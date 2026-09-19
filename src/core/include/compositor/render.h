@@ -51,6 +51,8 @@ void drawLayer(const DrawParams& params, const Rect& region, double scale, const
 
 /// Coverage (0..255 per output pixel) of a gray mask placed by `transform` over `region` at `scale`;
 /// `outside` is the value beyond the mask's rectangle.
+/// With the shared mask, its reductions are cached across frames.
+void sampleMaskCoverage(const GrayPtr& mask, const LayerTransform& transform, const Rect& region, double scale, uint8_t outside, GrayImage& out, bool multiply);
 void sampleMaskCoverage(const GrayImage& mask, const LayerTransform& transform, const Rect& region, double scale, uint8_t outside, GrayImage& out, bool multiply);
 
 /// Image Size: every layer's pixels and mask resampled for a `width` x `height` canvas (the Mac rasterises each

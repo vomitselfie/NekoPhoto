@@ -105,14 +105,19 @@ bool Layer::operator==(const Layer& o) const {
 int Layer::pixelWidth() const { return asset && asset->image ? asset->image->width() : std::max(1, int(std::lround(transform.size.width))); }
 int Layer::pixelHeight() const { return asset && asset->image ? asset->image->height() : std::max(1, int(std::lround(transform.size.height))); }
 
-bool Selection::isEmpty() const {
-    if (!coverage) return true;
-    return nonzeroBounds(*coverage).isEmpty();
+const PixelBounds& Selection::pixelBounds() const {
+    if (coverage.get() != boundsFor_) {
+        bounds_ = coverage ? nonzeroBounds(*coverage) : PixelBounds{};
+        boundsFor_ = coverage.get();
+    }
+    return bounds_;
 }
+
+bool Selection::isEmpty() const { return !coverage || pixelBounds().isEmpty(); }
 
 Rect Selection::bounds() const {
     if (!coverage) return {};
-    auto b = nonzeroBounds(*coverage);
+    const PixelBounds& b = pixelBounds();
     if (b.isEmpty()) return {};
     return {double(b.x0), double(b.y0), double(b.x1 - b.x0), double(b.y1 - b.y0)};
 }

@@ -1,4 +1,5 @@
 #include "compositor/adjustments.h"
+#include "compositor/kernels.h"
 #include "compositor/parallel.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -17,10 +18,13 @@ namespace {
 
 double clampFinite(double v, double lo, double hi, double fallback) { return std::isfinite(v) ? std::min(hi, std::max(lo, v)) : fallback; }
 
+/// The float tables (straight 0..1 out per straight 0..255 in) quantised to bytes: the kernel then needs no
+/// float work per pixel. Identical results for opaque pixels, within a level at partial alpha.
 void applyTables(Image& image, const std::vector<float>& tables) {
-    parallelRows(0, image.height(), [&](int y0, int y1) {
-        for (int y = y0; y < y1; y++) levels_apply(image.row(y), size_t(image.width()), tables.data());
-    });
+    kernels::ChannelTables lut;
+    for (int c = 0; c < 3; c++)
+        for (int i = 0; i < 256; i++) lut.lut[c][i] = uint8_t(std::lround(std::clamp(tables[size_t(c) * 256 + size_t(i)], 0.0f, 1.0f) * 255.0f));
+    kernels::applyChannelTables(image, lut);
 }
 
 } // namespace
@@ -228,9 +232,7 @@ std::vector<uint8_t> GradientMapSettings::table() const {
 
 void applyGradientMap(Image& image, const GradientMapSettings& settings) {
     std::vector<uint8_t> table = settings.table();
-    parallelRows(0, image.height(), [&](int y0, int y1) {
-        for (int y = y0; y < y1; y++) adjust_gradient_map(image.row(y), size_t(image.width()), 1, size_t(image.stride()), table.data());
-    });
+    kernels::gradientMap(image, table.data());
 }
 
 GrainSettings GrainSettings::normalized() const {
@@ -472,14 +474,7 @@ void applyHueSaturation(Image& image, const HueSaturationSettings& settings) {
 
 // ---- Invert ---------------------------------------------------------------------------
 
-void applyInvert(Image& image) {
-    parallelRows(0, image.height(), [&](int y0, int y1) {
-        for (int y = y0; y < y1; y++) {
-            uint8_t* p = image.row(y);
-            for (int x = 0; x < image.width(); x++, p += 4) for (int c = 0; c < 3; c++) p[c] = uint8_t(p[3] - p[c]);
-        }
-    });
-}
+void applyInvert(Image& image) { kernels::invertColors(image); }
 
 void applyInvert(GrayImage& mask) {
     for (size_t i = 0; i < mask.byteCount(); i++) mask.data()[i] = uint8_t(255 - mask.data()[i]);

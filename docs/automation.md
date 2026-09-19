@@ -114,7 +114,8 @@ Pixels of the active layer, inside the selection: `pixels.adjust`,
 `pixels.contentAwareFill`, `pixels.removeBackground`.
 
 Selection: `selection.all`, `selection.none`, `selection.invert`,
-`selection.rect` (or `ellipse: true`), `selection.polygon`, `selection.wand`,
+`selection.rect` (or `ellipse: true`), `selection.polygon`, `selection.wand` (all take
+`mode` replace, add, subtract or intersect),
 `selection.fromLayer`, `selection.grow`.
 
 Canvas and history: `canvas.resize`, `canvas.crop`, `canvas.flip`,

@@ -1,6 +1,7 @@
 #include "compositor/selection.h"
 #include "compositor/render.h"
 #include <algorithm>
+#include <cstring>
 #include <cmath>
 #include <cstdlib>
 
@@ -98,6 +99,23 @@ std::shared_ptr<GrayImage> rasterizeEllipse(const Rect& rect, int width, int hei
     return rasterizePolygon(points, width, height, antialiased);
 }
 
+namespace {
+/// `op(a, b)` per pixel into a fresh raster, row by row so the compiler vectorises the byte operation.
+template <class Op>
+std::shared_ptr<GrayImage> combineRows(const GrayImage& a, const GrayImage& b, Op op) {
+    auto out = std::make_shared<GrayImage>(a.width(), a.height());
+    const int w = std::min(a.width(), b.width()), h = std::min(a.height(), b.height());
+    for (int y = 0; y < h; y++) {
+        const uint8_t *pa = a.row(y), *pb = b.row(y);
+        uint8_t* po = out->row(y);
+        for (int x = 0; x < w; x++) po[x] = op(pa[x], pb[x]);
+        for (int x = w; x < a.width(); x++) po[x] = pa[x];
+    }
+    for (int y = h; y < a.height(); y++) std::memcpy(out->row(y), a.row(y), size_t(a.width()));
+    return out;
+}
+} // namespace
+
 std::optional<Selection> combineSelection(const std::optional<Selection>& current, const GrayImage& shape, SelectionMode mode, bool antialiased) {
     Selection result;
     result.antialiased = antialiased;
@@ -107,16 +125,17 @@ std::optional<Selection> combineSelection(const std::optional<Selection>& curren
         return result;
     case SelectionMode::Add: {
         if (!current || !current->coverage) { result.coverage = std::make_shared<GrayImage>(shape); return result; }
-        auto out = std::make_shared<GrayImage>(*current->coverage);
-        for (int y = 0; y < out->height(); y++) for (int x = 0; x < out->width(); x++) out->at(x, y) = std::max(out->at(x, y), shape.at(x, y));
-        result.coverage = out;
+        result.coverage = combineRows(*current->coverage, shape, [](uint8_t a, uint8_t b) { return std::max(a, b); });
         return result;
     }
     case SelectionMode::Subtract: {
         if (!current || !current->coverage) return current;
-        auto out = std::make_shared<GrayImage>(*current->coverage);
-        for (int y = 0; y < out->height(); y++) for (int x = 0; x < out->width(); x++) out->at(x, y) = uint8_t(std::max(0, int(out->at(x, y)) - int(shape.at(x, y))));
-        result.coverage = out;
+        result.coverage = combineRows(*current->coverage, shape, [](uint8_t a, uint8_t b) { return uint8_t(a > b ? a - b : 0); });
+        return result;
+    }
+    case SelectionMode::Intersect: {
+        if (!current || !current->coverage) return current;
+        result.coverage = combineRows(*current->coverage, shape, [](uint8_t a, uint8_t b) { return std::min(a, b); });
         return result;
     }
     }
@@ -127,7 +146,11 @@ Selection invertSelection(const Selection& selection, int width, int height) {
     Selection result = selection;
     auto out = std::make_shared<GrayImage>(width, height, 255);
     if (selection.coverage)
-        for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) out->at(x, y) = uint8_t(255 - selection.coverage->at(x, y));
+        for (int y = 0; y < height; y++) {
+            const uint8_t* in = selection.coverage->row(y);
+            uint8_t* po = out->row(y);
+            for (int x = 0; x < width; x++) po[x] = uint8_t(255 - in[x]);
+        }
     result.coverage = out;
     return result;
 }
@@ -176,15 +199,31 @@ std::vector<std::vector<Point>> selectionOutline(const GrayImage& coverage) {
 }
 
 std::shared_ptr<GrayImage> coverageFromLayer(const Document& document, const Layer& layer) {
+    auto out = std::make_shared<GrayImage>(document.width, document.height);
+    if (!layer.asset || !layer.asset->image) return out;
+    const Image& image = *layer.asset->image;
+    const LayerTransform& t = layer.transform;
+    // Pixels sitting on the document grid at whole coordinates: copy their alpha straight across.
+    bool onGrid = t.rotation == 0 && !t.flipX && !t.flipY && t.size.width == image.width() && t.size.height == image.height()
+        && t.origin.x == std::floor(t.origin.x) && t.origin.y == std::floor(t.origin.y);
+    if (onGrid) {
+        int ox = int(t.origin.x), oy = int(t.origin.y);
+        int x0 = std::max(0, ox), y0 = std::max(0, oy), x1 = std::min(document.width, ox + image.width()), y1 = std::min(document.height, oy + image.height());
+        for (int y = y0; y < y1; y++) {
+            const uint8_t* src = image.pixel(x0 - ox, y - oy) + 3;
+            uint8_t* dst = out->row(y) + x0;
+            for (int x = x0; x < x1; x++, src += 4) dst[x - x0] = *src;
+        }
+        return out;
+    }
     Image pixels(document.width, document.height);
-    if (layer.asset && layer.asset->image) {
+    {
         DrawParams params;
         params.image = layer.asset->image;
         params.transform = layer.transform;
         params.layerTransformForMask = layer.transform;
         drawLayer(params, document.rect(), 1, nullptr, pixels);
     }
-    auto out = std::make_shared<GrayImage>(document.width, document.height);
     layer_extract_alpha(pixels.data(), size_t(pixels.stride()), out->data(), size_t(out->stride()), size_t(document.width), size_t(document.height));
     return out;
 }

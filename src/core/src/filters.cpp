@@ -1,4 +1,5 @@
 #include "compositor/filters.h"
+#include "compositor/kernels.h"
 #include "compositor/parallel.h"
 #include <algorithm>
 #include <cmath>
@@ -229,11 +230,11 @@ void applyFilter(FilterKind kind, Image& image, const FilterSettings& settings, 
     case FilterKind::GaussianBlur: gaussianBlur(image, s.radius * scale); break;
     case FilterKind::MotionBlur: motionBlur(image, s.distance * scale, s.angle); break;
     case FilterKind::AddNoise:
-        noise_add(image.data(), size_t(image.width()), size_t(image.height()), size_t(image.stride()), float(s.amount), s.gaussian ? 1 : 0, s.monochromatic ? 1 : 0, seed);
+        kernels::addNoise(image, float(s.amount), s.gaussian, s.monochromatic, seed);
         break;
     case FilterKind::LensCorrection: {
         Image source = image;
-        lens_distort(source.data(), image.data(), size_t(image.width()), size_t(image.height()), size_t(image.stride()), s.distortion / 100 * lensStrength);
+        kernels::lensDistort(source, image, s.distortion / 100 * lensStrength);
         break;
     }
     }

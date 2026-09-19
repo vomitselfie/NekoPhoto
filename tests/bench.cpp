@@ -1,0 +1,129 @@
+// Timings for the pixel pipeline on a 4000 x 3000 document, for checking the effect of kernel work.
+// Not a test: `build/tests/compositor_bench [filter]` prints milliseconds per operation.
+#include "compositor/adjustments.h"
+#include "compositor/blend.h"
+#include "compositor/document.h"
+#include "compositor/filters.h"
+#include "compositor/kernels.h"
+#include "compositor/render.h"
+#include "compositor/selection.h"
+#include <chrono>
+#include <cstdio>
+#include <cstring>
+#include <functional>
+#include <random>
+#include <string>
+
+using namespace compositor;
+
+namespace {
+
+Image busyImage(int w, int h, uint32_t seed = 1) {
+    Image img(w, h);
+    std::mt19937 rng(seed);
+    for (int y = 0; y < h; y++) {
+        uint8_t* p = img.row(y);
+        for (int x = 0; x < w; x++, p += 4) {
+            unsigned a = (x + y) % 97 < 90 ? 255 : uint8_t(rng() % 256);
+            unsigned r = uint8_t((x * 3 + y) % 256), g = uint8_t((x + y * 5) % 256), b = uint8_t((x ^ y) % 256);
+            p[0] = uint8_t((r * a + 127) / 255); p[1] = uint8_t((g * a + 127) / 255); p[2] = uint8_t((b * a + 127) / 255); p[3] = uint8_t(a);
+        }
+    }
+    return img;
+}
+
+double timeMs(const std::function<void()>& body, int repeats = 3) {
+    double best = 1e300;
+    for (int i = 0; i < repeats; i++) {
+        auto t0 = std::chrono::steady_clock::now();
+        body();
+        auto t1 = std::chrono::steady_clock::now();
+        best = std::min(best, std::chrono::duration<double, std::milli>(t1 - t0).count());
+    }
+    return best;
+}
+
+} // namespace
+
+int main(int argc, char** argv) {
+    std::string only = argc > 1 ? argv[1] : "";
+    const int W = 4000, H = 3000;
+    Image base = busyImage(W, H);
+    auto want = [&](const char* name) { return only.empty() || std::strstr(name, only.c_str()) != nullptr; };
+    auto report = [&](const char* name, double ms) { std::printf("%-34s %8.1f ms\n", name, ms); };
+
+    if (want("levels")) {
+        AdjustmentSettings s = AdjustmentSettings::defaults(AdjustmentKind::Levels);
+        s.levels.ranges[0].black = 20; s.levels.ranges[0].gamma = 1.3;
+        Image img = base;
+        report("levels (LUT kernel)", timeMs([&] { img = base; applyAdjustment(s, img, Rect(0, 0, W, H), 1); }));
+    }
+    if (want("hue")) {
+        AdjustmentSettings s = AdjustmentSettings::defaults(AdjustmentKind::HueSaturation);
+        s.hsv.current().hue = 40; s.hsv.current().saturation = 20;
+        Image img = base;
+        report("hue/saturation (cube)", timeMs([&] { img = base; applyAdjustment(s, img, Rect(0, 0, W, H), 1); }));
+    }
+    if (want("gradient")) {
+        AdjustmentSettings s = AdjustmentSettings::defaults(AdjustmentKind::GradientMap);
+        Image img = base;
+        report("gradient map", timeMs([&] { img = base; applyAdjustment(s, img, Rect(0, 0, W, H), 1); }));
+    }
+    if (want("invert")) {
+        Image img = base;
+        report("invert", timeMs([&] { img = base; applyInvert(img); }));
+    }
+    if (want("noise")) {
+        FilterSettings s; s.amount = 30; s.gaussian = true;
+        Image img = base;
+        report("add noise (gaussian)", timeMs([&] { img = base; applyFilter(FilterKind::AddNoise, img, s, 1, 7); }));
+    }
+    if (want("lens")) {
+        FilterSettings s; s.distortion = -35;
+        Image img = base;
+        report("lens correction", timeMs([&] { img = base; applyFilter(FilterKind::LensCorrection, img, s, 1, 0); }));
+    }
+    if (want("blur")) {
+        for (double sigma : {2.0, 20.0, 200.0}) {
+            FilterSettings s; s.radius = sigma;
+            Image img = base;
+            char name[64]; std::snprintf(name, sizeof name, "gaussian blur sigma %.0f", sigma);
+            report(name, timeMs([&] { img = base; applyFilter(FilterKind::GaussianBlur, img, s, 1, 0); }, 2));
+        }
+    }
+    if (want("motion")) {
+        for (double d : {10.0, 100.0}) {
+            FilterSettings s; s.distance = d; s.angle = 30;
+            Image img = base;
+            char name[64]; std::snprintf(name, sizeof name, "motion blur distance %.0f", d);
+            report(name, timeMs([&] { img = base; applyFilter(FilterKind::MotionBlur, img, s, 1, 0); }, 1));
+        }
+    }
+    if (want("composite")) {
+        // Five layers over a 1080p view of the document, the interactive redraw case.
+        Document doc(W, H);
+        for (int i = 0; i < 5; i++) {
+            Layer layer(Asset::make(std::make_shared<Image>(busyImage(2000, 1500, uint32_t(i + 2))), "L"), Point(300.0 * i, 200.0 * i));
+            layer.transform.rotation = i == 2 ? 12 : 0;
+            layer.opacity = i == 3 ? 0.6 : 1;
+            layer.blendMode = i == 4 ? BlendMode::Multiply : BlendMode::Normal;
+            doc.layers.push_back(layer);
+        }
+        Image out(1920, 1440);
+        RenderOptions o; o.region = doc.rect(); o.scale = 1920.0 / W;
+        report("composite 5 layers -> 1920 px", timeMs([&] { render(doc, o, out); }, 5));
+        Image flat(W, H);
+        RenderOptions full; full.region = doc.rect(); full.scale = 1;
+        report("flatten 5 layers at 4000x3000", timeMs([&] { render(doc, full, flat); }, 2));
+    }
+    if (want("selection")) {
+        auto shape = rasterizeEllipse(Rect(200, 200, 3000, 2000), W, H, true);
+        report("ellipse rasterize 3000x2000", timeMs([&] { shape = rasterizeEllipse(Rect(200, 200, 3000, 2000), W, H, true); }, 1));
+        Selection sel; sel.coverage = shape;
+        report("selection bounds", timeMs([&] { Selection s2 = sel; (void)s2.bounds(); }));
+        report("selection expand 10 px", timeMs([&] { (void)resizeSelection(sel, 10); }, 1));
+        auto other = rasterizeRect(Rect(1000, 1000, 2000, 1500), W, H, true);
+        report("selection add", timeMs([&] { (void)combineSelection(sel, *other, SelectionMode::Add, true); }));
+    }
+    return 0;
+}

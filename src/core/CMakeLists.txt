@@ -39,6 +39,7 @@ add_library(compositor_core STATIC
     src/filters.cpp
     src/history.cpp
     src/image.cpp
+    src/kernels.cpp
     src/matte.cpp
     src/subject.cpp
     src/png.cpp

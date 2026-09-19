@@ -21,6 +21,15 @@ endif()
 option(COMPOSITOR_BUILD_APP "Build the Qt 6 application" ON)
 option(COMPOSITOR_BUILD_TESTS "Build the test executables" ON)
 option(COMPOSITOR_WARNINGS_AS_ERRORS "Treat warnings as errors" OFF)
+# x86-64-v2 (SSE4.2, every x86 CPU since 2009) makes roundf/floor/min/max single instructions in the kernels.
+set(COMPOSITOR_ARCH_FLAGS "" CACHE STRING "Extra architecture flags (empty picks x86-64-v2 on x86_64 with GCC/Clang)")
+if(COMPOSITOR_ARCH_FLAGS STREQUAL "" AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64" AND (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"))
+    set(COMPOSITOR_ARCH_FLAGS "-march=x86-64-v2")
+endif()
+if(NOT COMPOSITOR_ARCH_FLAGS STREQUAL "")
+    separate_arguments(COMPOSITOR_ARCH_FLAG_LIST NATIVE_COMMAND "${COMPOSITOR_ARCH_FLAGS}")
+    add_compile_options(${COMPOSITOR_ARCH_FLAG_LIST})
+endif()
 
 add_library(compositor_warnings INTERFACE)
 target_compile_options(compositor_warnings INTERFACE

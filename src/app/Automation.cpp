@@ -86,7 +86,8 @@ SelectionMode selectionMode(const QJsonObject& p) {
     if (m == "replace") return SelectionMode::Replace;
     if (m == "add") return SelectionMode::Add;
     if (m == "subtract") return SelectionMode::Subtract;
-    fail("mode must be replace, add or subtract", invalidParams);
+    if (m == "intersect") return SelectionMode::Intersect;
+    fail("mode must be replace, add, subtract or intersect", invalidParams);
 }
 
 std::optional<AdjustmentKind> adjustmentKindNamed(QString name) {

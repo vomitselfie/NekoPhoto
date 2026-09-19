@@ -117,6 +117,12 @@ struct Selection {
     bool operator==(const Selection& o) const { return coverage == o.coverage && antialiased == o.antialiased; }
     bool isEmpty() const;
     Rect bounds() const;
+    /// The nonzero pixel bounds, scanned once per coverage raster and remembered.
+    const PixelBounds& pixelBounds() const;
+
+private:
+    mutable const GrayImage* boundsFor_ = nullptr;
+    mutable PixelBounds bounds_;
 };
 
 struct Document {

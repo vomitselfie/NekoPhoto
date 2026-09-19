@@ -91,7 +91,8 @@ Mapping mappingFor(const LayerTransform& transform, int pixelWidth, int pixelHei
 
 // ---- Mask coverage --------------------------------------------------------
 
-void sampleMaskCoverage(const GrayImage& mask, const LayerTransform& transform, const Rect& region, double scale, uint8_t outside, GrayImage& out, bool multiply) {
+namespace {
+void sampleMaskCoverageImpl(const GrayImage& mask, const GrayPtr& owner, const LayerTransform& transform, const Rect& region, double scale, uint8_t outside, GrayImage& out, bool multiply) {
     int mw = mask.width(), mh = mask.height();
     if (!multiply) out.fill(outside);
     if (mw <= 0 || mh <= 0) return;
@@ -99,13 +100,9 @@ void sampleMaskCoverage(const GrayImage& mask, const LayerTransform& transform, 
     double sx = std::hypot(m.outputToPixel.a, m.outputToPixel.b); // layer px per output px along x
     double sy = std::hypot(m.outputToPixel.c, m.outputToPixel.d);
     MipChoice mip = mipFor(transform.sampling, transform.size.width * scale, transform.size.height * scale, mw, mh);
+    // Reductions are cached with the shared mask; a plain reference builds them on the spot.
     std::shared_ptr<const GrayImage> reduced;
-    if (mip.level > 0) {
-        // Build the reduction directly (masks are small and this path is uncommon).
-        std::shared_ptr<GrayImage> r = std::make_shared<GrayImage>(mask);
-        for (int i = 0; i < mip.level; i++) r = halveGray(*r);
-        reduced = r;
-    }
+    if (mip.level > 0) reduced = owner && owner.get() == &mask ? MipCache::shared().level(owner, mip.level) : reduceGray(mask, mip.level);
     const GrayImage& src = reduced ? *reduced : mask;
     double factor = mip.factor;
     bool nearest = transform.sampling == Sampling::Nearest;
@@ -143,6 +140,15 @@ void sampleMaskCoverage(const GrayImage& mask, const LayerTransform& transform, 
     });
 }
 
+} // namespace
+
+void sampleMaskCoverage(const GrayImage& mask, const LayerTransform& transform, const Rect& region, double scale, uint8_t outside, GrayImage& out, bool multiply) {
+    sampleMaskCoverageImpl(mask, nullptr, transform, region, scale, outside, out, multiply);
+}
+void sampleMaskCoverage(const GrayPtr& mask, const LayerTransform& transform, const Rect& region, double scale, uint8_t outside, GrayImage& out, bool multiply) {
+    if (mask) sampleMaskCoverageImpl(*mask, mask, transform, region, scale, outside, out, multiply);
+}
+
 // ---- Drawing a layer -------------------------------------------------------
 
 void drawLayer(const DrawParams& params, const Rect& region, double scale, const GrayImage* coverage, Image& out) {
@@ -178,18 +184,43 @@ void drawLayer(const DrawParams& params, const Rect& region, double scale, const
     }
     double maskScaleX = mask ? double(mask->width()) / pw : 1, maskScaleY = mask ? double(mask->height()) / ph : 1;
     float opacity = float(clamp(params.opacity, 0.0, 1.0));
+    const double invFactor = 1.0 / factor;   // a power of two: exact
+    const int xBegin = int(m.outputRect.minX()), xEnd = int(m.outputRect.maxX());
+    const Point dp = m.outputToPixel.applyVector({1, 0});
+
+    // Along a row the sample point moves linearly, so the pixels at least half a source pixel inside the
+    // layer (where the edge antialias is exactly 1) form one interval; only the pixels outside it pay for it.
+    auto interior = [&](Point p0, int& from, int& to) {
+        double lo = 0, hi = double(xEnd - xBegin);
+        auto constrain = [&](double value, double step, double min, double max) {
+            // value + t*step in [min, max]
+            if (std::fabs(step) < 1e-12) { if (value < min || value > max) { lo = 1; hi = 0; } return; }
+            double t0 = (min - value) / step, t1 = (max - value) / step;
+            if (t0 > t1) std::swap(t0, t1);
+            lo = std::max(lo, t0); hi = std::min(hi, t1);
+        };
+        constrain(p0.x, dp.x, 0.5 * sx, pw - 0.5 * sx);
+        constrain(p0.y, dp.y, 0.5 * sy, ph - 0.5 * sy);
+        if (lo > hi) { from = to = xBegin; return; }
+        from = xBegin + int(std::ceil(lo)); to = xBegin + int(std::floor(hi)) + 1;
+        from = std::max(from, xBegin); to = std::min(to, xEnd);
+        if (to < from) to = from;
+    };
 
     parallelRows(int(m.outputRect.minY()), int(m.outputRect.maxY()), [&](int ya, int yb) {
     for (int y = ya; y < yb; y++) {
         uint8_t* row = out.row(y);
         const uint8_t* covRow = coverage ? coverage->row(y) : nullptr;
         const uint8_t* placedRow = placedMask ? placedMask->row(y) : nullptr;
-        Point p = m.outputToPixel.apply({m.outputRect.minX() + 0.5, y + 0.5});
-        Point dp = m.outputToPixel.applyVector({1, 0});
-        for (int x = int(m.outputRect.minX()); x < int(m.outputRect.maxX()); x++, p = p + dp) {
+        Point p = m.outputToPixel.apply({xBegin + 0.5, y + 0.5});
+        int interiorFrom = xBegin, interiorTo = xBegin;
+        if (!nearest) interior(p, interiorFrom, interiorTo);
+        for (int x = xBegin; x < xEnd; x++, p = p + dp) {
             float edge;
             if (nearest) {
                 if (p.x < 0 || p.x >= pw || p.y < 0 || p.y >= ph) continue;
+                edge = 1;
+            } else if (x >= interiorFrom && x < interiorTo) {
                 edge = 1;
             } else {
                 double ex = std::min(p.x, pw - p.x) / std::max(1e-9, sx), ey = std::min(p.y, ph - p.y) / std::max(1e-9, sy);
@@ -205,7 +236,7 @@ void drawLayer(const DrawParams& params, const Rect& region, double scale, const
             if (cov <= 0.0005f) continue;
             float s[4];
             if (nearest) sampleNearest(*source, p.x, p.y, s);
-            else sampleBilinear(*source, p.x / factor, p.y / factor, s);
+            else sampleBilinear(*source, p.x * invFactor, p.y * invFactor, s);
             uint8_t src[4] = {uint8_t(s[0] + 0.5f), uint8_t(s[1] + 0.5f), uint8_t(s[2] + 0.5f), uint8_t(s[3] + 0.5f)};
             if (!src[3]) continue;
             compositePixel(params.mode, src, cov, row + x * 4);
@@ -396,7 +427,7 @@ struct Renderer {
         std::shared_ptr<GrayImage> result;
         if (group.mask && group.mask->enabled && group.mask->asset.image) {
             result = std::make_shared<GrayImage>(outWidth, outHeight, 0);
-            sampleMaskCoverage(*group.mask->asset.image, transformOf(group), region, scale, 0, *result, false);
+            sampleMaskCoverage(group.mask->asset.image, transformOf(group), region, scale, 0, *result, false);
         }
         folderCoverage[group.id] = result;
         return result;
@@ -487,8 +518,25 @@ struct Renderer {
         std::shared_ptr<GrayImage> clip = coverage;
         if (layer.mask && layer.mask->enabled && layer.mask->asset.image) {
             auto own = std::make_shared<GrayImage>(outWidth, outHeight, 0);
-            sampleMaskCoverage(*layer.mask->asset.image, transformOf(layer), region, scale, 0, *own, false);
+            sampleMaskCoverage(layer.mask->asset.image, transformOf(layer), region, scale, 0, *own, false);
             clip = multiply(clip, own);
+        }
+        if (mode == BlendMode::Normal) {
+            // Same alpha on both sides, so the straight-colour lerp is a premultiplied lerp: no divides.
+            parallelRows(0, outHeight, [&](int ya, int yb) {
+            for (int y = ya; y < yb; y++) {
+                uint8_t* d = target.row(y);
+                const uint8_t* a = adjusted.row(y);
+                const uint8_t* c = clip ? clip->row(y) : nullptr;
+                for (int x = 0; x < outWidth; x++, d += 4, a += 4) {
+                    if (d[3] == 0) continue;
+                    int mix = int(opacity * (c ? c[x] : 255) + 0.5f);   // 0..255
+                    if (mix <= 0) continue;
+                    for (int k = 0; k < 3; k++) d[k] = uint8_t(std::min(int(d[3]), d[k] + ((int(a[k]) - int(d[k])) * mix + 127 + (a[k] < d[k] ? 0 : 0)) / 255));
+                }
+            }
+            });
+            return;
         }
         parallelRows(0, outHeight, [&](int ya, int yb) {
         for (int y = ya; y < yb; y++) {

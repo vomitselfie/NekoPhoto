@@ -34,14 +34,42 @@ PixelBounds alphaBounds(const Image& image) {
     return b;
 }
 
+namespace {
+/// First nonzero byte index in [0, n), or n: eight bytes at a time.
+int firstNonzero(const uint8_t* p, int n) {
+    int x = 0;
+    for (; x + 8 <= n; x += 8) {
+        uint64_t word;
+        std::memcpy(&word, p + x, 8);
+        if (word) break;
+    }
+    for (; x < n; x++) if (p[x]) return x;
+    return n;
+}
+/// Last nonzero byte index in [0, n) plus one, or 0.
+int endNonzero(const uint8_t* p, int n) {
+    int x = n;
+    for (; x - 8 >= 0; x -= 8) {
+        uint64_t word;
+        std::memcpy(&word, p + x - 8, 8);
+        if (word) break;
+    }
+    for (; x > 0; x--) if (p[x - 1]) return x;
+    return 0;
+}
+} // namespace
+
 PixelBounds nonzeroBounds(const GrayImage& image) {
     PixelBounds b;
     int x0 = image.width(), y0 = image.height(), x1 = 0, y1 = 0;
     for (int y = 0; y < image.height(); y++) {
         const uint8_t* p = image.row(y);
-        for (int x = 0; x < image.width(); x++) {
-            if (p[x]) { x0 = std::min(x0, x); x1 = std::max(x1, x + 1); y0 = std::min(y0, y); y1 = std::max(y1, y + 1); }
-        }
+        int first = firstNonzero(p, image.width());
+        if (first == image.width()) continue;
+        x0 = std::min(x0, first);
+        x1 = std::max(x1, endNonzero(p, image.width()));
+        y0 = std::min(y0, y);
+        y1 = y + 1;
     }
     if (x1 > x0 && y1 > y0) { b.x0 = x0; b.y0 = y0; b.x1 = x1; b.y1 = y1; }
     return b;

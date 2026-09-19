@@ -7,7 +7,7 @@
 
 namespace compositor {
 
-enum class SelectionMode { Replace, Add, Subtract };
+enum class SelectionMode { Replace, Add, Subtract, Intersect };
 
 /// Fills a closed polygon (document pixels) into a `width` x `height` coverage image.
 std::shared_ptr<GrayImage> rasterizePolygon(const std::vector<Point>& points, int width, int height, bool antialiased);

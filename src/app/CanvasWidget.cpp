@@ -377,8 +377,10 @@ void CanvasWidget::updateCursor(QPointF view, Qt::KeyboardModifiers modifiers) {
 }
 
 SelectionMode CanvasWidget::selectionMode(Qt::KeyboardModifiers modifiers) const {
-    if (modifiers & Qt::AltModifier) return SelectionMode::Subtract;
-    if (modifiers & Qt::ShiftModifier) return SelectionMode::Add;
+    bool shift = modifiers & Qt::ShiftModifier, alt = modifiers & Qt::AltModifier;
+    if (shift && alt) return SelectionMode::Intersect;
+    if (alt) return SelectionMode::Subtract;
+    if (shift) return SelectionMode::Add;
     return SelectionMode::Replace;
 }
 
