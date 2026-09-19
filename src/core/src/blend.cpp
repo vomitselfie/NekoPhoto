@@ -74,6 +74,18 @@ Rgb blendColor(BlendMode mode, Rgb cb, Rgb cs) {
 }
 
 void compositePixel(BlendMode mode, const uint8_t* src, float coverage, uint8_t* dst) {
+    if (mode == BlendMode::Normal) {
+        // Source-over in fixed point: out = src * coverage + dst * (1 - srcAlpha * coverage).
+        unsigned k = unsigned(coverage * 256.0f + 0.5f);
+        if (k == 0) return;
+        if (k > 256) k = 256;
+        unsigned sa = (src[3] * k + 128) >> 8;
+        if (sa == 0) return;
+        unsigned inv = 255 - sa;
+        for (int c = 0; c < 3; c++) dst[c] = uint8_t(((src[c] * k + 128) >> 8) + ((dst[c] * inv + 127) / 255));
+        dst[3] = uint8_t(sa + (dst[3] * inv + 127) / 255);
+        return;
+    }
     float as = src[3] / 255.0f * coverage;
     if (as <= 0) return;
     float k = coverage / 255.0f;

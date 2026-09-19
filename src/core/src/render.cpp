@@ -1,6 +1,7 @@
 #include "compositor/render.h"
 #include "compositor/adjustments.h"
 #include "compositor/blend.h"
+#include "compositor/parallel.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -117,7 +118,8 @@ void sampleMaskCoverage(const GrayImage& mask, const LayerTransform& transform, 
             }
         }
     }
-    for (int y = int(m.outputRect.minY()); y < int(m.outputRect.maxY()); y++) {
+    parallelRows(int(m.outputRect.minY()), int(m.outputRect.maxY()), [&](int ya, int yb) {
+    for (int y = ya; y < yb; y++) {
         uint8_t* row = out.row(y);
         Point p = m.outputToPixel.apply({m.outputRect.minX() + 0.5, y + 0.5});
         Point dp = m.outputToPixel.applyVector({1, 0});
@@ -137,6 +139,7 @@ void sampleMaskCoverage(const GrayImage& mask, const LayerTransform& transform, 
             row[x] = multiply ? uint8_t((row[x] * v + 127) / 255) : v;
         }
     }
+    });
 }
 
 // ---- Drawing a layer -------------------------------------------------------
@@ -175,7 +178,8 @@ void drawLayer(const DrawParams& params, const Rect& region, double scale, const
     double maskScaleX = mask ? double(mask->width()) / pw : 1, maskScaleY = mask ? double(mask->height()) / ph : 1;
     float opacity = float(clamp(params.opacity, 0.0, 1.0));
 
-    for (int y = int(m.outputRect.minY()); y < int(m.outputRect.maxY()); y++) {
+    parallelRows(int(m.outputRect.minY()), int(m.outputRect.maxY()), [&](int ya, int yb) {
+    for (int y = ya; y < yb; y++) {
         uint8_t* row = out.row(y);
         const uint8_t* covRow = coverage ? coverage->row(y) : nullptr;
         const uint8_t* placedRow = placedMask ? placedMask->row(y) : nullptr;
@@ -206,6 +210,7 @@ void drawLayer(const DrawParams& params, const Rect& region, double scale, const
             compositePixel(params.mode, src, cov, row + x * 4);
         }
     }
+    });
 }
 
 // ---- Resampling into a grid --------------------------------------------------
@@ -221,7 +226,8 @@ std::shared_ptr<Image> resampleLayer(const Image& image, const LayerTransform& t
     ImagePtr source = MipCache::shared().level(std::make_shared<Image>(image), level);
     double factor = std::ldexp(1.0, level);
     int pw = image.width(), ph = image.height();
-    for (int y = 0; y < height; y++) {
+    parallelRows(0, height, [&](int ya, int yb) {
+    for (int y = ya; y < yb; y++) {
         uint8_t* row = out->row(y);
         Point p = map.apply({0.5, y + 0.5});
         Point dp = map.applyVector({1, 0});
@@ -240,6 +246,7 @@ std::shared_ptr<Image> resampleLayer(const Image& image, const LayerTransform& t
             }
         }
     }
+    });
     return out;
 }
 
@@ -253,7 +260,8 @@ std::shared_ptr<GrayImage> resampleMask(const GrayImage& mask, const LayerTransf
     for (int i = 0; i < level; i++) reduced = halveGray(*reduced);
     double factor = std::ldexp(1.0, level);
     int mw = mask.width(), mh = mask.height();
-    for (int y = 0; y < height; y++) {
+    parallelRows(0, height, [&](int ya, int yb) {
+    for (int y = ya; y < yb; y++) {
         uint8_t* row = out->row(y);
         Point p = map.apply({0.5, y + 0.5});
         Point dp = map.applyVector({1, 0});
@@ -264,6 +272,7 @@ std::shared_ptr<GrayImage> resampleMask(const GrayImage& mask, const LayerTransf
             row[x] = uint8_t(clamp(in * edge + outside * (1 - edge) + 0.5f, 0.0f, 255.0f));
         }
     }
+    });
     return out;
 }
 
@@ -411,7 +420,8 @@ struct Renderer {
             sampleMaskCoverage(*layer.mask->asset.image, transformOf(layer), region, scale, 0, *own, false);
             clip = multiply(clip, own);
         }
-        for (int y = 0; y < outHeight; y++) {
+        parallelRows(0, outHeight, [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++) {
             uint8_t* d = target.row(y);
             const uint8_t* a = adjusted.row(y);
             const uint8_t* c = clip ? clip->row(y) : nullptr;
@@ -431,6 +441,7 @@ struct Renderer {
                 }
             }
         }
+        });
     }
 
     void prepareStacks() {
@@ -471,15 +482,18 @@ struct Renderer {
             else drawOwn(*it->second, group, nullptr);
         }
         layer_restore_alpha(group.data(), size_t(group.stride()), alpha.data(), size_t(outWidth), size_t(outWidth), size_t(outHeight));
-        for (int y = 0; y < outHeight; y++) {
+        BlendMode mode = blendOf(layer);
+        parallelRows(0, outHeight, [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++) {
             const uint8_t* s = group.row(y);
             uint8_t* d = out.row(y);
             const uint8_t* c = folders ? folders->row(y) : nullptr;
             for (int x = 0; x < outWidth; x++, s += 4, d += 4) {
                 float cov = c ? c[x] / 255.0f : 1.0f;
-                if (cov > 0) compositePixel(blendOf(layer), s, cov, d);
+                if (cov > 0) compositePixel(mode, s, cov, d);
             }
         }
+        });
     }
 
     void run(Image& out) {
