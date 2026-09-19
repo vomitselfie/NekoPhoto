@@ -1,0 +1,19 @@
+<RCC><qresource prefix="/icons">
+  <file alias="arrow-left-right.svg">icons/arrow-left-right.svg</file>
+  <file alias="bandage.svg">icons/bandage.svg</file>
+  <file alias="blend.svg">icons/blend.svg</file>
+  <file alias="crop.svg">icons/crop.svg</file>
+  <file alias="droplet.svg">icons/droplet.svg</file>
+  <file alias="eraser.svg">icons/eraser.svg</file>
+  <file alias="hand.svg">icons/hand.svg</file>
+  <file alias="lasso.svg">icons/lasso.svg</file>
+  <file alias="move.svg">icons/move.svg</file>
+  <file alias="paintbrush.svg">icons/paintbrush.svg</file>
+  <file alias="pipette.svg">icons/pipette.svg</file>
+  <file alias="rotate-ccw.svg">icons/rotate-ccw.svg</file>
+  <file alias="shapes.svg">icons/shapes.svg</file>
+  <file alias="square-dashed.svg">icons/square-dashed.svg</file>
+  <file alias="stamp.svg">icons/stamp.svg</file>
+  <file alias="wand-sparkles.svg">icons/wand-sparkles.svg</file>
+  <file alias="zoom-in.svg">icons/zoom-in.svg</file>
+</qresource></RCC>

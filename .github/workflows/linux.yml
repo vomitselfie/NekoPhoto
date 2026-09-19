@@ -18,7 +18,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build cmake libpng-dev qt6-base-dev qt6-wayland libgl1-mesa-dev libopencv-dev clang
+          sudo apt-get install -y ninja-build cmake libpng-dev qt6-base-dev qt6-svg-dev qt6-wayland libgl1-mesa-dev libopencv-dev clang
       - name: Configure
         run: |
           if [ "${{ matrix.compiler }}" = "clang" ]; then export CC=clang CXX=clang++; else export CC=gcc CXX=g++; fi

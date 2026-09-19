@@ -9,18 +9,19 @@ unchanged. The macOS application and its Xcode project are untouched; see
 ## Building
 
 Requirements: CMake 3.22+, Ninja (or Make), GCC 12+ or Clang 15+, Qt 6.4+
-(Core, Gui, Widgets, plus the Wayland platform plugin), libpng.
+(Core, Gui, Widgets, Network, Svg, plus the Wayland platform plugin), libpng;
+OpenCV for Remove Background.
 
 Arch / Manjaro:
 
 ```bash
-sudo pacman -S cmake ninja qt6-base qt6-wayland qt6-imageformats libpng opencv
+sudo pacman -S cmake ninja qt6-base qt6-svg qt6-wayland qt6-imageformats libpng opencv
 ```
 
 Ubuntu 24.04:
 
 ```bash
-sudo apt install cmake ninja-build qt6-base-dev qt6-wayland qt6-image-formats-plugins libpng-dev libgl1-mesa-dev libopencv-dev
+sudo apt install cmake ninja-build qt6-base-dev qt6-svg-dev qt6-wayland qt6-image-formats-plugins libpng-dev libgl1-mesa-dev libopencv-dev
 ```
 
 Then:
@@ -58,6 +59,7 @@ src/core/                       compositor_core: portable C++20 editor core
                                 blend, render, brush, selection, png, project
 src/app/                        the Qt 6 Widgets application
 src/third_party/nlohmann/       JSON (MIT)
+src/app/icons/                  tool icons from Lucide (ISC), tinted to the palette at runtime
 tests/                          pixels_tests, core_tests, golden_tests (+ golden PNGs)
 packaging/                      .desktop, icon, MIME type
 .github/workflows/linux.yml     GCC and Clang builds, tests, offscreen smoke test

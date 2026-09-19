@@ -1,6 +1,6 @@
 # The Linux front end: Qt 6 Widgets over the portable core.
 
-find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Widgets Network)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Widgets Network Svg)
 
 # Some locked-down shells cannot execute binaries under /usr/lib. Point this at a
 # directory holding copies of moc, uic and rcc to build there anyway.
@@ -21,11 +21,14 @@ if(COMPOSITOR_QT_TOOL_DIR)
 endif()
 
 qt_standard_project_setup()
+set(CMAKE_AUTORCC ON)
 
 qt_add_executable(compositor
     main.cpp
     ImageConvert.h
     Style.h
+    Icons.h
+    icons.qrc
     Viewport.h
     EditorSession.h
     EditorSession.cpp
@@ -51,7 +54,7 @@ qt_add_executable(compositor
     MainWindow.cpp
 )
 
-target_link_libraries(compositor PRIVATE compositor::core Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network compositor_warnings)
+target_link_libraries(compositor PRIVATE compositor::core Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Svg compositor_warnings)
 set_target_properties(compositor PROPERTIES OUTPUT_NAME compositor)
 
 install(TARGETS compositor RUNTIME DESTINATION bin)

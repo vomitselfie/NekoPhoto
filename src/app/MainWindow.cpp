@@ -5,6 +5,7 @@
 #include "LayersPanel.h"
 #include "AdjustmentsPanel.h"
 #include "FilterDialog.h"
+#include "Icons.h"
 #include "ModelStore.h"
 #include "PreferencesDialog.h"
 #include "compositor/subject.h"
@@ -256,11 +257,11 @@ void MainWindow::buildToolRail() {
     rail->setOrientation(Qt::Vertical);
     rail->setMovable(false);
     rail->setIconSize(QSize(20, 20));
-    rail->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    rail->setToolButtonStyle(Qt::ToolButtonIconOnly);
     auto* group = new QActionGroup(this);
     group->setExclusive(true);
-    auto tool = [&](Tool t, const QString& label, const QString& text, const QKeySequence& key) {
-        QAction* a = rail->addAction(text);
+    auto tool = [&](Tool t, const QString& label, const QString& iconName, const QKeySequence& key) {
+        QAction* a = rail->addAction(toolIcon(iconName), label);
         a->setToolTip(label + " (" + key.toString() + ")");
         a->setCheckable(true);
         a->setShortcut(key);
@@ -270,28 +271,28 @@ void MainWindow::buildToolRail() {
         toolActions_[t] = a;
         return a;
     };
-    tool(Tool::Move, tr("Move / Transform"), "V", QKeySequence("V"))->setChecked(true);
-    tool(Tool::Marquee, tr("Marquee"), "M", QKeySequence("M"));
-    tool(Tool::Lasso, tr("Lasso"), "L", QKeySequence("L"));
-    tool(Tool::Wand, tr("Magic Wand"), "W", QKeySequence("W"));
-    tool(Tool::Crop, tr("Crop"), "C", QKeySequence("C"));
+    tool(Tool::Move, tr("Move / Transform"), "move", QKeySequence("V"))->setChecked(true);
+    tool(Tool::Marquee, tr("Marquee"), "square-dashed", QKeySequence("M"));
+    tool(Tool::Lasso, tr("Lasso"), "lasso", QKeySequence("L"));
+    tool(Tool::Wand, tr("Magic Wand"), "wand-sparkles", QKeySequence("W"));
+    tool(Tool::Crop, tr("Crop"), "crop", QKeySequence("C"));
     rail->addSeparator();
-    tool(Tool::Brush, tr("Brush"), "B", QKeySequence("B"));
-    eraserAction_ = rail->addAction("E");
+    tool(Tool::Brush, tr("Brush"), "paintbrush", QKeySequence("B"));
+    eraserAction_ = rail->addAction(toolIcon("eraser"), tr("Eraser"));
     eraserAction_->setToolTip(tr("Eraser (E)"));
     eraserAction_->setCheckable(true);
     eraserAction_->setShortcut(QKeySequence("E"));
     group->addAction(eraserAction_);
     connect(eraserAction_, &QAction::triggered, this, [this] { session_->brushErase = true; session_->selectTool(Tool::Brush); emit session_->toolChanged(); canvas_->setFocus(); });
-    tool(Tool::SpotHealing, tr("Spot Healing Brush"), "J", QKeySequence("J"));
-    tool(Tool::CloneStamp, tr("Clone Stamp (Alt-click sets the source)"), "S", QKeySequence("S"));
-    tool(Tool::Smudge, tr("Liquify / Blur / Smudge"), "R", QKeySequence("R"));
-    tool(Tool::Gradient, tr("Gradient"), "G", QKeySequence("G"));
-    tool(Tool::Shape, tr("Shape (Shift-U switches Rectangle / Ellipse)"), "U", QKeySequence("U"));
-    tool(Tool::Eyedropper, tr("Eyedropper"), "I", QKeySequence("I"));
+    tool(Tool::SpotHealing, tr("Spot Healing Brush"), "bandage", QKeySequence("J"));
+    tool(Tool::CloneStamp, tr("Clone Stamp (Alt-click sets the source)"), "stamp", QKeySequence("S"));
+    tool(Tool::Smudge, tr("Liquify / Blur / Smudge"), "droplet", QKeySequence("R"));
+    tool(Tool::Gradient, tr("Gradient"), "blend", QKeySequence("G"));
+    tool(Tool::Shape, tr("Shape (Shift-U switches Rectangle / Ellipse)"), "shapes", QKeySequence("U"));
+    tool(Tool::Eyedropper, tr("Eyedropper"), "pipette", QKeySequence("I"));
     rail->addSeparator();
-    tool(Tool::Hand, tr("Hand"), "H", QKeySequence("H"));
-    tool(Tool::Zoom, tr("Zoom"), "Z", QKeySequence("Z"));
+    tool(Tool::Hand, tr("Hand"), "hand", QKeySequence("H"));
+    tool(Tool::Zoom, tr("Zoom"), "zoom-in", QKeySequence("Z"));
     rail->addSeparator();
     foregroundButton_ = new QToolButton;
     foregroundButton_->setToolTip(tr("Foreground colour"));
@@ -303,11 +304,11 @@ void MainWindow::buildToolRail() {
     backgroundButton_->setFixedSize(30, 24);
     connect(backgroundButton_, &QToolButton::clicked, this, [this] { chooseColor(true); });
     rail->addWidget(backgroundButton_);
-    QAction* swap = rail->addAction(tr("⇄"));
+    QAction* swap = rail->addAction(toolIcon("arrow-left-right"), tr("Swap colours"));
     swap->setToolTip(tr("Swap colours (X)"));
     swap->setShortcut(QKeySequence("X"));
     connect(swap, &QAction::triggered, this, [this] { std::swap(session_->foregroundColor, session_->backgroundColor); updateColorSwatches(); });
-    QAction* defaults = rail->addAction(tr("D"));
+    QAction* defaults = rail->addAction(toolIcon("rotate-ccw"), tr("Default colours"));
     defaults->setToolTip(tr("Default colours (D)"));
     defaults->setShortcut(QKeySequence("D"));
     connect(defaults, &QAction::triggered, this, [this] { session_->foregroundColor = Qt::black; session_->backgroundColor = Qt::white; updateColorSwatches(); });
