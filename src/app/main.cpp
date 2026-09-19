@@ -165,7 +165,7 @@ void buildDemo(app::EditorSession& session, const QString& imagePath) {
             LayerTransform t;
             auto source = session.adjustmentSource(0, t);
             std::string error;
-            if (auto mask = subjectMask(*source, path.toStdString(), &error)) {
+            if (auto mask = subjectMask(*source, path.toStdString(), &error, app::ModelStore::mirrorAverage())) {
                 auto refined = refineMatte(*mask, *source, MatteSettings{}, 0);
                 session.applySubjectMask(refined, estimateForeground(*source, *refined));
             }

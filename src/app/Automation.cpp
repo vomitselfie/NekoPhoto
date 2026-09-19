@@ -809,8 +809,8 @@ void AutomationServer::registerHandlers() {
         if (!source) fail("the active layer has no pixels");
         std::string error;
         const std::string modelPath = ModelStore::pathFor(ModelStore::selected()).toStdString();
-        const bool detail = flag(p, "detail", false);
-        auto mask = detail ? subjectMaskDetailed(*source, modelPath, nullptr, int(num(p, "detailWindows", 12)), &error) : subjectMask(*source, modelPath, &error);
+        const bool detail = flag(p, "detail", false), mirror = flag(p, "flip", ModelStore::mirrorAverage());
+        auto mask = detail ? subjectMaskDetailed(*source, modelPath, nullptr, int(num(p, "detailWindows", 12)), &error, mirror) : subjectMask(*source, modelPath, &error, mirror);
         if (!mask) fail("the model failed: " + qs(error));
         std::shared_ptr<const Image> pixels;
         if (flag(p, "refine", true)) {

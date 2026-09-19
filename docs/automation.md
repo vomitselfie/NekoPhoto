@@ -122,7 +122,8 @@ Pixels of the active layer, inside the selection: `pixels.adjust`,
 `contrast`, `shiftEdge`, `matting`: the band width in pixels in which hair opacity is solved,
 `cleanup`: half-transparent specks touching no edge go, `decontaminate`: the edge pixels take the
 subject's own colour; both default true; `detail`: the model runs again on full-resolution windows
-along the edge of a large photo, `detailWindows` at most, default 12), `pixels.gmic` (`command`, a G'MIC
+along the edge of a large photo, `detailWindows` at most, default 12; `flip`: average the mask with the
+mirrored image's, defaulting to the preference), `pixels.gmic` (`command`, a G'MIC
 command line; `gmic.filters` lists the catalogue with parameters and defaults).
 
 Selection: `selection.all`, `selection.none`, `selection.invert`,

@@ -16,7 +16,9 @@ bool subjectModelSupported();
 
 /// The subject, white, at `image`'s size, from the ONNX model at `modelPath` (rembg's isnet-general-use or a
 /// u2net variant, told apart by name). Null with `error` set when the model can't be loaded or run.
-std::shared_ptr<GrayImage> subjectMask(const Image& image, const std::string& modelPath, std::string* error);
+/// With `flipAverage` the model also runs on the mirrored image and the two predictions are averaged: twice
+/// the time, and on AIM-500 a lower error on most subjects (portraits and furniture most of all).
+std::shared_ptr<GrayImage> subjectMask(const Image& image, const std::string& modelPath, std::string* error, bool flipAverage = false);
 
 /// The detail pass: `subjectMask` (or `coarse`, when given) and then the same network again on windows of its
 /// own input size cut from the layer at native resolution (half, above four times the input) wherever the
@@ -24,7 +26,7 @@ std::shared_ptr<GrayImage> subjectMask(const Image& image, const std::string& mo
 /// mask where that is confident, the windows are blended with Hann weights, and the result is fused with
 /// the coarse mask: its low frequencies, the windows' high ones, inside the uncertain band only. The coarse
 /// mask comes back unchanged when the layer is not much larger than the model's input.
-std::shared_ptr<GrayImage> subjectMaskDetailed(const Image& image, const std::string& modelPath, const GrayImage* coarse, int maxWindows, std::string* error);
+std::shared_ptr<GrayImage> subjectMaskDetailed(const Image& image, const std::string& modelPath, const GrayImage* coarse, int maxWindows, std::string* error, bool flipAverage = false);
 
 /// A window of the detail pass: `size` layer pixels square with its top-left corner at (x, y).
 struct DetailWindow { int x = 0, y = 0, size = 0; };

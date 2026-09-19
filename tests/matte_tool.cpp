@@ -36,6 +36,7 @@ struct Options {
     bool refine = true;
     int detail = 0;   // windows of the detail pass; 0 = coarse pass only
     int limit = 0;    // eval: at most this many images (0 = all)
+    bool flip = false;   // average the model's prediction with the mirrored image's
 };
 
 Options parse(int argc, char** argv, int from) {
@@ -57,6 +58,7 @@ Options parse(int argc, char** argv, int from) {
         else if (a == "--mask-suffix") o.maskSuffix = next();
         else if (a == "--categories") o.categories = next();
         else if (a == "--limit") o.limit = std::stoi(next());
+        else if (a == "--flip") o.flip = true;
         else std::fprintf(stderr, "ignored: %s\n", a.c_str());
     }
     return o;
@@ -78,10 +80,10 @@ std::shared_ptr<GrayImage> readAlpha(const std::string& path, std::string* error
     return gray;
 }
 
-std::shared_ptr<GrayImage> maskFor(const Image& image, const std::string& model, const std::string& maskPath, int detail, std::string* error) {
+std::shared_ptr<GrayImage> maskFor(const Image& image, const std::string& model, const std::string& maskPath, int detail, bool flip, std::string* error) {
     if (model != "none") {
         if (!subjectModelSupported()) { *error = "this build has no OpenCV"; return nullptr; }
-        return detail > 0 ? subjectMaskDetailed(image, model, nullptr, detail, error) : subjectMask(image, model, error);
+        return detail > 0 ? subjectMaskDetailed(image, model, nullptr, detail, error) : subjectMask(image, model, error, flip);
     }
     if (maskPath.empty()) { *error = "no model and no --mask"; return nullptr; }
     auto mask = readAlpha(maskPath, error);
@@ -201,7 +203,7 @@ int runMode(int argc, char** argv) {
     if (o.detail > 0 && model != "none") {
         if (auto coarse = subjectMask(*image, model, &error)) writePngGray(out("coarse.png"), *coarse);
     }
-    auto mask = maskFor(*image, model, o.mask, o.detail, &error);
+    auto mask = maskFor(*image, model, o.mask, o.detail, o.flip, &error);
     if (!mask) { std::fprintf(stderr, "mask: %s\n", error.c_str()); return 1; }
     writePngGray(out("mask.png"), *mask);
     MatteSettings s = o.settings.normalized();
@@ -277,7 +279,7 @@ int evalMode(int argc, char** argv) {
         auto truth = readAlpha(truthPath, &error);
         if (!image || !truth || truth->width() != image->width() || truth->height() != image->height()) { std::fprintf(stderr, "%s: %s\n", stem.c_str(), error.empty() ? "size mismatch" : error.c_str()); continue; }
         const std::string maskPath = (file.parent_path() / (stem + o.maskSuffix + ".png")).string();
-        auto mask = maskFor(*image, model, model == "none" ? maskPath : o.mask, o.detail, &error);
+        auto mask = maskFor(*image, model, model == "none" ? maskPath : o.mask, o.detail, o.flip, &error);
         if (!mask) { std::fprintf(stderr, "%s: %s\n", stem.c_str(), error.c_str()); continue; }
         auto matte = refineMatte(*mask, *image, o.settings, 0);
         Scores raw = score(*mask, *truth), refined = score(*matte, *truth);

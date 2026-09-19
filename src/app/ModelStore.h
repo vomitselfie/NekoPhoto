@@ -32,6 +32,9 @@ public:
     /// Preferences: whether the feature is on, and which model it uses.
     static bool enabled();
     static void setEnabled(bool on);
+    /// Preferences: run the model on the mirrored image too and average (on by default).
+    static bool mirrorAverage();
+    static void setMirrorAverage(bool on);
     static const ModelInfo& selected();
     static void setSelected(const QString& id);
     /// Ready to run: enabled, this build has model support, and the chosen model is downloaded.

@@ -1,5 +1,6 @@
 #include "Style.h"
 #include "FilterDialog.h"
+#include "ModelStore.h"
 #include <QCheckBox>
 #include <QComboBox>
 #include <QMessageBox>
@@ -307,14 +308,15 @@ BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QS
     setCursor(Qt::BusyCursor);
     std::shared_ptr<const Image> image = source_;
     std::string path = modelPath_.toStdString(), quick = quickModelPath == modelPath_ ? std::string() : quickModelPath.toStdString();
-    worker_ = std::thread([this, image, path, quick] {
+    const bool mirror = ModelStore::mirrorAverage();
+    worker_ = std::thread([this, image, path, quick, mirror] {
         if (!quick.empty()) {
             std::string ignored;
             if (auto coarse = subjectMask(*image, quick, &ignored))
                 QMetaObject::invokeMethod(this, [this, coarse] { if (computing_) { raw_ = coarse; refreshPreview(); } }, Qt::QueuedConnection);
         }
         std::string error;
-        auto mask = subjectMask(*image, path, &error);
+        auto mask = subjectMask(*image, path, &error, mirror);
         QMetaObject::invokeMethod(this, [this, mask, error] {
             computing_ = false;
             unsetCursor();

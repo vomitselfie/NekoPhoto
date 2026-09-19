@@ -232,7 +232,7 @@ std::shared_ptr<GrayImage> toMask(const cv::Mat& plane, int w, int h) {
 
 } // namespace
 
-std::shared_ptr<GrayImage> subjectMask(const Image& image, const std::string& modelPath, std::string* error) {
+std::shared_ptr<GrayImage> subjectMask(const Image& image, const std::string& modelPath, std::string* error, bool flipAverage) {
     if (image.isEmpty()) return nullptr;
     cv::dnn::Net* net = modelFor(modelPath, error);
     if (!net) return nullptr;
@@ -240,7 +240,16 @@ std::shared_ptr<GrayImage> subjectMask(const Image& image, const std::string& mo
     int inW, inH;
     inputSize(kind, image.width(), image.height(), inW, inH);
     cv::Mat pred;
-    if (!predict(net, kind, straightRgb(image, 0, 0, image.width(), image.height()), inW, inH, pred, error)) return nullptr;
+    const cv::Mat rgb = straightRgb(image, 0, 0, image.width(), image.height());
+    if (!predict(net, kind, rgb, inW, inH, pred, error)) return nullptr;
+    if (flipAverage) {
+        // Test-time augmentation: the mirrored image's prediction, mirrored back and averaged in.
+        cv::Mat mirrored, predMirrored;
+        cv::flip(rgb, mirrored, 1);
+        if (!predict(net, kind, mirrored, inW, inH, predMirrored, error)) return nullptr;
+        cv::flip(predMirrored, predMirrored, 1);
+        pred = (pred + predMirrored) * 0.5;
+    }
     if (!kind.modnet && !kind.humanseg) {
         double mn, mx;
         cv::minMaxLoc(pred, &mn, &mx);
@@ -249,8 +258,8 @@ std::shared_ptr<GrayImage> subjectMask(const Image& image, const std::string& mo
     return toMask(pred, image.width(), image.height());
 }
 
-std::shared_ptr<GrayImage> subjectMaskDetailed(const Image& image, const std::string& modelPath, const GrayImage* coarseIn, int maxWindows, std::string* error) {
-    std::shared_ptr<GrayImage> coarse = coarseIn && coarseIn->width() == image.width() && coarseIn->height() == image.height() ? std::make_shared<GrayImage>(*coarseIn) : subjectMask(image, modelPath, error);
+std::shared_ptr<GrayImage> subjectMaskDetailed(const Image& image, const std::string& modelPath, const GrayImage* coarseIn, int maxWindows, std::string* error, bool flipAverage) {
+    std::shared_ptr<GrayImage> coarse = coarseIn && coarseIn->width() == image.width() && coarseIn->height() == image.height() ? std::make_shared<GrayImage>(*coarseIn) : subjectMask(image, modelPath, error, flipAverage);
     if (!coarse) return nullptr;
     const Kind kind = kindOf(modelPath);
     const int w = image.width(), h = image.height();
@@ -332,12 +341,12 @@ std::shared_ptr<GrayImage> subjectMaskDetailed(const Image& image, const std::st
 
 bool subjectModelSupported() { return false; }
 
-std::shared_ptr<GrayImage> subjectMask(const Image&, const std::string&, std::string* error) {
+std::shared_ptr<GrayImage> subjectMask(const Image&, const std::string&, std::string* error, bool) {
     if (error) *error = "This build has no segmentation model support (OpenCV was not found when building).";
     return nullptr;
 }
 
-std::shared_ptr<GrayImage> subjectMaskDetailed(const Image&, const std::string&, const GrayImage*, int, std::string* error) {
+std::shared_ptr<GrayImage> subjectMaskDetailed(const Image&, const std::string&, const GrayImage*, int, std::string* error, bool) {
     if (error) *error = "This build has no segmentation model support (OpenCV was not found when building).";
     return nullptr;
 }

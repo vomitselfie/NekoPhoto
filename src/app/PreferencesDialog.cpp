@@ -61,6 +61,11 @@ PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent) {
     model_->setCurrentIndex(std::max(0, model_->findData(ModelStore::selected().id)));
     modelRow->addWidget(model_, 1);
     v->addLayout(modelRow);
+    auto* mirror = new QCheckBox(tr("Average with the mirrored image (steadier edges, twice the model time)"));
+    mirror->setToolTip(tr("The model runs on the image and on its mirror and the two masks are averaged. Measured on AIM-500 this lowers the error on most subjects, portraits and furniture most of all."));
+    mirror->setChecked(ModelStore::mirrorAverage());
+    connect(mirror, &QCheckBox::toggled, this, [](bool on) { ModelStore::setMirrorAverage(on); });
+    v->addWidget(mirror);
     about_ = new QLabel;
     about_->setWordWrap(true);
     about_->setStyleSheet(hintStyle());

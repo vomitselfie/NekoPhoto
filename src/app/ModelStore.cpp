@@ -36,6 +36,8 @@ const ModelInfo* ModelStore::modelById(const QString& id) {
 
 bool ModelStore::enabled() { return QSettings().value("ai/removeBackground", false).toBool(); }
 void ModelStore::setEnabled(bool on) { QSettings().setValue("ai/removeBackground", on); }
+bool ModelStore::mirrorAverage() { return QSettings().value("ai/mirrorAverage", true).toBool(); }
+void ModelStore::setMirrorAverage(bool on) { QSettings().setValue("ai/mirrorAverage", on); }
 
 const ModelInfo& ModelStore::selected() {
     const ModelInfo* m = modelById(QSettings().value("ai/model", "isnet").toString());

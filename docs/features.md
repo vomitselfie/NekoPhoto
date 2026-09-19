@@ -61,7 +61,9 @@ Off by default. Edit > Preferences turns it on and downloads a segmentation
 model (IS-Net, the U2Net portrait model or the small U2Net from the rembg
 project, or PP-HumanSeg from OpenCV's model zoo, all Apache-2.0) into the app's
 data folder. The model runs locally through OpenCV's DNN module; nothing is
-uploaded. The Advanced panel refines the mask against the image's edges, can
+uploaded. The model also runs on the mirrored image and the two masks are
+averaged (a preference, on by default; twice the model time for a steadier
+mask). The Advanced panel refines the mask against the image's edges, can
 solve hair opacity in a band around the edge (Matting), drops half-transparent
 specks that touch no edge, and re-estimates the edge pixels' colours as pure
 subject colour so no rim of the old background shows over a new one. On a large
