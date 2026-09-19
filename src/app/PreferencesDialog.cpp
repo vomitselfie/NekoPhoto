@@ -1,0 +1,145 @@
+#include "Style.h"
+#include "PreferencesDialog.h"
+#include <QCheckBox>
+#include <QComboBox>
+#include <QDesktopServices>
+#include <QDialogButtonBox>
+#include <QDir>
+#include <QGroupBox>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QMessageBox>
+#include <QProgressBar>
+#include <QPushButton>
+#include <QUrl>
+#include <QVBoxLayout>
+
+namespace app {
+
+PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent) {
+    setWindowTitle(tr("Preferences"));
+    setMinimumWidth(520);
+    auto* layout = new QVBoxLayout(this);
+
+    auto* group = new QGroupBox(tr("AI background removal"));
+    auto* v = new QVBoxLayout(group);
+    enable_ = new QCheckBox(tr("Enable Filter > Remove Background"));
+    enable_->setChecked(ModelStore::enabled());
+    enable_->setEnabled(ModelStore::supported());
+    v->addWidget(enable_);
+    auto* intro = new QLabel(ModelStore::supported()
+        ? tr("Finds the subject of a layer with a segmentation model that runs on this computer; nothing is sent anywhere. "
+             "The model is a separate download from the rembg project (Apache-2.0), kept in the folder below.")
+        : tr("This build was made without OpenCV, which runs the segmentation model, so the feature is unavailable."));
+    intro->setWordWrap(true);
+    intro->setStyleSheet(hintStyle());
+    v->addWidget(intro);
+
+    auto* modelRow = new QHBoxLayout;
+    modelRow->addWidget(new QLabel(tr("Model")));
+    model_ = new QComboBox;
+    for (auto& m : ModelStore::models()) model_->addItem(QStringLiteral("%1 (%2 MB)").arg(m.label).arg(m.bytes / 1e6, 0, 'f', m.bytes > 50e6 ? 0 : 1), m.id);
+    model_->setCurrentIndex(std::max(0, model_->findData(ModelStore::selected().id)));
+    modelRow->addWidget(model_, 1);
+    v->addLayout(modelRow);
+    about_ = new QLabel;
+    about_->setWordWrap(true);
+    about_->setStyleSheet(hintStyle());
+    v->addWidget(about_);
+
+    auto* statusRow = new QHBoxLayout;
+    status_ = new QLabel;
+    statusRow->addWidget(status_, 1);
+    download_ = new QPushButton(tr("Download"));
+    remove_ = new QPushButton(tr("Remove"));
+    cancel_ = new QPushButton(tr("Cancel"));
+    statusRow->addWidget(download_);
+    statusRow->addWidget(remove_);
+    statusRow->addWidget(cancel_);
+    v->addLayout(statusRow);
+    progress_ = new QProgressBar;
+    progress_->setRange(0, 1000);
+    progress_->setVisible(false);
+    v->addWidget(progress_);
+
+    auto* locationRow = new QHBoxLayout;
+    location_ = new QLabel;
+    location_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    location_->setWordWrap(true);
+    locationRow->addWidget(location_, 1);
+    auto* open = new QPushButton(tr("Show Folder"));
+    connect(open, &QPushButton::clicked, this, [] { QDir().mkpath(ModelStore::directory()); QDesktopServices::openUrl(QUrl::fromLocalFile(ModelStore::directory())); });
+    locationRow->addWidget(open);
+    v->addLayout(locationRow);
+    layout->addWidget(group);
+
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close);
+    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    layout->addWidget(buttons);
+
+    connect(enable_, &QCheckBox::toggled, this, [this](bool on) {
+        ModelStore::setEnabled(on);
+        // Turning it on with no model yet starts the download, which is the whole point of the switch.
+        if (on && !ModelStore::isPresent(chosen()) && !active_) startDownload();
+        syncStatus();
+        emit backgroundRemovalChanged();
+    });
+    connect(model_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        ModelStore::setSelected(model_->currentData().toString());
+        syncStatus();
+        emit backgroundRemovalChanged();
+    });
+    connect(download_, &QPushButton::clicked, this, &PreferencesDialog::startDownload);
+    connect(remove_, &QPushButton::clicked, this, &PreferencesDialog::removeModel);
+    connect(cancel_, &QPushButton::clicked, this, [this] { if (active_) active_->cancel(); });
+    syncStatus();
+}
+
+PreferencesDialog::~PreferencesDialog() { if (active_) active_->cancel(); }
+
+const ModelInfo& PreferencesDialog::chosen() const {
+    const ModelInfo* m = ModelStore::modelById(model_->currentData().toString());
+    return m ? *m : ModelStore::models().front();
+}
+
+void PreferencesDialog::syncStatus() {
+    const ModelInfo& m = chosen();
+    about_->setText(m.about);
+    bool present = ModelStore::isPresent(m), busy = active_.has_value(), supported = ModelStore::supported();
+    if (busy) status_->setText(tr("Downloading %1…").arg(m.label));
+    else if (present) status_->setText(tr("Downloaded and ready."));
+    else status_->setText(tr("Not downloaded (%1 MB).").arg(m.bytes / 1e6, 0, 'f', m.bytes > 50e6 ? 0 : 1));
+    download_->setVisible(!present && !busy);
+    download_->setEnabled(supported);
+    remove_->setVisible(present && !busy);
+    cancel_->setVisible(busy);
+    progress_->setVisible(busy);
+    model_->setEnabled(!busy);
+    location_->setText(tr("Models folder: %1").arg(ModelStore::directory()));
+}
+
+void PreferencesDialog::startDownload() {
+    if (active_) return;
+    const ModelInfo& m = chosen();
+    progress_->setValue(0);
+    active_ = ModelStore::download(m, this,
+        [this](qint64 received, qint64 total) { progress_->setValue(int(received * 1000 / std::max<qint64>(1, total))); },
+        [this](QString path, QString error) {
+            active_.reset();
+            if (!error.isEmpty()) QMessageBox::warning(this, tr("Download failed"), error);
+            else if (path.isEmpty()) status_->setText(tr("Download cancelled."));
+            syncStatus();
+            emit backgroundRemovalChanged();
+        });
+    syncStatus();
+}
+
+void PreferencesDialog::removeModel() {
+    const ModelInfo& m = chosen();
+    if (QMessageBox::question(this, tr("Remove the model?"), tr("Delete %1 from disk? It can be downloaded again later.").arg(m.name)) != QMessageBox::Yes) return;
+    ModelStore::remove(m);
+    syncStatus();
+    emit backgroundRemovalChanged();
+}
+
+} // namespace app

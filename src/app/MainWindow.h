@@ -80,6 +80,9 @@ private:
     void updateColorSwatches();
     void showError(const QString& title, const QString& message);
     void copyLayerFromPayload(int tabIndex, const QString& payload);
+    void showPreferences();
+    void refreshBackgroundAction();
+    QAction* removeBackgroundAction_ = nullptr;
 
     std::vector<Tab> tabs_;
     int current_ = -1;

@@ -1,3 +1,4 @@
+#include "Style.h"
 #include "ToolOptionsBar.h"
 #include "CanvasWidget.h"
 #include <QButtonGroup>
@@ -231,7 +232,7 @@ QWidget* ToolOptionsBar::buildBrushOptions() {
     spin(tr("Hardness"), "hardness", 0, 100, session_->brushSettings.hardness * 100, "%", [this](double v) { session_->brushSettings.hardness = v / 100; });
     spin(tr("Opacity"), "opacity", 1, 100, session_->brushSettings.opacity * 100, "%", [this](double v) { session_->brushSettings.opacity = v / 100; });
     auto* hint = new QLabel(tr("[ and ] change the size; Shift-click paints a straight line"));
-    hint->setStyleSheet("color: palette(mid);");
+    hint->setStyleSheet(hintStyle());
     h->addWidget(hint);
     h->addStretch();
     return w;
@@ -264,7 +265,7 @@ QWidget* ToolOptionsBar::buildCloneOptions() {
     h->addWidget(all);
     addBrushTipFields(h);
     auto* hint = new QLabel(tr("Alt-click sets the source"));
-    hint->setStyleSheet("color: palette(mid);");
+    hint->setStyleSheet(hintStyle());
     h->addWidget(hint);
     h->addStretch();
     return w;
@@ -294,7 +295,7 @@ QWidget* ToolOptionsBar::buildSmudgeOptions() {
     h->addWidget(mode);
     addBrushTipFields(h);
     auto* hint = new QLabel(tr("Opacity is the strength; Liquify pushes pixels, Smudge drags colour, Blur softens"));
-    hint->setStyleSheet("color: palette(mid);");
+    hint->setStyleSheet(hintStyle());
     h->addWidget(hint);
     h->addStretch();
     return w;
@@ -325,7 +326,7 @@ QWidget* ToolOptionsBar::buildGradientOptions() {
     connect(apply, &QPushButton::clicked, this, [this] { session_->commitGradient(); });
     h->addWidget(apply);
     auto* hint = new QLabel(tr("Drag a line; drag again to redo it; Enter applies, Esc discards. Shift snaps the angle"));
-    hint->setStyleSheet("color: palette(mid);");
+    hint->setStyleSheet(hintStyle());
     h->addWidget(hint);
     h->addStretch();
     return w;
@@ -344,7 +345,7 @@ QWidget* ToolOptionsBar::buildShapeOptions() {
     connect(radius, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double v) { session_->shapeCornerRadius = v; });
     h->addWidget(radius);
     auto* hint = new QLabel(tr("Drag a shape in the foreground colour; Shift squares, Alt grows from the centre; Shift-U switches kind"));
-    hint->setStyleSheet("color: palette(mid);");
+    hint->setStyleSheet(hintStyle());
     h->addWidget(hint);
     h->addStretch();
     return w;
@@ -363,7 +364,7 @@ QWidget* ToolOptionsBar::buildMarqueeOptions() {
     connect(aa, &QCheckBox::toggled, this, [this](bool on) { session_->selectionAntialiased = on; });
     h->addWidget(aa);
     auto* hint = new QLabel(tr("Shift adds, Alt subtracts; drag inside a selection to move its outline"));
-    hint->setStyleSheet("color: palette(mid);");
+    hint->setStyleSheet(hintStyle());
     h->addWidget(hint);
     h->addStretch();
     return w;
@@ -379,7 +380,7 @@ QWidget* ToolOptionsBar::buildLassoOptions() {
     syncers_.push_back([this, kind] { QSignalBlocker b(kind); kind->setCurrentIndex(session_->lassoKind == LassoKind::Polygonal ? 1 : 0); });
     h->addWidget(kind);
     auto* hint = new QLabel(tr("Polygonal: click to add points, double-click or Enter to close, Backspace removes the last point"));
-    hint->setStyleSheet("color: palette(mid);");
+    hint->setStyleSheet(hintStyle());
     h->addWidget(hint);
     h->addStretch();
     return w;
@@ -420,7 +421,7 @@ QWidget* ToolOptionsBar::buildCropOptions() {
     });
     h->addWidget(ratio);
     auto* hint = new QLabel(tr("Drag the crop, then press Enter or double-click; Shift squares, Alt grows from the centre"));
-    hint->setStyleSheet("color: palette(mid);");
+    hint->setStyleSheet(hintStyle());
     h->addWidget(hint);
     auto* apply = new QPushButton(tr("Crop"));
     connect(apply, &QPushButton::clicked, this, [this] { canvas_->applyCrop(); });
@@ -442,7 +443,7 @@ QWidget* ToolOptionsBar::buildZoomOptions() {
     h->addWidget(fit);
     h->addWidget(actual);
     auto* hint = new QLabel(tr("Click zooms in, Alt-click out, drag a box to zoom to it; Ctrl-wheel zooms anywhere"));
-    hint->setStyleSheet("color: palette(mid);");
+    hint->setStyleSheet(hintStyle());
     h->addWidget(hint);
     h->addStretch();
     return w;
@@ -452,7 +453,7 @@ QWidget* ToolOptionsBar::buildEyedropperOptions() {
     QWidget* w = row();
     auto* h = layoutOf(w);
     auto* hint = new QLabel(tr("Click sets the foreground colour, Alt-click the background"));
-    hint->setStyleSheet("color: palette(mid);");
+    hint->setStyleSheet(hintStyle());
     h->addWidget(hint);
     h->addStretch();
     return w;

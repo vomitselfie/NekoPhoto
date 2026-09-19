@@ -1,3 +1,4 @@
+#include "Style.h"
 #include "LayersPanel.h"
 #include "ImageConvert.h"
 #include <QApplication>
@@ -343,12 +344,12 @@ QWidget* LayersPanel::makeRow(const Layer& layer, int depth, bool visible) {
     auto* name = new QLabel(QString::fromStdString(layer.name));
     name->setProperty("layerId", QString::fromStdString(layer.id));
     name->setProperty("name", true);
-    if (!visible) name->setStyleSheet("color: palette(mid);");
+    if (!visible) name->setStyleSheet(hintStyle());
     if (layer.isGroup) { QFont f = name->font(); f.setBold(true); name->setFont(f); }
     h->addWidget(name, 1);
     if (!layer.isGroup && (layer.opacity != 1 || layer.blendMode != BlendMode::Normal)) {
         auto* info = new QLabel(QStringLiteral("%1%").arg(int(std::round(layer.opacity * 100))));
-        info->setStyleSheet("color: palette(mid); font-size: 10px;");
+        info->setStyleSheet(hintStyle(" font-size: 10px;"));
         h->addWidget(info);
     }
     return row;

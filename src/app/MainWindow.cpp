@@ -6,6 +6,7 @@
 #include "AdjustmentsPanel.h"
 #include "FilterDialog.h"
 #include "ModelStore.h"
+#include "PreferencesDialog.h"
 #include "compositor/subject.h"
 #include "ToolOptionsBar.h"
 #include "compositor/png.h"
@@ -384,6 +385,9 @@ void MainWindow::buildMenus() {
     needsDocument(load->addAction(tr("Subtract Layer Pixels"), this, [this] { if (session_->activeLayerId()) session_->loadLayerAsSelection(*session_->activeLayerId(), false, SelectionMode::Subtract); }));
     needsDocument(edit->addAction(tr("Content-Aware Fill"), QKeySequence("Shift+F5"), this, [this] { QString error; if (!session_->contentAwareFill(&error)) showError(tr("Content-Aware Fill"), error); }));
 
+    edit->addSeparator();
+    edit->addAction(tr("&Preferences…"), QKeySequence::Preferences, this, &MainWindow::showPreferences);
+
     QMenu* image = menuBar()->addMenu(tr("&Image"));
     needsDocument(image->addAction(tr("&Canvas Size…"), QKeySequence("Ctrl+Alt+C"), this, [this] {
         auto o = askCanvasSize(this, session_->document()->width, session_->document()->height);
@@ -465,16 +469,20 @@ void MainWindow::buildMenus() {
     filterAction(tr("Add &Noise…"), FilterKind::AddNoise);
     filterAction(tr("&Lens Correction…"), FilterKind::LensCorrection);
     filter->addSeparator();
-    needsDocument(filter->addAction(tr("Remove &Background…"), this, [this] {
+    removeBackgroundAction_ = needsDocument(filter->addAction(tr("Remove &Background…"), this, [this] {
+        if (!ModelStore::ready()) {
+            // Off, or no model yet: the preferences page is where it gets turned on and fetched.
+            auto answer = QMessageBox::question(this, tr("Remove Background"),
+                ModelStore::supported() ? tr("AI background removal is turned off. Open Preferences to enable it and download the model?")
+                                        : tr("This build was made without OpenCV, which runs the segmentation model."),
+                ModelStore::supported() ? (QMessageBox::Yes | QMessageBox::Cancel) : QMessageBox::Ok);
+            if (answer == QMessageBox::Yes) showPreferences();
+            return;
+        }
         if (!session_->canAdjustPixels()) { showError(tr("Remove Background"), tr("Select a visible image layer (not a mask) to remove its background.")); return; }
-        if (!subjectModelSupported()) { showError(tr("Remove Background"), tr("This build was made without OpenCV, which runs the segmentation model.")); return; }
-        EditorSession* session = session_;
-        ModelStore::ensure(ModelStore::primary(), this, [this, session](QString path, QString error) {
-            if (!error.isEmpty()) { showError(tr("Remove Background"), error); return; }
-            if (path.isEmpty() || session != session_) return;
-            (new BackgroundDialog(session_, path, this))->show();
-        });
+        (new BackgroundDialog(session_, ModelStore::pathFor(ModelStore::selected()), this))->show();
     }));
+    refreshBackgroundAction();
 
     QMenu* view = menuBar()->addMenu(tr("&View"));
     needsDocument(view->addAction(tr("Zoom &In"), QKeySequence::ZoomIn, this, [this] { session_->zoomTo(session_->viewport.zoom * 1.25); }));
@@ -516,6 +524,24 @@ void MainWindow::deleteSelectedLayers() {
     box.exec();
     if (box.clickedButton() == bake) session_->deleteLayersResolvingClipping(ids, true);
     else if (box.clickedButton() == remove) session_->deleteLayersResolvingClipping(ids, false);
+}
+
+void MainWindow::showPreferences() {
+    auto* dialog = new PreferencesDialog(this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    connect(dialog, &PreferencesDialog::backgroundRemovalChanged, this, &MainWindow::refreshBackgroundAction);
+    dialog->show();
+}
+
+void MainWindow::refreshBackgroundAction() {
+    if (!removeBackgroundAction_) return;
+    QString tip;
+    if (!ModelStore::supported()) tip = tr("Unavailable: this build has no OpenCV");
+    else if (!ModelStore::enabled()) tip = tr("Off: enable it in Edit > Preferences");
+    else if (!ModelStore::isPresent(ModelStore::selected())) tip = tr("The model isn’t downloaded yet: see Edit > Preferences");
+    else tip = tr("Hide the background of the active layer with a mask (%1)").arg(ModelStore::selected().label);
+    removeBackgroundAction_->setToolTip(tip);
+    removeBackgroundAction_->setText(ModelStore::ready() ? tr("Remove &Background…") : tr("Remove &Background (off)…"));
 }
 
 void MainWindow::refreshActions() {

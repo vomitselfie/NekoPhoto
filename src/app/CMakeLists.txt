@@ -25,6 +25,7 @@ qt_standard_project_setup()
 qt_add_executable(compositor
     main.cpp
     ImageConvert.h
+    Style.h
     Viewport.h
     EditorSession.h
     EditorSession.cpp
@@ -40,6 +41,8 @@ qt_add_executable(compositor
     FilterDialog.cpp
     ModelStore.h
     ModelStore.cpp
+    PreferencesDialog.h
+    PreferencesDialog.cpp
     ToolOptionsBar.h
     ToolOptionsBar.cpp
     Dialogs.h

@@ -1,3 +1,4 @@
+#include "Style.h"
 #include "AdjustmentEditor.h"
 #include "EditorSession.h"
 #include <QApplication>
@@ -281,7 +282,7 @@ QWidget* AdjustmentEditor::buildCurves() {
     v->addWidget(curve_, 1);
     auto* hint = new QLabel(tr("Click the curve to add a point, drag to move, double-click to remove."));
     hint->setWordWrap(true);
-    hint->setStyleSheet("color: palette(mid);");
+    hint->setStyleSheet(hintStyle());
     v->addWidget(hint);
     auto* reset = new QPushButton(tr("Reset"));
     connect(reset, &QPushButton::clicked, this, [this] { emit editStarted(); settings_.curves = CurvesSettings(); changed(); emit editFinished(); });

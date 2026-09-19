@@ -1,3 +1,4 @@
+#include "Style.h"
 #include "FilterDialog.h"
 #include <QCheckBox>
 #include <QComboBox>
@@ -262,7 +263,7 @@ BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QW
     connect(quality, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { advancedMode_ = i == 1; advanced_->setVisible(advancedMode_); adjustSize(); refreshPreview(); });
     auto* note = new QLabel(tr("The background is hidden by a layer mask, not erased: paint the mask, disable it or delete it to bring it back."));
     note->setWordWrap(true);
-    note->setStyleSheet("color: palette(mid);");
+    note->setStyleSheet(hintStyle());
     layout->addWidget(note);
     preview_ = new QCheckBox(tr("Preview"));
     preview_->setChecked(true);

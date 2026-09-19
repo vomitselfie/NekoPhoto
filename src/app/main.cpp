@@ -1,5 +1,8 @@
 #include "MainWindow.h"
 #include "ImageConvert.h"
+#include "ModelStore.h"
+#include "PreferencesDialog.h"
+#include <cstdio>
 #include "compositor/filters.h"
 #include "compositor/selection.h"
 #include "compositor/subject.h"
@@ -155,19 +158,37 @@ int main(int argc, char** argv) {
     QCommandLineOption demo("demo", "Build a layered demo document (optionally from the given image).");
     QCommandLineOption screenshot("screenshot", "Grab the window to <file> after opening, then quit.", "file");
     QCommandLineOption saveAs("save-as", "Save the document as the .comp package <path> before quitting (with --screenshot).", "path");
+    QCommandLineOption prefs("preferences", "Open the Preferences dialog too (with --screenshot, grab it instead of the window).");
+    QCommandLineOption fetch("download-model", "Download model <id> (isnet or u2netp) into the models folder, report, and quit.", "id");
     parser.addOption(demo);
     parser.addOption(screenshot);
     parser.addOption(saveAs);
+    parser.addOption(prefs);
+    parser.addOption(fetch);
     parser.process(app);
+    if (parser.isSet(fetch)) {
+        const app::ModelInfo* model = app::ModelStore::modelById(parser.value(fetch));
+        if (!model) { qWarning("unknown model id"); return 2; }
+        int status = 1;
+        app::ModelStore::download(*model, &app, [](qint64 r, qint64 t) { std::fprintf(stderr, "\r%lld / %lld", (long long)r, (long long)t); }, [&](QString path, QString error) {
+            std::fprintf(stderr, "\n%s\n", error.isEmpty() ? qPrintable("saved " + path) : qPrintable("failed: " + error));
+            status = error.isEmpty() && !path.isEmpty() ? 0 : 1;
+            QApplication::exit(status);
+        });
+        app.exec();
+        return status;
+    }
     app::MainWindow window;
     window.show();
     QStringList files = parser.positionalArguments();
     if (parser.isSet(demo)) buildDemo(*window.session(), files.isEmpty() ? QString() : QDir::current().absoluteFilePath(files.first()));
     else for (const QString& path : files) window.openPath(QDir::current().absoluteFilePath(path));
+    app::PreferencesDialog* preferences = nullptr;
+    if (parser.isSet(prefs)) { preferences = new app::PreferencesDialog(&window); preferences->show(); }
     if (parser.isSet(screenshot)) {
         QString target = parser.value(screenshot), savePath = parser.value(saveAs);
-        QTimer::singleShot(400, &window, [&window, target, savePath] {
-            window.grab().save(target);
+        QTimer::singleShot(400, &window, [&window, target, savePath, preferences] {
+            (preferences ? preferences->grab() : window.grab()).save(target);
             if (!savePath.isEmpty()) { QString error; window.session()->saveProject(savePath, &error); if (!error.isEmpty()) qWarning("%s", qPrintable(error)); }
             QApplication::quit();
         });

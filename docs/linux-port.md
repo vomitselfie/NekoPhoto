@@ -42,6 +42,8 @@ Options: `-DCOMPOSITOR_BUILD_APP=OFF` builds only the core and tests;
 `-DCOMPOSITOR_QT_TOOL_DIR=<dir>` points the build at copies of `moc`, `uic`
 and `rcc` for shells that cannot execute binaries under `/usr/lib`.
 
+`compositor --download-model isnet` fetches a model without the GUI (into
+`COMPOSITOR_MODEL_DIR` when set); `--preferences` opens the Preferences dialog.
 `compositor --demo --screenshot out.png --save-as Demo.comp` builds a layered
 demo document, grabs the window and saves a project without any interaction
 (works with `QT_QPA_PLATFORM=offscreen`); CI runs it as a smoke test.
@@ -119,9 +121,10 @@ packaging/                      .desktop, icon, MIME type
   copy it there.
 - Image Size resamples every layer and mask, as the Mac does.
 
-- Remove Background: the IS-Net segmentation model (rembg's Apache-2.0 ONNX
-  release, ~180 MB, downloaded once on first use into the app data directory,
-  checksum verified) run through OpenCV's DNN module, with the Mac panel's
+- Remove Background: off until enabled in Edit > Preferences, which offers the
+  IS-Net model (rembg's Apache-2.0 ONNX release, ~180 MB) or a 4.6 MB U2Net,
+  downloads it with a checksum check into the app data directory, and can
+  remove it again. The model runs through OpenCV's DNN module, with the Mac panel's
   Advanced refinement (guided-filter edge refine for hair, matte contrast,
   edge shift). The result is a layer mask, multiplied with any existing mask,
   limited to the selection when there is one. OpenCV is optional at build
@@ -156,3 +159,4 @@ uses a different model than Apple's Vision, so its cutouts differ in detail.
 | Alt Backspace, Ctrl Backspace, Delete, Shift F5 | Fill foreground / background, clear, content-aware fill |
 | Ctrl Z, Ctrl Shift Z | Undo, redo |
 | Ctrl Shift E, Ctrl Alt Shift S | Export PNG, export JPEG |
+| Ctrl , | Preferences |
