@@ -4,6 +4,24 @@
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PNG REQUIRED IMPORTED_TARGET libpng)
 
+# OpenCV's DNN module runs the Remove Background model. Optional: without it the
+# refinement still builds and the menu item explains what's missing.
+option(COMPOSITOR_WITH_OPENCV "Use OpenCV DNN for Remove Background" ON)
+set(COMPOSITOR_HAVE_OPENCV OFF)
+if(COMPOSITOR_WITH_OPENCV)
+    pkg_check_modules(OPENCV IMPORTED_TARGET opencv5)
+    if(NOT OPENCV_FOUND)
+        pkg_check_modules(OPENCV IMPORTED_TARGET opencv4)
+    endif()
+    if(OPENCV_FOUND)
+        set(COMPOSITOR_HAVE_OPENCV ON)
+        message(STATUS "Remove Background: OpenCV ${OPENCV_VERSION} DNN")
+    else()
+        message(STATUS "Remove Background: OpenCV not found, model inference disabled")
+    endif()
+endif()
+set(COMPOSITOR_HAVE_OPENCV ${COMPOSITOR_HAVE_OPENCV} PARENT_SCOPE)
+
 add_library(compositor_core STATIC
     src/adjustments.cpp
     src/blend.cpp
@@ -12,6 +30,8 @@ add_library(compositor_core STATIC
     src/filters.cpp
     src/history.cpp
     src/image.cpp
+    src/matte.cpp
+    src/subject.cpp
     src/png.cpp
     src/project.cpp
     src/render.cpp
@@ -33,4 +53,8 @@ target_link_libraries(compositor_core
     PRIVATE PkgConfig::PNG compositor_warnings
 )
 target_compile_definitions(compositor_core PRIVATE _USE_MATH_DEFINES)
+if(COMPOSITOR_HAVE_OPENCV)
+    target_link_libraries(compositor_core PRIVATE PkgConfig::OPENCV)
+    target_compile_definitions(compositor_core PRIVATE COMPOSITOR_HAVE_OPENCV)
+endif()
 set_target_properties(compositor_core PROPERTIES POSITION_INDEPENDENT_CODE ON)

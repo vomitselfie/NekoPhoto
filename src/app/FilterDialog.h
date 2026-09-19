@@ -3,6 +3,7 @@
 #pragma once
 #include "AdjustmentEditor.h"
 #include "EditorSession.h"
+#include "compositor/subject.h"
 #include <QDialog>
 
 class QCheckBox;
@@ -58,6 +59,31 @@ private:
     std::shared_ptr<compositor::GrayImage> previewCoverage_;
     std::vector<std::function<void()>> syncers_;
     bool finished_ = false;
+};
+
+/// Filter > Remove Background: the subject mask from the model, refined live, applied as a layer mask.
+class BackgroundDialog : public QDialog {
+    Q_OBJECT
+public:
+    BackgroundDialog(EditorSession* session, QString modelPath, QWidget* parent = nullptr);
+    ~BackgroundDialog() override;
+protected:
+    void done(int result) override;
+private:
+    void refreshPreview();
+    std::shared_ptr<compositor::GrayImage> refined(int limit) const;
+    EditorSession* session_;
+    QString modelPath_;
+    QCheckBox* preview_;
+    QWidget* advanced_;
+    bool advancedMode_ = false;
+    compositor::MatteSettings settings_;
+    std::shared_ptr<const compositor::Image> source_;
+    compositor::LayerTransform transform_;
+    std::shared_ptr<compositor::GrayImage> raw_;
+    QString error_;
+    bool finished_ = false;
+    bool computing_ = false;
 };
 
 } // namespace app

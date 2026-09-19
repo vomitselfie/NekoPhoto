@@ -1,5 +1,8 @@
 #include "FilterDialog.h"
 #include <QCheckBox>
+#include <QComboBox>
+#include <QMessageBox>
+#include <thread>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
 #include <QHBoxLayout>
@@ -210,6 +213,116 @@ void FilterDialog::done(int result) {
         if (kind_ == FilterKind::GaussianBlur || kind_ == FilterKind::MotionBlur) image = trimToPixels(*out, transform_, placed);
         session_->commitPixels(image, placed, QString::fromUtf8(filterKindName(kind_)));
     } else session_->clearPixelPreview();
+    QDialog::done(result);
+}
+
+// ---- Remove Background -----------------------------------------------------------------------
+
+BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QWidget* parent)
+    : QDialog(parent), session_(session), modelPath_(std::move(modelPath)) {
+    setWindowTitle(tr("Remove Background"));
+    setModal(false);
+    setAttribute(Qt::WA_DeleteOnClose);
+    auto* layout = new QVBoxLayout(this);
+    auto* qualityRow = new QHBoxLayout;
+    qualityRow->addWidget(new QLabel(tr("Quality")));
+    auto* quality = new QComboBox;
+    quality->addItems({tr("Basic"), tr("Advanced")});
+    quality->setToolTip(tr("Basic is the model's mask as it comes; Advanced refines it against the image's own edges"));
+    qualityRow->addWidget(quality, 1);
+    layout->addLayout(qualityRow);
+    advanced_ = new QWidget;
+    auto* av = new QVBoxLayout(advanced_);
+    av->setContentsMargins(0, 0, 0, 0);
+    auto slider = [&](const QString& label, const QString& tip, double min, double max, double scale, std::function<double()> get, std::function<void(double)> apply) {
+        auto* row = new QHBoxLayout;
+        auto* name = new QLabel(label);
+        name->setMinimumWidth(90);
+        name->setToolTip(tip);
+        row->addWidget(name);
+        auto* s = new QSlider(Qt::Horizontal);
+        s->setRange(int(min * scale), int(max * scale));
+        s->setValue(int(std::round(get() * scale)));
+        row->addWidget(s, 1);
+        auto* spin = new QDoubleSpinBox;
+        spin->setRange(min, max);
+        spin->setDecimals(scale >= 10 ? 1 : 0);
+        spin->setValue(get());
+        spin->setKeyboardTracking(false);
+        row->addWidget(spin);
+        connect(s, &QSlider::valueChanged, this, [this, spin, apply, scale](int v) { { QSignalBlocker b(spin); spin->setValue(v / scale); } apply(v / scale); refreshPreview(); });
+        connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this, s, apply, scale](double v) { { QSignalBlocker b(s); s->setValue(int(std::round(v * scale))); } apply(v); refreshPreview(); });
+        av->addLayout(row);
+    };
+    slider(tr("Refine Edges"), tr("Pulls the mask onto the image's own edges, recovering hair and fur (layer pixels)"), 0, 40, 1, [this] { return settings_.refineEdges; }, [this](double v) { settings_.refineEdges = v; });
+    slider(tr("Contrast"), tr("Pushes the mask's grays toward black and white, clearing haze"), 0, 100, 1, [this] { return settings_.contrast; }, [this](double v) { settings_.contrast = v; });
+    slider(tr("Shift Edge"), tr("Contracts (negative) or expands the edge, dropping the rim of background colour"), -10, 10, 1, [this] { return settings_.shiftEdge; }, [this](double v) { settings_.shiftEdge = v; });
+    advanced_->setVisible(false);
+    layout->addWidget(advanced_);
+    connect(quality, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { advancedMode_ = i == 1; advanced_->setVisible(advancedMode_); adjustSize(); refreshPreview(); });
+    auto* note = new QLabel(tr("The background is hidden by a layer mask, not erased: paint the mask, disable it or delete it to bring it back."));
+    note->setWordWrap(true);
+    note->setStyleSheet("color: palette(mid);");
+    layout->addWidget(note);
+    preview_ = new QCheckBox(tr("Preview"));
+    preview_->setChecked(true);
+    connect(preview_, &QCheckBox::toggled, this, [this] { refreshPreview(); });
+    layout->addWidget(preview_);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    layout->addWidget(buttons);
+
+    source_ = session_->adjustmentSource(0, transform_);
+    if (!source_) return;
+    // The model runs once, off the UI thread; the sliders only redo the refinement.
+    computing_ = true;
+    setCursor(Qt::BusyCursor);
+    std::shared_ptr<const Image> image = source_;
+    std::string path = modelPath_.toStdString();
+    auto* worker = new std::thread([this, image, path] {
+        std::string error;
+        auto mask = subjectMask(*image, path, &error);
+        QMetaObject::invokeMethod(this, [this, mask, error] {
+            computing_ = false;
+            unsetCursor();
+            if (!mask) { error_ = QString::fromStdString(error); QMessageBox::warning(this, tr("Remove Background"), error_.isEmpty() ? tr("No subject mask could be made.") : error_); reject(); return; }
+            raw_ = mask;
+            refreshPreview();
+        }, Qt::QueuedConnection);
+    });
+    worker->detach();
+    delete worker;
+}
+
+BackgroundDialog::~BackgroundDialog() { if (!finished_) session_->clearPixelPreview(); }
+
+std::shared_ptr<GrayImage> BackgroundDialog::refined(int limit) const {
+    if (!raw_) return nullptr;
+    if (!advancedMode_) return raw_;
+    return refineMatte(*raw_, *source_, settings_, limit);
+}
+
+void BackgroundDialog::refreshPreview() {
+    if (!source_ || !raw_) return;
+    if (!preview_->isChecked()) { session_->clearPixelPreview(); return; }
+    auto mask = refined(1400);
+    // The layer with its background made transparent by the same mask the commit lays down.
+    auto out = std::make_shared<Image>(*source_);
+    for (int y = 0; y < out->height(); y++) for (int x = 0; x < out->width(); x++) {
+        unsigned k = mask->at(x, y);
+        uint8_t* p = out->pixel(x, y);
+        for (int c = 0; c < 4; c++) p[c] = uint8_t((p[c] * k + 127) / 255);
+    }
+    session_->setPixelPreview(out, std::nullopt);
+}
+
+void BackgroundDialog::done(int result) {
+    if (finished_) { QDialog::done(result); return; }
+    if (computing_ && result == QDialog::Accepted) return; // wait for the mask
+    finished_ = true;
+    if (result == QDialog::Accepted && source_ && raw_) session_->applySubjectMask(refined(0));
+    else session_->clearPixelPreview();
     QDialog::done(result);
 }
 

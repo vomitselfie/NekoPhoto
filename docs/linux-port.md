@@ -14,13 +14,13 @@ Requirements: CMake 3.22+, Ninja (or Make), GCC 12+ or Clang 15+, Qt 6.4+
 Arch / Manjaro:
 
 ```bash
-sudo pacman -S cmake ninja qt6-base qt6-wayland qt6-imageformats libpng
+sudo pacman -S cmake ninja qt6-base qt6-wayland qt6-imageformats libpng opencv
 ```
 
 Ubuntu 24.04:
 
 ```bash
-sudo apt install cmake ninja-build qt6-base-dev qt6-wayland qt6-image-formats-plugins libpng-dev libgl1-mesa-dev
+sudo apt install cmake ninja-build qt6-base-dev qt6-wayland qt6-image-formats-plugins libpng-dev libgl1-mesa-dev libopencv-dev
 ```
 
 Then:
@@ -37,6 +37,7 @@ Under a Wayland session Qt picks the Wayland platform on its own; force it with
 XWayland.
 
 Options: `-DCOMPOSITOR_BUILD_APP=OFF` builds only the core and tests;
+`-DCOMPOSITOR_WITH_OPENCV=OFF` leaves out the Remove Background model;
 `-DCOMPOSITOR_WARNINGS_AS_ERRORS=ON` is what CI uses.
 `-DCOMPOSITOR_QT_TOOL_DIR=<dir>` points the build at copies of `moc`, `uic`
 and `rcc` for shells that cannot execute binaries under `/usr/lib`.
@@ -118,10 +119,18 @@ packaging/                      .desktop, icon, MIME type
   copy it there.
 - Image Size resamples every layer and mask, as the Mac does.
 
+- Remove Background: the IS-Net segmentation model (rembg's Apache-2.0 ONNX
+  release, ~180 MB, downloaded once on first use into the app data directory,
+  checksum verified) run through OpenCV's DNN module, with the Mac panel's
+  Advanced refinement (guided-filter edge refine for hair, matte contrast,
+  edge shift). The result is a layer mask, multiplied with any existing mask,
+  limited to the selection when there is one. OpenCV is optional at build
+  time; `COMPOSITOR_MODEL_DIR` overrides where models are kept.
+
 ## Not ported
 
-- Remove Background: Apple's Vision subject mask has no Linux equivalent. An
-  ONNX (U²-Net) backend would be the route if wanted.
+Nothing on the Mac README's feature list is missing now. Remove Background
+uses a different model than Apple's Vision, so its cutouts differ in detail.
 
 ## Keyboard shortcuts
 

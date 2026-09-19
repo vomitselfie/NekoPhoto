@@ -12,6 +12,7 @@
 #include "compositor/render.h"
 #include "compositor/selection.h"
 #include "compositor/shape.h"
+#include "compositor/subject.h"
 #include "compositor/warp.h"
 #include "compositor/warpstroke.h"
 #include "compositor/transform.h"
@@ -857,6 +858,43 @@ TEST_CASE(image_size_resamples_layers) {
     auto flat = renderFlattened(doc);
     CHECK_EQ(int(flat->pixel(50, 20)[0]), 255);
     CHECK_EQ(int(flat->pixel(25, 20)[3]), 0);
+}
+
+TEST_CASE(matte_refinement_follows_the_guide) {
+    // A hard vertical edge in the guide at x=20; a coarse mask edge at x=24 gets pulled onto the guide's edge.
+    auto guide = std::make_shared<Image>(40, 40);
+    for (int y = 0; y < 40; y++) for (int x = 0; x < 40; x++) { uint8_t v = x < 20 ? 240 : 20; uint8_t* p = guide->pixel(x, y); p[0] = p[1] = p[2] = v; p[3] = 255; }
+    GrayImage mask(40, 40, 0);
+    for (int y = 0; y < 40; y++) for (int x = 0; x < 24; x++) mask.at(x, y) = 255;
+    auto refined = guidedRefine(mask, *guide, 6, 0);
+    CHECK(refined->at(22, 20) < mask.at(22, 20));
+    CHECK(refined->at(10, 20) > 200);
+    CHECK(refined->at(35, 20) < 40);
+    MatteSettings s{0, 100, 0};
+    auto hard = refineMatte(mask, *guide, s, 0);
+    CHECK_EQ(int(hard->at(10, 20)), 255);
+    MatteSettings shrink{0, 0, -4};
+    auto shrunk = refineMatte(mask, *guide, shrink, 0);
+    CHECK(shrunk->at(23, 20) < 128);
+    CHECK(shrunk->at(10, 20) > 128);
+    MatteSettings grow{0, 0, 4};
+    auto grown = refineMatte(mask, *guide, grow, 0);
+    CHECK(grown->at(24, 20) > 128);
+    CHECK(grown->at(28, 20) < 128);
+}
+
+TEST_CASE(subject_mask_from_model_when_available) {
+    const char* dir = std::getenv("COMPOSITOR_MODEL_DIR");
+    if (!dir || !subjectModelSupported()) { std::fprintf(stderr, "  (skipped: set COMPOSITOR_MODEL_DIR with u2netp.onnx to run)\n"); return; }
+    std::string path = std::string(dir) + "/u2netp.onnx";
+    if (!fs::exists(path)) { std::fprintf(stderr, "  (skipped: %s not present)\n", path.c_str()); return; }
+    // A bright disc on a dark field: the disc is the subject.
+    auto img = std::make_shared<Image>(160, 160);
+    for (int y = 0; y < 160; y++) for (int x = 0; x < 160; x++) { bool in = std::hypot(x - 80, y - 80) < 45; uint8_t* p = img->pixel(x, y); p[0] = in ? 230 : 30; p[1] = in ? 200 : 40; p[2] = in ? 120 : 60; p[3] = 255; }
+    std::string error;
+    auto mask = subjectMask(*img, path, &error);
+    REQUIRE(mask != nullptr);
+    CHECK(mask->at(80, 80) > mask->at(5, 5));
 }
 
 TEST_MAIN()

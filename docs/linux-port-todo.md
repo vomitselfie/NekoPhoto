@@ -23,6 +23,6 @@ Checked off as each lands on the `linux-port` branch. Ordered by workflow impact
 - [x] Deleting a clipping base asks to bake or release
 - [x] Zoom tool cursors, drag-to-zoom out with Alt
 
-## Cannot port as-is
-- Remove Background: uses Apple Vision. Left out; an ONNX (U²-Net) backend is possible later.
+## Done differently
+- [x] Remove Background: IS-Net ONNX through OpenCV DNN, with the Mac's refinement controls (Apple Vision has no Linux equivalent).
 - Golden images from the Mac build: needs `.comp` files saved on a Mac (see docs/linux-port.md).

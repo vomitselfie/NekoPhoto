@@ -2284,6 +2284,36 @@ std::array<std::vector<double>, 4> EditorSession::activeHistogram() const {
     return levelsHistogram(*layer->asset->image, coverage.get());
 }
 
+void EditorSession::applySubjectMask(std::shared_ptr<const GrayImage> mask) {
+    clearPixelPreview();
+    Layer* layer = activeLayerMutable();
+    if (!layer || !mask || !layer->asset || !layer->asset->image) return;
+    const Image& src = *layer->asset->image;
+    if (mask->width() != src.width() || mask->height() != src.height()) return;
+    auto out = std::make_shared<GrayImage>(*mask);
+    // A mask already on the layer (in its own grid) is kept: what either one hides stays hidden.
+    std::shared_ptr<const GrayImage> existing;
+    if (layer->mask && layer->mask->asset.image && !layer->mask->placement) {
+        const GrayImage& old = *layer->mask->asset.image;
+        if (old.width() == src.width() && old.height() == src.height()) existing = layer->mask->asset.image;
+        else if (old.width() == 1 && old.height() == 1) { auto e = std::make_shared<GrayImage>(src.width(), src.height(), old.at(0, 0)); existing = e; }
+    }
+    if (existing) for (size_t i = 0; i < out->byteCount(); i++) out->data()[i] = uint8_t((out->data()[i] * existing->data()[i] + 127) / 255);
+    if (auto coverage = selectionOnGrid(layer->transform, src.width(), src.height())) {
+        GrayImage base = existing ? *existing : GrayImage(src.width(), src.height(), 255);
+        blendThroughCoverage(*out, base, *coverage);
+    }
+    beginEdit("Remove Background");
+    LayerMask m;
+    if (layer->mask) { m = *layer->mask; m.placement.reset(); }
+    m.asset = MaskAsset::make(out);
+    m.enabled = true;
+    layer->mask = m;
+    isMaskSelected_ = true;
+    endEdit();
+    notifyDocument();
+}
+
 // ---- Crop and canvas --------------------------------------------------------------
 
 void EditorSession::cropTo(const QRectF& rectF) {

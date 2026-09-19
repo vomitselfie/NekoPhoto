@@ -308,6 +308,9 @@ public:
     void commitPixels(std::shared_ptr<const compositor::Image> image, const compositor::LayerTransform& transform, const QString& name);
     void invertActive();
     std::array<std::vector<double>, 4> activeHistogram() const;
+    /// Remove Background: `mask` (white over the subject, the active layer's pixel grid) becomes the layer mask,
+    /// multiplied with any mask already there; with a selection only the selected part changes.
+    void applySubjectMask(std::shared_ptr<const compositor::GrayImage> mask);
 
     // Crop / canvas
     void cropTo(const QRectF& rect);

@@ -5,6 +5,8 @@
 #include "LayersPanel.h"
 #include "AdjustmentsPanel.h"
 #include "FilterDialog.h"
+#include "ModelStore.h"
+#include "compositor/subject.h"
 #include "ToolOptionsBar.h"
 #include "compositor/png.h"
 #include "compositor/project.h"
@@ -462,6 +464,17 @@ void MainWindow::buildMenus() {
     filterAction(tr("&Motion Blur…"), FilterKind::MotionBlur);
     filterAction(tr("Add &Noise…"), FilterKind::AddNoise);
     filterAction(tr("&Lens Correction…"), FilterKind::LensCorrection);
+    filter->addSeparator();
+    needsDocument(filter->addAction(tr("Remove &Background…"), this, [this] {
+        if (!session_->canAdjustPixels()) { showError(tr("Remove Background"), tr("Select a visible image layer (not a mask) to remove its background.")); return; }
+        if (!subjectModelSupported()) { showError(tr("Remove Background"), tr("This build was made without OpenCV, which runs the segmentation model.")); return; }
+        EditorSession* session = session_;
+        ModelStore::ensure(ModelStore::primary(), this, [this, session](QString path, QString error) {
+            if (!error.isEmpty()) { showError(tr("Remove Background"), error); return; }
+            if (path.isEmpty() || session != session_) return;
+            (new BackgroundDialog(session_, path, this))->show();
+        });
+    }));
 
     QMenu* view = menuBar()->addMenu(tr("&View"));
     needsDocument(view->addAction(tr("Zoom &In"), QKeySequence::ZoomIn, this, [this] { session_->zoomTo(session_->viewport.zoom * 1.25); }));

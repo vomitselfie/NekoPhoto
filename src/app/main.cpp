@@ -2,6 +2,8 @@
 #include "ImageConvert.h"
 #include "compositor/filters.h"
 #include "compositor/selection.h"
+#include "compositor/subject.h"
+#include <QFileInfo>
 #include "compositor/warp.h"
 #include <QApplication>
 #include <QCommandLineParser>
@@ -121,6 +123,20 @@ void buildDemo(app::EditorSession& session, const QString& imagePath) {
     session.movePixels(QPointF(base.width() * 0.75, 0));
     session.finishPixelMove();
     session.selectLayer(session.document()->layers[1].id);
+    // With a model available, Remove Background on the base image, as the menu item would.
+    QString modelDir = qEnvironmentVariable("COMPOSITOR_MODEL_DIR");
+    if (!modelDir.isEmpty() && subjectModelSupported()) {
+        QString path = modelDir + "/isnet-general-use.onnx";
+        if (!QFileInfo::exists(path)) path = modelDir + "/u2netp.onnx";
+        if (QFileInfo::exists(path)) {
+            session.selectLayer(session.document()->layers[0].id);
+            LayerTransform t;
+            auto source = session.adjustmentSource(0, t);
+            std::string error;
+            if (auto mask = subjectMask(*source, path.toStdString(), &error)) session.applySubjectMask(refineMatte(*mask, *source, MatteSettings{}, 0));
+            else qWarning("Remove Background: %s", error.c_str());
+        }
+    }
 }
 
 } // namespace
