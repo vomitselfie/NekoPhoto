@@ -162,7 +162,7 @@ int main(int argc, char** argv) {
     QApplication app(argc, argv);
     QApplication::setOrganizationName("compositor-linux");
     QApplication::setApplicationName("compositor-linux");
-    QApplication::setApplicationVersion("1.0.4");
+    QApplication::setApplicationVersion(QStringLiteral(COMPOSITOR_VERSION));
     QApplication::setDesktopFileName("compositor-linux");
     app.setWindowIcon(QIcon(QStringLiteral(":/app/icon.svg")));
     QCommandLineParser parser;

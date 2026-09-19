@@ -53,6 +53,30 @@ dialog is what gets grabbed.
 demo document, grabs the window and saves a project without any interaction
 (works with `QT_QPA_PLATFORM=offscreen`); CI runs it as a smoke test.
 
+## Releases
+
+`.github/workflows/release.yml` runs when a `v*` tag is pushed. It builds on
+Ubuntu 22.04 with Qt 6.7 from the Qt installer (so the AppImage runs on
+distributions back to 2022), runs the tests and the offscreen smoke test,
+stages `cmake --install` into an AppDir, bundles Qt (Wayland, xcb and
+offscreen platforms), libpng and the three OpenCV modules with linuxdeploy,
+runs the packaged app once, and publishes `compositor-linux-<version>-x86_64.AppImage`
+(with a zsync file for AppImageUpdate), a tarball, and `SHA256SUMS` on a
+GitHub release with generated notes. To cut a release:
+
+```bash
+# bump the version in the root CMakeLists.txt first, commit, then
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+"Run workflow" on the Actions tab does a dry run that only attaches the
+artifacts to the workflow run. The app reports the version it was built with
+(`compositor-linux --version`, Help > About); tagged builds get the tag's
+number, local builds the CMake project version.
+
+OpenCV is linked as `core`, `imgproc` and `dnn` only via its CMake config
+(pkg-config's entry would drag every module into the bundle).
+
 ## Layout
 
 ```

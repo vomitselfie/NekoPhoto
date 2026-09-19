@@ -67,6 +67,13 @@ model (IS-Net or the small U2Net, from the rembg project, Apache-2.0) into the
 app's data folder. The model runs locally through OpenCV's DNN module; nothing
 is uploaded.
 
+## Installing
+
+Each release on the GitHub Releases page ships an AppImage (make it executable
+and run it; works on any x86_64 distribution from 2022 on, Wayland or X11) and
+a tarball with the binary, desktop file, icon and MIME type for `cmake --install`
+style layouts.
+
 ## Building
 
 Requirements: CMake 3.22+, Ninja (or Make), GCC 12+ or Clang 15+, Qt 6.4+

@@ -566,9 +566,9 @@ void MainWindow::buildMenus() {
 
     QMenu* help = menuBar()->addMenu(tr("&Help"));
     help->addAction(tr("&About compositor-linux"), this, [this] {
-        QMessageBox::about(this, tr("About compositor-linux"), tr("<b>compositor-linux</b><br>A small, focused image compositor. "
+        QMessageBox::about(this, tr("About compositor-linux"), tr("<b>compositor-linux</b> %3<br>A small, focused image compositor. "
             "A Linux port of <a href=\"https://github.com/robbietilton/Compositor\">Compositor</a> for macOS.<br><br>"
-            "Qt %1 &middot; project format version %2<br>MIT licence.").arg(QT_VERSION_STR).arg(projectFormatVersion));
+            "Qt %1 &middot; project format version %2<br>MIT licence.").arg(QT_VERSION_STR).arg(projectFormatVersion).arg(QApplication::applicationVersion()));
     });
     refreshRecent();
 }

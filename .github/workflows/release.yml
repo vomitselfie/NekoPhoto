@@ -1,0 +1,118 @@
+name: release
+
+# Pushing a tag like v0.2.0 builds compositor-linux, packages an AppImage and a
+# plain tarball, and publishes them on a GitHub release with generated notes.
+# "Run workflow" from the Actions tab does a dry run: the artifacts are built
+# and attached to the workflow run only.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  appimage:
+    name: AppImage and tarball
+    # 22.04's glibc keeps the AppImage runnable on distributions back to 2022.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version from the tag
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then v="${GITHUB_REF#refs/tags/v}"; else v="0.0.0-dev.${GITHUB_SHA::7}"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "Building version $v"
+
+      - name: System packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build libpng-dev libopencv-dev libgl1-mesa-dev \
+            libfuse2 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 libxcb-xkb1 file
+
+      - name: Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.7.3"
+          modules: "qtimageformats"
+          cache: true
+
+      - name: Configure and build
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCOMPOSITOR_VERSION="${{ steps.version.outputs.version }}" \
+            -DCOMPOSITOR_WARNINGS_AS_ERRORS=ON
+          cmake --build build -j"$(nproc)"
+
+      - name: Tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Smoke test
+        run: |
+          QT_QPA_PLATFORM=offscreen ./build/src/app/compositor-linux --version
+          QT_QPA_PLATFORM=offscreen ./build/src/app/compositor-linux --demo --screenshot demo.png --save-as Demo.comp
+
+      - name: Stage into an AppDir
+        run: cmake --install build --prefix AppDir/usr
+
+      - name: linuxdeploy
+        run: |
+          curl -sSL -o linuxdeploy https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          curl -sSL -o linuxdeploy-plugin-qt https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          chmod +x linuxdeploy linuxdeploy-plugin-qt
+          export PATH="$PWD:$PATH"
+          export NO_STRIP=1   # linuxdeploy's bundled strip predates .relr.dyn sections
+          export QMAKE="$(command -v qmake6 || command -v qmake)"
+          export EXTRA_QT_MODULES="svg;waylandcompositor"
+          # Qt 6.7 ships libqwayland-egl/-generic, newer Qt a single libqwayland; take whatever is there.
+          plugins="$("$QMAKE" -query QT_INSTALL_PLUGINS)/platforms"
+          # offscreen too, so the packaged app can be smoke-tested headless.
+          export EXTRA_PLATFORM_PLUGINS="$(ls "$plugins" | grep -E '^libqwayland|^libqoffscreen' | paste -sd ';')"
+          echo "Wayland plugins: $EXTRA_PLATFORM_PLUGINS"
+          export LDAI_OUTPUT="compositor-linux-${{ steps.version.outputs.version }}-x86_64.AppImage"
+          export LDAI_UPDATE_INFORMATION="gh-releases-zsync|${GITHUB_REPOSITORY_OWNER}|${GITHUB_REPOSITORY#*/}|latest|compositor-linux-*-x86_64.AppImage.zsync"
+          ./linuxdeploy --appdir AppDir \
+            --desktop-file AppDir/usr/share/applications/compositor-linux.desktop \
+            --icon-file packaging/compositor-linux.svg \
+            --plugin qt --output appimage
+          ls -la *.AppImage*
+
+      - name: Run the AppImage
+        run: |
+          chmod +x compositor-linux-*.AppImage
+          QT_QPA_PLATFORM=offscreen ./compositor-linux-*.AppImage --appimage-extract-and-run --version
+          QT_QPA_PLATFORM=offscreen ./compositor-linux-*.AppImage --appimage-extract-and-run --demo --screenshot appimage-demo.png
+
+      - name: Tarball
+        run: |
+          v="${{ steps.version.outputs.version }}"
+          rm -rf "compositor-linux-$v" && mkdir "compositor-linux-$v"
+          cp -r AppDir/usr/bin AppDir/usr/share "compositor-linux-$v/"
+          cp LICENSE README.md "compositor-linux-$v/"
+          tar czf "compositor-linux-$v-x86_64.tar.gz" "compositor-linux-$v"
+          sha256sum *.AppImage *.tar.gz > SHA256SUMS
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: compositor-linux-${{ steps.version.outputs.version }}
+          path: |
+            *.AppImage
+            *.AppImage.zsync
+            *.tar.gz
+            SHA256SUMS
+
+      - name: GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: compositor-linux ${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          files: |
+            *.AppImage
+            *.AppImage.zsync
+            *.tar.gz
+            SHA256SUMS

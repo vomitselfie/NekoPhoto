@@ -57,6 +57,7 @@ qt_add_executable(compositor-linux
     MainWindow.cpp
 )
 
+target_compile_definitions(compositor-linux PRIVATE COMPOSITOR_VERSION="${COMPOSITOR_VERSION}")
 target_link_libraries(compositor-linux PRIVATE compositor::core Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Svg compositor_warnings)
 set_target_properties(compositor-linux PROPERTIES OUTPUT_NAME compositor-linux)
 
