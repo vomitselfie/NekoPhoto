@@ -18,12 +18,23 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Homebrew packages
-        run: brew install ninja qt libpng opencv pkg-config
+        run: brew install ninja qt libpng pkg-config
+
+      - name: Vendored OpenCV (cached)
+        id: opencv
+        uses: actions/cache@v4
+        with:
+          path: opencv-prefix
+          key: opencv-macos-14-${{ runner.arch }}-${{ hashFiles('tools/build-opencv.sh') }}
+      - name: Build OpenCV
+        if: steps.opencv.outputs.cache-hit != 'true'
+        run: tools/build-opencv.sh opencv-prefix "$(sysctl -n hw.ncpu)"
 
       - name: Configure and build
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PREFIX_PATH="$(brew --prefix qt)" \
+            -DOpenCV_DIR="$PWD/opencv-prefix/lib/cmake/opencv4" \
             -DCOMPOSITOR_VERSION="0.0.0-dev.${GITHUB_SHA::7}"
           cmake --build build -j"$(sysctl -n hw.ncpu)"
 

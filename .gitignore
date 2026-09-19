@@ -28,3 +28,4 @@ build-*/
 .cache/
 compile_commands.json
 __pycache__/
+opencv-prefix/

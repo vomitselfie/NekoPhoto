@@ -32,8 +32,18 @@ jobs:
       - name: System packages
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build libpng-dev libopencv-dev libgl1-mesa-dev \
+          sudo apt-get install -y cmake ninja-build libpng-dev libgl1-mesa-dev pkg-config \
             libfuse2 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 libxcb-xkb1 file
+
+      - name: Vendored OpenCV (cached)
+        id: opencv
+        uses: actions/cache@v4
+        with:
+          path: opencv-prefix
+          key: opencv-ubuntu-22.04-${{ hashFiles('tools/build-opencv.sh') }}
+      - name: Build OpenCV
+        if: steps.opencv.outputs.cache-hit != 'true'
+        run: tools/build-opencv.sh opencv-prefix
 
       - name: Qt
         uses: jurplel/install-qt-action@v4
@@ -46,7 +56,8 @@ jobs:
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DCOMPOSITOR_VERSION="${{ steps.version.outputs.version }}" \
-            -DCOMPOSITOR_WARNINGS_AS_ERRORS=ON
+            -DCOMPOSITOR_WARNINGS_AS_ERRORS=ON \
+            -DOpenCV_DIR="$PWD/opencv-prefix/lib/cmake/opencv4"
           cmake --build build -j"$(nproc)"
 
       - name: Tests
@@ -119,12 +130,23 @@ jobs:
           echo "version=$v" >> "$GITHUB_OUTPUT"
 
       - name: Homebrew packages
-        run: brew install ninja qt libpng opencv pkg-config
+        run: brew install ninja qt libpng pkg-config
+
+      - name: Vendored OpenCV (cached)
+        id: opencv
+        uses: actions/cache@v4
+        with:
+          path: opencv-prefix
+          key: opencv-macos-14-${{ runner.arch }}-${{ hashFiles('tools/build-opencv.sh') }}
+      - name: Build OpenCV
+        if: steps.opencv.outputs.cache-hit != 'true'
+        run: tools/build-opencv.sh opencv-prefix "$(sysctl -n hw.ncpu)"
 
       - name: Configure and build
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PREFIX_PATH="$(brew --prefix qt)" \
+            -DOpenCV_DIR="$PWD/opencv-prefix/lib/cmake/opencv4" \
             -DCOMPOSITOR_VERSION="${{ steps.version.outputs.version }}"
           cmake --build build -j"$(sysctl -n hw.ncpu)"
 

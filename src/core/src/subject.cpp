@@ -182,12 +182,28 @@ bool predict(cv::dnn::Net* net, const Kind& kind, const cv::Mat& rgb, int inW, i
         try {
             std::lock_guard<std::mutex> lock(modelLock);
             net->setInput(blob);
-            out = net->forward();
+            // The mask is the output with the input's height and width. A model with several outputs (IS-Net
+            // has side outputs and a deep feature map) hands a different one to a plain forward() depending
+            // on the engine, so all of them are asked for and the right one picked.
+            std::vector<cv::Mat> outputs;
+            net->forward(outputs, net->getUnconnectedOutLayersNames());
+            out = cv::Mat();
+            for (const cv::Mat& candidate : outputs)
+                if (candidate.dims == 4 && candidate.size[2] == resized.rows && candidate.size[3] == resized.cols) { out = candidate; break; }
+            if (out.empty() && !outputs.empty()) out = outputs.front();
         } catch (const std::exception& e) {
             if (why) *why = std::string("The model could not be run: ") + e.what();
             return false;
         }
-        if (out.dims != 4 || out.size[2] != resized.rows || out.size[3] != resized.cols) { if (why) *why = "The model gave an unexpected output."; return false; }
+        if (out.dims != 4 || out.size[2] != resized.rows || out.size[3] != resized.cols) {
+            if (why) {
+                *why = "The model gave an unexpected output: " + std::to_string(out.dims) + " dimensions";
+                for (int d = 0; d < out.dims; d++) *why += (d ? " x " : " (") + std::to_string(out.size[d]);
+                if (out.dims) *why += ")";
+                *why += " for a " + std::to_string(resized.cols) + " x " + std::to_string(resized.rows) + " input.";
+            }
+            return false;
+        }
         if (kind.humanseg && out.size[1] < 2) { if (why) *why = "The model gave an unexpected output."; return false; }
         return true;
     };

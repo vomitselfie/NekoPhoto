@@ -40,6 +40,12 @@ XWayland.
 Options: `-DCOMPOSITOR_BUILD_APP=OFF` builds only the core and tests;
 `-DCOMPOSITOR_WITH_OPENCV=OFF` leaves out the Remove Background model;
 `-DCOMPOSITOR_WARNINGS_AS_ERRORS=ON` is what CI uses.
+`-DOpenCV_DIR=<prefix>/lib/cmake/opencv4` builds against the OpenCV that
+`tools/build-opencv.sh <prefix>` makes: a pinned 4.x, static, with only the
+three modules the model needs and every optional dependency off. CI, the
+release jobs and the Mac bundle use that build (cached, so it is compiled once
+per runner image), which is how every platform ends up running the model on
+the same OpenCV; a local build takes the system OpenCV unless told otherwise.
 `-DCOMPOSITOR_QT_TOOL_DIR=<dir>` points the build at copies of `moc`, `uic`
 and `rcc` for shells that cannot execute binaries under `/usr/lib`.
 
@@ -113,7 +119,7 @@ bridges it to MCP. `docs/automation.md` has the protocol and method list.
 Ubuntu 22.04 with Qt 6.7 from the Qt installer (so the AppImage runs on
 distributions back to 2022), runs the tests and the offscreen smoke test,
 stages `cmake --install` into an AppDir, bundles Qt (Wayland, xcb and
-offscreen platforms), libpng and the three OpenCV modules with linuxdeploy,
+offscreen platforms) and libpng with linuxdeploy (OpenCV is built in),
 runs the packaged app once, and publishes `compositor-linux-<version>-x86_64.AppImage`
 (with a zsync file for AppImageUpdate), a tarball, and `SHA256SUMS` on a
 GitHub release with generated notes. To cut a release:
@@ -128,11 +134,13 @@ artifacts to the workflow run. The app reports the version it was built with
 (`compositor-linux --version`, Help > About); tagged builds get the tag's
 number, local builds the CMake project version.
 
-OpenCV is linked as `core`, `imgproc` and `dnn` only via its CMake config
-(pkg-config's entry would drag every module into the bundle).
+OpenCV is the vendored static build of `tools/build-opencv.sh` (4.14, `core`,
+`imgproc` and `dnn` only), linked through its CMake config, so the AppImage
+carries no OpenCV shared libraries and every release runs the model on the
+same version.
 
 A second job in the same workflow builds the app on a macOS Apple Silicon
-runner with Homebrew's Qt, libpng and OpenCV, runs the tests and the offscreen
+runner with Homebrew's Qt and libpng and the same vendored OpenCV, runs the tests and the offscreen
 smoke test, bundles Qt with `macdeployqt`, signs the bundle ad hoc (unsigned
 arm64 binaries do not launch at all; ad hoc signed ones do after Gatekeeper's
 Open Anyway) and zips it as `compositor-linux-<version>-macos-arm64.zip`; a

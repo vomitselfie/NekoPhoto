@@ -26,6 +26,11 @@ toolchain is older than a rolling desktop's (Ubuntu 24.04: GCC 13, Clang 18,
 Qt 6.4; the release image is 22.04 with GCC 11), so before pushing run
 `tools/ci-in-docker.sh ubuntu:24.04 gcc` (and `clang`), and
 `RELEASE=1 tools/ci-in-docker.sh ubuntu:22.04` before tagging a release.
+OpenCV is vendored: CI, the release jobs, the Mac bundle and the Docker check
+build `tools/build-opencv.sh` (4.14, static, core/imgproc/dnn only, cached) and
+configure with `-DOpenCV_DIR=<prefix>/lib/cmake/opencv4`; a local build takes
+the system OpenCV unless you pass that too, so a model verified here may
+behave differently in CI only if the versions differ.
 
 ## Driving the app
 

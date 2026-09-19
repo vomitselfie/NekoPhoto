@@ -18,11 +18,20 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build cmake libpng-dev qt6-base-dev qt6-svg-dev qt6-wayland libgl1-mesa-dev libopencv-dev clang
+          sudo apt-get install -y ninja-build cmake libpng-dev qt6-base-dev qt6-svg-dev qt6-wayland libgl1-mesa-dev pkg-config clang
+      - name: Vendored OpenCV (cached)
+        id: opencv
+        uses: actions/cache@v4
+        with:
+          path: opencv-prefix
+          key: opencv-ubuntu-24.04-${{ hashFiles('tools/build-opencv.sh') }}
+      - name: Build OpenCV
+        if: steps.opencv.outputs.cache-hit != 'true'
+        run: tools/build-opencv.sh opencv-prefix
       - name: Configure
         run: |
           if [ "${{ matrix.compiler }}" = "clang" ]; then export CC=clang CXX=clang++; else export CC=gcc CXX=g++; fi
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCOMPOSITOR_WARNINGS_AS_ERRORS=ON
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCOMPOSITOR_WARNINGS_AS_ERRORS=ON -DOpenCV_DIR="$PWD/opencv-prefix/lib/cmake/opencv4"
       - name: Build
         run: cmake --build build -j
       - name: Unit and golden tests

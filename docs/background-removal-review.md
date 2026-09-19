@@ -65,7 +65,10 @@ runtime cannot load it. The verified state of the parser: SAM ViT-B loads from
 `GatherND`, `GridSample`, most `Resize` modes and the quantised ops; 5.0 lifts
 those but rejects `DeformConv` unless built with its new ONNX Runtime engine
 (`ENGINE_ORT`), which would add onnxruntime to the runtime, a policy decision
-this document does not recommend.
+this document does not recommend. (Since this review: CI, the release jobs and
+the Mac bundle build OpenCV 4.14 themselves, `tools/build-opencv.sh`, so the
+shipped runtime is one known version and the 4.8-and-later imports are open to
+AppImage users.)
 
 ## Progress
 
