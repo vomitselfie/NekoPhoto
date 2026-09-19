@@ -21,7 +21,7 @@ FROM $image
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -q && apt-get install -y -q ninja-build cmake libpng-dev libgl1-mesa-dev libopencv-dev g++ python3 python3-pip \\
     libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 libxcb-xkb1 libglib2.0-0 libfontconfig1 libdbus-1-3 \\
-    && pip3 install -q aqtinstall && aqt install-qt -O /opt/qt linux desktop 6.7.3 gcc_64 -m qtimageformats >/dev/null && rm -rf /var/lib/apt/lists/*
+    && pip3 install -q aqtinstall && aqt install-qt -O /opt/qt linux desktop 6.7.3 linux_gcc_64 -m qtimageformats >/dev/null && rm -rf /var/lib/apt/lists/*
 DOCKERFILE
 else
     docker build -q -t "$tag" - <<DOCKERFILE >/dev/null
