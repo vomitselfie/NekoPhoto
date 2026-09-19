@@ -25,6 +25,9 @@ public:
     std::string redoName() const { return future_.empty() ? "" : future_.back().name; }
     bool isModified() const { return revision_ != savedRevision_; }
     int undoCount() const { return int(past_.size()); }
+    /// Names of the recorded edits, oldest first / next-redo first.
+    std::vector<std::string> pastNames() const { std::vector<std::string> n; for (auto& e : past_) n.push_back(e.name); return n; }
+    std::vector<std::string> futureNames() const { std::vector<std::string> n; for (auto it = future_.rbegin(); it != future_.rend(); ++it) n.push_back(it->name); return n; }
     void markSaved() { savedRevision_ = revision_; }
     void reset();
 

@@ -19,12 +19,16 @@ class Rpc:
         self.sock.connect(path)
         self.file = self.sock.makefile("rw", encoding="utf-8")
         self.next_id = 0
+        self.events = []
 
     def call(self, method, **params):
         self.next_id += 1
         self.file.write(json.dumps({"jsonrpc": "2.0", "id": self.next_id, "method": method, "params": params}) + "\n")
         self.file.flush()
         reply = json.loads(self.file.readline())
+        while reply.get("method") == "event":
+            self.events.append(reply["params"])
+            reply = json.loads(self.file.readline())
         if "error" in reply:
             raise RuntimeError(f"{method}: {reply['error']['message']}")
         return reply["result"]
@@ -123,6 +127,38 @@ def main():
     under = rpc.call("layers.add", kind="pixels", name="Backdrop", below=True)
     order = [l["id"] for l in rpc.call("layers.list")]
     assert order.index(under["id"]) == order.index(target["id"]) + 1, order
+
+    # History listing and a selection mask.
+    names = rpc.call("history.list")
+    assert names["undo"] and isinstance(names["undo"][-1], str), names
+    rpc.call("selection.rect", x=0, y=0, width=50, height=50)
+    mask = rpc.call("selection.render", maxSize=64)
+    assert base64.b64decode(mask["png"])[:4] == b"\x89PNG", mask
+    rpc.call("selection.none")
+
+    # Events: after subscribing, an edit produces notifications before the next reply.
+    rpc.call("events.subscribe", kinds=["layers", "history"])
+    rpc.call("layers.set", id=target["id"], opacity=0.7)
+    rpc.call("app.info")
+    kinds = {e["kind"] for e in rpc.events}
+    assert "layers" in kinds and "history" in kinds, rpc.events
+    rpc.call("events.unsubscribe")
+    rpc.call("history.undo")
+
+    # The command-line client and batch mode.
+    import os, subprocess
+    binary = os.environ.get("COMPOSITOR_BIN", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "build", "src", "app", "compositor-linux"))
+    if os.path.exists(binary):
+        env = dict(os.environ); env.pop("QT_QPA_PLATFORM", None)
+        out = subprocess.run([binary, "--rpc-socket", path, "--call", "app.info"], capture_output=True, text=True, env=env, timeout=60)
+        assert out.returncode == 0 and '"name": "compositor-linux"' in out.stdout, (out.returncode, out.stdout, out.stderr)
+        bad = subprocess.run([binary, "--rpc-socket", path, "--call", "layers.get", "--params", '{"id": "nope"}'], capture_output=True, text=True, env=env, timeout=60)
+        assert bad.returncode == 1 and "no layer" in bad.stderr, (bad.returncode, bad.stderr)
+        script = '{"method":"document.new","params":{"width":64,"height":48}}\n{"method":"shape.draw","params":{"x":4,"y":4,"width":20,"height":20,"color":"#ff0000"}}\n{"method":"layers.list"}\n'
+        batch = subprocess.run([binary, "--headless", "--batch", "-"], input=script, capture_output=True, text=True, env=env, timeout=120)
+        lines = [json.loads(l) for l in batch.stdout.splitlines() if l.strip()]
+        assert batch.returncode == 0 and len(lines) == 3 and len(lines[2]["result"]) == 2, (batch.returncode, batch.stdout, batch.stderr)
+        print("--call and --batch ok")
 
     # Errors come back as errors, not crashes.
     try:

@@ -25,6 +25,9 @@ MCP SDK on first run.
 claude mcp add compositor -- uv run /path/to/compositor-linux/mcp/compositor_mcp.py
 ```
 
+Inside this repository nothing needs adding: `.mcp.json` declares the server,
+so Claude Code offers it when a session starts here.
+
 Without `uv`: `pip install "mcp<2"` and run `python3 mcp/compositor_mcp.py` instead.
 The bridge uses the 1.x MCP SDK API (2.x renamed its server class).
 
@@ -42,6 +45,25 @@ A workable prompt for an agent: "Open photo.jpg, remove the background, put a
 dark gradient layer behind it, and export result.png." It will call
 `document_open`, `remove_background` (if the model is enabled in Preferences),
 `layers_add`, `layers_move`, `render` to check, and `document_export`.
+
+## From a shell
+
+`compositor-linux --call <method> [--params '<json object>']` sends one request
+to the running instance and prints the result (exit 1 on an error reply, 2 when
+nothing is listening; `--rpc-socket` picks the socket). Useful from scripts and
+from an agent's shell tool without any MCP setup:
+
+```bash
+compositor-linux --call layers.list
+compositor-linux --call layers.set --params '{"id": "…", "opacity": 0.5}'
+compositor-linux --call render --params '{"path": "/tmp/check.png", "maxSize": 800}'
+```
+
+`compositor-linux --headless --batch script.jsonl` (or `-` for stdin) runs a
+file of requests, one JSON object per line (`#` comments allowed, ids
+optional), in a fresh windowless instance with no socket, prints one response
+per line and quits; the first error stops it unless
+`COMPOSITOR_BATCH_CONTINUE=1`.
 
 ## The protocol
 
@@ -109,12 +131,24 @@ brush settings and colours are restored afterwards.
 
 View: `tool.select`, `colors.set`, `view.zoom`.
 
+Events: `events.subscribe` (`kinds`: document, layers, selection, history,
+tool, view, tabs; default all) makes the server push
+`{"jsonrpc":"2.0","method":"event","params":{"kind":"layers","tab":0}}` lines on
+that connection, one per kind per event-loop turn, in between replies;
+`events.unsubscribe` stops them. Clients must skip event lines while waiting
+for a reply.
+
+`layers.list {"thumbnails": true}` adds each pixel layer's 96 px thumbnail (and
+its mask's) as base64 PNG; `selection.render` returns the selection as a mask
+image; `history.list` names every recorded edit.
+
 `tools/rpc_smoke.py` exercises a representative set and is what CI runs against
-a headless instance.
+a headless instance. `docs/agent-guide.md` has recipes and habits that work
+well for agents.
 
 ## Not there yet
 
-Events pushed to the client (a document-changed notification) and text layers
-(the editor has none) are the next candidates. Adding a method is one `add("name", handler)` in
+Text layers (the editor has none) and a remote transport (the socket is local
+only, by design) are the open items. Adding a method is one `add("name", handler)` in
 `src/app/Automation.cpp`; the bridge's generic `rpc` tool reaches it without a
 Python change.

@@ -334,6 +334,8 @@ public:
     bool canRedo() const;
     QString undoName() const { return QString::fromStdString(history_.undoName()); }
     QString redoName() const { return QString::fromStdString(history_.redoName()); }
+    std::vector<std::string> undoNames() const { return history_.pastNames(); }
+    std::vector<std::string> redoNames() const { return history_.futureNames(); }
     void undo();
     void redo();
     void beginEdit(const QString& name);

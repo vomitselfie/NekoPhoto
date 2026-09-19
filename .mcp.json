@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "compositor": {
+      "command": "uv",
+      "args": ["run", "mcp/compositor_mcp.py"],
+      "env": {
+        "COMPOSITOR_BIN": "./build/src/app/compositor-linux"
+      }
+    }
+  }
+}

@@ -2,6 +2,7 @@
 #include "ImageConvert.h"
 #include "ModelStore.h"
 #include "PreferencesDialog.h"
+#include "Automation.h"
 #include "Dialogs.h"
 #include "FilterDialog.h"
 #include "ImageConvert.h"
@@ -22,6 +23,10 @@
 #include <QSettings>
 #include <QToolBar>
 #include <QDockWidget>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QLocalSocket>
+#include <QTextStream>
 #include <QTimer>
 
 namespace {
@@ -197,6 +202,12 @@ int main(int argc, char** argv) {
     parser.addOption(rpc);
     parser.addOption(rpcSocket);
     parser.addOption(headlessOption);
+    QCommandLineOption callOption("call", "Send one request to a running instance's socket and print the result: --call layers.list [--params '{...}']. Exit 1 on an error reply, 2 when nothing is listening.", "method");
+    QCommandLineOption paramsOption("params", "JSON object of parameters for --call.", "json");
+    QCommandLineOption batchOption("batch", "Run JSON-RPC requests from <file> (one object per line; '-' is stdin) in this instance and print one response per line, then quit. Pairs with --headless.", "file");
+    parser.addOption(callOption);
+    parser.addOption(paramsOption);
+    parser.addOption(batchOption);
     parser.addOption(fetch);
     parser.process(app);
     if (parser.isSet(fetch)) {
@@ -211,8 +222,66 @@ int main(int argc, char** argv) {
         app.exec();
         return status;
     }
+    if (parser.isSet(callOption)) {
+        // A client, not the editor: one request over the socket, the result on stdout.
+        QString path = parser.value(rpcSocket).isEmpty() ? app::AutomationServer::defaultSocketPath() : parser.value(rpcSocket);
+        QLocalSocket socket;
+        socket.connectToServer(path);
+        if (!socket.waitForConnected(3000)) { std::fprintf(stderr, "nothing is listening at %s (start compositor-linux --rpc, or --headless)\n", qPrintable(path)); return 2; }
+        QJsonObject params;
+        if (parser.isSet(paramsOption)) {
+            QJsonParseError parseError;
+            QJsonDocument doc = QJsonDocument::fromJson(parser.value(paramsOption).toUtf8(), &parseError);
+            if (parseError.error != QJsonParseError::NoError || !doc.isObject()) { std::fprintf(stderr, "--params must be a JSON object: %s\n", qPrintable(parseError.errorString())); return 2; }
+            params = doc.object();
+        }
+        QJsonObject request{{"jsonrpc", "2.0"}, {"id", 1}, {"method", parser.value(callOption)}, {"params", params}};
+        socket.write(QJsonDocument(request).toJson(QJsonDocument::Compact) + "\n");
+        socket.flush();
+        QByteArray received;
+        while (true) {
+            if (!socket.waitForReadyRead(600000)) { std::fprintf(stderr, "no reply\n"); return 2; }
+            received += socket.readAll();
+            int newline;
+            while ((newline = received.indexOf('\n')) >= 0) {
+                QByteArray l = received.left(newline).trimmed();
+                received.remove(0, newline + 1);
+                if (l.isEmpty()) continue;
+                QJsonObject reply = QJsonDocument::fromJson(l).object();
+                if (reply.value("method").toString() == "event") continue;   // notifications may precede the reply
+                if (reply.contains("error")) { std::fprintf(stderr, "error: %s\n", qPrintable(reply["error"].toObject()["message"].toString())); return 1; }
+                QJsonValue result = reply.value("result");
+                QTextStream(stdout) << (result.isArray() ? QJsonDocument(result.toArray()) : QJsonDocument(result.toObject())).toJson(QJsonDocument::Indented);
+                return 0;
+            }
+        }
+    }
     app::MainWindow window;
     window.show();
+    if (parser.isSet(batchOption)) {
+        // Requests from a file, handled in this instance without a socket; responses one per line.
+        app::AutomationServer server(&window);
+        QFile file(parser.value(batchOption));
+        bool ok = parser.value(batchOption) == "-" ? file.open(stdin, QIODevice::ReadOnly) : file.open(QIODevice::ReadOnly);
+        if (!ok) { std::fprintf(stderr, "couldn't read %s\n", qPrintable(parser.value(batchOption))); return 2; }
+        QTextStream out(stdout);
+        int status = 0, id = 0;
+        while (!file.atEnd()) {
+            QByteArray line = file.readLine().trimmed();
+            if (line.isEmpty() || line.startsWith('#')) continue;
+            QJsonParseError parseError;
+            QJsonDocument doc = QJsonDocument::fromJson(line, &parseError);
+            if (parseError.error != QJsonParseError::NoError || !doc.isObject()) { std::fprintf(stderr, "bad request line: %s\n", qPrintable(parseError.errorString())); return 2; }
+            QJsonObject request = doc.object();
+            if (!request.contains("id")) request["id"] = ++id;
+            QJsonObject response = server.handle(request);
+            out << QJsonDocument(response).toJson(QJsonDocument::Compact) << "\n";
+            out.flush();
+            QApplication::processEvents();
+            if (response.contains("error")) { status = 1; if (!qEnvironmentVariableIsSet("COMPOSITOR_BATCH_CONTINUE")) break; }
+        }
+        return status;
+    }
     if (qEnvironmentVariableIsSet("COMPOSITOR_DEBUG_LAYOUT")) {
         // What is forcing the window's minimum size: the main window and each toolbar, dock and central child.
         auto report = [](QWidget* w, const char* tag) { QSize m = w->minimumSizeHint(), mm = w->minimumSize(); std::fprintf(stderr, "layout: %-28s %-22s hint %dx%d min %dx%d size %dx%d\n", tag, qPrintable(w->objectName().isEmpty() ? w->windowTitle() : w->objectName()), m.width(), m.height(), mm.width(), mm.height(), w->width(), w->height()); };

@@ -25,6 +25,7 @@
 #include <QPainter>
 #include <QToolButton>
 #include <QStandardPaths>
+#include <QTimer>
 #include <cmath>
 #include <stdexcept>
 
@@ -175,7 +176,10 @@ std::shared_ptr<Image> scaledCopy(const Image& image, double maxSize) {
 
 // ---- Server -------------------------------------------------------------------------------------
 
-AutomationServer::AutomationServer(MainWindow* window) : QObject(window), window_(window) { registerHandlers(); }
+AutomationServer::AutomationServer(MainWindow* window) : QObject(window), window_(window) {
+    registerHandlers();
+    connect(window_, &MainWindow::automationEvent, this, &AutomationServer::notify);
+}
 
 AutomationServer::~AutomationServer() {
     if (server_) { server_->close(); QLocalServer::removeServer(path_); }
@@ -200,35 +204,63 @@ bool AutomationServer::listen(const QString& path, QString* error) {
     }
     connect(server_, &QLocalServer::newConnection, this, [this] {
         while (QLocalSocket* socket = server_->nextPendingConnection()) {
-            clients_++;
-            emit clientsChanged(clients_);
-            auto* buffer = new QByteArray;
-            connect(socket, &QLocalSocket::readyRead, this, [this, socket, buffer] {
-                buffer->append(socket->readAll());
+            clients_[socket] = Client{};
+            emit clientsChanged(clients());
+            connect(socket, &QLocalSocket::readyRead, this, [this, socket] {
+                auto it = clients_.find(socket);
+                if (it == clients_.end()) return;
+                QByteArray& buffer = it->second.buffer;
+                buffer.append(socket->readAll());
                 int newline;
-                while ((newline = buffer->indexOf('\n')) >= 0) {
-                    QByteArray line = buffer->left(newline).trimmed();
-                    buffer->remove(0, newline + 1);
+                while ((newline = buffer.indexOf('\n')) >= 0) {
+                    QByteArray line = buffer.left(newline).trimmed();
+                    buffer.remove(0, newline + 1);
                     if (line.isEmpty()) continue;
                     QJsonParseError parseError;
                     QJsonDocument doc = QJsonDocument::fromJson(line, &parseError);
                     QJsonObject response;
                     if (parseError.error != QJsonParseError::NoError || !doc.isObject())
                         response = {{"jsonrpc", "2.0"}, {"id", QJsonValue::Null}, {"error", QJsonObject{{"code", -32700}, {"message", "parse error: " + parseError.errorString()}}}};
-                    else response = handle(doc.object());
+                    else { current_ = socket; response = handle(doc.object()); current_ = nullptr; }
+                    if (!clients_.count(socket)) return;   // the request closed the connection
                     socket->write(QJsonDocument(response).toJson(QJsonDocument::Compact) + "\n");
                     socket->flush();
                 }
             });
-            connect(socket, &QLocalSocket::disconnected, this, [this, socket, buffer] {
-                delete buffer;
+            connect(socket, &QLocalSocket::disconnected, this, [this, socket] {
+                clients_.erase(socket);
                 socket->deleteLater();
-                clients_--;
-                emit clientsChanged(clients_);
+                emit clientsChanged(clients());
             });
         }
     });
     return true;
+}
+
+void AutomationServer::notify(const QString& kind) {
+    for (auto& [socket, client] : clients_) {
+        if (!client.kinds.contains("all") && !client.kinds.contains(kind)) continue;
+        client.pending.insert(kind);
+        if (client.flushScheduled) continue;
+        client.flushScheduled = true;
+        QPointer<QLocalSocket> guard(socket);
+        QTimer::singleShot(0, this, [this, guard] { if (guard) flush(guard); });
+    }
+}
+
+void AutomationServer::flush(QLocalSocket* socket) {
+    auto it = clients_.find(socket);
+    if (it == clients_.end()) return;
+    Client& client = it->second;
+    client.flushScheduled = false;
+    QStringList kinds(client.pending.begin(), client.pending.end());
+    kinds.sort();
+    client.pending.clear();
+    for (const QString& kind : kinds) {
+        QJsonObject event{{"jsonrpc", "2.0"}, {"method", "event"}, {"params", QJsonObject{{"kind", kind}, {"tab", window_->currentTabIndex()}}}};
+        socket->write(QJsonDocument(event).toJson(QJsonDocument::Compact) + "\n");
+    }
+    socket->flush();
 }
 
 QStringList AutomationServer::methods() const {
@@ -317,6 +349,21 @@ void AutomationServer::registerHandlers() {
                            {"platform", QApplication::platformName()}, {"tabs", w->tabCount()}, {"currentTab", w->currentTabIndex()},
                            {"removeBackground", ModelStore::ready()}};
     });
+    add("events.subscribe", [this](const QJsonObject& p) {
+        // Notifications on this connection: {"method":"event","params":{"kind":...,"tab":N}}, one per kind per event-loop turn.
+        if (!current_ || !clients_.count(current_)) fail("events need a socket connection (not --batch)");
+        QSet<QString> kinds;
+        for (QJsonValue v : p.value("kinds").toArray()) kinds.insert(v.toString());
+        if (kinds.isEmpty()) kinds.insert("all");
+        clients_[current_].kinds = kinds;
+        QStringList list(kinds.begin(), kinds.end());
+        list.sort();
+        return QJsonObject{{"subscribed", QJsonArray::fromStringList(list)}, {"kinds", QJsonArray{"document", "layers", "selection", "history", "tool", "view", "tabs"}}};
+    });
+    add("events.unsubscribe", [this](const QJsonObject&) {
+        if (current_ && clients_.count(current_)) { clients_[current_].kinds.clear(); clients_[current_].pending.clear(); }
+        return QJsonObject{{"subscribed", QJsonArray{}}};
+    });
     add("tabs.list", [w, tabJson](const QJsonObject&) { QJsonArray a; for (int i = 0; i < w->tabCount(); i++) a.append(tabJson(i)); return a; });
     add("tabs.select", [w, tabJson, tabIndex](const QJsonObject& p) { int i = tabIndex(p); w->selectTab(i); return tabJson(i); });
     add("tabs.new", [w, tabJson](const QJsonObject&) { return tabJson(w->newTab()); });
@@ -401,7 +448,20 @@ void AutomationServer::registerHandlers() {
     });
 
     // ---- layers
-    add("layers.list", [document](const QJsonObject&) { return layersJson(document()); });
+    add("layers.list", [document](const QJsonObject& p) {
+        // thumbnails: true adds each pixel layer's 96 px thumbnail (and its mask's) as base64 PNG.
+        QJsonArray out = layersJson(document());
+        if (!flag(p, "thumbnails", false)) return out;
+        const Document& doc = document();
+        for (int i = 0; i < out.size(); i++) {
+            QJsonObject o = out[i].toObject();
+            const Layer* l = doc.find(o["id"].toString().toStdString());
+            if (l && l->asset && l->asset->thumbnail) o["thumbnail"] = base64Png(*l->asset->thumbnail);
+            if (l && l->mask && l->mask->asset.thumbnail) o["maskThumbnail"] = base64Png(*fromQImage(toQImage(*l->mask->asset.thumbnail)));
+            out[i] = o;
+        }
+        return out;
+    });
     add("layers.get", [layer](const QJsonObject& p) { return layerJson(layer(p), 0); });
     add("layers.select", [session, layer](const QJsonObject& p) {
         EditorSession* s = session();
@@ -670,6 +730,15 @@ void AutomationServer::registerHandlers() {
         if (!doc.selection || doc.selection->isEmpty()) return QJsonObject{{"active", false}};
         return QJsonObject{{"active", true}, {"bounds", rectJson(doc.selection->bounds())}, {"antialiased", doc.selection->antialiased}};
     });
+    add("selection.render", [document](const QJsonObject& p) {
+        // The selection as a mask image: white selected, black not, downscaled to maxSize.
+        const Document& doc = document();
+        if (!doc.selection || !doc.selection->coverage) fail("there is no selection");
+        QImage mask = toQImage(*doc.selection->coverage);
+        double maxSize = num(p, "maxSize", 1024);
+        if (maxSize > 0 && std::max(mask.width(), mask.height()) > maxSize) mask = mask.scaled(int(maxSize), int(maxSize), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        return deliverPng(*fromQImage(mask), p, {{"bounds", rectJson(doc.selection->bounds())}});
+    });
     add("selection.all", [session, document](const QJsonObject&) { document(); session()->selectAll(); return QJsonObject{}; });
     add("selection.none", [session, document](const QJsonObject&) { document(); session()->deselect(); return QJsonObject{}; });
     add("selection.invert", [session, document](const QJsonObject&) { document(); session()->invertSelection(); return QJsonObject{}; });
@@ -743,6 +812,13 @@ void AutomationServer::registerHandlers() {
         document();
         EditorSession* s = session();
         return QJsonObject{{"canUndo", s->canUndo()}, {"undo", s->undoName()}, {"canRedo", s->canRedo()}, {"redo", s->redoName()}};
+    });
+    add("history.list", [session, document](const QJsonObject&) {
+        document();
+        QJsonArray undo, redo;
+        for (auto& n : session()->undoNames()) undo.append(qs(n));
+        for (auto& n : session()->redoNames()) redo.append(qs(n));
+        return QJsonObject{{"undo", undo}, {"redo", redo}, {"note", "undo is oldest first (the last entry is what history.undo reverts); redo is next first"}};
     });
     add("history.undo", [session, document](const QJsonObject& p) {
         document();

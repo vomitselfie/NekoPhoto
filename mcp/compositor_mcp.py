@@ -107,6 +107,8 @@ class Connection:
             self.file.flush()
             line = self.file.readline()
         reply = json.loads(line)
+        while reply.get("method") == "event":   # notifications for a subscription we never asked for
+            reply = json.loads(self.file.readline())
         if "error" in reply:
             raise RuntimeError(reply["error"]["message"])
         return reply["result"]
@@ -145,6 +147,18 @@ def document_info() -> str:
 def layers_list() -> str:
     """All layers top to bottom with id, name, kind (pixels, shape, group, adjustment), depth, parent, visibility, opacity, blend mode, transform (document pixels), mask and adjustment settings."""
     return text(call("layers.list"))
+
+
+@mcp.tool()
+def history_list() -> str:
+    """The recorded edits: undo (oldest first; the last is what history_undo reverts) and redo."""
+    return text(call("history.list"))
+
+
+@mcp.tool()
+def selection_render(max_size: int = 512) -> Image:
+    """The current selection as a mask image: white selected, black not."""
+    return png(call("selection.render", maxSize=max_size))
 
 
 @mcp.tool()

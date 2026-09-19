@@ -62,6 +62,10 @@ public:
     /// Starts listening on `socketPath` (empty: the default); returns false with a warning on failure.
     bool startAutomation(const QString& socketPath);
 
+signals:
+    /// Something an agent may want to know about changed: document, layers, selection, history, tool, view, tabs.
+    void automationEvent(QString kind);
+
 protected:
     void closeEvent(QCloseEvent*) override;
     void dragEnterEvent(QDragEnterEvent*) override;
