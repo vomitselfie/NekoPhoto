@@ -13,6 +13,12 @@ for macOS and opens the same `.comp` projects.
   <img src="docs/images/screenshot.jpg" alt="compositor-linux editing a layered illustration" width="800">
 </p>
 
+<p align="center">
+  <img src="docs/images/screenshot-gmic.jpg" alt="Filter > G'MIC: the catalogue's folders on the left, a CRT sub-pixel filter's controls on the right, and its live preview on the canvas" width="800">
+  <br>
+  <sub>Filter &gt; G'MIC: over 700 filters with their own controls and a live preview.</sub>
+</p>
+
 ## Get it
 
 Download the AppImage from the [Releases](../../releases) page, make it
