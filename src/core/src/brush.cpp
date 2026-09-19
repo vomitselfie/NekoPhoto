@@ -4,9 +4,7 @@
 #include <cmath>
 #include <cstring>
 
-extern "C" {
-#include "HealPixels.h"
-}
+#include "compositor/heal.h"
 
 namespace compositor {
 
@@ -491,7 +489,7 @@ void BrushStroke::heal() {
     // the hole and leave it half healed. Heal the solid core only, then feather the result in by coverage.
     auto core = std::make_shared<GrayImage>(rw, rh);
     for (int y = 0; y < rh; y++) for (int x = 0; x < rw; x++) core->at(x, y) = painting->at(x, y) >= 128 ? 255 : 0;
-    if (spot_heal(pixels->data(), core->data(), size_t(rw), size_t(rh), size_t(pixels->stride()), float(settings_.opacity), settings_.healingMode, settings_.healingSeed) != 0) return;
+    spotHeal(*pixels, *core, float(settings_.opacity), settings_.healingMode, settings_.healingSeed);
     // The healed pixels replace the wash: the working image becomes the original with the healed region.
     working_ = std::make_shared<Image>(*base_);
     for (int y = 0; y < rh; y++) {

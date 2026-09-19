@@ -33,3 +33,7 @@ add_test(NAME golden_tests COMMAND golden_tests)
 add_executable(resample_tests resample_tests.cpp)
 target_link_libraries(resample_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME resample_tests COMMAND resample_tests)
+
+add_executable(heal_tests heal_tests.cpp)
+target_link_libraries(heal_tests PRIVATE compositor::core compositor::pixels compositor_warnings)
+add_test(NAME heal_tests COMMAND heal_tests)

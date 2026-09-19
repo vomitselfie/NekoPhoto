@@ -10,9 +10,13 @@
 #include "compositor/warp.h"
 #include "compositor/wand.h"
 #include "compositor/resample.h"
+#include "compositor/heal.h"
 #include "compositor/subject.h"
 #include "compositor/render.h"
 #include "compositor/selection.h"
+extern "C" {
+#include "HealPixels.h"
+}
 #include <chrono>
 #include <cstdio>
 #include <cstring>
@@ -138,6 +142,20 @@ int main(int argc, char** argv) {
         report("resample -> 2000x1500 lanczos3", timeMs([&] { (void)resampleAxisAligned(base, 2000, 1500, 1, 2, 1, 2, ResampleFilter::Lanczos3); }));
         report("resample -> 2000x1500 triangle", timeMs([&] { (void)resampleAxisAligned(base, 2000, 1500, 1, 2, 1, 2, ResampleFilter::Triangle); }));
         report("resample -> 6000x4500 lanczos3", timeMs([&] { (void)resampleAxisAligned(base, 6000, 4500, 1.0 / 3, 2.0 / 3, 1.0 / 3, 2.0 / 3, ResampleFilter::Lanczos3); }, 2));
+    }
+    if (want("heal")) {
+        for (int r : {20, 60, 150}) {
+            GrayImage coverage(W, H, 0);
+            for (int y = H / 2 - r; y < H / 2 + r; y++) for (int x = W / 2 - r; x < W / 2 + r; x++) if (std::hypot(x - W / 2, y - H / 2) < r) coverage.at(x, y) = 255;
+            Image img = base;
+            char name[64];
+            std::snprintf(name, sizeof name, "spot heal %d px content-aware", r * 2);
+            report(name, timeMs([&] { img = base; spotHeal(img, coverage, 1.0f, 0, 1); }));
+            std::snprintf(name, sizeof name, "spot heal %d px create texture", r * 2);
+            report(name, timeMs([&] { img = base; spotHeal(img, coverage, 1.0f, 1, 1); }));
+            std::snprintf(name, sizeof name, "spot heal %d px (C reference)", r * 2);
+            report(name, timeMs([&] { img = base; spot_heal(img.data(), coverage.data(), size_t(W), size_t(H), size_t(img.stride()), 1.0f, 0, 1); }, r > 100 ? 1 : 2));
+        }
     }
     if (want("brush")) {
         Layer layer(Asset::make(std::make_shared<Image>(base), "L"), Point(0, 0));
