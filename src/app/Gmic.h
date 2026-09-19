@@ -1,12 +1,16 @@
-// G'MIC (gmic.eu), the open-source filter framework: the `gmic` executable runs a filter on a layer's
-// pixels through a PNG round trip, and the filter catalogue comes from G'MIC's own definition file
-// (the `#@gui` lines the G'MIC-Qt plugin reads), so every filter it lists is available here.
+// G'MIC (gmic.eu), the open-source filter framework: a filter runs on a layer's pixels through the
+// `gmic` executable and a PNG round trip, or, when the build found libgmic and COMPOSITOR_GMIC_INPROCESS
+// is set, in-process through one interpreter kept warm with the catalogue's commands; the filter
+// catalogue comes from G'MIC's own definition file (the `#@gui` lines the G'MIC-Qt plugin reads), so
+// every filter it lists is available.
 #pragma once
 #include "compositor/image.h"
 #include <QObject>
 #include <QString>
 #include <QStringList>
+#include <atomic>
 #include <memory>
+#include <thread>
 #include <vector>
 
 class QProcess;
@@ -61,6 +65,10 @@ public:
     explicit GmicRunner(QObject* parent = nullptr);
     ~GmicRunner() override;
 
+    /// G'MIC can run: the library is built in, or the executable is on PATH.
+    static bool available();
+    /// Filters run in-process through libgmic (no PNG round trip): built in and COMPOSITOR_GMIC_INPROCESS set.
+    static bool inProcess();
     static QString executable();
     static QString version();
     static QStringList tokenize(const QString& command);
@@ -79,6 +87,11 @@ private:
     QProcess* process_ = nullptr;
     std::unique_ptr<QTemporaryDir> dir_;
     int expectedWidth_ = 0, expectedHeight_ = 0;
+    // The in-process path: a worker thread, an abort flag the interpreter polls, and a run number so a
+    // cancelled run's result is dropped.
+    std::thread worker_;
+    std::shared_ptr<std::atomic<bool>> abort_;
+    uint64_t run_ = 0;
 };
 
 } // namespace app

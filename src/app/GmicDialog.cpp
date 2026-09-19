@@ -165,7 +165,7 @@ GmicDialog::GmicDialog(EditorSession* session, QWidget* parent) : QDialog(parent
         coverage_ = session_->selectionOnGrid(transform_, source_->width(), source_->height());
         previewCoverage_ = previewSource_ == source_ ? coverage_ : coverageCopy(coverage_, previewSource_->width(), previewSource_->height());
     }
-    if (GmicRunner::executable().isEmpty()) {
+    if (!GmicRunner::available()) {
         status_->setText(tr("G'MIC is not installed. Install the gmic package (Arch: pacman -S gmic; Ubuntu: apt install gmic) and reopen this dialog."));
         ok_->setEnabled(false);
         update_->setEnabled(false);

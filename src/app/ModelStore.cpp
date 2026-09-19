@@ -22,6 +22,9 @@ const std::vector<ModelInfo>& ModelStore::models() {
         {"u2netp", "u2netp.onnx", "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx",
          "309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8", 4574861, QObject::tr("U2Net small"),
          QObject::tr("A tiny model with coarser edges; quick to download and run.")},
+        {"pphumanseg", "human_segmentation_pphumanseg_2023mar.onnx", "https://github.com/opencv/opencv_zoo/raw/main/models/human_segmentation_pphumanseg/human_segmentation_pphumanseg_2023mar.onnx",
+         "552d8a984054e59b5d773d24b9b12022b22046ceb2bbc4c9aaeaceb36a9ddf24", 6163938, QObject::tr("PP-HumanSeg (instant)"),
+         QObject::tr("Baidu's people segmenter from OpenCV's model zoo: a coarse mask in a few milliseconds. When downloaded it also shows an instant preview while a slower model runs.")},
     };
     return list;
 }

@@ -84,6 +84,13 @@ each filter's parameters; the dialog builds the controls from them, shows the
 resulting command line, and previews on a reduced copy. Filters that change the
 image size are rejected. Over automation: `pixels.gmic` and `gmic.filters`.
 
+When the build finds libgmic (`COMPOSITOR_WITH_LIBGMIC`, on by default), setting
+`COMPOSITOR_GMIC_INPROCESS=1` runs filters in-process through one interpreter
+kept warm with the catalogue's commands, with no PNG round trip (12 MP through
+the executable costs about six seconds of encode and decode). It stays opt-in
+because libgmic 4.0.5 crashes inside `sharpen` when called as a library, and a
+crash in-process takes the editor down.
+
 ## Appearance
 
 Edit > Preferences > Appearance: System, Dark or Light. Dark and Light use Qt's
@@ -208,9 +215,11 @@ packaging/                      .desktop, icon, MIME type
   keeps pixels hard.
 
 - Remove Background: off until enabled in Edit > Preferences, which offers the
-  IS-Net model (rembg's Apache-2.0 ONNX release, ~180 MB) or a 4.6 MB U2Net,
-  downloads it with a checksum check into the app data directory, and can
-  remove it again. The model runs through OpenCV's DNN module, with the Mac panel's
+  IS-Net model (rembg's Apache-2.0 ONNX release, ~180 MB), the U2Net portrait
+  model, a 4.6 MB U2Net, and Baidu's 6 MB PP-HumanSeg from OpenCV's model zoo
+  (a coarse mask in milliseconds; when downloaded it also gives the dialog an
+  instant preview while a slower model runs), downloads them with a checksum
+  check into the app data directory, and can remove them again. The model runs through OpenCV's DNN module, with the Mac panel's
   Advanced refinement (guided-filter edge refine for hair, matte contrast,
   edge shift). The result is a layer mask, multiplied with any existing mask,
   limited to the selection when there is one. OpenCV is optional at build

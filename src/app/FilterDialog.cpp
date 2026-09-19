@@ -224,7 +224,7 @@ void FilterDialog::done(int result) {
 
 // ---- Remove Background -----------------------------------------------------------------------
 
-BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QWidget* parent)
+BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QString quickModelPath, QWidget* parent)
     : QDialog(parent), session_(session), modelPath_(std::move(modelPath)) {
     setWindowTitle(tr("Remove Background"));
     setModal(false);
@@ -281,12 +281,18 @@ BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QW
 
     source_ = session_->adjustmentSource(0, transform_);
     if (!source_) return;
-    // The model runs once, off the UI thread; the sliders only redo the refinement.
+    // The model runs once, off the UI thread; the sliders only redo the refinement. A quick coarse model,
+    // when there is one, gives a preview within a few milliseconds while the chosen model works.
     computing_ = true;
     setCursor(Qt::BusyCursor);
     std::shared_ptr<const Image> image = source_;
-    std::string path = modelPath_.toStdString();
-    auto* worker = new std::thread([this, image, path] {
+    std::string path = modelPath_.toStdString(), quick = quickModelPath == modelPath_ ? std::string() : quickModelPath.toStdString();
+    auto* worker = new std::thread([this, image, path, quick] {
+        if (!quick.empty()) {
+            std::string ignored;
+            if (auto coarse = subjectMask(*image, quick, &ignored))
+                QMetaObject::invokeMethod(this, [this, coarse] { if (computing_) { raw_ = coarse; refreshPreview(); } }, Qt::QueuedConnection);
+        }
         std::string error;
         auto mask = subjectMask(*image, path, &error);
         QMetaObject::invokeMethod(this, [this, mask, error] {

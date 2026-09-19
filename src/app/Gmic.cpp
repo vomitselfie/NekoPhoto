@@ -4,6 +4,11 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QProcess>
+#include <QDateTime>
+#include <mutex>
+#ifdef COMPOSITOR_HAVE_LIBGMIC
+#include <gmic.h>
+#endif
 #include <QRegularExpression>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -192,9 +197,24 @@ QString GmicRunner::executable() {
     return QStandardPaths::findExecutable("gmic");
 }
 
+bool GmicRunner::inProcess() {
+#ifdef COMPOSITOR_HAVE_LIBGMIC
+    // Opt-in: libgmic 4.0.5 crashes inside `sharpen` (its default inverse-diffusion mode) when called as a
+    // library although the executable handles it, and a crash in-process takes the editor down with it.
+    return qEnvironmentVariableIsSet("COMPOSITOR_GMIC_INPROCESS");
+#else
+    return false;
+#endif
+}
+
+bool GmicRunner::available() { return inProcess() || !executable().isEmpty(); }
+
 QString GmicRunner::version() {
     static QString cached;
     if (!cached.isEmpty()) return cached;
+#ifdef COMPOSITOR_HAVE_LIBGMIC
+    if (inProcess()) { cached = QString("%1.%2.%3").arg(gmic_version / 100).arg(gmic_version / 10 % 10).arg(gmic_version % 10); return cached; }
+#endif
     QString exe = executable();
     if (exe.isEmpty()) return {};
     QProcess p;
@@ -242,7 +262,104 @@ std::shared_ptr<compositor::Image> readResult(const QString& outPath, int width,
 
 } // namespace
 
+#ifdef COMPOSITOR_HAVE_LIBGMIC
+namespace {
+
+/// One interpreter, kept between runs with the catalogue's definitions loaded (parsing them costs more
+/// than most filters), reloaded when the definition file changes. Runs are serialised.
+class Interpreter {
+public:
+    static Interpreter& shared() { static Interpreter instance; return instance; }
+
+    /// Asks the run in progress (if any) to stop; the interpreter polls the flag between commands.
+    void abort() { abortFlag_ = true; }
+
+    std::shared_ptr<compositor::Image> run(const compositor::Image& source, const QString& command, QString* error) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        reload();
+        abortFlag_ = false;
+        // Straight RGBA as G'MIC's planar floats, 0..255.
+        const int w = source.width(), h = source.height();
+        gmic_list<float> images;
+        gmic_list<char> names;
+        images.assign(1);
+        names.assign(1);
+        images[0].assign(w, h, 1, 4);
+        float* planes = images[0]._data;
+        const size_t plane = size_t(w) * h;
+        for (int y = 0; y < h; y++) {
+            const uint8_t* p = source.row(y);
+            for (int x = 0; x < w; x++, p += 4) {
+                const size_t i = size_t(y) * w + size_t(x);
+                const float a = p[3];
+                for (int c = 0; c < 3; c++) planes[c * plane + i] = a > 0 ? std::min(255.0f, p[c] * 255.0f / a) : 0.0f;
+                planes[3 * plane + i] = a;
+            }
+        }
+        try {
+            gmic_->run(("v -1 " + command).toUtf8().constData(), images, names);
+        } catch (gmic_exception& e) {
+            if (error) *error = abortFlag_ ? QString() : QString::fromUtf8(e.what()).trimmed().section('\n', -1);
+            return nullptr;
+        } catch (std::exception& e) {
+            if (error) *error = QString::fromUtf8(e.what());
+            return nullptr;
+        }
+        if (images._width < 1) { if (error) *error = QObject::tr("G'MIC produced no image."); return nullptr; }
+        const gmic_image<float>& out = images[0];
+        if (int(out._width) != w || int(out._height) != h) {
+            if (error) *error = QObject::tr("The filter changed the image size (%1 x %2 to %3 x %4); only filters that keep it are supported here.").arg(w).arg(h).arg(out._width).arg(out._height);
+            return nullptr;
+        }
+        // Back to premultiplied bytes; a gray or RGB result keeps the source's alpha.
+        auto result = std::make_shared<compositor::Image>(w, h);
+        const int spectrum = int(out._spectrum);
+        const float* o = out._data;
+        for (int y = 0; y < h; y++) {
+            uint8_t* p = result->row(y);
+            const uint8_t* src = source.row(y);
+            for (int x = 0; x < w; x++, p += 4, src += 4) {
+                const size_t i = size_t(y) * w + size_t(x);
+                float rgb[3];
+                if (spectrum >= 3) for (int c = 0; c < 3; c++) rgb[c] = o[c * plane + i];
+                else for (int c = 0; c < 3; c++) rgb[c] = o[i];
+                const float alpha = spectrum == 4 ? o[3 * plane + i] : spectrum == 2 ? o[plane + i] : float(src[3]);
+                const unsigned a = unsigned(std::clamp(alpha + 0.5f, 0.0f, 255.0f));
+                for (int c = 0; c < 3; c++) p[c] = uint8_t(std::min(a, unsigned(std::clamp(rgb[c], 0.0f, 255.0f) * a / 255 + 0.5f)));
+                p[3] = uint8_t(a);
+            }
+        }
+        return result;
+    }
+
+private:
+    void reload() {
+        QString path = GmicCatalogue::preferredFile();
+        QDateTime stamp = path.isEmpty() ? QDateTime() : QFileInfo(path).lastModified();
+        if (gmic_ && path == loadedPath_ && stamp == loadedStamp_) return;
+        gmic_ = std::make_unique<gmic>("", nullptr, true, nullptr, &abortFlag_, 0.0f);
+        loadedPath_ = path; loadedStamp_ = stamp;
+        if (path.isEmpty()) return;
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly)) return;
+        QByteArray text = file.readAll();
+        try { gmic_->add_commands(text.constData()); } catch (...) {}
+    }
+
+    std::mutex mutex_;
+    std::unique_ptr<gmic> gmic_;
+    bool abortFlag_ = false;   // read by the interpreter mid-run, written by whoever cancels
+    QString loadedPath_;
+    QDateTime loadedStamp_;
+};
+
+} // namespace
+#endif
+
 std::shared_ptr<compositor::Image> GmicRunner::runSync(const compositor::Image& source, const QString& command, QString* error, int timeoutMs) {
+#ifdef COMPOSITOR_HAVE_LIBGMIC
+    if (inProcess()) return Interpreter::shared().run(source, command, error);
+#endif
     QString exe = executable();
     if (exe.isEmpty()) { if (error) *error = QObject::tr("G'MIC is not installed (no gmic executable on PATH)."); return nullptr; }
     QTemporaryDir dir;
@@ -263,6 +380,21 @@ std::shared_ptr<compositor::Image> GmicRunner::runSync(const compositor::Image& 
 
 void GmicRunner::start(std::shared_ptr<const compositor::Image> source, const QString& command) {
     cancel();
+#ifdef COMPOSITOR_HAVE_LIBGMIC
+    if (inProcess()) {
+        const uint64_t run = ++run_;
+        abort_ = std::make_shared<std::atomic<bool>>(false);
+        std::shared_ptr<std::atomic<bool>> abort = abort_;
+        worker_ = std::thread([this, source, command, run, abort] {
+            if (abort->load()) return;
+            QString error;
+            std::shared_ptr<compositor::Image> result = Interpreter::shared().run(*source, command, &error);
+            if (abort->load()) return;
+            QMetaObject::invokeMethod(this, [this, run, result, error] { if (run == run_) emit finished(result, error); }, Qt::QueuedConnection);
+        });
+        return;
+    }
+#endif
     QString exe = executable();
     if (exe.isEmpty()) { emit finished(nullptr, QObject::tr("G'MIC is not installed (no gmic executable on PATH).")); return; }
     dir_ = std::make_unique<QTemporaryDir>();
@@ -288,7 +420,19 @@ void GmicRunner::start(std::shared_ptr<const compositor::Image> source, const QS
     process_->start(exe, argumentsFor(command, inPath, outPath));
 }
 
+bool GmicRunner::running() const { return process_ != nullptr || (abort_ && worker_.joinable() && !abort_->load()); }
+
 void GmicRunner::cancel() {
+    if (worker_.joinable()) {
+        // The interpreter polls its flag between commands and throws its way out.
+        if (abort_) abort_->store(true);
+        run_++;
+#ifdef COMPOSITOR_HAVE_LIBGMIC
+        Interpreter::shared().abort();
+#endif
+        worker_.join();
+        abort_.reset();
+    }
     if (!process_) return;
     QProcess* p = process_;
     process_ = nullptr;
@@ -298,6 +442,5 @@ void GmicRunner::cancel() {
     p->deleteLater();
 }
 
-bool GmicRunner::running() const { return process_ != nullptr; }
 
 } // namespace app

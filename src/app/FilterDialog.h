@@ -65,7 +65,8 @@ private:
 class BackgroundDialog : public QDialog {
     Q_OBJECT
 public:
-    BackgroundDialog(EditorSession* session, QString modelPath, QWidget* parent = nullptr);
+    /// `quickModelPath`, when set, is a fast coarse model run first for an instant preview.
+    BackgroundDialog(EditorSession* session, QString modelPath, QString quickModelPath = {}, QWidget* parent = nullptr);
     ~BackgroundDialog() override;
 protected:
     void done(int result) override;

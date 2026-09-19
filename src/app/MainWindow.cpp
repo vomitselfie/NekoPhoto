@@ -582,7 +582,9 @@ void MainWindow::buildMenus() {
             return;
         }
         if (!session_->canAdjustPixels()) { showError(tr("Remove Background"), tr("Select a visible image layer (not a mask) to remove its background.")); return; }
-        (new BackgroundDialog(session_, ModelStore::pathFor(ModelStore::selected()), this))->show();
+        const ModelInfo* quick = ModelStore::modelById("pphumanseg");
+        QString quickPath = quick && ModelStore::isPresent(*quick) ? ModelStore::pathFor(*quick) : QString();
+        (new BackgroundDialog(session_, ModelStore::pathFor(ModelStore::selected()), quickPath, this))->show();
     }));
     refreshBackgroundAction();
 

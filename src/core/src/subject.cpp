@@ -44,11 +44,13 @@ std::shared_ptr<GrayImage> subjectMask(const Image& image, const std::string& mo
     if (!net) return nullptr;
     // What the file name says about the model: IS-Net takes 1024 px and (x - 0.5); the U2Net family 320 px
     // with ImageNet normalisation over the image's maximum; MODNet-style matting models 512 px, (x - 0.5) / 0.5,
-    // and give an alpha matte directly (no min-max stretch afterwards).
+    // and give an alpha matte directly (no min-max stretch afterwards); PP-HumanSeg 192 px, a probability.
     std::string name = modelPath.substr(modelPath.rfind('/') + 1);
     bool isnet = name.find("isnet") != std::string::npos;
     bool modnet = name.find("modnet") != std::string::npos;
-    int size = isnet ? 1024 : modnet ? 512 : 320;
+    // PP-HumanSeg (OpenCV's model zoo): 192 px, (x - 0.5) / 0.5, a two-class softmax whose second plane is the person.
+    bool humanseg = name.find("pphumanseg") != std::string::npos;
+    int size = isnet ? 1024 : modnet ? 512 : humanseg ? 192 : 320;
     // The layer's straight colour over black where transparent, as RGB float 0..1.
     cv::Mat rgb(image.height(), image.width(), CV_32FC3);
     for (int y = 0; y < image.height(); y++) {
@@ -65,7 +67,7 @@ std::shared_ptr<GrayImage> subjectMask(const Image& image, const std::string& mo
     cv::split(resized, channels);
     if (isnet) {
         for (auto& c : channels) c = c - 0.5f; // (x - 0.5) / 1
-    } else if (modnet) {
+    } else if (modnet || humanseg) {
         for (auto& c : channels) c = (c - 0.5f) / 0.5f;
     } else {
         double mx = 0;
@@ -85,9 +87,10 @@ std::shared_ptr<GrayImage> subjectMask(const Image& image, const std::string& mo
         return nullptr;
     }
     if (out.dims != 4 || out.size[2] != size || out.size[3] != size) { if (error) *error = "The model gave an unexpected output."; return nullptr; }
-    cv::Mat pred(size, size, CV_32F, out.ptr<float>(0, 0));
+    if (humanseg && out.size[1] < 2) { if (error) *error = "The model gave an unexpected output."; return nullptr; }
+    cv::Mat pred(size, size, CV_32F, out.ptr<float>(0, humanseg ? 1 : 0));
     cv::Mat scaled;
-    if (modnet) scaled = pred;
+    if (modnet || humanseg) scaled = pred;
     else {
         double mn, mx;
         cv::minMaxLoc(pred, &mn, &mx);
