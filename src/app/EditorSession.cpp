@@ -1925,6 +1925,63 @@ bool EditorSession::contentAwareFill(QString* errorText) {
     return true;
 }
 
+bool EditorSession::copyLayerFrom(const EditorSession& source, const Uuid& id, std::optional<QPointF> at, QString* errorText) {
+    if (!source.document_ || (document_ && !canEditLayers())) return false;
+    const Document& from = *source.document_;
+    if (!from.find(id)) return false;
+    std::set<Uuid> included = descendantIds(from.layers, id);
+    included.insert(id);
+    std::vector<Layer> copied;
+    for (auto& l : from.layers) if (included.count(l.id)) copied.push_back(l);
+    long long used = 0, added = 0;
+    if (document_) for (auto& l : document_->layers) if (l.asset && l.asset->image) used += (long long)l.asset->image->width() * l.asset->image->height();
+    for (auto& l : copied) if (l.asset && l.asset->image) added += (long long)l.asset->image->width() * l.asset->image->height();
+    if (used + added > Document::pixelBudget) { if (errorText) *errorText = tr("The copied layers exceed this project’s 100-megapixel limit."); return false; }
+    // Clipping to a layer that stays behind is baked into the pixels.
+    for (auto& l : copied) {
+        if (l.maskSourceId && !included.count(*l.maskSourceId)) {
+            if (!l.adjustment) { if (auto baked = source.bakeClipping(l.id)) l.asset = *baked; }
+            l.maskSourceId.reset();
+        }
+    }
+    std::map<Uuid, Uuid> mapping;
+    for (auto& l : copied) mapping[l.id] = makeUuid();
+    commitTransform();
+    resolveGradient();
+    beginEdit("Copy Layer");
+    if (!document_) {
+        document_ = Document(from.width, from.height);
+        document_->resolution = from.resolution;
+        viewport.fit({double(from.width), double(from.height)});
+        emit viewportChanged();
+        emit projectPathChanged();
+    }
+    const Layer* dragged = from.find(id);
+    Point anchor = dragged->transform.center();
+    Point center = at ? toPoint(*at) : Point(document_->width / 2.0, document_->height / 2.0);
+    double dx = center.x - anchor.x, dy = center.y - anchor.y;
+    const Layer* active = activeLayer();
+    std::optional<Uuid> parent = active && active->isGroup ? activeLayerId_ : (active ? active->parentId : std::nullopt);
+    int index = activeLayerId_ ? document_->indexOf(*activeLayerId_) + 1 : int(document_->layers.size());
+    std::vector<Layer> placed;
+    for (auto& l : copied) {
+        Layer c = l;
+        c.id = mapping[l.id];
+        c.parentId = l.parentId && mapping.count(*l.parentId) ? std::optional(mapping[*l.parentId]) : parent;
+        if (c.maskSourceId) c.maskSourceId = mapping.count(*c.maskSourceId) ? std::optional(mapping[*c.maskSourceId]) : std::nullopt;
+        c.transform.origin.x += dx; c.transform.origin.y += dy;
+        if (c.mask && c.mask->placement) { c.mask->placement->origin.x += dx; c.mask->placement->origin.y += dy; }
+        placed.push_back(c);
+    }
+    document_->layers.insert(document_->layers.begin() + std::min(index, int(document_->layers.size())), placed.begin(), placed.end());
+    setActiveLayer(mapping[id]);
+    if (parent) collapsedGroupIds.erase(*parent);
+    endEdit();
+    notifyDocument();
+    emit selectionChanged();
+    return true;
+}
+
 // ---- Selection --------------------------------------------------------------------
 
 void EditorSession::setSelection(const std::optional<Selection>& selection, const QString& name) {

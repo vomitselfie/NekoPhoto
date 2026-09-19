@@ -27,6 +27,7 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    QMimeData* mimeData(const QList<QTreeWidgetItem*>& items) const override;
 private:
     EditorSession* session_;
 public:

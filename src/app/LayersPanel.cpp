@@ -117,6 +117,14 @@ LayerTree::LayerTree(EditorSession* session, QWidget* parent) : QTreeWidget(pare
     setMouseTracking(true);
 }
 
+QMimeData* LayerTree::mimeData(const QList<QTreeWidgetItem*>& items) const {
+    QMimeData* mime = QTreeWidget::mimeData(items);
+    if (!mime) mime = new QMimeData;
+    QTreeWidgetItem* lead = currentItem() && items.contains(currentItem()) ? currentItem() : (items.isEmpty() ? nullptr : items.first());
+    if (lead) mime->setData("application/x-compositor-layer", (QString::number(quintptr(session_)) + ":" + lead->data(0, Qt::UserRole).toString()).toUtf8());
+    return mime;
+}
+
 void LayerTree::dragEnterEvent(QDragEnterEvent* event) {
     if (event->mimeData()->hasFormat("application/x-compositor-mask")) { event->acceptProposedAction(); return; }
     QTreeWidget::dragEnterEvent(event);

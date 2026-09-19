@@ -28,7 +28,9 @@
 #include <QPainter>
 #include <QPushButton>
 #include <QSettings>
+#include <QStackedWidget>
 #include <QStatusBar>
+#include <QVBoxLayout>
 #include <QToolBar>
 #include <QToolButton>
 
@@ -48,32 +50,63 @@ bool isProjectPath(const QString& path) { return path.endsWith(".comp", Qt::Case
 
 } // namespace
 
+ProjectTabBar::ProjectTabBar(QWidget* parent) : QTabBar(parent) {
+    setAcceptDrops(true);
+    setExpanding(false);
+    setMovable(true);
+    setTabsClosable(true);
+    setDocumentMode(true);
+    setElideMode(Qt::ElideRight);
+}
+
+void ProjectTabBar::dragEnterEvent(QDragEnterEvent* e) {
+    if (e->mimeData()->hasFormat("application/x-compositor-layer")) e->acceptProposedAction(); else QTabBar::dragEnterEvent(e);
+}
+
+void ProjectTabBar::dragMoveEvent(QDragMoveEvent* e) {
+    if (e->mimeData()->hasFormat("application/x-compositor-layer")) { e->acceptProposedAction(); return; }
+    QTabBar::dragMoveEvent(e);
+}
+
+void ProjectTabBar::dropEvent(QDropEvent* e) {
+    if (!e->mimeData()->hasFormat("application/x-compositor-layer")) { QTabBar::dropEvent(e); return; }
+    int index = tabAt(e->position().toPoint());
+    emit layerDropped(index, QString::fromUtf8(e->mimeData()->data("application/x-compositor-layer")));
+    e->acceptProposedAction();
+}
+
 MainWindow::MainWindow() {
-    session_ = new EditorSession(this);
-    canvas_ = new CanvasWidget(session_);
-    setCentralWidget(canvas_);
     setAcceptDrops(true);
     resize(1400, 900);
 
-    options_ = new ToolOptionsBar(session_, canvas_);
-    addToolBar(Qt::TopToolBarArea, options_);
+    tabBar_ = new ProjectTabBar;
+    canvasStack_ = new QStackedWidget;
+    auto* central = new QWidget;
+    auto* centralLayout = new QVBoxLayout(central);
+    centralLayout->setContentsMargins(0, 0, 0, 0);
+    centralLayout->setSpacing(0);
+    centralLayout->addWidget(tabBar_);
+    centralLayout->addWidget(canvasStack_, 1);
+    setCentralWidget(central);
+    connect(tabBar_, &QTabBar::currentChanged, this, [this](int index) { if (index >= 0 && index != current_) switchTo(index); });
+    connect(tabBar_, &QTabBar::tabCloseRequested, this, [this](int index) { closeTab(index); });
+    connect(tabBar_, &QTabBar::tabMoved, this, [this](int from, int to) { std::swap(tabs_[size_t(from)], tabs_[size_t(to)]); current_ = tabBar_->currentIndex(); });
+    connect(tabBar_, &ProjectTabBar::layerDropped, this, &MainWindow::copyLayerFromPayload);
 
     auto* dock = new QDockWidget(tr("Layers"), this);
     dock->setObjectName("layersDock");
     dock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
-    layers_ = new LayersPanel(session_);
-    layers_->setMinimumWidth(280);
-    dock->setWidget(layers_);
+    layersStack_ = new QStackedWidget;
+    layersStack_->setMinimumWidth(280);
+    dock->setWidget(layersStack_);
     addDockWidget(Qt::RightDockWidgetArea, dock);
     auto* adjustDock = new QDockWidget(tr("Adjustments"), this);
     adjustDock->setObjectName("adjustmentsDock");
     adjustDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable | QDockWidget::DockWidgetClosable);
-    adjustDock->setWidget(new AdjustmentsPanel(session_));
+    adjustStack_ = new QStackedWidget;
+    adjustDock->setWidget(adjustStack_);
     addDockWidget(Qt::RightDockWidgetArea, adjustDock);
     splitDockWidget(dock, adjustDock, Qt::Vertical);
-
-    buildToolRail();
-    buildMenus();
 
     zoomLabel_ = new QLabel;
     positionLabel_ = new QLabel;
@@ -81,24 +114,136 @@ MainWindow::MainWindow() {
     statusBar()->addWidget(zoomLabel_);
     statusBar()->addWidget(sizeLabel_);
     statusBar()->addPermanentWidget(positionLabel_);
-    connect(canvas_, &CanvasWidget::cursorMoved, this, [this](QPointF p) { positionLabel_->setText(QStringLiteral("%1, %2").arg(int(std::floor(p.x()))).arg(int(std::floor(p.y())))); });
-    connect(session_, &EditorSession::viewportChanged, this, [this] { zoomLabel_->setText(QStringLiteral("%1%").arg(session_->viewport.zoom * 100, 0, 'f', session_->viewport.zoom < 0.1 ? 1 : 0)); });
-    connect(session_, &EditorSession::titleChanged, this, &MainWindow::refreshTitle);
-    connect(session_, &EditorSession::projectPathChanged, this, &MainWindow::refreshTitle);
-    connect(session_, &EditorSession::historyChanged, this, &MainWindow::refreshActions);
-    connect(session_, &EditorSession::layersChanged, this, &MainWindow::refreshActions);
-    connect(session_, &EditorSession::toolChanged, this, [this] {
-        if (toolActions_.contains(session_->tool())) toolActions_[session_->tool()]->setChecked(true);
-        eraserAction_->setChecked(session_->tool() == Tool::Brush && session_->brushErase);
-        updateColorSwatches();
-    });
-    connect(session_, &EditorSession::error, this, [this](QString message) { showError(tr("Compositor"), message); });
-    refreshTitle();
-    refreshActions();
-    updateColorSwatches();
+
+    buildToolRail();
+    buildMenus();
+    addTab(false);
+    switchTo(0);
     QSettings settings;
     restoreGeometry(settings.value("window/geometry").toByteArray());
     restoreState(settings.value("window/state").toByteArray());
+}
+
+MainWindow::Tab& MainWindow::addTab(bool reuseEmpty) {
+    if (reuseEmpty && current_ >= 0 && !currentTab().session->hasDocument()) return currentTab();
+    Tab tab;
+    tab.defaultName = tabs_.empty() ? tr("Untitled") : tr("Untitled %1").arg(nextNumber_++);
+    tab.session = new EditorSession(this);
+    tab.canvas = new CanvasWidget(tab.session);
+    tab.layers = new LayersPanel(tab.session);
+    tab.adjustments = new AdjustmentsPanel(tab.session);
+    tab.options = new ToolOptionsBar(tab.session, tab.canvas);
+    addToolBar(Qt::TopToolBarArea, tab.options);
+    tab.options->setVisible(false);
+    canvasStack_->addWidget(tab.canvas);
+    layersStack_->addWidget(tab.layers);
+    adjustStack_->addWidget(tab.adjustments);
+    tabs_.push_back(tab);
+    int index = int(tabs_.size()) - 1;
+    { QSignalBlocker b(tabBar_); tabBar_->addTab(tab.defaultName); }
+    connect(tab.canvas, &CanvasWidget::cursorMoved, this, [this](QPointF p) { positionLabel_->setText(QStringLiteral("%1, %2").arg(int(std::floor(p.x()))).arg(int(std::floor(p.y())))); });
+    connect(tab.session, &EditorSession::projectPathChanged, this, &MainWindow::refreshTabTitles);
+    connect(tab.session, &EditorSession::titleChanged, this, &MainWindow::refreshTabTitles);
+    tabBar_->setCurrentIndex(index);
+    if (current_ != index) switchTo(index);
+    return tabs_[size_t(index)];
+}
+
+void MainWindow::switchTo(int index) {
+    if (index < 0 || index >= int(tabs_.size())) return;
+    if (current_ >= 0 && current_ < int(tabs_.size()) && current_ != index) {
+        currentTab().session->commitTransform();
+        currentTab().session->resolveGradient();
+        currentTab().options->setVisible(false);
+    }
+    current_ = index;
+    Tab& tab = currentTab();
+    session_ = tab.session;
+    canvas_ = tab.canvas;
+    layers_ = tab.layers;
+    options_ = tab.options;
+    canvasStack_->setCurrentWidget(tab.canvas);
+    layersStack_->setCurrentWidget(tab.layers);
+    adjustStack_->setCurrentWidget(tab.adjustments);
+    tab.options->setVisible(true);
+    { QSignalBlocker b(tabBar_); tabBar_->setCurrentIndex(index); }
+    connectSession();
+    refreshTitle();
+    refreshActions();
+    updateColorSwatches();
+    if (toolActions_.contains(session_->tool())) toolActions_[session_->tool()]->setChecked(true);
+    zoomLabel_->setText(QStringLiteral("%1%").arg(session_->viewport.zoom * 100, 0, 'f', session_->viewport.zoom < 0.1 ? 1 : 0));
+    canvas_->setFocus();
+}
+
+void MainWindow::connectSession() {
+    for (auto& c : sessionConnections_) disconnect(c);
+    sessionConnections_.clear();
+    sessionConnections_.push_back(connect(session_, &EditorSession::viewportChanged, this, [this] { zoomLabel_->setText(QStringLiteral("%1%").arg(session_->viewport.zoom * 100, 0, 'f', session_->viewport.zoom < 0.1 ? 1 : 0)); }));
+    sessionConnections_.push_back(connect(session_, &EditorSession::titleChanged, this, &MainWindow::refreshTitle));
+    sessionConnections_.push_back(connect(session_, &EditorSession::projectPathChanged, this, &MainWindow::refreshTitle));
+    sessionConnections_.push_back(connect(session_, &EditorSession::historyChanged, this, &MainWindow::refreshActions));
+    sessionConnections_.push_back(connect(session_, &EditorSession::layersChanged, this, &MainWindow::refreshActions));
+    sessionConnections_.push_back(connect(session_, &EditorSession::toolChanged, this, [this] {
+        if (toolActions_.contains(session_->tool())) toolActions_[session_->tool()]->setChecked(true);
+        eraserAction_->setChecked(session_->tool() == Tool::Brush && session_->brushErase);
+        updateColorSwatches();
+    }));
+    sessionConnections_.push_back(connect(session_, &EditorSession::error, this, [this](QString message) { showError(tr("Compositor"), message); }));
+}
+
+void MainWindow::refreshTabTitles() {
+    for (size_t i = 0; i < tabs_.size(); i++) {
+        Tab& tab = tabs_[i];
+        QString name = tab.session->projectPath().isEmpty() ? tab.defaultName : QFileInfo(tab.session->projectPath()).completeBaseName();
+        if (tab.session->isModified()) name += " *";
+        tabBar_->setTabText(int(i), name);
+        tabBar_->setTabToolTip(int(i), tab.session->projectPath());
+    }
+}
+
+bool MainWindow::confirmDiscard(int index) {
+    if (index < 0 || index >= int(tabs_.size())) return true;
+    EditorSession* s = tabs_[size_t(index)].session;
+    if (!s->hasDocument() || !s->isModified()) return true;
+    if (index != current_) switchTo(index);
+    auto answer = QMessageBox::warning(this, tr("Unsaved Changes"), tr("Save the changes to %1?").arg(s->title()),
+                                       QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel, QMessageBox::Save);
+    if (answer == QMessageBox::Cancel) return false;
+    if (answer == QMessageBox::Save) return save(false);
+    return true;
+}
+
+void MainWindow::closeTab(int index) {
+    if (index < 0 || index >= int(tabs_.size()) || !confirmDiscard(index)) return;
+    Tab tab = tabs_[size_t(index)];
+    tabs_.erase(tabs_.begin() + index);
+    { QSignalBlocker b(tabBar_); tabBar_->removeTab(index); }
+    canvasStack_->removeWidget(tab.canvas);
+    layersStack_->removeWidget(tab.layers);
+    adjustStack_->removeWidget(tab.adjustments);
+    removeToolBar(tab.options);
+    tab.canvas->deleteLater(); tab.layers->deleteLater(); tab.adjustments->deleteLater(); tab.options->deleteLater();
+    tab.session->deleteLater();
+    current_ = -1;
+    if (tabs_.empty()) { addTab(false); return; }
+    switchTo(std::min(index, int(tabs_.size()) - 1));
+}
+
+void MainWindow::copyLayerFromPayload(int tabIndex, const QString& payload) {
+    QStringList parts = payload.split(':');
+    if (parts.size() != 2) return;
+    quintptr key = parts[0].toULongLong();
+    EditorSession* source = nullptr;
+    for (auto& t : tabs_) if (quintptr(t.session) == key) source = t.session;
+    if (!source) return;
+    Tab* target = nullptr;
+    if (tabIndex < 0) target = &addTab(false); else target = &tabs_[size_t(tabIndex)];
+    if (target->session == source) return;
+    QString error;
+    if (!target->session->copyLayerFrom(*source, parts[1].toStdString(), std::nullopt, &error)) { if (!error.isEmpty()) showError(tr("Copy Layer"), error); return; }
+    int index = int(target - tabs_.data());
+    if (index != current_) switchTo(index);
 }
 
 void MainWindow::buildToolRail() {
@@ -205,7 +350,10 @@ void MainWindow::buildMenus() {
     needsDocument(file->addAction(tr("Export &PNG…"), QKeySequence("Ctrl+Shift+E"), this, &MainWindow::exportPng));
     needsDocument(file->addAction(tr("Export &JPEG…"), QKeySequence("Ctrl+Alt+Shift+S"), this, &MainWindow::exportJpeg));
     file->addSeparator();
-    needsDocument(file->addAction(tr("&Close"), QKeySequence::Close, this, [this] { if (confirmDiscard()) session_->closeDocument(); }));
+    file->addAction(tr("&Close Tab"), QKeySequence::Close, this, [this] { closeTab(current_); });
+    file->addAction(tr("New &Tab"), QKeySequence::AddTab, this, [this] { addTab(false); });
+    file->addAction(tr("Next Tab"), QKeySequence("Ctrl+Tab"), this, [this] { if (tabs_.size() > 1) switchTo((current_ + 1) % int(tabs_.size())); });
+    file->addAction(tr("Previous Tab"), QKeySequence("Ctrl+Shift+Tab"), this, [this] { if (tabs_.size() > 1) switchTo((current_ + int(tabs_.size()) - 1) % int(tabs_.size())); });
     file->addAction(tr("&Quit"), QKeySequence::Quit, this, &QWidget::close);
 
     QMenu* edit = menuBar()->addMenu(tr("&Edit"));
@@ -323,7 +471,7 @@ void MainWindow::buildMenus() {
     view->addSeparator();
     QAction* grid = view->addAction(tr("Pixel &Grid"), this, [this](bool on) { session_->showsPixelGrid = on; canvas_->update(); });
     grid->setCheckable(true);
-    grid->setChecked(session_->showsPixelGrid);
+    grid->setChecked(true);
     QAction* controls = view->addAction(tr("Transform &Controls"), QKeySequence("Ctrl+H"), this, [this](bool on) { session_->showsTransformControls = on; emit session_->transformChanged(); });
     controls->setCheckable(true);
     controls->setChecked(true);
@@ -369,8 +517,10 @@ void MainWindow::refreshActions() {
 }
 
 void MainWindow::refreshTitle() {
+    if (!session_) return;
     setWindowTitle(session_->title() + (session_->hasDocument() ? QStringLiteral(" — Compositor") : QString()));
     setWindowModified(session_->isModified());
+    refreshTabTitles();
 }
 
 void MainWindow::refreshRecent() {
@@ -390,17 +540,13 @@ void MainWindow::addRecent(const QString& path) {
     refreshRecent();
 }
 
-bool MainWindow::confirmDiscard() {
-    if (!session_->hasDocument() || !session_->isModified()) return true;
-    auto answer = QMessageBox::warning(this, tr("Unsaved Changes"), tr("Save the changes to %1?").arg(session_->title()),
-                                       QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel, QMessageBox::Save);
-    if (answer == QMessageBox::Cancel) return false;
-    if (answer == QMessageBox::Save) return save(false);
-    return true;
-}
+bool MainWindow::confirmDiscard() { return confirmDiscard(current_); }
 
 void MainWindow::closeEvent(QCloseEvent* e) {
-    if (!confirmDiscard()) { e->ignore(); return; }
+    // The tab on screen first, then the rest left to right.
+    std::vector<int> order{current_};
+    for (int i = 0; i < int(tabs_.size()); i++) if (i != current_) order.push_back(i);
+    for (int i : order) if (!confirmDiscard(i)) { e->ignore(); return; }
     QSettings settings;
     settings.setValue("window/geometry", saveGeometry());
     settings.setValue("window/state", saveState());
@@ -410,17 +556,25 @@ void MainWindow::closeEvent(QCloseEvent* e) {
 void MainWindow::showError(const QString& title, const QString& message) { QMessageBox::warning(this, title, message); }
 
 void MainWindow::newDocument() {
-    if (!confirmDiscard()) return;
     auto options = askNewDocument(this, {});
     if (!options) return;
-    session_->createDocument(options->width, options->height, options->resolution, true);
+    Tab& tab = addTab(true);
+    tab.session->createDocument(options->width, options->height, options->resolution, true);
 }
 
 void MainWindow::openPath(const QString& path) {
     if (isProjectPath(path)) {
-        if (!confirmDiscard()) return;
+        QString canonical = QFileInfo(path).canonicalFilePath();
+        for (size_t i = 0; i < tabs_.size(); i++)
+            if (!tabs_[i].session->projectPath().isEmpty() && QFileInfo(tabs_[i].session->projectPath()).canonicalFilePath() == canonical) { switchTo(int(i)); return; }
+        // Load into a fresh session first, so a failed open never disturbs a tab.
+        auto* probe = new EditorSession(this);
         QString error;
-        if (!session_->openProject(path, &error)) { showError(tr("Couldn’t open the project"), error); return; }
+        bool ok = probe->openProject(path, &error);
+        probe->deleteLater();
+        if (!ok) { showError(tr("Couldn’t open the project"), error); return; }
+        Tab& tab = addTab(true);
+        if (!tab.session->openProject(path, &error)) { showError(tr("Couldn’t open the project"), error); return; }
         addRecent(path);
         return;
     }

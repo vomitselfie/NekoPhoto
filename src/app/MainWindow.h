@@ -1,19 +1,37 @@
-// The application window: menus, the tool rail, the canvas, the Layers panel
-// and the status bar.
+// The application window: project tabs, menus, the tool rail, the canvas, the
+// Layers and Adjustments panels and the status bar. Each tab is one project
+// with its own session, canvas and panels; the menus act on the current one.
 #pragma once
 #include "EditorSession.h"
 #include <QMainWindow>
 #include <QStringList>
+#include <QTabBar>
+#include <vector>
 
 class QLabel;
 class QMenu;
 class QToolButton;
+class QStackedWidget;
 
 namespace app {
 
 class CanvasWidget;
 class LayersPanel;
+class AdjustmentsPanel;
 class ToolOptionsBar;
+
+/// The tab strip: accepts a layer dragged from another project's Layers panel.
+class ProjectTabBar : public QTabBar {
+    Q_OBJECT
+public:
+    explicit ProjectTabBar(QWidget* parent = nullptr);
+signals:
+    void layerDropped(int tabIndex, QString payload);
+protected:
+    void dragEnterEvent(QDragEnterEvent*) override;
+    void dragMoveEvent(QDragMoveEvent*) override;
+    void dropEvent(QDropEvent*) override;
+};
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -28,6 +46,21 @@ protected:
     void dropEvent(QDropEvent*) override;
 
 private:
+    struct Tab {
+        EditorSession* session = nullptr;
+        CanvasWidget* canvas = nullptr;
+        LayersPanel* layers = nullptr;
+        AdjustmentsPanel* adjustments = nullptr;
+        ToolOptionsBar* options = nullptr;
+        QString defaultName;
+    };
+    Tab& addTab(bool reuseEmpty);
+    void switchTo(int index);
+    void closeTab(int index);
+    Tab& currentTab() { return tabs_[size_t(current_)]; }
+    bool confirmDiscard(int index);
+    void connectSession();
+    void refreshTabTitles();
     void buildMenus();
     void buildToolRail();
     void newDocument();
@@ -46,11 +79,20 @@ private:
     void deleteSelectedLayers();
     void updateColorSwatches();
     void showError(const QString& title, const QString& message);
+    void copyLayerFromPayload(int tabIndex, const QString& payload);
 
-    EditorSession* session_;
-    CanvasWidget* canvas_;
-    LayersPanel* layers_;
-    ToolOptionsBar* options_;
+    std::vector<Tab> tabs_;
+    int current_ = -1;
+    int nextNumber_ = 2;
+    EditorSession* session_ = nullptr;
+    CanvasWidget* canvas_ = nullptr;
+    LayersPanel* layers_ = nullptr;
+    ToolOptionsBar* options_ = nullptr;
+    ProjectTabBar* tabBar_;
+    QStackedWidget* canvasStack_;
+    QStackedWidget* layersStack_;
+    QStackedWidget* adjustStack_;
+    std::vector<QMetaObject::Connection> sessionConnections_;
     QMenu* recentMenu_;
     QLabel* zoomLabel_;
     QLabel* positionLabel_;

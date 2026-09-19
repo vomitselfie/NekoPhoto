@@ -149,7 +149,7 @@ QWidget* ToolOptionsBar::buildMoveOptions() {
 
 void ToolOptionsBar::syncTransformFields() {
     const Layer* active = session_->activeLayer();
-    bool enabled = active && !active->isGroup && session_->canTransform();
+    bool enabled = active && session_->canTransform();
     transformFields_->setEnabled(enabled);
     for (auto* b : transformFields_->findChildren<QPushButton*>()) b->setVisible(session_->transformEdit().has_value());
     if (!enabled) return;

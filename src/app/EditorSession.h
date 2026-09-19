@@ -262,6 +262,10 @@ public:
     void layerViaCopy();
     /// Content-Aware Fill of the selection on the active layer; the layer grows over any selection past its edge.
     bool contentAwareFill(QString* error);
+    /// Dragging a layer between projects: `id` (a folder with its contents) copied from `source` into this
+    /// document, centred on `at` (or the canvas); clipping to layers left behind is baked in. A first copy
+    /// into an empty tab makes the canvas the source's size.
+    bool copyLayerFrom(const EditorSession& source, const compositor::Uuid& id, std::optional<QPointF> at, QString* error);
 
     // Selection
     void applySelectionShape(const compositor::GrayImage& shape, compositor::SelectionMode mode, const QString& name);

@@ -102,24 +102,42 @@ packaging/                      .desktop, icon, MIME type
 - Filter menu: Gaussian Blur and Motion Blur (spreading past the layer's
   edges, as on the Mac), Add Noise, Lens Correction, all with a live preview.
 
-## Not ported yet
+- Move tool drags selected pixels (Alt duplicates, Ctrl-arrows nudge); Ctrl+T
+  with a selection floats the pixels for a transform; Ctrl-drag a handle for
+  free distort (Shift locks an axis); several layers or a folder transform
+  together; Alt-drag duplicates a layer while moving it.
+- Gradient tool (linear / radial, foreground to background or to transparent,
+  reverse, opacity; Shift snaps the angle; Enter applies, Esc discards), Shape
+  tool (rectangle, rounded rectangle, ellipse; Shift-U switches), Blur /
+  Smudge / Liquify tool.
+- Opacity number keys, Shift-[ ] for hardness, Shift-M / Shift-L kinds,
+  snapping while resizing, crop ratio presets, Load as Selection, a bake or
+  release prompt when deleting a clipping base, Alt-click to clip, Alt-drag
+  to copy a mask, Hue/Saturation eyedroppers and targeted-adjustment drag.
+- Multiple projects in tabs (Ctrl+N opens a new tab, Ctrl+W closes, Ctrl+Tab cycles); drag a layer from the Layers panel onto another tab to
+  copy it there.
+- Image Size resamples every layer and mask, as the Mac does.
 
-- Remove Background (Apple's Vision subject mask has no Linux equivalent).
-- Blur/Smudge/Liquify, Gradient and Shape tools; free distort; dragging
-  selected pixels with the Move tool (use Cut/Paste or Layer via Copy).
-- Multiple projects in tabs.
-- Image Size scales layer placement rather than resampling pixels (the layers
-  keep their full-resolution sources); the Mac resamples.
+## Not ported
+
+- Remove Background: Apple's Vision subject mask has no Linux equivalent. An
+  ONNX (U²-Net) backend would be the route if wanted.
 
 ## Keyboard shortcuts
 
 | Keys | Action |
 |---|---|
-| V M L W C B E J S I H Z | Tools: Move, Marquee, Lasso, Wand, Crop, Brush, Eraser, Spot Healing, Clone Stamp, Eyedropper, Hand, Zoom |
+| V M L W C B E J S R G U I H Z | Tools: Move, Marquee, Lasso, Wand, Crop, Brush, Eraser, Spot Healing, Clone Stamp, Smudge, Gradient, Shape, Eyedropper, Hand, Zoom |
+| Shift M / L / U | Switch the Marquee, Lasso or Shape kind |
+| 1…9, 0 | Opacity 10%…90%, 100% (two digits quickly for an exact value) |
+| [ ], Shift [ ] | Brush size, hardness |
 | X, D | Swap / reset colours |
 | Space + drag, middle drag, wheel | Pan |
 | Ctrl + wheel, Ctrl +/−, Ctrl 0, Ctrl 1 | Zoom, fit, 100% |
-| Ctrl T, Enter, Esc | Free transform, apply, cancel |
+| Ctrl T, Enter, Esc | Free transform (of the selection when there is one), apply, cancel |
+| Ctrl + drag handle | Free distort |
+| Ctrl + arrows | Nudge selected pixels |
+| Ctrl N, Ctrl W, Ctrl Tab | New tab, close tab, next tab |
 | Ctrl Shift N, Ctrl G, Ctrl J, Ctrl E | New layer, group, duplicate, merge down |
 | Ctrl Alt G | Clipping mask |
 | Ctrl ] / Ctrl [ | Bring forward / send backward |
