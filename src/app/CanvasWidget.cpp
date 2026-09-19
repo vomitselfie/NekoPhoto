@@ -691,14 +691,26 @@ void CanvasWidget::move(QPointF view, Qt::MouseButtons buttons, Qt::KeyboardModi
         update();
         break;
     }
-    case Drag::Crop:
-        crop_ = dragBox(dragStartDocument_, doc, modifiers & Qt::ShiftModifier, modifiers & Qt::AltModifier, cropRatio_).intersected(QRectF(QPointF(0, 0), documentSize()));
+    case Drag::Crop: {
+        QPointF p = (modifiers & Qt::ControlModifier) ? doc : snapPoint(doc);
+        crop_ = dragBox(dragStartDocument_, p, modifiers & Qt::ShiftModifier, modifiers & Qt::AltModifier, cropRatio_).intersected(QRectF(QPointF(0, 0), documentSize()));
         emit cropChanged();
         update();
         break;
+    }
     case Drag::CropMove: {
         QPointF d = doc - dragStartDocument_;
         QRectF r = cropOrigin_.translated(std::round(d.x()), std::round(d.y()));
+        if (!(modifiers & Qt::ControlModifier)) {
+            std::vector<double> xs, ys;
+            guideTargets(xs, ys);
+            SnapResult snap = snapOffset(Rect(r.x(), r.y(), r.width(), r.height()), xs, ys, snapDistance / session_->viewport.pointsPerPixel());
+            r.translate(snap.dx, snap.dy);
+            std::vector<double> gx, gy;
+            if (snap.snappedX) gx.push_back(snap.x);
+            if (snap.snappedY) gy.push_back(snap.y);
+            session_->setSnapGuides(gx, gy);
+        }
         QSizeF ds = documentSize();
         r.moveLeft(std::clamp(r.left(), 0.0, ds.width() - r.width()));
         r.moveTop(std::clamp(r.top(), 0.0, ds.height() - r.height()));
@@ -709,7 +721,8 @@ void CanvasWidget::move(QPointF view, Qt::MouseButtons buttons, Qt::KeyboardModi
     }
     case Drag::CropResize: {
         QRectF r = cropOrigin_;
-        QPointF p(std::round(doc.x()), std::round(doc.y()));
+        QPointF snapped = (modifiers & Qt::ControlModifier) ? doc : snapPoint(doc);
+        QPointF p(std::round(snapped.x()), std::round(snapped.y()));
         QPointF opposite = cropHandle_ == 0 ? r.bottomRight() : cropHandle_ == 1 ? r.bottomLeft() : cropHandle_ == 2 ? r.topLeft() : r.topRight();
         QRectF box = cropRatio_ > 0 || (modifiers & Qt::ShiftModifier) ? dragBox(opposite, p, modifiers & Qt::ShiftModifier, false, cropRatio_) : QRectF(opposite, p).normalized();
         crop_ = box.intersected(QRectF(QPointF(0, 0), documentSize()));
@@ -774,6 +787,7 @@ void CanvasWidget::release(QPointF view, Qt::MouseButton button, Qt::KeyboardMod
         emit session_->selectionChanged();
         break;
     case Drag::Crop: case Drag::CropMove: case Drag::CropResize:
+        session_->setSnapGuides({}, {});
         if (crop_ && (crop_->width() < 1 || crop_->height() < 1)) crop_ = QRectF(QPointF(0, 0), documentSize());
         emit cropChanged();
         update();
@@ -918,6 +932,7 @@ void CanvasWidget::keyPressEvent(QKeyEvent* e) {
         double dx = e->key() == Qt::Key_Left ? -step : e->key() == Qt::Key_Right ? step : 0;
         double dy = e->key() == Qt::Key_Up ? -step : e->key() == Qt::Key_Down ? step : 0;
         if ((e->modifiers() & Qt::ControlModifier) && session_->document()->selection) { session_->nudgePixels(dx, dy); return; }
+        if ((session_->tool() == Tool::Marquee || session_->tool() == Tool::Lasso || session_->tool() == Tool::Wand) && session_->document()->selection) { session_->nudgeSelection(dx, dy); return; }
         if (session_->tool() == Tool::Move && session_->canTransform()) { session_->nudgeLayer(dx, dy); return; }
         break;
     }

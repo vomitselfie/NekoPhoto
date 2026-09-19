@@ -1,6 +1,7 @@
 #include "Dialogs.h"
 #include <QBuffer>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QColorDialog>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
@@ -91,13 +92,17 @@ std::optional<ImageSizeOptions> askImageSize(QWidget* parent, int currentWidth, 
     form->addRow(QObject::tr("Height"), height);
     form->addRow(QObject::tr("Resolution"), resolution);
     form->addRow(lock);
-    form->addRow(new QLabel(QObject::tr("Layers keep their full-resolution pixels; only their placement scales.")));
+    auto* sampling = new QComboBox;
+    sampling->addItems({QObject::tr("Nearest Neighbour"), QObject::tr("Smooth"), QObject::tr("High Quality")});
+    sampling->setCurrentIndex(2);
+    form->addRow(QObject::tr("Resampling"), sampling);
+    form->addRow(new QLabel(QObject::tr("Every layer's pixels and mask are resampled to the new size.")));
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     form->addRow(buttons);
     if (dialog.exec() != QDialog::Accepted) return std::nullopt;
-    return ImageSizeOptions{width->value(), height->value(), resolution->value()};
+    return ImageSizeOptions{width->value(), height->value(), resolution->value(), sampling->currentIndex()};
 }
 
 std::optional<JpegOptions> askJpegExport(QWidget* parent, const QImage& flattened) {

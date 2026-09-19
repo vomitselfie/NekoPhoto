@@ -60,6 +60,8 @@ private:
     int hueSampleMode_ = 0; // 0 off, 1 sample, 2 add, 3 remove
     bool hueTargeting_ = false;
     void installHueHooks();
+    void installLevelsHook();
+    std::optional<compositor::LevelsSample> levelsSample_;
     void clearHueHooks();
     struct HueDrag { int range; double hue, saturation; };
     std::optional<HueDrag> hueDrag_;

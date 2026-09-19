@@ -13,7 +13,7 @@ std::optional<NewDocumentOptions> askNewDocument(QWidget* parent, NewDocumentOpt
 struct CanvasSizeOptions { int width, height; double anchorX = 0.5, anchorY = 0.5; };
 std::optional<CanvasSizeOptions> askCanvasSize(QWidget* parent, int width, int height);
 
-struct ImageSizeOptions { int width, height; double resolution; };
+struct ImageSizeOptions { int width, height; double resolution; int sampling = 2; /* 0 nearest, 1 smooth, 2 high */ };
 std::optional<ImageSizeOptions> askImageSize(QWidget* parent, int width, int height, double resolution);
 
 struct JpegOptions { int quality = 85; QColor background = Qt::white; };

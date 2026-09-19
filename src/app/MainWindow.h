@@ -83,6 +83,7 @@ private:
     void showPreferences();
     void refreshBackgroundAction();
     QAction* removeBackgroundAction_ = nullptr;
+    QAction* mergeAction_ = nullptr;
 
     std::vector<Tab> tabs_;
     int current_ = -1;

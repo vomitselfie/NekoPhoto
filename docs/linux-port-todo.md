@@ -23,6 +23,16 @@ Checked off as each lands on the `linux-port` branch. Ordered by workflow impact
 - [x] Deleting a clipping base asks to bake or release
 - [x] Zoom tool cursors, drag-to-zoom out with Alt
 
+## Follow-up pass
+- [x] Merge Layers / Merge Group (Ctrl+E adapts to the selection)
+- [x] Blur tool on masks
+- [x] Crop snapping to canvas and layer edges
+- [x] Levels black / gray / white samplers
+- [x] Arrow keys nudge the selection outline with a selection tool
+- [x] Image Size resampling choice
+- [x] Rename Layer… and Move Out of Folder menu items
+- [x] Blend mode hover preview
+
 ## Done differently
 - [x] Remove Background: IS-Net ONNX through OpenCV DNN, with the Mac's refinement controls (Apple Vision has no Linux equivalent).
 - Golden images from the Mac build: needs `.comp` files saved on a Mac (see docs/linux-port.md).

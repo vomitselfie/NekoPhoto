@@ -125,6 +125,14 @@ void buildDemo(app::EditorSession& session, const QString& imagePath) {
     session.beginPixelMove(true);
     session.movePixels(QPointF(base.width() * 0.75, 0));
     session.finishPixelMove();
+    // Merge the painted layer with the stripes below it (Merge Layers), then nudge the selection outline.
+    {
+        std::set<Uuid> pair;
+        for (auto& l : session.document()->layers) if (l.name == "Paint" || l.name == "Stripes") pair.insert(l.id);
+        session.selectLayers(pair, std::nullopt);
+        if (session.canMergeLayers()) session.mergeLayers();
+        session.nudgeSelection(0, 12);
+    }
     session.selectLayer(session.document()->layers[1].id);
     // With a model available, Remove Background on the base image, as the menu item would.
     QString modelDir = qEnvironmentVariable("COMPOSITOR_MODEL_DIR");

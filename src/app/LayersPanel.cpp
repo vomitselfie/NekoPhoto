@@ -11,6 +11,7 @@
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
+#include <QAbstractItemView>
 #include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
@@ -249,6 +250,8 @@ LayersPanel::LayersPanel(EditorSession* session, QWidget* parent) : QWidget(pare
     layout->addLayout(footer);
 
     connect(blendCombo_, QOverload<int>::of(&QComboBox::activated), this, [this](int index) { session_->setLayerBlendMode(BlendMode(index)); });
+    connect(blendCombo_, QOverload<int>::of(&QComboBox::highlighted), this, [this](int index) { if (session_->canEditLayers()) session_->previewBlendMode(BlendMode(index)); });
+    blendCombo_->view()->installEventFilter(this);
     connect(opacitySlider_, &QSlider::sliderPressed, this, [this] { session_->beginOpacityEdit(); });
     connect(opacitySlider_, &QSlider::sliderReleased, this, [this] { session_->endOpacityEdit(); });
     connect(opacitySlider_, &QSlider::valueChanged, this, [this](int value) {
@@ -425,6 +428,7 @@ void LayersPanel::startRename(const Uuid& id) {
 }
 
 bool LayersPanel::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == blendCombo_->view() && event->type() == QEvent::Hide) session_->previewBlendMode(std::nullopt);
     if (event->type() == QEvent::MouseButtonPress) {
         auto* w = qobject_cast<QWidget*>(watched);
         auto* mouse = static_cast<QMouseEvent*>(event);

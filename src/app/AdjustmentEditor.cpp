@@ -260,6 +260,29 @@ QWidget* AdjustmentEditor::buildLevels() {
     connect(reset, &QPushButton::clicked, this, [this] { emit editStarted(); settings_.levels = LevelsSettings(); changed(); emit editFinished(); });
     buttons->addWidget(reset);
     v->addLayout(buttons);
+    // The samplers: click the image to set the black, gray or white point from that colour.
+    auto* samplers = new QHBoxLayout;
+    samplers->addWidget(new QLabel(tr("Sample")));
+    auto* group = new QButtonGroup(w);
+    group->setExclusive(false);
+    auto sampler = [&](const QString& text, LevelsSample mode) {
+        auto* b = new QToolButton;
+        b->setText(text);
+        b->setCheckable(true);
+        b->setToolTip(tr("Click the image to set the %1 point").arg(text.toLower()));
+        connect(b, &QToolButton::toggled, this, [this, b, group, mode](bool on) {
+            if (on) for (auto* other : group->buttons()) if (other != b) other->setChecked(false);
+            levelsSample_ = on ? std::optional(mode) : std::nullopt;
+            if (on) installLevelsHook(); else if (session_) session_->canvasPressHook = nullptr;
+        });
+        group->addButton(b);
+        samplers->addWidget(b);
+    };
+    sampler(tr("Black"), LevelsSample::Black);
+    sampler(tr("Gray"), LevelsSample::Gray);
+    sampler(tr("White"), LevelsSample::White);
+    samplers->addStretch();
+    v->addLayout(samplers);
     return w;
 }
 
@@ -361,6 +384,20 @@ void AdjustmentEditor::clearHueHooks() {
     session_->canvasPressHook = nullptr;
     session_->canvasDragHook = nullptr;
     session_->canvasReleaseHook = nullptr;
+}
+
+void AdjustmentEditor::installLevelsHook() {
+    if (!session_) return;
+    session_->canvasPressHook = [this](QPointF p) {
+        if (settings_.kind != AdjustmentKind::Levels || !levelsSample_) return false;
+        auto color = session_->compositeColorAt(p);
+        if (!color) return false;
+        emit editStarted();
+        settings_.levels = sampleLevels(settings_.levels, color->redF(), color->greenF(), color->blueF(), *levelsSample_);
+        changed();
+        emit editFinished();
+        return true;
+    };
 }
 
 void AdjustmentEditor::installHueHooks() {

@@ -68,9 +68,11 @@ packaging/                      .desktop, icon, MIME type
 - New canvas; import PNG, JPEG, TIFF, WebP, HEIC and anything else Qt can
   decode (EXIF orientation applied); drag and drop of files and images onto
   the window.
-- Layers: create, delete, duplicate, rename inline, reorder and nest by drag
-  and drop, folders, visibility (with the eye-swipe), opacity, all thirteen
-  blend modes, merge down, group selected layers.
+- Layers: create, delete, duplicate, rename inline or from the menu, reorder
+  and nest by drag and drop, move out of a folder, folders, visibility (with
+  the eye-swipe), opacity, all thirteen blend modes with a hover preview,
+  Ctrl+E merges down / merges the selected layers / merges a folder with
+  blend modes, masks and clipping baked in, group selected layers.
 - Layer masks (reveal all, hide all, from the selection), enable/disable,
   link/unlink, invert, apply, delete; folder masks; clipping masks (create /
   release, contiguous stacks share the base's alpha).
@@ -91,13 +93,16 @@ packaging/                      .desktop, icon, MIME type
   lasso, magic wand (tolerance, contiguous, sample all layers), add/subtract
   with Shift/Alt, move the outline, select all, deselect, inverse, expand,
   contract, fill, clear, crop to selection, mask from selection.
-- Crop tool, Canvas Size (with anchor), Image Size.
+- Crop tool with snapping to canvas and layer edges, ratio presets and Alt
+  for symmetric cropping; Canvas Size (with anchor); Image Size with a
+  resampling choice.
 - Undo/redo of everything, with Photoshop-style shortcuts throughout.
 - `.comp` projects: open and save version 1–7 packages written by the Mac app,
   keeping unknown fields; PNG export with resolution metadata; JPEG export with
   a live preview.
 - Wayland, X11, HiDPI and fractional scaling; tablet input (as a pointer).
-- Adjustment layers: Levels (with histogram and Auto), Curves (draggable
+- Adjustment layers: Levels (with histogram, Auto and black / gray / white
+  point samplers), Curves (draggable
   points), Hue/Saturation (per-range, colorize), Exposure, Gradient Map and
   Grain, edited live in the Adjustments panel, saved in the Mac's format.
 - Image > Adjustments applies the same six to a layer's pixels with a live
@@ -112,7 +117,7 @@ packaging/                      .desktop, icon, MIME type
 - Gradient tool (linear / radial, foreground to background or to transparent,
   reverse, opacity; Shift snaps the angle; Enter applies, Esc discards), Shape
   tool (rectangle, rounded rectangle, ellipse; Shift-U switches), Blur /
-  Smudge / Liquify tool.
+  Smudge / Liquify tool (Blur works on masks too, to feather them).
 - Opacity number keys, Shift-[ ] for hardness, Shift-M / Shift-L kinds,
   snapping while resizing, crop ratio presets, Load as Selection, a bake or
   release prompt when deleting a clipping base, Alt-click to clip, Alt-drag
@@ -149,6 +154,8 @@ uses a different model than Apple's Vision, so its cutouts differ in detail.
 | Ctrl T, Enter, Esc | Free transform (of the selection when there is one), apply, cancel |
 | Ctrl + drag handle | Free distort |
 | Ctrl + arrows | Nudge selected pixels |
+| Arrows with a selection tool | Nudge the selection outline |
+| Ctrl Shift [ | Move the layer out of its folder |
 | Ctrl N, Ctrl W, Ctrl Tab | New tab, close tab, next tab |
 | Ctrl Shift N, Ctrl G, Ctrl J, Ctrl E | New layer, group, duplicate, merge down |
 | Ctrl Alt G | Clipping mask |

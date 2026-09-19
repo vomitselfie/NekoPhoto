@@ -112,6 +112,13 @@ public:
     /// Deletes `ids`; with `bake`, dependents keep their masked appearance in their pixels first.
     void deleteLayersResolvingClipping(const std::vector<compositor::Uuid>& ids, bool bake);
     void duplicateActiveLayer();
+    /// Ctrl+E: one layer merges with the one beneath it; several selected merge together; a folder merges its contents.
+    struct MergePlan { std::vector<compositor::Uuid> ids; std::set<compositor::Uuid> removed; std::string name; std::optional<compositor::Uuid> parent; compositor::Uuid anchor; QString action; };
+    std::optional<MergePlan> mergePlan() const;
+    bool canMergeLayers() const;
+    QString mergeTitle() const;
+    void mergeLayers();
+    void moveActiveLayerOutOfGroup();
     /// Alt-drag in the Layers panel: a copy of the layer placed where it was dropped.
     bool duplicateLayerTo(const compositor::Uuid& id, const std::optional<compositor::Uuid>& parent, const std::optional<compositor::Uuid>& above, bool atBottom);
     /// Alt-dragging a mask thumbnail onto another layer: a copy of the mask, where it sits on the document.
@@ -129,6 +136,8 @@ public:
     void beginOpacityEdit();
     void endOpacityEdit();
     void setLayerBlendMode(compositor::BlendMode mode);
+    /// Hovering the blend menu: the active layer drawn in `mode` until the menu closes.
+    void previewBlendMode(std::optional<compositor::BlendMode> mode);
     void toggleClippingMask(const compositor::Uuid& id);
     bool canToggleClippingMask(const compositor::Uuid& id) const;
     void addLayerMask(bool revealing);
@@ -278,6 +287,8 @@ public:
     void clearSelectionPixels();
     void selectionExpand(int amount);
     void selectionContract(int amount);
+    /// Arrow keys with a selection tool: the outline moves by whole pixels, one undo step per press.
+    void nudgeSelection(double dx, double dy);
     /// Load a layer's pixels (or its mask) as the selection.
     void loadLayerAsSelection(const compositor::Uuid& id, bool mask, compositor::SelectionMode mode);
     LassoKind lassoKind = LassoKind::Freehand;
@@ -315,7 +326,7 @@ public:
     // Crop / canvas
     void cropTo(const QRectF& rect);
     void resizeCanvas(int width, int height, double anchorX, double anchorY);
-    void resizeImage(int width, int height, double resolution);
+    void resizeImage(int width, int height, double resolution, int sampling = 2);
 
     // History
     bool canUndo() const;
@@ -405,6 +416,7 @@ private:
     compositor::Uuid warpLayerId_;
     compositor::LayerTransform warpTransform_;
     std::optional<std::pair<int, qint64>> pendingOpacityDigit_;
+    std::optional<compositor::BlendMode> blendPreview_;
     QElapsedTimer opacityTimer_;
 };
 

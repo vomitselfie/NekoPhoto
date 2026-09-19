@@ -24,6 +24,7 @@
 #include <QImageReader>
 #include <QImageWriter>
 #include <QInputDialog>
+#include <QLineEdit>
 #include <QLabel>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -395,7 +396,7 @@ void MainWindow::buildMenus() {
     }));
     needsDocument(image->addAction(tr("&Image Size…"), QKeySequence("Ctrl+Alt+I"), this, [this] {
         auto o = askImageSize(this, session_->document()->width, session_->document()->height, session_->document()->resolution);
-        if (o) session_->resizeImage(o->width, o->height, o->resolution);
+        if (o) session_->resizeImage(o->width, o->height, o->resolution, o->sampling);
     }));
     needsDocument(image->addAction(tr("Crop to Selection"), this, [this] {
         const auto& d = session_->document();
@@ -428,7 +429,15 @@ void MainWindow::buildMenus() {
     needsDocument(layer->addAction(tr("Layer via &Copy"), QKeySequence("Ctrl+J"), this, [this] { session_->layerViaCopy(); }));
     needsDocument(layer->addAction(tr("&Duplicate Layer"), this, [this] { session_->duplicateActiveLayer(); }));
     needsDocument(layer->addAction(tr("De&lete Layer"), this, [this] { deleteSelectedLayers(); }));
-    needsDocument(layer->addAction(tr("Merge &Down"), QKeySequence("Ctrl+E"), this, [this] { session_->mergeDown(); }));
+    mergeAction_ = needsDocument(layer->addAction(tr("Merge &Down"), QKeySequence("Ctrl+E"), this, [this] { session_->mergeLayers(); }));
+    needsDocument(layer->addAction(tr("&Rename Layer…"), this, [this] {
+        const Layer* active = session_->activeLayer();
+        if (!active) return;
+        bool ok;
+        QString name = QInputDialog::getText(this, tr("Rename Layer"), tr("Name"), QLineEdit::Normal, QString::fromStdString(active->name), &ok);
+        if (ok) session_->renameLayer(active->id, name);
+    }));
+    needsDocument(layer->addAction(tr("Move &Out of Folder"), QKeySequence("Ctrl+Shift+["), this, [this] { session_->moveActiveLayerOutOfGroup(); }));
     QMenu* adjustmentLayers = layer->addMenu(tr("New &Adjustment Layer"));
     for (int i = 0; i < 6; i++) {
         AdjustmentKind kind = AdjustmentKind(i);
@@ -547,6 +556,7 @@ void MainWindow::refreshBackgroundAction() {
 void MainWindow::refreshActions() {
     bool has = session_->hasDocument();
     for (auto* a : documentActions_) a->setEnabled(has);
+    if (mergeAction_) { mergeAction_->setText(tr("&%1").arg(session_->mergeTitle())); mergeAction_->setEnabled(has && session_->canMergeLayers()); }
     undoAction_->setEnabled(session_->canUndo());
     redoAction_->setEnabled(session_->canRedo());
     undoAction_->setText(session_->canUndo() ? tr("&Undo %1").arg(session_->undoName()) : tr("&Undo"));

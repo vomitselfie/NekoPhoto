@@ -15,6 +15,7 @@ extern "C" {
 #include <QClipboard>
 #include <cstring>
 #include <QMimeData>
+#include "compositor/filters.h"
 
 using namespace compositor;
 
@@ -469,46 +470,93 @@ void EditorSession::duplicateActiveLayer() {
     notifyDocument();
 }
 
-void EditorSession::mergeDown() {
-    if (!canEditLayers() || !activeLayerId_) return;
-    const Layer* top = activeLayer();
-    if (!top || top->isGroup) return;
-    // The next lower sibling with pixels.
-    const Layer* below = nullptr;
-    int topIndex = document_->indexOf(top->id);
-    for (int i = topIndex - 1; i >= 0; i--) {
-        const Layer& l = document_->layers[size_t(i)];
-        if (l.parentId == top->parentId && !l.isGroup) { below = &l; break; }
-        if (l.parentId == top->parentId && l.isGroup) return;
+std::optional<EditorSession::MergePlan> EditorSession::mergePlan() const {
+    if (!canEditLayers()) return std::nullopt;
+    const Layer* active = activeLayer();
+    if (!active) return std::nullopt;
+    const auto& layers = document_->layers;
+    MergePlan plan;
+    if (selectedLayerIds_.size() > 1) {
+        std::set<Uuid> picked = selectedLayerIds_;
+        for (auto& id : selectedLayerIds_) for (auto& d : descendantIds(layers, id)) picked.insert(d);
+        const Layer* top = nullptr;
+        bool anyPixels = false;
+        for (auto& l : layers) if (picked.count(l.id)) { plan.ids.push_back(l.id); if (!l.isGroup) anyPixels = true; if (selectedLayerIds_.count(l.id)) top = &l; }
+        if (!anyPixels || !top) return std::nullopt;
+        plan.removed = picked; plan.name = top->name; plan.parent = top->parentId; plan.anchor = top->id; plan.action = "Merge Layers";
+        return plan;
     }
-    if (!below || below->adjustment) return;
-    // Render both as displayed, over transparency, on the union of their bounds.
-    Rect bounds = below->transform.bounds().unionWith(top->transform.bounds()).intersection(document_->rect()).integral();
-    if (bounds.isEmpty()) return;
-    Document pair(document_->width, document_->height);
-    Layer a = *below, b = *top;
-    a.parentId.reset(); b.parentId.reset(); a.visible = b.visible = true;
-    pair.layers = {a, b};
-    Image out;
-    RenderOptions options;
-    options.region = bounds;
-    render(pair, options, out);
-    Layer merged = *below;
-    merged.asset = Asset::make(std::make_shared<Image>(std::move(out)), below->name);
-    merged.transform = LayerTransform(bounds.origin(), bounds.size());
-    merged.mask.reset();
-    merged.shape.reset();
-    merged.shapeImage.reset();
-    merged.opacity = 1;
-    merged.blendMode = below->blendMode;
-    beginEdit("Merge Down");
-    int belowIndex = document_->indexOf(below->id);
-    document_->layers[size_t(belowIndex)] = merged;
-    document_->layers.erase(document_->layers.begin() + topIndex);
-    for (auto& l : document_->layers) if (l.maskSourceId == top->id) l.maskSourceId = merged.id;
+    if (active->isGroup) {
+        std::set<Uuid> inside = descendantIds(layers, active->id);
+        bool anyPixels = false;
+        for (auto& l : layers) if (inside.count(l.id) && !l.isGroup) anyPixels = true;
+        if (!anyPixels) return std::nullopt;
+        for (auto& l : layers) if (inside.count(l.id) || l.id == active->id) { plan.ids.push_back(l.id); plan.removed.insert(l.id); }
+        plan.name = active->name; plan.parent = active->parentId; plan.anchor = active->id; plan.action = "Merge Group";
+        return plan;
+    }
+    int index = document_->indexOf(active->id);
+    const Layer* below = nullptr;
+    for (int i = index - 1; i >= 0; i--) if (layers[size_t(i)].parentId == active->parentId) { below = &layers[size_t(i)]; break; }
+    if (!below || below->isGroup) return std::nullopt;
+    plan.ids = {below->id, active->id}; plan.removed = {below->id, active->id};
+    plan.name = below->name; plan.parent = active->parentId; plan.anchor = active->id; plan.action = "Merge Down";
+    return plan;
+}
+
+bool EditorSession::canMergeLayers() const { return mergePlan().has_value(); }
+QString EditorSession::mergeTitle() const { auto plan = mergePlan(); return plan ? plan->action : QStringLiteral("Merge Down"); }
+
+void EditorSession::mergeLayers() {
+    commitTransform();
+    auto plan = mergePlan();
+    if (!plan) return;
+    const auto& layers = document_->layers;
+    std::set<Uuid> kept(plan->ids.begin(), plan->ids.end());
+    // Only the merged layers, cut loose from anything outside the merge, composited as the canvas shows them.
+    Document flat(document_->width, document_->height);
+    for (auto& l : layers) {
+        if (!kept.count(l.id)) continue;
+        Layer copy = l;
+        if (copy.parentId && !kept.count(*copy.parentId)) copy.parentId.reset();
+        if (copy.maskSourceId && !kept.count(*copy.maskSourceId)) copy.maskSourceId.reset();
+        flat.layers.push_back(copy);
+    }
+    auto full = renderFlattened(flat);
+    LayerTransform canvas(Point(0, 0), document_->size());
+    LayerTransform placed;
+    auto trimmed = trimToPixels(*full, canvas, placed);
+    if (alphaBounds(*trimmed).isEmpty()) { emit error(tr("Nothing to merge: the layers have no visible pixels.")); return; }
+    Layer merged(Asset::make(trimmed, plan->name), placed.origin);
+    merged.transform = placed;
+    merged.name = plan->name;
+    merged.parentId = plan->parent;
+    std::vector<Layer> next;
+    for (auto& l : layers) if (!plan->removed.count(l.id)) next.push_back(l);
+    // Layers clipped to anything that was merged now clip to the result.
+    for (auto& l : next) if (l.maskSourceId && plan->removed.count(*l.maskSourceId)) l.maskSourceId = merged.id;
+    int slot = document_->indexOf(plan->anchor);
+    int removedBefore = 0;
+    for (int i = 0; i < slot; i++) if (plan->removed.count(layers[size_t(i)].id)) removedBefore++;
+    int insertion = std::clamp(slot - removedBefore, 0, int(next.size()));
+    next.insert(next.begin() + insertion, merged);
+    if (!validateHierarchy(next)) return;
+    endOpacityEdit();
+    beginEdit(plan->action);
+    document_->layers = next;
     setActiveLayer(merged.id);
     endEdit();
     notifyDocument();
+}
+
+void EditorSession::mergeDown() { mergeLayers(); }
+
+void EditorSession::moveActiveLayerOutOfGroup() {
+    const Layer* layer = activeLayer();
+    if (!layer || !layer->parentId) return;
+    const Layer* group = document_->find(*layer->parentId);
+    if (!group) return;
+    placeLayer(layer->id, group->parentId, group->id, false);
 }
 
 void EditorSession::renameLayer(const Uuid& id, const QString& name) {
@@ -684,7 +732,14 @@ void EditorSession::setLayerOpacity(double opacity) {
     else { emit documentChanged({}); emit layersChanged(); }
 }
 
+void EditorSession::previewBlendMode(std::optional<BlendMode> mode) {
+    if (blendPreview_ == mode) return;
+    blendPreview_ = mode;
+    emit documentChanged({});
+}
+
 void EditorSession::setLayerBlendMode(BlendMode mode) {
+    blendPreview_.reset();
     if (!canEditLayers()) return;
     Layer* layer = activeLayerMutable();
     if (!layer || layer->isGroup || layer->blendMode == mode) return;
@@ -1470,6 +1525,25 @@ bool EditorSession::beginWarp(QPointF documentPoint) {
     if (!document_ || stroke_ || warp_ || transformEdit_) return false;
     const Layer* layer = activeLayer();
     if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image) return false;
+    if (isMaskSelected_ && blurMode == BlurToolMode::Blur && layer->mask && layer->mask->asset.image) {
+        // Blur on a mask: the mask as it sits on the document, its edge tone beyond its pixels, softened.
+        const GrayImage& own = *layer->mask->asset.image;
+        uint8_t background = LayerMask::background(*layer->mask->asset.thumbnail);
+        auto sample = std::make_shared<GrayImage>(document_->width, document_->height, background);
+        sampleMaskCoverage(own, layer->maskTransform(), document_->rect(), 1, background, *sample, false);
+        Image temp(sample->width(), sample->height());
+        for (int y = 0; y < temp.height(); y++) for (int x = 0; x < temp.width(); x++) { uint8_t v = sample->at(x, y); uint8_t* p = temp.pixel(x, y); p[0] = p[1] = p[2] = v; p[3] = 255; }
+        gaussianBlur(temp, std::min(30.0, std::max(1.5, brushSettings.diameter / 10)));
+        for (int y = 0; y < temp.height(); y++) for (int x = 0; x < temp.width(); x++) sample->at(x, y) = temp.pixel(x, y)[0];
+        stroke_ = makeRasterEdit(*layer, true, brushSettings);
+        if (!stroke_) return false;
+        stroke_->setMaskClone(sample);
+        strokeLayerId_ = layer->id;
+        strokeMask_ = true;
+        stroke_->append(toPoint(documentPoint));
+        emit documentChanged({});
+        return true;
+    }
     if (isMaskSelected_) { emit error(tr("Smudge and Liquify work on a layer's pixels, not its mask.")); return false; }
     if (!effectiveVisibleIds(document_->layers).count(layer->id)) return false;
     // The layer as the canvas shows it, at document size.
@@ -2123,6 +2197,17 @@ void EditorSession::clearSelectionPixels() {
     notifyDocument();
 }
 
+void EditorSession::nudgeSelection(double dx, double dy) {
+    if (!document_ || !document_->selection || !document_->selection->coverage || !canEditLayers()) return;
+    const GrayImage& src = *document_->selection->coverage;
+    int ix = int(std::lround(dx)), iy = int(std::lround(dy));
+    auto moved = std::make_shared<GrayImage>(src.width(), src.height(), 0);
+    for (int y = 0; y < src.height(); y++) { int sy = y - iy; if (sy < 0 || sy >= src.height()) continue; for (int x = 0; x < src.width(); x++) { int sx = x - ix; if (sx >= 0 && sx < src.width()) moved->at(x, y) = src.at(sx, sy); } }
+    Selection s = *document_->selection;
+    s.coverage = moved;
+    setSelection(s, "Move Selection");
+}
+
 void EditorSession::loadLayerAsSelection(const Uuid& id, bool mask, SelectionMode mode) {
     if (!document_ || !canEditLayers()) return;
     const Layer* layer = document_->find(id);
@@ -2360,25 +2445,12 @@ void EditorSession::resizeCanvas(int width, int height, double anchorX, double a
     emit selectionChanged();
 }
 
-void EditorSession::resizeImage(int width, int height, double resolution) {
+void EditorSession::resizeImage(int width, int height, double resolution, int sampling) {
     if (!canEditLayers() || !Document::validDimension(width) || !Document::validDimension(height)) return;
-    double sx = double(width) / document_->width, sy = double(height) / document_->height;
-    beginEdit("Image Size");
     Document doc = *document_;
-    doc.width = width;
-    doc.height = height;
-    doc.resolution = resolution;
-    // Layers keep their full-resolution pixels; only their placement scales.
-    auto scaleTransform = [&](LayerTransform t) {
-        t.origin = {t.origin.x * sx, t.origin.y * sy};
-        t.size = {std::max(1.0, t.size.width * sx), std::max(1.0, t.size.height * sy)};
-        return t;
-    };
-    for (auto& l : doc.layers) {
-        l.transform = scaleTransform(l.transform);
-        if (l.mask && l.mask->placement) l.mask->placement = scaleTransform(*l.mask->placement);
-    }
-    doc.selection.reset();
+    Sampling mode = sampling == 0 ? Sampling::Nearest : sampling == 1 ? Sampling::Smooth : Sampling::High;
+    if (!resizeDocument(doc, width, height, resolution, mode)) { emit error(tr("The resized image would exceed the 100-megapixel limit.")); return; }
+    beginEdit("Image Size");
     document_ = doc;
     endEdit();
     viewport.fit({double(width), double(height)});
@@ -2446,6 +2518,7 @@ Overrides EditorSession::renderOverrides() const {
             }
         }
     }
+    if (blendPreview_ && activeLayerId_) overrides[*activeLayerId_].blendMode = *blendPreview_;
     if (previewImage_ && activeLayerId_) {
         LayerOverride& o = overrides[*activeLayerId_];
         o.image = previewImage_;

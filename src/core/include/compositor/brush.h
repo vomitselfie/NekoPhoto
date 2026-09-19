@@ -42,6 +42,8 @@ public:
     /// Clone Stamp: the sample painted through the tip instead of the colour. With `replaces`, the sample
     /// replaces what is under the tip rather than drawing over it (so it can clear pixels too).
     void setClone(CloneSource clone, bool replaces = false) { clone_ = std::move(clone); replacesWithClone_ = replaces; }
+    /// Painting a mask from a document-sized gray sample (the Blur tool on a mask) instead of a flat value.
+    void setMaskClone(std::shared_ptr<const GrayImage> sample) { maskClone_ = std::move(sample); }
 
     // Moving selected pixels (the Move tool with a selection).
     /// Cuts the selected pixels out of the original image. False when nothing is lifted.
@@ -117,6 +119,7 @@ private:
     LayerTransform layerTransform_;
     std::optional<CloneSource> clone_;
     bool replacesWithClone_ = false;
+    std::shared_ptr<const GrayImage> maskClone_;
     std::shared_ptr<Image> lifted_;
     Rect liftedRect_;
 };

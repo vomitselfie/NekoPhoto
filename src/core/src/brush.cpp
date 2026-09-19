@@ -254,9 +254,25 @@ void BrushStroke::recompose(const Rect& gridRect) {
             const uint8_t* sel = selection_ ? selection_->row(y) : nullptr;
             const uint8_t* base = baseMask_->row(y);
             uint8_t* out = workingMask_->row(y);
-            for (int x = x0; x < x1; x++) {
+            Point d = pixelToDocument_.apply({x0 + 0.5, y + 0.5});
+            Point dd = pixelToDocument_.applyVector({1, 0});
+            for (int x = x0; x < x1; x++, d = d + dd) {
                 double c = cov[x] / 255.0 * opacity * (sel ? sel[x] / 255.0 : 1.0);
-                out[x] = uint8_t(clamp(base[x] * (1 - c) + paint * c + 0.5, 0.0, 255.0));
+                double value = paint;
+                if (maskClone_) {
+                    // The sample under the document point, bilinear.
+                    double sx = d.x - 0.5, sy = d.y - 0.5;
+                    int ix = int(std::floor(sx)), iy = int(std::floor(sy));
+                    double fx = sx - ix, fy = sy - iy, acc = 0, wsum = 0;
+                    for (int j = 0; j < 2; j++) for (int i = 0; i < 2; i++) {
+                        int px = ix + i, py = iy + j;
+                        double w = (i ? fx : 1 - fx) * (j ? fy : 1 - fy);
+                        if (w <= 0 || px < 0 || py < 0 || px >= maskClone_->width() || py >= maskClone_->height()) continue;
+                        acc += maskClone_->at(px, py) * w; wsum += w;
+                    }
+                    value = wsum > 0 ? acc / wsum : base[x];
+                }
+                out[x] = uint8_t(clamp(base[x] * (1 - c) + value * c + 0.5, 0.0, 255.0));
             }
         }
         return;
