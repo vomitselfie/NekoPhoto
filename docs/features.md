@@ -22,8 +22,9 @@ The full feature list. It mirrors the Mac app's, with Linux key names.
 
 ## Selections
 - Rectangle and Ellipse Marquee, Freehand and Polygonal Lasso, and Magic Wand
-- Add to (Shift) and subtract from (Alt) selections, move the outline, or move and duplicate the pixels inside
-- Expand, contract, invert; load a layer's pixels or a mask as a selection
+- Add to (Shift), subtract from (Alt) and intersect with (Shift+Alt) selections, move the outline, or move and duplicate the pixels inside
+- Magic Wand tolerance, contiguous, sample all layers, and Sample Size (point, 3 by 3, 5 by 5)
+- Expand, Contract, Feather (Shift+F6), Smooth, Border and Invert, with Photoshop's circular kernels; load a layer's pixels or a mask as a selection
 - Delete or Backspace clears the selected pixels
 - Content-Aware Fill, which can also extend an image past its edges
 

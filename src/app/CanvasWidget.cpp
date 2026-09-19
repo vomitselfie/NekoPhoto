@@ -363,7 +363,8 @@ void CanvasWidget::refreshSelectionOutline() {
         size_t points = 0;
         for (auto& loop : loops) points += loop.size();
         // Past a couple of hundred thousand corners the vector ants cost more than a raster pass per tick.
-        if (tooDetailed || points > 200000) selectionRasterAnts_ = true;
+        // COMPOSITOR_RASTER_ANTS=1 forces the raster path, for checking it.
+        if (tooDetailed || points > 200000 || qEnvironmentVariableIsSet("COMPOSITOR_RASTER_ANTS")) selectionRasterAnts_ = true;
         else for (auto& loop : loops) {
             QPolygonF poly;
             for (auto& p : loop) poly << toQPoint(p);
