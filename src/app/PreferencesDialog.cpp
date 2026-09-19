@@ -1,6 +1,7 @@
 #include "Style.h"
 #include "PreferencesDialog.h"
 #include "Automation.h"
+#include "Theme.h"
 #include <QSettings>
 #include <QCheckBox>
 #include <QComboBox>
@@ -22,6 +23,22 @@ PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent) {
     setWindowTitle(tr("Preferences"));
     setMinimumWidth(520);
     auto* layout = new QVBoxLayout(this);
+
+    auto* appearance = new QGroupBox(tr("Appearance"));
+    auto* appearanceRow = new QHBoxLayout(appearance);
+    appearanceRow->addWidget(new QLabel(tr("Theme")));
+    auto* theme = new QComboBox;
+    theme->addItem(tr("System"), "system");
+    theme->addItem(tr("Dark"), "dark");
+    theme->addItem(tr("Light"), "light");
+    theme->setCurrentIndex(std::max(0, theme->findData(themeSetting())));
+    connect(theme, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [theme](int) { setThemeSetting(theme->currentData().toString()); applyTheme(); });
+    appearanceRow->addWidget(theme, 1);
+    auto* themeHint = new QLabel(tr("System follows the desktop (through its portal when running as an AppImage). Some text colours refresh at the next launch."));
+    themeHint->setWordWrap(true);
+    themeHint->setStyleSheet(hintStyle());
+    appearanceRow->addWidget(themeHint, 2);
+    layout->addWidget(appearance);
 
     auto* group = new QGroupBox(tr("AI background removal"));
     auto* v = new QVBoxLayout(group);

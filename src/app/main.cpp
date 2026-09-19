@@ -4,6 +4,7 @@
 #include "PreferencesDialog.h"
 #include "Automation.h"
 #include "Dialogs.h"
+#include "Theme.h"
 #include "FilterDialog.h"
 #include "ImageConvert.h"
 #include <QDialog>
@@ -181,6 +182,7 @@ int main(int argc, char** argv) {
     // The desktop entry gives Wayland the app id and icon; naming it when it isn't installed only makes the portal complain.
     if (!QStandardPaths::locate(QStandardPaths::ApplicationsLocation, "compositor-linux.desktop").isEmpty()) QApplication::setDesktopFileName("compositor-linux");
     app.setWindowIcon(QIcon(QStringLiteral(":/app/icon.svg")));
+    app::applyTheme();
     QCommandLineParser parser;
     parser.setApplicationDescription("compositor-linux: a small, focused image compositor.");
     parser.addHelpOption();

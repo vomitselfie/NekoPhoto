@@ -58,6 +58,14 @@ minimum size at startup, for chasing what stops the window from shrinking;
 `COMPOSITOR_WINDOW_SIZE=1000x700` forces the initial window size, for looking at
 the layout as a laptop or a tiling window manager would show it.
 
+## Appearance
+
+Edit > Preferences > Appearance: System, Dark or Light. Dark and Light use Qt's
+Fusion style with a fixed palette. System keeps the desktop's own Qt theme when
+it can load (a distribution package under KDE or GNOME), and otherwise asks the
+XDG desktop portal for the colour scheme, which is how the AppImage matches a
+dark desktop. `COMPOSITOR_THEME=dark|light|system` overrides for one run.
+
 ## Automation
 
 `--rpc` opens a JSON-RPC socket an agent or script can drive the editor

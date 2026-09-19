@@ -1,6 +1,8 @@
 # The Linux front end: Qt 6 Widgets over the portable core.
 
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Widgets Network Svg)
+# DBus lets "System" appearance ask the desktop portal for the colour scheme (needed inside an AppImage).
+find_package(Qt6 6.4 QUIET COMPONENTS DBus)
 
 # Some locked-down shells cannot execute binaries under /usr/lib. Point this at a
 # directory holding copies of moc, uic and rcc to build there anyway.
@@ -47,6 +49,8 @@ qt_add_executable(compositor-linux
     FilterDialog.cpp
     Automation.h
     Automation.cpp
+    Theme.h
+    Theme.cpp
     ModelStore.h
     ModelStore.cpp
     PreferencesDialog.h
@@ -61,6 +65,11 @@ qt_add_executable(compositor-linux
 
 target_compile_definitions(compositor-linux PRIVATE COMPOSITOR_VERSION="${COMPOSITOR_VERSION}")
 target_link_libraries(compositor-linux PRIVATE compositor::core Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Svg compositor_warnings)
+if(TARGET Qt6::DBus)
+    target_link_libraries(compositor-linux PRIVATE Qt6::DBus)
+    target_compile_definitions(compositor-linux PRIVATE COMPOSITOR_HAVE_DBUS)
+    message(STATUS "Appearance: desktop colour scheme via the XDG portal (Qt DBus)")
+endif()
 set_target_properties(compositor-linux PROPERTIES OUTPUT_NAME compositor-linux)
 
 install(TARGETS compositor-linux RUNTIME DESTINATION bin)
