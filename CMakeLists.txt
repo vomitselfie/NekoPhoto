@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(compositor-linux VERSION 0.3.0 LANGUAGES C CXX)
+project(compositor-linux VERSION 0.4.0 LANGUAGES C CXX)
 
 # Releases pass the tag version in; local builds use the project version above.
 set(COMPOSITOR_VERSION "${PROJECT_VERSION}" CACHE STRING "Version string shown by the app")
