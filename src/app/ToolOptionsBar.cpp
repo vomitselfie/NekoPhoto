@@ -195,10 +195,12 @@ void ToolOptionsBar::syncTransformFields() {
     bool enabled = active && session_->canTransform();
     transformFields_->setEnabled(enabled);
     for (auto* b : transformFields_->findChildren<QPushButton*>()) b->setVisible(session_->transformEdit().has_value());
-    if (!enabled) return;
+    // A layer that cannot be transformed right now (hidden, say) still shows where and how big it is.
+    if (!active || active->isGroup) return;
     syncingFields_ = true;
     LayerTransform t = session_->editedTransform(*active);
     auto pixels = session_->transformPixelSize();
+    if (!pixels && !enabled && active->asset && active->asset->image) pixels = Size(active->asset->image->width(), active->asset->image->height());
     xField_->setValue(t.origin.x);
     yField_->setValue(t.origin.y);
     wField_->setValue(t.size.width);

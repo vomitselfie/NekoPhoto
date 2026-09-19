@@ -119,8 +119,11 @@ bool EditorSession::openProject(const QString& path, QString* error) {
 void EditorSession::adoptDocument(const Document& document, const QString& name) {
     commitTransform();
     document_ = document;
+    // The topmost visible pixel layer starts active (a hidden top layer, common in exports, would confuse).
     std::optional<Uuid> active;
-    for (auto it = document_->layers.rbegin(); it != document_->layers.rend(); ++it) if (!it->isGroup) { active = it->id; break; }
+    std::set<Uuid> visible = effectiveVisibleIds(document_->layers);
+    for (auto it = document_->layers.rbegin(); it != document_->layers.rend(); ++it) if (!it->isGroup && visible.count(it->id)) { active = it->id; break; }
+    if (!active) for (auto it = document_->layers.rbegin(); it != document_->layers.rend(); ++it) if (!it->isGroup) { active = it->id; break; }
     setActiveLayer(active);
     projectPath_.clear();
     importedName_ = name;
