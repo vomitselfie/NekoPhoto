@@ -9,6 +9,7 @@
 #include "compositor/brush.h"
 #include "compositor/warp.h"
 #include "compositor/wand.h"
+#include "compositor/resample.h"
 #include "compositor/subject.h"
 #include "compositor/render.h"
 #include "compositor/selection.h"
@@ -131,6 +132,12 @@ int main(int argc, char** argv) {
         Document doc(W, H);
         doc.layers.push_back(Layer(Asset::make(std::make_shared<Image>(base), "L"), Point(0, 0)));
         report("image size 4000x3000 -> 2000x1500", timeMs([&] { Document d = doc; resizeDocument(d, 2000, 1500, 72, Sampling::High); }, 2));
+    }
+    if (want("resample")) {
+        report("halve 4000x3000 (mip level)", timeMs([&] { (void)halveImage(base); }));
+        report("resample -> 2000x1500 lanczos3", timeMs([&] { (void)resampleAxisAligned(base, 2000, 1500, 1, 2, 1, 2, ResampleFilter::Lanczos3); }));
+        report("resample -> 2000x1500 triangle", timeMs([&] { (void)resampleAxisAligned(base, 2000, 1500, 1, 2, 1, 2, ResampleFilter::Triangle); }));
+        report("resample -> 6000x4500 lanczos3", timeMs([&] { (void)resampleAxisAligned(base, 6000, 4500, 1.0 / 3, 2.0 / 3, 1.0 / 3, 2.0 / 3, ResampleFilter::Lanczos3); }, 2));
     }
     if (want("brush")) {
         Layer layer(Asset::make(std::make_shared<Image>(base), "L"), Point(0, 0));

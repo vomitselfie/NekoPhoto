@@ -199,7 +199,10 @@ packaging/                      .desktop, icon, MIME type
   to copy a mask, Hue/Saturation eyedroppers and targeted-adjustment drag.
 - Multiple projects in tabs (Ctrl+N opens a new tab, Ctrl+W closes, Ctrl+Tab cycles); drag a layer from the Layers panel onto another tab to
   copy it there.
-- Image Size resamples every layer and mask, as the Mac does.
+- Image Size resamples every layer and mask, as the Mac does. "High quality" is a
+  Lanczos-3 resample for pure scaling and Catmull-Rom bicubic on rotated or
+  distorted layers; "Smooth" is an area-weighted triangle and bilinear; "Nearest"
+  keeps pixels hard.
 
 - Remove Background: off until enabled in Edit > Preferences, which offers the
   IS-Net model (rembg's Apache-2.0 ONNX release, ~180 MB) or a 4.6 MB U2Net,

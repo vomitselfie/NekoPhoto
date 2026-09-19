@@ -47,7 +47,7 @@ The full feature list. It mirrors the Mac app's, with Linux key names.
 - Multiple projects in tabs
 - Rulers (Ctrl+R), pixel grid when zoomed in, sharp downsampling when zoomed out
 - Crop with snapping and ratio presets; Alt for symmetric cropping
-- Canvas Size (with anchor and relative mode) and Image Size (with scale and resampling choice)
+- Canvas Size (with anchor and relative mode) and Image Size (with scale and resampling choice: Lanczos-3, triangle or nearest)
 - Import JPEG, PNG, TIFF and WebP, including dropped images from other apps
 - Export PNG, or JPEG with a live preview; Copy Merged
 - `.comp` projects open in the Mac app and vice versa

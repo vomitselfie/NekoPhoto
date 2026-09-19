@@ -31,7 +31,7 @@ void addNoise(Image& image, float amount, bool gaussian, bool monochromatic, uin
 
 /// Lens Correction: `destination = source` resampled through the radial model `scale = 1 - k r^2`
 /// (r normalised to the half diagonal), bilinear, transparent outside. Row-parallel; identical to the reference.
-void lensDistort(const Image& source, Image& destination, double k);
+void lensDistort(const Image& source, Image& destination, double k, bool bicubic = false);
 
 /// Gradient Map: Rec. 709 luma of the straight colour indexes a 256 x RGB table. One division per pixel
 /// (luma is linear in the premultiplied channels); the index can differ from the reference by one at partial alpha.

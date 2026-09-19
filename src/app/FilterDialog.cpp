@@ -160,6 +160,7 @@ FilterDialog::FilterDialog(EditorSession* session, FilterKind kind, QWidget* par
         break;
     case FilterKind::LensCorrection:
         slider(tr("Remove Distortion"), -100, 100, 0, 1, [this] { return settings_.distortion; }, [this](double v) { settings_.distortion = v; });
+        check(tr("Bicubic"), [this] { return settings_.bicubic; }, [this](bool on) { settings_.bicubic = on; });
         break;
     }
     for (auto& s : syncers_) s();

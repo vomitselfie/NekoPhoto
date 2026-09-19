@@ -313,9 +313,9 @@ def pixels_adjust(kind: str, settings: Optional[dict] = None) -> str:
 
 
 @mcp.tool()
-def pixels_filter(kind: str, radius: Optional[float] = None, angle: Optional[float] = None, distance: Optional[float] = None, amount: Optional[float] = None, gaussian: Optional[bool] = None, monochromatic: Optional[bool] = None, distortion: Optional[float] = None) -> str:
-    """Run a filter on the active layer's pixels: Gaussian Blur (radius), Motion Blur (angle, distance), Add Noise (amount, gaussian, monochromatic) or Lens Correction (distortion -100..100)."""
-    return text(call("pixels.filter", kind=kind, radius=radius, angle=angle, distance=distance, amount=amount, gaussian=gaussian, monochromatic=monochromatic, distortion=distortion))
+def pixels_filter(kind: str, radius: Optional[float] = None, angle: Optional[float] = None, distance: Optional[float] = None, amount: Optional[float] = None, gaussian: Optional[bool] = None, monochromatic: Optional[bool] = None, distortion: Optional[float] = None, bicubic: Optional[bool] = None) -> str:
+    """Run a filter on the active layer's pixels: Gaussian Blur (radius), Motion Blur (angle, distance), Add Noise (amount, gaussian, monochromatic) or Lens Correction (distortion -100..100, bicubic for a sharper resample)."""
+    return text(call("pixels.filter", kind=kind, radius=radius, angle=angle, distance=distance, amount=amount, gaussian=gaussian, monochromatic=monochromatic, distortion=distortion, bicubic=bicubic))
 
 
 @mcp.tool()

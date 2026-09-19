@@ -2,6 +2,7 @@
 #include "compositor/adjustments.h"
 #include "compositor/blend.h"
 #include "compositor/parallel.h"
+#include "compositor/resample.h"
 #include "compositor/warp.h"
 #include <algorithm>
 #include <cmath>
@@ -21,42 +22,18 @@ namespace {
 
 // ---- Sampling -------------------------------------------------------------
 
-// Bilinear sample of a premultiplied RGBA image at continuous pixel coordinates, clamped to the edge.
-inline void sampleBilinear(const Image& image, double x, double y, float out[4]) {
-    int w = image.width(), h = image.height();
-    x -= 0.5; y -= 0.5;
-    if (x < 0) x = 0; else if (x > w - 1) x = w - 1;
-    if (y < 0) y = 0; else if (y > h - 1) y = h - 1;
-    int x0 = int(x), y0 = int(y);
-    int x1 = std::min(x0 + 1, w - 1), y1 = std::min(y0 + 1, h - 1);
-    float fx = float(x - x0), fy = float(y - y0);
-    const uint8_t* p00 = image.pixel(x0, y0);
-    const uint8_t* p10 = image.pixel(x1, y0);
-    const uint8_t* p01 = image.pixel(x0, y1);
-    const uint8_t* p11 = image.pixel(x1, y1);
-    float w00 = (1 - fx) * (1 - fy), w10 = fx * (1 - fy), w01 = (1 - fx) * fy, w11 = fx * fy;
-    for (int c = 0; c < 4; c++) out[c] = p00[c] * w00 + p10[c] * w10 + p01[c] * w01 + p11[c] * w11;
-}
-
-inline void sampleNearest(const Image& image, double x, double y, float out[4]) {
+inline void sampleNearest(const Image& image, double x, double y, uint8_t out[4]) {
     int ix = clamp(int(std::floor(x)), 0, image.width() - 1), iy = clamp(int(std::floor(y)), 0, image.height() - 1);
-    const uint8_t* p = image.pixel(ix, iy);
-    for (int c = 0; c < 4; c++) out[c] = p[c];
+    std::memcpy(out, image.pixel(ix, iy), 4);
 }
 
-inline float sampleGrayBilinear(const GrayImage& image, double x, double y) {
-    int w = image.width(), h = image.height();
-    if (w == 1 && h == 1) return image.at(0, 0);
-    x -= 0.5; y -= 0.5;
-    if (x < 0) x = 0; else if (x > w - 1) x = w - 1;
-    if (y < 0) y = 0; else if (y > h - 1) y = h - 1;
-    int x0 = int(x), y0 = int(y);
-    int x1 = std::min(x0 + 1, w - 1), y1 = std::min(y0 + 1, h - 1);
-    float fx = float(x - x0), fy = float(y - y0);
-    return image.at(x0, y0) * (1 - fx) * (1 - fy) + image.at(x1, y0) * fx * (1 - fy) + image.at(x0, y1) * (1 - fx) * fy + image.at(x1, y1) * fx * fy;
+/// Bilinear for Smooth, Catmull-Rom for High (sharper when magnifying, and the mip level is then chosen nearest 1x).
+inline void samplePixels(Sampling sampling, const Image& image, double x, double y, uint8_t out[4]) {
+    if (sampling == Sampling::High) sampleBicubic(image, x, y, out);
+    else sampleBilinear(image, x, y, out);
 }
 
-inline float sampleGrayNearest(const GrayImage& image, double x, double y) {
+inline int sampleGrayNearest(const GrayImage& image, double x, double y) {
     int ix = clamp(int(std::floor(x)), 0, image.width() - 1), iy = clamp(int(std::floor(y)), 0, image.height() - 1);
     return image.at(ix, iy);
 }
@@ -66,7 +43,7 @@ struct MipChoice { int level; double factor; };
 MipChoice mipFor(Sampling sampling, double outputWidth, double outputHeight, int pixelWidth, int pixelHeight) {
     if (sampling == Sampling::Nearest) return {0, 1};
     double fx = outputWidth / std::max(1, pixelWidth), fy = outputHeight / std::max(1, pixelHeight);
-    int level = MipCache::levelFor(std::min(fx, fy));
+    int level = MipCache::levelFor(std::min(fx, fy), sampling == Sampling::High);
     return {level, std::ldexp(1.0, level)};
 }
 
@@ -126,12 +103,12 @@ void sampleMaskCoverageImpl(const GrayImage& mask, const GrayPtr& owner, const L
             float value;
             bool inside = p.x >= 0 && p.x < mw && p.y >= 0 && p.y < mh;
             if (nearest) {
-                value = inside ? sampleGrayNearest(src, p.x, p.y) : outside;
+                value = inside ? float(sampleGrayNearest(src, p.x, p.y)) : float(outside);
             } else {
                 // Antialiased rectangle edge, then the mask's value, `outside` beyond it.
                 double ex = std::min(p.x, mw - p.x) / std::max(1e-9, sx), ey = std::min(p.y, mh - p.y) / std::max(1e-9, sy);
                 float edge = float(clamp(std::min(ex, ey) + 0.5, 0.0, 1.0));
-                float in = sampleGrayBilinear(src, p.x / factor, p.y / factor);
+                float in = float(sampleGrayBilinear(src, p.x / factor, p.y / factor));
                 value = in * edge + outside * (1 - edge);
             }
             uint8_t v = uint8_t(clamp(value + 0.5f, 0.0f, 255.0f));
@@ -266,10 +243,9 @@ void drawLayer(const DrawParams& params, const Rect& region, double scale, const
                 else cov *= (nearest ? sampleGrayNearest(*mask, p.x * maskScaleX, p.y * maskScaleY) : sampleGrayBilinear(*mask, p.x * maskScaleX, p.y * maskScaleY)) / 255.0f;
             }
             if (cov <= 0.0005f) continue;
-            float s[4];
-            if (nearest) sampleNearest(*source, p.x, p.y, s);
-            else sampleBilinear(*source, p.x * invFactor, p.y * invFactor, s);
-            uint8_t src[4] = {uint8_t(s[0] + 0.5f), uint8_t(s[1] + 0.5f), uint8_t(s[2] + 0.5f), uint8_t(s[3] + 0.5f)};
+            uint8_t src[4];
+            if (nearest) sampleNearest(*source, p.x, p.y, src);
+            else samplePixels(params.transform.sampling, *source, p.x * invFactor, p.y * invFactor, src);
             if (!src[3]) continue;
             compositePixel(params.mode, src, cov, row + x * 4);
         }
@@ -286,8 +262,12 @@ std::shared_ptr<Image> resampleLayerImpl(const Image& image, const ImagePtr& own
     Affine targetToDoc = target.pixelToDocument(width, height);
     Affine docToPixel = transform.pixelToDocument(image.width(), image.height()).inverted();
     Affine map = targetToDoc.concatenating(docToPixel);
+    const bool nearest = transform.sampling == Sampling::Nearest;
+    // A pure scale (no rotation or shear): one separable pass with the kernel widened by the reduction.
+    if (!nearest && std::fabs(map.b) < 1e-12 && std::fabs(map.c) < 1e-12 && map.a != 0 && map.d != 0)
+        return resampleAxisAligned(image, width, height, map.tx + 0.5 * map.a, map.a, map.ty + 0.5 * map.d, map.d, filterFor(transform.sampling));
     double sx = std::hypot(map.a, map.b), sy = std::hypot(map.c, map.d);
-    int level = transform.sampling == Sampling::Nearest ? 0 : MipCache::levelFor(1.0 / std::max(sx, sy));
+    int level = nearest ? 0 : MipCache::levelFor(1.0 / std::max(sx, sy), transform.sampling == Sampling::High);
     ImagePtr reduced = level > 0 ? (owner && owner.get() == &image ? MipCache::shared().level(owner, level) : reduceImage(image, level)) : nullptr;
     const Image* source = reduced ? reduced.get() : &image;
     double factor = std::ldexp(1.0, level);
@@ -298,17 +278,16 @@ std::shared_ptr<Image> resampleLayerImpl(const Image& image, const ImagePtr& own
         Point p = map.apply({0.5, y + 0.5});
         Point dp = map.applyVector({1, 0});
         for (int x = 0; x < width; x++, p = p + dp, row += 4) {
-            float s[4];
-            if (transform.sampling == Sampling::Nearest) {
+            if (nearest) {
                 if (p.x < 0 || p.x >= pw || p.y < 0 || p.y >= ph) continue;
-                sampleNearest(*source, p.x, p.y, s);
-                for (int c = 0; c < 4; c++) row[c] = uint8_t(s[c] + 0.5f);
+                sampleNearest(*source, p.x, p.y, row);
             } else {
                 double ex = std::min(p.x, pw - p.x) / std::max(1e-9, sx), ey = std::min(p.y, ph - p.y) / std::max(1e-9, sy);
-                float edge = float(clamp(std::min(ex, ey) + 0.5, 0.0, 1.0));
+                int edge = int(clamp(std::min(ex, ey) + 0.5, 0.0, 1.0) * 256 + 0.5);
                 if (edge <= 0) continue;
-                sampleBilinear(*source, p.x / factor, p.y / factor, s);
-                for (int c = 0; c < 4; c++) row[c] = uint8_t(clamp(s[c] * edge + 0.5f, 0.0f, 255.0f));
+                uint8_t s[4];
+                samplePixels(transform.sampling, *source, p.x / factor, p.y / factor, s);
+                for (int c = 0; c < 4; c++) row[c] = uint8_t((s[c] * edge + 128) >> 8);
             }
         }
     }
@@ -329,10 +308,12 @@ std::shared_ptr<GrayImage> resampleMask(const GrayImage& mask, const LayerTransf
     auto out = std::make_shared<GrayImage>(width, height, outside);
     if (mask.isEmpty() || width <= 0 || height <= 0) return out;
     Affine map = target.pixelToDocument(width, height).concatenating(transform.pixelToDocument(mask.width(), mask.height()).inverted());
+    if (std::fabs(map.b) < 1e-12 && std::fabs(map.c) < 1e-12 && map.a != 0 && map.d != 0)
+        return resampleAxisAligned(mask, width, height, map.tx + 0.5 * map.a, map.a, map.ty + 0.5 * map.d, map.d, filterFor(transform.sampling), outside);
     double sx = std::hypot(map.a, map.b), sy = std::hypot(map.c, map.d);
     int level = MipCache::levelFor(1.0 / std::max(sx, sy));
-    std::shared_ptr<GrayImage> reduced = std::make_shared<GrayImage>(mask);
-    for (int i = 0; i < level; i++) reduced = halveGray(*reduced);
+    std::shared_ptr<const GrayImage> reduced = level > 0 ? reduceGray(mask, level) : nullptr;
+    const GrayImage& src = reduced ? *reduced : mask;
     double factor = std::ldexp(1.0, level);
     int mw = mask.width(), mh = mask.height();
     parallelRows(0, height, [&](int ya, int yb) {
@@ -343,7 +324,7 @@ std::shared_ptr<GrayImage> resampleMask(const GrayImage& mask, const LayerTransf
         for (int x = 0; x < width; x++, p = p + dp) {
             double ex = std::min(p.x, mw - p.x) / std::max(1e-9, sx), ey = std::min(p.y, mh - p.y) / std::max(1e-9, sy);
             float edge = float(clamp(std::min(ex, ey) + 0.5, 0.0, 1.0));
-            float in = sampleGrayBilinear(*reduced, p.x / factor, p.y / factor);
+            float in = float(sampleGrayBilinear(src, p.x / factor, p.y / factor));
             row[x] = uint8_t(clamp(in * edge + outside * (1 - edge) + 0.5f, 0.0f, 255.0f));
         }
     }

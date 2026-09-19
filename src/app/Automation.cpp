@@ -676,6 +676,7 @@ void AutomationServer::registerHandlers() {
         settings.gaussian = flag(p, "gaussian", settings.gaussian);
         settings.monochromatic = flag(p, "monochromatic", settings.monochromatic);
         settings.distortion = num(p, "distortion", settings.distortion);
+        settings.bicubic = flag(p, "bicubic", settings.bicubic);
         int margin = int(std::ceil(blurMargin(*kind, settings)));
         LayerTransform transform;
         auto source = s->adjustmentSource(margin, transform);

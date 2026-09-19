@@ -1,7 +1,9 @@
 #include "compositor/warp.h"
+#include "compositor/resample.h"
 #include "compositor/parallel.h"
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 namespace compositor {
 
@@ -124,6 +126,21 @@ struct HomographyStepper {
     }
 };
 
+/// When the warp is a pure scale and translation (axis-aligned corners, in order), the separable resample
+/// applies: output pixel x's centre in source pixels is origin + x * step along each axis.
+struct AxisAlignedWarp { double originX, stepX, originY, stepY; };
+std::optional<AxisAlignedWarp> axisAlignedWarp(const WarpFrame& f, const Corners& corners, int pw, int ph) {
+    auto same = [](double a, double b) { return std::fabs(a - b) < 1e-9; };
+    if (!(same(corners[0].y, corners[1].y) && same(corners[2].y, corners[3].y) && same(corners[0].x, corners[3].x) && same(corners[1].x, corners[2].x))) return std::nullopt;
+    if (corners[1].x <= corners[0].x || corners[3].y <= corners[0].y) return std::nullopt;
+    const HomographyStepper stepper(f);
+    HomographyStepper::Row r0 = stepper.row(0), r1 = stepper.row(1);
+    Point u00 = r0.unit();
+    r0.advance();
+    Point u10 = r0.unit(), u01 = r1.unit();
+    return AxisAlignedWarp{u00.x * pw, (u10.x - u00.x) * pw, u00.y * ph, (u01.y - u00.y) * ph};
+}
+
 /// The pixels a warp samples from: the image itself, or a reduction (cached when the image is shared).
 struct MipSource {
     const Image* image;
@@ -140,12 +157,17 @@ std::optional<WarpedImage> warpImageImpl(const Image& image, const ImagePtr& own
     auto frame = frameFor(transform, corners, limit);
     if (!frame || image.isEmpty()) return std::nullopt;
     const WarpFrame& f = *frame;
-    auto out = std::make_shared<Image>(f.width, f.height);
     int pw = image.width(), ph = image.height();
     bool nearest = transform.sampling == Sampling::Nearest;
+    LayerTransform placed(f.bounds.origin(), f.bounds.size());
+    placed.sampling = transform.sampling;
+    if (!nearest)
+        if (auto axis = axisAlignedWarp(f, corners, pw, ph))
+            return WarpedImage{resampleAxisAligned(image, f.width, f.height, axis->originX, axis->stepX, axis->originY, axis->stepY, filterFor(transform.sampling)), placed};
+    auto out = std::make_shared<Image>(f.width, f.height);
     // Mip level from the average reduction across the shape.
     double areaOut = f.bounds.width * f.bounds.height * f.factor * f.factor;
-    int level = nearest ? 0 : MipCache::levelFor(std::sqrt(areaOut / std::max(1.0, double(pw) * ph)));
+    int level = nearest ? 0 : MipCache::levelFor(std::sqrt(areaOut / std::max(1.0, double(pw) * ph)), transform.sampling == Sampling::High);
     MipSource mipSource = mipSourceFor(image, owner, level);
     const Image* source = mipSource.image;
     double mip = std::ldexp(1.0, level);
@@ -166,25 +188,18 @@ std::optional<WarpedImage> warpImageImpl(const Image& image, const ImagePtr& own
                     edge = float(clamp(e + 0.5, 0.0, 1.0));
                     if (edge <= 0) continue;
                 }
-                float s[4];
                 if (nearest) {
-                    const uint8_t* p = source->pixel(clamp(int(std::floor(px.x)), 0, pw - 1), clamp(int(std::floor(px.y)), 0, ph - 1));
-                    for (int c = 0; c < 4; c++) s[c] = p[c];
-                } else {
-                    double bx = px.x / mip - 0.5, by = px.y / mip - 0.5;
-                    int w = source->width(), h = source->height();
-                    bx = clamp(bx, 0.0, double(w - 1)); by = clamp(by, 0.0, double(h - 1));
-                    int x0 = int(bx), y0 = int(by), x1 = std::min(x0 + 1, w - 1), y1 = std::min(y0 + 1, h - 1);
-                    float fx = float(bx - x0), fy = float(by - y0);
-                    const uint8_t *p00 = source->pixel(x0, y0), *p10 = source->pixel(x1, y0), *p01 = source->pixel(x0, y1), *p11 = source->pixel(x1, y1);
-                    for (int c = 0; c < 4; c++) s[c] = p00[c] * (1 - fx) * (1 - fy) + p10[c] * fx * (1 - fy) + p01[c] * (1 - fx) * fy + p11[c] * fx * fy;
+                    std::memcpy(row, source->pixel(clamp(int(std::floor(px.x)), 0, pw - 1), clamp(int(std::floor(px.y)), 0, ph - 1)), 4);
+                    continue;
                 }
-                for (int c = 0; c < 4; c++) row[c] = uint8_t(clamp(s[c] * edge + 0.5f, 0.0f, 255.0f));
+                uint8_t s[4];
+                if (transform.sampling == Sampling::High) sampleBicubic(*source, px.x / mip, px.y / mip, s);
+                else sampleBilinear(*source, px.x / mip, px.y / mip, s);
+                const int e = int(edge * 256 + 0.5f);
+                for (int c = 0; c < 4; c++) row[c] = uint8_t((s[c] * e + 128) >> 8);
             }
         }
     });
-    LayerTransform placed(f.bounds.origin(), f.bounds.size());
-    placed.sampling = transform.sampling;
     return WarpedImage{out, placed};
 }
 
@@ -233,8 +248,11 @@ std::optional<WarpedMask> warpMask(const GrayImage& mask, const LayerTransform& 
     placed.sampling = transform.sampling;
     // A uniform 1x1 mask already covers any shape.
     if (mask.width() == 1 && mask.height() == 1) return WarpedMask{std::make_shared<GrayImage>(mask), placed};
-    auto out = std::make_shared<GrayImage>(f.width, f.height, background);
     int pw = mask.width(), ph = mask.height();
+    if (transform.sampling != Sampling::Nearest)
+        if (auto axis = axisAlignedWarp(f, corners, pw, ph))
+            return WarpedMask{resampleAxisAligned(mask, f.width, f.height, axis->originX, axis->stepX, axis->originY, axis->stepY, filterFor(transform.sampling), background), placed};
+    auto out = std::make_shared<GrayImage>(f.width, f.height, background);
     const HomographyStepper stepper(f);
     parallelRows(0, f.height, [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) {
@@ -247,10 +265,7 @@ std::optional<WarpedMask> warpMask(const GrayImage& mask, const LayerTransform& 
                 double e = std::min({px.x, pw - px.x, px.y, ph - px.y}) / footprint;
                 float edge = float(clamp(e + 0.5, 0.0, 1.0));
                 if (edge <= 0) continue;
-                double bx = clamp(px.x - 0.5, 0.0, double(pw - 1)), by = clamp(px.y - 0.5, 0.0, double(ph - 1));
-                int x0 = int(bx), y0 = int(by), x1 = std::min(x0 + 1, pw - 1), y1 = std::min(y0 + 1, ph - 1);
-                float fx = float(bx - x0), fy = float(by - y0);
-                float v = mask.at(x0, y0) * (1 - fx) * (1 - fy) + mask.at(x1, y0) * fx * (1 - fy) + mask.at(x0, y1) * (1 - fx) * fy + mask.at(x1, y1) * fx * fy;
+                float v = float(sampleGrayBilinear(mask, px.x, px.y));
                 row[x] = uint8_t(clamp(v * edge + background * (1 - edge) + 0.5f, 0.0f, 255.0f));
             }
         }

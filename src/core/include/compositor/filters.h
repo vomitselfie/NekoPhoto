@@ -25,6 +25,7 @@ struct FilterSettings {
     bool monochromatic = false;
     /// Lens Correction's Remove Distortion, -100..100.
     double distortion = 0;
+    bool bicubic = false;   // Lens Correction resamples bicubically instead of bilinearly (the Mac's way)
     FilterSettings normalized() const;
 };
 

@@ -112,7 +112,7 @@ Hue/Saturation settings accept `"saturationCurve": "photoshop"` (+100 saturates 
 -100 greys out, lightness kept) beside the default `"scale"`.
 
 Pixels of the active layer, inside the selection: `pixels.adjust`,
-`pixels.filter`, `pixels.invert`, `pixels.fill`, `pixels.clear`,
+`pixels.filter` (`kind` and its settings; Lens Correction takes `bicubic: true` for a sharper resample), `pixels.invert`, `pixels.fill`, `pixels.clear`,
 `pixels.contentAwareFill`, `pixels.removeBackground`, `pixels.gmic` (`command`, a G'MIC
 command line; `gmic.filters` lists the catalogue with parameters and defaults).
 

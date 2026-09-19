@@ -94,6 +94,7 @@ def main():
     assert abs(got["settings"]["exposure"] - 0.5) < 1e-6, got
     rpc.call("layers.select", id=target["id"])
     rpc.call("pixels.filter", kind="Gaussian Blur", radius=2)
+    rpc.call("pixels.filter", kind="Lens Correction", distortion=20, bicubic=True)
 
     # Painting by coordinates: a stroke, a gradient and a shape layer.
     rpc.call("brush.stroke", points=[[20, 20], [120, 60], [220, 20]], size=12, color="#00ff00", opacity=1)

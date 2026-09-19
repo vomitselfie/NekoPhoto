@@ -1,7 +1,9 @@
 #include "compositor/image.h"
+#include "compositor/parallel.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <type_traits>
 
 namespace compositor {
 
@@ -135,36 +137,84 @@ std::shared_ptr<GrayImage> cropGray(const GrayImage& image, int x, int y, int wi
     return out;
 }
 
+namespace {
+
+typedef uint8_t u8x16 __attribute__((vector_size(16)));
+typedef uint8_t u8x8 __attribute__((vector_size(8)));
+typedef uint8_t u8x4 __attribute__((vector_size(4)));
+typedef uint16_t u16x8 __attribute__((vector_size(16)));
+typedef uint16_t u16x4 __attribute__((vector_size(8)));
+
+/// Two output pixels from four source pixels of each of two rows: (p00 + p01 + p10 + p11 + 2) / 4 per channel.
+inline void halvePairRGBA(const uint8_t* r0, const uint8_t* r1, uint8_t* o) {
+    u8x16 a, b;
+    std::memcpy(&a, r0, 16); std::memcpy(&b, r1, 16);
+    // Row sums in 16 bits, then each pair of neighbouring pixels.
+    u16x8 lo = __builtin_convertvector(__builtin_shufflevector(a, a, 0, 1, 2, 3, 4, 5, 6, 7), u16x8) + __builtin_convertvector(__builtin_shufflevector(b, b, 0, 1, 2, 3, 4, 5, 6, 7), u16x8);
+    u16x8 hi = __builtin_convertvector(__builtin_shufflevector(a, a, 8, 9, 10, 11, 12, 13, 14, 15), u16x8) + __builtin_convertvector(__builtin_shufflevector(b, b, 8, 9, 10, 11, 12, 13, 14, 15), u16x8);
+    u16x8 left = __builtin_shufflevector(lo, hi, 0, 1, 2, 3, 8, 9, 10, 11), right = __builtin_shufflevector(lo, hi, 4, 5, 6, 7, 12, 13, 14, 15);
+    u16x8 sum = (left + right + 2) >> 2;
+    u8x8 out = __builtin_convertvector(sum, u8x8);
+    std::memcpy(o, &out, 8);
+}
+
+/// Sixteen gray output pixels from thirty-two source pixels of each of two rows.
+inline void halveRunGray(const uint8_t* r0, const uint8_t* r1, uint8_t* o) {
+    u8x16 a0, a1, b0, b1;
+    std::memcpy(&a0, r0, 16); std::memcpy(&a1, r0 + 16, 16); std::memcpy(&b0, r1, 16); std::memcpy(&b1, r1 + 16, 16);
+    u8x16 evens = __builtin_shufflevector(a0, a1, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30);
+    u8x16 odds = __builtin_shufflevector(a0, a1, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31);
+    u8x16 evensBelow = __builtin_shufflevector(b0, b1, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30);
+    u8x16 oddsBelow = __builtin_shufflevector(b0, b1, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31);
+    auto widen = [](u8x16 v, bool upper) {
+        return upper ? __builtin_convertvector(__builtin_shufflevector(v, v, 8, 9, 10, 11, 12, 13, 14, 15), u16x8)
+                     : __builtin_convertvector(__builtin_shufflevector(v, v, 0, 1, 2, 3, 4, 5, 6, 7), u16x8);
+    };
+    u16x8 lo = (widen(evens, false) + widen(odds, false) + widen(evensBelow, false) + widen(oddsBelow, false) + 2) >> 2;
+    u16x8 hi = (widen(evens, true) + widen(odds, true) + widen(evensBelow, true) + widen(oddsBelow, true) + 2) >> 2;
+    u8x16 out = __builtin_convertvector(__builtin_shufflevector(lo, hi, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15), u8x16);
+    std::memcpy(o, &out, 16);
+}
+
+} // namespace
+
 std::shared_ptr<Image> halveImage(const Image& image) {
-    int w = (image.width() + 1) / 2, h = (image.height() + 1) / 2;
+    const int sw = image.width(), sh = image.height();
+    const int w = (sw + 1) / 2, h = (sh + 1) / 2;
     auto out = std::make_shared<Image>(w, h);
-    for (int y = 0; y < h; y++) {
-        int y0 = std::min(2 * y, image.height() - 1), y1 = std::min(2 * y + 1, image.height() - 1);
-        const uint8_t* r0 = image.row(y0);
-        const uint8_t* r1 = image.row(y1);
-        uint8_t* o = out->row(y);
-        for (int x = 0; x < w; x++, o += 4) {
-            int x0 = std::min(2 * x, image.width() - 1) * 4, x1 = std::min(2 * x + 1, image.width() - 1) * 4;
-            for (int c = 0; c < 4; c++)
-                o[c] = uint8_t((int(r0[x0 + c]) + r0[x1 + c] + r1[x0 + c] + r1[x1 + c] + 2) / 4);
+    const int pairs = sw / 4;   // output pixel pairs whose four source pixels all exist
+    parallelRows(0, h, [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++) {
+            const uint8_t* r0 = image.row(std::min(2 * y, sh - 1));
+            const uint8_t* r1 = image.row(std::min(2 * y + 1, sh - 1));
+            uint8_t* o = out->row(y);
+            for (int i = 0; i < pairs; i++) halvePairRGBA(r0 + size_t(i) * 16, r1 + size_t(i) * 16, o + size_t(i) * 8);
+            for (int x = pairs * 2; x < w; x++) {
+                int x0 = std::min(2 * x, sw - 1) * 4, x1 = std::min(2 * x + 1, sw - 1) * 4;
+                for (int c = 0; c < 4; c++) o[x * 4 + c] = uint8_t((int(r0[x0 + c]) + r0[x1 + c] + r1[x0 + c] + r1[x1 + c] + 2) / 4);
+            }
         }
-    }
+    }, 64);
     return out;
 }
 
 std::shared_ptr<GrayImage> halveGray(const GrayImage& image) {
-    int w = (image.width() + 1) / 2, h = (image.height() + 1) / 2;
+    const int sw = image.width(), sh = image.height();
+    const int w = (sw + 1) / 2, h = (sh + 1) / 2;
     auto out = std::make_shared<GrayImage>(w, h);
-    for (int y = 0; y < h; y++) {
-        int y0 = std::min(2 * y, image.height() - 1), y1 = std::min(2 * y + 1, image.height() - 1);
-        const uint8_t* r0 = image.row(y0);
-        const uint8_t* r1 = image.row(y1);
-        uint8_t* o = out->row(y);
-        for (int x = 0; x < w; x++) {
-            int x0 = std::min(2 * x, image.width() - 1), x1 = std::min(2 * x + 1, image.width() - 1);
-            o[x] = uint8_t((int(r0[x0]) + r0[x1] + r1[x0] + r1[x1] + 2) / 4);
+    const int runs = sw / 32;
+    parallelRows(0, h, [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++) {
+            const uint8_t* r0 = image.row(std::min(2 * y, sh - 1));
+            const uint8_t* r1 = image.row(std::min(2 * y + 1, sh - 1));
+            uint8_t* o = out->row(y);
+            for (int i = 0; i < runs; i++) halveRunGray(r0 + size_t(i) * 32, r1 + size_t(i) * 32, o + size_t(i) * 16);
+            for (int x = runs * 16; x < w; x++) {
+                int x0 = std::min(2 * x, sw - 1), x1 = std::min(2 * x + 1, sw - 1);
+                o[x] = uint8_t((int(r0[x0]) + r0[x1] + r1[x0] + r1[x1] + 2) / 4);
+            }
         }
-    }
+    }, 128);
     return out;
 }
 
@@ -240,9 +290,10 @@ void unpremultiply(Image& image) {
 
 MipCache& MipCache::shared() { static MipCache cache; return cache; }
 
-int MipCache::levelFor(double factor) {
+int MipCache::levelFor(double factor, bool rounded) {
     if (!(factor > 0) || factor >= 1) return 0;
-    int level = int(std::floor(std::log2(1.0 / factor)));
+    double halvings = std::log2(1.0 / factor);
+    int level = int(std::floor(rounded ? halvings + 0.5 : halvings));
     return std::max(0, std::min(level, 16));
 }
 
@@ -260,37 +311,61 @@ std::shared_ptr<GrayImage> reduceGray(const GrayImage& image, int level) {
     return out;
 }
 
-ImagePtr MipCache::level(const ImagePtr& image, int level) {
-    if (!image || level <= 0) return image;
+template <typename Img>
+std::shared_ptr<const Img> MipCache::levelOf(std::vector<Entry<Img>>& entries, const std::shared_ptr<const Img>& image, int level) {
     std::lock_guard<std::mutex> lock(mutex_);
     // Drop entries whose source is gone.
-    entries_.erase(std::remove_if(entries_.begin(), entries_.end(), [](const Entry& e) { return e.source.expired(); }), entries_.end());
-    Entry* entry = nullptr;
-    for (auto& e : entries_) if (e.source.lock() == image) { entry = &e; break; }
-    if (!entry) { entries_.push_back({image, {image}}); entry = &entries_.back(); }
-    while (int(entry->levels.size()) <= level) {
-        const ImagePtr& last = entry->levels.back();
-        if (last->width() <= 1 && last->height() <= 1) return last;
-        entry->levels.push_back(halveImage(*last));
+    for (auto it = entries.begin(); it != entries.end();) {
+        if (it->source.expired()) { used_ -= it->bytes; it = entries.erase(it); }
+        else ++it;
     }
-    return entry->levels[size_t(level)];
+    Entry<Img>* entry = nullptr;
+    for (auto& e : entries) if (e.source.lock() == image) { entry = &e; break; }
+    if (!entry) { entries.push_back({image, {}, 0, 0}); entry = &entries.back(); }
+    entry->lastUse = ++clock_;
+    while (int(entry->levels.size()) < level) {
+        const Img& last = entry->levels.empty() ? *image : *entry->levels.back();
+        if (last.width() <= 1 && last.height() <= 1) break;
+        std::shared_ptr<const Img> next;
+        if constexpr (std::is_same_v<Img, Image>) next = halveImage(last); else next = halveGray(last);
+        entry->bytes += next->byteCount();
+        used_ += next->byteCount();
+        entry->levels.push_back(next);
+    }
+    std::shared_ptr<const Img> result = entry->levels.empty() ? image : entry->levels[size_t(std::min(level, int(entry->levels.size())) - 1)];
+    enforceBudget(entry->lastUse);
+    return result;
+}
+
+ImagePtr MipCache::level(const ImagePtr& image, int level) {
+    if (!image || level <= 0) return image;
+    return levelOf(entries_, image, level);
 }
 
 GrayPtr MipCache::level(const GrayPtr& image, int level) {
     if (!image || level <= 0) return image;
-    std::lock_guard<std::mutex> lock(mutex_);
-    grayEntries_.erase(std::remove_if(grayEntries_.begin(), grayEntries_.end(), [](const GrayEntry& e) { return e.source.expired(); }), grayEntries_.end());
-    GrayEntry* entry = nullptr;
-    for (auto& e : grayEntries_) if (e.source.lock() == image) { entry = &e; break; }
-    if (!entry) { grayEntries_.push_back({image, {image}}); entry = &grayEntries_.back(); }
-    while (int(entry->levels.size()) <= level) {
-        const GrayPtr& last = entry->levels.back();
-        if (last->width() <= 1 && last->height() <= 1) return last;
-        entry->levels.push_back(halveGray(*last));
-    }
-    return entry->levels[size_t(level)];
+    return levelOf(grayEntries_, image, level);
 }
 
-void MipCache::clear() { std::lock_guard<std::mutex> lock(mutex_); entries_.clear(); grayEntries_.clear(); }
+void MipCache::enforceBudget(uint64_t keep) {
+    // The least recently used entries go first; the one just used stays whatever its size.
+    while (used_ > budget_) {
+        uint64_t oldest = keep;
+        int which = -1; size_t index = 0;
+        for (size_t i = 0; i < entries_.size(); i++) if (entries_[i].lastUse < oldest) { oldest = entries_[i].lastUse; which = 0; index = i; }
+        for (size_t i = 0; i < grayEntries_.size(); i++) if (grayEntries_[i].lastUse < oldest) { oldest = grayEntries_[i].lastUse; which = 1; index = i; }
+        if (which < 0) return;
+        if (which == 0) { used_ -= entries_[index].bytes; entries_.erase(entries_.begin() + long(index)); }
+        else { used_ -= grayEntries_[index].bytes; grayEntries_.erase(grayEntries_.begin() + long(index)); }
+    }
+}
+
+void MipCache::setBudget(size_t bytes) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    budget_ = bytes;
+    enforceBudget(clock_ + 1);
+}
+
+void MipCache::clear() { std::lock_guard<std::mutex> lock(mutex_); entries_.clear(); grayEntries_.clear(); used_ = 0; }
 
 } // namespace compositor

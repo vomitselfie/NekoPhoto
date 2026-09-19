@@ -73,7 +73,8 @@ PixelBounds nonzeroBounds(const GrayImage& image);
 std::shared_ptr<Image> cropImage(const Image& image, int x, int y, int width, int height);
 std::shared_ptr<GrayImage> cropGray(const GrayImage& image, int x, int y, int width, int height);
 
-/// Box-filtered halving (each output pixel the average of 2x2 inputs), the sharp reduction the Mac uses for large scale-downs.
+/// Box-filtered halving (each output pixel the average of 2x2 inputs), the sharp reduction the Mac uses for large scale-downs;
+/// rows in parallel, four pixels per vector step.
 std::shared_ptr<Image> halveImage(const Image& image);
 std::shared_ptr<GrayImage> halveGray(const GrayImage& image);
 /// `level` halvings built on the spot (nothing cached): for images that have no shared owner. Level 0 returns null.
@@ -88,24 +89,41 @@ std::shared_ptr<GrayImage> makeGrayThumbnail(const GrayImage& image, int maxSide
 void premultiply(Image& image);
 void unpremultiply(Image& image);
 
-/// Power-of-two reductions of an image, built on demand and cached by image identity.
+/// Power-of-two reductions of an image, built on demand and cached by image identity. The cache holds
+/// only weak references to the sources; the reductions it keeps are bounded by a byte budget (the Mac
+/// caps its cache at 400 MB), the least recently used going first.
 class MipCache {
 public:
     static MipCache& shared();
     /// `level` halvings of `image` (level 0 is the image itself).
     ImagePtr level(const ImagePtr& image, int level);
     GrayPtr level(const GrayPtr& image, int level);
-    /// The level for drawing an image at `factor` destination pixels per source pixel:
-    /// halvings until the final resample is at most 2x reduction.
-    static int levelFor(double factor);
+    /// The level for drawing an image at `factor` destination pixels per source pixel: halvings until the
+    /// final resample is at most 2x reduction, or, `rounded`, until it is nearest to 1x (between 0.7x
+    /// and 1.4x), which suits a bicubic final step.
+    static int levelFor(double factor, bool rounded = false);
     void clear();
+    void setBudget(size_t bytes);
+    size_t budget() const { return budget_; }
+    size_t bytesUsed() const { return used_; }
 
 private:
-    struct Entry { std::weak_ptr<const Image> source; std::vector<ImagePtr> levels; };
-    struct GrayEntry { std::weak_ptr<const GrayImage> source; std::vector<GrayPtr> levels; };
-    std::vector<Entry> entries_;
-    std::vector<GrayEntry> grayEntries_;
+    template <typename Img>
+    struct Entry {
+        std::weak_ptr<const Img> source;
+        std::vector<std::shared_ptr<const Img>> levels;   // level k at index k - 1
+        size_t bytes = 0;
+        uint64_t lastUse = 0;
+    };
+    template <typename Img>
+    std::shared_ptr<const Img> levelOf(std::vector<Entry<Img>>& entries, const std::shared_ptr<const Img>& image, int level);
+    void enforceBudget(uint64_t keep);
+    std::vector<Entry<Image>> entries_;
+    std::vector<Entry<GrayImage>> grayEntries_;
     std::mutex mutex_;
+    size_t budget_ = size_t(400) << 20;
+    size_t used_ = 0;
+    uint64_t clock_ = 0;
 };
 
 } // namespace compositor

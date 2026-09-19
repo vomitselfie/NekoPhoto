@@ -86,7 +86,7 @@ void applyFilter(FilterKind kind, Image& image, const FilterSettings& settings, 
         break;
     case FilterKind::LensCorrection: {
         Image source = image;
-        kernels::lensDistort(source, image, s.distortion / 100 * lensStrength);
+        kernels::lensDistort(source, image, s.distortion / 100 * lensStrength, s.bicubic);
         break;
     }
     }

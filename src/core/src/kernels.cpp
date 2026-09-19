@@ -1,4 +1,5 @@
 #include "compositor/kernels.h"
+#include "compositor/resample.h"
 #include "compositor/parallel.h"
 #include <algorithm>
 #include <cmath>
@@ -153,7 +154,7 @@ void addNoise(Image& image, float amount, bool gaussian, bool monochromatic, uin
 
 // ---- Lens Correction -----------------------------------------------------------------------------
 
-void lensDistort(const Image& source, Image& destination, double k) {
+void lensDistort(const Image& source, Image& destination, double k, bool bicubic) {
     const int width = source.width(), height = source.height();
     const double cx = width * 0.5, cy = height * 0.5;
     const double halfDiagonal2 = cx * cx + cy * cy;
@@ -169,6 +170,28 @@ void lensDistort(const Image& source, Image& destination, double k) {
                 const double fx0 = std::floor(sx), fy0 = std::floor(sy);
                 const double fx = sx - fx0, fy = sy - fy0;
                 const long x0 = long(fx0), py0 = long(fy0);
+                if (bicubic) {
+                    // Catmull-Rom over the 4x4 neighbourhood: sharper where the correction magnifies (the corners).
+                    const int16_t *wx = catmullRomWeights(int(fx * 256)), *wy = catmullRomWeights(int(fy * 256));
+                    int acc[4] = {0, 0, 0, 0};
+                    for (int j = 0; j < 4; j++) {
+                        const long row = py0 - 1 + j;
+                        if (row < 0 || row >= height || wy[j] == 0) continue;
+                        const uint8_t* line = source.row(int(row));
+                        int h[4] = {0, 0, 0, 0};
+                        for (int i = 0; i < 4; i++) {
+                            const long column = x0 - 1 + i;
+                            if (column < 0 || column >= width) continue;
+                            const uint8_t* p = line + size_t(column) * 4;
+                            for (int c = 0; c < 4; c++) h[c] += p[c] * wx[i];
+                        }
+                        for (int c = 0; c < 4; c++) acc[c] += h[c] * wy[j];
+                    }
+                    int a = std::clamp((acc[3] + 32768) >> 16, 0, 255);
+                    for (int c = 0; c < 3; c++) out[c] = uint8_t(std::clamp((acc[c] + 32768) >> 16, 0, a));
+                    out[3] = uint8_t(a);
+                    continue;
+                }
                 double sums[4] = {0, 0, 0, 0};
                 for (int j = 0; j < 2; j++) {
                     const long row = py0 + j;
