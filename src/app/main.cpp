@@ -154,12 +154,12 @@ void buildDemo(app::EditorSession& session, const QString& imagePath) {
 
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
-    QApplication::setOrganizationName("Compositor");
-    QApplication::setApplicationName("Compositor");
+    QApplication::setOrganizationName("compositor-linux");
+    QApplication::setApplicationName("compositor-linux");
     QApplication::setApplicationVersion("1.0.4");
-    QApplication::setDesktopFileName("compositor");
+    QApplication::setDesktopFileName("compositor-linux");
     QCommandLineParser parser;
-    parser.setApplicationDescription("A small, focused image compositor.");
+    parser.setApplicationDescription("compositor-linux: a small, focused image compositor.");
     parser.addHelpOption();
     parser.addVersionOption();
     parser.addPositionalArgument("file", "A .comp project or an image to open.");

@@ -31,7 +31,7 @@ Point toPoint(QPointF p) { return {p.x(), p.y()}; }
 EditorSession::EditorSession(QObject* parent) : QObject(parent) {}
 
 QString EditorSession::title() const {
-    if (!document_) return QStringLiteral("Compositor");
+    if (!document_) return QStringLiteral("compositor-linux");
     QString name = projectPath_.isEmpty() ? QStringLiteral("Untitled") : QFileInfo(projectPath_).completeBaseName();
     return name + (isModified() ? QStringLiteral(" *") : QString());
 }
@@ -1021,12 +1021,12 @@ void EditorSession::beginTransform(bool persistent) {
         TransformGroup group;
         group.box = *box;
         for (const Layer* l : groupTransformMembers()) group.originals[l->id] = l->transform;
-        TransformEdit edit{layer->id, *box, persistent, false};
+        TransformEdit edit{.layerId = layer->id, .draft = *box, .persistent = persistent, .mask = false};
         edit.group = group;
         transformEdit_ = edit;
     } else {
         bool maskAlone = isMaskSelected_ && layer->mask && !layer->mask->linked;
-        transformEdit_ = TransformEdit{layer->id, maskAlone ? layer->maskTransform() : layer->transform, persistent, maskAlone};
+        transformEdit_ = TransformEdit{.layerId = layer->id, .draft = maskAlone ? layer->maskTransform() : layer->transform, .persistent = persistent, .mask = maskAlone};
     }
     emit toolChanged();
     emit transformChanged();
@@ -1052,7 +1052,7 @@ void EditorSession::beginSelectionTransform() {
     document_->layers.insert(document_->layers.begin() + index + 1, floating);
     setActiveLayer(floating.id);
     tool_ = Tool::Move;
-    TransformEdit edit{floating.id, floating.transform, true, false};
+    TransformEdit edit{.layerId = floating.id, .draft = floating.transform, .persistent = true, .mask = false};
     edit.floating = FloatingTransform{source->id, std::move(before), beforeActive, floating.transform, lifted->image->width(), lifted->image->height()};
     transformEdit_ = edit;
     emit toolChanged();

@@ -1,6 +1,6 @@
-# Compositor on Linux
+# compositor-linux
 
-The Linux port is a Qt 6 front end over a portable C++ core that re-implements
+compositor-linux is a Qt 6 front end over a portable C++ core that re-implements
 the Mac app's document model, compositor, brush, history and `.comp` project
 format. The existing C pixel routines under `Compositor/Rendering` are compiled
 unchanged. The macOS application and its Xcode project are untouched; see
@@ -30,7 +30,7 @@ Then:
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ctest --test-dir build --output-on-failure
-./build/src/app/compositor            # or: ./build/src/app/compositor Photo.comp
+./build/src/app/compositor-linux      # or: ./build/src/app/compositor-linux Photo.comp
 ```
 
 Under a Wayland session Qt picks the Wayland platform on its own; force it with
@@ -43,9 +43,9 @@ Options: `-DCOMPOSITOR_BUILD_APP=OFF` builds only the core and tests;
 `-DCOMPOSITOR_QT_TOOL_DIR=<dir>` points the build at copies of `moc`, `uic`
 and `rcc` for shells that cannot execute binaries under `/usr/lib`.
 
-`compositor --download-model isnet` fetches a model without the GUI (into
+`compositor-linux --download-model isnet` fetches a model without the GUI (into
 `COMPOSITOR_MODEL_DIR` when set); `--preferences` opens the Preferences dialog.
-`compositor --demo --screenshot out.png --save-as Demo.comp` builds a layered
+`compositor-linux --demo --screenshot out.png --save-as Demo.comp` builds a layered
 demo document, grabs the window and saves a project without any interaction
 (works with `QT_QPA_PLATFORM=offscreen`); CI runs it as a smoke test.
 

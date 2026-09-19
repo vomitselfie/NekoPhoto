@@ -464,7 +464,7 @@ QWidget* AdjustmentEditor::buildGradientMap() {
         auto* row = new QHBoxLayout;
         row->addWidget(new QLabel(label));
         auto* b = new QPushButton;
-        connect(b, &QPushButton::clicked, this, [this, color, b] {
+        connect(b, &QPushButton::clicked, this, [this, color] {
             AdjustmentColor& c = color();
             QColor chosen = QColorDialog::getColor(QColor::fromRgbF(c.red, c.green, c.blue), this);
             if (!chosen.isValid()) return;

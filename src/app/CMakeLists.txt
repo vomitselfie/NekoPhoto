@@ -23,7 +23,7 @@ endif()
 qt_standard_project_setup()
 set(CMAKE_AUTORCC ON)
 
-qt_add_executable(compositor
+qt_add_executable(compositor-linux
     main.cpp
     ImageConvert.h
     Style.h
@@ -54,10 +54,10 @@ qt_add_executable(compositor
     MainWindow.cpp
 )
 
-target_link_libraries(compositor PRIVATE compositor::core Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Svg compositor_warnings)
-set_target_properties(compositor PROPERTIES OUTPUT_NAME compositor)
+target_link_libraries(compositor-linux PRIVATE compositor::core Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Svg compositor_warnings)
+set_target_properties(compositor-linux PROPERTIES OUTPUT_NAME compositor-linux)
 
-install(TARGETS compositor RUNTIME DESTINATION bin)
-install(FILES ${CMAKE_SOURCE_DIR}/packaging/compositor.desktop DESTINATION share/applications)
-install(FILES ${CMAKE_SOURCE_DIR}/packaging/compositor.svg DESTINATION share/icons/hicolor/scalable/apps)
-install(FILES ${CMAKE_SOURCE_DIR}/packaging/compositor-mime.xml DESTINATION share/mime/packages RENAME compositor.xml)
+install(TARGETS compositor-linux RUNTIME DESTINATION bin)
+install(FILES ${CMAKE_SOURCE_DIR}/packaging/compositor-linux.desktop DESTINATION share/applications)
+install(FILES ${CMAKE_SOURCE_DIR}/packaging/compositor-linux.svg DESTINATION share/icons/hicolor/scalable/apps)
+install(FILES ${CMAKE_SOURCE_DIR}/packaging/compositor-linux-mime.xml DESTINATION share/mime/packages RENAME compositor-linux.xml)

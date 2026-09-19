@@ -65,18 +65,18 @@ ProjectTabBar::ProjectTabBar(QWidget* parent) : QTabBar(parent) {
 }
 
 void ProjectTabBar::dragEnterEvent(QDragEnterEvent* e) {
-    if (e->mimeData()->hasFormat("application/x-compositor-layer")) e->acceptProposedAction(); else QTabBar::dragEnterEvent(e);
+    if (e->mimeData()->hasFormat("application/x-compositor-linux-layer")) e->acceptProposedAction(); else QTabBar::dragEnterEvent(e);
 }
 
 void ProjectTabBar::dragMoveEvent(QDragMoveEvent* e) {
-    if (e->mimeData()->hasFormat("application/x-compositor-layer")) { e->acceptProposedAction(); return; }
+    if (e->mimeData()->hasFormat("application/x-compositor-linux-layer")) { e->acceptProposedAction(); return; }
     QTabBar::dragMoveEvent(e);
 }
 
 void ProjectTabBar::dropEvent(QDropEvent* e) {
-    if (!e->mimeData()->hasFormat("application/x-compositor-layer")) { QTabBar::dropEvent(e); return; }
+    if (!e->mimeData()->hasFormat("application/x-compositor-linux-layer")) { QTabBar::dropEvent(e); return; }
     int index = tabAt(e->position().toPoint());
-    emit layerDropped(index, QString::fromUtf8(e->mimeData()->data("application/x-compositor-layer")));
+    emit layerDropped(index, QString::fromUtf8(e->mimeData()->data("application/x-compositor-linux-layer")));
     e->acceptProposedAction();
 }
 
@@ -194,7 +194,7 @@ void MainWindow::connectSession() {
         eraserAction_->setChecked(session_->tool() == Tool::Brush && session_->brushErase);
         updateColorSwatches();
     }));
-    sessionConnections_.push_back(connect(session_, &EditorSession::error, this, [this](QString message) { showError(tr("Compositor"), message); }));
+    sessionConnections_.push_back(connect(session_, &EditorSession::error, this, [this](QString message) { showError(tr("compositor-linux"), message); }));
 }
 
 void MainWindow::refreshTabTitles() {
@@ -508,8 +508,9 @@ void MainWindow::buildMenus() {
     controls->setChecked(true);
 
     QMenu* help = menuBar()->addMenu(tr("&Help"));
-    help->addAction(tr("&About Compositor"), this, [this] {
-        QMessageBox::about(this, tr("About Compositor"), tr("<b>Compositor</b> for Linux<br>A small, focused image compositor.<br><br>"
+    help->addAction(tr("&About compositor-linux"), this, [this] {
+        QMessageBox::about(this, tr("About compositor-linux"), tr("<b>compositor-linux</b><br>A small, focused image compositor. "
+            "A Linux port of <a href=\"https://github.com/robbietilton/Compositor\">Compositor</a> for macOS.<br><br>"
             "Qt %1 &middot; project format version %2<br>MIT licence.").arg(QT_VERSION_STR).arg(projectFormatVersion));
     });
     refreshRecent();
@@ -568,7 +569,7 @@ void MainWindow::refreshActions() {
 
 void MainWindow::refreshTitle() {
     if (!session_) return;
-    setWindowTitle(session_->title() + (session_->hasDocument() ? QStringLiteral(" — Compositor") : QString()));
+    setWindowTitle(session_->title() + (session_->hasDocument() ? QStringLiteral(" — compositor-linux") : QString()));
     setWindowModified(session_->isModified());
     refreshTabTitles();
 }

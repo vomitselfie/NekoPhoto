@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.22)
-project(Compositor VERSION 1.0.4 LANGUAGES C CXX)
+project(compositor-linux VERSION 1.0.4 LANGUAGES C CXX)
 
-# The Linux port. The macOS application (Compositor.xcodeproj) does not use this file;
-# it keeps building from Xcode. See docs/linux-port-architecture.md.
+# compositor-linux: the Linux port of Compositor. The macOS application (Compositor.xcodeproj)
+# does not use this file; it keeps building from Xcode. See docs/linux-port-architecture.md.
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -22,7 +22,7 @@ option(COMPOSITOR_WARNINGS_AS_ERRORS "Treat warnings as errors" OFF)
 add_library(compositor_warnings INTERFACE)
 target_compile_options(compositor_warnings INTERFACE
     $<$<COMPILE_LANG_AND_ID:C,GNU,Clang>:-Wall -Wextra>
-    $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang>:-Wall -Wextra -Wno-unused-parameter>
+    $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang>:-Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers>
     $<$<AND:$<BOOL:${COMPOSITOR_WARNINGS_AS_ERRORS}>,$<COMPILE_LANG_AND_ID:C,GNU,Clang>>:-Werror>
     $<$<AND:$<BOOL:${COMPOSITOR_WARNINGS_AS_ERRORS}>,$<COMPILE_LANG_AND_ID:CXX,GNU,Clang>>:-Werror>
 )

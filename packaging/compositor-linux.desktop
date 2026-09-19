@@ -1,10 +1,10 @@
 [Desktop Entry]
 Type=Application
-Name=Compositor
+Name=compositor-linux
 GenericName=Image Compositor
 Comment=A small, focused, layer-based image compositor
-Exec=compositor %F
-Icon=compositor
+Exec=compositor-linux %F
+Icon=compositor-linux
 Terminal=false
 Categories=Graphics;RasterGraphics;2DGraphics;
 MimeType=image/png;image/jpeg;image/tiff;image/webp;application/x-compositor-project;

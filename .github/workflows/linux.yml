@@ -1,8 +1,8 @@
-name: Linux
+name: compositor-linux
 
 on:
   push:
-    branches: [main, linux-port]
+    branches: [main]
   pull_request:
 
 jobs:
@@ -29,8 +29,8 @@ jobs:
         run: ctest --test-dir build --output-on-failure
       - name: Smoke test the application offscreen
         run: |
-          QT_QPA_PLATFORM=offscreen ./build/src/app/compositor --demo --screenshot demo.png --save-as Demo.comp
-          QT_QPA_PLATFORM=offscreen ./build/src/app/compositor Demo.comp --screenshot reopened.png
+          QT_QPA_PLATFORM=offscreen ./build/src/app/compositor-linux --demo --screenshot demo.png --save-as Demo.comp
+          QT_QPA_PLATFORM=offscreen ./build/src/app/compositor-linux Demo.comp --screenshot reopened.png
       - uses: actions/upload-artifact@v4
         with:
           name: screenshots-${{ matrix.compiler }}

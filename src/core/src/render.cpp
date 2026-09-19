@@ -297,9 +297,6 @@ bool resizeDocument(Document& document, int width, int height, double resolution
         LayerTransform box(Point(left, top), Size(w, h));
         box.sampling = sampling;
         if (!box.isValid()) return false;
-        // Where the old pixels sit on the new canvas: the old transform with the scale applied around the origin.
-        LayerTransform scaled = layer.transform.placing(layer.transform.unitToDocument().concatenating(scale));
-        scaled.sampling = sampling;
         if (layer.asset && layer.asset->image) {
             if (w > 30000 || h > 30000 || (long long)w * h > Document::pixelBudget - used) return false;
             used += (long long)w * h;
