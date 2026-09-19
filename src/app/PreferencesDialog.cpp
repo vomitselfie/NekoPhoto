@@ -15,6 +15,7 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QUrl>
+#include <QTimer>
 #include <QVBoxLayout>
 
 namespace app {
@@ -23,6 +24,14 @@ PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent) {
     setWindowTitle(tr("Preferences"));
     setMinimumWidth(520);
     auto* layout = new QVBoxLayout(this);
+    // Word-wrapped hint labels report a one-line minimum, so a dialog sized from minimums opens shorter than
+    // its contents and the rows draw over each other; once shown it has a width, and the height for that width
+    // becomes its minimum.
+    layout->setSizeConstraint(QLayout::SetMinimumSize);
+    QTimer::singleShot(0, this, [this, layout] {
+        const int height = layout->totalHeightForWidth(width());
+        if (height > minimumHeight()) { setMinimumHeight(height); resize(width(), height); }
+    });
 
     auto* appearance = new QGroupBox(tr("Appearance"));
     auto* appearanceRow = new QHBoxLayout(appearance);
