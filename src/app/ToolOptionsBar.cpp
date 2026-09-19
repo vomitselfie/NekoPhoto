@@ -10,6 +10,8 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QMessageBox>
+#include "ModelStore.h"
 #include <QResizeEvent>
 #include <QSpinBox>
 #include <QToolButton>
@@ -473,6 +475,28 @@ QWidget* ToolOptionsBar::buildLassoOptions() {
 QWidget* ToolOptionsBar::buildScribbleOptions() {
     QWidget* w = row();
     auto* h = layoutOf(w);
+    h->addWidget(new QLabel(tr("Engine")));
+    auto* engine = new QComboBox;
+    engine->addItems({tr("Scribble"), tr("Click")});
+    engine->setToolTip(tr("Scribble: strokes segmented by GrabCut, no model. Click: EfficientSAM finds the object under a click; Alt-click marks what is not it, a drag draws a box; up to six prompts count"));
+    engine->setCurrentIndex(session_->quickSelectClicks ? 1 : 0);
+    h->addWidget(engine);
+    auto* fetch = new QPushButton(tr("Download model (48 MB)"));
+    fetch->setToolTip(tr("Meta's EfficientSAM as packaged by OpenCV's model zoo (Apache-2.0), kept in the models folder next to the Remove Background ones; nothing is uploaded"));
+    fetch->setVisible(session_->quickSelectClicks && !ModelStore::promptReady());
+    connect(engine, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, fetch](int i) { session_->setQuickSelectClicks(i == 1); fetch->setVisible(session_->quickSelectClicks && !ModelStore::promptReady()); });
+    connect(fetch, &QPushButton::clicked, this, [this, fetch] {
+        fetch->setEnabled(false);
+        ModelStore::download(ModelStore::promptModel(), fetch,
+            [fetch](qint64 received, qint64 total) { fetch->setText(tr("Downloading… %1%").arg(total > 0 ? int(received * 100 / total) : 0)); },
+            [this, fetch](QString, QString error) {
+                fetch->setEnabled(true);
+                fetch->setText(tr("Download model (48 MB)"));
+                if (!error.isEmpty()) QMessageBox::warning(this, tr("Download failed"), error);
+                fetch->setVisible(session_->quickSelectClicks && !ModelStore::promptReady());
+            });
+    });
+    h->addWidget(fetch);
     h->addWidget(new QLabel(tr("Mode")));
     auto* mode = new QComboBox;
     mode->addItems({tr("Subject"), tr("Background")});
@@ -497,11 +521,11 @@ QWidget* ToolOptionsBar::buildScribbleOptions() {
     refine->setAlignment(Qt::AlignRight);
     refine->setFixedWidth(40);
     refine->setValue(session_->scribbleRefine);
-    connect(refine, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int v) { session_->scribbleRefine = v; if (!session_->scribbles().empty()) session_->runScribbleSelection(compositor::SelectionMode::Replace); });
+    connect(refine, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int v) { session_->scribbleRefine = v; session_->startQuickSelectJob(); });
     h->addWidget(refine);
-    auto* clear = new QPushButton(tr("Clear Strokes"));
-    clear->setToolTip(tr("Forgets the strokes (Esc); Backspace takes back the last one"));
-    connect(clear, &QPushButton::clicked, this, [this] { session_->clearScribbles(); });
+    auto* clear = new QPushButton(tr("Clear"));
+    clear->setToolTip(tr("Forgets the strokes and clicks (Esc); Backspace takes back the last one"));
+    connect(clear, &QPushButton::clicked, this, [this] { session_->clearScribbles(); session_->clearClickPrompts(); });
     h->addWidget(clear);
     h->addStretch();
     return w;

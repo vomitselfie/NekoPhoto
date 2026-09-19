@@ -25,9 +25,15 @@ const std::vector<ModelInfo>& ModelStore::models() {
         {"pphumanseg", "human_segmentation_pphumanseg_2023mar.onnx", "https://github.com/opencv/opencv_zoo/raw/main/models/human_segmentation_pphumanseg/human_segmentation_pphumanseg_2023mar.onnx",
          "552d8a984054e59b5d773d24b9b12022b22046ceb2bbc4c9aaeaceb36a9ddf24", 6163938, QObject::tr("PP-HumanSeg (instant)"),
          QObject::tr("Baidu's people segmenter from OpenCV's model zoo: a coarse mask in a few milliseconds. When downloaded it also shows an instant preview while a slower model runs.")},
+        {"efficientsam_ti", "efficientsam_ti_2025april.onnx", "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/image_segmentation_efficientsam/image_segmentation_efficientsam_ti_2025april.onnx",
+         "4eb496e0a7259d435b49b66faf1754aa45a5c382a34558ddda9a8c6fe5915d77", 48312857, QObject::tr("EfficientSAM (click to select)"),
+         QObject::tr("Meta's EfficientSAM-Ti as packaged by OpenCV's model zoo (Apache-2.0): click the subject and it is selected, Alt-click what is not it. About a second per click."), true},
     };
     return list;
 }
+
+const ModelInfo& ModelStore::promptModel() { return *modelById("efficientsam_ti"); }
+bool ModelStore::promptReady() { return supported() && isPresent(promptModel()); }
 
 const ModelInfo* ModelStore::modelById(const QString& id) {
     for (auto& m : models()) if (m.id == id) return &m;

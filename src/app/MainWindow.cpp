@@ -254,7 +254,7 @@ QString MainWindow::toolHint(Tool tool, bool erase) {
     case Tool::Marquee: return tr("Drag to select; Shift adds, Alt subtracts; drag inside a selection to move its outline");
     case Tool::Lasso: return tr("Freehand: drag around an area. Polygonal: click points, double-click or Enter closes, Backspace removes the last");
     case Tool::Wand: return tr("Click a colour to select it; Shift adds, Alt subtracts; Tolerance widens the match");
-    case Tool::Scribble: return tr("Scribble over the subject (Alt: over the background) and the selection follows; Backspace takes a stroke back, Esc clears them");
+    case Tool::Scribble: return tr("Scribble over the subject (Alt: the background), or with the Click engine click it (Alt-click what is not it, drag a box); Backspace takes one back, Esc clears");
     case Tool::Crop: return tr("Drag the crop, then press Enter or double-click; Shift squares, Alt grows from the centre");
     case Tool::Brush: return erase ? tr("Drag to erase; [ and ] change the size; Shift-click erases a straight line")
                                    : tr("Drag to paint; [ and ] change the size, digits set the opacity; Shift-click paints a straight line");
@@ -281,6 +281,8 @@ void MainWindow::connectSession() {
     sessionConnections_.push_back(connect(session_, &EditorSession::viewportChanged, this, &MainWindow::refreshZoom));
     sessionConnections_.push_back(connect(session_, &EditorSession::textEditRequested, this, [this](Uuid id) { (new TextDialog(session_, id, this))->show(); }));
     sessionConnections_.push_back(connect(session_, &EditorSession::titleChanged, this, &MainWindow::refreshTitle));
+    sessionConnections_.push_back(connect(session_, &EditorSession::quickSelectBusyChanged, this, [this](bool busy) { if (busy) statusBar()->showMessage(tr("Finding the subject…")); else statusBar()->clearMessage(); }));
+    sessionConnections_.push_back(connect(session_, &EditorSession::quickSelectFailed, this, [this](const QString& error) { statusBar()->showMessage(error, 6000); }));
     sessionConnections_.push_back(connect(session_, &EditorSession::projectPathChanged, this, &MainWindow::refreshTitle));
     sessionConnections_.push_back(connect(session_, &EditorSession::historyChanged, this, &MainWindow::refreshActions));
     sessionConnections_.push_back(connect(session_, &EditorSession::documentChanged, this, [this] { emit automationEvent("document"); }));

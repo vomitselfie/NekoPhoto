@@ -332,8 +332,20 @@ void CanvasWidget::drawScribbles(QPainter& painter) {
     };
     painter.save();
     painter.setRenderHint(QPainter::Antialiasing);
-    for (const EditorSession::Scribble& s : session_->scribbles()) stroke(s.points, s.size, s.background);
-    if (drag_ == Drag::Scribble) stroke(scribblePoints_, session_->scribbleSize, scribbleBackground_);
+    if (session_->quickSelectClicks) {
+        // Prompts: a dot per click (green the subject, red not), the box as a dashed rectangle.
+        std::optional<QPointF> corner;
+        for (const EditorSession::ClickPrompt& p : session_->clickPrompts()) {
+            if (p.label >= 2) { if (!corner) corner = p.at; else { QPen pen(QColor(60, 200, 90, 200)); pen.setStyle(Qt::DashLine); pen.setWidthF(1.5); painter.setPen(pen); painter.setBrush(Qt::NoBrush); painter.drawRect(QRectF(viewPoint(*corner), viewPoint(p.at)).normalized()); corner.reset(); } continue; }
+            painter.setPen(QPen(Qt::white, 1.5));
+            painter.setBrush(p.label ? QColor(60, 200, 90, 220) : QColor(230, 60, 60, 220));
+            painter.drawEllipse(viewPoint(p.at), 6.0, 6.0);
+        }
+        if (drag_ == Drag::ClickBox && dragMoved_) { QPen pen(QColor(60, 200, 90, 200)); pen.setStyle(Qt::DashLine); pen.setWidthF(1.5); painter.setPen(pen); painter.setBrush(Qt::NoBrush); painter.drawRect(QRectF(viewPoint(clickStart_), viewPoint(clickCurrent_)).normalized()); }
+    } else {
+        for (const EditorSession::Scribble& s : session_->scribbles()) stroke(s.points, s.size, s.background);
+        if (drag_ == Drag::Scribble) stroke(scribblePoints_, session_->scribbleSize, scribbleBackground_);
+    }
     painter.restore();
 }
 
@@ -631,6 +643,14 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
         session_->magicWand(doc, session_->wandTolerance, session_->wandContiguous, session_->wandSampleAll, selectionMode(modifiers), session_->wandSampleRadius);
         return;
     case Tool::Scribble:
+        if (session_->quickSelectClicks) {
+            // A click marks the subject, Alt-click what is not it; a drag becomes a box on release.
+            clickStart_ = clickCurrent_ = doc;
+            clickBackground_ = modifiers & Qt::AltModifier;
+            drag_ = Drag::ClickBox;
+            update();
+            return;
+        }
         // Alt flips the stroke's kind for this stroke.
         scribbleBackground_ = session_->scribbleBackground != bool(modifiers & Qt::AltModifier);
         scribblePoints_ = {doc};
@@ -786,6 +806,10 @@ void CanvasWidget::move(QPointF view, Qt::MouseButtons buttons, Qt::KeyboardModi
         if (scribblePoints_.empty() || std::hypot(doc.x() - scribblePoints_.back().x(), doc.y() - scribblePoints_.back().y()) >= 0.5) scribblePoints_.push_back(doc);
         update();
         break;
+    case Drag::ClickBox:
+        clickCurrent_ = doc;
+        update();
+        break;
     case Drag::SelectionMove: {
         if (!selectionMoveOrigin_ || !selectionMoveOrigin_->coverage) break;
         int dx = int(std::round(doc.x() - dragStartDocument_.x())), dy = int(std::round(doc.y() - dragStartDocument_.y()));
@@ -899,6 +923,11 @@ void CanvasWidget::release(QPointF view, Qt::MouseButton button, Qt::KeyboardMod
         update();
         break;
     }
+    case Drag::ClickBox:
+        if (dragMoved_) session_->setClickBox(clickStart_, doc);
+        else session_->addClickPrompt(clickStart_, clickBackground_);
+        update();
+        break;
     case Drag::SelectionMove:
         selectionMoveOrigin_.reset();
         session_->endEdit();
@@ -1038,7 +1067,7 @@ void CanvasWidget::keyPressEvent(QKeyEvent* e) {
         if (session_->shapeDraft()) { session_->cancelShape(); return; }
         if (session_->transformEdit()) { session_->cancelTransform(); return; }
         if (!lassoPoints_.empty()) { cancelLasso(); return; }
-        if (session_->tool() == Tool::Scribble && !session_->scribbles().empty()) { session_->clearScribbles(); return; }
+        if (session_->tool() == Tool::Scribble && (!session_->scribbles().empty() || !session_->clickPrompts().empty())) { session_->clearScribbles(); session_->clearClickPrompts(); return; }
         if (crop_) { cancelCrop(); return; }
         return;
     case Qt::Key_Return: case Qt::Key_Enter:
@@ -1049,7 +1078,8 @@ void CanvasWidget::keyPressEvent(QKeyEvent* e) {
         return;
     case Qt::Key_Backspace: case Qt::Key_Delete:
         if (session_->lassoKind == LassoKind::Polygonal && !lassoPoints_.empty()) { lassoPoints_.pop_back(); update(); return; }
-        if (session_->tool() == Tool::Scribble && !session_->scribbles().empty()) { session_->removeLastScribble(); return; }
+        if (session_->tool() == Tool::Scribble && session_->quickSelectClicks && !session_->clickPrompts().empty()) { session_->removeLastClickPrompt(); return; }
+        if (session_->tool() == Tool::Scribble && !session_->quickSelectClicks && !session_->scribbles().empty()) { session_->removeLastScribble(); return; }
         break;
     case Qt::Key_Left: case Qt::Key_Right: case Qt::Key_Up: case Qt::Key_Down: {
         double dx = e->key() == Qt::Key_Left ? -step : e->key() == Qt::Key_Right ? step : 0;

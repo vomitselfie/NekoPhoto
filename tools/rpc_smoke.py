@@ -99,6 +99,10 @@ def main():
         scribble = rpc.call("selection.scribble", foreground=[[[300, 200], [340, 210]]], background=[[[20, 20], [60, 20]]], size=16, clear=True)
         assert scribble["strokes"] == 2, scribble
         rpc.call("selection.none")
+    if info.get("clickSelect"):
+        subject = rpc.call("selection.subject", foreground=[[320, 210]], background=[[30, 30]], clear=True)
+        assert subject["prompts"] == 2, subject
+        rpc.call("selection.none")
     rpc.call("selection.rect", x=40, y=40, width=30, height=30)
     rpc.call("pixels.contentAwareFill")
     rpc.call("selection.none")

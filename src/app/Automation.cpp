@@ -375,7 +375,7 @@ void AutomationServer::registerHandlers() {
     add("app.info", [this, w](const QJsonObject&) {
         return QJsonObject{{"name", "compositor-linux"}, {"version", QApplication::applicationVersion()}, {"socket", path_},
                            {"platform", QApplication::platformName()}, {"tabs", w->tabCount()}, {"currentTab", w->currentTabIndex()},
-                           {"removeBackground", ModelStore::ready()}, {"scribble", scribbleSelectionSupported()}};
+                           {"removeBackground", ModelStore::ready()}, {"scribble", scribbleSelectionSupported()}, {"clickSelect", ModelStore::promptReady()}};
     });
     add("events.subscribe", [this](const QJsonObject& p) {
         // Notifications on this connection: {"method":"event","params":{"kind":...,"tab":N}}, one per kind per event-loop turn.
@@ -892,6 +892,22 @@ void AutomationServer::registerHandlers() {
         QString error;
         if (!s->runScribbleSelection(selectionMode(p), &error)) fail(error);
         return QJsonObject{{"strokes", int(s->scribbles().size())}, {"bounds", rectJson(doc.selection ? doc.selection->bounds() : Rect())}};
+    });
+    add("selection.subject", [session, document](const QJsonObject& p) {
+        // Click to select: `foreground` and `background` points as [x, y] lists, an optional `box` [x0, y0, x1, y1];
+        // EfficientSAM finds the object, refined onto the image's edges. Up to six prompts count (a box is two).
+        const Document& doc = document();
+        EditorSession* s = session();
+        if (!ModelStore::promptReady()) fail("the click-to-select model is not downloaded (Quick Select > Click > Download model, or compositor-linux --download-model efficientsam_ti)");
+        if (flag(p, "clear", true)) s->clearClickPrompts();
+        s->setQuickSelectClicks(true);   // the prompts show on the canvas as the person's own would
+        if (has(p, "refine")) s->scribbleRefine = std::clamp(integer(p, "refine", s->scribbleRefine), 0, 40);
+        for (QJsonValue pt : p.value("foreground").toArray()) { QJsonArray a = pt.toArray(); if (a.size() >= 2) s->addClickPrompt(QPointF(a[0].toDouble(), a[1].toDouble()), false, false); }
+        for (QJsonValue pt : p.value("background").toArray()) { QJsonArray a = pt.toArray(); if (a.size() >= 2) s->addClickPrompt(QPointF(a[0].toDouble(), a[1].toDouble()), true, false); }
+        if (has(p, "box")) { QJsonArray b = p.value("box").toArray(); if (b.size() >= 4) s->setClickBox(QPointF(b[0].toDouble(), b[1].toDouble()), QPointF(b[2].toDouble(), b[3].toDouble()), false); }
+        QString error;
+        if (!s->runClickSelection(selectionMode(p), &error)) fail(error);
+        return QJsonObject{{"prompts", int(s->clickPrompts().size())}, {"bounds", rectJson(doc.selection ? doc.selection->bounds() : Rect())}};
     });
     add("selection.fromLayer", [session, layerOrActive, document](const QJsonObject& p) {
         const Document& doc = document();

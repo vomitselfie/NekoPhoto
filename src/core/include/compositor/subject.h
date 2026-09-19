@@ -28,6 +28,18 @@ std::shared_ptr<GrayImage> subjectMask(const Image& image, const std::string& mo
 /// mask comes back unchanged when the layer is not much larger than the model's input.
 std::shared_ptr<GrayImage> subjectMaskDetailed(const Image& image, const std::string& modelPath, const GrayImage* coarse, int maxWindows, std::string* error, bool flipAverage = false);
 
+/// A prompt for a click-to-select model: a point in image pixels with SAM's label, 1 for "part of the subject",
+/// 0 for "not the subject", and 2 and 3 for the top-left and bottom-right corners of a box.
+struct PointPrompt { double x = 0, y = 0; int label = 1; };
+
+/// Whether the model file is a prompt (click-to-select) model rather than a whole-image segmenter, by name.
+bool promptModelPath(const std::string& modelPath);
+
+/// The subject the prompts point at, white, at `image`'s size, from a prompt model (EfficientSAM as OpenCV's
+/// model zoo exports it: the image at 1024 px, up to six prompt slots, three candidate masks scored by the
+/// model, the best one taken). Null with `error` when the model can't be loaded or run, or there is no prompt.
+std::shared_ptr<GrayImage> subjectFromPrompts(const Image& image, const std::string& modelPath, const std::vector<PointPrompt>& prompts, std::string* error);
+
 /// A window of the detail pass: `size` layer pixels square with its top-left corner at (x, y).
 struct DetailWindow { int x = 0, y = 0, size = 0; };
 

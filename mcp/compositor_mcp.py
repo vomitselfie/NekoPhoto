@@ -423,6 +423,12 @@ def selection_scribble(foreground: Optional[list[list[list[float]]]] = None, bac
 
 
 @mcp.tool()
+def selection_subject(foreground: Optional[list[list[float]]] = None, background: Optional[list[list[float]]] = None, box: Optional[list[float]] = None, refine: int = 8, clear: bool = True, mode: str = "replace") -> str:
+    """Click to select: foreground points on the subject and background points on what is not it (each [x, y] in document pixels), or a box [x0, y0, x1, y1]; the EfficientSAM model (needs its download, see app_info clickSelect) finds the object and the selection is pulled onto the image's edges (refine 0..40). Up to six prompts count. One foreground point on a subject usually selects all of it."""
+    return text(call("selection.subject", foreground=foreground or [], background=background or [], box=box, refine=refine, clear=clear, mode=mode))
+
+
+@mcp.tool()
 def selection_from_layer(id: str, mask: bool = False, mode: str = "replace") -> str:
     """Load a layer's opaque pixels (or its mask) as the selection."""
     return text(call("selection.fromLayer", id=id, mask=mask, mode=mode))

@@ -2,6 +2,7 @@
 //
 //   matte_tool run <image.png> <model.onnx|none> <outdir> [--refine R] [--band B] [--contrast C] [--shift S]
 //                  [--no-cleanup] [--no-decontaminate] [--raw] [--detail N] [--mask <mask.png>]
+//                  [--prompt x,y[,label] ...]   (a click-to-select model: label 1 subject, 0 not, 2/3 box corners)
 //       runs the pipeline and writes every stage: mask.png (the model's), matte.png (after the panel),
 //       trimap.png, chosenF.png, chosenB.png, pairAlpha.png (what the band saw and chose), cutout.png (the
 //       layer with its new alpha and edge colours), composite.png (over green).
@@ -37,6 +38,7 @@ struct Options {
     int detail = 0;   // windows of the detail pass; 0 = coarse pass only
     int limit = 0;    // eval: at most this many images (0 = all)
     bool flip = false;   // average the model's prediction with the mirrored image's
+    std::vector<PointPrompt> prompts;   // run: click prompts for a prompt model instead of the whole-image pass
 };
 
 Options parse(int argc, char** argv, int from) {
@@ -59,6 +61,10 @@ Options parse(int argc, char** argv, int from) {
         else if (a == "--categories") o.categories = next();
         else if (a == "--limit") o.limit = std::stoi(next());
         else if (a == "--flip") o.flip = true;
+        else if (a == "--prompt") {
+            PointPrompt pt;
+            if (std::sscanf(next().c_str(), "%lf,%lf,%d", &pt.x, &pt.y, &pt.label) >= 2) o.prompts.push_back(pt);
+        }
         else std::fprintf(stderr, "ignored: %s\n", a.c_str());
     }
     return o;
@@ -80,9 +86,10 @@ std::shared_ptr<GrayImage> readAlpha(const std::string& path, std::string* error
     return gray;
 }
 
-std::shared_ptr<GrayImage> maskFor(const Image& image, const std::string& model, const std::string& maskPath, int detail, bool flip, std::string* error) {
+std::shared_ptr<GrayImage> maskFor(const Image& image, const std::string& model, const std::string& maskPath, int detail, bool flip, const std::vector<PointPrompt>& prompts, std::string* error) {
     if (model != "none") {
         if (!subjectModelSupported()) { *error = "this build has no OpenCV"; return nullptr; }
+        if (!prompts.empty()) return subjectFromPrompts(image, model, prompts, error);
         return detail > 0 ? subjectMaskDetailed(image, model, nullptr, detail, error) : subjectMask(image, model, error, flip);
     }
     if (maskPath.empty()) { *error = "no model and no --mask"; return nullptr; }
@@ -203,7 +210,7 @@ int runMode(int argc, char** argv) {
     if (o.detail > 0 && model != "none") {
         if (auto coarse = subjectMask(*image, model, &error)) writePngGray(out("coarse.png"), *coarse);
     }
-    auto mask = maskFor(*image, model, o.mask, o.detail, o.flip, &error);
+    auto mask = maskFor(*image, model, o.mask, o.detail, o.flip, o.prompts, &error);
     if (!mask) { std::fprintf(stderr, "mask: %s\n", error.c_str()); return 1; }
     writePngGray(out("mask.png"), *mask);
     MatteSettings s = o.settings.normalized();
@@ -279,7 +286,7 @@ int evalMode(int argc, char** argv) {
         auto truth = readAlpha(truthPath, &error);
         if (!image || !truth || truth->width() != image->width() || truth->height() != image->height()) { std::fprintf(stderr, "%s: %s\n", stem.c_str(), error.empty() ? "size mismatch" : error.c_str()); continue; }
         const std::string maskPath = (file.parent_path() / (stem + o.maskSuffix + ".png")).string();
-        auto mask = maskFor(*image, model, model == "none" ? maskPath : o.mask, o.detail, o.flip, &error);
+        auto mask = maskFor(*image, model, model == "none" ? maskPath : o.mask, o.detail, o.flip, o.prompts, &error);
         if (!mask) { std::fprintf(stderr, "%s: %s\n", stem.c_str(), error.c_str()); continue; }
         auto matte = refineMatte(*mask, *image, o.settings, 0);
         Scores raw = score(*mask, *truth), refined = score(*matte, *truth);

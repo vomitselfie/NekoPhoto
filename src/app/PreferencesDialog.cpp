@@ -66,7 +66,7 @@ PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent) {
     auto* modelRow = new QHBoxLayout;
     modelRow->addWidget(new QLabel(tr("Model")));
     model_ = new QComboBox;
-    for (auto& m : ModelStore::models()) model_->addItem(QStringLiteral("%1 (%2 MB)").arg(m.label).arg(m.bytes / 1e6, 0, 'f', m.bytes > 50e6 ? 0 : 1), m.id);
+    for (auto& m : ModelStore::models()) if (!m.prompt) model_->addItem(QStringLiteral("%1 (%2 MB)").arg(m.label).arg(m.bytes / 1e6, 0, 'f', m.bytes > 50e6 ? 0 : 1), m.id);
     model_->setCurrentIndex(std::max(0, model_->findData(ModelStore::selected().id)));
     modelRow->addWidget(model_, 1);
     v->addLayout(modelRow);

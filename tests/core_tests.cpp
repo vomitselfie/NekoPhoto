@@ -1245,4 +1245,34 @@ TEST_CASE(subject_mask_from_model_when_available) {
     CHECK(mask->at(80, 80) > mask->at(5, 5));
 }
 
+TEST_CASE(subject_from_prompts_when_the_model_is_available) {
+    const char* dir = std::getenv("COMPOSITOR_MODEL_DIR");
+    if (!dir || !subjectModelSupported()) { std::fprintf(stderr, "  (skipped: set COMPOSITOR_MODEL_DIR with efficientsam_ti_2025april.onnx to run)\n"); return; }
+    std::string path = std::string(dir) + "/efficientsam_ti_2025april.onnx";
+    if (!fs::exists(path)) { std::fprintf(stderr, "  (skipped: %s not present)\n", path.c_str()); return; }
+    CHECK(promptModelPath(path));
+    CHECK(!promptModelPath("isnet-general-use.onnx"));
+    // Two discs on a dark field: a click on the left one selects it alone; a second click on the right one
+    // with the first as a negative point selects the right one alone.
+    auto img = std::make_shared<Image>(320, 200);
+    for (int y = 0; y < 200; y++) for (int x = 0; x < 320; x++) {
+        bool a = std::hypot(x - 90, y - 100) < 50, b = std::hypot(x - 230, y - 100) < 50;
+        uint8_t* p = img->pixel(x, y);
+        p[0] = a ? 230 : b ? 60 : 30; p[1] = a ? 200 : b ? 200 : 40; p[2] = a ? 120 : b ? 230 : 60; p[3] = 255;
+    }
+    std::string error;
+    auto left = subjectFromPrompts(*img, path, {{90, 100, 1}}, &error);
+    REQUIRE(left != nullptr);
+    CHECK(left->at(90, 100) > 200);
+    CHECK(left->at(230, 100) < 50);
+    CHECK(left->at(10, 10) < 50);
+    // A negative point is best-effort in this export (two flat discs read as one object to it), so only the
+    // positive side is asserted.
+    auto right = subjectFromPrompts(*img, path, {{230, 100, 1}, {90, 100, 0}}, &error);
+    REQUIRE(right != nullptr);
+    CHECK(right->at(230, 100) > 200);
+    CHECK(right->at(10, 10) < 50);
+    CHECK(subjectFromPrompts(*img, path, {}, &error) == nullptr);
+}
+
 TEST_MAIN()

@@ -62,7 +62,7 @@ executable on the path.
 - Marquee, lasso and magic wand selections; content-aware fill
 - Brush, eraser, spot healing, clone stamp, smudge, gradient and shape tools
 - Levels, curves, hue/saturation, exposure, gradient map, grain, blurs, noise
-- Remove Background with a local model, if you turn it on in Preferences
+- Remove Background with a local model, if you turn it on in Preferences, and click-to-select with another
 - Text layers in any installed font, editable until painted on
 - Opens Photoshop PSD files with their layers, folders, masks and blend modes
 - The G'MIC filter library (700+ filters) through Filter > G'MIC, when `gmic` is installed

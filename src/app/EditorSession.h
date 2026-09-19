@@ -25,6 +25,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <thread>
 
 namespace app {
 
@@ -79,6 +80,7 @@ class EditorSession : public QObject {
     Q_OBJECT
 public:
     explicit EditorSession(QObject* parent = nullptr);
+    ~EditorSession() override;
 
     // Document
     const std::optional<compositor::Document>& document() const { return document_; }
@@ -313,6 +315,22 @@ public:
     void clearScribbles();
     /// The selection from the strokes so far; false with `error` when none can be made (no foreground stroke, no OpenCV).
     bool runScribbleSelection(compositor::SelectionMode mode, QString* error = nullptr);
+    // Quick Select's other engine: clicks for a prompt model (EfficientSAM). A click marks the subject, an
+    // Alt-click what is not it, a drag a box; the prompts stay until cleared.
+    struct ClickPrompt { QPointF at; int label = 1; };   // 1 subject, 0 not the subject, 2 and 3 a box's corners
+    bool quickSelectClicks = false;                     // the engine in use: strokes, or clicks
+    void setQuickSelectClicks(bool clicks);
+    const std::vector<ClickPrompt>& clickPrompts() const { return clickPrompts_; }
+    void addClickPrompt(QPointF at, bool background, bool run = true);
+    void setClickBox(QPointF a, QPointF b, bool run = true);
+    void removeLastClickPrompt();
+    void clearClickPrompts();
+    /// The selection from the prompts, on this thread; false with `error` when the model is missing or none can be made.
+    bool runClickSelection(compositor::SelectionMode mode, QString* error = nullptr);
+    /// The current engine's selection computed off the main thread and applied when done; `quickSelectBusy`
+    /// meanwhile, and a change of strokes or prompts during a run queues another.
+    void startQuickSelectJob();
+    bool quickSelectBusy() const { return quickSelectBusy_; }
     void fillSelection(const QColor& color);
     void clearSelectionPixels();
     void selectionExpand(int amount);
@@ -399,6 +417,8 @@ signals:
     void layersChanged();
     void selectionChanged();
     void scribblesChanged();
+    void quickSelectBusyChanged(bool busy);
+    void quickSelectFailed(const QString& error);
     void toolChanged();
     void viewportChanged();
     void transformChanged();
@@ -462,6 +482,9 @@ private:
     uint64_t cloneSampleRevision_ = 0;
     std::shared_ptr<const compositor::Image> wandSample_;
     std::vector<Scribble> scribbles_;
+    std::vector<ClickPrompt> clickPrompts_;
+    std::thread quickSelectThread_;
+    bool quickSelectBusy_ = false, quickSelectAgain_ = false;
     /// The flattened document as the wand samples it with Sample All Layers, cached per document revision.
     std::shared_ptr<const compositor::Image> flattenedForSampling();
     bool wandSampleAll_ = false;

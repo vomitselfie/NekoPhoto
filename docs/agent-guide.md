@@ -47,6 +47,15 @@ render {"region": {"x": 400, "y": 300, "width": 200, "height": 200}, "maxSize": 
 brush.stroke {"tool": "healing", "size": 40, "points": [[480, 380], [500, 390]]}
 ```
 
+Select one object by clicking it (the click model must be downloaded; `app.info` says `clickSelect`):
+
+```
+selection.subject {"foreground": [[520, 300]]}                       # one point on the object usually takes all of it
+selection.subject {"foreground": [[520, 300]], "background": [[800, 500]]}   # a point on a separate thing it grabbed too
+selection.subject {"box": [260, 190, 470, 400]}                      # a part of an object: box it (a negative point does not split one object)
+layers.mask {"action": "addFromSelection"}                          # or pixels.clear, or a copy to a new layer
+```
+
 Replace a flat background colour on one layer:
 
 ```

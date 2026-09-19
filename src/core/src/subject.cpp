@@ -21,6 +21,11 @@
 
 namespace compositor {
 
+bool promptModelPath(const std::string& modelPath) {
+    const std::string name = modelPath.substr(modelPath.rfind('/') + 1);
+    return name.find("efficientsam") != std::string::npos || name.find("sam_") == 0 || name.find("_sam") != std::string::npos;
+}
+
 std::vector<DetailWindow> detailWindows(const GrayImage& uncertain, int size, int maxWindows, int minPixels) {
     const int w = uncertain.width(), h = uncertain.height();
     std::vector<DetailWindow> windows;
@@ -258,6 +263,71 @@ std::shared_ptr<GrayImage> subjectMask(const Image& image, const std::string& mo
     return toMask(pred, image.width(), image.height());
 }
 
+std::shared_ptr<GrayImage> subjectFromPrompts(const Image& image, const std::string& modelPath, const std::vector<PointPrompt>& prompts, std::string* error) {
+    if (image.isEmpty()) return nullptr;
+    if (prompts.empty()) { if (error) *error = "Click the subject first."; return nullptr; }
+    cv::dnn::Net* net = modelFor(modelPath, error);
+    if (!net) return nullptr;
+    // EfficientSAM (opencv_zoo, April 2025 export): batched_images [1,3,1024,1024] RGB 0..1, batched_point_coords
+    // [1,1,6,2] in the 1024 space, batched_point_labels [1,1,6,1] with -1 for an empty slot; output_masks
+    // [1,1,3,1024,1024] logits and iou_predictions [1,1,3]. With more than six prompts the last six count.
+    constexpr int size = 1024, slots = 6;
+    const int w = image.width(), h = image.height();
+    cv::Mat resized, input;
+    cv::resize(straightRgb(image, 0, 0, w, h), resized, cv::Size(size, size), 0, 0, cv::INTER_AREA);
+    cv::Mat imageBlob = cv::dnn::blobFromImage(resized, 1.0, cv::Size(size, size), cv::Scalar(), false, false);
+    std::vector<float> coords(size_t(slots) * 2, 0.0f), labels(size_t(slots), -1.0f);
+    const size_t first = prompts.size() > size_t(slots) ? prompts.size() - size_t(slots) : 0;
+    for (size_t i = first, n = 0; i < prompts.size(); i++, n++) {
+        coords[n * 2] = float(std::clamp(prompts[i].x, 0.0, double(w)) * size / w);
+        coords[n * 2 + 1] = float(std::clamp(prompts[i].y, 0.0, double(h)) * size / h);
+        labels[n] = float(std::clamp(prompts[i].label, 0, 3));
+    }
+    const int coordShape[4] = {1, 1, slots, 2}, labelShape[4] = {1, 1, slots, 1};
+    cv::Mat coordBlob(4, coordShape, CV_32F, coords.data()), labelBlob(4, labelShape, CV_32F, labels.data());
+    std::vector<cv::Mat> outputs;
+    try {
+        std::lock_guard<std::mutex> lock(modelLock);
+        net->setInput(imageBlob, "batched_images");
+        net->setInput(coordBlob, "batched_point_coords");
+        net->setInput(labelBlob, "batched_point_labels");
+        net->forward(outputs, std::vector<std::string>{"output_masks", "iou_predictions"});
+    } catch (const std::exception& e) {
+        if (error) *error = std::string("The model could not be run: ") + e.what();
+        return nullptr;
+    }
+    if (outputs.size() != 2 || outputs[0].dims != 5 || outputs[1].dims != 3 || outputs[0].size[2] != outputs[1].size[2]) { if (error) *error = "The model gave an unexpected output."; return nullptr; }
+    const cv::Mat& masks = outputs[0];
+    const int candidates = masks.size[2], mh = masks.size[3], mw = masks.size[4];
+    // The best-scoring candidate that keeps every "not the subject" point outside, else the best-scoring one:
+    // the model weighs a negative point lightly, and the zoo's demo applies the same rule.
+    std::vector<int> order(static_cast<size_t>(candidates));
+    for (int c = 0; c < candidates; c++) order[size_t(c)] = c;
+    std::sort(order.begin(), order.end(), [&](int a, int b) { return outputs[1].ptr<float>(0, 0)[a] > outputs[1].ptr<float>(0, 0)[b]; });
+    // When none does, the one least committed to a negative point (the lowest logit there) rather than the
+    // best-scored, which tends to be the whole object the point was meant to trim.
+    int best = -1;
+    float leastCommitted = INFINITY;
+    int fallback = order.front();
+    for (int c : order) {
+        float worst = -INFINITY;
+        for (size_t n = 0; n < size_t(slots); n++) {
+            if (labels[n] != 0.0f) continue;
+            const int px = std::clamp(int(coords[n * 2] * mw / size), 0, mw - 1), py = std::clamp(int(coords[n * 2 + 1] * mh / size), 0, mh - 1);
+            worst = std::max(worst, masks.ptr<float>(0, 0, c)[py * mw + px]);
+        }
+        if (worst < 0) { best = c; break; }
+        if (worst < leastCommitted) { leastCommitted = worst; fallback = c; }
+    }
+    if (best < 0) best = fallback;
+    // Logits to opacity: the model's edges are sharp, so a sigmoid is nearly a step, and the resize back to the
+    // image gives a pixel or two of ramp for the refinement to work from.
+    cv::Mat logits(mh, mw, CV_32F, const_cast<float*>(masks.ptr<float>(0, 0, best))), e, probability;
+    cv::exp(-logits, e);
+    probability = 1.0 / (1.0 + e);
+    return toMask(probability, w, h);
+}
+
 std::shared_ptr<GrayImage> subjectMaskDetailed(const Image& image, const std::string& modelPath, const GrayImage* coarseIn, int maxWindows, std::string* error, bool flipAverage) {
     std::shared_ptr<GrayImage> coarse = coarseIn && coarseIn->width() == image.width() && coarseIn->height() == image.height() ? std::make_shared<GrayImage>(*coarseIn) : subjectMask(image, modelPath, error, flipAverage);
     if (!coarse) return nullptr;
@@ -347,6 +417,11 @@ std::shared_ptr<GrayImage> subjectMask(const Image&, const std::string&, std::st
 }
 
 std::shared_ptr<GrayImage> subjectMaskDetailed(const Image&, const std::string&, const GrayImage*, int, std::string* error, bool) {
+    if (error) *error = "This build has no segmentation model support (OpenCV was not found when building).";
+    return nullptr;
+}
+
+std::shared_ptr<GrayImage> subjectFromPrompts(const Image&, const std::string&, const std::vector<PointPrompt>&, std::string* error) {
     if (error) *error = "This build has no segmentation model support (OpenCV was not found when building).";
     return nullptr;
 }

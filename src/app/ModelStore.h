@@ -20,6 +20,7 @@ struct ModelInfo {
     qint64 bytes;
     QString label;
     QString about;
+    bool prompt = false;  // a click-to-select model (prompts in, one subject out) rather than a whole-image segmenter
 };
 
 class ModelStore : public QObject {
@@ -28,6 +29,9 @@ public:
     /// The models on offer, best first: IS-Net general use, then the small U2Net.
     static const std::vector<ModelInfo>& models();
     static const ModelInfo* modelById(const QString& id);
+    /// The click-to-select model, and whether it is downloaded and can run here.
+    static const ModelInfo& promptModel();
+    static bool promptReady();
 
     /// Preferences: whether the feature is on, and which model it uses.
     static bool enabled();

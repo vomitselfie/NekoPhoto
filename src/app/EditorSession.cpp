@@ -1,6 +1,7 @@
 #include "compositor/morphology.h"
 #include "EditorSession.h"
 #include "compositor/scribble.h"
+#include "ModelStore.h"
 #include "compositor/subject.h"
 #include "ImageConvert.h"
 #include "compositor/blend.h"
@@ -29,6 +30,10 @@ QRectF toQRect(const Rect& r) { return {r.x, r.y, r.width, r.height}; }
 Point toPoint(QPointF p) { return {p.x(), p.y()}; }
 
 } // namespace
+
+EditorSession::~EditorSession() {
+    if (quickSelectThread_.joinable()) quickSelectThread_.join();
+}
 
 EditorSession::EditorSession(QObject* parent) : QObject(parent) {
     // Spot healing previews its result once the pointer has paused; the stroke goes on from there.
@@ -2224,6 +2229,19 @@ void stampScribble(GrayImage& labels, const EditorSession::Scribble& stroke, uin
     }
 }
 
+/// The panel's refinement for a Quick Select result: pulled onto the image's edges, hazed values pushed apart,
+/// specks dropped; no matting and no colour change (the selection is what comes out, not pixels).
+std::shared_ptr<GrayImage> refinedQuickSelect(const GrayImage& coverage, const Image& composite, int refine) {
+    if (refine <= 0) return std::make_shared<GrayImage>(coverage);
+    MatteSettings settings;
+    settings.refineEdges = refine;
+    settings.contrast = 25;
+    settings.matting = 0;
+    settings.cleanup = true;
+    settings.decontaminate = false;
+    return refineMatte(coverage, composite, settings, 0);
+}
+
 } // namespace
 
 std::shared_ptr<const Image> EditorSession::flattenedForSampling() {
@@ -2238,14 +2256,120 @@ void EditorSession::addScribble(const std::vector<QPointF>& points, bool backgro
     if (!document_ || points.empty()) return;
     scribbles_.push_back({points, double(std::max(1, scribbleSize)), background});
     emit scribblesChanged();
-    if (run) runScribbleSelection(SelectionMode::Replace);
+    if (run) startQuickSelectJob();
 }
 
 void EditorSession::removeLastScribble() {
     if (scribbles_.empty()) return;
     scribbles_.pop_back();
     emit scribblesChanged();
-    if (!scribbles_.empty()) runScribbleSelection(SelectionMode::Replace);
+    if (!scribbles_.empty()) startQuickSelectJob();
+}
+
+void EditorSession::setQuickSelectClicks(bool clicks) {
+    if (quickSelectClicks == clicks) return;
+    quickSelectClicks = clicks;
+    emit scribblesChanged();
+}
+
+void EditorSession::addClickPrompt(QPointF at, bool background, bool run) {
+    if (!document_) return;
+    clickPrompts_.push_back({at, background ? 0 : 1});
+    emit scribblesChanged();
+    if (run) startQuickSelectJob();
+}
+
+void EditorSession::setClickBox(QPointF a, QPointF b, bool run) {
+    if (!document_) return;
+    // One box at a time: an earlier one goes.
+    clickPrompts_.erase(std::remove_if(clickPrompts_.begin(), clickPrompts_.end(), [](const ClickPrompt& p) { return p.label >= 2; }), clickPrompts_.end());
+    clickPrompts_.push_back({QPointF(std::min(a.x(), b.x()), std::min(a.y(), b.y())), 2});
+    clickPrompts_.push_back({QPointF(std::max(a.x(), b.x()), std::max(a.y(), b.y())), 3});
+    emit scribblesChanged();
+    if (run) startQuickSelectJob();
+}
+
+void EditorSession::removeLastClickPrompt() {
+    if (clickPrompts_.empty()) return;
+    // A box is two prompts.
+    const bool box = clickPrompts_.back().label >= 2;
+    clickPrompts_.pop_back();
+    if (box && !clickPrompts_.empty() && clickPrompts_.back().label >= 2) clickPrompts_.pop_back();
+    emit scribblesChanged();
+    if (!clickPrompts_.empty()) startQuickSelectJob();
+}
+
+void EditorSession::clearClickPrompts() {
+    if (clickPrompts_.empty()) return;
+    clickPrompts_.clear();
+    emit scribblesChanged();
+}
+
+namespace {
+
+std::vector<PointPrompt> promptsOf(const std::vector<EditorSession::ClickPrompt>& clicks) {
+    std::vector<PointPrompt> out;
+    for (const EditorSession::ClickPrompt& c : clicks) out.push_back({c.at.x(), c.at.y(), c.label});
+    return out;
+}
+
+} // namespace
+
+bool EditorSession::runClickSelection(SelectionMode mode, QString* error) {
+    if (!document_) return false;
+    if (!ModelStore::promptReady()) { if (error) *error = tr("The click-to-select model is not downloaded: choose the Click engine in the Quick Select options and download it, or scribble instead."); return false; }
+    std::shared_ptr<const Image> composite = flattenedForSampling();
+    std::string why;
+    auto coverage = subjectFromPrompts(*composite, ModelStore::pathFor(ModelStore::promptModel()).toStdString(), promptsOf(clickPrompts_), &why);
+    if (!coverage) { if (error) *error = QString::fromStdString(why); return false; }
+    coverage = refinedQuickSelect(*coverage, *composite, scribbleRefine);
+    applySelectionShape(*coverage, mode, "Select Subject");
+    return true;
+}
+
+void EditorSession::startQuickSelectJob() {
+    if (!document_) return;
+    if (quickSelectBusy_) { quickSelectAgain_ = true; return; }
+    struct Inputs {
+        std::shared_ptr<const Image> composite;
+        GrayImage labels;
+        std::vector<PointPrompt> prompts;
+        bool clicks = false;
+        std::string model;
+        int refine = 0;
+    };
+    auto in = std::make_shared<Inputs>();
+    in->clicks = quickSelectClicks;
+    in->refine = scribbleRefine;
+    if (quickSelectClicks) {
+        if (clickPrompts_.empty()) return;
+        if (!ModelStore::promptReady()) { emit quickSelectFailed(tr("The click-to-select model is not downloaded: use the Download button in the options bar, or the Scribble engine.")); return; }
+        in->prompts = promptsOf(clickPrompts_);
+        in->model = ModelStore::pathFor(ModelStore::promptModel()).toStdString();
+    } else {
+        if (scribbles_.empty()) return;
+        in->labels = GrayImage(document_->width, document_->height, 0);
+        for (const Scribble& stroke : scribbles_) stampScribble(in->labels, stroke, stroke.background ? 2 : 1);
+    }
+    in->composite = flattenedForSampling();
+    quickSelectBusy_ = true;
+    emit quickSelectBusyChanged(true);
+    if (quickSelectThread_.joinable()) quickSelectThread_.join();
+    quickSelectThread_ = std::thread([this, in] {
+        std::string why;
+        std::shared_ptr<GrayImage> coverage;
+        if (in->clicks) coverage = subjectFromPrompts(*in->composite, in->model, in->prompts, &why);
+        else coverage = scribbleSelection(*in->composite, in->labels, 450, 2, &why);
+        if (coverage) coverage = refinedQuickSelect(*coverage, *in->composite, in->refine);
+        const bool clicks = in->clicks;
+        QMetaObject::invokeMethod(this, [this, coverage, why, clicks] {
+            quickSelectBusy_ = false;
+            emit quickSelectBusyChanged(false);
+            if (coverage) applySelectionShape(*coverage, SelectionMode::Replace, clicks ? "Select Subject" : "Quick Select");
+            else emit quickSelectFailed(QString::fromStdString(why));
+            if (quickSelectAgain_) { quickSelectAgain_ = false; startQuickSelectJob(); }
+        }, Qt::QueuedConnection);
+    });
 }
 
 void EditorSession::clearScribbles() {
@@ -2264,15 +2388,7 @@ bool EditorSession::runScribbleSelection(SelectionMode mode, QString* error) {
     // at full size restores the edge, so the segmentation runs small.
     auto coverage = scribbleSelection(*composite, labels, 450, 2, &why);
     if (!coverage) { if (error) *error = QString::fromStdString(why); return false; }
-    if (scribbleRefine > 0) {
-        MatteSettings settings;
-        settings.refineEdges = scribbleRefine;
-        settings.contrast = 25;
-        settings.matting = 0;
-        settings.cleanup = true;
-        settings.decontaminate = false;
-        coverage = refineMatte(*coverage, *composite, settings, 0);
-    }
+    coverage = refinedQuickSelect(*coverage, *composite, scribbleRefine);
     applySelectionShape(*coverage, mode, "Quick Select");
     return true;
 }
