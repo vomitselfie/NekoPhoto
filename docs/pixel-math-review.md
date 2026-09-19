@@ -22,10 +22,11 @@ plan.
 | 4, compositing | 16, 17, 29 (the on-grid Normal row path, scalar `compositeSpanNormal` for now), C8. |
 | 5a/5b, geometry and painting | 18, 19, 36 (the shared const base and bounded scans; no copy-on-write tiles), 37 (hard tips only). |
 | G'MIC | Steps 1 and 2 of the plan at the end of this document. |
+| 7, adjustments and the wand | 20 (compare once per pixel in a vectorised range test, fill over the match map, sampled pixels cached per document revision), 26 (tetrahedral 8.8 cube, exact 511-entry Colorize table), 39 (Levels/Curves/Exposure layers are transfers; a run at full opacity in Normal mode with no masks composes into one table applied in place), C2 (a "Photoshop saturation curve" checkbox and `saturationCurve` in the manifest, off by default for Mac parity). Also fixed on the way: the integer Normal blend for adjustment layers rounded negative deltas towards zero, so a darkening layer at full opacity was one level too light. |
 | 6, matting | 22, C10, C13, C14, C15, C17, C28 (the coefficient grid is 2× or 4× coarser by size). C13 differs: the guide is R, G, B only. With the mask as a fourth guide channel the filter fits the mask exactly (a_M → 1) and nothing moves, so the multichannel form uses the colour alone. C9: MODNet's preprocessing is recognised by file name (`modnet*.onnx`), but no download entry exists because the official release has no fixed-shape ONNX asset. |
 
-Still open: 20, 23, 26, 27, 28, 30, 31, 32, 33, 34, 35, 38, 39; C2, C3, C4, C5,
-C11, C16, C18–C24, C29, C30; G'MIC step 3.
+Still open: 23, 27, 28, 30, 31, 32, 33, 34, 35, 38; C3, C4, C5, C11, C16,
+C18–C24, C29, C30; G'MIC step 3.
 
 ## Bugs and waste found on the way
 

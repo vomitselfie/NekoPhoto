@@ -18,15 +18,6 @@ namespace {
 
 double clampFinite(double v, double lo, double hi, double fallback) { return std::isfinite(v) ? std::min(hi, std::max(lo, v)) : fallback; }
 
-/// The float tables (straight 0..1 out per straight 0..255 in) quantised to bytes: the kernel then needs no
-/// float work per pixel. Identical results for opaque pixels, within a level at partial alpha.
-void applyTables(Image& image, const std::vector<float>& tables) {
-    kernels::ChannelTables lut;
-    for (int c = 0; c < 3; c++)
-        for (int i = 0; i < 256; i++) lut.lut[c][i] = uint8_t(std::lround(std::clamp(tables[size_t(c) * 256 + size_t(i)], 0.0f, 1.0f) * 255.0f));
-    kernels::applyChannelTables(image, lut);
-}
-
 } // namespace
 
 // ---- Levels ------------------------------------------------------------------------
@@ -62,11 +53,49 @@ bool LevelsSettings::isIdentity() const {
     return true;
 }
 
+// ---- Transfers ----------------------------------------------------------------------
+
+Transfer identityTransfer() {
+    Transfer t;
+    for (auto& channel : t) for (int i = 0; i < 256; i++) channel[size_t(i)] = i / 255.0f;
+    return t;
+}
+
+Transfer levelsTransfer(const LevelsSettings& settings) {
+    Transfer t;
+    for (int c = 0; c < 3; c++) for (int i = 0; i < 256; i++) t[size_t(c)][size_t(i)] = float(settings.apply(i / 255.0, c + 1));
+    return t;
+}
+
+Transfer composeTransfer(const Transfer& first, const Transfer& second) {
+    Transfer t;
+    for (int c = 0; c < 3; c++)
+        for (int i = 0; i < 256; i++) {
+            float x = std::clamp(first[size_t(c)][size_t(i)], 0.0f, 1.0f) * 255;
+            int lo = std::min(254, int(x));
+            float frac = x - lo;
+            t[size_t(c)][size_t(i)] = second[size_t(c)][size_t(lo)] * (1 - frac) + second[size_t(c)][size_t(lo + 1)] * frac;
+        }
+    return t;
+}
+
+void applyTransfer(Image& image, const Transfer& transfer) {
+    // Quantised to bytes once: the kernel then needs no float work per pixel. Identical results for opaque
+    // pixels, within a level at partial alpha.
+    kernels::ChannelTables lut;
+    bool identity = true;
+    for (int c = 0; c < 3; c++)
+        for (int i = 0; i < 256; i++) {
+            lut.lut[c][i] = uint8_t(std::lround(std::clamp(transfer[size_t(c)][size_t(i)], 0.0f, 1.0f) * 255.0f));
+            identity = identity && lut.lut[c][i] == i;
+        }
+    if (identity) return;
+    kernels::applyChannelTables(image, lut);
+}
+
 void applyLevels(Image& image, const LevelsSettings& settings) {
     if (settings.isIdentity()) return;
-    std::vector<float> tables(3 * 256);
-    for (int c = 0; c < 3; c++) for (int i = 0; i < 256; i++) tables[size_t(c * 256 + i)] = float(settings.apply(i / 255.0, c + 1));
-    applyTables(image, tables);
+    applyTransfer(image, levelsTransfer(settings));
 }
 
 std::array<std::vector<double>, 4> levelsHistogram(const Image& image, const GrayImage* coverage) {
@@ -180,11 +209,16 @@ double CurvesSettings::value(double x, int channel) const {
     return std::min(255.0, std::max(0.0, y));
 }
 
+Transfer curvesTransfer(const CurvesSettings& settings) {
+    if (!settings.isValid()) return identityTransfer();
+    Transfer t;
+    for (int c = 1; c <= 3; c++) for (int i = 0; i < 256; i++) t[size_t(c - 1)][size_t(i)] = float(settings.value(settings.value(i, c), 0) / 255);
+    return t;
+}
+
 void applyCurves(Image& image, const CurvesSettings& settings) {
     if (!settings.isValid() || settings.isIdentity()) return;
-    std::vector<float> tables(3 * 256);
-    for (int c = 1; c <= 3; c++) for (int i = 0; i < 256; i++) tables[size_t((c - 1) * 256 + i)] = float(settings.value(settings.value(i, c), 0) / 255);
-    applyTables(image, tables);
+    applyTransfer(image, curvesTransfer(settings));
 }
 
 // ---- Exposure ----------------------------------------------------------------------
@@ -207,12 +241,14 @@ std::array<float, 256> ExposureSettings::table() const {
     return result;
 }
 
+Transfer exposureTransfer(const ExposureSettings& settings) {
+    std::array<float, 256> table = settings.table();
+    return {table, table, table};
+}
+
 void applyExposure(Image& image, const ExposureSettings& settings) {
     if (settings.normalized().isIdentity()) return;
-    auto t = settings.table();
-    std::vector<float> tables(3 * 256);
-    for (int c = 0; c < 3; c++) std::copy(t.begin(), t.end(), tables.begin() + c * 256);
-    applyTables(image, tables);
+    applyTransfer(image, exposureTransfer(settings));
 }
 
 // ---- Gradient Map and Grain ----------------------------------------------------------
@@ -400,10 +436,24 @@ std::vector<HueResponse> hueResponse(const HueSaturationSettings& settings) {
     return result;
 }
 
+/// Photoshop's Saturation slider (as reverse-engineered by maozefa, 2012): the channels move away from or
+/// towards the HSL lightness, +100 reaching full saturation and -100 grey; the lightness is kept.
+void photoshopSaturate(double& r, double& g, double& b, double amount) {
+    double high = std::max({r, g, b}), low = std::min({r, g, b}), l = (high + low) / 2, delta = high - low;
+    if (delta <= 0) return;
+    double factor;
+    if (amount >= 0) {
+        double s = delta / (1 - std::fabs(2 * l - 1));
+        factor = 1 / (amount + s >= 1 ? s : 1 - amount);
+    } else factor = 1 + amount;
+    auto move = [&](double& c) { c = std::min(1.0, std::max(0.0, l + (c - l) * factor)); };
+    move(r); move(g); move(b);
+}
+
 void adjustColor(const HueSaturationSettings& settings, const std::vector<HueResponse>& response, double& r, double& g, double& b) {
     double h, s, l;
     toHSL(r, g, b, h, s, l);
-    double lightnessAmount;
+    double lightnessAmount, saturationAmount = 0;
     if (settings.colorize) {
         RangeAdjustment a = settings.currentValue();
         h = wrap360(a.hue);
@@ -412,12 +462,14 @@ void adjustColor(const HueSaturationSettings& settings, const std::vector<HueRes
     } else {
         const HueResponse& sampled = response[size_t(std::min(360, std::max(0, int(std::round(h)))))];
         lightnessAmount = sampled.lightness / 100;
+        saturationAmount = std::min(1.0, std::max(-1.0, sampled.saturation / 100));
         h = wrap360(h + sampled.shift);
-        s = std::min(1.0, std::max(0.0, s * (1 + sampled.saturation / 100)));
+        if (!settings.photoshopSaturation) s = std::min(1.0, std::max(0.0, s * (1 + saturationAmount)));
     }
     double amount = std::min(1.0, std::max(-1.0, lightnessAmount));
     l = amount >= 0 ? l + (1 - l) * amount : l * (1 + amount);
     toRGB(h, s, std::min(1.0, std::max(0.0, l)), r, g, b);
+    if (settings.photoshopSaturation && !settings.colorize && saturationAmount != 0) photoshopSaturate(r, g, b, saturationAmount);
 }
 
 } // namespace
@@ -432,9 +484,22 @@ double HueSaturationSettings::shiftedHue(double hue) const {
 
 void applyHueSaturation(Image& image, const HueSaturationSettings& settings) {
     if (settings.isIdentity()) return;
-    // A 33-point colour cube, as the Mac's CIColorCube, sampled trilinearly; fast enough for slider drags.
-    constexpr int dim = 33;
-    std::vector<float> cube(size_t(dim) * dim * dim * 3);
+    auto fixed = [](double v) { return uint16_t(std::lround(std::min(1.0, std::max(0.0, v)) * 65280)); };
+    if (settings.colorize) {
+        // Colorize keeps only the pixel's lightness (max + min) / 2, so a table over max + min is exact.
+        std::vector<uint16_t> table(511 * 3);
+        std::vector<HueResponse> none;
+        for (int key = 0; key <= 510; key++) {
+            double r = key / 510.0, g = r, b = r;
+            adjustColor(settings, none, r, g, b);
+            table[size_t(key) * 3] = fixed(r); table[size_t(key) * 3 + 1] = fixed(g); table[size_t(key) * 3 + 2] = fixed(b);
+        }
+        kernels::applyLightnessTable(image, table.data());
+        return;
+    }
+    // A 33-point colour cube, as the Mac's CIColorCube, sampled tetrahedrally; fast enough for slider drags.
+    constexpr int dim = kernels::cubeDim;
+    std::vector<uint16_t> cube(size_t(dim) * dim * dim * 3);
     std::vector<HueResponse> response = hueResponse(settings);
     parallelRows(0, dim, [&](int b0, int b1) {
         for (int bi = b0; bi < b1; bi++)
@@ -443,33 +508,10 @@ void applyHueSaturation(Image& image, const HueSaturationSettings& settings) {
                     double r = ri / double(dim - 1), g = gi / double(dim - 1), b = bi / double(dim - 1);
                     adjustColor(settings, response, r, g, b);
                     size_t index = (size_t(bi) * dim * dim + size_t(gi) * dim + size_t(ri)) * 3;
-                    cube[index] = float(r); cube[index + 1] = float(g); cube[index + 2] = float(b);
+                    cube[index] = fixed(r); cube[index + 1] = fixed(g); cube[index + 2] = fixed(b);
                 }
     }, 1);
-    auto sample = [&](float r, float g, float b, float out[3]) {
-        float fr = r * (dim - 1), fg = g * (dim - 1), fb = b * (dim - 1);
-        int r0 = std::min(dim - 2, int(fr)), g0 = std::min(dim - 2, int(fg)), b0 = std::min(dim - 2, int(fb));
-        float tr = fr - r0, tg = fg - g0, tb = fb - b0;
-        out[0] = out[1] = out[2] = 0;
-        for (int db = 0; db < 2; db++) for (int dg = 0; dg < 2; dg++) for (int dr = 0; dr < 2; dr++) {
-            float w = (dr ? tr : 1 - tr) * (dg ? tg : 1 - tg) * (db ? tb : 1 - tb);
-            if (w <= 0) continue;
-            const float* c = &cube[(size_t(b0 + db) * dim * dim + size_t(g0 + dg) * dim + size_t(r0 + dr)) * 3];
-            out[0] += c[0] * w; out[1] += c[1] * w; out[2] += c[2] * w;
-        }
-    };
-    parallelRows(0, image.height(), [&](int y0, int y1) {
-        for (int y = y0; y < y1; y++) {
-            uint8_t* p = image.row(y);
-            for (int x = 0; x < image.width(); x++, p += 4) {
-                unsigned a = p[3];
-                if (!a) continue;
-                float out[3];
-                sample(std::min(1.0f, p[0] / float(a)), std::min(1.0f, p[1] / float(a)), std::min(1.0f, p[2] / float(a)), out);
-                for (int c = 0; c < 3; c++) p[c] = uint8_t(std::min(float(a), std::max(0.0f, out[c] * a + 0.5f)));
-            }
-        }
-    });
+    kernels::applyColorCube(image, cube.data());
 }
 
 // ---- Invert ---------------------------------------------------------------------------
@@ -565,6 +607,9 @@ bool parseHsv(const json& j, HueSaturationSettings& out) {
     if (!parseColorRange(j.value("range", "Master"), out.range)) return false;
     out.colorize = boolean(j, "colorize", false);
     out.invertRange = boolean(j, "invertRange", false);
+    std::string curve = j.value("saturationCurve", "scale");
+    if (curve != "scale" && curve != "photoshop") return false;
+    out.photoshopSaturation = curve == "photoshop";
     auto adjustments = j.find("adjustments");
     if (adjustments != j.end() && !parseRangeMap(*adjustments, out.adjustments, [](const json& v, RangeAdjustment& a) {
             if (!v.is_object()) return false;
@@ -586,6 +631,7 @@ json hsvJson(const HueSaturationSettings& s) {
     j["range"] = colorRangeName(s.range);
     j["colorize"] = s.colorize;
     j["invertRange"] = s.invertRange;
+    if (s.photoshopSaturation) j["saturationCurve"] = "photoshop";
     json adjustments = json::array();
     for (auto& [range, a] : s.adjustments) { adjustments.push_back(colorRangeName(range)); adjustments.push_back({{"hue", number(a.hue)}, {"saturation", number(a.saturation)}, {"lightness", number(a.lightness)}}); }
     j["adjustments"] = adjustments;
@@ -715,6 +761,15 @@ bool applyAdjustment(const LayerAdjustment& adjustment, Image& image, const Rect
     AdjustmentSettings settings;
     if (!AdjustmentSettings::parse(adjustment.json, settings)) return false;
     return applyAdjustment(settings, image, region, scale);
+}
+
+std::optional<Transfer> adjustmentTransfer(const AdjustmentSettings& settings) {
+    switch (settings.kind) {
+    case AdjustmentKind::Levels: return levelsTransfer(settings.levels);
+    case AdjustmentKind::Curves: return curvesTransfer(settings.curves);
+    case AdjustmentKind::Exposure: return exposureTransfer(settings.exposure);
+    default: return std::nullopt;
+    }
 }
 
 std::string defaultAdjustmentJson(AdjustmentKind kind) { return AdjustmentSettings::defaults(kind).toJson(); }

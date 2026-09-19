@@ -108,6 +108,8 @@ clipping), `layers.add` (pixels, group, adjustment; `below: true` puts it under 
 `layers.duplicate`, `layers.move`, `layers.reorder`, `layers.setTransform`,
 `layers.flip`, `layers.mask` (add, addFromSelection, delete, toggle, invert,
 apply, link), `layers.merge`, `layers.group`, `adjustments.set`.
+Hue/Saturation settings accept `"saturationCurve": "photoshop"` (+100 saturates fully,
+-100 greys out, lightness kept) beside the default `"scale"`.
 
 Pixels of the active layer, inside the selection: `pixels.adjust`,
 `pixels.filter`, `pixels.invert`, `pixels.fill`, `pixels.clear`,

@@ -5,6 +5,7 @@
 #include "document.h"
 #include <array>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -99,6 +100,9 @@ struct HueSaturationSettings {
     int range = 0;
     bool colorize = false;
     bool invertRange = false;
+    /// Photoshop's saturation curve instead of the Mac's plain scale: +100 reaches full saturation, -100 grey,
+    /// with the HSL lightness kept ("saturationCurve": "photoshop" in the manifest).
+    bool photoshopSaturation = false;
     std::map<int, RangeAdjustment> adjustments;
     std::map<int, HueBand> bands;
     bool operator==(const HueSaturationSettings&) const = default;
@@ -137,6 +141,18 @@ struct AdjustmentSettings {
     bool isIdentity() const;
 };
 
+/// A per-channel transfer: output (0..1) at each of the 256 straight input levels. Levels, Curves and
+/// Exposure are transfers, so a run of them composes into one table applied in a single pass.
+using Transfer = std::array<std::array<float, 256>, 3>;
+Transfer identityTransfer();
+Transfer levelsTransfer(const LevelsSettings& settings);
+Transfer curvesTransfer(const CurvesSettings& settings);
+Transfer exposureTransfer(const ExposureSettings& settings);
+/// `second` applied after `first`, evaluated in float (linear between `second`'s entries) so the pair quantises once.
+Transfer composeTransfer(const Transfer& first, const Transfer& second);
+/// Quantises to bytes and applies; an identity table is skipped.
+void applyTransfer(Image& image, const Transfer& transfer);
+
 // Applying to premultiplied RGBA in place.
 void applyLevels(Image& image, const LevelsSettings& settings);
 void applyCurves(Image& image, const CurvesSettings& settings);
@@ -151,6 +167,8 @@ void applyInvert(GrayImage& mask);
 /// Applies `settings` to `image` (the document area `region` at `scale`, for Grain).
 bool applyAdjustment(const AdjustmentSettings& settings, Image& image, const Rect& region, double scale);
 bool applyAdjustment(const LayerAdjustment& adjustment, Image& image, const Rect& region, double scale);
+/// The transfer of a table-driven adjustment (Levels, Curves, Exposure); empty for the other kinds.
+std::optional<Transfer> adjustmentTransfer(const AdjustmentSettings& settings);
 
 /// The default settings JSON for a new adjustment layer of `kind`.
 std::string defaultAdjustmentJson(AdjustmentKind kind);

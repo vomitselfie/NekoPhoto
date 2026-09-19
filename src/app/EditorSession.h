@@ -416,6 +416,10 @@ private:
     bool cloneSampleAll_ = false;
     compositor::Uuid cloneSampleLayer_;
     uint64_t cloneSampleRevision_ = 0;
+    std::shared_ptr<const compositor::Image> wandSample_;
+    bool wandSampleAll_ = false;
+    compositor::Uuid wandSampleLayer_;
+    uint64_t wandSampleRevision_ = 0;
     bool adjustmentEditing_ = false;
     std::shared_ptr<const compositor::Image> previewImage_;
     std::optional<compositor::LayerTransform> previewTransform_;

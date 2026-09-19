@@ -8,6 +8,7 @@
 #include <cstring>
 #include <functional>
 #include <map>
+#include <optional>
 #include <set>
 
 extern "C" {
@@ -563,7 +564,10 @@ struct Renderer {
                     if (d[3] == 0) continue;
                     int mix = int(opacity * (c ? c[x] : 255) + 0.5f);   // 0..255
                     if (mix <= 0) continue;
-                    for (int k = 0; k < 3; k++) d[k] = uint8_t(std::min(int(d[3]), d[k] + ((int(a[k]) - int(d[k])) * mix + 127 + (a[k] < d[k] ? 0 : 0)) / 255));
+                    for (int k = 0; k < 3; k++) {
+                        int delta = (int(a[k]) - int(d[k])) * mix;   // rounded symmetrically: a full mix is exact either way
+                        d[k] = uint8_t(std::min(int(d[3]), int(d[k]) + (delta + (delta < 0 ? -127 : 127)) / 255));
+                    }
                 }
             }
             });
@@ -609,6 +613,18 @@ struct Renderer {
         }
     }
 
+    /// The layer's transfer when it can be applied in place: a table-driven adjustment, unclipped, at full
+    /// opacity in Normal mode, without a layer mask or a masked folder above it.
+    std::optional<Transfer> fusibleTransfer(const Layer& layer) {
+        if (!layer.adjustment || layer.maskSourceId || stacked.count(layer.id)) return std::nullopt;
+        if (blendOf(layer) != BlendMode::Normal || clamp(layer.opacity, 0.0, 1.0) < 1) return std::nullopt;
+        if (layer.mask && layer.mask->enabled && layer.mask->asset.image) return std::nullopt;
+        if (foldersCoverage(layer.parentId)) return std::nullopt;
+        AdjustmentSettings settings;
+        if (!AdjustmentSettings::parse(layer.adjustment->json, settings)) return std::nullopt;
+        return adjustmentTransfer(settings);
+    }
+
     void drawComposite(const Layer& layer, Image& out) {
         if (stacked.count(layer.id)) return;
         std::shared_ptr<GrayImage> folders = foldersCoverage(layer.parentId);
@@ -649,7 +665,20 @@ struct Renderer {
         for (auto& l : document.layers) byId[l.id] = &l;
         order = renderLayers(document.layers);
         prepareStacks();
-        for (const Layer* layer : order) drawComposite(*layer, out);
+        for (size_t index = 0; index < order.size();) {
+            // A run of table-driven adjustment layers (Levels, Curves, Exposure) at full opacity in Normal mode
+            // with no masks composes into one transfer: one pass over the canvas, quantised once.
+            std::optional<Transfer> fused;
+            size_t end = index;
+            for (; end < order.size(); end++) {
+                std::optional<Transfer> next = fusibleTransfer(*order[end]);
+                if (!next) break;
+                fused = fused ? composeTransfer(*fused, *next) : std::move(next);
+            }
+            if (fused) { applyTransfer(out, *fused); index = end; continue; }
+            drawComposite(*order[index], out);
+            index++;
+        }
     }
 };
 

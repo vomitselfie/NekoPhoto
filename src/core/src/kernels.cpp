@@ -49,6 +49,77 @@ void applyChannelTables(Image& image, const ChannelTables& tables) {
     });
 }
 
+// ---- Hue/Saturation ------------------------------------------------------------------------------
+
+namespace {
+
+/// The straight channels of a premultiplied pixel with alpha `a` (nonzero), rounded to bytes.
+inline void straightChannels(const uint8_t* p, unsigned a, unsigned out[3]) {
+    if (a == 255) { out[0] = p[0]; out[1] = p[1]; out[2] = p[2]; return; }
+    const unsigned inverse = (255u << 16) / a + 1;   // 255 / a in 16.16, rounded up so p == a gives 255
+    for (int c = 0; c < 3; c++) out[c] = std::min(255u, (p[c] * inverse + 32768u) >> 16);
+}
+
+/// An 8.8 fixed-point straight value (0..65280) premultiplied by `a`, rounded.
+inline uint8_t premultiplied88(unsigned value, unsigned a) { return uint8_t((value * a + 32640u) / 65280u); }
+
+} // namespace
+
+void applyColorCube(Image& image, const uint16_t* cube) {
+    constexpr unsigned dim = unsigned(cubeDim);
+    constexpr size_t stepR = 3, stepG = size_t(dim) * 3, stepB = size_t(dim) * dim * 3;
+    parallelRows(0, image.height(), [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++) {
+            uint8_t* p = image.row(y);
+            for (int x = 0; x < image.width(); x++, p += 4) {
+                const unsigned a = p[3];
+                if (!a) continue;
+                unsigned s[3];
+                straightChannels(p, a, s);
+                // Cell index and fraction (0..255 of a cell) along each axis: 32 cells span 0..255, 255 per cell.
+                unsigned index[3], frac[3];
+                for (int c = 0; c < 3; c++) {
+                    unsigned position = s[c] * (dim - 1);
+                    index[c] = position / 255; frac[c] = position % 255;
+                    if (index[c] == dim - 1) { index[c]--; frac[c] = 255; }
+                }
+                // Tetrahedral: from the cell's origin corner, step along the axes in decreasing fraction order.
+                const size_t step[3] = {stepR, stepG, stepB};
+                int order[3] = {0, 1, 2};
+                if (frac[order[0]] < frac[order[1]]) std::swap(order[0], order[1]);
+                if (frac[order[1]] < frac[order[2]]) std::swap(order[1], order[2]);
+                if (frac[order[0]] < frac[order[1]]) std::swap(order[0], order[1]);
+                const uint16_t* c0 = cube + index[2] * stepB + index[1] * stepG + index[0] * stepR;
+                const uint16_t* cA = c0 + step[order[0]];
+                const uint16_t* cB = cA + step[order[1]];
+                const uint16_t* c1 = cB + step[order[2]];
+                const int tA = int(frac[order[0]]), tB = int(frac[order[1]]), tC = int(frac[order[2]]);
+                for (int c = 0; c < 3; c++) {
+                    // The weights (255 - tA), (tA - tB), (tB - tC), tC are all non-negative, so the sum is too.
+                    int v = int(c0[c]) * 255 + (int(cA[c]) - int(c0[c])) * tA + (int(cB[c]) - int(cA[c])) * tB + (int(c1[c]) - int(cB[c])) * tC;
+                    p[c] = premultiplied88(unsigned(v + 127) / 255u, a);
+                }
+            }
+        }
+    });
+}
+
+void applyLightnessTable(Image& image, const uint16_t* table) {
+    parallelRows(0, image.height(), [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++) {
+            uint8_t* p = image.row(y);
+            for (int x = 0; x < image.width(); x++, p += 4) {
+                const unsigned a = p[3];
+                if (!a) continue;
+                unsigned s[3];
+                straightChannels(p, a, s);
+                const uint16_t* t = table + (std::max({s[0], s[1], s[2]}) + std::min({s[0], s[1], s[2]})) * 3;
+                for (int c = 0; c < 3; c++) p[c] = premultiplied88(t[c], a);
+            }
+        }
+    });
+}
+
 // ---- Add Noise -----------------------------------------------------------------------------------
 
 void addNoise(Image& image, float amount, bool gaussian, bool monochromatic, uint32_t seed) {

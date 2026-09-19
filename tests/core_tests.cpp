@@ -2,6 +2,7 @@
 // compositing semantics, brush strokes, PNG and the .comp round trip.
 #include "check.h"
 #include "compositor/adjustments.h"
+#include <cstring>
 #include "compositor/blend.h"
 #include "compositor/filters.h"
 #include "compositor/brush.h"
@@ -858,6 +859,47 @@ TEST_CASE(image_size_resamples_layers) {
     auto flat = renderFlattened(doc);
     CHECK_EQ(int(flat->pixel(50, 20)[0]), 255);
     CHECK_EQ(int(flat->pixel(25, 20)[3]), 0);
+}
+
+TEST_CASE(adjustment_layers_render_as_their_direct_application) {
+    // A gradient base under Levels and Exposure adjustment layers.
+    auto gradient = std::make_shared<Image>(64, 8);
+    for (int y = 0; y < 8; y++) for (int x = 0; x < 64; x++) { uint8_t* p = gradient->pixel(x, y); unsigned a = y < 6 ? 255 : 128; p[0] = uint8_t((x * 4 * a + 127) / 255); p[1] = uint8_t((255 - x * 4) * a / 255); p[2] = uint8_t((x * 2 + 60) * a / 255); p[3] = uint8_t(a); }
+    Document doc(64, 8);
+    doc.layers.push_back(imageLayer("base", gradient, {0, 0}));
+    AdjustmentSettings levels = AdjustmentSettings::defaults(AdjustmentKind::Levels);
+    levels.levels.ranges[0].outputWhite = 254;   // darkens every full-white channel by exactly one level
+    levels.levels.ranges[0].gamma = 1.4;
+    Layer a("Levels", doc.size());
+    a.adjustment = levels.toLayerAdjustment();
+    AdjustmentSettings exposure = AdjustmentSettings::defaults(AdjustmentKind::Exposure);
+    exposure.exposure.exposure = -0.7;
+    Layer b("Exposure", doc.size());
+    b.adjustment = exposure.toLayerAdjustment();
+    doc.layers.push_back(a);
+    // One layer at full opacity: the flattened result is the adjustment applied to the base, bit for bit.
+    auto one = renderFlattened(doc);
+    Image direct = *gradient;
+    applyAdjustment(levels, direct, Rect(0, 0, 64, 8), 1);
+    CHECK_EQ(std::memcmp(one->data(), direct.data(), one->byteCount()), 0);
+    CHECK_EQ(int(one->pixel(63, 0)[1]), int(direct.pixel(63, 0)[1]));
+    CHECK(int(one->pixel(1, 0)[1]) < 255);
+    // Two in a row fuse into one table: within a level of applying them in turn.
+    doc.layers.push_back(b);
+    auto two = renderFlattened(doc);
+    applyAdjustment(exposure, direct, Rect(0, 0, 64, 8), 1);
+    int worst = 0;
+    for (size_t i = 0; i < two->byteCount(); i++) worst = std::max(worst, std::abs(int(two->data()[i]) - int(direct.data()[i])));
+    CHECK(worst <= 1);
+    // A layer mask (all white) sends the layer through the blending path, which must give the direct result too.
+    LayerMask m;
+    m.asset = MaskAsset::make(std::make_shared<GrayImage>(64, 8, 255));
+    doc.layers[1].mask = m;
+    doc.layers.pop_back();
+    auto masked = renderFlattened(doc);
+    Image again = *gradient;
+    applyAdjustment(levels, again, Rect(0, 0, 64, 8), 1);
+    CHECK_EQ(std::memcmp(masked->data(), again.data(), masked->byteCount()), 0);
 }
 
 TEST_CASE(matte_refinement_follows_the_guide) {

@@ -10,8 +10,8 @@
 
 extern "C" {
 #include "ContentFill.h"
-#include "WandPixels.h"
 }
+#include "compositor/wand.h"
 #include <QApplication>
 #include <QClipboard>
 #include <cstring>
@@ -2105,26 +2105,31 @@ void EditorSession::magicWand(QPointF documentPoint, int tolerance, bool contigu
     if (!document_ || !canEditLayers()) return;
     int x = int(std::floor(documentPoint.x())), y = int(std::floor(documentPoint.y()));
     if (x < 0 || y < 0 || x >= document_->width || y >= document_->height) return;
-    std::shared_ptr<Image> pixels;
-    if (sampleAllLayers) pixels = renderFlattened(*document_);
-    else {
-        // The active layer's own pixels as placed, without its mask, opacity, blend or clipping (as on the Mac).
-        const Layer* layer = activeLayer();
-        if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image) return;
-        Document single(document_->width, document_->height);
-        Layer copy = *layer;
-        copy.parentId.reset();
-        copy.visible = true;
-        copy.opacity = 1;
-        copy.blendMode = BlendMode::Normal;
-        copy.mask.reset();
-        copy.maskSourceId.reset();
-        copy.transform = displayedTransform(*layer);
-        single.layers = {copy};
-        pixels = renderFlattened(single);
+    const Layer* layer = sampleAllLayers ? nullptr : activeLayer();
+    if (!sampleAllLayers && (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image)) return;
+    // The sampled pixels are kept between clicks on the same document state (repeated wand clicks are common).
+    Uuid layerId = layer ? layer->id : Uuid{};
+    bool cached = wandSample_ && wandSampleAll_ == sampleAllLayers && wandSampleLayer_ == layerId && wandSampleRevision_ == documentRevision_;
+    if (!cached) {
+        if (sampleAllLayers) wandSample_ = renderFlattened(*document_);
+        else {
+            // The active layer's own pixels as placed, without its mask, opacity, blend or clipping (as on the Mac).
+            Document single(document_->width, document_->height);
+            Layer copy = *layer;
+            copy.parentId.reset();
+            copy.visible = true;
+            copy.opacity = 1;
+            copy.blendMode = BlendMode::Normal;
+            copy.mask.reset();
+            copy.maskSourceId.reset();
+            copy.transform = displayedTransform(*layer);
+            single.layers = {copy};
+            wandSample_ = renderFlattened(single);
+        }
+        wandSampleAll_ = sampleAllLayers; wandSampleLayer_ = layerId; wandSampleRevision_ = documentRevision_;
     }
     auto mask = std::make_shared<GrayImage>(document_->width, document_->height);
-    long count = wand_mask(pixels->data(), size_t(document_->width), size_t(document_->height), size_t(pixels->stride()), size_t(x), size_t(y), std::clamp(sampleRadius, 0, 2), tolerance, contiguous ? 1 : 0, mask->data());
+    long count = wandMask(*wandSample_, x, y, std::clamp(sampleRadius, 0, 2), tolerance, contiguous, *mask);
     if (count < 0) return;
     applySelectionShape(*mask, mode, "Magic Wand");
 }

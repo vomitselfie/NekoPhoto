@@ -16,6 +16,15 @@ struct ChannelTables {
 /// float reference for opaque pixels, within 1 LSB elsewhere.
 void applyChannelTables(Image& image, const ChannelTables& tables);
 
+/// Hue/Saturation: a 33-point colour cube of straight RGB in 8.8 fixed point (0..65280), laid out
+/// [blue][green][red][channel], sampled tetrahedrally (four corners, exact on the greys and on the
+/// r = g, g = b and r = b creases where trilinear interpolation bends).
+constexpr int cubeDim = 33;
+void applyColorCube(Image& image, const uint16_t* cube);
+/// Colorize: the output colour depends only on the pixel's lightness (max + min) / 2, so a 511-entry
+/// table of straight RGB in 8.8 fixed point keyed by max + min of the straight channels is exact.
+void applyLightnessTable(Image& image, const uint16_t* table);
+
 /// Add Noise: the reference's hash-based uniform or Gaussian noise, row-parallel and with the monochromatic
 /// value computed once per pixel. Identical output to the reference.
 void addNoise(Image& image, float amount, bool gaussian, bool monochromatic, uint32_t seed);

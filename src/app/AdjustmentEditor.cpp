@@ -344,6 +344,11 @@ QWidget* AdjustmentEditor::buildHsv() {
     connect(invert, &QCheckBox::toggled, this, [this](bool on) { if (syncing_) return; emit editStarted(); settings_.hsv.invertRange = on; changed(); emit editFinished(); });
     syncers_.push_back([this, invert] { invert->setChecked(settings_.hsv.invertRange); invert->setEnabled(settings_.hsv.range != 0 && !settings_.hsv.colorize); });
     v->addWidget(invert);
+    auto* curve = new QCheckBox(tr("Photoshop saturation curve"));
+    curve->setToolTip(tr("+100 reaches full saturation and -100 grey, keeping the lightness, as Photoshop's slider does; off scales saturation as the Mac app does."));
+    connect(curve, &QCheckBox::toggled, this, [this](bool on) { if (syncing_) return; emit editStarted(); settings_.hsv.photoshopSaturation = on; changed(); emit editFinished(); });
+    syncers_.push_back([this, curve] { curve->setChecked(settings_.hsv.photoshopSaturation); curve->setEnabled(!settings_.hsv.colorize); });
+    v->addWidget(curve);
     // Eyedroppers and the targeted-adjustment tool: they take the next canvas click(s).
     auto* tools = new QHBoxLayout;
     auto* group = new QButtonGroup(w);

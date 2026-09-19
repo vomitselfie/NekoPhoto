@@ -8,6 +8,7 @@
 #include "compositor/morphology.h"
 #include "compositor/brush.h"
 #include "compositor/warp.h"
+#include "compositor/wand.h"
 #include "compositor/subject.h"
 #include "compositor/render.h"
 #include "compositor/selection.h"
@@ -146,6 +147,11 @@ int main(int argc, char** argv) {
                 }, 2));
             }
         }
+    }
+    if (want("wand")) {
+        GrayImage mask(W, H);
+        report("magic wand contiguous tol 40", timeMs([&] { wandMask(base, W / 2, H / 2, 1, 40, true, mask); }));
+        report("magic wand global tol 40", timeMs([&] { wandMask(base, W / 2, H / 2, 1, 40, false, mask); }));
     }
     if (want("matte")) {
         GrayImage mask(W, H, 0);

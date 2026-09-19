@@ -178,7 +178,7 @@ packaging/                      .desktop, icon, MIME type
 - Wayland, X11, HiDPI and fractional scaling; tablet input (as a pointer).
 - Adjustment layers: Levels (with histogram, Auto and black / gray / white
   point samplers), Curves (draggable
-  points), Hue/Saturation (per-range, colorize), Exposure, Gradient Map and
+  points), Hue/Saturation (per-range, colorize, an optional Photoshop-style saturation curve), Exposure, Gradient Map and
   Grain, edited live in the Adjustments panel, saved in the Mac's format.
 - Image > Adjustments applies the same six to a layer's pixels with a live
   preview, inside the selection; Invert works on pixels and masks.
