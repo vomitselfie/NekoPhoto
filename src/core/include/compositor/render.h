@@ -16,6 +16,22 @@ struct RenderOptions {
     double scale = 1;
     /// Blank the output first (false lets a caller draw over an existing backdrop).
     bool clear = true;
+    /// The caller's document version, for a RenderCache: bump it whenever the document changes.
+    uint64_t version = 0;
+};
+
+/// What a caller keeps between frames while one layer is being edited (the one layer with an override):
+/// the layers below it composited, and, when every layer above is a plain Normal pixel layer, those
+/// flattened, so a frame is backdrop + the edited layer + one blend. Rebuilt when the version, region,
+/// scale or edited layer changes.
+struct RenderCache {
+    uint64_t version = 0;
+    Rect region;
+    double scale = 0;
+    int width = 0, height = 0;
+    Uuid layer;
+    std::shared_ptr<Image> backdrop, above;
+    bool aboveFlat = false;
 };
 
 /// Per-layer overrides while an edit is in progress (a transform being dragged, a brush stroke).
@@ -29,7 +45,7 @@ struct LayerOverride {
 using Overrides = std::map<Uuid, LayerOverride>;
 
 /// Renders `document` into `out`, which is sized to fit `options.region * options.scale`.
-void render(const Document& document, const RenderOptions& options, Image& out, const Overrides* overrides = nullptr);
+void render(const Document& document, const RenderOptions& options, Image& out, const Overrides* overrides = nullptr, RenderCache* cache = nullptr);
 /// Convenience: the whole document at 1:1.
 std::shared_ptr<Image> renderFlattened(const Document& document);
 

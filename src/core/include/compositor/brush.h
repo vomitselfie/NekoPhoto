@@ -23,6 +23,9 @@ struct BrushSettings {
     bool healing = false;
     int healingMode = 0;
     uint32_t healingSeed = 0;
+    /// Dabs on a grid aligned with the document come from a precomputed tile at a quarter-pixel phase;
+    /// off, every dab is computed per pixel (the reference the stamps are held to in tests).
+    bool stampedDabs = true;
 };
 
 /// Clone Stamp: a document-sized image to copy from, and the offset from each painted point to its source.
@@ -117,6 +120,15 @@ private:
     /// of computing a square root and a falloff per pixel.
     std::vector<uint8_t> dabTable_;
     double dabTableRadius_ = -1, dabTableHardness_ = -1, dabTableFootprint_ = -1, dabTableScale_ = 0;
+    /// On a grid aligned with the document, a dab is a precomputed tile at one of 4x4 subpixel phases,
+    /// merged row by row (Krita's dab cache); the tile is rebuilt when the tip or the grid scale changes.
+    struct Stamp {
+        int side = 0;
+        double radius = -1, hardness = -1, scale = 0;
+        std::vector<uint8_t> tiles[16];
+    };
+    Stamp stamp_;
+    bool stampDab(Point center, double radius, const Rect& affected);
     void refreshDabTable(double radius, double hardness, double footprint);
     bool touched_ = false;
     // A provisional straight tail is drawn to the newest sample and undone when the next arrives.

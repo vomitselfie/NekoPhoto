@@ -65,11 +65,13 @@ void refGaussianRows(std::vector<float>& data, int w, int h, double sigma) {
     }
 }
 
-void refGaussian(Image& image, double sigma) {
+/// The true separable Gaussian (an FIR out to three sigma) at any sigma, or Kovesi's three-box
+/// approximation when `boxes` is set (what the blur used before the recursive Gaussian).
+void refGaussian(Image& image, double sigma, bool boxes = false) {
     int w = image.width(), h = image.height();
     std::vector<float> data(size_t(w) * h * 4), transposed;
     for (int y = 0; y < h; y++) { const uint8_t* p = image.row(y); for (int i = 0; i < w * 4; i++) data[size_t(y) * w * 4 + i] = p[i]; }
-    if (sigma <= 6) {
+    if (!boxes) {
         refGaussianRows(data, w, h, sigma);
         refTranspose(data, transposed, w, h);
         refGaussianRows(transposed, h, w, sigma);
@@ -172,15 +174,22 @@ TEST_CASE(gaussian_fir_matches_reference) {
     }
 }
 
-TEST_CASE(gaussian_box_matches_reference) {
-    for (double sigma : {6.5, 12.0, 30.0}) {
+TEST_CASE(gaussian_recursive_matches_the_true_gaussian) {
+    // Above sigma 6 the blur is Deriche's recursive fit: within a level or two of the true Gaussian at every
+    // sigma, where the three-box approximation it replaces drifts by several levels.
+    for (double sigma : {6.5, 12.0, 30.0, 90.0}) {
         Image fast = scene(), reference = scene();
         gaussianBlur(fast, sigma);
         refGaussian(reference, sigma);
         Diff d = compare(fast, reference);
         CHECK(d.max <= 2);
+        CHECK(d.mean < 0.3);
         CHECK(premultipliedValid(fast));
     }
+    Image boxes = scene(), truth = scene();
+    refGaussian(boxes, 12.0, true);
+    refGaussian(truth, 12.0);
+    CHECK(compare(boxes, truth).max > 2);
 }
 
 TEST_CASE(gaussian_gray_matches_rgba_channel) {

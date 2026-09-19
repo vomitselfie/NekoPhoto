@@ -356,6 +356,8 @@ public:
     void zoomTo(double zoom, std::optional<QPointF> anchor = std::nullopt);
     /// The overrides the renderer needs while an edit is in progress.
     compositor::Overrides renderOverrides() const;
+    /// Bumped on every document notification; what render caches key on.
+    uint64_t documentRevision() const { return documentRevision_; }
 
 signals:
     /// The document's pixels or structure changed; `region` is the document area affected (empty means all).

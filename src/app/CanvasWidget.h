@@ -82,6 +82,7 @@ private:
 
     EditorSession* session_;
     QImage cache_;
+    compositor::RenderCache renderCache_;   // the layers around the one being edited, kept between frames
     QRect cacheDeviceRect_;
     QPointF cacheDocumentOrigin_;
     double cacheZoom_ = 0;

@@ -114,9 +114,10 @@ void CanvasWidget::renderInto(QImage& target, QRect deviceRect, QPointF document
     RenderOptions options;
     options.region = Rect((deviceRect.x() - documentOrigin.x()) / zoom, (deviceRect.y() - documentOrigin.y()) / zoom, deviceRect.width() / zoom, deviceRect.height() / zoom);
     options.scale = zoom;
+    options.version = session_->documentRevision();
     Image out;
     Overrides overrides = session_->renderOverrides();
-    compositor::render(*session_->document(), options, out, overrides.empty() ? nullptr : &overrides);
+    compositor::render(*session_->document(), options, out, overrides.empty() ? nullptr : &overrides, &renderCache_);
     target = toQImage(out);
 }
 

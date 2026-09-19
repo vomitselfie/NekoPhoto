@@ -247,6 +247,55 @@ void BrushStroke::refreshDabTable(double radius, double hardness, double footpri
     }
 }
 
+bool BrushStroke::stampDab(Point center, double radius, const Rect& affected) {
+    const Affine& g = pixelToDocument_;
+    if (!settings_.stampedDabs || g.b != 0 || g.c != 0 || g.a != g.d || !(g.a > 0)) return false;
+    const double scale = g.a;                      // document units per grid pixel
+    const double gridRadius = radius / scale;
+    const int side = 2 * int(std::ceil(gridRadius + 1)) + 2;
+    if (side > 512) return false;
+    const bool hard = settings_.hardness >= 1;
+    if (stamp_.side != side || stamp_.radius != radius || stamp_.hardness != settings_.hardness || stamp_.scale != scale) {
+        // The tip at each phase, from the same profile table the general path reads.
+        stamp_.side = side; stamp_.radius = radius; stamp_.hardness = settings_.hardness; stamp_.scale = scale;
+        const double reach2 = (radius + scale) * (radius + scale);
+        for (int phase = 0; phase < 16; phase++) {
+            const double cx = side / 2 + (phase & 3) / 4.0, cy = side / 2 + (phase >> 2) / 4.0;
+            std::vector<uint8_t>& tile = stamp_.tiles[phase];
+            tile.assign(size_t(side) * side, 0);
+            for (int j = 0; j < side; j++)
+                for (int i = 0; i < side; i++) {
+                    const double dx = (i + 0.5 - cx) * scale, dy = (j + 0.5 - cy) * scale, q = dx * dx + dy * dy;
+                    if (q >= reach2) continue;
+                    const double index = q * dabTableScale_;
+                    const int k = int(index);
+                    const unsigned frac = unsigned((index - k) * 256);
+                    tile[size_t(j) * side + size_t(i)] = uint8_t((dabTable_[size_t(k)] * (256 - frac) + dabTable_[size_t(k) + 1] * frac + 128) >> 8);
+                }
+        }
+    }
+    // Where the tile lands: its centre pixel on the grid pixel under the dab, at the nearest quarter phase
+    // (an eighth of a pixel off at most).
+    const Point gc = documentToPixel_.apply(center);
+    const int qx = int(std::floor(gc.x * 4 + 0.5)), qy = int(std::floor(gc.y * 4 + 0.5));   // quarter pixels
+    const int phase = (qx & 3) | ((qy & 3) << 2);
+    const int ox = (qx >> 2) - side / 2, oy = (qy >> 2) - side / 2;
+    // Rows and columns whose pixel centres lie on the canvas and in the affected rect.
+    const Rect canvasGrid = documentToPixel_.mapBounds(canvas_);
+    const int x0 = std::max({int(affected.minX()), ox, int(std::ceil(canvasGrid.minX() - 0.5))}), x1 = std::min({int(affected.maxX()), ox + side, int(std::ceil(canvasGrid.maxX() - 0.5))});
+    const int y0 = std::max({int(affected.minY()), oy, int(std::ceil(canvasGrid.minY() - 0.5))}), y1 = std::min({int(affected.maxY()), oy + side, int(std::ceil(canvasGrid.maxY() - 0.5))});
+    if (x0 >= x1 || y0 >= y1) return true;
+    const std::vector<uint8_t>& tile = stamp_.tiles[phase];
+    const int n = x1 - x0;
+    for (int y = y0; y < y1; y++) {
+        uint8_t* row = coverage_->row(y) + x0;
+        const uint8_t* t = &tile[size_t(y - oy) * side + size_t(x0 - ox)];
+        if (hard) for (int i = 0; i < n; i++) row[i] = std::max(row[i], t[i]);
+        else for (int i = 0; i < n; i++) row[i] = uint8_t(row[i] + ((t[i] * (255 - row[i]) + 127) / 255));
+    }
+    return true;
+}
+
 void BrushStroke::dab(Point center) {
     double radius = settings_.diameter / 2;
     Rect circle(center.x - radius, center.y - radius, radius * 2, radius * 2);
@@ -257,6 +306,7 @@ void BrushStroke::dab(Point center) {
     // Document units per grid pixel, for antialiasing the rim.
     double footprint = std::hypot(pixelToDocument_.a, pixelToDocument_.b);
     refreshDabTable(radius, settings_.hardness, footprint);
+    if (stampDab(center, radius, affected)) { markDirty(affected); return; }
     const bool hard = settings_.hardness >= 1;
     const bool whollyInside = clipped == circle;
     const double reach2 = (radius + footprint) * (radius + footprint);

@@ -915,6 +915,81 @@ TEST_CASE(adjustment_layers_render_as_their_direct_application) {
     CHECK_EQ(std::memcmp(masked->data(), again.data(), masked->byteCount()), 0);
 }
 
+TEST_CASE(render_cache_matches_a_plain_render) {
+    // Five layers, the third being edited through an override: with a cache the frame must match the plain
+    // render, whether the layers above are plain (flattened once) or not (drawn live).
+    Document doc(120, 90);
+    for (int i = 0; i < 5; i++) {
+        Layer l = imageLayer("L" + std::to_string(i), solid(60, 40, uint8_t(50 * i), uint8_t(255 - 40 * i), uint8_t(30 * i), uint8_t(i == 1 ? 160 : 255)), {10.0 * i, 8.0 * i});
+        l.transform.rotation = i == 3 ? 20 : 0;
+        l.opacity = i == 4 ? 0.7 : 1;
+        doc.layers.push_back(l);
+    }
+    auto stroke = solid(60, 40, 255, 255, 0);
+    Overrides overrides;
+    overrides[doc.layers[2].id].image = stroke;
+    RenderOptions o;
+    o.region = Rect(5, 5, 100, 70);
+    o.scale = 1.5;
+    o.version = 7;
+    Image plain, cached, again;
+    render(doc, o, plain, &overrides);
+    RenderCache cache;
+    render(doc, o, cached, &overrides, &cache);
+    REQUIRE(cache.backdrop != nullptr);
+    CHECK(cache.aboveFlat);
+    CHECK(cache.above != nullptr);
+    CHECK_EQ(std::memcmp(plain.data(), cached.data(), plain.byteCount()), 0);
+    render(doc, o, again, &overrides, &cache);   // from the cache
+    CHECK_EQ(std::memcmp(plain.data(), again.data(), plain.byteCount()), 0);
+    // A Multiply layer above: the layers above are drawn live, the backdrop still cached.
+    doc.layers[4].blendMode = BlendMode::Multiply;
+    o.version = 8;
+    render(doc, o, plain, &overrides);
+    render(doc, o, cached, &overrides, &cache);
+    CHECK(!cache.aboveFlat);
+    CHECK_EQ(std::memcmp(plain.data(), cached.data(), plain.byteCount()), 0);
+    // A layer clipped to the edited one leaves the cache aside.
+    doc.layers[3].maskSourceId = doc.layers[2].id;
+    o.version = 9;
+    render(doc, o, plain, &overrides);
+    render(doc, o, cached, &overrides, &cache);
+    CHECK_EQ(std::memcmp(plain.data(), cached.data(), plain.byteCount()), 0);
+}
+
+TEST_CASE(stamped_dabs_match_the_general_path) {
+    // The same stroke with stamped dabs and with per-pixel dabs: the interior and the outside agree exactly,
+    // the antialiased rim within the quarter-pixel phase the stamp snaps to.
+    Document doc(200, 120);
+    for (double hardness : {1.0, 0.5}) {
+        std::shared_ptr<Image> results[2];
+        for (int stamped = 0; stamped < 2; stamped++) {
+            BrushSettings s;
+            s.diameter = 41; s.hardness = hardness; s.stampedDabs = stamped == 1;
+            Layer flat = imageLayer("flat", solid(200, 120, 0, 0, 0, 0), {0, 0});
+            BrushStroke stroke(flat, false, s, doc.size());
+            REQUIRE(stroke.isValid());
+            stroke.append({40.3, 60.6});
+            stroke.append({150.7, 60.2});
+            stroke.append({160.1, 100.9});
+            stroke.flush();
+            results[stamped] = std::make_shared<Image>(*stroke.previewImage());
+        }
+        int worst = 0; long total = 0, count = 0;
+        for (int y = 0; y < 120; y++)
+            for (int x = 0; x < 200; x++) {
+                int a = results[0]->pixel(x, y)[3], b = results[1]->pixel(x, y)[3];
+                if ((a == 0) != (b == 0)) { CHECK(std::min(a, b) <= 40); }
+                if (a == 255 || b == 255) CHECK(std::abs(a - b) <= 40);
+                worst = std::max(worst, std::abs(a - b)); total += std::abs(a - b); count++;
+            }
+        CHECK(worst <= 48);
+        CHECK(double(total) / double(count) < 0.6);
+        CHECK_EQ(int(results[1]->pixel(90, 60)[3]), 255);
+        CHECK_EQ(int(results[1]->pixel(90, 20)[3]), 0);
+    }
+}
+
 TEST_CASE(matte_refinement_follows_the_guide) {
     // A hard vertical edge in the guide at x=20; a coarse mask edge at x=24 gets pulled onto the guide's edge.
     auto guide = std::make_shared<Image>(40, 40);

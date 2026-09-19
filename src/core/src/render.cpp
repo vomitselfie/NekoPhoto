@@ -642,16 +642,14 @@ struct Renderer {
         });
     }
 
-    void run(Image& out) {
-        for (auto& l : document.layers) byId[l.id] = &l;
-        order = renderLayers(document.layers);
-        prepareStacks();
-        for (size_t index = 0; index < order.size();) {
+    /// Draws the layers order[from, to) over `out`.
+    void drawRange(Image& out, size_t from, size_t to) {
+        for (size_t index = from; index < to;) {
             // A run of table-driven adjustment layers (Levels, Curves, Exposure) at full opacity in Normal mode
             // with no masks composes into one transfer: one pass over the canvas, quantised once.
             std::optional<Transfer> fused;
             size_t end = index;
-            for (; end < order.size(); end++) {
+            for (; end < to; end++) {
                 std::optional<Transfer> next = fusibleTransfer(*order[end]);
                 if (!next) break;
                 fused = fused ? composeTransfer(*fused, *next) : std::move(next);
@@ -661,18 +659,75 @@ struct Renderer {
             index++;
         }
     }
+
+    /// The one layer with an override, when a cache can be kept around it: a plain pixel layer that no other
+    /// layer clips to or takes its mask from. SIZE_MAX otherwise.
+    size_t editedIndex() const {
+        if (!overrides || overrides->size() != 1) return SIZE_MAX;
+        const Uuid& id = overrides->begin()->first;
+        size_t index = SIZE_MAX;
+        for (size_t i = 0; i < order.size(); i++) if (order[i]->id == id) index = i;
+        if (index == SIZE_MAX) return SIZE_MAX;
+        const Layer& l = *order[index];
+        if (l.adjustment || l.maskSourceId || stacks.count(l.id) || stacked.count(l.id)) return SIZE_MAX;
+        for (auto& other : document.layers) if (other.maskSourceId && *other.maskSourceId == id) return SIZE_MAX;
+        return index;
+    }
+
+    /// A layer above the edited one that composites as plain source-over, so a group of them can be
+    /// flattened once and laid over the frame.
+    bool plainAbove(const Layer& l) {
+        return !l.adjustment && !l.maskSourceId && !stacks.count(l.id) && !stacked.count(l.id) && blendOf(l) == BlendMode::Normal;
+    }
+
+    void runCached(Image& out, RenderCache& cache, uint64_t version, size_t edited) {
+        const Layer& layer = *order[edited];
+        const bool valid = cache.backdrop && cache.version == version && cache.layer == layer.id && cache.width == outWidth && cache.height == outHeight
+            && cache.region == region && cache.scale == scale;
+        if (!valid) {
+            cache.version = version; cache.layer = layer.id; cache.width = outWidth; cache.height = outHeight; cache.region = region; cache.scale = scale;
+            cache.backdrop = std::make_shared<Image>(outWidth, outHeight);
+            drawRange(*cache.backdrop, 0, edited);
+            cache.above.reset();
+            cache.aboveFlat = true;
+            for (size_t i = edited + 1; i < order.size(); i++) if (!plainAbove(*order[i])) { cache.aboveFlat = false; break; }
+            if (cache.aboveFlat && edited + 1 < order.size()) {
+                cache.above = std::make_shared<Image>(outWidth, outHeight);
+                drawRange(*cache.above, edited + 1, order.size());
+            }
+        }
+        std::memcpy(out.data(), cache.backdrop->data(), out.byteCount());
+        drawComposite(layer, out);
+        if (!cache.aboveFlat) { drawRange(out, edited + 1, order.size()); return; }
+        if (!cache.above) return;
+        // Source-over is associative: the flattened layers above go on in one pass.
+        const std::vector<uint16_t> steps(size_t(outWidth), coverageSteps(1.0f));
+        parallelRows(0, outHeight, [&](int y0, int y1) {
+            for (int y = y0; y < y1; y++) compositeSpanNormal(cache.above->row(y), steps.data(), out.row(y), outWidth);
+        });
+    }
+
+    void run(Image& out, RenderCache* cache, uint64_t version) {
+        for (auto& l : document.layers) byId[l.id] = &l;
+        order = renderLayers(document.layers);
+        prepareStacks();
+        const size_t edited = cache ? editedIndex() : SIZE_MAX;
+        if (edited != SIZE_MAX) runCached(out, *cache, version, edited);
+        else drawRange(out, 0, order.size());
+    }
 };
 
 } // namespace
 
-void render(const Document& document, const RenderOptions& options, Image& out, const Overrides* overrides) {
+void render(const Document& document, const RenderOptions& options, Image& out, const Overrides* overrides, RenderCache* cache) {
     Rect region = options.region.isEmpty() ? document.rect() : options.region;
     double scale = options.scale > 0 ? options.scale : 1;
     int w = std::max(1, int(std::ceil(region.width * scale - 1e-9))), h = std::max(1, int(std::ceil(region.height * scale - 1e-9)));
     if (out.width() != w || out.height() != h) out = Image(w, h);
     else if (options.clear) out.clear();
     Renderer renderer(document, overrides, region, scale, w, h);
-    renderer.run(out);
+    // The cache replaces the whole frame, so it only applies when the frame is being cleared anyway.
+    renderer.run(out, options.clear ? cache : nullptr, options.version);
 }
 
 std::shared_ptr<Image> renderFlattened(const Document& document) {

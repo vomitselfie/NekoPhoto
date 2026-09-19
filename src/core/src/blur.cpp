@@ -99,101 +99,104 @@ void firColumns(const std::vector<float>& in, typename Raster<C>::Type& image, c
 
 // ---- large sigma: three integer box passes ---------------------------------------------------------
 
-// Three box blurs approximating a Gaussian of standard deviation sigma (Kovesi's sizes).
-void boxSizes(double sigma, int sizes[3]) {
-    double wIdeal = std::sqrt(12 * sigma * sigma / 3 + 1);
-    int wl = int(std::floor(wIdeal));
-    if (wl % 2 == 0) wl--;
-    int wu = wl + 2;
-    double mIdeal = (12 * sigma * sigma - 3 * wl * wl - 12 * wl - 9) / (-4 * wl - 4);
-    int m = int(std::round(mIdeal));
-    for (int i = 0; i < 3; i++) sizes[i] = i < m ? wl : wu;
+// ---- large sigma: Deriche's recursive Gaussian ----------------------------------------------------
+//
+// A fourth-order IIR fit to the Gaussian (Deriche 1993; Getreuer, IPOL 2013): a causal and an anticausal
+// pass whose sum is within 0.05 % of the true kernel at every sigma, at a cost independent of sigma.
+// y+[n] = sum b_k x[n-k] - sum a_k y+[n-k]; y-[n] = sum b'_k x[n+k] - sum a_k y-[n+k]; y = y+ + y-.
+
+struct DericheFilter {
+    double b[4], a[4], anti[4];   // b0..b3, a1..a4, b'1..b'4
+};
+
+DericheFilter dericheFor(double sigma) {
+    // Deriche's fit: h(n) = sum_k e^{-l_k n/s} (alpha_k cos(w_k n/s) + beta_k sin(w_k n/s)), n >= 0.
+    static const double alpha[2] = {1.6800, -0.6803}, beta[2] = {3.7350, -0.2598}, omega[2] = {0.6318, 1.9970}, lambda[2] = {1.7830, 1.7230};
+    // Each term is (n0 + n1 z^-1) / (1 + d1 z^-1 + d2 z^-2); the sum has a cubic numerator over a quartic.
+    double n[2][2], d[2][3];
+    for (int k = 0; k < 2; k++) {
+        const double e = std::exp(-lambda[k] / sigma), c = std::cos(omega[k] / sigma), sn = std::sin(omega[k] / sigma);
+        n[k][0] = alpha[k];
+        n[k][1] = -alpha[k] * e * c + beta[k] * e * sn;
+        d[k][0] = 1; d[k][1] = -2 * e * c; d[k][2] = e * e;
+    }
+    double num[4] = {0, 0, 0, 0}, den[5] = {0, 0, 0, 0, 0};
+    for (int i = 0; i < 2; i++) for (int j = 0; j < 3; j++) { num[i + j] += n[0][i] * d[1][j]; num[i + j] += n[1][i] * d[0][j]; }
+    for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++) den[i + j] += d[0][i] * d[1][j];
+    DericheFilter f;
+    for (int k = 0; k < 4; k++) { f.b[k] = num[k]; f.a[k] = den[k + 1]; }
+    // The anticausal numerator from the causal one, then both scaled so the whole response sums to one.
+    for (int k = 0; k < 4; k++) f.anti[k] = (k < 3 ? f.b[k + 1] : 0) - f.a[k] * f.b[0];
+    double sumB = 0, sumA = 1, sumAnti = 0;
+    for (int k = 0; k < 4; k++) { sumB += f.b[k]; sumA += f.a[k]; sumAnti += f.anti[k]; }
+    const double gain = (sumB + sumAnti) / sumA;
+    for (int k = 0; k < 4; k++) { f.b[k] /= gain; f.anti[k] /= gain; }
+    return f;
 }
 
-/// Values travel between passes as 8.8 fixed point in uint16.
-using Fixed = uint16_t;
-
-/// Vertical box of radius r over column bands: a running column sum per value, divided as it goes.
+/// Both passes along one line of `n` samples with `lanes` interleaved channels (a row, or a band of columns
+/// when `stride` steps between rows); beyond the ends the signal is zero (transparent), as for the FIR.
 template <int C>
-void boxColumns(const std::vector<Fixed>& in, std::vector<Fixed>& out, int w, int h, int r) {
-    const int n = 2 * r + 1;
-    const float inv = 1.0f / n;   // a multiply instead of an integer division per value
-    const int bands = (w + bandColumns - 1) / bandColumns;
-    out.resize(in.size());
-    parallelRows(0, bands, [&](int b0, int b1) {
-        std::vector<int32_t> sum(size_t(bandColumns) * C);
-        for (int b = b0; b < b1; b++) {
-            const int x0 = b * bandColumns, len = std::min(bandColumns, w - x0) * C;
-            std::fill(sum.begin(), sum.begin() + len, 0);
-            for (int y = 0; y < std::min(r, h); y++) {
-                const Fixed* p = &in[(size_t(y) * w + x0) * C];
-                for (int j = 0; j < len; j++) sum[size_t(j)] += p[j];
-            }
-            for (int y = 0; y < h; y++) {
-                if (y + r < h) { const Fixed* p = &in[(size_t(y + r) * w + x0) * C]; for (int j = 0; j < len; j++) sum[size_t(j)] += p[j]; }
-                if (y - r - 1 >= 0) { const Fixed* p = &in[(size_t(y - r - 1) * w + x0) * C]; for (int j = 0; j < len; j++) sum[size_t(j)] -= p[j]; }
-                Fixed* o = &out[(size_t(y) * w + x0) * C];
-                for (int j = 0; j < len; j++) o[j] = Fixed(int32_t(float(sum[size_t(j)]) * inv + 0.5f));
-            }
+void dericheLine(const float* in, float* out, int n, int lanes, size_t stride, const DericheFilter& f, double* scratch) {
+    if (n <= 0 || lanes <= 0) return;
+    // The feedback cancels large terms (the poles sit near 1 for a wide kernel), so the state and the sums
+    // are double; the samples stay float.
+    const double b0 = f.b[0], b1 = f.b[1], b2 = f.b[2], b3 = f.b[3];
+    const double a1 = f.a[0], a2 = f.a[1], a3 = f.a[2], a4 = f.a[3];
+    const double c1 = f.anti[0], c2 = f.anti[1], c3 = f.anti[2], c4 = f.anti[3];
+    const size_t count = size_t(lanes);
+    double *x1 = scratch, *x2 = x1 + count, *x3 = x2 + count, *x4 = x3 + count, *y1 = x4 + count, *y2 = y1 + count, *y3 = y2 + count, *y4 = y3 + count;
+    std::fill(scratch, scratch + count * 8, 0.0);
+    for (int i = 0; i < n; i++) {
+        const float* x = in + size_t(i) * stride;
+        float* y = out + size_t(i) * stride;
+        for (size_t l = 0; l < count; l++) {
+            const double v = b0 * x[l] + b1 * x1[l] + b2 * x2[l] + b3 * x3[l] - a1 * y1[l] - a2 * y2[l] - a3 * y3[l] - a4 * y4[l];
+            x3[l] = x2[l]; x2[l] = x1[l]; x1[l] = x[l];
+            y4[l] = y3[l]; y3[l] = y2[l]; y2[l] = y1[l]; y1[l] = v;
+            y[l] = float(v);
         }
-    }, 1);
-}
-
-/// Horizontal box of radius r per row.
-template <int C>
-void boxRows(const std::vector<Fixed>& in, std::vector<Fixed>& out, int w, int h, int r) {
-    const int n = 2 * r + 1;
-    const float inv = 1.0f / n;
-    out.resize(in.size());
-    parallelRows(0, h, [&](int y0, int y1) {
-        for (int y = y0; y < y1; y++) {
-            const Fixed* src = &in[size_t(y) * w * C];
-            Fixed* dst = &out[size_t(y) * w * C];
-            int32_t sum[C] = {};
-            for (int x = 0; x < std::min(r, w); x++) for (int c = 0; c < C; c++) sum[c] += src[size_t(x) * C + c];
-            for (int x = 0; x < w; x++) {
-                if (x + r < w) for (int c = 0; c < C; c++) sum[c] += src[size_t(x + r) * C + c];
-                if (x - r - 1 >= 0) for (int c = 0; c < C; c++) sum[c] -= src[size_t(x - r - 1) * C + c];
-                for (int c = 0; c < C; c++) dst[size_t(x) * C + c] = Fixed(int32_t(float(sum[c]) * inv + 0.5f));
-            }
+    }
+    std::fill(scratch, scratch + count * 8, 0.0);
+    for (int i = n - 1; i >= 0; i--) {
+        const float* x = in + size_t(i) * stride;
+        float* y = out + size_t(i) * stride;
+        for (size_t l = 0; l < count; l++) {
+            const double v = c1 * x1[l] + c2 * x2[l] + c3 * x3[l] + c4 * x4[l] - a1 * y1[l] - a2 * y2[l] - a3 * y3[l] - a4 * y4[l];
+            x4[l] = x3[l]; x3[l] = x2[l]; x2[l] = x1[l]; x1[l] = x[l];
+            y4[l] = y3[l]; y3[l] = y2[l]; y2[l] = y1[l]; y1[l] = v;
+            y[l] += float(v);
         }
-    });
+    }
 }
 
 template <int C>
-void boxGaussian(typename Raster<C>::Type& image, double sigma) {
+void dericheGaussian(typename Raster<C>::Type& image, double sigma) {
     const int w = image.width(), h = image.height();
-    int sizes[3];
-    boxSizes(sigma, sizes);
-    std::vector<Fixed> a(size_t(w) * h * C), b;
+    const DericheFilter f = dericheFor(sigma);
+    // Rows: bytes in, floats out.
+    std::vector<float> rows(size_t(w) * h * C);
     parallelRows(0, h, [&](int y0, int y1) {
+        std::vector<float> in(size_t(w) * C);
+        std::vector<double> scratch(8 * size_t(C));
         for (int y = y0; y < y1; y++) {
             const uint8_t* p = Raster<C>::row(image, y);
-            Fixed* f = &a[size_t(y) * w * C];
-            for (int i = 0; i < w * C; i++) f[i] = Fixed(p[i] << 8);
+            for (int i = 0; i < w * C; i++) in[size_t(i)] = p[i];
+            dericheLine<C>(in.data(), &rows[size_t(y) * w * C], w, C, C, f, scratch.data());
         }
     });
-    for (int s : sizes) {
-        const int r = (s - 1) / 2;
-        if (r <= 0) continue;
-        boxRows<C>(a, b, w, h, r);
-        boxColumns<C>(b, a, w, h, r);
-    }
-    parallelRows(0, h, [&](int y0, int y1) {
-        for (int y = y0; y < y1; y++) {
-            uint8_t* p = Raster<C>::row(image, y);
-            const Fixed* f = &a[size_t(y) * w * C];
-            for (int x = 0; x < w; x++, p += C, f += C) {
-                if constexpr (C == 4) {
-                    uint8_t alpha = uint8_t(std::min(255u, (unsigned(f[3]) + 128u) >> 8));
-                    for (int c = 0; c < 3; c++) p[c] = uint8_t(std::min(unsigned(alpha), (unsigned(f[c]) + 128u) >> 8));
-                    p[3] = alpha;
-                } else {
-                    p[0] = uint8_t(std::min(255u, (unsigned(f[0]) + 128u) >> 8));
-                }
-            }
+    // Columns in bands, row-major: the recursion steps down the rows while the inner loop runs across the band.
+    const int bands = (w + bandColumns - 1) / bandColumns;
+    parallelRows(0, bands, [&](int b0, int b1) {
+        std::vector<float> band(size_t(bandColumns) * C * h), in(size_t(bandColumns) * C * h);
+        std::vector<double> scratch(8 * size_t(bandColumns) * C);
+        for (int b = b0; b < b1; b++) {
+            const int x0 = b * bandColumns, lanes = std::min(bandColumns, w - x0) * C;
+            for (int y = 0; y < h; y++) std::copy_n(&rows[(size_t(y) * w + size_t(x0)) * C], lanes, &in[size_t(y) * lanes]);
+            dericheLine<C>(in.data(), band.data(), h, lanes, size_t(lanes), f, scratch.data());
+            for (int y = 0; y < h; y++) storeRow<C>(Raster<C>::row(image, y) + size_t(x0) * C, &band[size_t(y) * lanes], lanes / C);
         }
-    });
+    }, 1);
 }
 
 template <int C>
@@ -206,7 +209,7 @@ void gaussianBlurImpl(typename Raster<C>::Type& image, double sigma) {
         firRows<C>(image, rows, kernel, radius);
         firColumns<C>(rows, image, kernel, radius);
     } else {
-        boxGaussian<C>(image, sigma);
+        dericheGaussian<C>(image, sigma);
     }
 }
 

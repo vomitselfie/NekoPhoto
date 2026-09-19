@@ -125,6 +125,13 @@ int main(int argc, char** argv) {
         Image out(1920, 1440);
         RenderOptions o; o.region = doc.rect(); o.scale = 1920.0 / W;
         report("composite 5 layers -> 1920 px", timeMs([&] { render(doc, o, out); }, 5));
+        // Painting on the middle layer: the layers around it come from the cache after the first frame.
+        Overrides overrides;
+        overrides[doc.layers[2].id].image = doc.layers[2].asset->image;
+        RenderCache cache;
+        o.version = 1;
+        render(doc, o, out, &overrides, &cache);
+        report("composite, edited layer 3 of 5, cached", timeMs([&] { render(doc, o, out, &overrides, &cache); }, 5));
         Image flat(W, H);
         RenderOptions full; full.region = doc.rect(); full.scale = 1;
         report("flatten 5 layers at 4000x3000", timeMs([&] { render(doc, full, flat); }, 2));
