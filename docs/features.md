@@ -63,7 +63,9 @@ data folder. The model runs locally through OpenCV's DNN module; nothing is
 uploaded. The Advanced panel refines the mask against the image's edges, can
 solve hair opacity in a band around the edge (Matting), drops half-transparent
 specks that touch no edge, and re-estimates the edge pixels' colours as pure
-subject colour so no rim of the old background shows over a new one.
+subject colour so no rim of the old background shows over a new one. On a large
+photo, a Detail pass runs the model again on full-resolution windows along the
+edge, recovering the hair and thin structures the whole-image pass blurred away.
 
 ## Automation
 An automation socket and an MCP bridge let scripts and AI agents drive the

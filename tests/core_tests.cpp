@@ -1096,6 +1096,59 @@ TEST_CASE(matting_band_recovers_thin_strands_far_from_the_body) {
     }
 }
 
+TEST_CASE(detail_windows_cover_the_uncertain_pixels) {
+    // Two uncertain blobs in a 500 x 400 map; 128-pixel windows from a half-window grid cover both with
+    // the busiest first, stay inside the image, and stop when nothing worth a window is left.
+    GrayImage uncertain(500, 400, 0);
+    for (int y = 40; y < 100; y++) for (int x = 60; x < 200; x++) uncertain.at(x, y) = 255;
+    for (int y = 300; y < 330; y++) for (int x = 420; x < 480; x++) uncertain.at(x, y) = 255;
+    auto windows = detailWindows(uncertain, 128, 16, 50);
+    CHECK(windows.size() >= 3);
+    CHECK(windows.size() <= 6);
+    for (const DetailWindow& win : windows) { CHECK(win.x >= 0); CHECK(win.y >= 0); CHECK(win.x + win.size <= 500); CHECK(win.y + win.size <= 400); CHECK_EQ(win.size, 128); }
+    // The first window takes the biggest bite of the large blob.
+    CHECK(windows[0].y <= 40 && windows[0].y + 128 >= 100);
+    for (int y = 0; y < 400; y++) for (int x = 0; x < 500; x++) {
+        if (!uncertain.at(x, y)) continue;
+        bool covered = false;
+        for (const DetailWindow& win : windows) covered = covered || (x >= win.x && x < win.x + win.size && y >= win.y && y < win.y + win.size);
+        CHECK(covered);
+    }
+    CHECK(detailWindows(uncertain, 600, 4, 1).empty());
+    CHECK(detailWindows(GrayImage(500, 400, 0), 128, 4, 1).empty());
+}
+
+TEST_CASE(fuse_detail_keeps_the_coarse_shape_and_takes_the_local_edge) {
+    // A blurry coarse step against a sharp local step with a thin gap in it: inside the weighted band the
+    // result has the sharp edge and the gap, outside it is the coarse mask untouched.
+    const int w = 200, h = 100;
+    GrayImage coarse(w, h), local(w, h), weight(w, h, 0);
+    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+        coarse.at(x, y) = uint8_t(std::lround(255 * std::clamp((110 - x) / 20.0, 0.0, 1.0)));
+        local.at(x, y) = (x < 100 && !(y >= 48 && y < 52)) ? 255 : 0;
+        weight.at(x, y) = (x >= 70 && x < 130) ? 255 : 0;
+    }
+    auto out = fuseDetail(coarse, local, weight, 6);
+    CHECK_EQ(int(out->at(20, 20)), 255);
+    CHECK_EQ(int(out->at(180, 20)), 0);
+    CHECK_EQ(int(out->at(65, 20)), int(coarse.at(65, 20)));
+    CHECK(out->at(96, 20) > 200);
+    CHECK(out->at(104, 20) < 60);
+    CHECK(out->at(90, 50) < 90);   // the gap came from the local mask
+    CHECK(out->at(90, 40) > 200);
+    // Sigma 0: the local mask where it is sure, and the coarse one where only it is; a window's soft floor
+    // (0.4 outside the subject) yields to the coarse pass's certain background.
+    local.at(120, 20) = 100;
+    local.at(80, 60) = 140;   // unsure, over a sure coarse foreground
+    auto direct = fuseDetail(coarse, local, weight, 0);
+    CHECK_EQ(int(direct->at(90, 50)), 0);
+    CHECK_EQ(int(direct->at(99, 20)), 255);
+    CHECK_EQ(int(direct->at(100, 20)), 0);
+    CHECK_EQ(int(direct->at(65, 20)), int(coarse.at(65, 20)));
+    CHECK_EQ(int(direct->at(120, 20)), 0);
+    CHECK_EQ(int(direct->at(80, 60)), 255);
+}
+
 TEST_CASE(matte_cleanup_removes_speckle_but_keeps_the_edge) {
     // A subject on the left with a soft ramp at its edge, a soft speck floating in the background and a soft
     // patch inside the subject: the ramp stays, the speck goes transparent, the patch opaque.

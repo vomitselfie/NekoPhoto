@@ -1,7 +1,7 @@
 // The background-removal harness (docs/background-removal-review.md, item 10).
 //
 //   matte_tool run <image.png> <model.onnx|none> <outdir> [--refine R] [--band B] [--contrast C] [--shift S]
-//                  [--no-cleanup] [--no-decontaminate] [--mask <mask.png>]
+//                  [--no-cleanup] [--no-decontaminate] [--raw] [--detail N] [--mask <mask.png>]
 //       runs the pipeline and writes every stage: mask.png (the model's), matte.png (after the panel),
 //       trimap.png, chosenF.png, chosenB.png, pairAlpha.png (what the band saw and chose), cutout.png (the
 //       layer with its new alpha and edge colours), composite.png (over green).
@@ -29,6 +29,7 @@ struct Options {
     MatteSettings settings;
     std::string mask, suffix = "_alpha", maskSuffix = "_mask";
     bool refine = true;
+    int detail = 0;   // windows of the detail pass; 0 = coarse pass only
 };
 
 Options parse(int argc, char** argv, int from) {
@@ -44,6 +45,7 @@ Options parse(int argc, char** argv, int from) {
         else if (a == "--no-cleanup") o.settings.cleanup = false;
         else if (a == "--no-decontaminate") o.settings.decontaminate = false;
         else if (a == "--raw") o.refine = false;
+        else if (a == "--detail") o.detail = std::stoi(next());
         else if (a == "--mask") o.mask = next();
         else if (a == "--suffix") o.suffix = next();
         else if (a == "--mask-suffix") o.maskSuffix = next();
@@ -52,10 +54,10 @@ Options parse(int argc, char** argv, int from) {
     return o;
 }
 
-std::shared_ptr<GrayImage> maskFor(const Image& image, const std::string& model, const std::string& maskPath, std::string* error) {
+std::shared_ptr<GrayImage> maskFor(const Image& image, const std::string& model, const std::string& maskPath, int detail, std::string* error) {
     if (model != "none") {
         if (!subjectModelSupported()) { *error = "this build has no OpenCV"; return nullptr; }
-        return subjectMask(image, model, error);
+        return detail > 0 ? subjectMaskDetailed(image, model, nullptr, detail, error) : subjectMask(image, model, error);
     }
     if (maskPath.empty()) { *error = "no model and no --mask"; return nullptr; }
     auto mask = readPngGray(maskPath, error);
@@ -170,10 +172,13 @@ int runMode(int argc, char** argv) {
     std::string error;
     auto image = readPngImage(imagePath, &error);
     if (!image) { std::fprintf(stderr, "%s: %s\n", imagePath.c_str(), error.c_str()); return 1; }
-    auto mask = maskFor(*image, model, o.mask, &error);
-    if (!mask) { std::fprintf(stderr, "mask: %s\n", error.c_str()); return 1; }
     fs::create_directories(outDir);
     auto out = [&](const std::string& name) { return (fs::path(outDir) / name).string(); };
+    if (o.detail > 0 && model != "none") {
+        if (auto coarse = subjectMask(*image, model, &error)) writePngGray(out("coarse.png"), *coarse);
+    }
+    auto mask = maskFor(*image, model, o.mask, o.detail, &error);
+    if (!mask) { std::fprintf(stderr, "mask: %s\n", error.c_str()); return 1; }
     writePngGray(out("mask.png"), *mask);
     MatteSettings s = o.settings.normalized();
     std::shared_ptr<GrayImage> matte = o.refine ? refineMatte(*mask, *image, s, 0) : mask;
@@ -226,7 +231,7 @@ int evalMode(int argc, char** argv) {
         auto truth = readPngGray(truthPath, &error);
         if (!image || !truth || truth->width() != image->width() || truth->height() != image->height()) { std::fprintf(stderr, "%s: %s\n", stem.c_str(), error.empty() ? "size mismatch" : error.c_str()); continue; }
         const std::string maskPath = (file.parent_path() / (stem + o.maskSuffix + ".png")).string();
-        auto mask = maskFor(*image, model, model == "none" ? maskPath : o.mask, &error);
+        auto mask = maskFor(*image, model, model == "none" ? maskPath : o.mask, o.detail, &error);
         if (!mask) { std::fprintf(stderr, "%s: %s\n", stem.c_str(), error.c_str()); continue; }
         auto matte = refineMatte(*mask, *image, o.settings, 0);
         Scores raw = score(*mask, *truth), refined = score(*matte, *truth);

@@ -83,7 +83,10 @@ private:
     compositor::MatteSettings settings_;
     std::shared_ptr<const compositor::Image> source_;
     compositor::LayerTransform transform_;
-    std::shared_ptr<compositor::GrayImage> raw_;
+    std::shared_ptr<compositor::GrayImage> raw_;        // the mask the sliders refine: coarse or detailed
+    std::shared_ptr<compositor::GrayImage> coarse_, detailed_;
+    bool detail_ = false;
+    void startDetail();
     QString error_;
     bool finished_ = false;
     bool computing_ = false;

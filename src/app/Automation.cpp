@@ -807,7 +807,9 @@ void AutomationServer::registerHandlers() {
         auto source = s->adjustmentSource(0, transform);
         if (!source) fail("the active layer has no pixels");
         std::string error;
-        auto mask = subjectMask(*source, ModelStore::pathFor(ModelStore::selected()).toStdString(), &error);
+        const std::string modelPath = ModelStore::pathFor(ModelStore::selected()).toStdString();
+        const bool detail = flag(p, "detail", false);
+        auto mask = detail ? subjectMaskDetailed(*source, modelPath, nullptr, int(num(p, "detailWindows", 12)), &error) : subjectMask(*source, modelPath, &error);
         if (!mask) fail("the model failed: " + qs(error));
         std::shared_ptr<const Image> pixels;
         if (flag(p, "refine", true)) {
@@ -822,7 +824,7 @@ void AutomationServer::registerHandlers() {
             if (settings.decontaminate) pixels = estimateForeground(*source, *mask);
         }
         s->applySubjectMask(mask, pixels);
-        return QJsonObject{{"applied", true}, {"decontaminated", bool(pixels)}};
+        return QJsonObject{{"applied", true}, {"decontaminated", bool(pixels)}, {"detail", detail}};
     });
 
     // ---- selection (document pixels)

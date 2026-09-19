@@ -274,6 +274,14 @@ BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QS
         connect(box, &QCheckBox::toggled, this, [this, &value](bool on) { value = on; refreshPreview(); });
         av->addWidget(box);
     };
+    auto* detail = new QCheckBox(tr("Detail pass (native resolution, slower)"));
+    detail->setToolTip(tr("Runs the model again on full-resolution windows along the edge, where the whole-image pass blurred away hair and thin structures; a few seconds more on a large photo"));
+    connect(detail, &QCheckBox::toggled, this, [this](bool on) {
+        detail_ = on;
+        if (on) { if (detailed_) { raw_ = detailed_; refreshPreview(); } else startDetail(); }
+        else if (coarse_) { raw_ = coarse_; refreshPreview(); }
+    });
+    av->addWidget(detail);
     check(tr("Clean up speckle"), tr("Half-transparent specks that touch no edge go: inside the subject they become opaque, out in the background transparent"), settings_.cleanup);
     check(tr("Clean edge colours"), tr("The edge pixels take the subject's own colour, so no rim of the old background shows over a new one (those pixels of the layer change)"), settings_.decontaminate);
     advanced_->setVisible(false);
@@ -311,8 +319,30 @@ BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QS
             computing_ = false;
             unsetCursor();
             if (!mask) { error_ = QString::fromStdString(error); QMessageBox::warning(this, tr("Remove Background"), error_.isEmpty() ? tr("No subject mask could be made.") : error_); reject(); return; }
-            raw_ = mask;
+            raw_ = coarse_ = mask;
             refreshPreview();
+            if (detail_) startDetail();
+        }, Qt::QueuedConnection);
+    });
+}
+
+void BackgroundDialog::startDetail() {
+    if (!coarse_ || detailed_ || computing_ || !source_) return;
+    computing_ = true;
+    setCursor(Qt::BusyCursor);
+    if (worker_.joinable()) worker_.join();
+    std::shared_ptr<const Image> image = source_;
+    std::shared_ptr<const GrayImage> coarse = coarse_;
+    std::string path = modelPath_.toStdString();
+    worker_ = std::thread([this, image, coarse, path] {
+        std::string error;
+        auto detailed = subjectMaskDetailed(*image, path, coarse.get(), 12, &error);
+        QMetaObject::invokeMethod(this, [this, detailed] {
+            computing_ = false;
+            unsetCursor();
+            if (!detailed) return;   // the coarse mask stays
+            detailed_ = detailed;
+            if (detail_) { raw_ = detailed_; refreshPreview(); }
         }, Qt::QueuedConnection);
     });
 }
