@@ -8,6 +8,7 @@
 #include "compositor/morphology.h"
 #include "compositor/brush.h"
 #include "compositor/warp.h"
+#include "compositor/subject.h"
 #include "compositor/render.h"
 #include "compositor/selection.h"
 #include <chrono>
@@ -145,6 +146,14 @@ int main(int argc, char** argv) {
                 }, 2));
             }
         }
+    }
+    if (want("matte")) {
+        GrayImage mask(W, H, 0);
+        for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) if ((x - 2000) * (x - 2000) + (y - 1500) * (y - 1500) < 1000 * 1000) mask.at(x, y) = 255;
+        report("matte refine r=12 (full)", timeMs([&] { (void)guidedRefine(mask, base, 12, 0); }, 2));
+        report("matte refine r=12 (limit 1400)", timeMs([&] { (void)guidedRefine(mask, base, 12, 1400); }, 2));
+        MatteSettings s; s.refineEdges = 12; s.shiftEdge = 3;
+        report("matte refine + shift edge", timeMs([&] { (void)refineMatte(mask, base, s, 0); }, 2));
     }
     if (want("selection")) {
         auto shape = rasterizeEllipse(Rect(200, 200, 3000, 2000), W, H, true);

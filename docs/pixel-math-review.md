@@ -7,6 +7,26 @@ expected gain, whether output stays identical, and the effort in days.
 
 Measurements are on a 4000 × 3000 RGBA document, Ryzen AI 9 HX 370, `-O2`.
 
+## Progress
+
+Updated as batches land (see the "Pixel maths batch" commits). "Done" means
+the item is in `src/core` with tests; a note says where it differs from the
+plan.
+
+| Batch | Items landed |
+|---|---|
+| 1, the bug list | All fourteen rows below, except the wand's premultiplied compare, which stays for parity with the Mac (see the correctness notes). |
+| 2, quick wins | 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13 (5 is superseded by batch 3a). |
+| 3a, blurs | 5, 15, 21, C25 (Gaussian: FIR in bands at σ ≤ 6, three 8.8 fixed-point box passes with running column sums above; motion blur by shear). |
+| 3b, selections | 14, 24, 25, C6 (Expand/Contract by exact EDT; Feather, Smooth, Border; signed-area rasterizer; raster ants). |
+| 4, compositing | 16, 17, 29 (the on-grid Normal row path, scalar `compositeSpanNormal` for now), C8. |
+| 5a/5b, geometry and painting | 18, 19, 36 (the shared const base and bounded scans; no copy-on-write tiles), 37 (hard tips only). |
+| G'MIC | Steps 1 and 2 of the plan at the end of this document. |
+| 6, matting | 22, C10, C13, C14, C15, C17, C28 (the coefficient grid is 2× or 4× coarser by size). C13 differs: the guide is R, G, B only. With the mask as a fourth guide channel the filter fits the mask exactly (a_M → 1) and nothing moves, so the multichannel form uses the colour alone. C9: MODNet's preprocessing is recognised by file name (`modnet*.onnx`), but no download entry exists because the official release has no fixed-shape ONNX asset. |
+
+Still open: 20, 23, 26, 27, 28, 30, 31, 32, 33, 34, 35, 38, 39; C2, C3, C4, C5,
+C11, C16, C18–C24, C29, C30; G'MIC step 3.
+
 ## Bugs and waste found on the way
 
 These are not optimisations; they are things that are wrong or needlessly slow

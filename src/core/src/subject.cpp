@@ -42,9 +42,13 @@ std::shared_ptr<GrayImage> subjectMask(const Image& image, const std::string& mo
     if (image.isEmpty()) return nullptr;
     cv::dnn::Net* net = modelFor(modelPath, error);
     if (!net) return nullptr;
+    // What the file name says about the model: IS-Net takes 1024 px and (x - 0.5); the U2Net family 320 px
+    // with ImageNet normalisation over the image's maximum; MODNet-style matting models 512 px, (x - 0.5) / 0.5,
+    // and give an alpha matte directly (no min-max stretch afterwards).
     std::string name = modelPath.substr(modelPath.rfind('/') + 1);
     bool isnet = name.find("isnet") != std::string::npos;
-    int size = isnet ? 1024 : 320;
+    bool modnet = name.find("modnet") != std::string::npos;
+    int size = isnet ? 1024 : modnet ? 512 : 320;
     // The layer's straight colour over black where transparent, as RGB float 0..1.
     cv::Mat rgb(image.height(), image.width(), CV_32FC3);
     for (int y = 0; y < image.height(); y++) {
@@ -61,6 +65,8 @@ std::shared_ptr<GrayImage> subjectMask(const Image& image, const std::string& mo
     cv::split(resized, channels);
     if (isnet) {
         for (auto& c : channels) c = c - 0.5f; // (x - 0.5) / 1
+    } else if (modnet) {
+        for (auto& c : channels) c = (c - 0.5f) / 0.5f;
     } else {
         double mx = 0;
         cv::minMaxLoc(resized.reshape(1), nullptr, &mx);
@@ -80,9 +86,13 @@ std::shared_ptr<GrayImage> subjectMask(const Image& image, const std::string& mo
     }
     if (out.dims != 4 || out.size[2] != size || out.size[3] != size) { if (error) *error = "The model gave an unexpected output."; return nullptr; }
     cv::Mat pred(size, size, CV_32F, out.ptr<float>(0, 0));
-    double mn, mx;
-    cv::minMaxLoc(pred, &mn, &mx);
-    cv::Mat scaled = (pred - mn) / std::max(1e-6, mx - mn);
+    cv::Mat scaled;
+    if (modnet) scaled = pred;
+    else {
+        double mn, mx;
+        cv::minMaxLoc(pred, &mn, &mx);
+        scaled = (pred - mn) / std::max(1e-6, mx - mn);
+    }
     cv::Mat full;
     cv::resize(scaled, full, cv::Size(image.width(), image.height()), 0, 0, cv::INTER_LINEAR);
     auto mask = std::make_shared<GrayImage>(image.width(), image.height());
