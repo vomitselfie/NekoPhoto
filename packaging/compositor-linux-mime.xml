@@ -5,4 +5,8 @@
     <glob pattern="*.comp"/>
     <sub-class-of type="inode/directory"/>
   </mime-type>
+  <!-- The shared MIME database knows .psd as Photoshop's type; the large-document variant is not listed there. -->
+  <mime-type type="image/vnd.adobe.photoshop">
+    <glob pattern="*.psb"/>
+  </mime-type>
 </mime-info>
