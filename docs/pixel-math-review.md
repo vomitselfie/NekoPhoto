@@ -104,3 +104,105 @@ today, all cheap to fix.
 ## Sources
 
 W3C Compositing and Blending Level 1; PDF 32000-1:2008 §11.3.5; Porter & Duff 1984; Blinn, *Three Wrongs Make a Right*; pixman `pixman-combine32.c`; Skia `SkBlendMode.cpp`, `SkColorPriv.h`; Kovesi, *Fast Almost-Gaussian Filtering*, DICTA 2010; Deriche 1993 (INRIA RR-1893); Getreuer, IPOL 2013; Elboher & Werman 2011; Gwosdek et al. 2011; Paeth 1986; Marsaglia & Tsang 2000; He, Sun & Tang, *Guided Image Filtering*; He & Sun 2015 (arXiv:1505.00996); Kasson et al. 1995; Kang 1997; Fritsch & Carlson 1980; Fritsch & Butland 1984; Poynton, *Digital Video and HD*; Felzenszwalb & Huttenlocher 2012; Meijster et al. 2000; van Herk 1992; Gil & Werman 1993; Heckbert, *A Seed Fill Algorithm* (Graphics Gems 1990); stb_truetype v2 rasterizer; font-rs; Heckbert 1989, *Fundamentals of Texture Mapping and Image Warping*; Wolberg 1990; Greene & Heckbert 1986; Keys 1981; Mitchell & Netravali 1988; Turkowski 1990; Williams 1983; Chromium `skia/ext/image_operations.cc`; Pillow `Resample.c`; MyPaint `brushlib`; Krita `KisDabCache`, `KisLiquifyTransformWorker`; GIMP `gimpwarptool.c`; Pérez et al. 2003; Farbman et al. 2009; Barnes et al. 2009; Wexler et al. 2007; Briggs, *A Multigrid Tutorial*.
+
+## Second pass: Chinese literature and engineering write-ups
+
+A second round of five reviews restricted to Chinese-language sources and work
+from Chinese groups. Most of the practical material comes from the ImageShop
+engineering blog (石林 / laviewpbt, who has spent a decade reproducing and
+SSE-optimising Photoshop's own algorithms) and from a handful of papers by
+Kaiming He, Jian Sun and their successors. Mainland hosts often refuse
+connections from this machine, so several posts were read through mirrors.
+Blog code is unlicensed unless noted: treat it as reference and re-derive.
+
+### What changes the plan
+
+| # | Finding | Source | Effect on the plan | Days |
+|---|---|---|---|---|
+| C1 | **Photoshop's opacity + blend-mode compositing may omit the `As·(1−Ab)·Cs` term** that `blend.cpp:105-107` implements from the PDF spec: a probe of Photoshop gives `Cr·Ar = Cb·Ab·(1−As) + As·F(Cs,Cb)`. The two agree for Normal and for opaque bases only. | laviewpbt, 「PS算法理论探讨一」*How Photoshop composites two 32-bit images*, 2021 | Verify with a small PSD probe before locking #17's integer formulas; adopt whichever matches | ½ |
+| C2 | **Photoshop's saturation slider is not `s·(1+Δ)`**: with `L=(max+min)/510` and HSL `S`, for `inc ≥ 0`: `α = (inc+S ≥ 1) ? S : 1−inc; α = 1/α − 1; C' = C + (C−255L)·α`; for `inc < 0`: `C' = 255L + (C−255L)·(1+inc)`. | 阿发伯 (maozefa) 2012, reposted 2014 | Option for `adjustments.cpp:414`; diverges from the Mac's Core Image behaviour, so make it a product choice | ¼ |
+| C3 | **Bicubic at bilinear cost**: 8-bit fractional fixed point (coordinate ≪ 16, top byte indexes a 513-entry kernel LUT), per-column weight tables, `pshufb` interleave so `pmaddwd` sums two taps of one channel, `packus` instead of clamps, border/interior split. 720p→1080p in 8.5 ms single-threaded. | laviewpbt, SSE 优化系列十八 (2018) and 短道速滑五 (2020) | The u8 SIMD layout for #30/#27/#35; makes "High" = Catmull-Rom essentially free | 1½ |
+| C4 | **Liquify's forward warp** is Gustafsson 1993 §4.4: `u = x − ((r²ₘₐₓ − |x−c|²)/((r²ₘₐₓ − |x−c|²) + |m−c|²))² · (m−c)`; local scale `r' = r·(1 − a(1 − r²/R²))`. Our `warpstroke.cpp:104-107` uses a smoothstep that doesn't shrink with drag length as Photoshop's does. | xiaotie 2009; laviewpbt 眼睛放大 2014 | Fold into #33's displacement field; Bloat, Pucker and Twirl fall out of the same form | ½ |
+| C5 | **Halving with SIMD**: `(p00+p01+p10+p11+2)>>2` via `pmaddubsw`/`phaddw`; the `std::min` clamps in `halveImage` (`image.cpp:78-93`) are what stop auto-vectorisation. A `[1 4 6 4 1]` blur-then-decimate in 16-bit is a cheaper anti-aliased halve than Lanczos for #28. | laviewpbt 2020, 2019 | 3–5× on mip builds, identical output | ¼ |
+| C6 | **Expand/Contract/Smooth**: confirms Photoshop's kernels are circular; Smooth = "more than half the pixels within the radius are selected" = a box count, O(N) and radius-independent with the `(uint8)255 → (int8)−1` counting trick; **Feather N = Gaussian blur with σ = N** on the coverage (a difference layer against Photoshop is pure black). | laviewpbt EDM/erode posts 2018–2021; aiuai.cn | Keep the FH distance transform (#14); add Smooth and Feather, two missing Photoshop features, from the same EDT and blur | ¾ |
+| C7 | **Magic-wand tolerance consensus**: `|R−R0| ≤ T ∧ |G−G0| ≤ T ∧ |B−B0| ≤ T` on straight RGB, seed colour = 3×3 or 5×5 mean. | myexception.cn; several reproductions | Confirms the unpremultiply fix and the Sample Size option already in the bug list | 0 |
+| C8 | **Exact `/255` in SIMD**: `(x + 1 + (x>>8)) >> 8` (floor) and `(x + 128 + ((x+128)>>8)) >> 8` (round), add-and-shift only. | laviewpbt SSE 系列十七 (2018) | Same cost as #29's `((t+128)·257)>>16`; either | 0 |
+
+### Matting and background removal
+
+| # | Finding | Source | Effect | Days |
+|---|---|---|---|---|
+| C9 | **MODNet** (Apache-2.0, 512², ~7 M params, 50–150 ms on CPU) loads in OpenCV DNN from the official fixed-shape export (the PaddleSeg export fails with a Concat shape assert, opencv #23288). **PP-MattingV2** (Apache-2.0, 8.95 M params, 18 % lower error than MODNet) needs a fixed-shape export plus onnxsim. Both are portrait-only and sharper on hair than IS-Net. | Ke et al., CityU + SenseTime, AAAI 2022; Baidu PaddleSeg 2.7 | Add as "Portrait" models next to IS-Net; skip the min-max stretch at `subject.cpp:82-85` for alpha-output models; aspect-preserving resize to a multiple of 32 | 2 |
+| C10 | **u2net_human_seg** (Apache-2.0, 320², rembg release) runs today with no code change. | Qin Xuebin | One `ModelStore` entry | 0.1 |
+| C11 | **PP-HumanSeg** (Apache-2.0, 192², 5.6 ms) ships in OpenCV's own model zoo. | Baidu | Instant coarse mask for a live preview, refined afterwards | ½ |
+| C12 | **BiRefNet** is confirmed unusable in OpenCV DNN: `deform_conv2d` has no importer path and Swin's `roll` produces silent garbage. RVM is GPL-3 and also fails; AEMatter has non-commercial weights; MAT is CC BY-NC. | — | Stays excluded; would need onnxruntime | — |
+| C13 | **Multichannel guided filter with guide (R,G,B,M)**: `a_k = (Σ_k + εU)⁻¹(mean(I·p) − μ_k·p̄_k)`, `q = aᵀI + b`; the mask becomes its own regressor and colour edges invisible in luma drive the matte. Ten box means and a 4×4 solve per pixel instead of the luma-only filter at `matte.cpp:95-109`. | He's multichannel GIF; the closed-form twin of Fast Deep Matting's feathering block (CASIA, ACM MM 2017) | Visibly better hair on same-luma backgrounds | ½–1 |
+| C14 | **Halo-free guided filters**: weighted GIF `a_k = cov/(var + λ/Γ_k)` and gradient-domain GIF with an edge-aware `γ_k` so `a → 1` on edges. One extra box mean at `matte.cpp:104-105`. | Li Zhengguo, TIP 2015; Kou, Wen, Li, TIP 2015 | Removes the grey band the plain filter leaks over flat backgrounds | ½ each |
+| C15 | **Shift Edge hardens the matte**: `matte.cpp:118-130` blurs then thresholds at slope 1/0.001. Grey-level dilation or erosion by |s| (van Herk running max/min) moves every iso-contour and keeps the ramp. | laviewpbt SSE max filter | A quality bug fix | ½ |
+| C16 | **Trimap band + local matting**: unknown band `|d| ≤ w` from the mask's distance transform, width from the ramp's gradient, solved with Shared Sampling (1–2 s at 12 MP, parallel) or the large-kernel matting Laplacian. | Alibaba SHM (ACM MM 2018); SCUT 2023; He/Sun/Tang CVPR 2010 | The largest hair-quality jump; also the input ViTMatte (MIT) would need | 3–4 |
+| C17 | Fast guided filter done right (subsample the guide and mask, upsample the coefficients, evaluate against the full-resolution guide). The current `limit` path upsamples the result and throws the detail away. | He & Sun 2015; laviewpbt 2017 | Confirms #22 | 1 |
+
+### Inpainting, healing and content-aware fill
+
+| # | Finding | Source | Effect | Days |
+|---|---|---|---|---|
+| C18 | **Dominant patch offsets**: the 2-D histogram of nearest-neighbour offsets between 8×8 patches is sparse; keep the K≈60 peaks and label hole pixels with one offset each by α-expansion graph cut (`E_d = 0` if the shifted pixel is known, else ∞; `E_s` = colour difference at the seam). Structures like bricks, railings and text rows continue across the hole. | He Kaiming & Sun Jian, MSRA, ECCV 2012 | Replaces the 120-candidate polar search in `HealPixels.c:162-188` with K data-driven offsets, and seeds #38's nearest-neighbour field; the graph cut gives coherent seams where voting blurs | 2 + 2 |
+| C19 | **PatchMatch inpainting, engineering corrections**: drop the source→target field (2× faster); 5×5 patches; pyramid sizes `(W+1)/2`; random search around the original centre (sharper); gradient channels `g = (a/2 − b/2) + 128` in the SSD; the distance-to-similarity vote table in most public ports collapses to zero past ~40 % of range and produces garbage votes; run 2–3 seeds and keep the best. | laviewpbt, 2024 (20 days of notes) | Design constraints for #38 | 0 |
+| C20 | **Patch structure sparsity**: priority `P = C·ρ` where `ρ` measures how concentrated a patch's similarities are (edges and corners first); fill by a sparse convex combination of the top candidates rather than one copy. | Xu Zongben & Sun Jian, XJTU, TIP 2010 | A priority heap for `ContentFill.c:50-55` and a weighted blend at `:81`, removing the speckle | 1½ |
+| C21 | **Exact Poisson solve by sine transforms**: row and column DSTs with eigenvalues `2cos(πi/(W+1)) + 2cos(πj/(H+1)) − 4`, exact for any mask, O(N log N), about 100 lines. | laviewpbt's reading of OpenCV `seamlessClone`, 2024 | Replaces the SOR sweeps at `HealPixels.c:54-113`; identical solution, no tuning | 1 |
+| C22 | **Mean-value coordinates** for spot heals: interpolate the ring difference with `w_i = (tan(α_{i−1}/2) + tan(α_i/2)) / ‖p_i − x‖`; no solve at all for holes up to ~10⁴ px. | Farbman 2009; fafa1899/MVCImageBlend; NUAA 2019 | Microseconds per heal, near-harmonic result | ½ |
+| C23 | Criminisi priority fixes: regularised confidence `Rc = (1−ω)C + ω`, adaptive block size from local variance; gains of 0.4–3 dB on small test images. | NTU 2005; SCU 2018; Liaoning TU 2023 | Only the confidence and radius rules worth carrying into #38 | ½ |
+| C24 | **Deep inpainting through OpenCV DNN**: AOT-GAN (SYSU + MSRA, Apache-2.0, 15 M params, plain and dilated convolutions, any resolution, ~1–2 s per 512² crop on CPU) is the one model that is both permissively licensed and importer-clean. CoordFill (BSD-3, 90 ms at 2048² but weaker texture) is worth a test. ZITS needs OpenCV 5's DFT; MAT is non-commercial; MI-GAN's weights descend from a non-commercial model; LaMa (Samsung) is the OpenCV 5 fallback. | — | An optional "Content-Aware Fill (AI)" behind the same model-download switch as Remove Background | 2–3 |
+
+### Suggested adjustments to the order
+
+- Before #17 (integer blends), spend half a day on C1's Photoshop probe so the formulas are right the first time.
+- Bundle C5 with the `MipCache` fix, C8 with #29, C3 with #30, C4 with #33.
+- Do C6's Smooth and Feather with #14; C7 with the wand fix.
+- Matting: C15, C13, C14 first (2 days, no new models), then C9/C10 model entries, then C16.
+- Healing: C22 first (half a day), then #38 shaped by C19 with C18's offsets seeding it, then C21 for large fills.
+
+### Blurs and the guided filter
+
+| # | Finding | Source | Effect | Days |
+|---|---|---|---|---|
+| C25 | **Box blur without transposes ("lazy" column sums)**: keep `int32 colSum[x]` over the vertical window, add the entering row and subtract the leaving one per output row, then a running horizontal sum over `colSum` gives the whole 2-D box in one row-major sweep; no transpose, no float buffers. 3000×2000 grey: 39 ms C, ~6 ms SSE, single thread. An original Chinese formulation (2009). | laviewpbt 2009; ImageShop SSE 系列十三 (2018) | Replaces `boxBlurRows` plus both transposes and the 16-byte-per-pixel float buffers (`filters.cpp:81-109, 177-184`): ~5–7× on the large-sigma path and 4× less memory, beating #5 and #21; also the box engine for #15's motion blur | ½–1 |
+| C26 | **Recursive Gaussian with a row-major vertical pass**: the IIR's vertical pass runs y-outer, x-inner using the three rows already written, so it is sequential in memory and SIMD across x with no transpose; float RGBA interleaved so one vector is one pixel, our exact layout. 3000×2000 RGB: 370 ms C, 75 ms SSE, single thread. Confirms that float Young–van Vliet breaks above radius ≈ 75 while Deriche does not. | ImageShop SSE 系列二 parts 1–2 (2017) | The engineering layout for #34 (Deriche as the single path) | 1–2 |
+| C27 | **Integer extended-binomial Gaussian**: the same Kovesi box widths we use plus `{1,−4,6,−4,1}` recursions in int32, 3000×2000 grey in 11–13 ms; "no visible difference for 8-bit at 4th order". | ImageShop 2022 | An alternative integer layout for #21 | 1–2 |
+| C28 | **Fast guided filter at s = 5** with one integral image reused for the six means and the coefficients (not the result) upsampled in split passes: 3000×2000 RGB 55 ms single thread. | ImageShop SSE 系列三 (2017) | Confirms #22 and that our `limit` path is wrong | 1 |
+| C29 | **Bicubic for Lens Correction** with fixed-point 4×4 weight tables and separable SIMD accumulation, ~1.5–2× the cost of fixed-point bilinear. | ImageShop 2020 | Fixes the corner aliasing at strong distortion: 325 ms → ~30–40 ms with rows in parallel | 1 |
+| C30 | Side-window filtering (eight half windows, keep the one closest to the input) removes halos at hard edges at 2–3× the cost of one box; thin strands narrower than the radius can pick the wrong side. | Yin, Gong, Qiu, Shenzhen U., CVPR 2019 oral | Optional refinement after C13/C14 | 1½–2 |
+| — | Motion blur and Add Noise: nothing in the Chinese sources beats #15 and #1; the naive O(distance) line samplers there are slower than ours. | — | — | — |
+
+## G'MIC: the open-source filter library used as a plugin
+
+G'MIC (GREYC's Magic for Image Computing, from the GREYC lab at the University
+of Caen and CNRS) is the filter framework that GIMP, Krita, Paint.NET, digiKam
+and Photoshop users install as a plugin: more than 500 filters (sharpening,
+denoising, artistic and painterly looks, film emulation, deformations, patch-based
+inpainting, frames, and so on) driven by a scripting language. It is installed on
+this machine (version 4.0.5 with `gmic`, `gmic_qt`, `libgmic` and its headers)
+and packaged by Arch and Ubuntu.
+
+Licensing: `libgmic` is dual-licensed CeCILL-C (LGPL-like, linking from an MIT
+program is fine) or CeCILL v2.1; the `gmic_qt` plugin front end is CeCILL
+(GPL-like), so it can only be run as a separate program, never embedded.
+
+Plan, as three deliverables:
+
+1. **Filter > G'MIC…** bridge through the `gmic` executable (an optional runtime
+   dependency found on PATH): the active layer's pixels inside the selection go
+   out as PNG, the command runs, the result comes back through the same commit
+   path the built-in filters use, with a downscaled live preview, a searchable
+   list of curated filters with parameter widgets, and a free-form command box.
+   The automation socket gets `pixels.gmic {command}`. About 2 days.
+2. **The whole catalogue**: parse the `#@gui` descriptors of the G'MIC standard
+   library (name, folder, and typed parameters: float, int, bool, choice, colour,
+   text, separator) to build the parameter panel for every filter automatically,
+   which is exactly what `gmic_qt` does, with the same "update filters" download
+   of the community definitions. About 3–4 days.
+3. **In-process `libgmic`** behind a CMake option, for previews without the PNG
+   round trip, keeping the executable path as the fallback. About 1 day.
+
+This gives the editor the plugin ecosystem people expect without taking on any
+of its code.
