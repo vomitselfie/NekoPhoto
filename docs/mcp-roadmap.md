@@ -36,6 +36,25 @@ method reference is `docs/automation.md`, the practice `docs/agent-guide.md`.
 | 9 | **Resources and a prompt.** Expose the current render and the layer list as MCP resources, and one prompt that encodes the agent guide's loop. | Cheap; useful for clients that browse resources rather than call tools. | The bridge | ¼ |
 | 10 | **Recipes for the new tools.** Remove Background with the detail pass and matting, Quick Select by scribble, the text tool, PSD import notes, in `docs/agent-guide.md`. | The guide predates all of them. | Docs | ¼ |
 
+## Learned from the first agent session (September 2026)
+
+An agent drove the editor on the person's display through the socket: opened a
+photo, ran Remove Background with matting, found the foliage the model had
+left on the subject with a colour search over a render, wand-selected it and
+filled it with Content-Aware Fill, imported a second photo, sent it to the
+bottom and fitted it to the canvas, exported and saved. Two things it hit:
+
+- **Spot healing and Content-Aware Fill sample pixels the mask hides.** Near
+  the silhouette of a masked layer the healer pulled in the old, nearly black
+  background, and applying the mask first did not help enough. Tools that
+  synthesise from a layer's surroundings should treat masked-out pixels as
+  unknown, the way they treat pixels outside the layer. A core change in
+  `heal.cpp` and `inpaint.cpp` (pass the mask as a validity map), half a day.
+- **Wrong-shape parameters fail late and tersely.** `layers.add` with a text
+  object instead of a string returned "parameter 'text' must be a string" only
+  after the guess; see item 8, and the one-call overview of item 4 would have
+  shown the shape of an existing text layer.
+
 Not planned: PSD export (a writer is a project of its own, unrelated to the
 bridge), and remote transports (the socket is local by design; an agent on
 another machine has no business in a person's editor).
