@@ -14,6 +14,10 @@ add_executable(selection_tests selection_tests.cpp)
 target_link_libraries(selection_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME selection_tests COMMAND selection_tests)
 
+add_executable(blend_tests blend_tests.cpp)
+target_link_libraries(blend_tests PRIVATE compositor::core compositor_warnings)
+add_test(NAME blend_tests COMMAND blend_tests)
+
 add_executable(kernel_tests kernel_tests.cpp)
 target_link_libraries(kernel_tests PRIVATE compositor::core compositor::pixels compositor_warnings)
 add_test(NAME kernel_tests COMMAND kernel_tests)

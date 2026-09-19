@@ -207,6 +207,37 @@ void drawLayer(const DrawParams& params, const Rect& region, double scale, const
         if (to < from) to = from;
     };
 
+    // A layer sitting on the output grid at whole pixels (100 % zoom, no rotation) in Normal mode needs no
+    // resampling: its rows blend straight over the destination with a coverage step per pixel.
+    const Affine& o2p = m.outputToPixel;
+    const bool onGrid = params.mode == BlendMode::Normal && factor == 1 && std::fabs(o2p.a - 1) < 1e-9 && std::fabs(o2p.b) < 1e-9
+        && std::fabs(o2p.c) < 1e-9 && std::fabs(o2p.d - 1) < 1e-9 && std::fabs(o2p.tx - std::round(o2p.tx)) < 1e-9 && std::fabs(o2p.ty - std::round(o2p.ty)) < 1e-9
+        && (!mask || placedMask || (maskScaleX == 1 && maskScaleY == 1));
+    if (onGrid) {
+        const int offsetX = int(std::round(o2p.tx)), offsetY = int(std::round(o2p.ty));   // output -> layer pixel
+        const int spanBegin = std::max(xBegin, -offsetX), spanEnd = std::min(xEnd, pw - offsetX);
+        if (spanEnd <= spanBegin) return;
+        parallelRows(int(m.outputRect.minY()), int(m.outputRect.maxY()), [&](int ya, int yb) {
+            std::vector<uint16_t> steps(size_t(spanEnd - spanBegin));
+            for (int y = ya; y < yb; y++) {
+                const int py = y + offsetY;
+                if (py < 0 || py >= ph) continue;
+                const uint8_t* covRow = coverage ? coverage->row(y) : nullptr;
+                const uint8_t* placedRow = placedMask ? placedMask->row(y) : nullptr;
+                const uint8_t* maskRow = mask && !placedMask ? mask->row(py) : nullptr;
+                for (int x = spanBegin; x < spanEnd; x++) {
+                    float cov = opacity;
+                    if (covRow) cov *= covRow[x] / 255.0f;
+                    if (placedRow) cov *= placedRow[x] / 255.0f;
+                    else if (maskRow) cov *= maskRow[x + offsetX] / 255.0f;
+                    steps[size_t(x - spanBegin)] = uint16_t(cov <= 0.0005f ? 0 : coverageSteps(cov));
+                }
+                compositeSpanNormal(source->pixel(spanBegin + offsetX, py), steps.data(), out.row(y) + size_t(spanBegin) * 4, spanEnd - spanBegin);
+            }
+        });
+        return;
+    }
+
     parallelRows(int(m.outputRect.minY()), int(m.outputRect.maxY()), [&](int ya, int yb) {
     for (int y = ya; y < yb; y++) {
         uint8_t* row = out.row(y);
