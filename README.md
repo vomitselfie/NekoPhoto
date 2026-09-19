@@ -67,6 +67,13 @@ model (IS-Net or the small U2Net, from the rembg project, Apache-2.0) into the
 app's data folder. The model runs locally through OpenCV's DNN module; nothing
 is uploaded.
 
+## Driving it from an agent
+
+An MCP bridge (`mcp/compositor_mcp.py`) lets Claude Code or any MCP client open
+documents, inspect and edit layers, run adjustments and filters, and look at
+renders. `compositor-linux --rpc` (or Preferences > Automation) opens the
+socket; `--headless` runs without a window. See `docs/automation.md`.
+
 ## Installing
 
 Each release on the GitHub Releases page ships an AppImage (make it executable

@@ -5,6 +5,7 @@
 #include "ImageConvert.h"
 #include "LayersPanel.h"
 #include "AdjustmentsPanel.h"
+#include "Automation.h"
 #include "FilterDialog.h"
 #include "ColorSwatches.h"
 #include "Icons.h"
@@ -271,7 +272,7 @@ void MainWindow::refreshTabTitles() {
 }
 
 bool MainWindow::confirmDiscard(int index) {
-    if (index < 0 || index >= int(tabs_.size())) return true;
+    if (index < 0 || index >= int(tabs_.size()) || skipConfirm_) return true;
     EditorSession* s = tabs_[size_t(index)].session;
     if (!s->hasDocument() || !s->isModified()) return true;
     if (index != current_) switchTo(index);
@@ -661,7 +662,38 @@ void MainWindow::closeEvent(QCloseEvent* e) {
     e->accept();
 }
 
-void MainWindow::showError(const QString& title, const QString& message) { QMessageBox::warning(this, title, message); }
+void MainWindow::showError(const QString& title, const QString& message) {
+    if (errorSink_) { *errorSink_ += title + ": " + message + "\n"; return; }
+    QMessageBox::warning(this, title, message);
+}
+
+QString MainWindow::tabTitle(int i) const {
+    const Tab& tab = tabs_[size_t(i)];
+    return tab.session->projectPath().isEmpty() ? tab.defaultName : QFileInfo(tab.session->projectPath()).completeBaseName();
+}
+
+bool MainWindow::startAutomation(const QString& socketPath) {
+    if (automation_) return true;
+    automation_ = new AutomationServer(this);
+    QString path = socketPath.isEmpty() ? AutomationServer::defaultSocketPath() : socketPath, error;
+    if (!automation_->listen(path, &error)) {
+        qWarning("automation: couldn't listen on %s: %s", qPrintable(path), qPrintable(error));
+        automation_->deleteLater();
+        automation_ = nullptr;
+        return false;
+    }
+    qInfo("automation: listening on %s", qPrintable(path));
+    automationLabel_ = new QLabel;
+    automationLabel_->setToolTip(tr("An agent is connected to the automation socket at %1").arg(path));
+    automationLabel_->setStyleSheet(QStringLiteral("color: palette(highlight); font-weight: bold;"));
+    automationLabel_->setVisible(false);
+    statusBar()->addPermanentWidget(automationLabel_);
+    connect(automation_, &AutomationServer::clientsChanged, this, [this](int count) {
+        automationLabel_->setText(count > 0 ? tr("Agent connected") : QString());
+        automationLabel_->setVisible(count > 0);
+    });
+    return true;
+}
 
 void MainWindow::newDocument() {
     auto options = askNewDocument(this, {});
@@ -699,13 +731,19 @@ void MainWindow::openProject() {
 }
 
 void MainWindow::importFile(const QString& path, std::optional<QPointF> at) {
+    QString error;
+    if (!importImageFile(path, at, &error)) showError(tr("Couldn’t import %1").arg(QFileInfo(path).fileName()), error);
+}
+
+bool MainWindow::importImageFile(const QString& path, std::optional<QPointF> at, QString* error) {
     QImageReader reader(path);
     reader.setAutoTransform(true);
     QImage image = reader.read();
-    if (image.isNull()) { showError(tr("Couldn’t import %1").arg(QFileInfo(path).fileName()), reader.errorString()); return; }
-    if (image.width() > 30000 || image.height() > 30000) { showError(tr("Image too large"), tr("Images up to 30,000 pixels per side are supported.")); return; }
+    if (image.isNull()) { if (error) *error = reader.errorString(); return false; }
+    if (image.width() > 30000 || image.height() > 30000) { if (error) *error = tr("Images up to 30,000 pixels per side are supported."); return false; }
     session_->insertImage(fromQImage(image), QFileInfo(path).completeBaseName(), at);
     addRecent(path);
+    return true;
 }
 
 void MainWindow::importImages() {

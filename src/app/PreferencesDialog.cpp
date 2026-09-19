@@ -1,5 +1,7 @@
 #include "Style.h"
 #include "PreferencesDialog.h"
+#include "Automation.h"
+#include <QSettings>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDesktopServices>
@@ -72,6 +74,20 @@ PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent) {
     locationRow->addWidget(open);
     v->addLayout(locationRow);
     layout->addWidget(group);
+
+    auto* automation = new QGroupBox(tr("Automation"));
+    auto* av = new QVBoxLayout(automation);
+    auto* rpc = new QCheckBox(tr("Listen for agents on the automation socket at startup"));
+    rpc->setChecked(QSettings().value("automation/enabled", false).toBool());
+    connect(rpc, &QCheckBox::toggled, this, [](bool on) { QSettings().setValue("automation/enabled", on); });
+    av->addWidget(rpc);
+    auto* rpcInfo = new QLabel(tr("Lets an MCP bridge or a script drive the editor over a local socket (%1). "
+                                  "Only programs running as you can connect. Takes effect at the next launch; "
+                                  "compositor-linux --rpc turns it on for one run.").arg(AutomationServer::defaultSocketPath()));
+    rpcInfo->setWordWrap(true);
+    rpcInfo->setStyleSheet(hintStyle());
+    av->addWidget(rpcInfo);
+    layout->addWidget(automation);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);

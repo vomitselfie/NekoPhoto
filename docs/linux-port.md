@@ -53,6 +53,12 @@ dialog is what gets grabbed.
 demo document, grabs the window and saves a project without any interaction
 (works with `QT_QPA_PLATFORM=offscreen`); CI runs it as a smoke test.
 
+## Automation
+
+`--rpc` opens a JSON-RPC socket an agent or script can drive the editor
+through, `--headless` does so without a window, and `mcp/compositor_mcp.py`
+bridges it to MCP. `docs/automation.md` has the protocol and method list.
+
 ## Releases
 
 `.github/workflows/release.yml` runs when a `v*` tag is pushed. It builds on

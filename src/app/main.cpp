@@ -7,6 +7,7 @@
 #include "ImageConvert.h"
 #include <QDialog>
 #include <cstdio>
+#include <cstring>
 #include "compositor/filters.h"
 #include "compositor/selection.h"
 #include "compositor/subject.h"
@@ -18,6 +19,7 @@
 #include <QImageReader>
 #include <QIcon>
 #include <QMap>
+#include <QSettings>
 #include <QTimer>
 
 namespace {
@@ -159,6 +161,10 @@ void buildDemo(app::EditorSession& session, const QString& imagePath) {
 } // namespace
 
 int main(int argc, char** argv) {
+    // --headless: no window on screen; the automation socket is the only way in. Must be decided before QApplication.
+    bool headless = false;
+    for (int i = 1; i < argc; i++) if (std::strcmp(argv[i], "--headless") == 0) headless = true;
+    if (headless && !qEnvironmentVariableIsSet("QT_QPA_PLATFORM")) qputenv("QT_QPA_PLATFORM", "offscreen");
     QApplication app(argc, argv);
     QApplication::setOrganizationName("compositor-linux");
     QApplication::setApplicationName("compositor-linux");
@@ -183,6 +189,12 @@ int main(int argc, char** argv) {
     parser.addOption(toolOption);
     QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: new, canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens.", "name");
     parser.addOption(dialogOption);
+    QCommandLineOption rpc("rpc", "Listen on the automation socket (JSON-RPC over a local socket, for the MCP bridge). Also on when the automation preference is set.");
+    QCommandLineOption rpcSocket("rpc-socket", "Socket path for --rpc (default: $XDG_RUNTIME_DIR/compositor-linux.sock, or $COMPOSITOR_RPC_SOCKET).", "path");
+    QCommandLineOption headlessOption("headless", "Run without a visible window (offscreen) with the automation socket on; implies --rpc.");
+    parser.addOption(rpc);
+    parser.addOption(rpcSocket);
+    parser.addOption(headlessOption);
     parser.addOption(fetch);
     parser.process(app);
     if (parser.isSet(fetch)) {
@@ -199,6 +211,9 @@ int main(int argc, char** argv) {
     }
     app::MainWindow window;
     window.show();
+    if (parser.isSet(rpc) || parser.isSet(headlessOption) || QSettings().value("automation/enabled", false).toBool()) {
+        if (!window.startAutomation(parser.value(rpcSocket)) && parser.isSet(headlessOption)) return 3;
+    }
     QStringList files = parser.positionalArguments();
     if (parser.isSet(demo)) buildDemo(*window.session(), files.isEmpty() ? QString() : QDir::current().absoluteFilePath(files.first()));
     else for (const QString& path : files) window.openPath(QDir::current().absoluteFilePath(path));

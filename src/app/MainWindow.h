@@ -22,6 +22,7 @@ class CanvasWidget;
 class ColorSwatches;
 class LayersPanel;
 class AdjustmentsPanel;
+class AutomationServer;
 class ToolOptionsBar;
 
 /// The tab strip: accepts a layer dragged from another project's Layers panel.
@@ -43,6 +44,22 @@ public:
     MainWindow();
     void openPath(const QString& path);
     EditorSession* session() const { return session_; }
+
+    // For the automation socket (Automation.cpp).
+    int tabCount() const { return int(tabs_.size()); }
+    int currentTabIndex() const { return current_; }
+    EditorSession* sessionAt(int i) const { return tabs_[size_t(i)].session; }
+    CanvasWidget* canvasAt(int i) const { return tabs_[size_t(i)].canvas; }
+    QString tabTitle(int i) const;
+    void selectTab(int i) { switchTo(i); }
+    int newTab() { addTab(false); return current_; }
+    void closeTabAt(int i) { skipConfirm_ = true; closeTab(i); skipConfirm_ = false; }
+    bool importImageFile(const QString& path, std::optional<QPointF> at, QString* error);
+    void noteRecent(const QString& path) { addRecent(path); }
+    /// While set, errors the window would show in a dialog are appended here instead.
+    void setErrorSink(QString* sink) { errorSink_ = sink; }
+    /// Starts listening on `socketPath` (empty: the default); returns false with a warning on failure.
+    bool startAutomation(const QString& socketPath);
 
 protected:
     void closeEvent(QCloseEvent*) override;
@@ -91,6 +108,10 @@ private:
     void showPreferences();
     void refreshBackgroundAction();
     QAction* removeBackgroundAction_ = nullptr;
+    QString* errorSink_ = nullptr;
+    bool skipConfirm_ = false;
+    AutomationServer* automation_ = nullptr;
+    QLabel* automationLabel_ = nullptr;
     QAction* mergeAction_ = nullptr;
 
     std::vector<Tab> tabs_;

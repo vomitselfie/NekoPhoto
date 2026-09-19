@@ -27,3 +27,4 @@ BUILD_PLAN.md
 build-*/
 .cache/
 compile_commands.json
+__pycache__/

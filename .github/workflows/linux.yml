@@ -31,6 +31,11 @@ jobs:
         run: |
           QT_QPA_PLATFORM=offscreen ./build/src/app/compositor-linux --demo --screenshot demo.png --save-as Demo.comp
           QT_QPA_PLATFORM=offscreen ./build/src/app/compositor-linux Demo.comp --screenshot reopened.png
+      - name: Automation socket smoke test
+        run: |
+          ./build/src/app/compositor-linux --headless --rpc-socket "$PWD/rpc.sock" --demo &
+          python3 tools/rpc_smoke.py "$PWD/rpc.sock"
+          kill %1
       - uses: actions/upload-artifact@v4
         with:
           name: screenshots-${{ matrix.compiler }}

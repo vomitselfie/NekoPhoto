@@ -45,6 +45,8 @@ qt_add_executable(compositor-linux
     AdjustmentsPanel.cpp
     FilterDialog.h
     FilterDialog.cpp
+    Automation.h
+    Automation.cpp
     ModelStore.h
     ModelStore.cpp
     PreferencesDialog.h
