@@ -343,7 +343,9 @@ public:
     std::array<std::vector<double>, 4> activeHistogram() const;
     /// Remove Background: `mask` (white over the subject, the active layer's pixel grid) becomes the layer mask,
     /// multiplied with any mask already there; with a selection only the selected part changes.
-    void applySubjectMask(std::shared_ptr<const compositor::GrayImage> mask);
+    /// Hides the background behind `mask` as a layer mask; `pixels`, when given at the layer's size, replaces the
+    /// layer's pixels in the same undo step (the edge colours after foreground estimation).
+    void applySubjectMask(std::shared_ptr<const compositor::GrayImage> mask, std::shared_ptr<const compositor::Image> pixels = nullptr);
 
     // Crop / canvas
     void cropTo(const QRectF& rect);

@@ -1055,6 +1055,61 @@ TEST_CASE(matting_band_recovers_a_soft_edge) {
     CHECK_NEAR(MatteSettings().normalized().matting, 0, 1e-9);
 }
 
+TEST_CASE(matte_cleanup_removes_speckle_but_keeps_the_edge) {
+    // A subject on the left with a soft ramp at its edge, a soft speck floating in the background and a soft
+    // patch inside the subject: the ramp stays, the speck goes transparent, the patch opaque.
+    const int w = 100, h = 60;
+    GrayImage m(w, h, 0);
+    auto ramp = [](int x) { return x < 40 ? 255 : x < 48 ? 255 - (x - 39) * 28 : 0; };
+    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) m.at(x, y) = uint8_t(ramp(x));
+    for (int y = 20; y < 24; y++) for (int x = 70; x < 74; x++) m.at(x, y) = 120;
+    for (int y = 30; y < 34; y++) for (int x = 10; x < 14; x++) m.at(x, y) = 100;
+    GrayImage original = m;
+    cleanMatte(m);
+    CHECK_EQ(int(m.at(71, 21)), 0);
+    CHECK_EQ(int(m.at(11, 31)), 255);
+    for (int x = 38; x < 50; x++) CHECK_EQ(int(m.at(x, 10)), ramp(x));
+    CHECK_EQ(int(m.at(20, 10)), 255);
+    CHECK_EQ(int(m.at(90, 10)), 0);
+    // Through the settings: on by default, and off leaves the speck alone.
+    auto guide = std::make_shared<Image>(w, h);
+    guide->fill(128, 128, 128, 255);
+    MatteSettings on{0, 0, 0, 0};
+    CHECK_EQ(int(refineMatte(original, *guide, on, 0)->at(71, 21)), 0);
+    MatteSettings off{0, 0, 0, 0, false};
+    CHECK_EQ(int(refineMatte(original, *guide, off, 0)->at(71, 21)), 120);
+    MatteSettings wide{0, 0, 0, 300};
+    CHECK_NEAR(wide.normalized().matting, 300, 1e-9);
+}
+
+TEST_CASE(foreground_estimation_removes_the_background_tint) {
+    // Red over blue through a 24-pixel ramp, with the true opacity as the matte: the estimated colour in the
+    // band is the red, not the mix; opaque pixels and pixels away from the edge are untouched.
+    const int w = 120, h = 60;
+    auto image = std::make_shared<Image>(w, h);
+    auto truth = [](int x) { return std::clamp((72 - x) / 24.0, 0.0, 1.0); };
+    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+        double a = truth(x);
+        uint8_t* p = image->pixel(x, y);
+        p[0] = uint8_t(std::lround(220 * a + 30 * (1 - a))); p[1] = uint8_t(std::lround(40 * a + 60 * (1 - a))); p[2] = uint8_t(std::lround(30 * a + 200 * (1 - a))); p[3] = 255;
+    }
+    GrayImage matte(w, h);
+    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) matte.at(x, y) = uint8_t(std::lround(truth(x) * 255));
+    auto out = estimateForeground(*image, matte);
+    auto same = [&](int x, int y) { const uint8_t *a = out->pixel(x, y), *b = image->pixel(x, y); return a[0] == b[0] && a[1] == b[1] && a[2] == b[2] && a[3] == b[3]; };
+    CHECK(same(10, 30));
+    CHECK(same(47, 30));
+    CHECK(same(80, 30));
+    for (int x = 52; x <= 70; x += 6) {
+        const uint8_t* p = out->pixel(x, 30);
+        CHECK(p[0] >= 190);
+        CHECK(p[2] <= 60);
+        CHECK_EQ(int(p[3]), 255);
+    }
+    // The first transparent pixel past the ramp is re-coloured too (a resampled mask blends it in).
+    CHECK(!same(72, 30));
+}
+
 TEST_CASE(subject_mask_from_model_when_available) {
     const char* dir = std::getenv("COMPOSITOR_MODEL_DIR");
     if (!dir || !subjectModelSupported()) { std::fprintf(stderr, "  (skipped: set COMPOSITOR_MODEL_DIR with u2netp.onnx to run)\n"); return; }

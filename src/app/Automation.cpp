@@ -809,16 +809,20 @@ void AutomationServer::registerHandlers() {
         std::string error;
         auto mask = subjectMask(*source, ModelStore::pathFor(ModelStore::selected()).toStdString(), &error);
         if (!mask) fail("the model failed: " + qs(error));
+        std::shared_ptr<const Image> pixels;
         if (flag(p, "refine", true)) {
             MatteSettings settings;
             settings.refineEdges = num(p, "refineEdges", settings.refineEdges);
             settings.contrast = num(p, "contrast", settings.contrast);
             settings.matting = num(p, "matting", settings.matting);
             settings.shiftEdge = num(p, "shiftEdge", settings.shiftEdge);
+            settings.cleanup = flag(p, "cleanup", settings.cleanup);
+            settings.decontaminate = flag(p, "decontaminate", settings.decontaminate);
             mask = refineMatte(*mask, *source, settings, 0);
+            if (settings.decontaminate) pixels = estimateForeground(*source, *mask);
         }
-        s->applySubjectMask(mask);
-        return QJsonObject{{"applied", true}};
+        s->applySubjectMask(mask, pixels);
+        return QJsonObject{{"applied", true}, {"decontaminated", bool(pixels)}};
     });
 
     // ---- selection (document pixels)

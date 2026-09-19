@@ -25,10 +25,27 @@ struct MatteSettings {
     /// Contracts (negative) or expands (positive) the edge, in layer pixels, -10..10.
     double shiftEdge = 0;
     /// Solves the true opacity of hair and fur in a band this wide (layer pixels) around the edge from
-    /// foreground and background colour samples; 0 off, 0..40.
+    /// foreground and background colour samples; 0 off, 0..400 (a few percent of the short side is usual).
     double matting = 0;
+    /// Half-transparent regions that touch no edge are speckle: the ones enclosed by the subject become
+    /// opaque, the ones floating in the background transparent (`cleanMatte`).
+    bool cleanup = true;
+    /// The edge pixels' colours are replaced by the subject's own colour, so no rim of the old background
+    /// tints them over a new one (`estimateForeground`; Photoshop's Decontaminate Colors).
+    bool decontaminate = true;
     MatteSettings normalized() const;
 };
+
+/// Speckle cleanup, in place: a half-transparent region must touch the matte's edge. One enclosed by
+/// foreground becomes opaque, one floating in the background transparent; regions touching both stay.
+void cleanMatte(GrayImage& matte);
+
+/// `image` with the colour of every half-transparent matte pixel (and its transparent neighbours) replaced by
+/// the estimated pure subject colour, from Germer et al.'s multi-level foreground estimation: per pixel the
+/// colour is explained as alpha * F + (1 - alpha) * B with F and B smooth where alpha is, coarse to fine.
+/// Composited with the matte over any background, no rim of the old one shows. Opaque pixels keep their
+/// colours, and the image's own alpha is kept.
+std::shared_ptr<Image> estimateForeground(const Image& image, const GrayImage& matte);
 
 /// Guided filtering (He, Sun & Tang): `mask` pulled onto the edges of `guide` (the layer's pixels), on a copy no
 /// larger than `limit` on its longest side (0 for full size).
@@ -37,7 +54,7 @@ std::shared_ptr<GrayImage> guidedRefine(const GrayImage& mask, const Image& guid
 /// opacity is solved from foreground and background colours found along rays into the sure regions, the
 /// best-explaining pairs are shared between neighbours, and the result is smoothed by confidence and colour.
 std::shared_ptr<GrayImage> matteBand(const GrayImage& matte, const Image& guide, double band, int limit);
-/// The panel's controls applied in order: refine, matting, shift edge, contrast.
+/// The panel's controls applied in order: refine, matting, cleanup, shift edge, contrast.
 std::shared_ptr<GrayImage> refineMatte(const GrayImage& mask, const Image& guide, const MatteSettings& settings, int limit);
 
 } // namespace compositor

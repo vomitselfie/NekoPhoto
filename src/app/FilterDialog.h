@@ -5,6 +5,8 @@
 #include "EditorSession.h"
 #include "compositor/subject.h"
 #include <QDialog>
+#include <QPointer>
+#include <thread>
 
 class QCheckBox;
 
@@ -21,7 +23,7 @@ protected:
 private:
     void refreshPreview();
     std::shared_ptr<compositor::Image> run(const compositor::Image& source, double scale) const;
-    EditorSession* session_;
+    QPointer<EditorSession> session_;   // the window destroys its sessions before Qt deletes child dialogs
     AdjustmentEditor* editor_;
     QCheckBox* preview_;
     std::shared_ptr<const compositor::Image> source_;
@@ -45,7 +47,7 @@ private:
     void prepareSource();
     void refreshPreview();
     std::shared_ptr<compositor::Image> run(const compositor::Image& source, double scale) const;
-    EditorSession* session_;
+    QPointer<EditorSession> session_;   // the window destroys its sessions before Qt deletes child dialogs
     compositor::FilterKind kind_;
     compositor::FilterSettings settings_;
     uint32_t seed_;
@@ -73,7 +75,7 @@ protected:
 private:
     void refreshPreview();
     std::shared_ptr<compositor::GrayImage> refined(int limit) const;
-    EditorSession* session_;
+    QPointer<EditorSession> session_;   // the window destroys its sessions before Qt deletes child dialogs
     QString modelPath_;
     QCheckBox* preview_;
     QWidget* advanced_;
@@ -85,6 +87,7 @@ private:
     QString error_;
     bool finished_ = false;
     bool computing_ = false;
+    std::thread worker_;   // runs the model; joined before the dialog goes, so a quit mid-run waits for it
 };
 
 } // namespace app

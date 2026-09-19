@@ -32,6 +32,7 @@
 #include <QLocalSocket>
 #include <QTextStream>
 #include <QTimer>
+#include <QComboBox>
 
 namespace {
 
@@ -163,7 +164,10 @@ void buildDemo(app::EditorSession& session, const QString& imagePath) {
             LayerTransform t;
             auto source = session.adjustmentSource(0, t);
             std::string error;
-            if (auto mask = subjectMask(*source, path.toStdString(), &error)) session.applySubjectMask(refineMatte(*mask, *source, MatteSettings{}, 0));
+            if (auto mask = subjectMask(*source, path.toStdString(), &error)) {
+                auto refined = refineMatte(*mask, *source, MatteSettings{}, 0);
+                session.applySubjectMask(refined, estimateForeground(*source, *refined));
+            }
             else qWarning("Remove Background: %s", error.c_str());
         }
     }
@@ -201,7 +205,7 @@ int main(int argc, char** argv) {
     parser.addOption(prefs);
     QCommandLineOption toolOption("tool", "Select tool <name> after opening (move, marquee, lasso, wand, crop, brush, healing, clone, smudge, gradient, shape, eyedropper, hand, zoom).", "name");
     parser.addOption(toolOption);
-    QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: new, canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, gmic.", "name");
+    QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: new, canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, gmic, background, text, fonts.", "name");
     parser.addOption(dialogOption);
     QCommandLineOption rpc("rpc", "Listen on the automation socket (JSON-RPC over a local socket, for the MCP bridge). Also on when the automation preference is set.");
     QCommandLineOption rpcSocket("rpc-socket", "Socket path for --rpc (default: $XDG_RUNTIME_DIR/compositor-linux.sock, or $COMPOSITOR_RPC_SOCKET).", "path");
@@ -327,6 +331,16 @@ int main(int argc, char** argv) {
                 text.text = "Hello";
                 if (s->hasDocument()) s->addTextLayer(QPointF(s->document()->width / 3.0, s->document()->height / 3.0), text, true);
                 if (name == "fonts") QTimer::singleShot(100, &window, [] { for (QWidget* w : QApplication::topLevelWidgets()) for (auto* picker : w->findChildren<app::FontPicker*>()) if (w->isVisible()) { picker->showPicker(); return; } });
+            }
+            else if (name == "background") {
+                if (!app::ModelStore::ready()) qWarning("Remove Background is off or its model is missing");
+                else {
+                    const app::ModelInfo* quick = app::ModelStore::modelById("pphumanseg");
+                    QString quickPath = quick && app::ModelStore::isPresent(*quick) ? app::ModelStore::pathFor(*quick) : QString();
+                    auto* dialog = new app::BackgroundDialog(s, app::ModelStore::pathFor(app::ModelStore::selected()), quickPath, &window);
+                    if (auto* quality = dialog->findChild<QComboBox*>()) quality->setCurrentIndex(1);   // the Advanced panel
+                    dialog->show();
+                }
             }
             else if (name == "new") app::askNewDocument(&window, {});
             else if (name == "canvas-size") app::askCanvasSize(&window, s->hasDocument() ? s->document()->width : 1920, s->hasDocument() ? s->document()->height : 1080);

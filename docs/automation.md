@@ -117,7 +117,9 @@ Hue/Saturation settings accept `"saturationCurve": "photoshop"` (+100 saturates 
 Pixels of the active layer, inside the selection: `pixels.adjust`,
 `pixels.filter` (`kind` and its settings; Lens Correction takes `bicubic: true` for a sharper resample), `pixels.invert`, `pixels.fill`, `pixels.clear`,
 `pixels.contentAwareFill`, `pixels.removeBackground` (`refine`, and then `refineEdges`,
-`contrast`, `shiftEdge`, `matting`: the band width in pixels in which hair opacity is solved), `pixels.gmic` (`command`, a G'MIC
+`contrast`, `shiftEdge`, `matting`: the band width in pixels in which hair opacity is solved,
+`cleanup`: half-transparent specks touching no edge go, `decontaminate`: the edge pixels take the
+subject's own colour; both default true), `pixels.gmic` (`command`, a G'MIC
 command line; `gmic.filters` lists the catalogue with parameters and defaults).
 
 Selection: `selection.all`, `selection.none`, `selection.invert`,

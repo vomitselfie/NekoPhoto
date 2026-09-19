@@ -227,6 +227,10 @@ int main(int argc, char** argv) {
         report("matte refine + shift edge", timeMs([&] { (void)refineMatte(mask, base, s, 0); }, 2));
         report("matting band 12 px (full)", timeMs([&] { (void)matteBand(mask, base, 12, 0); }, 2));
         report("matting band 12 px (limit 1400)", timeMs([&] { (void)matteBand(mask, base, 12, 1400); }, 2));
+        GrayImage soft(W, H, 0);
+        for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) { double d = std::sqrt(double((x - 2000) * (x - 2000) + (y - 1500) * (y - 1500))); soft.at(x, y) = uint8_t(std::lround(255 * std::clamp((1006 - d) / 12, 0.0, 1.0))); }
+        report("matte cleanup", timeMs([&] { GrayImage copy = soft; cleanMatte(copy); }, 2));
+        report("foreground estimate (12 px soft ring)", timeMs([&] { (void)estimateForeground(base, soft); }, 2));
     }
     if (want("selection")) {
         auto shape = rasterizeEllipse(Rect(200, 200, 3000, 2000), W, H, true);

@@ -80,7 +80,7 @@ PixelAdjustmentDialog::PixelAdjustmentDialog(EditorSession* session, AdjustmentK
     refreshPreview();
 }
 
-PixelAdjustmentDialog::~PixelAdjustmentDialog() { if (!finished_) session_->clearPixelPreview(); }
+PixelAdjustmentDialog::~PixelAdjustmentDialog() { if (!finished_ && session_) session_->clearPixelPreview(); }
 
 std::shared_ptr<Image> PixelAdjustmentDialog::run(const Image& source, double scale) const {
     auto out = std::make_shared<Image>(source);
@@ -176,7 +176,7 @@ FilterDialog::FilterDialog(EditorSession* session, FilterKind kind, QWidget* par
     refreshPreview();
 }
 
-FilterDialog::~FilterDialog() { if (!finished_) session_->clearPixelPreview(); }
+FilterDialog::~FilterDialog() { if (!finished_ && session_) session_->clearPixelPreview(); }
 
 void FilterDialog::prepareSource() {
     // A blur grows the layer by its reach; only ever grows, so easing the amount off rebuilds nothing.
@@ -227,6 +227,9 @@ void FilterDialog::done(int result) {
 BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QString quickModelPath, QWidget* parent)
     : QDialog(parent), session_(session), modelPath_(std::move(modelPath)) {
     setWindowTitle(tr("Remove Background"));
+    source_ = session_->adjustmentSource(0, transform_);
+    // The matting band is worth a few percent of the short side on a big photo.
+    const int mattingMax = source_ ? std::max(40, int(std::lround(std::min(source_->width(), source_->height()) * 0.025))) : 40;
     setModal(false);
     setAttribute(Qt::WA_DeleteOnClose);
     auto* layout = new QVBoxLayout(this);
@@ -262,12 +265,21 @@ BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QS
     };
     slider(tr("Refine Edges"), tr("Pulls the mask onto the image's own edges, recovering hair and fur (layer pixels)"), 0, 40, 1, [this] { return settings_.refineEdges; }, [this](double v) { settings_.refineEdges = v; });
     slider(tr("Contrast"), tr("Pushes the mask's grays toward black and white, clearing haze"), 0, 100, 1, [this] { return settings_.contrast; }, [this](double v) { settings_.contrast = v; });
-    slider(tr("Matting"), tr("Solves the true opacity of hair and fur in a band this wide around the edge from foreground and background colours (slower)"), 0, 40, 1, [this] { return settings_.matting; }, [this](double v) { settings_.matting = v; });
+    slider(tr("Matting"), tr("Solves the true opacity of hair and fur in a band this wide around the edge from foreground and background colours (slower)"), 0, mattingMax, 1, [this] { return settings_.matting; }, [this](double v) { settings_.matting = v; });
     slider(tr("Shift Edge"), tr("Contracts (negative) or expands the edge, dropping the rim of background colour"), -10, 10, 1, [this] { return settings_.shiftEdge; }, [this](double v) { settings_.shiftEdge = v; });
+    auto check = [&](const QString& label, const QString& tip, bool& value) {
+        auto* box = new QCheckBox(label);
+        box->setToolTip(tip);
+        box->setChecked(value);
+        connect(box, &QCheckBox::toggled, this, [this, &value](bool on) { value = on; refreshPreview(); });
+        av->addWidget(box);
+    };
+    check(tr("Clean up speckle"), tr("Half-transparent specks that touch no edge go: inside the subject they become opaque, out in the background transparent"), settings_.cleanup);
+    check(tr("Clean edge colours"), tr("The edge pixels take the subject's own colour, so no rim of the old background shows over a new one (those pixels of the layer change)"), settings_.decontaminate);
     advanced_->setVisible(false);
     layout->addWidget(advanced_);
     connect(quality, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { advancedMode_ = i == 1; advanced_->setVisible(advancedMode_); adjustSize(); refreshPreview(); });
-    auto* note = new QLabel(tr("The background is hidden by a layer mask, not erased: paint the mask, disable it or delete it to bring it back."));
+    auto* note = new QLabel(tr("The background is hidden by a layer mask, not erased: paint the mask, disable it or delete it to bring it back. Clean edge colours changes the edge pixels themselves."));
     note->setWordWrap(true);
     note->setStyleSheet(hintStyle());
     layout->addWidget(note);
@@ -280,7 +292,6 @@ BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QS
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     layout->addWidget(buttons);
 
-    source_ = session_->adjustmentSource(0, transform_);
     if (!source_) return;
     // The model runs once, off the UI thread; the sliders only redo the refinement. A quick coarse model,
     // when there is one, gives a preview within a few milliseconds while the chosen model works.
@@ -288,7 +299,7 @@ BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QS
     setCursor(Qt::BusyCursor);
     std::shared_ptr<const Image> image = source_;
     std::string path = modelPath_.toStdString(), quick = quickModelPath == modelPath_ ? std::string() : quickModelPath.toStdString();
-    auto* worker = new std::thread([this, image, path, quick] {
+    worker_ = std::thread([this, image, path, quick] {
         if (!quick.empty()) {
             std::string ignored;
             if (auto coarse = subjectMask(*image, quick, &ignored))
@@ -304,11 +315,12 @@ BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QS
             refreshPreview();
         }, Qt::QueuedConnection);
     });
-    worker->detach();
-    delete worker;
 }
 
-BackgroundDialog::~BackgroundDialog() { if (!finished_) session_->clearPixelPreview(); }
+BackgroundDialog::~BackgroundDialog() {
+    if (worker_.joinable()) worker_.join();
+    if (!finished_ && session_) session_->clearPixelPreview();
+}
 
 std::shared_ptr<GrayImage> BackgroundDialog::refined(int limit) const {
     if (!raw_) return nullptr;
@@ -317,11 +329,14 @@ std::shared_ptr<GrayImage> BackgroundDialog::refined(int limit) const {
 }
 
 void BackgroundDialog::refreshPreview() {
-    if (!source_ || !raw_) return;
+    if (!source_ || !raw_ || !session_) return;
     if (!preview_->isChecked()) { session_->clearPixelPreview(); return; }
     auto mask = refined(1400);
-    // The layer with its background made transparent by the same mask the commit lays down.
-    auto out = std::make_shared<Image>(*source_);
+    // The layer with its background made transparent by the same mask the commit lays down, with the edge
+    // colours it will have.
+    std::shared_ptr<const Image> base = source_;
+    if (advancedMode_ && settings_.decontaminate) base = estimateForeground(*source_, *mask);
+    auto out = std::make_shared<Image>(*base);
     for (int y = 0; y < out->height(); y++) for (int x = 0; x < out->width(); x++) {
         unsigned k = mask->at(x, y);
         uint8_t* p = out->pixel(x, y);
@@ -334,8 +349,13 @@ void BackgroundDialog::done(int result) {
     if (finished_) { QDialog::done(result); return; }
     if (computing_ && result == QDialog::Accepted) return; // wait for the mask
     finished_ = true;
-    if (result == QDialog::Accepted && source_ && raw_) session_->applySubjectMask(refined(0));
-    else session_->clearPixelPreview();
+    if (!session_) { QDialog::done(result); return; }
+    if (result == QDialog::Accepted && source_ && raw_) {
+        auto mask = refined(0);
+        std::shared_ptr<const Image> pixels;
+        if (advancedMode_ && settings_.decontaminate) pixels = estimateForeground(*source_, *mask);
+        session_->applySubjectMask(mask, pixels);
+    } else session_->clearPixelPreview();
     QDialog::done(result);
 }
 

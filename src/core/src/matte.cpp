@@ -23,7 +23,7 @@ namespace compositor {
 
 MatteSettings MatteSettings::normalized() const {
     auto c = [](double v, double lo, double hi, double f) { return std::isfinite(v) ? std::min(hi, std::max(lo, v)) : f; };
-    return {c(refineEdges, 0, 40, 12), c(contrast, 0, 100, 25), c(shiftEdge, -10, 10, 0), c(matting, 0, 40, 0)};
+    return {c(refineEdges, 0, 40, 12), c(contrast, 0, 100, 25), c(shiftEdge, -10, 10, 0), c(matting, 0, 400, 0), cleanup, decontaminate};
 }
 
 namespace {
@@ -306,7 +306,9 @@ std::shared_ptr<GrayImage> matteBand(const GrayImage& matte, const Image& guide,
     std::array<Map, 3> colour = colourLevels(guide, width, height);
     Map levels = maskLevels(matte, width, height);
     // The trimap: sure foreground is the matte eroded by the band, sure background the eroded complement
-    // (running min and max, O(N)); everything else is unknown and gets solved.
+    // (running min and max, O(N)); everything else is unknown and gets solved. Half-transparent pixels
+    // beyond the band are hardened with their region: solving them from samples reached along rays turns
+    // dark fur next to light fur transparent, and the cleanup handles the specks that remain.
     GrayImage eroded(width, height), dilated(width, height);
     for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) eroded.at(x, y) = dilated.at(x, y) = levels[size_t(y) * width + size_t(x)] >= 0.5f ? 255 : 0;
     runningExtreme(eroded, band, false);
@@ -418,6 +420,7 @@ std::shared_ptr<GrayImage> refineMatte(const GrayImage& mask, const Image& guide
     MatteSettings s = raw.normalized();
     std::shared_ptr<GrayImage> out = s.refineEdges > 0 ? guidedRefine(mask, guide, s.refineEdges, limit) : std::make_shared<GrayImage>(mask);
     if (s.matting > 0) out = matteBand(*out, guide, s.matting, limit);
+    if (s.cleanup) cleanMatte(*out);
     if (s.shiftEdge != 0) {
         // Grey-level dilation or erosion: every iso-contour moves by the amount and the soft ramp survives.
         int r = std::max(1, int(std::lround(std::fabs(s.shiftEdge))));
@@ -433,6 +436,258 @@ std::shared_ptr<GrayImage> refineMatte(const GrayImage& mask, const Image& guide
             out->data()[i] = uint8_t(std::min(255.0f, std::max(0.0f, v * 255 + 0.5f)));
         }
     }
+    return out;
+}
+
+// ---- Speckle cleanup ----------------------------------------------------------------------------------------
+//
+// Half-transparent alpha belongs at the subject's edge (the connectivity prior of Beijing Normal U. + HUST,
+// 2025): a soft region that touches only foreground is interior noise and becomes opaque, one that touches
+// only background is a floating speck and becomes transparent. Regions touching both are the edge itself.
+
+void cleanMatte(GrayImage& matte) {
+    const int w = matte.width(), h = matte.height();
+    if (w <= 0 || h <= 0) return;
+    constexpr uint8_t low = 25, high = 230;   // below: background, above: foreground, between: soft
+    uint8_t* d = matte.data();
+    const size_t n = size_t(w) * h;
+    std::vector<uint8_t> visited(n, 0);
+    std::vector<int32_t> stack, component;
+    for (size_t start = 0; start < n; start++) {
+        if (visited[start] || d[start] <= low || d[start] >= high) continue;
+        // Flood one soft component, noting which sure regions it touches.
+        bool touchesF = false, touchesB = false;
+        component.clear();
+        stack.assign(1, int32_t(start));
+        visited[start] = 1;
+        while (!stack.empty()) {
+            const int32_t i = stack.back();
+            stack.pop_back();
+            component.push_back(i);
+            const int x = i % w, y = i / w;
+            const int32_t around[4] = {x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, y > 0 ? i - w : -1, y < h - 1 ? i + w : -1};
+            for (int32_t q : around) {
+                if (q < 0) continue;
+                const uint8_t v = d[q];
+                if (v >= high) touchesF = true;
+                else if (v <= low) touchesB = true;
+                else if (!visited[q]) { visited[q] = 1; stack.push_back(q); }
+            }
+        }
+        if (touchesF == touchesB) continue;   // the edge itself (or a soft image with no sure pixels at all)
+        const uint8_t value = touchesF ? 255 : 0;
+        for (int32_t i : component) d[i] = value;
+    }
+}
+
+// ---- Foreground estimation ------------------------------------------------------------------------------
+//
+// Germer, Uelwer, Conrad & Harmeling, "Fast Multi-Level Foreground Estimation" (ICPR 2020): each pixel's colour
+// is alpha * F + (1 - alpha) * B, with F and B asked to vary smoothly, more strictly where alpha does not
+// change. Holding the neighbours fixed that is a 2x2 system per pixel, shared by the three channels, swept
+// Jacobi-style coarse to fine from a level a couple of pixels wide, so that colour equalises across the whole
+// image at the small levels and settles at the large ones.
+// The base of the pyramid is at most 2048 px on its longest side; the full-size pass runs in tiles with a
+// margin wider than its few sweeps can reach, so it is identical to a whole-image pass at a fraction of the
+// memory, and only where the matte is soft.
+
+namespace {
+
+struct ForegroundLevel {
+    int width = 0, height = 0;
+    std::array<Map, 3> colour;   // straight R, G, B
+    Map alpha;
+    std::vector<uint8_t> work;   // 1 where the estimate is worth computing (near a soft pixel); empty: everywhere
+};
+
+constexpr float smoothness = 1e-5f, alphaWeight = 1.0f;   // the reference implementation's regularisation and gradient weight
+
+/// One Jacobi sweep over `level`: F, B from their neighbours' previous values.
+void relaxForeground(const ForegroundLevel& level, std::array<Map, 3>& F, std::array<Map, 3>& B, std::array<Map, 3>& nextF, std::array<Map, 3>& nextB) {
+    const int w = level.width, h = level.height;
+    parallelRows(0, h, [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++)
+            for (int x = 0; x < w; x++) {
+                const size_t i = size_t(y) * w + size_t(x);
+                if (!level.work.empty() && !level.work[i]) { for (int c = 0; c < 3; c++) { nextF[size_t(c)][i] = F[size_t(c)][i]; nextB[size_t(c)][i] = B[size_t(c)][i]; } continue; }
+                const float a = level.alpha[i];
+                float weightSum = 0, sumF[3] = {0, 0, 0}, sumB[3] = {0, 0, 0};
+                const size_t around[4] = {x > 0 ? i - 1 : i, x < w - 1 ? i + 1 : i, y > 0 ? i - size_t(w) : i, y < h - 1 ? i + size_t(w) : i};
+                for (size_t q : around) {
+                    if (q == i) continue;
+                    const float wq = smoothness + alphaWeight * std::fabs(a - level.alpha[q]);
+                    weightSum += wq;
+                    for (int c = 0; c < 3; c++) { sumF[c] += wq * F[size_t(c)][q]; sumB[c] += wq * B[size_t(c)][q]; }
+                }
+                // [a^2 + W, a(1-a); a(1-a), (1-a)^2 + W] [F; B] = [a I + SF; (1-a) I + SB]
+                const float m00 = a * a + weightSum, m01 = a * (1 - a), m11 = (1 - a) * (1 - a) + weightSum;
+                const float det = std::max(1e-12f, m00 * m11 - m01 * m01);
+                for (int c = 0; c < 3; c++) {
+                    const float I = level.colour[size_t(c)][i];
+                    const float r0 = a * I + sumF[c], r1 = (1 - a) * I + sumB[c];
+                    nextF[size_t(c)][i] = std::clamp((m11 * r0 - m01 * r1) / det, 0.0f, 1.0f);
+                    nextB[size_t(c)][i] = std::clamp((m00 * r1 - m01 * r0) / det, 0.0f, 1.0f);
+                }
+            }
+    });
+}
+
+void sweepForeground(const ForegroundLevel& level, std::array<Map, 3>& F, std::array<Map, 3>& B, int iterations) {
+    std::array<Map, 3> nextF, nextB;
+    for (int c = 0; c < 3; c++) { nextF[size_t(c)].resize(F[size_t(c)].size()); nextB[size_t(c)].resize(B[size_t(c)].size()); }
+    for (int k = 0; k < iterations; k++) {
+        relaxForeground(level, F, B, nextF, nextB);
+        F.swap(nextF);
+        B.swap(nextB);
+    }
+}
+
+/// 2x2 block average of a map (odd sizes take the clamped block).
+Map halveMap(const Map& src, int sw, int sh, int dw, int dh) {
+    Map out(size_t(dw) * dh);
+    for (int y = 0; y < dh; y++)
+        for (int x = 0; x < dw; x++) {
+            float sum = 0;
+            for (int j = 0; j < 2; j++)
+                for (int i = 0; i < 2; i++) sum += src[size_t(std::min(sh - 1, 2 * y + j)) * sw + size_t(std::min(sw - 1, 2 * x + i))];
+            out[size_t(y) * dw + size_t(x)] = sum * 0.25f;
+        }
+    return out;
+}
+
+/// 1 within `margin` pixels of a half-transparent alpha, the pixels worth solving.
+std::vector<uint8_t> workNear(const Map& alpha, int w, int h, int margin) {
+    GrayImage soft(w, h, 0);
+    bool any = false;
+    for (size_t i = 0; i < alpha.size(); i++) if (alpha[i] > 0.004f && alpha[i] < 0.996f) { soft.data()[i] = 255; any = true; }
+    std::vector<uint8_t> work(alpha.size(), 0);
+    if (!any) return work;
+    runningExtreme(soft, margin, true);
+    for (size_t i = 0; i < work.size(); i++) work[i] = soft.data()[i] ? 1 : 0;
+    return work;
+}
+
+} // namespace
+
+std::shared_ptr<Image> estimateForeground(const Image& image, const GrayImage& matte) {
+    const int w = image.width(), h = image.height();
+    auto out = std::make_shared<Image>(image);
+    if (w <= 0 || h <= 0 || matte.width() != w || matte.height() != h) return out;
+    // Which pixels get new colours: soft ones, and their transparent neighbours (a resampled mask blends them in).
+    std::vector<uint8_t> replace(size_t(w) * h, 0);
+    bool any = false;
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            const uint8_t m = matte.at(x, y);
+            if (m == 255) continue;
+            bool near = false;
+            for (int j = -1; j <= 1 && !near; j++)
+                for (int i = -1; i <= 1 && !near; i++) {
+                    const int sx = x + i, sy = y + j;
+                    if (sx < 0 || sy < 0 || sx >= w || sy >= h) continue;
+                    const uint8_t v = matte.at(sx, sy);
+                    near = v > 0 && v < 255;
+                }
+            if (near) { replace[size_t(y) * w + size_t(x)] = 1; any = true; }
+        }
+    if (!any) return out;
+
+    // The dense pyramid: from a base no larger than 2048 px down to a couple of pixels.
+    std::vector<ForegroundLevel> levels;
+    {
+        ForegroundLevel base;
+        base.width = w; base.height = h;
+        while (std::max(base.width, base.height) > 2048) { base.width = (base.width + 1) / 2; base.height = (base.height + 1) / 2; }
+        base.colour = colourLevels(image, base.width, base.height);
+        base.alpha = maskLevels(matte, base.width, base.height);
+        levels.push_back(std::move(base));
+        while (std::max(levels.back().width, levels.back().height) > 2) {
+            const ForegroundLevel& fine = levels.back();
+            ForegroundLevel coarse;
+            coarse.width = (fine.width + 1) / 2; coarse.height = (fine.height + 1) / 2;
+            for (int c = 0; c < 3; c++) coarse.colour[size_t(c)] = halveMap(fine.colour[size_t(c)], fine.width, fine.height, coarse.width, coarse.height);
+            coarse.alpha = halveMap(fine.alpha, fine.width, fine.height, coarse.width, coarse.height);
+            levels.push_back(std::move(coarse));
+        }
+        for (ForegroundLevel& level : levels)
+            if (std::max(level.width, level.height) > 64) level.work = workNear(level.alpha, level.width, level.height, 6);
+    }
+    // Coarse to fine: colours start as the image itself.
+    std::array<Map, 3> F, B;
+    for (size_t l = levels.size(); l-- > 0;) {
+        const ForegroundLevel& level = levels[l];
+        if (l + 1 == levels.size()) { F = level.colour; B = level.colour; }
+        else {
+            const ForegroundLevel& coarse = levels[l + 1];
+            for (int c = 0; c < 3; c++) { F[size_t(c)] = upsample(F[size_t(c)], coarse.width, coarse.height, level.width, level.height); B[size_t(c)] = upsample(B[size_t(c)], coarse.width, coarse.height, level.width, level.height); }
+        }
+        sweepForeground(level, F, B, std::max(level.width, level.height) <= 32 ? 10 : 4);
+    }
+    const ForegroundLevel& base = levels.front();
+    auto write = [&](int x, int y, const float f[3]) {
+        uint8_t* p = out->pixel(x, y);
+        const float a = p[3];
+        for (int c = 0; c < 3; c++) p[c] = uint8_t(std::lround(std::clamp(f[c], 0.0f, 1.0f) * a));
+    };
+    if (base.width == w && base.height == h) {
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++) {
+                const size_t i = size_t(y) * w + size_t(x);
+                if (!replace[i]) continue;
+                const float f[3] = {F[0][i], F[1][i], F[2][i]};
+                write(x, y, f);
+            }
+        return out;
+    }
+    // Full size, in tiles: colours from the base bilinearly, then a few sweeps against the real pixels. The
+    // margin exceeds what the sweeps can reach, so the tiles agree with a whole-image pass.
+    constexpr int tile = 256, margin = 8, sweeps = 4;
+    const int tilesX = (w + tile - 1) / tile, tilesY = (h + tile - 1) / tile;
+    parallelRows(0, tilesY, [&](int ty0, int ty1) {
+        ForegroundLevel local;
+        std::array<Map, 3> lf, lb;
+        for (int ty = ty0; ty < ty1; ty++)
+            for (int tx = 0; tx < tilesX; tx++) {
+                const int x0 = tx * tile, y0 = ty * tile, x1 = std::min(w, x0 + tile), y1 = std::min(h, y0 + tile);
+                bool needed = false;
+                for (int y = y0; y < y1 && !needed; y++) for (int x = x0; x < x1 && !needed; x++) needed = replace[size_t(y) * w + size_t(x)];
+                if (!needed) continue;
+                const int lx0 = std::max(0, x0 - margin), ly0 = std::max(0, y0 - margin), lx1 = std::min(w, x1 + margin), ly1 = std::min(h, y1 + margin);
+                local.width = lx1 - lx0; local.height = ly1 - ly0;
+                const size_t count = size_t(local.width) * local.height;
+                for (int c = 0; c < 3; c++) { local.colour[size_t(c)].resize(count); lf[size_t(c)].resize(count); lb[size_t(c)].resize(count); }
+                local.alpha.resize(count);
+                local.work.clear();
+                const double sx = double(base.width) / w, sy = double(base.height) / h;
+                for (int y = ly0; y < ly1; y++) {
+                    const uint8_t* p = image.pixel(lx0, y);
+                    for (int x = lx0; x < lx1; x++, p += 4) {
+                        const size_t i = size_t(y - ly0) * local.width + size_t(x - lx0);
+                        const float a = p[3] ? p[3] / 255.0f : 1.0f;
+                        for (int c = 0; c < 3; c++) local.colour[size_t(c)][i] = p[c] / 255.0f / a;
+                        local.alpha[i] = matte.at(x, y) / 255.0f;
+                        // Bilinear sample of the base level's F and B.
+                        const double bx = std::clamp((x + 0.5) * sx - 0.5, 0.0, double(base.width - 1)), by = std::clamp((y + 0.5) * sy - 0.5, 0.0, double(base.height - 1));
+                        const int ix = int(bx), iy = int(by), ix1 = std::min(ix + 1, base.width - 1), iy1 = std::min(iy + 1, base.height - 1);
+                        const float wx = float(bx - ix), wy = float(by - iy);
+                        for (int c = 0; c < 3; c++) {
+                            const Map &f = F[size_t(c)], &b = B[size_t(c)];
+                            const size_t i00 = size_t(iy) * base.width + size_t(ix), i01 = size_t(iy) * base.width + size_t(ix1), i10 = size_t(iy1) * base.width + size_t(ix), i11 = size_t(iy1) * base.width + size_t(ix1);
+                            lf[size_t(c)][i] = (f[i00] * (1 - wx) + f[i01] * wx) * (1 - wy) + (f[i10] * (1 - wx) + f[i11] * wx) * wy;
+                            lb[size_t(c)][i] = (b[i00] * (1 - wx) + b[i01] * wx) * (1 - wy) + (b[i10] * (1 - wx) + b[i11] * wx) * wy;
+                        }
+                    }
+                }
+                sweepForeground(local, lf, lb, sweeps);
+                for (int y = y0; y < y1; y++)
+                    for (int x = x0; x < x1; x++) {
+                        if (!replace[size_t(y) * w + size_t(x)]) continue;
+                        const size_t i = size_t(y - ly0) * local.width + size_t(x - lx0);
+                        const float f[3] = {lf[0][i], lf[1][i], lf[2][i]};
+                        write(x, y, f);
+                    }
+            }
+    }, 1);
     return out;
 }
 

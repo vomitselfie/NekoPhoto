@@ -2522,7 +2522,7 @@ std::array<std::vector<double>, 4> EditorSession::activeHistogram() const {
     return levelsHistogram(*layer->asset->image, coverage.get());
 }
 
-void EditorSession::applySubjectMask(std::shared_ptr<const GrayImage> mask) {
+void EditorSession::applySubjectMask(std::shared_ptr<const GrayImage> mask, std::shared_ptr<const Image> pixels) {
     clearPixelPreview();
     Layer* layer = activeLayerMutable();
     if (!layer || !mask || !layer->asset || !layer->asset->image) return;
@@ -2548,6 +2548,10 @@ void EditorSession::applySubjectMask(std::shared_ptr<const GrayImage> mask) {
     m.enabled = true;
     layer->mask = m;
     isMaskSelected_ = true;
+    if (pixels && pixels->width() == out->width() && pixels->height() == out->height()) {
+        layer->asset = Asset::make(pixels, layer->name);
+        layer->shapeImage.reset();
+    }
     endEdit();
     notifyDocument();
 }
