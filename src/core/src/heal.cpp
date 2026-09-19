@@ -117,7 +117,7 @@ inline double unitRandom(uint32_t key) { return double(hash32(key) >> 8) / 16777
 
 /// Mean squared difference between the ring around the spot and the ring around the patch offset by
 /// (dx, dy); infinite when the patch would overlap the spot or leave the image.
-double ringScore(const Image& image, const std::vector<uint8_t>& role, int wx0, int wy0, int ww, int wh, int dx, int dy) {
+double ringScore(const Image& image, const std::vector<uint8_t>& role, int wx0, int wy0, int ww, int wh, int dx, int dy, const GrayImage* visible) {
     if (std::abs(dx) < ww && std::abs(dy) < wh) return INFINITY;
     if (wx0 + dx < 0 || wy0 + dy < 0 || wx0 + ww + dx > image.width() || wy0 + wh + dy > image.height()) return INFINITY;
     double sum = 0;
@@ -127,6 +127,9 @@ double ringScore(const Image& image, const std::vector<uint8_t>& role, int wx0, 
         const uint8_t* t = image.pixel(wx0, wy0 + y);
         const uint8_t* s = image.pixel(wx0 + dx, wy0 + y + dy);
         for (int x = 0; x < ww; x++, t += 4, s += 4) {
+            if (roleRow[x] == Outside) continue;
+            // A patch that would copy hidden pixels is no candidate.
+            if (visible && visible->at(wx0 + x + dx, wy0 + y + dy) < 128) return INFINITY;
             if (roleRow[x] != Ring) continue;
             for (int c = 0; c < 4; c++) { double d = double(t[c]) - s[c]; sum += d * d; }
             n++;
@@ -138,7 +141,7 @@ double ringScore(const Image& image, const std::vector<uint8_t>& role, int wx0, 
 /// Content-Aware healing: the spot and a thin band around it are synthesised from the surroundings (so
 /// edges and patterns continue through it), then the band's difference from the original is spread across
 /// the spot, the membrane, so the tone matches. False when there is nothing to synthesise from.
-bool healBySynthesis(Image& image, const GrayImage& coverage, const PixelBounds& b, float opacity, uint32_t seed) {
+bool healBySynthesis(Image& image, const GrayImage& coverage, const PixelBounds& b, float opacity, uint32_t seed, const GrayImage* visible) {
     const int W = image.width(), H = image.height(), band = 2;
     GrayImage grown(W, H, 0);
     for (int y = std::max(0, b.y0 - band); y < std::min(H, b.y1 + band); y++)
@@ -154,7 +157,7 @@ bool healBySynthesis(Image& image, const GrayImage& coverage, const PixelBounds&
     Image synthesised = image;
     InpaintOptions options;
     options.seed = seed;
-    if (!contentFill(synthesised, grown, options)) return false;
+    if (!contentFill(synthesised, grown, options, visible)) return false;
     // The membrane over the spot, from the band where both the original and the synthesis are known.
     const int x0 = std::max(0, b.x0 - band - 1), y0 = std::max(0, b.y0 - band - 1);
     const int x1 = std::min(W, b.x1 + band + 1), y1 = std::min(H, b.y1 + band + 1);
@@ -166,7 +169,7 @@ bool healBySynthesis(Image& image, const GrayImage& coverage, const PixelBounds&
             const size_t p = size_t(y) * ww + size_t(x);
             const int ix = x0 + x, iy = y0 + y;
             if (coverage.at(ix, iy)) { hole[p] = 1; continue; }
-            if (!grown.at(ix, iy) || image.pixel(ix, iy)[3] != 255) continue;
+            if (!grown.at(ix, iy) || image.pixel(ix, iy)[3] != 255 || (visible && visible->at(ix, iy) < 128)) continue;
             known[p] = 1;
             for (int c = 0; c < 4; c++) values[p * 4 + size_t(c)] = float(image.pixel(ix, iy)[c]) - float(synthesised.pixel(ix, iy)[c]);
         }
@@ -211,11 +214,12 @@ void membraneFill(float* values, int channels, const uint8_t* hole, const uint8_
     }, 4);
 }
 
-void spotHeal(Image& image, const GrayImage& coverage, float opacity, int mode, uint32_t seed) {
+void spotHeal(Image& image, const GrayImage& coverage, float opacity, int mode, uint32_t seed, const GrayImage* visible) {
     const int W = image.width(), H = image.height();
+    if (visible && (visible->width() != W || visible->height() != H)) visible = nullptr;
     PixelBounds b = nonzeroBounds(coverage);
     if (b.isEmpty()) return;
-    if (mode == 0 && healBySynthesis(image, coverage, b, opacity, seed)) return;
+    if (mode == 0 && healBySynthesis(image, coverage, b, opacity, seed, visible)) return;
     const int size = std::max(b.x1 - b.x0, b.y1 - b.y0);
     const int ring = std::clamp(size / 8, 2, 16);
     // Work box: the spot plus its ring, clipped to the image.
@@ -241,6 +245,13 @@ void spotHeal(Image& image, const GrayImage& coverage, float opacity, int mode, 
             if (r == Outside && prefix[size_t(std::min(wh, y + ring + 1))] - prefix[size_t(std::max(0, y - ring))] > 0) r = Ring;
         }
     }
+    // Hidden pixels are no part of the ring: they neither set the tone nor score a candidate patch.
+    if (visible)
+        for (int y = 0; y < wh; y++)
+            for (int x = 0; x < ww; x++) {
+                uint8_t& r = role[size_t(y) * ww + size_t(x)];
+                if (r == Ring && visible->at(wx0 + x, wy0 + y) < 128) r = Outside;
+            }
     long ringCount = 0;
     for (uint8_t r : role) ringCount += r == Ring;
     if (!ringCount) return;
@@ -266,7 +277,7 @@ void spotHeal(Image& image, const GrayImage& coverage, float opacity, int mode, 
             candidates[size_t(i)] = {INFINITY, dx, dy};
         }
         auto scored = [&](int dx, int dy) {
-            double score = ringScore(image, role, wx0, wy0, ww, wh, dx, dy);
+            double score = ringScore(image, role, wx0, wy0, ww, wh, dx, dy, visible);
             if (!std::isfinite(score)) return score;
             // Nearer patches win ties, more so for Proximity Match.
             const double distance = std::hypot(double(dx) / ww, double(dy) / wh);
@@ -296,10 +307,10 @@ void spotHeal(Image& image, const GrayImage& coverage, float opacity, int mode, 
             }
         if (std::isfinite(best)) {
             const int cx = ox, cy = oy;
-            double refined = ringScore(image, role, wx0, wy0, ww, wh, cx, cy);
+            double refined = ringScore(image, role, wx0, wy0, ww, wh, cx, cy, visible);
             for (int j = -3; j <= 3; j++)
                 for (int i = -3; i <= 3; i++) {
-                    double score = ringScore(image, role, wx0, wy0, ww, wh, cx + i, cy + j);
+                    double score = ringScore(image, role, wx0, wy0, ww, wh, cx + i, cy + j, visible);
                     if (score < refined) { refined = score; ox = cx + i; oy = cy + j; }
                 }
             haveSource = true;

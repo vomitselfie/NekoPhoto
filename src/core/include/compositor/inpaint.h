@@ -17,7 +17,9 @@ struct InpaintOptions {
 };
 
 /// Fills the pixels of `image` where `hole` is nonzero from its opaque, unselected pixels. Returns false when
-/// there is nothing to copy from (no fully known patch anywhere), leaving the image untouched.
-bool contentFill(Image& image, const GrayImage& hole, const InpaintOptions& options = {});
+/// there is nothing to copy from (no fully known patch anywhere), leaving the image untouched. `visible`, when
+/// given at the image's size, limits the sources to the pixels it marks (128 and up): what a layer mask hides
+/// is not copied from.
+bool contentFill(Image& image, const GrayImage& hole, const InpaintOptions& options = {}, const GrayImage* visible = nullptr);
 
 } // namespace compositor

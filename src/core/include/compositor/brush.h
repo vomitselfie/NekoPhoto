@@ -111,6 +111,7 @@ private:
     std::shared_ptr<Image> working_;
     std::shared_ptr<GrayImage> baseMask_;
     std::shared_ptr<GrayImage> workingMask_;
+    std::shared_ptr<GrayImage> visible_;   // the layer mask's visible pixels on the grid, for the healers; null without an enabled mask on the layer's own grid
     std::shared_ptr<GrayImage> coverage_;
     std::shared_ptr<GrayImage> selection_; // selection coverage in grid pixels, if any
     std::vector<Point> samples_;

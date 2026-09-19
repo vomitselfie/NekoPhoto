@@ -110,6 +110,47 @@ TEST_CASE(spot_heal_carries_texture_and_tone) {
     CHECK(std::abs(int(half.pixel(48, 48)[0]) - 100) <= 12);
 }
 
+TEST_CASE(healers_ignore_what_a_mask_hides) {
+    // A light, softly textured subject on the left, a black background on the right, all opaque, and a mask
+    // that hides the right part as a cut-out would. A spot straddling the silhouette must close with the
+    // subject's light texture, never with the hidden black, in every healing mode and in content fill.
+    const int w = 200, h = 100, edge = 120;
+    std::mt19937 rng(7);
+    std::uniform_int_distribution<int> noise(-18, 18);
+    auto scene = [&] {
+        Image img(w, h);
+        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+            uint8_t* p = img.pixel(x, y);
+            if (x < edge) { int v = 205 + noise(rng); p[0] = uint8_t(v); p[1] = uint8_t(v - 20); p[2] = uint8_t(v - 45); }
+            else { p[0] = 12; p[1] = 12; p[2] = 12; }
+            p[3] = 255;
+        }
+        return img;
+    };
+    GrayImage visible(w, h, 255);
+    for (int y = 0; y < h; y++) for (int x = edge; x < w; x++) visible.at(x, y) = 0;
+    GrayImage spot(w, h, 0);
+    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) if ((x - edge) * (x - edge) + (y - 50) * (y - 50) <= 7 * 7) spot.at(x, y) = 255;
+    auto darkest = [&](const Image& img) {
+        int lowest = 255;
+        for (int y = 0; y < h; y++) for (int x = 0; x < edge; x++) if (spot.at(x, y)) lowest = std::min(lowest, int(img.pixel(x, y)[0]));
+        return lowest;
+    };
+    for (int mode = 0; mode < 3; mode++) {
+        Image img = scene();
+        spotHeal(img, spot, 1.0f, mode, 5, &visible);
+        std::printf("  mode %d: darkest healed subject pixel %d\n", mode, darkest(img));
+        CHECK(darkest(img) >= 150);
+    }
+    Image blind = scene();
+    spotHeal(blind, spot, 1.0f, 1, 5);
+    std::printf("  without the mask (texture mode): darkest %d\n", darkest(blind));
+    CHECK(darkest(blind) < 150);   // the control: with the black in the ring, the membrane pulls the spot dark
+    Image filled = scene();
+    CHECK(contentFill(filled, spot, {}, &visible));
+    CHECK(darkest(filled) >= 150);
+}
+
 TEST_CASE(content_fill_continues_stripes_through_a_hole) {
     // Vertical stripes of period 8 with a hole in the middle: the synthesis must continue them, which the
     // reference's greedy onion peel could not.

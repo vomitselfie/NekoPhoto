@@ -19,6 +19,9 @@ void membraneFill(float* values, int channels, const uint8_t* hole, const uint8_
 /// through it; mode 1, Create Texture, fills smoothly and adds grain matching the detail around it; mode 2,
 /// Proximity Match, copies the closest nearby patch whose surrounding ring matches the spot's. Copied texture
 /// is membrane-blended to meet the surrounding tone, and the result replaces the original by coverage x opacity.
-void spotHeal(Image& image, const GrayImage& coverage, float opacity, int mode, uint32_t seed);
+/// `visible`, when given at the image's size, marks the pixels that may be copied from or blended towards
+/// (a layer mask's visible pixels, 128 and up): what it hides counts as unknown, like transparent pixels, so
+/// a dab at the edge of a cut-out closes with the subject and not with the old background.
+void spotHeal(Image& image, const GrayImage& coverage, float opacity, int mode, uint32_t seed, const GrayImage* visible = nullptr);
 
 } // namespace compositor

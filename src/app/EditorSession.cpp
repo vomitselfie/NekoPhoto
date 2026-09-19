@@ -2115,7 +2115,14 @@ bool EditorSession::contentAwareFill(QString* errorText) {
     auto coverage = selectionOnGrid(grown, source->width(), source->height());
     if (!coverage) { if (errorText) *errorText = tr("Select an area to fill."); return false; }
     auto out = std::make_shared<Image>(*source);
-    if (!contentFill(*out, *coverage)) { if (errorText) *errorText = tr("Not enough unselected, opaque image pixels to synthesize a fill. Use a smaller selection with some surrounding image."); return false; }
+    // What the layer's mask hides is not copied from: a fill at the edge of a cut-out takes the subject.
+    std::shared_ptr<GrayImage> visible;
+    if (layer->mask && layer->mask->enabled && !layer->mask->placement && layer->mask->asset.image && layer->mask->asset.image->width() == src.width() && layer->mask->asset.image->height() == src.height()) {
+        visible = std::make_shared<GrayImage>(source->width(), source->height(), 255);
+        const GrayImage& m = *layer->mask->asset.image;
+        for (int y = 0; y < m.height(); y++) std::memcpy(visible->row(y + margin) + margin, m.row(y), size_t(m.width()));
+    }
+    if (!contentFill(*out, *coverage, {}, visible.get())) { if (errorText) *errorText = tr("Not enough unselected, opaque image pixels to synthesize a fill. Use a smaller selection with some surrounding image."); return false; }
     LayerTransform placed;
     auto trimmed = trimToPixels(*out, grown, placed);
     commitPixels(trimmed, placed, "Content-Aware Fill");

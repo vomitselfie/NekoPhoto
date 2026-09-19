@@ -285,8 +285,9 @@ void smoothStart(Level& L) {
 
 } // namespace
 
-bool contentFill(Image& image, const GrayImage& hole, const InpaintOptions& options) {
+bool contentFill(Image& image, const GrayImage& hole, const InpaintOptions& options, const GrayImage* visible) {
     const int r = std::clamp(options.patchRadius, 1, 8);
+    if (visible && (visible->width() != image.width() || visible->height() != image.height())) visible = nullptr;
     PixelBounds b = nonzeroBounds(hole);
     if (b.isEmpty()) return true;
     // The work region: the hole with room around it to copy from, twice its size each way (as far as a
@@ -302,7 +303,7 @@ bool contentFill(Image& image, const GrayImage& hole, const InpaintOptions& opti
         for (int x = 0; x < fine.w; x++) {
             const size_t p = fine.at(x, y);
             fine.hole[p] = hole.at(x0 + x, y0 + y) != 0;
-            fine.known[p] = !fine.hole[p] && image.pixel(x0 + x, y0 + y)[3] == 255;
+            fine.known[p] = !fine.hole[p] && image.pixel(x0 + x, y0 + y)[3] == 255 && (!visible || visible->at(x0 + x, y0 + y) >= 128);
         }
     }
     // The pyramid, down to where the hole is a few patches wide.

@@ -31,7 +31,7 @@ The full feature list. It mirrors the Mac app's, with Linux key names.
 
 ## Painting and retouching
 - Brush with size, hardness and opacity, `[` and `]` for size, digits for opacity, Shift for straight lines
-- Spot Healing Brush (content-aware)
+- Spot Healing Brush (content-aware); it and Content-Aware Fill ignore what a layer mask hides, so a dab at the edge of a cut-out closes with the subject, not the old background
 - Clone Stamp, aligned or not, sampling one layer or all of them
 - Smudge, Liquify and Blur, on pixels or masks
 - Gradient tool and Shape tool (rectangles, rounded rectangles and ellipses)

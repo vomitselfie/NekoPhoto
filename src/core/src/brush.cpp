@@ -91,6 +91,12 @@ BrushStroke::BrushStroke(const Layer& layer, bool mask, BrushSettings settings, 
         }
         baseBounds_ = alphaBounds(*base_);
         working_ = std::make_shared<Image>(*base_);
+        // The healers copy only from what the mask shows: a dab at a cut-out's edge closes with the subject.
+        if (layer.mask && layer.mask->enabled && !layer.mask->placement && layer.mask->asset.image
+            && layer.mask->asset.image->width() == originalWidth && layer.mask->asset.image->height() == originalHeight) {
+            visible_ = std::make_shared<GrayImage>(width_, height_, 255);
+            stretchGray(*layer.mask->asset.image, *visible_, sourceRect_);
+        }
     }
     coverage_ = std::make_shared<GrayImage>(width_, height_, 0);
     if (selection && !selection->isEmpty()) {
@@ -539,7 +545,8 @@ void BrushStroke::heal() {
     // the hole and leave it half healed. Heal the solid core only, then feather the result in by coverage.
     auto core = std::make_shared<GrayImage>(rw, rh);
     for (int y = 0; y < rh; y++) for (int x = 0; x < rw; x++) core->at(x, y) = painting->at(x, y) >= 128 ? 255 : 0;
-    spotHeal(*pixels, *core, float(settings_.opacity), settings_.healingMode, settings_.healingSeed);
+    std::shared_ptr<GrayImage> visible = visible_ ? cropGray(*visible_, rx, ry, rw, rh) : nullptr;
+    spotHeal(*pixels, *core, float(settings_.opacity), settings_.healingMode, settings_.healingSeed, visible.get());
     // The healed pixels replace the wash: the working image becomes the original with the healed region.
     working_ = std::make_shared<Image>(*base_);
     for (int y = 0; y < rh; y++) {

@@ -44,12 +44,11 @@ left on the subject with a colour search over a render, wand-selected it and
 filled it with Content-Aware Fill, imported a second photo, sent it to the
 bottom and fitted it to the canvas, exported and saved. Two things it hit:
 
-- **Spot healing and Content-Aware Fill sample pixels the mask hides.** Near
+- **Spot healing and Content-Aware Fill sampled pixels the mask hides.** Near
   the silhouette of a masked layer the healer pulled in the old, nearly black
-  background, and applying the mask first did not help enough. Tools that
-  synthesise from a layer's surroundings should treat masked-out pixels as
-  unknown, the way they treat pixels outside the layer. A core change in
-  `heal.cpp` and `inpaint.cpp` (pass the mask as a validity map), half a day.
+  background. Fixed the same day: both healers take the layer mask's visible
+  pixels as a validity map and treat what it hides as unknown, the way they
+  treat transparent pixels.
 - **Wrong-shape parameters fail late and tersely.** `layers.add` with a text
   object instead of a string returned "parameter 'text' must be a string" only
   after the guess; see item 8, and the one-call overview of item 4 would have
