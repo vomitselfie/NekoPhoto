@@ -306,7 +306,7 @@ int main(int argc, char** argv) {
     if (parser.isSet(toolOption)) {
         static const QMap<QString, app::Tool> tools{{"move", app::Tool::Move}, {"marquee", app::Tool::Marquee}, {"lasso", app::Tool::Lasso}, {"wand", app::Tool::Wand},
             {"crop", app::Tool::Crop}, {"brush", app::Tool::Brush}, {"healing", app::Tool::SpotHealing}, {"clone", app::Tool::CloneStamp}, {"smudge", app::Tool::Smudge},
-            {"gradient", app::Tool::Gradient}, {"shape", app::Tool::Shape}, {"eyedropper", app::Tool::Eyedropper}, {"hand", app::Tool::Hand}, {"zoom", app::Tool::Zoom}};
+            {"gradient", app::Tool::Gradient}, {"shape", app::Tool::Shape}, {"eyedropper", app::Tool::Eyedropper}, {"hand", app::Tool::Hand}, {"zoom", app::Tool::Zoom}, {"text", app::Tool::Text}};
         QString name = parser.value(toolOption).toLower();
         if (tools.contains(name)) window.session()->selectTool(tools.value(name)); else qWarning("unknown tool: %s", qPrintable(name));
     }
@@ -321,6 +321,11 @@ int main(int argc, char** argv) {
             if (adjustments.contains(name)) (new app::PixelAdjustmentDialog(s, adjustments.value(name), &window))->show();
             else if (filters.contains(name)) (new app::FilterDialog(s, filters.value(name), &window))->show();
             else if (name == "gmic") (new app::GmicDialog(s, &window))->show();
+            else if (name == "text") {
+                compositor::LayerText text = s->textStyle;
+                text.text = "Hello";
+                if (s->hasDocument()) s->addTextLayer(QPointF(s->document()->width / 3.0, s->document()->height / 3.0), text, true);
+            }
             else if (name == "new") app::askNewDocument(&window, {});
             else if (name == "canvas-size") app::askCanvasSize(&window, s->hasDocument() ? s->document()->width : 1920, s->hasDocument() ? s->document()->height : 1080);
             else if (name == "image-size") app::askImageSize(&window, s->hasDocument() ? s->document()->width : 1920, s->hasDocument() ? s->document()->height : 1080, 72);

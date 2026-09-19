@@ -201,7 +201,11 @@ packaging/                      .desktop, icon, MIME type
   together; Alt-drag duplicates a layer while moving it.
 - Gradient tool (linear / radial, foreground to background or to transparent,
   reverse, opacity; Shift snaps the angle; Enter applies, Esc discards), Shape
-  tool (rectangle, rounded rectangle, ellipse; Shift-U switches), Blur /
+  tool (rectangle, rounded rectangle, ellipse; Shift-U switches), Text tool
+  (click to add text in the foreground colour, click a text layer to edit it;
+  the options bar sets font, size, bold, italic and alignment, the editor also
+  colour, line and letter spacing; a text layer is a raster with its text and
+  style beside it in the manifest, so the Mac app sees pixels), Blur /
   Smudge / Liquify tool (Blur works on masks too, to feather them; Liquify
   accumulates a displacement field and resamples the original through it, so
   long strokes stay sharp).
@@ -238,7 +242,7 @@ uses a different model than Apple's Vision, so its cutouts differ in detail.
 
 | Keys | Action |
 |---|---|
-| V M L W C B E J S R G U I H Z | Tools: Move, Marquee, Lasso, Wand, Crop, Brush, Eraser, Spot Healing, Clone Stamp, Smudge, Gradient, Shape, Eyedropper, Hand, Zoom |
+| V M L W C B E J S R G U T I H Z | Tools: Move, Marquee, Lasso, Wand, Crop, Brush, Eraser, Spot Healing, Clone Stamp, Smudge, Gradient, Shape, Text, Eyedropper, Hand, Zoom |
 | Shift M / L / U | Switch the Marquee, Lasso or Shape kind |
 | 1…9, 0 | Opacity 10%…90%, 100% (two digits quickly for an exact value) |
 | [ ], Shift [ ] | Brush size, hardness |

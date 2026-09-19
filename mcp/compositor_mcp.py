@@ -239,9 +239,18 @@ def layers_set(id: str, name: Optional[str] = None, visible: Optional[bool] = No
 
 
 @mcp.tool()
-def layers_add(kind: str = "pixels", name: Optional[str] = None, adjustment_kind: Optional[str] = None, settings: Optional[dict] = None, below: bool = False) -> str:
-    """Add a layer above the active one (or below it with below=true, e.g. a new background): kind pixels (blank), group, or adjustment with adjustment_kind Levels, Curves, Hue/Saturation, Exposure, Gradient Map or Grain and optional settings (see adjustments_defaults)."""
-    return text(call("layers.add", kind=kind, name=name, adjustmentKind=adjustment_kind, settings=settings, below=below))
+def layers_add(kind: str = "pixels", name: Optional[str] = None, adjustment_kind: Optional[str] = None, settings: Optional[dict] = None, below: bool = False,
+               text_content: Optional[str] = None, x: Optional[float] = None, y: Optional[float] = None, font: Optional[str] = None, size: Optional[float] = None,
+               bold: Optional[bool] = None, italic: Optional[bool] = None, color: Optional[str] = None, align: Optional[str] = None) -> str:
+    """Add a layer above the active one (or below it with below=true, e.g. a new background): kind pixels (blank), group, adjustment with adjustment_kind Levels, Curves, Hue/Saturation, Exposure, Gradient Map or Grain and optional settings (see adjustments_defaults), or text with text_content at x, y (document pixels), font family, size in pixels, bold, italic, color (CSS) and align (left, center, right)."""
+    return text(call("layers.add", kind=kind, name=name, adjustmentKind=adjustment_kind, settings=settings, below=below, text=text_content, x=x, y=y, font=font, size=size, bold=bold, italic=italic, color=color, align=align))
+
+
+@mcp.tool()
+def text_set(id: Optional[str] = None, text_content: Optional[str] = None, font: Optional[str] = None, size: Optional[float] = None, bold: Optional[bool] = None,
+             italic: Optional[bool] = None, color: Optional[str] = None, align: Optional[str] = None, line_spacing: Optional[float] = None, letter_spacing: Optional[float] = None) -> str:
+    """Change a text layer's content or style (the active layer, or id): text_content, font, size (px), bold, italic, color (CSS), align (left, center, right), line_spacing (multiple of the line height), letter_spacing (px). The layer must still be text, not painted on."""
+    return text(call("text.set", id=id, text=text_content, font=font, size=size, bold=bold, italic=italic, color=color, align=align, lineSpacing=line_spacing, letterSpacing=letter_spacing))
 
 
 @mcp.tool()

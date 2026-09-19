@@ -118,6 +118,7 @@ private:
     AutomationServer* automation_ = nullptr;
     QLabel* automationLabel_ = nullptr;
     QAction* mergeAction_ = nullptr;
+    QAction* editTextAction_ = nullptr;
 
     std::vector<Tab> tabs_;
     int current_ = -1;

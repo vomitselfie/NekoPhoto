@@ -9,6 +9,7 @@
 #include <map>
 
 #include "compositor/inpaint.h"
+#include "TextLayer.h"
 #include "compositor/wand.h"
 #include <QApplication>
 #include <QClipboard>
@@ -1762,6 +1763,87 @@ void EditorSession::finishShape() {
     beginEdit(QString::fromStdString(prefix));
     document_->layers.insert(document_->layers.begin() + index, layer);
     setActiveLayer(layer.id);
+    endEdit();
+    notifyDocument();
+}
+
+// ---- Text ----------------------------------------------------------------------------------
+
+bool EditorSession::redrawText(Layer& layer) {
+    if (!layer.text) return false;
+    auto image = renderTextLayer(*layer.text);
+    if (!image) { emit error(tr("That text is too large to render. Text can cover up to 100 megapixels.")); return false; }
+    // A layer scaled on the canvas keeps its scale; the box follows the new raster.
+    double scaleX = 1, scaleY = 1;
+    if (layer.asset && layer.asset->image && layer.asset->image->width() > 0 && layer.asset->image->height() > 0) {
+        scaleX = layer.transform.size.width / layer.asset->image->width();
+        scaleY = layer.transform.size.height / layer.asset->image->height();
+    }
+    if (layer.mask && !layer.mask->placement) layer.mask->placement = layer.maskTransform();
+    layer.asset = Asset::make(image, layer.name);
+    layer.textImage = image;
+    layer.transform.size = Size(image->width() * scaleX, image->height() * scaleY);
+    return true;
+}
+
+std::optional<Uuid> EditorSession::addTextLayer(QPointF documentPoint, const LayerText& text, bool openEditor) {
+    if (!canEditLayers()) return std::nullopt;
+    auto image = renderTextLayer(text);
+    if (!image) { emit error(tr("That text is too large to render. Text can cover up to 100 megapixels.")); return std::nullopt; }
+    Layer layer(Asset::make(image, nextLayerName(document_->layers, "Text")), Point(documentPoint.x() - textPadding, documentPoint.y() - textPadding));
+    layer.name = layer.asset->name;
+    layer.text = text;
+    layer.textImage = image;
+    const Layer* active = activeLayer();
+    layer.parentId = active && active->isGroup ? activeLayerId_ : (active ? active->parentId : std::nullopt);
+    int index = activeLayerId_ ? document_->indexOf(*activeLayerId_) + 1 : int(document_->layers.size());
+    endOpacityEdit();
+    beginEdit("Add Text");
+    document_->layers.insert(document_->layers.begin() + index, layer);
+    setActiveLayer(layer.id);
+    endEdit();
+    notifyDocument();
+    if (openEditor) emit textEditRequested(layer.id);
+    return layer.id;
+}
+
+std::optional<LayerText> EditorSession::layerText(const Uuid& id) const {
+    if (!document_) return std::nullopt;
+    const Layer* layer = document_->find(id);
+    if (!layer || !layer->isLiveText()) return std::nullopt;
+    return layer->text;
+}
+
+void EditorSession::beginTextEdit(const Uuid& id) {
+    if (textEditing_ || !document_) return;
+    const Layer* layer = document_->find(id);
+    if (!layer || !layer->text) return;
+    textEditing_ = true;
+    textEditOriginal_ = *layer;
+    beginEdit("Edit Text");
+}
+
+void EditorSession::setLayerText(const Uuid& id, const LayerText& text) {
+    if (!document_) return;
+    Layer* layer = document_->find(id);
+    if (!layer || !layer->text) return;
+    if (*layer->text == text && layer->isLiveText()) return;
+    const bool standalone = !textEditing_;
+    if (standalone) beginEdit("Edit Text");
+    layer->text = text;
+    redrawText(*layer);
+    if (standalone) { endEdit(); notifyDocument(); }
+    else { emit documentChanged({}); emit layersChanged(); }
+}
+
+void EditorSession::endTextEdit(bool keep) {
+    if (!textEditing_) return;
+    textEditing_ = false;
+    if (!keep && textEditOriginal_ && document_) {
+        Layer* layer = document_->find(textEditOriginal_->id);
+        if (layer) *layer = *textEditOriginal_;
+    }
+    textEditOriginal_.reset();
     endEdit();
     notifyDocument();
 }

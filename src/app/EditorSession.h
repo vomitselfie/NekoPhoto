@@ -28,7 +28,7 @@
 
 namespace app {
 
-enum class Tool { Move, Marquee, Lasso, Wand, Crop, Brush, SpotHealing, CloneStamp, Smudge, Gradient, Shape, Eyedropper, Hand, Zoom };
+enum class Tool { Move, Marquee, Lasso, Wand, Crop, Brush, SpotHealing, CloneStamp, Smudge, Gradient, Shape, Eyedropper, Hand, Zoom, Text };
 enum class MarqueeKind { Rectangle, Ellipse };
 enum class LassoKind { Freehand, Polygonal };
 enum class BlurToolMode { Liquify, Blur, Smudge };
@@ -218,6 +218,20 @@ public:
     /// Switching tools, layers or targets applies the pending gradient, as in Photoshop.
     void resolveGradient();
 
+    // Text tool. New text takes `textStyle` (its colour follows the foreground colour) and opens the editor.
+    compositor::LayerText textStyle;
+    /// Adds a text layer above the active one with its top-left near `documentPoint`; with `openEditor` the
+    /// text editor is requested for it. Returns the layer's id, or none when nothing could be added.
+    std::optional<compositor::Uuid> addTextLayer(QPointF documentPoint, const compositor::LayerText& text, bool openEditor);
+    std::optional<compositor::LayerText> layerText(const compositor::Uuid& id) const;
+    /// Text edits: a session (the dialog) applies changes as they come and keeps or drops them at the end;
+    /// outside a session each setLayerText is its own undo step.
+    void beginTextEdit(const compositor::Uuid& id);
+    void setLayerText(const compositor::Uuid& id, const compositor::LayerText& text);
+    void endTextEdit(bool keep);
+    bool textEditing() const { return textEditing_; }
+    void requestTextEdit(const compositor::Uuid& id) { emit textEditRequested(id); }
+
     // Shape tool
     compositor::ShapeKind shapeKind = compositor::ShapeKind::Rectangle;
     double shapeCornerRadius = 0;
@@ -372,6 +386,8 @@ signals:
     void titleChanged();
     void projectPathChanged();
     void error(QString message);
+    /// The text editor should open for this layer (a new one, or a text layer clicked with the Text tool).
+    void textEditRequested(compositor::Uuid id);
 
 private:
     void restore(const compositor::DocumentHistory::Snapshot& snapshot);
@@ -388,6 +404,9 @@ private:
     std::optional<std::pair<compositor::LayerTransform, compositor::Corners>> distortTarget(const compositor::Layer& layer, const TransformEdit& edit) const;
     std::optional<compositor::LayerTransform> displayedMaskPlacement(const compositor::Layer& layer) const;
     void redrawShape(compositor::Layer& layer);
+    bool redrawText(compositor::Layer& layer);
+    bool textEditing_ = false;
+    std::optional<compositor::Layer> textEditOriginal_;
     void finishDeleting(const std::vector<compositor::Uuid>& ids, const std::map<compositor::Uuid, compositor::Asset>& baked);
     std::optional<compositor::Asset> bakeClipping(const compositor::Uuid& target) const;
     void clearSelectedPixelsNow(compositor::Layer& layer);

@@ -104,7 +104,9 @@ Documents: `tabs.select`, `tabs.new`, `tabs.close`, `document.new`,
 `document.save`, `document.export` (.png or .jpg), `document.close`.
 
 Layers: `layers.select`, `layers.set` (name, visible, opacity, blend, sampling,
-clipping), `layers.add` (pixels, group, adjustment; `below: true` puts it under the active layer), `layers.delete`,
+clipping), `layers.add` (pixels, group, adjustment, or text with `text`, `x`, `y`, `font`, `size`, `bold`,
+`italic`, `color`, `align`; `below: true` puts it under the active layer), `text.set` (a text layer's
+content and style, same keys plus `lineSpacing` and `letterSpacing`), `layers.delete`,
 `layers.duplicate`, `layers.move`, `layers.reorder`, `layers.setTransform`,
 `layers.flip`, `layers.mask` (add, addFromSelection, delete, toggle, invert,
 apply, link), `layers.merge`, `layers.group`, `adjustments.set`.

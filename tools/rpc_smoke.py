@@ -98,6 +98,13 @@ def main():
     rpc.call("selection.rect", x=40, y=40, width=30, height=30)
     rpc.call("pixels.contentAwareFill")
     rpc.call("selection.none")
+    text = rpc.call("layers.add", kind="text", text="Hello", x=20, y=20, size=36, color="#ff8800")
+    assert text["kind"] == "text" and text["text"]["text"] == "Hello", text
+    assert text["pixelSize"]["width"] > 20 and text["pixelSize"]["height"] > 20, text
+    edited = rpc.call("text.set", text="Hello there", bold=True, align="center")
+    assert edited["text"]["bold"] and edited["text"]["align"] == "center" and edited["pixelSize"]["width"] > text["pixelSize"]["width"], edited
+    rpc.call("layers.delete", id=text["id"])
+    rpc.call("layers.select", id=target["id"])
 
     # Painting by coordinates: a stroke, a gradient and a shape layer.
     rpc.call("brush.stroke", points=[[20, 20], [120, 60], [220, 20]], size=12, color="#00ff00", opacity=1)

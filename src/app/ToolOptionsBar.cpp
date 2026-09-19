@@ -1,5 +1,7 @@
 #include "Style.h"
 #include "ToolOptionsBar.h"
+#include "TextLayer.h"
+#include <QFontComboBox>
 #include "CanvasWidget.h"
 #include "Icons.h"
 #include <QButtonGroup>
@@ -74,10 +76,12 @@ ToolOptionsBar::ToolOptionsBar(EditorSession* session, CanvasWidget* canvas, QWi
     stack_->addWidget(buildSmudgeOptions());     // 10
     stack_->addWidget(buildGradientOptions());   // 11
     stack_->addWidget(buildShapeOptions());      // 12
+    stack_->addWidget(buildTextOptions());       // 13
     addWidget(stack_);
     connect(session_, &EditorSession::toolChanged, this, &ToolOptionsBar::syncTool);
     connect(session_, &EditorSession::transformChanged, this, &ToolOptionsBar::syncTransformFields);
     connect(session_, &EditorSession::layersChanged, this, &ToolOptionsBar::syncTransformFields);
+    connect(session_, &EditorSession::layersChanged, this, [this] { for (auto& s : syncers_) s(); });
     syncTool();
 }
 
@@ -97,6 +101,7 @@ void ToolOptionsBar::syncTool() {
     case Tool::Smudge: index = 10; break;
     case Tool::Gradient: index = 11; break;
     case Tool::Shape: index = 12; break;
+    case Tool::Text: index = 13; break;
     }
     for (auto& s : syncers_) s();
     stack_->setCurrentIndex(index);
@@ -378,6 +383,56 @@ QWidget* ToolOptionsBar::buildShapeOptions() {
     auto* radius = numberField(0, 5000, 0, " px", tr("Corner radius, for rectangles"));
     connect(radius, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double v) { session_->shapeCornerRadius = v; });
     h->addWidget(radius);
+    h->addStretch();
+    return w;
+}
+
+QWidget* ToolOptionsBar::buildTextOptions() {
+    // The style new text starts with; a live text layer that is active takes each change straight away.
+    QWidget* w = row();
+    auto* h = layoutOf(w);
+    auto applyStyle = [this](std::function<void(LayerText&)> change) {
+        change(session_->textStyle);
+        const Layer* layer = session_->activeLayer();
+        if (layer && layer->isLiveText() && !session_->textEditing()) {
+            LayerText text = *layer->text;
+            change(text);
+            session_->setLayerText(layer->id, text);
+        }
+    };
+    auto* family = new QFontComboBox;
+    family->setToolTip(tr("Font family"));
+    family->setMaximumWidth(220);
+    connect(family, &QFontComboBox::currentFontChanged, this, [applyStyle](const QFont& f) { applyStyle([f](LayerText& t) { t.fontFamily = f.family().toStdString(); }); });
+    syncers_.push_back([this, family] { QSignalBlocker b(family); family->setCurrentFont(fontFor(session_->textStyle)); });
+    h->addWidget(family);
+    auto* size = numberField(1, 2000, 0, " px", tr("Size, in document pixels"));
+    connect(size, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [applyStyle](double v) { applyStyle([v](LayerText& t) { t.fontSize = v; }); });
+    syncers_.push_back([this, size] { QSignalBlocker b(size); size->setValue(session_->textStyle.fontSize); });
+    h->addWidget(size);
+    auto* bold = new QToolButton;
+    bold->setText(tr("B")); bold->setCheckable(true); bold->setToolTip(tr("Bold"));
+    { QFont f = bold->font(); f.setBold(true); bold->setFont(f); }
+    connect(bold, &QToolButton::toggled, this, [applyStyle](bool on) { applyStyle([on](LayerText& t) { t.bold = on; }); });
+    syncers_.push_back([this, bold] { QSignalBlocker b(bold); bold->setChecked(session_->textStyle.bold); });
+    h->addWidget(bold);
+    auto* italic = new QToolButton;
+    italic->setText(tr("I")); italic->setCheckable(true); italic->setToolTip(tr("Italic"));
+    { QFont f = italic->font(); f.setItalic(true); italic->setFont(f); }
+    connect(italic, &QToolButton::toggled, this, [applyStyle](bool on) { applyStyle([on](LayerText& t) { t.italic = on; }); });
+    syncers_.push_back([this, italic] { QSignalBlocker b(italic); italic->setChecked(session_->textStyle.italic); });
+    h->addWidget(italic);
+    auto* align = new QComboBox;
+    align->addItems({tr("Left"), tr("Centre"), tr("Right")});
+    align->setToolTip(tr("Alignment of the lines"));
+    connect(align, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [applyStyle](int i) { applyStyle([i](LayerText& t) { t.alignment = i; }); });
+    syncers_.push_back([this, align] { QSignalBlocker b(align); align->setCurrentIndex(std::clamp(session_->textStyle.alignment, 0, 2)); });
+    h->addWidget(align);
+    auto* edit = new QPushButton(tr("Edit Text…"));
+    edit->setToolTip(tr("Open the editor for the active text layer"));
+    connect(edit, &QPushButton::clicked, this, [this] { const Layer* l = session_->activeLayer(); if (l && l->isLiveText()) session_->requestTextEdit(l->id); });
+    syncers_.push_back([this, edit] { const Layer* l = session_->activeLayer(); edit->setEnabled(l && l->isLiveText()); });
+    h->addWidget(edit);
     h->addStretch();
     return w;
 }

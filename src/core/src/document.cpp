@@ -99,7 +99,7 @@ bool Layer::operator==(const Layer& o) const {
         && (asset ? asset->image : nullptr) == (o.asset ? o.asset->image : nullptr)
         && parentId == o.parentId && isGroup == o.isGroup && opacity == o.opacity && blendMode == o.blendMode
         && mask == o.mask && maskSourceId == o.maskSourceId && adjustment == o.adjustment
-        && shape == o.shape && shapeImage == o.shapeImage;
+        && shape == o.shape && shapeImage == o.shapeImage && text == o.text && textImage == o.textImage;
 }
 
 int Layer::pixelWidth() const { return asset && asset->image ? asset->image->width() : std::max(1, int(std::lround(transform.size.width))); }

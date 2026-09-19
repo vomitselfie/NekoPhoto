@@ -51,6 +51,10 @@ qt_add_executable(compositor-linux
     Gmic.cpp
     GmicDialog.h
     GmicDialog.cpp
+    TextLayer.h
+    TextLayer.cpp
+    TextDialog.h
+    TextDialog.cpp
     Automation.h
     Automation.cpp
     Theme.h

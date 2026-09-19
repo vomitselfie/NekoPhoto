@@ -416,6 +416,7 @@ void CanvasWidget::updateCursor(QPointF view, Qt::KeyboardModifiers modifiers) {
     }
     case Tool::Brush: case Tool::SpotHealing: case Tool::CloneStamp: case Tool::Smudge: setCursor(Qt::BlankCursor); return;
     case Tool::Marquee: case Tool::Lasso: case Tool::Wand: case Tool::Crop: case Tool::Gradient: case Tool::Shape: case Tool::Eyedropper: setCursor(Qt::CrossCursor); return;
+    case Tool::Text: setCursor(Qt::IBeamCursor); return;
     case Tool::Zoom: setCursor((modifiers & Qt::AltModifier) ? zoomOutCursor_ : zoomInCursor_); return;
     case Tool::Hand: setCursor(Qt::OpenHandCursor); return;
     }
@@ -542,6 +543,17 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
         session_->beginShape(doc);
         if (session_->shapeDraft()) drag_ = Drag::Shape;
         return;
+    case Tool::Text: {
+        // A click on a text layer edits it; anywhere else starts a new one in the current style.
+        std::optional<Uuid> under = session_->layerAt(doc);
+        const Layer* hit = under ? session_->document()->find(*under) : nullptr;
+        if (hit && hit->isLiveText()) { session_->selectLayer(hit->id, false); session_->requestTextEdit(hit->id); return; }
+        LayerText text = session_->textStyle;
+        text.text = tr("Text").toStdString();
+        text.red = session_->foregroundColor.redF(); text.green = session_->foregroundColor.greenF(); text.blue = session_->foregroundColor.blueF();
+        session_->addTextLayer(doc, text, true);
+        return;
+    }
     case Tool::Marquee: {
         const auto& d = session_->document();
         if (selectionMode(modifiers) == SelectionMode::Replace && d->selection && d->selection->coverage) {

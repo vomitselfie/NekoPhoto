@@ -448,7 +448,10 @@ TEST_CASE(project_round_trip_preserves_layers_masks_groups_and_unknown_fields) {
     b.extraJson = "{\"futureField\":[1,2,3]}";
     Layer adj("Levels", doc.size());
     adj.adjustment = LayerAdjustment{AdjustmentKind::Levels, "{\"kind\":\"Levels\",\"levels\":{\"channel\":\"RGB\",\"ranges\":[]},\"custom\":true}"};
-    doc.layers = {group, a, b, adj};
+    Layer t = imageLayer("Text", solid(30, 10, 0, 0, 0), {2, 2});
+    t.text = LayerText{"Hello\nWorld", "Sans", 24, true, false, 0.2, 0.4, 0.6, 1, 1.2, 0.5};
+    t.textImage = t.asset->image;
+    doc.layers = {group, a, b, adj, t};
     doc.extraJson = "{\"futureManifestField\":\"x\"}";
 
     fs::path dir = tempDir();
@@ -465,8 +468,21 @@ TEST_CASE(project_round_trip_preserves_layers_masks_groups_and_unknown_fields) {
     CHECK_EQ(loaded->width, 40);
     CHECK_NEAR(loaded->resolution, 300, 1e-9);
     CHECK_EQ(loaded->id, doc.id);
-    REQUIRE(loaded->layers.size() == 4u);
+    REQUIRE(loaded->layers.size() == 5u);
     CHECK(loaded->layers[0].isGroup);
+    // A text layer comes back as pixels plus its content and style, still live.
+    const Layer& lt = loaded->layers[4];
+    REQUIRE(lt.text.has_value());
+    CHECK(lt.isLiveText());
+    CHECK_EQ(lt.text->text, std::string("Hello\nWorld"));
+    CHECK_EQ(lt.text->fontFamily, std::string("Sans"));
+    CHECK_NEAR(lt.text->fontSize, 24, 1e-9);
+    CHECK(lt.text->bold);
+    CHECK(!lt.text->italic);
+    CHECK_NEAR(lt.text->green, 0.4, 1e-9);
+    CHECK_EQ(lt.text->alignment, 1);
+    CHECK_NEAR(lt.text->lineSpacing, 1.2, 1e-9);
+    CHECK_NEAR(lt.text->letterSpacing, 0.5, 1e-9);
     const Layer& la = loaded->layers[1];
     CHECK_EQ(la.name, std::string("Photo"));
     CHECK(la.parentId == group.id);

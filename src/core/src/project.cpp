@@ -100,7 +100,7 @@ json transformJson(const LayerTransform& t) {
 }
 
 const std::set<std::string> knownLayerKeys = {"id", "name", "isVisible", "transform", "imageFile", "parentID", "isGroup", "opacity", "blendMode",
-    "maskFile", "maskEnabled", "maskSourceID", "adjustment", "maskPlacement", "maskLinked", "shape"};
+    "maskFile", "maskEnabled", "maskSourceID", "adjustment", "maskPlacement", "maskLinked", "shape", "text"};
 const std::set<std::string> knownManifestKeys = {"format", "version", "colorSpace", "resolution", "documentID", "width", "height", "activeLayerID", "layers"};
 
 struct Record {
@@ -163,6 +163,23 @@ bool parseRecord(const json& j, Record& r) {
         if (!getDouble(*sh, "red", s.red, true) || !getDouble(*sh, "green", s.green, true) || !getDouble(*sh, "blue", s.blue, true) || !getDouble(*sh, "cornerRadius", s.cornerRadius, true)) return false;
         l.shape = s;
     }
+    auto tx = j.find("text");
+    if (tx != j.end() && !tx->is_null()) {
+        if (!tx->is_object()) return false;
+        LayerText t;
+        if (!getString(*tx, "text", t.text, true)) return false;
+        if (tx->contains("fontFamily") && !getString(*tx, "fontFamily", t.fontFamily, true)) return false;
+        if (!getDouble(*tx, "fontSize", t.fontSize, true) || !getDouble(*tx, "red", t.red, true) || !getDouble(*tx, "green", t.green, true) || !getDouble(*tx, "blue", t.blue, true)) return false;
+        if (tx->contains("bold") && !getBool(*tx, "bold", t.bold, true)) return false;
+        if (tx->contains("italic") && !getBool(*tx, "italic", t.italic, true)) return false;
+        double alignment = 0, lineSpacing = 1, letterSpacing = 0;
+        if (tx->contains("alignment") && !getDouble(*tx, "alignment", alignment, true)) return false;
+        if (tx->contains("lineSpacing") && !getDouble(*tx, "lineSpacing", lineSpacing, true)) return false;
+        if (tx->contains("letterSpacing") && !getDouble(*tx, "letterSpacing", letterSpacing, true)) return false;
+        t.alignment = std::clamp(int(alignment), 0, 2); t.lineSpacing = lineSpacing; t.letterSpacing = letterSpacing;
+        if (!(t.fontSize > 0) || !std::isfinite(t.fontSize) || !std::isfinite(t.lineSpacing) || !std::isfinite(t.letterSpacing)) return false;
+        l.text = t;
+    }
     json extra = json::object();
     for (auto& [key, value] : j.items()) if (!knownLayerKeys.count(key)) extra[key] = value;
     if (!extra.empty()) l.extraJson = extra.dump();
@@ -192,6 +209,12 @@ json recordJson(const Layer& l) {
     if (l.shape && l.isLiveShape()) {
         j["shape"] = {{"kind", l.shape->kind == ShapeKind::Ellipse ? "Ellipse" : "Rectangle"}, {"red", number(l.shape->red)}, {"green", number(l.shape->green)},
                       {"blue", number(l.shape->blue)}, {"cornerRadius", number(l.shape->cornerRadius)}};
+    }
+    if (l.text && l.isLiveText()) {
+        const LayerText& t = *l.text;
+        j["text"] = {{"text", t.text}, {"fontFamily", t.fontFamily}, {"fontSize", number(t.fontSize)}, {"bold", t.bold}, {"italic", t.italic},
+                     {"red", number(t.red)}, {"green", number(t.green)}, {"blue", number(t.blue)}, {"alignment", t.alignment},
+                     {"lineSpacing", number(t.lineSpacing)}, {"letterSpacing", number(t.letterSpacing)}};
     }
     return j;
 }
@@ -375,6 +398,7 @@ std::optional<Document> loadProject(const std::string& pathText, ProjectError& e
                 if (!image) { error = missingImage(); return std::nullopt; }
                 layer.asset = Asset::make(image, layer.name);
                 if (layer.shape) layer.shapeImage = layer.asset->image;
+                if (layer.text) layer.textImage = layer.asset->image;
             }
         }
     }

@@ -8,6 +8,7 @@
 #include "Automation.h"
 #include "FilterDialog.h"
 #include "GmicDialog.h"
+#include "TextDialog.h"
 #include "ColorSwatches.h"
 #include "Icons.h"
 #include "ModelStore.h"
@@ -257,6 +258,7 @@ QString MainWindow::toolHint(Tool tool, bool erase) {
     case Tool::Smudge: return tr("Opacity is the strength; Liquify pushes pixels, Smudge drags colour, Blur softens");
     case Tool::Gradient: return tr("Drag a line; drag again to redo it; Enter applies, Esc discards; Shift snaps the angle");
     case Tool::Shape: return tr("Drag a shape in the foreground colour; Shift squares, Alt grows from the centre; Shift-U switches kind");
+    case Tool::Text: return tr("Click to add text in the foreground colour, or click a text layer to edit it; the options bar sets the font");
     case Tool::Eyedropper: return tr("Click sets the foreground colour, Alt-click the background");
     case Tool::Hand: return tr("Drag to pan; hold Space to pan from any tool");
     case Tool::Zoom: return tr("Click zooms in, Alt-click out, drag a box to zoom to it; Ctrl-wheel zooms anywhere");
@@ -272,6 +274,7 @@ void MainWindow::connectSession() {
     for (auto& c : sessionConnections_) disconnect(c);
     sessionConnections_.clear();
     sessionConnections_.push_back(connect(session_, &EditorSession::viewportChanged, this, &MainWindow::refreshZoom));
+    sessionConnections_.push_back(connect(session_, &EditorSession::textEditRequested, this, [this](Uuid id) { (new TextDialog(session_, id, this))->show(); }));
     sessionConnections_.push_back(connect(session_, &EditorSession::titleChanged, this, &MainWindow::refreshTitle));
     sessionConnections_.push_back(connect(session_, &EditorSession::projectPathChanged, this, &MainWindow::refreshTitle));
     sessionConnections_.push_back(connect(session_, &EditorSession::historyChanged, this, &MainWindow::refreshActions));
@@ -384,6 +387,7 @@ void MainWindow::buildToolRail() {
     tool(Tool::Smudge, tr("Liquify / Blur / Smudge"), "droplet", QKeySequence("R"));
     tool(Tool::Gradient, tr("Gradient"), "blend", QKeySequence("G"));
     tool(Tool::Shape, tr("Shape (Shift-U switches Rectangle / Ellipse)"), "shapes", QKeySequence("U"));
+    tool(Tool::Text, tr("Text"), "type", QKeySequence("T"));
     tool(Tool::Eyedropper, tr("Eyedropper"), "pipette", QKeySequence("I"));
     rail->addSeparator();
     tool(Tool::Hand, tr("Hand"), "hand", QKeySequence("H"));
@@ -518,6 +522,7 @@ void MainWindow::buildMenus() {
     needsDocument(layer->addAction(tr("&Duplicate Layer"), this, [this] { session_->duplicateActiveLayer(); }));
     needsDocument(layer->addAction(tr("De&lete Layer"), this, [this] { deleteSelectedLayers(); }));
     mergeAction_ = needsDocument(layer->addAction(tr("Merge &Down"), QKeySequence("Ctrl+E"), this, [this] { session_->mergeLayers(); }));
+    editTextAction_ = needsDocument(layer->addAction(tr("Edit &Text…"), this, [this] { const Layer* l = session_->activeLayer(); if (l && l->isLiveText()) session_->requestTextEdit(l->id); }));
     needsDocument(layer->addAction(tr("&Rename Layer…"), this, [this] {
         const Layer* active = session_->activeLayer();
         if (!active) return;
@@ -666,6 +671,7 @@ void MainWindow::refreshActions() {
     bool has = session_->hasDocument();
     for (auto* a : documentActions_) a->setEnabled(has);
     if (mergeAction_) { mergeAction_->setText(tr("&%1").arg(session_->mergeTitle())); mergeAction_->setEnabled(has && session_->canMergeLayers()); }
+    if (editTextAction_) { const Layer* l = has ? session_->activeLayer() : nullptr; editTextAction_->setEnabled(l && l->isLiveText()); }
     undoAction_->setEnabled(session_->canUndo());
     redoAction_->setEnabled(session_->canRedo());
     undoAction_->setText(session_->canUndo() ? tr("&Undo %1").arg(session_->undoName()) : tr("&Undo"));

@@ -125,7 +125,7 @@ QJsonObject transformJson(const LayerTransform& t) {
 QJsonObject layerJson(const Layer& layer, int depth) {
     QJsonObject o{
         {"id", qs(layer.id)}, {"name", qs(layer.name)}, {"depth", depth},
-        {"kind", layer.isGroup ? "group" : layer.adjustment ? "adjustment" : layer.isLiveShape() ? "shape" : "pixels"},
+        {"kind", layer.isGroup ? "group" : layer.adjustment ? "adjustment" : layer.isLiveShape() ? "shape" : layer.isLiveText() ? "text" : "pixels"},
         {"visible", layer.visible}, {"opacity", layer.opacity}, {"blend", QString::fromUtf8(blendModeName(layer.blendMode))},
         {"clipping", layer.maskSourceId.has_value()}, {"transform", transformJson(layer.transform)},
     };
@@ -136,7 +136,32 @@ QJsonObject layerJson(const Layer& layer, int depth) {
         o["adjustmentKind"] = QString::fromUtf8(adjustmentKindName(layer.adjustment->kind));
         o["adjustment"] = QJsonDocument::fromJson(QByteArray::fromStdString(layer.adjustment->json)).object();
     }
+    if (layer.isLiveText()) {
+        const LayerText& t = *layer.text;
+        o["text"] = QJsonObject{{"text", qs(t.text)}, {"font", qs(t.fontFamily)}, {"size", t.fontSize}, {"bold", t.bold}, {"italic", t.italic},
+                                {"color", QColor::fromRgbF(float(t.red), float(t.green), float(t.blue)).name()}, {"align", t.alignment == 1 ? "center" : t.alignment == 2 ? "right" : "left"},
+                                {"lineSpacing", t.lineSpacing}, {"letterSpacing", t.letterSpacing}};
+    }
     return o;
+}
+
+/// A text style from request parameters over `base`: text, font, size, bold, italic, color (CSS), align
+/// (left, center, right), lineSpacing, letterSpacing.
+LayerText textFromParams(const QJsonObject& p, LayerText base) {
+    if (has(p, "text")) base.text = str(p, "text").toStdString();
+    if (has(p, "font")) base.fontFamily = str(p, "font").toStdString();
+    if (has(p, "size")) { double size = num(p, "size", base.fontSize); if (!(size >= 1 && size <= 2000)) fail("size must be 1..2000 pixels", invalidParams); base.fontSize = size; }
+    if (has(p, "bold")) base.bold = flag(p, "bold", base.bold);
+    if (has(p, "italic")) base.italic = flag(p, "italic", base.italic);
+    if (has(p, "color")) { QColor c(str(p, "color")); if (!c.isValid()) fail("color must be a CSS colour", invalidParams); base.red = c.redF(); base.green = c.greenF(); base.blue = c.blueF(); }
+    if (has(p, "align")) {
+        QString a = str(p, "align").toLower();
+        if (a == "left") base.alignment = 0; else if (a == "center" || a == "centre") base.alignment = 1; else if (a == "right") base.alignment = 2;
+        else fail("align must be left, center or right", invalidParams);
+    }
+    if (has(p, "lineSpacing")) base.lineSpacing = std::clamp(num(p, "lineSpacing", base.lineSpacing), 0.5, 5.0);
+    if (has(p, "letterSpacing")) base.letterSpacing = std::clamp(num(p, "letterSpacing", base.letterSpacing), -20.0, 100.0);
+    return base;
 }
 
 QJsonArray layersJson(const Document& doc) {
@@ -517,10 +542,27 @@ void AutomationServer::registerHandlers() {
                 if (!l || !AdjustmentSettings::parse(QJsonDocument(settings).toJson(QJsonDocument::Compact).toStdString(), parsed)) fail("couldn't parse settings", invalidParams);
                 s->setAdjustment(l->id, parsed);
             }
-        } else fail("kind must be pixels, group or adjustment", invalidParams);
+        } else if (kind == "text") {
+            LayerText base = s->textStyle;
+            base.text = "Text";
+            base.red = s->foregroundColor.redF(); base.green = s->foregroundColor.greenF(); base.blue = s->foregroundColor.blueF();
+            LayerText text = textFromParams(p, base);
+            const Document& doc = document();
+            if (!s->addTextLayer(QPointF(num(p, "x", doc.width / 4.0), num(p, "y", doc.height / 4.0)), text, false)) fail("the text could not be added");
+        } else fail("kind must be pixels, group, adjustment or text", invalidParams);
         if (has(p, "name") && s->activeLayer()) s->renameLayer(s->activeLayer()->id, str(p, "name"));
         const Layer* l = s->activeLayer();
         return l ? layerJson(*l, 0) : QJsonObject{};
+    });
+    add("text.set", [session, layer](const QJsonObject& p) {
+        // The active (or named) text layer's content and style; the layer must still be text (not painted on).
+        EditorSession* s = session();
+        const Layer& l = has(p, "id") ? layer(p) : [&]() -> const Layer& { const Layer* a = s->activeLayer(); if (!a) fail("no active layer"); return *a; }();
+        std::optional<LayerText> current = s->layerText(l.id);
+        if (!current) fail("the layer is not a text layer (or its pixels were edited); add one with layers.add kind text", invalidParams);
+        s->setLayerText(l.id, textFromParams(p, *current));
+        const Layer* updated = s->document()->find(l.id);
+        return updated ? layerJson(*updated, 0) : QJsonObject{};
     });
     add("layers.delete", [session, layer](const QJsonObject& p) {
         std::vector<Uuid> ids;

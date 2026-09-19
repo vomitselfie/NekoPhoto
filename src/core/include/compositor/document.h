@@ -71,6 +71,20 @@ struct LayerShapeStyle {
     bool operator==(const LayerShapeStyle&) const = default;
 };
 
+/// A text layer's content and style. Its pixels are an ordinary raster the app renders from these (the
+/// core has no font engine), so every consumer of the document, the Mac app included, sees pixels.
+struct LayerText {
+    std::string text;
+    std::string fontFamily;            // empty: the system's default sans-serif
+    double fontSize = 48;              // document pixels
+    bool bold = false, italic = false;
+    double red = 0, green = 0, blue = 0;
+    int alignment = 0;                 // 0 left, 1 centre, 2 right (multi-line text)
+    double lineSpacing = 1;            // multiple of the font's line height
+    double letterSpacing = 0;          // extra pixels between glyphs
+    bool operator==(const LayerText&) const = default;
+};
+
 struct Layer {
     Uuid id;
     std::optional<Asset> asset;
@@ -88,6 +102,10 @@ struct Layer {
     /// once the pixels change the layer is plain pixels again.
     std::optional<LayerShapeStyle> shape;
     ImagePtr shapeImage;
+    /// A text layer's content and style, with the raster it rendered; once the pixels change the layer is
+    /// plain pixels again, as with shapes.
+    std::optional<LayerText> text;
+    ImagePtr textImage;
     /// Manifest fields this build does not understand, kept for the round trip.
     std::string extraJson;
 
@@ -107,6 +125,8 @@ struct Layer {
     LayerTransform maskTransform() const { return mask && mask->placement ? *mask->placement : transform; }
     /// The shape this layer still is: none once its pixels were edited some other way.
     bool isLiveShape() const { return shape && shapeImage && asset && asset->image == shapeImage; }
+    /// The text this layer still is, likewise.
+    bool isLiveText() const { return text && textImage && asset && asset->image == textImage; }
 };
 
 /// A selection: document-sized coverage (white = selected) with a flag for antialiased edges.

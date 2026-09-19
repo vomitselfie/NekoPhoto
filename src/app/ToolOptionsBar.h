@@ -48,6 +48,7 @@ private:
     QWidget* buildSmudgeOptions();
     QWidget* buildGradientOptions();
     QWidget* buildShapeOptions();
+    QWidget* buildTextOptions();
     std::vector<std::function<void()>> syncers_;
     void addBrushTipFields(QHBoxLayout* layout);
 

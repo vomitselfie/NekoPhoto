@@ -46,6 +46,7 @@ type into `/usr/local`.
 - Brush, eraser, spot healing, clone stamp, smudge, gradient and shape tools
 - Levels, curves, hue/saturation, exposure, gradient map, grain, blurs, noise
 - Remove Background with a local model, if you turn it on in Preferences
+- Text layers in any installed font, editable until painted on
 - The G'MIC filter library (700+ filters) through Filter > G'MIC, when `gmic` is installed
 - Multiple projects in tabs; PNG and JPEG export
 - The keyboard shortcuts you already know
