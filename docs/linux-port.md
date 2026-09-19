@@ -193,7 +193,9 @@ packaging/                      .desktop, icon, MIME type
 - Gradient tool (linear / radial, foreground to background or to transparent,
   reverse, opacity; Shift snaps the angle; Enter applies, Esc discards), Shape
   tool (rectangle, rounded rectangle, ellipse; Shift-U switches), Blur /
-  Smudge / Liquify tool (Blur works on masks too, to feather them).
+  Smudge / Liquify tool (Blur works on masks too, to feather them; Liquify
+  accumulates a displacement field and resamples the original through it, so
+  long strokes stay sharp).
 - Opacity number keys, Shift-[ ] for hardness, Shift-M / Shift-L kinds,
   snapping while resizing, crop ratio presets, Load as Selection, a bake or
   release prompt when deleting a clipping base, Alt-click to clip, Alt-drag

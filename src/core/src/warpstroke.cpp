@@ -1,4 +1,6 @@
 #include "compositor/warpstroke.h"
+#include "compositor/resample.h"
+#include "compositor/parallel.h"
 #include <algorithm>
 #include <cmath>
 
@@ -6,7 +8,9 @@ namespace compositor {
 
 WarpStroke::WarpStroke(std::shared_ptr<Image> image, WarpMode mode, double diameter, double hardness, double strength)
     : image_(std::move(image)), mode_(mode), diameter_(std::max(2.0, diameter)), hardness_(std::min(0.98, std::max(0.0, hardness))),
-      strength_(std::min(1.0, std::max(0.01, strength))), width_(image_->width()), height_(image_->height()) {}
+      strength_(std::min(1.0, std::max(0.01, strength))), width_(image_->width()), height_(image_->height()) {
+    if (mode_ == WarpMode::Liquify) original_ = std::make_shared<Image>(*image_);
+}
 
 float WarpStroke::weight(float u) const {
     if (u >= 1) return 0;
@@ -79,44 +83,76 @@ void WarpStroke::smudge(Point center) {
     }
 }
 
+void WarpStroke::growField(int x0, int y0, int x1, int y1) {
+    if (field_.width > 0 && x0 >= field_.x0 && y0 >= field_.y0 && x1 <= field_.x0 + field_.width && y1 <= field_.y0 + field_.height) return;
+    constexpr int pad = 32;
+    const int nx0 = std::max(0, std::min(field_.width > 0 ? field_.x0 : x0, x0 - pad)), ny0 = std::max(0, std::min(field_.width > 0 ? field_.y0 : y0, y0 - pad));
+    const int nx1 = std::min(width_, std::max(field_.width > 0 ? field_.x0 + field_.width : x1, x1 + pad));
+    const int ny1 = std::min(height_, std::max(field_.width > 0 ? field_.y0 + field_.height : y1, y1 + pad));
+    Field grown;
+    grown.x0 = nx0; grown.y0 = ny0; grown.width = nx1 - nx0; grown.height = ny1 - ny0;
+    grown.offsets.assign(size_t(grown.width) * grown.height * 2, 0.0f);
+    for (int y = 0; y < field_.height; y++)
+        std::copy_n(&field_.offsets[size_t(y) * field_.width * 2], size_t(field_.width) * 2, &grown.offsets[(size_t(y + field_.y0 - ny0) * grown.width + size_t(field_.x0 - nx0)) * 2]);
+    field_ = std::move(grown);
+}
+
+void WarpStroke::fieldAt(double x, double y, float& dx, float& dy) const {
+    // Bilinear over the field's pixel centres; zero beyond the field.
+    dx = dy = 0;
+    if (field_.width == 0) return;
+    const double fx = x - 0.5 - field_.x0, fy = y - 0.5 - field_.y0;
+    if (fx <= -1 || fy <= -1 || fx >= field_.width || fy >= field_.height) return;
+    const int ix = int(std::floor(fx)), iy = int(std::floor(fy));
+    const float tx = float(fx - ix), ty = float(fy - iy);
+    auto at = [&](int px, int py, int c) -> float {
+        if (px < 0 || py < 0 || px >= field_.width || py >= field_.height) return 0;
+        return field_.offsets[(size_t(py) * field_.width + size_t(px)) * 2 + size_t(c)];
+    };
+    dx = (at(ix, iy, 0) * (1 - tx) + at(ix + 1, iy, 0) * tx) * (1 - ty) + (at(ix, iy + 1, 0) * (1 - tx) + at(ix + 1, iy + 1, 0) * tx) * ty;
+    dy = (at(ix, iy, 1) * (1 - tx) + at(ix + 1, iy, 1) * tx) * (1 - ty) + (at(ix, iy + 1, 1) * (1 - tx) + at(ix + 1, iy + 1, 1) * tx) * ty;
+}
+
 void WarpStroke::push(Point a, Point b) {
-    int r = radius();
-    float moveX = float((b.x - a.x) * strength_), moveY = float((b.y - a.y) * strength_);
-    int margin = int(std::ceil(std::max(std::fabs(moveX), std::fabs(moveY)))) + 2;
-    int cx = int(std::lround(b.x)), cy = int(std::lround(b.y));
-    int x0 = std::max(0, cx - r - margin), x1 = std::min(width_ - 1, cx + r + margin);
-    int y0 = std::max(0, cy - r - margin), y1 = std::min(height_ - 1, cy + r + margin);
+    const int r = radius();
+    const double moveX = (b.x - a.x) * strength_, moveY = (b.y - a.y) * strength_;
+    const int cx = int(std::lround(b.x)), cy = int(std::lround(b.y));
+    const int x0 = std::max(0, cx - r), x1 = std::min(width_ - 1, cx + r);
+    const int y0 = std::max(0, cy - r), y1 = std::min(height_ - 1, cy + r);
     if (x0 > x1 || y0 > y1) return;
-    int cw = x1 - x0 + 1, ch = y1 - y0 + 1;
-    if (scratch_.size() < size_t(cw) * ch * 4) scratch_.resize(size_t(cw) * ch * 4);
-    for (int y = 0; y < ch; y++) for (int x = 0; x < cw; x++) {
-        const uint8_t* p = image_->pixel(x + x0, y + y0);
-        size_t s = (size_t(y) * cw + x) * 4;
-        for (int k = 0; k < 4; k++) scratch_[s + k] = p[k];
-    }
-    float invR = 1 / float(diameter_ / 2);
-    for (int dy = -r; dy <= r; dy++) {
-        int y = cy + dy;
-        if (y < y0 || y > y1) continue;
-        for (int dx = -r; dx <= r; dx++) {
-            int x = cx + dx;
-            if (x < x0 || x > x1) continue;
-            float w = weight(std::sqrt(float(dx * dx + dy * dy)) * invR);
-            if (w <= 0) continue;
-            float sx = std::min(float(cw - 1), std::max(0.0f, float(x - x0) - moveX * w));
-            float sy = std::min(float(ch - 1), std::max(0.0f, float(y - y0) - moveY * w));
-            int ix = std::min(cw - 2, int(sx)), iy = std::min(ch - 2, int(sy));
-            if (ix < 0 || iy < 0) continue;
-            float fx = sx - ix, fy = sy - iy;
-            uint8_t* p = image_->pixel(x, y);
-            size_t s00 = (size_t(iy) * cw + ix) * 4, s10 = s00 + 4, s01 = s00 + size_t(cw) * 4, s11 = s01 + 4;
-            for (int k = 0; k < 4; k++) {
-                float top = scratch_[s00 + k] + (scratch_[s10 + k] - scratch_[s00 + k]) * fx;
-                float bottom = scratch_[s01 + k] + (scratch_[s11 + k] - scratch_[s01 + k]) * fx;
-                p[k] = uint8_t(std::max(0.0f, std::min(255.0f, std::round(top + (bottom - top) * fy))));
-            }
+    growField(x0, y0, x1 + 1, y1 + 1);
+    // Each pixel under the brush now shows what the result so far showed a little behind it, so it takes
+    // that point's displacement plus the move (Gustafsson's forward warp: the falloff, shaped by the
+    // hardness, shrinks with the length of the drag).
+    const double R = diameter_ / 2, drag2 = moveX * moveX + moveY * moveY;
+    const int bw = x1 - x0 + 1, bh = y1 - y0 + 1;
+    std::vector<float> updated(size_t(bw) * bh * 2);
+    parallelRows(y0, y1 + 1, [&](int ya, int yb) {
+    for (int y = ya; y < yb; y++)
+        for (int x = x0; x <= x1; x++) {
+            float* u = &updated[(size_t(y - y0) * bw + size_t(x - x0)) * 2];
+            const double u0 = std::hypot(x + 0.5 - b.x, y + 0.5 - b.y) / R;
+            fieldAt(x + 0.5, y + 0.5, u[0], u[1]);
+            if (u0 >= 1) continue;
+            const double s = hardness_ >= 1 ? 0 : std::max(0.0, (u0 - hardness_) / (1 - hardness_));
+            const double band = R * R * (1 - s * s);
+            const double w = (band / (band + drag2)) * (band / (band + drag2));
+            const double vx = moveX * w, vy = moveY * w;
+            float px, py;
+            fieldAt(x + 0.5 - vx, y + 0.5 - vy, px, py);
+            u[0] = float(px - vx); u[1] = float(py - vy);
         }
-    }
+    }, 16);
+    for (int y = y0; y <= y1; y++)
+        std::copy_n(&updated[size_t(y - y0) * bw * 2], size_t(bw) * 2, &field_.offsets[(size_t(y - field_.y0) * field_.width + size_t(x0 - field_.x0)) * 2]);
+    // The result under the brush, resampled from the untouched original through the field.
+    parallelRows(y0, y1 + 1, [&](int ya, int yb) {
+    for (int y = ya; y < yb; y++)
+        for (int x = x0; x <= x1; x++) {
+            const float* d = &field_.offsets[(size_t(y - field_.y0) * field_.width + size_t(x - field_.x0)) * 2];
+            sampleBicubic(*original_, x + 0.5 + d[0], y + 0.5 + d[1], image_->pixel(x, y));
+        }
+    }, 16);
 }
 
 } // namespace compositor

@@ -12,6 +12,7 @@
 #include "compositor/resample.h"
 #include "compositor/heal.h"
 #include "compositor/inpaint.h"
+#include "compositor/warpstroke.h"
 #include "compositor/subject.h"
 #include "compositor/render.h"
 #include "compositor/selection.h"
@@ -171,6 +172,16 @@ int main(int argc, char** argv) {
                 std::snprintf(name, sizeof name, "content fill %dx%d (C reference)", side, side);
                 report(name, timeMs([&] { img = base; content_fill(img.data(), size_t(img.stride()), hole.data(), size_t(hole.stride()), W, H); }, 1));
             }
+        }
+    }
+    if (want("liquify")) {
+        for (double diameter : {100.0, 300.0}) {
+            char name[64]; std::snprintf(name, sizeof name, "liquify %.0f px brush, 1000 px stroke", diameter);
+            report(name, timeMs([&] {
+                auto img = std::make_shared<Image>(base);
+                WarpStroke w(img, WarpMode::Liquify, diameter, 0.5, 0.6);
+                for (int i = 0; i <= 100; i++) w.append({500.0 + i * 10, 1500});
+            }, 2));
         }
     }
     if (want("brush")) {

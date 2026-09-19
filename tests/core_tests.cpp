@@ -835,6 +835,19 @@ TEST_CASE(warp_stroke_moves_pixels) {
     smudge.append({18, 20});
     smudge.append({30, 20});
     CHECK(smudge.image()->pixel(26, 20)[0] > 40);
+    // Pushing the edge away and back again through the displacement field brings back a sharp edge: the
+    // result is always resampled from the original, never from itself.
+    auto img3 = std::make_shared<Image>(40, 40);
+    for (int y = 0; y < 40; y++) for (int x = 0; x < 40; x++) { uint8_t* p = img3->pixel(x, y); p[0] = x < 20 ? 255 : 0; p[2] = x < 20 ? 0 : 255; p[3] = 255; }
+    WarpStroke there(img3, WarpMode::Liquify, 24, 0.5, 1);
+    for (int i = 0; i <= 40; i++) there.append({20.0 + i * 0.25, 20});
+    for (int i = 40; i >= 0; i--) there.append({20.0 + i * 0.25, 20});
+    const Image& back = *there.image();
+    int transition = 0;
+    for (int x = 0; x < 40; x++) if (back.pixel(x, 20)[0] > 10 && back.pixel(x, 20)[0] < 245) transition++;
+    CHECK(transition <= 3);
+    CHECK(back.pixel(17, 20)[0] > 245);
+    CHECK(back.pixel(23, 20)[0] < 10);
 }
 
 TEST_CASE(image_size_resamples_layers) {

@@ -2,6 +2,11 @@
 // the brush, working on the layer as the canvas shows it at document size. When
 // the stroke ends the result is painted back into the layer along the stroke's
 // path (a clone stroke that replaces). A port of Document/SmudgeLiquify.swift.
+//
+// Liquify keeps a displacement field (where each pixel of the result samples the
+// original) and resamples the untouched original through it after every push, so
+// a long stroke never blurs; the falloff is Gustafsson's forward warp, which
+// shrinks with the drag length as Photoshop's does.
 #pragma once
 #include "image.h"
 #include "geometry.h"
@@ -28,14 +33,25 @@ private:
     void smudge(Point center);
     void push(Point from, Point to);
 
+    /// Liquify's accumulated displacement over the box the stroke has touched (zero beyond it): two floats
+    /// per pixel, the offset from a result pixel's centre to where it samples the original.
+    struct Field {
+        int x0 = 0, y0 = 0, width = 0, height = 0;
+        std::vector<float> offsets;
+    };
+    void growField(int x0, int y0, int x1, int y1);
+    void fieldAt(double x, double y, float& dx, float& dy) const;
+
     std::shared_ptr<Image> image_;
+    std::shared_ptr<const Image> original_;
     WarpMode mode_;
     double diameter_, hardness_, strength_;
     int width_, height_;
     std::vector<Point> points_;
     bool hasLast_ = false;
     Point last_;
-    std::vector<float> carried_, scratch_;
+    std::vector<float> carried_;
+    Field field_;
 };
 
 } // namespace compositor
