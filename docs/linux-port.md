@@ -53,6 +53,11 @@ dialog is what gets grabbed.
 demo document, grabs the window and saves a project without any interaction
 (works with `QT_QPA_PLATFORM=offscreen`); CI runs it as a smoke test.
 
+`COMPOSITOR_DEBUG_LAYOUT=1` prints each toolbar's, dock's and central widget's
+minimum size at startup, for chasing what stops the window from shrinking;
+`COMPOSITOR_WINDOW_SIZE=1000x700` forces the initial window size, for looking at
+the layout as a laptop or a tiling window manager would show it.
+
 ## Automation
 
 `--rpc` opens a JSON-RPC socket an agent or script can drive the editor

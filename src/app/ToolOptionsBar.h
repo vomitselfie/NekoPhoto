@@ -7,7 +7,9 @@
 #include <functional>
 #include <vector>
 
+class QCheckBox;
 class QHBoxLayout;
+class QResizeEvent;
 
 namespace app {
 
@@ -18,7 +20,18 @@ class ToolOptionsBar : public QToolBar {
 public:
     ToolOptionsBar(EditorSession* session, CanvasWidget* canvas, QWidget* parent = nullptr);
 
+    /// The bar never dictates the window's width: narrow windows clip its right end (see applyCompact).
+    QSize minimumSizeHint() const override { return QSize(200, QToolBar::minimumSizeHint().height()); }
+
+protected:
+    void resizeEvent(QResizeEvent*) override;
+
 private:
+    /// Narrow windows lose the percent fields and get shorter checkbox labels (level 1), then the transform fields (level 2).
+    void applyCompact();
+    int compact_ = 0;
+    QCheckBox* controlsCheck_ = nullptr;
+    QCheckBox* ratioCheck_ = nullptr;
     void syncTool();
     void syncTransformFields();
     void applyTransformField();

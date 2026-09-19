@@ -20,6 +20,8 @@
 #include <QIcon>
 #include <QMap>
 #include <QSettings>
+#include <QToolBar>
+#include <QDockWidget>
 #include <QTimer>
 
 namespace {
@@ -211,6 +213,15 @@ int main(int argc, char** argv) {
     }
     app::MainWindow window;
     window.show();
+    if (qEnvironmentVariableIsSet("COMPOSITOR_DEBUG_LAYOUT")) {
+        // What is forcing the window's minimum size: the main window and each toolbar, dock and central child.
+        auto report = [](QWidget* w, const char* tag) { QSize m = w->minimumSizeHint(), mm = w->minimumSize(); std::fprintf(stderr, "layout: %-28s %-22s hint %dx%d min %dx%d size %dx%d\n", tag, qPrintable(w->objectName().isEmpty() ? w->windowTitle() : w->objectName()), m.width(), m.height(), mm.width(), mm.height(), w->width(), w->height()); };
+        report(&window, "window");
+        for (QToolBar* t : window.findChildren<QToolBar*>()) report(t, "toolbar");
+        for (QDockWidget* d : window.findChildren<QDockWidget*>()) { report(d, "dock"); if (d->widget()) report(d->widget(), "  dock widget"); }
+        if (window.centralWidget()) report(window.centralWidget(), "central");
+        for (QWidget* c : window.centralWidget()->findChildren<QWidget*>(QString(), Qt::FindDirectChildrenOnly)) report(c, "  central child");
+    }
     if (parser.isSet(rpc) || parser.isSet(headlessOption) || QSettings().value("automation/enabled", false).toBool()) {
         if (!window.startAutomation(parser.value(rpcSocket)) && parser.isSet(headlessOption)) return 3;
     }

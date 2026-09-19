@@ -91,6 +91,15 @@ def main():
     rpc.call("layers.select", id=target["id"])
     rpc.call("pixels.filter", kind="Gaussian Blur", radius=2)
 
+    # Painting by coordinates: a stroke, a gradient and a shape layer.
+    rpc.call("brush.stroke", points=[[20, 20], [120, 60], [220, 20]], size=12, color="#00ff00", opacity=1)
+    rpc.call("gradient.draw", x0=0, y0=0, x1=200, y1=0, foreground="#0000ff", opacity=0.5)
+    n = len(rpc.call("layers.list"))
+    shape = rpc.call("shape.draw", kind="ellipse", x=300, y=100, width=120, height=80, color="#ff00ff")
+    assert shape["kind"] == "shape", shape
+    assert len(rpc.call("layers.list")) == n + 1
+    assert rpc.call("app.info")["currentTab"] == 0
+
     # Errors come back as errors, not crashes.
     try:
         rpc.call("layers.get", id="nope")

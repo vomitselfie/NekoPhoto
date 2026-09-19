@@ -98,6 +98,15 @@ Selection: `selection.all`, `selection.none`, `selection.invert`,
 Canvas and history: `canvas.resize`, `canvas.crop`, `canvas.flip`,
 `image.resize`, `history.undo`, `history.redo`.
 
+Painting by coordinates: `brush.stroke` (`points` as `[x, y]` pairs; `tool` brush,
+eraser, healing, clone with `source`, smudge, blur or liquify; `size`,
+`hardness`, `opacity` 0..1, `color`, `mask: true` paints the active layer's
+mask), `gradient.draw` (`x0, y0, x1, y1`, `shape` linear or radial, `style`
+foreground-to-transparent or foreground-to-background, `reversed`, `opacity`,
+`foreground`, `background`), `shape.draw` (a new shape layer: `kind` rectangle
+or ellipse, `x, y, width, height`, `cornerRadius`, `color`). The person's tool,
+brush settings and colours are restored afterwards.
+
 View: `tool.select`, `colors.set`, `view.zoom`.
 
 `tools/rpc_smoke.py` exercises a representative set and is what CI runs against
@@ -105,8 +114,7 @@ a headless instance.
 
 ## Not there yet
 
-Brush, clone and healing strokes from point lists, gradients and shapes by
-coordinates, and events pushed to the client (a document-changed notification)
-are the next candidates. Adding a method is one `add("name", handler)` in
+Events pushed to the client (a document-changed notification) and text layers
+(the editor has none) are the next candidates. Adding a method is one `add("name", handler)` in
 `src/app/Automation.cpp`; the bridge's generic `rpc` tool reaches it without a
 Python change.

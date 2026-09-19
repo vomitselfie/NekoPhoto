@@ -334,6 +334,27 @@ def remove_background(refine: bool = True) -> str:
     return text(call("pixels.removeBackground", refine=refine))
 
 
+# ---- painting by coordinates ---------------------------------------------------------------------
+
+@mcp.tool()
+def brush_stroke(points: list[list[float]], tool: str = "brush", size: Optional[float] = None, hardness: Optional[float] = None, opacity: Optional[float] = None, color: Optional[str] = None, mask: bool = False, source_x: Optional[float] = None, source_y: Optional[float] = None) -> str:
+    """Paint one stroke through [x, y] points on the active layer (or its mask with mask=true): tool brush, eraser, healing, clone (with source_x/source_y), smudge, blur or liquify; size in pixels, hardness and opacity 0..1, a CSS color."""
+    source = {"x": source_x, "y": source_y} if source_x is not None and source_y is not None else None
+    return text(call("brush.stroke", points=points, tool=tool, size=size, hardness=hardness, opacity=opacity, color=color, mask=mask, source=source))
+
+
+@mcp.tool()
+def gradient_draw(x0: float, y0: float, x1: float, y1: float, shape: str = "linear", style: str = "foreground-to-transparent", reversed: bool = False, opacity: float = 1.0, foreground: Optional[str] = None, background: Optional[str] = None) -> str:
+    """Draw a gradient on the active layer from (x0, y0) to (x1, y1): shape linear or radial; style foreground-to-transparent or foreground-to-background; colours as CSS strings."""
+    return text(call("gradient.draw", x0=x0, y0=y0, x1=x1, y1=y1, shape=shape, style=style, reversed=reversed, opacity=opacity, foreground=foreground, background=background))
+
+
+@mcp.tool()
+def shape_draw(x: float, y: float, width: float, height: float, kind: str = "rectangle", corner_radius: float = 0, color: Optional[str] = None) -> str:
+    """Add a filled rectangle (optionally rounded) or ellipse as a new shape layer."""
+    return text(call("shape.draw", x=x, y=y, width=width, height=height, kind=kind, cornerRadius=corner_radius, color=color))
+
+
 # ---- selection ----------------------------------------------------------------------------------
 
 @mcp.tool()

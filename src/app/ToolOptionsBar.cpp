@@ -8,6 +8,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QResizeEvent>
 #include <QSpinBox>
 #include <QToolButton>
 #include <cmath>
@@ -56,6 +57,7 @@ ToolOptionsBar::ToolOptionsBar(EditorSession* session, CanvasWidget* canvas, QWi
     setMovable(false);
     setFloatable(false);
     stack_ = new QStackedWidget;
+    stack_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     stack_->addWidget(buildMoveOptions());       // 0
     stack_->addWidget(buildBrushOptions());      // 1
     stack_->addWidget(buildMarqueeOptions());    // 2
@@ -121,10 +123,12 @@ QWidget* ToolOptionsBar::buildMoveOptions() {
     connect(autoSelect, &QCheckBox::toggled, this, [this](bool on) { session_->transformAutoSelect = on; });
     h->addWidget(autoSelect);
     auto* controls = new QCheckBox(tr("Transform Controls"));
+    controlsCheck_ = controls;
     controls->setChecked(session_->showsTransformControls);
     connect(controls, &QCheckBox::toggled, this, [this](bool on) { session_->showsTransformControls = on; emit session_->transformChanged(); });
     h->addWidget(controls);
     auto* lock = new QCheckBox(tr("Keep Ratio"));
+    ratioCheck_ = lock;
     lock->setToolTip(tr("Corner handles keep the proportions (Shift reverses)"));
     lock->setChecked(session_->locksTransformRatio);
     connect(lock, &QCheckBox::toggled, this, [this](bool on) { session_->locksTransformRatio = on; });
@@ -162,6 +166,20 @@ QWidget* ToolOptionsBar::buildMoveOptions() {
     h->addWidget(transformFields_);
     h->addStretch();
     return w;
+}
+
+void ToolOptionsBar::resizeEvent(QResizeEvent* e) {
+    QToolBar::resizeEvent(e);
+    int level = width() >= 1150 ? 0 : width() >= 900 ? 1 : 2;
+    if (level != compact_) { compact_ = level; applyCompact(); }
+}
+
+void ToolOptionsBar::applyCompact() {
+    wPercent_->setVisible(compact_ == 0);
+    hPercent_->setVisible(compact_ == 0);
+    transformFields_->setVisible(compact_ < 2);
+    if (controlsCheck_) controlsCheck_->setText(compact_ ? tr("Controls") : tr("Transform Controls"));
+    if (ratioCheck_) ratioCheck_->setText(compact_ ? tr("Ratio") : tr("Keep Ratio"));
 }
 
 void ToolOptionsBar::syncTransformFields() {

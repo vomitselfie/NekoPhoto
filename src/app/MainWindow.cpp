@@ -37,6 +37,8 @@
 #include <QMimeData>
 #include <QPainter>
 #include <QPushButton>
+#include <QScreen>
+#include <QScrollArea>
 #include <QSettings>
 #include <QStackedWidget>
 #include <QStatusBar>
@@ -106,16 +108,21 @@ MainWindow::MainWindow() {
 
     auto* dock = new QDockWidget(tr("Layers"), this);
     dock->setObjectName("layersDock");
-    dock->setFeatures(QDockWidget::DockWidgetMovable);
+    dock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetClosable);
     layersStack_ = new QStackedWidget;
-    layersStack_->setMinimumWidth(280);
+    layersStack_->setMinimumWidth(200);
     dock->setWidget(layersStack_);
     addDockWidget(Qt::RightDockWidgetArea, dock);
     auto* adjustDock = new QDockWidget(tr("Adjustments"), this);
     adjustDock->setObjectName("adjustmentsDock");
     adjustDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetClosable);
     adjustStack_ = new QStackedWidget;
-    adjustDock->setWidget(adjustStack_);
+    // Scrolled, so a tall editor (Levels with its histogram) never forces the dock column taller than the screen.
+    auto* adjustScroll = new QScrollArea;
+    adjustScroll->setWidgetResizable(true);
+    adjustScroll->setFrameShape(QFrame::NoFrame);
+    adjustScroll->setWidget(adjustStack_);
+    adjustDock->setWidget(adjustScroll);
     addDockWidget(Qt::RightDockWidgetArea, adjustDock);
     splitDockWidget(dock, adjustDock, Qt::Vertical);
     layersDock_ = dock;
@@ -156,8 +163,24 @@ MainWindow::MainWindow() {
     buildMenus();
     addTab(false);
     switchTo(0);
+    // Size to the screen: the default 1400x900, or less on small or scaled displays, and never off-screen.
     QSettings settings;
-    restoreGeometry(settings.value("window/geometry").toByteArray());
+    bool restored = restoreGeometry(settings.value("window/geometry").toByteArray());
+    bool onScreen = false;
+    for (QScreen* sc : QApplication::screens()) {
+        QRect avail = sc->availableGeometry();
+        if (avail.intersects(frameGeometry()) && width() <= avail.width() && height() <= avail.height()) onScreen = true;
+    }
+    if (!restored || !onScreen) {
+        QScreen* screen = QApplication::primaryScreen();
+        QRect avail = screen ? screen->availableGeometry() : QRect(0, 0, 1400, 900);
+        QSize target = QSize(1400, 900).boundedTo(QSize(int(avail.width() * 0.92), int(avail.height() * 0.92)));
+        resize(target);
+        move(avail.center() - QPoint(target.width() / 2, target.height() / 2));
+    }
+    // COMPOSITOR_WINDOW_SIZE=WxH forces the initial size, for checking layouts at other sizes.
+    QStringList forced = qEnvironmentVariable("COMPOSITOR_WINDOW_SIZE").split('x');
+    if (forced.size() == 2) resize(forced[0].toInt(), forced[1].toInt());
     if (!restoreState(settings.value("window/state").toByteArray()))
         QTimer::singleShot(0, this, [this] { resizeDocks({layersDock_, adjustDock_}, {3, 1}, Qt::Vertical); });
 }
@@ -558,6 +581,12 @@ void MainWindow::buildMenus() {
     rulersAction_->setCheckable(true);
     rulersAction_->setChecked(QSettings().value("view/rulers", true).toBool());
     for (auto& tab : tabs_) tab.frame->setRulersVisible(rulersAction_->isChecked());
+    view->addSeparator();
+    layersDock_->toggleViewAction()->setText(tr("&Layers Panel"));
+    adjustDock_->toggleViewAction()->setText(tr("&Adjustments Panel"));
+    view->addAction(layersDock_->toggleViewAction());
+    view->addAction(adjustDock_->toggleViewAction());
+    view->addSeparator();
     QAction* grid = view->addAction(tr("Pixel &Grid"), this, [this](bool on) { session_->showsPixelGrid = on; canvas_->update(); });
     grid->setCheckable(true);
     grid->setChecked(true);
