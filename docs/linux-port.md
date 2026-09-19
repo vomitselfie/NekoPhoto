@@ -88,14 +88,18 @@ packaging/                      .desktop, icon, MIME type
   keeping unknown fields; PNG export with resolution metadata; JPEG export with
   a live preview.
 - Wayland, X11, HiDPI and fractional scaling; tablet input (as a pointer).
+- Adjustment layers: Levels (with histogram and Auto), Curves (draggable
+  points), Hue/Saturation (per-range, colorize), Exposure, Gradient Map and
+  Grain, edited live in the Adjustments panel, saved in the Mac's format.
+- Image > Adjustments applies the same six to a layer's pixels with a live
+  preview, inside the selection; Invert works on pixels and masks.
+- Filter menu: Gaussian Blur and Motion Blur (spreading past the layer's
+  edges, as on the Mac), Add Noise, Lens Correction, all with a live preview.
 
 ## Not ported yet
 
-- Adjustment layers render as pass-through (their settings survive a round
-  trip untouched). Levels, Curves, Hue/Saturation, Exposure, Gradient Map and
-  Grain, and the destructive filters (blurs, noise, lens correction, invert,
-  remove background) are the next milestone; the C routines for Gradient Map,
-  Grain, Noise and Lens are already built into the core.
+- Remove Background (Apple's Vision subject mask) and Content-Aware Fill's
+  panel (the C routine is built and tested; the UI is pending).
 - Spot Healing, Clone Stamp, Blur/Smudge, Gradient and Shape tools; free
   distort; moving and duplicating selected pixels; copy/paste.
 - Multiple projects in tabs.
@@ -115,6 +119,7 @@ packaging/                      .desktop, icon, MIME type
 | Ctrl Alt G | Clipping mask |
 | Ctrl ] / Ctrl [ | Bring forward / send backward |
 | Ctrl A, Ctrl D, Ctrl Shift I | Select all, deselect, inverse |
+| Ctrl L, Ctrl M, Ctrl U, Ctrl I | Levels, Curves, Hue/Saturation, Invert |
 | Alt Backspace, Ctrl Backspace, Delete | Fill foreground / background, clear |
 | Ctrl Z, Ctrl Shift Z | Undo, redo |
 | Ctrl Shift E, Ctrl Alt Shift S | Export PNG, export JPEG |

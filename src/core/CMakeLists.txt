@@ -9,6 +9,7 @@ add_library(compositor_core STATIC
     src/blend.cpp
     src/brush.cpp
     src/document.cpp
+    src/filters.cpp
     src/history.cpp
     src/image.cpp
     src/png.cpp

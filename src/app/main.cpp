@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 #include "ImageConvert.h"
+#include "compositor/filters.h"
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QDir>
@@ -56,6 +57,27 @@ void buildDemo(app::EditorSession& session, const QString& imagePath) {
     session.beginBrush(QPointF(60, 60), false);
     for (int i = 1; i <= 40; i++) session.continueBrush(QPointF(60 + i * 12, 60 + std::sin(i / 4.0) * 40));
     session.endBrush();
+    // An adjustment layer over everything, and a blurred copy of the stripes.
+    session.selectLayer(session.document()->layers.back().id);
+    session.addAdjustmentLayer(AdjustmentKind::HueSaturation);
+    {
+        auto settings = session.adjustmentSettings(*session.activeLayerId());
+        settings->hsv.adjustments[0] = {90, 20, 0};
+        session.setAdjustment(*session.activeLayerId(), *settings);
+    }
+    session.selectLayer(session.document()->layers[3].id); // the stripes
+    {
+        LayerTransform grown;
+        auto source = session.adjustmentSource(int(std::ceil(blurMargin(FilterKind::GaussianBlur, FilterSettings{}))) + 6, grown);
+        if (source) {
+            auto out = std::make_shared<Image>(*source);
+            FilterSettings fs; fs.radius = 3;
+            applyFilter(FilterKind::GaussianBlur, *out, fs);
+            LayerTransform placed;
+            auto trimmed = trimToPixels(*out, grown, placed);
+            session.commitPixels(trimmed, placed, "Gaussian Blur");
+        }
+    }
     session.selectLayer(session.document()->layers[1].id);
     session.selectAll();
     session.deselect();

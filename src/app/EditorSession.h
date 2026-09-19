@@ -4,7 +4,9 @@
 // Views observe it through signals and never mutate the document themselves.
 #pragma once
 #include "Viewport.h"
+#include "compositor/adjustments.h"
 #include "compositor/brush.h"
+#include "compositor/filters.h"
 #include "compositor/document.h"
 #include "compositor/history.h"
 #include "compositor/render.h"
@@ -142,6 +144,28 @@ public:
     bool wandContiguous = true;
     bool wandSampleAll = true;
 
+    // Adjustment layers
+    void addAdjustmentLayer(compositor::AdjustmentKind kind);
+    /// Live edits of an adjustment layer's settings; wrap a slider drag in begin/end for one undo step.
+    void beginAdjustmentEdit();
+    void setAdjustment(const compositor::Uuid& id, const compositor::AdjustmentSettings& settings);
+    void endAdjustmentEdit();
+    std::optional<compositor::AdjustmentSettings> adjustmentSettings(const compositor::Uuid& id) const;
+
+    // Destructive adjustments and filters on the active layer's pixels, inside the selection.
+    bool canAdjustPixels() const;
+    /// Shows `image` (placed by `transform`, or the layer's own) in place of the active layer while a dialog is open.
+    void setPixelPreview(std::shared_ptr<const compositor::Image> image, std::optional<compositor::LayerTransform> transform);
+    void clearPixelPreview();
+    /// The active layer's pixels (grown by `margin` layer pixels for blurs), and the transform placing them.
+    std::shared_ptr<const compositor::Image> adjustmentSource(int margin, compositor::LayerTransform& transform) const;
+    /// The selection as coverage on that grid, or null when everything is selected.
+    std::shared_ptr<compositor::GrayImage> selectionOnGrid(const compositor::LayerTransform& transform, int width, int height) const;
+    /// Replaces the active layer's pixels with `image` at `transform` as one undo step.
+    void commitPixels(std::shared_ptr<const compositor::Image> image, const compositor::LayerTransform& transform, const QString& name);
+    void invertActive();
+    std::array<std::vector<double>, 4> activeHistogram() const;
+
     // Crop / canvas
     void cropTo(const QRectF& rect);
     void resizeCanvas(int width, int height, double anchorX, double anchorY);
@@ -204,6 +228,9 @@ private:
     std::optional<QPointF> lastBrushPoint_;
     bool opacityEditing_ = false;
     bool visibilitySwipe_ = false;
+    bool adjustmentEditing_ = false;
+    std::shared_ptr<const compositor::Image> previewImage_;
+    std::optional<compositor::LayerTransform> previewTransform_;
 };
 
 } // namespace app

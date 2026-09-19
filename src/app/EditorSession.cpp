@@ -2,6 +2,7 @@
 #include "ImageConvert.h"
 #include "compositor/project.h"
 #include <QFileInfo>
+#include <random>
 #include <algorithm>
 #include <map>
 
@@ -1152,6 +1153,141 @@ void EditorSession::selectionContract(int amount) {
     setSelection(resizeSelection(*document_->selection, -amount), "Contract Selection");
 }
 
+// ---- Adjustment layers and pixel adjustments --------------------------------------------
+
+void EditorSession::addAdjustmentLayer(AdjustmentKind kind) {
+    if (!canEditLayers() || document_->layers.size() >= size_t(Document::maxLayers)) return;
+    Layer layer(adjustmentKindName(kind), document_->size());
+    AdjustmentSettings settings = AdjustmentSettings::defaults(kind);
+    if (kind == AdjustmentKind::GradientMap) {
+        settings.gradientMap.shadows = {foregroundColor.redF(), foregroundColor.greenF(), foregroundColor.blueF()};
+        settings.gradientMap.highlights = {backgroundColor.redF(), backgroundColor.greenF(), backgroundColor.blueF()};
+    }
+    if (kind == AdjustmentKind::Grain) settings.grain.seed = uint32_t(std::random_device{}());
+    layer.adjustment = settings.toLayerAdjustment();
+    const Layer* active = activeLayer();
+    layer.parentId = active && active->isGroup ? activeLayerId_ : (active ? active->parentId : std::nullopt);
+    int index = activeLayerId_ ? document_->indexOf(*activeLayerId_) + 1 : int(document_->layers.size());
+    beginEdit(QStringLiteral("New %1 Adjustment").arg(adjustmentKindName(kind)));
+    document_->layers.insert(document_->layers.begin() + index, layer);
+    if (layer.parentId) collapsedGroupIds.erase(*layer.parentId);
+    setActiveLayer(layer.id);
+    endEdit();
+    notifyDocument();
+}
+
+void EditorSession::beginAdjustmentEdit() {
+    if (adjustmentEditing_ || !document_) return;
+    adjustmentEditing_ = true;
+    beginEdit("Adjustment");
+}
+
+void EditorSession::setAdjustment(const Uuid& id, const AdjustmentSettings& settings) {
+    if (!document_ || !settings.isValid()) return;
+    Layer* layer = document_->find(id);
+    if (!layer || !layer->adjustment) return;
+    bool standalone = !adjustmentEditing_;
+    if (standalone) beginEdit("Adjustment");
+    layer->adjustment = settings.toLayerAdjustment();
+    if (standalone) { endEdit(); notifyDocument(); }
+    else emit documentChanged({});
+}
+
+void EditorSession::endAdjustmentEdit() {
+    if (!adjustmentEditing_) return;
+    adjustmentEditing_ = false;
+    endEdit();
+    notifyDocument();
+}
+
+std::optional<AdjustmentSettings> EditorSession::adjustmentSettings(const Uuid& id) const {
+    if (!document_) return std::nullopt;
+    const Layer* layer = document_->find(id);
+    if (!layer || !layer->adjustment) return std::nullopt;
+    AdjustmentSettings settings;
+    if (!AdjustmentSettings::parse(layer->adjustment->json, settings)) return std::nullopt;
+    return settings;
+}
+
+bool EditorSession::canAdjustPixels() const {
+    if (!canEditLayers()) return false;
+    const Layer* layer = activeLayer();
+    if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image || isMaskSelected_) return false;
+    if (!effectiveVisibleIds(document_->layers).count(layer->id)) return false;
+    if (document_->selection && document_->selection->isEmpty()) return false;
+    return selectedLayerIds_.size() == 1;
+}
+
+void EditorSession::setPixelPreview(std::shared_ptr<const Image> image, std::optional<LayerTransform> transform) {
+    previewImage_ = std::move(image);
+    previewTransform_ = transform;
+    emit documentChanged({});
+}
+
+void EditorSession::clearPixelPreview() {
+    if (!previewImage_) return;
+    previewImage_.reset();
+    previewTransform_.reset();
+    emit documentChanged({});
+}
+
+std::shared_ptr<const Image> EditorSession::adjustmentSource(int margin, LayerTransform& transform) const {
+    const Layer* layer = activeLayer();
+    if (!layer || !layer->asset || !layer->asset->image) return nullptr;
+    if (margin <= 0) { transform = layer->transform; return layer->asset->image; }
+    return growImage(*layer->asset->image, layer->transform, margin, transform);
+}
+
+std::shared_ptr<GrayImage> EditorSession::selectionOnGrid(const LayerTransform& transform, int width, int height) const {
+    if (!document_ || !document_->selection || !document_->selection->coverage) return nullptr;
+    return selectionInGrid(*document_->selection->coverage, transform.pixelToDocument(width, height), width, height);
+}
+
+void EditorSession::commitPixels(std::shared_ptr<const Image> image, const LayerTransform& transform, const QString& name) {
+    clearPixelPreview();
+    Layer* layer = activeLayerMutable();
+    if (!layer || !image) return;
+    beginEdit(name);
+    // A mask covering the old grid stays where it was when the layer grows.
+    if (layer->mask && !layer->mask->placement && !transform.samePlacement(layer->transform)) layer->mask->placement = layer->transform;
+    layer->asset = Asset::make(image, layer->name);
+    layer->transform = transform;
+    layer->shapeImage.reset();
+    endEdit();
+    notifyDocument();
+}
+
+void EditorSession::invertActive() {
+    if (!canEditLayers()) return;
+    Layer* layer = activeLayerMutable();
+    if (!layer || layer->isGroup) return;
+    if (isMaskSelected_ && layer->mask) {
+        auto out = std::make_shared<GrayImage>(*layer->mask->asset.image);
+        applyInvert(*out);
+        if (document_->selection && document_->selection->coverage && out->width() > 1) {
+            auto coverage = selectionInGrid(*document_->selection->coverage, layer->maskTransform().pixelToDocument(out->width(), out->height()), out->width(), out->height());
+            blendThroughCoverage(*out, *layer->mask->asset.image, *coverage);
+        }
+        beginEdit("Invert");
+        layer->mask->asset = MaskAsset::make(out);
+        endEdit();
+        notifyDocument();
+        return;
+    }
+    if (!layer->asset || !layer->asset->image) return;
+    auto out = std::make_shared<Image>(*layer->asset->image);
+    applyInvert(*out);
+    if (auto coverage = selectionOnGrid(layer->transform, out->width(), out->height())) blendThroughCoverage(*out, *layer->asset->image, *coverage);
+    commitPixels(out, layer->transform, "Invert");
+}
+
+std::array<std::vector<double>, 4> EditorSession::activeHistogram() const {
+    const Layer* layer = activeLayer();
+    if (!layer || !layer->asset || !layer->asset->image) return {};
+    auto coverage = selectionOnGrid(layer->transform, layer->asset->image->width(), layer->asset->image->height());
+    return levelsHistogram(*layer->asset->image, coverage.get());
+}
+
 // ---- Crop and canvas --------------------------------------------------------------
 
 void EditorSession::cropTo(const QRectF& rectF) {
@@ -1257,6 +1393,13 @@ Overrides EditorSession::renderOverrides() const {
             o.transform = transformEdit_->draft;
             if (layer && layer->mask) o.maskPlacement = layer->mask->placementMovingLayer(layer->transform, transformEdit_->draft);
         }
+    }
+    if (previewImage_ && activeLayerId_) {
+        LayerOverride& o = overrides[*activeLayerId_];
+        o.image = previewImage_;
+        if (previewTransform_) o.transform = *previewTransform_;
+        const Layer* layer = document_ ? document_->find(*activeLayerId_) : nullptr;
+        if (layer && layer->mask && !layer->mask->placement && previewTransform_ && !previewTransform_->samePlacement(layer->transform)) o.maskPlacement = std::optional<LayerTransform>(layer->transform);
     }
     if (stroke_) {
         LayerOverride& o = overrides[strokeLayerId_];

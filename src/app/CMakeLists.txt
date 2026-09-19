@@ -32,6 +32,12 @@ qt_add_executable(compositor
     CanvasWidget.cpp
     LayersPanel.h
     LayersPanel.cpp
+    AdjustmentEditor.h
+    AdjustmentEditor.cpp
+    AdjustmentsPanel.h
+    AdjustmentsPanel.cpp
+    FilterDialog.h
+    FilterDialog.cpp
     ToolOptionsBar.h
     ToolOptionsBar.cpp
     Dialogs.h

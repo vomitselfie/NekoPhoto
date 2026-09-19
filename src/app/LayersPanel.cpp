@@ -9,6 +9,7 @@
 #include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPushButton>
 #include <QStyle>
 #include <QTimer>
@@ -72,6 +73,25 @@ QPixmap maskPixmap(const GrayPtr& image, bool enabled, double dpr) {
     p.setBrush(Qt::NoBrush);
     p.drawRect(QRectF(0.5, 0.5, w - 1, h - 1));
     return pixmap;
+}
+
+QIcon eyeIcon(bool visible, double dpr, QColor color) {
+    QPixmap pixmap(int(16 * dpr), int(16 * dpr));
+    pixmap.setDevicePixelRatio(dpr);
+    pixmap.fill(Qt::transparent);
+    QPainter p(&pixmap);
+    p.setRenderHint(QPainter::Antialiasing);
+    if (!visible) color.setAlpha(70);
+    p.setPen(QPen(color, 1.5));
+    p.setBrush(Qt::NoBrush);
+    // An almond-shaped eye with a pupil; hollow when hidden.
+    QPainterPath eye;
+    eye.moveTo(1.5, 8);
+    eye.quadTo(8, 1.5, 14.5, 8);
+    eye.quadTo(8, 14.5, 1.5, 8);
+    p.drawPath(eye);
+    if (visible) { p.setBrush(color); p.drawEllipse(QPointF(8, 8), 2.6, 2.6); }
+    return QIcon(pixmap);
 }
 
 } // namespace
@@ -236,8 +256,8 @@ QWidget* LayersPanel::makeRow(const Layer& layer, int depth, bool visible) {
     eye->setProperty("layerId", QString::fromStdString(layer.id));
     eye->setProperty("eye", true);
     eye->setAutoRaise(true);
-    eye->setText(layer.visible ? QStringLiteral("👁") : QStringLiteral("·"));
-    eye->setStyleSheet(layer.visible ? "" : "color: palette(mid);");
+    eye->setIcon(eyeIcon(layer.visible, dpr, palette().color(QPalette::Text)));
+    eye->setIconSize(QSize(16, 16));
     eye->setToolTip(tr("Show or hide (drag across other eyes to set them too)"));
     eye->setFixedWidth(22);
     eye->installEventFilter(this);

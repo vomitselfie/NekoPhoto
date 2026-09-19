@@ -1,7 +1,9 @@
 // Unit tests for the portable core: geometry, transforms, blending, history,
 // compositing semantics, brush strokes, PNG and the .comp round trip.
 #include "check.h"
+#include "compositor/adjustments.h"
 #include "compositor/blend.h"
+#include "compositor/filters.h"
 #include "compositor/brush.h"
 #include "compositor/document.h"
 #include "compositor/history.h"
@@ -555,6 +557,145 @@ TEST_CASE(hierarchy_entries_and_validation) {
     doc.layers[1].parentId = a.id; // cycle through a non-group
     CHECK(!validateHierarchy(doc.layers));
     CHECK_EQ(nextLayerName(doc.layers, "Layer"), std::string("Layer 1"));
+}
+
+TEST_CASE(adjustment_settings_round_trip_matches_the_manifest_encoding) {
+    AdjustmentSettings s = AdjustmentSettings::defaults(AdjustmentKind::HueSaturation);
+    s.hsv.range = 1;
+    s.hsv.adjustments[1] = {30, -20, 5};
+    s.hsv.adjustments[0] = {0, 10, 0};
+    s.hsv.bands[1] = HueBand{300, 340, 20, 60};
+    s.levels.ranges[2] = {10, 1.2, 240, 5, 250};
+    s.curves.channels[0] = {{0, 0}, {128, 150}, {255, 255}};
+    s.exposure = {1.5, 0.1, 1.2};
+    s.gradientMap.highlights = {0.2, 0.4, 0.6};
+    s.gradientMap.reversed = true;
+    s.grain = {40, 2, 60, 12345};
+    s.extraJson = "{\"future\":1}";
+    std::string json = s.toJson();
+    // Enum-keyed dictionaries are flat key/value arrays, as Swift writes them.
+    CHECK(json.find("\"adjustments\":[\"Master\"") != std::string::npos);
+    CHECK(json.find("\"kind\":\"Hue/Saturation\"") != std::string::npos);
+    CHECK(json.find("\"future\":1") != std::string::npos);
+    AdjustmentSettings back;
+    REQUIRE(AdjustmentSettings::parse(json, back));
+    CHECK(back == s);
+    // The pre-range form (top-level sliders only) still decodes.
+    AdjustmentSettings old;
+    REQUIRE(AdjustmentSettings::parse("{\"kind\":\"Hue/Saturation\",\"hue\":15,\"saturation\":-10,\"lightness\":0,\"colorize\":false}", old));
+    CHECK_NEAR(old.hsv.adjustments[0].hue, 15, 1e-9);
+    // An object-keyed dictionary is accepted too.
+    AdjustmentSettings obj;
+    REQUIRE(AdjustmentSettings::parse("{\"kind\":\"Levels\",\"hsvSettings\":{\"range\":\"Reds\",\"adjustments\":{\"Reds\":{\"hue\":5}}}}", obj));
+    CHECK_NEAR(obj.hsv.adjustments[1].hue, 5, 1e-9);
+    CHECK(!AdjustmentSettings::parse("{\"kind\":\"Nope\"}", obj));
+    CHECK(!AdjustmentSettings::parse("{\"kind\":\"Levels\",\"levels\":{\"channel\":\"RGB\",\"ranges\":[]}}", obj));
+}
+
+TEST_CASE(adjustments_change_pixels_as_expected) {
+    auto gray = solid(4, 4, 128, 128, 128);
+    Image img = *gray;
+    LevelsSettings levels;
+    levels.ranges[0].black = 64; levels.ranges[0].white = 192;
+    applyLevels(img, levels);
+    CHECK_EQ(int(img.pixel(0, 0)[0]), 128); // midpoint stays put
+    levels.ranges[0].gamma = 2;
+    applyLevels(img = *gray, levels);
+    CHECK(img.pixel(0, 0)[0] > 170);
+    ExposureSettings exposure{1, 0, 1};
+    applyExposure(img = *gray, exposure);
+    CHECK(img.pixel(0, 0)[0] > 160);
+    CurvesSettings curves;
+    curves.channels[0] = {{0, 0}, {128, 200}, {255, 255}};
+    applyCurves(img = *gray, curves);
+    CHECK(std::abs(int(img.pixel(0, 0)[0]) - 200) <= 1);
+    CHECK_NEAR(curves.value(0, 0), 0, 1e-9);
+    CHECK_NEAR(curves.value(255, 0), 255, 1e-9);
+    GradientMapSettings map;
+    map.shadows = {1, 0, 0}; map.highlights = {0, 0, 1};
+    applyGradientMap(img = *gray, map);
+    CHECK(std::abs(int(img.pixel(0, 0)[0]) - 127) <= 1);
+    CHECK(std::abs(int(img.pixel(0, 0)[2]) - 128) <= 1);
+    HueSaturationSettings hsv;
+    hsv.adjustments[0] = {180, 0, 0};
+    auto red = solid(4, 4, 255, 0, 0);
+    applyHueSaturation(img = *red, hsv);
+    CHECK(img.pixel(1, 1)[0] < 30);
+    CHECK(img.pixel(1, 1)[1] > 220);
+    CHECK(img.pixel(1, 1)[2] > 220);
+    hsv.adjustments[0] = {0, -100, 0};
+    applyHueSaturation(img = *red, hsv);
+    CHECK(std::abs(int(img.pixel(1, 1)[0]) - int(img.pixel(1, 1)[1])) <= 2);
+    HueBand reds = HueBand::defaultBand(1);
+    CHECK_NEAR(reds.weight(0), 1, 1e-9);
+    CHECK_NEAR(reds.weight(30), 0.5, 1e-9);
+    CHECK_NEAR(reds.weight(90), 0, 1e-9);
+    applyInvert(img = *gray);
+    CHECK_EQ(int(img.pixel(0, 0)[0]), 127);
+    // A translucent pixel keeps its alpha when inverted.
+    Image half = *solid(1, 1, 200, 100, 50, 128);
+    applyInvert(half);
+    CHECK_EQ(int(half.pixel(0, 0)[3]), 128);
+    CHECK(half.pixel(0, 0)[0] <= 128);
+    GrainSettings grain;
+    grain.amount = 50;
+    Image a = *gray, b = *gray;
+    applyGrain(a, grain, {0, 0}, 1);
+    applyGrain(b, grain, {0, 0}, 1);
+    CHECK(a == b);
+    CHECK(!(a == *gray));
+    // Through the adjustment-layer path.
+    LayerAdjustment adj{AdjustmentKind::GradientMap, AdjustmentSettings::defaults(AdjustmentKind::GradientMap).toJson()};
+    img = *red;
+    CHECK(applyAdjustment(adj, img, {0, 0, 4, 4}, 1));
+    CHECK_EQ(int(img.pixel(0, 0)[0]), int(img.pixel(0, 0)[1])); // gray from black to white
+}
+
+TEST_CASE(filters_blur_noise_lens_and_growing) {
+    Image dot(21, 21);
+    dot.pixel(10, 10)[3] = 255; dot.pixel(10, 10)[0] = 255;
+    Image blurred = dot;
+    gaussianBlur(blurred, 2);
+    CHECK(blurred.pixel(10, 10)[3] < 255);
+    CHECK(blurred.pixel(12, 10)[3] > 0);
+    CHECK_EQ(int(blurred.pixel(0, 0)[3]), 0);
+    long total = 0;
+    for (int y = 0; y < 21; y++) for (int x = 0; x < 21; x++) total += blurred.pixel(x, y)[3];
+    CHECK(std::abs(total - 255) < 40); // mass is conserved
+    Image wide = dot;
+    gaussianBlur(wide, 8); // box approximation path
+    CHECK(wide.pixel(10, 10)[3] < blurred.pixel(10, 10)[3]);
+    Image streak = dot;
+    motionBlur(streak, 9, 0);
+    CHECK(streak.pixel(14, 10)[3] > 0);
+    CHECK_EQ(int(streak.pixel(10, 14)[3]), 0);
+    Image vertical = dot;
+    motionBlur(vertical, 9, 90);
+    CHECK(vertical.pixel(10, 14)[3] > 0);
+    CHECK_EQ(int(vertical.pixel(14, 10)[3]), 0);
+    FilterSettings settings;
+    settings.amount = 30;
+    Image noisy = *solid(16, 16, 100, 100, 100);
+    applyFilter(FilterKind::AddNoise, noisy, settings, 1, 7);
+    CHECK(!(noisy == *solid(16, 16, 100, 100, 100)));
+    settings.distortion = -100;
+    Image lens = *solid(32, 32, 100, 100, 100);
+    applyFilter(FilterKind::LensCorrection, lens, settings);
+    CHECK_EQ(int(lens.pixel(0, 0)[3]), 0);
+    // Growing and trimming keep pixels in place on the document.
+    LayerTransform t(Point(10, 20), Size(21, 21));
+    LayerTransform grown;
+    auto big = growImage(dot, t, 5, grown);
+    REQUIRE(big != nullptr);
+    CHECK_EQ(big->width(), 31);
+    CHECK_NEAR(grown.origin.x, 5, 1e-9);
+    CHECK_EQ(int(big->pixel(15, 15)[3]), 255);
+    LayerTransform trimmed;
+    auto small = trimToPixels(*big, grown, trimmed);
+    CHECK_EQ(small->width(), 1);
+    CHECK_NEAR(trimmed.origin.x, 20, 1e-9);
+    CHECK_NEAR(trimmed.origin.y, 30, 1e-9);
+    CHECK_NEAR(blurMargin(FilterKind::GaussianBlur, settings), 5, 1e-9);
 }
 
 TEST_MAIN()

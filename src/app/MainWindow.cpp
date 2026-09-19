@@ -3,6 +3,8 @@
 #include "Dialogs.h"
 #include "ImageConvert.h"
 #include "LayersPanel.h"
+#include "AdjustmentsPanel.h"
+#include "FilterDialog.h"
 #include "ToolOptionsBar.h"
 #include "compositor/png.h"
 #include "compositor/project.h"
@@ -62,6 +64,12 @@ MainWindow::MainWindow() {
     layers_->setMinimumWidth(280);
     dock->setWidget(layers_);
     addDockWidget(Qt::RightDockWidgetArea, dock);
+    auto* adjustDock = new QDockWidget(tr("Adjustments"), this);
+    adjustDock->setObjectName("adjustmentsDock");
+    adjustDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable | QDockWidget::DockWidgetClosable);
+    adjustDock->setWidget(new AdjustmentsPanel(session_));
+    addDockWidget(Qt::RightDockWidgetArea, adjustDock);
+    splitDockWidget(dock, adjustDock, Qt::Vertical);
 
     buildToolRail();
     buildMenus();
@@ -218,6 +226,22 @@ void MainWindow::buildMenus() {
         if (d && d->selection) { Rect b = d->selection->bounds(); if (!b.isEmpty()) { session_->cropTo(QRectF(b.x, b.y, b.width, b.height)); session_->deselect(); } }
     }));
     image->addSeparator();
+    QMenu* adjustments = image->addMenu(tr("&Adjustments"));
+    auto pixelAdjustment = [this, adjustments, &needsDocument](const QString& label, const QKeySequence& key, AdjustmentKind kind) {
+        needsDocument(adjustments->addAction(label, key, this, [this, kind] {
+            if (!session_->canAdjustPixels()) { showError(tr("Adjustments"), tr("Select a visible image layer (not a mask) to adjust its pixels.")); return; }
+            (new PixelAdjustmentDialog(session_, kind, this))->show();
+        }));
+    };
+    pixelAdjustment(tr("&Levels…"), QKeySequence("Ctrl+L"), AdjustmentKind::Levels);
+    pixelAdjustment(tr("&Curves…"), QKeySequence("Ctrl+M"), AdjustmentKind::Curves);
+    pixelAdjustment(tr("&Hue/Saturation…"), QKeySequence("Ctrl+U"), AdjustmentKind::HueSaturation);
+    pixelAdjustment(tr("&Exposure…"), QKeySequence(), AdjustmentKind::Exposure);
+    pixelAdjustment(tr("&Gradient Map…"), QKeySequence(), AdjustmentKind::GradientMap);
+    pixelAdjustment(tr("G&rain…"), QKeySequence(), AdjustmentKind::Grain);
+    adjustments->addSeparator();
+    needsDocument(adjustments->addAction(tr("&Invert"), QKeySequence("Ctrl+I"), this, [this] { session_->invertActive(); }));
+    image->addSeparator();
     needsDocument(image->addAction(tr("Flip Canvas Horizontal"), this, [this] { session_->flipCanvas(true); }));
     needsDocument(image->addAction(tr("Flip Canvas Vertical"), this, [this] { session_->flipCanvas(false); }));
 
@@ -228,6 +252,11 @@ void MainWindow::buildMenus() {
     needsDocument(layer->addAction(tr("&Duplicate Layer"), QKeySequence("Ctrl+J"), this, [this] { session_->duplicateActiveLayer(); }));
     needsDocument(layer->addAction(tr("De&lete Layer"), this, [this] { session_->deleteSelectedLayers(); }));
     needsDocument(layer->addAction(tr("Merge &Down"), QKeySequence("Ctrl+E"), this, [this] { session_->mergeDown(); }));
+    QMenu* adjustmentLayers = layer->addMenu(tr("New &Adjustment Layer"));
+    for (int i = 0; i < 6; i++) {
+        AdjustmentKind kind = AdjustmentKind(i);
+        needsDocument(adjustmentLayers->addAction(QString::fromUtf8(adjustmentKindName(kind)), this, [this, kind] { session_->addAdjustmentLayer(kind); }));
+    }
     layer->addSeparator();
     QMenu* mask = layer->addMenu(tr("Layer &Mask"));
     needsDocument(mask->addAction(tr("Reveal All"), this, [this] { session_->addLayerMask(true); }));
@@ -250,6 +279,18 @@ void MainWindow::buildMenus() {
     needsDocument(sampling->addAction(tr("High Quality"), this, [this] { session_->setLayerSampling(Sampling::High); }));
     needsDocument(sampling->addAction(tr("Smooth"), this, [this] { session_->setLayerSampling(Sampling::Smooth); }));
     needsDocument(sampling->addAction(tr("Nearest Neighbour"), this, [this] { session_->setLayerSampling(Sampling::Nearest); }));
+
+    QMenu* filter = menuBar()->addMenu(tr("Filte&r"));
+    auto filterAction = [this, filter, &needsDocument](const QString& label, FilterKind kind) {
+        needsDocument(filter->addAction(label, this, [this, kind] {
+            if (!session_->canAdjustPixels()) { showError(tr("Filters"), tr("Select a visible image layer (not a mask) to filter its pixels.")); return; }
+            (new FilterDialog(session_, kind, this))->show();
+        }));
+    };
+    filterAction(tr("&Gaussian Blur…"), FilterKind::GaussianBlur);
+    filterAction(tr("&Motion Blur…"), FilterKind::MotionBlur);
+    filterAction(tr("Add &Noise…"), FilterKind::AddNoise);
+    filterAction(tr("&Lens Correction…"), FilterKind::LensCorrection);
 
     QMenu* view = menuBar()->addMenu(tr("&View"));
     needsDocument(view->addAction(tr("Zoom &In"), QKeySequence::ZoomIn, this, [this] { session_->zoomTo(session_->viewport.zoom * 1.25); }));
