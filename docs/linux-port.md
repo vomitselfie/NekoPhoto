@@ -215,7 +215,10 @@ packaging/                      .desktop, icon, MIME type
   accumulates a displacement field and resamples the original through it, so
   long strokes stay sharp).
 - Opacity number keys, Shift-[ ] for hardness, Shift-M / Shift-L kinds,
-  snapping while resizing, crop ratio presets, Load as Selection, a bake or
+  snapping while resizing, crop ratio presets, a Select menu (All, Deselect,
+  Inverse; Modify: Expand, Contract, Feather, Smooth, Border; Load as Selection
+  from a layer's pixels or mask, replacing, adding, subtracting or
+  intersecting), a bake or
   release prompt when deleting a clipping base, Alt-click to clip, Alt-drag
   to copy a mask, Hue/Saturation eyedroppers and targeted-adjustment drag.
 - Multiple projects in tabs (Ctrl+N opens a new tab, Ctrl+W closes, Ctrl+Tab cycles); drag a layer from the Layers panel onto another tab to
