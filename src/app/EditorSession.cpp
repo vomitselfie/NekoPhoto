@@ -1,3 +1,4 @@
+#include "compositor/morphology.h"
 #include "EditorSession.h"
 #include "ImageConvert.h"
 #include "compositor/blend.h"
@@ -2241,6 +2242,27 @@ void EditorSession::loadLayerAsSelection(const Uuid& id, bool mask, SelectionMod
 void EditorSession::selectionExpand(int amount) {
     if (!document_ || !document_->selection || !document_->selection->coverage || amount <= 0 || amount > 500) return;
     setSelection(resizeSelection(*document_->selection, amount), "Expand Selection");
+}
+
+void EditorSession::selectionFeather(double radius) {
+    if (!document_ || !document_->selection || !document_->selection->coverage || !(radius > 0) || radius > 250) return;
+    Selection s = *document_->selection;
+    s.coverage = featherSelection(*s.coverage, radius);
+    setSelection(s, "Feather Selection");
+}
+
+void EditorSession::selectionSmooth(int radius) {
+    if (!document_ || !document_->selection || !document_->selection->coverage || radius <= 0 || radius > 100) return;
+    Selection s = *document_->selection;
+    s.coverage = smoothSelection(*s.coverage, radius);
+    setSelection(s, "Smooth Selection");
+}
+
+void EditorSession::selectionBorder(int width) {
+    if (!document_ || !document_->selection || !document_->selection->coverage || width <= 0 || width > 200) return;
+    Selection s = *document_->selection;
+    s.coverage = borderSelection(*s.coverage, width);
+    setSelection(s, "Border Selection");
 }
 
 void EditorSession::selectionContract(int amount) {

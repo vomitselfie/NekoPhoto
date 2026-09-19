@@ -22,7 +22,8 @@ Selection invertSelection(const Selection& selection, int width, int height);
 Selection resizeSelection(const Selection& selection, int amount);
 
 /// Closed loops of pixel-edge corner points (document pixels) around the selected pixels, for marching ants.
-std::vector<std::vector<Point>> selectionOutline(const GrayImage& coverage);
+/// `tooDetailed` reports an outline past the tracer's edge limit (the loops are then empty).
+std::vector<std::vector<Point>> selectionOutline(const GrayImage& coverage, bool* tooDetailed = nullptr);
 
 /// Alpha of `image` (the layer's pixels through its transform) as a document-sized coverage: Load Selection.
 std::shared_ptr<GrayImage> coverageFromLayer(const Document& document, const Layer& layer);

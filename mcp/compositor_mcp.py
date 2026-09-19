@@ -402,10 +402,16 @@ def selection_from_layer(id: str, mask: bool = False, mode: str = "replace") -> 
 
 
 @mcp.tool()
-def selection_edit(action: str, amount: int = 0) -> str:
-    """action all, none, invert, or grow (by amount pixels; negative contracts)."""
+def selection_edit(action: str, amount: float = 0) -> str:
+    """action all, none, invert, grow (by amount pixels; negative contracts), feather (Gaussian of that radius), smooth (disc majority of that radius) or border (a band that wide)."""
     if action == "grow":
-        return text(call("selection.grow", amount=amount))
+        return text(call("selection.grow", amount=int(amount)))
+    if action == "feather":
+        return text(call("selection.feather", radius=amount))
+    if action == "smooth":
+        return text(call("selection.smooth", radius=int(amount)))
+    if action == "border":
+        return text(call("selection.border", width=int(amount)))
     return text(call(f"selection.{action}"))
 
 

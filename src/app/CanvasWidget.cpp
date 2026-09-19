@@ -76,7 +76,7 @@ CanvasWidget::CanvasWidget(EditorSession* session, QWidget* parent) : QWidget(pa
     });
     connect(session_, &EditorSession::transformChanged, this, [this] { if (session_->transformEdit() && session_->transformEdit()->floating) refreshSelectionOutline(); update(); });
     antsTimer_.setInterval(120);
-    connect(&antsTimer_, &QTimer::timeout, this, [this] { antsPhase_ = (antsPhase_ + 1) % 8; if (!selectionOutline_.empty()) update(); });
+    connect(&antsTimer_, &QTimer::timeout, this, [this] { antsPhase_ = (antsPhase_ + 1) % 8; if (!selectionOutline_.empty() || selectionRasterAnts_) update(); });
     zoomInCursor_ = magnifierCursor(false, devicePixelRatioF());
     zoomOutCursor_ = magnifierCursor(true, devicePixelRatioF());
 }
@@ -280,7 +280,43 @@ void CanvasWidget::drawTransformBox(QPainter& painter, const Corners& corners, b
     }
 }
 
+void CanvasWidget::drawRasterAnts(QPainter& painter, const GrayImage& coverage) {
+    // Sample the selection at every view pixel, mark the inside pixels with an outside neighbour, dash them.
+    const int vw = width(), vh = height();
+    if (vw <= 0 || vh <= 0) return;
+    const QPointF origin = documentPoint(QPointF(0.5, 0.5));
+    const QPointF stepX = documentPoint(QPointF(1.5, 0.5)) - origin, stepY = documentPoint(QPointF(0.5, 1.5)) - origin;
+    std::vector<uint8_t> mask(size_t(vw) * size_t(vh), 0);
+    const int cw = coverage.width(), ch = coverage.height();
+    for (int y = 0; y < vh; y++) {
+        uint8_t* row = &mask[size_t(y) * size_t(vw)];
+        QPointF p = origin + stepY * y;
+        for (int x = 0; x < vw; x++, p += stepX) {
+            int dx = int(std::floor(p.x())), dy = int(std::floor(p.y()));
+            row[x] = dx >= 0 && dy >= 0 && dx < cw && dy < ch && coverage.at(dx, dy) >= 128;
+        }
+    }
+    QImage ants(vw, vh, QImage::Format_ARGB32_Premultiplied);
+    ants.fill(Qt::transparent);
+    const QRgb black = qRgb(0, 0, 0), white = qRgb(255, 255, 255);
+    for (int y = 0; y < vh; y++) {
+        const uint8_t* row = &mask[size_t(y) * size_t(vw)];
+        QRgb* out = reinterpret_cast<QRgb*>(ants.scanLine(y));
+        for (int x = 0; x < vw; x++) {
+            if (!row[x]) continue;
+            bool edge = x == 0 || y == 0 || x == vw - 1 || y == vh - 1 || !row[x - 1] || !row[x + 1] || !mask[size_t(y - 1) * size_t(vw) + size_t(x)] || !mask[size_t(y + 1) * size_t(vw) + size_t(x)];
+            if (edge) out[x] = ((x + y + antsPhase_) & 7) < 4 ? black : white;
+        }
+    }
+    painter.drawImage(0, 0, ants);
+}
+
 void CanvasWidget::drawSelectionAnts(QPainter& painter) {
+    if (selectionRasterAnts_) {
+        auto selection = session_->displayedSelection();
+        if (selection && selection->coverage) drawRasterAnts(painter, *selection->coverage);
+        return;
+    }
     if (selectionOutline_.empty()) return;
     painter.setBrush(Qt::NoBrush);
     QPen white(Qt::white, 1);
@@ -319,15 +355,22 @@ void CanvasWidget::drawCropOverlay(QPainter& painter) {
 
 void CanvasWidget::refreshSelectionOutline() {
     selectionOutline_.clear();
+    selectionRasterAnts_ = false;
     auto selection = session_->displayedSelection();
     if (selection && selection->coverage) {
-        for (auto& loop : selectionOutline(*selection->coverage)) {
+        bool tooDetailed = false;
+        auto loops = selectionOutline(*selection->coverage, &tooDetailed);
+        size_t points = 0;
+        for (auto& loop : loops) points += loop.size();
+        // Past a couple of hundred thousand corners the vector ants cost more than a raster pass per tick.
+        if (tooDetailed || points > 200000) selectionRasterAnts_ = true;
+        else for (auto& loop : loops) {
             QPolygonF poly;
             for (auto& p : loop) poly << toQPoint(p);
             selectionOutline_.push_back(poly);
         }
     }
-    if (selectionOutline_.empty()) antsTimer_.stop(); else if (!antsTimer_.isActive()) antsTimer_.start();
+    if (selectionOutline_.empty() && !selectionRasterAnts_) antsTimer_.stop(); else if (!antsTimer_.isActive()) antsTimer_.start();
 }
 
 // ---- Hit testing and cursors --------------------------------------------------------

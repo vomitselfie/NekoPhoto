@@ -774,6 +774,21 @@ void AutomationServer::registerHandlers() {
         session()->loadLayerAsSelection(layerOrActive(p).id, flag(p, "mask", false), selectionMode(p));
         return QJsonObject{{"bounds", rectJson(doc.selection ? doc.selection->bounds() : Rect())}};
     });
+    add("selection.feather", [session, document](const QJsonObject& p) {
+        const Document& doc = document();
+        session()->selectionFeather(num(p, "radius"));
+        return QJsonObject{{"bounds", rectJson(doc.selection ? doc.selection->bounds() : Rect())}};
+    });
+    add("selection.smooth", [session, document](const QJsonObject& p) {
+        const Document& doc = document();
+        session()->selectionSmooth(integer(p, "radius"));
+        return QJsonObject{{"bounds", rectJson(doc.selection ? doc.selection->bounds() : Rect())}};
+    });
+    add("selection.border", [session, document](const QJsonObject& p) {
+        const Document& doc = document();
+        session()->selectionBorder(integer(p, "width"));
+        return QJsonObject{{"bounds", rectJson(doc.selection ? doc.selection->bounds() : Rect())}};
+    });
     add("selection.grow", [session, document](const QJsonObject& p) {
         const Document& doc = document();
         int amount = integer(p, "amount");

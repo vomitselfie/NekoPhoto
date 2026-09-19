@@ -1,4 +1,5 @@
 #include "compositor/selection.h"
+#include "compositor/morphology.h"
 #include "compositor/render.h"
 #include <algorithm>
 #include <cstring>
@@ -14,11 +15,98 @@ namespace compositor {
 
 namespace {
 
-// Scanline polygon fill with nonzero winding. Antialiasing: 4 sub-scanlines per pixel and exact
-// horizontal span coverage; without antialiasing, pixel centers are tested.
+// Exact-area antialiasing: every edge deposits its signed area and cover into an accumulation buffer
+// (one float per pixel plus two per row), and a running sum along each row turns that into coverage
+// (the font-rs / stb_truetype v2 formulation). Nonzero winding is approximated by min(1, |sum|),
+// which is exact for outlines that don't cross themselves and keeps overlaps opaque.
+void fillPolygonAntialiased(const std::vector<Point>& points, GrayImage& out) {
+    const int w = out.width(), h = out.height();
+    if (points.size() < 3 || w <= 0 || h <= 0) return;
+    double minY = 1e300, maxY = -1e300;
+    for (auto& p : points) { minY = std::min(minY, p.y); maxY = std::max(maxY, p.y); }
+    const int y0 = std::max(0, int(std::floor(minY))), y1 = std::min(h, int(std::ceil(maxY)));
+    if (y1 <= y0) return;
+    const int stride = w + 2;
+    std::vector<float> acc(size_t(stride) * size_t(y1 - y0), 0.0f);
+
+    auto drawLine = [&](Point p0, Point p1) {
+        if (std::fabs(p0.y - p1.y) < 1e-12) return;
+        double dir = 1;
+        if (p0.y > p1.y) { std::swap(p0, p1); dir = -1; }
+        const double dxdy = (p1.x - p0.x) / (p1.y - p0.y);
+        double x = p0.x;
+        int yStart = std::max(y0, int(std::floor(p0.y)));
+        if (p0.y < yStart) x += (yStart - p0.y) * dxdy;
+        const int yEnd = std::min(y1, int(std::ceil(p1.y)));
+        for (int y = yStart; y < yEnd; y++) {
+            float* line = &acc[size_t(y - y0) * stride];
+            const double dy = std::min(double(y + 1), p1.y) - std::max(double(y), p0.y);
+            const double xnext = x + dxdy * dy;
+            const double d = dy * dir;
+            double xa = x, xb = xnext;
+            if (xa > xb) std::swap(xa, xb);
+            const double x0floor = std::floor(xa);
+            const int x0i = int(x0floor);
+            const double x1ceil = std::ceil(xb);
+            const int x1i = int(x1ceil);
+            if (x1i <= x0i + 1) {
+                // The piece stays within one pixel column: split its cover by where it sits in the column.
+                const double xmf = 0.5 * (x + xnext) - x0floor;
+                line[x0i] += float(d - d * xmf);
+                line[x0i + 1] += float(d * xmf);
+            } else {
+                const double s = 1.0 / (xb - xa);
+                const double x0f = xa - x0floor;
+                const double a0 = 0.5 * s * (1.0 - x0f) * (1.0 - x0f);
+                const double x1f = xb - x1ceil + 1.0;
+                const double am = 0.5 * s * x1f * x1f;
+                line[x0i] += float(d * a0);
+                if (x1i == x0i + 2) {
+                    line[x0i + 1] += float(d * (1.0 - a0 - am));
+                } else {
+                    const double a1 = s * (1.5 - x0f);
+                    line[x0i + 1] += float(d * (a1 - a0));
+                    for (int xi = x0i + 2; xi < x1i - 1; xi++) line[xi] += float(d * s);
+                    const double a2 = a1 + (x1i - x0i - 3) * s;
+                    line[x1i - 1] += float(d * (1.0 - a2 - am));
+                }
+                line[x1i] += float(d * am);
+            }
+            x = xnext;
+        }
+    };
+    // Edges are clipped to the buffer's columns [0, w]: a piece left of the image becomes a vertical edge at
+    // 0 (its winding still counts from column 0 on), a piece right of it lands on column w, past every pixel.
+    auto clipped = [&](Point a, Point b) {
+        auto clampX = [&](Point p) { return Point{std::clamp(p.x, 0.0, double(w)), p.y}; };
+        auto emit = [&](Point p, Point q) { drawLine(clampX(p), clampX(q)); };
+        for (double bound : {0.0, double(w)}) {
+            if ((a.x < bound) != (b.x < bound) && a.x != b.x) {
+                double t = (bound - a.x) / (b.x - a.x);
+                Point m{bound, a.y + (b.y - a.y) * t};
+                emit(a, m);
+                a = m;
+            }
+        }
+        emit(a, b);
+    };
+    for (size_t i = 0; i < points.size(); i++) clipped(points[i], points[(i + 1) % points.size()]);
+    for (int y = y0; y < y1; y++) {
+        const float* line = &acc[size_t(y - y0) * stride];
+        uint8_t* o = out.row(y);
+        float sum = 0;
+        for (int x = 0; x < w; x++) {
+            sum += line[x];
+            float v = std::min(1.0f, std::fabs(sum));
+            if (v > 0.0005f) o[x] = std::max(o[x], uint8_t(v * 255 + 0.5f));
+        }
+    }
+}
+
+// Aliased fill: a pixel is in when its centre is inside (nonzero winding), by scanline.
 struct Edge { double x0, y0, x1, y1; int dir; };
 
-void fillPolygon(const std::vector<Point>& points, GrayImage& out, bool antialiased) {
+void fillPolygonAliased(const std::vector<Point>& points, GrayImage& out) {
     if (points.size() < 3) return;
     std::vector<Edge> edges;
     for (size_t i = 0; i < points.size(); i++) {
@@ -32,47 +120,29 @@ void fillPolygon(const std::vector<Point>& points, GrayImage& out, bool antialia
     double minY = edges[0].y0, maxY = edges[0].y1;
     for (auto& e : edges) { minY = std::min(minY, e.y0); maxY = std::max(maxY, e.y1); }
     int y0 = std::max(0, int(std::floor(minY))), y1 = std::min(h, int(std::ceil(maxY)));
-    const int sub = antialiased ? 4 : 1;
-    std::vector<float> row(static_cast<size_t>(w), 0.0f);
     struct Crossing { double x; int dir; };
     std::vector<Crossing> crossings;
     for (int y = y0; y < y1; y++) {
-        std::fill(row.begin(), row.end(), 0.0f);
-        for (int s = 0; s < sub; s++) {
-            double sy = y + (s + 0.5) / sub;
-            crossings.clear();
-            for (auto& e : edges) {
-                if (sy < e.y0 || sy >= e.y1) continue;
-                double x = e.x0 + (sy - e.y0) * (e.x1 - e.x0) / (e.y1 - e.y0);
-                crossings.push_back({x, e.dir});
-            }
-            std::sort(crossings.begin(), crossings.end(), [](const Crossing& a, const Crossing& b) { return a.x < b.x; });
-            int winding = 0;
-            for (size_t i = 0; i + 1 < crossings.size(); i++) {
-                winding += crossings[i].dir;
-                if (winding == 0) continue;
-                double xa = crossings[i].x, xb = crossings[i + 1].x;
-                if (xb <= xa) continue;
-                if (!antialiased) {
-                    int ia = std::max(0, int(std::ceil(xa - 0.5))), ib = std::min(w, int(std::ceil(xb - 0.5)));
-                    for (int x = ia; x < ib; x++) row[size_t(x)] = 1;
-                    continue;
-                }
-                double ca = clamp(xa, 0.0, double(w)), cb = clamp(xb, 0.0, double(w));
-                if (cb <= ca) continue;
-                int ia = int(std::floor(ca)), ib = int(std::ceil(cb));
-                for (int x = ia; x < ib && x < w; x++) {
-                    double cover = std::min(cb, double(x + 1)) - std::max(ca, double(x));
-                    if (cover > 0) row[size_t(x)] += float(cover / sub);
-                }
-            }
+        double sy = y + 0.5;
+        crossings.clear();
+        for (auto& e : edges) {
+            if (sy < e.y0 || sy >= e.y1) continue;
+            crossings.push_back({e.x0 + (sy - e.y0) * (e.x1 - e.x0) / (e.y1 - e.y0), e.dir});
         }
+        std::sort(crossings.begin(), crossings.end(), [](const Crossing& a, const Crossing& b) { return a.x < b.x; });
+        int winding = 0;
         uint8_t* o = out.row(y);
-        for (int x = 0; x < w; x++) {
-            float v = std::min(1.0f, row[size_t(x)]);
-            if (v > 0) o[x] = std::max(o[x], uint8_t(v * 255 + 0.5f));
+        for (size_t i = 0; i + 1 < crossings.size(); i++) {
+            winding += crossings[i].dir;
+            if (winding == 0) continue;
+            int ia = std::max(0, int(std::ceil(crossings[i].x - 0.5))), ib = std::min(w, int(std::ceil(crossings[i + 1].x - 0.5)));
+            for (int x = ia; x < ib; x++) o[x] = 255;
         }
     }
+}
+
+void fillPolygon(const std::vector<Point>& points, GrayImage& out, bool antialiased) {
+    if (antialiased) fillPolygonAntialiased(points, out); else fillPolygonAliased(points, out);
 }
 
 } // namespace
@@ -88,8 +158,11 @@ std::shared_ptr<GrayImage> rasterizeRect(const Rect& rect, int width, int height
 }
 
 std::shared_ptr<GrayImage> rasterizeEllipse(const Rect& rect, int width, int height, bool antialiased) {
-    int segments = std::max(32, int(std::ceil((rect.width + rect.height) * 2)));
-    segments = std::min(segments, 4096);
+    // Enough chords that the sagitta stays under 0.05 px: n = pi / acos(1 - tolerance / r).
+    const double r = std::max(1.0, std::max(rect.width, rect.height) / 2);
+    const double tolerance = 0.05;
+    int segments = int(std::ceil(M_PI / std::acos(std::max(-1.0, 1.0 - tolerance / r))));
+    segments = std::clamp(segments, 32, 4096);
     std::vector<Point> points;
     points.reserve(size_t(segments));
     for (int i = 0; i < segments; i++) {
@@ -158,27 +231,11 @@ Selection invertSelection(const Selection& selection, int width, int height) {
 Selection resizeSelection(const Selection& selection, int amount) {
     Selection result = selection;
     if (!selection.coverage || amount == 0) return result;
-    const GrayImage& src = *selection.coverage;
-    int w = src.width(), h = src.height(), r = std::abs(amount);
-    // A round structuring element: dilate (grow) or erode (shrink) the coverage.
-    auto out = std::make_shared<GrayImage>(w, h, 0);
-    std::vector<std::pair<int, int>> disc;
-    for (int dy = -r; dy <= r; dy++) for (int dx = -r; dx <= r; dx++) if (dx * dx + dy * dy <= r * r) disc.push_back({dx, dy});
-    for (int y = 0; y < h; y++)
-        for (int x = 0; x < w; x++) {
-            int v = amount > 0 ? 0 : 255;
-            for (auto [dx, dy] : disc) {
-                int sx = x + dx, sy = y + dy;
-                int s = (sx < 0 || sy < 0 || sx >= w || sy >= h) ? 0 : src.at(sx, sy);
-                v = amount > 0 ? std::max(v, s) : std::min(v, s);
-            }
-            out->at(x, y) = uint8_t(v);
-        }
-    result.coverage = out;
+    result.coverage = growSelection(*selection.coverage, amount);
     return result;
 }
 
-std::vector<std::vector<Point>> selectionOutline(const GrayImage& coverage) {
+std::vector<std::vector<Point>> selectionOutline(const GrayImage& coverage, bool* tooDetailed) {
     std::vector<std::vector<Point>> loops;
     if (coverage.isEmpty()) return loops;
     // Trace pixels at least half selected.
@@ -186,6 +243,7 @@ std::vector<std::vector<Point>> selectionOutline(const GrayImage& coverage) {
     for (int y = 0; y < coverage.height(); y++) for (int x = 0; x < coverage.width(); x++) mask[size_t(y) * coverage.width() + x] = coverage.at(x, y) >= 128 ? 255 : 0;
     int32_t* points = nullptr; int32_t* counts = nullptr; size_t pointCount = 0, loopCount = 0;
     int result = wand_trace(mask.data(), size_t(coverage.width()), size_t(coverage.height()), &points, &pointCount, &counts, &loopCount);
+    if (tooDetailed) *tooDetailed = result == -2;
     if (result != 0) return loops;
     size_t offset = 0;
     for (size_t i = 0; i < loopCount; i++) {

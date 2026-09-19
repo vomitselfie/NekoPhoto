@@ -42,6 +42,7 @@ add_library(compositor_core STATIC
     src/image.cpp
     src/kernels.cpp
     src/matte.cpp
+    src/morphology.cpp
     src/subject.cpp
     src/png.cpp
     src/project.cpp

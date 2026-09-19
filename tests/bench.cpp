@@ -5,6 +5,7 @@
 #include "compositor/document.h"
 #include "compositor/filters.h"
 #include "compositor/kernels.h"
+#include "compositor/morphology.h"
 #include "compositor/render.h"
 #include "compositor/selection.h"
 #include <chrono>
@@ -122,6 +123,10 @@ int main(int argc, char** argv) {
         Selection sel; sel.coverage = shape;
         report("selection bounds", timeMs([&] { Selection s2 = sel; (void)s2.bounds(); }));
         report("selection expand 10 px", timeMs([&] { (void)resizeSelection(sel, 10); }, 1));
+        report("selection contract 100 px", timeMs([&] { (void)resizeSelection(sel, -100); }, 1));
+        report("selection smooth r=5", timeMs([&] { (void)smoothSelection(*shape, 5); }, 1));
+        report("selection border 6", timeMs([&] { (void)borderSelection(*shape, 6); }, 1));
+        report("selection feather 10", timeMs([&] { (void)featherSelection(*shape, 10); }, 1));
         auto other = rasterizeRect(Rect(1000, 1000, 2000, 1500), W, H, true);
         report("selection add", timeMs([&] { (void)combineSelection(sel, *other, SelectionMode::Add, true); }));
     }

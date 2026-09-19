@@ -289,6 +289,10 @@ public:
     void clearSelectionPixels();
     void selectionExpand(int amount);
     void selectionContract(int amount);
+    /// Photoshop's Select > Modify: Feather (a Gaussian of that radius), Smooth (disc majority), Border (a band).
+    void selectionFeather(double radius);
+    void selectionSmooth(int radius);
+    void selectionBorder(int width);
     /// Arrow keys with a selection tool: the outline moves by whole pixels, one undo step per press.
     void nudgeSelection(double dx, double dy);
     /// Load a layer's pixels (or its mask) as the selection.

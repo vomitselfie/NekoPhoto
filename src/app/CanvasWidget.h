@@ -104,6 +104,9 @@ private:
     double cropRatio_ = 0;
     std::optional<QRectF> zoomRect_;
     std::vector<QPolygonF> selectionOutline_;
+    /// Set when the outline is too detailed to trace or draw as vectors: the ants come from a raster pass instead.
+    bool selectionRasterAnts_ = false;
+    void drawRasterAnts(QPainter& painter, const compositor::GrayImage& coverage);
     int antsPhase_ = 0;
     QTimer antsTimer_;
     bool layerPickedOnPress_ = false;

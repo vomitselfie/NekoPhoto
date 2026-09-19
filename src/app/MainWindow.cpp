@@ -456,6 +456,9 @@ void MainWindow::buildMenus() {
     needsDocument(edit->addAction(tr("&Inverse"), QKeySequence("Ctrl+Shift+I"), this, [this] { session_->invertSelection(); }));
     needsDocument(edit->addAction(tr("Expand Selection…"), this, [this] { bool ok; int n = QInputDialog::getInt(this, tr("Expand Selection"), tr("Pixels"), 1, 1, 500, 1, &ok); if (ok) session_->selectionExpand(n); }));
     needsDocument(edit->addAction(tr("Contract Selection…"), this, [this] { bool ok; int n = QInputDialog::getInt(this, tr("Contract Selection"), tr("Pixels"), 1, 1, 500, 1, &ok); if (ok) session_->selectionContract(n); }));
+    needsDocument(edit->addAction(tr("Feather Selection…"), QKeySequence("Shift+F6"), this, [this] { bool ok; double r = QInputDialog::getDouble(this, tr("Feather Selection"), tr("Radius (pixels)"), 5, 0.1, 250, 1, &ok); if (ok) session_->selectionFeather(r); }));
+    needsDocument(edit->addAction(tr("Smooth Selection…"), this, [this] { bool ok; int n = QInputDialog::getInt(this, tr("Smooth Selection"), tr("Sample radius (pixels)"), 3, 1, 100, 1, &ok); if (ok) session_->selectionSmooth(n); }));
+    needsDocument(edit->addAction(tr("Border Selection…"), this, [this] { bool ok; int n = QInputDialog::getInt(this, tr("Border Selection"), tr("Width (pixels)"), 4, 1, 200, 1, &ok); if (ok) session_->selectionBorder(n); }));
     edit->addSeparator();
     needsDocument(edit->addAction(tr("Free &Transform"), QKeySequence("Ctrl+T"), this, [this] { session_->transformCommand(); }));
     needsDocument(edit->addAction(tr("Fill with Foreground"), QKeySequence("Alt+Backspace"), this, [this] { session_->fillSelection(session_->foregroundColor); }));
