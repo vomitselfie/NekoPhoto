@@ -343,6 +343,18 @@ def pixels_content_aware_fill() -> str:
 
 
 @mcp.tool()
+def gmic_filters(search: str = "") -> str:
+    """The G'MIC filter catalogue (name, folder, command, parameters with defaults and ranges), optionally narrowed by a search string. G'MIC is the open-source filter framework GIMP and Krita use as a plugin."""
+    return text(call("gmic.filters", search=search))
+
+
+@mcp.tool()
+def pixels_gmic(command: str) -> str:
+    """Run a G'MIC command line on the active layer's pixels inside the selection, e.g. "unsharp 2,1.5", "cartoon 3,150,20,0.25,1.5,8" or a catalogue filter's defaultCommand with edited values."""
+    return text(call("pixels.gmic", command=command))
+
+
+@mcp.tool()
 def remove_background(refine: bool = True) -> str:
     """Mask out the active layer's background with the local segmentation model (needs Preferences > AI background removal enabled and a downloaded model)."""
     return text(call("pixels.removeBackground", refine=refine))

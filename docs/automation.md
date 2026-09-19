@@ -111,7 +111,8 @@ apply, link), `layers.merge`, `layers.group`, `adjustments.set`.
 
 Pixels of the active layer, inside the selection: `pixels.adjust`,
 `pixels.filter`, `pixels.invert`, `pixels.fill`, `pixels.clear`,
-`pixels.contentAwareFill`, `pixels.removeBackground`.
+`pixels.contentAwareFill`, `pixels.removeBackground`, `pixels.gmic` (`command`, a G'MIC
+command line; `gmic.filters` lists the catalogue with parameters and defaults).
 
 Selection: `selection.all`, `selection.none`, `selection.invert`,
 `selection.rect` (or `ellipse: true`), `selection.polygon`, `selection.wand` (all take

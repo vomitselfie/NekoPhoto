@@ -2,6 +2,7 @@
 #include "CanvasWidget.h"
 #include "EditorSession.h"
 #include "ImageConvert.h"
+#include "Gmic.h"
 #include "LayersPanel.h"
 #include "MainWindow.h"
 #include "ModelStore.h"
@@ -702,6 +703,51 @@ void AutomationServer::registerHandlers() {
         QString error;
         if (!session()->contentAwareFill(&error)) fail(error.isEmpty() ? "content-aware fill needs a selection on a pixel layer" : error);
         return QJsonObject{};
+    });
+    add("pixels.gmic", [session, document](const QJsonObject& p) {
+        // A G'MIC command on the active layer's pixels inside the selection, e.g. "unsharp 2,1.5" or "fx_dreamsmooth 3,0,1,0.8,0,0.8,0,24,0".
+        document();
+        EditorSession* s = session();
+        if (!s->canAdjustPixels()) fail("the active layer has no pixels; select a pixel layer");
+        QString command = str(p, "command").trimmed();
+        if (command.isEmpty()) fail("command is empty", invalidParams);
+        if (GmicRunner::executable().isEmpty()) fail("G'MIC is not installed (no gmic executable on PATH)");
+        LayerTransform transform;
+        auto source = s->adjustmentSource(0, transform);
+        if (!source) fail("the active layer has no pixels");
+        QString error;
+        auto result = GmicRunner::runSync(*source, command, &error, integer(p, "timeoutMs", 300000));
+        if (!result) fail(error);
+        if (auto coverage = s->selectionOnGrid(transform, source->width(), source->height())) blendThroughCoverage(*result, *source, *coverage);
+        s->commitPixels(result, transform, "G'MIC: " + command.section(' ', 0, 0));
+        return QJsonObject{{"applied", command}, {"gmic", GmicRunner::version()}};
+    });
+    add("gmic.filters", [](const QJsonObject& p) {
+        // The catalogue: name, folder, command and parameters, optionally filtered by a search string.
+        GmicCatalogue catalogue;
+        QString path = GmicCatalogue::preferredFile();
+        QJsonArray out;
+        if (!path.isEmpty() && catalogue.load(path)) {
+            QString needle = str(p, "search", QString()).trimmed();
+            for (const GmicFilter& f : catalogue.filters()) {
+                if (!needle.isEmpty() && !f.name.contains(needle, Qt::CaseInsensitive) && !f.folder.contains(needle, Qt::CaseInsensitive)) continue;
+                QJsonArray params;
+                for (const GmicParam& gp : f.params) {
+                    if (!gp.contributes()) continue;
+                    QJsonObject o{{"label", gp.label}};
+                    switch (gp.kind) {
+                    case GmicParam::Float: case GmicParam::Int: o["type"] = gp.kind == GmicParam::Int ? "int" : "float"; o["default"] = gp.value; o["min"] = gp.min; o["max"] = gp.max; break;
+                    case GmicParam::Bool: o["type"] = "bool"; o["default"] = gp.value != 0; break;
+                    case GmicParam::Choice: o["type"] = "choice"; o["default"] = int(gp.value); o["choices"] = QJsonArray::fromStringList(gp.choices); break;
+                    case GmicParam::Color: o["type"] = "color"; o["default"] = gp.argument(); break;
+                    default: o["type"] = "text"; o["default"] = gp.argument(); break;
+                    }
+                    params.append(o);
+                }
+                out.append(QJsonObject{{"name", f.name}, {"folder", f.folder}, {"command", f.command}, {"defaultCommand", f.commandLine(false)}, {"params", params}});
+            }
+        }
+        return QJsonObject{{"installed", !GmicRunner::executable().isEmpty()}, {"version", GmicRunner::version()}, {"catalogue", path}, {"filters", out}};
     });
     add("pixels.removeBackground", [session, document](const QJsonObject& p) {
         document();

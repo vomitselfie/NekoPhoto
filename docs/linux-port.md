@@ -71,6 +71,19 @@ For an AppImage, `tools/integrate-appimage.sh <file>` copies it to
 `~/Applications` and writes the launcher entry, icon and MIME type under
 `~/.local/share`; `--remove` undoes it.
 
+## G'MIC
+
+Filter > G'MIC runs the `gmic` executable (an optional runtime dependency:
+`pacman -S gmic` / `apt install gmic`; `COMPOSITOR_GMIC` points at a specific
+binary) on the active layer's pixels through a PNG round trip. The dialog lists
+a few essentials from G'MIC's core, and the whole catalogue once its definition
+file is available: Update Filters downloads `https://gmic.eu/update<version>.gmic`
+into the app data folder's `gmic/`, and an existing G'MIC-Qt copy under
+`~/.config/gmic/` is used until then. The `#@gui` lines of that file describe
+each filter's parameters; the dialog builds the controls from them, shows the
+resulting command line, and previews on a reduced copy. Filters that change the
+image size are rejected. Over automation: `pixels.gmic` and `gmic.filters`.
+
 ## Appearance
 
 Edit > Preferences > Appearance: System, Dark or Light. Dark and Light use Qt's

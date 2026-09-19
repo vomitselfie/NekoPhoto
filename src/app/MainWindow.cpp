@@ -7,6 +7,7 @@
 #include "AdjustmentsPanel.h"
 #include "Automation.h"
 #include "FilterDialog.h"
+#include "GmicDialog.h"
 #include "ColorSwatches.h"
 #include "Icons.h"
 #include "ModelStore.h"
@@ -565,6 +566,11 @@ void MainWindow::buildMenus() {
     filterAction(tr("Add &Noise…"), FilterKind::AddNoise);
     filterAction(tr("&Lens Correction…"), FilterKind::LensCorrection);
     filter->addSeparator();
+    filter->addSeparator();
+    needsDocument(filter->addAction(tr("&G'MIC…"), QKeySequence("Ctrl+Shift+G"), this, [this] {
+        if (!session_->canAdjustPixels()) { showError(tr("G'MIC"), tr("Select a layer with pixels first.")); return; }
+        (new GmicDialog(session_, this))->show();
+    }));
     removeBackgroundAction_ = needsDocument(filter->addAction(tr("Remove &Background…"), this, [this] {
         if (!ModelStore::ready()) {
             // Off, or no model yet: the preferences page is where it gets turned on and fetched.

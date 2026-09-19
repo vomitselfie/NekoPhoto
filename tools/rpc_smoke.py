@@ -160,6 +160,19 @@ def main():
         assert batch.returncode == 0 and len(lines) == 3 and len(lines[2]["result"]) == 2, (batch.returncode, batch.stdout, batch.stderr)
         print("--call and --batch ok")
 
+    # G'MIC, when the executable is installed: a core command on the active layer, and the catalogue listing.
+    cat = rpc.call("gmic.filters", search="sharpen")
+    if cat["installed"]:
+        rpc.call("layers.select", id=target["id"])
+        applied = rpc.call("pixels.gmic", command="unsharp 2,1.5")
+        assert applied["applied"].startswith("unsharp"), applied
+        rpc.call("history.undo")
+        if cat["catalogue"]:
+            assert cat["filters"], cat
+            print("gmic", cat["version"], "catalogue entries matching 'sharpen':", len(cat["filters"]))
+        else:
+            print("gmic", cat["version"], "(no catalogue file)")
+
     # Errors come back as errors, not crashes.
     try:
         rpc.call("layers.get", id="nope")

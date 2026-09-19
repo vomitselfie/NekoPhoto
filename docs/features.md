@@ -40,6 +40,7 @@ The full feature list. It mirrors the Mac app's, with Linux key names.
 - Levels (with Auto), Curves, Hue/Saturation, Exposure, Gradient Map, Grain and Invert
 - Gaussian Blur and Motion Blur that spread past a layer's edges
 - Add Noise, Lens Correction and Remove Background
+- Filter > G'MIC (Ctrl+Shift+G): the G'MIC filter framework's catalogue (over 700 filters once downloaded) with auto-built controls, live preview and an editable command line; needs the `gmic` package
 - Live previews, limited to the selection when there is one
 
 ## Canvas and files

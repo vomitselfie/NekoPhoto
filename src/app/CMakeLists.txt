@@ -47,6 +47,10 @@ qt_add_executable(compositor-linux
     AdjustmentsPanel.cpp
     FilterDialog.h
     FilterDialog.cpp
+    Gmic.h
+    Gmic.cpp
+    GmicDialog.h
+    GmicDialog.cpp
     Automation.h
     Automation.cpp
     Theme.h
