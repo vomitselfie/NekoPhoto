@@ -59,6 +59,10 @@ public:
     int newTab() { addTab(false); return current_; }
     void closeTabAt(int i) { skipConfirm_ = true; closeTab(i); skipConfirm_ = false; }
     bool importImageFile(const QString& path, std::optional<QPointF> at, QString* error);
+    /// An image file as a document of its own, in a new tab (what a drop on the tab strip does).
+    bool openImageAsDocument(const QString& path, QString* error);
+    /// Whether a window position lies on the tab strip, where a dropped file opens as a new document.
+    bool overTabStrip(const QPointF& windowPosition) const;
     void noteRecent(const QString& path) { addRecent(path); }
     /// While set, errors the window would show in a dialog are appended here instead.
     void setErrorSink(QString* sink) { errorSink_ = sink; }
@@ -72,6 +76,8 @@ signals:
 protected:
     void closeEvent(QCloseEvent*) override;
     void dragEnterEvent(QDragEnterEvent*) override;
+    void dragMoveEvent(QDragMoveEvent*) override;
+    void dragLeaveEvent(QDragLeaveEvent*) override;
     void dropEvent(QDropEvent*) override;
 
 private:

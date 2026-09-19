@@ -27,6 +27,8 @@
 #include <QDir>
 #include <QDockWidget>
 #include <QDragEnterEvent>
+#include <QDragLeaveEvent>
+#include <QDragMoveEvent>
 #include <QDropEvent>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -831,15 +833,38 @@ void MainWindow::importFile(const QString& path, std::optional<QPointF> at) {
     if (!importImageFile(path, at, &error)) showError(tr("Couldn’t import %1").arg(QFileInfo(path).fileName()), error);
 }
 
-bool MainWindow::importImageFile(const QString& path, std::optional<QPointF> at, QString* error) {
+namespace {
+std::shared_ptr<const compositor::Image> readImageFile(const QString& path, QString* error) {
     QImageReader reader(path);
     reader.setAutoTransform(true);
     QImage image = reader.read();
-    if (image.isNull()) { if (error) *error = reader.errorString(); return false; }
-    if (image.width() > 30000 || image.height() > 30000) { if (error) *error = tr("Images up to 30,000 pixels per side are supported."); return false; }
-    session_->insertImage(fromQImage(image), QFileInfo(path).completeBaseName(), at);
+    if (image.isNull()) { if (error) *error = reader.errorString(); return nullptr; }
+    if (image.width() > 30000 || image.height() > 30000) { if (error) *error = QObject::tr("Images up to 30,000 pixels per side are supported."); return nullptr; }
+    return fromQImage(image);
+}
+} // namespace
+
+bool MainWindow::importImageFile(const QString& path, std::optional<QPointF> at, QString* error) {
+    auto image = readImageFile(path, error);
+    if (!image) return false;
+    session_->insertImage(image, QFileInfo(path).completeBaseName(), at);
     addRecent(path);
     return true;
+}
+
+bool MainWindow::openImageAsDocument(const QString& path, QString* error) {
+    auto image = readImageFile(path, error);
+    if (!image) return false;
+    Tab& tab = addTab(true);
+    tab.session->insertImage(image, QFileInfo(path).completeBaseName(), std::nullopt);   // a first image makes the canvas
+    tab.defaultName = QFileInfo(path).completeBaseName();
+    refreshTabTitles();
+    addRecent(path);
+    return true;
+}
+
+bool MainWindow::overTabStrip(const QPointF& windowPosition) const {
+    return tabBar_->rect().contains(tabBar_->mapFrom(this, windowPosition.toPoint()));
 }
 
 void MainWindow::importImages() {
@@ -904,16 +929,30 @@ void MainWindow::dragEnterEvent(QDragEnterEvent* e) {
     if (e->mimeData()->hasUrls() || e->mimeData()->hasImage()) e->acceptProposedAction();
 }
 
+void MainWindow::dragMoveEvent(QDragMoveEvent* e) {
+    // A file over the tab strip will open as its own document; over the canvas it joins this one.
+    if (e->mimeData()->hasUrls() && session_->hasDocument())
+        statusBar()->showMessage(overTabStrip(e->position()) ? tr("Drop to open as a new document") : tr("Drop to add as a layer (drop on the tab strip to open as a new document)"));
+    e->acceptProposedAction();
+}
+
+void MainWindow::dragLeaveEvent(QDragLeaveEvent*) { statusBar()->clearMessage(); }
+
 void MainWindow::dropEvent(QDropEvent* e) {
+    statusBar()->clearMessage();
     QPointF canvasPoint = canvas_->mapFrom(this, e->position().toPoint());
     std::optional<QPointF> at;
     if (session_->hasDocument() && canvas_->rect().contains(canvasPoint.toPoint())) at = canvas_->documentPoint(canvasPoint);
+    const bool asDocument = session_->hasDocument() && overTabStrip(e->position());
     if (e->mimeData()->hasUrls()) {
         for (auto& url : e->mimeData()->urls()) {
             if (!url.isLocalFile()) continue;
             QString path = url.toLocalFile();
-            // Projects and Photoshop files open in their own tab; anything else lands as a layer where it was dropped.
-            if (isProjectPath(path) || isPhotoshopPath(path)) openPath(path); else importFile(path, at);
+            // Projects and Photoshop files open in their own tab; an image dropped on the tab strip does too,
+            // while one dropped on the canvas lands as a layer where it was dropped.
+            if (isProjectPath(path) || isPhotoshopPath(path)) openPath(path);
+            else if (asDocument) { QString error; if (!openImageAsDocument(path, &error)) showError(tr("Couldn’t open %1").arg(QFileInfo(path).fileName()), error); }
+            else importFile(path, at);
         }
         e->acceptProposedAction();
         return;
