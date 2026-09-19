@@ -3,6 +3,7 @@
 // Blurs spread past the layer's edges: the caller grows the grid first
 // (growForBlur) and trims the empty margin afterwards (trimToPixels).
 #pragma once
+#include "blur.h"
 #include "document.h"
 #include <cstdint>
 
@@ -40,8 +41,7 @@ std::shared_ptr<Image> trimToPixels(const Image& image, const LayerTransform& tr
 /// (a downscaled preview blurs proportionally less); `seed` fixes Add Noise's pattern.
 void applyFilter(FilterKind kind, Image& image, const FilterSettings& settings, double scale = 1, uint32_t seed = 0);
 
-void gaussianBlur(Image& image, double sigma);
-void motionBlur(Image& image, double distance, double angleDegrees);
+// gaussianBlur and motionBlur live in blur.h.
 
 /// Selection coverage resampled into a layer's pixel grid (`pixelToDocument` maps the grid to the document).
 std::shared_ptr<GrayImage> selectionInGrid(const GrayImage& selection, const Affine& pixelToDocument, int width, int height);

@@ -34,6 +34,7 @@ set(COMPOSITOR_HAVE_OPENCV ${COMPOSITOR_HAVE_OPENCV} PARENT_SCOPE)
 add_library(compositor_core STATIC
     src/adjustments.cpp
     src/blend.cpp
+    src/blur.cpp
     src/brush.cpp
     src/document.cpp
     src/filters.cpp

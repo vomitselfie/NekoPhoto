@@ -118,12 +118,11 @@ std::shared_ptr<GrayImage> refineMatte(const GrayImage& mask, const Image& guide
     if (s.shiftEdge != 0) {
         // A blur then a hard threshold at the matching level moves the edge by the blur's reach.
         double reach = std::fabs(s.shiftEdge);
-        Image temp(out->width(), out->height());
-        for (int y = 0; y < out->height(); y++) for (int x = 0; x < out->width(); x++) { uint8_t v = out->at(x, y); uint8_t* p = temp.pixel(x, y); p[0] = p[1] = p[2] = v; p[3] = 255; }
+        GrayImage temp(*out);
         gaussianBlur(temp, reach / 2);
         float level = s.shiftEdge < 0 ? 0.75f : 0.25f;
         for (int y = 0; y < out->height(); y++) for (int x = 0; x < out->width(); x++) {
-            float v = temp.pixel(x, y)[0] / 255.0f;
+            float v = temp.at(x, y) / 255.0f;
             float t = std::min(1.0f, std::max(0.0f, (v - level) / 0.001f));
             out->at(x, y) = uint8_t(t * 255 + 0.5f);
         }

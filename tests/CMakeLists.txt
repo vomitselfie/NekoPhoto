@@ -6,6 +6,10 @@ add_executable(core_tests core_tests.cpp)
 target_link_libraries(core_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME core_tests COMMAND core_tests)
 
+add_executable(blur_tests blur_tests.cpp)
+target_link_libraries(blur_tests PRIVATE compositor::core compositor_warnings)
+add_test(NAME blur_tests COMMAND blur_tests)
+
 add_executable(kernel_tests kernel_tests.cpp)
 target_link_libraries(kernel_tests PRIVATE compositor::core compositor::pixels compositor_warnings)
 add_test(NAME kernel_tests COMMAND kernel_tests)
