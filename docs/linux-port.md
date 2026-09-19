@@ -53,7 +53,8 @@ and `rcc` for shells that cannot execute binaries under `/usr/lib`.
 `COMPOSITOR_MODEL_DIR` when set); `--preferences` opens the Preferences dialog;
 One editor per user: a launch that carries only file names (a double-click in
 the file manager, `compositor-linux photo.psd`) hands them to the running
-editor, which opens them as tabs and raises its window, and quits;
+editor, which opens them as tabs and raises its window, and quits (with
+`--rpc` the running editor also starts its automation socket for the caller);
 `--new-window` keeps a separate process, as any of the options below does.
 `--tool brush` (or any tool name from `--help`) selects a tool, and `--dialog new`
 (or canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map,

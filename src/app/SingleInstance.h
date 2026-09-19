@@ -23,9 +23,11 @@ public:
     static QString lockPath();
 
     /// Hands `files` (absolute paths, possibly none) to a running instance, which opens them and raises its
-    /// window. True when an instance took them, so this process should quit; false when there is none, or it
-    /// could not be reached within a moment, so this process should become the instance.
-    static bool handOff(const QStringList& files);
+    /// window; with `rpcSocket` it also asks that instance to start its automation server on that path, so
+    /// an agent that launched the editor attaches to the window the person already has. True when an
+    /// instance took the request, so this process should quit; false when there is none, or it could not be
+    /// reached within a moment, so this process should become the instance.
+    static bool handOff(const QStringList& files, const QString& rpcSocket = QString());
 
     /// Becomes the instance for `window`: takes the lock and listens. False when another instance holds the
     /// lock or the socket cannot be made; the window then simply runs without the handoff.

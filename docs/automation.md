@@ -33,7 +33,9 @@ The bridge uses the 1.x MCP SDK API (2.x renamed its server class).
 
 When nothing is listening the bridge launches `compositor-linux` (from `PATH`,
 `$COMPOSITOR_BIN`, or `./build/src/app/`) with the socket on; with no display it
-launches headless. `COMPOSITOR_MCP_LAUNCH=0` disables launching and
+launches headless. When the editor is already open, that launch hands the
+request to it instead and the running window starts listening on the socket,
+so the agent works in the document the person is looking at. `COMPOSITOR_MCP_LAUNCH=0` disables launching and
 `COMPOSITOR_MCP_LAUNCH=headless` forces the windowless kind.
 
 The bridge exposes one MCP tool per common operation (`layers_list`, `render`,

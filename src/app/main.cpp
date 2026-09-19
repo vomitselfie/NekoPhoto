@@ -275,7 +275,8 @@ int main(int argc, char** argv) {
     QStringList handoff;
     for (const QString& path : parser.positionalArguments()) handoff << QDir::current().absoluteFilePath(path);
     const bool ownProcess = parser.isSet(newWindow) || parser.isSet(screenshot) || parser.isSet(headlessOption) || parser.isSet(batchOption) || parser.isSet(dialogOption) || parser.isSet(saveAs) || parser.isSet(prefs) || parser.isSet(demo) || parser.isSet(toolOption);
-    if (!ownProcess && app::SingleInstance::handOff(handoff)) return 0;
+    const QString rpcRequested = parser.isSet(rpc) || parser.isSet(rpcSocket) ? (parser.value(rpcSocket).isEmpty() ? app::AutomationServer::defaultSocketPath() : parser.value(rpcSocket)) : QString();
+    if (!ownProcess && app::SingleInstance::handOff(handoff, rpcRequested)) return 0;
     app::MainWindow window;
     window.show();
     app::SingleInstance instance;

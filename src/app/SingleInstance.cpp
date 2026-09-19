@@ -29,7 +29,7 @@ SingleInstance::~SingleInstance() = default;
 QString SingleInstance::socketPath() { return runtimeDirectory() + "/compositor-linux-instance.sock"; }
 QString SingleInstance::lockPath() { return runtimeDirectory() + "/compositor-linux-instance.lock"; }
 
-bool SingleInstance::handOff(const QStringList& files) {
+bool SingleInstance::handOff(const QStringList& files, const QString& rpcSocket) {
     // The lock says whether an instance is running (a dead one's lock is cleared by the PID check); by age a
     // lock is never stale, or a long-running editor would lose it after half a minute.
     QLockFile probe(lockPath());
@@ -47,7 +47,9 @@ bool SingleInstance::handOff(const QStringList& files) {
     }
     QJsonArray paths;
     for (const QString& f : files) paths.append(f);
-    socket.write(QJsonDocument(QJsonObject{{"open", paths}, {"raise", true}}).toJson(QJsonDocument::Compact) + "\n");
+    QJsonObject request{{"open", paths}, {"raise", true}};
+    if (!rpcSocket.isEmpty()) request["rpc"] = rpcSocket;
+    socket.write(QJsonDocument(request).toJson(QJsonDocument::Compact) + "\n");
     socket.flush();
     if (!socket.waitForReadyRead(5000)) return false;
     return socket.readAll().trimmed() == "ok";
@@ -75,6 +77,8 @@ bool SingleInstance::serve(MainWindow& window) {
                     const QString path = v.toString();
                     if (!path.isEmpty()) window.openAsDocument(path);
                 }
+                const QString rpc = request.value("rpc").toString();
+                if (!rpc.isEmpty()) window.startAutomation(rpc);
                 if (request.value("raise").toBool(true)) {
                     if (window.isMinimized()) window.showNormal();
                     window.raise();
