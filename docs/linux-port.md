@@ -78,6 +78,12 @@ packaging/                      .desktop, icon, MIME type
   pixels keep their resolution. Flip layer and flip canvas.
 - Brush and eraser with size, hardness and opacity, Shift-click straight
   lines, `[` and `]` for size, painting on masks (white reveals, black hides).
+- Spot Healing Brush (Content-Aware, Create Texture, Proximity Match) and
+  Clone Stamp (aligned or not, sampling one layer or all), both on the
+  existing C healing code; Content-Aware Fill of a selection, growing the
+  layer past its edge when the selection reaches out.
+- Cut, Copy, Copy Merged, Paste (as a new layer, back in place, or centred
+  for images from other apps) and Layer via Copy, through the system clipboard.
 - Selections: rectangular and elliptical marquee, freehand and polygonal
   lasso, magic wand (tolerance, contiguous, sample all layers), add/subtract
   with Shift/Alt, move the outline, select all, deselect, inverse, expand,
@@ -98,10 +104,9 @@ packaging/                      .desktop, icon, MIME type
 
 ## Not ported yet
 
-- Remove Background (Apple's Vision subject mask) and Content-Aware Fill's
-  panel (the C routine is built and tested; the UI is pending).
-- Spot Healing, Clone Stamp, Blur/Smudge, Gradient and Shape tools; free
-  distort; moving and duplicating selected pixels; copy/paste.
+- Remove Background (Apple's Vision subject mask has no Linux equivalent).
+- Blur/Smudge/Liquify, Gradient and Shape tools; free distort; dragging
+  selected pixels with the Move tool (use Cut/Paste or Layer via Copy).
 - Multiple projects in tabs.
 - Image Size scales layer placement rather than resampling pixels (the layers
   keep their full-resolution sources); the Mac resamples.
@@ -110,7 +115,7 @@ packaging/                      .desktop, icon, MIME type
 
 | Keys | Action |
 |---|---|
-| V M L W C B E I H Z | Tools: Move, Marquee, Lasso, Wand, Crop, Brush, Eraser, Eyedropper, Hand, Zoom |
+| V M L W C B E J S I H Z | Tools: Move, Marquee, Lasso, Wand, Crop, Brush, Eraser, Spot Healing, Clone Stamp, Eyedropper, Hand, Zoom |
 | X, D | Swap / reset colours |
 | Space + drag, middle drag, wheel | Pan |
 | Ctrl + wheel, Ctrl +/−, Ctrl 0, Ctrl 1 | Zoom, fit, 100% |
@@ -120,6 +125,7 @@ packaging/                      .desktop, icon, MIME type
 | Ctrl ] / Ctrl [ | Bring forward / send backward |
 | Ctrl A, Ctrl D, Ctrl Shift I | Select all, deselect, inverse |
 | Ctrl L, Ctrl M, Ctrl U, Ctrl I | Levels, Curves, Hue/Saturation, Invert |
-| Alt Backspace, Ctrl Backspace, Delete | Fill foreground / background, clear |
+| Ctrl X, Ctrl C, Ctrl Shift C, Ctrl V | Cut, copy, copy merged, paste |
+| Alt Backspace, Ctrl Backspace, Delete, Shift F5 | Fill foreground / background, clear, content-aware fill |
 | Ctrl Z, Ctrl Shift Z | Undo, redo |
 | Ctrl Shift E, Ctrl Alt Shift S | Export PNG, export JPEG |

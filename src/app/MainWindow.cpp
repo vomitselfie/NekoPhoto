@@ -133,6 +133,8 @@ void MainWindow::buildToolRail() {
     eraserAction_->setShortcut(QKeySequence("E"));
     group->addAction(eraserAction_);
     connect(eraserAction_, &QAction::triggered, this, [this] { session_->brushErase = true; session_->selectTool(Tool::Brush); emit session_->toolChanged(); canvas_->setFocus(); });
+    tool(Tool::SpotHealing, tr("Spot Healing Brush"), "J", QKeySequence("J"));
+    tool(Tool::CloneStamp, tr("Clone Stamp (Alt-click sets the source)"), "S", QKeySequence("S"));
     tool(Tool::Eyedropper, tr("Eyedropper"), "I", QKeySequence("I"));
     rail->addSeparator();
     tool(Tool::Hand, tr("Hand"), "H", QKeySequence("H"));
@@ -201,6 +203,11 @@ void MainWindow::buildMenus() {
     undoAction_ = edit->addAction(tr("&Undo"), QKeySequence::Undo, this, [this] { session_->undo(); });
     redoAction_ = edit->addAction(tr("&Redo"), QKeySequence("Ctrl+Shift+Z"), this, [this] { session_->redo(); });
     edit->addSeparator();
+    needsDocument(edit->addAction(tr("Cu&t"), QKeySequence::Cut, this, [this] { session_->cutSelection(); }));
+    needsDocument(edit->addAction(tr("&Copy"), QKeySequence::Copy, this, [this] { session_->copySelection(); }));
+    needsDocument(edit->addAction(tr("Copy &Merged"), QKeySequence("Ctrl+Shift+C"), this, [this] { session_->copyMerged(); }));
+    needsDocument(edit->addAction(tr("&Paste"), QKeySequence::Paste, this, [this] { session_->paste(); }));
+    edit->addSeparator();
     needsDocument(edit->addAction(tr("Select &All"), QKeySequence::SelectAll, this, [this] { session_->selectAll(); }));
     needsDocument(edit->addAction(tr("&Deselect"), QKeySequence("Ctrl+D"), this, [this] { session_->deselect(); }));
     needsDocument(edit->addAction(tr("&Inverse"), QKeySequence("Ctrl+Shift+I"), this, [this] { session_->invertSelection(); }));
@@ -211,6 +218,7 @@ void MainWindow::buildMenus() {
     needsDocument(edit->addAction(tr("Fill with Foreground"), QKeySequence("Alt+Backspace"), this, [this] { session_->fillSelection(session_->foregroundColor); }));
     needsDocument(edit->addAction(tr("Fill with Background"), QKeySequence("Ctrl+Backspace"), this, [this] { session_->fillSelection(session_->backgroundColor); }));
     needsDocument(edit->addAction(tr("Clear"), QKeySequence(Qt::Key_Delete), this, [this] { if (session_->document() && session_->document()->selection) session_->clearSelectionPixels(); else session_->deleteSelectedLayers(); }));
+    needsDocument(edit->addAction(tr("Content-Aware Fill"), QKeySequence("Shift+F5"), this, [this] { QString error; if (!session_->contentAwareFill(&error)) showError(tr("Content-Aware Fill"), error); }));
 
     QMenu* image = menuBar()->addMenu(tr("&Image"));
     needsDocument(image->addAction(tr("&Canvas Size…"), QKeySequence("Ctrl+Alt+C"), this, [this] {
@@ -249,7 +257,7 @@ void MainWindow::buildMenus() {
     needsDocument(layer->addAction(tr("&New Layer"), QKeySequence("Ctrl+Shift+N"), this, [this] { session_->addBlankLayer(); }));
     needsDocument(layer->addAction(tr("New &Folder"), this, [this] { session_->addGroup(); }));
     needsDocument(layer->addAction(tr("&Group Layers"), QKeySequence("Ctrl+G"), this, [this] { session_->groupSelectedLayers(); }));
-    needsDocument(layer->addAction(tr("&Duplicate Layer"), QKeySequence("Ctrl+J"), this, [this] { session_->duplicateActiveLayer(); }));
+    needsDocument(layer->addAction(tr("&Duplicate Layer / Layer via Copy"), QKeySequence("Ctrl+J"), this, [this] { session_->layerViaCopy(); }));
     needsDocument(layer->addAction(tr("De&lete Layer"), this, [this] { session_->deleteSelectedLayers(); }));
     needsDocument(layer->addAction(tr("Merge &Down"), QKeySequence("Ctrl+E"), this, [this] { session_->mergeDown(); }));
     QMenu* adjustmentLayers = layer->addMenu(tr("New &Adjustment Layer"));

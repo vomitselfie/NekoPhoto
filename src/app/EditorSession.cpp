@@ -7,8 +7,12 @@
 #include <map>
 
 extern "C" {
+#include "ContentFill.h"
 #include "WandPixels.h"
 }
+#include <QApplication>
+#include <QClipboard>
+#include <QMimeData>
 
 using namespace compositor;
 
@@ -947,14 +951,42 @@ std::optional<Size> EditorSession::transformPixelSize() const {
 
 // ---- Brush ---------------------------------------------------------------------
 
+std::optional<QPointF> EditorSession::cloneSamplePoint(QPointF point) const {
+    if (!cloneSource) return std::nullopt;
+    if (!cloneOffset || !(cloneAligned || stroke_)) return cloneSource;
+    return QPointF(point.x() + cloneOffset->x(), point.y() + cloneOffset->y());
+}
+
 bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
     if (!document_ || stroke_ || transformEdit_) return false;
     const Layer* layer = activeLayer();
     if (!layer || layer->isGroup || layer->adjustment) return false;
     bool mask = isMaskSelected_ && layer->mask;
+    bool healing = tool_ == Tool::SpotHealing, cloning = tool_ == Tool::CloneStamp;
+    // Spot Healing and Clone Stamp rework image pixels; they have nothing to do on a mask.
+    if ((healing || cloning) && mask) return false;
+    std::optional<CloneSource> clone;
+    if (cloning) {
+        if (!cloneSource) { emit error(tr("Alt-click where Clone Stamp should copy from first.")); return false; }
+        QPointF offset = cloneAligned && cloneOffset ? *cloneOffset : QPointF(std::round(cloneSource->x() - documentPoint.x()), std::round(cloneSource->y() - documentPoint.y()));
+        std::shared_ptr<Image> sample;
+        if (cloneSampleAll) sample = renderFlattened(*document_);
+        else if (layer->asset && layer->asset->image) {
+            Document single(document_->width, document_->height);
+            Layer copy = *layer;
+            copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
+            single.layers = {copy};
+            sample = renderFlattened(single);
+        } else sample = std::make_shared<Image>(document_->width, document_->height);
+        cloneOffset = offset;
+        clone = CloneSource{sample, {offset.x(), offset.y()}};
+    }
     if (!mask && !effectiveVisibleIds(document_->layers).count(layer->id)) { emit error(tr("The active layer is hidden.")); return false; }
     BrushSettings settings = brushSettings;
-    settings.erasing = brushErase && !mask;
+    settings.erasing = tool_ == Tool::Brush && brushErase && !mask;
+    settings.healing = healing;
+    settings.healingMode = spotHealingMode;
+    settings.healingSeed = uint32_t(std::random_device{}());
     if (mask) settings.maskValue = (maskPaintWhite != brushErase) ? 1 : 0;
     else { settings.red = foregroundColor.redF(); settings.green = foregroundColor.greenF(); settings.blue = foregroundColor.blueF(); }
     const GrayImage* selection = document_->selection && document_->selection->coverage ? document_->selection->coverage.get() : nullptr;
@@ -963,6 +995,7 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
     if (!stroke_->isValid()) { emit error(QString::fromStdString(stroke_->error())); stroke_.reset(); return false; }
     strokeLayerId_ = layer->id;
     strokeMask_ = mask;
+    if (clone) stroke_->setClone(*clone);
     if (straightFromLast && lastBrushPoint_) stroke_->append(toPoint(*lastBrushPoint_));
     stroke_->append(toPoint(documentPoint));
     lastBrushPoint_ = documentPoint;
@@ -985,7 +1018,7 @@ void EditorSession::endBrush() {
     Layer* layer = document_->find(strokeLayerId_);
     if (!layer || !stroke->touched()) { emit documentChanged({}); emit historyChanged(); return; }
     BrushStroke::Commit commit = stroke->commit();
-    beginEdit(strokeMask_ ? "Paint Mask" : (brushErase ? "Eraser" : "Brush Stroke"));
+    beginEdit(strokeMask_ ? "Paint Mask" : tool_ == Tool::SpotHealing ? "Spot Healing" : tool_ == Tool::CloneStamp ? "Clone Stamp" : (brushErase ? "Eraser" : "Brush Stroke"));
     if (strokeMask_) {
         if (commit.mask) { layer->mask->asset = *commit.mask; layer->mask->placement = commit.maskPlacement; }
     } else if (commit.asset) {
@@ -1005,6 +1038,146 @@ void EditorSession::cancelBrush() {
     if (!stroke_) return;
     stroke_.reset();
     emit documentChanged({});
+}
+
+// ---- Clipboard and Content-Aware Fill ------------------------------------------------
+
+bool EditorSession::canCopyPixels() const {
+    if (!canEditLayers()) return false;
+    const Layer* layer = activeLayer();
+    if (!layer || (layer->isGroup && !isMaskSelected_)) return false;
+    if (document_->selection && document_->selection->isEmpty()) return false;
+    return isMaskSelected_ ? layer->mask.has_value() : layer->asset.has_value();
+}
+
+std::optional<EditorSession::PixelClipboard> EditorSession::renderSelectedPixels(bool merged) const {
+    if (!document_) return std::nullopt;
+    Rect region = document_->rect();
+    const GrayImage* coverage = nullptr;
+    if (document_->selection) {
+        if (!document_->selection->coverage || document_->selection->isEmpty()) return std::nullopt;
+        coverage = document_->selection->coverage.get();
+        region = document_->selection->bounds().intersection(document_->rect());
+    }
+    if (region.isEmpty()) return std::nullopt;
+    Image out(int(region.width), int(region.height));
+    RenderOptions options;
+    options.region = region;
+    if (merged) render(*document_, options, out);
+    else {
+        const Layer* layer = activeLayer();
+        if (!layer) return std::nullopt;
+        if (isMaskSelected_ && layer->mask) {
+            // The mask as opaque gray, placed as it sits on the document.
+            GrayImage gray(out.width(), out.height(), layer->mask->placement ? LayerMask::background(*layer->mask->asset.thumbnail) : 0);
+            sampleMaskCoverage(*layer->mask->asset.image, layer->maskTransform(), region, 1, gray.at(0, 0), gray, false);
+            for (int y = 0; y < out.height(); y++) for (int x = 0; x < out.width(); x++) { uint8_t* p = out.pixel(x, y); p[0] = p[1] = p[2] = gray.at(x, y); p[3] = 255; }
+        } else if (layer->asset && layer->asset->image) {
+            Document single(document_->width, document_->height);
+            Layer copy = *layer;
+            copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.maskSourceId.reset();
+            single.layers = {copy};
+            render(single, options, out);
+        } else return std::nullopt;
+    }
+    if (coverage) {
+        for (int y = 0; y < out.height(); y++) for (int x = 0; x < out.width(); x++) {
+            unsigned k = coverage->at(x + int(region.x), y + int(region.y));
+            uint8_t* p = out.pixel(x, y);
+            for (int c = 0; c < 4; c++) p[c] = uint8_t((p[c] * k + 127) / 255);
+        }
+    }
+    return PixelClipboard{std::make_shared<Image>(std::move(out)), QPointF(region.x, region.y)};
+}
+
+void EditorSession::copySelection() {
+    if (!canCopyPixels()) return;
+    auto copied = renderSelectedPixels(false);
+    if (!copied) return;
+    pixelClipboard_ = copied;
+    QApplication::clipboard()->setImage(toQImage(*copied->image).convertToFormat(QImage::Format_ARGB32));
+}
+
+void EditorSession::copyMerged() {
+    if (!canEditLayers() || (document_->selection && document_->selection->isEmpty())) return;
+    auto copied = renderSelectedPixels(true);
+    if (!copied) return;
+    pixelClipboard_ = copied;
+    QApplication::clipboard()->setImage(toQImage(*copied->image).convertToFormat(QImage::Format_ARGB32));
+}
+
+void EditorSession::cutSelection() {
+    if (!document_ || !document_->selection || !canCopyPixels()) return;
+    copySelection();
+    clearSelectionPixels();
+}
+
+bool EditorSession::canPaste() const {
+    if (!document_ || !canEditLayers()) return false;
+    return pixelClipboard_.has_value() || QApplication::clipboard()->mimeData()->hasImage();
+}
+
+void EditorSession::paste() {
+    if (!canPaste()) return;
+    const QMimeData* mime = QApplication::clipboard()->mimeData();
+    QImage external = mime->hasImage() ? qvariant_cast<QImage>(mime->imageData()) : QImage();
+    // Pixels copied here go back exactly where they came from unless another app copied since.
+    if (pixelClipboard_ && (!mime->hasImage() || (external.width() == pixelClipboard_->image->width() && external.height() == pixelClipboard_->image->height()))) {
+        addPixelLayer(pixelClipboard_->image, pixelClipboard_->origin, "Paste", true);
+        return;
+    }
+    if (external.isNull()) return;
+    QPointF origin(std::floor((document_->width - external.width()) / 2.0), std::floor((document_->height - external.height()) / 2.0));
+    addPixelLayer(fromQImage(external), origin, "Paste", true);
+}
+
+void EditorSession::layerViaCopy() {
+    if (!canEditLayers()) return;
+    const Layer* layer = activeLayer();
+    if (!layer || layer->isGroup) return;
+    if (!document_->selection) { duplicateActiveLayer(); return; }
+    auto copied = renderSelectedPixels(false);
+    if (!copied) return;
+    addPixelLayer(copied->image, copied->origin, "Layer via Copy", false);
+}
+
+void EditorSession::addPixelLayer(std::shared_ptr<const Image> image, QPointF origin, const QString& editName, bool dropsSelection) {
+    if (!document_ || !image || document_->layers.size() >= size_t(Document::maxLayers)) return;
+    Layer layer(Asset::make(image, nextLayerName(document_->layers, "Layer")), toPoint(origin));
+    const Layer* active = activeLayer();
+    layer.parentId = active && active->isGroup ? activeLayerId_ : (active ? active->parentId : std::nullopt);
+    int index = activeLayerId_ ? document_->indexOf(*activeLayerId_) + 1 : int(document_->layers.size());
+    endOpacityEdit();
+    beginEdit(editName);
+    document_->layers.insert(document_->layers.begin() + index, layer);
+    if (dropsSelection) document_->selection.reset();
+    setActiveLayer(layer.id);
+    endEdit();
+    notifyDocument();
+    if (dropsSelection) emit selectionChanged();
+}
+
+bool EditorSession::contentAwareFill(QString* errorText) {
+    if (!canAdjustPixels() || !document_->selection || !document_->selection->coverage) { if (errorText) *errorText = tr("Select a visible image layer and an area to fill."); return false; }
+    Layer* layer = activeLayerMutable();
+    // The layer grows over any of the selection on the canvas past its edge.
+    Rect area = document_->selection->bounds().intersection(document_->rect());
+    const Image& src = *layer->asset->image;
+    Affine toPixels = layer->transform.pixelToDocument(src.width(), src.height()).inverted();
+    Rect wanted = toPixels.mapBounds(area).integral().unionWith(Rect(0, 0, src.width(), src.height()));
+    int margin = int(std::ceil(std::max({0.0, -wanted.minX(), -wanted.minY(), wanted.maxX() - src.width(), wanted.maxY() - src.height()})));
+    LayerTransform grown;
+    auto source = adjustmentSource(margin, grown);
+    if (!source) { if (errorText) *errorText = tr("The layer is too large to grow."); return false; }
+    auto coverage = selectionOnGrid(grown, source->width(), source->height());
+    if (!coverage) { if (errorText) *errorText = tr("Select an area to fill."); return false; }
+    auto out = std::make_shared<Image>(*source);
+    int result = content_fill(out->data(), size_t(out->stride()), coverage->data(), size_t(coverage->stride()), out->width(), out->height());
+    if (result != 1) { if (errorText) *errorText = tr("Not enough unselected, opaque image pixels to synthesize a fill. Use a smaller selection with some surrounding image."); return false; }
+    LayerTransform placed;
+    auto trimmed = trimToPixels(*out, grown, placed);
+    commitPixels(trimmed, placed, "Content-Aware Fill");
+    return true;
 }
 
 // ---- Selection --------------------------------------------------------------------

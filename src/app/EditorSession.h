@@ -21,7 +21,7 @@
 
 namespace app {
 
-enum class Tool { Move, Marquee, Lasso, Wand, Crop, Brush, Eyedropper, Hand, Zoom };
+enum class Tool { Move, Marquee, Lasso, Wand, Crop, Brush, SpotHealing, CloneStamp, Eyedropper, Hand, Zoom };
 enum class MarqueeKind { Rectangle, Ellipse };
 
 struct TransformEdit {
@@ -126,6 +126,25 @@ public:
     void endBrush();
     void cancelBrush();
     std::optional<QPointF> lastBrushPoint() const { return lastBrushPoint_; }
+    int spotHealingMode = 0;
+    bool cloneAligned = true;
+    bool cloneSampleAll = false;
+    std::optional<QPointF> cloneSource;
+    std::optional<QPointF> cloneOffset;
+    void setCloneSource(QPointF documentPoint) { cloneSource = documentPoint; cloneOffset.reset(); emit toolChanged(); }
+    /// Where Clone Stamp would copy from for a brush at `point`, for the canvas's crosshair.
+    std::optional<QPointF> cloneSamplePoint(QPointF point) const;
+
+    // Clipboard
+    bool canCopyPixels() const;
+    void copySelection();
+    void copyMerged();
+    void cutSelection();
+    bool canPaste() const;
+    void paste();
+    void layerViaCopy();
+    /// Content-Aware Fill of the selection on the active layer; the layer grows over any selection past its edge.
+    bool contentAwareFill(QString* error);
 
     // Selection
     void applySelectionShape(const compositor::GrayImage& shape, compositor::SelectionMode mode, const QString& name);
@@ -226,6 +245,11 @@ private:
     compositor::Uuid strokeLayerId_;
     bool strokeMask_ = false;
     std::optional<QPointF> lastBrushPoint_;
+    struct PixelClipboard { std::shared_ptr<const compositor::Image> image; QPointF origin; };
+    std::optional<PixelClipboard> pixelClipboard_;
+    /// The active layer's pixels (or the composite) as they sit on the canvas, inside the selection's whole-pixel bounds.
+    std::optional<PixelClipboard> renderSelectedPixels(bool merged) const;
+    void addPixelLayer(std::shared_ptr<const compositor::Image> image, QPointF origin, const QString& editName, bool dropsSelection);
     bool opacityEditing_ = false;
     bool visibilitySwipe_ = false;
     bool adjustmentEditing_ = false;

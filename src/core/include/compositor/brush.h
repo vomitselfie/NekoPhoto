@@ -18,6 +18,17 @@ struct BrushSettings {
     bool erasing = false;
     /// Painting a mask: the gray value painted (1 reveals, 0 hides).
     double maskValue = 1;
+    /// Spot Healing: the stroke shows a dark wash while painting and rebuilds the area from its
+    /// surroundings when it ends (mode 0 Content-Aware, 1 Create Texture, 2 Proximity Match).
+    bool healing = false;
+    int healingMode = 0;
+    uint32_t healingSeed = 0;
+};
+
+/// Clone Stamp: a document-sized image to copy from, and the offset from each painted point to its source.
+struct CloneSource {
+    std::shared_ptr<const Image> image;
+    Point offset;
 };
 
 /// Soft-brush falloff across the band between the hardness radius and the rim.
@@ -28,6 +39,8 @@ public:
     /// Begins a stroke on `layer` (its pixels, or its mask when `mask`). The working grid is the
     /// layer's pixel grid grown to cover `canvas` so paint can go past the layer's edges.
     BrushStroke(const Layer& layer, bool mask, BrushSettings settings, Size canvas, const GrayImage* selection = nullptr);
+    /// Clone Stamp: the sample painted through the tip instead of the colour.
+    void setClone(CloneSource clone) { clone_ = std::move(clone); }
     bool isValid() const { return valid_; }
     const std::string& error() const { return error_; }
 
@@ -59,6 +72,7 @@ private:
     void curve(Point from, Point to, Point before, Point after);
     void recompose(const Rect& gridRect);
     void markDirty(const Rect& gridRect);
+    void heal();
 
     bool valid_ = false;
     std::string error_;
@@ -88,6 +102,7 @@ private:
     double tailDistance_ = 0;
     std::string name_;
     LayerTransform layerTransform_;
+    std::optional<CloneSource> clone_;
 };
 
 } // namespace compositor

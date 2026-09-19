@@ -5,6 +5,8 @@
 #include <QStackedWidget>
 #include <QToolBar>
 
+class QHBoxLayout;
+
 namespace app {
 
 class CanvasWidget;
@@ -26,6 +28,9 @@ private:
     QWidget* buildCropOptions();
     QWidget* buildZoomOptions();
     QWidget* buildEyedropperOptions();
+    QWidget* buildHealingOptions();
+    QWidget* buildCloneOptions();
+    void addBrushTipFields(QHBoxLayout* layout);
 
     EditorSession* session_;
     CanvasWidget* canvas_;

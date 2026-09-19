@@ -52,6 +52,8 @@ ToolOptionsBar::ToolOptionsBar(EditorSession* session, CanvasWidget* canvas, QWi
     stack_->addWidget(buildCropOptions());       // 5
     stack_->addWidget(buildZoomOptions());       // 6
     stack_->addWidget(buildEyedropperOptions()); // 7
+    stack_->addWidget(buildHealingOptions());    // 8
+    stack_->addWidget(buildCloneOptions());      // 9
     addWidget(stack_);
     connect(session_, &EditorSession::toolChanged, this, &ToolOptionsBar::syncTool);
     connect(session_, &EditorSession::transformChanged, this, &ToolOptionsBar::syncTransformFields);
@@ -70,10 +72,13 @@ void ToolOptionsBar::syncTool() {
     case Tool::Crop: index = 5; break;
     case Tool::Zoom: case Tool::Hand: index = 6; break;
     case Tool::Eyedropper: index = 7; break;
+    case Tool::SpotHealing: index = 8; break;
+    case Tool::CloneStamp: index = 9; break;
     }
     stack_->setCurrentIndex(index);
     // Widgets that mirror session state.
-    for (auto* spin : stack_->widget(1)->findChildren<QDoubleSpinBox*>()) {
+    for (int page : {1, 8, 9})
+    for (auto* spin : stack_->widget(page)->findChildren<QDoubleSpinBox*>()) {
         QSignalBlocker b(spin);
         QString role = spin->property("role").toString();
         if (role == "size") spin->setValue(session_->brushSettings.diameter);
@@ -223,6 +228,53 @@ QWidget* ToolOptionsBar::buildBrushOptions() {
     h->addWidget(hint);
     h->addStretch();
     return w;
+}
+
+QWidget* ToolOptionsBar::buildHealingOptions() {
+    QWidget* w = row();
+    auto* h = layoutOf(w);
+    auto* mode = new QComboBox;
+    mode->addItems({tr("Content-Aware"), tr("Create Texture"), tr("Proximity Match")});
+    connect(mode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->spotHealingMode = i; });
+    h->addWidget(new QLabel(tr("Type")));
+    h->addWidget(mode);
+    addBrushTipFields(h);
+    h->addStretch();
+    return w;
+}
+
+QWidget* ToolOptionsBar::buildCloneOptions() {
+    QWidget* w = row();
+    auto* h = layoutOf(w);
+    auto* aligned = new QCheckBox(tr("Aligned"));
+    aligned->setToolTip(tr("The source moves with the brush and keeps its offset between strokes"));
+    aligned->setChecked(session_->cloneAligned);
+    connect(aligned, &QCheckBox::toggled, this, [this](bool on) { session_->cloneAligned = on; });
+    h->addWidget(aligned);
+    auto* all = new QCheckBox(tr("Sample All Layers"));
+    all->setChecked(session_->cloneSampleAll);
+    connect(all, &QCheckBox::toggled, this, [this](bool on) { session_->cloneSampleAll = on; });
+    h->addWidget(all);
+    addBrushTipFields(h);
+    auto* hint = new QLabel(tr("Alt-click sets the source"));
+    hint->setStyleSheet("color: palette(mid);");
+    h->addWidget(hint);
+    h->addStretch();
+    return w;
+}
+
+void ToolOptionsBar::addBrushTipFields(QHBoxLayout* h) {
+    auto spin = [&](const QString& label, const QString& role, double min, double max, double value, const QString& suffix, auto apply) {
+        h->addWidget(new QLabel(label));
+        auto* f = numberField(min, max, 0, suffix, label);
+        f->setProperty("role", role);
+        f->setValue(value);
+        connect(f, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this, apply](double v) { apply(v); emit session_->toolChanged(); });
+        h->addWidget(f);
+    };
+    spin(tr("Size"), "size", 1, 2000, session_->brushSettings.diameter, " px", [this](double v) { session_->brushSettings.diameter = v; });
+    spin(tr("Hardness"), "hardness", 0, 100, session_->brushSettings.hardness * 100, "%", [this](double v) { session_->brushSettings.hardness = v / 100; });
+    spin(tr("Opacity"), "opacity", 1, 100, session_->brushSettings.opacity * 100, "%", [this](double v) { session_->brushSettings.opacity = v / 100; });
 }
 
 QWidget* ToolOptionsBar::buildMarqueeOptions() {

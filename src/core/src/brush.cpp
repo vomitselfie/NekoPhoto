@@ -3,6 +3,10 @@
 #include <cmath>
 #include <cstring>
 
+extern "C" {
+#include "HealPixels.h"
+}
+
 namespace compositor {
 
 double brushFalloff(double u) {
@@ -257,14 +261,35 @@ void BrushStroke::recompose(const Rect& gridRect) {
         return;
     }
     double cr = settings_.red * 255, cg = settings_.green * 255, cb = settings_.blue * 255;
+    if (settings_.healing) { cr = cg = cb = 0.12 * 255; opacity *= 0.45; } // the wash shown while painting
     for (int y = y0; y < y1; y++) {
         const uint8_t* cov = coverage_->row(y);
         const uint8_t* sel = selection_ ? selection_->row(y) : nullptr;
         const uint8_t* base = base_->row(y) + x0 * 4;
         uint8_t* out = working_->row(y) + x0 * 4;
-        for (int x = x0; x < x1; x++, base += 4, out += 4) {
+        Point d = pixelToDocument_.apply({x0 + 0.5, y + 0.5});
+        Point dd = pixelToDocument_.applyVector({1, 0});
+        for (int x = x0; x < x1; x++, base += 4, out += 4, d = d + dd) {
             double c = cov[x] / 255.0 * opacity * (sel ? sel[x] / 255.0 : 1.0);
             if (c <= 0) { std::memcpy(out, base, 4); continue; }
+            if (clone_ && clone_->image) {
+                // The sample under the source point, over the original through the tip.
+                const Image& src = *clone_->image;
+                double sx = d.x + clone_->offset.x - 0.5, sy = d.y + clone_->offset.y - 0.5;
+                double s[4] = {0, 0, 0, 0};
+                int ix = int(std::floor(sx)), iy = int(std::floor(sy));
+                double fx = sx - ix, fy = sy - iy;
+                for (int j = 0; j < 2; j++) for (int i = 0; i < 2; i++) {
+                    int px = ix + i, py = iy + j;
+                    double w = (i ? fx : 1 - fx) * (j ? fy : 1 - fy);
+                    if (w <= 0 || px < 0 || py < 0 || px >= src.width() || py >= src.height()) continue;
+                    const uint8_t* p = src.pixel(px, py);
+                    for (int k = 0; k < 4; k++) s[k] += p[k] * w;
+                }
+                double sa = s[3] / 255.0 * c;
+                for (int k = 0; k < 4; k++) out[k] = uint8_t(clamp(s[k] * c + base[k] * (1 - sa) + 0.5, 0.0, 255.0));
+                continue;
+            }
             if (settings_.erasing) {
                 for (int k = 0; k < 4; k++) out[k] = uint8_t(base[k] * (1 - c) + 0.5);
             } else {
@@ -277,11 +302,30 @@ void BrushStroke::recompose(const Rect& gridRect) {
     }
 }
 
+void BrushStroke::heal() {
+    if (!settings_.healing || isMask_ || !coverage_) return;
+    PixelBounds b = nonzeroBounds(*coverage_);
+    if (b.isEmpty()) return;
+    // Room for the kernel's patch search, which looks up to about three spot-widths away.
+    double reach = (std::max(b.x1 - b.x0, b.y1 - b.y0) + 32) * 3.2;
+    Rect region = Rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0).insetBy(-reach, -reach).intersection(Rect(0, 0, width_, height_)).integral();
+    int rx = int(region.x), ry = int(region.y), rw = int(region.width), rh = int(region.height);
+    if (rw <= 0 || rh <= 0) return;
+    auto pixels = cropImage(*base_, rx, ry, rw, rh);
+    auto painting = cropGray(*coverage_, rx, ry, rw, rh);
+    if (selection_) for (int y = 0; y < rh; y++) for (int x = 0; x < rw; x++) painting->at(x, y) = uint8_t((painting->at(x, y) * selection_->at(x + rx, y + ry) + 127) / 255);
+    if (spot_heal(pixels->data(), painting->data(), size_t(rw), size_t(rh), size_t(pixels->stride()), float(settings_.opacity), settings_.healingMode, settings_.healingSeed) != 0) return;
+    // The healed pixels replace the wash: the working image becomes the original with the healed region.
+    working_ = std::make_shared<Image>(*base_);
+    for (int y = 0; y < rh; y++) std::memcpy(working_->pixel(rx, y + ry), pixels->row(y), size_t(rw) * 4);
+}
+
 BrushStroke::Commit BrushStroke::commit() {
     Commit result;
     result.transform = layerTransform_;
     if (!valid_) return result;
     flush();
+    if (settings_.healing) heal();
     if (isMask_) {
         result.mask = MaskAsset::make(workingMask_);
         result.maskPlacement = paintTransform_.samePlacement(layerTransform_) ? std::nullopt : std::optional<LayerTransform>(paintTransform_);

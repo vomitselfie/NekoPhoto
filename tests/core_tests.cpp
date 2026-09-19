@@ -331,6 +331,38 @@ TEST_CASE(brush_paints_and_erases_within_opacity_cap) {
     CHECK_EQ(int(erased.asset->image->pixel(ex, ey)[3]), 0);
 }
 
+TEST_CASE(brush_heals_and_clones) {
+    Document doc(64, 64);
+    auto field = solid(64, 64, 120, 120, 120);
+    for (int y = 28; y < 36; y++) for (int x = 28; x < 36; x++) { uint8_t* p = std::const_pointer_cast<Image>(std::static_pointer_cast<const Image>(field))->pixel(x, y); p[0] = p[1] = p[2] = 0; }
+    Layer layer = imageLayer("field", field, {0, 0});
+    BrushSettings settings;
+    settings.diameter = 14;
+    settings.healing = true;
+    BrushStroke stroke(layer, false, settings, doc.size());
+    REQUIRE(stroke.isValid());
+    stroke.append({32, 32});
+    stroke.flush();
+    // While painting: a dark wash over the spot.
+    CHECK(stroke.previewImage()->pixel(32, 32)[3] == 255);
+    auto commit = stroke.commit();
+    REQUIRE(commit.asset.has_value());
+    int x = int(32 - commit.transform.origin.x), y = int(32 - commit.transform.origin.y);
+    CHECK(commit.asset->image->pixel(x, y)[0] > 90); // the black spot is gone
+    // Clone: copy from 20 px to the right, where the field is plain gray, onto the spot.
+    auto sample = renderFlattened([&] { Document d(64, 64); d.layers.push_back(imageLayer("f", field, {0, 0})); return d; }());
+    BrushSettings cloneSettings;
+    cloneSettings.diameter = 14;
+    BrushStroke cloner(layer, false, cloneSettings, doc.size());
+    cloner.setClone({sample, {20, 0}});
+    cloner.append({32, 32});
+    cloner.flush();
+    auto cloned = cloner.commit();
+    REQUIRE(cloned.asset.has_value());
+    int cx = int(32 - cloned.transform.origin.x), cy = int(32 - cloned.transform.origin.y);
+    CHECK(std::abs(int(cloned.asset->image->pixel(cx, cy)[0]) - 120) <= 2);
+}
+
 TEST_CASE(brush_paints_mask_and_soft_tip_falls_off) {
     CHECK_NEAR(brushFalloff(0), 1, 1e-9);
     CHECK_NEAR(brushFalloff(1), 0, 1e-9);

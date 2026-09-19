@@ -201,8 +201,17 @@ void CanvasWidget::drawOverlays(QPainter& painter) {
         painter.drawRect(QRectF(viewPoint(zoomRect_->topLeft()), viewPoint(zoomRect_->bottomRight())));
     }
     drawCropOverlay(painter);
+    // Clone Stamp: the source, as a crosshair.
+    if (session_->tool() == Tool::CloneStamp && hover_) {
+        if (auto sample = session_->cloneSamplePoint(documentPoint(*hover_))) {
+            QPointF v = viewPoint(*sample);
+            painter.setPen(QPen(Qt::white, 3)); painter.drawLine(v + QPointF(-8, 0), v + QPointF(8, 0)); painter.drawLine(v + QPointF(0, -8), v + QPointF(0, 8));
+            painter.setPen(QPen(Qt::black, 1)); painter.drawLine(v + QPointF(-8, 0), v + QPointF(8, 0)); painter.drawLine(v + QPointF(0, -8), v + QPointF(0, 8));
+        }
+    }
     // Brush cursor.
-    if (session_->tool() == Tool::Brush && hover_ && !spaceHeld_) {
+    bool brushLike = session_->tool() == Tool::Brush || session_->tool() == Tool::SpotHealing || session_->tool() == Tool::CloneStamp;
+    if (brushLike && hover_ && !spaceHeld_) {
         double r = session_->brushSettings.diameter / 2 * ppp;
         painter.setBrush(Qt::NoBrush);
         painter.setPen(QPen(QColor(255, 255, 255, 200), 1));
@@ -317,7 +326,7 @@ void CanvasWidget::updateCursor(QPointF view, Qt::KeyboardModifiers modifiers) {
         setCursor((modifiers & Qt::ControlModifier) || session_->transformAutoSelect ? Qt::PointingHandCursor : Qt::SizeAllCursor);
         return;
     }
-    case Tool::Brush: setCursor(Qt::BlankCursor); return;
+    case Tool::Brush: case Tool::SpotHealing: case Tool::CloneStamp: setCursor(Qt::BlankCursor); return;
     case Tool::Marquee: case Tool::Lasso: case Tool::Wand: case Tool::Crop: setCursor(Qt::CrossCursor); return;
     case Tool::Eyedropper: setCursor(Qt::CrossCursor); return;
     case Tool::Zoom: setCursor(Qt::CrossCursor); return;
@@ -399,7 +408,8 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
         drag_ = Drag::Move;
         return;
     }
-    case Tool::Brush:
+    case Tool::Brush: case Tool::SpotHealing: case Tool::CloneStamp:
+        if (session_->tool() == Tool::CloneStamp && (modifiers & Qt::AltModifier)) { session_->setCloneSource(doc); update(); return; }
         if (session_->beginBrush(doc, modifiers & Qt::ShiftModifier)) drag_ = Drag::Brush;
         return;
     case Tool::Marquee: {
@@ -487,7 +497,7 @@ void CanvasWidget::move(QPointF view, Qt::MouseButtons buttons, Qt::KeyboardModi
     if (drag_ == Drag::None) {
         if (session_->tool() == Tool::Lasso && polygonalLasso_ && !lassoPoints_.empty()) { lassoCursor_ = doc; update(); }
         updateCursor(view, modifiers);
-        if (session_->tool() == Tool::Brush) update();
+        if (session_->tool() == Tool::Brush || session_->tool() == Tool::SpotHealing || session_->tool() == Tool::CloneStamp) update();
         return;
     }
     QPointF delta = view - lastView_;
@@ -743,7 +753,7 @@ void CanvasWidget::keyPressEvent(QKeyEvent* e) {
         break;
     }
     case Qt::Key_BracketLeft: case Qt::Key_BracketRight: {
-        if (session_->tool() != Tool::Brush) break;
+        if (session_->tool() != Tool::Brush && session_->tool() != Tool::SpotHealing && session_->tool() != Tool::CloneStamp) break;
         double d = session_->brushSettings.diameter;
         double stepSize = d < 10 ? 1 : d < 50 ? 5 : d < 200 ? 10 : 50;
         d += e->key() == Qt::Key_BracketRight ? stepSize : -stepSize;
