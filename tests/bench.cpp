@@ -6,6 +6,8 @@
 #include "compositor/filters.h"
 #include "compositor/kernels.h"
 #include "compositor/morphology.h"
+#include "compositor/brush.h"
+#include "compositor/warp.h"
 #include "compositor/render.h"
 #include "compositor/selection.h"
 #include <chrono>
@@ -116,6 +118,33 @@ int main(int argc, char** argv) {
         Image flat(W, H);
         RenderOptions full; full.region = doc.rect(); full.scale = 1;
         report("flatten 5 layers at 4000x3000", timeMs([&] { render(doc, full, flat); }, 2));
+    }
+    if (want("warp")) {
+        auto layer = std::make_shared<Image>(busyImage(2000, 1500, 3));
+        LayerTransform t(Point(100, 100), Size(2000, 1500));
+        Corners trap = {Point{100, 100}, Point{2300, 300}, Point{2100, 1900}, Point{150, 1700}};
+        report("warp 2000x1500 perspective", timeMs([&] { (void)warpImage(layer, t, trap, 0); }));
+        Corners same = cornersOf(t);
+        report("warp 2000x1500 identity corners", timeMs([&] { (void)warpImage(layer, t, same, 0); }));
+        Document doc(W, H);
+        doc.layers.push_back(Layer(Asset::make(std::make_shared<Image>(base), "L"), Point(0, 0)));
+        report("image size 4000x3000 -> 2000x1500", timeMs([&] { Document d = doc; resizeDocument(d, 2000, 1500, 72, Sampling::High); }, 2));
+    }
+    if (want("brush")) {
+        Layer layer(Asset::make(std::make_shared<Image>(base), "L"), Point(0, 0));
+        for (double diameter : {60.0, 500.0}) {
+            for (double hardness : {1.0, 0.5}) {
+                BrushSettings s; s.diameter = diameter; s.hardness = hardness; s.opacity = 0.8; s.red = 0.2; s.green = 0.9; s.blue = 0.3;
+                char name[64]; std::snprintf(name, sizeof name, "brush %.0f px hardness %.1f, 1000 px stroke", diameter, hardness);
+                report(name, timeMs([&] {
+                    BrushStroke stroke(layer, false, s, Size(W, H), nullptr);
+                    // As the canvas does: the dirty rect is taken after every pointer event.
+                    for (int i = 0; i <= 50; i++) { stroke.append({500.0 + i * 20, 1500.0 + 200 * std::sin(i * 0.3)}); (void)stroke.takeDirtyRect(); }
+                    stroke.flush();
+                    (void)stroke.commit();
+                }, 2));
+            }
+        }
     }
     if (want("selection")) {
         auto shape = rasterizeEllipse(Rect(200, 200, 3000, 2000), W, H, true);

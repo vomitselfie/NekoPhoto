@@ -88,6 +88,42 @@ std::optional<WarpFrame> frameFor(const LayerTransform& transform, const Corners
     return f;
 }
 
+/// Walks a warp frame's output pixels through the homography incrementally: the homogeneous numerators
+/// and denominator are linear along a row, so each pixel costs three adds and one reciprocal instead of a
+/// full projective map (and the edge footprint comes from the derivatives instead of two more maps).
+struct HomographyStepper {
+    const double* h;
+    double step;      // document units per output pixel
+    double x0, y0;    // document position of output pixel (0, 0)'s centre
+    explicit HomographyStepper(const WarpFrame& f) : h(f.docToUnit.m), step(1.0 / f.factor), x0(f.bounds.x + 0.5 / f.factor), y0(f.bounds.y + 0.5 / f.factor) {}
+
+    struct Row {
+        const double* h;
+        double step;
+        double nu, nv, den;             // numerators and denominator at the current pixel
+        double dnu, dnv, dden;          // their change per pixel along the row
+        void advance() { nu += dnu; nv += dnv; den += dden; }
+        Point unit() const { double inv = 1.0 / den; return {nu * inv, nv * inv}; }
+        /// Source-pixel extent of one output pixel, the larger of the two axes.
+        double footprint(Point u, int pw, int ph) const {
+            double inv = 1.0 / den;
+            double dudx = (h[0] - u.x * h[6]) * inv, dvdx = (h[3] - u.y * h[6]) * inv;
+            double dudy = (h[1] - u.x * h[7]) * inv, dvdy = (h[4] - u.y * h[7]) * inv;
+            return step * std::max(std::hypot(dudx * pw, dvdx * ph), std::hypot(dudy * pw, dvdy * ph));
+        }
+    };
+    Row row(int y) const {
+        double Y = y0 + y * step;
+        Row r;
+        r.h = h; r.step = step;
+        r.nu = h[0] * x0 + h[1] * Y + h[2];
+        r.nv = h[3] * x0 + h[4] * Y + h[5];
+        r.den = h[6] * x0 + h[7] * Y + h[8];
+        r.dnu = h[0] * step; r.dnv = h[3] * step; r.dden = h[6] * step;
+        return r;
+    }
+};
+
 /// The pixels a warp samples from: the image itself, or a reduction (cached when the image is shared).
 struct MipSource {
     const Image* image;
@@ -113,18 +149,16 @@ std::optional<WarpedImage> warpImageImpl(const Image& image, const ImagePtr& own
     MipSource mipSource = mipSourceFor(image, owner, level);
     const Image* source = mipSource.image;
     double mip = std::ldexp(1.0, level);
+    const HomographyStepper stepper(f);
     parallelRows(0, f.height, [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) {
             uint8_t* row = out->row(y);
-            for (int x = 0; x < f.width; x++, row += 4) {
-                Point doc{f.bounds.x + (x + 0.5) / f.factor, f.bounds.y + (y + 0.5) / f.factor};
-                Point u = f.docToUnit.map(doc);
+            HomographyStepper::Row r = stepper.row(y);
+            for (int x = 0; x < f.width; x++, row += 4, r.advance()) {
+                Point u = r.unit();
                 Point px{u.x * pw, u.y * ph};
-                // Local pixel footprint for the edge antialias.
-                Point u2 = f.docToUnit.map({doc.x + 1 / f.factor, doc.y});
-                Point u3 = f.docToUnit.map({doc.x, doc.y + 1 / f.factor});
-                double sx = std::hypot((u2.x - u.x) * pw, (u2.y - u.y) * ph), sy = std::hypot((u3.x - u.x) * pw, (u3.y - u.y) * ph);
-                double footprint = std::max(1e-6, std::max(sx, sy));
+                // Local pixel footprint for the edge antialias, from the mapping's derivatives.
+                double footprint = std::max(1e-6, r.footprint(u, pw, ph));
                 float edge;
                 if (nearest) { if (px.x < 0 || px.x >= pw || px.y < 0 || px.y >= ph) continue; edge = 1; }
                 else {
@@ -201,16 +235,15 @@ std::optional<WarpedMask> warpMask(const GrayImage& mask, const LayerTransform& 
     if (mask.width() == 1 && mask.height() == 1) return WarpedMask{std::make_shared<GrayImage>(mask), placed};
     auto out = std::make_shared<GrayImage>(f.width, f.height, background);
     int pw = mask.width(), ph = mask.height();
+    const HomographyStepper stepper(f);
     parallelRows(0, f.height, [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) {
             uint8_t* row = out->row(y);
-            for (int x = 0; x < f.width; x++) {
-                Point doc{f.bounds.x + (x + 0.5) / f.factor, f.bounds.y + (y + 0.5) / f.factor};
-                Point u = f.docToUnit.map(doc);
+            HomographyStepper::Row r = stepper.row(y);
+            for (int x = 0; x < f.width; x++, r.advance()) {
+                Point u = r.unit();
                 Point px{u.x * pw, u.y * ph};
-                Point u2 = f.docToUnit.map({doc.x + 1 / f.factor, doc.y});
-                Point u3 = f.docToUnit.map({doc.x, doc.y + 1 / f.factor});
-                double footprint = std::max(1e-6, std::max(std::hypot((u2.x - u.x) * pw, (u2.y - u.y) * ph), std::hypot((u3.x - u.x) * pw, (u3.y - u.y) * ph)));
+                double footprint = std::max(1e-6, r.footprint(u, pw, ph));
                 double e = std::min({px.x, pw - px.x, px.y, ph - px.y}) / footprint;
                 float edge = float(clamp(e + 0.5, 0.0, 1.0));
                 if (edge <= 0) continue;
@@ -243,10 +276,14 @@ std::shared_ptr<GrayImage> warpCoverage(const GrayImage& coverage, const LayerTr
     Homography docToUnit = Homography::unitTo(target).inverted();
     Affine pixelToDoc = original.pixelToDocument(pixelWidth, pixelHeight);
     int w = coverage.width(), h = coverage.height();
+    const double* hm = docToUnit.m;
     parallelRows(0, h, [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) {
-            for (int x = 0; x < w; x++) {
-                Point u = docToUnit.map({x + 0.5, y + 0.5});
+            const double Y = y + 0.5;
+            double nu = hm[0] * 0.5 + hm[1] * Y + hm[2], nv = hm[3] * 0.5 + hm[4] * Y + hm[5], den = hm[6] * 0.5 + hm[7] * Y + hm[8];
+            for (int x = 0; x < w; x++, nu += hm[0], nv += hm[3], den += hm[6]) {
+                const double inv = 1.0 / den;
+                Point u{nu * inv, nv * inv};
                 if (u.x < 0 || u.x > 1 || u.y < 0 || u.y > 1) continue;
                 Point src = pixelToDoc.apply({u.x * pixelWidth, u.y * pixelHeight});
                 double bx = clamp(src.x - 0.5, 0.0, double(w - 1)), by = clamp(src.y - 0.5, 0.0, double(h - 1));

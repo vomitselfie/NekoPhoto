@@ -216,6 +216,26 @@ void BrushStroke::walk(Point point) {
     previous_ = point;
 }
 
+void BrushStroke::refreshDabTable(double radius, double hardness, double footprint) {
+    if (dabTableRadius_ == radius && dabTableHardness_ == hardness && dabTableFootprint_ == footprint) return;
+    dabTableRadius_ = radius; dabTableHardness_ = hardness; dabTableFootprint_ = footprint;
+    const bool hard = hardness >= 1;
+    const double inner = radius * hardness;
+    const double reach = radius + footprint;   // nothing beyond
+    const int entries = 8192;
+    dabTableScale_ = entries / (reach * reach);
+    dabTable_.assign(size_t(entries) + 2, 0);
+    for (int i = 0; i <= entries; i++) {
+        const double dist = std::sqrt(i / dabTableScale_);
+        double value;
+        if (hard) value = clamp((radius - dist) / std::max(1e-9, footprint) + 0.5, 0.0, 1.0);
+        else if (dist <= inner) value = 1;
+        else if (dist >= radius) value = 0;
+        else value = brushFalloff((dist - inner) / std::max(1e-9, radius - inner));
+        dabTable_[size_t(i)] = uint8_t(clamp(value * 255 + 0.5, 0.0, 255.0));
+    }
+}
+
 void BrushStroke::dab(Point center) {
     double radius = settings_.diameter / 2;
     Rect circle(center.x - radius, center.y - radius, radius * 2, radius * 2);
@@ -225,25 +245,30 @@ void BrushStroke::dab(Point center) {
     if (affected.isEmpty()) return;
     // Document units per grid pixel, for antialiasing the rim.
     double footprint = std::hypot(pixelToDocument_.a, pixelToDocument_.b);
-    bool hard = settings_.hardness >= 1;
-    double inner = radius * settings_.hardness;
+    refreshDabTable(radius, settings_.hardness, footprint);
+    const bool hard = settings_.hardness >= 1;
+    const bool whollyInside = clipped == circle;
+    const double reach2 = (radius + footprint) * (radius + footprint);
     int x0 = int(affected.minX()), x1 = int(affected.maxX()), y0 = int(affected.minY()), y1 = int(affected.maxY());
+    const Point dd = pixelToDocument_.applyVector({1, 0});
+    const double dd2 = dd.x * dd.x + dd.y * dd.y;
     for (int y = y0; y < y1; y++) {
         uint8_t* row = coverage_->row(y);
         Point d = pixelToDocument_.apply({x0 + 0.5, y + 0.5});
-        Point dd = pixelToDocument_.applyVector({1, 0});
-        for (int x = x0; x < x1; x++, d = d + dd) {
-            if (!canvas_.contains(d)) continue;
-            double dist = std::hypot(d.x - center.x, d.y - center.y);
-            double value;
-            if (hard) value = clamp((radius - dist) / std::max(1e-9, footprint) + 0.5, 0.0, 1.0);
-            else if (dist <= inner) value = 1;
-            else if (dist >= radius) value = 0;
-            else value = brushFalloff((dist - inner) / std::max(1e-9, radius - inner));
-            if (value <= 0) continue;
-            double old = row[x] / 255.0;
-            double merged = hard ? std::max(old, value) : (old + value - old * value);
-            row[x] = uint8_t(clamp(merged * 255 + 0.5, 0.0, 255.0));
+        // Squared distance to the centre is a quadratic along the row: step it with first and second differences.
+        double rx = d.x - center.x, ry = d.y - center.y;
+        double q = rx * rx + ry * ry;
+        double dq = 2 * (rx * dd.x + ry * dd.y) + dd2;
+        for (int x = x0; x < x1; x++, q += dq, dq += 2 * dd2, d = d + dd) {
+            if (q >= reach2) continue;
+            if (!whollyInside && !canvas_.contains(d)) continue;
+            const double index = q * dabTableScale_;
+            const int i = int(index);
+            const unsigned frac = unsigned((index - i) * 256);
+            const unsigned value = (dabTable_[size_t(i)] * (256 - frac) + dabTable_[size_t(i) + 1] * frac + 128) >> 8;
+            if (value == 0) continue;
+            const unsigned old = row[x];
+            row[x] = uint8_t(hard ? std::max(old, value) : old + ((value * (255 - old) + 127) / 255));
         }
     }
     markDirty(affected);

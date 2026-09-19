@@ -111,6 +111,11 @@ private:
     double distanceToNext_ = 0;
     Rect dirtyGrid_;
     bool deferRecompose_ = false;
+    /// Dab profile over squared distance (0..255), rebuilt when the tip changes; the dab loop reads it instead
+    /// of computing a square root and a falloff per pixel.
+    std::vector<uint8_t> dabTable_;
+    double dabTableRadius_ = -1, dabTableHardness_ = -1, dabTableFootprint_ = -1, dabTableScale_ = 0;
+    void refreshDabTable(double radius, double hardness, double footprint);
     bool touched_ = false;
     // A provisional straight tail is drawn to the newest sample and undone when the next arrives.
     bool hasTail_ = false;
