@@ -665,8 +665,8 @@ void MainWindow::refreshActions() {
 
 void MainWindow::refreshTitle() {
     if (!session_) return;
+    // The session's title already carries the modified marker; Qt's own needs a "[*]" placeholder we don't use.
     setWindowTitle(session_->title() + (session_->hasDocument() ? QStringLiteral(" — compositor-linux") : QString()));
-    setWindowModified(session_->isModified());
     refreshTabTitles();
 }
 

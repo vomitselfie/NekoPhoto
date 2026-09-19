@@ -170,8 +170,9 @@ void buildDemo(app::EditorSession& session, const QString& imagePath) {
 
 int main(int argc, char** argv) {
     // --headless: no window on screen; the automation socket is the only way in. Must be decided before QApplication.
+    // --call and --batch never show a window either, so they must work without a display.
     bool headless = false;
-    for (int i = 1; i < argc; i++) if (std::strcmp(argv[i], "--headless") == 0) headless = true;
+    for (int i = 1; i < argc; i++) if (std::strcmp(argv[i], "--headless") == 0 || std::strcmp(argv[i], "--call") == 0 || std::strcmp(argv[i], "--batch") == 0) headless = true;
     if (headless && !qEnvironmentVariableIsSet("QT_QPA_PLATFORM")) qputenv("QT_QPA_PLATFORM", "offscreen");
     QApplication app(argc, argv);
     QApplication::setOrganizationName("compositor-linux");
