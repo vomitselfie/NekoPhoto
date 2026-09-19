@@ -29,3 +29,6 @@ build-*/
 compile_commands.json
 __pycache__/
 opencv-prefix/
+
+# Evaluation data (AIM-500 and the like), fetched by hand
+data/

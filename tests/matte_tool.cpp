@@ -5,11 +5,13 @@
 //       runs the pipeline and writes every stage: mask.png (the model's), matte.png (after the panel),
 //       trimap.png, chosenF.png, chosenB.png, pairAlpha.png (what the band saw and chose), cutout.png (the
 //       layer with its new alpha and edge colours), composite.png (over green).
-//   matte_tool eval <dir> <model.onnx|none> [the same options] [--suffix _alpha]
+//   matte_tool eval <dir> <model.onnx|none> [the same options] [--suffix _alpha] [--limit N]
+//                   [--categories <aim_category_type.json>]
 //       scores every <name>.png with a <name><suffix>.png ground-truth alpha (8-bit grey): SAD (/1000),
 //       MSE, MAD, Grad (first Gaussian derivative, sigma 1.4, /1000) and Conn (/1000), as GFM's evaluate.py
-//       defines them, for the raw mask and for the refined matte. With "none" as the model, --mask names a
-//       mask file (run) or a mask suffix (eval, default _mask) to start from instead of the model.
+//       defines them, for the raw mask and for the refined matte; with AIM-500's category file, means per
+//       category and per type as well. With "none" as the model, --mask names a mask file (run) or a mask
+//       suffix (eval, default _mask) to start from instead of the model.
 #include "compositor/png.h"
 #include "compositor/subject.h"
 #include <algorithm>
@@ -17,6 +19,9 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <iterator>
+#include <map>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -27,9 +32,10 @@ namespace {
 
 struct Options {
     MatteSettings settings;
-    std::string mask, suffix = "_alpha", maskSuffix = "_mask";
+    std::string mask, suffix = "_alpha", maskSuffix = "_mask", categories;
     bool refine = true;
     int detail = 0;   // windows of the detail pass; 0 = coarse pass only
+    int limit = 0;    // eval: at most this many images (0 = all)
 };
 
 Options parse(int argc, char** argv, int from) {
@@ -49,9 +55,27 @@ Options parse(int argc, char** argv, int from) {
         else if (a == "--mask") o.mask = next();
         else if (a == "--suffix") o.suffix = next();
         else if (a == "--mask-suffix") o.maskSuffix = next();
+        else if (a == "--categories") o.categories = next();
+        else if (a == "--limit") o.limit = std::stoi(next());
         else std::fprintf(stderr, "ignored: %s\n", a.c_str());
     }
     return o;
+}
+
+/// A mask or ground-truth alpha from any PNG: the strict 8-bit grey reader first, else the red channel of the
+/// decoded image (some datasets store their alphas as palette or RGB files).
+std::shared_ptr<GrayImage> readAlpha(const std::string& path, std::string* error) {
+    std::string strictError;
+    if (auto gray = readPngGray(path, &strictError)) return gray;
+    auto image = readPngImage(path, error);
+    if (!image) return nullptr;
+    auto gray = std::make_shared<GrayImage>(image->width(), image->height());
+    for (int y = 0; y < image->height(); y++)
+        for (int x = 0; x < image->width(); x++) {
+            const uint8_t* p = image->pixel(x, y);
+            gray->at(x, y) = p[3] ? uint8_t(std::min(255, p[0] * 255 / p[3])) : 0;
+        }
+    return gray;
 }
 
 std::shared_ptr<GrayImage> maskFor(const Image& image, const std::string& model, const std::string& maskPath, int detail, std::string* error) {
@@ -60,7 +84,7 @@ std::shared_ptr<GrayImage> maskFor(const Image& image, const std::string& model,
         return detail > 0 ? subjectMaskDetailed(image, model, nullptr, detail, error) : subjectMask(image, model, error);
     }
     if (maskPath.empty()) { *error = "no model and no --mask"; return nullptr; }
-    auto mask = readPngGray(maskPath, error);
+    auto mask = readAlpha(maskPath, error);
     if (mask && (mask->width() != image.width() || mask->height() != image.height())) { *error = "mask size differs from the image"; return nullptr; }
     return mask;
 }
@@ -213,6 +237,27 @@ int evalMode(int argc, char** argv) {
     if (argc < 4) { std::fprintf(stderr, "usage: matte_tool eval <dir> <model.onnx|none> [options]\n"); return 2; }
     const std::string dir = argv[2], model = argv[3];
     Options o = parse(argc, argv, 4);
+    // AIM-500's category file: {"o_...": {"category": "animal", "type": "SO"}, ...}, read without a JSON library.
+    std::map<std::string, std::string> categoryOf, typeOf;
+    if (!o.categories.empty()) {
+        std::ifstream in(o.categories);
+        std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        size_t pos = 0;
+        while ((pos = text.find("\"o_", pos)) != std::string::npos) {
+            const size_t end = text.find('"', pos + 1);
+            const std::string name = text.substr(pos + 1, end - pos - 1);
+            auto field = [&](const char* key) {
+                const size_t k = text.find(std::string("\"") + key + "\"", end);
+                if (k == std::string::npos) return std::string();
+                const size_t q = text.find('"', text.find(':', k) + 1);
+                return text.substr(q + 1, text.find('"', q + 1) - q - 1);
+            };
+            categoryOf[name] = field("category");
+            typeOf[name] = field("type");
+            pos = end;
+        }
+    }
+    std::map<std::string, std::pair<Scores, Scores>> byCategory, byType;
     Scores rawTotal, refinedTotal;
     std::vector<fs::path> files;
     for (const auto& entry : fs::directory_iterator(dir)) {
@@ -221,6 +266,7 @@ int evalMode(int argc, char** argv) {
         files.push_back(entry.path());
     }
     std::sort(files.begin(), files.end());
+    if (o.limit > 0 && int(files.size()) > o.limit) files.resize(size_t(o.limit));
     std::printf("%-28s %8s %8s %8s %8s %8s   %8s %8s %8s %8s %8s\n", "image", "rawSAD", "rawMSE", "rawGrad", "rawConn", "rawMAD", "SAD", "MSE", "Grad", "Conn", "MAD");
     for (const fs::path& file : files) {
         const std::string stem = file.stem().string();
@@ -228,7 +274,7 @@ int evalMode(int argc, char** argv) {
         if (!fs::exists(truthPath)) continue;
         std::string error;
         auto image = readPngImage(file.string(), &error);
-        auto truth = readPngGray(truthPath, &error);
+        auto truth = readAlpha(truthPath, &error);
         if (!image || !truth || truth->width() != image->width() || truth->height() != image->height()) { std::fprintf(stderr, "%s: %s\n", stem.c_str(), error.empty() ? "size mismatch" : error.c_str()); continue; }
         const std::string maskPath = (file.parent_path() / (stem + o.maskSuffix + ".png")).string();
         auto mask = maskFor(*image, model, model == "none" ? maskPath : o.mask, o.detail, &error);
@@ -238,10 +284,17 @@ int evalMode(int argc, char** argv) {
         std::printf("%-28s %8.2f %8.5f %8.2f %8.2f %8.4f   %8.2f %8.5f %8.2f %8.2f %8.4f\n", stem.c_str(), raw.sad, raw.mse, raw.grad, raw.conn, raw.mad, refined.sad, refined.mse, refined.grad, refined.conn, refined.mad);
         auto add = [](Scores& t, const Scores& s) { t.sad += s.sad; t.mse += s.mse; t.mad += s.mad; t.grad += s.grad; t.conn += s.conn; t.count++; };
         add(rawTotal, raw); add(refinedTotal, refined);
+        if (categoryOf.count(stem)) { add(byCategory[categoryOf[stem]].first, raw); add(byCategory[categoryOf[stem]].second, refined); add(byType[typeOf[stem]].first, raw); add(byType[typeOf[stem]].second, refined); }
+        std::fflush(stdout);
     }
+    auto meanRow = [](const std::string& label, const Scores& r, const Scores& f) {
+        const double n = std::max(1, r.count);
+        std::printf("%-28s %8.2f %8.5f %8.2f %8.2f %8.4f   %8.2f %8.5f %8.2f %8.2f %8.4f\n", (label + " (" + std::to_string(r.count) + ")").c_str(), r.sad / n, r.mse / n, r.grad / n, r.conn / n, r.mad / n, f.sad / n, f.mse / n, f.grad / n, f.conn / n, f.mad / n);
+    };
     if (rawTotal.count) {
-        const double n = rawTotal.count;
-        std::printf("%-28s %8.2f %8.5f %8.2f %8.2f %8.4f   %8.2f %8.5f %8.2f %8.2f %8.4f\n", "mean", rawTotal.sad / n, rawTotal.mse / n, rawTotal.grad / n, rawTotal.conn / n, rawTotal.mad / n, refinedTotal.sad / n, refinedTotal.mse / n, refinedTotal.grad / n, refinedTotal.conn / n, refinedTotal.mad / n);
+        for (const auto& [name, scores] : byCategory) meanRow("  " + name, scores.first, scores.second);
+        for (const auto& [name, scores] : byType) meanRow("  type " + name, scores.first, scores.second);
+        meanRow("mean", rawTotal, refinedTotal);
     } else std::printf("no <name>.png with <name>%s.png pairs in %s\n", o.suffix.c_str(), dir.c_str());
     return 0;
 }
