@@ -88,16 +88,23 @@ QIcon eyeIcon(bool visible, double dpr, QColor color) {
     pixmap.fill(Qt::transparent);
     QPainter p(&pixmap);
     p.setRenderHint(QPainter::Antialiasing);
-    if (!visible) color.setAlpha(70);
+    if (!visible) {
+        // Hidden: an empty slot, so the difference reads at a glance (as Photoshop's empty box does).
+        color.setAlpha(60);
+        p.setPen(QPen(color, 1));
+        p.setBrush(Qt::NoBrush);
+        p.drawRoundedRect(QRectF(2.5, 2.5, 11, 11), 2, 2);
+        return QIcon(pixmap);
+    }
     p.setPen(QPen(color, 1.5));
     p.setBrush(Qt::NoBrush);
-    // An almond-shaped eye with a pupil; hollow when hidden.
     QPainterPath eye;
     eye.moveTo(1.5, 8);
     eye.quadTo(8, 1.5, 14.5, 8);
     eye.quadTo(8, 14.5, 1.5, 8);
     p.drawPath(eye);
-    if (visible) { p.setBrush(color); p.drawEllipse(QPointF(8, 8), 2.6, 2.6); }
+    p.setBrush(color);
+    p.drawEllipse(QPointF(8, 8), 2.6, 2.6);
     return QIcon(pixmap);
 }
 
@@ -204,7 +211,7 @@ void LayerTree::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void LayerTree::mouseReleaseEvent(QMouseEvent* event) {
-    if (swiping) { swiping = false; session_->endVisibilitySwipe(); return; }
+    if (swiping) { emit swipeEnded(); return; }
     QTreeWidget::mouseReleaseEvent(event);
 }
 
@@ -248,7 +255,7 @@ LayersPanel::LayersPanel(EditorSession* session, QWidget* parent) : QWidget(pare
         footer->addWidget(b);
         return b;
     };
-    button("square-plus", tr("New layer"), [this] { session_->addBlankLayer(); });
+    button("square-plus", tr("New layer (Ctrl-click: below the current layer)"), [this] { session_->addBlankLayer(QApplication::keyboardModifiers() & Qt::ControlModifier); });
     button("folder-plus", tr("New folder"), [this] { session_->addGroup(); });
     button("mask", tr("Add layer mask (reveal all, or hide the selection)"), [this] { session_->addMaskFromSelection(true); });
     auto* adjust = button("sliders-horizontal", tr("New adjustment layer"), [] {});
@@ -294,7 +301,10 @@ LayersPanel::LayersPanel(EditorSession* session, QWidget* parent) : QWidget(pare
     connect(tree_, &QWidget::customContextMenuRequested, this, &LayersPanel::showContextMenu);
     connect(tree_, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item, int) { startRename(item->data(0, Qt::UserRole).toString().toStdString()); });
 
+    connect(tree_, &LayerTree::swipeEnded, this, &LayersPanel::finishSwipe);
     connect(session_, &EditorSession::layersChanged, this, [this] {
+        // Rebuilding mid-swipe would destroy the eye button under the pointer and lose the release.
+        if (tree_->swiping) { rebuildAfterSwipe_ = true; syncEyes(); return; }
         if (pendingRebuild_) return;
         pendingRebuild_ = true;
         QTimer::singleShot(0, this, [this] { pendingRebuild_ = false; rebuild(); });
@@ -403,6 +413,33 @@ void LayersPanel::rebuild() {
     rebuilding_ = false;
 }
 
+QToolButton* LayersPanel::eyeButton(const Uuid& id) const {
+    auto it = items_.find(id);
+    if (it == items_.end()) return nullptr;
+    QWidget* row = tree_->itemWidget(it->second, 0);
+    if (!row) return nullptr;
+    for (auto* b : row->findChildren<QToolButton*>()) if (b->property("eye").toBool()) return b;
+    return nullptr;
+}
+
+void LayersPanel::syncEyes() {
+    const auto& doc = session_->document();
+    if (!doc) return;
+    for (auto& [id, item] : items_) {
+        const Layer* l = doc->find(id);
+        QWidget* row = tree_->itemWidget(item, 0);
+        if (!l || !row) continue;
+        for (auto* b : row->findChildren<QToolButton*>()) if (b->property("eye").toBool()) b->setIcon(eyeIcon(l->visible, devicePixelRatioF(), palette().color(QPalette::Text)));
+    }
+}
+
+void LayersPanel::finishSwipe() {
+    if (!tree_->swiping) return;
+    tree_->swiping = false;
+    session_->endVisibilitySwipe();
+    if (rebuildAfterSwipe_) { rebuildAfterSwipe_ = false; rebuild(); }
+}
+
 void LayersPanel::syncAppearance() {
     const Layer* active = session_->activeLayer();
     bool enabled = active && !active->isGroup && !active->adjustment;
@@ -443,6 +480,17 @@ void LayersPanel::startRename(const Uuid& id) {
 
 bool LayersPanel::eventFilter(QObject* watched, QEvent* event) {
     if (watched == blendCombo_->view() && event->type() == QEvent::Hide) session_->previewBlendMode(std::nullopt);
+    // The eye button owns the pointer during a swipe: moves toggle the eye under the pointer, the release ends it.
+    if (auto* eye = qobject_cast<QWidget*>(watched); eye && eye->property("eye").toBool() && tree_->swiping) {
+        if (event->type() == QEvent::MouseMove) {
+            auto* mouse = static_cast<QMouseEvent*>(event);
+            QWidget* w = tree_->viewport()->childAt(tree_->viewport()->mapFromGlobal(mouse->globalPosition().toPoint()));
+            while (w && w->property("layerId").isNull()) w = w->parentWidget();
+            if (w && w->property("eye").toBool()) session_->setVisibilityInSwipe(w->property("layerId").toString().toStdString(), tree_->swipeVisible);
+            return true;
+        }
+        if (event->type() == QEvent::MouseButtonRelease) { finishSwipe(); return true; }
+    }
     if (event->type() == QEvent::MouseButtonPress) {
         auto* w = qobject_cast<QWidget*>(watched);
         auto* mouse = static_cast<QMouseEvent*>(event);

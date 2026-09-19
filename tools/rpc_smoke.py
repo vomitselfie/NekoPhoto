@@ -100,6 +100,30 @@ def main():
     assert len(rpc.call("layers.list")) == n + 1
     assert rpc.call("app.info")["currentTab"] == 0
 
+    # The eye swipe: press toggles, dragging across another eye sets it too, release ends one undo step,
+    # and a second click still works (the rows are rebuilt underneath the gesture).
+    layers = rpc.call("layers.list")
+    a, b = [l for l in layers if l["depth"] == 0][:2]
+    was = a["visible"]
+    rpc.call("debug.eye", id=a["id"], action="press")
+    assert rpc.call("layers.get", id=a["id"])["visible"] == (not was)
+    rpc.call("debug.eye", id=a["id"], action="move", to=b["id"])
+    assert rpc.call("layers.get", id=b["id"])["visible"] == (not was)
+    rpc.call("debug.eye", id=a["id"], action="release")
+    hist = rpc.call("history.info")
+    assert hist["canUndo"] and "Layer" in hist["undo"], hist
+    rpc.call("debug.eye", id=a["id"], action="press")
+    rpc.call("debug.eye", id=a["id"], action="release")
+    assert rpc.call("layers.get", id=a["id"])["visible"] == was
+    rpc.call("history.undo", steps=2)
+    assert rpc.call("layers.get", id=b["id"])["visible"] == b["visible"]
+
+    # A new layer below the active one, for a fresh background.
+    rpc.call("layers.select", id=target["id"])
+    under = rpc.call("layers.add", kind="pixels", name="Backdrop", below=True)
+    order = [l["id"] for l in rpc.call("layers.list")]
+    assert order.index(under["id"]) == order.index(target["id"]) + 1, order
+
     # Errors come back as errors, not crashes.
     try:
         rpc.call("layers.get", id="nope")

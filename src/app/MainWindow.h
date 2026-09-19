@@ -50,6 +50,7 @@ public:
     int currentTabIndex() const { return current_; }
     EditorSession* sessionAt(int i) const { return tabs_[size_t(i)].session; }
     CanvasWidget* canvasAt(int i) const { return tabs_[size_t(i)].canvas; }
+    LayersPanel* layersPanelAt(int i) const { return tabs_[size_t(i)].layers; }
     QString tabTitle(int i) const;
     void selectTab(int i) { switchTo(i); }
     int newTab() { addTab(false); return current_; }

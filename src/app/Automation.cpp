@@ -2,6 +2,7 @@
 #include "CanvasWidget.h"
 #include "EditorSession.h"
 #include "ImageConvert.h"
+#include "LayersPanel.h"
 #include "MainWindow.h"
 #include "ModelStore.h"
 #include "compositor/filters.h"
@@ -20,7 +21,9 @@
 #include <QJsonDocument>
 #include <QLocalServer>
 #include <QLocalSocket>
+#include <QMouseEvent>
 #include <QPainter>
+#include <QToolButton>
 #include <QStandardPaths>
 #include <cmath>
 #include <stdexcept>
@@ -438,7 +441,7 @@ void AutomationServer::registerHandlers() {
         document();
         EditorSession* s = session();
         QString kind = str(p, "kind", QStringLiteral("pixels")).toLower();
-        if (kind == "pixels" || kind == "blank") s->addBlankLayer();
+        if (kind == "pixels" || kind == "blank") s->addBlankLayer(flag(p, "below", false));
         else if (kind == "group" || kind == "folder") s->addGroup();
         else if (kind == "adjustment") {
             auto ak = adjustmentKindNamed(str(p, "adjustmentKind"));
@@ -885,6 +888,23 @@ void AutomationServer::registerHandlers() {
         restore();
         const Layer* l = s->activeLayer();
         return l ? layerJson(*l, 0) : QJsonObject{};
+    });
+
+    // ---- test hooks: the pointer gesture on a layer's eye (press, move to another eye, release), synthesised
+    add("debug.eye", [w, layer](const QJsonObject& p) {
+        LayersPanel* panel = w->layersPanelAt(w->currentTabIndex());
+        QToolButton* eye = panel->eyeButton(layer(p).id);
+        if (!eye) fail("no eye button for that layer (is the Layers panel showing it?)");
+        QToolButton* target = has(p, "to") ? panel->eyeButton(layer(p, "to").id) : eye;
+        if (!target) fail("no eye button for 'to'");
+        QString action = str(p, "action").toLower();
+        QPoint global = target->mapToGlobal(target->rect().center());
+        QPointF local = eye->mapFromGlobal(global);
+        QEvent::Type type = action == "press" ? QEvent::MouseButtonPress : action == "move" ? QEvent::MouseMove : action == "release" ? QEvent::MouseButtonRelease : QEvent::None;
+        if (type == QEvent::None) fail("action must be press, move or release", invalidParams);
+        QMouseEvent event(type, local, local, QPointF(global), Qt::LeftButton, type == QEvent::MouseButtonRelease ? Qt::NoButton : Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(eye, &event);
+        return QJsonObject{{"sent", action}};
     });
 
     // ---- tools and view (what the person sees)

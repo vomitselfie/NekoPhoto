@@ -102,7 +102,8 @@ public:
     void selectLayers(const std::set<compositor::Uuid>& ids, const std::optional<compositor::Uuid>& primary);
     std::set<compositor::Uuid> collapsedGroupIds;
     void toggleGroupExpansion(const compositor::Uuid& id);
-    void addBlankLayer();
+    /// A blank layer above the active one (inside it, for a folder), or `below` it.
+    void addBlankLayer(bool below = false);
     void addGroup();
     void groupSelectedLayers();
     void deleteLayer(const compositor::Uuid& id);
@@ -296,7 +297,7 @@ public:
     MarqueeKind marqueeKind = MarqueeKind::Rectangle;
     int wandTolerance = 32;
     bool wandContiguous = true;
-    bool wandSampleAll = true;
+    bool wandSampleAll = false;
 
     // Adjustment layers
     void addAdjustmentLayer(compositor::AdjustmentKind kind);

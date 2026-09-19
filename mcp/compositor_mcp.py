@@ -225,9 +225,9 @@ def layers_set(id: str, name: Optional[str] = None, visible: Optional[bool] = No
 
 
 @mcp.tool()
-def layers_add(kind: str = "pixels", name: Optional[str] = None, adjustment_kind: Optional[str] = None, settings: Optional[dict] = None) -> str:
-    """Add a layer above the active one: kind pixels (blank), group, or adjustment with adjustment_kind Levels, Curves, Hue/Saturation, Exposure, Gradient Map or Grain and optional settings (see adjustments_defaults)."""
-    return text(call("layers.add", kind=kind, name=name, adjustmentKind=adjustment_kind, settings=settings))
+def layers_add(kind: str = "pixels", name: Optional[str] = None, adjustment_kind: Optional[str] = None, settings: Optional[dict] = None, below: bool = False) -> str:
+    """Add a layer above the active one (or below it with below=true, e.g. a new background): kind pixels (blank), group, or adjustment with adjustment_kind Levels, Curves, Hue/Saturation, Exposure, Gradient Map or Grain and optional settings (see adjustments_defaults)."""
+    return text(call("layers.add", kind=kind, name=name, adjustmentKind=adjustment_kind, settings=settings, below=below))
 
 
 @mcp.tool()
@@ -376,8 +376,8 @@ def selection_polygon(points: list[list[float]], mode: str = "replace") -> str:
 
 
 @mcp.tool()
-def selection_wand(x: float, y: float, tolerance: int = 32, contiguous: bool = True, sample_all: bool = True, mode: str = "replace") -> str:
-    """Magic wand: select the colour at a point within tolerance (0..255)."""
+def selection_wand(x: float, y: float, tolerance: int = 32, contiguous: bool = True, sample_all: bool = False, mode: str = "replace") -> str:
+    """Magic wand: select the colour at a point within tolerance (0..255), reading the active layer's own pixels (sample_all=true reads the visible composite instead)."""
     return text(call("selection.wand", x=x, y=y, tolerance=tolerance, contiguous=contiguous, sampleAll=sample_all, mode=mode))
 
 

@@ -237,14 +237,16 @@ void EditorSession::toggleGroupExpansion(const Uuid& id) {
     emit layersChanged();
 }
 
-void EditorSession::addBlankLayer() {
+void EditorSession::addBlankLayer(bool below) {
     if (!canEditLayers() || document_->layers.size() >= size_t(Document::maxLayers)) return;
     Layer layer(nextLayerName(document_->layers, "Layer"), document_->size());
     const Layer* active = activeLayer();
-    layer.parentId = active && active->isGroup ? activeLayerId_ : (active ? active->parentId : std::nullopt);
+    bool intoGroup = active && active->isGroup && !below;
+    layer.parentId = intoGroup ? activeLayerId_ : (active ? active->parentId : std::nullopt);
     if (layer.parentId) collapsedGroupIds.erase(*layer.parentId);
-    int insertion = activeLayerId_ ? document_->indexOf(*activeLayerId_) + 1 : int(document_->layers.size());
-    if (active && active->isGroup) {
+    // Layers are stored bottom to top with a folder's contents after it, so "below" is the active index itself.
+    int insertion = activeLayerId_ ? document_->indexOf(*activeLayerId_) + (below ? 0 : 1) : int(document_->layers.size());
+    if (intoGroup) {
         auto inside = descendantIds(document_->layers, active->id);
         for (size_t i = 0; i < document_->layers.size(); i++) if (inside.count(document_->layers[i].id)) insertion = std::max(insertion, int(i) + 1);
     }
@@ -2099,12 +2101,18 @@ void EditorSession::magicWand(QPointF documentPoint, int tolerance, bool contigu
     std::shared_ptr<Image> pixels;
     if (sampleAllLayers) pixels = renderFlattened(*document_);
     else {
+        // The active layer's own pixels as placed, without its mask, opacity, blend or clipping (as on the Mac).
         const Layer* layer = activeLayer();
-        if (!layer || !layer->asset) return;
+        if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image) return;
         Document single(document_->width, document_->height);
         Layer copy = *layer;
         copy.parentId.reset();
         copy.visible = true;
+        copy.opacity = 1;
+        copy.blendMode = BlendMode::Normal;
+        copy.mask.reset();
+        copy.maskSourceId.reset();
+        copy.transform = displayedTransform(*layer);
         single.layers = {copy};
         pixels = renderFlattened(single);
     }

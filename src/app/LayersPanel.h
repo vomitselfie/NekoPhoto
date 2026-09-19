@@ -10,6 +10,8 @@
 #include <QWidget>
 #include <map>
 
+class QToolButton;
+
 namespace app {
 
 class LayerTree : public QTreeWidget {
@@ -18,6 +20,7 @@ public:
     explicit LayerTree(EditorSession* session, QWidget* parent = nullptr);
 signals:
     void dropRequested(compositor::Uuid id, std::optional<compositor::Uuid> parent, std::optional<compositor::Uuid> above, bool atBottom);
+    void swipeEnded();
 public:
     bool dropDuplicates = false;
 protected:
@@ -46,6 +49,13 @@ protected:
 private:
     void rebuild();
     void syncAppearance();
+    /// Eye icons refreshed in place (the rows are kept while a swipe is in progress).
+    void syncEyes();
+public:
+    /// The eye button of a layer's row, for tests that synthesise the swipe gesture.
+    QToolButton* eyeButton(const compositor::Uuid& id) const;
+private:
+    void finishSwipe();
     QWidget* makeRow(const compositor::Layer& layer, int depth, bool visible);
     void showContextMenu(const QPoint& pos);
     void startRename(const compositor::Uuid& id);
@@ -59,6 +69,7 @@ private:
     std::map<compositor::Uuid, QTreeWidgetItem*> items_;
     bool rebuilding_ = false;
     bool pendingRebuild_ = false;
+    bool rebuildAfterSwipe_ = false;
 };
 
 } // namespace app

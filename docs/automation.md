@@ -82,7 +82,7 @@ Documents: `tabs.select`, `tabs.new`, `tabs.close`, `document.new`,
 `document.save`, `document.export` (.png or .jpg), `document.close`.
 
 Layers: `layers.select`, `layers.set` (name, visible, opacity, blend, sampling,
-clipping), `layers.add` (pixels, group, adjustment), `layers.delete`,
+clipping), `layers.add` (pixels, group, adjustment; `below: true` puts it under the active layer), `layers.delete`,
 `layers.duplicate`, `layers.move`, `layers.reorder`, `layers.setTransform`,
 `layers.flip`, `layers.mask` (add, addFromSelection, delete, toggle, invert,
 apply, link), `layers.merge`, `layers.group`, `adjustments.set`.
