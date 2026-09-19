@@ -1,91 +1,64 @@
+<p align="center">
+  <img src="docs/images/logo.svg" alt="compositor-linux" width="180">
+</p>
+
 # compositor-linux
 
-A Linux port of [Compositor](https://github.com/robbietilton/Compositor), the
-small, focused, layer-based image editor for macOS by Wonder Assembly LLC. It
-is built around the same compositing and post-processing workflow, with
-Photoshop-style tools and shortcuts, and it reads and writes the same `.comp`
-project packages as the Mac app.
+A small, focused image editor for Linux: layers, masks, selections, brushes,
+adjustments and filters, with Photoshop-style tools and shortcuts and none of
+the bloat. It is a native port of [Compositor](https://github.com/robbietilton/Compositor)
+for macOS and opens the same `.comp` projects.
 
-The port is a Qt 6 front end over a portable C++ core. The Mac app's eight C
-pixel routines are compiled unchanged; everything else (document model,
-compositing, brush engine, selections, history, adjustments, filters, the
-project format) is a C++ re-implementation checked against the Swift original.
-The macOS sources and Xcode project remain in this tree, untouched, both as the
-reference and so upstream changes can still be merged.
+<p align="center">
+  <img src="docs/images/screenshot.jpg" alt="compositor-linux editing a layered illustration" width="800">
+</p>
 
-## Features
+## Get it
 
-### Layers
-- Layers and folders, with blend modes and opacity
-- Layer masks: paint, fill, invert, blur and feather them; link or unlink them to transform a mask on its own
-- Clipping masks and folder masks
-- Adjustment layers: Hue/Saturation, Levels, Curves, Exposure, Gradient Map and Grain
-- Merge Down, Merge Layers and Merge Group (Ctrl+E)
-- Duplicate, rename inline, reorder and nest by drag and drop; Alt-drag to duplicate
-- Drag layers between open projects
+Download the AppImage from the [Releases](../../releases) page, make it
+executable, and run it:
 
-### Transform
-- Non-destructive move, scale, rotate and flip; images keep their full resolution however small you make them
-- Free distort (Ctrl-drag a handle), with Shift to lock to an axis
-- Transform several layers, or a whole folder, together
-- Snapping to canvas and layer edges and centers, with guides
-- Exact values for position, size, scale and angle, stepped with the arrow keys
-- Flip Layer and Flip Canvas, horizontal and vertical
+```bash
+chmod +x compositor-linux-*.AppImage
+./compositor-linux-*.AppImage
+```
 
-### Selections
-- Rectangle and Ellipse Marquee, Freehand and Polygonal Lasso, and Magic Wand
-- Add to and subtract from selections, move the outline, or move and duplicate the pixels inside
-- Load a layer's pixels or a mask as a selection
-- Content-Aware Fill, which can also extend an image past its edges
+It runs on any x86_64 Linux from 2022 on, under Wayland or X11. Open an image
+with File > Open or drop it on the window, and go.
 
-### Painting and retouching
-- Brush with size, hardness and opacity, and Shift for straight lines
-- Spot Healing Brush (content-aware)
-- Clone Stamp, aligned or not, sampling one layer or all of them
-- Blur tool, on pixels or masks
-- Gradient tool and Shape tool (rectangles, rounded rectangles and ellipses)
-- Eyedropper and a full color picker
+## What you get
 
-### Adjustments and filters
-- Levels (with Auto), Curves, Hue/Saturation, Exposure, Gradient Map, Grain and Invert
-- Gaussian Blur and Motion Blur that spread past a layer's edges
-- Add Noise, Lens Correction and Remove Background
-- Live previews, limited to the selection when there is one
+- Layers, folders, blend modes, opacity, and layer masks
+- Move, scale, rotate and distort without losing pixels
+- Marquee, lasso and magic wand selections; content-aware fill
+- Brush, eraser, spot healing, clone stamp, smudge, gradient and shape tools
+- Levels, curves, hue/saturation, exposure, gradient map, grain, blurs, noise
+- Remove Background with a local model, if you turn it on in Preferences
+- Multiple projects in tabs; PNG and JPEG export
+- The keyboard shortcuts you already know
 
-### Canvas and files
-- Multiple projects in tabs
-- Crop with snapping, and Alt for symmetric cropping
-- Canvas Size and Image Size
-- Sharp high-quality downsampling when zoomed out, and a pixel grid when zoomed in
-- Import JPEG, PNG, TIFF and WebP, including dropped images from other apps
-- Export JPEG with a live preview; Copy Merged
-- Photoshop-style keyboard shortcuts throughout
+The full list is in [docs/features.md](docs/features.md).
 
-### Remove Background
-Off by default. Edit > Preferences turns it on and downloads a segmentation
-model (IS-Net or the small U2Net, from the rembg project, Apache-2.0) into the
-app's data folder. The model runs locally through OpenCV's DNN module; nothing
-is uploaded.
+## Remove Background
 
-## Driving it from an agent
+Off by default. Edit > Preferences > AI background removal downloads a
+segmentation model (from the rembg project) into your data folder and runs it
+on your machine. Nothing is uploaded anywhere.
 
-An MCP bridge (`mcp/compositor_mcp.py`) lets Claude Code or any MCP client open
-documents, inspect and edit layers, run adjustments and filters, and look at
-renders. `compositor-linux --rpc` (or Preferences > Automation) opens the
-socket; `--headless` runs without a window. See `docs/automation.md`.
+## Use it with an AI agent
 
-## Installing
+The editor can be driven by Claude Code or any MCP client: open files, inspect
+and edit layers, run adjustments and filters, and look at the result.
 
-Each release on the GitHub Releases page ships an AppImage (make it executable
-and run it; works on any x86_64 distribution from 2022 on, Wayland or X11) and
-a tarball with the binary, desktop file, icon and MIME type for `cmake --install`
-style layouts.
+```bash
+claude mcp add compositor -- uv run /path/to/compositor-linux/mcp/compositor_mcp.py
+```
 
-## Building
+Then ask for things like "open photo.jpg, remove the background, add a dark
+gradient behind it and export result.png". Details, the protocol and the full
+method list are in [docs/automation.md](docs/automation.md).
 
-Requirements: CMake 3.22+, Ninja (or Make), GCC 12+ or Clang 15+, Qt 6.4+
-(Core, Gui, Widgets, Network, Svg and the Wayland platform plugin), libpng, and
-OpenCV for Remove Background.
+## Build from source
 
 Arch / Manjaro:
 
@@ -104,33 +77,16 @@ Then:
 ```bash
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
-ctest --test-dir build --output-on-failure
-./build/src/app/compositor-linux            # or: ./build/src/app/compositor-linux Photo.comp
-sudo cmake --install build                  # optional: binary, .desktop, icon, MIME type
+./build/src/app/compositor-linux
 ```
 
-`docs/linux-port.md` covers build options, command-line flags, the source
-layout and the keyboard shortcuts. `docs/linux-port-architecture.md` explains
-how the port relates to the Mac sources, and `docs/project-format.md` the
-`.comp` package format.
-
-## Layout
-
-```
-CMakeLists.txt        root build for compositor-linux
-src/pixels/           the Mac app's C pixel routines, compiled unchanged
-src/core/             portable C++20 editor core (no Qt)
-src/app/              the Qt 6 Widgets application
-tests/                unit and golden-image tests (ctest)
-packaging/            .desktop file, icon, MIME type
-docs/                 port notes, project format, upstream README
-Compositor/           the macOS app sources (reference, untouched)
-Compositor.xcodeproj  the macOS Xcode project (untouched)
-```
+`docs/linux-port.md` has the build options, command-line flags, the source
+layout, how releases are made and the keyboard shortcuts.
+`docs/linux-port-architecture.md` explains how the port relates to the Mac
+sources, which stay in this tree untouched.
 
 ## Credits and license
 
-Compositor is by Wonder Assembly LLC and is released under the MIT license;
-the original README is kept at `docs/upstream-README.md`. compositor-linux is
-MIT as well; see [LICENSE](LICENSE). Bundled third-party code: nlohmann/json
-(MIT) and the Lucide icons (ISC), each with its license alongside.
+Compositor is by Wonder Assembly LLC, MIT licensed; its README is kept at
+`docs/upstream-README.md`. compositor-linux is MIT as well, see
+[LICENSE](LICENSE). It bundles nlohmann/json (MIT) and the Lucide icons (ISC).
