@@ -100,7 +100,9 @@ private:
     Affine pixelToDocument_, documentToPixel_;
     LayerTransform paintTransform_;
     Rect sourceRect_;                 // where the original pixels sit in the grid
-    std::shared_ptr<Image> base_;     // original pixels in the grid (image strokes)
+    std::shared_ptr<const Image> base_;   // original pixels in the grid (image strokes); the layer's own image when the grid matches it
+    PixelBounds baseBounds_;               // where base_ has any alpha
+    Rect touchedGrid_;                     // every grid pixel a dab or fill may have changed
     std::shared_ptr<Image> working_;
     std::shared_ptr<GrayImage> baseMask_;
     std::shared_ptr<GrayImage> workingMask_;

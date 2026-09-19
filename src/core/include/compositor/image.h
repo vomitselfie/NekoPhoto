@@ -66,6 +66,8 @@ using GrayPtr = std::shared_ptr<const GrayImage>;
 /// Half-open bounds of the pixels with nonzero alpha: {x0, y0, x1, y1}; all zero when empty.
 struct PixelBounds { int x0 = 0, y0 = 0, x1 = 0, y1 = 0; bool isEmpty() const { return x1 <= x0 || y1 <= y0; } };
 PixelBounds alphaBounds(const Image& image);
+/// The same, scanning only `within` (pixel bounds); useful when everything outside is known to be unchanged.
+PixelBounds alphaBounds(const Image& image, const PixelBounds& within);
 PixelBounds nonzeroBounds(const GrayImage& image);
 
 std::shared_ptr<Image> cropImage(const Image& image, int x, int y, int width, int height);

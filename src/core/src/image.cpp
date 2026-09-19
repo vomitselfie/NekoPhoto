@@ -21,18 +21,50 @@ GrayImage::GrayImage(int width, int height, uint8_t value)
 
 void GrayImage::fill(uint8_t value) { std::fill(pixels_.begin(), pixels_.end(), value); }
 
-PixelBounds alphaBounds(const Image& image) {
+namespace {
+/// First pixel in [0, n) of a row with nonzero alpha, or n: two pixels per 64-bit word.
+int firstOpaque(const uint8_t* row, int n) {
+    constexpr uint64_t alphaMask = 0xFF000000FF000000ULL;
+    int x = 0;
+    for (; x + 2 <= n; x += 2) {
+        uint64_t word;
+        std::memcpy(&word, row + size_t(x) * 4, 8);
+        if (word & alphaMask) break;
+    }
+    for (; x < n; x++) if (row[size_t(x) * 4 + 3]) return x;
+    return n;
+}
+int endOpaque(const uint8_t* row, int n) {
+    constexpr uint64_t alphaMask = 0xFF000000FF000000ULL;
+    int x = n;
+    for (; x - 2 >= 0; x -= 2) {
+        uint64_t word;
+        std::memcpy(&word, row + size_t(x - 2) * 4, 8);
+        if (word & alphaMask) break;
+    }
+    for (; x > 0; x--) if (row[size_t(x - 1) * 4 + 3]) return x;
+    return 0;
+}
+} // namespace
+
+PixelBounds alphaBounds(const Image& image, const PixelBounds& within) {
     PixelBounds b;
+    const int wx0 = std::max(0, within.x0), wy0 = std::max(0, within.y0), wx1 = std::min(image.width(), within.x1), wy1 = std::min(image.height(), within.y1);
     int x0 = image.width(), y0 = image.height(), x1 = 0, y1 = 0;
-    for (int y = 0; y < image.height(); y++) {
-        const uint8_t* p = image.row(y) + 3;
-        for (int x = 0; x < image.width(); x++, p += 4) {
-            if (*p) { x0 = std::min(x0, x); x1 = std::max(x1, x + 1); y0 = std::min(y0, y); y1 = std::max(y1, y + 1); }
-        }
+    for (int y = wy0; y < wy1; y++) {
+        const uint8_t* row = image.row(y) + size_t(wx0) * 4;
+        int first = firstOpaque(row, wx1 - wx0);
+        if (first == wx1 - wx0) continue;
+        x0 = std::min(x0, wx0 + first);
+        x1 = std::max(x1, wx0 + endOpaque(row, wx1 - wx0));
+        y0 = std::min(y0, y);
+        y1 = y + 1;
     }
     if (x1 > x0 && y1 > y0) { b.x0 = x0; b.y0 = y0; b.x1 = x1; b.y1 = y1; }
     return b;
 }
+
+PixelBounds alphaBounds(const Image& image) { return alphaBounds(image, PixelBounds{0, 0, image.width(), image.height()}); }
 
 namespace {
 /// First nonzero byte index in [0, n), or n: eight bytes at a time.
@@ -139,10 +171,13 @@ std::shared_ptr<GrayImage> halveGray(const GrayImage& image) {
 namespace {
 
 // Area-averaging reduction to exactly `w` x `h` (used for thumbnails; box filter over the covered source area).
+// A large box is sampled on a grid of at most 8 x 8 points instead of read entirely: a thumbnail of a
+// 12-megapixel layer then costs a few hundred thousand reads, not twelve million.
 template <int Channels, typename Img>
 std::shared_ptr<Img> boxResize(const Img& image, int w, int h) {
     auto out = std::make_shared<Img>(w, h);
     double sx = double(image.width()) / w, sy = double(image.height()) / h;
+    const int stepX = std::max(1, int(sx / 8)), stepY = std::max(1, int(sy / 8));
     for (int y = 0; y < h; y++) {
         int y0 = int(std::floor(y * sy)), y1 = std::max(y0 + 1, int(std::floor((y + 1) * sy)));
         y1 = std::min(y1, image.height());
@@ -151,9 +186,9 @@ std::shared_ptr<Img> boxResize(const Img& image, int w, int h) {
             x1 = std::min(x1, image.width());
             long sum[Channels] = {0};
             long count = 0;
-            for (int j = y0; j < y1; j++) {
-                const uint8_t* p = image.row(j) + x0 * Channels;
-                for (int i = x0; i < x1; i++, p += Channels) { for (int c = 0; c < Channels; c++) sum[c] += p[c]; count++; }
+            for (int j = y0 + stepY / 2; j < y1; j += stepY) {
+                const uint8_t* p = image.row(j) + (x0 + stepX / 2) * Channels;
+                for (int i = x0 + stepX / 2; i < x1; i += stepX, p += Channels * stepX) { for (int c = 0; c < Channels; c++) sum[c] += p[c]; count++; }
             }
             uint8_t* o = out->row(y) + x * Channels;
             for (int c = 0; c < Channels; c++) o[c] = count ? uint8_t((sum[c] + count / 2) / count) : 0;

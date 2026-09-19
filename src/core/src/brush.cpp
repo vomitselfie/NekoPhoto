@@ -81,8 +81,17 @@ BrushStroke::BrushStroke(const Layer& layer, bool mask, BrushSettings settings, 
         if (source) stretchGray(*source, *baseMask_, sourceRect_);
         workingMask_ = std::make_shared<GrayImage>(*baseMask_);
     } else {
-        base_ = std::make_shared<Image>(width_, height_);
-        if (layer.asset && layer.asset->image) copyImage(*layer.asset->image, *base_, int(sourceRect_.minX()), int(sourceRect_.minY()));
+        // The grid usually is the layer's own pixel grid: then the layer image (immutable, shared) is the base
+        // and only the working copy is made.
+        const bool sameGrid = layer.asset && layer.asset->image && sourceRect_ == Rect(0, 0, width_, height_)
+            && layer.asset->image->width() == width_ && layer.asset->image->height() == height_;
+        if (sameGrid) base_ = layer.asset->image;
+        else {
+            auto copy = std::make_shared<Image>(width_, height_);
+            if (layer.asset && layer.asset->image) copyImage(*layer.asset->image, *copy, int(sourceRect_.minX()), int(sourceRect_.minY()));
+            base_ = copy;
+        }
+        baseBounds_ = alphaBounds(*base_);
         working_ = std::make_shared<Image>(*base_);
     }
     coverage_ = std::make_shared<GrayImage>(width_, height_, 0);
@@ -106,6 +115,7 @@ void BrushStroke::markDirty(const Rect& gridRect) {
     Rect r = gridRect.intersection(Rect(0, 0, width_, height_));
     if (r.isEmpty()) return;
     dirtyGrid_ = dirtyGrid_.unionWith(r);
+    touchedGrid_ = touchedGrid_.unionWith(r);
     touched_ = true;
 }
 
@@ -197,7 +207,10 @@ void BrushStroke::curve(Point start, Point end, Point before, Point after) {
 }
 
 void BrushStroke::walk(Point point) {
-    double spacing = std::max(0.25, settings_.diameter * (settings_.hardness >= 1 ? 0.015 : 0.025));
+    // Hard tips merge by max, so dabs only need to be close enough that the scallop between two circles stays
+    // under a tenth of a pixel (depth ~ s^2 / 8r); soft tips build up by screen and keep the dense spacing.
+    const double radius = settings_.diameter / 2;
+    double spacing = settings_.hardness >= 1 ? std::clamp(std::sqrt(0.8 * radius), 0.25, settings_.diameter * 0.05) : std::max(0.25, settings_.diameter * 0.025);
     if (previous_) {
         double dx = point.x - previous_->x, dy = point.y - previous_->y;
         double length = std::hypot(dx, dy);
@@ -311,6 +324,27 @@ void BrushStroke::recompose(const Rect& gridRect) {
     }
     double cr = settings_.red * 255, cg = settings_.green * 255, cb = settings_.blue * 255;
     if (settings_.healing) { cr = cg = cb = 0.12 * 255; opacity *= 0.45; } // the wash shown while painting
+    if (!clone_) {
+        // Plain paint or erase: integer lerps, one coverage step per pixel.
+        const unsigned op = unsigned(clamp(opacity * 255 + 0.5, 0.0, 255.0));
+        const int colour[4] = {int(clamp(cr + 0.5, 0.0, 255.0)), int(clamp(cg + 0.5, 0.0, 255.0)), int(clamp(cb + 0.5, 0.0, 255.0)), 255};
+        const bool erasing = settings_.erasing;
+        for (int y = y0; y < y1; y++) {
+            const uint8_t* cov = coverage_->row(y);
+            const uint8_t* sel = selection_ ? selection_->row(y) : nullptr;
+            const uint8_t* base = base_->row(y) + x0 * 4;
+            uint8_t* out = working_->row(y) + x0 * 4;
+            for (int x = x0; x < x1; x++, base += 4, out += 4) {
+                unsigned k = cov[x];
+                if (sel) k = (k * sel[x] + 127) / 255;
+                k = (k * op + 127) / 255;
+                if (k == 0) { std::memcpy(out, base, 4); continue; }
+                if (erasing) { for (int c = 0; c < 4; c++) out[c] = uint8_t((base[c] * (255 - k) + 127) / 255); continue; }
+                for (int c = 0; c < 4; c++) out[c] = uint8_t(base[c] + ((colour[c] - int(base[c])) * int(k) + (colour[c] >= base[c] ? 127 : -127)) / 255);
+            }
+        }
+        return;
+    }
     for (int y = y0; y < y1; y++) {
         const uint8_t* cov = coverage_->row(y);
         const uint8_t* sel = selection_ ? selection_->row(y) : nullptr;
@@ -484,10 +518,12 @@ BrushStroke::Commit BrushStroke::commit() {
         result.maskPlacement = paintTransform_.samePlacement(layerTransform_) ? std::nullopt : std::optional<LayerTransform>(paintTransform_);
         return result;
     }
-    // Keep every nonzero-alpha pixel; an existing layer keeps at least its old bounds.
-    PixelBounds b = alphaBounds(*working_);
+    // Keep every nonzero-alpha pixel; an existing layer keeps at least its old bounds. Outside the base's
+    // own alpha and the touched area nothing changed, so only that region needs scanning.
+    Rect scan = Rect(baseBounds_.x0, baseBounds_.y0, baseBounds_.x1 - baseBounds_.x0, baseBounds_.y1 - baseBounds_.y0).unionWith(touchedGrid_).integral();
+    PixelBounds b = scan.isEmpty() ? PixelBounds{} : alphaBounds(*working_, PixelBounds{int(scan.minX()), int(scan.minY()), int(scan.maxX()), int(scan.maxY())});
     Rect crop = b.isEmpty() ? Rect() : Rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0);
-    bool hadSource = base_ && alphaBounds(*base_).x1 > 0;
+    bool hadSource = base_ && !baseBounds_.isEmpty();
     if (hadSource) crop = crop.unionWith(sourceRect_);
     if (crop.isEmpty()) crop = hadSource ? sourceRect_ : Rect(0, 0, width_, height_);
     crop = crop.integral();
