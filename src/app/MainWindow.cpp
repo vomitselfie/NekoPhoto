@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "CanvasFrame.h"
 #include "CanvasWidget.h"
 #include "Dialogs.h"
 #include "ImageConvert.h"
@@ -10,6 +11,7 @@
 #include "ModelStore.h"
 #include "PreferencesDialog.h"
 #include "compositor/subject.h"
+#include "Style.h"
 #include "ToolOptionsBar.h"
 #include "compositor/png.h"
 #include "compositor/project.h"
@@ -142,8 +144,11 @@ MainWindow::MainWindow() {
     });
     positionLabel_ = new QLabel;
     sizeLabel_ = new QLabel;
+    hintLabel_ = new QLabel;
+    hintLabel_->setStyleSheet(hintStyle());
     statusBar()->addWidget(zoomBox_);
     statusBar()->addWidget(sizeLabel_);
+    statusBar()->addWidget(hintLabel_, 1);
     statusBar()->addPermanentWidget(positionLabel_);
 
     buildToolRail();
@@ -162,12 +167,14 @@ MainWindow::Tab& MainWindow::addTab(bool reuseEmpty) {
     tab.defaultName = tabs_.empty() ? tr("Untitled") : tr("Untitled %1").arg(nextNumber_++);
     tab.session = new EditorSession(this);
     tab.canvas = new CanvasWidget(tab.session);
+    tab.frame = new CanvasFrame(tab.session, tab.canvas);
+    tab.frame->setRulersVisible(rulersAction_ && rulersAction_->isChecked());
     tab.layers = new LayersPanel(tab.session);
     tab.adjustments = new AdjustmentsPanel(tab.session);
     tab.options = new ToolOptionsBar(tab.session, tab.canvas);
     addToolBar(Qt::TopToolBarArea, tab.options);
     tab.options->setVisible(false);
-    canvasStack_->addWidget(tab.canvas);
+    canvasStack_->addWidget(tab.frame);
     layersStack_->addWidget(tab.layers);
     adjustStack_->addWidget(tab.adjustments);
     tabs_.push_back(tab);
@@ -194,7 +201,7 @@ void MainWindow::switchTo(int index) {
     canvas_ = tab.canvas;
     layers_ = tab.layers;
     options_ = tab.options;
-    canvasStack_->setCurrentWidget(tab.canvas);
+    canvasStack_->setCurrentWidget(tab.frame);
     layersStack_->setCurrentWidget(tab.layers);
     adjustStack_->setCurrentWidget(tab.adjustments);
     tab.options->setVisible(true);
@@ -205,7 +212,31 @@ void MainWindow::switchTo(int index) {
     updateColorSwatches();
     if (toolActions_.contains(session_->tool())) toolActions_[session_->tool()]->setChecked(true);
     refreshZoom();
+    refreshHint();
     canvas_->setFocus();
+}
+
+void MainWindow::refreshHint() { hintLabel_->setText(toolHint(session_->tool(), session_->brushErase)); }
+
+QString MainWindow::toolHint(Tool tool, bool erase) {
+    switch (tool) {
+    case Tool::Move: return tr("Drag to move; handles scale, just outside a corner rotates; Ctrl-drag a handle distorts; Ctrl-click picks a layer");
+    case Tool::Marquee: return tr("Drag to select; Shift adds, Alt subtracts; drag inside a selection to move its outline");
+    case Tool::Lasso: return tr("Freehand: drag around an area. Polygonal: click points, double-click or Enter closes, Backspace removes the last");
+    case Tool::Wand: return tr("Click a colour to select it; Shift adds, Alt subtracts; Tolerance widens the match");
+    case Tool::Crop: return tr("Drag the crop, then press Enter or double-click; Shift squares, Alt grows from the centre");
+    case Tool::Brush: return erase ? tr("Drag to erase; [ and ] change the size; Shift-click erases a straight line")
+                                   : tr("Drag to paint; [ and ] change the size, digits set the opacity; Shift-click paints a straight line");
+    case Tool::SpotHealing: return tr("Paint over a blemish and it is filled from its surroundings");
+    case Tool::CloneStamp: return tr("Alt-click sets the source, then paint");
+    case Tool::Smudge: return tr("Opacity is the strength; Liquify pushes pixels, Smudge drags colour, Blur softens");
+    case Tool::Gradient: return tr("Drag a line; drag again to redo it; Enter applies, Esc discards; Shift snaps the angle");
+    case Tool::Shape: return tr("Drag a shape in the foreground colour; Shift squares, Alt grows from the centre; Shift-U switches kind");
+    case Tool::Eyedropper: return tr("Click sets the foreground colour, Alt-click the background");
+    case Tool::Hand: return tr("Drag to pan; hold Space to pan from any tool");
+    case Tool::Zoom: return tr("Click zooms in, Alt-click out, drag a box to zoom to it; Ctrl-wheel zooms anywhere");
+    }
+    return {};
 }
 
 void MainWindow::refreshZoom() {
@@ -224,6 +255,7 @@ void MainWindow::connectSession() {
         if (toolActions_.contains(session_->tool())) toolActions_[session_->tool()]->setChecked(true);
         eraserAction_->setChecked(session_->tool() == Tool::Brush && session_->brushErase);
         updateColorSwatches();
+        refreshHint();
     }));
     sessionConnections_.push_back(connect(session_, &EditorSession::error, this, [this](QString message) { showError(tr("compositor-linux"), message); }));
 }
@@ -255,11 +287,11 @@ void MainWindow::closeTab(int index) {
     Tab tab = tabs_[size_t(index)];
     tabs_.erase(tabs_.begin() + index);
     { QSignalBlocker b(tabBar_); tabBar_->removeTab(index); }
-    canvasStack_->removeWidget(tab.canvas);
+    canvasStack_->removeWidget(tab.frame);
     layersStack_->removeWidget(tab.layers);
     adjustStack_->removeWidget(tab.adjustments);
     removeToolBar(tab.options);
-    tab.canvas->deleteLater(); tab.layers->deleteLater(); tab.adjustments->deleteLater(); tab.options->deleteLater();
+    tab.frame->deleteLater(); tab.layers->deleteLater(); tab.adjustments->deleteLater(); tab.options->deleteLater();
     tab.session->deleteLater();
     current_ = -1;
     if (tabs_.empty()) { addTab(false); return; }
@@ -518,6 +550,13 @@ void MainWindow::buildMenus() {
     needsDocument(view->addAction(tr("&Fit on Screen"), QKeySequence("Ctrl+0"), this, [this] { session_->fitView(); }));
     needsDocument(view->addAction(tr("&Actual Pixels"), QKeySequence("Ctrl+1"), this, [this] { session_->zoomTo(1); }));
     view->addSeparator();
+    rulersAction_ = view->addAction(tr("&Rulers"), QKeySequence("Ctrl+R"), this, [this](bool on) {
+        for (auto& tab : tabs_) tab.frame->setRulersVisible(on);
+        QSettings().setValue("view/rulers", on);
+    });
+    rulersAction_->setCheckable(true);
+    rulersAction_->setChecked(QSettings().value("view/rulers", true).toBool());
+    for (auto& tab : tabs_) tab.frame->setRulersVisible(rulersAction_->isChecked());
     QAction* grid = view->addAction(tr("Pixel &Grid"), this, [this](bool on) { session_->showsPixelGrid = on; canvas_->update(); });
     grid->setCheckable(true);
     grid->setChecked(true);

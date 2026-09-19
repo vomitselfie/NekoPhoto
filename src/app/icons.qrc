@@ -21,4 +21,7 @@
   <file alias="trash-2.svg">icons/trash-2.svg</file>
   <file alias="wand-sparkles.svg">icons/wand-sparkles.svg</file>
   <file alias="zoom-in.svg">icons/zoom-in.svg</file>
+</qresource>
+<qresource prefix="/app">
+  <file alias="icon.svg">../../packaging/compositor-linux.svg</file>
 </qresource></RCC>

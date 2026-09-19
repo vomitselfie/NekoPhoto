@@ -17,6 +17,7 @@ class QStackedWidget;
 
 namespace app {
 
+class CanvasFrame;
 class CanvasWidget;
 class ColorSwatches;
 class LayersPanel;
@@ -50,6 +51,7 @@ protected:
 
 private:
     struct Tab {
+        CanvasFrame* frame = nullptr;
         EditorSession* session = nullptr;
         CanvasWidget* canvas = nullptr;
         LayersPanel* layers = nullptr;
@@ -78,6 +80,8 @@ private:
     void refreshRecent();
     void refreshTitle();
     void refreshZoom();
+    void refreshHint();
+    static QString toolHint(Tool tool, bool erase);
     void refreshActions();
     void chooseColor(bool background);
     void deleteSelectedLayers();
@@ -103,6 +107,8 @@ private:
     std::vector<QMetaObject::Connection> sessionConnections_;
     QMenu* recentMenu_;
     QLabel* positionLabel_;
+    QLabel* hintLabel_;
+    QAction* rulersAction_ = nullptr;
     QLabel* sizeLabel_;
     ColorSwatches* swatches_;
     QDockWidget* layersDock_ = nullptr;

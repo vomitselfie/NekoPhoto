@@ -29,6 +29,8 @@ qt_add_executable(compositor-linux
     Style.h
     Icons.h
     ColorSwatches.h
+    Ruler.h
+    CanvasFrame.h
     icons.qrc
     Viewport.h
     EditorSession.h

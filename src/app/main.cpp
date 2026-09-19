@@ -12,6 +12,7 @@
 #include <QCommandLineParser>
 #include <QDir>
 #include <QImageReader>
+#include <QIcon>
 #include <QMap>
 #include <QTimer>
 
@@ -159,6 +160,7 @@ int main(int argc, char** argv) {
     QApplication::setApplicationName("compositor-linux");
     QApplication::setApplicationVersion("1.0.4");
     QApplication::setDesktopFileName("compositor-linux");
+    app.setWindowIcon(QIcon(QStringLiteral(":/app/icon.svg")));
     QCommandLineParser parser;
     parser.setApplicationDescription("compositor-linux: a small, focused image compositor.");
     parser.addHelpOption();

@@ -254,10 +254,6 @@ QWidget* ToolOptionsBar::buildBrushOptions() {
     spin(tr("Size"), "size", 1, 2000, session_->brushSettings.diameter, " px", [this](double v) { session_->brushSettings.diameter = v; });
     spin(tr("Hardness"), "hardness", 0, 100, session_->brushSettings.hardness * 100, "%", [this](double v) { session_->brushSettings.hardness = v / 100; });
     spin(tr("Opacity"), "opacity", 1, 100, session_->brushSettings.opacity * 100, "%", [this](double v) { session_->brushSettings.opacity = v / 100; });
-    auto* hint = new QLabel(tr("[ and ] change the size; Shift-click paints a straight line"));
-    hint->setStyleSheet(hintStyle());
-    h->addWidget(separator());
-    h->addWidget(hint);
     h->addStretch();
     return w;
 }
@@ -288,10 +284,6 @@ QWidget* ToolOptionsBar::buildCloneOptions() {
     connect(all, &QCheckBox::toggled, this, [this](bool on) { session_->cloneSampleAll = on; });
     h->addWidget(all);
     addBrushTipFields(h);
-    auto* hint = new QLabel(tr("Alt-click sets the source"));
-    hint->setStyleSheet(hintStyle());
-    h->addWidget(separator());
-    h->addWidget(hint);
     h->addStretch();
     return w;
 }
@@ -320,10 +312,6 @@ QWidget* ToolOptionsBar::buildSmudgeOptions() {
     h->addWidget(new QLabel(tr("Mode")));
     h->addWidget(mode);
     addBrushTipFields(h);
-    auto* hint = new QLabel(tr("Opacity is the strength; Liquify pushes pixels, Smudge drags colour, Blur softens"));
-    hint->setStyleSheet(hintStyle());
-    h->addWidget(separator());
-    h->addWidget(hint);
     h->addStretch();
     return w;
 }
@@ -353,10 +341,6 @@ QWidget* ToolOptionsBar::buildGradientOptions() {
     auto* apply = new QPushButton(tr("Apply"));
     connect(apply, &QPushButton::clicked, this, [this] { session_->commitGradient(); });
     h->addWidget(apply);
-    auto* hint = new QLabel(tr("Drag a line; drag again to redo it; Enter applies, Esc discards. Shift snaps the angle"));
-    hint->setStyleSheet(hintStyle());
-    h->addWidget(separator());
-    h->addWidget(hint);
     h->addStretch();
     return w;
 }
@@ -373,10 +357,6 @@ QWidget* ToolOptionsBar::buildShapeOptions() {
     auto* radius = numberField(0, 5000, 0, " px", tr("Corner radius, for rectangles"));
     connect(radius, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double v) { session_->shapeCornerRadius = v; });
     h->addWidget(radius);
-    auto* hint = new QLabel(tr("Drag a shape in the foreground colour; Shift squares, Alt grows from the centre; Shift-U switches kind"));
-    hint->setStyleSheet(hintStyle());
-    h->addWidget(separator());
-    h->addWidget(hint);
     h->addStretch();
     return w;
 }
@@ -393,10 +373,6 @@ QWidget* ToolOptionsBar::buildMarqueeOptions() {
     aa->setChecked(session_->selectionAntialiased);
     connect(aa, &QCheckBox::toggled, this, [this](bool on) { session_->selectionAntialiased = on; });
     h->addWidget(aa);
-    auto* hint = new QLabel(tr("Shift adds, Alt subtracts; drag inside a selection to move its outline"));
-    hint->setStyleSheet(hintStyle());
-    h->addWidget(separator());
-    h->addWidget(hint);
     h->addStretch();
     return w;
 }
@@ -410,10 +386,6 @@ QWidget* ToolOptionsBar::buildLassoOptions() {
     kind->setProperty("role", "lassoKind");
     syncers_.push_back([this, kind] { QSignalBlocker b(kind); kind->setCurrentIndex(session_->lassoKind == LassoKind::Polygonal ? 1 : 0); });
     h->addWidget(kind);
-    auto* hint = new QLabel(tr("Polygonal: click to add points, double-click or Enter to close, Backspace removes the last point"));
-    hint->setStyleSheet(hintStyle());
-    h->addWidget(separator());
-    h->addWidget(hint);
     h->addStretch();
     return w;
 }
@@ -455,10 +427,6 @@ QWidget* ToolOptionsBar::buildCropOptions() {
         canvas_->setCropRatio(std::max(0.0, r));
     });
     h->addWidget(ratio);
-    auto* hint = new QLabel(tr("Drag the crop, then press Enter or double-click; Shift squares, Alt grows from the centre"));
-    hint->setStyleSheet(hintStyle());
-    h->addWidget(separator());
-    h->addWidget(hint);
     auto* apply = new QPushButton(tr("Crop"));
     connect(apply, &QPushButton::clicked, this, [this] { canvas_->applyCrop(); });
     auto* cancel = new QPushButton(tr("Cancel"));
@@ -478,10 +446,6 @@ QWidget* ToolOptionsBar::buildZoomOptions() {
     connect(actual, &QPushButton::clicked, this, [this] { session_->zoomTo(1); });
     h->addWidget(fit);
     h->addWidget(actual);
-    auto* hint = new QLabel(tr("Click zooms in, Alt-click out, drag a box to zoom to it; Ctrl-wheel zooms anywhere"));
-    hint->setStyleSheet(hintStyle());
-    h->addWidget(separator());
-    h->addWidget(hint);
     h->addStretch();
     return w;
 }
@@ -489,10 +453,6 @@ QWidget* ToolOptionsBar::buildZoomOptions() {
 QWidget* ToolOptionsBar::buildEyedropperOptions() {
     QWidget* w = row();
     auto* h = layoutOf(w);
-    auto* hint = new QLabel(tr("Click sets the foreground colour, Alt-click the background"));
-    hint->setStyleSheet(hintStyle());
-    h->addWidget(separator());
-    h->addWidget(hint);
     h->addStretch();
     return w;
 }
