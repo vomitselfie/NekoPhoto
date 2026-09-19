@@ -426,7 +426,13 @@ void AutomationServer::registerHandlers() {
         if (!QFileInfo::exists(path)) fail("no such file: " + path, invalidParams);
         w->openPath(path);
         EditorSession* s = session();
-        return QJsonObject{{"tab", w->currentTabIndex()}, {"title", s->title()}, {"width", s->hasDocument() ? s->document()->width : 0}, {"height", s->hasDocument() ? s->document()->height : 0}};
+        QJsonObject out{{"tab", w->currentTabIndex()}, {"title", s->title()}, {"width", s->hasDocument() ? s->document()->width : 0}, {"height", s->hasDocument() ? s->document()->height : 0}};
+        if (path.endsWith(".psd", Qt::CaseInsensitive) || path.endsWith(".psb", Qt::CaseInsensitive)) {
+            if (!s->hasDocument()) fail("the Photoshop file could not be imported");
+            out["layers"] = int(s->document()->layers.size());
+            out["notes"] = QJsonArray::fromStringList(w->lastImportNotes());
+        }
+        return out;
     });
     add("document.import", [w](const QJsonObject& p) {
         // An image file as a new layer (a first import creates the canvas).

@@ -43,6 +43,9 @@ class MainWindow : public QMainWindow {
 public:
     MainWindow();
     void openPath(const QString& path);
+    /// Imports a PSD/PSB into a new tab; the notes say what was left behind.
+    void openPhotoshopFile(const QString& path);
+    const QStringList& lastImportNotes() const { return lastImportNotes_; }
     EditorSession* session() const { return session_; }
 
     // For the automation socket (Automation.cpp).
@@ -119,6 +122,7 @@ private:
     QLabel* automationLabel_ = nullptr;
     QAction* mergeAction_ = nullptr;
     QAction* editTextAction_ = nullptr;
+    QStringList lastImportNotes_;   // what the last PSD import could not carry, for automation callers
 
     std::vector<Tab> tabs_;
     int current_ = -1;

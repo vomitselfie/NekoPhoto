@@ -3,6 +3,7 @@
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PNG REQUIRED IMPORTED_TARGET libpng)
+pkg_check_modules(ZLIB REQUIRED IMPORTED_TARGET zlib)
 
 # OpenCV's DNN module runs the Remove Background model. Optional: without it the
 # refinement still builds and the menu item explains what's missing.
@@ -48,6 +49,7 @@ add_library(compositor_core STATIC
     src/resample.cpp
     src/heal.cpp
     src/inpaint.cpp
+    src/psd.cpp
     src/subject.cpp
     src/png.cpp
     src/project.cpp
@@ -67,7 +69,7 @@ target_include_directories(compositor_core
 )
 target_link_libraries(compositor_core
     PUBLIC compositor::pixels
-    PRIVATE PkgConfig::PNG compositor_warnings
+    PRIVATE PkgConfig::PNG PkgConfig::ZLIB compositor_warnings
 )
 target_compile_definitions(compositor_core PRIVATE _USE_MATH_DEFINES)
 if(COMPOSITOR_HAVE_OPENCV)

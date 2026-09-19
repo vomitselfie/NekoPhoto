@@ -41,7 +41,7 @@ EditorSession::EditorSession(QObject* parent) : QObject(parent) {
 
 QString EditorSession::title() const {
     if (!document_) return QStringLiteral("compositor-linux");
-    QString name = projectPath_.isEmpty() ? QStringLiteral("Untitled") : QFileInfo(projectPath_).completeBaseName();
+    QString name = !projectPath_.isEmpty() ? QFileInfo(projectPath_).completeBaseName() : !importedName_.isEmpty() ? importedName_ : QStringLiteral("Untitled");
     return name + (isModified() ? QStringLiteral(" *") : QString());
 }
 
@@ -114,6 +114,23 @@ bool EditorSession::openProject(const QString& path, QString* error) {
     notifyDocument();
     emit selectionChanged();
     return true;
+}
+
+void EditorSession::adoptDocument(const Document& document, const QString& name) {
+    commitTransform();
+    document_ = document;
+    std::optional<Uuid> active;
+    for (auto it = document_->layers.rbegin(); it != document_->layers.rend(); ++it) if (!it->isGroup) { active = it->id; break; }
+    setActiveLayer(active);
+    projectPath_.clear();
+    importedName_ = name;
+    history_.reset();
+    viewport.fit({double(document_->width), double(document_->height)});
+    emit viewportChanged();
+    emit projectPathChanged();
+    emit titleChanged();
+    notifyDocument();
+    emit selectionChanged();
 }
 
 bool EditorSession::saveProject(const QString& path, QString* error) {

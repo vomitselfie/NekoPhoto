@@ -46,3 +46,7 @@ if(TARGET Qt6::Core)
     target_link_libraries(font_group_tests PRIVATE Qt6::Core compositor_warnings)
     add_test(NAME font_group_tests COMMAND font_group_tests)
 endif()
+
+add_executable(psd_tests psd_tests.cpp)
+target_link_libraries(psd_tests PRIVATE compositor::core compositor_warnings)
+add_test(NAME psd_tests COMMAND psd_tests)

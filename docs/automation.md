@@ -100,7 +100,8 @@ instead of returning base64), `layers.render` (one layer's pixels),
 `screenshot` (the canvas as shown, or the `window`).
 
 Documents: `tabs.select`, `tabs.new`, `tabs.close`, `document.new`,
-`document.open` (.comp or an image), `document.import` (an image as a layer),
+`document.open` (.comp, a Photoshop .psd/.psb, which answers with `layers` and the import
+`notes`, or an image), `document.import` (an image as a layer),
 `document.save`, `document.export` (.png or .jpg), `document.close`.
 
 Layers: `layers.select`, `layers.set` (name, visible, opacity, blend, sampling,

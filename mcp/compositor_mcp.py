@@ -202,7 +202,7 @@ def document_new(width: int = 1920, height: int = 1080, resolution: float = 72) 
 
 @mcp.tool()
 def document_open(path: str) -> str:
-    """Open a .comp project (in its own tab) or an image file (as a layer; a first image creates the canvas)."""
+    """Open a .comp project (in its own tab), a Photoshop .psd/.psb (in its own tab, with its layers; the reply lists what could not be carried), or an image file (as a layer; a first image creates the canvas)."""
     return text(call("document.open", path=os.path.abspath(path)))
 
 

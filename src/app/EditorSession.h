@@ -370,6 +370,10 @@ public:
     void fitView();
     void zoomTo(double zoom, std::optional<QPointF> anchor = std::nullopt);
     /// The overrides the renderer needs while an edit is in progress.
+    /// Takes an imported document (a PSD, say) as this session's, titled `name`, with no project path yet.
+    void adoptDocument(const compositor::Document& document, const QString& name);
+    /// The name an imported document carries while it has no project path.
+    const QString& importedName() const { return importedName_; }
     compositor::Overrides renderOverrides() const;
     /// Bumped on every document notification; what render caches key on.
     uint64_t documentRevision() const { return documentRevision_; }
@@ -435,6 +439,7 @@ private:
     bool visibilitySwipe_ = false;
     /// Bumped on every document notification; cheap change detection for caches.
     uint64_t documentRevision_ = 0;
+    QString importedName_;   // the title of a document that came from an import and has no project path
     std::shared_ptr<const compositor::Image> cloneSample_;
     bool cloneSampleAll_ = false;
     compositor::Uuid cloneSampleLayer_;

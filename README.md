@@ -47,6 +47,7 @@ type into `/usr/local`.
 - Levels, curves, hue/saturation, exposure, gradient map, grain, blurs, noise
 - Remove Background with a local model, if you turn it on in Preferences
 - Text layers in any installed font, editable until painted on
+- Opens Photoshop PSD files with their layers, folders, masks and blend modes
 - The G'MIC filter library (700+ filters) through Filter > G'MIC, when `gmic` is installed
 - Multiple projects in tabs; PNG and JPEG export
 - The keyboard shortcuts you already know

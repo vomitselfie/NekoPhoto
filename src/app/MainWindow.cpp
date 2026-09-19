@@ -9,6 +9,7 @@
 #include "FilterDialog.h"
 #include "GmicDialog.h"
 #include "TextDialog.h"
+#include "compositor/psd.h"
 #include "ColorSwatches.h"
 #include "Icons.h"
 #include "ModelStore.h"
@@ -62,6 +63,7 @@ QString imageFilter() {
 }
 
 bool isProjectPath(const QString& path) { return path.endsWith(".comp", Qt::CaseInsensitive) && QFileInfo(path).isDir(); }
+bool isPhotoshopPath(const QString& path) { return path.endsWith(".psd", Qt::CaseInsensitive) || path.endsWith(".psb", Qt::CaseInsensitive); }
 
 } // namespace
 
@@ -298,7 +300,8 @@ void MainWindow::connectSession() {
 void MainWindow::refreshTabTitles() {
     for (size_t i = 0; i < tabs_.size(); i++) {
         Tab& tab = tabs_[i];
-        QString name = tab.session->projectPath().isEmpty() ? tab.defaultName : QFileInfo(tab.session->projectPath()).completeBaseName();
+        QString name = !tab.session->projectPath().isEmpty() ? QFileInfo(tab.session->projectPath()).completeBaseName()
+                     : !tab.session->importedName().isEmpty() ? tab.session->importedName() : tab.defaultName;
         if (tab.session->isModified()) name += " *";
         tabBar_->setTabText(int(i), name);
         tabBar_->setTabToolTip(int(i), tab.session->projectPath());
@@ -432,6 +435,12 @@ void MainWindow::buildMenus() {
     QMenu* file = menuBar()->addMenu(tr("&File"));
     file->addAction(tr("&New…"), QKeySequence::New, this, &MainWindow::newDocument);
     file->addAction(tr("&Open Project…"), QKeySequence::Open, this, &MainWindow::openProject);
+    file->addAction(tr("Open &Photoshop File…"), this, [this] {
+        QString path = QFileDialog::getOpenFileName(this, tr("Open Photoshop File"), QSettings().value("lastDir").toString(), tr("Photoshop files (*.psd *.psb)"));
+        if (path.isEmpty()) return;
+        QSettings().setValue("lastDir", QFileInfo(path).path());
+        openPhotoshopFile(path);
+    });
     recentMenu_ = file->addMenu(tr("Open &Recent"));
     file->addAction(tr("&Import Images…"), QKeySequence("Ctrl+Shift+O"), this, &MainWindow::importImages);
     file->addSeparator();
@@ -766,6 +775,7 @@ void MainWindow::newDocument() {
 }
 
 void MainWindow::openPath(const QString& path) {
+    if (isPhotoshopPath(path)) { openPhotoshopFile(path); return; }
     if (isProjectPath(path)) {
         QString canonical = QFileInfo(path).canonicalFilePath();
         for (size_t i = 0; i < tabs_.size(); i++)
@@ -782,6 +792,29 @@ void MainWindow::openPath(const QString& path) {
         return;
     }
     importFile(path);
+}
+
+void MainWindow::openPhotoshopFile(const QString& path) {
+    // The import reads the whole file; a big one takes a moment.
+    QApplication::setOverrideCursor(Qt::BusyCursor);
+    std::string error;
+    auto imported = compositor::importPsd(path.toStdString(), &error);
+    QApplication::restoreOverrideCursor();
+    if (!imported) { showError(tr("Couldn’t open %1").arg(QFileInfo(path).fileName()), QString::fromStdString(error)); return; }
+    Tab& tab = addTab(true);
+    tab.session->adoptDocument(imported->document, QFileInfo(path).completeBaseName());
+    addRecent(path);
+    lastImportNotes_.clear();
+    for (const std::string& note : imported->notes) lastImportNotes_ << QString::fromStdString(note);
+    if (!lastImportNotes_.isEmpty() && isVisible()) {
+        auto* box = new QMessageBox(QMessageBox::Information, tr("Imported %1").arg(QFileInfo(path).fileName()),
+            tr("%n layer(s) imported. Some things Photoshop keeps have no counterpart here:", nullptr, int(imported->document.layers.size())), QMessageBox::Ok, this);
+        box->setDetailedText(lastImportNotes_.join('\n'));
+        box->setInformativeText(lastImportNotes_.mid(0, 6).join('\n') + (lastImportNotes_.size() > 6 ? tr("\n… and %n more (see Details).", nullptr, lastImportNotes_.size() - 6) : QString()));
+        box->setAttribute(Qt::WA_DeleteOnClose);
+        box->setModal(false);
+        box->show();
+    }
 }
 
 void MainWindow::openProject() {
