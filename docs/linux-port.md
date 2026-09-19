@@ -51,6 +51,10 @@ and `rcc` for shells that cannot execute binaries under `/usr/lib`.
 
 `compositor-linux --download-model isnet` fetches a model without the GUI (into
 `COMPOSITOR_MODEL_DIR` when set); `--preferences` opens the Preferences dialog;
+One editor per user: a launch that carries only file names (a double-click in
+the file manager, `compositor-linux photo.psd`) hands them to the running
+editor, which opens them as tabs and raises its window, and quits;
+`--new-window` keeps a separate process, as any of the options below does.
 `--tool brush` (or any tool name from `--help`) selects a tool, and `--dialog new`
 (or canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map,
 grain, blur, motion-blur, noise, lens, gmic, background, text, fonts) opens that
@@ -92,7 +96,8 @@ Notes fold), lists filters under the catalogue's folders, shows the resulting
 command line, and previews on a reduced copy. Filters that change the
 image size are rejected. Over automation: `pixels.gmic` and `gmic.filters`.
 
-When the build finds libgmic (`COMPOSITOR_WITH_LIBGMIC`, on by default), setting
+When the build is configured with `-DCOMPOSITOR_WITH_LIBGMIC=ON` and finds libgmic (off by
+default, so an installed binary never depends on a library that a later upgrade may remove), setting
 `COMPOSITOR_GMIC_INPROCESS=1` runs filters in-process through one interpreter
 kept warm with the catalogue's commands, with no PNG round trip (12 MP through
 the executable costs about six seconds of encode and decode). It stays opt-in

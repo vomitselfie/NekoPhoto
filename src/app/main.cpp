@@ -8,6 +8,7 @@
 #include "FilterDialog.h"
 #include "GmicDialog.h"
 #include "FontPicker.h"
+#include "SingleInstance.h"
 #include "ImageConvert.h"
 #include <QDialog>
 #include <cstdio>
@@ -215,6 +216,8 @@ int main(int argc, char** argv) {
     parser.addOption(headlessOption);
     QCommandLineOption callOption("call", "Send one request to a running instance's socket and print the result: --call layers.list [--params '{...}']. Exit 1 on an error reply, 2 when nothing is listening.", "method");
     QCommandLineOption paramsOption("params", "JSON object of parameters for --call.", "json");
+    QCommandLineOption newWindow("new-window", "Open in a separate process instead of handing the files to the running editor.");
+    parser.addOption(newWindow);
     QCommandLineOption batchOption("batch", "Run JSON-RPC requests from <file> (one object per line; '-' is stdin) in this instance and print one response per line, then quit. Pairs with --headless.", "file");
     parser.addOption(callOption);
     parser.addOption(paramsOption);
@@ -267,8 +270,16 @@ int main(int argc, char** argv) {
             }
         }
     }
+    // One editor per user: a launch that carries nothing but file names hands them to the running editor and
+    // quits; anything that asks for a process of its own (screenshots, automation, --new-window) keeps one.
+    QStringList handoff;
+    for (const QString& path : parser.positionalArguments()) handoff << QDir::current().absoluteFilePath(path);
+    const bool ownProcess = parser.isSet(newWindow) || parser.isSet(screenshot) || parser.isSet(headlessOption) || parser.isSet(batchOption) || parser.isSet(dialogOption) || parser.isSet(saveAs) || parser.isSet(prefs) || parser.isSet(demo) || parser.isSet(toolOption);
+    if (!ownProcess && app::SingleInstance::handOff(handoff)) return 0;
     app::MainWindow window;
     window.show();
+    app::SingleInstance instance;
+    if (!ownProcess) instance.serve(window);   // best effort; without it the window still runs
     if (parser.isSet(batchOption)) {
         // Requests from a file, handled in this instance without a socket; responses one per line.
         app::AutomationServer server(&window);

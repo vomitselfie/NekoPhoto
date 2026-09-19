@@ -778,6 +778,12 @@ void MainWindow::newDocument() {
     tab.session->createDocument(options->width, options->height, options->resolution, true);
 }
 
+void MainWindow::openAsDocument(const QString& path) {
+    if (isPhotoshopPath(path) || isProjectPath(path)) { openPath(path); return; }
+    QString error;
+    if (!openImageAsDocument(path, &error)) showError(tr("Couldn’t open the file"), error.isEmpty() ? path : error);
+}
+
 void MainWindow::openPath(const QString& path) {
     if (isPhotoshopPath(path)) { openPhotoshopFile(path); return; }
     if (isProjectPath(path)) {

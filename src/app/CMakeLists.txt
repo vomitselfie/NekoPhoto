@@ -57,6 +57,7 @@ qt_add_executable(compositor-linux
     TextDialog.cpp
     FontPicker.h
     FontPicker.cpp
+    SingleInstance.cpp
     FontGroups.h
     FontGroups.cpp
     Automation.h
@@ -77,7 +78,10 @@ qt_add_executable(compositor-linux
 
 target_compile_definitions(compositor-linux PRIVATE COMPOSITOR_VERSION="${COMPOSITOR_VERSION_STRING}")
 target_link_libraries(compositor-linux PRIVATE compositor::core Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Svg compositor_warnings)
-option(COMPOSITOR_WITH_LIBGMIC "Run G'MIC filters in-process through libgmic when it is installed" ON)
+# Off by default: linking libgmic makes it a hard dependency of the binary, and an installed build then
+# refuses to start once the library is upgraded or removed, while the gmic executable serves the same
+# filters. In-process G'MIC is for people who build with it on and keep libgmic around.
+option(COMPOSITOR_WITH_LIBGMIC "Run G'MIC filters in-process through libgmic when it is installed" OFF)
 if(COMPOSITOR_WITH_LIBGMIC)
     find_path(GMIC_INCLUDE_DIR gmic.h)
     find_library(GMIC_LIBRARY gmic)

@@ -43,6 +43,9 @@ class MainWindow : public QMainWindow {
 public:
     MainWindow();
     void openPath(const QString& path);
+    /// A file handed over from another launch: a project or PSD as `openPath` does, an image as a document of
+    /// its own rather than a layer of the current one (a double-click in the file manager means "open this").
+    void openAsDocument(const QString& path);
     /// Imports a PSD/PSB into a new tab; the notes say what was left behind.
     void openPhotoshopFile(const QString& path);
     const QStringList& lastImportNotes() const { return lastImportNotes_; }

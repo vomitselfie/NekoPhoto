@@ -46,7 +46,7 @@ The full feature list. It mirrors the Mac app's, with Linux key names.
 - Live previews, limited to the selection when there is one
 
 ## Canvas and files
-- Multiple projects in tabs
+- Multiple projects in tabs; a file opened from the file manager while the editor runs becomes a tab in the running window (`--new-window` for a separate one)
 - Rulers (Ctrl+R), pixel grid when zoomed in, sharp downsampling when zoomed out
 - Crop with snapping and ratio presets; Alt for symmetric cropping
 - Canvas Size (with anchor and relative mode) and Image Size (with scale and resampling choice: Lanczos-3, triangle or nearest)
