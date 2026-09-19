@@ -912,7 +912,8 @@ void MainWindow::dropEvent(QDropEvent* e) {
         for (auto& url : e->mimeData()->urls()) {
             if (!url.isLocalFile()) continue;
             QString path = url.toLocalFile();
-            if (isProjectPath(path)) openPath(path); else importFile(path, at);
+            // Projects and Photoshop files open in their own tab; anything else lands as a layer where it was dropped.
+            if (isProjectPath(path) || isPhotoshopPath(path)) openPath(path); else importFile(path, at);
         }
         e->acceptProposedAction();
         return;

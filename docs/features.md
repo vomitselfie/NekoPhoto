@@ -50,7 +50,7 @@ The full feature list. It mirrors the Mac app's, with Linux key names.
 - Crop with snapping and ratio presets; Alt for symmetric cropping
 - Canvas Size (with anchor and relative mode) and Image Size (with scale and resampling choice: Lanczos-3, triangle or nearest)
 - Import JPEG, PNG, TIFF and WebP, including dropped images from other apps
-- Open Photoshop PSD and PSB files: layers with names, positions, opacity, blend modes, visibility, folders, clipping and masks; Levels, Curves, Hue/Saturation, Exposure and Gradient Map adjustment layers become ours; solid fills, text and smart objects arrive as pixels; 16- and 32-bit files are reduced to 8 bits; anything left behind (layer styles, vector masks, other adjustments) is listed after the import
+- Open Photoshop PSD and PSB files (File > Open Photoshop File…, or drop one on the window): layers with names, positions, opacity, blend modes, visibility, folders, clipping and masks; Levels, Curves, Hue/Saturation, Exposure and Gradient Map adjustment layers become ours; solid fills, text and smart objects arrive as pixels; 16- and 32-bit files are reduced to 8 bits; anything left behind (layer styles, vector masks, other adjustments) is listed after the import
 - Export PNG, or JPEG with a live preview; Copy Merged
 - `.comp` projects open in the Mac app and vice versa
 - Photoshop-style keyboard shortcuts throughout; `docs/linux-port.md` lists them

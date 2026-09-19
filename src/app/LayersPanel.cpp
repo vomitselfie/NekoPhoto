@@ -136,11 +136,13 @@ QMimeData* LayerTree::mimeData(const QList<QTreeWidgetItem*>& items) const {
 }
 
 void LayerTree::dragEnterEvent(QDragEnterEvent* event) {
+    if (event->mimeData()->hasUrls()) { event->ignore(); return; }   // files dropped here are the window's to open
     if (event->mimeData()->hasFormat("application/x-compositor-linux-mask")) { event->acceptProposedAction(); return; }
     QTreeWidget::dragEnterEvent(event);
 }
 
 void LayerTree::dragMoveEvent(QDragMoveEvent* event) {
+    if (event->mimeData()->hasUrls()) { event->ignore(); return; }
     if (event->mimeData()->hasFormat("application/x-compositor-linux-mask")) { event->acceptProposedAction(); return; }
     QTreeWidget::dragMoveEvent(event);
 }
