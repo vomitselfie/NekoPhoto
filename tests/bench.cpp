@@ -11,11 +11,13 @@
 #include "compositor/wand.h"
 #include "compositor/resample.h"
 #include "compositor/heal.h"
+#include "compositor/inpaint.h"
 #include "compositor/subject.h"
 #include "compositor/render.h"
 #include "compositor/selection.h"
 extern "C" {
 #include "HealPixels.h"
+#include "ContentFill.h"
 }
 #include <chrono>
 #include <cstdio>
@@ -155,6 +157,20 @@ int main(int argc, char** argv) {
             report(name, timeMs([&] { img = base; spotHeal(img, coverage, 1.0f, 1, 1); }));
             std::snprintf(name, sizeof name, "spot heal %d px (C reference)", r * 2);
             report(name, timeMs([&] { img = base; spot_heal(img.data(), coverage.data(), size_t(W), size_t(H), size_t(img.stride()), 1.0f, 0, 1); }, r > 100 ? 1 : 2));
+        }
+    }
+    if (want("fill")) {
+        for (int side : {200, 600}) {
+            GrayImage hole(W, H, 0);
+            for (int y = H / 2 - side / 2; y < H / 2 + side / 2; y++) for (int x = W / 2 - side / 2; x < W / 2 + side / 2; x++) hole.at(x, y) = 255;
+            Image img = base;
+            char name[64];
+            std::snprintf(name, sizeof name, "content fill %dx%d", side, side);
+            report(name, timeMs([&] { img = base; contentFill(img, hole); }, side > 300 ? 1 : 2));
+            if (side <= 200) {
+                std::snprintf(name, sizeof name, "content fill %dx%d (C reference)", side, side);
+                report(name, timeMs([&] { img = base; content_fill(img.data(), size_t(img.stride()), hole.data(), size_t(hole.stride()), W, H); }, 1));
+            }
         }
     }
     if (want("brush")) {

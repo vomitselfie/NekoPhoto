@@ -47,6 +47,7 @@ add_library(compositor_core STATIC
     src/wand.cpp
     src/resample.cpp
     src/heal.cpp
+    src/inpaint.cpp
     src/subject.cpp
     src/png.cpp
     src/project.cpp

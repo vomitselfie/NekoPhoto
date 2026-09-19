@@ -26,7 +26,7 @@ The full feature list. It mirrors the Mac app's, with Linux key names.
 - Magic Wand tolerance, contiguous, sample all layers, and Sample Size (point, 3 by 3, 5 by 5)
 - Expand, Contract, Feather (Shift+F6), Smooth, Border and Invert, with Photoshop's circular kernels; load a layer's pixels or a mask as a selection
 - Delete or Backspace clears the selected pixels
-- Content-Aware Fill, which can also extend an image past its edges
+- Content-Aware Fill (PatchMatch synthesis, so edges and patterns continue), which can also extend an image past its edges
 
 ## Painting and retouching
 - Brush with size, hardness and opacity, `[` and `]` for size, digits for opacity, Shift for straight lines

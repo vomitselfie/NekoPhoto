@@ -8,9 +8,7 @@
 #include <algorithm>
 #include <map>
 
-extern "C" {
-#include "ContentFill.h"
-}
+#include "compositor/inpaint.h"
 #include "compositor/wand.h"
 #include <QApplication>
 #include <QClipboard>
@@ -2000,8 +1998,7 @@ bool EditorSession::contentAwareFill(QString* errorText) {
     auto coverage = selectionOnGrid(grown, source->width(), source->height());
     if (!coverage) { if (errorText) *errorText = tr("Select an area to fill."); return false; }
     auto out = std::make_shared<Image>(*source);
-    int result = content_fill(out->data(), size_t(out->stride()), coverage->data(), size_t(coverage->stride()), out->width(), out->height());
-    if (result != 1) { if (errorText) *errorText = tr("Not enough unselected, opaque image pixels to synthesize a fill. Use a smaller selection with some surrounding image."); return false; }
+    if (!contentFill(*out, *coverage)) { if (errorText) *errorText = tr("Not enough unselected, opaque image pixels to synthesize a fill. Use a smaller selection with some surrounding image."); return false; }
     LayerTransform placed;
     auto trimmed = trimToPixels(*out, grown, placed);
     commitPixels(trimmed, placed, "Content-Aware Fill");

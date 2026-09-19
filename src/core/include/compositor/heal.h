@@ -15,10 +15,10 @@ namespace compositor {
 void membraneFill(float* values, int channels, const uint8_t* hole, const uint8_t* known, int width, int height);
 
 /// Spot healing in place over premultiplied RGBA; `coverage` (the image's size) marks the spot.
-/// Mode 0, Content-Aware, copies the nearby patch whose surrounding ring best matches the spot's; mode 1,
-/// Create Texture, fills smoothly and adds grain matching the detail around it; mode 2, Proximity Match,
-/// takes the closest good patch. Copied texture is membrane-blended to meet the surrounding tone, and the
-/// result replaces the original by coverage x opacity.
+/// Mode 0, Content-Aware, synthesises the spot from its surroundings (compositor/inpaint.h) so edges continue
+/// through it; mode 1, Create Texture, fills smoothly and adds grain matching the detail around it; mode 2,
+/// Proximity Match, copies the closest nearby patch whose surrounding ring matches the spot's. Copied texture
+/// is membrane-blended to meet the surrounding tone, and the result replaces the original by coverage x opacity.
 void spotHeal(Image& image, const GrayImage& coverage, float opacity, int mode, uint32_t seed);
 
 } // namespace compositor

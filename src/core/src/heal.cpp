@@ -1,4 +1,5 @@
 #include "compositor/heal.h"
+#include "compositor/inpaint.h"
 #include "compositor/parallel.h"
 #include <algorithm>
 #include <cmath>
@@ -134,6 +135,58 @@ double ringScore(const Image& image, const std::vector<uint8_t>& role, int wx0, 
     return n ? sum / n : INFINITY;
 }
 
+/// Content-Aware healing: the spot and a thin band around it are synthesised from the surroundings (so
+/// edges and patterns continue through it), then the band's difference from the original is spread across
+/// the spot, the membrane, so the tone matches. False when there is nothing to synthesise from.
+bool healBySynthesis(Image& image, const GrayImage& coverage, const PixelBounds& b, float opacity, uint32_t seed) {
+    const int W = image.width(), H = image.height(), band = 2;
+    GrayImage grown(W, H, 0);
+    for (int y = std::max(0, b.y0 - band); y < std::min(H, b.y1 + band); y++)
+        for (int x = std::max(0, b.x0 - band); x < std::min(W, b.x1 + band); x++) {
+            bool near = false;
+            for (int j = -band; j <= band && !near; j++)
+                for (int i = -band; i <= band && !near; i++) {
+                    const int sx = x + i, sy = y + j;
+                    near = sx >= 0 && sy >= 0 && sx < W && sy < H && coverage.at(sx, sy) != 0;
+                }
+            grown.at(x, y) = near ? 255 : 0;
+        }
+    Image synthesised = image;
+    InpaintOptions options;
+    options.seed = seed;
+    if (!contentFill(synthesised, grown, options)) return false;
+    // The membrane over the spot, from the band where both the original and the synthesis are known.
+    const int x0 = std::max(0, b.x0 - band - 1), y0 = std::max(0, b.y0 - band - 1);
+    const int x1 = std::min(W, b.x1 + band + 1), y1 = std::min(H, b.y1 + band + 1);
+    const int ww = x1 - x0, wh = y1 - y0;
+    std::vector<float> values(size_t(ww) * wh * 4, 0.0f);
+    std::vector<uint8_t> hole(size_t(ww) * wh, 0), known(size_t(ww) * wh, 0);
+    for (int y = 0; y < wh; y++)
+        for (int x = 0; x < ww; x++) {
+            const size_t p = size_t(y) * ww + size_t(x);
+            const int ix = x0 + x, iy = y0 + y;
+            if (coverage.at(ix, iy)) { hole[p] = 1; continue; }
+            if (!grown.at(ix, iy) || image.pixel(ix, iy)[3] != 255) continue;
+            known[p] = 1;
+            for (int c = 0; c < 4; c++) values[p * 4 + size_t(c)] = float(image.pixel(ix, iy)[c]) - float(synthesised.pixel(ix, iy)[c]);
+        }
+    membraneFill(values.data(), 4, hole.data(), known.data(), ww, wh);
+    for (int y = 0; y < wh; y++)
+        for (int x = 0; x < ww; x++) {
+            const size_t p = size_t(y) * ww + size_t(x);
+            if (!hole[p]) continue;
+            const int ix = x0 + x, iy = y0 + y;
+            uint8_t* t = image.pixel(ix, iy);
+            const uint8_t* s = synthesised.pixel(ix, iy);
+            const double amount = coverage.at(ix, iy) / 255.0 * opacity;
+            double out[4];
+            for (int c = 0; c < 4; c++) out[c] = t[c] + (s[c] + values[p * 4 + size_t(c)] - t[c]) * amount;
+            t[3] = uint8_t(std::lround(std::clamp(out[3], 0.0, 255.0)));
+            for (int c = 0; c < 3; c++) t[c] = uint8_t(std::lround(std::clamp(out[c], 0.0, double(t[3]))));
+        }
+    return true;
+}
+
 } // namespace
 
 void membraneFill(float* values, int channels, const uint8_t* hole, const uint8_t* known, int width, int height) {
@@ -162,6 +215,7 @@ void spotHeal(Image& image, const GrayImage& coverage, float opacity, int mode, 
     const int W = image.width(), H = image.height();
     PixelBounds b = nonzeroBounds(coverage);
     if (b.isEmpty()) return;
+    if (mode == 0 && healBySynthesis(image, coverage, b, opacity, seed)) return;
     const int size = std::max(b.x1 - b.x0, b.y1 - b.y0);
     const int ring = std::clamp(size / 8, 2, 16);
     // Work box: the spot plus its ring, clipped to the image.
@@ -191,8 +245,8 @@ void spotHeal(Image& image, const GrayImage& coverage, float opacity, int mode, 
     for (uint8_t r : role) ringCount += r == Ring;
     if (!ringCount) return;
 
-    // Source patch for Content-Aware and Proximity Match: 24 directions at a few distances, the nearer winning
-    // ties, then a fine alignment so repeating texture lines up.
+    // Source patch for Proximity Match (and Content-Aware when there was nothing to synthesise from): 24
+    // directions at a few distances, the nearer winning ties, then a fine alignment so repeating texture lines up.
     int ox = 0, oy = 0;
     bool haveSource = false;
     if (mode != 1) {

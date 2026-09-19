@@ -1,12 +1,14 @@
 // The mean-value membrane against exact cases and the reference solver, and spot healing end to end.
 #include "check.h"
 #include "compositor/heal.h"
+#include "compositor/inpaint.h"
 #include <cmath>
 #include <cstring>
 #include <random>
 #include <vector>
 extern "C" {
 #include "HealPixels.h"
+#include "ContentFill.h"
 }
 
 using namespace compositor;
@@ -74,6 +76,7 @@ TEST_CASE(spot_heal_matches_the_reference_on_a_flat_field) {
     GrayImage coverage(w, h, 0);
     for (int y = 27; y < 37; y++) for (int x = 27; x < 37; x++) coverage.at(x, y) = 255;
     for (int mode : {0, 1, 2}) {
+        // Modes 1 and 2 follow the reference's method; Content-Aware synthesises, which on a flat field is flat too.
         Image mine = ours, reference = ours;
         spotHeal(mine, coverage, 1.0f, mode, 1234);
         REQUIRE(spot_heal(reference.data(), coverage.data(), size_t(w), size_t(h), size_t(reference.stride()), 1.0f, mode, 1234) == 0);
@@ -93,14 +96,53 @@ TEST_CASE(spot_heal_carries_texture_and_tone) {
     for (int y = 44; y < 52; y++) for (int x = 44; x < 52; x++) { uint8_t* p = img.pixel(x, y); p[0] = p[1] = p[2] = 0; }
     GrayImage coverage(w, h, 0);
     for (int y = 43; y < 53; y++) for (int x = 43; x < 53; x++) coverage.at(x, y) = 255;
-    spotHeal(img, coverage, 1.0f, 0, 7);
-    for (int y = 44; y < 52; y++) CHECK(std::abs(int(img.pixel(48, y)[0]) - (40 + y * 2)) <= 4);
+    for (int mode : {0, 2}) {
+        Image copy = img;
+        spotHeal(copy, coverage, 1.0f, mode, 7);
+        for (int y = 44; y < 52; y++) CHECK(std::abs(int(copy.pixel(48, y)[0]) - (40 + y * 2)) <= 6);
+    }
     // Half opacity leaves the spot half way.
     Image half(w, h);
     half.fill(200, 200, 200, 255);
     for (int y = 44; y < 52; y++) for (int x = 44; x < 52; x++) { uint8_t* p = half.pixel(x, y); p[0] = p[1] = p[2] = 0; }
     spotHeal(half, coverage, 0.5f, 1, 7);
     CHECK(std::abs(int(half.pixel(48, 48)[0]) - 100) <= 12);
+}
+
+TEST_CASE(content_fill_continues_stripes_through_a_hole) {
+    // Vertical stripes of period 8 with a hole in the middle: the synthesis must continue them, which the
+    // reference's greedy onion peel could not.
+    const int w = 160, h = 120;
+    Image img(w, h);
+    auto stripe = [](int x) { return uint8_t((x / 4) % 2 ? 210 : 40); };
+    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) { uint8_t* p = img.pixel(x, y); p[0] = p[1] = p[2] = stripe(x); p[3] = 255; }
+    GrayImage hole(w, h, 0);
+    for (int y = 48; y < 72; y++) for (int x = 68; x < 92; x++) { hole.at(x, y) = 255; uint8_t* p = img.pixel(x, y); p[0] = p[1] = p[2] = 128; }
+    REQUIRE(contentFill(img, hole));
+    int good = 0, total = 0;
+    for (int y = 48; y < 72; y++) for (int x = 68; x < 92; x++, total++) if (std::abs(int(img.pixel(x, y)[0]) - stripe(x)) <= 25) good++;
+    CHECK(good * 10 >= total * 9);
+    CHECK_EQ(int(img.pixel(80, 60)[3]), 255);
+    // Pixels outside the hole are untouched.
+    CHECK_EQ(int(img.pixel(10, 10)[0]), int(stripe(10)));
+    // Nothing known anywhere: no fill.
+    Image empty(w, h);
+    GrayImage all(w, h, 255);
+    CHECK(!contentFill(empty, all));
+    Image transparent(w, h);
+    GrayImage some(w, h, 0);
+    for (int y = 10; y < 20; y++) for (int x = 10; x < 20; x++) some.at(x, y) = 255;
+    CHECK(!contentFill(transparent, some));
+}
+
+TEST_CASE(content_fill_keeps_a_flat_field_flat) {
+    const int w = 96, h = 96;
+    Image img(w, h);
+    img.fill(90, 140, 200, 255);
+    GrayImage hole(w, h, 0);
+    for (int y = 30; y < 66; y++) for (int x = 30; x < 66; x++) { hole.at(x, y) = 255; uint8_t* p = img.pixel(x, y); p[0] = p[1] = p[2] = 0; }
+    REQUIRE(contentFill(img, hole));
+    for (int y = 30; y < 66; y++) for (int x = 30; x < 66; x++) { const uint8_t* p = img.pixel(x, y); CHECK_EQ(int(p[0]), 90); CHECK_EQ(int(p[1]), 140); CHECK_EQ(int(p[2]), 200); CHECK_EQ(int(p[3]), 255); }
 }
 
 TEST_MAIN()

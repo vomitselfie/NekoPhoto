@@ -159,9 +159,10 @@ packaging/                      .desktop, icon, MIME type
 - Brush and eraser with size, hardness and opacity, Shift-click straight
   lines, `[` and `]` for size, painting on masks (white reveals, black hides).
 - Spot Healing Brush (Content-Aware, Create Texture, Proximity Match) and
-  Clone Stamp (aligned or not, sampling one layer or all), both on the
-  existing C healing code; Content-Aware Fill of a selection, growing the
-  layer past its edge when the selection reaches out.
+  Clone Stamp (aligned or not, sampling one layer or all). Content-Aware
+  healing and Content-Aware Fill synthesise from the surroundings with
+  PatchMatch, so edges and patterns continue; the fill grows the layer past
+  its edge when the selection reaches out.
 - Cut, Copy, Copy Merged, Paste (as a new layer, back in place, or centred
   for images from other apps) and Layer via Copy, through the system clipboard.
 - Selections: rectangular and elliptical marquee, freehand and polygonal
