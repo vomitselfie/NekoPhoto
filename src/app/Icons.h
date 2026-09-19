@@ -3,10 +3,13 @@
 // text colour.
 #pragma once
 #include <QApplication>
+#include <algorithm>
+#include <cmath>
 #include <QDebug>
 #include <QSet>
 #include <QFile>
 #include <QIcon>
+#include <QIconEngine>
 #include <QPainter>
 #include <QPalette>
 #include <QPixmap>
@@ -41,19 +44,43 @@ inline QPixmap renderIcon(const QString& name, const QColor& color, int size, do
     return pixmap;
 }
 
-/// An icon for a checkable tool button: palette text normally, highlighted text when checked.
-inline QIcon toolIcon(const QString& name, int size = 20) {
-    QPalette palette = QApplication::palette();
-    QIcon icon;
-    double dpr = qApp->devicePixelRatio();
-    for (double scale : {1.0, 2.0}) {
-        if (scale < dpr && dpr != 2.0) continue;
-        icon.addPixmap(renderIcon(name, palette.color(QPalette::ButtonText), size, scale), QIcon::Normal, QIcon::Off);
-        icon.addPixmap(renderIcon(name, palette.color(QPalette::HighlightedText), size, scale), QIcon::Normal, QIcon::On);
-        icon.addPixmap(renderIcon(name, palette.color(QPalette::HighlightedText), size, scale), QIcon::Active, QIcon::On);
-        icon.addPixmap(renderIcon(name, palette.color(QPalette::HighlightedText), size, scale), QIcon::Selected, QIcon::On);
+/// Renders a bundled SVG at whatever size and scale is asked for, tinted for the mode and state, so
+/// the icon is never empty at unusual scale factors and follows palette changes.
+class TintedSvgIconEngine : public QIconEngine {
+public:
+    explicit TintedSvgIconEngine(QString name) : name_(std::move(name)) {}
+
+    static QColor colorFor(QIcon::Mode mode, QIcon::State state) {
+        QPalette palette = QApplication::palette();
+        if (mode == QIcon::Disabled) return palette.color(QPalette::Disabled, QPalette::ButtonText);
+        if (state == QIcon::On) return palette.color(QPalette::HighlightedText);
+        return palette.color(QPalette::ButtonText);
     }
-    return icon;
-}
+
+    void paint(QPainter* painter, const QRect& rect, QIcon::Mode mode, QIcon::State state) override {
+        double dpr = painter->device() ? painter->device()->devicePixelRatio() : 1.0;
+        int size = std::min(rect.width(), rect.height());
+        QPixmap pm = renderIcon(name_, colorFor(mode, state), size, dpr);
+        painter->drawPixmap(QRect(rect.x() + (rect.width() - size) / 2, rect.y() + (rect.height() - size) / 2, size, size), pm);
+    }
+    QPixmap pixmap(const QSize& size, QIcon::Mode mode, QIcon::State state) override {
+        return renderIcon(name_, colorFor(mode, state), std::min(size.width(), size.height()), 1.0);
+    }
+    QPixmap scaledPixmap(const QSize& size, QIcon::Mode mode, QIcon::State state, qreal scale) override {
+        // `size` is in device pixels; render the logical size at `scale` so the result matches.
+        int logical = std::max(1, int(std::lround(std::min(size.width(), size.height()) / std::max(scale, 0.01))));
+        return renderIcon(name_, colorFor(mode, state), logical, scale);
+    }
+    QSize actualSize(const QSize& size, QIcon::Mode, QIcon::State) override { int s = std::min(size.width(), size.height()); return {s, s}; }
+    QIconEngine* clone() const override { return new TintedSvgIconEngine(name_); }
+    QString key() const override { return QStringLiteral("compositor-tinted-svg"); }
+    QString iconName() override { return name_; }
+
+private:
+    QString name_;
+};
+
+/// An icon for a tool button: palette text normally, highlighted text when checked, at any scale.
+inline QIcon toolIcon(const QString& name, int = 20) { return QIcon(new TintedSvgIconEngine(name)); }
 
 } // namespace app
