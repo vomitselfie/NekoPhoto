@@ -16,8 +16,9 @@ ctest --test-dir build --output-on-failure
 For background-removal work, `build/tests/matte_tool run <image.png> <model.onnx> <dir> --band 20`
 dumps every stage (mask, trimap, chosen samples, band, composite) and `matte_tool eval <dir> <model>`
 scores image/alpha pairs; the model lives under `~/.local/share/compositor-linux/compositor-linux/models`.
-Drive one Remove Background run per headless process when comparing settings: a second `document.open`
-in the same process does not switch the active document, and the socket path must stay under 107 bytes.
+When comparing settings, use one document per headless process: `document.open` on an image with a
+document already open imports it as a layer (File > Open's behaviour), so a second run would work on the
+first document. The RPC socket path must stay under 107 bytes.
 
 CI builds with `-DCOMPOSITOR_WARNINGS_AS_ERRORS=ON` on GCC and Clang and runs
 `tools/rpc_smoke.py` against a headless instance; keep both green. CI's

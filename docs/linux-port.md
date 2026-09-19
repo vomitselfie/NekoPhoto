@@ -190,7 +190,8 @@ packaging/                      .desktop, icon, MIME type
 - Cut, Copy, Copy Merged, Paste (as a new layer, back in place, or centred
   for images from other apps) and Layer via Copy, through the system clipboard.
 - Selections: rectangular and elliptical marquee, freehand and polygonal
-  lasso, magic wand (tolerance, contiguous, sample all layers), add/subtract
+  lasso, magic wand (tolerance, contiguous, sample all layers), quick select
+  by scribble (GrabCut, Q), add/subtract
   with Shift/Alt, move the outline, select all, deselect, inverse, expand,
   contract, fill, clear, crop to selection, mask from selection.
 - Crop tool with snapping to canvas and layer edges, ratio presets and Alt

@@ -95,6 +95,10 @@ def main():
     rpc.call("layers.select", id=target["id"])
     rpc.call("pixels.filter", kind="Gaussian Blur", radius=2)
     rpc.call("pixels.filter", kind="Lens Correction", distortion=20, bicubic=True)
+    if info.get("scribble"):
+        scribble = rpc.call("selection.scribble", foreground=[[[300, 200], [340, 210]]], background=[[[20, 20], [60, 20]]], size=16, clear=True)
+        assert scribble["strokes"] == 2, scribble
+        rpc.call("selection.none")
     rpc.call("selection.rect", x=40, y=40, width=30, height=30)
     rpc.call("pixels.contentAwareFill")
     rpc.call("selection.none")

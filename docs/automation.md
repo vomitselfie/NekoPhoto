@@ -124,7 +124,9 @@ along the edge of a large photo, `detailWindows` at most, default 12), `pixels.g
 command line; `gmic.filters` lists the catalogue with parameters and defaults).
 
 Selection: `selection.all`, `selection.none`, `selection.invert`,
-`selection.rect` (or `ellipse: true`), `selection.polygon`, `selection.wand` (all take
+`selection.rect` (or `ellipse: true`), `selection.polygon`, `selection.wand`,
+`selection.scribble` (`foreground` and `background`: lists of strokes, each a list of `[x, y]`
+points; `size`, `refine` 0..40, `clear`) (all take
 `mode` replace, add, subtract or intersect),
 `selection.fromLayer`, `selection.grow`, `selection.feather` (`radius`), `selection.smooth`
 (`radius`), `selection.border` (`width`).

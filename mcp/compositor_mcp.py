@@ -417,6 +417,12 @@ def selection_wand(x: float, y: float, tolerance: int = 32, contiguous: bool = T
 
 
 @mcp.tool()
+def selection_scribble(foreground: Optional[list[list[list[float]]]] = None, background: Optional[list[list[list[float]]]] = None, size: int = 24, refine: int = 8, clear: bool = True, mode: str = "replace") -> str:
+    """Quick Select by scribble: strokes over the subject and over the background (each a list of [x, y] points, size pixels wide) segment the subject on the flattened document with GrabCut, refined onto the image's edges (refine 0..40); clear forgets earlier strokes first."""
+    return text(call("selection.scribble", foreground=foreground or [], background=background or [], size=size, refine=refine, clear=clear, mode=mode))
+
+
+@mcp.tool()
 def selection_from_layer(id: str, mask: bool = False, mode: str = "replace") -> str:
     """Load a layer's opaque pixels (or its mask) as the selection."""
     return text(call("selection.fromLayer", id=id, mask=mask, mode=mode))

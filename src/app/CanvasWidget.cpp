@@ -66,6 +66,7 @@ CanvasWidget::CanvasWidget(EditorSession* session, QWidget* parent) : QWidget(pa
     });
     connect(session_, &EditorSession::layersChanged, this, [this] { update(); });
     connect(session_, &EditorSession::selectionChanged, this, [this] { refreshSelectionOutline(); update(); });
+    connect(session_, &EditorSession::scribblesChanged, this, [this] { update(); });
     connect(session_, &EditorSession::viewportChanged, this, [this] { cacheValid_ = false; update(); });
     connect(session_, &EditorSession::toolChanged, this, [this] {
         if (session_->tool() != Tool::Crop) crop_.reset();
@@ -204,6 +205,7 @@ void CanvasWidget::drawOverlays(QPainter& painter) {
         for (int y = y0; y <= y1; y++) { double vy = docView.top() + y * ppp; painter.drawLine(QPointF(visible.left(), vy), QPointF(visible.right(), vy)); }
     }
     drawSelectionAnts(painter);
+    drawScribbles(painter);
     const Layer* active = session_->activeLayer();
     if (active && boxShown()) {
         bool distorting = session_->transformEdit() && session_->transformEdit()->corners;
@@ -312,6 +314,29 @@ void CanvasWidget::drawRasterAnts(QPainter& painter, const GrayImage& coverage) 
     painter.drawImage(0, 0, ants);
 }
 
+void CanvasWidget::drawScribbles(QPainter& painter) {
+    if (session_->tool() != Tool::Scribble || !session_->hasDocument()) return;
+    const double zoom = session_->viewport.zoom;
+    auto stroke = [&](const std::vector<QPointF>& points, double size, bool background) {
+        if (points.empty()) return;
+        QPen pen(background ? QColor(230, 60, 60, 120) : QColor(60, 200, 90, 120));
+        pen.setWidthF(std::max(2.0, size * zoom));
+        pen.setCapStyle(Qt::RoundCap);
+        pen.setJoinStyle(Qt::RoundJoin);
+        painter.setPen(pen);
+        painter.setBrush(Qt::NoBrush);
+        QPolygonF poly;
+        for (const QPointF& p : points) poly << viewPoint(p);
+        if (poly.size() == 1) poly << poly.front();
+        painter.drawPolyline(poly);
+    };
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing);
+    for (const EditorSession::Scribble& s : session_->scribbles()) stroke(s.points, s.size, s.background);
+    if (drag_ == Drag::Scribble) stroke(scribblePoints_, session_->scribbleSize, scribbleBackground_);
+    painter.restore();
+}
+
 void CanvasWidget::drawSelectionAnts(QPainter& painter) {
     if (selectionRasterAnts_) {
         auto selection = session_->displayedSelection();
@@ -415,7 +440,7 @@ void CanvasWidget::updateCursor(QPointF view, Qt::KeyboardModifiers modifiers) {
         return;
     }
     case Tool::Brush: case Tool::SpotHealing: case Tool::CloneStamp: case Tool::Smudge: setCursor(Qt::BlankCursor); return;
-    case Tool::Marquee: case Tool::Lasso: case Tool::Wand: case Tool::Crop: case Tool::Gradient: case Tool::Shape: case Tool::Eyedropper: setCursor(Qt::CrossCursor); return;
+    case Tool::Marquee: case Tool::Lasso: case Tool::Wand: case Tool::Scribble: case Tool::Crop: case Tool::Gradient: case Tool::Shape: case Tool::Eyedropper: setCursor(Qt::CrossCursor); return;
     case Tool::Text: setCursor(Qt::IBeamCursor); return;
     case Tool::Zoom: setCursor((modifiers & Qt::AltModifier) ? zoomOutCursor_ : zoomInCursor_); return;
     case Tool::Hand: setCursor(Qt::OpenHandCursor); return;
@@ -605,6 +630,13 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
     case Tool::Wand:
         session_->magicWand(doc, session_->wandTolerance, session_->wandContiguous, session_->wandSampleAll, selectionMode(modifiers), session_->wandSampleRadius);
         return;
+    case Tool::Scribble:
+        // Alt flips the stroke's kind for this stroke.
+        scribbleBackground_ = session_->scribbleBackground != bool(modifiers & Qt::AltModifier);
+        scribblePoints_ = {doc};
+        drag_ = Drag::Scribble;
+        update();
+        return;
     case Tool::Crop: {
         if (crop_) {
             QRectF cropView(viewPoint(crop_->topLeft()), viewPoint(crop_->bottomRight()));
@@ -750,6 +782,10 @@ void CanvasWidget::move(QPointF view, Qt::MouseButtons buttons, Qt::KeyboardModi
         if (lassoPoints_.empty() || std::hypot(doc.x() - lassoPoints_.back().x(), doc.y() - lassoPoints_.back().y()) >= 0.25) lassoPoints_.push_back(doc);
         update();
         break;
+    case Drag::Scribble:
+        if (scribblePoints_.empty() || std::hypot(doc.x() - scribblePoints_.back().x(), doc.y() - scribblePoints_.back().y()) >= 0.5) scribblePoints_.push_back(doc);
+        update();
+        break;
     case Drag::SelectionMove: {
         if (!selectionMoveOrigin_ || !selectionMoveOrigin_->coverage) break;
         int dx = int(std::round(doc.x() - dragStartDocument_.x())), dy = int(std::round(doc.y() - dragStartDocument_.y()));
@@ -856,6 +892,13 @@ void CanvasWidget::release(QPointF view, Qt::MouseButton button, Qt::KeyboardMod
     case Drag::Lasso:
         finishFreehandLasso();
         break;
+    case Drag::Scribble: {
+        std::vector<QPointF> points = std::move(scribblePoints_);
+        scribblePoints_.clear();
+        session_->addScribble(points, scribbleBackground_);
+        update();
+        break;
+    }
     case Drag::SelectionMove:
         selectionMoveOrigin_.reset();
         session_->endEdit();
@@ -995,6 +1038,7 @@ void CanvasWidget::keyPressEvent(QKeyEvent* e) {
         if (session_->shapeDraft()) { session_->cancelShape(); return; }
         if (session_->transformEdit()) { session_->cancelTransform(); return; }
         if (!lassoPoints_.empty()) { cancelLasso(); return; }
+        if (session_->tool() == Tool::Scribble && !session_->scribbles().empty()) { session_->clearScribbles(); return; }
         if (crop_) { cancelCrop(); return; }
         return;
     case Qt::Key_Return: case Qt::Key_Enter:
@@ -1005,6 +1049,7 @@ void CanvasWidget::keyPressEvent(QKeyEvent* e) {
         return;
     case Qt::Key_Backspace: case Qt::Key_Delete:
         if (session_->lassoKind == LassoKind::Polygonal && !lassoPoints_.empty()) { lassoPoints_.pop_back(); update(); return; }
+        if (session_->tool() == Tool::Scribble && !session_->scribbles().empty()) { session_->removeLastScribble(); return; }
         break;
     case Qt::Key_Left: case Qt::Key_Right: case Qt::Key_Up: case Qt::Key_Down: {
         double dx = e->key() == Qt::Key_Left ? -step : e->key() == Qt::Key_Right ? step : 0;

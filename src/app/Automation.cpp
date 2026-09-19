@@ -11,6 +11,7 @@
 #include "compositor/render.h"
 #include "compositor/selection.h"
 #include "compositor/subject.h"
+#include "compositor/scribble.h"
 #include <QApplication>
 #include <QBuffer>
 #include <QDir>
@@ -374,7 +375,7 @@ void AutomationServer::registerHandlers() {
     add("app.info", [this, w](const QJsonObject&) {
         return QJsonObject{{"name", "compositor-linux"}, {"version", QApplication::applicationVersion()}, {"socket", path_},
                            {"platform", QApplication::platformName()}, {"tabs", w->tabCount()}, {"currentTab", w->currentTabIndex()},
-                           {"removeBackground", ModelStore::ready()}};
+                           {"removeBackground", ModelStore::ready()}, {"scribble", scribbleSelectionSupported()}};
     });
     add("events.subscribe", [this](const QJsonObject& p) {
         // Notifications on this connection: {"method":"event","params":{"kind":...,"tab":N}}, one per kind per event-loop turn.
@@ -870,6 +871,27 @@ void AutomationServer::registerHandlers() {
         EditorSession* s = session();
         s->magicWand(QPointF(num(p, "x"), num(p, "y")), integer(p, "tolerance", s->wandTolerance), flag(p, "contiguous", s->wandContiguous), flag(p, "sampleAll", s->wandSampleAll), selectionMode(p), integer(p, "sampleRadius", s->wandSampleRadius));
         return QJsonObject{{"bounds", rectJson(doc.selection ? doc.selection->bounds() : Rect())}};
+    });
+    add("selection.scribble", [session, document](const QJsonObject& p) {
+        // Quick Select by scribble: strokes as lists of [x, y] points, `size` pixels wide.
+        const Document& doc = document();
+        EditorSession* s = session();
+        if (!scribbleSelectionSupported()) fail("this build has no OpenCV, which runs the scribble selection");
+        if (flag(p, "clear", false)) s->clearScribbles();
+        if (has(p, "size")) s->scribbleSize = std::max(1, integer(p, "size", s->scribbleSize));
+        if (has(p, "refine")) s->scribbleRefine = std::clamp(integer(p, "refine", s->scribbleRefine), 0, 40);
+        auto strokes = [&](const char* key, bool background) {
+            for (QJsonValue stroke : p.value(key).toArray()) {
+                std::vector<QPointF> points;
+                for (QJsonValue pt : stroke.toArray()) { QJsonArray a = pt.toArray(); if (a.size() >= 2) points.emplace_back(a[0].toDouble(), a[1].toDouble()); }
+                if (!points.empty()) s->addScribble(points, background, false);
+            }
+        };
+        strokes("foreground", false);
+        strokes("background", true);
+        QString error;
+        if (!s->runScribbleSelection(selectionMode(p), &error)) fail(error);
+        return QJsonObject{{"strokes", int(s->scribbles().size())}, {"bounds", rectJson(doc.selection ? doc.selection->bounds() : Rect())}};
     });
     add("selection.fromLayer", [session, layerOrActive, document](const QJsonObject& p) {
         const Document& doc = document();

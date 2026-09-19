@@ -309,7 +309,7 @@ int main(int argc, char** argv) {
     if (parser.isSet(demo)) buildDemo(*window.session(), files.isEmpty() ? QString() : QDir::current().absoluteFilePath(files.first()));
     else for (const QString& path : files) window.openPath(QDir::current().absoluteFilePath(path));
     if (parser.isSet(toolOption)) {
-        static const QMap<QString, app::Tool> tools{{"move", app::Tool::Move}, {"marquee", app::Tool::Marquee}, {"lasso", app::Tool::Lasso}, {"wand", app::Tool::Wand},
+        static const QMap<QString, app::Tool> tools{{"move", app::Tool::Move}, {"marquee", app::Tool::Marquee}, {"lasso", app::Tool::Lasso}, {"wand", app::Tool::Wand}, {"scribble", app::Tool::Scribble},
             {"crop", app::Tool::Crop}, {"brush", app::Tool::Brush}, {"healing", app::Tool::SpotHealing}, {"clone", app::Tool::CloneStamp}, {"smudge", app::Tool::Smudge},
             {"gradient", app::Tool::Gradient}, {"shape", app::Tool::Shape}, {"eyedropper", app::Tool::Eyedropper}, {"hand", app::Tool::Hand}, {"zoom", app::Tool::Zoom}, {"text", app::Tool::Text}};
         QString name = parser.value(toolOption).toLower();

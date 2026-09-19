@@ -28,7 +28,7 @@
 
 namespace app {
 
-enum class Tool { Move, Marquee, Lasso, Wand, Crop, Brush, SpotHealing, CloneStamp, Smudge, Gradient, Shape, Eyedropper, Hand, Zoom, Text };
+enum class Tool { Move, Marquee, Lasso, Wand, Scribble, Crop, Brush, SpotHealing, CloneStamp, Smudge, Gradient, Shape, Eyedropper, Hand, Zoom, Text };
 enum class MarqueeKind { Rectangle, Ellipse };
 enum class LassoKind { Freehand, Polygonal };
 enum class BlurToolMode { Liquify, Blur, Smudge };
@@ -300,6 +300,19 @@ public:
     void setSelection(const std::optional<compositor::Selection>& selection, const QString& name);
     /// `sampleRadius` 0, 1 or 2: the point, a 3x3 or a 5x5 average sets the colour to match (Photoshop's Sample Size).
     void magicWand(QPointF documentPoint, int tolerance, bool contiguous, bool sampleAllLayers, compositor::SelectionMode mode, int sampleRadius = 0);
+    // Quick Select by scribble: strokes over the subject and over the background, segmented by GrabCut on the
+    // flattened document and refined to its edges; the strokes stay until cleared, the last one wins where two overlap.
+    struct Scribble { std::vector<QPointF> points; double size = 24; bool background = false; };
+    int scribbleSize = 24;
+    bool scribbleBackground = false;
+    int scribbleRefine = 8;
+    const std::vector<Scribble>& scribbles() const { return scribbles_; }
+    /// Adds a stroke, and with `run` recomputes the selection from every stroke so far.
+    void addScribble(const std::vector<QPointF>& points, bool background, bool run = true);
+    void removeLastScribble();
+    void clearScribbles();
+    /// The selection from the strokes so far; false with `error` when none can be made (no foreground stroke, no OpenCV).
+    bool runScribbleSelection(compositor::SelectionMode mode, QString* error = nullptr);
     void fillSelection(const QColor& color);
     void clearSelectionPixels();
     void selectionExpand(int amount);
@@ -385,6 +398,7 @@ signals:
     void documentChanged(QRectF region);
     void layersChanged();
     void selectionChanged();
+    void scribblesChanged();
     void toolChanged();
     void viewportChanged();
     void transformChanged();
@@ -447,6 +461,9 @@ private:
     compositor::Uuid cloneSampleLayer_;
     uint64_t cloneSampleRevision_ = 0;
     std::shared_ptr<const compositor::Image> wandSample_;
+    std::vector<Scribble> scribbles_;
+    /// The flattened document as the wand samples it with Sample All Layers, cached per document revision.
+    std::shared_ptr<const compositor::Image> flattenedForSampling();
     bool wandSampleAll_ = false;
     compositor::Uuid wandSampleLayer_;
     uint64_t wandSampleRevision_ = 0;

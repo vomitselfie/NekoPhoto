@@ -14,6 +14,7 @@
 #include "compositor/inpaint.h"
 #include "compositor/warpstroke.h"
 #include "compositor/subject.h"
+#include "compositor/scribble.h"
 #include "compositor/render.h"
 #include "compositor/selection.h"
 extern "C" {
@@ -231,6 +232,17 @@ int main(int argc, char** argv) {
         for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) { double d = std::sqrt(double((x - 2000) * (x - 2000) + (y - 1500) * (y - 1500))); soft.at(x, y) = uint8_t(std::lround(255 * std::clamp((1006 - d) / 12, 0.0, 1.0))); }
         report("matte cleanup", timeMs([&] { GrayImage copy = soft; cleanMatte(copy); }, 2));
         report("foreground estimate (12 px soft ring)", timeMs([&] { (void)estimateForeground(base, soft); }, 2));
+    }
+    if (want("scribble")) {
+        // Quick Select: a foreground stroke across the middle and a background stroke along the top.
+        GrayImage labels(W, H, 0);
+        for (int y = H / 2 - 12; y < H / 2 + 12; y++) for (int x = W / 3; x < 2 * W / 3; x++) labels.at(x, y) = 1;
+        for (int y = 40; y < 64; y++) for (int x = 100; x < W - 100; x++) labels.at(x, y) = 2;
+        std::string error;
+        for (auto [limit, iterations] : {std::pair{400, 2}, std::pair{450, 2}, std::pair{700, 3}}) {
+            if (!scribbleSelectionSupported()) break;
+            report(("scribble selection, limit " + std::to_string(limit) + ", " + std::to_string(iterations) + " iterations").c_str(), timeMs([&] { (void)scribbleSelection(base, labels, limit, iterations, &error); }, 1));
+        }
     }
     if (want("selection")) {
         auto shape = rasterizeEllipse(Rect(200, 200, 3000, 2000), W, H, true);

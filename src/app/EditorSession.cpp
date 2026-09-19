@@ -1,5 +1,7 @@
 #include "compositor/morphology.h"
 #include "EditorSession.h"
+#include "compositor/scribble.h"
+#include "compositor/subject.h"
 #include "ImageConvert.h"
 #include "compositor/blend.h"
 #include "compositor/project.h"
@@ -2188,6 +2190,84 @@ void EditorSession::setSelection(const std::optional<Selection>& selection, cons
     emit historyChanged();
     emit titleChanged();
     emit selectionChanged();
+}
+
+namespace {
+
+/// Stamps discs of the stroke's width along its polyline into the label map.
+void stampScribble(GrayImage& labels, const EditorSession::Scribble& stroke, uint8_t value) {
+    const int w = labels.width(), h = labels.height();
+    const double r = std::max(0.5, stroke.size / 2);
+    auto disc = [&](QPointF c) {
+        const int x0 = std::max(0, int(std::floor(c.x() - r))), x1 = std::min(w - 1, int(std::ceil(c.x() + r)));
+        const int y0 = std::max(0, int(std::floor(c.y() - r))), y1 = std::min(h - 1, int(std::ceil(c.y() + r)));
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++) {
+                const double dx = x + 0.5 - c.x(), dy = y + 0.5 - c.y();
+                if (dx * dx + dy * dy <= r * r) labels.at(x, y) = value;
+            }
+    };
+    if (stroke.points.empty()) return;
+    disc(stroke.points.front());
+    for (size_t i = 1; i < stroke.points.size(); i++) {
+        const QPointF a = stroke.points[i - 1], b = stroke.points[i];
+        const double length = std::hypot(b.x() - a.x(), b.y() - a.y());
+        const int steps = std::max(1, int(std::ceil(length / std::max(1.0, r / 2))));
+        for (int k = 1; k <= steps; k++) disc(a + (b - a) * (double(k) / steps));
+    }
+}
+
+} // namespace
+
+std::shared_ptr<const Image> EditorSession::flattenedForSampling() {
+    if (!(wandSample_ && wandSampleAll_ && wandSampleRevision_ == documentRevision_)) {
+        wandSample_ = renderFlattened(*document_);
+        wandSampleAll_ = true; wandSampleLayer_ = Uuid{}; wandSampleRevision_ = documentRevision_;
+    }
+    return wandSample_;
+}
+
+void EditorSession::addScribble(const std::vector<QPointF>& points, bool background, bool run) {
+    if (!document_ || points.empty()) return;
+    scribbles_.push_back({points, double(std::max(1, scribbleSize)), background});
+    emit scribblesChanged();
+    if (run) runScribbleSelection(SelectionMode::Replace);
+}
+
+void EditorSession::removeLastScribble() {
+    if (scribbles_.empty()) return;
+    scribbles_.pop_back();
+    emit scribblesChanged();
+    if (!scribbles_.empty()) runScribbleSelection(SelectionMode::Replace);
+}
+
+void EditorSession::clearScribbles() {
+    if (scribbles_.empty()) return;
+    scribbles_.clear();
+    emit scribblesChanged();
+}
+
+bool EditorSession::runScribbleSelection(SelectionMode mode, QString* error) {
+    if (!document_) return false;
+    GrayImage labels(document_->width, document_->height, 0);
+    for (const Scribble& stroke : scribbles_) stampScribble(labels, stroke, stroke.background ? 2 : 1);
+    std::shared_ptr<const Image> composite = flattenedForSampling();
+    std::string why;
+    // GrabCut's cost grows fast with size (a 12 MP test image: 4 s at 400 px, 22 s at 700); the guided refine
+    // at full size restores the edge, so the segmentation runs small.
+    auto coverage = scribbleSelection(*composite, labels, 450, 2, &why);
+    if (!coverage) { if (error) *error = QString::fromStdString(why); return false; }
+    if (scribbleRefine > 0) {
+        MatteSettings settings;
+        settings.refineEdges = scribbleRefine;
+        settings.contrast = 25;
+        settings.matting = 0;
+        settings.cleanup = true;
+        settings.decontaminate = false;
+        coverage = refineMatte(*coverage, *composite, settings, 0);
+    }
+    applySelectionShape(*coverage, mode, "Quick Select");
+    return true;
 }
 
 void EditorSession::applySelectionShape(const GrayImage& shape, SelectionMode mode, const QString& name) {

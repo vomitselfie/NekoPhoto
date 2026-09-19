@@ -22,6 +22,7 @@ The full feature list. It mirrors the Mac app's, with Linux key names.
 
 ## Selections
 - Rectangle and Ellipse Marquee, Freehand and Polygonal Lasso, and Magic Wand
+- Quick Select (Q): scribble over the subject and, with Alt, over the background; GrabCut on the flattened document finds the subject and the selection is pulled onto the image's edges. Backspace takes a stroke back, Esc clears them; needs no model
 - Add to (Shift), subtract from (Alt) and intersect with (Shift+Alt) selections, move the outline, or move and duplicate the pixels inside
 - Magic Wand tolerance, contiguous, sample all layers, and Sample Size (point, 3 by 3, 5 by 5)
 - Expand, Contract, Feather (Shift+F6), Smooth, Border and Invert, with Photoshop's circular kernels; load a layer's pixels or a mask as a selection

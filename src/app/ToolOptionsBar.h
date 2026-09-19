@@ -49,6 +49,7 @@ private:
     QWidget* buildGradientOptions();
     QWidget* buildShapeOptions();
     QWidget* buildTextOptions();
+    QWidget* buildScribbleOptions();
     std::vector<std::function<void()>> syncers_;
     void addBrushTipFields(QHBoxLayout* layout);
 

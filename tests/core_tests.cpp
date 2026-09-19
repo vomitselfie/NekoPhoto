@@ -14,6 +14,7 @@
 #include "compositor/selection.h"
 #include "compositor/shape.h"
 #include "compositor/subject.h"
+#include "compositor/scribble.h"
 #include "compositor/warp.h"
 #include "compositor/warpstroke.h"
 #include "compositor/transform.h"
@@ -1147,6 +1148,32 @@ TEST_CASE(fuse_detail_keeps_the_coarse_shape_and_takes_the_local_edge) {
     CHECK_EQ(int(direct->at(65, 20)), int(coarse.at(65, 20)));
     CHECK_EQ(int(direct->at(120, 20)), 0);
     CHECK_EQ(int(direct->at(80, 60)), 255);
+}
+
+TEST_CASE(scribble_selection_finds_the_disc) {
+    if (!scribbleSelectionSupported()) { std::fprintf(stderr, "  (skipped: no OpenCV)\n"); return; }
+    // A red disc on a blue field, a foreground stroke across the disc and a background stroke in a corner.
+    const int w = 200, h = 160;
+    auto image = std::make_shared<Image>(w, h);
+    auto inside = [](int x, int y) { return (x - 100) * (x - 100) + (y - 80) * (y - 80) < 50 * 50; };
+    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+        uint8_t* p = image->pixel(x, y);
+        const bool in = inside(x, y);
+        p[0] = in ? 210 : 40; p[1] = in ? 50 : 60; p[2] = in ? 40 : 200; p[3] = 255;
+    }
+    GrayImage labels(w, h, 0);
+    for (int y = 76; y < 84; y++) for (int x = 80; x < 120; x++) labels.at(x, y) = 1;
+    for (int y = 10; y < 16; y++) for (int x = 10; x < 60; x++) labels.at(x, y) = 2;
+    std::string error;
+    auto coverage = scribbleSelection(*image, labels, 120, 3, &error);
+    CHECK(coverage != nullptr);
+    if (!coverage) { std::fprintf(stderr, "  %s\n", error.c_str()); return; }
+    int agree = 0, total = 0;
+    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) { agree += (coverage->at(x, y) >= 128) == inside(x, y); total++; }
+    std::printf("  scribble disc: %.1f%% of pixels right\n", 100.0 * agree / total);
+    CHECK(agree > total * 97 / 100);
+    GrayImage none(w, h, 0);
+    CHECK(scribbleSelection(*image, none, 120, 3, &error) == nullptr);
 }
 
 TEST_CASE(matte_cleanup_removes_speckle_but_keeps_the_edge) {

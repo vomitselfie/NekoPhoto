@@ -254,6 +254,7 @@ QString MainWindow::toolHint(Tool tool, bool erase) {
     case Tool::Marquee: return tr("Drag to select; Shift adds, Alt subtracts; drag inside a selection to move its outline");
     case Tool::Lasso: return tr("Freehand: drag around an area. Polygonal: click points, double-click or Enter closes, Backspace removes the last");
     case Tool::Wand: return tr("Click a colour to select it; Shift adds, Alt subtracts; Tolerance widens the match");
+    case Tool::Scribble: return tr("Scribble over the subject (Alt: over the background) and the selection follows; Backspace takes a stroke back, Esc clears them");
     case Tool::Crop: return tr("Drag the crop, then press Enter or double-click; Shift squares, Alt grows from the centre");
     case Tool::Brush: return erase ? tr("Drag to erase; [ and ] change the size; Shift-click erases a straight line")
                                    : tr("Drag to paint; [ and ] change the size, digits set the opacity; Shift-click paints a straight line");
@@ -378,6 +379,7 @@ void MainWindow::buildToolRail() {
     tool(Tool::Marquee, tr("Marquee"), "square-dashed", QKeySequence("M"));
     tool(Tool::Lasso, tr("Lasso"), "lasso", QKeySequence("L"));
     tool(Tool::Wand, tr("Magic Wand"), "wand-sparkles", QKeySequence("W"));
+    tool(Tool::Scribble, tr("Quick Select"), "scribble", QKeySequence("Q"));
     tool(Tool::Crop, tr("Crop"), "crop", QKeySequence("C"));
     rail->addSeparator();
     tool(Tool::Brush, tr("Brush"), "paintbrush", QKeySequence("B"));

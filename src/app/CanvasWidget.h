@@ -50,7 +50,7 @@ protected:
     void focusOutEvent(QFocusEvent*) override;
 
 private:
-    enum class Drag { None, Pan, Move, Resize, Rotate, Distort, PixelMove, Brush, Warp, Gradient, Shape, Marquee, Lasso, SelectionMove, Crop, CropMove, CropResize, ZoomRect, Hook };
+    enum class Drag { None, Pan, Move, Resize, Rotate, Distort, PixelMove, Brush, Warp, Gradient, Shape, Marquee, Lasso, Scribble, SelectionMove, Crop, CropMove, CropResize, ZoomRect, Hook };
     struct HandleHit { bool hit = false; int index = 0; bool rotate = false; };
 
     void invalidate(QRectF documentRegion);
@@ -72,6 +72,7 @@ private:
     void drawOverlays(QPainter& painter);
     void drawTransformBox(QPainter& painter, const compositor::Corners& corners, bool active, bool distorting);
     void drawSelectionAnts(QPainter& painter);
+    void drawScribbles(QPainter& painter);
     void drawCropOverlay(QPainter& painter);
     QRectF dragBox(QPointF anchor, QPointF point, bool square, bool fromCenter, double ratio = 0) const;
     void refreshSelectionOutline();
@@ -96,6 +97,8 @@ private:
     bool spaceHeld_ = false;
     std::optional<QPointF> hover_;
     std::vector<QPointF> lassoPoints_;
+    std::vector<QPointF> scribblePoints_;
+    bool scribbleBackground_ = false;
     std::optional<QPointF> lassoCursor_;
     std::optional<QRectF> marquee_;
     std::optional<compositor::Selection> selectionMoveOrigin_;

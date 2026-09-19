@@ -77,6 +77,7 @@ ToolOptionsBar::ToolOptionsBar(EditorSession* session, CanvasWidget* canvas, QWi
     stack_->addWidget(buildGradientOptions());   // 11
     stack_->addWidget(buildShapeOptions());      // 12
     stack_->addWidget(buildTextOptions());       // 13
+    stack_->addWidget(buildScribbleOptions());   // 14
     addWidget(stack_);
     connect(session_, &EditorSession::toolChanged, this, &ToolOptionsBar::syncTool);
     connect(session_, &EditorSession::transformChanged, this, &ToolOptionsBar::syncTransformFields);
@@ -93,6 +94,7 @@ void ToolOptionsBar::syncTool() {
     case Tool::Marquee: index = 2; break;
     case Tool::Lasso: index = 3; break;
     case Tool::Wand: index = 4; break;
+    case Tool::Scribble: index = 14; break;
     case Tool::Crop: index = 5; break;
     case Tool::Zoom: case Tool::Hand: index = 6; break;
     case Tool::Eyedropper: index = 7; break;
@@ -464,6 +466,43 @@ QWidget* ToolOptionsBar::buildLassoOptions() {
     kind->setProperty("role", "lassoKind");
     syncers_.push_back([this, kind] { QSignalBlocker b(kind); kind->setCurrentIndex(session_->lassoKind == LassoKind::Polygonal ? 1 : 0); });
     h->addWidget(kind);
+    h->addStretch();
+    return w;
+}
+
+QWidget* ToolOptionsBar::buildScribbleOptions() {
+    QWidget* w = row();
+    auto* h = layoutOf(w);
+    h->addWidget(new QLabel(tr("Mode")));
+    auto* mode = new QComboBox;
+    mode->addItems({tr("Subject"), tr("Background")});
+    mode->setToolTip(tr("What a stroke marks; Alt flips it for one stroke"));
+    mode->setCurrentIndex(session_->scribbleBackground ? 1 : 0);
+    connect(mode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->scribbleBackground = i == 1; });
+    h->addWidget(mode);
+    h->addWidget(new QLabel(tr("Size")));
+    auto* size = new QSpinBox;
+    size->setRange(1, 500);
+    size->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    size->setAlignment(Qt::AlignRight);
+    size->setFixedWidth(48);
+    size->setValue(session_->scribbleSize);
+    connect(size, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int v) { session_->scribbleSize = v; });
+    h->addWidget(size);
+    h->addWidget(new QLabel(tr("Refine")));
+    auto* refine = new QSpinBox;
+    refine->setRange(0, 40);
+    refine->setToolTip(tr("Pulls the selection onto the image's own edges by this many pixels; 0 keeps the segmentation as it is"));
+    refine->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    refine->setAlignment(Qt::AlignRight);
+    refine->setFixedWidth(40);
+    refine->setValue(session_->scribbleRefine);
+    connect(refine, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int v) { session_->scribbleRefine = v; if (!session_->scribbles().empty()) session_->runScribbleSelection(compositor::SelectionMode::Replace); });
+    h->addWidget(refine);
+    auto* clear = new QPushButton(tr("Clear Strokes"));
+    clear->setToolTip(tr("Forgets the strokes (Esc); Backspace takes back the last one"));
+    connect(clear, &QPushButton::clicked, this, [this] { session_->clearScribbles(); });
+    h->addWidget(clear);
     h->addStretch();
     return w;
 }

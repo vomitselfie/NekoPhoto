@@ -51,6 +51,7 @@ add_library(compositor_core STATIC
     src/inpaint.cpp
     src/psd.cpp
     src/subject.cpp
+    src/scribble.cpp
     src/png.cpp
     src/project.cpp
     src/render.cpp
