@@ -80,8 +80,10 @@ a few essentials from G'MIC's core, and the whole catalogue once its definition
 file is available: Update Filters downloads `https://gmic.eu/update<version>.gmic`
 into the app data folder's `gmic/`, and an existing G'MIC-Qt copy under
 `~/.config/gmic/` is used until then. The `#@gui` lines of that file describe
-each filter's parameters; the dialog builds the controls from them, shows the
-resulting command line, and previews on a reduced copy. Filters that change the
+each filter's parameters; the dialog builds the controls from them (the
+declaration's separators and short notes become folding sections, long notes a
+Notes fold), lists filters under the catalogue's folders, shows the resulting
+command line, and previews on a reduced copy. Filters that change the
 image size are rejected. Over automation: `pixels.gmic` and `gmic.filters`.
 
 When the build finds libgmic (`COMPOSITOR_WITH_LIBGMIC`, on by default), setting

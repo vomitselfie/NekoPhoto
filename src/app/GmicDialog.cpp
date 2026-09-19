@@ -18,6 +18,9 @@
 #include <QNetworkReply>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QTreeWidgetItemIterator>
+#include <QTextDocument>
+#include <QToolButton>
 #include <QSlider>
 #include <QSplitter>
 #include <QTreeWidget>
@@ -78,11 +81,67 @@ std::vector<GmicFilter> builtinPresets() {
 
 } // namespace
 
+namespace {
+
+/// A titled block of controls that folds away behind its header.
+class CollapsibleSection : public QWidget {
+public:
+    CollapsibleSection(const QString& title, bool expanded, QWidget* parent = nullptr) : QWidget(parent) {
+        auto* layout = new QVBoxLayout(this);
+        layout->setContentsMargins(0, 6, 0, 0);
+        layout->setSpacing(2);
+        header_ = new QToolButton(this);
+        header_->setText(title);
+        header_->setAutoRaise(true);
+        header_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+        header_->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
+        header_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        header_->setStyleSheet(QStringLiteral("QToolButton { border: none; background: transparent; text-align: left; padding: 3px 2px; }"));
+        QFont f = header_->font(); f.setBold(true); header_->setFont(f);
+        layout->addWidget(header_);
+        content_ = new QWidget(this);
+        contentLayout_ = new QVBoxLayout(content_);
+        contentLayout_->setContentsMargins(12, 2, 0, 4);
+        contentLayout_->setSpacing(4);
+        layout->addWidget(content_);
+        content_->setVisible(expanded);
+        connect(header_, &QToolButton::clicked, this, [this] { bool on = !content_->isVisible(); content_->setVisible(on); header_->setArrowType(on ? Qt::DownArrow : Qt::RightArrow); });
+    }
+    QVBoxLayout* contentLayout() const { return contentLayout_; }
+
+private:
+    QToolButton* header_;
+    QWidget* content_;
+    QVBoxLayout* contentLayout_;
+};
+
+/// A note's text without markup, for deciding whether it is a heading.
+QString plainText(const QString& html) {
+    QTextDocument doc;
+    doc.setHtml(html);
+    return doc.toPlainText().trimmed();
+}
+
+/// A label column of fixed width; the full text is in the tooltip when it does not fit.
+QLabel* rowLabel(const QString& text) {
+    auto* label = new QLabel;
+    label->setFixedWidth(108);
+    QFontMetrics metrics(label->font());
+    label->setText(metrics.elidedText(text, Qt::ElideRight, 104));
+    if (label->text() != text) label->setToolTip(text);
+    return label;
+}
+
+constexpr int headingLimit = 40;    // a note this short (as plain text) is a section heading
+constexpr int longNoteLimit = 320;  // notes longer than this fold away
+
+} // namespace
+
 GmicDialog::GmicDialog(EditorSession* session, QWidget* parent) : QDialog(parent), session_(session), presets_(builtinPresets()) {
     setWindowTitle(tr("G'MIC"));
     setModal(false);
     setAttribute(Qt::WA_DeleteOnClose);
-    resize(900, 600);
+    resize(1040, 680);
     auto* layout = new QVBoxLayout(this);
     auto* splitter = new QSplitter;
 
@@ -114,6 +173,8 @@ GmicDialog::GmicDialog(EditorSession* session, QWidget* parent) : QDialog(parent
     controls_ = new QWidget;
     controlsLayout_ = new QVBoxLayout(controls_);
     controlsLayout_->setAlignment(Qt::AlignTop);
+    controlsLayout_->setContentsMargins(4, 0, 12, 0);
+    controlsLayout_->setSpacing(4);
     scroll->setWidget(controls_);
     rightLayout->addWidget(scroll, 1);
     auto* commandRow = new QHBoxLayout;
@@ -132,8 +193,9 @@ GmicDialog::GmicDialog(EditorSession* session, QWidget* parent) : QDialog(parent
     bottom->addWidget(status_, 1);
     rightLayout->addLayout(bottom);
     splitter->addWidget(right);
-    splitter->setStretchFactor(0, 2);
-    splitter->setStretchFactor(1, 3);
+    splitter->setStretchFactor(0, 1);
+    splitter->setStretchFactor(1, 2);
+    splitter->setSizes({330, 700});
     layout->addWidget(splitter, 1);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
@@ -172,8 +234,12 @@ GmicDialog::GmicDialog(EditorSession* session, QWidget* parent) : QDialog(parent
     }
     loadCatalogue();
     fillTree({});
-    // Start on the first essential so the right side is never blank.
+    // Start on the first essential so the right side is never blank (COMPOSITOR_GMIC_FILTER names another, for screenshots).
     if (QTreeWidgetItem* first = tree_->topLevelItem(0); first && first->childCount() > 0) tree_->setCurrentItem(first->child(0));
+    QString wanted = qEnvironmentVariable("COMPOSITOR_GMIC_FILTER");
+    if (!wanted.isEmpty())
+        for (QTreeWidgetItemIterator it(tree_); *it; ++it)
+            if ((*it)->text(0).compare(wanted, Qt::CaseInsensitive) == 0) { tree_->setCurrentItem(*it); tree_->scrollToItem(*it); break; }
 }
 
 GmicDialog::~GmicDialog() {
@@ -221,17 +287,42 @@ void GmicDialog::selectFilter(const GmicFilter* filter) {
 }
 
 void GmicDialog::buildControls() {
-    while (QLayoutItem* item = controlsLayout_->takeAt(0)) { delete item->widget(); delete item; }
+    // Rows are sub-layouts, so the widgets inside them must go explicitly; a layout item does not own them.
+    qDeleteAll(controls_->findChildren<QWidget*>(QString(), Qt::FindDirectChildrenOnly));
+    while (QLayoutItem* item = controlsLayout_->takeAt(0)) delete item;
     auto* title = new QLabel(QStringLiteral("<b>%1</b>").arg(current_.name.toHtmlEscaped()));
     controlsLayout_->addWidget(title);
-    for (size_t i = 0; i < current_.params.size(); i++) {
-        GmicParam& p = current_.params[i];
+
+    // The declaration's separators cut the parameters into blocks. A block whose first note is short is a
+    // section folding behind that note as its heading; other notes go to the end of their block in hint
+    // style, the long ones behind a "Notes" fold. Untitled blocks just get a spaced line.
+    // Within a block the order is kept: a short note between controls is a sub-heading, a medium one a
+    // hint where it stands, and the long ones (authors, essays) gather in a "Notes" fold at the end.
+    struct Item { GmicParam* control = nullptr; QString note; };
+    struct Block { QString heading; std::vector<Item> items; QStringList longNotes; bool hasControls = false; };
+    std::vector<Block> blocks(1);
+    for (GmicParam& p : current_.params) {
+        if (p.kind == GmicParam::Separator) { blocks.emplace_back(); continue; }
+        Block& block = blocks.back();
+        if (p.kind == GmicParam::Note) {
+            QString plain = plainText(p.text);
+            if (plain.isEmpty()) continue;
+            if (block.heading.isEmpty() && !block.hasControls && blocks.size() > 1 && plain.size() <= headingLimit && !plain.endsWith('.')) block.heading = plain;
+            else if (plain.size() > longNoteLimit) block.longNotes << p.text;
+            else block.items.push_back({nullptr, p.text});
+            continue;
+        }
+        if (p.kind == GmicParam::Unsupported) continue;
+        block.items.push_back({&p, {}});
+        block.hasControls = true;
+    }
+
+    auto addControl = [this](QVBoxLayout* into, GmicParam& p) {
         switch (p.kind) {
         case GmicParam::Float: case GmicParam::Int: {
             auto* row = new QHBoxLayout;
-            auto* label = new QLabel(p.label);
-            label->setMinimumWidth(120);
-            row->addWidget(label);
+            row->setSpacing(6);
+            row->addWidget(rowLabel(p.label));
             auto* slider = new QSlider(Qt::Horizontal);
             const double scale = p.kind == GmicParam::Int ? 1 : std::pow(10.0, p.decimals);
             slider->setRange(int(std::floor(p.min * scale)), int(std::ceil(p.max * scale)));
@@ -243,38 +334,36 @@ void GmicDialog::buildControls() {
             spin->setValue(p.value);
             spin->setKeyboardTracking(false);
             spin->setButtonSymbols(QAbstractSpinBox::NoButtons);
-            spin->setFixedWidth(72);
+            spin->setFixedWidth(68);
             row->addWidget(spin);
             connect(slider, &QSlider::valueChanged, this, [this, &p, spin, scale](int v) { p.value = v / scale; { QSignalBlocker b(spin); spin->setValue(p.value); } updateCommand(); });
             connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this, &p, slider, scale](double v) { p.value = v; { QSignalBlocker b(slider); slider->setValue(int(std::lround(v * scale))); } updateCommand(); });
-            controlsLayout_->addLayout(row);
+            into->addLayout(row);
             break;
         }
         case GmicParam::Bool: {
             auto* box = new QCheckBox(p.label);
             box->setChecked(p.value != 0);
             connect(box, &QCheckBox::toggled, this, [this, &p](bool on) { p.value = on ? 1 : 0; updateCommand(); });
-            controlsLayout_->addWidget(box);
+            into->addWidget(box);
             break;
         }
         case GmicParam::Choice: {
             auto* row = new QHBoxLayout;
-            auto* label = new QLabel(p.label);
-            label->setMinimumWidth(120);
-            row->addWidget(label);
+            row->setSpacing(6);
+            row->addWidget(rowLabel(p.label));
             auto* combo = new QComboBox;
             combo->addItems(p.choices);
             combo->setCurrentIndex(int(p.value));
             connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, &p](int i) { p.value = i; updateCommand(); });
             row->addWidget(combo, 1);
-            controlsLayout_->addLayout(row);
+            into->addLayout(row);
             break;
         }
         case GmicParam::Color: {
             auto* row = new QHBoxLayout;
-            auto* label = new QLabel(p.label);
-            label->setMinimumWidth(120);
-            row->addWidget(label);
+            row->setSpacing(6);
+            row->addWidget(rowLabel(p.label));
             auto* button = new QPushButton;
             auto paint = [button, &p] { button->setStyleSheet(QStringLiteral("background: rgb(%1,%2,%3);").arg(int(p.r)).arg(int(p.g)).arg(int(p.b))); button->setText(QStringLiteral("%1, %2, %3").arg(int(p.r)).arg(int(p.g)).arg(int(p.b))); };
             paint();
@@ -286,42 +375,65 @@ void GmicDialog::buildControls() {
                 updateCommand();
             });
             row->addWidget(button, 1);
-            controlsLayout_->addLayout(row);
+            into->addLayout(row);
             break;
         }
         case GmicParam::Text: {
             auto* row = new QHBoxLayout;
-            auto* label = new QLabel(p.label);
-            label->setMinimumWidth(120);
-            row->addWidget(label);
+            row->setSpacing(6);
+            row->addWidget(rowLabel(p.label));
             auto* edit = new QLineEdit(p.text);
             connect(edit, &QLineEdit::textChanged, this, [this, &p](const QString& t) { p.text = t; updateCommand(); });
             row->addWidget(edit, 1);
-            controlsLayout_->addLayout(row);
-            break;
-        }
-        case GmicParam::Note: {
-            auto* note = new QLabel(p.text);
-            note->setWordWrap(true);
-            note->setStyleSheet(hintStyle());
-            note->setOpenExternalLinks(true);
-            controlsLayout_->addWidget(note);
-            break;
-        }
-        case GmicParam::Separator: {
-            auto* line = new QFrame;
-            line->setFrameShape(QFrame::HLine);
-            line->setFrameShadow(QFrame::Sunken);
-            controlsLayout_->addWidget(line);
+            into->addLayout(row);
             break;
         }
         default: break;
         }
+    };
+    auto noteLabel = [](const QString& html, bool hint) {
+        auto* note = new QLabel(html);
+        note->setWordWrap(true);
+        note->setOpenExternalLinks(true);
+        note->setTextInteractionFlags(Qt::TextBrowserInteraction);
+        if (hint) note->setStyleSheet(hintStyle());
+        else { QFont f = note->font(); f.setBold(true); note->setFont(f); note->setContentsMargins(0, 6, 0, 0); }
+        return note;
+    };
+    auto addNote = [&](QVBoxLayout* into, const QString& html) {
+        QString plain = plainText(html);
+        into->addWidget(noteLabel(plain.size() <= headingLimit && !plain.endsWith('.') ? plain : html, plain.size() > headingLimit || plain.endsWith('.')));
+    };
+    auto addLongNotes = [&](QVBoxLayout* into, const QStringList& notes) {
+        if (notes.isEmpty()) return;
+        auto* fold = new CollapsibleSection(QObject::tr("Notes"), false);
+        for (const QString& n : notes) fold->contentLayout()->addWidget(noteLabel(n, true));
+        into->addWidget(fold);
+    };
+
+    for (size_t i = 0; i < blocks.size(); i++) {
+        Block& block = blocks[i];
+        if (block.items.empty() && block.longNotes.isEmpty()) continue;
+        QVBoxLayout* into = controlsLayout_;
+        if (!block.heading.isEmpty()) {
+            auto* section = new CollapsibleSection(block.heading, true);
+            controlsLayout_->addWidget(section);
+            into = section->contentLayout();
+        } else if (i > 0) {
+            auto* line = new QFrame;
+            line->setFrameShape(QFrame::HLine);
+            line->setFrameShadow(QFrame::Sunken);
+            controlsLayout_->addSpacing(6);
+            controlsLayout_->addWidget(line);
+            controlsLayout_->addSpacing(2);
+        }
+        for (const Item& item : block.items) { if (item.control) addControl(into, *item.control); else addNote(into, item.note); }
+        addLongNotes(into, block.longNotes);
     }
 }
 
 void GmicDialog::updateCommand() {
-    if (!customCommand_) { QSignalBlocker b(command_); command_->setText(current_.commandLine(false)); }
+    if (!customCommand_) { QSignalBlocker b(command_); command_->setText(current_.commandLine(false)); command_->setCursorPosition(0); }
     schedulePreview();
 }
 

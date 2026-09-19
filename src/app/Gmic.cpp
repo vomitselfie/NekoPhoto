@@ -111,7 +111,7 @@ bool parseParam(const QString& decl, GmicParam& p) {
         p.text = args.size() >= 2 && (args[0] == "0" || args[0] == "1") ? unquote(last) : unquote(args.value(0));
         return true;
     }
-    if (type == "note") { p.kind = GmicParam::Note; p.text = unquote(inner); p.text.remove(QRegularExpression("<[^>]*>")); return true; }
+    if (type == "note") { p.kind = GmicParam::Note; p.text = unquote(inner); p.text.remove(QRegularExpression("<[^>]*>")); p.text.replace("\\n", "\n"); p.text = p.text.trimmed(); return true; }
     if (type == "separator") { p.kind = GmicParam::Separator; return true; }
     if (type == "point") { p.kind = GmicParam::Point; p.text = QStringLiteral("%1,%2").arg(num(0, 50)).arg(num(1, 50)); return true; }
     if (type == "value") { p.kind = GmicParam::Value; p.text = args.value(0); return true; }
@@ -128,10 +128,12 @@ bool GmicCatalogue::load(const QString& path, QString* error) {
     in.setEncoding(QStringConverter::Utf8);
     filters_.clear();
     source_ = path;
-    QString folder;
+    // Folder lines nest by leading underscores: `_<b>Name</b>` (or more underscores) opens a folder at the
+    // top, a plain `<b>Name</b>` a subfolder of the last top folder; filters show under "Top / Sub".
+    QString topFolder, folder;
     GmicFilter* current = nullptr;
     bool skipping = false;
-    static const QRegularExpression folderRe(R"(^<b>(.*)</b>\s*$)");
+    static const QRegularExpression folderRe(R"(^(_*)<b>(.*)</b>\s*$)");
     static const QRegularExpression filterRe(R"(^([^:]+):([^,]+)(?:,([^(]*)(?:\(.*\))?)?\s*$)");
     while (!in.atEnd()) {
         QString line = in.readLine();
@@ -146,7 +148,14 @@ bool GmicCatalogue::load(const QString& path, QString* error) {
             continue;
         }
         auto fm = folderRe.match(body);
-        if (fm.hasMatch()) { folder = fm.captured(1).trimmed(); folder.remove(QRegularExpression("<[^>]*>")); current = nullptr; skipping = false; continue; }
+        if (fm.hasMatch()) {
+            QString name = fm.captured(2).trimmed();
+            name.remove(QRegularExpression("<[^>]*>"));
+            if (fm.captured(1).isEmpty() && !topFolder.isEmpty()) folder = topFolder + " / " + name;
+            else { topFolder = name; folder = name; }
+            current = nullptr; skipping = false;
+            continue;
+        }
         auto m = filterRe.match(body);
         if (!m.hasMatch()) { current = nullptr; skipping = false; continue; }
         GmicFilter f;
