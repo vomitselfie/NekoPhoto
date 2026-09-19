@@ -5,6 +5,7 @@
 #include "LayersPanel.h"
 #include "AdjustmentsPanel.h"
 #include "FilterDialog.h"
+#include "ColorSwatches.h"
 #include "Icons.h"
 #include "ModelStore.h"
 #include "PreferencesDialog.h"
@@ -15,6 +16,7 @@
 #include <QActionGroup>
 #include <QApplication>
 #include <QCloseEvent>
+#include <QComboBox>
 #include <QColorDialog>
 #include <QDir>
 #include <QDockWidget>
@@ -36,6 +38,7 @@
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QVBoxLayout>
+#include <QTimer>
 #include <QToolBar>
 #include <QToolButton>
 
@@ -100,23 +103,46 @@ MainWindow::MainWindow() {
 
     auto* dock = new QDockWidget(tr("Layers"), this);
     dock->setObjectName("layersDock");
-    dock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+    dock->setFeatures(QDockWidget::DockWidgetMovable);
     layersStack_ = new QStackedWidget;
     layersStack_->setMinimumWidth(280);
     dock->setWidget(layersStack_);
     addDockWidget(Qt::RightDockWidgetArea, dock);
     auto* adjustDock = new QDockWidget(tr("Adjustments"), this);
     adjustDock->setObjectName("adjustmentsDock");
-    adjustDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable | QDockWidget::DockWidgetClosable);
+    adjustDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetClosable);
     adjustStack_ = new QStackedWidget;
     adjustDock->setWidget(adjustStack_);
     addDockWidget(Qt::RightDockWidgetArea, adjustDock);
     splitDockWidget(dock, adjustDock, Qt::Vertical);
+    layersDock_ = dock;
+    adjustDock_ = adjustDock;
 
-    zoomLabel_ = new QLabel;
+    zoomBox_ = new QComboBox;
+    zoomBox_->setEditable(true);
+    zoomBox_->setInsertPolicy(QComboBox::NoInsert);
+    zoomBox_->setToolTip(tr("Zoom (Ctrl+0 fits, Ctrl+1 is 100%)"));
+    for (int z : {25, 50, 100, 200, 400, 800}) zoomBox_->addItem(QStringLiteral("%1%").arg(z), z);
+    zoomBox_->addItem(tr("Fit"), 0);
+    zoomBox_->setMinimumContentsLength(6);
+    zoomBox_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    connect(zoomBox_, QOverload<int>::of(&QComboBox::activated), this, [this](int index) {
+        int z = zoomBox_->itemData(index).toInt();
+        if (z == 0) session_->fitView(); else session_->zoomTo(z / 100.0);
+        canvas_->setFocus();
+    });
+    connect(zoomBox_->lineEdit(), &QLineEdit::returnPressed, this, [this] {
+        QString text = zoomBox_->lineEdit()->text().trimmed();
+        if (text.compare(tr("Fit"), Qt::CaseInsensitive) == 0) { session_->fitView(); canvas_->setFocus(); return; }
+        text.remove('%');
+        bool ok = false;
+        double z = text.toDouble(&ok);
+        if (ok && z > 0) session_->zoomTo(z / 100.0); else refreshZoom();
+        canvas_->setFocus();
+    });
     positionLabel_ = new QLabel;
     sizeLabel_ = new QLabel;
-    statusBar()->addWidget(zoomLabel_);
+    statusBar()->addWidget(zoomBox_);
     statusBar()->addWidget(sizeLabel_);
     statusBar()->addPermanentWidget(positionLabel_);
 
@@ -126,7 +152,8 @@ MainWindow::MainWindow() {
     switchTo(0);
     QSettings settings;
     restoreGeometry(settings.value("window/geometry").toByteArray());
-    restoreState(settings.value("window/state").toByteArray());
+    if (!restoreState(settings.value("window/state").toByteArray()))
+        QTimer::singleShot(0, this, [this] { resizeDocks({layersDock_, adjustDock_}, {3, 1}, Qt::Vertical); });
 }
 
 MainWindow::Tab& MainWindow::addTab(bool reuseEmpty) {
@@ -177,14 +204,18 @@ void MainWindow::switchTo(int index) {
     refreshActions();
     updateColorSwatches();
     if (toolActions_.contains(session_->tool())) toolActions_[session_->tool()]->setChecked(true);
-    zoomLabel_->setText(QStringLiteral("%1%").arg(session_->viewport.zoom * 100, 0, 'f', session_->viewport.zoom < 0.1 ? 1 : 0));
+    refreshZoom();
     canvas_->setFocus();
+}
+
+void MainWindow::refreshZoom() {
+    zoomBox_->lineEdit()->setText(QStringLiteral("%1%").arg(session_->viewport.zoom * 100, 0, 'f', session_->viewport.zoom < 0.1 ? 1 : 0));
 }
 
 void MainWindow::connectSession() {
     for (auto& c : sessionConnections_) disconnect(c);
     sessionConnections_.clear();
-    sessionConnections_.push_back(connect(session_, &EditorSession::viewportChanged, this, [this] { zoomLabel_->setText(QStringLiteral("%1%").arg(session_->viewport.zoom * 100, 0, 'f', session_->viewport.zoom < 0.1 ? 1 : 0)); }));
+    sessionConnections_.push_back(connect(session_, &EditorSession::viewportChanged, this, &MainWindow::refreshZoom));
     sessionConnections_.push_back(connect(session_, &EditorSession::titleChanged, this, &MainWindow::refreshTitle));
     sessionConnections_.push_back(connect(session_, &EditorSession::projectPathChanged, this, &MainWindow::refreshTitle));
     sessionConnections_.push_back(connect(session_, &EditorSession::historyChanged, this, &MainWindow::refreshActions));
@@ -256,7 +287,7 @@ void MainWindow::buildToolRail() {
     rail->setObjectName("toolRail");
     rail->setOrientation(Qt::Vertical);
     rail->setMovable(false);
-    rail->setIconSize(QSize(20, 20));
+    rail->setIconSize(QSize(22, 22));
     rail->setToolButtonStyle(Qt::ToolButtonIconOnly);
     auto* group = new QActionGroup(this);
     group->setExclusive(true);
@@ -294,24 +325,20 @@ void MainWindow::buildToolRail() {
     tool(Tool::Hand, tr("Hand"), "hand", QKeySequence("H"));
     tool(Tool::Zoom, tr("Zoom"), "zoom-in", QKeySequence("Z"));
     rail->addSeparator();
-    foregroundButton_ = new QToolButton;
-    foregroundButton_->setToolTip(tr("Foreground colour"));
-    foregroundButton_->setFixedSize(30, 24);
-    connect(foregroundButton_, &QToolButton::clicked, this, [this] { chooseColor(false); });
-    rail->addWidget(foregroundButton_);
-    backgroundButton_ = new QToolButton;
-    backgroundButton_->setToolTip(tr("Background colour"));
-    backgroundButton_->setFixedSize(30, 24);
-    connect(backgroundButton_, &QToolButton::clicked, this, [this] { chooseColor(true); });
-    rail->addWidget(backgroundButton_);
-    QAction* swap = rail->addAction(toolIcon("arrow-left-right"), tr("Swap colours"));
-    swap->setToolTip(tr("Swap colours (X)"));
+    swatches_ = new ColorSwatches;
+    connect(swatches_, &ColorSwatches::foregroundClicked, this, [this] { chooseColor(false); });
+    connect(swatches_, &ColorSwatches::backgroundClicked, this, [this] { chooseColor(true); });
+    auto* swap = new QAction(tr("Swap colours"), this);
     swap->setShortcut(QKeySequence("X"));
     connect(swap, &QAction::triggered, this, [this] { std::swap(session_->foregroundColor, session_->backgroundColor); updateColorSwatches(); });
-    QAction* defaults = rail->addAction(toolIcon("rotate-ccw"), tr("Default colours"));
-    defaults->setToolTip(tr("Default colours (D)"));
+    addAction(swap);
+    connect(swatches_, &ColorSwatches::swapRequested, swap, &QAction::trigger);
+    auto* defaults = new QAction(tr("Default colours"), this);
     defaults->setShortcut(QKeySequence("D"));
     connect(defaults, &QAction::triggered, this, [this] { session_->foregroundColor = Qt::black; session_->backgroundColor = Qt::white; updateColorSwatches(); });
+    addAction(defaults);
+    connect(swatches_, &ColorSwatches::defaultsRequested, defaults, &QAction::trigger);
+    rail->addWidget(swatches_);
     addToolBar(Qt::LeftToolBarArea, rail);
     // Shift-letter switches a tool's kind without leaving it.
     auto kindKey = [this](const QString& key, auto slot) { auto* a = new QAction(this); a->setShortcut(QKeySequence(key)); connect(a, &QAction::triggered, this, slot); addAction(a); };
@@ -321,16 +348,7 @@ void MainWindow::buildToolRail() {
 }
 
 void MainWindow::updateColorSwatches() {
-    auto swatch = [](QToolButton* b, const QColor& c) {
-        QPixmap p(22, 16);
-        p.fill(c);
-        QPainter painter(&p);
-        painter.setPen(QColor(0, 0, 0, 120));
-        painter.drawRect(0, 0, 21, 15);
-        b->setIcon(QIcon(p));
-    };
-    swatch(foregroundButton_, session_->foregroundColor);
-    swatch(backgroundButton_, session_->backgroundColor);
+    swatches_->setColors(session_->foregroundColor, session_->backgroundColor);
 }
 
 void MainWindow::chooseColor(bool background) {

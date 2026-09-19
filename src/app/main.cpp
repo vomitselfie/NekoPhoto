@@ -12,6 +12,7 @@
 #include <QCommandLineParser>
 #include <QDir>
 #include <QImageReader>
+#include <QMap>
 #include <QTimer>
 
 namespace {
@@ -172,6 +173,8 @@ int main(int argc, char** argv) {
     parser.addOption(screenshot);
     parser.addOption(saveAs);
     parser.addOption(prefs);
+    QCommandLineOption toolOption("tool", "Select tool <name> after opening (move, marquee, lasso, wand, crop, brush, healing, clone, smudge, gradient, shape, eyedropper, hand, zoom).", "name");
+    parser.addOption(toolOption);
     parser.addOption(fetch);
     parser.process(app);
     if (parser.isSet(fetch)) {
@@ -191,6 +194,13 @@ int main(int argc, char** argv) {
     QStringList files = parser.positionalArguments();
     if (parser.isSet(demo)) buildDemo(*window.session(), files.isEmpty() ? QString() : QDir::current().absoluteFilePath(files.first()));
     else for (const QString& path : files) window.openPath(QDir::current().absoluteFilePath(path));
+    if (parser.isSet(toolOption)) {
+        static const QMap<QString, app::Tool> tools{{"move", app::Tool::Move}, {"marquee", app::Tool::Marquee}, {"lasso", app::Tool::Lasso}, {"wand", app::Tool::Wand},
+            {"crop", app::Tool::Crop}, {"brush", app::Tool::Brush}, {"healing", app::Tool::SpotHealing}, {"clone", app::Tool::CloneStamp}, {"smudge", app::Tool::Smudge},
+            {"gradient", app::Tool::Gradient}, {"shape", app::Tool::Shape}, {"eyedropper", app::Tool::Eyedropper}, {"hand", app::Tool::Hand}, {"zoom", app::Tool::Zoom}};
+        QString name = parser.value(toolOption).toLower();
+        if (tools.contains(name)) window.session()->selectTool(tools.value(name)); else qWarning("unknown tool: %s", qPrintable(name));
+    }
     app::PreferencesDialog* preferences = nullptr;
     if (parser.isSet(prefs)) { preferences = new app::PreferencesDialog(&window); preferences->show(); }
     if (parser.isSet(screenshot)) {
@@ -198,7 +208,8 @@ int main(int argc, char** argv) {
         QTimer::singleShot(400, &window, [&window, target, savePath, preferences] {
             (preferences ? preferences->grab() : window.grab()).save(target);
             if (!savePath.isEmpty()) { QString error; window.session()->saveProject(savePath, &error); if (!error.isEmpty()) qWarning("%s", qPrintable(error)); }
-            QApplication::quit();
+            // exit() rather than quit(): newer Qt closes the windows on quit(), and the unsaved demo would prompt.
+            QCoreApplication::exit(0);
         });
     }
     return app.exec();

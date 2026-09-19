@@ -44,7 +44,8 @@ Options: `-DCOMPOSITOR_BUILD_APP=OFF` builds only the core and tests;
 and `rcc` for shells that cannot execute binaries under `/usr/lib`.
 
 `compositor-linux --download-model isnet` fetches a model without the GUI (into
-`COMPOSITOR_MODEL_DIR` when set); `--preferences` opens the Preferences dialog.
+`COMPOSITOR_MODEL_DIR` when set); `--preferences` opens the Preferences dialog;
+`--tool brush` (or any tool name from `--help`) selects a tool, handy with `--screenshot`.
 `compositor-linux --demo --screenshot out.png --save-as Demo.comp` builds a layered
 demo document, grabs the window and saves a project without any interaction
 (works with `QT_QPA_PLATFORM=offscreen`); CI runs it as a smoke test.

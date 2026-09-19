@@ -1,6 +1,7 @@
 #include "Style.h"
 #include "ToolOptionsBar.h"
 #include "CanvasWidget.h"
+#include "Icons.h"
 #include <QButtonGroup>
 #include <QCheckBox>
 #include <QComboBox>
@@ -24,8 +25,18 @@ QDoubleSpinBox* numberField(double min, double max, int decimals, const QString&
     f->setSuffix(suffix);
     f->setToolTip(tip);
     f->setKeyboardTracking(false);
-    f->setFixedWidth(suffix.isEmpty() ? 80 : 104);
+    f->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    f->setAlignment(Qt::AlignRight);
+    f->setFixedWidth(suffix.isEmpty() ? 64 : 82);
     return f;
+}
+
+/// A thin vertical rule between groups of controls.
+QWidget* separator() {
+    auto* line = new QWidget;
+    line->setFixedSize(1, 18);
+    line->setStyleSheet(QStringLiteral("background: %1;").arg(hintColor(3).name()));
+    return line;
 }
 
 QWidget* row() {
@@ -118,12 +129,16 @@ QWidget* ToolOptionsBar::buildMoveOptions() {
     lock->setChecked(session_->locksTransformRatio);
     connect(lock, &QCheckBox::toggled, this, [this](bool on) { session_->locksTransformRatio = on; });
     h->addWidget(lock);
+    h->addWidget(separator());
 
     transformFields_ = new QWidget;
     auto* fields = new QHBoxLayout(transformFields_);
-    fields->setContentsMargins(12, 0, 0, 0);
+    fields->setContentsMargins(0, 0, 0, 0);
     fields->setSpacing(4);
-    auto add = [&](const QString& label, QDoubleSpinBox* f) { fields->addWidget(new QLabel(label)); fields->addWidget(f); };
+    auto add = [&](const QString& label, QDoubleSpinBox* f) {
+        if (!label.isEmpty()) { auto* l = new QLabel(label); l->setStyleSheet(hintStyle()); fields->addSpacing(6); fields->addWidget(l); }
+        fields->addWidget(f);
+    };
     xField_ = numberField(-1000000, 1000000, 1, " px", tr("Left"));
     yField_ = numberField(-1000000, 1000000, 1, " px", tr("Top"));
     wField_ = numberField(1, 300000, 1, " px", tr("Width"));
@@ -132,6 +147,7 @@ QWidget* ToolOptionsBar::buildMoveOptions() {
     hPercent_ = numberField(0.01, 100000, 2, "%", tr("Height as a percentage of the pixels"));
     angleField_ = numberField(-100000, 100000, 1, "°", tr("Rotation, clockwise"));
     add("X", xField_); add("Y", yField_); add("W", wField_); add("H", hField_); add("", wPercent_); add("", hPercent_); add(tr("Angle"), angleField_);
+    fields->addSpacing(6);
     for (auto* f : {xField_, yField_, wField_, hField_, wPercent_, hPercent_, angleField_})
         connect(f, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &ToolOptionsBar::applyTransformField);
     auto* apply = new QPushButton(tr("Apply"));
@@ -206,11 +222,17 @@ QWidget* ToolOptionsBar::buildBrushOptions() {
     auto* h = layoutOf(w);
     auto* paint = new QToolButton;
     paint->setText(tr("Paint"));
+    paint->setIcon(toolIcon("paintbrush", 16));
+    paint->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     paint->setCheckable(true);
+    paint->setAutoRaise(true);
     paint->setProperty("role", "paint");
     auto* erase = new QToolButton;
     erase->setText(tr("Erase"));
+    erase->setIcon(toolIcon("eraser", 16));
+    erase->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     erase->setCheckable(true);
+    erase->setAutoRaise(true);
     erase->setProperty("role", "erase");
     auto* group = new QButtonGroup(w);
     group->addButton(paint);
@@ -220,6 +242,7 @@ QWidget* ToolOptionsBar::buildBrushOptions() {
     connect(paint, &QToolButton::toggled, this, [this](bool on) { if (session_->brushErase == on) { session_->brushErase = !on; emit session_->toolChanged(); } });
     h->addWidget(paint);
     h->addWidget(erase);
+    h->addWidget(separator());
     auto spin = [&](const QString& label, const QString& role, double min, double max, double value, const QString& suffix, auto apply) {
         h->addWidget(new QLabel(label));
         auto* f = numberField(min, max, 0, suffix, label);
@@ -233,6 +256,7 @@ QWidget* ToolOptionsBar::buildBrushOptions() {
     spin(tr("Opacity"), "opacity", 1, 100, session_->brushSettings.opacity * 100, "%", [this](double v) { session_->brushSettings.opacity = v / 100; });
     auto* hint = new QLabel(tr("[ and ] change the size; Shift-click paints a straight line"));
     hint->setStyleSheet(hintStyle());
+    h->addWidget(separator());
     h->addWidget(hint);
     h->addStretch();
     return w;
@@ -266,12 +290,14 @@ QWidget* ToolOptionsBar::buildCloneOptions() {
     addBrushTipFields(h);
     auto* hint = new QLabel(tr("Alt-click sets the source"));
     hint->setStyleSheet(hintStyle());
+    h->addWidget(separator());
     h->addWidget(hint);
     h->addStretch();
     return w;
 }
 
 void ToolOptionsBar::addBrushTipFields(QHBoxLayout* h) {
+    h->addWidget(separator());
     auto spin = [&](const QString& label, const QString& role, double min, double max, double value, const QString& suffix, auto apply) {
         h->addWidget(new QLabel(label));
         auto* f = numberField(min, max, 0, suffix, label);
@@ -296,6 +322,7 @@ QWidget* ToolOptionsBar::buildSmudgeOptions() {
     addBrushTipFields(h);
     auto* hint = new QLabel(tr("Opacity is the strength; Liquify pushes pixels, Smudge drags colour, Blur softens"));
     hint->setStyleSheet(hintStyle());
+    h->addWidget(separator());
     h->addWidget(hint);
     h->addStretch();
     return w;
@@ -315,6 +342,7 @@ QWidget* ToolOptionsBar::buildGradientOptions() {
     auto* reverse = new QCheckBox(tr("Reverse"));
     connect(reverse, &QCheckBox::toggled, this, [this](bool on) { session_->gradientSettings.reversed = on; session_->refreshGradient(); });
     h->addWidget(reverse);
+    h->addWidget(separator());
     h->addWidget(new QLabel(tr("Opacity")));
     auto* opacity = numberField(1, 100, 0, "%", tr("Opacity"));
     opacity->setProperty("role", "gradientOpacity");
@@ -327,6 +355,7 @@ QWidget* ToolOptionsBar::buildGradientOptions() {
     h->addWidget(apply);
     auto* hint = new QLabel(tr("Drag a line; drag again to redo it; Enter applies, Esc discards. Shift snaps the angle"));
     hint->setStyleSheet(hintStyle());
+    h->addWidget(separator());
     h->addWidget(hint);
     h->addStretch();
     return w;
@@ -346,6 +375,7 @@ QWidget* ToolOptionsBar::buildShapeOptions() {
     h->addWidget(radius);
     auto* hint = new QLabel(tr("Drag a shape in the foreground colour; Shift squares, Alt grows from the centre; Shift-U switches kind"));
     hint->setStyleSheet(hintStyle());
+    h->addWidget(separator());
     h->addWidget(hint);
     h->addStretch();
     return w;
@@ -365,6 +395,7 @@ QWidget* ToolOptionsBar::buildMarqueeOptions() {
     h->addWidget(aa);
     auto* hint = new QLabel(tr("Shift adds, Alt subtracts; drag inside a selection to move its outline"));
     hint->setStyleSheet(hintStyle());
+    h->addWidget(separator());
     h->addWidget(hint);
     h->addStretch();
     return w;
@@ -381,6 +412,7 @@ QWidget* ToolOptionsBar::buildLassoOptions() {
     h->addWidget(kind);
     auto* hint = new QLabel(tr("Polygonal: click to add points, double-click or Enter to close, Backspace removes the last point"));
     hint->setStyleSheet(hintStyle());
+    h->addWidget(separator());
     h->addWidget(hint);
     h->addStretch();
     return w;
@@ -392,6 +424,9 @@ QWidget* ToolOptionsBar::buildWandOptions() {
     h->addWidget(new QLabel(tr("Tolerance")));
     auto* tol = new QSpinBox;
     tol->setRange(0, 255);
+    tol->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    tol->setAlignment(Qt::AlignRight);
+    tol->setFixedWidth(48);
     tol->setValue(session_->wandTolerance);
     connect(tol, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int v) { session_->wandTolerance = v; });
     h->addWidget(tol);
@@ -422,6 +457,7 @@ QWidget* ToolOptionsBar::buildCropOptions() {
     h->addWidget(ratio);
     auto* hint = new QLabel(tr("Drag the crop, then press Enter or double-click; Shift squares, Alt grows from the centre"));
     hint->setStyleSheet(hintStyle());
+    h->addWidget(separator());
     h->addWidget(hint);
     auto* apply = new QPushButton(tr("Crop"));
     connect(apply, &QPushButton::clicked, this, [this] { canvas_->applyCrop(); });
@@ -444,6 +480,7 @@ QWidget* ToolOptionsBar::buildZoomOptions() {
     h->addWidget(actual);
     auto* hint = new QLabel(tr("Click zooms in, Alt-click out, drag a box to zoom to it; Ctrl-wheel zooms anywhere"));
     hint->setStyleSheet(hintStyle());
+    h->addWidget(separator());
     h->addWidget(hint);
     h->addStretch();
     return w;
@@ -454,6 +491,7 @@ QWidget* ToolOptionsBar::buildEyedropperOptions() {
     auto* h = layoutOf(w);
     auto* hint = new QLabel(tr("Click sets the foreground colour, Alt-click the background"));
     hint->setStyleSheet(hintStyle());
+    h->addWidget(separator());
     h->addWidget(hint);
     h->addStretch();
     return w;

@@ -8,6 +8,8 @@
 #include <QTabBar>
 #include <vector>
 
+class QComboBox;
+class QDockWidget;
 class QLabel;
 class QMenu;
 class QToolButton;
@@ -16,6 +18,7 @@ class QStackedWidget;
 namespace app {
 
 class CanvasWidget;
+class ColorSwatches;
 class LayersPanel;
 class AdjustmentsPanel;
 class ToolOptionsBar;
@@ -74,6 +77,7 @@ private:
     void addRecent(const QString& path);
     void refreshRecent();
     void refreshTitle();
+    void refreshZoom();
     void refreshActions();
     void chooseColor(bool background);
     void deleteSelectedLayers();
@@ -98,11 +102,12 @@ private:
     QStackedWidget* adjustStack_;
     std::vector<QMetaObject::Connection> sessionConnections_;
     QMenu* recentMenu_;
-    QLabel* zoomLabel_;
     QLabel* positionLabel_;
     QLabel* sizeLabel_;
-    QToolButton* foregroundButton_;
-    QToolButton* backgroundButton_;
+    ColorSwatches* swatches_;
+    QDockWidget* layersDock_ = nullptr;
+    QDockWidget* adjustDock_ = nullptr;
+    QComboBox* zoomBox_;
     QAction* undoAction_;
     QAction* redoAction_;
     QList<QAction*> documentActions_;

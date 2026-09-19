@@ -1,3 +1,4 @@
+#include "Style.h"
 #include "AdjustmentsPanel.h"
 #include <QVBoxLayout>
 
@@ -28,7 +29,9 @@ void AdjustmentsPanel::sync() {
     if (!layer || !layer->adjustment) {
         layerId_.reset();
         editor_->setVisible(false);
-        title_->setText(tr("Select an adjustment layer to edit it, or add one with Layer > New Adjustment Layer."));
+        title_->setAlignment(Qt::AlignCenter);
+        title_->setStyleSheet(hintStyle());
+        title_->setText(tr("Select an adjustment layer to edit it here.\nAdd one from the Layers panel or Layer > New Adjustment Layer."));
         return;
     }
     auto settings = session_->adjustmentSettings(layer->id);

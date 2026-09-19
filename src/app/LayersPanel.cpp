@@ -16,6 +16,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include "Icons.h"
 #include <QPushButton>
 #include <QStyle>
 #include <QTimer>
@@ -226,6 +227,9 @@ LayersPanel::LayersPanel(EditorSession* session, QWidget* parent) : QWidget(pare
     opacitySpin_ = new QSpinBox;
     opacitySpin_->setRange(0, 100);
     opacitySpin_->setSuffix("%");
+    opacitySpin_->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    opacitySpin_->setAlignment(Qt::AlignRight);
+    opacitySpin_->setFixedWidth(52);
     appearance->addWidget(opacitySpin_);
     layout->addLayout(appearance);
 
@@ -233,20 +237,30 @@ LayersPanel::LayersPanel(EditorSession* session, QWidget* parent) : QWidget(pare
     layout->addWidget(tree_, 1);
 
     auto* footer = new QHBoxLayout;
-    auto button = [&](const QString& text, const QString& tip, auto slot) {
+    footer->setSpacing(2);
+    auto button = [&](const QString& icon, const QString& tip, auto slot) {
         auto* b = new QToolButton;
-        b->setText(text);
+        b->setIcon(toolIcon(icon, 18));
+        b->setIconSize(QSize(18, 18));
         b->setToolTip(tip);
         b->setAutoRaise(true);
         connect(b, &QToolButton::clicked, this, slot);
         footer->addWidget(b);
         return b;
     };
-    button("+", tr("New layer"), [this] { session_->addBlankLayer(); });
-    button(tr("Folder"), tr("New folder"), [this] { session_->addGroup(); });
-    button(tr("Mask"), tr("Add layer mask (reveal all, or hide the selection)"), [this] { session_->addMaskFromSelection(true); });
+    button("square-plus", tr("New layer"), [this] { session_->addBlankLayer(); });
+    button("folder-plus", tr("New folder"), [this] { session_->addGroup(); });
+    button("mask", tr("Add layer mask (reveal all, or hide the selection)"), [this] { session_->addMaskFromSelection(true); });
+    auto* adjust = button("sliders-horizontal", tr("New adjustment layer"), [] {});
+    auto* adjustMenu = new QMenu(adjust);
+    for (int i = 0; i < 6; i++) {
+        AdjustmentKind kind = AdjustmentKind(i);
+        adjustMenu->addAction(QString::fromUtf8(adjustmentKindName(kind)), this, [this, kind] { session_->addAdjustmentLayer(kind); });
+    }
+    adjust->setMenu(adjustMenu);
+    adjust->setPopupMode(QToolButton::InstantPopup);
     footer->addStretch();
-    button(tr("Delete"), tr("Delete the selected layers"), [this] { session_->deleteSelectedLayers(); });
+    button("trash-2", tr("Delete the selected layers"), [this] { session_->deleteSelectedLayers(); });
     layout->addLayout(footer);
 
     connect(blendCombo_, QOverload<int>::of(&QComboBox::activated), this, [this](int index) { session_->setLayerBlendMode(BlendMode(index)); });
@@ -328,7 +342,7 @@ QWidget* LayersPanel::makeRow(const Layer& layer, int depth, bool visible) {
     auto* thumb = new QLabel;
     thumb->setPixmap(thumbnailPixmap(layer.asset ? layer.asset->thumbnail : nullptr, layer.isGroup, dpr));
     thumb->setFixedSize(thumbWidth, thumbHeight);
-    if (layer.adjustment) { thumb->setText(QStringLiteral("⚙")); thumb->setAlignment(Qt::AlignCenter); thumb->setToolTip(QString::fromUtf8(adjustmentKindName(layer.adjustment->kind))); }
+    if (layer.adjustment) { thumb->setPixmap(renderIcon("sliders-horizontal", palette().color(QPalette::Text), 20, dpr)); thumb->setAlignment(Qt::AlignCenter); thumb->setToolTip(QString::fromUtf8(adjustmentKindName(layer.adjustment->kind))); }
     bool activeImage = session_->activeLayerId() == layer.id && !session_->isMaskSelected();
     thumb->setStyleSheet(activeImage ? "border: 2px solid palette(highlight);" : "border: 2px solid transparent;");
     h->addWidget(thumb);
