@@ -2,11 +2,12 @@
 // the layer as they change; OK keeps the edit as one undo step, Cancel puts the layer back.
 #pragma once
 #include "EditorSession.h"
+#include "FontPicker.h"
 #include <QDialog>
+#include <QPointer>
 #include <QTimer>
 
 class QPlainTextEdit;
-class QFontComboBox;
 class QDoubleSpinBox;
 class QToolButton;
 class QComboBox;
@@ -27,11 +28,11 @@ private:
     void apply();
     void pickColour();
 
-    EditorSession* session_;
+    QPointer<EditorSession> session_;
     compositor::Uuid layerId_;
     compositor::LayerText text_;
     QPlainTextEdit* editor_;
-    QFontComboBox* family_;
+    FontPicker* family_;
     QDoubleSpinBox* size_;
     QToolButton* bold_;
     QToolButton* italic_;

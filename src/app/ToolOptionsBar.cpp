@@ -1,7 +1,7 @@
 #include "Style.h"
 #include "ToolOptionsBar.h"
 #include "TextLayer.h"
-#include <QFontComboBox>
+#include "FontPicker.h"
 #include "CanvasWidget.h"
 #include "Icons.h"
 #include <QButtonGroup>
@@ -400,11 +400,11 @@ QWidget* ToolOptionsBar::buildTextOptions() {
             session_->setLayerText(layer->id, text);
         }
     };
-    auto* family = new QFontComboBox;
-    family->setToolTip(tr("Font family"));
-    family->setMaximumWidth(220);
-    connect(family, &QFontComboBox::currentFontChanged, this, [applyStyle](const QFont& f) { applyStyle([f](LayerText& t) { t.fontFamily = f.family().toStdString(); }); });
-    syncers_.push_back([this, family] { QSignalBlocker b(family); family->setCurrentFont(fontFor(session_->textStyle)); });
+    auto* family = new FontPicker;
+    family->setMinimumWidth(150);
+    family->setMaximumWidth(240);
+    connect(family, &FontPicker::familyChanged, this, [applyStyle](const QString& f) { applyStyle([f](LayerText& t) { t.fontFamily = f.toStdString(); }); });
+    syncers_.push_back([this, family] { QSignalBlocker b(family); family->setFamily(fontFor(session_->textStyle).family()); });
     h->addWidget(family);
     auto* size = numberField(1, 2000, 0, " px", tr("Size, in document pixels"));
     connect(size, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [applyStyle](double v) { applyStyle([v](LayerText& t) { t.fontSize = v; }); });

@@ -204,8 +204,10 @@ packaging/                      .desktop, icon, MIME type
   tool (rectangle, rounded rectangle, ellipse; Shift-U switches), Text tool
   (click to add text in the foreground colour, click a text layer to edit it;
   the options bar sets font, size, bold, italic and alignment, the editor also
-  colour, line and letter spacing; a text layer is a raster with its text and
-  style beside it in the manifest, so the Mac app sees pixels), Blur /
+  colour, line and letter spacing; the font picker folds families sharing a
+  leading name into one expandable row, filters as you type and keeps recent
+  fonts on top; a text layer is a raster with its text and style beside it in
+  the manifest, so the Mac app sees pixels), Blur /
   Smudge / Liquify tool (Blur works on masks too, to feather them; Liquify
   accumulates a displacement field and resamples the original through it, so
   long strokes stay sharp).

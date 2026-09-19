@@ -37,3 +37,12 @@ add_test(NAME resample_tests COMMAND resample_tests)
 add_executable(heal_tests heal_tests.cpp)
 target_link_libraries(heal_tests PRIVATE compositor::core compositor::pixels compositor_warnings)
 add_test(NAME heal_tests COMMAND heal_tests)
+
+# The font picker's grouping is plain QtCore logic; test it when Qt is around.
+find_package(Qt6 6.4 QUIET COMPONENTS Core)
+if(TARGET Qt6::Core)
+    add_executable(font_group_tests font_group_tests.cpp ${CMAKE_SOURCE_DIR}/src/app/FontGroups.cpp)
+    target_include_directories(font_group_tests PRIVATE ${CMAKE_SOURCE_DIR}/src/app)
+    target_link_libraries(font_group_tests PRIVATE Qt6::Core compositor_warnings)
+    add_test(NAME font_group_tests COMMAND font_group_tests)
+endif()

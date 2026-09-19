@@ -4,7 +4,6 @@
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
-#include <QFontComboBox>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPlainTextEdit>
@@ -33,9 +32,8 @@ TextDialog::TextDialog(EditorSession* session, Uuid layerId, QWidget* parent)
     layout->addWidget(editor_);
 
     auto* fontRow = new QHBoxLayout;
-    family_ = new QFontComboBox;
-    family_->setCurrentFont(fontFor(text_));
-    family_->setToolTip(tr("Font family"));
+    family_ = new FontPicker;
+    family_->setFamily(fontFor(text_).family());
     fontRow->addWidget(family_, 1);
     size_ = new QDoubleSpinBox;
     size_->setRange(1, 2000);
@@ -95,7 +93,7 @@ TextDialog::TextDialog(EditorSession* session, Uuid layerId, QWidget* parent)
     connect(&debounce_, &QTimer::timeout, this, &TextDialog::apply);
     auto schedule = [this] { debounce_.start(); };
     connect(editor_, &QPlainTextEdit::textChanged, this, schedule);
-    connect(family_, &QFontComboBox::currentFontChanged, this, schedule);
+    connect(family_, &FontPicker::familyChanged, this, schedule);
     connect(size_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, schedule);
     connect(bold_, &QToolButton::toggled, this, schedule);
     connect(italic_, &QToolButton::toggled, this, schedule);
@@ -103,16 +101,18 @@ TextDialog::TextDialog(EditorSession* session, Uuid layerId, QWidget* parent)
     connect(lineSpacing_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, schedule);
     connect(letterSpacing_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, schedule);
     connect(colour_, &QPushButton::clicked, this, &TextDialog::pickColour);
-    connect(session_, &EditorSession::layersChanged, this, [this] { if (!finished_ && !session_->layerText(layerId_)) reject(); });
+    connect(session_, &EditorSession::layersChanged, this, [this] { if (!finished_ && session_ && !session_->layerText(layerId_)) reject(); });
+    connect(session_, &QObject::destroyed, this, [this] { finished_ = true; close(); });
     editor_->setFocus();
     editor_->selectAll();
 }
 
-TextDialog::~TextDialog() { if (!finished_) session_->endTextEdit(false); }
+TextDialog::~TextDialog() { if (!finished_ && session_) session_->endTextEdit(false); }
 
 void TextDialog::apply() {
+    if (!session_) return;
     text_.text = editor_->toPlainText().toStdString();
-    text_.fontFamily = family_->currentFont().family().toStdString();
+    text_.fontFamily = family_->family().toStdString();
     text_.fontSize = size_->value();
     text_.bold = bold_->isChecked();
     text_.italic = italic_->isChecked();
@@ -137,7 +137,7 @@ void TextDialog::done(int result) {
     if (finished_) { QDialog::done(result); return; }
     finished_ = true;
     if (debounce_.isActive()) { debounce_.stop(); apply(); }
-    session_->endTextEdit(result == QDialog::Accepted);
+    if (session_) session_->endTextEdit(result == QDialog::Accepted);
     QDialog::done(result);
 }
 

@@ -55,6 +55,10 @@ qt_add_executable(compositor-linux
     TextLayer.cpp
     TextDialog.h
     TextDialog.cpp
+    FontPicker.h
+    FontPicker.cpp
+    FontGroups.h
+    FontGroups.cpp
     Automation.h
     Automation.cpp
     Theme.h

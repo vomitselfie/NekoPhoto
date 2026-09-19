@@ -7,6 +7,7 @@
 #include "Theme.h"
 #include "FilterDialog.h"
 #include "GmicDialog.h"
+#include "FontPicker.h"
 #include "ImageConvert.h"
 #include <QDialog>
 #include <cstdio>
@@ -321,10 +322,11 @@ int main(int argc, char** argv) {
             if (adjustments.contains(name)) (new app::PixelAdjustmentDialog(s, adjustments.value(name), &window))->show();
             else if (filters.contains(name)) (new app::FilterDialog(s, filters.value(name), &window))->show();
             else if (name == "gmic") (new app::GmicDialog(s, &window))->show();
-            else if (name == "text") {
+            else if (name == "text" || name == "fonts") {
                 compositor::LayerText text = s->textStyle;
                 text.text = "Hello";
                 if (s->hasDocument()) s->addTextLayer(QPointF(s->document()->width / 3.0, s->document()->height / 3.0), text, true);
+                if (name == "fonts") QTimer::singleShot(100, &window, [] { for (QWidget* w : QApplication::topLevelWidgets()) for (auto* picker : w->findChildren<app::FontPicker*>()) if (w->isVisible()) { picker->showPicker(); return; } });
             }
             else if (name == "new") app::askNewDocument(&window, {});
             else if (name == "canvas-size") app::askCanvasSize(&window, s->hasDocument() ? s->document()->width : 1920, s->hasDocument() ? s->document()->height : 1080);
@@ -340,6 +342,7 @@ int main(int argc, char** argv) {
         QTimer::singleShot(400, &window, [&window, target, savePath, preferences] {
             QWidget* subject = preferences;
             if (!subject) for (QWidget* w : QApplication::topLevelWidgets()) if (w->isVisible() && qobject_cast<QDialog*>(w)) subject = w;
+            for (QWidget* w : QApplication::topLevelWidgets()) if (w->isVisible() && w->windowType() == Qt::Popup) subject = w;   // a dropped-down picker wins
             (subject ? subject->grab() : window.grab()).save(target);
             if (!savePath.isEmpty()) { QString error; window.session()->saveProject(savePath, &error); if (!error.isEmpty()) qWarning("%s", qPrintable(error)); }
             // exit() rather than quit(): newer Qt closes the windows on quit(), and the unsaved demo would prompt.

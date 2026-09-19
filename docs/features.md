@@ -34,7 +34,7 @@ The full feature list. It mirrors the Mac app's, with Linux key names.
 - Clone Stamp, aligned or not, sampling one layer or all of them
 - Smudge, Liquify and Blur, on pixels or masks
 - Gradient tool and Shape tool (rectangles, rounded rectangles and ellipses)
-- Text tool: click to add text in any installed font (size, bold, italic, colour, alignment, line and letter spacing), editable later as long as the layer is not painted on; text layers stay pixels in the project so the Mac app opens them
+- Text tool: click to add text in any installed font (size, bold, italic, colour, alignment, line and letter spacing), editable later as long as the layer is not painted on; text layers stay pixels in the project so the Mac app opens them. The font picker folds families that share a name (the hundreds of Noto variants) into one expandable row, filters as you type, and keeps recent fonts on top
 - Eyedropper and a full colour picker; X swaps the colours, D resets them
 
 ## Adjustments and filters
