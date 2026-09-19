@@ -870,9 +870,11 @@ void CanvasWidget::cancelCrop() {
 }
 
 void CanvasWidget::sampleColor(QPointF doc, bool background) {
-    auto color = session_->compositeColorAt(doc);
-    if (!color) return;
-    if (background) session_->backgroundColor = *color; else session_->foregroundColor = *color;
+    std::optional<QColor> sampled = session_->compositeColorAt(doc);
+    if (!sampled) return;
+    // Copied out by value: GCC 13 misreads a dereference here as a dangling pointer.
+    QColor color = sampled.value_or(QColor());
+    if (background) session_->backgroundColor = color; else session_->foregroundColor = color;
     session_->refreshGradient();
     emit session_->toolChanged();
 }
