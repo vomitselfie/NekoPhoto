@@ -43,6 +43,7 @@ private:
     void refreshTitle();
     void refreshActions();
     void chooseColor(bool background);
+    void deleteSelectedLayers();
     void updateColorSwatches();
     void showError(const QString& title, const QString& message);
 

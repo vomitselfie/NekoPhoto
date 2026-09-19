@@ -1,4 +1,5 @@
 #include "compositor/brush.h"
+#include "compositor/shape.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -286,7 +287,7 @@ void BrushStroke::recompose(const Rect& gridRect) {
                     const uint8_t* p = src.pixel(px, py);
                     for (int k = 0; k < 4; k++) s[k] += p[k] * w;
                 }
-                double sa = s[3] / 255.0 * c;
+                double sa = replacesWithClone_ ? c : s[3] / 255.0 * c;
                 for (int k = 0; k < 4; k++) out[k] = uint8_t(clamp(s[k] * c + base[k] * (1 - sa) + 0.5, 0.0, 255.0));
                 continue;
             }
@@ -300,6 +301,96 @@ void BrushStroke::recompose(const Rect& gridRect) {
             }
         }
     }
+}
+
+bool BrushStroke::liftSelection() {
+    if (isMask_ || !selection_ || !base_) return false;
+    PixelBounds b = nonzeroBounds(*selection_);
+    Rect region = b.isEmpty() ? Rect() : Rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0).intersection(sourceRect_).integral();
+    if (region.isEmpty()) return false;
+    liftedRect_ = region;
+    lifted_ = std::make_shared<Image>(int(region.width), int(region.height));
+    bool any = false;
+    for (int y = 0; y < lifted_->height(); y++) for (int x = 0; x < lifted_->width(); x++) {
+        int sx = x + int(region.x), sy = y + int(region.y);
+        unsigned k = selection_->at(sx, sy);
+        const uint8_t* s = base_->pixel(sx, sy);
+        uint8_t* d = lifted_->pixel(x, y);
+        for (int c = 0; c < 4; c++) d[c] = uint8_t((s[c] * k + 127) / 255);
+        if (d[3]) any = true;
+    }
+    return any;
+}
+
+void BrushStroke::moveLifted(Point offset, bool duplicate) {
+    if (!lifted_ || !selection_) return;
+    // The offset in grid pixels (whole document pixels may land between grid pixels on a scaled layer).
+    Point zero = documentToPixel_.apply({0, 0}), moved = documentToPixel_.apply(offset);
+    double gx = moved.x - zero.x, gy = moved.y - zero.y;
+    working_ = std::make_shared<Image>(*base_);
+    if (!duplicate) {
+        for (int y = 0; y < height_; y++) for (int x = 0; x < width_; x++) {
+            unsigned k = selection_->at(x, y);
+            if (!k) continue;
+            uint8_t* p = working_->pixel(x, y);
+            for (int c = 0; c < 4; c++) p[c] = uint8_t((p[c] * (255 - k) + 127) / 255);
+        }
+    }
+    bool whole = std::fabs(gx - std::round(gx)) < 1e-6 && std::fabs(gy - std::round(gy)) < 1e-6;
+    double tx = liftedRect_.x + gx, ty = liftedRect_.y + gy;
+    int lw = lifted_->width(), lh = lifted_->height();
+    Rect target = Rect(tx, ty, lw, lh).insetBy(-1, -1).integral().intersection(Rect(0, 0, width_, height_));
+    for (int y = int(target.minY()); y < int(target.maxY()); y++) for (int x = int(target.minX()); x < int(target.maxX()); x++) {
+        double sx = x - tx, sy = y - ty;
+        float s[4];
+        if (whole) {
+            int ix = int(std::lround(sx)), iy = int(std::lround(sy));
+            if (ix < 0 || iy < 0 || ix >= lw || iy >= lh) continue;
+            const uint8_t* p = lifted_->pixel(ix, iy);
+            for (int c = 0; c < 4; c++) s[c] = p[c];
+        } else {
+            double bx = sx - 0.5 + 0.5, by = sy - 0.5 + 0.5; // sample centre-aligned
+            int x0 = int(std::floor(bx)), y0 = int(std::floor(by));
+            float fx = float(bx - x0), fy = float(by - y0);
+            for (int c = 0; c < 4; c++) s[c] = 0;
+            for (int j = 0; j < 2; j++) for (int i = 0; i < 2; i++) {
+                int px = x0 + i, py = y0 + j;
+                float w = (i ? fx : 1 - fx) * (j ? fy : 1 - fy);
+                if (w <= 0 || px < 0 || py < 0 || px >= lw || py >= lh) continue;
+                const uint8_t* p = lifted_->pixel(px, py);
+                for (int c = 0; c < 4; c++) s[c] += p[c] * w;
+            }
+        }
+        if (s[3] <= 0) continue;
+        uint8_t* d = working_->pixel(x, y);
+        float a = s[3] / 255.0f;
+        for (int c = 0; c < 4; c++) d[c] = uint8_t(clamp(s[c] + d[c] * (1 - a) + 0.5f, 0.0f, 255.0f));
+    }
+    touched_ = true;
+    dirtyGrid_ = {};
+}
+
+void BrushStroke::fillGradientOver(int shape, Point from, Point to, const float startColor[4], const float endColor[4], double opacity) {
+    if (!valid_) return;
+    touched_ = true;
+    dirtyGrid_ = {}; // the working image is composed here, not from the coverage
+    // Pixels outside the canvas are left alone: the canvas as grid coverage, times the selection.
+    GrayImage inside(width_, height_, 0);
+    for (int y = 0; y < height_; y++) {
+        Point d = pixelToDocument_.apply({0.5, y + 0.5});
+        Point dd = pixelToDocument_.applyVector({1, 0});
+        for (int x = 0; x < width_; x++, d = d + dd)
+            if (canvas_.contains(d)) inside.at(x, y) = selection_ ? selection_->at(x, y) : 255;
+    }
+    GradientStops stops;
+    for (int c = 0; c < 4; c++) { stops.start[c] = startColor[c]; stops.end[c] = endColor[c]; }
+    if (isMask_) fillGradient(*baseMask_, *workingMask_, pixelToDocument_, GradientShape(shape), from, to, stops, opacity, &inside);
+    else fillGradient(*base_, *working_, pixelToDocument_, GradientShape(shape), from, to, stops, opacity, &inside);
+}
+
+void BrushStroke::fillColor(double red, double green, double blue) {
+    float color[4] = {float(red), float(green), float(blue), 1.0f};
+    fillGradientOver(0, {0, 0}, {0, 0}, color, color, 1);
 }
 
 void BrushStroke::heal() {

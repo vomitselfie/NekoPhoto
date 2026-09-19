@@ -1,6 +1,8 @@
 #include "MainWindow.h"
 #include "ImageConvert.h"
 #include "compositor/filters.h"
+#include "compositor/selection.h"
+#include "compositor/warp.h"
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QDir>
@@ -78,9 +80,47 @@ void buildDemo(app::EditorSession& session, const QString& imagePath) {
             session.commitPixels(trimmed, placed, "Gaussian Blur");
         }
     }
-    session.selectLayer(session.document()->layers[1].id);
-    session.selectAll();
+    // The newer tools: a rounded shape, a gradient on it, a distorted copy, a smudge, and moved pixels.
+    session.selectLayer(session.document()->layers.back().id);
+    session.shapeKind = ShapeKind::Rectangle;
+    session.shapeCornerRadius = 24;
+    session.foregroundColor = QColor(40, 200, 255);
+    session.beginShape(QPointF(base.width() * 0.62, base.height() * 0.6));
+    session.dragShape(QPointF(base.width() * 0.95, base.height() * 0.92), false, false);
+    session.finishShape();
+    session.gradientSettings.style = app::GradientStyle::ForegroundToBackground;
+    session.backgroundColor = QColor(255, 60, 160);
+    session.loadLayerAsSelection(*session.activeLayerId(), false, SelectionMode::Replace);
+    session.beginGradient(QPointF(base.width() * 0.62, base.height() * 0.6));
+    session.moveGradient(QPointF(base.width() * 0.95, base.height() * 0.92));
+    session.commitGradient();
+    session.beginTransform(true);
+    session.beginDistort();
+    if (auto& edit = session.transformEdit()) {
+        Corners c = *edit->corners;
+        c[0].y += 30; c[1].y -= 30;
+        session.previewCorners(c);
+    }
+    session.commitTransform();
     session.deselect();
+    session.shapeKind = ShapeKind::Ellipse;
+    session.foregroundColor = QColor(255, 255, 255);
+    session.beginShape(QPointF(base.width() * 0.05, base.height() * 0.55));
+    session.dragShape(QPointF(base.width() * 0.25, base.height() * 0.75), true, false);
+    session.finishShape();
+    session.selectLayer(session.document()->layers[0].id);
+    session.blurMode = app::BlurToolMode::Liquify;
+    session.brushSettings.diameter = 60;
+    session.beginWarp(QPointF(base.width() * 0.2, base.height() * 0.8));
+    session.continueWarp(QPointF(base.width() * 0.3, base.height() * 0.7));
+    session.continueWarp(QPointF(base.width() * 0.4, base.height() * 0.85));
+    session.endWarp();
+    auto rect = rasterizeRect({base.width() * 0.05, base.height() * 0.05, base.width() * 0.15, base.height() * 0.15}, base.width(), base.height(), true);
+    session.applySelectionShape(*rect, SelectionMode::Replace, "Marquee");
+    session.beginPixelMove(true);
+    session.movePixels(QPointF(base.width() * 0.75, 0));
+    session.finishPixelMove();
+    session.selectLayer(session.document()->layers[1].id);
 }
 
 } // namespace

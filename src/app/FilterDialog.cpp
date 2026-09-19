@@ -45,6 +45,7 @@ PixelAdjustmentDialog::PixelAdjustmentDialog(EditorSession* session, AdjustmentK
     setAttribute(Qt::WA_DeleteOnClose);
     auto* layout = new QVBoxLayout(this);
     editor_ = new AdjustmentEditor;
+    editor_->setSession(session_);
     AdjustmentSettings settings = AdjustmentSettings::defaults(kind);
     if (kind == AdjustmentKind::GradientMap) {
         settings.gradientMap.shadows = {session_->foregroundColor.redF(), session_->foregroundColor.greenF(), session_->foregroundColor.blueF()};

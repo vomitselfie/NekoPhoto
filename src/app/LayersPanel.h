@@ -18,8 +18,13 @@ public:
     explicit LayerTree(EditorSession* session, QWidget* parent = nullptr);
 signals:
     void dropRequested(compositor::Uuid id, std::optional<compositor::Uuid> parent, std::optional<compositor::Uuid> above, bool atBottom);
+public:
+    bool dropDuplicates = false;
 protected:
     void dropEvent(QDropEvent* event) override;
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dragMoveEvent(QDragMoveEvent* event) override;
+    void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
 private:

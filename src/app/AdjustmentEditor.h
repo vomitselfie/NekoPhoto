@@ -4,6 +4,7 @@
 #pragma once
 #include "compositor/adjustments.h"
 #include <QWidget>
+#include <optional>
 #include <array>
 #include <vector>
 
@@ -25,6 +26,9 @@ public:
     void setSettings(const compositor::AdjustmentSettings& settings);
     const compositor::AdjustmentSettings& settings() const { return settings_; }
     void setHistogram(const std::array<std::vector<double>, 4>& histogram);
+    /// Lets the Hue/Saturation eyedroppers and the targeted-adjustment drag sample the canvas.
+    void setSession(class EditorSession* session);
+    ~AdjustmentEditor() override;
 
 signals:
     /// A slider drag began / a value changed / the drag ended.
@@ -52,6 +56,13 @@ private:
     HistogramWidget* histogram_ = nullptr;
     CurveWidget* curve_ = nullptr;
     std::array<std::vector<double>, 4> histogramData_;
+    EditorSession* session_ = nullptr;
+    int hueSampleMode_ = 0; // 0 off, 1 sample, 2 add, 3 remove
+    bool hueTargeting_ = false;
+    void installHueHooks();
+    void clearHueHooks();
+    struct HueDrag { int range; double hue, saturation; };
+    std::optional<HueDrag> hueDrag_;
 };
 
 } // namespace app

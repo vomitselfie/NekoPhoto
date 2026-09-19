@@ -53,6 +53,11 @@ void drawLayer(const DrawParams& params, const Rect& region, double scale, const
 /// `outside` is the value beyond the mask's rectangle.
 void sampleMaskCoverage(const GrayImage& mask, const LayerTransform& transform, const Rect& region, double scale, uint8_t outside, GrayImage& out, bool multiply);
 
+/// Image Size: every layer's pixels and mask resampled for a `width` x `height` canvas (the Mac rasterises each
+/// transformed layer into an axis-aligned box); placed masks and uniform masks keep their pixels. Adjustment and
+/// group records scale their transforms. Returns false when a layer would exceed the size limits.
+bool resizeDocument(Document& document, int width, int height, double resolution, Sampling sampling);
+
 /// Resamples `image` through `transform` into a `width` x `height` grid placed by `target` (both in
 /// document space): what the Mac does when Image Size or a distort bakes pixels.
 std::shared_ptr<Image> resampleLayer(const Image& image, const LayerTransform& transform, const LayerTransform& target, int width, int height);

@@ -22,10 +22,13 @@ public:
     std::optional<QRectF> cropRect() const { return crop_; }
     void applyCrop();
     void cancelCrop();
+    /// Width / height the crop keeps while dragging; 0 is free.
+    void setCropRatio(double ratio);
     void finishPolygonalLasso();
     void cancelLasso();
     QPointF documentPoint(QPointF viewPoint) const;
     QPointF viewPoint(QPointF documentPoint) const;
+    EditorSession* session() const { return session_; }
 
 signals:
     void cursorMoved(QPointF documentPoint);
@@ -47,7 +50,7 @@ protected:
     void focusOutEvent(QFocusEvent*) override;
 
 private:
-    enum class Drag { None, Pan, Move, Resize, Rotate, Brush, Marquee, Lasso, SelectionMove, Crop, CropMove, CropResize, ZoomRect };
+    enum class Drag { None, Pan, Move, Resize, Rotate, Distort, PixelMove, Brush, Warp, Gradient, Shape, Marquee, Lasso, SelectionMove, Crop, CropMove, CropResize, ZoomRect, Hook };
     struct HandleHit { bool hit = false; int index = 0; bool rotate = false; };
 
     void invalidate(QRectF documentRegion);
@@ -56,7 +59,8 @@ private:
     QSizeF documentSize() const;
     QRectF documentViewRect() const;
     void syncViewport();
-    HandleHit hitHandle(QPointF viewPoint, const compositor::LayerTransform& transform) const;
+    HandleHit hitHandle(QPointF viewPoint, const compositor::Corners& corners, bool insideBox) const;
+    bool boxShown() const;
     void updateCursor(QPointF viewPoint, Qt::KeyboardModifiers modifiers);
     void press(QPointF viewPoint, Qt::MouseButton button, Qt::KeyboardModifiers modifiers);
     void move(QPointF viewPoint, Qt::MouseButtons buttons, Qt::KeyboardModifiers modifiers);
@@ -66,12 +70,15 @@ private:
     void sampleColor(QPointF documentPoint, bool background);
     compositor::SelectionMode selectionMode(Qt::KeyboardModifiers modifiers) const;
     void drawOverlays(QPainter& painter);
-    void drawTransformBox(QPainter& painter, const compositor::LayerTransform& transform, bool active);
+    void drawTransformBox(QPainter& painter, const compositor::Corners& corners, bool active, bool distorting);
     void drawSelectionAnts(QPainter& painter);
     void drawCropOverlay(QPainter& painter);
-    QRectF dragBox(QPointF anchor, QPointF point, bool square, bool fromCenter) const;
+    QRectF dragBox(QPointF anchor, QPointF point, bool square, bool fromCenter, double ratio = 0) const;
     void refreshSelectionOutline();
-    void snapMove(compositor::LayerTransform& draft, const compositor::LayerTransform& original);
+    void guideTargets(std::vector<double>& xs, std::vector<double>& ys) const;
+    void snapMove(compositor::LayerTransform& draft);
+    QPointF snapPoint(QPointF documentPoint);
+    bool isBrushLike() const;
 
     EditorSession* session_;
     QImage cache_;
@@ -82,22 +89,25 @@ private:
     Drag drag_ = Drag::None;
     QPointF dragStartView_, dragStartDocument_, lastView_;
     std::optional<compositor::TransformDrag> transformDrag_;
+    compositor::Corners distortStart_{};
+    int distortIndex_ = 0;
     bool dragMoved_ = false;
     bool spaceHeld_ = false;
     std::optional<QPointF> hover_;
     std::vector<QPointF> lassoPoints_;
     std::optional<QPointF> lassoCursor_;
-    bool polygonalLasso_ = false;
     std::optional<QRectF> marquee_;
     std::optional<compositor::Selection> selectionMoveOrigin_;
     std::optional<QRectF> crop_;
     QRectF cropOrigin_;
     int cropHandle_ = -1;
+    double cropRatio_ = 0;
     std::optional<QRectF> zoomRect_;
     std::vector<QPolygonF> selectionOutline_;
     int antsPhase_ = 0;
     QTimer antsTimer_;
     bool layerPickedOnPress_ = false;
+    QCursor zoomInCursor_, zoomOutCursor_;
 };
 
 } // namespace app

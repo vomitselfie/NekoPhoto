@@ -1,5 +1,9 @@
 #include "AdjustmentEditor.h"
+#include "EditorSession.h"
+#include <QApplication>
+#include <QButtonGroup>
 #include <QCheckBox>
+#include <QToolButton>
 #include <QColorDialog>
 #include <QComboBox>
 #include <QDoubleSpinBox>
@@ -316,10 +320,89 @@ QWidget* AdjustmentEditor::buildHsv() {
     connect(invert, &QCheckBox::toggled, this, [this](bool on) { if (syncing_) return; emit editStarted(); settings_.hsv.invertRange = on; changed(); emit editFinished(); });
     syncers_.push_back([this, invert] { invert->setChecked(settings_.hsv.invertRange); invert->setEnabled(settings_.hsv.range != 0 && !settings_.hsv.colorize); });
     v->addWidget(invert);
+    // Eyedroppers and the targeted-adjustment tool: they take the next canvas click(s).
+    auto* tools = new QHBoxLayout;
+    auto* group = new QButtonGroup(w);
+    group->setExclusive(false);
+    auto toolButton = [&](const QString& text, const QString& tip, int mode) {
+        auto* b = new QToolButton;
+        b->setText(text);
+        b->setToolTip(tip);
+        b->setCheckable(true);
+        connect(b, &QToolButton::toggled, this, [this, mode, b, group](bool on) {
+            if (on) { for (auto* other : group->buttons()) if (other != b) other->setChecked(false); }
+            if (mode < 0) hueTargeting_ = on; else hueSampleMode_ = on ? mode : (hueSampleMode_ == mode ? 0 : hueSampleMode_);
+            if (on) installHueHooks(); else if (!hueTargeting_ && hueSampleMode_ == 0) clearHueHooks();
+        });
+        group->addButton(b);
+        tools->addWidget(b);
+        return b;
+    };
+    toolButton(tr("Sample"), tr("Click the image to centre this range on that colour"), 1);
+    toolButton(tr("+"), tr("Click the image to widen this range to include that colour"), 2);
+    toolButton(tr("−"), tr("Click the image to narrow this range to exclude that colour"), 3);
+    toolButton(tr("Targeted"), tr("Drag on the image: right raises saturation of the colour under the pointer, left lowers it (Ctrl: hue)"), -1);
+    tools->addStretch();
+    v->addLayout(tools);
+    syncers_.push_back([this, group] { bool enabled = settings_.hsv.range != 0 && !settings_.hsv.colorize; for (auto* b : group->buttons()) if (b->text() != tr("Targeted")) b->setEnabled(enabled); });
     auto* reset = new QPushButton(tr("Reset"));
     connect(reset, &QPushButton::clicked, this, [this] { emit editStarted(); settings_.hsv = HueSaturationSettings(); changed(); emit editFinished(); });
     v->addWidget(reset);
     return w;
+}
+
+AdjustmentEditor::~AdjustmentEditor() { clearHueHooks(); }
+
+void AdjustmentEditor::setSession(EditorSession* session) { session_ = session; }
+
+void AdjustmentEditor::clearHueHooks() {
+    if (!session_) return;
+    session_->canvasPressHook = nullptr;
+    session_->canvasDragHook = nullptr;
+    session_->canvasReleaseHook = nullptr;
+}
+
+void AdjustmentEditor::installHueHooks() {
+    if (!session_) return;
+    auto sampledHue = [this](QPointF p) -> std::optional<double> {
+        auto color = session_->compositeColorAt(p);
+        if (!color || color->hsvSaturationF() <= 0.02) return std::nullopt;
+        return color->hueF() * 360;
+    };
+    session_->canvasPressHook = [this, sampledHue](QPointF p) {
+        if (settings_.kind != AdjustmentKind::HueSaturation) return false;
+        auto hue = sampledHue(p);
+        if (!hue) return false;
+        if (hueTargeting_ && !settings_.hsv.colorize) {
+            int best = 1;
+            for (int r = 1; r <= 6; r++) if (settings_.hsv.weight(r, *hue) > settings_.hsv.weight(best, *hue)) best = r;
+            settings_.hsv.range = best;
+            RangeAdjustment a = settings_.hsv.currentValue();
+            hueDrag_ = HueDrag{best, a.hue, a.saturation};
+            emit editStarted();
+            changed();
+            return true;
+        }
+        if (hueSampleMode_ == 0 || settings_.hsv.range == 0 || settings_.hsv.colorize) return false;
+        emit editStarted();
+        HueBand band = settings_.hsv.band();
+        if (hueSampleMode_ == 1) band = band.centered(*hue);
+        else if (hueSampleMode_ == 2) band.include(*hue);
+        else band.exclude(*hue);
+        settings_.hsv.bands[settings_.hsv.range] = band;
+        changed();
+        emit editFinished();
+        return true;
+    };
+    session_->canvasDragHook = [this](QPointF start, QPointF now) {
+        if (!hueDrag_) return;
+        double delta = (now.x() - start.x()) * (session_ ? session_->viewport.pointsPerPixel() : 1);
+        RangeAdjustment& a = settings_.hsv.adjustments[hueDrag_->range];
+        if (QApplication::keyboardModifiers() & Qt::ControlModifier) a.hue = std::min(180.0, std::max(-180.0, hueDrag_->hue + delta / 2));
+        else a.saturation = std::min(100.0, std::max(-100.0, hueDrag_->saturation + delta / 2));
+        changed();
+    };
+    session_->canvasReleaseHook = [this] { if (hueDrag_) { hueDrag_.reset(); emit editFinished(); } };
 }
 
 QWidget* AdjustmentEditor::buildExposure() {

@@ -1,5 +1,6 @@
 #include "EditorSession.h"
 #include "ImageConvert.h"
+#include "compositor/blend.h"
 #include "compositor/project.h"
 #include <QFileInfo>
 #include <random>
@@ -12,6 +13,7 @@ extern "C" {
 }
 #include <QApplication>
 #include <QClipboard>
+#include <cstring>
 #include <QMimeData>
 
 using namespace compositor;
@@ -58,7 +60,7 @@ void EditorSession::setActiveLayer(const std::optional<Uuid>& id) {
 }
 
 bool EditorSession::canEditLayers() const {
-    return document_ && !stroke_ && !transformEdit_;
+    return document_ && !stroke_ && !warp_ && !transformEdit_ && !pixelMove_;
 }
 
 // ---- Document ----------------------------------------------------------------
@@ -166,10 +168,12 @@ std::shared_ptr<Image> EditorSession::flattened() const {
 
 // ---- History -----------------------------------------------------------------
 
-bool EditorSession::canUndo() const { return document_ && !stroke_ && !transformEdit_ && history_.canUndo(); }
-bool EditorSession::canRedo() const { return document_ && !stroke_ && !transformEdit_ && history_.canRedo(); }
+bool EditorSession::canUndo() const { return document_ && !stroke_ && !warp_ && !pixelMove_ && !transformEdit_ && (history_.canUndo() || gradient_); }
+bool EditorSession::canRedo() const { return document_ && !stroke_ && !warp_ && !pixelMove_ && !transformEdit_ && !gradient_ && history_.canRedo(); }
 
 void EditorSession::undo() {
+    // Like Photoshop, the first Undo discards a pending gradient.
+    if (gradient_) { cancelGradient(); return; }
     if (!canUndo()) return;
     auto snapshot = history_.undo();
     if (snapshot) restore(*snapshot);
@@ -199,8 +203,8 @@ void EditorSession::endEdit() { history_.end(document_, activeLayerId_); }
 // ---- Layers ------------------------------------------------------------------
 
 void EditorSession::selectLayer(const std::optional<Uuid>& id, bool mask) {
-    if (stroke_) return;
-    if (id != activeLayerId_) commitTransform();
+    if (stroke_ || warp_ || pixelMove_) return;
+    if (id != activeLayerId_ || (mask != isMaskSelected_)) { commitTransform(); resolveGradient(); }
     setActiveLayer(id);
     const Layer* active = activeLayer();
     isMaskSelected_ = mask && active && active->mask;
@@ -209,10 +213,10 @@ void EditorSession::selectLayer(const std::optional<Uuid>& id, bool mask) {
 }
 
 void EditorSession::selectLayers(const std::set<Uuid>& ids, const std::optional<Uuid>& primary) {
-    if (stroke_ || !document_) return;
+    if (stroke_ || warp_ || pixelMove_ || !document_) return;
     std::set<Uuid> valid;
     for (auto& id : ids) if (document_->find(id)) valid.insert(id);
-    if (valid != selectedLayerIds_) commitTransform();
+    if (valid != selectedLayerIds_) { commitTransform(); resolveGradient(); }
     activeLayerId_ = primary && valid.count(*primary) ? primary : (valid.empty() ? std::nullopt : std::optional<Uuid>(*valid.begin()));
     selectedLayerIds_ = valid;
     isMaskSelected_ = false;
@@ -328,7 +332,73 @@ void EditorSession::groupSelectedLayers() {
     notifyDocument();
 }
 
-void EditorSession::finishDeleting(const std::vector<Uuid>& ids) {
+std::vector<Uuid> EditorSession::clippingDependents(const std::vector<Uuid>& ids) const {
+    std::vector<Uuid> result;
+    if (!document_) return result;
+    std::set<Uuid> removed;
+    for (auto& id : ids) { removed.insert(id); for (auto& d : descendantIds(document_->layers, id)) removed.insert(d); }
+    for (auto& l : document_->layers) if (!removed.count(l.id) && l.maskSourceId && removed.count(*l.maskSourceId)) result.push_back(l.id);
+    return result;
+}
+
+std::optional<Asset> EditorSession::bakeClipping(const Uuid& target) const {
+    const Layer* layer = document_->find(target);
+    if (!layer || !layer->asset || !layer->asset->image || !layer->maskSourceId) return std::nullopt;
+    // The source's coverage (its alpha with its own mask and upstream clipping), ignoring visibility, at document size.
+    Document chain(document_->width, document_->height);
+    std::set<Uuid> keep;
+    std::optional<Uuid> current = layer->maskSourceId;
+    for (int i = 0; i < 256 && current; i++) { keep.insert(*current); const Layer* l = document_->find(*current); current = l ? l->maskSourceId : std::nullopt; }
+    for (auto& l : document_->layers) if (keep.count(l.id)) { Layer c = l; c.parentId.reset(); c.visible = true; chain.layers.push_back(c); }
+    auto flat = renderFlattened(chain);
+    GrayImage coverage(document_->width, document_->height);
+    for (int y = 0; y < coverage.height(); y++) for (int x = 0; x < coverage.width(); x++) coverage.at(x, y) = flat->pixel(x, y)[3];
+    const Image& src = *layer->asset->image;
+    auto inGrid = resampleMask(coverage, LayerTransform(Point(0, 0), document_->size()), layer->transform, src.width(), src.height(), 0);
+    auto out = std::make_shared<Image>(src);
+    for (int y = 0; y < src.height(); y++) for (int x = 0; x < src.width(); x++) { unsigned k = inGrid->at(x, y); uint8_t* p = out->pixel(x, y); for (int c = 0; c < 4; c++) p[c] = uint8_t((p[c] * k + 127) / 255); }
+    return Asset::make(out, layer->name);
+}
+
+void EditorSession::deleteLayersResolvingClipping(const std::vector<Uuid>& ids, bool bake) {
+    if (!canEditLayers()) return;
+    std::map<Uuid, Asset> baked;
+    if (bake) for (auto& id : clippingDependents(ids)) if (auto asset = bakeClipping(id)) baked[id] = *asset;
+    finishDeleting(ids, baked);
+}
+
+bool EditorSession::duplicateLayerTo(const Uuid& id, const std::optional<Uuid>& parent, const std::optional<Uuid>& above, bool atBottom) {
+    if (!canEditLayers() || !document_->find(id) || document_->find(id)->isGroup) return false;
+    beginEdit("Duplicate Layer");
+    selectLayer(id);
+    duplicateActiveLayer();
+    bool ok = activeLayerId_ && *activeLayerId_ != id && placeLayer(*activeLayerId_, parent, above, atBottom);
+    endEdit();
+    notifyDocument();
+    return ok;
+}
+
+bool EditorSession::copyMask(const Uuid& source, const Uuid& target) {
+    if (!canEditLayers() || source == target) return false;
+    const Layer* from = document_->find(source);
+    Layer* to = document_->find(target);
+    if (!from || !from->mask || !to || to->isGroup) return false;
+    commitTransform();
+    endOpacityEdit();
+    LayerMask mask = *from->mask;
+    mask.placement = from->maskTransform();
+    beginEdit(to->mask ? "Replace Layer Mask" : "Copy Layer Mask");
+    to->mask = mask;
+    setActiveLayer(target);
+    isMaskSelected_ = true;
+    endEdit();
+    notifyDocument();
+    return true;
+}
+
+void EditorSession::finishDeleting(const std::vector<Uuid>& ids) { finishDeleting(ids, {}); }
+
+void EditorSession::finishDeleting(const std::vector<Uuid>& ids, const std::map<Uuid, Asset>& baked) {
     if (!document_) return;
     std::set<Uuid> removed;
     int firstIndex = int(document_->layers.size());
@@ -343,7 +413,7 @@ void EditorSession::finishDeleting(const std::vector<Uuid>& ids) {
     beginEdit(ids.size() > 1 ? "Delete Layers" : "Delete Layer");
     std::vector<Layer> kept;
     for (auto& l : document_->layers) if (!removed.count(l.id)) kept.push_back(l);
-    for (auto& l : kept) if (l.maskSourceId && removed.count(*l.maskSourceId)) l.maskSourceId.reset();
+    for (auto& l : kept) if (l.maskSourceId && removed.count(*l.maskSourceId)) { l.maskSourceId.reset(); auto b = baked.find(l.id); if (b != baked.end()) { l.asset = b->second; l.shapeImage.reset(); } }
     document_->layers = kept;
     if (activeLayerId_ && removed.count(*activeLayerId_)) {
         setActiveLayer(kept.empty() ? std::nullopt : std::optional<Uuid>(kept[size_t(std::min(firstIndex, int(kept.size()) - 1))].id));
@@ -835,22 +905,116 @@ void EditorSession::setLayerSampling(Sampling sampling) {
 
 // ---- Transform -----------------------------------------------------------------
 
+bool EditorSession::transformsAsGroup() const {
+    const Layer* active = activeLayer();
+    return selectedLayerIds_.size() > 1 || (selectedLayerIds_.size() == 1 && active && active->isGroup);
+}
+
+std::vector<const Layer*> EditorSession::groupTransformMembers() const {
+    std::vector<const Layer*> result;
+    if (!document_ || !transformsAsGroup()) return result;
+    auto visible = effectiveVisibleIds(document_->layers);
+    for (auto& layer : document_->layers) {
+        if (!layer.asset || layer.isGroup || !visible.count(layer.id)) continue;
+        std::optional<Uuid> current = layer.id;
+        for (int i = 0; i < 64 && current; i++) {
+            if (selectedLayerIds_.count(*current)) { result.push_back(&layer); break; }
+            const Layer* l = document_->find(*current);
+            current = l ? l->parentId : std::nullopt;
+        }
+    }
+    return result;
+}
+
+std::optional<LayerTransform> EditorSession::groupTransformBox() const {
+    double minX = 1e300, minY = 1e300, maxX = -1e300, maxY = -1e300;
+    bool any = false;
+    for (const Layer* l : groupTransformMembers()) for (auto& p : l->transform.corners()) { minX = std::min(minX, p.x); minY = std::min(minY, p.y); maxX = std::max(maxX, p.x); maxY = std::max(maxY, p.y); any = true; }
+    if (!any) return std::nullopt;
+    return LayerTransform(Point(minX, minY), Size(std::max(1.0, maxX - minX), std::max(1.0, maxY - minY)));
+}
+
 bool EditorSession::canTransform() const {
-    if (!document_ || stroke_) return false;
+    if (!document_ || stroke_ || warp_ || pixelMove_) return false;
+    if (transformsAsGroup()) return !groupTransformMembers().empty();
     const Layer* active = activeLayer();
     if (!active || active->isGroup) return false;
     if (isMaskSelected_ && active->mask && !active->mask->linked) return true;
     return active->asset.has_value() && effectiveVisibleIds(document_->layers).count(active->id);
 }
 
+bool EditorSession::canTransformSelection() const {
+    if (transformEdit_ || !canEditLayers() || isMaskSelected_) return false;
+    const Layer* active = activeLayer();
+    return active && active->asset && !active->isGroup && document_->selection && document_->selection->coverage && !document_->selection->isEmpty();
+}
+
+void EditorSession::transformCommand() {
+    if (canTransformSelection()) beginSelectionTransform();
+    else { selectTool(Tool::Move); beginTransform(true); }
+}
+
 void EditorSession::beginTransform(bool persistent) {
     if (transformEdit_ || !canTransform()) return;
+    resolveGradient();
     const Layer* layer = activeLayer();
+    if (!layer) return;
     tool_ = Tool::Move;
-    bool maskAlone = isMaskSelected_ && layer->mask && !layer->mask->linked;
-    transformEdit_ = TransformEdit{layer->id, maskAlone ? layer->maskTransform() : layer->transform, persistent, maskAlone};
+    if (transformsAsGroup()) {
+        auto box = groupTransformBox();
+        if (!box) return;
+        TransformGroup group;
+        group.box = *box;
+        for (const Layer* l : groupTransformMembers()) group.originals[l->id] = l->transform;
+        TransformEdit edit{layer->id, *box, persistent, false};
+        edit.group = group;
+        transformEdit_ = edit;
+    } else {
+        bool maskAlone = isMaskSelected_ && layer->mask && !layer->mask->linked;
+        transformEdit_ = TransformEdit{layer->id, maskAlone ? layer->maskTransform() : layer->transform, persistent, maskAlone};
+    }
     emit toolChanged();
     emit transformChanged();
+}
+
+void EditorSession::beginSelectionTransform() {
+    if (!canTransformSelection()) return;
+    const Layer* source = activeLayer();
+    auto lifted = renderSelectedPixels(false);
+    if (!lifted) return;
+    Document before = *document_;
+    std::optional<Uuid> beforeActive = activeLayerId_;
+    // Outer edit: closed by commitTransform (merge) or cancelTransform (restore).
+    beginEdit("Transform Selection");
+    Layer* src = document_->find(source->id);
+    clearSelectedPixelsNow(*src);
+    Layer floating(Asset::make(lifted->image, "Floating Selection"), toPoint(lifted->origin));
+    floating.name = "Floating Selection";
+    floating.parentId = src->parentId;
+    floating.opacity = src->opacity;
+    floating.blendMode = src->blendMode;
+    int index = document_->indexOf(src->id);
+    document_->layers.insert(document_->layers.begin() + index + 1, floating);
+    setActiveLayer(floating.id);
+    tool_ = Tool::Move;
+    TransformEdit edit{floating.id, floating.transform, true, false};
+    edit.floating = FloatingTransform{source->id, std::move(before), beforeActive, floating.transform, lifted->image->width(), lifted->image->height()};
+    transformEdit_ = edit;
+    emit toolChanged();
+    notifyDocument();
+    emit transformChanged();
+}
+
+void EditorSession::beginDuplicateTransform() {
+    if (transformDuplicate_ || transformsAsGroup() || !activeLayerId_) return;
+    Uuid source = *activeLayerId_;
+    commitTransform();
+    if (!canTransform()) return;
+    beginEdit("Duplicate Layer");
+    duplicateActiveLayer();
+    if (!activeLayerId_ || *activeLayerId_ == source) { endEdit(); return; }
+    transformDuplicate_ = std::make_pair(*activeLayerId_, source);
+    beginTransform(false);
 }
 
 void EditorSession::previewTransform(const LayerTransform& value) {
@@ -858,6 +1022,36 @@ void EditorSession::previewTransform(const LayerTransform& value) {
     transformEdit_->draft = value;
     emit documentChanged({});
     emit transformChanged();
+}
+
+void EditorSession::beginDistort() {
+    if (!transformEdit_ || transformEdit_->corners || !transformEdit_->draft.isValid() || transformEdit_->mask) return;
+    transformEdit_->corners = cornersOf(transformEdit_->draft);
+    transformEdit_->persistent = true;
+    emit transformChanged();
+}
+
+void EditorSession::previewCorners(const Corners& corners) {
+    if (!transformEdit_ || !transformEdit_->corners || !cornersUsable(corners)) return;
+    transformEdit_->corners = corners;
+    emit documentChanged({});
+    emit transformChanged();
+}
+
+Corners EditorSession::editedCorners(const Layer& layer) const {
+    if (transformEdit_ && transformEdit_->corners && transformEdit_->layerId == layer.id) return *transformEdit_->corners;
+    return cornersOf(editedTransform(layer));
+}
+
+std::optional<std::pair<LayerTransform, Corners>> EditorSession::distortTarget(const Layer& layer, const TransformEdit& edit) const {
+    if (!edit.corners) return std::nullopt;
+    if (!edit.group) return edit.layerId == layer.id ? std::optional(std::make_pair(edit.draft, *edit.corners)) : std::nullopt;
+    auto it = edit.group->originals.find(layer.id);
+    if (it == edit.group->originals.end()) return std::nullopt;
+    LayerTransform transform = it->second.following(edit.group->box, edit.draft);
+    Corners carried = carriedCorners(transform, edit.draft, *edit.corners);
+    if (!cornersUsable(carried)) return std::nullopt;
+    return std::make_pair(transform, carried);
 }
 
 void EditorSession::commitMaskTransform(const TransformEdit& edit) {
@@ -870,6 +1064,112 @@ void EditorSession::commitMaskTransform(const TransformEdit& edit) {
     endEdit();
 }
 
+void EditorSession::commitDistort(const TransformEdit& edit) {
+    distortCache_.clear();
+    std::vector<Uuid> ids;
+    if (edit.group) for (auto& [id, t] : edit.group->originals) ids.push_back(id); else ids.push_back(edit.layerId);
+    beginEdit(edit.group ? "Distort Layers" : "Distort");
+    for (auto& id : ids) {
+        Layer* layer = document_->find(id);
+        if (!layer || !layer->asset || !layer->asset->image) continue;
+        auto target = distortTarget(*layer, edit);
+        if (!target) continue;
+        Rect crop;
+        auto warped = warpImageTrimmed(*layer->asset->image, target->first, target->second, &crop);
+        if (!warped) { emit error(tr("That shape can't be applied.")); continue; }
+        if (layer->mask && layer->mask->asset.image) {
+            LayerMask& mask = *layer->mask;
+            if (!mask.placement && mask.linked) {
+                auto wm = warpMask(*mask.asset.image, target->first, target->second, 0, 0);
+                if (wm) {
+                    if (wm->image->width() == 1 && wm->image->height() == 1) {}
+                    else mask.asset = MaskAsset::make(cropGray(*wm->image, int(crop.x), int(crop.y), int(crop.width), int(crop.height)));
+                }
+            } else if (mask.linked && mask.placement) {
+                LayerTransform placement = mask.placement->following(layer->transform, target->first);
+                Corners carried = carriedCorners(placement, target->first, target->second);
+                if (cornersUsable(carried)) {
+                    auto wm = warpMask(*mask.asset.image, placement, carried, LayerMask::background(*mask.asset.thumbnail), 0);
+                    if (wm) { mask.asset = MaskAsset::make(wm->image); mask.placement = wm->transform; }
+                }
+            } else if (!mask.placement) {
+                mask.placement = layer->transform;
+            }
+        }
+        layer->asset = Asset::make(warped->image, layer->name);
+        layer->transform = warped->transform;
+        layer->shapeImage.reset();
+    }
+    endEdit();
+}
+
+void EditorSession::mergeFloatingTransform(const TransformEdit& edit) {
+    const FloatingTransform& floating = *edit.floating;
+    Layer* moving = document_->find(edit.layerId);
+    Layer* source = document_->find(floating.sourceId);
+    if (!moving || !source || !moving->asset || !source->asset || !edit.draft.isValid()) { cancelFloatingTransform(floating); return; }
+    std::shared_ptr<const Image> pixels = moving->asset->image;
+    LayerTransform placed = edit.draft;
+    if (edit.corners) {
+        auto warped = warpImageTrimmed(*pixels, edit.draft, *edit.corners);
+        if (!warped) { cancelFloatingTransform(floating); return; }
+        pixels = warped->image;
+        placed = warped->transform;
+    }
+    // Draw the floating pixels onto the source's own grid, growing it where they now extend past it.
+    const Image& src = *source->asset->image;
+    int w = src.width(), h = src.height();
+    Affine toPixels = source->transform.pixelToDocument(w, h).inverted();
+    Rect floatBounds = toPixels.mapBounds(placed.pixelToDocument(pixels->width(), pixels->height()).mapBounds(Rect(0, 0, pixels->width(), pixels->height())));
+    Rect extent = Rect(0, 0, w, h).unionWith(floatBounds).integral();
+    if (extent.width > 30000 || extent.height > 30000 || extent.width * extent.height > double(Document::pixelBudget)) { cancelFloatingTransform(floating); emit error(tr("The merged layer would exceed the size limits.")); return; }
+    auto grown = std::make_shared<Image>(int(extent.width), int(extent.height));
+    for (int y = 0; y < h; y++) std::memcpy(grown->pixel(int(-extent.x), y + int(-extent.y)), src.row(y), size_t(w) * 4);
+    LayerTransform grownTransform = source->transform;
+    grownTransform.size = {extent.width * source->transform.size.width / w, extent.height * source->transform.size.height / h};
+    Point center = source->transform.pixelToDocument(w, h).apply({extent.midX(), extent.midY()});
+    grownTransform.origin = {center.x - grownTransform.size.width / 2, center.y - grownTransform.size.height / 2};
+    auto onto = resampleLayer(*pixels, placed, grownTransform, grown->width(), grown->height());
+    compositeImage(BlendMode::Normal, *onto, 1, *grown);
+    if (source->mask && !source->mask->placement && source->mask->asset.image && (extent.width != w || extent.height != h)) {
+        const GrayImage& old = *source->mask->asset.image;
+        auto mask = std::make_shared<GrayImage>(grown->width(), grown->height(), 255);
+        if (old.width() == 1 && old.height() == 1) mask->fill(old.at(0, 0));
+        else for (int y = 0; y < h; y++) std::memcpy(mask->row(y + int(-extent.y)) + int(-extent.x), old.row(y), size_t(w));
+        source->mask->asset = MaskAsset::make(mask);
+    }
+    // The selection follows the pixels.
+    if (document_->selection && document_->selection->coverage) {
+        std::shared_ptr<GrayImage> moved;
+        if (edit.corners) moved = warpCoverage(*document_->selection->coverage, floating.original, floating.pixelWidth, floating.pixelHeight, *edit.corners);
+        else {
+            Affine map = floating.original.pixelToDocument(floating.pixelWidth, floating.pixelHeight).inverted().concatenating(edit.draft.pixelToDocument(floating.pixelWidth, floating.pixelHeight));
+            Affine inv = map.inverted();
+            const GrayImage& cov = *document_->selection->coverage;
+            moved = std::make_shared<GrayImage>(cov.width(), cov.height(), 0);
+            for (int y = 0; y < cov.height(); y++) for (int x = 0; x < cov.width(); x++) {
+                Point p = inv.apply({x + 0.5, y + 0.5});
+                int sx = int(std::floor(p.x)), sy = int(std::floor(p.y));
+                if (sx >= 0 && sy >= 0 && sx < cov.width() && sy < cov.height()) moved->at(x, y) = cov.at(sx, sy);
+            }
+        }
+        document_->selection->coverage = moved;
+    }
+    source->asset = Asset::make(grown, source->name);
+    source->transform = grownTransform;
+    source->shapeImage.reset();
+    Uuid sourceId = source->id;
+    document_->layers.erase(document_->layers.begin() + document_->indexOf(edit.layerId));
+    setActiveLayer(sourceId);
+    endEdit();
+}
+
+void EditorSession::cancelFloatingTransform(const FloatingTransform& floating) {
+    document_ = floating.before;
+    setActiveLayer(floating.beforeActive);
+    endEdit();
+}
+
 void EditorSession::commitTransform() {
     snapGuidesX.clear();
     snapGuidesY.clear();
@@ -877,14 +1177,42 @@ void EditorSession::commitTransform() {
     if (!transformEdit_) return;
     TransformEdit edit = *transformEdit_;
     transformEdit_.reset();
-    if (edit.mask) { commitMaskTransform(edit); notifyDocument(); emit transformChanged(); return; }
+    distortCache_.clear();
+    auto finishDuplicate = [&] { if (transformDuplicate_) { transformDuplicate_.reset(); endEdit(); } };
+    if (edit.floating) {
+        if (edit.draft == edit.floating->original && !edit.corners) cancelFloatingTransform(*edit.floating);
+        else mergeFloatingTransform(edit);
+        notifyDocument(); emit selectionChanged(); emit transformChanged();
+        return;
+    }
+    if (edit.mask) { commitMaskTransform(edit); finishDuplicate(); notifyDocument(); emit transformChanged(); return; }
+    if (edit.corners) { commitDistort(edit); finishDuplicate(); notifyDocument(); emit transformChanged(); return; }
+    if (edit.group) {
+        if (edit.draft.isValid()) {
+            beginEdit("Transform Layers");
+            for (auto& [id, original] : edit.group->originals) {
+                Layer* layer = document_->find(id);
+                if (!layer) continue;
+                LayerTransform moved = original.following(edit.group->box, edit.draft);
+                if (!moved.isValid()) continue;
+                if (layer->mask) layer->mask->placement = layer->mask->placementMovingLayer(original, moved);
+                layer->transform = moved;
+                redrawShape(*layer);
+            }
+            endEdit();
+        }
+        finishDuplicate(); notifyDocument(); emit transformChanged();
+        return;
+    }
     Layer* layer = document_ ? document_->find(edit.layerId) : nullptr;
     if (layer && edit.draft.isValid() && !edit.draft.samePlacement(layer->transform)) {
         beginEdit("Transform Layer");
         if (layer->mask) layer->mask->placement = layer->mask->placementMovingLayer(layer->transform, edit.draft);
         layer->transform = edit.draft;
+        redrawShape(*layer);
         endEdit();
     }
+    finishDuplicate();
     notifyDocument();
     emit transformChanged();
 }
@@ -893,8 +1221,19 @@ void EditorSession::cancelTransform() {
     snapGuidesX.clear();
     snapGuidesY.clear();
     if (!transformEdit_) return;
+    TransformEdit edit = *transformEdit_;
     transformEdit_.reset();
-    emit documentChanged({});
+    distortCache_.clear();
+    if (transformDuplicate_) {
+        auto [copy, source] = *transformDuplicate_;
+        document_->layers.erase(std::remove_if(document_->layers.begin(), document_->layers.end(), [&](const Layer& l) { return l.id == copy; }), document_->layers.end());
+        setActiveLayer(source);
+        transformDuplicate_.reset();
+        endEdit();
+    }
+    if (edit.floating) cancelFloatingTransform(*edit.floating);
+    notifyDocument();
+    emit selectionChanged();
     emit transformChanged();
 }
 
@@ -905,17 +1244,35 @@ void EditorSession::nudgeLayer(double dx, double dy) {
     LayerTransform value = transformEdit_->draft;
     value.origin.x += dx;
     value.origin.y += dy;
+    if (transformEdit_->corners) { Corners c = *transformEdit_->corners; for (auto& p : c) { p.x += dx; p.y += dy; } transformEdit_->corners = c; }
     previewTransform(value);
     if (!alreadyEditing) commitTransform();
 }
 
 LayerTransform EditorSession::displayedTransform(const Layer& layer) const {
-    if (transformEdit_ && !transformEdit_->mask && transformEdit_->layerId == layer.id) return transformEdit_->draft;
+    if (transformEdit_ && !transformEdit_->mask) {
+        if (transformEdit_->group) { auto it = transformEdit_->group->originals.find(layer.id); if (it != transformEdit_->group->originals.end()) return it->second.following(transformEdit_->group->box, transformEdit_->draft); }
+        else if (transformEdit_->layerId == layer.id) return transformEdit_->draft;
+    }
     return layer.transform;
+}
+
+std::optional<LayerTransform> EditorSession::displayedMaskPlacement(const Layer& layer) const {
+    if (!layer.mask) return std::nullopt;
+    const LayerMask& mask = *layer.mask;
+    if (transformEdit_ && transformEdit_->group) {
+        auto it = transformEdit_->group->originals.find(layer.id);
+        if (it == transformEdit_->group->originals.end()) return mask.placement;
+        return mask.placementMovingLayer(layer.transform, it->second.following(transformEdit_->group->box, transformEdit_->draft));
+    }
+    if (!transformEdit_ || transformEdit_->layerId != layer.id || transformEdit_->floating) return mask.placement;
+    if (transformEdit_->mask) return transformEdit_->draft.samePlacement(layer.transform) ? std::nullopt : std::optional(transformEdit_->draft);
+    return mask.placementMovingLayer(layer.transform, transformEdit_->draft);
 }
 
 LayerTransform EditorSession::editedTransform(const Layer& layer) const {
     if (transformEdit_ && transformEdit_->layerId == layer.id) return transformEdit_->draft;
+    if (!transformEdit_ && layer.id == activeLayerId_ && transformsAsGroup()) { if (auto box = groupTransformBox()) return *box; }
     if (layer.id == activeLayerId_ && isMaskSelected_ && layer.mask && !layer.mask->linked) return layer.maskTransform();
     return layer.transform;
 }
@@ -942,11 +1299,24 @@ std::optional<Uuid> EditorSession::layerAt(QPointF documentPoint) const {
 }
 
 std::optional<Size> EditorSession::transformPixelSize() const {
-    const Layer* active = activeLayer();
-    if (!active) return std::nullopt;
+    if (transformEdit_ && transformEdit_->group) return transformEdit_->group->box.size;
+    if (!transformEdit_ && transformsAsGroup()) { auto box = groupTransformBox(); return box ? std::optional(box->size) : std::nullopt; }
     if (transformEdit_ && transformEdit_->mask) return std::nullopt;
-    if (!active->asset || !active->asset->image) return std::nullopt;
+    if (transformEdit_ && transformEdit_->floating) return Size(transformEdit_->floating->pixelWidth, transformEdit_->floating->pixelHeight);
+    const Layer* active = activeLayer();
+    if (!active || !active->asset || !active->asset->image) return std::nullopt;
     return Size(active->asset->image->width(), active->asset->image->height());
+}
+
+void EditorSession::redrawShape(Layer& layer) {
+    if (!layer.isLiveShape() || !layer.asset) return;
+    int w = std::max(1, int(std::lround(layer.transform.size.width))), h = std::max(1, int(std::lround(layer.transform.size.height)));
+    if ((w == layer.asset->image->width() && h == layer.asset->image->height()) || (long long)w * h > Document::pixelBudget) return;
+    auto image = shapeImage(layer.shape->kind, w, h, layer.shape->red, layer.shape->green, layer.shape->blue, layer.shape->cornerRadius);
+    // A mask that follows the layer's pixel grid stays exactly where it is while that grid changes size.
+    if (layer.mask && !layer.mask->placement) layer.mask->placement = layer.maskTransform();
+    layer.asset = Asset::make(image, layer.name);
+    layer.shapeImage = image;
 }
 
 // ---- Brush ---------------------------------------------------------------------
@@ -1011,21 +1381,23 @@ void EditorSession::continueBrush(QPointF documentPoint) {
     if (!dirty.isEmpty()) emit documentChanged(toQRect(dirty));
 }
 
-void EditorSession::endBrush() {
-    if (!stroke_) return;
-    std::unique_ptr<BrushStroke> stroke = std::move(stroke_);
-    stroke->flush();
-    Layer* layer = document_->find(strokeLayerId_);
-    if (!layer || !stroke->touched()) { emit documentChanged({}); emit historyChanged(); return; }
-    BrushStroke::Commit commit = stroke->commit();
-    beginEdit(strokeMask_ ? "Paint Mask" : tool_ == Tool::SpotHealing ? "Spot Healing" : tool_ == Tool::CloneStamp ? "Clone Stamp" : (brushErase ? "Eraser" : "Brush Stroke"));
-    if (strokeMask_) {
-        if (commit.mask) { layer->mask->asset = *commit.mask; layer->mask->placement = commit.maskPlacement; }
+std::unique_ptr<BrushStroke> EditorSession::makeRasterEdit(const Layer& layer, bool mask, const BrushSettings& settings) const {
+    const GrayImage* selection = document_->selection && document_->selection->coverage ? document_->selection->coverage.get() : nullptr;
+    if (document_->selection && !selection) return nullptr; // an explicit empty selection: touch nothing
+    auto stroke = std::make_unique<BrushStroke>(layer, mask, settings, document_->size(), selection);
+    if (!stroke->isValid()) return nullptr;
+    return stroke;
+}
+
+void EditorSession::commitRasterEdit(BrushStroke& stroke, const Uuid& layerId, bool mask, const QString& name) {
+    Layer* layer = document_->find(layerId);
+    if (!layer || !stroke.touched()) { emit documentChanged({}); emit historyChanged(); return; }
+    BrushStroke::Commit commit = stroke.commit();
+    beginEdit(name);
+    if (mask) {
+        if (commit.mask && layer->mask) { layer->mask->asset = *commit.mask; layer->mask->placement = commit.maskPlacement; }
     } else if (commit.asset) {
-        if (layer->mask && layer->mask->linked && !layer->mask->placement) {
-            // The mask kept covering the old pixel grid; a grown layer leaves it placed where it was.
-            if (!commit.transform.samePlacement(layer->transform) && layer->asset) layer->mask->placement = layer->transform;
-        }
+        if (layer->mask && layer->mask->linked && !layer->mask->placement && layer->asset && !commit.transform.samePlacement(layer->transform)) layer->mask->placement = layer->transform;
         layer->asset = commit.asset;
         layer->transform = commit.transform;
         layer->shapeImage.reset();
@@ -1034,10 +1406,383 @@ void EditorSession::endBrush() {
     notifyDocument();
 }
 
+void EditorSession::endBrush() {
+    if (!stroke_) return;
+    std::unique_ptr<BrushStroke> stroke = std::move(stroke_);
+    stroke->flush();
+    QString name = strokeMask_ ? "Paint Mask" : tool_ == Tool::SpotHealing ? "Spot Healing" : tool_ == Tool::CloneStamp ? "Clone Stamp" : tool_ == Tool::Smudge ? "Blur" : (brushErase ? "Eraser" : "Brush Stroke");
+    commitRasterEdit(*stroke, strokeLayerId_, strokeMask_, name);
+}
+
 void EditorSession::cancelBrush() {
     if (!stroke_) return;
     stroke_.reset();
     emit documentChanged({});
+}
+
+// ---- Opacity keys and brush steps ---------------------------------------------------
+
+void EditorSession::typeOpacityDigit(int digit) {
+    if (stroke_ || digit < 0 || digit > 9) return;
+    bool brushLike = tool_ == Tool::Brush || tool_ == Tool::SpotHealing || tool_ == Tool::CloneStamp || tool_ == Tool::Smudge;
+    if (!brushLike && tool_ != Tool::Gradient && tool_ != Tool::Move) return;
+    qint64 now = opacityTimer_.isValid() ? opacityTimer_.elapsed() : 0;
+    if (!opacityTimer_.isValid()) opacityTimer_.start();
+    int percent = digit == 0 ? 100 : digit * 10;
+    if (pendingOpacityDigit_ && now - pendingOpacityDigit_->second < 600) {
+        percent = std::max(1, pendingOpacityDigit_->first * 10 + digit);
+        pendingOpacityDigit_.reset();
+    } else pendingOpacityDigit_ = std::make_pair(digit, now);
+    double value = percent / 100.0;
+    if (brushLike) { brushSettings.opacity = value; emit toolChanged(); }
+    else if (tool_ == Tool::Gradient) { gradientSettings.opacity = value; refreshGradient(); emit toolChanged(); }
+    else {
+        std::vector<Layer*> targets;
+        for (auto& l : document_->layers) if (selectedLayerIds_.count(l.id) && !l.isGroup && l.opacity != value) targets.push_back(&l);
+        if (targets.empty()) return;
+        endOpacityEdit();
+        beginEdit("Layer Opacity");
+        for (Layer* l : targets) l->opacity = value;
+        endEdit();
+        notifyDocument();
+    }
+}
+
+void EditorSession::changeBrushHardness(bool increase) {
+    if (stroke_) return;
+    double quarter = brushSettings.hardness * 4;
+    double step = increase ? std::floor(quarter + 0.001) + 1 : std::ceil(quarter - 0.001) - 1;
+    brushSettings.hardness = std::min(4.0, std::max(0.0, step)) / 4;
+    emit toolChanged();
+}
+
+void EditorSession::changeBrushSize(bool increase) {
+    if (stroke_) return;
+    double current = brushSettings.diameter;
+    double stepped = increase ? std::max(current + 1, std::round(current * 1.2)) : std::min(current - 1, std::round(current / 1.2));
+    brushSettings.diameter = std::min(2000.0, std::max(1.0, stepped));
+    emit toolChanged();
+}
+
+// ---- Blur / Smudge / Liquify ---------------------------------------------------------
+
+bool EditorSession::beginWarp(QPointF documentPoint) {
+    if (!document_ || stroke_ || warp_ || transformEdit_) return false;
+    const Layer* layer = activeLayer();
+    if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image) return false;
+    if (isMaskSelected_) { emit error(tr("Smudge and Liquify work on a layer's pixels, not its mask.")); return false; }
+    if (!effectiveVisibleIds(document_->layers).count(layer->id)) return false;
+    // The layer as the canvas shows it, at document size.
+    Document single(document_->width, document_->height);
+    Layer copy = *layer;
+    copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
+    copy.transform = displayedTransform(*layer);
+    single.layers = {copy};
+    auto rendered = renderFlattened(single);
+    if (blurMode == BlurToolMode::Blur) {
+        // Blur paints a softened copy of the layer in place, through the tip.
+        double sigma = std::min(30.0, std::max(1.5, brushSettings.diameter / 10));
+        gaussianBlur(*rendered, sigma);
+        BrushSettings settings = brushSettings;
+        stroke_ = makeRasterEdit(*layer, false, settings);
+        if (!stroke_) return false;
+        stroke_->setClone(CloneSource{rendered, {0, 0}}, false);
+        strokeLayerId_ = layer->id;
+        strokeMask_ = false;
+        stroke_->append(toPoint(documentPoint));
+        emit documentChanged({});
+        return true;
+    }
+    warp_ = std::make_unique<WarpStroke>(rendered, blurMode == BlurToolMode::Smudge ? WarpMode::Smudge : WarpMode::Liquify, brushSettings.diameter, brushSettings.hardness, brushSettings.opacity);
+    warpLayerId_ = layer->id;
+    warpTransform_ = copy.transform;
+    warp_->append(toPoint(documentPoint));
+    lastBrushPoint_ = documentPoint;
+    emit documentChanged({});
+    return true;
+}
+
+void EditorSession::continueWarp(QPointF documentPoint) {
+    if (stroke_ && !warp_) { continueBrush(documentPoint); return; }
+    if (!warp_) return;
+    warp_->append(toPoint(documentPoint));
+    lastBrushPoint_ = documentPoint;
+    emit documentChanged({});
+}
+
+void EditorSession::endWarp() {
+    if (stroke_ && !warp_) { endBrush(); return; }
+    if (!warp_) return;
+    std::unique_ptr<WarpStroke> warp = std::move(warp_);
+    Layer* layer = document_->find(warpLayerId_);
+    if (!layer || warp->points().empty()) { emit documentChanged({}); return; }
+    // Paint the result into the layer's pixels along the stroke: a hard tip a little wider than the brush.
+    BrushSettings settings = brushSettings;
+    settings.diameter = std::min(2000.0, warp->diameter() + 4);
+    settings.hardness = 1;
+    settings.opacity = 1;
+    auto stroke = makeRasterEdit(*layer, false, settings);
+    if (!stroke) { emit documentChanged({}); return; }
+    stroke->setClone(CloneSource{std::make_shared<Image>(*warp->image()), {0, 0}}, true);
+    for (auto& p : warp->points()) stroke->append(p);
+    stroke->flush();
+    commitRasterEdit(*stroke, layer->id, false, blurMode == BlurToolMode::Smudge ? "Smudge" : "Liquify");
+}
+
+void EditorSession::cancelWarp() {
+    if (stroke_ && !warp_) { cancelBrush(); return; }
+    if (!warp_) return;
+    warp_.reset();
+    emit documentChanged({});
+}
+
+// ---- Gradient ---------------------------------------------------------------------------
+
+std::optional<std::pair<QPointF, QPointF>> EditorSession::gradientLine() const {
+    if (!gradient_) return std::nullopt;
+    return std::make_pair(gradient_->start, gradient_->end);
+}
+
+void EditorSession::beginGradient(QPointF documentPoint) {
+    if (!document_ || stroke_ || transformEdit_) return;
+    const Layer* layer = activeLayer();
+    if (!layer) return;
+    bool mask = isMaskSelected_ && layer->mask;
+    if (gradient_ && gradient_->layerId == layer->id && gradient_->mask == mask) {
+        gradient_->start = gradient_->end = documentPoint;
+        refreshGradient();
+        return;
+    }
+    if (layer->isGroup && !mask) return;
+    if (layer->adjustment && !mask) return;
+    if (!mask && !effectiveVisibleIds(document_->layers).count(layer->id)) return;
+    resolveGradient();
+    endOpacityEdit();
+    auto raster = makeRasterEdit(*layer, mask, BrushSettings());
+    if (!raster) return;
+    gradient_ = std::make_unique<GradientEdit>();
+    gradient_->raster = std::move(raster);
+    gradient_->layerId = layer->id;
+    gradient_->mask = mask;
+    gradient_->start = gradient_->end = documentPoint;
+    emit documentChanged({});
+}
+
+void EditorSession::moveGradient(QPointF end) {
+    if (!gradient_) return;
+    gradient_->end = end;
+    refreshGradient();
+}
+
+void EditorSession::refreshGradient() {
+    if (!gradient_) return;
+    QPointF a = gradient_->start, b = gradient_->end;
+    if (std::hypot(b.x() - a.x(), b.y() - a.y()) >= 0.5) {
+        QColor fg = foregroundColor, bg = backgroundColor;
+        float start[4], end[4];
+        if (gradient_->mask) {
+            float f = fg.lightnessF() >= 0.5 ? 1 : 0, g = bg.lightnessF() >= 0.5 ? 1 : 0;
+            start[0] = start[1] = start[2] = f; start[3] = 1;
+            end[0] = end[1] = end[2] = gradientSettings.style == GradientStyle::ForegroundToBackground ? g : f;
+            end[3] = gradientSettings.style == GradientStyle::ForegroundToBackground ? 1 : 0;
+        } else {
+            start[0] = fg.redF(); start[1] = fg.greenF(); start[2] = fg.blueF(); start[3] = 1;
+            if (gradientSettings.style == GradientStyle::ForegroundToBackground) { end[0] = bg.redF(); end[1] = bg.greenF(); end[2] = bg.blueF(); end[3] = 1; }
+            else { end[0] = fg.redF(); end[1] = fg.greenF(); end[2] = fg.blueF(); end[3] = 0; }
+        }
+        if (gradientSettings.reversed) for (int c = 0; c < 4; c++) std::swap(start[c], end[c]);
+        gradient_->raster->fillGradientOver(gradientSettings.shape == GradientShape::Radial ? 1 : 0, toPoint(a), toPoint(b), start, end, gradientSettings.opacity);
+    }
+    emit documentChanged({});
+}
+
+void EditorSession::endGradientDrag() {
+    if (!gradient_) return;
+    QPointF a = gradient_->start, b = gradient_->end;
+    if (std::hypot(b.x() - a.x(), b.y() - a.y()) < 0.5) cancelGradient();
+}
+
+void EditorSession::cancelGradient() {
+    if (!gradient_) return;
+    gradient_.reset();
+    emit documentChanged({});
+    emit historyChanged();
+}
+
+void EditorSession::commitGradient() {
+    if (!gradient_) return;
+    std::unique_ptr<GradientEdit> edit = std::move(gradient_);
+    QPointF a = edit->start, b = edit->end;
+    if (std::hypot(b.x() - a.x(), b.y() - a.y()) < 0.5) { emit documentChanged({}); return; }
+    commitRasterEdit(*edit->raster, edit->layerId, edit->mask, edit->mask ? "Gradient Mask" : "Gradient");
+}
+
+void EditorSession::resolveGradient() { if (gradient_) commitGradient(); }
+
+// ---- Shape ------------------------------------------------------------------------------
+
+void EditorSession::beginShape(QPointF documentPoint) {
+    if (!canEditLayers()) return;
+    QPointF anchor(std::round(documentPoint.x()), std::round(documentPoint.y()));
+    shapeDraft_ = ShapeDraft{shapeKind, anchor, QRectF(anchor, QSizeF(0, 0)), shapeKind == ShapeKind::Rectangle ? shapeCornerRadius : 0};
+    emit transformChanged();
+}
+
+void EditorSession::dragShape(QPointF point, bool square, bool fromCenter) {
+    if (!shapeDraft_) return;
+    QPointF anchor = shapeDraft_->anchor;
+    double dx = std::round(point.x()) - anchor.x(), dy = std::round(point.y()) - anchor.y();
+    if (square) { double side = std::max(std::fabs(dx), std::fabs(dy)); dx = dx < 0 ? -side : side; dy = dy < 0 ? -side : side; }
+    shapeDraft_->rect = fromCenter ? QRectF(anchor.x() - std::fabs(dx), anchor.y() - std::fabs(dy), std::fabs(dx) * 2, std::fabs(dy) * 2)
+                                   : QRectF(std::min(anchor.x(), anchor.x() + dx), std::min(anchor.y(), anchor.y() + dy), std::fabs(dx), std::fabs(dy));
+    emit transformChanged();
+}
+
+void EditorSession::cancelShape() { if (shapeDraft_) { shapeDraft_.reset(); emit transformChanged(); } }
+
+void EditorSession::toggleShapeKind() {
+    cancelShape();
+    shapeKind = shapeKind == ShapeKind::Rectangle ? ShapeKind::Ellipse : ShapeKind::Rectangle;
+    emit toolChanged();
+}
+
+void EditorSession::finishShape() {
+    if (!shapeDraft_) return;
+    ShapeDraft draft = *shapeDraft_;
+    shapeDraft_.reset();
+    emit transformChanged();
+    if (!canEditLayers() || draft.rect.width() < 1 || draft.rect.height() < 1) return;
+    int w = int(draft.rect.width()), h = int(draft.rect.height());
+    if ((long long)w * h > Document::pixelBudget) { emit error(tr("That shape is too large. A shape can cover up to 100 megapixels.")); return; }
+    QColor c = foregroundColor;
+    auto image = shapeImage(draft.kind, w, h, c.redF(), c.greenF(), c.blueF(), draft.cornerRadius);
+    std::string prefix = draft.kind == ShapeKind::Ellipse ? "Ellipse" : "Rectangle";
+    Layer layer(Asset::make(image, nextLayerName(document_->layers, prefix)), toPoint(draft.rect.topLeft()));
+    layer.name = layer.asset->name;
+    layer.shape = LayerShapeStyle{draft.kind, c.redF(), c.greenF(), c.blueF(), draft.cornerRadius};
+    layer.shapeImage = image;
+    const Layer* active = activeLayer();
+    layer.parentId = active && active->isGroup ? activeLayerId_ : (active ? active->parentId : std::nullopt);
+    int index = activeLayerId_ ? document_->indexOf(*activeLayerId_) + 1 : int(document_->layers.size());
+    endOpacityEdit();
+    beginEdit(QString::fromStdString(prefix));
+    document_->layers.insert(document_->layers.begin() + index, layer);
+    setActiveLayer(layer.id);
+    endEdit();
+    notifyDocument();
+}
+
+// ---- Moving selected pixels ------------------------------------------------------------------
+
+bool EditorSession::canMovePixels(QPointF documentPoint) const {
+    if (!document_ || !document_->selection || !document_->selection->coverage || pixelMove_ || stroke_ || transformEdit_ || isMaskSelected_) return false;
+    const Layer* layer = activeLayer();
+    if (!layer || !layer->asset || layer->isGroup || layer->adjustment) return false;
+    int x = int(std::floor(documentPoint.x())), y = int(std::floor(documentPoint.y()));
+    if (x < 0 || y < 0 || x >= document_->width || y >= document_->height) return false;
+    return document_->selection->coverage->at(x, y) > 127;
+}
+
+bool EditorSession::beginPixelMove(bool duplicate) {
+    if (pixelMove_ || !document_ || !document_->selection || !document_->selection->coverage || document_->selection->isEmpty() || isMaskSelected_) return false;
+    const Layer* layer = activeLayer();
+    if (!layer || !layer->asset || layer->isGroup || layer->adjustment || stroke_ || transformEdit_) return false;
+    resolveGradient();
+    auto raster = makeRasterEdit(*layer, false, BrushSettings());
+    if (!raster || !raster->liftSelection()) return false;
+    endOpacityEdit();
+    pixelMove_ = std::make_unique<PixelMove>();
+    pixelMove_->raster = std::move(raster);
+    pixelMove_->origin = *document_->selection;
+    pixelMove_->duplicate = duplicate;
+    pixelMove_->layerId = layer->id;
+    return true;
+}
+
+void EditorSession::movePixels(QPointF offset) {
+    if (!pixelMove_) return;
+    QPointF rounded(std::round(offset.x()), std::round(offset.y()));
+    pixelMove_->raster->moveLifted(toPoint(rounded), pixelMove_->duplicate);
+    pixelMove_->offset = rounded;
+    emit documentChanged({});
+    emit selectionChanged();
+}
+
+std::optional<Selection> EditorSession::displayedSelection() const {
+    if (!document_ || !document_->selection) return std::nullopt;
+    if (pixelMove_ && pixelMove_->origin.coverage) {
+        int dx = int(pixelMove_->offset.x()), dy = int(pixelMove_->offset.y());
+        if (dx == 0 && dy == 0) return pixelMove_->origin;
+        const GrayImage& src = *pixelMove_->origin.coverage;
+        auto moved = std::make_shared<GrayImage>(src.width(), src.height(), 0);
+        for (int y = 0; y < src.height(); y++) { int sy = y - dy; if (sy < 0 || sy >= src.height()) continue; for (int x = 0; x < src.width(); x++) { int sx = x - dx; if (sx >= 0 && sx < src.width()) moved->at(x, y) = src.at(sx, sy); } }
+        Selection s = pixelMove_->origin;
+        s.coverage = moved;
+        return s;
+    }
+    if (transformEdit_ && transformEdit_->floating && document_->selection->coverage) {
+        const FloatingTransform& f = *transformEdit_->floating;
+        const GrayImage& cov = *document_->selection->coverage;
+        auto moved = std::make_shared<GrayImage>(cov.width(), cov.height(), 0);
+        if (transformEdit_->corners) moved = warpCoverage(cov, f.original, f.pixelWidth, f.pixelHeight, *transformEdit_->corners);
+        else {
+            Affine map = f.original.pixelToDocument(f.pixelWidth, f.pixelHeight).inverted().concatenating(transformEdit_->draft.pixelToDocument(f.pixelWidth, f.pixelHeight));
+            Affine inv = map.inverted();
+            for (int y = 0; y < cov.height(); y++) for (int x = 0; x < cov.width(); x++) {
+                Point p = inv.apply({x + 0.5, y + 0.5});
+                int sx = int(std::floor(p.x)), sy = int(std::floor(p.y));
+                if (sx >= 0 && sy >= 0 && sx < cov.width() && sy < cov.height()) moved->at(x, y) = cov.at(sx, sy);
+            }
+        }
+        Selection s = *document_->selection;
+        s.coverage = moved;
+        return s;
+    }
+    return document_->selection;
+}
+
+void EditorSession::finishPixelMove() {
+    if (!pixelMove_) return;
+    std::unique_ptr<PixelMove> move = std::move(pixelMove_);
+    if (move->offset.isNull()) { emit documentChanged({}); emit selectionChanged(); return; }
+    Selection moved = *[&] { pixelMove_ = std::move(move); auto s = displayedSelection(); move = std::move(pixelMove_); return s; }();
+    Layer* layer = document_->find(move->layerId);
+    if (!layer) return;
+    BrushStroke::Commit commit = move->raster->commit();
+    beginEdit(move->duplicate ? "Duplicate Pixels" : "Move Pixels");
+    if (commit.asset) {
+        if (layer->mask && layer->mask->linked && !layer->mask->placement && !commit.transform.samePlacement(layer->transform)) layer->mask->placement = layer->transform;
+        layer->asset = commit.asset;
+        layer->transform = commit.transform;
+        layer->shapeImage.reset();
+    }
+    document_->selection = moved;
+    endEdit();
+    notifyDocument();
+    emit selectionChanged();
+}
+
+void EditorSession::cancelPixelMove() {
+    if (!pixelMove_) return;
+    pixelMove_.reset();
+    emit documentChanged({});
+    emit selectionChanged();
+}
+
+void EditorSession::nudgePixels(double dx, double dy) {
+    if (!beginPixelMove(false)) return;
+    movePixels({dx, dy});
+    finishPixelMove();
+}
+
+std::optional<QColor> EditorSession::compositeColorAt(QPointF documentPoint) const {
+    auto flat = flattened();
+    if (!flat) return std::nullopt;
+    int x = int(std::floor(documentPoint.x())), y = int(std::floor(documentPoint.y()));
+    if (x < 0 || y < 0 || x >= flat->width() || y >= flat->height()) return std::nullopt;
+    const uint8_t* p = flat->pixel(x, y);
+    if (!p[3]) return std::nullopt;
+    return QColor(p[0] * 255 / p[3], p[1] * 255 / p[3], p[2] * 255 / p[3]);
 }
 
 // ---- Clipboard and Content-Aware Fill ------------------------------------------------
@@ -1292,15 +2037,12 @@ void EditorSession::fillSelection(const QColor& color) {
     notifyDocument();
 }
 
-void EditorSession::clearSelectionPixels() {
-    if (!canEditLayers()) return;
-    Layer* layer = activeLayerMutable();
-    if (!layer || layer->isGroup || !layer->asset || !layer->asset->image) return;
+void EditorSession::clearSelectedPixelsNow(Layer& layer) {
     const GrayImage* selection = document_->selection && document_->selection->coverage ? document_->selection->coverage.get() : nullptr;
-    if (!selection) return;
-    const Image& src = *layer->asset->image;
+    if (!selection || !layer.asset || !layer.asset->image) return;
+    const Image& src = *layer.asset->image;
     auto out = std::make_shared<Image>(src);
-    Affine toDoc = layer->transform.pixelToDocument(src.width(), src.height());
+    Affine toDoc = layer.transform.pixelToDocument(src.width(), src.height());
     for (int y = 0; y < src.height(); y++) for (int x = 0; x < src.width(); x++) {
         Point d = toDoc.apply({x + 0.5, y + 0.5});
         if (d.x < 0 || d.y < 0 || d.x >= document_->width || d.y >= document_->height) continue;
@@ -1309,11 +2051,35 @@ void EditorSession::clearSelectionPixels() {
         uint8_t* p = out->pixel(x, y);
         for (int k = 0; k < 4; k++) p[k] = uint8_t(p[k] * (1 - c) + 0.5);
     }
+    layer.asset = Asset::make(out, layer.name);
+    layer.shapeImage.reset();
+}
+
+void EditorSession::clearSelectionPixels() {
+    if (!canEditLayers()) return;
+    Layer* layer = activeLayerMutable();
+    if (!layer || layer->isGroup || !layer->asset || !layer->asset->image) return;
+    if (!document_->selection || !document_->selection->coverage) return;
     beginEdit("Clear");
-    layer->asset = Asset::make(out, layer->name);
-    layer->shapeImage.reset();
+    clearSelectedPixelsNow(*layer);
     endEdit();
     notifyDocument();
+}
+
+void EditorSession::loadLayerAsSelection(const Uuid& id, bool mask, SelectionMode mode) {
+    if (!document_ || !canEditLayers()) return;
+    const Layer* layer = document_->find(id);
+    if (!layer) return;
+    std::shared_ptr<GrayImage> shape;
+    if (mask) {
+        if (!layer->mask || !layer->mask->asset.image) return;
+        shape = std::make_shared<GrayImage>(document_->width, document_->height, 0);
+        sampleMaskCoverage(*layer->mask->asset.image, layer->maskTransform(), document_->rect(), 1, 0, *shape, false);
+    } else {
+        if (!layer->asset || !layer->asset->image) return;
+        shape = coverageFromLayer(*document_, *layer);
+    }
+    applySelectionShape(*shape, mode, mask ? "Load Mask as Selection" : "Load Layer as Selection");
 }
 
 void EditorSession::selectionExpand(int amount) {
@@ -1537,8 +2303,8 @@ void EditorSession::resizeImage(int width, int height, double resolution) {
 // ---- Tools and view -----------------------------------------------------------------
 
 void EditorSession::selectTool(Tool tool) {
-    if (stroke_) return;
-    if (tool != tool_) commitTransform();
+    if (stroke_ || warp_ || pixelMove_) return;
+    if (tool != tool_) { commitTransform(); resolveGradient(); cancelShape(); }
     tool_ = tool;
     emit toolChanged();
 }
@@ -1557,14 +2323,40 @@ void EditorSession::zoomTo(double zoom, std::optional<QPointF> anchor) {
 
 Overrides EditorSession::renderOverrides() const {
     Overrides overrides;
-    if (transformEdit_) {
-        LayerOverride& o = overrides[transformEdit_->layerId];
-        const Layer* layer = document_ ? document_->find(transformEdit_->layerId) : nullptr;
-        if (transformEdit_->mask) {
-            o.maskPlacement = std::optional<LayerTransform>(transformEdit_->draft);
-        } else {
-            o.transform = transformEdit_->draft;
-            if (layer && layer->mask) o.maskPlacement = layer->mask->placementMovingLayer(layer->transform, transformEdit_->draft);
+    if (transformEdit_ && document_) {
+        const TransformEdit& edit = *transformEdit_;
+        std::vector<const Layer*> targets;
+        if (edit.group) { for (auto& [id, t] : edit.group->originals) if (const Layer* l = document_->find(id)) targets.push_back(l); }
+        else if (const Layer* l = document_->find(edit.layerId)) targets.push_back(l);
+        for (const Layer* layer : targets) {
+            LayerOverride& o = overrides[layer->id];
+            if (edit.mask) { o.maskPlacement = std::optional<LayerTransform>(edit.draft); continue; }
+            LayerTransform shown = displayedTransform(*layer);
+            o.transform = shown;
+            if (layer->mask) o.maskPlacement = displayedMaskPlacement(*layer);
+            if (edit.corners && layer->asset && layer->asset->image) {
+                // The layer warped into the pending distortion, at preview size, cached while nothing changes.
+                auto target = distortTarget(*layer, edit);
+                if (!target) continue;
+                GrayPtr maskImage = layer->mask && layer->mask->enabled ? layer->mask->asset.image : nullptr;
+                auto it = distortCache_.find(layer->id);
+                bool fresh = it != distortCache_.end() && it->second.corners == target->second && it->second.transform == target->first && it->second.source == layer->asset->image && it->second.mask == maskImage;
+                if (!fresh) {
+                    DistortCache cache{target->second, target->first, layer->asset->image, maskImage, warpImage(*layer->asset->image, target->first, target->second, 2048), nullptr};
+                    if (cache.image && maskImage && !layer->mask->placement && layer->mask->linked) {
+                        auto wm = warpMask(*maskImage, target->first, target->second, 0, 2048);
+                        if (wm) cache.warpedMask = wm->image;
+                    }
+                    it = distortCache_.insert_or_assign(layer->id, std::move(cache)).first;
+                }
+                const DistortCache& cache = it->second;
+                if (cache.image) {
+                    o.image = cache.image->image;
+                    o.transform = cache.image->transform;
+                    if (cache.warpedMask) { o.maskImage = cache.warpedMask; o.maskPlacement = std::optional<LayerTransform>(); }
+                    else if (layer->mask) o.maskPlacement = std::optional<LayerTransform>(layer->mask->placement ? *layer->mask->placement : layer->transform);
+                }
+            }
         }
     }
     if (previewImage_ && activeLayerId_) {
@@ -1574,19 +2366,28 @@ Overrides EditorSession::renderOverrides() const {
         const Layer* layer = document_ ? document_->find(*activeLayerId_) : nullptr;
         if (layer && layer->mask && !layer->mask->placement && previewTransform_ && !previewTransform_->samePlacement(layer->transform)) o.maskPlacement = std::optional<LayerTransform>(layer->transform);
     }
-    if (stroke_) {
-        LayerOverride& o = overrides[strokeLayerId_];
-        if (strokeMask_) {
-            o.maskImage = stroke_->previewMask();
-            const Layer* layer = document_ ? document_->find(strokeLayerId_) : nullptr;
-            if (layer && layer->mask && layer->mask->placement) o.maskPlacement = std::optional<LayerTransform>(stroke_->paintTransform());
+    auto strokeOverride = [&](const BrushStroke& stroke, const Uuid& layerId, bool mask) {
+        LayerOverride& o = overrides[layerId];
+        const Layer* layer = document_ ? document_->find(layerId) : nullptr;
+        if (mask) {
+            o.maskImage = stroke.previewMask();
+            if (layer && layer->mask && layer->mask->placement) o.maskPlacement = std::optional<LayerTransform>(stroke.paintTransform());
         } else {
-            o.image = stroke_->previewImage();
-            o.transform = stroke_->paintTransform();
-            // A mask covering the old grid stays where it was while the layer grows under the stroke.
-            const Layer* layer = document_ ? document_->find(strokeLayerId_) : nullptr;
+            o.image = stroke.previewImage();
+            o.transform = stroke.paintTransform();
+            // A mask covering the old grid stays where it was while the layer grows under the edit.
             if (layer && layer->mask && !layer->mask->placement && layer->asset) o.maskPlacement = std::optional<LayerTransform>(layer->transform);
         }
+    };
+    if (stroke_) strokeOverride(*stroke_, strokeLayerId_, strokeMask_);
+    if (gradient_) strokeOverride(*gradient_->raster, gradient_->layerId, gradient_->mask);
+    if (pixelMove_) strokeOverride(*pixelMove_->raster, pixelMove_->layerId, false);
+    if (warp_ && document_) {
+        LayerOverride& o = overrides[warpLayerId_];
+        o.image = warp_->image();
+        o.transform = LayerTransform(Point(0, 0), document_->size());
+        const Layer* layer = document_->find(warpLayerId_);
+        if (layer && layer->mask && !layer->mask->placement) o.maskPlacement = std::optional<LayerTransform>(layer->transform);
     }
     return overrides;
 }

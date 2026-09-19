@@ -11,6 +11,9 @@
 #include "compositor/project.h"
 #include "compositor/render.h"
 #include "compositor/selection.h"
+#include "compositor/shape.h"
+#include "compositor/warp.h"
+#include "compositor/warpstroke.h"
 #include "compositor/transform.h"
 
 #include <cstdlib>
@@ -728,6 +731,132 @@ TEST_CASE(filters_blur_noise_lens_and_growing) {
     CHECK_NEAR(trimmed.origin.x, 20, 1e-9);
     CHECK_NEAR(trimmed.origin.y, 30, 1e-9);
     CHECK_NEAR(blurMargin(FilterKind::GaussianBlur, settings), 5, 1e-9);
+}
+
+TEST_CASE(warp_identity_and_perspective) {
+    auto img = solid(20, 10, 255, 0, 0);
+    LayerTransform t(Point(5, 7), Size(20, 10));
+    Corners same = cornersOf(t);
+    CHECK(cornersUsable(same));
+    auto w = warpImage(*img, t, same);
+    REQUIRE(w.has_value());
+    CHECK_EQ(w->image->width(), 20);
+    CHECK_NEAR(w->transform.origin.x, 5, 1e-9);
+    CHECK_EQ(int(w->image->pixel(10, 5)[0]), 255);
+    CHECK_EQ(int(w->image->pixel(10, 5)[3]), 255);
+    // A trapezoid: the bottom edge narrowed. Pixels at the top corners stay, bottom corners empty.
+    Corners trap = {Point{0, 0}, Point{40, 0}, Point{30, 20}, Point{10, 20}};
+    auto p = warpImage(*img, t, trap);
+    REQUIRE(p.has_value());
+    CHECK_EQ(p->image->width(), 40);
+    CHECK_EQ(int(p->image->pixel(20, 10)[3]), 255);
+    CHECK_EQ(int(p->image->pixel(1, 18)[3]), 0);
+    CHECK(p->image->pixel(20, 18)[3] == 255);
+    Homography h = Homography::unitTo(trap);
+    Point m = h.map({0.5, 1});
+    CHECK_NEAR(m.x, 20, 1e-9); CHECK_NEAR(m.y, 20, 1e-9);
+    Point back = h.inverted().map(m);
+    CHECK_NEAR(back.x, 0.5, 1e-9); CHECK_NEAR(back.y, 1, 1e-9);
+    Corners twisted = {Point{0, 0}, Point{40, 0}, Point{0, 20}, Point{40, 20}};
+    CHECK(!cornersUsable(twisted));
+    Rect crop;
+    auto trimmed = warpImageTrimmed(*img, t, trap, &crop);
+    REQUIRE(trimmed.has_value());
+    CHECK(trimmed->image->width() <= 40);
+    auto mask = std::make_shared<GrayImage>(20, 10, 255);
+    auto wm = warpMask(*mask, t, trap, 0);
+    REQUIRE(wm.has_value());
+    CHECK_EQ(int(wm->image->at(20, 10)), 255);
+    CHECK_EQ(int(wm->image->at(1, 18)), 0);
+}
+
+TEST_CASE(shape_rasters_and_gradients) {
+    auto rect = shapeImage(ShapeKind::Rectangle, 10, 6, 1, 0, 0, 0);
+    CHECK_EQ(int(rect->pixel(0, 0)[3]), 255);
+    CHECK_EQ(int(rect->pixel(9, 5)[0]), 255);
+    auto rounded = shapeImage(ShapeKind::Rectangle, 20, 20, 0, 1, 0, 8);
+    CHECK_EQ(int(rounded->pixel(0, 0)[3]), 0);
+    CHECK_EQ(int(rounded->pixel(10, 10)[1]), 255);
+    CHECK_EQ(int(rounded->pixel(10, 0)[3]), 255);
+    auto ellipse = shapeImage(ShapeKind::Ellipse, 20, 10, 0, 0, 1, 0);
+    CHECK_EQ(int(ellipse->pixel(0, 0)[3]), 0);
+    CHECK_EQ(int(ellipse->pixel(10, 5)[2]), 255);
+    Image base(10, 1);
+    Image out(10, 1);
+    GradientStops stops{{1, 0, 0, 1}, {0, 0, 1, 1}};
+    fillGradient(base, out, Affine::identity(), GradientShape::Linear, {0, 0}, {10, 0}, stops, 1, nullptr);
+    CHECK(out.pixel(0, 0)[0] > 200);
+    CHECK(out.pixel(9, 0)[2] > 200);
+    CHECK(std::abs(int(out.pixel(5, 0)[0]) - int(out.pixel(5, 0)[2])) < 40);
+    // Through a brush stroke on a blank layer, transparent at the far end.
+    Document doc(16, 16);
+    Layer blank("L", doc.size());
+    BrushSettings s;
+    BrushStroke stroke(blank, false, s, doc.size());
+    float a[4] = {0, 1, 0, 1}, b[4] = {0, 1, 0, 0};
+    stroke.fillGradientOver(0, {0, 8}, {16, 8}, a, b, 1);
+    auto commit = stroke.commit();
+    REQUIRE(commit.asset.has_value());
+    CHECK(commit.asset->image->pixel(0, 8)[3] > 240);
+    CHECK(commit.asset->image->pixel(commit.asset->image->width() - 1, 8)[3] < 40);
+}
+
+TEST_CASE(pixel_move_lifts_and_places) {
+    Document doc(32, 32);
+    auto img = solid(32, 32, 0, 0, 255);
+    Layer layer = imageLayer("blue", img, {0, 0});
+    auto sel = rasterizeRect({4, 4, 8, 8}, 32, 32, false);
+    BrushSettings s;
+    BrushStroke stroke(layer, false, s, doc.size(), sel.get());
+    REQUIRE(stroke.liftSelection());
+    stroke.moveLifted({10, 0}, false);
+    auto out = stroke.previewImage();
+    CHECK_EQ(int(out->pixel(5, 5)[3]), 0);      // the hole
+    CHECK_EQ(int(out->pixel(15, 5)[2]), 255);   // the moved pixels
+    stroke.moveLifted({10, 0}, true);
+    CHECK_EQ(int(stroke.previewImage()->pixel(5, 5)[2]), 255); // duplicating leaves the source
+    auto commit = stroke.commit();
+    REQUIRE(commit.asset.has_value());
+}
+
+TEST_CASE(warp_stroke_moves_pixels) {
+    auto img = std::make_shared<Image>(40, 40);
+    for (int y = 0; y < 40; y++) for (int x = 0; x < 40; x++) { uint8_t* p = img->pixel(x, y); p[0] = x < 20 ? 255 : 0; p[2] = x < 20 ? 0 : 255; p[3] = 255; }
+    WarpStroke liquify(img, WarpMode::Liquify, 16, 0.5, 1);
+    liquify.append({20, 20});
+    liquify.append({28, 20});
+    CHECK(!liquify.points().empty());
+    // Red was pushed to the right at the centre of the stroke.
+    CHECK(liquify.image()->pixel(24, 20)[0] > 128);
+    auto img2 = std::make_shared<Image>(*img);
+    WarpStroke smudge(img2, WarpMode::Smudge, 16, 0.5, 0.8);
+    smudge.append({18, 20});
+    smudge.append({30, 20});
+    CHECK(smudge.image()->pixel(26, 20)[0] > 40);
+}
+
+TEST_CASE(image_size_resamples_layers) {
+    Document doc(40, 20);
+    Layer a = imageLayer("a", solid(20, 10, 255, 0, 0), {10, 5});
+    LayerMask m;
+    auto mask = std::make_shared<GrayImage>(20, 10, 255);
+    for (int y = 0; y < 10; y++) for (int x = 0; x < 10; x++) mask->at(x, y) = 0;
+    m.asset = MaskAsset::make(mask);
+    a.mask = m;
+    doc.layers.push_back(a);
+    REQUIRE(resizeDocument(doc, 80, 40, 150, Sampling::High));
+    CHECK_EQ(doc.width, 80);
+    CHECK_NEAR(doc.resolution, 150, 1e-9);
+    const Layer& l = doc.layers[0];
+    CHECK_EQ(l.asset->image->width(), 40);
+    CHECK_EQ(l.asset->image->height(), 20);
+    CHECK_NEAR(l.transform.origin.x, 20, 1e-9);
+    CHECK_EQ(l.mask->asset.image->width(), 40);
+    CHECK_EQ(int(l.mask->asset.image->at(5, 5)), 0);
+    CHECK_EQ(int(l.mask->asset.image->at(35, 5)), 255);
+    auto flat = renderFlattened(doc);
+    CHECK_EQ(int(flat->pixel(50, 20)[0]), 255);
+    CHECK_EQ(int(flat->pixel(25, 20)[3]), 0);
 }
 
 TEST_MAIN()

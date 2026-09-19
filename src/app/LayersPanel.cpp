@@ -1,7 +1,11 @@
 #include "LayersPanel.h"
 #include "ImageConvert.h"
 #include <QApplication>
+#include <QDrag>
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
 #include <QDropEvent>
+#include <QMimeData>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
@@ -113,8 +117,41 @@ LayerTree::LayerTree(EditorSession* session, QWidget* parent) : QTreeWidget(pare
     setMouseTracking(true);
 }
 
+void LayerTree::dragEnterEvent(QDragEnterEvent* event) {
+    if (event->mimeData()->hasFormat("application/x-compositor-mask")) { event->acceptProposedAction(); return; }
+    QTreeWidget::dragEnterEvent(event);
+}
+
+void LayerTree::dragMoveEvent(QDragMoveEvent* event) {
+    if (event->mimeData()->hasFormat("application/x-compositor-mask")) { event->acceptProposedAction(); return; }
+    QTreeWidget::dragMoveEvent(event);
+}
+
+void LayerTree::mousePressEvent(QMouseEvent* event) {
+    // Alt-click on a row clips it to the layer below (or releases it).
+    if (event->button() == Qt::LeftButton && (event->modifiers() & Qt::AltModifier) && !(event->modifiers() & Qt::ControlModifier)) {
+        if (QTreeWidgetItem* item = itemAt(event->position().toPoint())) {
+            QWidget* w = childAt(event->position().toPoint());
+            while (w && w->property("layerId").isNull()) w = w->parentWidget();
+            if (!(w && (w->property("eye").toBool() || w->property("mask").toBool()))) {
+                session_->toggleClippingMask(item->data(0, Qt::UserRole).toString().toStdString());
+                return;
+            }
+        }
+    }
+    QTreeWidget::mousePressEvent(event);
+}
+
 void LayerTree::dropEvent(QDropEvent* event) {
     QTreeWidgetItem* target = itemAt(event->position().toPoint());
+    if (event->mimeData()->hasFormat("application/x-compositor-mask")) {
+        event->ignore();
+        if (!target) return;
+        Uuid source = QString::fromUtf8(event->mimeData()->data("application/x-compositor-mask")).toStdString();
+        session_->copyMask(source, target->data(0, Qt::UserRole).toString().toStdString());
+        return;
+    }
+    dropDuplicates = event->modifiers() & Qt::AltModifier;
     QList<QTreeWidgetItem*> dragged = selectedItems();
     event->ignore();
     if (dragged.isEmpty()) return;
@@ -225,7 +262,8 @@ LayersPanel::LayersPanel(EditorSession* session, QWidget* parent) : QWidget(pare
     connect(tree_, &QTreeWidget::itemCollapsed, this, [this](QTreeWidgetItem* item) { if (!rebuilding_) session_->toggleGroupExpansion(item->data(0, Qt::UserRole).toString().toStdString()); });
     connect(tree_, &LayerTree::dropRequested, this, [this](Uuid id, std::optional<Uuid> parent, std::optional<Uuid> above, bool atBottom) {
         // Dropped "above" a shown item means directly above it in the stack: the item shown becomes the one below.
-        session_->placeLayer(id, parent, above, atBottom && !above);
+        if (tree_->dropDuplicates) session_->duplicateLayerTo(id, parent, above, atBottom && !above);
+        else session_->placeLayer(id, parent, above, atBottom && !above);
     });
     connect(tree_, &QWidget::customContextMenuRequested, this, &LayersPanel::showContextMenu);
     connect(tree_, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item, int) { startRename(item->data(0, Qt::UserRole).toString().toStdString()); });
@@ -380,7 +418,18 @@ void LayersPanel::startRename(const Uuid& id) {
 bool LayersPanel::eventFilter(QObject* watched, QEvent* event) {
     if (event->type() == QEvent::MouseButtonPress) {
         auto* w = qobject_cast<QWidget*>(watched);
+        auto* mouse = static_cast<QMouseEvent*>(event);
         if (w && w->property("mask").toBool()) {
+            if (mouse->modifiers() & Qt::AltModifier) {
+                // Alt-drag a mask onto another layer to copy it there.
+                auto* drag = new QDrag(w);
+                auto* mime = new QMimeData;
+                mime->setData("application/x-compositor-mask", w->property("layerId").toString().toUtf8());
+                drag->setMimeData(mime);
+                if (auto* label = qobject_cast<QLabel*>(w)) drag->setPixmap(label->pixmap());
+                drag->exec(Qt::CopyAction);
+                return true;
+            }
             session_->selectLayer(w->property("layerId").toString().toStdString(), true);
             return true;
         }

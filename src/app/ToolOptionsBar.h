@@ -4,6 +4,8 @@
 #include <QDoubleSpinBox>
 #include <QStackedWidget>
 #include <QToolBar>
+#include <functional>
+#include <vector>
 
 class QHBoxLayout;
 
@@ -30,6 +32,10 @@ private:
     QWidget* buildEyedropperOptions();
     QWidget* buildHealingOptions();
     QWidget* buildCloneOptions();
+    QWidget* buildSmudgeOptions();
+    QWidget* buildGradientOptions();
+    QWidget* buildShapeOptions();
+    std::vector<std::function<void()>> syncers_;
     void addBrushTipFields(QHBoxLayout* layout);
 
     EditorSession* session_;

@@ -11,6 +11,12 @@
 #include "compositor/history.h"
 #include "compositor/render.h"
 #include "compositor/selection.h"
+#include "compositor/shape.h"
+#include "compositor/warp.h"
+#include "compositor/warpstroke.h"
+#include <QElapsedTimer>
+#include <functional>
+#include <map>
 #include <QColor>
 #include <QObject>
 #include <QRectF>
@@ -21,14 +27,51 @@
 
 namespace app {
 
-enum class Tool { Move, Marquee, Lasso, Wand, Crop, Brush, SpotHealing, CloneStamp, Eyedropper, Hand, Zoom };
+enum class Tool { Move, Marquee, Lasso, Wand, Crop, Brush, SpotHealing, CloneStamp, Smudge, Gradient, Shape, Eyedropper, Hand, Zoom };
 enum class MarqueeKind { Rectangle, Ellipse };
+enum class LassoKind { Freehand, Polygonal };
+enum class BlurToolMode { Liquify, Blur, Smudge };
+enum class GradientStyle { ForegroundToBackground, ForegroundToTransparent };
+
+/// Several layers transformed together: the upright box around them when the edit began, and each one's transform then.
+struct TransformGroup {
+    compositor::LayerTransform box;
+    std::map<compositor::Uuid, compositor::LayerTransform> originals;
+};
+
+/// Ctrl+T with a selection: the selected pixels float on a temporary layer and merge back on Apply.
+struct FloatingTransform {
+    compositor::Uuid sourceId;
+    compositor::Document before;
+    std::optional<compositor::Uuid> beforeActive;
+    compositor::LayerTransform original;
+    int pixelWidth = 0, pixelHeight = 0;
+};
 
 struct TransformEdit {
     compositor::Uuid layerId;
     compositor::LayerTransform draft;
     bool persistent = false;
     bool mask = false;
+    /// Set once a handle is Ctrl-dragged: the four corners move freely and Apply resamples the pixels.
+    std::optional<compositor::Corners> corners;
+    std::optional<TransformGroup> group;
+    std::optional<FloatingTransform> floating;
+};
+
+struct GradientSettings {
+    compositor::GradientShape shape = compositor::GradientShape::Linear;
+    GradientStyle style = GradientStyle::ForegroundToTransparent;
+    bool reversed = false;
+    double opacity = 1;
+};
+
+/// A shape being dragged out with the Shape tool, in whole document pixels.
+struct ShapeDraft {
+    compositor::ShapeKind kind;
+    QPointF anchor;
+    QRectF rect;
+    double cornerRadius = 0;
 };
 
 class EditorSession : public QObject {
@@ -64,7 +107,15 @@ public:
     void groupSelectedLayers();
     void deleteLayer(const compositor::Uuid& id);
     void deleteSelectedLayers();
+    /// Layers that clip to something being deleted but survive it; the UI asks whether to bake or release them.
+    std::vector<compositor::Uuid> clippingDependents(const std::vector<compositor::Uuid>& ids) const;
+    /// Deletes `ids`; with `bake`, dependents keep their masked appearance in their pixels first.
+    void deleteLayersResolvingClipping(const std::vector<compositor::Uuid>& ids, bool bake);
     void duplicateActiveLayer();
+    /// Alt-drag in the Layers panel: a copy of the layer placed where it was dropped.
+    bool duplicateLayerTo(const compositor::Uuid& id, const std::optional<compositor::Uuid>& parent, const std::optional<compositor::Uuid>& above, bool atBottom);
+    /// Alt-dragging a mask thumbnail onto another layer: a copy of the mask, where it sits on the document.
+    bool copyMask(const compositor::Uuid& source, const compositor::Uuid& target);
     void mergeDown();
     void renameLayer(const compositor::Uuid& id, const QString& name);
     void toggleLayerVisibility(const compositor::Uuid& id);
@@ -100,6 +151,21 @@ public:
     void commitTransform();
     void cancelTransform();
     void nudgeLayer(double dx, double dy);
+    /// Ctrl+T: transforms the selected pixels when there is a selection, else the layer(s).
+    void transformCommand();
+    bool canTransformSelection() const;
+    void beginSelectionTransform();
+    /// Alt-drag: a copy of the active layer is made and moved; cancelling removes it again.
+    void beginDuplicateTransform();
+    /// Several selected layers, or a folder: the transform moves them together in one box.
+    bool transformsAsGroup() const;
+    std::vector<const compositor::Layer*> groupTransformMembers() const;
+    std::optional<compositor::LayerTransform> groupTransformBox() const;
+    /// Ctrl-drag on a handle: the corners start moving freely; Apply resamples the pixels.
+    void beginDistort();
+    void previewCorners(const compositor::Corners& corners);
+    /// Where the transform box's corners are right now (the distortion's, or the draft's).
+    compositor::Corners editedCorners(const compositor::Layer& layer) const;
     /// The transform a layer shows right now: the pending draft or its own.
     compositor::LayerTransform displayedTransform(const compositor::Layer& layer) const;
     compositor::LayerTransform editedTransform(const compositor::Layer& layer) const;
@@ -116,6 +182,57 @@ public:
 
     // Brush
     compositor::BrushSettings brushSettings;
+    /// Photoshop's opacity keys: 1 = 10% ... 9 = 90%, 0 = 100%; two digits typed quickly set an exact value.
+    void typeOpacityDigit(int digit);
+    void changeBrushHardness(bool increase);
+    void changeBrushSize(bool increase);
+    /// The Blur tool's modes; Liquify and Smudge push pixels, Blur paints a softened copy.
+    BlurToolMode blurMode = BlurToolMode::Liquify;
+    bool warpActive() const { return warp_ != nullptr; }
+    bool beginWarp(QPointF documentPoint);
+    void continueWarp(QPointF documentPoint);
+    void endWarp();
+    void cancelWarp();
+
+    // Gradient tool
+    GradientSettings gradientSettings;
+    bool gradientPending() const { return gradient_ != nullptr; }
+    std::optional<std::pair<QPointF, QPointF>> gradientLine() const;
+    void beginGradient(QPointF documentPoint);
+    void moveGradient(QPointF end);
+    void endGradientDrag();
+    void refreshGradient();
+    void commitGradient();
+    void cancelGradient();
+    /// Switching tools, layers or targets applies the pending gradient, as in Photoshop.
+    void resolveGradient();
+
+    // Shape tool
+    compositor::ShapeKind shapeKind = compositor::ShapeKind::Rectangle;
+    double shapeCornerRadius = 0;
+    const std::optional<ShapeDraft>& shapeDraft() const { return shapeDraft_; }
+    void beginShape(QPointF documentPoint);
+    void dragShape(QPointF documentPoint, bool square, bool fromCenter);
+    void finishShape();
+    void cancelShape();
+    void toggleShapeKind();
+
+    // Moving selected pixels (the Move tool with a selection)
+    bool pixelMoveActive() const { return pixelMove_ != nullptr; }
+    bool canMovePixels(QPointF documentPoint) const;
+    bool beginPixelMove(bool duplicate);
+    void movePixels(QPointF offset);
+    void finishPixelMove();
+    void cancelPixelMove();
+    void nudgePixels(double dx, double dy);
+    /// The outline to draw: during a pixel move or a floating transform, the selection carried along.
+    std::optional<compositor::Selection> displayedSelection() const;
+    /// The composite's straight colour under a document point, or none when transparent / outside.
+    std::optional<QColor> compositeColorAt(QPointF documentPoint) const;
+    /// Hooks a panel can install to take the next canvas press (returns true to claim it), the drag and the release.
+    std::function<bool(QPointF)> canvasPressHook;
+    std::function<void(QPointF, QPointF)> canvasDragHook;
+    std::function<void()> canvasReleaseHook;
     bool brushErase = false;
     QColor foregroundColor{Qt::black};
     QColor backgroundColor{Qt::white};
@@ -157,6 +274,9 @@ public:
     void clearSelectionPixels();
     void selectionExpand(int amount);
     void selectionContract(int amount);
+    /// Load a layer's pixels (or its mask) as the selection.
+    void loadLayerAsSelection(const compositor::Uuid& id, bool mask, compositor::SelectionMode mode);
+    LassoKind lassoKind = LassoKind::Freehand;
     bool selectionAntialiased = true;
     MarqueeKind marqueeKind = MarqueeKind::Rectangle;
     int wandTolerance = 32;
@@ -232,6 +352,17 @@ private:
     static void adoptClipping(const compositor::Uuid& id, std::vector<compositor::Layer>& layers);
     static void releaseDetachedClipping(std::vector<compositor::Layer>& layers);
     void commitMaskTransform(const TransformEdit& edit);
+    void commitDistort(const TransformEdit& edit);
+    void mergeFloatingTransform(const TransformEdit& edit);
+    void cancelFloatingTransform(const FloatingTransform& floating);
+    std::optional<std::pair<compositor::LayerTransform, compositor::Corners>> distortTarget(const compositor::Layer& layer, const TransformEdit& edit) const;
+    std::optional<compositor::LayerTransform> displayedMaskPlacement(const compositor::Layer& layer) const;
+    void redrawShape(compositor::Layer& layer);
+    void finishDeleting(const std::vector<compositor::Uuid>& ids, const std::map<compositor::Uuid, compositor::Asset>& baked);
+    std::optional<compositor::Asset> bakeClipping(const compositor::Uuid& target) const;
+    void clearSelectedPixelsNow(compositor::Layer& layer);
+    std::unique_ptr<compositor::BrushStroke> makeRasterEdit(const compositor::Layer& layer, bool mask, const compositor::BrushSettings& settings) const;
+    void commitRasterEdit(compositor::BrushStroke& stroke, const compositor::Uuid& layerId, bool mask, const QString& name);
 
     std::optional<compositor::Document> document_;
     compositor::DocumentHistory history_;
@@ -255,6 +386,19 @@ private:
     bool adjustmentEditing_ = false;
     std::shared_ptr<const compositor::Image> previewImage_;
     std::optional<compositor::LayerTransform> previewTransform_;
+    std::optional<std::pair<compositor::Uuid, compositor::Uuid>> transformDuplicate_; // copy, source
+    struct DistortCache { compositor::Corners corners; compositor::LayerTransform transform; compositor::ImagePtr source; compositor::GrayPtr mask; std::optional<compositor::WarpedImage> image; compositor::GrayPtr warpedMask; };
+    mutable std::map<compositor::Uuid, DistortCache> distortCache_;
+    struct PixelMove { std::unique_ptr<compositor::BrushStroke> raster; compositor::Selection origin; bool duplicate; QPointF offset; compositor::Uuid layerId; };
+    std::unique_ptr<PixelMove> pixelMove_;
+    struct GradientEdit { std::unique_ptr<compositor::BrushStroke> raster; compositor::Uuid layerId; bool mask; QPointF start, end; };
+    std::unique_ptr<GradientEdit> gradient_;
+    std::optional<ShapeDraft> shapeDraft_;
+    std::unique_ptr<compositor::WarpStroke> warp_;
+    compositor::Uuid warpLayerId_;
+    compositor::LayerTransform warpTransform_;
+    std::optional<std::pair<int, qint64>> pendingOpacityDigit_;
+    QElapsedTimer opacityTimer_;
 };
 
 } // namespace app

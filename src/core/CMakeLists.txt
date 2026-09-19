@@ -16,6 +16,9 @@ add_library(compositor_core STATIC
     src/project.cpp
     src/render.cpp
     src/selection.cpp
+    src/shape.cpp
+    src/warp.cpp
+    src/warpstroke.cpp
     src/transform.cpp
     src/uuid.cpp
 )

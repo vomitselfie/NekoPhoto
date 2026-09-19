@@ -54,6 +54,9 @@ ToolOptionsBar::ToolOptionsBar(EditorSession* session, CanvasWidget* canvas, QWi
     stack_->addWidget(buildEyedropperOptions()); // 7
     stack_->addWidget(buildHealingOptions());    // 8
     stack_->addWidget(buildCloneOptions());      // 9
+    stack_->addWidget(buildSmudgeOptions());     // 10
+    stack_->addWidget(buildGradientOptions());   // 11
+    stack_->addWidget(buildShapeOptions());      // 12
     addWidget(stack_);
     connect(session_, &EditorSession::toolChanged, this, &ToolOptionsBar::syncTool);
     connect(session_, &EditorSession::transformChanged, this, &ToolOptionsBar::syncTransformFields);
@@ -74,10 +77,14 @@ void ToolOptionsBar::syncTool() {
     case Tool::Eyedropper: index = 7; break;
     case Tool::SpotHealing: index = 8; break;
     case Tool::CloneStamp: index = 9; break;
+    case Tool::Smudge: index = 10; break;
+    case Tool::Gradient: index = 11; break;
+    case Tool::Shape: index = 12; break;
     }
+    for (auto& s : syncers_) s();
     stack_->setCurrentIndex(index);
     // Widgets that mirror session state.
-    for (int page : {1, 8, 9})
+    for (int page : {1, 8, 9, 10})
     for (auto* spin : stack_->widget(page)->findChildren<QDoubleSpinBox*>()) {
         QSignalBlocker b(spin);
         QString role = spin->property("role").toString();
@@ -209,7 +216,7 @@ QWidget* ToolOptionsBar::buildBrushOptions() {
     group->addButton(erase);
     group->setExclusive(true);
     paint->setChecked(true);
-    connect(paint, &QToolButton::toggled, this, [this](bool on) { session_->brushErase = !on; emit session_->toolChanged(); });
+    connect(paint, &QToolButton::toggled, this, [this](bool on) { if (session_->brushErase == on) { session_->brushErase = !on; emit session_->toolChanged(); } });
     h->addWidget(paint);
     h->addWidget(erase);
     auto spin = [&](const QString& label, const QString& role, double min, double max, double value, const QString& suffix, auto apply) {
@@ -277,12 +284,79 @@ void ToolOptionsBar::addBrushTipFields(QHBoxLayout* h) {
     spin(tr("Opacity"), "opacity", 1, 100, session_->brushSettings.opacity * 100, "%", [this](double v) { session_->brushSettings.opacity = v / 100; });
 }
 
+QWidget* ToolOptionsBar::buildSmudgeOptions() {
+    QWidget* w = row();
+    auto* h = layoutOf(w);
+    auto* mode = new QComboBox;
+    mode->addItems({tr("Liquify"), tr("Blur"), tr("Smudge")});
+    connect(mode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->blurMode = BlurToolMode(i); });
+    h->addWidget(new QLabel(tr("Mode")));
+    h->addWidget(mode);
+    addBrushTipFields(h);
+    auto* hint = new QLabel(tr("Opacity is the strength; Liquify pushes pixels, Smudge drags colour, Blur softens"));
+    hint->setStyleSheet("color: palette(mid);");
+    h->addWidget(hint);
+    h->addStretch();
+    return w;
+}
+
+QWidget* ToolOptionsBar::buildGradientOptions() {
+    QWidget* w = row();
+    auto* h = layoutOf(w);
+    auto* shape = new QComboBox;
+    shape->addItems({tr("Linear"), tr("Radial")});
+    connect(shape, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->gradientSettings.shape = i == 1 ? GradientShape::Radial : GradientShape::Linear; session_->refreshGradient(); });
+    h->addWidget(shape);
+    auto* style = new QComboBox;
+    style->addItems({tr("Foreground to Transparent"), tr("Foreground to Background")});
+    connect(style, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->gradientSettings.style = i == 1 ? GradientStyle::ForegroundToBackground : GradientStyle::ForegroundToTransparent; session_->refreshGradient(); });
+    h->addWidget(style);
+    auto* reverse = new QCheckBox(tr("Reverse"));
+    connect(reverse, &QCheckBox::toggled, this, [this](bool on) { session_->gradientSettings.reversed = on; session_->refreshGradient(); });
+    h->addWidget(reverse);
+    h->addWidget(new QLabel(tr("Opacity")));
+    auto* opacity = numberField(1, 100, 0, "%", tr("Opacity"));
+    opacity->setProperty("role", "gradientOpacity");
+    opacity->setValue(session_->gradientSettings.opacity * 100);
+    connect(opacity, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double v) { session_->gradientSettings.opacity = v / 100; session_->refreshGradient(); });
+    syncers_.push_back([this, opacity] { QSignalBlocker b(opacity); opacity->setValue(session_->gradientSettings.opacity * 100); });
+    h->addWidget(opacity);
+    auto* apply = new QPushButton(tr("Apply"));
+    connect(apply, &QPushButton::clicked, this, [this] { session_->commitGradient(); });
+    h->addWidget(apply);
+    auto* hint = new QLabel(tr("Drag a line; drag again to redo it; Enter applies, Esc discards. Shift snaps the angle"));
+    hint->setStyleSheet("color: palette(mid);");
+    h->addWidget(hint);
+    h->addStretch();
+    return w;
+}
+
+QWidget* ToolOptionsBar::buildShapeOptions() {
+    QWidget* w = row();
+    auto* h = layoutOf(w);
+    auto* kind = new QComboBox;
+    kind->addItems({tr("Rectangle"), tr("Ellipse")});
+    connect(kind, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->shapeKind = i == 1 ? ShapeKind::Ellipse : ShapeKind::Rectangle; });
+    syncers_.push_back([this, kind] { QSignalBlocker b(kind); kind->setCurrentIndex(session_->shapeKind == ShapeKind::Ellipse ? 1 : 0); });
+    h->addWidget(kind);
+    h->addWidget(new QLabel(tr("Corner radius")));
+    auto* radius = numberField(0, 5000, 0, " px", tr("Corner radius, for rectangles"));
+    connect(radius, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double v) { session_->shapeCornerRadius = v; });
+    h->addWidget(radius);
+    auto* hint = new QLabel(tr("Drag a shape in the foreground colour; Shift squares, Alt grows from the centre; Shift-U switches kind"));
+    hint->setStyleSheet("color: palette(mid);");
+    h->addWidget(hint);
+    h->addStretch();
+    return w;
+}
+
 QWidget* ToolOptionsBar::buildMarqueeOptions() {
     QWidget* w = row();
     auto* h = layoutOf(w);
     auto* kind = new QComboBox;
     kind->addItems({tr("Rectangle"), tr("Ellipse")});
     connect(kind, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->marqueeKind = i == 1 ? MarqueeKind::Ellipse : MarqueeKind::Rectangle; });
+    syncers_.push_back([this, kind] { QSignalBlocker b(kind); kind->setCurrentIndex(session_->marqueeKind == MarqueeKind::Ellipse ? 1 : 0); });
     h->addWidget(kind);
     auto* aa = new QCheckBox(tr("Anti-alias"));
     aa->setChecked(session_->selectionAntialiased);
@@ -300,8 +374,9 @@ QWidget* ToolOptionsBar::buildLassoOptions() {
     auto* h = layoutOf(w);
     auto* kind = new QComboBox;
     kind->addItems({tr("Freehand"), tr("Polygonal")});
-    connect(kind, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { canvas_->setProperty("polygonal", i == 1); emit session_->toolChanged(); });
+    connect(kind, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->lassoKind = i == 1 ? LassoKind::Polygonal : LassoKind::Freehand; canvas_->cancelLasso(); emit session_->toolChanged(); });
     kind->setProperty("role", "lassoKind");
+    syncers_.push_back([this, kind] { QSignalBlocker b(kind); kind->setCurrentIndex(session_->lassoKind == LassoKind::Polygonal ? 1 : 0); });
     h->addWidget(kind);
     auto* hint = new QLabel(tr("Polygonal: click to add points, double-click or Enter to close, Backspace removes the last point"));
     hint->setStyleSheet("color: palette(mid);");
@@ -334,6 +409,16 @@ QWidget* ToolOptionsBar::buildWandOptions() {
 QWidget* ToolOptionsBar::buildCropOptions() {
     QWidget* w = row();
     auto* h = layoutOf(w);
+    h->addWidget(new QLabel(tr("Ratio")));
+    auto* ratio = new QComboBox;
+    ratio->addItems({tr("Free"), tr("Original"), "1:1", "4:3", "3:2", "16:9", "4:5", "2:3"});
+    connect(ratio, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) {
+        static const double values[] = {0, -1, 1, 4.0 / 3, 3.0 / 2, 16.0 / 9, 4.0 / 5, 2.0 / 3};
+        double r = values[i];
+        if (r < 0 && session_->hasDocument()) r = double(session_->document()->width) / session_->document()->height;
+        canvas_->setCropRatio(std::max(0.0, r));
+    });
+    h->addWidget(ratio);
     auto* hint = new QLabel(tr("Drag the crop, then press Enter or double-click; Shift squares, Alt grows from the centre"));
     hint->setStyleSheet("color: palette(mid);");
     h->addWidget(hint);

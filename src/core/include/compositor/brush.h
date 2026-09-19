@@ -39,8 +39,21 @@ public:
     /// Begins a stroke on `layer` (its pixels, or its mask when `mask`). The working grid is the
     /// layer's pixel grid grown to cover `canvas` so paint can go past the layer's edges.
     BrushStroke(const Layer& layer, bool mask, BrushSettings settings, Size canvas, const GrayImage* selection = nullptr);
-    /// Clone Stamp: the sample painted through the tip instead of the colour.
-    void setClone(CloneSource clone) { clone_ = std::move(clone); }
+    /// Clone Stamp: the sample painted through the tip instead of the colour. With `replaces`, the sample
+    /// replaces what is under the tip rather than drawing over it (so it can clear pixels too).
+    void setClone(CloneSource clone, bool replaces = false) { clone_ = std::move(clone); replacesWithClone_ = replaces; }
+
+    // Moving selected pixels (the Move tool with a selection).
+    /// Cuts the selected pixels out of the original image. False when nothing is lifted.
+    bool liftSelection();
+    /// Rebuilds the working image: the selection becomes a transparent hole (unless duplicating) and the lifted
+    /// pixels are placed `offset` document pixels away.
+    void moveLifted(Point offset, bool duplicate);
+
+    /// Replaces this edit with a gradient over the whole canvas (or the selection) on the original pixels.
+    void fillGradientOver(int shape, Point from, Point to, const float startColor[4], const float endColor[4], double opacity);
+    /// Fills the selection (or the whole canvas) with a colour (straight 0..1; the red channel on masks).
+    void fillColor(double red, double green, double blue);
     bool isValid() const { return valid_; }
     const std::string& error() const { return error_; }
 
@@ -103,6 +116,9 @@ private:
     std::string name_;
     LayerTransform layerTransform_;
     std::optional<CloneSource> clone_;
+    bool replacesWithClone_ = false;
+    std::shared_ptr<Image> lifted_;
+    Rect liftedRect_;
 };
 
 } // namespace compositor

@@ -12,6 +12,7 @@ AdjustmentsPanel::AdjustmentsPanel(EditorSession* session, QWidget* parent) : QW
     title_->setWordWrap(true);
     layout->addWidget(title_);
     editor_ = new AdjustmentEditor;
+    editor_->setSession(session_);
     layout->addWidget(editor_);
     layout->addStretch();
     connect(editor_, &AdjustmentEditor::editStarted, this, [this] { if (layerId_) { session_->beginAdjustmentEdit(); editing_ = true; } });

@@ -26,6 +26,7 @@
 #include <QMessageBox>
 #include <QMimeData>
 #include <QPainter>
+#include <QPushButton>
 #include <QSettings>
 #include <QStatusBar>
 #include <QToolBar>
@@ -135,6 +136,9 @@ void MainWindow::buildToolRail() {
     connect(eraserAction_, &QAction::triggered, this, [this] { session_->brushErase = true; session_->selectTool(Tool::Brush); emit session_->toolChanged(); canvas_->setFocus(); });
     tool(Tool::SpotHealing, tr("Spot Healing Brush"), "J", QKeySequence("J"));
     tool(Tool::CloneStamp, tr("Clone Stamp (Alt-click sets the source)"), "S", QKeySequence("S"));
+    tool(Tool::Smudge, tr("Liquify / Blur / Smudge"), "R", QKeySequence("R"));
+    tool(Tool::Gradient, tr("Gradient"), "G", QKeySequence("G"));
+    tool(Tool::Shape, tr("Shape (Shift-U switches Rectangle / Ellipse)"), "U", QKeySequence("U"));
     tool(Tool::Eyedropper, tr("Eyedropper"), "I", QKeySequence("I"));
     rail->addSeparator();
     tool(Tool::Hand, tr("Hand"), "H", QKeySequence("H"));
@@ -159,6 +163,11 @@ void MainWindow::buildToolRail() {
     defaults->setShortcut(QKeySequence("D"));
     connect(defaults, &QAction::triggered, this, [this] { session_->foregroundColor = Qt::black; session_->backgroundColor = Qt::white; updateColorSwatches(); });
     addToolBar(Qt::LeftToolBarArea, rail);
+    // Shift-letter switches a tool's kind without leaving it.
+    auto kindKey = [this](const QString& key, auto slot) { auto* a = new QAction(this); a->setShortcut(QKeySequence(key)); connect(a, &QAction::triggered, this, slot); addAction(a); };
+    kindKey("Shift+M", [this] { session_->marqueeKind = session_->marqueeKind == MarqueeKind::Rectangle ? MarqueeKind::Ellipse : MarqueeKind::Rectangle; session_->selectTool(Tool::Marquee); emit session_->toolChanged(); });
+    kindKey("Shift+L", [this] { session_->lassoKind = session_->lassoKind == LassoKind::Freehand ? LassoKind::Polygonal : LassoKind::Freehand; canvas_->cancelLasso(); session_->selectTool(Tool::Lasso); emit session_->toolChanged(); });
+    kindKey("Shift+U", [this] { session_->selectTool(Tool::Shape); session_->toggleShapeKind(); });
 }
 
 void MainWindow::updateColorSwatches() {
@@ -214,10 +223,15 @@ void MainWindow::buildMenus() {
     needsDocument(edit->addAction(tr("Expand Selection…"), this, [this] { bool ok; int n = QInputDialog::getInt(this, tr("Expand Selection"), tr("Pixels"), 1, 1, 500, 1, &ok); if (ok) session_->selectionExpand(n); }));
     needsDocument(edit->addAction(tr("Contract Selection…"), this, [this] { bool ok; int n = QInputDialog::getInt(this, tr("Contract Selection"), tr("Pixels"), 1, 1, 500, 1, &ok); if (ok) session_->selectionContract(n); }));
     edit->addSeparator();
-    needsDocument(edit->addAction(tr("Free &Transform"), QKeySequence("Ctrl+T"), this, [this] { session_->selectTool(Tool::Move); session_->beginTransform(true); }));
+    needsDocument(edit->addAction(tr("Free &Transform"), QKeySequence("Ctrl+T"), this, [this] { session_->transformCommand(); }));
     needsDocument(edit->addAction(tr("Fill with Foreground"), QKeySequence("Alt+Backspace"), this, [this] { session_->fillSelection(session_->foregroundColor); }));
     needsDocument(edit->addAction(tr("Fill with Background"), QKeySequence("Ctrl+Backspace"), this, [this] { session_->fillSelection(session_->backgroundColor); }));
-    needsDocument(edit->addAction(tr("Clear"), QKeySequence(Qt::Key_Delete), this, [this] { if (session_->document() && session_->document()->selection) session_->clearSelectionPixels(); else session_->deleteSelectedLayers(); }));
+    needsDocument(edit->addAction(tr("Clear"), QKeySequence(Qt::Key_Delete), this, [this] { if (session_->document() && session_->document()->selection) session_->clearSelectionPixels(); else deleteSelectedLayers(); }));
+    QMenu* load = edit->addMenu(tr("Load as Selection"));
+    needsDocument(load->addAction(tr("Layer Pixels"), this, [this] { if (session_->activeLayerId()) session_->loadLayerAsSelection(*session_->activeLayerId(), false, SelectionMode::Replace); }));
+    needsDocument(load->addAction(tr("Layer Mask"), this, [this] { if (session_->activeLayerId()) session_->loadLayerAsSelection(*session_->activeLayerId(), true, SelectionMode::Replace); }));
+    needsDocument(load->addAction(tr("Add Layer Pixels"), this, [this] { if (session_->activeLayerId()) session_->loadLayerAsSelection(*session_->activeLayerId(), false, SelectionMode::Add); }));
+    needsDocument(load->addAction(tr("Subtract Layer Pixels"), this, [this] { if (session_->activeLayerId()) session_->loadLayerAsSelection(*session_->activeLayerId(), false, SelectionMode::Subtract); }));
     needsDocument(edit->addAction(tr("Content-Aware Fill"), QKeySequence("Shift+F5"), this, [this] { QString error; if (!session_->contentAwareFill(&error)) showError(tr("Content-Aware Fill"), error); }));
 
     QMenu* image = menuBar()->addMenu(tr("&Image"));
@@ -257,8 +271,9 @@ void MainWindow::buildMenus() {
     needsDocument(layer->addAction(tr("&New Layer"), QKeySequence("Ctrl+Shift+N"), this, [this] { session_->addBlankLayer(); }));
     needsDocument(layer->addAction(tr("New &Folder"), this, [this] { session_->addGroup(); }));
     needsDocument(layer->addAction(tr("&Group Layers"), QKeySequence("Ctrl+G"), this, [this] { session_->groupSelectedLayers(); }));
-    needsDocument(layer->addAction(tr("&Duplicate Layer / Layer via Copy"), QKeySequence("Ctrl+J"), this, [this] { session_->layerViaCopy(); }));
-    needsDocument(layer->addAction(tr("De&lete Layer"), this, [this] { session_->deleteSelectedLayers(); }));
+    needsDocument(layer->addAction(tr("Layer via &Copy"), QKeySequence("Ctrl+J"), this, [this] { session_->layerViaCopy(); }));
+    needsDocument(layer->addAction(tr("&Duplicate Layer"), this, [this] { session_->duplicateActiveLayer(); }));
+    needsDocument(layer->addAction(tr("De&lete Layer"), this, [this] { deleteSelectedLayers(); }));
     needsDocument(layer->addAction(tr("Merge &Down"), QKeySequence("Ctrl+E"), this, [this] { session_->mergeDown(); }));
     QMenu* adjustmentLayers = layer->addMenu(tr("New &Adjustment Layer"));
     for (int i = 0; i < 6; i++) {
@@ -319,6 +334,27 @@ void MainWindow::buildMenus() {
             "Qt %1 &middot; project format version %2<br>MIT licence.").arg(QT_VERSION_STR).arg(projectFormatVersion));
     });
     refreshRecent();
+}
+
+void MainWindow::deleteSelectedLayers() {
+    if (!session_->hasDocument()) return;
+    std::vector<Uuid> ids;
+    for (auto& l : session_->document()->layers) if (session_->selectedLayerIds().count(l.id)) ids.push_back(l.id);
+    if (ids.empty() && session_->activeLayerId()) ids.push_back(*session_->activeLayerId());
+    if (ids.empty()) return;
+    auto dependents = session_->clippingDependents(ids);
+    if (dependents.empty()) { session_->deleteLayersResolvingClipping(ids, false); return; }
+    QMessageBox box(this);
+    box.setIcon(QMessageBox::Question);
+    box.setText(ids.size() == 1 ? tr("This layer supplies a clipping mask") : tr("These layers supply clipping masks"));
+    box.setInformativeText(tr("Bake keeps the current masked appearance in the dependent layers’ pixels. Remove Links reveals their pixels. You can undo either choice."));
+    QPushButton* bake = box.addButton(tr("Bake and Delete"), QMessageBox::AcceptRole);
+    QPushButton* remove = box.addButton(tr("Remove Links and Delete"), QMessageBox::DestructiveRole);
+    box.addButton(QMessageBox::Cancel);
+    box.setDefaultButton(bake);
+    box.exec();
+    if (box.clickedButton() == bake) session_->deleteLayersResolvingClipping(ids, true);
+    else if (box.clickedButton() == remove) session_->deleteLayersResolvingClipping(ids, false);
 }
 
 void MainWindow::refreshActions() {

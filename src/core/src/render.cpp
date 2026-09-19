@@ -2,6 +2,7 @@
 #include "compositor/adjustments.h"
 #include "compositor/blend.h"
 #include "compositor/parallel.h"
+#include "compositor/warp.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -274,6 +275,63 @@ std::shared_ptr<GrayImage> resampleMask(const GrayImage& mask, const LayerTransf
     }
     });
     return out;
+}
+
+bool resizeDocument(Document& document, int width, int height, double resolution, Sampling sampling) {
+    if (!Document::validDimension(width) || !Document::validDimension(height) || (long long)width * height > Document::pixelBudget) return false;
+    double sx = double(width) / document.width, sy = double(height) / document.height;
+    if (document.width == width && document.height == height) { document.resolution = resolution; return true; }
+    Document out = document;
+    out.width = width; out.height = height; out.resolution = resolution;
+    out.selection.reset();
+    long long used = 0, usedMask = 0;
+    Affine scale = Affine::scaling(sx, sy);
+    for (auto& layer : out.layers) {
+        // The scaled corners' axis-aligned box: nonuniform scaling of a rotated rectangle adds shear that
+        // width/height/angle cannot hold, so each layer is rasterised into its box.
+        auto c = layer.transform.corners();
+        double minX = 1e300, minY = 1e300, maxX = -1e300, maxY = -1e300;
+        for (auto& p : c) { minX = std::min(minX, p.x * sx); minY = std::min(minY, p.y * sy); maxX = std::max(maxX, p.x * sx); maxY = std::max(maxY, p.y * sy); }
+        double left = std::floor(minX), top = std::floor(minY);
+        int w = std::max(1, int(std::ceil(maxX) - left)), h = std::max(1, int(std::ceil(maxY) - top));
+        LayerTransform box(Point(left, top), Size(w, h));
+        box.sampling = sampling;
+        if (!box.isValid()) return false;
+        // Where the old pixels sit on the new canvas: the old transform with the scale applied around the origin.
+        LayerTransform scaled = layer.transform.placing(layer.transform.unitToDocument().concatenating(scale));
+        scaled.sampling = sampling;
+        if (layer.asset && layer.asset->image) {
+            if (w > 30000 || h > 30000 || (long long)w * h > Document::pixelBudget - used) return false;
+            used += (long long)w * h;
+            // Shear can't be expressed as a LayerTransform, so resample through the scaled corner mapping directly.
+            Corners corners;
+            for (size_t i = 0; i < 4; i++) corners[i] = {c[i].x * sx, c[i].y * sy};
+            auto warped = warpImage(*layer.asset->image, layer.transform, corners, 0);
+            if (!warped) return false;
+            layer.asset = Asset::make(warped->image, layer.name);
+            layer.shapeImage.reset();
+            box = warped->transform;
+            box.sampling = sampling;
+        }
+        if (layer.mask && layer.mask->asset.image) {
+            const GrayImage& mask = *layer.mask->asset.image;
+            if (layer.mask->placement) layer.mask->placement = layer.mask->placement->placing(layer.mask->placement->unitToDocument().concatenating(scale));
+            else if (mask.width() > 1 || mask.height() > 1) {
+                if ((long long)w * h > Document::pixelBudget - usedMask) return false;
+                usedMask += (long long)w * h;
+                Corners corners;
+                for (size_t i = 0; i < 4; i++) corners[i] = {c[i].x * sx, c[i].y * sy};
+                auto warped = warpMask(mask, layer.transform, corners, 0, 0);
+                if (!warped) return false;
+                // The warp's bounds equal the box; the pixel grid now matches the layer's.
+                layer.mask->asset = MaskAsset::make(warped->image);
+                if (!layer.asset) box = warped->transform;
+            }
+        }
+        layer.transform = box;
+    }
+    document = out;
+    return true;
 }
 
 // ---- Document rendering ------------------------------------------------------
