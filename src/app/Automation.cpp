@@ -307,7 +307,7 @@ void AutomationServer::registerHandlers() {
         if (!s->hasDocument()) fail("no document is open in the current tab; use document.new or document.open");
         return *s->document();
     };
-    auto layer = [w, document](const QJsonObject& p, const char* key = "id") -> const Layer& {
+    auto layer = [document](const QJsonObject& p, const char* key = "id") -> const Layer& {
         const Document& doc = document();
         QString id = str(p, key);
         const Layer* l = doc.find(id.toStdString());
@@ -401,7 +401,7 @@ void AutomationServer::registerHandlers() {
         EditorSession* s = session();
         return QJsonObject{{"tab", w->currentTabIndex()}, {"title", s->title()}, {"width", s->hasDocument() ? s->document()->width : 0}, {"height", s->hasDocument() ? s->document()->height : 0}};
     });
-    add("document.import", [w, document](const QJsonObject& p) {
+    add("document.import", [w](const QJsonObject& p) {
         // An image file as a new layer (a first import creates the canvas).
         QString path = QFileInfo(str(p, "path")).absoluteFilePath(), error;
         std::optional<QPointF> at;
@@ -441,7 +441,7 @@ void AutomationServer::registerHandlers() {
         } else fail("path must end in .png, .jpg or .jpeg", invalidParams);
         return QJsonObject{{"path", path}, {"width", flat->width()}, {"height", flat->height()}};
     });
-    add("document.close", [w, session](const QJsonObject& p) {
+    add("document.close", [session](const QJsonObject& p) {
         if (session()->isModified() && !flag(p, "discard", false)) fail("the document has unsaved changes; save first or pass discard: true");
         session()->closeDocument();
         return QJsonObject{};

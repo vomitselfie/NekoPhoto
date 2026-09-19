@@ -54,6 +54,9 @@ QHBoxLayout* layoutOf(QWidget* w) { return static_cast<QHBoxLayout*>(w->layout()
 
 ToolOptionsBar::ToolOptionsBar(EditorSession* session, CanvasWidget* canvas, QWidget* parent)
     : QToolBar(tr("Tool Options"), parent), session_(session), canvas_(canvas) {
+    // One bar per tab; unique names keep QMainWindow::saveState quiet (their state is trivial, they can't move).
+    static int count = 0;
+    setObjectName(QStringLiteral("toolOptions%1").arg(++count));
     setMovable(false);
     setFloatable(false);
     stack_ = new QStackedWidget;

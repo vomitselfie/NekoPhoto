@@ -21,6 +21,7 @@
 #include <QIcon>
 #include <QMap>
 #include <QSettings>
+#include <QStandardPaths>
 #include <QToolBar>
 #include <QDockWidget>
 #include <QJsonArray>
@@ -176,7 +177,8 @@ int main(int argc, char** argv) {
     QApplication::setOrganizationName("compositor-linux");
     QApplication::setApplicationName("compositor-linux");
     QApplication::setApplicationVersion(QStringLiteral(COMPOSITOR_VERSION));
-    QApplication::setDesktopFileName("compositor-linux");
+    // The desktop entry gives Wayland the app id and icon; naming it when it isn't installed only makes the portal complain.
+    if (!QStandardPaths::locate(QStandardPaths::ApplicationsLocation, "compositor-linux.desktop").isEmpty()) QApplication::setDesktopFileName("compositor-linux");
     app.setWindowIcon(QIcon(QStringLiteral(":/app/icon.svg")));
     QCommandLineParser parser;
     parser.setApplicationDescription("compositor-linux: a small, focused image compositor.");
