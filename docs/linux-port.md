@@ -131,6 +131,19 @@ number, local builds the CMake project version.
 OpenCV is linked as `core`, `imgproc` and `dnn` only via its CMake config
 (pkg-config's entry would drag every module into the bundle).
 
+A second job in the same workflow builds the app on a macOS Apple Silicon
+runner with Homebrew's Qt, libpng and OpenCV, runs the tests and the offscreen
+smoke test, bundles Qt with `macdeployqt`, signs the bundle ad hoc (unsigned
+arm64 binaries do not launch at all; ad hoc signed ones do after Gatekeeper's
+Open Anyway) and zips it as `compositor-linux-<version>-macos-arm64.zip`; a
+publish job then attaches both platforms' files to the release. The bundle's
+Info.plist comes from `packaging/Info.plist.in` and its icon from
+`packaging/compositor-linux.icns`, built from the same SVG as the Linux icon.
+`.github/workflows/macos.yml` runs the same build on every push so the Mac
+side stays compiling; its zip is an artifact on the workflow run. Proper
+signing and notarisation are not set up: this is a way to try the editor on a
+Mac, not a Mac product.
+
 ## Layout
 
 ```

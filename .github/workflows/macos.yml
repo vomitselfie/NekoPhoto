@@ -1,0 +1,55 @@
+name: macos
+
+# Builds the app on macOS (Apple Silicon runner) with Homebrew's Qt, runs the tests and the offscreen
+# smoke test, and uploads an unsigned app bundle as an artifact, so a Mac can try the current tree.
+# The release workflow builds the same bundle for tags and attaches it to the release.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: macOS build and tests
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Homebrew packages
+        run: brew install ninja qt libpng opencv pkg-config
+
+      - name: Configure and build
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$(brew --prefix qt)" \
+            -DCOMPOSITOR_VERSION="0.0.0-dev.${GITHUB_SHA::7}"
+          cmake --build build -j"$(sysctl -n hw.ncpu)"
+
+      - name: Unit and golden tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Smoke test offscreen
+        run: |
+          app=build/src/app/compositor-linux.app/Contents/MacOS/compositor-linux
+          QT_QPA_PLATFORM=offscreen "$app" --version
+          QT_QPA_PLATFORM=offscreen "$app" --demo --screenshot demo.png --save-as Demo.comp
+          "$app" --headless --rpc-socket "$PWD/rpc.sock" --demo &
+          sleep 3
+          COMPOSITOR_BIN="$app" python3 tools/rpc_smoke.py "$PWD/rpc.sock"
+          kill %1
+
+      - name: Bundle Qt and sign ad hoc
+        run: |
+          "$(brew --prefix qt)/bin/macdeployqt" build/src/app/compositor-linux.app -always-overwrite -verbose=1
+          codesign --force --deep --sign - build/src/app/compositor-linux.app
+          ditto -c -k --sequesterRsrc --keepParent build/src/app/compositor-linux.app "compositor-linux-dev-macos-arm64.zip"
+          shasum -a 256 compositor-linux-dev-macos-arm64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: compositor-linux-macos-arm64
+          path: |
+            compositor-linux-dev-macos-arm64.zip
+            demo.png

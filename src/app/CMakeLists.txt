@@ -97,7 +97,23 @@ if(TARGET Qt6::DBus)
 endif()
 set_target_properties(compositor-linux PROPERTIES OUTPUT_NAME compositor-linux)
 
-install(TARGETS compositor-linux RUNTIME DESTINATION bin)
+if(APPLE)
+    # An app bundle with the icon and document types; macdeployqt then adds Qt and the other dylibs.
+    set(COMPOSITOR_ICNS ${CMAKE_SOURCE_DIR}/packaging/compositor-linux.icns)
+    target_sources(compositor-linux PRIVATE ${COMPOSITOR_ICNS})
+    set_source_files_properties(${COMPOSITOR_ICNS} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+    set_target_properties(compositor-linux PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/packaging/Info.plist.in
+        MACOSX_BUNDLE_BUNDLE_NAME "compositor-linux"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "com.github.vomitselfie.compositor-linux"
+        MACOSX_BUNDLE_ICON_FILE "compositor-linux.icns"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${COMPOSITOR_VERSION}"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${COMPOSITOR_VERSION}")
+    install(TARGETS compositor-linux BUNDLE DESTINATION .)
+else()
+    install(TARGETS compositor-linux RUNTIME DESTINATION bin)
+endif()
 install(FILES ${CMAKE_SOURCE_DIR}/packaging/compositor-linux.desktop DESTINATION share/applications)
 install(FILES ${CMAKE_SOURCE_DIR}/packaging/compositor-linux.svg DESTINATION share/icons/hicolor/scalable/apps)
 install(FILES ${CMAKE_SOURCE_DIR}/packaging/compositor-linux-mime.xml DESTINATION share/mime/packages RENAME compositor-linux.xml)

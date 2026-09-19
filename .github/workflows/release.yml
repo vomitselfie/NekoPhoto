@@ -1,7 +1,8 @@
 name: release
 
 # Pushing a tag like v0.2.0 builds compositor-linux, packages an AppImage and a
-# plain tarball, and publishes them on a GitHub release with generated notes.
+# plain tarball on Linux and an unsigned app bundle on macOS, and publishes them
+# on a GitHub release with generated notes.
 # "Run workflow" from the Actions tab does a dry run: the artifacts are built
 # and attached to the workflow run only.
 
@@ -105,9 +106,68 @@ jobs:
             *.tar.gz
             SHA256SUMS
 
-      - name: GitHub release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+  macos:
+    name: macOS app bundle
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version from the tag
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then v="${GITHUB_REF#refs/tags/v}"; else v="0.0.0-dev.${GITHUB_SHA::7}"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Homebrew packages
+        run: brew install ninja qt libpng opencv pkg-config
+
+      - name: Configure and build
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$(brew --prefix qt)" \
+            -DCOMPOSITOR_VERSION="${{ steps.version.outputs.version }}"
+          cmake --build build -j"$(sysctl -n hw.ncpu)"
+
+      - name: Tests and smoke test
+        run: |
+          ctest --test-dir build --output-on-failure
+          app=build/src/app/compositor-linux.app/Contents/MacOS/compositor-linux
+          QT_QPA_PLATFORM=offscreen "$app" --version
+          QT_QPA_PLATFORM=offscreen "$app" --demo --screenshot demo.png --save-as Demo.comp
+
+      - name: Bundle Qt, sign ad hoc, zip
+        run: |
+          v="${{ steps.version.outputs.version }}"
+          "$(brew --prefix qt)/bin/macdeployqt" build/src/app/compositor-linux.app -always-overwrite -verbose=1
+          codesign --force --deep --sign - build/src/app/compositor-linux.app
+          ditto -c -k --sequesterRsrc --keepParent build/src/app/compositor-linux.app "compositor-linux-$v-macos-arm64.zip"
+          shasum -a 256 "compositor-linux-$v-macos-arm64.zip" > SHA256SUMS-macos
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: compositor-linux-${{ steps.version.outputs.version }}-macos
+          path: |
+            compositor-linux-*-macos-arm64.zip
+            SHA256SUMS-macos
+
+  publish:
+    name: GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [appimage, macos]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Version from the tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: compositor-linux-*
+          merge-multiple: true
+      - name: Combined checksums
+        run: |
+          cat SHA256SUMS SHA256SUMS-macos > SHA256SUMS.all && mv SHA256SUMS.all SHA256SUMS && rm SHA256SUMS-macos
+          ls -la
+      - uses: softprops/action-gh-release@v2
         with:
           name: compositor-linux ${{ steps.version.outputs.version }}
           generate_release_notes: true
@@ -115,4 +175,5 @@ jobs:
             *.AppImage
             *.AppImage.zsync
             *.tar.gz
+            *.zip
             SHA256SUMS

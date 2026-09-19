@@ -38,6 +38,17 @@ It keeps the AppImage in `~/Applications`. If you build from source instead,
 `sudo cmake --install build` puts the binary, launcher entry, icon and file
 type into `/usr/local`.
 
+### Trying it on a Mac
+
+Each release also carries `compositor-linux-<version>-macos-arm64.zip`, an app
+bundle for Apple Silicon built on GitHub's macOS runners. It is not signed or
+notarised, so the first launch needs one extra step: unzip it, drag the app to
+Applications, then either right-click it and choose Open, or after a first
+refusal go to System Settings > Privacy & Security and choose Open Anyway. It
+is the same editor as on Linux; `.comp` projects, PSDs and images open the same
+way. The G'MIC filters appear once `brew install gmic` has put the `gmic`
+executable on the path.
+
 ## What you get
 
 - Layers, folders, blend modes, opacity, and layer masks
@@ -87,7 +98,15 @@ Ubuntu 24.04:
 sudo apt install cmake ninja-build qt6-base-dev qt6-svg-dev qt6-wayland qt6-image-formats-plugins libpng-dev libgl1-mesa-dev libopencv-dev
 ```
 
-Then:
+macOS (Homebrew), where the build produces an app bundle instead:
+
+```bash
+brew install cmake ninja qt libpng opencv pkg-config
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
+cmake --build build -j && open build/src/app/compositor-linux.app
+```
+
+Then, on Linux:
 
 ```bash
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
