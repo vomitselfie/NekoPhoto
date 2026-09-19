@@ -116,6 +116,7 @@ FilterDialog::FilterDialog(EditorSession* session, FilterKind kind, QWidget* par
     setWindowTitle(QString::fromUtf8(filterKindName(kind)));
     setModal(false);
     setAttribute(Qt::WA_DeleteOnClose);
+    setMinimumWidth(420);
     auto* layout = new QVBoxLayout(this);
     auto slider = [&](const QString& label, double min, double max, int decimals, double scale, std::function<double()> get, std::function<void(double)> apply) {
         auto* row = new QHBoxLayout;
@@ -129,6 +130,9 @@ FilterDialog::FilterDialog(EditorSession* session, FilterKind kind, QWidget* par
         spin->setRange(min, max);
         spin->setDecimals(decimals);
         spin->setKeyboardTracking(false);
+        spin->setButtonSymbols(QAbstractSpinBox::NoButtons);
+        spin->setAlignment(Qt::AlignRight);
+        spin->setFixedWidth(64);
         row->addWidget(spin);
         connect(s, &QSlider::valueChanged, this, [this, spin, apply, scale](int v) { { QSignalBlocker b(spin); spin->setValue(v / scale); } apply(v / scale); refreshPreview(); });
         connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this, s, apply, scale](double v) { { QSignalBlocker b(s); s->setValue(int(std::round(v * scale))); } apply(v); refreshPreview(); });

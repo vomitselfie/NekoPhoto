@@ -2,6 +2,10 @@
 #include "ImageConvert.h"
 #include "ModelStore.h"
 #include "PreferencesDialog.h"
+#include "Dialogs.h"
+#include "FilterDialog.h"
+#include "ImageConvert.h"
+#include <QDialog>
 #include <cstdio>
 #include "compositor/filters.h"
 #include "compositor/selection.h"
@@ -177,6 +181,8 @@ int main(int argc, char** argv) {
     parser.addOption(prefs);
     QCommandLineOption toolOption("tool", "Select tool <name> after opening (move, marquee, lasso, wand, crop, brush, healing, clone, smudge, gradient, shape, eyedropper, hand, zoom).", "name");
     parser.addOption(toolOption);
+    QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: new, canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens.", "name");
+    parser.addOption(dialogOption);
     parser.addOption(fetch);
     parser.process(app);
     if (parser.isSet(fetch)) {
@@ -203,12 +209,31 @@ int main(int argc, char** argv) {
         QString name = parser.value(toolOption).toLower();
         if (tools.contains(name)) window.session()->selectTool(tools.value(name)); else qWarning("unknown tool: %s", qPrintable(name));
     }
+    if (parser.isSet(dialogOption)) {
+        QString name = parser.value(dialogOption).toLower();
+        QTimer::singleShot(50, &window, [&window, name] {
+            using compositor::AdjustmentKind; using compositor::FilterKind;
+            static const QMap<QString, AdjustmentKind> adjustments{{"levels", AdjustmentKind::Levels}, {"curves", AdjustmentKind::Curves}, {"hue", AdjustmentKind::HueSaturation},
+                {"exposure", AdjustmentKind::Exposure}, {"gradient-map", AdjustmentKind::GradientMap}, {"grain", AdjustmentKind::Grain}};
+            static const QMap<QString, FilterKind> filters{{"blur", FilterKind::GaussianBlur}, {"motion-blur", FilterKind::MotionBlur}, {"noise", FilterKind::AddNoise}, {"lens", FilterKind::LensCorrection}};
+            app::EditorSession* s = window.session();
+            if (adjustments.contains(name)) (new app::PixelAdjustmentDialog(s, adjustments.value(name), &window))->show();
+            else if (filters.contains(name)) (new app::FilterDialog(s, filters.value(name), &window))->show();
+            else if (name == "new") app::askNewDocument(&window, {});
+            else if (name == "canvas-size") app::askCanvasSize(&window, s->hasDocument() ? s->document()->width : 1920, s->hasDocument() ? s->document()->height : 1080);
+            else if (name == "image-size") app::askImageSize(&window, s->hasDocument() ? s->document()->width : 1920, s->hasDocument() ? s->document()->height : 1080, 72);
+            else if (name == "jpeg") { auto flat = s->hasDocument() ? s->flattened() : nullptr; if (flat) app::askJpegExport(&window, app::toQImage(*flat)); }
+            else qWarning("unknown dialog: %s", qPrintable(name));
+        });
+    }
     app::PreferencesDialog* preferences = nullptr;
     if (parser.isSet(prefs)) { preferences = new app::PreferencesDialog(&window); preferences->show(); }
     if (parser.isSet(screenshot)) {
         QString target = parser.value(screenshot), savePath = parser.value(saveAs);
         QTimer::singleShot(400, &window, [&window, target, savePath, preferences] {
-            (preferences ? preferences->grab() : window.grab()).save(target);
+            QWidget* subject = preferences;
+            if (!subject) for (QWidget* w : QApplication::topLevelWidgets()) if (w->isVisible() && qobject_cast<QDialog*>(w)) subject = w;
+            (subject ? subject->grab() : window.grab()).save(target);
             if (!savePath.isEmpty()) { QString error; window.session()->saveProject(savePath, &error); if (!error.isEmpty()) qWarning("%s", qPrintable(error)); }
             // exit() rather than quit(): newer Qt closes the windows on quit(), and the unsaved demo would prompt.
             QCoreApplication::exit(0);
