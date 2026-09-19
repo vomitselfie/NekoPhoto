@@ -765,6 +765,7 @@ void AutomationServer::registerHandlers() {
             MatteSettings settings;
             settings.refineEdges = num(p, "refineEdges", settings.refineEdges);
             settings.contrast = num(p, "contrast", settings.contrast);
+            settings.matting = num(p, "matting", settings.matting);
             settings.shiftEdge = num(p, "shiftEdge", settings.shiftEdge);
             mask = refineMatte(*mask, *source, settings, 0);
         }

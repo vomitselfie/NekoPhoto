@@ -221,7 +221,9 @@ packaging/                      .desktop, icon, MIME type
   instant preview while a slower model runs), downloads them with a checksum
   check into the app data directory, and can remove them again. The model runs through OpenCV's DNN module, with the Mac panel's
   Advanced refinement (guided-filter edge refine for hair, matte contrast,
-  edge shift). The result is a layer mask, multiplied with any existing mask,
+  edge shift) plus a Matting slider that solves the true opacity of hair and
+  fur in a band around the edge from foreground and background colour samples.
+  The result is a layer mask, multiplied with any existing mask,
   limited to the selection when there is one. OpenCV is optional at build
   time; `COMPOSITOR_MODEL_DIR` overrides where models are kept.
 

@@ -1,6 +1,9 @@
 // Matte refinement for Remove Background: a guided filter pulls the model's coarse mask onto the
 // image's own edges (hair, fur), Shift Edge moves the whole edge, Contrast hardens it.
 //
+// Matting (Gastal & Oliveira 2010, shared sampling) then solves the true opacity in a band around the
+// edge from foreground and background colour samples, for hair against a busy background.
+//
 // The filter is He, Sun & Tang's guided filter in its colour form, with the layer's R, G, B as the
 // guide, so colour edges invisible in luma still steer the matte; the regularisation is edge-aware
 // (Li et al.'s weighted guided filter), so flat background stays smooth while edges keep their detail;
@@ -20,7 +23,7 @@ namespace compositor {
 
 MatteSettings MatteSettings::normalized() const {
     auto c = [](double v, double lo, double hi, double f) { return std::isfinite(v) ? std::min(hi, std::max(lo, v)) : f; };
-    return {c(refineEdges, 0, 40, 12), c(contrast, 0, 100, 25), c(shiftEdge, -10, 10, 0)};
+    return {c(refineEdges, 0, 40, 12), c(contrast, 0, 100, 25), c(shiftEdge, -10, 10, 0), c(matting, 0, 40, 0)};
 }
 
 namespace {
@@ -273,9 +276,148 @@ std::shared_ptr<GrayImage> guidedRefine(const GrayImage& mask, const Image& guid
     return fromLevels(result, width, height, fullW, fullH);
 }
 
+namespace {
+
+/// A foreground or background colour sample found along a ray, with its distance from the pixel.
+struct Sample { float r, g, b, distance; };
+
+/// The best (foreground, background) pair for a pixel's colour: the opacity it implies and how badly it
+/// explains the colour, with a small preference for nearby samples and well-separated pairs.
+struct Pair { float fr = 0, fg = 0, fb = 0, br = 0, bg = 0, bb = 0, alpha = 0, cost = 1e9f; };
+
+inline void score(const float colour[3], float fr, float fg, float fb, float br, float bg, float bb, float spatial, Pair& best) {
+    const float dr = fr - br, dg = fg - bg, db = fb - bb;
+    const float separation = dr * dr + dg * dg + db * db;
+    float alpha = separation > 1e-6f ? ((colour[0] - br) * dr + (colour[1] - bg) * dg + (colour[2] - bb) * db) / separation : 0.5f;
+    alpha = std::clamp(alpha, 0.0f, 1.0f);
+    const float er = colour[0] - (alpha * fr + (1 - alpha) * br), eg = colour[1] - (alpha * fg + (1 - alpha) * bg), eb = colour[2] - (alpha * fb + (1 - alpha) * bb);
+    const float chroma = std::sqrt(er * er + eg * eg + eb * eb);
+    const float cost = chroma / std::max(0.05f, std::sqrt(separation)) + spatial;
+    if (cost < best.cost) best = {fr, fg, fb, br, bg, bb, alpha, cost};
+}
+
+} // namespace
+
+std::shared_ptr<GrayImage> matteBand(const GrayImage& matte, const Image& guide, double bandFull, int limit) {
+    const int fullW = matte.width(), fullH = matte.height();
+    const double factor = limit > 0 ? std::min(1.0, double(limit) / std::max(fullW, fullH)) : 1;
+    const int width = std::max(1, int(std::lround(fullW * factor))), height = std::max(1, int(std::lround(fullH * factor)));
+    const int band = std::max(1, int(std::lround(bandFull * factor)));
+    std::array<Map, 3> colour = colourLevels(guide, width, height);
+    Map levels = maskLevels(matte, width, height);
+    // The trimap: sure foreground is the matte eroded by the band, sure background the eroded complement
+    // (running min and max, O(N)); everything else is unknown and gets solved.
+    GrayImage eroded(width, height), dilated(width, height);
+    for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) eroded.at(x, y) = dilated.at(x, y) = levels[size_t(y) * width + size_t(x)] >= 0.5f ? 255 : 0;
+    runningExtreme(eroded, band, false);
+    runningExtreme(dilated, band, true);
+    enum Region : uint8_t { Unknown = 0, Foreground = 1, Background = 2 };
+    std::vector<uint8_t> region(size_t(width) * height, Unknown);
+    std::vector<int32_t> slot(region.size(), -1);   // each unknown pixel's index among the unknowns
+    int32_t unknowns = 0;
+    for (size_t i = 0; i < region.size(); i++) {
+        if (eroded.data()[i]) region[i] = Foreground;
+        else if (!dilated.data()[i]) region[i] = Background;
+        else slot[i] = unknowns++;
+    }
+    auto at = [&](int x, int y) { return size_t(y) * width + size_t(x); };
+    auto colourAt = [&](size_t i, float out[3]) { out[0] = colour[0][i]; out[1] = colour[1][i]; out[2] = colour[2][i]; };
+
+    // Sampling: rays from each unknown pixel into both sure regions, then the best pair.
+    constexpr int rays = 6;
+    const int reach = 3 * band + 4;
+    std::vector<Pair> pairs(static_cast<size_t>(unknowns));
+    parallelRows(0, height, [&](int y0, int y1) {
+        Sample fg[rays], bg[rays];
+        for (int y = y0; y < y1; y++)
+            for (int x = 0; x < width; x++) {
+                const size_t p = at(x, y);
+                if (region[p] != Unknown) continue;
+                int nf = 0, nb = 0;
+                const double start = ((x * 7 + y * 13) % rays) * (2 * M_PI / rays) / rays;   // decorrelate neighbours
+                for (int k = 0; k < rays; k++) {
+                    const double angle = start + k * (2 * M_PI / rays), dx = std::cos(angle), dy = std::sin(angle);
+                    bool haveF = false, haveB = false;
+                    for (int step = 1; step <= reach && !(haveF && haveB); step++) {
+                        const int sx = int(std::lround(x + dx * step)), sy = int(std::lround(y + dy * step));
+                        if (sx < 0 || sy < 0 || sx >= width || sy >= height) break;
+                        const size_t q = at(sx, sy);
+                        if (region[q] == Foreground && !haveF) { fg[nf++] = {colour[0][q], colour[1][q], colour[2][q], float(step)}; haveF = true; }
+                        else if (region[q] == Background && !haveB) { bg[nb++] = {colour[0][q], colour[1][q], colour[2][q], float(step)}; haveB = true; }
+                    }
+                }
+                if (!nf || !nb) continue;
+                float c[3];
+                colourAt(p, c);
+                Pair best;
+                for (int i = 0; i < nf; i++)
+                    for (int j = 0; j < nb; j++)
+                        score(c, fg[i].r, fg[i].g, fg[i].b, bg[j].r, bg[j].g, bg[j].b, 0.02f * (fg[i].distance + bg[j].distance) / float(band), best);
+                pairs[size_t(slot[p])] = best;
+            }
+    }, 8);
+    // Sharing: a neighbour's pair that explains this pixel better is taken over (two passes).
+    for (int pass = 0; pass < 2; pass++) {
+        std::vector<Pair> shared = pairs;
+        parallelRows(0, height, [&](int y0, int y1) {
+            for (int y = y0; y < y1; y++)
+                for (int x = 0; x < width; x++) {
+                    const size_t p = at(x, y);
+                    if (region[p] != Unknown) continue;
+                    float c[3];
+                    colourAt(p, c);
+                    Pair best = pairs[size_t(slot[p])];
+                    for (int j = -1; j <= 1; j++)
+                        for (int i = -1; i <= 1; i++) {
+                            if ((!i && !j) || x + i < 0 || y + j < 0 || x + i >= width || y + j >= height) continue;
+                            const int32_t ns = slot[at(x + i, y + j)];
+                            if (ns < 0) continue;
+                            const Pair& n = pairs[size_t(ns)];
+                            if (n.cost >= 1e9f) continue;
+                            score(c, n.fr, n.fg, n.fb, n.br, n.bg, n.bb, 0, best);
+                        }
+                    shared[size_t(slot[p])] = best;
+                }
+        }, 8);
+        pairs.swap(shared);
+    }
+    // Smoothing: opacities averaged over a small window, weighted by confidence and colour similarity.
+    constexpr int radius = 3;
+    const float chromaScale = 0.1f, colourScale = 0.1f;
+    Map result = levels;
+    parallelRows(0, height, [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++)
+            for (int x = 0; x < width; x++) {
+                const size_t p = at(x, y);
+                if (region[p] != Unknown) { result[p] = region[p] == Foreground ? 1.0f : 0.0f; continue; }
+                if (pairs[size_t(slot[p])].cost >= 1e9f) continue;   // no samples reached: the matte as it was
+                float c[3];
+                colourAt(p, c);
+                double sum = 0, weight = 0;
+                for (int j = -radius; j <= radius; j++)
+                    for (int i = -radius; i <= radius; i++) {
+                        const int sx = x + i, sy = y + j;
+                        if (sx < 0 || sy < 0 || sx >= width || sy >= height) continue;
+                        const size_t q = at(sx, sy);
+                        float alpha, confidence;
+                        if (region[q] == Unknown) { const Pair& n = pairs[size_t(slot[q])]; if (n.cost >= 1e9f) continue; alpha = n.alpha; confidence = n.cost; }
+                        else { alpha = region[q] == Foreground ? 1.0f : 0.0f; confidence = 0; }
+                        float n[3];
+                        colourAt(q, n);
+                        const float dc = (n[0] - c[0]) * (n[0] - c[0]) + (n[1] - c[1]) * (n[1] - c[1]) + (n[2] - c[2]) * (n[2] - c[2]);
+                        const double w = std::exp(-confidence / chromaScale) * std::exp(-dc / (colourScale * colourScale));
+                        sum += w * alpha; weight += w;
+                    }
+                if (weight > 0) result[p] = float(sum / weight);
+            }
+    }, 8);
+    return fromLevels(result, width, height, fullW, fullH);
+}
+
 std::shared_ptr<GrayImage> refineMatte(const GrayImage& mask, const Image& guide, const MatteSettings& raw, int limit) {
     MatteSettings s = raw.normalized();
     std::shared_ptr<GrayImage> out = s.refineEdges > 0 ? guidedRefine(mask, guide, s.refineEdges, limit) : std::make_shared<GrayImage>(mask);
+    if (s.matting > 0) out = matteBand(*out, guide, s.matting, limit);
     if (s.shiftEdge != 0) {
         // Grey-level dilation or erosion: every iso-contour moves by the amount and the soft ramp survives.
         int r = std::max(1, int(std::lround(std::fabs(s.shiftEdge))));

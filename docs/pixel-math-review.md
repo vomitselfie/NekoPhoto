@@ -1,9 +1,11 @@
 # Pixel maths review: faster and better algorithms for what we have
 
 Six parallel reviews of the pixel pipeline (compositing, filters, adjustments,
-selections, painting, geometry), September 2026. Research only; nothing here
-is implemented yet. Every item names the file and line it refers to, the
-expected gain, whether output stays identical, and the effort in days.
+selections, painting, geometry), September 2026, then implemented batch by
+batch (the progress table below says what landed where). The item tables keep
+their original wording, so file and line references describe the code as it
+was when the review was written; every item names the expected gain, whether
+output stays identical, and the effort in days.
 
 Measurements are on a 4000 × 3000 RGBA document, Ryzen AI 9 HX 370, `-O2`.
 
@@ -23,6 +25,7 @@ plan.
 | 5a/5b, geometry and painting | 18, 19, 36 (the shared const base and bounded scans; no copy-on-write tiles), 37 (hard tips only). |
 | G'MIC | Steps 1 and 2 of the plan at the end of this document. |
 | 7, adjustments and the wand | 20 (compare once per pixel in a vectorised range test, fill over the match map, sampled pixels cached per document revision), 26 (tetrahedral 8.8 cube, exact 511-entry Colorize table), 39 (Levels/Curves/Exposure layers are transfers; a run at full opacity in Normal mode with no masks composes into one table applied in place), C2 (a "Photoshop saturation curve" checkbox and `saturationCurve` in the manifest, off by default for Mac parity). Also fixed on the way: the integer Normal blend for adjustment layers rounded negative deltas towards zero, so a darkening layer at full opacity was one level too light. |
+| 14, matting | C16: a Matting control (band width in pixels) in Remove Background's Advanced panel, `matting` over automation. Within the band the opacity is solved by Gastal & Oliveira's shared sampling: rays into the sure regions (the matte eroded and dilated by the band with running min/max), the best-explaining foreground/background pair per pixel, pairs shared between neighbours, then a confidence- and colour-weighted smoothing; done on the refined matte, before the shift and contrast. 12 MP with a 12 px band: 224 ms (71 ms at the preview limit). |
 | 13, G'MIC step 3 and the preview model | G'MIC step 3: libgmic in-process behind `COMPOSITOR_WITH_LIBGMIC` (one interpreter kept warm with the catalogue), opt-in at runtime with `COMPOSITOR_GMIC_INPROCESS=1` because libgmic 4.0.5 crashes inside `sharpen` when called as a library while the executable handles it. C11: PP-HumanSeg (OpenCV's model zoo, 192 px, 6 ms) is a model in the list and, when downloaded, gives Remove Background an instant coarse preview while the chosen model runs. |
 | 12, painting frames and blur accuracy | 31 (on a document-aligned grid a dab is a precomputed tile at one of 4x4 subpixel phases merged row by row; `stampedDabs` in BrushSettings turns it off for comparison), 32 (`RenderCache`: while one layer is edited the layers below are kept composited and, when every layer above is a plain Normal pixel layer, those are flattened once, so a frame is backdrop + layer + one blend; the canvas keys it on the session's document revision), 34 with C26 (Deriche's fourth-order recursive Gaussian above sigma 6, row-major banded column pass, double state: within a level of the true kernel at every sigma, where the three boxes drifted by several; about 25 % slower than the boxes at 12 MP, 125 ms). C27 not needed. |
 | 11, liquify | 33 and C4: Liquify keeps a displacement field over the touched box and resamples the untouched original through it (bicubic) after every push, so a long stroke never blurs and a stroke pushed back lands on a sharp edge again; the falloff is Gustafsson's forward warp shaped by the brush hardness, shrinking with the drag length. Smudge is unchanged (it mixes paint rather than warping). |
@@ -31,7 +34,13 @@ plan.
 | 8, resampling | 27 (High = Catmull-Rom point sampling on the mip level nearest 1x; Smooth = bilinear on the floor level, as before), 28 (the cache holds weak references only and a 400 MB budget with least-recently-used eviction; it used to keep every source alive through its level-0 entry), 30 (pure scaling, which is what Image Size and unrotated distorts are, goes through a separable Lanczos-3 (High) or triangle (Smooth) resample with the kernel widened by the reduction, no mips), 35 (8.8/10-bit fixed-point bilinear and bicubic in 32-bit lanes), C3 (the fixed-point layout; a full `pshufb`/`pmaddwd` pipeline is not needed at these sizes), C5 (vectorised halving, 4000x3000 in 1.5 ms), C29 (Lens Correction: a Bicubic checkbox and `bicubic` over automation, off by default for parity with the reference). |
 | 6, matting | 22, C10, C13, C14, C15, C17, C28 (the coefficient grid is 2× or 4× coarser by size). C13 differs: the guide is R, G, B only. With the mask as a fourth guide channel the filter fits the mask exactly (a_M → 1) and nothing moves, so the multichannel form uses the colour alone. C9: MODNet's preprocessing is recognised by file name (`modnet*.onnx`), but no download entry exists because the official release has no fixed-shape ONNX asset. |
 
-Still open: C16, C24, C30 (C18, C20, C23 folded into 38's notes; C27 not needed).
+Not adopted, by decision: C24 (deep inpainting through OpenCV DNN) has no
+validated, permissively licensed fixed-shape ONNX export to point a download
+at, and the PatchMatch fill of batch 10 covers the same ground offline; C30
+(side-window filtering) is an optional refinement whose own caveat, strands
+thinner than the radius picking the wrong side, is exactly the hair case the
+matte exists for. C18, C20 and C23 are folded into batch 10's notes; C27 was
+not needed once Deriche landed. Everything else in this document is done.
 
 ## Bugs and waste found on the way
 

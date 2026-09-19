@@ -262,6 +262,7 @@ BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QS
     };
     slider(tr("Refine Edges"), tr("Pulls the mask onto the image's own edges, recovering hair and fur (layer pixels)"), 0, 40, 1, [this] { return settings_.refineEdges; }, [this](double v) { settings_.refineEdges = v; });
     slider(tr("Contrast"), tr("Pushes the mask's grays toward black and white, clearing haze"), 0, 100, 1, [this] { return settings_.contrast; }, [this](double v) { settings_.contrast = v; });
+    slider(tr("Matting"), tr("Solves the true opacity of hair and fur in a band this wide around the edge from foreground and background colours (slower)"), 0, 40, 1, [this] { return settings_.matting; }, [this](double v) { settings_.matting = v; });
     slider(tr("Shift Edge"), tr("Contracts (negative) or expands the edge, dropping the rim of background colour"), -10, 10, 1, [this] { return settings_.shiftEdge; }, [this](double v) { settings_.shiftEdge = v; });
     advanced_->setVisible(false);
     layout->addWidget(advanced_);

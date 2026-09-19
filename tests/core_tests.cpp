@@ -1013,6 +1013,32 @@ TEST_CASE(matte_refinement_follows_the_guide) {
     CHECK(grown->at(28, 20) < 128);
 }
 
+TEST_CASE(matting_band_recovers_a_soft_edge) {
+    // Red over blue with a 24-pixel linear blend between them; the coarse matte is the hard threshold. Matting
+    // in a band around that edge solves the opacity back from the colours.
+    const int w = 120, h = 60;
+    auto guide = std::make_shared<Image>(w, h);
+    auto truth = [](int x) { return std::clamp((72 - x) / 24.0, 0.0, 1.0); };   // 1 red left of 48, 0 right of 72
+    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+        double a = truth(x);
+        uint8_t* p = guide->pixel(x, y);
+        p[0] = uint8_t(std::lround(220 * a + 30 * (1 - a))); p[1] = uint8_t(std::lround(40 * a + 60 * (1 - a))); p[2] = uint8_t(std::lround(30 * a + 200 * (1 - a))); p[3] = 255;
+    }
+    GrayImage coarse(w, h, 0);
+    for (int y = 0; y < h; y++) for (int x = 0; x < 60; x++) coarse.at(x, y) = 255;
+    auto matted = matteBand(coarse, *guide, 14, 0);
+    double worst = 0;
+    for (int y = 8; y < h - 8; y++) for (int x = 50; x < 70; x++) worst = std::max(worst, std::fabs(matted->at(x, y) / 255.0 - truth(x)));
+    CHECK(worst <= 0.15);
+    CHECK_EQ(int(matted->at(10, 30)), 255);
+    CHECK_EQ(int(matted->at(110, 30)), 0);
+    // Through the settings, and off by default.
+    MatteSettings s{0, 0, 0, 14};
+    auto viaSettings = refineMatte(coarse, *guide, s, 0);
+    CHECK(std::fabs(viaSettings->at(60, 30) / 255.0 - truth(60)) <= 0.15);
+    CHECK_NEAR(MatteSettings().normalized().matting, 0, 1e-9);
+}
+
 TEST_CASE(subject_mask_from_model_when_available) {
     const char* dir = std::getenv("COMPOSITOR_MODEL_DIR");
     if (!dir || !subjectModelSupported()) { std::fprintf(stderr, "  (skipped: set COMPOSITOR_MODEL_DIR with u2netp.onnx to run)\n"); return; }

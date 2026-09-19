@@ -219,6 +219,8 @@ int main(int argc, char** argv) {
         report("matte refine r=12 (limit 1400)", timeMs([&] { (void)guidedRefine(mask, base, 12, 1400); }, 2));
         MatteSettings s; s.refineEdges = 12; s.shiftEdge = 3;
         report("matte refine + shift edge", timeMs([&] { (void)refineMatte(mask, base, s, 0); }, 2));
+        report("matting band 12 px (full)", timeMs([&] { (void)matteBand(mask, base, 12, 0); }, 2));
+        report("matting band 12 px (limit 1400)", timeMs([&] { (void)matteBand(mask, base, 12, 1400); }, 2));
     }
     if (want("selection")) {
         auto shape = rasterizeEllipse(Rect(200, 200, 3000, 2000), W, H, true);

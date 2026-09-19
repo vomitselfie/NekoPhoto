@@ -24,13 +24,20 @@ struct MatteSettings {
     double contrast = 25;
     /// Contracts (negative) or expands (positive) the edge, in layer pixels, -10..10.
     double shiftEdge = 0;
+    /// Solves the true opacity of hair and fur in a band this wide (layer pixels) around the edge from
+    /// foreground and background colour samples; 0 off, 0..40.
+    double matting = 0;
     MatteSettings normalized() const;
 };
 
 /// Guided filtering (He, Sun & Tang): `mask` pulled onto the edges of `guide` (the layer's pixels), on a copy no
 /// larger than `limit` on its longest side (0 for full size).
 std::shared_ptr<GrayImage> guidedRefine(const GrayImage& mask, const Image& guide, double radius, int limit);
-/// The panel's three controls applied in order: refine, shift edge, contrast.
+/// Matting within `band` pixels of the matte's edge (Gastal & Oliveira's shared sampling): each pixel's
+/// opacity is solved from foreground and background colours found along rays into the sure regions, the
+/// best-explaining pairs are shared between neighbours, and the result is smoothed by confidence and colour.
+std::shared_ptr<GrayImage> matteBand(const GrayImage& matte, const Image& guide, double band, int limit);
+/// The panel's controls applied in order: refine, matting, shift edge, contrast.
 std::shared_ptr<GrayImage> refineMatte(const GrayImage& mask, const Image& guide, const MatteSettings& settings, int limit);
 
 } // namespace compositor

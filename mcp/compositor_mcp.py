@@ -355,9 +355,9 @@ def pixels_gmic(command: str) -> str:
 
 
 @mcp.tool()
-def remove_background(refine: bool = True) -> str:
-    """Mask out the active layer's background with the local segmentation model (needs Preferences > AI background removal enabled and a downloaded model)."""
-    return text(call("pixels.removeBackground", refine=refine))
+def remove_background(refine: bool = True, refine_edges: Optional[float] = None, contrast: Optional[float] = None, shift_edge: Optional[float] = None, matting: Optional[float] = None) -> str:
+    """Mask out the active layer's background with the local segmentation model (needs Preferences > AI background removal enabled and a downloaded model). With refine, the guided edge refinement (refine_edges 0..40), matte contrast (0..100), shift_edge (-10..10) and matting band (0..40 px, solves hair opacity) apply."""
+    return text(call("pixels.removeBackground", refine=refine, refineEdges=refine_edges, contrast=contrast, shiftEdge=shift_edge, matting=matting))
 
 
 # ---- painting by coordinates ---------------------------------------------------------------------

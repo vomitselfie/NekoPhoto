@@ -55,9 +55,11 @@ The full feature list. It mirrors the Mac app's, with Linux key names.
 
 ## Remove Background
 Off by default. Edit > Preferences turns it on and downloads a segmentation
-model (IS-Net, or the small U2Net) from the rembg project (Apache-2.0) into the
-app's data folder. The model runs locally through OpenCV's DNN module; nothing
-is uploaded.
+model (IS-Net, the U2Net portrait model or the small U2Net from the rembg
+project, or PP-HumanSeg from OpenCV's model zoo, all Apache-2.0) into the app's
+data folder. The model runs locally through OpenCV's DNN module; nothing is
+uploaded. The Advanced panel refines the mask against the image's edges and can
+solve hair opacity in a band around the edge (Matting).
 
 ## Automation
 An automation socket and an MCP bridge let scripts and AI agents drive the
