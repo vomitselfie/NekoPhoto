@@ -355,6 +355,11 @@ QWidget* LayersPanel::makeRow(const Layer& layer, int depth, bool visible) {
     if (layer.adjustment) { thumb->setPixmap(renderIcon("sliders-horizontal", palette().color(QPalette::Text), 20, dpr)); thumb->setAlignment(Qt::AlignCenter); thumb->setToolTip(QString::fromUtf8(adjustmentKindName(layer.adjustment->kind))); }
     bool activeImage = session_->activeLayerId() == layer.id && !session_->isMaskSelected();
     thumb->setStyleSheet(activeImage ? "border: 2px solid palette(highlight);" : "border: 2px solid transparent;");
+    if (layer.isLiveText()) {
+        thumb->setToolTip(tr("Text layer: double-click to edit the text"));
+        thumb->setProperty("textLayer", QString::fromStdString(layer.id));
+        thumb->installEventFilter(this);
+    }
     h->addWidget(thumb);
     if (layer.mask) {
         auto* mask = new QLabel;
@@ -479,6 +484,15 @@ void LayersPanel::startRename(const Uuid& id) {
 }
 
 bool LayersPanel::eventFilter(QObject* watched, QEvent* event) {
+    if (event->type() == QEvent::MouseButtonDblClick) {
+        QString textLayer = watched->property("textLayer").toString();
+        if (!textLayer.isEmpty()) {
+            Uuid id = textLayer.toStdString();
+            if (session_->activeLayerId() != id) session_->selectLayer(id);
+            session_->requestTextEdit(id);
+            return true;
+        }
+    }
     if (watched == blendCombo_->view() && event->type() == QEvent::Hide) session_->previewBlendMode(std::nullopt);
     // The eye button owns the pointer during a swipe: moves toggle the eye under the pointer, the release ends it.
     if (auto* eye = qobject_cast<QWidget*>(watched); eye && eye->property("eye").toBool() && tree_->swiping) {
@@ -524,6 +538,7 @@ void LayersPanel::showContextMenu(const QPoint& pos) {
     const Layer* layer = session_->document() ? session_->document()->find(id) : nullptr;
     if (!layer) return;
     QMenu menu(this);
+    if (layer->isLiveText()) menu.addAction(tr("Edit Text…"), this, [this, id] { session_->requestTextEdit(id); });
     menu.addAction(tr("Rename…"), this, [this, id] { startRename(id); });
     menu.addAction(tr("Duplicate Layer"), this, [this] { session_->duplicateActiveLayer(); });
     menu.addAction(tr("Delete Layer"), this, [this, id] { session_->deleteLayer(id); });

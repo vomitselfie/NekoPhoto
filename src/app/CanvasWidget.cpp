@@ -450,6 +450,23 @@ void CanvasWidget::mouseMoveEvent(QMouseEvent* e) { move(e->position(), e->butto
 void CanvasWidget::mouseReleaseEvent(QMouseEvent* e) { release(e->position(), e->button(), e->modifiers()); }
 
 void CanvasWidget::mouseDoubleClickEvent(QMouseEvent* e) {
+    // Double-clicking text with any tool opens its editor (the Text tool needs only a click).
+    if (e->button() == Qt::LeftButton && session_->hasDocument() && !session_->brushActive() && !session_->warpActive() && !session_->pixelMoveActive()) {
+        QPointF doc = documentPoint(e->position());
+        std::optional<Uuid> under = session_->layerAt(doc);
+        const Layer* hit = under ? session_->document()->find(*under) : nullptr;
+        if (!hit || !hit->isLiveText()) {
+            // Between the glyphs the pixel is transparent: the active text layer still counts inside its box.
+            const Layer* active = session_->activeLayer();
+            if (active && active->isLiveText() && session_->displayedTransform(*active).contains(compositor::Point(doc.x(), doc.y()))) hit = active;
+        }
+        if (hit && hit->isLiveText()) {
+            if (session_->transformEdit()) session_->commitTransform();
+            session_->selectLayer(hit->id, false);
+            session_->requestTextEdit(hit->id);
+            return;
+        }
+    }
     if (session_->tool() == Tool::Lasso && session_->lassoKind == LassoKind::Polygonal && !lassoPoints_.empty()) { finishPolygonalLasso(); return; }
     if (session_->tool() == Tool::Crop && crop_) { applyCrop(); return; }
     if (session_->tool() == Tool::Move && session_->transformEdit()) { session_->commitTransform(); return; }

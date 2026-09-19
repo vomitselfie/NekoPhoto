@@ -202,7 +202,8 @@ packaging/                      .desktop, icon, MIME type
 - Gradient tool (linear / radial, foreground to background or to transparent,
   reverse, opacity; Shift snaps the angle; Enter applies, Esc discards), Shape
   tool (rectangle, rounded rectangle, ellipse; Shift-U switches), Text tool
-  (click to add text in the foreground colour, click a text layer to edit it;
+  (click to add text in the foreground colour, click a text layer to edit it, or
+  double-click text with any tool, or its thumbnail in the Layers panel;
   the options bar sets font, size, bold, italic and alignment, the editor also
   colour, line and letter spacing; the font picker folds families sharing a
   leading name into one expandable row, filters as you type and keeps recent
