@@ -30,10 +30,14 @@ struct WarpedMask { std::shared_ptr<GrayImage> image; LayerTransform transform; 
 /// `image`, shown through `transform`, resampled so its corners land on `corners`: the warped
 /// pixels over the shape's whole-pixel bounds and the axis-aligned transform placing them.
 /// `limit` (> 0) caps the longest side, for previews. Fails for unusable corners or sizes.
+/// Pass the shared image when there is one: its reductions are then cached across calls (previews, repeated warps).
+std::optional<WarpedImage> warpImage(const ImagePtr& image, const LayerTransform& transform, const Corners& corners, int limit = 0);
 std::optional<WarpedImage> warpImage(const Image& image, const LayerTransform& transform, const Corners& corners, int limit = 0);
 /// The same, cropped to the pixels that are actually there. `crop` reports the crop in the warp's pixels.
+std::optional<WarpedImage> warpImageTrimmed(const ImagePtr& image, const LayerTransform& transform, const Corners& corners, Rect* crop = nullptr);
 std::optional<WarpedImage> warpImageTrimmed(const Image& image, const LayerTransform& transform, const Corners& corners, Rect* crop = nullptr);
 /// A mask warped the same way, `background` (its tone past its pixels) outside the shape.
+std::optional<WarpedMask> warpMask(const GrayPtr& mask, const LayerTransform& transform, const Corners& corners, uint8_t background, int limit = 0);
 std::optional<WarpedMask> warpMask(const GrayImage& mask, const LayerTransform& transform, const Corners& corners, uint8_t background, int limit = 0);
 /// Where `placement`'s corners land when the perspective taking `by`'s corners to `corners` is applied to it too.
 Corners carriedCorners(const LayerTransform& placement, const LayerTransform& by, const Corners& corners);

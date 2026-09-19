@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <vector>
 
 namespace compositor {
@@ -73,6 +74,9 @@ std::shared_ptr<GrayImage> cropGray(const GrayImage& image, int x, int y, int wi
 /// Box-filtered halving (each output pixel the average of 2x2 inputs), the sharp reduction the Mac uses for large scale-downs.
 std::shared_ptr<Image> halveImage(const Image& image);
 std::shared_ptr<GrayImage> halveGray(const GrayImage& image);
+/// `level` halvings built on the spot (nothing cached): for images that have no shared owner. Level 0 returns null.
+std::shared_ptr<Image> reduceImage(const Image& image, int level);
+std::shared_ptr<GrayImage> reduceGray(const GrayImage& image, int level);
 
 /// A reduction with the longest side at most `maxSide` pixels, box-filtered.
 std::shared_ptr<Image> makeThumbnail(const Image& image, int maxSide = 96);
@@ -99,6 +103,7 @@ private:
     struct GrayEntry { std::weak_ptr<const GrayImage> source; std::vector<GrayPtr> levels; };
     std::vector<Entry> entries_;
     std::vector<GrayEntry> grayEntries_;
+    std::mutex mutex_;
 };
 
 } // namespace compositor

@@ -431,6 +431,12 @@ QWidget* ToolOptionsBar::buildWandOptions() {
     all->setChecked(session_->wandSampleAll);
     connect(all, &QCheckBox::toggled, this, [this](bool on) { session_->wandSampleAll = on; });
     h->addWidget(all);
+    h->addWidget(new QLabel(tr("Sample")));
+    auto* sample = new QComboBox;
+    sample->addItems({tr("Point Sample"), tr("3 by 3 Average"), tr("5 by 5 Average")});
+    sample->setCurrentIndex(session_->wandSampleRadius);
+    connect(sample, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->wandSampleRadius = i; });
+    h->addWidget(sample);
     h->addStretch();
     return w;
 }

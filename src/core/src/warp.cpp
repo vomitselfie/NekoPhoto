@@ -65,10 +65,13 @@ struct WarpFrame {
 
 std::optional<WarpFrame> frameFor(const LayerTransform& transform, const Corners& corners, int limit) {
     if (!cornersUsable(corners)) return std::nullopt;
-    double minX = std::floor(std::min({corners[0].x, corners[1].x, corners[2].x, corners[3].x}));
-    double minY = std::floor(std::min({corners[0].y, corners[1].y, corners[2].y, corners[3].y}));
-    double maxX = std::ceil(std::max({corners[0].x, corners[1].x, corners[2].x, corners[3].x}));
-    double maxY = std::ceil(std::max({corners[0].y, corners[1].y, corners[2].y, corners[3].y}));
+    // Corners land a hair off whole pixels after a rotation through sin/cos (300 + 1e-14); snapping keeps floor/ceil
+    // from adding a soft extra row or column.
+    auto snap = [](double v) { return std::round(v * 1e6) / 1e6; };
+    double minX = std::floor(snap(std::min({corners[0].x, corners[1].x, corners[2].x, corners[3].x})));
+    double minY = std::floor(snap(std::min({corners[0].y, corners[1].y, corners[2].y, corners[3].y})));
+    double maxX = std::ceil(snap(std::max({corners[0].x, corners[1].x, corners[2].x, corners[3].x})));
+    double maxY = std::ceil(snap(std::max({corners[0].y, corners[1].y, corners[2].y, corners[3].y})));
     Rect bounds(minX, minY, maxX - minX, maxY - minY);
     if (bounds.width < 1 || bounds.height < 1 || bounds.width > 30000 || bounds.height > 30000 || bounds.width * bounds.height > 100000000.0) return std::nullopt;
     double factor = limit > 0 ? std::min(1.0, limit / std::max(bounds.width, bounds.height)) : 1;
@@ -85,9 +88,19 @@ std::optional<WarpFrame> frameFor(const LayerTransform& transform, const Corners
     return f;
 }
 
-} // namespace
+/// The pixels a warp samples from: the image itself, or a reduction (cached when the image is shared).
+struct MipSource {
+    const Image* image;
+    ImagePtr holder;
+};
 
-std::optional<WarpedImage> warpImage(const Image& image, const LayerTransform& transform, const Corners& corners, int limit) {
+MipSource mipSourceFor(const Image& image, const ImagePtr& owner, int level) {
+    if (level <= 0) return {&image, nullptr};
+    ImagePtr reduced = owner && owner.get() == &image ? MipCache::shared().level(owner, level) : reduceImage(image, level);
+    return {reduced.get(), reduced};
+}
+
+std::optional<WarpedImage> warpImageImpl(const Image& image, const ImagePtr& owner, const LayerTransform& transform, const Corners& corners, int limit) {
     auto frame = frameFor(transform, corners, limit);
     if (!frame || image.isEmpty()) return std::nullopt;
     const WarpFrame& f = *frame;
@@ -97,7 +110,8 @@ std::optional<WarpedImage> warpImage(const Image& image, const LayerTransform& t
     // Mip level from the average reduction across the shape.
     double areaOut = f.bounds.width * f.bounds.height * f.factor * f.factor;
     int level = nearest ? 0 : MipCache::levelFor(std::sqrt(areaOut / std::max(1.0, double(pw) * ph)));
-    ImagePtr source = MipCache::shared().level(std::make_shared<Image>(image), level);
+    MipSource mipSource = mipSourceFor(image, owner, level);
+    const Image* source = mipSource.image;
     double mip = std::ldexp(1.0, level);
     parallelRows(0, f.height, [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) {
@@ -140,8 +154,7 @@ std::optional<WarpedImage> warpImage(const Image& image, const LayerTransform& t
     return WarpedImage{out, placed};
 }
 
-std::optional<WarpedImage> warpImageTrimmed(const Image& image, const LayerTransform& transform, const Corners& corners, Rect* crop) {
-    auto warped = warpImage(image, transform, corners, 0);
+std::optional<WarpedImage> trimWarped(std::optional<WarpedImage> warped, Rect* crop) {
     if (!warped) return std::nullopt;
     PixelBounds b = alphaBounds(*warped->image);
     Rect full(0, 0, warped->image->width(), warped->image->height());
@@ -155,6 +168,27 @@ std::optional<WarpedImage> warpImageTrimmed(const Image& image, const LayerTrans
     result.transform.origin = {warped->transform.origin.x + c.x, warped->transform.origin.y + c.y};
     result.transform.size = c.size();
     return result;
+}
+
+} // namespace
+
+std::optional<WarpedImage> warpImage(const ImagePtr& image, const LayerTransform& transform, const Corners& corners, int limit) {
+    if (!image) return std::nullopt;
+    return warpImageImpl(*image, image, transform, corners, limit);
+}
+std::optional<WarpedImage> warpImage(const Image& image, const LayerTransform& transform, const Corners& corners, int limit) {
+    return warpImageImpl(image, nullptr, transform, corners, limit);
+}
+std::optional<WarpedImage> warpImageTrimmed(const ImagePtr& image, const LayerTransform& transform, const Corners& corners, Rect* crop) {
+    return trimWarped(warpImage(image, transform, corners, 0), crop);
+}
+std::optional<WarpedImage> warpImageTrimmed(const Image& image, const LayerTransform& transform, const Corners& corners, Rect* crop) {
+    return trimWarped(warpImage(image, transform, corners, 0), crop);
+}
+
+std::optional<WarpedMask> warpMask(const GrayPtr& mask, const LayerTransform& transform, const Corners& corners, uint8_t background, int limit) {
+    if (!mask) return std::nullopt;
+    return warpMask(*mask, transform, corners, background, limit);
 }
 
 std::optional<WarpedMask> warpMask(const GrayImage& mask, const LayerTransform& transform, const Corners& corners, uint8_t background, int limit) {

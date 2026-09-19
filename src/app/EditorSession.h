@@ -283,7 +283,8 @@ public:
     void deselect();
     void invertSelection();
     void setSelection(const std::optional<compositor::Selection>& selection, const QString& name);
-    void magicWand(QPointF documentPoint, int tolerance, bool contiguous, bool sampleAllLayers, compositor::SelectionMode mode);
+    /// `sampleRadius` 0, 1 or 2: the point, a 3x3 or a 5x5 average sets the colour to match (Photoshop's Sample Size).
+    void magicWand(QPointF documentPoint, int tolerance, bool contiguous, bool sampleAllLayers, compositor::SelectionMode mode, int sampleRadius = 0);
     void fillSelection(const QColor& color);
     void clearSelectionPixels();
     void selectionExpand(int amount);
@@ -298,6 +299,7 @@ public:
     int wandTolerance = 32;
     bool wandContiguous = true;
     bool wandSampleAll = false;
+    int wandSampleRadius = 0;
 
     // Adjustment layers
     void addAdjustmentLayer(compositor::AdjustmentKind kind);
@@ -404,6 +406,12 @@ private:
     void addPixelLayer(std::shared_ptr<const compositor::Image> image, QPointF origin, const QString& editName, bool dropsSelection);
     bool opacityEditing_ = false;
     bool visibilitySwipe_ = false;
+    /// Bumped on every document notification; cheap change detection for caches.
+    uint64_t documentRevision_ = 0;
+    std::shared_ptr<const compositor::Image> cloneSample_;
+    bool cloneSampleAll_ = false;
+    compositor::Uuid cloneSampleLayer_;
+    uint64_t cloneSampleRevision_ = 0;
     bool adjustmentEditing_ = false;
     std::shared_ptr<const compositor::Image> previewImage_;
     std::optional<compositor::LayerTransform> previewTransform_;

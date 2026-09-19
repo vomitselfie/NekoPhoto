@@ -60,6 +60,8 @@ public:
     const std::string& error() const { return error_; }
 
     void append(Point documentPoint);
+    /// Every point of a finished path at once: one recompose at the end instead of one per point.
+    void appendAll(const std::vector<Point>& documentPoints);
     /// Replaces the provisional tail with the final curve piece. Safe to repeat.
     void flush();
 
@@ -108,6 +110,7 @@ private:
     std::optional<Point> previous_;
     double distanceToNext_ = 0;
     Rect dirtyGrid_;
+    bool deferRecompose_ = false;
     bool touched_ = false;
     // A provisional straight tail is drawn to the newest sample and undone when the next arrives.
     bool hasTail_ = false;

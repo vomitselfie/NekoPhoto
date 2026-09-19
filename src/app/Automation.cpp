@@ -765,7 +765,7 @@ void AutomationServer::registerHandlers() {
     add("selection.wand", [session, document](const QJsonObject& p) {
         const Document& doc = document();
         EditorSession* s = session();
-        s->magicWand(QPointF(num(p, "x"), num(p, "y")), integer(p, "tolerance", s->wandTolerance), flag(p, "contiguous", s->wandContiguous), flag(p, "sampleAll", s->wandSampleAll), selectionMode(p));
+        s->magicWand(QPointF(num(p, "x"), num(p, "y")), integer(p, "tolerance", s->wandTolerance), flag(p, "contiguous", s->wandContiguous), flag(p, "sampleAll", s->wandSampleAll), selectionMode(p), integer(p, "sampleRadius", s->wandSampleRadius));
         return QJsonObject{{"bounds", rectJson(doc.selection ? doc.selection->bounds() : Rect())}};
     });
     add("selection.fromLayer", [session, layerOrActive, document](const QJsonObject& p) {

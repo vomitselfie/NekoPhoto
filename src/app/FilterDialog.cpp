@@ -29,7 +29,7 @@ std::shared_ptr<const Image> previewCopy(const std::shared_ptr<const Image>& sou
     int w = std::max(1, int(source->width() * scale)), h = std::max(1, int(source->height() * scale));
     LayerTransform full(Point(0, 0), Size(source->width(), source->height()));
     LayerTransform small(Point(0, 0), Size(source->width(), source->height()));
-    return resampleLayer(*source, full, small, w, h);
+    return resampleLayer(source, full, small, w, h);
 }
 
 std::shared_ptr<GrayImage> coverageCopy(const std::shared_ptr<GrayImage>& coverage, int w, int h) {

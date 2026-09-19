@@ -37,6 +37,7 @@ QString EditorSession::title() const {
 }
 
 void EditorSession::notifyDocument(QRectF region) {
+    documentRevision_++;
     emit documentChanged(region);
     emit layersChanged();
     emit historyChanged();
@@ -1132,12 +1133,12 @@ void EditorSession::commitDistort(const TransformEdit& edit) {
         auto target = distortTarget(*layer, edit);
         if (!target) continue;
         Rect crop;
-        auto warped = warpImageTrimmed(*layer->asset->image, target->first, target->second, &crop);
+        auto warped = warpImageTrimmed(layer->asset->image, target->first, target->second, &crop);
         if (!warped) { emit error(tr("That shape can't be applied.")); continue; }
         if (layer->mask && layer->mask->asset.image) {
             LayerMask& mask = *layer->mask;
             if (!mask.placement && mask.linked) {
-                auto wm = warpMask(*mask.asset.image, target->first, target->second, 0, 0);
+                auto wm = warpMask(mask.asset.image, target->first, target->second, 0, 0);
                 if (wm) {
                     if (wm->image->width() == 1 && wm->image->height() == 1) {}
                     else mask.asset = MaskAsset::make(cropGray(*wm->image, int(crop.x), int(crop.y), int(crop.width), int(crop.height)));
@@ -1146,7 +1147,7 @@ void EditorSession::commitDistort(const TransformEdit& edit) {
                 LayerTransform placement = mask.placement->following(layer->transform, target->first);
                 Corners carried = carriedCorners(placement, target->first, target->second);
                 if (cornersUsable(carried)) {
-                    auto wm = warpMask(*mask.asset.image, placement, carried, LayerMask::background(*mask.asset.thumbnail), 0);
+                    auto wm = warpMask(mask.asset.image, placement, carried, LayerMask::background(*mask.asset.thumbnail), 0);
                     if (wm) { mask.asset = MaskAsset::make(wm->image); mask.placement = wm->transform; }
                 }
             } else if (!mask.placement) {
@@ -1168,7 +1169,7 @@ void EditorSession::mergeFloatingTransform(const TransformEdit& edit) {
     std::shared_ptr<const Image> pixels = moving->asset->image;
     LayerTransform placed = edit.draft;
     if (edit.corners) {
-        auto warped = warpImageTrimmed(*pixels, edit.draft, *edit.corners);
+        auto warped = warpImageTrimmed(pixels, edit.draft, *edit.corners);
         if (!warped) { cancelFloatingTransform(floating); return; }
         pixels = warped->image;
         placed = warped->transform;
@@ -1186,7 +1187,7 @@ void EditorSession::mergeFloatingTransform(const TransformEdit& edit) {
     grownTransform.size = {extent.width * source->transform.size.width / w, extent.height * source->transform.size.height / h};
     Point center = source->transform.pixelToDocument(w, h).apply({extent.midX(), extent.midY()});
     grownTransform.origin = {center.x - grownTransform.size.width / 2, center.y - grownTransform.size.height / 2};
-    auto onto = resampleLayer(*pixels, placed, grownTransform, grown->width(), grown->height());
+    auto onto = resampleLayer(pixels, placed, grownTransform, grown->width(), grown->height());
     compositeImage(BlendMode::Normal, *onto, 1, *grown);
     if (source->mask && !source->mask->placement && source->mask->asset.image && (extent.width != w || extent.height != h)) {
         const GrayImage& old = *source->mask->asset.image;
@@ -1396,8 +1397,12 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
     if (cloning) {
         if (!cloneSource) { emit error(tr("Alt-click where Clone Stamp should copy from first.")); return false; }
         QPointF offset = cloneAligned && cloneOffset ? *cloneOffset : QPointF(std::round(cloneSource->x() - documentPoint.x()), std::round(cloneSource->y() - documentPoint.y()));
-        std::shared_ptr<Image> sample;
-        if (cloneSampleAll) sample = renderFlattened(*document_);
+        // The sample is the document (or the layer alone) at document size; keep it between strokes until
+        // something changes, since a stroke start is where latency shows.
+        std::shared_ptr<const Image> sample;
+        bool cached = cloneSample_ && cloneSampleAll_ == cloneSampleAll && cloneSampleLayer_ == layer->id && cloneSampleRevision_ == documentRevision_;
+        if (cached) sample = cloneSample_;
+        else if (cloneSampleAll) sample = renderFlattened(*document_);
         else if (layer->asset && layer->asset->image) {
             Document single(document_->width, document_->height);
             Layer copy = *layer;
@@ -1405,6 +1410,7 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
             single.layers = {copy};
             sample = renderFlattened(single);
         } else sample = std::make_shared<Image>(document_->width, document_->height);
+        cloneSample_ = sample; cloneSampleAll_ = cloneSampleAll; cloneSampleLayer_ = layer->id; cloneSampleRevision_ = documentRevision_;
         cloneOffset = offset;
         clone = CloneSource{sample, {offset.x(), offset.y()}};
     }
@@ -1599,8 +1605,8 @@ void EditorSession::endWarp() {
     settings.opacity = 1;
     auto stroke = makeRasterEdit(*layer, false, settings);
     if (!stroke) { emit documentChanged({}); return; }
-    stroke->setClone(CloneSource{std::make_shared<Image>(*warp->image()), {0, 0}}, true);
-    for (auto& p : warp->points()) stroke->append(p);
+    stroke->setClone(CloneSource{warp->image(), {0, 0}}, true);
+    stroke->appendAll(warp->points());
     stroke->flush();
     commitRasterEdit(*stroke, layer->id, false, blurMode == BlurToolMode::Smudge ? "Smudge" : "Liquify");
 }
@@ -2094,7 +2100,7 @@ void EditorSession::invertSelection() {
     setSelection(compositor::invertSelection(*document_->selection, document_->width, document_->height), "Inverse");
 }
 
-void EditorSession::magicWand(QPointF documentPoint, int tolerance, bool contiguous, bool sampleAllLayers, SelectionMode mode) {
+void EditorSession::magicWand(QPointF documentPoint, int tolerance, bool contiguous, bool sampleAllLayers, SelectionMode mode, int sampleRadius) {
     if (!document_ || !canEditLayers()) return;
     int x = int(std::floor(documentPoint.x())), y = int(std::floor(documentPoint.y()));
     if (x < 0 || y < 0 || x >= document_->width || y >= document_->height) return;
@@ -2117,7 +2123,7 @@ void EditorSession::magicWand(QPointF documentPoint, int tolerance, bool contigu
         pixels = renderFlattened(single);
     }
     auto mask = std::make_shared<GrayImage>(document_->width, document_->height);
-    long count = wand_mask(pixels->data(), size_t(document_->width), size_t(document_->height), size_t(pixels->stride()), size_t(x), size_t(y), 0, tolerance, contiguous ? 1 : 0, mask->data());
+    long count = wand_mask(pixels->data(), size_t(document_->width), size_t(document_->height), size_t(pixels->stride()), size_t(x), size_t(y), std::clamp(sampleRadius, 0, 2), tolerance, contiguous ? 1 : 0, mask->data());
     if (count < 0) return;
     applySelectionShape(*mask, mode, "Magic Wand");
 }
@@ -2509,9 +2515,9 @@ Overrides EditorSession::renderOverrides() const {
                 auto it = distortCache_.find(layer->id);
                 bool fresh = it != distortCache_.end() && it->second.corners == target->second && it->second.transform == target->first && it->second.source == layer->asset->image && it->second.mask == maskImage;
                 if (!fresh) {
-                    DistortCache cache{target->second, target->first, layer->asset->image, maskImage, warpImage(*layer->asset->image, target->first, target->second, 2048), nullptr};
+                    DistortCache cache{target->second, target->first, layer->asset->image, maskImage, warpImage(layer->asset->image, target->first, target->second, 2048), nullptr};
                     if (cache.image && maskImage && !layer->mask->placement && layer->mask->linked) {
-                        auto wm = warpMask(*maskImage, target->first, target->second, 0, 2048);
+                        auto wm = warpMask(maskImage, target->first, target->second, 0, 2048);
                         if (wm) cache.warpedMask = wm->image;
                     }
                     it = distortCache_.insert_or_assign(layer->id, std::move(cache)).first;

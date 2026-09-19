@@ -443,7 +443,7 @@ void applyHueSaturation(Image& image, const HueSaturationSettings& settings) {
                     size_t index = (size_t(bi) * dim * dim + size_t(gi) * dim + size_t(ri)) * 3;
                     cube[index] = float(r); cube[index + 1] = float(g); cube[index + 2] = float(b);
                 }
-    });
+    }, 1);
     auto sample = [&](float r, float g, float b, float out[3]) {
         float fr = r * (dim - 1), fg = g * (dim - 1), fb = b * (dim - 1);
         int r0 = std::min(dim - 2, int(fr)), g0 = std::min(dim - 2, int(fg)), b0 = std::min(dim - 2, int(fb));

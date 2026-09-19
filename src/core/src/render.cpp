@@ -115,7 +115,7 @@ void sampleMaskCoverage(const GrayImage& mask, const LayerTransform& transform, 
             uint8_t* row = out.row(y);
             for (int x = 0; x < out.width(); x++) {
                 bool inside = x >= m.outputRect.minX() && x < m.outputRect.maxX() && y >= m.outputRect.minY() && y < m.outputRect.maxY();
-                if (!inside) row[x] = uint8_t(row[x] * outside / 255);
+                if (!inside) row[x] = uint8_t((row[x] * outside + 127) / 255);
             }
         }
     }
@@ -216,7 +216,8 @@ void drawLayer(const DrawParams& params, const Rect& region, double scale, const
 
 // ---- Resampling into a grid --------------------------------------------------
 
-std::shared_ptr<Image> resampleLayer(const Image& image, const LayerTransform& transform, const LayerTransform& target, int width, int height) {
+namespace {
+std::shared_ptr<Image> resampleLayerImpl(const Image& image, const ImagePtr& owner, const LayerTransform& transform, const LayerTransform& target, int width, int height) {
     auto out = std::make_shared<Image>(width, height);
     if (image.isEmpty() || width <= 0 || height <= 0) return out;
     Affine targetToDoc = target.pixelToDocument(width, height);
@@ -224,7 +225,8 @@ std::shared_ptr<Image> resampleLayer(const Image& image, const LayerTransform& t
     Affine map = targetToDoc.concatenating(docToPixel);
     double sx = std::hypot(map.a, map.b), sy = std::hypot(map.c, map.d);
     int level = transform.sampling == Sampling::Nearest ? 0 : MipCache::levelFor(1.0 / std::max(sx, sy));
-    ImagePtr source = MipCache::shared().level(std::make_shared<Image>(image), level);
+    ImagePtr reduced = level > 0 ? (owner && owner.get() == &image ? MipCache::shared().level(owner, level) : reduceImage(image, level)) : nullptr;
+    const Image* source = reduced ? reduced.get() : &image;
     double factor = std::ldexp(1.0, level);
     int pw = image.width(), ph = image.height();
     parallelRows(0, height, [&](int ya, int yb) {
@@ -249,6 +251,15 @@ std::shared_ptr<Image> resampleLayer(const Image& image, const LayerTransform& t
     }
     });
     return out;
+}
+} // namespace
+
+std::shared_ptr<Image> resampleLayer(const Image& image, const LayerTransform& transform, const LayerTransform& target, int width, int height) {
+    return resampleLayerImpl(image, nullptr, transform, target, width, height);
+}
+std::shared_ptr<Image> resampleLayer(const ImagePtr& image, const LayerTransform& transform, const LayerTransform& target, int width, int height) {
+    if (!image) return std::make_shared<Image>(std::max(0, width), std::max(0, height));
+    return resampleLayerImpl(*image, image, transform, target, width, height);
 }
 
 std::shared_ptr<GrayImage> resampleMask(const GrayImage& mask, const LayerTransform& transform, const LayerTransform& target, int width, int height, uint8_t outside) {
@@ -303,7 +314,9 @@ bool resizeDocument(Document& document, int width, int height, double resolution
             // Shear can't be expressed as a LayerTransform, so resample through the scaled corner mapping directly.
             Corners corners;
             for (size_t i = 0; i < 4; i++) corners[i] = {c[i].x * sx, c[i].y * sy};
-            auto warped = warpImage(*layer.asset->image, layer.transform, corners, 0);
+            LayerTransform sampled = layer.transform;
+            sampled.sampling = sampling;   // the dialog's choice, not the layer's own
+            auto warped = warpImage(layer.asset->image, sampled, corners, 0);
             if (!warped) return false;
             layer.asset = Asset::make(warped->image, layer.name);
             layer.shapeImage.reset();
@@ -318,7 +331,9 @@ bool resizeDocument(Document& document, int width, int height, double resolution
                 usedMask += (long long)w * h;
                 Corners corners;
                 for (size_t i = 0; i < 4; i++) corners[i] = {c[i].x * sx, c[i].y * sy};
-                auto warped = warpMask(mask, layer.transform, corners, 0, 0);
+                LayerTransform sampled = layer.transform;
+                sampled.sampling = sampling;
+                auto warped = warpMask(layer.mask->asset.image, sampled, corners, 0, 0);
                 if (!warped) return false;
                 // The warp's bounds equal the box; the pixel grid now matches the layer's.
                 layer.mask->asset = MaskAsset::make(warped->image);

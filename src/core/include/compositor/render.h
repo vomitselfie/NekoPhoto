@@ -61,6 +61,8 @@ bool resizeDocument(Document& document, int width, int height, double resolution
 /// Resamples `image` through `transform` into a `width` x `height` grid placed by `target` (both in
 /// document space): what the Mac does when Image Size or a distort bakes pixels.
 std::shared_ptr<Image> resampleLayer(const Image& image, const LayerTransform& transform, const LayerTransform& target, int width, int height);
+/// The same with the shared image, whose reductions are then cached across calls.
+std::shared_ptr<Image> resampleLayer(const ImagePtr& image, const LayerTransform& transform, const LayerTransform& target, int width, int height);
 std::shared_ptr<GrayImage> resampleMask(const GrayImage& mask, const LayerTransform& transform, const LayerTransform& target, int width, int height, uint8_t outside);
 
 } // namespace compositor

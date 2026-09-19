@@ -190,7 +190,6 @@ void motionBlur(Image& image, double distance, double angleDegrees) {
     int w = image.width(), h = image.height();
     std::vector<float> data;
     toFloat(image, data);
-    Image source = image;
     // Photoshop smears evenly along the whole distance; counterclockwise from horizontal, y down.
     double radians = angleDegrees * M_PI / 180;
     double dx = std::cos(radians), dy = -std::sin(radians);

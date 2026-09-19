@@ -152,6 +152,13 @@ void BrushStroke::append(Point point) {
         previous_ = tailPrevious_;
         distanceToNext_ = tailDistance_;
     }
+    if (!dirtyGrid_.isEmpty() && !deferRecompose_) recompose(dirtyGrid_);
+}
+
+void BrushStroke::appendAll(const std::vector<Point>& documentPoints) {
+    deferRecompose_ = true;
+    for (const Point& p : documentPoints) append(p);
+    deferRecompose_ = false;
     if (!dirtyGrid_.isEmpty()) recompose(dirtyGrid_);
 }
 
@@ -421,10 +428,24 @@ void BrushStroke::heal() {
     auto pixels = cropImage(*base_, rx, ry, rw, rh);
     auto painting = cropGray(*coverage_, rx, ry, rw, rh);
     if (selection_) for (int y = 0; y < rh; y++) for (int x = 0; x < rw; x++) painting->at(x, y) = uint8_t((painting->at(x, y) * selection_->at(x + rx, y + ry) + 127) / 255);
-    if (spot_heal(pixels->data(), painting->data(), size_t(rw), size_t(rh), size_t(pixels->stride()), float(settings_.opacity), settings_.healingMode, settings_.healingSeed) != 0) return;
+    // The kernel treats any touched pixel as the hole, so a soft tip would make its own faint rim part of
+    // the hole and leave it half healed. Heal the solid core only, then feather the result in by coverage.
+    auto core = std::make_shared<GrayImage>(rw, rh);
+    for (int y = 0; y < rh; y++) for (int x = 0; x < rw; x++) core->at(x, y) = painting->at(x, y) >= 128 ? 255 : 0;
+    if (spot_heal(pixels->data(), core->data(), size_t(rw), size_t(rh), size_t(pixels->stride()), float(settings_.opacity), settings_.healingMode, settings_.healingSeed) != 0) return;
     // The healed pixels replace the wash: the working image becomes the original with the healed region.
     working_ = std::make_shared<Image>(*base_);
-    for (int y = 0; y < rh; y++) std::memcpy(working_->pixel(rx, y + ry), pixels->row(y), size_t(rw) * 4);
+    for (int y = 0; y < rh; y++) {
+        uint8_t* dst = working_->pixel(rx, y + ry);
+        const uint8_t* healed = pixels->row(y);
+        const uint8_t* orig = base_->pixel(rx, y + ry);
+        for (int x = 0; x < rw; x++, dst += 4, healed += 4, orig += 4) {
+            unsigned k = painting->at(x, y);
+            if (k == 0) continue;
+            if (k >= 255) { std::memcpy(dst, healed, 4); continue; }
+            for (int c = 0; c < 4; c++) dst[c] = uint8_t((orig[c] * (255 - k) + healed[c] * k + 127) / 255);
+        }
+    }
 }
 
 BrushStroke::Commit BrushStroke::commit() {

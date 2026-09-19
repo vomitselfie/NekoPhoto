@@ -183,8 +183,23 @@ int MipCache::levelFor(double factor) {
     return std::max(0, std::min(level, 16));
 }
 
+std::shared_ptr<Image> reduceImage(const Image& image, int level) {
+    if (level <= 0) return nullptr;
+    std::shared_ptr<Image> out = halveImage(image);
+    for (int i = 1; i < level && (out->width() > 1 || out->height() > 1); i++) out = halveImage(*out);
+    return out;
+}
+
+std::shared_ptr<GrayImage> reduceGray(const GrayImage& image, int level) {
+    if (level <= 0) return nullptr;
+    std::shared_ptr<GrayImage> out = halveGray(image);
+    for (int i = 1; i < level && (out->width() > 1 || out->height() > 1); i++) out = halveGray(*out);
+    return out;
+}
+
 ImagePtr MipCache::level(const ImagePtr& image, int level) {
     if (!image || level <= 0) return image;
+    std::lock_guard<std::mutex> lock(mutex_);
     // Drop entries whose source is gone.
     entries_.erase(std::remove_if(entries_.begin(), entries_.end(), [](const Entry& e) { return e.source.expired(); }), entries_.end());
     Entry* entry = nullptr;
@@ -200,6 +215,7 @@ ImagePtr MipCache::level(const ImagePtr& image, int level) {
 
 GrayPtr MipCache::level(const GrayPtr& image, int level) {
     if (!image || level <= 0) return image;
+    std::lock_guard<std::mutex> lock(mutex_);
     grayEntries_.erase(std::remove_if(grayEntries_.begin(), grayEntries_.end(), [](const GrayEntry& e) { return e.source.expired(); }), grayEntries_.end());
     GrayEntry* entry = nullptr;
     for (auto& e : grayEntries_) if (e.source.lock() == image) { entry = &e; break; }
@@ -212,6 +228,6 @@ GrayPtr MipCache::level(const GrayPtr& image, int level) {
     return entry->levels[size_t(level)];
 }
 
-void MipCache::clear() { entries_.clear(); grayEntries_.clear(); }
+void MipCache::clear() { std::lock_guard<std::mutex> lock(mutex_); entries_.clear(); grayEntries_.clear(); }
 
 } // namespace compositor

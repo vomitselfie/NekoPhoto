@@ -527,7 +527,7 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
         drag_ = Drag::Lasso;
         return;
     case Tool::Wand:
-        session_->magicWand(doc, session_->wandTolerance, session_->wandContiguous, session_->wandSampleAll, selectionMode(modifiers));
+        session_->magicWand(doc, session_->wandTolerance, session_->wandContiguous, session_->wandSampleAll, selectionMode(modifiers), session_->wandSampleRadius);
         return;
     case Tool::Crop: {
         if (crop_) {
