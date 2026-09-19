@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Compositor
+GenericName=Image Compositor
+Comment=A small, focused, layer-based image compositor
+Exec=compositor %F
+Icon=compositor
+Terminal=false
+Categories=Graphics;RasterGraphics;2DGraphics;
+MimeType=image/png;image/jpeg;image/tiff;image/webp;application/x-compositor-project;
+Keywords=image;layers;compositing;photo;editor;

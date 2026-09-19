@@ -1,0 +1,560 @@
+// Unit tests for the portable core: geometry, transforms, blending, history,
+// compositing semantics, brush strokes, PNG and the .comp round trip.
+#include "check.h"
+#include "compositor/blend.h"
+#include "compositor/brush.h"
+#include "compositor/document.h"
+#include "compositor/history.h"
+#include "compositor/png.h"
+#include "compositor/project.h"
+#include "compositor/render.h"
+#include "compositor/selection.h"
+#include "compositor/transform.h"
+
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+
+using namespace compositor;
+namespace fs = std::filesystem;
+
+namespace {
+
+std::shared_ptr<Image> solid(int w, int h, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255) {
+    auto img = std::make_shared<Image>(w, h);
+    // Premultiplied.
+    img->fill(uint8_t(r * a / 255), uint8_t(g * a / 255), uint8_t(b * a / 255), a);
+    return img;
+}
+
+Layer imageLayer(const std::string& name, std::shared_ptr<Image> image, Point origin) {
+    return Layer(Asset::make(image, name), origin);
+}
+
+fs::path tempDir() {
+    fs::path dir = fs::temp_directory_path() / ("compositor-core-tests-" + std::to_string(std::rand()));
+    fs::create_directories(dir);
+    return dir;
+}
+
+} // namespace
+
+TEST_CASE(affine_matches_core_graphics_conventions) {
+    Affine t = Affine::translation(10, 20).rotated(M_PI / 2).scaledBy(2, 3);
+    // Apply order: scale, then rotate, then translate (CG: t.rotated(by:).scaledBy() applies inner ops first).
+    Point p = t.apply({1, 1});
+    CHECK_NEAR(p.x, 10 - 3, 1e-9);
+    CHECK_NEAR(p.y, 20 + 2, 1e-9);
+    Point back = t.inverted().apply(p);
+    CHECK_NEAR(back.x, 1, 1e-9);
+    CHECK_NEAR(back.y, 1, 1e-9);
+    Affine ab = Affine::scaling(2, 2).concatenating(Affine::translation(5, 5));
+    Point q = ab.apply({1, 1});
+    CHECK_NEAR(q.x, 7, 1e-9);
+    CHECK_NEAR(q.y, 7, 1e-9);
+}
+
+TEST_CASE(layer_transform_pixel_mapping_and_corners) {
+    LayerTransform t(Point(100, 50), Size(200, 100));
+    Affine m = t.pixelToDocument(20, 10);
+    Point p = m.apply({0, 0});
+    CHECK_NEAR(p.x, 100, 1e-9); CHECK_NEAR(p.y, 50, 1e-9);
+    p = m.apply({20, 10});
+    CHECK_NEAR(p.x, 300, 1e-9); CHECK_NEAR(p.y, 150, 1e-9);
+    t.flipX = true;
+    p = t.pixelToDocument(20, 10).apply({0, 0});
+    CHECK_NEAR(p.x, 300, 1e-9);
+    t.flipX = false;
+    t.rotation = 90;
+    auto c = t.corners();
+    // Rotating 90 degrees clockwise about the center (200,100): the top-left corner goes to the top-right.
+    CHECK_NEAR(c[0].x, 250, 1e-9); CHECK_NEAR(c[0].y, 0, 1e-9);
+    CHECK(t.contains({200, 100}));
+    CHECK(!t.contains({100, 50}));
+    CHECK(t.isValid());
+    LayerTransform moved = t.following(t, LayerTransform(Point(110, 60), Size(200, 100)));
+    moved.rotation = 90;
+    CHECK_NEAR(moved.origin.x, 110, 1e-9);
+}
+
+TEST_CASE(transform_placing_recovers_a_scaled_rotated_box) {
+    LayerTransform t(Point(10, 20), Size(100, 50));
+    t.rotation = 30;
+    LayerTransform again = t.placing(t.unitToDocument());
+    CHECK_NEAR(again.origin.x, t.origin.x, 1e-6);
+    CHECK_NEAR(again.origin.y, t.origin.y, 1e-6);
+    CHECK_NEAR(again.size.width, 100, 1e-6);
+    CHECK_NEAR(again.size.height, 50, 1e-6);
+    CHECK_NEAR(again.rotation, 30, 1e-6);
+    CHECK(!again.flipY);
+}
+
+TEST_CASE(transform_drag_resize_keeps_opposite_corner) {
+    LayerTransform t(Point(0, 0), Size(100, 100));
+    TransformDrag drag{t, {100, 100}, TransformDrag::Mode::Resize, 4}; // bottom-right handle
+    LayerTransform r = drag.updated({150, 120}, false, false);
+    CHECK_NEAR(r.origin.x, 0, 1e-9);
+    CHECK_NEAR(r.origin.y, 0, 1e-9);
+    CHECK_NEAR(r.size.width, 150, 1e-9);
+    CHECK_NEAR(r.size.height, 120, 1e-9);
+    LayerTransform locked = drag.updated({150, 120}, true, false);
+    CHECK_NEAR(locked.size.width, locked.size.height, 1e-9);
+}
+
+TEST_CASE(blend_modes_follow_the_pdf_definitions) {
+    Rgb b{0.5f, 0.25f, 1.0f}, s{0.5f, 0.5f, 0.5f};
+    Rgb m = blendColor(BlendMode::Multiply, b, s);
+    CHECK_NEAR(m.r, 0.25, 1e-6); CHECK_NEAR(m.g, 0.125, 1e-6);
+    Rgb sc = blendColor(BlendMode::Screen, b, s);
+    CHECK_NEAR(sc.r, 0.75, 1e-6);
+    Rgb dodge = blendColor(BlendMode::ColorDodge, {0.25f, 0.25f, 0.25f}, {0.5f, 0.5f, 0.5f});
+    CHECK_NEAR(dodge.r, 0.5, 1e-6);
+    Rgb burn = blendColor(BlendMode::ColorBurn, {0.75f, 0.75f, 0.75f}, {0.5f, 0.5f, 0.5f});
+    CHECK_NEAR(burn.r, 0.5, 1e-6);
+    Rgb lum = blendColor(BlendMode::Luminosity, {1, 0, 0}, {0.5f, 0.5f, 0.5f});
+    CHECK_NEAR(0.3 * lum.r + 0.59 * lum.g + 0.11 * lum.b, 0.5, 1e-4);
+    Rgb ov = blendColor(BlendMode::Overlay, {0.25f, 0.75f, 0.5f}, {0.5f, 0.5f, 0.5f});
+    CHECK_NEAR(ov.r, 0.25, 1e-6); CHECK_NEAR(ov.g, 0.75, 1e-6);
+}
+
+TEST_CASE(composite_pixel_source_over_and_dodge_soft_edge) {
+    uint8_t dst[4] = {0, 0, 255, 255};
+    uint8_t src[4] = {128, 0, 0, 128}; // half-transparent red, premultiplied
+    compositePixel(BlendMode::Normal, src, 1.0f, dst);
+    CHECK_EQ(int(dst[3]), 255);
+    CHECK(std::abs(int(dst[0]) - 128) <= 1);
+    CHECK(std::abs(int(dst[2]) - 127) <= 1);
+    // A translucent dodge must not produce a hard edge: half coverage gives half the effect.
+    uint8_t backdrop[4] = {64, 64, 64, 255};
+    uint8_t white[4] = {255, 255, 255, 255};
+    uint8_t full[4]; std::copy(backdrop, backdrop + 4, full);
+    compositePixel(BlendMode::ColorDodge, white, 1.0f, full);
+    uint8_t half[4]; std::copy(backdrop, backdrop + 4, half);
+    compositePixel(BlendMode::ColorDodge, white, 0.5f, half);
+    CHECK_EQ(int(full[0]), 255);
+    CHECK(std::abs(int(half[0]) - (64 + 255) / 2) <= 2);
+}
+
+TEST_CASE(history_records_only_real_changes_and_shares_images) {
+    DocumentHistory history;
+    Document doc(10, 10);
+    auto image = solid(4, 4, 255, 0, 0);
+    doc.layers.push_back(imageLayer("A", image, {0, 0}));
+    history.begin("Nothing", doc, doc.layers[0].id);
+    history.end(doc, doc.layers[0].id);
+    CHECK(!history.canUndo());
+    CHECK(!history.isModified());
+    history.begin("Hide", doc, doc.layers[0].id);
+    doc.layers[0].visible = false;
+    history.end(doc, doc.layers[0].id);
+    CHECK(history.canUndo());
+    CHECK(history.isModified());
+    CHECK_EQ(history.undoName(), std::string("Hide"));
+    CHECK_EQ(history.retainedBytes(doc), size_t(0)); // the image is shared with the live document
+    auto snapshot = history.undo();
+    REQUIRE(snapshot.has_value());
+    CHECK(snapshot->document->layers[0].visible);
+    CHECK(!history.isModified());
+    CHECK(history.canRedo());
+    auto redo = history.redo();
+    REQUIRE(redo.has_value());
+    CHECK(!redo->document->layers[0].visible);
+    // Nested edits collapse into one entry.
+    history.begin("Outer", doc, doc.layers[0].id);
+    history.begin("Inner", doc, doc.layers[0].id);
+    doc.layers[0].opacity = 0.5;
+    history.end(doc, doc.layers[0].id);
+    CHECK(history.isEditing());
+    doc.layers[0].name = "B";
+    history.end(doc, doc.layers[0].id);
+    CHECK_EQ(history.undoCount(), 2);
+    CHECK_EQ(history.undoName(), std::string("Outer"));
+}
+
+TEST_CASE(render_normal_layer_at_offset_and_opacity) {
+    Document doc(8, 8);
+    doc.layers.push_back(imageLayer("red", solid(4, 4, 255, 0, 0), {2, 2}));
+    doc.layers.back().opacity = 0.5;
+    auto out = renderFlattened(doc);
+    const uint8_t* outside = out->pixel(0, 0);
+    CHECK_EQ(int(outside[3]), 0);
+    const uint8_t* inside = out->pixel(3, 3);
+    CHECK(std::abs(int(inside[3]) - 128) <= 1);
+    CHECK(std::abs(int(inside[0]) - 128) <= 1);
+    CHECK_EQ(int(inside[1]), 0);
+    // Edge pixel (2,2) is fully inside; (1,1) fully outside.
+    CHECK(out->pixel(2, 2)[3] > 120);
+    CHECK_EQ(int(out->pixel(1, 1)[3]), 0);
+}
+
+TEST_CASE(render_scaled_layer_and_region_at_zoom) {
+    Document doc(16, 16);
+    auto layer = imageLayer("blue", solid(2, 2, 0, 0, 255), {0, 0});
+    layer.transform.size = {16, 16}; // scaled 8x
+    doc.layers.push_back(layer);
+    auto out = renderFlattened(doc);
+    CHECK_EQ(int(out->pixel(8, 8)[2]), 255);
+    CHECK_EQ(int(out->pixel(15, 15)[3]), 255);
+    // A quarter of the document at 2x zoom gives a 16x16 output of the top-left corner.
+    Image zoomed;
+    RenderOptions options;
+    options.region = {0, 0, 8, 8};
+    options.scale = 2;
+    render(doc, options, zoomed);
+    CHECK_EQ(zoomed.width(), 16);
+    CHECK_EQ(int(zoomed.pixel(3, 3)[2]), 255);
+}
+
+TEST_CASE(render_groups_visibility_masks_and_folder_masks) {
+    Document doc(8, 8);
+    Layer group("Folder", doc.size());
+    group.isGroup = true;
+    Layer child = imageLayer("green", solid(8, 8, 0, 255, 0), {0, 0});
+    child.parentId = group.id;
+    doc.layers = {group, child};
+    auto out = renderFlattened(doc);
+    CHECK_EQ(int(out->pixel(4, 4)[1]), 255);
+    doc.layers[0].visible = false;
+    out = renderFlattened(doc);
+    CHECK_EQ(int(out->pixel(4, 4)[3]), 0);
+    doc.layers[0].visible = true;
+    // A layer mask hiding the left half.
+    auto mask = std::make_shared<GrayImage>(8, 8, 255);
+    for (int y = 0; y < 8; y++) for (int x = 0; x < 4; x++) mask->at(x, y) = 0;
+    LayerMask m;
+    m.asset = MaskAsset::make(mask);
+    doc.layers[1].mask = m;
+    out = renderFlattened(doc);
+    CHECK_EQ(int(out->pixel(1, 4)[3]), 0);
+    CHECK_EQ(int(out->pixel(6, 4)[3]), 255);
+    doc.layers[1].mask->enabled = false;
+    out = renderFlattened(doc);
+    CHECK_EQ(int(out->pixel(1, 4)[3]), 255);
+    doc.layers[1].mask.reset();
+    // A folder mask hiding the top half clips the child.
+    auto fmask = std::make_shared<GrayImage>(8, 8, 255);
+    for (int y = 0; y < 4; y++) for (int x = 0; x < 8; x++) fmask->at(x, y) = 0;
+    LayerMask fm;
+    fm.asset = MaskAsset::make(fmask);
+    doc.layers[0].mask = fm;
+    out = renderFlattened(doc);
+    CHECK_EQ(int(out->pixel(4, 1)[3]), 0);
+    CHECK_EQ(int(out->pixel(4, 6)[3]), 255);
+    // A uniform 1x1 mask stretches over the layer.
+    doc.layers[0].mask.reset();
+    LayerMask solidMask;
+    solidMask.asset = MaskAsset::solid(false);
+    doc.layers[1].mask = solidMask;
+    out = renderFlattened(doc);
+    CHECK_EQ(int(out->pixel(4, 4)[3]), 0);
+}
+
+TEST_CASE(render_clipping_mask_uses_base_alpha) {
+    Document doc(8, 8);
+    Layer base = imageLayer("base", solid(4, 4, 0, 0, 255), {0, 0});
+    Layer clipped = imageLayer("clipped", solid(8, 8, 255, 0, 0), {0, 0});
+    clipped.maskSourceId = base.id;
+    doc.layers = {base, clipped};
+    auto out = renderFlattened(doc);
+    // Red shows only where the base has pixels.
+    CHECK_EQ(int(out->pixel(2, 2)[0]), 255);
+    CHECK_EQ(int(out->pixel(6, 6)[3]), 0);
+    // Hiding the base leaves the clipped layer showing through the base's coverage, as on the Mac
+    // (coverage ignores the source's visibility).
+    doc.layers[0].visible = false;
+    out = renderFlattened(doc);
+    CHECK_EQ(int(out->pixel(2, 2)[0]), 255);
+    CHECK_EQ(int(out->pixel(2, 2)[2]), 0);
+    CHECK_EQ(int(out->pixel(6, 6)[3]), 0);
+    // A clipped layer whose base is not directly below still clips by the base's coverage.
+    doc.layers[0].visible = true;
+    Layer between = imageLayer("between", solid(8, 8, 0, 255, 0), {0, 0});
+    doc.layers = {doc.layers[0], between, doc.layers[1]};
+    out = renderFlattened(doc);
+    CHECK_EQ(int(out->pixel(2, 2)[0]), 255);
+    CHECK_EQ(int(out->pixel(6, 6)[1]), 255);
+    CHECK_EQ(int(out->pixel(6, 6)[0]), 0);
+}
+
+TEST_CASE(render_blend_mode_multiply_against_backdrop) {
+    Document doc(4, 4);
+    doc.layers.push_back(imageLayer("gray", solid(4, 4, 128, 128, 128), {0, 0}));
+    Layer top = imageLayer("top", solid(4, 4, 128, 128, 128), {0, 0});
+    top.blendMode = BlendMode::Multiply;
+    doc.layers.push_back(top);
+    auto out = renderFlattened(doc);
+    CHECK(std::abs(int(out->pixel(1, 1)[0]) - 64) <= 1);
+}
+
+TEST_CASE(brush_paints_and_erases_within_opacity_cap) {
+    Document doc(64, 64);
+    Layer layer("Layer 1", doc.size());
+    BrushSettings settings;
+    settings.diameter = 20;
+    settings.hardness = 1;
+    settings.opacity = 0.5;
+    settings.red = 1; settings.green = 0; settings.blue = 0;
+    BrushStroke stroke(layer, false, settings, doc.size());
+    REQUIRE(stroke.isValid());
+    stroke.append({20, 32});
+    stroke.append({40, 32});
+    stroke.append({44, 32});
+    stroke.flush();
+    CHECK(stroke.touched());
+    auto commit = stroke.commit();
+    REQUIRE(commit.asset.has_value());
+    const Image& img = *commit.asset->image;
+    // Cropped to the painted pixels; the transform places them where they were painted.
+    CHECK(img.width() < 64);
+    CHECK_NEAR(commit.transform.origin.x, 10, 1.5);
+    CHECK_NEAR(commit.transform.size.width, img.width(), 1e-9);
+    // Overlapping dabs never exceed the stroke opacity.
+    int cx = int(32 - commit.transform.origin.x), cy = int(32 - commit.transform.origin.y);
+    const uint8_t* p = img.pixel(cx, cy);
+    CHECK(std::abs(int(p[3]) - 128) <= 1);
+    CHECK(std::abs(int(p[0]) - 128) <= 1);
+    // Erase what was painted.
+    Layer painted = layer;
+    painted.asset = commit.asset;
+    painted.transform = commit.transform;
+    settings.erasing = true;
+    settings.opacity = 1;
+    BrushStroke eraser(painted, false, settings, doc.size());
+    eraser.append({20, 32});
+    eraser.append({44, 32});
+    eraser.flush();
+    auto erased = eraser.commit();
+    REQUIRE(erased.asset.has_value());
+    int ex = int(32 - erased.transform.origin.x), ey = int(32 - erased.transform.origin.y);
+    CHECK_EQ(int(erased.asset->image->pixel(ex, ey)[3]), 0);
+}
+
+TEST_CASE(brush_paints_mask_and_soft_tip_falls_off) {
+    CHECK_NEAR(brushFalloff(0), 1, 1e-9);
+    CHECK_NEAR(brushFalloff(1), 0, 1e-9);
+    CHECK(brushFalloff(0.5) > 0.2 && brushFalloff(0.5) < 0.6);
+    Document doc(32, 32);
+    Layer layer = imageLayer("img", solid(32, 32, 0, 0, 0), {0, 0});
+    LayerMask m;
+    m.asset = MaskAsset::solid(true);
+    layer.mask = m;
+    BrushSettings settings;
+    settings.diameter = 10;
+    settings.hardness = 0;
+    settings.maskValue = 0; // paint black: hide
+    BrushStroke stroke(layer, true, settings, doc.size());
+    REQUIRE(stroke.isValid());
+    stroke.append({16, 16});
+    stroke.flush();
+    auto commit = stroke.commit();
+    REQUIRE(commit.mask.has_value());
+    CHECK_EQ(commit.mask->image->width(), 32);
+    CHECK(commit.mask->image->at(16, 16) < 20); // a hardness-0 tip falls off from its very center
+    CHECK_EQ(int(commit.mask->image->at(0, 0)), 255);
+    CHECK(!commit.maskPlacement.has_value());
+}
+
+TEST_CASE(png_round_trip_keeps_pixels) {
+    auto image = std::make_shared<Image>(5, 3);
+    for (int y = 0; y < 3; y++) for (int x = 0; x < 5; x++) {
+        uint8_t* p = image->pixel(x, y);
+        uint8_t a = uint8_t(50 + x * 40);
+        p[0] = uint8_t(x * 40 * a / 255); p[1] = uint8_t(y * 100 * a / 255); p[2] = uint8_t(a * 200 / 255); p[3] = a;
+    }
+    std::vector<uint8_t> bytes;
+    std::string error;
+    REQUIRE(encodePngImage(*image, bytes, 72, &error));
+    auto back = decodePngImage(bytes.data(), bytes.size(), &error);
+    REQUIRE(back != nullptr);
+    CHECK_EQ(back->width(), 5);
+    for (int y = 0; y < 3; y++) for (int x = 0; x < 5; x++)
+        for (int c = 0; c < 4; c++) CHECK(std::abs(int(back->pixel(x, y)[c]) - int(image->pixel(x, y)[c])) <= 1);
+    fs::path dir = tempDir();
+    auto gray = std::make_shared<GrayImage>(3, 2, 7);
+    gray->at(1, 1) = 200;
+    REQUIRE(writePngGray((dir / "m.png").string(), *gray, &error));
+    auto g = readPngGray((dir / "m.png").string(), &error);
+    REQUIRE(g != nullptr);
+    CHECK_EQ(int(g->at(1, 1)), 200);
+    CHECK_EQ(int(g->at(0, 0)), 7);
+    // A colour PNG is not a valid mask.
+    REQUIRE(writePngImage((dir / "c.png").string(), *image, 0, &error));
+    CHECK(readPngGray((dir / "c.png").string(), &error) == nullptr);
+    fs::remove_all(dir);
+}
+
+TEST_CASE(project_round_trip_preserves_layers_masks_groups_and_unknown_fields) {
+    Document doc(40, 30);
+    doc.resolution = 300;
+    Layer group("Folder 1", doc.size());
+    group.isGroup = true;
+    Layer a = imageLayer("Photo", solid(10, 8, 200, 100, 50, 255), {3, 4});
+    a.parentId = group.id;
+    a.opacity = 0.75;
+    a.blendMode = BlendMode::ColorDodge;
+    a.transform.rotation = 15;
+    a.transform.flipX = true;
+    a.transform.sampling = Sampling::Smooth;
+    LayerMask mask;
+    auto maskImage = std::make_shared<GrayImage>(10, 8, 255);
+    maskImage->at(2, 2) = 0;
+    mask.asset = MaskAsset::make(maskImage);
+    mask.enabled = false;
+    mask.linked = false;
+    mask.placement = LayerTransform(Point(5, 5), Size(10, 8));
+    a.mask = mask;
+    Layer b("Blank", doc.size());
+    b.maskSourceId = a.id;
+    b.parentId = group.id;
+    b.extraJson = "{\"futureField\":[1,2,3]}";
+    Layer adj("Levels", doc.size());
+    adj.adjustment = LayerAdjustment{AdjustmentKind::Levels, "{\"kind\":\"Levels\",\"levels\":{\"channel\":\"RGB\",\"ranges\":[]},\"custom\":true}"};
+    doc.layers = {group, a, b, adj};
+    doc.extraJson = "{\"futureManifestField\":\"x\"}";
+
+    fs::path dir = tempDir();
+    fs::path package = dir / "Test.comp";
+    ProjectError error;
+    REQUIRE(saveProject(doc, a.id, package.string(), error));
+    CHECK(fs::exists(package / "manifest.json"));
+    CHECK(fs::exists(package / "images" / (a.id + ".png")));
+    CHECK(fs::exists(package / "images" / (a.id + ".mask.png")));
+    CHECK(!fs::exists(package / "images" / (b.id + ".png")));
+
+    auto loaded = loadProject(package.string(), error);
+    REQUIRE(loaded.has_value());
+    CHECK_EQ(loaded->width, 40);
+    CHECK_NEAR(loaded->resolution, 300, 1e-9);
+    CHECK_EQ(loaded->id, doc.id);
+    REQUIRE(loaded->layers.size() == 4u);
+    CHECK(loaded->layers[0].isGroup);
+    const Layer& la = loaded->layers[1];
+    CHECK_EQ(la.name, std::string("Photo"));
+    CHECK(la.parentId == group.id);
+    CHECK_NEAR(la.opacity, 0.75, 1e-9);
+    CHECK(la.blendMode == BlendMode::ColorDodge);
+    CHECK_NEAR(la.transform.rotation, 15, 1e-9);
+    CHECK(la.transform.flipX);
+    CHECK(la.transform.sampling == Sampling::Smooth);
+    REQUIRE(la.asset.has_value());
+    CHECK_EQ(la.asset->image->width(), 10);
+    CHECK_EQ(int(la.asset->image->pixel(0, 0)[0]), 200);
+    REQUIRE(la.mask.has_value());
+    CHECK(!la.mask->enabled);
+    CHECK(!la.mask->linked);
+    REQUIRE(la.mask->placement.has_value());
+    CHECK_NEAR(la.mask->placement->origin.x, 5, 1e-9);
+    CHECK_EQ(int(la.mask->asset.image->at(2, 2)), 0);
+    CHECK(loaded->layers[2].maskSourceId == a.id);
+    CHECK(loaded->layers[2].extraJson.find("futureField") != std::string::npos);
+    REQUIRE(loaded->layers[3].adjustment.has_value());
+    CHECK(loaded->layers[3].adjustment->kind == AdjustmentKind::Levels);
+    CHECK(loaded->layers[3].adjustment->json.find("custom") != std::string::npos);
+    CHECK(loaded->extraJson.find("futureManifestField") != std::string::npos);
+    CHECK(loadedActiveLayer(package.string()) == a.id);
+
+    // Saving again over the existing package keeps the unknown fields.
+    REQUIRE(saveProject(*loaded, std::nullopt, package.string(), error));
+    std::ifstream in(package / "manifest.json");
+    std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    CHECK(text.find("futureField") != std::string::npos);
+    CHECK(text.find("futureManifestField") != std::string::npos);
+    CHECK(text.find("\"version\": 7") != std::string::npos);
+    CHECK(text.find("\"origin\": [") != std::string::npos);
+    CHECK(text.find("\"blendMode\": \"Color Dodge\"") != std::string::npos);
+    CHECK(text.find("\"sampling\": \"Smooth\"") != std::string::npos);
+    fs::remove_all(dir);
+}
+
+TEST_CASE(project_rejects_bad_manifests_like_the_mac) {
+    ProjectError error;
+    CHECK(!parseManifest("{}", error));
+    CHECK(error.kind == ProjectError::Invalid);
+    std::string base = R"({"format":"com.compositor.project","version":%V,"colorSpace":"sRGB","documentID":"E621E1F8-C36C-495A-93FC-0C247A3E6E5F","width":10,"height":10,"activeLayerID":null,"layers":[%L]})";
+    auto with = [&](const std::string& version, const std::string& layers) {
+        std::string text = base;
+        text.replace(text.find("%V"), 2, version);
+        text.replace(text.find("%L"), 2, layers);
+        return text;
+    };
+    CHECK(!parseManifest(with("8", ""), error));
+    CHECK(error.kind == ProjectError::Version);
+    CHECK_EQ(error.version, 8);
+    CHECK(parseManifest(with("1", ""), error).has_value());
+    std::string layer = R"({"id":"11111111-2222-3333-4444-555555555555","name":"L","isVisible":true,"transform":{"origin":[0,0],"size":[10,10],"rotation":0,"flipX":false,"flipY":false,"sampling":"High quality"}%X})";
+    auto layerWith = [&](const std::string& extra) { std::string t = layer; t.replace(t.find("%X"), 2, extra); return t; };
+    CHECK(parseManifest(with("7", layerWith("")), error).has_value());
+    // Opacity needs version 3.
+    CHECK(!parseManifest(with("2", layerWith(",\"opacity\":0.5")), error));
+    CHECK(parseManifest(with("3", layerWith(",\"opacity\":0.5")), error).has_value());
+    // Masks need version 4 and the right filename.
+    CHECK(!parseManifest(with("3", layerWith(",\"maskFile\":\"11111111-2222-3333-4444-555555555555.mask.png\"")), error));
+    CHECK(!parseManifest(with("4", layerWith(",\"maskFile\":\"wrong.png\"")), error));
+    CHECK(parseManifest(with("4", layerWith(",\"maskFile\":\"11111111-2222-3333-4444-555555555555.mask.png\"")), error).has_value());
+    // A missing parent is invalid; a lowercase uuid is accepted and uppercased.
+    CHECK(!parseManifest(with("7", layerWith(",\"parentID\":\"99999999-2222-3333-4444-555555555555\"")), error));
+    auto lower = parseManifest(with("7", layerWith(",\"imageFile\":\"11111111-2222-3333-4444-555555555555.png\"")), error);
+    CHECK(lower.has_value());
+    CHECK(!parseManifest(with("7", layerWith(",\"imageFile\":\"other.png\"")), error));
+    // Self clipping is a cycle.
+    CHECK(!parseManifest(with("7", layerWith(",\"maskSourceID\":\"11111111-2222-3333-4444-555555555555\"")), error));
+    // Adjustment layers need version 7.
+    CHECK(!parseManifest(with("6", layerWith(",\"adjustment\":{\"kind\":\"Levels\"}")), error));
+    CHECK(parseManifest(with("7", layerWith(",\"adjustment\":{\"kind\":\"Levels\"}")), error).has_value());
+    // Dimensions beyond 30000 are too large.
+    std::string big = with("7", "");
+    big.replace(big.find("\"width\":10"), 10, "\"width\":40000");
+    CHECK(!parseManifest(big, error));
+    CHECK(error.kind == ProjectError::TooLarge);
+}
+
+TEST_CASE(selection_rasterizes_and_combines) {
+    auto rect = rasterizeRect({2, 2, 4, 4}, 10, 10, false);
+    CHECK_EQ(int(rect->at(3, 3)), 255);
+    CHECK_EQ(int(rect->at(1, 1)), 0);
+    CHECK_EQ(int(rect->at(6, 6)), 0);
+    auto half = rasterizeRect({2.5, 2, 4, 4}, 10, 10, true);
+    CHECK(std::abs(int(half->at(2, 3)) - 128) <= 2);
+    CHECK_EQ(int(half->at(4, 3)), 255);
+    auto ellipse = rasterizeEllipse({0, 0, 10, 10}, 10, 10, true);
+    CHECK_EQ(int(ellipse->at(5, 5)), 255);
+    CHECK(ellipse->at(0, 0) < 30);
+    auto sel = combineSelection(std::nullopt, *rect, SelectionMode::Replace, true);
+    REQUIRE(sel.has_value());
+    auto more = rasterizeRect({5, 5, 4, 4}, 10, 10, false);
+    sel = combineSelection(sel, *more, SelectionMode::Add, true);
+    CHECK_EQ(int(sel->coverage->at(7, 7)), 255);
+    sel = combineSelection(sel, *rect, SelectionMode::Subtract, true);
+    CHECK_EQ(int(sel->coverage->at(3, 3)), 0);
+    CHECK_EQ(int(sel->coverage->at(7, 7)), 255);
+    auto inverted = invertSelection(*sel, 10, 10);
+    CHECK_EQ(int(inverted.coverage->at(3, 3)), 255);
+    auto loops = selectionOutline(*rect);
+    CHECK_EQ(loops.size(), size_t(1));
+    CHECK_EQ(loops[0].size(), size_t(4));
+}
+
+TEST_CASE(hierarchy_entries_and_validation) {
+    Document doc(10, 10);
+    Layer g("Folder 1", doc.size());
+    g.isGroup = true;
+    Layer a("A", doc.size());
+    a.parentId = g.id;
+    Layer b("B", doc.size());
+    doc.layers = {b, g, a};
+    auto entries = hierarchyEntries(doc.layers, true);
+    REQUIRE(entries.size() == 3u);
+    CHECK_EQ(entries[0].layer->name, std::string("Folder 1"));
+    CHECK_EQ(entries[1].layer->name, std::string("A"));
+    CHECK_EQ(entries[1].depth, 1);
+    CHECK_EQ(entries[2].layer->name, std::string("B"));
+    CHECK(validateHierarchy(doc.layers));
+    doc.layers[2].parentId = "00000000-0000-0000-0000-000000000000";
+    CHECK(!validateHierarchy(doc.layers));
+    doc.layers[2].parentId = g.id;
+    doc.layers[1].parentId = a.id; // cycle through a non-group
+    CHECK(!validateHierarchy(doc.layers));
+    CHECK_EQ(nextLayerName(doc.layers, "Layer"), std::string("Layer 1"));
+}
+
+TEST_MAIN()

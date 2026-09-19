@@ -22,3 +22,8 @@ xcuserdata/
 # Claude Code settings personal to this machine
 .claude/settings.local.json
 BUILD_PLAN.md
+
+# Linux port
+build-*/
+.cache/
+compile_commands.json

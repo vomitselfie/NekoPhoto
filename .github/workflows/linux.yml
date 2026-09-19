@@ -1,0 +1,39 @@
+name: Linux
+
+on:
+  push:
+    branches: [main, linux-port]
+  pull_request:
+
+jobs:
+  build:
+    name: ${{ matrix.compiler }} build and tests
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build cmake libpng-dev qt6-base-dev qt6-wayland libgl1-mesa-dev clang
+      - name: Configure
+        run: |
+          if [ "${{ matrix.compiler }}" = "clang" ]; then export CC=clang CXX=clang++; else export CC=gcc CXX=g++; fi
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCOMPOSITOR_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        run: cmake --build build -j
+      - name: Unit and golden tests
+        run: ctest --test-dir build --output-on-failure
+      - name: Smoke test the application offscreen
+        run: |
+          QT_QPA_PLATFORM=offscreen ./build/src/app/compositor --demo --screenshot demo.png --save-as Demo.comp
+          QT_QPA_PLATFORM=offscreen ./build/src/app/compositor Demo.comp --screenshot reopened.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-${{ matrix.compiler }}
+          path: |
+            demo.png
+            reopened.png

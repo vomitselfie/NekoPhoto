@@ -1,0 +1,12 @@
+add_executable(pixels_tests pixels_tests.cpp)
+target_link_libraries(pixels_tests PRIVATE compositor::pixels compositor_warnings)
+add_test(NAME pixels_tests COMMAND pixels_tests)
+
+add_executable(core_tests core_tests.cpp)
+target_link_libraries(core_tests PRIVATE compositor::core compositor_warnings)
+add_test(NAME core_tests COMMAND core_tests)
+
+add_executable(golden_tests golden_tests.cpp)
+target_link_libraries(golden_tests PRIVATE compositor::core compositor_warnings)
+target_compile_definitions(golden_tests PRIVATE GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/golden")
+add_test(NAME golden_tests COMMAND golden_tests)
