@@ -1,5 +1,6 @@
 #include "compositor/kernels.h"
 #include "compositor/resample.h"
+#include "compositor/simd.h"
 #include "compositor/parallel.h"
 #include <algorithm>
 #include <cmath>
@@ -238,29 +239,20 @@ void gradientMap(Image& image, const uint8_t* table) {
 // ---- Invert --------------------------------------------------------------------------------------
 
 void invertColors(Image& image) {
-#if defined(__GNUC__) || defined(__clang__)
-    typedef uint8_t u8x16 __attribute__((vector_size(16)));
-    constexpr bool vectorised = true;
-#else
-    constexpr bool vectorised = false;
-#endif
+    using namespace simd;
     parallelRows(0, image.height(), [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) {
             uint8_t* p = image.row(y);
             int x = 0;
-#if defined(__GNUC__) || defined(__clang__)
-            if (vectorised) {
-                for (; x + 4 <= image.width(); x += 4, p += 16) {
-                    u8x16 v;
-                    std::memcpy(&v, p, 16);
-                    // Every lane takes its pixel's alpha; the alpha lanes then get their own value back.
-                    u8x16 a = __builtin_shufflevector(v, v, 3, 3, 3, 3, 7, 7, 7, 7, 11, 11, 11, 11, 15, 15, 15, 15);
-                    u8x16 inverted = a - v;
-                    u8x16 result = __builtin_shufflevector(inverted, v, 0, 1, 2, 19, 4, 5, 6, 23, 8, 9, 10, 27, 12, 13, 14, 31);
-                    std::memcpy(p, &result, 16);
-                }
+            for (; x + 4 <= image.width(); x += 4, p += 16) {
+                u8x16 v;
+                std::memcpy(&v, p, 16);
+                // Every lane takes its pixel's alpha; the alpha lanes then get their own value back.
+                const u8x16 a = COMPOSITOR_SHUFFLE(u8x16, v, v, 3, 3, 3, 3, 7, 7, 7, 7, 11, 11, 11, 11, 15, 15, 15, 15);
+                const u8x16 inverted = a - v;
+                const u8x16 result = COMPOSITOR_SHUFFLE(u8x16, inverted, v, 0, 1, 2, 19, 4, 5, 6, 23, 8, 9, 10, 27, 12, 13, 14, 31);
+                std::memcpy(p, &result, 16);
             }
-#endif
             for (; x < image.width(); x++, p += 4) {
                 const uint8_t a = p[3];
                 p[0] = uint8_t(a - p[0]);

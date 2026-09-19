@@ -43,10 +43,18 @@ QPalette darkPalette() {
     return p;
 }
 
+/// A desktop colour preference (Qt::ColorScheme arrived in Qt 6.5; CI builds against 6.4).
+enum class Scheme { Unknown, Light, Dark };
+
 /// The desktop's preference: Qt's own answer when a platform theme provides it, else the XDG portal's.
-Qt::ColorScheme desktopScheme() {
-    Qt::ColorScheme scheme = QApplication::styleHints()->colorScheme();
-    if (scheme != Qt::ColorScheme::Unknown) return scheme;
+Scheme desktopScheme() {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+    switch (QApplication::styleHints()->colorScheme()) {
+    case Qt::ColorScheme::Dark: return Scheme::Dark;
+    case Qt::ColorScheme::Light: return Scheme::Light;
+    default: break;
+    }
+#endif
 #ifdef COMPOSITOR_HAVE_DBUS
     QDBusInterface portal("org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop", "org.freedesktop.portal.Settings");
     portal.setTimeout(500);
@@ -57,13 +65,13 @@ Qt::ColorScheme desktopScheme() {
             QVariant v = reply.value().variant();
             while (v.canConvert<QDBusVariant>()) v = v.value<QDBusVariant>().variant();
             uint value = v.toUInt();   // 0 no preference, 1 dark, 2 light
-            if (value == 1) return Qt::ColorScheme::Dark;
-            if (value == 2) return Qt::ColorScheme::Light;
-            return Qt::ColorScheme::Unknown;
+            if (value == 1) return Scheme::Dark;
+            if (value == 2) return Scheme::Light;
+            return Scheme::Unknown;
         }
     }
 #endif
-    return Qt::ColorScheme::Unknown;
+    return Scheme::Unknown;
 }
 
 bool paletteIsDark(const QPalette& p) { return p.color(QPalette::Window).lightness() < 128; }
@@ -87,14 +95,14 @@ void applyTheme() {
     if (choice == "dark") wantDark = true;
     else if (choice == "light") wantDark = false;
     else {
-        Qt::ColorScheme desktop = desktopScheme();
+        Scheme desktop = desktopScheme();
         // The platform theme already gave the desktop look, or the desktop has no preference: leave it alone.
-        if (desktop == Qt::ColorScheme::Unknown || paletteIsDark(original) == (desktop == Qt::ColorScheme::Dark)) {
+        if (desktop == Scheme::Unknown || paletteIsDark(original) == (desktop == Scheme::Dark)) {
             if (QApplication::style()->objectName() != originalStyle) QApplication::setStyle(QStyleFactory::create(originalStyle));
             QApplication::setPalette(original);
             return;
         }
-        wantDark = desktop == Qt::ColorScheme::Dark;
+        wantDark = desktop == Scheme::Dark;
     }
     // Fusion draws both palettes consistently; the platform style may not.
     if (QApplication::style()->objectName() != QLatin1String("fusion")) QApplication::setStyle(QStyleFactory::create("Fusion"));

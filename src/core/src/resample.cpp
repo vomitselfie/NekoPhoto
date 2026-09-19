@@ -1,5 +1,6 @@
 #include "compositor/resample.h"
 #include "compositor/parallel.h"
+#include "compositor/simd.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -57,9 +58,7 @@ double kernelValue(ResampleFilter filter, double x) {
 
 // ---- Point samplers ------------------------------------------------------------------------------
 
-typedef uint8_t u8x4 __attribute__((vector_size(4)));
-typedef int32_t i32x4 __attribute__((vector_size(16)));
-typedef uint32_t u32x4 __attribute__((vector_size(16)));
+using simd::u8x4; using simd::i32x4; using simd::u32x4;
 
 /// The four channels of a pixel as 32-bit lanes.
 inline i32x4 lanes(const uint8_t* p) {

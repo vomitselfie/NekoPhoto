@@ -14,7 +14,11 @@ ctest --test-dir build --output-on-failure
 ```
 
 CI builds with `-DCOMPOSITOR_WARNINGS_AS_ERRORS=ON` on GCC and Clang and runs
-`tools/rpc_smoke.py` against a headless instance; keep both green.
+`tools/rpc_smoke.py` against a headless instance; keep both green. CI's
+toolchain is older than a rolling desktop's (Ubuntu 24.04: GCC 13, Clang 18,
+Qt 6.4; the release image is 22.04 with GCC 11), so before pushing run
+`tools/ci-in-docker.sh ubuntu:24.04 gcc` (and `clang`), and
+`RELEASE=1 tools/ci-in-docker.sh ubuntu:22.04` before tagging a release.
 
 ## Driving the app
 

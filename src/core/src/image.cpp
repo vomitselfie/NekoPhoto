@@ -1,5 +1,6 @@
 #include "compositor/image.h"
 #include "compositor/parallel.h"
+#include "compositor/simd.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -139,22 +140,17 @@ std::shared_ptr<GrayImage> cropGray(const GrayImage& image, int x, int y, int wi
 
 namespace {
 
-typedef uint8_t u8x16 __attribute__((vector_size(16)));
-typedef uint8_t u8x8 __attribute__((vector_size(8)));
-typedef uint8_t u8x4 __attribute__((vector_size(4)));
-typedef uint16_t u16x8 __attribute__((vector_size(16)));
-typedef uint16_t u16x4 __attribute__((vector_size(8)));
+using namespace simd;
 
 /// Two output pixels from four source pixels of each of two rows: (p00 + p01 + p10 + p11 + 2) / 4 per channel.
 inline void halvePairRGBA(const uint8_t* r0, const uint8_t* r1, uint8_t* o) {
     u8x16 a, b;
     std::memcpy(&a, r0, 16); std::memcpy(&b, r1, 16);
     // Row sums in 16 bits, then each pair of neighbouring pixels.
-    u16x8 lo = __builtin_convertvector(__builtin_shufflevector(a, a, 0, 1, 2, 3, 4, 5, 6, 7), u16x8) + __builtin_convertvector(__builtin_shufflevector(b, b, 0, 1, 2, 3, 4, 5, 6, 7), u16x8);
-    u16x8 hi = __builtin_convertvector(__builtin_shufflevector(a, a, 8, 9, 10, 11, 12, 13, 14, 15), u16x8) + __builtin_convertvector(__builtin_shufflevector(b, b, 8, 9, 10, 11, 12, 13, 14, 15), u16x8);
-    u16x8 left = __builtin_shufflevector(lo, hi, 0, 1, 2, 3, 8, 9, 10, 11), right = __builtin_shufflevector(lo, hi, 4, 5, 6, 7, 12, 13, 14, 15);
-    u16x8 sum = (left + right + 2) >> 2;
-    u8x8 out = __builtin_convertvector(sum, u8x8);
+    const u16x8 lo = widenLow(a) + widenLow(b), hi = widenHigh(a) + widenHigh(b);
+    const u16x8 left = COMPOSITOR_SHUFFLE(u16x8, lo, hi, 0, 1, 2, 3, 8, 9, 10, 11), right = COMPOSITOR_SHUFFLE(u16x8, lo, hi, 4, 5, 6, 7, 12, 13, 14, 15);
+    const u16x8 sum = (left + right + 2) >> 2;
+    const u8x8 out = __builtin_convertvector(sum, u8x8);
     std::memcpy(o, &out, 8);
 }
 
@@ -162,18 +158,14 @@ inline void halvePairRGBA(const uint8_t* r0, const uint8_t* r1, uint8_t* o) {
 inline void halveRunGray(const uint8_t* r0, const uint8_t* r1, uint8_t* o) {
     u8x16 a0, a1, b0, b1;
     std::memcpy(&a0, r0, 16); std::memcpy(&a1, r0 + 16, 16); std::memcpy(&b0, r1, 16); std::memcpy(&b1, r1 + 16, 16);
-    u8x16 evens = __builtin_shufflevector(a0, a1, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30);
-    u8x16 odds = __builtin_shufflevector(a0, a1, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31);
-    u8x16 evensBelow = __builtin_shufflevector(b0, b1, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30);
-    u8x16 oddsBelow = __builtin_shufflevector(b0, b1, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31);
-    auto widen = [](u8x16 v, bool upper) {
-        return upper ? __builtin_convertvector(__builtin_shufflevector(v, v, 8, 9, 10, 11, 12, 13, 14, 15), u16x8)
-                     : __builtin_convertvector(__builtin_shufflevector(v, v, 0, 1, 2, 3, 4, 5, 6, 7), u16x8);
-    };
-    u16x8 lo = (widen(evens, false) + widen(odds, false) + widen(evensBelow, false) + widen(oddsBelow, false) + 2) >> 2;
-    u16x8 hi = (widen(evens, true) + widen(odds, true) + widen(evensBelow, true) + widen(oddsBelow, true) + 2) >> 2;
-    u8x16 out = __builtin_convertvector(__builtin_shufflevector(lo, hi, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15), u8x16);
-    std::memcpy(o, &out, 16);
+    const u8x16 evens = COMPOSITOR_SHUFFLE(u8x16, a0, a1, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30);
+    const u8x16 odds = COMPOSITOR_SHUFFLE(u8x16, a0, a1, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31);
+    const u8x16 evensBelow = COMPOSITOR_SHUFFLE(u8x16, b0, b1, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30);
+    const u8x16 oddsBelow = COMPOSITOR_SHUFFLE(u8x16, b0, b1, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31);
+    const u16x8 lo = (widenLow(evens) + widenLow(odds) + widenLow(evensBelow) + widenLow(oddsBelow) + 2) >> 2;
+    const u16x8 hi = (widenHigh(evens) + widenHigh(odds) + widenHigh(evensBelow) + widenHigh(oddsBelow) + 2) >> 2;
+    const u8x8 outLo = __builtin_convertvector(lo, u8x8), outHi = __builtin_convertvector(hi, u8x8);
+    std::memcpy(o, &outLo, 8); std::memcpy(o + 8, &outHi, 8);
 }
 
 } // namespace
