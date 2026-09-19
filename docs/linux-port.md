@@ -58,6 +58,19 @@ minimum size at startup, for chasing what stops the window from shrinking;
 `COMPOSITOR_WINDOW_SIZE=1000x700` forces the initial window size, for looking at
 the layout as a laptop or a tiling window manager would show it.
 
+## Installing
+
+`sudo cmake --install build` installs the binary to `/usr/local/bin`, the
+launcher entry, icon and `.comp` MIME type under `/usr/local/share`; follow it
+with `sudo update-mime-database /usr/local/share/mime` and
+`sudo update-desktop-database /usr/local/share/applications` so the file type
+and launcher pick it up at once. `cmake --install build --prefix ~/.local` does
+the same for one user (make sure `~/.local/bin` is on the launcher's PATH).
+
+For an AppImage, `tools/integrate-appimage.sh <file>` copies it to
+`~/Applications` and writes the launcher entry, icon and MIME type under
+`~/.local/share`; `--remove` undoes it.
+
 ## Appearance
 
 Edit > Preferences > Appearance: System, Dark or Light. Dark and Light use Qt's

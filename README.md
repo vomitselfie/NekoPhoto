@@ -26,6 +26,18 @@ chmod +x compositor-linux-*.AppImage
 It runs on any x86_64 Linux from 2022 on, under Wayland or X11. Open an image
 with File > Open or drop it on the window, and go.
 
+To have it in your app launcher, with its icon, opening `.comp` projects by
+double-click, run the integration script once (no root needed; run it again
+with a newer AppImage to update, or with `--remove`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/vomitselfie/compositor-linux/main/tools/integrate-appimage.sh | bash -s -- compositor-linux-*.AppImage
+```
+
+It keeps the AppImage in `~/Applications`. If you build from source instead,
+`sudo cmake --install build` puts the binary, launcher entry, icon and file
+type into `/usr/local`.
+
 ## What you get
 
 - Layers, folders, blend modes, opacity, and layer masks
