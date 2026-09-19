@@ -75,7 +75,7 @@ qt_add_executable(compositor-linux
     MainWindow.cpp
 )
 
-target_compile_definitions(compositor-linux PRIVATE COMPOSITOR_VERSION="${COMPOSITOR_VERSION}")
+target_compile_definitions(compositor-linux PRIVATE COMPOSITOR_VERSION="${COMPOSITOR_VERSION_STRING}")
 target_link_libraries(compositor-linux PRIVATE compositor::core Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Svg compositor_warnings)
 option(COMPOSITOR_WITH_LIBGMIC "Run G'MIC filters in-process through libgmic when it is installed" ON)
 if(COMPOSITOR_WITH_LIBGMIC)
@@ -108,8 +108,8 @@ if(APPLE)
         MACOSX_BUNDLE_BUNDLE_NAME "compositor-linux"
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.github.vomitselfie.compositor-linux"
         MACOSX_BUNDLE_ICON_FILE "compositor-linux.icns"
-        MACOSX_BUNDLE_SHORT_VERSION_STRING "${COMPOSITOR_VERSION}"
-        MACOSX_BUNDLE_BUNDLE_VERSION "${COMPOSITOR_VERSION}")
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${COMPOSITOR_VERSION_STRING}"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${COMPOSITOR_VERSION_STRING}")
     install(TARGETS compositor-linux BUNDLE DESTINATION .)
 else()
     install(TARGETS compositor-linux RUNTIME DESTINATION bin)

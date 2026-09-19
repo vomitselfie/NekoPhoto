@@ -1,8 +1,15 @@
 cmake_minimum_required(VERSION 3.22)
-project(compositor-linux VERSION 0.4.0 LANGUAGES C CXX)
+project(compositor-linux VERSION 0.5.0 LANGUAGES C CXX)
 
-# Releases pass the tag version in; local builds use the project version above.
-set(COMPOSITOR_VERSION "${PROJECT_VERSION}" CACHE STRING "Version string shown by the app")
+# Releases pass the tag version in with -DCOMPOSITOR_VERSION; a local build shows the project version
+# above. The override is a cache entry, so it defaults to empty rather than to the project version: a
+# configure after a version bump then picks the new number up instead of keeping the one it first saw.
+set(COMPOSITOR_VERSION "" CACHE STRING "Version string shown by the app; empty for the project version")
+if(COMPOSITOR_VERSION STREQUAL "")
+    set(COMPOSITOR_VERSION_STRING "${PROJECT_VERSION}")
+else()
+    set(COMPOSITOR_VERSION_STRING "${COMPOSITOR_VERSION}")
+endif()
 
 # compositor-linux: the Linux port of Compositor. The macOS application (Compositor.xcodeproj)
 # does not use this file; it keeps building from Xcode. See docs/linux-port-architecture.md.
