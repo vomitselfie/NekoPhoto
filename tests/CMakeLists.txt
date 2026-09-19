@@ -50,3 +50,8 @@ endif()
 add_executable(psd_tests psd_tests.cpp)
 target_link_libraries(psd_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME psd_tests COMMAND psd_tests)
+
+# Offline background-removal harness: runs the pipeline on a PNG and dumps every stage, or scores a
+# directory of image/alpha pairs (SAD, MSE, MAD, Grad, Conn). Not a test; see docs/background-removal-review.md.
+add_executable(matte_tool matte_tool.cpp)
+target_link_libraries(matte_tool PRIVATE compositor::core compositor_warnings)

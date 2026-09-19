@@ -1055,6 +1055,47 @@ TEST_CASE(matting_band_recovers_a_soft_edge) {
     CHECK_NEAR(MatteSettings().normalized().matting, 0, 1e-9);
 }
 
+TEST_CASE(matting_band_recovers_thin_strands_far_from_the_body) {
+    // Dark strands one to two pixels wide leave a body and run across a light, gently textured background;
+    // the coarse matte is the hard threshold of the truth. Global sampling explains the strand pixels with
+    // body colour from the sure region and background colour from around them, however far the strand runs.
+    const int w = 160, h = 120;
+    struct Strand { double y0, slope; };
+    const Strand strands[5] = {{20, 0.05}, {40, -0.08}, {60, 0.0}, {80, 0.12}, {100, -0.03}};
+    auto truth = [&](int x, int y) {
+        if (x < 40) return 1.0;
+        double a = 0;
+        for (const Strand& st : strands) {
+            double cy = st.y0 + (x - 40) * st.slope;
+            a = std::max(a, std::clamp(1.4 - std::fabs(y - cy), 0.0, 1.0));
+        }
+        return a;
+    };
+    auto image = std::make_shared<Image>(w, h);
+    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+        const double a = truth(x, y);
+        const double br = 205 + 20 * std::sin(x / 7.0), bg = 195 + 15 * std::cos(y / 5.0), bb = 175 + 10 * std::sin((x + y) / 9.0);
+        uint8_t* p = image->pixel(x, y);
+        p[0] = uint8_t(std::lround(60 * a + br * (1 - a))); p[1] = uint8_t(std::lround(40 * a + bg * (1 - a))); p[2] = uint8_t(std::lround(30 * a + bb * (1 - a))); p[3] = 255;
+    }
+    GrayImage coarse(w, h, 0);
+    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) coarse.at(x, y) = truth(x, y) > 0.5 ? 255 : 0;
+    auto matted = matteBand(coarse, *image, 8, 0);
+    double total = 0; int count = 0;
+    for (int y = 4; y < h - 4; y++) for (int x = 44; x < 150; x++) { total += std::fabs(matted->at(x, y) / 255.0 - truth(x, y)); count++; }
+    const double mad = total / count;
+    std::printf("  thin strands: mean absolute error %.4f\n", mad);
+    CHECK(mad < 0.05);
+    // Far along the strands, on each one and at the nearest empty pixel below it.
+    for (const Strand& st : strands) {
+        const int x = 140, cy = int(std::lround(st.y0 + (x - 40) * st.slope));
+        CHECK(matted->at(x, cy) > 170);
+        int empty = cy + 3;
+        while (empty < h - 1 && truth(x, empty) > 0) empty++;
+        CHECK(matted->at(x, empty) < 50);
+    }
+}
+
 TEST_CASE(matte_cleanup_removes_speckle_but_keeps_the_edge) {
     // A subject on the left with a soft ramp at its edge, a soft speck floating in the background and a soft
     // patch inside the subject: the ramp stays, the speck goes transparent, the patch opaque.

@@ -50,10 +50,21 @@ std::shared_ptr<Image> estimateForeground(const Image& image, const GrayImage& m
 /// Guided filtering (He, Sun & Tang): `mask` pulled onto the edges of `guide` (the layer's pixels), on a copy no
 /// larger than `limit` on its longest side (0 for full size).
 std::shared_ptr<GrayImage> guidedRefine(const GrayImage& mask, const Image& guide, double radius, int limit);
-/// Matting within `band` pixels of the matte's edge (Gastal & Oliveira's shared sampling): each pixel's
-/// opacity is solved from foreground and background colours found along rays into the sure regions, the
-/// best-explaining pairs are shared between neighbours, and the result is smoothed by confidence and colour.
-std::shared_ptr<GrayImage> matteBand(const GrayImage& matte, const Image& guide, double band, int limit);
+/// Matting within `band` pixels of the edge, by global sampling (He, Rhemann, Rother, Tang & Sun 2011): every
+/// sure pixel near the band is a candidate, each unknown pixel searches the (foreground, background) pairs
+/// PatchMatch-style for the one that explains its colour best and lies nearby, and the opacities are smoothed
+/// by confidence and colour. The band is cut around `trimapFrom`'s edge when given (the model's own mask,
+/// whose interior has no dips), else around `matte`'s; the values outside it come from `matte`.
+struct MatteDebug;
+std::shared_ptr<GrayImage> matteBand(const GrayImage& matte, const Image& guide, double band, int limit, const GrayImage* trimapFrom = nullptr, MatteDebug* debug = nullptr);
+
+/// What `matteBand` saw and chose, at its working size, for the matte tool: the trimap (0 background, 128
+/// unknown, 255 foreground), the foreground and background colours chosen for every band pixel, and the
+/// opacity those pairs imply before smoothing.
+struct MatteDebug {
+    std::shared_ptr<GrayImage> trimap, pairAlpha;
+    std::shared_ptr<Image> chosenF, chosenB;
+};
 /// The panel's controls applied in order: refine, matting, cleanup, shift edge, contrast.
 std::shared_ptr<GrayImage> refineMatte(const GrayImage& mask, const Image& guide, const MatteSettings& settings, int limit);
 
