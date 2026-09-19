@@ -3,6 +3,7 @@
 #include "compositor/heal.h"
 #include "compositor/inpaint.h"
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <random>
 #include <vector>
@@ -121,7 +122,8 @@ TEST_CASE(content_fill_continues_stripes_through_a_hole) {
     REQUIRE(contentFill(img, hole));
     int good = 0, total = 0;
     for (int y = 48; y < 72; y++) for (int x = 68; x < 92; x++, total++) if (std::abs(int(img.pixel(x, y)[0]) - stripe(x)) <= 25) good++;
-    CHECK(good * 10 >= total * 9);
+    std::fprintf(stderr, "  stripes continued: %d of %d\n", good, total);
+    CHECK(good * 100 >= total * 97);
     CHECK_EQ(int(img.pixel(80, 60)[3]), 255);
     // Pixels outside the hole are untouched.
     CHECK_EQ(int(img.pixel(10, 10)[0]), int(stripe(10)));
@@ -133,6 +135,22 @@ TEST_CASE(content_fill_continues_stripes_through_a_hole) {
     GrayImage some(w, h, 0);
     for (int y = 10; y < 20; y++) for (int x = 10; x < 20; x++) some.at(x, y) = 255;
     CHECK(!contentFill(transparent, some));
+}
+
+TEST_CASE(content_fill_keeps_a_repeating_pattern_in_phase) {
+    // A checkerboard of 12 px cells with a hole two cells wide: the dominant offsets keep the synthesis on
+    // the pattern's period, so nearly every filled pixel lands on the right cell.
+    const int w = 168, h = 144;
+    Image img(w, h);
+    auto cell = [](int x, int y) { return uint8_t(((x / 12) + (y / 12)) % 2 ? 200 : 50); };
+    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) { uint8_t* p = img.pixel(x, y); p[0] = cell(x, y); p[1] = uint8_t(cell(x, y) / 2); p[2] = uint8_t(255 - cell(x, y)); p[3] = 255; }
+    GrayImage hole(w, h, 0);
+    for (int y = 60; y < 84; y++) for (int x = 72; x < 96; x++) { hole.at(x, y) = 255; uint8_t* p = img.pixel(x, y); p[0] = p[1] = p[2] = 128; }
+    REQUIRE(contentFill(img, hole));
+    int good = 0, total = 0;
+    for (int y = 60; y < 84; y++) for (int x = 72; x < 96; x++, total++) if (std::abs(int(img.pixel(x, y)[0]) - cell(x, y)) <= 30) good++;
+    std::fprintf(stderr, "  pattern in phase: %d of %d\n", good, total);
+    CHECK(good * 100 >= total * 95);
 }
 
 TEST_CASE(content_fill_keeps_a_flat_field_flat) {

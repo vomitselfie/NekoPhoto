@@ -154,17 +154,23 @@ int main(int argc, char** argv) {
         report("resample -> 6000x4500 lanczos3", timeMs([&] { (void)resampleAxisAligned(base, 6000, 4500, 1.0 / 3, 2.0 / 3, 1.0 / 3, 2.0 / 3, ResampleFilter::Lanczos3); }, 2));
     }
     if (want("heal")) {
+        // On the crop the brush hands the heal (about three spot widths around it), so the timings are the
+        // heal's own, not a 48 MB copy.
         for (int r : {20, 60, 150}) {
-            GrayImage coverage(W, H, 0);
-            for (int y = H / 2 - r; y < H / 2 + r; y++) for (int x = W / 2 - r; x < W / 2 + r; x++) if (std::hypot(x - W / 2, y - H / 2) < r) coverage.at(x, y) = 255;
-            Image img = base;
+            const int side = std::min(W, std::max(400, int((r * 2 + 32) * 6.4)));
+            auto crop = cropImage(base, W / 2 - side / 2, H / 2 - side / 2, side, side);
+            GrayImage coverage(side, side, 0);
+            for (int y = 0; y < side; y++) for (int x = 0; x < side; x++) if (std::hypot(x - side / 2, y - side / 2) < r) coverage.at(x, y) = 255;
+            Image img = *crop;
             char name[64];
             std::snprintf(name, sizeof name, "spot heal %d px content-aware", r * 2);
-            report(name, timeMs([&] { img = base; spotHeal(img, coverage, 1.0f, 0, 1); }));
+            report(name, timeMs([&] { img = *crop; spotHeal(img, coverage, 1.0f, 0, 1); }));
+            std::snprintf(name, sizeof name, "spot heal %d px proximity match", r * 2);
+            report(name, timeMs([&] { img = *crop; spotHeal(img, coverage, 1.0f, 2, 1); }));
             std::snprintf(name, sizeof name, "spot heal %d px create texture", r * 2);
-            report(name, timeMs([&] { img = base; spotHeal(img, coverage, 1.0f, 1, 1); }));
+            report(name, timeMs([&] { img = *crop; spotHeal(img, coverage, 1.0f, 1, 1); }));
             std::snprintf(name, sizeof name, "spot heal %d px (C reference)", r * 2);
-            report(name, timeMs([&] { img = base; spot_heal(img.data(), coverage.data(), size_t(W), size_t(H), size_t(img.stride()), 1.0f, 0, 1); }, r > 100 ? 1 : 2));
+            report(name, timeMs([&] { img = *crop; spot_heal(img.data(), coverage.data(), size_t(side), size_t(side), size_t(img.stride()), 1.0f, 0, 1); }, r > 100 ? 1 : 2));
         }
     }
     if (want("fill")) {

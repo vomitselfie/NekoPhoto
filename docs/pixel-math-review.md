@@ -25,6 +25,7 @@ plan.
 | 5a/5b, geometry and painting | 18, 19, 36 (the shared const base and bounded scans; no copy-on-write tiles), 37 (hard tips only). |
 | G'MIC | Steps 1 and 2 of the plan at the end of this document. |
 | 7, adjustments and the wand | 20 (compare once per pixel in a vectorised range test, fill over the match map, sampled pixels cached per document revision), 26 (tetrahedral 8.8 cube, exact 511-entry Colorize table), 39 (Levels/Curves/Exposure layers are transfers; a run at full opacity in Normal mode with no masks composes into one table applied in place), C2 (a "Photoshop saturation curve" checkbox and `saturationCurve` in the manifest, off by default for Mac parity). Also fixed on the way: the integer Normal blend for adjustment layers rounded negative deltas towards zero, so a darkening layer at full opacity was one level too light. |
+| 15, healing follow-ups | Patches match on colour plus luma gradient (C19), the coarsest level runs three random starts and keeps the field that explains itself best (C19), the field's dominant offsets are offered to every target so repeating patterns stay in phase (C18, now done), Proximity Match adds random candidates and a closing-in search to the reference's fixed ring, and a healing stroke previews its result once the pointer pauses. Stripes and a checkerboard now fill 100 % correctly (90 % before). |
 | 14, matting | C16: a Matting control (band width in pixels) in Remove Background's Advanced panel, `matting` over automation. Within the band the opacity is solved by Gastal & Oliveira's shared sampling: rays into the sure regions (the matte eroded and dilated by the band with running min/max), the best-explaining foreground/background pair per pixel, pairs shared between neighbours, then a confidence- and colour-weighted smoothing; done on the refined matte, before the shift and contrast. 12 MP with a 12 px band: 224 ms (71 ms at the preview limit). |
 | 13, G'MIC step 3 and the preview model | G'MIC step 3: libgmic in-process behind `COMPOSITOR_WITH_LIBGMIC` (one interpreter kept warm with the catalogue), opt-in at runtime with `COMPOSITOR_GMIC_INPROCESS=1` because libgmic 4.0.5 crashes inside `sharpen` when called as a library while the executable handles it. C11: PP-HumanSeg (OpenCV's model zoo, 192 px, 6 ms) is a model in the list and, when downloaded, gives Remove Background an instant coarse preview while the chosen model runs. |
 | 12, painting frames and blur accuracy | 31 (on a document-aligned grid a dab is a precomputed tile at one of 4x4 subpixel phases merged row by row; `stampedDabs` in BrushSettings turns it off for comparison), 32 (`RenderCache`: while one layer is edited the layers below are kept composited and, when every layer above is a plain Normal pixel layer, those are flattened once, so a frame is backdrop + layer + one blend; the canvas keys it on the session's document revision), 34 with C26 (Deriche's fourth-order recursive Gaussian above sigma 6, row-major banded column pass, double state: within a level of the true kernel at every sigma, where the three boxes drifted by several; about 25 % slower than the boxes at 12 MP, 125 ms). C27 not needed. |
@@ -39,8 +40,9 @@ validated, permissively licensed fixed-shape ONNX export to point a download
 at, and the PatchMatch fill of batch 10 covers the same ground offline; C30
 (side-window filtering) is an optional refinement whose own caveat, strands
 thinner than the radius picking the wrong side, is exactly the hair case the
-matte exists for. C18, C20 and C23 are folded into batch 10's notes; C27 was
-not needed once Deriche landed. Everything else in this document is done.
+matte exists for. C18 landed in batch 15; C20 and C23 are folded into batch 10's
+notes; C27 was not needed once Deriche landed. Everything else in this document
+is done.
 
 ## Bugs and waste found on the way
 

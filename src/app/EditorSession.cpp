@@ -27,7 +27,16 @@ Point toPoint(QPointF p) { return {p.x(), p.y()}; }
 
 } // namespace
 
-EditorSession::EditorSession(QObject* parent) : QObject(parent) {}
+EditorSession::EditorSession(QObject* parent) : QObject(parent) {
+    // Spot healing previews its result once the pointer has paused; the stroke goes on from there.
+    healPreview_.setSingleShot(true);
+    healPreview_.setInterval(180);
+    connect(&healPreview_, &QTimer::timeout, this, [this] {
+        if (!stroke_ || strokeMask_) return;
+        stroke_->previewHeal();
+        emit documentChanged({});
+    });
+}
 
 QString EditorSession::title() const {
     if (!document_) return QStringLiteral("compositor-linux");
@@ -1432,6 +1441,7 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
     stroke_->append(toPoint(documentPoint));
     lastBrushPoint_ = documentPoint;
     emit documentChanged(toQRect(stroke_->takeDirtyRect()));
+    if (settings.healing) healPreview_.start();
     return true;
 }
 
@@ -1441,6 +1451,7 @@ void EditorSession::continueBrush(QPointF documentPoint) {
     lastBrushPoint_ = documentPoint;
     Rect dirty = stroke_->takeDirtyRect();
     if (!dirty.isEmpty()) emit documentChanged(toQRect(dirty));
+    if (healPreview_.isActive() || tool_ == Tool::SpotHealing) healPreview_.start();
 }
 
 std::unique_ptr<BrushStroke> EditorSession::makeRasterEdit(const Layer& layer, bool mask, const BrushSettings& settings) const {
@@ -1470,6 +1481,7 @@ void EditorSession::commitRasterEdit(BrushStroke& stroke, const Uuid& layerId, b
 
 void EditorSession::endBrush() {
     if (!stroke_) return;
+    healPreview_.stop();
     std::unique_ptr<BrushStroke> stroke = std::move(stroke_);
     stroke->flush();
     QString name = strokeMask_ ? "Paint Mask" : tool_ == Tool::SpotHealing ? "Spot Healing" : tool_ == Tool::CloneStamp ? "Clone Stamp" : tool_ == Tool::Smudge ? "Blur" : (brushErase ? "Eraser" : "Brush Stroke");
@@ -1478,6 +1490,7 @@ void EditorSession::endBrush() {
 
 void EditorSession::cancelBrush() {
     if (!stroke_) return;
+    healPreview_.stop();
     stroke_.reset();
     emit documentChanged({});
 }

@@ -85,6 +85,8 @@ public:
     };
     /// Finishes the stroke: the new raster cropped to its pixels, and the transform placing it.
     Commit commit();
+    /// A healing stroke's result so far, in the preview image (what commit will do with the spot as painted).
+    void previewHeal();
 
 private:
     void walk(Point to);

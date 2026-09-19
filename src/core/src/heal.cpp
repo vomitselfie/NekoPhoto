@@ -250,22 +250,50 @@ void spotHeal(Image& image, const GrayImage& coverage, float opacity, int mode, 
     int ox = 0, oy = 0;
     bool haveSource = false;
     if (mode != 1) {
+        // The reference's ring of candidates (24 directions at a few distances, nearer ones favoured), plus
+        // random offsets within reach, scored in parallel; then a random search that closes in on the best.
         static const double factors[5] = {1.05, 1.35, 1.75, 2.25, 2.8};
-        const int count = mode == 2 ? 2 : 5;
+        const int count = mode == 2 ? 2 : 5, fixed = count * 24, random = 96;
         struct Candidate { double score; int dx, dy; };
-        std::vector<Candidate> candidates(size_t(count) * 24);
-        parallelRows(0, count * 24, [&](int i0, int i1) {
+        std::vector<Candidate> candidates(size_t(fixed + random));
+        const int reachX = int(factors[size_t(count) - 1] * ww) + ww, reachY = int(factors[size_t(count) - 1] * wh) + wh;
+        uint32_t rng = hash32(seed ^ 0x9e3779b9u) | 1u;
+        for (int i = fixed; i < fixed + random; i++) {
+            rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
+            const int dx = int(rng % unsigned(2 * reachX + 1)) - reachX;
+            rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
+            const int dy = int(rng % unsigned(2 * reachY + 1)) - reachY;
+            candidates[size_t(i)] = {INFINITY, dx, dy};
+        }
+        auto scored = [&](int dx, int dy) {
+            double score = ringScore(image, role, wx0, wy0, ww, wh, dx, dy);
+            if (!std::isfinite(score)) return score;
+            // Nearer patches win ties, more so for Proximity Match.
+            const double distance = std::hypot(double(dx) / ww, double(dy) / wh);
+            return score * (1 + (mode == 2 ? 0.35 : 0.06) * std::max(0.0, distance - 1));
+        };
+        parallelRows(0, fixed + random, [&](int i0, int i1) {
             for (int i = i0; i < i1; i++) {
-                const int f = i / 24, a = i % 24;
-                const double angle = a * M_PI / 12.0;
-                const int dx = int(std::lround(std::cos(angle) * factors[f] * ww)), dy = int(std::lround(std::sin(angle) * factors[f] * wh));
-                double score = ringScore(image, role, wx0, wy0, ww, wh, dx, dy);
-                if (std::isfinite(score)) score *= mode == 2 ? 1.0 + 0.6 * f : 1.0 + 0.1 * f;
-                candidates[size_t(i)] = {score, dx, dy};
+                Candidate& c = candidates[size_t(i)];
+                if (i < fixed) {
+                    const int f = i / 24, a = i % 24;
+                    const double angle = a * M_PI / 12.0;
+                    c.dx = int(std::lround(std::cos(angle) * factors[f] * ww)); c.dy = int(std::lround(std::sin(angle) * factors[f] * wh));
+                }
+                c.score = scored(c.dx, c.dy);
             }
         }, 1);
         double best = INFINITY;
         for (const Candidate& c : candidates) if (c.score < best) { best = c.score; ox = c.dx; oy = c.dy; }
+        for (int radius = std::max(reachX, reachY) / 2; radius >= 4 && std::isfinite(best); radius /= 2)
+            for (int k = 0; k < 4; k++) {
+                rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
+                const int dx = ox + int(rng % unsigned(2 * radius + 1)) - radius;
+                rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
+                const int dy = oy + int(rng % unsigned(2 * radius + 1)) - radius;
+                const double score = scored(dx, dy);
+                if (score < best) { best = score; ox = dx; oy = dy; }
+            }
         if (std::isfinite(best)) {
             const int cx = ox, cy = oy;
             double refined = ringScore(image, role, wx0, wy0, ww, wh, cx, cy);

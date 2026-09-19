@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <unordered_map>
 #include <vector>
 
 namespace compositor {
@@ -23,9 +24,27 @@ struct Level {
     std::vector<int32_t> nn;        // nearest source centre per target, x then y
     std::vector<int32_t> dist;      // its patch distance
     std::vector<int32_t> sources;   // every source centre, x then y, for random draws
+    std::vector<int16_t> grad;      // luma gradient per pixel, x then y, halved: patches match on structure too
+    std::vector<int32_t> offsets;   // the field's most common source offsets, x then y, tried everywhere
     int tx0 = 0, ty0 = 0, tx1 = 0, ty1 = 0;   // the rows and columns holding targets (half-open)
     size_t at(int x, int y) const { return size_t(y) * w + size_t(x); }
 };
+
+/// Luma gradient (central differences, halved so it fits the colour range) over the rows [y0, y1).
+void refreshGradients(Level& L, int y0, int y1) {
+    y0 = std::max(0, y0); y1 = std::min(L.h, y1);
+    if (L.grad.size() != L.pix.size() / 2) L.grad.assign(L.pix.size() / 2, 0);
+    auto luma = [&](int x, int y) { const uint8_t* p = &L.pix[L.at(x, y) * 4]; return (p[0] * 77 + p[1] * 151 + p[2] * 28) >> 8; };
+    parallelRows(y0, y1, [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++)
+            for (int x = 0; x < L.w; x++) {
+                const int left = luma(std::max(0, x - 1), y), right = luma(std::min(L.w - 1, x + 1), y);
+                const int up = luma(x, std::max(0, y - 1)), down = luma(x, std::min(L.h - 1, y + 1));
+                int16_t* g = &L.grad[L.at(x, y) * 2];
+                g[0] = int16_t((right - left) / 2); g[1] = int16_t((down - up) / 2);
+            }
+    }, 32);
+}
 
 /// 1 where any pixel of the (2r+1)^2 box around (x, y), clipped to the level, is set: a row pass of window
 /// counts, then a column pass over those.
@@ -69,18 +88,26 @@ void classify(Level& L, int r) {
     if (L.tx1 <= L.tx0) L.tx0 = L.ty0 = L.tx1 = L.ty1 = 0;
 }
 
-/// Sum of squared differences over the patches at (px, py) and (qx, qy); the source patch is inside the
-/// level, the target's pixels beyond it are skipped. Stops early once past `best`.
+/// Sum of squared differences over the patches at (px, py) and (qx, qy), colour plus the gradient channels
+/// (so a patch that continues an edge beats one that merely matches its colours); the source patch is
+/// inside the level, the target's pixels beyond it are skipped. Stops early once past `best`.
+constexpr int gradientWeight = 2;
 inline int patchDistance(const Level& L, int r, int px, int py, int qx, int qy, int best) {
     int sum = 0;
     for (int j = -r; j <= r; j++) {
         const int ty = py + j;
         if (ty < 0 || ty >= L.h) continue;
         const int x0 = std::max(-r, -px), x1 = std::min(r, L.w - 1 - px);
-        const uint8_t* t = &L.pix[(L.at(px + x0, ty)) * 4];
-        const uint8_t* s = &L.pix[(L.at(qx + x0, qy + j)) * 4];
-        for (int i = x0; i <= x1; i++, t += 4, s += 4)
+        const size_t tp = L.at(px + x0, ty), sp = L.at(qx + x0, qy + j);
+        const uint8_t* t = &L.pix[tp * 4];
+        const uint8_t* s = &L.pix[sp * 4];
+        const int16_t* tg = &L.grad[tp * 2];
+        const int16_t* sg = &L.grad[sp * 2];
+        for (int i = x0; i <= x1; i++, t += 4, s += 4, tg += 2, sg += 2) {
             for (int c = 0; c < 4; c++) { int d = int(t[c]) - int(s[c]); sum += d * d; }
+            const int gx = int(tg[0]) - int(sg[0]), gy = int(tg[1]) - int(sg[1]);
+            sum += gradientWeight * (gx * gx + gy * gy);
+        }
         if (sum >= best) return sum;
     }
     return sum;
@@ -125,6 +152,9 @@ void propagateAndSearch(Level& L, int r, uint32_t& rng, bool forward) {
                 const int step = forward ? -1 : 1;
                 if (x + step >= 0 && x + step < L.w) { size_t n = L.at(x + step, y); if (L.target[n]) consider(L.nn[n * 2] - step, L.nn[n * 2 + 1]); }
                 if (y + step >= y0 && y + step < y1) { size_t n = L.at(x, y + step); if (L.target[n]) consider(L.nn[n * 2], L.nn[n * 2 + 1] - step); }
+                // The field's dominant offsets (He & Sun's statistics of patch offsets): a repeating pattern
+                // found in one part of the hole is offered to every other part.
+                for (size_t k = 0; k + 1 < L.offsets.size(); k += 2) consider(x + L.offsets[k], y + L.offsets[k + 1]);
                 for (int radius = std::max(L.w, L.h); radius >= 1; radius /= 2) {
                     const int qx = bx + int(xorshift(seed) % unsigned(2 * radius + 1)) - radius;
                     const int qy = by + int(xorshift(seed) % unsigned(2 * radius + 1)) - radius;
@@ -134,6 +164,34 @@ void propagateAndSearch(Level& L, int r, uint32_t& rng, bool forward) {
             }
         }
     }, 8);
+}
+
+/// The most common source offsets over the targets (at most `count`), kept as candidates for the next pass.
+void dominantOffsets(Level& L, size_t count = 8) {
+    std::unordered_map<int64_t, int> histogram;
+    for (int y = L.ty0; y < L.ty1; y++)
+        for (int x = L.tx0; x < L.tx1; x++) {
+            const size_t p = L.at(x, y);
+            if (!L.target[p] || L.nn[p * 2] < 0) continue;
+            const int64_t dx = L.nn[p * 2] - x, dy = L.nn[p * 2 + 1] - y;
+            histogram[(dx << 32) ^ (dy & 0xffffffff)]++;
+        }
+    std::vector<std::pair<int, int64_t>> ranked;
+    for (auto& [key, n] : histogram) if (n >= 3) ranked.emplace_back(n, key);
+    std::partial_sort(ranked.begin(), ranked.begin() + long(std::min(count, ranked.size())), ranked.end(), [](auto& a, auto& b) { return a.first > b.first; });
+    L.offsets.clear();
+    for (size_t k = 0; k < std::min(count, ranked.size()); k++) {
+        const int64_t key = ranked[k].second;
+        L.offsets.push_back(int32_t(key >> 32));
+        L.offsets.push_back(int32_t(int64_t(int32_t(key & 0xffffffff))));
+    }
+}
+
+/// The field's total distance over the targets: how well the synthesis explains itself.
+int64_t totalDistance(const Level& L) {
+    int64_t total = 0;
+    for (int y = L.ty0; y < L.ty1; y++) for (int x = L.tx0; x < L.tx1; x++) { size_t p = L.at(x, y); if (L.target[p]) total += L.dist[p]; }
+    return total;
 }
 
 /// The spread of the field's distances, for the vote weights: half the median over the targets.
@@ -266,14 +324,38 @@ bool contentFill(Image& image, const GrayImage& hole, const InpaintOptions& opti
     if (levels[size_t(coarsest)].sources.empty()) return false;
 
     uint32_t rng = options.seed * 2654435761u + 1;
+    // One pass at a level: distances for the current field, propagation and search, the vote, then the
+    // gradients and dominant offsets the next pass reads.
+    auto pass = [&](Level& L, bool forward) {
+        refreshDistances(L, r);
+        propagateAndSearch(L, r, rng, forward);
+        vote(L, r, distanceScale(L));
+        refreshGradients(L, L.ty0 - 1, L.ty1 + 1);
+        dominantOffsets(L);
+    };
     for (int li = coarsest; li >= 0; li--) {
         Level& L = levels[size_t(li)];
         L.nn.assign(L.target.size() * 2, -1); L.dist.assign(L.target.size(), INT32_MAX);
         if (L.sources.empty()) continue;
         if (li == coarsest) {
+            // The coarsest level decides the structure, so a few random starts compete and the field that
+            // explains itself best goes on.
             smoothStart(L);
-            for (int y = L.ty0; y < L.ty1; y++) for (int x = L.tx0; x < L.tx1; x++) { size_t p = L.at(x, y); if (L.target[p]) randomSource(L, rng, L.nn[p * 2], L.nn[p * 2 + 1]); }
+            refreshGradients(L, 0, L.h);
+            Level best;
+            int64_t bestTotal = INT64_MAX;
+            for (int seed = 0; seed < std::max(1, options.seeds); seed++) {
+                Level trial = L;
+                for (int y = trial.ty0; y < trial.ty1; y++) for (int x = trial.tx0; x < trial.tx1; x++) { size_t p = trial.at(x, y); if (trial.target[p]) randomSource(trial, rng, trial.nn[p * 2], trial.nn[p * 2 + 1]); }
+                for (int it = 0; it < options.iterations + 2; it++) pass(trial, (it & 1) == 0);
+                refreshDistances(trial, r);
+                const int64_t total = totalDistance(trial);
+                if (total < bestTotal) { bestTotal = total; best = std::move(trial); }
+            }
+            L = std::move(best);
+            continue;
         } else {
+            refreshGradients(L, 0, L.h);
             // The coarser field, doubled; the hole then takes its first vote at this resolution.
             const Level& C = levels[size_t(li + 1)];
             for (int y = L.ty0; y < L.ty1; y++)
@@ -288,13 +370,10 @@ bool contentFill(Image& image, const GrayImage& hole, const InpaintOptions& opti
                 }
             refreshDistances(L, r);
             vote(L, r, distanceScale(L));
+            refreshGradients(L, L.ty0 - 1, L.ty1 + 1);
+            dominantOffsets(L);
         }
-        const int passes = li == coarsest ? options.iterations + 2 : options.iterations;
-        for (int it = 0; it < passes; it++) {
-            refreshDistances(L, r);
-            propagateAndSearch(L, r, rng, (it & 1) == 0);
-            vote(L, r, distanceScale(L));
-        }
+        for (int it = 0; it < options.iterations; it++) pass(L, (it & 1) == 0);
     }
     const Level& L = levels[0];
     for (int y = 0; y < L.h; y++)

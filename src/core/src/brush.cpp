@@ -555,6 +555,12 @@ void BrushStroke::heal() {
     }
 }
 
+void BrushStroke::previewHeal() {
+    if (!valid_ || !settings_.healing || isMask_) return;
+    flush();
+    heal();
+}
+
 BrushStroke::Commit BrushStroke::commit() {
     Commit result;
     result.transform = layerTransform_;

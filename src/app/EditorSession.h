@@ -19,6 +19,7 @@
 #include <map>
 #include <QColor>
 #include <QObject>
+#include <QTimer>
 #include <QRectF>
 #include <QString>
 #include <memory>
@@ -402,6 +403,7 @@ private:
     Tool tool_ = Tool::Move;
     std::optional<TransformEdit> transformEdit_;
     std::unique_ptr<compositor::BrushStroke> stroke_;
+    QTimer healPreview_;   // a healing stroke shows its result once the pointer pauses
     compositor::Uuid strokeLayerId_;
     bool strokeMask_ = false;
     std::optional<QPointF> lastBrushPoint_;

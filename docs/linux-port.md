@@ -168,8 +168,10 @@ packaging/                      .desktop, icon, MIME type
 - Spot Healing Brush (Content-Aware, Create Texture, Proximity Match) and
   Clone Stamp (aligned or not, sampling one layer or all). Content-Aware
   healing and Content-Aware Fill synthesise from the surroundings with
-  PatchMatch, so edges and patterns continue; the fill grows the layer past
-  its edge when the selection reaches out.
+  PatchMatch (matching on colour and gradient, keeping repeating patterns in
+  phase), so edges and patterns continue; a healing stroke previews its result
+  once the pointer pauses; the fill grows the layer past its edge when the
+  selection reaches out.
 - Cut, Copy, Copy Merged, Paste (as a new layer, back in place, or centred
   for images from other apps) and Layer via Copy, through the system clipboard.
 - Selections: rectangular and elliptical marquee, freehand and polygonal
