@@ -62,6 +62,7 @@ private:
 
     std::shared_ptr<const compositor::Image> source_;
     compositor::LayerTransform transform_;
+    std::optional<compositor::Uuid> layerId_;   // the layer this dialog opened on: its preview and result go there, whatever becomes active meanwhile
     std::shared_ptr<const compositor::Image> previewSource_;
     double previewScale_ = 1;
     std::shared_ptr<compositor::GrayImage> coverage_, previewCoverage_;

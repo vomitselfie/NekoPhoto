@@ -2655,9 +2655,10 @@ bool EditorSession::canAdjustPixels() const {
     return selectedLayerIds_.size() == 1;
 }
 
-void EditorSession::setPixelPreview(std::shared_ptr<const Image> image, std::optional<LayerTransform> transform) {
+void EditorSession::setPixelPreview(std::shared_ptr<const Image> image, std::optional<LayerTransform> transform, std::optional<Uuid> layerId) {
     previewImage_ = std::move(image);
     previewTransform_ = transform;
+    previewLayerId_ = layerId ? layerId : activeLayerId_;
     emit documentChanged({});
 }
 
@@ -2665,6 +2666,7 @@ void EditorSession::clearPixelPreview() {
     if (!previewImage_) return;
     previewImage_.reset();
     previewTransform_.reset();
+    previewLayerId_.reset();
     emit documentChanged({});
 }
 
@@ -2680,9 +2682,9 @@ std::shared_ptr<GrayImage> EditorSession::selectionOnGrid(const LayerTransform& 
     return selectionInGrid(*document_->selection->coverage, transform.pixelToDocument(width, height), width, height);
 }
 
-void EditorSession::commitPixels(std::shared_ptr<const Image> image, const LayerTransform& transform, const QString& name) {
+void EditorSession::commitPixels(std::shared_ptr<const Image> image, const LayerTransform& transform, const QString& name, std::optional<Uuid> layerId) {
     clearPixelPreview();
-    Layer* layer = activeLayerMutable();
+    Layer* layer = layerId ? (document_ ? document_->find(*layerId) : nullptr) : activeLayerMutable();
     if (!layer || !image) return;
     beginEdit(name);
     // A mask covering the old grid stays where it was when the layer grows.
@@ -2725,9 +2727,9 @@ std::array<std::vector<double>, 4> EditorSession::activeHistogram() const {
     return levelsHistogram(*layer->asset->image, coverage.get());
 }
 
-void EditorSession::applySubjectMask(std::shared_ptr<const GrayImage> mask, std::shared_ptr<const Image> pixels) {
+void EditorSession::applySubjectMask(std::shared_ptr<const GrayImage> mask, std::shared_ptr<const Image> pixels, std::optional<Uuid> layerId) {
     clearPixelPreview();
-    Layer* layer = activeLayerMutable();
+    Layer* layer = layerId ? (document_ ? document_->find(*layerId) : nullptr) : activeLayerMutable();
     if (!layer || !mask || !layer->asset || !layer->asset->image) return;
     const Image& src = *layer->asset->image;
     if (mask->width() != src.width() || mask->height() != src.height()) return;
@@ -2879,11 +2881,11 @@ Overrides EditorSession::renderOverrides() const {
         }
     }
     if (blendPreview_ && activeLayerId_) overrides[*activeLayerId_].blendMode = *blendPreview_;
-    if (previewImage_ && activeLayerId_) {
-        LayerOverride& o = overrides[*activeLayerId_];
+    if (previewImage_ && previewLayerId_ && document_ && document_->find(*previewLayerId_)) {
+        LayerOverride& o = overrides[*previewLayerId_];
         o.image = previewImage_;
         if (previewTransform_) o.transform = *previewTransform_;
-        const Layer* layer = document_ ? document_->find(*activeLayerId_) : nullptr;
+        const Layer* layer = document_->find(*previewLayerId_);
         if (layer && layer->mask && !layer->mask->placement && previewTransform_ && !previewTransform_->samePlacement(layer->transform)) o.maskPlacement = std::optional<LayerTransform>(layer->transform);
     }
     auto strokeOverride = [&](const BrushStroke& stroke, const Uuid& layerId, bool mask) {

@@ -362,21 +362,25 @@ public:
     // Destructive adjustments and filters on the active layer's pixels, inside the selection.
     bool canAdjustPixels() const;
     /// Shows `image` (placed by `transform`, or the layer's own) in place of the active layer while a dialog is open.
-    void setPixelPreview(std::shared_ptr<const compositor::Image> image, std::optional<compositor::LayerTransform> transform);
+    /// Shows `image` in place of a layer's pixels until cleared: `layerId`'s, or the active layer's at the time
+    /// of the call. The preview stays with that layer whatever becomes active meanwhile.
+    void setPixelPreview(std::shared_ptr<const compositor::Image> image, std::optional<compositor::LayerTransform> transform, std::optional<compositor::Uuid> layerId = std::nullopt);
     void clearPixelPreview();
     /// The active layer's pixels (grown by `margin` layer pixels for blurs), and the transform placing them.
     std::shared_ptr<const compositor::Image> adjustmentSource(int margin, compositor::LayerTransform& transform) const;
     /// The selection as coverage on that grid, or null when everything is selected.
     std::shared_ptr<compositor::GrayImage> selectionOnGrid(const compositor::LayerTransform& transform, int width, int height) const;
     /// Replaces the active layer's pixels with `image` at `transform` as one undo step.
-    void commitPixels(std::shared_ptr<const compositor::Image> image, const compositor::LayerTransform& transform, const QString& name);
+    /// Replaces a layer's pixels as one undo step: `layerId`'s, or the active layer's. A dialog that opened on
+    /// one layer passes that layer, so its result never lands on whatever was selected since.
+    void commitPixels(std::shared_ptr<const compositor::Image> image, const compositor::LayerTransform& transform, const QString& name, std::optional<compositor::Uuid> layerId = std::nullopt);
     void invertActive();
     std::array<std::vector<double>, 4> activeHistogram() const;
     /// Remove Background: `mask` (white over the subject, the active layer's pixel grid) becomes the layer mask,
     /// multiplied with any mask already there; with a selection only the selected part changes.
     /// Hides the background behind `mask` as a layer mask; `pixels`, when given at the layer's size, replaces the
     /// layer's pixels in the same undo step (the edge colours after foreground estimation).
-    void applySubjectMask(std::shared_ptr<const compositor::GrayImage> mask, std::shared_ptr<const compositor::Image> pixels = nullptr);
+    void applySubjectMask(std::shared_ptr<const compositor::GrayImage> mask, std::shared_ptr<const compositor::Image> pixels = nullptr, std::optional<compositor::Uuid> layerId = std::nullopt);
 
     // Crop / canvas
     void cropTo(const QRectF& rect);
@@ -456,6 +460,7 @@ private:
     std::optional<compositor::Document> document_;
     compositor::DocumentHistory history_;
     std::optional<compositor::Uuid> activeLayerId_;
+    std::optional<compositor::Uuid> previewLayerId_;   // the layer the pixel preview stands in for
     std::set<compositor::Uuid> selectedLayerIds_;
     bool isMaskSelected_ = false;
     QString projectPath_;

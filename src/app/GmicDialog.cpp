@@ -222,6 +222,7 @@ GmicDialog::GmicDialog(EditorSession* session, QWidget* parent) : QDialog(parent
     connect(update_, &QPushButton::clicked, this, &GmicDialog::updateFilters);
 
     source_ = session_->adjustmentSource(0, transform_);
+    layerId_ = session_->activeLayerId();
     if (source_) {
         previewSource_ = previewCopy(source_, previewLimit, previewScale_);
         coverage_ = session_->selectionOnGrid(transform_, source_->width(), source_->height());
@@ -455,7 +456,7 @@ void GmicDialog::previewFinished(std::shared_ptr<Image> result, QString error) {
     if (!result) { status_->setText(error); session_->clearPixelPreview(); return; }
     status_->clear();
     if (previewCoverage_) blendThroughCoverage(*result, *previewSource_, *previewCoverage_);
-    session_->setPixelPreview(result, std::nullopt);
+    session_->setPixelPreview(result, std::nullopt, layerId_);
     if (debounce_.isActive()) return;   // a newer preview is already scheduled
 }
 
@@ -475,7 +476,7 @@ void GmicDialog::applyAndClose() {
         if (!result) { status_->setText(error); QMessageBox::warning(this, tr("G'MIC"), error); return; }
         if (coverage_) blendThroughCoverage(*result, *source_, *coverage_);
         finished_ = true;
-        session_->commitPixels(result, transform_, tr("G'MIC: %1").arg(customCommand_ ? command.section(' ', 0, 0) : current_.name));
+        session_->commitPixels(result, transform_, tr("G'MIC: %1").arg(customCommand_ ? command.section(' ', 0, 0) : current_.name), layerId_);
         QDialog::done(QDialog::Accepted);
     });
     runner->start(source_, command);

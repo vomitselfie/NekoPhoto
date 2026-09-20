@@ -68,6 +68,7 @@ PixelAdjustmentDialog::PixelAdjustmentDialog(EditorSession* session, AdjustmentK
     layout->addWidget(buttons);
 
     source_ = session_->adjustmentSource(0, transform_);
+    layerId_ = session_->activeLayerId();
     if (source_) {
         // Levels and Hue/Saturation preview at full size (a lookup per pixel); the rest from a reduced copy.
         int limit = (kind == AdjustmentKind::Levels || kind == AdjustmentKind::HueSaturation) ? 8000 : previewLimit;
@@ -96,7 +97,7 @@ void PixelAdjustmentDialog::refreshPreview() {
     if (!preview_->isChecked() || editor_->settings().isIdentity()) { session_->clearPixelPreview(); return; }
     auto out = run(*previewSource_, previewScale_);
     if (previewCoverage_) blendThroughCoverage(*out, *previewSource_, *previewCoverage_);
-    session_->setPixelPreview(out, std::nullopt);
+    session_->setPixelPreview(out, std::nullopt, layerId_);
 }
 
 void PixelAdjustmentDialog::done(int result) {
@@ -105,7 +106,7 @@ void PixelAdjustmentDialog::done(int result) {
     if (result == QDialog::Accepted && source_ && !editor_->settings().isIdentity()) {
         auto out = run(*source_, 1);
         if (coverage_) blendThroughCoverage(*out, *source_, *coverage_);
-        session_->commitPixels(out, transform_, QString::fromUtf8(adjustmentKindName(editor_->settings().kind)));
+        session_->commitPixels(out, transform_, QString::fromUtf8(adjustmentKindName(editor_->settings().kind)), layerId_);
     } else session_->clearPixelPreview();
     QDialog::done(result);
 }
@@ -185,6 +186,7 @@ void FilterDialog::prepareSource() {
     if (source_ && margin <= margin_) return;
     margin_ = std::max(margin_, margin);
     source_ = session_->adjustmentSource(margin_, transform_);
+    layerId_ = session_->activeLayerId();
     if (!source_) return;
     bool fullSize = kind_ == FilterKind::AddNoise;
     previewSource_ = fullSize ? source_ : previewCopy(source_, previewLimit, previewScale_);
@@ -205,7 +207,7 @@ void FilterDialog::refreshPreview() {
     if (!preview_->isChecked() || identity) { session_->clearPixelPreview(); return; }
     auto out = run(*previewSource_, previewScale_);
     if (previewCoverage_) blendThroughCoverage(*out, *previewSource_, *previewCoverage_);
-    session_->setPixelPreview(out, transform_);
+    session_->setPixelPreview(out, transform_, layerId_);
 }
 
 void FilterDialog::done(int result) {
@@ -218,7 +220,7 @@ void FilterDialog::done(int result) {
         LayerTransform placed = transform_;
         std::shared_ptr<const Image> image = out;
         if (kind_ == FilterKind::GaussianBlur || kind_ == FilterKind::MotionBlur) image = trimToPixels(*out, transform_, placed);
-        session_->commitPixels(image, placed, QString::fromUtf8(filterKindName(kind_)));
+        session_->commitPixels(image, placed, QString::fromUtf8(filterKindName(kind_)), layerId_);
     } else session_->clearPixelPreview();
     QDialog::done(result);
 }
@@ -229,6 +231,7 @@ BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QS
     : QDialog(parent), session_(session), modelPath_(std::move(modelPath)) {
     setWindowTitle(tr("Remove Background"));
     source_ = session_->adjustmentSource(0, transform_);
+    layerId_ = session_->activeLayerId();
     // The matting band is worth a few percent of the short side on a big photo.
     const int mattingMax = source_ ? std::max(40, int(std::lround(std::min(source_->width(), source_->height()) * 0.025))) : 40;
     setModal(false);
@@ -374,7 +377,7 @@ void BackgroundDialog::refreshPreview() {
         uint8_t* p = out->pixel(x, y);
         for (int c = 0; c < 4; c++) p[c] = uint8_t((p[c] * k + 127) / 255);
     }
-    session_->setPixelPreview(out, std::nullopt);
+    session_->setPixelPreview(out, std::nullopt, layerId_);
 }
 
 void BackgroundDialog::done(int result) {
@@ -386,7 +389,7 @@ void BackgroundDialog::done(int result) {
         auto mask = refined(0);
         std::shared_ptr<const Image> pixels;
         if (advancedMode_ && settings_.decontaminate) pixels = estimateForeground(*source_, *mask);
-        session_->applySubjectMask(mask, pixels);
+        session_->applySubjectMask(mask, pixels, layerId_);
     } else session_->clearPixelPreview();
     QDialog::done(result);
 }
