@@ -162,8 +162,16 @@ void CanvasWidget::paintEvent(QPaintEvent*) {
         painter.drawText(rect(), Qt::AlignCenter, tr("Open an image or project, or drop one here.\nFile > New creates a blank canvas."));
         return;
     }
-    QRectF docView = documentViewRect();
     double dpr = devicePixelRatioF();
+    // A move to a screen with another scale changes the device pixel ratio without a resize: the viewport
+    // would keep the old scale for the overlay while the render used the new one, and the ants, prompts and
+    // rulers would sit away from the image.
+    if (std::fabs(session_->viewport.backingScale - std::max(1.0, dpr)) > 1e-9) {
+        syncViewport();
+        cacheValid_ = false;
+        emit session_->viewportChanged();
+    }
+    QRectF docView = documentViewRect();
     static QPixmap checker;
     static double checkerDpr = 0;
     if (checkerDpr != dpr) { checker = checkerPixmap(dpr); checkerDpr = dpr; }
