@@ -71,6 +71,10 @@ struct MatteSettings {
     /// The edge pixels' colours are replaced by the subject's own colour, so no rim of the old background
     /// tints them over a new one (`estimateForeground`; Photoshop's Decontaminate Colors).
     bool decontaminate = true;
+    // Variants judged by the harness (docs/background-removal-review.md items 13 to 15); off unless adopted.
+    bool highPass = false;     // the guided filter on Gaussian high-passed signals (Zhao & He 2025)
+    bool sideWindows = false;  // side-window coefficients where the mask is soft (Yin, Gong & Qiu 2019)
+    bool narrowBand = false;   // band pixels whose colour clearly belongs to one side are decided before matting
     MatteSettings normalized() const;
 };
 
@@ -87,14 +91,14 @@ std::shared_ptr<Image> estimateForeground(const Image& image, const GrayImage& m
 
 /// Guided filtering (He, Sun & Tang): `mask` pulled onto the edges of `guide` (the layer's pixels), on a copy no
 /// larger than `limit` on its longest side (0 for full size).
-std::shared_ptr<GrayImage> guidedRefine(const GrayImage& mask, const Image& guide, double radius, int limit);
+std::shared_ptr<GrayImage> guidedRefine(const GrayImage& mask, const Image& guide, double radius, int limit, bool highPass = false, bool sideWindows = false);
 /// Matting within `band` pixels of the edge, by global sampling (He, Rhemann, Rother, Tang & Sun 2011): every
 /// sure pixel near the band is a candidate, each unknown pixel searches the (foreground, background) pairs
 /// PatchMatch-style for the one that explains its colour best and lies nearby, and the opacities are smoothed
 /// by confidence and colour. The band is cut around `trimapFrom`'s edge when given (the model's own mask,
 /// whose interior has no dips), else around `matte`'s; the values outside it come from `matte`.
 struct MatteDebug;
-std::shared_ptr<GrayImage> matteBand(const GrayImage& matte, const Image& guide, double band, int limit, const GrayImage* trimapFrom = nullptr, MatteDebug* debug = nullptr);
+std::shared_ptr<GrayImage> matteBand(const GrayImage& matte, const Image& guide, double band, int limit, const GrayImage* trimapFrom = nullptr, MatteDebug* debug = nullptr, bool narrow = false);
 
 /// What `matteBand` saw and chose, at its working size, for the matte tool: the trimap (0 background, 128
 /// unknown, 255 foreground), the foreground and background colours chosen for every band pixel, and the

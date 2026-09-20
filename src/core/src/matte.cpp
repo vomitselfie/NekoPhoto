@@ -24,7 +24,7 @@ namespace compositor {
 
 MatteSettings MatteSettings::normalized() const {
     auto c = [](double v, double lo, double hi, double f) { return std::isfinite(v) ? std::min(hi, std::max(lo, v)) : f; };
-    return {c(refineEdges, 0, 40, 12), c(contrast, 0, 100, 25), c(shiftEdge, -10, 10, 0), c(matting, 0, 400, 0), cleanup, decontaminate};
+    return {c(refineEdges, 0, 40, 12), c(contrast, 0, 100, 25), c(shiftEdge, -10, 10, 0), c(matting, 0, 400, 0), cleanup, decontaminate, highPass, sideWindows, narrowBand};
 }
 
 namespace {
@@ -191,7 +191,39 @@ void runningExtreme(GrayImage& image, int r, bool takeMax) {
 
 } // namespace
 
-std::shared_ptr<GrayImage> guidedRefine(const GrayImage& mask, const Image& guide, double radius, int limit) {
+namespace {
+
+/// Three box passes: a low-pass close to a Gaussian of sigma about `radius`.
+Map lowPass(const Map& src, int width, int height, int radius) {
+    Map a, b;
+    boxMean(src, a, width, height, radius);
+    boxMean(a, b, width, height, radius);
+    boxMean(b, a, width, height, radius);
+    return a;
+}
+
+/// Sums over any rectangle of a map in constant time.
+struct Integral {
+    int w = 0, h = 0;
+    std::vector<double> s;
+    Integral(const Map& src, int width, int height) : w(width), h(height), s(size_t(width + 1) * size_t(height + 1), 0.0) {
+        for (int y = 0; y < h; y++) {
+            double row = 0;
+            for (int x = 0; x < w; x++) { row += src[size_t(y) * w + size_t(x)]; s[size_t(y + 1) * size_t(w + 1) + size_t(x + 1)] = s[size_t(y) * size_t(w + 1) + size_t(x + 1)] + row; }
+        }
+    }
+    double mean(int x0, int y0, int x1, int y1) const {   // inclusive corners, clipped
+        x0 = std::max(0, x0); y0 = std::max(0, y0); x1 = std::min(w - 1, x1); y1 = std::min(h - 1, y1);
+        if (x1 < x0 || y1 < y0) return 0;
+        const size_t stride = size_t(w + 1);
+        const double sum = s[size_t(y1 + 1) * stride + size_t(x1 + 1)] - s[size_t(y0) * stride + size_t(x1 + 1)] - s[size_t(y1 + 1) * stride + size_t(x0)] + s[size_t(y0) * stride + size_t(x0)];
+        return sum / (double(x1 - x0 + 1) * double(y1 - y0 + 1));
+    }
+};
+
+} // namespace
+
+std::shared_ptr<GrayImage> guidedRefine(const GrayImage& mask, const Image& guide, double radius, int limit, bool highPass, bool sideWindows) {
     constexpr int C = 3;   // guide channels: R, G, B
     const int fullW = mask.width(), fullH = mask.height();
     const double factor = limit > 0 ? std::min(1.0, double(limit) / std::max(fullW, fullH)) : 1;
@@ -206,6 +238,21 @@ std::shared_ptr<GrayImage> guidedRefine(const GrayImage& mask, const Image& guid
     std::array<Map, C> I = sub == 1 ? guideFull : colourLevels(guide, lowW, lowH);   // the guide at the coefficient grid
     Map p = maskLevels(mask, lowW, lowH);                                              // the mask being filtered
     const size_t count = size_t(lowW) * lowH;
+    const Map pOriginal = p;
+    // The high-pass variant filters the guide's and the mask's detail (their Gaussian residuals) with no
+    // intercept, and adds the mask's low-pass back at the end: an explicit "the mask's shape plus the image's
+    // edges" model.
+    std::array<Map, C> lowIFull;
+    Map lowPFull;
+    if (highPass) {
+        for (int c = 0; c < C; c++) { Map low = lowPass(I[size_t(c)], lowW, lowH, r); for (size_t i = 0; i < count; i++) I[size_t(c)][i] -= low[i]; }
+        Map low = lowPass(p, lowW, lowH, r);
+        for (size_t i = 0; i < count; i++) p[i] -= low[i];
+        const int rFull = std::max(1, int(std::lround(radius * factor)));
+        for (int c = 0; c < C; c++) lowIFull[size_t(c)] = lowPass(guideFull[size_t(c)], width, height, rFull);
+        lowPFull = lowPass(maskLevels(mask, width, height), width, height, rFull);
+    }
+    const float centred = highPass ? 0.0f : 1.0f;   // covariances about the mean, or raw moments of residuals
 
     // Means and second moments over the window.
     std::array<Map, C> meanI, meanIp;
@@ -244,14 +291,14 @@ std::shared_ptr<GrayImage> guidedRefine(const GrayImage& mask, const Image& guid
                 float epsilon = std::clamp(lambda / float(gamma[i] * meanInverse), 1e-6f, 1e-2f);
                 double A[C][C], rhs[C];
                 for (int u = 0; u < C; u++) {
-                    for (int v = u; v < C; v++) A[u][v] = A[v][u] = meanII[u][v][i] - meanI[size_t(u)][i] * meanI[size_t(v)][i];
+                    for (int v = u; v < C; v++) A[u][v] = A[v][u] = meanII[u][v][i] - centred * meanI[size_t(u)][i] * meanI[size_t(v)][i];
                     A[u][u] += epsilon;
-                    rhs[u] = meanIp[size_t(u)][i] - meanI[size_t(u)][i] * meanP[i];
+                    rhs[u] = meanIp[size_t(u)][i] - centred * meanI[size_t(u)][i] * meanP[i];
                 }
                 float coefficients[C];
                 solve<C>(A, rhs, coefficients);
-                float offset = meanP[i];
-                for (int c = 0; c < C; c++) { a[size_t(c)][i] = coefficients[c]; offset -= coefficients[c] * meanI[size_t(c)][i]; }
+                float offset = centred * meanP[i];
+                for (int c = 0; c < C; c++) { a[size_t(c)][i] = coefficients[c]; offset -= centred * coefficients[c] * meanI[size_t(c)][i]; }
                 b[i] = offset;
             }
     });
@@ -259,6 +306,53 @@ std::shared_ptr<GrayImage> guidedRefine(const GrayImage& mask, const Image& guid
     Map meanB;
     for (int c = 0; c < C; c++) boxMean(a[size_t(c)], meanA[size_t(c)], lowW, lowH, r);
     boxMean(b, meanB, lowW, lowH, r);
+    if (sideWindows) {
+        // Side-window filtering (Yin, Gong & Qiu, CVPR 2019) where the mask is soft: the coefficients of the
+        // one of eight half windows (left, right, up, down at (2r+1) x (r+1); the four corners at (r+1) x
+        // (r+1)) whose output stays closest to the input, in place of the centred average. A window that
+        // straddles an edge is never chosen, so the edge stays sharp and no halo forms.
+        GrayImage soft(lowW, lowH, 0);
+        for (size_t i = 0; i < count; i++) if (pOriginal[i] > 0.02f && pOriginal[i] < 0.98f) soft.data()[i] = 255;
+        runningExtreme(soft, r, true);
+        std::array<Integral, C> intI{Integral(I[0], lowW, lowH), Integral(I[1], lowW, lowH), Integral(I[2], lowW, lowH)};
+        Integral intP(p, lowW, lowH);
+        std::vector<Integral> intII, intIp;
+        for (int u = 0; u < C; u++) {
+            for (int v = u; v < C; v++) { for (size_t i = 0; i < count; i++) product[i] = I[size_t(u)][i] * I[size_t(v)][i]; intII.emplace_back(product, lowW, lowH); }
+            for (size_t i = 0; i < count; i++) product[i] = I[size_t(u)][i] * p[i];
+            intIp.emplace_back(product, lowW, lowH);
+        }
+        auto pairIndex = [](int u, int v) { if (u > v) std::swap(u, v); return u == 0 ? v : u == 1 ? 2 + v : 5; };   // (0,0)(0,1)(0,2)(1,1)(1,2)(2,2)
+        parallelRows(0, lowH, [&](int y0, int y1) {
+            for (int y = y0; y < y1; y++)
+                for (int x = 0; x < lowW; x++) {
+                    const size_t i = size_t(y) * lowW + size_t(x);
+                    if (!soft.data()[i]) continue;
+                    const float epsilon = std::clamp(lambda / float(gamma[i] * meanInverse), 1e-6f, 1e-2f);
+                    const int windows[8][4] = {{x - r, y - r, x, y + r}, {x, y - r, x + r, y + r}, {x - r, y - r, x + r, y}, {x - r, y, x + r, y + r},
+                                               {x - r, y - r, x, y}, {x, y - r, x + r, y}, {x - r, y, x, y + r}, {x, y, x + r, y + r}};
+                    float bestGap = INFINITY, bestA[C] = {0, 0, 0}, bestB = 0;
+                    for (const int* win : windows) {
+                        double mI[C], mP = intP.mean(win[0], win[1], win[2], win[3]), A[C][C], rhs[C];
+                        for (int c = 0; c < C; c++) mI[c] = intI[size_t(c)].mean(win[0], win[1], win[2], win[3]);
+                        for (int u = 0; u < C; u++) {
+                            for (int v = u; v < C; v++) A[u][v] = A[v][u] = intII[size_t(pairIndex(u, v))].mean(win[0], win[1], win[2], win[3]) - centred * mI[u] * mI[v];
+                            A[u][u] += epsilon;
+                            rhs[u] = intIp[size_t(u)].mean(win[0], win[1], win[2], win[3]) - centred * mI[u] * mP;
+                        }
+                        float coefficients[C];
+                        solve<C>(A, rhs, coefficients);
+                        float offset = centred * float(mP), q = 0;
+                        for (int c = 0; c < C; c++) { offset -= centred * coefficients[c] * float(mI[c]); q += coefficients[c] * I[size_t(c)][i]; }
+                        q += offset;
+                        const float gap = std::fabs(q - p[i]);
+                        if (gap < bestGap) { bestGap = gap; for (int c = 0; c < C; c++) bestA[c] = coefficients[c]; bestB = offset; }
+                    }
+                    for (int c = 0; c < C; c++) meanA[size_t(c)][i] = bestA[c];
+                    meanB[i] = bestB;
+                }
+        });
+    }
 
     // Apply at the working resolution with the full guide.
     std::array<Map, C> up;
@@ -270,7 +364,8 @@ std::shared_ptr<GrayImage> guidedRefine(const GrayImage& mask, const Image& guid
             for (int x = 0; x < width; x++) {
                 size_t i = size_t(y) * width + size_t(x);
                 float q = upB[i];
-                for (int c = 0; c < C; c++) q += up[size_t(c)][i] * guideFull[size_t(c)][i];
+                if (highPass) { q += lowPFull[i]; for (int c = 0; c < C; c++) q += up[size_t(c)][i] * (guideFull[size_t(c)][i] - lowIFull[size_t(c)][i]); }
+                else for (int c = 0; c < C; c++) q += up[size_t(c)][i] * guideFull[size_t(c)][i];
                 result[i] = std::clamp(q, 0.0f, 1.0f);
             }
     });
@@ -304,7 +399,7 @@ inline void score(const float colour[3], float fr, float fg, float fb, float br,
 
 } // namespace
 
-std::shared_ptr<GrayImage> matteBand(const GrayImage& matte, const Image& guide, double bandFull, int limit, const GrayImage* trimapFrom, MatteDebug* debug) {
+std::shared_ptr<GrayImage> matteBand(const GrayImage& matte, const Image& guide, double bandFull, int limit, const GrayImage* trimapFrom, MatteDebug* debug, bool narrow) {
     const int fullW = matte.width(), fullH = matte.height();
     const double factor = limit > 0 ? std::min(1.0, double(limit) / std::max(fullW, fullH)) : 1;
     const int width = std::max(1, int(std::lround(fullW * factor))), height = std::max(1, int(std::lround(fullH * factor)));
@@ -325,12 +420,9 @@ std::shared_ptr<GrayImage> matteBand(const GrayImage& matte, const Image& guide,
     runningExtreme(dilated, band, true);
     enum Region : uint8_t { Unknown = 0, Foreground = 1, Background = 2 };
     std::vector<uint8_t> region(size_t(width) * height, Unknown);
-    std::vector<int32_t> slot(region.size(), -1);   // each unknown pixel's index among the unknowns
-    int32_t unknowns = 0;
     for (size_t i = 0; i < region.size(); i++) {
         if (eroded.data()[i]) region[i] = Foreground;
         else if (!dilated.data()[i]) region[i] = Background;
-        else slot[i] = unknowns++;
     }
     auto at = [&](int x, int y) { return size_t(y) * width + size_t(x); };
     auto colourAt = [&](size_t i, float out[3]) { out[0] = colour[0][i]; out[1] = colour[1][i]; out[2] = colour[2][i]; };
@@ -359,6 +451,37 @@ std::shared_ptr<GrayImage> matteBand(const GrayImage& matte, const Image& guide,
     auto byLuma = [](const Candidate& a, const Candidate& b) { return a.luma < b.luma; };
     std::sort(fs.begin(), fs.end(), byLuma);
     std::sort(bs.begin(), bs.end(), byLuma);
+    if (narrow && !fs.empty() && !bs.empty()) {
+        // Band narrowing (after Liang et al., IET IP 2023): a band pixel whose colour sits on one side's
+        // samples and far from the other's is that side, decided before the pair search.
+        auto distanceTo = [](const std::vector<Candidate>& list, const float c[3]) {
+            const float luma = 0.299f * c[0] + 0.587f * c[1] + 0.114f * c[2];
+            const int n = int(list.size());
+            const int centre = int(std::lower_bound(list.begin(), list.end(), luma, [](const Candidate& a, float v) { return a.luma < v; }) - list.begin());
+            float best = INFINITY;
+            for (int i = std::max(0, centre - 12); i <= std::min(n - 1, centre + 12); i++) {
+                const float dr = list[size_t(i)].r - c[0], dg = list[size_t(i)].g - c[1], db = list[size_t(i)].b - c[2];
+                best = std::min(best, dr * dr + dg * dg + db * db);
+            }
+            return std::sqrt(best);
+        };
+        constexpr float close = 0.04f, far = 0.12f;
+        parallelRows(0, height, [&](int y0, int y1) {
+            for (int y = y0; y < y1; y++)
+                for (int x = 0; x < width; x++) {
+                    const size_t i = at(x, y);
+                    if (region[i] != Unknown) continue;
+                    float c[3];
+                    colourAt(i, c);
+                    const float dF = distanceTo(fs, c), dB = distanceTo(bs, c);
+                    if (dF < close && dB > far) region[i] = Foreground;
+                    else if (dB < close && dF > far) region[i] = Background;
+                }
+        });
+    }
+    std::vector<int32_t> slot(region.size(), -1);   // each unknown pixel's index among the unknowns
+    int32_t unknowns = 0;
+    for (size_t i = 0; i < region.size(); i++) if (region[i] == Unknown) slot[i] = unknowns++;
     const int nF = int(fs.size()), nB = int(bs.size());
     std::vector<Pair> pairs(static_cast<size_t>(unknowns));
     if (unknowns && nF && nB) {
@@ -501,8 +624,8 @@ std::shared_ptr<GrayImage> matteBand(const GrayImage& matte, const Image& guide,
 
 std::shared_ptr<GrayImage> refineMatte(const GrayImage& mask, const Image& guide, const MatteSettings& raw, int limit) {
     MatteSettings s = raw.normalized();
-    std::shared_ptr<GrayImage> out = s.refineEdges > 0 ? guidedRefine(mask, guide, s.refineEdges, limit) : std::make_shared<GrayImage>(mask);
-    if (s.matting > 0) out = matteBand(*out, guide, s.matting, limit, &mask);
+    std::shared_ptr<GrayImage> out = s.refineEdges > 0 ? guidedRefine(mask, guide, s.refineEdges, limit, s.highPass, s.sideWindows) : std::make_shared<GrayImage>(mask);
+    if (s.matting > 0) out = matteBand(*out, guide, s.matting, limit, &mask, nullptr, s.narrowBand);
     if (s.cleanup) cleanMatte(*out);
     if (s.shiftEdge != 0) {
         // Grey-level dilation or erosion: every iso-contour moves by the amount and the soft ramp survives.

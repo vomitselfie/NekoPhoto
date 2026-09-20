@@ -61,6 +61,9 @@ Options parse(int argc, char** argv, int from) {
         else if (a == "--categories") o.categories = next();
         else if (a == "--limit") o.limit = std::stoi(next());
         else if (a == "--flip") o.flip = true;
+        else if (a == "--highpass") o.settings.highPass = true;
+        else if (a == "--sidewindows") o.settings.sideWindows = true;
+        else if (a == "--narrow") o.settings.narrowBand = true;
         else if (a == "--prompt") {
             PointPrompt pt;
             if (std::sscanf(next().c_str(), "%lf,%lf,%d", &pt.x, &pt.y, &pt.label) >= 2) o.prompts.push_back(pt);
@@ -219,7 +222,7 @@ int runMode(int argc, char** argv) {
     if (o.refine && s.matting > 0) {
         MatteDebug debug;
         auto refined = s.refineEdges > 0 ? guidedRefine(*mask, *image, s.refineEdges, 0) : mask;
-        auto band = matteBand(*refined, *image, s.matting, 0, mask.get(), &debug);
+        auto band = matteBand(*refined, *image, s.matting, 0, mask.get(), &debug, s.narrowBand);
         writePngGray(out("band.png"), *band);
         if (debug.trimap) { writePngGray(out("trimap.png"), *debug.trimap); writePngGray(out("pairAlpha.png"), *debug.pairAlpha); writePngImage(out("chosenF.png"), *debug.chosenF); writePngImage(out("chosenB.png"), *debug.chosenB); }
     }
