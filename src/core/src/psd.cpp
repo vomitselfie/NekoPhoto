@@ -252,7 +252,16 @@ std::shared_ptr<Image> assemble(int mode, int width, int height, const std::map<
 
 // ---- Layer records --------------------------------------------------------------------------------
 
-struct MaskRecord { bool present = false; int top = 0, left = 0, bottom = 0, right = 0; uint8_t defaultColour = 0; uint8_t flags = 0; };
+/// One side of a rectangle whose corners came from the file. The subtraction is 64-bit because `right -
+/// left` on two raw i32 overflows, and the result is clamped to what a buffer can hold, so a rectangle can
+/// never size an allocation or a loop beyond the pixel format's limit.
+int extentOf(int low, int high) { return int(std::clamp<int64_t>(int64_t(high) - int64_t(low), 0, maxImageSide)); }
+
+struct MaskRecord {
+    bool present = false; int top = 0, left = 0, bottom = 0, right = 0; uint8_t defaultColour = 0; uint8_t flags = 0;
+    int width() const { return extentOf(left, right); }
+    int height() const { return extentOf(top, bottom); }
+};
 
 struct Record {
     int top = 0, left = 0, bottom = 0, right = 0;
@@ -263,8 +272,8 @@ struct Record {
     std::string name;
     int section = 0;                                   // lsct: 1 open folder, 2 closed folder, 3 the folder's end marker
     std::map<std::string, std::pair<const uint8_t*, size_t>> blocks;   // tagged blocks by key
-    int width() const { return std::max(0, right - left); }
-    int height() const { return std::max(0, bottom - top); }
+    int width() const { return extentOf(left, right); }
+    int height() const { return extentOf(top, bottom); }
 };
 
 bool psbLongKey(const std::string& key) {
@@ -290,6 +299,9 @@ void readTaggedBlocks(Reader& r, size_t end, bool psb, size_t pad, std::map<std:
 Record readRecord(Reader& r, bool psb) {
     Record rec;
     rec.top = r.i32(); rec.left = r.i32(); rec.bottom = r.i32(); rec.right = r.i32();
+    // The rectangle bounds every plane allocated for this layer, so it gets the canvas's own limit instead
+    // of being trusted. Clamping instead would import a plausible-looking layer from a nonsense rectangle.
+    if (int64_t(rec.right) - rec.left > maxImageSide || int64_t(rec.bottom) - rec.top > maxImageSide) throw Truncated{};
     uint16_t channels = r.u16();
     if (channels > 64) throw Truncated{};
     for (int i = 0; i < channels; i++) { Channel c; c.id = r.i16(); c.length = r.length(psb); rec.channels.push_back(c); }
@@ -304,6 +316,7 @@ Record readRecord(Reader& r, bool psb) {
         size_t maskEnd = r.position() + maskLen;
         rec.mask.present = true;
         rec.mask.top = r.i32(); rec.mask.left = r.i32(); rec.mask.bottom = r.i32(); rec.mask.right = r.i32();
+        if (int64_t(rec.mask.right) - rec.mask.left > maxImageSide || int64_t(rec.mask.bottom) - rec.mask.top > maxImageSide) throw Truncated{};
         rec.mask.defaultColour = r.u8(); rec.mask.flags = r.u8();
         r.seek(maskEnd);
     } else r.skip(maskLen);
@@ -544,13 +557,15 @@ std::optional<PsdImport> importPsd(const std::string& path, std::string* error) 
         // Channel image data follows the records, one channel after another in record order.
         auto decodeRecordChannels = [&](const Record& rec, std::map<int, std::vector<uint8_t>>& planes, std::map<int, std::vector<uint8_t>>& maskPlanes, size_t& cursor) {
             for (const Channel& c : rec.channels) {
-                if (c.length < 2 || cursor + c.length > file.size()) throw Truncated{};
+                // Subtraction, not addition: a PSB's channel length is a full 64-bit field, so `cursor +
+                // c.length` wraps and a wrapped sum passes the test while the reader runs off the file.
+                if (c.length < 2 || cursor > file.size() || c.length > file.size() - cursor) throw Truncated{};
                 Reader ch(file.data() + cursor, size_t(c.length));
                 int compression = ch.u16();
                 const uint8_t* data = file.data() + cursor + 2;
                 size_t size = size_t(c.length) - 2;
                 int w = rec.width(), h = rec.height();
-                if (c.id == -2 || c.id == -3) { w = std::max(0, rec.mask.right - rec.mask.left); h = std::max(0, rec.mask.bottom - rec.mask.top); }
+                if (c.id == -2 || c.id == -3) { w = rec.mask.width(); h = rec.mask.height(); }
                 std::vector<uint8_t> plane;
                 std::string why;
                 if (w > 0 && h > 0 && decodePlane(data, size, compression, w, h, depth, psb, plane, &why)) (c.id == -2 || c.id == -3 ? maskPlanes : planes)[c.id] = std::move(plane);

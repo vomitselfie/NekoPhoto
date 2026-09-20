@@ -1275,4 +1275,25 @@ TEST_CASE(subject_from_prompts_when_the_model_is_available) {
     CHECK(subjectFromPrompts(*img, path, {}, &error) == nullptr);
 }
 
+TEST_CASE(image_sizes_beyond_the_buffer_limit_are_empty_rather_than_short) {
+    // A width whose byte stride overflowed an int used to yield a four-byte buffer that claimed to be a
+    // billion pixels wide; every write through it then ran off the heap.
+    Image wrapping(0x40000001, 1);
+    CHECK(wrapping.isEmpty());
+    CHECK_EQ(int(wrapping.byteCount()), 0);
+    Image justOver(maxImageSide + 1, 4);
+    CHECK(justOver.isEmpty());
+    Image negative(-5, 4);
+    CHECK(negative.isEmpty());
+    GrayImage grayWrapping(0x40000001, 1);
+    CHECK(grayWrapping.isEmpty());
+    // The limit itself still holds pixels, and the stride always matches the width it reports.
+    Image atLimit(maxImageSide, 2);
+    CHECK_EQ(atLimit.width(), maxImageSide);
+    CHECK_EQ(atLimit.stride(), maxImageSide * 4);
+    CHECK(atLimit.byteCount() == size_t(maxImageSide) * 4 * 2);
+    GrayImage grayAtLimit(maxImageSide, 2);
+    CHECK(grayAtLimit.byteCount() == size_t(maxImageSide) * 2);
+}
+
 TEST_MAIN()

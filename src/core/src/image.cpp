@@ -8,9 +8,18 @@
 
 namespace compositor {
 
+namespace {
+/// Whether a size can be held as pixels: both sides within the per-side limit. A size that is not (a
+/// negative, or one read from a malformed file) empties the image, so callers see `isEmpty()` rather than a
+/// buffer whose stride claims more than it holds.
+constexpr bool holdable(int width, int height) {
+    return width >= 0 && height >= 0 && width <= maxImageSide && height <= maxImageSide;
+}
+}   // namespace
+
 Image::Image(int width, int height)
-    : width_(std::max(0, width)), height_(std::max(0, height)), stride_(std::max(0, width) * 4),
-      pixels_(size_t(stride_) * size_t(height_), 0) {}
+    : width_(holdable(width, height) ? width : 0), height_(holdable(width, height) ? height : 0),
+      stride_(width_ * 4), pixels_(size_t(stride_) * size_t(height_), 0) {}
 
 void Image::fill(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     for (int y = 0; y < height_; y++) {
@@ -20,7 +29,8 @@ void Image::fill(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
 }
 
 GrayImage::GrayImage(int width, int height, uint8_t value)
-    : width_(std::max(0, width)), height_(std::max(0, height)), pixels_(size_t(width_) * size_t(height_), value) {}
+    : width_(holdable(width, height) ? width : 0), height_(holdable(width, height) ? height : 0),
+      pixels_(size_t(width_) * size_t(height_), value) {}
 
 void GrayImage::fill(uint8_t value) { std::fill(pixels_.begin(), pixels_.end(), value); }
 

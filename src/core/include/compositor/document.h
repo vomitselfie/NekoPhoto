@@ -164,7 +164,7 @@ struct Document {
     Layer* find(const Uuid& id);
     int indexOf(const Uuid& id) const;
 
-    static bool validDimension(int n) { return n >= 1 && n <= 30000; }
+    static bool validDimension(int n) { return n >= 1 && n <= maxImageSide; }
     static constexpr int maxLayers = 10000;
     static constexpr long long pixelBudget = 100000000;
 };

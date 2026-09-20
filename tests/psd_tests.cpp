@@ -20,6 +20,7 @@ struct Out {
     void u8(unsigned v) { b.push_back(uint8_t(v)); }
     void u16(unsigned v) { u8(v >> 8); u8(v); }
     void u32(uint32_t v) { u16(v >> 16); u16(v & 0xffff); }
+    void u64(uint64_t v) { u32(uint32_t(v >> 32)); u32(uint32_t(v)); }
     void i32(int32_t v) { u32(uint32_t(v)); }
     void str(const std::string& s) { b.insert(b.end(), s.begin(), s.end()); }
     void pascal4(const std::string& s) { u8(unsigned(s.size())); str(s); size_t used = 1 + s.size(); while (used % 4) { u8(0); used++; } }
@@ -49,6 +50,7 @@ struct LayerSpec {
     bool mask = false; int maskLeft = 0, maskTop = 0, maskW = 0, maskH = 0; unsigned maskDefault = 255; std::vector<uint8_t> maskPlane;
     std::vector<uint8_t> extraBlock; std::string extraKey;
     std::string unicodeName;
+    uint64_t forcedChannelLength = 0;   // written in place of the real length, to build a malformed file
 };
 
 std::vector<uint8_t> channelData(const LayerSpec& l, const std::vector<uint8_t>& plane, int w, int h) {
@@ -62,9 +64,10 @@ std::vector<uint8_t> channelData(const LayerSpec& l, const std::vector<uint8_t>&
     return o.b;
 }
 
-std::vector<uint8_t> writePsd(int width, int height, const std::vector<LayerSpec>& layers, const std::vector<std::vector<uint8_t>>& compositePlanes) {
+/// `psb` writes the large-document variant: version 2, and the three section lengths that widen to 64 bits.
+std::vector<uint8_t> writePsd(int width, int height, const std::vector<LayerSpec>& layers, const std::vector<std::vector<uint8_t>>& compositePlanes, bool psb = false) {
     Out f;
-    f.str("8BPS"); f.u16(1); for (int i = 0; i < 6; i++) f.u8(0);
+    f.str("8BPS"); f.u16(psb ? 2 : 1); for (int i = 0; i < 6; i++) f.u8(0);
     f.u16(unsigned(compositePlanes.size())); f.u32(uint32_t(height)); f.u32(uint32_t(width)); f.u16(8); f.u16(3);
     f.u32(0);   // colour mode data
     // Image resources: the resolution (0x03ED) at 144 ppi.
@@ -81,7 +84,12 @@ std::vector<uint8_t> writePsd(int width, int height, const std::vector<LayerSpec
         for (size_t i = 0; i < l.ids.size(); i++) chans.push_back({l.ids[i], channelData(l, l.planes[i], l.w, l.h)});
         if (l.mask) chans.push_back({-2, channelData(l, l.maskPlane, l.maskW, l.maskH)});
         records.u16(unsigned(chans.size()));
-        for (auto& [id, data] : chans) { records.u16(uint16_t(int16_t(id))); records.u32(uint32_t(data.size())); channelBytes.insert(channelBytes.end(), data.begin(), data.end()); }
+        for (auto& [id, data] : chans) {
+            records.u16(uint16_t(int16_t(id)));
+            const uint64_t declared = l.forcedChannelLength ? l.forcedChannelLength : uint64_t(data.size());
+            if (psb) records.u64(declared); else records.u32(uint32_t(declared));
+            channelBytes.insert(channelBytes.end(), data.begin(), data.end());
+        }
         records.str("8BIM"); records.str(l.blend); records.u8(l.opacity); records.u8(l.clipping); records.u8(l.flags); records.u8(0);
         Out extra;
         if (l.mask) { extra.u32(20); extra.i32(l.maskTop); extra.i32(l.maskLeft); extra.i32(l.maskTop + l.maskH); extra.i32(l.maskLeft + l.maskW); extra.u8(l.maskDefault); extra.u8(0); extra.u16(0); }
@@ -97,9 +105,11 @@ std::vector<uint8_t> writePsd(int width, int height, const std::vector<LayerSpec
     layerInfo.insert(layerInfo.end(), channelBytes.begin(), channelBytes.end());
     if (layerInfo.size() % 2) layerInfo.push_back(0);
     Out lm;
-    lm.u32(uint32_t(layerInfo.size())); lm.bytes(layerInfo);
+    if (psb) lm.u64(layerInfo.size()); else lm.u32(uint32_t(layerInfo.size()));
+    lm.bytes(layerInfo);
     lm.u32(0);   // global layer mask info
-    f.u32(uint32_t(lm.b.size())); f.bytes(lm.b);
+    if (psb) f.u64(lm.b.size()); else f.u32(uint32_t(lm.b.size()));
+    f.bytes(lm.b);
     // The merged image, raw.
     f.u16(0);
     for (auto& plane : compositePlanes) f.bytes(plane);
@@ -217,6 +227,44 @@ TEST_CASE(psd_without_layers_becomes_one_background_layer) {
     std::string bogus = writeTemp({'h', 'e', 'l', 'l', 'o'}, "bogus.psd");
     CHECK(!importPsd(bogus, &error).has_value());
     CHECK(!error.empty());
+}
+
+TEST_CASE(psd_layer_rectangle_beyond_the_buffer_limit_is_refused) {
+    // The rectangle sizes every plane the importer allocates for the layer, and it comes straight from the
+    // file. One wider than a buffer may be must be refused outright, not clamped into a plausible layer.
+    LayerSpec wide;
+    wide.name = "Wide"; wide.left = 0; wide.top = 0; wide.w = maxImageSide + 10000; wide.h = 1;
+    wide.planes = {std::vector<uint8_t>(8, 128)}; wide.ids = {-1};
+    std::string error;
+    auto imported = importPsd(writeTemp(writePsd(4, 4, {wide}, {solid(4, 4, 10), solid(4, 4, 20), solid(4, 4, 30)}), "oversized-rect.psd"), &error);
+    CHECK(!imported.has_value());
+    CHECK(!error.empty());
+    // The same layer within the limit still imports, so the guard is not simply refusing everything.
+    LayerSpec ordinary = wide;
+    ordinary.w = 2; ordinary.h = 2; ordinary.planes = {solid(2, 2, 128)};
+    auto fine = importPsd(writeTemp(writePsd(4, 4, {ordinary}, {solid(4, 4, 10), solid(4, 4, 20), solid(4, 4, 30)}), "ordinary-rect.psd"), &error);
+    REQUIRE(fine.has_value());
+    CHECK(fine->document.layers.size() == 1);
+}
+
+TEST_CASE(psb_channel_length_that_wraps_the_bounds_check_is_refused) {
+    // A large document's channel length is a full 64-bit field. A value chosen so that cursor + length
+    // wraps used to pass the bounds test, after which the reader ran off the end of the file.
+    LayerSpec layer;
+    // The rectangle is large while the file stays small, so an unchecked length makes the decoder copy
+    // several hundred kilobytes out of a file only a few hundred bytes long.
+    layer.name = "Wrap"; layer.left = 0; layer.top = 0; layer.w = 600; layer.h = 600;
+    layer.planes = {std::vector<uint8_t>(16, 200)}; layer.ids = {-1};
+    layer.forcedChannelLength = 0xFFFFFFFFFFFFFFB0ull;
+    std::string error;
+    auto imported = importPsd(writeTemp(writePsd(4, 4, {layer}, {solid(4, 4, 10), solid(4, 4, 20), solid(4, 4, 30)}, true), "wrapping-length.psb"), &error);
+    CHECK(!imported.has_value());
+    CHECK(!error.empty());
+    // The same file with an honest length is a large document that imports normally.
+    layer.forcedChannelLength = 0;
+    auto fine = importPsd(writeTemp(writePsd(4, 4, {layer}, {solid(4, 4, 10), solid(4, 4, 20), solid(4, 4, 30)}, true), "honest-length.psb"), &error);
+    REQUIRE(fine.has_value());
+    CHECK(fine->document.layers.size() == 1);
 }
 
 TEST_CASE(psd_sample_file_when_available) {

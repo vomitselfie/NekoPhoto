@@ -12,6 +12,11 @@
 
 namespace compositor {
 
+/// The largest side a pixel buffer may have. It is the document's own limit, kept here because the buffer
+/// classes enforce it: with the side bounded, `width * 4` cannot overflow an int, so a stride can never
+/// disagree with the buffer behind it. A size beyond it yields an empty image rather than a short buffer.
+inline constexpr int maxImageSide = 30000;
+
 class Image {
 public:
     Image() = default;
