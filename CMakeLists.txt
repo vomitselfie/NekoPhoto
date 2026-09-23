@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(compositor-linux VERSION 0.7.0 LANGUAGES C CXX)
+project(compositor-linux VERSION 0.8.0 LANGUAGES C CXX)
 
 # Releases pass the tag version in with -DCOMPOSITOR_VERSION; a local build shows the project version
 # above. The override is a cache entry, so it defaults to empty rather than to the project version: a
