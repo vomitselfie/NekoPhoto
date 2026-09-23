@@ -2,6 +2,7 @@
 #include "brushformats.h"
 #include "compositor/png.h"
 #include <algorithm>
+#include <cmath>
 #include <cctype>
 #include <filesystem>
 #include <fstream>
@@ -11,6 +12,21 @@
 namespace compositor {
 
 namespace fs = std::filesystem;
+
+std::shared_ptr<GrayImage> roundTipImage(double diameter, double hardness, double roundness) {
+    const int w = std::clamp(int(std::ceil(diameter)), 1, 1024), h = std::clamp(int(std::ceil(diameter * std::clamp(roundness, 0.01, 1.0))), 1, 1024);
+    auto tip = std::make_shared<GrayImage>(w, h, 0);
+    const double rx = w / 2.0, ry = h / 2.0, solid = std::clamp(hardness, 0.0, 1.0);
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            const double dx = (x + 0.5 - rx) / rx, dy = (y + 0.5 - ry) / ry, d = std::sqrt(dx * dx + dy * dy);
+            double v = d >= 1 ? 0 : d <= solid ? 1 : 1 - (d - solid) / (1 - solid);
+            v = v * v * (3 - 2 * v);   // smoothstep: the soft rim Photoshop draws
+            tip->at(x, y) = uint8_t(std::lround(v * 255));
+        }
+    return tip;
+}
+
 
 std::shared_ptr<GrayImage> tipFromImage(const Image& image) {
     const int w = image.width(), h = image.height();
@@ -64,6 +80,8 @@ std::optional<BrushImport> importBrushFile(const std::string& path, std::string*
     const bool abrSections = file.size() >= 8 && file[0] == 0 && file[1] >= 6 && file[1] <= 10 && std::equal(magic + 4, magic + 8, "8BIM");
     if (abrSections || (extension == ".abr" && file.size() >= 4 && file[0] == 0 && (file[1] == 1 || file[1] == 2)))
         return readAbr(file.data(), file.size(), name, error);
+    // Clip Studio: an SQLite database.
+    if (file.size() >= 16 && std::equal(file.begin(), file.begin() + 16, "SQLite format 3")) return readClipStudio(path, name, error);
     // Procreate: a ZIP (local file header "PK\3\4") holding a Brush.archive.
     if (file.size() >= 4 && std::equal(magic, magic + 4, "PK\x03\x04")) return readProcreate(file.data(), file.size(), name, error);
     // A PNG is a single tip; other raster formats go through the application's image reader.

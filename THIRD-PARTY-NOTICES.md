@@ -43,6 +43,7 @@ the AppImage and the tarball) or in `Contents/Resources/licenses/` (macOS).
 | [zlib](https://zlib.net) | zlib | [zlib.txt](LICENSES/zlib.txt) |
 | [libmypaint](https://github.com/mypaint/libmypaint) 1.6, the MyPaint brush engine | ISC | [libmypaint-ISC.txt](LICENSES/libmypaint-ISC.txt) |
 | [json-c](https://github.com/json-c/json-c), which libmypaint uses to read presets | MIT | [json-c-MIT.txt](LICENSES/json-c-MIT.txt) |
+| [SQLite](https://sqlite.org), which reads Clip Studio brushes | Public domain | none required |
 
 The AppImage also carries system libraries that Qt depends on (fonts, text
 shaping, input, graphics). Their copyright files are collected at build time
@@ -51,6 +52,17 @@ into `share/doc/compositor-linux/bundled/` inside the AppImage and the tarball.
 The source for the GPL program is this repository at the tag of each release.
 Qt, libpng, zlib, libmypaint and json-c are unmodified upstream releases; OpenCV is built from the
 unmodified 4.14.0 source archive by `tools/build-opencv.sh`.
+
+## Formats and references
+
+The brush importers are written from public format descriptions: PKWARE's ZIP
+APPNOTE, Apple's binary property list format (CoreFoundation, APSL), the
+Photoshop brush format as documented by the Archive Team file format wiki and
+read by GIMP and Krita, and, for Procreate's setting names and ranges, the
+schema of [procreate-brush-decoder](https://github.com/aumlette-lab/procreate-brush-decoder)
+by aumlette-lab (MIT licence). No code was taken from these. A
+CC BY-NC brush converter was looked at only for the facts its README states;
+none of its code is used.
 
 ## Used at run time, not distributed
 

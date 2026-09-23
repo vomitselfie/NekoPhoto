@@ -62,21 +62,6 @@ std::shared_ptr<GrayImage> readSampledTip(Reader& r, long long& budget) {
     return tip;
 }
 
-/// A computed (round) brush as an image: an ellipse of `diameter` with `hardness` 0..1 of its radius solid.
-std::shared_ptr<GrayImage> roundTip(double diameter, double hardness, double roundness) {
-    const int w = std::clamp(int(std::ceil(diameter)), 1, 1024), h = std::clamp(int(std::ceil(diameter * std::clamp(roundness, 0.01, 1.0))), 1, 1024);
-    auto tip = std::make_shared<GrayImage>(w, h, 0);
-    const double rx = w / 2.0, ry = h / 2.0, solid = std::clamp(hardness, 0.0, 1.0);
-    for (int y = 0; y < h; y++)
-        for (int x = 0; x < w; x++) {
-            const double dx = (x + 0.5 - rx) / rx, dy = (y + 0.5 - ry) / ry, d = std::sqrt(dx * dx + dy * dy);
-            double v = d >= 1 ? 0 : d <= solid ? 1 : 1 - (d - solid) / (1 - solid);
-            v = v * v * (3 - 2 * v);   // smoothstep: the soft rim Photoshop draws
-            tip->at(x, y) = uint8_t(std::lround(v * 255));
-        }
-    return tip;
-}
-
 // ---- Versions 1 and 2 ----------------------------------------------------------------------------
 
 std::optional<BrushImport> readOld(Reader& r, int version, const std::string& name, std::string* error) {
@@ -95,7 +80,7 @@ std::optional<BrushImport> readOld(Reader& r, int version, const std::string& na
             r.u32();
             const double spacing = r.u16();
             const double diameter = r.u16(), roundness = r.u16(), angle = r.i16(), hardness = r.u16();
-            preset.tip.shape = roundTip(diameter, hardness / 100.0, roundness / 100.0);
+            preset.tip.shape = roundTipImage(diameter, hardness / 100.0, roundness / 100.0);
             preset.tip.spacing = spacing > 0 ? spacing / 100.0 : 0.25;
             preset.tip.angle = angle;
             preset.diameter = std::max(1.0, diameter);
@@ -188,7 +173,7 @@ std::optional<BrushImport> readSections(Reader& r, const std::string& name, std:
             tip.flipX = brush->numberAt("flipX", 0) != 0;
             tip.flipY = brush->numberAt("flipY", 0) != 0;
             if (brush->classId == "computedBrush") {
-                tip.shape = roundTip(std::min(diameter, 1024.0), brush->numberAt("Hrdn", 100) / 100.0, 1);
+                tip.shape = roundTipImage(std::min(diameter, 1024.0), brush->numberAt("Hrdn", 100) / 100.0, 1);
             } else if (const Descriptor* id = brush->item("sampledData")) {
                 auto it = samples.find(id->text);
                 if (it == samples.end()) continue;

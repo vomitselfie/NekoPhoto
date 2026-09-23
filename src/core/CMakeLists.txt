@@ -55,6 +55,26 @@ if(COMPOSITOR_WITH_MYPAINT)
 endif()
 set(COMPOSITOR_HAVE_MYPAINT ${COMPOSITOR_HAVE_MYPAINT} PARENT_SCOPE)
 
+# SQLite reads Clip Studio brushes (.sut). Optional: without it that one import format is refused.
+option(COMPOSITOR_WITH_SQLITE "Import Clip Studio brushes through SQLite" ON)
+set(COMPOSITOR_HAVE_SQLITE OFF)
+if(COMPOSITOR_WITH_SQLITE)
+    find_package(SQLite3 QUIET)
+    if(SQLite3_FOUND)
+        set(COMPOSITOR_HAVE_SQLITE ON)
+        # CMake 4 names the target SQLite3::SQLite3 and deprecates SQLite::SQLite3, the only name CMake 3.22 has.
+        if(TARGET SQLite3::SQLite3)
+            set(COMPOSITOR_SQLITE_TARGET SQLite3::SQLite3)
+        else()
+            set(COMPOSITOR_SQLITE_TARGET SQLite::SQLite3)
+        endif()
+        message(STATUS "Brush import: Clip Studio through SQLite ${SQLite3_VERSION}")
+    else()
+        message(STATUS "Brush import: SQLite not found, Clip Studio brushes disabled")
+    endif()
+endif()
+set(COMPOSITOR_HAVE_SQLITE ${COMPOSITOR_HAVE_SQLITE} PARENT_SCOPE)
+
 add_library(compositor_core STATIC
     src/abr.cpp
     src/adjustments.cpp
@@ -79,6 +99,7 @@ add_library(compositor_core STATIC
     src/inpaint.cpp
     src/psd.cpp
     src/subject.cpp
+    src/sut.cpp
     src/scribble.cpp
     src/photoshop.cpp
     src/plist.cpp
@@ -107,6 +128,10 @@ target_compile_definitions(compositor_core PRIVATE _USE_MATH_DEFINES)
 if(COMPOSITOR_HAVE_OPENCV)
     target_link_libraries(compositor_core PRIVATE ${COMPOSITOR_OPENCV_LIBS})
     target_compile_definitions(compositor_core PRIVATE COMPOSITOR_HAVE_OPENCV)
+endif()
+if(COMPOSITOR_HAVE_SQLITE)
+    target_link_libraries(compositor_core PRIVATE ${COMPOSITOR_SQLITE_TARGET})
+    target_compile_definitions(compositor_core PRIVATE COMPOSITOR_HAVE_SQLITE)
 endif()
 if(COMPOSITOR_HAVE_MYPAINT)
     target_link_libraries(compositor_core PRIVATE PkgConfig::MYPAINT)

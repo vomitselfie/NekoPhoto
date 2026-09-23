@@ -10,7 +10,8 @@ unchanged. The macOS application and its Xcode project are untouched; see
 
 Requirements: CMake 3.22+, Ninja (or Make), GCC 12+ or Clang 15+, Qt 6.4+
 (Core, Gui, Widgets, Network, Svg, plus the Wayland platform plugin), libpng;
-OpenCV for Remove Background; libmypaint 1.5 or newer for the MyPaint brushes.
+OpenCV for Remove Background; libmypaint 1.5 or newer for the MyPaint brushes;
+SQLite for importing Clip Studio brushes.
 
 Arch / Manjaro:
 
@@ -21,7 +22,7 @@ sudo pacman -S cmake ninja qt6-base qt6-svg qt6-wayland qt6-imageformats libpng 
 Ubuntu 24.04:
 
 ```bash
-sudo apt install cmake ninja-build qt6-base-dev qt6-svg-dev qt6-wayland qt6-image-formats-plugins libpng-dev libmypaint-dev libgl1-mesa-dev libopencv-dev
+sudo apt install cmake ninja-build qt6-base-dev qt6-svg-dev qt6-wayland qt6-image-formats-plugins libpng-dev libmypaint-dev libsqlite3-dev libgl1-mesa-dev libopencv-dev
 ```
 
 Then:
@@ -49,6 +50,7 @@ XWayland.
 Options: `-DCOMPOSITOR_BUILD_APP=OFF` builds only the core and tests;
 `-DCOMPOSITOR_WITH_OPENCV=OFF` leaves out the Remove Background model;
 `-DCOMPOSITOR_WITH_MYPAINT=OFF` leaves out the MyPaint brushes (the round brush stays);
+`-DCOMPOSITOR_WITH_SQLITE=OFF` leaves out Clip Studio brush import;
 `-DCOMPOSITOR_WARNINGS_AS_ERRORS=ON` is what CI uses.
 `-DOpenCV_DIR=<prefix>/lib/cmake/opencv4` builds against the OpenCV that
 `tools/build-opencv.sh <prefix>` makes: a pinned 4.x, static, with only the
@@ -68,7 +70,7 @@ editor, which opens them as tabs and raises its window, and quits (with
 `--new-window` keeps a separate process, as any of the options below does.
 `--tool brush` (or any tool name from `--help`) selects a tool, and `--dialog new`
 (or canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map,
-grain, blur, motion-blur, noise, lens, gmic, background, text, fonts) opens that
+grain, blur, motion-blur, noise, lens, gmic, background, text, fonts, brushes) opens that
 dialog; with `--screenshot` the dialog is what gets grabbed.
 `compositor-linux --demo --screenshot out.png --save-as Demo.comp` builds a layered
 demo document, grabs the window and saves a project without any interaction
@@ -225,6 +227,22 @@ packaging/                      .desktop, icon, MIME type
   Brushes. libmypaint's newer `stroke_to_2` reads uninitialised memory in 1.6,
   so the engine uses `stroke_to`: the 19 Dieterle presets that ask for pigment
   mixing paint with ordinary RGB mixing.
+- Tip brushes and brush import: a second engine stamps a tip image along the
+  stroke (spacing, angle or following the stroke, jitter of size, angle and
+  flow, roundness, scatter with a count, flips, pressure on size and flow, a
+  grain texture) into the round brush's coverage, so opacity, the selection,
+  masks, erasing and undo work as for any brush. File > Import Brushes reads
+  Photoshop `.abr` (versions 1, 2 and 6 to 10: sampled and computed tips, the
+  presets' dynamics), Procreate `.brushset` and `.brush` (Brush.archive keyed
+  archives; key names after the MIT procreate-brush-decoder schema), Clip
+  Studio `.sut` (the settings from its SQLite tables on a round tip: its tip
+  images are in an undocumented format) and images (alpha, or darkness when
+  opaque). Each brush is saved as an open folder (`brush.json`, `tip.png`,
+  optional `grain.png`, `preview.png`) under
+  `~/.local/share/compositor-linux/compositor-linux/brushes/imported/<set>/`,
+  and the import lists what it could not carry over (texture and dual brush,
+  wet mixing, Procreate's built-in shapes and grains, Clip Studio's pressure
+  curves). A file may decode at most 256 megapixels of tips.
 - Spot Healing Brush (Content-Aware, Create Texture, Proximity Match) and
   Clone Stamp (aligned or not, sampling one layer or all). Content-Aware
   healing and Content-Aware Fill synthesise from the surroundings with

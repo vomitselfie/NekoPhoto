@@ -21,7 +21,7 @@ for macOS, and opens Photoshop files and the Mac app's `.comp` projects.
 - **Transform:** move, scale, rotate and distort without losing resolution
 - **Selections:** marquee, lasso, magic wand, and Quick Select by scribble or by click; Content-Aware Fill
 - **Painting:** brush, eraser, spot healing, clone stamp, smudge, liquify, gradients, shapes and text
-- **Brushes:** 196 MyPaint brushes (pencils, inks, charcoal, paint, smudging) that follow pen pressure and tilt
+- **Brushes:** 196 MyPaint brushes (pencils, inks, charcoal, paint, smudging) that follow pen pressure and tilt, and your own brushes imported from Photoshop (`.abr`), Procreate (`.brushset`, `.brush`) and Clip Studio (`.sut`), or any image as a brush tip
 - **Adjustments and filters:** levels, curves, hue/saturation, exposure, gradient map, grain, blurs, noise and lens correction
 - **Remove Background:** an AI model that runs on your own machine; nothing is uploaded
 - **G'MIC:** over 700 more filters with a live preview, when `gmic` is installed
@@ -87,7 +87,7 @@ dark gradient behind it and export result.png". See
 # Arch / Manjaro
 sudo pacman -S cmake ninja qt6-base qt6-svg qt6-wayland qt6-imageformats libpng libmypaint opencv
 # Ubuntu 24.04
-sudo apt install cmake ninja-build qt6-base-dev qt6-svg-dev qt6-wayland qt6-image-formats-plugins libpng-dev libmypaint-dev libgl1-mesa-dev libopencv-dev
+sudo apt install cmake ninja-build qt6-base-dev qt6-svg-dev qt6-wayland qt6-image-formats-plugins libpng-dev libmypaint-dev libsqlite3-dev libgl1-mesa-dev libopencv-dev
 
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
@@ -122,7 +122,7 @@ Photoshop ファイルと Mac 版の `.comp` プロジェクトを開けます�
 - **変形:** 解像度を落とさずに移動・拡大縮小・回転・自由変形
 - **選択範囲:** 長方形・楕円選択、なげなわ、自動選択、なぞる/クリックするだけのクイック選択、コンテンツに応じた塗りつぶし
 - **描画:** ブラシ、消しゴム、スポット修復ブラシ、コピースタンプ、指先ツール、ゆがみ、グラデーション、シェイプ、テキスト
-- **ブラシ:** 筆圧と傾きに反応する MyPaint ブラシ 196 種類(鉛筆、インク、木炭、絵の具、ぼかし)
+- **ブラシ:** 筆圧と傾きに反応する MyPaint ブラシ 196 種類(鉛筆、インク、木炭、絵の具、ぼかし)。Photoshop(`.abr`)、Procreate(`.brushset`・`.brush`)、クリップスタジオ(`.sut`)のブラシや、任意の画像をブラシ先端として読み込めます
 - **色調補正とフィルター:** レベル補正、トーンカーブ、色相・彩度、露光量、グラデーションマップ、粒子、ぼかし、ノイズ、レンズ補正
 - **背景を削除:** AI モデルは手元のマシンで動作し、画像はどこにも送信されません
 - **G'MIC:** `gmic` をインストールすると、700 種類以上のフィルターをライブプレビュー付きで使えます

@@ -151,7 +151,7 @@ std::optional<XmlDict> parseXmlDict(const std::string& xml) {
         return unescape(xml.substr(a + open.size(), b - a - open.size()));
     };
     while (true) {
-        size_t afterKey;
+        size_t afterKey = 0;
         auto key = between("<key>", "</key>", p, afterKey);
         if (!key) break;
         const size_t next = xml.find_first_not_of(" \t\r\n", afterKey);
@@ -164,7 +164,7 @@ std::optional<XmlDict> parseXmlDict(const std::string& xml) {
             if (close == std::string::npos) break;
             std::vector<std::string> items;
             for (size_t q = next; ;) {
-                size_t itemEnd;
+                size_t itemEnd = 0;
                 auto item = between("<string>", "</string>", q, itemEnd);
                 if (!item || itemEnd > close) break;
                 items.push_back(*item);
