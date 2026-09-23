@@ -1,7 +1,7 @@
 // Clip Studio Paint brushes (.sut): an SQLite database. Each tool is a row of Node (its name and the Variant
 // it uses), and each Variant row holds the settings in named columns. Column meanings are read from the
-// column names and checked against a real file; the pressure and rotation "effectors" are coded blobs with
-// no public description, and are left out rather than guessed.
+// column names and checked against a real file. The "effectors" (dynamics) are coded blobs with no public
+// description; only whether pressure drives size and opacity, and size's minimum, is read (see pressureMinimum).
 //
 // Tip images and paper textures are materials, one MaterialFile row each: a tar holding the material's
 // layer file (data/material*.layer) and icedata/layerData.xml, whose tags say BrushPattern or PaperTexture.
@@ -306,6 +306,18 @@ std::string materialReference(const void* blob, int size) {
     return std::string(reinterpret_cast<const char*>(p + 16), length);
 }
 
+/// A pressure "effector" blob: after its header size and a marker come flags and the minimum, in percent.
+/// Bit 0x10 of the flags is taken as "pressure drives it": a sample brush with size pressure on carries 0x90
+/// and a minimum of 10, and one with opacity pressure off carries 0. The pressure curve after the header is
+/// left out. Nullopt when pressure does not drive it.
+std::optional<double> pressureMinimum(const void* blob, int size) {
+    const auto* p = static_cast<const uint8_t*>(blob);
+    if (!p || size < 20 || be32(p) < 20 || !(be32(p + 8) & 0x10)) return std::nullopt;
+    const uint32_t minimum = be32(p + 12);
+    if (minimum > 100) return std::nullopt;
+    return minimum / 100.0;
+}
+
 } // namespace
 
 std::optional<BrushImport> readClipStudio(const std::string& path, const std::string& name, std::string* error) {
@@ -334,7 +346,7 @@ std::optional<BrushImport> readClipStudio(const std::string& path, const std::st
     std::vector<Wants> wants;
     std::vector<std::string> tipOrder, textureOrder;   // references in the order the brushes first use them
     auto remember = [](std::vector<std::string>& order, const std::string& ref) { if (!ref.empty() && std::find(order.begin(), order.end(), ref) == order.end()) order.push_back(ref); };
-    int watercolour = 0, dual = 0;
+    int watercolour = 0, dual = 0, pressured = 0;
     while (sqlite3_step(rows) == SQLITE_ROW && import.brushes.size() < 1000) {
         TipPreset preset;
         if (const unsigned char* title = sqlite3_column_text(rows, 0)) preset.name = reinterpret_cast<const char*>(title);
@@ -353,6 +365,12 @@ std::optional<BrushImport> readClipStudio(const std::string& path, const std::st
             tip.count = int(std::clamp(std::lround(number("BrushSprayDensity", 1)), 1L, 16L));
             tip.scatterBothAxes = true;   // a spray scatters all round the stroke
         }
+        auto effector = [&](const char* key) {
+            return has(key) && sqlite3_column_type(rows, column[key]) == SQLITE_BLOB
+                ? pressureMinimum(sqlite3_column_blob(rows, column[key]), sqlite3_column_bytes(rows, column[key])) : std::nullopt;
+        };
+        if (auto minimum = effector("BrushSizeEffector")) { tip.pressureSize = 1; tip.minimumSize = *minimum; pressured++; }
+        if (effector("BrushOpacityEffector") || effector("BrushFlowEffector")) { tip.pressureFlow = 1; pressured++; }
         Wants want;
         if (number("BrushUsePatternImage", 0) != 0) want.tip = reference("BrushPatternImageArray");
         want.texture = reference("TextureImage");
@@ -418,7 +436,9 @@ std::optional<BrushImport> readClipStudio(const std::string& path, const std::st
     note(dual, "brushes with a dual brush, which is left out");
     if (tipOrder.size() > 1 || textureOrder.size() > 1)
         import.notes.push_back("the file does not say which embedded image belongs to which brush; they are matched in the order the brushes use them");
-    if (!import.brushes.empty()) import.notes.push_back("pressure and rotation settings are Clip Studio's own coding and are left out");
+    if (!import.brushes.empty())
+        import.notes.push_back(pressured ? "size and opacity follow pen pressure where the brush says so; Clip Studio's pressure curves and its other dynamics are left out"
+                                         : "Clip Studio's pressure curves and its other dynamics are left out");
     if (import.brushes.empty()) { if (error) *error = "the file holds no Clip Studio brush this reader can use"; return std::nullopt; }
     return import;
 }

@@ -165,7 +165,8 @@ TEST_CASE(clip_studio_brushes_come_through_with_their_tips_and_textures) {
         "CREATE TABLE Variant(_PW_ID INTEGER PRIMARY KEY AUTOINCREMENT, VariantID INTEGER, BrushSize REAL, BrushSizeUnit INTEGER,"
         " BrushHardness INTEGER, BrushInterval REAL, BrushThickness INTEGER, BrushRotation REAL, BrushFlow INTEGER, BrushUseSpray INTEGER,"
         " BrushSpraySize REAL, BrushSpraySizeUnit INTEGER, BrushSprayDensity INTEGER, BrushUsePatternImage INTEGER, BrushUseWaterColor INTEGER,"
-        " UseDualBrush INTEGER, BrushPatternImageArray BLOB, TextureImage BLOB, TextureDensity INTEGER, TextureScale2 REAL, TextureReverseDensity INTEGER);"
+        " UseDualBrush INTEGER, BrushPatternImageArray BLOB, TextureImage BLOB, TextureDensity INTEGER, TextureScale2 REAL, TextureReverseDensity INTEGER,"
+        " BrushSizeEffector BLOB, BrushOpacityEffector BLOB);"
         "CREATE TABLE MaterialFile(_PW_ID INTEGER PRIMARY KEY AUTOINCREMENT, FileData BLOB);"
         "INSERT INTO Node(NodeName, NodeVariantID) VALUES ('Soft Pencil', 11), ('Spray', 12);"
         "INSERT INTO Variant(VariantID, BrushSize, BrushSizeUnit, BrushHardness, BrushInterval, BrushThickness, BrushRotation, BrushFlow,"
@@ -179,6 +180,17 @@ TEST_CASE(clip_studio_brushes_come_through_with_their_tips_and_textures) {
     sqlite3_finalize(statement);
     sqlite3_prepare_v2(db, "UPDATE Variant SET BrushPatternImageArray = ?1 WHERE VariantID = 12", -1, &statement, nullptr);
     bindBlob(statement, 1, reference(".:Install:Paint110:5678:data:material_0.layer"));
+    sqlite3_step(statement);
+    sqlite3_finalize(statement);
+    // Size follows pressure down to 10% (flags 0x90, as Clip Studio writes it); opacity does not (flags 0).
+    auto effector = [](uint32_t flags, uint32_t minimum) {
+        std::vector<uint8_t> out;
+        for (uint32_t v : {44u, 0xF0u, flags, minimum, 100u, 0u, 0u, 0u, 0u, 0u, 0u}) be32(out, v);
+        return out;
+    };
+    sqlite3_prepare_v2(db, "UPDATE Variant SET BrushSizeEffector = ?1, BrushOpacityEffector = ?2 WHERE VariantID = 12", -1, &statement, nullptr);
+    bindBlob(statement, 1, effector(0x90, 10));
+    bindBlob(statement, 2, effector(0, 0));
     sqlite3_step(statement);
     sqlite3_finalize(statement);
     sqlite3_prepare_v2(db, "INSERT INTO MaterialFile(FileData) VALUES (?1), (?2)", -1, &statement, nullptr);
@@ -216,6 +228,10 @@ TEST_CASE(clip_studio_brushes_come_through_with_their_tips_and_textures) {
     CHECK_EQ(spray.tip.shape->height(), 200);
     CHECK_EQ(int(spray.tip.shape->at(10, 20)), (tileValue(10, 20) * 255 + 50) / 100);
     CHECK(spray.tip.grain == nullptr);
+    CHECK_EQ(spray.tip.pressureSize, 1.0);
+    CHECK_EQ(spray.tip.minimumSize, 0.1);
+    CHECK_EQ(spray.tip.pressureFlow, 0.0);
+    CHECK_EQ(pencil.tip.pressureSize, 0.0);
     fs::remove(path);
 }
 
@@ -231,9 +247,11 @@ TEST_CASE(clip_studio_sample_file_when_available) {
     std::string error;
     auto import = importBrushFile(sample, &error);
     REQUIRE(import.has_value());
-    for (const TipPreset& brush : import->brushes)
+    for (const TipPreset& brush : import->brushes) {
         std::fprintf(stderr, "  %s: %.0f px, tip %dx%d, grain %dx%d\n", brush.name.c_str(), brush.diameter, brush.tip.shape->width(), brush.tip.shape->height(),
             brush.tip.grain ? brush.tip.grain->width() : 0, brush.tip.grain ? brush.tip.grain->height() : 0);
+        std::fprintf(stderr, "    pressure: size %.0f (minimum %.2f), flow %.0f\n", brush.tip.pressureSize, brush.tip.minimumSize, brush.tip.pressureFlow);
+    }
     for (const std::string& note : import->notes) std::fprintf(stderr, "  note: %s\n", note.c_str());
     CHECK(!import->brushes.empty());
 }
