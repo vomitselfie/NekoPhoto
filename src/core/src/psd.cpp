@@ -1,4 +1,5 @@
 #include "compositor/psd.h"
+#include "photoshop.h"
 #include "compositor/adjustments.h"
 #include <zlib.h>
 #include <algorithm>
@@ -12,138 +13,9 @@
 
 namespace compositor {
 
+using namespace photoshop;
+
 namespace {
-
-// ---- Reading big-endian structures with bounds checks -------------------------------------------
-
-struct Truncated {};
-
-class Reader {
-public:
-    Reader(const uint8_t* data, size_t size) : data_(data), size_(size) {}
-    size_t position() const { return pos_; }
-    size_t remaining() const { return size_ - pos_; }
-    void seek(size_t pos) { if (pos > size_) throw Truncated{}; pos_ = pos; }
-    void skip(size_t n) { seek(pos_ + n); }
-    const uint8_t* bytes(size_t n) { if (n > remaining()) throw Truncated{}; const uint8_t* p = data_ + pos_; pos_ += n; return p; }
-    uint8_t u8() { return *bytes(1); }
-    uint16_t u16() { const uint8_t* p = bytes(2); return uint16_t((p[0] << 8) | p[1]); }
-    uint32_t u32() { const uint8_t* p = bytes(4); return (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) | (uint32_t(p[2]) << 8) | p[3]; }
-    uint64_t u64() { uint64_t hi = u32(); return (hi << 32) | u32(); }
-    int16_t i16() { return int16_t(u16()); }
-    int32_t i32() { return int32_t(u32()); }
-    float f32() { uint32_t v = u32(); float f; std::memcpy(&f, &v, 4); return f; }
-    double f64() { uint64_t v = u64(); double d; std::memcpy(&d, &v, 8); return d; }
-    /// A section length: 4 bytes, or 8 in a PSB.
-    uint64_t length(bool psb) { return psb ? u64() : u32(); }
-    std::string chars(size_t n) { const uint8_t* p = bytes(n); return std::string(reinterpret_cast<const char*>(p), n); }
-    /// A Pascal string (length byte, text) padded to a multiple of `pad`.
-    std::string pascal(size_t pad) {
-        size_t start = pos_;
-        uint8_t n = u8();
-        std::string s = chars(n);
-        size_t used = pos_ - start;
-        if (used % pad) skip(pad - used % pad);
-        return s;
-    }
-    /// A Unicode string: a character count, then UTF-16BE, as UTF-8.
-    std::string unicode() {
-        uint32_t count = u32();
-        if (count > remaining() / 2) throw Truncated{};
-        std::string out;
-        for (uint32_t i = 0; i < count; i++) {
-            uint32_t c = u16();
-            if (c >= 0xD800 && c < 0xDC00 && i + 1 < count) { uint32_t low = u16(); i++; c = 0x10000 + ((c - 0xD800) << 10) + (low - 0xDC00); }
-            if (c == 0) continue;
-            if (c < 0x80) out += char(c);
-            else if (c < 0x800) { out += char(0xC0 | (c >> 6)); out += char(0x80 | (c & 0x3F)); }
-            else if (c < 0x10000) { out += char(0xE0 | (c >> 12)); out += char(0x80 | ((c >> 6) & 0x3F)); out += char(0x80 | (c & 0x3F)); }
-            else { out += char(0xF0 | (c >> 18)); out += char(0x80 | ((c >> 12) & 0x3F)); out += char(0x80 | ((c >> 6) & 0x3F)); out += char(0x80 | (c & 0x3F)); }
-        }
-        return out;
-    }
-    /// A key in a descriptor: a length, then that many characters, or four when the length is zero.
-    std::string key() { uint32_t n = u32(); return chars(n ? n : 4); }
-
-private:
-    const uint8_t* data_;
-    size_t size_;
-    size_t pos_ = 0;
-};
-
-// ---- Descriptors (the structure Photoshop stores settings in) ------------------------------------
-
-struct Descriptor {
-    std::string type;                                  // doub, long, bool, TEXT, enum, Objc, VlLs, UntF, ...
-    double number = 0;
-    std::string text;                                  // TEXT, enum value
-    std::map<std::string, Descriptor> items;           // Objc
-    std::vector<Descriptor> list;                      // VlLs
-    const Descriptor* item(const std::string& key) const { auto it = items.find(key); return it == items.end() ? nullptr : &it->second; }
-};
-
-Descriptor readDescriptorValue(Reader& r, const std::string& type, int depth);
-
-Descriptor readDescriptorObject(Reader& r, int depth) {
-    Descriptor d;
-    d.type = "Objc";
-    if (depth > 32) throw Truncated{};
-    r.unicode();   // class name
-    r.key();       // class id
-    uint32_t count = r.u32();
-    if (count > 100000) throw Truncated{};
-    for (uint32_t i = 0; i < count; i++) {
-        std::string key = r.key();
-        std::string type = r.chars(4);
-        d.items[key] = readDescriptorValue(r, type, depth + 1);
-    }
-    return d;
-}
-
-Descriptor readDescriptorValue(Reader& r, const std::string& type, int depth) {
-    Descriptor d;
-    d.type = type;
-    if (type == "Objc" || type == "GlbO") return readDescriptorObject(r, depth);
-    if (type == "doub") d.number = r.f64();
-    else if (type == "UntF") { r.chars(4); d.number = r.f64(); }
-    else if (type == "long") d.number = r.i32();
-    else if (type == "comp") d.number = double(int64_t(r.u64()));
-    else if (type == "bool") d.number = r.u8();
-    else if (type == "TEXT") d.text = r.unicode();
-    else if (type == "enum") { r.key(); d.text = r.key(); }
-    else if (type == "type" || type == "GlbC") { r.unicode(); r.key(); }
-    else if (type == "alis" || type == "tdta") { uint32_t n = r.u32(); r.skip(n); }
-    else if (type == "VlLs") {
-        uint32_t count = r.u32();
-        if (count > 100000) throw Truncated{};
-        for (uint32_t i = 0; i < count; i++) { std::string t = r.chars(4); d.list.push_back(readDescriptorValue(r, t, depth + 1)); }
-    } else if (type == "ObAr") {
-        r.u32(); r.unicode(); r.key();
-        uint32_t count = r.u32();
-        if (count > 100000) throw Truncated{};
-        for (uint32_t i = 0; i < count; i++) { std::string key = r.key(); std::string t = r.chars(4); d.items[key] = readDescriptorValue(r, t, depth + 1); }
-    } else if (type == "obj ") {
-        uint32_t count = r.u32();
-        if (count > 1000) throw Truncated{};
-        for (uint32_t i = 0; i < count; i++) {
-            std::string t = r.chars(4);
-            if (t == "prop") { r.unicode(); r.key(); r.key(); }
-            else if (t == "Clss") { r.unicode(); r.key(); }
-            else if (t == "Enmr") { r.unicode(); r.key(); r.key(); r.key(); }
-            else if (t == "rele") { r.unicode(); r.key(); r.u32(); }
-            else if (t == "Idnt" || t == "indx") { r.unicode(); r.key(); r.u32(); }
-            else if (t == "name") { r.unicode(); r.key(); r.unicode(); }
-            else throw Truncated{};
-        }
-    } else throw Truncated{};   // an unknown item type: the rest of the descriptor cannot be walked
-    return d;
-}
-
-/// A descriptor block: its version (16), then the object.
-Descriptor readDescriptor(Reader& r) {
-    if (r.u32() != 16) throw Truncated{};
-    return readDescriptorObject(r, 0);
-}
 
 // ---- Channel data ------------------------------------------------------------------------------------
 

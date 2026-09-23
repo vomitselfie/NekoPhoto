@@ -1,9 +1,11 @@
 #include "compositor/brushimport.h"
+#include "brushformats.h"
 #include "compositor/png.h"
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <set>
 
 namespace compositor {
@@ -52,9 +54,16 @@ std::optional<TipPreset> presetFromImage(const Image& image, const std::string& 
 std::optional<BrushImport> importBrushFile(const std::string& path, std::string* error) {
     std::ifstream in(path, std::ios::binary);
     if (!in) { if (error) *error = "cannot read " + path; return std::nullopt; }
+    std::vector<uint8_t> file((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
     char magic[8] = {};
-    in.read(magic, 8);
+    std::copy_n(file.begin(), std::min<size_t>(8, file.size()), magic);
     const std::string name = fs::path(path).stem().string();
+    std::string extension = fs::path(path).extension().string();
+    std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+    // Photoshop: from version 6 an 8BIM section follows the version words; 1 and 2 are known by the name.
+    const bool abrSections = file.size() >= 8 && file[0] == 0 && file[1] >= 6 && file[1] <= 10 && std::equal(magic + 4, magic + 8, "8BIM");
+    if (abrSections || (extension == ".abr" && file.size() >= 4 && file[0] == 0 && (file[1] == 1 || file[1] == 2)))
+        return readAbr(file.data(), file.size(), name, error);
     // A PNG is a single tip; other raster formats go through the application's image reader.
     if (std::equal(magic, magic + 8, "\x89PNG\r\n\x1a\n")) {
         auto image = readPngImage(path, error);

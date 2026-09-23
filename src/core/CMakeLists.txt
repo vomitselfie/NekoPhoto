@@ -56,6 +56,7 @@ endif()
 set(COMPOSITOR_HAVE_MYPAINT ${COMPOSITOR_HAVE_MYPAINT} PARENT_SCOPE)
 
 add_library(compositor_core STATIC
+    src/abr.cpp
     src/adjustments.cpp
     src/blend.cpp
     src/blur.cpp
@@ -78,6 +79,7 @@ add_library(compositor_core STATIC
     src/psd.cpp
     src/subject.cpp
     src/scribble.cpp
+    src/photoshop.cpp
     src/png.cpp
     src/project.cpp
     src/render.cpp
