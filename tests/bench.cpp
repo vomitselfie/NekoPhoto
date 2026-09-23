@@ -17,12 +17,14 @@
 #include "compositor/scribble.h"
 #include "compositor/render.h"
 #include "compositor/selection.h"
+#include "compositor/png.h"
 extern "C" {
 #include "HealPixels.h"
 #include "ContentFill.h"
 }
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <random>
@@ -235,14 +237,29 @@ int main(int argc, char** argv) {
     }
     if (want("scribble")) {
         // Quick Select: a foreground stroke across the middle and a background stroke along the top.
-        GrayImage labels(W, H, 0);
-        for (int y = H / 2 - 12; y < H / 2 + 12; y++) for (int x = W / 3; x < 2 * W / 3; x++) labels.at(x, y) = 1;
-        for (int y = 40; y < 64; y++) for (int x = 100; x < W - 100; x++) labels.at(x, y) = 2;
+        // Noise is the worst case for a graph cut; COMPOSITOR_BENCH_PHOTO=<png> times a real photo instead.
+        std::shared_ptr<Image> photo;
+        if (const char* path = std::getenv("COMPOSITOR_BENCH_PHOTO")) photo = readPngImage(path);
+        const Image& source = photo ? *photo : base;
+        const int sw = source.width(), sh = source.height();
+        GrayImage labels(sw, sh, 0);
+        for (int y = sh / 2 - 12; y < sh / 2 + 12; y++) for (int x = sw * 2 / 5; x < sw * 3 / 5; x++) labels.at(x, y) = 1;
+        for (int y = 10; y < 24; y++) for (int x = 10; x < sw - 10; x++) labels.at(x, y) = 2;
         std::string error;
         for (auto [limit, iterations] : {std::pair{400, 2}, std::pair{450, 2}, std::pair{700, 3}}) {
             if (!scribbleSelectionSupported()) break;
-            report(("scribble selection, limit " + std::to_string(limit) + ", " + std::to_string(iterations) + " iterations").c_str(), timeMs([&] { (void)scribbleSelection(base, labels, limit, iterations, &error); }, 1));
+            report(("scribble selection, limit " + std::to_string(limit) + ", " + std::to_string(iterations) + " iterations").c_str(), timeMs([&] { (void)scribbleSelection(source, labels, limit, iterations, &error); }, 1));
         }
+    }
+    if (want("png")) {
+        // Project saves and PNG export; noise is incompressible, so COMPOSITOR_BENCH_PHOTO gives the real case.
+        std::shared_ptr<Image> photo;
+        if (const char* path = std::getenv("COMPOSITOR_BENCH_PHOTO")) photo = readPngImage(path);
+        const Image& source = photo ? *photo : base;
+        std::vector<uint8_t> bytes;
+        report("png encode", timeMs([&] { (void)encodePngImage(source, bytes); }, 1));
+        std::printf("%-34s %8.1f MB\n", "png size", double(bytes.size()) / 1e6);
+        report("png decode", timeMs([&] { (void)decodePngImage(bytes.data(), bytes.size()); }, 1));
     }
     if (want("selection")) {
         auto shape = rasterizeEllipse(Rect(200, 200, 3000, 2000), W, H, true);

@@ -1,4 +1,5 @@
 #include "compositor/project.h"
+#include "compositor/parallel.h"
 #include "compositor/png.h"
 #include <nlohmann/json.hpp>
 #include <cmath>
@@ -372,10 +373,12 @@ std::optional<Document> loadProject(const std::string& pathText, ProjectError& e
     if (!parseManifestJson(j, m, error) || !validateManifest(m, error)) return std::nullopt;
 
     Document d = documentFrom(m);
+    // Every file is checked against the budgets from its header first; then the images decode side by side.
+    struct Load { size_t layer; bool isMask; fs::path file; std::shared_ptr<Image> image; std::shared_ptr<GrayImage> gray; };
+    std::vector<Load> loads;
     long long pixels = 0, maskPixels = 0;
     for (size_t i = 0; i < m.records.size(); i++) {
         const Record& r = m.records[i];
-        Layer& layer = d.layers[i];
         for (bool isMask : {false, true}) {
             const std::optional<std::string>& filename = isMask ? r.maskFile : r.imageFile;
             if (!filename) continue;
@@ -384,22 +387,32 @@ std::optional<Document> loadProject(const std::string& pathText, ProjectError& e
             PngInfo info;
             if (!readPngInfo(file.string(), info) || info.bitDepth > 8) { error = missingImage(); return std::nullopt; }
             if (!checkSize(info.width, info.height, isMask ? maskPixels : pixels)) { error = tooLarge(); return std::nullopt; }
-            if (isMask) {
-                auto gray = readPngGray(file.string());
-                if (!gray) { error = invalid(); return std::nullopt; }
-                LayerMask mask;
-                mask.asset = MaskAsset::make(gray);
-                mask.enabled = r.maskEnabled.value_or(true);
-                mask.placement = r.maskPlacement;
-                mask.linked = r.maskLinked.value_or(true);
-                layer.mask = mask;
-            } else {
-                auto image = readPngImage(file.string());
-                if (!image) { error = missingImage(); return std::nullopt; }
-                layer.asset = Asset::make(image, layer.name);
-                if (layer.shape) layer.shapeImage = layer.asset->image;
-                if (layer.text) layer.textImage = layer.asset->image;
-            }
+            loads.push_back({i, isMask, file, nullptr, nullptr});
+        }
+    }
+    parallelFor(0, int(loads.size()), 1, [&](int a, int b) {
+        for (int k = a; k < b; k++) {
+            Load& load = loads[size_t(k)];
+            if (load.isMask) load.gray = readPngGray(load.file.string());
+            else load.image = readPngImage(load.file.string());
+        }
+    });
+    for (Load& load : loads) {
+        const Record& r = m.records[load.layer];
+        Layer& layer = d.layers[load.layer];
+        if (load.isMask) {
+            if (!load.gray) { error = invalid(); return std::nullopt; }
+            LayerMask mask;
+            mask.asset = MaskAsset::make(load.gray);
+            mask.enabled = r.maskEnabled.value_or(true);
+            mask.placement = r.maskPlacement;
+            mask.linked = r.maskLinked.value_or(true);
+            layer.mask = mask;
+        } else {
+            if (!load.image) { error = missingImage(); return std::nullopt; }
+            layer.asset = Asset::make(load.image, layer.name);
+            if (layer.shape) layer.shapeImage = layer.asset->image;
+            if (layer.text) layer.textImage = layer.asset->image;
         }
     }
     return d;

@@ -1,8 +1,14 @@
 #include "compositor/png.h"
+#include "compositor/parallel.h"
+#include <algorithm>
+#include <atomic>
 #include <csetjmp>
+#include <cstdlib>
+#include <functional>
 #include <cstdio>
 #include <cstring>
 #include <png.h>
+#include <zlib.h>
 
 namespace compositor {
 
@@ -37,12 +43,6 @@ void readFromMemory(png_structp png, png_bytep out, png_size_t length) {
     std::memcpy(out, src->data + src->offset, length);
     src->offset += length;
 }
-
-void writeToVector(png_structp png, png_bytep data, png_size_t length) {
-    auto* out = static_cast<std::vector<uint8_t>*>(png_get_io_ptr(png));
-    out->insert(out->end(), data, data + length);
-}
-void flushNothing(png_structp) {}
 
 std::shared_ptr<Image> readRgba(png_structp png, png_infop info, std::string* error) {
     if (setjmp(png_jmpbuf(png))) { if (error) *error = "PNG decoding failed"; return nullptr; }
@@ -126,40 +126,149 @@ std::shared_ptr<GrayImage> readPngGray(const std::string& path, std::string* err
 
 namespace {
 
-bool writePng(png_structp png, png_infop info, int width, int height, int colorType, const std::vector<png_bytep>& rows, double dpi, std::string* error) {
-    if (setjmp(png_jmpbuf(png))) { if (error) *error = "PNG encoding failed"; return false; }
-    png_set_IHDR(png, info, png_uint_32(width), png_uint_32(height), 8, colorType, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
-    if (colorType == PNG_COLOR_TYPE_RGBA) png_set_sRGB_gAMA_and_cHRM(png, info, PNG_sRGB_INTENT_PERCEPTUAL);
-    if (dpi > 0) {
-        png_uint_32 ppm = png_uint_32(dpi / 0.0254 + 0.5);
-        png_set_pHYs(png, info, ppm, ppm, PNG_RESOLUTION_METER);
+// PNG writing without libpng, so one image can be compressed on every core: the rows are cut into strips of
+// about a megabyte, each strip is filtered and raw-deflated on its own, ends with a sync flush (the last one
+// finishes the stream), and the strips join under one zlib header with their Adler-32s combined, as pigz does.
+// Each strip is primed with the 32 KB of filtered data before it, so the split costs almost no compression.
+
+void putU32(std::vector<uint8_t>& out, uint32_t v) {
+    uint8_t b[4] = {uint8_t(v >> 24), uint8_t(v >> 16), uint8_t(v >> 8), uint8_t(v)};
+    out.insert(out.end(), b, b + 4);
+}
+
+void putChunk(std::vector<uint8_t>& out, const char* type, const uint8_t* data, size_t size) {
+    putU32(out, uint32_t(size));
+    size_t at = out.size();
+    out.insert(out.end(), type, type + 4);
+    if (size) out.insert(out.end(), data, data + size);
+    putU32(out, uint32_t(crc32(0, out.data() + at, uInt(size + 4))));
+}
+
+uint8_t paeth(int a, int b, int c) {
+    int p = a + b - c, pa = std::abs(p - a), pb = std::abs(p - b), pc = std::abs(p - c);
+    return uint8_t(pa <= pb && pa <= pc ? a : pb <= pc ? b : c);
+}
+
+/// libpng's default choice for 8-bit images: every filter is tried and the row keeps the one whose bytes,
+/// read as signed, have the smallest absolute sum. `out` gets the filter type byte and the filtered row.
+void filterRow(const uint8_t* row, const uint8_t* prior, int bytes, int bpp, uint8_t* out, uint8_t* trial) {
+    unsigned best = ~0u;
+    for (int type = 0; type < 5; type++) {
+        unsigned sum = 0;
+        for (int i = 0; i < bytes; i++) {
+            int left = i >= bpp ? row[i - bpp] : 0, up = prior[i], corner = i >= bpp ? prior[i - bpp] : 0;
+            uint8_t v = row[i];
+            switch (type) {
+            case 1: v = uint8_t(v - left); break;
+            case 2: v = uint8_t(v - up); break;
+            case 3: v = uint8_t(v - ((left + up) >> 1)); break;
+            case 4: v = uint8_t(v - paeth(left, up, corner)); break;
+            default: break;
+            }
+            trial[i] = v;
+            sum += unsigned(std::abs(int(int8_t(v))));
+        }
+        if (sum < best) { best = sum; out[0] = uint8_t(type); std::memcpy(out + 1, trial, size_t(bytes)); }
     }
-    png_write_info(png, info);
-    png_write_image(png, const_cast<png_bytep*>(rows.data()));
-    png_write_end(png, nullptr);
+}
+
+using RowSource = std::function<void(int y, uint8_t* out)>;
+
+bool encodePng(int width, int height, int colorType, int bpp, const RowSource& source, double dpi, int level,
+               std::vector<uint8_t>& out, std::string* error) {
+    if (width <= 0 || height <= 0) { if (error) *error = "PNG encoding failed: empty image"; return false; }
+    const int rowBytes = width * bpp;
+    const size_t lineBytes = size_t(rowBytes) + 1;
+    const int stripRows = std::max(8, int((size_t(1) << 20) / lineBytes));
+    const int strips = (height + stripRows - 1) / stripRows;
+    const size_t window = 32768;
+    const int primeRows = int((window + lineBytes - 1) / lineBytes);
+    std::vector<std::vector<uint8_t>> packed(static_cast<size_t>(strips));
+    std::vector<uLong> checks(static_cast<size_t>(strips));
+    std::vector<size_t> lengths(static_cast<size_t>(strips));
+    std::atomic<bool> failed{false};
+
+    parallelFor(0, strips, 1, [&](int s0, int s1) {
+        std::vector<uint8_t> prior(static_cast<size_t>(rowBytes)), row(static_cast<size_t>(rowBytes)), trial(static_cast<size_t>(rowBytes)), lines;
+        for (int s = s0; s < s1; s++) {
+            const int y0 = s * stripRows, y1 = std::min(height, y0 + stripRows);
+            const int first = std::max(0, y0 - primeRows);
+            lines.resize(size_t(y1 - first) * lineBytes);
+            std::fill(prior.begin(), prior.end(), 0);
+            if (first > 0) source(first - 1, prior.data());
+            for (int y = first; y < y1; y++) {
+                source(y, row.data());
+                filterRow(row.data(), prior.data(), rowBytes, bpp, lines.data() + size_t(y - first) * lineBytes, trial.data());
+                std::swap(row, prior);
+            }
+            const size_t primed = size_t(y0 - first) * lineBytes, length = lines.size() - primed;
+            const uint8_t* data = lines.data() + primed;
+            z_stream z{};
+            if (deflateInit2(&z, level, Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY) != Z_OK) { failed = true; return; }
+            if (primed) {
+                size_t dictionary = std::min(window, primed);
+                deflateSetDictionary(&z, data - dictionary, uInt(dictionary));
+            }
+            std::vector<uint8_t>& chunk = packed[size_t(s)];
+            chunk.resize(deflateBound(&z, uLong(length)) + 16);
+            z.next_in = const_cast<Bytef*>(data);
+            z.avail_in = uInt(length);
+            z.next_out = chunk.data();
+            z.avail_out = uInt(chunk.size());
+            const bool last = s == strips - 1;
+            int status = deflate(&z, last ? Z_FINISH : Z_SYNC_FLUSH);
+            if ((last ? status != Z_STREAM_END : status != Z_OK) || z.avail_in != 0) failed = true;
+            chunk.resize(chunk.size() - z.avail_out);
+            deflateEnd(&z);
+            checks[size_t(s)] = adler32(1, data, uInt(length));
+            lengths[size_t(s)] = length;
+        }
+    });
+    if (failed) { if (error) *error = "PNG encoding failed"; return false; }
+
+    out.clear();
+    static const uint8_t signature[8] = {137, 80, 78, 71, 13, 10, 26, 10};
+    out.insert(out.end(), signature, signature + 8);
+    std::vector<uint8_t> header;
+    putU32(header, uint32_t(width));
+    putU32(header, uint32_t(height));
+    header.insert(header.end(), {8, uint8_t(colorType), 0, 0, 0});
+    putChunk(out, "IHDR", header.data(), header.size());
+    if (colorType == 6) {
+        // The chunks png_set_sRGB_gAMA_and_cHRM writes: sRGB, perceptual intent, with the matching fallbacks.
+        std::vector<uint8_t> gamma, chroma;
+        putU32(gamma, 45455);
+        for (uint32_t v : {31270u, 32900u, 64000u, 33000u, 30000u, 60000u, 15000u, 6000u}) putU32(chroma, v);
+        const uint8_t intent = 0;
+        putChunk(out, "gAMA", gamma.data(), gamma.size());
+        putChunk(out, "cHRM", chroma.data(), chroma.size());
+        putChunk(out, "sRGB", &intent, 1);
+    }
+    if (dpi > 0) {
+        std::vector<uint8_t> physical;
+        uint32_t ppm = uint32_t(dpi / 0.0254 + 0.5);
+        putU32(physical, ppm);
+        putU32(physical, ppm);
+        physical.push_back(1);
+        putChunk(out, "pHYs", physical.data(), physical.size());
+    }
+    uLong check = checks[0];
+    for (size_t s = 1; s < checks.size(); s++) check = adler32_combine(check, checks[s], z_off_t(lengths[s]));
+    const int levelFlag = level < 2 ? 0 : level < 6 ? 1 : level == 6 ? 2 : 3;
+    uint8_t flags = uint8_t(levelFlag << 6);
+    flags = uint8_t(flags + 31 - ((0x78 * 256 + flags) % 31));
+    for (size_t s = 0; s < packed.size(); s++) {
+        std::vector<uint8_t>& data = packed[s];
+        if (s == 0) data.insert(data.begin(), {0x78, flags});
+        if (s + 1 == packed.size()) putU32(data, uint32_t(check));
+        putChunk(out, "IDAT", data.data(), data.size());
+        std::vector<uint8_t>().swap(data);
+    }
+    putChunk(out, "IEND", nullptr, 0);
     return true;
 }
 
-} // namespace
-
-bool encodePngImage(const Image& image, std::vector<uint8_t>& out, double dpi, std::string* error) {
-    Image straight = image;
-    unpremultiply(straight);
-    png_structp png = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
-    png_infop info = png ? png_create_info_struct(png) : nullptr;
-    if (!png || !info) { if (png) png_destroy_write_struct(&png, nullptr); if (error) *error = "libpng initialisation failed"; return false; }
-    out.clear();
-    png_set_write_fn(png, &out, writeToVector, flushNothing);
-    std::vector<png_bytep> rows(size_t(straight.height()));
-    for (int y = 0; y < straight.height(); y++) rows[size_t(y)] = straight.row(y);
-    bool ok = writePng(png, info, straight.width(), straight.height(), PNG_COLOR_TYPE_RGBA, rows, dpi, error);
-    png_destroy_write_struct(&png, &info);
-    return ok;
-}
-
-bool writePngImage(const std::string& path, const Image& image, double dpi, std::string* error) {
-    std::vector<uint8_t> bytes;
-    if (!encodePngImage(image, bytes, dpi, error)) return false;
+bool writeFile(const std::string& path, const std::vector<uint8_t>& bytes, std::string* error) {
     FILE* file = std::fopen(path.c_str(), "wb");
     if (!file) { if (error) *error = "cannot write " + path; return false; }
     bool ok = std::fwrite(bytes.data(), 1, bytes.size(), file) == bytes.size();
@@ -168,22 +277,30 @@ bool writePngImage(const std::string& path, const Image& image, double dpi, std:
     return ok;
 }
 
+} // namespace
+
+bool encodePngImage(const Image& image, std::vector<uint8_t>& out, double dpi, std::string* error) {
+    // Straight alpha, one row at a time, with unpremultiply()'s rounding.
+    auto straight = [&](int y, uint8_t* row) {
+        std::memcpy(row, image.row(y), size_t(image.width()) * 4);
+        for (int x = 0; x < image.width(); x++, row += 4) {
+            unsigned a = row[3];
+            if (a == 255 || a == 0) continue;
+            for (int c = 0; c < 3; c++) row[c] = uint8_t(std::min(255u, (row[c] * 255u + a / 2) / a));
+        }
+    };
+    return encodePng(image.width(), image.height(), 6, 4, straight, dpi, pngCompressionLevel, out, error);
+}
+
+bool writePngImage(const std::string& path, const Image& image, double dpi, std::string* error) {
+    std::vector<uint8_t> bytes;
+    return encodePngImage(image, bytes, dpi, error) && writeFile(path, bytes, error);
+}
+
 bool writePngGray(const std::string& path, const GrayImage& image, std::string* error) {
-    png_structp png = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
-    png_infop info = png ? png_create_info_struct(png) : nullptr;
-    if (!png || !info) { if (png) png_destroy_write_struct(&png, nullptr); if (error) *error = "libpng initialisation failed"; return false; }
-    std::vector<uint8_t> out;
-    png_set_write_fn(png, &out, writeToVector, flushNothing);
-    std::vector<png_bytep> rows(size_t(image.height()));
-    for (int y = 0; y < image.height(); y++) rows[size_t(y)] = const_cast<png_bytep>(image.row(y));
-    bool ok = writePng(png, info, image.width(), image.height(), PNG_COLOR_TYPE_GRAY, rows, 0, error);
-    png_destroy_write_struct(&png, &info);
-    if (!ok) return false;
-    FILE* file = std::fopen(path.c_str(), "wb");
-    if (!file) { if (error) *error = "cannot write " + path; return false; }
-    ok = std::fwrite(out.data(), 1, out.size(), file) == out.size();
-    ok = std::fclose(file) == 0 && ok;
-    return ok;
+    std::vector<uint8_t> bytes;
+    auto copy = [&](int y, uint8_t* row) { std::memcpy(row, image.row(y), size_t(image.width())); };
+    return encodePng(image.width(), image.height(), 0, 1, copy, 0, pngCompressionLevel, bytes, error) && writeFile(path, bytes, error);
 }
 
 } // namespace compositor

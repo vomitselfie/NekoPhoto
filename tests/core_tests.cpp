@@ -22,6 +22,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <random>
 
 using namespace compositor;
 namespace fs = std::filesystem;
@@ -420,6 +421,48 @@ TEST_CASE(png_round_trip_keeps_pixels) {
     // A colour PNG is not a valid mask.
     REQUIRE(writePngImage((dir / "c.png").string(), *image, 0, &error));
     CHECK(readPngGray((dir / "c.png").string(), &error) == nullptr);
+    fs::remove_all(dir);
+}
+
+TEST_CASE(png_written_in_parallel_strips_decodes_exactly) {
+    // Big enough for several strips, each primed from the one before; odd widths catch filter edges.
+    std::mt19937 rng(7);
+    for (auto [w, h] : {std::pair{1537, 700}, std::pair{1, 1}, std::pair{3001, 1}, std::pair{1, 2500}}) {
+        Image image(w, h);
+        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+            uint8_t* p = image.pixel(x, y);
+            // Smooth ramps with noise on top, opaque on the left half and translucent on the right.
+            unsigned a = x < w / 2 ? 255u : 40u + unsigned(rng() % 216);
+            for (int c = 0; c < 3; c++) p[c] = uint8_t(((x * (c + 1) + y * 3 + int(rng() % 9)) & 255) * a / 255);
+            p[3] = uint8_t(a);
+        }
+        std::vector<uint8_t> bytes;
+        std::string error;
+        REQUIRE(encodePngImage(image, bytes, 300, &error));
+        auto back = decodePngImage(bytes.data(), bytes.size(), &error);
+        REQUIRE(back != nullptr);
+        CHECK_EQ(back->width(), w);
+        CHECK_EQ(back->height(), h);
+        int worst = 0;
+        bool opaqueExact = true;
+        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) for (int c = 0; c < 4; c++) {
+            int d = std::abs(int(back->pixel(x, y)[c]) - int(image.pixel(x, y)[c]));
+            worst = std::max(worst, d);
+            if (image.pixel(x, y)[3] == 255 && d) opaqueExact = false;
+        }
+        CHECK(worst <= 1);   // straight alpha in the file, premultiplied again on the way in
+        CHECK(opaqueExact);
+    }
+    fs::path dir = tempDir();
+    GrayImage gray(4099, 600);
+    for (int y = 0; y < 600; y++) for (int x = 0; x < 4099; x++) gray.at(x, y) = uint8_t((x ^ y) + int(rng() % 3));
+    std::string error;
+    REQUIRE(writePngGray((dir / "g.png").string(), gray, &error));
+    auto g = readPngGray((dir / "g.png").string(), &error);
+    REQUIRE(g != nullptr);
+    bool same = true;
+    for (int y = 0; y < 600; y++) same = same && std::memcmp(g->row(y), gray.row(y), 4099) == 0;
+    CHECK(same);
     fs::remove_all(dir);
 }
 

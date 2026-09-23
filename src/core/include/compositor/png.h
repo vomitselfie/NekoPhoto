@@ -1,4 +1,4 @@
-// PNG reading and writing with libpng, for .comp assets and PNG export.
+// PNG reading with libpng and writing with zlib on every core, for .comp assets and PNG export.
 #pragma once
 #include "image.h"
 #include <cstdint>
@@ -6,6 +6,9 @@
 #include <vector>
 
 namespace compositor {
+
+/// zlib level for everything written: level 6, libpng's default, now that the strips compress in parallel.
+inline constexpr int pngCompressionLevel = 6;
 
 struct PngInfo { int width = 0, height = 0, bitDepth = 8; bool gray = false; };
 
