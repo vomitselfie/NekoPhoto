@@ -53,6 +53,10 @@ qt_add_executable(compositor-linux
     AdjustmentEditor.cpp
     AdjustmentsPanel.h
     AdjustmentsPanel.cpp
+    BrushLibrary.h
+    BrushLibrary.cpp
+    BrushPicker.h
+    BrushPicker.cpp
     FilterDialog.h
     FilterDialog.cpp
     PixelDialog.h
@@ -87,6 +91,10 @@ qt_add_executable(compositor-linux
 )
 
 target_compile_definitions(compositor-linux PRIVATE COMPOSITOR_VERSION="${COMPOSITOR_VERSION_STRING}")
+# The MyPaint brush presets (CC0) are compiled in, so every package and a plain build tree have them.
+file(GLOB_RECURSE COMPOSITOR_BRUSH_FILES CONFIGURE_DEPENDS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/brushes/mypaint/*.myb ${CMAKE_CURRENT_SOURCE_DIR}/brushes/mypaint/*_prev.png)
+qt_add_resources(compositor-linux "mypaint_brushes" PREFIX "/" FILES ${COMPOSITOR_BRUSH_FILES} brushes/mypaint/order.conf)
 target_link_libraries(compositor-linux PRIVATE compositor::core Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Svg compositor_warnings)
 # Off by default: linking libgmic makes it a hard dependency of the binary, and an installed build then
 # refuses to start once the library is upgraded or removed, while the gmic executable serves the same

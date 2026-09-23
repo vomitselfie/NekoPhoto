@@ -116,6 +116,16 @@ def main():
 
     # Painting by coordinates: a stroke, a gradient and a shape layer.
     rpc.call("brush.stroke", points=[[20, 20], [120, 60], [220, 20]], size=12, color="#00ff00", opacity=1)
+    presets = rpc.call("brush.presets")
+    if presets["supported"]:
+        assert len(presets["presets"]) >= 196 and "Classic" in presets["groups"], presets["groups"]
+        painted = rpc.call("brush.stroke", points=[[30, 80], [130, 110], [230, 80]], preset="classic/pencil", pressures=[0.2, 0.8, 0.5], color="#000000")
+        assert painted["preset"] == "classic/pencil", painted
+        try:
+            rpc.call("brush.stroke", points=[[0, 0], [5, 5]], preset="no/such-brush")
+            raise AssertionError("an unknown preset should be refused")
+        except RuntimeError as e:
+            print("expected error:", e)
     rpc.call("gradient.draw", x0=0, y0=0, x1=200, y1=0, foreground="#0000ff", opacity=0.5)
     n = len(rpc.call("layers.list"))
     shape = rpc.call("shape.draw", kind="ellipse", x=300, y=100, width=120, height=80, color="#ff00ff")

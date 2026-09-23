@@ -1,6 +1,8 @@
 #include "Style.h"
 #include "ToolOptionsBar.h"
 #include "TextLayer.h"
+#include "BrushLibrary.h"
+#include "BrushPicker.h"
 #include "FontPicker.h"
 #include "CanvasWidget.h"
 #include "Icons.h"
@@ -118,6 +120,9 @@ void ToolOptionsBar::syncTool() {
         else if (role == "hardness") spin->setValue(session_->brushSettings.hardness * 100);
         else if (role == "opacity") spin->setValue(session_->brushSettings.opacity * 100);
     }
+    // A MyPaint preset brings its own hardness.
+    for (auto* spin : stack_->widget(1)->findChildren<QDoubleSpinBox*>())
+        if (spin->property("role").toString() == "hardness") spin->setEnabled(session_->brushPreset.isEmpty());
     for (auto* b : stack_->widget(1)->findChildren<QToolButton*>()) {
         QString role = b->property("role").toString();
         if (role == "paint") b->setChecked(!session_->brushErase);
@@ -252,6 +257,19 @@ void ToolOptionsBar::applyTransformField() {
 QWidget* ToolOptionsBar::buildBrushOptions() {
     QWidget* w = row();
     auto* h = layoutOf(w);
+    auto* picker = new BrushPicker;
+    picker->setPreset(session_->brushPreset);
+    connect(picker, &BrushPicker::presetChosen, this, [this](const QString& id) {
+        session_->brushPreset = id;
+        // A preset starts at its own size; Size then scales it like any brush.
+        if (const BrushPreset* preset = BrushLibrary::find(id)) session_->brushSettings.diameter = preset->diameter;
+        emit session_->toolChanged();
+    });
+    syncers_.push_back([this, picker] {
+        if (picker->preset() != session_->brushPreset) picker->setPreset(session_->brushPreset);
+    });
+    h->addWidget(picker);
+    h->addWidget(separator());
     auto* paint = new QToolButton;
     paint->setText(tr("Paint"));
     paint->setIcon(toolIcon("paintbrush", 16));

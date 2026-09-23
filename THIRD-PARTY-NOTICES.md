@@ -32,6 +32,7 @@ the AppImage and the tarball) or in `Contents/Resources/licenses/` (macOS).
 | DLPack headers, as bundled with OpenCV's dnn module | Apache-2.0 | [Apache-2.0.txt](LICENSES/Apache-2.0.txt) |
 | [nlohmann/json](https://github.com/nlohmann/json) (`src/third_party/nlohmann`) | MIT | [nlohmann-json.txt](LICENSES/nlohmann-json.txt) |
 | [Lucide](https://lucide.dev) icons (`src/app/icons`) | ISC | [Lucide-ISC.txt](LICENSES/Lucide-ISC.txt) |
+| [mypaint-brushes](https://github.com/mypaint/mypaint-brushes) 2.0.2 (`src/app/brushes/mypaint`): 196 presets by Martin Renold and the MyPaint team, David Revoy, Ramón Miranda, Marcelo "Tanda" Cerviño, Guillaume Loussarévian and Brien Dieterle | CC0-1.0 (public domain) | [CC0-1.0.txt](LICENSES/CC0-1.0.txt); authors per set in `src/app/brushes/mypaint/Licenses.dep5` |
 
 ## Shipped as shared libraries
 
@@ -40,13 +41,15 @@ the AppImage and the tarball) or in `Contents/Resources/licenses/` (macOS).
 | [Qt](https://www.qt.io) 6: Core, Gui, Widgets, Network, Svg, DBus, Wayland and the image format plugins, bundled in the AppImage and the macOS app | LGPL-3.0 (used under its terms; the libraries are unmodified and can be replaced) | [LGPL-3.0.txt](LICENSES/LGPL-3.0.txt) with [LICENSE](LICENSE); Qt's own third-party components are listed at <https://doc.qt.io/qt-6/licenses-used-in-qt.html> |
 | [libpng](http://www.libpng.org) | libpng / PNG Reference Library License v2 | [libpng.txt](LICENSES/libpng.txt) |
 | [zlib](https://zlib.net) | zlib | [zlib.txt](LICENSES/zlib.txt) |
+| [libmypaint](https://github.com/mypaint/libmypaint) 1.6, the MyPaint brush engine | ISC | [libmypaint-ISC.txt](LICENSES/libmypaint-ISC.txt) |
+| [json-c](https://github.com/json-c/json-c), which libmypaint uses to read presets | MIT | [json-c-MIT.txt](LICENSES/json-c-MIT.txt) |
 
 The AppImage also carries system libraries that Qt depends on (fonts, text
 shaping, input, graphics). Their copyright files are collected at build time
 into `share/doc/compositor-linux/bundled/` inside the AppImage and the tarball.
 
 The source for the GPL program is this repository at the tag of each release.
-Qt, libpng and zlib are unmodified upstream releases; OpenCV is built from the
+Qt, libpng, zlib, libmypaint and json-c are unmodified upstream releases; OpenCV is built from the
 unmodified 4.14.0 source archive by `tools/build-opencv.sh`.
 
 ## Used at run time, not distributed

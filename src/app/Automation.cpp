@@ -1,4 +1,5 @@
 #include "Automation.h"
+#include "BrushLibrary.h"
 #include "CanvasWidget.h"
 #include "EditorSession.h"
 #include "ImageConvert.h"
@@ -1038,6 +1039,16 @@ void AutomationServer::registerHandlers() {
         }
         return pts;
     };
+    add("brush.presets", [](const QJsonObject& p) {
+        // The MyPaint presets the Brush tool offers, grouped as in the picker; group filters to one.
+        const QString group = str(p, "group", QString());
+        QJsonArray out;
+        for (const BrushPreset& preset : BrushLibrary::presets()) {
+            if (!group.isEmpty() && preset.group.compare(group, Qt::CaseInsensitive) != 0) continue;
+            out.append(QJsonObject{{"id", preset.id}, {"name", preset.name}, {"group", preset.group}, {"size", preset.diameter}, {"eraser", preset.eraser}});
+        }
+        return QJsonObject{{"supported", myPaintSupported()}, {"presets", out}, {"groups", QJsonArray::fromStringList(BrushLibrary::groups())}};
+    });
     add("brush.stroke", [session, document, pointList](const QJsonObject& p) {
         document();
         EditorSession* s = session();
@@ -1051,8 +1062,10 @@ void AutomationServer::registerHandlers() {
         BlurToolMode previousBlur = s->blurMode;
         auto previousClone = s->cloneSource;
         auto previousActive = s->activeLayerId();
+        const QString previousPreset = s->brushPreset;
         auto restore = [&] {
             s->brushSettings = previousBrush; s->brushErase = previousErase; s->foregroundColor = previousColor; s->blurMode = previousBlur; s->cloneSource = previousClone;
+            s->brushPreset = previousPreset;
             if (previousActive && s->document() && s->document()->find(*previousActive)) s->selectLayer(previousActive, previousMask);
             s->selectTool(previousTool);
         };
@@ -1061,6 +1074,23 @@ void AutomationServer::registerHandlers() {
         if (has(p, "opacity")) s->brushSettings.opacity = std::clamp(num(p, "opacity"), 0.0, 1.0);
         if (has(p, "color")) { QColor c(str(p, "color")); if (!c.isValid()) { restore(); fail("color must be a CSS colour", invalidParams); } s->foregroundColor = c; }
         if (has(p, "mask") && s->activeLayerId()) s->selectLayer(s->activeLayerId(), flag(p, "mask", false));
+        if (has(p, "preset")) {
+            // A MyPaint preset from brush.presets, or "round" for the plain tip; the preset's own size unless size is given.
+            QString id = str(p, "preset");
+            if (id.compare("round", Qt::CaseInsensitive) == 0) id.clear();
+            const BrushPreset* preset = id.isEmpty() ? nullptr : BrushLibrary::find(id);
+            if (!id.isEmpty() && !preset) { restore(); fail("no brush preset " + id + "; brush.presets lists them", invalidParams); }
+            if (!id.isEmpty() && !myPaintSupported()) { restore(); fail("this build has no MyPaint brush engine"); }
+            s->brushPreset = id;
+            if (preset && !has(p, "size")) s->brushSettings.diameter = preset->diameter;
+        }
+        // Pen pressure: one value for the whole stroke, or one per point; events come 8 ms apart.
+        const QJsonArray pressures = p.value("pressures").toArray();
+        const double pressure = std::clamp(num(p, "pressure", 0.5), 0.0, 1.0);
+        auto penAt = [&](size_t i) {
+            double value = i < size_t(pressures.size()) ? std::clamp(pressures[int(i)].toDouble(pressure), 0.0, 1.0) : pressure;
+            s->pen = {value, 0, 0, qint64(i) * 8};
+        };
         bool warp = false;
         if (tool == "brush" || tool == "eraser") { s->selectTool(Tool::Brush); s->brushErase = tool == "eraser" || flag(p, "erase", false); }
         else if (tool == "healing") s->selectTool(Tool::SpotHealing);
@@ -1072,12 +1102,16 @@ void AutomationServer::registerHandlers() {
             s->blurMode = tool == "blur" ? BlurToolMode::Blur : tool == "smudge" ? BlurToolMode::Smudge : BlurToolMode::Liquify;
             warp = true;
         } else { restore(); fail("tool must be brush, eraser, healing, clone, smudge, blur or liquify", invalidParams); }
+        penAt(0);
         bool started = warp ? s->beginWarp(pts[0]) : s->beginBrush(pts[0], false);
         if (!started) { restore(); fail("couldn't start the stroke: the active layer must have pixels (clone needs a source; healing and clone can't paint a mask)"); }
-        for (size_t i = 1; i < pts.size(); i++) { if (warp) s->continueWarp(pts[i]); else s->continueBrush(pts[i]); }
+        for (size_t i = 1; i < pts.size(); i++) { penAt(i); if (warp) s->continueWarp(pts[i]); else s->continueBrush(pts[i]); }
         if (warp) s->endWarp(); else s->endBrush();
+        const QString usedPreset = s->brushPreset;
         restore();
-        return QJsonObject{{"points", int(pts.size())}, {"tool", tool}};
+        QJsonObject answer{{"points", int(pts.size())}, {"tool", tool}};
+        if (!usedPreset.isEmpty()) answer["preset"] = usedPreset;
+        return answer;
     });
     add("gradient.draw", [session, document](const QJsonObject& p) {
         document();

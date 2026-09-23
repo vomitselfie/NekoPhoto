@@ -10,18 +10,18 @@ unchanged. The macOS application and its Xcode project are untouched; see
 
 Requirements: CMake 3.22+, Ninja (or Make), GCC 12+ or Clang 15+, Qt 6.4+
 (Core, Gui, Widgets, Network, Svg, plus the Wayland platform plugin), libpng;
-OpenCV for Remove Background.
+OpenCV for Remove Background; libmypaint 1.5 or newer for the MyPaint brushes.
 
 Arch / Manjaro:
 
 ```bash
-sudo pacman -S cmake ninja qt6-base qt6-svg qt6-wayland qt6-imageformats libpng opencv
+sudo pacman -S cmake ninja qt6-base qt6-svg qt6-wayland qt6-imageformats libpng libmypaint opencv
 ```
 
 Ubuntu 24.04:
 
 ```bash
-sudo apt install cmake ninja-build qt6-base-dev qt6-svg-dev qt6-wayland qt6-image-formats-plugins libpng-dev libgl1-mesa-dev libopencv-dev
+sudo apt install cmake ninja-build qt6-base-dev qt6-svg-dev qt6-wayland qt6-image-formats-plugins libpng-dev libmypaint-dev libgl1-mesa-dev libopencv-dev
 ```
 
 Then:
@@ -37,7 +37,7 @@ macOS (Homebrew) builds an app bundle; the G'MIC filters appear once
 `brew install gmic` has put `gmic` on the path:
 
 ```bash
-brew install cmake ninja qt libpng opencv pkg-config
+brew install cmake ninja qt libpng libmypaint opencv pkg-config
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
 cmake --build build -j && open build/src/app/compositor-linux.app
 ```
@@ -48,6 +48,7 @@ XWayland.
 
 Options: `-DCOMPOSITOR_BUILD_APP=OFF` builds only the core and tests;
 `-DCOMPOSITOR_WITH_OPENCV=OFF` leaves out the Remove Background model;
+`-DCOMPOSITOR_WITH_MYPAINT=OFF` leaves out the MyPaint brushes (the round brush stays);
 `-DCOMPOSITOR_WARNINGS_AS_ERRORS=ON` is what CI uses.
 `-DOpenCV_DIR=<prefix>/lib/cmake/opencv4` builds against the OpenCV that
 `tools/build-opencv.sh <prefix>` makes: a pinned 4.x, static, with only the
@@ -214,6 +215,16 @@ packaging/                      .desktop, icon, MIME type
   pixels keep their resolution. Flip layer and flip canvas.
 - Brush and eraser with size, hardness and opacity, Shift-click straight
   lines, `[` and `]` for size, painting on masks (white reveals, black hides).
+- MyPaint brushes: the 196 presets of mypaint-brushes 2.0.2 (CC0), compiled in
+  and chosen from the Brush tool's options bar, painted by libmypaint on 15-bit
+  tiles filled from the layer so smudging reads the real paint. They follow pen
+  pressure and tilt (a mouse is half pressure), take Size, Opacity, the colour
+  and Erase from the options, paint layer pixels (a mask gets the round tip),
+  and undo like any stroke. `.myb` files in
+  `~/.local/share/compositor-linux/compositor-linux/brushes` appear as My
+  Brushes. libmypaint's newer `stroke_to_2` reads uninitialised memory in 1.6,
+  so the engine uses `stroke_to`: the 19 Dieterle presets that ask for pigment
+  mixing paint with ordinary RGB mixing.
 - Spot Healing Brush (Content-Aware, Create Texture, Proximity Match) and
   Clone Stamp (aligned or not, sampling one layer or all). Content-Aware
   healing and Content-Aware Fill synthesise from the surroundings with

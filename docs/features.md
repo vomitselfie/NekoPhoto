@@ -29,6 +29,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 
 ## Painting and retouching
 - Brush and eraser with size, hardness and opacity; Shift for straight lines
+- 196 MyPaint brushes (pencils, inks, charcoal, paint, smudging, by the MyPaint team, David Revoy, Ramón Miranda, Tanda and others) that follow pen pressure and tilt; pick one from the Brush tool's options bar. Your own `.myb` presets go in the app's `brushes` folder
 - Spot Healing Brush and Clone Stamp; both ignore what a layer mask hides
 - Smudge, Liquify and Blur, on pixels or masks
 - Gradients and shapes (rectangles, rounded rectangles, ellipses)
@@ -91,6 +92,7 @@ Mac 版と同じ機能を、Linux のキー表記で使えます。キーボー�
 
 ### 描画とレタッチ
 - サイズ・硬さ・不透明度を指定できるブラシと消しゴム。Shift で直線
+- 筆圧と傾きに反応する MyPaint ブラシ 196 種類(鉛筆、インク、木炭、絵の具、ぼかし。MyPaint チーム、David Revoy、Ramón Miranda、Tanda ほか)。ブラシツールのオプションバーから選べます。自作の `.myb` はアプリの `brushes` フォルダーに置けます
 - スポット修復ブラシとコピースタンプ(どちらもレイヤーマスクで隠れた部分は使いません)
 - 指先ツール、ゆがみ、ぼかしツール(ピクセルにもマスクにも使えます)
 - グラデーションとシェイプ(長方形、角丸長方形、楕円)

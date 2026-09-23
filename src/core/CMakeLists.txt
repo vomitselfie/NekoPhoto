@@ -32,6 +32,29 @@ if(COMPOSITOR_WITH_OPENCV)
 endif()
 set(COMPOSITOR_HAVE_OPENCV ${COMPOSITOR_HAVE_OPENCV} PARENT_SCOPE)
 
+# libmypaint paints the MyPaint brush presets. Optional: without it the round brush is the only engine.
+option(COMPOSITOR_WITH_MYPAINT "Use libmypaint for the MyPaint brush presets" ON)
+set(COMPOSITOR_HAVE_MYPAINT OFF)
+if(COMPOSITOR_WITH_MYPAINT)
+    pkg_check_modules(MYPAINT IMPORTED_TARGET libmypaint>=1.5)
+    if(MYPAINT_FOUND)
+        # Ubuntu's libmypaint.pc puts -fopenmp in Libs. libmypaint.so already links its own OpenMP runtime;
+        # the flag only makes our link ask for the compiler's (libomp under Clang, often not installed).
+        foreach(property INTERFACE_LINK_OPTIONS INTERFACE_LINK_LIBRARIES INTERFACE_COMPILE_OPTIONS)
+            get_target_property(values PkgConfig::MYPAINT ${property})
+            if(values)
+                list(FILTER values EXCLUDE REGEX "^-f?openmp$|^-fopenmp")
+                set_target_properties(PkgConfig::MYPAINT PROPERTIES ${property} "${values}")
+            endif()
+        endforeach()
+        set(COMPOSITOR_HAVE_MYPAINT ON)
+        message(STATUS "Brushes: libmypaint ${MYPAINT_VERSION}")
+    else()
+        message(STATUS "Brushes: libmypaint not found, MyPaint presets disabled")
+    endif()
+endif()
+set(COMPOSITOR_HAVE_MYPAINT ${COMPOSITOR_HAVE_MYPAINT} PARENT_SCOPE)
+
 add_library(compositor_core STATIC
     src/adjustments.cpp
     src/blend.cpp
@@ -44,6 +67,7 @@ add_library(compositor_core STATIC
     src/kernels.cpp
     src/matte.cpp
     src/morphology.cpp
+    src/mypaint.cpp
     src/parallel.cpp
     src/wand.cpp
     src/resample.cpp
@@ -76,5 +100,9 @@ target_compile_definitions(compositor_core PRIVATE _USE_MATH_DEFINES)
 if(COMPOSITOR_HAVE_OPENCV)
     target_link_libraries(compositor_core PRIVATE ${COMPOSITOR_OPENCV_LIBS})
     target_compile_definitions(compositor_core PRIVATE COMPOSITOR_HAVE_OPENCV)
+endif()
+if(COMPOSITOR_HAVE_MYPAINT)
+    target_link_libraries(compositor_core PRIVATE PkgConfig::MYPAINT)
+    target_compile_definitions(compositor_core PRIVATE COMPOSITOR_HAVE_MYPAINT)
 endif()
 set_target_properties(compositor_core PROPERTIES POSITION_INDEPENDENT_CODE ON)

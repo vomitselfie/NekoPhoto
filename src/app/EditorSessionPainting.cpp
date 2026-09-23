@@ -1,5 +1,6 @@
 // EditorSession: Painting: brushes, opacity keys, blur/smudge/liquify, gradients, shapes and text.
 #include "EditorSession.h"
+#include "BrushLibrary.h"
 #include "QtGeometry.h"
 #include "TextLayer.h"
 #include <algorithm>
@@ -61,17 +62,42 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
     strokeLayerId_ = layer->id;
     strokeMask_ = mask;
     if (clone) stroke_->setClone(*clone);
-    if (straightFromLast && lastBrushPoint_) stroke_->append(toPoint(*lastBrushPoint_));
-    stroke_->append(toPoint(documentPoint));
+    if (tool_ == Tool::Brush && !mask && !brushPreset.isEmpty()) {
+        if (const BrushPreset* preset = BrushLibrary::find(brushPreset)) {
+            myPaint_ = std::make_unique<MyPaintStroke>(*stroke_, preset->json, settings);
+            if (!myPaint_->isValid()) { emit error(QString::fromStdString(myPaint_->error())); myPaint_.reset(); stroke_.reset(); return false; }
+        }
+    }
+    if (myPaint_) {
+        lastPenTime_ = pen.timeMs;
+        if (straightFromLast && lastBrushPoint_) myPaintTo(*lastBrushPoint_);
+        myPaintTo(documentPoint);
+    } else {
+        if (straightFromLast && lastBrushPoint_) stroke_->append(toPoint(*lastBrushPoint_));
+        stroke_->append(toPoint(documentPoint));
+    }
     lastBrushPoint_ = documentPoint;
     emit documentChanged(toQRect(stroke_->takeDirtyRect()));
     if (settings.healing) healPreview_.start();
     return true;
 }
 
+void EditorSession::myPaintTo(QPointF documentPoint) {
+    MyPaintInput input;
+    input.document = toPoint(documentPoint);
+    input.pressure = pen.pressure;
+    input.xtilt = pen.xtilt;
+    input.ytilt = pen.ytilt;
+    // Seconds since the last event; events without a timestamp count as 120 a second.
+    input.seconds = pen.timeMs > lastPenTime_ ? (pen.timeMs - lastPenTime_) / 1000.0 : 1.0 / 120;
+    lastPenTime_ = pen.timeMs;
+    myPaint_->strokeTo(input);
+}
+
 void EditorSession::continueBrush(QPointF documentPoint) {
     if (!stroke_) return;
-    stroke_->append(toPoint(documentPoint));
+    if (myPaint_) myPaintTo(documentPoint);
+    else stroke_->append(toPoint(documentPoint));
     lastBrushPoint_ = documentPoint;
     Rect dirty = stroke_->takeDirtyRect();
     if (!dirty.isEmpty()) emit documentChanged(toQRect(dirty));
@@ -106,6 +132,7 @@ void EditorSession::commitRasterEdit(BrushStroke& stroke, const Uuid& layerId, b
 void EditorSession::endBrush() {
     if (!stroke_) return;
     healPreview_.stop();
+    if (myPaint_) { myPaint_->finish(); myPaint_.reset(); }
     std::unique_ptr<BrushStroke> stroke = std::move(stroke_);
     stroke->flush();
     QString name = strokeMask_ ? "Paint Mask" : tool_ == Tool::SpotHealing ? "Spot Healing" : tool_ == Tool::CloneStamp ? "Clone Stamp" : tool_ == Tool::Smudge ? "Blur" : (brushErase ? "Eraser" : "Brush Stroke");
@@ -115,6 +142,7 @@ void EditorSession::endBrush() {
 void EditorSession::cancelBrush() {
     if (!stroke_) return;
     healPreview_.stop();
+    myPaint_.reset();
     stroke_.reset();
     emit documentChanged({});
 }

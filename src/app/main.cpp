@@ -7,6 +7,7 @@
 #include "Theme.h"
 #include "FilterDialog.h"
 #include "GmicDialog.h"
+#include "BrushPicker.h"
 #include "FontPicker.h"
 #include "SingleInstance.h"
 #include "ImageConvert.h"
@@ -207,7 +208,7 @@ int main(int argc, char** argv) {
     parser.addOption(prefs);
     QCommandLineOption toolOption("tool", "Select tool <name> after opening (move, marquee, lasso, wand, crop, brush, healing, clone, smudge, gradient, shape, eyedropper, hand, zoom).", "name");
     parser.addOption(toolOption);
-    QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: new, canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, gmic, background, text, fonts.", "name");
+    QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: new, canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, gmic, background, text, fonts, brushes.", "name");
     parser.addOption(dialogOption);
     QCommandLineOption rpc("rpc", "Listen on the automation socket (JSON-RPC over a local socket, for the MCP bridge). Also on when the automation preference is set.");
     QCommandLineOption rpcSocket("rpc-socket", "Socket path for --rpc (default: $XDG_RUNTIME_DIR/compositor-linux.sock, or $COMPOSITOR_RPC_SOCKET).", "path");
@@ -344,6 +345,10 @@ int main(int argc, char** argv) {
                 text.text = "Hello";
                 if (s->hasDocument()) s->addTextLayer(QPointF(s->document()->width / 3.0, s->document()->height / 3.0), text, true);
                 if (name == "fonts") QTimer::singleShot(100, &window, [] { for (QWidget* w : QApplication::topLevelWidgets()) for (auto* picker : w->findChildren<app::FontPicker*>()) if (w->isVisible()) { picker->showPicker(); return; } });
+            }
+            else if (name == "brushes") {
+                s->selectTool(app::Tool::Brush);
+                QTimer::singleShot(100, &window, [] { for (QWidget* w : QApplication::topLevelWidgets()) for (auto* picker : w->findChildren<app::BrushPicker*>()) if (picker->isVisible()) { picker->showPicker(); return; } });
             }
             else if (name == "background") {
                 if (!app::ModelStore::ready()) qWarning("Remove Background is off or its model is missing");

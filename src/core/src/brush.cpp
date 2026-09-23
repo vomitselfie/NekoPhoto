@@ -342,6 +342,7 @@ void BrushStroke::dab(Point center) {
 }
 
 void BrushStroke::recompose(const Rect& gridRect) {
+    if (painted_) return;   // another engine owns the working pixels
     Rect r = gridRect.intersection(Rect(0, 0, width_, height_));
     if (r.isEmpty()) return;
     int x0 = int(r.minX()), x1 = int(r.maxX()), y0 = int(r.minY()), y1 = int(r.maxY());

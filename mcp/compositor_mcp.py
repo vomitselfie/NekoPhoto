@@ -374,10 +374,17 @@ def remove_background(refine: bool = True, refine_edges: Optional[float] = None,
 # ---- painting by coordinates ---------------------------------------------------------------------
 
 @mcp.tool()
-def brush_stroke(points: list[list[float]], tool: str = "brush", size: Optional[float] = None, hardness: Optional[float] = None, opacity: Optional[float] = None, color: Optional[str] = None, mask: bool = False, source_x: Optional[float] = None, source_y: Optional[float] = None) -> str:
-    """Paint one stroke through [x, y] points on the active layer (or its mask with mask=true): tool brush, eraser, healing, clone (with source_x/source_y), smudge, blur or liquify; size in pixels, hardness and opacity 0..1, a CSS color."""
+def brush_stroke(points: list[list[float]], tool: str = "brush", size: Optional[float] = None, hardness: Optional[float] = None, opacity: Optional[float] = None, color: Optional[str] = None, mask: bool = False, source_x: Optional[float] = None, source_y: Optional[float] = None, preset: Optional[str] = None, pressure: Optional[float] = None, pressures: Optional[list[float]] = None) -> str:
+    """Paint one stroke through [x, y] points on the active layer (or its mask with mask=true): tool brush, eraser, healing, clone (with source_x/source_y), smudge, blur or liquify; size in pixels, hardness and opacity 0..1, a CSS color.
+    With tool brush or eraser, preset picks a MyPaint brush from brush_presets (pencils, inks, charcoal, paint, smudging; "round" for the plain tip); it starts at its own size unless size is given, and follows pen pressure: one pressure 0..1 for the stroke, or pressures with one value per point (a ramp tapers the line)."""
     source = {"x": source_x, "y": source_y} if source_x is not None and source_y is not None else None
-    return text(call("brush.stroke", points=points, tool=tool, size=size, hardness=hardness, opacity=opacity, color=color, mask=mask, source=source))
+    return text(call("brush.stroke", points=points, tool=tool, size=size, hardness=hardness, opacity=opacity, color=color, mask=mask, source=source, preset=preset, pressure=pressure, pressures=pressures))
+
+
+@mcp.tool()
+def brush_presets(group: Optional[str] = None) -> str:
+    """The MyPaint brush presets brush_stroke can paint with (id, name, group, own size, whether it erases), optionally one group: Classic, David Revoy, Ramón Miranda, Tanda, Kaerhon, Brien Dieterle, Experimental."""
+    return text(call("brush.presets", group=group))
 
 
 @mcp.tool()

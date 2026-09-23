@@ -88,6 +88,14 @@ public:
     /// A healing stroke's result so far, in the preview image (what commit will do with the spot as painted).
     void previewHeal();
 
+    // Another paint engine on this stroke's grid (the MyPaint presets): it reads the original pixels, writes
+    // the working ones and reports what it changed; the preview, the selection and commit() stay this class's.
+    const Image* gridBase() const { return base_.get(); }
+    Image* gridWorking() { return working_.get(); }
+    const GrayImage* gridSelection() const { return selection_.get(); }
+    const Affine& documentToGrid() const { return documentToPixel_; }
+    void markPainted(const Rect& gridRect) { painted_ = true; markDirty(gridRect); }
+
 private:
     void walk(Point to);
     void dab(Point center);
@@ -134,6 +142,7 @@ private:
     bool stampDab(Point center, double radius, const Rect& affected);
     void refreshDabTable(double radius, double hardness, double footprint);
     bool touched_ = false;
+    bool painted_ = false;   // another engine wrote the working pixels: never recompose them from coverage_
     // A provisional straight tail is drawn to the newest sample and undone when the next arrives.
     bool hasTail_ = false;
     Rect tailRect_;
