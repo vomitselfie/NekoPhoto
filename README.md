@@ -12,7 +12,8 @@ It is a native port of [Compositor](https://github.com/robbietilton/Compositor)
 for macOS, and opens Photoshop files and the Mac app's `.comp` projects.
 
 <p align="center">
-  <img src="docs/images/screenshot.jpg" alt="compositor-linux editing a layered illustration" width="800">
+  <img src="docs/images/remove-background.jpg" alt="Remove Background on an illustration, with the settings dialog open" width="800">
+  <img src="docs/images/filters.jpg" alt="The G'MIC filter browser previewing CRT Sub-Pixels on an illustration" width="800">
 </p>
 
 ## What it does
