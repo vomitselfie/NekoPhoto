@@ -3,6 +3,7 @@
 // adjustment layers and by the Image > Adjustments dialogs for pixels.
 #pragma once
 #include "compositor/adjustments.h"
+#include <QPointer>
 #include <QWidget>
 #include <optional>
 #include <array>
@@ -16,6 +17,7 @@ class QPushButton;
 
 namespace app {
 
+class EditorSession;
 class HistogramWidget;
 class CurveWidget;
 
@@ -56,7 +58,7 @@ private:
     HistogramWidget* histogram_ = nullptr;
     CurveWidget* curve_ = nullptr;
     std::array<std::vector<double>, 4> histogramData_;
-    EditorSession* session_ = nullptr;
+    QPointer<EditorSession> session_;   // may go first: its tab can close while a dialog holding this editor is open
     int hueSampleMode_ = 0; // 0 off, 1 sample, 2 add, 3 remove
     bool hueTargeting_ = false;
     void installHueHooks();

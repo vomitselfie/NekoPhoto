@@ -5,7 +5,6 @@
 #include <QComboBox>
 #include <QMessageBox>
 #include <thread>
-#include <QDialogButtonBox>
 #include <QDoubleSpinBox>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -22,67 +21,34 @@ namespace {
 
 constexpr int previewLimit = 2048;
 
-// A copy no larger than `limit` on its longest side, for quick previews; `scale` reports the reduction.
-std::shared_ptr<const Image> previewCopy(const std::shared_ptr<const Image>& source, int limit, double& scale) {
-    int longest = std::max(source->width(), source->height());
-    if (longest <= limit) { scale = 1; return source; }
-    scale = double(limit) / longest;
-    int w = std::max(1, int(source->width() * scale)), h = std::max(1, int(source->height() * scale));
-    LayerTransform full(Point(0, 0), Size(source->width(), source->height()));
-    LayerTransform small(Point(0, 0), Size(source->width(), source->height()));
-    return resampleLayer(source, full, small, w, h);
-}
-
-std::shared_ptr<GrayImage> coverageCopy(const std::shared_ptr<GrayImage>& coverage, int w, int h) {
-    if (!coverage) return nullptr;
-    LayerTransform full(Point(0, 0), Size(coverage->width(), coverage->height()));
-    return resampleMask(*coverage, full, full, w, h, 0);
-}
-
 } // namespace
 
 // ---- Pixel adjustments ----------------------------------------------------------------------
 
 PixelAdjustmentDialog::PixelAdjustmentDialog(EditorSession* session, AdjustmentKind kind, QWidget* parent)
-    : QDialog(parent), session_(session) {
+    : PixelDialog(session, parent) {
     setWindowTitle(QString::fromUtf8(adjustmentKindName(kind)));
-    setModal(false);
-    setAttribute(Qt::WA_DeleteOnClose);
     auto* layout = new QVBoxLayout(this);
     editor_ = new AdjustmentEditor;
-    editor_->setSession(session_);
+    editor_->setSession(session);
     AdjustmentSettings settings = AdjustmentSettings::defaults(kind);
     if (kind == AdjustmentKind::GradientMap) {
-        settings.gradientMap.shadows = {session_->foregroundColor.redF(), session_->foregroundColor.greenF(), session_->foregroundColor.blueF()};
-        settings.gradientMap.highlights = {session_->backgroundColor.redF(), session_->backgroundColor.greenF(), session_->backgroundColor.blueF()};
+        settings.gradientMap.shadows = {session->foregroundColor.redF(), session->foregroundColor.greenF(), session->foregroundColor.blueF()};
+        settings.gradientMap.highlights = {session->backgroundColor.redF(), session->backgroundColor.greenF(), session->backgroundColor.blueF()};
     }
     if (kind == AdjustmentKind::Grain) settings.grain.seed = uint32_t(std::random_device{}());
     editor_->setSettings(settings);
     layout->addWidget(editor_);
-    preview_ = new QCheckBox(tr("Preview"));
-    preview_->setChecked(true);
-    layout->addWidget(preview_);
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
-    layout->addWidget(buttons);
+    QCheckBox* preview = addPreviewAndButtons(layout);
 
-    source_ = session_->adjustmentSource(0, transform_);
-    layerId_ = session_->activeLayerId();
-    if (source_) {
-        // Levels and Hue/Saturation preview at full size (a lookup per pixel); the rest from a reduced copy.
-        int limit = (kind == AdjustmentKind::Levels || kind == AdjustmentKind::HueSaturation) ? 8000 : previewLimit;
-        previewSource_ = kind == AdjustmentKind::Grain ? source_ : previewCopy(source_, limit, previewScale_);
-        coverage_ = session_->selectionOnGrid(transform_, source_->width(), source_->height());
-        previewCoverage_ = previewSource_ == source_ ? coverage_ : coverageCopy(coverage_, previewSource_->width(), previewSource_->height());
-        if (kind == AdjustmentKind::Levels) editor_->setHistogram(levelsHistogram(*source_, coverage_.get()));
-    }
+    // Levels and Hue/Saturation preview at full size (a lookup per pixel), Grain too (its texture is per pixel);
+    // the rest from a reduced copy.
+    capture(0, kind == AdjustmentKind::Grain ? 0 : (kind == AdjustmentKind::Levels || kind == AdjustmentKind::HueSaturation) ? 8000 : previewLimit);
+    if (source() && kind == AdjustmentKind::Levels) editor_->setHistogram(levelsHistogram(*source(), coverage()));
     connect(editor_, &AdjustmentEditor::settingsChanged, this, [this] { refreshPreview(); });
-    connect(preview_, &QCheckBox::toggled, this, [this] { refreshPreview(); });
+    connect(preview, &QCheckBox::toggled, this, [this] { refreshPreview(); });
     refreshPreview();
 }
-
-PixelAdjustmentDialog::~PixelAdjustmentDialog() { if (!finished_ && session_) session_->clearPixelPreview(); }
 
 std::shared_ptr<Image> PixelAdjustmentDialog::run(const Image& source, double scale) const {
     auto out = std::make_shared<Image>(source);
@@ -93,31 +59,24 @@ std::shared_ptr<Image> PixelAdjustmentDialog::run(const Image& source, double sc
 }
 
 void PixelAdjustmentDialog::refreshPreview() {
-    if (!source_ || !previewSource_) return;
-    if (!preview_->isChecked() || editor_->settings().isIdentity()) { session_->clearPixelPreview(); return; }
-    auto out = run(*previewSource_, previewScale_);
-    if (previewCoverage_) blendThroughCoverage(*out, *previewSource_, *previewCoverage_);
-    session_->setPixelPreview(out, std::nullopt, layerId_);
+    if (!previewSource()) return;
+    if (!previewing() || editor_->settings().isIdentity()) { clearPreview(); return; }
+    showPreview(run(*previewSource(), previewScale()));
 }
 
-void PixelAdjustmentDialog::done(int result) {
-    if (finished_) { QDialog::done(result); return; }
-    finished_ = true;
-    if (result == QDialog::Accepted && source_ && !editor_->settings().isIdentity()) {
-        auto out = run(*source_, 1);
-        if (coverage_) blendThroughCoverage(*out, *source_, *coverage_);
-        session_->commitPixels(out, transform_, QString::fromUtf8(adjustmentKindName(editor_->settings().kind)), layerId_);
-    } else session_->clearPixelPreview();
-    QDialog::done(result);
+bool PixelAdjustmentDialog::apply() {
+    if (editor_->settings().isIdentity()) return true;
+    auto out = run(*source(), 1);
+    throughSelection(*out);
+    commit(out, placement(), QString::fromUtf8(adjustmentKindName(editor_->settings().kind)));
+    return true;
 }
 
 // ---- Filters ----------------------------------------------------------------------------------
 
 FilterDialog::FilterDialog(EditorSession* session, FilterKind kind, QWidget* parent)
-    : QDialog(parent), session_(session), kind_(kind), seed_(uint32_t(std::random_device{}())) {
+    : PixelDialog(session, parent), kind_(kind), seed_(uint32_t(std::random_device{}())) {
     setWindowTitle(QString::fromUtf8(filterKindName(kind)));
-    setModal(false);
-    setAttribute(Qt::WA_DeleteOnClose);
     setMinimumWidth(420);
     auto* layout = new QVBoxLayout(this);
     auto slider = [&](const QString& label, double min, double max, int decimals, double scale, std::function<double()> get, std::function<void(double)> apply) {
@@ -166,33 +125,19 @@ FilterDialog::FilterDialog(EditorSession* session, FilterKind kind, QWidget* par
         break;
     }
     for (auto& s : syncers_) s();
-    preview_ = new QCheckBox(tr("Preview"));
-    preview_->setChecked(true);
-    connect(preview_, &QCheckBox::toggled, this, [this] { refreshPreview(); });
-    layout->addWidget(preview_);
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
-    layout->addWidget(buttons);
-    prepareSource();
+    connect(addPreviewAndButtons(layout), &QCheckBox::toggled, this, [this] { refreshPreview(); });
     refreshPreview();
 }
-
-FilterDialog::~FilterDialog() { if (!finished_ && session_) session_->clearPixelPreview(); }
 
 void FilterDialog::prepareSource() {
     // A blur grows the layer by its reach; only ever grows, so easing the amount off rebuilds nothing.
     int margin = int(std::ceil(blurMargin(kind_, settings_)));
-    if (source_ && margin <= margin_) return;
+    if (source() && margin <= margin_) return;
     margin_ = std::max(margin_, margin);
-    source_ = session_->adjustmentSource(margin_, transform_);
-    layerId_ = session_->activeLayerId();
-    if (!source_) return;
-    bool fullSize = kind_ == FilterKind::AddNoise;
-    previewSource_ = fullSize ? source_ : previewCopy(source_, previewLimit, previewScale_);
-    coverage_ = session_->selectionOnGrid(transform_, source_->width(), source_->height());
-    previewCoverage_ = previewSource_ == source_ ? coverage_ : coverageCopy(coverage_, previewSource_->width(), previewSource_->height());
+    capture(margin_, kind_ == FilterKind::AddNoise ? 0 : previewLimit);
 }
+
+bool FilterDialog::identity() const { return kind_ == FilterKind::LensCorrection && settings_.normalized().distortion == 0; }
 
 std::shared_ptr<Image> FilterDialog::run(const Image& source, double scale) const {
     auto out = std::make_shared<Image>(source);
@@ -201,41 +146,32 @@ std::shared_ptr<Image> FilterDialog::run(const Image& source, double scale) cons
 }
 
 void FilterDialog::refreshPreview() {
+    if (finished()) return;
     prepareSource();
-    if (!source_ || !previewSource_) return;
-    bool identity = kind_ == FilterKind::LensCorrection && settings_.normalized().distortion == 0;
-    if (!preview_->isChecked() || identity) { session_->clearPixelPreview(); return; }
-    auto out = run(*previewSource_, previewScale_);
-    if (previewCoverage_) blendThroughCoverage(*out, *previewSource_, *previewCoverage_);
-    session_->setPixelPreview(out, transform_, layerId_);
+    if (!previewSource()) return;
+    if (!previewing() || identity()) { clearPreview(); return; }
+    showPreview(run(*previewSource(), previewScale()), placement());
 }
 
-void FilterDialog::done(int result) {
-    if (finished_) { QDialog::done(result); return; }
-    finished_ = true;
-    bool identity = kind_ == FilterKind::LensCorrection && settings_.normalized().distortion == 0;
-    if (result == QDialog::Accepted && source_ && !identity) {
-        auto out = run(*source_, 1);
-        if (coverage_) blendThroughCoverage(*out, *source_, *coverage_);
-        LayerTransform placed = transform_;
-        std::shared_ptr<const Image> image = out;
-        if (kind_ == FilterKind::GaussianBlur || kind_ == FilterKind::MotionBlur) image = trimToPixels(*out, transform_, placed);
-        session_->commitPixels(image, placed, QString::fromUtf8(filterKindName(kind_)), layerId_);
-    } else session_->clearPixelPreview();
-    QDialog::done(result);
+bool FilterDialog::apply() {
+    if (identity()) return true;
+    auto out = run(*source(), 1);
+    throughSelection(*out);
+    LayerTransform placed = placement();
+    std::shared_ptr<const Image> image = out;
+    if (kind_ == FilterKind::GaussianBlur || kind_ == FilterKind::MotionBlur) image = trimToPixels(*out, placement(), placed);
+    commit(image, placed, QString::fromUtf8(filterKindName(kind_)));
+    return true;
 }
 
 // ---- Remove Background -----------------------------------------------------------------------
 
 BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QString quickModelPath, QWidget* parent)
-    : QDialog(parent), session_(session), modelPath_(std::move(modelPath)) {
+    : PixelDialog(session, parent), modelPath_(std::move(modelPath)) {
     setWindowTitle(tr("Remove Background"));
-    source_ = session_->adjustmentSource(0, transform_);
-    layerId_ = session_->activeLayerId();
+    capture(0, 0);
     // The matting band is worth a few percent of the short side on a big photo.
-    const int mattingMax = source_ ? std::max(40, int(std::lround(std::min(source_->width(), source_->height()) * 0.025))) : 40;
-    setModal(false);
-    setAttribute(Qt::WA_DeleteOnClose);
+    const int mattingMax = source() ? std::max(40, int(std::lround(std::min(source()->width(), source()->height()) * 0.025))) : 40;
     auto* layout = new QVBoxLayout(this);
     auto* qualityRow = new QHBoxLayout;
     qualityRow->addWidget(new QLabel(tr("Quality")));
@@ -295,21 +231,14 @@ BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QS
     note->setWordWrap(true);
     note->setStyleSheet(hintStyle());
     layout->addWidget(note);
-    preview_ = new QCheckBox(tr("Preview"));
-    preview_->setChecked(true);
-    connect(preview_, &QCheckBox::toggled, this, [this] { refreshPreview(); });
-    layout->addWidget(preview_);
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
-    layout->addWidget(buttons);
+    connect(addPreviewAndButtons(layout), &QCheckBox::toggled, this, [this] { refreshPreview(); });
 
-    if (!source_) return;
+    if (!source()) return;
     // The model runs once, off the UI thread; the sliders only redo the refinement. A quick coarse model,
     // when there is one, gives a preview within a few milliseconds while the chosen model works.
     computing_ = true;
     setCursor(Qt::BusyCursor);
-    std::shared_ptr<const Image> image = source_;
+    std::shared_ptr<const Image> image = source();
     std::string path = modelPath_.toStdString(), quick = quickModelPath == modelPath_ ? std::string() : quickModelPath.toStdString();
     const bool mirror = ModelStore::mirrorAverage();
     worker_ = std::thread([this, image, path, quick, mirror] {
@@ -332,11 +261,11 @@ BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QS
 }
 
 void BackgroundDialog::startDetail() {
-    if (!coarse_ || detailed_ || computing_ || !source_) return;
+    if (!coarse_ || detailed_ || computing_ || !source()) return;
     computing_ = true;
     setCursor(Qt::BusyCursor);
     if (worker_.joinable()) worker_.join();
-    std::shared_ptr<const Image> image = source_;
+    std::shared_ptr<const Image> image = source();
     std::shared_ptr<const GrayImage> coarse = coarse_;
     std::string path = modelPath_.toStdString();
     worker_ = std::thread([this, image, coarse, path] {
@@ -354,44 +283,39 @@ void BackgroundDialog::startDetail() {
 
 BackgroundDialog::~BackgroundDialog() {
     if (worker_.joinable()) worker_.join();
-    if (!finished_ && session_) session_->clearPixelPreview();
 }
 
 std::shared_ptr<GrayImage> BackgroundDialog::refined(int limit) const {
     if (!raw_) return nullptr;
     if (!advancedMode_) return raw_;
-    return refineMatte(*raw_, *source_, settings_, limit);
+    return refineMatte(*raw_, *source(), settings_, limit);
 }
 
 void BackgroundDialog::refreshPreview() {
-    if (!source_ || !raw_ || !session_) return;
-    if (!preview_->isChecked()) { session_->clearPixelPreview(); return; }
+    if (!source() || !raw_) return;
+    if (!previewing()) { clearPreview(); return; }
     auto mask = refined(1400);
     // The layer with its background made transparent by the same mask the commit lays down, with the edge
     // colours it will have.
-    std::shared_ptr<const Image> base = source_;
-    if (advancedMode_ && settings_.decontaminate) base = estimateForeground(*source_, *mask);
+    std::shared_ptr<const Image> base = source();
+    if (advancedMode_ && settings_.decontaminate) base = estimateForeground(*source(), *mask);
     auto out = std::make_shared<Image>(*base);
     for (int y = 0; y < out->height(); y++) for (int x = 0; x < out->width(); x++) {
         unsigned k = mask->at(x, y);
         uint8_t* p = out->pixel(x, y);
         for (int c = 0; c < 4; c++) p[c] = uint8_t((p[c] * k + 127) / 255);
     }
-    session_->setPixelPreview(out, std::nullopt, layerId_);
+    showPreview(out);
 }
 
-void BackgroundDialog::done(int result) {
-    if (finished_) { QDialog::done(result); return; }
-    if (computing_ && result == QDialog::Accepted) return; // wait for the mask
-    finished_ = true;
-    if (!session_) { QDialog::done(result); return; }
-    if (result == QDialog::Accepted && source_ && raw_) {
-        auto mask = refined(0);
-        std::shared_ptr<const Image> pixels;
-        if (advancedMode_ && settings_.decontaminate) pixels = estimateForeground(*source_, *mask);
-        session_->applySubjectMask(mask, pixels, layerId_);
-    } else session_->clearPixelPreview();
-    QDialog::done(result);
+bool BackgroundDialog::apply() {
+    if (computing_) return false;   // OK waits for the mask
+    if (!raw_) return true;
+    auto mask = refined(0);
+    std::shared_ptr<const Image> pixels;
+    if (advancedMode_ && settings_.decontaminate) pixels = estimateForeground(*source(), *mask);
+    session()->applySubjectMask(mask, pixels, layerId());
+    return true;
 }
 
 } // namespace app

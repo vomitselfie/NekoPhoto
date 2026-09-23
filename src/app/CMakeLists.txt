@@ -47,6 +47,8 @@ qt_add_executable(compositor-linux
     AdjustmentsPanel.cpp
     FilterDialog.h
     FilterDialog.cpp
+    PixelDialog.h
+    PixelDialog.cpp
     Gmic.h
     Gmic.cpp
     GmicDialog.h

@@ -35,21 +35,6 @@ namespace {
 
 constexpr int previewLimit = 1024;
 
-std::shared_ptr<const Image> previewCopy(const std::shared_ptr<const Image>& source, int limit, double& scale) {
-    int longest = std::max(source->width(), source->height());
-    if (longest <= limit) { scale = 1; return source; }
-    scale = double(limit) / longest;
-    int w = std::max(1, int(source->width() * scale)), h = std::max(1, int(source->height() * scale));
-    LayerTransform full(Point(0, 0), Size(source->width(), source->height()));
-    return resampleLayer(source, full, full, w, h);
-}
-
-std::shared_ptr<GrayImage> coverageCopy(const std::shared_ptr<GrayImage>& coverage, int w, int h) {
-    if (!coverage) return nullptr;
-    LayerTransform full(Point(0, 0), Size(coverage->width(), coverage->height()));
-    return resampleMask(*coverage, full, full, w, h, 0);
-}
-
 GmicParam number(const QString& label, double value, double min, double max, int decimals) {
     GmicParam p;
     p.kind = decimals == 0 ? GmicParam::Int : GmicParam::Float;
@@ -137,10 +122,8 @@ constexpr int longNoteLimit = 320;  // notes longer than this fold away
 
 } // namespace
 
-GmicDialog::GmicDialog(EditorSession* session, QWidget* parent) : QDialog(parent), session_(session), presets_(builtinPresets()) {
+GmicDialog::GmicDialog(EditorSession* session, QWidget* parent) : PixelDialog(session, parent), presets_(builtinPresets()) {
     setWindowTitle(tr("G'MIC"));
-    setModal(false);
-    setAttribute(Qt::WA_DeleteOnClose);
     resize(1040, 680);
     auto* layout = new QVBoxLayout(this);
     auto* splitter = new QSplitter;
@@ -201,7 +184,7 @@ GmicDialog::GmicDialog(EditorSession* session, QWidget* parent) : QDialog(parent
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     ok_ = buttons->button(QDialogButtonBox::Ok);
     ok_->setText(tr("Apply"));
-    connect(buttons, &QDialogButtonBox::accepted, this, &GmicDialog::applyAndClose);
+    connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     layout->addWidget(buttons);
 
@@ -218,16 +201,10 @@ GmicDialog::GmicDialog(EditorSession* session, QWidget* parent) : QDialog(parent
         if (index >= 0 && index < int(list.size())) selectFilter(&list[size_t(index)]);
     });
     connect(command_, &QLineEdit::textEdited, this, [this] { customCommand_ = true; schedulePreview(); });
-    connect(preview_, &QCheckBox::toggled, this, [this](bool on) { if (on) schedulePreview(); else session_->clearPixelPreview(); });
+    connect(preview_, &QCheckBox::toggled, this, [this](bool on) { if (on) schedulePreview(); else clearPreview(); });
     connect(update_, &QPushButton::clicked, this, &GmicDialog::updateFilters);
 
-    source_ = session_->adjustmentSource(0, transform_);
-    layerId_ = session_->activeLayerId();
-    if (source_) {
-        previewSource_ = previewCopy(source_, previewLimit, previewScale_);
-        coverage_ = session_->selectionOnGrid(transform_, source_->width(), source_->height());
-        previewCoverage_ = previewSource_ == source_ ? coverage_ : coverageCopy(coverage_, previewSource_->width(), previewSource_->height());
-    }
+    capture(0, previewLimit);
     if (!GmicRunner::available()) {
         status_->setText(tr("G'MIC is not installed. Install the gmic package (Arch: pacman -S gmic; Ubuntu: apt install gmic) and reopen this dialog."));
         ok_->setEnabled(false);
@@ -243,10 +220,7 @@ GmicDialog::GmicDialog(EditorSession* session, QWidget* parent) : QDialog(parent
             if ((*it)->text(0).compare(wanted, Qt::CaseInsensitive) == 0) { tree_->setCurrentItem(*it); tree_->scrollToItem(*it); break; }
 }
 
-GmicDialog::~GmicDialog() {
-    preview_runner_.cancel();
-    if (!finished_) session_->clearPixelPreview();
-}
+GmicDialog::~GmicDialog() { preview_runner_.cancel(); }
 
 void GmicDialog::loadCatalogue() {
     QString path = GmicCatalogue::preferredFile();
@@ -439,31 +413,29 @@ void GmicDialog::updateCommand() {
 }
 
 void GmicDialog::schedulePreview() {
-    if (!preview_->isChecked() || !previewSource_ || GmicRunner::executable().isEmpty()) return;
+    if (!preview_->isChecked() || !previewSource() || GmicRunner::executable().isEmpty()) return;
     debounce_.start();
 }
 
 void GmicDialog::runPreview() {
-    if (applying_ || !previewSource_) return;
+    if (applying_ || finished() || !previewSource()) return;
     QString command = customCommand_ ? command_->text().trimmed() : current_.commandLine(true);
-    if (command.isEmpty()) { session_->clearPixelPreview(); return; }
+    if (command.isEmpty()) { clearPreview(); return; }
     status_->setText(tr("Previewing…"));
-    preview_runner_.start(previewSource_, command);
+    preview_runner_.start(previewSource(), command);
 }
 
 void GmicDialog::previewFinished(std::shared_ptr<Image> result, QString error) {
-    if (applying_) return;
-    if (!result) { status_->setText(error); session_->clearPixelPreview(); return; }
+    if (applying_ || finished()) return;
+    if (!result) { status_->setText(error); clearPreview(); return; }
     status_->clear();
-    if (previewCoverage_) blendThroughCoverage(*result, *previewSource_, *previewCoverage_);
-    session_->setPixelPreview(result, std::nullopt, layerId_);
-    if (debounce_.isActive()) return;   // a newer preview is already scheduled
+    showPreview(result);
 }
 
-void GmicDialog::applyAndClose() {
-    if (!source_ || applying_) return;
+bool GmicDialog::apply() {
+    if (applying_) return false;
     QString command = customCommand_ ? command_->text().trimmed() : current_.commandLine(false);
-    if (command.isEmpty()) { reject(); return; }
+    if (command.isEmpty()) return true;
     applying_ = true;
     preview_runner_.cancel();
     setEnabled(false);
@@ -473,22 +445,14 @@ void GmicDialog::applyAndClose() {
         runner->deleteLater();
         setEnabled(true);
         applying_ = false;
+        if (finished()) return;   // the tab closed meanwhile
         if (!result) { status_->setText(error); QMessageBox::warning(this, tr("G'MIC"), error); return; }
-        if (coverage_) blendThroughCoverage(*result, *source_, *coverage_);
-        finished_ = true;
-        session_->commitPixels(result, transform_, tr("G'MIC: %1").arg(customCommand_ ? command.section(' ', 0, 0) : current_.name), layerId_);
-        QDialog::done(QDialog::Accepted);
+        throughSelection(*result);
+        commit(result, placement(), tr("G'MIC: %1").arg(customCommand_ ? command.section(' ', 0, 0) : current_.name));
+        finish(QDialog::Accepted);
     });
-    runner->start(source_, command);
-}
-
-void GmicDialog::done(int result) {
-    if (finished_) { QDialog::done(result); return; }
-    if (result == QDialog::Accepted) { applyAndClose(); return; }
-    finished_ = true;
-    preview_runner_.cancel();
-    session_->clearPixelPreview();
-    QDialog::done(result);
+    runner->start(source(), command);
+    return false;   // closes when the run finishes
 }
 
 void GmicDialog::updateFilters() {

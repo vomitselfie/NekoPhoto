@@ -2670,8 +2670,8 @@ void EditorSession::clearPixelPreview() {
     emit documentChanged({});
 }
 
-std::shared_ptr<const Image> EditorSession::adjustmentSource(int margin, LayerTransform& transform) const {
-    const Layer* layer = activeLayer();
+std::shared_ptr<const Image> EditorSession::adjustmentSource(int margin, LayerTransform& transform, std::optional<Uuid> layerId) const {
+    const Layer* layer = layerId ? (document_ ? document_->find(*layerId) : nullptr) : activeLayer();
     if (!layer || !layer->asset || !layer->asset->image) return nullptr;
     if (margin <= 0) { transform = layer->transform; return layer->asset->image; }
     return growImage(*layer->asset->image, layer->transform, margin, transform);
