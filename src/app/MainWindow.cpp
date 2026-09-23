@@ -64,6 +64,14 @@ QString imageFilter() {
     return QObject::tr("Images (%1)").arg(patterns.join(' '));
 }
 
+/// Everything File > Open and Import File take: Photoshop files, images, and a project's manifest.json.
+QString openFilter() {
+    QStringList patterns = {"*.psd", "*.psb", "manifest.json"};
+    for (auto& format : QImageReader::supportedImageFormats()) patterns << "*." + QString::fromLatin1(format);
+    return QObject::tr("Images, Photoshop files and projects (%1)").arg(patterns.join(' ')) + ";;" + imageFilter() + ";;"
+        + QObject::tr("Photoshop files (*.psd *.psb)");
+}
+
 bool isProjectPath(const QString& path) { return path.endsWith(".comp", Qt::CaseInsensitive) && QFileInfo(path).isDir(); }
 bool isPhotoshopPath(const QString& path) { return path.endsWith(".psd", Qt::CaseInsensitive) || path.endsWith(".psb", Qt::CaseInsensitive); }
 
@@ -443,16 +451,11 @@ void MainWindow::buildMenus() {
     auto needsDocument = [this](QAction* a) { documentActions_ << a; return a; };
     QMenu* file = menuBar()->addMenu(tr("&File"));
     file->addAction(tr("&New…"), QKeySequence::New, this, &MainWindow::newDocument);
-    file->addAction(tr("&Open Project…"), QKeySequence::Open, this, &MainWindow::openProject);
-    file->addAction(tr("Import &File…"), this, [this] {
-        QString path = QFileDialog::getOpenFileName(this, tr("Import File"), QSettings().value("lastDir").toString(), tr("Photoshop files (*.psd *.psb)"));
-        if (path.isEmpty()) return;
-        QSettings().setValue("lastDir", QFileInfo(path).path());
-        openPhotoshopFile(path);
-    });
-    file->addAction(tr("Import &Brushes…"), this, [this] { importBrushesInteractively(this, session_); });
+    file->addAction(tr("&Open…"), QKeySequence::Open, this, &MainWindow::openFiles);
+    file->addAction(tr("Open &Project…"), this, &MainWindow::openProject);
     recentMenu_ = file->addMenu(tr("Open &Recent"));
-    file->addAction(tr("&Import Images…"), QKeySequence("Ctrl+Shift+O"), this, &MainWindow::importImages);
+    file->addAction(tr("Import &File…"), QKeySequence("Ctrl+Shift+O"), this, &MainWindow::importFiles);
+    file->addAction(tr("Import &Brushes…"), this, [this] { importBrushesInteractively(this, session_); });
     file->addSeparator();
     needsDocument(file->addAction(tr("&Save"), QKeySequence::Save, this, [this] { save(false); }));
     needsDocument(file->addAction(tr("Save &As…"), QKeySequence::SaveAs, this, [this] { save(true); }));
@@ -881,11 +884,28 @@ bool MainWindow::overTabStrip(const QPointF& windowPosition) const {
     return tabBar_->rect().contains(tabBar_->mapFrom(this, windowPosition.toPoint()));
 }
 
-void MainWindow::importImages() {
-    QStringList paths = QFileDialog::getOpenFileNames(this, tr("Import Images"), QSettings().value("lastDir").toString(), imageFilter());
+void MainWindow::openFiles() {
+    // Photoshop files, images, and a project picked by its manifest.json (a .comp is a folder, which a file
+    // picker cannot choose); each opens in its own tab.
+    QStringList paths = QFileDialog::getOpenFileNames(this, tr("Open"), QSettings().value("lastDir").toString(), openFilter());
     if (paths.isEmpty()) return;
     QSettings().setValue("lastDir", QFileInfo(paths.first()).path());
-    for (auto& path : paths) importFile(path);
+    for (QString path : paths) {
+        const QFileInfo info(path);
+        if (info.fileName() == "manifest.json" && isProjectPath(info.path())) path = info.path();
+        openAsDocument(path);
+    }
+}
+
+void MainWindow::importFiles() {
+    // Images land as layers in the open document; Photoshop files, or anything with no document open, get a tab.
+    QStringList paths = QFileDialog::getOpenFileNames(this, tr("Import File"), QSettings().value("lastDir").toString(), openFilter());
+    if (paths.isEmpty()) return;
+    QSettings().setValue("lastDir", QFileInfo(paths.first()).path());
+    for (const QString& path : paths) {
+        if (isPhotoshopPath(path) || !session_->hasDocument()) openAsDocument(path);
+        else importFile(path);
+    }
 }
 
 bool MainWindow::save(bool asNew) {

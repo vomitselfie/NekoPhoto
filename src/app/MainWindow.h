@@ -104,7 +104,8 @@ private:
     void buildToolRail();
     void newDocument();
     void openProject();
-    void importImages();
+    void openFiles();
+    void importFiles();
     bool save(bool asNew);
     void exportPng();
     void exportJpeg();
