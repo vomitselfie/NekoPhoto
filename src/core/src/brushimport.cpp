@@ -64,6 +64,8 @@ std::optional<BrushImport> importBrushFile(const std::string& path, std::string*
     const bool abrSections = file.size() >= 8 && file[0] == 0 && file[1] >= 6 && file[1] <= 10 && std::equal(magic + 4, magic + 8, "8BIM");
     if (abrSections || (extension == ".abr" && file.size() >= 4 && file[0] == 0 && (file[1] == 1 || file[1] == 2)))
         return readAbr(file.data(), file.size(), name, error);
+    // Procreate: a ZIP (local file header "PK\3\4") holding a Brush.archive.
+    if (file.size() >= 4 && std::equal(magic, magic + 4, "PK\x03\x04")) return readProcreate(file.data(), file.size(), name, error);
     // A PNG is a single tip; other raster formats go through the application's image reader.
     if (std::equal(magic, magic + 8, "\x89PNG\r\n\x1a\n")) {
         auto image = readPngImage(path, error);

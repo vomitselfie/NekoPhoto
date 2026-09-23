@@ -68,3 +68,7 @@ add_test(NAME tipbrush_tests COMMAND tipbrush_tests)
 add_executable(abr_tests abr_tests.cpp)
 target_link_libraries(abr_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME abr_tests COMMAND abr_tests)
+
+add_executable(procreate_tests procreate_tests.cpp)
+target_link_libraries(procreate_tests PRIVATE compositor::core compositor_warnings)
+add_test(NAME procreate_tests COMMAND procreate_tests)

@@ -11,4 +11,7 @@ namespace compositor {
 /// samp section, presets and their dynamics in the desc descriptor).
 std::optional<BrushImport> readAbr(const uint8_t* data, size_t size, const std::string& name, std::string* error);
 
+/// Procreate brushes: a .brushset (a ZIP of brush folders listed in brushset.plist) or a single .brush.
+std::optional<BrushImport> readProcreate(const uint8_t* data, size_t size, const std::string& name, std::string* error);
+
 } // namespace compositor

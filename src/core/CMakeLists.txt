@@ -73,6 +73,7 @@ add_library(compositor_core STATIC
     src/tipbrush.cpp
     src/parallel.cpp
     src/wand.cpp
+    src/zip.cpp
     src/resample.cpp
     src/heal.cpp
     src/inpaint.cpp
@@ -80,7 +81,9 @@ add_library(compositor_core STATIC
     src/subject.cpp
     src/scribble.cpp
     src/photoshop.cpp
+    src/plist.cpp
     src/png.cpp
+    src/procreate.cpp
     src/project.cpp
     src/render.cpp
     src/selection.cpp
