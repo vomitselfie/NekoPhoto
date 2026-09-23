@@ -128,6 +128,18 @@ bool Document::operator==(const Document& o) const {
     return id == o.id && width == o.width && height == o.height && resolution == o.resolution && layers == o.layers && selection == o.selection;
 }
 
+long long Document::layerPixels() const {
+    long long total = 0;
+    for (const Layer& l : layers) if (l.asset && l.asset->image) total += (long long)l.asset->image->width() * l.asset->image->height();
+    return total;
+}
+
+long long Document::maskPixels() const {
+    long long total = 0;
+    for (const Layer& l : layers) if (l.mask && l.mask->asset.image) total += (long long)l.mask->asset.image->width() * l.mask->asset.image->height();
+    return total;
+}
+
 const Layer* Document::find(const Uuid& lid) const {
     for (auto& l : layers) if (l.id == lid) return &l;
     return nullptr;

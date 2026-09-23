@@ -247,6 +247,22 @@ TEST_CASE(psd_layer_rectangle_beyond_the_buffer_limit_is_refused) {
     CHECK(fine->document.layers.size() == 1);
 }
 
+TEST_CASE(psd_layers_past_a_gigapixel_are_refused_before_decoding) {
+    // Eleven 100-megapixel layers: each is allowed, together they pass what a project holds. The records
+    // alone say so, so the file is refused before any plane is allocated (these carry almost no data).
+    std::vector<LayerSpec> layers;
+    for (int i = 0; i < 11; i++) {
+        LayerSpec l;
+        l.name = "Texture " + std::to_string(i); l.left = 0; l.top = 0; l.w = 10000; l.h = 10000;
+        l.planes = {std::vector<uint8_t>(8, 128)}; l.ids = {-1};
+        layers.push_back(l);
+    }
+    std::string error;
+    auto imported = importPsd(writeTemp(writePsd(4, 4, layers, {solid(4, 4, 10), solid(4, 4, 20), solid(4, 4, 30)}), "gigapixel.psd"), &error);
+    CHECK(!imported.has_value());
+    CHECK(error.find("1,000") != std::string::npos);
+}
+
 TEST_CASE(psb_channel_length_that_wraps_the_bounds_check_is_refused) {
     // A large document's channel length is a full 64-bit field. A value chosen so that cursor + length
     // wraps used to pass the bounds test, after which the reader ran off the end of the file.

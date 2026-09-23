@@ -568,6 +568,31 @@ TEST_CASE(project_round_trip_preserves_layers_masks_groups_and_unknown_fields) {
     fs::remove_all(dir);
 }
 
+TEST_CASE(projects_past_the_macs_100_megapixels_save_and_load) {
+    // Game texture stacks: layers that together pass Compositor for macOS's 100-megapixel project total.
+    Document doc(6000, 6000);
+    for (int i = 0; i < 3; i++) doc.layers.push_back(imageLayer("Texture " + std::to_string(i), solid(6000, 6000, 40 * i, 90, 200, 255), {0, 0}));
+    CHECK(doc.layerPixels() == 108000000LL);
+    CHECK(!doc.fitsMacBudget());
+    fs::path dir = tempDir();
+    std::string path = (dir / "Textures.comp").string();
+    ProjectError error;
+    REQUIRE(saveProject(doc, std::nullopt, path, error));
+    auto back = loadProject(path, error);
+    REQUIRE(back.has_value());
+    CHECK_EQ(int(back->layers.size()), 3);
+    CHECK(back->layerPixels() == 108000000LL);
+    fs::remove_all(dir);
+    // One layer still stops at 100 megapixels, as on the Mac.
+    Document one(10, 10);
+    one.layers.push_back(imageLayer("Too big", std::make_shared<Image>(10001, 10000), {0, 0}));
+    CHECK(one.layers.back().asset->image->width() == 10001);
+    dir = tempDir();
+    CHECK(!saveProject(one, std::nullopt, (dir / "Big.comp").string(), error));
+    CHECK(error.kind == ProjectError::TooLarge);
+    fs::remove_all(dir);
+}
+
 TEST_CASE(project_rejects_bad_manifests_like_the_mac) {
     ProjectError error;
     CHECK(!parseManifest("{}", error));

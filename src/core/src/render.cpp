@@ -353,7 +353,7 @@ bool resizeDocument(Document& document, int width, int height, double resolution
         box.sampling = sampling;
         if (!box.isValid()) return false;
         if (layer.asset && layer.asset->image) {
-            if (w > 30000 || h > 30000 || (long long)w * h > Document::pixelBudget - used) return false;
+            if (w > 30000 || h > 30000 || (long long)w * h > Document::pixelBudget || (long long)w * h > Document::projectPixelBudget - used) return false;
             used += (long long)w * h;
             // Shear can't be expressed as a LayerTransform, so resample through the scaled corner mapping directly.
             Corners corners;
@@ -371,7 +371,7 @@ bool resizeDocument(Document& document, int width, int height, double resolution
             const GrayImage& mask = *layer.mask->asset.image;
             if (layer.mask->placement) layer.mask->placement = layer.mask->placement->placing(layer.mask->placement->unitToDocument().concatenating(scale));
             else if (mask.width() > 1 || mask.height() > 1) {
-                if ((long long)w * h > Document::pixelBudget - usedMask) return false;
+                if ((long long)w * h > Document::pixelBudget || (long long)w * h > Document::projectPixelBudget - usedMask) return false;
                 usedMask += (long long)w * h;
                 Corners corners;
                 for (size_t i = 0; i < 4; i++) corners[i] = {c[i].x * sx, c[i].y * sy};

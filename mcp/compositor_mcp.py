@@ -214,7 +214,9 @@ def document_import(path: str, x: Optional[float] = None, y: Optional[float] = N
 
 @mcp.tool()
 def document_save(path: Optional[str] = None) -> str:
-    """Save the project as a .comp package, to its current path or to path."""
+    """Save the project as a .comp package, to its current path or to path. macCompatible in the answer is
+    false when the layers total more than the 100 megapixels Compositor for macOS opens (up to a gigapixel
+    saves and opens here)."""
     return text(call("document.save", path=os.path.abspath(path) if path else None))
 
 

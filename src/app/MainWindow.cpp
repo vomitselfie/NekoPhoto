@@ -896,6 +896,9 @@ bool MainWindow::save(bool asNew) {
     QString error;
     if (!session_->saveProject(path, &error)) { showError(tr("Couldn’t save the project"), error); return false; }
     addRecent(path);
+    if (!session_->document()->fitsMacBudget())
+        statusBar()->showMessage(tr("Saved. With %1 megapixels of layers this project is larger than Compositor for macOS opens (100); it opens here.")
+                                     .arg(std::max(session_->document()->layerPixels(), session_->document()->maskPixels()) / 1000000), 10000);
     return true;
 }
 

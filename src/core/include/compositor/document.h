@@ -166,7 +166,17 @@ struct Document {
 
     static bool validDimension(int n) { return n >= 1 && n <= maxImageSide; }
     static constexpr int maxLayers = 10000;
+    /// One image, layer, mask or canvas: 100 megapixels, as in Compositor for macOS.
     static constexpr long long pixelBudget = 100000000;
+    /// All the layers' pixels together, and separately all the masks': a gigapixel, 4 GB of RGBA, so a stack
+    /// of full-size game textures fits. Compositor for macOS stops at pixelBudget in total and cannot open a
+    /// larger project (see fitsMacBudget).
+    static constexpr long long projectPixelBudget = 1000000000;
+    /// The pixels held by every layer's image, and by every mask.
+    long long layerPixels() const;
+    long long maskPixels() const;
+    /// Whether Compositor for macOS can open this project: its loader allows pixelBudget in total.
+    bool fitsMacBudget() const { return layerPixels() <= pixelBudget && maskPixels() <= pixelBudget; }
 };
 
 /// Layer hierarchy helpers (Document/LayerGroups.swift `LayerHierarchy`).

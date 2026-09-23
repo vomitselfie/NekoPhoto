@@ -283,10 +283,10 @@ bool EditorSession::copyLayerFrom(const EditorSession& source, const Uuid& id, s
     included.insert(id);
     std::vector<Layer> copied;
     for (auto& l : from.layers) if (included.count(l.id)) copied.push_back(l);
-    long long used = 0, added = 0;
-    if (document_) for (auto& l : document_->layers) if (l.asset && l.asset->image) used += (long long)l.asset->image->width() * l.asset->image->height();
+    const long long used = document_ ? document_->layerPixels() : 0;
+    long long added = 0;
     for (auto& l : copied) if (l.asset && l.asset->image) added += (long long)l.asset->image->width() * l.asset->image->height();
-    if (used + added > Document::pixelBudget) { if (errorText) *errorText = tr("The copied layers exceed this project’s 100-megapixel limit."); return false; }
+    if (used + added > Document::projectPixelBudget) { if (errorText) *errorText = tr("The copied layers would take this project past its 1-gigapixel limit for all layers together."); return false; }
     // Clipping to a layer that stays behind is baked into the pixels.
     for (auto& l : copied) {
         if (l.maskSourceId && !included.count(*l.maskSourceId)) {

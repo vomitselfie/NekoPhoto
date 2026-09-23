@@ -553,6 +553,16 @@ std::optional<PsdImport> importPsd(const std::string& path, std::string* error) 
             }
         }
         r.seek(layerMaskEnd);
+        // A project holds a gigapixel of layers (and as much of masks); refuse more before decoding any of it.
+        long long layerTotal = 0, maskTotal = 0;
+        for (const Record& rec : records) {
+            layerTotal += (long long)rec.width() * rec.height();
+            maskTotal += (long long)rec.mask.width() * rec.mask.height();
+        }
+        if (layerTotal > Document::projectPixelBudget || maskTotal > Document::projectPixelBudget) {
+            if (error) *error = "The layers total " + std::to_string(std::max(layerTotal, maskTotal) / 1000000) + " megapixels; a project holds up to 1,000.";
+            return std::nullopt;
+        }
 
         // Channel image data follows the records, one channel after another in record order.
         auto decodeRecordChannels = [&](const Record& rec, std::map<int, std::vector<uint8_t>>& planes, std::map<int, std::vector<uint8_t>>& maskPlanes, size_t& cursor) {

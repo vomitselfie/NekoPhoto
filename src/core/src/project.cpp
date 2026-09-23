@@ -24,7 +24,7 @@ constexpr uintmax_t assetLimit = uintmax_t(512) * 1024 * 1024;
 ProjectError invalid() { return {ProjectError::Invalid, "This is not a valid Compositor project, or its metadata is damaged."}; }
 ProjectError version(int v) { return {ProjectError::Version, "This project uses format version " + std::to_string(v) + ". This app supports versions 1-7.", v}; }
 ProjectError missingImage() { return {ProjectError::MissingImage, "An image inside the project is missing or damaged. The current document has not been replaced."}; }
-ProjectError tooLarge() { return {ProjectError::TooLarge, "This project exceeds the supported canvas, layer, file-size, or 100-megapixel image limit."}; }
+ProjectError tooLarge() { return {ProjectError::TooLarge, "This project exceeds the supported canvas, layer or file size, the 100-megapixel limit for one image, or the 1-gigapixel limit for all layers together."}; }
 ProjectError encodeError() { return {ProjectError::Encode, "An image could not be saved. The previous project has not been replaced."}; }
 ProjectError ioError(const std::string& what) { return {ProjectError::Io, what}; }
 
@@ -301,7 +301,8 @@ bool validateManifest(const Manifest& m, ProjectError& error) {
 }
 
 bool checkSize(int width, int height, long long& used) {
-    if (!Document::validDimension(width) || !Document::validDimension(height) || (long long)width * height > Document::pixelBudget - used) return false;
+    if (!Document::validDimension(width) || !Document::validDimension(height)) return false;
+    if ((long long)width * height > Document::pixelBudget || (long long)width * height > Document::projectPixelBudget - used) return false;
     used += (long long)width * height;
     return true;
 }

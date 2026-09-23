@@ -453,7 +453,8 @@ void AutomationServer::registerHandlers() {
         QString error;
         if (!session()->saveProject(path, &error)) fail(error);
         w->noteRecent(path);
-        return QJsonObject{{"path", path}};
+        // Compositor for macOS opens projects up to 100 megapixels of layers in total.
+        return QJsonObject{{"path", path}, {"macCompatible", session()->document()->fitsMacBudget()}};
     });
     add("document.export", [session, document](const QJsonObject& p) {
         document();

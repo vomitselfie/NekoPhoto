@@ -184,6 +184,12 @@ packaging/                      .desktop, icon, MIME type
 - New canvas; import PNG, JPEG, TIFF, WebP, HEIC and anything else Qt can
   decode (EXIF orientation applied); drag and drop of files and images onto
   the window.
+- Size limits: 30,000 pixels a side and 100 megapixels for any one canvas,
+  layer or mask, as on the Mac; up to a gigapixel for all layers together
+  (and as much again for masks), where the Mac stops at 100 megapixels, so a
+  stack of 4K game textures opens and saves. Saving a project past the Mac's
+  total says so in the status bar (`macCompatible` over automation), since
+  Compositor for macOS will not open it.
 - Layers: create, delete, duplicate, rename inline or from the menu, reorder
   and nest by drag and drop, move out of a folder, folders, visibility (with
   the eye-swipe), opacity, all thirteen blend modes with a hover preview,

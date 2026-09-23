@@ -104,7 +104,8 @@ instead of returning base64), `layers.render` (one layer's pixels),
 Documents: `tabs.select`, `tabs.new`, `tabs.close`, `document.new`,
 `document.open` (.comp, a Photoshop .psd/.psb, which answers with `layers` and the import
 `notes`, or an image), `document.import` (an image as a layer),
-`document.save`, `document.export` (.png or .jpg), `document.close`.
+`document.save` (answers `macCompatible`: false past the 100 megapixels of layers Compositor for
+macOS opens; projects here hold up to a gigapixel), `document.export` (.png or .jpg), `document.close`.
 
 Layers: `layers.select`, `layers.set` (name, visible, opacity, blend, sampling,
 clipping), `layers.add` (pixels, group, adjustment, or text with `text`, `x`, `y`, `font`, `size`, `bold`,
