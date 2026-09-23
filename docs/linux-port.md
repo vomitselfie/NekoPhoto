@@ -103,7 +103,8 @@ default, so an installed binary never depends on a library that a later upgrade 
 kept warm with the catalogue's commands, with no PNG round trip (12 MP through
 the executable costs about six seconds of encode and decode). It stays opt-in
 because libgmic 4.0.5 crashes inside `sharpen` when called as a library, and a
-crash in-process takes the editor down.
+crash in-process takes the editor down. Licensing is no obstacle: libgmic's
+CeCILL licences are GPL-compatible, and compositor-linux is GPL-3.0-or-later.
 
 ## Appearance
 
@@ -126,6 +127,8 @@ Ubuntu 22.04 with Qt 6.7 from the Qt installer (so the AppImage runs on
 distributions back to 2022), runs the tests and the offscreen smoke test,
 stages `cmake --install` into an AppDir, bundles Qt (Wayland, xcb and
 offscreen platforms) and libpng with linuxdeploy (OpenCV is built in),
+copies the Debian copyright file of every bundled system library into
+`share/doc/compositor-linux/bundled/` next to the installed licence texts,
 runs the packaged app once, and publishes `compositor-linux-<version>-x86_64.AppImage`
 (with a zsync file for AppImageUpdate), a tarball, and `SHA256SUMS` on a
 GitHub release with generated notes. To cut a release:
@@ -168,6 +171,8 @@ src/core/                       compositor_core: portable C++20 editor core
                                 blend, render, brush, selection, png, project
 src/app/                        the Qt 6 Widgets application
 src/third_party/nlohmann/       JSON (MIT)
+LICENSE, LICENSES/              GPL-3.0-or-later for the port; upstream MIT and third-party texts
+THIRD-PARTY-NOTICES.md          every bundled or linked component and its licence
 src/app/icons/                  tool icons from Lucide (ISC), tinted to the palette at runtime
 tests/                          pixels_tests, core_tests, golden_tests (+ golden PNGs)
 packaging/                      .desktop, icon, MIME type

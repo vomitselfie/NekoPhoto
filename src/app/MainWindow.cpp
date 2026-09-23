@@ -646,7 +646,10 @@ void MainWindow::buildMenus() {
     help->addAction(tr("&About compositor-linux"), this, [this] {
         QMessageBox::about(this, tr("About compositor-linux"), tr("<b>compositor-linux</b> %3<br>A small, focused image compositor. "
             "A Linux port of <a href=\"https://github.com/robbietilton/Compositor\">Compositor</a> for macOS.<br><br>"
-            "Qt %1 &middot; project format version %2<br>MIT licence.").arg(QT_VERSION_STR).arg(projectFormatVersion).arg(QApplication::applicationVersion()));
+            "Qt %1 &middot; project format version %2<br><br>"
+            "Free software under the GNU General Public License, version 3 or later, with ABSOLUTELY NO WARRANTY. "
+            "Compositor's own code is MIT licensed by Wonder Assembly LLC; the licences of the bundled components "
+            "are in THIRD-PARTY-NOTICES.md, installed with the program.").arg(QT_VERSION_STR).arg(projectFormatVersion).arg(QApplication::applicationVersion()));
     });
     refreshRecent();
 }

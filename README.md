@@ -127,6 +127,16 @@ sources, which stay in this tree untouched.
 
 ## Credits and license
 
-Compositor is by Wonder Assembly LLC, MIT licensed; its README is kept at
-`docs/upstream-README.md`. compositor-linux is MIT as well, see
-[LICENSE](LICENSE). It bundles nlohmann/json (MIT) and the Lucide icons (ISC).
+compositor-linux is free software under the GNU General Public License,
+version 3 or (at your option) any later version; see [LICENSE](LICENSE).
+
+It is a port of Compositor by Wonder Assembly LLC, which is MIT licensed; its
+README is kept at `docs/upstream-README.md`. The Mac sources under
+`Compositor/`, including the C pixel routines the Linux build compiles, keep
+that MIT notice ([LICENSES/MIT-Compositor.txt](LICENSES/MIT-Compositor.txt)).
+
+Release builds link OpenCV (Apache-2.0) statically and bundle Qt (LGPL-3.0);
+the source also carries nlohmann/json (MIT) and the Lucide icons (ISC).
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) lists every component, its
+licence and where its text is, and every package installs those texts with
+the program.

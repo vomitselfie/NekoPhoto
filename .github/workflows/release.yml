@@ -90,7 +90,19 @@ jobs:
           ./linuxdeploy --appdir AppDir \
             --desktop-file AppDir/usr/share/applications/compositor-linux.desktop \
             --icon-file packaging/compositor-linux.svg \
-            --plugin qt --output appimage
+            --plugin qt
+          # Ship the copyright file of every distribution package whose library was bundled.
+          # Qt comes from aqtinstall, not dpkg; its licences are in LICENSES/ and THIRD-PARTY-NOTICES.md.
+          bundled=AppDir/usr/share/doc/compositor-linux/bundled
+          mkdir -p "$bundled"
+          for lib in AppDir/usr/lib/*.so*; do
+            pkg="$(dpkg -S "*/$(basename "$lib")" 2>/dev/null | head -n1 | cut -d: -f1)"
+            if [ -n "$pkg" ] && [ -f "/usr/share/doc/$pkg/copyright" ]; then
+              cp "/usr/share/doc/$pkg/copyright" "$bundled/$pkg.copyright"
+            fi
+          done
+          ls "$bundled"
+          ./linuxdeploy --appdir AppDir --output appimage
           ls -la *.AppImage*
 
       - name: Run the AppImage
@@ -104,7 +116,7 @@ jobs:
           v="${{ steps.version.outputs.version }}"
           rm -rf "compositor-linux-$v" && mkdir "compositor-linux-$v"
           cp -r AppDir/usr/bin AppDir/usr/share "compositor-linux-$v/"
-          cp LICENSE README.md "compositor-linux-$v/"
+          cp LICENSE THIRD-PARTY-NOTICES.md README.md "compositor-linux-$v/"
           tar czf "compositor-linux-$v-x86_64.tar.gz" "compositor-linux-$v"
           sha256sum *.AppImage *.tar.gz > SHA256SUMS
 

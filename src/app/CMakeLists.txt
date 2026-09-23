@@ -101,11 +101,19 @@ if(TARGET Qt6::DBus)
 endif()
 set_target_properties(compositor-linux PROPERTIES OUTPUT_NAME compositor-linux)
 
+# GPL-3.0 for the program, the MIT notice of the code it ports, and the third-party notices.
+set(COMPOSITOR_LICENSE_FILES ${CMAKE_SOURCE_DIR}/LICENSE ${CMAKE_SOURCE_DIR}/THIRD-PARTY-NOTICES.md)
+file(GLOB COMPOSITOR_LICENSE_TEXTS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/LICENSES/*.txt)
+
 if(APPLE)
     # An app bundle with the icon and document types; macdeployqt then adds Qt and the other dylibs.
     set(COMPOSITOR_ICNS ${CMAKE_SOURCE_DIR}/packaging/compositor-linux.icns)
     target_sources(compositor-linux PRIVATE ${COMPOSITOR_ICNS})
     set_source_files_properties(${COMPOSITOR_ICNS} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+    # The licence texts travel inside the bundle, as they do in share/doc on Linux.
+    target_sources(compositor-linux PRIVATE ${COMPOSITOR_LICENSE_FILES} ${COMPOSITOR_LICENSE_TEXTS})
+    set_source_files_properties(${COMPOSITOR_LICENSE_FILES} PROPERTIES MACOSX_PACKAGE_LOCATION Resources/licenses)
+    set_source_files_properties(${COMPOSITOR_LICENSE_TEXTS} PROPERTIES MACOSX_PACKAGE_LOCATION Resources/licenses/LICENSES)
     set_target_properties(compositor-linux PROPERTIES
         MACOSX_BUNDLE TRUE
         MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/packaging/Info.plist.in
@@ -121,3 +129,7 @@ endif()
 install(FILES ${CMAKE_SOURCE_DIR}/packaging/compositor-linux.desktop DESTINATION share/applications)
 install(FILES ${CMAKE_SOURCE_DIR}/packaging/compositor-linux.svg DESTINATION share/icons/hicolor/scalable/apps)
 install(FILES ${CMAKE_SOURCE_DIR}/packaging/compositor-linux-mime.xml DESTINATION share/mime/packages RENAME compositor-linux.xml)
+if(NOT APPLE)
+    install(FILES ${COMPOSITOR_LICENSE_FILES} DESTINATION share/doc/compositor-linux)
+    install(FILES ${COMPOSITOR_LICENSE_TEXTS} DESTINATION share/doc/compositor-linux/LICENSES)
+endif()

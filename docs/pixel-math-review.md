@@ -222,7 +222,7 @@ this machine (version 4.0.5 with `gmic`, `gmic_qt`, `libgmic` and its headers)
 and packaged by Arch and Ubuntu.
 
 Licensing: `libgmic` is dual-licensed CeCILL-C (LGPL-like, linking from an MIT
-program is fine) or CeCILL v2.1; the `gmic_qt` plugin front end is CeCILL
+program is fine; compositor-linux has since moved to GPL-3.0-or-later) or CeCILL v2.1; the `gmic_qt` plugin front end is CeCILL
 (GPL-like), so it can only be run as a separate program, never embedded.
 
 Plan, as three deliverables:

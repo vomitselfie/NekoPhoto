@@ -75,4 +75,9 @@ It needs, all kept outside this repository:
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](../LICENSES/MIT-Compositor.txt).
+
+*(compositor-linux note: this is the upstream README, kept as it was. The
+upstream MIT licence text now lives at `LICENSES/MIT-Compositor.txt` and still
+covers the Mac sources under `Compositor/`; the Linux port as a whole is
+GPL-3.0-or-later, see the root `LICENSE` and `THIRD-PARTY-NOTICES.md`.)*
