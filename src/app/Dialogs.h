@@ -1,4 +1,4 @@
-// The small sheets: New canvas, Canvas Size, Image Size, JPEG export.
+// The small sheets: New canvas, Canvas Size, Image Size, JPEG and WebP export.
 #pragma once
 #include <QColor>
 #include <QDialog>
@@ -17,7 +17,8 @@ struct ImageSizeOptions { int width, height; double resolution; int sampling = 2
 std::optional<ImageSizeOptions> askImageSize(QWidget* parent, int width, int height, double resolution);
 
 struct JpegOptions { int quality = 85; QColor background = Qt::white; };
-/// Shows a live preview of `flattened` over the background at the chosen quality.
-std::optional<JpegOptions> askJpegExport(QWidget* parent, const QImage& flattened);
+/// Shows a live preview of `flattened` over the background at the chosen quality; with `webp`, the WebP
+/// encoding instead, which keeps transparency (the background is not asked for).
+std::optional<JpegOptions> askJpegExport(QWidget* parent, const QImage& flattened, bool webp = false);
 
 } // namespace app

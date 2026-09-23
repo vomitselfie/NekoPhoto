@@ -2,6 +2,7 @@
 #pragma once
 #include "compositor/image.h"
 #include <QImage>
+#include <QImageWriter>
 #include <cstring>
 
 namespace app {
@@ -31,5 +32,22 @@ inline std::shared_ptr<compositor::GrayImage> grayFromQImage(const QImage& sourc
     for (int y = 0; y < converted.height(); y++) std::memcpy(out->row(y), converted.constScanLine(y), size_t(converted.width()));
     return out;
 }
+
+/// Writes a flattened image through Qt's image plugins (JPEG, WebP, TIFF), with its resolution. For WebP a
+/// quality of 100 is lossless; TIFF is LZW-compressed and keeps transparency.
+inline bool writeQtImage(const QString& path, const char* format, QImage image, int quality, double dpi, QString* error) {
+    const int dotsPerMeter = int(dpi / 0.0254 + 0.5);
+    image.setDotsPerMeterX(dotsPerMeter);
+    image.setDotsPerMeterY(dotsPerMeter);
+    QImageWriter writer(path, format);
+    if (qstrcmp(format, "tiff") == 0) writer.setCompression(1);
+    else writer.setQuality(quality);
+    if (writer.write(image)) return true;
+    if (error) *error = writer.errorString();
+    return false;
+}
+
+/// Whether this Qt has a writer for the format (WebP and TIFF come from the qtimageformats plugins).
+inline bool canWriteImageFormat(const char* format) { return QImageWriter::supportedImageFormats().contains(format); }
 
 } // namespace app

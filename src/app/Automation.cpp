@@ -473,10 +473,14 @@ void AutomationServer::registerHandlers() {
             QPainter painter(&image);
             painter.drawImage(0, 0, wrapImage(*flat));
             painter.end();
-            QImageWriter writer(path, "jpeg");
-            writer.setQuality(integer(p, "quality", 85));
-            if (!writer.write(image)) fail("couldn't write " + path + ": " + writer.errorString());
-        } else fail("path must end in .png, .jpg or .jpeg", invalidParams);
+            QString error;
+            if (!writeQtImage(path, "jpeg", image, integer(p, "quality", 85), session()->document()->resolution, &error)) fail("couldn't write " + path + ": " + error);
+        } else if ((suffix == "webp" || suffix == "tif" || suffix == "tiff") && canWriteImageFormat(suffix == "webp" ? "webp" : "tiff")) {
+            // WebP and TIFF keep transparency; WebP at quality 100 is lossless.
+            QString error;
+            if (!writeQtImage(path, suffix == "webp" ? "webp" : "tiff", toQImage(*flat), integer(p, "quality", 90), session()->document()->resolution, &error))
+                fail("couldn't write " + path + ": " + error);
+        } else fail("path must end in .png, .jpg, .jpeg, .webp, .tif or .tiff", invalidParams);
         return QJsonObject{{"path", path}, {"width", flat->width()}, {"height", flat->height()}};
     });
     add("document.close", [session](const QJsonObject& p) {

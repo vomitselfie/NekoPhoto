@@ -462,6 +462,8 @@ void MainWindow::buildMenus() {
     file->addSeparator();
     needsDocument(file->addAction(tr("Export &PNG…"), QKeySequence("Ctrl+Shift+E"), this, &MainWindow::exportPng));
     needsDocument(file->addAction(tr("Export &JPEG…"), QKeySequence("Ctrl+Alt+Shift+S"), this, &MainWindow::exportJpeg));
+    if (canWriteImageFormat("webp")) needsDocument(file->addAction(tr("Export &WebP…"), this, &MainWindow::exportWebp));
+    if (canWriteImageFormat("tiff")) needsDocument(file->addAction(tr("Export &TIFF…"), this, &MainWindow::exportTiff));
     file->addSeparator();
     file->addAction(tr("&Close Tab"), QKeySequence::Close, this, [this] { closeTab(current_); });
     file->addAction(tr("New &Tab"), QKeySequence::AddTab, this, [this] { addTab(false); });
@@ -938,6 +940,14 @@ void MainWindow::exportPng() {
     if (!image || !writePngImage(path.toStdString(), *image, session_->document()->resolution, &error)) showError(tr("Couldn’t export PNG"), QString::fromStdString(error));
 }
 
+QString MainWindow::askExportPath(const QString& title, const QString& filter, const QStringList& suffixes) {
+    QString suggested = QDir(QSettings().value("lastDir").toString()).filePath((session_->projectPath().isEmpty() ? QStringLiteral("Untitled") : QFileInfo(session_->projectPath()).completeBaseName()) + "." + suffixes.first());
+    QString path = QFileDialog::getSaveFileName(this, title, suggested, filter);
+    if (path.isEmpty()) return path;
+    if (std::none_of(suffixes.begin(), suffixes.end(), [&](const QString& s) { return path.endsWith("." + s, Qt::CaseInsensitive); })) path += "." + suffixes.first();
+    return path;
+}
+
 void MainWindow::exportJpeg() {
     if (!session_->hasDocument()) return;
     auto flattened = session_->flattened();
@@ -945,21 +955,38 @@ void MainWindow::exportJpeg() {
     QImage image = toQImage(*flattened);
     auto options = askJpegExport(this, image);
     if (!options) return;
-    QString suggested = QDir(QSettings().value("lastDir").toString()).filePath((session_->projectPath().isEmpty() ? QStringLiteral("Untitled") : QFileInfo(session_->projectPath()).completeBaseName()) + ".jpg");
-    QString path = QFileDialog::getSaveFileName(this, tr("Export JPEG"), suggested, tr("JPEG image (*.jpg *.jpeg)"));
+    QString path = askExportPath(tr("Export JPEG"), tr("JPEG image (*.jpg *.jpeg)"), {"jpg", "jpeg"});
     if (path.isEmpty()) return;
-    if (!path.endsWith(".jpg", Qt::CaseInsensitive) && !path.endsWith(".jpeg", Qt::CaseInsensitive)) path += ".jpg";
     QImage flat(image.size(), QImage::Format_RGB32);
     flat.fill(options->background);
     QPainter p(&flat);
     p.drawImage(0, 0, image);
     p.end();
-    int dpm = int(session_->document()->resolution / 0.0254 + 0.5);
-    flat.setDotsPerMeterX(dpm);
-    flat.setDotsPerMeterY(dpm);
-    QImageWriter writer(path, "jpeg");
-    writer.setQuality(options->quality);
-    if (!writer.write(flat)) showError(tr("Couldn’t export JPEG"), writer.errorString());
+    QString error;
+    if (!writeQtImage(path, "jpeg", flat, options->quality, session_->document()->resolution, &error)) showError(tr("Couldn’t export JPEG"), error);
+}
+
+void MainWindow::exportWebp() {
+    if (!session_->hasDocument()) return;
+    auto flattened = session_->flattened();
+    if (!flattened) return;
+    QImage image = toQImage(*flattened);
+    auto options = askJpegExport(this, image, true);
+    if (!options) return;
+    QString path = askExportPath(tr("Export WebP"), tr("WebP image (*.webp)"), {"webp"});
+    if (path.isEmpty()) return;
+    QString error;
+    if (!writeQtImage(path, "webp", image, options->quality, session_->document()->resolution, &error)) showError(tr("Couldn’t export WebP"), error);
+}
+
+void MainWindow::exportTiff() {
+    if (!session_->hasDocument()) return;
+    auto flattened = session_->flattened();
+    if (!flattened) return;
+    QString path = askExportPath(tr("Export TIFF"), tr("TIFF image (*.tif *.tiff)"), {"tif", "tiff"});
+    if (path.isEmpty()) return;
+    QString error;
+    if (!writeQtImage(path, "tiff", toQImage(*flattened), 100, session_->document()->resolution, &error)) showError(tr("Couldn’t export TIFF"), error);
 }
 
 void MainWindow::dragEnterEvent(QDragEnterEvent* e) {

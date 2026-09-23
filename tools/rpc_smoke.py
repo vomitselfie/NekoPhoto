@@ -140,6 +140,19 @@ def main():
     assert len(imported["presets"]) == 1, imported
     tipped = rpc.call("brush.stroke", points=[[30, 140], [230, 140]], preset=imported["presets"][0], size=20)
     assert tipped["preset"] == imported["presets"][0], tipped
+    # Export: PNG always; WebP and TIFF when Qt's image-format plugins are installed.
+    out_dir = tempfile.mkdtemp()
+    magic = {"png": b"\x89PNG", "jpg": b"\xff\xd8\xff", "webp": b"RIFF", "tif": (b"II*\x00", b"MM\x00*")}
+    for suffix, start in magic.items():
+        exported = os.path.join(out_dir, "export." + suffix)
+        try:
+            rpc.call("document.export", path=exported, quality=90)
+        except RuntimeError as e:
+            assert suffix in ("webp", "tif") and "must end in" in str(e), e
+            print("no %s writer in this Qt; skipped" % suffix)
+            continue
+        with open(exported, "rb") as f:
+            assert f.read(4).startswith(start if isinstance(start, bytes) else tuple(start)), suffix
     rpc.call("gradient.draw", x0=0, y0=0, x1=200, y1=0, foreground="#0000ff", opacity=0.5)
     n = len(rpc.call("layers.list"))
     shape = rpc.call("shape.draw", kind="ellipse", x=300, y=100, width=120, height=80, color="#ff00ff")

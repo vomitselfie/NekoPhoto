@@ -222,7 +222,8 @@ def document_save(path: Optional[str] = None) -> str:
 
 @mcp.tool()
 def document_export(path: str, quality: int = 85, background: str = "#ffffff") -> str:
-    """Flatten and export to a .png (keeps transparency) or .jpg (over background, at quality)."""
+    """Flatten and export to a .png, .webp or .tif (these keep transparency; WebP at quality 100 is
+    lossless) or .jpg (over background, at quality)."""
     return text(call("document.export", path=os.path.abspath(path), quality=quality, background=background))
 
 

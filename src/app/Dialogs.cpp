@@ -273,9 +273,11 @@ std::optional<ImageSizeOptions> askImageSize(QWidget* parent, int currentWidth, 
     return ImageSizeOptions{width->value(), height->value(), resolution->value(), sampling->currentIndex()};
 }
 
-std::optional<JpegOptions> askJpegExport(QWidget* parent, const QImage& flattened) {
+std::optional<JpegOptions> askJpegExport(QWidget* parent, const QImage& flattened, bool webp) {
+    // JPEG flattens onto a colour; WebP keeps transparency, and at quality 100 it is lossless.
+    const char* format = webp ? "webp" : "jpeg";
     QDialog dialog(parent);
-    dialog.setWindowTitle(QObject::tr("Export JPEG"));
+    dialog.setWindowTitle(webp ? QObject::tr("Export WebP") : QObject::tr("Export JPEG"));
     auto* layout = new QVBoxLayout(&dialog);
     auto* preview = new QLabel;
     preview->setMinimumSize(560, 360);
@@ -310,24 +312,27 @@ std::optional<JpegOptions> askJpegExport(QWidget* parent, const QImage& flattene
     colorRow->addWidget(colorSwatch);
     colorRow->addWidget(colorButton);
     colorRow->addStretch();
-    form->addRow(QObject::tr("Behind transparency"), colorRow);
+    if (!webp) form->addRow(QObject::tr("Behind transparency"), colorRow);
+    else { colorSwatch->hide(); colorButton->hide(); }
     auto* sizeLabel = new QLabel;
     form->addRow(QObject::tr("File size"), sizeLabel);
     layout->addLayout(form);
     QImage small = flattened.width() > 1000 || flattened.height() > 1000 ? flattened.scaled(1000, 1000, Qt::KeepAspectRatio, Qt::SmoothTransformation) : flattened;
     auto refresh = [&] {
-        QImage flat(small.size(), QImage::Format_RGB32);
-        flat.fill(background);
-        QPainter p(&flat);
-        p.drawImage(0, 0, small);
-        p.end();
+        QImage flat = small;
+        if (!webp) {
+            flat = QImage(small.size(), QImage::Format_RGB32);
+            flat.fill(background);
+            QPainter p(&flat);
+            p.drawImage(0, 0, small);
+        }
         QByteArray bytes;
         QBuffer buffer(&bytes);
         buffer.open(QIODevice::WriteOnly);
-        QImageWriter writer(&buffer, "jpeg");
+        QImageWriter writer(&buffer, format);
         writer.setQuality(quality->value());
         writer.write(flat);
-        QImage decoded = QImage::fromData(bytes, "jpeg");
+        QImage decoded = QImage::fromData(bytes, format);
         preview->setPixmap(QPixmap::fromImage(decoded.scaled(preview->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation)));
         double factor = double(flattened.width()) * flattened.height() / std::max(1, small.width() * small.height());
         double kb = bytes.size() * factor / 1024;

@@ -109,6 +109,9 @@ private:
     bool save(bool asNew);
     void exportPng();
     void exportJpeg();
+    void exportWebp();
+    void exportTiff();
+    QString askExportPath(const QString& title, const QString& filter, const QStringList& suffixes);
     bool confirmDiscard();
     void importFile(const QString& path, std::optional<QPointF> at = std::nullopt);
     void addRecent(const QString& path);
