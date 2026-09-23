@@ -171,7 +171,7 @@ void EditorSession::startQuickSelectJob() {
         std::string why;
         std::shared_ptr<GrayImage> coverage;
         if (in->clicks) coverage = subjectFromPrompts(*in->composite, in->model, in->prompts, &why);
-        else coverage = scribbleSelection(*in->composite, in->labels, 450, 2, &why);
+        else coverage = scribbleSelection(*in->composite, in->labels, scribbleLimit, scribbleIterations, &why);
         if (coverage) coverage = refinedQuickSelect(*coverage, *in->composite, in->refine);
         QMetaObject::invokeMethod(this, [this, coverage, why, in] {
             quickSelectBusy_ = false;
@@ -202,9 +202,7 @@ bool EditorSession::runScribbleSelection(SelectionMode mode, QString* error) {
     for (const Scribble& stroke : scribbles_) stampScribble(labels, stroke, stroke.background ? 2 : 1);
     std::shared_ptr<const Image> composite = flattenedForSampling();
     std::string why;
-    // GrabCut's cost grows fast with size (a 12 MP test image: 4 s at 400 px, 22 s at 700); the guided refine
-    // at full size restores the edge, so the segmentation runs small.
-    auto coverage = scribbleSelection(*composite, labels, 450, 2, &why);
+    auto coverage = scribbleSelection(*composite, labels, scribbleLimit, scribbleIterations, &why);
     if (!coverage) { if (error) *error = QString::fromStdString(why); return false; }
     coverage = refinedQuickSelect(*coverage, *composite, scribbleRefine);
     applySelectionShape(*coverage, mode, "Quick Select");

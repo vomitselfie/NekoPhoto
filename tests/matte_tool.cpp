@@ -13,10 +13,19 @@
 //       defines them, for the raw mask and for the refined matte; with AIM-500's category file, means per
 //       category and per type as well. With "none" as the model, --mask names a mask file (run) or a mask
 //       suffix (eval, default _mask) to start from instead of the model.
+//   matte_tool scribble <dir> [--suffix _alpha] [--limit N] [--sizes 300,450,600] [--iterations 1,2,3] [--refine 8]
+//       Quick Select's scribble engine against ground truth: for every pair, a foreground cross through the
+//       subject's solid core and a background band along the border where the truth is clear, then GrabCut
+//       at each size and iteration count; prints the intersection over union at alpha 0.5 and the time, and
+//       the IoU and SAD after the refinement Quick Select applies (edges pulled in by --refine, contrast 25,
+//       cleanup).
 #include "compositor/png.h"
 #include "compositor/matte.h"
+#include "compositor/scribble.h"
 #include "compositor/subject.h"
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -25,6 +34,8 @@
 #include <map>
 #include <fstream>
 #include <string>
+#include <sstream>
+#include <thread>
 #include <vector>
 
 using namespace compositor;
@@ -312,9 +323,127 @@ int evalMode(int argc, char** argv) {
     return 0;
 }
 
+/// Synthetic strokes from a ground-truth alpha: 1 on a cross through the solid core of the subject (pixels
+/// whose whole 31-pixel box is opaque), 2 on a 10-pixel border band where the truth is transparent.
+/// Empty when the subject has no solid core.
+GrayImage strokesFrom(const GrayImage& truth) {
+    const int w = truth.width(), h = truth.height(), r = 15;
+    std::vector<int> sum(size_t(w + 1) * size_t(h + 1), 0);
+    auto at = [&](int x, int y) -> int& { return sum[size_t(y) * size_t(w + 1) + size_t(x)]; };
+    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) at(x + 1, y + 1) = (truth.at(x, y) >= 250) + at(x, y + 1) + at(x + 1, y) - at(x, y);
+    auto core = [&](int x, int y) {
+        if (x < r || y < r || x >= w - r || y >= h - r) return false;
+        return at(x + r + 1, y + r + 1) - at(x - r, y + r + 1) - at(x + r + 1, y - r) + at(x - r, y - r) == (2 * r + 1) * (2 * r + 1);
+    };
+    GrayImage labels(w, h, 0);
+    long long cx = 0, cy = 0, n = 0;
+    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) if (core(x, y)) { cx += x; cy += y; n++; }
+    if (!n) return GrayImage();
+    const int mx = int(cx / n), my = int(cy / n);
+    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+        if ((std::abs(y - my) <= 2 || std::abs(x - mx) <= 2) && core(x, y)) labels.at(x, y) = 1;
+        else if ((x < 10 || y < 10 || x >= w - 10 || y >= h - 10) && truth.at(x, y) <= 5) labels.at(x, y) = 2;
+    }
+    return labels;
+}
+
+std::vector<int> intList(const std::string& text) {
+    std::vector<int> out;
+    std::stringstream in(text);
+    for (std::string item; std::getline(in, item, ',');) out.push_back(std::atoi(item.c_str()));
+    return out;
+}
+
+int scribbleMode(int argc, char** argv) {
+    if (argc < 3) { std::fprintf(stderr, "usage: matte_tool scribble <dir> [options]\n"); return 2; }
+    const std::string dir = argv[2];
+    std::string suffix = "_alpha";
+    int limit = 0;
+    std::vector<int> sizes{300, 450, 600}, iterations{1, 2, 3};
+    int refine = 8;
+    for (int i = 3; i + 1 < argc; i += 2) {
+        const std::string key = argv[i], value = argv[i + 1];
+        if (key == "--suffix") suffix = value;
+        else if (key == "--limit") limit = std::atoi(value.c_str());
+        else if (key == "--sizes") sizes = intList(value);
+        else if (key == "--iterations") iterations = intList(value);
+        else if (key == "--refine") refine = std::atoi(value.c_str());
+    }
+    std::vector<fs::path> files;
+    for (const auto& entry : fs::directory_iterator(dir))
+        if (entry.path().extension() == ".png" && entry.path().filename().string().find(suffix + ".png") == std::string::npos) files.push_back(entry.path());
+    std::sort(files.begin(), files.end());
+    // An even spread over the set rather than its first names.
+    if (limit > 0 && int(files.size()) > limit) {
+        std::vector<fs::path> spread;
+        for (int i = 0; i < limit; i++) spread.push_back(files[size_t(i) * files.size() / size_t(limit)]);
+        files = spread;
+    }
+    struct Config { int size, iterations; double iou = 0, ms = 0, worstMs = 0, refinedIou = 0, refinedSad = 0; int count = 0; };
+    struct Result { double iou = -1, ms = 0, refinedIou = 0, refinedSad = 0; };
+    MatteSettings refinement;
+    refinement.refineEdges = refine;
+    refinement.contrast = 25;
+    refinement.matting = 0;
+    refinement.cleanup = true;
+    refinement.decontaminate = false;
+    auto iouOf = [](const GrayImage& a, const GrayImage& b) {
+        long long both = 0, either = 0;
+        for (int y = 0; y < a.height(); y++) for (int x = 0; x < a.width(); x++) {
+            const bool p = a.at(x, y) >= 128, q = b.at(x, y) >= 128;
+            both += p && q; either += p || q;
+        }
+        return either ? double(both) / double(either) : 1.0;
+    };
+    std::vector<Config> configs;
+    for (int s : sizes) for (int it : iterations) configs.push_back({s, it});
+    std::vector<std::vector<Result>> results(files.size(), std::vector<Result>(configs.size()));
+    std::atomic<size_t> next{0};
+    // GrabCut is single-threaded, so the images run side by side; a few threads keep the timings honest.
+    std::vector<std::thread> workers;
+    for (int t = 0; t < 6; t++)
+        workers.emplace_back([&] {
+            for (size_t f; (f = next++) < files.size();) {
+                const std::string stem = files[f].stem().string();
+                auto image = readPngImage(files[f].string());
+                auto truth = readAlpha((files[f].parent_path() / (stem + suffix + ".png")).string(), nullptr);
+                if (!image || !truth || truth->width() != image->width() || truth->height() != image->height()) continue;
+                GrayImage labels = strokesFrom(*truth);
+                if (labels.isEmpty()) continue;
+                for (size_t c = 0; c < configs.size(); c++) {
+                    auto t0 = std::chrono::steady_clock::now();
+                    auto coverage = scribbleSelection(*image, labels, configs[c].size, configs[c].iterations, nullptr);
+                    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+                    if (!coverage) continue;
+                    auto refined = refineMatte(*coverage, *image, refinement, 0);
+                    results[f][c] = {iouOf(*coverage, *truth), ms, iouOf(*refined, *truth), score(*refined, *truth).sad};
+                }
+            }
+        });
+    for (auto& w : workers) w.join();
+    for (size_t f = 0; f < files.size(); f++)
+        for (size_t c = 0; c < configs.size(); c++) {
+            const Result& r = results[f][c];
+            if (r.iou < 0) continue;
+            configs[c].iou += r.iou;
+            configs[c].ms += r.ms;
+            configs[c].worstMs = std::max(configs[c].worstMs, r.ms);
+            configs[c].refinedIou += r.refinedIou;
+            configs[c].refinedSad += r.refinedSad;
+            configs[c].count++;
+        }
+    std::printf("%6s %10s %8s %10s %10s %12s %12s %6s\n", "size", "iterations", "IoU", "mean ms", "worst ms", "refined IoU", "refined SAD", "n");
+    for (const Config& c : configs) {
+        const double n = std::max(1, c.count);
+        std::printf("%6d %10d %8.4f %10.0f %10.0f %12.4f %12.2f %6d\n", c.size, c.iterations, c.iou / n, c.ms / n, c.worstMs, c.refinedIou / n, c.refinedSad / n, c.count);
+    }
+    return 0;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
+    if (argc >= 2 && std::strcmp(argv[1], "scribble") == 0) return scribbleMode(argc, argv);
     if (argc >= 2 && std::strcmp(argv[1], "run") == 0) return runMode(argc, argv);
     if (argc >= 2 && std::strcmp(argv[1], "eval") == 0) return evalMode(argc, argv);
     std::fprintf(stderr, "usage: matte_tool run <image.png> <model.onnx|none> <outdir> [options]\n       matte_tool eval <dir> <model.onnx|none> [options]\n");

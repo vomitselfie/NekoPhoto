@@ -246,7 +246,7 @@ int main(int argc, char** argv) {
         for (int y = sh / 2 - 12; y < sh / 2 + 12; y++) for (int x = sw * 2 / 5; x < sw * 3 / 5; x++) labels.at(x, y) = 1;
         for (int y = 10; y < 24; y++) for (int x = 10; x < sw - 10; x++) labels.at(x, y) = 2;
         std::string error;
-        for (auto [limit, iterations] : {std::pair{400, 2}, std::pair{450, 2}, std::pair{700, 3}}) {
+        for (auto [limit, iterations] : {std::pair{scribbleLimit, scribbleIterations}, std::pair{450, 2}, std::pair{700, 3}}) {
             if (!scribbleSelectionSupported()) break;
             report(("scribble selection, limit " + std::to_string(limit) + ", " + std::to_string(iterations) + " iterations").c_str(), timeMs([&] { (void)scribbleSelection(source, labels, limit, iterations, &error); }, 1));
         }
