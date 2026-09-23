@@ -188,6 +188,9 @@ MainWindow::MainWindow() {
     if (forced.size() == 2) resize(forced[0].toInt(), forced[1].toInt());
     if (!restoreState(settings.value("window/state").toByteArray()))
         QTimer::singleShot(0, this, [this] { resizeDocks({layersDock_, adjustDock_}, {3, 1}, Qt::Vertical); });
+    // The saved state remembers each tab's options bar by name, and only the current tab's is visible when the
+    // window closes; restoring it could hide the bar of the tab this launch shows. The current tab owns the bar.
+    for (size_t i = 0; i < tabs_.size(); i++) tabs_[i].options->setVisible(int(i) == current_);
 }
 
 MainWindow::Tab& MainWindow::addTab(bool reuseEmpty) {
