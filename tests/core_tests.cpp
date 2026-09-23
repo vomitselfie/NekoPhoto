@@ -19,10 +19,12 @@
 #include "compositor/warpstroke.h"
 #include "compositor/transform.h"
 
+#include <atomic>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <random>
+#include <thread>
 
 using namespace compositor;
 namespace fs = std::filesystem;
@@ -1286,6 +1288,54 @@ TEST_CASE(subject_mask_from_model_when_available) {
     auto mask = subjectMask(*img, path, &error);
     REQUIRE(mask != nullptr);
     CHECK(mask->at(80, 80) > mask->at(5, 5));
+}
+
+TEST_CASE(subject_masks_on_two_threads_match_the_masks_run_alone) {
+    // Runs on two threads share one network. forward() into a list copies its outputs out of the network's
+    // buffers, so what a run reads after the model lock is released is its own; this keeps it that way.
+    const char* dir = std::getenv("COMPOSITOR_MODEL_DIR");
+    if (!dir || !subjectModelSupported()) { std::fprintf(stderr, "  (skipped: set COMPOSITOR_MODEL_DIR with u2netp.onnx to run)\n"); return; }
+    std::string path = std::string(dir) + "/u2netp.onnx";
+    if (!fs::exists(path)) { std::fprintf(stderr, "  (skipped: %s not present)\n", path.c_str()); return; }
+    auto disc = [](int cx, int cy) {
+        auto img = std::make_shared<Image>(200, 160);
+        for (int y = 0; y < 160; y++) for (int x = 0; x < 200; x++) { bool in = std::hypot(x - cx, y - cy) < 40; uint8_t* p = img->pixel(x, y); p[0] = in ? 230 : 30; p[1] = in ? 200 : 40; p[2] = in ? 120 : 60; p[3] = 255; }
+        return img;
+    };
+    const std::shared_ptr<Image> images[2] = {disc(60, 60), disc(140, 100)};
+    std::shared_ptr<GrayImage> alone[2];
+    for (int i = 0; i < 2; i++) { alone[i] = subjectMask(*images[i], path, nullptr); REQUIRE(alone[i] != nullptr); }
+    auto same = [](const GrayImage& a, const GrayImage& b) {
+        for (int y = 0; y < a.height(); y++) if (std::memcmp(a.row(y), b.row(y), size_t(a.width()))) return false;
+        return true;
+    };
+    std::atomic<int> mismatches{0};
+    std::vector<std::thread> threads;
+    for (int i = 0; i < 2; i++)
+        threads.emplace_back([&, i] {
+            for (int run = 0; run < 12; run++) {
+                auto mask = subjectMask(*images[i], path, nullptr);
+                if (!mask || !same(*mask, *alone[i])) mismatches++;
+            }
+        });
+    for (auto& t : threads) t.join();
+    CHECK_EQ(mismatches.load(), 0);
+
+    // The same for click prompts, whose outputs are read for longer after the run.
+    std::string prompt = std::string(dir) + "/efficientsam_ti_2025april.onnx";
+    if (!fs::exists(prompt)) { std::fprintf(stderr, "  (prompts skipped: %s not present)\n", prompt.c_str()); return; }
+    const std::vector<PointPrompt> clicks[2] = {{{60, 60, 1}}, {{140, 100, 1}}};
+    for (int i = 0; i < 2; i++) { alone[i] = subjectFromPrompts(*images[i], prompt, clicks[i], nullptr); REQUIRE(alone[i] != nullptr); }
+    threads.clear();
+    for (int i = 0; i < 2; i++)
+        threads.emplace_back([&, i] {
+            for (int run = 0; run < 12; run++) {
+                auto mask = subjectFromPrompts(*images[i], prompt, clicks[i], nullptr);
+                if (!mask || !same(*mask, *alone[i])) mismatches++;
+            }
+        });
+    for (auto& t : threads) t.join();
+    CHECK_EQ(mismatches.load(), 0);
 }
 
 TEST_CASE(subject_from_prompts_when_the_model_is_available) {

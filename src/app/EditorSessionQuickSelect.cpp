@@ -143,6 +143,8 @@ void EditorSession::startQuickSelectJob() {
         bool clicks = false;
         std::string model;
         int refine = 0;
+        uint64_t revision = 0;
+        int width = 0, height = 0;
     };
     auto in = std::make_shared<Inputs>();
     in->clicks = quickSelectClicks;
@@ -158,6 +160,9 @@ void EditorSession::startQuickSelectJob() {
         for (const Scribble& stroke : scribbles_) stampScribble(in->labels, stroke, stroke.background ? 2 : 1);
     }
     in->composite = flattenedForSampling();
+    in->revision = documentRevision_;
+    in->width = document_->width;
+    in->height = document_->height;
     quickSelectBusy_ = true;
     emit quickSelectBusyChanged(true);
     if (quickSelectThread_.joinable()) quickSelectThread_.join();
@@ -167,11 +172,17 @@ void EditorSession::startQuickSelectJob() {
         if (in->clicks) coverage = subjectFromPrompts(*in->composite, in->model, in->prompts, &why);
         else coverage = scribbleSelection(*in->composite, in->labels, 450, 2, &why);
         if (coverage) coverage = refinedQuickSelect(*coverage, *in->composite, in->refine);
-        const bool clicks = in->clicks;
-        QMetaObject::invokeMethod(this, [this, coverage, why, clicks] {
+        QMetaObject::invokeMethod(this, [this, coverage, why, in] {
             quickSelectBusy_ = false;
             emit quickSelectBusyChanged(false);
-            if (coverage) applySelectionShape(*coverage, SelectionMode::Replace, clicks ? "Select Subject" : "Quick Select");
+            // The document moved on while the job ran (an edit, a crop, another document): the result
+            // describes pixels that are gone and may not even fit the canvas, so compute it again.
+            if (!document_ || documentRevision_ != in->revision || document_->width != in->width || document_->height != in->height) {
+                quickSelectAgain_ = false;
+                startQuickSelectJob();
+                return;
+            }
+            if (coverage) applySelectionShape(*coverage, SelectionMode::Replace, in->clicks ? "Select Subject" : "Quick Select");
             else emit quickSelectFailed(QString::fromStdString(why));
             if (quickSelectAgain_) { quickSelectAgain_ = false; startQuickSelectJob(); }
         }, Qt::QueuedConnection);
