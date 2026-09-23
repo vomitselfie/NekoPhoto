@@ -1,75 +1,121 @@
 # What compositor-linux can do
 
-The full feature list. It mirrors the Mac app's, with Linux key names.
+**English** · [日本語](#日本語)
+
+Everything the Mac app does, with Linux key names. Keyboard shortcuts are
+listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 
 ## Layers
-- Layers and folders, with blend modes and opacity
-- Layer masks: paint, fill, invert, blur and feather them; link or unlink them to transform a mask on its own
+- Layers and folders with blend modes and opacity
+- Layer masks: paint, fill, invert, blur and feather; link or unlink them from the layer
 - Clipping masks and folder masks
-- Adjustment layers: Hue/Saturation, Levels, Curves, Exposure, Gradient Map and Grain
+- Adjustment layers: Hue/Saturation, Levels, Curves, Exposure, Gradient Map, Grain
 - Merge Down, Merge Layers and Merge Group (Ctrl+E)
-- Duplicate, rename inline, reorder and nest by drag and drop; Alt-drag to duplicate
-- New Layer Below (or Ctrl-click the + button) for a fresh background
-- Drag layers between open projects
+- Duplicate, rename, reorder and nest by drag and drop; drag layers between open projects
 
 ## Transform
-- Non-destructive move, scale, rotate and flip; images keep their full resolution however small you make them
-- Free distort (Ctrl-drag a handle), with Shift to lock to an axis
-- Transform several layers, or a whole folder, together
-- Snapping to canvas and layer edges and centers, with guides
-- Exact values for position, size, scale and angle, stepped with the arrow keys
-- Flip Layer and Flip Canvas, horizontal and vertical
+- Move, scale, rotate and flip without losing resolution
+- Free distort (Ctrl-drag a handle)
+- Transform several layers, or a whole folder, at once
+- Snapping to the canvas and other layers, with guides
+- Exact position, size and angle in the options bar
 
 ## Selections
-- Rectangle and Ellipse Marquee, Freehand and Polygonal Lasso, and Magic Wand
-- Quick Select (Q), two engines: Scribble (over the subject and, with Alt, over the background; GrabCut on the flattened document, no model) and Click (EfficientSAM from OpenCV's model zoo, a 48 MB download from the options bar: click the subject, Alt-click what is not it, drag a box; up to six prompts; to take a part of an object, click the part or box it, since a negative point trims separate objects rather than parts of one). Either way the selection is pulled onto the image's edges and follows each stroke or click, computed off the main thread; Backspace takes one back, Esc clears
-- Add to (Shift), subtract from (Alt) and intersect with (Shift+Alt) selections, move the outline, or move and duplicate the pixels inside
-- Magic Wand tolerance, contiguous, sample all layers, and Sample Size (point, 3 by 3, 5 by 5)
-- Expand, Contract, Feather (Shift+F6), Smooth, Border and Invert, with Photoshop's circular kernels; load a layer's pixels or a mask as a selection
-- Delete or Backspace clears the selected pixels
-- Content-Aware Fill (PatchMatch synthesis, so edges and patterns continue), which can also extend an image past its edges
+- Rectangle and ellipse marquee, freehand and polygonal lasso, magic wand
+- Quick Select (Q): scribble over the subject, or click it (a 48 MB model, downloaded from the options bar); the selection snaps to the image's edges
+- Add (Shift), subtract (Alt) and intersect (Shift+Alt)
+- Expand, Contract, Feather, Smooth, Border, Invert; load a layer or mask as a selection
+- Content-Aware Fill, which continues edges and patterns and can extend an image past its borders
 
 ## Painting and retouching
-- Brush with size, hardness and opacity, `[` and `]` for size, digits for opacity, Shift for straight lines
-- Spot Healing Brush (content-aware); it and Content-Aware Fill ignore what a layer mask hides, so a dab at the edge of a cut-out closes with the subject, not the old background
-- Clone Stamp, aligned or not, sampling one layer or all of them
+- Brush and eraser with size, hardness and opacity; Shift for straight lines
+- Spot Healing Brush and Clone Stamp; both ignore what a layer mask hides
 - Smudge, Liquify and Blur, on pixels or masks
-- Gradient tool and Shape tool (rectangles, rounded rectangles and ellipses)
-- Text tool: click to add text in any installed font (size, bold, italic, colour, alignment, line and letter spacing), editable later (double-click the text on the canvas or its thumbnail in the Layers panel, or Layer > Edit Text…) as long as the layer is not painted on; text layers stay pixels in the project so the Mac app opens them. The font picker folds families that share a name (the hundreds of Noto variants) into one expandable row, filters as you type, and keeps recent fonts on top
-- Eyedropper and a full colour picker; X swaps the colours, D resets them
+- Gradients and shapes (rectangles, rounded rectangles, ellipses)
+- Text in any installed font, editable until you paint on the layer
+- Eyedropper and colour picker
 
 ## Adjustments and filters
-- Levels (with Auto), Curves, Hue/Saturation, Exposure, Gradient Map, Grain and Invert
-- Gaussian Blur and Motion Blur that spread past a layer's edges
-- Add Noise, Lens Correction and Remove Background
-- Filter > G'MIC (Ctrl+Shift+G): the G'MIC filter framework's catalogue (over 700 filters once downloaded) with auto-built controls, live preview and an editable command line; needs the `gmic` package (or libgmic in-process, opt-in)
-- Live previews, limited to the selection when there is one
-
-## Canvas and files
-- Multiple projects in tabs; a file opened from the file manager while the editor runs becomes a tab in the running window (`--new-window` for a separate one)
-- Rulers (Ctrl+R), pixel grid when zoomed in, sharp downsampling when zoomed out
-- Crop with snapping and ratio presets; Alt for symmetric cropping
-- Canvas Size (with anchor and relative mode) and Image Size (with scale and resampling choice: Lanczos-3, triangle or nearest)
-- Import JPEG, PNG, TIFF and WebP, including dropped images from other apps: dropped on the canvas an image becomes a layer, dropped on the tab strip it opens as a document of its own
-- Open Photoshop PSD and PSB files (File > Open Photoshop File…, or drop one on the window): layers with names, positions, opacity, blend modes, visibility, folders, clipping and masks; Levels, Curves, Hue/Saturation, Exposure and Gradient Map adjustment layers become ours; solid fills, text and smart objects arrive as pixels; 16- and 32-bit files are reduced to 8 bits; anything left behind (layer styles, vector masks, other adjustments) is listed after the import
-- Export PNG, or JPEG with a live preview; Copy Merged
-- `.comp` projects open in the Mac app and vice versa
-- Photoshop-style keyboard shortcuts throughout; `docs/linux-port.md` lists them
+- Levels (with Auto), Curves, Hue/Saturation, Exposure, Gradient Map, Grain, Invert
+- Gaussian Blur and Motion Blur, which spread past a layer's edges
+- Add Noise and Lens Correction
+- Filter > G'MIC: over 700 filters with their own controls, when `gmic` is installed
+- Live previews on the canvas, limited to the selection when there is one
 
 ## Remove Background
-Off by default. Edit > Preferences turns it on and downloads a segmentation
-model (IS-Net, the U2Net portrait model or the small U2Net from the rembg
-project, or PP-HumanSeg from OpenCV's model zoo, all Apache-2.0) into the app's
-data folder. The model runs locally through OpenCV's DNN module; nothing is
-uploaded. The model also runs on the mirrored image and the two masks are
-averaged (a preference, on by default; twice the model time for a steadier
-mask). The Advanced panel refines the mask against the image's edges, can
-solve hair opacity in a band around the edge (Matting), drops half-transparent
-specks that touch no edge, and re-estimates the edge pixels' colours as pure
-subject colour so no rim of the old background shows over a new one. On a large
-photo, a Detail pass runs the model again on full-resolution windows along the
-edge, recovering the hair and thin structures the whole-image pass blurred away.
+- Off until you turn it on in Edit > Preferences, which downloads a model once
+- Runs on your machine; nothing is uploaded
+- Advanced options: refine the edges, solve hair and fur, remove speckles, clean the edge colours, and a detail pass at full resolution for large photos
+
+## Files and canvas
+- Open Photoshop PSD and PSB files with their layers, folders, masks, blend modes and most adjustment layers; what cannot be kept is listed after opening
+- Open PNG, JPEG, TIFF, WebP and more; drop an image on the canvas to add it as a layer, or on the tab strip to open it
+- Projects of up to a gigapixel of layers; the Mac app opens projects up to 100 megapixels
+- Export PNG, or JPEG with a live preview
+- Several projects in tabs; opening a file from the file manager adds a tab to the running window
+- Crop, Canvas Size and Image Size; rulers and a pixel grid
 
 ## Automation
-An automation socket and an MCP bridge let scripts and AI agents drive the
-editor; see `docs/automation.md`.
+- Scripts and AI agents can drive the editor through a socket or MCP; see [automation.md](automation.md)
+
+---
+
+## 日本語
+
+[English](#what-compositor-linux-can-do) · **日本語**
+
+Mac 版と同じ機能を、Linux のキー表記で使えます。キーボードショートカットは
+[linux-port.md](linux-port.md#keyboard-shortcuts)(英語)に一覧があります。
+
+### レイヤー
+- 描画モードと不透明度を持つレイヤーとフォルダー
+- レイヤーマスク:描画、塗りつぶし、反転、ぼかし、境界のぼかし。レイヤーとのリンクの切り替え
+- クリッピングマスクとフォルダーマスク
+- 調整レイヤー:色相・彩度、レベル補正、トーンカーブ、露光量、グラデーションマップ、粒子
+- 下のレイヤーと結合、レイヤーを結合、グループを結合(Ctrl+E)
+- ドラッグ&ドロップで複製・名前変更・並べ替え・入れ子。開いているプロジェクト間でもレイヤーを移動可能
+
+### 変形
+- 解像度を落とさずに移動・拡大縮小・回転・反転
+- 自由な形に(Ctrl を押しながらハンドルをドラッグ)
+- 複数のレイヤーやフォルダーをまとめて変形
+- カンバスや他のレイヤーへのスナップとガイド
+- オプションバーで位置・サイズ・角度を数値指定
+
+### 選択範囲
+- 長方形選択・楕円選択、なげなわ・多角形選択、自動選択
+- クイック選択(Q):被写体をなぞるか、クリックするだけ(クリック用の 48 MB のモデルはオプションバーからダウンロード)。選択範囲は画像の輪郭に合わせて調整されます
+- 追加(Shift)、削除(Alt)、共通範囲(Shift+Alt)
+- 拡張、縮小、境界をぼかす、滑らかに、境界線、選択範囲を反転。レイヤーやマスクから選択範囲を作成
+- コンテンツに応じた塗りつぶし:輪郭や模様をつなげ、画像の外側への拡張にも使えます
+
+### 描画とレタッチ
+- サイズ・硬さ・不透明度を指定できるブラシと消しゴム。Shift で直線
+- スポット修復ブラシとコピースタンプ(どちらもレイヤーマスクで隠れた部分は使いません)
+- 指先ツール、ゆがみ、ぼかしツール(ピクセルにもマスクにも使えます)
+- グラデーションとシェイプ(長方形、角丸長方形、楕円)
+- インストール済みの任意のフォントでテキスト。レイヤーに描画するまでは再編集可能
+- スポイトとカラーピッカー
+
+### 色調補正とフィルター
+- レベル補正(自動補正付き)、トーンカーブ、色相・彩度、露光量、グラデーションマップ、粒子、階調の反転
+- ぼかし(ガウス)とぼかし(移動):レイヤーの端の外まで広がります
+- ノイズを加える、レンズ補正
+- フィルター > G'MIC:`gmic` をインストールすると、700 種類以上のフィルターを専用の設定画面で使えます
+- カンバス上でのライブプレビュー(選択範囲があればその中だけ)
+
+### 背景を削除
+- 初期状態ではオフ。編集 > 環境設定 でオンにするとモデルを一度だけダウンロードします
+- 処理はすべて手元のマシンで行い、画像はどこにも送信されません
+- 詳細オプション:輪郭の調整、髪や毛並みの抽出、細かなノイズの除去、輪郭の色の補正、大きな写真向けの高解像度ディテール処理
+
+### ファイルとカンバス
+- Photoshop の PSD/PSB を、レイヤー・フォルダー・マスク・描画モード・主な調整レイヤーを保ったまま開けます。引き継げなかった要素は開いた後に一覧表示されます
+- PNG、JPEG、TIFF、WebP などを開けます。カンバスにドロップするとレイヤーとして追加、タブバーにドロップすると新しいドキュメントとして開きます
+- レイヤー合計 1 ギガピクセルまでのプロジェクト(Mac 版で開けるのは 1 億画素まで)
+- PNG 書き出し、プレビュー付きの JPEG 書き出し
+- タブで複数のプロジェクト。ファイルマネージャーから開いたファイルは起動中のウィンドウにタブとして追加
+- 切り抜き、カンバスサイズ、画像解像度。定規とピクセルグリッド
+
+### 自動化
+- スクリプトや AI エージェントからソケットまたは MCP 経由で操作できます。詳しくは [automation.md](automation.md)(英語)

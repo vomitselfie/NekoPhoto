@@ -4,139 +4,184 @@
 
 # compositor-linux
 
-A small, focused image editor for Linux: layers, masks, selections, brushes,
-adjustments and filters, with Photoshop-style tools and shortcuts and none of
-the bloat. It is a native port of [Compositor](https://github.com/robbietilton/Compositor)
-for macOS and opens the same `.comp` projects.
+**English** · [日本語](#日本語)
+
+A fast, focused image editor for Linux: layers, masks, selections, brushes,
+adjustments and filters, with the tools and shortcuts you know from Photoshop.
+It is a native port of [Compositor](https://github.com/robbietilton/Compositor)
+for macOS, and opens Photoshop files and the Mac app's `.comp` projects.
 
 <p align="center">
   <img src="docs/images/screenshot.jpg" alt="compositor-linux editing a layered illustration" width="800">
 </p>
 
-<p align="center">
-  <img src="docs/images/screenshot-gmic.jpg" alt="Filter > G'MIC: the catalogue's folders on the left, a CRT sub-pixel filter's controls on the right, and its live preview on the canvas" width="800">
-  <br>
-  <sub>Filter &gt; G'MIC: over 700 filters with their own controls and a live preview.</sub>
-</p>
+## What it does
+
+- **Layers:** folders, blend modes, opacity, layer masks, clipping masks and adjustment layers
+- **Transform:** move, scale, rotate and distort without losing resolution
+- **Selections:** marquee, lasso, magic wand, and Quick Select by scribble or by click; Content-Aware Fill
+- **Painting:** brush, eraser, spot healing, clone stamp, smudge, liquify, gradients, shapes and text
+- **Adjustments and filters:** levels, curves, hue/saturation, exposure, gradient map, grain, blurs, noise and lens correction
+- **Remove Background:** an AI model that runs on your own machine; nothing is uploaded
+- **G'MIC:** over 700 more filters with a live preview, when `gmic` is installed
+- **Files:** Photoshop PSD and PSB with layers, folders, masks and blend modes; projects of up to a gigapixel of layers; PNG and JPEG export; several projects in tabs
+- **AI agents:** Claude Code or any MCP client can drive the editor
+
+The full list is in [docs/features.md](docs/features.md).
+
+## Performance
+
+The heavy work runs on every core. Times on a 12-core laptop (AMD Ryzen AI 9 HX 370):
+
+| Task | Time |
+|---|---|
+| Open a 70 MB Photoshop file (17 layers at 4096 × 4096) | 0.7 s |
+| Save it as a project | 1.3 s |
+| Save a project with five 4096 × 4096 layers | 0.7 s (7.2 s in 0.6.0) |
+| Open that project | 0.4 s (2.5 s in 0.6.0) |
+| Export a 4096 × 4096 PNG | 0.24 s (1.8 s in 0.6.0) |
+| Quick Select, per stroke | 0.16 s on average (0.65 s in 0.6.0) |
+| Remove Background on a 10-megapixel photo | 1.7 s (8.3 s with every refinement on) |
+| Gaussian blur on a 12-megapixel layer | under 0.1 s |
 
 ## Get it
 
 Download the AppImage from the [Releases](../../releases) page, make it
-executable, and run it:
+executable, and run it. It works on any x86_64 Linux from 2022 on, under
+Wayland or X11.
 
 ```bash
 chmod +x compositor-linux-*.AppImage
 ./compositor-linux-*.AppImage
 ```
 
-It runs on any x86_64 Linux from 2022 on, under Wayland or X11. Open an image
-with File > Open or drop it on the window, and go.
-
-To have it in your app launcher, with its icon, opening `.comp` projects by
-double-click, run the integration script once (no root needed; run it again
-with a newer AppImage to update, or with `--remove`):
+To add it to your app launcher, open `.comp` projects by double-click and
+offer it for `.psd` files, run the integration script once (no root needed;
+`--remove` undoes it):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/vomitselfie/compositor-linux/main/tools/integrate-appimage.sh | bash -s -- compositor-linux-*.AppImage
 ```
 
-It keeps the AppImage in `~/Applications`. If you build from source instead,
-`sudo cmake --install build` puts the binary, launcher entry, icon and file
-type into `/usr/local`.
+**On a Mac:** each release also has an unsigned app bundle for Apple
+Silicon. Unzip it, move it to Applications, and open it with right-click >
+Open the first time.
 
-### Trying it on a Mac
-
-Each release also carries `compositor-linux-<version>-macos-arm64.zip`, an app
-bundle for Apple Silicon built on GitHub's macOS runners. It is not signed or
-notarised, so the first launch needs one extra step: unzip it, drag the app to
-Applications, then either right-click it and choose Open, or after a first
-refusal go to System Settings > Privacy & Security and choose Open Anyway. It
-is the same editor as on Linux; `.comp` projects, PSDs and images open the same
-way. The G'MIC filters appear once `brew install gmic` has put the `gmic`
-executable on the path.
-
-## What you get
-
-- Layers, folders, blend modes, opacity, and layer masks
-- Move, scale, rotate and distort without losing pixels
-- Marquee, lasso and magic wand selections; content-aware fill
-- Brush, eraser, spot healing, clone stamp, smudge, gradient and shape tools
-- Levels, curves, hue/saturation, exposure, gradient map, grain, blurs, noise
-- Remove Background with a local model, if you turn it on in Preferences, and click-to-select with another
-- Text layers in any installed font, editable until painted on
-- Opens Photoshop PSD files with their layers, folders, masks and blend modes
-- The G'MIC filter library (700+ filters) through Filter > G'MIC, when `gmic` is installed
-- Multiple projects in tabs; PNG and JPEG export
-- The keyboard shortcuts you already know
-
-The full list is in [docs/features.md](docs/features.md).
-
-## Remove Background
-
-Off by default. Edit > Preferences > AI background removal downloads a
-segmentation model (from the rembg project) into your data folder and runs it
-on your machine. Nothing is uploaded anywhere.
+**Remove Background** is off until you turn it on in Edit > Preferences,
+which downloads the model once.
 
 ## Use it with an AI agent
-
-The editor can be driven by Claude Code or any MCP client: open files, inspect
-and edit layers, run adjustments and filters, and look at the result.
 
 ```bash
 claude mcp add compositor -- uv run /path/to/compositor-linux/mcp/compositor_mcp.py
 ```
 
-Then ask for things like "open photo.jpg, remove the background, add a dark
-gradient behind it and export result.png". Details, the protocol and the full
-method list are in [docs/automation.md](docs/automation.md).
+Then ask for something like "open photo.jpg, remove the background, put a
+dark gradient behind it and export result.png". See
+[docs/automation.md](docs/automation.md).
 
 ## Build from source
 
-Arch / Manjaro:
-
 ```bash
+# Arch / Manjaro
 sudo pacman -S cmake ninja qt6-base qt6-svg qt6-wayland qt6-imageformats libpng opencv
-```
-
-Ubuntu 24.04:
-
-```bash
+# Ubuntu 24.04
 sudo apt install cmake ninja-build qt6-base-dev qt6-svg-dev qt6-wayland qt6-image-formats-plugins libpng-dev libgl1-mesa-dev libopencv-dev
-```
 
-macOS (Homebrew), where the build produces an app bundle instead:
-
-```bash
-brew install cmake ninja qt libpng opencv pkg-config
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
-cmake --build build -j && open build/src/app/compositor-linux.app
-```
-
-Then, on Linux:
-
-```bash
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ./build/src/app/compositor-linux
 ```
 
-`docs/linux-port.md` has the build options, command-line flags, the source
-layout, how releases are made and the keyboard shortcuts.
-`docs/linux-port-architecture.md` explains how the port relates to the Mac
-sources, which stay in this tree untouched.
+macOS, build options, command-line flags and keyboard shortcuts are in
+[docs/linux-port.md](docs/linux-port.md).
 
-## Credits and license
+## License
 
-compositor-linux is free software under the GNU General Public License,
-version 3 or (at your option) any later version; see [LICENSE](LICENSE).
+GPL-3.0-or-later; see [LICENSE](LICENSE). Based on Compositor by Wonder
+Assembly LLC, whose code keeps its MIT licence
+([LICENSES/MIT-Compositor.txt](LICENSES/MIT-Compositor.txt)). Third-party
+components and their licences are listed in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
-It is a port of Compositor by Wonder Assembly LLC, which is MIT licensed; its
-README is kept at `docs/upstream-README.md`. The Mac sources under
-`Compositor/`, including the C pixel routines the Linux build compiles, keep
-that MIT notice ([LICENSES/MIT-Compositor.txt](LICENSES/MIT-Compositor.txt)).
+---
 
-Release builds link OpenCV (Apache-2.0) statically and bundle Qt (LGPL-3.0);
-the source also carries nlohmann/json (MIT) and the Lucide icons (ISC).
-[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) lists every component, its
-licence and where its text is, and every package installs those texts with
-the program.
+## 日本語
+
+[English](#compositor-linux) · **日本語**
+
+Linux 向けの軽快でシンプルな画像編集ソフトです。レイヤー、マスク、選択範囲、ブラシ、
+色調補正、フィルターを備え、Photoshop でおなじみのツールとショートカットで操作できます。
+macOS 版 [Compositor](https://github.com/robbietilton/Compositor) のネイティブ移植で、
+Photoshop ファイルと Mac 版の `.comp` プロジェクトを開けます。
+
+### できること
+
+- **レイヤー:** フォルダー、描画モード、不透明度、レイヤーマスク、クリッピングマスク、調整レイヤー
+- **変形:** 解像度を落とさずに移動・拡大縮小・回転・自由変形
+- **選択範囲:** 長方形・楕円選択、なげなわ、自動選択、なぞる/クリックするだけのクイック選択、コンテンツに応じた塗りつぶし
+- **描画:** ブラシ、消しゴム、スポット修復ブラシ、コピースタンプ、指先ツール、ゆがみ、グラデーション、シェイプ、テキスト
+- **色調補正とフィルター:** レベル補正、トーンカーブ、色相・彩度、露光量、グラデーションマップ、粒子、ぼかし、ノイズ、レンズ補正
+- **背景を削除:** AI モデルは手元のマシンで動作し、画像はどこにも送信されません
+- **G'MIC:** `gmic` をインストールすると、700 種類以上のフィルターをライブプレビュー付きで使えます
+- **ファイル:** レイヤー・フォルダー・マスク・描画モードを保ったまま PSD/PSB を開けます。1 ギガピクセルまでのプロジェクト、PNG/JPEG 書き出し、タブで複数のプロジェクト
+- **AI エージェント:** Claude Code などの MCP クライアントから操作できます
+
+機能の一覧は [docs/features.md](docs/features.md#日本語) にあります。
+
+### パフォーマンス
+
+重い処理はすべての CPU コアで並列に実行します。12 コアのノート PC(AMD Ryzen AI 9 HX 370)での計測値:
+
+| 処理 | 時間 |
+|---|---|
+| 70 MB の Photoshop ファイルを開く(4096 × 4096 のレイヤー 17 枚) | 0.7 秒 |
+| それをプロジェクトとして保存 | 1.3 秒 |
+| 4096 × 4096 のレイヤー 5 枚のプロジェクトを保存 | 0.7 秒(0.6.0 では 7.2 秒) |
+| そのプロジェクトを開く | 0.4 秒(0.6.0 では 2.5 秒) |
+| 4096 × 4096 の PNG を書き出し | 0.24 秒(0.6.0 では 1.8 秒) |
+| クイック選択(1 ストロークあたり) | 平均 0.16 秒(0.6.0 では 0.65 秒) |
+| 1000 万画素の写真の背景を削除 | 1.7 秒(すべての補正をオンにして 8.3 秒) |
+| 1200 万画素のレイヤーにぼかし(ガウス) | 0.1 秒未満 |
+
+### 入手方法
+
+[Releases](../../releases) ページから AppImage をダウンロードし、実行権限を付けて起動します。
+2022 年以降の x86_64 Linux であれば、Wayland と X11 のどちらでも動作します。
+
+```bash
+chmod +x compositor-linux-*.AppImage
+./compositor-linux-*.AppImage
+```
+
+アプリランチャーに登録し、`.comp` をダブルクリックで開けるようにして `.psd` の「別のアプリで開く」にも
+表示させるには、統合スクリプトを一度実行します(root 権限は不要、`--remove` で元に戻せます):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/vomitselfie/compositor-linux/main/tools/integrate-appimage.sh | bash -s -- compositor-linux-*.AppImage
+```
+
+**Mac の場合:** 各リリースには Apple シリコン向けの未署名アプリも含まれます。
+展開して「アプリケーション」に移動し、初回だけ右クリック >「開く」で起動してください。
+
+**背景を削除** は、編集 > 環境設定 でオンにすると使えるようになります(モデルを一度だけダウンロードします)。
+
+### AI エージェントから使う
+
+```bash
+claude mcp add compositor -- uv run /path/to/compositor-linux/mcp/compositor_mcp.py
+```
+
+あとは「photo.jpg を開いて背景を削除し、後ろに暗いグラデーションを敷いて result.png に書き出して」
+のように頼むだけです。詳しくは [docs/automation.md](docs/automation.md)(英語)をご覧ください。
+
+### ソースからビルド
+
+必要なパッケージとビルド手順は、英語版の [Build from source](#build-from-source) と同じです。
+macOS でのビルド、オプション、キーボードショートカットは [docs/linux-port.md](docs/linux-port.md)(英語)にあります。
+
+### ライセンス
+
+GPL-3.0-or-later です([LICENSE](LICENSE))。Wonder Assembly LLC の Compositor を元にしており、
+その部分のコードは MIT ライセンスのままです([LICENSES/MIT-Compositor.txt](LICENSES/MIT-Compositor.txt))。
+サードパーティー製コンポーネントとそのライセンスは [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) にまとめています。

@@ -33,6 +33,15 @@ ctest --test-dir build --output-on-failure
 ./build/src/app/compositor-linux      # or: ./build/src/app/compositor-linux Photo.comp
 ```
 
+macOS (Homebrew) builds an app bundle; the G'MIC filters appear once
+`brew install gmic` has put `gmic` on the path:
+
+```bash
+brew install cmake ninja qt libpng opencv pkg-config
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
+cmake --build build -j && open build/src/app/compositor-linux.app
+```
+
 Under a Wayland session Qt picks the Wayland platform on its own; force it with
 `QT_QPA_PLATFORM=wayland` if needed. `QT_QPA_PLATFORM=xcb` runs under X11 or
 XWayland.
