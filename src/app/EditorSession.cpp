@@ -104,23 +104,33 @@ void EditorSession::createDocument(int width, int height, double resolution, boo
     emit selectionChanged();
 }
 
-bool EditorSession::openProject(const QString& path, QString* error) {
+std::optional<EditorSession::LoadedProject> EditorSession::readProject(const QString& path, QString* error) {
     ProjectError err;
     auto doc = loadProject(path.toStdString(), err);
-    if (!doc) { if (error) *error = QString::fromStdString(err.message); return false; }
-    commitTransform();
-    document_ = *doc;
+    if (!doc) { if (error) *error = QString::fromStdString(err.message); return std::nullopt; }
     std::optional<Uuid> active = loadedActiveLayer(path.toStdString());
-    if (active && !document_->find(*active)) active.reset();
-    setActiveLayer(active);
-    projectPath_ = path;
+    if (active && !doc->find(*active)) active.reset();
+    return LoadedProject{std::move(*doc), active, path};
+}
+
+bool EditorSession::openProject(const QString& path, QString* error) {
+    auto project = readProject(path, error);
+    if (!project) return false;
+    installProject(std::move(*project));
+    return true;
+}
+
+void EditorSession::installProject(LoadedProject project) {
+    commitTransform();
+    document_ = std::move(project.document);
+    setActiveLayer(project.activeLayer);
+    projectPath_ = project.path;
     history_.reset();
     viewport.fit({double(document_->width), double(document_->height)});
     emit viewportChanged();
     emit projectPathChanged();
     notifyDocument();
     emit selectionChanged();
-    return true;
 }
 
 void EditorSession::adoptDocument(const Document& document, const QString& name) {

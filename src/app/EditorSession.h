@@ -89,6 +89,11 @@ public:
     QString title() const;
     bool isModified() const { return history_.isModified(); }
     void createDocument(int width, int height, double resolution = 72, bool emptyLayer = true);
+    /// A project read from disk with its saved active layer, before any session takes it.
+    struct LoadedProject { compositor::Document document; std::optional<compositor::Uuid> activeLayer; QString path; };
+    /// Reads a project without touching a session, so a failed open never disturbs a tab.
+    static std::optional<LoadedProject> readProject(const QString& path, QString* error);
+    void installProject(LoadedProject project);
     bool openProject(const QString& path, QString* error);
     bool saveProject(const QString& path, QString* error);
     void closeDocument();

@@ -795,14 +795,11 @@ void MainWindow::openPath(const QString& path) {
         QString canonical = QFileInfo(path).canonicalFilePath();
         for (size_t i = 0; i < tabs_.size(); i++)
             if (!tabs_[i].session->projectPath().isEmpty() && QFileInfo(tabs_[i].session->projectPath()).canonicalFilePath() == canonical) { switchTo(int(i)); return; }
-        // Load into a fresh session first, so a failed open never disturbs a tab.
-        auto* probe = new EditorSession(this);
+        // Read once, then give it a tab: a failed open never disturbs one.
         QString error;
-        bool ok = probe->openProject(path, &error);
-        probe->deleteLater();
-        if (!ok) { showError(tr("Couldn’t open the project"), error); return; }
-        Tab& tab = addTab(true);
-        if (!tab.session->openProject(path, &error)) { showError(tr("Couldn’t open the project"), error); return; }
+        auto project = EditorSession::readProject(path, &error);
+        if (!project) { showError(tr("Couldn’t open the project"), error); return; }
+        addTab(true).session->installProject(std::move(*project));
         addRecent(path);
         return;
     }
