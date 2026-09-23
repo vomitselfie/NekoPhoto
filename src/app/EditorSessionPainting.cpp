@@ -62,13 +62,20 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
     strokeLayerId_ = layer->id;
     strokeMask_ = mask;
     if (clone) stroke_->setClone(*clone);
-    if (tool_ == Tool::Brush && !mask && !brushPreset.isEmpty()) {
-        if (const BrushPreset* preset = BrushLibrary::find(brushPreset)) {
-            myPaint_ = std::make_unique<MyPaintStroke>(*stroke_, preset->json, settings);
-            if (!myPaint_->isValid()) { emit error(QString::fromStdString(myPaint_->error())); myPaint_.reset(); stroke_.reset(); return false; }
-        }
+    const BrushPreset* preset = tool_ == Tool::Brush && !brushPreset.isEmpty() ? BrushLibrary::find(brushPreset) : nullptr;
+    if (preset && preset->engine == BrushPreset::Engine::Tip) {
+        auto tip = preset->tip();
+        if (!tip) { emit error(tr("The brush %1 could not be read.").arg(preset->name)); stroke_.reset(); return false; }
+        tipStroke_ = std::make_unique<TipStroke>(*stroke_, tip->tip, settings.diameter, uint32_t(std::random_device{}()));
+        if (!tipStroke_->isValid()) { emit error(tr("The brush %1 has no usable tip.").arg(preset->name)); tipStroke_.reset(); stroke_.reset(); return false; }
+    } else if (preset && !mask) {
+        myPaint_ = std::make_unique<MyPaintStroke>(*stroke_, preset->json, settings);
+        if (!myPaint_->isValid()) { emit error(QString::fromStdString(myPaint_->error())); myPaint_.reset(); stroke_.reset(); return false; }
     }
-    if (myPaint_) {
+    if (tipStroke_) {
+        if (straightFromLast && lastBrushPoint_) tipTo(*lastBrushPoint_);
+        tipTo(documentPoint);
+    } else if (myPaint_) {
         lastPenTime_ = pen.timeMs;
         if (straightFromLast && lastBrushPoint_) myPaintTo(*lastBrushPoint_);
         myPaintTo(documentPoint);
@@ -94,9 +101,14 @@ void EditorSession::myPaintTo(QPointF documentPoint) {
     myPaint_->strokeTo(input);
 }
 
+void EditorSession::tipTo(QPointF documentPoint) {
+    tipStroke_->strokeTo({toPoint(documentPoint), pen.tablet ? pen.pressure : 1.0});
+}
+
 void EditorSession::continueBrush(QPointF documentPoint) {
     if (!stroke_) return;
-    if (myPaint_) myPaintTo(documentPoint);
+    if (tipStroke_) tipTo(documentPoint);
+    else if (myPaint_) myPaintTo(documentPoint);
     else stroke_->append(toPoint(documentPoint));
     lastBrushPoint_ = documentPoint;
     Rect dirty = stroke_->takeDirtyRect();
@@ -133,6 +145,7 @@ void EditorSession::endBrush() {
     if (!stroke_) return;
     healPreview_.stop();
     if (myPaint_) { myPaint_->finish(); myPaint_.reset(); }
+    tipStroke_.reset();
     std::unique_ptr<BrushStroke> stroke = std::move(stroke_);
     stroke->flush();
     QString name = strokeMask_ ? "Paint Mask" : tool_ == Tool::SpotHealing ? "Spot Healing" : tool_ == Tool::CloneStamp ? "Clone Stamp" : tool_ == Tool::Smudge ? "Blur" : (brushErase ? "Eraser" : "Brush Stroke");
@@ -143,6 +156,7 @@ void EditorSession::cancelBrush() {
     if (!stroke_) return;
     healPreview_.stop();
     myPaint_.reset();
+    tipStroke_.reset();
     stroke_.reset();
     emit documentChanged({});
 }

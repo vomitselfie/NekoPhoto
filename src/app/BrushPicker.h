@@ -21,6 +21,8 @@ public:
 
 signals:
     void presetChosen(const QString& id);
+    /// The list's Import Brushes button.
+    void importRequested();
 
 private:
     void openPopup();

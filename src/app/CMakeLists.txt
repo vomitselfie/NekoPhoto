@@ -55,6 +55,8 @@ qt_add_executable(compositor-linux
     AdjustmentsPanel.cpp
     BrushLibrary.h
     BrushLibrary.cpp
+    BrushImporter.h
+    BrushImporter.cpp
     BrushPicker.h
     BrushPicker.cpp
     FilterDialog.h

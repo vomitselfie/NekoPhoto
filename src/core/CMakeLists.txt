@@ -59,6 +59,7 @@ add_library(compositor_core STATIC
     src/adjustments.cpp
     src/blend.cpp
     src/blur.cpp
+    src/brushimport.cpp
     src/brush.cpp
     src/document.cpp
     src/filters.cpp
@@ -68,6 +69,7 @@ add_library(compositor_core STATIC
     src/matte.cpp
     src/morphology.cpp
     src/mypaint.cpp
+    src/tipbrush.cpp
     src/parallel.cpp
     src/wand.cpp
     src/resample.cpp

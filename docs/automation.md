@@ -144,10 +144,12 @@ Painting by coordinates: `brush.stroke` (`points` as `[x, y]` pairs; `tool` brus
 eraser, healing, clone with `source`, smudge, blur or liquify; `size`,
 `hardness`, `opacity` 0..1, `color`, `mask: true` paints the active layer's
 mask; with brush or eraser, `preset` paints with a MyPaint brush from
-`brush.presets`, or `"round"` for the plain tip, at its own size unless `size`
+`brush.presets`, or `"round"` for the plain tip, or an imported tip brush, at its own size unless `size`
 is given, and `pressure` 0..1 or `pressures`, one per point, drive it the way
 a pen would), `brush.presets` (the MyPaint presets: `id`, `name`, `group`,
-`size`, `eraser`; `group` filters), `gradient.draw` (`x0, y0, x1, y1`, `shape` linear or radial, `style`
+`size`, `eraser`; `group` filters), `brush.import` (`path` or `paths`: Photoshop
+`.abr`, Procreate `.brushset`/`.brush`, Clip Studio `.sut` or images as tips;
+answers the new preset ids and notes on what was approximated), `gradient.draw` (`x0, y0, x1, y1`, `shape` linear or radial, `style`
 foreground-to-transparent or foreground-to-background, `reversed`, `opacity`,
 `foreground`, `background`), `shape.draw` (a new shape layer: `kind` rectangle
 or ellipse, `x, y, width, height`, `cornerRadius`, `color`). The person's tool,

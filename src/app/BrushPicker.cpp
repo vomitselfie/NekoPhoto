@@ -4,6 +4,7 @@
 #include <QFrame>
 #include <QKeyEvent>
 #include <QLineEdit>
+#include <QPushButton>
 #include <QScreen>
 #include <QTreeWidget>
 #include <QTreeWidgetItemIterator>
@@ -49,10 +50,14 @@ void BrushPicker::openPopup() {
     layout->addWidget(filter_);
     tree_ = new QTreeWidget;
     tree_->setHeaderHidden(true);
-    tree_->setIconSize(QSize(iconSide, iconSide));
+    tree_->setIconSize(QSize(iconSide * 2, iconSide));   // square MyPaint previews, wide tip-brush strokes
     tree_->setUniformRowHeights(true);
     tree_->setSelectionMode(QAbstractItemView::SingleSelection);
     layout->addWidget(tree_, 1);
+    auto* import = new QPushButton(tr("Import Brushes…"));
+    import->setToolTip(tr("Photoshop .abr, Procreate .brushset and .brush, Clip Studio .sut, or images to use as tips"));
+    connect(import, &QPushButton::clicked, this, [this] { if (popup_) popup_->close(); emit importRequested(); });
+    layout->addWidget(import);
     connect(filter_, &QLineEdit::textChanged, this, [this](const QString& text) { rebuild(text); });
     connect(tree_, &QTreeWidget::itemClicked, this, [this](QTreeWidgetItem* item) {
         if (item->data(0, idRole).isValid()) choose(item->data(0, idRole).toString());

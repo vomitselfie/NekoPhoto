@@ -9,6 +9,7 @@
 #include "compositor/adjustments.h"
 #include "compositor/brush.h"
 #include "compositor/mypaint.h"
+#include "compositor/tipbrush.h"
 #include "compositor/filters.h"
 #include "compositor/document.h"
 #include "compositor/history.h"
@@ -203,12 +204,14 @@ public:
 
     // Brush
     compositor::BrushSettings brushSettings;
-    /// The Brush tool's MyPaint preset (BrushLibrary id, "classic/pencil"), or empty for the round tip. A
-    /// preset paints layer pixels only; on a mask the round tip is used.
+    /// The Brush tool's preset (BrushLibrary id: "classic/pencil", "imported/<set>/<brush>"), or empty for the
+    /// round tip. A MyPaint preset paints layer pixels only (a mask gets the round tip); a tip brush paints
+    /// masks too.
     QString brushPreset;
-    /// The pen as the canvas last saw it, read by the MyPaint presets: pressure 0..1 (0.5 from a mouse), tilt
-    /// -1..1, and the event time in milliseconds.
-    struct PenSample { double pressure = 0.5, xtilt = 0, ytilt = 0; qint64 timeMs = 0; };
+    /// The pen as the canvas last saw it: pressure 0..1, tilt -1..1, the event time in milliseconds, and
+    /// whether a tablet sent it. A mouse is half pressure to MyPaint (as in MyPaint) and full pressure to tip
+    /// brushes (as in Photoshop).
+    struct PenSample { double pressure = 0.5, xtilt = 0, ytilt = 0; qint64 timeMs = 0; bool tablet = false; };
     PenSample pen;
     /// Photoshop's opacity keys: 1 = 10% ... 9 = 90%, 0 = 100%; two digits typed quickly set an exact value.
     void typeOpacityDigit(int digit);
@@ -482,6 +485,8 @@ private:
     std::optional<TransformEdit> transformEdit_;
     std::unique_ptr<compositor::BrushStroke> stroke_;
     std::unique_ptr<compositor::MyPaintStroke> myPaint_;   // paints stroke_ when a MyPaint preset is chosen
+    std::unique_ptr<compositor::TipStroke> tipStroke_;     // stamps into stroke_ when a tip brush is chosen
+    void tipTo(QPointF documentPoint);
     qint64 lastPenTime_ = 0;
     void myPaintTo(QPointF documentPoint);
     QTimer healPreview_;   // a healing stroke shows its result once the pointer pauses

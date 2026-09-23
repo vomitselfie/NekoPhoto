@@ -490,9 +490,9 @@ QRectF CanvasWidget::dragBox(QPointF anchor, QPointF point, bool square, bool fr
 // ---- Input ----------------------------------------------------------------------------
 
 // A mouse is a pen at half pressure without tilt; the MyPaint presets read pressure, tilt and timing.
-void CanvasWidget::mousePressEvent(QMouseEvent* e) { session_->pen = {0.5, 0, 0, qint64(e->timestamp())}; setFocus(); press(e->position(), e->button(), e->modifiers()); }
-void CanvasWidget::mouseMoveEvent(QMouseEvent* e) { session_->pen = {0.5, 0, 0, qint64(e->timestamp())}; move(e->position(), e->buttons(), e->modifiers()); }
-void CanvasWidget::mouseReleaseEvent(QMouseEvent* e) { session_->pen = {0.5, 0, 0, qint64(e->timestamp())}; release(e->position(), e->button(), e->modifiers()); }
+void CanvasWidget::mousePressEvent(QMouseEvent* e) { session_->pen = {0.5, 0, 0, qint64(e->timestamp()), false}; setFocus(); press(e->position(), e->button(), e->modifiers()); }
+void CanvasWidget::mouseMoveEvent(QMouseEvent* e) { session_->pen = {0.5, 0, 0, qint64(e->timestamp()), false}; move(e->position(), e->buttons(), e->modifiers()); }
+void CanvasWidget::mouseReleaseEvent(QMouseEvent* e) { session_->pen = {0.5, 0, 0, qint64(e->timestamp()), false}; release(e->position(), e->button(), e->modifiers()); }
 
 void CanvasWidget::mouseDoubleClickEvent(QMouseEvent* e) {
     // Double-clicking text with any tool opens its editor (the Text tool needs only a click).
@@ -522,7 +522,7 @@ void CanvasWidget::mouseDoubleClickEvent(QMouseEvent* e) {
 void CanvasWidget::tabletEvent(QTabletEvent* e) {
     e->accept();
     // Tilt arrives in degrees (about ±60 at most); MyPaint takes -1..1.
-    session_->pen = {std::clamp(double(e->pressure()), 0.0, 1.0), std::clamp(e->xTilt() / 60.0, -1.0, 1.0), std::clamp(e->yTilt() / 60.0, -1.0, 1.0), qint64(e->timestamp())};
+    session_->pen = {std::clamp(double(e->pressure()), 0.0, 1.0), std::clamp(e->xTilt() / 60.0, -1.0, 1.0), std::clamp(e->yTilt() / 60.0, -1.0, 1.0), qint64(e->timestamp()), true};
     switch (e->type()) {
     case QEvent::TabletPress: setFocus(); press(e->position(), e->button(), e->modifiers()); break;
     case QEvent::TabletMove: move(e->position(), e->buttons(), e->modifiers()); break;

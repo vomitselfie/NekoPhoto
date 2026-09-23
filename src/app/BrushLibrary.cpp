@@ -4,6 +4,8 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QStandardPaths>
 #include <algorithm>
 
@@ -45,6 +47,29 @@ bool load(BrushPreset& preset, const QString& mybPath) {
     return true;
 }
 
+/// Imported tip brushes: importFolder()/<set>/<brush>/brush.json, the set's folders in name order.
+void loadImported(std::vector<BrushPreset>& out) {
+    const QDir root(BrushLibrary::importFolder());
+    for (const QFileInfo& set : root.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name | QDir::IgnoreCase)) {
+        const QDir setDir(set.absoluteFilePath());
+        for (const QFileInfo& brush : setDir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name | QDir::IgnoreCase)) {
+            const QString folder = brush.absoluteFilePath();
+            QFile json(folder + "/brush.json");
+            if (!json.open(QIODevice::ReadOnly)) continue;
+            const QJsonObject o = QJsonDocument::fromJson(json.readAll()).object();
+            BrushPreset preset;
+            preset.engine = BrushPreset::Engine::Tip;
+            preset.id = "imported/" + set.fileName() + "/" + brush.fileName();
+            preset.group = set.fileName();
+            preset.name = o.value("name").toString(brush.fileName());
+            preset.folder = folder;
+            preset.diameter = std::clamp(o.value("diameter").toDouble(30), 1.0, 2000.0);
+            if (QFile::exists(folder + "/preview.png")) preset.previewPath = folder + "/preview.png";
+            out.push_back(std::move(preset));
+        }
+    }
+}
+
 std::vector<BrushPreset> loadAll() {
     std::vector<BrushPreset> out;
     QFile order(QString(collection) + "order.conf");
@@ -69,16 +94,32 @@ std::vector<BrushPreset> loadAll() {
         preset.name = displayName(file.completeBaseName());
         if (load(preset, file.absoluteFilePath())) out.push_back(std::move(preset));
     }
+    loadImported(out);
     return out;
+}
+
+std::vector<BrushPreset>& storage() {
+    static std::vector<BrushPreset> all = loadAll();
+    return all;
 }
 
 } // namespace
 
 QIcon BrushPreset::icon() const { return previewPath.isEmpty() ? QIcon() : QIcon(previewPath); }
 
-const std::vector<BrushPreset>& BrushLibrary::presets() {
-    static const std::vector<BrushPreset> all = loadAll();
-    return all;
+const std::vector<BrushPreset>& BrushLibrary::presets() { return storage(); }
+
+void BrushLibrary::reload() { storage() = loadAll(); }
+
+QString BrushLibrary::importFolder() { return userFolder() + "/imported"; }
+
+std::shared_ptr<const compositor::TipPreset> BrushPreset::tip() const {
+    if (engine != Engine::Tip) return nullptr;
+    if (!tip_) {
+        std::string error;
+        if (auto loaded = compositor::loadTipPreset(folder.toStdString(), &error)) tip_ = std::make_shared<const compositor::TipPreset>(std::move(*loaded));
+    }
+    return tip_;
 }
 
 const BrushPreset* BrushLibrary::find(const QString& id) {

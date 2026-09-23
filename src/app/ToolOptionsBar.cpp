@@ -1,6 +1,7 @@
 #include "Style.h"
 #include "ToolOptionsBar.h"
 #include "TextLayer.h"
+#include "BrushImporter.h"
 #include "BrushLibrary.h"
 #include "BrushPicker.h"
 #include "FontPicker.h"
@@ -265,6 +266,7 @@ QWidget* ToolOptionsBar::buildBrushOptions() {
         if (const BrushPreset* preset = BrushLibrary::find(id)) session_->brushSettings.diameter = preset->diameter;
         emit session_->toolChanged();
     });
+    connect(picker, &BrushPicker::importRequested, this, [this] { importBrushesInteractively(window(), session_); });
     syncers_.push_back([this, picker] {
         if (picker->preset() != session_->brushPreset) picker->setPreset(session_->brushPreset);
     });

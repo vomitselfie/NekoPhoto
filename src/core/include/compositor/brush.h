@@ -95,6 +95,12 @@ public:
     const GrayImage* gridSelection() const { return selection_.get(); }
     const Affine& documentToGrid() const { return documentToPixel_; }
     void markPainted(const Rect& gridRect) { painted_ = true; markDirty(gridRect); }
+    // Or an engine that stamps its own dabs (imported tip brushes) into this stroke's coverage: the colour,
+    // opacity, selection, erasing and masks then apply exactly as for the round tip.
+    GrayImage* gridCoverage() { return coverage_.get(); }
+    const Affine& gridToDocument() const { return pixelToDocument_; }
+    const Rect& canvasRect() const { return canvas_; }
+    void recomposeCovered(const Rect& gridRect) { markDirty(gridRect); recompose(gridRect); }
 
 private:
     void walk(Point to);

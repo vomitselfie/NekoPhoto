@@ -8,9 +8,13 @@ through a few calls and checks the answers. CI starts the app headless with
 """
 import base64
 import json
+import os
 import socket
+import struct
 import sys
+import tempfile
 import time
+import zlib
 
 
 class Rpc:
@@ -126,6 +130,16 @@ def main():
             raise AssertionError("an unknown preset should be refused")
         except RuntimeError as e:
             print("expected error:", e)
+    # An image imported as a tip brush, then painted with (a 24x24 PNG: a dark disc on white).
+    tip_path = os.path.join(tempfile.mkdtemp(), "Disc.png")
+    rows = b"".join(b"\x00" + b"".join(bytes([0 if (x - 12) ** 2 + (y - 12) ** 2 < 100 else 255] * 3) for x in range(24)) for y in range(24))
+    chunk = lambda kind, data: struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+    with open(tip_path, "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 24, 24, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
+    imported = rpc.call("brush.import", path=tip_path)
+    assert len(imported["presets"]) == 1, imported
+    tipped = rpc.call("brush.stroke", points=[[30, 140], [230, 140]], preset=imported["presets"][0], size=20)
+    assert tipped["preset"] == imported["presets"][0], tipped
     rpc.call("gradient.draw", x0=0, y0=0, x1=200, y1=0, foreground="#0000ff", opacity=0.5)
     n = len(rpc.call("layers.list"))
     shape = rpc.call("shape.draw", kind="ellipse", x=300, y=100, width=120, height=80, color="#ff00ff")
@@ -175,7 +189,7 @@ def main():
     rpc.call("history.undo")
 
     # The command-line client and batch mode.
-    import os, subprocess
+    import subprocess
     binary = os.environ.get("COMPOSITOR_BIN", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "build", "src", "app", "compositor-linux"))
     if os.path.exists(binary):
         env = dict(os.environ); env.pop("QT_QPA_PLATFORM", None)

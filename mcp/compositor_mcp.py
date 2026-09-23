@@ -382,6 +382,12 @@ def brush_stroke(points: list[list[float]], tool: str = "brush", size: Optional[
 
 
 @mcp.tool()
+def brush_import(paths: list[str]) -> str:
+    """Import brush files into the brush library: Photoshop .abr, Procreate .brushset and .brush, Clip Studio .sut, or images to use as tips. Answers the new preset ids (use them as brush_stroke's preset) and notes on anything approximated."""
+    return text(call("brush.import", paths=[os.path.abspath(p) for p in paths]))
+
+
+@mcp.tool()
 def brush_presets(group: Optional[str] = None) -> str:
     """The MyPaint brush presets brush_stroke can paint with (id, name, group, own size, whether it erases), optionally one group: Classic, David Revoy, Ramón Miranda, Tanda, Kaerhon, Brien Dieterle, Experimental."""
     return text(call("brush.presets", group=group))

@@ -60,3 +60,7 @@ add_executable(mypaint_tests mypaint_tests.cpp)
 target_link_libraries(mypaint_tests PRIVATE compositor::core compositor_warnings)
 target_compile_definitions(mypaint_tests PRIVATE BRUSHES_DIR="${CMAKE_SOURCE_DIR}/src/app/brushes/mypaint")
 add_test(NAME mypaint_tests COMMAND mypaint_tests)
+
+add_executable(tipbrush_tests tipbrush_tests.cpp)
+target_link_libraries(tipbrush_tests PRIVATE compositor::core compositor_warnings)
+add_test(NAME tipbrush_tests COMMAND tipbrush_tests)

@@ -1,4 +1,5 @@
 #include "Automation.h"
+#include "BrushImporter.h"
 #include "BrushLibrary.h"
 #include "CanvasWidget.h"
 #include "EditorSession.h"
@@ -1049,6 +1050,16 @@ void AutomationServer::registerHandlers() {
         }
         return QJsonObject{{"supported", myPaintSupported()}, {"presets", out}, {"groups", QJsonArray::fromStringList(BrushLibrary::groups())}};
     });
+    add("brush.import", [](const QJsonObject& p) {
+        // Brush files (Photoshop .abr, Procreate .brushset/.brush, Clip Studio .sut, images) into the library.
+        QStringList paths;
+        if (has(p, "path")) paths << QFileInfo(str(p, "path")).absoluteFilePath();
+        for (QJsonValue v : p.value("paths").toArray()) paths << QFileInfo(v.toString()).absoluteFilePath();
+        if (paths.isEmpty()) fail("pass path or paths", invalidParams);
+        const BrushImportResult result = importBrushFiles(paths);
+        if (result.ids.isEmpty()) fail(result.errors.isEmpty() ? QStringLiteral("nothing was imported") : result.errors.join("; "));
+        return QJsonObject{{"presets", QJsonArray::fromStringList(result.ids)}, {"notes", QJsonArray::fromStringList(result.notes)}, {"errors", QJsonArray::fromStringList(result.errors)}};
+    });
     add("brush.stroke", [session, document, pointList](const QJsonObject& p) {
         document();
         EditorSession* s = session();
@@ -1089,7 +1100,8 @@ void AutomationServer::registerHandlers() {
         const double pressure = std::clamp(num(p, "pressure", 0.5), 0.0, 1.0);
         auto penAt = [&](size_t i) {
             double value = i < size_t(pressures.size()) ? std::clamp(pressures[int(i)].toDouble(pressure), 0.0, 1.0) : pressure;
-            s->pen = {value, 0, 0, qint64(i) * 8};
+            // Given pressure acts as a pen's; without it MyPaint sees a mouse (half) and tip brushes full pressure.
+            s->pen = {value, 0, 0, qint64(i) * 8, has(p, "pressure") || !pressures.isEmpty()};
         };
         bool warp = false;
         if (tool == "brush" || tool == "eraser") { s->selectTool(Tool::Brush); s->brushErase = tool == "eraser" || flag(p, "erase", false); }

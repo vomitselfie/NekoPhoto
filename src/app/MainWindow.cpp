@@ -15,6 +15,7 @@
 #include "ModelStore.h"
 #include "PreferencesDialog.h"
 #include "Style.h"
+#include "BrushImporter.h"
 #include "ToolOptionsBar.h"
 #include "compositor/png.h"
 #include "compositor/project.h"
@@ -449,6 +450,7 @@ void MainWindow::buildMenus() {
         QSettings().setValue("lastDir", QFileInfo(path).path());
         openPhotoshopFile(path);
     });
+    file->addAction(tr("Import &Brushes…"), this, [this] { importBrushesInteractively(this, session_); });
     recentMenu_ = file->addMenu(tr("Open &Recent"));
     file->addAction(tr("&Import Images…"), QKeySequence("Ctrl+Shift+O"), this, &MainWindow::importImages);
     file->addSeparator();
