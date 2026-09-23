@@ -444,8 +444,8 @@ void MainWindow::buildMenus() {
     QMenu* file = menuBar()->addMenu(tr("&File"));
     file->addAction(tr("&New…"), QKeySequence::New, this, &MainWindow::newDocument);
     file->addAction(tr("&Open Project…"), QKeySequence::Open, this, &MainWindow::openProject);
-    file->addAction(tr("Open &Photoshop File…"), this, [this] {
-        QString path = QFileDialog::getOpenFileName(this, tr("Open Photoshop File"), QSettings().value("lastDir").toString(), tr("Photoshop files (*.psd *.psb)"));
+    file->addAction(tr("Import &File…"), this, [this] {
+        QString path = QFileDialog::getOpenFileName(this, tr("Import File"), QSettings().value("lastDir").toString(), tr("Photoshop files (*.psd *.psb)"));
         if (path.isEmpty()) return;
         QSettings().setValue("lastDir", QFileInfo(path).path());
         openPhotoshopFile(path);

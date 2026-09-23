@@ -19,8 +19,18 @@ std::optional<BrushImport> readAbr(const uint8_t* data, size_t size, const std::
 std::optional<BrushImport> readProcreate(const uint8_t* data, size_t size, const std::string& name, std::string* error);
 
 /// Clip Studio Paint brushes (.sut, an SQLite database): each tool node's size, spacing, hardness, angle,
-/// thickness and spray. The tip images are kept in a format that is not publicly documented, so a round
-/// tip stands in. Needs SQLite at build time (COMPOSITOR_HAVE_SQLITE).
+/// thickness, spray, and its tip image and paper texture when the file carries them. Needs SQLite at build
+/// time (COMPOSITOR_HAVE_SQLITE).
 std::optional<BrushImport> readClipStudio(const std::string& path, const std::string& name, std::string* error);
+
+/// One Clip Studio material, as a .sut keeps it in MaterialFile.FileData (a tar of the material's files): its
+/// image as density (255 paints, stretched so the densest pixel is 255) and whether it is a paper texture
+/// rather than a brush tip. Nullopt when no image in it paints. Needs no SQLite: the material's own database
+/// is read page by page.
+struct ClipStudioMaterial {
+    std::shared_ptr<GrayImage> image;
+    bool texture = false;
+};
+std::optional<ClipStudioMaterial> readClipStudioMaterial(const uint8_t* data, size_t size);
 
 } // namespace compositor

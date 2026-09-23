@@ -74,7 +74,9 @@ target_link_libraries(procreate_tests PRIVATE compositor::core compositor_warnin
 add_test(NAME procreate_tests COMMAND procreate_tests)
 
 add_executable(sut_tests sut_tests.cpp)
-target_link_libraries(sut_tests PRIVATE compositor::core compositor_warnings)
+# zlib compresses the test's layer tiles, as Clip Studio does.
+find_package(ZLIB REQUIRED)
+target_link_libraries(sut_tests PRIVATE compositor::core compositor_warnings ZLIB::ZLIB)
 if(COMPOSITOR_HAVE_SQLITE)
     find_package(SQLite3 REQUIRED)
     if(TARGET SQLite3::SQLite3)

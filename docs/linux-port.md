@@ -235,14 +235,18 @@ packaging/                      .desktop, icon, MIME type
   Photoshop `.abr` (versions 1, 2 and 6 to 10: sampled and computed tips, the
   presets' dynamics), Procreate `.brushset` and `.brush` (Brush.archive keyed
   archives; key names after the MIT procreate-brush-decoder schema), Clip
-  Studio `.sut` (the settings from its SQLite tables on a round tip: its tip
-  images are in an undocumented format) and images (alpha, or darkness when
+  Studio `.sut` (the settings from its SQLite tables, and the tip images and
+  paper textures embedded as materials: each a tar holding a C2F layer file
+  whose SQLite pages from page 6 are plain and are read without SQLite, the
+  image being a PNG or 256-pixel zlib tiles; the file does not link materials
+  to brushes, so each kind is matched in the order the brushes use them) and
+  images (alpha, or darkness when
   opaque). Each brush is saved as an open folder (`brush.json`, `tip.png`,
   optional `grain.png`, `preview.png`) under
   `~/.local/share/compositor-linux/compositor-linux/brushes/imported/<set>/`,
   and the import lists what it could not carry over (texture and dual brush,
   wet mixing, Procreate's built-in shapes and grains, Clip Studio's pressure
-  curves). A file may decode at most 256 megapixels of tips.
+  curves and texture rotation, brightness and contrast). A file may decode at most 256 megapixels of tips.
 - Spot Healing Brush (Content-Aware, Create Texture, Proximity Match) and
   Clone Stamp (aligned or not, sampling one layer or all). Content-Aware
   healing and Content-Aware Fill synthesise from the surroundings with

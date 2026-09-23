@@ -30,7 +30,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 ## Painting and retouching
 - Brush and eraser with size, hardness and opacity; Shift for straight lines
 - 196 MyPaint brushes (pencils, inks, charcoal, paint, smudging, by the MyPaint team, David Revoy, Ramón Miranda, Tanda and others) that follow pen pressure and tilt; pick one from the Brush tool's options bar. Your own `.myb` presets go in the app's `brushes` folder
-- Import your brushes (File > Import Brushes, or the button under the brush list): Photoshop `.abr` with its presets and dynamics, Procreate `.brushset` and `.brush` with shape, grain and pencil settings, Clip Studio `.sut` (its settings on a round tip, since its tip images are in an undocumented format), or any image as a tip. What a brush uses that cannot be carried over is listed after the import
+- Import your brushes (File > Import Brushes, or the button under the brush list): Photoshop `.abr` with its presets and dynamics, Procreate `.brushset` and `.brush` with shape, grain and pencil settings, Clip Studio `.sut` with its tip images, paper textures and settings, or any image as a tip. What a brush uses that cannot be carried over is listed after the import
 - Spot Healing Brush and Clone Stamp; both ignore what a layer mask hides
 - Smudge, Liquify and Blur, on pixels or masks
 - Gradients and shapes (rectangles, rounded rectangles, ellipses)
@@ -94,7 +94,7 @@ Mac 版と同じ機能を、Linux のキー表記で使えます。キーボー�
 ### 描画とレタッチ
 - サイズ・硬さ・不透明度を指定できるブラシと消しゴム。Shift で直線
 - 筆圧と傾きに反応する MyPaint ブラシ 196 種類(鉛筆、インク、木炭、絵の具、ぼかし。MyPaint チーム、David Revoy、Ramón Miranda、Tanda ほか)。ブラシツールのオプションバーから選べます。自作の `.myb` はアプリの `brushes` フォルダーに置けます
-- ブラシの読み込み(ファイル > ブラシを読み込み、またはブラシ一覧の下のボタン):Photoshop の `.abr`(プリセットとシェイプダイナミクス)、Procreate の `.brushset`・`.brush`(シェイプ、グレイン、ペンシル設定)、クリップスタジオの `.sut`(先端画像は非公開形式のため、設定を円形の先端で再現)、任意の画像を先端として。引き継げなかった設定は読み込み後に表示されます
+- ブラシの読み込み(ファイル > ブラシを読み込み、またはブラシ一覧の下のボタン):Photoshop の `.abr`(プリセットとシェイプダイナミクス)、Procreate の `.brushset`・`.brush`(シェイプ、グレイン、ペンシル設定)、クリップスタジオの `.sut`(先端画像、用紙テクスチャ、設定)、任意の画像を先端として。引き継げなかった設定は読み込み後に表示されます
 - スポット修復ブラシとコピースタンプ(どちらもレイヤーマスクで隠れた部分は使いません)
 - 指先ツール、ゆがみ、ぼかしツール(ピクセルにもマスクにも使えます)
 - グラデーションとシェイプ(長方形、角丸長方形、楕円)
