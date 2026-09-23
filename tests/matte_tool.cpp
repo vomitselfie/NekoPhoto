@@ -14,6 +14,7 @@
 //       category and per type as well. With "none" as the model, --mask names a mask file (run) or a mask
 //       suffix (eval, default _mask) to start from instead of the model.
 #include "compositor/png.h"
+#include "compositor/matte.h"
 #include "compositor/subject.h"
 #include <algorithm>
 #include <cmath>

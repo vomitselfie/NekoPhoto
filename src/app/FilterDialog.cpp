@@ -1,6 +1,7 @@
 #include "Style.h"
 #include "FilterDialog.h"
 #include "ModelStore.h"
+#include "compositor/subject.h"
 #include <QCheckBox>
 #include <QComboBox>
 #include <QMessageBox>

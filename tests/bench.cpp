@@ -13,7 +13,7 @@
 #include "compositor/heal.h"
 #include "compositor/inpaint.h"
 #include "compositor/warpstroke.h"
-#include "compositor/subject.h"
+#include "compositor/matte.h"
 #include "compositor/scribble.h"
 #include "compositor/render.h"
 #include "compositor/selection.h"

@@ -3,7 +3,7 @@
 #pragma once
 #include "AdjustmentEditor.h"
 #include "PixelDialog.h"
-#include "compositor/subject.h"
+#include "compositor/matte.h"
 #include <thread>
 
 class QCheckBox;

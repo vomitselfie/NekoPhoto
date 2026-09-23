@@ -13,6 +13,7 @@
 #include "compositor/render.h"
 #include "compositor/selection.h"
 #include "compositor/shape.h"
+#include "compositor/matte.h"
 #include "compositor/subject.h"
 #include "compositor/scribble.h"
 #include "compositor/warp.h"

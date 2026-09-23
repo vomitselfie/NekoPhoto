@@ -15,6 +15,7 @@
 #include <cstring>
 #include "compositor/filters.h"
 #include "compositor/selection.h"
+#include "compositor/matte.h"
 #include "compositor/subject.h"
 #include <QFileInfo>
 #include "compositor/warp.h"

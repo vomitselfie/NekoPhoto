@@ -14,7 +14,6 @@
 #include "Icons.h"
 #include "ModelStore.h"
 #include "PreferencesDialog.h"
-#include "compositor/subject.h"
 #include "Style.h"
 #include "ToolOptionsBar.h"
 #include "compositor/png.h"

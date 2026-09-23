@@ -2,6 +2,7 @@
 #include "EditorSession.h"
 #include "ModelStore.h"
 #include "compositor/scribble.h"
+#include "compositor/matte.h"
 #include "compositor/subject.h"
 #include <algorithm>
 #include <thread>
