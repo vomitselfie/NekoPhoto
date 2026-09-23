@@ -2,6 +2,8 @@
 // the active layer, the tools and their settings. A port of the parts of
 // Document/EditorSession.swift (and its extensions) that the Linux UI needs.
 // Views observe it through signals and never mutate the document themselves.
+// The implementation is split by area, like the Swift extensions: EditorSession.cpp (document, history,
+// canvas, view) and EditorSession{Layers,Transform,Painting,Pixels,Selection,QuickSelect,Adjustments}.cpp.
 #pragma once
 #include "Viewport.h"
 #include "compositor/adjustments.h"

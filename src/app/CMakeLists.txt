@@ -28,6 +28,7 @@ set(CMAKE_AUTORCC ON)
 qt_add_executable(compositor-linux
     main.cpp
     ImageConvert.h
+    QtGeometry.h
     Style.h
     Icons.h
     ColorSwatches.h
@@ -37,6 +38,13 @@ qt_add_executable(compositor-linux
     Viewport.h
     EditorSession.h
     EditorSession.cpp
+    EditorSessionAdjustments.cpp
+    EditorSessionLayers.cpp
+    EditorSessionPainting.cpp
+    EditorSessionPixels.cpp
+    EditorSessionQuickSelect.cpp
+    EditorSessionSelection.cpp
+    EditorSessionTransform.cpp
     CanvasWidget.h
     CanvasWidget.cpp
     LayersPanel.h

@@ -1,5 +1,6 @@
 #include "CanvasWidget.h"
 #include "ImageConvert.h"
+#include "QtGeometry.h"
 #include "compositor/render.h"
 #include "compositor/selection.h"
 #include <QApplication>
@@ -22,9 +23,6 @@ constexpr double handleRadius = 5;   // points
 constexpr double rotateReach = 22;   // points beyond a corner that still rotates
 constexpr double dragThreshold = 3;  // points before a press becomes a drag
 constexpr double snapDistance = 10;  // points
-
-Point toPoint(QPointF p) { return {p.x(), p.y()}; }
-QPointF toQPoint(Point p) { return {p.x, p.y}; }
 
 QPixmap checkerPixmap(double dpr) {
     int cell = int(std::round(8 * dpr));
