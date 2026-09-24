@@ -1,4 +1,4 @@
-# compositor-linux
+# NekoPhoto
 
 A Qt 6 / C++20 image editor: a Linux port of the macOS app Compositor. The Mac
 sources under `Compositor/` and `Compositor.xcodeproj` are a reference and stay
@@ -10,12 +10,12 @@ untouched; the port lives in `src/`, `tests/`, `mcp/`, `tools/`, `docs/`.
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release   # once
 cmake --build build -j
 ctest --test-dir build --output-on-failure
-./build/src/app/compositor-linux
+./build/src/app/nekophoto
 ```
 
 For background-removal work, `build/tests/matte_tool run <image.png> <model.onnx> <dir> --band 20`
 dumps every stage (mask, trimap, chosen samples, band, composite) and `matte_tool eval <dir> <model>`
-scores image/alpha pairs; the model lives under `~/.local/share/compositor-linux/compositor-linux/models`.
+scores image/alpha pairs; the model lives under `~/.local/share/nekophoto/nekophoto/models`.
 When comparing settings, use one document per headless process: `document.open` on an image with a
 document already open imports it as a layer (File > Open's behaviour), so a second run would work on the
 first document. The RPC socket path must stay under 107 bytes.
@@ -35,11 +35,11 @@ behave differently in CI only if the versions differ.
 
 ## Driving the app
 
-- `./build/src/app/compositor-linux --headless --rpc-socket /tmp/c.sock --demo &`
+- `./build/src/app/nekophoto --headless --rpc-socket /tmp/c.sock --demo &`
   then `--call <method> [--params '{...}'] --rpc-socket /tmp/c.sock`, or the
   MCP server in `.mcp.json` (tools mirror the methods in `docs/automation.md`).
 - `--headless --batch script.jsonl` runs requests without a socket.
-- Screenshots for checking UI work: `QT_QPA_PLATFORM=offscreen ./build/src/app/compositor-linux --demo --tool brush --dialog levels --screenshot out.png`
+- Screenshots for checking UI work: `QT_QPA_PLATFORM=offscreen ./build/src/app/nekophoto --demo --tool brush --dialog levels --screenshot out.png`
   (`COMPOSITOR_WINDOW_SIZE=1000x700` forces the size; `QT_SCALE_FACTOR=2` a scale).
 
 ## Conventions
@@ -51,5 +51,5 @@ behave differently in CI only if the versions differ.
 - Behaviour follows the Mac app; when in doubt read the Swift source it ports
   (`docs/linux-port-architecture.md` maps files).
 - An automation method is one `add("name", handler)` in
-  `src/app/Automation.cpp`; add a matching tool in `mcp/compositor_mcp.py`,
+  `src/app/Automation.cpp`; add a matching tool in `mcp/nekophoto_mcp.py`,
   a line in `docs/automation.md`, and cover it in `tools/rpc_smoke.py`.

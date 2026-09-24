@@ -1,18 +1,18 @@
 # Automation and MCP
 
-compositor-linux can be driven by a program: an MCP bridge for agents such as
+NekoPhoto can be driven by a program: an MCP bridge for agents such as
 Claude Code, or any script that can talk JSON over a local socket. Everything
 an agent does goes through the same editor session the person sees, lands in
 the undo history, and shows on screen (or nowhere, in headless mode).
 
 ## Turning it on
 
-- `compositor-linux --rpc` listens for one run.
+- `nekophoto --rpc` listens for one run.
 - Edit > Preferences > Automation turns it on at every launch.
-- `compositor-linux --headless` runs with no visible window (Qt's offscreen
+- `nekophoto --headless` runs with no visible window (Qt's offscreen
   platform) and the socket on; for batch work and CI.
 
-The socket is `$XDG_RUNTIME_DIR/compositor-linux.sock`, or the path given with
+The socket is `$XDG_RUNTIME_DIR/nekophoto.sock`, or the path given with
 `--rpc-socket` or `$COMPOSITOR_RPC_SOCKET`. Only the same user can connect. The
 status bar shows "Agent connected" while a client is attached.
 
@@ -22,16 +22,16 @@ The bridge is a single Python file with inline dependencies; `uv` fetches the
 MCP SDK on first run.
 
 ```bash
-claude mcp add compositor -- uv run /path/to/compositor-linux/mcp/compositor_mcp.py
+claude mcp add nekophoto -- uv run /path/to/nekophoto/mcp/nekophoto_mcp.py
 ```
 
 Inside this repository nothing needs adding: `.mcp.json` declares the server,
 so Claude Code offers it when a session starts here.
 
-Without `uv`: `pip install "mcp<2"` and run `python3 mcp/compositor_mcp.py` instead.
+Without `uv`: `pip install "mcp<2"` and run `python3 mcp/nekophoto_mcp.py` instead.
 The bridge uses the 1.x MCP SDK API (2.x renamed its server class).
 
-When nothing is listening the bridge launches `compositor-linux` (from `PATH`,
+When nothing is listening the bridge launches `nekophoto` (from `PATH`,
 `$COMPOSITOR_BIN`, or `./build/src/app/`) with the socket on; with no display it
 launches headless. When the editor is already open, that launch hands the
 request to it instead and the running window starts listening on the socket,
@@ -50,18 +50,18 @@ dark gradient layer behind it, and export result.png." It will call
 
 ## From a shell
 
-`compositor-linux --call <method> [--params '<json object>']` sends one request
+`nekophoto --call <method> [--params '<json object>']` sends one request
 to the running instance and prints the result (exit 1 on an error reply, 2 when
 nothing is listening; `--rpc-socket` picks the socket). Useful from scripts and
 from an agent's shell tool without any MCP setup:
 
 ```bash
-compositor-linux --call layers.list
-compositor-linux --call layers.set --params '{"id": "…", "opacity": 0.5}'
-compositor-linux --call render --params '{"path": "/tmp/check.png", "maxSize": 800}'
+nekophoto --call layers.list
+nekophoto --call layers.set --params '{"id": "…", "opacity": 0.5}'
+nekophoto --call render --params '{"path": "/tmp/check.png", "maxSize": 800}'
 ```
 
-`compositor-linux --headless --batch script.jsonl` (or `-` for stdin) runs a
+`nekophoto --headless --batch script.jsonl` (or `-` for stdin) runs a
 file of requests, one JSON object per line (`#` comments allowed, ids
 optional), in a fresh windowless instance with no socket, prints one response
 per line and quits; the first error stops it unless
@@ -87,7 +87,7 @@ Python, without any library:
 
 ```python
 import json, socket
-s = socket.socket(socket.AF_UNIX); s.connect("/run/user/1000/compositor-linux.sock")
+s = socket.socket(socket.AF_UNIX); s.connect("/run/user/1000/nekophoto.sock")
 f = s.makefile("rw")
 f.write(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "document.info", "params": {}}) + "\n"); f.flush()
 print(json.loads(f.readline())["result"])

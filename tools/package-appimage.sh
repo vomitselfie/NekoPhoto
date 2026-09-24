@@ -3,7 +3,7 @@
 # and so does `RELEASE=1 APPIMAGE=1 tools/ci-in-docker.sh ubuntu:22.04` to check packaging before tagging.
 # linuxdeploy is pinned to tagged builds and checked against their SHA-256, since the release job can
 # publish; to move to newer ones, change the tags and the sums together.
-# Usage: tools/package-appimage.sh <build dir> <version>   (writes compositor-linux-<version>-x86_64.AppImage here)
+# Usage: tools/package-appimage.sh <build dir> <version>   (writes NekoPhoto-<version>-x86_64.AppImage here)
 set -euo pipefail
 build="$1"
 version="$2"
@@ -34,17 +34,17 @@ plugins="$("$QMAKE" -query QT_INSTALL_PLUGINS)/platforms"
 # offscreen too, so the packaged app can be smoke-tested headless.
 export EXTRA_PLATFORM_PLUGINS="$(ls "$plugins" | grep -E '^libqwayland|^libqoffscreen' | paste -sd ';')"
 echo "Wayland plugins: $EXTRA_PLATFORM_PLUGINS"
-export LDAI_OUTPUT="compositor-linux-$version-x86_64.AppImage"
+export LDAI_OUTPUT="NekoPhoto-$version-x86_64.AppImage"
 if [ -n "${GITHUB_REPOSITORY:-}" ]; then
-    export LDAI_UPDATE_INFORMATION="gh-releases-zsync|${GITHUB_REPOSITORY_OWNER}|${GITHUB_REPOSITORY#*/}|latest|compositor-linux-*-x86_64.AppImage.zsync"
+    export LDAI_UPDATE_INFORMATION="gh-releases-zsync|${GITHUB_REPOSITORY_OWNER}|${GITHUB_REPOSITORY#*/}|latest|NekoPhoto-*-x86_64.AppImage.zsync"
 fi
 linuxdeploy --appdir AppDir \
-    --desktop-file AppDir/usr/share/applications/compositor-linux.desktop \
-    --icon-file "$root/packaging/compositor-linux.svg" \
+    --desktop-file AppDir/usr/share/applications/nekophoto.desktop \
+    --icon-file "$root/packaging/nekophoto.svg" \
     --plugin qt
 # Ship the copyright file of every distribution package whose library was bundled.
 # Qt comes from aqtinstall, not dpkg; its licences are in LICENSES/ and THIRD-PARTY-NOTICES.md.
-bundled=AppDir/usr/share/doc/compositor-linux/bundled
+bundled=AppDir/usr/share/doc/nekophoto/bundled
 mkdir -p "$bundled"
 for lib in AppDir/usr/lib/*.so*; do
     pkg="$(dpkg -S "*/$(basename "$lib")" 2>/dev/null | head -n1 | cut -d: -f1 || true)"   # Qt's own libraries are no package's

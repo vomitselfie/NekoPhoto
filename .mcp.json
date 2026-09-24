@@ -1,10 +1,10 @@
 {
   "mcpServers": {
-    "compositor": {
+    "nekophoto": {
       "command": "uv",
-      "args": ["run", "mcp/compositor_mcp.py"],
+      "args": ["run", "mcp/nekophoto_mcp.py"],
       "env": {
-        "COMPOSITOR_BIN": "./build/src/app/compositor-linux"
+        "COMPOSITOR_BIN": "./build/src/app/nekophoto"
       }
     }
   }

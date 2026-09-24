@@ -221,7 +221,7 @@ QString AutomationServer::defaultSocketPath() {
     if (!env.isEmpty()) return env;
     QString runtime = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
     if (runtime.isEmpty()) runtime = QDir::tempPath();
-    return runtime + "/compositor-linux.sock";
+    return runtime + "/nekophoto.sock";
 }
 
 bool AutomationServer::listen(const QString& path, QString* error) {
@@ -376,7 +376,7 @@ void AutomationServer::registerHandlers() {
     // ---- app / tabs
     add("rpc.methods", [this](const QJsonObject&) { return QJsonArray::fromStringList(methods()); });
     add("app.info", [this, w](const QJsonObject&) {
-        return QJsonObject{{"name", "compositor-linux"}, {"version", QApplication::applicationVersion()}, {"socket", path_},
+        return QJsonObject{{"name", "nekophoto"}, {"version", QApplication::applicationVersion()}, {"socket", path_},
                            {"platform", QApplication::platformName()}, {"tabs", w->tabCount()}, {"currentTab", w->currentTabIndex()},
                            {"removeBackground", ModelStore::ready()}, {"scribble", scribbleSelectionSupported()}, {"clickSelect", ModelStore::promptReady()}};
     });
@@ -816,7 +816,7 @@ void AutomationServer::registerHandlers() {
     add("pixels.removeBackground", [session, document](const QJsonObject& p) {
         document();
         if (!ModelStore::supported()) fail("this build has no OpenCV, so the segmentation model can't run");
-        if (!ModelStore::ready()) fail("Remove Background is off or its model isn't downloaded: enable it in Edit > Preferences (or run compositor-linux --download-model isnet)");
+        if (!ModelStore::ready()) fail("Remove Background is off or its model isn't downloaded: enable it in Edit > Preferences (or run nekophoto --download-model isnet)");
         EditorSession* s = session();
         LayerTransform transform;
         auto source = s->adjustmentSource(0, transform);
@@ -912,7 +912,7 @@ void AutomationServer::registerHandlers() {
         // EfficientSAM finds the object, refined onto the image's edges. Up to six prompts count (a box is two).
         const Document& doc = document();
         EditorSession* s = session();
-        if (!ModelStore::promptReady()) fail("the click-to-select model is not downloaded (Quick Select > Click > Download model, or compositor-linux --download-model efficientsam_ti)");
+        if (!ModelStore::promptReady()) fail("the click-to-select model is not downloaded (Quick Select > Click > Download model, or nekophoto --download-model efficientsam_ti)");
         if (flag(p, "clear", true)) s->clearClickPrompts();
         s->setQuickSelectClicks(true);   // the prompts show on the canvas as the person's own would
         if (has(p, "refine")) s->scribbleRefine = std::clamp(integer(p, "refine", s->scribbleRefine), 0, 40);

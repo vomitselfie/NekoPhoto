@@ -25,5 +25,5 @@
   <file alias="zoom-in.svg">icons/zoom-in.svg</file>
 </qresource>
 <qresource prefix="/app">
-  <file alias="icon.svg">../../packaging/compositor-linux.svg</file>
+  <file alias="icon.svg">../../packaging/nekophoto.svg</file>
 </qresource></RCC>

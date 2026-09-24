@@ -178,6 +178,23 @@ void buildDemo(app::EditorSession& session, const QString& imagePath) {
 
 } // namespace
 
+/// Until 0.9.1 the app was compositor-linux: its settings and data (the model, imported brushes, the G'MIC
+/// catalogue, recovery files) move to NekoPhoto's folders once, on the first launch after the rename, and only
+/// when nothing is there yet.
+static void migrateFromOldName() {
+    auto move = [](const QString& from, const QString& to) {
+        if (!QFileInfo::exists(from) || QFileInfo::exists(to)) return;
+        QDir().mkpath(QFileInfo(to).path());
+        QDir().rename(from, to);
+    };
+    const QString data = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+    const QString config = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+    move(data + "/compositor-linux/compositor-linux", QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
+    move(config + "/compositor-linux/compositor-linux.conf", config + "/nekophoto/nekophoto.conf");
+    QDir().rmdir(data + "/compositor-linux");   // only if nothing else was in it
+    QDir().rmdir(config + "/compositor-linux");
+}
+
 int main(int argc, char** argv) {
     // --headless: no window on screen; the automation socket is the only way in. Must be decided before QApplication.
     // --call and --batch never show a window either, so they must work without a display.
@@ -185,15 +202,17 @@ int main(int argc, char** argv) {
     for (int i = 1; i < argc; i++) if (std::strcmp(argv[i], "--headless") == 0 || std::strcmp(argv[i], "--call") == 0 || std::strcmp(argv[i], "--batch") == 0) headless = true;
     if (headless && !qEnvironmentVariableIsSet("QT_QPA_PLATFORM")) qputenv("QT_QPA_PLATFORM", "offscreen");
     QApplication app(argc, argv);
-    QApplication::setOrganizationName("compositor-linux");
-    QApplication::setApplicationName("compositor-linux");
+    QApplication::setOrganizationName("nekophoto");
+    QApplication::setApplicationName("nekophoto");
+    QApplication::setApplicationDisplayName("NekoPhoto");
+    migrateFromOldName();
     QApplication::setApplicationVersion(QStringLiteral(COMPOSITOR_VERSION));
     // The desktop entry gives Wayland the app id and icon; naming it when it isn't installed only makes the portal complain.
-    if (!QStandardPaths::locate(QStandardPaths::ApplicationsLocation, "compositor-linux.desktop").isEmpty()) QApplication::setDesktopFileName("compositor-linux");
+    if (!QStandardPaths::locate(QStandardPaths::ApplicationsLocation, "nekophoto.desktop").isEmpty()) QApplication::setDesktopFileName("nekophoto");
     app.setWindowIcon(QIcon(QStringLiteral(":/app/icon.svg")));
     app::applyTheme();
     QCommandLineParser parser;
-    parser.setApplicationDescription("compositor-linux: a small, focused image compositor.");
+    parser.setApplicationDescription("NekoPhoto: a layered photo editor and painting app.");
     parser.addHelpOption();
     parser.addVersionOption();
     parser.addPositionalArgument("file", "A .comp project or an image to open.");
@@ -211,7 +230,7 @@ int main(int argc, char** argv) {
     QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: new, canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, gmic, background, text, fonts, brushes.", "name");
     parser.addOption(dialogOption);
     QCommandLineOption rpc("rpc", "Listen on the automation socket (JSON-RPC over a local socket, for the MCP bridge). Also on when the automation preference is set.");
-    QCommandLineOption rpcSocket("rpc-socket", "Socket path for --rpc (default: $XDG_RUNTIME_DIR/compositor-linux.sock, or $COMPOSITOR_RPC_SOCKET).", "path");
+    QCommandLineOption rpcSocket("rpc-socket", "Socket path for --rpc (default: $XDG_RUNTIME_DIR/nekophoto.sock, or $COMPOSITOR_RPC_SOCKET).", "path");
     QCommandLineOption headlessOption("headless", "Run without a visible window (offscreen) with the automation socket on; implies --rpc.");
     parser.addOption(rpc);
     parser.addOption(rpcSocket);
@@ -243,7 +262,7 @@ int main(int argc, char** argv) {
         QString path = parser.value(rpcSocket).isEmpty() ? app::AutomationServer::defaultSocketPath() : parser.value(rpcSocket);
         QLocalSocket socket;
         socket.connectToServer(path);
-        if (!socket.waitForConnected(3000)) { std::fprintf(stderr, "nothing is listening at %s (start compositor-linux --rpc, or --headless)\n", qPrintable(path)); return 2; }
+        if (!socket.waitForConnected(3000)) { std::fprintf(stderr, "nothing is listening at %s (start nekophoto --rpc, or --headless)\n", qPrintable(path)); return 2; }
         QJsonObject params;
         if (parser.isSet(paramsOption)) {
             QJsonParseError parseError;

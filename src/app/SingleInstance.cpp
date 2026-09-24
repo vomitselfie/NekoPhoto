@@ -26,8 +26,8 @@ QString runtimeDirectory() {
 SingleInstance::SingleInstance(QObject* parent) : QObject(parent) {}
 SingleInstance::~SingleInstance() = default;
 
-QString SingleInstance::socketPath() { return runtimeDirectory() + "/compositor-linux-instance.sock"; }
-QString SingleInstance::lockPath() { return runtimeDirectory() + "/compositor-linux-instance.lock"; }
+QString SingleInstance::socketPath() { return runtimeDirectory() + "/nekophoto-instance.sock"; }
+QString SingleInstance::lockPath() { return runtimeDirectory() + "/nekophoto-instance.lock"; }
 
 bool SingleInstance::handOff(const QStringList& files, const QString& rpcSocket) {
     // The lock says whether an instance is running (a dead one's lock is cleared by the PID check); by age a

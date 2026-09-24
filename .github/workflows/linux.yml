@@ -1,4 +1,4 @@
-name: compositor-linux
+name: NekoPhoto
 
 on:
   push:
@@ -38,11 +38,11 @@ jobs:
         run: ctest --test-dir build --output-on-failure
       - name: Smoke test the application offscreen
         run: |
-          QT_QPA_PLATFORM=offscreen ./build/src/app/compositor-linux --demo --screenshot demo.png --save-as Demo.comp
-          QT_QPA_PLATFORM=offscreen ./build/src/app/compositor-linux Demo.comp --screenshot reopened.png
+          QT_QPA_PLATFORM=offscreen ./build/src/app/nekophoto --demo --screenshot demo.png --save-as Demo.comp
+          QT_QPA_PLATFORM=offscreen ./build/src/app/nekophoto Demo.comp --screenshot reopened.png
       - name: Automation socket smoke test
         run: |
-          ./build/src/app/compositor-linux --headless --rpc-socket "$PWD/rpc.sock" --demo &
+          ./build/src/app/nekophoto --headless --rpc-socket "$PWD/rpc.sock" --demo &
           python3 tools/rpc_smoke.py "$PWD/rpc.sock"
           kill %1
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4

@@ -92,18 +92,18 @@ ProjectTabBar::ProjectTabBar(QWidget* parent) : QTabBar(parent) {
 }
 
 void ProjectTabBar::dragEnterEvent(QDragEnterEvent* e) {
-    if (e->mimeData()->hasFormat("application/x-compositor-linux-layer")) e->acceptProposedAction(); else QTabBar::dragEnterEvent(e);
+    if (e->mimeData()->hasFormat("application/x-nekophoto-layer")) e->acceptProposedAction(); else QTabBar::dragEnterEvent(e);
 }
 
 void ProjectTabBar::dragMoveEvent(QDragMoveEvent* e) {
-    if (e->mimeData()->hasFormat("application/x-compositor-linux-layer")) { e->acceptProposedAction(); return; }
+    if (e->mimeData()->hasFormat("application/x-nekophoto-layer")) { e->acceptProposedAction(); return; }
     QTabBar::dragMoveEvent(e);
 }
 
 void ProjectTabBar::dropEvent(QDropEvent* e) {
-    if (!e->mimeData()->hasFormat("application/x-compositor-linux-layer")) { QTabBar::dropEvent(e); return; }
+    if (!e->mimeData()->hasFormat("application/x-nekophoto-layer")) { QTabBar::dropEvent(e); return; }
     int index = tabAt(e->position().toPoint());
-    emit layerDropped(index, QString::fromUtf8(e->mimeData()->data("application/x-compositor-linux-layer")));
+    emit layerDropped(index, QString::fromUtf8(e->mimeData()->data("application/x-nekophoto-layer")));
     e->acceptProposedAction();
 }
 
@@ -367,7 +367,7 @@ void MainWindow::connectSession() {
         updateColorSwatches();
         refreshHint();
     }));
-    sessionConnections_.push_back(connect(session_, &EditorSession::error, this, [this](QString message) { showError(tr("compositor-linux"), message); }));
+    sessionConnections_.push_back(connect(session_, &EditorSession::error, this, [this](QString message) { showError(tr("NekoPhoto"), message); }));
 }
 
 void MainWindow::refreshTabTitles() {
@@ -710,9 +710,9 @@ void MainWindow::buildMenus() {
     controls->setChecked(true);
 
     QMenu* help = menuBar()->addMenu(tr("&Help"));
-    help->addAction(tr("&About compositor-linux"), this, [this] {
-        QMessageBox::about(this, tr("About compositor-linux"), tr("<b>compositor-linux</b> %3<br>A small, focused image compositor. "
-            "A Linux port of <a href=\"https://github.com/robbietilton/Compositor\">Compositor</a> for macOS.<br><br>"
+    help->addAction(tr("&About NekoPhoto"), this, [this] {
+        QMessageBox::about(this, tr("About NekoPhoto"), tr("<b>NekoPhoto</b> %3<br>A layered photo editor and painting app for Linux. "
+            "It began as a Linux port of <a href=\"https://github.com/robbietilton/Compositor\">Compositor</a> for macOS, and still opens its projects.<br><br>"
             "Qt %1 &middot; project format version %2<br><br>"
             "Free software under the GNU General Public License, version 3 or later, with ABSOLUTELY NO WARRANTY. "
             "Compositor's own code is MIT licensed by Wonder Assembly LLC; the licences of the bundled components "
@@ -777,7 +777,7 @@ void MainWindow::refreshActions() {
 void MainWindow::refreshTitle() {
     if (!session_) return;
     // The session's title already carries the modified marker; Qt's own needs a "[*]" placeholder we don't use.
-    setWindowTitle(session_->title() + (session_->hasDocument() ? QStringLiteral(" — compositor-linux") : QString()));
+    setWindowTitle(session_->title() + (session_->hasDocument() ? QStringLiteral(" — NekoPhoto") : QString()));
     refreshTabTitles();
 }
 

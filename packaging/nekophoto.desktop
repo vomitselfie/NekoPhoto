@@ -1,11 +1,11 @@
 [Desktop Entry]
 Type=Application
-Name=compositor-linux
-GenericName=Image Compositor
-Comment=A small, focused, layer-based image compositor
-Exec=compositor-linux %F
-Icon=compositor-linux
+Name=NekoPhoto
+GenericName=Photo Editor
+Comment=Edit photos and paint in layers
+Exec=nekophoto %F
+Icon=nekophoto
 Terminal=false
 Categories=Graphics;RasterGraphics;2DGraphics;
 MimeType=image/png;image/jpeg;image/tiff;image/webp;image/vnd.adobe.photoshop;application/x-compositor-project;application/x-clip-studio-project;
-Keywords=image;layers;compositing;photo;editor;
+Keywords=image;layers;compositing;photo;editor;paint;brush;psd;clip;

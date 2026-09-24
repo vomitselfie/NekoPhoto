@@ -1,15 +1,20 @@
 <p align="center">
-  <img src="docs/images/logo.svg" alt="compositor-linux" width="180">
+  <img src="docs/images/logo.svg" alt="NekoPhoto" width="180">
 </p>
 
-# compositor-linux
+# NekoPhoto
 
 **English** · [日本語](#日本語)
 
-A fast, focused image editor for Linux: layers, masks, selections, brushes,
-adjustments and filters, with the tools and shortcuts you know from Photoshop.
-It is a native port of [Compositor](https://github.com/robbietilton/Compositor)
-for macOS, and opens Photoshop files and the Mac app's `.comp` projects.
+A fast, focused photo editor and painting app for Linux: layers, masks,
+selections, brushes, adjustments and filters, with the tools and shortcuts you
+know from Photoshop. It opens Photoshop and Clip Studio files, and imports your
+brushes from Photoshop, Procreate and Clip Studio.
+
+NekoPhoto began as a Linux port of [Compositor](https://github.com/robbietilton/Compositor)
+for macOS, and still opens its `.comp` projects. Until version 1.0 it was
+called compositor-linux; your settings, brushes and downloaded model move over
+by themselves the first time you start it.
 
 <p align="center">
   <img src="docs/images/remove-background.jpg" alt="Remove Background on an illustration, with the settings dialog open" width="800">
@@ -53,8 +58,8 @@ executable, and run it. It works on any x86_64 Linux from 2022 on, under
 Wayland or X11.
 
 ```bash
-chmod +x compositor-linux-*.AppImage
-./compositor-linux-*.AppImage
+chmod +x NekoPhoto-*.AppImage
+./NekoPhoto-*.AppImage
 ```
 
 To add it to your app launcher, open `.comp` projects by double-click and
@@ -62,7 +67,7 @@ offer it for `.psd` files, run the integration script once (no root needed;
 `--remove` undoes it):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/vomitselfie/compositor-linux/main/tools/integrate-appimage.sh | bash -s -- compositor-linux-*.AppImage
+curl -fsSL https://raw.githubusercontent.com/vomitselfie/nekophoto/main/tools/integrate-appimage.sh | bash -s -- NekoPhoto-*.AppImage
 ```
 
 **On a Mac:** each release also has an unsigned app bundle for Apple
@@ -75,7 +80,7 @@ which downloads the model once.
 ## Use it with an AI agent
 
 ```bash
-claude mcp add compositor -- uv run /path/to/compositor-linux/mcp/compositor_mcp.py
+claude mcp add nekophoto -- uv run /path/to/nekophoto/mcp/nekophoto_mcp.py
 ```
 
 Then ask for something like "open photo.jpg, remove the background, put a
@@ -92,7 +97,7 @@ sudo apt install cmake ninja-build qt6-base-dev qt6-svg-dev qt6-wayland qt6-imag
 
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
-./build/src/app/compositor-linux
+./build/src/app/nekophoto
 ```
 
 macOS, build options, command-line flags and keyboard shortcuts are in
@@ -110,12 +115,15 @@ components and their licences are listed in
 
 ## 日本語
 
-[English](#compositor-linux) · **日本語**
+[English](#nekophoto) · **日本語**
 
-Linux 向けの軽快でシンプルな画像編集ソフトです。レイヤー、マスク、選択範囲、ブラシ、
-色調補正、フィルターを備え、Photoshop でおなじみのツールとショートカットで操作できます。
-macOS 版 [Compositor](https://github.com/robbietilton/Compositor) のネイティブ移植で、
-Photoshop ファイルと Mac 版の `.comp` プロジェクトを開けます。
+Linux 向けの軽快でシンプルな写真編集・お絵描きソフトです。レイヤー、マスク、選択範囲、
+ブラシ、色調補正、フィルターを備え、Photoshop でおなじみのツールとショートカットで操作できます。
+Photoshop とクリップスタジオのファイルを開け、Photoshop・Procreate・クリップスタジオのブラシも読み込めます。
+
+NekoPhoto は macOS 版 [Compositor](https://github.com/robbietilton/Compositor) の
+Linux 移植として始まり、今も Mac 版の `.comp` プロジェクトを開けます。バージョン 1.0 までは
+compositor-linux という名前でした。設定・ブラシ・ダウンロード済みのモデルは、初回起動時に自動で引き継がれます。
 
 ### できること
 
@@ -153,15 +161,15 @@ Photoshop ファイルと Mac 版の `.comp` プロジェクトを開けます�
 2022 年以降の x86_64 Linux であれば、Wayland と X11 のどちらでも動作します。
 
 ```bash
-chmod +x compositor-linux-*.AppImage
-./compositor-linux-*.AppImage
+chmod +x NekoPhoto-*.AppImage
+./NekoPhoto-*.AppImage
 ```
 
 アプリランチャーに登録し、`.comp` をダブルクリックで開けるようにして `.psd` の「別のアプリで開く」にも
 表示させるには、統合スクリプトを一度実行します(root 権限は不要、`--remove` で元に戻せます):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/vomitselfie/compositor-linux/main/tools/integrate-appimage.sh | bash -s -- compositor-linux-*.AppImage
+curl -fsSL https://raw.githubusercontent.com/vomitselfie/nekophoto/main/tools/integrate-appimage.sh | bash -s -- NekoPhoto-*.AppImage
 ```
 
 **Mac の場合:** 各リリースには Apple シリコン向けの未署名アプリも含まれます。
@@ -172,7 +180,7 @@ curl -fsSL https://raw.githubusercontent.com/vomitselfie/compositor-linux/main/t
 ### AI エージェントから使う
 
 ```bash
-claude mcp add compositor -- uv run /path/to/compositor-linux/mcp/compositor_mcp.py
+claude mcp add nekophoto -- uv run /path/to/nekophoto/mcp/nekophoto_mcp.py
 ```
 
 あとは「photo.jpg を開いて背景を削除し、後ろに暗いグラデーションを敷いて result.png に書き出して」

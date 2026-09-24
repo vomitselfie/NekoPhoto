@@ -7,8 +7,8 @@ and unsupported.txt (the list src/app/gmic/unsupported.txt holds) into the outpu
 G'MIC runs with no display and a time limit: some catalogue entries are interactive programs (games,
 tools waiting for clicks in a window of their own) and would otherwise open windows on the desktop.
 
-    compositor-linux --headless --rpc-socket /tmp/c.sock &
-    compositor-linux --call gmic.filters --params '{"all":true}' --rpc-socket /tmp/c.sock > filters.json
+    nekophoto --headless --rpc-socket /tmp/c.sock &
+    nekophoto --call gmic.filters --params '{"all":true}' --rpc-socket /tmp/c.sock > filters.json
     tools/gmic-sweep.py filters.json photo.jpg sweep/ [--gallery]
 
 Needs Python 3 with Pillow and NumPy, and the gmic executable.

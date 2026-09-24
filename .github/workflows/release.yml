@@ -1,6 +1,6 @@
 name: release
 
-# Pushing a tag like v0.2.0 builds compositor-linux, packages an AppImage and a
+# Pushing a tag like v0.2.0 builds NekoPhoto, packages an AppImage and a
 # plain tarball on Linux and an unsigned app bundle on macOS, and publishes them
 # on a GitHub release with generated notes.
 # "Run workflow" from the Actions tab does a dry run: the artifacts are built
@@ -64,30 +64,39 @@ jobs:
 
       - name: Smoke test
         run: |
-          QT_QPA_PLATFORM=offscreen ./build/src/app/compositor-linux --version
-          QT_QPA_PLATFORM=offscreen ./build/src/app/compositor-linux --demo --screenshot demo.png --save-as Demo.comp
+          QT_QPA_PLATFORM=offscreen ./build/src/app/nekophoto --version
+          QT_QPA_PLATFORM=offscreen ./build/src/app/nekophoto --demo --screenshot demo.png --save-as Demo.comp
 
       - name: AppImage
         run: tools/package-appimage.sh build "${{ steps.version.outputs.version }}"
 
       - name: Run the AppImage
         run: |
-          chmod +x compositor-linux-*.AppImage
-          QT_QPA_PLATFORM=offscreen ./compositor-linux-*.AppImage --appimage-extract-and-run --version
-          QT_QPA_PLATFORM=offscreen ./compositor-linux-*.AppImage --appimage-extract-and-run --demo --screenshot appimage-demo.png
+          chmod +x NekoPhoto-*.AppImage
+          QT_QPA_PLATFORM=offscreen ./NekoPhoto-*.AppImage --appimage-extract-and-run --version
+          QT_QPA_PLATFORM=offscreen ./NekoPhoto-*.AppImage --appimage-extract-and-run --demo --screenshot appimage-demo.png
+
+      - name: Updates for compositor-linux AppImages
+        # Until 1.0 the AppImage was compositor-linux-<version>, and those look for compositor-linux-*.zsync in the
+        # latest release. The same zsync under that name (its URL is the NekoPhoto AppImage, relative) moves them over.
+        run: |
+          v="${{ steps.version.outputs.version }}"
+          if [ -f "NekoPhoto-$v-x86_64.AppImage.zsync" ]; then
+            cp "NekoPhoto-$v-x86_64.AppImage.zsync" "compositor-linux-$v-x86_64.AppImage.zsync"
+          fi
 
       - name: Tarball
         run: |
           v="${{ steps.version.outputs.version }}"
-          rm -rf "compositor-linux-$v" && mkdir "compositor-linux-$v"
-          cp -r AppDir/usr/bin AppDir/usr/share "compositor-linux-$v/"
-          cp LICENSE THIRD-PARTY-NOTICES.md README.md "compositor-linux-$v/"
-          tar czf "compositor-linux-$v-x86_64.tar.gz" "compositor-linux-$v"
+          rm -rf "NekoPhoto-$v" && mkdir "NekoPhoto-$v"
+          cp -r AppDir/usr/bin AppDir/usr/share "NekoPhoto-$v/"
+          cp LICENSE THIRD-PARTY-NOTICES.md README.md "NekoPhoto-$v/"
+          tar czf "NekoPhoto-$v-x86_64.tar.gz" "NekoPhoto-$v"
           sha256sum *.AppImage *.tar.gz > SHA256SUMS
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
         with:
-          name: compositor-linux-${{ steps.version.outputs.version }}
+          name: NekoPhoto-${{ steps.version.outputs.version }}
           path: |
             *.AppImage
             *.AppImage.zsync
@@ -129,23 +138,23 @@ jobs:
       - name: Tests and smoke test
         run: |
           ctest --test-dir build --output-on-failure
-          app=build/src/app/compositor-linux.app/Contents/MacOS/compositor-linux
+          app=build/src/app/NekoPhoto.app/Contents/MacOS/NekoPhoto
           QT_QPA_PLATFORM=offscreen "$app" --version
           QT_QPA_PLATFORM=offscreen "$app" --demo --screenshot demo.png --save-as Demo.comp
 
       - name: Bundle Qt, sign ad hoc, zip
         run: |
           v="${{ steps.version.outputs.version }}"
-          "$(brew --prefix qt)/bin/macdeployqt" build/src/app/compositor-linux.app -always-overwrite -verbose=1
-          codesign --force --deep --sign - build/src/app/compositor-linux.app
-          ditto -c -k --sequesterRsrc --keepParent build/src/app/compositor-linux.app "compositor-linux-$v-macos-arm64.zip"
-          shasum -a 256 "compositor-linux-$v-macos-arm64.zip" > SHA256SUMS-macos
+          "$(brew --prefix qt)/bin/macdeployqt" build/src/app/NekoPhoto.app -always-overwrite -verbose=1
+          codesign --force --deep --sign - build/src/app/NekoPhoto.app
+          ditto -c -k --sequesterRsrc --keepParent build/src/app/NekoPhoto.app "NekoPhoto-$v-macos-arm64.zip"
+          shasum -a 256 "NekoPhoto-$v-macos-arm64.zip" > SHA256SUMS-macos
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
         with:
-          name: compositor-linux-${{ steps.version.outputs.version }}-macos
+          name: NekoPhoto-${{ steps.version.outputs.version }}-macos
           path: |
-            compositor-linux-*-macos-arm64.zip
+            NekoPhoto-*-macos-arm64.zip
             SHA256SUMS-macos
 
   publish:
@@ -161,7 +170,7 @@ jobs:
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093   # v4
         with:
-          pattern: compositor-linux-*
+          pattern: NekoPhoto-*
           merge-multiple: true
       - name: Combined checksums
         run: |
@@ -169,7 +178,7 @@ jobs:
           ls -la
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65   # v2
         with:
-          name: compositor-linux ${{ steps.version.outputs.version }}
+          name: NekoPhoto ${{ steps.version.outputs.version }}
           generate_release_notes: true
           files: |
             *.AppImage

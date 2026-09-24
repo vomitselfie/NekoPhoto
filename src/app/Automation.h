@@ -25,7 +25,7 @@ public:
     explicit AutomationServer(MainWindow* window);
     ~AutomationServer() override;
 
-    /// $XDG_RUNTIME_DIR/compositor-linux.sock, or a per-user file under the temp directory.
+    /// $XDG_RUNTIME_DIR/nekophoto.sock, or a per-user file under the temp directory.
     static QString defaultSocketPath();
     bool listen(const QString& path, QString* error);
     QString socketPath() const { return path_; }

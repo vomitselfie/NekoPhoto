@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(compositor-linux VERSION 0.9.1 LANGUAGES C CXX)
+project(nekophoto VERSION 0.9.1 LANGUAGES C CXX)
 
 # Releases pass the tag version in with -DCOMPOSITOR_VERSION; a local build shows the project version
 # above. The override is a cache entry, so it defaults to empty rather than to the project version: a
@@ -11,7 +11,7 @@ else()
     set(COMPOSITOR_VERSION_STRING "${COMPOSITOR_VERSION}")
 endif()
 
-# compositor-linux: the Linux port of Compositor. The macOS application (Compositor.xcodeproj)
+# NekoPhoto, which began as the Linux port of Compositor. The macOS application (Compositor.xcodeproj)
 # does not use this file; it keeps building from Xcode. See docs/linux-port-architecture.md.
 
 set(CMAKE_C_STANDARD 11)

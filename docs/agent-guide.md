@@ -1,4 +1,4 @@
-# Working with compositor-linux as an agent
+# Working with NekoPhoto as an agent
 
 How to get good results driving the editor through MCP, `--call`, `--batch`
 or the socket. `docs/automation.md` has the method reference; this is the
@@ -72,7 +72,7 @@ Batch export a folder of projects:
 for f in *.comp; do
   printf '%s\n' "{\"method\":\"document.open\",\"params\":{\"path\":\"$f\"}}" \
                 "{\"method\":\"document.export\",\"params\":{\"path\":\"${f%.comp}.png\"}}" \
-  | compositor-linux --headless --batch -
+  | nekophoto --headless --batch -
 done
 ```
 

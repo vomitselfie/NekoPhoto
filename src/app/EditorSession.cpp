@@ -26,7 +26,7 @@ EditorSession::EditorSession(QObject* parent) : QObject(parent) {
 }
 
 QString EditorSession::title() const {
-    if (!document_) return QStringLiteral("compositor-linux");
+    if (!document_) return QStringLiteral("NekoPhoto");
     QString name = !projectPath_.isEmpty() ? QFileInfo(projectPath_).completeBaseName() : !importedName_.isEmpty() ? importedName_ : QStringLiteral("Untitled");
     return name + (isModified() ? QStringLiteral(" *") : QString());
 }

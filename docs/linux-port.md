@@ -1,10 +1,22 @@
-# compositor-linux
+# NekoPhoto
 
-compositor-linux is a Qt 6 front end over a portable C++ core that re-implements
+NekoPhoto is a Qt 6 front end over a portable C++ core that re-implements
 the Mac app's document model, compositor, brush, history and `.comp` project
 format. The existing C pixel routines under `Compositor/Rendering` are compiled
 unchanged. The macOS application and its Xcode project are untouched; see
 `docs/linux-port-architecture.md` for how the two relate.
+
+Until 1.0 the project was called compositor-linux. The rename covers the
+program (`nekophoto`, `NekoPhoto.app` on the Mac), the desktop entry and icon,
+the settings and data folders (`~/.config/nekophoto/`, `~/.local/share/nekophoto/nekophoto/`),
+the automation socket (`nekophoto.sock`) and the MCP bridge (`mcp/nekophoto_mcp.py`,
+server name `nekophoto`). On the first launch after the rename the old settings
+file and data folder (model, imported brushes, G'MIC catalogue, recovery files)
+move to the new places, unless something is there already. Unchanged on
+purpose: the `.comp` format and its MIME type, which keep Mac projects opening;
+the `COMPOSITOR_*` environment variables and build options; and the C++
+`compositor` namespace. `tools/integrate-appimage.sh` removes a launcher that
+an older compositor-linux AppImage installed.
 
 ## Building
 
@@ -31,7 +43,7 @@ Then:
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ctest --test-dir build --output-on-failure
-./build/src/app/compositor-linux      # or: ./build/src/app/compositor-linux Photo.comp
+./build/src/app/nekophoto      # or: ./build/src/app/nekophoto Photo.comp
 ```
 
 macOS (Homebrew) builds an app bundle; the G'MIC filters appear once
@@ -40,7 +52,7 @@ macOS (Homebrew) builds an app bundle; the G'MIC filters appear once
 ```bash
 brew install cmake ninja qt libpng libmypaint opencv pkg-config
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
-cmake --build build -j && open build/src/app/compositor-linux.app
+cmake --build build -j && open build/src/app/NekoPhoto.app
 ```
 
 Under a Wayland session Qt picks the Wayland platform on its own; force it with
@@ -61,10 +73,10 @@ the same OpenCV; a local build takes the system OpenCV unless told otherwise.
 `-DCOMPOSITOR_QT_TOOL_DIR=<dir>` points the build at copies of `moc`, `uic`
 and `rcc` for shells that cannot execute binaries under `/usr/lib`.
 
-`compositor-linux --download-model isnet` fetches a model without the GUI (into
+`nekophoto --download-model isnet` fetches a model without the GUI (into
 `COMPOSITOR_MODEL_DIR` when set); `--preferences` opens the Preferences dialog;
 One editor per user: a launch that carries only file names (a double-click in
-the file manager, `compositor-linux photo.psd`) hands them to the running
+the file manager, `nekophoto photo.psd`) hands them to the running
 editor, which opens them as tabs and raises its window, and quits (with
 `--rpc` the running editor also starts its automation socket for the caller);
 `--new-window` keeps a separate process, as any of the options below does.
@@ -72,7 +84,7 @@ editor, which opens them as tabs and raises its window, and quits (with
 (or canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map,
 grain, blur, motion-blur, noise, lens, gmic, background, text, fonts, brushes) opens that
 dialog; with `--screenshot` the dialog is what gets grabbed.
-`compositor-linux --demo --screenshot out.png --save-as Demo.comp` builds a layered
+`nekophoto --demo --screenshot out.png --save-as Demo.comp` builds a layered
 demo document, grabs the window and saves a project without any interaction
 (works with `QT_QPA_PLATFORM=offscreen`); CI runs it as a smoke test.
 
@@ -140,7 +152,7 @@ kept warm with the catalogue's commands, with no PNG round trip (12 MP through
 the executable costs about six seconds of encode and decode). It stays opt-in
 because libgmic 4.0.5 crashes inside `sharpen` when called as a library, and a
 crash in-process takes the editor down. Licensing is no obstacle: libgmic's
-CeCILL licences are GPL-compatible, and compositor-linux is GPL-3.0-or-later.
+CeCILL licences are GPL-compatible, and NekoPhoto is GPL-3.0-or-later.
 
 ## Appearance
 
@@ -153,7 +165,7 @@ dark desktop. `COMPOSITOR_THEME=dark|light|system` overrides for one run.
 ## Automation
 
 `--rpc` opens a JSON-RPC socket an agent or script can drive the editor
-through, `--headless` does so without a window, and `mcp/compositor_mcp.py`
+through, `--headless` does so without a window, and `mcp/nekophoto_mcp.py`
 bridges it to MCP. `docs/automation.md` has the protocol and method list.
 
 ## Releases
@@ -164,8 +176,8 @@ distributions back to 2022), runs the tests and the offscreen smoke test,
 stages `cmake --install` into an AppDir, bundles Qt (Wayland, xcb and
 offscreen platforms) and libpng with linuxdeploy (OpenCV is built in),
 copies the Debian copyright file of every bundled system library into
-`share/doc/compositor-linux/bundled/` next to the installed licence texts,
-runs the packaged app once, and publishes `compositor-linux-<version>-x86_64.AppImage`
+`share/doc/nekophoto/bundled/` next to the installed licence texts,
+runs the packaged app once, and publishes `NekoPhoto-<version>-x86_64.AppImage`
 (with a zsync file for AppImageUpdate), a tarball, and `SHA256SUMS` on a
 GitHub release with generated notes. To cut a release:
 
@@ -176,7 +188,7 @@ git tag v0.2.0 && git push origin v0.2.0
 
 "Run workflow" on the Actions tab does a dry run that only attaches the
 artifacts to the workflow run. The app reports the version it was built with
-(`compositor-linux --version`, Help > About); tagged builds get the tag's
+(`nekophoto --version`, Help > About); tagged builds get the tag's
 number, local builds the CMake project version.
 
 OpenCV is the vendored static build of `tools/build-opencv.sh` (4.14, `core`,
@@ -188,10 +200,10 @@ A second job in the same workflow builds the app on a macOS Apple Silicon
 runner with Homebrew's Qt and libpng and the same vendored OpenCV, runs the tests and the offscreen
 smoke test, bundles Qt with `macdeployqt`, signs the bundle ad hoc (unsigned
 arm64 binaries do not launch at all; ad hoc signed ones do after Gatekeeper's
-Open Anyway) and zips it as `compositor-linux-<version>-macos-arm64.zip`; a
+Open Anyway) and zips it as `NekoPhoto-<version>-macos-arm64.zip`; a
 publish job then attaches both platforms' files to the release. The bundle's
 Info.plist comes from `packaging/Info.plist.in` and its icon from
-`packaging/compositor-linux.icns`, built from the same SVG as the Linux icon.
+`packaging/nekophoto.icns`, built from the same SVG as the Linux icon.
 `.github/workflows/macos.yml` runs the same build on every push so the Mac
 side stays compiling; its zip is an artifact on the workflow run. Proper
 signing and notarisation are not set up: this is a way to try the editor on a
@@ -234,7 +246,7 @@ packaging/                      .desktop, icon, MIME type
 - Crash recovery (`src/app/Autosave.cpp`): in an ordinary launch, every tab
   with unsaved changes is saved as a project every few minutes (Preferences,
   `autosave/minutes`, default 3, 0 off) into
-  `~/.local/share/compositor-linux/compositor-linux/recovery/<instance>/`, on
+  `~/.local/share/nekophoto/nekophoto/recovery/<instance>/`, on
   a worker thread from a copy of the document. A save or closing the tab
   removes its copy; a clean quit removes the folder. Each instance holds
   `<instance>.lock` (a QLockFile, stale only when its process is gone), so the
@@ -269,7 +281,7 @@ packaging/                      .desktop, icon, MIME type
   pressure and tilt (a mouse is half pressure), take Size, Opacity, the colour
   and Erase from the options, paint layer pixels (a mask gets the round tip),
   and undo like any stroke. `.myb` files in
-  `~/.local/share/compositor-linux/compositor-linux/brushes` appear as My
+  `~/.local/share/nekophoto/nekophoto/brushes` appear as My
   Brushes. libmypaint's newer `stroke_to_2` reads uninitialised memory in 1.6,
   so the engine uses `stroke_to`: the 19 Dieterle presets that ask for pigment
   mixing paint with ordinary RGB mixing.
@@ -289,7 +301,7 @@ packaging/                      .desktop, icon, MIME type
   images (alpha, or darkness when
   opaque). Each brush is saved as an open folder (`brush.json`, `tip.png`,
   optional `grain.png`, `preview.png`) under
-  `~/.local/share/compositor-linux/compositor-linux/brushes/imported/<set>/`,
+  `~/.local/share/nekophoto/nekophoto/brushes/imported/<set>/`,
   and the import lists what it could not carry over (texture and dual brush,
   wet mixing, Procreate's built-in shapes and grains, Clip Studio's pressure
   curves and texture rotation, brightness and contrast). A file may decode at most 256 megapixels of tips.

@@ -1,4 +1,4 @@
-# What compositor-linux can do
+# What NekoPhoto can do
 
 **English** · [日本語](#日本語)
 
@@ -66,7 +66,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 
 ## 日本語
 
-[English](#what-compositor-linux-can-do) · **日本語**
+[English](#what-nekophoto-can-do) · **日本語**
 
 Mac 版と同じ機能を、Linux のキー表記で使えます。キーボードショートカットは
 [linux-port.md](linux-port.md#keyboard-shortcuts)(英語)に一覧があります。

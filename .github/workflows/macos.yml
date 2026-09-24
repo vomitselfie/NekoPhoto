@@ -42,7 +42,7 @@ jobs:
 
       - name: Smoke test offscreen
         run: |
-          app=build/src/app/compositor-linux.app/Contents/MacOS/compositor-linux
+          app=build/src/app/NekoPhoto.app/Contents/MacOS/NekoPhoto
           QT_QPA_PLATFORM=offscreen "$app" --version
           QT_QPA_PLATFORM=offscreen "$app" --demo --screenshot demo.png --save-as Demo.comp
           "$app" --headless --rpc-socket "$PWD/rpc.sock" --demo &
@@ -52,14 +52,14 @@ jobs:
 
       - name: Bundle Qt and sign ad hoc
         run: |
-          "$(brew --prefix qt)/bin/macdeployqt" build/src/app/compositor-linux.app -always-overwrite -verbose=1
-          codesign --force --deep --sign - build/src/app/compositor-linux.app
-          ditto -c -k --sequesterRsrc --keepParent build/src/app/compositor-linux.app "compositor-linux-dev-macos-arm64.zip"
-          shasum -a 256 compositor-linux-dev-macos-arm64.zip
+          "$(brew --prefix qt)/bin/macdeployqt" build/src/app/NekoPhoto.app -always-overwrite -verbose=1
+          codesign --force --deep --sign - build/src/app/NekoPhoto.app
+          ditto -c -k --sequesterRsrc --keepParent build/src/app/NekoPhoto.app "NekoPhoto-dev-macos-arm64.zip"
+          shasum -a 256 NekoPhoto-dev-macos-arm64.zip
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
         with:
-          name: compositor-linux-macos-arm64
+          name: NekoPhoto-macos-arm64
           path: |
-            compositor-linux-dev-macos-arm64.zip
+            NekoPhoto-dev-macos-arm64.zip
             demo.png

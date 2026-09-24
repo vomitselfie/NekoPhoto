@@ -49,16 +49,16 @@ cmake -S /src -B /tmp/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCOMPOSITOR_WAR
 cmake --build /tmp/build -j"$(nproc)"
 ctest --test-dir /tmp/build --output-on-failure
 if [ "$APP" = ON ]; then
-  cd /tmp && QT_QPA_PLATFORM=offscreen /tmp/build/src/app/compositor-linux --demo --screenshot demo.png --save-as Demo.comp
-  /tmp/build/src/app/compositor-linux --headless --rpc-socket /tmp/rpc.sock --demo & sleep 2; COMPOSITOR_BIN=/tmp/build/src/app/compositor-linux python3 /src/tools/rpc_smoke.py /tmp/rpc.sock; kill %1
+  cd /tmp && QT_QPA_PLATFORM=offscreen /tmp/build/src/app/nekophoto --demo --screenshot demo.png --save-as Demo.comp
+  /tmp/build/src/app/nekophoto --headless --rpc-socket /tmp/rpc.sock --demo & sleep 2; COMPOSITOR_BIN=/tmp/build/src/app/nekophoto python3 /src/tools/rpc_smoke.py /tmp/rpc.sock; kill %1
 fi
 if [ "$APPIMAGE" = 1 ] && [ -n "$QTPREFIX" ]; then
   (apt-get update -q && apt-get install -y -q file libwayland-cursor0 libwayland-egl1 libwayland-client0) >/dev/null   # present on the GitHub runner
   mkdir -p /tmp/pkg && cd /tmp/pkg
   export QMAKE="$QTPREFIX/bin/qmake" LD_LIBRARY_PATH="$QTPREFIX/lib" APPIMAGE_EXTRACT_AND_RUN=1
   /src/tools/package-appimage.sh /tmp/build 0.0.0-docker
-  QT_QPA_PLATFORM=offscreen ./compositor-linux-0.0.0-docker-x86_64.AppImage --version
-  QT_QPA_PLATFORM=offscreen ./compositor-linux-0.0.0-docker-x86_64.AppImage --demo --screenshot appimage-demo.png && ls -la appimage-demo.png
+  QT_QPA_PLATFORM=offscreen ./NekoPhoto-0.0.0-docker-x86_64.AppImage --version
+  QT_QPA_PLATFORM=offscreen ./NekoPhoto-0.0.0-docker-x86_64.AppImage --demo --screenshot appimage-demo.png && ls -la appimage-demo.png
   ls AppDir/usr/lib | grep -E "mypaint|sqlite|json" || true
 fi
 echo "CI-IN-DOCKER OK ($COMPILER, $(grep -oP "VERSION_ID=\"\K[^\"]+" /etc/os-release), app=$APP)"

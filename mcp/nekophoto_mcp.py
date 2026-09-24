@@ -2,18 +2,18 @@
 # requires-python = ">=3.10"
 # dependencies = ["mcp>=1.2,<2"]
 # ///
-"""MCP bridge for compositor-linux.
+"""MCP bridge for NekoPhoto.
 
 Exposes the editor's automation socket as MCP tools over stdio, so Claude Code
 (or any MCP client) can open documents, inspect and edit layers, and look at
-renders. Start it with `uv run mcp/compositor_mcp.py`; it connects to a running
-compositor-linux (started with --rpc, or with the automation preference on) or
+renders. Start it with `uv run mcp/nekophoto_mcp.py`; it connects to a running
+nekophoto (started with --rpc, or with the automation preference on) or
 launches one itself.
 
 Environment:
-  COMPOSITOR_RPC_SOCKET  socket path (default $XDG_RUNTIME_DIR/compositor-linux.sock, else Qt's private
+  COMPOSITOR_RPC_SOCKET  socket path (default $XDG_RUNTIME_DIR/nekophoto.sock, else Qt's private
                          /tmp/runtime-<user>/, never the shared /tmp itself)
-  COMPOSITOR_BIN         binary to launch when nothing is listening (default: compositor-linux on PATH,
+  COMPOSITOR_BIN         binary to launch when nothing is listening (default: nekophoto on PATH,
                          else the build next to this file)
   COMPOSITOR_MCP_LAUNCH  "0" to never launch the app; "headless" to launch it without a window
 """
@@ -34,8 +34,8 @@ from typing import Any, Optional
 
 from mcp.server.fastmcp import FastMCP, Image
 
-mcp = FastMCP("compositor-linux", instructions=(
-    "Drives the compositor-linux image editor (a layered, Photoshop-like editor). Coordinates are document pixels "
+mcp = FastMCP("nekophoto", instructions=(
+    "Drives the NekoPhoto image editor (a layered, Photoshop-like editor). Coordinates are document pixels "
     "with the origin at the top-left. Layers are addressed by id from layers_list. Every edit is one undo step "
     "(history_undo reverts it). Call render after edits to see the result; use region and max_size to keep images small."
 ))
@@ -46,7 +46,7 @@ def socket_path() -> str:
     if env:
         return env
     runtime = os.environ.get("XDG_RUNTIME_DIR") or private_runtime_dir()
-    return os.path.join(runtime, "compositor-linux.sock")
+    return os.path.join(runtime, "nekophoto.sock")
 
 
 def private_runtime_dir() -> str:
@@ -76,15 +76,15 @@ class Connection:
             pass
         mode = os.environ.get("COMPOSITOR_MCP_LAUNCH", "window")
         if mode == "0":
-            raise RuntimeError(f"compositor-linux is not listening at {path}; start it with --rpc (or turn on Preferences > Automation)")
-        binary = os.environ.get("COMPOSITOR_BIN") or shutil.which("compositor-linux")
+            raise RuntimeError(f"NekoPhoto is not listening at {path}; start it with --rpc (or turn on Preferences > Automation)")
+        binary = os.environ.get("COMPOSITOR_BIN") or shutil.which("nekophoto")
         if not binary:
             # The build next to this bridge (mcp/ sits in the source tree), never one relative to the current folder.
-            candidate = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build", "src", "app", "compositor-linux")
+            candidate = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build", "src", "app", "nekophoto")
             if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
                 binary = candidate
         if not binary:
-            raise RuntimeError(f"nothing listening at {path} and no compositor-linux binary found; set COMPOSITOR_BIN")
+            raise RuntimeError(f"nothing listening at {path} and no nekophoto binary found; set COMPOSITOR_BIN")
         args = [binary, "--rpc", "--rpc-socket", path]
         if mode == "headless" or not (os.environ.get("WAYLAND_DISPLAY") or os.environ.get("DISPLAY")):
             args.append("--headless")

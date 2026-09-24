@@ -131,19 +131,19 @@ QMimeData* LayerTree::mimeData(const QList<QTreeWidgetItem*>& items) const {
     QMimeData* mime = QTreeWidget::mimeData(items);
     if (!mime) mime = new QMimeData;
     QTreeWidgetItem* lead = currentItem() && items.contains(currentItem()) ? currentItem() : (items.isEmpty() ? nullptr : items.first());
-    if (lead) mime->setData("application/x-compositor-linux-layer", (QString::number(quintptr(session_)) + ":" + lead->data(0, Qt::UserRole).toString()).toUtf8());
+    if (lead) mime->setData("application/x-nekophoto-layer", (QString::number(quintptr(session_)) + ":" + lead->data(0, Qt::UserRole).toString()).toUtf8());
     return mime;
 }
 
 void LayerTree::dragEnterEvent(QDragEnterEvent* event) {
     if (event->mimeData()->hasUrls()) { event->ignore(); return; }   // files dropped here are the window's to open
-    if (event->mimeData()->hasFormat("application/x-compositor-linux-mask")) { event->acceptProposedAction(); return; }
+    if (event->mimeData()->hasFormat("application/x-nekophoto-mask")) { event->acceptProposedAction(); return; }
     QTreeWidget::dragEnterEvent(event);
 }
 
 void LayerTree::dragMoveEvent(QDragMoveEvent* event) {
     if (event->mimeData()->hasUrls()) { event->ignore(); return; }
-    if (event->mimeData()->hasFormat("application/x-compositor-linux-mask")) { event->acceptProposedAction(); return; }
+    if (event->mimeData()->hasFormat("application/x-nekophoto-mask")) { event->acceptProposedAction(); return; }
     QTreeWidget::dragMoveEvent(event);
 }
 
@@ -164,10 +164,10 @@ void LayerTree::mousePressEvent(QMouseEvent* event) {
 
 void LayerTree::dropEvent(QDropEvent* event) {
     QTreeWidgetItem* target = itemAt(event->position().toPoint());
-    if (event->mimeData()->hasFormat("application/x-compositor-linux-mask")) {
+    if (event->mimeData()->hasFormat("application/x-nekophoto-mask")) {
         event->ignore();
         if (!target) return;
-        Uuid source = QString::fromUtf8(event->mimeData()->data("application/x-compositor-linux-mask")).toStdString();
+        Uuid source = QString::fromUtf8(event->mimeData()->data("application/x-nekophoto-mask")).toStdString();
         session_->copyMask(source, target->data(0, Qt::UserRole).toString().toStdString());
         return;
     }
@@ -515,7 +515,7 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event) {
                 // Alt-drag a mask onto another layer to copy it there.
                 auto* drag = new QDrag(w);
                 auto* mime = new QMimeData;
-                mime->setData("application/x-compositor-linux-mask", w->property("layerId").toString().toUtf8());
+                mime->setData("application/x-nekophoto-mask", w->property("layerId").toString().toUtf8());
                 drag->setMimeData(mime);
                 if (auto* label = qobject_cast<QLabel*>(w)) drag->setPixmap(label->pixmap());
                 drag->exec(Qt::CopyAction);

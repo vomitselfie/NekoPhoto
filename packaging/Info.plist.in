@@ -29,7 +29,7 @@
     <key>NSSupportsAutomaticGraphicsSwitching</key>
     <true/>
     <key>NSHumanReadableCopyright</key>
-    <string>GPL-3.0-or-later. A port of Compositor by Wonder Assembly LLC (MIT).</string>
+    <string>GPL-3.0-or-later. Based on Compositor by Wonder Assembly LLC (MIT).</string>
     <key>CFBundleDocumentTypes</key>
     <array>
         <dict>

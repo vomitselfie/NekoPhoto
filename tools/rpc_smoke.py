@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Smoke test for the automation socket: drives a running compositor-linux
+"""Smoke test for the automation socket: drives a running NekoPhoto
 through a few calls and checks the answers. CI starts the app headless with
 --demo first.
 
-    compositor-linux --headless --rpc-socket /tmp/c.sock --demo &
+    nekophoto --headless --rpc-socket /tmp/c.sock --demo &
     python3 tools/rpc_smoke.py /tmp/c.sock
 """
 import base64
@@ -124,7 +124,7 @@ def main():
         raise SystemExit("usage: rpc_smoke.py <socket path>")
     rpc = wait_for(path)
     info = rpc.call("app.info")
-    assert info["name"] == "compositor-linux", info
+    assert info["name"] == "nekophoto", info
     print("version", info["version"], "platform", info["platform"])
 
     doc = rpc.call("document.info")
@@ -273,11 +273,11 @@ def main():
 
     # The command-line client and batch mode.
     import subprocess
-    binary = os.environ.get("COMPOSITOR_BIN", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "build", "src", "app", "compositor-linux"))
+    binary = os.environ.get("COMPOSITOR_BIN", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "build", "src", "app", "nekophoto"))
     if os.path.exists(binary):
         env = dict(os.environ); env.pop("QT_QPA_PLATFORM", None)
         out = subprocess.run([binary, "--rpc-socket", path, "--call", "app.info"], capture_output=True, text=True, env=env, timeout=60)
-        assert out.returncode == 0 and '"name": "compositor-linux"' in out.stdout, (out.returncode, out.stdout, out.stderr)
+        assert out.returncode == 0 and '"name": "nekophoto"' in out.stdout, (out.returncode, out.stdout, out.stderr)
         bad = subprocess.run([binary, "--rpc-socket", path, "--call", "layers.get", "--params", '{"id": "nope"}'], capture_output=True, text=True, env=env, timeout=60)
         assert bad.returncode == 1 and "no layer" in bad.stderr, (bad.returncode, bad.stderr)
         script = '{"method":"document.new","params":{"width":64,"height":48}}\n{"method":"shape.draw","params":{"x":4,"y":4,"width":20,"height":20,"color":"#ff0000"}}\n{"method":"layers.list"}\n'

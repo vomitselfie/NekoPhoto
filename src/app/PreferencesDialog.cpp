@@ -132,7 +132,7 @@ PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent) {
     av->addWidget(rpc);
     auto* rpcInfo = new QLabel(tr("Lets an MCP bridge or a script drive the editor over a local socket (%1). "
                                   "Only programs running as you can connect. Takes effect at the next launch; "
-                                  "compositor-linux --rpc turns it on for one run.").arg(AutomationServer::defaultSocketPath()));
+                                  "nekophoto --rpc turns it on for one run.").arg(AutomationServer::defaultSocketPath()));
     rpcInfo->setWordWrap(true);
     rpcInfo->setStyleSheet(hintStyle());
     av->addWidget(rpcInfo);

@@ -1,15 +1,15 @@
 # Licences and third-party notices
 
-compositor-linux is free software: you can redistribute it and/or modify it
+NekoPhoto is free software: you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the Free
 Software Foundation, either version 3 of the License, or (at your option) any
 later version. It is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
 FITNESS FOR A PARTICULAR PURPOSE. The full text is in [LICENSE](LICENSE).
 
-Copyright (C) 2026 the compositor-linux contributors.
+Copyright (C) 2026 the NekoPhoto contributors.
 
-compositor-linux is a port of [Compositor](https://github.com/robbietilton/Compositor)
+NekoPhoto (formerly compositor-linux) began as a port of [Compositor](https://github.com/robbietilton/Compositor)
 for macOS, copyright (c) 2026 Wonder Assembly LLC and released under the MIT
 licence. The code taken from it, the macOS sources under `Compositor/`
 (including the C pixel routines in `Compositor/Rendering` that the Linux build
@@ -19,7 +19,7 @@ may still be used on their own under the MIT licence; the program as a whole is
 distributed under the GPL.
 
 The texts named below are in [LICENSES/](LICENSES). Installed builds carry
-this file, `LICENSE` and `LICENSES/` in `share/doc/compositor-linux/` (inside
+this file, `LICENSE` and `LICENSES/` in `share/doc/nekophoto/` (inside
 the AppImage and the tarball) or in `Contents/Resources/licenses/` (macOS).
 
 ## Compiled into the program
@@ -47,7 +47,7 @@ the AppImage and the tarball) or in `Contents/Resources/licenses/` (macOS).
 
 The AppImage also carries system libraries that Qt depends on (fonts, text
 shaping, input, graphics). Their copyright files are collected at build time
-into `share/doc/compositor-linux/bundled/` inside the AppImage and the tarball.
+into `share/doc/nekophoto/bundled/` inside the AppImage and the tarball.
 
 The source for the GPL program is this repository at the tag of each release.
 Qt, libpng, zlib, libmypaint and json-c are unmodified upstream releases; OpenCV is built from the
