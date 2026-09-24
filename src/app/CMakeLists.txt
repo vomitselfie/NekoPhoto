@@ -92,8 +92,8 @@ qt_add_executable(nekophoto
     MainWindow.cpp
     Autosave.h
     Autosave.cpp
-    BrushBench.h
-    BrushBench.cpp
+    Bench.h
+    Bench.cpp
 )
 
 target_compile_definitions(nekophoto PRIVATE COMPOSITOR_VERSION="${COMPOSITOR_VERSION_STRING}")

@@ -191,6 +191,11 @@ bool validateHierarchy(const std::vector<Layer>& layers, std::string* error = nu
 /// Clipping links: sources exist, are not groups or adjustments, no self links or cycles, chains under 256.
 bool validateClipping(const std::vector<Layer>& layers, std::string* error = nullptr);
 
+/// The part of the canvas that may look different between two versions of a document: the bounds of every
+/// layer added, removed or changed. The whole canvas when something reaches further (a folder, an adjustment
+/// layer, the stacking order, the canvas size); an empty rectangle when nothing visible changed.
+Rect changedArea(const Document& before, const Document& after);
+
 /// The name "Layer N" / "Folder N" not yet used.
 std::string nextLayerName(const std::vector<Layer>& layers, const std::string& prefix);
 

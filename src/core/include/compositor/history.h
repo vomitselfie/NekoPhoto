@@ -41,11 +41,17 @@ public:
     std::optional<Snapshot> undo();
     std::optional<Snapshot> redo();
 
+    /// While an edit is open: the part of the canvas it changes, when the edit knows it exactly (a brush
+    /// stroke does). Undoing or redoing the step then need only render that part again.
+    void noteRegion(const Rect& region);
+    /// The region of the step the last undo or redo moved over; empty when that step did not note one.
+    const Rect& stepRegion() const { return stepRegion_; }
+
     /// Bytes retained only by history, excluding images in the live document.
     size_t retainedBytes(const std::optional<Document>& current) const;
 
 private:
-    struct Entry { std::string name; Snapshot before, after; };
+    struct Entry { std::string name; Snapshot before, after; Rect region; };
     void trim(const std::optional<Document>& current);
     uint64_t nextRevision() { return ++counter_; }
 
@@ -55,6 +61,7 @@ private:
     uint64_t savedRevision_ = 1;
     std::optional<Snapshot> pending_;
     std::string pendingName_ = "Edit";
+    Rect pendingRegion_, stepRegion_;
     int depth_ = 0;
     int entryLimit_;
     size_t retainedByteLimit_;

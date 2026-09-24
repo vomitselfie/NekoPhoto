@@ -1,4 +1,4 @@
-#include "BrushBench.h"
+#include "Bench.h"
 #include "BrushLibrary.h"
 #include "CanvasWidget.h"
 #include "EditorSession.h"
@@ -7,6 +7,7 @@
 #include <QApplication>
 #include <QElapsedTimer>
 #include <QMouseEvent>
+#include <QWheelEvent>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -101,6 +102,84 @@ int runBrushBench(MainWindow& window, const BrushBenchOptions& o) {
     }
     std::printf("summary: press median %.2f ms, move median %.2f ms / p95 %.2f ms, release median %.2f ms\n",
                 percentile(pressTotals, 0.5), percentile(moveTotals, 0.5), percentile(moveTotals, 0.95), percentile(releaseTotals, 0.5));
+    std::fflush(stdout);
+    return 0;
+}
+
+int runViewBench(MainWindow& window, const ViewBenchOptions& o) {
+    EditorSession* session = window.session();
+    CanvasWidget* canvas = window.canvasAt(window.currentTabIndex());
+    const int w = o.document.width(), h = o.document.height();
+    // A photo-like base, then layers that each cover most of the canvas with soft, partly transparent paint,
+    // one of them multiplied: every pixel of the view composites every layer.
+    auto base = std::make_shared<compositor::Image>(w, h);
+    for (int y = 0; y < h; y++) {
+        uint8_t* row = base->row(y);
+        for (int x = 0; x < w; x++, row += 4) { row[0] = uint8_t(x * 255 / w); row[1] = uint8_t(y * 255 / h); row[2] = uint8_t((x ^ y) & 0xFF); row[3] = 255; }
+    }
+    session->insertImage(base, "Base");
+    for (int l = 1; l < o.layers; l++) {
+        auto layer = std::make_shared<compositor::Image>(w, h);
+        const double cx = w * (0.3 + 0.1 * l), cy = h * (0.6 - 0.08 * l), r = std::min(w, h) * 0.45;
+        for (int y = 0; y < h; y++) {
+            uint8_t* row = layer->row(y);
+            for (int x = 0; x < w; x++, row += 4) {
+                const double d = std::hypot(x - cx, y - cy) / r;
+                const unsigned a = d >= 1 ? 0 : unsigned(200 * (1 - d));
+                row[0] = uint8_t((a * (40 * l)) / 255); row[1] = uint8_t((a * (255 - 40 * l)) / 255); row[2] = uint8_t(a / 2); row[3] = uint8_t(a);
+            }
+        }
+        session->insertImage(layer, QString("Paint %1").arg(l));
+    }
+    session->fitView();
+    QApplication::processEvents();
+    QApplication::processEvents();
+
+    auto pump = [] { QApplication::processEvents(QEventLoop::AllEvents); };
+    auto timed = [&](auto&& action) {
+        QElapsedTimer t;
+        t.start();
+        action();
+        pump();
+        return double(t.nsecsElapsed()) / 1e6;
+    };
+    const QPointF center(canvas->width() / 2.0, canvas->height() / 2.0);
+    auto wheel = [&](QPoint pixelDelta, QPoint angleDelta, Qt::KeyboardModifiers modifiers) {
+        QWheelEvent event(center, canvas->mapToGlobal(center), pixelDelta, angleDelta, Qt::NoButton, modifiers, Qt::NoScrollPhase, false);
+        QApplication::sendEvent(canvas, &event);
+    };
+    auto report = [](const char* what, std::vector<double> v) {
+        std::printf("%-26s median %7.2f ms   p95 %7.2f ms   max %7.2f ms   (%zu)\n", what, percentile(v, 0.5), percentile(v, 0.95),
+                    v.empty() ? 0.0 : *std::max_element(v.begin(), v.end()), v.size());
+    };
+    std::printf("view bench: %dx%d document, %d layers, canvas %dx%d at dpr %.2f\n", w, h, o.layers, canvas->width(), canvas->height(), canvas->devicePixelRatioF());
+
+    std::vector<double> full;
+    for (int i = 0; i < 5; i++) full.push_back(timed([&] { emit session->documentChanged({}); }));
+    report("full view render (fit)", full);
+    std::vector<double> zoomIn, zoomOut, pan;
+    for (int i = 0; i < 6; i++) zoomIn.push_back(timed([&] { wheel({}, {0, 120}, Qt::ControlModifier); }));
+    for (int i = 0; i < 40; i++) pan.push_back(timed([&] { wheel({0, -24}, {0, -48}, Qt::NoModifier); }));
+    for (int i = 0; i < 6; i++) zoomOut.push_back(timed([&] { wheel({}, {0, -120}, Qt::ControlModifier); }));
+    report("zoom in step", zoomIn);
+    report("pan step (zoomed in)", pan);
+    report("zoom out step", zoomOut);
+
+    // A stroke on the top layer, then undo and redo of it.
+    session->selectTool(Tool::Brush);
+    session->brushPreset = QString();
+    session->brushSettings.diameter = 200;
+    std::vector<double> undo, redo;
+    for (int i = 0; i < 4; i++) {
+        session->beginBrush(QPointF(w * 0.2, h * 0.2 + i * 50), false);
+        for (int k = 1; k <= 40; k++) session->continueBrush(QPointF(w * 0.2 + k * w * 0.015, h * 0.2 + i * 50 + std::sin(k * 0.3) * 200));
+        session->endBrush();
+        pump();
+        undo.push_back(timed([&] { session->undo(); }));
+        redo.push_back(timed([&] { session->redo(); }));
+    }
+    report("undo a stroke", undo);
+    report("redo a stroke", redo);
     std::fflush(stdout);
     return 0;
 }

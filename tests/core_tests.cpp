@@ -183,6 +183,53 @@ TEST_CASE(history_records_only_real_changes_and_shares_images) {
     CHECK_EQ(history.undoName(), std::string("Outer"));
 }
 
+TEST_CASE(history_keeps_the_region_an_edit_noted) {
+    DocumentHistory history;
+    Document doc(100, 100);
+    doc.layers.push_back(imageLayer("A", solid(100, 100, 255, 0, 0), {0, 0}));
+    history.begin("Paint", doc, doc.layers[0].id);
+    history.noteRegion(Rect(10, 10, 5, 5));
+    history.noteRegion(Rect(30, 40, 10, 10));
+    doc.layers[0].opacity = 0.5;
+    history.end(doc, doc.layers[0].id);
+    history.begin("Hide", doc, doc.layers[0].id);
+    doc.layers[0].visible = false;
+    history.end(doc, doc.layers[0].id);
+    REQUIRE(history.undo().has_value());
+    CHECK(history.stepRegion().isEmpty()); // nothing noted: the caller works it out
+    REQUIRE(history.undo().has_value());
+    CHECK(history.stepRegion() == Rect(10, 10, 30, 40));
+    REQUIRE(history.redo().has_value());
+    CHECK(history.stepRegion() == Rect(10, 10, 30, 40));
+}
+
+TEST_CASE(changed_area_covers_only_what_changed) {
+    Document before(100, 100);
+    before.layers.push_back(imageLayer("base", solid(100, 100, 0, 0, 255), {0, 0}));
+    before.layers.push_back(imageLayer("spot", solid(10, 10, 255, 0, 0), {20, 30}));
+    Document after = before;
+    CHECK(changedArea(before, after).isEmpty());
+    after.layers[1].opacity = 0.5;
+    CHECK(changedArea(before, after) == Rect(18, 28, 14, 14));
+    // Moving a layer covers where it was and where it went.
+    after = before;
+    after.layers[1].transform.origin = {60, 30};
+    CHECK(changedArea(before, after) == Rect(18, 28, 54, 14));
+    // A change of stacking order, a folder or a new canvas size reaches the whole canvas.
+    after = before;
+    std::swap(after.layers[0], after.layers[1]);
+    CHECK(changedArea(before, after) == before.rect());
+    after = before;
+    Layer group("Folder", before.size());
+    group.isGroup = true;
+    after.layers.push_back(group);
+    CHECK(changedArea(before, after) == before.rect());
+    // A new layer covers its own bounds.
+    after = before;
+    after.layers.push_back(imageLayer("new", solid(4, 4, 0, 255, 0), {90, 90}));
+    CHECK(changedArea(before, after) == Rect(88, 88, 8, 8));
+}
+
 TEST_CASE(render_normal_layer_at_offset_and_opacity) {
     Document doc(8, 8);
     doc.layers.push_back(imageLayer("red", solid(4, 4, 255, 0, 0), {2, 2}));

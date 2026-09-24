@@ -1,5 +1,5 @@
 #include "MainWindow.h"
-#include "BrushBench.h"
+#include "Bench.h"
 #include "BrushLibrary.h"
 #include "ImageConvert.h"
 #include "ModelStore.h"
@@ -222,6 +222,7 @@ int main(int argc, char** argv) {
     QCommandLineOption screenshot("screenshot", "Grab the window to <file> after opening, then quit.", "file");
     QCommandLineOption benchBrush("bench-brush", "Developer benchmark: paint strokes with brush preset <id> (or \"round\") through the canvas, print press, move and release latency, then quit.", "id");
     QCommandLineOption benchSize("bench-size", "Document size for --bench-brush, WxH (default 2000x2000).", "size");
+    QCommandLineOption benchView("bench-view", "Developer benchmark: zoom, pan and undo on a large multi-layer document (--bench-size, default 4096x4096), print the times, then quit.");
     QCommandLineOption benchOpaque("bench-opaque", "With --bench-brush, paint on the opaque image layer rather than a blank layer.");
     QCommandLineOption saveAs("save-as", "Save the document as the .comp package <path> before quitting (with --screenshot).", "path");
     QCommandLineOption prefs("preferences", "Open the Preferences dialog too (with --screenshot, grab it instead of the window).");
@@ -231,6 +232,7 @@ int main(int argc, char** argv) {
     parser.addOption(benchBrush);
     parser.addOption(benchSize);
     parser.addOption(benchOpaque);
+    parser.addOption(benchView);
     parser.addOption(saveAs);
     parser.addOption(prefs);
     QCommandLineOption toolOption("tool", "Select tool <name> after opening (move, marquee, lasso, wand, crop, brush, healing, clone, smudge, gradient, shape, eyedropper, hand, zoom).", "name");
@@ -303,7 +305,7 @@ int main(int argc, char** argv) {
     // quits; anything that asks for a process of its own (screenshots, automation, --new-window) keeps one.
     QStringList handoff;
     for (const QString& path : parser.positionalArguments()) handoff << QDir::current().absoluteFilePath(path);
-    const bool ownProcess = parser.isSet(newWindow) || parser.isSet(benchBrush) || parser.isSet(screenshot) || parser.isSet(headlessOption) || parser.isSet(batchOption) || parser.isSet(dialogOption) || parser.isSet(saveAs) || parser.isSet(prefs) || parser.isSet(demo) || parser.isSet(toolOption);
+    const bool ownProcess = parser.isSet(newWindow) || parser.isSet(benchBrush) || parser.isSet(benchView) || parser.isSet(screenshot) || parser.isSet(headlessOption) || parser.isSet(batchOption) || parser.isSet(dialogOption) || parser.isSet(saveAs) || parser.isSet(prefs) || parser.isSet(demo) || parser.isSet(toolOption);
     const QString rpcRequested = parser.isSet(rpc) || parser.isSet(rpcSocket) ? (parser.value(rpcSocket).isEmpty() ? app::AutomationServer::defaultSocketPath() : parser.value(rpcSocket)) : QString();
     if (!ownProcess && app::SingleInstance::handOff(handoff, rpcRequested)) return 0;
     app::MainWindow window;
@@ -402,6 +404,12 @@ int main(int argc, char** argv) {
     }
     app::PreferencesDialog* preferences = nullptr;
     if (parser.isSet(prefs)) { preferences = new app::PreferencesDialog(&window); preferences->show(); }
+    if (parser.isSet(benchView)) {
+        app::ViewBenchOptions options;
+        const QStringList size = parser.value(benchSize).split('x');
+        if (size.size() == 2 && size[0].toInt() > 0 && size[1].toInt() > 0) options.document = QSize(size[0].toInt(), size[1].toInt());
+        return app::runViewBench(window, options);
+    }
     if (parser.isSet(benchBrush)) {
         app::BrushBenchOptions options;
         options.preset = parser.value(benchBrush);

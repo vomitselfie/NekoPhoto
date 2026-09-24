@@ -254,4 +254,35 @@ std::string nextLayerName(const std::vector<Layer>& layers, const std::string& p
     }
 }
 
+Rect changedArea(const Document& before, const Document& after) {
+    const Rect whole = after.rect();
+    if (before.width != after.width || before.height != after.height) return whole;
+    std::map<Uuid, const Layer*> was, now;
+    for (const Layer& l : before.layers) was[l.id] = &l;
+    for (const Layer& l : after.layers) now[l.id] = &l;
+    // Layers in both, in stacking order: a change of order changes how they cover each other anywhere.
+    std::vector<Uuid> orderBefore, orderAfter;
+    for (const Layer& l : before.layers) if (now.count(l.id)) orderBefore.push_back(l.id);
+    for (const Layer& l : after.layers) if (was.count(l.id)) orderAfter.push_back(l.id);
+    if (orderBefore != orderAfter) return whole;
+    Rect area;
+    auto add = [&](const Layer& l) { const Rect b = l.transform.bounds(); area = area.isEmpty() ? b : area.unionWith(b); };
+    // A folder or an adjustment layer changes everything under or inside it: the whole canvas.
+    auto reaches = [](const Layer& l) { return l.isGroup || l.adjustment.has_value(); };
+    for (const auto& [id, layer] : was) {
+        auto other = now.find(id);
+        if (other == now.end()) { if (reaches(*layer)) return whole; add(*layer); continue; }
+        if (*layer == *other->second) continue;
+        if (reaches(*layer) || reaches(*other->second)) return whole;
+        add(*layer);
+        add(*other->second);
+    }
+    for (const auto& [id, layer] : now) {
+        if (was.count(id)) continue;
+        if (reaches(*layer)) return whole;
+        add(*layer);
+    }
+    return area.isEmpty() ? Rect() : area.insetBy(-2, -2).intersection(whole);
+}
+
 } // namespace compositor

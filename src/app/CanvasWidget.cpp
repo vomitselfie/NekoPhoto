@@ -1,4 +1,6 @@
 #include "CanvasWidget.h"
+#include <QRegion>
+#include <cstring>
 #include "ImageConvert.h"
 #include "QtGeometry.h"
 #include "compositor/render.h"
@@ -68,7 +70,8 @@ CanvasWidget::CanvasWidget(EditorSession* session, QWidget* parent) : QWidget(pa
     connect(session_, &EditorSession::layersChanged, this, [this] { if (boxShown() || boxPainted_) update(); });
     connect(session_, &EditorSession::selectionChanged, this, [this] { refreshSelectionOutline(); update(); });
     connect(session_, &EditorSession::scribblesChanged, this, [this] { update(); });
-    connect(session_, &EditorSession::viewportChanged, this, [this] { cacheValid_ = false; update(); });
+    // A viewport change leaves the cache valid: ensureCache compares zoom and origin, and a pan scrolls it.
+    connect(session_, &EditorSession::viewportChanged, this, [this] { update(); });
     connect(session_, &EditorSession::toolChanged, this, [this] {
         if (session_->tool() != Tool::Crop) crop_.reset();
         if (session_->tool() != Tool::Lasso) { lassoPoints_.clear(); lassoCursor_.reset(); }
@@ -132,11 +135,40 @@ void CanvasWidget::ensureCache() {
     QRectF widgetDevice(0, 0, width() * dpr, height() * dpr);
     QRect visible = docDevice.intersected(widgetDevice).toAlignedRect();
     if (cacheValid_ && cacheDeviceRect_ == visible && cacheZoom_ == zoom && cacheDocumentOrigin_ == origin) return;
+    if (scrollCache(visible, origin, zoom)) return;
     cacheDeviceRect_ = visible;
     cacheZoom_ = zoom;
     cacheDocumentOrigin_ = origin;
     renderInto(cache_, visible, origin, zoom);
     cacheValid_ = true;
+}
+
+bool CanvasWidget::scrollCache(QRect visible, QPointF origin, double zoom) {
+    // A pan at the same zoom by whole device pixels: what stays in view moves, and only the strips that came
+    // into view are rendered. Anything else (a zoom, a fractional shift) renders the view afresh.
+    if (!cacheValid_ || cache_.isNull() || zoom != cacheZoom_ || visible.isEmpty()) return false;
+    const QPointF shift = origin - cacheDocumentOrigin_;
+    const double dx = std::round(shift.x()), dy = std::round(shift.y());
+    if (std::fabs(shift.x() - dx) > 1e-6 || std::fabs(shift.y() - dy) > 1e-6) return false;
+    const QRect moved = cacheDeviceRect_.translated(int(dx), int(dy));   // where the cached pixels now sit
+    const QRect kept = moved.intersected(visible);
+    if (kept.isEmpty() || qint64(kept.width()) * kept.height() * 4 < qint64(visible.width()) * visible.height()) return false;
+    QImage next(visible.size(), QImage::Format_RGBA8888_Premultiplied);
+    next.fill(Qt::transparent);
+    const QPoint from = kept.topLeft() - moved.topLeft(), to = kept.topLeft() - visible.topLeft();
+    for (int y = 0; y < kept.height(); y++)
+        std::memcpy(next.scanLine(to.y() + y) + size_t(to.x()) * 4, cache_.constScanLine(from.y() + y) + size_t(from.x()) * 4, size_t(kept.width()) * 4);
+    for (const QRect& strip : QRegion(visible).subtracted(QRegion(kept))) {
+        QImage piece;
+        renderInto(piece, strip, origin, zoom);
+        const QPoint at = strip.topLeft() - visible.topLeft();
+        for (int y = 0; y < piece.height(); y++)
+            std::memcpy(next.scanLine(at.y() + y) + size_t(at.x()) * 4, piece.constScanLine(y), size_t(piece.width()) * 4);
+    }
+    cache_ = next;
+    cacheDeviceRect_ = visible;
+    cacheDocumentOrigin_ = origin;
+    return true;
 }
 
 void CanvasWidget::invalidate(QRectF documentRegion) {

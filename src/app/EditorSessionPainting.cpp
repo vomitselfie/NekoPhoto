@@ -145,6 +145,8 @@ void EditorSession::commitRasterEdit(BrushStroke& stroke, const Uuid& layerId, b
     const bool asShown = previewExact && onPixelGrid;
     BrushStroke::Commit commit = stroke.commit();
     beginEdit(name);
+    // What the stroke painted is all that differs between before and after: undo renders only that.
+    if (!region.isEmpty()) history_.noteRegion(Rect(region.x(), region.y(), region.width(), region.height()));
     if (mask) {
         if (commit.mask && layer->mask) { layer->mask->asset = *commit.mask; layer->mask->placement = commit.maskPlacement; }
     } else if (commit.asset) {

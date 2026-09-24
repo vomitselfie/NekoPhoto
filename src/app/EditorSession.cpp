@@ -227,12 +227,22 @@ void EditorSession::redo() {
 void EditorSession::restore(const DocumentHistory::Snapshot& snapshot) {
     bool changedCanvas = !document_ || !snapshot.document || document_->id != snapshot.document->id || document_->width != snapshot.document->width || document_->height != snapshot.document->height;
     bool keepMask = isMaskSelected_ && activeLayerId_ == snapshot.activeLayerId;
+    // Only what the step changed is rendered again: undoing a brush stroke redraws the stroke's layer, not the view.
+    const Rect changed = changedCanvas ? Rect() : !history_.stepRegion().isEmpty() ? history_.stepRegion() : changedArea(*document_, *snapshot.document);
     document_ = snapshot.document;
     setActiveLayer(snapshot.activeLayerId);
     const Layer* active = activeLayer();
     isMaskSelected_ = keepMask && active && active->mask;
     if (changedCanvas && document_) { viewport.fit({double(document_->width), double(document_->height)}); emit viewportChanged(); }
-    notifyDocument();
+    if (changedCanvas) notifyDocument();
+    else if (changed.isEmpty()) {
+        // Nothing visible changed (a rename, a selection, a lock): the canvas keeps what it shows.
+        documentRevision_++;
+        emit documentChangedAsShown();
+        emit layersChanged();
+        emit historyChanged();
+        emit titleChanged();
+    } else notifyDocument(toQRect(changed));
     emit selectionChanged();
 }
 

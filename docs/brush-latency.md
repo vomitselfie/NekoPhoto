@@ -55,3 +55,22 @@ What changed, largest effect first:
   canvas's.
 - **libmypaint warmed.** Its one-time setup (about 9 ms) runs shortly after the window appears
   (`warmBrushEngines`) instead of in the first press.
+
+## Viewing: `--bench-view`
+
+`nekophoto --bench-view` builds a document (`--bench-size`, default 4096 × 4096) with a photo-like base and
+four soft paint layers, then times a full view render, six zoom steps in, forty pan steps, six zoom steps
+out, and the undo and redo of a brush stroke. At a 2.25 display scale on the same laptop:
+
+| 4096 × 4096, 5 layers | Before | After |
+|---|---:|---:|
+| Pan step | 54 ms | 11 ms |
+| Undo of a stroke | 31 ms | 12.5 ms |
+| Redo of a stroke | 31 ms | 12.8 ms |
+| Full render, zoom step | 40–59 ms | unchanged |
+
+- **Panning scrolls the cached view.** A pan by whole device pixels (pans are now rounded to them) moves
+  what the cache already holds and renders only the strip that came into view.
+- **Undo and redo render only what they change.** A raster edit notes its area in its history entry
+  (`DocumentHistory::noteRegion`); other steps compare the two documents (`changedArea`), which falls back
+  to the whole canvas for a new canvas size, a new stacking order, a folder or an adjustment layer.

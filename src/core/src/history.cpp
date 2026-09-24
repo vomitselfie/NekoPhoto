@@ -19,6 +19,7 @@ void DocumentHistory::begin(const std::string& name, const std::optional<Documen
     if (depth_ == 0) {
         pending_ = Snapshot{document, selection, revision_};
         pendingName_ = name;
+        pendingRegion_ = {};
     }
     depth_++;
 }
@@ -32,9 +33,15 @@ void DocumentHistory::end(const std::optional<Document>& document, const std::op
     // Selecting, navigating, and no-op edits must preserve redo history.
     if (before.document == document) return;
     revision_ = nextRevision();
-    past_.push_back({pendingName_, std::move(before), Snapshot{document, selection, revision_}});
+    past_.push_back({pendingName_, std::move(before), Snapshot{document, selection, revision_}, pendingRegion_});
+    pendingRegion_ = {};
     future_.clear();
     trim(document);
+}
+
+void DocumentHistory::noteRegion(const Rect& region) {
+    if (depth_ <= 0 || region.isEmpty()) return;
+    pendingRegion_ = pendingRegion_.isEmpty() ? region : pendingRegion_.unionWith(region);
 }
 
 std::optional<DocumentHistory::Snapshot> DocumentHistory::undo() {
@@ -43,6 +50,7 @@ std::optional<DocumentHistory::Snapshot> DocumentHistory::undo() {
     past_.pop_back();
     Snapshot result = entry.before;
     revision_ = entry.before.revision;
+    stepRegion_ = entry.region;
     future_.push_back(std::move(entry));
     trim(result.document);
     return result;
@@ -54,6 +62,7 @@ std::optional<DocumentHistory::Snapshot> DocumentHistory::redo() {
     future_.pop_back();
     Snapshot result = entry.after;
     revision_ = entry.after.revision;
+    stepRegion_ = entry.region;
     past_.push_back(std::move(entry));
     trim(result.document);
     return result;
