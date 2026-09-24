@@ -100,6 +100,8 @@ qt_add_executable(nekophoto
     Dialogs.cpp
     MainWindow.h
     MainWindow.cpp
+    MainWindowFiles.cpp
+    MainWindowMenus.cpp
     Autosave.h
     Autosave.cpp
     Bench.h

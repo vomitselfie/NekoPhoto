@@ -1,18 +1,9 @@
 // Canvas input: hit testing and cursors, the wheel and keyboard.
 #include "CanvasWidget.h"
-#include <QRegion>
 #include <cstring>
-#include "ImageConvert.h"
 #include "QtGeometry.h"
-#include "compositor/render.h"
-#include "compositor/selection.h"
-#include <QApplication>
 #include <QKeyEvent>
-#include <QMouseEvent>
 #include <QNativeGestureEvent>
-#include <QPainter>
-#include <QPainterPath>
-#include <QTabletEvent>
 #include <QWheelEvent>
 #include <algorithm>
 #include <cmath>
