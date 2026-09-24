@@ -47,7 +47,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 ## Remove Background
 - Off until you turn it on in Edit > Preferences, which downloads a model once
 - Runs on your machine; nothing is uploaded
-- Advanced options: refine the edges, solve hair and fur, remove speckles, clean the edge colours, and a detail pass at full resolution for large photos
+- Advanced options: refine the edges, solve hair and fur, remove speckles, clean the edge colours, and a detail pass at full resolution for large photos; Quality > Best turns on everything for hair and fur in one step
 
 ## Files and canvas
 - Open Photoshop PSD and PSB files with their layers, folders, masks, blend modes and most adjustment layers; what cannot be kept is listed after opening
@@ -112,7 +112,7 @@ Mac 版と同じ機能を、Linux のキー表記で使えます。キーボー�
 ### 背景を削除
 - 初期状態ではオフ。編集 > 環境設定 でオンにするとモデルを一度だけダウンロードします
 - 処理はすべて手元のマシンで行い、画像はどこにも送信されません
-- 詳細オプション:輪郭の調整、髪や毛並みの抽出、細かなノイズの除去、輪郭の色の補正、大きな写真向けの高解像度ディテール処理
+- 詳細オプション:輪郭の調整、髪や毛並みの抽出、細かなノイズの除去、輪郭の色の補正、大きな写真向けの高解像度ディテール処理。品質の「最高」で、髪や毛並み向けの設定をまとめて有効にできます
 
 ### ファイルとカンバス
 - Photoshop の PSD/PSB を、レイヤー・フォルダー・マスク・描画モード・主な調整レイヤーを保ったまま開けます。引き継げなかった要素は開いた後に一覧表示されます

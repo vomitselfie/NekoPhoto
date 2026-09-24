@@ -177,13 +177,15 @@ BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QS
     auto* qualityRow = new QHBoxLayout;
     qualityRow->addWidget(new QLabel(tr("Quality")));
     auto* quality = new QComboBox;
-    quality->addItems({tr("Basic"), tr("Advanced")});
-    quality->setToolTip(tr("Basic is the model's mask as it comes; Advanced refines it against the image's own edges"));
+    quality->addItems({tr("Basic"), tr("Advanced"), tr("Best (hair and fur)")});
+    quality->setToolTip(tr("Basic is the model's mask as it comes; Advanced refines it against the image's own edges; "
+                           "Best adds matting and the detail pass, for hair, fur and thin structures (slower)"));
     qualityRow->addWidget(quality, 1);
     layout->addLayout(qualityRow);
     advanced_ = new QWidget;
     auto* av = new QVBoxLayout(advanced_);
     av->setContentsMargins(0, 0, 0, 0);
+    std::vector<std::function<void()>> resync;   // puts each control back in step with settings_ after a preset
     auto slider = [&](const QString& label, const QString& tip, double min, double max, double scale, std::function<double()> get, std::function<void(double)> apply) {
         auto* row = new QHBoxLayout;
         auto* name = new QLabel(label);
@@ -202,6 +204,7 @@ BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QS
         row->addWidget(spin);
         connect(s, &QSlider::valueChanged, this, [this, spin, apply, scale](int v) { { QSignalBlocker b(spin); spin->setValue(v / scale); } apply(v / scale); refreshPreview(); });
         connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this, s, apply, scale](double v) { { QSignalBlocker b(s); s->setValue(int(std::round(v * scale))); } apply(v); refreshPreview(); });
+        resync.push_back([s, spin, get, scale] { QSignalBlocker a(s), b(spin); s->setValue(int(std::round(get() * scale))); spin->setValue(get()); });
         av->addLayout(row);
     };
     slider(tr("Refine Edges"), tr("Pulls the mask onto the image's own edges, recovering hair and fur (layer pixels)"), 0, 40, 1, [this] { return settings_.refineEdges; }, [this](double v) { settings_.refineEdges = v; });
@@ -213,6 +216,7 @@ BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QS
         box->setToolTip(tip);
         box->setChecked(value);
         connect(box, &QCheckBox::toggled, this, [this, &value](bool on) { value = on; refreshPreview(); });
+        resync.push_back([box, &value] { QSignalBlocker b(box); box->setChecked(value); });
         av->addWidget(box);
     };
     auto* detail = new QCheckBox(tr("Detail pass (native resolution, slower)"));
@@ -227,7 +231,20 @@ BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QS
     check(tr("Clean edge colours"), tr("The edge pixels take the subject's own colour, so no rim of the old background shows over a new one (those pixels of the layer change)"), settings_.decontaminate);
     advanced_->setVisible(false);
     layout->addWidget(advanced_);
-    connect(quality, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { advancedMode_ = i == 1; advanced_->setVisible(advancedMode_); adjustSize(); refreshPreview(); });
+    // Best: Advanced with matting in a band of about 1.5% of the short side and the detail pass.
+    const int bestMatting = source() ? std::min(mattingMax, std::max(8, int(std::lround(std::min(source()->width(), source()->height()) * 0.015)))) : 12;
+    connect(quality, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, detail, bestMatting, resync](int i) {
+        advancedMode_ = i >= 1;
+        if (i == 2) {
+            settings_.matting = bestMatting;
+            settings_.cleanup = settings_.decontaminate = true;
+            for (const auto& f : resync) f();
+            detail->setChecked(true);   // starts the detail pass when it has not run yet
+        }
+        advanced_->setVisible(advancedMode_);
+        adjustSize();
+        refreshPreview();
+    });
     auto* note = new QLabel(tr("The background is hidden by a layer mask, not erased: paint the mask, disable it or delete it to bring it back. Clean edge colours changes the edge pixels themselves."));
     note->setWordWrap(true);
     note->setStyleSheet(hintStyle());
