@@ -111,6 +111,28 @@ image size are rejected. Over automation: `pixels.gmic` (filter names and
 numbers only, since G'MIC can run shell commands; `COMPOSITOR_GMIC_UNRESTRICTED=1`
 lifts that) and `gmic.filters`.
 
+The file gmic.eu serves is compressed (a one-image G'MIC file: two header
+lines, then zlib), and a download that holds no filters never replaces a
+working catalogue. The parser reads G'MIC-Qt's forms: controls marked `_` or
+`~`, `()`, `[]` or `{}` around their arguments, a preview-behaviour suffix
+(`_0`, `_1`, `_2`, `+`), hex colours with alpha, `value()` with several numbers,
+buttons (they pass 0), folders nested by underscores and author subfolders in
+italics; entries with no command (About and the like) and filters needing a
+file or folder chooser are left out. A command runs through a one-line script
+(`-m command.gmic`), so G'MIC parses its arguments as G'MIC-Qt's do, text with
+spaces and quotes included. G'MIC runs with no `DISPLAY` or `WAYLAND_DISPLAY`:
+some catalogue entries are interactive programs (games, tools waiting for
+clicks in a window of their own), and without a display they fail at once.
+Previews stop after 30 s and Apply after 5 minutes.
+
+`tools/gmic-sweep.py` runs every filter once at its defaults, as the editor
+runs it, and writes `src/app/gmic/unsupported.txt`: the filters that change the
+image size, make several layers, fail or give a blank image. The dialog hides
+those unless Show all filters is on, and `gmic.filters` leaves them out unless
+`all: true`. With G'MIC 4.0.5 about 890 of the catalogue's 1,151 filters show;
+rerun the sweep when G'MIC updates (`--gallery` also writes a captioned image
+per working filter).
+
 When the build is configured with `-DCOMPOSITOR_WITH_LIBGMIC=ON` and finds libgmic (off by
 default, so an installed binary never depends on a library that a later upgrade may remove), setting
 `COMPOSITOR_GMIC_INPROCESS=1` runs filters in-process through one interpreter
