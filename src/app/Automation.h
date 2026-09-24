@@ -42,6 +42,15 @@ signals:
 private:
     using Handler = std::function<QJsonValue(const QJsonObject&)>;
     void registerHandlers();
+    // One per area, each in its own file: Automation.cpp (app, tabs, history, tools, view),
+    // AutomationDocument.cpp (documents, canvas, rendering), AutomationLayers.cpp (layers, adjustments),
+    // AutomationPixels.cpp, AutomationSelection.cpp and AutomationPaint.cpp (brush, gradient, shape).
+    void registerAppHandlers();
+    void registerDocumentHandlers();
+    void registerLayersHandlers();
+    void registerPixelsHandlers();
+    void registerSelectionHandlers();
+    void registerPaintHandlers();
     void add(const QString& name, Handler handler) { handlers_[name] = std::move(handler); }
     /// An event for every subscribed client, coalesced per kind until the event loop turns.
     void notify(const QString& kind);

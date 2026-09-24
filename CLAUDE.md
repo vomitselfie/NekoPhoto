@@ -52,6 +52,7 @@ behave differently in CI only if the versions differ.
   `beginEdit(name)` / `endEdit()` on `EditorSession`.
 - Behaviour follows the Mac app; when in doubt read the Swift source it ports
   (`docs/linux-port-architecture.md` maps files).
-- An automation method is one `add("name", handler)` in
-  `src/app/Automation.cpp`; add a matching tool in `mcp/nekophoto_mcp.py`,
+- An automation method is one `add("name", handler)` in the
+  `src/app/Automation*.cpp` file for its area (document, layers, pixels,
+  selection, paint; app, tabs, history and view in `Automation.cpp`); add a matching tool in `mcp/nekophoto_mcp.py`,
   a line in `docs/automation.md`, and cover it in `tools/rpc_smoke.py`.

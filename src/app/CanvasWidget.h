@@ -50,6 +50,10 @@ protected:
     void focusOutEvent(QFocusEvent*) override;
 
 private:
+    static constexpr double handleRadius = 5;   // points
+    static constexpr double rotateReach = 22;   // points beyond a corner that still rotates
+    static constexpr double dragThreshold = 3;  // points before a press becomes a drag
+    static constexpr double snapDistance = 10;  // points
     /// The area the brush outline (and Clone Stamp's sample marker) covers with the pointer at `at`.
     QRect brushCursorRect(QPointF at) const;
     /// Keeps the cache through a pan by whole device pixels, rendering only what came into view; false when

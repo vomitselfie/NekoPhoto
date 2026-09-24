@@ -47,6 +47,9 @@ qt_add_executable(nekophoto
     EditorSessionTransform.cpp
     CanvasWidget.h
     CanvasWidget.cpp
+    CanvasWidgetInput.cpp
+    CanvasWidgetOverlays.cpp
+    CanvasWidgetPointer.cpp
     LayersPanel.h
     LayersPanel.cpp
     AdjustmentEditor.h
@@ -78,6 +81,13 @@ qt_add_executable(nekophoto
     FontGroups.cpp
     Automation.h
     Automation.cpp
+    AutomationDocument.cpp
+    AutomationHandlers.h
+    AutomationLayers.cpp
+    AutomationPaint.cpp
+    AutomationPixels.cpp
+    AutomationSelection.cpp
+    AutomationSupport.cpp
     Theme.h
     Theme.cpp
     ModelStore.h
