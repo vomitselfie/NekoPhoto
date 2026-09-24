@@ -237,7 +237,7 @@ def layers_select(id: str, mask: bool = False) -> str:
 
 @mcp.tool()
 def layers_set(id: str, name: Optional[str] = None, visible: Optional[bool] = None, opacity: Optional[float] = None, blend: Optional[str] = None, clipping: Optional[bool] = None) -> str:
-    """Change a layer's name, visibility, opacity (0..1), blend mode (Normal, Multiply, Screen, Overlay, Soft Light, Hard Light, Color Dodge, Color Burn, Darken, Lighten, Difference, Exclusion, Luminosity) or whether it clips to the layer beneath."""
+    """Change a layer's name, visibility, opacity (0..1), blend mode (Normal, Multiply, Screen, Overlay, Darken, Lighten, Difference, Color Dodge, Color Burn, Hue, Saturation, Color, Luminosity) or whether it clips to the layer beneath."""
     return text(call("layers.set", id=id, name=name, visible=visible, opacity=opacity, blend=blend, clipping=clipping))
 
 

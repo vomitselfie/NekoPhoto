@@ -158,7 +158,8 @@ foreground-to-transparent or foreground-to-background, `reversed`, `opacity`,
 or ellipse, `x, y, width, height`, `cornerRadius`, `color`). The person's tool,
 brush settings and colours are restored afterwards.
 
-View: `tool.select`, `colors.set`, `view.zoom`.
+View: `tool.select` (`name`: move, marquee, lasso, wand, quickselect, crop, brush, healing, clone,
+smudge, gradient, shape, text, eyedropper, hand or zoom), `colors.set`, `view.zoom`.
 
 Events: `events.subscribe` (`kinds`: document, layers, selection, history,
 tool, view, tabs; default all) makes the server push

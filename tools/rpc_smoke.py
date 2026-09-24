@@ -48,6 +48,76 @@ def wait_for(path, seconds=30):
     raise SystemExit(f"no socket at {path} after {seconds}s")
 
 
+def remaining_methods(rpc):
+    """Every method the checks above do not reach, in a tab of its own that is closed afterwards."""
+    work = tempfile.mkdtemp()
+    first = rpc.call("tabs.list")
+    tab = rpc.call("tabs.new")
+    rpc.call("document.new", width=200, height=120)
+    rpc.call("shape.draw", kind="ellipse", x=20, y=20, width=160, height=80, color="#aa3355")
+    rpc.call("render", maxSize=64)
+    image = os.path.join(work, "flat.png")
+    rpc.call("document.export", path=image)
+    placed = rpc.call("document.import", path=image, x=100, y=60)
+    rpc.call("layers.duplicate")
+    copy = rpc.call("layers.list")[0]
+    rpc.call("layers.flip", vertical=True)
+    rpc.call("layers.move", id=copy["id"], atBottom=True)
+    rpc.call("layers.reorder", id=copy["id"], offset=1)
+    rpc.call("layers.render", id=placed["id"], maxSize=32)
+    rpc.call("layers.setTransform", id=placed["id"], x=10, y=5, rotation=15)
+    rpc.call("selection.fromLayer", id=placed["id"])
+    try:   # needs the downloaded model; without it, a clear error
+        rpc.call("pixels.removeBackground")
+        rpc.call("history.undo")
+    except RuntimeError as e:
+        print("removeBackground:", e)
+    rpc.call("layers.mask", id=placed["id"], action="add")
+    rpc.call("layers.mask", id=placed["id"], action="invert")
+    rpc.call("layers.mask", id=placed["id"], action="delete")
+    rpc.call("layers.select", id=placed["id"])
+    rpc.call("pixels.adjust", kind="Exposure", settings={})
+    rpc.call("pixels.invert")
+    assert rpc.call("adjustments.defaults", kind="Levels")
+    rpc.call("layers.add", kind="adjustment", adjustmentKind="Exposure")
+    rpc.call("adjustments.set", settings={})
+    rpc.call("layers.select", id=placed["id"])
+    rpc.call("selection.all")
+    assert rpc.call("selection.info")
+    rpc.call("selection.invert")
+    rpc.call("selection.invert")
+    rpc.call("selection.feather", radius=2)
+    rpc.call("selection.grow", amount=2)
+    rpc.call("selection.smooth", radius=2)
+    rpc.call("selection.border", width=3)
+    rpc.call("selection.wand", x=100, y=60, tolerance=20)
+    rpc.call("selection.polygon", points=[[10, 10], [90, 10], [50, 80]])
+    rpc.call("pixels.clear")
+    rpc.call("selection.none")
+    rpc.call("layers.group")
+    rpc.call("history.undo")
+    rpc.call("history.redo")
+    rpc.call("history.undo")
+    rpc.call("layers.select", id=placed["id"])
+    rpc.call("layers.merge", down=True)
+    rpc.call("canvas.flip", vertical=False)
+    rpc.call("canvas.resize", width=220, height=140)
+    rpc.call("canvas.crop", x=0, y=0, width=200, height=120)
+    rpc.call("image.resize", scale=0.5)
+    for name in ("quickselect", "text", "brush"):
+        rpc.call("tool.select", name=name)
+    rpc.call("colors.set", foreground="#102030", background="#ffffff")
+    rpc.call("view.zoom", zoom=1)
+    rpc.call("screenshot", maxSize=64)
+    project = os.path.join(work, "Coverage.comp")
+    rpc.call("document.save", path=project)
+    rpc.call("document.close", discard=True)
+    rpc.call("document.open", path=project)
+    assert rpc.call("document.info")["width"] == 100
+    rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
+    rpc.call("tabs.close", index=tab["index"], discard=True)
+
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else None
     if not path:
@@ -235,6 +305,8 @@ def main():
             print("gmic", cat["version"], "catalogue entries matching 'sharpen':", len(cat["filters"]))
         else:
             print("gmic", cat["version"], "(no catalogue file)")
+
+    remaining_methods(rpc)
 
     # Errors come back as errors, not crashes.
     try:

@@ -1196,7 +1196,8 @@ void AutomationServer::registerHandlers() {
     add("tool.select", [session](const QJsonObject& p) {
         static const QMap<QString, Tool> tools{{"move", Tool::Move}, {"marquee", Tool::Marquee}, {"lasso", Tool::Lasso}, {"wand", Tool::Wand}, {"crop", Tool::Crop},
             {"brush", Tool::Brush}, {"healing", Tool::SpotHealing}, {"clone", Tool::CloneStamp}, {"smudge", Tool::Smudge}, {"gradient", Tool::Gradient},
-            {"shape", Tool::Shape}, {"eyedropper", Tool::Eyedropper}, {"hand", Tool::Hand}, {"zoom", Tool::Zoom}};
+            {"shape", Tool::Shape}, {"eyedropper", Tool::Eyedropper}, {"hand", Tool::Hand}, {"zoom", Tool::Zoom},
+            {"quickselect", Tool::Scribble}, {"text", Tool::Text}};
         QString name = str(p, "name").toLower();
         if (!tools.contains(name)) fail("unknown tool; one of " + QStringList(tools.keys()).join(", "), invalidParams);
         session()->selectTool(tools.value(name));
