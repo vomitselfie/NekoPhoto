@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read   # only the release job, which publishes, can write
 
 jobs:
   appimage:
@@ -20,8 +20,7 @@ jobs:
     # 22.04's glibc keeps the AppImage runnable on distributions back to 2022.
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
       - name: Version from the tag
         id: version
         run: |
@@ -37,7 +36,7 @@ jobs:
 
       - name: Vendored OpenCV (cached)
         id: opencv
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830   # v4
         with:
           path: opencv-prefix
           key: opencv-ubuntu-22.04-${{ hashFiles('tools/build-opencv.sh') }}
@@ -46,7 +45,7 @@ jobs:
         run: tools/build-opencv.sh opencv-prefix
 
       - name: Qt
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125   # v4
         with:
           version: "6.7.3"
           modules: "qtimageformats"
@@ -68,42 +67,8 @@ jobs:
           QT_QPA_PLATFORM=offscreen ./build/src/app/compositor-linux --version
           QT_QPA_PLATFORM=offscreen ./build/src/app/compositor-linux --demo --screenshot demo.png --save-as Demo.comp
 
-      - name: Stage into an AppDir
-        run: cmake --install build --prefix AppDir/usr
-
-      - name: linuxdeploy
-        run: |
-          curl -sSL -o linuxdeploy https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
-          curl -sSL -o linuxdeploy-plugin-qt https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
-          chmod +x linuxdeploy linuxdeploy-plugin-qt
-          export PATH="$PWD:$PATH"
-          export NO_STRIP=1   # linuxdeploy's bundled strip predates .relr.dyn sections
-          export QMAKE="$(command -v qmake6 || command -v qmake)"
-          export EXTRA_QT_MODULES="svg;waylandcompositor"
-          # Qt 6.7 ships libqwayland-egl/-generic, newer Qt a single libqwayland; take whatever is there.
-          plugins="$("$QMAKE" -query QT_INSTALL_PLUGINS)/platforms"
-          # offscreen too, so the packaged app can be smoke-tested headless.
-          export EXTRA_PLATFORM_PLUGINS="$(ls "$plugins" | grep -E '^libqwayland|^libqoffscreen' | paste -sd ';')"
-          echo "Wayland plugins: $EXTRA_PLATFORM_PLUGINS"
-          export LDAI_OUTPUT="compositor-linux-${{ steps.version.outputs.version }}-x86_64.AppImage"
-          export LDAI_UPDATE_INFORMATION="gh-releases-zsync|${GITHUB_REPOSITORY_OWNER}|${GITHUB_REPOSITORY#*/}|latest|compositor-linux-*-x86_64.AppImage.zsync"
-          ./linuxdeploy --appdir AppDir \
-            --desktop-file AppDir/usr/share/applications/compositor-linux.desktop \
-            --icon-file packaging/compositor-linux.svg \
-            --plugin qt
-          # Ship the copyright file of every distribution package whose library was bundled.
-          # Qt comes from aqtinstall, not dpkg; its licences are in LICENSES/ and THIRD-PARTY-NOTICES.md.
-          bundled=AppDir/usr/share/doc/compositor-linux/bundled
-          mkdir -p "$bundled"
-          for lib in AppDir/usr/lib/*.so*; do
-            pkg="$(dpkg -S "*/$(basename "$lib")" 2>/dev/null | head -n1 | cut -d: -f1)"
-            if [ -n "$pkg" ] && [ -f "/usr/share/doc/$pkg/copyright" ]; then
-              cp "/usr/share/doc/$pkg/copyright" "$bundled/$pkg.copyright"
-            fi
-          done
-          ls "$bundled"
-          ./linuxdeploy --appdir AppDir --output appimage
-          ls -la *.AppImage*
+      - name: AppImage
+        run: tools/package-appimage.sh build "${{ steps.version.outputs.version }}"
 
       - name: Run the AppImage
         run: |
@@ -120,7 +85,7 @@ jobs:
           tar czf "compositor-linux-$v-x86_64.tar.gz" "compositor-linux-$v"
           sha256sum *.AppImage *.tar.gz > SHA256SUMS
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
         with:
           name: compositor-linux-${{ steps.version.outputs.version }}
           path: |
@@ -133,8 +98,7 @@ jobs:
     name: macOS app bundle
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
       - name: Version from the tag
         id: version
         run: |
@@ -146,7 +110,7 @@ jobs:
 
       - name: Vendored OpenCV (cached)
         id: opencv
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830   # v4
         with:
           path: opencv-prefix
           key: opencv-macos-14-${{ runner.arch }}-${{ hashFiles('tools/build-opencv.sh') }}
@@ -177,7 +141,7 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent build/src/app/compositor-linux.app "compositor-linux-$v-macos-arm64.zip"
           shasum -a 256 "compositor-linux-$v-macos-arm64.zip" > SHA256SUMS-macos
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
         with:
           name: compositor-linux-${{ steps.version.outputs.version }}-macos
           path: |
@@ -189,11 +153,13 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [appimage, macos]
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write   # creates the release and uploads the files
     steps:
       - name: Version from the tag
         id: version
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093   # v4
         with:
           pattern: compositor-linux-*
           merge-multiple: true
@@ -201,7 +167,7 @@ jobs:
         run: |
           cat SHA256SUMS SHA256SUMS-macos > SHA256SUMS.all && mv SHA256SUMS.all SHA256SUMS && rm SHA256SUMS-macos
           ls -la
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65   # v2
         with:
           name: compositor-linux ${{ steps.version.outputs.version }}
           generate_release_notes: true

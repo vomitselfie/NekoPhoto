@@ -15,14 +15,13 @@ jobs:
     name: macOS build and tests
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
       - name: Homebrew packages
         run: brew install ninja qt libpng libmypaint pkg-config
 
       - name: Vendored OpenCV (cached)
         id: opencv
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830   # v4
         with:
           path: opencv-prefix
           key: opencv-macos-14-${{ runner.arch }}-${{ hashFiles('tools/build-opencv.sh') }}
@@ -58,7 +57,7 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent build/src/app/compositor-linux.app "compositor-linux-dev-macos-arm64.zip"
           shasum -a 256 compositor-linux-dev-macos-arm64.zip
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
         with:
           name: compositor-linux-macos-arm64
           path: |

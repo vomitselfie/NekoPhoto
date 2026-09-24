@@ -14,14 +14,14 @@ jobs:
       matrix:
         compiler: [gcc, clang]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y ninja-build cmake libpng-dev libmypaint-dev libsqlite3-dev qt6-base-dev qt6-svg-dev qt6-wayland libgl1-mesa-dev pkg-config clang
       - name: Vendored OpenCV (cached)
         id: opencv
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830   # v4
         with:
           path: opencv-prefix
           key: opencv-ubuntu-24.04-${{ hashFiles('tools/build-opencv.sh') }}
@@ -45,7 +45,7 @@ jobs:
           ./build/src/app/compositor-linux --headless --rpc-socket "$PWD/rpc.sock" --demo &
           python3 tools/rpc_smoke.py "$PWD/rpc.sock"
           kill %1
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
         with:
           name: screenshots-${{ matrix.compiler }}
           path: |
