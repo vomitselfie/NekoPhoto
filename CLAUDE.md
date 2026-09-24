@@ -39,6 +39,8 @@ behave differently in CI only if the versions differ.
   then `--call <method> [--params '{...}'] --rpc-socket /tmp/c.sock`, or the
   MCP server in `.mcp.json` (tools mirror the methods in `docs/automation.md`).
 - `--headless --batch script.jsonl` runs requests without a socket.
+- Brush latency: `QT_QPA_PLATFORM=offscreen ./build/src/app/nekophoto --bench-brush classic/dry_brush --bench-size 1086x1448`
+  (add `QT_SCALE_FACTOR=2.25` for the user's HiDPI panel); see `docs/brush-latency.md`.
 - Screenshots for checking UI work: `QT_QPA_PLATFORM=offscreen ./build/src/app/nekophoto --demo --tool brush --dialog levels --screenshot out.png`
   (`COMPOSITOR_WINDOW_SIZE=1000x700` forces the size; `QT_SCALE_FACTOR=2` a scale).
 

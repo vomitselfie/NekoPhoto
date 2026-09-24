@@ -13,6 +13,9 @@ namespace compositor {
 
 /// Whether this build can paint MyPaint brushes.
 bool myPaintSupported();
+/// Paints one throwaway dab with `brushJson` on a tiny layer, so libmypaint's one-time setup (about 9 ms)
+/// happens before the first real stroke rather than during its press.
+void warmMyPaint(const std::string& brushJson);
 
 /// What a preset asks for by default: its radius (in pixels) and whether it is an eraser, read from the .myb.
 struct MyPaintPresetInfo { double radius = 2; bool eraser = false; bool valid = false; };
@@ -40,6 +43,10 @@ public:
     bool isValid() const;
     const std::string& error() const { return error_; }
     void strokeTo(const MyPaintInput& input);
+    /// Whether the brush has caught up with the pointer. Presets with slow position tracking follow the
+    /// pointer with a lag and only move on input, so while it is held still the caller repeats the last
+    /// input until this is true.
+    bool settled() const;
     /// Lifts the pen: a last event at zero pressure, which some presets use to taper. Call before the grid's
     /// commit.
     void finish();

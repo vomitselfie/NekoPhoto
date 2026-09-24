@@ -437,6 +437,9 @@ public:
 signals:
     /// The document's pixels or structure changed; `region` is the document area affected (empty means all).
     void documentChanged(QRectF region);
+    /// The document changed, but the canvas already shows it: a brush stroke committed as its live preview
+    /// drew it. Nothing to render again.
+    void documentChangedAsShown();
     void layersChanged();
     void selectionChanged();
     void scribblesChanged();
@@ -474,7 +477,7 @@ private:
     std::optional<compositor::Asset> bakeClipping(const compositor::Uuid& target) const;
     void clearSelectedPixelsNow(compositor::Layer& layer);
     std::unique_ptr<compositor::BrushStroke> makeRasterEdit(const compositor::Layer& layer, bool mask, const compositor::BrushSettings& settings) const;
-    void commitRasterEdit(compositor::BrushStroke& stroke, const compositor::Uuid& layerId, bool mask, const QString& name);
+    void commitRasterEdit(compositor::BrushStroke& stroke, const compositor::Uuid& layerId, bool mask, const QString& name, QRectF region = {}, bool previewExact = false);
 
     std::optional<compositor::Document> document_;
     compositor::DocumentHistory history_;
@@ -492,7 +495,9 @@ private:
     qint64 lastPenTime_ = 0;
     void myPaintTo(QPointF documentPoint);
     QTimer healPreview_;   // a healing stroke shows its result once the pointer pauses
+    QTimer myPaintSettle_; // while the pointer rests, a MyPaint brush with slow tracking catches up to it
     compositor::Uuid strokeLayerId_;
+    QRectF strokeRegion_;   // everything the stroke has painted so far, in document pixels
     bool strokeMask_ = false;
     std::optional<QPointF> lastBrushPoint_;
     struct PixelClipboard { std::shared_ptr<const compositor::Image> image; QPointF origin; };

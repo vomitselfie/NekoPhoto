@@ -115,6 +115,45 @@ TEST_CASE(mypaint_pencil_draws_along_the_path_and_repeats_exactly) {
     CHECK(same(image, *second.asset->image));         // libmypaint's jitter is seeded, so a stroke repeats
 }
 
+TEST_CASE(mypaint_click_leaves_a_mark_and_slow_tracking_catches_up) {
+    if (!myPaintSupported()) { std::fprintf(stderr, "  (skipped: no libmypaint)\n"); return; }
+    // Dry brush places dabs only by distance and has slow position tracking: a click alone used to paint nothing.
+    const std::string dry = readPreset("classic/dry_brush");
+    {
+        Layer layer = whiteLayer(200, 100);
+        Painting stroke(layer, dry, black(20), Size(200, 100));
+        REQUIRE(stroke.isValid());
+        MyPaintInput click;
+        click.document = {100, 50};
+        click.pressure = 0.7;
+        click.seconds = 1.0 / 120;
+        stroke.engine.strokeTo(click);
+        auto commit = stroke.commit();
+        REQUIRE(commit.asset && commit.asset->image);
+        CHECK(darkest(*commit.asset->image, 90, 40, 110, 60) < 200);   // the dab where it was clicked
+        CHECK(darkest(*commit.asset->image, 10, 5, 60, 30) == 255);    // and nothing else
+    }
+    {
+        Layer layer = whiteLayer(300, 100);
+        Painting stroke(layer, dry, black(10), Size(300, 100));
+        MyPaintInput in;
+        in.pressure = 0.7;
+        in.seconds = 1.0 / 120;
+        in.document = {20, 50};
+        stroke.engine.strokeTo(in);
+        in.document = {260, 50};   // a fast flick: the brush trails behind
+        stroke.engine.strokeTo(in);
+        CHECK(!stroke.engine.settled());
+        int repeats = 0;
+        while (!stroke.engine.settled() && repeats < 500) { stroke.engine.strokeTo(in); repeats++; }   // the pointer held still
+        CHECK(stroke.engine.settled());
+        CHECK(repeats > 0 && repeats < 500);
+        auto commit = stroke.commit();
+        REQUIRE(commit.asset && commit.asset->image);
+        CHECK(darkest(*commit.asset->image, 250, 42, 266, 58) < 220);  // it painted all the way to where the pointer stopped
+    }
+}
+
 TEST_CASE(mypaint_respects_the_selection_and_erases) {
     if (!myPaintSupported()) { std::fprintf(stderr, "  (skipped: no libmypaint)\n"); return; }
     const std::string ink = readPreset("classic/pen");

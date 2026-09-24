@@ -23,6 +23,18 @@ EditorSession::EditorSession(QObject* parent) : QObject(parent) {
         stroke_->previewHeal();
         emit documentChanged({});
     });
+    // Presets with slow position tracking trail the pointer and only move on input; a mouse held still sends
+    // none, so the brush would stop short of it. The last input repeats at 60 a second until it has caught up.
+    myPaintSettle_.setInterval(16);
+    connect(&myPaintSettle_, &QTimer::timeout, this, [this] {
+        if (!myPaint_ || !stroke_ || !lastBrushPoint_ || myPaint_->settled()) { myPaintSettle_.stop(); return; }
+        myPaintTo(*lastBrushPoint_);
+        Rect dirty = stroke_->takeDirtyRect();
+        if (!dirty.isEmpty()) {
+            strokeRegion_ = strokeRegion_.isEmpty() ? toQRect(dirty) : strokeRegion_.united(toQRect(dirty));
+            emit documentChanged(toQRect(dirty));
+        }
+    });
 }
 
 QString EditorSession::title() const {

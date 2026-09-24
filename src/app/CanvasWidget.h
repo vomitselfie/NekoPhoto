@@ -50,6 +50,9 @@ protected:
     void focusOutEvent(QFocusEvent*) override;
 
 private:
+    /// The area the brush outline (and Clone Stamp's sample marker) covers with the pointer at `at`.
+    QRect brushCursorRect(QPointF at) const;
+    bool boxPainted_ = false;   // whether the last paint drew a transform box
     enum class Drag { None, Pan, Move, Resize, Rotate, Distort, PixelMove, Brush, Warp, Gradient, Shape, Marquee, Lasso, Scribble, ClickBox, SelectionMove, Crop, CropMove, CropResize, ZoomRect, Hook };
     struct HandleHit { bool hit = false; int index = 0; bool rotate = false; };
 

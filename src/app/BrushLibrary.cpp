@@ -137,4 +137,9 @@ QString BrushLibrary::userFolder() {
     return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/brushes";
 }
 
+void warmBrushEngines() {
+    for (const BrushPreset& preset : BrushLibrary::presets())
+        if (preset.engine != BrushPreset::Engine::Tip && !preset.json.empty()) { compositor::warmMyPaint(preset.json); return; }
+}
+
 } // namespace app

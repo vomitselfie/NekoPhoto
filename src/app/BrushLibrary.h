@@ -47,4 +47,8 @@ public:
     static void reload();
 };
 
+/// Paints a throwaway dab with a MyPaint preset, so the engine's one-time setup is not paid in the first
+/// stroke's press.
+void warmBrushEngines();
+
 } // namespace app

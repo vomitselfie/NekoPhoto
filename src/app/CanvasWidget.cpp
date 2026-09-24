@@ -63,7 +63,9 @@ CanvasWidget::CanvasWidget(EditorSession* session, QWidget* parent) : QWidget(pa
         if (region.isEmpty()) { cacheValid_ = false; update(); }
         else invalidate(region);
     });
-    connect(session_, &EditorSession::layersChanged, this, [this] { update(); });
+    // The layers draw through documentChanged; of the overlays only the transform box follows them, so a layer
+    // change repaints the whole view only while a box is (or was) shown. At 2.25x a full repaint is ~5 ms.
+    connect(session_, &EditorSession::layersChanged, this, [this] { if (boxShown() || boxPainted_) update(); });
     connect(session_, &EditorSession::selectionChanged, this, [this] { refreshSelectionOutline(); update(); });
     connect(session_, &EditorSession::scribblesChanged, this, [this] { update(); });
     connect(session_, &EditorSession::viewportChanged, this, [this] { cacheValid_ = false; update(); });
@@ -145,6 +147,7 @@ void CanvasWidget::invalidate(QRectF documentRegion) {
     if (part.isEmpty()) return;
     QImage piece;
     renderInto(piece, part, cacheDocumentOrigin_, zoom);
+    cache_.setDevicePixelRatio(1);   // painted in device pixels; paintEvent sets the ratio back
     QPainter p(&cache_);
     p.setCompositionMode(QPainter::CompositionMode_Source);
     p.drawImage(part.topLeft() - cacheDeviceRect_.topLeft(), piece);
@@ -182,9 +185,9 @@ void CanvasWidget::paintEvent(QPaintEvent*) {
     painter.restore();
     ensureCache();
     if (cacheValid_ && !cache_.isNull()) {
-        QImage image = cache_;
-        image.setDevicePixelRatio(dpr);
-        painter.drawImage(QPointF(cacheDeviceRect_.x() / dpr, cacheDeviceRect_.y() / dpr), image);
+        // The ratio set on the cache itself: on a copy it would make Qt copy the whole image on every paint.
+        cache_.setDevicePixelRatio(dpr);
+        painter.drawImage(QPointF(cacheDeviceRect_.x() / dpr, cacheDeviceRect_.y() / dpr), cache_);
     }
     painter.setPen(QPen(QColor(0, 0, 0, 90), 1));
     painter.setBrush(Qt::NoBrush);
@@ -214,7 +217,8 @@ void CanvasWidget::drawOverlays(QPainter& painter) {
     drawSelectionAnts(painter);
     drawScribbles(painter);
     const Layer* active = session_->activeLayer();
-    if (active && boxShown()) {
+    boxPainted_ = active && boxShown();
+    if (boxPainted_) {
         bool distorting = session_->transformEdit() && session_->transformEdit()->corners;
         drawTransformBox(painter, session_->editedCorners(*active), true, distorting);
     }
@@ -732,14 +736,27 @@ QPointF CanvasWidget::snapPoint(QPointF p) {
     return {p.x() + snap.dx, p.y() + snap.dy};
 }
 
+QRect CanvasWidget::brushCursorRect(QPointF at) const {
+    const double r = session_->brushSettings.diameter / 2 * session_->viewport.pointsPerPixel() + 8;
+    QRect rect = QRectF(at.x() - r, at.y() - r, 2 * r, 2 * r).toAlignedRect();
+    if (session_->tool() == Tool::CloneStamp)
+        if (auto sample = session_->cloneSamplePoint(documentPoint(at))) {
+            const QPointF v = viewPoint(*sample);
+            rect = rect.united(QRectF(v.x() - 12, v.y() - 12, 24, 24).toAlignedRect());
+        }
+    return rect;
+}
+
 void CanvasWidget::move(QPointF view, Qt::MouseButtons buttons, Qt::KeyboardModifiers modifiers) {
+    const std::optional<QPointF> previous = hover_;
     hover_ = view;
     QPointF doc = documentPoint(view);
     emit cursorMoved(doc);
     if (drag_ == Drag::None) {
         if (session_->tool() == Tool::Lasso && session_->lassoKind == LassoKind::Polygonal && !lassoPoints_.empty()) { lassoCursor_ = doc; update(); }
         updateCursor(view, modifiers);
-        if (isBrushLike()) update();
+        // Only where the brush outline was and is now (and Clone Stamp's sample marker), not the whole view.
+        if (isBrushLike()) { if (previous) update(brushCursorRect(*previous)); update(brushCursorRect(view)); }
         return;
     }
     QPointF delta = view - lastView_;

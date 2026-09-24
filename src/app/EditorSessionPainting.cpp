@@ -84,7 +84,11 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
         stroke_->append(toPoint(documentPoint));
     }
     lastBrushPoint_ = documentPoint;
-    emit documentChanged(toQRect(stroke_->takeDirtyRect()));
+    // Only what the press painted: a MyPaint press paints nothing until the pen moves, and an empty region
+    // would make the canvas render the whole view again.
+    strokeRegion_ = toQRect(stroke_->takeDirtyRect());
+    if (!strokeRegion_.isEmpty()) emit documentChanged(strokeRegion_);
+    if (myPaint_) myPaintSettle_.start();
     if (settings.healing) healPreview_.start();
     return true;
 }
@@ -108,11 +112,14 @@ void EditorSession::tipTo(QPointF documentPoint) {
 void EditorSession::continueBrush(QPointF documentPoint) {
     if (!stroke_) return;
     if (tipStroke_) tipTo(documentPoint);
-    else if (myPaint_) myPaintTo(documentPoint);
+    else if (myPaint_) { myPaintTo(documentPoint); myPaintSettle_.start(); }   // restarts: ticks only once input pauses
     else stroke_->append(toPoint(documentPoint));
     lastBrushPoint_ = documentPoint;
     Rect dirty = stroke_->takeDirtyRect();
-    if (!dirty.isEmpty()) emit documentChanged(toQRect(dirty));
+    if (!dirty.isEmpty()) {
+        strokeRegion_ = strokeRegion_.isEmpty() ? toQRect(dirty) : strokeRegion_.united(toQRect(dirty));
+        emit documentChanged(toQRect(dirty));
+    }
     if (healPreview_.isActive() || tool_ == Tool::SpotHealing) healPreview_.start();
 }
 
@@ -124,9 +131,18 @@ std::unique_ptr<BrushStroke> EditorSession::makeRasterEdit(const Layer& layer, b
     return stroke;
 }
 
-void EditorSession::commitRasterEdit(BrushStroke& stroke, const Uuid& layerId, bool mask, const QString& name) {
+void EditorSession::commitRasterEdit(BrushStroke& stroke, const Uuid& layerId, bool mask, const QString& name, QRectF region, bool previewExact) {
     Layer* layer = document_->find(layerId);
-    if (!layer || !stroke.touched()) { emit documentChanged({}); emit historyChanged(); return; }
+    // `region`: what the edit painted, when known. The committed layer looks as the live preview did, so only
+    // that part of the canvas is rendered again; empty means the whole view.
+    if (!layer || !stroke.touched()) { if (!region.isEmpty()) emit documentChanged(region); emit historyChanged(); return; }
+    // The preview matches the result exactly when the layer sits on whole pixels at its own size: the
+    // committed pixels land where the preview drew them, so the canvas has nothing to render again.
+    const LayerTransform& placed = layer->transform;
+    const bool onPixelGrid = placed.rotation == 0 && !placed.flipX && !placed.flipY
+        && placed.origin.x == std::round(placed.origin.x) && placed.origin.y == std::round(placed.origin.y)
+        && placed.size.width == layer->pixelWidth() && placed.size.height == layer->pixelHeight();
+    const bool asShown = previewExact && onPixelGrid;
     BrushStroke::Commit commit = stroke.commit();
     beginEdit(name);
     if (mask) {
@@ -138,23 +154,37 @@ void EditorSession::commitRasterEdit(BrushStroke& stroke, const Uuid& layerId, b
         layer->shapeImage.reset();
     }
     endEdit();
-    notifyDocument();
+    if (asShown) {
+        documentRevision_++;
+        emit documentChangedAsShown();
+        emit layersChanged();
+        emit historyChanged();
+        emit titleChanged();
+    } else {
+        notifyDocument(region);
+    }
 }
 
 void EditorSession::endBrush() {
     if (!stroke_) return;
     healPreview_.stop();
+    myPaintSettle_.stop();
     if (myPaint_) { myPaint_->finish(); myPaint_.reset(); }
     tipStroke_.reset();
     std::unique_ptr<BrushStroke> stroke = std::move(stroke_);
     stroke->flush();
+    Rect tail = stroke->takeDirtyRect();
+    if (!tail.isEmpty()) strokeRegion_ = strokeRegion_.isEmpty() ? toQRect(tail) : strokeRegion_.united(toQRect(tail));
     QString name = strokeMask_ ? "Paint Mask" : tool_ == Tool::SpotHealing ? "Spot Healing" : tool_ == Tool::CloneStamp ? "Clone Stamp" : tool_ == Tool::Smudge ? "Blur" : (brushErase ? "Eraser" : "Brush Stroke");
-    commitRasterEdit(*stroke, strokeLayerId_, strokeMask_, name);
+    // Spot healing changes the pixels as it commits; every other brush commits what its preview showed.
+    commitRasterEdit(*stroke, strokeLayerId_, strokeMask_, name, strokeRegion_, tool_ != Tool::SpotHealing);
+    strokeRegion_ = {};
 }
 
 void EditorSession::cancelBrush() {
     if (!stroke_) return;
     healPreview_.stop();
+    myPaintSettle_.stop();
     myPaint_.reset();
     tipStroke_.reset();
     stroke_.reset();

@@ -189,9 +189,17 @@ void MyPaintStroke::strokeTo(const MyPaintInput& input) {
         for (MyPaintBrushState state : {MYPAINT_BRUSH_STATE_Y, MYPAINT_BRUSH_STATE_ACTUAL_Y}) mypaint_brush_set_state(engine_->brush, state, float(p.y));
         mypaint_brush_stroke_to(engine_->brush, surface, float(p.x), float(p.y), 0.0f, 0.0f, 0.0f, 1.0);
     }
+    const double seconds = std::clamp(input.seconds, 0.001, 5.0);
+    // A click leaves a mark, as in Photoshop and Krita: a preset that places dabs only by distance travelled
+    // would paint nothing until the pen moved, so the press gets exactly one dab from a dab rate lent for it.
+    const float rate = mypaint_brush_get_base_value(engine_->brush, MYPAINT_BRUSH_SETTING_DABS_PER_SECOND);
+    const bool lend = !started_ && rate <= 0;
+    // One and a half dabs' worth: one is placed, and a rate of exactly one per event rounds libmypaint's time
+    // bookkeeping just below zero ("Time is running backwards").
+    if (lend) mypaint_brush_set_base_value(engine_->brush, MYPAINT_BRUSH_SETTING_DABS_PER_SECOND, float(1.5 / seconds));
     mypaint_brush_stroke_to(engine_->brush, surface, float(p.x), float(p.y), float(std::clamp(input.pressure, 0.0, 1.0)),
-                            float(std::clamp(input.xtilt, -1.0, 1.0)), float(std::clamp(input.ytilt, -1.0, 1.0)),
-                            std::clamp(input.seconds, 0.001, 5.0));
+                            float(std::clamp(input.xtilt, -1.0, 1.0)), float(std::clamp(input.ytilt, -1.0, 1.0)), seconds);
+    if (lend) mypaint_brush_set_base_value(engine_->brush, MYPAINT_BRUSH_SETTING_DABS_PER_SECOND, rate);
     MyPaintRectangle rects[8];
     MyPaintRectangles changed{8, rects};
     mypaint_tiled_surface2_end_atomic(&t.parent, &changed);
@@ -226,6 +234,28 @@ void MyPaintStroke::strokeTo(const MyPaintInput& input) {
     }
 }
 
+bool MyPaintStroke::settled() const {
+    if (!isValid() || !started_ || finished_) return true;
+    const Point p = grid_.documentToGrid().apply(last_);
+    const float x = mypaint_brush_get_state(engine_->brush, MYPAINT_BRUSH_STATE_X);
+    const float y = mypaint_brush_get_state(engine_->brush, MYPAINT_BRUSH_STATE_Y);
+    return std::hypot(double(x) - p.x, double(y) - p.y) < 0.5;
+}
+
+void warmMyPaint(const std::string& brushJson) {
+    auto image = std::make_shared<Image>(8, 8);
+    Layer layer(Asset::make(image, "warm"), Point(0, 0));
+    BrushSettings settings;
+    settings.diameter = 4;
+    BrushStroke grid(layer, false, settings, Size(8, 8));
+    MyPaintStroke stroke(grid, brushJson, settings);
+    MyPaintInput input;
+    input.document = {4, 4};
+    input.seconds = 1.0 / 120;
+    stroke.strokeTo(input);
+    stroke.finish();
+}
+
 void MyPaintStroke::finish() {
     if (!isValid() || finished_ || !started_) return;
     MyPaintInput lift;
@@ -249,6 +279,8 @@ MyPaintStroke::MyPaintStroke(BrushStroke& grid, const std::string&, const BrushS
 MyPaintStroke::~MyPaintStroke() = default;
 bool MyPaintStroke::isValid() const { return false; }
 void MyPaintStroke::strokeTo(const MyPaintInput&) {}
+bool MyPaintStroke::settled() const { return true; }
+void warmMyPaint(const std::string&) {}
 void MyPaintStroke::finish() {}
 
 #endif

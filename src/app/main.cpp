@@ -1,4 +1,6 @@
 #include "MainWindow.h"
+#include "BrushBench.h"
+#include "BrushLibrary.h"
 #include "ImageConvert.h"
 #include "ModelStore.h"
 #include "PreferencesDialog.h"
@@ -218,11 +220,17 @@ int main(int argc, char** argv) {
     parser.addPositionalArgument("file", "A .comp project or an image to open.");
     QCommandLineOption demo("demo", "Build a layered demo document (optionally from the given image).");
     QCommandLineOption screenshot("screenshot", "Grab the window to <file> after opening, then quit.", "file");
+    QCommandLineOption benchBrush("bench-brush", "Developer benchmark: paint strokes with brush preset <id> (or \"round\") through the canvas, print press, move and release latency, then quit.", "id");
+    QCommandLineOption benchSize("bench-size", "Document size for --bench-brush, WxH (default 2000x2000).", "size");
+    QCommandLineOption benchOpaque("bench-opaque", "With --bench-brush, paint on the opaque image layer rather than a blank layer.");
     QCommandLineOption saveAs("save-as", "Save the document as the .comp package <path> before quitting (with --screenshot).", "path");
     QCommandLineOption prefs("preferences", "Open the Preferences dialog too (with --screenshot, grab it instead of the window).");
     QCommandLineOption fetch("download-model", "Download model <id> (isnet or u2netp) into the models folder, report, and quit.", "id");
     parser.addOption(demo);
     parser.addOption(screenshot);
+    parser.addOption(benchBrush);
+    parser.addOption(benchSize);
+    parser.addOption(benchOpaque);
     parser.addOption(saveAs);
     parser.addOption(prefs);
     QCommandLineOption toolOption("tool", "Select tool <name> after opening (move, marquee, lasso, wand, crop, brush, healing, clone, smudge, gradient, shape, eyedropper, hand, zoom).", "name");
@@ -295,7 +303,7 @@ int main(int argc, char** argv) {
     // quits; anything that asks for a process of its own (screenshots, automation, --new-window) keeps one.
     QStringList handoff;
     for (const QString& path : parser.positionalArguments()) handoff << QDir::current().absoluteFilePath(path);
-    const bool ownProcess = parser.isSet(newWindow) || parser.isSet(screenshot) || parser.isSet(headlessOption) || parser.isSet(batchOption) || parser.isSet(dialogOption) || parser.isSet(saveAs) || parser.isSet(prefs) || parser.isSet(demo) || parser.isSet(toolOption);
+    const bool ownProcess = parser.isSet(newWindow) || parser.isSet(benchBrush) || parser.isSet(screenshot) || parser.isSet(headlessOption) || parser.isSet(batchOption) || parser.isSet(dialogOption) || parser.isSet(saveAs) || parser.isSet(prefs) || parser.isSet(demo) || parser.isSet(toolOption);
     const QString rpcRequested = parser.isSet(rpc) || parser.isSet(rpcSocket) ? (parser.value(rpcSocket).isEmpty() ? app::AutomationServer::defaultSocketPath() : parser.value(rpcSocket)) : QString();
     if (!ownProcess && app::SingleInstance::handOff(handoff, rpcRequested)) return 0;
     app::MainWindow window;
@@ -342,7 +350,11 @@ int main(int argc, char** argv) {
     if (parser.isSet(demo)) buildDemo(*window.session(), files.isEmpty() ? QString() : QDir::current().absoluteFilePath(files.first()));
     else for (const QString& path : files) window.openPath(QDir::current().absoluteFilePath(path));
     // Crash recovery in an ordinary launch only; screenshots, demos, batches and headless runs leave nothing behind.
-    if (!ownProcess || (parser.isSet(newWindow) && !parser.isSet(demo))) window.enableAutosave();
+    if (!ownProcess || (parser.isSet(newWindow) && !parser.isSet(demo))) {
+        window.enableAutosave();
+        // libmypaint's one-time setup, done while the window settles instead of in the first stroke's press.
+        QTimer::singleShot(300, &window, [] { app::warmBrushEngines(); });
+    }
     if (parser.isSet(toolOption)) {
         static const QMap<QString, app::Tool> tools{{"move", app::Tool::Move}, {"marquee", app::Tool::Marquee}, {"lasso", app::Tool::Lasso}, {"wand", app::Tool::Wand}, {"scribble", app::Tool::Scribble},
             {"crop", app::Tool::Crop}, {"brush", app::Tool::Brush}, {"healing", app::Tool::SpotHealing}, {"clone", app::Tool::CloneStamp}, {"smudge", app::Tool::Smudge},
@@ -390,6 +402,14 @@ int main(int argc, char** argv) {
     }
     app::PreferencesDialog* preferences = nullptr;
     if (parser.isSet(prefs)) { preferences = new app::PreferencesDialog(&window); preferences->show(); }
+    if (parser.isSet(benchBrush)) {
+        app::BrushBenchOptions options;
+        options.preset = parser.value(benchBrush);
+        const QStringList size = parser.value(benchSize).split('x');
+        if (size.size() == 2 && size[0].toInt() > 0 && size[1].toInt() > 0) options.document = QSize(size[0].toInt(), size[1].toInt());
+        options.paintOnOpaque = parser.isSet(benchOpaque);
+        return app::runBrushBench(window, options);
+    }
     if (parser.isSet(screenshot)) {
         QString target = parser.value(screenshot), savePath = parser.value(saveAs);
         QTimer::singleShot(400, &window, [&window, target, savePath, preferences] {

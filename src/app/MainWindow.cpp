@@ -354,6 +354,7 @@ void MainWindow::connectSession() {
     sessionConnections_.push_back(connect(session_, &EditorSession::projectPathChanged, this, &MainWindow::refreshTitle));
     sessionConnections_.push_back(connect(session_, &EditorSession::historyChanged, this, &MainWindow::refreshActions));
     sessionConnections_.push_back(connect(session_, &EditorSession::documentChanged, this, [this] { emit automationEvent("document"); }));
+    sessionConnections_.push_back(connect(session_, &EditorSession::documentChangedAsShown, this, [this] { emit automationEvent("document"); }));
     sessionConnections_.push_back(connect(session_, &EditorSession::layersChanged, this, [this] { emit automationEvent("layers"); }));
     sessionConnections_.push_back(connect(session_, &EditorSession::selectionChanged, this, [this] { emit automationEvent("selection"); }));
     sessionConnections_.push_back(connect(session_, &EditorSession::historyChanged, this, [this] { emit automationEvent("history"); }));
