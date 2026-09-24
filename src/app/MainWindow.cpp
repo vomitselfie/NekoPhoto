@@ -3,6 +3,7 @@
 #include "CanvasWidget.h"
 #include "Dialogs.h"
 #include "ImageConvert.h"
+#include "Autosave.h"
 #include "LayersPanel.h"
 #include "AdjustmentsPanel.h"
 #include "Automation.h"
@@ -224,9 +225,61 @@ MainWindow::Tab& MainWindow::addTab(bool reuseEmpty) {
     connect(tab.canvas, &CanvasWidget::cursorMoved, this, [this](QPointF p) { positionLabel_->setText(QStringLiteral("%1, %2").arg(int(std::floor(p.x()))).arg(int(std::floor(p.y())))); });
     connect(tab.session, &EditorSession::projectPathChanged, this, &MainWindow::refreshTabTitles);
     connect(tab.session, &EditorSession::titleChanged, this, &MainWindow::refreshTabTitles);
+    if (autosave_) watchForRecovery(tab.session);
     tabBar_->setCurrentIndex(index);
     if (current_ != index) switchTo(index);
     return tabs_[size_t(index)];
+}
+
+void MainWindow::watchForRecovery(EditorSession* session) {
+    autosave_->watch(session, [this, session] {
+        for (size_t i = 0; i < tabs_.size(); i++) if (tabs_[i].session == session) return tabTitle(int(i));
+        return QString();
+    });
+}
+
+void MainWindow::enableAutosave() {
+    if (autosave_) return;
+    autosave_ = new Autosave(this);
+    for (const Tab& tab : tabs_) watchForRecovery(tab.session);
+    QTimer::singleShot(0, this, &MainWindow::offerRecovery);
+}
+
+void MainWindow::offerRecovery() {
+    const auto recovered = autosave_->claimOrphans();
+    if (recovered.empty()) return;
+    QStringList lines;
+    for (const auto& r : recovered)
+        lines << tr("%1, saved %2").arg(r.title.isEmpty() ? tr("Untitled") : r.title, QLocale().toString(r.saved.toLocalTime(), QLocale::ShortFormat));
+    QMessageBox box(QMessageBox::Question, tr("Recover Unsaved Work"),
+        tr("Compositor did not close properly last time. Recover %n document(s) with unsaved changes?", nullptr, int(recovered.size())), QMessageBox::NoButton, this);
+    box.setInformativeText(lines.join('\n'));
+    QPushButton* recover = box.addButton(tr("Recover"), QMessageBox::AcceptRole);
+    QPushButton* discard = box.addButton(tr("Discard"), QMessageBox::DestructiveRole);
+    QPushButton* later = box.addButton(tr("Later"), QMessageBox::RejectRole);
+    box.setDefaultButton(recover);
+    // COMPOSITOR_RECOVERY_ANSWER (recover, discard or later) answers without asking, for tests.
+    const QString answer = qEnvironmentVariable("COMPOSITOR_RECOVERY_ANSWER");
+    if (answer == "recover") recover->click();
+    else if (answer == "discard") discard->click();
+    else if (!answer.isEmpty()) later->click();
+    else box.exec();
+    if (box.clickedButton() == discard) { autosave_->discardClaimed(); return; }
+    if (box.clickedButton() != recover) { autosave_->releaseClaimed(); return; }
+    QStringList failed;
+    for (const auto& r : recovered) {
+        QString error;
+        auto project = EditorSession::readProject(r.project, &error);
+        if (!project) { failed << (r.title + ": " + error); continue; }
+        Tab& tab = addTab(true);
+        const QString name = tr("%1 (recovered)").arg(r.title.isEmpty() ? tr("Untitled") : r.title);
+        tab.session->adoptDocument(project->document, name);
+        tab.defaultName = name;
+        tab.session->markUnsaved();   // it exists nowhere else now
+        refreshTabTitles();
+    }
+    if (!failed.isEmpty()) { autosave_->releaseClaimed(); showError(tr("Some documents could not be recovered"), failed.join('\n')); return; }
+    autosave_->discardClaimed();
 }
 
 void MainWindow::switchTo(int index) {
@@ -346,6 +399,7 @@ void MainWindow::closeTab(int index) {
     adjustStack_->removeWidget(tab.adjustments);
     removeToolBar(tab.options);
     tab.frame->deleteLater(); tab.layers->deleteLater(); tab.adjustments->deleteLater(); tab.options->deleteLater();
+    if (autosave_) autosave_->forget(tab.session);
     tab.session->deleteLater();
     current_ = -1;
     if (tabs_.empty()) { addTab(false); return; }
@@ -688,6 +742,7 @@ void MainWindow::showPreferences() {
     auto* dialog = new PreferencesDialog(this);
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     connect(dialog, &PreferencesDialog::backgroundRemovalChanged, this, &MainWindow::refreshBackgroundAction);
+    connect(dialog, &QObject::destroyed, this, [this] { if (autosave_) autosave_->restart(); });
     dialog->show();
 }
 
@@ -749,6 +804,7 @@ void MainWindow::closeEvent(QCloseEvent* e) {
     QSettings settings;
     settings.setValue("window/geometry", saveGeometry());
     settings.setValue("window/state", saveState());
+    if (autosave_) autosave_->finish();   // a clean quit leaves nothing to recover
     e->accept();
 }
 

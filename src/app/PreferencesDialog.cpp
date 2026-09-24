@@ -3,6 +3,8 @@
 #include "Automation.h"
 #include "Theme.h"
 #include <QSettings>
+#include <QSpinBox>
+#include "Autosave.h"
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDesktopServices>
@@ -105,6 +107,22 @@ PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent) {
     locationRow->addWidget(open);
     v->addLayout(locationRow);
     layout->addWidget(group);
+
+    auto* recovery = new QGroupBox(tr("Crash recovery"));
+    auto* recoveryRow = new QHBoxLayout(recovery);
+    recoveryRow->addWidget(new QLabel(tr("Autosave every")));
+    auto* minutes = new QSpinBox;
+    minutes->setRange(0, 120);
+    minutes->setSuffix(tr(" min"));
+    minutes->setSpecialValueText(tr("Off"));
+    minutes->setValue(Autosave::intervalMinutes());
+    connect(minutes, QOverload<int>::of(&QSpinBox::valueChanged), this, [](int v) { Autosave::setIntervalMinutes(v); });
+    recoveryRow->addWidget(minutes);
+    auto* recoveryHint = new QLabel(tr("Unsaved changes are kept aside in the background, and offered back if the editor quits unexpectedly. Your files are not touched."));
+    recoveryHint->setWordWrap(true);
+    recoveryHint->setStyleSheet(hintStyle());
+    recoveryRow->addWidget(recoveryHint, 1);
+    layout->addWidget(recovery);
 
     auto* automation = new QGroupBox(tr("Automation"));
     auto* av = new QVBoxLayout(automation);

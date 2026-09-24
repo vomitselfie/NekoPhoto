@@ -92,6 +92,8 @@ public:
     QString projectPath() const { return projectPath_; }
     QString title() const;
     bool isModified() const { return history_.isModified(); }
+    /// A document that exists nowhere else (one recovered after a crash): unsaved until saved.
+    void markUnsaved() { history_.markUnsaved(); emit titleChanged(); emit historyChanged(); }
     void createDocument(int width, int height, double resolution = 72, bool emptyLayer = true);
     /// A project read from disk with its saved active layer, before any session takes it.
     struct LoadedProject { compositor::Document document; std::optional<compositor::Uuid> activeLayer; QString path; };

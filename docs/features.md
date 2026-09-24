@@ -54,6 +54,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Open PNG, JPEG, TIFF, WebP and more; drop an image on the canvas to add it as a layer, or on the tab strip to open it
 - Projects of up to a gigapixel of layers; the Mac app opens projects up to 100 megapixels
 - Export PNG, TIFF, or JPEG and WebP with a live preview (WebP keeps transparency, and is lossless at quality 100)
+- Crash recovery: unsaved changes are autosaved in the background every few minutes (Preferences sets how often, or turns it off) and offered back after a crash; your own files are never touched
 - Several projects in tabs; opening a file from the file manager adds a tab to the running window
 - Crop, Canvas Size and Image Size; rulers and a pixel grid
 
@@ -118,6 +119,7 @@ Mac 版と同じ機能を、Linux のキー表記で使えます。キーボー�
 - PNG、JPEG、TIFF、WebP などを開けます。カンバスにドロップするとレイヤーとして追加、タブバーにドロップすると新しいドキュメントとして開きます
 - レイヤー合計 1 ギガピクセルまでのプロジェクト(Mac 版で開けるのは 1 億画素まで)
 - PNG・TIFF 書き出し、プレビュー付きの JPEG・WebP 書き出し(WebP は透明部分を保持し、品質 100 で可逆圧縮)
+- クラッシュからの復元:未保存の変更を数分ごとにバックグラウンドで自動保存し、異常終了の後に復元を提案します(間隔の変更やオフは環境設定で)。元のファイルには触れません
 - タブで複数のプロジェクト。ファイルマネージャーから開いたファイルは起動中のウィンドウにタブとして追加
 - 切り抜き、カンバスサイズ、画像解像度。定規とピクセルグリッド
 

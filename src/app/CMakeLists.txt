@@ -90,6 +90,8 @@ qt_add_executable(compositor-linux
     Dialogs.cpp
     MainWindow.h
     MainWindow.cpp
+    Autosave.h
+    Autosave.cpp
 )
 
 target_compile_definitions(compositor-linux PRIVATE COMPOSITOR_VERSION="${COMPOSITOR_VERSION_STRING}")

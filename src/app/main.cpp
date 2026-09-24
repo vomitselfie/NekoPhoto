@@ -322,6 +322,8 @@ int main(int argc, char** argv) {
     QStringList files = parser.positionalArguments();
     if (parser.isSet(demo)) buildDemo(*window.session(), files.isEmpty() ? QString() : QDir::current().absoluteFilePath(files.first()));
     else for (const QString& path : files) window.openPath(QDir::current().absoluteFilePath(path));
+    // Crash recovery in an ordinary launch only; screenshots, demos, batches and headless runs leave nothing behind.
+    if (!ownProcess || (parser.isSet(newWindow) && !parser.isSet(demo))) window.enableAutosave();
     if (parser.isSet(toolOption)) {
         static const QMap<QString, app::Tool> tools{{"move", app::Tool::Move}, {"marquee", app::Tool::Marquee}, {"lasso", app::Tool::Lasso}, {"wand", app::Tool::Wand}, {"scribble", app::Tool::Scribble},
             {"crop", app::Tool::Crop}, {"brush", app::Tool::Brush}, {"healing", app::Tool::SpotHealing}, {"clone", app::Tool::CloneStamp}, {"smudge", app::Tool::Smudge},

@@ -29,6 +29,8 @@ public:
     std::vector<std::string> pastNames() const { std::vector<std::string> n; for (auto& e : past_) n.push_back(e.name); return n; }
     std::vector<std::string> futureNames() const { std::vector<std::string> n; for (auto it = future_.rbegin(); it != future_.rend(); ++it) n.push_back(it->name); return n; }
     void markSaved() { savedRevision_ = revision_; }
+    /// Counts as unsaved until the next save (revisions start at 1, so 0 matches none): a recovered document.
+    void markUnsaved() { savedRevision_ = 0; }
     void reset();
 
     /// Nestable: only the outermost begin/end pair records an entry, and only if the document changed.

@@ -198,6 +198,17 @@ packaging/                      .desktop, icon, MIME type
 - New canvas; import PNG, JPEG, TIFF, WebP, HEIC and anything else Qt can
   decode (EXIF orientation applied); drag and drop of files and images onto
   the window.
+- Crash recovery (`src/app/Autosave.cpp`): in an ordinary launch, every tab
+  with unsaved changes is saved as a project every few minutes (Preferences,
+  `autosave/minutes`, default 3, 0 off) into
+  `~/.local/share/compositor-linux/compositor-linux/recovery/<instance>/`, on
+  a worker thread from a copy of the document. A save or closing the tab
+  removes its copy; a clean quit removes the folder. Each instance holds
+  `<instance>.lock` (a QLockFile, stale only when its process is gone), so the
+  next launch offers back only what a crashed instance left. Headless, batch,
+  demo and screenshot runs do not autosave. For tests,
+  `COMPOSITOR_AUTOSAVE_MS` sets the interval and `COMPOSITOR_RECOVERY_ANSWER`
+  (recover, discard, later) answers the offer.
 - Size limits: 30,000 pixels a side and 100 megapixels for any one canvas,
   layer or mask, as on the Mac; up to a gigapixel for all layers together
   (and as much again for masks), where the Mac stops at 100 megapixels, so a

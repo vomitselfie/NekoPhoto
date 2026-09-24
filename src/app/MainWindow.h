@@ -17,6 +17,8 @@ class QStackedWidget;
 
 namespace app {
 
+class Autosave;
+
 class CanvasFrame;
 class CanvasWidget;
 class ColorSwatches;
@@ -43,6 +45,9 @@ class MainWindow : public QMainWindow {
 public:
     MainWindow();
     void openPath(const QString& path);
+    /// Crash recovery for an interactive launch: autosaves each tab's unsaved changes and offers back what
+    /// an instance that crashed left behind. Off for headless, batch and screenshot runs.
+    void enableAutosave();
     /// A file handed over from another launch: a project or PSD as `openPath` does, an image as a document of
     /// its own rather than a layer of the current one (a double-click in the file manager means "open this").
     void openAsDocument(const QString& path);
@@ -132,6 +137,9 @@ private:
     QString* errorSink_ = nullptr;
     bool skipConfirm_ = false;
     AutomationServer* automation_ = nullptr;
+    Autosave* autosave_ = nullptr;
+    void offerRecovery();
+    void watchForRecovery(EditorSession* session);
     QLabel* automationLabel_ = nullptr;
     QAction* mergeAction_ = nullptr;
     QAction* editTextAction_ = nullptr;
