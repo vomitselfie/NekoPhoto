@@ -770,6 +770,7 @@ void AutomationServer::registerHandlers() {
         QString command = str(p, "command").trimmed();
         if (command.isEmpty()) fail("command is empty", invalidParams);
         if (GmicRunner::executable().isEmpty()) fail("G'MIC is not installed (no gmic executable on PATH)");
+        if (QString why; !GmicRunner::allowedForAutomation(command, &why)) fail(why, invalidParams);
         LayerTransform transform;
         auto source = s->adjustmentSource(0, transform);
         if (!source) fail("the active layer has no pixels");

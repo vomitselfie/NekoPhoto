@@ -125,7 +125,10 @@ Pixels of the active layer, inside the selection: `pixels.adjust`,
 subject's own colour; both default true; `detail`: the model runs again on full-resolution windows
 along the edge of a large photo, `detailWindows` at most, default 12; `flip`: average the mask with the
 mirrored image's, defaulting to the preference), `pixels.gmic` (`command`, a G'MIC
-command line; `gmic.filters` lists the catalogue with parameters and defaults).
+command line made of catalogue filters or common built-ins, each followed only by numbers: G'MIC can
+run shell commands and read or write files, so strings, paths, substitutions and other commands are
+refused unless `COMPOSITOR_GMIC_UNRESTRICTED=1` is set; the G'MIC dialog is not restricted;
+`gmic.filters` lists the catalogue with parameters and defaults).
 
 Selection: `selection.all`, `selection.none`, `selection.invert`,
 `selection.rect` (or `ellipse: true`), `selection.polygon`, `selection.wand`,

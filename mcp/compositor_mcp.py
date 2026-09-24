@@ -362,7 +362,7 @@ def gmic_filters(search: str = "") -> str:
 
 @mcp.tool()
 def pixels_gmic(command: str) -> str:
-    """Run a G'MIC command line on the active layer's pixels inside the selection, e.g. "unsharp 2,1.5", "cartoon 3,150,20,0.25,1.5,8" or a catalogue filter's defaultCommand with edited values."""
+    """Run a G'MIC command line on the active layer's pixels inside the selection, e.g. "unsharp 2,1.5", "cartoon 3,150,20,0.25,1.5,8" or a catalogue filter's defaultCommand with edited values. Only filter names (from gmic_filters, or common built-ins such as blur, sharpen, unsharp, denoise, cartoon) followed by numbers are accepted: no strings, paths or other G'MIC commands."""
     return text(call("pixels.gmic", command=command))
 
 

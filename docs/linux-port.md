@@ -107,7 +107,9 @@ each filter's parameters; the dialog builds the controls from them (the
 declaration's separators and short notes become folding sections, long notes a
 Notes fold), lists filters under the catalogue's folders, shows the resulting
 command line, and previews on a reduced copy. Filters that change the
-image size are rejected. Over automation: `pixels.gmic` and `gmic.filters`.
+image size are rejected. Over automation: `pixels.gmic` (filter names and
+numbers only, since G'MIC can run shell commands; `COMPOSITOR_GMIC_UNRESTRICTED=1`
+lifts that) and `gmic.filters`.
 
 When the build is configured with `-DCOMPOSITOR_WITH_LIBGMIC=ON` and finds libgmic (off by
 default, so an installed binary never depends on a library that a later upgrade may remove), setting

@@ -10,6 +10,7 @@
 #include <gmic.h>
 #endif
 #include <QRegularExpression>
+#include <QSet>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTextStream>
@@ -246,6 +247,46 @@ QStringList GmicRunner::tokenize(const QString& command) {
     }
     if (!current.isEmpty()) out << current;
     return out;
+}
+
+bool GmicRunner::allowedForAutomation(const QString& command, QString* why) {
+    if (qEnvironmentVariableIntValue("COMPOSITOR_GMIC_UNRESTRICTED") == 1) return true;
+    auto refuse = [&](const QString& reason) { if (why) *why = reason; return false; };
+    // Characters that make strings, paths, URLs, substitutions, math expressions or definitions.
+    static const QRegularExpression forbidden(QStringLiteral(R"([$@{}`\"'/:;()<>|&=\n\r])"));
+    const QRegularExpressionMatch bad = forbidden.match(command);
+    if (bad.hasMatch()) return refuse(QStringLiteral("automation runs only filter names and numbers; \"%1\" is not allowed").arg(bad.captured()));
+    static const QSet<QString> builtins = {
+        "blur", "blur_x", "blur_y", "blur_xy", "blur_angular", "blur_radial", "blur_linear", "bilateral", "sharpen", "unsharp",
+        "deblur", "smooth", "denoise", "median", "erode", "dilate", "edges", "gradient_norm", "normalize", "equalize", "negate",
+        "threshold", "cut", "sepia", "cartoon", "pencilbw", "sketchbw", "drawing", "painting", "cubism", "kuwahara", "noise",
+        "pixelize", "vignette", "mirror", "solarize", "posterize", "glow", "emboss"};
+    // The catalogue's filter commands (and their preview variants), read once.
+    static const QSet<QString> catalogue = [] {
+        QSet<QString> names;
+        GmicCatalogue c;
+        if (const QString path = GmicCatalogue::preferredFile(); !path.isEmpty() && c.load(path))
+            for (const GmicFilter& f : c.filters()) {
+                names.insert(f.command);
+                if (!f.previewCommand.isEmpty()) names.insert(f.previewCommand);
+            }
+        return names;
+    }();
+    static const QRegularExpression numbers(QStringLiteral(R"(^[-+]?[0-9.,eE%+-]*[0-9][0-9.,eE%+-]*$)"));
+    const QStringList tokens = tokenize(command);
+    if (tokens.isEmpty()) return refuse(QStringLiteral("the command is empty"));
+    for (int i = 0; i < tokens.size(); i++) {
+        const QString& token = tokens[i];
+        if (numbers.match(token).hasMatch()) {
+            if (i == 0) return refuse(QStringLiteral("the command must start with a filter name"));
+            continue;
+        }
+        QString name = token;
+        if (name.startsWith('-') || name.startsWith('+')) name.remove(0, 1);
+        if (!builtins.contains(name) && !catalogue.contains(name))
+            return refuse(QStringLiteral("\"%1\" is not a filter from the catalogue (gmic.filters) or a known built-in").arg(token));
+    }
+    return true;
 }
 
 namespace {

@@ -72,6 +72,11 @@ public:
     static QString executable();
     static QString version();
     static QStringList tokenize(const QString& command);
+    /// Whether automation may run `command`. G'MIC is a full language (it can run shell commands, read and
+    /// write files, and fetch URLs), so a command from outside, where a prompt could have written it, must be
+    /// filter names from the catalogue or a short list of built-ins, each followed only by numbers; no
+    /// strings, paths, substitutions or definitions. COMPOSITOR_GMIC_UNRESTRICTED=1 lifts the check.
+    static bool allowedForAutomation(const QString& command, QString* why);
     /// Runs `command` on premultiplied RGBA `source`; the result has the same size or `error` says why not.
     static std::shared_ptr<compositor::Image> runSync(const compositor::Image& source, const QString& command, QString* error, int timeoutMs = 300000);
 

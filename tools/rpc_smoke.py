@@ -223,6 +223,13 @@ def main():
         applied = rpc.call("pixels.gmic", command="unsharp 2,1.5")
         assert applied["applied"].startswith("unsharp"), applied
         rpc.call("history.undo")
+        # G'MIC can run shell commands; automation takes only filter names and numbers.
+        for unsafe in ('x "touch /tmp/compositor-gmic-check"', "blur 3 exec ls", "blur ${x}"):
+            try:
+                rpc.call("pixels.gmic", command=unsafe)
+                raise AssertionError("pixels.gmic ran " + unsafe)
+            except RuntimeError as e:
+                assert "not allowed" in str(e) or "not a filter" in str(e), e
         if cat["catalogue"]:
             assert cat["filters"], cat
             print("gmic", cat["version"], "catalogue entries matching 'sharpen':", len(cat["filters"]))
