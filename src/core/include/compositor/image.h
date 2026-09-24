@@ -6,7 +6,10 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <memory>
+#include <new>
+#include <utility>
 #include <mutex>
 #include <vector>
 
@@ -17,10 +20,37 @@ namespace compositor {
 /// disagree with the buffer behind it. A size beyond it yields an empty image rather than a short buffer.
 inline constexpr int maxImageSide = 30000;
 
+/// Pixel memory from calloc. A large block comes from the kernel as untouched zero pages, so a blank image
+/// costs nothing until something is written to it (a brush stroke on a blank 4096 x 4096 layer used to fill
+/// 64 MB with zeros twice before its first dab). Value-initialising an element is a no-op, since calloc zeroed
+/// it; copies go through the buffer classes' own copy, which copies in bulk.
+template <class T>
+struct ZeroedAllocator {
+    using value_type = T;
+    ZeroedAllocator() = default;
+    template <class U> ZeroedAllocator(const ZeroedAllocator<U>&) noexcept {}
+    T* allocate(size_t n) {
+        void* p = std::calloc(n ? n : 1, sizeof(T));
+        if (!p) throw std::bad_alloc();
+        return static_cast<T*>(p);
+    }
+    void deallocate(T* p, size_t) noexcept { std::free(p); }
+    template <class U> void construct(U*) noexcept {}
+    template <class U, class... A> void construct(U* p, A&&... args) { ::new (static_cast<void*>(p)) U(std::forward<A>(args)...); }
+    friend bool operator==(const ZeroedAllocator&, const ZeroedAllocator&) { return true; }
+};
+using PixelBytes = std::vector<uint8_t, ZeroedAllocator<uint8_t>>;
+
 class Image {
 public:
     Image() = default;
+    /// Transparent black, from zero pages that cost nothing until written.
     Image(int width, int height);
+    /// Large images copy on every core.
+    Image(const Image& other);
+    Image& operator=(const Image& other);
+    Image(Image&&) noexcept = default;
+    Image& operator=(Image&&) noexcept = default;
     int width() const { return width_; }
     int height() const { return height_; }
     /// Bytes per row.
@@ -39,13 +69,17 @@ public:
 
 private:
     int width_ = 0, height_ = 0, stride_ = 0;
-    std::vector<uint8_t> pixels_;
+    PixelBytes pixels_;
 };
 
 class GrayImage {
 public:
     GrayImage() = default;
     GrayImage(int width, int height, uint8_t value = 0);
+    GrayImage(const GrayImage& other);
+    GrayImage& operator=(const GrayImage& other);
+    GrayImage(GrayImage&&) noexcept = default;
+    GrayImage& operator=(GrayImage&&) noexcept = default;
     int width() const { return width_; }
     int height() const { return height_; }
     int stride() const { return width_; }
@@ -62,7 +96,7 @@ public:
 
 private:
     int width_ = 0, height_ = 0;
-    std::vector<uint8_t> pixels_;
+    PixelBytes pixels_;
 };
 
 using ImagePtr = std::shared_ptr<const Image>;

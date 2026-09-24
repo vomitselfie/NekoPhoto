@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <mutex>
 #include <type_traits>
 
 namespace compositor {
@@ -17,9 +18,31 @@ constexpr bool holdable(int width, int height) {
 }
 }   // namespace
 
+namespace {
+/// A bulk copy, on every core once it is large enough to be worth it (a 4096 x 4096 layer is 64 MB).
+void copyBytes(uint8_t* to, const uint8_t* from, size_t n) {
+    constexpr size_t band = size_t(1) << 20;
+    if (n < 4 * band) { if (n) std::memcpy(to, from, n); return; }
+    const int bands = int((n + band - 1) / band);
+    parallelFor(0, bands, 1, [&](int b0, int b1) {
+        const size_t start = size_t(b0) * band, end = std::min(n, size_t(b1) * band);
+        std::memcpy(to + start, from + start, end - start);
+    });
+}
+}   // namespace
+
 Image::Image(int width, int height)
     : width_(holdable(width, height) ? width : 0), height_(holdable(width, height) ? height : 0),
-      stride_(width_ * 4), pixels_(size_t(stride_) * size_t(height_), 0) {}
+      stride_(width_ * 4), pixels_(size_t(stride_) * size_t(height_)) {}
+
+Image::Image(const Image& other) : width_(other.width_), height_(other.height_), stride_(other.stride_), pixels_(other.pixels_.size()) {
+    copyBytes(pixels_.data(), other.pixels_.data(), pixels_.size());
+}
+
+Image& Image::operator=(const Image& other) {
+    if (this != &other) { Image copy(other); *this = std::move(copy); }
+    return *this;
+}
 
 void Image::fill(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     for (int y = 0; y < height_; y++) {
@@ -30,7 +53,18 @@ void Image::fill(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
 
 GrayImage::GrayImage(int width, int height, uint8_t value)
     : width_(holdable(width, height) ? width : 0), height_(holdable(width, height) ? height : 0),
-      pixels_(size_t(width_) * size_t(height_), value) {}
+      pixels_(size_t(width_) * size_t(height_)) {
+    if (value) std::memset(pixels_.data(), value, pixels_.size());
+}
+
+GrayImage::GrayImage(const GrayImage& other) : width_(other.width_), height_(other.height_), pixels_(other.pixels_.size()) {
+    copyBytes(pixels_.data(), other.pixels_.data(), pixels_.size());
+}
+
+GrayImage& GrayImage::operator=(const GrayImage& other) {
+    if (this != &other) { GrayImage copy(other); *this = std::move(copy); }
+    return *this;
+}
 
 void GrayImage::fill(uint8_t value) { std::fill(pixels_.begin(), pixels_.end(), value); }
 
@@ -64,15 +98,23 @@ PixelBounds alphaBounds(const Image& image, const PixelBounds& within) {
     PixelBounds b;
     const int wx0 = std::max(0, within.x0), wy0 = std::max(0, within.y0), wx1 = std::min(image.width(), within.x1), wy1 = std::min(image.height(), within.y1);
     int x0 = image.width(), y0 = image.height(), x1 = 0, y1 = 0;
-    for (int y = wy0; y < wy1; y++) {
-        const uint8_t* row = image.row(y) + size_t(wx0) * 4;
-        int first = firstOpaque(row, wx1 - wx0);
-        if (first == wx1 - wx0) continue;
-        x0 = std::min(x0, wx0 + first);
-        x1 = std::max(x1, wx0 + endOpaque(row, wx1 - wx0));
-        y0 = std::min(y0, y);
-        y1 = y + 1;
-    }
+    std::mutex merge;
+    // Bands of rows on every core, each finding its own extent; a large layer is 16 M pixels to look through.
+    parallelFor(wy0, wy1, 64, [&](int ya, int yb) {
+        int bx0 = image.width(), by0 = image.height(), bx1 = 0, by1 = 0;
+        for (int y = ya; y < yb; y++) {
+            const uint8_t* row = image.row(y) + size_t(wx0) * 4;
+            int first = firstOpaque(row, wx1 - wx0);
+            if (first == wx1 - wx0) continue;
+            bx0 = std::min(bx0, wx0 + first);
+            bx1 = std::max(bx1, wx0 + endOpaque(row, wx1 - wx0));
+            by0 = std::min(by0, y);
+            by1 = y + 1;
+        }
+        if (bx1 <= bx0) return;
+        std::lock_guard<std::mutex> lock(merge);
+        x0 = std::min(x0, bx0); x1 = std::max(x1, bx1); y0 = std::min(y0, by0); y1 = std::max(y1, by1);
+    });
     if (x1 > x0 && y1 > y0) { b.x0 = x0; b.y0 = y0; b.x1 = x1; b.y1 = y1; }
     return b;
 }
@@ -122,29 +164,30 @@ PixelBounds nonzeroBounds(const GrayImage& image) {
 
 std::shared_ptr<Image> cropImage(const Image& image, int x, int y, int width, int height) {
     auto out = std::make_shared<Image>(std::max(0, width), std::max(0, height));
-    for (int j = 0; j < out->height(); j++) {
-        int sy = y + j;
-        if (sy < 0 || sy >= image.height()) continue;
-        for (int i = 0; i < out->width(); i++) {
-            int sx = x + i;
-            if (sx < 0 || sx >= image.width()) continue;
-            std::memcpy(out->pixel(i, j), image.pixel(sx, sy), 4);
+    // Outside the source stays transparent (zero pages); inside, whole row spans on every core.
+    const int i0 = std::max(0, -x), i1 = std::min(out->width(), image.width() - x);
+    if (i1 <= i0) return out;
+    parallelFor(0, out->height(), 128, [&](int ja, int jb) {
+        for (int j = ja; j < jb; j++) {
+            const int sy = y + j;
+            if (sy < 0 || sy >= image.height()) continue;
+            std::memcpy(out->pixel(i0, j), image.pixel(x + i0, sy), size_t(i1 - i0) * 4);
         }
-    }
+    });
     return out;
 }
 
 std::shared_ptr<GrayImage> cropGray(const GrayImage& image, int x, int y, int width, int height) {
     auto out = std::make_shared<GrayImage>(std::max(0, width), std::max(0, height));
-    for (int j = 0; j < out->height(); j++) {
-        int sy = y + j;
-        if (sy < 0 || sy >= image.height()) continue;
-        for (int i = 0; i < out->width(); i++) {
-            int sx = x + i;
-            if (sx < 0 || sx >= image.width()) continue;
-            out->at(i, j) = image.at(sx, sy);
+    const int i0 = std::max(0, -x), i1 = std::min(out->width(), image.width() - x);
+    if (i1 <= i0) return out;
+    parallelFor(0, out->height(), 256, [&](int ja, int jb) {
+        for (int j = ja; j < jb; j++) {
+            const int sy = y + j;
+            if (sy < 0 || sy >= image.height()) continue;
+            std::memcpy(out->row(j) + i0, image.row(sy) + x + i0, size_t(i1 - i0));
         }
-    }
+    });
     return out;
 }
 

@@ -1,4 +1,5 @@
 #include "compositor/brush.h"
+#include "compositor/parallel.h"
 #include "compositor/shape.h"
 #include <algorithm>
 #include <cmath>
@@ -29,13 +30,15 @@ void stretchGray(const GrayImage& source, GrayImage& target, const Rect& rect) {
 }
 
 void copyImage(const Image& source, Image& target, int dx, int dy) {
-    for (int y = 0; y < source.height(); y++) {
-        int ty = y + dy;
-        if (ty < 0 || ty >= target.height()) continue;
-        int x0 = std::max(0, -dx), x1 = std::min(source.width(), target.width() - dx);
-        if (x1 <= x0) continue;
-        std::memcpy(target.pixel(x0 + dx, ty), source.pixel(x0, y), size_t(x1 - x0) * 4);
-    }
+    const int x0 = std::max(0, -dx), x1 = std::min(source.width(), target.width() - dx);
+    if (x1 <= x0) return;
+    parallelFor(0, source.height(), 256, [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++) {
+            const int ty = y + dy;
+            if (ty < 0 || ty >= target.height()) continue;
+            std::memcpy(target.pixel(x0 + dx, ty), source.pixel(x0, y), size_t(x1 - x0) * 4);
+        }
+    });
 }
 
 } // namespace
@@ -83,14 +86,31 @@ BrushStroke::BrushStroke(const Layer& layer, bool mask, BrushSettings settings, 
         // and only the working copy is made.
         const bool sameGrid = layer.asset && layer.asset->image && sourceRect_ == Rect(0, 0, width_, height_)
             && layer.asset->image->width() == width_ && layer.asset->image->height() == height_;
-        if (sameGrid) base_ = layer.asset->image;
-        else {
+        // A blank layer (no pixels yet) needs no copy and no scan: two images of zero pages, which cost nothing
+        // until painted. A layer smaller than the grid is scanned at its own size.
+        const bool blank = !(layer.asset && layer.asset->image);
+        if (sameGrid) {
+            base_ = layer.asset->image;
+            baseBounds_ = alphaBounds(*base_);
+        } else {
+            // Base and working copy each get the layer's own pixels; the rest of the grid is zero pages in both,
+            // so the working copy is not a copy of the whole grid.
             auto copy = std::make_shared<Image>(width_, height_);
-            if (layer.asset && layer.asset->image) copyImage(*layer.asset->image, *copy, int(sourceRect_.minX()), int(sourceRect_.minY()));
+            auto working = std::make_shared<Image>(width_, height_);
+            if (!blank) {
+                const int dx = int(sourceRect_.minX()), dy = int(sourceRect_.minY());
+                copyImage(*layer.asset->image, *copy, dx, dy);
+                copyImage(*layer.asset->image, *working, dx, dy);
+                PixelBounds b = alphaBounds(*layer.asset->image);
+                if (!b.isEmpty()) {
+                    b = {std::max(0, b.x0 + dx), std::max(0, b.y0 + dy), std::min(width_, b.x1 + dx), std::min(height_, b.y1 + dy)};
+                    baseBounds_ = b.isEmpty() ? PixelBounds{} : b;
+                }
+            }
             base_ = copy;
+            working_ = working;
         }
-        baseBounds_ = alphaBounds(*base_);
-        working_ = std::make_shared<Image>(*base_);
+        if (!working_) working_ = std::make_shared<Image>(*base_);
         // The healers copy only from what the mask shows: a dab at a cut-out's edge closes with the subject.
         if (layer.mask && layer.mask->enabled && !layer.mask->placement && layer.mask->asset.image
             && layer.mask->asset.image->width() == originalWidth && layer.mask->asset.image->height() == originalHeight) {
