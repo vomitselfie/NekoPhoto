@@ -431,8 +431,8 @@ void AutomationServer::registerHandlers() {
         w->openPath(path);
         EditorSession* s = session();
         QJsonObject out{{"tab", w->currentTabIndex()}, {"title", s->title()}, {"width", s->hasDocument() ? s->document()->width : 0}, {"height", s->hasDocument() ? s->document()->height : 0}};
-        if (path.endsWith(".psd", Qt::CaseInsensitive) || path.endsWith(".psb", Qt::CaseInsensitive)) {
-            if (!s->hasDocument()) fail("the Photoshop file could not be imported");
+        if (path.endsWith(".psd", Qt::CaseInsensitive) || path.endsWith(".psb", Qt::CaseInsensitive) || path.endsWith(".clip", Qt::CaseInsensitive)) {
+            if (!s->hasDocument()) fail(path.endsWith(".clip", Qt::CaseInsensitive) ? "the Clip Studio file could not be imported" : "the Photoshop file could not be imported");
             out["layers"] = int(s->document()->layers.size());
             out["notes"] = QJsonArray::fromStringList(w->lastImportNotes());
         }

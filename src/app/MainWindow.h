@@ -52,7 +52,8 @@ public:
     /// its own rather than a layer of the current one (a double-click in the file manager means "open this").
     void openAsDocument(const QString& path);
     /// Imports a PSD/PSB into a new tab; the notes say what was left behind.
-    void openPhotoshopFile(const QString& path);
+    /// A Photoshop or Clip Studio file in a new tab, with a note of what did not carry over.
+    void openLayeredFile(const QString& path);
     const QStringList& lastImportNotes() const { return lastImportNotes_; }
     EditorSession* session() const { return session_; }
 

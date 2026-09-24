@@ -102,8 +102,8 @@ instead of returning base64), `layers.render` (one layer's pixels),
 `screenshot` (the canvas as shown, or the `window`).
 
 Documents: `tabs.select`, `tabs.new`, `tabs.close`, `document.new`,
-`document.open` (.comp, a Photoshop .psd/.psb, which answers with `layers` and the import
-`notes`, or an image), `document.import` (an image as a layer),
+`document.open` (.comp, a Photoshop .psd/.psb or a Clip Studio .clip, which answer with `layers`
+and the import `notes`, or an image), `document.import` (an image as a layer),
 `document.save` (answers `macCompatible`: false past the 100 megapixels of layers Compositor for
 macOS opens; projects here hold up to a gigapixel), `document.export` (.png, .jpg, .webp or .tif; `quality` for JPEG and WebP, where 100 is lossless; `background` behind a JPEG), `document.close`.
 

@@ -26,7 +26,7 @@ for macOS, and opens Photoshop files and the Mac app's `.comp` projects.
 - **Adjustments and filters:** levels, curves, hue/saturation, exposure, gradient map, grain, blurs, noise and lens correction
 - **Remove Background:** an AI model that runs on your own machine; nothing is uploaded
 - **G'MIC:** over 700 more filters with a live preview, when `gmic` is installed
-- **Files:** Photoshop PSD and PSB with layers, folders, masks and blend modes; projects of up to a gigapixel of layers; PNG, JPEG, WebP and TIFF export; several projects in tabs; crash recovery
+- **Files:** Photoshop PSD and PSB, and Clip Studio `.clip` projects, with layers, folders, masks, clipping and blend modes; projects of up to a gigapixel of layers; PNG, JPEG, WebP and TIFF export; several projects in tabs; crash recovery
 - **AI agents:** Claude Code or any MCP client can drive the editor
 
 The full list is in [docs/features.md](docs/features.md).
@@ -127,7 +127,7 @@ Photoshop ファイルと Mac 版の `.comp` プロジェクトを開けます�
 - **色調補正とフィルター:** レベル補正、トーンカーブ、色相・彩度、露光量、グラデーションマップ、粒子、ぼかし、ノイズ、レンズ補正
 - **背景を削除:** AI モデルは手元のマシンで動作し、画像はどこにも送信されません
 - **G'MIC:** `gmic` をインストールすると、700 種類以上のフィルターをライブプレビュー付きで使えます
-- **ファイル:** レイヤー・フォルダー・マスク・描画モードを保ったまま PSD/PSB を開けます。1 ギガピクセルまでのプロジェクト、PNG・JPEG・WebP・TIFF 書き出し、タブで複数のプロジェクト、クラッシュからの復元
+- **ファイル:** レイヤー・フォルダー・マスク・クリッピング・描画モードを保ったまま PSD/PSB とクリップスタジオの `.clip` を開けます。1 ギガピクセルまでのプロジェクト、PNG・JPEG・WebP・TIFF 書き出し、タブで複数のプロジェクト、クラッシュからの復元
 - **AI エージェント:** Claude Code などの MCP クライアントから操作できます
 
 機能の一覧は [docs/features.md](docs/features.md#日本語) にあります。

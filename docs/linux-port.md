@@ -198,6 +198,17 @@ packaging/                      .desktop, icon, MIME type
 - New canvas; import PNG, JPEG, TIFF, WebP, HEIC and anything else Qt can
   decode (EXIF orientation applied); drag and drop of files and images onto
   the window.
+- Clip Studio projects (`.clip`, `src/core/src/clip.cpp` over the C reader
+  `csp_clip_import.c`): the CSFCHUNK container's tile streams and its embedded
+  SQLite database (Layer, Mipmap, MipmapInfo, Offscreen) give the layers,
+  folders, masks, opacity, visibility, clipping and blend modes. A layer's
+  bitmap sits at `LayerOffset` + `LayerRenderOffscrOffset` (it grows in whole
+  tiles, so a layer moved past the edge has a bitmap starting off the canvas),
+  and each layer is cropped to what it paints. Blend modes without a
+  counterpart take the nearest (as for PSD) and are listed. Vector, text and
+  other special layers come in as the pixels Clip Studio cached; 16- and
+  32-bit and 1-bit layers are refused with a note. Checked against twelve real
+  files and their PSD exports (identical renders) and fuzzed under ASan.
 - Crash recovery (`src/app/Autosave.cpp`): in an ordinary launch, every tab
   with unsaved changes is saved as a project every few minutes (Preferences,
   `autosave/minutes`, default 3, 0 off) into

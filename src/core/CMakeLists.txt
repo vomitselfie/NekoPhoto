@@ -55,7 +55,7 @@ if(COMPOSITOR_WITH_MYPAINT)
 endif()
 set(COMPOSITOR_HAVE_MYPAINT ${COMPOSITOR_HAVE_MYPAINT} PARENT_SCOPE)
 
-# SQLite reads Clip Studio brushes (.sut). Optional: without it that one import format is refused.
+# SQLite reads Clip Studio brushes (.sut) and projects (.clip). Optional: without it those imports are refused.
 option(COMPOSITOR_WITH_SQLITE "Import Clip Studio brushes through SQLite" ON)
 set(COMPOSITOR_HAVE_SQLITE OFF)
 if(COMPOSITOR_WITH_SQLITE)
@@ -78,6 +78,7 @@ set(COMPOSITOR_HAVE_SQLITE ${COMPOSITOR_HAVE_SQLITE} PARENT_SCOPE)
 add_library(compositor_core STATIC
     src/abr.cpp
     src/adjustments.cpp
+    src/clip.cpp
     src/blend.cpp
     src/blur.cpp
     src/brushimport.cpp
@@ -130,6 +131,8 @@ if(COMPOSITOR_HAVE_OPENCV)
     target_compile_definitions(compositor_core PRIVATE COMPOSITOR_HAVE_OPENCV)
 endif()
 if(COMPOSITOR_HAVE_SQLITE)
+    # Clip Studio projects (.clip): a C reader of the container, its SQLite database and the layer tiles.
+    target_sources(compositor_core PRIVATE src/csp_clip_import.c)
     target_link_libraries(compositor_core PRIVATE ${COMPOSITOR_SQLITE_TARGET})
     target_compile_definitions(compositor_core PRIVATE COMPOSITOR_HAVE_SQLITE)
 endif()

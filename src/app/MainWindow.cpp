@@ -10,6 +10,7 @@
 #include "FilterDialog.h"
 #include "GmicDialog.h"
 #include "TextDialog.h"
+#include "compositor/clip.h"
 #include "compositor/psd.h"
 #include "ColorSwatches.h"
 #include "Icons.h"
@@ -65,16 +66,19 @@ QString imageFilter() {
     return QObject::tr("Images (%1)").arg(patterns.join(' '));
 }
 
-/// Everything File > Open and Import File take: Photoshop files, images, and a project's manifest.json.
+/// Everything File > Open and Import File take: Photoshop and Clip Studio files, images, and a project's manifest.json.
 QString openFilter() {
-    QStringList patterns = {"*.psd", "*.psb", "manifest.json"};
+    QStringList patterns = {"*.psd", "*.psb", "*.clip", "manifest.json"};
     for (auto& format : QImageReader::supportedImageFormats()) patterns << "*." + QString::fromLatin1(format);
-    return QObject::tr("Images, Photoshop files and projects (%1)").arg(patterns.join(' ')) + ";;" + imageFilter() + ";;"
-        + QObject::tr("Photoshop files (*.psd *.psb)");
+    return QObject::tr("Images, layered files and projects (%1)").arg(patterns.join(' ')) + ";;" + imageFilter() + ";;"
+        + QObject::tr("Photoshop files (*.psd *.psb)") + ";;" + QObject::tr("Clip Studio files (*.clip)");
 }
 
 bool isProjectPath(const QString& path) { return path.endsWith(".comp", Qt::CaseInsensitive) && QFileInfo(path).isDir(); }
-bool isPhotoshopPath(const QString& path) { return path.endsWith(".psd", Qt::CaseInsensitive) || path.endsWith(".psb", Qt::CaseInsensitive); }
+/// A layered file from another editor, opened in its own tab: Photoshop (.psd, .psb) or Clip Studio (.clip).
+bool isLayeredPath(const QString& path) {
+    return path.endsWith(".psd", Qt::CaseInsensitive) || path.endsWith(".psb", Qt::CaseInsensitive) || path.endsWith(".clip", Qt::CaseInsensitive);
+}
 
 } // namespace
 
@@ -849,13 +853,13 @@ void MainWindow::newDocument() {
 }
 
 void MainWindow::openAsDocument(const QString& path) {
-    if (isPhotoshopPath(path) || isProjectPath(path)) { openPath(path); return; }
+    if (isLayeredPath(path) || isProjectPath(path)) { openPath(path); return; }
     QString error;
     if (!openImageAsDocument(path, &error)) showError(tr("Couldn’t open the file"), error.isEmpty() ? path : error);
 }
 
 void MainWindow::openPath(const QString& path) {
-    if (isPhotoshopPath(path)) { openPhotoshopFile(path); return; }
+    if (isLayeredPath(path)) { openLayeredFile(path); return; }
     if (isProjectPath(path)) {
         QString canonical = QFileInfo(path).canonicalFilePath();
         for (size_t i = 0; i < tabs_.size(); i++)
@@ -871,11 +875,12 @@ void MainWindow::openPath(const QString& path) {
     importFile(path);
 }
 
-void MainWindow::openPhotoshopFile(const QString& path) {
+void MainWindow::openLayeredFile(const QString& path) {
     // The import reads the whole file; a big one takes a moment.
     QApplication::setOverrideCursor(Qt::BusyCursor);
     std::string error;
-    auto imported = compositor::importPsd(path.toStdString(), &error);
+    const bool clip = path.endsWith(".clip", Qt::CaseInsensitive);
+    auto imported = clip ? compositor::importClip(path.toStdString(), &error) : compositor::importPsd(path.toStdString(), &error);
     QApplication::restoreOverrideCursor();
     if (!imported) { showError(tr("Couldn’t open %1").arg(QFileInfo(path).fileName()), QString::fromStdString(error)); return; }
     Tab& tab = addTab(true);
@@ -885,7 +890,8 @@ void MainWindow::openPhotoshopFile(const QString& path) {
     for (const std::string& note : imported->notes) lastImportNotes_ << QString::fromStdString(note);
     if (!lastImportNotes_.isEmpty() && isVisible()) {
         auto* box = new QMessageBox(QMessageBox::Information, tr("Imported %1").arg(QFileInfo(path).fileName()),
-            tr("%n layer(s) imported. Some things Photoshop keeps have no counterpart here:", nullptr, int(imported->document.layers.size())), QMessageBox::Ok, this);
+            (clip ? tr("%n layer(s) imported. Some things Clip Studio keeps have no counterpart here:", nullptr, int(imported->document.layers.size()))
+                  : tr("%n layer(s) imported. Some things Photoshop keeps have no counterpart here:", nullptr, int(imported->document.layers.size()))), QMessageBox::Ok, this);
         box->setDetailedText(lastImportNotes_.join('\n'));
         box->setInformativeText(lastImportNotes_.mid(0, 6).join('\n') + (lastImportNotes_.size() > 6 ? tr("\n… and %n more (see Details).", nullptr, lastImportNotes_.size() - 6) : QString()));
         box->setAttribute(Qt::WA_DeleteOnClose);
@@ -943,7 +949,7 @@ bool MainWindow::overTabStrip(const QPointF& windowPosition) const {
 }
 
 void MainWindow::openFiles() {
-    // Photoshop files, images, and a project picked by its manifest.json (a .comp is a folder, which a file
+    // Photoshop and Clip Studio files, images, and a project picked by its manifest.json (a .comp is a folder, which a file
     // picker cannot choose); each opens in its own tab.
     QStringList paths = QFileDialog::getOpenFileNames(this, tr("Open"), QSettings().value("lastDir").toString(), openFilter());
     if (paths.isEmpty()) return;
@@ -956,12 +962,12 @@ void MainWindow::openFiles() {
 }
 
 void MainWindow::importFiles() {
-    // Images land as layers in the open document; Photoshop files, or anything with no document open, get a tab.
+    // Images land as layers in the open document; layered files, or anything with no document open, get a tab.
     QStringList paths = QFileDialog::getOpenFileNames(this, tr("Import File"), QSettings().value("lastDir").toString(), openFilter());
     if (paths.isEmpty()) return;
     QSettings().setValue("lastDir", QFileInfo(paths.first()).path());
     for (const QString& path : paths) {
-        if (isPhotoshopPath(path) || !session_->hasDocument()) openAsDocument(path);
+        if (isLayeredPath(path) || !session_->hasDocument()) openAsDocument(path);
         else importFile(path);
     }
 }
@@ -1068,9 +1074,9 @@ void MainWindow::dropEvent(QDropEvent* e) {
         for (auto& url : e->mimeData()->urls()) {
             if (!url.isLocalFile()) continue;
             QString path = url.toLocalFile();
-            // Projects and Photoshop files open in their own tab; an image dropped on the tab strip does too,
+            // Projects and layered files open in their own tab; an image dropped on the tab strip does too,
             // while one dropped on the canvas lands as a layer where it was dropped.
-            if (isProjectPath(path) || isPhotoshopPath(path)) openPath(path);
+            if (isProjectPath(path) || isLayeredPath(path)) openPath(path);
             else if (asDocument) { QString error; if (!openImageAsDocument(path, &error)) showError(tr("Couldn’t open %1").arg(QFileInfo(path).fileName()), error); }
             else importFile(path, at);
         }
