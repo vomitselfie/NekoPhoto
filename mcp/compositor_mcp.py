@@ -11,19 +11,24 @@ compositor-linux (started with --rpc, or with the automation preference on) or
 launches one itself.
 
 Environment:
-  COMPOSITOR_RPC_SOCKET  socket path (default $XDG_RUNTIME_DIR/compositor-linux.sock)
-  COMPOSITOR_BIN         binary to launch when nothing is listening (default: compositor-linux on PATH)
+  COMPOSITOR_RPC_SOCKET  socket path (default $XDG_RUNTIME_DIR/compositor-linux.sock, else Qt's private
+                         /tmp/runtime-<user>/, never the shared /tmp itself)
+  COMPOSITOR_BIN         binary to launch when nothing is listening (default: compositor-linux on PATH,
+                         else the build next to this file)
   COMPOSITOR_MCP_LAUNCH  "0" to never launch the app; "headless" to launch it without a window
 """
 from __future__ import annotations
 
 import base64
+import getpass
 import json
 import os
 import shutil
 import socket
+import stat
 import subprocess
 import sys
+import tempfile
 import time
 from typing import Any, Optional
 
@@ -40,8 +45,19 @@ def socket_path() -> str:
     env = os.environ.get("COMPOSITOR_RPC_SOCKET")
     if env:
         return env
-    runtime = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
+    runtime = os.environ.get("XDG_RUNTIME_DIR") or private_runtime_dir()
     return os.path.join(runtime, "compositor-linux.sock")
+
+
+def private_runtime_dir() -> str:
+    """Qt's fallback when XDG_RUNTIME_DIR is unset (the editor uses it too): /tmp/runtime-<user>, which must be
+    ours and closed to everyone else, never the shared /tmp itself."""
+    path = os.path.join(tempfile.gettempdir(), "runtime-" + getpass.getuser())
+    os.makedirs(path, mode=0o700, exist_ok=True)
+    info = os.lstat(path)
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+        raise RuntimeError(f"{path} is not a private folder of this user; set XDG_RUNTIME_DIR or COMPOSITOR_RPC_SOCKET")
+    return path
 
 
 class Connection:
@@ -63,10 +79,10 @@ class Connection:
             raise RuntimeError(f"compositor-linux is not listening at {path}; start it with --rpc (or turn on Preferences > Automation)")
         binary = os.environ.get("COMPOSITOR_BIN") or shutil.which("compositor-linux")
         if not binary:
-            for candidate in ("./build/src/app/compositor-linux", os.path.expanduser("~/Development/linpositor/Compositor/build/src/app/compositor-linux")):
-                if os.path.exists(candidate):
-                    binary = candidate
-                    break
+            # The build next to this bridge (mcp/ sits in the source tree), never one relative to the current folder.
+            candidate = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build", "src", "app", "compositor-linux")
+            if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                binary = candidate
         if not binary:
             raise RuntimeError(f"nothing listening at {path} and no compositor-linux binary found; set COMPOSITOR_BIN")
         args = [binary, "--rpc", "--rpc-socket", path]
