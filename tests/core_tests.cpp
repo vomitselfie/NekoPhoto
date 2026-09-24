@@ -203,6 +203,35 @@ TEST_CASE(history_keeps_the_region_an_edit_noted) {
     CHECK(history.stepRegion() == Rect(10, 10, 30, 40));
 }
 
+TEST_CASE(history_squash_merges_the_steps_since_a_revision) {
+    DocumentHistory history;
+    Document doc(10, 10);
+    doc.layers.push_back(imageLayer("A", solid(4, 4, 255, 0, 0), {0, 0}));
+    history.begin("Before", doc, doc.layers[0].id); doc.layers[0].name = "B"; history.end(doc, doc.layers[0].id);
+    const uint64_t since = history.revision();
+    CHECK(history.revisionsSince(since)->empty());
+    for (double opacity : {0.8, 0.6, 0.4}) {
+        history.begin("Opacity", doc, doc.layers[0].id);
+        doc.layers[0].opacity = opacity;
+        history.end(doc, doc.layers[0].id);
+    }
+    CHECK_EQ(history.revisionsSince(since)->size(), size_t(3));
+    CHECK_EQ(history.squash(since, "Agent"), 3);
+    CHECK_EQ(history.undoCount(), 2);
+    CHECK_EQ(history.undoName(), std::string("Agent"));
+    auto undone = history.undo();
+    REQUIRE(undone.has_value());
+    CHECK_EQ(undone->document->layers[0].opacity, 1.0);   // all three steps at once
+    CHECK_EQ(undone->document->layers[0].name, std::string("B"));
+    auto redone = history.redo();
+    REQUIRE(redone.has_value());
+    CHECK_EQ(redone->document->layers[0].opacity, 0.4);
+    // Undone past the mark: nothing to merge.
+    history.undo(); history.undo();
+    CHECK(!history.revisionsSince(since).has_value());
+    CHECK_EQ(history.squash(since, "Agent"), 0);
+}
+
 TEST_CASE(changed_area_covers_only_what_changed) {
     Document before(100, 100);
     before.layers.push_back(imageLayer("base", solid(100, 100, 0, 0, 255), {0, 0}));
