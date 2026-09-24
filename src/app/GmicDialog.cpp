@@ -3,6 +3,7 @@
 #include "compositor/filters.h"
 #include "compositor/render.h"
 #include <QCheckBox>
+#include <algorithm>
 #include <QColorDialog>
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -135,6 +136,10 @@ GmicDialog::GmicDialog(EditorSession* session, QWidget* parent) : PixelDialog(se
     search_->setPlaceholderText(tr("Search filters"));
     search_->setClearButtonEnabled(true);
     leftLayout->addWidget(search_);
+    showAll_ = new QCheckBox(tr("Show all filters"));
+    showAll_->setToolTip(tr("Also list the filters that do not work here at their defaults: they change the image size, "
+                            "make several layers, fail or give a blank image"));
+    leftLayout->addWidget(showAll_);
     tree_ = new QTreeWidget;
     tree_->setHeaderHidden(true);
     leftLayout->addWidget(tree_, 1);
@@ -193,6 +198,7 @@ GmicDialog::GmicDialog(EditorSession* session, QWidget* parent) : PixelDialog(se
     connect(&debounce_, &QTimer::timeout, this, &GmicDialog::runPreview);
     connect(&preview_runner_, &GmicRunner::finished, this, &GmicDialog::previewFinished);
     connect(search_, &QLineEdit::textChanged, this, [this](const QString& text) { fillTree(text); });
+    connect(showAll_, &QCheckBox::toggled, this, [this] { fillTree(search_->text()); });
     connect(tree_, &QTreeWidget::currentItemChanged, this, [this](QTreeWidgetItem* item, QTreeWidgetItem*) {
         if (!item || item->data(0, Qt::UserRole).isNull()) return;
         int index = item->data(0, Qt::UserRole).toInt();
@@ -226,7 +232,9 @@ void GmicDialog::loadCatalogue() {
     QString path = GmicCatalogue::preferredFile();
     QString error;
     if (!path.isEmpty() && catalogue_.load(path, &error)) {
-        catalogueInfo_->setText(tr("%1 filters from %2 (G'MIC %3)").arg(catalogue_.filters().size()).arg(QFileInfo(path).fileName(), GmicRunner::version()));
+        const auto hidden = std::count_if(catalogue_.filters().begin(), catalogue_.filters().end(), [](const GmicFilter& f) { return GmicCatalogue::unsupported().contains(f.command); });
+        catalogueInfo_->setText(tr("%1 filters from %2 (G'MIC %3); %4 that do not work here are hidden")
+                                    .arg(catalogue_.filters().size() - size_t(hidden)).arg(QFileInfo(path).fileName(), GmicRunner::version()).arg(hidden));
     } else {
         catalogue_.load({});
         catalogueInfo_->setText(GmicRunner::executable().isEmpty() ? QString() : tr("Only the essentials are listed until the full catalogue is downloaded with Update Filters (about 1 MB from gmic.eu)."));
@@ -241,9 +249,15 @@ void GmicDialog::fillTree(const QString& search) {
         for (size_t i = 0; i < list.size(); i++) {
             const GmicFilter& f = list[i];
             if (!needle.isEmpty() && !f.name.contains(needle, Qt::CaseInsensitive) && !f.folder.contains(needle, Qt::CaseInsensitive)) continue;
+            const QString problem = builtin ? QString() : GmicCatalogue::unsupported().value(f.command);
+            if (!problem.isEmpty() && !showAll_->isChecked()) continue;
             QTreeWidgetItem*& folder = folders[f.folder];
             if (!folder) { folder = new QTreeWidgetItem(tree_, {f.folder.isEmpty() ? tr("Filters") : f.folder}); folder->setFlags(Qt::ItemIsEnabled); }
             auto* item = new QTreeWidgetItem(folder, {f.name});
+            if (!problem.isEmpty()) {
+                item->setToolTip(0, tr("At its defaults this filter %1, which does not work here.").arg(problem));
+                item->setForeground(0, palette().color(QPalette::Disabled, QPalette::Text));
+            }
             item->setData(0, Qt::UserRole, int(i));
             item->setData(0, Qt::UserRole + 1, builtin);
         }

@@ -782,7 +782,8 @@ void AutomationServer::registerHandlers() {
         return QJsonObject{{"applied", command}, {"gmic", GmicRunner::version()}};
     });
     add("gmic.filters", [](const QJsonObject& p) {
-        // The catalogue: name, folder, command and parameters, optionally filtered by a search string.
+        // The catalogue: name, folder, command and parameters, optionally filtered by a search string; the
+        // filters that do not work here are left out unless all: true (then they carry "unsupported").
         GmicCatalogue catalogue;
         QString path = GmicCatalogue::preferredFile();
         QJsonArray out;
@@ -790,6 +791,8 @@ void AutomationServer::registerHandlers() {
             QString needle = str(p, "search", QString()).trimmed();
             for (const GmicFilter& f : catalogue.filters()) {
                 if (!needle.isEmpty() && !f.name.contains(needle, Qt::CaseInsensitive) && !f.folder.contains(needle, Qt::CaseInsensitive)) continue;
+                const QString problem = GmicCatalogue::unsupported().value(f.command);
+                if (!problem.isEmpty() && !flag(p, "all", false)) continue;
                 QJsonArray params;
                 for (const GmicParam& gp : f.params) {
                     if (!gp.contributes()) continue;
@@ -803,7 +806,9 @@ void AutomationServer::registerHandlers() {
                     }
                     params.append(o);
                 }
-                out.append(QJsonObject{{"name", f.name}, {"folder", f.folder}, {"command", f.command}, {"defaultCommand", f.commandLine(false)}, {"params", params}});
+                QJsonObject entry{{"name", f.name}, {"folder", f.folder}, {"command", f.command}, {"defaultCommand", f.commandLine(false)}, {"params", params}};
+                if (!problem.isEmpty()) entry["unsupported"] = problem;
+                out.append(entry);
             }
         }
         return QJsonObject{{"installed", !GmicRunner::executable().isEmpty()}, {"version", GmicRunner::version()}, {"catalogue", path}, {"filters", out}};

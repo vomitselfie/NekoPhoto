@@ -1,0 +1,264 @@
+# G'MIC catalogue filters that do not work in this editor at their default settings, by command.
+# Made by tools/gmic-sweep.py with G'MIC 4.0.5 (update405.gmic) on 2026-09-23: each filter ran once at its
+# defaults on a 640 x 427 photo, with no display and a 30 s limit. The G'MIC dialog hides these unless
+# "Show all filters" is on. Filters that change nothing at their defaults, and slow ones, are not listed.
+Annular_Steiner_Chain_Round_Tile	changes the image size	Annular Steiner Chain Round Tile
+Cercles_Concentriques_A	changes the image size	Cercles Concentriques
+Denim_samj	gives a blank image	Denim Texture
+Lylejk_Quantize_Wicker	changes the image size	Lylejk Quantize Wicker
+Lylejk_Wicker	changes the image size	Lylejk Wicker
+Triangles_Shades_Adjacents	makes several layers	Triangles Shades Adjacents
+Twisted_Rays	changes the image size	Twisted Rays [Samj]
+afre_contrastfft	fails	Contrast FFT
+afre_details	makes several layers	Details
+afre_gleam	fails	Gleam
+afre_montagex	changes the image size	Montage X
+afre_portraitmontage	changes the image size	Portrait Montage
+afre_softlight	fails	Softlight
+albers_projection	changes the image size	Albers Equal Area Conic
+azimuthal_equidistant_projection	changes the image size	Azimuthal Equidistant
+cl_colorWheel	makes several layers	Color Wheel
+cl_implicitEqua	makes several layers	Equation Plot [Implicit]
+cl_tangentialCircle	makes several layers	Tangential Circles
+conic_equidistant_projection	changes the image size	Conic Equidistant
+cylindrical_equal_area	changes the image size	Cylindrical Equal-Area Projection
+disco	gives a blank image	Disco
+eckert_iv_projection	changes the image size	Eckert IV
+eckert_vi_projection	changes the image size	Eckert VI
+fx_CompositionAnalysis	changes the image size	Composition Analysis
+fx_ExposureWeightMap	fails	Exposure Fusion Weight Map
+fx_MorphoPaint	fails	Morphology Painting
+fx_SmoothSketch	fails	Smooth Sketch
+fx_apply_multiscale	makes several layers	Multiscale Operator
+fx_array	changes the image size	Array [Regular]
+fx_array_fade	changes the image size	Array [Faded]
+fx_array_mirror	changes the image size	Array [Mirrored]
+fx_array_random	changes the image size	Array [Random]
+fx_autofill_lineart	makes several layers	Colorize Lineart [Auto-Fill]
+fx_ball	makes several layers	Ball
+fx_barnsley_fern	makes several layers	Barnsley Fern
+fx_bitplane8	makes several layers	8-Bit Plane Splitter
+fx_blocks3d	changes the image size	3D Blocks
+fx_buffer_error	changes the image size	Buffer Error
+fx_channels2layers	makes several layers	Channels to Layers
+fx_circle_art	changes the image size	Circle Art
+fx_colorful_blobs	fails	Colorful Blobs
+fx_colorize_lineart_smart	makes several layers	Colorize Lineart [Smart Coloring]
+fx_crt_phosphors	changes the image size	CRT Phosphors
+fx_crt_scanlines	changes the image size	CRT Scanlines
+fx_cupid	makes several layers	Cupid
+fx_curves_interactive	fails	Curves
+fx_customize_clut	makes several layers	Customize CLUT
+fx_dct_fsu	changes the image size	DCT FSU
+fx_decompose_channels	changes the image size	Decompose Channels
+fx_dices	changes the image size	Dices
+fx_display_fft	makes several layers	Fourier Analysis
+fx_drop_shadow	makes several layers	Drop Shadow
+fx_drop_shadow3d	makes several layers	Drop Shadow 3D
+fx_drop_water	makes several layers	Drop Water
+fx_elevation3d	changes the image size	3D Elevation
+fx_emboss_relief	gives a blank image	Emboss-Relief
+fx_extract_foreground	fails	Extract Foreground [Interactive]
+fx_extract_objects	makes several layers	Extract Objects
+fx_extrude25d	changes the image size	2.5D Extrusion
+fx_extrude3d	changes the image size	3D Extrusion
+fx_fire_edges	makes several layers	Edges on Fire
+fx_fourier_picture_watermark	fails	Fourier Picture Watermark
+fx_frame	changes the image size	Frame [Regular]
+fx_frame_blur	changes the image size	Frame [Blur]
+fx_frame_mirror	changes the image size	Frame [Mirror]
+fx_frame_painting	changes the image size	Frame [Painting]
+fx_frame_pattern	changes the image size	Frame [Pattern]
+fx_frame_seamless	changes the image size	Make Seamless [Patch-Based]
+fx_frame_smooth	changes the image size	Frame [Smooth]
+fx_gcd_adjust_aspect	changes the image size	Aspect Adjustment
+fx_gcd_crmt_tile	changes the image size	CRMT Tiles
+fx_gcd_transfer_colors_patch	makes several layers	Transfer Colors [Patch-Based]
+fx_gcd_upscale_edge	changes the image size	Upscale [Edge]
+fx_gcd_upscale_patch2x	changes the image size	Upscale [Patch2x]
+fx_gcd_upscale_recursive2x	changes the image size	Upscale [Recursive2x]
+fx_gcd_upscale_solver2x	changes the image size	Upscale [Solver2x]
+fx_gear	makes several layers	Gear
+fx_generate_random_portrait	changes the image size	Generate Random Portrait
+fx_gmic_demos	fails	Games & Demos
+fx_gmicky	changes the image size	Gmicky - Roddy
+fx_heart	makes several layers	Heart
+fx_heightfield_warp	fails	Heightfield Warp
+fx_hue_overlay_masks	makes several layers	Hue Overlay Masks
+fx_illuminate_shape2d	makes several layers	Illuminate 2D Shape
+fx_image_sample	makes several layers	Sample Image
+fx_imagegrid	changes the image size	Grid [Cartesian]
+fx_imageobject3d	changes the image size	3D Image Object
+fx_isolate_tiles	changes the image size	Tiled Isolation
+fx_jr_bilinear	gives a blank image	Bilinear Enhancement
+fx_karo_cimg_nlmeans	fails	CImg NL-Means
+fx_karo_cimg_skel	fails	CImg Skeleton
+fx_karo_pink	fails	Pink Operator
+fx_karo_pink_bianca	fails	Pink Test Operator Bianca
+fx_karo_pink_bin	fails	Pink Operator Binary
+fx_lathing3d	changes the image size	3D Lathing
+fx_lavalampbw	makes several layers	Lava Lamp
+fx_light_leaks	makes several layers	Light Leaks
+fx_lightning	makes several layers	Lightning
+fx_linify	fails	Linify
+fx_mandelbrot	changes the image size	Mandelbrot - Julia Sets
+fx_map_sphere	changes the image size	Sphere
+fx_mask_color	fails	Color Mask [Interactive]
+fx_ministeck	changes the image size	Ministeck
+fx_morph_interactive	fails	Morph [Interactive]
+fx_ncee	fails	Non-Convolution Edge Extraction
+fx_neon_alpha	makes several layers	Neon Alpha
+fx_pack_sprites	makes several layers	Pack Sprites
+fx_poincare_disk	changes the image size	Poincaré Disk
+fx_polaroid	changes the image size	Polaroid
+fx_project_stereographic	fails	Stereographic Projection
+fx_psyglass	changes the image size	Psychedelic Glasswork Tiler
+fx_quadrangle	changes the image size	Quadrangle
+fx_rain	makes several layers	Rain & Snow
+fx_random_pattern	makes several layers	Random Pattern
+fx_reflect	changes the image size	Reflection
+fx_rep_array_random_jumble_by_px	fails	Array [Random] [Jumble by Px]
+fx_rep_bitplane_shuffle	fails	Bit-Plane Shuffler
+fx_rep_color_region	gives a blank image	Color Region
+fx_rep_cstdmap	makes several layers	Chirikov-Taylor
+fx_rep_dla	gives a blank image	Diffusion Limited Aggregation
+fx_rep_edgefade	gives a blank image	Edge Fade
+fx_rep_lavander_binary_map	fails	Lavander Binary Map
+fx_rep_rd	gives a blank image	Reverse Digits
+fx_rep_self_referential_formula	fails	Tupper's Self-Referential Formula
+fx_rep_shear	fails	Shear
+fx_rep_trsa	fails	Attractor
+fx_rotate_tileable	fails	Tileable Rotation
+fx_rotate_tiles	changes the image size	Tiled Rotation
+fx_row_shift	changes the image size	Row Shifter
+fx_scale_dcci2x	changes the image size	Upscale [DCCI2x]
+fx_scaledown3	changes the image size	Scale Down Neat
+fx_scalenx	changes the image size	Upscale [Scale2x]
+fx_seamcarve	changes the image size	Seamcarve
+fx_self_glitching_cascade	gives a blank image	Cascading Self Glitching
+fx_shapes	changes the image size	Op Art
+fx_slice_luminosity	makes several layers	Slice Luminosity
+fx_solve_maze	makes several layers	Solve Maze
+fx_speech_bubble	fails	Speech Bubble
+fx_split_details_alpha	makes several layers	Split Details [Alpha]
+fx_split_details_gaussian	makes several layers	Split Details [Gaussian]
+fx_split_details_wavelets	makes several layers	Split Details [Wavelets]
+fx_split_luminance	makes several layers	Luminance to Alpha
+fx_stereo_to_anaglyph	changes the image size	Stereo to Anaglyph
+fx_stroke	makes several layers	Stroke
+fx_stylize	fails	Stylize
+fx_symmetric_shape2d	fails	Symmetric 2D Shape
+fx_taquin	changes the image size	Taquin
+fx_text_pointcloud3d	makes several layers	3D Text Pointcloud
+fx_tiles2layers	makes several layers	Tiles to Layers
+fx_tk_deana	makes several layers	De-Anaglyph
+fx_tk_dof	changes the image size	DOF Manipulation
+fx_tk_make3D	changes the image size	3D Conversion
+fx_tk_photoillustration	changes the image size	Photoillustration
+fx_tk_retouch	fails	Beauty Retouch
+fx_tones2layers	makes several layers	Tones to Layers
+fx_tree	makes several layers	Tree
+fx_ultrawarptwo	gives a blank image	UltraWarp 2
+fx_upscale_smart	changes the image size	Upscale [Diffusion]
+fx_vibrato	gives a blank image	Vibrato
+fx_warp_interactive	fails	Warp [Interactive]
+fx_warp_rbf	fails	Warp [RBF]
+gcd_deinterlace2x	changes the image size	Deinterlace2x
+gcd_layers	fails	Layer Manipulation
+gcd_upscale_noise	changes the image size	Upscale [Noise]
+gcd_xbr2x	changes the image size	Xbr2x
+gui_rep_form_pixel	changes the image size	Tiled Form
+iain_2d_scopes	changes the image size	2D Scopes
+iain_2x	changes the image size	Iain 2x
+iain_savenoiseprint	fails	Save Noise Print
+iain_split_orientation	makes several layers	Split Detials [Orientation]
+iain_weightmap	gives a blank image	Iain Weightmap
+jeje_periodic_dots	changes the image size	Periodic Dots
+jeje_zernike_preview	gives a blank image	Zernike
+jpr_coltexindex	makes several layers	Jpr Coltexindex
+jpr_decimate	changes the image size	Jpr Decimate
+lambert_azimuthal_projection	changes the image size	Lambert Azimuthal Equal-Area
+lambert_conformal_conic_projection	changes the image size	Lambert Conformal Conic
+lylejk_test_TRW	changes the image size	Lylejk Test TRW
+mc_australia	makes several layers	Australia
+mc_barbed_wire	makes several layers	Barbed Wire
+mc_crosshair	makes several layers	Crosshair
+mc_dragonfly	makes several layers	Dragonfly
+mc_flip	makes several layers	Flip
+mc_flou	fails	Mc Flou
+mc_gum_leaf	makes several layers	Gum Leaf
+mc_information	makes several layers	Information
+mc_kookaburra	makes several layers	Kookaburra
+mc_mail	makes several layers	Mail
+mc_maple_leaf	makes several layers	Japanese Maple Leaf
+mc_paint_splat	makes several layers	Paint Splat
+mc_paw	makes several layers	Paw
+mc_phone	makes several layers	Phone
+mc_rooster	makes several layers	Rooster
+mc_shopping_cart	makes several layers	Shopping Cart
+mercator	changes the image size	Mercator Projection
+mollweide_projection	changes the image size	Mollweide
+orthographic_projection	changes the image size	Orthographic
+pat_rgb	changes the image size	Patrick RGB
+pr_iris	changes the image size	Iris
+pr_lilboxy	changes the image size	Little Boxy Things
+pr_nonwoods	changes the image size	Nonscape - Woods
+pr_papercuts	makes several layers	Paper Cuts
+pr_scpat	makes several layers	Seamless Chaotic Pattern
+pr_smoothelate	changes the image size	Smoothelate
+rep_color_existence_distribution_rgb8	changes the image size	Color Existence Distribution [RGB-8]
+samj_Beigne	changes the image size	Beigne Donut
+samj_CeKoaSa_002	changes the image size	CeKoaSa 002
+samj_CeKoaSa_005	changes the image size	CeKoaSa 005
+samj_Cercle_Polaire	changes the image size	Cercle Polaire
+samj_Cercles_Qui_Tournent	changes the image size	Rotating Circles
+samj_Chryzodes	changes the image size	Chryzodes
+samj_Coeurs_Hearts_002	changes the image size	Coeurs Hearts 002
+samj_Coloriage	changes the image size	Coloriage
+samj_CorLine	makes several layers	CorLine
+samj_CorLine_B	makes several layers	CorLine B
+samj_Courtepointe	fails	Random Pattern Courtepointe
+samj_Degrades_HSL_TSL	changes the image size	Degrades HSL TSL
+samj_Degrades_XYZ_CIE	changes the image size	Motifs Degrades CIE
+samj_EPPE_Transform	changes the image size	EPPE Transform
+samj_Ecraser_Etirer	changes the image size	Ecraser Etirer
+samj_Ecraser_Etirer_V2	changes the image size	Ecraser Etirer V2
+samj_Engrenages_Laser_LED	makes several layers	Engrenages Gears Laser
+samj_Etoiles_Laser_LED	changes the image size	Etoiles Stars Laser
+samj_Flocon_Laser_LED	changes the image size	Flocon Snowflake Laser
+samj_Grid_BW_Color	changes the image size	Grid BW Color
+samj_Layers_To_PNG	makes several layers	Layers To PNG
+samj_Lignes_H_ou_V_Colorees	makes several layers	Lignes H Ou V Colorees
+samj_Masques_Noir_Et_Blanc	makes several layers	Masques B&W Masks
+samj_Moirage_Spline	makes several layers	Moirage Spline
+samj_Moirage_Spline_XY	makes several layers	Moirage Spline XY
+samj_Montage_Annular_Steiner_Chain	changes the image size	Montage Annular Steiner Chain
+samj_Montage_Cercle_Spirale	changes the image size	Montage Cercle Spirale
+samj_Montage_Figures_Geometriques	changes the image size	Montage Geometric Figures
+samj_Montage_Pappus_Chain	changes the image size	Montage Pappus Chain
+samj_Montage_Zigzag	changes the image size	Montage Zigzag
+samj_Motifs_Aleatoires_Symetriques_Degrades	changes the image size	Motifs Aleatoires Symetriques Degrades
+samj_Ombre_Portee_B	changes the image size	Ombre Portee B
+samj_Ombre_Portee_C	changes the image size	Ombre Portee C
+samj_Ombre_Portee_D	changes the image size	Ombre Portee D
+samj_Orbites	changes the image size	Orbites
+samj_Palette_De_Degrades	makes several layers	Palette De Degrades
+samj_Random_Small_Deformations	changes the image size	Random Small Deformations
+samj_SVG_Symetries_A	changes the image size	SVG Symetries A
+samj_Selection_Hermite_Spline	fails	Samj Selection Hermite Spline
+samj_Splines_Test	makes several layers	Splines Test
+samj_Test_Visu_3D	changes the image size	Test Visu 3D
+samj_diaporama	fails	Diaporama - Slideshow
+samj_dt_montage_sur_une_page	changes the image size	Montage 1 Page
+samj_fond_broderie	changes the image size	Fond Broderie
+samj_montage_row_GUI	changes the image size	Montage Row
+samj_reptile	makes several layers	Reptile
+samj_rotate_flip_image	changes the image size	Samj Rotate Flip Image
+samj_test_B	makes several layers	Test B
+samj_test_C	makes several layers	Test C
+samj_test_tout_interactif	fails	Tout Interactif
+samj_transition_H_V_to_PNG	makes several layers	Transition H V To PNG
+syntexturize	changes the image size	Resynthesize Texture [FFT]
+syntexturize_matchpatch	changes the image size	Resynthesize Texture [Patch-Based]
+uglify	gives a blank image	Uglify
+warhol	changes the image size	Warhol

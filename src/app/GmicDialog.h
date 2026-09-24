@@ -44,6 +44,7 @@ private:
     bool customCommand_ = false;
 
     QLineEdit* search_;
+    QCheckBox* showAll_ = nullptr;
     QTreeWidget* tree_;
     QWidget* controls_;
     QVBoxLayout* controlsLayout_;

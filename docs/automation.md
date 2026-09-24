@@ -128,7 +128,8 @@ mirrored image's, defaulting to the preference), `pixels.gmic` (`command`, a G'M
 command line made of catalogue filters or common built-ins, each followed only by numbers: G'MIC can
 run shell commands and read or write files, so strings, paths, substitutions and other commands are
 refused unless `COMPOSITOR_GMIC_UNRESTRICTED=1` is set; the G'MIC dialog is not restricted;
-`gmic.filters` lists the catalogue with parameters and defaults).
+`gmic.filters` lists the catalogue with parameters and defaults, leaving out the filters that do not
+work here unless `all: true`, when they carry an `unsupported` reason).
 
 Selection: `selection.all`, `selection.none`, `selection.invert`,
 `selection.rect` (or `ellipse: true`), `selection.polygon`, `selection.wand`,

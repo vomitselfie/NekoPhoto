@@ -7,6 +7,7 @@
 #include "compositor/image.h"
 #include <QObject>
 #include <QString>
+#include <QHash>
 #include <QStringList>
 #include <atomic>
 #include <memory>
@@ -53,6 +54,10 @@ public:
     /// Where Update Filters saves the definitions for the installed G'MIC version.
     static QString ownFile();
     static QString updateUrl();
+    /// Filters that do not work in this editor at their defaults (they change the image size, make several
+    /// layers, fail or give a blank image), by command, with the reason: src/app/gmic/unsupported.txt, made by
+    /// tools/gmic-sweep.py. The dialog hides them unless asked to show all.
+    static const QHash<QString, QString>& unsupported();
 
 private:
     std::vector<GmicFilter> filters_;

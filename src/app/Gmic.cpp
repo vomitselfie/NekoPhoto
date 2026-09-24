@@ -232,6 +232,22 @@ QString GmicCatalogue::ownFile() {
     return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/gmic/update" + digits + ".gmic";
 }
 
+const QHash<QString, QString>& GmicCatalogue::unsupported() {
+    static const QHash<QString, QString> list = [] {
+        QHash<QString, QString> out;
+        QFile file(":/gmic/unsupported.txt");
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) return out;
+        for (const QByteArray& raw : file.readAll().split('\n')) {
+            const QString line = QString::fromUtf8(raw);
+            if (line.isEmpty() || line.startsWith('#')) continue;
+            const QStringList fields = line.split('\t');
+            if (fields.size() >= 2) out.insert(fields[0], fields[1]);
+        }
+        return out;
+    }();
+    return list;
+}
+
 QString GmicCatalogue::updateUrl() {
     QString digits = GmicRunner::version();
     digits.remove('.');
