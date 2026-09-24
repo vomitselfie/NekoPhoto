@@ -14,6 +14,8 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTextStream>
+#include <QTimer>
+#include <QProcessEnvironment>
 #include <algorithm>
 
 namespace app {
@@ -73,7 +75,9 @@ bool parseParam(const QString& decl, GmicParam& p) {
     if (eq < 0) return false;
     p.label = decl.left(eq).trimmed();
     QString rest = decl.mid(eq + 1).trimmed();
-    static const QRegularExpression typeRe(R"(^_?([a-z]+)\s*(?:\((.*)\))?\s*$)", QRegularExpression::DotMatchesEverythingOption);
+    // `type(args)`, perhaps marked _ or ~, with [] or {} as well as () around the arguments, and G'MIC-Qt's optional suffix after
+    // them (_0, _1, _2, with a +: how the preview reacts to the control), which says nothing about the value.
+    static const QRegularExpression typeRe(R"(^[_~]*([a-z]+)\s*(?:[(\[{](.*)[)\]}])?\s*(?:_\d+\+?)?\s*$)", QRegularExpression::DotMatchesEverythingOption);
     auto m = typeRe.match(rest);
     if (!m.hasMatch()) return false;
     QString type = m.captured(1).toLower(), inner = m.captured(2);
@@ -100,6 +104,17 @@ bool parseParam(const QString& decl, GmicParam& p) {
     }
     if (type == "color") {
         p.kind = GmicParam::Color;
+        const QString first = args.value(0).trimmed();
+        if (first.startsWith('#')) {
+            // #rrggbb, or #rrggbbaa with alpha (which G'MIC then passes as a fourth value).
+            const QString hex = first.mid(1);
+            bool ok = (hex.size() == 6 || hex.size() == 8);
+            auto byte = [&](int i) { bool good = false; const int v = hex.mid(i * 2, 2).toInt(&good, 16); ok = ok && good; return v; };
+            p.r = byte(0); p.g = byte(1); p.b = byte(2);
+            p.hasAlpha = hex.size() == 8;
+            p.a = p.hasAlpha ? byte(3) : 255;
+            return ok;
+        }
         p.r = num(0, 0); p.g = num(1, 0); p.b = num(2, 0);
         p.hasAlpha = args.size() >= 4;
         p.a = p.hasAlpha ? num(3, 255) : 255;
@@ -117,25 +132,54 @@ bool parseParam(const QString& decl, GmicParam& p) {
     if (type == "point") { p.kind = GmicParam::Point; p.text = QStringLiteral("%1,%2").arg(num(0, 50)).arg(num(1, 50)); return true; }
     if (type == "value") { p.kind = GmicParam::Value; p.text = args.value(0); return true; }
     if (type == "link" || type == "url") { p.kind = GmicParam::Note; p.text = unquote(args.value(0)); return true; }
-    return false;   // file, folder, button, ...
+    // A button passes 0, or 1 on the run its press starts; a filter run from here passes 0.
+    if (type == "button") { p.kind = GmicParam::Value; p.text = "0"; return true; }
+    return false;   // file, folder: they need a path to be chosen
+}
+
+} // namespace
+
+namespace {
+
+/// The definitions as text. gmic.eu serves them compressed, as a one-image G'MIC file: the header lines
+/// "1 uint8 little_endian" and "1 <bytes> 1 1 #<compressed bytes>", then a zlib stream of the text.
+QByteArray catalogueText(const QByteArray& raw) {
+    if (!raw.startsWith("1 uint8")) return raw;
+    const qsizetype first = raw.indexOf('\n'), second = first < 0 ? -1 : raw.indexOf('\n', first + 1);
+    if (second < 0) return {};
+    const QList<QByteArray> fields = raw.mid(first + 1, second - first - 1).split(' ');
+    bool ok = false;
+    const qint64 size = fields.size() >= 2 ? fields[1].toLongLong(&ok) : 0;
+    if (!ok || size <= 0 || size > 256 * 1024 * 1024) return {};
+    // qUncompress takes the expected size as four big-endian bytes before the zlib stream.
+    QByteArray framed(4, '\0');
+    for (int i = 0; i < 4; i++) framed[i] = char((size >> (24 - 8 * i)) & 0xFF);
+    framed += raw.mid(second + 1);
+    return qUncompress(framed);
 }
 
 } // namespace
 
 bool GmicCatalogue::load(const QString& path, QString* error) {
     QFile file(path);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) { if (error) *error = QObject::tr("Couldn't read %1").arg(path); return false; }
-    QTextStream in(&file);
+    if (!file.open(QIODevice::ReadOnly)) { if (error) *error = QObject::tr("Couldn't read %1").arg(path); return false; }
+    const QByteArray text = catalogueText(file.readAll());
+    if (text.isEmpty()) { if (error) *error = QObject::tr("%1 is not a G'MIC definition file").arg(path); return false; }
+    QTextStream in(text);
     in.setEncoding(QStringConverter::Utf8);
     filters_.clear();
     source_ = path;
-    // Folder lines nest by leading underscores: `_<b>Name</b>` (or more underscores) opens a folder at the
-    // top, a plain `<b>Name</b>` a subfolder of the last top folder; filters show under "Top / Sub".
+    // Folder lines nest by leading underscores: `_<b>Name</b>` opens a folder at the top, and `__<b>Name</b>`
+    // (G'MIC 3.4 on) or a plain `<b>Name</b>` (older files) a subfolder of the last top folder; filters show
+    // under "Top / Sub". Italic lines are author subfolders of the top folder (Testing's, in practice).
     QString topFolder, folder;
     GmicFilter* current = nullptr;
     bool skipping = false;
     static const QRegularExpression folderRe(R"(^(_*)<b>(.*)</b>\s*$)");
-    static const QRegularExpression filterRe(R"(^([^:]+):([^,]+)(?:,([^(]*)(?:\(.*\))?)?\s*$)");
+    // Under Testing, each author's filters sit in an italic subfolder: `<i>Name</i>` (or `_<i>Name</i>`).
+    static const QRegularExpression authorRe(R"(^_*<i>(.*)</i>\s*$)");
+    // `Name:command, preview(zoom)` with G'MIC-Qt's marks after the preview (+ accepts resizing, * random).
+    static const QRegularExpression filterRe(R"(^([^:]+):([^,]+)(?:,([^(]*)(?:\(.*\))?[+*]*)?\s*$)");
     while (!in.atEnd()) {
         QString line = in.readLine();
         if (!line.startsWith("#@gui ") && !line.startsWith("#@gui:")) continue;
@@ -152,8 +196,15 @@ bool GmicCatalogue::load(const QString& path, QString* error) {
         if (fm.hasMatch()) {
             QString name = fm.captured(2).trimmed();
             name.remove(QRegularExpression("<[^>]*>"));
-            if (fm.captured(1).isEmpty() && !topFolder.isEmpty()) folder = topFolder + " / " + name;
+            if (fm.captured(1).size() != 1 && !topFolder.isEmpty()) folder = topFolder + " / " + name;
             else { topFolder = name; folder = name; }
+            current = nullptr; skipping = false;
+            continue;
+        }
+        if (auto am = authorRe.match(body); am.hasMatch() && !topFolder.isEmpty()) {
+            QString name = am.captured(1).trimmed();
+            name.remove(QRegularExpression("<[^>]*>"));
+            folder = topFolder + " / " + name;
             current = nullptr; skipping = false;
             continue;
         }
@@ -165,7 +216,8 @@ bool GmicCatalogue::load(const QString& path, QString* error) {
         f.command = m.captured(2).trimmed();
         f.previewCommand = m.captured(3).trimmed();
         f.folder = folder;
-        if (f.name.startsWith('_') || f.command.isEmpty()) { current = nullptr; skipping = true; continue; }   // hidden entries
+        // Hidden entries, and the pages with no command (About, Release Notes, ...).
+        if (f.name.startsWith('_') || f.command.isEmpty() || f.command == "_none_") { current = nullptr; skipping = true; continue; }
         filters_.push_back(f);
         current = &filters_.back();
         skipping = false;
@@ -292,15 +344,46 @@ bool GmicRunner::allowedForAutomation(const QString& command, QString* why) {
 namespace {
 
 /// The gmic invocation for one round trip: input, the command's tokens, output.
+/// G'MIC runs with no display: some catalogue entries are interactive programs (games, editors that wait
+/// for clicks in a window of their own), and without a display they fail at once instead of opening one.
+void withoutDisplay(QProcess& p) {
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.remove("DISPLAY");
+    env.remove("WAYLAND_DISPLAY");
+    p.setProcessEnvironment(env);
+}
+
+/// G'MIC's last error line without its terminal colour codes.
+QString errorLine(QProcess& p) {
+    static const QRegularExpression ansi(QStringLiteral("\x1b\\[[0-9;]*m"));
+    QString text = QString::fromUtf8(p.readAllStandardError()).remove(ansi).trimmed();
+    return text.isEmpty() ? QString() : text.section('\n', -1).trimmed();
+}
+
+/// The gmic invocation for one round trip. The command goes through a one-line script, so G'MIC parses it as
+/// G'MIC-Qt's does: text arguments with spaces or quotes ("(c) G'MIC", an expression) stay one argument, where
+/// passing it item by item on the command line split them.
 QStringList argumentsFor(const QString& command, const QString& inPath, const QString& outPath) {
-    QStringList args{"-v", "-1", inPath};
-    args << GmicRunner::tokenize(command);
-    args << "-o" << outPath;
-    return args;
+    const QString script = QFileInfo(inPath).dir().filePath("command.gmic");
+    QFile file(script);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        QString line = command;
+        line.replace('\n', ' ').replace('\r', ' ');
+        file.write(("compositor_run :\n  " + line + "\n").toUtf8());
+    }
+    return {"-v", "-1", "-m", script, inPath, "compositor_run", "-o", outPath};
 }
 
 std::shared_ptr<compositor::Image> readResult(const QString& outPath, int width, int height, QString* error) {
     std::string err;
+    if (!QFileInfo::exists(outPath)) {
+        // Several images come out as out_000000.png, out_000001.png, ...: a filter that makes layers.
+        const QFileInfo info(outPath);
+        const int count = int(QDir(info.path()).entryList({info.completeBaseName() + "_*." + info.suffix()}, QDir::Files).size());
+        if (error) *error = count > 1 ? QObject::tr("The filter makes %1 layers; only filters that give back one image are supported here.").arg(count)
+                                      : QObject::tr("G'MIC produced no image.");
+        return nullptr;
+    }
     auto image = compositor::readPngImage(outPath.toStdString(), &err);
     if (!image) { if (error) *error = QObject::tr("G'MIC produced no image (%1).").arg(QString::fromStdString(err)); return nullptr; }
     if (image->width() != width || image->height() != height) {
@@ -418,17 +501,18 @@ std::shared_ptr<compositor::Image> GmicRunner::runSync(const compositor::Image& 
     std::string err;
     if (!compositor::writePngImage(inPath.toStdString(), source, 0, &err)) { if (error) *error = QString::fromStdString(err); return nullptr; }
     QProcess p;
+    withoutDisplay(p);
     p.start(exe, argumentsFor(command, inPath, outPath));
     if (!p.waitForFinished(timeoutMs)) { p.kill(); if (error) *error = QObject::tr("G'MIC took too long and was stopped."); return nullptr; }
     if (p.exitStatus() != QProcess::NormalExit || p.exitCode() != 0) {
-        QString text = QString::fromUtf8(p.readAllStandardError()).trimmed();
-        if (error) *error = text.isEmpty() ? QObject::tr("G'MIC failed.") : text.section('\n', -1);
+        const QString text = errorLine(p);
+        if (error) *error = text.isEmpty() ? QObject::tr("G'MIC failed.") : text;
         return nullptr;
     }
     return readResult(outPath, source.width(), source.height(), error);
 }
 
-void GmicRunner::start(std::shared_ptr<const compositor::Image> source, const QString& command) {
+void GmicRunner::start(std::shared_ptr<const compositor::Image> source, const QString& command, int timeoutMs) {
     cancel();
 #ifdef COMPOSITOR_HAVE_LIBGMIC
     if (inProcess()) {
@@ -455,14 +539,26 @@ void GmicRunner::start(std::shared_ptr<const compositor::Image> source, const QS
     expectedWidth_ = source->width();
     expectedHeight_ = source->height();
     process_ = new QProcess(this);
+    withoutDisplay(*process_);
+    if (timeoutMs > 0) {
+        if (!limit_) { limit_ = new QTimer(this); limit_->setSingleShot(true); }
+        limit_->disconnect();
+        connect(limit_, &QTimer::timeout, this, [this] {
+            if (!process_) return;
+            cancel();
+            emit finished(nullptr, QObject::tr("G'MIC took too long and was stopped."));
+        });
+        limit_->start(timeoutMs);
+    }
     connect(process_, &QProcess::finished, this, [this, outPath](int code, QProcess::ExitStatus status) {
+        if (limit_) limit_->stop();
         QProcess* p = process_;
         process_ = nullptr;
         std::shared_ptr<compositor::Image> result;
         QString error;
         if (status != QProcess::NormalExit || code != 0) {
-            QString text = QString::fromUtf8(p->readAllStandardError()).trimmed();
-            error = text.isEmpty() ? QObject::tr("G'MIC failed.") : text.section('\n', -1);
+            const QString text = errorLine(*p);
+            error = text.isEmpty() ? QObject::tr("G'MIC failed.") : text;
         } else result = readResult(outPath, expectedWidth_, expectedHeight_, &error);
         p->deleteLater();
         emit finished(result, error);
@@ -483,6 +579,7 @@ void GmicRunner::cancel() {
         worker_.join();
         abort_.reset();
     }
+    if (limit_) limit_->stop();
     if (!process_) return;
     QProcess* p = process_;
     process_ = nullptr;

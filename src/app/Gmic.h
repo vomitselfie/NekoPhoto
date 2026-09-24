@@ -14,6 +14,7 @@
 #include <vector>
 
 class QProcess;
+class QTimer;
 class QTemporaryDir;
 
 namespace app {
@@ -81,7 +82,8 @@ public:
     static std::shared_ptr<compositor::Image> runSync(const compositor::Image& source, const QString& command, QString* error, int timeoutMs = 300000);
 
     /// Starts an asynchronous run; `finished` reports the result (null on failure) and the error.
-    void start(std::shared_ptr<const compositor::Image> source, const QString& command);
+    /// Stopped with an error after `timeoutMs` (0: no limit), so a filter that never ends cannot hang the dialog.
+    void start(std::shared_ptr<const compositor::Image> source, const QString& command, int timeoutMs = 0);
     void cancel();
     bool running() const;
 
@@ -90,6 +92,7 @@ signals:
 
 private:
     QProcess* process_ = nullptr;
+    QTimer* limit_ = nullptr;
     std::unique_ptr<QTemporaryDir> dir_;
     int expectedWidth_ = 0, expectedHeight_ = 0;
     // The in-process path: a worker thread, an abort flag the interpreter polls, and a run number so a

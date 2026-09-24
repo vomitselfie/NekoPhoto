@@ -422,7 +422,7 @@ void GmicDialog::runPreview() {
     QString command = customCommand_ ? command_->text().trimmed() : current_.commandLine(true);
     if (command.isEmpty()) { clearPreview(); return; }
     status_->setText(tr("Previewing…"));
-    preview_runner_.start(previewSource(), command);
+    preview_runner_.start(previewSource(), command, 30 * 1000);   // a preview that takes longer is no preview
 }
 
 void GmicDialog::previewFinished(std::shared_ptr<Image> result, QString error) {
@@ -451,7 +451,7 @@ bool GmicDialog::apply() {
         commit(result, placement(), tr("G'MIC: %1").arg(customCommand_ ? command.section(' ', 0, 0) : current_.name));
         finish(QDialog::Accepted);
     });
-    runner->start(source(), command);
+    runner->start(source(), command, 5 * 60 * 1000);   // the dialog is disabled meanwhile, so a run must end
     return false;   // closes when the run finishes
 }
 
@@ -470,9 +470,15 @@ void GmicDialog::updateFilters() {
         QByteArray data = reply->readAll();
         QString path = GmicCatalogue::ownFile();
         QDir().mkpath(QFileInfo(path).path());
-        QFile file(path);
-        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate) || file.write(data) != data.size()) { status_->setText(tr("Couldn't save %1").arg(path)); return; }
+        // Saved aside and read first: a download that holds no filters must not replace a catalogue that works.
+        const QString part = path + ".part";
+        QFile file(part);
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate) || file.write(data) != data.size()) { status_->setText(tr("Couldn't save %1").arg(part)); return; }
         file.close();
+        GmicCatalogue check;
+        if (!check.load(part) || check.filters().empty()) { QFile::remove(part); status_->setText(tr("The download held no filters; the current ones are kept.")); return; }
+        QFile::remove(path);
+        if (!QFile::rename(part, path)) { status_->setText(tr("Couldn't save %1").arg(path)); return; }
         loadCatalogue();
         fillTree(search_->text());
         status_->setText(tr("%1 filters ready.").arg(catalogue_.filters().size()));

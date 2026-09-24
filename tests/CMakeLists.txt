@@ -41,6 +41,12 @@ add_test(NAME heal_tests COMMAND heal_tests)
 # The font picker's grouping is plain QtCore logic; test it when Qt is around.
 find_package(Qt6 6.4 QUIET COMPONENTS Core)
 if(TARGET Qt6::Core)
+    # The G'MIC catalogue parser (app code; Qt Core only, with moc for the runner in the same file).
+    add_executable(gmic_catalogue_tests gmic_catalogue_tests.cpp ${CMAKE_SOURCE_DIR}/src/app/Gmic.cpp ${CMAKE_SOURCE_DIR}/src/app/Gmic.h)
+    set_target_properties(gmic_catalogue_tests PROPERTIES AUTOMOC ON)
+    target_include_directories(gmic_catalogue_tests PRIVATE ${CMAKE_SOURCE_DIR}/src/app)
+    target_link_libraries(gmic_catalogue_tests PRIVATE Qt6::Core compositor::core compositor_warnings)
+    add_test(NAME gmic_catalogue_tests COMMAND gmic_catalogue_tests)
     add_executable(font_group_tests font_group_tests.cpp ${CMAKE_SOURCE_DIR}/src/app/FontGroups.cpp)
     target_include_directories(font_group_tests PRIVATE ${CMAKE_SOURCE_DIR}/src/app)
     target_link_libraries(font_group_tests PRIVATE Qt6::Core compositor_warnings)
