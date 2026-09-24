@@ -7,9 +7,11 @@
 #include "compositor/document.h"
 #include "compositor/filters.h"
 #include "compositor/selection.h"
+#include "compositor/transform.h"
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QString>
+#include <QStringList>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -37,6 +39,11 @@ QString qs(const std::string& s);
 compositor::SelectionMode selectionMode(const QJsonObject& p);
 std::optional<compositor::AdjustmentKind> adjustmentKindNamed(QString name);
 std::optional<compositor::FilterKind> filterKindNamed(QString name);
+/// "Color Dodge", "color dodge", "colorDodge" and "color-dodge" alike.
+std::optional<compositor::BlendMode> blendModeNamed(const QString& name);
+QStringList blendModeNames();
+/// Nearest, Smooth or High quality, by any case or prefix ("high", "near").
+std::optional<compositor::Sampling> samplingNamed(const QString& name);
 
 // ---- JSON views of the model --------------------------------------------------------------------
 
@@ -51,6 +58,22 @@ QString base64Png(const compositor::Image& image);
 /// `image` as PNG: written to params.path when given (result carries the path), else base64 in "png".
 QJsonObject deliverPng(const compositor::Image& image, const QJsonObject& p, QJsonObject result);
 std::shared_ptr<compositor::Image> scaledCopy(const compositor::Image& image, double maxSize);
+
+// ---- Method descriptions (AutomationDescriptions.cpp) --------------------------------------------
+
+/// Bumped when a method changes in a way a client could notice; app.info reports it.
+constexpr int protocolVersion = 2;
+/// The names tool.select takes.
+const QStringList& toolNames();
+bool isDescribed(const QString& method);
+/// A method's summary and parameters with types, defaults and valid values; an error for an unknown method.
+QJsonObject describeMethod(const QString& method);
+/// Every described method's one-line summary.
+QJsonObject describeAll();
+/// Empty when every key of `params` is one the method takes, else a message naming the ones it does.
+QString unknownParameter(const QString& method, const QJsonObject& params);
+/// Empty when every required parameter is there, else a message naming the first one missing.
+QString missingParameter(const QString& method, const QJsonObject& params);
 
 // ---- What a handler works on --------------------------------------------------------------------
 // Small callables rather than functions so a handler can capture them by value, as `[document, layer]`.

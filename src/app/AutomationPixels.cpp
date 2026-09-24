@@ -32,7 +32,7 @@ void AutomationServer::registerPixelsHandlers() {
         if (!AdjustmentSettings::parse(QJsonDocument(settings).toJson(QJsonDocument::Compact).toStdString(), parsed)) fail("couldn't parse settings; adjustments.defaults shows the shape", invalidParams);
         LayerTransform transform;
         auto source = s->adjustmentSource(0, transform);
-        if (!source) fail("the active layer has no pixels");
+        if (!source) fail("the active layer has no pixels; select a pixel layer with layers.select (document.overview shows each layer's kind)");
         auto out = std::make_shared<Image>(*source);
         applyAdjustment(parsed, *out, Rect(0, 0, source->width(), source->height()), 1);
         if (auto coverage = s->selectionOnGrid(transform, source->width(), source->height())) blendThroughCoverage(*out, *source, *coverage);
@@ -57,7 +57,7 @@ void AutomationServer::registerPixelsHandlers() {
         int margin = int(std::ceil(blurMargin(*kind, settings)));
         LayerTransform transform;
         auto source = s->adjustmentSource(margin, transform);
-        if (!source) fail("the active layer has no pixels");
+        if (!source) fail("the active layer has no pixels; select a pixel layer with layers.select (document.overview shows each layer's kind)");
         auto out = std::make_shared<Image>(*source);
         applyFilter(*kind, *out, settings, 1, uint32_t(integer(p, "seed", 1)));
         if (auto coverage = s->selectionOnGrid(transform, source->width(), source->height())) blendThroughCoverage(*out, *source, *coverage);
@@ -93,7 +93,7 @@ void AutomationServer::registerPixelsHandlers() {
         if (QString why; !GmicRunner::allowedForAutomation(command, &why)) fail(why, invalidParams);
         LayerTransform transform;
         auto source = s->adjustmentSource(0, transform);
-        if (!source) fail("the active layer has no pixels");
+        if (!source) fail("the active layer has no pixels; select a pixel layer with layers.select (document.overview shows each layer's kind)");
         QString error;
         auto result = GmicRunner::runSync(*source, command, &error, integer(p, "timeoutMs", 300000));
         if (!result) fail(error);
@@ -140,7 +140,7 @@ void AutomationServer::registerPixelsHandlers() {
         EditorSession* s = session();
         LayerTransform transform;
         auto source = s->adjustmentSource(0, transform);
-        if (!source) fail("the active layer has no pixels");
+        if (!source) fail("the active layer has no pixels; select a pixel layer with layers.select (document.overview shows each layer's kind)");
         std::string error;
         const std::string modelPath = ModelStore::pathFor(ModelStore::selected()).toStdString();
         const bool detail = flag(p, "detail", false), mirror = flag(p, "flip", ModelStore::mirrorAverage());

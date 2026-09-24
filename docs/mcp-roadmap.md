@@ -7,11 +7,11 @@ method reference is `docs/automation.md`, the practice `docs/agent-guide.md`.
 ## What exists
 
 - A JSON-RPC socket in the editor (`--rpc`, `--headless`, or the Automation
-  preference) with 74 methods: documents and tabs, layers and masks,
+  preference) with 79 methods: documents and tabs, layers and masks,
   adjustments, filters and G'MIC, painting, selections including Quick Select,
   Remove Background with every panel setting and the detail pass, canvas and
   history, view state, and events.
-- `mcp/nekophoto_mcp.py`: a stdio MCP bridge with 54 tools over those methods
+- `mcp/nekophoto_mcp.py`: a stdio MCP bridge with 69 tools over those methods
   and a generic `rpc` tool for the rest; renders, layer renders and screenshots
   come back as PNG images; it launches the editor when nothing listens, headless
   without a display, and reconnects once when the editor goes away.
@@ -20,6 +20,29 @@ method reference is `docs/automation.md`, the practice `docs/agent-guide.md`.
   listening, so the agent works in the document the person is looking at.
 - `tools/rpc_smoke.py` exercises every method in CI; `.mcp.json` registers the
   bridge for Claude Code in this checkout.
+
+## Done in the second round (September 2026)
+
+Items 1, 2, 3, 4, 8 and 9 (the prompt; resources are left), with what the Blender MCP taught:
+
+- `rpc.describe` and the `describe_method` tool: every method's parameters, types, defaults and valid
+  values, from a table in `AutomationDescriptions.cpp`. The editor refuses keys a method does not take
+  and names the ones it does, so a misspelt key fails at once instead of doing nothing; the smoke test
+  fails for a method without a description. (Blender MCP added lookup tools instead of more granular
+  ones "so the model stops guessing API names"; this is ours.)
+- `document.overview` and its tool: the layer tree as text with ids, the selection and the undo step,
+  capped at `maxLayers` (their scene summary is capped too), optionally with a render.
+- Short server instructions naming the loop (look, act, verify, undo) and one prompt, `edit_photo`,
+  with the recipes: the key rules sit in the instructions as well, because most clients never fetch
+  prompts.
+- Errors that name the next step, and `app.info` reports `protocolVersion`.
+- Titles and read-only / destructive annotations on every tool; the missing first-class tools.
+- `tools/mcp_smoke.py`: the bridge driven by the MCP client in CI. It found a bug on its first run.
+- Forgiving names: blend modes in any case or spacing; a blend mode on a folder is refused instead of
+  ignored.
+
+Not taken from Blender MCP: arbitrary code execution (their main tool, and their main security
+complaint; our `rpc` only reaches the editor's own methods), and per-call telemetry.
 
 ## Ranked
 
@@ -60,6 +83,5 @@ another machine has no business in a person's editor).
 
 ## Suggested order
 
-1, 2 and 3 in one pass (a day): the bridge becomes tested, complete and
-self-describing. Then 4 and 5 (a day) for fewer round trips and tidy undo. Then
-6 when a slow call actually bites, and the rest as they come up.
+Next: 5 (edit groups and batches) for tidy undo and fewer round trips, then 7's helpers, then 6 when a slow
+call actually bites, and resources (the rest of 9) if a client wants them.

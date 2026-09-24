@@ -38,10 +38,13 @@ request to it instead and the running window starts listening on the socket,
 so the agent works in the document the person is looking at. `COMPOSITOR_MCP_LAUNCH=0` disables launching and
 `COMPOSITOR_MCP_LAUNCH=headless` forces the windowless kind.
 
-The bridge exposes one MCP tool per common operation (`layers_list`, `render`,
-`layers_set`, `pixels_filter`, `selection_rect`, ...) and a generic `rpc` tool
+The bridge exposes one MCP tool per common operation (`document_overview`, `render`,
+`layers_set`, `pixels_filter`, `selection_rect`, ...), `describe_method` and a generic `rpc` tool
 for the rest. Renders and screenshots come back as images, so the agent can
-look at what it did.
+look at what it did. Every tool has a title and says whether it only reads, edits (one undo step) or
+reaches past undo (saving, exporting, closing, `rpc`), so clients can skip confirmations on the safe
+ones. The `edit_photo` prompt carries the working loop and recipes. `tools/mcp_smoke.py` drives the
+bridge with the MCP client in CI.
 
 A workable prompt for an agent: "Open photo.jpg, remove the background, put a
 dark gradient layer behind it, and export result.png." It will call
@@ -79,7 +82,13 @@ one response per line:
 
 Errors use the standard shape (`-32601` unknown method, `-32602` bad
 parameters, `-32000` the editor refused: the message is what a dialog would
-have said). `rpc.methods` lists every method. Coordinates are document pixels
+have said, with the next step where there is one). `rpc.methods` lists every
+method; `rpc.describe {"method": "layers.set"}` gives one method's parameters
+with types, defaults and valid values (blend modes, tools, filter kinds), and
+without a method a one-line summary of each. A request with a key the method
+does not take, or without a required one, is refused with the keys it does
+take, rather than the key being ignored. `app.info` reports `protocolVersion`
+(2 since these checks). Coordinates are document pixels
 with the origin top-left; layers are addressed by the UUIDs `layers.list`
 reports; colours are CSS strings. Every method works on the current tab.
 
@@ -95,7 +104,8 @@ print(json.loads(f.readline())["result"])
 
 ## Methods
 
-Observe: `app.info`, `tabs.list`, `document.info`, `layers.list`, `layers.get`,
+Observe: `app.info`, `rpc.describe`, `tabs.list`, `document.overview` (the document, selection, undo and
+layer tree as text, one line per layer with its id: where an agent starts), `document.info`, `layers.list`, `layers.get`,
 `adjustments.get`, `adjustments.defaults`, `selection.info`, `history.info`,
 `render` (composite, or a `region`, longest side `maxSize`; `path` writes a file
 instead of returning base64), `layers.render` (one layer's pixels),
@@ -181,5 +191,5 @@ well for agents.
 
 Text layers (the editor has none) and a remote transport (the socket is local
 only, by design) are the open items. Adding a method is one `add("name", handler)` in
-the `src/app/Automation*.cpp` file for its area; the bridge's generic `rpc` tool reaches it without a
-Python change.
+the `src/app/Automation*.cpp` file for its area and its entry in `AutomationDescriptions.cpp` (the smoke
+test fails without one); the bridge's generic `rpc` tool reaches it without a Python change.

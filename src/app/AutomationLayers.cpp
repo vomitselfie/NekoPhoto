@@ -53,8 +53,15 @@ void AutomationServer::registerLayersHandlers() {
         if (has(p, "opacity") || has(p, "blend") || has(p, "sampling")) {
             std::optional<BlendMode> blend;
             std::optional<Sampling> sampling;
-            if (has(p, "blend")) { BlendMode b; if (!parseBlendMode(str(p, "blend").toStdString(), b)) fail("unknown blend mode; use the names layers.list reports", invalidParams); blend = b; }
-            if (has(p, "sampling")) { Sampling sm; if (!parseSampling(str(p, "sampling").toStdString(), sm)) fail("sampling must be Nearest, Smooth or High quality", invalidParams); sampling = sm; }
+            if (has(p, "blend")) {
+                blend = blendModeNamed(str(p, "blend"));
+                if (!blend) fail("unknown blend mode '" + str(p, "blend") + "'; one of " + blendModeNames().join(", "), invalidParams);
+                if (l.isGroup && *blend != BlendMode::Normal) fail("a folder has no blend mode; set it on the layers inside", invalidParams);
+            }
+            if (has(p, "sampling")) {
+                sampling = samplingNamed(str(p, "sampling"));
+                if (!sampling) fail("sampling must be Nearest, Smooth or High quality", invalidParams);
+            }
             withActive(id, [&] {
                 if (has(p, "opacity")) s->setLayerOpacity(std::clamp(num(p, "opacity"), 0.0, 1.0));
                 if (blend) s->setLayerBlendMode(*blend);
@@ -83,7 +90,7 @@ void AutomationServer::registerLayersHandlers() {
                 QJsonObject settings = obj(p, "settings");
                 settings["kind"] = QString::fromUtf8(adjustmentKindName(*ak));
                 AdjustmentSettings parsed;
-                if (!l || !AdjustmentSettings::parse(QJsonDocument(settings).toJson(QJsonDocument::Compact).toStdString(), parsed)) fail("couldn't parse settings", invalidParams);
+                if (!l || !AdjustmentSettings::parse(QJsonDocument(settings).toJson(QJsonDocument::Compact).toStdString(), parsed)) fail("couldn't parse settings; adjustments.defaults shows the shape", invalidParams);
                 s->setAdjustment(l->id, parsed);
             }
         } else if (kind == "text") {
@@ -101,7 +108,7 @@ void AutomationServer::registerLayersHandlers() {
     add("text.set", [session, layer](const QJsonObject& p) {
         // The active (or named) text layer's content and style; the layer must still be text (not painted on).
         EditorSession* s = session();
-        const Layer& l = has(p, "id") ? layer(p) : [&]() -> const Layer& { const Layer* a = s->activeLayer(); if (!a) fail("no active layer"); return *a; }();
+        const Layer& l = has(p, "id") ? layer(p) : [&]() -> const Layer& { const Layer* a = s->activeLayer(); if (!a) fail("no active layer; pass the text layer's id"); return *a; }();
         std::optional<LayerText> current = s->layerText(l.id);
         if (!current) fail("the layer is not a text layer (or its pixels were edited); add one with layers.add kind text", invalidParams);
         s->setLayerText(l.id, textFromParams(p, *current));
@@ -195,7 +202,7 @@ void AutomationServer::registerLayersHandlers() {
     add("layers.render", [layer](const QJsonObject& p) {
         // A layer's own pixels (not composited), downscaled to maxSize.
         const Layer& l = layer(p);
-        if (!l.asset || !l.asset->image) fail("the layer has no pixels");
+        if (!l.asset || !l.asset->image) fail("the layer has no pixels (a folder, adjustment or blank layer); document.overview shows each layer's kind");
         auto copy = scaledCopy(*l.asset->image, num(p, "maxSize", 1024));
         return deliverPng(*copy, p, {{"id", qs(l.id)}, {"transform", transformJson(l.transform)}, {"pixelWidth", l.pixelWidth()}, {"pixelHeight", l.pixelHeight()}});
     });
@@ -203,13 +210,13 @@ void AutomationServer::registerLayersHandlers() {
     // ---- adjustment layers
     add("adjustments.get", [layerOrActive](const QJsonObject& p) {
         const Layer& l = layerOrActive(p);
-        if (!l.adjustment) fail("not an adjustment layer");
+        if (!l.adjustment) fail("not an adjustment layer; document.overview lists them with their kind");
         return QJsonObject{{"id", qs(l.id)}, {"kind", QString::fromUtf8(adjustmentKindName(l.adjustment->kind))},
                            {"settings", QJsonDocument::fromJson(QByteArray::fromStdString(l.adjustment->json)).object()}};
     });
     add("adjustments.set", [session, layerOrActive](const QJsonObject& p) {
         const Layer& l = layerOrActive(p);
-        if (!l.adjustment) fail("not an adjustment layer");
+        if (!l.adjustment) fail("not an adjustment layer; document.overview lists them with their kind");
         // Merge over the current settings so a partial object works.
         QJsonObject settings = QJsonDocument::fromJson(QByteArray::fromStdString(l.adjustment->json)).object();
         QJsonObject patch = obj(p, "settings");

@@ -40,10 +40,12 @@ jobs:
         run: |
           QT_QPA_PLATFORM=offscreen ./build/src/app/nekophoto --demo --screenshot demo.png --save-as Demo.comp
           QT_QPA_PLATFORM=offscreen ./build/src/app/nekophoto Demo.comp --screenshot reopened.png
-      - name: Automation socket smoke test
+      - name: Automation socket and MCP bridge smoke tests
         run: |
           ./build/src/app/nekophoto --headless --rpc-socket "$PWD/rpc.sock" --demo &
           python3 tools/rpc_smoke.py "$PWD/rpc.sock"
+          python3 -m venv "$RUNNER_TEMP/mcp" && "$RUNNER_TEMP/mcp/bin/pip" install -q "mcp>=1.10,<2"
+          "$RUNNER_TEMP/mcp/bin/python" tools/mcp_smoke.py "$PWD/rpc.sock"
           kill %1
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
         with:

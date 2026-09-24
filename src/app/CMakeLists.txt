@@ -81,6 +81,7 @@ qt_add_executable(nekophoto
     FontGroups.cpp
     Automation.h
     Automation.cpp
+    AutomationDescriptions.cpp
     AutomationDocument.cpp
     AutomationHandlers.h
     AutomationLayers.cpp

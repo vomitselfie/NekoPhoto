@@ -26,6 +26,9 @@ class Rpc:
         self.events = []
 
     def call(self, method, **params):
+        return self.request(method, params)
+
+    def request(self, method, params):
         self.next_id += 1
         self.file.write(json.dumps({"jsonrpc": "2.0", "id": self.next_id, "method": method, "params": params}) + "\n")
         self.file.flush()
@@ -316,6 +319,27 @@ def main():
     else:
         raise SystemExit("missing-layer lookup should have failed")
     methods = rpc.call("rpc.methods")
+    # Every method is described, request keys are checked against the description, and names are forgiving.
+    described = rpc.call("rpc.describe")
+    missing = sorted(set(methods) - set(described))
+    assert not missing, f"methods without a description in AutomationDescriptions.cpp: {missing}"
+    for m in methods:
+        d = rpc.request("rpc.describe", {"method": m})
+        assert d["summary"], m
+    for bad, words in ((dict(method="layers.set", params={"id": "x", "opacty": 0.5}), "has no parameter 'opacty'"),
+                       (dict(method="canvas.crop", params={"x": 0, "y": 0, "width": 4}), "needs 'height'")):
+        try:
+            rpc.call(bad["method"], **bad["params"])
+            raise AssertionError(f"{bad} should have been refused")
+        except RuntimeError as e:
+            assert words in str(e) and "rpc.describe" in str(e), e
+    tools = next(p for p in rpc.request("rpc.describe", {"method": "tool.select"})["params"] if p["name"] == "name")["values"]
+    for t in tools:
+        rpc.call("tool.select", name=t)
+    rpc.call("tool.select", name="move")
+    pixels = next(l["id"] for l in rpc.call("layers.list") if l["kind"] == "pixels")
+    assert rpc.call("layers.set", id=pixels, blend="color-dodge")["blend"] == "Color Dodge"
+    rpc.call("history.undo")
     print(len(methods), "methods; smoke test passed")
 
 

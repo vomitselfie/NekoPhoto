@@ -67,6 +67,30 @@ std::optional<AdjustmentKind> adjustmentKindNamed(QString name) {
     return std::nullopt;
 }
 
+namespace {
+QString bare(QString name) { return name.toLower().remove(' ').remove('-').remove('_'); }
+} // namespace
+
+std::optional<BlendMode> blendModeNamed(const QString& name) {
+    for (int i = 0; i < blendModeCount; i++)
+        if (bare(QString::fromUtf8(blendModeName(BlendMode(i)))) == bare(name)) return BlendMode(i);
+    return std::nullopt;
+}
+
+QStringList blendModeNames() {
+    QStringList out;
+    for (int i = 0; i < blendModeCount; i++) out << QString::fromUtf8(blendModeName(BlendMode(i)));
+    return out;
+}
+
+std::optional<Sampling> samplingNamed(const QString& name) {
+    const QString n = bare(name);
+    if (n.isEmpty()) return std::nullopt;
+    for (int i = 0; i < 3; i++)
+        if (bare(QString::fromUtf8(samplingName(Sampling(i)))).startsWith(n)) return Sampling(i);
+    return std::nullopt;
+}
+
 std::optional<FilterKind> filterKindNamed(QString name) {
     name = name.toLower().remove(' ').remove('-');
     for (int i = 0; i < 4; i++) {
@@ -173,7 +197,7 @@ const Layer& LayerOf::operator()(const QJsonObject& p, const char* key) const {
     const Document& doc = document();
     QString id = str(p, key);
     const Layer* l = doc.find(id.toStdString());
-    if (!l) fail("no layer with id " + id);
+    if (!l) fail("no layer with id " + id + "; document.overview or layers.list give the ids");
     return *l;
 }
 

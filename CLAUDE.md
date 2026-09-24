@@ -54,5 +54,7 @@ behave differently in CI only if the versions differ.
   (`docs/linux-port-architecture.md` maps files).
 - An automation method is one `add("name", handler)` in the
   `src/app/Automation*.cpp` file for its area (document, layers, pixels,
-  selection, paint; app, tabs, history and view in `Automation.cpp`); add a matching tool in `mcp/nekophoto_mcp.py`,
-  a line in `docs/automation.md`, and cover it in `tools/rpc_smoke.py`.
+  selection, paint; app, tabs, history and view in `Automation.cpp`), its parameters in
+  `AutomationDescriptions.cpp` (requests with other keys are refused), a matching tool in
+  `mcp/nekophoto_mcp.py` (with `@look`, `@edit` or `@outside`), a line in `docs/automation.md`, and
+  cover it in `tools/rpc_smoke.py`. `tools/mcp_smoke.py` tests the bridge through the MCP client.

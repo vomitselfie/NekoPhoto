@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["mcp>=1.2,<2"]
+# dependencies = ["mcp>=1.10,<2"]
 # ///
 """MCP bridge for NekoPhoto.
 
@@ -33,12 +33,32 @@ import time
 from typing import Any, Optional
 
 from mcp.server.fastmcp import FastMCP, Image
+from mcp.types import ToolAnnotations
 
 mcp = FastMCP("nekophoto", instructions=(
-    "Drives the NekoPhoto image editor (a layered, Photoshop-like editor). Coordinates are document pixels "
-    "with the origin at the top-left. Layers are addressed by id from layers_list. Every edit is one undo step "
-    "(history_undo reverts it). Call render after edits to see the result; use region and max_size to keep images small."
+    "Drives the NekoPhoto image editor (layers, masks, adjustments, filters, painting, selections). "
+    "Work in a loop: look (document_overview; render at max_size 512 to orient), act in small steps, then verify "
+    "with render (a region at full size for details). Every edit is one undo step: history_undo when a render "
+    "shows the wrong thing. Coordinates are document pixels, origin top-left; layers are addressed by the ids "
+    "document_overview lists. Filters, fills and adjustments act on the active layer inside the selection. "
+    "Before using rpc for a method without a tool, describe_method shows what it takes. "
+    "The edit_photo prompt has recipes."
 ))
+
+
+def look(title: str, **options: Any):
+    """A tool that only reads."""
+    return mcp.tool(title=title, annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False), **options)
+
+
+def edit(title: str):
+    """A tool that changes the document, as one undo step."""
+    return mcp.tool(title=title, annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=False))
+
+
+def outside(title: str):
+    """A tool whose effect undo does not reach: files written, tabs or documents closed."""
+    return mcp.tool(title=title, annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=False))
 
 
 def socket_path() -> str:
@@ -147,50 +167,69 @@ def png(result: dict) -> Image:
 
 # ---- looking ------------------------------------------------------------------------------------
 
-@mcp.tool()
+@look("App info")
 def app_info() -> str:
     """Version, open tabs, and whether Remove Background is available."""
     return text(call("app.info"))
 
 
-@mcp.tool()
+@look("Document info")
 def document_info() -> str:
     """Size, resolution, path, active layer, selection bounds and undo/redo names of the current document."""
     return text(call("document.info"))
 
 
-@mcp.tool()
+@look("Document overview", structured_output=False)
+def document_overview(render: bool = False, max_size: int = 512, max_layers: int = 80) -> list:
+    """Start here. The document at a glance as text: size, selection, what undo would revert, and the layer tree
+    top first with each layer's kind, bounds, opacity, blend, mask, visibility and id (* marks the active one).
+    render=true adds a picture of the composite at max_size."""
+    result = call("document.overview", maxLayers=max_layers)
+    out: list = [result["overview"]]
+    if render:
+        out.append(png(call("render", maxSize=max_size)))
+    return out
+
+
+@look("Describe a method")
+def describe_method(method: Optional[str] = None) -> str:
+    """What an editor method takes: its parameters with types, defaults and valid values (blend modes, tools,
+    filter kinds...). Without a method, one line per method, including those only rpc reaches."""
+    return text(conn.call("rpc.describe", {"method": method} if method else {}))
+
+
+@look("List layers")
 def layers_list() -> str:
     """All layers top to bottom with id, name, kind (pixels, shape, group, adjustment), depth, parent, visibility, opacity, blend mode, transform (document pixels), mask and adjustment settings."""
     return text(call("layers.list"))
 
 
-@mcp.tool()
+@look("Edit history")
 def history_list() -> str:
     """The recorded edits: undo (oldest first; the last is what history_undo reverts) and redo."""
     return text(call("history.list"))
 
 
-@mcp.tool()
+@look("Show the selection")
 def selection_render(max_size: int = 512) -> Image:
     """The current selection as a mask image: white selected, black not."""
     return png(call("selection.render", maxSize=max_size))
 
 
-@mcp.tool()
+@look("Render the document")
 def render(max_size: int = 1024, x: Optional[float] = None, y: Optional[float] = None, width: Optional[float] = None, height: Optional[float] = None, checkerboard: bool = False) -> Image:
     """The composited document as a PNG (what an export would give), downscaled so its longest side is max_size. Give x, y, width, height to render only that region at up to full resolution. checkerboard shows transparency like the canvas does."""
     region = {"x": x, "y": y, "width": width, "height": height} if None not in (x, y, width, height) else None
     return png(call("render", maxSize=max_size, region=region, checkerboard=checkerboard))
 
 
-@mcp.tool()
+@look("Render one layer")
 def render_layer(id: str, max_size: int = 1024) -> Image:
     """One layer's own pixels (not composited, transparency kept) as a PNG."""
     return png(call("layers.render", id=id, maxSize=max_size))
 
 
-@mcp.tool()
+@look("Screenshot the editor")
 def screenshot(window: bool = False, max_size: int = 1600) -> Image:
     """What the person sees: the canvas widget (or the whole window with window=true), including selection outlines and transform handles."""
     return png(call("screenshot", window=window, maxSize=max_size))
@@ -198,37 +237,55 @@ def screenshot(window: bool = False, max_size: int = 1600) -> Image:
 
 # ---- documents and tabs -------------------------------------------------------------------------
 
-@mcp.tool()
+@look("List tabs")
 def tabs_list() -> str:
     """The open tabs (index, title, path, modified, size) and which is current."""
     return text(call("tabs.list"))
 
 
-@mcp.tool()
+@edit("Switch tab")
 def tabs_select(index: int) -> str:
     """Make a tab current; every other tool works on the current tab."""
     return text(call("tabs.select", index=index))
 
 
-@mcp.tool()
+@edit("New tab")
+def tabs_new() -> str:
+    """Open an empty tab and make it current."""
+    return text(call("tabs.new"))
+
+
+@outside("Close a tab")
+def tabs_close(index: int, discard: bool = False) -> str:
+    """Close a tab; with unsaved changes it refuses unless discard=true (those changes are lost)."""
+    return text(call("tabs.close", index=index, discard=discard))
+
+
+@outside("Close the document")
+def document_close(discard: bool = False) -> str:
+    """Close the current tab's document; with unsaved changes it refuses unless discard=true (those changes are lost)."""
+    return text(call("document.close", discard=discard))
+
+
+@edit("New document")
 def document_new(width: int = 1920, height: int = 1080, resolution: float = 72) -> str:
     """A new document (in a new tab if the current one is in use) with one empty layer."""
     return text(call("document.new", width=width, height=height, resolution=resolution))
 
 
-@mcp.tool()
+@edit("Open a file")
 def document_open(path: str) -> str:
     """Open a .comp project (in its own tab), a Photoshop .psd/.psb (in its own tab, with its layers; the reply lists what could not be carried), or an image file (as a layer; a first image creates the canvas)."""
     return text(call("document.open", path=os.path.abspath(path)))
 
 
-@mcp.tool()
+@edit("Import an image as a layer")
 def document_import(path: str, x: Optional[float] = None, y: Optional[float] = None) -> str:
     """Add an image file as a new layer, centred on x, y (document pixels) or on the canvas."""
     return text(call("document.import", path=os.path.abspath(path), x=x, y=y))
 
 
-@mcp.tool()
+@outside("Save the project")
 def document_save(path: Optional[str] = None) -> str:
     """Save the project as a .comp package, to its current path or to path. macCompatible in the answer is
     false when the layers total more than the 100 megapixels Compositor for macOS opens (up to a gigapixel
@@ -236,7 +293,7 @@ def document_save(path: Optional[str] = None) -> str:
     return text(call("document.save", path=os.path.abspath(path) if path else None))
 
 
-@mcp.tool()
+@outside("Export an image")
 def document_export(path: str, quality: int = 85, background: str = "#ffffff") -> str:
     """Flatten and export to a .png, .webp or .tif (these keep transparency; WebP at quality 100 is
     lossless) or .jpg (over background, at quality)."""
@@ -245,19 +302,25 @@ def document_export(path: str, quality: int = 85, background: str = "#ffffff") -
 
 # ---- layers -------------------------------------------------------------------------------------
 
-@mcp.tool()
+@edit("Select a layer")
 def layers_select(id: str, mask: bool = False) -> str:
     """Make a layer active (edits like fills and filters apply to the active layer); mask=true targets its mask."""
     return text(call("layers.select", id=id, mask=mask))
 
 
-@mcp.tool()
+@look("Get a layer")
+def layers_get(id: str) -> str:
+    """One layer's full record, as layers_list reports it (transform, mask, adjustment settings, text style)."""
+    return text(call("layers.get", id=id))
+
+
+@edit("Set layer properties")
 def layers_set(id: str, name: Optional[str] = None, visible: Optional[bool] = None, opacity: Optional[float] = None, blend: Optional[str] = None, clipping: Optional[bool] = None) -> str:
     """Change a layer's name, visibility, opacity (0..1), blend mode (Normal, Multiply, Screen, Overlay, Darken, Lighten, Difference, Color Dodge, Color Burn, Hue, Saturation, Color, Luminosity) or whether it clips to the layer beneath."""
     return text(call("layers.set", id=id, name=name, visible=visible, opacity=opacity, blend=blend, clipping=clipping))
 
 
-@mcp.tool()
+@edit("Add a layer")
 def layers_add(kind: str = "pixels", name: Optional[str] = None, adjustment_kind: Optional[str] = None, settings: Optional[dict] = None, below: bool = False,
                text_content: Optional[str] = None, x: Optional[float] = None, y: Optional[float] = None, font: Optional[str] = None, size: Optional[float] = None,
                bold: Optional[bool] = None, italic: Optional[bool] = None, color: Optional[str] = None, align: Optional[str] = None) -> str:
@@ -265,50 +328,62 @@ def layers_add(kind: str = "pixels", name: Optional[str] = None, adjustment_kind
     return text(call("layers.add", kind=kind, name=name, adjustmentKind=adjustment_kind, settings=settings, below=below, text=text_content, x=x, y=y, font=font, size=size, bold=bold, italic=italic, color=color, align=align))
 
 
-@mcp.tool()
+@edit("Edit a text layer")
 def text_set(id: Optional[str] = None, text_content: Optional[str] = None, font: Optional[str] = None, size: Optional[float] = None, bold: Optional[bool] = None,
              italic: Optional[bool] = None, color: Optional[str] = None, align: Optional[str] = None, line_spacing: Optional[float] = None, letter_spacing: Optional[float] = None) -> str:
     """Change a text layer's content or style (the active layer, or id): text_content, font, size (px), bold, italic, color (CSS), align (left, center, right), line_spacing (multiple of the line height), letter_spacing (px). The layer must still be text, not painted on."""
     return text(call("text.set", id=id, text=text_content, font=font, size=size, bold=bold, italic=italic, color=color, align=align, lineSpacing=line_spacing, letterSpacing=letter_spacing))
 
 
-@mcp.tool()
+@edit("Delete layers")
 def layers_delete(ids: list[str]) -> str:
     """Delete layers by id (layers clipped to them keep their masked look baked in)."""
     return text(call("layers.delete", ids=ids))
 
 
-@mcp.tool()
+@edit("Duplicate a layer")
 def layers_duplicate(id: str) -> str:
     """A copy of the layer directly above it; the copy becomes active."""
     return text(call("layers.duplicate", id=id))
 
 
-@mcp.tool()
+@edit("Move a layer in the tree")
 def layers_move(id: str, parent: Optional[str] = None, above: Optional[str] = None, at_bottom: bool = False) -> str:
     """Re-parent and reorder: into group parent (or the top level), directly above layer above, or at the bottom / top of that level."""
     return text(call("layers.move", id=id, parent=parent, above=above, atBottom=at_bottom))
 
 
-@mcp.tool()
+@edit("Reorder a layer")
+def layers_reorder(offset: int, id: Optional[str] = None) -> str:
+    """Move a layer (default the active one) up (positive offset) or down among its siblings."""
+    return text(call("layers.reorder", id=id, offset=offset))
+
+
+@edit("Flip a layer")
+def layers_flip(id: Optional[str] = None, vertical: bool = False) -> str:
+    """Flip a layer's pixels left to right, or top to bottom with vertical=true."""
+    return text(call("layers.flip", id=id, vertical=vertical))
+
+
+@edit("Place a layer")
 def layers_set_transform(id: str, x: Optional[float] = None, y: Optional[float] = None, width: Optional[float] = None, height: Optional[float] = None, rotation: Optional[float] = None, scale: Optional[float] = None, flip_x: Optional[bool] = None, flip_y: Optional[bool] = None) -> str:
     """Place a layer non-destructively: top-left x, y and width, height in document pixels, rotation in degrees clockwise, or scale (a factor about its centre)."""
     return text(call("layers.setTransform", id=id, x=x, y=y, width=width, height=height, rotation=rotation, scale=scale, flipX=flip_x, flipY=flip_y))
 
 
-@mcp.tool()
+@edit("Layer mask")
 def layers_mask(id: str, action: str, revealing: bool = True) -> str:
     """Layer masks: action add (reveal all, or revealing=false to hide all), addFromSelection, delete, toggle, invert, apply, link."""
     return text(call("layers.mask", id=id, action=action, revealing=revealing))
 
 
-@mcp.tool()
+@edit("Merge layers")
 def layers_merge(down: bool = False) -> str:
     """Merge the selected layers, a selected folder, or (down=true) the active layer into the one beneath."""
     return text(call("layers.merge", down=down))
 
 
-@mcp.tool()
+@edit("Group layers")
 def layers_group() -> str:
     """Put the selected layers into a new folder."""
     return text(call("layers.group"))
@@ -316,73 +391,73 @@ def layers_group() -> str:
 
 # ---- adjustments and filters ---------------------------------------------------------------------
 
-@mcp.tool()
+@look("Adjustment settings shape")
 def adjustments_defaults(kind: str) -> str:
     """The settings object an adjustment kind takes (Levels, Curves, Hue/Saturation, Exposure, Gradient Map, Grain) with its default values."""
     return text(call("adjustments.defaults", kind=kind))
 
 
-@mcp.tool()
+@look("Adjustment settings")
 def adjustments_get(id: str) -> str:
     """An adjustment layer's current settings."""
     return text(call("adjustments.get", id=id))
 
 
-@mcp.tool()
+@edit("Change an adjustment")
 def adjustments_set(id: str, settings: dict) -> str:
     """Change an adjustment layer's settings; a partial object is merged over the current one."""
     return text(call("adjustments.set", id=id, settings=settings))
 
 
-@mcp.tool()
+@edit("Adjust pixels")
 def pixels_adjust(kind: str, settings: Optional[dict] = None) -> str:
     """Bake an adjustment (Levels, Curves, Hue/Saturation, Exposure, Gradient Map, Grain) into the active layer's pixels, inside the selection if there is one."""
     return text(call("pixels.adjust", kind=kind, settings=settings or {}))
 
 
-@mcp.tool()
+@edit("Filter pixels")
 def pixels_filter(kind: str, radius: Optional[float] = None, angle: Optional[float] = None, distance: Optional[float] = None, amount: Optional[float] = None, gaussian: Optional[bool] = None, monochromatic: Optional[bool] = None, distortion: Optional[float] = None, bicubic: Optional[bool] = None) -> str:
     """Run a filter on the active layer's pixels: Gaussian Blur (radius), Motion Blur (angle, distance), Add Noise (amount, gaussian, monochromatic) or Lens Correction (distortion -100..100, bicubic for a sharper resample)."""
     return text(call("pixels.filter", kind=kind, radius=radius, angle=angle, distance=distance, amount=amount, gaussian=gaussian, monochromatic=monochromatic, distortion=distortion, bicubic=bicubic))
 
 
-@mcp.tool()
+@edit("Fill")
 def pixels_fill(color: str = "#000000") -> str:
     """Fill the selection (or the whole active layer) with a CSS colour."""
     return text(call("pixels.fill", color=color))
 
 
-@mcp.tool()
+@edit("Clear pixels")
 def pixels_clear() -> str:
     """Make the selected pixels of the active layer transparent."""
     return text(call("pixels.clear"))
 
 
-@mcp.tool()
+@edit("Invert colours")
 def pixels_invert() -> str:
     """Invert the active layer's colours."""
     return text(call("pixels.invert"))
 
 
-@mcp.tool()
+@edit("Content-Aware Fill")
 def pixels_content_aware_fill() -> str:
     """Fill the selection from its surroundings (also extends an image past its edge when the selection reaches outside it)."""
     return text(call("pixels.contentAwareFill"))
 
 
-@mcp.tool()
+@look("G'MIC catalogue")
 def gmic_filters(search: str = "") -> str:
     """The G'MIC filter catalogue (name, folder, command, parameters with defaults and ranges), optionally narrowed by a search string. G'MIC is the open-source filter framework GIMP and Krita use as a plugin."""
     return text(call("gmic.filters", search=search))
 
 
-@mcp.tool()
+@edit("Run a G'MIC filter")
 def pixels_gmic(command: str) -> str:
     """Run a G'MIC command line on the active layer's pixels inside the selection, e.g. "unsharp 2,1.5", "cartoon 3,150,20,0.25,1.5,8" or a catalogue filter's defaultCommand with edited values. Only filter names (from gmic_filters, or common built-ins such as blur, sharpen, unsharp, denoise, cartoon) followed by numbers are accepted: no strings, paths or other G'MIC commands."""
     return text(call("pixels.gmic", command=command))
 
 
-@mcp.tool()
+@edit("Remove the background")
 def remove_background(refine: bool = True, refine_edges: Optional[float] = None, contrast: Optional[float] = None, shift_edge: Optional[float] = None, matting: Optional[float] = None, cleanup: bool = True, decontaminate: bool = True, detail: bool = False, flip: Optional[bool] = None) -> str:
     """Mask out the active layer's background with the local segmentation model (needs Preferences > AI background removal enabled and a downloaded model). With refine, the guided edge refinement (refine_edges 0..40), matte contrast (0..100), shift_edge (-10..10), the matting band (0..400 px, solves hair opacity), speckle cleanup and edge-colour decontamination (the edge pixels take the subject's own colour) apply. detail runs the model again on full-resolution windows along the edge of a large photo (slower, sharper hair). flip averages the model's mask with the mirrored image's (the preference's default when omitted; steadier edges, twice the model time)."""
     return text(call("pixels.removeBackground", refine=refine, refineEdges=refine_edges, contrast=contrast, shiftEdge=shift_edge, matting=matting, cleanup=cleanup, decontaminate=decontaminate, detail=detail, flip=flip))
@@ -390,7 +465,7 @@ def remove_background(refine: bool = True, refine_edges: Optional[float] = None,
 
 # ---- painting by coordinates ---------------------------------------------------------------------
 
-@mcp.tool()
+@edit("Paint a stroke")
 def brush_stroke(points: list[list[float]], tool: str = "brush", size: Optional[float] = None, hardness: Optional[float] = None, opacity: Optional[float] = None, color: Optional[str] = None, mask: bool = False, source_x: Optional[float] = None, source_y: Optional[float] = None, preset: Optional[str] = None, pressure: Optional[float] = None, pressures: Optional[list[float]] = None) -> str:
     """Paint one stroke through [x, y] points on the active layer (or its mask with mask=true): tool brush, eraser, healing, clone (with source_x/source_y), smudge, blur or liquify; size in pixels, hardness and opacity 0..1, a CSS color.
     With tool brush or eraser, preset picks a MyPaint brush from brush_presets (pencils, inks, charcoal, paint, smudging; "round" for the plain tip); it starts at its own size unless size is given, and follows pen pressure: one pressure 0..1 for the stroke, or pressures with one value per point (a ramp tapers the line)."""
@@ -398,25 +473,25 @@ def brush_stroke(points: list[list[float]], tool: str = "brush", size: Optional[
     return text(call("brush.stroke", points=points, tool=tool, size=size, hardness=hardness, opacity=opacity, color=color, mask=mask, source=source, preset=preset, pressure=pressure, pressures=pressures))
 
 
-@mcp.tool()
+@edit("Import brushes")
 def brush_import(paths: list[str]) -> str:
     """Import brush files into the brush library: Photoshop .abr, Procreate .brushset and .brush, Clip Studio .sut, or images to use as tips. Answers the new preset ids (use them as brush_stroke's preset) and notes on anything approximated."""
     return text(call("brush.import", paths=[os.path.abspath(p) for p in paths]))
 
 
-@mcp.tool()
+@look("Brush presets")
 def brush_presets(group: Optional[str] = None) -> str:
     """The MyPaint brush presets brush_stroke can paint with (id, name, group, own size, whether it erases), optionally one group: Classic, David Revoy, Ramón Miranda, Tanda, Kaerhon, Brien Dieterle, Experimental."""
     return text(call("brush.presets", group=group))
 
 
-@mcp.tool()
+@edit("Draw a gradient")
 def gradient_draw(x0: float, y0: float, x1: float, y1: float, shape: str = "linear", style: str = "foreground-to-transparent", reversed: bool = False, opacity: float = 1.0, foreground: Optional[str] = None, background: Optional[str] = None) -> str:
     """Draw a gradient on the active layer from (x0, y0) to (x1, y1): shape linear or radial; style foreground-to-transparent or foreground-to-background; colours as CSS strings."""
     return text(call("gradient.draw", x0=x0, y0=y0, x1=x1, y1=y1, shape=shape, style=style, reversed=reversed, opacity=opacity, foreground=foreground, background=background))
 
 
-@mcp.tool()
+@edit("Draw a shape")
 def shape_draw(x: float, y: float, width: float, height: float, kind: str = "rectangle", corner_radius: float = 0, color: Optional[str] = None) -> str:
     """Add a filled rectangle (optionally rounded) or ellipse as a new shape layer."""
     return text(call("shape.draw", x=x, y=y, width=width, height=height, kind=kind, cornerRadius=corner_radius, color=color))
@@ -424,49 +499,49 @@ def shape_draw(x: float, y: float, width: float, height: float, kind: str = "rec
 
 # ---- selection ----------------------------------------------------------------------------------
 
-@mcp.tool()
+@look("Selection info")
 def selection_info() -> str:
     """Whether there is a selection and its bounds."""
     return text(call("selection.info"))
 
 
-@mcp.tool()
+@edit("Select a rectangle")
 def selection_rect(x: float, y: float, width: float, height: float, ellipse: bool = False, mode: str = "replace") -> str:
     """Select a rectangle or ellipse (document pixels); mode replace, add or subtract."""
     return text(call("selection.rect", x=x, y=y, width=width, height=height, ellipse=ellipse, mode=mode))
 
 
-@mcp.tool()
+@edit("Select a polygon")
 def selection_polygon(points: list[list[float]], mode: str = "replace") -> str:
     """Select a polygon from [x, y] points."""
     return text(call("selection.polygon", points=points, mode=mode))
 
 
-@mcp.tool()
+@edit("Magic wand")
 def selection_wand(x: float, y: float, tolerance: int = 32, contiguous: bool = True, sample_all: bool = False, mode: str = "replace") -> str:
     """Magic wand: select the colour at a point within tolerance (0..255), reading the active layer's own pixels (sample_all=true reads the visible composite instead)."""
     return text(call("selection.wand", x=x, y=y, tolerance=tolerance, contiguous=contiguous, sampleAll=sample_all, mode=mode))
 
 
-@mcp.tool()
+@edit("Quick Select by scribble")
 def selection_scribble(foreground: Optional[list[list[list[float]]]] = None, background: Optional[list[list[list[float]]]] = None, size: int = 24, refine: int = 8, clear: bool = True, mode: str = "replace") -> str:
     """Quick Select by scribble: strokes over the subject and over the background (each a list of [x, y] points, size pixels wide) segment the subject on the flattened document with GrabCut, refined onto the image's edges (refine 0..40); clear forgets earlier strokes first."""
     return text(call("selection.scribble", foreground=foreground or [], background=background or [], size=size, refine=refine, clear=clear, mode=mode))
 
 
-@mcp.tool()
+@edit("Click to select")
 def selection_subject(foreground: Optional[list[list[float]]] = None, background: Optional[list[list[float]]] = None, box: Optional[list[float]] = None, refine: int = 8, clear: bool = True, mode: str = "replace") -> str:
     """Click to select: foreground points on the subject and background points on what is not it (each [x, y] in document pixels), or a box [x0, y0, x1, y1]; the EfficientSAM model (needs its download, see app_info clickSelect) finds the object and the selection is pulled onto the image's edges (refine 0..40). Up to six prompts count. One foreground point on a subject usually selects all of it."""
     return text(call("selection.subject", foreground=foreground or [], background=background or [], box=box, refine=refine, clear=clear, mode=mode))
 
 
-@mcp.tool()
+@edit("Select from a layer")
 def selection_from_layer(id: str, mask: bool = False, mode: str = "replace") -> str:
     """Load a layer's opaque pixels (or its mask) as the selection."""
     return text(call("selection.fromLayer", id=id, mask=mask, mode=mode))
 
 
-@mcp.tool()
+@edit("Modify the selection")
 def selection_edit(action: str, amount: float = 0) -> str:
     """action all, none, invert, grow (by amount pixels; negative contracts), feather (Gaussian of that radius), smooth (disc majority of that radius) or border (a band that wide)."""
     if action == "grow":
@@ -482,39 +557,94 @@ def selection_edit(action: str, amount: float = 0) -> str:
 
 # ---- canvas and history ---------------------------------------------------------------------------
 
-@mcp.tool()
+@edit("Resize the canvas")
 def canvas_resize(width: int, height: int, anchor_x: float = 0.5, anchor_y: float = 0.5) -> str:
     """Change the canvas size without scaling pixels; the anchor (0..1) says which side stays put."""
     return text(call("canvas.resize", width=width, height=height, anchorX=anchor_x, anchorY=anchor_y))
 
 
-@mcp.tool()
+@edit("Crop")
 def canvas_crop(x: float, y: float, width: float, height: float) -> str:
     """Crop the document to a rectangle."""
     return text(call("canvas.crop", x=x, y=y, width=width, height=height))
 
 
-@mcp.tool()
+@edit("Flip the canvas")
+def canvas_flip(vertical: bool = False) -> str:
+    """Flip the whole image left to right, or top to bottom with vertical=true."""
+    return text(call("canvas.flip", vertical=vertical))
+
+
+@edit("Resize the image")
 def image_resize(width: Optional[int] = None, height: Optional[int] = None, scale: Optional[float] = None, sampling: str = "high") -> str:
     """Resample the whole image (every layer) to width x height (one keeps the aspect ratio) or by scale; sampling nearest, smooth or high."""
     return text(call("image.resize", width=width, height=height, scale=scale, sampling=sampling))
 
 
-@mcp.tool()
+@edit("Undo")
 def history_undo(steps: int = 1) -> str:
     """Undo the last edit(s)."""
     return text(call("history.undo", steps=steps))
 
 
-@mcp.tool()
+@edit("Redo")
 def history_redo(steps: int = 1) -> str:
     """Redo."""
     return text(call("history.redo", steps=steps))
 
 
-@mcp.tool()
+# ---- what the person sees -----------------------------------------------------------------------
+
+@edit("Pick a tool")
+def tool_select(name: str) -> str:
+    """Switch the tool the person sees (move, marquee, lasso, wand, quickselect, crop, brush, healing, clone, smudge, gradient, shape, text, eyedropper, hand, zoom). Tools that paint by coordinates do not need this."""
+    return text(call("tool.select", name=name))
+
+
+@edit("Set colours")
+def colors_set(foreground: Optional[str] = None, background: Optional[str] = None) -> str:
+    """Set the foreground and background colours (CSS), which painting, fills and gradients default to."""
+    return text(call("colors.set", foreground=foreground, background=background))
+
+
+@edit("Zoom the view")
+def view_zoom(zoom: Optional[float] = None, fit: bool = False) -> str:
+    """Zoom the person's view (1 = 100%) or fit the document in the window; the document is not changed."""
+    return text(call("view.zoom", zoom=zoom, fit=fit))
+
+
+# ---- prompts ------------------------------------------------------------------------------------
+
+@mcp.prompt(title="Edit a photo in NekoPhoto")
+def edit_photo(goal: str) -> str:
+    """The working loop and recipes for editing an image with these tools."""
+    return f"""Goal: {goal}
+
+Work in NekoPhoto with this loop:
+1. Look: document_overview (render=true for a picture). Open files with document_open first if nothing is open.
+2. Act in small steps. Each tool call is one undo step; history_undo takes back one that went wrong.
+3. Verify with render after each meaningful change; render a region at max_size 0 to check edges, text or a spot.
+4. Finish with document_export (a .png/.jpg/.webp) or document_save (the editable project) only when asked.
+
+Recipes:
+- Cut out a subject: remove_background (app_info says whether its model is ready; if not, tell the person to
+  enable it in Edit > Preferences), then layers_add kind pixels below=true for a new backdrop, gradient_draw on it.
+- Non-destructive colour: layers_add kind adjustment (adjustments_defaults shows the settings shape), then
+  adjustments_set to tweak after a render. pixels_adjust bakes the same into the pixels instead.
+- One object: selection_subject with a foreground point on it (a box for a part of one object), then
+  layers_mask action addFromSelection to keep it, or pixels_clear to remove it.
+- A flat background colour: layers_select the layer, selection_wand on the colour, selection_edit grow 2,
+  pixels_clear, selection_edit none.
+- A blemish: render the region at full size, then brush_stroke tool healing through it.
+
+Things to know: filters, fills and adjustments act on the active layer inside the selection (selection_edit none
+for the whole layer). Opacity is 0..1. Folders have no blend mode. brush_stroke puts the person's tool and colours
+back afterwards. For a method without a tool, describe_method, then rpc."""
+
+
+@outside("Call any method")
 def rpc(method: str, params: Optional[dict] = None) -> str:
-    """Call any automation method directly (rpc.methods lists them); the escape hatch for anything without a tool."""
+    """Call any editor method directly: the escape hatch for anything without a tool. describe_method lists the methods and what each takes."""
     return text(conn.call(method, params or {}))
 
 

@@ -32,6 +32,48 @@ void AutomationServer::registerDocumentHandlers() {
         o["redo"] = s->canRedo() ? QJsonValue(s->redoName()) : QJsonValue::Null;
         return o;
     });
+    add("document.overview", [w, session, document](const QJsonObject& p) {
+        // Everything an agent reads before touching a document, as text: one line per layer, top first.
+        const Document& doc = document();
+        EditorSession* s = session();
+        const int limit = std::max(1, integer(p, "maxLayers", 80));
+        QStringList lines;
+        lines << QStringLiteral("%1 x %2 px at %3 ppi, %4 layers%5%6").arg(doc.width).arg(doc.height).arg(doc.resolution).arg(doc.layers.size())
+                     .arg(s->isModified() ? ", unsaved changes" : "").arg(s->projectPath().isEmpty() ? QString() : ", " + s->projectPath());
+        if (doc.selection && !doc.selection->isEmpty()) {
+            const Rect b = doc.selection->bounds();
+            lines << QStringLiteral("Selection: %1 x %2 at (%3, %4)").arg(b.width).arg(b.height).arg(b.x).arg(b.y);
+        } else lines << "Selection: none";
+        lines << "Undo: " + (s->canUndo() ? s->undoName() : QStringLiteral("nothing")) + (s->canRedo() ? "; redo: " + s->redoName() : QString());
+        lines << "Layers, top first (* active):";
+        const auto active = s->activeLayerId();
+        const auto entries = hierarchyEntries(doc.layers, true);
+        int shown = 0;
+        for (const HierarchyEntry& e : entries) {
+            if (shown == limit) { lines << QStringLiteral("... %1 more (layers.list has them all)").arg(entries.size() - shown); break; }
+            const Layer& l = *e.layer;
+            QStringList bits;
+            if (l.isGroup) bits << "folder";
+            else if (l.adjustment) bits << QString::fromUtf8(adjustmentKindName(l.adjustment->kind)) + " adjustment";
+            else {
+                bits << (l.isLiveText() ? "text" : l.isLiveShape() ? "shape" : "pixels");
+                const Rect r = l.transform.bounds();
+                bits << QStringLiteral("%1 x %2 at (%3, %4)").arg(r.width).arg(r.height).arg(r.x).arg(r.y);
+                if (!l.asset || !l.asset->image) bits << "blank";
+            }
+            if (l.opacity < 1) bits << QStringLiteral("%1%").arg(std::lround(l.opacity * 100));
+            if (l.blendMode != BlendMode::Normal) bits << QString::fromUtf8(blendModeName(l.blendMode));
+            if (!l.visible) bits << "hidden";
+            if (l.mask) bits << (l.mask->enabled ? "mask" : "mask off");
+            if (l.maskSourceId) bits << "clipped";
+            if (l.transform.rotation != 0) bits << QStringLiteral("rotated %1").arg(l.transform.rotation);
+            if (l.isLiveText()) bits << "\"" + qs(l.text->text).left(40) + "\"";
+            lines << QStringLiteral("%1%2 %3 (%4) id %5").arg(QString(e.depth * 2 + 1, ' '), active == l.id ? "*" : "-", qs(l.name), bits.join(", "), qs(l.id));
+            shown++;
+        }
+        return QJsonObject{{"overview", lines.join('\n')}, {"width", doc.width}, {"height", doc.height}, {"layers", int(doc.layers.size())},
+                           {"activeLayer", active ? qs(*active) : QString()}, {"tab", w->currentTabIndex()}};
+    });
     add("document.new", [w, session](const QJsonObject& p) {
         int width = integer(p, "width", 1920), height = integer(p, "height", 1080);
         if (!Document::validDimension(width) || !Document::validDimension(height)) fail("width and height must be 1..30000", invalidParams);

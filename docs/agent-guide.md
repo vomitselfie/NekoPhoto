@@ -6,9 +6,10 @@ practice.
 
 ## The loop
 
-1. Look before touching: `document.info`, then `layers.list` (add
-   `thumbnails: true` for a visual index) and, when it matters, `render` at a
-   modest `maxSize` (512 is plenty for orientation).
+1. Look before touching: `document.overview` (the layer tree with ids, the
+   selection and the undo step in one call; the MCP tool adds a render with
+   `render: true`), then `render` at a modest `maxSize` (512 is plenty for
+   orientation). `rpc.describe` says what any method takes.
 2. Act in small steps. Every method is one undo step; if a render shows the
    wrong thing, `history.undo` and try again. `history.list` shows what you did.
 3. Verify with `render` after each meaningful change, cropping with `region`
@@ -78,7 +79,9 @@ done
 
 ## Things to know
 
-- `layers.set` opacity is 0..1; blend names are the ones `layers.list` reports.
+- `layers.set` opacity is 0..1; blend names are the ones `layers.list` reports, in any case or
+  spacing ("color-dodge"). Folders have no blend mode.
+- A misspelt parameter is refused with the list of the ones the method takes.
 - Filters and pixel adjustments apply to the active layer inside the selection;
   select the layer first (`layers.select`) and clear the selection if you mean
   the whole layer.

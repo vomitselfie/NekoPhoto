@@ -114,6 +114,15 @@ QStringList AutomationServer::methods() const {
     return names;
 }
 
+namespace {
+
+/// Where to look when a request's parameters are wrong.
+QString describeHint(const QString& method) {
+    return QStringLiteral(" (rpc.describe {\"method\": \"%1\"} lists its parameters)").arg(method);
+}
+
+} // namespace
+
 QJsonObject AutomationServer::handle(const QJsonObject& request) {
     QJsonValue id = request.value("id");
     QString method = request.value("method").toString();
@@ -122,6 +131,13 @@ QJsonObject AutomationServer::handle(const QJsonObject& request) {
     auto it = handlers_.find(method);
     if (it == handlers_.end()) {
         response["error"] = QJsonObject{{"code", methodNotFound}, {"message", "unknown method '" + method + "'; call rpc.methods for the list"}};
+        return response;
+    }
+    // Keys the method does not take are refused rather than ignored: a misspelt key would otherwise do nothing.
+    QString wrong = unknownParameter(method, params);
+    if (wrong.isEmpty()) wrong = missingParameter(method, params);
+    if (!wrong.isEmpty()) {
+        response["error"] = QJsonObject{{"code", invalidParams}, {"message", wrong + describeHint(method)}};
         return response;
     }
     // Errors the editor would have shown in a dialog come back in the response instead.
@@ -134,7 +150,9 @@ QJsonObject AutomationServer::handle(const QJsonObject& request) {
         else response["result"] = result.isUndefined() ? QJsonValue(QJsonObject{}) : result;
     } catch (const RpcError& e) {
         window_->setErrorSink(nullptr);
-        response["error"] = QJsonObject{{"code", e.code}, {"message", QString::fromUtf8(e.what())}};
+        QString message = QString::fromUtf8(e.what());
+        if (e.code == invalidParams && method != "rpc.describe") message += describeHint(method);
+        response["error"] = QJsonObject{{"code", e.code}, {"message", message}};
     } catch (const std::exception& e) {
         window_->setErrorSink(nullptr);
         response["error"] = QJsonObject{{"code", appError}, {"message", QString::fromUtf8(e.what())}};
@@ -173,8 +191,11 @@ void AutomationServer::registerAppHandlers() {
 
     // ---- app / tabs
     add("rpc.methods", [this](const QJsonObject&) { return QJsonArray::fromStringList(methods()); });
+    add("rpc.describe", [](const QJsonObject& p) -> QJsonValue {
+        return has(p, "method") ? describeMethod(str(p, "method")) : describeAll();
+    });
     add("app.info", [this, w](const QJsonObject&) {
-        return QJsonObject{{"name", "nekophoto"}, {"version", QApplication::applicationVersion()}, {"socket", path_},
+        return QJsonObject{{"name", "nekophoto"}, {"version", QApplication::applicationVersion()}, {"protocolVersion", protocolVersion}, {"socket", path_},
                            {"platform", QApplication::platformName()}, {"tabs", w->tabCount()}, {"currentTab", w->currentTabIndex()},
                            {"removeBackground", ModelStore::ready()}, {"scribble", scribbleSelectionSupported()}, {"clickSelect", ModelStore::promptReady()}};
     });
@@ -253,7 +274,7 @@ void AutomationServer::registerAppHandlers() {
             {"shape", Tool::Shape}, {"eyedropper", Tool::Eyedropper}, {"hand", Tool::Hand}, {"zoom", Tool::Zoom},
             {"quickselect", Tool::Scribble}, {"text", Tool::Text}};
         QString name = str(p, "name").toLower();
-        if (!tools.contains(name)) fail("unknown tool; one of " + QStringList(tools.keys()).join(", "), invalidParams);
+        if (!tools.contains(name)) fail("unknown tool; one of " + toolNames().join(", "), invalidParams);
         session()->selectTool(tools.value(name));
         return QJsonObject{{"tool", name}};
     });
