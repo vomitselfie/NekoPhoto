@@ -623,6 +623,15 @@ TEST_CASE(project_rejects_bad_manifests_like_the_mac) {
     auto lower = parseManifest(with("7", layerWith(",\"imageFile\":\"11111111-2222-3333-4444-555555555555.png\"")), error);
     CHECK(lower.has_value());
     CHECK(!parseManifest(with("7", layerWith(",\"imageFile\":\"other.png\"")), error));
+    // Deep nesting in an unknown field is refused, not recursed into on save (a crafted file's stack overflow).
+    const std::string deep = std::string(100000, '[') + std::string(100000, ']');
+    std::string nested = with("7", "");
+    nested.insert(nested.size() - 1, ",\"extra\":" + deep);
+    CHECK(!parseManifest(nested, error));
+    CHECK(error.kind == ProjectError::Invalid);
+    std::string shallow = with("7", "");
+    shallow.insert(shallow.size() - 1, ",\"extra\":[[[1]]]");
+    CHECK(parseManifest(shallow, error).has_value());
     // Self clipping is a cycle.
     CHECK(!parseManifest(with("7", layerWith(",\"maskSourceID\":\"11111111-2222-3333-4444-555555555555\"")), error));
     // Adjustment layers need version 7.

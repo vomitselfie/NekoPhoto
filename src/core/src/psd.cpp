@@ -1,6 +1,8 @@
 #include "compositor/psd.h"
 #include "photoshop.h"
 #include "compositor/adjustments.h"
+#include <new>
+#include <stdexcept>
 #include <zlib.h>
 #include <algorithm>
 #include <cmath>
@@ -632,6 +634,13 @@ std::optional<PsdImport> importPsd(const std::string& path, std::string* error) 
         return result;
     } catch (Truncated&) {
         if (error) *error = "The file ends early or has a structure this reader does not understand.";
+        return std::nullopt;
+    } catch (const std::bad_alloc&) {
+        // A size in the file (a layer, a channel, a compressed stream) larger than memory allows.
+        if (error) *error = "The file asks for more memory than is available.";
+        return std::nullopt;
+    } catch (const std::length_error&) {
+        if (error) *error = "The file asks for more memory than is available.";
         return std::nullopt;
     }
 }

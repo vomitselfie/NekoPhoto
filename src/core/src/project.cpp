@@ -22,6 +22,21 @@ constexpr size_t manifestLimit = 4 * 1024 * 1024;
 constexpr uintmax_t assetLimit = uintmax_t(512) * 1024 * 1024;
 
 ProjectError invalid() { return {ProjectError::Invalid, "This is not a valid Compositor project, or its metadata is damaged."}; }
+
+/// Whether a parsed manifest nests deeper than any real one does. Parsing and destroying a json are
+/// iterative, but dump() (which keeps unknown fields for saving) recurses, so a crafted manifest of deeply
+/// nested arrays would overflow the stack; it is refused as damaged instead. Checked with an explicit stack.
+bool nestsTooDeep(const json& root, size_t limit = 64) {
+    std::vector<std::pair<const json*, size_t>> pending{{&root, 1}};
+    while (!pending.empty()) {
+        auto [value, depth] = pending.back();
+        pending.pop_back();
+        if (depth > limit) return true;
+        if (value->is_structured())
+            for (const json& child : *value) if (child.is_structured()) pending.emplace_back(&child, depth + 1);
+    }
+    return false;
+}
 ProjectError version(int v) { return {ProjectError::Version, "This project uses format version " + std::to_string(v) + ". This app supports versions 1-7.", v}; }
 ProjectError missingImage() { return {ProjectError::MissingImage, "An image inside the project is missing or damaged. The current document has not been replaced."}; }
 ProjectError tooLarge() { return {ProjectError::TooLarge, "This project exceeds the supported canvas, layer or file size, the 100-megapixel limit for one image, or the 1-gigapixel limit for all layers together."}; }
@@ -335,7 +350,7 @@ Document documentFrom(const Manifest& m) {
 
 std::optional<Document> parseManifest(const std::string& text, ProjectError& error, std::optional<Uuid>* activeLayer) {
     json j = json::parse(text, nullptr, false);
-    if (j.is_discarded()) { error = invalid(); return std::nullopt; }
+    if (j.is_discarded() || nestsTooDeep(j)) { error = invalid(); return std::nullopt; }
     Manifest m;
     if (!parseManifestJson(j, m, error) || !validateManifest(m, error)) return std::nullopt;
     if (activeLayer) *activeLayer = m.activeLayerId;
@@ -363,7 +378,7 @@ std::optional<Document> loadProject(const std::string& pathText, ProjectError& e
     std::stringstream buffer;
     buffer << in.rdbuf();
     json j = json::parse(buffer.str(), nullptr, false);
-    if (j.is_discarded() || !j.is_object()) { error = invalid(); return std::nullopt; }
+    if (j.is_discarded() || !j.is_object() || nestsTooDeep(j)) { error = invalid(); return std::nullopt; }
     // Header first, so an unsupported version is reported as such rather than as damage.
     std::string format;
     if (!getString(j, "format", format, true) || format != formatIdentifier) { error = invalid(); return std::nullopt; }
@@ -426,7 +441,7 @@ std::optional<Uuid> loadedActiveLayer(const std::string& pathText) {
     buffer << in.rdbuf();
     json j = json::parse(buffer.str(), nullptr, false);
     std::optional<Uuid> id;
-    if (j.is_object()) getUuid(j, "activeLayerID", id, false);
+    if (j.is_object() && !nestsTooDeep(j)) getUuid(j, "activeLayerID", id, false);
     return id;
 }
 

@@ -6,6 +6,8 @@
 #include <cctype>
 #include <filesystem>
 #include <fstream>
+#include <new>
+#include <stdexcept>
 #include <iterator>
 #include <set>
 
@@ -67,7 +69,9 @@ std::optional<TipPreset> presetFromImage(const Image& image, const std::string& 
     return preset;
 }
 
-std::optional<BrushImport> importBrushFile(const std::string& path, std::string* error) {
+namespace {
+
+std::optional<BrushImport> readBrushFile(const std::string& path, std::string* error) {
     std::ifstream in(path, std::ios::binary);
     if (!in) { if (error) *error = "cannot read " + path; return std::nullopt; }
     std::vector<uint8_t> file((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
@@ -93,6 +97,20 @@ std::optional<BrushImport> importBrushFile(const std::string& path, std::string*
         return BrushImport{"Images", {*preset}, {}};
     }
     if (error) *error = "not a brush file this version can read";
+    return std::nullopt;
+}
+
+} // namespace
+
+std::optional<BrushImport> importBrushFile(const std::string& path, std::string* error) {
+    // The readers bound what they decode, but a size in a crafted file can still ask for more than memory.
+    try {
+        return readBrushFile(path, error);
+    } catch (const std::bad_alloc&) {
+        if (error) *error = "the file asks for more memory than is available";
+    } catch (const std::length_error&) {
+        if (error) *error = "the file asks for more memory than is available";
+    }
     return std::nullopt;
 }
 

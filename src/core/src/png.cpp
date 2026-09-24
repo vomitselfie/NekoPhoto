@@ -44,12 +44,19 @@ void readFromMemory(png_structp png, png_bytep out, png_size_t length) {
     src->offset += length;
 }
 
-std::shared_ptr<Image> readRgba(png_structp png, png_infop info, std::string* error) {
-    if (setjmp(png_jmpbuf(png))) { if (error) *error = "PNG decoding failed"; return nullptr; }
+// libpng reports errors by longjmp. Every call that may jump runs in one of these functions, which create
+// no C++ object after their setjmp, so a jump never skips a destructor; the images and row lists live in
+// the callers.
+bool pngReadInfo(png_structp png, png_infop info) {
+    if (setjmp(png_jmpbuf(png))) return false;
     png_read_info(png, info);
-    png_uint_32 width = png_get_image_width(png, info), height = png_get_image_height(png, info);
-    int depth = png_get_bit_depth(png, info), type = png_get_color_type(png, info);
-    if (width == 0 || height == 0 || width > 30000 || height > 30000) { if (error) *error = "PNG too large"; return nullptr; }
+    return true;
+}
+
+/// Asks for 8-bit RGBA whatever the file holds.
+bool pngExpandToRgba(png_structp png, png_infop info) {
+    if (setjmp(png_jmpbuf(png))) return false;
+    const int depth = png_get_bit_depth(png, info), type = png_get_color_type(png, info);
     if (type == PNG_COLOR_TYPE_PALETTE) png_set_palette_to_rgb(png);
     if (type == PNG_COLOR_TYPE_GRAY && depth < 8) png_set_expand_gray_1_2_4_to_8(png);
     if (png_get_valid(png, info, PNG_INFO_tRNS)) png_set_tRNS_to_alpha(png);
@@ -59,11 +66,33 @@ std::shared_ptr<Image> readRgba(png_structp png, png_infop info, std::string* er
     png_set_filler(png, 0xFF, PNG_FILLER_AFTER);
     png_set_interlace_handling(png);
     png_read_update_info(png, info);
+    return true;
+}
+
+bool pngExpandGray(png_structp png, png_infop info) {
+    if (setjmp(png_jmpbuf(png))) return false;
+    if (png_get_bit_depth(png, info) < 8) png_set_expand_gray_1_2_4_to_8(png);
+    png_set_interlace_handling(png);
+    png_read_update_info(png, info);
+    return true;
+}
+
+bool pngReadRows(png_structp png, png_bytep* rows) {
+    if (setjmp(png_jmpbuf(png))) return false;
+    png_read_image(png, rows);
+    png_read_end(png, nullptr);
+    return true;
+}
+
+std::shared_ptr<Image> readRgba(png_structp png, png_infop info, std::string* error) {
+    if (!pngReadInfo(png, info)) { if (error) *error = "PNG decoding failed"; return nullptr; }
+    const png_uint_32 width = png_get_image_width(png, info), height = png_get_image_height(png, info);
+    if (width == 0 || height == 0 || width > 30000 || height > 30000) { if (error) *error = "PNG too large"; return nullptr; }
+    if (!pngExpandToRgba(png, info)) { if (error) *error = "PNG decoding failed"; return nullptr; }
     auto image = std::make_shared<Image>(int(width), int(height));
     std::vector<png_bytep> rows(height);
     for (png_uint_32 y = 0; y < height; y++) rows[y] = image->row(int(y));
-    png_read_image(png, rows.data());
-    png_read_end(png, nullptr);
+    if (!pngReadRows(png, rows.data())) { if (error) *error = "PNG decoding failed"; return nullptr; }
     premultiply(*image);
     return image;
 }
@@ -73,8 +102,7 @@ std::shared_ptr<Image> readRgba(png_structp png, png_infop info, std::string* er
 bool readPngInfo(const std::string& path, PngInfo& out, std::string* error) {
     Reader r;
     if (!r.open(path, error)) return false;
-    if (setjmp(png_jmpbuf(r.png))) { if (error) *error = "PNG header unreadable"; return false; }
-    png_read_info(r.png, r.info);
+    if (!pngReadInfo(r.png, r.info)) { if (error) *error = "PNG header unreadable"; return false; }
     out.width = int(png_get_image_width(r.png, r.info));
     out.height = int(png_get_image_height(r.png, r.info));
     out.bitDepth = png_get_bit_depth(r.png, r.info);
@@ -104,23 +132,19 @@ std::shared_ptr<Image> decodePngImage(const uint8_t* data, size_t size, std::str
 std::shared_ptr<GrayImage> readPngGray(const std::string& path, std::string* error) {
     Reader r;
     if (!r.open(path, error)) return nullptr;
-    if (setjmp(png_jmpbuf(r.png))) { if (error) *error = "PNG decoding failed"; return nullptr; }
-    png_read_info(r.png, r.info);
-    png_uint_32 width = png_get_image_width(r.png, r.info), height = png_get_image_height(r.png, r.info);
-    int depth = png_get_bit_depth(r.png, r.info), type = png_get_color_type(r.png, r.info);
+    if (!pngReadInfo(r.png, r.info)) { if (error) *error = "PNG decoding failed"; return nullptr; }
+    const png_uint_32 width = png_get_image_width(r.png, r.info), height = png_get_image_height(r.png, r.info);
+    const int depth = png_get_bit_depth(r.png, r.info), type = png_get_color_type(r.png, r.info);
     if (type != PNG_COLOR_TYPE_GRAY || depth > 8 || png_get_valid(r.png, r.info, PNG_INFO_tRNS)) {
         if (error) *error = "mask is not 8-bit grayscale without alpha";
         return nullptr;
     }
     if (width == 0 || height == 0 || width > 30000 || height > 30000) { if (error) *error = "PNG too large"; return nullptr; }
-    if (depth < 8) png_set_expand_gray_1_2_4_to_8(r.png);
-    png_set_interlace_handling(r.png);
-    png_read_update_info(r.png, r.info);
+    if (!pngExpandGray(r.png, r.info)) { if (error) *error = "PNG decoding failed"; return nullptr; }
     auto image = std::make_shared<GrayImage>(int(width), int(height));
     std::vector<png_bytep> rows(height);
     for (png_uint_32 y = 0; y < height; y++) rows[y] = image->row(int(y));
-    png_read_image(r.png, rows.data());
-    png_read_end(r.png, nullptr);
+    if (!pngReadRows(r.png, rows.data())) { if (error) *error = "PNG decoding failed"; return nullptr; }
     return image;
 }
 
