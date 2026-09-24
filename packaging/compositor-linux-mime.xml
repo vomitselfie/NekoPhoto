@@ -9,4 +9,12 @@
   <mime-type type="image/vnd.adobe.photoshop">
     <glob pattern="*.psb"/>
   </mime-type>
+  <!-- Clip Studio Paint projects: no shared type exists; recognised by the CSFCHUNK signature, and by name. -->
+  <mime-type type="application/x-clip-studio-project">
+    <comment>Clip Studio Paint project</comment>
+    <glob pattern="*.clip"/>
+    <magic priority="60">
+      <match type="string" offset="0" value="CSFCHUNK"/>
+    </magic>
+  </mime-type>
 </mime-info>

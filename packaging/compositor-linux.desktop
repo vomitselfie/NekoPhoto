@@ -7,5 +7,5 @@ Exec=compositor-linux %F
 Icon=compositor-linux
 Terminal=false
 Categories=Graphics;RasterGraphics;2DGraphics;
-MimeType=image/png;image/jpeg;image/tiff;image/webp;image/vnd.adobe.photoshop;application/x-compositor-project;
+MimeType=image/png;image/jpeg;image/tiff;image/webp;image/vnd.adobe.photoshop;application/x-compositor-project;application/x-clip-studio-project;
 Keywords=image;layers;compositing;photo;editor;
