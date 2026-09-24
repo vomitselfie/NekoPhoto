@@ -12,6 +12,9 @@ practice.
    orientation). `rpc.describe` says what any method takes.
 2. Act in small steps. Every method is one undo step; if a render shows the
    wrong thing, `history.undo` and try again. `history.list` shows what you did.
+   Wrap a change of many steps in `history.beginGroup {"name": "Retouch by agent"}`
+   ... `history.endGroup` so the person can take it back in one Undo, and send
+   calls that need no look in between as one `rpc.batch` (named: all or nothing).
 3. Verify with `render` after each meaningful change, cropping with `region`
    at full resolution for details (edges of a mask, text, a blemish).
 4. Save or export at the end: `document.save` for the editable project,

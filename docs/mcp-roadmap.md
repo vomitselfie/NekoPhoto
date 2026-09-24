@@ -7,11 +7,11 @@ method reference is `docs/automation.md`, the practice `docs/agent-guide.md`.
 ## What exists
 
 - A JSON-RPC socket in the editor (`--rpc`, `--headless`, or the Automation
-  preference) with 79 methods: documents and tabs, layers and masks,
+  preference) with 82 methods: documents and tabs, layers and masks,
   adjustments, filters and G'MIC, painting, selections including Quick Select,
   Remove Background with every panel setting and the detail pass, canvas and
   history, view state, and events.
-- `mcp/nekophoto_mcp.py`: a stdio MCP bridge with 69 tools over those methods
+- `mcp/nekophoto_mcp.py`: a stdio MCP bridge with 72 tools over those methods
   and a generic `rpc` tool for the rest; renders, layer renders and screenshots
   come back as PNG images; it launches the editor when nothing listens, headless
   without a display, and reconnects once when the editor goes away.
@@ -83,5 +83,7 @@ another machine has no business in a person's editor).
 
 ## Suggested order
 
-Next: 5 (edit groups and batches) for tidy undo and fewer round trips, then 7's helpers, then 6 when a slow
+5 landed next: `history.beginGroup`/`endGroup` merge a connection's steps after the fact (the person's Undo
+keeps working during a group, and their own edits keep it from merging), and `rpc.batch` runs calls in one
+request, named for all or nothing. Next: 7's helpers, then 6 when a slow
 call actually bites, and resources (the rest of 9) if a client wants them.

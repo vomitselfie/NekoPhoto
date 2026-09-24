@@ -41,6 +41,11 @@ const MethodDoc methodDocs[] = {
     {"history.list", "Every recorded edit: undo oldest first, redo next first.", ""},
     {"history.undo", "Undo edits.", "steps:integer=1 How many"},
     {"history.redo", "Redo edits.", "steps:integer=1 How many"},
+    {"history.beginGroup", "Start an edit group: the steps this connection records until history.endGroup become one undo step with this name.",
+     "name:string! What Undo will call the step, e.g. Retouch by agent"},
+    {"history.endGroup", "Close the edit group and merge its steps into one. They stay separate when someone else edited the document meanwhile (the reply says so).", ""},
+    {"rpc.batch", "Run calls in order in one request, stopping at the first error. With a name they become one undo step, and an error takes back what the earlier calls did.",
+     "calls:array! {\"method\": ..., \"params\": {...}} objects; name:string Make the calls one undo step with this name, all or nothing"},
     // tools and view
     {"tool.select", "Pick the tool the person sees.", "name:<tool>! The tool"},
     {"colors.set", "Set the foreground and background colours.", "foreground:color Foreground; background:color Background"},

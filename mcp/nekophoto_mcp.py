@@ -41,6 +41,7 @@ mcp = FastMCP("nekophoto", instructions=(
     "with render (a region at full size for details). Every edit is one undo step: history_undo when a render "
     "shows the wrong thing. Coordinates are document pixels, origin top-left; layers are addressed by the ids "
     "document_overview lists. Filters, fills and adjustments act on the active layer inside the selection. "
+    "Wrap a change of several steps in history_group_begin / history_group_end so the person undoes it at once. "
     "Before using rpc for a method without a tool, describe_method shows what it takes. "
     "The edit_photo prompt has recipes."
 ))
@@ -56,9 +57,9 @@ def edit(title: str):
     return mcp.tool(title=title, annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=False))
 
 
-def outside(title: str):
+def outside(title: str, **options: Any):
     """A tool whose effect undo does not reach: files written, tabs or documents closed."""
-    return mcp.tool(title=title, annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=False))
+    return mcp.tool(title=title, annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=False), **options)
 
 
 def socket_path() -> str:
@@ -591,6 +592,39 @@ def history_undo(steps: int = 1) -> str:
 def history_redo(steps: int = 1) -> str:
     """Redo."""
     return text(call("history.redo", steps=steps))
+
+
+@edit("Start an undo group")
+def history_group_begin(name: str) -> str:
+    """Start an edit group: the steps made until history_group_end become one undo step called name
+    (e.g. "Retouch by agent"), so the person can take the whole change back at once. If the person edits
+    meanwhile, the steps stay separate. Close it before finishing."""
+    return text(call("history.beginGroup", name=name))
+
+
+@edit("Finish the undo group")
+def history_group_end() -> str:
+    """Close the edit group and merge its steps into one undo step (the reply says how many, or why not)."""
+    return text(call("history.endGroup"))
+
+
+@outside("Run several calls", structured_output=False)
+def batch(calls: list[dict], name: Optional[str] = None) -> list:
+    """Run editor methods in order in one round trip, stopping at the first error: calls is a list of
+    {"method": "layers.set", "params": {...}} using the editor's method names and camelCase keys
+    (describe_method shows them). With name, the calls are one undo step and all or nothing: an error
+    takes back what the earlier calls did. Rendered images in the results come back as images."""
+    result = call("rpc.batch", calls=calls, name=name)
+    images = []
+    for r in result.get("results", []):
+        if isinstance(r, dict) and "png" in r:
+            images.append(png(r))
+            r["png"] = f"(image {len(images)} below)"
+    if "error" in result:
+        raise RuntimeError(f"call {result['error']['index']} ({result['error']['method']}) failed: {result['error']['message']}"
+                           + ("; the earlier calls were taken back" if result.get("rolledBack") else "")
+                           + "\n" + text(result))
+    return [text(result), *images]
 
 
 # ---- what the person sees -----------------------------------------------------------------------

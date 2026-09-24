@@ -415,6 +415,12 @@ public:
     std::vector<std::string> redoNames() const { return history_.futureNames(); }
     void undo();
     void redo();
+    /// For grouping steps after the fact (the automation server's edit groups): the document's revision now,
+    /// the revisions of the recorded steps, those recorded since a revision, and merging them into one step.
+    uint64_t historyRevision() const { return history_.revision(); }
+    std::vector<uint64_t> historyRevisions() const { return history_.pastRevisions(); }
+    std::optional<std::vector<uint64_t>> historyRevisionsSince(uint64_t since) const { return history_.revisionsSince(since); }
+    int squashHistory(uint64_t since, const QString& name);
     void beginEdit(const QString& name);
     void endEdit();
 

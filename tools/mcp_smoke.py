@@ -69,6 +69,23 @@ async def main(sock: str) -> None:
         assert not undone.isError, texts(undone)
         assert "MCP smoke" not in texts(await session.call_tool("document_overview", {}))
 
+        # An undo group, and a named batch that fails part-way and is taken back.
+        await session.call_tool("history_group_begin", {"name": "MCP group"})
+        await session.call_tool("layers_add", {"kind": "pixels", "name": "G1"})
+        await session.call_tool("pixels_fill", {"color": "#ff0000"})
+        ended = await session.call_tool("history_group_end", {})
+        assert '"merged": 3' in texts(ended), texts(ended)
+        await session.call_tool("history_undo", {})
+        assert "G1" not in texts(await session.call_tool("document_overview", {}))
+        batch = await session.call_tool("batch", {"calls": [{"method": "render", "params": {"maxSize": 64}},
+                                                            {"method": "document.overview", "params": {}}]})
+        assert not batch.isError and [c.type for c in batch.content] == ["text", "image"], batch.content
+        failed = await session.call_tool("batch", {"name": "All or nothing", "calls": [
+            {"method": "layers.add", "params": {"kind": "pixels", "name": "Rolled back layer"}},
+            {"method": "layers.set", "params": {"id": "nope"}}]})
+        assert failed.isError and "taken back" in texts(failed), texts(failed)
+        assert "Rolled back layer" not in texts(await session.call_tool("document_overview", {}))
+
         # Errors come back as tool errors that say what to do.
         bad = await session.call_tool("rpc", {"method": "layers.set", "params": {"id": "x", "opacty": 1}})
         assert bad.isError and "takes id, name" in texts(bad), texts(bad)

@@ -11,6 +11,7 @@
 #include <QString>
 #include <functional>
 #include <map>
+#include <set>
 
 class QLocalServer;
 class QLocalSocket;
@@ -18,6 +19,7 @@ class QLocalSocket;
 namespace app {
 
 class MainWindow;
+class EditorSession;
 
 class AutomationServer : public QObject {
     Q_OBJECT
@@ -62,6 +64,20 @@ private:
         QSet<QString> pending;
         bool flushScheduled = false;
     };
+    /// An edit group: the steps one connection records between history.beginGroup and history.endGroup,
+    /// merged into one at the end when no one else recorded a step in between.
+    struct Group {
+        QPointer<EditorSession> session;
+        uint64_t since = 0;
+        QString name;
+        std::set<uint64_t> own;   // revisions of the steps this connection's requests recorded
+    };
+    /// Closes `owner`'s group: the reply history.endGroup gives.
+    QJsonObject endGroup(QLocalSocket* owner);
+    /// Runs a handler, noting the steps it records in the current connection's group.
+    QJsonValue runTracked(const Handler& handler, const QJsonObject& params);
+    std::map<QLocalSocket*, Group> groups_;   // by connection; nullptr for --batch
+
     MainWindow* window_;
     QLocalServer* server_ = nullptr;
     QString path_;

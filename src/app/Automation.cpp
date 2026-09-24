@@ -73,6 +73,7 @@ bool AutomationServer::listen(const QString& path, QString* error) {
                 }
             });
             connect(socket, &QLocalSocket::disconnected, this, [this, socket] {
+                if (groups_.count(socket)) endGroup(socket);   // a client that goes away closes its group
                 clients_.erase(socket);
                 socket->deleteLater();
                 emit clientsChanged(clients());
@@ -123,6 +124,37 @@ QString describeHint(const QString& method) {
 
 } // namespace
 
+QJsonValue AutomationServer::runTracked(const Handler& handler, const QJsonObject& params) {
+    auto group = groups_.find(current_);
+    QPointer<EditorSession> session = group != groups_.end() ? group->second.session : nullptr;
+    std::set<uint64_t> before;
+    if (session) for (uint64_t r : session->historyRevisions()) before.insert(r);
+    QJsonValue result = handler(params);
+    group = groups_.find(current_);   // the handler may have closed it
+    if (session && group != groups_.end() && group->second.session == session)
+        for (uint64_t r : session->historyRevisions()) if (!before.count(r)) group->second.own.insert(r);
+    return result;
+}
+
+QJsonObject AutomationServer::endGroup(QLocalSocket* owner) {
+    auto it = groups_.find(owner);
+    if (it == groups_.end()) return {};
+    Group group = std::move(it->second);
+    groups_.erase(it);
+    QJsonObject out{{"name", group.name}, {"merged", 0}};
+    if (!group.session) { out["note"] = "the group's tab was closed"; return out; }
+    auto steps = group.session->historyRevisionsSince(group.since);
+    if (!steps) { out["note"] = "undone past where the group began; nothing merged"; return out; }
+    for (uint64_t r : *steps) {
+        if (group.own.count(r)) continue;
+        out["steps"] = int(steps->size());
+        out["note"] = "someone else edited the document during the group, so its steps stay separate";
+        return out;
+    }
+    out["merged"] = group.session->squashHistory(group.since, group.name);
+    return out;
+}
+
 QJsonObject AutomationServer::handle(const QJsonObject& request) {
     QJsonValue id = request.value("id");
     QString method = request.value("method").toString();
@@ -144,7 +176,7 @@ QJsonObject AutomationServer::handle(const QJsonObject& request) {
     QString captured;
     window_->setErrorSink(&captured);
     try {
-        QJsonValue result = it->second(params);
+        QJsonValue result = runTracked(it->second, params);
         window_->setErrorSink(nullptr);
         if (!captured.isEmpty()) response["error"] = QJsonObject{{"code", appError}, {"message", captured.trimmed()}};
         else response["result"] = result.isUndefined() ? QJsonValue(QJsonObject{}) : result;
@@ -191,6 +223,52 @@ void AutomationServer::registerAppHandlers() {
 
     // ---- app / tabs
     add("rpc.methods", [this](const QJsonObject&) { return QJsonArray::fromStringList(methods()); });
+    add("history.beginGroup", [this, session, document](const QJsonObject& p) {
+        document();
+        auto open = groups_.find(current_);
+        if (open != groups_.end()) fail("the group \"" + open->second.name + "\" is still open; history.endGroup first");
+        const QString name = str(p, "name").trimmed();
+        if (name.isEmpty()) fail("name the group: it is what Undo will say", invalidParams);
+        groups_[current_] = Group{session(), session()->historyRevision(), name, {}};
+        return QJsonObject{{"group", name}};
+    });
+    add("history.endGroup", [this](const QJsonObject&) {
+        if (!groups_.count(current_)) fail("no group is open on this connection; history.beginGroup starts one");
+        return endGroup(current_);
+    });
+    add("rpc.batch", [this, w](const QJsonObject& p) -> QJsonValue {
+        // Calls in order in one request, stopping at the first error. Named, they are one undo step, and an
+        // error takes back what the earlier calls did.
+        const QJsonArray calls = p.value("calls").toArray();
+        if (calls.isEmpty()) fail("calls must list {\"method\", \"params\"} objects", invalidParams);
+        const QString name = has(p, "name") ? str(p, "name").trimmed() : QString();
+        for (int i = 0; i < calls.size(); i++) {
+            const QString method = calls[i].toObject().value("method").toString();
+            if (method == "rpc.batch" || method == "history.beginGroup" || method == "history.endGroup")
+                fail(QStringLiteral("call %1: %2 can't run inside a batch").arg(i).arg(method), invalidParams);
+        }
+        QPointer<EditorSession> session = w->session();
+        const uint64_t since = session->historyRevision();
+        QJsonArray results;
+        for (int i = 0; i < calls.size(); i++) {
+            const QJsonObject call = calls[i].toObject();
+            const QString method = call.value("method").toString();
+            const QJsonObject reply = handle({{"method", method}, {"params", call.value("params").toObject()}, {"id", i}});
+            if (reply.contains("error")) {
+                QJsonObject out{{"results", results}, {"completed", i},
+                                {"error", QJsonObject{{"index", i}, {"method", method}, {"message", reply["error"].toObject()["message"]}}}};
+                if (!name.isEmpty() && session) {
+                    while (session->historyRevision() != since && session->canUndo()) session->undo();
+                    out["rolledBack"] = session->historyRevision() == since;
+                }
+                return out;
+            }
+            results.append(reply.value("result"));
+        }
+        QJsonObject out{{"results", results}, {"completed", int(calls.size())}};
+        if (!name.isEmpty() && session) out["merged"] = session->squashHistory(since, name);
+        return out;
+    });
     add("rpc.describe", [](const QJsonObject& p) -> QJsonValue {
         return has(p, "method") ? describeMethod(str(p, "method")) : describeAll();
     });

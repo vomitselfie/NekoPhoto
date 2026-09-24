@@ -340,6 +340,51 @@ def main():
     pixels = next(l["id"] for l in rpc.call("layers.list") if l["kind"] == "pixels")
     assert rpc.call("layers.set", id=pixels, blend="color-dodge")["blend"] == "Color Dodge"
     rpc.call("history.undo")
+
+    # Edit groups: the steps between begin and end become one undo step...
+    count = len(rpc.call("layers.list"))
+    rpc.call("history.beginGroup", name="Agent test")
+    rpc.call("layers.add", kind="pixels", name="Grouped")
+    rpc.call("pixels.fill", color="#00ff00")
+    ended = rpc.call("history.endGroup")
+    assert ended["merged"] >= 2, ended
+    assert rpc.call("history.info")["undo"] == "Agent test"
+    rpc.call("history.undo")
+    assert len(rpc.call("layers.list")) == count
+    # ...unless someone else edited in between (a second connection stands in for the person).
+    other = Rpc(sys.argv[1])
+    rpc.call("history.beginGroup", name="Agent test")
+    rpc.call("layers.add", kind="pixels", name="Mine")
+    other.call("layers.add", kind="pixels", name="Theirs")
+    ended = rpc.call("history.endGroup")
+    assert ended["merged"] == 0 and "separate" in ended["note"], ended
+    while len(rpc.call("layers.list")) > count:
+        rpc.call("history.undo")
+    # A client that goes away with a group open has it closed for it.
+    leaver = Rpc(sys.argv[1])
+    leaver.call("history.beginGroup", name="Left open")
+    leaver.call("layers.add", kind="pixels", name="Leaver")
+    leaver.file.close()
+    leaver.sock.close()
+    for _ in range(50):
+        if rpc.call("history.info")["undo"] == "Left open":
+            break
+        time.sleep(0.05)
+    assert rpc.call("history.info")["undo"] == "Left open", rpc.call("history.info")
+    rpc.call("history.undo")
+    # A named batch is one step, and all or nothing.
+    done = rpc.call("rpc.batch", name="Batch test", calls=[
+        {"method": "layers.add", "params": {"kind": "pixels", "name": "Batched"}},
+        {"method": "pixels.fill", "params": {"color": "#ff00ff"}}])
+    assert done["completed"] == 2 and done["merged"] >= 2, done
+    assert rpc.call("history.info")["undo"] == "Batch test"
+    rpc.call("history.undo")
+    failed = rpc.call("rpc.batch", name="Batch test", calls=[
+        {"method": "layers.add", "params": {"kind": "pixels"}},
+        {"method": "layers.set", "params": {"id": "nope", "opacity": 0.5}}])
+    assert failed["error"]["index"] == 1 and failed["rolledBack"], failed
+    assert len(rpc.call("layers.list")) == count
+
     print(len(methods), "methods; smoke test passed")
 
 

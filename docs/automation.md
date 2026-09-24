@@ -152,7 +152,16 @@ model once downloaded: `foreground` and `background` points as `[x, y]` lists, a
 (`radius`), `selection.border` (`width`).
 
 Canvas and history: `canvas.resize`, `canvas.crop`, `canvas.flip`,
-`image.resize`, `history.undo`, `history.redo`.
+`image.resize`, `history.undo`, `history.redo`, `history.beginGroup` (`name`) and
+`history.endGroup`: the steps one connection records in between become one undo step with that name.
+Each call still records its own step while the group is open, so the person's Undo keeps working; the
+merge happens at the end, and only when no one else recorded a step in between (the reply says why
+not). A connection that closes with a group open has it closed.
+
+Batches: `rpc.batch` (`calls`: a list of `{"method", "params"}`; `name`) runs the calls in order in one
+request and stops at the first error, answering the results so far and the error's index. With a
+`name` the calls are one undo step and all or nothing: an error takes back what the earlier calls did
+(`rolledBack`). Nothing else runs between the calls of a batch.
 
 Painting by coordinates: `brush.stroke` (`points` as `[x, y]` pairs; `tool` brush,
 eraser, healing, clone with `source`, smudge, blur or liquify; `size`,

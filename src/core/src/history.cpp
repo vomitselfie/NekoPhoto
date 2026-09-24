@@ -68,6 +68,32 @@ std::optional<DocumentHistory::Snapshot> DocumentHistory::redo() {
     return result;
 }
 
+std::optional<std::vector<uint64_t>> DocumentHistory::revisionsSince(uint64_t since) const {
+    if (since == revision_ && depth_ == 0) return std::vector<uint64_t>{};
+    for (size_t k = 0; k < past_.size(); k++) {
+        if (past_[k].before.revision != since) continue;
+        std::vector<uint64_t> out;
+        for (size_t i = k; i < past_.size(); i++) out.push_back(past_[i].after.revision);
+        return out;
+    }
+    return std::nullopt;
+}
+
+int DocumentHistory::squash(uint64_t since, const std::string& name) {
+    if (depth_ > 0) return 0;
+    size_t k = 0;
+    while (k < past_.size() && past_[k].before.revision != since) k++;
+    const int count = int(past_.size() - k);
+    if (count < 2) return count;
+    Entry merged{name, std::move(past_[k].before), std::move(past_.back().after), past_[k].region};
+    // A region is exact only when every step noted one; otherwise the caller works the change out.
+    for (size_t i = k + 1; i < past_.size() && !merged.region.isEmpty(); i++)
+        merged.region = past_[i].region.isEmpty() ? Rect() : merged.region.unionWith(past_[i].region);
+    past_.resize(k);
+    past_.push_back(std::move(merged));
+    return count;
+}
+
 size_t DocumentHistory::retainedBytes(const std::optional<Document>& current) const {
     std::set<const void*> seen;
     auto note = [&](const Layer& layer, size_t* bytes) {

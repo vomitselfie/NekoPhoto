@@ -47,6 +47,17 @@ public:
     /// The region of the step the last undo or redo moved over; empty when that step did not note one.
     const Rect& stepRegion() const { return stepRegion_; }
 
+    /// The revision of the document as it stands; each recorded entry ends at a new one.
+    uint64_t revision() const { return revision_; }
+    /// The revisions the recorded entries end at, oldest first: identifies entries across undo and redo.
+    std::vector<uint64_t> pastRevisions() const { std::vector<uint64_t> r; for (auto& e : past_) r.push_back(e.after.revision); return r; }
+    /// The revisions of the entries recorded after the document stood at `since`, oldest first; nullopt when
+    /// no entry starts there (undone past it, trimmed, or the document replaced).
+    std::optional<std::vector<uint64_t>> revisionsSince(uint64_t since) const;
+    /// Merges the entries recorded after the document stood at `since` into one called `name`, which undoes
+    /// and redoes them all at once. Returns how many entries it merged (0 or 1 leave the history as it was).
+    int squash(uint64_t since, const std::string& name);
+
     /// Bytes retained only by history, excluding images in the live document.
     size_t retainedBytes(const std::optional<Document>& current) const;
 

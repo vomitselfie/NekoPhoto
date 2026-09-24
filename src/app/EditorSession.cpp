@@ -246,6 +246,12 @@ void EditorSession::restore(const DocumentHistory::Snapshot& snapshot) {
     emit selectionChanged();
 }
 
+int EditorSession::squashHistory(uint64_t since, const QString& name) {
+    const int merged = history_.squash(since, name.toStdString());
+    if (merged > 1) emit historyChanged();
+    return merged;
+}
+
 void EditorSession::beginEdit(const QString& name) { history_.begin(name.toStdString(), document_, activeLayerId_); }
 void EditorSession::endEdit() { history_.end(document_, activeLayerId_); }
 
