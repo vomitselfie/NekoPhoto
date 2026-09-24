@@ -24,6 +24,7 @@ const char* definitions =
     "#@gui <i>Someone</i>\n"
     "#@gui Glow:someone_glow,someone_glow_preview(0)*\n"
     "#@gui :Amount=int(5,0,10)\n"
+    "#@gui :_=value(50,30)\n"
     "#@gui __<b>Colors</b>\n"
     "#@gui Tint:someone_tint,someone_tint\n"
     "#@gui :Colour=color(255,0,0)\n"
@@ -52,7 +53,7 @@ void checkCatalogue(const GmicCatalogue& c) {
     CHECK(painting->previewCommand == "fx_painting_preview");
     CHECK(painting->commandLine(false) == "fx_painting 2.5,1,0");
     CHECK(glow->folder == "Testing / Someone");
-    CHECK(glow->commandLine(false) == "someone_glow 5");
+    CHECK(glow->commandLine(false) == "someone_glow 5,50,30");   // a value() passes everything in it
     CHECK(tint->folder == "Testing / Colors");
     CHECK(tint->commandLine(false) == "someone_tint 255,0,0,0,0,0,128");   // the hex colour carries its alpha
 }

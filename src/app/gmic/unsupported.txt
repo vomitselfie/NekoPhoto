@@ -1,6 +1,6 @@
 # G'MIC catalogue filters that do not work in this editor at their default settings, by command.
-# Made by tools/gmic-sweep.py with G'MIC 4.0.5 (update405.gmic) on 2026-09-23: each filter ran once at its
-# defaults on a 640 x 427 photo, with no display and a 30 s limit. The G'MIC dialog hides these unless
+# Made by tools/gmic-sweep.py with G'MIC 4.0.5 on 2026-09-23: each filter ran once at its
+# defaults on a 640-pixel-wide photo, with no display and a 30 s limit. The G'MIC dialog hides these unless
 # "Show all filters" is on. Filters that change nothing at their defaults, and slow ones, are not listed.
 Annular_Steiner_Chain_Round_Tile	changes the image size	Annular Steiner Chain Round Tile
 Cercles_Concentriques_A	changes the image size	Cercles Concentriques
@@ -42,7 +42,7 @@ fx_blocks3d	changes the image size	3D Blocks
 fx_buffer_error	changes the image size	Buffer Error
 fx_channels2layers	makes several layers	Channels to Layers
 fx_circle_art	changes the image size	Circle Art
-fx_colorful_blobs	fails	Colorful Blobs
+fx_colorful_blobs	changes the image size	Colorful Blobs
 fx_colorize_lineart_smart	makes several layers	Colorize Lineart [Smart Coloring]
 fx_crt_phosphors	changes the image size	CRT Phosphors
 fx_crt_scanlines	changes the image size	CRT Scanlines
@@ -139,7 +139,7 @@ fx_self_glitching_cascade	gives a blank image	Cascading Self Glitching
 fx_shapes	changes the image size	Op Art
 fx_slice_luminosity	makes several layers	Slice Luminosity
 fx_solve_maze	makes several layers	Solve Maze
-fx_speech_bubble	fails	Speech Bubble
+fx_speech_bubble	makes several layers	Speech Bubble
 fx_split_details_alpha	makes several layers	Split Details [Alpha]
 fx_split_details_gaussian	makes several layers	Split Details [Gaussian]
 fx_split_details_wavelets	makes several layers	Split Details [Wavelets]
@@ -147,7 +147,7 @@ fx_split_luminance	makes several layers	Luminance to Alpha
 fx_stereo_to_anaglyph	changes the image size	Stereo to Anaglyph
 fx_stroke	makes several layers	Stroke
 fx_stylize	fails	Stylize
-fx_symmetric_shape2d	fails	Symmetric 2D Shape
+fx_symmetric_shape2d	makes several layers	Symmetric 2D Shape
 fx_taquin	changes the image size	Taquin
 fx_text_pointcloud3d	makes several layers	3D Text Pointcloud
 fx_tiles2layers	makes several layers	Tiles to Layers
@@ -162,7 +162,6 @@ fx_ultrawarptwo	gives a blank image	UltraWarp 2
 fx_upscale_smart	changes the image size	Upscale [Diffusion]
 fx_vibrato	gives a blank image	Vibrato
 fx_warp_interactive	fails	Warp [Interactive]
-fx_warp_rbf	fails	Warp [RBF]
 gcd_deinterlace2x	changes the image size	Deinterlace2x
 gcd_layers	fails	Layer Manipulation
 gcd_upscale_noise	changes the image size	Upscale [Noise]
@@ -226,6 +225,7 @@ samj_Ecraser_Etirer_V2	changes the image size	Ecraser Etirer V2
 samj_Engrenages_Laser_LED	makes several layers	Engrenages Gears Laser
 samj_Etoiles_Laser_LED	changes the image size	Etoiles Stars Laser
 samj_Flocon_Laser_LED	changes the image size	Flocon Snowflake Laser
+samj_GUI_Test_Liste_Points_TSP	changes the image size	SVG TSP
 samj_Grid_BW_Color	changes the image size	Grid BW Color
 samj_Layers_To_PNG	makes several layers	Layers To PNG
 samj_Lignes_H_ou_V_Colorees	makes several layers	Lignes H Ou V Colorees

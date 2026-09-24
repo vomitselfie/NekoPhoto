@@ -130,7 +130,7 @@ bool parseParam(const QString& decl, GmicParam& p) {
     if (type == "note") { p.kind = GmicParam::Note; p.text = unquote(inner); p.text.remove(QRegularExpression("<[^>]*>")); p.text.replace("\\n", "\n"); p.text = p.text.trimmed(); return true; }
     if (type == "separator") { p.kind = GmicParam::Separator; return true; }
     if (type == "point") { p.kind = GmicParam::Point; p.text = QStringLiteral("%1,%2").arg(num(0, 50)).arg(num(1, 50)); return true; }
-    if (type == "value") { p.kind = GmicParam::Value; p.text = args.value(0); return true; }
+    if (type == "value") { p.kind = GmicParam::Value; p.text = inner.trimmed(); return true; }   // all of it: value(50,50) passes both
     if (type == "link" || type == "url") { p.kind = GmicParam::Note; p.text = unquote(args.value(0)); return true; }
     // A button passes 0, or 1 on the run its press starts; a filter run from here passes 0.
     if (type == "button") { p.kind = GmicParam::Value; p.text = "0"; return true; }
