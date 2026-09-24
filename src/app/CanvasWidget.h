@@ -94,6 +94,11 @@ private:
     QPointF cacheDocumentOrigin_;
     double cacheZoom_ = 0;
     bool cacheValid_ = false;
+    /// Running from each wheel or pinch zoom step until the gesture pauses; meanwhile the view shows the cache
+    /// scaled to the new zoom (`zoomPreview_`) rather than rendering every step afresh.
+    QTimer zoomSettle_;
+    bool zoomPreview_ = false;
+    void zoomGesture(double factor, QPointF viewPoint);
     Drag drag_ = Drag::None;
     QPointF dragStartView_, dragStartDocument_, lastView_;
     std::optional<compositor::TransformDrag> transformDrag_;

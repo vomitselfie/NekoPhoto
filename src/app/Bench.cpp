@@ -7,6 +7,7 @@
 #include <QApplication>
 #include <QElapsedTimer>
 #include <QMouseEvent>
+#include <QThread>
 #include <QWheelEvent>
 #include <algorithm>
 #include <cmath>
@@ -158,9 +159,17 @@ int runViewBench(MainWindow& window, const ViewBenchOptions& o) {
     for (int i = 0; i < 5; i++) full.push_back(timed([&] { emit session->documentChanged({}); }));
     report("full view render (fit)", full);
     std::vector<double> zoomIn, zoomOut, pan;
+    // A zoom gesture shows the last render scaled until it pauses, then renders once (as the full render above).
+    auto settle = [&] {
+        QElapsedTimer t;
+        t.start();
+        while (t.elapsed() < 400) { pump(); QThread::msleep(1); }
+    };
     for (int i = 0; i < 6; i++) zoomIn.push_back(timed([&] { wheel({}, {0, 120}, Qt::ControlModifier); }));
+    settle();
     for (int i = 0; i < 40; i++) pan.push_back(timed([&] { wheel({0, -24}, {0, -48}, Qt::NoModifier); }));
     for (int i = 0; i < 6; i++) zoomOut.push_back(timed([&] { wheel({}, {0, -120}, Qt::ControlModifier); }));
+    settle();
     report("zoom in step", zoomIn);
     report("pan step (zoomed in)", pan);
     report("zoom out step", zoomOut);

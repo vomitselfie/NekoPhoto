@@ -80,6 +80,9 @@ CanvasWidget::CanvasWidget(EditorSession* session, QWidget* parent) : QWidget(pa
         update();
     });
     connect(session_, &EditorSession::transformChanged, this, [this] { if (session_->transformEdit() && session_->transformEdit()->floating) refreshSelectionOutline(); update(); });
+    zoomSettle_.setSingleShot(true);
+    zoomSettle_.setInterval(120);
+    connect(&zoomSettle_, &QTimer::timeout, this, [this] { update(); });
     antsTimer_.setInterval(120);
     connect(&antsTimer_, &QTimer::timeout, this, [this] { antsPhase_ = (antsPhase_ + 1) % 8; if (!selectionOutline_.empty() || selectionRasterAnts_) update(); });
     zoomInCursor_ = magnifierCursor(false, devicePixelRatioF());
@@ -134,8 +137,10 @@ void CanvasWidget::ensureCache() {
     QRectF docDevice(origin, QSizeF(documentSize().width() * zoom, documentSize().height() * zoom));
     QRectF widgetDevice(0, 0, width() * dpr, height() * dpr);
     QRect visible = docDevice.intersected(widgetDevice).toAlignedRect();
+    zoomPreview_ = false;
     if (cacheValid_ && cacheDeviceRect_ == visible && cacheZoom_ == zoom && cacheDocumentOrigin_ == origin) return;
     if (scrollCache(visible, origin, zoom)) return;
+    if (zoomSettle_.isActive() && cacheValid_ && !cache_.isNull() && zoom != cacheZoom_) { zoomPreview_ = true; return; }
     cacheDeviceRect_ = visible;
     cacheZoom_ = zoom;
     cacheDocumentOrigin_ = origin;
@@ -184,6 +189,7 @@ void CanvasWidget::invalidate(QRectF documentRegion) {
     p.setCompositionMode(QPainter::CompositionMode_Source);
     p.drawImage(part.topLeft() - cacheDeviceRect_.topLeft(), piece);
     p.end();
+    if (zoomPreview_) { update(); return; }   // the cache is shown scaled: its device rect is not the widget's
     double dpr = devicePixelRatioF();
     update(QRectF(part.x() / dpr, part.y() / dpr, part.width() / dpr, part.height() / dpr).toAlignedRect().adjusted(-1, -1, 1, 1));
 }
@@ -216,7 +222,19 @@ void CanvasWidget::paintEvent(QPaintEvent*) {
     painter.fillRect(docView, brush);
     painter.restore();
     ensureCache();
-    if (cacheValid_ && !cache_.isNull()) {
+    if (zoomPreview_) {
+        // Mid-zoom: the last render, scaled to where its pixels fall at the new zoom.
+        const double k = session_->viewport.zoom / cacheZoom_;
+        const QPointF origin(docView.x() * dpr, docView.y() * dpr);
+        const QRectF target((origin.x() + (cacheDeviceRect_.x() - cacheDocumentOrigin_.x()) * k) / dpr,
+                            (origin.y() + (cacheDeviceRect_.y() - cacheDocumentOrigin_.y()) * k) / dpr,
+                            cache_.width() * k / dpr, cache_.height() * k / dpr);
+        painter.save();
+        painter.setClipRect(docView);
+        painter.setRenderHint(QPainter::SmoothPixmapTransform, k < 1);
+        painter.drawImage(target, cache_, QRectF(0, 0, cache_.width(), cache_.height()));
+        painter.restore();
+    } else if (cacheValid_ && !cache_.isNull()) {
         // The ratio set on the cache itself: on a copy it would make Qt copy the whole image on every paint.
         cache_.setDevicePixelRatio(dpr);
         painter.drawImage(QPointF(cacheDeviceRect_.x() / dpr, cacheDeviceRect_.y() / dpr), cache_);
@@ -1086,12 +1104,17 @@ void CanvasWidget::sampleColor(QPointF doc, bool background) {
     emit session_->toolChanged();
 }
 
+void CanvasWidget::zoomGesture(double factor, QPointF viewPoint) {
+    zoomSettle_.start();
+    session_->zoomTo(session_->viewport.zoom * factor, viewPoint);
+}
+
 void CanvasWidget::wheelEvent(QWheelEvent* e) {
     if (!session_->hasDocument()) return;
     if (e->modifiers() & Qt::ControlModifier) {
         double steps = e->angleDelta().y() / 120.0;
         if (steps == 0) steps = e->pixelDelta().y() / 50.0;
-        session_->zoomTo(session_->viewport.zoom * std::pow(1.25, steps), e->position());
+        zoomGesture(std::pow(1.25, steps), e->position());
     } else {
         QPointF delta = e->pixelDelta().isNull() ? QPointF(e->angleDelta().x(), e->angleDelta().y()) / 2 : QPointF(e->pixelDelta());
         if (e->modifiers() & Qt::ShiftModifier && delta.x() == 0) delta = {delta.y(), 0};
@@ -1105,7 +1128,7 @@ bool CanvasWidget::event(QEvent* e) {
     if (e->type() == QEvent::NativeGesture) {
         auto* g = static_cast<QNativeGestureEvent*>(e);
         if (g->gestureType() == Qt::ZoomNativeGesture && session_->hasDocument()) {
-            session_->zoomTo(session_->viewport.zoom * (1 + g->value()), g->position());
+            zoomGesture(1 + g->value(), g->position());
             return true;
         }
     }

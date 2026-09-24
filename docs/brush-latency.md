@@ -67,10 +67,13 @@ out, and the undo and redo of a brush stroke. At a 2.25 display scale on the sam
 | Pan step | 54 ms | 11 ms |
 | Undo of a stroke | 31 ms | 12.5 ms |
 | Redo of a stroke | 31 ms | 12.8 ms |
-| Full render, zoom step | 40–59 ms | unchanged |
+| Wheel zoom step | 59 ms | 3.2 ms |
+| Full render | 40 ms | unchanged |
 
 - **Panning scrolls the cached view.** A pan by whole device pixels (pans are now rounded to them) moves
   what the cache already holds and renders only the strip that came into view.
+- **A wheel or pinch zoom shows the last render scaled** and renders afresh once the gesture pauses for
+  120 ms (`zoomSettle_` in `CanvasWidget`); zooms from the menu or keyboard render at once.
 - **Undo and redo render only what they change.** A raster edit notes its area in its history entry
   (`DocumentHistory::noteRegion`); other steps compare the two documents (`changedArea`), which falls back
   to the whole canvas for a new canvas size, a new stacking order, a folder or an adjustment layer.
