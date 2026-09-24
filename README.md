@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/logo.svg" alt="NekoPhoto" width="180">
+  <img src="docs/images/nekophoto.png" alt="NekoPhoto: みんなのためのエディタ (an editor for everyone)" width="720">
 </p>
 
 # NekoPhoto
@@ -16,11 +16,6 @@ for macOS, and still opens its `.comp` projects. Until version 1.0 it was
 called compositor-linux; your settings, brushes and downloaded model move over
 by themselves the first time you start it.
 
-<p align="center">
-  <img src="docs/images/remove-background.jpg" alt="Remove Background on an illustration, with the settings dialog open" width="800">
-  <img src="docs/images/filters.jpg" alt="The G'MIC filter browser previewing CRT Sub-Pixels on an illustration" width="800">
-</p>
-
 ## What it does
 
 - **Layers:** folders, blend modes, opacity, layer masks, clipping masks and adjustment layers
@@ -35,6 +30,10 @@ by themselves the first time you start it.
 - **AI agents:** Claude Code or any MCP client can drive the editor
 
 The full list is in [docs/features.md](docs/features.md).
+
+| Remove Background | G'MIC filters |
+|:---:|:---:|
+| <img src="docs/images/remove-background.jpg" alt="Remove Background on an illustration, with the settings dialog open" width="420"> | <img src="docs/images/filters.jpg" alt="The G'MIC filter browser previewing CRT Sub-Pixels on an illustration" width="420"> |
 
 ## Performance
 
@@ -139,6 +138,10 @@ compositor-linux という名前でした。設定・ブラシ・ダウンロー
 - **AI エージェント:** Claude Code などの MCP クライアントから操作できます
 
 機能の一覧は [docs/features.md](docs/features.md#日本語) にあります。
+
+| 背景を削除 | G'MIC フィルター |
+|:---:|:---:|
+| <img src="docs/images/remove-background.jpg" alt="イラストの背景を削除しているところ(設定画面を表示)" width="420"> | <img src="docs/images/filters.jpg" alt="G'MIC フィルターブラウザーで CRT Sub-Pixels をプレビューしているところ" width="420"> |
 
 ### パフォーマンス
 
