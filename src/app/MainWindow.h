@@ -62,6 +62,9 @@ public:
     // For the automation socket (Automation.cpp).
     int tabCount() const { return int(tabs_.size()); }
     int currentTabIndex() const { return current_; }
+    /// Opens the active smart object's contents in a tab of their own; saving that tab puts them back. With
+    /// `error`, reports instead of showing a dialog (automation).
+    bool editSmartObjectContents(QString* error = nullptr);
     EditorSession* sessionAt(int i) const { return tabs_[size_t(i)].session; }
     CanvasWidget* canvasAt(int i) const { return tabs_[size_t(i)].canvas; }
     LayersPanel* layersPanelAt(int i) const { return tabs_[size_t(i)].layers; }
@@ -121,6 +124,7 @@ private:
     void exportTiff();
     /// A layered PSD, after a summary of anything Photoshop cannot carry.
     void exportPsd();
+
     QString askExportPath(const QString& title, const QString& filter, const QStringList& suffixes);
     bool confirmDiscard();
     void importFile(const QString& path, std::optional<QPointF> at = std::nullopt);

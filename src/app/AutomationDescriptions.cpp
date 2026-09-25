@@ -104,6 +104,12 @@ const MethodDoc methodDocs[] = {
      "id:layer The layer (default the active one); action:(add|addFromSelection|delete|toggle|invert|apply|link)! What to do; revealing:bool=true For add: white (reveal all) rather than black"},
     {"layers.merge", "Merge the selected layers, or the active layer into the one beneath.", "down:bool=false Merge the active layer down"},
     {"layers.group", "Put the selected layers in a new folder.", ""},
+    {"smartObject.convert", "The selected layers (or ids) as one smart object: their PSD becomes its contents, placed where they were.", "ids:array Layer ids (default: the selection)"},
+    {"smartObject.place", "Place an image or PSD file as an embedded smart object above the active layer, 1:1 in the middle (scaled to fit).", "path:string! File path"},
+    {"smartObject.replace", "Swap a smart object's contents for a file's, in every layer placing them; each keeps its centre and scale.", "id:layer The smart object layer (default: active); path:string! File path"},
+    {"smartObject.rasterize", "A smart object as plain pixels.", "id:layer The smart object layer (default: active)"},
+    {"smartObject.editContents", "Open a smart object's contents in a new tab; smartObject.commit in that tab puts them back into every layer placing them.", "id:layer The smart object layer (default: active)"},
+    {"smartObject.commit", "In a contents tab, put the contents back into the smart object they came from (as Save does).", ""},
     {"layers.render", "One layer alone as PNG, not composited with the others: with a mask, as it shows (mask applied, over the layer's bounds in document pixels); otherwise its own pixels.",
      "id:layer! The layer; masked:bool=true Apply the layer's mask; false gives the raw pixels; maxSize:number=1024 Longest side; path:string Write the PNG here instead of returning base64"},
     {"adjustments.get", "An adjustment layer's settings.", "id:layer The adjustment layer (default the active one)"},
@@ -181,7 +187,7 @@ struct Param {
 
 QStringList valuesNamed(const QString& list) {
     QStringList out;
-    if (list == "blend") out = blendModeNames();
+    if (list == "blend") out = blendModeNames() << QStringLiteral("Pass Through");   // Pass Through: folders only
     else if (list == "sampling") for (int i = 0; i < 3; i++) out << QString::fromUtf8(samplingName(Sampling(i)));
     else if (list == "adjustment") for (int i = 0; i < 6; i++) out << QString::fromUtf8(adjustmentKindName(AdjustmentKind(i)));
     else if (list == "filter") for (int i = 0; i < 4; i++) out << QString::fromUtf8(filterKindName(FilterKind(i)));

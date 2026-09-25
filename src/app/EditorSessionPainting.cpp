@@ -1,4 +1,7 @@
 // EditorSession: Painting: brushes, opacity keys, blur/smudge/liquify, gradients, shapes and text.
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include "EditorSession.h"
 #include "BrushLibrary.h"
 #include "QtGeometry.h"
@@ -211,7 +214,7 @@ void EditorSession::typeOpacityDigit(int digit) {
     else if (tool_ == Tool::Gradient) { gradientSettings.opacity = value; refreshGradient(); emit toolChanged(); }
     else {
         std::vector<Layer*> targets;
-        for (auto& l : document_->layers) if (selectedLayerIds_.count(l.id) && !l.isGroup && l.opacity != value) targets.push_back(&l);
+        for (auto& l : document_->layers) if (selectedLayerIds_.count(l.id) && l.opacity != value) targets.push_back(&l);
         if (targets.empty()) return;
         endOpacityEdit();
         beginEdit("Layer Opacity");
@@ -482,6 +485,21 @@ bool EditorSession::redrawText(Layer& layer) {
     layer.asset = Asset::make(image, layer.name);
     layer.textImage = image;
     layer.transform.size = Size(image->width() * scaleX, image->height() * scaleY);
+    // Text opened from a PSD shows Photoshop's pixels until this first redraw: put our first baseline where
+    // Photoshop anchored its own, then forget the anchor.
+    if (layer.extraJson.find("psdTextAnchor") != std::string::npos) {
+        QJsonObject extra = QJsonDocument::fromJson(QByteArray::fromStdString(layer.extraJson)).object();
+        const QJsonArray anchor = extra.value("psdTextAnchor").toArray();
+        if (anchor.size() == 2 && layer.transform.rotation == 0) {
+            if (auto m = psdTextMetrics(*layer.text)) {
+                const double x = m->blockLeft + (layer.text->alignment == 1 ? m->blockWidth / 2 : layer.text->alignment == 2 ? m->blockWidth : 0);
+                const double y = m->blockTop + m->ascent;
+                layer.transform.origin = Point(anchor[0].toDouble() - x * scaleX, anchor[1].toDouble() - y * scaleY);
+            }
+        }
+        extra.remove("psdTextAnchor");
+        layer.extraJson = extra.isEmpty() ? std::string() : QJsonDocument(extra).toJson(QJsonDocument::Compact).toStdString();
+    }
     return true;
 }
 

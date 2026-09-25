@@ -25,3 +25,9 @@ Version 5 adds optional `maskSourceID`: the UUID of a non-group layer supplying 
 UI terminology: these alpha links are clipping masks. Option-click assigns the lower sibling’s base or releases the connection. Multiple clipped layers share one base, show indented above it, and release when moved outside the contiguous stack. The underlying `maskSourceID` representation is unchanged.
 
 Version 6 allows `maskFile` and `maskEnabled` on group records. A folder has no image, so its mask covers the folder's own transform rectangle (the canvas size when the folder was created); Image Size resamples it through that transform, and Canvas Size and Crop preserve its pixels, exactly as for layer masks. Groups are pass-through, so an enabled folder mask multiplies the coverage of every descendant layer, together with that layer's own mask and any enclosing folders' masks; clipping-mask coverage is unaffected. Files declaring versions 1–5 cannot give a group a mask, and older app builds reject v6.
+
+Version 8 (NekoPhoto) gives folders their own `opacity` and `blendMode`, and `passThrough` (default `true`):
+a pass-through folder's children blend straight into what is below it and its opacity fades their result back
+toward that backdrop; `passThrough: false` isolates the children and composites the folder's result in its
+blend mode and opacity, as Photoshop does. A save writes version 7 whenever no folder uses these, so the Mac app
+(which reads up to 7) still opens it; version 7 files cannot give a folder non-default values.

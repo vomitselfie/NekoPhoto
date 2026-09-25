@@ -6,18 +6,35 @@
 // pixel layer. psd.h reads the files back; the round trip is tested (tests/psd_writer_tests.cpp).
 #pragma once
 #include "document.h"
+#include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
 namespace compositor {
 
+/// How a text layer was laid out, from the font engine that drew it (the core has none): what Photoshop's
+/// type layer needs to lay the same text out again. Raster coordinates are the text layer's own pixels.
+struct PsdTextMetrics {
+    std::string postScriptName;        // the face used, e.g. "DejaVuSans-Bold"
+    bool fauxBold = false, fauxItalic = false;   // bold or italic asked for but synthesised
+    double fontSize = 0;               // pixels, as drawn
+    double ascent = 0;                 // first baseline below the block's top
+    double lineHeight = 0;             // baseline to baseline
+    double blockLeft = 0, blockTop = 0, blockWidth = 0;
+    int lines = 1;
+};
+
 struct PsdExportOptions {
     /// PackBits (RLE) channels, as Photoshop writes; raw when a channel would not shrink.
     bool compress = true;
+    /// With it, live text layers are written as Photoshop type layers (editable text over the same pixels);
+    /// without it, or when it returns nothing, as pixels.
+    std::function<std::optional<PsdTextMetrics>(const LayerText&)> textMetrics;
 };
 
 struct PsdExportSummary {
-    int layers = 0, folders = 0, masks = 0, clipped = 0, adjustments = 0;
+    int layers = 0, folders = 0, masks = 0, clipped = 0, adjustments = 0, texts = 0, smartObjects = 0;   // texts: as Photoshop type layers
     /// What will not look or behave the same in Photoshop, one line each.
     std::vector<std::string> warnings;
     /// What is written differently but looks the same (resampled layers, text as pixels), one line each.
@@ -28,7 +45,12 @@ struct PsdExportSummary {
 constexpr int psdMaxSide = 30000;
 
 /// What exporting `document` would write and report, without encoding any pixels (for a dialog).
-PsdExportSummary planPsdExport(const Document& document);
+PsdExportSummary planPsdExport(const Document& document, const PsdExportOptions& options = {});
+
+/// The 'TySh' block for a text layer drawn with `metrics`, placed by `transform` over its `imageWidth` x
+/// `imageHeight` raster; `recordBounds` is the layer record's rectangle. None for a flipped layer.
+std::optional<std::vector<uint8_t>> photoshopTypeBlock(const LayerText& text, const PsdTextMetrics& metrics, const LayerTransform& transform,
+                                                       int imageWidth, int imageHeight, const Rect& recordBounds);
 
 /// The file's bytes; empty with `error` set when the document cannot be written as PSD.
 std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions& options, PsdExportSummary* summary, std::string* error);

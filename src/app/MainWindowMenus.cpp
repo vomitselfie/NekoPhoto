@@ -17,6 +17,8 @@
 #include <QLineEdit>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QSettings>
 #include <QToolBar>
 
@@ -112,6 +114,14 @@ void MainWindow::buildMenus() {
     recentMenu_ = file->addMenu(tr("Open &Recent"));
     file->addAction(tr("Import &File…"), QKeySequence("Ctrl+Shift+O"), this, &MainWindow::importFiles);
     file->addAction(tr("Import &Brushes…"), this, [this] { importBrushesInteractively(this, session_); });
+    needsDocument(file->addAction(tr("Place &Embedded…"), this, [this] {
+        const QString path = QFileDialog::getOpenFileName(this, tr("Place Embedded"), QSettings().value("lastDir").toString(),
+                                                          tr("Images and Photoshop documents (*.psd *.psb *.png *.jpg *.jpeg *.tif *.tiff *.webp *.bmp *.gif)"));
+        if (path.isEmpty()) return;
+        QSettings().setValue("lastDir", QFileInfo(path).path());
+        QString error;
+        if (!session_->placeEmbedded(path, &error)) showError(tr("Couldn’t place %1").arg(QFileInfo(path).fileName()), error);
+    }));
     file->addSeparator();
     needsDocument(file->addAction(tr("&Save"), QKeySequence::Save, this, [this] { save(false); }));
     needsDocument(file->addAction(tr("Save &As…"), QKeySequence::SaveAs, this, [this] { save(true); }));
@@ -203,6 +213,20 @@ void MainWindow::buildMenus() {
         AdjustmentKind kind = AdjustmentKind(i);
         needsDocument(adjustmentLayers->addAction(QString::fromUtf8(adjustmentKindName(kind)), this, [this, kind] { session_->addAdjustmentLayer(kind); }));
     }
+    QMenu* smart = layer->addMenu(tr("S&mart Objects"));
+    needsDocument(smart->addAction(tr("&Convert to Smart Object"), this, [this] {
+        QString error;
+        if (!session_->convertToSmartObject(&error) && !error.isEmpty()) showError(tr("Couldn’t convert to a smart object"), error);
+    }));
+    needsDocument(smart->addAction(tr("&Edit Contents"), this, [this] { editSmartObjectContents(); }));
+    needsDocument(smart->addAction(tr("&Replace Contents…"), this, [this] {
+        const QString path = QFileDialog::getOpenFileName(this, tr("Replace Contents"), QSettings().value("lastDir").toString(),
+                                                          tr("Images and Photoshop documents (*.psd *.psb *.png *.jpg *.jpeg *.tif *.tiff *.webp *.bmp *.gif)"));
+        if (path.isEmpty()) return;
+        QString error;
+        if (!session_->replaceSmartObjectContents(path, &error)) showError(tr("Couldn’t replace the contents"), error);
+    }));
+    needsDocument(smart->addAction(tr("R&asterize"), this, [this] { session_->rasterizeSmartObject(); }));
     layer->addSeparator();
     QMenu* mask = layer->addMenu(tr("Layer &Mask"));
     needsDocument(mask->addAction(tr("Reveal All"), this, [this] { session_->addLayerMask(true); }));

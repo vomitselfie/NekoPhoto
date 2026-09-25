@@ -15,7 +15,9 @@ struct ProjectError {
     explicit operator bool() const { return kind != None; }
 };
 
-constexpr int projectFormatVersion = 7;
+constexpr int projectFormatVersion = 8;
+/// What a save writes when the document needs nothing past it (the Mac app reads up to 7).
+constexpr int projectMacFormatVersion = 7;
 
 /// Loads a package directory. On failure the error says why, in the Mac app's words.
 std::optional<Document> loadProject(const std::string& path, ProjectError& error);

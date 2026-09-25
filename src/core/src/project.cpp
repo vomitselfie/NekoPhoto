@@ -116,7 +116,7 @@ json transformJson(const LayerTransform& t) {
 }
 
 const std::set<std::string> knownLayerKeys = {"id", "name", "isVisible", "transform", "imageFile", "parentID", "isGroup", "opacity", "blendMode",
-    "maskFile", "maskEnabled", "maskSourceID", "adjustment", "maskPlacement", "maskLinked", "shape", "text"};
+    "maskFile", "maskEnabled", "maskSourceID", "adjustment", "maskPlacement", "maskLinked", "shape", "text", "passThrough"};
 const std::set<std::string> knownManifestKeys = {"format", "version", "colorSpace", "resolution", "documentID", "width", "height", "activeLayerID", "layers"};
 
 struct Record {
@@ -144,6 +144,9 @@ bool parseRecord(const json& j, Record& r) {
     bool isGroup = false;
     if (!getBool(j, "isGroup", isGroup, false)) return false;
     l.isGroup = isGroup;
+    bool passThrough = true;
+    if (!getBool(j, "passThrough", passThrough, false)) return false;
+    l.passThrough = passThrough;
     double opacity = 1;
     if (!getDouble(j, "opacity", opacity, false)) return false;
     l.opacity = opacity;
@@ -212,6 +215,7 @@ json recordJson(const Layer& l) {
     if (l.asset && l.asset->image) j["imageFile"] = l.id + ".png";
     if (l.parentId) j["parentID"] = *l.parentId;
     if (l.isGroup) j["isGroup"] = true;
+    if (l.isGroup && !l.passThrough) j["passThrough"] = false;
     if (l.opacity != 1) j["opacity"] = number(l.opacity);
     if (l.blendMode != BlendMode::Normal) j["blendMode"] = blendModeName(l.blendMode);
     if (l.mask && l.mask->asset.image) {
@@ -295,7 +299,9 @@ bool validateManifest(const Manifest& m, ProjectError& error) {
         if (r.maskPlacement && (!r.maskPlacement->isValid() || !r.maskFile)) { error = invalid(); return false; }
         if (!(l.opacity >= 0 && l.opacity <= 1)) { error = invalid(); return false; }
         if (m.version < 3 && (l.opacity != 1 || l.blendMode != BlendMode::Normal)) { error = invalid(); return false; }
-        if (l.isGroup && (l.opacity != 1 || l.blendMode != BlendMode::Normal)) { error = invalid(); return false; }
+        // Version 8: folders with their own opacity, blend mode and isolation (Photoshop's folders).
+        if (l.isGroup && m.version < 8 && (l.opacity != 1 || l.blendMode != BlendMode::Normal || !l.passThrough)) { error = invalid(); return false; }
+        if (!l.isGroup && !l.passThrough) { error = invalid(); return false; }
         if (m.version < 5 && l.maskSourceId) { error = invalid(); return false; }
         if (m.version == 1 && (l.parentId || l.isGroup)) { error = invalid(); return false; }
         if (!ids.insert(l.id).second || !l.transform.isValid()) { error = invalid(); return false; }
@@ -320,6 +326,12 @@ bool checkSize(int width, int height, long long& used) {
     if ((long long)width * height > Document::pixelBudget || (long long)width * height > Document::projectPixelBudget - used) return false;
     used += (long long)width * height;
     return true;
+}
+
+bool writeBytes(const fs::path& file, const std::vector<uint8_t>& bytes) {
+    std::ofstream out(file, std::ios::binary);
+    out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+    return bool(out);
 }
 
 bool checkFile(const fs::path& file, const fs::path& package, uintmax_t maximumBytes) {
@@ -431,6 +443,42 @@ std::optional<Document> loadProject(const std::string& pathText, ProjectError& e
             if (layer.text) layer.textImage = layer.asset->image;
         }
     }
+    // What a PSD held that we do not model (psd_carry.h), beside the images; optional, and dropped if unreadable.
+    auto readCarry = [&](const fs::path& file) -> std::optional<std::vector<uint8_t>> {
+        std::error_code ec;
+        if (!fs::is_regular_file(file, ec) || !checkFile(file, path, assetLimit)) return std::nullopt;
+        std::ifstream in(file, std::ios::binary);
+        std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        if (!in.good() && !in.eof()) return std::nullopt;
+        return bytes;
+    };
+    for (Layer& layer : d.layers)
+        if (auto bytes = readCarry(path / "images" / (layer.id + ".psdcarry"))) layer.psdCarry = parsePsdLayerCarry(*bytes);
+    if (auto bytes = readCarry(path / "images" / "document.psdcarry")) d.psdCarry = parsePsdDocumentCarry(*bytes);
+    // Smart objects: the sources in smartobjects/ (each with its image as PNG), the instances beside their layers.
+    {
+        std::error_code ec;
+        const fs::path dir = path / "smartobjects";
+        if (fs::is_directory(dir, ec))
+            for (auto& entry : fs::directory_iterator(dir, ec)) {
+                if (entry.path().extension() != ".source" || d.smartObjects.size() >= 4096) continue;
+                auto bytes = readCarry(entry.path());
+                auto source = bytes ? parseSmartObjectSource(*bytes) : std::nullopt;
+                if (!source) continue;
+                fs::path png = entry.path();
+                png.replace_extension(".png");
+                if (fs::is_regular_file(png, ec) && checkFile(png, path, assetLimit)) source->image = readPngImage(png.string());
+                const std::string id = source->id;
+                d.smartObjects[id] = std::make_shared<const SmartObjectSource>(std::move(*source));
+            }
+    }
+    for (Layer& layer : d.layers) {
+        auto bytes = layer.asset && layer.asset->image ? readCarry(path / "images" / (layer.id + ".smartobject")) : std::nullopt;
+        if (auto instance = bytes ? parseSmartObjectInstance(*bytes) : std::nullopt) {
+            layer.smartObject = std::move(*instance);
+            layer.smartImage = layer.asset->image;
+        }
+    }
     return d;
 }
 
@@ -449,7 +497,9 @@ std::string manifestJson(const Document& document, const std::optional<Uuid>& ac
     json j;
     if (!document.extraJson.empty()) { auto extra = json::parse(document.extraJson, nullptr, false); if (extra.is_object()) j = extra; }
     j["format"] = formatIdentifier;
-    j["version"] = projectFormatVersion;
+    bool folders = false;
+    for (auto& l : document.layers) folders |= l.isGroup && (l.opacity != 1 || l.blendMode != BlendMode::Normal || !l.passThrough);
+    j["version"] = folders ? projectFormatVersion : projectMacFormatVersion;
     j["colorSpace"] = "sRGB";
     j["resolution"] = number(document.resolution);
     j["documentID"] = document.id;
@@ -492,6 +542,24 @@ bool saveProject(const Document& document, const std::optional<Uuid>& activeLaye
         std::string err;
         if (l.asset && l.asset->image && !writePngImage((staging / "images" / (l.id + ".png")).string(), *l.asset->image, 0, &err)) { abandon(); error = encodeError(); return false; }
         if (l.mask && l.mask->asset.image && !writePngGray((staging / "images" / (l.id + ".mask.png")).string(), *l.mask->asset.image, &err)) { abandon(); error = encodeError(); return false; }
+        if (l.psdCarry && !writeBytes(staging / "images" / (l.id + ".psdcarry"), serializePsdCarry(*l.psdCarry))) { abandon(); error = ioError("could not write the PSD data of " + l.name); return false; }
+    }
+    if (document.psdCarry && !writeBytes(staging / "images" / "document.psdcarry", serializePsdCarry(*document.psdCarry))) { abandon(); error = ioError("could not write the PSD data"); return false; }
+    // Smart objects (see the loader): a live instance's record beside its layer; every source in smartobjects/.
+    for (auto& l : document.layers)
+        if (l.isLiveSmartObject() && !writeBytes(staging / "images" / (l.id + ".smartobject"), serializeSmartObjectInstance(*l.smartObject))) { abandon(); error = ioError("could not write the smart object of " + l.name); return false; }
+    if (!document.smartObjects.empty()) {
+        std::error_code ec;
+        fs::create_directories(staging / "smartobjects", ec);
+        int n = 0;
+        for (auto& [id, source] : document.smartObjects) {
+            const fs::path base = staging / "smartobjects" / std::to_string(n++);
+            std::string err;
+            if (!writeBytes(fs::path(base).replace_extension(".source"), serializeSmartObjectSource(*source))
+                || (source->image && !writePngImage(fs::path(base).replace_extension(".png").string(), *source->image, 0, &err))) {
+                abandon(); error = ioError("could not write a smart object source"); return false;
+            }
+        }
     }
     // Swap the finished package in: the old one is moved aside and removed only after the new one is in place.
     fs::path backup = parent / (path.filename().string() + ".replaced-" + std::to_string(rng()));

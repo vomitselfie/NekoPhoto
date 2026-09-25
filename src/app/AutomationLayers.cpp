@@ -3,7 +3,9 @@
 #include "AutomationHandlers.h"
 #include "ImageConvert.h"
 #include "compositor/render.h"
+#include <QFileInfo>
 #include <QJsonDocument>
+#include <set>
 #include <algorithm>
 #include <cmath>
 
@@ -19,6 +21,58 @@ void AutomationServer::registerLayersHandlers() {
     const LayerOf layer{document};
     const LayerOrActive layerOrActive{w};
     const WithActive withActive{w};
+
+    // ---- smart objects
+    add("smartObject.convert", [session, document](const QJsonObject& p) {
+        EditorSession* s = session();
+        document();
+        if (has(p, "ids")) {
+            std::set<Uuid> ids;
+            for (const auto& v : p["ids"].toArray()) {
+                const Uuid id = v.toString().toStdString();
+                if (!s->document()->find(id)) fail("no layer with id " + v.toString(), invalidParams);
+                ids.insert(id);
+            }
+            s->selectLayers(ids, ids.empty() ? std::nullopt : std::optional<Uuid>(*ids.rbegin()));
+        }
+        QString error;
+        if (!s->convertToSmartObject(&error)) fail(error.isEmpty() ? QStringLiteral("nothing to convert") : error);
+        return layerJson(*s->activeLayer(), 0);
+    });
+    add("smartObject.place", [session, document](const QJsonObject& p) {
+        document();
+        QString error;
+        if (!session()->placeEmbedded(QFileInfo(str(p, "path")).absoluteFilePath(), &error)) fail(error);
+        return layerJson(*session()->activeLayer(), 0);
+    });
+    add("smartObject.replace", [session, layerOrActive, withActive](const QJsonObject& p) {
+        const Uuid id = layerOrActive(p).id;
+        QString error;
+        bool ok = false;
+        withActive(id, [&] { ok = session()->replaceSmartObjectContents(QFileInfo(str(p, "path")).absoluteFilePath(), &error); });
+        if (!ok) fail(error);
+        return layerJson(*session()->document()->find(id), 0);
+    });
+    add("smartObject.rasterize", [session, layerOrActive, withActive](const QJsonObject& p) {
+        const Uuid id = layerOrActive(p).id;
+        bool ok = false;
+        withActive(id, [&] { ok = session()->rasterizeSmartObject(); });
+        if (!ok) fail("not a smart object", invalidParams);
+        return layerJson(*session()->document()->find(id), 0);
+    });
+    add("smartObject.editContents", [w, session, layerOrActive](const QJsonObject& p) {
+        const Uuid id = layerOrActive(p).id;
+        session()->selectLayer(id);
+        QString error;
+        if (!w->editSmartObjectContents(&error)) fail(error);
+        return QJsonObject{{"tab", w->currentTabIndex()}, {"title", session()->title()}};
+    });
+    add("smartObject.commit", [session](const QJsonObject&) {
+        QString error;
+        if (!session()->smartObjectParent()) fail("this tab is not a smart object's contents", invalidParams);
+        if (!session()->commitToSmartObjectParent(&error)) fail(error);
+        return QJsonObject{{"committed", true}};
+    });
 
     // ---- layers
     add("layers.list", [document](const QJsonObject& p) {
@@ -54,11 +108,13 @@ void AutomationServer::registerLayersHandlers() {
         if (has(p, "visible") && flag(p, "visible", true) != l.visible) s->toggleLayerVisibility(id);
         if (has(p, "opacity") || has(p, "blend") || has(p, "sampling")) {
             std::optional<BlendMode> blend;
+            bool passThrough = false;
             std::optional<Sampling> sampling;
             if (has(p, "blend")) {
-                blend = blendModeNamed(str(p, "blend"));
-                if (!blend) fail("unknown blend mode '" + str(p, "blend") + "'; one of " + blendModeNames().join(", "), invalidParams);
-                if (l.isGroup && *blend != BlendMode::Normal) fail("a folder has no blend mode; set it on the layers inside", invalidParams);
+                passThrough = str(p, "blend").compare("Pass Through", Qt::CaseInsensitive) == 0;
+                if (passThrough && !l.isGroup) fail("Pass Through is a folder's blend mode", invalidParams);
+                blend = passThrough ? std::optional<BlendMode>(BlendMode::Normal) : blendModeNamed(str(p, "blend"));
+                if (!blend) fail("unknown blend mode '" + str(p, "blend") + "'; one of " + blendModeNames().join(", ") + ", or Pass Through for a folder", invalidParams);
             }
             if (has(p, "sampling")) {
                 sampling = samplingNamed(str(p, "sampling"));
@@ -66,7 +122,7 @@ void AutomationServer::registerLayersHandlers() {
             }
             withActive(id, [&] {
                 if (has(p, "opacity")) s->setLayerOpacity(std::clamp(num(p, "opacity"), 0.0, 1.0));
-                if (blend) s->setLayerBlendMode(*blend);
+                if (blend) s->setLayerBlendMode(*blend, passThrough);
                 if (sampling) s->setLayerSampling(*sampling);
             });
         }

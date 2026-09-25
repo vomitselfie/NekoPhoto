@@ -116,11 +116,15 @@ QJsonObject transformJson(const LayerTransform& t) {
 QJsonObject layerJson(const Layer& layer, int depth) {
     QJsonObject o{
         {"id", qs(layer.id)}, {"name", qs(layer.name)}, {"depth", depth},
-        {"kind", layer.isGroup ? "group" : layer.adjustment ? "adjustment" : layer.isLiveShape() ? "shape" : layer.isLiveText() ? "text" : "pixels"},
-        {"visible", layer.visible}, {"opacity", layer.opacity}, {"blend", QString::fromUtf8(blendModeName(layer.blendMode))},
+        {"kind", layer.isGroup ? "group" : layer.adjustment ? "adjustment" : layer.isLiveShape() ? "shape" : layer.isLiveText() ? "text"
+                 : layer.isLiveSmartObject() ? "smartObject" : "pixels"},
+        {"visible", layer.visible}, {"opacity", layer.opacity}, {"blend", layer.isGroup && layer.passThrough ? QStringLiteral("Pass Through") : QString::fromUtf8(blendModeName(layer.blendMode))},
         {"clipping", layer.maskSourceId.has_value()}, {"transform", transformJson(layer.transform)},
     };
     if (layer.parentId) o["parent"] = qs(*layer.parentId);
+    if (layer.isLiveSmartObject())
+        o["smartObject"] = QJsonObject{{"source", qs(layer.smartObject->sourceId)}, {"locked", layer.smartObject->locked()},
+                                       {"state", QString::fromUtf8(smartObjectLockDescription(layer.smartObject->lock))}};
     if (!layer.isGroup && !layer.adjustment) o["pixelSize"] = QJsonObject{{"width", layer.pixelWidth()}, {"height", layer.pixelHeight()}, {"blank", !layer.asset || !layer.asset->image}};
     if (layer.mask) o["mask"] = QJsonObject{{"enabled", layer.mask->enabled}, {"linked", layer.mask->linked}, {"placed", layer.mask->placement.has_value()}};
     if (layer.adjustment) {

@@ -681,9 +681,9 @@ TEST_CASE(project_rejects_bad_manifests_like_the_mac) {
         text.replace(text.find("%L"), 2, layers);
         return text;
     };
-    CHECK(!parseManifest(with("8", ""), error));
+    CHECK(!parseManifest(with("9", ""), error));
     CHECK(error.kind == ProjectError::Version);
-    CHECK_EQ(error.version, 8);
+    CHECK_EQ(error.version, 9);
     CHECK(parseManifest(with("1", ""), error).has_value());
     std::string layer = R"({"id":"11111111-2222-3333-4444-555555555555","name":"L","isVisible":true,"transform":{"origin":[0,0],"size":[10,10],"rotation":0,"flipX":false,"flipY":false,"sampling":"High quality"}%X})";
     auto layerWith = [&](const std::string& extra) { std::string t = layer; t.replace(t.find("%X"), 2, extra); return t; };

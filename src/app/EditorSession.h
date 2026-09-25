@@ -13,6 +13,8 @@
 #include "compositor/filters.h"
 #include "compositor/document.h"
 #include "compositor/history.h"
+#include "compositor/smartobject_edit.h"
+#include <QPointer>
 #include "compositor/render.h"
 #include "compositor/selection.h"
 #include "compositor/smartwand.h"
@@ -151,7 +153,7 @@ public:
     void setLayerOpacity(double opacity);
     void beginOpacityEdit();
     void endOpacityEdit();
-    void setLayerBlendMode(compositor::BlendMode mode);
+    void setLayerBlendMode(compositor::BlendMode mode, bool passThrough = false);
     /// Hovering the blend menu: the active layer drawn in `mode` until the menu closes.
     void previewBlendMode(std::optional<compositor::BlendMode> mode);
     void toggleClippingMask(const compositor::Uuid& id);
@@ -449,6 +451,26 @@ public:
     /// Bumped on every document notification; what render caches key on.
     uint64_t documentRevision() const { return documentRevision_; }
 
+    // ---- Smart objects (EditorSessionSmartObjects.cpp) --------------------------------------------------------
+    /// The selected layers as one smart object (one undo step).
+    bool convertToSmartObject(QString* error);
+    /// A file as a new embedded smart object above the active layer.
+    bool placeEmbedded(const QString& path, QString* error);
+    /// The active smart object's contents swapped for a file's, in every layer placing them.
+    bool replaceSmartObjectContents(const QString& path, QString* error);
+    /// The active smart object as plain pixels.
+    bool rasterizeSmartObject();
+    /// The active smart object's contents as a document to edit, with the source they belong to.
+    std::optional<std::pair<compositor::Document, std::string>> smartObjectContentsForEditing(QString* error) const;
+    /// New contents for source `sourceId`, placed in every layer that places it (one undo step).
+    bool commitSmartObjectContents(const std::string& sourceId, const compositor::Document& contents, QString* error);
+    /// A session editing a smart object's contents: where they go back to.
+    void setSmartObjectParent(EditorSession* parent, const std::string& sourceId) { smartObjectParent_ = parent; smartObjectSource_ = sourceId; }
+    EditorSession* smartObjectParent() const { return smartObjectParent_.data(); }
+    const std::string& smartObjectSource() const { return smartObjectSource_; }
+    /// Sends this session's document back to the smart object it came from and marks it saved.
+    bool commitToSmartObjectParent(QString* error);
+
 signals:
     /// The document's pixels or structure changed; `region` is the document area affected (empty means all).
     void documentChanged(QRectF region);
@@ -490,6 +512,8 @@ private:
     bool redrawText(compositor::Layer& layer);
     bool textEditing_ = false;
     std::optional<compositor::Layer> textEditOriginal_;
+    QPointer<EditorSession> smartObjectParent_;
+    std::string smartObjectSource_;
     void finishDeleting(const std::vector<compositor::Uuid>& ids, const std::map<compositor::Uuid, compositor::Asset>& baked);
     std::optional<compositor::Asset> bakeClipping(const compositor::Uuid& target) const;
     void clearSelectedPixelsNow(compositor::Layer& layer);

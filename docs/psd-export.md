@@ -10,7 +10,10 @@ over automation. The writer is `src/core/src/psd_writer.cpp`, the reader it is t
   canvas edge), visibility, opacity and blend modes. All thirteen of NekoPhoto's blend modes have Photoshop
   keys.
 - Folders, nested, as Photoshop's section records; folders are written pass-through, which is how NekoPhoto
-  draws them.
+  draws them (a folder opened from a PSD keeps its own mode).
+- For a document opened from a PSD, what NekoPhoto does not model: layer styles, editable text, smart
+  objects, vector masks, Fill, Blend If, the file's resources, while each is still true of its layer
+  ([psd-roundtrip.md](psd-roundtrip.md)).
 - Layer masks and folder masks, including disabled ones.
 - Clipping, where the clipped layers sit directly above their base, as PSD requires.
 - Levels, Curves and Exposure adjustment layers, and Hue/Saturation when it uses Photoshop's saturation
@@ -26,7 +29,9 @@ Colour is written straight (not premultiplied), so soft edges keep their colour.
 Each is listed before you export (the export dialog) or in the reply (`warnings`, `notes`):
 
 - **Scaled, rotated or flipped layers** are resampled into place (a note; the look is the same).
-- **Text and shape layers** are written as pixels; they stay editable in the NekoPhoto project (a note).
+- **Shape layers** are written as pixels; they stay editable in the NekoPhoto project (a note). **Text layers** are
+  written as Photoshop type layers over the same pixels (see [psd-roundtrip.md](psd-roundtrip.md#text)); flipped text
+  is written as pixels (a note).
 - **Adjustments Photoshop has no equivalent for** (Grain; Gradient Map, whose ramp between its ends is
   NekoPhoto's own; Hue/Saturation with the plain scale) become a pixel layer holding the adjusted look of
   everything beneath, in the adjustment's place. The layers beneath stay in the file (a warning).

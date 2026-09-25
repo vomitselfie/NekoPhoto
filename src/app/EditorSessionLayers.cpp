@@ -533,7 +533,7 @@ void EditorSession::setLayerOpacity(double opacity) {
     if (!document_ || !std::isfinite(opacity) || (!canEditLayers() && !opacityEditing_)) return;
     double value = std::clamp(opacity, 0.0, 1.0);
     std::vector<Layer*> targets;
-    for (auto& l : document_->layers) if (selectedLayerIds_.count(l.id) && !l.isGroup && l.opacity != value) targets.push_back(&l);
+    for (auto& l : document_->layers) if (selectedLayerIds_.count(l.id) && l.opacity != value) targets.push_back(&l);
     if (targets.empty()) return;
     bool standalone = !opacityEditing_;
     if (standalone) beginEdit("Layer Opacity");
@@ -548,14 +548,19 @@ void EditorSession::previewBlendMode(std::optional<BlendMode> mode) {
     emit documentChanged({});
 }
 
-void EditorSession::setLayerBlendMode(BlendMode mode) {
+void EditorSession::setLayerBlendMode(BlendMode mode, bool passThrough) {
     blendPreview_.reset();
     if (!canEditLayers()) return;
     Layer* layer = activeLayerMutable();
-    if (!layer || layer->isGroup || layer->blendMode == mode) return;
+    if (!layer) return;
+    // Folders also take Photoshop's Pass Through (their children blend straight into what is below).
+    passThrough = passThrough && layer->isGroup;
+    if (passThrough) mode = BlendMode::Normal;
+    if (layer->blendMode == mode && (!layer->isGroup || layer->passThrough == passThrough)) return;
     endOpacityEdit();
     beginEdit("Layer Blend Mode");
     layer->blendMode = mode;
+    if (layer->isGroup) layer->passThrough = passThrough;
     endEdit();
     notifyDocument();
 }

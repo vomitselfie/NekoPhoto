@@ -98,6 +98,17 @@ def remaining_methods(rpc):
     rpc.call("pixels.clear")
     rpc.call("selection.none")
     rpc.call("layers.group")
+    # Folders take Photoshop's modes: Pass Through by default, a blend mode isolates, opacity fades.
+    listed = rpc.call("layers.list")
+    folder = next(l for l in (listed["layers"] if isinstance(listed, dict) else listed) if l.get("kind") == "group")
+    assert folder["blend"] == "Pass Through", folder
+    rpc.call("layers.set", id=folder["id"], blend="Multiply", opacity=0.5)
+    folder = rpc.call("layers.get", id=folder["id"])
+    assert folder["blend"] == "Multiply" and abs(folder["opacity"] - 0.5) < 1e-6, folder
+    rpc.call("layers.set", id=folder["id"], blend="Pass Through")
+    assert rpc.call("layers.get", id=folder["id"])["blend"] == "Pass Through"
+    for _ in range(3):   # the three folder changes (opacity, blend, Pass Through)
+        rpc.call("history.undo")
     rpc.call("history.undo")
     rpc.call("history.redo")
     rpc.call("history.undo")
@@ -183,6 +194,26 @@ def main():
     rpc.call("selection.rect", x=40, y=40, width=30, height=30)
     rpc.call("pixels.contentAwareFill")
     rpc.call("selection.none")
+    # Smart objects: place a file, convert layers, edit the contents in their tab, put them back, rasterize.
+    import tempfile
+    tile = os.path.join(tempfile.mkdtemp(prefix="nekophoto-smoke-"), "tile.png")
+    rpc.call("render", region={"x": 0, "y": 0, "width": 16, "height": 16}, maxSize=0, path=tile)
+    placed_so = rpc.call("smartObject.place", path=tile)
+    assert placed_so["kind"] == "smartObject" and not placed_so["smartObject"]["locked"], placed_so
+    converted = rpc.call("smartObject.convert", ids=[placed_so["id"]])
+    assert converted["kind"] == "smartObject" and converted["smartObject"]["source"] != placed_so["smartObject"]["source"], converted
+    parent_tab = rpc.call("tabs.list")
+    opened = rpc.call("smartObject.editContents", id=converted["id"])
+    inner = rpc.call("layers.list")
+    assert any(l["kind"] == "smartObject" for l in (inner["layers"] if isinstance(inner, dict) else inner)), inner
+    rpc.call("layers.add", kind="pixels", name="Inside")
+    assert rpc.call("smartObject.commit")["committed"]
+    rpc.call("tabs.close", index=opened["tab"])
+    after = rpc.call("layers.get", id=converted["id"])
+    assert after["kind"] == "smartObject", after
+    assert rpc.call("smartObject.rasterize", id=converted["id"])["kind"] == "pixels"
+    rpc.call("history.undo")
+    print("smart objects: placed, converted, edited, committed, rasterized")
     text = rpc.call("layers.add", kind="text", text="Hello", x=20, y=20, size=36, color="#ff8800")
     assert text["kind"] == "text" and text["text"]["text"] == "Hello", text
     assert text["pixelSize"]["width"] > 20 and text["pixelSize"]["height"] > 20, text

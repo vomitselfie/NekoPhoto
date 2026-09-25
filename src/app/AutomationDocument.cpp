@@ -1,4 +1,5 @@
 // Automation methods: document. Registered from AutomationServer::registerHandlers (Automation.cpp).
+#include "TextLayer.h"
 #include "Automation.h"
 #include "AutomationHandlers.h"
 #include "CanvasWidget.h"
@@ -123,12 +124,12 @@ void AutomationServer::registerDocumentHandlers() {
             // Layered: what Photoshop cannot carry comes back in the reply, the way the export dialog lists it.
             PsdExportSummary summary;
             std::string error;
-            if (!exportPsd(doc, path.toStdString(), {}, &summary, &error)) fail("couldn't write " + path + ": " + qs(error));
+            if (!exportPsd(doc, path.toStdString(), app::psdExportOptions(), &summary, &error)) fail("couldn't write " + path + ": " + qs(error));
             QJsonArray warnings, notes;
             for (auto& w : summary.warnings) warnings.append(qs(w));
             for (auto& n : summary.notes) notes.append(qs(n));
             return QJsonObject{{"path", path}, {"width", doc.width}, {"height", doc.height}, {"layers", summary.layers}, {"folders", summary.folders},
-                               {"masks", summary.masks}, {"clipped", summary.clipped}, {"adjustments", summary.adjustments}, {"warnings", warnings}, {"notes", notes}};
+                               {"masks", summary.masks}, {"clipped", summary.clipped}, {"adjustments", summary.adjustments}, {"texts", summary.texts}, {"smartObjects", summary.smartObjects}, {"warnings", warnings}, {"notes", notes}};
         }
         auto flat = session()->flattened();
         if (!flat) fail("nothing to export");

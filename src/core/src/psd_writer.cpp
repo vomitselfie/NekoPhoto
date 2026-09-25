@@ -2,6 +2,7 @@
 #include "compositor/adjustments.h"
 #include "compositor/parallel.h"
 #include "compositor/render.h"
+#include "compositor/vectormask.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -10,6 +11,7 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <set>
 
 namespace compositor {
 
@@ -136,7 +138,6 @@ std::string asciiName(const std::string& s) {
     return out;
 }
 
-std::string percent(double v) { char b[16]; std::snprintf(b, sizeof b, "%d%%", int(std::lround(v * 100))); return b; }
 
 /// A layer record, ready to encode.
 struct Record {
@@ -145,6 +146,7 @@ struct Record {
     std::string blend = "norm";
     uint8_t opacity = 255;
     bool clipping = false, hidden = false;
+    uint8_t flags = 0;                     // besides hidden (bit 1) and bit 3, which are always written
     int section = 0;                                     // lsct: 1 folder, 3 its end marker
     std::vector<std::pair<int, std::vector<uint8_t>>> channels;   // id, encoded data
     bool mask = false;
@@ -152,6 +154,12 @@ struct Record {
     uint8_t maskDefault = 255, maskFlags = 0;
     const char* adjustmentKey = nullptr;
     std::vector<uint8_t> adjustmentData;
+    // Carried from the PSD the layer came from (psd_carry.h).
+    std::vector<PsdBlock> carried;
+    std::vector<uint8_t> blendingRanges;
+    std::vector<uint8_t> rawMask;          // the mask section as stored; its channels are in `channels`
+    uint8_t fill = 255;                    // written as 'iOpa' below 255
+    uint32_t layerId = 0;                  // 'lyid': assigned for every record
 };
 
 class Writer {
@@ -163,6 +171,13 @@ public:
 
     std::vector<Record> records() {
         emit(std::nullopt);
+        // Every record gets a unique 'lyid', keeping Photoshop's own where it is still unique.
+        uint32_t next = 1;
+        for (const Record& r : records_) next = std::max(next, r.layerId + 1);
+        std::set<uint32_t> used;
+        for (Record& r : records_) {
+            if (r.layerId == 0 || !used.insert(r.layerId).second) { r.layerId = next++; used.insert(r.layerId); }
+        }
         return std::move(records_);
     }
 
@@ -216,6 +231,97 @@ private:
         }
         if (encode_) r.channels.push_back({-2, encodeChannel(plane, w, h, options_.compress)});
         summary_.masks++;
+    }
+
+    /// What the layer carries from its PSD, onto the finished record: the blocks still true of it, Blend
+    /// If, Fill, its id, and the mask section as stored while the mask is unchanged. `sameContent` is false
+    /// when the record's pixels are not the layer's own (written clipped or resampled).
+    void applyCarry(Record& r, const Layer& l, bool sameContent = true) const {
+        if (!l.psdCarry) return;
+        const PsdLayerCarry& c = *l.psdCarry;
+        const LayerTransform& t = l.transform;
+        const bool placementKept = c.placement.origin == t.origin && c.placement.size == t.size && c.placement.rotation == t.rotation
+            && c.placement.flipX == t.flipX && c.placement.flipY == t.flipY;
+        const bool contentKept = sameContent && placementKept && c.contentHash == psdContentHash(l.asset ? l.asset->image.get() : nullptr);
+        std::set<std::string> dropped;
+        for (const PsdBlock& block : c.blocks) {
+            const auto binding = PsdLayerCarry::binding(block.key);
+            if ((binding == PsdLayerCarry::Binding::Content && !contentKept) || (binding == PsdLayerCarry::Binding::Placement && !placementKept)) { dropped.insert(block.key); continue; }
+            if (r.adjustmentKey && block.key == r.adjustmentKey) continue;
+            if (!placementKept && (block.key == "vmsk" || block.key == "vsms")) {
+                // The path follows the layer to where it now is.
+                const int cw = doc_.psdCarry && doc_.psdCarry->width > 0 ? doc_.psdCarry->width : doc_.width;
+                const int ch = doc_.psdCarry && doc_.psdCarry->height > 0 ? doc_.psdCarry->height : doc_.height;
+                const int w0 = std::max(1, int(std::lround(c.placement.size.width))), h0 = std::max(1, int(std::lround(c.placement.size.height)));
+                auto moved = mapVectorMask(block.data, cw, ch, [&](Point p) { return mapLayerPoint(p, c.placement, w0, h0, t, l.pixelWidth(), l.pixelHeight()); });
+                if (moved) { r.carried.push_back({block.key, std::move(*moved)}); continue; }
+                dropped.insert(block.key);
+                continue;
+            }
+            r.carried.push_back(block);
+        }
+        auto droppedAny = [&](std::initializer_list<const char*> keys) { for (const char* k : keys) if (dropped.count(k)) return true; return false; };
+        if (droppedAny({"TySh", "tySh"})) summary_.notes.push_back("Layer \"" + l.name + "\": its pixels changed here, so it is written as pixels, not editable text.");
+        if (droppedAny({"SoLd", "SoLE", "PlLd", "plLd"})) summary_.notes.push_back("Layer \"" + l.name + "\": its pixels changed here, so it is written as pixels, not a smart object.");
+        if (droppedAny({"GdFl", "PtFl", "SoCo"})) summary_.notes.push_back("Layer \"" + l.name + "\": its pixels changed here, so it is written as pixels, not a fill layer.");
+        if (droppedAny({"vmsk", "vsms"})) summary_.warnings.push_back("Layer \"" + l.name + "\": its vector mask could not be moved with it, so it is left out.");
+        if (droppedAny({"brit", "blwh", "vibA", "phfl", "mixr", "clrL", "nvrt", "post", "thrs", "selc", "blnc", "CgEd"}))
+            summary_.warnings.push_back("Layer \"" + l.name + "\": it was painted on here, so the Photoshop adjustment it held is left out.");
+        r.blendingRanges = c.blendingRanges;
+        r.layerId = c.layerId;
+        if (c.blendAs == int(l.blendMode) && c.blendKey.size() == 4 && (!l.isGroup || (c.blendKey == "pass") == l.passThrough)) r.blend = c.blendKey;
+        // Transparency lock (bit 0) always; "pixel data irrelevant" (bit 4) while what makes it so is kept.
+        r.flags = uint8_t((c.flags & 0x01) | (contentKept ? c.flags & 0x10 : 0));
+        if (r.section == 1 && c.closedFolder) r.section = 2;
+        // Opacity and Fill as they were while the combined opacity is unchanged; else ours alone.
+        if (std::abs(l.opacity - c.opacity / 255.0 * (c.fill / 255.0)) < 0.5 / 255) { r.opacity = c.opacity; r.fill = c.fill; }
+        const uint64_t maskHash = l.mask ? psdMaskHash(l.mask->asset.image.get(), l.mask->enabled) : 0;
+        if (!c.maskData.empty() && placementKept && maskHash == c.maskHash && !dropped.count("vmsk") && !dropped.count("vsms")) {
+            r.rawMask = c.maskData;
+            r.channels.erase(std::remove_if(r.channels.begin(), r.channels.end(), [](auto& ch) { return ch.first == -2 || ch.first == -3; }), r.channels.end());
+            if (encode_) for (auto& ch : c.maskChannels) r.channels.push_back(ch);
+        }
+    }
+
+    std::set<std::string> placedIds_;
+
+    /// A smart object still placed by the layer: its Photoshop blocks, the quad following the layer's transform.
+    void applySmartObject(Record& r, const Layer& l, const Image& image) {
+        if (!l.smartObject) return;
+        const SmartObjectInstance& so = *l.smartObject;
+        if (!l.isLiveSmartObject()) {
+            summary_.notes.push_back("Layer \"" + l.name + "\": its pixels changed here, so it is written as pixels, not a smart object.");
+            return;
+        }
+        const int w = image.width(), h = image.height();
+        std::array<double, 8> quad{};
+        if (!so.locked()) {
+            const double corners[4][2] = {{0, 0}, {double(w), 0}, {double(w), double(h)}, {0, double(h)}};
+            for (int i = 0; i < 4; i++) { const Point p = mapThroughTransform(l.transform, w, h, corners[i][0], corners[i][1]); quad[size_t(i * 2)] = p.x; quad[size_t(i * 2 + 1)] = p.y; }
+        } else quad = moveQuad(so.quad, so.placedTransform, so.placedWidth, so.placedHeight, l.transform, w, h);
+        bool moved = false;
+        for (size_t i = 0; i < 8; i++) moved |= std::abs(quad[i] - so.quad[i]) > 1e-4;
+        if (moved && so.lock == SmartObjectInstance::Lock::Filters) {
+            // Smart Filters keep a document-space cache Photoshop checks against the placement.
+            summary_.warnings.push_back("Layer \"" + l.name + "\": a smart object with Smart Filters moved here, so it is written as pixels.");
+            return;
+        }
+        // A duplicate needs its own instance id (Photoshop aliases layers that share one).
+        std::string placed;
+        if (!so.placedId.empty() && !placedIds_.insert(so.placedId).second) {
+            if (so.lock == SmartObjectInstance::Lock::Filters) {
+                summary_.warnings.push_back("Layer \"" + l.name + "\": a copy of a smart object with Smart Filters is written as pixels.");
+                return;
+            }
+            placed = makeUuid();
+            std::transform(placed.begin(), placed.end(), placed.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+        }
+        for (const PsdBlock& b : so.psdBlocks) {
+            if (!moved && placed.empty()) { r.carried.push_back(b); continue; }
+            auto patched = patchPsdPlacement(b.key, b.data, quad, placed);
+            if (patched) r.carried.push_back({b.key, std::move(*patched)});
+        }
+        summary_.smartObjects++;
     }
 
     Record base(const Layer& l) const {
@@ -280,15 +386,15 @@ private:
         end.name = "</Layer group>";
         end.section = 3;
         emptyChannels(end);
+        if (l.psdCarry) { end.carried = l.psdCarry->endBlocks; end.blendingRanges = l.psdCarry->endRanges; }
         records_.push_back(std::move(end));
         emit(l.id);
         Record folder = base(l);
         folder.section = 1;
-        folder.blend = l.blendMode == BlendMode::Normal ? "pass" : blendKey(l.blendMode);   // our folders pass through
+        folder.blend = l.passThrough ? "pass" : blendKey(l.blendMode);
         emptyChannels(folder);
         setMask(folder, l, doc_.rect(), false);
-        if (l.opacity < 1) summary_.warnings.push_back("Folder \"" + l.name + "\": its opacity (" + percent(l.opacity) + ") is written as it is set; NekoPhoto does not apply folder opacity, so Photoshop will show the folder fainter than it looks here.");
-        if (l.blendMode != BlendMode::Normal) summary_.warnings.push_back("Folder \"" + l.name + "\": its blend mode (" + blendModeName(l.blendMode) + ") is written as it is set; NekoPhoto does not apply folder blend modes, so Photoshop will show the folder differently.");
+        applyCarry(folder, l);
         records_.push_back(std::move(folder));
         summary_.folders++;
     }
@@ -328,6 +434,7 @@ private:
         case AdjustmentKind::Exposure:
             o.u16(1);
             o.f32(float(s.exposure.exposure)); o.f32(float(s.exposure.offset)); o.f32(float(s.exposure.gamma));
+            o.u16(0);   // Photoshop's block is 16 bytes: two zero bytes after the gamma
             r.adjustmentKey = "expA";
             break;
         case AdjustmentKind::HueSaturation: {
@@ -366,6 +473,7 @@ private:
             setMask(r, l, doc_.rect(), false);
             summary_.adjustments++;
             if (r.clipping) summary_.clipped++;
+            applyCarry(r, l);
             records_.push_back(std::move(r));
             return;
         }
@@ -384,7 +492,9 @@ private:
     void emitPixels(const Layer& l) {
         Record r = base(l);
         const bool hasPixels = l.asset && l.asset->image && !l.asset->image->isEmpty();
-        if (l.isLiveText()) summary_.notes.push_back("Text \"" + l.name + "\" is written as pixels; it stays editable text in the NekoPhoto project.");
+        std::optional<PsdTextMetrics> textMetrics;
+        if (l.isLiveText() && options_.textMetrics) textMetrics = options_.textMetrics(*l.text);
+        if (l.isLiveText() && !textMetrics) summary_.notes.push_back("Text \"" + l.name + "\" is written as pixels; it stays editable text in the NekoPhoto project.");
         else if (l.isLiveShape()) summary_.notes.push_back("Shape \"" + l.name + "\" is written as pixels; it stays an editable shape in the NekoPhoto project.");
         const bool clipped = l.maskSourceId.has_value();
         const bool clipFits = clipped && clippingFits(l);
@@ -394,6 +504,7 @@ private:
             r.clipping = clipFits;
             summary_.layers++;
             if (r.clipping) summary_.clipped++;
+            applyCarry(r, l);
             records_.push_back(std::move(r));
             return;
         }
@@ -420,6 +531,7 @@ private:
                 }
                 setPixels(r, out, int(bounds.x), int(bounds.y));
             } else { r.left = int(bounds.x); r.top = int(bounds.y); r.right = int(bounds.x + bounds.width); r.bottom = int(bounds.y + bounds.height); }
+            applyCarry(r, l, false);
             records_.push_back(std::move(r));
             summary_.layers++;
             return;
@@ -440,6 +552,17 @@ private:
         }
         summary_.layers++;
         if (r.clipping) summary_.clipped++;
+        applyCarry(r, l, onGrid);
+        applySmartObject(r, l, image);
+        // Photoshop's own type layer, still true of the pixels, says more than ours can (several styles, warps).
+        if (textMetrics && std::any_of(r.carried.begin(), r.carried.end(), [](const PsdBlock& b) { return b.key == "TySh"; })) { textMetrics.reset(); summary_.texts++; }
+        if (textMetrics) {
+            const Rect bounds(r.left, r.top, r.right - r.left, r.bottom - r.top);
+            if (auto block = photoshopTypeBlock(*l.text, *textMetrics, t, image.width(), image.height(), bounds)) {
+                r.carried.push_back({"TySh", std::move(*block)});
+                summary_.texts++;
+            } else summary_.notes.push_back("Text \"" + l.name + "\" is flipped, which Photoshop text cannot be; it is written as pixels.");
+        }
         records_.push_back(std::move(r));
     }
 };
@@ -448,15 +571,20 @@ void writeRecord(Out& o, const Record& r) {
     o.i32(r.top); o.i32(r.left); o.i32(r.bottom); o.i32(r.right);
     o.u16(unsigned(r.channels.size()));
     for (auto& [id, data] : r.channels) { o.i16(id); o.u32(uint32_t(data.size())); }
-    o.str("8BIM"); o.str(r.blend.c_str());
-    o.u8(r.opacity); o.u8(r.clipping ? 1 : 0); o.u8(r.hidden ? 2 : 0); o.u8(0);
+    // A pass-through folder says so in 'lsct' only; its record says Normal, as Photoshop writes it.
+    o.str("8BIM"); o.str((r.section && r.blend == "pass") ? "norm" : r.blend.c_str());
+    o.u8(r.opacity); o.u8(r.clipping ? 1 : 0); o.u8(0x08 | r.flags | (r.hidden ? 2 : 0)); o.u8(0);   // bit 3: bit 4 is meaningful; Photoshop applies legacy semantics without it
     Out extra;
-    if (r.mask) {
+    if (!r.rawMask.empty()) {
+        extra.u32(uint32_t(r.rawMask.size()));
+        extra.bytes(r.rawMask);
+    } else if (r.mask) {
         extra.u32(20);
         extra.i32(r.maskTop); extra.i32(r.maskLeft); extra.i32(r.maskBottom); extra.i32(r.maskRight);
         extra.u8(r.maskDefault); extra.u8(r.maskFlags); extra.u16(0);
     } else extra.u32(0);
-    extra.u32(0);   // blending ranges
+    extra.u32(uint32_t(r.blendingRanges.size()));   // blending ranges (Blend If)
+    extra.bytes(r.blendingRanges);
     const std::string ascii = asciiName(r.name);
     extra.u8(unsigned(ascii.size())); extra.str(ascii.c_str());
     for (size_t used = 1 + ascii.size(); used % 4; used++) extra.u8(0);
@@ -473,22 +601,32 @@ void writeRecord(Out& o, const Record& r) {
         for (uint16_t c : units) u.u16(c);
         block("luni", u.b);
     }
+    {
+        Out id;
+        id.u32(r.layerId);
+        block("lyid", id.b);
+    }
+    if (r.fill < 255) {
+        Out f;
+        f.u8(r.fill); f.u8(0); f.u8(0); f.u8(0);
+        block("iOpa", f.b);
+    }
     if (r.section) {
         Out s;
         s.u32(uint32_t(r.section));
-        if (r.section == 1) { s.str("8BIM"); s.str(r.blend.c_str()); }
+        if (r.section == 1 || r.section == 2) { s.str("8BIM"); s.str(r.blend.c_str()); }
         block("lsct", s.b);
     }
     if (r.adjustmentKey) block(r.adjustmentKey, r.adjustmentData);
+    for (const PsdBlock& carried : r.carried) block(carried.key.c_str(), carried.data);
     o.u32(uint32_t(extra.b.size()));
     o.bytes(extra.b);
 }
 
 } // namespace
 
-PsdExportSummary planPsdExport(const Document& document) {
+PsdExportSummary planPsdExport(const Document& document, const PsdExportOptions& options) {
     PsdExportSummary summary;
-    PsdExportOptions options;
     Writer(document, options, false, summary).records();
     return summary;
 }
@@ -513,6 +651,22 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
         const uint32_t ppi = uint32_t(std::lround(std::clamp(document.resolution, 1.0, 30000.0) * 65536));
         res.str("8BIM"); res.u16(0x03ED); res.u8(0); res.u8(0); res.u32(16);
         res.u32(ppi); res.u16(1); res.u16(1); res.u32(ppi); res.u16(1); res.u16(1);
+        // The PSD's own resources, when the document came from one.
+        if (document.psdCarry) {
+            const PsdDocumentCarry& c = *document.psdCarry;
+            const bool sameCanvas = c.width == document.width && c.height == document.height;
+            for (const auto& resource : c.resources) {
+                // Guides, slices and paths (stored relative to the canvas size) belong to the canvas they were made on.
+                const bool canvasBound = resource.id == 1032 || resource.id == 1050 || resource.id == 1025 || (resource.id >= 2000 && resource.id <= 2999);
+                if (!sameCanvas && canvasBound) continue;
+                res.str("8BIM"); res.u16(resource.id);
+                const std::string name = resource.name.substr(0, 255);
+                res.u8(unsigned(name.size())); res.bytes(std::vector<uint8_t>(name.begin(), name.end()));
+                if ((name.size() + 1) & 1) res.u8(0);
+                res.u32(uint32_t(resource.data.size())); res.bytes(resource.data);
+                if (resource.data.size() & 1) res.u8(0);
+            }
+        }
         f.u32(uint32_t(res.b.size())); f.bytes(res.b);
     }
     {
@@ -526,6 +680,31 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
         section.u32(uint32_t(info.b.size()));
         section.bytes(info.b);
         section.u32(0);   // global layer mask info
+        // Global blocks from the PSD the document came from (linked smart object data, patterns, text
+        // engine data), each padded to four bytes outside its declared length, as Photoshop reads them.
+        // Smart object sources: while every embedded one is as it was read, the file's own 'lnk2' goes back as it
+        // was; otherwise 'lnk2' is rebuilt, unchanged elements byte for byte and new or edited ones written anew.
+        bool rebuildLinks = false;
+        for (auto& [id, source] : document.smartObjects)
+            rebuildLinks |= source->kind == SmartObjectSource::Kind::Embedded && !source->psdElement;
+        std::vector<uint8_t> links;
+        if (rebuildLinks)
+            for (auto& [id, source] : document.smartObjects) {
+                if (!source->psdBlock.empty() && source->psdBlock != "lnk2") continue;   // stays in its own block
+                if (source->psdElement) links.insert(links.end(), source->psdElement->begin(), source->psdElement->end());
+                else if (source->kind == SmartObjectSource::Kind::Embedded) { auto e = psdEmbeddedElement(*source); links.insert(links.end(), e.begin(), e.end()); }
+            }
+        if (document.psdCarry) for (const PsdBlock& block : document.psdCarry->globals) {
+            if (rebuildLinks && block.key == "lnk2") continue;
+            section.str("8BIM"); section.str(block.key.c_str());
+            section.u32(uint32_t(block.data.size())); section.bytes(block.data);
+            for (size_t n = block.data.size(); n % 4; n++) section.u8(0);
+        }
+        if (!links.empty()) {
+            section.str("8BIM"); section.str("lnk2");
+            section.u32(uint32_t(links.size())); section.bytes(links);
+            for (size_t n = links.size(); n % 4; n++) section.u8(0);
+        }
         if (section.b.size() > 0xFFFFFFFFull) { if (error) *error = "The layers are too large for a PSD file."; return {}; }
         f.u32(uint32_t(section.b.size()));
         f.bytes(section.b);

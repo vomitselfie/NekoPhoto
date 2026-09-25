@@ -4,9 +4,12 @@
 #include "check.h"
 #include "compositor/adjustments.h"
 #include "compositor/psd.h"
+#include "compositor/project.h"
 #include "compositor/psd_writer.h"
 #include "compositor/render.h"
+#include "psd/psd_descriptor.hpp"
 #include <filesystem>
+#include <set>
 
 using namespace compositor;
 
@@ -302,7 +305,207 @@ TEST_CASE(psd_export_plan_matches_the_export) {
     CHECK_EQ(plan.layers, rt.summary.layers);
     CHECK_EQ(plan.folders, rt.summary.folders);
     CHECK_EQ(plan.warnings.size(), rt.summary.warnings.size());
-    CHECK_EQ(int(plan.warnings.size()), 1);   // the folder's opacity
+    CHECK_EQ(int(plan.warnings.size()), 0);   // folder opacity is drawn here as in Photoshop now
+}
+
+TEST_CASE(folders_isolate_and_fade_as_photoshop_does) {
+    // Grey backdrop; a folder holding a Multiply layer of half grey. Pass Through: the child multiplies the
+    // backdrop. Isolated (Normal): it multiplies nothing inside the folder, so the folder shows the child as is.
+    Document doc(4, 4);
+    doc.layers.push_back(pixels("Back", solid(4, 4, 200, 200, 200), {0, 0}));
+    Layer f = folder("F", doc);
+    doc.layers.push_back(f);
+    Layer child = pixels("Child", solid(4, 4, 128, 128, 128), {0, 0});
+    child.parentId = f.id;
+    child.blendMode = BlendMode::Multiply;
+    doc.layers.push_back(child);
+    CHECK(std::abs(int(renderFlattened(doc)->pixel(1, 1)[0]) - 200 * 128 / 255) <= 1);
+    doc.layers[1].passThrough = false;
+    CHECK(std::abs(int(renderFlattened(doc)->pixel(1, 1)[0]) - 128) <= 1);
+    // Half opacity: halfway back to the backdrop, isolated or not.
+    doc.layers[1].opacity = 0.5;
+    CHECK(std::abs(int(renderFlattened(doc)->pixel(1, 1)[0]) - (200 + 128) / 2) <= 1);
+    doc.layers[1].passThrough = true;
+    CHECK(std::abs(int(renderFlattened(doc)->pixel(1, 1)[0]) - (200 + 200 * 128 / 255) / 2) <= 1);
+    // Saved as a project it needs version 8; the plain document stays at the Mac app's 7.
+    CHECK(manifestJson(doc, std::nullopt).find("\"version\": 8") != std::string::npos);
+    doc.layers[1].opacity = 1;
+    CHECK(manifestJson(doc, std::nullopt).find("\"version\": 7") != std::string::npos);
+    // Through PSD: Pass Through and isolation survive.
+    doc.layers[1].passThrough = false;
+    auto rt = roundTrip(doc, "isolated.psd");
+    REQUIRE(rt.imported.has_value());
+    CHECK(!rt.imported->document.layers[1].passThrough);
+}
+
+namespace {
+
+/// A layer as if opened from a PSD: a style (kept always), text (kept while the pixels are), a vector mask
+/// (kept while the layer stays put), Blend If ranges, Fill 50% under opacity 80%, and Photoshop's id.
+Layer carried(const std::string& name, std::shared_ptr<Image> image, Point at, const std::string& blend = "norm", BlendMode as = BlendMode::Normal) {
+    Layer l = pixels(name, image, at);
+    l.blendMode = as;
+    auto c = std::make_shared<PsdLayerCarry>();
+    c->blocks = {{"lfx2", {0, 0, 0, 0, 0, 0, 0, 16, 1, 2}}, {"TySh", {7, 7, 7, 7}}, {"vmsk", {0, 0, 0, 3, 0, 0}}, {"lclr", {0, 4, 0, 0, 0, 0, 0, 0}}};
+    c->blendingRanges = std::vector<uint8_t>(40, 0);
+    c->blendingRanges[3] = 0xff;
+    c->opacity = 204; c->fill = 128;
+    l.opacity = 204 / 255.0 * (128 / 255.0);
+    c->layerId = 42;
+    c->blendKey = blend;
+    c->blendAs = int(as);
+    c->contentHash = psdContentHash(image.get());
+    c->placement = l.transform;
+    l.psdCarry = c;
+    return l;
+}
+
+std::set<std::string> keys(const Layer& l) {
+    std::set<std::string> out;
+    if (l.psdCarry) for (auto& b : l.psdCarry->blocks) out.insert(b.key);
+    return out;
+}
+
+} // namespace
+
+TEST_CASE(psd_carry_comes_back_while_it_is_still_true) {
+    Document doc(40, 40);
+    doc.layers.push_back(carried("Untouched", solid(10, 10, 200, 0, 0), {2, 2}, "lbrn", BlendMode::ColorBurn));
+    doc.layers.push_back(carried("Painted", solid(10, 10, 0, 200, 0), {14, 2}));
+    doc.layers.push_back(carried("Moved", solid(10, 10, 0, 0, 200), {26, 2}));
+    doc.layers.push_back(carried("Faded", solid(10, 10, 9, 9, 9), {2, 20}));
+    doc.layers[1].asset = Asset::make(solid(10, 10, 0, 100, 0), "Painted");     // new pixels
+    doc.layers[2].transform.origin = Point(27, 3);                              // moved
+    doc.layers[3].opacity = 0.3;                                                // opacity changed
+    auto rt = roundTrip(doc, "carry.psd");
+    REQUIRE(rt.imported.has_value());
+    const auto& back = rt.imported->document.layers;
+    REQUIRE(back.size() == 4);
+    CHECK(keys(back[0]) == (std::set<std::string>{"lfx2", "TySh", "vmsk", "lclr"}));
+    CHECK(keys(back[1]) == (std::set<std::string>{"lfx2", "vmsk", "lclr"}));   // text no longer true
+    CHECK(keys(back[2]) == (std::set<std::string>{"lfx2", "lclr"}));           // nor text, nor the vector mask
+    CHECK(keys(back[3]) == (std::set<std::string>{"lfx2", "TySh", "vmsk", "lclr"}));
+    REQUIRE(back[0].psdCarry);
+    CHECK(back[0].psdCarry->blendKey == "lbrn");                               // not Color Burn
+    CHECK(back[0].psdCarry->blendingRanges == doc.layers[0].psdCarry->blendingRanges);
+    CHECK_EQ(int(back[0].psdCarry->opacity), 204);
+    CHECK_EQ(int(back[0].psdCarry->fill), 128);
+    CHECK_EQ(int(back[0].psdCarry->layerId), 42);
+    CHECK(back[1].psdCarry->layerId != 42 && back[2].psdCarry->layerId != 42);   // ids stay unique
+    CHECK_EQ(int(back[3].psdCarry->fill), 255);                                 // ours alone once changed
+    CHECK(std::abs(back[3].opacity - 0.3) < 1.0 / 255);
+    CHECK(std::abs(back[0].opacity - doc.layers[0].opacity) < 1.0 / 255);
+    bool textNote = false, vectorWarning = false;
+    for (auto& n : rt.summary.notes) textNote |= n.find("Painted") != std::string::npos && n.find("editable text") != std::string::npos;
+    for (auto& w : rt.summary.warnings) vectorWarning |= w.find("Moved") != std::string::npos && w.find("vector mask") != std::string::npos;
+    CHECK(textNote);
+    CHECK(vectorWarning);
+}
+
+TEST_CASE(psd_carry_survives_a_project_save) {
+    Document doc(20, 20);
+    doc.layers.push_back(carried("A", solid(8, 8, 1, 2, 3, 128), {3, 3}));
+    auto dc = std::make_shared<PsdDocumentCarry>();
+    dc->resources = {{1032, "", {0, 0, 0, 1}}, {2000, "Path 1", {1, 2, 3}}};
+    dc->globals = {{"Txt2", {1, 2, 3, 4, 5}}};
+    dc->width = 20; dc->height = 20;
+    doc.psdCarry = dc;
+    const auto package = std::filesystem::temp_directory_path() / "nekophoto-psd-carry.comp";
+    ProjectError error;
+    REQUIRE(saveProject(doc, std::nullopt, package.string(), error));
+    auto loaded = loadProject(package.string(), error);
+    REQUIRE(loaded.has_value());
+    REQUIRE(loaded->layers[0].psdCarry);
+    CHECK(loaded->layers[0].psdCarry->blocks == doc.layers[0].psdCarry->blocks);
+    CHECK_EQ(loaded->layers[0].psdCarry->contentHash, doc.layers[0].psdCarry->contentHash);
+    // The pixels came back through PNG, and still match what the text describes.
+    CHECK_EQ(psdContentHash(loaded->layers[0].asset->image.get()), doc.layers[0].psdCarry->contentHash);
+    REQUIRE(loaded->psdCarry);
+    CHECK_EQ(int(loaded->psdCarry->resources.size()), 2);
+    CHECK(loaded->psdCarry->globals == dc->globals);
+    std::filesystem::remove_all(package);
+
+    // Exported: the resources and global block are in the file; after a canvas change, not the guides or paths.
+    auto rt = roundTrip(*loaded, "carry-project.psd");
+    REQUIRE(rt.imported && rt.imported->document.psdCarry);
+    CHECK_EQ(int(rt.imported->document.psdCarry->resources.size()), 2);
+    CHECK(rt.imported->document.psdCarry->globals == dc->globals);
+    loaded->width = 30;
+    auto resized = roundTrip(*loaded, "carry-resized.psd");
+    REQUIRE(resized.imported && resized.imported->document.psdCarry);
+    CHECK_EQ(int(resized.imported->document.psdCarry->resources.size()), 0);
+}
+
+TEST_CASE(psd_export_writes_text_as_photoshop_type_layers) {
+    Document doc(300, 200);
+    LayerText text;
+    text.text = "Hello (World)\nsecond";
+    text.fontSize = 30; text.red = 1; text.alignment = 1; text.letterSpacing = 3;
+    auto raster = solid(200, 90, 255, 0, 0, 0);
+    Layer l = pixels("Title", raster, {40, 30});
+    l.text = text; l.textImage = raster;
+    doc.layers.push_back(l);
+    PsdExportOptions options;
+    options.textMetrics = [](const LayerText&) {
+        PsdTextMetrics m;
+        m.postScriptName = "Example-Bold"; m.fontSize = 30; m.ascent = 28; m.lineHeight = 36;
+        m.blockLeft = 4; m.blockTop = 4; m.blockWidth = 192; m.lines = 2;
+        return std::optional<PsdTextMetrics>(m);
+    };
+    PsdExportSummary summary;
+    std::string error;
+    auto bytes = encodePsd(doc, options, &summary, &error);
+    REQUIRE(!bytes.empty());
+    CHECK_EQ(summary.texts, 1);
+    CHECK(summary.notes.empty());
+    const std::string file(bytes.begin(), bytes.end());
+    const size_t at = file.find("8BIMTySh");
+    REQUIRE(at != std::string::npos);
+    const uint32_t length = uint32_t(uint8_t(file[at + 8])) << 24 | uint32_t(uint8_t(file[at + 9])) << 16 | uint32_t(uint8_t(file[at + 10])) << 8 | uint8_t(file[at + 11]);
+    CHECK_EQ(length % 2, 0u);
+    std::vector<uint8_t> block(bytes.begin() + long(at + 12), bytes.begin() + long(at + 12 + length));
+    patchy::psd::BigEndianReader r(block);
+    CHECK_EQ(int(r.read_u16()), 1);
+    double m[6];
+    for (double& v : m) v = patchy::psd::read_f64(r);
+    // Centred: anchored at the block's middle, on the first baseline.
+    CHECK(std::abs(m[4] - (40 + 4 + 96)) < 1e-9);
+    CHECK(std::abs(m[5] - (30 + 4 + 28)) < 1e-9);
+    CHECK_EQ(int(r.read_u16()), 50);
+    CHECK_EQ(int(r.read_u32()), 16);
+    auto descriptor = patchy::psd::read_descriptor(r);
+    CHECK(descriptor.class_id == "TxLr");
+    auto txt = patchy::psd::descriptor_value(descriptor, "Txt ");
+    REQUIRE(txt);
+    CHECK(txt->string_value == "Hello (World)\rsecond\r");
+    auto bounds = patchy::psd::descriptor_object(descriptor, "bounds");
+    REQUIRE(bounds);
+    CHECK(std::abs(patchy::psd::descriptor_number(*bounds, "Left") + 96) < 1e-9);
+    CHECK(std::abs(patchy::psd::descriptor_number(*bounds, "Top ") + 28) < 1e-9);
+    auto engine = patchy::psd::descriptor_value(descriptor, "EngineData");
+    REQUIRE(engine);
+    const std::string e(engine->raw_value.begin(), engine->raw_value.end());
+    CHECK(e.find("/Justification 2") != std::string::npos);
+    CHECK(e.find("/Leading 36.0") != std::string::npos);
+    CHECK(e.find("/AutoLeading false") != std::string::npos);
+    CHECK(e.find("/Tracking 100") != std::string::npos);
+    CHECK(e.find("/RunLengthArray [ 21 ]") != std::string::npos);
+    CHECK_EQ(int(r.read_u16()), 1);   // warp
+    CHECK_EQ(int(r.read_u32()), 16);
+    auto warp = patchy::psd::read_descriptor(r);
+    CHECK(warp.class_id == "warp");
+    CHECK_EQ(r.remaining(), size_t(16));   // then the tail
+    // Our reader sees a text layer.
+    const auto dir = std::filesystem::temp_directory_path() / "nekophoto-psd-writer-tests";
+    std::filesystem::create_directories(dir);
+    REQUIRE(exportPsd(doc, (dir / "text.psd").string(), options, nullptr, &error));
+    auto back = importPsd((dir / "text.psd").string(), &error);
+    REQUIRE(back.has_value());
+    CHECK(back->document.layers[0].extraJson.find("Hello (World)") != std::string::npos);
+    // Flipped text cannot be Photoshop text.
+    doc.layers[0].transform.flipX = true;
+    auto flipped = encodePsd(doc, options, &summary, &error);
+    CHECK(std::string(flipped.begin(), flipped.end()).find("8BIMTySh") == std::string::npos);
 }
 
 TEST_MAIN()

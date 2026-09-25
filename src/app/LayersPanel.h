@@ -43,6 +43,10 @@ class LayersPanel : public QWidget {
 public:
     explicit LayersPanel(EditorSession* session, QWidget* parent = nullptr);
 
+signals:
+    /// The smart object badge was clicked: open that layer's contents.
+    void smartObjectContentsRequested(const compositor::Uuid& id);
+
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
 

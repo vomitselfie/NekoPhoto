@@ -111,3 +111,19 @@ add_test(NAME clip_tests COMMAND clip_tests)
 add_executable(wand_bench wand_bench.cpp)
 target_link_libraries(wand_bench PRIVATE compositor::core compositor_warnings)
 add_test(NAME wand_bench_check COMMAND wand_bench check)
+
+# Round trip of what a PSD carries (psd_carry.h) over a folder of real files, e.g. Patchy's fixtures.
+add_executable(psd_roundtrip psd_roundtrip.cpp)
+target_link_libraries(psd_roundtrip PRIVATE compositor::core compositor_warnings)
+
+add_executable(layerstyle_tests layerstyle_tests.cpp)
+target_link_libraries(layerstyle_tests PRIVATE compositor::core compositor_warnings)
+add_test(NAME layerstyle_tests COMMAND layerstyle_tests)
+
+add_executable(smartobject_tests smartobject_tests.cpp)
+target_link_libraries(smartobject_tests PRIVATE compositor::core compositor_warnings)
+add_test(NAME smartobject_tests COMMAND smartobject_tests)
+
+add_executable(vectormask_tests vectormask_tests.cpp)
+target_link_libraries(vectormask_tests PRIVATE compositor::core compositor_warnings)
+add_test(NAME vectormask_tests COMMAND vectormask_tests)

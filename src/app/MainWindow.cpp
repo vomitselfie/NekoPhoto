@@ -169,6 +169,11 @@ MainWindow::Tab& MainWindow::addTab(bool reuseEmpty) {
     tab.frame = new CanvasFrame(tab.session, tab.canvas);
     tab.frame->setRulersVisible(rulersAction_ && rulersAction_->isChecked());
     tab.layers = new LayersPanel(tab.session);
+    connect(tab.layers, &LayersPanel::smartObjectContentsRequested, this, [this, session = tab.session](const Uuid& id) {
+        if (session != session_) return;
+        session_->selectLayer(id);
+        editSmartObjectContents();
+    });
     tab.adjustments = new AdjustmentsPanel(tab.session);
     tab.options = new ToolOptionsBar(tab.session, tab.canvas);
     addToolBar(Qt::TopToolBarArea, tab.options);

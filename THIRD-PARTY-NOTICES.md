@@ -30,6 +30,7 @@ the AppImage and the tarball) or in `Contents/Resources/licenses/` (macOS).
 | Protocol Buffers, as bundled with OpenCV's dnn module | BSD-3-Clause | [protobuf.txt](LICENSES/protobuf.txt) |
 | Berkeley SoftFloat 3c, as bundled with OpenCV's core module | BSD-3-Clause | [Berkeley-SoftFloat.txt](LICENSES/Berkeley-SoftFloat.txt) |
 | DLPack headers, as bundled with OpenCV's dnn module | Apache-2.0 | [Apache-2.0.txt](LICENSES/Apache-2.0.txt) |
+| [Patchy](https://github.com/SethRobinson/Patchy) PSD primitives, binary I/O and Photoshop descriptors (`src/third_party/patchy_psd`), (c) 2026 Seth A. Robinson; its documented Photoshop write rules also inform `src/core/src/psd_writer.cpp` | MIT | [Patchy-MIT.txt](LICENSES/Patchy-MIT.txt) |
 | [nlohmann/json](https://github.com/nlohmann/json) (`src/third_party/nlohmann`) | MIT | [nlohmann-json.txt](LICENSES/nlohmann-json.txt) |
 | [Lucide](https://lucide.dev) icons (`src/app/icons`) | ISC | [Lucide-ISC.txt](LICENSES/Lucide-ISC.txt) |
 | [mypaint-brushes](https://github.com/mypaint/mypaint-brushes) 2.0.2 (`src/app/brushes/mypaint`): 196 presets by Martin Renold and the MyPaint team, David Revoy, Ramón Miranda, Marcelo "Tanda" Cerviño, Guillaume Loussarévian and Brien Dieterle | CC0-1.0 (public domain) | [CC0-1.0.txt](LICENSES/CC0-1.0.txt); authors per set in `src/app/brushes/mypaint/Licenses.dep5` |

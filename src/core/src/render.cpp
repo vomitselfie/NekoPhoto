@@ -1,4 +1,7 @@
 #include "compositor/render.h"
+#include "compositor/layerstyle.h"
+#include "layerstyle_render.h"
+#include "compositor/vectormask.h"
 #include "compositor/adjustments.h"
 #include "compositor/blend.h"
 #include "compositor/parallel.h"
@@ -8,6 +11,8 @@
 #include <cmath>
 #include <cstring>
 #include <functional>
+#include <mutex>
+#include <tuple>
 #include <map>
 #include <optional>
 #include <set>
@@ -342,6 +347,18 @@ bool resizeDocument(Document& document, int width, int height, double resolution
     long long used = 0, usedMask = 0;
     Affine scale = Affine::scaling(sx, sy);
     for (auto& layer : out.layers) {
+        // A smart object keeps its source: its placement scales instead (where no shear arises), so resizing
+        // never resamples it into pixels.
+        if (layer.isLiveSmartObject() && (layer.transform.rotation == 0 || std::abs(sx - sy) < 1e-9)) {
+            const LayerTransform old = layer.transform;
+            layer.transform = old.placing(old.unitToDocument().concatenating(scale));
+            layer.transform.sampling = old.sampling;
+            if (layer.mask && layer.mask->asset.image) {
+                const LayerTransform placement = layer.mask->placement.value_or(old);
+                layer.mask->placement = placement.placing(placement.unitToDocument().concatenating(scale));
+            }
+            continue;
+        }
         // The scaled corners' axis-aligned box: nonuniform scaling of a rotated rectangle adds shear that
         // width/height/angle cannot hold, so each layer is rasterised into its box.
         auto c = layer.transform.corners();
@@ -408,6 +425,115 @@ struct Renderer {
     std::set<Uuid> stacked;
     std::map<Uuid, std::shared_ptr<GrayImage>> liveCoverage;
     std::set<Uuid> visiting;
+    bool plainOnly = false;   // while taking a clipping base's transparency
+    // Folders with a layer style: their exterior effects go down before their first child in `order`, the rest
+    // after their last (outermost first in, innermost first out).
+    std::map<size_t, std::vector<const Layer*>> groupsOpen, groupsClose;
+    std::set<Uuid> suppressedGroups;   // the folder a silhouette is being rendered for
+
+    bool within(const Layer& layer, const Uuid& group) const {
+        int depth = 0;
+        for (auto p = layer.parentId; p && depth < 64; depth++) {
+            if (*p == group) return true;
+            auto it = byId.find(*p);
+            if (it == byId.end()) break;
+            p = it->second->parentId;
+        }
+        return false;
+    }
+
+    static bool isolates(const Layer& g) { return !g.passThrough; }
+    static bool fades(const Layer& g) { return g.passThrough && g.opacity < 1; }
+
+    /// The folders being drawn: an isolated one draws into its own buffer, a fading one keeps what was under it.
+    struct Frame { const Layer* group; std::unique_ptr<Image> buffer; std::unique_ptr<Image> before; Image* parent; };
+    std::vector<Frame> frames;
+
+    void openGroup(const Layer& g, Image*& cur) {
+        if (layerStyleOf(g, document)) drawGroupStyle(g, *cur, StyledDraw::Phase::Exterior);
+        Frame f{&g, nullptr, nullptr, cur};
+        if (isolates(g)) { f.buffer = std::make_unique<Image>(outWidth, outHeight); cur = f.buffer.get(); }
+        else if (fades(g)) f.before = std::make_unique<Image>(*cur);
+        frames.push_back(std::move(f));
+    }
+
+    void closeGroup(const Layer& g, Image*& cur) {
+        if (frames.empty() || frames.back().group != &g) return;
+        Frame f = std::move(frames.back());
+        frames.pop_back();
+        const float opacity = float(clamp(g.opacity, 0.0, 1.0));
+        if (f.buffer) {
+            // The folder's result, in its own mode and opacity, over what is below it.
+            cur = f.parent;
+            const BlendMode mode = blendOf(g);
+            parallelRows(0, outHeight, [&](int ya, int yb) {
+                for (int y = ya; y < yb; y++) {
+                    const uint8_t* src = f.buffer->row(y);
+                    uint8_t* dst = cur->row(y);
+                    for (int x = 0; x < outWidth; x++) if (src[x * 4 + 3]) compositePixel(mode, src + x * 4, opacity, dst + x * 4);
+                }
+            });
+        } else if (f.before) {
+            // Pass Through at reduced opacity: the children met the backdrop at full strength; the result fades
+            // back toward it (Photoshop's non-isolated group opacity).
+            parallelRows(0, outHeight, [&](int ya, int yb) {
+                for (int y = ya; y < yb; y++) {
+                    const uint8_t* b = f.before->row(y);
+                    uint8_t* d = cur->row(y);
+                    for (int i = 0; i < outWidth * 4; i++) d[i] = uint8_t(std::lround(b[i] + (d[i] - b[i]) * opacity));
+                }
+            });
+        }
+        if (layerStyleOf(g, document)) drawGroupStyle(g, *cur, StyledDraw::Phase::Interior);
+    }
+
+    void prepareGroupStyles() {
+        for (const Layer& g : document.layers) {
+            // A folder needs handling around its children when it has a style, isolates them (anything but Pass
+            // Through), or fades them (Pass Through below full opacity).
+            if (!g.isGroup || !g.visible || suppressedGroups.count(g.id)) continue;
+            if (!layerStyleOf(g, document) && !isolates(g) && !fades(g)) continue;
+            size_t first = SIZE_MAX, last = 0;
+            for (size_t i = 0; i < order.size(); i++) if (within(*order[i], g.id)) { first = std::min(first, i); last = i; }
+            if (first == SIZE_MAX) continue;
+            groupsOpen[first].push_back(&g);
+            groupsClose[last].insert(groupsClose[last].begin(), &g);
+        }
+        // Outer folders open first: sort each opening list by depth.
+        auto depth = [&](const Layer* l) { int d = 0; for (auto p = l->parentId; p && d < 64; d++) { auto it = byId.find(*p); if (it == byId.end()) break; p = it->second->parentId; } return d; };
+        for (auto& [i, list] : groupsOpen) std::stable_sort(list.begin(), list.end(), [&](auto a, auto b) { return depth(a) < depth(b); });
+        for (auto& [i, list] : groupsClose) std::stable_sort(list.begin(), list.end(), [&](auto a, auto b) { return depth(a) > depth(b); });
+    }
+
+    void drawGroupStyle(const Layer& group, Image& out, StyledDraw::Phase phase) {
+        auto style = layerStyleOf(group, document);
+        if (!style) return;
+        StyledDraw draw;
+        draw.style = style;
+        draw.region = region;
+        draw.scale = scale;
+        draw.phase = phase;
+        layerOpacities(group, draw.master, draw.fill);
+        draw.fill = 1;   // Photoshop ignores a folder's Fill once it has effects
+        if (isolates(group) || fades(group)) draw.master = 1;   // the folder's opacity already faded its result
+        auto folders = foldersCoverage(group.parentId);
+        draw.coverage = folders.get();
+        draw.patterns = documentPatterns(document);
+        draw.documentWidth = document.width;
+        draw.documentHeight = document.height;
+        // The effects' shape: the folder's children drawn alone, their effects included, through its mask.
+        draw.drawSource = [&](Image& into, const Rect& area) {
+            Renderer sub(document, overrides, area, scale, into.width(), into.height());
+            sub.suppressedGroups = suppressedGroups;
+            sub.suppressedGroups.insert(group.id);
+            for (auto& l : document.layers) sub.byId[l.id] = &l;
+            for (const Layer* l : order) if (within(*l, group.id)) sub.order.push_back(l);
+            sub.prepareStacks();
+            sub.prepareGroupStyles();
+            sub.drawRange(into, 0, sub.order.size());
+        };
+        drawStyledLayer(draw, out);
+    }
     std::map<Uuid, std::shared_ptr<GrayImage>> folderCoverage; // per group id, that group's own mask coverage
     std::map<std::optional<Uuid>, std::shared_ptr<GrayImage>> chainCoverage; // per parent, all enclosing folders combined
 
@@ -476,9 +602,7 @@ struct Renderer {
         return r;
     }
 
-    void drawOwn(const Layer& layer, Image& target, const GrayImage* coverage) {
-        ImagePtr image = imageOf(layer);
-        if (!image) return;
+    DrawParams paramsFor(const Layer& layer, const ImagePtr& image) const {
         DrawParams params;
         params.image = image;
         params.transform = transformOf(layer);
@@ -491,7 +615,103 @@ struct Renderer {
             if (o && o->maskPlacement) params.maskPlacement = *o->maskPlacement;
             if (o && o->maskImage) params.maskImage = *o->maskImage;
         }
+        return params;
+    }
+
+    /// A gradient or pattern fill layer's contents (they have no pixels of their own), kept while its carry lives.
+    ImagePtr fillImage(const Layer& layer) {
+        static std::mutex m;
+        static std::vector<std::tuple<std::weak_ptr<const PsdLayerCarry>, int, int, ImagePtr>> cache;
+        if (!layer.psdCarry) return nullptr;
+        std::lock_guard<std::mutex> lock(m);
+        for (auto& [carry, w, h, image] : cache)
+            if (carry.lock() == layer.psdCarry && w == document.width && h == document.height) return image;
+        ImagePtr image = renderFillLayer(layer, document);
+        if (cache.size() > 32) cache.erase(cache.begin());
+        cache.emplace_back(layer.psdCarry, document.width, document.height, image);
+        return image;
+    }
+
+    void drawOwn(const Layer& layer, Image& target, const GrayImage* coverage) {
+        ImagePtr image = imageOf(layer);
+        if (!image) image = fillImage(layer);
+        if (!image) return;
+        DrawParams params = paramsFor(layer, image);
+        if (!image->isEmpty() && !layer.asset) params.transform = LayerTransform(Point(0, 0), Size(document.width, document.height));
+        const GrayImage* coverageWithoutVector = coverage;
+        const std::optional<MaskParameters> maskParameters = layer.psdCarry ? parseMaskParameters(layer.psdCarry->maskData) : std::nullopt;
+        // A vector mask (a shape layer's shape, or a mask drawn with paths) cuts the layer like its pixel mask.
+        std::optional<VectorPath> vector = layerVectorMask(layer, document);
+        std::shared_ptr<GrayImage> cut;
+        if (vector) {
+            cut = rasterizeVectorMask(*vector, region, scale, outWidth, outHeight);
+            if (maskParameters) applyMaskParameters(*cut, maskParameters->vectorDensity, maskParameters->vectorFeather, scale);
+            if (coverage) for (size_t i = 0; i < cut->byteCount(); i++) cut->data()[i] = uint8_t((cut->data()[i] * coverage->data()[i] + 127) / 255);
+            coverage = cut.get();
+        }
+        // A pixel mask with Photoshop's density or feather: drawn here with them, instead of by drawLayer.
+        std::shared_ptr<GrayImage> userCut;
+        if (maskParameters && (maskParameters->userDensity || maskParameters->userFeather) && layer.mask && layer.mask->enabled && layer.mask->asset.image) {
+            userCut = std::make_shared<GrayImage>(outWidth, outHeight, 0);
+            sampleMaskCoverage(layer.mask->asset.image, layer.maskTransform(), region, scale, 0, *userCut, false);
+            applyMaskParameters(*userCut, maskParameters->userDensity, maskParameters->userFeather, scale, true);
+            if (coverage) for (size_t i = 0; i < userCut->byteCount(); i++) userCut->data()[i] = uint8_t((userCut->data()[i] * coverage->data()[i] + 127) / 255);
+            coverage = userCut.get();
+            params.mask = nullptr;
+        }
+        // A shape's stroke goes over its fill, in the layer's mode; with its fill off, the stroke alone.
+        const std::optional<VectorStroke> stroke = vector ? layerVectorStroke(layer) : std::nullopt;
+        auto drawStroke = [&] {
+            if (!stroke || !stroke->enabled || stroke->opacity <= 0) return;
+            std::optional<VectorPath> path = layerVectorMask(layer, document);
+            if (!path) return;
+            path->inverted = false;
+            auto band = rasterizeVectorStroke(*path, *stroke, region, scale, outWidth, outHeight);
+            // A shape's feather softens its stroke too (Photoshop feathers the whole rendered shape).
+            if (maskParameters && maskParameters->vectorFeather) applyMaskParameters(*band, std::nullopt, maskParameters->vectorFeather, scale);
+            const uint8_t colour[4] = {stroke->r, stroke->g, stroke->b, 255};
+            const float opacity = float(clamp(layer.opacity, 0.0, 1.0)) * stroke->opacity;
+            const BlendMode mode = blendOf(layer);
+            parallelRows(0, outHeight, [&](int ya, int yb) {
+                for (int y = ya; y < yb; y++) {
+                    const uint8_t* b = band->row(y);
+                    const uint8_t* c = coverageWithoutVector ? coverageWithoutVector->row(y) : nullptr;
+                    uint8_t* d = target.row(y);
+                    for (int x = 0; x < outWidth; x++) if (b[x]) compositePixel(mode, colour, b[x] / 255.0f * opacity * (c ? c[x] / 255.0f : 1.0f), d + x * 4);
+                }
+            });
+        };
+        if (stroke && stroke->enabled && !stroke->fillEnabled) { drawStroke(); return; }
+        // A Photoshop layer style draws the layer with its effects (never while taking a clipping base's
+        // transparency, which effects do not shape).
+        if (!plainOnly) if (auto style = layerStyleOf(layer, document)) {
+            StyledDraw draw;
+            draw.style = style;
+            draw.region = region;
+            draw.scale = scale;
+            draw.mode = params.mode;
+            layerOpacities(layer, draw.master, draw.fill);
+            draw.coverage = coverage;
+            draw.patterns = documentPatterns(document);
+            draw.documentWidth = document.width;
+            draw.documentHeight = document.height;
+            draw.bounds = params.transform.bounds();
+            draw.drawSource = [&](Image& into, const Rect& area) {
+                DrawParams plain = params;
+                plain.opacity = 1;
+                plain.mode = BlendMode::Normal;
+                // The vector mask shapes what the effects are drawn around, as the pixel mask does.
+                std::shared_ptr<GrayImage> shape = vector ? rasterizeVectorMask(*vector, area, scale, into.width(), into.height()) : nullptr;
+                drawLayer(plain, area, scale, shape.get(), into);
+            };
+            // The folders' coverage alone: the vector mask is already in the source.
+            if (vector) draw.coverage = coverageWithoutVector;
+            drawStyledLayer(draw, target);
+            drawStroke();
+            return;
+        }
         drawLayer(params, region, scale, coverage, target);
+        drawStroke();
     }
 
     /// Alpha of `id` drawn with its own mask and upstream clipping, ignoring visibility and folder masks.
@@ -503,7 +723,10 @@ struct Renderer {
         if (lit == byId.end()) return nullptr;
         visiting.insert(id);
         Image pixels(outWidth, outHeight);
+        const bool wasPlain = plainOnly;
+        plainOnly = true;
         drawClipped(*lit->second, pixels, nullptr);
+        plainOnly = wasPlain;
         visiting.erase(id);
         auto gray = std::make_shared<GrayImage>(outWidth, outHeight);
         layer_extract_alpha(pixels.data(), size_t(pixels.stride()), gray->data(), size_t(gray->stride()), size_t(outWidth), size_t(outHeight));
@@ -615,6 +838,19 @@ struct Renderer {
         }
         auto stack = stacks.find(layer.id);
         if (stack == stacks.end()) { drawClipped(layer, out, folders); return; }
+        if (!plainOnly && layerStyleOf(layer, document)) {
+            // A styled base: the base with its effects, then the clipped layers over it, masked by the base's own
+            // transparency (never by its effects, as in Photoshop).
+            drawOwn(layer, out, folders.get());
+            auto clip = multiply(folders, coverageOf(layer.id));
+            for (auto& childId : stack->second) {
+                auto it = byId.find(childId);
+                if (it == byId.end()) continue;
+                if (it->second->adjustment) adjust(*it->second, out, clip);
+                else drawOwn(*it->second, out, clip.get());
+            }
+            return;
+        }
         // A clipping stack: the base's alpha is shared by the layers clipped to it.
         Image group(outWidth, outHeight);
         drawOwn(layer, group, nullptr);
@@ -644,18 +880,30 @@ struct Renderer {
 
     /// Draws the layers order[from, to) over `out`.
     void drawRange(Image& out, size_t from, size_t to) {
+        Image* cur = &out;
         for (size_t index = from; index < to;) {
             // A run of table-driven adjustment layers (Levels, Curves, Exposure) at full opacity in Normal mode
             // with no masks composes into one transfer: one pass over the canvas, quantised once.
+            if (auto open = groupsOpen.find(index); open != groupsOpen.end())
+                for (const Layer* g : open->second) openGroup(*g, cur);
             std::optional<Transfer> fused;
             size_t end = index;
             for (; end < to; end++) {
+                if (end > index && (groupsOpen.count(end) || groupsClose.count(end - 1))) break;
                 std::optional<Transfer> next = fusibleTransfer(*order[end]);
                 if (!next) break;
                 fused = fused ? composeTransfer(*fused, *next) : std::move(next);
             }
-            if (fused) { applyTransfer(out, *fused); index = end; continue; }
-            drawComposite(*order[index], out);
+            if (fused) {
+                applyTransfer(*cur, *fused);
+                for (size_t i = index; i < end; i++)
+                    if (auto close = groupsClose.find(i); close != groupsClose.end()) for (const Layer* g : close->second) closeGroup(*g, cur);
+                index = end;
+                continue;
+            }
+            drawComposite(*order[index], *cur);
+            if (auto close = groupsClose.find(index); close != groupsClose.end())
+                for (const Layer* g : close->second) closeGroup(*g, cur);
             index++;
         }
     }
@@ -663,7 +911,7 @@ struct Renderer {
     /// The one layer with an override, when a cache can be kept around it: a plain pixel layer that no other
     /// layer clips to or takes its mask from. SIZE_MAX otherwise.
     size_t editedIndex() const {
-        if (!overrides || overrides->size() != 1) return SIZE_MAX;
+        if (!overrides || overrides->size() != 1 || !groupsOpen.empty()) return SIZE_MAX;
         const Uuid& id = overrides->begin()->first;
         size_t index = SIZE_MAX;
         for (size_t i = 0; i < order.size(); i++) if (order[i]->id == id) index = i;
@@ -677,7 +925,8 @@ struct Renderer {
     /// A layer above the edited one that composites as plain source-over, so a group of them can be
     /// flattened once and laid over the frame.
     bool plainAbove(const Layer& l) {
-        return !l.adjustment && !l.maskSourceId && !stacks.count(l.id) && !stacked.count(l.id) && blendOf(l) == BlendMode::Normal;
+        return !l.adjustment && !l.maskSourceId && !stacks.count(l.id) && !stacked.count(l.id) && blendOf(l) == BlendMode::Normal
+            && !layerStyleOf(l, document);   // effects blend in their own modes
     }
 
     void runCached(Image& out, RenderCache& cache, uint64_t version, size_t edited) {
@@ -711,6 +960,7 @@ struct Renderer {
         for (auto& l : document.layers) byId[l.id] = &l;
         order = renderLayers(document.layers);
         prepareStacks();
+        prepareGroupStyles();
         const size_t edited = cache ? editedIndex() : SIZE_MAX;
         if (edited != SIZE_MAX) runCached(out, *cache, version, edited);
         else drawRange(out, 0, order.size());

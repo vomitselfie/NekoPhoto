@@ -97,9 +97,10 @@ Layer::Layer(std::string name_, Size blankSize) : id(makeUuid()), transform(Poin
 bool Layer::operator==(const Layer& o) const {
     return id == o.id && name == o.name && visible == o.visible && transform == o.transform
         && (asset ? asset->image : nullptr) == (o.asset ? o.asset->image : nullptr)
-        && parentId == o.parentId && isGroup == o.isGroup && opacity == o.opacity && blendMode == o.blendMode
+        && parentId == o.parentId && isGroup == o.isGroup && passThrough == o.passThrough && opacity == o.opacity && blendMode == o.blendMode
         && mask == o.mask && maskSourceId == o.maskSourceId && adjustment == o.adjustment
-        && shape == o.shape && shapeImage == o.shapeImage && text == o.text && textImage == o.textImage;
+        && shape == o.shape && shapeImage == o.shapeImage && text == o.text && textImage == o.textImage && psdCarry == o.psdCarry
+        && smartObject == o.smartObject && smartImage == o.smartImage;
 }
 
 int Layer::pixelWidth() const { return asset && asset->image ? asset->image->width() : std::max(1, int(std::lround(transform.size.width))); }
@@ -125,7 +126,7 @@ Rect Selection::bounds() const {
 Document::Document(int width_, int height_) : id(makeUuid()), width(width_), height(height_) {}
 
 bool Document::operator==(const Document& o) const {
-    return id == o.id && width == o.width && height == o.height && resolution == o.resolution && layers == o.layers && selection == o.selection;
+    return id == o.id && width == o.width && height == o.height && resolution == o.resolution && layers == o.layers && selection == o.selection && psdCarry == o.psdCarry && smartObjects == o.smartObjects;
 }
 
 long long Document::layerPixels() const {

@@ -44,6 +44,7 @@ qt_add_executable(nekophoto
     EditorSessionPixels.cpp
     EditorSessionQuickSelect.cpp
     EditorSessionSelection.cpp
+    EditorSessionSmartObjects.cpp
     EditorSessionTransform.cpp
     CanvasWidget.h
     CanvasWidget.cpp

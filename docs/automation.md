@@ -105,7 +105,7 @@ print(json.loads(f.readline())["result"])
 ## Methods
 
 Observe: `app.info`, `rpc.describe`, `tabs.list`, `document.overview` (the document, selection, undo and
-layer tree as text, one line per layer with its id: where an agent starts), `document.info`, `layers.list`, `layers.get`,
+layer tree as text, one line per layer with its id: where an agent starts), `document.info`, `layers.list`, `layers.get` (a smart object is kind `smartObject`, with its source and whether it is preview-locked),
 `adjustments.get`, `adjustments.defaults`, `selection.info`, `history.info`,
 `render` (composite, or a `region`, longest side `maxSize`; `zoom` 2..32 enlarges a region with square
 pixels to judge an edge exactly; `path` writes a file instead of returning base64), `layers.render` (one
@@ -116,9 +116,11 @@ Documents: `tabs.select`, `tabs.new`, `tabs.close`, `document.new`,
 `document.open` (.comp, a Photoshop .psd/.psb or a Clip Studio .clip, which answer with `layers`
 and the import `notes`, or an image), `document.import` (an image as a layer),
 `document.save` (answers `macCompatible`: false past the 100 megapixels of layers Compositor for
-macOS opens; projects here hold up to a gigapixel), `document.export` (.psd, layered, answering with the counts and any `warnings` and `notes` about what Photoshop cannot carry; or the composite as .png, .jpg, .webp or .tif; `quality` for JPEG and WebP, where 100 is lossless; `background` behind a JPEG), `document.close`.
+macOS opens; projects here hold up to a gigapixel), `document.export` (.psd, layered, text layers as Photoshop text (`texts` counts them), answering with the counts and any `warnings` and `notes` about what Photoshop cannot carry; or the composite as .png, .jpg, .webp or .tif; `quality` for JPEG and WebP, where 100 is lossless; `background` behind a JPEG), `document.close`.
 
-Layers: `layers.select`, `layers.set` (name, visible, opacity, blend, sampling,
+Smart objects: `smartObject.convert` (the selection or `ids`), `smartObject.place` (`path`), `smartObject.replace`
+(`path`), `smartObject.rasterize`, `smartObject.editContents` (opens a tab) and `smartObject.commit` (in that tab).
+Layers: `layers.select`, `layers.set` (name, visible, opacity, blend (a folder also takes "Pass Through"), sampling,
 clipping), `layers.add` (pixels, group, adjustment, or text with `text`, `x`, `y`, `font`, `size`, `bold`,
 `italic`, `color`, `align`; `below: true` puts it under the active layer), `text.set` (a text layer's
 content and style, same keys plus `lineSpacing` and `letterSpacing`), `layers.delete`,

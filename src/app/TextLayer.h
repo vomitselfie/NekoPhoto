@@ -1,6 +1,8 @@
 // Text layers: the raster a LayerText renders to, through Qt's font engine (the core has no fonts).
 #pragma once
 #include "compositor/document.h"
+#include "compositor/psd.h"
+#include "compositor/psd_writer.h"
 #include <QFont>
 #include <QString>
 #include <memory>
@@ -16,5 +18,14 @@ constexpr int textPadding = 4;
 /// The text drawn at 1:1 document pixels, premultiplied, sized to its lines plus the padding; null when it
 /// would exceed the document's pixel budget.
 std::shared_ptr<compositor::Image> renderTextLayer(const compositor::LayerText& text);
+/// How renderTextLayer lays `text` out, for writing it as a Photoshop type layer.
+std::optional<compositor::PsdTextMetrics> psdTextMetrics(const compositor::LayerText& text);
+/// PSD export options with text layers written as Photoshop type layers.
+compositor::PsdExportOptions psdExportOptions();
+/// Finishes the type layers a PSD opened as text: the installed family for each face, the line spacing for
+/// Photoshop's leading. A face that is not installed is noted; the text keeps Photoshop's pixels until edited.
+void finishPsdText(compositor::PsdImport& imported);
+/// PSD import options with the app's decoders for smart object contents the core cannot read (JPEG, TIFF, ...).
+compositor::PsdImportOptions psdImportOptions();
 
 } // namespace app

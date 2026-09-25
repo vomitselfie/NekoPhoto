@@ -1,6 +1,9 @@
 #include "compositor/psd.h"
 #include "photoshop.h"
 #include "compositor/adjustments.h"
+#include "compositor/png.h"
+#include "compositor/render.h"
+#include <cstdio>
 #include <new>
 #include <stdexcept>
 #include <zlib.h>
@@ -133,8 +136,14 @@ int extentOf(int low, int high) { return int(std::clamp<int64_t>(int64_t(high) -
 
 struct MaskRecord {
     bool present = false; int top = 0, left = 0, bottom = 0, right = 0; uint8_t defaultColour = 0; uint8_t flags = 0;
+    // With a vector mask too, the painted mask is the "real" one (channel -3) with its own rectangle, and
+    // the -2 plane is the vector mask rendered (flag bit 3).
+    bool real = false; int realTop = 0, realLeft = 0, realBottom = 0, realRight = 0; uint8_t realDefault = 0, realFlags = 0;
+    std::vector<uint8_t> section;   // the whole mask section, as stored
     int width() const { return extentOf(left, right); }
     int height() const { return extentOf(top, bottom); }
+    int realWidth() const { return extentOf(realLeft, realRight); }
+    int realHeight() const { return extentOf(realTop, realBottom); }
 };
 
 struct Record {
@@ -146,6 +155,8 @@ struct Record {
     std::string name;
     int section = 0;                                   // lsct: 1 open folder, 2 closed folder, 3 the folder's end marker
     std::map<std::string, std::pair<const uint8_t*, size_t>> blocks;   // tagged blocks by key
+    std::vector<std::pair<std::string, std::pair<const uint8_t*, size_t>>> ordered;   // and in file order
+    std::vector<uint8_t> blendingRanges;
     int width() const { return extentOf(left, right); }
     int height() const { return extentOf(top, bottom); }
 };
@@ -156,7 +167,8 @@ bool psbLongKey(const std::string& key) {
 }
 
 /// Tagged blocks (`8BIM`/`8B64`, key, length, data) up to `end`; `pad` rounds the data length.
-void readTaggedBlocks(Reader& r, size_t end, bool psb, size_t pad, std::map<std::string, std::pair<const uint8_t*, size_t>>& blocks) {
+void readTaggedBlocks(Reader& r, size_t end, bool psb, size_t pad, std::map<std::string, std::pair<const uint8_t*, size_t>>& blocks,
+                      std::vector<std::pair<std::string, std::pair<const uint8_t*, size_t>>>* ordered = nullptr) {
     while (r.position() + 12 <= end) {
         std::string sig = r.chars(4);
         if (sig != "8BIM" && sig != "8B64") break;
@@ -165,6 +177,7 @@ void readTaggedBlocks(Reader& r, size_t end, bool psb, size_t pad, std::map<std:
         if (len > r.remaining()) throw Truncated{};
         const uint8_t* data = r.bytes(size_t(len));
         blocks[key] = {data, size_t(len)};
+        if (ordered) ordered->push_back({key, {data, size_t(len)}});
         if (pad > 1 && len % pad) r.skip(size_t(pad - len % pad));
     }
     r.seek(end);
@@ -186,18 +199,31 @@ Record readRecord(Reader& r, bool psb) {
     size_t extraEnd = r.position() + extra;
     if (extraEnd > r.position() + r.remaining()) throw Truncated{};
     uint32_t maskLen = r.u32();
-    if (maskLen >= 20) {
+    if (maskLen > r.remaining()) throw Truncated{};
+    if (maskLen >= 18) {
         size_t maskEnd = r.position() + maskLen;
+        { const uint8_t* all = r.bytes(maskLen); rec.mask.section.assign(all, all + maskLen); r.seek(maskEnd - maskLen); }
         rec.mask.present = true;
         rec.mask.top = r.i32(); rec.mask.left = r.i32(); rec.mask.bottom = r.i32(); rec.mask.right = r.i32();
         if (int64_t(rec.mask.right) - rec.mask.left > maxImageSide || int64_t(rec.mask.bottom) - rec.mask.top > maxImageSide) throw Truncated{};
         rec.mask.defaultColour = r.u8(); rec.mask.flags = r.u8();
+        // The real mask's fields come right after the flags (Photoshop's order, which Patchy pinned; the
+        // format document lists the parameters first). A parameters-only section (bit 4 without bit 3) has none.
+        const bool parametersOnly = (rec.mask.flags & 0x18) == 0x10;
+        if (maskLen >= 36 && !parametersOnly) {
+            rec.mask.real = true;
+            rec.mask.realFlags = r.u8(); rec.mask.realDefault = r.u8();
+            rec.mask.realTop = r.i32(); rec.mask.realLeft = r.i32(); rec.mask.realBottom = r.i32(); rec.mask.realRight = r.i32();
+            if (int64_t(rec.mask.realRight) - rec.mask.realLeft > maxImageSide || int64_t(rec.mask.realBottom) - rec.mask.realTop > maxImageSide) throw Truncated{};
+        }
         r.seek(maskEnd);
     } else r.skip(maskLen);
     uint32_t rangesLen = r.u32();
-    r.skip(rangesLen);
+    if (rangesLen > r.remaining()) throw Truncated{};
+    const uint8_t* ranges = r.bytes(rangesLen);
+    rec.blendingRanges.assign(ranges, ranges + rangesLen);
     rec.name = r.pascal(4);
-    readTaggedBlocks(r, extraEnd, psb, 1, rec.blocks);
+    readTaggedBlocks(r, extraEnd, psb, 1, rec.blocks, &rec.ordered);
     auto luni = rec.blocks.find("luni");
     if (luni != rec.blocks.end()) { try { Reader u(luni->second.first, luni->second.second); rec.name = u.unicode(); } catch (Truncated&) {} }
     auto lsct = rec.blocks.find("lsct");
@@ -222,6 +248,41 @@ BlendMode blendFor(const std::string& key, bool* lossy) {
     *lossy = true;
     if (auto it = nearest.find(key); it != nearest.end()) return it->second;
     return BlendMode::Normal;
+}
+
+// ---- What is carried for PSD export ----------------------------------------------------------------
+
+/// Image resources written back on PSD export. Left out: the resolution (ours), thumbnails, what indexes
+/// layers or alpha channels by position (both are rewritten), the ID seed (layer ids are reassigned), and
+/// a non-RGB file's colour profile and colour settings (the export is RGB).
+bool carriedResource(uint16_t id, int mode) {
+    // Resolution; thumbnails; layer state, groups, selection, group-enabled ids; ID seed; alpha channel names,
+    // unicode names, ids, display info and old display info; transparency index.
+    static const std::set<uint16_t> never{1005, 1033, 1036, 1024, 1026, 1069, 1072, 1044, 1006, 1045, 1053, 1077, 1007, 1047};
+    // Colour profile and untagged flag; colour and duotone halftoning and transfer; duotone image info.
+    static const std::set<uint16_t> colourBound{1039, 1041, 1013, 1014, 1016, 1017, 1018};
+    if (never.count(id)) return false;
+    if (mode != RGB && colourBound.count(id)) return false;
+    return true;
+}
+
+/// Global tagged blocks written back: everything but the layer information itself (written anew) and
+/// the merged image's 16/32-bit transparency.
+bool carriedGlobalBlock(const std::string& key) {
+    static const std::set<std::string> never{"Lr16", "Lr32", "Layr", "LMsk", "Mt16", "Mt32", "Mtrn", "Alph"};
+    return !never.count(key);
+}
+
+/// Per-layer blocks written back: all but what NekoPhoto reads into its own model and writes itself.
+bool smartObjectBlock(const std::string& key) { return key == "SoLd" || key == "SoLE" || key == "PlLd" || key == "plLd"; }
+
+bool carriedLayerBlock(const std::string& key, bool modelledAdjustment, bool smartObject = false) {
+    if (smartObject && smartObjectBlock(key)) return false;   // the instance keeps them (smartobject.h)
+    static const std::set<std::string> never{"luni", "lsct", "lsdk", "iOpa", "lyid"};
+    static const std::set<std::string> adjustments{"levl", "curv", "hue2", "expA", "grdm"};
+    if (never.count(key)) return false;
+    if (modelledAdjustment && adjustments.count(key)) return false;
+    return true;
 }
 
 const char* blendDescription(const std::string& key) {
@@ -348,10 +409,39 @@ std::string jsonEscape(const std::string& s) {
 
 // ---- The import ---------------------------------------------------------------------------------------
 
-std::optional<PsdImport> importPsd(const std::string& path, std::string* error) {
+std::optional<PsdImport> importPsd(const std::string& path, std::string* error, const PsdImportOptions& options) {
     std::ifstream in(path, std::ios::binary);
     if (!in) { if (error) *error = "The file could not be opened."; return std::nullopt; }
     std::vector<uint8_t> file((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    return importPsdBytes(file, error, options);
+}
+
+namespace {
+
+/// A smart object source's contents as an image: an embedded PSD/PSB through this importer (Photoshop's merged
+/// image when it is real, else our render of its layers), PNG directly, anything else through the app's hook.
+ImagePtr decodeSource(const SmartObjectSource& source, const PsdImportOptions& options) {
+    if (source.kind != SmartObjectSource::Kind::Embedded || !source.bytes || source.bytes->empty()) return nullptr;
+    const std::vector<uint8_t>& bytes = *source.bytes;
+    const bool psdFile = bytes.size() >= 4 && std::memcmp(bytes.data(), "8BPS", 4) == 0;
+    if (psdFile) {
+        if (options.depth + 1 >= psdSmartObjectDepthLimit) return nullptr;
+        PsdImportOptions inner = options;
+        inner.depth++;
+        std::string error;
+        auto nested = importPsdBytes(bytes, &error, inner);
+        if (!nested) return nullptr;
+        if (nested->realComposite && nested->composite) return nested->composite;
+        return renderFlattened(nested->document);
+    }
+    if (bytes.size() >= 8 && std::memcmp(bytes.data(), "\x89PNG", 4) == 0) return decodePngImage(bytes.data(), bytes.size());
+    if (options.decodeImage) return options.decodeImage(bytes, source.fileType, source.fileName);
+    return nullptr;
+}
+
+} // namespace
+
+std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::string* error, const PsdImportOptions& options) {
     try {
         Reader r(file.data(), file.size());
         if (r.chars(4) != "8BPS") { if (error) *error = "Not a Photoshop file (no 8BPS signature)."; return std::nullopt; }
@@ -377,17 +467,25 @@ std::optional<PsdImport> importPsd(const std::string& path, std::string* error) 
         std::vector<uint8_t> palette;
         if (colourDataLen) { const uint8_t* p = r.bytes(colourDataLen); if (mode == Indexed && colourDataLen >= 768) palette.assign(p, p + 768); }
 
-        // Image resources: the resolution is the one thing kept.
+        // Image resources: the resolution is ours; the rest is carried for PSD export (psd_carry.h).
         Document document{int(width), int(height)};
+        auto docCarry = std::make_shared<PsdDocumentCarry>();
+        docCarry->width = int(width); docCarry->height = int(height);
         uint32_t resourcesLen = r.u32();
         size_t resourcesEnd = r.position() + resourcesLen;
         while (r.position() + 12 <= resourcesEnd) {
             if (r.chars(4) != "8BIM") break;
             uint16_t id = r.u16();
-            r.pascal(2);
+            std::string resourceName = r.pascal(2);
             uint32_t len = r.u32();
             size_t dataStart = r.position();
+            if (len <= r.remaining() && carriedResource(id, mode)) {
+                const uint8_t* p = r.bytes(len);
+                docCarry->resources.push_back({id, resourceName, std::vector<uint8_t>(p, p + len)});
+                r.seek(dataStart);
+            }
             if (id == 0x03ED && len >= 4) { double hres = r.u32() / 65536.0; if (hres > 0 && hres < 100000) document.resolution = hres; }
+            if (id == 1057 && len >= 5) { r.u32(); result.realComposite = r.u8() != 0; }   // version info: hasRealMergedData
             r.seek(dataStart + len + (len & 1));
         }
         r.seek(resourcesEnd);
@@ -414,7 +512,21 @@ std::optional<PsdImport> importPsd(const std::string& path, std::string* error) 
             // Global layer mask info, then additional blocks: 16- and 32-bit files keep their layers there.
             if (r.position() + 4 <= layerMaskEnd) { uint32_t globalLen = r.u32(); r.skip(globalLen); }
             std::map<std::string, std::pair<const uint8_t*, size_t>> globalBlocks;
-            if (r.position() < layerMaskEnd) readTaggedBlocks(r, layerMaskEnd, psb, 4, globalBlocks);
+            std::vector<std::pair<std::string, std::pair<const uint8_t*, size_t>>> globalOrder;
+            if (r.position() < layerMaskEnd) readTaggedBlocks(r, layerMaskEnd, psb, 4, globalBlocks, &globalOrder);
+            for (auto& [key, data] : globalOrder) {
+                if (carriedGlobalBlock(key) && !((psb || depth != 8) && (key == "FEid" || key == "FXid"))) docCarry->globals.push_back({key, std::vector<uint8_t>(data.first, data.first + data.second)});
+                // Smart object sources: the linked-file blocks' embedded (and linked) files.
+                if (key == "lnk2" || key == "lnkD" || key == "lnk3" || key == "lnkE")
+                    for (SmartObjectSource& s : parsePsdLinkBlock(std::vector<uint8_t>(data.first, data.first + data.second))) {
+                        if (s.id.empty() || document.smartObjects.count(s.id)) continue;
+                        s.psdBlock = key;
+                        s.image = decodeSource(s, options);
+                        if (s.image) { s.width = s.image->width(); s.height = s.image->height(); }
+                        const std::string id = s.id;
+                        document.smartObjects[id] = std::make_shared<const SmartObjectSource>(std::move(s));
+                    }
+            }
             if (records.empty()) {
                 for (const char* key : {"Lr16", "Lr32"}) {
                     auto it = globalBlocks.find(key);
@@ -439,7 +551,8 @@ std::optional<PsdImport> importPsd(const std::string& path, std::string* error) 
         }
 
         // Channel image data follows the records, one channel after another in record order.
-        auto decodeRecordChannels = [&](const Record& rec, std::map<int, std::vector<uint8_t>>& planes, std::map<int, std::vector<uint8_t>>& maskPlanes, size_t& cursor) {
+        auto decodeRecordChannels = [&](const Record& rec, std::map<int, std::vector<uint8_t>>& planes, std::map<int, std::vector<uint8_t>>& maskPlanes, size_t& cursor,
+                                        std::vector<std::pair<int, std::vector<uint8_t>>>& maskRaw) {
             for (const Channel& c : rec.channels) {
                 // Subtraction, not addition: a PSB's channel length is a full 64-bit field, so `cursor +
                 // c.length` wraps and a wrapped sum passes the test while the reader runs off the file.
@@ -449,7 +562,9 @@ std::optional<PsdImport> importPsd(const std::string& path, std::string* error) 
                 const uint8_t* data = file.data() + cursor + 2;
                 size_t size = size_t(c.length) - 2;
                 int w = rec.width(), h = rec.height();
-                if (c.id == -2 || c.id == -3) { w = rec.mask.width(); h = rec.mask.height(); }
+                if (c.id == -2) { w = rec.mask.width(); h = rec.mask.height(); }
+                if (c.id == -3) { w = rec.mask.realWidth(); h = rec.mask.realHeight(); }
+                if (c.id == -2 || c.id == -3) maskRaw.push_back({c.id, std::vector<uint8_t>(file.data() + cursor, file.data() + cursor + size_t(c.length))});
                 std::vector<uint8_t> plane;
                 std::string why;
                 if (w > 0 && h > 0 && decodePlane(data, size, compression, w, h, depth, psb, plane, &why)) (c.id == -2 || c.id == -3 ? maskPlanes : planes)[c.id] = std::move(plane);
@@ -460,38 +575,73 @@ std::optional<PsdImport> importPsd(const std::string& path, std::string* error) 
 
         // Records run bottom to top. Folders arrive as an end marker first, then their contents, then the
         // folder itself; clipped layers sit directly above what they clip to.
-        struct OpenGroup { size_t firstChild; std::vector<Uuid> members; };
+        struct OpenGroup { size_t firstChild; std::vector<Uuid> members; const Record* end = nullptr; };
         std::vector<OpenGroup> open;
         std::vector<Layer>& layers = document.layers;
         std::vector<std::optional<Uuid>> parents;   // the parent each layer was added under
         size_t cursor = channelDataStart;
-        int effectsCount = 0, vectorMasks = 0, smartObjects = 0;
+        int effectsCount = 0, vectorMasks = 0, smartObjects = 0, editableSmartObjects = 0;
+        std::map<std::string, int> lockedSmartObjects;
+        // What the record holds that NekoPhoto does not model, bound to the layer's content as imported.
+        auto carryFor = [&](const Record& rec, const Layer& layer, bool modelledAdjustment,
+                            const std::vector<std::pair<int, std::vector<uint8_t>>>& maskRaw) -> std::shared_ptr<const PsdLayerCarry> {
+            auto carry = std::make_shared<PsdLayerCarry>();
+            for (auto& [key, data] : rec.ordered)
+                if (carriedLayerBlock(key, modelledAdjustment, layer.smartObject.has_value())) carry->blocks.push_back({key, std::vector<uint8_t>(data.first, data.first + data.second)});
+            carry->blendingRanges = rec.blendingRanges;
+            carry->blendKey = rec.blend;
+            carry->blendAs = int(layer.blendMode);
+            carry->flags = rec.flags;
+            carry->closedFolder = rec.section == 2;
+            carry->opacity = rec.opacity;
+            carry->fill = rec.fillOpacity;
+            auto lyid = rec.blocks.find("lyid");
+            if (lyid != rec.blocks.end() && lyid->second.second >= 4) { Reader id(lyid->second.first, 4); carry->layerId = id.u32(); }
+            carry->contentHash = psdContentHash(layer.asset ? layer.asset->image.get() : nullptr);
+            carry->placement = layer.transform;
+            if (!psb && depth == 8 && !rec.mask.section.empty()) {
+                carry->maskData = rec.mask.section;
+                carry->maskChannels = maskRaw;
+                carry->maskHash = layer.mask ? psdMaskHash(layer.mask->asset.image.get(), layer.mask->enabled) : 0;
+            }
+            const bool plainBlend = rec.blend == "norm" || (rec.blend == "pass" && layer.isGroup);
+            if (carry->blocks.empty() && carry->blendingRanges.empty() && carry->fill == 255 && carry->layerId == 0 && carry->maskData.empty()
+                && plainBlend && (rec.flags & ~0x0A) == 0 && !carry->closedFolder) return nullptr;
+            return carry;
+        };
         for (const Record& rec : records) {
             std::map<int, std::vector<uint8_t>> planes, maskPlanes;
-            decodeRecordChannels(rec, planes, maskPlanes, cursor);
+            std::vector<std::pair<int, std::vector<uint8_t>>> maskRaw;
+            decodeRecordChannels(rec, planes, maskPlanes, cursor, maskRaw);
             const bool hidden = rec.flags & 2;
             std::optional<Uuid> parent = open.empty() ? std::nullopt : std::optional<Uuid>();
             bool lossyBlend = false;
             BlendMode blend = blendFor(rec.blend, &lossyBlend);
             // The user mask over a lw x lh grid at (lx, ly): Photoshop keeps it in its own rectangle with a default beyond.
             auto userMaskFor = [&](int lw, int lh, int lx, int ly) -> std::optional<LayerMask> {
-                auto userMask = maskPlanes.find(-2);
-                if (userMask == maskPlanes.end()) userMask = maskPlanes.find(-3);
+                // The painted mask: the real one when there is one, else -2 (which may be the vector mask
+                // rendered: then it stands in for it here, and the vector mask itself is carried).
+                const bool real = rec.mask.real && maskPlanes.count(-3);
+                // Without a painted mask, a plane "rendered from other data" (flag bit 3) is the vector mask baked,
+                // unfeathered: the vector mask itself draws it here, and the section goes back as stored.
+                if (!real && (rec.mask.flags & 0x08)) return std::nullopt;
+                auto userMask = maskPlanes.find(real ? -3 : -2);
                 if (!rec.mask.present || userMask == maskPlanes.end() || lw <= 0 || lh <= 0) return std::nullopt;
-                auto mask = std::make_shared<GrayImage>(lw, lh, rec.mask.defaultColour);
-                const int mw = rec.mask.right - rec.mask.left, mh = rec.mask.bottom - rec.mask.top;
+                const int top = real ? rec.mask.realTop : rec.mask.top, left = real ? rec.mask.realLeft : rec.mask.left;
+                const int mw = real ? rec.mask.realWidth() : rec.mask.width(), mh = real ? rec.mask.realHeight() : rec.mask.height();
+                auto mask = std::make_shared<GrayImage>(lw, lh, real ? rec.mask.realDefault : rec.mask.defaultColour);
                 if (size_t(std::max(0, mw)) * size_t(std::max(0, mh)) > userMask->second.size()) return std::nullopt;
                 for (int y = 0; y < mh; y++) {
-                    const int ty = rec.mask.top + y - ly;
+                    const int ty = top + y - ly;
                     if (ty < 0 || ty >= lh) continue;
-                    for (int x = 0; x < mw; x++) { const int tx = rec.mask.left + x - lx; if (tx >= 0 && tx < lw) mask->at(tx, ty) = userMask->second[size_t(y) * mw + size_t(x)]; }
+                    for (int x = 0; x < mw; x++) { const int tx = left + x - lx; if (tx >= 0 && tx < lw) mask->at(tx, ty) = userMask->second[size_t(y) * mw + size_t(x)]; }
                 }
                 LayerMask lm;
                 lm.asset = MaskAsset::make(mask);
-                lm.enabled = !(rec.mask.flags & 2);
+                lm.enabled = !((real ? rec.mask.realFlags : rec.mask.flags) & 2);
                 return lm;
             };
-            if (rec.section == 3) { open.push_back({layers.size(), {}}); continue; }   // a folder's end marker: its contents follow
+            if (rec.section == 3) { open.push_back({layers.size(), {}, &rec}); continue; }   // a folder's end marker: its contents follow
             if (rec.section == 1 || rec.section == 2) {
                 if (open.empty()) continue;
                 OpenGroup group = open.back();
@@ -501,7 +651,17 @@ std::optional<PsdImport> importPsd(const std::string& path, std::string* error) 
                 folder.visible = !hidden;
                 folder.opacity = rec.opacity / 255.0;
                 folder.blendMode = blend;
+                folder.passThrough = rec.blend == "pass";
                 if (auto lm = userMaskFor(int(width), int(height), 0, 0)) folder.mask = lm;   // over the canvas, as our folders are
+                folder.psdCarry = carryFor(rec, folder, false, maskRaw);
+                if (group.end) {
+                    auto carry = std::make_shared<PsdLayerCarry>(folder.psdCarry ? *folder.psdCarry : PsdLayerCarry{});
+                    for (auto& [key, data] : group.end->ordered)
+                        if (carriedLayerBlock(key, false)) carry->endBlocks.push_back({key, std::vector<uint8_t>(data.first, data.first + data.second)});
+                    carry->endRanges = group.end->blendingRanges;
+                    if (!folder.psdCarry) { carry->placement = folder.transform; carry->opacity = rec.opacity; carry->fill = rec.fillOpacity; carry->blendKey = rec.blend; carry->blendAs = int(folder.blendMode); carry->flags = rec.flags; carry->closedFolder = rec.section == 2; }
+                    if (!carry->endBlocks.empty() || !carry->endRanges.empty()) folder.psdCarry = carry;
+                }
                 if (lossyBlend && rec.blend != "pass") notes.push_back("Folder \"" + folder.name + "\": blend mode " + blendDescription(rec.blend) + " has no counterpart; " + blendModeName(blend) + " was used.");
                 for (const Uuid& id : group.members) if (Layer* l = document.find(id)) l->parentId = folder.id;
                 layers.insert(layers.begin() + long(group.firstChild), folder);
@@ -516,7 +676,6 @@ std::optional<PsdImport> importPsd(const std::string& path, std::string* error) 
             auto block = [&](const char* key) -> const std::pair<const uint8_t*, size_t>* { auto it = rec.blocks.find(key); return it == rec.blocks.end() ? nullptr : &it->second; };
             if (rec.width() > 0 && rec.height() > 0 && !planes.empty()) image = assemble(mode, rec.width(), rec.height(), planes, palette);
             std::optional<AdjustmentSettings> settings;
-            bool skippedAdjustment = false;
             if (auto b = block("levl")) settings = levelsFrom(b->first, b->second);
             else if (auto b = block("curv")) settings = curvesFrom(b->first, b->second);
             else if (auto b = block("hue2")) settings = hueSaturationFrom(b->first, b->second);
@@ -525,7 +684,7 @@ std::optional<PsdImport> importPsd(const std::string& path, std::string* error) 
             else {
                 static const std::map<std::string, const char*> others{{"brit", "Brightness/Contrast"}, {"blwh", "Black & White"}, {"vibA", "Vibrance"}, {"phfl", "Photo Filter"}, {"mixr", "Channel Mixer"},
                     {"clrL", "Color Lookup"}, {"nvrt", "Invert"}, {"post", "Posterize"}, {"thrs", "Threshold"}, {"selc", "Selective Color"}, {"blnc", "Color Balance"}};
-                for (auto& [key, name] : others) if (block(key.c_str())) { notes.push_back("Layer \"" + rec.name + "\": " + name + " adjustment layers have no counterpart; skipped."); skippedAdjustment = true; break; }
+                for (auto& [key, name] : others) if (block(key.c_str())) { notes.push_back("Layer \"" + rec.name + "\": " + name + " adjustment layers have no counterpart; it shows as an empty layer here and is written back to PSD as it was."); break; }
             }
             if (settings) adjustment = settings->toLayerAdjustment();
             if (!image && !adjustment) {
@@ -534,15 +693,25 @@ std::optional<PsdImport> importPsd(const std::string& path, std::string* error) 
                         image = std::make_shared<Image>(int(width), int(height));
                         image->fill(uint8_t(std::lround(colour->red * 255)), uint8_t(std::lround(colour->green * 255)), uint8_t(std::lround(colour->blue * 255)), 255);
                     }
-                } else if (block("GdFl") || block("PtFl")) notes.push_back("Layer \"" + rec.name + "\": gradient and pattern fill layers are not carried; skipped.");
+                } else if (block("GdFl") || block("PtFl")) { notes.push_back("Layer \"" + rec.name + "\": a gradient or pattern fill; it shows as an empty layer here and is written back to PSD as it was."); }
             }
-            if (block("TySh")) { if (auto text = textFrom(block("TySh")->first, block("TySh")->second)) extraJson = "{\"psdText\":\"" + jsonEscape(*text) + "\"}"; notes.push_back("Layer \"" + rec.name + "\": text was imported as pixels (its text is kept as psdText in the project)."); }
+            std::optional<PsdTypeLayer> type;
+            if (block("TySh")) {
+                std::string why;
+                type = image ? readPhotoshopType(block("TySh")->first, block("TySh")->second, &why) : std::nullopt;
+                if (auto text = textFrom(block("TySh")->first, block("TySh")->second)) {
+                    extraJson = "{\"psdText\":\"" + jsonEscape(*text) + "\"";
+                    // Where Photoshop anchored the first baseline, so the first redraw here lands on it.
+                    if (type) { char anchor[96]; std::snprintf(anchor, sizeof anchor, ",\"psdTextAnchor\":[%.4f,%.4f]", type->anchorX, type->anchorY); extraJson += anchor; }
+                    extraJson += "}";
+                }
+                if (!type) notes.push_back("Layer \"" + rec.name + "\": its text is " + (why.empty() ? std::string("without pixels") : why) + ", which NekoPhoto text cannot be; it shows as Photoshop drew it, and is Photoshop text again on PSD export while its pixels are unchanged.");
+            }
             if (block("lfx2") || block("lrFX")) effectsCount++;
             if (block("vmsk") || block("vsms")) vectorMasks++;
             if (block("SoLd") || block("PlLd")) smartObjects++;
-            // An adjustment or fill kind with no counterpart is dropped; an empty layer (a divider, a layer never
-            // painted on) stays as a blank one, so the structure survives.
-            if (!image && !adjustment && (block("GdFl") || block("PtFl") || skippedAdjustment)) continue;
+            // An adjustment or fill kind with no counterpart stays as an empty layer that carries it, as does an
+            // empty layer (a divider, a layer never painted on), so the structure survives.
 
             Layer layer;
             if (image) {
@@ -557,10 +726,55 @@ std::optional<PsdImport> importPsd(const std::string& path, std::string* error) 
             layer.blendMode = blend;
             layer.adjustment = adjustment;
             layer.extraJson = extraJson;
+            if (type && image) {
+                layer.text = type->text;
+                layer.textImage = layer.asset->image;
+                result.texts.push_back({layer.id, type->postScriptName, type->leading, type->autoLeading});
+            }
             if (lossyBlend) notes.push_back("Layer \"" + layer.name + "\": blend mode " + blendDescription(rec.blend) + " has no counterpart; " + blendModeName(blend) + " was used.");
             // The mask covers the layer's pixels (the canvas for a layer without any).
             if (auto lm = userMaskFor(image ? image->width() : int(width), image ? image->height() : int(height),
                                       image ? int(layer.transform.origin.x) : 0, image ? int(layer.transform.origin.y) : 0)) layer.mask = lm;
+            // A placed layer: an instance of its source. Editable, its pixels become the source's image placed by
+            // the quad (the mask keeps the place it had); otherwise it shows Photoshop's preview, locked.
+            {
+                std::optional<PsdPlacement> placement;
+                SmartObjectInstance instance;
+                for (const char* key : {"SoLd", "SoLE", "PlLd", "plLd"})
+                    if (auto b = block(key)) {
+                        instance.psdBlocks.push_back({key, std::vector<uint8_t>(b->first, b->first + b->second)});
+                        if (!placement) placement = parsePsdPlacement(key, instance.psdBlocks.back().data);
+                    }
+                if (placement && image) {
+                    instance.sourceId = placement->sourceId;
+                    instance.placedId = placement->placedId;
+                    instance.quad = placement->quad;
+                    auto source = document.smartObjects.find(placement->sourceId);
+                    const bool legacy = !block("SoLd") && !block("SoLE");
+                    std::optional<LayerTransform> placed;
+                    if (source != document.smartObjects.end() && source->second->image)
+                        placed = transformForQuad(placement->quad, source->second->image->width(), source->second->image->height());
+                    using Lock = SmartObjectInstance::Lock;
+                    instance.lock = legacy ? Lock::Legacy : placement->warped ? Lock::Warp : placement->filtered ? Lock::Filters
+                        : source == document.smartObjects.end() || source->second->kind == SmartObjectSource::Kind::Linked ? Lock::Linked
+                        : !source->second->image ? Lock::Unreadable : placement->nonAffine || !placed ? Lock::Perspective : Lock::None;
+                    if (!instance.locked()) {
+                        const LayerTransform raster = layer.transform;
+                        layer.asset = Asset::make(source->second->image, layer.name);
+                        layer.transform = *placed;
+                        layer.transform.sampling = raster.sampling;
+                        if (layer.mask && !layer.mask->placement) layer.mask->placement = raster;
+                    }
+                    instance.placedTransform = layer.transform;
+                    instance.placedWidth = layer.asset->image->width();
+                    instance.placedHeight = layer.asset->image->height();
+                    layer.smartImage = layer.asset->image;
+                    layer.smartObject = std::move(instance);
+                    if (layer.smartObject->locked()) lockedSmartObjects[smartObjectLockDescription(layer.smartObject->lock)]++;
+                    else editableSmartObjects++;
+                }
+            }
+            layer.psdCarry = carryFor(rec, layer, settings.has_value(), maskRaw);
             if (rec.clipping) {
                 // Clipped to the nearest unclipped layer below it in the same folder.
                 const size_t from = open.empty() ? 0 : open.back().firstChild;
@@ -569,9 +783,12 @@ std::optional<PsdImport> importPsd(const std::string& path, std::string* error) 
             layers.push_back(layer);
             if (!open.empty()) open.back().members.push_back(layer.id);
         }
-        if (effectsCount) notes.push_back(std::to_string(effectsCount) + " layer style(s) (drop shadows, strokes, glows) were not carried.");
-        if (vectorMasks) notes.push_back(std::to_string(vectorMasks) + " vector mask(s) were not carried.");
-        if (smartObjects) notes.push_back(std::to_string(smartObjects) + " smart object(s) were imported as pixels.");
+        if (effectsCount) notes.push_back(std::to_string(effectsCount) + " layer style(s) (shadows, glows, strokes, bevels, overlays) show as Photoshop draws them and are written back on PSD export; they cannot be edited here yet.");
+        if (vectorMasks) notes.push_back(std::to_string(vectorMasks) + " vector mask(s) and shape(s) show as Photoshop draws them and follow their layers; their paths cannot be edited here yet.");
+        if (editableSmartObjects) notes.push_back(std::to_string(editableSmartObjects) + " smart object(s) place their contents here: moving or scaling one resamples the original, and each stays a smart object on PSD export.");
+        for (auto& [why, count] : lockedSmartObjects)
+            notes.push_back(std::to_string(count) + " smart object(s) " + why + " show Photoshop's preview: they can be moved and scaled, and stay smart objects on PSD export.");
+        (void)smartObjects;
         while (!open.empty()) open.pop_back();   // an unterminated folder: its members stay at the top level
 
         // The merged image: every channel one after another, one compression for all.
@@ -645,6 +862,7 @@ std::optional<PsdImport> importPsd(const std::string& path, std::string* error) 
             layers.push_back(background);
             if (records.empty()) notes.push_back("The file carries no layers (it was saved flattened); the merged image is the only layer.");
         }
+        if (!docCarry->resources.empty() || !docCarry->globals.empty()) document.psdCarry = docCarry;
         result.document = std::move(document);
         return result;
     } catch (Truncated&) {

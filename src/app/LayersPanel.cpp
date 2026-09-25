@@ -1,6 +1,7 @@
 #include "Style.h"
 #include "LayersPanel.h"
 #include "ImageConvert.h"
+#include <QStandardItemModel>
 #include <QApplication>
 #include <QDrag>
 #include <QDragEnterEvent>
@@ -227,6 +228,7 @@ LayersPanel::LayersPanel(EditorSession* session, QWidget* parent) : QWidget(pare
     auto* appearance = new QHBoxLayout;
     blendCombo_ = new QComboBox;
     for (int i = 0; i < blendModeCount; i++) blendCombo_->addItem(QString::fromUtf8(blendModeName(BlendMode(i))));
+    blendCombo_->addItem(tr("Pass Through"));   // folders only: the last entry
     blendCombo_->setToolTip(tr("Blend mode"));
     appearance->addWidget(blendCombo_, 1);
     opacitySlider_ = new QSlider(Qt::Horizontal);
@@ -272,8 +274,13 @@ LayersPanel::LayersPanel(EditorSession* session, QWidget* parent) : QWidget(pare
     button("trash-2", tr("Delete the selected layers"), [this] { session_->deleteSelectedLayers(); });
     layout->addLayout(footer);
 
-    connect(blendCombo_, QOverload<int>::of(&QComboBox::activated), this, [this](int index) { session_->setLayerBlendMode(BlendMode(index)); });
-    connect(blendCombo_, QOverload<int>::of(&QComboBox::highlighted), this, [this](int index) { if (session_->canEditLayers()) session_->previewBlendMode(BlendMode(index)); });
+    connect(blendCombo_, QOverload<int>::of(&QComboBox::activated), this, [this](int index) {
+        if (index == blendModeCount) session_->setLayerBlendMode(BlendMode::Normal, true);
+        else session_->setLayerBlendMode(BlendMode(index));
+    });
+    connect(blendCombo_, QOverload<int>::of(&QComboBox::highlighted), this, [this](int index) {
+        if (session_->canEditLayers() && index < blendModeCount) session_->previewBlendMode(BlendMode(index));
+    });
     blendCombo_->view()->installEventFilter(this);
     connect(opacitySlider_, &QSlider::sliderPressed, this, [this] { session_->beginOpacityEdit(); });
     connect(opacitySlider_, &QSlider::sliderReleased, this, [this] { session_->endOpacityEdit(); });
@@ -381,7 +388,23 @@ QWidget* LayersPanel::makeRow(const Layer& layer, int depth, bool visible) {
     if (!visible) name->setStyleSheet(hintStyle());
     if (layer.isGroup) { QFont f = name->font(); f.setBold(true); name->setFont(f); }
     h->addWidget(name, 1);
-    if (!layer.isGroup && (layer.opacity != 1 || layer.blendMode != BlendMode::Normal)) {
+    if (layer.isLiveSmartObject()) {
+        // The smart object badge: its contents open on a click (when NekoPhoto can redraw them).
+        auto* badge = new QToolButton;
+        badge->setAutoRaise(true);
+        badge->setText(layer.smartObject->locked() ? QStringLiteral("◇") : QStringLiteral("◆"));
+        const SmartObjectSource* source = nullptr;
+        if (auto it = session_->document()->smartObjects.find(layer.smartObject->sourceId); it != session_->document()->smartObjects.end()) source = it->second.get();
+        const QString file = source ? QString::fromStdString(source->fileName) : tr("its contents");
+        badge->setToolTip(layer.smartObject->locked()
+            ? tr("Smart object (%1), %2: it shows its stored preview and can be moved and scaled.").arg(file, QString::fromUtf8(smartObjectLockDescription(layer.smartObject->lock)))
+            : tr("Smart object (%1): click to edit its contents.").arg(file));
+        badge->setProperty("smartObjectBadge", true);
+        const Uuid id = layer.id;
+        connect(badge, &QToolButton::clicked, this, [this, id] { emit smartObjectContentsRequested(id); });
+        h->addWidget(badge);
+    }
+    if (layer.opacity != 1 || layer.blendMode != BlendMode::Normal || (layer.isGroup && !layer.passThrough)) {
         auto* info = new QLabel(QStringLiteral("%1%").arg(int(std::round(layer.opacity * 100))));
         info->setStyleSheet(hintStyle(" font-size: 10px;"));
         h->addWidget(info);
@@ -449,12 +472,15 @@ void LayersPanel::finishSwipe() {
 
 void LayersPanel::syncAppearance() {
     const Layer* active = session_->activeLayer();
-    bool enabled = active && !active->isGroup && !active->adjustment;
+    bool enabled = active && !active->adjustment;
     blendCombo_->setEnabled(enabled);
-    opacitySlider_->setEnabled(active && !active->isGroup);
-    opacitySpin_->setEnabled(active && !active->isGroup);
+    opacitySlider_->setEnabled(active != nullptr);
+    opacitySpin_->setEnabled(active != nullptr);
     QSignalBlocker b1(blendCombo_), b2(opacitySlider_), b3(opacitySpin_);
-    blendCombo_->setCurrentIndex(active ? int(active->blendMode) : 0);
+    // Pass Through is a folder's alone.
+    if (auto* model = qobject_cast<QStandardItemModel*>(blendCombo_->model()))
+        if (auto* item = model->item(blendModeCount)) item->setEnabled(active && active->isGroup);
+    blendCombo_->setCurrentIndex(!active ? 0 : active->isGroup && active->passThrough ? blendModeCount : int(active->blendMode));
     int opacity = active ? int(std::round(active->opacity * 100)) : 100;
     opacitySlider_->setValue(opacity);
     opacitySpin_->setValue(opacity);

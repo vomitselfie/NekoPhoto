@@ -318,7 +318,7 @@ def layers_get(id: str) -> str:
 
 @edit("Set layer properties")
 def layers_set(id: str, name: Optional[str] = None, visible: Optional[bool] = None, opacity: Optional[float] = None, blend: Optional[str] = None, clipping: Optional[bool] = None) -> str:
-    """Change a layer's name, visibility, opacity (0..1), blend mode (Normal, Multiply, Screen, Overlay, Darken, Lighten, Difference, Color Dodge, Color Burn, Hue, Saturation, Color, Luminosity) or whether it clips to the layer beneath."""
+    """Change a layer's name, visibility, opacity (0..1), blend mode (Normal, Multiply, Screen, Overlay, Darken, Lighten, Difference, Color Dodge, Color Burn, Hue, Saturation, Color, Luminosity; a folder also Pass Through) or whether it clips to the layer beneath."""
     return text(call("layers.set", id=id, name=name, visible=visible, opacity=opacity, blend=blend, clipping=clipping))
 
 
@@ -389,6 +389,45 @@ def layers_merge(down: bool = False) -> str:
 def layers_group() -> str:
     """Put the selected layers into a new folder."""
     return text(call("layers.group"))
+
+
+@edit("Convert to smart object")
+def smart_object_convert(ids: Optional[list[str]] = None) -> str:
+    """Turn the selected layers (or these layer ids) into one smart object: their PSD becomes its contents, placed
+    where they were. Moving or scaling it later resamples the original, never the last result."""
+    return text(call("smartObject.convert", ids=ids))
+
+
+@edit("Place a smart object")
+def smart_object_place(path: str) -> str:
+    """Place an image or PSD file as an embedded smart object above the active layer, 1:1 in the middle (scaled
+    down to fit a smaller canvas)."""
+    return text(call("smartObject.place", path=os.path.abspath(path)))
+
+
+@edit("Replace smart object contents")
+def smart_object_replace(path: str, id: Optional[str] = None) -> str:
+    """Swap a smart object's contents for a file's in every layer placing them; each keeps its centre and scale."""
+    return text(call("smartObject.replace", id=id, path=os.path.abspath(path)))
+
+
+@edit("Rasterize a smart object")
+def smart_object_rasterize(id: Optional[str] = None) -> str:
+    """Make a smart object plain pixels (it keeps what it shows)."""
+    return text(call("smartObject.rasterize", id=id))
+
+
+@outside("Open smart object contents")
+def smart_object_edit_contents(id: Optional[str] = None) -> str:
+    """Open a smart object's contents in a new tab. Edit them there with the usual tools, then smart_object_commit
+    puts them back into every layer placing them (and tabs_select returns to the document)."""
+    return text(call("smartObject.editContents", id=id))
+
+
+@edit("Put smart object contents back")
+def smart_object_commit() -> str:
+    """In a contents tab opened by smart_object_edit_contents: put the contents back into the smart object."""
+    return text(call("smartObject.commit"))
 
 
 # ---- adjustments and filters ---------------------------------------------------------------------
@@ -679,7 +718,7 @@ Recipes:
   pixels_fill #111111 gives it the drawing's outline.
 
 Things to know: filters, fills and adjustments act on the active layer inside the selection (selection_edit none
-for the whole layer). Opacity is 0..1. Folders have no blend mode. brush_stroke puts the person's tool and colours
+for the whole layer). Opacity is 0..1. Folders are Pass Through (children blend into what is below) unless given a blend mode, which isolates them as in Photoshop. brush_stroke puts the person's tool and colours
 back afterwards. For a method without a tool, describe_method, then rpc."""
 
 

@@ -1,4 +1,5 @@
 // The main window's file handling: new, open, import, save, export, and files dropped on the window.
+#include "TextLayer.h"
 #include "MainWindow.h"
 #include "compositor/psd_writer.h"
 #include "CanvasWidget.h"
@@ -85,9 +86,10 @@ void MainWindow::openLayeredFile(const QString& path) {
     QApplication::setOverrideCursor(Qt::BusyCursor);
     std::string error;
     const bool clip = path.endsWith(".clip", Qt::CaseInsensitive);
-    auto imported = clip ? compositor::importClip(path.toStdString(), &error) : compositor::importPsd(path.toStdString(), &error);
+    auto imported = clip ? compositor::importClip(path.toStdString(), &error) : compositor::importPsd(path.toStdString(), &error, app::psdImportOptions());
     QApplication::restoreOverrideCursor();
     if (!imported) { showError(tr("Couldn’t open %1").arg(QFileInfo(path).fileName()), QString::fromStdString(error)); return; }
+    if (!clip) app::finishPsdText(*imported);
     Tab& tab = addTab(true);
     tab.session->adoptDocument(imported->document, QFileInfo(path).completeBaseName());
     addRecent(path);
@@ -177,8 +179,35 @@ void MainWindow::importFiles() {
     }
 }
 
+bool MainWindow::editSmartObjectContents(QString* errorOut) {
+    QString error;
+    auto contents = session_->smartObjectContentsForEditing(&error);
+    if (!contents) {
+        if (errorOut) *errorOut = error; else showError(tr("Couldn’t open the contents"), error);
+        return false;
+    }
+    EditorSession* parent = session_;
+    const Layer* layer = parent->activeLayer();
+    const QString parentName = parent->title().remove(QStringLiteral(" *"));
+    const QString fileName = layer && layer->smartObject && parent->document()->smartObjects.count(layer->smartObject->sourceId)
+        ? QString::fromStdString(parent->document()->smartObjects.at(layer->smartObject->sourceId)->fileName) : tr("Contents");
+    Tab& tab = addTab(false);
+    tab.session->adoptDocument(contents->first, tr("%1 (in %2)").arg(fileName, parentName));
+    tab.session->setSmartObjectParent(parent, contents->second);
+    statusBar()->showMessage(tr("Editing the contents of %1: Save puts them back.").arg(fileName), 8000);
+    return true;
+}
+
 bool MainWindow::save(bool asNew) {
     if (!session_->hasDocument()) return false;
+    // A smart object's contents go back to it (Save As saves them as a project of their own instead).
+    if (!asNew && session_->smartObjectParent()) {
+        QString error;
+        if (!session_->commitToSmartObjectParent(&error)) { showError(tr("Couldn’t put the contents back"), error); return false; }
+        refreshTabTitles();
+        statusBar()->showMessage(tr("Contents saved into the smart object."), 5000);
+        return true;
+    }
     QString path = session_->projectPath();
     if (asNew || path.isEmpty()) {
         QString suggested = QDir(QSettings().value("lastDir").toString()).filePath((path.isEmpty() ? QStringLiteral("Untitled") : QFileInfo(path).completeBaseName()) + ".comp");
@@ -215,7 +244,7 @@ void MainWindow::exportPsd() {
         return;
     }
     // What the file will hold, and what will not look or behave the same in Photoshop, before choosing where.
-    const compositor::PsdExportSummary plan = compositor::planPsdExport(doc);
+    const compositor::PsdExportSummary plan = compositor::planPsdExport(doc, app::psdExportOptions());
     if (!plan.warnings.empty()) {
         QString counts = tr("%n layer(s)", "", plan.layers + plan.adjustments);
         if (plan.folders) counts += tr(", %n folder(s)", "", plan.folders);
@@ -243,7 +272,7 @@ void MainWindow::exportPsd() {
     QApplication::setOverrideCursor(Qt::WaitCursor);
     compositor::PsdExportSummary summary;
     std::string error;
-    const bool ok = compositor::exportPsd(doc, path.toStdString(), {}, &summary, &error);
+    const bool ok = compositor::exportPsd(doc, path.toStdString(), app::psdExportOptions(), &summary, &error);
     QApplication::restoreOverrideCursor();
     if (!ok) { showError(tr("Couldn’t export PSD"), QString::fromStdString(error)); return; }
     statusBar()->showMessage(tr("Exported %1").arg(QFileInfo(path).fileName()), 5000);

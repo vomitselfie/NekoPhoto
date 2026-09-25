@@ -100,6 +100,13 @@ add_library(compositor_core STATIC
     src/heal.cpp
     src/inpaint.cpp
     src/psd.cpp
+    src/layerstyle.cpp
+    src/layerstyle_render.cpp
+    src/psd_carry.cpp
+    src/smartobject.cpp
+    src/smartobject_edit.cpp
+    src/vectormask.cpp
+    src/psd_text.cpp
     src/psd_writer.cpp
     src/subject.cpp
     src/sut.cpp
@@ -143,3 +150,12 @@ if(COMPOSITOR_HAVE_MYPAINT)
     target_compile_definitions(compositor_core PRIVATE COMPOSITOR_HAVE_MYPAINT)
 endif()
 set_target_properties(compositor_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# Patchy's PSD primitives (MIT, src/third_party/patchy_psd/README.md): descriptors and binary I/O.
+add_library(patchy_psd STATIC
+    ${CMAKE_SOURCE_DIR}/src/third_party/patchy_psd/psd/psd_binary.cpp
+    ${CMAKE_SOURCE_DIR}/src/third_party/patchy_psd/psd/psd_descriptor.cpp
+)
+target_include_directories(patchy_psd PUBLIC ${CMAKE_SOURCE_DIR}/src/third_party/patchy_psd)
+set_target_properties(patchy_psd PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(compositor_core PUBLIC patchy_psd)
