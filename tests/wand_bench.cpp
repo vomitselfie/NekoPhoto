@@ -7,6 +7,8 @@
 #include "compositor/png.h"
 #include "compositor/smartwand.h"
 #include "compositor/wand.h"
+#include "compositor/morphology.h"
+#include "compositor/selection.h"
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -177,6 +179,130 @@ int main(int argc, char** argv) {
         }
         return 0;
     }
+    if (argc > 1 && std::string(argv[1]) == "edges") {
+        // Line art on a coloured ground, antialiased and smudged the way AI renders often are: the background is
+        // clicked and cleared, and what is left is compared with the true line (black, alpha = its coverage).
+        const int N = 384;
+        const double lr = 20, lg = 20, lb = 25, br = 60, bg = 110, bb = 220;
+        GrayImage truth(N, N, 0);
+        {
+            std::vector<float> cov(size_t(N) * N, 0.0f);
+            for (int y = 0; y < N; y++) for (int x = 0; x < N; x++) {
+                int hits = 0;
+                for (int j = 0; j < 4; j++) for (int i = 0; i < 4; i++) {
+                    const double X = x + (i + 0.5) / 4, Y = y + (j + 0.5) / 4;
+                    bool on = false;
+                    for (int k = 0; k < 4; k++) {   // four waves of widths 1.5 to 6
+                        const double w = 1.5 + k * 1.5, cy = 60 + k * 85 + 18 * std::sin(X / (22.0 + k * 7));
+                        on = on || std::fabs(Y - cy) < w / 2;
+                    }
+                    on = on || std::fabs(std::hypot(X - 190, Y - 190) - 150) < 1.5;   // a thin ring
+                    hits += on;
+                }
+                cov[size_t(y) * N + x] = hits / 16.0f;
+            }
+            // Smudge: a small blur, the unclear lines of a render.
+            std::vector<float> blurred(cov.size());
+            const float k3[3] = {0.25f, 0.5f, 0.25f};
+            for (int y = 0; y < N; y++) for (int x = 0; x < N; x++) { float a = 0; for (int i = -1; i <= 1; i++) a += k3[i + 1] * cov[size_t(y) * N + size_t(std::clamp(x + i, 0, N - 1))]; blurred[size_t(y) * N + x] = a; }
+            for (int y = 0; y < N; y++) for (int x = 0; x < N; x++) { float a = 0; for (int j = -1; j <= 1; j++) a += k3[j + 1] * blurred[size_t(std::clamp(y + j, 0, N - 1)) * N + x]; truth.at(x, y) = uint8_t(std::lround(a * 255)); }
+        }
+        Image image(N, N);
+        std::mt19937 rng(7);
+        std::normal_distribution<double> noise(0, 3);
+        for (int y = 0; y < N; y++) for (int x = 0; x < N; x++) {
+            const double c = truth.at(x, y) / 255.0;
+            uint8_t* p = image.pixel(x, y);
+            p[0] = uint8_t(std::clamp(std::lround(lr * c + br * (1 - c) + noise(rng)), 0L, 255L));
+            p[1] = uint8_t(std::clamp(std::lround(lg * c + bg * (1 - c) + noise(rng)), 0L, 255L));
+            p[2] = uint8_t(std::clamp(std::lround(lb * c + bb * (1 - c) + noise(rng)), 0L, 255L));
+            p[3] = 255;
+        }
+        // What one click is answerable for: the background region it lands in (no line coverage to speak of,
+        // connected to the click) and everything within 5 pixels of it (the lines bounding it).
+        std::vector<uint8_t> scope(size_t(N) * N, 0), clearedSide(size_t(N) * N, 0);
+        {
+            std::vector<uint8_t> region(size_t(N) * N, 0);
+            std::vector<std::pair<int, int>> stack{{5, 5}};
+            while (!stack.empty()) {
+                auto [x, y] = stack.back(); stack.pop_back();
+                if (x < 0 || y < 0 || x >= N || y >= N || region[size_t(y) * N + x] || truth.at(x, y) >= 13) continue;
+                region[size_t(y) * N + x] = 1;
+                stack.push_back({x + 1, y}); stack.push_back({x - 1, y}); stack.push_back({x, y + 1}); stack.push_back({x, y - 1});
+            }
+            for (int y = 0; y < N; y++) for (int x = 0; x < N; x++) {
+                if (!region[size_t(y) * N + x]) continue;
+                for (int j = -5; j <= 5; j++) for (int i = -5; i <= 5; i++) { const int X = x + i, Y = y + j; if (X >= 0 && Y >= 0 && X < N && Y < N) scope[size_t(Y) * N + X] = 1; }
+            }
+            // The cleared side: where blue left over counts (the far side of a line keeps its own region's blue).
+            for (int y = 0; y < N; y++) for (int x = 0; x < N; x++) {
+                if (!region[size_t(y) * N + x]) continue;
+                for (int j = -2; j <= 2; j++) for (int i = -2; i <= 2; i++) { const int X = x + i, Y = y + j; if (X >= 0 && Y >= 0 && X < N && Y < N) clearedSide[size_t(Y) * N + X] = 1; }
+            }
+            // Not the other regions beyond the lines: those are another click's.
+            for (int y = 0; y < N; y++) for (int x = 0; x < N; x++)
+                if (!region[size_t(y) * N + x] && truth.at(x, y) < 13) scope[size_t(y) * N + x] = 0;
+        }
+        struct Result { double alphaError, lineEaten, blueLeft; };
+        auto score = [&](const Image& out) {
+            double err = 0, eaten = 0, blue = 0; long ne = 0, nl = 0, nb = 0;
+            for (int y = 0; y < N; y++) for (int x = 0; x < N; x++) {
+                if (!scope[size_t(y) * N + x]) continue;
+                const double want = truth.at(x, y) / 255.0;
+                const uint8_t* p = out.pixel(x, y);
+                const double a = p[3] / 255.0;
+                if (want > 0 || a > 0) { err += std::fabs(a - want); ne++; }
+                if (want > 0.9) { eaten += std::max(0.0, want - a); nl++; }
+                // What is left, as it shows over white: blue above the line's own colour is the old ground.
+                if (a > 0.02 && clearedSide[size_t(y) * N + x]) { const double sb = p[2] / 255.0 / a * 255, sr = p[0] / 255.0 / a * 255; blue += a * std::max(0.0, (sb - sr) - (lb - lr)); nb++; }
+            }
+            return Result{err / std::max(1L, ne), eaten / std::max(1L, nl), blue / std::max(1L, nb)};
+        };
+        SmartWandImage prepared(image);
+        auto field = prepared.propagate(5, 5, 1, wandCost(255));
+        std::printf("%-44s %12s %12s %12s\n", "flow (best tolerance)", "alpha error", "line eaten", "blue left");
+        auto report = [&](const char* name, auto run) {
+            for (int t : {16, 32, 48}) { Result r = run(t); std::printf("%-38s (%3d) %12.4f %12.4f %12.2f\n", name, t, r.alphaError, r.lineEaten, r.blueLeft); }
+        };
+        auto clearPlain = [&](const GrayImage& m) {
+            Image out = image;
+            for (int y = 0; y < N; y++) for (int x = 0; x < N; x++) { const double c = m.at(x, y) / 255.0; uint8_t* p = out.pixel(x, y); for (int k = 0; k < 4; k++) p[k] = uint8_t(p[k] * (1 - c) + 0.5); }
+            return out;
+        };
+        report("wand, delete", [&](int t) { GrayImage m(N, N, 0); thresholdWandField(field, t, true, m); return score(clearPlain(m)); });
+        report("wand, expand 2, smooth 3, delete", [&](int t) {
+            GrayImage m(N, N, 0); thresholdWandField(field, t, true, m);
+            Selection s; s.coverage = std::make_shared<GrayImage>(m);
+            Selection grown = resizeSelection(s, 2);
+            auto smooth = smoothSelection(*grown.coverage, 3);
+            return score(clearPlain(*smooth));
+        });
+        report("classic wand, expand 2, smooth 3, delete", [&](int t) {
+            GrayImage m(N, N, 0); wandMask(image, 5, 5, 1, t, true, m);
+            Selection s; s.coverage = std::make_shared<GrayImage>(m);
+            Selection grown = resizeSelection(s, 2);
+            auto smooth = smoothSelection(*grown.coverage, 3);
+            return score(clearPlain(*smooth));
+        });
+        report("wand, refined edge, delete", [&](int t) { GrayImage m(N, N, 0); thresholdWandField(field, t, true, m); refineWandEdge(image, m, 3); return score(clearPlain(m)); });
+        report("wand, refined edge, clean delete", [&](int t) {
+            GrayImage m(N, N, 0); thresholdWandField(field, t, true, m); std::vector<uint32_t> colours; refineWandEdge(image, m, 3, &colours);
+            Image out = image; clearDecontaminated(out, m, &colours); return score(out);
+        });
+        if (argc > 2) {
+            GrayImage m(N, N, 0); thresholdWandField(field, 32, true, m); std::vector<uint32_t> colours; refineWandEdge(image, m, 3, &colours);
+            Image out = image; clearDecontaminated(out, m, &colours);
+            writePngImage(std::string(argv[2]) + "/lines.png", image, 72, nullptr);
+            writePngImage(std::string(argv[2]) + "/lines-clean.png", out, 72, nullptr);
+            GrayImage m2(N, N, 0); thresholdWandField(field, 32, true, m2);
+            Selection s; s.coverage = std::make_shared<GrayImage>(m2);
+            auto smooth = smoothSelection(*resizeSelection(s, 2).coverage, 3);
+            writePngImage(std::string(argv[2]) + "/lines-routine.png", clearPlain(*smooth), 72, nullptr);
+        }
+        return 0;
+    }
+    // wand_bench check: the benchmark's recorded results as a test (tests/CMakeLists.txt runs it).
+    const bool check = argc > 1 && std::string(argv[1]) == "check";
     const bool dump = argc > 2 && std::string(argv[1]) == "dump";
     const std::string dir = dump ? argv[2] : "";
     std::vector<std::pair<std::string, Method>> methods;
@@ -184,7 +310,7 @@ int main(int argc, char** argv) {
         return [&s](int t, GrayImage& m) { wandMask(s.image, s.x, s.y, 1, t, true, m); };
     }});
     struct Variant { const char* label; double edge, neighbour, seed, texture, region = 0; };
-    for (Variant v : {Variant{"B seed only", 0, 0, 1, 0}, Variant{"shipped (M1)", 0, 8, 0.7, 2, 0}, Variant{"M3 region 1", 0, 8, 0.7, 2, 1}, Variant{"M3 region 2", 0, 8, 0.7, 2, 2}}) {
+    for (Variant v : {Variant{"seed only", 0, 0, 1, 0}, Variant{"milestone 1", 0, 8, 0.7, 2, 0}, Variant{"region weight 2", 0, 8, 0.7, 2, 2}, Variant{"shipped", 0, 8, 0.7, 2, 1}}) {
         methods.push_back({v.label, [v](const Scene& s) {
             auto image = std::make_shared<SmartWandImage>(s.image, v.edge > 0);
             SmartWandOptions o; o.edgeWeight = v.edge; o.neighbourWeight = v.neighbour; o.seedWeight = v.seed; o.textureWeight = v.texture; o.regionWeight = v.region;
@@ -222,5 +348,13 @@ int main(int argc, char** argv) {
     std::printf("\nmean over %zu scenes\n%-22s %8s %8s %7s\n", all.size(), "method", "IoU@32", "best", "range");
     for (size_t k = 0; k < methods.size(); k++)
         std::printf("%-22s %8.3f %8.3f %7.1f\n", methods[k].first.c_str(), sumDefault[k] / all.size(), sumBest[k] / all.size(), sumRange[k] / all.size());
+    if (check) {
+        // The shipped wand (the last method) must stay at least as good as recorded, and ahead of the classic one.
+        const size_t shipped = methods.size() - 1;
+        const double atDefault = sumDefault[shipped] / all.size(), best = sumBest[shipped] / all.size();
+        bool ok = atDefault >= 0.86 && best >= 0.99 && atDefault > sumDefault[0] / all.size() + 0.2;
+        std::printf("check: shipped IoU@32 %.3f (at least 0.86), best %.3f (at least 0.99): %s\n", atDefault, best, ok ? "ok" : "REGRESSED");
+        return ok ? 0 : 1;
+    }
     return 0;
 }

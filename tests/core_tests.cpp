@@ -1187,6 +1187,59 @@ TEST_CASE(wand_click_in_a_grid_takes_the_whole_piece) {
     CHECK_EQ(int(mask.at(220, 100)), 0);
 }
 
+TEST_CASE(wand_handles_tiny_and_transparent_layers) {
+    // One pixel, fully transparent, and a click at the corner of a 2 x 2: no crash, sensible answers.
+    Image one(1, 1);
+    one.fill(10, 20, 30, 255);
+    SmartWandImage a(one);
+    auto fa = a.propagate(0, 0, 3, wandCost(255));
+    GrayImage ma(1, 1, 0);
+    CHECK_EQ(thresholdWandField(fa, 32, true, ma), 1L);
+    refineWandEdge(one, ma, 3);
+    Image clear(40, 30);   // transparent everywhere
+    SmartWandImage b(clear);
+    auto fb = b.propagate(39, 29, 5, wandCost(255));
+    GrayImage mb(40, 30, 0);
+    CHECK_EQ(thresholdWandField(fb, 0, false, mb), 40L * 30);
+    refineWandEdge(clear, mb, 3);
+    Image c(2, 2);
+    c.fill(200, 0, 0, 255);
+    c.pixel(1, 1)[0] = 0;
+    SmartWandImage cc(c);
+    auto fc = cc.propagate(0, 0, 1, 64);
+    CHECK(fc.cost[0] == 0);
+    CHECK_EQ(thresholdWandFields({}, {}, 32, true, mb), 0L);
+    CHECK_EQ(wandNextTolerance({}, {}, 32), -1);
+}
+
+TEST_CASE(refined_wand_edge_unmixes_a_line_fringe_and_clean_delete_leaves_its_colour) {
+    // A black line 3 pixels wide on blue with a one-pixel half-mixed fringe each side: the background click with a
+    // refined edge half-selects the fringe, and the clean delete leaves the fringe black at half alpha.
+    const int W = 40, H = 20;
+    Image image(W, H);
+    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
+        uint8_t* p = image.pixel(x, y);
+        const double line = (x >= 19 && x <= 21) ? 1.0 : (x == 18 || x == 22) ? 0.5 : 0.0;
+        p[0] = uint8_t(std::lround(60 * (1 - line))); p[1] = uint8_t(std::lround(110 * (1 - line))); p[2] = uint8_t(std::lround(220 * (1 - line))); p[3] = 255;
+    }
+    SmartWandImage prepared(image);
+    auto field = prepared.propagate(3, 10, 1, 64);
+    GrayImage mask(W, H, 0);
+    thresholdWandField(field, 32, true, mask);
+    CHECK_EQ(int(mask.at(18, 10)), 0);   // the plain wand leaves the fringe whole
+    std::vector<uint32_t> colours;
+    refineWandEdge(image, mask, 3, &colours);
+    CHECK(std::abs(int(mask.at(18, 10)) - 128) <= 20);   // half background
+    CHECK_EQ(int(mask.at(20, 10)), 0);                    // the line itself untouched
+    Image cleared = image;
+    clearDecontaminated(cleared, mask, &colours);
+    const uint8_t* fringe = cleared.pixel(18, 10);
+    CHECK(std::abs(int(fringe[3]) - 128) <= 20);
+    CHECK(fringe[2] < 15);   // black, not blue
+    CHECK_EQ(int(cleared.pixel(5, 10)[3]), 0);
+    CHECK_EQ(int(cleared.pixel(20, 10)[3]), 255);
+}
+
 TEST_CASE(wand_keep_out_clicks_compete_with_selecting_ones) {
     // At a tolerance high enough to cross into the near colour, a keep-out click on it takes it back out.
     const int W = 120, H = 60;

@@ -1,5 +1,6 @@
 #include "compositor/smartwand.h"
 #include "compositor/parallel.h"
+#include "compositor/matte.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -394,6 +395,182 @@ long thresholdWandFields(const std::vector<const SmartWandImage::Field*>& positi
         }
     }
     return count;
+}
+
+void refineWandEdge(const Image& pixels, GrayImage& mask, int band, std::vector<uint32_t>* lineColours) {
+    const int W = pixels.width(), H = pixels.height();
+    if (W != mask.width() || H != mask.height() || band <= 0) return;
+    // Which side of the edge each pixel is on, and whether it is within `band` of it (a square neighbourhood
+    // holding both sides).
+    std::vector<uint8_t> inside(size_t(W) * H), near(size_t(W) * H, 0);
+    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) inside[size_t(y) * W + x] = mask.at(x, y) >= 128;
+    {
+        // Row then column: the distance, in squares, to the nearest pixel on the other side.
+        std::vector<int> rowNear(size_t(W) * H, band + 1);
+        parallelRows(0, H, [&](int ya, int yb) {
+            for (int y = ya; y < yb; y++)
+                for (int x = 0; x < W; x++) {
+                    const uint8_t me = inside[size_t(y) * W + x];
+                    int d = band + 1;
+                    for (int k = 0; k <= band && d > band; k++) {
+                        if (x - k >= 0 && inside[size_t(y) * W + x - k] != me) d = k;
+                        else if (x + k < W && inside[size_t(y) * W + x + k] != me) d = k;
+                    }
+                    rowNear[size_t(y) * W + x] = d;
+                }
+        }, 32);
+        // A pixel is near the edge when some pixel within `band` rows has an opposite-side pixel within `band` columns.
+        parallelRows(0, H, [&](int ya, int yb) {
+            for (int y = ya; y < yb; y++)
+                for (int x = 0; x < W; x++) {
+                    const uint8_t me = inside[size_t(y) * W + x];
+                    bool found = false;
+                    for (int j = -band; j <= band && !found; j++) {
+                        const int Y = y + j;
+                        if (Y < 0 || Y >= H) continue;
+                        // Same-side rows carry the distance to their own other side; an opposite-side pixel counts at 0.
+                        if (inside[size_t(Y) * W + x] != me || rowNear[size_t(Y) * W + x] <= band) found = true;
+                    }
+                    near[size_t(y) * W + x] = found;
+                }
+        }, 32);
+    }
+    auto straight = [&](int x, int y, float out[3]) {
+        const uint8_t* p = pixels.pixel(x, y);
+        const float a = p[3];
+        for (int c = 0; c < 3; c++) out[c] = a > 0 ? p[c] * 255.0f / a : 0.0f;
+    };
+    const int R = band + 3;
+    GrayImage refined = mask;
+    if (lineColours) lineColours->assign(size_t(W) * H, 0);
+    // First, per edge pixel: the selected colour near it (B, from sure selected pixels) and the other colour
+    // (F, the fifth of unselected pixels farthest from B: the line's core, which a thin line has no sure pixels
+    // of).
+    struct Local { float B[3], F[3]; bool ok = false; };
+    std::vector<Local> local(size_t(W) * H);
+    parallelRows(0, H, [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++)
+            for (int x = 0; x < W; x++) {
+                if (!near[size_t(y) * W + x]) continue;
+                Local& L = local[size_t(y) * W + x];
+                float B[3] = {0, 0, 0};
+                int nb = 0;
+                for (int j = -R; j <= R; j++) for (int i = -R; i <= R; i++) {
+                    const int X = x + i, Y = y + j;
+                    if (X < 0 || Y < 0 || X >= W || Y >= H) continue;
+                    const size_t k = size_t(Y) * W + X;
+                    if (!inside[k] || near[k]) continue;
+                    float c[3]; straight(X, Y, c);
+                    for (int ch = 0; ch < 3; ch++) B[ch] += c[ch];
+                    nb++;
+                }
+                if (nb == 0) continue;
+                for (float& v : B) v /= float(nb);
+                std::vector<std::pair<float, std::array<float, 3>>> others;
+                for (int j = -R; j <= R; j++) for (int i = -R; i <= R; i++) {
+                    const int X = x + i, Y = y + j;
+                    if (X < 0 || Y < 0 || X >= W || Y >= H || inside[size_t(Y) * W + X]) continue;
+                    std::array<float, 3> c; straight(X, Y, c.data());
+                    float d = 0; for (int ch = 0; ch < 3; ch++) d += (c[size_t(ch)] - B[ch]) * (c[size_t(ch)] - B[ch]);
+                    others.push_back({d, c});
+                }
+                if (others.empty()) continue;
+                const size_t keep = std::max<size_t>(1, others.size() / 5);
+                std::partial_sort(others.begin(), others.begin() + long(keep), others.end(), [](const auto& p, const auto& q) { return p.first > q.first; });
+                for (int ch = 0; ch < 3; ch++) { L.B[ch] = B[ch]; L.F[ch] = 0; }
+                for (size_t k = 0; k < keep; k++) for (int ch = 0; ch < 3; ch++) L.F[ch] += others[k].second[size_t(ch)] / float(keep);
+                L.ok = true;
+            }
+    }, 16);
+    // The line's own colour over the whole edge: the local colours farthest from their background (the cores of
+    // the thicker stretches), the most distinct twentieth, averaged.
+    float G[3] = {0, 0, 0};
+    bool haveGlobal = false;
+    {
+        std::vector<std::pair<float, std::array<float, 3>>> all;
+        for (const Local& L : local) {
+            if (!L.ok) continue;
+            float d = 0; for (int ch = 0; ch < 3; ch++) d += (L.F[ch] - L.B[ch]) * (L.F[ch] - L.B[ch]);
+            all.push_back({d, {L.F[0], L.F[1], L.F[2]}});
+        }
+        if (!all.empty()) {
+            const size_t keep = std::max<size_t>(1, all.size() / 20);
+            std::partial_sort(all.begin(), all.begin() + long(keep), all.end(), [](const auto& p, const auto& q) { return p.first > q.first; });
+            for (size_t k = 0; k < keep; k++) for (int ch = 0; ch < 3; ch++) G[ch] += all[k].second[size_t(ch)] / float(keep);
+            haveGlobal = true;
+        }
+    }
+    parallelRows(0, H, [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++)
+            for (int x = 0; x < W; x++) {
+                const Local& L = local[size_t(y) * W + x];
+                if (!L.ok) continue;
+                float F[3] = {L.F[0], L.F[1], L.F[2]};
+                // A faint stretch of the same line: its local colour lies on the way from the background to the
+                // line's own colour. Unmix against the line's own colour then (a lower alpha, a truer colour).
+                if (haveGlobal) {
+                    float bg2 = 0, t = 0;
+                    for (int ch = 0; ch < 3; ch++) { bg2 += (G[ch] - L.B[ch]) * (G[ch] - L.B[ch]); t += (L.F[ch] - L.B[ch]) * (G[ch] - L.B[ch]); }
+                    if (bg2 > 0) {
+                        t /= bg2;
+                        float off = 0;
+                        for (int ch = 0; ch < 3; ch++) { const float onLine = L.B[ch] + t * (G[ch] - L.B[ch]); off += (L.F[ch] - onLine) * (L.F[ch] - onLine); }
+                        if (t > 0.2f && t < 1.05f && std::sqrt(off) < 25.0f) for (int ch = 0; ch < 3; ch++) F[ch] = G[ch];
+                    }
+                }
+                float BF2 = 0; for (int ch = 0; ch < 3; ch++) BF2 += (L.B[ch] - F[ch]) * (L.B[ch] - F[ch]);
+                if (BF2 < 20.0f * 20.0f) continue;   // too alike to unmix
+                float P[3]; straight(x, y, P);
+                const float alpha = pixels.pixel(x, y)[3] / 255.0f;
+                float t = 0; for (int ch = 0; ch < 3; ch++) t += (P[ch] - F[ch]) * (L.B[ch] - F[ch]);
+                const float a = std::clamp(t / BF2, 0.0f, 1.0f) * alpha + (1 - alpha) * (inside[size_t(y) * W + x] ? 1.0f : 0.0f);
+                refined.at(x, y) = uint8_t(std::lround(a * 255));
+                if (lineColours) {
+                    const auto q = [](float v) { return uint32_t(std::clamp(std::lround(v), 0L, 255L)); };
+                    (*lineColours)[size_t(y) * W + x] = 0x1000000u | (q(F[0]) << 16) | (q(F[1]) << 8) | q(F[2]);
+                }
+            }
+    }, 16);
+    mask = std::move(refined);
+}
+
+void clearDecontaminated(Image& pixels, const GrayImage& coverage, const std::vector<uint32_t>* lineColours) {
+    const int W = pixels.width(), H = pixels.height();
+    if (coverage.width() != W || coverage.height() != H) return;
+    // What stays is 1 - coverage of each pixel; its colour, where only part stays, is the estimated colour of
+    // that part alone.
+    GrayImage kept(W, H, 0);
+    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) kept.at(x, y) = uint8_t(std::lround((255 - coverage.at(x, y)) * pixels.pixel(x, y)[3] / 255.0));
+    // The general estimate only where a half-cleared pixel has no colour from the unmixing.
+    const bool haveColours = lineColours && lineColours->size() == size_t(W) * H;
+    bool needEstimate = false;
+    for (int y = 0; y < H && !needEstimate; y++) for (int x = 0; x < W; x++) {
+        const unsigned c = coverage.at(x, y);
+        if (c > 0 && c < 255 && !(haveColours && (*lineColours)[size_t(y) * W + x])) { needEstimate = true; break; }
+    }
+    auto foreground = needEstimate ? estimateForeground(pixels, kept) : nullptr;
+    parallelRows(0, H, [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++)
+            for (int x = 0; x < W; x++) {
+                const unsigned c = coverage.at(x, y);
+                if (c == 0) continue;
+                uint8_t* p = pixels.pixel(x, y);
+                if (c == 255) { p[0] = p[1] = p[2] = p[3] = 0; continue; }
+                const unsigned a = kept.at(x, y);
+                const uint32_t known = lineColours && lineColours->size() == size_t(W) * H ? (*lineColours)[size_t(y) * W + x] : 0;
+                if (known) {
+                    // The line's own colour, from the unmixing, at the alpha that is left.
+                    p[0] = uint8_t(((known >> 16) & 0xff) * a / 255); p[1] = uint8_t(((known >> 8) & 0xff) * a / 255); p[2] = uint8_t((known & 0xff) * a / 255);
+                    p[3] = uint8_t(a);
+                    continue;
+                }
+                const uint8_t* f = foreground ? foreground->pixel(x, y) : p;
+                // The estimate's straight colour at the kept alpha, premultiplied.
+                const unsigned fa = f[3];
+                for (int k = 0; k < 3; k++) p[k] = uint8_t(fa ? std::min(255u, (f[k] * 255u / fa) * a / 255u) : 0);
+                p[3] = uint8_t(a);
+            }
+    }, 32);
 }
 
 } // namespace compositor

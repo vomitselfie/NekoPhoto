@@ -93,4 +93,19 @@ long thresholdWandField(const SmartWandImage::Field& field, int tolerance, bool 
 long thresholdWandFields(const std::vector<const SmartWandImage::Field*>& positive, const std::vector<const SmartWandImage::Field*>& negative,
                          int tolerance, bool soft, GrayImage& mask);
 
+/// Softens a wand selection's edge by unmixing: within `band` pixels of it (both sides), each pixel is taken as
+/// a mix of the selected colour nearby (the background it was clicked on, say) and the most different colour
+/// nearby (the line), pixel = a * selected + (1 - a) * other, and gets coverage a. Antialiased and smudged
+/// lines then come out with the fringe partly selected rather than left whole; `pixels` is the image the
+/// wand sampled (premultiplied), `mask` the selection, changed in place.
+/// `lineColours`, when given, receives for each pixel it unmixed the colour of the other part (straight RGB,
+/// packed as 0xRRGGBB with the top byte 1; 0 elsewhere), which clearDecontaminated can paint what is left with.
+void refineWandEdge(const Image& pixels, GrayImage& mask, int band = 3, std::vector<uint32_t>* lineColours = nullptr);
+
+/// Clears `coverage` from `pixels` (premultiplied, the same grid) and gives the half-cleared pixels the colour
+/// of what is left (the line, not the background it was mixed with): Delete after a refined wand selection
+/// leaves clean edges instead of a rim of the old background's colour. With the colours refineWandEdge found,
+/// those are used where it found one; elsewhere the colour is estimated (estimateForeground).
+void clearDecontaminated(Image& pixels, const GrayImage& coverage, const std::vector<uint32_t>* lineColours = nullptr);
+
 } // namespace compositor

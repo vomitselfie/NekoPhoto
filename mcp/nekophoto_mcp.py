@@ -520,9 +520,9 @@ def selection_polygon(points: list[list[float]], mode: str = "replace") -> str:
 
 
 @edit("Magic wand")
-def selection_wand(x: float, y: float, tolerance: int = 32, contiguous: bool = True, sample_all: bool = False, mode: str = "replace", edge_aware: Optional[bool] = None) -> str:
-    """Magic wand: select the region around a point within tolerance (0..255), reading the active layer's own pixels (sample_all=true reads the visible composite instead). Edge-aware by default: shading and texture stay in and edges between similar colours hold; edge_aware=false is the classic per-channel tolerance."""
-    return text(call("selection.wand", x=x, y=y, tolerance=tolerance, contiguous=contiguous, sampleAll=sample_all, mode=mode, edgeAware=edge_aware))
+def selection_wand(x: float, y: float, tolerance: int = 32, contiguous: bool = True, sample_all: bool = False, mode: str = "replace", edge_aware: Optional[bool] = None, refine_edge: Optional[bool] = None) -> str:
+    """Magic wand: select the region around a point within tolerance (0..255), reading the active layer's own pixels (sample_all=true reads the visible composite instead). Edge-aware by default: shading and texture stay in and edges between similar colours hold; edge_aware=false is the classic per-channel tolerance. refine_edge (on) unmixes the edge so a line's fringe is partly selected; pixels_clear right after then leaves the line its own colour, without a rim of the background's (clearing a background around line art in one click)."""
+    return text(call("selection.wand", x=x, y=y, tolerance=tolerance, contiguous=contiguous, sampleAll=sample_all, mode=mode, edgeAware=edge_aware, refineEdge=refine_edge))
 
 
 @edit("Quick Select by scribble")

@@ -143,6 +143,7 @@ const MethodDoc methodDocs[] = {
      "x:number! Point; y:number! Point; tolerance:integer Colour tolerance 0..255 (default the tool's); contiguous:bool Only connected pixels (default the tool's); "
      "sampleAll:bool Sample the composite rather than the active layer; sampleRadius:integer Average a square of this radius; "
      "edgeAware:bool Contiguous only: follow the image (shading and texture stay in, edges between similar colours hold); default the tool's setting, on; false is the classic per-channel tolerance; "
+     "refineEdge:bool Unmix the edge so a line's fringe is partly selected, and pixels.clear right after leaves the line its own colour (the tool's setting, on); "
      "mode:<selectionMode>=replace How it combines"},
     {"selection.scribble", "Quick Select: strokes over the subject and over the background; the selection follows the image's edges.",
      "foreground:array Strokes over what to select, each a list of [x, y] points; background:array Strokes over what to leave out; size:integer Stroke width in pixels; "

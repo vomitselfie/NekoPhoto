@@ -82,10 +82,49 @@ On a real character sheet, a click on a black top selects the top where the clas
 connected black outline (11,219 pixels against 29,054). A 4096 × 4096 image takes about 150 ms to prepare
 (once per layer state; about 240 ms with the coarse statistics) and 100 to 500 ms per click.
 
+## Clearing a background around line art in one click
+
+The case this was built for: an AI render or a painting with a flat or textured background, lines that are
+smudged or antialiased, and the background to go. Selecting the background with the wand and deleting it
+leaves the lines' fringe (pixels half line, half background) whole, a rim of the background's colour; the
+workaround was to expand the selection by 2, smooth it by 3 and delete, which eats into the lines and still
+leaves the rim.
+
+Refine Edge (on) unmixes the wand's edge (`refineWandEdge`): within 3 pixels of it, each pixel is taken as
+a mix of the selected colour nearby and the line's colour, pixel = a × background + (1 − a) × line, and
+is selected by a. The line's colour is the most different colour nearby, except where that is itself a
+faint stretch of the line (it lies on the way from the background to the line's colour over the whole
+edge): then the whole edge's line colour is used, so thin and smudged lines unmix against black, not
+against a dark blue. Delete right after that selection (`clearDecontaminated`) gives what is left the
+line's colour at the alpha that is left: no rim.
+
+`wand_bench edges` scores this on smudged black line art on blue, one click on the background, at
+tolerance 32 (alpha error against the true coverage, the share of line cores eaten, and blue left on the
+cleared side):
+
+| Flow | Alpha error | Line eaten | Blue left |
+|---|---:|---:|---:|
+| Wand, delete | 0.458 | 0% | 83 |
+| Wand, expand 2, smooth 3, delete | 0.444 | 12% | 81 |
+| Wand with refined edge, delete | 0.082 | 0% | 29 |
+| **Wand with refined edge, clean delete** | **0.082** | **0%** | **2.9** |
+
+The clean delete applies when the selection is still the refined wand selection and the active layer
+covers the canvas pixel for pixel (an opened image); otherwise Delete clears as before.
+
+## Tests
+
+`core_tests` covers the wand on tiny and transparent layers, a click in a grid, keep-out clicks, and the
+unmixed fringe with the clean delete; `wand_bench check` runs the ten-scene benchmark in CI and fails if the
+shipped wand falls below its recorded scores (IoU at 32 at least 0.86, best at least 0.99).
+
 ## Limits and next steps
 
 - Same-coloured regions that touch (a black beanie and its black outline) join; no colour rule separates them.
 - A pattern of more than two colours is modelled as two (the 2-means); patterns coarser than about 36 pixels
   are not seen as texture.
+- The unmixing assumes two colours meet at an edge; where three do (a line between two background colours) the
+  fringe is unmixed against the nearer pair only.
 - Not done from the plan: superpixels for very large canvases (4; a 4096 x 4096 click takes 0.1 to 0.5 s,
-  so it has not been needed) and boundary matting (5).
+  so it has not been needed). Boundary matting (5) is the refined edge above, for line art; hair and fur in
+  photographs are Remove Background's job.

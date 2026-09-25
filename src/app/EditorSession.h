@@ -322,7 +322,7 @@ public:
     void invertSelection();
     void setSelection(const std::optional<compositor::Selection>& selection, const QString& name);
     /// `sampleRadius` 0, 1 or 2: the point, a 3x3 or a 5x5 average sets the colour to match (Photoshop's Sample Size).
-    void magicWand(QPointF documentPoint, int tolerance, bool contiguous, bool sampleAllLayers, compositor::SelectionMode mode, int sampleRadius = 0, bool edgeAware = true);
+    void magicWand(QPointF documentPoint, int tolerance, bool contiguous, bool sampleAllLayers, compositor::SelectionMode mode, int sampleRadius = 0, bool edgeAware = true, std::optional<bool> refineEdge = std::nullopt);
     /// Right after an edge-aware wand click, a new tolerance re-thresholds that click's field and replaces
     /// its Magic Wand step; otherwise it only sets the tolerance for the next click. True when it re-selected.
     bool retolerateWand(int tolerance);
@@ -376,6 +376,9 @@ public:
     int wandSampleRadius = 0;
     /// Contiguous clicks follow the image (smartwand.h): perceptual colour, neighbour steps and texture.
     bool wandEdgeAware = true;
+    /// The wand's edge is unmixed (smartwand.h refineWandEdge): the fringe of a line is partly selected, and
+    /// Delete right after gives what is left the line's own colour instead of a rim of the background's.
+    bool wandRefineEdge = true;
 
     // Adjustment layers
     void addAdjustmentLayer(compositor::AdjustmentKind kind);
@@ -555,6 +558,10 @@ private:
         bool hasStep = false;   // whether the latest undo step is this session's (a no-change selection records none)
     };
     std::optional<WandSession> wandSession_;
+    /// The line colours the last refined wand edge found, and the selection they belong to (Delete uses them
+    /// while that selection is unchanged).
+    std::vector<uint32_t> wandLineColours_;
+    std::shared_ptr<const compositor::GrayImage> wandLineSelection_;
     bool wandSessionLive() const;
     void applyWandSession(int tolerance, bool replaceStep);
     bool adjustmentEditing_ = false;

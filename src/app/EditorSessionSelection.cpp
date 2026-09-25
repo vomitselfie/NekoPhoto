@@ -45,7 +45,8 @@ void EditorSession::invertSelection() {
     setSelection(compositor::invertSelection(*document_->selection, document_->width, document_->height), "Inverse");
 }
 
-void EditorSession::magicWand(QPointF documentPoint, int tolerance, bool contiguous, bool sampleAllLayers, SelectionMode mode, int sampleRadius, bool edgeAware) {
+void EditorSession::magicWand(QPointF documentPoint, int tolerance, bool contiguous, bool sampleAllLayers, SelectionMode mode, int sampleRadius, bool edgeAware, std::optional<bool> refineEdge) {
+    if (refineEdge) wandRefineEdge = *refineEdge;
     if (!document_ || !canEditLayers()) return;
     int x = int(std::floor(documentPoint.x())), y = int(std::floor(documentPoint.y()));
     if (x < 0 || y < 0 || x >= document_->width || y >= document_->height) return;
@@ -119,13 +120,18 @@ void EditorSession::applyWandSession(int tolerance, bool replaceStep) {
         (click.positive ? positive : negative).push_back(&click.field);
     }
     GrayImage mask(document_->width, document_->height);
-    const long count = thresholdWandFields(positive, negative, tolerance, selectionAntialiased, mask);
+    long count = thresholdWandFields(positive, negative, tolerance, selectionAntialiased, mask);
+    std::vector<uint32_t> lineColours;
+    if (wandRefineEdge) refineWandEdge(*wandSample_, mask, 3, &lineColours);
     if (replaceStep && session.hasStep) undo();
     const size_t steps = undoNames().size();
     setSelection(combineSelection(session.before, mask, session.mode, selectionAntialiased), "Magic Wand");
     // A selection equal to the one before records no step; the next change then has nothing to take back.
     session.hasStep = undoNames().size() > steps;
     session.revisionAfter = documentRevision_;
+    // The unmixed colours belong to this wand selection only when it replaced the selection outright.
+    wandLineColours_ = std::move(lineColours);
+    wandLineSelection_ = session.mode == SelectionMode::Replace && document_->selection ? document_->selection->coverage : nullptr;
     const int next = wandNextTolerance(positive, negative, tolerance);
     emit notice(next < 0 ? tr("Tolerance %1: %L2 pixels").arg(tolerance).arg(count)
                          : tr("Tolerance %1: %L2 pixels; the selection grows next at %3").arg(tolerance).arg(count).arg(next));
@@ -197,6 +203,17 @@ void EditorSession::clearSelectedPixelsNow(Layer& layer) {
     if (!selection || !layer.asset || !layer.asset->image) return;
     const Image& src = *layer.asset->image;
     auto out = std::make_shared<Image>(src);
+    // Right after a refined wand selection, on a layer that covers the canvas pixel for pixel: the cleared edge
+    // takes the line's own colour (no rim of the old background).
+    const LayerTransform& t = layer.transform;
+    if (wandLineSelection_ && document_->selection->coverage == wandLineSelection_ && !wandLineColours_.empty()
+        && t.rotation == 0 && !t.flipX && !t.flipY && t.origin.x == 0 && t.origin.y == 0
+        && src.width() == document_->width && src.height() == document_->height && t.size.width == src.width() && t.size.height == src.height()) {
+        clearDecontaminated(*out, *selection, &wandLineColours_);
+        layer.asset = Asset::make(out, layer.name);
+        layer.shapeImage.reset();
+        return;
+    }
     Affine toDoc = layer.transform.pixelToDocument(src.width(), src.height());
     for (int y = 0; y < src.height(); y++) for (int x = 0; x < src.width(); x++) {
         Point d = toDoc.apply({x + 0.5, y + 0.5});

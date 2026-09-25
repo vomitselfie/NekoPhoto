@@ -337,6 +337,11 @@ QWidget* ToolOptionsBar::buildCloneOptions() {
     edgeAware->setChecked(session_->wandEdgeAware);
     connect(edgeAware, &QCheckBox::toggled, this, [this](bool on) { session_->wandEdgeAware = on; });
     h->addWidget(edgeAware);
+    auto* refine = new QCheckBox(tr("Refine Edge"));
+    refine->setToolTip(tr("Unmix the edge: the fringe of a line is partly selected, and Delete right after leaves the line its own colour, without a rim of the background's"));
+    refine->setChecked(session_->wandRefineEdge);
+    connect(refine, &QCheckBox::toggled, this, [this](bool on) { session_->wandRefineEdge = on; });
+    h->addWidget(refine);
     auto* all = new QCheckBox(tr("Sample All Layers"));
     all->setChecked(session_->cloneSampleAll);
     connect(all, &QCheckBox::toggled, this, [this](bool on) { session_->cloneSampleAll = on; });
@@ -580,6 +585,11 @@ QWidget* ToolOptionsBar::buildWandOptions() {
     edgeAware->setChecked(session_->wandEdgeAware);
     connect(edgeAware, &QCheckBox::toggled, this, [this](bool on) { session_->wandEdgeAware = on; });
     h->addWidget(edgeAware);
+    auto* refine = new QCheckBox(tr("Refine Edge"));
+    refine->setToolTip(tr("Unmix the edge: the fringe of a line is partly selected, and Delete right after leaves the line its own colour, without a rim of the background's"));
+    refine->setChecked(session_->wandRefineEdge);
+    connect(refine, &QCheckBox::toggled, this, [this](bool on) { session_->wandRefineEdge = on; });
+    h->addWidget(refine);
     auto* all = new QCheckBox(tr("Sample All Layers"));
     all->setChecked(session_->wandSampleAll);
     connect(all, &QCheckBox::toggled, this, [this](bool on) { session_->wandSampleAll = on; });
