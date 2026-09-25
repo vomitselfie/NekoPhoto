@@ -9,6 +9,11 @@
 
 namespace compositor {
 
+namespace {
+/// Pixels in a w x h area, without overflow.
+inline long long areaOf(int w, int h) { return (long long)(w) * (long long)(h); }
+} // namespace
+
 double brushFalloff(double u) {
     const double k = 2.5;
     return std::max(0.0, (std::exp(-k * u * u) - std::exp(-k)) / (1 - std::exp(-k)));
@@ -279,17 +284,29 @@ bool BrushStroke::stampDab(Point center, double radius, const Rect& affected) {
     const double scale = g.a;                      // document units per grid pixel
     const double gridRadius = radius / scale;
     const int side = 2 * int(std::ceil(gridRadius + 1)) + 2;
-    if (side > 512) return false;
+    if (side > 2600) return false;   // beyond, the general path
     const bool hard = settings_.hardness >= 1;
     if (stamp_.side != side || stamp_.radius != radius || stamp_.hardness != settings_.hardness || stamp_.scale != scale) {
-        // The tip at each phase, from the same profile table the general path reads.
         stamp_.side = side; stamp_.radius = radius; stamp_.hardness = settings_.hardness; stamp_.scale = scale;
+        // A hard rim shows a quarter-pixel shift; a soft one does not, so soft tips over 512 pixels keep 4 tiles.
+        stamp_.steps = side <= 512 || (hard && side <= 2048) ? 4 : 2;
+        for (int phase = 0; phase < 16; phase++) { stamp_.tiles[phase].clear(); stamp_.tiles[phase].shrink_to_fit(); stamp_.built[phase] = false; }
+    }
+    // Where the tile lands: its centre pixel on the grid pixel under the dab, at the nearest subpixel phase
+    // (an eighth of a pixel off at most with quarter steps, a quarter with half steps).
+    const int steps = stamp_.steps, shift = steps == 4 ? 2 : 1;
+    const Point gc = documentToPixel_.apply(center);
+    const int qx = int(std::floor(gc.x * steps + 0.5)), qy = int(std::floor(gc.y * steps + 0.5));
+    const int phase = (qx & (steps - 1)) + (qy & (steps - 1)) * steps;
+    const int ox = (qx >> shift) - side / 2, oy = (qy >> shift) - side / 2;
+    if (!stamp_.built[phase]) {
+        // The tip at this phase, from the same profile table the general path reads.
         const double reach2 = (radius + scale) * (radius + scale);
-        for (int phase = 0; phase < 16; phase++) {
-            const double cx = side / 2 + (phase & 3) / 4.0, cy = side / 2 + (phase >> 2) / 4.0;
-            std::vector<uint8_t>& tile = stamp_.tiles[phase];
-            tile.assign(size_t(side) * side, 0);
-            for (int j = 0; j < side; j++)
+        const double cx = side / 2 + double(phase % steps) / steps, cy = side / 2 + double(phase / steps) / steps;
+        std::vector<uint8_t>& tile = stamp_.tiles[phase];
+        tile.assign(size_t(side) * side, 0);
+        parallelRows(0, side, [&](int ya, int yb) {
+            for (int j = ya; j < yb; j++)
                 for (int i = 0; i < side; i++) {
                     const double dx = (i + 0.5 - cx) * scale, dy = (j + 0.5 - cy) * scale, q = dx * dx + dy * dy;
                     if (q >= reach2) continue;
@@ -298,14 +315,9 @@ bool BrushStroke::stampDab(Point center, double radius, const Rect& affected) {
                     const unsigned frac = unsigned((index - k) * 256);
                     tile[size_t(j) * side + size_t(i)] = uint8_t((dabTable_[size_t(k)] * (256 - frac) + dabTable_[size_t(k) + 1] * frac + 128) >> 8);
                 }
-        }
+        }, 64);
+        stamp_.built[phase] = true;
     }
-    // Where the tile lands: its centre pixel on the grid pixel under the dab, at the nearest quarter phase
-    // (an eighth of a pixel off at most).
-    const Point gc = documentToPixel_.apply(center);
-    const int qx = int(std::floor(gc.x * 4 + 0.5)), qy = int(std::floor(gc.y * 4 + 0.5));   // quarter pixels
-    const int phase = (qx & 3) | ((qy & 3) << 2);
-    const int ox = (qx >> 2) - side / 2, oy = (qy >> 2) - side / 2;
     // Rows and columns whose pixel centres lie on the canvas and in the affected rect.
     const Rect canvasGrid = documentToPixel_.mapBounds(canvas_);
     const int x0 = std::max({int(affected.minX()), ox, int(std::ceil(canvasGrid.minX() - 0.5))}), x1 = std::min({int(affected.maxX()), ox + side, int(std::ceil(canvasGrid.maxX() - 0.5))});
@@ -313,12 +325,16 @@ bool BrushStroke::stampDab(Point center, double radius, const Rect& affected) {
     if (x0 >= x1 || y0 >= y1) return true;
     const std::vector<uint8_t>& tile = stamp_.tiles[phase];
     const int n = x1 - x0;
-    for (int y = y0; y < y1; y++) {
-        uint8_t* row = coverage_->row(y) + x0;
-        const uint8_t* t = &tile[size_t(y - oy) * side + size_t(x0 - ox)];
-        if (hard) for (int i = 0; i < n; i++) row[i] = std::max(row[i], t[i]);
-        else for (int i = 0; i < n; i++) row[i] = uint8_t(row[i] + ((t[i] * (255 - row[i]) + 127) / 255));
-    }
+    auto merge = [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++) {
+            uint8_t* row = coverage_->row(y) + x0;
+            const uint8_t* t = &tile[size_t(y - oy) * side + size_t(x0 - ox)];
+            if (hard) for (int i = 0; i < n; i++) row[i] = std::max(row[i], t[i]);
+            else for (int i = 0; i < n; i++) row[i] = uint8_t(row[i] + ((t[i] * (255 - row[i]) + 127) / 255));
+        }
+    };
+    // A large dab is merged on every core; a small one is quicker than handing it out.
+    if (areaOf(n, y1 - y0) >= 65536) parallelRows(y0, y1, merge, 32); else merge(y0, y1);
     return true;
 }
 
@@ -339,25 +355,28 @@ void BrushStroke::dab(Point center) {
     int x0 = int(affected.minX()), x1 = int(affected.maxX()), y0 = int(affected.minY()), y1 = int(affected.maxY());
     const Point dd = pixelToDocument_.applyVector({1, 0});
     const double dd2 = dd.x * dd.x + dd.y * dd.y;
-    for (int y = y0; y < y1; y++) {
-        uint8_t* row = coverage_->row(y);
-        Point d = pixelToDocument_.apply({x0 + 0.5, y + 0.5});
-        // Squared distance to the centre is a quadratic along the row: step it with first and second differences.
-        double rx = d.x - center.x, ry = d.y - center.y;
-        double q = rx * rx + ry * ry;
-        double dq = 2 * (rx * dd.x + ry * dd.y) + dd2;
-        for (int x = x0; x < x1; x++, q += dq, dq += 2 * dd2, d = d + dd) {
-            if (q >= reach2) continue;
-            if (!whollyInside && !canvas_.contains(d)) continue;
-            const double index = q * dabTableScale_;
-            const int i = int(index);
-            const unsigned frac = unsigned((index - i) * 256);
-            const unsigned value = (dabTable_[size_t(i)] * (256 - frac) + dabTable_[size_t(i) + 1] * frac + 128) >> 8;
-            if (value == 0) continue;
-            const unsigned old = row[x];
-            row[x] = uint8_t(hard ? std::max(old, value) : old + ((value * (255 - old) + 127) / 255));
+    auto rows = [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++) {
+            uint8_t* row = coverage_->row(y);
+            Point d = pixelToDocument_.apply({x0 + 0.5, y + 0.5});
+            // Squared distance to the centre is a quadratic along the row: step it with first and second differences.
+            double rx = d.x - center.x, ry = d.y - center.y;
+            double q = rx * rx + ry * ry;
+            double dq = 2 * (rx * dd.x + ry * dd.y) + dd2;
+            for (int x = x0; x < x1; x++, q += dq, dq += 2 * dd2, d = d + dd) {
+                if (q >= reach2) continue;
+                if (!whollyInside && !canvas_.contains(d)) continue;
+                const double index = q * dabTableScale_;
+                const int i = int(index);
+                const unsigned frac = unsigned((index - i) * 256);
+                const unsigned value = (dabTable_[size_t(i)] * (256 - frac) + dabTable_[size_t(i) + 1] * frac + 128) >> 8;
+                if (value == 0) continue;
+                const unsigned old = row[x];
+                row[x] = uint8_t(hard ? std::max(old, value) : old + ((value * (255 - old) + 127) / 255));
+            }
         }
-    }
+    };
+    if (areaOf(x1 - x0, y1 - y0) >= 65536) parallelRows(y0, y1, rows, 32); else rows(y0, y1);
     markDirty(affected);
 }
 
@@ -365,6 +384,12 @@ void BrushStroke::recompose(const Rect& gridRect) {
     if (painted_) return;   // another engine owns the working pixels
     Rect r = gridRect.intersection(Rect(0, 0, width_, height_));
     if (r.isEmpty()) return;
+    // Rows are independent: a large area (a big brush's dab) is recomposed on every core.
+    if (areaOf(int(r.width), int(r.height)) < 65536) { recomposeRows(r); return; }
+    parallelRows(int(r.minY()), int(r.maxY()), [&](int ya, int yb) { recomposeRows(Rect(r.minX(), ya, r.width, yb - ya)); }, 32);
+}
+
+void BrushStroke::recomposeRows(const Rect& r) {
     int x0 = int(r.minX()), x1 = int(r.maxX()), y0 = int(r.minY()), y1 = int(r.maxY());
     double opacity = settings_.opacity;
     if (isMask_) {

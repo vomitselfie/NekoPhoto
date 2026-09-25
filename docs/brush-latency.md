@@ -13,7 +13,10 @@ QT_QPA_PLATFORM=offscreen COMPOSITOR_WINDOW_SIZE=1400x1000 QT_SCALE_FACTOR=2.25 
 ```
 
 (`round` is the plain brush; use a scratch `XDG_CONFIG_HOME` and `XDG_DATA_HOME` to leave your own settings
-alone.)
+alone.) `--bench-brush-size`, `--bench-hardness`, `--bench-eraser`, `--bench-zoom`, `--bench-moves` and
+`--bench-reach` shape the stroke; `--bench-burst N` delivers N moves between two repaints, as a fast mouse
+does, and the `moves:` line then gives the mean cost per move, which must stay under 1 ms to keep pace with
+a 1000 Hz mouse.
 
 ## September 2026 pass
 
@@ -55,6 +58,34 @@ What changed, largest effect first:
   canvas's.
 - **libmypaint warmed.** Its one-time setup (about 9 ms) runs shortly after the window appears
   (`warmBrushEngines`) instead of in the first press.
+
+## Large strokes (September 2026)
+
+A big brush or eraser swept across a long canvas trailed behind the pointer, further the longer the stroke.
+Wayland delivers every pointer event (up to 1000 a second from a gaming mouse, and Qt does not merge them
+there as it does on X11), and each one cost more than a millisecond, so events queued up. Two causes:
+
+- **Every move rendered the view.** The canvas composited each event's changed area at once (4-5 ms at
+  2.25x with a 400 px brush). It now notes the area and renders everything noted once per frame.
+- **Brushes over about 510 px painted every dab pixel by pixel.** Stamped tiles now cover them too
+  (quarter-pixel phases for hard tips, half-pixel for soft ones, whose rim hides it; built as needed), and
+  large dabs and the recomposite behind them run on every core.
+
+Mean cost per move with 16 moves per repaint, 40% hardness unless noted, 3000 x 15000 canvas at 50% zoom
+and 2.25x:
+
+| Brush | Before | After |
+|---|---:|---:|
+| 400 px | 1.55 ms | 0.65 ms |
+| 400 px eraser | 0.90 ms | 0.55 ms |
+| 800 px | 8.20 ms | 0.98 ms |
+| 800 px hard | 8.37 ms | 1.02 ms |
+| 800 px eraser | 5.65 ms | 0.77 ms |
+| 1500 px | 19.28 ms | 2.09 ms |
+| 1500 px eraser | 13.70 ms | 1.59 ms |
+
+The strokes match: the same strokes painted by both builds differ only on the rim of the hard one, by the
+eighth of a pixel every stamped tip already had (`large_stamped_dabs_match_the_general_path`).
 
 ## Viewing: `--bench-view`
 

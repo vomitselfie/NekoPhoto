@@ -1163,6 +1163,39 @@ TEST_CASE(stamped_dabs_match_the_general_path) {
     }
 }
 
+TEST_CASE(large_stamped_dabs_match_the_general_path) {
+    // Tips over a 512-pixel tile are stamped too: a hard one at quarter phases, a soft one at half phases
+    // (its rim hides the difference). Held to the same tolerances as the small tips.
+    const int W = 1800, H = 1100;
+    Document doc(W, H);
+    for (auto [diameter, hardness] : {std::pair{700.0, 1.0}, std::pair{800.0, 0.4}}) {
+        std::shared_ptr<Image> results[2];
+        for (int stamped = 0; stamped < 2; stamped++) {
+            BrushSettings s;
+            s.diameter = diameter; s.hardness = hardness; s.stampedDabs = stamped == 1;
+            Layer flat = imageLayer("flat", solid(W, H, 0, 0, 0, 0), {0, 0});
+            BrushStroke stroke(flat, false, s, doc.size());
+            REQUIRE(stroke.isValid());
+            stroke.append({420.3, 540.6});
+            stroke.append({1300.7, 520.2});
+            stroke.append({1380.1, 700.9});
+            stroke.flush();
+            results[stamped] = std::make_shared<Image>(*stroke.previewImage());
+        }
+        int worst = 0; long total = 0, count = 0;
+        for (int y = 0; y < H; y++)
+            for (int x = 0; x < W; x++) {
+                int a = results[0]->pixel(x, y)[3], b = results[1]->pixel(x, y)[3];
+                if ((a == 0) != (b == 0)) { CHECK(std::min(a, b) <= 40); }
+                worst = std::max(worst, std::abs(a - b)); total += std::abs(a - b); count++;
+            }
+        CHECK(worst <= 48);
+        CHECK(double(total) / double(count) < 0.6);
+        CHECK_EQ(int(results[1]->pixel(860, 530)[3]), 255);
+        CHECK_EQ(int(results[1]->pixel(20, 20)[3]), 0);
+    }
+}
+
 TEST_CASE(matte_refinement_follows_the_guide) {
     // A hard vertical edge in the guide at x=20; a coarse mask edge at x=24 gets pulled onto the guide's edge.
     auto guide = std::make_shared<Image>(40, 40);

@@ -224,6 +224,13 @@ int main(int argc, char** argv) {
     QCommandLineOption benchSize("bench-size", "Document size for --bench-brush, WxH (default 2000x2000).", "size");
     QCommandLineOption benchView("bench-view", "Developer benchmark: zoom, pan and undo on a large multi-layer document (--bench-size, default 4096x4096), print the times, then quit.");
     QCommandLineOption benchOpaque("bench-opaque", "With --bench-brush, paint on the opaque image layer rather than a blank layer.");
+    QCommandLineOption benchBrushSize("bench-brush-size", "With --bench-brush, the brush diameter in document pixels.", "pixels");
+    QCommandLineOption benchEraser("bench-eraser", "With --bench-brush, erase instead of painting.");
+    QCommandLineOption benchMoves("bench-moves", "With --bench-brush, pointer moves per stroke (default 80).", "count");
+    QCommandLineOption benchZoom("bench-zoom", "With --bench-brush, the view zoom (1 = 100%; default: fit).", "zoom");
+    QCommandLineOption benchBurst("bench-burst", "With --bench-brush, pointer moves per repaint (default 1; a 1000 Hz mouse gives ~16 per frame).", "count");
+    QCommandLineOption benchHardness("bench-hardness", "With --bench-brush, the brush hardness 0..1.", "hardness");
+    QCommandLineOption benchReach("bench-reach", "With --bench-brush, the stroke's half-width as a fraction of the view (default 0.35).", "fraction");
     QCommandLineOption saveAs("save-as", "Save the document as the .comp package <path> before quitting (with --screenshot).", "path");
     QCommandLineOption prefs("preferences", "Open the Preferences dialog too (with --screenshot, grab it instead of the window).");
     QCommandLineOption fetch("download-model", "Download model <id> (isnet or u2netp) into the models folder, report, and quit.", "id");
@@ -232,6 +239,13 @@ int main(int argc, char** argv) {
     parser.addOption(benchBrush);
     parser.addOption(benchSize);
     parser.addOption(benchOpaque);
+    parser.addOption(benchBrushSize);
+    parser.addOption(benchEraser);
+    parser.addOption(benchMoves);
+    parser.addOption(benchReach);
+    parser.addOption(benchZoom);
+    parser.addOption(benchBurst);
+    parser.addOption(benchHardness);
     parser.addOption(benchView);
     parser.addOption(saveAs);
     parser.addOption(prefs);
@@ -416,6 +430,13 @@ int main(int argc, char** argv) {
         const QStringList size = parser.value(benchSize).split('x');
         if (size.size() == 2 && size[0].toInt() > 0 && size[1].toInt() > 0) options.document = QSize(size[0].toInt(), size[1].toInt());
         options.paintOnOpaque = parser.isSet(benchOpaque);
+        options.brushSize = parser.value(benchBrushSize).toDouble();
+        options.eraser = parser.isSet(benchEraser);
+        if (parser.value(benchMoves).toInt() > 0) options.moves = parser.value(benchMoves).toInt();
+        if (parser.value(benchReach).toDouble() > 0) options.reach = parser.value(benchReach).toDouble();
+        if (parser.value(benchZoom).toDouble() > 0) options.zoom = parser.value(benchZoom).toDouble();
+        if (parser.value(benchBurst).toInt() > 0) options.burst = parser.value(benchBurst).toInt();
+        if (parser.isSet(benchHardness)) options.hardness = parser.value(benchHardness).toDouble();
         return app::runBrushBench(window, options);
     }
     if (parser.isSet(screenshot)) {

@@ -16,6 +16,12 @@ struct BrushBenchOptions {
     bool paintOnOpaque = false; // paint on the opaque image layer instead of a blank layer above it
     int strokes = 5;
     int moves = 80;
+    double brushSize = 0;      // diameter in document pixels; 0 keeps the preset's own
+    bool eraser = false;
+    double hardness = -1;      // 0..1; negative keeps the current setting
+    double reach = 0.35;
+    double zoom = 0;
+    int burst = 1;             // moves delivered between two repaints: a 1000 Hz mouse gives ~16 per 60 Hz frame           // view zoom (1 = 100%); 0 fits the document in the window       // the stroke's half-width as a fraction of the visible document's short side
 };
 
 /// Runs the benchmark in `window` (shown), prints the results to stdout, and returns an exit code.

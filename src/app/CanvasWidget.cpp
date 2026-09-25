@@ -133,6 +133,7 @@ void CanvasWidget::ensureCache() {
     cacheDocumentOrigin_ = origin;
     renderInto(cache_, visible, origin, zoom);
     cacheValid_ = true;
+    pendingDirty_ = QRectF();
 }
 
 bool CanvasWidget::scrollCache(QRect visible, QPointF origin, double zoom) {
@@ -164,21 +165,37 @@ bool CanvasWidget::scrollCache(QRect visible, QPointF origin, double zoom) {
 }
 
 void CanvasWidget::invalidate(QRectF documentRegion) {
+    // Only noted here: the next paint renders everything noted since the last one at once. Pointer events
+    // arrive faster than frames on Wayland (up to 1000 a second, uncompressed), and rendering each one's
+    // area as it came cost 4-5 ms, so a long stroke built a backlog and the paint fell behind the pointer.
     if (!cacheValid_) { update(); return; }
-    double zoom = cacheZoom_;
+    pendingDirty_ = pendingDirty_.isEmpty() ? documentRegion : pendingDirty_.united(documentRegion);
+    if (zoomPreview_) { update(); return; }   // the cache is shown scaled: its device rect is not the widget's
+    const QRect part = cachePart(documentRegion);
+    if (part.isEmpty()) return;
+    const double dpr = devicePixelRatioF();
+    update(QRectF(part.x() / dpr, part.y() / dpr, part.width() / dpr, part.height() / dpr).toAlignedRect().adjusted(-1, -1, 1, 1));
+}
+
+QRect CanvasWidget::cachePart(QRectF documentRegion) const {
+    const double zoom = cacheZoom_;
     QRectF device(cacheDocumentOrigin_.x() + documentRegion.x() * zoom, cacheDocumentOrigin_.y() + documentRegion.y() * zoom, documentRegion.width() * zoom, documentRegion.height() * zoom);
-    QRect part = device.adjusted(-2, -2, 2, 2).toAlignedRect().intersected(cacheDeviceRect_);
+    return device.adjusted(-2, -2, 2, 2).toAlignedRect().intersected(cacheDeviceRect_);
+}
+
+void CanvasWidget::flushDirty() {
+    const QRectF region = pendingDirty_;
+    pendingDirty_ = QRectF();
+    if (region.isEmpty() || !cacheValid_ || cache_.isNull()) return;
+    const QRect part = cachePart(region);
     if (part.isEmpty()) return;
     QImage piece;
-    renderInto(piece, part, cacheDocumentOrigin_, zoom);
+    renderInto(piece, part, cacheDocumentOrigin_, cacheZoom_);
     cache_.setDevicePixelRatio(1);   // painted in device pixels; paintEvent sets the ratio back
     QPainter p(&cache_);
     p.setCompositionMode(QPainter::CompositionMode_Source);
     p.drawImage(part.topLeft() - cacheDeviceRect_.topLeft(), piece);
     p.end();
-    if (zoomPreview_) { update(); return; }   // the cache is shown scaled: its device rect is not the widget's
-    double dpr = devicePixelRatioF();
-    update(QRectF(part.x() / dpr, part.y() / dpr, part.width() / dpr, part.height() / dpr).toAlignedRect().adjusted(-1, -1, 1, 1));
 }
 
 void CanvasWidget::paintEvent(QPaintEvent*) {
@@ -209,6 +226,7 @@ void CanvasWidget::paintEvent(QPaintEvent*) {
     painter.fillRect(docView, brush);
     painter.restore();
     ensureCache();
+    flushDirty();
     if (zoomPreview_) {
         // Mid-zoom: the last render, scaled to where its pixels fall at the new zoom.
         const double k = session_->viewport.zoom / cacheZoom_;

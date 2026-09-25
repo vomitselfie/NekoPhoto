@@ -48,17 +48,22 @@ int runBrushBench(MainWindow& window, const BrushBenchOptions& o) {
     else session->selectLayer(baseId);
     session->selectTool(Tool::Brush);
     session->brushPreset = o.preset == "round" ? QString() : o.preset;
+    if (o.brushSize > 0) session->brushSettings.diameter = o.brushSize;
+    session->brushErase = o.eraser;
+    if (o.hardness >= 0) session->brushSettings.hardness = o.hardness;
     session->fitView();
+    if (o.zoom > 0) session->zoomTo(o.zoom, QPointF(canvas->width() / 2.0, canvas->height() / 2.0));
     warmBrushEngines();   // as a normal launch does shortly after the window appears
     QApplication::processEvents();
     QApplication::processEvents();
 
-    const QRectF view = session->viewport.documentRect(QSizeF(o.document));
+    // The part of the document on screen: the whole of it when fitted, the middle when zoomed in.
+    const QRectF view = session->viewport.documentRect(QSizeF(o.document)).intersected(QRectF(QPointF(0, 0), QSizeF(canvas->size())));
     const QPointF center = view.center();
-    const double span = std::min(view.width(), view.height()) * 0.35;
+    const double span = std::min(view.width(), view.height()) * o.reach;
     auto pump = [] { QApplication::processEvents(QEventLoop::AllEvents); };
     qint64 timestamp = 1000;
-    auto send = [&](QEvent::Type type, QPointF pos, Qt::MouseButton button, Qt::MouseButtons buttons) {
+    auto send = [&](QEvent::Type type, QPointF pos, Qt::MouseButton button, Qt::MouseButtons buttons, bool repaint = true) {
         QMouseEvent event(type, pos, canvas->mapToGlobal(pos), button, buttons, Qt::NoModifier);
         event.setTimestamp(quint64(timestamp));
         timestamp += 8;   // 125 events a second, a common mouse and pen rate
@@ -67,14 +72,14 @@ int runBrushBench(MainWindow& window, const BrushBenchOptions& o) {
         QApplication::sendEvent(canvas, &event);
         Sample s;
         s.handler = double(t.nsecsElapsed()) / 1e6;
-        pump();   // the repaint the handler asked for
+        if (repaint) pump();   // the repaint the handler asked for
         s.total = double(t.nsecsElapsed()) / 1e6;
         return s;
     };
 
-    std::printf("brush bench: preset %s, %dx%d document, painting on %s, canvas %dx%d at zoom %.3f\n",
-                qPrintable(o.preset), o.document.width(), o.document.height(), o.paintOnOpaque ? "the opaque layer" : "a blank layer",
-                canvas->width(), canvas->height(), session->viewport.zoom);
+    std::printf("brush bench: preset %s%s, size %.0f, hardness %.2f, %dx%d document, painting on %s, canvas %dx%d at zoom %.3f, %d moves\n",
+                qPrintable(o.preset), o.eraser ? " (erasing)" : "", session->brushSettings.diameter, session->brushSettings.hardness, o.document.width(), o.document.height(),
+                o.paintOnOpaque ? "the opaque layer" : "a blank layer", canvas->width(), canvas->height(), session->viewport.zoom, o.moves);
     std::printf("%-8s %10s %10s | %10s %10s %10s | %10s\n", "stroke", "press ms", "(handler)", "move p50", "move p95", "move max", "release ms");
     std::vector<double> pressTotals, moveTotals, releaseTotals;
     for (int s = 0; s < o.strokes; s++) {
@@ -90,7 +95,10 @@ int runBrushBench(MainWindow& window, const BrushBenchOptions& o) {
         int firstPaint = s == 0 && changed() ? 0 : -1;
         std::vector<double> moves;
         for (int i = 1; i <= o.moves; i++) {
-            moves.push_back(send(QEvent::MouseMove, at(i), Qt::NoButton, Qt::LeftButton).total);
+            // With a burst, the repaint comes once per `burst` moves, as when input outpaces frames; each
+            // sample is then the moves' share of the frame: (handlers + one repaint) / burst.
+            const bool frame = i % std::max(1, o.burst) == 0 || i == o.moves;
+            moves.push_back(send(QEvent::MouseMove, at(i), Qt::NoButton, Qt::LeftButton, frame).total);
             if (s == 0 && firstPaint < 0 && changed()) firstPaint = i;
         }
         if (s == 0) std::printf("first paint shows after %s\n", firstPaint < 0 ? "no event (nothing painted)" : firstPaint == 0 ? "the press itself" : qPrintable(QString("%1 moves (%2 ms of pointer time)").arg(firstPaint).arg(firstPaint * 8)));
@@ -101,8 +109,13 @@ int runBrushBench(MainWindow& window, const BrushBenchOptions& o) {
         releaseTotals.push_back(release.total);
         moveTotals.insert(moveTotals.end(), moves.begin(), moves.end());
     }
+    double moveSum = 0;
+    for (double m : moveTotals) moveSum += m;
     std::printf("summary: press median %.2f ms, move median %.2f ms / p95 %.2f ms, release median %.2f ms\n",
                 percentile(pressTotals, 0.5), percentile(moveTotals, 0.5), percentile(moveTotals, 0.95), percentile(releaseTotals, 0.5));
+    // What decides whether painting keeps up with the pointer: under 1 ms a move keeps pace with a 1000 Hz mouse.
+    std::printf("moves: mean %.2f ms each with a repaint every %d (keeps up with %.0f moves a second)\n",
+                moveSum / std::max<size_t>(1, moveTotals.size()), std::max(1, o.burst), 1000.0 * moveTotals.size() / std::max(1e-9, moveSum));
     std::fflush(stdout);
     return 0;
 }

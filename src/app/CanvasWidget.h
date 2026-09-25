@@ -63,7 +63,11 @@ private:
     enum class Drag { None, Pan, Move, Resize, Rotate, Distort, PixelMove, Brush, Warp, Gradient, Shape, Marquee, Lasso, Scribble, ClickBox, SelectionMove, Crop, CropMove, CropResize, ZoomRect, Hook };
     struct HandleHit { bool hit = false; int index = 0; bool rotate = false; };
 
+    /// Notes a changed part of the document for the next paint, which renders all of it at once (flushDirty).
     void invalidate(QRectF documentRegion);
+    void flushDirty();
+    /// Where `documentRegion` falls in the cache, in device pixels, clipped to it.
+    QRect cachePart(QRectF documentRegion) const;
     void ensureCache();
     void renderInto(QImage& target, QRect deviceRect, QPointF documentOrigin, double zoom);
     QSizeF documentSize() const;
@@ -98,6 +102,7 @@ private:
     QPointF cacheDocumentOrigin_;
     double cacheZoom_ = 0;
     bool cacheValid_ = false;
+    QRectF pendingDirty_;   // document area changed since the last paint, not yet rendered into the cache
     /// Running from each wheel or pinch zoom step until the gesture pauses; meanwhile the view shows the cache
     /// scaled to the new zoom (`zoomPreview_`) rather than rendering every step afresh.
     QTimer zoomSettle_;

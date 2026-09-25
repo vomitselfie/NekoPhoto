@@ -107,6 +107,7 @@ private:
     void dab(Point center);
     void curve(Point from, Point to, Point before, Point after);
     void recompose(const Rect& gridRect);
+    void recomposeRows(const Rect& gridRect);   // recompose's work over whole rows of the grid
     void markDirty(const Rect& gridRect);
     void heal();
 
@@ -137,12 +138,14 @@ private:
     /// of computing a square root and a falloff per pixel.
     std::vector<uint8_t> dabTable_;
     double dabTableRadius_ = -1, dabTableHardness_ = -1, dabTableFootprint_ = -1, dabTableScale_ = 0;
-    /// On a grid aligned with the document, a dab is a precomputed tile at one of 4x4 subpixel phases,
-    /// merged row by row (Krita's dab cache); the tile is rebuilt when the tip or the grid scale changes.
+    /// On a grid aligned with the document, a dab is a precomputed tile at one of 4x4 subpixel phases (2x2 for
+    /// soft tips over 512 pixels, whose rim hides a quarter pixel), merged row by row (Krita's dab cache). Each phase is built the first time a dab needs it; all are dropped when the
+    /// tip or the grid scale changes.
     struct Stamp {
-        int side = 0;
+        int side = 0, steps = 4;   // steps: subpixel positions per axis
         double radius = -1, hardness = -1, scale = 0;
         std::vector<uint8_t> tiles[16];
+        bool built[16] = {};
     };
     Stamp stamp_;
     bool stampDab(Point center, double radius, const Rect& affected);
