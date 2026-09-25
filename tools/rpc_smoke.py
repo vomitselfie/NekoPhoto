@@ -385,6 +385,17 @@ def main():
     assert failed["error"]["index"] == 1 and failed["rolledBack"], failed
     assert len(rpc.call("layers.list")) == count
 
+    # The edge-aware wand: a keep-out (subtract) click right after a wand click is evidence for the same
+    # selection, one undo step, not a second selection.
+    rpc.call("selection.wand", x=20, y=20, tolerance=120)
+    steps = len(rpc.call("history.list")["undo"])
+    first = rpc.call("selection.info")["bounds"]
+    rpc.call("selection.wand", x=600, y=380, tolerance=120, mode="subtract")
+    assert len(rpc.call("history.list")["undo"]) == steps, "the keep-out click replaced the step"
+    assert rpc.call("history.info")["undo"] == "Magic Wand"
+    rpc.call("history.undo")
+    rpc.call("selection.none")
+
     # A layered PSD export: the demo's folder, mask, clipping and adjustment come back counted.
     psd_path = os.path.join(tempfile.mkdtemp(), "smoke.psd")
     exported = rpc.call("document.export", path=psd_path)

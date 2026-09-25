@@ -1164,6 +1164,22 @@ TEST_CASE(edge_aware_wand_follows_the_image) {
     CHECK(hard > 0);
 }
 
+TEST_CASE(wand_keep_out_clicks_compete_with_selecting_ones) {
+    // At a tolerance high enough to cross into the near colour, a keep-out click on it takes it back out.
+    const int W = 120, H = 60;
+    Image near(W, H);
+    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) { uint8_t* p = near.pixel(x, y); const int v = x < 60 ? 0 : 20; p[0] = uint8_t(120 + v); p[1] = uint8_t(140 + v); p[2] = uint8_t(170 + v); p[3] = 255; }
+    SmartWandImage prepared(near);
+    auto in = prepared.propagate(20, 30, 1, 255), out = prepared.propagate(100, 30, 1, 255);
+    GrayImage mask(W, H, 0);
+    thresholdWandFields({&in}, {}, 200, false, mask);
+    CHECK_EQ(int(mask.at(100, 30)), 255);
+    thresholdWandFields({&in}, {&out}, 200, false, mask);
+    CHECK_EQ(int(mask.at(100, 30)), 0);
+    CHECK_EQ(int(mask.at(10, 30)), 255);
+    CHECK_EQ(int(mask.at(55, 30)), 255);   // right up to the edge
+}
+
 TEST_CASE(stamped_dabs_match_the_general_path) {
     // The same stroke with stamped dabs and with per-pixel dabs: the interior and the outside agree exactly,
     // the antialiased rim within the quarter-pixel phase the stamp snaps to.

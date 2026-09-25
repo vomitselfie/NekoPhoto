@@ -74,39 +74,58 @@ void EditorSession::magicWand(QPointF documentPoint, int tolerance, bool contigu
         wandSmart_.reset();
     }
     if (edgeAware && contiguous) {
-        // The click's cost field, far enough past this tolerance that the slider can move without recomputing.
         if (!wandSmart_) wandSmart_ = std::make_shared<SmartWandImage>(*wandSample_);
         WandClick click;
         click.x = x; click.y = y;
         click.radius = 1 + 2 * std::clamp(sampleRadius, 0, 2);   // the patch: 3, 7 or 11 pixels across
+        // The click's cost field, far enough past this tolerance that the slider can move without recomputing.
         click.field = wandSmart_->propagate(x, y, click.radius, std::clamp(std::max(64, tolerance * 2), 0, 255));
-        click.before = document_->selection;
-        click.mode = mode;
-        GrayImage mask(document_->width, document_->height);
-        thresholdWandField(click.field, tolerance, selectionAntialiased, mask);
-        applySelectionShape(mask, mode, "Magic Wand");
-        click.revisionAfter = documentRevision_;
-        wandClick_ = std::move(click);
+        if (wandSessionLive() && mode != SelectionMode::Replace && mode != SelectionMode::Intersect) {
+            // More evidence for the selection just made: Shift for what belongs, Alt for what does not.
+            click.positive = mode == SelectionMode::Add;
+            wandSession_->clicks.push_back(std::move(click));
+            applyWandSession(tolerance, true);
+            return;
+        }
+        WandSession session;
+        session.before = document_->selection;
+        session.mode = mode;
+        session.clicks.push_back(std::move(click));
+        wandSession_ = std::move(session);
+        applyWandSession(tolerance, false);
         return;
     }
-    wandClick_.reset();
+    wandSession_.reset();
     auto mask = std::make_shared<GrayImage>(document_->width, document_->height);
     long count = wandMask(*wandSample_, x, y, std::clamp(sampleRadius, 0, 2), tolerance, contiguous, *mask);
     if (count < 0) return;
     applySelectionShape(*mask, mode, "Magic Wand");
 }
 
-bool EditorSession::retolerateWand(int tolerance) {
-    // Only while the click's step is the latest thing that happened to the document.
-    if (!wandClick_ || !document_ || documentRevision_ != wandClick_->revisionAfter || undoName() != "Magic Wand" || !wandSmart_) return false;
-    WandClick& click = *wandClick_;
-    if (tolerance > click.field.limit)
-        click.field = wandSmart_->propagate(click.x, click.y, click.radius, std::clamp(std::max(64, tolerance * 2), 0, 255));
+bool EditorSession::wandSessionLive() const {
+    return wandSession_ && document_ && wandSmart_ && documentRevision_ == wandSession_->revisionAfter && undoName() == "Magic Wand";
+}
+
+void EditorSession::applyWandSession(int tolerance, bool replaceStep) {
+    WandSession& session = *wandSession_;
+    std::vector<const SmartWandImage::Field*> positive, negative;
+    for (WandClick& click : session.clicks) {
+        if (tolerance > click.field.limit)
+            click.field = wandSmart_->propagate(click.x, click.y, click.radius, std::clamp(std::max(64, tolerance * 2), 0, 255));
+        // A keep-out click competes at any cost it can reach, so its field goes as far as the positive ones do.
+        (click.positive ? positive : negative).push_back(&click.field);
+    }
     GrayImage mask(document_->width, document_->height);
-    thresholdWandField(click.field, tolerance, selectionAntialiased, mask);
-    undo();
-    setSelection(combineSelection(click.before, mask, click.mode, selectionAntialiased), "Magic Wand");
-    click.revisionAfter = documentRevision_;
+    thresholdWandFields(positive, negative, tolerance, selectionAntialiased, mask);
+    if (replaceStep) undo();
+    setSelection(combineSelection(session.before, mask, session.mode, selectionAntialiased), "Magic Wand");
+    session.revisionAfter = documentRevision_;
+}
+
+bool EditorSession::retolerateWand(int tolerance) {
+    // Only while the wand's step is the latest thing that happened to the document.
+    if (!wandSessionLive()) return false;
+    applyWandSession(tolerance, true);
     return true;
 }
 

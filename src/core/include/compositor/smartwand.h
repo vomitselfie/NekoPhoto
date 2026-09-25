@@ -69,4 +69,10 @@ private:
 /// for antialiasing (`soft`), 0 elsewhere. Returns the count at or above half.
 long thresholdWandField(const SmartWandImage::Field& field, int tolerance, bool soft, GrayImage& mask);
 
+/// Several clicks at once: positive fields say what to select, negative ones what to keep out. A pixel is
+/// selected when its cheapest positive cost is within `tolerance` and below its cheapest negative cost, so
+/// the two kinds of evidence compete for pixels rather than one mask being cut from the other.
+long thresholdWandFields(const std::vector<const SmartWandImage::Field*>& positive, const std::vector<const SmartWandImage::Field*>& negative,
+                         int tolerance, bool soft, GrayImage& mask);
+
 } // namespace compositor

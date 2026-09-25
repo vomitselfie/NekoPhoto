@@ -274,7 +274,7 @@ QString MainWindow::toolHint(Tool tool, bool erase) {
     case Tool::Move: return tr("Drag to move; handles scale, just outside a corner rotates; Ctrl-drag a handle distorts; Ctrl-click picks a layer");
     case Tool::Marquee: return tr("Drag to select; Shift adds, Alt subtracts; drag inside a selection to move its outline");
     case Tool::Lasso: return tr("Freehand: drag around an area. Polygonal: click points, double-click or Enter closes, Backspace removes the last");
-    case Tool::Wand: return tr("Click a colour to select it; Shift adds, Alt subtracts; Tolerance widens the match");
+    case Tool::Wand: return tr("Click to select a region; then Shift-click more of it, Alt-click what should stay out, or change Tolerance to adjust it");
     case Tool::Scribble: return tr("Scribble over the subject (Alt: the background), or with the Click engine click it (Alt-click what is not it, drag a box); Backspace takes one back, Esc clears");
     case Tool::Crop: return tr("Drag the crop, then press Enter or double-click; Shift squares, Alt grows from the centre");
     case Tool::Brush: return erase ? tr("Drag to erase; [ and ] change the size; Shift-click erases a straight line")

@@ -537,15 +537,23 @@ private:
     compositor::Uuid wandSampleLayer_;
     uint64_t wandSampleRevision_ = 0;
     std::shared_ptr<compositor::SmartWandImage> wandSmart_;   // wandSample_ prepared for the edge-aware wand
-    /// The last edge-aware click, for re-thresholding it while its step is still the latest one.
+    /// The latest edge-aware wand selection, while its step is still the latest thing that happened: its
+    /// clicks (Shift adds one that selects, Alt one that keeps out), the selection it started from and how it
+    /// combines with it. A tolerance change or another click re-evaluates all of them and replaces the step.
     struct WandClick {
         compositor::SmartWandImage::Field field;
         int x = 0, y = 0, radius = 0;
+        bool positive = true;
+    };
+    struct WandSession {
+        std::vector<WandClick> clicks;
         std::optional<compositor::Selection> before;
         compositor::SelectionMode mode = compositor::SelectionMode::Replace;
         uint64_t revisionAfter = 0;
     };
-    std::optional<WandClick> wandClick_;
+    std::optional<WandSession> wandSession_;
+    bool wandSessionLive() const;
+    void applyWandSession(int tolerance, bool replaceStep);
     bool adjustmentEditing_ = false;
     std::shared_ptr<const compositor::Image> previewImage_;
     std::optional<compositor::LayerTransform> previewTransform_;

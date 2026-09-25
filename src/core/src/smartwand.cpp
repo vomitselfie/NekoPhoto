@@ -234,4 +234,30 @@ long thresholdWandField(const SmartWandImage::Field& field, int tolerance, bool 
     return count;
 }
 
+long thresholdWandFields(const std::vector<const SmartWandImage::Field*>& positive, const std::vector<const SmartWandImage::Field*>& negative,
+                         int tolerance, bool soft, GrayImage& mask) {
+    if (positive.empty()) { std::memset(mask.data(), 0, mask.byteCount()); return 0; }
+    const int width = positive[0]->width, height = positive[0]->height;
+    const int inside = std::max(0, tolerance) * quarter;
+    const int band = soft ? 2 * quarter : 0;
+    long count = 0;
+    for (int y = 0; y < height; y++) {
+        uint8_t* out = mask.row(y);
+        for (int x = 0; x < width; x++) {
+            const size_t i = size_t(y) * width + x;
+            int p = 65535, n = 65535;
+            for (auto* f : positive) p = std::min<int>(p, f->cost[i]);
+            for (auto* f : negative) n = std::min<int>(n, f->cost[i]);
+            uint8_t m = 0;
+            if (p != 65535 && p < n) {
+                if (p <= inside) m = 255;
+                else if (band && p < inside + band) m = uint8_t(255 - (p - inside) * 255 / band);
+            }
+            out[x] = m;
+            count += m >= 128;
+        }
+    }
+    return count;
+}
+
 } // namespace compositor
