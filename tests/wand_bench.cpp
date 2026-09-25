@@ -11,6 +11,7 @@
 #include "compositor/selection.h"
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <cstdio>
 #include <functional>
 #include <random>
@@ -169,11 +170,17 @@ int main(int argc, char** argv) {
         if (!image) { std::fprintf(stderr, "%s\n", error.c_str()); return 1; }
         const int x = std::atoi(argv[3]), y = std::atoi(argv[4]);
         SmartWandImage prepared(*image);
-        auto field = prepared.propagate(x, y, 1, wandCost(255));
+        const bool anywhere = std::getenv("ANYWHERE") != nullptr;
+        auto field = prepared.propagate(x, y, 1, wandCost(255), {}, anywhere);
         GrayImage m(image->width(), image->height(), 0);
         std::printf("%9s %12s %12s\n", "tolerance", "classic", "edge-aware");
+        if (argc > 5) { GrayImage out(image->width(), image->height(), 0); thresholdWandField(field, std::atoi(argv[5]), false, out);
+            Image view(out.width(), out.height());
+            for (int y = 0; y < out.height(); y++) for (int x = 0; x < out.width(); x++) { const uint8_t* p = image->pixel(x, y); uint8_t* q = view.pixel(x, y); const bool on = out.at(x, y) >= 128;
+                q[0] = on ? 255 : p[0]; q[1] = on ? 0 : p[1]; q[2] = on ? 150 : p[2]; q[3] = 255; }
+            writePngImage("build/rt/curve-sel.png", view, 72, nullptr); }
         for (int t : {0, 4, 8, 12, 16, 20, 24, 32, 40, 48, 64, 80, 100, 128, 160, 200, 255}) {
-            const long classic = wandMask(*image, x, y, 1, t, true, m);
+            const long classic = wandMask(*image, x, y, 1, t, !anywhere, m);
             const long smart = thresholdWandField(field, t, false, m);
             std::printf("%9d %12ld %12ld\n", t, classic, smart);
         }

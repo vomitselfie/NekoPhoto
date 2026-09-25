@@ -1240,6 +1240,28 @@ TEST_CASE(refined_wand_edge_unmixes_a_line_fringe_and_clean_delete_leaves_its_co
     CHECK_EQ(int(cleared.pixel(20, 10)[3]), 255);
 }
 
+TEST_CASE(wand_without_contiguous_takes_every_pocket_of_the_pattern_but_not_flat_look_alikes) {
+    // A checkerboard ground cut into two pockets by a dark bar, with a flat white blob (an eye white) inside the
+    // bar: one click in the left pocket takes the right pocket too, and not the white blob.
+    const int W = 200, H = 100;
+    Image image(W, H);
+    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
+        uint8_t* p = image.pixel(x, y);
+        const bool bar = x >= 80 && x < 120;
+        const bool blob = bar && x >= 90 && x < 110 && y >= 40 && y < 60;
+        const uint8_t v = blob ? 253 : bar ? 30 : ((x / 10 + y / 10) % 2 ? 214 : 253);
+        p[0] = p[1] = p[2] = v; p[3] = 255;
+    }
+    SmartWandImage prepared(image);
+    auto field = prepared.propagate(5, 5, 1, wandCost(64), {}, true);
+    GrayImage mask(W, H, 0);
+    thresholdWandField(field, 32, false, mask);
+    CHECK_EQ(int(mask.at(40, 50)), 255);    // the clicked pocket
+    CHECK_EQ(int(mask.at(160, 50)), 255);   // the other pocket
+    CHECK_EQ(int(mask.at(100, 50)), 0);     // not the white blob
+    CHECK_EQ(int(mask.at(85, 20)), 0);      // not the bar
+}
+
 TEST_CASE(wand_keep_out_clicks_compete_with_selecting_ones) {
     // At a tolerance high enough to cross into the near colour, a keep-out click on it takes it back out.
     const int W = 120, H = 60;

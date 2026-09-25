@@ -549,6 +549,7 @@ private:
         compositor::SmartWandImage::Field field;
         int x = 0, y = 0, radius = 0;
         bool positive = true;
+        bool anywhere = false;   // Contiguous off: every region that looks like the click
     };
     struct WandSession {
         std::vector<WandClick> clicks;

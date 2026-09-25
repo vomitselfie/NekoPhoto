@@ -54,7 +54,11 @@ public:
         std::vector<uint16_t> cost;
         int limit = 0;   // in cost units (wandCost): thresholds above it are not meaningful
     };
-    Field propagate(int seedX, int seedY, int radius, int limit, const SmartWandOptions& options = {}) const;
+    /// `anywhere`: every region that looks like the click, not only the connected one (the wand with Contiguous
+    /// off): pixels close to the click's colours (the classic per-channel measure, against the patch and the
+    /// pattern's two colours) whose coarse neighbourhood matches the click's start the search, which then fills
+    /// each such region out to its edges.
+    Field propagate(int seedX, int seedY, int radius, int limit, const SmartWandOptions& options = {}, bool anywhere = false) const;
 
     /// OKLab of pixel i, scaled: L 0..1 and a, b about -0.4..0.4, times 4096 (for tests and the patch model).
     void oklab(size_t i, float out[3]) const { out[0] = lab_[i * 3] / 4096.0f; out[1] = lab_[i * 3 + 1] / 4096.0f; out[2] = lab_[i * 3 + 2] / 4096.0f; }
@@ -63,6 +67,7 @@ private:
     int width_ = 0, height_ = 0;
     std::vector<int16_t> lab_;     // straight-colour OKLab, three per pixel, times 4096
     std::vector<uint8_t> alpha_;
+    std::vector<uint8_t> rgb_;       // straight sRGB, three per pixel (the classic per-channel tolerance)
     std::vector<uint16_t> edge_;   // multi-scale gradient magnitude of L, in tolerance units times four
     std::vector<uint16_t> spread_; // local colour spread (5 x 5 window) in tolerance units times four
     std::vector<int16_t> localMean_;   // local mean OKLab (the same window), times 4096: texture averaged out

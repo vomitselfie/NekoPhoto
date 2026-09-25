@@ -112,6 +112,25 @@ cleared side):
 The clean delete applies when the selection is still the refined wand selection and the active layer
 covers the canvas pixel for pixel (an opened image); otherwise Delete clears as before.
 
+## One click for a background in many pockets: Contiguous off
+
+A background cut into pockets by hair and figures (the baked checkerboard of an AI character sheet) needs a
+click per pocket when the wand is contiguous. With Contiguous off (and Edge Aware on) the wand takes every
+region that looks like the click instead:
+
+- a pixel can start the selection when it is close to one of the click's colours by the classic measure (the
+  largest channel difference; perceptual distance is too lenient about tints without edges to hold it back:
+  pale skin is close to white in OKLab), the click's colour or, for a textured click, either colour of the
+  pattern (a 2-means over its neighbourhood), and when its neighbourhood looks like the click's at the coarse
+  scale (a checker pocket shows both colours; an eye white beside a line does not; for a flat click, flat);
+- the search then fills each such region out to its edges as a click inside it would, crossing the pattern's
+  soft cell boundaries.
+
+On the character sheet, one click in a corner at tolerance 32 takes the whole checkerboard, every pocket,
+and none of the eye whites, bone charms, skin or highlights; the result holds from tolerance 16 to 64. With
+Refine Edge and Delete, the outlines come out clean over any colour. A few tiny or oddly mixed pockets can
+still be missed (a Shift-click takes each).
+
 ## Tests
 
 `core_tests` covers the wand on tiny and transparent layers, a click in a grid, keep-out clicks, and the

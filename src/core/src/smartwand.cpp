@@ -68,6 +68,7 @@ SmartWandImage::SmartWandImage(const Image& pixels, bool edges) : width_(pixels.
     const size_t n = size_t(width_) * height_;
     lab_.resize(n * 3);
     alpha_.resize(n);
+    rgb_.resize(n * 3);
     edge_.assign(n, 0);
     std::vector<float> lightness(n);
     parallelRows(0, height_, [&](int ya, int yb) {
@@ -78,7 +79,7 @@ SmartWandImage::SmartWandImage(const Image& pixels, bool edges) : width_(pixels.
                 const unsigned a = p[3];
                 alpha_[i] = uint8_t(a);
                 uint8_t s[3];
-                for (int c = 0; c < 3; c++) s[c] = a == 0 ? 0 : uint8_t(std::min(255u, (p[c] * 255u + a / 2) / a));
+                for (int c = 0; c < 3; c++) { s[c] = a == 0 ? 0 : uint8_t(std::min(255u, (p[c] * 255u + a / 2) / a)); rgb_[i * 3 + size_t(c)] = s[c]; }
                 float lab[3];
                 toOklab(s[0], s[1], s[2], lab);
                 // Transparent pixels read as their own colour but far from any opaque one through alpha.
@@ -192,7 +193,7 @@ SmartWandImage::SmartWandImage(const Image& pixels, bool edges) : width_(pixels.
     }
 }
 
-SmartWandImage::Field SmartWandImage::propagate(int seedX, int seedY, int radius, int limit, const SmartWandOptions& options) const {
+SmartWandImage::Field SmartWandImage::propagate(int seedX, int seedY, int radius, int limit, const SmartWandOptions& options, bool anywhere) const {
     Field field;
     field.width = width_; field.height = height_; field.limit = limit;
     const size_t n = size_t(width_) * height_;
@@ -263,6 +264,54 @@ SmartWandImage::Field SmartWandImage::propagate(int seedX, int seedY, int radius
             }
             coarse.push_back(c);
         }
+    // The texture's way in (see Coarse): the pixel's colour on the way between the pattern's two colours, and its
+    // neighbourhood textured too. `strict` refuses flat neighbourhoods outright (no path to hold a flat pixel
+    // back) instead of charging for them. In quarter units; 65534 when it does not apply.
+    auto textureCost = [&](size_t i) -> float {
+        float best = 65534.0f;
+        for (const Coarse& k : coarse) {
+            // The pixel's colour must be one of the two the click's neighbourhood is made of, and its own
+            // neighbourhood must match the click's: mean and spread, a Gaussian stand-in for comparing the two
+            // colour distributions (a lone line beside the click differs there, a repeating pattern does not).
+            float near0 = 0, near1 = 0, dm = 0;
+            const size_t ci = cellOf(i);
+            for (int ch = 0; ch < 3; ch++) {
+                const float v = lab_[i * 3 + size_t(ch)] / 4096.0f;
+                near0 += (v - k.centre[0][ch]) * (v - k.centre[0][ch]);
+                near1 += (v - k.centre[1][ch]) * (v - k.centre[1][ch]);
+                const float m = k.scale->mean[ci * 3 + size_t(ch)] / 4096.0f - k.mean[ch]; dm += m * m;
+            }
+            if (std::sqrt(near0) * unitsPerLab > k.reach[0] && std::sqrt(near1) * unitsPerLab > k.reach[1]) continue;
+            const float ds = std::fabs(k.scale->spread[ci] / float(quarter) - k.spread);
+            best = std::min(best, float(options.regionWeight) * (std::sqrt(dm) * unitsPerLab + ds) * quarter);
+        }
+        return best;
+    };
+    // With Contiguous off the seeds are already known to lie in look-alike regions, so filling them may cross
+    // the pattern's own boundaries more freely: any colour on the way between the pattern's two colours (the
+    // blends at soft cell edges), in a neighbourhood that is textured at all, whatever its proportions.
+    auto patternCost = [&](size_t i) -> float {
+        float best = 65534.0f;
+        for (const Coarse& k : coarse) {
+            float along = 0, span = 0;
+            for (int ch = 0; ch < 3; ch++) {
+                const float v = lab_[i * 3 + size_t(ch)] / 4096.0f;
+                along += (v - k.centre[0][ch]) * (k.centre[1][ch] - k.centre[0][ch]);
+                span += (k.centre[1][ch] - k.centre[0][ch]) * (k.centre[1][ch] - k.centre[0][ch]);
+            }
+            const float t = span > 0 ? std::clamp(along / span, 0.0f, 1.0f) : 0.0f;
+            float off = 0;
+            for (int ch = 0; ch < 3; ch++) {
+                const float v = lab_[i * 3 + size_t(ch)] / 4096.0f, onSegment = k.centre[0][ch] + t * (k.centre[1][ch] - k.centre[0][ch]);
+                off += (v - onSegment) * (v - onSegment);
+            }
+            const float distance = std::sqrt(off) * unitsPerLab, reach = k.reach[0] + t * (k.reach[1] - k.reach[0]);
+            if (distance > reach) continue;
+            const float flatness = std::max(0.0f, 0.4f * k.spread - k.scale->spread[cellOf(i)] / float(quarter));
+            best = std::min(best, float(options.regionWeight) * (distance + flatness * 4) * quarter);
+        }
+        return best;
+    };
     auto stepCost = [&](size_t from, size_t i) -> int {
         float d2 = 0, n2 = 0;
         for (int c = 0; c < 3; c++) {
@@ -276,23 +325,7 @@ SmartWandImage::Field SmartWandImage::propagate(int seedX, int seedY, int radius
         // A textured click does not flow into smoother ground: the spread it lacks against the click's.
         const float texture = float(options.textureWeight) * std::max(0.0f, seedSpread * 0.5f - spread_[i]);
         float c = (colour + neighbour + alpha) * quarter + float(options.edgeWeight) * edge_[i] + texture;
-        for (const Coarse& k : coarse) {
-            // The pixel's colour must be one of the two the click's neighbourhood is made of, and its own
-            // neighbourhood must match the click's: mean and spread, a Gaussian stand-in for comparing the two
-            // colour distributions.
-            float near0 = 0, near1 = 0, dm = 0;
-            const size_t ci = cellOf(i);
-            for (int ch = 0; ch < 3; ch++) {
-                const float v = lab_[i * 3 + size_t(ch)] / 4096.0f;
-                near0 += (v - k.centre[0][ch]) * (v - k.centre[0][ch]);
-                near1 += (v - k.centre[1][ch]) * (v - k.centre[1][ch]);
-                const float m = k.scale->mean[ci * 3 + size_t(ch)] / 4096.0f - k.mean[ch]; dm += m * m;
-            }
-            if (std::sqrt(near0) * unitsPerLab > k.reach[0] && std::sqrt(near1) * unitsPerLab > k.reach[1]) continue;
-            const float ds = std::fabs(k.scale->spread[ci] / float(quarter) - k.spread);
-            const float region = float(options.regionWeight) * (std::sqrt(dm) * unitsPerLab + ds) + alpha;
-            c = std::min(c, region * quarter);
-        }
+        c = std::min(c, (anywhere ? std::min(textureCost(i), patternCost(i)) : textureCost(i)) + alpha * quarter);
         return int(std::min(65534.0f, c));
     };
     const bool additive = options.accumulation == WandAccumulation::Additive;
@@ -301,6 +334,80 @@ SmartWandImage::Field SmartWandImage::propagate(int seedX, int seedY, int radius
     // A bucket queue: costs are small integers, so each pixel is settled in order without a heap.
     std::vector<std::vector<uint32_t>> buckets(size_t(maxLevel) + 1);
     const size_t seed = size_t(seedY) * width_ + seedX;
+    if (anywhere) {
+        // Each pixel on its own: the click's colour and texture model, no step from a neighbour. With no edge to
+        // stop it, the distance from the click counts in full and colour (a, b) twice: warm skin is closer to
+        // white than any outline would let through.
+        // The patch's mean straight colour, for the classic per-channel difference.
+        float rgbMean[3] = {0, 0, 0};
+        int rgbCount = 0;
+        for (int y = std::max(0, seedY - radius); y <= std::min(height_ - 1, seedY + radius); y++)
+            for (int x = std::max(0, seedX - radius); x <= std::min(width_ - 1, seedX + radius); x++) {
+                for (int c = 0; c < 3; c++) rgbMean[c] += rgb_[(size_t(y) * width_ + x) * 3 + size_t(c)];
+                rgbCount++;
+            }
+        for (float& v : rgbMean) v /= float(std::max(1, rgbCount));
+        // With a textured click, the pattern's colours too: two clusters of the widest textured window, in sRGB.
+        std::vector<std::array<float, 3>> references{{rgbMean[0], rgbMean[1], rgbMean[2]}};
+        if (!coarse.empty()) {
+            const int r = coarse.back().scale->radius;
+            std::vector<std::array<float, 3>> window;
+            for (int y = std::max(0, seedY - r); y <= std::min(height_ - 1, seedY + r); y++)
+                for (int x = std::max(0, seedX - r); x <= std::min(width_ - 1, seedX + r); x++) {
+                    const size_t k = (size_t(y) * width_ + x) * 3;
+                    window.push_back({float(rgb_[k]), float(rgb_[k + 1]), float(rgb_[k + 2])});
+                }
+            std::array<float, 3> centre[2] = {references[0], references[0]};
+            auto d2 = [](const std::array<float, 3>& a, const std::array<float, 3>& b) { float d = 0; for (int c = 0; c < 3; c++) d += (a[size_t(c)] - b[size_t(c)]) * (a[size_t(c)] - b[size_t(c)]); return d; };
+            float far = -1;
+            for (auto& v : window) if (d2(v, centre[0]) > far) { far = d2(v, centre[0]); centre[1] = v; }
+            for (int round = 0; round < 6; round++) {
+                double sum[2][3] = {}; int count[2] = {0, 0};
+                for (auto& v : window) { const int m = d2(v, centre[1]) < d2(v, centre[0]) ? 1 : 0; for (int c = 0; c < 3; c++) sum[m][c] += v[size_t(c)]; count[m]++; }
+                for (int m = 0; m < 2; m++) if (count[m]) for (int c = 0; c < 3; c++) centre[m][size_t(c)] = float(sum[m][c] / count[m]);
+            }
+            references.push_back(centre[0]);
+            references.push_back(centre[1]);
+        }
+        auto ownCost = [&](size_t i) -> int {
+            // The classic wand's measure, the largest channel difference: with no edge to hold it back, perceptual
+            // distance is too lenient about tints (pale skin is close to white in OKLab, 40 or more levels off in
+            // a channel).
+            float best = 65535;
+            for (auto& ref : references) {
+                float worst = 0;
+                for (int c = 0; c < 3; c++) worst = std::max(worst, std::fabs(rgb_[i * 3 + size_t(c)] - ref[size_t(c)]));
+                best = std::min(best, worst);
+            }
+            const float colour = best * quarter;
+            const float alpha = float(options.alphaWeight * std::fabs(alpha_[i] - alphaMean)) * quarter;
+            return int(std::min(65534.0f, colour + alpha));
+        };
+        // Seeds only where the neighbourhood looks like the click's at the coarse scale (a checker pocket shows
+        // both of its colours; an eye white beside a line does not), or, for a flat click, is flat; the path search
+        // then fills each seeded region out to its edges as a click inside it would.
+        const Scale* widest = scales_.empty() ? nullptr : &scales_.back();
+        const size_t seedCell = cellOf(size_t(seedY) * width_ + seedX);
+        const float seedWindowSpread = widest ? widest->spread[seedCell] / float(quarter) : 0;
+        float seedWindowMean[3] = {0, 0, 0};
+        if (widest) for (int c = 0; c < 3; c++) seedWindowMean[c] = widest->mean[seedCell * 3 + size_t(c)] / 4096.0f;
+        const bool textured = !coarse.empty();
+        for (size_t i = 0; i < n; i++) {
+            const int own = ownCost(i);
+            if (own > maxLevel) continue;
+            if (widest) {
+                const size_t ci = cellOf(i);
+                const float spreadHere = widest->spread[ci] / float(quarter);
+                if (textured) {
+                    float dm = 0;
+                    for (int c = 0; c < 3; c++) { const float d = widest->mean[ci * 3 + size_t(c)] / 4096.0f - seedWindowMean[c]; dm += d * d; }
+                    if (std::sqrt(dm) * unitsPerLab > 0.5f * seedWindowSpread || spreadHere < 0.5f * seedWindowSpread || spreadHere > 1.6f * seedWindowSpread) continue;
+                } else if (spreadHere > std::max(6.0f, 2 * seedWindowSpread)) continue;
+            }
+            field.cost[i] = uint16_t(own);
+            buckets[size_t(own)].push_back(uint32_t(i));
+        }
+    }
     field.cost[seed] = 0;
     buckets[0].push_back(uint32_t(seed));
     static const int dx[8] = {1, -1, 0, 0, 1, 1, -1, -1}, dy[8] = {0, 0, 1, -1, 1, -1, 1, -1};

@@ -77,13 +77,14 @@ void EditorSession::magicWand(QPointF documentPoint, int tolerance, bool contigu
         wandSampleAll_ = sampleAllLayers; wandSampleLayer_ = layerId; wandSampleRevision_ = documentRevision_;
         wandSmart_.reset();
     }
-    if (edgeAware && contiguous) {
+    if (edgeAware) {
         if (!wandSmart_) wandSmart_ = std::make_shared<SmartWandImage>(*wandSample_);
         WandClick click;
         click.x = x; click.y = y;
         click.radius = 1 + 2 * std::clamp(sampleRadius, 0, 2);   // the patch: 3, 7 or 11 pixels across
         // The click's cost field, far enough past this tolerance that the slider can move without recomputing.
-        click.field = wandSmart_->propagate(x, y, click.radius, wandCost(std::clamp(std::max(tolerance * 2, 64), 0, 255)));
+        click.anywhere = !contiguous;
+        click.field = wandSmart_->propagate(x, y, click.radius, wandCost(std::clamp(std::max(tolerance * 2, 64), 0, 255)), {}, click.anywhere);
         if (wandSessionLive() && mode != SelectionMode::Replace && mode != SelectionMode::Intersect) {
             // More evidence for the selection just made: Shift for what belongs, Alt for what does not.
             click.positive = mode == SelectionMode::Add;
@@ -115,7 +116,7 @@ void EditorSession::applyWandSession(int tolerance, bool replaceStep) {
     std::vector<const SmartWandImage::Field*> positive, negative;
     for (WandClick& click : session.clicks) {
         if (wandCost(tolerance) > click.field.limit)
-            click.field = wandSmart_->propagate(click.x, click.y, click.radius, wandCost(std::clamp(std::max(tolerance * 2, 64), 0, 255)));
+            click.field = wandSmart_->propagate(click.x, click.y, click.radius, wandCost(std::clamp(std::max(tolerance * 2, 64), 0, 255)), {}, click.anywhere);
         // A keep-out click competes at any cost it can reach, so its field goes as far as the positive ones do.
         (click.positive ? positive : negative).push_back(&click.field);
     }
