@@ -13,6 +13,7 @@
 #include "compositor/render.h"
 #include "compositor/selection.h"
 #include "compositor/shape.h"
+#include "compositor/smartwand.h"
 #include "compositor/matte.h"
 #include "compositor/subject.h"
 #include "compositor/scribble.h"
@@ -1128,6 +1129,39 @@ TEST_CASE(render_cache_matches_a_plain_render) {
     render(doc, o, plain, &overrides);
     render(doc, o, cached, &overrides, &cache);
     CHECK_EQ(std::memcmp(plain.data(), cached.data(), plain.byteCount()), 0);
+}
+
+TEST_CASE(edge_aware_wand_follows_the_image) {
+    // Two flat colours 20 levels apart side by side: the plain wand at 32 takes both, the edge-aware one only
+    // the clicked side. A strong ramp across one region (shading) is taken whole at the same tolerance.
+    const int W = 120, H = 60;
+    Image near(W, H);
+    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) { uint8_t* p = near.pixel(x, y); const int v = x < 60 ? 0 : 20; p[0] = uint8_t(120 + v); p[1] = uint8_t(140 + v); p[2] = uint8_t(170 + v); p[3] = 255; }
+    SmartWandImage prepared(near);
+    auto field = prepared.propagate(20, 30, 1, 64);
+    GrayImage mask(W, H, 0);
+    thresholdWandField(field, 32, false, mask);
+    CHECK_EQ(int(mask.at(10, 30)), 255);
+    CHECK_EQ(int(mask.at(100, 30)), 0);
+    // A higher tolerance, from the same field, crosses.
+    thresholdWandField(field, 200, false, mask);
+    CHECK_EQ(int(mask.at(100, 30)), field.limit >= 200 ? 255 : 0);
+
+    Image shaded(W, H);
+    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
+        uint8_t* p = shaded.pixel(x, y);
+        if (x < 100) { const int d = x * 6 / 10; p[0] = uint8_t(200 - d); p[1] = uint8_t(60 - d / 3); p[2] = uint8_t(60 - d / 3); }   // red, darkening by 60 levels
+        else { p[0] = 170; p[1] = 110; p[2] = 60; }                                                                         // orange ground
+        p[3] = 255;
+    }
+    SmartWandImage prepared2(shaded);
+    auto field2 = prepared2.propagate(5, 30, 1, 64);
+    thresholdWandField(field2, 32, false, mask);
+    CHECK_EQ(int(mask.at(95, 30)), 255);    // the dark end of the shading
+    CHECK_EQ(int(mask.at(110, 30)), 0);     // not the ground
+    // The soft band sits just past the threshold.
+    long hard = thresholdWandField(field2, 32, true, mask);
+    CHECK(hard > 0);
 }
 
 TEST_CASE(stamped_dabs_match_the_general_path) {

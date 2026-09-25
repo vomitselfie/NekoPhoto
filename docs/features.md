@@ -21,7 +21,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Exact position, size and angle in the options bar
 
 ## Selections
-- Rectangle and ellipse marquee, freehand and polygonal lasso, magic wand
+- Rectangle and ellipse marquee, freehand and polygonal lasso, and an edge-aware magic wand: shading and texture stay in, edges between similar colours hold, and the tolerance can be changed right after a click
 - Quick Select (Q): scribble over the subject, or click it (a 48 MB model, downloaded from the options bar); the selection snaps to the image's edges
 - Add (Shift), subtract (Alt) and intersect (Shift+Alt)
 - Expand, Contract, Feather, Smooth, Border, Invert; load a layer or mask as a selection

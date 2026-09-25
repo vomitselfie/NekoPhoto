@@ -1,5 +1,6 @@
 // EditorSession: Selections: setting, combining, the magic wand, fill and clear, and the Select menu.
 #include "EditorSession.h"
+#include "compositor/smartwand.h"
 #include "compositor/morphology.h"
 #include "compositor/wand.h"
 #include <algorithm>
@@ -44,7 +45,7 @@ void EditorSession::invertSelection() {
     setSelection(compositor::invertSelection(*document_->selection, document_->width, document_->height), "Inverse");
 }
 
-void EditorSession::magicWand(QPointF documentPoint, int tolerance, bool contiguous, bool sampleAllLayers, SelectionMode mode, int sampleRadius) {
+void EditorSession::magicWand(QPointF documentPoint, int tolerance, bool contiguous, bool sampleAllLayers, SelectionMode mode, int sampleRadius, bool edgeAware) {
     if (!document_ || !canEditLayers()) return;
     int x = int(std::floor(documentPoint.x())), y = int(std::floor(documentPoint.y()));
     if (x < 0 || y < 0 || x >= document_->width || y >= document_->height) return;
@@ -70,11 +71,43 @@ void EditorSession::magicWand(QPointF documentPoint, int tolerance, bool contigu
             wandSample_ = renderFlattened(single);
         }
         wandSampleAll_ = sampleAllLayers; wandSampleLayer_ = layerId; wandSampleRevision_ = documentRevision_;
+        wandSmart_.reset();
     }
+    if (edgeAware && contiguous) {
+        // The click's cost field, far enough past this tolerance that the slider can move without recomputing.
+        if (!wandSmart_) wandSmart_ = std::make_shared<SmartWandImage>(*wandSample_);
+        WandClick click;
+        click.x = x; click.y = y;
+        click.radius = 1 + 2 * std::clamp(sampleRadius, 0, 2);   // the patch: 3, 7 or 11 pixels across
+        click.field = wandSmart_->propagate(x, y, click.radius, std::clamp(std::max(64, tolerance * 2), 0, 255));
+        click.before = document_->selection;
+        click.mode = mode;
+        GrayImage mask(document_->width, document_->height);
+        thresholdWandField(click.field, tolerance, selectionAntialiased, mask);
+        applySelectionShape(mask, mode, "Magic Wand");
+        click.revisionAfter = documentRevision_;
+        wandClick_ = std::move(click);
+        return;
+    }
+    wandClick_.reset();
     auto mask = std::make_shared<GrayImage>(document_->width, document_->height);
     long count = wandMask(*wandSample_, x, y, std::clamp(sampleRadius, 0, 2), tolerance, contiguous, *mask);
     if (count < 0) return;
     applySelectionShape(*mask, mode, "Magic Wand");
+}
+
+bool EditorSession::retolerateWand(int tolerance) {
+    // Only while the click's step is the latest thing that happened to the document.
+    if (!wandClick_ || !document_ || documentRevision_ != wandClick_->revisionAfter || undoName() != "Magic Wand" || !wandSmart_) return false;
+    WandClick& click = *wandClick_;
+    if (tolerance > click.field.limit)
+        click.field = wandSmart_->propagate(click.x, click.y, click.radius, std::clamp(std::max(64, tolerance * 2), 0, 255));
+    GrayImage mask(document_->width, document_->height);
+    thresholdWandField(click.field, tolerance, selectionAntialiased, mask);
+    undo();
+    setSelection(combineSelection(click.before, mask, click.mode, selectionAntialiased), "Magic Wand");
+    click.revisionAfter = documentRevision_;
+    return true;
 }
 
 void EditorSession::fillSelection(const QColor& color) {

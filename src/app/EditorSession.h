@@ -15,6 +15,7 @@
 #include "compositor/history.h"
 #include "compositor/render.h"
 #include "compositor/selection.h"
+#include "compositor/smartwand.h"
 #include "compositor/shape.h"
 #include "compositor/warp.h"
 #include "compositor/warpstroke.h"
@@ -321,7 +322,10 @@ public:
     void invertSelection();
     void setSelection(const std::optional<compositor::Selection>& selection, const QString& name);
     /// `sampleRadius` 0, 1 or 2: the point, a 3x3 or a 5x5 average sets the colour to match (Photoshop's Sample Size).
-    void magicWand(QPointF documentPoint, int tolerance, bool contiguous, bool sampleAllLayers, compositor::SelectionMode mode, int sampleRadius = 0);
+    void magicWand(QPointF documentPoint, int tolerance, bool contiguous, bool sampleAllLayers, compositor::SelectionMode mode, int sampleRadius = 0, bool edgeAware = true);
+    /// Right after an edge-aware wand click, a new tolerance re-thresholds that click's field and replaces
+    /// its Magic Wand step; otherwise it only sets the tolerance for the next click. True when it re-selected.
+    bool retolerateWand(int tolerance);
     // Quick Select by scribble: strokes over the subject and over the background, segmented by GrabCut on the
     // flattened document and refined to its edges; the strokes stay until cleared, the last one wins where two overlap.
     struct Scribble { std::vector<QPointF> points; double size = 24; bool background = false; };
@@ -370,6 +374,8 @@ public:
     bool wandContiguous = true;
     bool wandSampleAll = false;
     int wandSampleRadius = 0;
+    /// Contiguous clicks follow the image (smartwand.h): perceptual colour, neighbour steps and texture.
+    bool wandEdgeAware = true;
 
     // Adjustment layers
     void addAdjustmentLayer(compositor::AdjustmentKind kind);
@@ -530,6 +536,16 @@ private:
     bool wandSampleAll_ = false;
     compositor::Uuid wandSampleLayer_;
     uint64_t wandSampleRevision_ = 0;
+    std::shared_ptr<compositor::SmartWandImage> wandSmart_;   // wandSample_ prepared for the edge-aware wand
+    /// The last edge-aware click, for re-thresholding it while its step is still the latest one.
+    struct WandClick {
+        compositor::SmartWandImage::Field field;
+        int x = 0, y = 0, radius = 0;
+        std::optional<compositor::Selection> before;
+        compositor::SelectionMode mode = compositor::SelectionMode::Replace;
+        uint64_t revisionAfter = 0;
+    };
+    std::optional<WandClick> wandClick_;
     bool adjustmentEditing_ = false;
     std::shared_ptr<const compositor::Image> previewImage_;
     std::optional<compositor::LayerTransform> previewTransform_;

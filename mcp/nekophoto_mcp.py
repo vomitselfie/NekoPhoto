@@ -520,9 +520,9 @@ def selection_polygon(points: list[list[float]], mode: str = "replace") -> str:
 
 
 @edit("Magic wand")
-def selection_wand(x: float, y: float, tolerance: int = 32, contiguous: bool = True, sample_all: bool = False, mode: str = "replace") -> str:
-    """Magic wand: select the colour at a point within tolerance (0..255), reading the active layer's own pixels (sample_all=true reads the visible composite instead)."""
-    return text(call("selection.wand", x=x, y=y, tolerance=tolerance, contiguous=contiguous, sampleAll=sample_all, mode=mode))
+def selection_wand(x: float, y: float, tolerance: int = 32, contiguous: bool = True, sample_all: bool = False, mode: str = "replace", edge_aware: Optional[bool] = None) -> str:
+    """Magic wand: select the region around a point within tolerance (0..255), reading the active layer's own pixels (sample_all=true reads the visible composite instead). Edge-aware by default: shading and texture stay in and edges between similar colours hold; edge_aware=false is the classic per-channel tolerance."""
+    return text(call("selection.wand", x=x, y=y, tolerance=tolerance, contiguous=contiguous, sampleAll=sample_all, mode=mode, edgeAware=edge_aware))
 
 
 @edit("Quick Select by scribble")

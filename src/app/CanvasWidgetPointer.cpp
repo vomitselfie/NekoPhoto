@@ -175,7 +175,7 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
         drag_ = Drag::Lasso;
         return;
     case Tool::Wand:
-        session_->magicWand(doc, session_->wandTolerance, session_->wandContiguous, session_->wandSampleAll, selectionMode(modifiers), session_->wandSampleRadius);
+        session_->magicWand(doc, session_->wandTolerance, session_->wandContiguous, session_->wandSampleAll, selectionMode(modifiers), session_->wandSampleRadius, session_->wandEdgeAware);
         return;
     case Tool::Scribble:
         if (session_->quickSelectClicks) {

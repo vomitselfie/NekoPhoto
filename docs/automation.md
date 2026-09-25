@@ -143,7 +143,7 @@ refused unless `COMPOSITOR_GMIC_UNRESTRICTED=1` is set; the G'MIC dialog is not 
 work here unless `all: true`, when they carry an `unsupported` reason).
 
 Selection: `selection.all`, `selection.none`, `selection.invert`,
-`selection.rect` (or `ellipse: true`), `selection.polygon`, `selection.wand`,
+`selection.rect` (or `ellipse: true`), `selection.polygon`, `selection.wand` (`edgeAware`, on by default: see docs/smart-wand.md),
 `selection.scribble` (`foreground` and `background`: lists of strokes, each a list of `[x, y]`
 points; `size`, `refine` 0..40, `clear`), `selection.subject` (click to select with the EfficientSAM
 model once downloaded: `foreground` and `background` points as `[x, y]` lists, an optional `box`

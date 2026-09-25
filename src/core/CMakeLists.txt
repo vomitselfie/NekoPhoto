@@ -94,6 +94,7 @@ add_library(compositor_core STATIC
     src/tipbrush.cpp
     src/parallel.cpp
     src/wand.cpp
+    src/smartwand.cpp
     src/zip.cpp
     src/resample.cpp
     src/heal.cpp

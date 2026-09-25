@@ -331,6 +331,12 @@ QWidget* ToolOptionsBar::buildCloneOptions() {
     aligned->setChecked(session_->cloneAligned);
     connect(aligned, &QCheckBox::toggled, this, [this](bool on) { session_->cloneAligned = on; });
     h->addWidget(aligned);
+    auto* edgeAware = new QCheckBox(tr("Edge Aware"));
+    edgeAware->setToolTip(tr("Follow the image: shading and texture stay in, edges between similar colours hold. "
+                             "Change the tolerance right after a click to adjust that selection."));
+    edgeAware->setChecked(session_->wandEdgeAware);
+    connect(edgeAware, &QCheckBox::toggled, this, [this](bool on) { session_->wandEdgeAware = on; });
+    h->addWidget(edgeAware);
     auto* all = new QCheckBox(tr("Sample All Layers"));
     all->setChecked(session_->cloneSampleAll);
     connect(all, &QCheckBox::toggled, this, [this](bool on) { session_->cloneSampleAll = on; });
@@ -561,12 +567,19 @@ QWidget* ToolOptionsBar::buildWandOptions() {
     tol->setAlignment(Qt::AlignRight);
     tol->setFixedWidth(48);
     tol->setValue(session_->wandTolerance);
-    connect(tol, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int v) { session_->wandTolerance = v; });
+    // Right after a click, a new tolerance redoes that click's selection at once (the field is kept).
+    connect(tol, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int v) { session_->wandTolerance = v; if (session_->wandEdgeAware) session_->retolerateWand(v); });
     h->addWidget(tol);
     auto* contiguous = new QCheckBox(tr("Contiguous"));
     contiguous->setChecked(session_->wandContiguous);
     connect(contiguous, &QCheckBox::toggled, this, [this](bool on) { session_->wandContiguous = on; });
     h->addWidget(contiguous);
+    auto* edgeAware = new QCheckBox(tr("Edge Aware"));
+    edgeAware->setToolTip(tr("Follow the image: shading and texture stay in, edges between similar colours hold. "
+                             "Change the tolerance right after a click to adjust that selection."));
+    edgeAware->setChecked(session_->wandEdgeAware);
+    connect(edgeAware, &QCheckBox::toggled, this, [this](bool on) { session_->wandEdgeAware = on; });
+    h->addWidget(edgeAware);
     auto* all = new QCheckBox(tr("Sample All Layers"));
     all->setChecked(session_->wandSampleAll);
     connect(all, &QCheckBox::toggled, this, [this](bool on) { session_->wandSampleAll = on; });
