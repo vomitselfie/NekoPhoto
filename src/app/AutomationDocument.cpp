@@ -183,7 +183,11 @@ void AutomationServer::registerDocumentHandlers() {
             region = region.intersection(doc.rect());
             if (region.width < 1 || region.height < 1) fail("region lies outside the document", invalidParams);
         }
-        double maxSize = num(p, "maxSize", 1024);
+        // zoom > 1 renders at full size and enlarges with square pixels, to judge edges and seams exactly.
+        const double zoom = num(p, "zoom", 1);
+        if (!(zoom >= 1 && zoom <= 32)) fail("zoom must be 1..32", invalidParams);
+        if (zoom > 1 && std::max(region.width, region.height) * zoom > 4096) fail(QStringLiteral("region times zoom must stay within 4096 pixels; render a smaller region (at most %1 pixels across)").arg(int(4096 / zoom)), invalidParams);
+        double maxSize = zoom > 1 ? 0 : num(p, "maxSize", 1024);
         double scale = maxSize > 0 ? std::min(1.0, maxSize / std::max(region.width, region.height)) : 1.0;
         int w = std::max(1, int(std::lround(region.width * scale))), h = std::max(1, int(std::lround(region.height * scale)));
         Image out(w, h);
@@ -200,6 +204,10 @@ void AutomationServer::registerDocumentHandlers() {
             painter.drawImage(0, 0, wrapImage(out));
             painter.end();
             out = *fromQImage(flat);
+        }
+        if (zoom > 1) {
+            out = *fromQImage(wrapImage(out).scaled(int(std::lround(w * zoom)), int(std::lround(h * zoom)), Qt::IgnoreAspectRatio, Qt::FastTransformation));
+            scale = zoom;
         }
         return deliverPng(out, p, {{"region", rectJson(region)}, {"scale", scale}});
     });

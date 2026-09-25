@@ -64,6 +64,8 @@ async def main(sock: str) -> None:
         assert not filled.isError, texts(filled)
         render = await session.call_tool("render", {"max_size": 128})
         assert render.content[0].type == "image", render.content
+        zoomed = await session.call_tool("render", {"x": 0, "y": 0, "width": 20, "height": 20, "zoom": 4})
+        assert not zoomed.isError and zoomed.content[0].type == "image", texts(zoomed)
         assert "MCP smoke" in texts(await session.call_tool("document_overview", {}))
         undone = await session.call_tool("history_undo", {"steps": 2})
         assert not undone.isError, texts(undone)

@@ -2,8 +2,10 @@
 #include "Automation.h"
 #include "AutomationHandlers.h"
 #include "ImageConvert.h"
+#include "compositor/render.h"
 #include <QJsonDocument>
 #include <algorithm>
+#include <cmath>
 
 using namespace compositor;
 using namespace app::rpc;
@@ -200,9 +202,32 @@ void AutomationServer::registerLayersHandlers() {
     });
     add("layers.group", [session, document](const QJsonObject&) { document(); session()->groupSelectedLayers(); const Layer* l = session()->activeLayer(); return l ? layerJson(*l, 0) : QJsonObject{}; });
     add("layers.render", [layer](const QJsonObject& p) {
-        // A layer's own pixels (not composited), downscaled to maxSize.
+        // A layer's own pixels (not composited), downscaled to maxSize. With a mask, as the layer shows: the
+        // mask applied, placed and rotated as on the canvas, over the layer's bounds (masked: false for the
+        // raw pixels).
         const Layer& l = layer(p);
         if (!l.asset || !l.asset->image) fail("the layer has no pixels (a folder, adjustment or blank layer); document.overview shows each layer's kind");
+        if (l.mask && l.mask->enabled && flag(p, "masked", true)) {
+            const Rect bounds = l.transform.bounds().integral();
+            if (!Document::validDimension(int(bounds.width)) || !Document::validDimension(int(bounds.height))) fail("the layer is too large to render alone; pass masked: false");
+            Document solo(int(bounds.width), int(bounds.height));
+            Layer alone = l;
+            alone.parentId.reset();
+            alone.maskSourceId.reset();
+            alone.visible = true;
+            alone.opacity = 1;
+            alone.blendMode = BlendMode::Normal;
+            alone.transform.origin = Point(l.transform.origin.x - bounds.x, l.transform.origin.y - bounds.y);
+            solo.layers = {alone};
+            const double maxSize = num(p, "maxSize", 1024);
+            const double scale = maxSize > 0 ? std::min(1.0, maxSize / std::max(bounds.width, bounds.height)) : 1.0;
+            Image out(std::max(1, int(std::lround(bounds.width * scale))), std::max(1, int(std::lround(bounds.height * scale))));
+            RenderOptions options;
+            options.region = solo.rect();
+            options.scale = scale;
+            render(solo, options, out, nullptr);
+            return deliverPng(out, p, {{"id", qs(l.id)}, {"masked", true}, {"region", rectJson(bounds)}, {"transform", transformJson(l.transform)}});
+        }
         auto copy = scaledCopy(*l.asset->image, num(p, "maxSize", 1024));
         return deliverPng(*copy, p, {{"id", qs(l.id)}, {"transform", transformJson(l.transform)}, {"pixelWidth", l.pixelWidth()}, {"pixelHeight", l.pixelHeight()}});
     });

@@ -70,6 +70,27 @@ pixels.clear {}
 selection.none {}
 ```
 
+Drawings and line art (learned on an anime character sheet, September 2026):
+
+```
+render {"region": {"x": 0, "y": 0, "width": 60, "height": 60}, "maxSize": 0}   # is the "transparency" a baked-in checkerboard?
+selection.wand {"x": 3, "y": 3, "tolerance": 80}                                # from a corner; black outlines stop it
+selection.wand {"x": <each other background pocket>, "tolerance": 80, "mode": "add"}
+selection.grow {"amount": 1}
+pixels.clear {}
+selection.polygon {"points": [...]}                                            # to keep one figure: trace the gap
+render {"region": {...}, "zoom": 4}                                             # check the gap at the seam first
+```
+
+- Remove Background and click select are trained on photos. On flat line art they bleed across
+  neighbouring figures and into a baked-in checkerboard; the magic wand is exact there.
+- Where figures touch, trace a polygon through the gap between their outlines, checking the tight spots
+  with `render` and `zoom`, then invert and clear.
+- To make a pasted photo object sit in a drawing, give it the drawing's outline:
+  `selection.fromLayer {"id": <object>, "mask": true}`, `selection.grow {"amount": 4}`, a new layer below it,
+  `pixels.fill {"color": "#111111"}`.
+- `layers.render` shows a masked layer as it looks; `masked: false` for the raw pixels.
+
 Batch export a folder of projects:
 
 ```

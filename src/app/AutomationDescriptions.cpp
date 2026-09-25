@@ -73,7 +73,7 @@ const MethodDoc methodDocs[] = {
      "width:integer New width (0 keeps the aspect from height); height:integer New height; scale:number Instead of a size: a factor; sampling:(nearest|smooth|high)=high Resampling; resolution:number Pixels per inch to record"},
     // seeing the result
     {"render", "The composite (what an export gives) as PNG, downscaled so its longest side is at most maxSize.",
-     "region:object {x, y, width, height} in document pixels; maxSize:number=1024 Longest side in pixels (0 = full size); checkerboard:bool=false Show transparency as a checkerboard; path:string Write the PNG here instead of returning base64"},
+     "region:object {x, y, width, height} in document pixels; maxSize:number=1024 Longest side in pixels (0 = full size); zoom:number=1 Enlarge a region 2..32 times with square pixels to judge edges (region times zoom within 4096); checkerboard:bool=false Show transparency as a checkerboard; path:string Write the PNG here instead of returning base64"},
     {"screenshot", "The canvas as the person sees it (overlays, selection outline), or the whole window.",
      "window:bool=false The whole window; maxSize:number=1600 Longest side; path:string Write the PNG here instead of returning base64"},
     // layers
@@ -104,8 +104,8 @@ const MethodDoc methodDocs[] = {
      "id:layer The layer (default the active one); action:(add|addFromSelection|delete|toggle|invert|apply|link)! What to do; revealing:bool=true For add: white (reveal all) rather than black"},
     {"layers.merge", "Merge the selected layers, or the active layer into the one beneath.", "down:bool=false Merge the active layer down"},
     {"layers.group", "Put the selected layers in a new folder.", ""},
-    {"layers.render", "One layer's own pixels (not composited, mask not applied) as PNG.",
-     "id:layer! The layer; maxSize:number=1024 Longest side; path:string Write the PNG here instead of returning base64"},
+    {"layers.render", "One layer alone as PNG, not composited with the others: with a mask, as it shows (mask applied, over the layer's bounds in document pixels); otherwise its own pixels.",
+     "id:layer! The layer; masked:bool=true Apply the layer's mask; false gives the raw pixels; maxSize:number=1024 Longest side; path:string Write the PNG here instead of returning base64"},
     {"adjustments.get", "An adjustment layer's settings.", "id:layer The adjustment layer (default the active one)"},
     {"adjustments.set", "Change an adjustment layer's settings (keys not given keep their values).",
      "id:layer The adjustment layer (default the active one); settings:object! Settings, shaped as adjustments.defaults shows"},

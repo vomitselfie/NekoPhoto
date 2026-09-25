@@ -218,16 +218,17 @@ def selection_render(max_size: int = 512) -> Image:
 
 
 @look("Render the document")
-def render(max_size: int = 1024, x: Optional[float] = None, y: Optional[float] = None, width: Optional[float] = None, height: Optional[float] = None, checkerboard: bool = False) -> Image:
-    """The composited document as a PNG (what an export would give), downscaled so its longest side is max_size. Give x, y, width, height to render only that region at up to full resolution. checkerboard shows transparency like the canvas does."""
+def render(max_size: int = 1024, x: Optional[float] = None, y: Optional[float] = None, width: Optional[float] = None, height: Optional[float] = None, checkerboard: bool = False, zoom: Optional[float] = None) -> Image:
+    """The composited document as a PNG (what an export would give), downscaled so its longest side is max_size. Give x, y, width, height to render only that region at up to full resolution; zoom (2..32) enlarges that region with square pixels to judge an edge, a seam or a gap exactly (region times zoom within 4096). checkerboard shows transparency like the canvas does."""
     region = {"x": x, "y": y, "width": width, "height": height} if None not in (x, y, width, height) else None
-    return png(call("render", maxSize=max_size, region=region, checkerboard=checkerboard))
+    return png(call("render", maxSize=max_size, region=region, checkerboard=checkerboard, zoom=zoom))
 
 
 @look("Render one layer")
-def render_layer(id: str, max_size: int = 1024) -> Image:
-    """One layer's own pixels (not composited, transparency kept) as a PNG."""
-    return png(call("layers.render", id=id, maxSize=max_size))
+def render_layer(id: str, max_size: int = 1024, masked: bool = True) -> Image:
+    """One layer alone as a PNG, not composited with the others (transparency kept). A layer with a mask shows
+    as it looks on the canvas, the mask applied over the layer's bounds; masked=false gives its raw pixels."""
+    return png(call("layers.render", id=id, maxSize=max_size, masked=masked))
 
 
 @look("Screenshot the editor")
@@ -670,6 +671,12 @@ Recipes:
 - A flat background colour: layers_select the layer, selection_wand on the colour, selection_edit grow 2,
   pixels_clear, selection_edit none.
 - A blemish: render the region at full size, then brush_stroke tool healing through it.
+- Drawings and line art: remove_background and selection_subject are made for photos and bleed on flat
+  art. Clear a flat or baked-in checkerboard background with selection_wand (tolerance about 80) from a
+  corner, adding each separate pocket with mode add; the outlines stop it. Separate touching figures with a
+  selection_polygon through the gap, checked with render zoom 4.
+- A photo object in a drawing: selection_from_layer mask=true, selection_edit grow 4, layers_add below=true,
+  pixels_fill #111111 gives it the drawing's outline.
 
 Things to know: filters, fills and adjustments act on the active layer inside the selection (selection_edit none
 for the whole layer). Opacity is 0..1. Folders have no blend mode. brush_stroke puts the person's tool and colours

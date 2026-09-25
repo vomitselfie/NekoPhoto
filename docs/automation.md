@@ -107,8 +107,9 @@ print(json.loads(f.readline())["result"])
 Observe: `app.info`, `rpc.describe`, `tabs.list`, `document.overview` (the document, selection, undo and
 layer tree as text, one line per layer with its id: where an agent starts), `document.info`, `layers.list`, `layers.get`,
 `adjustments.get`, `adjustments.defaults`, `selection.info`, `history.info`,
-`render` (composite, or a `region`, longest side `maxSize`; `path` writes a file
-instead of returning base64), `layers.render` (one layer's pixels),
+`render` (composite, or a `region`, longest side `maxSize`; `zoom` 2..32 enlarges a region with square
+pixels to judge an edge exactly; `path` writes a file instead of returning base64), `layers.render` (one
+layer alone; a masked layer as it shows, `masked: false` for its raw pixels),
 `screenshot` (the canvas as shown, or the `window`).
 
 Documents: `tabs.select`, `tabs.new`, `tabs.close`, `document.new`,

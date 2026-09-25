@@ -385,6 +385,20 @@ def main():
     assert failed["error"]["index"] == 1 and failed["rolledBack"], failed
     assert len(rpc.call("layers.list")) == count
 
+    # Zoomed renders enlarge with square pixels; a masked layer renders as it shows.
+    zoomed = rpc.call("render", region={"x": 10, "y": 10, "width": 16, "height": 12}, zoom=4)
+    assert (zoomed["width"], zoomed["height"]) == (64, 48), zoomed
+    try:
+        rpc.call("render", zoom=8)
+        raise AssertionError("a whole-document render at zoom 8 should be refused")
+    except RuntimeError as e:
+        assert "4096" in str(e), e
+    masked_layer = next(l for l in rpc.call("layers.list") if l.get("mask") and l["kind"] == "pixels")
+    shown = rpc.call("layers.render", id=masked_layer["id"])
+    raw = rpc.call("layers.render", id=masked_layer["id"], masked=False)
+    assert shown["masked"] and "masked" not in raw, (shown.keys(), raw.keys())
+    assert shown["png"] != raw["png"]
+
     print(len(methods), "methods; smoke test passed")
 
 
