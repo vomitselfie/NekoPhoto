@@ -34,6 +34,9 @@ struct SmartWandOptions {
     double textureWeight = 2;
     /// When the neighbour term is on, the share of the distance from the click still counted.
     double seedWeight = 0.7;
+    /// A click textured at a coarser scale (a grid, a weave) also reaches pixels whose neighbourhood matches its
+    /// neighbourhood there and whose colour its coarse colour spread explains. 0 turns this off.
+    double regionWeight = 1;
 };
 
 /// Everything a wand needs from an image that does not depend on where it is clicked, computed once per image.
@@ -63,6 +66,14 @@ private:
     std::vector<uint16_t> edge_;   // multi-scale gradient magnitude of L, in tolerance units times four
     std::vector<uint16_t> spread_; // local colour spread (5 x 5 window) in tolerance units times four
     std::vector<int16_t> localMean_;   // local mean OKLab (the same window), times 4096: texture averaged out
+    /// Mean OKLab (times 4096) and spread (tolerance units times four) over about 20 and 36 pixel windows: a
+    /// pattern coarser than the click's patch, such as a grid, shows up here.
+    /// They are coarse by nature, so they live on a grid of 4 x 4 pixel cells (a pixel reads its cell's).
+    struct Scale { int radius = 0; std::vector<int16_t> mean; std::vector<uint16_t> spread; };
+    std::vector<Scale> scales_;
+    static constexpr int cell = 4;
+    int cellsWide_ = 0, cellsHigh_ = 0;
+    size_t cellOf(size_t pixel) const { return size_t((pixel / size_t(width_)) / cell) * size_t(cellsWide_) + (pixel % size_t(width_)) / cell; }
 };
 
 /// Selects where the field is within `tolerance` (0..255): 255 inside, a two-level soft band just past it

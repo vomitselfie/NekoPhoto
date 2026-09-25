@@ -1164,6 +1164,29 @@ TEST_CASE(edge_aware_wand_follows_the_image) {
     CHECK(hard > 0);
 }
 
+TEST_CASE(wand_click_in_a_grid_takes_the_whole_piece) {
+    // Dark cloth with a thin red grid every 24 pixels, on grey: a click in one cell takes the piece, grid and
+    // all, and not the grey around it.
+    const int W = 240, H = 200;
+    Image atlas(W, H);
+    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
+        uint8_t* p = atlas.pixel(x, y);
+        const bool inside = x >= 30 && x < 210 && y >= 30 && y < 170, line = x % 24 == 0 || y % 24 == 0;
+        if (!inside) { p[0] = p[1] = p[2] = 100; }
+        else if (line) { p[0] = 150; p[1] = 30; p[2] = 40; }
+        else { p[0] = 40; p[1] = 25; p[2] = 30; }
+        p[3] = 255;
+    }
+    SmartWandImage prepared(atlas);
+    auto field = prepared.propagate(107, 105, 1, 64);
+    GrayImage mask(W, H, 0);
+    thresholdWandField(field, 32, false, mask);
+    CHECK_EQ(int(mask.at(180, 150)), 255);   // a far cell
+    CHECK_EQ(int(mask.at(120, 60)), 255);    // a grid line
+    CHECK_EQ(int(mask.at(15, 100)), 0);      // the grey ground
+    CHECK_EQ(int(mask.at(220, 100)), 0);
+}
+
 TEST_CASE(wand_keep_out_clicks_compete_with_selecting_ones) {
     // At a tolerance high enough to cross into the near colour, a keep-out click on it takes it back out.
     const int W = 120, H = 60;

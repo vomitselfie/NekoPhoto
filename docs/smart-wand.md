@@ -13,7 +13,17 @@ OKLab), then computes, once, the cost of reaching every pixel from it:
   little at a time while a boundary is one big step, and a textured click steps over its own texture;
 - with a textured click, how much smoother a neighbourhood is than the click's (texture does not run into
   flat colour of the same mean);
-- the alpha difference.
+- the alpha difference;
+- where the click is textured at a coarser scale (about 20 and 36 pixel windows, kept on a grid of 4 x 4
+  cells), a second way in: a pixel whose colour is near one of the two colours the click's neighbourhood is
+  made of (a 2-means over the window: cloth and grid, a weave's two threads) and whose own neighbourhood
+  matches the click's in mean and spread (a Gaussian stand-in for comparing colour distributions) costs only
+  that mismatch. A grid-lined piece of a texture atlas is taken whole, and the ground around it is not.
+
+Right after a click, Shift-click adds a click that selects and Alt-click one that keeps out; each has its own
+colour model and field, and a pixel is selected when its cheapest selecting cost is within tolerance and
+below its cheapest keep-out cost, so the clicks compete for pixels (Milestone 2). They and tolerance changes
+re-evaluate the one Magic Wand step.
 
 A pixel's cost is the worst step on its best path from the click (a bottleneck path, found with a bucket
 queue), in the classic wand's tolerance units. Tolerance only thresholds this field, with a two-level soft
@@ -38,7 +48,19 @@ colour, a small region, and a strongly shadowed object. Means over the nine:
 | + multi-scale edge barrier | 0.672 | 0.906 | 58 |
 | Additive (geodesic sum) + edges | 0.605 | 0.874 | 60 |
 | + texture term | 0.673 | 0.978 | 57 |
-| **Neighbour steps ×8, click distance ×0.7, texture (shipped)** | **0.860** | **0.996** | **137** |
+| **Neighbour steps ×8, click distance ×0.7, texture (Milestone 1)** | **0.860** | **0.996** | **137** |
+
+A tenth scene, a grid-lined piece of a texture atlas on grey, was added for Milestone 3. Over all ten:
+
+| Method | IoU at 32 | Best IoU | Range |
+|---|---:|---:|---:|
+| Classic wand | 0.577 | 0.855 | 59 |
+| Milestone 1 | 0.776 | 0.899 | 123 |
+| **+ coarse region statistics (shipped)** | **0.868** | **0.997** | **144** |
+
+The other nine scenes score exactly as before: the coarse term only switches on for clicks textured at a
+coarser scale. On the real texture atlas a click on a grid-lined sock takes the sock and stops at its stripes
+and outline (before: one grid cell).
 
 The shipped variant is right at the default tolerance where the classic wand is not (two near colours with a
 sharp edge, a small region, a shadowed object), reaches every answer at some tolerance, and is right over
@@ -50,12 +72,12 @@ every scene and selection; `wand_bench time IMAGE.png` times the preparation and
 
 On a real character sheet, a click on a black top selects the top where the classic wand also runs along every
 connected black outline (11,219 pixels against 29,054). A 4096 × 4096 image takes about 150 ms to prepare
-(once per layer state) and 100 to 250 ms per click.
+(once per layer state; about 240 ms with the coarse statistics) and 100 to 500 ms per click.
 
 ## Limits and next steps
 
 - Same-coloured regions that touch (a black beanie and its black outline) join; no colour rule separates them.
-- The click's patch (3 to 11 pixels) cannot see a pattern coarser than itself: on a texture atlas with a grid,
-  a click selects one grid cell. Milestone 3 (region statistics at larger scales) is where that belongs.
-- Next, from the plan: positive and negative evidence (Alt-click to keep a region out, Milestone 2), region
-  statistics and superpixels for large canvases (3 and 4), boundary matting (5).
+- A pattern of more than two colours is modelled as two (the 2-means); patterns coarser than about 36 pixels
+  are not seen as texture.
+- Not done from the plan: superpixels for very large canvases (4; a 4096 x 4096 click takes 0.1 to 0.5 s,
+  so it has not been needed) and boundary matting (5).

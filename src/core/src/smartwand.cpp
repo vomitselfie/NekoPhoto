@@ -138,6 +138,57 @@ SmartWandImage::SmartWandImage(const Image& pixels, bool edges) : width_(pixels.
                 spread_[i] = uint16_t(std::min(65535.0f, std::sqrt(var) * unitsPerLab * quarter));
             }
     }, 32);
+    // Coarser neighbourhoods: sums of the values and their squares per 4 x 4 cell, a summed-area table over
+    // the cells, and each cell's window of 5 x 5 and 9 x 9 cells.
+    {
+        const int W = width_, H = height_;
+        cellsWide_ = (W + cell - 1) / cell; cellsHigh_ = (H + cell - 1) / cell;
+        const int CW = cellsWide_, CH = cellsHigh_;
+        std::vector<double> sat(size_t(CW + 1) * (CH + 1) * 7, 0.0);   // six sums and the pixel count
+        auto at = [&](int x, int y) -> double* { return &sat[(size_t(y) * (CW + 1) + x) * 7]; };
+        {
+            std::vector<double> cells(size_t(CW) * CH * 7, 0.0);
+            for (int y = 0; y < H; y++)
+                for (int x = 0; x < W; x++) {
+                    const size_t k = size_t(y) * W + x;
+                    double* c = &cells[(size_t(y / cell) * CW + size_t(x / cell)) * 7];
+                    for (int ch = 0; ch < 3; ch++) { const double v = lab_[k * 3 + size_t(ch)] / 4096.0; c[ch] += v; c[3 + ch] += v * v; }
+                    c[6] += 1;
+                }
+            for (int y = 0; y < CH; y++) {
+                double row[7] = {0, 0, 0, 0, 0, 0, 0};
+                for (int x = 0; x < CW; x++) {
+                    const double* c = &cells[(size_t(y) * CW + x) * 7];
+                    const double* up = at(x + 1, y);
+                    double* here = at(x + 1, y + 1);
+                    for (int k = 0; k < 7; k++) { row[k] += c[k]; here[k] = up[k] + row[k]; }
+                }
+            }
+        }
+        for (int radius : {2, 4}) {
+            Scale scale;
+            scale.radius = radius * cell;
+            scale.mean.assign(size_t(CW) * CH * 3, 0);
+            scale.spread.assign(size_t(CW) * CH, 0);
+            for (int y = 0; y < CH; y++) {
+                const int y0 = std::max(0, y - radius), y1 = std::min(CH, y + radius + 1);
+                for (int x = 0; x < CW; x++) {
+                    const int x0 = std::max(0, x - radius), x1 = std::min(CW, x + radius + 1);
+                    const double *a = at(x1, y1), *b = at(x0, y1), *c = at(x1, y0), *d = at(x0, y0);
+                    const double count = std::max(1.0, a[6] - b[6] - c[6] + d[6]);
+                    double var = 0;
+                    const size_t i = size_t(y) * CW + x;
+                    for (int k = 0; k < 3; k++) {
+                        const double mean = (a[k] - b[k] - c[k] + d[k]) / count;
+                        var += std::max(0.0, (a[3 + k] - b[3 + k] - c[3 + k] + d[3 + k]) / count - mean * mean);
+                        scale.mean[i * 3 + size_t(k)] = int16_t(std::lround(mean * 4096));
+                    }
+                    scale.spread[i] = uint16_t(std::min(65535.0, std::sqrt(var) * unitsPerLab * quarter));
+                }
+            }
+            scales_.push_back(std::move(scale));
+        }
+    }
 }
 
 SmartWandImage::Field SmartWandImage::propagate(int seedX, int seedY, int radius, int limit, const SmartWandOptions& options) const {
@@ -166,6 +217,51 @@ SmartWandImage::Field SmartWandImage::propagate(int seedX, int seedY, int radius
     const int maxLevel = std::min(65534, limit * quarter);
     const float seedSpread = float(std::sqrt(spread) * unitsPerLab * quarter);
     const float seedWeight = options.neighbourWeight > 0 ? float(options.seedWeight) : 1.0f;
+    // The click at the coarser scales: where it is textured there (much more spread than in its patch), a
+    // pixel may also be reached by matching the click's neighbourhood rather than its colour.
+    // The colours such a neighbourhood is made of: two clusters (a cloth and its grid, a weave's two threads)
+    // found by a few rounds of 2-means over the window; a pixel belongs to the texture only if its colour is
+    // near one of them, so a ground of another colour is not mistaken for part of the pattern.
+    struct Coarse { const Scale* scale; float mean[3]; float spread; float centre[2][3]; float reach[2]; };
+    std::vector<Coarse> coarse;
+    if (options.regionWeight > 0)
+        for (const Scale& sc : scales_) {
+            const size_t i = cellOf(size_t(seedY) * width_ + seedX);
+            const float spreadUnits = sc.spread[i] / float(quarter);
+            if (spreadUnits < 12 || spreadUnits < 3 * float(std::sqrt(spread) * unitsPerLab)) continue;
+            Coarse c{&sc, {}, spreadUnits, {}, {}};
+            for (int k = 0; k < 3; k++) c.mean[k] = sc.mean[i * 3 + size_t(k)] / 4096.0f;
+            std::vector<std::array<float, 3>> window;
+            for (int y = std::max(0, seedY - sc.radius); y <= std::min(height_ - 1, seedY + sc.radius); y++)
+                for (int x = std::max(0, seedX - sc.radius); x <= std::min(width_ - 1, seedX + sc.radius); x++) {
+                    const size_t k = size_t(y) * width_ + x;
+                    window.push_back({lab_[k * 3] / 4096.0f, lab_[k * 3 + 1] / 4096.0f, lab_[k * 3 + 2] / 4096.0f});
+                }
+            // Start from the click's colour and the window colour farthest from it.
+            const size_t seedIndex = size_t(seedY) * width_ + seedX;
+            std::array<float, 3> centre[2] = {{lab_[seedIndex * 3] / 4096.0f, lab_[seedIndex * 3 + 1] / 4096.0f, lab_[seedIndex * 3 + 2] / 4096.0f}, {}};
+            auto dist2 = [](const std::array<float, 3>& a, const std::array<float, 3>& b) { float d = 0; for (int k = 0; k < 3; k++) d += (a[k] - b[k]) * (a[k] - b[k]); return d; };
+            float far = -1;
+            for (auto& v : window) if (dist2(v, centre[0]) > far) { far = dist2(v, centre[0]); centre[1] = v; }
+            std::vector<int> label(window.size());
+            for (int round = 0; round < 6; round++) {
+                double sum[2][3] = {}; int count[2] = {0, 0};
+                for (size_t k = 0; k < window.size(); k++) {
+                    label[k] = dist2(window[k], centre[1]) < dist2(window[k], centre[0]) ? 1 : 0;
+                    for (int ch = 0; ch < 3; ch++) sum[label[k]][ch] += window[k][size_t(ch)];
+                    count[label[k]]++;
+                }
+                for (int m = 0; m < 2; m++) if (count[m]) for (int ch = 0; ch < 3; ch++) centre[m][size_t(ch)] = float(sum[m][ch] / count[m]);
+            }
+            // Each cluster's reach: two and a half of its own spread, and at least 12 units.
+            double var[2] = {0, 0}; int count[2] = {0, 0};
+            for (size_t k = 0; k < window.size(); k++) { var[label[k]] += dist2(window[k], centre[label[k]]); count[label[k]]++; }
+            for (int m = 0; m < 2; m++) {
+                for (int ch = 0; ch < 3; ch++) c.centre[m][ch] = centre[m][size_t(ch)];
+                c.reach[m] = std::max(12.0f, 2.5f * float(std::sqrt(count[m] ? var[m] / count[m] : 0.0)) * unitsPerLab);
+            }
+            coarse.push_back(c);
+        }
     auto stepCost = [&](size_t from, size_t i) -> int {
         float d2 = 0, n2 = 0;
         for (int c = 0; c < 3; c++) {
@@ -178,7 +274,24 @@ SmartWandImage::Field SmartWandImage::propagate(int seedX, int seedY, int radius
         const float alpha = float(options.alphaWeight * std::fabs(alpha_[i] - alphaMean));
         // A textured click does not flow into smoother ground: the spread it lacks against the click's.
         const float texture = float(options.textureWeight) * std::max(0.0f, seedSpread * 0.5f - spread_[i]);
-        const float c = (colour + neighbour + alpha) * quarter + float(options.edgeWeight) * edge_[i] + texture;
+        float c = (colour + neighbour + alpha) * quarter + float(options.edgeWeight) * edge_[i] + texture;
+        for (const Coarse& k : coarse) {
+            // The pixel's colour must be one of the two the click's neighbourhood is made of, and its own
+            // neighbourhood must match the click's: mean and spread, a Gaussian stand-in for comparing the two
+            // colour distributions.
+            float near0 = 0, near1 = 0, dm = 0;
+            const size_t ci = cellOf(i);
+            for (int ch = 0; ch < 3; ch++) {
+                const float v = lab_[i * 3 + size_t(ch)] / 4096.0f;
+                near0 += (v - k.centre[0][ch]) * (v - k.centre[0][ch]);
+                near1 += (v - k.centre[1][ch]) * (v - k.centre[1][ch]);
+                const float m = k.scale->mean[ci * 3 + size_t(ch)] / 4096.0f - k.mean[ch]; dm += m * m;
+            }
+            if (std::sqrt(near0) * unitsPerLab > k.reach[0] && std::sqrt(near1) * unitsPerLab > k.reach[1]) continue;
+            const float ds = std::fabs(k.scale->spread[ci] / float(quarter) - k.spread);
+            const float region = float(options.regionWeight) * (std::sqrt(dm) * unitsPerLab + ds) + alpha;
+            c = std::min(c, region * quarter);
+        }
         return int(std::min(65534.0f, c));
     };
     const bool additive = options.accumulation == WandAccumulation::Additive;

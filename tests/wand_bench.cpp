@@ -118,6 +118,11 @@ std::vector<Scene> scenes() {
     out.push_back(make("shadowed object", 90, 128, [](double x, double y) { return std::fabs(x - 128) < 90 && std::fabs(y - 128) < 60; },
                        [](double x, double, double c[3]) { double t = (x - 38) / 180; c[0] = 200 - 100 * t; c[1] = 60 - 30 * t; c[2] = 60 - 30 * t; },
                        flat(170, 110, 60)));
+    // 10. A texture atlas piece: dark cloth with a thin red grid every 24 px, on grey. The click lands inside
+    //     a grid cell; the answer is the whole piece, grid lines included.
+    out.push_back(make("grid-lined piece on grey", 131, 129, [](double x, double y) { return std::fabs(x - 128) < 90 && std::fabs(y - 128) < 70; },
+                       [](double x, double y, double c[3]) { bool line = int(x) % 24 == 0 || int(y) % 24 == 0; c[0] = line ? 150 : 40; c[1] = line ? 30 : 25; c[2] = line ? 40 : 30; },
+                       flat(100, 100, 100)));
     return out;
 }
 
@@ -161,11 +166,11 @@ int main(int argc, char** argv) {
     methods.push_back({"classic", [](const Scene& s) {
         return [&s](int t, GrayImage& m) { wandMask(s.image, s.x, s.y, 1, t, true, m); };
     }});
-    struct Variant { const char* label; double edge, neighbour, seed, texture; };
-    for (Variant v : {Variant{"B seed only", 0, 0, 1, 0}, Variant{"nb4 seed0.3", 0, 4, 0.3, 2}, Variant{"nb4 seed0.5", 0, 4, 0.5, 2}, Variant{"nb4 seed0.7", 0, 4, 0.7, 2}, Variant{"nb4 seed1.0", 0, 4, 1.0, 2}, Variant{"nb6 seed0.3", 0, 6, 0.3, 2}, Variant{"nb6 seed0.5", 0, 6, 0.5, 2}, Variant{"nb6 seed0.7", 0, 6, 0.7, 2}, Variant{"nb6 seed1.0", 0, 6, 1.0, 2}, Variant{"nb8 seed0.3", 0, 8, 0.3, 2}, Variant{"nb8 seed0.5", 0, 8, 0.5, 2}, Variant{"nb8 seed0.7", 0, 8, 0.7, 2}, Variant{"nb8 seed1.0", 0, 8, 1.0, 2}}) {
+    struct Variant { const char* label; double edge, neighbour, seed, texture, region = 0; };
+    for (Variant v : {Variant{"B seed only", 0, 0, 1, 0}, Variant{"shipped (M1)", 0, 8, 0.7, 2, 0}, Variant{"M3 region 1", 0, 8, 0.7, 2, 1}, Variant{"M3 region 2", 0, 8, 0.7, 2, 2}}) {
         methods.push_back({v.label, [v](const Scene& s) {
             auto image = std::make_shared<SmartWandImage>(s.image, v.edge > 0);
-            SmartWandOptions o; o.edgeWeight = v.edge; o.neighbourWeight = v.neighbour; o.seedWeight = v.seed; o.textureWeight = v.texture;
+            SmartWandOptions o; o.edgeWeight = v.edge; o.neighbourWeight = v.neighbour; o.seedWeight = v.seed; o.textureWeight = v.texture; o.regionWeight = v.region;
             auto field = std::make_shared<SmartWandImage::Field>(image->propagate(s.x, s.y, 2, 300, o));
             return [field](int t, GrayImage& m) { thresholdWandField(*field, t, true, m); };
         }});
