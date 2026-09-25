@@ -457,6 +457,8 @@ signals:
     void scribblesChanged();
     void quickSelectBusyChanged(bool busy);
     void quickSelectFailed(const QString& error);
+    /// A short note for the status bar (the wand's size and next step, why a click did nothing).
+    void notice(const QString& text);
     void toolChanged();
     void viewportChanged();
     void transformChanged();
@@ -550,6 +552,7 @@ private:
         std::optional<compositor::Selection> before;
         compositor::SelectionMode mode = compositor::SelectionMode::Replace;
         uint64_t revisionAfter = 0;
+        bool hasStep = false;   // whether the latest undo step is this session's (a no-change selection records none)
     };
     std::optional<WandSession> wandSession_;
     bool wandSessionLive() const;

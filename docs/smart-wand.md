@@ -26,10 +26,18 @@ below its cheapest keep-out cost, so the clicks compete for pixels (Milestone 2)
 re-evaluate the one Magic Wand step.
 
 A pixel's cost is the worst step on its best path from the click (a bottleneck path, found with a bucket
-queue), in the classic wand's tolerance units. Tolerance only thresholds this field, with a two-level soft
+queue), in the classic wand's tolerance units. Tolerance only thresholds this field (up to 32 as it is, then
+growing with the square, about 2,000 at 255: `wandCost`), with a two-level soft
 band for antialiasing, so changing the tolerance right after a click re-selects at once from the same field
 and replaces that Magic Wand step. The field is computed to twice the tolerance (at least 64) and again
 only if the tolerance goes past that.
+
+Because edges cost so much more than shading, a clean region stays the same over a wide stretch of tolerance;
+that is what the benchmark's "range" column measures, and early testing found it read as the slider doing
+nothing. So tolerance grows faster above 32 (the upper half reaches through the stronger boundaries: on the
+texture atlas, 12 to 64 keep the sock, 80 adds its neighbours, 100 most of the sheet), and every change says in
+the status bar how many pixels are selected and at what tolerance the selection grows next. A click on a folder
+or an empty layer says why nothing was selected.
 
 The tool's options bar has Edge Aware (on); off, or with Contiguous off, the classic per-channel wand runs.
 `selection.wand` takes `edgeAware` over automation.

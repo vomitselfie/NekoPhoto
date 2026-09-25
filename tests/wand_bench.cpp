@@ -151,13 +151,30 @@ int main(int argc, char** argv) {
         auto t0 = std::chrono::steady_clock::now();
         SmartWandImage prepared(*image);
         auto t1 = std::chrono::steady_clock::now();
-        auto field = prepared.propagate(image->width() / 2, image->height() / 2, 2, 255);
+        auto field = prepared.propagate(image->width() / 2, image->height() / 2, 2, wandCost(255));
         auto t2 = std::chrono::steady_clock::now();
         GrayImage m(image->width(), image->height(), 0);
         thresholdWandField(field, 32, true, m);
         auto t3 = std::chrono::steady_clock::now();
         auto ms = [](auto a, auto b) { return std::chrono::duration<double, std::milli>(b - a).count(); };
         std::printf("%dx%d: prepare %.0f ms, field %.0f ms, threshold %.1f ms\n", image->width(), image->height(), ms(t0, t1), ms(t1, t2), ms(t2, t3));
+        return 0;
+    }
+    if (argc > 4 && std::string(argv[1]) == "curve") {
+        // wand_bench curve image.png x y: selected pixels against tolerance, classic and edge-aware, for one click.
+        std::string error;
+        auto image = readPngImage(argv[2], &error);
+        if (!image) { std::fprintf(stderr, "%s\n", error.c_str()); return 1; }
+        const int x = std::atoi(argv[3]), y = std::atoi(argv[4]);
+        SmartWandImage prepared(*image);
+        auto field = prepared.propagate(x, y, 1, wandCost(255));
+        GrayImage m(image->width(), image->height(), 0);
+        std::printf("%9s %12s %12s\n", "tolerance", "classic", "edge-aware");
+        for (int t : {0, 4, 8, 12, 16, 20, 24, 32, 40, 48, 64, 80, 100, 128, 160, 200, 255}) {
+            const long classic = wandMask(*image, x, y, 1, t, true, m);
+            const long smart = thresholdWandField(field, t, false, m);
+            std::printf("%9d %12ld %12ld\n", t, classic, smart);
+        }
         return 0;
     }
     const bool dump = argc > 2 && std::string(argv[1]) == "dump";
@@ -171,7 +188,7 @@ int main(int argc, char** argv) {
         methods.push_back({v.label, [v](const Scene& s) {
             auto image = std::make_shared<SmartWandImage>(s.image, v.edge > 0);
             SmartWandOptions o; o.edgeWeight = v.edge; o.neighbourWeight = v.neighbour; o.seedWeight = v.seed; o.textureWeight = v.texture; o.regionWeight = v.region;
-            auto field = std::make_shared<SmartWandImage::Field>(image->propagate(s.x, s.y, 2, 300, o));
+            auto field = std::make_shared<SmartWandImage::Field>(image->propagate(s.x, s.y, 2, wandCost(255), o));
             return [field](int t, GrayImage& m) { thresholdWandField(*field, t, true, m); };
         }});
     }

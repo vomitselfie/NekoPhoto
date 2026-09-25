@@ -1193,7 +1193,7 @@ TEST_CASE(wand_keep_out_clicks_compete_with_selecting_ones) {
     Image near(W, H);
     for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) { uint8_t* p = near.pixel(x, y); const int v = x < 60 ? 0 : 20; p[0] = uint8_t(120 + v); p[1] = uint8_t(140 + v); p[2] = uint8_t(170 + v); p[3] = 255; }
     SmartWandImage prepared(near);
-    auto in = prepared.propagate(20, 30, 1, 255), out = prepared.propagate(100, 30, 1, 255);
+    auto in = prepared.propagate(20, 30, 1, wandCost(255)), out = prepared.propagate(100, 30, 1, wandCost(255));
     GrayImage mask(W, H, 0);
     thresholdWandFields({&in}, {}, 200, false, mask);
     CHECK_EQ(int(mask.at(100, 30)), 255);

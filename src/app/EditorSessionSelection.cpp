@@ -50,7 +50,10 @@ void EditorSession::magicWand(QPointF documentPoint, int tolerance, bool contigu
     int x = int(std::floor(documentPoint.x())), y = int(std::floor(documentPoint.y()));
     if (x < 0 || y < 0 || x >= document_->width || y >= document_->height) return;
     const Layer* layer = sampleAllLayers ? nullptr : activeLayer();
-    if (!sampleAllLayers && (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image)) return;
+    if (!sampleAllLayers && (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image)) {
+        emit notice(tr("The Magic Wand reads the active layer's pixels: select a pixel layer, or turn on Sample All Layers"));
+        return;
+    }
     // The sampled pixels are kept between clicks on the same document state (repeated wand clicks are common).
     Uuid layerId = layer ? layer->id : Uuid{};
     bool cached = wandSample_ && wandSampleAll_ == sampleAllLayers && wandSampleLayer_ == layerId && wandSampleRevision_ == documentRevision_;
@@ -79,7 +82,7 @@ void EditorSession::magicWand(QPointF documentPoint, int tolerance, bool contigu
         click.x = x; click.y = y;
         click.radius = 1 + 2 * std::clamp(sampleRadius, 0, 2);   // the patch: 3, 7 or 11 pixels across
         // The click's cost field, far enough past this tolerance that the slider can move without recomputing.
-        click.field = wandSmart_->propagate(x, y, click.radius, std::clamp(std::max(64, tolerance * 2), 0, 255));
+        click.field = wandSmart_->propagate(x, y, click.radius, wandCost(std::clamp(std::max(tolerance * 2, 64), 0, 255)));
         if (wandSessionLive() && mode != SelectionMode::Replace && mode != SelectionMode::Intersect) {
             // More evidence for the selection just made: Shift for what belongs, Alt for what does not.
             click.positive = mode == SelectionMode::Add;
@@ -103,23 +106,29 @@ void EditorSession::magicWand(QPointF documentPoint, int tolerance, bool contigu
 }
 
 bool EditorSession::wandSessionLive() const {
-    return wandSession_ && document_ && wandSmart_ && documentRevision_ == wandSession_->revisionAfter && undoName() == "Magic Wand";
+    return wandSession_ && document_ && wandSmart_ && documentRevision_ == wandSession_->revisionAfter;
 }
 
 void EditorSession::applyWandSession(int tolerance, bool replaceStep) {
     WandSession& session = *wandSession_;
     std::vector<const SmartWandImage::Field*> positive, negative;
     for (WandClick& click : session.clicks) {
-        if (tolerance > click.field.limit)
-            click.field = wandSmart_->propagate(click.x, click.y, click.radius, std::clamp(std::max(64, tolerance * 2), 0, 255));
+        if (wandCost(tolerance) > click.field.limit)
+            click.field = wandSmart_->propagate(click.x, click.y, click.radius, wandCost(std::clamp(std::max(tolerance * 2, 64), 0, 255)));
         // A keep-out click competes at any cost it can reach, so its field goes as far as the positive ones do.
         (click.positive ? positive : negative).push_back(&click.field);
     }
     GrayImage mask(document_->width, document_->height);
-    thresholdWandFields(positive, negative, tolerance, selectionAntialiased, mask);
-    if (replaceStep) undo();
+    const long count = thresholdWandFields(positive, negative, tolerance, selectionAntialiased, mask);
+    if (replaceStep && session.hasStep) undo();
+    const size_t steps = undoNames().size();
     setSelection(combineSelection(session.before, mask, session.mode, selectionAntialiased), "Magic Wand");
+    // A selection equal to the one before records no step; the next change then has nothing to take back.
+    session.hasStep = undoNames().size() > steps;
     session.revisionAfter = documentRevision_;
+    const int next = wandNextTolerance(positive, negative, tolerance);
+    emit notice(next < 0 ? tr("Tolerance %1: %L2 pixels").arg(tolerance).arg(count)
+                         : tr("Tolerance %1: %L2 pixels; the selection grows next at %3").arg(tolerance).arg(count).arg(next));
 }
 
 bool EditorSession::retolerateWand(int tolerance) {

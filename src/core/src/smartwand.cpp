@@ -214,7 +214,7 @@ SmartWandImage::Field SmartWandImage::propagate(int seedX, int seedY, int radius
     // Colour within one and a half of the patch's own spread is as good as the patch.
     const float slack = float(1.5 * std::sqrt(spread) * unitsPerLab);
 
-    const int maxLevel = std::min(65534, limit * quarter);
+    const int maxLevel = std::min(65534, std::max(0, limit) * quarter);
     const float seedSpread = float(std::sqrt(spread) * unitsPerLab * quarter);
     const float seedWeight = options.neighbourWeight > 0 ? float(options.seedWeight) : 1.0f;
     // The click at the coarser scales: where it is textured there (much more spread than in its patch), a
@@ -328,8 +328,31 @@ SmartWandImage::Field SmartWandImage::propagate(int seedX, int seedY, int radius
     return field;
 }
 
+int wandCost(int tolerance) {
+    tolerance = std::clamp(tolerance, 0, 255);
+    if (tolerance <= 32) return tolerance;
+    const double stretch = 1.0 + (tolerance - 32) / 32.0;
+    return int(std::lround(32 * stretch * stretch));
+}
+
+int wandNextTolerance(const std::vector<const SmartWandImage::Field*>& positive, const std::vector<const SmartWandImage::Field*>& negative, int tolerance) {
+    if (positive.empty()) return -1;
+    const int inside = wandCost(tolerance) * quarter;
+    int next = 65535;
+    const size_t n = positive[0]->cost.size();
+    for (size_t i = 0; i < n; i++) {
+        int p = 65535, q = 65535;
+        for (auto* f : positive) p = std::min<int>(p, f->cost[i]);
+        for (auto* f : negative) q = std::min<int>(q, f->cost[i]);
+        if (p > inside && p < q && p < next) next = p;
+    }
+    if (next == 65535) return -1;
+    for (int t = tolerance + 1; t <= 255; t++) if (wandCost(t) * quarter >= next) return t;
+    return -1;
+}
+
 long thresholdWandField(const SmartWandImage::Field& field, int tolerance, bool soft, GrayImage& mask) {
-    const int inside = std::max(0, tolerance) * quarter;
+    const int inside = wandCost(tolerance) * quarter;
     const int band = soft ? 2 * quarter : 0;   // two tolerance levels of antialiasing just past the threshold
     long count = 0;
     for (int y = 0; y < field.height; y++) {
@@ -351,7 +374,7 @@ long thresholdWandFields(const std::vector<const SmartWandImage::Field*>& positi
                          int tolerance, bool soft, GrayImage& mask) {
     if (positive.empty()) { std::memset(mask.data(), 0, mask.byteCount()); return 0; }
     const int width = positive[0]->width, height = positive[0]->height;
-    const int inside = std::max(0, tolerance) * quarter;
+    const int inside = wandCost(tolerance) * quarter;
     const int band = soft ? 2 * quarter : 0;
     long count = 0;
     for (int y = 0; y < height; y++) {

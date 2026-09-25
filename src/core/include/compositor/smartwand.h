@@ -47,12 +47,12 @@ public:
     int width() const { return width_; }
     int height() const { return height_; }
 
-    /// The field for a click: each pixel's cost in tolerance units times four (0..65534), 65535 beyond `limit`
-    /// tolerance or unreachable. `radius` is the sample patch's half size.
+    /// The field for a click: each pixel's cost in quarter cost units (0..65534), 65535 beyond `limit` cost
+    /// units (see wandCost) or unreachable. `radius` is the sample patch's half size.
     struct Field {
         int width = 0, height = 0;
         std::vector<uint16_t> cost;
-        int limit = 0;   // in tolerance units: thresholds above it are not meaningful
+        int limit = 0;   // in cost units (wandCost): thresholds above it are not meaningful
     };
     Field propagate(int seedX, int seedY, int radius, int limit, const SmartWandOptions& options = {}) const;
 
@@ -75,6 +75,13 @@ private:
     int cellsWide_ = 0, cellsHigh_ = 0;
     size_t cellOf(size_t pixel) const { return size_t((pixel / size_t(width_)) / cell) * size_t(cellsWide_) + (pixel % size_t(width_)) / cell; }
 };
+
+/// The field cost a tolerance (0..255) reaches: the same number up to 32, then growing with the square (about
+/// 2,000 at 255), so the slider's upper half reaches through strong boundaries instead of sitting on one
+/// selection. Fields should be propagated to wandCost(tolerance) or further.
+int wandCost(int tolerance);
+/// The lowest tolerance above `tolerance` at which these clicks' selection would grow, or -1 if none does.
+int wandNextTolerance(const std::vector<const SmartWandImage::Field*>& positive, const std::vector<const SmartWandImage::Field*>& negative, int tolerance);
 
 /// Selects where the field is within `tolerance` (0..255): 255 inside, a two-level soft band just past it
 /// for antialiasing (`soft`), 0 elsewhere. Returns the count at or above half.

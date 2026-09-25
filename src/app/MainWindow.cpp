@@ -304,6 +304,7 @@ void MainWindow::connectSession() {
     sessionConnections_.push_back(connect(session_, &EditorSession::titleChanged, this, &MainWindow::refreshTitle));
     sessionConnections_.push_back(connect(session_, &EditorSession::quickSelectBusyChanged, this, [this](bool busy) { if (busy) statusBar()->showMessage(tr("Finding the subject…")); else statusBar()->clearMessage(); }));
     sessionConnections_.push_back(connect(session_, &EditorSession::quickSelectFailed, this, [this](const QString& error) { statusBar()->showMessage(error, 6000); }));
+    sessionConnections_.push_back(connect(session_, &EditorSession::notice, this, [this](const QString& text) { statusBar()->showMessage(text, 6000); }));
     sessionConnections_.push_back(connect(session_, &EditorSession::projectPathChanged, this, &MainWindow::refreshTitle));
     sessionConnections_.push_back(connect(session_, &EditorSession::historyChanged, this, &MainWindow::refreshActions));
     sessionConnections_.push_back(connect(session_, &EditorSession::documentChanged, this, [this] { emit automationEvent("document"); }));
