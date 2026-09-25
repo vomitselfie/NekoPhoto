@@ -141,6 +141,10 @@ public:
     /// final resample is at most 2x reduction, or, `rounded`, until it is nearest to 1x (between 0.7x
     /// and 1.4x), which suits a bicubic final step.
     static int levelFor(double factor, bool rounded = false);
+    /// After `image` was written in place (a stroke's working pixels, kept under the same pointer), brings the
+    /// part of each cached level under `pixelRect` up to date; the levels assume images never change.
+    void refresh(const Image* image, int x0, int y0, int x1, int y1);
+    void refresh(const GrayImage* image, int x0, int y0, int x1, int y1);
     void clear();
     void setBudget(size_t bytes);
     size_t budget() const { return budget_; }
@@ -156,6 +160,8 @@ private:
     };
     template <typename Img>
     std::shared_ptr<const Img> levelOf(std::vector<Entry<Img>>& entries, const std::shared_ptr<const Img>& image, int level);
+    template <typename Img>
+    void refreshOf(std::vector<Entry<Img>>& entries, const Img* image, int x0, int y0, int x1, int y1);
     void enforceBudget(uint64_t keep);
     std::vector<Entry<Image>> entries_;
     std::vector<Entry<GrayImage>> grayEntries_;

@@ -84,6 +84,14 @@ and 2.25x:
 | 1500 px | 19.28 ms | 2.09 ms |
 | 1500 px eraser | 13.70 ms | 1.59 ms |
 
+Zoomed out, a stroke in progress showed only its first dab, or a garbled version of itself, until the
+view was zoomed in. Layers drawn below about half size come from reduced copies cached per image
+(`MipCache`), and a stroke paints its working image in place under the same pointer, so the copies went
+stale. The stroke engines now bring the cached levels up to date over what they changed
+(`MipCache::refresh`, from `BrushStroke::takeDirtyRect` and `WarpStroke::takeDirtyRect`); Smudge and
+Liquify also render only what they changed instead of the whole view. The test
+`zoomed_out_render_follows_a_stroke_in_progress` fails without it.
+
 The strokes match: the same strokes painted by both builds differ only on the rim of the hard one, by the
 eighth of a pixel every stamped tip already had (`large_stamped_dabs_match_the_general_path`).
 

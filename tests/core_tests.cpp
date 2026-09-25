@@ -1196,6 +1196,42 @@ TEST_CASE(large_stamped_dabs_match_the_general_path) {
     }
 }
 
+TEST_CASE(zoomed_out_render_follows_a_stroke_in_progress) {
+    // The renderer draws a layer zoomed out from reduced copies cached by image, and a stroke paints its
+    // working image in place: the copies must follow, or the stroke is missing when zoomed out.
+    const int W = 2000, H = 1400;
+    Document doc(W, H);
+    doc.layers.push_back(imageLayer("paper", solid(W, H, 255, 255, 255), {0, 0}));
+    BrushSettings s;
+    s.diameter = 90; s.hardness = 0.6; s.red = 0.1; s.green = 0.2; s.blue = 0.8;
+    BrushStroke stroke(doc.layers[0], false, s, doc.size());
+    REQUIRE(stroke.isValid());
+    RenderOptions o;
+    o.region = doc.rect();
+    o.scale = 0.1;
+    auto renderWith = [&](ImagePtr image) {
+        Overrides overrides;
+        overrides[doc.layers[0].id].image = image;
+        overrides[doc.layers[0].id].transform = stroke.paintTransform();
+        Image out(200, 140);
+        render(doc, o, out, &overrides);
+        return out;
+    };
+    stroke.append({200, 300});
+    stroke.append({600, 320});
+    stroke.takeDirtyRect();
+    renderWith(stroke.previewImage());   // the reduced copies are made here
+    for (Point p : {Point{1000, 500}, Point{1500, 900}, Point{1800, 1200}}) stroke.append(p);
+    stroke.takeDirtyRect();
+    const Image live = renderWith(stroke.previewImage());
+    const Image fresh = renderWith(std::make_shared<Image>(*stroke.previewImage()));   // a new image: nothing cached
+    int worst = 0;
+    for (int y = 0; y < 140; y++) for (int x = 0; x < 200; x++) for (int c = 0; c < 4; c++)
+        worst = std::max(worst, std::abs(int(live.pixel(x, y)[c]) - int(fresh.pixel(x, y)[c])));
+    CHECK_EQ(worst, 0);
+    CHECK(live.pixel(150, 90)[2] > live.pixel(150, 90)[0]);   // the late part of the stroke shows, blue
+}
+
 TEST_CASE(matte_refinement_follows_the_guide) {
     // A hard vertical edge in the guide at x=20; a coarse mask edge at x=24 gets pulled onto the guide's edge.
     auto guide = std::make_shared<Image>(40, 40);

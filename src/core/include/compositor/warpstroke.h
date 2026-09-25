@@ -23,6 +23,9 @@ public:
     WarpStroke(std::shared_ptr<Image> image, WarpMode mode, double diameter, double hardness, double strength);
     void append(Point point);
     std::shared_ptr<const Image> image() const { return image_; }
+    /// The pixels changed since the last call (document pixels: the image is at document size). Also brings
+    /// the renderer's reduced copies of the image up to date there.
+    Rect takeDirtyRect();
     const std::vector<Point>& points() const { return points_; }
     double diameter() const { return diameter_; }
 
@@ -42,6 +45,8 @@ private:
     void growField(int x0, int y0, int x1, int y1);
     void fieldAt(double x, double y, float& dx, float& dy) const;
 
+    void markDirty(int x0, int y0, int x1, int y1);   // half-open pixel box
+    int dirtyX0_ = 0, dirtyY0_ = 0, dirtyX1_ = 0, dirtyY1_ = 0;   // empty when x0 >= x1
     std::shared_ptr<Image> image_;
     std::shared_ptr<const Image> original_;
     WarpMode mode_;

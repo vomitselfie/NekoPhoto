@@ -42,6 +42,22 @@ void WarpStroke::append(Point point) {
     last_ = point;
 }
 
+void WarpStroke::markDirty(int x0, int y0, int x1, int y1) {
+    x0 = std::max(0, x0); y0 = std::max(0, y0); x1 = std::min(width_, x1); y1 = std::min(height_, y1);
+    if (x0 >= x1 || y0 >= y1) return;
+    if (dirtyX0_ >= dirtyX1_) { dirtyX0_ = x0; dirtyY0_ = y0; dirtyX1_ = x1; dirtyY1_ = y1; return; }
+    dirtyX0_ = std::min(dirtyX0_, x0); dirtyY0_ = std::min(dirtyY0_, y0); dirtyX1_ = std::max(dirtyX1_, x1); dirtyY1_ = std::max(dirtyY1_, y1);
+}
+
+Rect WarpStroke::takeDirtyRect() {
+    if (dirtyX0_ >= dirtyX1_) return {};
+    // The renderer draws zoomed-out layers from reduced copies cached by image; this image changes in place.
+    MipCache::shared().refresh(image_.get(), dirtyX0_, dirtyY0_, dirtyX1_, dirtyY1_);
+    Rect r(dirtyX0_, dirtyY0_, dirtyX1_ - dirtyX0_, dirtyY1_ - dirtyY0_);
+    dirtyX0_ = dirtyX1_ = 0;
+    return r;
+}
+
 void WarpStroke::pickUp(Point center) {
     int r = radius(), side = 2 * r + 1;
     carried_.assign(size_t(side) * side * 4, 0);
@@ -62,6 +78,7 @@ void WarpStroke::pickUp(Point center) {
 void WarpStroke::smudge(Point center) {
     int r = radius(), side = 2 * r + 1;
     int cx = int(std::lround(center.x)), cy = int(std::lround(center.y));
+    markDirty(cx - r, cy - r, cx + r + 1, cy + r + 1);
     float keep = float(strength_), invR = 1 / float(diameter_ / 2);
     for (int dy = -r; dy <= r; dy++) {
         int y = cy + dy;
@@ -121,6 +138,7 @@ void WarpStroke::push(Point a, Point b) {
     const int y0 = std::max(0, cy - r), y1 = std::min(height_ - 1, cy + r);
     if (x0 > x1 || y0 > y1) return;
     growField(x0, y0, x1 + 1, y1 + 1);
+    markDirty(x0, y0, x1 + 1, y1 + 1);
     // Each pixel under the brush now shows what the result so far showed a little behind it, so it takes
     // that point's displacement plus the move (Gustafsson's forward warp: the falloff, shaped by the
     // hardness, shrinks with the length of the drag).

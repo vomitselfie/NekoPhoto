@@ -299,7 +299,9 @@ void EditorSession::continueWarp(QPointF documentPoint) {
     if (!warp_) return;
     warp_->append(toPoint(documentPoint));
     lastBrushPoint_ = documentPoint;
-    emit documentChanged({});
+    // The warp image is at document size, so its changed pixels are the document area to render again.
+    const Rect dirty = warp_->takeDirtyRect();
+    if (!dirty.isEmpty()) emit documentChanged(toQRect(dirty));
 }
 
 void EditorSession::endWarp() {

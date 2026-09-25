@@ -148,8 +148,17 @@ void BrushStroke::markDirty(const Rect& gridRect) {
     touched_ = true;
 }
 
+void BrushStroke::refreshLevels(const Rect& grid) const {
+    // The renderer draws zoomed-out layers from reduced copies cached by image; the working pixels change in
+    // place, so the copies are brought up to date where they changed (else strokes vanish when zoomed out).
+    const int x0 = int(std::floor(grid.minX())), y0 = int(std::floor(grid.minY())), x1 = int(std::ceil(grid.maxX())), y1 = int(std::ceil(grid.maxY()));
+    if (working_) MipCache::shared().refresh(working_.get(), x0, y0, x1, y1);
+    if (workingMask_) MipCache::shared().refresh(workingMask_.get(), x0, y0, x1, y1);
+}
+
 Rect BrushStroke::takeDirtyRect() {
     if (dirtyGrid_.isEmpty()) return {};
+    refreshLevels(dirtyGrid_);
     Rect doc = pixelToDocument_.mapBounds(dirtyGrid_).insetBy(-1, -1).intersection(canvas_);
     dirtyGrid_ = {};
     return doc;
@@ -550,6 +559,7 @@ void BrushStroke::moveLifted(Point offset, bool duplicate) {
     }
     touched_ = true;
     dirtyGrid_ = {};
+    refreshLevels(Rect(0, 0, width_, height_));
 }
 
 void BrushStroke::fillGradientOver(int shape, Point from, Point to, const float startColor[4], const float endColor[4], double opacity) {
@@ -568,6 +578,7 @@ void BrushStroke::fillGradientOver(int shape, Point from, Point to, const float 
     for (int c = 0; c < 4; c++) { stops.start[c] = startColor[c]; stops.end[c] = endColor[c]; }
     if (isMask_) fillGradient(*baseMask_, *workingMask_, pixelToDocument_, GradientShape(shape), from, to, stops, opacity, &inside);
     else fillGradient(*base_, *working_, pixelToDocument_, GradientShape(shape), from, to, stops, opacity, &inside);
+    refreshLevels(Rect(0, 0, width_, height_));
 }
 
 void BrushStroke::fillColor(double red, double green, double blue) {
@@ -606,6 +617,7 @@ void BrushStroke::heal() {
             for (int c = 0; c < 4; c++) dst[c] = uint8_t((orig[c] * (255 - k) + healed[c] * k + 127) / 255);
         }
     }
+    refreshLevels(Rect(0, 0, width_, height_));
 }
 
 void BrushStroke::previewHeal() {

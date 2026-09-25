@@ -75,6 +75,8 @@ public:
     const LayerTransform& paintTransform() const { return paintTransform_; }
     /// The document area changed since the last call, then reset.
     Rect takeDirtyRect();
+    /// Brings the renderer's reduced copies of the working pixels up to date over `grid` (takeDirtyRect does).
+    void refreshLevels(const Rect& grid) const;
     bool touched() const { return touched_; }
 
     struct Commit {
