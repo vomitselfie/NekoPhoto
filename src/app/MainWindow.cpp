@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "BrushImporter.h"
 #include "CanvasFrame.h"
 #include "Autosave.h"
 #include "LayersPanel.h"
@@ -7,6 +8,7 @@
 #include "TextDialog.h"
 #include "PreferencesDialog.h"
 #include "ToolOptionsBar.h"
+#include "WelcomeDialog.h"
 #include <QApplication>
 #include <QCloseEvent>
 #include <QComboBox>
@@ -500,6 +502,15 @@ bool MainWindow::startAutomation(const QString& socketPath) {
         automationLabel_->setVisible(count > 0);
     });
     return true;
+}
+
+void MainWindow::showWelcome() {
+    auto* welcome = new WelcomeDialog(this);
+    welcome->setAttribute(Qt::WA_DeleteOnClose);
+    connect(welcome, &WelcomeDialog::openRequested, this, &MainWindow::openFiles);
+    connect(welcome, &WelcomeDialog::newCanvasRequested, this, &MainWindow::newDocument);
+    connect(welcome, &WelcomeDialog::importBrushesRequested, this, [this] { importBrushesInteractively(this, session_); });
+    welcome->open();
 }
 
 } // namespace app

@@ -6,15 +6,31 @@
 
 **English** · [日本語](#日本語)
 
-A fast, focused photo editor and painting app for Linux: layers, masks,
-selections, brushes, adjustments and filters, with the tools and shortcuts you
-know from Photoshop. It opens Photoshop and Clip Studio files, and imports your
-brushes from Photoshop, Procreate and Clip Studio.
+**Bring your work with you from any major platform.** NekoPhoto is a fast,
+focused photo editor and painting app for Linux that opens the files and brushes
+you already have: Photoshop and Clip Studio projects with their layers intact,
+and brushes from Photoshop, Clip Studio and Procreate. Layers, masks,
+selections, brushes, adjustments and filters work with the tools and shortcuts
+you know.
 
 NekoPhoto began as a Linux port of [Compositor](https://github.com/robbietilton/Compositor)
 for macOS, and still opens its `.comp` projects. Until version 1.0 it was
 called compositor-linux; your settings, brushes and downloaded model move over
 by themselves the first time you start it.
+
+## Bring your work with you
+
+| Coming from | Your files | Your brushes and habits |
+|---|---|---|
+| **Photoshop** | `.psd` and `.psb` open with their layers, folders, masks, clipping masks and blend modes | `.abr` brushes; the tools and shortcuts you know (V, M, L, W, B, E, `[` `]`, Ctrl+T, Ctrl+J, Ctrl+G) |
+| **Clip Studio Paint** | `.clip` projects open with their layers, folders, masks, clipping and blend modes | `.sut` brushes |
+| **Procreate** | Your exported images | `.brushset` and `.brush` files |
+| **Krita and GIMP** | Photoshop files from collaborators, and your images | The MyPaint brush engine you know, and G'MIC's filters |
+
+Coming next:
+
+- **Saving back to PSD**, so NekoPhoto fits into a workflow shared with Photoshop, Krita and Photopea
+- **Brushes that feel the same**: a deeper translation of Clip Studio and Photoshop brush settings, so your favourite brush behaves as it did
 
 ## What it does
 
@@ -116,13 +132,28 @@ components and their licences are listed in
 
 [English](#nekophoto) · **日本語**
 
-Linux 向けの軽快でシンプルな写真編集・お絵描きソフトです。レイヤー、マスク、選択範囲、
-ブラシ、色調補正、フィルターを備え、Photoshop でおなじみのツールとショートカットで操作できます。
-Photoshop とクリップスタジオのファイルを開け、Photoshop・Procreate・クリップスタジオのブラシも読み込めます。
+**どのアプリからでも、作品をそのまま持ってこられます。** NekoPhoto は Linux 向けの軽快でシンプルな
+写真編集・お絵描きソフトです。Photoshop とクリップスタジオのファイルをレイヤーを保ったまま開け、
+Photoshop・クリップスタジオ・Procreate のブラシも読み込めます。レイヤー、マスク、選択範囲、ブラシ、
+色調補正、フィルターを、おなじみのツールとショートカットで操作できます。
 
 NekoPhoto は macOS 版 [Compositor](https://github.com/robbietilton/Compositor) の
 Linux 移植として始まり、今も Mac 版の `.comp` プロジェクトを開けます。バージョン 1.0 までは
 compositor-linux という名前でした。設定・ブラシ・ダウンロード済みのモデルは、初回起動時に自動で引き継がれます。
+
+### 作品をそのまま持ってくる
+
+| 移行元 | ファイル | ブラシと操作 |
+|---|---|---|
+| **Photoshop** | `.psd`・`.psb` をレイヤー・フォルダー・マスク・クリッピングマスク・描画モードを保ったまま開けます | `.abr` ブラシ、おなじみのツールとショートカット(V、M、L、W、B、E、`[` `]`、Ctrl+T、Ctrl+J、Ctrl+G) |
+| **クリップスタジオ** | `.clip` をレイヤー・フォルダー・マスク・クリッピング・描画モードを保ったまま開けます | `.sut` ブラシ |
+| **Procreate** | 書き出した画像 | `.brushset`・`.brush` |
+| **Krita・GIMP** | 共同作業者から届いた Photoshop ファイルや画像 | おなじみの MyPaint ブラシエンジンと G'MIC フィルター |
+
+今後の予定:
+
+- **PSD への保存**: Photoshop・Krita・Photopea を使う人とのやり取りに NekoPhoto をそのまま組み込めるように
+- **同じ描き心地のブラシ**: クリップスタジオや Photoshop のブラシ設定をより深く変換し、お気に入りのブラシがそのままの感覚で使えるように
 
 ### できること
 

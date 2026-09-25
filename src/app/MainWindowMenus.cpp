@@ -308,6 +308,7 @@ void MainWindow::buildMenus() {
     controls->setChecked(true);
 
     QMenu* help = menuBar()->addMenu(tr("&Help"));
+    help->addAction(tr("&Welcome to NekoPhoto"), this, &MainWindow::showWelcome);
     help->addAction(tr("&About NekoPhoto"), this, [this] {
         QMessageBox::about(this, tr("About NekoPhoto"), tr("<b>NekoPhoto</b> %3<br>A layered photo editor and painting app for Linux. "
             "It began as a Linux port of <a href=\"https://github.com/robbietilton/Compositor\">Compositor</a> for macOS, and still opens its projects.<br><br>"

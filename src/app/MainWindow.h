@@ -45,6 +45,8 @@ class MainWindow : public QMainWindow {
 public:
     MainWindow();
     void openPath(const QString& path);
+    /// The first-run introduction (WelcomeDialog), opened over the window.
+    void showWelcome();
     /// Crash recovery for an interactive launch: autosaves each tab's unsaved changes and offers back what
     /// an instance that crashed left behind. Off for headless, batch and screenshot runs.
     void enableAutosave();

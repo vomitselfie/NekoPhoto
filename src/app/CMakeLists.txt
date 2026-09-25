@@ -97,6 +97,8 @@ qt_add_executable(nekophoto
     PreferencesDialog.cpp
     ToolOptionsBar.h
     ToolOptionsBar.cpp
+    WelcomeDialog.h
+    WelcomeDialog.cpp
     Dialogs.h
     Dialogs.cpp
     MainWindow.h
@@ -114,6 +116,7 @@ target_compile_definitions(nekophoto PRIVATE COMPOSITOR_VERSION="${COMPOSITOR_VE
 file(GLOB_RECURSE COMPOSITOR_BRUSH_FILES CONFIGURE_DEPENDS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/brushes/mypaint/*.myb ${CMAKE_CURRENT_SOURCE_DIR}/brushes/mypaint/*_prev.png)
 # G'MIC filters that do not work here at their defaults (tools/gmic-sweep.py makes the list).
+qt_add_resources(nekophoto "welcome" PREFIX "/" FILES images/welcome.jpg)
 qt_add_resources(nekophoto "gmic_lists" PREFIX "/" FILES gmic/unsupported.txt)
 qt_add_resources(nekophoto "mypaint_brushes" PREFIX "/" FILES ${COMPOSITOR_BRUSH_FILES} brushes/mypaint/order.conf)
 target_link_libraries(nekophoto PRIVATE compositor::core Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Svg compositor_warnings)
