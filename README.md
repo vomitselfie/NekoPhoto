@@ -41,7 +41,7 @@ Coming next:
 
 - **Layers:** folders, blend modes, opacity, layer masks, clipping masks and adjustment layers
 - **Transform:** move, scale, rotate and distort without losing resolution
-- **Selections:** marquee, lasso, magic wand, and Quick Select by scribble or by click; Content-Aware Fill
+- **Selections:** marquee, lasso, Quick Select by scribble or by click, Content-Aware Fill, and an edge-aware magic wand: shading and texture stay in, edges hold, the tolerance can be changed right after a click, Shift/Alt-clicks add what belongs and what doesn't, and with Contiguous off one click takes a background in many pockets (a baked checkerboard around a character) and Delete leaves the line art without a rim of the background ([docs/smart-wand.md](docs/smart-wand.md))
 - **Painting:** brush, eraser, spot healing, clone stamp, smudge, liquify, gradients, shapes and text
 - **Brushes:** 196 MyPaint brushes (pencils, inks, charcoal, paint, smudging) that follow pen pressure and tilt, and your own brushes imported from Photoshop (`.abr`), Procreate (`.brushset`, `.brush`) and Clip Studio (`.sut`), or any image as a brush tip
 - **Adjustments and filters:** levels, curves, hue/saturation, exposure, gradient map, grain, blurs, noise and lens correction
@@ -168,7 +168,7 @@ PSD の書き出しは往復テスト済みです。手元にあるレイヤー�
 
 - **レイヤー:** フォルダー、描画モード、不透明度、レイヤーマスク、クリッピングマスク、調整レイヤー
 - **変形:** 解像度を落とさずに移動・拡大縮小・回転・自由変形
-- **選択範囲:** 長方形・楕円選択、なげなわ、自動選択、なぞる/クリックするだけのクイック選択、コンテンツに応じた塗りつぶし
+- **選択範囲:** 長方形・楕円選択、なげなわ、なぞる/クリックするだけのクイック選択、コンテンツに応じた塗りつぶし、そして輪郭を読み取る自動選択(陰影やテクスチャは含め、境界では止まります。クリック直後に許容値を変えて調整でき、Shift/Alt クリックで含めるもの・除くものを指示できます。「隣接」をオフにすれば、キャラクターの周りに分かれた背景も 1 クリックで選択でき、削除しても線画に背景の色が残りません)
 - **描画:** ブラシ、消しゴム、スポット修復ブラシ、コピースタンプ、指先ツール、ゆがみ、グラデーション、シェイプ、テキスト
 - **ブラシ:** 筆圧と傾きに反応する MyPaint ブラシ 196 種類(鉛筆、インク、木炭、絵の具、ぼかし)。Photoshop(`.abr`)、Procreate(`.brushset`・`.brush`)、クリップスタジオ(`.sut`)のブラシや、任意の画像をブラシ先端として読み込めます
 - **色調補正とフィルター:** レベル補正、トーンカーブ、色相・彩度、露光量、グラデーションマップ、粒子、ぼかし、ノイズ、レンズ補正
