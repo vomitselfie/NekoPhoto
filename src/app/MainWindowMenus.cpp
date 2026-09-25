@@ -116,6 +116,7 @@ void MainWindow::buildMenus() {
     needsDocument(file->addAction(tr("&Save"), QKeySequence::Save, this, [this] { save(false); }));
     needsDocument(file->addAction(tr("Save &As…"), QKeySequence::SaveAs, this, [this] { save(true); }));
     file->addSeparator();
+    needsDocument(file->addAction(tr("Export as Photoshop &Document (PSD)…"), this, &MainWindow::exportPsd));
     needsDocument(file->addAction(tr("Export &PNG…"), QKeySequence("Ctrl+Shift+E"), this, &MainWindow::exportPng));
     needsDocument(file->addAction(tr("Export &JPEG…"), QKeySequence("Ctrl+Alt+Shift+S"), this, &MainWindow::exportJpeg));
     if (canWriteImageFormat("webp")) needsDocument(file->addAction(tr("Export &WebP…"), this, &MainWindow::exportWebp));

@@ -99,6 +99,7 @@ add_library(compositor_core STATIC
     src/heal.cpp
     src/inpaint.cpp
     src/psd.cpp
+    src/psd_writer.cpp
     src/subject.cpp
     src/sut.cpp
     src/scribble.cpp

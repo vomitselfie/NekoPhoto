@@ -1,5 +1,6 @@
 // The main window's file handling: new, open, import, save, export, and files dropped on the window.
 #include "MainWindow.h"
+#include "compositor/psd_writer.h"
 #include "CanvasWidget.h"
 #include "Dialogs.h"
 #include "ImageConvert.h"
@@ -15,6 +16,7 @@
 #include <QFileInfo>
 #include <QImageReader>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QMimeData>
 #include <QPainter>
 #include <QSettings>
@@ -203,6 +205,48 @@ void MainWindow::exportPng() {
     auto image = session_->flattened();
     std::string error;
     if (!image || !writePngImage(path.toStdString(), *image, session_->document()->resolution, &error)) showError(tr("Couldn’t export PNG"), QString::fromStdString(error));
+}
+
+void MainWindow::exportPsd() {
+    if (!session_->hasDocument()) return;
+    const compositor::Document& doc = *session_->document();
+    if (doc.width > compositor::psdMaxSide || doc.height > compositor::psdMaxSide) {
+        showError(tr("Couldn’t export PSD"), tr("This document is larger than PSD allows (%1 pixels a side). PSB export is not supported yet.").arg(compositor::psdMaxSide));
+        return;
+    }
+    // What the file will hold, and what will not look or behave the same in Photoshop, before choosing where.
+    const compositor::PsdExportSummary plan = compositor::planPsdExport(doc);
+    if (!plan.warnings.empty()) {
+        QString counts = tr("%n layer(s)", "", plan.layers + plan.adjustments);
+        if (plan.folders) counts += tr(", %n folder(s)", "", plan.folders);
+        if (plan.masks) counts += tr(", %n mask(s)", "", plan.masks);
+        if (plan.clipped) counts += tr(", %n clipped", "", plan.clipped);
+        QString list;
+        for (const std::string& w : plan.warnings) list += "<li>" + QString::fromStdString(w).toHtmlEscaped() + "</li>";
+        QMessageBox box(QMessageBox::Information, tr("Export Photoshop Document"),
+                        tr("<p>%1 will be written.</p><p>Some things will look or behave differently in Photoshop:</p><ul>%2</ul>").arg(counts, list),
+                        QMessageBox::NoButton, this);
+        if (!plan.notes.empty()) {
+            QString notes;
+            for (const std::string& n : plan.notes) notes += QString::fromStdString(n) + "\n";
+            box.setDetailedText(notes.trimmed());
+        }
+        QPushButton* go = box.addButton(tr("Export…"), QMessageBox::AcceptRole);
+        box.addButton(QMessageBox::Cancel);
+        box.setDefaultButton(go);
+        box.exec();
+        if (box.clickedButton() != static_cast<QAbstractButton*>(go)) return;
+    }
+    QString path = askExportPath(tr("Export Photoshop Document"), tr("Photoshop document (*.psd)"), {"psd"});
+    if (path.isEmpty()) return;
+    QSettings().setValue("lastDir", QFileInfo(path).absolutePath());
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    compositor::PsdExportSummary summary;
+    std::string error;
+    const bool ok = compositor::exportPsd(doc, path.toStdString(), {}, &summary, &error);
+    QApplication::restoreOverrideCursor();
+    if (!ok) { showError(tr("Couldn’t export PSD"), QString::fromStdString(error)); return; }
+    statusBar()->showMessage(tr("Exported %1").arg(QFileInfo(path).fileName()), 5000);
 }
 
 QString MainWindow::askExportPath(const QString& title, const QString& filter, const QStringList& suffixes) {

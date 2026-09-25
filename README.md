@@ -9,7 +9,8 @@
 **Bring your work with you from any major platform.** NekoPhoto is a fast,
 focused photo editor and painting app for Linux that opens the files and brushes
 you already have: Photoshop and Clip Studio projects with their layers intact,
-and brushes from Photoshop, Clip Studio and Procreate. Layers, masks,
+and brushes from Photoshop, Clip Studio and Procreate. It saves back to layered
+PSD, so it fits into a workflow shared with Photoshop, Krita and Photopea. Layers, masks,
 selections, brushes, adjustments and filters work with the tools and shortcuts
 you know.
 
@@ -22,14 +23,18 @@ by themselves the first time you start it.
 
 | Coming from | Your files | Your brushes and habits |
 |---|---|---|
-| **Photoshop** | `.psd` and `.psb` open with their layers, folders, masks, clipping masks and blend modes | `.abr` brushes; the tools and shortcuts you know (V, M, L, W, B, E, `[` `]`, Ctrl+T, Ctrl+J, Ctrl+G) |
+| **Photoshop** | `.psd` and `.psb` open with their layers, folders, masks, clipping masks and blend modes, and export back to layered `.psd` | `.abr` brushes; the tools and shortcuts you know (V, M, L, W, B, E, `[` `]`, Ctrl+T, Ctrl+J, Ctrl+G) |
 | **Clip Studio Paint** | `.clip` projects open with their layers, folders, masks, clipping and blend modes | `.sut` brushes |
 | **Procreate** | Your exported images | `.brushset` and `.brush` files |
 | **Krita and GIMP** | Photoshop files from collaborators, and your images | The MyPaint brush engine you know, and G'MIC's filters |
 
+PSD export is round-trip tested: every layered PSD we have, from Photoshop and Clip Studio (up to 54
+layers in 16 folders at 4096 × 4096), exports and reopens with the same pixels, and the files open in other
+PSD readers with their structure intact. What PSD cannot carry is listed before you export
+([docs/psd-export.md](docs/psd-export.md)).
+
 Coming next:
 
-- **Saving back to PSD**, so NekoPhoto fits into a workflow shared with Photoshop, Krita and Photopea
 - **Brushes that feel the same**: a deeper translation of Clip Studio and Photoshop brush settings, so your favourite brush behaves as it did
 
 ## What it does
@@ -42,7 +47,7 @@ Coming next:
 - **Adjustments and filters:** levels, curves, hue/saturation, exposure, gradient map, grain, blurs, noise and lens correction
 - **Remove Background:** an AI model that runs on your own machine; nothing is uploaded
 - **G'MIC:** over 850 more filters with a live preview, when `gmic` is installed
-- **Files:** Photoshop PSD and PSB, and Clip Studio `.clip` projects, with layers, folders, masks, clipping and blend modes; projects of up to a gigapixel of layers; PNG, JPEG, WebP and TIFF export; several projects in tabs; crash recovery
+- **Files:** Photoshop PSD and PSB, and Clip Studio `.clip` projects, with layers, folders, masks, clipping and blend modes; layered PSD export; projects of up to a gigapixel of layers; PNG, JPEG, WebP and TIFF export; several projects in tabs; crash recovery
 - **AI agents:** Claude Code or any MCP client can drive the editor
 
 The full list is in [docs/features.md](docs/features.md).
@@ -134,7 +139,8 @@ components and their licences are listed in
 
 **どのアプリからでも、作品をそのまま持ってこられます。** NekoPhoto は Linux 向けの軽快でシンプルな
 写真編集・お絵描きソフトです。Photoshop とクリップスタジオのファイルをレイヤーを保ったまま開け、
-Photoshop・クリップスタジオ・Procreate のブラシも読み込めます。レイヤー、マスク、選択範囲、ブラシ、
+Photoshop・クリップスタジオ・Procreate のブラシも読み込めます。レイヤー付きの PSD に保存し直せるので、
+Photoshop・Krita・Photopea を使う人とのやり取りにもそのまま組み込めます。レイヤー、マスク、選択範囲、ブラシ、
 色調補正、フィルターを、おなじみのツールとショートカットで操作できます。
 
 NekoPhoto は macOS 版 [Compositor](https://github.com/robbietilton/Compositor) の
@@ -145,14 +151,17 @@ compositor-linux という名前でした。設定・ブラシ・ダウンロー
 
 | 移行元 | ファイル | ブラシと操作 |
 |---|---|---|
-| **Photoshop** | `.psd`・`.psb` をレイヤー・フォルダー・マスク・クリッピングマスク・描画モードを保ったまま開けます | `.abr` ブラシ、おなじみのツールとショートカット(V、M、L、W、B、E、`[` `]`、Ctrl+T、Ctrl+J、Ctrl+G) |
+| **Photoshop** | `.psd`・`.psb` をレイヤー・フォルダー・マスク・クリッピングマスク・描画モードを保ったまま開け、レイヤー付きの `.psd` に書き出せます | `.abr` ブラシ、おなじみのツールとショートカット(V、M、L、W、B、E、`[` `]`、Ctrl+T、Ctrl+J、Ctrl+G) |
 | **クリップスタジオ** | `.clip` をレイヤー・フォルダー・マスク・クリッピング・描画モードを保ったまま開けます | `.sut` ブラシ |
 | **Procreate** | 書き出した画像 | `.brushset`・`.brush` |
 | **Krita・GIMP** | 共同作業者から届いた Photoshop ファイルや画像 | おなじみの MyPaint ブラシエンジンと G'MIC フィルター |
 
+PSD の書き出しは往復テスト済みです。手元にあるレイヤー付き PSD(Photoshop とクリップスタジオ製、4096 × 4096 で最大 54 レイヤー・16 フォルダー)は、
+書き出して開き直してもピクセル単位で同じになり、ほかの PSD リーダーでも構造を保ったまま開けます。PSD で表現できない要素は書き出す前に一覧表示されます
+([docs/psd-export.md](docs/psd-export.md)、英語)。
+
 今後の予定:
 
-- **PSD への保存**: Photoshop・Krita・Photopea を使う人とのやり取りに NekoPhoto をそのまま組み込めるように
 - **同じ描き心地のブラシ**: クリップスタジオや Photoshop のブラシ設定をより深く変換し、お気に入りのブラシがそのままの感覚で使えるように
 
 ### できること
@@ -165,7 +174,7 @@ compositor-linux という名前でした。設定・ブラシ・ダウンロー
 - **色調補正とフィルター:** レベル補正、トーンカーブ、色相・彩度、露光量、グラデーションマップ、粒子、ぼかし、ノイズ、レンズ補正
 - **背景を削除:** AI モデルは手元のマシンで動作し、画像はどこにも送信されません
 - **G'MIC:** `gmic` をインストールすると、850 種類以上のフィルターをライブプレビュー付きで使えます
-- **ファイル:** レイヤー・フォルダー・マスク・クリッピング・描画モードを保ったまま PSD/PSB とクリップスタジオの `.clip` を開けます。1 ギガピクセルまでのプロジェクト、PNG・JPEG・WebP・TIFF 書き出し、タブで複数のプロジェクト、クラッシュからの復元
+- **ファイル:** レイヤー・フォルダー・マスク・クリッピング・描画モードを保ったまま PSD/PSB とクリップスタジオの `.clip` を開け、レイヤー付き PSD に書き出せます。1 ギガピクセルまでのプロジェクト、PNG・JPEG・WebP・TIFF 書き出し、タブで複数のプロジェクト、クラッシュからの復元
 - **AI エージェント:** Claude Code などの MCP クライアントから操作できます
 
 機能の一覧は [docs/features.md](docs/features.md#日本語) にあります。

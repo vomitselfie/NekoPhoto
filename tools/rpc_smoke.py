@@ -385,6 +385,13 @@ def main():
     assert failed["error"]["index"] == 1 and failed["rolledBack"], failed
     assert len(rpc.call("layers.list")) == count
 
+    # A layered PSD export: the demo's folder, mask, clipping and adjustment come back counted.
+    psd_path = os.path.join(tempfile.mkdtemp(), "smoke.psd")
+    exported = rpc.call("document.export", path=psd_path)
+    assert exported["layers"] >= 3 and exported["folders"] >= 1 and os.path.getsize(psd_path) > 1000, exported
+    with open(psd_path, "rb") as f:
+        assert f.read(4) == b"8BPS"
+
     # Zoomed renders enlarge with square pixels; a masked layer renders as it shows.
     zoomed = rpc.call("render", region={"x": 10, "y": 10, "width": 16, "height": 12}, zoom=4)
     assert (zoomed["width"], zoomed["height"]) == (64, 48), zoomed

@@ -62,7 +62,7 @@ const MethodDoc methodDocs[] = {
      "path:string! File path"},
     {"document.import", "Import an image file as a new layer.", "path:string! File path; x:number Left edge in document pixels; y:number Top edge"},
     {"document.save", "Save as a project (.comp).", "path:string Where to save (default: where it was opened or last saved)"},
-    {"document.export", "Export the composite as .png, .jpg, .webp or .tif (the extension decides).",
+    {"document.export", "Export as a layered Photoshop .psd (the reply lists what Photoshop cannot carry), or the composite as .png, .jpg, .webp or .tif (the extension decides).",
      "path:string! Output file; quality:integer JPEG and WebP quality 1..100 (100 = lossless WebP; default 85 JPEG, 90 WebP); background:color=#ffffff Behind a JPEG's transparency"},
     {"document.close", "Close the document in the current tab.", "discard:bool=false Close even with unsaved changes"},
     {"canvas.resize", "Change the canvas size, keeping the layers' pixels.",

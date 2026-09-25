@@ -4,6 +4,7 @@
 #include "CanvasWidget.h"
 #include "ImageConvert.h"
 #include "compositor/png.h"
+#include "compositor/psd_writer.h"
 #include <QFileInfo>
 #include <QPainter>
 #include <algorithm>
@@ -115,11 +116,22 @@ void AutomationServer::registerDocumentHandlers() {
         return QJsonObject{{"path", path}, {"macCompatible", session()->document()->fitsMacBudget()}};
     });
     add("document.export", [session, document](const QJsonObject& p) {
-        document();
+        const Document& doc = document();
         QString path = QFileInfo(str(p, "path")).absoluteFilePath();
+        QString suffix = QFileInfo(path).suffix().toLower();
+        if (suffix == "psd") {
+            // Layered: what Photoshop cannot carry comes back in the reply, the way the export dialog lists it.
+            PsdExportSummary summary;
+            std::string error;
+            if (!exportPsd(doc, path.toStdString(), {}, &summary, &error)) fail("couldn't write " + path + ": " + qs(error));
+            QJsonArray warnings, notes;
+            for (auto& w : summary.warnings) warnings.append(qs(w));
+            for (auto& n : summary.notes) notes.append(qs(n));
+            return QJsonObject{{"path", path}, {"width", doc.width}, {"height", doc.height}, {"layers", summary.layers}, {"folders", summary.folders},
+                               {"masks", summary.masks}, {"clipped", summary.clipped}, {"adjustments", summary.adjustments}, {"warnings", warnings}, {"notes", notes}};
+        }
         auto flat = session()->flattened();
         if (!flat) fail("nothing to export");
-        QString suffix = QFileInfo(path).suffix().toLower();
         if (suffix == "png") {
             std::string error;
             if (!writePngImage(path.toStdString(), *flat, session()->document()->resolution, &error)) fail("couldn't write " + path + ": " + qs(error));
@@ -136,7 +148,7 @@ void AutomationServer::registerDocumentHandlers() {
             QString error;
             if (!writeQtImage(path, suffix == "webp" ? "webp" : "tiff", toQImage(*flat), integer(p, "quality", 90), session()->document()->resolution, &error))
                 fail("couldn't write " + path + ": " + error);
-        } else fail("path must end in .png, .jpg, .jpeg, .webp, .tif or .tiff", invalidParams);
+        } else fail("path must end in .psd, .png, .jpg, .jpeg, .webp, .tif or .tiff", invalidParams);
         return QJsonObject{{"path", path}, {"width", flat->width()}, {"height", flat->height()}};
     });
     add("document.close", [session](const QJsonObject& p) {

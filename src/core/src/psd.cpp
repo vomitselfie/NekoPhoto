@@ -473,6 +473,24 @@ std::optional<PsdImport> importPsd(const std::string& path, std::string* error) 
             std::optional<Uuid> parent = open.empty() ? std::nullopt : std::optional<Uuid>();
             bool lossyBlend = false;
             BlendMode blend = blendFor(rec.blend, &lossyBlend);
+            // The user mask over a lw x lh grid at (lx, ly): Photoshop keeps it in its own rectangle with a default beyond.
+            auto userMaskFor = [&](int lw, int lh, int lx, int ly) -> std::optional<LayerMask> {
+                auto userMask = maskPlanes.find(-2);
+                if (userMask == maskPlanes.end()) userMask = maskPlanes.find(-3);
+                if (!rec.mask.present || userMask == maskPlanes.end() || lw <= 0 || lh <= 0) return std::nullopt;
+                auto mask = std::make_shared<GrayImage>(lw, lh, rec.mask.defaultColour);
+                const int mw = rec.mask.right - rec.mask.left, mh = rec.mask.bottom - rec.mask.top;
+                if (size_t(std::max(0, mw)) * size_t(std::max(0, mh)) > userMask->second.size()) return std::nullopt;
+                for (int y = 0; y < mh; y++) {
+                    const int ty = rec.mask.top + y - ly;
+                    if (ty < 0 || ty >= lh) continue;
+                    for (int x = 0; x < mw; x++) { const int tx = rec.mask.left + x - lx; if (tx >= 0 && tx < lw) mask->at(tx, ty) = userMask->second[size_t(y) * mw + size_t(x)]; }
+                }
+                LayerMask lm;
+                lm.asset = MaskAsset::make(mask);
+                lm.enabled = !(rec.mask.flags & 2);
+                return lm;
+            };
             if (rec.section == 3) { open.push_back({layers.size(), {}}); continue; }   // a folder's end marker: its contents follow
             if (rec.section == 1 || rec.section == 2) {
                 if (open.empty()) continue;
@@ -483,6 +501,7 @@ std::optional<PsdImport> importPsd(const std::string& path, std::string* error) 
                 folder.visible = !hidden;
                 folder.opacity = rec.opacity / 255.0;
                 folder.blendMode = blend;
+                if (auto lm = userMaskFor(int(width), int(height), 0, 0)) folder.mask = lm;   // over the canvas, as our folders are
                 if (lossyBlend && rec.blend != "pass") notes.push_back("Folder \"" + folder.name + "\": blend mode " + blendDescription(rec.blend) + " has no counterpart; " + blendModeName(blend) + " was used.");
                 for (const Uuid& id : group.members) if (Layer* l = document.find(id)) l->parentId = folder.id;
                 layers.insert(layers.begin() + long(group.firstChild), folder);
@@ -539,24 +558,9 @@ std::optional<PsdImport> importPsd(const std::string& path, std::string* error) 
             layer.adjustment = adjustment;
             layer.extraJson = extraJson;
             if (lossyBlend) notes.push_back("Layer \"" + layer.name + "\": blend mode " + blendDescription(rec.blend) + " has no counterpart; " + blendModeName(blend) + " was used.");
-            // The mask: Photoshop keeps it in its own rectangle with a default beyond; ours covers the layer's pixels.
-            auto userMask = maskPlanes.find(-2);
-            if (userMask == maskPlanes.end()) userMask = maskPlanes.find(-3);
-            if (rec.mask.present && userMask != maskPlanes.end()) {
-                const int lw = image ? image->width() : int(width), lh = image ? image->height() : int(height);
-                const int lx = image ? int(layer.transform.origin.x) : 0, ly = image ? int(layer.transform.origin.y) : 0;
-                auto mask = std::make_shared<GrayImage>(lw, lh, rec.mask.defaultColour);
-                const int mw = rec.mask.right - rec.mask.left, mh = rec.mask.bottom - rec.mask.top;
-                for (int y = 0; y < mh; y++) {
-                    const int ty = rec.mask.top + y - ly;
-                    if (ty < 0 || ty >= lh) continue;
-                    for (int x = 0; x < mw; x++) { const int tx = rec.mask.left + x - lx; if (tx >= 0 && tx < lw) mask->at(tx, ty) = userMask->second[size_t(y) * mw + size_t(x)]; }
-                }
-                LayerMask lm;
-                lm.asset = MaskAsset::make(mask);
-                lm.enabled = !(rec.mask.flags & 2);
-                layer.mask = lm;
-            }
+            // The mask covers the layer's pixels (the canvas for a layer without any).
+            if (auto lm = userMaskFor(image ? image->width() : int(width), image ? image->height() : int(height),
+                                      image ? int(layer.transform.origin.x) : 0, image ? int(layer.transform.origin.y) : 0)) layer.mask = lm;
             if (rec.clipping) {
                 // Clipped to the nearest unclipped layer below it in the same folder.
                 const size_t from = open.empty() ? 0 : open.back().firstChild;
@@ -619,6 +623,17 @@ std::optional<PsdImport> importPsd(const std::string& path, std::string* error) 
                     const size_t rowBytes = (width + 7) / 8;
                     if (available >= rowBytes * height) for (uint32_t y = 0; y < height; y++) for (uint32_t x = 0; x < width; x++) gray[size_t(y) * width + x] = (data[y * rowBytes + x / 8] >> (7 - x % 8)) & 1 ? 0 : 255;
                     planes.clear(); planes[0] = std::move(gray);
+                }
+                // With transparency, Photoshop stores the merged colour matted against white: take the white out.
+                if (auto alpha = planes.find(-1); alpha != planes.end() && mode != Bitmap && mode != Indexed) {
+                    const std::vector<uint8_t>& a = alpha->second;
+                    for (auto& [id, plane] : planes) {
+                        if (id < 0 || plane.size() != a.size()) continue;
+                        for (size_t i = 0; i < plane.size(); i++) {
+                            const int A = a[i];
+                            plane[i] = A == 0 ? 0 : uint8_t(std::clamp((int(plane[i]) - (255 - A)) * 255 / A, 0, 255));
+                        }
+                    }
                 }
                 result.composite = assemble(mode == Bitmap ? Grayscale : mode, int(width), int(height), planes, palette);
             } else notes.push_back("The merged image could not be read; only the layers were imported.");

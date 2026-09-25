@@ -119,6 +119,8 @@ private:
     void exportJpeg();
     void exportWebp();
     void exportTiff();
+    /// A layered PSD, after a summary of anything Photoshop cannot carry.
+    void exportPsd();
     QString askExportPath(const QString& title, const QString& filter, const QStringList& suffixes);
     bool confirmDiscard();
     void importFile(const QString& path, std::optional<QPointF> at = std::nullopt);

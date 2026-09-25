@@ -108,7 +108,7 @@ WelcomeDialog::WelcomeDialog(QWidget* parent) : QDialog(parent) {
     struct Platform { QString title, subtitle; QStringList items; };
     const QVector<Platform> platforms{
         {tr("Coming from Photoshop"), tr("Your files, your brushes, your muscle memory."),
-         {tr("Open <b>.psd</b> and <b>.psb</b> files with their layers, folders, masks, clipping masks and blend modes"),
+         {tr("Open <b>.psd</b> and <b>.psb</b> files with their layers, folders, masks, clipping masks and blend modes, and export back to layered <b>.psd</b>"),
           tr("Import your <b>.abr</b> brushes"),
           tr("The shortcuts you know: V, M, L, W, B, E, [ and ], Ctrl+T, Ctrl+J, Ctrl+G, Ctrl+Alt+G"),
           tr("Adjustment layers (Levels, Curves, Hue/Saturation, Exposure, Gradient Map), Content-Aware Fill and Spot Healing")}},
@@ -125,7 +125,7 @@ WelcomeDialog::WelcomeDialog(QWidget* parent) : QDialog(parent) {
         {tr("Coming from Krita or GIMP"), tr("Familiar engines in a lighter app."),
          {tr("The MyPaint brush engine that Krita and GIMP offer too"),
           tr("Over 850 G'MIC filters with a live preview, when <b>gmic</b> is installed"),
-          tr("Photoshop and Clip Studio files open with their layers, for when collaborators send them"),
+          tr("Photoshop and Clip Studio files open with their layers, and layered PSD goes back out, for working with collaborators"),
           tr("Runs natively on Wayland and X11")}},
     };
     const int bannerHeight = 150, pageCount = int(platforms.size()) + 2;

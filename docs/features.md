@@ -51,6 +51,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 
 ## Files and canvas
 - Open Photoshop PSD and PSB files with their layers, folders, masks, blend modes and most adjustment layers; what cannot be kept is listed after opening
+- Export layered Photoshop PSD files (File > Export as Photoshop Document): layers, folders, masks, clipping, blend modes and Levels, Curves, Exposure and Hue/Saturation adjustment layers, with a merged image; anything Photoshop cannot carry is listed before you export (docs/psd-export.md)
 - Open Clip Studio `.clip` projects with their layers, folders, masks, clipping, opacity and blend modes (vector and text layers come in as their pixels)
 - Open PNG, JPEG, TIFF, WebP and more; drop an image on the canvas to add it as a layer, or on the tab strip to open it
 - Projects of up to a gigapixel of layers; the Mac app opens projects up to 100 megapixels
@@ -117,6 +118,7 @@ Mac 版と同じ機能を、Linux のキー表記で使えます。キーボー�
 
 ### ファイルとカンバス
 - Photoshop の PSD/PSB を、レイヤー・フォルダー・マスク・描画モード・主な調整レイヤーを保ったまま開けます。引き継げなかった要素は開いた後に一覧表示されます
+- レイヤー付きの Photoshop PSD に書き出せます(ファイル > Photoshop ドキュメントとして書き出し):レイヤー、フォルダー、マスク、クリッピング、描画モード、レベル補正・トーンカーブ・露光量・色相/彩度の調整レイヤーと統合画像。Photoshop で再現できない要素は書き出す前に一覧表示されます
 - クリップスタジオの `.clip` を、レイヤー・フォルダー・マスク・クリッピング・不透明度・描画モードを保ったまま開けます(ベクターやテキストのレイヤーは画像として読み込みます)
 - PNG、JPEG、TIFF、WebP などを開けます。カンバスにドロップするとレイヤーとして追加、タブバーにドロップすると新しいドキュメントとして開きます
 - レイヤー合計 1 ギガピクセルまでのプロジェクト(Mac 版で開けるのは 1 億画素まで)
