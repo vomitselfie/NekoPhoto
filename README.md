@@ -23,15 +23,17 @@ by themselves the first time you start it.
 
 | Coming from | Your files | Your brushes and habits |
 |---|---|---|
-| **Photoshop** | `.psd` and `.psb` open with their layers, folders, masks, clipping masks and blend modes, and export back to layered `.psd` | `.abr` brushes; the tools and shortcuts you know (V, M, L, W, B, E, `[` `]`, Ctrl+T, Ctrl+J, Ctrl+G) |
+| **Photoshop** | `.psd` and `.psb` open with their layers, folders, masks, clipping masks and blend modes, layer styles, vector shapes, smart objects and editable text, and export back to layered `.psd` with all of it still Photoshop's | `.abr` brushes; the tools and shortcuts you know (V, M, L, W, B, E, `[` `]`, Ctrl+T, Ctrl+J, Ctrl+G) |
 | **Clip Studio Paint** | `.clip` projects open with their layers, folders, masks, clipping and blend modes | `.sut` brushes |
 | **Procreate** | Your exported images | `.brushset` and `.brush` files |
 | **Krita and GIMP** | Photoshop files from collaborators, and your images | The MyPaint brush engine you know, and G'MIC's filters |
 
 PSD export is round-trip tested: every layered PSD we have, from Photoshop and Clip Studio (up to 54
 layers in 16 folders at 4096 × 4096), exports and reopens with the same pixels, and the files open in other
-PSD readers with their structure intact. What PSD cannot carry is listed before you export
-([docs/psd-export.md](docs/psd-export.md)).
+PSD readers with their structure intact. What NekoPhoto does not edit yet goes back byte for byte (118
+Photoshop-saved test files round-trip unchanged), and layer styles, vector shapes and folders are drawn as
+Photoshop draws them, most within a level of its own renders. What PSD cannot carry is listed before you export
+([docs/psd-roundtrip.md](docs/psd-roundtrip.md), [docs/psd-export.md](docs/psd-export.md)).
 
 Coming next:
 
@@ -47,7 +49,7 @@ Coming next:
 - **Adjustments and filters:** levels, curves, hue/saturation, exposure, gradient map, grain, blurs, noise and lens correction
 - **Remove Background:** an AI model that runs on your own machine; nothing is uploaded
 - **G'MIC:** over 850 more filters with a live preview, when `gmic` is installed
-- **Files:** Photoshop PSD and PSB, and Clip Studio `.clip` projects, with layers, folders, masks, clipping and blend modes; layered PSD export; projects of up to a gigapixel of layers; PNG, JPEG, WebP and TIFF export; several projects in tabs; crash recovery
+- **Files:** Photoshop PSD and PSB, and Clip Studio `.clip` projects, with layers, folders, masks, clipping and blend modes; Photoshop's layer styles, vector shapes and masks drawn as it draws them ([docs/layer-styles.md](docs/layer-styles.md), [docs/vector-masks.md](docs/vector-masks.md)); smart objects you can place, convert, edit and replace without losing resolution ([docs/smart-objects.md](docs/smart-objects.md)); text that stays editable both ways; layered PSD export; projects of up to a gigapixel of layers; PNG, JPEG, WebP and TIFF export; several projects in tabs; crash recovery
 - **AI agents:** Claude Code or any MCP client can drive the editor
 
 The full list is in [docs/features.md](docs/features.md).
@@ -151,13 +153,13 @@ compositor-linux という名前でした。設定・ブラシ・ダウンロー
 
 | 移行元 | ファイル | ブラシと操作 |
 |---|---|---|
-| **Photoshop** | `.psd`・`.psb` をレイヤー・フォルダー・マスク・クリッピングマスク・描画モードを保ったまま開け、レイヤー付きの `.psd` に書き出せます | `.abr` ブラシ、おなじみのツールとショートカット(V、M、L、W、B、E、`[` `]`、Ctrl+T、Ctrl+J、Ctrl+G) |
+| **Photoshop** | `.psd`・`.psb` をレイヤー・フォルダー・マスク・クリッピングマスク・描画モード・レイヤースタイル・ベクターシェイプ・スマートオブジェクト・編集可能なテキストを保ったまま開け、それらを Photoshop のまま保ってレイヤー付きの `.psd` に書き出せます | `.abr` ブラシ、おなじみのツールとショートカット(V、M、L、W、B、E、`[` `]`、Ctrl+T、Ctrl+J、Ctrl+G) |
 | **クリップスタジオ** | `.clip` をレイヤー・フォルダー・マスク・クリッピング・描画モードを保ったまま開けます | `.sut` ブラシ |
 | **Procreate** | 書き出した画像 | `.brushset`・`.brush` |
 | **Krita・GIMP** | 共同作業者から届いた Photoshop ファイルや画像 | おなじみの MyPaint ブラシエンジンと G'MIC フィルター |
 
 PSD の書き出しは往復テスト済みです。手元にあるレイヤー付き PSD(Photoshop とクリップスタジオ製、4096 × 4096 で最大 54 レイヤー・16 フォルダー)は、
-書き出して開き直してもピクセル単位で同じになり、ほかの PSD リーダーでも構造を保ったまま開けます。PSD で表現できない要素は書き出す前に一覧表示されます
+書き出して開き直してもピクセル単位で同じになり、ほかの PSD リーダーでも構造を保ったまま開けます。NekoPhoto がまだ編集できない要素はバイト単位でそのまま戻り(Photoshop で保存したテストファイル 118 個が変化なく往復します)、レイヤースタイル・ベクターシェイプ・フォルダーは Photoshop と同じように描画されます。PSD で表現できない要素は書き出す前に一覧表示されます
 ([docs/psd-export.md](docs/psd-export.md)、英語)。
 
 今後の予定:
