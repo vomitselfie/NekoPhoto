@@ -90,3 +90,10 @@ opacity changed, a project save, a canvas change).
 Not verified: that Photoshop opens our files without a warning, or re-lays our type layers exactly where we drew
 them. The structure matches what Photoshop
 wrote, but the files have not been opened in Photoshop; that check is still to do.
+
+## Colour
+
+A CMYK file (or a CMYK smart object's contents) converts to sRGB through the file's own ICC profile with the
+vendored Little CMS (`src/core/src/colour.cpp`; relative colorimetric, black point compensation, no dither, as
+Patchy calibrated against Photoshop's conversion); only a file without a profile falls back to the plain formula.
+On a CMYK-illustrated styleguide this brought the smart objects within 0.3 levels of Photoshop's own render.

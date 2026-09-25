@@ -78,6 +78,9 @@ message says which layer and why. New sources are written into the PSD's `lnk2` 
 beside the file's own untouched ones, and new placements as Photoshop 2026's `SoLd` (Patchy's authoring shape;
 Photoshop reads SoLd-only files).
 
+Contents come in as NekoPhoto reads them: a CMYK PSD (common for print illustration) converted to sRGB through its
+own colour profile. Edited and put back, such contents are written as an RGB PSD.
+
 ## Not yet
 
 Warps, Smart Filters, relinking linked files, PSB writing (converted contents are PSD, so 30,000 pixels a side),

@@ -102,6 +102,7 @@ add_library(compositor_core STATIC
     src/psd.cpp
     src/layerstyle.cpp
     src/layerstyle_render.cpp
+    src/colour.cpp
     src/psd_carry.cpp
     src/smartobject.cpp
     src/smartobject_edit.cpp
@@ -159,3 +160,10 @@ add_library(patchy_psd STATIC
 target_include_directories(patchy_psd PUBLIC ${CMAKE_SOURCE_DIR}/src/third_party/patchy_psd)
 set_target_properties(patchy_psd PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(compositor_core PUBLIC patchy_psd)
+
+# Little CMS (MIT, src/third_party/lcms2/README.md): CMYK PSDs through their own colour profiles.
+file(GLOB NEKOPHOTO_LCMS2_SOURCES ${CMAKE_SOURCE_DIR}/src/third_party/lcms2/*.c)
+add_library(nekophoto_lcms2 STATIC ${NEKOPHOTO_LCMS2_SOURCES})
+target_include_directories(nekophoto_lcms2 PUBLIC ${CMAKE_SOURCE_DIR}/src/third_party/lcms2)
+set_target_properties(nekophoto_lcms2 PROPERTIES POSITION_INDEPENDENT_CODE ON C_VISIBILITY_PRESET hidden)
+target_link_libraries(compositor_core PRIVATE nekophoto_lcms2)

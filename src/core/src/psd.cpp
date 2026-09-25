@@ -1,6 +1,7 @@
 #include "compositor/psd.h"
 #include "photoshop.h"
 #include "compositor/adjustments.h"
+#include "compositor/colour.h"
 #include "compositor/png.h"
 #include "compositor/render.h"
 #include <cstdio>
@@ -97,12 +98,31 @@ void labToRgb(double L, double a, double b, uint8_t out[3]) {
 }
 
 /// Premultiplied RGBA from the decoded planes of a layer or the composite.
-std::shared_ptr<Image> assemble(int mode, int width, int height, const std::map<int, std::vector<uint8_t>>& planes, const std::vector<uint8_t>& palette) {
+std::shared_ptr<Image> assemble(int mode, int width, int height, const std::map<int, std::vector<uint8_t>>& planes, const std::vector<uint8_t>& palette,
+                                const CmykToSrgb* cmykProfile = nullptr) {
     auto image = std::make_shared<Image>(width, height);
     auto plane = [&](int id) -> const uint8_t* { auto it = planes.find(id); return it == planes.end() ? nullptr : it->second.data(); };
     const uint8_t *c0 = plane(0), *c1 = plane(1), *c2 = plane(2), *c3 = plane(3), *alpha = plane(-1);
+    std::vector<uint8_t> inks, converted;
     for (int y = 0; y < height; y++) {
         uint8_t* p = image->row(y);
+        // CMYK through the file's own profile, a row at a time.
+        if (mode == CMYK && cmykProfile) {
+            inks.resize(size_t(width) * 4);
+            converted.resize(size_t(width) * 3);
+            for (int x = 0; x < width; x++) {
+                const size_t i = size_t(y) * width + size_t(x);
+                inks[size_t(x) * 4] = c0 ? c0[i] : 255; inks[size_t(x) * 4 + 1] = c1 ? c1[i] : 255;
+                inks[size_t(x) * 4 + 2] = c2 ? c2[i] : 255; inks[size_t(x) * 4 + 3] = c3 ? c3[i] : 255;
+            }
+            cmykProfile->convert(inks.data(), converted.data(), size_t(width));
+            for (int x = 0; x < width; x++, p += 4) {
+                const unsigned a = alpha ? alpha[size_t(y) * width + size_t(x)] : 255;
+                for (int c = 0; c < 3; c++) p[c] = uint8_t((converted[size_t(x) * 3 + size_t(c)] * a + 127) / 255);
+                p[3] = uint8_t(a);
+            }
+            continue;
+        }
         for (int x = 0; x < width; x++, p += 4) {
             const size_t i = size_t(y) * width + size_t(x);
             uint8_t rgb[3] = {0, 0, 0};
@@ -470,6 +490,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
         // Image resources: the resolution is ours; the rest is carried for PSD export (psd_carry.h).
         Document document{int(width), int(height)};
         auto docCarry = std::make_shared<PsdDocumentCarry>();
+        std::shared_ptr<const CmykToSrgb> cmykProfile;
         docCarry->width = int(width); docCarry->height = int(height);
         uint32_t resourcesLen = r.u32();
         size_t resourcesEnd = r.position() + resourcesLen;
@@ -486,9 +507,17 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             }
             if (id == 0x03ED && len >= 4) { double hres = r.u32() / 65536.0; if (hres > 0 && hres < 100000) document.resolution = hres; }
             if (id == 1057 && len >= 5) { r.u32(); result.realComposite = r.u8() != 0; }   // version info: hasRealMergedData
+            if (id == 1039 && mode == CMYK && len <= r.remaining()) {
+                // The ICC profile: a CMYK file's colours go to sRGB through it.
+                const uint8_t* icc = r.bytes(len);
+                cmykProfile = CmykToSrgb::fromProfile(std::vector<uint8_t>(icc, icc + len));
+                r.seek(dataStart);
+            }
             r.seek(dataStart + len + (len & 1));
         }
         r.seek(resourcesEnd);
+        for (auto& n : notes)
+            if (cmykProfile && n.rfind("CMYK colour was converted", 0) == 0) n = "CMYK colour was converted to sRGB through the file's own colour profile.";
 
         // Layer and mask information.
         const uint64_t layerMaskLen = r.length(psb);
@@ -674,7 +703,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             std::optional<LayerAdjustment> adjustment;
             std::string extraJson;
             auto block = [&](const char* key) -> const std::pair<const uint8_t*, size_t>* { auto it = rec.blocks.find(key); return it == rec.blocks.end() ? nullptr : &it->second; };
-            if (rec.width() > 0 && rec.height() > 0 && !planes.empty()) image = assemble(mode, rec.width(), rec.height(), planes, palette);
+            if (rec.width() > 0 && rec.height() > 0 && !planes.empty()) image = assemble(mode, rec.width(), rec.height(), planes, palette, cmykProfile.get());
             std::optional<AdjustmentSettings> settings;
             if (auto b = block("levl")) settings = levelsFrom(b->first, b->second);
             else if (auto b = block("curv")) settings = curvesFrom(b->first, b->second);
@@ -852,7 +881,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                         }
                     }
                 }
-                result.composite = assemble(mode == Bitmap ? Grayscale : mode, int(width), int(height), planes, palette);
+                result.composite = assemble(mode == Bitmap ? Grayscale : mode, int(width), int(height), planes, palette, cmykProfile.get());
             } else notes.push_back("The merged image could not be read; only the layers were imported.");
         }
         if (layers.empty()) {
