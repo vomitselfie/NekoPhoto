@@ -266,13 +266,15 @@ void MainWindow::exportPsd() {
         box.exec();
         if (box.clickedButton() != static_cast<QAbstractButton*>(go)) return;
     }
-    QString path = askExportPath(tr("Export Photoshop Document"), tr("Photoshop document (*.psd)"), {"psd"});
+    QString path = askExportPath(tr("Export Photoshop Document"), tr("Photoshop document (*.psd);;Photoshop large document (*.psb)"), {"psd", "psb"});
     if (path.isEmpty()) return;
     QSettings().setValue("lastDir", QFileInfo(path).absolutePath());
     QApplication::setOverrideCursor(Qt::WaitCursor);
     compositor::PsdExportSummary summary;
     std::string error;
-    const bool ok = compositor::exportPsd(doc, path.toStdString(), app::psdExportOptions(), &summary, &error);
+    compositor::PsdExportOptions options = app::psdExportOptions();
+    options.large = path.endsWith(".psb", Qt::CaseInsensitive);
+    const bool ok = compositor::exportPsd(doc, path.toStdString(), options, &summary, &error);
     QApplication::restoreOverrideCursor();
     if (!ok) { showError(tr("Couldn’t export PSD"), QString::fromStdString(error)); return; }
     statusBar()->showMessage(tr("Exported %1").arg(QFileInfo(path).fileName()), 5000);

@@ -46,6 +46,8 @@ void AutomationServer::registerPaintHandlers() {
         return QJsonObject{{"presets", QJsonArray::fromStringList(result.ids)}, {"notes", QJsonArray::fromStringList(result.notes)}, {"errors", QJsonArray::fromStringList(result.errors)}};
     });
     add("brush.stroke", [session, document, pointList](const QJsonObject& p) {
+        if (session()->smartObjectBlocksPixels() && !flag(p, "mask", false))
+            fail("the active layer is a smart object: edit its contents (smartObject.editContents) or rasterize it (smartObject.rasterize) first", invalidParams);
         document();
         EditorSession* s = session();
         std::vector<QPointF> pts = pointList(p, "points");
@@ -111,6 +113,8 @@ void AutomationServer::registerPaintHandlers() {
         return answer;
     });
     add("gradient.draw", [session, document](const QJsonObject& p) {
+        if (session()->smartObjectBlocksPixels() && !flag(p, "mask", false))
+            fail("the active layer is a smart object: edit its contents (smartObject.editContents) or rasterize it (smartObject.rasterize) first", invalidParams);
         document();
         EditorSession* s = session();
         GradientSettings previous = s->gradientSettings;

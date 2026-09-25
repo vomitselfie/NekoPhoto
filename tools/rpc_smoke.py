@@ -211,6 +211,14 @@ def main():
     rpc.call("tabs.close", index=opened["tab"])
     after = rpc.call("layers.get", id=converted["id"])
     assert after["kind"] == "smartObject", after
+    # Painting or filtering a smart object is refused: its contents, or rasterize first.
+    rpc.call("layers.select", id=converted["id"])
+    for method, params in (("pixels.fill", {"color": "#ff0000"}), ("brush.stroke", {"points": [[1, 1], [5, 5]]})):
+        try:
+            rpc.call(method, **params)
+            raise AssertionError(method + " should refuse a smart object")
+        except RuntimeError as e:
+            assert "smart object" in str(e), e
     assert rpc.call("smartObject.rasterize", id=converted["id"])["kind"] == "pixels"
     rpc.call("history.undo")
     print("smart objects: placed, converted, edited, committed, rasterized")

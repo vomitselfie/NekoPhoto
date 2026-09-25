@@ -169,6 +169,23 @@ MainWindow::Tab& MainWindow::addTab(bool reuseEmpty) {
     tab.frame = new CanvasFrame(tab.session, tab.canvas);
     tab.frame->setRulersVisible(rulersAction_ && rulersAction_->isChecked());
     tab.layers = new LayersPanel(tab.session);
+    // A pixel edit on a smart object: its contents instead, or pixels (Photoshop's choice).
+    connect(tab.session, &EditorSession::smartObjectPixelsRequested, this, [this, session = tab.session](const Uuid& id) {
+        if (session != session_) return;
+        const Layer* layer = session_->document()->find(id);
+        if (!layer) return;
+        QMessageBox box(QMessageBox::Question, tr("Smart object"),
+                        tr("“%1” is a smart object. Painting or filtering it would replace its contents with pixels.").arg(QString::fromStdString(layer->name)),
+                        QMessageBox::NoButton, this);
+        box.setInformativeText(layer->smartObject->locked() ? tr("Rasterize it to work on its pixels.") : tr("Edit its contents instead, or rasterize it to work on its pixels."));
+        QPushButton* edit = layer->smartObject->locked() ? nullptr : box.addButton(tr("Edit Contents"), QMessageBox::AcceptRole);
+        QPushButton* rasterize = box.addButton(tr("Rasterize"), QMessageBox::DestructiveRole);
+        box.addButton(QMessageBox::Cancel);
+        box.setDefaultButton(edit ? edit : rasterize);
+        box.exec();
+        if (edit && box.clickedButton() == edit) editSmartObjectContents();
+        else if (box.clickedButton() == rasterize) { session_->rasterizeSmartObject(); statusBar()->showMessage(tr("Rasterized: paint again to work on its pixels."), 5000); }
+    });
     connect(tab.layers, &LayersPanel::smartObjectContentsRequested, this, [this, session = tab.session](const Uuid& id) {
         if (session != session_) return;
         session_->selectLayer(id);

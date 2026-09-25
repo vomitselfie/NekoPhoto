@@ -122,7 +122,7 @@ std::optional<Uuid> convertToSmartObject(Document& document, const std::vector<U
     if (x1 <= x0 || y1 <= y0) return fail("There are no pixels to convert.");
     const double left = std::floor(x0), topY = std::floor(y0);
     const int w = int(std::ceil(x1) - left), h = int(std::ceil(y1) - topY);
-    if (w > psdMaxSide || h > psdMaxSide) return fail("The layers are too large for a smart object (PSD allows 30,000 pixels a side).");
+    if (w > psbMaxSide || h > psbMaxSide) return fail("The layers are too large for a smart object (300,000 pixels a side).");
     Document child(w, h);
     child.resolution = document.resolution;
     child.psdCarry = document.psdCarry;   // the global light and patterns the members' styles use
@@ -143,12 +143,15 @@ std::optional<Uuid> convertToSmartObject(Document& document, const std::vector<U
     for (Layer& l : child.layers) if (l.maskSourceId && !child.find(*l.maskSourceId)) l.maskSourceId.reset();
     PsdExportSummary summary;
     std::string encodeError;
-    std::vector<uint8_t> bytes = encodePsd(child, options, &summary, &encodeError);
+    // As Photoshop stores converted layers: a PSB.
+    PsdExportOptions large = options;
+    large.large = true;
+    std::vector<uint8_t> bytes = encodePsd(child, large, &summary, &encodeError);
     if (bytes.empty()) return fail("The layers could not be written as a smart object.");
     SmartObjectContents contents;
     contents.bytes = std::move(bytes);
-    contents.fileName = top->name + ".psd";
-    contents.fileType = "8BPS";
+    contents.fileName = top->name + ".psb";
+    contents.fileType = "8BPB";
     contents.image = renderFlattened(child);
     contents.resolution = document.resolution;
     auto source = makeSmartObjectSource(std::move(contents));
@@ -246,7 +249,9 @@ std::vector<uint8_t> encodeSmartObjectContents(const Document& contents, const S
     if (source.fileType == "8BPS" || source.fileType == "8BPB") {
         PsdExportSummary summary;
         std::string error;
-        return encodePsd(contents, options, &summary, &error);
+        PsdExportOptions o = options;
+        o.large = source.fileType == "8BPB";
+        return encodePsd(contents, o, &summary, &error);
     }
     if (source.fileType == "png ") {
         std::vector<uint8_t> out;

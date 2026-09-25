@@ -126,7 +126,10 @@ bool check(const fs::path& path, int& carriedBlocks) {
     auto imported = compositor::importPsd(path.string(), &error);
     if (!imported) { std::printf("SKIP %s: %s\n", path.filename().c_str(), error.c_str()); return true; }
     compositor::PsdExportSummary summary;
-    Bytes out = compositor::encodePsd(imported->document, {}, &summary, &error);
+    // PSD_ROUNDTRIP_PSB=1: export as PSB instead (Photoshop's large format, 64-bit lengths).
+    compositor::PsdExportOptions options;
+    options.large = std::getenv("PSD_ROUNDTRIP_PSB") != nullptr;
+    Bytes out = compositor::encodePsd(imported->document, options, &summary, &error);
     if (out.empty()) { std::printf("FAIL %s: export: %s\n", path.filename().c_str(), error.c_str()); return false; }
     FileDump a, b;
     try { a = dump(readFile(path)); } catch (std::exception& e) { std::printf("SKIP %s: unreadable here (%s)\n", path.filename().c_str(), e.what()); return true; }
@@ -167,7 +170,7 @@ bool check(const fs::path& path, int& carriedBlocks) {
         if (it == b.globals.end() || it->second != data) problems.push_back("global " + key + (it == b.globals.end() ? " lost" : " changed"));
     }
     // Round trip once more: our own file must read back.
-    const fs::path again = fs::temp_directory_path() / ("psd_roundtrip_" + std::to_string(::getpid()) + ".psd");
+    const fs::path again = fs::temp_directory_path() / ("psd_roundtrip_" + std::to_string(::getpid()) + (options.large ? ".psb" : ".psd"));
     { std::ofstream o(again, std::ios::binary); o.write(reinterpret_cast<const char*>(out.data()), std::streamsize(out.size())); }
     if (!compositor::importPsd(again.string(), &error)) problems.push_back("our file does not reopen: " + error);
     fs::remove(again);

@@ -508,4 +508,43 @@ TEST_CASE(psd_export_writes_text_as_photoshop_type_layers) {
     CHECK(std::string(flipped.begin(), flipped.end()).find("8BIMTySh") == std::string::npos);
 }
 
+TEST_CASE(psb_export_reads_back_with_even_composite_rows) {
+    Document doc(40, 30);
+    doc.layers.push_back(pixels("A", softDisc(20, 200, 30, 30), {5, 5}));
+    Layer masked = pixels("B", solid(10, 10, 0, 0, 255), {20, 10});
+    auto mask = std::make_shared<GrayImage>(10, 10, 255);
+    for (int y = 0; y < 10; y++) for (int x = 0; x < 5; x++) mask->at(x, y) = 0;
+    masked.mask = LayerMask{};
+    masked.mask->asset = MaskAsset::make(mask);
+    doc.layers.push_back(masked);
+    PsdExportOptions options;
+    options.large = true;
+    std::string error;
+    auto bytes = encodePsd(doc, options, nullptr, &error);
+    REQUIRE(!bytes.empty());
+    CHECK(bytes[4] == 0 && bytes[5] == 2);   // version 2: PSB
+    auto back = importPsdBytes(bytes, &error);
+    REQUIRE(back.has_value());
+    REQUIRE(back->document.layers.size() == 2);
+    CHECK(back->document.layers[1].mask.has_value());
+    checkLooksTheSame(doc, *back, 1);
+    // Every row of the merged image is an even number of bytes (Photoshop's rule for embedded files).
+    auto psd = encodePsd(doc, {}, nullptr, &error);
+    const size_t h = 30, planes = 4;
+    size_t at = psd.size();
+    // Walk back from the end: the rows follow the u16 counts, which follow the compression u16.
+    size_t rowsTotal = 0;
+    std::vector<size_t> counts;
+    for (size_t start = 0; start + 2 + h * planes * 2 < psd.size(); start++) {
+        if (psd[start] != 0 || psd[start + 1] != 1) continue;
+        size_t sum = 0;
+        std::vector<size_t> c;
+        for (size_t i = 0; i < h * planes; i++) { const size_t n = size_t(psd[start + 2 + i * 2]) << 8 | psd[start + 3 + i * 2]; c.push_back(n); sum += n; }
+        if (start + 2 + h * planes * 2 + sum == at) { counts = c; rowsTotal = sum; break; }
+    }
+    REQUIRE(!counts.empty());
+    CHECK(rowsTotal > 0);
+    for (size_t n : counts) CHECK(n % 2 == 0);
+}
+
 TEST_MAIN()

@@ -150,6 +150,7 @@ void EditorSession::fillSelection(const QColor& color) {
     Layer* layer = activeLayerMutable();
     if (!layer || layer->isGroup || layer->adjustment) return;
     bool mask = isMaskSelected_ && layer->mask;
+    if (!mask && smartObjectBlocksPixels(true)) return;
     const GrayImage* selection = document_->selection && document_->selection->coverage ? document_->selection->coverage.get() : nullptr;
     if (document_->selection && !selection) return;
     // A fill is a stroke covering the whole canvas: paint through the selection.
@@ -229,7 +230,7 @@ void EditorSession::clearSelectedPixelsNow(Layer& layer) {
 }
 
 void EditorSession::clearSelectionPixels() {
-    if (!canEditLayers()) return;
+    if (!canEditLayers() || smartObjectBlocksPixels(true)) return;
     Layer* layer = activeLayerMutable();
     if (!layer || layer->isGroup || !layer->asset || !layer->asset->image) return;
     if (!document_->selection || !document_->selection->coverage) return;

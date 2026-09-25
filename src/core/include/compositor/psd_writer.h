@@ -28,6 +28,8 @@ struct PsdTextMetrics {
 struct PsdExportOptions {
     /// PackBits (RLE) channels, as Photoshop writes; raw when a channel would not shrink.
     bool compress = true;
+    /// Photoshop's large document format (PSB): 64-bit lengths, up to 300,000 pixels a side.
+    bool large = false;
     /// With it, live text layers are written as Photoshop type layers (editable text over the same pixels);
     /// without it, or when it returns nothing, as pixels.
     std::function<std::optional<PsdTextMetrics>(const LayerText&)> textMetrics;
@@ -41,8 +43,9 @@ struct PsdExportSummary {
     std::vector<std::string> notes;
 };
 
-/// PSD's size limit per side; larger documents need PSB, which is not written yet.
+/// PSD's size limit per side; larger documents need PSB (PsdExportOptions::large).
 constexpr int psdMaxSide = 30000;
+constexpr int psbMaxSide = 300000;
 
 /// What exporting `document` would write and report, without encoding any pixels (for a dialog).
 PsdExportSummary planPsdExport(const Document& document, const PsdExportOptions& options = {});

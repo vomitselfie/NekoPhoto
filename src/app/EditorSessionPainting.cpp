@@ -26,6 +26,7 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
     const Layer* layer = activeLayer();
     if (!layer || layer->isGroup || layer->adjustment) return false;
     bool mask = isMaskSelected_ && layer->mask;
+    if (!mask && smartObjectBlocksPixels(true)) return false;
     bool healing = tool_ == Tool::SpotHealing, cloning = tool_ == Tool::CloneStamp;
     // Spot Healing and Clone Stamp rework image pixels; they have nothing to do on a mask.
     if ((healing || cloning) && mask) return false;
@@ -246,6 +247,7 @@ bool EditorSession::beginWarp(QPointF documentPoint) {
     if (!document_ || stroke_ || warp_ || transformEdit_) return false;
     const Layer* layer = activeLayer();
     if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image) return false;
+    if (smartObjectBlocksPixels(true)) return false;
     if (isMaskSelected_ && blurMode == BlurToolMode::Blur && layer->mask && layer->mask->asset.image) {
         // Blur on a mask: the mask as it sits on the document, its edge tone beyond its pixels, softened.
         const GrayImage& own = *layer->mask->asset.image;
@@ -344,6 +346,7 @@ void EditorSession::beginGradient(QPointF documentPoint) {
     if (!document_ || stroke_ || transformEdit_) return;
     const Layer* layer = activeLayer();
     if (!layer) return;
+    if (smartObjectBlocksPixels(true)) return;
     bool mask = isMaskSelected_ && layer->mask;
     if (gradient_ && gradient_->layerId == layer->id && gradient_->mask == mask) {
         gradient_->start = gradient_->end = documentPoint;

@@ -48,6 +48,13 @@ std::optional<SmartObjectContents> contentsFromFile(const QString& path, QString
 
 } // namespace
 
+bool EditorSession::smartObjectBlocksPixels(bool ask) {
+    const Layer* layer = activeLayer();
+    if (!layer || !layer->isLiveSmartObject() || isMaskSelected_) return false;
+    if (ask) emit smartObjectPixelsRequested(layer->id);
+    return true;
+}
+
 bool EditorSession::convertToSmartObject(QString* error) {
     if (!canEditLayers()) return false;
     std::vector<Uuid> ids(selectedLayerIds_.begin(), selectedLayerIds_.end());

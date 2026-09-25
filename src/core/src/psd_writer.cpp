@@ -24,6 +24,9 @@ struct Out {
     void u16(unsigned v) { u8((v >> 8) & 0xff); u8(v & 0xff); }
     void i16(int v) { u16(unsigned(uint16_t(int16_t(v)))); }
     void u32(uint32_t v) { u16(v >> 16); u16(v & 0xffff); }
+    void u64(uint64_t v) { u32(uint32_t(v >> 32)); u32(uint32_t(v)); }
+    /// A length: 64 bits in a PSB where Photoshop widens it, else 32.
+    void length(uint64_t v, bool wide) { if (wide) u64(v); else u32(uint32_t(v)); }
     void i32(int32_t v) { u32(uint32_t(v)); }
     void f32(float v) { uint32_t bits; std::memcpy(&bits, &v, 4); u32(bits); }
     void str(const char* s) { b.insert(b.end(), s, s + std::strlen(s)); }
@@ -48,7 +51,45 @@ void packBits(const uint8_t* row, int n, std::vector<uint8_t>& out) {
 }
 
 /// One channel's data as a layer record stores it: the compression word, then the rows.
-std::vector<uint8_t> encodeChannel(const std::vector<uint8_t>& plane, int w, int h, bool compress) {
+/// The tagged blocks whose length is 64 bits in a PSB.
+bool longKey(const std::string& key) {
+    static const std::set<std::string> keys{"LMsk", "Lr16", "Lr32", "Layr", "Mt16", "Mt32", "Mtrn", "Alph", "FMsk", "lnk2", "FEid", "FXid", "PxSD", "cinf"};   // cinf: Photoshop writes it wide in a PSB too (Patchy)
+    return keys.count(key) > 0;
+}
+
+/// A PackBits row made even in length, decoding the same: one literal run split in two, else the row written
+/// as literal runs sized to come out even. Photoshop rejects a smart object's embedded file whose merged image
+/// has an odd row when the document keeps Smart Filter caches (Patchy's pinned rule); even rows everywhere.
+void makeRowEven(std::vector<uint8_t>& row, const uint8_t* raw, int w) {
+    if (row.size() % 2 == 0) return;
+    for (size_t i = 0; i < row.size();) {
+        const int8_t header = int8_t(row[i]);
+        if (header >= 1) {   // a literal run of two or more: split its first byte off
+            const size_t count = size_t(header) + 1;
+            std::vector<uint8_t> out(row.begin(), row.begin() + long(i));
+            out.push_back(0); out.push_back(row[i + 1]);
+            out.push_back(uint8_t(count - 2)); out.insert(out.end(), row.begin() + long(i + 2), row.end());
+            row.swap(out);
+            return;
+        }
+        i += header >= 0 ? size_t(header) + 2 : header == -128 ? 1 : 2;
+    }
+    // No literal run to split: the row as literals, one chunk split short to fix the parity.
+    std::vector<uint8_t> out;
+    int x = 0;
+    const int chunks = (w + 127) / 128;
+    bool evenOut = (size_t(w) + size_t(chunks)) % 2 == 0;
+    while (x < w) {
+        int n = std::min(128, w - x);
+        if (!evenOut && n >= 2) { n = 1; evenOut = true; }
+        out.push_back(uint8_t(n - 1));
+        out.insert(out.end(), raw + x, raw + x + n);
+        x += n;
+    }
+    row.swap(out);
+}
+
+std::vector<uint8_t> encodeChannel(const std::vector<uint8_t>& plane, int w, int h, bool compress, bool large = false) {
     Out o;
     if (w <= 0 || h <= 0) { o.u16(0); return o.b; }
     if (compress) {
@@ -56,10 +97,10 @@ std::vector<uint8_t> encodeChannel(const std::vector<uint8_t>& plane, int w, int
         size_t total = 0;
         parallelRows(0, h, [&](int ya, int yb) { for (int y = ya; y < yb; y++) packBits(plane.data() + size_t(y) * w, w, rows[size_t(y)]); }, 64);
         for (auto& r : rows) total += r.size();
-        if (total + size_t(h) * 2 < plane.size()) {
-            o.b.reserve(2 + size_t(h) * 2 + total);
+        if (total + size_t(h) * (large ? 4 : 2) < plane.size()) {
+            o.b.reserve(2 + size_t(h) * 4 + total);
             o.u16(1);
-            for (auto& r : rows) o.u16(unsigned(r.size()));
+            for (auto& r : rows) { if (large) o.u32(uint32_t(r.size())); else o.u16(unsigned(r.size())); }
             for (auto& r : rows) o.bytes(r);
             return o.b;
         }
@@ -197,15 +238,15 @@ private:
 
     void emptyChannels(Record& r, bool alpha = true) const {
         if (!encode_) return;
-        for (int id : {-1, 0, 1, 2}) if (id != -1 || alpha) r.channels.push_back({id, encodeChannel({}, 0, 0, false)});
+        for (int id : {-1, 0, 1, 2}) if (id != -1 || alpha) r.channels.push_back({id, encodeChannel({}, 0, 0, false, options_.large)});
     }
 
     void setPixels(Record& r, const Image& image, int left, int top) const {
         r.left = left; r.top = top; r.right = left + image.width(); r.bottom = top + image.height();
         if (!encode_) return;
         auto planes = straightPlanes(image);
-        r.channels.push_back({-1, encodeChannel(planes[3], image.width(), image.height(), options_.compress)});
-        for (int c = 0; c < 3; c++) r.channels.push_back({c, encodeChannel(planes[size_t(c)], image.width(), image.height(), options_.compress)});
+        r.channels.push_back({-1, encodeChannel(planes[3], image.width(), image.height(), options_.compress, options_.large)});
+        for (int c = 0; c < 3; c++) r.channels.push_back({c, encodeChannel(planes[size_t(c)], image.width(), image.height(), options_.compress, options_.large)});
     }
 
     /// The layer's mask over `rect` (document pixels): a copy when it lies on the layer's own pixel grid,
@@ -229,7 +270,7 @@ private:
                 for (int y = 0; y < h; y++) std::memcpy(plane.data() + size_t(y) * w, sampled.row(y), size_t(w));
             }
         }
-        if (encode_) r.channels.push_back({-2, encodeChannel(plane, w, h, options_.compress)});
+        if (encode_) r.channels.push_back({-2, encodeChannel(plane, w, h, options_.compress, options_.large)});
         summary_.masks++;
     }
 
@@ -276,7 +317,8 @@ private:
         // Opacity and Fill as they were while the combined opacity is unchanged; else ours alone.
         if (std::abs(l.opacity - c.opacity / 255.0 * (c.fill / 255.0)) < 0.5 / 255) { r.opacity = c.opacity; r.fill = c.fill; }
         const uint64_t maskHash = l.mask ? psdMaskHash(l.mask->asset.image.get(), l.mask->enabled) : 0;
-        if (!c.maskData.empty() && placementKept && maskHash == c.maskHash && !dropped.count("vmsk") && !dropped.count("vsms")) {
+        // The stored mask channels are PSD's (16-bit row counts): as they are into a PSD only.
+        if (!options_.large && !c.maskData.empty() && placementKept && maskHash == c.maskHash && !dropped.count("vmsk") && !dropped.count("vsms")) {
             r.rawMask = c.maskData;
             r.channels.erase(std::remove_if(r.channels.begin(), r.channels.end(), [](auto& ch) { return ch.first == -2 || ch.first == -3; }), r.channels.end());
             if (encode_) for (auto& ch : c.maskChannels) r.channels.push_back(ch);
@@ -567,10 +609,10 @@ private:
     }
 };
 
-void writeRecord(Out& o, const Record& r) {
+void writeRecord(Out& o, const Record& r, bool large) {
     o.i32(r.top); o.i32(r.left); o.i32(r.bottom); o.i32(r.right);
     o.u16(unsigned(r.channels.size()));
-    for (auto& [id, data] : r.channels) { o.i16(id); o.u32(uint32_t(data.size())); }
+    for (auto& [id, data] : r.channels) { o.i16(id); o.length(data.size(), large); }
     // A pass-through folder says so in 'lsct' only; its record says Normal, as Photoshop writes it.
     o.str("8BIM"); o.str((r.section && r.blend == "pass") ? "norm" : r.blend.c_str());
     o.u8(r.opacity); o.u8(r.clipping ? 1 : 0); o.u8(0x08 | r.flags | (r.hidden ? 2 : 0)); o.u8(0);   // bit 3: bit 4 is meaningful; Photoshop applies legacy semantics without it
@@ -590,7 +632,7 @@ void writeRecord(Out& o, const Record& r) {
     for (size_t used = 1 + ascii.size(); used % 4; used++) extra.u8(0);
     auto block = [&](const char* key, const std::vector<uint8_t>& data) {
         extra.str("8BIM"); extra.str(key);
-        extra.u32(uint32_t(data.size() + (data.size() & 1)));
+        extra.length(data.size() + (data.size() & 1), large && longKey(key));
         extra.bytes(data);
         if (data.size() & 1) extra.u8(0);
     };
@@ -632,15 +674,17 @@ PsdExportSummary planPsdExport(const Document& document, const PsdExportOptions&
 }
 
 std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions& options, PsdExportSummary* summaryOut, std::string* error) {
-    if (document.width > psdMaxSide || document.height > psdMaxSide || document.width < 1 || document.height < 1) {
-        if (error) *error = "This document is larger than PSD allows (" + std::to_string(psdMaxSide) + " pixels a side). PSB export is not supported yet.";
+    const bool large = options.large;
+    const int maxSide = large ? psbMaxSide : psdMaxSide;
+    if (document.width > maxSide || document.height > maxSide || document.width < 1 || document.height < 1) {
+        if (error) *error = "This document is larger than PSD allows (" + std::to_string(psdMaxSide) + " pixels a side); export it as PSB.";
         return {};
     }
     PsdExportSummary summary;
     std::vector<Record> records = Writer(document, options, true, summary).records();
 
     Out f;
-    f.str("8BPS"); f.u16(1); for (int i = 0; i < 6; i++) f.u8(0);
+    f.str("8BPS"); f.u16(large ? 2 : 1); for (int i = 0; i < 6; i++) f.u8(0);
     f.u16(4);   // RGB and the merged image's transparency
     f.u32(uint32_t(document.height)); f.u32(uint32_t(document.width));
     f.u16(8); f.u16(3);
@@ -673,11 +717,11 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
         Out info;
         // Negative: the merged image's first alpha channel is its transparency.
         info.i16(-int(records.size()));
-        for (const Record& r : records) writeRecord(info, r);
+        for (const Record& r : records) writeRecord(info, r, large);
         for (const Record& r : records) for (auto& [id, data] : r.channels) info.bytes(data);
         if (info.b.size() & 1) info.u8(0);
         Out section;
-        section.u32(uint32_t(info.b.size()));
+        section.length(info.b.size(), large);
         section.bytes(info.b);
         section.u32(0);   // global layer mask info
         // Global blocks from the PSD the document came from (linked smart object data, patterns, text
@@ -697,16 +741,16 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
         if (document.psdCarry) for (const PsdBlock& block : document.psdCarry->globals) {
             if (rebuildLinks && block.key == "lnk2") continue;
             section.str("8BIM"); section.str(block.key.c_str());
-            section.u32(uint32_t(block.data.size())); section.bytes(block.data);
+            section.length(block.data.size(), large && longKey(block.key)); section.bytes(block.data);
             for (size_t n = block.data.size(); n % 4; n++) section.u8(0);
         }
         if (!links.empty()) {
             section.str("8BIM"); section.str("lnk2");
-            section.u32(uint32_t(links.size())); section.bytes(links);
+            section.length(links.size(), large); section.bytes(links);
             for (size_t n = links.size(); n % 4; n++) section.u8(0);
         }
-        if (section.b.size() > 0xFFFFFFFFull) { if (error) *error = "The layers are too large for a PSD file."; return {}; }
-        f.u32(uint32_t(section.b.size()));
+        if (!large && section.b.size() > 0xFFFFFFFFull) { if (error) *error = "The layers are too large for a PSD file; export it as PSB."; return {}; }
+        f.length(section.b.size(), large);
         f.bytes(section.b);
     }
     {
@@ -733,12 +777,16 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
         if (rle) {
             rows.resize(size_t(h) * 4);
             parallelRows(0, h, [&](int ya, int yb) {
-                for (int c : order) for (int y = ya; y < yb; y++) packBits(planes[size_t(c)].data() + size_t(y) * w, w, rows[size_t(c) * h + size_t(y)]);
+                for (int c : order) for (int y = ya; y < yb; y++) {
+                    const uint8_t* raw = planes[size_t(c)].data() + size_t(y) * w;
+                    packBits(raw, w, rows[size_t(c) * h + size_t(y)]);
+                    makeRowEven(rows[size_t(c) * h + size_t(y)], raw, w);
+                }
             }, 64);
         }
         if (rle) {
             f.u16(1);
-            for (auto& r : rows) f.u16(unsigned(r.size()));
+            for (auto& r : rows) { if (large) f.u32(uint32_t(r.size())); else f.u16(unsigned(r.size())); }
             for (auto& r : rows) f.bytes(r);
         } else {
             f.u16(0);

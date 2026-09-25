@@ -69,6 +69,7 @@ bool EditorSession::canAdjustPixels() const {
     if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image || isMaskSelected_) return false;
     if (!effectiveVisibleIds(document_->layers).count(layer->id)) return false;
     if (document_->selection && document_->selection->isEmpty()) return false;
+    if (layer->isLiveSmartObject()) return false;   // its contents: Edit Contents or Rasterize first
     return selectedLayerIds_.size() == 1;
 }
 

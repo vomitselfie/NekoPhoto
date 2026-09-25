@@ -120,11 +120,13 @@ void AutomationServer::registerDocumentHandlers() {
         const Document& doc = document();
         QString path = QFileInfo(str(p, "path")).absoluteFilePath();
         QString suffix = QFileInfo(path).suffix().toLower();
-        if (suffix == "psd") {
+        if (suffix == "psd" || suffix == "psb") {
             // Layered: what Photoshop cannot carry comes back in the reply, the way the export dialog lists it.
             PsdExportSummary summary;
             std::string error;
-            if (!exportPsd(doc, path.toStdString(), app::psdExportOptions(), &summary, &error)) fail("couldn't write " + path + ": " + qs(error));
+            PsdExportOptions options = app::psdExportOptions();
+            options.large = suffix == "psb";
+            if (!exportPsd(doc, path.toStdString(), options, &summary, &error)) fail("couldn't write " + path + ": " + qs(error));
             QJsonArray warnings, notes;
             for (auto& w : summary.warnings) warnings.append(qs(w));
             for (auto& n : summary.notes) notes.append(qs(n));
@@ -149,7 +151,7 @@ void AutomationServer::registerDocumentHandlers() {
             QString error;
             if (!writeQtImage(path, suffix == "webp" ? "webp" : "tiff", toQImage(*flat), integer(p, "quality", 90), session()->document()->resolution, &error))
                 fail("couldn't write " + path + ": " + error);
-        } else fail("path must end in .psd, .png, .jpg, .jpeg, .webp, .tif or .tiff", invalidParams);
+        } else fail("path must end in .psd, .psb, .png, .jpg, .jpeg, .webp, .tif or .tiff", invalidParams);
         return QJsonObject{{"path", path}, {"width", flat->width()}, {"height", flat->height()}};
     });
     add("document.close", [session](const QJsonObject& p) {

@@ -470,8 +470,13 @@ public:
     const std::string& smartObjectSource() const { return smartObjectSource_; }
     /// Sends this session's document back to the smart object it came from and marks it saved.
     bool commitToSmartObjectParent(QString* error);
+    /// Whether a pixel edit on the active layer would replace a smart object's contents with pixels (not on its
+    /// mask); `ask` also emits smartObjectPixelsRequested so the window can offer Edit Contents or Rasterize.
+    bool smartObjectBlocksPixels(bool ask = false);
 
 signals:
+    /// A pixel edit was stopped on smart object `id`: offer to edit its contents or rasterize it.
+    void smartObjectPixelsRequested(compositor::Uuid id);
     /// The document's pixels or structure changed; `region` is the document area affected (empty means all).
     void documentChanged(QRectF region);
     /// The document changed, but the canvas already shows it: a brush stroke committed as its live preview

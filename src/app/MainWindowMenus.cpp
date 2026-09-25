@@ -174,6 +174,7 @@ void MainWindow::buildMenus() {
     QMenu* adjustments = image->addMenu(tr("&Adjustments"));
     auto pixelAdjustment = [this, adjustments, &needsDocument](const QString& label, const QKeySequence& key, AdjustmentKind kind) {
         needsDocument(adjustments->addAction(label, key, this, [this, kind] {
+            if (session_->smartObjectBlocksPixels(true)) return;
             if (!session_->canAdjustPixels()) { showError(tr("Adjustments"), tr("Select a visible image layer (not a mask) to adjust its pixels.")); return; }
             (new PixelAdjustmentDialog(session_, kind, this))->show();
         }));
@@ -275,6 +276,7 @@ void MainWindow::buildMenus() {
     QMenu* filter = menuBar()->addMenu(tr("Filte&r"));
     auto filterAction = [this, filter, &needsDocument](const QString& label, FilterKind kind) {
         needsDocument(filter->addAction(label, this, [this, kind] {
+            if (session_->smartObjectBlocksPixels(true)) return;
             if (!session_->canAdjustPixels()) { showError(tr("Filters"), tr("Select a visible image layer (not a mask) to filter its pixels.")); return; }
             (new FilterDialog(session_, kind, this))->show();
         }));
@@ -286,7 +288,8 @@ void MainWindow::buildMenus() {
     filter->addSeparator();
     filter->addSeparator();
     needsDocument(filter->addAction(tr("&G'MIC…"), QKeySequence("Ctrl+Shift+G"), this, [this] {
-        if (!session_->canAdjustPixels()) { showError(tr("G'MIC"), tr("Select a layer with pixels first.")); return; }
+        if (session_->smartObjectBlocksPixels(true)) return;
+            if (!session_->canAdjustPixels()) { showError(tr("G'MIC"), tr("Select a layer with pixels first.")); return; }
         (new GmicDialog(session_, this))->show();
     }));
     removeBackgroundAction_ = needsDocument(filter->addAction(tr("Remove &Background…"), this, [this] {
@@ -299,7 +302,8 @@ void MainWindow::buildMenus() {
             if (answer == QMessageBox::Yes) showPreferences();
             return;
         }
-        if (!session_->canAdjustPixels()) { showError(tr("Remove Background"), tr("Select a visible image layer (not a mask) to remove its background.")); return; }
+        if (session_->smartObjectBlocksPixels(true)) return;
+            if (!session_->canAdjustPixels()) { showError(tr("Remove Background"), tr("Select a visible image layer (not a mask) to remove its background.")); return; }
         const ModelInfo* quick = ModelStore::modelById("pphumanseg");
         QString quickPath = quick && ModelStore::isPresent(*quick) ? ModelStore::pathFor(*quick) : QString();
         (new BackgroundDialog(session_, ModelStore::pathFor(ModelStore::selected()), quickPath, this))->show();

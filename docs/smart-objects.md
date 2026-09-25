@@ -72,6 +72,10 @@ In the Layer ▸ Smart Objects menu and over automation (`smartObject.*`, the MC
 - **Replace Contents** swaps in a file's contents; every instance keeps its centre and scale ("A copy" becomes "B
   copy", as Photoshop renames).
 - **Rasterize** keeps what the layer shows as plain pixels.
+- **Painting or filtering** a smart object asks first, as Photoshop does: Edit Contents (when it can be edited),
+  Rasterize, or Cancel. Automation refuses with the same two ways forward.
+
+Converted contents are a PSB, as Photoshop stores them (`8BPB`, "<name>.psb"); PSB contents edited go back as PSB.
 
 Contents that NekoPhoto cannot redraw in some instance (a preview-locked one) cannot be edited or replaced; the
 message says which layer and why. New sources are written into the PSD's `lnk2` as version-7 `liFD` elements
@@ -83,5 +87,4 @@ own colour profile. Edited and put back, such contents are written as an RGB PSD
 
 ## Not yet
 
-Warps, Smart Filters, relinking linked files, PSB writing (converted contents are PSD, so 30,000 pixels a side),
-and a prompt before painting turns a smart object into pixels.
+Warps, Smart Filters, relinking linked files.

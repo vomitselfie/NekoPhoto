@@ -12,6 +12,14 @@ using namespace app::rpc;
 
 namespace app {
 
+namespace {
+/// Pixel methods refuse a smart object (Photoshop asks; an agent is told what to do instead).
+void refuseSmartObject(EditorSession* s) {
+    if (s->smartObjectBlocksPixels())
+        fail("the active layer is a smart object: edit its contents (smartObject.editContents) or rasterize it (smartObject.rasterize) first", invalidParams);
+}
+} // namespace
+
 void AutomationServer::registerPixelsHandlers() {
     MainWindow* w = window_;
     const SessionOf session{w};
@@ -19,6 +27,7 @@ void AutomationServer::registerPixelsHandlers() {
 
     // ---- destructive pixel edits on the active layer, inside the selection
     add("pixels.adjust", [session, document](const QJsonObject& p) {
+        refuseSmartObject(session());
         document();
         EditorSession* s = session();
         if (!s->canAdjustPixels()) fail("the active layer has no pixels to adjust; select a pixel layer");
@@ -40,6 +49,7 @@ void AutomationServer::registerPixelsHandlers() {
         return QJsonObject{{"applied", QString::fromUtf8(adjustmentKindName(*kind))}};
     });
     add("pixels.filter", [session, document](const QJsonObject& p) {
+        refuseSmartObject(session());
         document();
         EditorSession* s = session();
         if (!s->canAdjustPixels()) fail("the active layer has no pixels to filter; select a pixel layer");
@@ -67,22 +77,27 @@ void AutomationServer::registerPixelsHandlers() {
         s->commitPixels(image, placed, QString::fromUtf8(filterKindName(*kind)));
         return QJsonObject{{"applied", QString::fromUtf8(filterKindName(*kind))}};
     });
-    add("pixels.invert", [session, document](const QJsonObject&) { document(); session()->invertActive(); return QJsonObject{}; });
+    add("pixels.invert", [session, document](const QJsonObject&) {
+        refuseSmartObject(session()); document(); session()->invertActive(); return QJsonObject{}; });
     add("pixels.fill", [session, document](const QJsonObject& p) {
+        refuseSmartObject(session());
         document();
         QColor color(str(p, "color", QStringLiteral("#000000")));
         if (!color.isValid()) fail("color must be a CSS colour such as #ff8800", invalidParams);
         session()->fillSelection(color);
         return QJsonObject{};
     });
-    add("pixels.clear", [session, document](const QJsonObject&) { document(); session()->clearSelectionPixels(); return QJsonObject{}; });
+    add("pixels.clear", [session, document](const QJsonObject&) {
+        refuseSmartObject(session()); document(); session()->clearSelectionPixels(); return QJsonObject{}; });
     add("pixels.contentAwareFill", [session, document](const QJsonObject&) {
+        refuseSmartObject(session());
         document();
         QString error;
         if (!session()->contentAwareFill(&error)) fail(error.isEmpty() ? "content-aware fill needs a selection on a pixel layer" : error);
         return QJsonObject{};
     });
     add("pixels.gmic", [session, document](const QJsonObject& p) {
+        refuseSmartObject(session());
         // A G'MIC command on the active layer's pixels inside the selection, e.g. "unsharp 2,1.5" or "fx_dreamsmooth 3,0,1,0.8,0,0.8,0,24,0".
         document();
         EditorSession* s = session();
@@ -134,6 +149,7 @@ void AutomationServer::registerPixelsHandlers() {
         return QJsonObject{{"installed", !GmicRunner::executable().isEmpty()}, {"version", GmicRunner::version()}, {"catalogue", path}, {"filters", out}};
     });
     add("pixels.removeBackground", [session, document](const QJsonObject& p) {
+        refuseSmartObject(session());
         document();
         if (!ModelStore::supported()) fail("this build has no OpenCV, so the segmentation model can't run");
         if (!ModelStore::ready()) fail("Remove Background is off or its model isn't downloaded: enable it in Edit > Preferences (or run nekophoto --download-model isnet)");

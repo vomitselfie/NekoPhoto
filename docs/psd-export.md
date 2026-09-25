@@ -41,7 +41,9 @@ Each is listed before you export (the export dialog) or in the reply (`warnings`
 
 ## Limits
 
-- PSD only; documents over 30,000 pixels a side need PSB, which is not written yet.
+- PSD, or PSB (Photoshop's large format: export to a `.psb` path). Every merged image is written with even-length
+  compressed rows, which Photoshop requires of a smart object's embedded file when the document keeps Smart Filter
+  caches.
 - 8 bits per channel, RGB.
 - Not yet: editable Photoshop text, layer effects, smart objects, Gradient Map and other adjustments as
   Photoshop adjustment layers.
