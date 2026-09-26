@@ -1,6 +1,7 @@
 // The main window's file handling: new, open, import, save, export, and files dropped on the window.
 #include "TextLayer.h"
 #include "MainWindow.h"
+#include "compositor/raw.h"
 #include "compositor/psd_writer.h"
 #include "CanvasWidget.h"
 #include "Dialogs.h"
@@ -123,6 +124,15 @@ void MainWindow::importFile(const QString& path, std::optional<QPointF> at) {
 
 namespace {
 std::shared_ptr<const compositor::Image> readImageFile(const QString& path, QString* error) {
+    if (compositor::isRawPath(path.toStdString())) {
+        // A camera RAW file, developed through LibRaw (a few seconds for a large sensor).
+        QApplication::setOverrideCursor(Qt::BusyCursor);
+        std::string message;
+        auto developed = compositor::decodeRaw(path.toStdString(), &message);
+        QApplication::restoreOverrideCursor();
+        if (!developed && error) *error = QString::fromStdString(message);
+        return developed;
+    }
     QImageReader reader(path);
     reader.setAutoTransform(true);
     QImage image = reader.read();

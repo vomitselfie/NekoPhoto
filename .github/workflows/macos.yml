@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
       - name: Homebrew packages
-        run: brew install ninja qt libpng libmypaint pkg-config
+        run: brew install ninja qt libpng libmypaint libraw pkg-config
 
       - name: Vendored OpenCV (cached)
         id: opencv

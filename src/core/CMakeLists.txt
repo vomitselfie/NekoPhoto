@@ -55,6 +55,27 @@ if(COMPOSITOR_WITH_MYPAINT)
 endif()
 set(COMPOSITOR_HAVE_MYPAINT ${COMPOSITOR_HAVE_MYPAINT} PARENT_SCOPE)
 
+# LibRaw (LGPL 2.1 / CDDL 1.0) develops camera RAW files. Optional: without it RAW files are refused.
+option(COMPOSITOR_WITH_LIBRAW "Open camera RAW files through LibRaw" ON)
+set(COMPOSITOR_HAVE_LIBRAW OFF)
+if(COMPOSITOR_WITH_LIBRAW)
+    pkg_check_modules(LIBRAW IMPORTED_TARGET libraw)
+    if(LIBRAW_FOUND)
+        # Ubuntu's libraw.pc asks for -fopenmp as libmypaint's does; libraw.so links its own runtime (see above).
+        foreach(property INTERFACE_LINK_OPTIONS INTERFACE_LINK_LIBRARIES INTERFACE_COMPILE_OPTIONS)
+            get_target_property(values PkgConfig::LIBRAW ${property})
+            if(values)
+                list(FILTER values EXCLUDE REGEX "^-f?openmp$|^-fopenmp")
+                set_target_properties(PkgConfig::LIBRAW PROPERTIES ${property} "${values}")
+            endif()
+        endforeach()
+        set(COMPOSITOR_HAVE_LIBRAW ON)
+        message(STATUS "RAW: LibRaw ${LIBRAW_VERSION}")
+    else()
+        message(STATUS "RAW: LibRaw not found, camera RAW files disabled")
+    endif()
+endif()
+
 # SQLite reads Clip Studio brushes (.sut) and projects (.clip). Optional: without it those imports are refused.
 option(COMPOSITOR_WITH_SQLITE "Import Clip Studio brushes through SQLite" ON)
 set(COMPOSITOR_HAVE_SQLITE OFF)
@@ -108,6 +129,7 @@ add_library(compositor_core STATIC
     src/layerstyle_write.cpp
     src/layerstyle_json.cpp
     src/toning.cpp
+    src/raw.cpp
     src/colour.cpp
     src/psd_carry.cpp
     src/smartobject.cpp
@@ -155,6 +177,10 @@ if(COMPOSITOR_HAVE_SQLITE)
     target_sources(compositor_core PRIVATE src/csp_clip_import.c)
     target_link_libraries(compositor_core PRIVATE ${COMPOSITOR_SQLITE_TARGET})
     target_compile_definitions(compositor_core PRIVATE COMPOSITOR_HAVE_SQLITE)
+endif()
+if(COMPOSITOR_HAVE_LIBRAW)
+    target_link_libraries(compositor_core PRIVATE PkgConfig::LIBRAW)
+    target_compile_definitions(compositor_core PRIVATE COMPOSITOR_HAVE_LIBRAW)
 endif()
 if(COMPOSITOR_HAVE_MYPAINT)
     target_link_libraries(compositor_core PRIVATE PkgConfig::MYPAINT)

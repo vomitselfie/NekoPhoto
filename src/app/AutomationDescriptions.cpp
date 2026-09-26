@@ -58,7 +58,7 @@ const MethodDoc methodDocs[] = {
      "maxLayers:integer=80 List at most this many layers"},
     {"document.new", "A new document in the current tab (or a new tab if this one has a document).",
      "width:integer=1920 Pixels; height:integer=1080 Pixels; resolution:number=72 Pixels per inch; emptyLayer:bool=true Start with a blank pixel layer"},
-    {"document.open", "Open a project (.comp), Photoshop (.psd/.psb), Clip Studio (.clip) or image file. With a document already open, an image is imported as a layer.",
+    {"document.open", "Open a project (.comp), Photoshop (.psd/.psb), Clip Studio (.clip), image or camera RAW file (when app.info reports raw). With a document already open, an image is imported as a layer.",
      "path:string! File path"},
     {"document.import", "Import an image file as a new layer.", "path:string! File path; x:number Left edge in document pixels; y:number Top edge"},
     {"document.save", "Save as a project (.comp).", "path:string Where to save (default: where it was opened or last saved)"},
