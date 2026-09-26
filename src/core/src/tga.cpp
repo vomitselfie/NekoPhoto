@@ -4,6 +4,7 @@
 #include "compositor/tga.h"
 #include "compositor/document.h"
 #include "format_io.h"
+#include <algorithm>
 #include <array>
 
 namespace compositor {
@@ -90,7 +91,7 @@ std::shared_ptr<Image> decodeTgaImage(const uint8_t* data, size_t size, std::str
         if (r.remaining() < total) return failed(error, "TGA data ended unexpectedly");
         pixels.assign(data + r.pos, data + r.pos + total);
     } else {
-        pixels.reserve(total);
+        pixels.reserve(std::min(total, r.remaining() * 128));   // at most 128 pixels per packet byte: no more than the data can fill
         while (pixels.size() < total) {
             const uint8_t packet = r.u8();
             const size_t run = size_t(packet & 0x7f) + 1;

@@ -7,6 +7,7 @@
 #include "compositor/png.h"
 #include "compositor/render.h"
 #include <cstdlib>
+#include <chrono>
 #include <cstring>
 #include <filesystem>
 #include <string>
@@ -199,7 +200,121 @@ Bytes makeDocument(bool withText = false) {
     return file;
 }
 
+/// A container holding `streams` stored raw; `declaredSize` and `compression` override the first stream's entry.
+Bytes packContainer(const std::vector<std::pair<std::string, Bytes>>& streams, uint64_t declaredSize = 0, uint8_t compression = 0) {
+    Bytes file;
+    u32(file, 0x414BFF00u); u16(file, 11); u16(file, 0); u32(file, tag("Prsn"));
+    u32(file, 0x666E4923u);
+    const size_t fatAt = file.size();
+    u64(file, 0); u64(file, 0);
+    for (int i = 0; i < 32; i++) u8(file, 0);
+    u32(file, 0x746F7250u); u32(file, 1);
+    std::vector<uint64_t> offsets;
+    for (auto& [name, data] : streams) {
+        offsets.push_back(file.size());
+        u32(file, 0x6C694623u);
+        file.insert(file.end(), data.begin(), data.end());
+    }
+    const uint64_t fat = file.size();
+    for (int i = 0; i < 8; i++) file[fatAt + size_t(i)] = uint8_t(fat >> (8 * i));
+    u32(file, 0x33544623u);
+    u64(file, 0);
+    for (int i = 0; i < 32; i++) u8(file, 0);
+    u32(file, uint32_t(streams.size()));
+    u64(file, 0);
+    u16(file, 0); u8(file, 0);
+    for (size_t i = 0; i < streams.size(); i++) {
+        const Bytes& data = streams[i].second;
+        u32(file, uint32_t(i + 1)); u8(file, 0);
+        u64(file, offsets[i]); u64(file, i == 0 && declaredSize ? declaredSize : data.size()); u64(file, data.size());
+        u32(file, uint32_t(crc32(0, data.data(), uInt(data.size()))));
+        u8(file, i == 0 ? compression : 0);
+        u32(file, 0);
+        u16(file, uint16_t(streams[i].first.size()));
+        file.insert(file.end(), streams[i].first.begin(), streams[i].first.end());
+    }
+    return file;
+}
+
+/// doc.dat's opening: the root, the document, its spread, up to the spread's children field.
+Bytes treeToSpread(Bytes& tree) {
+    u32(tree, 0x534BFF00u); u16(tree, 2); u32(tree, tag("Pers")); u16(tree, 0); u32(tree, 30);
+    classBegin(tree, "DocR", "Docu");
+    field(tree, 0x15, "DfSz"); u32(tree, 5); u32(tree, 4);
+    classListBegin(tree, "Chld", "Sprd", 1);
+    u8(tree, 1);
+    boolField(tree, "SprT", true);
+    return tree;
+}
+void treeFromSpread(Bytes& tree) { end(tree); end(tree); end(tree); }   // spread, document, root
+
 } // namespace
+
+TEST_CASE(a_group_that_contains_itself_is_left_out) {
+    // A shared group (id 7) whose children list names shared class 7 again: once a stack overflow.
+    Bytes tree;
+    treeToSpread(tree);
+    field(tree, 0x31 | 0x80, "Chld"); u32(tree, 1);
+    u8(tree, 1); u32(tree, 7); u8(tree, 1); u32(tree, tag("Grup"));   // shared class 7, type Grup
+    stringField(tree, "Desc", "Loop");
+    field(tree, 0x31 | 0x80, "Chld"); u32(tree, 1);
+    u8(tree, 2); u32(tree, 7);   // a reference to itself
+    end(tree);   // group
+    treeFromSpread(tree);
+    std::string error;
+    auto imported = importAffinityBytes(packContainer({{"doc.dat", tree}}), &error);
+    // Once a stack overflow. The loop is skipped; with nothing else to draw the document is then refused cleanly.
+    CHECK(!imported);
+    CHECK(error.find("no layers") != std::string::npos);
+}
+
+TEST_CASE(a_stream_claiming_more_than_it_holds_fails_before_allocating) {
+    // doc.dat stored zlib-compressed, 40 bytes of data declaring 500 MB: refused without taking that memory first.
+    Bytes tree;
+    treeToSpread(tree);
+    treeFromSpread(tree);
+    Bytes packed(tree.size() + 64);
+    uLongf packedSize = uLongf(packed.size());
+    compress(packed.data(), &packedSize, tree.data(), uLong(tree.size()));
+    packed.resize(packedSize);
+    std::string error;
+    CHECK(!importAffinityBytes(packContainer({{"doc.dat", packed}}, 500ull << 20, 1), &error));
+    CHECK(!error.empty());
+}
+
+TEST_CASE(tiles_naming_a_big_stream_are_not_inflated_each_time) {
+    // One channel of 256 x 1 tiles, every tile naming the same 4 MB stream (a tile holds 64 KiB at most).
+    const int tiles = 256;
+    Bytes tree;
+    treeToSpread(tree);
+    classListBegin(tree, "Chld", "Rstr", 1);
+    u8(tree, 1);
+    stringField(tree, "Desc", "Paint");
+    classBegin(tree, "Bitm", "DyBm");
+    enumField(tree, "Frmt", 0, 0);
+    i32Field(tree, "BmpW", 256 * tiles);
+    i32Field(tree, "BmpH", 256);
+    for (int ch = 1; ch <= 4; ch++) {
+        const std::string n = std::to_string(ch);
+        const char twi[5] = {'T', 'W', 'i', n[0], 0}, thi[5] = {'T', 'H', 'i', n[0], 0}, sta[5] = {'S', 't', 'a', n[0], 0}, idx[5] = {'I', 'd', 'x', n[0], 0};
+        i32Field(tree, twi, tiles);
+        i32Field(tree, thi, 1);
+        field(tree, 0x01 | 0x80, sta); u32(tree, tiles); for (int t = 0; t < tiles; t++) u8(tree, 4);
+        classListBegin(tree, idx, "Blck", tiles);
+        for (int t = 0; t < tiles; t++) {
+            u8(tree, 1);
+            field(tree, 0x33, "Data"); u32(tree, tag("Strm")); u32(tree, 3); tree.insert(tree.end(), {'d', '/', '1'});
+            end(tree);
+        }
+    }
+    end(tree);   // DyBm
+    end(tree);   // layer
+    treeFromSpread(tree);
+    const auto started = std::chrono::steady_clock::now();
+    std::string error;
+    (void)importAffinityBytes(packContainer({{"doc.dat", tree}, {"d/1", Bytes(size_t(4) << 20, 7)}}), &error);
+    CHECK(std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count() < 10);
+}
 
 TEST_CASE(a_written_document_opens_with_its_layer) {
     std::string error;

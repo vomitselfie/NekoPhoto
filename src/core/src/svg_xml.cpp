@@ -15,6 +15,7 @@ namespace {
 constexpr std::size_t kMaxNodes = 250000;
 constexpr std::size_t kMaxDepth = 512;
 constexpr std::size_t kMaxEntityOutput = 8U * 1024U * 1024U;
+constexpr std::size_t kMaxEntityTotal = 32U * 1024U * 1024U;
 constexpr int kMaxEntityDepth = 8;
 
 constexpr std::string_view kSvgNamespaceUri = "http://www.w3.org/2000/svg";
@@ -144,6 +145,8 @@ struct Parser {
   std::size_t node_count{0};
   // Internal-DTD general entities, raw replacement text (decoded at use).
   std::map<std::string, std::string, std::less<>> entities;
+  // Bytes entity references have added across the whole document (each string is also capped on its own).
+  mutable std::size_t entity_output{0};
 
   [[noreturn]] void fail(std::string message, std::size_t at) const {
     std::size_t line = 1;
@@ -323,6 +326,12 @@ std::string decoded(const Parser& parser, std::string_view raw, bool normalize_w
   std::string out;
   out.reserve(raw.size());
   decode_text(parser, raw, normalize_whitespace, out, 0);
+  if (out.size() > raw.size()) {
+    parser.entity_output += out.size() - raw.size();
+    if (parser.entity_output > kMaxEntityTotal) {
+      parser.fail("entity expansion too large across the document", parser.pos);
+    }
+  }
   return out;
 }
 

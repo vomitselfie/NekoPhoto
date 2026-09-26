@@ -162,6 +162,7 @@ constexpr uint64_t maxStreamBytes = 512ull << 20;
 constexpr int tileSize = 256;
 constexpr int maxLayers = 20000;
 constexpr int maxEmbedDepth = 3;
+constexpr size_t maxNesting = 128;   // layer nesting; real documents stay within a few dozen
 
 [[noreturn]] void fail(const std::string& what) { throw std::runtime_error(what); }
 
@@ -280,19 +281,51 @@ std::vector<uint8_t> extractStream(std::span<const uint8_t> bytes, const Stream&
     const uint64_t stored = algorithm == 0 ? s.size : s.compressed;
     if (stored > r.remaining()) fail("Affinity stream '" + name + "' is truncated.");
     const uint8_t* source = bytes.data() + r.position();
-    std::vector<uint8_t> out(size_t(s.size));
+    // The declared size is only trusted as a ceiling: the output grows in steps as the data inflates, so a small
+    // stream claiming hundreds of megabytes fails before that memory is taken.
+    std::vector<uint8_t> out;
+    constexpr size_t step = size_t(8) << 20;
+    const size_t expected = size_t(s.size);
     if (algorithm == 1) {
-        uLongf length = uLongf(s.size);
-        if (uncompress(out.data(), &length, source, uLong(stored)) != Z_OK || length != s.size) fail("Affinity stream '" + name + "' failed to decompress.");
+        z_stream z{};
+        if (inflateInit(&z) != Z_OK) fail("Affinity stream '" + name + "' failed to decompress.");
+        z.next_in = const_cast<Bytef*>(source);
+        z.avail_in = uInt(std::min<uint64_t>(stored, UINT32_MAX));
+        int rc = Z_OK;
+        while (rc == Z_OK && out.size() < expected) {
+            const size_t have = out.size();
+            out.resize(std::min(expected, have + step));
+            z.next_out = out.data() + have;
+            z.avail_out = uInt(out.size() - have);
+            rc = inflate(&z, Z_NO_FLUSH);
+            out.resize(out.size() - z.avail_out);
+            if (rc == Z_OK && out.size() == have) break;
+        }
+        inflateEnd(&z);
+        if (rc != Z_STREAM_END || out.size() != expected) fail("Affinity stream '" + name + "' failed to decompress.");
     } else if (algorithm == 2) {
 #ifdef COMPOSITOR_HAVE_ZSTD
-        const size_t produced = ZSTD_decompress(out.data(), out.size(), source, size_t(stored));
-        if (ZSTD_isError(produced) || produced != out.size()) fail("Affinity stream '" + name + "' failed to decompress.");
+        ZSTD_DStream* z = ZSTD_createDStream();
+        if (!z) fail("Affinity stream '" + name + "' failed to decompress.");
+        ZSTD_inBuffer in{source, size_t(stored), 0};
+        size_t rc = 1;
+        bool broken = false;
+        while (out.size() < expected) {
+            const size_t have = out.size();
+            out.resize(std::min(expected, have + step));
+            ZSTD_outBuffer o{out.data() + have, out.size() - have, 0};
+            rc = ZSTD_decompressStream(z, &o, &in);
+            out.resize(have + o.pos);
+            if (ZSTD_isError(rc)) { broken = true; break; }
+            if (o.pos == 0 && (rc == 0 || in.pos == in.size)) break;   // frame done or input spent
+        }
+        ZSTD_freeDStream(z);
+        if (broken || out.size() != expected) fail("Affinity stream '" + name + "' failed to decompress.");
 #else
         fail("This build reads no zstd-compressed Affinity streams (it was made without libzstd).");
 #endif
     } else if (algorithm == 0) {
-        std::memcpy(out.data(), source, size_t(stored));
+        out.assign(source, source + size_t(stored));   // stored <= what the file holds
     } else {
         fail("Affinity stream '" + name + "' uses an unknown compression.");
     }
@@ -519,6 +552,8 @@ PlaneStatus decodePlane(const Source& src, const Class& dybm, const PlaneTags& t
     const affinity::Field* idx = dybm.field(tags.index);
     const ClassList* blocks = idx ? std::get_if<ClassList>(&idx->value) : nullptr;
     size_t block = 0;
+    const uint64_t inflateBudget = uint64_t(out.bytes.size()) + (uint64_t(1) << 20);
+    uint64_t inflated = 0;
     for (size_t t = 0; t < codes->size(); t++) {
         const size_t tx = (t % size_t(tilesW)) * tileSize, ty = (t / size_t(tilesW)) * tileSize;
         if (ty >= out.rows) break;
@@ -543,6 +578,11 @@ PlaneStatus decodePlane(const Source& src, const Class& dybm, const PlaneTags& t
             if (!embedded) break;
             auto stream = src.container.streams.find(embedded->data);
             if (stream == src.container.streams.end()) break;
+            // A tile's stream holds one tile at most, and the plane decompresses no more than it holds (plus slack):
+            // many tiles naming one big stream would otherwise inflate it again for each.
+            if (stream->second.size > uint64_t(tileSize) * tileSize) break;
+            if (inflated + stream->second.size > inflateBudget) return PlaneStatus::Invalid;
+            inflated += stream->second.size;
             std::vector<uint8_t> tile;
             try { tile = extractStream(src.bytes, stream->second, embedded->data, nullptr); } catch (const std::exception&) { break; }
             if (tile.size() == size_t(tileSize) * tileSize) {
@@ -552,8 +592,10 @@ PlaneStatus decodePlane(const Source& src, const Class& dybm, const PlaneTags& t
             // A partial tile: only a sub-rectangle, [x, y, w, h] or [x0, y0, x1, y1], told apart by the stream size.
             const auto rect = b.vector(tag("Rect"));
             if (rect.size() != 4) break;
-            const int64_t rx = int64_t(rect[0]), ry = int64_t(rect[1]);
-            int64_t rw = int64_t(rect[2]), rh = int64_t(rect[3]);
+            // Clamped before converting: the rectangle's doubles come from the file.
+            auto whole = [](double v) { return std::isfinite(v) ? int64_t(std::clamp(v, -1e9, 1e9)) : int64_t(-1); };
+            const int64_t rx = whole(rect[0]), ry = whole(rect[1]);
+            int64_t rw = whole(rect[2]), rh = whole(rect[3]);
             if (rw > rx && rh > ry && uint64_t(rw - rx) * uint64_t(rh - ry) == tile.size()) { rw -= rx; rh -= ry; }
             if (rx < 0 || ry < 0 || rw <= 0 || rh <= 0 || rx + rw > tileSize || ry + rh > tileSize || uint64_t(rw) * uint64_t(rh) != tile.size()) break;
             for (int64_t row = 0; row < rh; row++)
@@ -1622,6 +1664,7 @@ struct Context {
     uint32_t documentVersion = 0;
     Affine6 transform = identity();
     int leftOut = 0;   // visible content not carried
+    std::vector<const Class*> open;   // the layers being built, outermost first: a shared class may name its ancestor
 };
 
 Document readContainer(std::span<const uint8_t> bytes, std::vector<std::string>& notes, int embedDepth, const PsdImportOptions& options, ImagePtr* preview,
@@ -1703,8 +1746,20 @@ void appendMaskPaths(const Class& node, const Affine6& base, int depth, VectorPa
     unsupported++;
 }
 
-/// Coverage of `path` over the canvas.
+/// Whether every coordinate of the path is finite and within a range the rasterizer's integer maths can hold
+/// (a damaged file's doubles can be anything).
+bool plausiblePath(const VectorPath& path) {
+    constexpr double limit = 1e7;
+    for (const auto& s : path.subpaths)
+        for (const auto& k : s.knots)
+            for (double v : {k.x, k.y, k.inX, k.inY, k.outX, k.outY})
+                if (!std::isfinite(v) || std::abs(v) > limit) return false;
+    return true;
+}
+
+/// Coverage of `path` over the canvas (none when the path is implausible).
 Plane canvasCoverage(const Context& ctx, const VectorPath& path) {
+    if (!plausiblePath(path)) return std::make_shared<GrayImage>(ctx.width, ctx.height, 0);
     return rasterizeVectorMask(path, Rect(0, 0, ctx.width, ctx.height), 1, ctx.width, ctx.height);
 }
 
@@ -1829,6 +1884,7 @@ std::optional<Built> drawVector(Context& ctx, const Class& node, const std::stri
     if (paint.gradient) ctx.notes.push_back("Layer \"" + name + "\": a gradient fill or stroke was left out.");
     if (paint.texturedStroke) ctx.notes.push_back("Layer \"" + name + "\": Affinity's textured brush stroke was drawn as a solid stroke.");
 
+    if (!plausiblePath(path) || !std::isfinite(paint.line.width) || paint.line.width > 1e6) { *why = "has geometry outside any plausible range"; return std::nullopt; }
     // Draw within the canvas: the path's bounds (handles included) grown by the stroke.
     double x0 = 1e18, y0 = 1e18, x1 = -1e18, y1 = -1e18;
     for (const auto& s : path.subpaths)
@@ -2195,6 +2251,13 @@ void buildLayers(Context& ctx, const ClassList& children, std::vector<Built>& ou
         if (!child) continue;
         if (++ctx.layerCount > maxLayers) fail("The Affinity document has an implausible number of layers.");
         const Class& node = *child;
+        // Shared classes are references, so a damaged file can make a layer its own descendant: skip the repeat.
+        if (std::find(ctx.open.begin(), ctx.open.end(), &node) != ctx.open.end() || ctx.open.size() >= maxNesting) {
+            ctx.notes.push_back("Layers nested in a loop or too deeply were left out; the file may be damaged.");
+            continue;
+        }
+        ctx.open.push_back(&node);
+        struct Close { std::vector<const Class*>& open; ~Close() { open.pop_back(); } } close{ctx.open};
         const std::string name = layerName(node);
         const std::string display = name.empty() ? "Layer" : name;
         const uint32_t type = node.type;
