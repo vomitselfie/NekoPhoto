@@ -4,6 +4,7 @@
 #include "compositor/psd.h"
 #include "compositor/psd_writer.h"
 #include <QFont>
+#include <QPointF>
 #include <QString>
 #include <memory>
 
@@ -16,8 +17,9 @@ QFont fontFor(const compositor::LayerText& text);
 /// Margin, in pixels, the raster keeps around the glyphs (so antialiasing and overhangs are not clipped).
 constexpr int textPadding = 4;
 /// The text drawn at 1:1 document pixels, premultiplied, sized to its lines plus the padding; null when it
-/// would exceed the document's pixel budget.
-std::shared_ptr<compositor::Image> renderTextLayer(const compositor::LayerText& text);
+/// would exceed the document's pixel budget. Warped text (Warp Text) is bent over its layout box; `warpOffset`
+/// then gives where the bent raster's top-left sits from the upright one's.
+std::shared_ptr<compositor::Image> renderTextLayer(const compositor::LayerText& text, QPointF* warpOffset = nullptr);
 /// How renderTextLayer lays `text` out, for writing it as a Photoshop type layer.
 std::optional<compositor::PsdTextMetrics> psdTextMetrics(const compositor::LayerText& text);
 /// PSD export options with text layers written as Photoshop type layers.

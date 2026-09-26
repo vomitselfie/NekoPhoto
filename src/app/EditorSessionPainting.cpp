@@ -476,7 +476,15 @@ void EditorSession::finishShape() {
 
 bool EditorSession::redrawText(Layer& layer) {
     if (!layer.text) return false;
-    auto image = renderTextLayer(*layer.text);
+    // Warped text: where the bent raster sits from the upright one, now and at the last redraw (so the upright text
+    // stays where it was and only the bend moves the pixels).
+    QPointF warpOffset;
+    auto image = renderTextLayer(*layer.text, &warpOffset);
+    QPointF oldWarpOffset;
+    if (layer.extraJson.find("textWarpOffset") != std::string::npos) {
+        const QJsonArray o = QJsonDocument::fromJson(QByteArray::fromStdString(layer.extraJson)).object().value("textWarpOffset").toArray();
+        if (o.size() == 2) oldWarpOffset = QPointF(o[0].toDouble(), o[1].toDouble());
+    }
     if (!image) { emit error(tr("That text is too large to render. Text can cover up to 100 megapixels.")); return false; }
     // A layer scaled on the canvas keeps its scale; the box follows the new raster.
     double scaleX = 1, scaleY = 1;
@@ -498,6 +506,12 @@ bool EditorSession::redrawText(Layer& layer) {
         const Point centre(corner->x + hw * c - hh * sn, corner->y + hw * sn + hh * c);
         layer.transform.origin = Point(centre.x - hw, centre.y - hh);
     }
+    if (warpOffset != oldWarpOffset) {
+        // The bend's own shift, turned with the layer.
+        const double a = layer.transform.radians(), c = std::cos(a), sn = std::sin(a);
+        const double dx = (warpOffset.x() - oldWarpOffset.x()) * scaleX, dy = (warpOffset.y() - oldWarpOffset.y()) * scaleY;
+        layer.transform.origin = Point(layer.transform.origin.x + dx * c - dy * sn, layer.transform.origin.y + dx * sn + dy * c);
+    }
     // Text opened from a PSD shows Photoshop's pixels until this first redraw: put our first baseline where
     // Photoshop anchored its own, then forget the anchor.
     if (layer.extraJson.find("psdTextAnchor") != std::string::npos) {
@@ -509,8 +523,9 @@ bool EditorSession::redrawText(Layer& layer) {
             if (auto m = psdTextMetrics(*layer.text)) {
                 // Box text is anchored at its frame's top-left, point text at its first baseline.
                 const bool boxed = layer.text->boxWidth > 0 && layer.text->boxHeight > 0;
-                const double x = m->blockLeft + (boxed ? 0 : layer.text->alignment == 1 ? m->blockWidth / 2 : layer.text->alignment == 2 ? m->blockWidth : 0);
-                const double y = m->blockTop + (boxed ? 0 : m->ascent);
+                // (In the bent raster's pixels when warped: the upright anchor, less the bend's shift.)
+                const double x = m->blockLeft + (boxed ? 0 : layer.text->alignment == 1 ? m->blockWidth / 2 : layer.text->alignment == 2 ? m->blockWidth : 0) - warpOffset.x();
+                const double y = m->blockTop + (boxed ? 0 : m->ascent) - warpOffset.y();
                 if (turned == 0) layer.transform.origin = Point(anchor[0].toDouble() - x * scaleX, anchor[1].toDouble() - y * scaleY);
                 else {
                     // The layer turns about its centre: put the centre where the turned anchor offset says.
@@ -525,6 +540,13 @@ bool EditorSession::redrawText(Layer& layer) {
         }
         extra.remove("psdTextAnchor");
         extra.remove("psdTextRotation");
+        layer.extraJson = extra.isEmpty() ? std::string() : QJsonDocument(extra).toJson(QJsonDocument::Compact).toStdString();
+    }
+    // Remember the bend's shift for the next redraw.
+    if (warpOffset != oldWarpOffset || layer.extraJson.find("textWarpOffset") != std::string::npos) {
+        QJsonObject extra = QJsonDocument::fromJson(QByteArray::fromStdString(layer.extraJson.empty() ? std::string("{}") : layer.extraJson)).object();
+        if (warpOffset.isNull()) extra.remove("textWarpOffset");
+        else extra.insert("textWarpOffset", QJsonArray{warpOffset.x(), warpOffset.y()});
         layer.extraJson = extra.isEmpty() ? std::string() : QJsonDocument(extra).toJson(QJsonDocument::Compact).toStdString();
     }
     return true;

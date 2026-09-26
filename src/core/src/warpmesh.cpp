@@ -2,6 +2,7 @@
 #include "compositor/warpmesh.h"
 #include <algorithm>
 #include <cmath>
+#include <functional>
 
 namespace compositor {
 
@@ -299,29 +300,23 @@ void distortWarpMesh(WarpMesh& m, double horizontal, double vertical) {
             scaleLine(size_t(c), size_t(m.uOrder), m.vOrder, 1 + (2.0 * c / (m.uOrder - 1) - 1) * horizontal / 100);
 }
 
-std::optional<WarpedRaster> renderWarpedImage(const Image& image, const WarpMesh& mesh, const std::array<double, 8>& quad) {
-    if (image.isEmpty() || mesh.xs.size() != size_t(mesh.uOrder * mesh.vOrder) || mesh.ys.size() != mesh.xs.size()) return std::nullopt;
-    for (double v : quad) if (!std::isfinite(v)) return std::nullopt;
-    // The control-point hull, not the warp bounds, is what Photoshop's placement quad describes.
-    const auto [x0, x1] = std::minmax_element(mesh.xs.begin(), mesh.xs.end());
-    const auto [y0, y1] = std::minmax_element(mesh.ys.begin(), mesh.ys.end());
-    const auto h = rectToQuad(*x0, *y0, *x1, *y1, quad);
-    if (!h) return std::nullopt;
+namespace {
 
-    // A forward lattice of the surface in document space, cells about two pixels across.
-    auto doc = [&](double u, double v) { return apply(*h, evaluateWarpMesh(mesh, u, v)); };
+// Draws `image` through a forward lattice: `at(u, v)` gives the document point for the image's (u, v) in [0, 1]^2.
+std::optional<WarpedRaster> resampleThrough(const Image& image, const std::function<Point(double, double)>& at) {
     double minX = 1e300, minY = 1e300, maxX = -1e300, maxY = -1e300;
     for (int j = 0; j <= 16; j++)
         for (int i = 0; i <= 16; i++) {
-            const Point p = doc(i / 16.0, j / 16.0);
+            const Point p = at(i / 16.0, j / 16.0);
             minX = std::min(minX, p.x); maxX = std::max(maxX, p.x); minY = std::min(minY, p.y); maxY = std::max(maxY, p.y);
         }
     if (!(maxX - minX < maxImageSide) || !(maxY - minY < maxImageSide)) return std::nullopt;
+    // Cells about two pixels across.
     const int cellsX = std::clamp(int(std::ceil((maxX - minX) / 2)), 8, 2048), cellsY = std::clamp(int(std::ceil((maxY - minY) / 2)), 8, 2048);
     std::vector<Point> lattice(size_t((cellsX + 1) * (cellsY + 1)));
     for (int j = 0; j <= cellsY; j++)
         for (int i = 0; i <= cellsX; i++) {
-            const Point p = doc(double(i) / cellsX, double(j) / cellsY);
+            const Point p = at(double(i) / cellsX, double(j) / cellsY);
             lattice[size_t(j * (cellsX + 1) + i)] = p;
             minX = std::min(minX, p.x); maxX = std::max(maxX, p.x); minY = std::min(minY, p.y); maxY = std::max(maxY, p.y);
         }
@@ -357,6 +352,32 @@ std::optional<WarpedRaster> renderWarpedImage(const Image& image, const WarpMesh
                 }
         }
     return WarpedRaster{out, LayerTransform(Point(left, top), Size(w, hgt))};
+}
+
+} // namespace
+
+std::optional<WarpedRaster> renderWarpedImage(const Image& image, const WarpMesh& mesh, const std::array<double, 8>& quad) {
+    if (image.isEmpty() || mesh.xs.size() != size_t(mesh.uOrder * mesh.vOrder) || mesh.ys.size() != mesh.xs.size()) return std::nullopt;
+    for (double v : quad) if (!std::isfinite(v)) return std::nullopt;
+    // The control-point hull, not the warp bounds, is what Photoshop's placement quad describes.
+    const auto [x0, x1] = std::minmax_element(mesh.xs.begin(), mesh.xs.end());
+    const auto [y0, y1] = std::minmax_element(mesh.ys.begin(), mesh.ys.end());
+    const auto h = rectToQuad(*x0, *y0, *x1, *y1, quad);
+    if (!h) return std::nullopt;
+    return resampleThrough(image, [&](double u, double v) { return apply(*h, evaluateWarpMesh(mesh, u, v)); });
+}
+
+std::optional<WarpedRaster> renderWarpedOverBox(const Image& image, const WarpMesh& mesh, const Rect& box) {
+    if (image.isEmpty() || !(box.width > 0) || !(box.height > 0) || mesh.xs.size() != size_t(mesh.uOrder * mesh.vOrder) || mesh.ys.size() != mesh.xs.size())
+        return std::nullopt;
+    // The image's (u, v) as the box's parameters: past the box they run outside [0, 1], where the Bernstein patch
+    // extrapolates smoothly.
+    const double u0 = -box.x / box.width, u1 = (image.width() - box.x) / box.width;
+    const double v0 = -box.y / box.height, v1 = (image.height() - box.y) / box.height;
+    return resampleThrough(image, [&](double u, double v) {
+        const Point p = evaluateWarpMesh(mesh, u0 + (u1 - u0) * u, v0 + (v1 - v0) * v);
+        return Point(box.x + p.x, box.y + p.y);
+    });
 }
 
 } // namespace compositor

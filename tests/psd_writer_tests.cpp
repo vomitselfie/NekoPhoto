@@ -627,6 +627,14 @@ TEST_CASE(turned_text_opens_as_text) {
     REQUIRE(read.text.has_value());
     CHECK(std::abs(read.text->fontSize - 30) < 1e-6);
     CHECK(read.extraJson.find("\"psdTextRotation\":30.0") != std::string::npos);
+
+    // Warp Text goes out and comes back with its style, bend, distortion and orientation.
+    doc.layers[0].transform.rotation = 0;
+    doc.layers[0].text->warp = TextWarp{"warpArc", 50, 10, -20, true};
+    auto warped = importPsdBytes(encodePsd(doc, options, nullptr, &error), &error);
+    REQUIRE(warped.has_value());
+    REQUIRE(warped->document.layers[0].text.has_value());
+    CHECK(warped->document.layers[0].text->warp == (TextWarp{"warpArc", 50, 10, -20, true}));
 }
 
 TEST_CASE(psb_export_reads_back_with_even_composite_rows) {

@@ -90,6 +90,16 @@ struct TextRun {
     bool operator==(const TextRun&) const = default;
 };
 
+/// Photoshop's Warp Text: a preset style bent over the text's layout box.
+struct TextWarp {
+    std::string style;                 // "warpArc", "warpFlag", ... (Photoshop's names); empty: none
+    double bend = 0;                   // percent, -100..100
+    double horizontal = 0, vertical = 0;   // distortion, percent
+    bool verticalOrientation = false;  // Photoshop's warpRotate Vrtc
+    bool active() const { return !style.empty() && style != "warpNone"; }
+    bool operator==(const TextWarp&) const = default;
+};
+
 /// A text layer's content and style. Its pixels are an ordinary raster the app renders from these (the
 /// core has no font engine), so every consumer of the document, the Mac app included, sees pixels.
 struct LayerText {
@@ -104,6 +114,7 @@ struct LayerText {
     /// Paragraph (box) text: lines wrap at the box's width and what does not fit its height is hidden; the first
     /// baseline sits the first line's cap height below the box's top, as Photoshop sets it. 0: point text.
     double boxWidth = 0, boxHeight = 0;
+    TextWarp warp;
     /// Text in more than one style: the runs, in order, covering the text (the fields above then mirror the first
     /// run). Empty: all of it in the style above.
     std::vector<TextRun> runs;

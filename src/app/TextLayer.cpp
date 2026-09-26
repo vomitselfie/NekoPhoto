@@ -1,5 +1,6 @@
 #include "TextLayer.h"
 #include "ImageConvert.h"
+#include "compositor/warpmesh.h"
 #include <QFontDatabase>
 #include <QFontInfo>
 #include <QHash>
@@ -162,7 +163,28 @@ std::shared_ptr<compositor::Image> renderRuns(const compositor::LayerText& text)
 
 } // namespace
 
-std::shared_ptr<compositor::Image> renderTextLayer(const compositor::LayerText& text) {
+std::shared_ptr<compositor::Image> renderUpright(const compositor::LayerText& text);
+
+std::shared_ptr<compositor::Image> renderTextLayer(const compositor::LayerText& text, QPointF* warpOffset) {
+    if (warpOffset) *warpOffset = QPointF(0, 0);
+    auto upright = renderUpright(text);
+    if (!upright || !text.warp.active()) return upright;
+    // Warp Text: the preset bent over the layout box (the block's lines, or the frame), as Photoshop re-derives it
+    // from its own layout; ink past the box follows the patch's extension.
+    auto m = psdTextMetrics(text);
+    if (!m) return upright;
+    const bool boxed = text.boxWidth > 0 && text.boxHeight > 0;
+    const compositor::Rect box(m->blockLeft, m->blockTop, boxed ? text.boxWidth : m->blockWidth, boxed ? text.boxHeight : m->lineHeight * std::max(1, m->lines));
+    auto mesh = compositor::styleWarpMesh(text.warp.style, text.warp.bend, text.warp.verticalOrientation, box.width, box.height);
+    if (!mesh) return upright;
+    compositor::distortWarpMesh(*mesh, text.warp.horizontal, text.warp.vertical);
+    auto bent = compositor::renderWarpedOverBox(*upright, *mesh, box);
+    if (!bent) return upright;
+    if (warpOffset) *warpOffset = QPointF(bent->transform.origin.x, bent->transform.origin.y);
+    return bent->image;
+}
+
+std::shared_ptr<compositor::Image> renderUpright(const compositor::LayerText& text) {
     if (!text.runs.empty() || (text.boxWidth > 0 && text.boxHeight > 0)) return renderRuns(text);
     const QFont font = fontFor(text);
     const QFontMetricsF metrics(font);

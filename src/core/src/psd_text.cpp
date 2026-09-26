@@ -5,12 +5,14 @@
 // integer; numbers stay short; the block's length stays even without a pad after its end-anchored tail.
 #include "compositor/psd.h"
 #include "compositor/psd_writer.h"
+#include "compositor/warpmesh.h"
 #include "psd/psd_descriptor.hpp"
 #include <algorithm>
 #include <array>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <map>
 #include <memory>
 #include <variant>
@@ -204,12 +206,18 @@ std::optional<std::vector<uint8_t>> photoshopTypeBlock(const LayerText& text, co
         patchy::psd::write_descriptor_unicode_string(w, "");
         patchy::psd::write_descriptor_id(w, "warp");
         w.write_u32(5);
-        enumItem(w, "warpStyle", "warpStyle", "warpNone");
-        for (const char* key : {"warpValue", "warpPerspective", "warpPerspectiveOther"}) { header(w, key, "doub"); patchy::psd::write_f64(w, 0); }
-        enumItem(w, "warpRotate", "Ornt", "Hrzn");
-        // The layer's bounds in the document, as four integers, at the very end.
-        for (double v : {recordBounds.x, recordBounds.y, recordBounds.x + recordBounds.width, recordBounds.y + recordBounds.height})
-            w.write_u32(uint32_t(int32_t(std::lround(v))));
+        enumItem(w, "warpStyle", "warpStyle", text.warp.active() ? text.warp.style.c_str() : "warpNone");
+        const double values[3] = {text.warp.active() ? text.warp.bend : 0, text.warp.active() ? text.warp.horizontal : 0, text.warp.active() ? text.warp.vertical : 0};
+        int k = 0;
+        for (const char* key : {"warpValue", "warpPerspective", "warpPerspectiveOther"}) { header(w, key, "doub"); patchy::psd::write_f64(w, values[k++]); }
+        enumItem(w, "warpRotate", "Ornt", text.warp.active() && text.warp.verticalOrientation ? "Vrtc" : "Hrzn");
+        // At the very end: the layer's bounds in the document as four integers, or, when warped, the warp's box
+        // (the text's bounds) as four floats, as Photoshop writes it (Patchy's reading).
+        if (text.warp.active())
+            for (double v : {left, top, right, bottom}) { float f = float(v); uint32_t bits; std::memcpy(&bits, &f, 4); w.write_u32(bits); }
+        else
+            for (double v : {recordBounds.x, recordBounds.y, recordBounds.x + recordBounds.width, recordBounds.y + recordBounds.height})
+                w.write_u32(uint32_t(int32_t(std::lround(v))));
         return w.bytes();
     };
     std::vector<uint8_t> block = build(engine);
@@ -365,7 +373,17 @@ std::optional<PsdTypeLayer> readPhotoshopType(const uint8_t* data, size_t size, 
         const auto descriptor = patchy::psd::read_descriptor(r);
         if (r.read_u16() != 1 || r.read_u32() != 16) return no("an unknown warp version");
         const auto warp = patchy::psd::read_descriptor(r);
-        if (auto style = patchy::psd::descriptor_value(warp, "warpStyle"); style && style->enum_value != "warpNone") return no("warped");
+        // Warp Text: one of the preset styles, bent over the layout box (Patchy's constructions, Photoshop's bakes).
+        TextWarp textWarp;
+        if (auto style = patchy::psd::descriptor_value(warp, "warpStyle"); style && style->enum_value != "warpNone") {
+            if (!warpStyleBakes(style->enum_value)) return no("warped in a style NekoPhoto does not draw");
+            textWarp.style = style->enum_value;
+            textWarp.bend = patchy::psd::descriptor_number(warp, "warpValue", 0);
+            textWarp.horizontal = patchy::psd::descriptor_number(warp, "warpPerspective", 0);
+            textWarp.vertical = patchy::psd::descriptor_number(warp, "warpPerspectiveOther", 0);
+            auto rotate = patchy::psd::descriptor_value(warp, "warpRotate");
+            textWarp.verticalOrientation = rotate && rotate->enum_value == "Vrtc";
+        }
         if (auto orientation = patchy::psd::descriptor_value(descriptor, "Ornt"); orientation && orientation->enum_value == "Vrtc") return no("vertical");
         // A rotation with an even scale: the text upright at that scale, the layer turned (clockwise, y down). A scale
         // a hair uneven (a transform nudged by hand: under 1.5%) reads as the vertical one, which sets the size and
@@ -425,6 +443,7 @@ std::optional<PsdTypeLayer> readPhotoshopType(const uint8_t* data, size_t size, 
         PsdTypeLayer out;
         out.anchorX = m[4]; out.anchorY = m[5];
         out.rotation = std::abs(rotation) < 1e-6 ? 0 : rotation;
+        out.text.warp = textWarp;
         if (box) {
             // Anchored at the frame's top-left.
             out.anchorX = m[4] + (*box)[0] * m[0] + (*box)[1] * m[2];

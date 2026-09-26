@@ -199,6 +199,12 @@ bool parseRecord(const json& j, Record& r) {
         if (tx->contains("boxWidth") && !getDouble(*tx, "boxWidth", t.boxWidth, true)) return false;
         if (tx->contains("boxHeight") && !getDouble(*tx, "boxHeight", t.boxHeight, true)) return false;
         if (!std::isfinite(t.boxWidth) || !std::isfinite(t.boxHeight) || t.boxWidth < 0 || t.boxHeight < 0) return false;
+        if (auto wj = tx->find("warp"); wj != tx->end()) {
+            if (!wj->is_object() || !getString(*wj, "style", t.warp.style, true)) return false;
+            for (auto [key, field] : {std::pair{"bend", &t.warp.bend}, {"horizontal", &t.warp.horizontal}, {"vertical", &t.warp.vertical}})
+                if (wj->contains(key) && (!getDouble(*wj, key, *field, true) || !std::isfinite(*field))) return false;
+            if (wj->contains("verticalOrientation") && !getBool(*wj, "verticalOrientation", t.warp.verticalOrientation, true)) return false;
+        }
         if (!(t.fontSize > 0) || !std::isfinite(t.fontSize) || !std::isfinite(t.lineSpacing) || !std::isfinite(t.letterSpacing)) return false;
         if (auto rs = tx->find("runs"); rs != tx->end()) {
             if (!rs->is_array() || rs->size() > 100000) return false;
@@ -261,6 +267,9 @@ json recordJson(const Layer& l) {
                      {"red", number(t.red)}, {"green", number(t.green)}, {"blue", number(t.blue)}, {"alignment", t.alignment},
                      {"lineSpacing", number(t.lineSpacing)}, {"letterSpacing", number(t.letterSpacing)}};
         if (t.boxWidth > 0 && t.boxHeight > 0) { j["text"]["boxWidth"] = number(t.boxWidth); j["text"]["boxHeight"] = number(t.boxHeight); }
+        if (t.warp.active())
+            j["text"]["warp"] = {{"style", t.warp.style}, {"bend", number(t.warp.bend)}, {"horizontal", number(t.warp.horizontal)},
+                                 {"vertical", number(t.warp.vertical)}, {"verticalOrientation", t.warp.verticalOrientation}};
         if (!t.runs.empty()) {
             json runs = json::array();
             for (const TextRun& r : t.runs) {

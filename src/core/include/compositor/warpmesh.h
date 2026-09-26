@@ -36,4 +36,9 @@ void distortWarpMesh(WarpMesh& mesh, double horizontal, double vertical);
 struct WarpedRaster { std::shared_ptr<Image> image; LayerTransform transform; };
 std::optional<WarpedRaster> renderWarpedImage(const Image& image, const WarpMesh& mesh, const std::array<double, 8>& quad);
 
+/// `image` bent by `mesh`, a patch over `box` (in the image's pixels; the mesh in the box's own space, 0..width by
+/// 0..height): the whole image, the patch extended past the box where the image reaches beyond it (Warp Text over
+/// its layout box, ink poking out of it). The result's transform places it in the image's pixel space.
+std::optional<WarpedRaster> renderWarpedOverBox(const Image& image, const WarpMesh& mesh, const Rect& box);
+
 } // namespace compositor
