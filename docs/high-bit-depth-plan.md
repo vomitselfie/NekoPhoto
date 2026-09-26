@@ -149,3 +149,14 @@ and a Channels panel, with 8-bit documents untouched throughout.
   plan's `CarriedPlane` is therefore required, not optional, for byte-exact PSD round trips of unedited layers, and PNG
   and TIFF 16-bit exports of edited images lose the lowest bit. Alternative to decide in P2: full 0..65535 storage (exact
   I/O, slightly costlier premultiply) versus Photoshop's range (calibration parity).
+
+## Decisions (2026-09-26)
+
+Follow Photoshop's choices throughout:
+
+- 16-bit uses Photoshop's 0..32768 range. `CarriedPlane` is mandatory: unedited 16-bit planes re-emit their original
+  bytes, so PSD round trips stay byte-exact.
+- CMYK and Lab modes and 32-bit float are all in scope; nothing from section 11 is cut up front.
+- Channels come early (P6 can move up to follow P2, as noted there).
+- Budgets become byte budgets (section 8).
+- macOS is no longer a target, so the version-7 writer for 8-bit sRGB is optional.
