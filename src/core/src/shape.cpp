@@ -50,7 +50,60 @@ inline double gradientPosition(GradientShape shape, Point from, Point to, Point 
     return clamp(((p.x - from.x) * dx + (p.y - from.y) * dy) / len2, 0.0, 1.0);
 }
 
+/// `t` within a run whose half-way point sits at `midpoint` (Photoshop's gradient midpoints).
+inline float midpointRemap(float t, float midpoint) {
+    t = std::clamp(t, 0.0f, 1.0f);
+    const float m = std::clamp(midpoint, 0.001f, 0.999f);
+    if (std::abs(m - 0.5f) < 1e-6f) return t;
+    return t <= m ? 0.5f * t / m : 0.5f + 0.5f * (t - m) / (1 - m);
+}
+
+/// The run of `stops` (sorted by location) holding `t`: the index of its end stop (0: before the first stop, size():
+/// past the last) and the remapped fraction along it in `u`.
+template <typename Stop>
+size_t runAt(const std::vector<Stop>& stops, float t, float& u) {
+    u = 0;
+    if (t <= stops.front().location) return 0;
+    if (t >= stops.back().location) return stops.size();
+    for (size_t i = 1; i < stops.size(); i++) {
+        if (t > stops[i].location) continue;
+        const float span = stops[i].location - stops[i - 1].location;
+        u = span > 1e-6f ? midpointRemap((t - stops[i - 1].location) / span, stops[i - 1].midpoint) : 1.0f;
+        return i;
+    }
+    return stops.size();
+}
+
 } // namespace
+
+void GradientStops::sample(float t, float out[4]) const {
+    if (colors.empty()) {
+        for (int c = 0; c < 4; c++) out[c] = start[c] + (end[c] - start[c]) * t;
+        return;
+    }
+    float u = 0;
+    const size_t i = runAt(colors, t, u);
+    if (i == 0) for (int c = 0; c < 3; c++) out[c] = colors.front().rgb[c];
+    else if (i >= colors.size()) for (int c = 0; c < 3; c++) out[c] = colors.back().rgb[c];
+    else for (int c = 0; c < 3; c++) out[c] = colors[i - 1].rgb[c] + (colors[i].rgb[c] - colors[i - 1].rgb[c]) * u;
+    if (alphas.empty()) { out[3] = 1; return; }
+    const size_t j = runAt(alphas, t, u);
+    out[3] = j == 0 ? alphas.front().opacity : j >= alphas.size() ? alphas.back().opacity
+           : alphas[j - 1].opacity + (alphas[j].opacity - alphas[j - 1].opacity) * u;
+}
+
+void GradientStops::reverse() {
+    for (int c = 0; c < 4; c++) std::swap(start[c], end[c]);
+    // A stop's midpoint belongs to the run after it; mirrored, that run follows the stop before it.
+    auto mirror = [](auto& stops) {
+        std::reverse(stops.begin(), stops.end());
+        for (auto& s : stops) s.location = 1 - s.location;
+        for (size_t i = 0; i + 1 < stops.size(); i++) stops[i].midpoint = 1 - stops[i + 1].midpoint;
+        if (!stops.empty()) stops.back().midpoint = 0.5f;
+    };
+    mirror(colors);
+    mirror(alphas);
+}
 
 void fillGradient(const Image& base, Image& out, const Affine& pixelToDocument, GradientShape shape, Point from, Point to, const GradientStops& stops, double opacity, const GrayImage* selection) {
     int w = out.width(), h = out.height();
@@ -63,7 +116,7 @@ void fillGradient(const Image& base, Image& out, const Affine& pixelToDocument, 
             for (int x = 0; x < w; x++, d = d + dd, b += 4, o += 4) {
                 double t = gradientPosition(shape, from, to, d);
                 float col[4];
-                for (int c = 0; c < 4; c++) col[c] = stops.start[c] + (stops.end[c] - stops.start[c]) * float(t);
+                stops.sample(float(t), col);
                 double cov = opacity * (selection ? selection->at(x, y) / 255.0 : 1.0);
                 float a = col[3] * float(cov);
                 if (a <= 0) { for (int c = 0; c < 4; c++) o[c] = b[c]; continue; }
@@ -82,8 +135,9 @@ void fillGradient(const GrayImage& base, GrayImage& out, const Affine& pixelToDo
             Point dd = pixelToDocument.applyVector({1, 0});
             for (int x = 0; x < w; x++, d = d + dd) {
                 double t = gradientPosition(shape, from, to, d);
-                float value = stops.start[0] + (stops.end[0] - stops.start[0]) * float(t);
-                float alpha = stops.start[3] + (stops.end[3] - stops.start[3]) * float(t);
+                float col[4];
+                stops.sample(float(t), col);
+                const float value = col[0], alpha = col[3];
                 double cov = opacity * alpha * (selection ? selection->at(x, y) / 255.0 : 1.0);
                 out.at(x, y) = uint8_t(clamp(value * 255 * cov + base.at(x, y) * (1 - cov) + 0.5, 0.0, 255.0));
             }

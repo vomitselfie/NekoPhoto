@@ -51,6 +51,130 @@ def wait_for(path, seconds=30):
     raise SystemExit(f"no socket at {path} after {seconds}s")
 
 
+# ---- Photoshop preset files, built here byte by byte (the layouts in src/core/src/presets.cpp) ----------
+
+def _ps_id(key):
+    raw = key.encode()
+    return struct.pack(">I", 0) + raw if len(raw) == 4 else struct.pack(">I", len(raw)) + raw
+
+
+def _ps_text(value):
+    units = value.encode("utf-16-be") + b"\0\0"
+    return struct.pack(">I", len(units) // 2) + units
+
+
+def _ps_value(value):
+    """(type, payload) tuples: ("TEXT", str), ("enum", (type, value)), ("long", int), ("doub", float),
+    ("UntF", (unit, float)), ("bool", bool), ("Objc", (class, items)), ("VlLs", [values])."""
+    kind, v = value
+    if kind == "TEXT":
+        body = _ps_text(v)
+    elif kind == "enum":
+        body = _ps_id(v[0]) + _ps_id(v[1])
+    elif kind == "long":
+        body = struct.pack(">i", v)
+    elif kind == "doub":
+        body = struct.pack(">d", v)
+    elif kind == "UntF":
+        body = v[0].encode() + struct.pack(">d", v[1])
+    elif kind == "bool":
+        body = bytes([1 if v else 0])
+    elif kind == "Objc":
+        body = _ps_descriptor(*v)
+    else:
+        body = struct.pack(">I", len(v)) + b"".join(_ps_value(item) for item in v)
+    return kind.encode() + body
+
+
+def _ps_descriptor(cls, items):
+    out = _ps_text("") + _ps_id(cls) + struct.pack(">I", len(items))
+    for key, value in items:
+        out += _ps_id(key) + _ps_value(value)
+    return out
+
+
+def _rgb(r, g, b):
+    return ("Objc", ("RGBC", [("Rd  ", ("doub", r)), ("Grn ", ("doub", g)), ("Bl  ", ("doub", b))]))
+
+
+def grd_file(gradients):
+    """gradients: (name, [(location 0..1, (r, g, b) or "fg"/"bg")], [(location, opacity 0..1)])."""
+    items = []
+    for name, colors, alphas in gradients:
+        stops = []
+        for location, color in colors:
+            fields = [] if isinstance(color, str) else [("Clr ", _rgb(*color))]
+            fields += [("Type", ("enum", ("Clry", {"fg": "FrgC", "bg": "BckC"}.get(color, "UsrS") if isinstance(color, str) else "UsrS"))),
+                       ("Lctn", ("long", round(location * 4096))), ("Mdpn", ("long", 50))]
+            stops.append(("Objc", ("Clrt", fields)))
+        trns = [("Objc", ("TrnS", [("Opct", ("UntF", ("#Prc", o * 100))), ("Lctn", ("long", round(l * 4096))), ("Mdpn", ("long", 50))])) for l, o in alphas]
+        grad = ("Objc", ("Grdn", [("Nm  ", ("TEXT", name)), ("GrdF", ("enum", ("GrdF", "CstS"))), ("Intr", ("doub", 4096.0)),
+                                  ("Clrs", ("VlLs", stops)), ("Trns", ("VlLs", trns))]))
+        items.append(("Objc", ("Grdn", [("Grad", grad)])))
+    return b"8BGR" + struct.pack(">HI", 5, 16) + _ps_descriptor("null", [("GrdL", ("VlLs", items))])
+
+
+def pat_file(pattern_id, name, width, height, rgb):
+    """One 8-bit RGB pattern, raw planes: rgb is a function (x, y) -> (r, g, b)."""
+    planes = [bytes(rgb(x, y)[c] for y in range(height) for x in range(width)) for c in range(3)]
+    slot = lambda data: struct.pack(">IIIIIIIHB", 1, 23 + len(data), 8, 0, 0, height, width, 8, 0) + data
+    vma = struct.pack(">IIIII", 0, 0, height, width, 24) + b"".join(slot(p) for p in planes) + struct.pack(">I", 0) * 23
+    record = struct.pack(">IIHH", 1, 3, height, width) + _ps_text(name) + bytes([len(pattern_id)]) + pattern_id.encode()
+    record += struct.pack(">II", 3, len(vma)) + vma
+    return b"8BPT" + struct.pack(">HI", 1, 1) + record
+
+
+def asl_file(name, style_id):
+    """One style: a red drop shadow (no patterns)."""
+    shadow = ("Objc", ("DrSh", [("enab", ("bool", True)), ("Md  ", ("enum", ("BlnM", "Mltp"))), ("Clr ", _rgb(255, 0, 0)),
+                                ("Opct", ("UntF", ("#Prc", 75.0))), ("uglg", ("bool", False)), ("lagl", ("UntF", ("#Ang", 90.0))),
+                                ("Dstn", ("UntF", ("#Pxl", 7.0))), ("Ckmt", ("UntF", ("#Pxl", 0.0))), ("blur", ("UntF", ("#Pxl", 3.0)))]))
+    lefx = ("Objc", ("Lefx", [("Scl ", ("UntF", ("#Prc", 100.0))), ("masterFXSwitch", ("bool", True)), ("DrSh", shadow)]))
+    record = struct.pack(">I", 16) + _ps_descriptor("null", [("Nm  ", ("TEXT", name)), ("Idnt", ("TEXT", style_id))])
+    record += struct.pack(">I", 16) + _ps_descriptor("Styl", [("Lefx", lefx)])
+    record += b"\0" * (-len(record) % 4)
+    return struct.pack(">H", 2) + b"8BSL" + struct.pack(">HI", 3, 0) + struct.pack(">I", 1) + struct.pack(">I", len(record)) + record
+
+
+def presets(rpc, work, layer_id):
+    """presets.import / list / remove, layers.applyStyle and gradient.draw with a preset. The names carry a
+    smoke-test prefix and are removed again, since the library lives in the person's data folder."""
+    paths = {"grd": os.path.join(work, "smoke.grd"), "pat": os.path.join(work, "smoke.pat"), "asl": os.path.join(work, "smoke.asl")}
+    with open(paths["grd"], "wb") as f:
+        f.write(grd_file([("rpc-smoke RGB", [(0, (255, 0, 0)), (0.5, (0, 255, 0)), (1, (0, 0, 255))], [(0, 1), (1, 1)]),
+                          ("rpc-smoke Fade", [(0, "fg"), (1, "bg")], [(0, 1), (1, 0)])]))
+    with open(paths["pat"], "wb") as f:
+        f.write(pat_file("rpc-smoke-pattern", "rpc-smoke checks", 8, 8, lambda x, y: (255, 255, 255) if (x // 4 + y // 4) % 2 else (0, 0, 0)))
+    with open(paths["asl"], "wb") as f:
+        f.write(asl_file("rpc-smoke Shadow", "rpc-smoke-style"))
+    imported = rpc.call("presets.import", paths=list(paths.values()))
+    assert imported["gradients"] == ["rpc-smoke RGB", "rpc-smoke Fade"], imported
+    assert imported["patterns"] == ["rpc-smoke checks"] and imported["patternsAddedToDocument"] == 1, imported
+    assert imported["styles"] == ["rpc-smoke Shadow"], imported
+    listed = rpc.call("presets.list")
+    rgb = [g for g in listed["gradients"] if g["name"] == "rpc-smoke RGB"][0]
+    assert [c["color"] for c in rgb["colors"]] == ["#ff0000", "#00ff00", "#0000ff"], rgb
+    assert any(p["id"] == "rpc-smoke-pattern" and p["width"] == 8 for p in listed["patterns"]), listed["patterns"]
+    styled = rpc.call("layers.applyStyle", id=layer_id, style="rpc-smoke Shadow")
+    assert styled["dropShadows"][0]["color"] == "#ff0000" and styled["dropShadows"][0]["distance"] == 7, styled
+    assert rpc.call("history.info")["undo"] == "Apply Style"
+    # A pattern overlay can now use the imported pattern.
+    patterned = rpc.call("layers.setStyle", id=layer_id, style={"patternOverlays": [{"pattern": "rpc-smoke-pattern"}]})
+    assert patterned["patternOverlays"][0]["pattern"] == "rpc-smoke-pattern", patterned
+    rpc.call("render", maxSize=64)
+    rpc.call("layers.select", id=layer_id)
+    rpc.call("selection.none")
+    rpc.call("gradient.draw", x0=0, y0=0, x1=200, y1=0, preset="rpc-smoke RGB")
+    try:
+        rpc.call("gradient.draw", x0=0, y0=0, x1=10, y1=0, preset="rpc-smoke no such gradient")
+        raise AssertionError("an unknown gradient preset should be refused")
+    except RuntimeError as e:
+        print("expected error:", e)
+    for kind, name in (("style", "rpc-smoke Shadow"), ("gradient", "rpc-smoke RGB"), ("gradient", "rpc-smoke Fade"), ("pattern", "rpc-smoke-pattern")):
+        assert rpc.call("presets.remove", kind=kind, name=name)["removed"] == name
+    assert not any(g["name"].startswith("rpc-smoke") for g in rpc.call("presets.list", kind="gradients")["gradients"])
+
+
 def remaining_methods(rpc):
     """Every method the checks above do not reach, in a tab of its own that is closed afterwards."""
     work = tempfile.mkdtemp()
@@ -78,6 +202,7 @@ def remaining_methods(rpc):
     except RuntimeError as e:
         print("expected error:", e)
     assert "strokes" not in rpc.call("layers.setStyle", id=placed["id"], style={})
+    presets(rpc, work, placed["id"])
     rpc.call("selection.fromLayer", id=placed["id"])
     try:   # needs the downloaded model; without it, a clear error
         rpc.call("pixels.removeBackground")

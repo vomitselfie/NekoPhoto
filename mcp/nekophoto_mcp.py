@@ -385,6 +385,12 @@ def layers_set_style(id: str, style: dict) -> str:
     return text(call("layers.setStyle", id=id, style=style))
 
 
+@edit("Apply a style preset")
+def layers_apply_style(id: str, style: str) -> str:
+    """Give a layer an imported style preset by name (presets_list): its effects replace the layer's, and the document gets the patterns the style uses. Answers the layer's style as layers_style shows it."""
+    return text(call("layers.applyStyle", id=id, style=style))
+
+
 @edit("Layer mask")
 def layers_mask(id: str, action: str, revealing: bool = True) -> str:
     """Layer masks: action add (reveal all, or revealing=false to hide all), addFromSelection, delete, toggle, invert, apply, link."""
@@ -589,9 +595,27 @@ def brush_presets(group: Optional[str] = None) -> str:
 
 
 @edit("Draw a gradient")
-def gradient_draw(x0: float, y0: float, x1: float, y1: float, shape: str = "linear", style: str = "foreground-to-transparent", reversed: bool = False, opacity: float = 1.0, foreground: Optional[str] = None, background: Optional[str] = None) -> str:
-    """Draw a gradient on the active layer from (x0, y0) to (x1, y1): shape linear or radial; style foreground-to-transparent or foreground-to-background; colours as CSS strings."""
-    return text(call("gradient.draw", x0=x0, y0=y0, x1=x1, y1=y1, shape=shape, style=style, reversed=reversed, opacity=opacity, foreground=foreground, background=background))
+def gradient_draw(x0: float, y0: float, x1: float, y1: float, shape: str = "linear", style: str = "foreground-to-transparent", reversed: bool = False, opacity: float = 1.0, foreground: Optional[str] = None, background: Optional[str] = None, preset: Optional[str] = None) -> str:
+    """Draw a gradient on the active layer from (x0, y0) to (x1, y1): shape linear or radial; style foreground-to-transparent or foreground-to-background, or preset, an imported gradient's name from presets_list (its foreground and background stops take the colours); colours as CSS strings."""
+    return text(call("gradient.draw", x0=x0, y0=y0, x1=x1, y1=y1, shape=shape, style=style, reversed=reversed, opacity=opacity, foreground=foreground, background=background, preset=preset))
+
+
+@edit("Import presets")
+def presets_import(paths: list[str]) -> str:
+    """Import Photoshop preset files into the preset library: layer styles (.asl, with the patterns they use), patterns (.pat, also added to the open document for pattern overlays and bevel textures) and gradients (.grd). Answers the names imported and notes on anything left out."""
+    return text(call("presets.import", paths=[os.path.abspath(p) for p in paths]))
+
+
+@look("Presets")
+def presets_list(kind: Optional[str] = None) -> str:
+    """The imported presets: styles (for layers_apply_style), gradients (for gradient_draw's preset, with their stops) and patterns (id, name, size); kind styles, gradients or patterns for one list."""
+    return text(call("presets.list", kind=kind))
+
+
+@outside("Remove a preset")
+def presets_remove(kind: str, name: str) -> str:
+    """Remove an imported style, gradient or pattern from the library (kind style, gradient or pattern; a pattern by id or name); undo does not bring it back."""
+    return text(call("presets.remove", kind=kind, name=name))
 
 
 @edit("Draw a shape")

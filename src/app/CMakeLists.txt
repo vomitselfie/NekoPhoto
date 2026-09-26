@@ -65,6 +65,8 @@ qt_add_executable(nekophoto
     BrushLibrary.cpp
     BrushImporter.h
     BrushImporter.cpp
+    PresetLibrary.h
+    PresetLibrary.cpp
     BrushPicker.h
     BrushPicker.cpp
     FilterDialog.h

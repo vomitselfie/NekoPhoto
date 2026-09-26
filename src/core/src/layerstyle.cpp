@@ -532,6 +532,19 @@ void readPatterns(const std::vector<uint8_t>& block, std::map<std::string, Patte
 
 } // namespace
 
+std::map<std::string, PatternTile> parsePatternBlock(const std::vector<uint8_t>& payload) {
+    std::map<std::string, PatternTile> out;
+    readPatterns(payload, out);
+    return out;
+}
+
+std::optional<LayerStyle> parseLayerStyleBlock(const std::vector<uint8_t>& block) {
+    try {
+        if (auto style = parseEffects(block, true)) return *style;
+    } catch (std::exception&) {}
+    return std::nullopt;
+}
+
 std::shared_ptr<const std::map<std::string, PatternTile>> documentPatterns(const Document& document) {
     static std::map<const void*, std::pair<std::weak_ptr<const PsdDocumentCarry>, std::shared_ptr<const std::map<std::string, PatternTile>>>> cache;
     if (!document.psdCarry) return nullptr;

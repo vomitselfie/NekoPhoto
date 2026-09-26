@@ -144,6 +144,7 @@ add_library(compositor_core STATIC
     src/photoshop.cpp
     src/plist.cpp
     src/png.cpp
+    src/presets.cpp
     src/procreate.cpp
     src/project.cpp
     src/render.cpp

@@ -1,4 +1,5 @@
 #include "LayerStyleDialog.h"
+#include "PresetLibrary.h"
 #include <QCheckBox>
 #include <QColorDialog>
 #include <QComboBox>
@@ -242,15 +243,23 @@ void LayerStyleDialog::addEffectPages() {
             auto* p = firstOf(style_.patternOverlays, madeUp_[e]);
             blendRow(f, tr("Blend mode"), &p->mode);
             percentRow(f, tr("Opacity"), &p->opacity);
+            // The document's patterns (by id: a PSD's blocks carry no names we keep), then the imported ones it
+            // does not have yet (by name), which join the document when chosen.
             auto patterns = session_ && session_->document() ? documentPatterns(*session_->document()) : nullptr;
-            QStringList ids;
-            if (patterns) for (auto& [id, tile] : *patterns) ids << QString::fromStdString(id);
+            QStringList ids, labels;
+            if (patterns) for (auto& [id, tile] : *patterns) { ids << QString::fromStdString(id); labels << ids.back(); }
+            for (const auto& preset : PresetLibrary::instance().patterns()) {
+                const QString id = QString::fromStdString(preset.id);
+                if (ids.contains(id)) continue;
+                ids << id;
+                labels << tr("%1 (imported)").arg(preset.name.empty() ? id : QString::fromStdString(preset.name));
+            }
             if (ids.isEmpty()) {
-                f->addRow(new QLabel(tr("This document has no patterns."), this));
+                f->addRow(new QLabel(tr("This document has no patterns. File ▸ Import Presets… adds Photoshop .pat patterns."), this));
                 if (p->patternId.empty()) { list_->addItem(name); list_->item(list_->count() - 1)->setFlags(Qt::NoItemFlags); continue; }
             } else {
                 if (p->patternId.empty()) p->patternId = ids.front().toStdString();
-                comboRow(f, tr("Pattern"), ids, [p, ids] { return std::max(0, int(ids.indexOf(QString::fromStdString(p->patternId)))); },
+                comboRow(f, tr("Pattern"), labels, [p, ids] { return std::max(0, int(ids.indexOf(QString::fromStdString(p->patternId)))); },
                          [p, ids](int i) { p->patternId = ids.value(i).toStdString(); });
             }
             numberRow(f, tr("Angle"), &p->angle, -180, 180, QStringLiteral("°"));
@@ -399,8 +408,48 @@ void LayerStyleDialog::gradientRows(QFormLayout* form, StyleGradient* g) {
     if (g->colors.empty()) g->colors = {{0, {0, 0, 0}, 0.5f}, {1, {255, 255, 255}, 0.5f}};
     if (g->colors.size() == 1) g->colors.push_back({1, g->colors.front().color, 0.5f});
     if (g->alphas.empty()) g->alphas = {{0, 1, 0.5f}, {1, 1, 0.5f}};
-    colourRow(form, tr("Start colour"), &g->colors.front().color);
-    colourRow(form, tr("End colour"), &g->colors.back().color);
+    // Imported gradients (PresetLibrary) replace the stops; their foreground and background stops take the colours set now.
+    const auto& presets = PresetLibrary::instance().gradients();
+    QComboBox* presetCombo = nullptr;
+    if (!presets.empty()) {
+        presetCombo = new QComboBox(this);
+        presetCombo->addItem(tr("Custom"));
+        for (const auto& p : presets) presetCombo->addItem(QString::fromStdString(p.name));
+        form->addRow(tr("Preset"), presetCombo);
+    }
+    // The colour rows edit the first and last stops, looked up when used: a preset replaces the stop list.
+    auto endRow = [this, form, g](const QString& label, bool first) {
+        auto* button = new QPushButton(this);
+        paintSwatch(button, first ? g->colors.front().color : g->colors.back().color);
+        connect(button, &QPushButton::clicked, this, [this, button, g, first, label] {
+            StyleColor& colour = first ? g->colors.front().color : g->colors.back().color;
+            const QColor chosen = QColorDialog::getColor(QColor(colour.r, colour.g, colour.b), this, label);
+            if (!chosen.isValid()) return;
+            StyleColor& target = first ? g->colors.front().color : g->colors.back().color;
+            target = {uint8_t(chosen.red()), uint8_t(chosen.green()), uint8_t(chosen.blue())};
+            paintSwatch(button, target);
+            changed();
+        });
+        form->addRow(label, button);
+        return button;
+    };
+    auto* startButton = endRow(tr("Start colour"), true);
+    auto* endButton = endRow(tr("End colour"), false);
+    if (presetCombo)
+        connect(presetCombo, &QComboBox::currentIndexChanged, this, [this, g, startButton, endButton](int i) {
+            const auto& list = PresetLibrary::instance().gradients();
+            if (i < 1 || i > int(list.size())) return;
+            QColor fg = session_ ? session_->foregroundColor : QColor(Qt::black), bg = session_ ? session_->backgroundColor : QColor(Qt::white);
+            const StyleGradient chosen = list[size_t(i - 1)].styleGradient({uint8_t(fg.red()), uint8_t(fg.green()), uint8_t(fg.blue())},
+                                                                          {uint8_t(bg.red()), uint8_t(bg.green()), uint8_t(bg.blue())});
+            const StyleColor front = chosen.colors.front().color, back = chosen.colors.back().color;
+            g->colors = chosen.colors;
+            g->alphas = chosen.alphas;
+            g->smoothness = chosen.smoothness;
+            paintSwatch(startButton, front);
+            paintSwatch(endButton, back);
+            changed();
+        });
     comboRow(form, tr("Style"), {tr("Linear"), tr("Radial"), tr("Angle"), tr("Reflected"), tr("Diamond"), tr("Shape Burst")},
              [g] { return int(g->type); }, [g](int i) { g->type = StyleGradient::Type(i); });
     numberRow(form, tr("Angle"), &g->angle, -180, 180, QStringLiteral("°"));

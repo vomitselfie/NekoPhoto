@@ -4,6 +4,7 @@
 #include <QJsonObject>
 #include "EditorSession.h"
 #include "BrushLibrary.h"
+#include "PresetLibrary.h"
 #include "QtGeometry.h"
 #include "TextLayer.h"
 #include <algorithm>
@@ -406,6 +407,21 @@ void EditorSession::refreshGradient() {
     QPointF a = gradient_->start, b = gradient_->end;
     if (std::hypot(b.x() - a.x(), b.y() - a.y()) >= 0.5) {
         QColor fg = foregroundColor, bg = backgroundColor;
+        const int shape = gradientSettings.shape == GradientShape::Radial ? 1 : 0;
+        if (const GradientPreset* preset = gradientSettings.preset.isEmpty() ? nullptr : PresetLibrary::instance().findGradient(gradientSettings.preset)) {
+            const float f[3] = {float(fg.redF()), float(fg.greenF()), float(fg.blueF())}, g[3] = {float(bg.redF()), float(bg.greenF()), float(bg.blueF())};
+            GradientStops stops = preset->stops(f, g);
+            if (gradient_->mask)   // a mask takes each stop's lightness
+                for (auto& s : stops.colors) {
+                    float v = 0.299f * s.rgb[0] + 0.587f * s.rgb[1] + 0.114f * s.rgb[2];
+                    if (paintsQuickMask()) v = 1 - v;
+                    s.rgb[0] = s.rgb[1] = s.rgb[2] = v;
+                }
+            if (gradientSettings.reversed) stops.reverse();
+            gradient_->raster->fillGradientOver(shape, toPoint(a), toPoint(b), stops, gradientSettings.opacity);
+            emit documentChanged({});
+            return;
+        }
         float start[4], end[4];
         if (gradient_->mask) {
             float f = fg.lightnessF() >= 0.5 ? 1 : 0, g = bg.lightnessF() >= 0.5 ? 1 : 0;
@@ -419,7 +435,7 @@ void EditorSession::refreshGradient() {
             else { end[0] = fg.redF(); end[1] = fg.greenF(); end[2] = fg.blueF(); end[3] = 0; }
         }
         if (gradientSettings.reversed) for (int c = 0; c < 4; c++) std::swap(start[c], end[c]);
-        gradient_->raster->fillGradientOver(gradientSettings.shape == GradientShape::Radial ? 1 : 0, toPoint(a), toPoint(b), start, end, gradientSettings.opacity);
+        gradient_->raster->fillGradientOver(shape, toPoint(a), toPoint(b), start, end, gradientSettings.opacity);
     }
     emit documentChanged({});
 }

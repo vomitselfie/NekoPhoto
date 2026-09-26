@@ -21,6 +21,7 @@
 #include "ColorSwatches.h"
 #include "PreferencesDialog.h"
 #include "BrushImporter.h"
+#include "PresetLibrary.h"
 #include "compositor/project.h"
 #include <QActionGroup>
 #include <QApplication>
@@ -129,6 +130,7 @@ void MainWindow::buildMenus() {
     recentMenu_ = file->addMenu(tr("Open &Recent"));
     file->addAction(tr("Import &File…"), QKeySequence("Ctrl+Shift+O"), this, &MainWindow::importFiles);
     file->addAction(tr("Import &Brushes…"), this, [this] { importBrushesInteractively(this, session_); });
+    file->addAction(tr("Import Pre&sets…"), this, [this] { importPresetsInteractively(this, session_); });
     needsDocument(file->addAction(tr("Place &Embedded…"), this, [this] {
         const QString path = QFileDialog::getOpenFileName(this, tr("Place Embedded"), QSettings().value("lastDir").toString(),
                                                           tr("Images and Photoshop documents (*.psd *.psb *.png *.jpg *.jpeg *.tif *.tiff *.webp *.bmp *.gif %1)").arg(compositor::rawSupported() ? QStringLiteral("*.cr2 *.cr3 *.crw *.nef *.nrw *.arw *.srf *.sr2 *.raf *.orf *.rw2 *.rwl *.pef *.dng *.3fr *.iiq *.erf *.kdc *.dcr *.mrw *.srw *.x3f") : QString()));
@@ -287,6 +289,26 @@ void MainWindow::buildMenus() {
     needsDocument(styles->addAction(tr("&Copy Layer Style"), this, [this] { session_->copyLayerStyle(); }));
     needsDocument(styles->addAction(tr("&Paste Layer Style"), this, [this] { session_->pasteLayerStyle(); }));
     needsDocument(styles->addAction(tr("C&lear Layer Style"), this, [this] { session_->clearLayerStyle(); }));
+    styles->addSeparator();
+    // Imported style presets (.asl): the submenu lists the library as it is when it opens.
+    QMenu* applyStyle = styles->addMenu(tr("&Apply Style"));
+    needsDocument(applyStyle->menuAction());
+    connect(applyStyle, &QMenu::aboutToShow, this, [this, applyStyle] {
+        applyStyle->clear();
+        const auto& presets = PresetLibrary::instance().styles();
+        if (presets.empty()) applyStyle->addAction(tr("No styles yet: Import Styles…"))->setEnabled(false);
+        for (const auto& preset : presets) {
+            const QString name = QString::fromStdString(preset.name);
+            applyStyle->addAction(name, this, [this, name] {
+                const StylePreset* p = PresetLibrary::instance().findStyle(name);
+                if (!p || !session_->activeLayerId()) return;
+                const StylePreset copy = *p;
+                if (!session_->applyStylePreset(*session_->activeLayerId(), copy.style, PresetLibrary::instance().patternsFor(copy.style)))
+                    showError(tr("Couldn’t apply the style"), tr("This layer cannot have effects."));
+            });
+        }
+    });
+    styles->addAction(tr("&Import Styles…"), this, [this] { importPresetsInteractively(this, session_); });
     QMenu* smart = layer->addMenu(tr("S&mart Objects"));
     needsDocument(smart->addAction(tr("&Convert to Smart Object"), this, [this] {
         QString error;

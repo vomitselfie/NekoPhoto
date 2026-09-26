@@ -563,6 +563,12 @@ void BrushStroke::moveLifted(Point offset, bool duplicate) {
 }
 
 void BrushStroke::fillGradientOver(int shape, Point from, Point to, const float startColor[4], const float endColor[4], double opacity) {
+    GradientStops stops;
+    for (int c = 0; c < 4; c++) { stops.start[c] = startColor[c]; stops.end[c] = endColor[c]; }
+    fillGradientOver(shape, from, to, stops, opacity);
+}
+
+void BrushStroke::fillGradientOver(int shape, Point from, Point to, const GradientStops& stops, double opacity) {
     if (!valid_) return;
     touched_ = true;
     dirtyGrid_ = {}; // the working image is composed here, not from the coverage
@@ -574,8 +580,6 @@ void BrushStroke::fillGradientOver(int shape, Point from, Point to, const float 
         for (int x = 0; x < width_; x++, d = d + dd)
             if (canvas_.contains(d)) inside.at(x, y) = selection_ ? selection_->at(x, y) : 255;
     }
-    GradientStops stops;
-    for (int c = 0; c < 4; c++) { stops.start[c] = startColor[c]; stops.end[c] = endColor[c]; }
     if (isMask_) fillGradient(*baseMask_, *workingMask_, pixelToDocument_, GradientShape(shape), from, to, stops, opacity, &inside);
     else fillGradient(*base_, *working_, pixelToDocument_, GradientShape(shape), from, to, stops, opacity, &inside);
     refreshLevels(Rect(0, 0, width_, height_));
