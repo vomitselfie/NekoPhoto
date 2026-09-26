@@ -381,7 +381,7 @@ int main(int argc, char** argv) {
     }
     if (parser.isSet(toolOption)) {
         static const QMap<QString, app::Tool> tools{{"move", app::Tool::Move}, {"marquee", app::Tool::Marquee}, {"lasso", app::Tool::Lasso}, {"wand", app::Tool::Wand}, {"scribble", app::Tool::Scribble},
-            {"crop", app::Tool::Crop}, {"brush", app::Tool::Brush}, {"healing", app::Tool::SpotHealing}, {"clone", app::Tool::CloneStamp}, {"smudge", app::Tool::Smudge},
+            {"crop", app::Tool::Crop}, {"brush", app::Tool::Brush}, {"healing", app::Tool::SpotHealing}, {"clone", app::Tool::CloneStamp}, {"smudge", app::Tool::Smudge}, {"dodge", app::Tool::Dodge}, {"bucket", app::Tool::PaintBucket},
             {"gradient", app::Tool::Gradient}, {"shape", app::Tool::Shape}, {"eyedropper", app::Tool::Eyedropper}, {"hand", app::Tool::Hand}, {"zoom", app::Tool::Zoom}, {"text", app::Tool::Text}};
         QString name = parser.value(toolOption).toLower();
         if (tools.contains(name)) window.session()->selectTool(tools.value(name)); else qWarning("unknown tool: %s", qPrintable(name));

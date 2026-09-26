@@ -138,3 +138,7 @@ add_test(NAME cameraraw_tests COMMAND cameraraw_tests)
 
 add_executable(restyle_check restyle_check.cpp)
 target_link_libraries(restyle_check PRIVATE compositor::core compositor_warnings)
+
+add_executable(toning_tests toning_tests.cpp)
+target_link_libraries(toning_tests PRIVATE compositor::core compositor_warnings)
+add_test(NAME toning_tests COMMAND toning_tests)

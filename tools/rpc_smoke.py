@@ -282,6 +282,9 @@ def main():
 
     # Painting by coordinates: a stroke, a gradient and a shape layer.
     rpc.call("brush.stroke", points=[[20, 20], [120, 60], [220, 20]], size=12, color="#00ff00", opacity=1)
+    for toning in ({"tool": "dodge", "range": "highlights"}, {"tool": "burn", "protectTones": False}, {"tool": "sponge", "saturate": True}, {"tool": "sharpen"}):
+        assert rpc.call("brush.stroke", points=[[20, 30], [200, 30]], size=20, opacity=0.5, **toning)["tool"] == toning["tool"]
+    assert rpc.call("pixels.bucket", x=5, y=5, color="#336699", tolerance=10)["filled"]
     presets = rpc.call("brush.presets")
     if presets["supported"]:
         assert len(presets["presets"]) >= 196 and "Classic" in presets["groups"], presets["groups"]

@@ -4,6 +4,8 @@
   <file alias="blend.svg">icons/blend.svg</file>
   <file alias="crop.svg">icons/crop.svg</file>
   <file alias="droplet.svg">icons/droplet.svg</file>
+  <file alias="lollipop.svg">icons/lollipop.svg</file>
+  <file alias="paint-bucket.svg">icons/paint-bucket.svg</file>
   <file alias="eraser.svg">icons/eraser.svg</file>
   <file alias="folder-plus.svg">icons/folder-plus.svg</file>
   <file alias="hand.svg">icons/hand.svg</file>

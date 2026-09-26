@@ -32,7 +32,9 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - 196 MyPaint brushes (pencils, inks, charcoal, paint, smudging, by the MyPaint team, David Revoy, Ramón Miranda, Tanda and others) that follow pen pressure and tilt; pick one from the Brush tool's options bar. Your own `.myb` presets go in the app's `brushes` folder
 - Import your brushes (File > Import Brushes, or the button under the brush list): Photoshop `.abr` with its presets and dynamics, Procreate `.brushset` and `.brush` with shape, grain and pencil settings, Clip Studio `.sut` with its tip images, paper textures and settings, or any image as a tip. What a brush uses that cannot be carried over is listed after the import
 - Spot Healing Brush and Clone Stamp; both ignore what a layer mask hides
-- Smudge, Liquify and Blur, on pixels or masks
+- Smudge, Liquify and Blur, on pixels or masks, and Sharpen
+- Dodge, Burn (Shadows, Midtones, Highlights; Protect Tones) and Sponge (desaturate or saturate), painted through the brush with Exposure or Flow as its opacity; their curves are shaped after Photoshop's behaviour, not measured against it
+- Paint Bucket with Tolerance, Contiguous, Anti-alias and All Layers, inside the selection
 - Gradients and shapes (rectangles, rounded rectangles, ellipses)
 - Text in any installed font, editable until you paint on the layer
 - Eyedropper and colour picker

@@ -124,6 +124,12 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
     case Tool::Smudge:
         if (session_->beginWarp(doc)) drag_ = Drag::Warp;
         return;
+    case Tool::Dodge:
+        if (session_->beginToning(doc)) drag_ = Drag::Warp;   // a stroke, continued and ended as Blur's
+        return;
+    case Tool::PaintBucket:
+        session_->paintBucket(doc);
+        return;
     case Tool::Gradient:
         session_->beginGradient(doc);
         if (session_->gradientPending()) drag_ = Drag::Gradient;

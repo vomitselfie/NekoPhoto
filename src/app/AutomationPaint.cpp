@@ -58,11 +58,12 @@ void AutomationServer::registerPaintHandlers() {
         bool previousErase = s->brushErase, previousMask = s->isMaskSelected();
         QColor previousColor = s->foregroundColor;
         BlurToolMode previousBlur = s->blurMode;
+        const ToningSettings previousToning = s->toning;
         auto previousClone = s->cloneSource;
         auto previousActive = s->activeLayerId();
         const QString previousPreset = s->brushPreset;
         auto restore = [&] {
-            s->brushSettings = previousBrush; s->brushErase = previousErase; s->foregroundColor = previousColor; s->blurMode = previousBlur; s->cloneSource = previousClone;
+            s->brushSettings = previousBrush; s->brushErase = previousErase; s->foregroundColor = previousColor; s->blurMode = previousBlur; s->toning = previousToning; s->cloneSource = previousClone;
             s->brushPreset = previousPreset;
             if (previousActive && s->document() && s->document()->find(*previousActive)) s->selectLayer(previousActive, previousMask);
             s->selectTool(previousTool);
@@ -96,13 +97,22 @@ void AutomationServer::registerPaintHandlers() {
         else if (tool == "clone") {
             s->selectTool(Tool::CloneStamp);
             if (has(p, "source")) { QJsonObject src = obj(p, "source"); s->setCloneSource(QPointF(num(src, "x"), num(src, "y"))); }
-        } else if (tool == "smudge" || tool == "blur" || tool == "liquify") {
+        } else if (tool == "smudge" || tool == "blur" || tool == "liquify" || tool == "sharpen") {
             s->selectTool(Tool::Smudge);
-            s->blurMode = tool == "blur" ? BlurToolMode::Blur : tool == "smudge" ? BlurToolMode::Smudge : BlurToolMode::Liquify;
+            s->blurMode = tool == "blur" ? BlurToolMode::Blur : tool == "smudge" ? BlurToolMode::Smudge : tool == "sharpen" ? BlurToolMode::Sharpen : BlurToolMode::Liquify;
             warp = true;
-        } else { restore(); fail("tool must be brush, eraser, healing, clone, smudge, blur or liquify", invalidParams); }
+        } else if (tool == "dodge" || tool == "burn" || tool == "sponge") {
+            s->selectTool(Tool::Dodge);
+            s->toning.kind = tool == "dodge" ? ToningKind::Dodge : tool == "burn" ? ToningKind::Burn : ToningKind::Sponge;
+            const QString range = str(p, "range", QStringLiteral("midtones")).toLower();
+            if (range != "shadows" && range != "midtones" && range != "highlights") { restore(); fail("range must be shadows, midtones or highlights", invalidParams); }
+            s->toning.range = range == "shadows" ? ToneRange::Shadows : range == "highlights" ? ToneRange::Highlights : ToneRange::Midtones;
+            s->toning.protectTones = flag(p, "protectTones", true);
+            s->toning.saturate = flag(p, "saturate", false);
+            warp = true;
+        } else { restore(); fail("tool must be brush, eraser, healing, clone, smudge, blur, sharpen, liquify, dodge, burn or sponge", invalidParams); }
         penAt(0);
-        bool started = warp ? s->beginWarp(pts[0]) : s->beginBrush(pts[0], false);
+        bool started = warp ? (tool == "dodge" || tool == "burn" || tool == "sponge" ? s->beginToning(pts[0]) : s->beginWarp(pts[0])) : s->beginBrush(pts[0], false);
         if (!started) { restore(); fail("couldn't start the stroke: the active layer must have pixels (clone needs a source; healing and clone can't paint a mask)"); }
         for (size_t i = 1; i < pts.size(); i++) { penAt(i); if (warp) s->continueWarp(pts[i]); else s->continueBrush(pts[i]); }
         if (warp) s->endWarp(); else s->endBrush();
@@ -111,6 +121,24 @@ void AutomationServer::registerPaintHandlers() {
         QJsonObject answer{{"points", int(pts.size())}, {"tool", tool}};
         if (!usedPreset.isEmpty()) answer["preset"] = usedPreset;
         return answer;
+    });
+    add("pixels.bucket", [session, document](const QJsonObject& p) {
+        document();
+        EditorSession* s = session();
+        const auto previousBucket = s->bucket;
+        const double previousOpacity = s->brushSettings.opacity;
+        const QColor previousColor = s->foregroundColor;
+        auto restore = [&] { s->bucket = previousBucket; s->brushSettings.opacity = previousOpacity; s->foregroundColor = previousColor; };
+        if (has(p, "color")) { QColor c(str(p, "color")); if (!c.isValid()) fail("color must be a CSS colour", invalidParams); s->foregroundColor = c; }
+        s->bucket.tolerance = int(std::clamp(num(p, "tolerance", 32), 0.0, 255.0));
+        s->bucket.contiguous = flag(p, "contiguous", true);
+        s->bucket.antialias = flag(p, "antialias", true);
+        s->bucket.allLayers = flag(p, "allLayers", false);
+        s->brushSettings.opacity = std::clamp(num(p, "opacity", 1), 0.0, 1.0);
+        const bool filled = s->paintBucket(QPointF(num(p, "x"), num(p, "y")));
+        restore();
+        if (!filled) fail("nothing was filled: the point must be on the canvas and inside the selection, on a pixel layer (or its mask)");
+        return QJsonObject{{"filled", true}};
     });
     add("gradient.draw", [session, document](const QJsonObject& p) {
         if (session()->smartObjectBlocksPixels() && !flag(p, "mask", false))

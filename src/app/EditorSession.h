@@ -13,6 +13,7 @@
 #include "compositor/filters.h"
 #include "compositor/document.h"
 #include "compositor/layerstyle.h"
+#include "compositor/toning.h"
 #include "compositor/smartfilter.h"
 #include "compositor/trim.h"
 #include "compositor/history.h"
@@ -41,10 +42,10 @@ class QTimer;
 
 namespace app {
 
-enum class Tool { Move, Marquee, Lasso, Wand, Scribble, Crop, Brush, SpotHealing, CloneStamp, Smudge, Gradient, Shape, Eyedropper, Hand, Zoom, Text };
+enum class Tool { Move, Marquee, Lasso, Wand, Scribble, Crop, Brush, SpotHealing, CloneStamp, Smudge, Gradient, Shape, Eyedropper, Hand, Zoom, Text, Dodge, PaintBucket };
 enum class MarqueeKind { Rectangle, Ellipse };
 enum class LassoKind { Freehand, Polygonal };
-enum class BlurToolMode { Liquify, Blur, Smudge };
+enum class BlurToolMode { Liquify, Blur, Smudge, Sharpen };
 enum class GradientStyle { ForegroundToBackground, ForegroundToTransparent };
 
 /// Several layers transformed together: the upright box around them when the edit began, and each one's transform then.
@@ -232,8 +233,16 @@ public:
     void typeOpacityDigit(int digit);
     void changeBrushHardness(bool increase);
     void changeBrushSize(bool increase);
-    /// The Blur tool's modes; Liquify and Smudge push pixels, Blur paints a softened copy.
+    /// The Blur tool's modes; Liquify and Smudge push pixels, Blur paints a softened copy and Sharpen a sharpened one.
     BlurToolMode blurMode = BlurToolMode::Liquify;
+    /// Dodge, Burn and Sponge (one tool, as Photoshop's O group); the brush's opacity is their Exposure or Flow.
+    compositor::ToningSettings toning;
+    bool beginToning(QPointF documentPoint);
+    /// Paint Bucket: fills the pixels like the one clicked (the wand's test, on the active layer or all layers) with
+    /// the foreground colour at the brush's opacity, inside the selection.
+    struct BucketSettings { int tolerance = 32; bool contiguous = true, antialias = true, allLayers = false; };
+    BucketSettings bucket;
+    bool paintBucket(QPointF documentPoint);
     bool warpActive() const { return warp_ != nullptr; }
     bool beginWarp(QPointF documentPoint);
     void continueWarp(QPointF documentPoint);
@@ -651,6 +660,11 @@ private:
     std::optional<compositor::Uuid> styleEditLayer_;
     std::shared_ptr<const compositor::PsdLayerCarry> styleEditCarry_;
     std::optional<compositor::LayerStyle> styleClipboard_;
+    /// Starts a stroke that paints `process`'s version of the active layer (as the canvas shows it) through the tip.
+    bool beginProcessedStroke(QPointF documentPoint, const std::function<void(compositor::Image&)>& process);
+    /// Fills the active layer (or its mask) with `color` through `coverage` (document size; null: everywhere) at
+    /// `opacity`, as one undo step named `name`.
+    bool fillThrough(const QColor& color, const compositor::GrayImage* coverage, double opacity, const char* name);
     std::shared_ptr<const compositor::Image> previewImage_;
     std::optional<compositor::LayerTransform> previewTransform_;
     std::optional<std::pair<compositor::Uuid, compositor::Uuid>> transformDuplicate_; // copy, source

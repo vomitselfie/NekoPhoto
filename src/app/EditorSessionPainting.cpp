@@ -181,7 +181,8 @@ void EditorSession::endBrush() {
     stroke->flush();
     Rect tail = stroke->takeDirtyRect();
     if (!tail.isEmpty()) strokeRegion_ = strokeRegion_.isEmpty() ? toQRect(tail) : strokeRegion_.united(toQRect(tail));
-    QString name = strokeMask_ ? "Paint Mask" : tool_ == Tool::SpotHealing ? "Spot Healing" : tool_ == Tool::CloneStamp ? "Clone Stamp" : tool_ == Tool::Smudge ? "Blur" : (brushErase ? "Eraser" : "Brush Stroke");
+    QString name = strokeMask_ ? "Paint Mask" : tool_ == Tool::SpotHealing ? "Spot Healing" : tool_ == Tool::CloneStamp ? "Clone Stamp" : tool_ == Tool::Smudge ? (blurMode == BlurToolMode::Sharpen ? "Sharpen" : "Blur")
+                 : tool_ == Tool::Dodge ? (toning.kind == ToningKind::Dodge ? "Dodge" : toning.kind == ToningKind::Burn ? "Burn" : "Sponge") : (brushErase ? "Eraser" : "Brush Stroke");
     // Spot healing changes the pixels as it commits; every other brush commits what its preview showed.
     commitRasterEdit(*stroke, strokeLayerId_, strokeMask_, name, strokeRegion_, tool_ != Tool::SpotHealing);
     strokeRegion_ = {};
@@ -201,7 +202,7 @@ void EditorSession::cancelBrush() {
 
 void EditorSession::typeOpacityDigit(int digit) {
     if (stroke_ || digit < 0 || digit > 9) return;
-    bool brushLike = tool_ == Tool::Brush || tool_ == Tool::SpotHealing || tool_ == Tool::CloneStamp || tool_ == Tool::Smudge;
+    bool brushLike = tool_ == Tool::Brush || tool_ == Tool::SpotHealing || tool_ == Tool::CloneStamp || tool_ == Tool::Smudge || tool_ == Tool::Dodge || tool_ == Tool::PaintBucket;
     if (!brushLike && tool_ != Tool::Gradient && tool_ != Tool::Move) return;
     qint64 now = opacityTimer_.isValid() ? opacityTimer_.elapsed() : 0;
     if (!opacityTimer_.isValid()) opacityTimer_.start();
@@ -267,6 +268,12 @@ bool EditorSession::beginWarp(QPointF documentPoint) {
         emit documentChanged({});
         return true;
     }
+    if (blurMode == BlurToolMode::Blur || blurMode == BlurToolMode::Sharpen) {
+        // Blur paints a softened copy of the layer in place, through the tip; Sharpen a sharpened one.
+        const double diameter = brushSettings.diameter;
+        if (blurMode == BlurToolMode::Sharpen) return beginProcessedStroke(documentPoint, [](Image& image) { sharpenImage(image); });
+        return beginProcessedStroke(documentPoint, [diameter](Image& image) { gaussianBlur(image, std::min(30.0, std::max(1.5, diameter / 10))); });
+    }
     if (isMaskSelected_) { emit error(tr("Smudge and Liquify work on a layer's pixels, not its mask.")); return false; }
     if (!effectiveVisibleIds(document_->layers).count(layer->id)) return false;
     // The layer as the canvas shows it, at document size.
@@ -276,20 +283,6 @@ bool EditorSession::beginWarp(QPointF documentPoint) {
     copy.transform = displayedTransform(*layer);
     single.layers = {copy};
     auto rendered = renderFlattened(single);
-    if (blurMode == BlurToolMode::Blur) {
-        // Blur paints a softened copy of the layer in place, through the tip.
-        double sigma = std::min(30.0, std::max(1.5, brushSettings.diameter / 10));
-        gaussianBlur(*rendered, sigma);
-        BrushSettings settings = brushSettings;
-        stroke_ = makeRasterEdit(*layer, false, settings);
-        if (!stroke_) return false;
-        stroke_->setClone(CloneSource{rendered, {0, 0}}, false);
-        strokeLayerId_ = layer->id;
-        strokeMask_ = false;
-        stroke_->append(toPoint(documentPoint));
-        emit documentChanged({});
-        return true;
-    }
     warp_ = std::make_unique<WarpStroke>(rendered, blurMode == BlurToolMode::Smudge ? WarpMode::Smudge : WarpMode::Liquify, brushSettings.diameter, brushSettings.hardness, brushSettings.opacity);
     warpLayerId_ = layer->id;
     warpTransform_ = copy.transform;
@@ -297,6 +290,38 @@ bool EditorSession::beginWarp(QPointF documentPoint) {
     lastBrushPoint_ = documentPoint;
     emit documentChanged({});
     return true;
+}
+
+bool EditorSession::beginProcessedStroke(QPointF documentPoint, const std::function<void(Image&)>& process) {
+    const Layer* layer = activeLayer();
+    if (!document_ || !layer || stroke_ || warp_) return false;
+    if (isMaskSelected_) { emit error(tr("This tool works on a layer's pixels, not its mask.")); return false; }
+    if (!effectiveVisibleIds(document_->layers).count(layer->id)) return false;
+    // The layer as the canvas shows it, at document size, processed, then painted back through the tip.
+    Document single(document_->width, document_->height);
+    Layer copy = *layer;
+    copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
+    copy.transform = displayedTransform(*layer);
+    single.layers = {copy};
+    auto rendered = renderFlattened(single);
+    process(*rendered);
+    stroke_ = makeRasterEdit(*layer, false, brushSettings);
+    if (!stroke_) return false;
+    stroke_->setClone(CloneSource{rendered, {0, 0}}, false);
+    strokeLayerId_ = layer->id;
+    strokeMask_ = false;
+    stroke_->append(toPoint(documentPoint));
+    emit documentChanged({});
+    return true;
+}
+
+bool EditorSession::beginToning(QPointF documentPoint) {
+    if (!document_ || stroke_ || warp_ || transformEdit_) return false;
+    const Layer* layer = activeLayer();
+    if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image) return false;
+    if (smartObjectBlocksPixels(true)) return false;
+    const ToningSettings settings = toning;
+    return beginProcessedStroke(documentPoint, [settings](Image& image) { toneImage(image, settings); });
 }
 
 void EditorSession::continueWarp(QPointF documentPoint) {

@@ -551,11 +551,17 @@ def remove_background(refine: bool = True, refine_edges: Optional[float] = None,
 # ---- painting by coordinates ---------------------------------------------------------------------
 
 @edit("Paint a stroke")
-def brush_stroke(points: list[list[float]], tool: str = "brush", size: Optional[float] = None, hardness: Optional[float] = None, opacity: Optional[float] = None, color: Optional[str] = None, mask: bool = False, source_x: Optional[float] = None, source_y: Optional[float] = None, preset: Optional[str] = None, pressure: Optional[float] = None, pressures: Optional[list[float]] = None) -> str:
-    """Paint one stroke through [x, y] points on the active layer (or its mask with mask=true): tool brush, eraser, healing, clone (with source_x/source_y), smudge, blur or liquify; size in pixels, hardness and opacity 0..1, a CSS color.
+def brush_stroke(points: list[list[float]], tool: str = "brush", size: Optional[float] = None, hardness: Optional[float] = None, opacity: Optional[float] = None, color: Optional[str] = None, mask: bool = False, source_x: Optional[float] = None, source_y: Optional[float] = None, preset: Optional[str] = None, pressure: Optional[float] = None, pressures: Optional[list[float]] = None, tone_range: Optional[str] = None, protect_tones: Optional[bool] = None, saturate: Optional[bool] = None) -> str:
+    """Paint one stroke through [x, y] points on the active layer (or its mask with mask=true): tool brush, eraser, healing, clone (with source_x/source_y), smudge, blur, sharpen or liquify, or dodge / burn (lighten / darken; tone_range shadows, midtones or highlights, protect_tones keeps the colour) and sponge (desaturates, or saturates with saturate=true), where opacity is the Exposure or Flow; size in pixels, hardness and opacity 0..1, a CSS color.
     With tool brush or eraser, preset picks a MyPaint brush from brush_presets (pencils, inks, charcoal, paint, smudging; "round" for the plain tip); it starts at its own size unless size is given, and follows pen pressure: one pressure 0..1 for the stroke, or pressures with one value per point (a ramp tapers the line)."""
     source = {"x": source_x, "y": source_y} if source_x is not None and source_y is not None else None
-    return text(call("brush.stroke", points=points, tool=tool, size=size, hardness=hardness, opacity=opacity, color=color, mask=mask, source=source, preset=preset, pressure=pressure, pressures=pressures))
+    return text(call("brush.stroke", points=points, tool=tool, size=size, hardness=hardness, opacity=opacity, color=color, mask=mask, source=source, preset=preset, pressure=pressure, pressures=pressures, range=tone_range, protectTones=protect_tones, saturate=saturate))
+
+
+@edit("Paint Bucket")
+def pixels_bucket(x: float, y: float, color: Optional[str] = None, opacity: float = 1, tolerance: int = 32, contiguous: bool = True, antialias: bool = True, all_layers: bool = False) -> str:
+    """Paint Bucket: fill the pixels like the one at x, y (document pixels) on the active layer (or its mask) with color (CSS; default the foreground), inside the selection. tolerance 0..255 as the Magic Wand's; contiguous only reaches connected pixels; all_layers compares with the document as shown instead of the active layer (an empty layer then fills the shape the click is in)."""
+    return text(call("pixels.bucket", x=x, y=y, color=color, opacity=opacity, tolerance=tolerance, contiguous=contiguous, antialias=antialias, allLayers=all_layers))
 
 
 @edit("Import brushes")

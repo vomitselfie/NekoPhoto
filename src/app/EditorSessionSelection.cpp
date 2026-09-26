@@ -147,19 +147,53 @@ bool EditorSession::retolerateWand(int tolerance) {
 
 void EditorSession::fillSelection(const QColor& color) {
     if (!canEditLayers()) return;
-    Layer* layer = activeLayerMutable();
-    if (!layer || layer->isGroup || layer->adjustment) return;
-    bool mask = isMaskSelected_ && layer->mask;
-    if (!mask && smartObjectBlocksPixels(true)) return;
     const GrayImage* selection = document_->selection && document_->selection->coverage ? document_->selection->coverage.get() : nullptr;
     if (document_->selection && !selection) return;
+    fillThrough(color, selection, 1, "Fill");
+}
+
+bool EditorSession::paintBucket(QPointF documentPoint) {
+    if (!canEditLayers()) return false;
+    const int x = int(std::floor(documentPoint.x())), y = int(std::floor(documentPoint.y()));
+    if (x < 0 || y < 0 || x >= document_->width || y >= document_->height) return false;
+    const Layer* layer = activeLayer();
+    if (!layer || layer->isGroup || layer->adjustment) return false;
+    const GrayImage* selection = document_->selection && document_->selection->coverage ? document_->selection->coverage.get() : nullptr;
+    if (document_->selection && (!selection || selection->at(x, y) == 0)) return false;   // a click outside the selection fills nothing
+    // What the click is compared with: the document as shown, or the active layer's own pixels as placed (an empty
+    // layer is all transparent, so it fills everywhere the fill reaches).
+    std::shared_ptr<Image> sample;
+    if (bucket.allLayers) sample = renderFlattened(*document_);
+    else {
+        Document single(document_->width, document_->height);
+        Layer copy = *layer;
+        copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
+        copy.transform = displayedTransform(*layer);
+        single.layers = {copy};
+        sample = renderFlattened(single);
+    }
+    GrayImage coverage(document_->width, document_->height);
+    if (wandMask(*sample, x, y, 0, std::clamp(bucket.tolerance, 0, 255), bucket.contiguous, coverage) <= 0) return false;
+    if (bucket.antialias) gaussianBlur(coverage, 0.5);
+    if (selection)
+        for (int py = 0; py < coverage.height(); py++)
+            for (int px = 0; px < coverage.width(); px++) coverage.at(px, py) = uint8_t((coverage.at(px, py) * selection->at(px, py) + 127) / 255);
+    return fillThrough(foregroundColor, &coverage, brushSettings.opacity, "Paint Bucket");
+}
+
+bool EditorSession::fillThrough(const QColor& color, const GrayImage* selection, double opacity, const char* name) {
+    Layer* layer = activeLayerMutable();
+    if (!layer || layer->isGroup || layer->adjustment) return false;
+    bool mask = isMaskSelected_ && layer->mask;
+    if (!mask && smartObjectBlocksPixels(true)) return false;
+    opacity = std::clamp(opacity, 0.0, 1.0);
     // A fill is a stroke covering the whole canvas: paint through the selection.
     BrushSettings settings;
     settings.diameter = 1;
     settings.red = color.redF(); settings.green = color.greenF(); settings.blue = color.blueF();
     if (mask) settings.maskValue = color.lightnessF() >= 0.5 ? 1 : 0;
     BrushStroke stroke(*layer, mask, settings, document_->size(), selection);
-    if (!stroke.isValid()) return;
+    if (!stroke.isValid()) return false;
     // Direct fill over the working image rather than dabbing.
     auto working = mask ? nullptr : std::const_pointer_cast<Image>(stroke.previewImage());
     auto workingMask = mask ? std::const_pointer_cast<GrayImage>(stroke.previewMask()) : nullptr;
@@ -168,7 +202,7 @@ void EditorSession::fillSelection(const QColor& color) {
     for (int py = 0; py < h; py++) for (int px = 0; px < w; px++) {
         Point d = toDoc.apply({px + 0.5, py + 0.5});
         if (d.x < 0 || d.y < 0 || d.x >= document_->width || d.y >= document_->height) continue;
-        double c = selection ? selection->at(std::min(int(d.x), selection->width() - 1), std::min(int(d.y), selection->height() - 1)) / 255.0 : 1.0;
+        double c = opacity * (selection ? selection->at(std::min(int(d.x), selection->width() - 1), std::min(int(d.y), selection->height() - 1)) / 255.0 : 1.0);
         if (c <= 0) continue;
         if (mask) {
             uint8_t& v = workingMask->at(px, py);
@@ -181,7 +215,7 @@ void EditorSession::fillSelection(const QColor& color) {
             p[3] = uint8_t(p[3] * (1 - c) + 255 * c + 0.5);
         }
     }
-    beginEdit("Fill");
+    beginEdit(name);
     if (mask) { layer->mask->asset = MaskAsset::make(workingMask); }
     else {
         PixelBounds b = alphaBounds(*working);
@@ -198,6 +232,7 @@ void EditorSession::fillSelection(const QColor& color) {
     }
     endEdit();
     notifyDocument();
+    return true;
 }
 
 void EditorSession::clearSelectedPixelsNow(Layer& layer) {

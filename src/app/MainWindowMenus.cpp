@@ -75,7 +75,9 @@ void MainWindow::buildToolRail() {
     tool(Tool::SpotHealing, tr("Spot Healing Brush"), "bandage", QKeySequence("J"));
     tool(Tool::CloneStamp, tr("Clone Stamp (Alt-click sets the source)"), "stamp", QKeySequence("S"));
     tool(Tool::Smudge, tr("Liquify / Blur / Smudge"), "droplet", QKeySequence("R"));
+    tool(Tool::Dodge, tr("Dodge / Burn / Sponge"), "lollipop", QKeySequence("O"));
     tool(Tool::Gradient, tr("Gradient"), "blend", QKeySequence("G"));
+    tool(Tool::PaintBucket, tr("Paint Bucket"), "paint-bucket", QKeySequence("K"));
     tool(Tool::Shape, tr("Shape (Shift-U switches Rectangle / Ellipse)"), "shapes", QKeySequence("U"));
     tool(Tool::Text, tr("Text"), "type", QKeySequence("T"));
     tool(Tool::Eyedropper, tr("Eyedropper"), "pipette", QKeySequence("I"));

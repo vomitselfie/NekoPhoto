@@ -83,6 +83,8 @@ ToolOptionsBar::ToolOptionsBar(EditorSession* session, CanvasWidget* canvas, QWi
     stack_->addWidget(buildShapeOptions());      // 12
     stack_->addWidget(buildTextOptions());       // 13
     stack_->addWidget(buildScribbleOptions());   // 14
+    stack_->addWidget(buildToningOptions());     // 15
+    stack_->addWidget(buildBucketOptions());     // 16
     addWidget(stack_);
     connect(session_, &EditorSession::toolChanged, this, &ToolOptionsBar::syncTool);
     connect(session_, &EditorSession::transformChanged, this, &ToolOptionsBar::syncTransformFields);
@@ -109,11 +111,13 @@ void ToolOptionsBar::syncTool() {
     case Tool::Gradient: index = 11; break;
     case Tool::Shape: index = 12; break;
     case Tool::Text: index = 13; break;
+    case Tool::Dodge: index = 15; break;
+    case Tool::PaintBucket: index = 16; break;
     }
     for (auto& s : syncers_) s();
     stack_->setCurrentIndex(index);
     // Widgets that mirror session state.
-    for (int page : {1, 8, 9, 10})
+    for (int page : {1, 8, 9, 10, 15, 16})
     for (auto* spin : stack_->widget(page)->findChildren<QDoubleSpinBox*>()) {
         QSignalBlocker b(spin);
         QString role = spin->property("role").toString();
@@ -351,7 +355,7 @@ QWidget* ToolOptionsBar::buildCloneOptions() {
     return w;
 }
 
-void ToolOptionsBar::addBrushTipFields(QHBoxLayout* h) {
+void ToolOptionsBar::addBrushTipFields(QHBoxLayout* h, const QString& strength) {
     h->addWidget(separator());
     auto spin = [&](const QString& label, const QString& role, double min, double max, double value, const QString& suffix, auto apply) {
         h->addWidget(new QLabel(label));
@@ -363,18 +367,83 @@ void ToolOptionsBar::addBrushTipFields(QHBoxLayout* h) {
     };
     spin(tr("Size"), "size", 1, 2000, session_->brushSettings.diameter, " px", [this](double v) { session_->brushSettings.diameter = v; });
     spin(tr("Hardness"), "hardness", 0, 100, session_->brushSettings.hardness * 100, "%", [this](double v) { session_->brushSettings.hardness = v / 100; });
-    spin(tr("Opacity"), "opacity", 1, 100, session_->brushSettings.opacity * 100, "%", [this](double v) { session_->brushSettings.opacity = v / 100; });
+    spin(strength.isEmpty() ? tr("Opacity") : strength, "opacity", 1, 100, session_->brushSettings.opacity * 100, "%", [this](double v) { session_->brushSettings.opacity = v / 100; });
 }
 
 QWidget* ToolOptionsBar::buildSmudgeOptions() {
     QWidget* w = row();
     auto* h = layoutOf(w);
     auto* mode = new QComboBox;
-    mode->addItems({tr("Liquify"), tr("Blur"), tr("Smudge")});
+    mode->addItems({tr("Liquify"), tr("Blur"), tr("Smudge"), tr("Sharpen")});
     connect(mode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->blurMode = BlurToolMode(i); });
     h->addWidget(new QLabel(tr("Mode")));
     h->addWidget(mode);
     addBrushTipFields(h);
+    h->addStretch();
+    return w;
+}
+
+QWidget* ToolOptionsBar::buildToningOptions() {
+    QWidget* w = row();
+    auto* h = layoutOf(w);
+    auto* kind = new QComboBox;
+    kind->addItems({tr("Dodge"), tr("Burn"), tr("Sponge")});
+    kind->setCurrentIndex(int(session_->toning.kind));
+    auto* range = new QComboBox;
+    range->addItems({tr("Shadows"), tr("Midtones"), tr("Highlights")});
+    range->setCurrentIndex(int(session_->toning.range));
+    auto* protect = new QCheckBox(tr("Protect Tones"));
+    protect->setChecked(session_->toning.protectTones);
+    auto* sponge = new QComboBox;
+    sponge->addItems({tr("Desaturate"), tr("Saturate")});
+    sponge->setCurrentIndex(session_->toning.saturate ? 1 : 0);
+    auto* rangeLabel = new QLabel(tr("Range"));
+    auto* spongeLabel = new QLabel(tr("Mode"));
+    auto show = [=, this] {
+        const bool isSponge = session_->toning.kind == compositor::ToningKind::Sponge;
+        rangeLabel->setVisible(!isSponge); range->setVisible(!isSponge); protect->setVisible(!isSponge);
+        spongeLabel->setVisible(isSponge); sponge->setVisible(isSponge);
+    };
+    connect(kind, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, show](int i) { session_->toning.kind = compositor::ToningKind(i); show(); });
+    connect(range, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->toning.range = compositor::ToneRange(i); });
+    connect(protect, &QCheckBox::toggled, this, [this](bool on) { session_->toning.protectTones = on; });
+    connect(sponge, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->toning.saturate = i == 1; });
+    h->addWidget(new QLabel(tr("Tool")));
+    h->addWidget(kind);
+    h->addWidget(rangeLabel);
+    h->addWidget(range);
+    h->addWidget(protect);
+    h->addWidget(spongeLabel);
+    h->addWidget(sponge);
+    addBrushTipFields(h, tr("Exposure"));
+    h->addStretch();
+    show();
+    return w;
+}
+
+QWidget* ToolOptionsBar::buildBucketOptions() {
+    QWidget* w = row();
+    auto* h = layoutOf(w);
+    h->addWidget(new QLabel(tr("Opacity")));
+    auto* opacity = numberField(1, 100, 0, "%", tr("Opacity"));
+    opacity->setProperty("role", "opacity");
+    opacity->setValue(session_->brushSettings.opacity * 100);
+    connect(opacity, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double v) { session_->brushSettings.opacity = v / 100; emit session_->toolChanged(); });
+    h->addWidget(opacity);
+    h->addWidget(new QLabel(tr("Tolerance")));
+    auto* tolerance = numberField(0, 255, 0, QString(), tr("Tolerance"));
+    tolerance->setValue(session_->bucket.tolerance);
+    connect(tolerance, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double v) { session_->bucket.tolerance = int(v); });
+    h->addWidget(tolerance);
+    auto check = [&](const QString& label, bool& value) {
+        auto* box = new QCheckBox(label);
+        box->setChecked(value);
+        connect(box, &QCheckBox::toggled, this, [&value](bool on) { value = on; });
+        h->addWidget(box);
+    };
+    check(tr("Anti-alias"), session_->bucket.antialias);
+    check(tr("Contiguous"), session_->bucket.contiguous);
+    check(tr("All Layers"), session_->bucket.allLayers);
     h->addStretch();
     return w;
 }

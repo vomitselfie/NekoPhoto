@@ -88,7 +88,7 @@ void CanvasWidget::setCropRatio(double ratio) { cropRatio_ = ratio; }
 
 bool CanvasWidget::isBrushLike() const {
     Tool t = session_->tool();
-    return t == Tool::Brush || t == Tool::SpotHealing || t == Tool::CloneStamp || t == Tool::Smudge;
+    return t == Tool::Brush || t == Tool::SpotHealing || t == Tool::CloneStamp || t == Tool::Smudge || t == Tool::Dodge;
 }
 
 void CanvasWidget::syncViewport() {

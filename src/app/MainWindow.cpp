@@ -305,6 +305,8 @@ QString MainWindow::toolHint(Tool tool, bool erase) {
     case Tool::CloneStamp: return tr("Alt-click sets the source, then paint");
     case Tool::Smudge: return tr("Opacity is the strength; Liquify pushes pixels, Smudge drags colour, Blur softens");
     case Tool::Gradient: return tr("Drag a line; drag again to redo it; Enter applies, Esc discards; Shift snaps the angle");
+    case Tool::Dodge: return tr("Opacity is the Exposure (Dodge, Burn) or Flow (Sponge); a stroke never goes past one full pass");
+    case Tool::PaintBucket: return tr("Click to fill pixels like the one clicked with the foreground colour, inside the selection");
     case Tool::Shape: return tr("Drag a shape in the foreground colour; Shift squares, Alt grows from the centre; Shift-U switches kind");
     case Tool::Text: return tr("Click to add text in the foreground colour, or click a text layer to edit it; the options bar sets the font");
     case Tool::Eyedropper: return tr("Click sets the foreground colour, Alt-click the background");
