@@ -954,8 +954,11 @@ struct Importer {
         if (const std::string* t = node.attribute("transform")) ctm = compose(parentCtm, parseTransform(*t));
 
         std::string fillUnsupported, strokeUnsupported;
-        const auto fillPaint = g->fillable ? solidPaint(style.fill, style, fillUnsupported) : std::nullopt;
-        const auto strokePaint = style.strokeWidth > 0 ? solidPaint(style.stroke, style, strokeUnsupported) : std::nullopt;
+        // Plain colours and flags, not optionals: GCC 13 cannot follow an optional's payload through here.
+        std::array<double, 4> fillColour{0, 0, 0, 1}, strokeColour{0, 0, 0, 1};
+        bool hasFill = false, hasStroke = false;
+        if (g->fillable) if (auto p = solidPaint(style.fill, style, fillUnsupported)) { fillColour = *p; hasFill = true; }
+        if (style.strokeWidth > 0) if (auto p = solidPaint(style.stroke, style, strokeUnsupported)) { strokeColour = *p; hasStroke = true; }
         std::string reason = rasterReason(node, style);
         if (reason.empty() && !fillUnsupported.empty()) reason = fillUnsupported;
         if (reason.empty() && !strokeUnsupported.empty()) reason = strokeUnsupported;
@@ -969,20 +972,21 @@ struct Importer {
         applySvgFillRule(g->path, style.evenOdd);
         transformPath(g->path, ctm);
         const double scale = std::sqrt(std::abs(ctm.determinant()));
-        if (strokePaint && std::abs(std::hypot(ctm.a, ctm.b) - std::hypot(ctm.c, ctm.d)) > 0.05 * std::max(1.0, scale))
+        if (hasStroke && std::abs(std::hypot(ctm.a, ctm.b) - std::hypot(ctm.c, ctm.d)) > 0.05 * std::max(1.0, scale))
             note("A stroke under an SVG transform that stretches one way more than the other was given one width.");
 
         VectorShape shape;
         shape.path = std::move(g->path);
-        shape.fill = fillPaint.has_value();
-        const auto& paint = fillPaint ? *fillPaint : strokePaint ? *strokePaint : std::array<double, 4>{0, 0, 0, 1};
+        shape.fill = hasFill;
+        // The fill's colour, or the stroke's when there is no fill.
+        const std::array<double, 4>& paint = hasFill ? fillColour : strokeColour;
         shape.r = byteOf(paint[0]); shape.g = byteOf(paint[1]); shape.b = byteOf(paint[2]);
         VectorStroke& stroke = shape.stroke;
-        stroke.enabled = strokePaint.has_value() && style.strokeWidth * scale > kEpsilon;
+        stroke.enabled = hasStroke && style.strokeWidth * scale > kEpsilon;
         stroke.fillEnabled = shape.fill;
         if (stroke.enabled) {
             stroke.width = std::max(0.01, style.strokeWidth * scale);
-            stroke.r = byteOf((*strokePaint)[0]); stroke.g = byteOf((*strokePaint)[1]); stroke.b = byteOf((*strokePaint)[2]);
+            stroke.r = byteOf(strokeColour[0]); stroke.g = byteOf(strokeColour[1]); stroke.b = byteOf(strokeColour[2]);
             stroke.cap = style.cap;
             stroke.join = style.join;
             stroke.miterLimit = style.miterLimit;
@@ -1006,8 +1010,8 @@ struct Importer {
         }
         // Opacity: the layer carries opacity x fill-opacity (x a colour's alpha); the stroke's own opacity divides that
         // back out, so a stroke more opaque than its fill is held to the fill's.
-        const double fillFactor = shape.fill ? style.fillOpacity * (*fillPaint)[3] : 1.0;
-        const double strokeTarget = strokePaint ? style.strokeOpacity * (*strokePaint)[3] : 1.0;
+        const double fillFactor = shape.fill ? style.fillOpacity * fillColour[3] : 1.0;
+        const double strokeTarget = hasStroke ? style.strokeOpacity * strokeColour[3] : 1.0;
         double layerOpacity = style.opacity * fillFactor;
         if (stroke.enabled) {
             if (!shape.fill) layerOpacity = style.opacity * strokeTarget, stroke.opacity = 1;
