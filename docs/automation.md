@@ -136,7 +136,10 @@ Hue/Saturation settings accept `"saturationCurve": "photoshop"` (+100 saturates 
 -100 greys out, lightness kept) beside the default `"scale"`.
 
 Pixels of the active layer, inside the selection: `pixels.adjust`,
-`pixels.filter` (`kind` and its settings; Lens Correction takes `bicubic: true` for a sharper resample), `pixels.invert`, `pixels.fill`, `pixels.clear`,
+`pixels.filter` (`kind` and its settings; Lens Correction takes `bicubic: true` for a sharper resample),
+`pixels.cameraRaw` (Filter > Camera Raw Filter: `settings` with the model's keys, nested `curve`, `mixer`, `grading`,
+`detail`, `optics`, `geometry` and `calibration` objects, unknown keys refused, `whiteBalance: "Auto"` balances the layer;
+`rpc.describe` lists every key and range and [camera-raw.md](camera-raw.md) what each does), `pixels.invert`, `pixels.fill`, `pixels.clear`,
 `pixels.contentAwareFill`, `pixels.removeBackground` (`refine`, and then `refineEdges`,
 `contrast`, `shiftEdge`, `matting`: the band width in pixels in which hair opacity is solved,
 `cleanup`: half-transparent specks touching no edge go, `decontaminate`: the edge pixels take the

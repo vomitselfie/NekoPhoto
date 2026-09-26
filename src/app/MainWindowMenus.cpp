@@ -13,6 +13,7 @@
 #include "CanvasFrame.h"
 #include "Dialogs.h"
 #include "ImageConvert.h"
+#include "CameraRawDialog.h"
 #include "FilterDialog.h"
 #include "GmicDialog.h"
 #include "ColorSwatches.h"
@@ -333,6 +334,12 @@ void MainWindow::buildMenus() {
     filterAction(tr("Add &Noise…"), FilterKind::AddNoise);
     filterAction(tr("&Lens Correction…"), FilterKind::LensCorrection);
     filter->addSeparator();
+    // Photoshop's shortcut. A destructive filter here: on a smart object it asks first, like the others.
+    needsDocument(filter->addAction(tr("Camera &Raw Filter…"), QKeySequence("Shift+Ctrl+A"), this, [this] {
+        if (session_->smartObjectBlocksPixels(true)) return;
+        if (!session_->canAdjustPixels()) { showError(tr("Camera Raw Filter"), tr("Select a visible image layer (not a mask) to filter its pixels.")); return; }
+        (new CameraRawDialog(session_, this))->show();
+    }));
     filter->addSeparator();
     needsDocument(filter->addAction(tr("&G'MIC…"), QKeySequence("Ctrl+Shift+G"), this, [this] {
         if (session_->smartObjectBlocksPixels(true)) return;

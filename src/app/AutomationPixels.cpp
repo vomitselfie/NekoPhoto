@@ -3,6 +3,7 @@
 #include "AutomationHandlers.h"
 #include "Gmic.h"
 #include "ModelStore.h"
+#include "compositor/cameraraw.h"
 #include "compositor/matte.h"
 #include "compositor/subject.h"
 #include <QJsonDocument>
@@ -76,6 +77,37 @@ void AutomationServer::registerPixelsHandlers() {
         if (*kind == FilterKind::GaussianBlur || *kind == FilterKind::MotionBlur) image = trimToPixels(*out, transform, placed);
         s->commitPixels(image, placed, QString::fromUtf8(filterKindName(*kind)));
         return QJsonObject{{"applied", QString::fromUtf8(filterKindName(*kind))}};
+    });
+    add("pixels.cameraRaw", [session, document](const QJsonObject& p) {
+        // Filter > Camera Raw Filter: `settings` has the model's keys (compositor/cameraraw.h); omitted keys keep their defaults.
+        refuseSmartObject(session());
+        document();
+        EditorSession* s = session();
+        if (!s->canAdjustPixels()) fail("the active layer has no pixels to filter; select a pixel layer");
+        CameraRawSettings settings;
+        std::string error;
+        const QByteArray text = QJsonDocument(obj(p, "settings")).toJson(QJsonDocument::Compact);
+        if (!CameraRawSettings::parse(text.toStdString(), settings, &error)) fail("settings." + qs(error), invalidParams);
+        if (settings.whiteBalance == CameraRawWhiteBalance::Auto && !obj(p, "settings").contains("temperature") && !obj(p, "settings").contains("tint")) {
+            // Auto without explicit numbers: the gray-world balance of the layer, as the dialog's White Balance > Auto.
+            LayerTransform probe;
+            if (auto layer = s->adjustmentSource(0, probe))
+                if (auto solved = CameraRawSettings::autoBalance(*layer)) {
+                    settings.temperature = std::clamp((*solved)[0], -100.0, 100.0);
+                    settings.tint = std::clamp((*solved)[1], -100.0, 100.0);
+                }
+        }
+        const CameraRawSettings normalized = settings.normalized();
+        QJsonObject applied = QJsonDocument::fromJson(QByteArray::fromStdString(normalized.toJson())).object();
+        if (normalized.isIdentity()) return QJsonObject{{"applied", false}, {"settings", applied}};
+        LayerTransform transform;
+        auto source = s->adjustmentSource(0, transform);
+        if (!source) fail("the active layer has no pixels; select a pixel layer with layers.select (document.overview shows each layer's kind)");
+        auto out = std::make_shared<Image>(*source);
+        if (!applyCameraRaw(*out, normalized, 1, uint32_t(integer(p, "seed", 1)))) fail("settings are out of range", invalidParams);
+        if (auto coverage = s->selectionOnGrid(transform, source->width(), source->height())) blendThroughCoverage(*out, *source, *coverage);
+        s->commitPixels(out, transform, "Camera Raw Filter");
+        return QJsonObject{{"applied", true}, {"settings", applied}};
     });
     add("pixels.invert", [session, document](const QJsonObject&) {
         refuseSmartObject(session()); document(); session()->invertActive(); return QJsonObject{}; });

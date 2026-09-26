@@ -41,6 +41,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Levels (with Auto), Curves, Hue/Saturation, Exposure, Gradient Map, Grain, Invert
 - Gaussian Blur and Motion Blur, which spread past a layer's edges
 - Add Noise and Lens Correction
+- Filter > Camera Raw Filter (Shift+Ctrl+A): white balance, tone, presence, curve, colour mixer, colour grading, detail, optics, geometry, effects and calibration on a layer's pixels ([camera-raw.md](camera-raw.md))
 - Filter > G'MIC: over 850 filters with their own controls, when `gmic` is installed (Update Filters fetches the catalogue; the few that cannot work here, such as those that resize the image or make layers, are hidden unless Show all filters is on)
 - Live previews on the canvas, limited to the selection when there is one
 
@@ -109,6 +110,7 @@ Mac 版と同じ機能を、Linux のキー表記で使えます。キーボー�
 - レベル補正(自動補正付き)、トーンカーブ、色相・彩度、露光量、グラデーションマップ、粒子、階調の反転
 - ぼかし(ガウス)とぼかし(移動):レイヤーの端の外まで広がります
 - ノイズを加える、レンズ補正
+- フィルター > Camera Raw フィルター(Shift+Ctrl+A):ホワイトバランス、階調、外観、トーンカーブ、カラーミキサー、カラーグレーディング、ディテール、光学、ジオメトリ、効果、キャリブレーションをレイヤーのピクセルに適用
 - フィルター > G'MIC:`gmic` をインストールすると、850 種類以上のフィルターを専用の設定画面で使えます(画像サイズを変えるものやレイヤーを作るものなど、ここで使えないものは「Show all filters」をオンにしない限り非表示)
 - カンバス上でのライブプレビュー(選択範囲があればその中だけ)
 

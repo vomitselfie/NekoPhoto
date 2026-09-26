@@ -66,6 +66,8 @@ qt_add_executable(nekophoto
     BrushPicker.cpp
     FilterDialog.h
     FilterDialog.cpp
+    CameraRawDialog.h
+    CameraRawDialog.cpp
     PixelDialog.h
     PixelDialog.cpp
     Gmic.h

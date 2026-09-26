@@ -131,3 +131,7 @@ add_test(NAME smartfilter_tests COMMAND smartfilter_tests)
 add_executable(vectormask_tests vectormask_tests.cpp)
 target_link_libraries(vectormask_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME vectormask_tests COMMAND vectormask_tests)
+
+add_executable(cameraraw_tests cameraraw_tests.cpp)
+target_link_libraries(cameraraw_tests PRIVATE compositor::core compositor_warnings)
+add_test(NAME cameraraw_tests COMMAND cameraraw_tests)

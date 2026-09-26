@@ -8,6 +8,7 @@
 #include "Automation.h"
 #include "Dialogs.h"
 #include "Theme.h"
+#include "CameraRawDialog.h"
 #include "FilterDialog.h"
 #include "GmicDialog.h"
 #include "BrushPicker.h"
@@ -36,6 +37,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLocalSocket>
+#include <QListWidget>
 #include <QTextStream>
 #include <QTimer>
 #include <QPushButton>
@@ -253,7 +255,7 @@ int main(int argc, char** argv) {
     parser.addOption(prefs);
     QCommandLineOption toolOption("tool", "Select tool <name> after opening (move, marquee, lasso, wand, crop, brush, healing, clone, smudge, gradient, shape, eyedropper, hand, zoom).", "name");
     parser.addOption(toolOption);
-    QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: welcome (or welcome:N for page N), new, canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, gmic, background, text, fonts, brushes.", "name");
+    QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: welcome (or welcome:N for page N), new, canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, cameraraw (or cameraraw:N for panel N), gmic, background, text, fonts, brushes.", "name");
     parser.addOption(dialogOption);
     QCommandLineOption rpc("rpc", "Listen on the automation socket (JSON-RPC over a local socket, for the MCP bridge). Also on when the automation preference is set.");
     QCommandLineOption rpcSocket("rpc-socket", "Socket path for --rpc (default: $XDG_RUNTIME_DIR/nekophoto.sock, or $COMPOSITOR_RPC_SOCKET).", "path");
@@ -394,6 +396,12 @@ int main(int argc, char** argv) {
             if (adjustments.contains(name)) (new app::PixelAdjustmentDialog(s, adjustments.value(name), &window))->show();
             else if (filters.contains(name)) (new app::FilterDialog(s, filters.value(name), &window))->show();
             else if (name == "gmic") (new app::GmicDialog(s, &window))->show();
+            else if (name == "cameraraw" || name.startsWith("cameraraw:")) {
+                // cameraraw, or cameraraw:N to open on panel N (0 Basic ... 7 Calibration)
+                auto* dialog = new app::CameraRawDialog(s, &window);
+                if (auto* panels = dialog->findChild<QListWidget*>("cameraRawPanels")) panels->setCurrentRow(name.section(':', 1).toInt());
+                dialog->show();
+            }
             else if (name.startsWith("welcome")) {
                 // welcome, or welcome:N for page N
                 window.showWelcome();
