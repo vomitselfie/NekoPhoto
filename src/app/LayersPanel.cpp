@@ -264,7 +264,7 @@ LayersPanel::LayersPanel(EditorSession* session, QWidget* parent) : QWidget(pare
     button("mask", tr("Add layer mask (reveal all, or hide the selection)"), [this] { session_->addMaskFromSelection(true); });
     auto* adjust = button("sliders-horizontal", tr("New adjustment layer"), [] {});
     auto* adjustMenu = new QMenu(adjust);
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < adjustmentKindCount; i++) {
         AdjustmentKind kind = AdjustmentKind(i);
         adjustMenu->addAction(QString::fromUtf8(adjustmentKindName(kind)), this, [this, kind] { session_->addAdjustmentLayer(kind); });
     }

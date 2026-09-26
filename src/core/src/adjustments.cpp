@@ -641,7 +641,112 @@ json hsvJson(const HueSaturationSettings& s) {
     return j;
 }
 
-const char* knownKeys[] = {"kind", "hue", "saturation", "lightness", "colorize", "hsvSettings", "levels", "curves", "exposureSettings", "gradientMapSettings", "grainSettings"};
+const char* knownKeys[] = {"kind", "hue", "saturation", "lightness", "colorize", "hsvSettings", "levels", "curves", "exposureSettings", "gradientMapSettings", "grainSettings",
+                           "brightnessContrastSettings", "posterizeSettings", "thresholdSettings", "blackWhiteSettings", "colorBalanceSettings", "vibranceSettings",
+                           "photoFilterSettings", "channelMixerSettings", "selectiveColorSettings"};
+
+json colourJson(const AdjustmentColor& c) { return {{"red", number(c.red)}, {"green", number(c.green)}, {"blue", number(c.blue)}}; }
+bool colourFrom(const json& j, AdjustmentColor& c) {
+    if (!j.is_object()) return false;
+    c = {num(j, "red", 0), num(j, "green", 0), num(j, "blue", 0)};
+    return c == c.clamped();
+}
+/// A JSON array of `n` numbers within [lo, hi].
+template <size_t N>
+bool numbersFrom(const json& j, std::array<double, N>& out, double lo, double hi) {
+    if (!j.is_array() || j.size() != N) return false;
+    for (size_t i = 0; i < N; i++) {
+        if (!j[i].is_number()) return false;
+        out[i] = j[i].get<double>();
+        if (!(out[i] >= lo && out[i] <= hi)) return false;
+    }
+    return true;
+}
+template <size_t N> json numbersJson(const std::array<double, N>& v) { json a = json::array(); for (double x : v) a.push_back(number(x)); return a; }
+
+// The settings of Photoshop's other adjustment layers (adjustments_more.cpp): false on a malformed or out-of-range value.
+bool parseMore(const json& j, AdjustmentSettings& s) {
+    if (auto it = j.find("brightnessContrastSettings"); it != j.end() && it->is_object()) {
+        s.brightnessContrast = {int(num(*it, "brightness", 0)), int(num(*it, "contrast", 0)), boolean(*it, "legacy", false)};
+        if (!(s.brightnessContrast == s.brightnessContrast.normalized())) return false;
+    }
+    if (auto it = j.find("posterizeSettings"); it != j.end() && it->is_object()) {
+        s.posterize.levels = int(num(*it, "levels", 4));
+        if (s.posterize.levels < 2 || s.posterize.levels > 255) return false;
+    }
+    if (auto it = j.find("thresholdSettings"); it != j.end() && it->is_object()) {
+        s.threshold.level = int(num(*it, "level", 128));
+        if (s.threshold.level < 1 || s.threshold.level > 255) return false;
+    }
+    if (auto it = j.find("blackWhiteSettings"); it != j.end() && it->is_object()) {
+        if (auto w = it->find("weights"); w != it->end() && !numbersFrom(*w, s.blackWhite.weights, -200, 300)) return false;
+        s.blackWhite.tint = boolean(*it, "tint", false);
+        if (auto c = it->find("tintColor"); c != it->end() && !colourFrom(*c, s.blackWhite.tintColor)) return false;
+    }
+    if (auto it = j.find("colorBalanceSettings"); it != j.end() && it->is_object()) {
+        const char* names[3] = {"shadows", "midtones", "highlights"};
+        for (size_t r = 0; r < 3; r++)
+            if (auto v = it->find(names[r]); v != it->end() && !numbersFrom(*v, s.colorBalance.ranges[r], -100, 100)) return false;
+        s.colorBalance.preserveLuminosity = boolean(*it, "preserveLuminosity", true);
+    }
+    if (auto it = j.find("vibranceSettings"); it != j.end() && it->is_object()) {
+        s.vibrance = {num(*it, "vibrance", 0), num(*it, "saturation", 0)};
+        if (std::fabs(s.vibrance.vibrance) > 100 || std::fabs(s.vibrance.saturation) > 100) return false;
+    }
+    if (auto it = j.find("photoFilterSettings"); it != j.end() && it->is_object()) {
+        if (auto c = it->find("color"); c != it->end() && !colourFrom(*c, s.photoFilter.color)) return false;
+        s.photoFilter.density = num(*it, "density", 25);
+        s.photoFilter.preserveLuminosity = boolean(*it, "preserveLuminosity", true);
+        if (!(s.photoFilter.density >= 0 && s.photoFilter.density <= 100)) return false;
+    }
+    if (auto it = j.find("channelMixerSettings"); it != j.end() && it->is_object()) {
+        s.channelMixer.monochrome = boolean(*it, "monochrome", false);
+        const char* names[4] = {"red", "green", "blue", "gray"};
+        for (size_t r = 0; r < 4; r++)
+            if (auto v = it->find(names[r]); v != it->end() && !numbersFrom(*v, s.channelMixer.rows[r], -200, 200)) return false;
+    }
+    if (auto it = j.find("selectiveColorSettings"); it != j.end() && it->is_object()) {
+        s.selectiveColor.absolute = boolean(*it, "absolute", false);
+        const char* names[9] = {"reds", "yellows", "greens", "cyans", "blues", "magentas", "whites", "neutrals", "blacks"};
+        for (size_t r = 0; r < 9; r++)
+            if (auto v = it->find(names[r]); v != it->end() && !numbersFrom(*v, s.selectiveColor.ranges[r], -100, 100)) return false;
+    }
+    return true;
+}
+
+void moreJson(const AdjustmentSettings& s, json& j) {
+    // Written for the kind that uses them only, so older manifests stay as they were.
+    switch (s.kind) {
+    case AdjustmentKind::BrightnessContrast:
+        j["brightnessContrastSettings"] = {{"brightness", s.brightnessContrast.brightness}, {"contrast", s.brightnessContrast.contrast}, {"legacy", s.brightnessContrast.legacy}};
+        break;
+    case AdjustmentKind::Posterize: j["posterizeSettings"] = {{"levels", s.posterize.levels}}; break;
+    case AdjustmentKind::Threshold: j["thresholdSettings"] = {{"level", s.threshold.level}}; break;
+    case AdjustmentKind::BlackWhite:
+        j["blackWhiteSettings"] = {{"weights", numbersJson(s.blackWhite.weights)}, {"tint", s.blackWhite.tint}, {"tintColor", colourJson(s.blackWhite.tintColor)}};
+        break;
+    case AdjustmentKind::ColorBalance:
+        j["colorBalanceSettings"] = {{"shadows", numbersJson(s.colorBalance.ranges[0])}, {"midtones", numbersJson(s.colorBalance.ranges[1])},
+                                     {"highlights", numbersJson(s.colorBalance.ranges[2])}, {"preserveLuminosity", s.colorBalance.preserveLuminosity}};
+        break;
+    case AdjustmentKind::Vibrance: j["vibranceSettings"] = {{"vibrance", number(s.vibrance.vibrance)}, {"saturation", number(s.vibrance.saturation)}}; break;
+    case AdjustmentKind::PhotoFilter:
+        j["photoFilterSettings"] = {{"color", colourJson(s.photoFilter.color)}, {"density", number(s.photoFilter.density)}, {"preserveLuminosity", s.photoFilter.preserveLuminosity}};
+        break;
+    case AdjustmentKind::ChannelMixer:
+        j["channelMixerSettings"] = {{"monochrome", s.channelMixer.monochrome}, {"red", numbersJson(s.channelMixer.rows[0])}, {"green", numbersJson(s.channelMixer.rows[1])},
+                                     {"blue", numbersJson(s.channelMixer.rows[2])}, {"gray", numbersJson(s.channelMixer.rows[3])}};
+        break;
+    case AdjustmentKind::SelectiveColor: {
+        json r = {{"absolute", s.selectiveColor.absolute}};
+        const char* names[9] = {"reds", "yellows", "greens", "cyans", "blues", "magentas", "whites", "neutrals", "blacks"};
+        for (size_t i = 0; i < 9; i++) r[names[i]] = numbersJson(s.selectiveColor.ranges[i]);
+        j["selectiveColorSettings"] = r;
+        break;
+    }
+    default: break;
+    }
+}
 
 } // namespace
 
@@ -691,6 +796,7 @@ bool AdjustmentSettings::parse(const std::string& text, AdjustmentSettings& out)
         GrainSettings n = s.grain.normalized();
         if (n.amount != s.grain.amount || n.size != s.grain.size || n.roughness != s.grain.roughness) return false;
     }
+    if (!parseMore(j, s)) return false;
     json extra = json::object();
     for (auto& [key, value] : j.items()) {
         bool known = false;
@@ -719,6 +825,7 @@ std::string AdjustmentSettings::toJson() const {
                                 {"highlights", {{"red", number(gradientMap.highlights.red)}, {"green", number(gradientMap.highlights.green)}, {"blue", number(gradientMap.highlights.blue)}}},
                                 {"reversed", gradientMap.reversed}};
     j["grainSettings"] = {{"amount", number(grain.amount)}, {"size", number(grain.size)}, {"roughness", number(grain.roughness)}, {"seed", grain.seed}};
+    moreJson(*this, j);
     return j.dump();
 }
 
@@ -737,6 +844,19 @@ bool AdjustmentSettings::isIdentity() const {
     case AdjustmentKind::Exposure: return exposure.normalized().isIdentity();
     case AdjustmentKind::GradientMap: return false;
     case AdjustmentKind::Grain: return grain.normalized().amount <= 0;
+    case AdjustmentKind::Invert: case AdjustmentKind::Posterize: case AdjustmentKind::Threshold:
+    case AdjustmentKind::BlackWhite: case AdjustmentKind::PhotoFilter: return false;
+    case AdjustmentKind::BrightnessContrast: return brightnessContrast.brightness == 0 && brightnessContrast.contrast == 0;
+    case AdjustmentKind::ColorBalance: {
+        for (auto& r : colorBalance.ranges) for (double v : r) if (v != 0) return false;
+        return true;
+    }
+    case AdjustmentKind::Vibrance: return vibrance.vibrance == 0 && vibrance.saturation == 0;
+    case AdjustmentKind::ChannelMixer: return !channelMixer.monochrome && channelMixer == ChannelMixerSettings{};
+    case AdjustmentKind::SelectiveColor: {
+        for (auto& r : selectiveColor.ranges) for (double v : r) if (v != 0) return false;
+        return true;
+    }
     }
     return true;
 }
@@ -753,6 +873,16 @@ bool applyAdjustment(const AdjustmentSettings& settings, Image& image, const Rec
         applyGrain(image, settings.grain, r.origin(), scale > 0 ? 1 / scale : 1);
         return true;
     }
+    case AdjustmentKind::Invert: applyTransfer(image, invertTransfer()); return true;
+    case AdjustmentKind::BrightnessContrast: applyTransfer(image, brightnessContrastTransfer(settings.brightnessContrast)); return true;
+    case AdjustmentKind::Posterize: applyTransfer(image, posterizeTransfer(settings.posterize)); return true;
+    case AdjustmentKind::Threshold: applyThreshold(image, settings.threshold); return true;
+    case AdjustmentKind::BlackWhite: applyBlackWhite(image, settings.blackWhite); return true;
+    case AdjustmentKind::ColorBalance: applyColorBalance(image, settings.colorBalance); return true;
+    case AdjustmentKind::Vibrance: applyVibrance(image, settings.vibrance); return true;
+    case AdjustmentKind::PhotoFilter: applyPhotoFilter(image, settings.photoFilter); return true;
+    case AdjustmentKind::ChannelMixer: applyChannelMixer(image, settings.channelMixer); return true;
+    case AdjustmentKind::SelectiveColor: applySelectiveColor(image, settings.selectiveColor); return true;
     }
     return false;
 }
@@ -768,6 +898,9 @@ std::optional<Transfer> adjustmentTransfer(const AdjustmentSettings& settings) {
     case AdjustmentKind::Levels: return levelsTransfer(settings.levels);
     case AdjustmentKind::Curves: return curvesTransfer(settings.curves);
     case AdjustmentKind::Exposure: return exposureTransfer(settings.exposure);
+    case AdjustmentKind::Invert: return invertTransfer();
+    case AdjustmentKind::BrightnessContrast: return brightnessContrastTransfer(settings.brightnessContrast);
+    case AdjustmentKind::Posterize: return posterizeTransfer(settings.posterize);
     default: return std::nullopt;
     }
 }

@@ -52,7 +52,9 @@ struct LayerMask {
     std::optional<LayerTransform> placementMovingLayer(const LayerTransform& from, const LayerTransform& to) const;
 };
 
-enum class AdjustmentKind { HueSaturation, Levels, Curves, Exposure, GradientMap, Grain };
+enum class AdjustmentKind { HueSaturation, Levels, Curves, Exposure, GradientMap, Grain,
+                            Invert, BrightnessContrast, Posterize, Threshold, BlackWhite, ColorBalance, Vibrance, PhotoFilter, ChannelMixer, SelectiveColor };
+constexpr int adjustmentKindCount = 16;
 const char* adjustmentKindName(AdjustmentKind kind);
 bool parseAdjustmentKind(const std::string& name, AdjustmentKind& out);
 

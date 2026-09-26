@@ -114,6 +114,7 @@ std::vector<uint8_t> serializePsdCarry(const PsdLayerCarry& c) {
     w.u64(c.maskHash);
     writeBlocks(w, c.endBlocks);
     w.bytes(c.endRanges);
+    if (!c.adjustmentJson.empty()) w.str(c.adjustmentJson);   // optional: older carries end before it
     return std::move(w.b);
 }
 
@@ -141,6 +142,7 @@ std::shared_ptr<const PsdLayerCarry> parsePsdLayerCarry(const std::vector<uint8_
     c->maskHash = r.u64();
     if (!readBlocks(r, c->endBlocks)) return nullptr;
     c->endRanges = r.bytes();
+    if (r.ok && r.at < bytes.size()) c->adjustmentJson = r.str();
     if (!r.ok || r.at != bytes.size()) return nullptr;
     return c;
 }

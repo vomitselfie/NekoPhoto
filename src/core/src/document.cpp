@@ -39,12 +39,22 @@ const char* adjustmentKindName(AdjustmentKind kind) {
     case AdjustmentKind::Exposure: return "Exposure";
     case AdjustmentKind::GradientMap: return "Gradient Map";
     case AdjustmentKind::Grain: return "Grain";
+    case AdjustmentKind::Invert: return "Invert";
+    case AdjustmentKind::BrightnessContrast: return "Brightness/Contrast";
+    case AdjustmentKind::Posterize: return "Posterize";
+    case AdjustmentKind::Threshold: return "Threshold";
+    case AdjustmentKind::BlackWhite: return "Black & White";
+    case AdjustmentKind::ColorBalance: return "Color Balance";
+    case AdjustmentKind::Vibrance: return "Vibrance";
+    case AdjustmentKind::PhotoFilter: return "Photo Filter";
+    case AdjustmentKind::ChannelMixer: return "Channel Mixer";
+    case AdjustmentKind::SelectiveColor: return "Selective Color";
     }
     return "Levels";
 }
 
 bool parseAdjustmentKind(const std::string& name, AdjustmentKind& out) {
-    for (int i = 0; i < 6; i++)
+    for (int i = 0; i < adjustmentKindCount; i++)
         if (name == adjustmentKindName(AdjustmentKind(i))) { out = AdjustmentKind(i); return true; }
     return false;
 }

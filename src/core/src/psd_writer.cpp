@@ -1,5 +1,6 @@
 #include "compositor/psd_writer.h"
 #include "compositor/smartfilter.h"
+#include "psd/psd_descriptor.hpp"
 #include "compositor/adjustments.h"
 #include "compositor/parallel.h"
 #include "compositor/render.h"
@@ -196,6 +197,8 @@ struct Record {
     uint8_t maskDefault = 255, maskFlags = 0;
     const char* adjustmentKey = nullptr;
     std::vector<uint8_t> adjustmentData;
+    /// Carried blocks a freshly written adjustment replaces (a Brightness/Contrast's 'CgEd' beside its 'brit').
+    std::set<std::string> replaces;
     // Carried from the PSD the layer came from (psd_carry.h).
     std::vector<PsdBlock> carried;
     std::vector<uint8_t> blendingRanges;
@@ -289,7 +292,7 @@ private:
         for (const PsdBlock& block : c.blocks) {
             const auto binding = PsdLayerCarry::binding(block.key);
             if ((binding == PsdLayerCarry::Binding::Content && !contentKept) || (binding == PsdLayerCarry::Binding::Placement && !placementKept)) { dropped.insert(block.key); continue; }
-            if (r.adjustmentKey && block.key == r.adjustmentKey) continue;
+            if ((r.adjustmentKey && block.key == r.adjustmentKey) || r.replaces.count(block.key)) continue;
             if (!placementKept && (block.key == "vmsk" || block.key == "vsms")) {
                 // The path follows the layer to where it now is.
                 const int cw = doc_.psdCarry && doc_.psdCarry->width > 0 ? doc_.psdCarry->width : doc_.width;
@@ -476,7 +479,7 @@ private:
     }
 
     /// Photoshop's own adjustment block for settings that mean the same there, or none.
-    bool nativeAdjustment(const AdjustmentSettings& s, Record& r) const {
+    bool nativeAdjustment(const AdjustmentSettings& s, Record& r, const Layer& l) const {
         Out o;
         switch (s.kind) {
         case AdjustmentKind::Levels: {
@@ -533,8 +536,114 @@ private:
             break;
         }
         default:
-            return false;
+            return otherAdjustment(s, r, l);
         }
+        r.adjustmentData = std::move(o.b);
+        return true;
+    }
+
+    /// Photoshop's other adjustment layers: the file's own block while the settings are what it said (byte for byte),
+    /// otherwise one written anew in Photoshop's layout.
+    bool otherAdjustment(const AdjustmentSettings& s, Record& r, const Layer& l) const {
+        static const std::map<AdjustmentKind, const char*> keys{{AdjustmentKind::Invert, "nvrt"}, {AdjustmentKind::BrightnessContrast, "brit"},
+            {AdjustmentKind::Posterize, "post"}, {AdjustmentKind::Threshold, "thrs"}, {AdjustmentKind::BlackWhite, "blwh"}, {AdjustmentKind::ColorBalance, "blnc"},
+            {AdjustmentKind::Vibrance, "vibA"}, {AdjustmentKind::PhotoFilter, "phfl"}, {AdjustmentKind::ChannelMixer, "mixr"}, {AdjustmentKind::SelectiveColor, "selc"}};
+        auto key = keys.find(s.kind);
+        if (key == keys.end()) return false;
+        // Unchanged since the file was read: its carried block goes back as it was.
+        if (l.psdCarry && !l.psdCarry->adjustmentJson.empty() && l.psdCarry->adjustmentJson == s.toJson()) {
+            for (const PsdBlock& b : l.psdCarry->blocks) if (b.key == key->second) return true;
+        }
+        Out o;
+        auto descriptor = [&](const patchy::psd::DescriptorObject& d) {
+            patchy::psd::BigEndianWriter w;
+            w.write_u32(16);
+            patchy::psd::write_descriptor(w, d);
+            o.bytes(w.bytes());
+        };
+        using DV = patchy::psd::DescriptorValue;
+        auto add = [](patchy::psd::DescriptorObject& d, const char* k, bool longForm, DV v) { d.key_order.push_back({k, longForm}); d.values[k] = std::move(v); };
+        auto integer = [](int v) { DV x; x.type = DV::Type::Integer; x.integer_value = v; return x; };
+        auto boolean = [](bool v) { DV x; x.type = DV::Type::Bool; x.bool_value = v; return x; };
+        auto dbl = [](double v) { DV x; x.type = DV::Type::Double; x.double_value = v; return x; };
+        switch (s.kind) {
+        case AdjustmentKind::Invert: break;   // no data
+        case AdjustmentKind::Posterize: o.u16(unsigned(std::clamp(s.posterize.levels, 2, 255))); o.u16(0); break;
+        case AdjustmentKind::Threshold: o.u16(unsigned(std::clamp(s.threshold.level, 1, 255))); o.u16(0); break;
+        case AdjustmentKind::ColorBalance:
+            for (const auto& range : s.colorBalance.ranges) for (double v : range) o.i16(int(std::lround(std::clamp(v, -100.0, 100.0))));
+            o.u8(s.colorBalance.preserveLuminosity ? 1 : 0); o.u8(0);
+            break;
+        case AdjustmentKind::BrightnessContrast: {
+            const BrightnessContrastSettings b = s.brightnessContrast.normalized();
+            // Legacy: the values in 'brit'. Modern: an all-zero 'brit' beside Photoshop 2026's 'CgEd' descriptor (Patchy's shape).
+            if (b.legacy) { o.i16(b.brightness); o.i16(b.contrast); o.u16(127); o.u8(0); o.u8(0); }
+            else {
+                o.u16(0); o.u16(0); o.u16(0); o.u8(0); o.u8(0);
+                patchy::psd::DescriptorObject d;
+                d.class_id = "null";
+                add(d, "Vrsn", false, integer(1)); add(d, "Brgh", false, integer(b.brightness)); add(d, "Cntr", false, integer(b.contrast));
+                add(d, "means", true, integer(127)); add(d, "Lab ", false, boolean(false)); add(d, "useLegacy", true, boolean(false)); add(d, "Auto", false, boolean(false));
+                patchy::psd::BigEndianWriter w;
+                w.write_u32(16);
+                patchy::psd::write_descriptor(w, d);
+                r.carried.push_back({"CgEd", w.bytes()});
+            }
+            r.replaces.insert("CgEd");
+            break;
+        }
+        case AdjustmentKind::ChannelMixer: {
+            o.u16(1); o.u16(s.channelMixer.monochrome ? 1 : 0);
+            // Four output records of red, green, blue, (CMYK's fourth), constant; monochrome's grey in the first.
+            for (int out = 0; out < 4; out++) {
+                const auto& row = s.channelMixer.monochrome ? (out == 0 ? s.channelMixer.rows[3] : std::array<double, 4>{}) : (out < 3 ? s.channelMixer.rows[size_t(out)] : std::array<double, 4>{});
+                for (int k = 0; k < 3; k++) o.i16(int(std::lround(std::clamp(row[size_t(k)], -200.0, 200.0))));
+                o.i16(0);
+                o.i16(int(std::lround(std::clamp(row[3], -200.0, 200.0))));
+            }
+            break;
+        }
+        case AdjustmentKind::SelectiveColor:
+            o.u16(1); o.u16(s.selectiveColor.absolute ? 1 : 0);
+            for (int k = 0; k < 4; k++) o.i16(0);   // the reserved first record
+            for (const auto& range : s.selectiveColor.ranges) for (double v : range) o.i16(int(std::lround(std::clamp(v, -100.0, 100.0))));
+            break;
+        case AdjustmentKind::PhotoFilter: {
+            // Version 2 with an RGB colour (version 3's XYZ scale is not documented).
+            const AdjustmentColor c = s.photoFilter.color.clamped();
+            o.u16(2); o.u16(0);
+            for (double v : {c.red, c.green, c.blue}) o.u16(unsigned(std::lround(v * 65535)));
+            o.u16(0);
+            o.u32(uint32_t(std::lround(std::clamp(s.photoFilter.density, 0.0, 100.0))));
+            o.u8(s.photoFilter.preserveLuminosity ? 1 : 0);
+            break;
+        }
+        case AdjustmentKind::Vibrance: {
+            patchy::psd::DescriptorObject d;
+            d.class_id = "null";
+            add(d, "vibrance", true, integer(int(std::lround(s.vibrance.vibrance))));
+            add(d, "Strt", false, integer(int(std::lround(s.vibrance.saturation))));
+            descriptor(d);
+            break;
+        }
+        case AdjustmentKind::BlackWhite: {
+            patchy::psd::DescriptorObject d;
+            d.class_id = "null";
+            const char* names[6] = {"Rd  ", "Yllw", "Grn ", "Cyn ", "Bl  ", "Mgnt"};
+            for (size_t i = 0; i < 6; i++) add(d, names[i], false, integer(int(std::lround(s.blackWhite.weights[i]))));
+            add(d, "useTint", true, boolean(s.blackWhite.tint));
+            DV colour; colour.type = DV::Type::Object; colour.object_value = std::make_shared<patchy::psd::DescriptorObject>();
+            colour.object_value->class_id = "RGBC";
+            const AdjustmentColor t = s.blackWhite.tintColor.clamped();
+            add(*colour.object_value, "Rd  ", false, dbl(t.red * 255)); add(*colour.object_value, "Grn ", false, dbl(t.green * 255)); add(*colour.object_value, "Bl  ", false, dbl(t.blue * 255));
+            add(d, "tintColor", true, colour);
+            add(d, "bwPresetKind", true, integer(1));
+            descriptor(d);
+            break;
+        }
+        default: return false;
+        }
+        r.adjustmentKey = key->second;
         r.adjustmentData = std::move(o.b);
         return true;
     }
@@ -543,7 +652,7 @@ private:
         AdjustmentSettings settings;
         const bool parsed = AdjustmentSettings::parse(l.adjustment->json, settings);
         Record r = base(l);
-        if (parsed && nativeAdjustment(settings, r)) {
+        if (parsed && nativeAdjustment(settings, r, l)) {
             r.clipping = l.maskSourceId && clippingFits(l);
             emptyChannels(r);
             setMask(r, l, doc_.rect(), false);

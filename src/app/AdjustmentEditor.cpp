@@ -213,6 +213,7 @@ void AdjustmentEditor::rebuild() {
     case AdjustmentKind::Exposure: body_ = buildExposure(); break;
     case AdjustmentKind::GradientMap: body_ = buildGradientMap(); break;
     case AdjustmentKind::Grain: body_ = buildGrain(); break;
+    default: body_ = buildMore(); break;
     }
     layout()->addWidget(body_);
     sync();
@@ -504,4 +505,125 @@ QWidget* AdjustmentEditor::buildGrain() {
     return w;
 }
 
+QWidget* AdjustmentEditor::checkRow(const QString& label, std::function<bool()> get, std::function<void(bool)> apply) {
+    auto* box = new QCheckBox(label);
+    connect(box, &QCheckBox::toggled, this, [this, apply](bool on) { if (syncing_) return; emit editStarted(); apply(on); changed(); emit editFinished(); });
+    syncers_.push_back([box, get] { QSignalBlocker b(box); box->setChecked(get()); });
+    return box;
+}
+
+QWidget* AdjustmentEditor::colourRow(const QString& label, std::function<AdjustmentColor&()> colour) {
+    auto* w = new QWidget;
+    auto* row = new QHBoxLayout(w);
+    row->setContentsMargins(0, 0, 0, 0);
+    row->addWidget(new QLabel(label));
+    auto* b = new QPushButton;
+    connect(b, &QPushButton::clicked, this, [this, colour] {
+        AdjustmentColor& c = colour();
+        QColor chosen = QColorDialog::getColor(QColor::fromRgbF(float(c.red), float(c.green), float(c.blue)), this);
+        if (!chosen.isValid()) return;
+        emit editStarted();
+        c = {chosen.redF(), chosen.greenF(), chosen.blueF()};
+        changed();
+        emit editFinished();
+    });
+    syncers_.push_back([colour, b] {
+        AdjustmentColor& c = colour();
+        QColor q = QColor::fromRgbF(float(c.red), float(c.green), float(c.blue));
+        b->setText(q.name());
+        b->setStyleSheet(QStringLiteral("background: %1; color: %2;").arg(q.name(), q.lightnessF() > 0.5 ? "black" : "white"));
+    });
+    row->addWidget(b, 1);
+    return w;
+}
+
+QWidget* AdjustmentEditor::buildMore() {
+    auto* w = new QWidget;
+    auto* v = new QVBoxLayout(w);
+    v->setContentsMargins(0, 0, 0, 0);
+    auto slider = [&](const QString& label, double min, double max, std::function<double&()> value) {
+        v->addWidget(sliderRow(label, min, max, 0, 1, [value] { return value(); }, [value](double x) { value() = std::round(x); }));
+    };
+    auto& s = settings_;
+    switch (s.kind) {
+    case AdjustmentKind::Invert:
+        v->addWidget(new QLabel(tr("Inverts every colour below it. Nothing to set.")));
+        break;
+    case AdjustmentKind::BrightnessContrast: {
+        v->addWidget(sliderRow(tr("Brightness"), -150, 150, 0, 1, [this] { return double(settings_.brightnessContrast.brightness); },
+                               [this](double x) { settings_.brightnessContrast.brightness = int(std::lround(x)); settings_.brightnessContrast = settings_.brightnessContrast.normalized(); }));
+        v->addWidget(sliderRow(tr("Contrast"), -50, 100, 0, 1, [this] { return double(settings_.brightnessContrast.contrast); },
+                               [this](double x) { settings_.brightnessContrast.contrast = int(std::lround(x)); settings_.brightnessContrast = settings_.brightnessContrast.normalized(); }));
+        v->addWidget(checkRow(tr("Use Legacy"), [this] { return settings_.brightnessContrast.legacy; },
+                              [this](bool on) { settings_.brightnessContrast.legacy = on; settings_.brightnessContrast = settings_.brightnessContrast.normalized(); }));
+        break;
+    }
+    case AdjustmentKind::Posterize:
+        v->addWidget(sliderRow(tr("Levels"), 2, 255, 0, 1, [this] { return double(settings_.posterize.levels); }, [this](double x) { settings_.posterize.levels = int(std::lround(x)); }));
+        break;
+    case AdjustmentKind::Threshold:
+        v->addWidget(sliderRow(tr("Threshold Level"), 1, 255, 0, 1, [this] { return double(settings_.threshold.level); }, [this](double x) { settings_.threshold.level = int(std::lround(x)); }));
+        break;
+    case AdjustmentKind::BlackWhite: {
+        const QString names[6] = {tr("Reds"), tr("Yellows"), tr("Greens"), tr("Cyans"), tr("Blues"), tr("Magentas")};
+        for (size_t i = 0; i < 6; i++) slider(names[i], -200, 300, [this, i]() -> double& { return settings_.blackWhite.weights[i]; });
+        v->addWidget(checkRow(tr("Tint"), [this] { return settings_.blackWhite.tint; }, [this](bool on) { settings_.blackWhite.tint = on; }));
+        v->addWidget(colourRow(tr("Tint colour"), [this]() -> AdjustmentColor& { return settings_.blackWhite.tintColor; }));
+        break;
+    }
+    case AdjustmentKind::ColorBalance: {
+        auto* tone = new QComboBox;
+        tone->addItems({tr("Shadows"), tr("Midtones"), tr("Highlights")});
+        tone->setCurrentIndex(toneRange_);
+        connect(tone, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { toneRange_ = i; rebuild(); });
+        v->addWidget(tone);
+        const size_t r = size_t(toneRange_);
+        slider(tr("Cyan / Red"), -100, 100, [this, r]() -> double& { return settings_.colorBalance.ranges[r][0]; });
+        slider(tr("Magenta / Green"), -100, 100, [this, r]() -> double& { return settings_.colorBalance.ranges[r][1]; });
+        slider(tr("Yellow / Blue"), -100, 100, [this, r]() -> double& { return settings_.colorBalance.ranges[r][2]; });
+        v->addWidget(checkRow(tr("Preserve Luminosity"), [this] { return settings_.colorBalance.preserveLuminosity; }, [this](bool on) { settings_.colorBalance.preserveLuminosity = on; }));
+        break;
+    }
+    case AdjustmentKind::Vibrance:
+        slider(tr("Vibrance"), -100, 100, [this]() -> double& { return settings_.vibrance.vibrance; });
+        slider(tr("Saturation"), -100, 100, [this]() -> double& { return settings_.vibrance.saturation; });
+        break;
+    case AdjustmentKind::PhotoFilter:
+        v->addWidget(colourRow(tr("Filter colour"), [this]() -> AdjustmentColor& { return settings_.photoFilter.color; }));
+        slider(tr("Density"), 0, 100, [this]() -> double& { return settings_.photoFilter.density; });
+        v->addWidget(checkRow(tr("Preserve Luminosity"), [this] { return settings_.photoFilter.preserveLuminosity; }, [this](bool on) { settings_.photoFilter.preserveLuminosity = on; }));
+        break;
+    case AdjustmentKind::ChannelMixer: {
+        v->addWidget(checkRow(tr("Monochrome"), [this] { return settings_.channelMixer.monochrome; }, [this](bool on) { settings_.channelMixer.monochrome = on; rebuild(); }));
+        auto* out = new QComboBox;
+        out->addItems({tr("Output: Red"), tr("Output: Green"), tr("Output: Blue")});
+        out->setEnabled(!s.channelMixer.monochrome);
+        out->setCurrentIndex(mixerOutput_);
+        connect(out, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { mixerOutput_ = i; rebuild(); });
+        v->addWidget(out);
+        const size_t row = s.channelMixer.monochrome ? 3 : size_t(mixerOutput_);
+        slider(tr("Red"), -200, 200, [this, row]() -> double& { return settings_.channelMixer.rows[row][0]; });
+        slider(tr("Green"), -200, 200, [this, row]() -> double& { return settings_.channelMixer.rows[row][1]; });
+        slider(tr("Blue"), -200, 200, [this, row]() -> double& { return settings_.channelMixer.rows[row][2]; });
+        slider(tr("Constant"), -200, 200, [this, row]() -> double& { return settings_.channelMixer.rows[row][3]; });
+        break;
+    }
+    case AdjustmentKind::SelectiveColor: {
+        auto* range = new QComboBox;
+        range->addItems({tr("Reds"), tr("Yellows"), tr("Greens"), tr("Cyans"), tr("Blues"), tr("Magentas"), tr("Whites"), tr("Neutrals"), tr("Blacks")});
+        range->setCurrentIndex(selectiveRange_);
+        connect(range, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { selectiveRange_ = i; rebuild(); });
+        v->addWidget(range);
+        const size_t r = size_t(selectiveRange_);
+        const QString inks[4] = {tr("Cyan"), tr("Magenta"), tr("Yellow"), tr("Black")};
+        for (size_t k = 0; k < 4; k++) slider(inks[k], -100, 100, [this, r, k]() -> double& { return settings_.selectiveColor.ranges[r][k]; });
+        v->addWidget(checkRow(tr("Absolute (else Relative)"), [this] { return settings_.selectiveColor.absolute; }, [this](bool on) { settings_.selectiveColor.absolute = on; }));
+        break;
+    }
+    default: break;
+    }
+    return w;
+}
+
 } // namespace app
+

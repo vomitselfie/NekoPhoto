@@ -5,6 +5,7 @@
 #include "compositor/png.h"
 #include "compositor/render.h"
 #include "compositor/smartfilter.h"
+#include "psd/psd_descriptor.hpp"
 #include <cstdio>
 #include <new>
 #include <stdexcept>
@@ -369,6 +370,139 @@ std::optional<AdjustmentSettings> exposureFrom(const uint8_t* data, size_t size)
     return s;
 }
 
+// ---- Photoshop's other adjustment layers (adjustments_more.cpp); a block that does not read stays carried ----
+
+std::optional<patchy::psd::DescriptorObject> versionedDescriptor(const uint8_t* data, size_t size) {
+    try {
+        patchy::psd::BigEndianReader r(std::span<const uint8_t>(data, size));
+        if (r.read_u32() != 16) return std::nullopt;
+        return patchy::psd::read_descriptor(r);
+    } catch (std::exception&) { return std::nullopt; }
+}
+
+/// Brightness/Contrast: Photoshop 2026's descriptor ('CgEd') when it reads, else the legacy 'brit' (Patchy's rule).
+std::optional<AdjustmentSettings> brightnessContrastFrom(const std::pair<const uint8_t*, size_t>* cged, const std::pair<const uint8_t*, size_t>* brit) {
+    AdjustmentSettings s = AdjustmentSettings::defaults(AdjustmentKind::BrightnessContrast);
+    if (cged)
+        if (auto d = versionedDescriptor(cged->first, cged->second)) {
+            const auto* b = patchy::psd::descriptor_value(*d, "Brgh");
+            const auto* c = patchy::psd::descriptor_value(*d, "Cntr");
+            if (b && c && b->type == patchy::psd::DescriptorValue::Type::Integer && c->type == patchy::psd::DescriptorValue::Type::Integer) {
+                s.brightnessContrast.legacy = patchy::psd::descriptor_bool(*d, "useLegacy", false);
+                s.brightnessContrast.brightness = b->integer_value;
+                s.brightnessContrast.contrast = c->integer_value;
+                s.brightnessContrast = s.brightnessContrast.normalized();
+                return s;
+            }
+        }
+    if (brit && brit->second >= 4) {
+        Reader r(brit->first, brit->second);
+        s.brightnessContrast.legacy = true;
+        s.brightnessContrast.brightness = r.i16();
+        s.brightnessContrast.contrast = r.i16();
+        s.brightnessContrast = s.brightnessContrast.normalized();
+        return s;
+    }
+    return std::nullopt;
+}
+
+std::optional<AdjustmentSettings> simpleAdjustmentFrom(const std::string& key, const uint8_t* data, size_t size) {
+    try {
+        Reader r(data, size);
+        if (key == "nvrt") return AdjustmentSettings::defaults(AdjustmentKind::Invert);
+        if (key == "post") {
+            AdjustmentSettings s = AdjustmentSettings::defaults(AdjustmentKind::Posterize);
+            s.posterize.levels = std::clamp(int(r.u16()), 2, 255);
+            return s;
+        }
+        if (key == "thrs") {
+            AdjustmentSettings s = AdjustmentSettings::defaults(AdjustmentKind::Threshold);
+            s.threshold.level = std::clamp(int(r.u16()), 1, 255);
+            return s;
+        }
+        if (key == "blnc") {
+            // Shadows, midtones, highlights: cyan-red, magenta-green, yellow-blue each; then Preserve Luminosity.
+            AdjustmentSettings s = AdjustmentSettings::defaults(AdjustmentKind::ColorBalance);
+            for (auto& range : s.colorBalance.ranges) for (double& v : range) v = std::clamp(int(r.i16()), -100, 100);
+            s.colorBalance.preserveLuminosity = r.remaining() > 0 && r.u8() != 0;
+            return s;
+        }
+        if (key == "mixr") {
+            // Version, monochrome, then per output channel: red, green, blue, (CMYK's fourth), constant, in percent.
+            if (r.u16() != 1) return std::nullopt;
+            AdjustmentSettings s = AdjustmentSettings::defaults(AdjustmentKind::ChannelMixer);
+            s.channelMixer.monochrome = r.u16() != 0;
+            for (int out = 0; out < 3 && r.remaining() >= 10; out++) {
+                auto& row = s.channelMixer.rows[size_t(out)];
+                row[0] = r.i16(); row[1] = r.i16(); row[2] = r.i16(); r.i16(); row[3] = r.i16();
+                for (double& v : row) v = std::clamp(v, -200.0, 200.0);
+            }
+            // Monochrome keeps its grey in the first record.
+            if (s.channelMixer.monochrome) s.channelMixer.rows[3] = s.channelMixer.rows[0];
+            return s;
+        }
+        if (key == "selc") {
+            // Version, method (0 relative, 1 absolute), then ten CMYK records: a reserved one, then reds .. blacks.
+            if (r.u16() != 1) return std::nullopt;
+            AdjustmentSettings s = AdjustmentSettings::defaults(AdjustmentKind::SelectiveColor);
+            s.selectiveColor.absolute = r.u16() == 1;
+            for (int i = 0; i < 4; i++) r.i16();
+            for (auto& range : s.selectiveColor.ranges) for (double& v : range) v = std::clamp(int(r.i16()), -100, 100);
+            return s;
+        }
+        if (key == "phfl") {
+            // Version 2 (a colour space and four components) or 3 (XYZ); density in percent; Preserve Luminosity.
+            const uint16_t version = r.u16();
+            AdjustmentSettings s = AdjustmentSettings::defaults(AdjustmentKind::PhotoFilter);
+            if (version == 3) {
+                // XYZ as three 32-bit numbers. Their scale is not documented: taken as fixed 16.16 when that gives a Y
+                // in range, else as hundredths (unchecked against Photoshop; docs/adjustment-layers.md).
+                double xyz[3];
+                for (double& v : xyz) v = double(int32_t(r.u32()));
+                double k = 65536;
+                if (!(xyz[1] / k > 0.001 && xyz[1] / k <= 1.2)) k = xyz[1] > 0 && xyz[1] <= 120 ? 100 : 10000;
+                const double X = xyz[0] / k, Y = xyz[1] / k, Z = xyz[2] / k;
+                // D50 XYZ (Photoshop's connection space) to linear sRGB, then encoded.
+                double lin[3] = {3.1338561 * X - 1.6168667 * Y - 0.4906146 * Z, -0.9787684 * X + 1.9161415 * Y + 0.0334540 * Z,
+                                 0.0719453 * X - 0.2289914 * Y + 1.4052427 * Z};
+                for (double& v : lin) { v = std::clamp(v, 0.0, 1.0); v = v <= 0.0031308 ? 12.92 * v : 1.055 * std::pow(v, 1 / 2.4) - 0.055; }
+                s.photoFilter.color = {lin[0], lin[1], lin[2]};
+            } else if (version == 2) {
+                const uint16_t space = r.u16();
+                const double a = r.u16() / 65535.0, b = r.u16() / 65535.0, c = r.u16() / 65535.0;
+                r.u16();
+                if (space != 0) return std::nullopt;   // RGB only here
+                s.photoFilter.color = {a, b, c};
+            } else return std::nullopt;
+            s.photoFilter.density = std::clamp(double(r.u32()), 0.0, 100.0);
+            s.photoFilter.preserveLuminosity = r.remaining() > 0 && r.u8() != 0;
+            return s;
+        }
+        if (key == "blwh" || key == "vibA") {
+            auto d = versionedDescriptor(data, size);
+            if (!d) return std::nullopt;
+            auto integer = [&](const char* k, double fallback) {
+                const auto* v = patchy::psd::descriptor_value(*d, k);
+                return v && v->type == patchy::psd::DescriptorValue::Type::Integer ? double(v->integer_value) : fallback;
+            };
+            if (key == "vibA") {
+                AdjustmentSettings s = AdjustmentSettings::defaults(AdjustmentKind::Vibrance);
+                s.vibrance = {std::clamp(integer("vibrance", 0), -100.0, 100.0), std::clamp(integer("Strt", 0), -100.0, 100.0)};
+                return s;
+            }
+            AdjustmentSettings s = AdjustmentSettings::defaults(AdjustmentKind::BlackWhite);
+            const char* keys[6] = {"Rd  ", "Yllw", "Grn ", "Cyn ", "Bl  ", "Mgnt"};
+            for (size_t i = 0; i < 6; i++) s.blackWhite.weights[i] = std::clamp(integer(keys[i], s.blackWhite.weights[i]), -200.0, 300.0);
+            s.blackWhite.tint = patchy::psd::descriptor_bool(*d, "useTint", false);
+            if (const auto* tint = patchy::psd::descriptor_object(*d, "tintColor"))
+                s.blackWhite.tintColor = AdjustmentColor{patchy::psd::descriptor_number(*tint, "Rd  ", 225) / 255, patchy::psd::descriptor_number(*tint, "Grn ", 211) / 255,
+                                                         patchy::psd::descriptor_number(*tint, "Bl  ", 179) / 255}.clamped();
+            return s;
+        }
+    } catch (...) {}
+    return std::nullopt;
+}
+
 std::optional<AdjustmentSettings> gradientMapFrom(const uint8_t* data, size_t size) {
     Reader r(data, size);
     if (r.u16() != 1) return std::nullopt;
@@ -628,6 +762,11 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             auto lyid = rec.blocks.find("lyid");
             if (lyid != rec.blocks.end() && lyid->second.second >= 4) { Reader id(lyid->second.first, 4); carry->layerId = id.u32(); }
             carry->contentHash = psdContentHash(layer.asset ? layer.asset->image.get() : nullptr);
+            if (layer.adjustment) {
+                // Settings as read, so an unchanged adjustment's own block goes back byte for byte.
+                AdjustmentSettings read;
+                if (AdjustmentSettings::parse(layer.adjustment->json, read)) carry->adjustmentJson = read.toJson();
+            }
             carry->placement = layer.transform;
             if (!psb && depth == 8 && !rec.mask.section.empty()) {
                 carry->maskData = rec.mask.section;
@@ -711,7 +850,11 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             else if (auto b = block("hue2")) settings = hueSaturationFrom(b->first, b->second);
             else if (auto b = block("expA")) settings = exposureFrom(b->first, b->second);
             else if (auto b = block("grdm")) settings = gradientMapFrom(b->first, b->second);
-            else {
+            else if (block("CgEd") || block("brit")) settings = brightnessContrastFrom(block("CgEd"), block("brit"));
+            if (!settings)
+                for (const char* key : {"nvrt", "post", "thrs", "blnc", "mixr", "selc", "phfl", "blwh", "vibA"})
+                    if (auto b = block(key)) { settings = simpleAdjustmentFrom(key, b->first, b->second); break; }
+            if (!settings) {
                 static const std::map<std::string, const char*> others{{"brit", "Brightness/Contrast"}, {"blwh", "Black & White"}, {"vibA", "Vibrance"}, {"phfl", "Photo Filter"}, {"mixr", "Channel Mixer"},
                     {"clrL", "Color Lookup"}, {"nvrt", "Invert"}, {"post", "Posterize"}, {"thrs", "Threshold"}, {"selc", "Selective Color"}, {"blnc", "Color Balance"}};
                 for (auto& [key, name] : others) if (block(key.c_str())) { notes.push_back("Layer \"" + rec.name + "\": " + name + " adjustment layers have no counterpart; it shows as an empty layer here and is written back to PSD as it was."); break; }

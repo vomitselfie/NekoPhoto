@@ -232,6 +232,16 @@ void MainWindow::buildMenus() {
     pixelAdjustment(tr("&Gradient Map…"), QKeySequence(), AdjustmentKind::GradientMap);
     pixelAdjustment(tr("G&rain…"), QKeySequence(), AdjustmentKind::Grain);
     adjustments->addSeparator();
+    pixelAdjustment(tr("&Brightness/Contrast…"), QKeySequence(), AdjustmentKind::BrightnessContrast);
+    pixelAdjustment(tr("&Vibrance…"), QKeySequence(), AdjustmentKind::Vibrance);
+    pixelAdjustment(tr("Color &Balance…"), QKeySequence("Ctrl+B"), AdjustmentKind::ColorBalance);
+    pixelAdjustment(tr("Black && &White…"), QKeySequence("Alt+Shift+Ctrl+B"), AdjustmentKind::BlackWhite);
+    pixelAdjustment(tr("&Photo Filter…"), QKeySequence(), AdjustmentKind::PhotoFilter);
+    pixelAdjustment(tr("Channel &Mixer…"), QKeySequence(), AdjustmentKind::ChannelMixer);
+    pixelAdjustment(tr("&Selective Color…"), QKeySequence(), AdjustmentKind::SelectiveColor);
+    pixelAdjustment(tr("P&osterize…"), QKeySequence(), AdjustmentKind::Posterize);
+    pixelAdjustment(tr("&Threshold…"), QKeySequence(), AdjustmentKind::Threshold);
+    adjustments->addSeparator();
     needsDocument(adjustments->addAction(tr("&Invert"), QKeySequence("Ctrl+I"), this, [this] { session_->invertActive(); }));
     image->addSeparator();
     needsDocument(image->addAction(tr("Flip Canvas Horizontal"), this, [this] { session_->flipCanvas(true); }));
@@ -256,7 +266,7 @@ void MainWindow::buildMenus() {
     }));
     needsDocument(layer->addAction(tr("Move &Out of Folder"), QKeySequence("Ctrl+Shift+["), this, [this] { session_->moveActiveLayerOutOfGroup(); }));
     QMenu* adjustmentLayers = layer->addMenu(tr("New &Adjustment Layer"));
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < adjustmentKindCount; i++) {
         AdjustmentKind kind = AdjustmentKind(i);
         needsDocument(adjustmentLayers->addAction(QString::fromUtf8(adjustmentKindName(kind)), this, [this, kind] { session_->addAdjustmentLayer(kind); }));
     }

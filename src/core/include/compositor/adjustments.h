@@ -119,6 +119,63 @@ struct HueSaturationSettings {
     double shiftedHue(double hue) const;
 };
 
+// ---- Photoshop's other adjustment layers ----------------------------------------------------------------------
+// Brightness/Contrast, Posterize and Threshold follow Patchy's calibration against Photoshop 2026 (MIT,
+// src/third_party/patchy_psd/README.md); Black & White and Color Balance follow upstream Compositor's C (MIT,
+// LICENSES/MIT-Compositor.txt); Vibrance, Photo Filter, Channel Mixer and Selective Color are the published formulas,
+// not yet checked against Photoshop (docs/adjustment-layers.md).
+
+struct BrightnessContrastSettings {
+    int brightness = 0, contrast = 0;   // modern: -150..150 and -50..100; legacy: -100..100 each
+    bool legacy = false;
+    bool operator==(const BrightnessContrastSettings&) const = default;
+    BrightnessContrastSettings normalized() const;
+    uint8_t apply(uint8_t value) const;
+};
+struct PosterizeSettings { int levels = 4; bool operator==(const PosterizeSettings&) const = default; };   // 2..255
+struct ThresholdSettings { int level = 128; bool operator==(const ThresholdSettings&) const = default; };   // 1..255
+struct BlackWhiteSettings {
+    /// Percent of each hue's contribution, -200..300: reds, yellows, greens, cyans, blues, magentas.
+    std::array<double, 6> weights{40, 60, 40, 60, 20, 80};
+    bool tint = false;
+    AdjustmentColor tintColor{225 / 255.0, 211 / 255.0, 179 / 255.0};
+    bool operator==(const BlackWhiteSettings&) const = default;
+};
+struct ColorBalanceSettings {
+    /// Cyan-red, magenta-green, yellow-blue for shadows, midtones, highlights; -100..100.
+    std::array<std::array<double, 3>, 3> ranges{};
+    bool preserveLuminosity = true;
+    bool operator==(const ColorBalanceSettings&) const = default;
+};
+struct VibranceSettings { double vibrance = 0, saturation = 0; bool operator==(const VibranceSettings&) const = default; };   // -100..100
+struct PhotoFilterSettings {
+    AdjustmentColor color{236 / 255.0, 138 / 255.0, 0};   // Warming Filter (85)
+    double density = 25;                                  // percent
+    bool preserveLuminosity = true;
+    bool operator==(const PhotoFilterSettings&) const = default;
+};
+struct ChannelMixerSettings {
+    bool monochrome = false;
+    /// Output red, green, blue, and grey (monochrome): source red, green, blue percent (-200..200) and a constant
+    /// (-200..200 percent of white).
+    std::array<std::array<double, 4>, 4> rows{{{100, 0, 0, 0}, {0, 100, 0, 0}, {0, 0, 100, 0}, {40, 40, 20, 0}}};
+    bool operator==(const ChannelMixerSettings&) const = default;
+};
+struct SelectiveColorSettings {
+    bool absolute = false;
+    /// Reds, yellows, greens, cyans, blues, magentas, whites, neutrals, blacks: cyan, magenta, yellow, black, -100..100.
+    std::array<std::array<double, 4>, 9> ranges{};
+    bool operator==(const SelectiveColorSettings&) const = default;
+};
+
+void applyThreshold(Image& image, const ThresholdSettings& settings);
+void applyBlackWhite(Image& image, const BlackWhiteSettings& settings);
+void applyColorBalance(Image& image, const ColorBalanceSettings& settings);
+void applyVibrance(Image& image, const VibranceSettings& settings);
+void applyPhotoFilter(Image& image, const PhotoFilterSettings& settings);
+void applyChannelMixer(Image& image, const ChannelMixerSettings& settings);
+void applySelectiveColor(Image& image, const SelectiveColorSettings& settings);
+
 /// Every adjustment layer setting, decoded from the manifest's "adjustment" object.
 struct AdjustmentSettings {
     AdjustmentKind kind = AdjustmentKind::Levels;
@@ -128,6 +185,15 @@ struct AdjustmentSettings {
     ExposureSettings exposure;
     GradientMapSettings gradientMap;
     GrainSettings grain;
+    BrightnessContrastSettings brightnessContrast;
+    PosterizeSettings posterize;
+    ThresholdSettings threshold;
+    BlackWhiteSettings blackWhite;
+    ColorBalanceSettings colorBalance;
+    VibranceSettings vibrance;
+    PhotoFilterSettings photoFilter;
+    ChannelMixerSettings channelMixer;
+    SelectiveColorSettings selectiveColor;
     /// Unknown fields, kept for the round trip.
     std::string extraJson;
     bool operator==(const AdjustmentSettings&) const = default;
@@ -148,6 +214,9 @@ Transfer identityTransfer();
 Transfer levelsTransfer(const LevelsSettings& settings);
 Transfer curvesTransfer(const CurvesSettings& settings);
 Transfer exposureTransfer(const ExposureSettings& settings);
+Transfer invertTransfer();
+Transfer brightnessContrastTransfer(const BrightnessContrastSettings& settings);
+Transfer posterizeTransfer(const PosterizeSettings& settings);
 /// `second` applied after `first`, evaluated in float (linear between `second`'s entries) so the pair quantises once.
 Transfer composeTransfer(const Transfer& first, const Transfer& second);
 /// Quantises to bytes and applies; an identity table is skipped.

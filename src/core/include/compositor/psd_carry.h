@@ -51,6 +51,9 @@ struct PsdLayerCarry {
     /// A folder's end-marker record: its blocks and blending ranges (colour label, locks and the like).
     std::vector<PsdBlock> endBlocks;
     std::vector<uint8_t> endRanges;
+    /// An adjustment layer's settings as read (their JSON): while they are still these, the file's own adjustment
+    /// block is written back instead of one made anew. Empty for anything else.
+    std::string adjustmentJson;
 
     enum class Binding { Always, Placement, Content };
     /// What `key` describes: nothing about the pixels (Always), where they are (a vector mask: Placement),

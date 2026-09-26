@@ -198,7 +198,7 @@ void AutomationServer::registerLayersHandlers() {
         else if (kind == "group" || kind == "folder") s->addGroup();
         else if (kind == "adjustment") {
             auto ak = adjustmentKindNamed(str(p, "adjustmentKind"));
-            if (!ak) fail("adjustmentKind must be Levels, Curves, Hue/Saturation, Exposure, Gradient Map or Grain", invalidParams);
+            if (!ak) fail("adjustmentKind must be one of: " + adjustmentKindList(), invalidParams);
             s->addAdjustmentLayer(*ak);
             if (has(p, "settings")) {
                 const Layer* l = s->activeLayer();
@@ -367,7 +367,7 @@ void AutomationServer::registerLayersHandlers() {
     });
     add("adjustments.defaults", [](const QJsonObject& p) {
         auto kind = adjustmentKindNamed(str(p, "kind"));
-        if (!kind) fail("kind must be Levels, Curves, Hue/Saturation, Exposure, Gradient Map or Grain", invalidParams);
+        if (!kind) fail("kind must be one of: " + adjustmentKindList(), invalidParams);
         return QJsonDocument::fromJson(QByteArray::fromStdString(AdjustmentSettings::defaults(*kind).toJson())).object();
     });
 

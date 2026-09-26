@@ -47,11 +47,17 @@ private:
     QWidget* buildExposure();
     QWidget* buildGradientMap();
     QWidget* buildGrain();
+    /// Photoshop's other adjustment layers: Invert, Brightness/Contrast, Posterize, Threshold, Black & White, Color
+    /// Balance, Vibrance, Photo Filter, Channel Mixer, Selective Color.
+    QWidget* buildMore();
+    QWidget* checkRow(const QString& label, std::function<bool()> get, std::function<void(bool)> apply);
+    QWidget* colourRow(const QString& label, std::function<compositor::AdjustmentColor&()> colour);
     void changed();
     /// A slider paired with a spin box, both writing to `apply`.
     QWidget* sliderRow(const QString& label, double min, double max, int decimals, double scale, std::function<double()> get, std::function<void(double)> apply);
 
     compositor::AdjustmentSettings settings_;
+    int toneRange_ = 1, mixerOutput_ = 0, selectiveRange_ = 0;   // which part of a many-part adjustment is shown
     QWidget* body_ = nullptr;
     bool syncing_ = false;
     std::vector<std::function<void()>> syncers_;

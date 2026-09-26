@@ -184,6 +184,11 @@ def main():
     assert adj["kind"] == "adjustment" and adj["name"] == "Brighter", adj
     got = rpc.call("adjustments.get", id=adj["id"])
     assert abs(got["settings"]["exposure"] - 0.5) < 1e-6, got
+    # One of Photoshop's other adjustment layers, with its own settings object.
+    balance = rpc.call("layers.add", kind="adjustment", adjustmentKind="color balance", settings={"colorBalanceSettings": {"midtones": [30, 0, -10]}})
+    got = rpc.call("adjustments.get", id=balance["id"])
+    assert got["settings"]["colorBalanceSettings"]["midtones"][0] == 30, got
+    rpc.call("layers.delete", id=balance["id"])
     rpc.call("layers.select", id=target["id"])
     rpc.call("pixels.filter", kind="Gaussian Blur", radius=2)
     rpc.call("pixels.filter", kind="Lens Correction", distortion=20, bicubic=True)

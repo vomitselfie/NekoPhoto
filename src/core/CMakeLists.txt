@@ -78,6 +78,7 @@ set(COMPOSITOR_HAVE_SQLITE ${COMPOSITOR_HAVE_SQLITE} PARENT_SCOPE)
 add_library(compositor_core STATIC
     src/abr.cpp
     src/adjustments.cpp
+    src/adjustments_more.cpp
     src/clip.cpp
     src/blend.cpp
     src/blur.cpp

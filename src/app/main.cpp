@@ -390,7 +390,10 @@ int main(int argc, char** argv) {
         QTimer::singleShot(50, &window, [&window, name] {
             using compositor::AdjustmentKind; using compositor::FilterKind;
             static const QMap<QString, AdjustmentKind> adjustments{{"levels", AdjustmentKind::Levels}, {"curves", AdjustmentKind::Curves}, {"hue", AdjustmentKind::HueSaturation},
-                {"exposure", AdjustmentKind::Exposure}, {"gradient-map", AdjustmentKind::GradientMap}, {"grain", AdjustmentKind::Grain}};
+                {"exposure", AdjustmentKind::Exposure}, {"gradient-map", AdjustmentKind::GradientMap}, {"grain", AdjustmentKind::Grain},
+                {"brightness-contrast", AdjustmentKind::BrightnessContrast}, {"posterize", AdjustmentKind::Posterize}, {"threshold", AdjustmentKind::Threshold},
+                {"black-white", AdjustmentKind::BlackWhite}, {"color-balance", AdjustmentKind::ColorBalance}, {"vibrance", AdjustmentKind::Vibrance},
+                {"photo-filter", AdjustmentKind::PhotoFilter}, {"channel-mixer", AdjustmentKind::ChannelMixer}, {"selective-color", AdjustmentKind::SelectiveColor}};
             static const QMap<QString, FilterKind> filters{{"blur", FilterKind::GaussianBlur}, {"motion-blur", FilterKind::MotionBlur}, {"noise", FilterKind::AddNoise}, {"lens", FilterKind::LensCorrection}};
             app::EditorSession* s = window.session();
             if (adjustments.contains(name)) (new app::PixelAdjustmentDialog(s, adjustments.value(name), &window))->show();

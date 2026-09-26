@@ -58,10 +58,16 @@ SelectionMode selectionMode(const QJsonObject& p) {
     fail("mode must be replace, add, subtract or intersect", invalidParams);
 }
 
+QString adjustmentKindList() {
+    QStringList names;
+    for (int i = 0; i < adjustmentKindCount; i++) names << QString::fromUtf8(adjustmentKindName(AdjustmentKind(i)));
+    return names.join(", ");
+}
+
 std::optional<AdjustmentKind> adjustmentKindNamed(QString name) {
     name = name.toLower().remove('/').remove(' ').remove('-');
-    for (int i = 0; i < 6; i++) {
-        QString n = QString::fromUtf8(adjustmentKindName(AdjustmentKind(i))).toLower().remove('/').remove(' ').remove('-');
+    for (int i = 0; i < adjustmentKindCount; i++) {
+        QString n = QString::fromUtf8(adjustmentKindName(AdjustmentKind(i))).toLower().remove('/').remove(' ').remove('-').remove('&');
         if (n == name) return AdjustmentKind(i);
     }
     return std::nullopt;

@@ -215,7 +215,7 @@ QStringList valuesNamed(const QString& list) {
     QStringList out;
     if (list == "blend") out = blendModeNames() << QStringLiteral("Pass Through");   // Pass Through: folders only
     else if (list == "sampling") for (int i = 0; i < 3; i++) out << QString::fromUtf8(samplingName(Sampling(i)));
-    else if (list == "adjustment") for (int i = 0; i < 6; i++) out << QString::fromUtf8(adjustmentKindName(AdjustmentKind(i)));
+    else if (list == "adjustment") for (int i = 0; i < adjustmentKindCount; i++) out << QString::fromUtf8(adjustmentKindName(AdjustmentKind(i)));
     else if (list == "filter") for (int i = 0; i < 4; i++) out << QString::fromUtf8(filterKindName(FilterKind(i)));
     else if (list == "tool") out = toolNames();
     else if (list == "selectionMode") out = {"replace", "add", "subtract", "intersect"};

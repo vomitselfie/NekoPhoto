@@ -637,6 +637,68 @@ TEST_CASE(turned_text_opens_as_text) {
     CHECK(warped->document.layers[0].text->warp == (TextWarp{"warpArc", 50, 10, -20, true}));
 }
 
+TEST_CASE(photoshops_other_adjustment_layers_draw_and_round_trip) {
+    // Each kind: a non-default setting survives JSON and a PSD, and draws as Photoshop does where that is pinned.
+    auto roundTrip = [](const AdjustmentSettings& s) {
+        Document doc(8, 8);
+        doc.layers.push_back(pixels("Base", solid(8, 8, 120, 60, 200, 255), {0, 0}));
+        Layer adj("Adjust", doc.size());
+        adj.adjustment = s.toLayerAdjustment();
+        doc.layers.push_back(adj);
+        std::string error;
+        auto back = importPsdBytes(encodePsd(doc, {}, nullptr, &error), &error);
+        AdjustmentSettings read;
+        const bool ok = back && back->document.layers.size() == 2 && back->document.layers[1].adjustment
+            && AdjustmentSettings::parse(back->document.layers[1].adjustment->json, read);
+        return ok ? std::optional<AdjustmentSettings>(read) : std::nullopt;
+    };
+    std::vector<AdjustmentSettings> all;
+    auto make = [&](AdjustmentKind k, auto&& set) { AdjustmentSettings s = AdjustmentSettings::defaults(k); set(s); all.push_back(s); };
+    make(AdjustmentKind::Invert, [](AdjustmentSettings&) {});
+    make(AdjustmentKind::BrightnessContrast, [](AdjustmentSettings& s) { s.brightnessContrast = {40, -20, false}; });
+    make(AdjustmentKind::BrightnessContrast, [](AdjustmentSettings& s) { s.brightnessContrast = {-30, 50, true}; });
+    make(AdjustmentKind::Posterize, [](AdjustmentSettings& s) { s.posterize.levels = 6; });
+    make(AdjustmentKind::Threshold, [](AdjustmentSettings& s) { s.threshold.level = 90; });
+    make(AdjustmentKind::BlackWhite, [](AdjustmentSettings& s) { s.blackWhite.weights = {10, 20, 30, 40, 50, 60}; s.blackWhite.tint = true; });
+    make(AdjustmentKind::ColorBalance, [](AdjustmentSettings& s) { s.colorBalance.ranges = {{{-10, 5, 15}, {45, -25, 35}, {-30, 20, -5}}}; s.colorBalance.preserveLuminosity = false; });
+    make(AdjustmentKind::Vibrance, [](AdjustmentSettings& s) { s.vibrance = {35, -10}; });
+    make(AdjustmentKind::PhotoFilter, [](AdjustmentSettings& s) { s.photoFilter.color = {0, 0.4, 1}; s.photoFilter.density = 60; });
+    make(AdjustmentKind::ChannelMixer, [](AdjustmentSettings& s) { s.channelMixer.rows[0] = {80, 20, 0, 5}; });
+    make(AdjustmentKind::SelectiveColor, [](AdjustmentSettings& s) { s.selectiveColor.absolute = true; s.selectiveColor.ranges[0] = {-20, 10, 0, 5}; });
+    for (const AdjustmentSettings& s : all) {
+        AdjustmentSettings json;
+        CHECK(AdjustmentSettings::parse(s.toJson(), json));
+        CHECK(json.toJson() == s.toJson());
+        auto back = roundTrip(s);
+        REQUIRE(back.has_value());
+        CHECK(back->kind == s.kind);
+        CHECK(back->toJson() == s.toJson());
+    }
+
+    // What Photoshop's own composites pinned (docs/adjustment-layers.md).
+    Transfer posterize = posterizeTransfer({6});
+    CHECK(std::lround(posterize[0][215] * 255) == 255 && std::lround(posterize[0][80] * 255) == 51 && std::lround(posterize[0][165] * 255) == 153);
+    Image grey(1, 1);
+    grey.fill(100, 100, 100, 255);
+    applyThreshold(grey, {100});
+    CHECK(grey.pixel(0, 0)[0] == 255);   // at the level: white
+    Image dim(1, 1);
+    dim.fill(99, 99, 99, 255);
+    applyThreshold(dim, {100});
+    CHECK(dim.pixel(0, 0)[0] == 0);
+    // Color Balance midtones are a gamma of 2^(-amount / 100): +45 red takes 75 to 104, as Photoshop does.
+    Image c(1, 1);
+    c.fill(75, 75, 75, 255);
+    ColorBalanceSettings cb;
+    cb.ranges[1] = {45, 0, 0};
+    cb.preserveLuminosity = false;
+    applyColorBalance(c, cb);
+    CHECK(std::abs(int(c.pixel(0, 0)[0]) - 104) <= 1);
+    // Legacy Brightness/Contrast: contrast 100 is a hard cut at (v + b) >= 127.
+    CHECK((BrightnessContrastSettings{0, 100, true}.apply(127)) == 255);
+    CHECK((BrightnessContrastSettings{0, 100, true}.apply(126)) == 0);
+}
+
 TEST_CASE(psb_export_reads_back_with_even_composite_rows) {
     Document doc(40, 30);
     doc.layers.push_back(pixels("A", softDisc(20, 200, 30, 30), {5, 5}));

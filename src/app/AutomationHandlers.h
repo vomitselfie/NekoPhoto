@@ -37,6 +37,8 @@ bool flag(const QJsonObject& p, const char* key, bool fallback);
 QJsonObject obj(const QJsonObject& p, const char* key);
 QString qs(const std::string& s);
 compositor::SelectionMode selectionMode(const QJsonObject& p);
+/// Every adjustment kind's name, comma separated (for messages).
+QString adjustmentKindList();
 std::optional<compositor::AdjustmentKind> adjustmentKindNamed(QString name);
 std::optional<compositor::FilterKind> filterKindNamed(QString name);
 /// "Color Dodge", "color dodge", "colorDodge" and "color-dodge" alike.
