@@ -142,6 +142,8 @@ void MainWindow::buildMenus() {
     needsDocument(file->addAction(tr("Export &JPEG…"), QKeySequence("Ctrl+Alt+Shift+S"), this, &MainWindow::exportJpeg));
     if (canWriteImageFormat("webp")) needsDocument(file->addAction(tr("Export &WebP…"), this, &MainWindow::exportWebp));
     if (canWriteImageFormat("tiff")) needsDocument(file->addAction(tr("Export &TIFF…"), this, &MainWindow::exportTiff));
+    needsDocument(file->addAction(tr("Export T&GA…"), this, &MainWindow::exportTga));
+    needsDocument(file->addAction(tr("Export &Icon (ICO)…"), this, &MainWindow::exportIco));
     file->addSeparator();
     file->addAction(tr("&Close Tab"), QKeySequence::Close, this, [this] { closeTab(current_); });
     file->addAction(tr("New &Tab"), QKeySequence::AddTab, this, [this] { addTab(false); });
