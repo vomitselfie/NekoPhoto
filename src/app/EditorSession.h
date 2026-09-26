@@ -12,6 +12,7 @@
 #include "compositor/tipbrush.h"
 #include "compositor/filters.h"
 #include "compositor/document.h"
+#include "compositor/layerstyle.h"
 #include "compositor/smartfilter.h"
 #include "compositor/trim.h"
 #include "compositor/history.h"
@@ -399,6 +400,24 @@ public:
     void endAdjustmentEdit();
     std::optional<compositor::AdjustmentSettings> adjustmentSettings(const compositor::Uuid& id) const;
 
+    // Layer styles (Layer ▸ Layer Style)
+    /// A layer's style for editing (every effect, the ones switched off too); empty when it has none.
+    compositor::LayerStyle layerStyle(const compositor::Uuid& id) const;
+    bool canStyleLayer(const compositor::Uuid& id) const;
+    /// The Layer Style dialog's live edit: begin, show each change on the layer, then keep it as one undo step or put
+    /// the layer back as it was (its carried style bytes untouched when nothing changed).
+    bool beginLayerStyleEdit(const compositor::Uuid& id);
+    void previewLayerStyle(const compositor::LayerStyle& style);
+    void endLayerStyleEdit(bool keep);
+    /// Gives a layer `style` as one undo step (automation's layers.setStyle).
+    bool applyLayerStyle(const compositor::Uuid& id, const compositor::LayerStyle& style);
+    /// Copy, Paste and Clear Layer Style on the active layer.
+    void copyLayerStyle();
+    bool canPasteLayerStyle() const { return styleClipboard_.has_value(); }
+    void pasteLayerStyle();
+    void clearLayerStyle();
+    bool activeLayerHasStyle() const;
+
     // Destructive adjustments and filters on the active layer's pixels, inside the selection.
     bool canAdjustPixels() const;
     /// Shows `image` (placed by `transform`, or the layer's own) in place of a layer's pixels until cleared: `layerId`'s, or the active layer's at the time
@@ -629,6 +648,9 @@ private:
     bool wandSessionLive() const;
     void applyWandSession(int tolerance, bool replaceStep);
     bool adjustmentEditing_ = false;
+    std::optional<compositor::Uuid> styleEditLayer_;
+    std::shared_ptr<const compositor::PsdLayerCarry> styleEditCarry_;
+    std::optional<compositor::LayerStyle> styleClipboard_;
     std::shared_ptr<const compositor::Image> previewImage_;
     std::optional<compositor::LayerTransform> previewTransform_;
     std::optional<std::pair<compositor::Uuid, compositor::Uuid>> transformDuplicate_; // copy, source

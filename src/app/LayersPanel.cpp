@@ -1,5 +1,6 @@
 #include "Style.h"
 #include "LayersPanel.h"
+#include "LayerStyleDialog.h"
 #include "ImageConvert.h"
 #include <QStandardItemModel>
 #include <QApplication>
@@ -576,6 +577,15 @@ void LayersPanel::showContextMenu(const QPoint& pos) {
     QMenu menu(this);
     if (layer->isLiveText()) menu.addAction(tr("Edit Text…"), this, [this, id] { session_->requestTextEdit(id); });
     menu.addAction(tr("Rename…"), this, [this, id] { startRename(id); });
+    if (session_->canStyleLayer(id)) {
+        menu.addAction(tr("Layer Style…"), this, [this, id] { LayerStyleDialog(session_, id, this).exec(); });
+        if (session_->activeLayerHasStyle()) {
+            menu.addAction(tr("Copy Layer Style"), this, [this] { session_->copyLayerStyle(); });
+            menu.addAction(tr("Clear Layer Style"), this, [this] { session_->clearLayerStyle(); });
+        }
+        if (session_->canPasteLayerStyle()) menu.addAction(tr("Paste Layer Style"), this, [this] { session_->pasteLayerStyle(); });
+    }
+
     menu.addAction(tr("Duplicate Layer"), this, [this] { session_->duplicateActiveLayer(); });
     menu.addAction(tr("Delete Layer"), this, [this, id] { session_->deleteLayer(id); });
     menu.addSeparator();

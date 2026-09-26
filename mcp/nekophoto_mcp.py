@@ -318,7 +318,7 @@ def layers_get(id: str) -> str:
 
 @edit("Set layer properties")
 def layers_set(id: str, name: Optional[str] = None, visible: Optional[bool] = None, opacity: Optional[float] = None, blend: Optional[str] = None, clipping: Optional[bool] = None) -> str:
-    """Change a layer's name, visibility, opacity (0..1), blend mode (Normal, Multiply, Screen, Overlay, Darken, Lighten, Difference, Color Dodge, Color Burn, Hue, Saturation, Color, Luminosity; a folder also Pass Through) or whether it clips to the layer beneath."""
+    """Change a layer's name, visibility, opacity (0..1), blend mode (any of Photoshop's: Normal, Dissolve, Darken, Multiply, Color Burn, Linear Burn, Darker Color, Lighten, Screen, Color Dodge, Linear Dodge (Add), Lighter Color, Overlay, Soft Light, Hard Light, Vivid Light, Linear Light, Pin Light, Hard Mix, Difference, Exclusion, Subtract, Divide, Hue, Saturation, Color, Luminosity; a folder also Pass Through) or whether it clips to the layer beneath."""
     return text(call("layers.set", id=id, name=name, visible=visible, opacity=opacity, blend=blend, clipping=clipping))
 
 
@@ -371,6 +371,18 @@ def layers_flip(id: Optional[str] = None, vertical: bool = False) -> str:
 def layers_set_transform(id: str, x: Optional[float] = None, y: Optional[float] = None, width: Optional[float] = None, height: Optional[float] = None, rotation: Optional[float] = None, scale: Optional[float] = None, flip_x: Optional[bool] = None, flip_y: Optional[bool] = None) -> str:
     """Place a layer non-destructively: top-left x, y and width, height in document pixels, rotation in degrees clockwise, or scale (a factor about its centre)."""
     return text(call("layers.setTransform", id=id, x=x, y=y, width=width, height=height, rotation=rotation, scale=scale, flipX=flip_x, flipY=flip_y))
+
+
+@look("Layer style")
+def layers_style(id: str) -> str:
+    """A layer's effects (Photoshop's layer style): dropShadows, innerShadows, outerGlows, innerGlows, bevels, satins, colorOverlays, gradientOverlays, patternOverlays and strokes, each a list (switched-off ones too, with enabled false), plus visible, maskHidesEffects and blendInteriorAsGroup."""
+    return text(call("layers.style", id=id))
+
+
+@edit("Set layer style")
+def layers_set_style(id: str, style: dict) -> str:
+    """Replace a layer's effects, shaped as layers_style shows; settings left out take Photoshop's defaults and {} clears the style. Colours are "#rrggbb"; opacity, scale and depth are fractions (1 = 100%); spread, choke and range percent; sizes and distances pixels; angles degrees; mode a blend mode (normal, multiply, screen, overlay, linearDodge, ...). Example: {"dropShadows": [{"distance": 8, "size": 10}], "strokes": [{"size": 3, "color": "#ffffff", "position": "outside"}]}."""
+    return text(call("layers.setStyle", id=id, style=style))
 
 
 @edit("Layer mask")

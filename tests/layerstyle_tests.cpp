@@ -154,4 +154,48 @@ TEST_CASE(clipping_ignores_the_base_layers_effects) {
     CHECK(at(*out, 13, 20)[1] < 20);   // the stroke band stays blue, not green
 }
 
+TEST_CASE(a_style_set_here_draws_and_reads_back) {
+    // A layer with no PSD past: the Layer Style dialog's path, with one effect switched off.
+    auto doc = squareWith(lfx2({}));
+    doc.layers[1].psdCarry = nullptr;
+    LayerStyle style;
+    ColorOverlay red; red.color = {255, 0, 0};
+    style.colorOverlays.push_back(red);
+    DropShadow off; off.enabled = false; off.distance = 9;
+    style.dropShadows.push_back(off);
+    Stroke gradientStroke; gradientStroke.gradientFill = true; gradientStroke.gradient.colors = {{0, {0, 0, 255}, 0.5f}, {1, {0, 255, 0}, 0.5f}};
+    gradientStroke.gradient.type = StyleGradient::Type::ShapeBurst;
+    style.strokes.push_back(gradientStroke);
+    style.strokes.push_back(Stroke{});   // two: the '...Multi' list
+    setLayerStyle(doc.layers[1], style);
+    auto out = renderFlattened(doc);
+    CHECK_EQ(int(at(*out, 20, 20)[0]), 255);
+    CHECK_EQ(int(at(*out, 20, 20)[1]), 0);
+    CHECK(at(*out, 27, 27)[0] > 250);   // the shadow is off
+    // What is drawn leaves the switched-off shadow out; the editor keeps it.
+    auto drawn = layerStyleOf(doc.layers[1], doc);
+    REQUIRE(drawn != nullptr);
+    CHECK(drawn->dropShadows.empty());
+    const LayerStyle back = editableLayerStyle(doc.layers[1], doc);
+    REQUIRE(back.dropShadows.size() == 1);
+    CHECK(!back.dropShadows[0].enabled);
+    CHECK_EQ(back.dropShadows[0].distance, 9.0f);
+    REQUIRE(back.strokes.size() == 2);
+    CHECK(back.strokes[0].gradientFill && back.strokes[0].gradient.type == StyleGradient::Type::ShapeBurst);
+    CHECK_EQ(int(back.strokes[0].gradient.colors[1].color.g), 255);
+    CHECK(authorLayerStyleBlock(back) == authorLayerStyleBlock(style));
+    // JSON both ways gives the same style.
+    LayerStyle fromJson;
+    std::string error;
+    REQUIRE(layerStyleFromJson(layerStyleToJson(back), fromJson, &error));
+    CHECK(authorLayerStyleBlock(fromJson) == authorLayerStyleBlock(style));
+    CHECK(!layerStyleFromJson(R"({"strokes": [{"sise": 3}]})", fromJson, &error));
+    CHECK(error.find("sise") != std::string::npos);
+    CHECK(!layerStyleFromJson(R"({"colorOverlays": [{"mode": "sparkle"}]})", fromJson, &error));
+    // Clearing takes the block away.
+    setLayerStyle(doc.layers[1], LayerStyle{});
+    CHECK(layerStyleOf(doc.layers[1], doc) == nullptr);
+    for (auto& b : doc.layers[1].psdCarry->blocks) CHECK(b.key != "lfx2");
+}
+
 TEST_MAIN()

@@ -69,6 +69,15 @@ def remaining_methods(rpc):
     rpc.call("layers.reorder", id=copy["id"], offset=1)
     rpc.call("layers.render", id=placed["id"], maxSize=32)
     rpc.call("layers.setTransform", id=placed["id"], x=10, y=5, rotation=15)
+    styled = rpc.call("layers.setStyle", id=placed["id"], style={"dropShadows": [{"distance": 6, "size": 4}], "strokes": [{"size": 2, "color": "#ff0000"}]})
+    assert styled["dropShadows"][0]["distance"] == 6 and styled["strokes"][0]["color"] == "#ff0000", styled
+    assert rpc.call("layers.style", id=placed["id"])["strokes"][0]["size"] == 2
+    try:
+        rpc.call("layers.setStyle", id=placed["id"], style={"strokes": [{"width": 2}]})
+        raise AssertionError("an unknown effect setting should be refused")
+    except RuntimeError as e:
+        print("expected error:", e)
+    assert "strokes" not in rpc.call("layers.setStyle", id=placed["id"], style={})
     rpc.call("selection.fromLayer", id=placed["id"])
     try:   # needs the downloaded model; without it, a clear error
         rpc.call("pixels.removeBackground")

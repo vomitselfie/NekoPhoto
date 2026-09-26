@@ -147,6 +147,20 @@ void AutomationServer::registerLayersHandlers() {
         return out;
     });
     add("layers.get", [layer](const QJsonObject& p) { return layerJson(layer(p), 0); });
+    add("layers.style", [session, layer](const QJsonObject& p) {
+        const std::string json = layerStyleToJson(session()->layerStyle(layer(p).id));
+        return QJsonDocument::fromJson(QByteArray::fromStdString(json)).object();
+    });
+    add("layers.setStyle", [session, layer](const QJsonObject& p) {
+        const Uuid id = layer(p).id;
+        LayerStyle style;
+        std::string error;
+        const QByteArray json = QJsonDocument(p.value("style").toObject()).toJson(QJsonDocument::Compact);
+        if (!p.value("style").isObject() || !layerStyleFromJson(json.toStdString(), style, &error))
+            fail(QString::fromStdString(error.empty() ? "style must be an object, shaped as layers.style shows" : error), invalidParams);
+        if (!session()->applyLayerStyle(id, style)) fail("this layer cannot have effects (an adjustment layer, or a locked document)");
+        return QJsonDocument::fromJson(QByteArray::fromStdString(layerStyleToJson(session()->layerStyle(id)))).object();
+    });
     add("layers.select", [session, layer](const QJsonObject& p) {
         EditorSession* s = session();
         if (has(p, "ids")) {

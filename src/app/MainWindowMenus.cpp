@@ -9,6 +9,7 @@
 #include <QCheckBox>
 #include <QFormLayout>
 #include <QDialogButtonBox>
+#include "LayerStyleDialog.h"
 #include "WarpDialog.h"
 #include "CanvasFrame.h"
 #include "Dialogs.h"
@@ -270,6 +271,19 @@ void MainWindow::buildMenus() {
         AdjustmentKind kind = AdjustmentKind(i);
         needsDocument(adjustmentLayers->addAction(QString::fromUtf8(adjustmentKindName(kind)), this, [this, kind] { session_->addAdjustmentLayer(kind); }));
     }
+    QMenu* styles = layer->addMenu(tr("Layer St&yle"));
+    const char* const stylePages[] = {"Blending Options…", "Bevel & Emboss…", "Stroke…", "Inner Shadow…", "Inner Glow…", "Satin…", "Color Overlay…",
+                                      "Gradient Overlay…", "Pattern Overlay…", "Outer Glow…", "Drop Shadow…"};
+    for (int page = 0; page < int(std::size(stylePages)); page++) {
+        needsDocument(styles->addAction(tr(stylePages[page]), this, [this, page] {
+            if (session_->activeLayerId()) LayerStyleDialog(session_, *session_->activeLayerId(), this, page).exec();
+        }));
+        if (page == 0) styles->addSeparator();
+    }
+    styles->addSeparator();
+    needsDocument(styles->addAction(tr("&Copy Layer Style"), this, [this] { session_->copyLayerStyle(); }));
+    needsDocument(styles->addAction(tr("&Paste Layer Style"), this, [this] { session_->pasteLayerStyle(); }));
+    needsDocument(styles->addAction(tr("C&lear Layer Style"), this, [this] { session_->clearLayerStyle(); }));
     QMenu* smart = layer->addMenu(tr("S&mart Objects"));
     needsDocument(smart->addAction(tr("&Convert to Smart Object"), this, [this] {
         QString error;

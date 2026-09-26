@@ -2,13 +2,24 @@
 
 A PSD's layer styles (the effects Photoshop keeps in a layer's 'lfx2' block, 'lmfx' for several of one kind,
 'lfxs' on folders) are drawn around the layer, in the editor and in every export. They come from the file as it
-was carried (psd-roundtrip.md) and go back unchanged on PSD export; they cannot be edited here yet.
+was carried (psd-roundtrip.md) and go back unchanged on PSD export, and Layer ▸ Layer Style edits them.
 
 - Model and parsing: `src/core/include/compositor/layerstyle.h`, `src/core/src/layerstyle.cpp` (with the global
   light from image resources 1037/1049, the effects scale, the 'fxrp' reference point and the file's patterns).
 - Drawing: `src/core/src/layerstyle_render.cpp`, called by the renderer for a styled layer (`drawOwn`), a
   clipping base with a style, and a styled folder (exterior effects before its first child, the rest after its
   last, over the shape of its children drawn alone).
+
+- Editing: Layer ▸ Layer Style (and the Layers panel's menu) opens Photoshop's dialog: Blending Options and the
+  ten effects, each with its switch; a page edits the effect's first instance, further ones are kept. Copy,
+  Paste and Clear Layer Style are beside it; automation has `layers.style` and `layers.setStyle`. An edited
+  style is written as a fresh 'lfx2' in Photoshop 2026's descriptor shapes (`src/core/src/layerstyle_write.cpp`,
+  Patchy's authoring) into the layer's carry, so drawing, PSD export and the project package take it as they
+  take a carried one; a style the dialog left as it was keeps the file's bytes. Effects switched off stay in
+  the style with their settings, as in Photoshop. What the model does not hold is lost on an edit: a gradient's
+  noise form, Satin's and the shadows' contours and noise, a pattern's name (its id is kept).
+  `build/tests/restyle_check` rewrites every styled layer in a corpus and checks the render is unchanged and the
+  new block reads back the same (Patchy's fixtures: 166 styles, all identical).
 
 The renderer follows Patchy (MIT, `src/third_party/patchy_psd/README.md`), which calibrated each effect against
 Photoshop 2026. Its mask machinery is ported: the tent blur, spread and choke as grayscale dilation, exact

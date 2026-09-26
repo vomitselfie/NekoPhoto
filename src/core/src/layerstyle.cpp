@@ -136,18 +136,23 @@ StyleGradient gradientOf(const psd::DescriptorObject& effect) {
     return g;
 }
 
-/// Each enabled instance of an effect: the '...Multi' list when there is one, else the single object.
+/// Each enabled instance of an effect (each instance with `all`): the '...Multi' list when there is one, else the
+/// single object. `parse` returns the effect it read, whose `enabled` is set from the descriptor.
 template <typename F>
-void each(const psd::DescriptorObject& root, const char* single, const char* multi, F parse) {
+void each(const psd::DescriptorObject& root, const char* single, const char* multi, bool all, F parse) {
+    auto one = [&](const psd::DescriptorObject& o) {
+        const bool on = flag(o, "enab", false);
+        if (on || all) parse(o).enabled = on;
+    };
     if (auto list = psd::descriptor_value(root, multi); list && list->type == psd::DescriptorValue::Type::List) {
         for (auto& item : list->list_value)
-            if (item.type == psd::DescriptorValue::Type::Object && item.object_value && flag(*item.object_value, "enab", false)) parse(*item.object_value);
+            if (item.type == psd::DescriptorValue::Type::Object && item.object_value) one(*item.object_value);
         return;
     }
-    if (auto o = psd::descriptor_object(root, single); o && flag(*o, "enab", false)) parse(*o);
+    if (auto o = psd::descriptor_object(root, single)) one(*o);
 }
 
-std::shared_ptr<LayerStyle> parseEffects(const std::vector<uint8_t>& block) {
+std::shared_ptr<LayerStyle> parseEffects(const std::vector<uint8_t>& block, bool all = false) {
     psd::BigEndianReader r(block);
     (void)r.read_u32();                // object effects version
     if (r.read_u32() != 16) return nullptr;
@@ -155,46 +160,52 @@ std::shared_ptr<LayerStyle> parseEffects(const std::vector<uint8_t>& block) {
     auto style = std::make_shared<LayerStyle>();
     style->visible = flag(root, "masterFXSwitch", true);
     const float scale = std::max(0.01f, num(root, "Scl ", 100) / 100.0f);   // Scale Effects
-    each(root, "DrSh", "dropShadowMulti", [&](const psd::DescriptorObject& e) {
+    each(root, "DrSh", "dropShadowMulti", all, [&](const psd::DescriptorObject& e) -> auto& {
         DropShadow s;
         s.mode = modeOf(e, "Md  ", EffectBlend::Multiply); s.color = colorOf(e, "Clr ", {}); s.opacity = percent(e, "Opct", 75);
         s.angle = num(e, "lagl", 120); s.useGlobalLight = flag(e, "uglg", false);
         s.distance = std::max(0.0f, num(e, "Dstn", 5)) * scale; s.spread = std::clamp(num(e, "Ckmt", 0), 0.0f, 100.0f);
         s.size = std::max(0.0f, num(e, "blur", 5)) * scale; s.layerConceals = flag(e, "layerConceals", true);
         style->dropShadows.push_back(s);
+        return style->dropShadows.back();
     });
-    each(root, "IrSh", "innerShadowMulti", [&](const psd::DescriptorObject& e) {
+    each(root, "IrSh", "innerShadowMulti", all, [&](const psd::DescriptorObject& e) -> auto& {
         InnerShadow s;
         s.mode = modeOf(e, "Md  ", EffectBlend::Multiply); s.color = colorOf(e, "Clr ", {}); s.opacity = percent(e, "Opct", 75);
         s.angle = num(e, "lagl", 120); s.useGlobalLight = flag(e, "uglg", false);
         s.distance = std::max(0.0f, num(e, "Dstn", 5)) * scale; s.choke = std::clamp(num(e, "Ckmt", 0), 0.0f, 100.0f);
         s.size = std::max(0.0f, num(e, "blur", 5)) * scale;
         style->innerShadows.push_back(s);
+        return style->innerShadows.back();
     });
-    each(root, "OrGl", "outerGlowMulti", [&](const psd::DescriptorObject& e) {
+    each(root, "OrGl", "outerGlowMulti", all, [&](const psd::DescriptorObject& e) -> auto& {
         OuterGlow g;
         g.mode = modeOf(e, "Md  ", EffectBlend::Screen); g.color = colorOf(e, "Clr ", {255, 255, 190}); g.opacity = percent(e, "Opct", 75);
         g.spread = std::clamp(num(e, "Ckmt", 0), 0.0f, 100.0f); g.size = std::max(0.0f, num(e, "blur", 5)) * scale;
         g.precise = enumOf(e, "GlwT", "SfBL") == "PrBL"; g.range = std::clamp(num(e, "Inpr", 100), 1.0f, 100.0f);
         style->outerGlows.push_back(g);
+        return style->outerGlows.back();
     });
-    each(root, "IrGl", "innerGlowMulti", [&](const psd::DescriptorObject& e) {
+    each(root, "IrGl", "innerGlowMulti", all, [&](const psd::DescriptorObject& e) -> auto& {
         InnerGlow g;
         g.mode = modeOf(e, "Md  ", EffectBlend::Screen); g.color = colorOf(e, "Clr ", {255, 255, 190}); g.opacity = percent(e, "Opct", 75);
         g.choke = std::clamp(num(e, "Ckmt", 0), 0.0f, 100.0f); g.size = std::max(0.0f, num(e, "blur", 5)) * scale;
         g.precise = enumOf(e, "GlwT", "SfBL") == "PrBL"; g.range = std::clamp(num(e, "Inpr", 100), 1.0f, 100.0f);
         g.center = enumOf(e, "glwS", "SrcE") == "SrcC";
         style->innerGlows.push_back(g);
+        return style->innerGlows.back();
     });
-    each(root, "SoFi", "solidFillMulti", [&](const psd::DescriptorObject& e) {
+    each(root, "SoFi", "solidFillMulti", all, [&](const psd::DescriptorObject& e) -> auto& {
         style->colorOverlays.push_back({modeOf(e, "Md  ", EffectBlend::Normal), colorOf(e, "Clr ", {255, 0, 0}), percent(e, "Opct", 100)});
+        return style->colorOverlays.back();
     });
-    each(root, "GrFl", "gradientFillMulti", [&](const psd::DescriptorObject& e) {
+    each(root, "GrFl", "gradientFillMulti", all, [&](const psd::DescriptorObject& e) -> auto& {
         GradientOverlay g;
         g.mode = modeOf(e, "Md  ", EffectBlend::Normal); g.opacity = percent(e, "Opct", 100); g.gradient = gradientOf(e);
         style->gradientOverlays.push_back(g);
+        return style->gradientOverlays.back();
     });
-    each(root, "patternFill", "patternFillMulti", [&](const psd::DescriptorObject& e) {
+    each(root, "patternFill", "patternFillMulti", all, [&](const psd::DescriptorObject& e) -> auto& {
         PatternOverlay p;
         p.mode = modeOf(e, "Md  ", EffectBlend::Normal); p.opacity = percent(e, "Opct", 100);
         p.scale = std::max(0.01f, num(e, "Scl ", 100) / 100.0f); p.angle = num(e, "Angl", 0);
@@ -202,15 +213,17 @@ std::shared_ptr<LayerStyle> parseEffects(const std::vector<uint8_t>& block) {
         p.linkWithLayer = flag(e, "Algn", true);
         if (auto phase = psd::descriptor_object(e, "phase")) { p.phaseX = num(*phase, "Hrzn", 0); p.phaseY = num(*phase, "Vrtc", 0); }
         style->patternOverlays.push_back(p);
+        return style->patternOverlays.back();
     });
-    each(root, "ChFX", "chromeFXMulti", [&](const psd::DescriptorObject& e) {
+    each(root, "ChFX", "chromeFXMulti", all, [&](const psd::DescriptorObject& e) -> auto& {
         Satin s;
         s.mode = modeOf(e, "Md  ", EffectBlend::Multiply); s.color = colorOf(e, "Clr ", {}); s.opacity = percent(e, "Opct", 50);
         s.angle = num(e, "lagl", 19); s.distance = std::max(0.0f, num(e, "Dstn", 11)) * scale;
         s.size = std::max(0.0f, num(e, "blur", 14)) * scale; s.invert = flag(e, "Invr", true);
         style->satins.push_back(s);
+        return style->satins.back();
     });
-    each(root, "FrFX", "frameFXMulti", [&](const psd::DescriptorObject& e) {
+    each(root, "FrFX", "frameFXMulti", all, [&](const psd::DescriptorObject& e) -> auto& {
         Stroke s;
         s.mode = modeOf(e, "Md  ", EffectBlend::Normal); s.opacity = percent(e, "Opct", 100);
         s.size = std::max(1.0f, num(e, "Sz  ", 3)) * scale;
@@ -221,8 +234,9 @@ std::shared_ptr<LayerStyle> parseEffects(const std::vector<uint8_t>& block) {
         if (s.gradientFill) s.gradient = gradientOf(e);
         s.overprint = flag(e, "overprint", false);
         style->strokes.push_back(s);
+        return style->strokes.back();
     });
-    each(root, "ebbl", "bevelEmbossMulti", [&](const psd::DescriptorObject& e) {
+    each(root, "ebbl", "bevelEmbossMulti", all, [&](const psd::DescriptorObject& e) -> auto& {
         Bevel b;
         b.highlightMode = modeOf(e, "hglM", EffectBlend::Screen); b.highlight = colorOf(e, "hglC", {255, 255, 255}); b.highlightOpacity = percent(e, "hglO", 75);
         b.shadowMode = modeOf(e, "sdwM", EffectBlend::Multiply); b.shadow = colorOf(e, "sdwC", {}); b.shadowOpacity = percent(e, "sdwO", 75);
@@ -248,6 +262,7 @@ std::shared_ptr<LayerStyle> parseEffects(const std::vector<uint8_t>& block) {
         if (auto ptrn = psd::descriptor_object(e, "Ptrn")) b.texturePattern = stringOf(*ptrn, "Idnt");
         if (auto phase = psd::descriptor_object(e, "phase")) { b.texturePhaseX = num(*phase, "Hrzn", 0); b.texturePhaseY = num(*phase, "Vrtc", 0); }
         style->bevels.push_back(b);
+        return style->bevels.back();
     });
     return style;
 }
@@ -358,6 +373,31 @@ std::optional<FillPattern> parseFillPattern(const std::vector<uint8_t>& block) {
     } catch (std::exception&) { return std::nullopt; }
 }
 
+/// The effects block `block` of `layer`, with the global light and the layer's style options resolved.
+static std::shared_ptr<LayerStyle> readStyle(const Layer& layer, const std::vector<uint8_t>& block, float angle, float altitude, bool all) {
+    std::shared_ptr<LayerStyle> style;
+    try { style = parseEffects(block, all); } catch (std::exception&) { return nullptr; }
+    if (!style) return nullptr;
+    for (auto& s : style->dropShadows) if (s.useGlobalLight) s.angle = angle;
+    for (auto& s : style->innerShadows) if (s.useGlobalLight) s.angle = angle;
+    for (auto& b : style->bevels) if (b.useGlobalLight) { b.angle = angle; b.altitude = altitude; }
+    if (auto lmgm = carriedBlock(layer, "lmgm"); lmgm && !lmgm->empty()) style->maskHidesEffects = (*lmgm)[0] != 0;
+    if (auto infx = carriedBlock(layer, "infx"); infx && !infx->empty()) style->blendInteriorAsGroup = (*infx)[0] != 0;
+    if (auto fxrp = carriedBlock(layer, "fxrp"); fxrp && fxrp->size() >= 16) {
+        psd::BigEndianReader r(*fxrp);
+        style->referenceX = psd::read_f64(r); style->referenceY = psd::read_f64(r);
+    }
+    return style;
+}
+
+static const std::vector<uint8_t>* effectsBlock(const Layer& layer) {
+    // 'lmfx' (multiple instances) wins over 'lfx2' ('lfxs' on folders); 'lrFX' is Photoshop 5's mirror and is ignored while either exists.
+    const std::vector<uint8_t>* block = carriedBlock(layer, "lmfx");
+    if (!block) block = carriedBlock(layer, "lfx2");
+    if (!block) block = carriedBlock(layer, "lfxs");   // a folder's
+    return block;
+}
+
 void layerOpacities(const Layer& layer, float& master, float& fill) {
     master = float(std::clamp(layer.opacity, 0.0, 1.0));
     fill = 1;
@@ -368,11 +408,7 @@ void layerOpacities(const Layer& layer, float& master, float& fill) {
 }
 
 std::shared_ptr<const LayerStyle> layerStyleOf(const Layer& layer, const Document& document) {
-    if (!layer.psdCarry) return nullptr;
-    // 'lmfx' (multiple instances) wins over 'lfx2' ('lfxs' on folders); 'lrFX' is Photoshop 5's mirror and is ignored while either exists.
-    const std::vector<uint8_t>* block = carriedBlock(layer, "lmfx");
-    if (!block) block = carriedBlock(layer, "lfx2");
-    if (!block) block = carriedBlock(layer, "lfxs");   // a folder's
+    const std::vector<uint8_t>* block = effectsBlock(layer);
     if (!block) return nullptr;
     static std::map<const void*, std::pair<std::weak_ptr<const PsdLayerCarry>, std::shared_ptr<const LayerStyle>>> cache;
     float angle = 120, altitude = 30;
@@ -385,23 +421,20 @@ std::shared_ptr<const LayerStyle> layerStyleOf(const Layer& layer, const Documen
         for (auto& d : s ? s->dropShadows : std::vector<DropShadow>{}) if (d.useGlobalLight && d.angle != angle) sameLight = false;
         if (sameLight) return s;
     }
-    std::shared_ptr<LayerStyle> style;
-    try { style = parseEffects(*block); } catch (std::exception&) { style = nullptr; }
-    if (style) {
-        for (auto& s : style->dropShadows) if (s.useGlobalLight) s.angle = angle;
-        for (auto& s : style->innerShadows) if (s.useGlobalLight) s.angle = angle;
-        for (auto& b : style->bevels) if (b.useGlobalLight) { b.angle = angle; b.altitude = altitude; }
-        if (auto lmgm = carriedBlock(layer, "lmgm"); lmgm && !lmgm->empty()) style->maskHidesEffects = (*lmgm)[0] != 0;
-        if (auto infx = carriedBlock(layer, "infx"); infx && !infx->empty()) style->blendInteriorAsGroup = (*infx)[0] != 0;
-        if (auto fxrp = carriedBlock(layer, "fxrp"); fxrp && fxrp->size() >= 16) {
-            psd::BigEndianReader r(*fxrp);
-            style->referenceX = psd::read_f64(r); style->referenceY = psd::read_f64(r);
-        }
-        if (style->empty()) style = nullptr;
-    }
+    std::shared_ptr<LayerStyle> style = readStyle(layer, *block, angle, altitude, false);
+    if (style && style->empty()) style = nullptr;
     if (cache.size() > 4096) cache.clear();
     cache[block] = {layer.psdCarry, style};
     return style;
+}
+
+LayerStyle editableLayerStyle(const Layer& layer, const Document& document) {
+    const std::vector<uint8_t>* block = effectsBlock(layer);
+    if (!block) return {};
+    float angle = 120, altitude = 30;
+    documentGlobalLight(document, angle, altitude);
+    auto style = readStyle(layer, *block, angle, altitude, true);
+    return style ? *style : LayerStyle{};
 }
 
 void documentGlobalLight(const Document& document, float& angle, float& altitude) {

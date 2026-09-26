@@ -135,3 +135,6 @@ add_test(NAME vectormask_tests COMMAND vectormask_tests)
 add_executable(cameraraw_tests cameraraw_tests.cpp)
 target_link_libraries(cameraraw_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME cameraraw_tests COMMAND cameraraw_tests)
+
+add_executable(restyle_check restyle_check.cpp)
+target_link_libraries(restyle_check PRIVATE compositor::core compositor_warnings)

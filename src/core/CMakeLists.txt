@@ -105,6 +105,8 @@ add_library(compositor_core STATIC
     src/psd.cpp
     src/layerstyle.cpp
     src/layerstyle_render.cpp
+    src/layerstyle_write.cpp
+    src/layerstyle_json.cpp
     src/colour.cpp
     src/psd_carry.cpp
     src/smartobject.cpp

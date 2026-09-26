@@ -9,6 +9,7 @@
 #include "Dialogs.h"
 #include "Theme.h"
 #include "CameraRawDialog.h"
+#include "LayerStyleDialog.h"
 #include "FilterDialog.h"
 #include "GmicDialog.h"
 #include "BrushPicker.h"
@@ -404,6 +405,15 @@ int main(int argc, char** argv) {
                 auto* dialog = new app::CameraRawDialog(s, &window);
                 if (auto* panels = dialog->findChild<QListWidget*>("cameraRawPanels")) panels->setCurrentRow(name.section(':', 1).toInt());
                 dialog->show();
+            }
+            else if (name.startsWith("layerstyle")) {
+                // layerstyle, or layerstyle:N to open on effect N (1 Bevel & Emboss ... 10 Drop Shadow) switched on
+                const int page = name.section(':', 1).toInt();
+                if (s->activeLayerId()) {
+                    auto* dialog = new app::LayerStyleDialog(s, *s->activeLayerId(), &window, page);
+                    if (auto* list = dialog->findChild<QListWidget*>(); list && page > 0 && list->item(page)) list->item(page)->setCheckState(Qt::Checked);
+                    dialog->show();
+                }
             }
             else if (name.startsWith("welcome")) {
                 // welcome, or welcome:N for page N

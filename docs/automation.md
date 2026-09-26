@@ -132,6 +132,9 @@ content and style, same keys plus `lineSpacing` and `letterSpacing`; on text in 
 `layers.duplicate`, `layers.move`, `layers.reorder`, `layers.setTransform`,
 `layers.flip`, `layers.mask` (add, addFromSelection, delete, toggle, invert,
 apply, link), `layers.merge`, `layers.group`, `adjustments.set`.
+`layers.style` gives a layer's effects (Photoshop's layer style) as JSON, every kind a list with switched-off
+effects kept (`enabled` false); `layers.setStyle` replaces them with an object of that shape (settings left out take
+Photoshop's defaults, `{}` clears the style). The style is written into the PSD as Photoshop's own `lfx2`.
 Hue/Saturation settings accept `"saturationCurve": "photoshop"` (+100 saturates fully,
 -100 greys out, lightness kept) beside the default `"scale"`.
 
