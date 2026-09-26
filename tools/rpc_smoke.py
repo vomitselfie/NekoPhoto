@@ -410,6 +410,14 @@ def main():
     assert fx["filters"][0]["settings"]["radius"] == 5 and fx["filters"][0]["opacity"] == 40 and fx["filters"][0]["blend"] == "Multiply", fx
     fx = rpc.call("smartObject.moveFilter", id=converted["id"], index=1, to=0)
     assert [f["kind"] for f in fx["filters"]] == ["mosaic", "gaussian blur"], fx
+    # Dragging rows in the Layers panel (the release, through the debug hook): within the stack only.
+    cid = converted["id"]
+    assert rpc.call("debug.dragSmartFilter", id=cid, index=0, onto=1, position="above")["dropped"]
+    assert [f["kind"] for f in rpc.call("smartObject.filters", id=cid)["filters"]] == ["gaussian blur", "mosaic"]
+    assert rpc.call("debug.dragSmartFilter", id=cid, index=1, onto=0, position="below")["dropped"]
+    assert [f["kind"] for f in rpc.call("smartObject.filters", id=cid)["filters"]] == ["mosaic", "gaussian blur"]
+    assert not rpc.call("debug.dragSmartFilter", id=cid, index=0, onto=7)["dropped"]
+    assert not rpc.call("debug.dragSmartFilter", id=cid, index=0, ontoId=next(l["id"] for l in rpc.call("layers.list") if l["id"] != cid), onto=0)["dropped"]
     fx = rpc.call("smartObject.setFilter", id=converted["id"], index=1, enabled=False)
     assert not fx["filters"][1]["enabled"], fx
     assert not rpc.call("smartObject.setFilter", id=converted["id"], enabled=False)["enabled"]
@@ -426,7 +434,7 @@ def main():
         raise AssertionError("a smart object without Smart Filters has none to set")
     except RuntimeError as e:
         assert "no Smart Filters" in str(e), e
-    for _ in range(11):   # back to before the first Smart Filter
+    for _ in range(13):   # back to before the first Smart Filter
         rpc.call("history.undo")
     # Warped: the smart object keeps its contents, the warp baked into its placement.
     warped = rpc.call("layers.warp", id=converted["id"], style="arc", bend=40)

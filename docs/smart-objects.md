@@ -175,8 +175,9 @@ through the stack. A stack with a filter not drawn here cannot be added to. Addi
 The Layers panel shows a smart object's stack under it, as Photoshop does: a **Smart Filters** row with the shared
 filter mask's thumbnail and an eye that turns the whole stack off, then each entry (last applied at the top) with its
 own eye, its name and a Blending Options button (opacity and mode). Double-click an entry to change its settings (a
-dialog per filter over all thirteen, with the canvas previewing the change); the context menu edits, disables, moves
-up or down, deletes one, or clears them all (the layer's own menu has Clear Smart Filters too). An entry NekoPhoto
+dialog per filter over all thirteen, with the canvas previewing the change); drag an entry up or down between
+the rows of its own stack to reorder it (a line shows where it lands; dropped anywhere else it stays put); the
+context menu edits, disables, moves up or down, deletes one, or clears them all (the layer's own menu has Clear Smart Filters too). An entry NekoPhoto
 does not draw is shown greyed with a tooltip, and its stack is read-only, since `filterFX` could not be written
 back without it; so is a preview-locked instance's.
 
@@ -195,8 +196,8 @@ ranges a Photoshop file may carry. `smartFilterStackOf` reads a stack with its m
 
 ## Not yet
 
-Dragging Smart Filters to reorder them (the context menu moves them), editing a stack with a filter not drawn
-here, a linked filter mask, relinking linked files.
+Dragging a Smart Filter to another smart object (a drag reorders within its own stack only), editing a stack with
+a filter not drawn here, a linked filter mask, relinking linked files.
 
 ## Warp Cage
 

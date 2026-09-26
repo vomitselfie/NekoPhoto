@@ -52,6 +52,8 @@ const MethodDoc methodDocs[] = {
     {"view.zoom", "Zoom the view (not the document).", "zoom:number Zoom factor, 1 = 100%; fit:bool=false Fit the document in the window"},
     {"debug.eye", "Test hook: a pointer event on a layer's eye button in the Layers panel.",
      "id:layer! The layer whose eye is pressed; to:layer The eye the pointer is over; action:(press|move|release)! The event"},
+    {"debug.dragSmartFilter", "Test hook: drag a Smart Filter row in the Layers panel and release it above or below another entry row (refused unless in the same stack).",
+     "id:layer! The smart object; index:integer! The dragged entry (running order); onto:integer! The entry row it is released on; ontoId:layer That row's smart object (default id); position:(above|below)=above Which half of the row"},
     // documents and canvas
     {"document.info", "The current document: size, resolution, layer count, active layer, path, whether modified.", ""},
     {"document.overview", "The document at a glance, as text: size, selection, undo, and the layer tree top first with each layer's kind, bounds, opacity, blend, mask and id.",

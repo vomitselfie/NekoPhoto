@@ -347,6 +347,17 @@ void AutomationServer::registerAppHandlers() {
         return QJsonObject{{"sent", action}};
     });
 
+    // ---- test hook: a Smart Filter row dragged in the Layers panel and released above or below another entry row
+    add("debug.dragSmartFilter", [w, layer](const QJsonObject& p) {
+        LayersPanel* panel = w->layersPanelAt(w->currentTabIndex());
+        const Uuid id = layer(p).id;
+        const Uuid onto = has(p, "ontoId") ? layer(p, "ontoId").id : id;
+        const QString position = str(p, "position", QString("above")).toLower();
+        if (position != "above" && position != "below") fail("position must be above or below", invalidParams);
+        const bool dropped = panel->dropSmartFilterForTest(id, integer(p, "index"), onto, integer(p, "onto"), position == "above");
+        return QJsonObject{{"dropped", dropped}};
+    });
+
     // ---- tools and view (what the person sees)
     add("tool.select", [session](const QJsonObject& p) {
         static const QMap<QString, Tool> tools{{"move", Tool::Move}, {"marquee", Tool::Marquee}, {"lasso", Tool::Lasso}, {"wand", Tool::Wand}, {"crop", Tool::Crop},
