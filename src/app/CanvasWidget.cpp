@@ -61,7 +61,7 @@ CanvasWidget::CanvasWidget(EditorSession* session, QWidget* parent) : QWidget(pa
     connect(session_, &EditorSession::viewportChanged, this, [this] { update(); });
     connect(session_, &EditorSession::toolChanged, this, [this] {
         if (session_->tool() != Tool::Crop) crop_.reset();
-        if (session_->tool() != Tool::Lasso) { lassoPoints_.clear(); lassoCursor_.reset(); }
+        if (session_->tool() != Tool::Lasso && drag_ != Drag::Lasso) { lassoPoints_.clear(); lassoCursor_.reset(); }
         if (session_->tool() == Tool::Crop && !crop_ && session_->hasDocument()) { crop_ = QRectF(QPointF(0, 0), documentSize()); emit cropChanged(); }
         if (hover_) updateCursor(*hover_, QApplication::keyboardModifiers());
         update();

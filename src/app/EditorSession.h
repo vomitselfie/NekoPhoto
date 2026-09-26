@@ -76,6 +76,14 @@ struct TransformEdit {
     std::optional<FloatingTransform> floating;
 };
 
+/// Content-Aware Fill's settings (its dialog, or the automation method).
+struct ContentFillRequest {
+    /// Auto: the fill's own neighbourhood; All: anywhere on the layer; Custom: the painted `sampleArea`.
+    enum class Sampling { Auto, All, Custom } sampling = Sampling::Auto;
+    std::shared_ptr<const compositor::GrayImage> sampleArea;   // document-sized, white = copy from here
+    bool newLayer = false;
+};
+
 struct GradientSettings {
     compositor::GradientShape shape = compositor::GradientShape::Linear;
     GradientStyle style = GradientStyle::ForegroundToTransparent;
@@ -387,7 +395,8 @@ public:
     void cancelBrush();
     std::optional<QPointF> lastBrushPoint() const { return lastBrushPoint_; }
     /// 0 Content-Aware, 1 Create Texture, 2 Proximity Match (Spot Healing); 3 Sampled: the Healing Brush, from the
-    /// clone source (Alt-click); 4 Patch: drag the selection to where to copy from.
+    /// clone source (Alt-click); 4 Patch: drag the selection to where to copy from; 5 Content-Aware Move: drag the
+    /// selection to where it should go.
     int spotHealingMode = 0;
     bool cloneAligned = true;
     bool cloneSampleAll = false;
@@ -406,7 +415,16 @@ public:
     void paste();
     void layerViaCopy();
     /// Content-Aware Fill of the selection on the active layer; the layer grows over any selection past its edge.
-    bool contentAwareFill(QString* error);
+    /// The request chooses where it copies from and whether the result goes on a new layer.
+    bool contentAwareFill(QString* error, const ContentFillRequest& request = {});
+    /// The fill without committing it (the dialog's preview): the layer's new pixels (only the filled ones for a new
+    /// layer) and where they sit.
+    std::shared_ptr<const compositor::Image> contentAwareFillResult(const ContentFillRequest& request, compositor::LayerTransform& placed, QString* error) const;
+    /// Content-Aware Move: the selected pixels move dx, dy (document pixels), the hole filled from its
+    /// surroundings (Extend: the original stays); the selection follows. One undo step.
+    bool contentAwareMove(int dx, int dy, QString* error);
+    bool contentMoveExtend = false;
+    int contentMoveAdaptation = 2;   // 0 very strict .. 4 very loose
     /// Dragging a layer between projects: `id` (a folder with its contents) copied from `source` into this
     /// document, centred on `at` (or the canvas); clipping to layers left behind is baked in. A first copy
     /// into an empty tab makes the canvas the source's size.

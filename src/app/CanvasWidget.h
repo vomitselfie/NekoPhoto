@@ -126,6 +126,7 @@ private:
     PathHit pathDrag_;
     void drawPathOverlay(QPainter& painter);
     std::vector<QPointF> lassoPoints_;
+    bool contentMoveDrag_ = false;   // the Patch drag is Content-Aware Move's
     std::vector<QPointF> scribblePoints_;
     bool scribbleBackground_ = false;
     QPointF clickStart_, clickCurrent_;

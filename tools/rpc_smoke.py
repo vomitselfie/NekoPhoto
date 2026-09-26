@@ -373,6 +373,23 @@ def main():
         rpc.call("selection.none")
     rpc.call("selection.rect", x=40, y=40, width=30, height=30)
     rpc.call("pixels.contentAwareFill")
+    layers_before_fill = len(rpc.call("layers.list"))
+    filled = rpc.call("pixels.contentAwareFill", sampling="custom", include=[{"x": 0, "y": 0, "width": 140, "height": 140}], exclude=[{"x": 100, "y": 100, "width": 20, "height": 20}], output="new")
+    assert filled["filled"] and "layer" in filled, filled
+    assert len(rpc.call("layers.list")) == layers_before_fill + 1
+    rpc.call("history.undo")
+    try:
+        rpc.call("pixels.contentAwareFill", sampling="nearby")
+        raise AssertionError("an unknown sampling was accepted")
+    except RuntimeError as e:
+        assert "sampling" in str(e), e
+    moved = rpc.call("pixels.contentAwareMove", dx=30, dy=10, adaptation=3)
+    assert moved["moved"] and moved["mode"] == "move", moved
+    sel = rpc.call("selection.info")
+    assert abs(sel["bounds"]["x"] - 70) <= 1 and abs(sel["bounds"]["y"] - 50) <= 1, sel
+    rpc.call("history.undo")
+    assert rpc.call("pixels.contentAwareMove", dx=-20, dy=0, mode="extend")["mode"] == "extend"
+    rpc.call("history.undo")
     rpc.call("selection.none")
     # Smart objects: place a file, convert layers, edit the contents in their tab, put them back, rasterize.
     import tempfile

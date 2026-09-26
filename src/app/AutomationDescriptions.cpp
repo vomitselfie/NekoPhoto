@@ -181,7 +181,13 @@ const MethodDoc methodDocs[] = {
     {"pixels.invert", "Invert the active layer's colours inside the selection.", ""},
     {"pixels.fill", "Fill the selection (or the whole layer) with a colour.", "color:color=#000000 The colour"},
     {"pixels.clear", "Clear the selection (or the whole layer) to transparent.", ""},
-    {"pixels.contentAwareFill", "Fill the selection from its surroundings (needs a selection).", ""},
+    {"pixels.contentAwareFill", "Content-Aware Fill: fill the selection from its surroundings (needs a selection).",
+     "sampling:(auto|all|custom)=auto Where it copies from: around the selection, anywhere on the layer, or the include/exclude rectangles; "
+     "include:array Custom: rectangles {x, y, width, height} to copy from (none: the whole canvas); exclude:array Custom: rectangles never copied from; "
+     "output:(current|new)=current Fill the active layer, or put only the filled pixels on a new layer above it"},
+    {"pixels.contentAwareMove", "Content-Aware Move: move the selected pixels of the active layer dx, dy; the hole they leave is filled from its surroundings and the patch blended into its new place. The selection follows.",
+     "dx:number! Horizontal offset; dy:number! Vertical offset; mode:(move|extend)=move Extend leaves the original and adds the copy; "
+     "adaptation:integer=2 0 very strict .. 4 very loose: how far the patch's tone adapts and how wide a seam is blended"},
     {"pixels.gmic", "Run a G'MIC command line on the active layer, inside the selection. Only catalogue filters and common built-ins followed by numbers are allowed.",
      "command:string! E.g. \"fx_bokeh 3,8,0,30\", see gmic.filters; timeoutMs:integer=300000 Give up after this long"},
     {"gmic.filters", "The G'MIC filter catalogue with parameters and defaults; filters that do not work here are left out.",

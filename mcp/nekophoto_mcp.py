@@ -585,9 +585,22 @@ def pixels_invert() -> str:
 
 
 @edit("Content-Aware Fill")
-def pixels_content_aware_fill() -> str:
-    """Fill the selection from its surroundings (also extends an image past its edge when the selection reaches outside it)."""
-    return text(call("pixels.contentAwareFill"))
+def pixels_content_aware_fill(sampling: str = "auto", include: list | None = None, exclude: list | None = None, output: str = "current") -> str:
+    """Fill the selection from its surroundings (also extends an image past its edge when the selection reaches outside it).
+    sampling: auto (around the selection), all (anywhere on the layer) or custom (the include rectangles, whole canvas when none, less the exclude rectangles; each {x, y, width, height}).
+    output: current (fill the active layer) or new (only the filled pixels on a new layer)."""
+    params: dict = {"sampling": sampling, "output": output}
+    if include is not None:
+        params["include"] = include
+    if exclude is not None:
+        params["exclude"] = exclude
+    return text(call("pixels.contentAwareFill", **params))
+
+
+@edit("Content-Aware Move")
+def pixels_content_aware_move(dx: float, dy: float, mode: str = "move", adaptation: int = 2) -> str:
+    """Content-Aware Move (Photoshop's tool): the selected pixels move dx, dy; the hole left behind is filled from its surroundings and the patch blended into its new place; the selection follows. mode extend keeps the original and adds the copy. adaptation 0 (very strict) .. 4 (very loose). Select the object first (selection_rect, selection_polygon, selection_subject)."""
+    return text(call("pixels.contentAwareMove", dx=dx, dy=dy, mode=mode, adaptation=adaptation))
 
 
 @look("G'MIC catalogue")

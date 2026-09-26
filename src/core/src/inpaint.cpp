@@ -293,8 +293,16 @@ bool contentFill(Image& image, const GrayImage& hole, const InpaintOptions& opti
     // The work region: the hole with room around it to copy from, twice its size each way (as far as a
     // match is likely to sit), bounded so a large fill does not pull the whole layer through the pyramid.
     const int reach = std::clamp(2 * std::max(b.x1 - b.x0, b.y1 - b.y0), 64, 384);
-    const int x0 = std::max(0, b.x0 - reach), y0 = std::max(0, b.y0 - reach);
-    const int x1 = std::min(image.width(), b.x1 + reach), y1 = std::min(image.height(), b.y1 + reach);
+    int x0 = std::max(0, b.x0 - reach), y0 = std::max(0, b.y0 - reach);
+    int x1 = std::min(image.width(), b.x1 + reach), y1 = std::min(image.height(), b.y1 + reach);
+    if (visible && options.sampleWholeVisible) {
+        // The sampling area chosen by hand: the region spans it (never more than 1024 pixels past the hole).
+        const PixelBounds v = nonzeroBounds(*visible);
+        if (!v.isEmpty()) {
+            x0 = std::clamp(std::min(b.x0, v.x0), std::max(0, b.x0 - 1024), x0); y0 = std::clamp(std::min(b.y0, v.y0), std::max(0, b.y0 - 1024), y0);
+            x1 = std::clamp(std::max(b.x1, v.x1), x1, std::min(image.width(), b.x1 + 1024)); y1 = std::clamp(std::max(b.y1, v.y1), y1, std::min(image.height(), b.y1 + 1024));
+        }
+    }
     Level fine;
     fine.w = x1 - x0; fine.h = y1 - y0;
     fine.pix.resize(size_t(fine.w) * fine.h * 4); fine.hole.resize(size_t(fine.w) * fine.h); fine.known.resize(size_t(fine.w) * fine.h);

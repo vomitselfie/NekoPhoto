@@ -14,6 +14,9 @@ struct InpaintOptions {
     int iterations = 6;       // nearest-neighbour passes per pyramid level
     int seeds = 3;            // random starts at the coarsest level; the best-explaining field goes on
     uint32_t seed = 1;
+    /// With `visible` given: copy from anywhere it marks (Content-Aware Fill's sampling area), not only from the
+    /// neighbourhood the fill would choose on its own. The work region then spans the hole and the marked pixels.
+    bool sampleWholeVisible = false;
 };
 
 /// Fills the pixels of `image` where `hole` is nonzero from its opaque, unselected pixels. Returns false when

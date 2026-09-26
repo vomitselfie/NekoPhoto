@@ -1,3 +1,6 @@
+#include "ContentFillDialog.h"
+#include <QButtonGroup>
+#include <QAbstractButton>
 #include "MainWindow.h"
 #include "WelcomeDialog.h"
 #include "Bench.h"
@@ -256,7 +259,7 @@ int main(int argc, char** argv) {
     parser.addOption(prefs);
     QCommandLineOption toolOption("tool", "Select tool <name> after opening (move, marquee, lasso, wand, crop, brush, healing, clone, smudge, gradient, shape, eyedropper, hand, zoom).", "name");
     parser.addOption(toolOption);
-    QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: welcome (or welcome:N for page N), new, canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, cameraraw (or cameraraw:N for panel N), gmic, background, text, fonts, brushes.", "name");
+    QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: welcome (or welcome:N for page N), new, canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, cameraraw (or cameraraw:N for panel N), gmic, content-fill, background, text, fonts, brushes.", "name");
     parser.addOption(dialogOption);
     QCommandLineOption rpc("rpc", "Listen on the automation socket (JSON-RPC over a local socket, for the MCP bridge). Also on when the automation preference is set.");
     QCommandLineOption rpcSocket("rpc-socket", "Socket path for --rpc (default: $XDG_RUNTIME_DIR/nekophoto.sock, or $COMPOSITOR_RPC_SOCKET).", "path");
@@ -400,6 +403,15 @@ int main(int argc, char** argv) {
             if (adjustments.contains(name)) (new app::PixelAdjustmentDialog(s, adjustments.value(name), &window))->show();
             else if (filters.contains(name)) (new app::FilterDialog(s, filters.value(name), &window))->show();
             else if (name == "gmic") (new app::GmicDialog(s, &window))->show();
+            else if (name == "content-fill") {
+                // A selection in the middle of the canvas, then the dialog with Custom sampling.
+                compositor::GrayImage shape(s->document()->width, s->document()->height);
+                for (int y = shape.height() * 2 / 5; y < shape.height() * 3 / 5; y++) for (int x = shape.width() * 2 / 5; x < shape.width() * 3 / 5; x++) shape.at(x, y) = 255;
+                s->applySelectionShape(shape, compositor::SelectionMode::Replace, "Select");
+                auto* dialog = new app::ContentFillDialog(s, &window);
+                if (auto* group = dialog->findChild<QButtonGroup*>()) { group->button(2)->click(); }
+                dialog->show();
+            }
             else if (name == "cameraraw" || name.startsWith("cameraraw:")) {
                 // cameraraw, or cameraraw:N to open on panel N (0 Basic ... 7 Calibration)
                 auto* dialog = new app::CameraRawDialog(s, &window);

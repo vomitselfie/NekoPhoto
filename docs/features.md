@@ -25,7 +25,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Quick Select (Shift+W): scribble over the subject, or click it (a 48 MB model, downloaded from the options bar); the selection snaps to the image's edges
 - Add (Shift), subtract (Alt) and intersect (Shift+Alt)
 - Expand, Contract, Feather, Smooth, Border, Invert; load a layer or mask as a selection
-- Content-Aware Fill, which continues edges and patterns and can extend an image past its borders
+- Content-Aware Fill, which continues edges and patterns and can extend an image past its borders; its dialog (Edit > Content-Aware Fill...) chooses the sampling area (Auto, the whole layer, or Custom painted with an include/exclude brush), previews on the canvas and can output to a new layer ([content-aware.md](content-aware.md))
 
 ## Painting and retouching
 - Brush and eraser with size, hardness and opacity; Shift for straight lines
@@ -39,6 +39,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Paint Bucket (Shift+G) with Tolerance, Contiguous, Anti-alias and All Layers, inside the selection
 - Open camera RAW files (CR2, CR3, NEF, ARW, RAF, ORF, RW2, DNG and more) through LibRaw, developed with the camera's white balance into sRGB; Filter ▸ Camera Raw then adjusts them
 - Healing Brush (the healing tool's Sampled type: Alt-click a source, and the copied texture takes the tone around the stroke) and Patch (select the blemish, drag the selection to the area to copy from)
+- Content-Aware Move (the healing tool's last type): select an object, or draw round it with the tool's lasso, and drag it; the hole it leaves is filled from its surroundings and the patch blended into its new place. Extend mode leaves the original; Adaptation (Very Strict to Very Loose) sets how far the patch's tone follows its new place and how wide a seam is blended
 - Quick Mask (Q, or Select ▸ Edit in Quick Mask Mode): the selection as a red overlay to paint with every mask tool, white selecting; saving or exporting leaves it first
 - Gradients and shapes (rectangles, rounded rectangles, ellipses); the Gradient tool draws Foreground to Background, Foreground to Transparent or any multi-stop gradient imported from a Photoshop `.grd` file (docs/presets.md)
 - Text in any installed font, editable until you paint on the layer
