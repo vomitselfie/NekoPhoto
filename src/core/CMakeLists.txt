@@ -96,12 +96,28 @@ if(COMPOSITOR_WITH_SQLITE)
 endif()
 set(COMPOSITOR_HAVE_SQLITE ${COMPOSITOR_HAVE_SQLITE} PARENT_SCOPE)
 
+# zstd decompresses the streams of Affinity documents (most from Affinity 2 on). Optional: without it such
+# documents are refused with a message; zlib-compressed ones still open.
+option(COMPOSITOR_WITH_ZSTD "Open zstd-compressed Affinity documents through libzstd" ON)
+set(COMPOSITOR_HAVE_ZSTD OFF)
+if(COMPOSITOR_WITH_ZSTD)
+    pkg_check_modules(ZSTD IMPORTED_TARGET libzstd)
+    if(ZSTD_FOUND)
+        set(COMPOSITOR_HAVE_ZSTD ON)
+        message(STATUS "Affinity: zstd ${ZSTD_VERSION}")
+    else()
+        message(STATUS "Affinity: libzstd not found, zstd-compressed Affinity documents disabled")
+    endif()
+endif()
+
 add_library(compositor_core STATIC
     src/abr.cpp
     src/aseprite.cpp
     src/gif.cpp
     src/ico.cpp
     src/tga.cpp
+    src/affinity.cpp
+    src/affinity_tree.cpp
     src/adjustments.cpp
     src/adjustments_more.cpp
     src/colorlookup.cpp
@@ -182,6 +198,10 @@ if(COMPOSITOR_HAVE_SQLITE)
     target_sources(compositor_core PRIVATE src/csp_clip_import.c)
     target_link_libraries(compositor_core PRIVATE ${COMPOSITOR_SQLITE_TARGET})
     target_compile_definitions(compositor_core PRIVATE COMPOSITOR_HAVE_SQLITE)
+endif()
+if(COMPOSITOR_HAVE_ZSTD)
+    target_link_libraries(compositor_core PRIVATE PkgConfig::ZSTD)
+    target_compile_definitions(compositor_core PRIVATE COMPOSITOR_HAVE_ZSTD)
 endif()
 if(COMPOSITOR_HAVE_LIBRAW)
     target_link_libraries(compositor_core PRIVATE PkgConfig::LIBRAW)

@@ -7,6 +7,7 @@
 #include "Dialogs.h"
 #include "ImageConvert.h"
 #include "compositor/aseprite.h"
+#include "compositor/affinity.h"
 #include "compositor/clip.h"
 #include "compositor/gif.h"
 #include "compositor/ico.h"
@@ -43,12 +44,13 @@ QString imageFilter() {
 /// Everything File > Open and Import File take: Photoshop, Clip Studio and Aseprite files, images (TGA, ICO and GIF
 /// through the core's own readers), and a project's manifest.json.
 QString openFilter() {
-    QStringList patterns = {"*.psd", "*.psb", "*.clip", "*.ase", "*.aseprite", "*.tga", "*.ico", "*.cur", "*.gif", "manifest.json"};
+    QStringList patterns = {"*.psd", "*.psb", "*.clip", "*.ase", "*.aseprite", "*.tga", "*.ico", "*.cur", "*.gif", "*.afphoto", "*.afdesign", "*.afpub", "*.af", "manifest.json"};
     for (auto& format : QImageReader::supportedImageFormats()) patterns << "*." + QString::fromLatin1(format);
     patterns.removeDuplicates();
     return QObject::tr("Images, layered files and projects (%1)").arg(patterns.join(' ')) + ";;" + imageFilter() + ";;"
         + QObject::tr("Photoshop files (*.psd *.psb)") + ";;" + QObject::tr("Clip Studio files (*.clip)") + ";;"
-        + QObject::tr("Aseprite files (*.ase *.aseprite)") + ";;" + QObject::tr("Icons (*.ico *.cur)") + ";;" + QObject::tr("TGA images (*.tga)");
+        + QObject::tr("Aseprite files (*.ase *.aseprite)") + ";;" + QObject::tr("Icons (*.ico *.cur)") + ";;" + QObject::tr("TGA images (*.tga)") + ";;"
+        + QObject::tr("Affinity files (*.afphoto *.afdesign *.afpub *.af)");
 }
 
 bool isProjectPath(const QString& path) { return path.endsWith(".comp", Qt::CaseInsensitive) && QFileInfo(path).isDir(); }
@@ -61,7 +63,7 @@ bool hasSuffix(const QString& path, std::initializer_list<const char*> suffixes)
 } // namespace
 
 bool isLayeredPath(const QString& path) {
-    if (hasSuffix(path, {".psd", ".psb", ".clip", ".ico", ".cur", ".ase", ".aseprite"})) return true;
+    if (hasSuffix(path, {".psd", ".psb", ".clip", ".ico", ".cur", ".ase", ".aseprite", ".afphoto", ".afdesign", ".afpub", ".af"})) return true;
     // An animated GIF's frames become layers; a still one opens as an image.
     return path.endsWith(".gif", Qt::CaseInsensitive) && QFileInfo(path).isFile() && compositor::gifFrameCount(path.toStdString()) > 1;
 }
@@ -101,9 +103,11 @@ void MainWindow::openLayeredFile(const QString& path) {
     QApplication::setOverrideCursor(Qt::BusyCursor);
     std::string error;
     const std::string file = path.toStdString();
+    const bool affinity = hasSuffix(path, {".afphoto", ".afdesign", ".afpub", ".af"});
     const bool clip = hasSuffix(path, {".clip"}), ase = hasSuffix(path, {".ase", ".aseprite"}), psd = hasSuffix(path, {".psd", ".psb"});
     std::optional<PsdImport> imported;
     if (clip) imported = compositor::importClip(file, &error);
+    else if (affinity) imported = compositor::importAffinity(file, &error, app::affinityImportOptions());
     else if (ase) imported = compositor::importAseprite(file, &error);
     else if (hasSuffix(path, {".ico", ".cur"})) imported = compositor::importIco(file, &error);
     else if (hasSuffix(path, {".gif"})) imported = compositor::importGif(file, &error);
@@ -120,6 +124,7 @@ void MainWindow::openLayeredFile(const QString& path) {
         auto* box = new QMessageBox(QMessageBox::Information, tr("Imported %1").arg(QFileInfo(path).fileName()),
             (clip ? tr("%n layer(s) imported. Some things Clip Studio keeps have no counterpart here:", nullptr, int(imported->document.layers.size()))
              : ase ? tr("%n layer(s) imported. Some things Aseprite keeps have no counterpart here:", nullptr, int(imported->document.layers.size()))
+             : affinity ? tr("%n layer(s) imported. Some things Affinity keeps have no counterpart here:", nullptr, int(imported->document.layers.size()))
              : psd ? tr("%n layer(s) imported. Some things Photoshop keeps have no counterpart here:", nullptr, int(imported->document.layers.size()))
                    : tr("%n layer(s) imported, with notes:", nullptr, int(imported->document.layers.size()))), QMessageBox::Ok, this);
         box->setDetailedText(lastImportNotes_.join('\n'));

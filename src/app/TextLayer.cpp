@@ -1,7 +1,9 @@
 #include "TextLayer.h"
 #include "ImageConvert.h"
 #include "compositor/warpmesh.h"
+#include <QBuffer>
 #include <QFontDatabase>
+#include <QImageReader>
 #include <QFontInfo>
 #include <QHash>
 #include <QFontMetricsF>
@@ -363,6 +365,22 @@ compositor::PsdImportOptions psdImportOptions() {
         QImage image;
         if (bytes.size() > size_t(std::numeric_limits<int>::max()) || !image.loadFromData(bytes.data(), int(bytes.size()))) return nullptr;
         if ((long long)image.width() * image.height() > compositor::Document::pixelBudget) return nullptr;
+        return fromQImage(image);
+    };
+    return options;
+}
+
+compositor::PsdImportOptions affinityImportOptions() {
+    compositor::PsdImportOptions options;
+    options.decodeImage = [](const std::vector<uint8_t>& bytes, const std::string&, const std::string&) -> compositor::ImagePtr {
+        if (bytes.size() > size_t(std::numeric_limits<int>::max())) return nullptr;
+        QByteArray data = QByteArray::fromRawData(reinterpret_cast<const char*>(bytes.data()), int(bytes.size()));
+        QBuffer buffer(&data);
+        buffer.open(QIODevice::ReadOnly);
+        QImageReader reader(&buffer);
+        reader.setAutoTransform(false);
+        const QImage image = reader.read();
+        if (image.isNull() || (long long)image.width() * image.height() > compositor::Document::pixelBudget) return nullptr;
         return fromQImage(image);
     };
     return options;

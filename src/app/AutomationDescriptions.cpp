@@ -58,7 +58,7 @@ const MethodDoc methodDocs[] = {
      "maxLayers:integer=80 List at most this many layers"},
     {"document.new", "A new document in the current tab (or a new tab if this one has a document).",
      "width:integer=1920 Pixels; height:integer=1080 Pixels; resolution:number=72 Pixels per inch; emptyLayer:bool=true Start with a blank pixel layer"},
-    {"document.open", "Open a project (.comp), Photoshop (.psd/.psb), Clip Studio (.clip), Aseprite (.ase/.aseprite, first frame), icon (.ico/.cur, a layer per size), animated GIF (a layer per frame), image or camera RAW file (.tga included; RAW when app.info reports raw). Layered files open in a new tab and the reply lists their layers and notes; with a document already open, an image is imported as a layer.",
+    {"document.open", "Open a project (.comp), Photoshop (.psd/.psb), Clip Studio (.clip), Affinity (.afphoto/.afdesign/.afpub/.af), Aseprite (.ase/.aseprite, first frame), icon (.ico/.cur, a layer per size), animated GIF (a layer per frame), image or camera RAW file (.tga included; RAW when app.info reports raw). Layered files open in a new tab and the reply lists their layers and notes; with a document already open, an image is imported as a layer.",
      "path:string! File path"},
     {"document.import", "Import an image file as a new layer.", "path:string! File path; x:number Left edge in document pixels; y:number Top edge"},
     {"document.save", "Save as a project (.comp).", "path:string Where to save (default: where it was opened or last saved)"},

@@ -3,6 +3,7 @@
 #include "EditorSession.h"
 #include "ImageConvert.h"
 #include "TextLayer.h"
+#include "compositor/affinity.h"
 #include "compositor/png.h"
 #include "compositor/psd.h"
 #include "compositor/render.h"
@@ -35,6 +36,13 @@ std::optional<SmartObjectContents> contentsFromFile(const QString& path, QString
         c.image = imported->realComposite && imported->composite ? imported->composite : renderFlattened(imported->document);
         c.resolution = imported->document.resolution;
         if (data.size() > 5 && data[5] == 2) c.fileType = "8BPB";
+    } else if (data.size() >= 4 && data[0] == '\0' && uint8_t(data[1]) == 0xFF && data[2] == 'K' && data[3] == 'A') {
+        // An Affinity document: placed as its flattened layers (the bytes stay as they are).
+        std::string why;
+        auto imported = importAffinityBytes(c.bytes, &why, affinityImportOptions());
+        if (!imported) { if (error) *error = QString::fromStdString(why); return std::nullopt; }
+        c.image = renderFlattened(imported->document);
+        c.resolution = imported->document.resolution;
     } else {
         QImage image;
         if (!image.loadFromData(data)) { if (error) *error = QObject::tr("%1 is not an image NekoPhoto can read.").arg(QFileInfo(path).fileName()); return std::nullopt; }

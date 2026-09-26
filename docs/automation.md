@@ -113,7 +113,7 @@ layer alone; a masked layer as it shows, `masked: false` for its raw pixels),
 `screenshot` (the canvas as shown, or the `window`).
 
 Documents: `tabs.select`, `tabs.new`, `tabs.close`, `document.new`,
-`document.open` (.comp, a Photoshop .psd/.psb, a Clip Studio .clip, an Aseprite .ase/.aseprite (first frame), an
+`document.open` (.comp, a Photoshop .psd/.psb, a Clip Studio .clip, an Affinity .afphoto, .afdesign, .afpub or .af, an Aseprite .ase/.aseprite (first frame), an
 icon .ico/.cur (a layer per size, the largest visible) or an animated GIF (a layer per frame, "Frame N (D ms)", frame 1
 at the bottom and the only one visible), which open in a tab of their own and answer with `layers` and the import
 `notes`; or an image, .tga included), `document.import` (an image as a layer),

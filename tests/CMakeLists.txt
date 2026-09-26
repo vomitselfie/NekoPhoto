@@ -154,3 +154,11 @@ add_test(NAME vectorlayer_tests COMMAND vectorlayer_tests)
 add_executable(formats_tests formats_tests.cpp)
 target_link_libraries(formats_tests PRIVATE compositor::core compositor_warnings ZLIB::ZLIB)
 add_test(NAME formats_tests COMMAND formats_tests)
+
+add_executable(affinity_tests affinity_tests.cpp)
+target_link_libraries(affinity_tests PRIVATE compositor::core compositor_warnings ZLIB::ZLIB)
+add_test(NAME affinity_tests COMMAND affinity_tests)
+
+# Not a test: dumps what the Affinity import makes of files (see the file's header).
+add_executable(affinity_check affinity_check.cpp)
+target_link_libraries(affinity_check PRIVATE compositor::core compositor_warnings)
