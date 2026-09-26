@@ -379,16 +379,31 @@ std::optional<PlacedRaster> placedSmartObjectRaster(const SmartObjectInstance& i
     return PlacedRaster{raster->image, int(std::lround(raster->transform.origin.x)), int(std::lround(raster->transform.origin.y))};
 }
 
+namespace {
+/// The instance's stack and its cache, when both are ones drawn here.
+bool drawableStack(const std::vector<PsdBlock>& globals, const SmartObjectInstance& instance,
+                   std::optional<SmartFilterStack>& stack, std::optional<SmartFilterCache>& cache) {
+    for (const PsdBlock& b : instance.psdBlocks)
+        if (b.key == "SoLd" || b.key == "SoLE") { stack = parseSmartFilterStack(b.key, b.data); break; }
+    if (!stack || !stack->supported) return false;
+    cache = findSmartFilterCache(globals, instance.placedId);
+    // A canvas past what a buffer can hold is not drawn here (a hostile file could claim 300,000 pixels a side).
+    return cache && cache->canvas.width <= maxImageSide && cache->canvas.height <= maxImageSide
+        && int64_t(cache->canvas.width) * cache->canvas.height <= int64_t(Document::pixelBudget);
+}
+} // namespace
+
+bool smartFiltersDrawable(const std::vector<PsdBlock>& globals, const SmartObjectInstance& instance) {
+    std::optional<SmartFilterStack> stack;
+    std::optional<SmartFilterCache> cache;
+    return drawableStack(globals, instance, stack, cache);
+}
+
 std::optional<PlacedRaster> filteredSmartObjectRaster(const std::vector<PsdBlock>& globals,
                                                       const SmartObjectInstance& instance, const Image& source, const std::array<double, 8>& quad) {
     std::optional<SmartFilterStack> stack;
-    for (const PsdBlock& b : instance.psdBlocks)
-        if (b.key == "SoLd" || b.key == "SoLE") { stack = parseSmartFilterStack(b.key, b.data); break; }
-    if (!stack || !stack->supported) return std::nullopt;
-    auto cache = findSmartFilterCache(globals, instance.placedId);
-    // A canvas past what a buffer can hold is not drawn here (a hostile file could claim 300,000 pixels a side).
-    if (!cache || cache->canvas.width > maxImageSide || cache->canvas.height > maxImageSide
-        || int64_t(cache->canvas.width) * cache->canvas.height > int64_t(Document::pixelBudget)) return std::nullopt;
+    std::optional<SmartFilterCache> cache;
+    if (!drawableStack(globals, instance, stack, cache)) return std::nullopt;
     stack->mask = cache->mask;
     stack->maskBounds = cache->maskBounds;
     // Only what lies on the filter canvas can show (past it the filters repeat the canvas's edge).
