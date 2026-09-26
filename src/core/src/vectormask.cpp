@@ -5,6 +5,7 @@
 #include "compositor/smartobject.h"
 #include "compositor/blur.h"
 #include "compositor/layerstyle.h"
+#include "compositor/parallel.h"
 #include "psd/psd_descriptor.hpp"
 #include <algorithm>
 #include <cmath>
@@ -111,82 +112,122 @@ void flatten(const VectorPath::Subpath& s, const Rect& region, double scale, std
     }
 }
 
-/// Even-odd coverage of `edges` over w x h: 4 sample rows per pixel, exact horizontal coverage of each span.
-std::vector<float> fill(const std::vector<Edge>& edges, int w, int h) {
-    std::vector<float> cov(size_t(w) * h, 0);
-    if (edges.empty()) return cov;
-    double minY = 1e300, maxY = -1e300;
-    for (auto& e : edges) { minY = std::min({minY, e.y0, e.y1}); maxY = std::max({maxY, e.y0, e.y1}); }
-    const int y0 = std::max(0, int(std::floor(minY))), y1 = std::min(h, int(std::ceil(maxY)));
-    constexpr int sub = 4;
-    std::vector<double> xs;
-    std::vector<float> row(size_t(w) + 2);
-    for (int y = y0; y < y1; y++) {
-        std::fill(row.begin(), row.end(), 0.0f);
-        for (int s = 0; s < sub; s++) {
-            const double sy = y + (s + 0.5) / sub;
-            xs.clear();
-            for (auto& e : edges) {
-                if ((e.y0 <= sy) == (e.y1 <= sy)) continue;
-                xs.push_back(e.x0 + (sy - e.y0) / (e.y1 - e.y0) * (e.x1 - e.x0));
-            }
-            std::sort(xs.begin(), xs.end());
-            for (size_t k = 0; k + 1 < xs.size(); k += 2) {
-                const double a = std::clamp(xs[k], 0.0, double(w)), b = std::clamp(xs[k + 1], 0.0, double(w));
-                if (b <= a) continue;
-                const int ia = int(a), ib = int(b);
-                if (ia == ib) { row[size_t(ia)] += float(b - a); continue; }
-                row[size_t(ia)] += float(ia + 1 - a);
-                for (int x = ia + 1; x < ib; x++) row[size_t(x)] += 1;
-                if (ib < w) row[size_t(ib)] += float(b - ib);
-            }
-        }
-        float* out = cov.data() + size_t(y) * w;
-        for (int x = 0; x < w; x++) out[x] = std::min(1.0f, row[size_t(x)] / sub);
+/// Coverage over the box [x0, x1) x [y0, y1) of a w x h output; zero outside it.
+struct Coverage {
+    int x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+    std::vector<float> v;
+    bool empty() const { return x1 <= x0 || y1 <= y0; }
+    float at(int x, int y) const {
+        return x < x0 || x >= x1 || y < y0 || y >= y1 ? 0.0f : v[size_t(y - y0) * size_t(x1 - x0) + size_t(x - x0)];
     }
-    return cov;
+};
+
+/// The pixel box of spans between minX..maxX and rows minY..maxY, inside w x h.
+void coverageBox(Coverage& c, double minX, double maxX, double minY, double maxY, int w, int h) {
+    auto lo = [](double v, int limit) { return int(std::clamp(std::floor(v), 0.0, double(limit))); };
+    auto hi = [](double v, int limit) { return int(std::clamp(std::ceil(v), 0.0, double(limit))); };
+    // A span's right end lands in pixel floor(maxX) (the partial pixel), so one past it.
+    c.x0 = lo(minX, w); c.x1 = std::min(w, lo(maxX, w) + 1);
+    c.y0 = lo(minY, h); c.y1 = hi(maxY, h);
+    if (c.empty()) { c.x1 = c.x0; c.y1 = c.y0; return; }
+    c.v.assign(size_t(c.x1 - c.x0) * size_t(c.y1 - c.y0), 0.0f);
+}
+
+/// Even-odd coverage of `edges` over w x h: 4 sample rows per pixel, exact horizontal coverage of each span.
+/// Only the edges' bounding box is computed (rows in parallel); the rest is zero.
+Coverage fill(const std::vector<Edge>& edges, int w, int h) {
+    Coverage c;
+    if (edges.empty()) return c;
+    double minX = 1e300, maxX = -1e300, minY = 1e300, maxY = -1e300;
+    for (auto& e : edges) {
+        minX = std::min({minX, e.x0, e.x1}); maxX = std::max({maxX, e.x0, e.x1});
+        minY = std::min({minY, e.y0, e.y1}); maxY = std::max({maxY, e.y0, e.y1});
+    }
+    coverageBox(c, minX, maxX, minY, maxY, w, h);
+    if (c.empty()) return c;
+    constexpr int sub = 4;
+    const int bw = c.x1 - c.x0;
+    parallelRows(c.y0, c.y1, [&](int ya, int yb) {
+        std::vector<double> xs;
+        std::vector<float> row(size_t(bw) + 2);
+        for (int y = ya; y < yb; y++) {
+            std::fill(row.begin(), row.end(), 0.0f);
+            for (int s = 0; s < sub; s++) {
+                const double sy = y + (s + 0.5) / sub;
+                xs.clear();
+                for (auto& e : edges) {
+                    if ((e.y0 <= sy) == (e.y1 <= sy)) continue;
+                    xs.push_back(e.x0 + (sy - e.y0) / (e.y1 - e.y0) * (e.x1 - e.x0));
+                }
+                std::sort(xs.begin(), xs.end());
+                for (size_t k = 0; k + 1 < xs.size(); k += 2) {
+                    const double a = std::clamp(xs[k], 0.0, double(w)), b = std::clamp(xs[k + 1], 0.0, double(w));
+                    if (b <= a) continue;
+                    const int ia = int(a), ib = int(b);
+                    if (ia == ib) { row[size_t(ia - c.x0)] += float(b - a); continue; }
+                    row[size_t(ia - c.x0)] += float(ia + 1 - a);
+                    for (int x = ia + 1; x < ib; x++) row[size_t(x - c.x0)] += 1;
+                    if (ib < w) row[size_t(ib - c.x0)] += float(b - ib);
+                }
+            }
+            float* out = c.v.data() + size_t(y - c.y0) * size_t(bw);
+            for (int x = 0; x < bw; x++) out[x] = std::min(1.0f, row[size_t(x)] / sub);
+        }
+    });
+    return c;
 }
 
 } // namespace
 
 std::shared_ptr<GrayImage> rasterizeVectorMask(const VectorPath& path, const Rect& region, double scale, int w, int h) {
-    auto mask = std::make_shared<GrayImage>(w, h, 0);
-    std::vector<float> acc;
-    bool first = true;
+    // Each shape group: consecutive subpaths sharing its index, filled together even-odd, over its own box.
+    std::vector<Coverage> groups;
+    std::vector<VectorPath::Op> ops;
     for (size_t i = 0; i < path.subpaths.size();) {
-        // One shape group: consecutive subpaths sharing its index, filled together even-odd.
         const int32_t group = path.subpaths[i].group;
-        const VectorPath::Op op = path.subpaths[i].op;
+        ops.push_back(path.subpaths[i].op);
         std::vector<Edge> edges;
         size_t j = i;
         for (; j < path.subpaths.size() && path.subpaths[j].group == group; j++) flatten(path.subpaths[j], region, scale, edges);
         i = j;
-        std::vector<float> g = fill(edges, w, h);
-        if (first) {
-            acc = op == VectorPath::Op::Subtract ? std::vector<float>(g.size(), 1) : g;
-            if (op == VectorPath::Op::Subtract) for (size_t k = 0; k < g.size(); k++) acc[k] = 1 - g[k];
-            first = false;
-            continue;
+        groups.push_back(fill(edges, w, h));
+    }
+    auto start = [](float g, VectorPath::Op op) { return op == VectorPath::Op::Subtract ? 1 - g : g; };
+    auto combine = [](float a, float b, VectorPath::Op op) {
+        switch (op) {
+        case VectorPath::Op::Add: return a + b - a * b;
+        case VectorPath::Op::Subtract: return a - a * b;
+        case VectorPath::Op::Intersect: return a * b;
+        case VectorPath::Op::Xor: return a + b - 2 * a * b;
         }
-        for (size_t k = 0; k < g.size(); k++) {
-            const float a = acc[k], b = g[k];
-            switch (op) {
-            case VectorPath::Op::Add: acc[k] = a + b - a * b; break;
-            case VectorPath::Op::Subtract: acc[k] = a - a * b; break;
-            case VectorPath::Op::Intersect: acc[k] = a * b; break;
-            case VectorPath::Op::Xor: acc[k] = a + b - 2 * a * b; break;
+        return a;
+    };
+    auto byte = [&](float v) {
+        v = std::clamp(v, 0.0f, 1.0f);
+        if (path.inverted) v = 1 - v;
+        return uint8_t(std::lround(v * 255));
+    };
+    // Outside every group's box each coverage is zero, so the result there is one value.
+    float outside = 0;
+    if (!groups.empty()) {
+        outside = start(0, ops[0]);
+        for (size_t k = 1; k < groups.size(); k++) outside = combine(outside, 0, ops[k]);
+    }
+    auto mask = std::make_shared<GrayImage>(w, h, byte(outside));
+    int x0 = w, y0 = h, x1 = 0, y1 = 0;
+    for (const Coverage& g : groups)
+        if (!g.empty()) { x0 = std::min(x0, g.x0); y0 = std::min(y0, g.y0); x1 = std::max(x1, g.x1); y1 = std::max(y1, g.y1); }
+    if (x1 <= x0 || y1 <= y0) return mask;
+    parallelRows(y0, y1, [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++) {
+            uint8_t* r = mask->row(y);
+            for (int x = x0; x < x1; x++) {
+                float a = start(groups[0].at(x, y), ops[0]);
+                for (size_t k = 1; k < groups.size(); k++) a = combine(a, groups[k].at(x, y), ops[k]);
+                r[x] = byte(a);
             }
         }
-    }
-    if (acc.empty()) acc.assign(size_t(w) * h, 0);
-    for (int y = 0; y < h; y++) {
-        uint8_t* r = mask->row(y);
-        for (int x = 0; x < w; x++) {
-            float v = std::clamp(acc[size_t(y) * w + x], 0.0f, 1.0f);
-            if (path.inverted) v = 1 - v;
-            r[x] = uint8_t(std::lround(v * 255));
-        }
-    }
+    });
     return mask;
 }
 
@@ -289,52 +330,57 @@ namespace {
 
 using Poly = std::vector<Point>;
 
-/// Nonzero-winding coverage of closed polygons (all wound the same way), antialiased like `fill`.
-std::vector<float> fillNonZero(const std::vector<Poly>& polys, int w, int h) {
+/// Nonzero-winding coverage of closed polygons (all wound the same way), antialiased like `fill`, over their box.
+Coverage fillNonZero(const std::vector<Poly>& polys, int w, int h) {
     struct DirEdge { double x0, y0, x1, y1; int dir; };
     std::vector<DirEdge> edges;
-    double minY = 1e300, maxY = -1e300;
+    double minX = 1e300, maxX = -1e300, minY = 1e300, maxY = -1e300;
     for (auto& p : polys)
         for (size_t i = 0; i < p.size(); i++) {
             const Point& a = p[i];
             const Point& b = p[(i + 1) % p.size()];
             if (a.y == b.y) continue;
             edges.push_back({a.x, a.y, b.x, b.y, a.y < b.y ? 1 : -1});
+            minX = std::min({minX, a.x, b.x}); maxX = std::max({maxX, a.x, b.x});
             minY = std::min({minY, a.y, b.y}); maxY = std::max({maxY, a.y, b.y});
         }
-    std::vector<float> cov(size_t(w) * h, 0);
-    if (edges.empty()) return cov;
-    const int y0 = std::max(0, int(std::floor(minY))), y1 = std::min(h, int(std::ceil(maxY)));
+    Coverage c;
+    if (edges.empty()) return c;
+    coverageBox(c, minX, maxX, minY, maxY, w, h);
+    if (c.empty()) return c;
     constexpr int sub = 4;
-    std::vector<std::pair<double, int>> xs;
-    std::vector<float> row(size_t(w) + 2);
-    for (int y = y0; y < y1; y++) {
-        std::fill(row.begin(), row.end(), 0.0f);
-        for (int s = 0; s < sub; s++) {
-            const double sy = y + (s + 0.5) / sub;
-            xs.clear();
-            for (auto& e : edges) {
-                if ((e.y0 <= sy) == (e.y1 <= sy)) continue;
-                xs.push_back({e.x0 + (sy - e.y0) / (e.y1 - e.y0) * (e.x1 - e.x0), e.dir});
+    const int bw = c.x1 - c.x0;
+    parallelRows(c.y0, c.y1, [&](int ya, int yb) {
+        std::vector<std::pair<double, int>> xs;
+        std::vector<float> row(size_t(bw) + 2);
+        for (int y = ya; y < yb; y++) {
+            std::fill(row.begin(), row.end(), 0.0f);
+            for (int s = 0; s < sub; s++) {
+                const double sy = y + (s + 0.5) / sub;
+                xs.clear();
+                for (auto& e : edges) {
+                    if ((e.y0 <= sy) == (e.y1 <= sy)) continue;
+                    xs.push_back({e.x0 + (sy - e.y0) / (e.y1 - e.y0) * (e.x1 - e.x0), e.dir});
+                }
+                std::sort(xs.begin(), xs.end());
+                int winding = 0;
+                for (size_t k = 0; k + 1 < xs.size(); k++) {
+                    winding += xs[k].second;
+                    if (winding == 0) continue;
+                    const double a = std::clamp(xs[k].first, 0.0, double(w)), b = std::clamp(xs[k + 1].first, 0.0, double(w));
+                    if (b <= a) continue;
+                    const int ia = int(a), ib = int(b);
+                    if (ia == ib) { row[size_t(ia - c.x0)] += float(b - a); continue; }
+                    row[size_t(ia - c.x0)] += float(ia + 1 - a);
+                    for (int x = ia + 1; x < ib; x++) row[size_t(x - c.x0)] += 1;
+                    if (ib < w) row[size_t(ib - c.x0)] += float(b - ib);
+                }
             }
-            std::sort(xs.begin(), xs.end());
-            int winding = 0;
-            for (size_t k = 0; k + 1 < xs.size(); k++) {
-                winding += xs[k].second;
-                if (winding == 0) continue;
-                const double a = std::clamp(xs[k].first, 0.0, double(w)), b = std::clamp(xs[k + 1].first, 0.0, double(w));
-                if (b <= a) continue;
-                const int ia = int(a), ib = int(b);
-                if (ia == ib) { row[size_t(ia)] += float(b - a); continue; }
-                row[size_t(ia)] += float(ia + 1 - a);
-                for (int x = ia + 1; x < ib; x++) row[size_t(x)] += 1;
-                if (ib < w) row[size_t(ib)] += float(b - ib);
-            }
+            float* out = c.v.data() + size_t(y - c.y0) * size_t(bw);
+            for (int x = 0; x < bw; x++) out[x] = std::min(1.0f, row[size_t(x)] / sub);
         }
-        float* out = cov.data() + size_t(y) * w;
-        for (int x = 0; x < w; x++) out[x] = std::min(1.0f, row[size_t(x)] / sub);
-    }
-    return cov;
+    });
+    return c;
 }
 
 /// Counter-clockwise (in y-down pixels, positive signed area) so overlapping pieces add instead of cancelling.
@@ -471,21 +517,24 @@ std::shared_ptr<GrayImage> rasterizeVectorStroke(const VectorPath& path, const V
         if (s.closed) pts.push_back(pts.front());
         for (auto& d : dash(pts, pattern, stroke.dashOffset * width)) strokePolyline(d, false, half, stroke, pieces);
     }
-    std::vector<float> band = fillNonZero(pieces, w, h);
+    const Coverage band = fillNonZero(pieces, w, h);
+    if (band.empty()) return out;
     std::shared_ptr<GrayImage> inside;
     if (stroke.align != VectorStroke::Align::Center) {
         VectorPath plain = path;
         plain.inverted = false;
         inside = rasterizeVectorMask(plain, region, scale, w, h);
     }
-    for (int y = 0; y < h; y++) {
-        uint8_t* row = out->row(y);
-        for (int x = 0; x < w; x++) {
-            double v = band[size_t(y) * w + x];
-            if (inside) { const double in = inside->row(y)[x] / 255.0; v *= stroke.align == VectorStroke::Align::Inside ? in : 1 - in; }
-            row[x] = uint8_t(std::lround(std::clamp(v, 0.0, 1.0) * 255));
+    parallelRows(band.y0, band.y1, [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++) {
+            uint8_t* row = out->row(y);
+            for (int x = band.x0; x < band.x1; x++) {
+                double v = band.at(x, y);
+                if (inside) { const double in = inside->row(y)[x] / 255.0; v *= stroke.align == VectorStroke::Align::Inside ? in : 1 - in; }
+                row[x] = uint8_t(std::lround(std::clamp(v, 0.0, 1.0) * 255));
+            }
         }
-    }
+    });
     return out;
 }
 

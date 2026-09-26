@@ -668,10 +668,9 @@ struct Renderer {
         const std::optional<VectorStroke> stroke = vector ? layerVectorStroke(layer) : std::nullopt;
         auto drawStroke = [&] {
             if (!stroke || !stroke->enabled || stroke->opacity <= 0) return;
-            std::optional<VectorPath> path = layerVectorMask(layer, document);
-            if (!path) return;
-            path->inverted = false;
-            auto band = rasterizeVectorStroke(*path, *stroke, region, scale, outWidth, outHeight);
+            VectorPath path = *vector;   // parsed once per draw
+            path.inverted = false;
+            auto band = rasterizeVectorStroke(path, *stroke, region, scale, outWidth, outHeight);
             // A shape's feather softens its stroke too (Photoshop feathers the whole rendered shape).
             if (maskParameters && maskParameters->vectorFeather) applyMaskParameters(*band, std::nullopt, maskParameters->vectorFeather, scale);
             const uint8_t colour[4] = {stroke->r, stroke->g, stroke->b, 255};
