@@ -315,6 +315,46 @@ std::vector<uint8_t> authorLayerStyleBlock(const LayerStyle& style) {
     return w.bytes();
 }
 
+// Fill-layer contents, as Patchy's fill_content_object authors them (MIT, src/psd/psd_vector.cpp there, pinned
+// against Photoshop 27.8): non-default keys only, in Photoshop's order, under a null root.
+namespace {
+std::vector<uint8_t> fillBlock(const Desc& d) {
+    psd::BigEndianWriter w;
+    w.write_u32(16);
+    psd::write_descriptor(w, d.o);
+    auto bytes = w.bytes();
+    while (bytes.size() % 4) bytes.push_back(0);
+    return bytes;
+}
+}
+
+std::vector<uint8_t> authorGradientFill(const StyleGradient& g) {
+    Desc d("null");
+    d.enumeration("gradientsInterpolationMethod", "gradientInterpolationMethodType", interpolation(g.interpolation));
+    d.angle("Angl", g.angle);
+    if (g.reverse) d.boolean("Rvrs", true);
+    if (g.dither) d.boolean("Dthr", true);
+    d.enumeration("Type", "GrdT", g.type == StyleGradient::Type::ShapeBurst ? "Lnr " : gradientType(g.type));
+    if (!g.alignWithLayer) d.boolean("Algn", false);
+    if (std::abs(g.scale - 1.0f) > 1e-4f) d.percent("Scl ", g.scale);
+    if (std::abs(g.offsetX) > 1e-4f || std::abs(g.offsetY) > 1e-4f) d.object("Ofst", point(g.offsetX, g.offsetY, true));
+    d.integer("noisePreSeed", 0);
+    d.object("Grad", gradient(g, true));
+    return fillBlock(d);
+}
+
+std::vector<uint8_t> authorPatternFill(const FillPattern& p, const std::string& name) {
+    Desc d("null");
+    if (!p.linked) d.boolean("Algn", false);
+    if (std::abs(p.phaseX) > 1e-9f || std::abs(p.phaseY) > 1e-9f) d.object("phase", point(p.phaseX, p.phaseY, false));
+    if (std::abs(p.scale - 1.0f) > 1e-6f) d.percent("Scl ", p.scale);
+    if (std::abs(p.angle) > 1e-6f) d.angle("Angl", p.angle);
+    Desc pattern("Ptrn");
+    pattern.text("Nm  ", name.empty() ? p.id : name).text("Idnt", p.id);
+    d.object("Ptrn", std::move(pattern));
+    return fillBlock(d);
+}
+
 void setLayerStyle(Layer& layer, const LayerStyle& style) {
     auto carry = layer.psdCarry ? std::make_shared<PsdLayerCarry>(*layer.psdCarry) : std::make_shared<PsdLayerCarry>();
     auto& blocks = carry->blocks;

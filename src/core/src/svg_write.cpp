@@ -266,7 +266,7 @@ struct Writer {
         const Layer& base = *run.front();
         if (run.size() > 1) note("Clipped layers over \"" + base.name + "\" were written as one image.");
         else if (base.isGroup) note("Folder \"" + base.name + "\" was written as one image (SVG cannot draw its style or blending).");
-        else if (isVectorShapeLayer(base)) note("Shape layer \"" + base.name + "\" was written as an image (its style, mask or path combination has no SVG form).");
+        else if (isVectorShapeLayer(base)) note("Shape layer \"" + base.name + "\" was written as an image (its style, mask, path combination or gradient or pattern paint has no SVG form).");
         Point origin;
         if (auto pixels = renderOnly(run, &base, origin)) emitImage(*pixels, origin, base.name, css(base), depth);
     }
@@ -279,6 +279,8 @@ struct Writer {
         if (auto style = layerStyleOf(layer, document); style && hasAnyEffect(*style)) return std::nullopt;
         auto shape = vectorShapeOf(layer, document);
         if (!shape || shape->path.inverted || shape->path.subpaths.empty() || classify(shape->path) == Combine::Unsupported) return std::nullopt;
+        // Gradient and pattern fills and strokes: drawn as an image.
+        if (shape->fillPaint.kind != VectorPaint::Kind::Solid || (shape->stroke.enabled && shape->stroke.paint.kind != VectorPaint::Kind::Solid)) return std::nullopt;
         return shape;
     }
 

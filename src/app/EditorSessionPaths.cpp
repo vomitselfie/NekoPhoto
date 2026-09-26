@@ -8,37 +8,7 @@ using namespace compositor;
 
 namespace app {
 
-namespace {
-
-/// Douglas-Peucker on a closed loop: the points that keep it within `tolerance` pixels.
-std::vector<Point> simplifyLoop(const std::vector<Point>& loop, double tolerance) {
-    if (loop.size() < 4) return loop;
-    std::vector<bool> keep(loop.size(), false);
-    // Split at the point farthest from the first, so both halves are open polylines.
-    size_t far = 0;
-    double best = -1;
-    for (size_t i = 1; i < loop.size(); i++) { const double d = std::hypot(loop[i].x - loop[0].x, loop[i].y - loop[0].y); if (d > best) { best = d; far = i; } }
-    std::function<void(size_t, size_t)> run = [&](size_t a, size_t b) {
-        if (b <= a + 1) return;
-        const Point p = loop[a], q = loop[b % loop.size()];
-        const double len = std::hypot(q.x - p.x, q.y - p.y);
-        double worst = -1; size_t at = a;
-        for (size_t i = a + 1; i < b; i++) {
-            const Point r = loop[i];
-            const double d = len > 1e-9 ? std::abs((q.x - p.x) * (p.y - r.y) - (p.x - r.x) * (q.y - p.y)) / len : std::hypot(r.x - p.x, r.y - p.y);
-            if (d > worst) { worst = d; at = i; }
-        }
-        if (worst > tolerance) { keep[at] = true; run(a, at); run(at, b); }
-    };
-    keep[0] = keep[far] = true;
-    run(0, far);
-    run(far, loop.size());
-    std::vector<Point> out;
-    for (size_t i = 0; i < loop.size(); i++) if (keep[i]) out.push_back(loop[i]);
-    return out;
-}
-
-} // namespace
+// (The outline simplification is core's simplifyLoop, vectorlayer.h.)
 
 // ---- Pen --------------------------------------------------------------------------------------------------------
 

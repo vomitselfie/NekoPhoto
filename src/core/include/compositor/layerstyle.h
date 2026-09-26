@@ -164,6 +164,10 @@ std::optional<StyleGradient> parseFillGradient(const std::vector<uint8_t>& block
 /// A fill layer's pattern ('PtFl'): the pattern id, scale, angle and phase.
 struct FillPattern { std::string id; float scale = 1, angle = 0, phaseX = 0, phaseY = 0; bool linked = true; };
 std::optional<FillPattern> parseFillPattern(const std::vector<uint8_t>& block);
+/// And the blocks themselves, as Photoshop writes a gradient ('GdFl') or pattern ('PtFl') fill (u32 16 + descriptor,
+/// padded to 4); `name` is the pattern's name (its id when empty).
+std::vector<uint8_t> authorGradientFill(const StyleGradient& gradient);
+std::vector<uint8_t> authorPatternFill(const FillPattern& pattern, const std::string& name = std::string());
 
 /// Master opacity and Fill as Photoshop splits them (NekoPhoto keeps one opacity: their product).
 void layerOpacities(const Layer& layer, float& master, float& fill);

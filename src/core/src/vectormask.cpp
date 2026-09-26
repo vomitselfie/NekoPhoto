@@ -207,6 +207,8 @@ std::shared_ptr<GrayImage> rasterizeVectorMask(const VectorPath& path, const Rec
         if (path.inverted) v = 1 - v;
         return uint8_t(std::lround(v * 255));
     };
+    // No subpaths: everything (Photoshop's Reveal All vector mask; inverted, Hide All).
+    if (groups.empty()) return std::make_shared<GrayImage>(w, h, byte(1));
     // Outside every group's box each coverage is zero, so the result there is one value.
     float outside = 0;
     if (!groups.empty()) {
@@ -315,11 +317,21 @@ std::optional<VectorStroke> layerVectorStroke(const Layer& layer) {
             double total = 0;
             for (double v : s.dashes) total += v;
             if (total <= 1e-6) s.dashes.clear();
-            if (auto content = psd::descriptor_object(d, "strokeStyleContent"))
+            if (auto content = psd::descriptor_object(d, "strokeStyleContent")) {
                 if (auto c = psd::descriptor_object(*content, "Clr ")) {
                     auto byte = [](double v) { return uint8_t(std::clamp(std::lround(v), 0L, 255L)); };
                     s.r = byte(psd::descriptor_number(*c, "Rd  ")); s.g = byte(psd::descriptor_number(*c, "Grn ")); s.b = byte(psd::descriptor_number(*c, "Bl  "));
                 }
+                // A gradient or pattern stroke: the content object read as a fill block would be.
+                if (psd::descriptor_object(*content, "Grad") || psd::descriptor_object(*content, "Ptrn")) {
+                    psd::BigEndianWriter w;
+                    w.write_u32(16);
+                    psd::write_descriptor(w, *content);
+                    const std::vector<uint8_t> bytes = w.bytes();
+                    if (auto g = parseFillGradient(bytes)) { s.paint.kind = VectorPaint::Kind::Gradient; s.paint.gradient = *g; }
+                    else if (auto p = parseFillPattern(bytes)) { s.paint.kind = VectorPaint::Kind::Pattern; s.paint.pattern = *p; }
+                }
+            }
             return s;
         } catch (std::exception&) { return std::nullopt; }
     }
@@ -540,61 +552,85 @@ std::shared_ptr<GrayImage> rasterizeVectorStroke(const VectorPath& path, const V
 
 // ---- Fill layers --------------------------------------------------------------------------------------------------
 
+ImagePtr renderVectorPaint(const VectorPaint& paint, const Document& document, const Rect& bounds, const Rect& area, double scale, int w, int h) {
+    if (w <= 0 || h <= 0 || scale <= 0) return nullptr;
+    // Output pixel (px, py) is document (area.x + px / scale, area.y + py / scale): at scale 1 over the canvas, a
+    // gradient is sampled at the pixel's corner and a pattern at its centre, as fill layers have always been drawn.
+    if (paint.kind == VectorPaint::Kind::Gradient) {
+        auto image = std::make_shared<Image>(w, h);
+        const StyleGradient& g = paint.gradient;
+        double bx = 0, by = 0, bw = document.width, bh = document.height;
+        if (g.alignWithLayer && bounds.width > 0 && bounds.height > 0) { bx = bounds.x; by = bounds.y; bw = bounds.width; bh = bounds.height; }
+        parallelRows(0, h, [&](int ya, int yb) {
+            for (int y = ya; y < yb; y++) {
+                uint8_t* row = image->row(y);
+                for (int x = 0; x < w; x++, row += 4) {
+                    const float t = gradientPosition(g, bx, by, bw, bh, area.x + x / scale, area.y + y / scale);
+                    const StyleColor c = gradientColor(g, t);
+                    const float a = gradientOpacity(g, t);
+                    row[0] = uint8_t(std::lround(c.r * a)); row[1] = uint8_t(std::lround(c.g * a)); row[2] = uint8_t(std::lround(c.b * a)); row[3] = uint8_t(std::lround(255 * a));
+                }
+            }
+        });
+        return image;
+    }
+    if (paint.kind != VectorPaint::Kind::Pattern) return nullptr;
+    const FillPattern& p = paint.pattern;
+    auto patterns = documentPatterns(document);
+    if (!patterns) return nullptr;
+    auto tile = patterns->find(p.id);
+    if (tile == patterns->end() || tile->second.width <= 0 || tile->second.height <= 0) return nullptr;
+    const PatternTile& t = tile->second;
+    auto image = std::make_shared<Image>(w, h);
+    const double inv = 1.0 / std::max(0.01f, p.scale), a = p.angle * M_PI / 180, cs = std::cos(a), sn = std::sin(a);
+    parallelRows(0, h, [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++) {
+            uint8_t* row = image->row(y);
+            for (int x = 0; x < w; x++, row += 4) {
+                const double u0 = area.x + (x + 0.5) / scale - p.phaseX, v0 = area.y + (y + 0.5) / scale - p.phaseY;
+                const double u = (u0 * cs - v0 * sn) * inv, v = (u0 * sn + v0 * cs) * inv;
+                long tx = long(std::floor(u)) % t.width, ty = long(std::floor(v)) % t.height;
+                if (tx < 0) tx += t.width;
+                if (ty < 0) ty += t.height;
+                const uint8_t* src = t.rgba.data() + (size_t(ty) * size_t(t.width) + size_t(tx)) * 4;
+                for (int k = 0; k < 3; k++) row[k] = uint8_t((src[k] * src[3] + 127) / 255);
+                row[3] = src[3];
+            }
+        }
+    });
+    return image;
+}
+
 ImagePtr renderFillLayer(const Layer& layer, const Document& document) {
     if (!layer.psdCarry) return nullptr;
     const std::vector<uint8_t>* gradientBlock = nullptr;
     const std::vector<uint8_t>* patternBlock = nullptr;
     for (auto& b : layer.psdCarry->blocks) { if (b.key == "GdFl") gradientBlock = &b.data; if (b.key == "PtFl") patternBlock = &b.data; }
     if (!gradientBlock && !patternBlock) return nullptr;
-    const int w = document.width, h = document.height;
-    auto image = std::make_shared<Image>(w, h);
+    VectorPaint paint;
+    Rect bounds;
     if (gradientBlock) {
         auto g = parseFillGradient(*gradientBlock);
         if (!g) return nullptr;
+        paint.kind = VectorPaint::Kind::Gradient;
+        paint.gradient = *g;
         // Aligned with the layer: over its shape's bounds (the vector mask's hull), else the canvas.
-        double bx = 0, by = 0, bw = w, bh = h;
         if (g->alignWithLayer)
             if (auto v = layerVectorMask(layer, document)) {
                 double x0 = 1e300, y0 = 1e300, x1 = -1e300, y1 = -1e300;
                 for (auto& s : v->subpaths) for (auto& k : s.knots) for (auto [x, y] : {std::pair{k.x, k.y}, {k.inX, k.inY}, {k.outX, k.outY}}) {
                     x0 = std::min(x0, x); x1 = std::max(x1, x); y0 = std::min(y0, y); y1 = std::max(y1, y);
                 }
-                if (x1 > x0 && y1 > y0) { bx = x0; by = y0; bw = x1 - x0; bh = y1 - y0; }
+                if (x1 > x0 && y1 > y0) bounds = Rect(x0, y0, x1 - x0, y1 - y0);
             }
-        for (int y = 0; y < h; y++) {
-            uint8_t* row = image->row(y);
-            for (int x = 0; x < w; x++, row += 4) {
-                const float t = gradientPosition(*g, bx, by, bw, bh, x, y);
-                const StyleColor c = gradientColor(*g, t);
-                const float a = gradientOpacity(*g, t);
-                row[0] = uint8_t(std::lround(c.r * a)); row[1] = uint8_t(std::lround(c.g * a)); row[2] = uint8_t(std::lround(c.b * a)); row[3] = uint8_t(std::lround(255 * a));
-            }
-        }
-        return image;
+    } else {
+        auto p = parseFillPattern(*patternBlock);
+        if (!p) return nullptr;
+        paint.kind = VectorPaint::Kind::Pattern;
+        paint.pattern = *p;
     }
-    auto p = parseFillPattern(*patternBlock);
-    auto patterns = documentPatterns(document);
-    if (!p || !patterns) return nullptr;
-    auto tile = patterns->find(p->id);
-    if (tile == patterns->end() || tile->second.width <= 0) return nullptr;
-    const PatternTile& t = tile->second;
-    const double inv = 1.0 / std::max(0.01f, p->scale), a = p->angle * M_PI / 180, cs = std::cos(a), sn = std::sin(a);
-    for (int y = 0; y < h; y++) {
-        uint8_t* row = image->row(y);
-        for (int x = 0; x < w; x++, row += 4) {
-            const double u0 = x + 0.5 - p->phaseX, v0 = y + 0.5 - p->phaseY;
-            const double u = (u0 * cs - v0 * sn) * inv, v = (u0 * sn + v0 * cs) * inv;
-            long tx = long(std::floor(u)) % t.width, ty = long(std::floor(v)) % t.height;
-            if (tx < 0) tx += t.width;
-            if (ty < 0) ty += t.height;
-            const uint8_t* s = t.rgba.data() + (size_t(ty) * size_t(t.width) + size_t(tx)) * 4;
-            for (int k = 0; k < 3; k++) row[k] = uint8_t((s[k] * s[3] + 127) / 255);
-            row[3] = s[3];
-        }
-    }
-    return image;
+    return renderVectorPaint(paint, document, bounds, Rect(0, 0, document.width, document.height), 1, document.width, document.height);
 }
-
 Point mapLayerPoint(Point p, const LayerTransform& before, int w0, int h0, const LayerTransform& after, int w1, int h1) {
     // One corner of a degenerate quad: moveQuad already inverts one transform and applies the other.
     const auto q = moveQuad({p.x, p.y, p.x, p.y, p.x, p.y, p.x, p.y}, before, w0, h0, after, w1, h1);

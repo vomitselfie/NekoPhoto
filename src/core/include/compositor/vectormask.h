@@ -5,6 +5,7 @@
 // order by their operation (add, subtract, intersect, exclude). The path follows its layer when the layer moves.
 #pragma once
 #include "image.h"
+#include "layerstyle.h"
 #include "transform.h"
 #include <array>
 #include <cstdint>
@@ -32,7 +33,8 @@ std::optional<VectorPath> parseVectorMask(const std::vector<uint8_t>& payload, i
 std::optional<std::vector<uint8_t>> mapVectorMask(const std::vector<uint8_t>& payload, int width, int height,
                                                   const std::function<Point(Point)>& map);
 
-/// Coverage (0..255) of `path` over `region` (document pixels) at `scale`, `w` x `h` output pixels, antialiased.
+/// Coverage (0..255) of `path` over `region` (document pixels) at `scale`, `w` x `h` output pixels, antialiased. A path
+/// with no subpaths covers everything (Photoshop's empty vector mask reveals all; inverted, it hides all).
 std::shared_ptr<GrayImage> rasterizeVectorMask(const VectorPath& path, const Rect& region, double scale, int w, int h);
 
 /// The layer's vector mask as it now stands: its carried path, moved along with the layer since it was read.
@@ -46,6 +48,17 @@ std::optional<MaskParameters> parseMaskParameters(const std::vector<uint8_t>& se
 /// Density and feather applied to coverage drawn at `scale` (feather is a gaussian of sigma = feather pixels).
 void applyMaskParameters(GrayImage& coverage, std::optional<int> density, std::optional<double> feather, double scale, bool clampEdges = false);
 
+/// What a shape's fill or stroke paints with: a colour (kept beside it), a gradient or a pattern, as Photoshop's
+/// solidColorLayer, gradientLayer and patternLayer contents ('SoCo', 'GdFl', 'PtFl'; a stroke's strokeStyleContent).
+struct VectorPaint {
+    enum class Kind { Solid, Gradient, Pattern } kind = Kind::Solid;
+    StyleGradient gradient;                // Kind::Gradient (fillLayer geometry)
+    FillPattern pattern;                   // Kind::Pattern: an id among the document's patterns
+};
+/// `paint` (not Solid) over `area` (document pixels) at `scale`, `w` x `h` premultiplied pixels; a gradient aligned
+/// with the layer spans `bounds` (the shape's), else the canvas. None when a pattern is not among the document's.
+ImagePtr renderVectorPaint(const VectorPaint& paint, const Document& document, const Rect& bounds, const Rect& area, double scale, int w, int h);
+
 /// A shape's stroke ('vstk'): drawn along its path in its own colour and opacity over the fill.
 struct VectorStroke {
     bool enabled = false, fillEnabled = true;
@@ -58,6 +71,7 @@ struct VectorStroke {
     double miterLimit = 100;
     std::vector<double> dashes;            // on, off, ... in stroke widths; empty: solid
     double dashOffset = 0;                 // in stroke widths
+    VectorPaint paint;                     // Solid: r, g, b
 };
 std::optional<VectorStroke> layerVectorStroke(const Layer& layer);
 /// Coverage (0..255) of the stroke band over `region` at `scale`.

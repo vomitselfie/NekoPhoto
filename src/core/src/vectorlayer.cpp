@@ -1,5 +1,6 @@
 #include "compositor/vectorlayer.h"
 #include "compositor/psd_carry.h"
+#include "compositor/selection.h"
 #include "psd/psd_descriptor.hpp"
 #include <algorithm>
 #include <cmath>
@@ -43,6 +44,14 @@ struct Desc {
     }
     Desc& object(const std::string& k, Desc d) {
         psd::DescriptorValue v; v.type = psd::DescriptorValue::Type::Object; v.object_value = std::make_shared<psd::DescriptorObject>(std::move(d.o));
+        return put(k, v);
+    }
+    Desc& list(const std::string& k, std::vector<Desc> items) {
+        psd::DescriptorValue v; v.type = psd::DescriptorValue::Type::List;
+        for (Desc& d : items) {
+            psd::DescriptorValue o; o.type = psd::DescriptorValue::Type::Object; o.object_value = std::make_shared<psd::DescriptorObject>(std::move(d.o));
+            v.list_value.push_back(std::move(o));
+        }
         return put(k, v);
     }
 };
@@ -117,6 +126,28 @@ std::vector<uint8_t> authorVectorMask(const VectorPath& path, int w, int h) {
     return out;
 }
 
+namespace {
+/// A fill block's descriptor as the content object Photoshop puts in a stroke (gradientLayer, patternLayer,
+/// solidColorLayer), as Patchy's fill_content_object makes both.
+Desc paintContent(const VectorPaint& paint, uint8_t r, uint8_t g, uint8_t b) {
+    if (paint.kind != VectorPaint::Kind::Solid) {
+        const auto bytes = paint.kind == VectorPaint::Kind::Gradient ? authorGradientFill(paint.gradient) : authorPatternFill(paint.pattern);
+        try {
+            psd::BigEndianReader r(bytes);
+            if (r.read_u32() != 16) throw std::runtime_error("fill block");
+            Desc d("null");
+            d.o = psd::read_descriptor(r);
+            d.o.class_id = paint.kind == VectorPaint::Kind::Gradient ? "gradientLayer" : "patternLayer";
+            d.o.class_id_long_form = true;
+            return d;
+        } catch (std::exception&) {}
+    }
+    Desc content("solidColorLayer");
+    content.object("Clr ", colour(r, g, b));
+    return content;
+}
+}
+
 std::vector<uint8_t> authorVectorStroke(const VectorStroke& s, bool fillEnabled) {
     // Photoshop 2026's 16-item strokeStyle, in its order (Patchy's capture).
     Desc d("strokeStyle");
@@ -135,9 +166,7 @@ std::vector<uint8_t> authorVectorStroke(const VectorStroke& s, bool fillEnabled)
     for (double v : s.dashes) { psd::DescriptorValue u; u.type = psd::DescriptorValue::Type::UnitFloat; u.unit = "#Nne"; u.double_value = v; dashes.list_value.push_back(u); }
     d.put("strokeStyleLineDashSet", dashes);
     d.enumeration("strokeStyleBlendMode", "BlnM", "normal").unit("strokeStyleOpacity", "#Prc", s.opacity * 100.0);
-    Desc content("solidColorLayer");
-    content.object("Clr ", colour(s.r, s.g, s.b));
-    d.object("strokeStyleContent", std::move(content)).number("strokeStyleResolution", 72);
+    d.object("strokeStyleContent", paintContent(s.paint, s.r, s.g, s.b)).number("strokeStyleResolution", 72);
     return descriptorBlock(d);
 }
 
@@ -171,8 +200,8 @@ uint64_t cachedContentHash(const std::shared_ptr<const Image>& image) {
 
 /// The blocks are there and the pixels are still the fill they describe (wherever the layer now is).
 bool hasShapeBlocks(const Layer& layer) {
-    return !layer.isGroup && !layer.adjustment && layer.asset && layer.asset->image && (block(layer, "vsms") || block(layer, "vmsk")) && block(layer, "SoCo")
-        && layer.psdCarry->contentHash == cachedContentHash(layer.asset->image);
+    return !layer.isGroup && !layer.adjustment && layer.asset && layer.asset->image && (block(layer, "vsms") || block(layer, "vmsk"))
+        && (block(layer, "SoCo") || block(layer, "GdFl") || block(layer, "PtFl")) && layer.psdCarry->contentHash == cachedContentHash(layer.asset->image);
 }
 }
 
@@ -199,18 +228,48 @@ std::optional<VectorShape> vectorShapeOf(const Layer& layer, const Document& doc
     if (!path) return std::nullopt;
     VectorShape shape;
     shape.path = *path;
-    try {
-        psd::BigEndianReader r(*block(layer, "SoCo"));
-        if (r.read_u32() == 16) {
-            const psd::DescriptorObject d = psd::read_descriptor(r);
-            if (auto c = psd::descriptor_object(d, "Clr ")) {
-                auto byte = [](double v) { return uint8_t(std::clamp(std::lround(v), 0L, 255L)); };
-                shape.r = byte(psd::descriptor_number(*c, "Rd  ")); shape.g = byte(psd::descriptor_number(*c, "Grn ")); shape.b = byte(psd::descriptor_number(*c, "Bl  "));
+    if (auto soco = block(layer, "SoCo")) {
+        try {
+            psd::BigEndianReader r(*soco);
+            if (r.read_u32() == 16) {
+                const psd::DescriptorObject d = psd::read_descriptor(r);
+                if (auto c = psd::descriptor_object(d, "Clr ")) {
+                    auto byte = [](double v) { return uint8_t(std::clamp(std::lround(v), 0L, 255L)); };
+                    shape.r = byte(psd::descriptor_number(*c, "Rd  ")); shape.g = byte(psd::descriptor_number(*c, "Grn ")); shape.b = byte(psd::descriptor_number(*c, "Bl  "));
+                }
             }
-        }
-    } catch (std::exception&) {}
+        } catch (std::exception&) {}
+    } else if (auto gdfl = block(layer, "GdFl"); gdfl && parseFillGradient(*gdfl)) {
+        shape.fillPaint.kind = VectorPaint::Kind::Gradient;
+        shape.fillPaint.gradient = *parseFillGradient(*gdfl);
+        // The solid colour it falls back to: the gradient's first stop.
+        if (!shape.fillPaint.gradient.colors.empty()) { auto c = shape.fillPaint.gradient.colors.front().color; shape.r = c.r; shape.g = c.g; shape.b = c.b; }
+    } else if (auto ptfl = block(layer, "PtFl"); ptfl && parseFillPattern(*ptfl)) {
+        shape.fillPaint.kind = VectorPaint::Kind::Pattern;
+        shape.fillPaint.pattern = *parseFillPattern(*ptfl);
+    }
     if (auto stroke = layerVectorStroke(layer)) { shape.stroke = *stroke; shape.fill = stroke->fillEnabled; }
     else shape.stroke.enabled = false;
+    if (auto vogk = block(layer, "vogk"))
+        if (auto live = parseVectorOrigination(*vogk)) {
+            // Moved with the layer since it was stored (the path already has been): the boxes go along, and each is
+            // kept only while its group is still what it makes.
+            const PsdLayerCarry& c = *layer.psdCarry;
+            const LayerTransform& now = layer.transform;
+            const bool moved = !(c.placement.origin == now.origin && c.placement.size == now.size && c.placement.rotation == now.rotation
+                                 && c.placement.flipX == now.flipX && c.placement.flipY == now.flipY);
+            const int w0 = std::max(1, int(std::lround(c.placement.size.width))), h0 = std::max(1, int(std::lround(c.placement.size.height)));
+            for (LiveShape l : *live) {
+                if (moved) {
+                    const Point a = mapLayerPoint({l.box.x, l.box.y}, c.placement, w0, h0, now, layer.pixelWidth(), layer.pixelHeight());
+                    const Point b = mapLayerPoint({l.box.maxX(), l.box.maxY()}, c.placement, w0, h0, now, layer.pixelWidth(), layer.pixelHeight());
+                    const double sx = l.box.width > 0 ? (b.x - a.x) / l.box.width : 1;
+                    l.box = Rect(std::min(a.x, b.x), std::min(a.y, b.y), std::abs(b.x - a.x), std::abs(b.y - a.y));
+                    for (double& r : l.radii) r *= std::abs(sx);
+                }
+                if (liveShapeHolds(l, shape.path)) shape.live.push_back(l);
+            }
+        }
     return shape;
 }
 
@@ -247,8 +306,13 @@ void setVectorShape(Layer& layer, const Document& document, const VectorShape& s
     hx = std::min(hx, lx + 30000); hy = std::min(hy, ly + 30000);
     const int x0 = int(lx), y0 = int(ly);
     const int w = std::max(1, int(hx - lx)), h = std::max(1, int(hy - ly));
-    auto image = std::make_shared<Image>(w, h);
-    image->fill(shape.r, shape.g, shape.b, 255);
+    ImagePtr painted;
+    if (shape.fillPaint.kind != VectorPaint::Kind::Solid)
+        painted = renderVectorPaint(shape.fillPaint, document, pathBounds(shape.path), Rect(x0, y0, w, h), 1, w, h);
+    // A pattern not among the document's: its fallback colour until it is there.
+    const bool paintedFill = painted != nullptr;
+    auto image = painted ? std::const_pointer_cast<Image>(painted) : std::make_shared<Image>(w, h);
+    if (!painted) image->fill(shape.r, shape.g, shape.b, 255);
     layer.asset = Asset::make(image, layer.name);
     layer.transform = LayerTransform(Point(x0, y0), Size(w, h));
     layer.shape.reset();
@@ -265,10 +329,16 @@ void setVectorShape(Layer& layer, const Document& document, const VectorShape& s
     pathCanvas(document, cw, ch);
     VectorPath path = shape.path;
     path.disabled = false;
-    blocks.push_back({"SoCo", authorSolidColour(shape.r, shape.g, shape.b)});
+    if (paintedFill && shape.fillPaint.kind == VectorPaint::Kind::Gradient) blocks.push_back({"GdFl", authorGradientFill(shape.fillPaint.gradient)});
+    else if (paintedFill && shape.fillPaint.kind == VectorPaint::Kind::Pattern) blocks.push_back({"PtFl", authorPatternFill(shape.fillPaint.pattern)});
+    else blocks.push_back({"SoCo", authorSolidColour(shape.r, shape.g, shape.b)});
     blocks.push_back({"vsms", authorVectorMask(path, cw, ch)});
     VectorStroke stroke = shape.stroke;
     blocks.push_back({"vstk", authorVectorStroke(stroke, shape.fill)});
+    // Live shape properties, those still true of the path.
+    std::vector<LiveShape> live;
+    for (const LiveShape& l : shape.live) if (liveShapeHolds(l, path)) live.push_back(l);
+    if (!live.empty()) blocks.push_back({"vogk", authorVectorOrigination(live)});
     // The blocks describe these pixels where they now are, so they are kept (and not moved) until they change.
     carry->placement = layer.transform;
     carry->contentHash = psdContentHash(image.get());
@@ -443,22 +513,37 @@ bool knotIsSmooth(const VectorPath::Knot& k) {
 
 // ---- Shapes ---------------------------------------------------------------------------------------------------
 
-VectorPath rectanglePath(const Rect& box, double radius) {
-    radius = std::clamp(radius, 0.0, std::min(box.width, box.height) / 2);
+VectorPath rectanglePath(const Rect& box, double radius) { return rectanglePath(box, {radius, radius, radius, radius}); }
+
+VectorPath rectanglePath(const Rect& box, const std::array<double, 4>& radii) {
+    const double limit = std::max(0.0, std::min(box.width, box.height) / 2);
+    std::array<double, 4> rr{};
+    for (size_t i = 0; i < 4; i++) rr[i] = std::isfinite(radii[i]) ? std::clamp(radii[i], 0.0, limit) : 0.0;
     const double l = box.x, t = box.y, r = box.maxX(), b = box.maxY();
-    if (radius <= 0) return single({corner(l, t), corner(r, t), corner(r, b), corner(l, b)});
-    const double k = radius * kKappa;
-    // Each rounded corner is two knots; the straight edges run between them.
-    return single({
-        {l, t + radius, l, t + radius, l, t + radius - k},   // the left edge's top end, its out handle towards the corner
-        {l + radius - k, t, l + radius, t, l + radius, t},
-        {r - radius, t, r - radius, t, r - radius + k, t},
-        {r, t + radius - k, r, t + radius, r, t + radius},
-        {r, b - radius, r, b - radius, r, b - radius + k},
-        {r - radius + k, b, r - radius, b, r - radius, b},
-        {l + radius, b, l + radius, b, l + radius - k, b},
-        {l, b - radius + k, l, b - radius, l, b - radius},
-    });
+    // Each rounded corner is two knots (the straight edges run between them), a square one a single corner knot;
+    // clockwise from the left edge's top end.
+    std::vector<VectorPath::Knot> k;
+    if (rr[0] > 0) {
+        const double q = rr[0], c = q * kKappa;
+        k.push_back({l, t + q, l, t + q, l, t + q - c});
+        k.push_back({l + q - c, t, l + q, t, l + q, t});
+    } else k.push_back(corner(l, t));
+    if (rr[1] > 0) {
+        const double q = rr[1], c = q * kKappa;
+        k.push_back({r - q, t, r - q, t, r - q + c, t});
+        k.push_back({r, t + q - c, r, t + q, r, t + q});
+    } else k.push_back(corner(r, t));
+    if (rr[2] > 0) {
+        const double q = rr[2], c = q * kKappa;
+        k.push_back({r, b - q, r, b - q, r, b - q + c});
+        k.push_back({r - q + c, b, r - q, b, r - q, b});
+    } else k.push_back(corner(r, b));
+    if (rr[3] > 0) {
+        const double q = rr[3], c = q * kKappa;
+        k.push_back({l + q, b, l + q, b, l + q - c, b});
+        k.push_back({l, b - q + c, l, b - q, l, b - q});
+    } else k.push_back(corner(l, b));
+    return single(std::move(k));
 }
 
 VectorPath ellipsePath(const Rect& box) {
@@ -523,4 +608,238 @@ VectorPath customShapePath(const std::string& name, const Rect& box) {
     });
 }
 
+
+// ---- Live shape properties ('vogk') ------------------------------------------------------------------------------
+
+VectorPath livePath(const LiveShape& shape) {
+    VectorPath p = shape.kind == LiveShape::Kind::Ellipse ? ellipsePath(shape.box) : rectanglePath(shape.box, shape.radii);
+    for (auto& s : p.subpaths) s.group = shape.group;
+    return p;
+}
+
+bool liveShapeHolds(const LiveShape& shape, const VectorPath& path) {
+    if (!(shape.box.width > 0) || !(shape.box.height > 0)) return false;
+    const VectorPath made = livePath(shape);
+    const VectorPath::Subpath* found = nullptr;
+    for (const auto& s : path.subpaths) {
+        if (s.group != shape.group) continue;
+        if (found) return false;   // more than the one subpath it makes
+        found = &s;
+    }
+    if (!found || !found->closed || found->knots.size() != made.subpaths[0].knots.size()) return false;
+    // Stored paths are 8.24 fixed point of the canvas: a tolerance well above that, well below a visible change.
+    constexpr double tolerance = 0.02;
+    for (size_t i = 0; i < found->knots.size(); i++) {
+        const auto& a = found->knots[i];
+        const auto& b = made.subpaths[0].knots[i];
+        for (auto [u, v] : {std::pair{a.x, b.x}, {a.y, b.y}, {a.inX, b.inX}, {a.inY, b.inY}, {a.outX, b.outX}, {a.outY, b.outY}})
+            if (!(std::abs(u - v) <= tolerance)) return false;
+    }
+    return true;
+}
+
+std::vector<uint8_t> authorVectorOrigination(const std::vector<LiveShape>& shapes) {
+    // Patchy's vector_origination_block_payload (MIT; pinned against Photoshop 27.8): per entry the type, resolution,
+    // the radii (rounded rectangles; stored top-right, top-left, bottom-left, bottom-right), the box, the box corners
+    // (not ellipses), the transform and the group index.
+    std::vector<Desc> entries;
+    for (const LiveShape& l : shapes) {
+        const bool rounded = l.kind == LiveShape::Kind::Rectangle && std::any_of(l.radii.begin(), l.radii.end(), [](double r) { return r > 0; });
+        Desc e("null");
+        e.integer("keyOriginType", l.kind == LiveShape::Kind::Ellipse ? 5 : rounded ? 2 : 1).number("keyOriginResolution", 72);
+        if (rounded) {
+            Desc radii("radii");
+            radii.integer("unitValueQuadVersion", 1).unit("topRight", "#Pxl", l.radii[1]).unit("topLeft", "#Pxl", l.radii[0])
+                 .unit("bottomLeft", "#Pxl", l.radii[3]).unit("bottomRight", "#Pxl", l.radii[2]);
+            e.object("keyOriginRRectRadii", std::move(radii));
+        }
+        Desc bbox("unitRect");
+        bbox.integer("unitValueQuadVersion", 1).unit("Top ", "#Pxl", l.box.y).unit("Left", "#Pxl", l.box.x)
+            .unit("Btom", "#Pxl", l.box.maxY()).unit("Rght", "#Pxl", l.box.maxX());
+        e.object("keyOriginShapeBBox", std::move(bbox));
+        auto point = [](double x, double y) { Desc p("Pnt "); p.number("Hrzn", x).number("Vrtc", y); return p; };
+        if (l.kind == LiveShape::Kind::Rectangle) {
+            Desc corners("null");
+            corners.object("rectangleCornerA", point(l.box.x, l.box.y)).object("rectangleCornerB", point(l.box.maxX(), l.box.y))
+                   .object("rectangleCornerC", point(l.box.maxX(), l.box.maxY())).object("rectangleCornerD", point(l.box.x, l.box.maxY()));
+            e.object("keyOriginBoxCorners", std::move(corners));
+        }
+        Desc transform("Trnf");
+        transform.o.name = "Transform";
+        transform.number("xx", 1).number("xy", 0).number("yx", 0).number("yy", 1).number("tx", 0).number("ty", 0);
+        e.object("Trnf", std::move(transform));
+        e.integer("keyOriginIndex", l.group);
+        entries.push_back(std::move(e));
+    }
+    Desc root("null");
+    root.list("keyDescriptorList", std::move(entries));
+    psd::BigEndianWriter w;
+    w.write_u32(1);
+    w.write_u32(16);
+    psd::write_descriptor(w, root.o);
+    auto bytes = w.bytes();
+    pad4(bytes);
+    return bytes;
+}
+
+std::optional<std::vector<LiveShape>> parseVectorOrigination(const std::vector<uint8_t>& payload) {
+    try {
+        psd::BigEndianReader r(payload);
+        uint32_t version = r.read_u32();
+        if (version == 1) version = r.read_u32();
+        if (version != 16) return std::nullopt;
+        const psd::DescriptorObject d = psd::read_descriptor(r);
+        auto list = psd::descriptor_value(d, "keyDescriptorList");
+        if (!list || list->type != psd::DescriptorValue::Type::List) return std::nullopt;
+        std::vector<LiveShape> out;
+        for (const auto& item : list->list_value) {
+            if (item.type != psd::DescriptorValue::Type::Object || !item.object_value) continue;
+            const auto& e = *item.object_value;
+            const int type = int(psd::descriptor_number(e, "keyOriginType", -1));
+            if (type != 1 && type != 2 && type != 5) continue;   // lines and custom shapes: not modelled here
+            // Turned or sheared since it was drawn: its box no longer says where it is.
+            if (auto t = psd::descriptor_object(e, "Trnf")) {
+                const double xx = psd::descriptor_number(*t, "xx", 1), xy = psd::descriptor_number(*t, "xy", 0), yx = psd::descriptor_number(*t, "yx", 0),
+                             yy = psd::descriptor_number(*t, "yy", 1), tx = psd::descriptor_number(*t, "tx", 0), ty = psd::descriptor_number(*t, "ty", 0);
+                if (std::abs(xx - 1) > 1e-9 || std::abs(xy) > 1e-9 || std::abs(yx) > 1e-9 || std::abs(yy - 1) > 1e-9 || std::abs(tx) > 1e-9 || std::abs(ty) > 1e-9) continue;
+            }
+            LiveShape l;
+            l.kind = type == 5 ? LiveShape::Kind::Ellipse : LiveShape::Kind::Rectangle;
+            l.group = int32_t(psd::descriptor_number(e, "keyOriginIndex", 0));
+            if (auto b = psd::descriptor_object(e, "keyOriginShapeBBox")) {
+                const double top = psd::descriptor_number(*b, "Top ", 0), left = psd::descriptor_number(*b, "Left", 0);
+                const double bottom = psd::descriptor_number(*b, "Btom", 0), right = psd::descriptor_number(*b, "Rght", 0);
+                l.box = Rect(left, top, right - left, bottom - top);
+            } else continue;
+            if (auto radii = psd::descriptor_object(e, "keyOriginRRectRadii"))
+                l.radii = {psd::descriptor_number(*radii, "topLeft", 0), psd::descriptor_number(*radii, "topRight", 0),
+                           psd::descriptor_number(*radii, "bottomRight", 0), psd::descriptor_number(*radii, "bottomLeft", 0)};
+            out.push_back(l);
+        }
+        return out;
+    } catch (std::exception&) { return std::nullopt; }
+}
+
+// ---- Path operations ---------------------------------------------------------------------------------------------
+
+int32_t addShapeComponent(VectorPath& path, const VectorPath& added, VectorPath::Op op) {
+    int32_t group = 0;
+    for (const auto& s : path.subpaths) group = std::max(group, s.group + 1);
+    for (auto s : added.subpaths) {
+        s.group = group;
+        s.op = op;
+        path.subpaths.push_back(std::move(s));
+    }
+    return group;
+}
+
+void setComponentOp(VectorPath& path, int subpath, VectorPath::Op op) {
+    if (subpath < 0 || subpath >= int(path.subpaths.size())) return;
+    // The run of consecutive subpaths sharing its group (the renderer's shape group).
+    const int32_t group = path.subpaths[size_t(subpath)].group;
+    int first = subpath, last = subpath;
+    while (first > 0 && path.subpaths[size_t(first - 1)].group == group) first--;
+    while (last + 1 < int(path.subpaths.size()) && path.subpaths[size_t(last + 1)].group == group) last++;
+    for (int i = first; i <= last; i++) path.subpaths[size_t(i)].op = op;
+}
+
+std::vector<Point> simplifyLoop(const std::vector<Point>& loop, double tolerance) {
+    if (loop.size() < 4) return loop;
+    std::vector<bool> keep(loop.size(), false);
+    // Split at the point farthest from the first, so both halves are open polylines.
+    size_t far = 0;
+    double best = -1;
+    for (size_t i = 1; i < loop.size(); i++) { const double d = std::hypot(loop[i].x - loop[0].x, loop[i].y - loop[0].y); if (d > best) { best = d; far = i; } }
+    // Iterative Douglas-Peucker (a traced outline can have tens of thousands of points).
+    std::vector<std::pair<size_t, size_t>> todo{{0, far}, {far, loop.size()}};
+    keep[0] = keep[far] = true;
+    while (!todo.empty()) {
+        auto [a, b] = todo.back();
+        todo.pop_back();
+        if (b <= a + 1) continue;
+        const Point p = loop[a], q = loop[b % loop.size()];
+        const double len = std::hypot(q.x - p.x, q.y - p.y);
+        double worst = -1; size_t at = a;
+        for (size_t i = a + 1; i < b; i++) {
+            const Point r = loop[i];
+            const double d = len > 1e-9 ? std::abs((q.x - p.x) * (p.y - r.y) - (p.x - r.x) * (q.y - p.y)) / len : std::hypot(r.x - p.x, r.y - p.y);
+            if (d > worst) { worst = d; at = i; }
+        }
+        if (worst > tolerance) { keep[at] = true; todo.push_back({a, at}); todo.push_back({at, b}); }
+    }
+    std::vector<Point> out;
+    for (size_t i = 0; i < loop.size(); i++) if (keep[i]) out.push_back(loop[i]);
+    return out;
+}
+
+VectorPath mergeShapeComponents(const VectorPath& path) {
+    VectorPath out;
+    out.inverted = path.inverted;
+    const Rect b = pathBounds(path);
+    if (!(b.width > 0) || !(b.height > 0) || !std::isfinite(b.width) || !std::isfinite(b.height)) return out;
+    // Drawn at up to 8x over the path's bounds (at most 4096 pixels a side), traced where it is half covered.
+    const double scale = std::min(8.0, 4096.0 / std::max(b.width, b.height));
+    const Rect region(std::floor(b.x) - 1, std::floor(b.y) - 1, std::ceil(b.width) + 3, std::ceil(b.height) + 3);
+    const int w = std::max(1, int(std::ceil(region.width * scale))), h = std::max(1, int(std::ceil(region.height * scale)));
+    VectorPath plain = path;
+    plain.inverted = false;
+    const auto coverage = rasterizeVectorMask(plain, region, scale, w, h);
+    bool tooDetailed = false;
+    const auto loops = selectionOutline(*coverage, &tooDetailed);
+    for (const auto& loop : loops) {
+        // The stair steps of the traced pixel edges go (a pixel's diagonal is under 1.5); the corners stay.
+        const auto points = simplifyLoop(loop, 1.5);
+        if (points.size() < 3) continue;
+        VectorPath::Subpath sub;
+        sub.closed = true;
+        sub.op = VectorPath::Op::Add;   // one group: its loops fill even-odd, so holes stay holes
+        sub.group = 0;
+        for (const Point& q : points) {
+            const double x = region.x + q.x / scale, y = region.y + q.y / scale;
+            sub.knots.push_back(corner(x, y));
+        }
+        out.subpaths.push_back(std::move(sub));
+    }
+    return out;
+}
+
+// ---- Vector masks on ordinary layers ---------------------------------------------------------------------------
+
+bool hasLayerVectorMask(const Layer& layer) {
+    return !layer.isGroup && !isVectorShapeLayer(layer) && (block(layer, "vmsk") || block(layer, "vsms"));
+}
+
+void setLayerVectorMask(Layer& layer, const Document& document, const std::optional<VectorPath>& path) {
+    auto carry = layer.psdCarry ? std::make_shared<PsdLayerCarry>(*layer.psdCarry) : std::make_shared<PsdLayerCarry>();
+    if (!layer.psdCarry) {
+        carry->placement = layer.transform;
+        carry->contentHash = psdContentHash(layer.asset ? layer.asset->image.get() : nullptr);
+    }
+    auto& blocks = carry->blocks;
+    const bool had = std::any_of(blocks.begin(), blocks.end(), [](const PsdBlock& b) { return b.key == "vmsk" || b.key == "vsms"; });
+    blocks.erase(std::remove_if(blocks.begin(), blocks.end(), [](const PsdBlock& b) { return b.key == "vmsk" || b.key == "vsms"; }), blocks.end());
+    if (path) {
+        // Stored where the carry's placement says the layer was (layerVectorMask carries it to where it now is).
+        VectorPath stored = *path;
+        stored.disabled = false;
+        const LayerTransform& now = layer.transform;
+        const LayerTransform& at = carry->placement;
+        const bool moved = !(at.origin == now.origin && at.size == now.size && at.rotation == now.rotation && at.flipX == now.flipX && at.flipY == now.flipY);
+        if (moved) {
+            const int w0 = std::max(1, int(std::lround(at.size.width))), h0 = std::max(1, int(std::lround(at.size.height)));
+            for (auto& s : stored.subpaths)
+                for (auto& k : s.knots) {
+                    auto map = [&](double& x, double& y) { const Point p = mapLayerPoint({x, y}, now, layer.pixelWidth(), layer.pixelHeight(), at, w0, h0); x = p.x; y = p.y; };
+                    map(k.inX, k.inY); map(k.x, k.y); map(k.outX, k.outY);
+                }
+        }
+        int cw = 0, ch = 0;
+        pathCanvas(document, cw, ch);
+        blocks.push_back({"vmsk", authorVectorMask(stored, cw, ch)});
+    } else if (had && carry->maskData.size() > 17 && (carry->maskData[17] & 0x08)) {
+        // The stored mask section described the vector mask's derived plane: it goes with it.
+        carry->maskData.clear();
+    }
+    layer.psdCarry = std::move(carry);
+}
 } // namespace compositor

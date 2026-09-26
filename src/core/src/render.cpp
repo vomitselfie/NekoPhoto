@@ -673,15 +673,35 @@ struct Renderer {
             auto band = rasterizeVectorStroke(path, *stroke, region, scale, outWidth, outHeight);
             // A shape's feather softens its stroke too (Photoshop feathers the whole rendered shape).
             if (maskParameters && maskParameters->vectorFeather) applyMaskParameters(*band, std::nullopt, maskParameters->vectorFeather, scale);
-            const uint8_t colour[4] = {stroke->r, stroke->g, stroke->b, 255};
             const float opacity = float(clamp(layer.opacity, 0.0, 1.0)) * stroke->opacity;
             const BlendMode mode = blendOf(layer);
+            // A gradient or pattern stroke: its colours over the region (a gradient aligned with the shape's bounds).
+            ImagePtr paint;
+            if (stroke->paint.kind != VectorPaint::Kind::Solid) {
+                double x0 = 1e300, y0 = 1e300, x1 = -1e300, y1 = -1e300;
+                for (auto& s : path.subpaths) for (auto& k : s.knots) for (auto [px, py] : {std::pair{k.x, k.y}, {k.inX, k.inY}, {k.outX, k.outY}}) {
+                    x0 = std::min(x0, px); x1 = std::max(x1, px); y0 = std::min(y0, py); y1 = std::max(y1, py);
+                }
+                paint = renderVectorPaint(stroke->paint, document, x1 > x0 ? Rect(x0, y0, x1 - x0, y1 - y0) : Rect(), region, scale, outWidth, outHeight);
+            }
             parallelRows(0, outHeight, [&](int ya, int yb) {
                 for (int y = ya; y < yb; y++) {
                     const uint8_t* b = band->row(y);
                     const uint8_t* c = coverageWithoutVector ? coverageWithoutVector->row(y) : nullptr;
+                    const uint8_t* p = paint ? paint->row(y) : nullptr;
                     uint8_t* d = target.row(y);
-                    for (int x = 0; x < outWidth; x++) if (b[x]) compositePixelAt(mode, colour, b[x] / 255.0f * opacity * (c ? c[x] / 255.0f : 1.0f), d + x * 4, docX(region, scale, x), docY(region, scale, y));
+                    for (int x = 0; x < outWidth; x++) {
+                        if (!b[x]) continue;
+                        uint8_t colour[4] = {stroke->r, stroke->g, stroke->b, 255};
+                        float alpha = 1;
+                        if (p) {
+                            const uint8_t* q = p + x * 4;
+                            if (!q[3]) continue;
+                            for (int k = 0; k < 3; k++) colour[k] = uint8_t(std::min(255, (q[k] * 255 + q[3] / 2) / q[3]));
+                            alpha = q[3] / 255.0f;
+                        }
+                        compositePixelAt(mode, colour, b[x] / 255.0f * opacity * alpha * (c ? c[x] / 255.0f : 1.0f), d + x * 4, docX(region, scale, x), docY(region, scale, y));
+                    }
                 }
             });
         };
