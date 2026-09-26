@@ -403,7 +403,10 @@ int main(int argc, char** argv) {
             app::EditorSession* s = window.session();
             if (adjustments.contains(name)) (new app::PixelAdjustmentDialog(s, adjustments.value(name), &window))->show();
             else if (filters.contains(name)) (new app::FilterDialog(s, filters.value(name), &window))->show();
-            else if (name == "content-aware-scale") (new app::ContentAwareScaleDialog(s, &window))->show();
+            else if (name == "content-aware-scale") {
+                for (const auto& l : s->document()->layers) if (l.name == "Background") s->selectLayer(l.id);   // an image layer to scale
+                (new app::ContentAwareScaleDialog(s, &window))->show();
+            }
             else if (name == "gmic") (new app::GmicDialog(s, &window))->show();
             else if (name == "content-fill") {
                 // A selection in the middle of the canvas, then the dialog with Custom sampling.
