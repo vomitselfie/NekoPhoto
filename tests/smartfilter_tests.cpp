@@ -3,6 +3,11 @@
 // Photoshop 27.8, and the calibration facts in Patchy's docs/smart-filters-native.md.
 #include "check.h"
 #include "compositor/smartfilter.h"
+#include "compositor/png.h"
+#include "compositor/psd.h"
+#include "compositor/psd_writer.h"
+#include "compositor/render.h"
+#include "compositor/smartobject_edit.h"
 
 #include <array>
 #include <cstdlib>
@@ -369,6 +374,103 @@ TEST_CASE(stack_blend_mode_uses_the_core_blend) {
     REQUIRE(out);
     CHECK_NEAR(double(at(*out, 2, 2)[0]), 96.0, 1.0);
     CHECK_EQ(int(at(*out, 0, 2)[0]), 0);
+}
+
+namespace {
+
+Document filteredDocument() {
+    Document doc(60, 40);
+    SmartObjectContents c;
+    auto image = std::make_shared<Image>(20, 10);
+    image->fill(0, 200, 0, 255);
+    c.image = image;
+    encodePngImage(*c.image, c.bytes);
+    c.fileName = "chip.png";
+    auto source = makeSmartObjectSource(std::move(c));
+    doc.smartObjects[source->id] = source;
+    doc.layers.push_back(smartObjectLayer(source, {20, 15, 40, 15, 40, 25, 20, 25}, "Chip"));
+    return doc;
+}
+
+} // namespace
+
+TEST_CASE(edit_reorder_and_mask_a_stack_then_round_trip) {
+    Document doc = filteredDocument();
+    std::string error;
+    SmartFilterEntry blur, mosaic;
+    blur.parameters = smartfilter::GaussianBlur{2};
+    mosaic.parameters = smartfilter::Mosaic{4};
+    REQUIRE(addSmartFilter(doc, doc.layers[0], blur, &error));
+    REQUIRE(addSmartFilter(doc, doc.layers[0], mosaic, &error));
+    auto stack = smartFilterStackOf(doc, doc.layers[0]);
+    REQUIRE(stack && stack->supported && stack->entries.size() == 2);
+    CHECK(!stack->mask || stack->mask->at(0, 0) == 255);
+    // Reorder, edit, switch off, blend, a mask and the stack's switches.
+    std::swap(stack->entries[0], stack->entries[1]);
+    stack->entries[1].parameters = smartfilter::GaussianBlur{5};
+    stack->entries[1].opacity = 0.5;
+    stack->entries[1].blend = BlendMode::Multiply;
+    stack->entries[0].enabled = false;
+    auto mask = std::make_shared<GrayImage>(60, 40, 255);
+    for (int y = 0; y < 40; y++) for (int x = 0; x < 30; x++) mask->at(x, y) = 0;
+    stack->mask = mask;
+    stack->maskBounds = {0, 0, 60, 40};
+    stack->maskEnabled = false;
+    REQUIRE(setSmartFilters(doc, doc.layers[0], *stack, &error));
+    auto check = [&](const Document& d) {
+        auto again = smartFilterStackOf(d, d.layers[0]);
+        REQUIRE(again && again->supported && again->entries.size() == 2);
+        CHECK(std::holds_alternative<smartfilter::Mosaic>(again->entries[0].parameters) && !again->entries[0].enabled);
+        CHECK(again->entries[1].parameters == SmartFilterParameters(smartfilter::GaussianBlur{5}));
+        CHECK(std::abs(again->entries[1].opacity - 0.5) < 1e-6 && again->entries[1].blend == BlendMode::Multiply);
+        CHECK(!again->maskEnabled && again->enabled);
+        REQUIRE(again->mask);
+        const int lx = 10 - again->maskBounds.x, rx = 50 - again->maskBounds.x, ly = 20 - again->maskBounds.y;
+        CHECK_EQ(int(again->mask->at(lx, ly)), 0);
+        CHECK_EQ(int(again->mask->at(rx, ly)), 255);
+    };
+    check(doc);
+    // Through PSD, the stack and its mask as they were.
+    auto bytes = encodePsd(doc, {}, nullptr, &error);
+    auto back = importPsdBytes(bytes, &error);
+    REQUIRE(back.has_value());
+    REQUIRE(back->document.layers[0].isLiveSmartObject() && !back->document.layers[0].smartObject->locked());
+    check(back->document);
+    // Out-of-range settings are held to what a file may carry.
+    stack = smartFilterStackOf(doc, doc.layers[0]);
+    stack->entries[1].parameters = smartfilter::GaussianBlur{5000};
+    REQUIRE(setSmartFilters(doc, doc.layers[0], *stack, &error));
+    CHECK(smartFilterStackOf(doc, doc.layers[0])->entries[1].parameters == SmartFilterParameters(smartfilter::GaussianBlur{1000}));
+    // An entry not drawn here is refused.
+    stack->entries[0].parameters = std::monostate{};
+    CHECK(!setSmartFilters(doc, doc.layers[0], *stack, &error));
+}
+
+TEST_CASE(clearing_a_stack_removes_its_filterfx_and_cache_record) {
+    Document doc = filteredDocument();
+    std::string error;
+    SmartFilterEntry blur;
+    blur.parameters = smartfilter::GaussianBlur{2};
+    REQUIRE(addSmartFilter(doc, doc.layers[0], blur, &error));
+    const std::string placedId = doc.layers[0].smartObject->placedId;
+    REQUIRE(setSmartFilters(doc, doc.layers[0], SmartFilterStack{}, &error));
+    const Layer& layer = doc.layers[0];
+    CHECK(layer.isLiveSmartObject() && !layer.smartObject->locked());
+    CHECK(!smartObjectFiltered(*layer.smartObject));
+    CHECK(!smartFilterStackOf(doc, layer).has_value());
+    for (const PsdBlock& b : doc.psdCarry->globals) CHECK(b.key != "FEid" && b.key != "FXid");
+    CHECK(!findSmartFilterCache(doc.psdCarry->globals, placedId).has_value());
+    // Drawn unfiltered: nothing past its edge.
+    auto out = renderFlattened(doc);
+    CHECK_EQ(int(out->pixel(18, 20)[3]), 0);
+    CHECK_EQ(int(out->pixel(25, 20)[3]), 255);
+    auto bytes = encodePsd(doc, {}, nullptr, &error);
+    auto back = importPsdBytes(bytes, &error);
+    REQUIRE(back.has_value());
+    CHECK(back->document.layers[0].isLiveSmartObject() && !smartObjectFiltered(*back->document.layers[0].smartObject));
+    // And a filter can go on again.
+    REQUIRE(addSmartFilter(doc, doc.layers[0], blur, &error));
+    CHECK(smartFilterStackOf(doc, doc.layers[0])->supported);
 }
 
 TEST_MAIN()

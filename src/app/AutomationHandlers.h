@@ -56,6 +56,11 @@ QJsonObject layerJson(const compositor::Layer& layer, int depth);
 /// (left, center, right), lineSpacing, letterSpacing.
 compositor::LayerText textFromParams(const QJsonObject& p, compositor::LayerText base);
 QJsonArray layersJson(const compositor::Document& doc);
+/// A smart object's Smart Filters (smartObject.filters): the stack, its mask and each entry in running order.
+QJsonObject smartFiltersJson(const EditorSession& session, const compositor::Uuid& id);
+/// Smart Filter settings from request keys (radius, threshold, amount, ...) over `parameters`; keys the filter does
+/// not take are ignored.
+void smartFilterSettingsFrom(const QJsonObject& p, compositor::SmartFilterParameters& parameters);
 QString base64Png(const compositor::Image& image);
 /// `image` as PNG: written to params.path when given (result carries the path), else base64 in "png".
 QJsonObject deliverPng(const compositor::Image& image, const QJsonObject& p, QJsonObject result);

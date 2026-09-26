@@ -51,6 +51,7 @@ qt_add_executable(nekophoto
     EditorSessionQuickSelect.cpp
     EditorSessionSelection.cpp
     EditorSessionSmartObjects.cpp
+    EditorSessionSmartFilters.cpp
     EditorSessionWatch.cpp
     EditorSessionTransform.cpp
     CanvasWidget.h
@@ -74,6 +75,8 @@ qt_add_executable(nekophoto
     BrushPicker.cpp
     FilterDialog.h
     FilterDialog.cpp
+    SmartFilterDialog.h
+    SmartFilterDialog.cpp
     CameraRawDialog.h
     CameraRawDialog.cpp
     PixelDialog.h

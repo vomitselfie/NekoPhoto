@@ -125,7 +125,12 @@ macOS opens; projects here hold up to a gigapixel), `document.export` (.psd, lay
 Smart objects: `smartObject.convert` (the selection or `ids`), `smartObject.place` (`path`), `smartObject.replace`
 (`path`), `smartObject.rasterize`, `smartObject.editContents` (opens a tab) and `smartObject.commit` (in that tab).
 `smartObject.addFilter` adds a Smart Filter (any of the thirteen drawn here, with its settings, opacity and blend) on
-top of a smart object's stack. `layers.cage` and `layers.setCage` read and apply a free warp cage (16 control points; a smart object keeps it as its
+top of a smart object's stack. `smartObject.filters` lists the stack (entries by `index` in running order, 0 applied
+first; each with its `kind`, `settings`, `enabled`, `opacity`, `blend`, and `drawn` false for one NekoPhoto does not draw,
+which makes the stack read-only), `smartObject.setFilter` changes an entry's settings, switch, opacity or blend (no
+`index`: `enabled` switches the whole stack), `smartObject.moveFilter` (`index`, `to`), `smartObject.removeFilter`
+(`index`, or `all` to clear them), and `smartObject.filterMask` (`action`: enable, disable, invert, delete, or select
+to paint it with `brush.stroke` `mask` and the other mask tools, `show` to see it; deselect, or selecting a layer, ends that). `layers.cage` and `layers.setCage` read and apply a free warp cage (16 control points; a smart object keeps it as its
 own Custom warp). `layers.warp` bends a layer with one of Photoshop's fifteen presets (`style`, `bend`, `horizontal`, `vertical`,
 `orientation`): Warp Text on text (`none` removes it), a mesh baked into a smart object's placement, bent pixels
 otherwise.

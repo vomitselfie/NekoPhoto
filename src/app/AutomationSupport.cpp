@@ -240,4 +240,72 @@ const Layer& LayerOrActive::operator()(const QJsonObject& p) const {
     return *l;
 }
 
+// ---- Smart Filters --------------------------------------------------------------------------------------
+
+void smartFilterSettingsFrom(const QJsonObject& p, SmartFilterParameters& parameters) {
+    using namespace smartfilter;
+    auto d = [&](const char* key, double& v) { if (has(p, key)) v = num(p, key); };
+    auto i = [&](const char* key, int32_t& v) { if (has(p, key)) v = int32_t(std::lround(num(p, key))); };
+    auto b = [&](const char* key, bool& v) { if (has(p, key)) v = flag(p, key, v); };
+    std::visit([&](auto& f) {
+        using T = std::decay_t<decltype(f)>;
+        if constexpr (std::is_same_v<T, GaussianBlur> || std::is_same_v<T, HighPass> || std::is_same_v<T, Median> || std::is_same_v<T, BoxBlur>) d("radius", f.radius);
+        else if constexpr (std::is_same_v<T, DustAndScratches>) { i("radius", f.radius); i("threshold", f.threshold); }
+        else if constexpr (std::is_same_v<T, SurfaceBlur>) { d("radius", f.radius); i("threshold", f.threshold); }
+        else if constexpr (std::is_same_v<T, UnsharpMask>) { d("amount", f.amount); d("radius", f.radius); i("threshold", f.threshold); }
+        else if constexpr (std::is_same_v<T, MotionBlur>) { i("angle", f.angle); i("distance", f.distance); }
+        else if constexpr (std::is_same_v<T, PlasticWrap>) { i("highlight", f.highlight); i("detail", f.detail); i("smoothness", f.smoothness); }
+        else if constexpr (std::is_same_v<T, Mosaic>) i("cellSize", f.cellSize);
+        else if constexpr (std::is_same_v<T, Emboss>) { i("angle", f.angle); i("height", f.height); i("amount", f.amount); }
+        else if constexpr (std::is_same_v<T, RadialBlur>) { i("amount", f.amount); i("samples", f.samples); }
+        else if constexpr (std::is_same_v<T, AddNoise>) { d("amount", f.amount); b("gaussian", f.gaussian); b("monochromatic", f.monochromatic); i("seed", f.seed); }
+    }, parameters);
+}
+
+namespace {
+QJsonObject settingsJson(const SmartFilterParameters& parameters) {
+    using namespace smartfilter;
+    QJsonObject o;
+    std::visit([&](const auto& f) {
+        using T = std::decay_t<decltype(f)>;
+        if constexpr (std::is_same_v<T, GaussianBlur> || std::is_same_v<T, HighPass> || std::is_same_v<T, Median> || std::is_same_v<T, BoxBlur>) o["radius"] = f.radius;
+        else if constexpr (std::is_same_v<T, DustAndScratches>) { o["radius"] = f.radius; o["threshold"] = f.threshold; }
+        else if constexpr (std::is_same_v<T, SurfaceBlur>) { o["radius"] = f.radius; o["threshold"] = f.threshold; }
+        else if constexpr (std::is_same_v<T, UnsharpMask>) { o["amount"] = f.amount; o["radius"] = f.radius; o["threshold"] = f.threshold; }
+        else if constexpr (std::is_same_v<T, MotionBlur>) { o["angle"] = f.angle; o["distance"] = f.distance; }
+        else if constexpr (std::is_same_v<T, PlasticWrap>) { o["highlight"] = f.highlight; o["detail"] = f.detail; o["smoothness"] = f.smoothness; }
+        else if constexpr (std::is_same_v<T, Mosaic>) o["cellSize"] = f.cellSize;
+        else if constexpr (std::is_same_v<T, Emboss>) { o["angle"] = f.angle; o["height"] = f.height; o["amount"] = f.amount; }
+        else if constexpr (std::is_same_v<T, RadialBlur>) { o["amount"] = f.amount; o["samples"] = f.samples; }
+        else if constexpr (std::is_same_v<T, AddNoise>) { o["amount"] = f.amount; o["gaussian"] = f.gaussian; o["monochromatic"] = f.monochromatic; o["seed"] = f.seed; }
+    }, parameters);
+    return o;
+}
+} // namespace
+
+QJsonObject smartFiltersJson(const EditorSession& session, const Uuid& id) {
+    QJsonObject out{{"id", qs(id)}};
+    auto stack = session.smartFilters(id);
+    if (!stack) { out["filters"] = QJsonArray(); return out; }
+    out["enabled"] = stack->enabled;
+    out["editable"] = session.canEditSmartFilters(id);
+    int masked = 0;
+    if (stack->mask) for (size_t k = 0; k < stack->mask->byteCount(); k++) masked += stack->mask->data()[k] < 255;
+    out["mask"] = QJsonObject{{"enabled", stack->maskEnabled}, {"outside", int(stack->maskDefault)}, {"hasPixels", stack->mask != nullptr},
+                              {"maskedPixels", masked}, {"painting", session.filterMaskOwner() == id}, {"shown", session.filterMaskOwner() == id && session.filterMaskShown()}};
+    static const char* kinds[] = {"", "gaussian blur", "high pass", "median", "dust and scratches", "surface blur", "unsharp mask",
+                                  "motion blur", "plastic wrap", "mosaic", "emboss", "box blur", "radial blur", "add noise"};
+    QJsonArray filters;
+    for (size_t i = 0; i < stack->entries.size(); i++) {
+        const SmartFilterEntry& e = stack->entries[i];
+        const bool drawn = !std::holds_alternative<std::monostate>(e.parameters);
+        QJsonObject f{{"index", int(i)}, {"name", qs(e.name)}, {"drawn", drawn}, {"enabled", e.enabled},
+                      {"opacity", std::round(e.opacity * 1000) / 10}, {"blend", QString::fromUtf8(blendModeName(e.blend))}};
+        if (drawn) { f["kind"] = kinds[e.parameters.index()]; f["settings"] = settingsJson(e.parameters); }
+        filters.append(f);
+    }
+    out["filters"] = filters;
+    return out;
+}
+
 } // namespace app::rpc

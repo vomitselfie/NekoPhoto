@@ -131,6 +131,20 @@ const MethodDoc methodDocs[] = {
      "highlight:number Plastic Wrap; detail:number Plastic Wrap; smoothness:number Plastic Wrap; cellSize:number Mosaic pixels; height:number Emboss pixels; "
      "samples:number Radial Blur 8, 16 or 32; gaussian:bool Add Noise distribution; monochromatic:bool Add Noise; seed:number Add Noise; "
      "opacity:number=100 Percent; blend:<blend> How it blends over what is below it in the stack"},
+    {"smartObject.filters", "A smart object's Smart Filters: the stack's switch, its shared mask, and each entry in running order (index 0 is applied first) with its settings, switch, opacity and blend; drawn false marks one NekoPhoto does not draw (the stack is then read-only).",
+     "id:layer The smart object layer (default: active)"},
+    {"smartObject.setFilter", "Change one Smart Filter (its settings, switch, opacity, blend), or with no index switch the whole stack; one undo step. Settings not given keep their values.",
+     "id:layer The smart object layer (default: active); index:integer Entry in running order (smartObject.filters); enabled:bool On or off (the entry, or the stack without index); radius:number Pixels (blurs, high pass, median, dust and scratches, surface blur, unsharp mask); threshold:number Levels (dust and scratches, surface blur, unsharp mask); "
+     "amount:number Percent (unsharp mask, emboss, add noise) or Radial Blur's amount; angle:number Degrees (motion blur, emboss); distance:number Motion Blur pixels; "
+     "highlight:number Plastic Wrap; detail:number Plastic Wrap; smoothness:number Plastic Wrap; cellSize:number Mosaic pixels; height:number Emboss pixels; "
+     "samples:number Radial Blur 8, 16 or 32; gaussian:bool Add Noise distribution; monochromatic:bool Add Noise; seed:number Add Noise; "
+     "opacity:number Percent; blend:<blend> How it blends over what is below it in the stack"},
+    {"smartObject.removeFilter", "Delete one Smart Filter, or all of them (Clear Smart Filters); the last one takes the stack and its mask with it.",
+     "id:layer The smart object layer (default: active); index:integer Entry in running order; all:bool=false Every Smart Filter"},
+    {"smartObject.moveFilter", "Move a Smart Filter to another place in the running order.",
+     "id:layer The smart object layer (default: active); index:integer! Entry to move; to:integer! Its new place (0 runs first)"},
+    {"smartObject.filterMask", "The Smart Filters' shared mask: turn it on or off, invert it, delete it (all white), or select it for painting (brush.stroke with mask true, fills, gradients and filters then work on it; selecting a layer ends that).",
+     "id:layer The smart object layer (default: active); action:(enable|disable|invert|delete|select|deselect)! What to do; show:bool=false With select: show the mask on the canvas"},
     {"layers.warp", "Warp a layer with one of Photoshop's presets: Warp Text on text (style none removes it), a mesh baked into a smart object's placement (redrawn from its contents), bent pixels otherwise.",
      "id:layer The layer (default the active one); style:string arc, arc lower, arc upper, arch, bulge, shell lower, shell upper, flag, wave, fish, rise, fisheye, inflate, squeeze, twist, or none (text); "
      "bend:number=50 Percent -100..100; horizontal:number=0 Horizontal distortion, percent; vertical:number=0 Vertical distortion, percent; orientation:(horizontal|vertical)=horizontal The warp's axis"},

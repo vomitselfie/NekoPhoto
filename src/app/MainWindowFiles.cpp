@@ -263,7 +263,7 @@ bool MainWindow::editSmartObjectContents(QString* errorOut) {
 
 bool MainWindow::save(bool asNew) {
     if (!session_->hasDocument()) return false;
-    session_->endQuickMask();
+    session_->endTemporaryLayers();
     // A smart object's contents go back to it (Save As saves them as a project of their own instead).
     if (!asNew && session_->smartObjectParent()) {
         QString error;
@@ -290,7 +290,7 @@ bool MainWindow::save(bool asNew) {
 }
 
 void MainWindow::exportPng() {
-    session_->endQuickMask();   // the Quick Mask layer is never written
+    session_->endTemporaryLayers();   // the Quick Mask and filter-mask layers are never written
     if (!session_->hasDocument()) return;
     QString suggested = QDir(QSettings().value("lastDir").toString()).filePath((session_->projectPath().isEmpty() ? QStringLiteral("Untitled") : QFileInfo(session_->projectPath()).completeBaseName()) + ".png");
     QString path = QFileDialog::getSaveFileName(this, tr("Export PNG"), suggested, tr("PNG image (*.png)"));
@@ -302,7 +302,7 @@ void MainWindow::exportPng() {
 }
 
 void MainWindow::exportPsd() {
-    session_->endQuickMask();   // the Quick Mask layer is never written
+    session_->endTemporaryLayers();   // the Quick Mask and filter-mask layers are never written
     if (!session_->hasDocument()) return;
     const compositor::Document& doc = *session_->document();
     if (doc.width > compositor::psdMaxSide || doc.height > compositor::psdMaxSide) {
@@ -347,7 +347,7 @@ void MainWindow::exportPsd() {
 }
 
 void MainWindow::exportSvg() {
-    session_->endQuickMask();   // the Quick Mask layer is never written
+    session_->endTemporaryLayers();   // the Quick Mask and filter-mask layers are never written
     if (!session_->hasDocument()) return;
     QString path = askExportPath(tr("Export SVG"), tr("SVG image (*.svg)"), {"svg"});
     if (path.isEmpty()) return;
@@ -371,7 +371,7 @@ QString MainWindow::askExportPath(const QString& title, const QString& filter, c
 }
 
 void MainWindow::exportJpeg() {
-    session_->endQuickMask();   // the Quick Mask layer is never written
+    session_->endTemporaryLayers();   // the Quick Mask and filter-mask layers are never written
     if (!session_->hasDocument()) return;
     auto flattened = session_->flattened();
     if (!flattened) return;
@@ -390,7 +390,7 @@ void MainWindow::exportJpeg() {
 }
 
 void MainWindow::exportWebp() {
-    session_->endQuickMask();   // the Quick Mask layer is never written
+    session_->endTemporaryLayers();   // the Quick Mask and filter-mask layers are never written
     if (!session_->hasDocument()) return;
     auto flattened = session_->flattened();
     if (!flattened) return;
@@ -404,7 +404,7 @@ void MainWindow::exportWebp() {
 }
 
 void MainWindow::exportTiff() {
-    session_->endQuickMask();   // the Quick Mask layer is never written
+    session_->endTemporaryLayers();   // the Quick Mask and filter-mask layers are never written
     if (!session_->hasDocument()) return;
     auto flattened = session_->flattened();
     if (!flattened) return;
@@ -415,6 +415,7 @@ void MainWindow::exportTiff() {
 }
 
 void MainWindow::exportTga() {
+    session_->endTemporaryLayers();   // the Quick Mask and filter-mask layers are never written
     if (!session_->hasDocument()) return;
     auto flattened = session_->flattened();
     if (!flattened) return;
@@ -425,6 +426,7 @@ void MainWindow::exportTga() {
 }
 
 void MainWindow::exportIco() {
+    session_->endTemporaryLayers();   // the Quick Mask and filter-mask layers are never written
     if (!session_->hasDocument()) return;
     auto flattened = session_->flattened();
     if (!flattened) return;

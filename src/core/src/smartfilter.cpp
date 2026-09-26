@@ -353,6 +353,7 @@ std::optional<std::vector<uint8_t>> replaceSmartFilterRecords(const std::vector<
         const std::string id = body.empty() || size_t(body[0]) + 1 > body.size() ? std::string() : std::string(body.begin() + 1, body.begin() + 1 + body[0]);
         const std::vector<uint8_t>* next = nullptr;
         for (auto& [pid, rec] : replacements) if (pid == id) next = &rec;
+        if (next && next->empty()) continue;   // dropped
         const std::span<const uint8_t> bytes = next ? std::span<const uint8_t>(*next) : body;
         w.write_u64(bytes.size());
         w.write_bytes(bytes);
@@ -549,28 +550,88 @@ std::optional<std::vector<uint8_t>> setPsdSmartFilterStack(const std::string& ke
     return std::nullopt;
 }
 
-bool addSmartFilter(Document& document, Layer& layer, const SmartFilterEntry& entry, std::string* error) {
+namespace {
+
+// The placement block without its 'filterFX' (the stack removed); none for a block that is not a SoLd / SoLE.
+std::optional<std::vector<uint8_t>> removePsdSmartFilterStack(const std::string& key, const std::vector<uint8_t>& payload) {
+    if (key != "SoLd" && key != "SoLE") return std::nullopt;
+    try {
+        psd::BigEndianReader r(payload);
+        if (r.read_bytes(4) != std::vector<uint8_t>{'s', 'o', 'L', 'D'}) return std::nullopt;
+        const uint32_t version = r.read_u32(), descriptorVersion = r.read_u32();
+        psd::DescriptorObject d = psd::read_descriptor(r);
+        const size_t tail = r.position();
+        d.values.erase("filterFX");
+        d.key_order.erase(std::remove_if(d.key_order.begin(), d.key_order.end(), [](const psd::DescriptorObject::KeyEntry& k) { return k.key == "filterFX"; }),
+                          d.key_order.end());
+        psd::BigEndianWriter w;
+        for (char c : std::string("soLD")) w.write_u8(uint8_t(c));
+        w.write_u32(version);
+        w.write_u32(descriptorVersion);
+        psd::write_descriptor(w, d);
+        w.write_bytes(std::span<const uint8_t>(payload.data() + tail, payload.size() - tail));
+        return w.bytes();
+    } catch (std::exception&) {}
+    return std::nullopt;
+}
+
+template <typename T> void clampTo(T& v, double lo, double hi) {
+    const double d = double(v);
+    v = T(std::isfinite(d) ? std::clamp(d, lo, hi) : lo);
+}
+
+} // namespace
+
+void clampSmartFilterParameters(SmartFilterParameters& parameters) {
+    using namespace smartfilter;
+    std::visit([&](auto& p) {
+        using T = std::decay_t<decltype(p)>;
+        if constexpr (std::is_same_v<T, GaussianBlur> || std::is_same_v<T, HighPass>) clampTo(p.radius, 0.1, 1000);
+        else if constexpr (std::is_same_v<T, Median>) clampTo(p.radius, 1, 500);
+        else if constexpr (std::is_same_v<T, DustAndScratches>) { clampTo(p.radius, 1, 500); clampTo(p.threshold, 0, 255); }
+        else if constexpr (std::is_same_v<T, SurfaceBlur>) { clampTo(p.radius, 1, 100); clampTo(p.threshold, 2, 255); }
+        else if constexpr (std::is_same_v<T, UnsharpMask>) { clampTo(p.amount, 1, 500); clampTo(p.radius, 0.1, 1000); clampTo(p.threshold, 0, 255); }
+        else if constexpr (std::is_same_v<T, MotionBlur>) { clampTo(p.angle, -360, 360); clampTo(p.distance, 1, 999); }
+        else if constexpr (std::is_same_v<T, PlasticWrap>) { clampTo(p.highlight, 0, 20); clampTo(p.detail, 1, 15); clampTo(p.smoothness, 1, 15); }
+        else if constexpr (std::is_same_v<T, Mosaic>) clampTo(p.cellSize, 2, 200);
+        else if constexpr (std::is_same_v<T, Emboss>) { clampTo(p.angle, -360, 360); clampTo(p.height, 1, 100); clampTo(p.amount, 1, 500); }
+        else if constexpr (std::is_same_v<T, BoxBlur>) clampTo(p.radius, 1, 2000);
+        else if constexpr (std::is_same_v<T, RadialBlur>) { clampTo(p.amount, 1, 100); p.samples = p.samples <= 8 ? 8 : p.samples <= 16 ? 16 : 32; }
+        else if constexpr (std::is_same_v<T, AddNoise>) { clampTo(p.amount, 0.1, 400); clampTo(p.seed, 0, 999999999); }
+    }, parameters);
+}
+
+std::optional<SmartFilterStack> smartFilterStackOf(const Document& document, const Layer& layer) {
+    if (!layer.smartObject) return std::nullopt;
+    std::optional<SmartFilterStack> stack;
+    for (const PsdBlock& b : layer.smartObject->psdBlocks)
+        if ((stack = parseSmartFilterStack(b.key, b.data))) break;
+    if (!stack) return std::nullopt;
+    auto cache = document.psdCarry ? findSmartFilterCache(document.psdCarry->globals, layer.smartObject->placedId) : std::nullopt;
+    if (cache) { stack->mask = cache->mask; stack->maskBounds = cache->maskBounds; }
+    else stack->supported = false;
+    return stack;
+}
+
+bool setSmartFilters(Document& document, Layer& layer, const SmartFilterStack& wanted, std::string* error) {
     auto fail = [&](const char* why) { if (error) *error = why; return false; };
     if (!layer.isLiveSmartObject()) return fail("Smart Filters go on a smart object: convert the layer first.");
     SmartObjectInstance& so = *layer.smartObject;
     if (so.locked()) return fail("This smart object shows the preview its file carried; its filters cannot be changed here.");
-    if (std::holds_alternative<std::monostate>(entry.parameters)) return fail("That filter is not one NekoPhoto draws as a Smart Filter.");
     auto source = document.smartObjects.find(so.sourceId);
     if (source == document.smartObjects.end() || !source->second->image) return fail("Its contents cannot be read.");
-    // The stack so far, if any.
-    SmartFilterStack stack;
-    stack.supported = true;
-    bool had = false;
-    for (const PsdBlock& b : so.psdBlocks)
-        if (auto existing = parseSmartFilterStack(b.key, b.data)) { stack = *existing; had = true; break; }
-    if (had && !stack.supported) return fail("Its Smart Filters include one NekoPhoto does not draw; they cannot be added to here.");
-    std::optional<SmartFilterCache> cache;
-    if (had) {
-        cache = document.psdCarry ? findSmartFilterCache(document.psdCarry->globals, so.placedId) : std::nullopt;
-        if (!cache) return fail("Its Smart Filters' cache cannot be read.");
+    if (auto existing = smartFilterStackOf(document, layer); existing && !existing->supported)
+        return fail("Its Smart Filters include one NekoPhoto does not draw (or a cache it cannot read); they cannot be changed here.");
+    SmartFilterStack stack = wanted;
+    for (SmartFilterEntry& e : stack.entries) {
+        if (std::holds_alternative<std::monostate>(e.parameters)) return fail("That filter is not one NekoPhoto draws as a Smart Filter.");
+        clampSmartFilterParameters(e.parameters);
+        e.opacity = std::isfinite(e.opacity) ? std::clamp(e.opacity, 0.0, 1.0) : 1.0;
+        if (e.name.empty()) e.name = smartFilterName(e.parameters);
     }
-    stack.entries.push_back(entry);
     stack.supported = true;
+    const bool removing = stack.entries.empty();
+    if (removing && !smartObjectFiltered(so)) return true;   // nothing to remove
     // Where it is now (a moved instance's quad follows the layer).
     const std::array<double, 8> quad = moveQuad(so.quad, so.placedTransform, so.placedWidth, so.placedHeight, layer.transform,
                                                 layer.asset->image->width(), layer.asset->image->height());
@@ -579,40 +640,47 @@ bool addSmartFilter(Document& document, Layer& layer, const SmartFilterEntry& en
     bool written = false;
     for (PsdBlock& b : next.psdBlocks) {
         auto placed = patchPsdPlacement(b.key, b.data, quad, next.placedId);
-        auto withStack = placed ? setPsdSmartFilterStack(b.key, *placed, stack) : std::nullopt;
+        auto withStack = !placed ? std::nullopt : removing ? removePsdSmartFilterStack(b.key, *placed) : setPsdSmartFilterStack(b.key, *placed, stack);
         if (withStack) { b.data = std::move(*withStack); written = true; }
     }
     if (!written) return fail("Its placement cannot take Smart Filters.");
     next.quad = quad;
-    // Its cache record: the unfiltered instance over the canvas, and the mask (kept, or all white).
-    const PixelRect canvas{0, 0, document.width, document.height};
-    auto unfiltered = placedSmartObjectRaster(next, *source->second->image, quad);
-    if (!unfiltered) return fail("It could not be drawn.");
-    const auto record = authorSmartFilterRecord(next.placedId, canvas, *unfiltered, cache && cache->mask ? cache->mask.get() : nullptr,
-                                                cache ? cache->maskBounds : PixelRect{}, stack.maskDefault);
     auto carry = std::make_shared<PsdDocumentCarry>(document.psdCarry ? *document.psdCarry : PsdDocumentCarry{});
     if (!document.psdCarry) { carry->width = document.width; carry->height = document.height; }
+    // Its cache record: the unfiltered instance over the canvas, and the mask; none when the stack goes.
+    std::vector<uint8_t> record;
+    if (!removing) {
+        const PixelRect canvas{0, 0, document.width, document.height};
+        auto unfiltered = placedSmartObjectRaster(next, *source->second->image, quad);
+        if (!unfiltered) return fail("It could not be drawn.");
+        record = authorSmartFilterRecord(next.placedId, canvas, *unfiltered, stack.mask.get(), stack.maskBounds, stack.maskDefault);
+    }
     bool placed = false;
-    for (PsdBlock& b : carry->globals) {
+    for (size_t k = 0; k < carry->globals.size(); k++) {
+        PsdBlock& b = carry->globals[k];
         if (b.key != "FEid" && b.key != "FXid") continue;
-        if (findSmartFilterCache({b}, next.placedId)) {
+        if (findSmartFilterCache({b}, next.placedId) || removing) {
+            if (!walk(b.data)) { if (removing) continue; return fail("The document's filter cache cannot be rewritten."); }
             auto replaced = replaceSmartFilterRecords(b.data, {{next.placedId, record}});
             if (!replaced) return fail("The document's filter cache cannot be rewritten.");
             b.data = std::move(*replaced);
-        } else {
-            // A new record at the end of the block, aligned as Photoshop aligns them.
-            psd::BigEndianWriter w;
-            w.write_bytes(b.data);
-            while (w.bytes().size() % 4) w.write_u8(0);
-            w.write_u64(record.size());
-            w.write_bytes(record);
-            while (w.bytes().size() % 4) w.write_u8(0);
-            b.data = w.bytes();
+            placed = true;
+            // A block left with no records goes.
+            if (auto left = walk(b.data); removing && left && left->empty()) { carry->globals.erase(carry->globals.begin() + std::ptrdiff_t(k)); k--; }
+            continue;
         }
+        if (placed) continue;
+        // A new record at the end of the block, aligned as Photoshop aligns them.
+        psd::BigEndianWriter w;
+        w.write_bytes(b.data);
+        while (w.bytes().size() % 4) w.write_u8(0);
+        w.write_u64(record.size());
+        w.write_bytes(record);
+        while (w.bytes().size() % 4) w.write_u8(0);
+        b.data = w.bytes();
         placed = true;
-        break;
     }
-    if (!placed) {
+    if (!placed && !removing) {
         psd::BigEndianWriter w;
         w.write_u32(3);
         w.write_u64(record.size());
@@ -620,20 +688,32 @@ bool addSmartFilter(Document& document, Layer& layer, const SmartFilterEntry& en
         while (w.bytes().size() % 4) w.write_u8(0);
         carry->globals.push_back({"FEid", w.bytes()});
     }
-    auto filtered = filteredSmartObjectRaster(carry->globals, next, *source->second->image, quad);
-    if (!filtered) return fail("The filters could not be drawn.");
+    auto drawn = removing ? placedSmartObjectRaster(next, *source->second->image, quad) : filteredSmartObjectRaster(carry->globals, next, *source->second->image, quad);
+    if (!drawn || !drawn->image) return fail("The filters could not be drawn.");
     document.psdCarry = carry;
     if (layer.mask && !layer.mask->placement) layer.mask->placement = layer.maskTransform();
     const Sampling sampling = layer.transform.sampling;
-    layer.asset = Asset::make(filtered->image, layer.name);
-    layer.transform = LayerTransform(Point(filtered->x, filtered->y), Size(filtered->image->width(), filtered->image->height()));
+    layer.asset = Asset::make(drawn->image, layer.name);
+    layer.transform = LayerTransform(Point(drawn->x, drawn->y), Size(drawn->image->width(), drawn->image->height()));
     layer.transform.sampling = sampling;
-    layer.smartImage = filtered->image;
+    layer.smartImage = drawn->image;
     next.placedTransform = layer.transform;
-    next.placedWidth = filtered->image->width();
-    next.placedHeight = filtered->image->height();
+    next.placedWidth = drawn->image->width();
+    next.placedHeight = drawn->image->height();
     so = std::move(next);
     return true;
+}
+
+bool addSmartFilter(Document& document, Layer& layer, const SmartFilterEntry& entry, std::string* error) {
+    if (!layer.isLiveSmartObject()) { if (error) *error = "Smart Filters go on a smart object: convert the layer first."; return false; }
+    if (std::holds_alternative<std::monostate>(entry.parameters)) { if (error) *error = "That filter is not one NekoPhoto draws as a Smart Filter."; return false; }
+    SmartFilterStack stack;
+    if (auto existing = smartFilterStackOf(document, layer)) {
+        if (!existing->supported) { if (error) *error = "Its Smart Filters include one NekoPhoto does not draw; they cannot be added to here."; return false; }
+        stack = *existing;
+    }
+    stack.entries.push_back(entry);
+    return setSmartFilters(document, layer, stack, error);
 }
 
 } // namespace compositor

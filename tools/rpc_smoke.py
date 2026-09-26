@@ -402,7 +402,32 @@ def main():
     # A Smart Filter: still a smart object, drawn through its filter.
     filtered = rpc.call("smartObject.addFilter", id=converted["id"], kind="gaussian blur", radius=3)
     assert filtered["kind"] == "smartObject", filtered
-    rpc.call("history.undo")
+    # Editing the stack: settings, blending, order, switches, the shared mask, removal; each one undo step.
+    rpc.call("smartObject.addFilter", id=converted["id"], kind="mosaic", cellSize=6)
+    fx = rpc.call("smartObject.filters", id=converted["id"])
+    assert fx["editable"] and [f["kind"] for f in fx["filters"]] == ["gaussian blur", "mosaic"], fx
+    fx = rpc.call("smartObject.setFilter", id=converted["id"], index=0, radius=5, opacity=40, blend="multiply")
+    assert fx["filters"][0]["settings"]["radius"] == 5 and fx["filters"][0]["opacity"] == 40 and fx["filters"][0]["blend"] == "Multiply", fx
+    fx = rpc.call("smartObject.moveFilter", id=converted["id"], index=1, to=0)
+    assert [f["kind"] for f in fx["filters"]] == ["mosaic", "gaussian blur"], fx
+    fx = rpc.call("smartObject.setFilter", id=converted["id"], index=1, enabled=False)
+    assert not fx["filters"][1]["enabled"], fx
+    assert not rpc.call("smartObject.setFilter", id=converted["id"], enabled=False)["enabled"]
+    fx = rpc.call("smartObject.filterMask", id=converted["id"], action="invert")
+    assert fx["mask"]["outside"] == 0 and fx["mask"]["maskedPixels"] > 0, fx
+    fx = rpc.call("smartObject.filterMask", id=converted["id"], action="select")
+    assert fx["mask"]["painting"], fx
+    rpc.call("smartObject.filterMask", id=converted["id"], action="deselect")
+    fx = rpc.call("smartObject.removeFilter", id=converted["id"], index=0)
+    assert [f["kind"] for f in fx["filters"]] == ["gaussian blur"], fx
+    assert rpc.call("smartObject.removeFilter", id=converted["id"], all=True)["filters"] == []
+    try:
+        rpc.call("smartObject.setFilter", id=converted["id"], index=0, radius=2)
+        raise AssertionError("a smart object without Smart Filters has none to set")
+    except RuntimeError as e:
+        assert "no Smart Filters" in str(e), e
+    for _ in range(11):   # back to before the first Smart Filter
+        rpc.call("history.undo")
     # Warped: the smart object keeps its contents, the warp baked into its placement.
     warped = rpc.call("layers.warp", id=converted["id"], style="arc", bend=40)
     assert warped["kind"] == "smartObject", warped

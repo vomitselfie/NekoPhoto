@@ -462,6 +462,44 @@ def smart_object_add_filter(kind: str, id: Optional[str] = None, radius: Optiona
                      distance=distance, cellSize=cell_size, height=height, opacity=opacity))
 
 
+@look("List Smart Filters")
+def smart_object_filters(id: Optional[str] = None) -> str:
+    """A smart object's Smart Filters: the stack's switch, its shared mask, and each filter in running order (index 0
+    is applied first) with its settings, switch, opacity and blend. drawn false marks one NekoPhoto does not draw
+    (the stack is then read-only)."""
+    return text(call("smartObject.filters", id=id))
+
+
+@edit("Change a Smart Filter")
+def smart_object_set_filter(id: Optional[str] = None, index: Optional[int] = None, enabled: Optional[bool] = None,
+                            radius: Optional[float] = None, threshold: Optional[float] = None, amount: Optional[float] = None,
+                            angle: Optional[float] = None, distance: Optional[float] = None, cell_size: Optional[float] = None,
+                            height: Optional[float] = None, opacity: Optional[float] = None, blend: Optional[str] = None) -> str:
+    """Change one Smart Filter (index from smart_object_filters): its settings (only those the filter uses), enabled,
+    opacity (percent) and blend mode. Without index, enabled switches the whole stack. One undo step."""
+    return text(call("smartObject.setFilter", id=id, index=index, enabled=enabled, radius=radius, threshold=threshold, amount=amount,
+                     angle=angle, distance=distance, cellSize=cell_size, height=height, opacity=opacity, blend=blend))
+
+
+@edit("Remove Smart Filters")
+def smart_object_remove_filter(id: Optional[str] = None, index: Optional[int] = None, all: bool = False) -> str:
+    """Delete one Smart Filter (index), or all of them (all=True, Clear Smart Filters)."""
+    return text(call("smartObject.removeFilter", id=id, index=index, all=all or None))
+
+
+@edit("Reorder Smart Filters")
+def smart_object_move_filter(index: int, to: int, id: Optional[str] = None) -> str:
+    """Move a Smart Filter to another place in the running order (0 runs first)."""
+    return text(call("smartObject.moveFilter", id=id, index=index, to=to))
+
+
+@edit("Smart Filter mask")
+def smart_object_filter_mask(action: str, id: Optional[str] = None, show: bool = False) -> str:
+    """The Smart Filters' shared mask: enable, disable, invert, delete (all white), select (then brush_stroke with
+    mask=True, fills, gradients and filters paint it; erase=True paints black) or deselect."""
+    return text(call("smartObject.filterMask", id=id, action=action, show=show or None))
+
+
 @edit("Warp a layer")
 def layers_warp(style: str, id: Optional[str] = None, bend: float = 50, horizontal: float = 0, vertical: float = 0,
                 orientation: str = "horizontal") -> str:

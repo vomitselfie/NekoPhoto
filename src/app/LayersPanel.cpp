@@ -1,6 +1,7 @@
 #include "Style.h"
 #include "LayersPanel.h"
 #include "LayerStyleDialog.h"
+#include "SmartFilterDialog.h"
 #include "ImageConvert.h"
 #include <QStandardItemModel>
 #include <QApplication>
@@ -15,6 +16,7 @@
 #include <QLineEdit>
 #include <QAbstractItemView>
 #include <QMenu>
+#include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -110,6 +112,26 @@ QIcon eyeIcon(bool visible, double dpr, QColor color) {
     return QIcon(pixmap);
 }
 
+// Child rows under a smart object: UserRole holds the smart object's id (so selecting one selects it), this role
+// what the row is, and the next its entry's index.
+constexpr int smartFilterRole = Qt::UserRole + 2, smartFilterIndexRole = Qt::UserRole + 3;
+enum SmartFilterRow { NotSmartFilter = 0, SmartFilterHeader = 1, SmartFilterItem = 2 };
+int smartFilterRow(const QTreeWidgetItem* item) { return item ? item->data(0, smartFilterRole).toInt() : NotSmartFilter; }
+
+/// The stack's mask, small, for its thumbnail (the document's rect sampled; its tone past its bounds).
+GrayPtr smartFilterMaskThumbnail(const SmartFilterStack& stack, int docW, int docH) {
+    const double scale = std::min(1.0, 64.0 / std::max(1, std::max(docW, docH)));
+    const int w = std::max(1, int(docW * scale)), h = std::max(1, int(docH * scale));
+    auto out = std::make_shared<GrayImage>(w, h, stack.maskDefault);
+    if (!stack.mask) return out;
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            const int mx = int((x + 0.5) / scale) - stack.maskBounds.x, my = int((y + 0.5) / scale) - stack.maskBounds.y;
+            if (mx >= 0 && my >= 0 && mx < stack.mask->width() && my < stack.mask->height()) out->at(x, y) = stack.mask->at(mx, my);
+        }
+    return out;
+}
+
 } // namespace
 
 // ---- LayerTree ---------------------------------------------------------------------
@@ -152,7 +174,7 @@ void LayerTree::dragMoveEvent(QDragMoveEvent* event) {
 void LayerTree::mousePressEvent(QMouseEvent* event) {
     // Alt-click on a row clips it to the layer below (or releases it).
     if (event->button() == Qt::LeftButton && (event->modifiers() & Qt::AltModifier) && !(event->modifiers() & Qt::ControlModifier)) {
-        if (QTreeWidgetItem* item = itemAt(event->position().toPoint())) {
+        if (QTreeWidgetItem* item = itemAt(event->position().toPoint()); item && !smartFilterRow(item)) {
             QWidget* w = childAt(event->position().toPoint());
             while (w && w->property("layerId").isNull()) w = w->parentWidget();
             if (!(w && (w->property("eye").toBool() || w->property("mask").toBool()))) {
@@ -169,10 +191,14 @@ void LayerTree::dropEvent(QDropEvent* event) {
     if (event->mimeData()->hasFormat("application/x-nekophoto-mask")) {
         event->ignore();
         if (!target) return;
+        while (smartFilterRow(target)) target = target->parent();
         Uuid source = QString::fromUtf8(event->mimeData()->data("application/x-nekophoto-mask")).toStdString();
         session_->copyMask(source, target->data(0, Qt::UserRole).toString().toStdString());
         return;
     }
+    // Onto a smart object's Smart Filters: onto the smart object.
+    bool ontoSmartObject = false;
+    while (smartFilterRow(target)) { target = target->parent(); ontoSmartObject = true; }
     dropDuplicates = event->modifiers() & Qt::AltModifier;
     QList<QTreeWidgetItem*> dragged = selectedItems();
     event->ignore();
@@ -183,7 +209,7 @@ void LayerTree::dropEvent(QDropEvent* event) {
     auto idOf = [](QTreeWidgetItem* item) -> std::optional<Uuid> { return item ? std::optional<Uuid>(item->data(0, Qt::UserRole).toString().toStdString()) : std::nullopt; };
     auto isGroup = [](QTreeWidgetItem* item) { return item && item->data(0, Qt::UserRole + 1).toBool(); };
     if (!target) { emit dropRequested(id, std::nullopt, std::nullopt, true); return; }
-    QAbstractItemView::DropIndicatorPosition position = dropIndicatorPosition();
+    QAbstractItemView::DropIndicatorPosition position = ontoSmartObject ? QAbstractItemView::OnItem : dropIndicatorPosition();
     std::optional<Uuid> parent = idOf(target->parent());
     // The list shows top first; "above" in the document is the item shown before.
     if (position == QAbstractItemView::OnItem) {
@@ -308,15 +334,27 @@ LayersPanel::LayersPanel(EditorSession* session, QWidget* parent) : QWidget(pare
         if (ids.size() == 1) session_->selectLayer(*ids.begin(), session_->isMaskSelected() && session_->activeLayerId() == *ids.begin());
         else session_->selectLayers(ids, primary);
     });
-    connect(tree_, &QTreeWidget::itemExpanded, this, [this](QTreeWidgetItem* item) { if (!rebuilding_) session_->toggleGroupExpansion(item->data(0, Qt::UserRole).toString().toStdString()); });
-    connect(tree_, &QTreeWidget::itemCollapsed, this, [this](QTreeWidgetItem* item) { if (!rebuilding_) session_->toggleGroupExpansion(item->data(0, Qt::UserRole).toString().toStdString()); });
+    auto folded = [this](QTreeWidgetItem* item, bool collapsed) {
+        if (rebuilding_) return;
+        const Uuid id = item->data(0, Qt::UserRole).toString().toStdString();
+        if (item->data(0, Qt::UserRole + 1).toBool()) { session_->toggleGroupExpansion(id); return; }
+        // A smart object's Smart Filters.
+        if (collapsed) collapsedSmartFilters_.insert(id); else collapsedSmartFilters_.erase(id);
+    };
+    connect(tree_, &QTreeWidget::itemExpanded, this, [folded](QTreeWidgetItem* item) { folded(item, false); });
+    connect(tree_, &QTreeWidget::itemCollapsed, this, [folded](QTreeWidgetItem* item) { folded(item, true); });
     connect(tree_, &LayerTree::dropRequested, this, [this](Uuid id, std::optional<Uuid> parent, std::optional<Uuid> above, bool atBottom) {
         // Dropped "above" a shown item means directly above it in the stack: the item shown becomes the one below.
         if (tree_->dropDuplicates) session_->duplicateLayerTo(id, parent, above, atBottom && !above);
         else session_->placeLayer(id, parent, above, atBottom && !above);
     });
     connect(tree_, &QWidget::customContextMenuRequested, this, &LayersPanel::showContextMenu);
-    connect(tree_, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item, int) { startRename(item->data(0, Qt::UserRole).toString().toStdString()); });
+    connect(tree_, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item, int) {
+        const Uuid id = item->data(0, Qt::UserRole).toString().toStdString();
+        if (smartFilterRow(item) == SmartFilterItem) { editSmartFilter(id, item->data(0, smartFilterIndexRole).toInt(), false); return; }
+        if (smartFilterRow(item)) return;
+        startRename(id);
+    });
 
     connect(tree_, &LayerTree::swipeEnded, this, &LayersPanel::finishSwipe);
     connect(session_, &EditorSession::layersChanged, this, [this] {
@@ -428,7 +466,9 @@ void LayersPanel::rebuild() {
     if (doc) {
         std::map<Uuid, QTreeWidgetItem*> parents;
         auto entries = hierarchyEntries(doc->layers, true, nullptr);
+        const auto proxy = session_->filterMaskLayer();
         for (auto& e : entries) {
+            if (proxy && e.layer->id == *proxy) continue;   // the filter mask being painted shows on its smart object
             QTreeWidgetItem* item = new QTreeWidgetItem;
             item->setData(0, Qt::UserRole, QString::fromStdString(e.layer->id));
             item->setData(0, Qt::UserRole + 1, e.layer->isGroup);
@@ -441,9 +481,11 @@ void LayersPanel::rebuild() {
             parents[e.layer->id] = item;
             items_[e.layer->id] = item;
             tree_->setItemWidget(item, 0, makeRow(*e.layer, e.depth, e.visible));
+            if (e.layer->smartObject) addSmartFilterRows(item, *e.layer);
         }
         tree_->invisibleRootItem()->setFlags(tree_->invisibleRootItem()->flags() | Qt::ItemIsDropEnabled);
-        for (auto& [id, item] : items_) if (item->childCount() > 0) item->setExpanded(!session_->collapsedGroupIds.count(id));
+        for (auto& [id, item] : items_)
+            if (item->childCount() > 0) item->setExpanded(item->data(0, Qt::UserRole + 1).toBool() ? !session_->collapsedGroupIds.count(id) : !collapsedSmartFilters_.count(id));
         for (auto& id : session_->selectedLayerIds()) if (auto* item = itemFor(id)) item->setSelected(true);
         if (session_->activeLayerId()) if (auto* item = itemFor(*session_->activeLayerId())) { tree_->setCurrentItem(item, 0, QItemSelectionModel::NoUpdate); tree_->scrollToItem(item); }
     }
@@ -547,6 +589,18 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event) {
     if (event->type() == QEvent::MouseButtonPress) {
         auto* w = qobject_cast<QWidget*>(watched);
         auto* mouse = static_cast<QMouseEvent*>(event);
+        if (w && w->property("smartFilterMask").toBool()) {
+            const Uuid id = w->property("smartObject").toString().toStdString();
+            QString error;
+            bool ok = true;
+            if (mouse->modifiers() & Qt::ShiftModifier) {
+                auto stack = session_->smartFilters(id);
+                ok = stack && session_->smartFilterMask(id, stack->maskEnabled ? EditorSession::FilterMaskAction::Disable : EditorSession::FilterMaskAction::Enable, &error);
+            } else if (mouse->modifiers() & Qt::AltModifier) ok = session_->beginFilterMaskEdit(id, !session_->filterMaskShown(), &error);
+            else ok = session_->beginFilterMaskEdit(id, false, &error);
+            if (!ok && !error.isEmpty()) QMessageBox::warning(this, tr("Smart Filters"), error);
+            return true;
+        }
         if (w && w->property("mask").toBool()) {
             if (mouse->modifiers() & Qt::AltModifier) {
                 // Alt-drag a mask onto another layer to copy it there.
@@ -572,6 +626,7 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event) {
 void LayersPanel::showContextMenu(const QPoint& pos) {
     QTreeWidgetItem* item = tree_->itemAt(pos);
     if (!item) return;
+    if (smartFilterRow(item)) { showSmartFilterMenu(item, tree_->viewport()->mapToGlobal(pos)); return; }
     Uuid id = item->data(0, Qt::UserRole).toString().toStdString();
     if (session_->activeLayerId() != id) session_->selectLayer(id);
     const Layer* layer = session_->document() ? session_->document()->find(id) : nullptr;
@@ -588,6 +643,11 @@ void LayersPanel::showContextMenu(const QPoint& pos) {
         if (session_->canPasteLayerStyle()) menu.addAction(tr("Paste Layer Style"), this, [this] { session_->pasteLayerStyle(); });
     }
 
+    if (session_->smartFilters(id)) {
+        QAction* clear = menu.addAction(tr("Clear Smart Filters"), this, [this, id] { QString e; if (!session_->clearSmartFilters(id, &e)) QMessageBox::warning(this, tr("Smart Filters"), e); });
+        clear->setEnabled(session_->canEditSmartFilters(id));
+        menu.addSeparator();
+    }
     menu.addAction(tr("Duplicate Layer"), this, [this] { session_->duplicateActiveLayer(); });
     menu.addAction(tr("Delete Layer"), this, [this, id] { session_->deleteLayer(id); });
     menu.addSeparator();
@@ -608,6 +668,165 @@ void LayersPanel::showContextMenu(const QPoint& pos) {
         menu.addAction(tr("Add Hide-All Mask"), this, [this] { session_->addMaskFromSelection(false); });
     }
     menu.exec(tree_->viewport()->mapToGlobal(pos));
+}
+
+// ---- Smart Filters -------------------------------------------------------------------------------
+
+void LayersPanel::addSmartFilterRows(QTreeWidgetItem* parent, const Layer& layer) {
+    auto stack = session_->smartFilters(layer.id);
+    if (!stack) return;
+    const bool editable = session_->canEditSmartFilters(layer.id);
+    auto add = [&](int kind, int index, QWidget* row) {
+        auto* item = new QTreeWidgetItem;
+        item->setData(0, Qt::UserRole, QString::fromStdString(layer.id));
+        item->setData(0, Qt::UserRole + 1, false);
+        item->setData(0, smartFilterRole, kind);
+        item->setData(0, smartFilterIndexRole, index);
+        item->setSizeHint(0, QSize(0, kind == SmartFilterHeader ? thumbHeight + 6 : 26));
+        item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);   // not dragged, nothing dropped into it
+        parent->addChild(item);
+        tree_->setItemWidget(item, 0, row);
+    };
+    add(SmartFilterHeader, -1, makeSmartFilterHeader(layer, *stack, editable));
+    for (int i = int(stack->entries.size()) - 1; i >= 0; i--) add(SmartFilterItem, i, makeSmartFilterEntry(layer, *stack, i, editable));
+}
+
+QWidget* LayersPanel::makeSmartFilterHeader(const Layer& layer, const SmartFilterStack& stack, bool editable) {
+    const double dpr = devicePixelRatioF();
+    auto* row = new QWidget;
+    auto* h = new QHBoxLayout(row);
+    h->setContentsMargins(2, 2, 4, 2);
+    h->setSpacing(6);
+    auto* eye = new QToolButton;
+    eye->setAutoRaise(true);
+    eye->setIcon(eyeIcon(stack.enabled, dpr, palette().color(QPalette::Text)));
+    eye->setIconSize(QSize(16, 16));
+    eye->setFixedWidth(22);
+    eye->setProperty("smartFilterEye", true);
+    eye->setToolTip(tr("Turn all Smart Filters on or off"));
+    eye->setEnabled(editable);
+    connect(eye, &QToolButton::clicked, this, [this, id = layer.id, on = !stack.enabled] {
+        QString e;
+        if (!session_->setSmartFilterEnabled(id, -1, on, &e)) QMessageBox::warning(this, tr("Smart Filters"), e);
+    });
+    h->addWidget(eye);
+    auto* mask = new QLabel;
+    const Document* doc = session_->document() ? &*session_->document() : nullptr;
+    mask->setPixmap(maskPixmap(smartFilterMaskThumbnail(stack, doc ? doc->width : 1, doc ? doc->height : 1), stack.maskEnabled, dpr));
+    mask->setFixedSize(30, thumbHeight);
+    const bool painting = session_->filterMaskOwner() == layer.id;
+    mask->setStyleSheet(painting ? "border: 2px solid palette(highlight);" : "border: 2px solid transparent;");
+    mask->setToolTip(editable ? tr("Filter mask: click to paint on it, Alt-click to show it, Shift-click to turn it off or on")
+                              : tr("Filter mask (these Smart Filters cannot be changed here)"));
+    mask->setProperty("smartFilterMask", true);
+    mask->setProperty("smartObject", QString::fromStdString(layer.id));
+    mask->setEnabled(editable);
+    if (editable) mask->installEventFilter(this);
+    h->addWidget(mask);
+    auto* name = new QLabel(painting && session_->filterMaskShown() ? tr("Smart Filters (mask shown)") : tr("Smart Filters"));
+    if (!stack.enabled) name->setStyleSheet(hintStyle());
+    h->addWidget(name, 1);
+    return row;
+}
+
+QWidget* LayersPanel::makeSmartFilterEntry(const Layer& layer, const SmartFilterStack& stack, int index, bool editable) {
+    const SmartFilterEntry& entry = stack.entries[size_t(index)];
+    const bool drawn = !std::holds_alternative<std::monostate>(entry.parameters);
+    const double dpr = devicePixelRatioF();
+    auto* row = new QWidget;
+    auto* h = new QHBoxLayout(row);
+    h->setContentsMargins(2, 0, 4, 0);
+    h->setSpacing(6);
+    auto* eye = new QToolButton;
+    eye->setAutoRaise(true);
+    eye->setIcon(eyeIcon(entry.enabled, dpr, palette().color(QPalette::Text)));
+    eye->setIconSize(QSize(16, 16));
+    eye->setFixedWidth(22);
+    eye->setProperty("smartFilterEye", true);
+    eye->setToolTip(tr("Turn this Smart Filter on or off"));
+    eye->setEnabled(editable);
+    connect(eye, &QToolButton::clicked, this, [this, id = layer.id, index, on = !entry.enabled] {
+        QString e;
+        if (!session_->setSmartFilterEnabled(id, index, on, &e)) QMessageBox::warning(this, tr("Smart Filters"), e);
+    });
+    h->addWidget(eye);
+    h->addSpacing(36);
+    QString text = QString::fromStdString(entry.name).replace(QStringLiteral("&&"), QStringLiteral("&"));
+    if (text.isEmpty()) text = tr("Smart Filter");
+    auto* name = new QLabel(text);
+    if (!entry.enabled || !stack.enabled || !drawn) name->setStyleSheet(hintStyle());
+    name->setToolTip(!drawn ? tr("NekoPhoto does not draw this filter: the layer keeps the preview the file carried, and it cannot be edited here.")
+                     : editable ? tr("Double-click to change its settings") : tr("These Smart Filters cannot be changed here."));
+    name->setEnabled(drawn);
+    h->addWidget(name, 1);
+    if (entry.opacity < 1 || entry.blend != BlendMode::Normal) {
+        auto* info = new QLabel(QStringLiteral("%1%").arg(int(std::round(entry.opacity * 100))));
+        info->setStyleSheet(hintStyle(" font-size: 10px;"));
+        h->addWidget(info);
+    }
+    auto* blending = new QToolButton;
+    blending->setAutoRaise(true);
+    blending->setIcon(toolIcon("sliders-horizontal", 14));
+    blending->setIconSize(QSize(14, 14));
+    blending->setToolTip(tr("Blending Options (opacity and mode)"));
+    blending->setEnabled(editable && drawn);
+    connect(blending, &QToolButton::clicked, this, [this, id = layer.id, index] { editSmartFilter(id, index, true); });
+    h->addWidget(blending);
+    return row;
+}
+
+void LayersPanel::editSmartFilter(const Uuid& id, int index, bool blending) {
+    if (!SmartFilterDialog::canEdit(session_, id, index)) {
+        QMessageBox::information(this, tr("Smart Filters"),
+                                 tr("This Smart Filter cannot be edited here: NekoPhoto does not draw it (or one beside it), or the smart object is locked."));
+        return;
+    }
+    SmartFilterDialog dialog(session_, id, index, blending ? SmartFilterDialog::Page::Blending : SmartFilterDialog::Page::Settings, this);
+    dialog.exec();
+}
+
+void LayersPanel::showSmartFilterMenu(QTreeWidgetItem* item, const QPoint& globalPos) {
+    const Uuid id = item->data(0, Qt::UserRole).toString().toStdString();
+    auto stack = session_->smartFilters(id);
+    if (!stack) return;
+    const bool editable = session_->canEditSmartFilters(id);
+    auto warn = [this](bool ok, const QString& error) { if (!ok && !error.isEmpty()) QMessageBox::warning(this, tr("Smart Filters"), error); };
+    QMenu menu(this);
+    if (smartFilterRow(item) == SmartFilterItem) {
+        const int index = item->data(0, smartFilterIndexRole).toInt();
+        const int count = int(stack->entries.size());
+        if (index < 0 || index >= count) return;
+        const SmartFilterEntry& entry = stack->entries[size_t(index)];
+        const bool canEdit = SmartFilterDialog::canEdit(session_, id, index);
+        menu.addAction(tr("Edit Smart Filter…"), this, [this, id, index] { editSmartFilter(id, index, false); })->setEnabled(canEdit);
+        menu.addAction(tr("Edit Smart Filter Blending Options…"), this, [this, id, index] { editSmartFilter(id, index, true); })->setEnabled(canEdit);
+        menu.addAction(entry.enabled ? tr("Disable Smart Filter") : tr("Enable Smart Filter"), this, [this, id, index, on = !entry.enabled, warn] {
+            QString e;
+            warn(session_->setSmartFilterEnabled(id, index, on, &e), e);
+        })->setEnabled(editable);
+        menu.addSeparator();
+        // The panel lists the last applied first: up in the list is later in the stack.
+        menu.addAction(tr("Move Up"), this, [this, id, index, warn] { QString e; warn(session_->moveSmartFilter(id, index, index + 1, &e), e); })->setEnabled(editable && index + 1 < count);
+        menu.addAction(tr("Move Down"), this, [this, id, index, warn] { QString e; warn(session_->moveSmartFilter(id, index, index - 1, &e), e); })->setEnabled(editable && index > 0);
+        menu.addAction(tr("Delete Smart Filter"), this, [this, id, index, warn] { QString e; warn(session_->removeSmartFilter(id, index, &e), e); })->setEnabled(editable);
+        menu.addSeparator();
+    } else {
+        using A = EditorSession::FilterMaskAction;
+        const A toggle = stack->maskEnabled ? A::Disable : A::Enable;
+        menu.addAction(stack->maskEnabled ? tr("Disable Filter Mask") : tr("Enable Filter Mask"), this, [this, id, warn, toggle] {
+            QString e;
+            warn(session_->smartFilterMask(id, toggle, &e), e);
+        })->setEnabled(editable);
+        menu.addAction(tr("Invert Filter Mask"), this, [this, id, warn] { QString e; warn(session_->smartFilterMask(id, A::Invert, &e), e); })->setEnabled(editable);
+        menu.addAction(tr("Delete Filter Mask"), this, [this, id, warn] { QString e; warn(session_->smartFilterMask(id, A::Delete, &e), e); })->setEnabled(editable);
+        menu.addSeparator();
+        menu.addAction(stack->enabled ? tr("Disable Smart Filters") : tr("Enable Smart Filters"), this, [this, id, warn, on = !stack->enabled] {
+            QString e;
+            warn(session_->setSmartFilterEnabled(id, -1, on, &e), e);
+        })->setEnabled(editable);
+    }
+    menu.addAction(tr("Clear Smart Filters"), this, [this, id, warn] { QString e; warn(session_->clearSmartFilters(id, &e), e); })->setEnabled(editable);
+    menu.exec(globalPos);
 }
 
 } // namespace app
