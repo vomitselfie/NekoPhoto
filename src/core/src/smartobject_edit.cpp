@@ -4,6 +4,7 @@
 // Edit Contents commit) gives the source a fresh id and rebuilds every instance about its own centre, keeping the
 // instance's scale; Rasterize keeps the pixels.
 #include "compositor/smartobject_edit.h"
+#include "compositor/smartfilter.h"
 #include "compositor/png.h"
 #include "compositor/psd.h"
 #include "compositor/psd_writer.h"
@@ -198,6 +199,37 @@ int replaceSmartObjectSource(Document& document, const std::string& from, const 
     int changed = 0;
     for (Layer& l : document.layers) {
         if (!l.isLiveSmartObject() || l.smartObject->sourceId != from || l.smartObject->locked()) continue;
+        SmartObjectInstance& so = *l.smartObject;
+        if (!smartObjectPixelsArePlacement(so)) {
+            // Warped or filtered: the quad (the warp cage) stays where it is and the new contents are drawn through
+            // the same warp and filters.
+            const std::array<double, 8> quad = moveQuad(so.quad, so.placedTransform, so.placedWidth, so.placedHeight,
+                                                        l.transform, l.asset->image->width(), l.asset->image->height());
+            SmartObjectInstance next = so;
+            for (PsdBlock& b : next.psdBlocks)
+                if (auto patched = repointPsdPlacement(b.key, b.data, quad, replacement->id, replacement->width, replacement->height)) b.data = std::move(*patched);
+            std::optional<WarpedRaster> raster;
+            if (smartObjectFiltered(next)) {
+                static const std::vector<PsdBlock> none;
+                if (auto f = filteredSmartObjectRaster(document.psdCarry ? document.psdCarry->globals : none, next, *replacement->image, quad))
+                    raster = WarpedRaster{f->image, LayerTransform(Point(f->x, f->y), Size(f->image->width(), f->image->height()))};
+            } else raster = warpedSmartObjectRaster(next, *replacement->image, quad);
+            if (!raster) continue;
+            next.sourceId = replacement->id;
+            next.quad = quad;
+            const Sampling sampling = l.transform.sampling;
+            l.asset = Asset::make(raster->image, l.name);
+            l.transform = raster->transform;
+            l.transform.sampling = sampling;
+            l.smartImage = raster->image;
+            next.placedTransform = l.transform;
+            next.placedWidth = raster->image->width();
+            next.placedHeight = raster->image->height();
+            so = std::move(next);
+            if (!oldStem.empty() && l.name.compare(0, oldStem.size(), oldStem) == 0) l.name = newStem + l.name.substr(oldStem.size());
+            changed++;
+            continue;
+        }
         // About its own centre, at its own scale.
         const int w0 = l.asset->image->width(), h0 = l.asset->image->height();
         LayerTransform t = l.transform;
@@ -208,7 +240,6 @@ int replaceSmartObjectSource(Document& document, const std::string& from, const 
         l.asset = Asset::make(replacement->image, l.name);
         l.transform = t;
         l.smartImage = replacement->image;
-        SmartObjectInstance& so = *l.smartObject;
         so.sourceId = replacement->id;
         so.quad = quadOf(t, replacement->width, replacement->height);
         for (PsdBlock& b : so.psdBlocks)

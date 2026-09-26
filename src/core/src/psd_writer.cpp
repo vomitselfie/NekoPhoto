@@ -1,4 +1,5 @@
 #include "compositor/psd_writer.h"
+#include "compositor/smartfilter.h"
 #include "compositor/adjustments.h"
 #include "compositor/parallel.h"
 #include "compositor/render.h"
@@ -327,6 +328,12 @@ private:
 
     std::set<std::string> placedIds_;
 
+public:
+    /// Smart Filter cache records written anew (placed id, record body), for the document's 'FEid' block.
+    std::vector<std::pair<std::string, std::vector<uint8_t>>> filterRecords_;
+
+private:
+
     /// A smart object still placed by the layer: its Photoshop blocks, the quad following the layer's transform.
     void applySmartObject(Record& r, const Layer& l, const Image& image) {
         if (!l.smartObject) return;
@@ -337,13 +344,36 @@ private:
         }
         const int w = image.width(), h = image.height();
         std::array<double, 8> quad{};
-        if (!so.locked()) {
+        if (!so.locked() && smartObjectPixelsArePlacement(so)) {
             const double corners[4][2] = {{0, 0}, {double(w), 0}, {double(w), double(h)}, {0, double(h)}};
             for (int i = 0; i < 4; i++) { const Point p = mapThroughTransform(l.transform, w, h, corners[i][0], corners[i][1]); quad[size_t(i * 2)] = p.x; quad[size_t(i * 2 + 1)] = p.y; }
         } else quad = moveQuad(so.quad, so.placedTransform, so.placedWidth, so.placedHeight, l.transform, w, h);
         bool moved = false;
         for (size_t i = 0; i < 8; i++) moved |= std::abs(quad[i] - so.quad[i]) > 1e-4;
-        if (moved && so.lock == SmartObjectInstance::Lock::Filters) {
+        const bool filtered = smartObjectFiltered(so);
+        auto source = doc_.smartObjects.find(so.sourceId);
+        if (filtered && !so.locked() && source != doc_.smartObjects.end() && source->second->image && (moved || !source->second->psdElement)) {
+            // Drawn here, and moved or given new contents: Photoshop's cache for it (the unfiltered pixels over the
+            // canvas, and the shared mask) is written anew.
+            auto cache = doc_.psdCarry ? findSmartFilterCache(doc_.psdCarry->globals, so.placedId) : std::nullopt;
+            auto unfiltered = cache ? placedSmartObjectRaster(so, *source->second->image, quad) : std::nullopt;
+            if (!unfiltered || !placedIds_.insert(so.placedId).second) {
+                summary_.warnings.push_back("Layer \"" + l.name + "\": its Smart Filters' cache could not be rewritten, so it is written as pixels.");
+                return;
+            }
+            uint8_t outside = 255;
+            for (const PsdBlock& b : so.psdBlocks)
+                if (auto stack = (b.key == "SoLd" || b.key == "SoLE") ? parseSmartFilterStack(b.key, b.data) : std::nullopt) { outside = stack->maskDefault; break; }
+            filterRecords_.push_back({so.placedId, authorSmartFilterRecord(so.placedId, PixelRect{0, 0, doc_.width, doc_.height}, *unfiltered,
+                                                                             cache->mask.get(), cache->maskBounds, outside)});
+            for (const PsdBlock& b : so.psdBlocks) {
+                auto patched = patchPsdPlacement(b.key, b.data, quad);
+                if (patched) r.carried.push_back({b.key, std::move(*patched)});
+            }
+            summary_.smartObjects++;
+            return;
+        }
+        if (moved && filtered) {
             // Smart Filters keep a document-space cache Photoshop checks against the placement.
             summary_.warnings.push_back("Layer \"" + l.name + "\": a smart object with Smart Filters moved here, so it is written as pixels.");
             return;
@@ -351,7 +381,7 @@ private:
         // A duplicate needs its own instance id (Photoshop aliases layers that share one).
         std::string placed;
         if (!so.placedId.empty() && !placedIds_.insert(so.placedId).second) {
-            if (so.lock == SmartObjectInstance::Lock::Filters) {
+            if (filtered) {
                 summary_.warnings.push_back("Layer \"" + l.name + "\": a copy of a smart object with Smart Filters is written as pixels.");
                 return;
             }
@@ -681,7 +711,8 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
         return {};
     }
     PsdExportSummary summary;
-    std::vector<Record> records = Writer(document, options, true, summary).records();
+    Writer writer(document, options, true, summary);
+    std::vector<Record> records = writer.records();
 
     Out f;
     f.str("8BPS"); f.u16(large ? 2 : 1); for (int i = 0; i < 6; i++) f.u8(0);
@@ -738,8 +769,11 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
                 if (source->psdElement) links.insert(links.end(), source->psdElement->begin(), source->psdElement->end());
                 else if (source->kind == SmartObjectSource::Kind::Embedded) { auto e = psdEmbeddedElement(*source); links.insert(links.end(), e.begin(), e.end()); }
             }
-        if (document.psdCarry) for (const PsdBlock& block : document.psdCarry->globals) {
-            if (rebuildLinks && block.key == "lnk2") continue;
+        if (document.psdCarry) for (const PsdBlock& stored : document.psdCarry->globals) {
+            if (rebuildLinks && stored.key == "lnk2") continue;
+            PsdBlock block = stored;
+            if (!writer.filterRecords_.empty() && (block.key == "FEid" || block.key == "FXid"))
+                if (auto replaced = replaceSmartFilterRecords(block.data, writer.filterRecords_)) block.data = std::move(*replaced);
             section.str("8BIM"); section.str(block.key.c_str());
             section.length(block.data.size(), large && longKey(block.key)); section.bytes(block.data);
             for (size_t n = block.data.size(); n % 4; n++) section.u8(0);

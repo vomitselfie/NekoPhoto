@@ -15,9 +15,14 @@ quad: moving, scaling, rotating or flipping it resamples the full-resolution sou
 result, and Image Size scales the placement instead of resampling pixels. Painting on it (or anything else that
 replaces its pixels) makes it a plain pixel layer, as with text.
 
+A **warped** or **filtered** instance is editable too, but its pixels are not the source under a transform: they
+are the source drawn through its warp and its Smart Filters onto the document's pixel grid (see below), redrawn
+whenever its contents change. Moving it moves those pixels; its quad follows.
+
 A **preview-locked** instance shows the preview the file carried, because NekoPhoto cannot yet redraw it itself:
-warped, placed in perspective or skewed, carrying Smart Filters, a source it cannot read (a vector `.ai`, a file
-type the app cannot decode) or a linked file, or only Photoshop's old `PlLd` form. It can still be moved, scaled
+a warp it does not draw (a quilt warp, a mesh with distortion), placed in perspective or skewed, a Smart Filter
+stack with any filter outside the thirteen below, a source it cannot read (a vector `.ai`, a file type the app
+cannot decode) or a linked file, or only Photoshop's old `PlLd` form. It can still be moved, scaled
 and rotated (its quad follows), and its Photoshop data goes back untouched but for the placement. The import
 notes list each kind.
 
@@ -36,8 +41,9 @@ which pinned them against Photoshop 2026.
 A live instance writes its blocks back verbatim while the layer sits where it was placed; moved, scaled or
 rotated, the quad is patched in (`Trnf`, and `nonAffineTransform` by the same per-corner delta), every other
 descriptor field untouched (the vendored descriptor writer keeps key order and id forms). A duplicate gets a new
-`placed` id (Photoshop aliases layers that share one). A Smart Filter instance that moved, or a copy of one, is
-written as pixels with a warning: its document-space filter cache would no longer match. The sources go back in
+`placed` id (Photoshop aliases layers that share one). A drawn Smart Filter instance that moved, or whose contents
+changed, gets its record in the document's `FEid` cache written anew (below); a copy of one, or a preview-locked
+one that moved, is written as pixels with a warning: its document-space filter cache would no longer match. The sources go back in
 the file's own linked-file blocks, byte for byte. The layer's pixels are our render of the placement.
 
 ## In a project
@@ -85,6 +91,49 @@ Photoshop reads SoLd-only files).
 Contents come in as NekoPhoto reads them: a CMYK PSD (common for print illustration) converted to sRGB through its
 own colour profile. Edited and put back, such contents are written as an RGB PSD.
 
+## Warps
+
+Photoshop keeps a smart object's warp in the `SoLd`'s `warp` descriptor: a Bezier patch of 2 to 4 by 2 to 4 control
+points (`customEnvelopeWarp` `meshPoints`, with `uOrder` / `vOrder`) in the contents' own space, or, as interactive
+Photoshop writes it, only a preset style and bend (`warpArc`, `warpFlag`, ... with `warpValue`, and the Warp Text
+distortion sliders `warpPerspective` / `warpPerspectiveOther`). `src/core/src/warpmesh.cpp` is a port of Patchy's
+warp mesh (MIT): the patch, the fifteen preset constructions Patchy pinned point for point against Photoshop 2026's
+own bakes, the distortion, and the resampler. The rules it follows, all from Patchy's captures:
+
+- The placement quad (`Trnf`, and `nonAffineTransform`, the same) is the mesh's **control-point hull** placed in the
+  document, not the contents' rectangle; the warp bounds only anchor the contents in mesh space.
+- The contents map linearly onto the patch's (u, v); the surface is evaluated forward on a lattice (cells about two
+  pixels across) and each output pixel found by inverting its cell's bilinear map; where the surface folds, the first
+  cell wins. Contents much larger than their warped size are halved first so the bilinear samples do not alias.
+- Moving the layer moves only the quad: the mesh bytes stay as they were. Replace or Edit Contents keeps the cage and
+  draws the new contents through the same surface; the mesh is scaled onto the new contents' bounds so Photoshop
+  reads the same shape.
+- A mesh that leaves every point where it was is no warp (K.psd's ellipse), a mesh with distortion still on it, a
+  quilt warp, or a style Patchy did not pin stays preview-locked.
+
+`warpPsdPlacement` writes a mesh into a placement (Custom style, value 0, as Photoshop's own bakes are) for a future
+Warp tool and the tests.
+
+## Smart Filters
+
+A stack (`SoLd` `filterFX`: `filterFXList` in the order the filters run, each with its blend options and settings)
+is drawn when every entry is one of the thirteen filters Patchy calibrated against Photoshop 2026 (Gaussian Blur,
+High Pass, Median, Dust & Scratches, Surface Blur, Unsharp Mask, Motion Blur, Plastic Wrap, Mosaic, Emboss, Box Blur,
+Radial Blur's Spin, Add Noise), each within Photoshop's own dialog ranges, in a blend mode NekoPhoto has, the filter
+mask not linked, and the instance has exactly one readable record in the document's `FEid` / `FXid` cache. The
+record gives the filter canvas (the rect the blurs may grow into) and the shared filter mask (document space).
+`src/core/src/smartfilter.cpp` reads and writes these; `smartfilter_render.cpp` is the port of Patchy's kernels.
+
+Drawing: the contents placed on the quad (through the warp, if any) on the document's pixel grid, then each enabled
+filter over the result so far with its opacity and blend (Normal at 100% replaces), then the mask between the
+unfiltered and the filtered pixels.
+
+Writing: while an instance and its contents are as they were read, its blocks and the cache go back byte for byte.
+Moved, or with new contents, its cache record is written anew in Photoshop 2026's shape (Patchy's authoring shape:
+record version 1, the unfiltered instance over the whole canvas as PackBits RGB and alpha, the mask as an explicit
+plane), the other records untouched, and its placement patched. Plastic Wrap, Mosaic, Emboss and Add Noise are
+Patchy's own compatible renders rather than Photoshop's pixels; Photoshop redraws them from the settings.
+
 ## Not yet
 
-Warps, Smart Filters, relinking linked files.
+A Warp tool, adding or editing Smart Filters, a linked filter mask, relinking linked files.

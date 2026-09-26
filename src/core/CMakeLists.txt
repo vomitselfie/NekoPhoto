@@ -106,6 +106,7 @@ add_library(compositor_core STATIC
     src/psd_carry.cpp
     src/smartobject.cpp
     src/smartobject_edit.cpp
+    src/smartfilter.cpp
     src/vectormask.cpp
     src/psd_text.cpp
     src/psd_writer.cpp
@@ -121,6 +122,8 @@ add_library(compositor_core STATIC
     src/selection.cpp
     src/shape.cpp
     src/warp.cpp
+    src/warpmesh.cpp
+    src/smartfilter_render.cpp
     src/warpstroke.cpp
     src/transform.cpp
     src/uuid.cpp

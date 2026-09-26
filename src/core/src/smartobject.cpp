@@ -165,12 +165,46 @@ std::optional<PsdPlacement> parsePsdPlacement(const std::string& key, const std:
             if (auto size = psd::descriptor_object(d, "Sz  ")) { p.width = psd::descriptor_number(*size, "Wdth", 0); p.height = psd::descriptor_number(*size, "Hght", 0); }
             p.resolution = psd::descriptor_number(d, "Rslt", 72);
             if (auto warp = psd::descriptor_object(d, "warp")) {
-                auto style = psd::descriptor_value(*warp, "warpStyle");
-                p.warped = (style && style->type == psd::DescriptorValue::Type::Enum && style->enum_value != "warpNone")
-                    || psd::descriptor_value(*warp, "customEnvelopeWarp") != nullptr
-                    || psd::descriptor_number(*warp, "warpValue", 0) != 0 || psd::descriptor_number(*warp, "warpPerspective", 0) != 0;
+                auto styleValue = psd::descriptor_value(*warp, "warpStyle");
+                const std::string style = styleValue && styleValue->type == psd::DescriptorValue::Type::Enum ? styleValue->enum_value : std::string("warpNone");
+                const double value = psd::descriptor_number(*warp, "warpValue", 0);
+                const double horizontal = psd::descriptor_number(*warp, "warpPerspective", 0), vertical = psd::descriptor_number(*warp, "warpPerspectiveOther", 0);
+                auto rotate = psd::descriptor_value(*warp, "warpRotate");
+                const bool vertically = rotate && rotate->type == psd::DescriptorValue::Type::Enum && rotate->enum_value == "Vrtc";
+                double bw = p.width, bh = p.height;
+                if (auto b = psd::descriptor_object(*warp, "bounds")) {
+                    bw = psd::descriptor_number(*b, "Rght", 0) - psd::descriptor_number(*b, "Left", 0);
+                    bh = psd::descriptor_number(*b, "Btom", 0) - psd::descriptor_number(*b, "Top ", 0);
+                }
+                if (auto custom = psd::descriptor_object(*warp, "customEnvelopeWarp")) {
+                    // A mesh (what Photoshop writes for Custom, and for presets baked by a script).
+                    auto points = psd::descriptor_value(*custom, "meshPoints");
+                    auto hv = points && points->object_value ? psd::descriptor_value(*points->object_value, "Hrzn") : nullptr;
+                    auto vv = points && points->object_value ? psd::descriptor_value(*points->object_value, "Vrtc") : nullptr;
+                    WarpMesh mesh;
+                    mesh.uOrder = int(psd::descriptor_number(*warp, "uOrder", 4));
+                    mesh.vOrder = int(psd::descriptor_number(*warp, "vOrder", 4));
+                    if (hv && vv && mesh.uOrder >= 2 && mesh.uOrder <= 4 && mesh.vOrder >= 2 && mesh.vOrder <= 4 && horizontal == 0 && vertical == 0
+                        && hv->unit_floats.size() == size_t(mesh.uOrder * mesh.vOrder) && vv->unit_floats.size() == hv->unit_floats.size()) {
+                        mesh.xs = hv->unit_floats;
+                        mesh.ys = vv->unit_floats;
+                        p.warp = std::move(mesh);
+                    } else p.warped = true;
+                } else if (style != "warpNone" || value != 0 || horizontal != 0 || vertical != 0) {
+                    // A preset style only (what interactive Photoshop writes): baked here as Photoshop bakes it.
+                    auto mesh = styleWarpMesh(style == "warpNone" ? "warpArc" : style, style == "warpNone" ? 0 : value, vertically, bw, bh);
+                    if (mesh) { distortWarpMesh(*mesh, horizontal, vertical); p.warp = std::move(*mesh); }
+                    else p.warped = true;
+                }
             }
-            p.warped |= psd::descriptor_value(d, "quiltWarp") != nullptr;
+            if (psd::descriptor_value(d, "quiltWarp")) { p.warped = true; p.warp.reset(); }
+            // A mesh that leaves every point where it was changes nothing.
+            if (p.warp) {
+                const WarpMesh flat = identityWarpMesh(p.warp->xs.front(), p.warp->ys.front(), p.warp->xs.back(), p.warp->ys.back(), p.warp->uOrder, p.warp->vOrder);
+                bool moved = false;
+                for (size_t i = 0; i < flat.xs.size(); i++) moved |= std::abs(flat.xs[i] - p.warp->xs[i]) > 1e-3 || std::abs(flat.ys[i] - p.warp->ys[i]) > 1e-3;
+                if (!moved) p.warp.reset();
+            }
             p.filtered = psd::descriptor_value(d, "filterFX") != nullptr;
             return p;
         }
@@ -183,6 +217,32 @@ std::optional<PsdPlacement> parsePsdPlacement(const std::string& key, const std:
         }
     } catch (std::exception&) {}
     return std::nullopt;
+}
+
+std::optional<WarpMesh> smartObjectWarp(const SmartObjectInstance& instance) {
+    for (const PsdBlock& b : instance.psdBlocks)
+        if (b.key == "SoLd" || b.key == "SoLE")
+            if (auto p = parsePsdPlacement(b.key, b.data)) return p->warped ? std::nullopt : p->warp;
+    return std::nullopt;
+}
+
+bool smartObjectFiltered(const SmartObjectInstance& instance) {
+    for (const PsdBlock& b : instance.psdBlocks)
+        if (b.key == "SoLd" || b.key == "SoLE")
+            if (auto p = parsePsdPlacement(b.key, b.data)) return p->filtered;
+    return false;
+}
+
+bool smartObjectPixelsArePlacement(const SmartObjectInstance& instance) {
+    for (const PsdBlock& b : instance.psdBlocks)
+        if (b.key == "SoLd" || b.key == "SoLE")
+            if (auto p = parsePsdPlacement(b.key, b.data)) return !p->warp && !p->warped && !p->filtered;
+    return true;
+}
+
+std::optional<WarpedRaster> warpedSmartObjectRaster(const SmartObjectInstance& instance, const Image& source, const std::array<double, 8>& quad) {
+    auto mesh = smartObjectWarp(instance);
+    return mesh ? renderWarpedImage(source, *mesh, quad) : std::nullopt;
 }
 
 std::optional<std::vector<uint8_t>> patchPsdPlacement(const std::string& key, const std::vector<uint8_t>& payload,
@@ -226,6 +286,53 @@ std::optional<std::vector<uint8_t>> patchPsdPlacement(const std::string& key, co
             std::memcpy(out.data() + at, w.bytes().data(), 64);
             return out;
         }
+    } catch (std::exception&) {}
+    return std::nullopt;
+}
+
+std::optional<std::vector<uint8_t>> warpPsdPlacement(const std::string& key, const std::vector<uint8_t>& payload, const WarpMesh& mesh,
+                                                     const std::array<double, 8>& quad) {
+    if ((key != "SoLd" && key != "SoLE") || mesh.xs.size() != size_t(mesh.uOrder * mesh.vOrder) || mesh.ys.size() != mesh.xs.size()) return std::nullopt;
+    try {
+        using V = psd::DescriptorValue;
+        psd::BigEndianReader r(payload);
+        if (four(r) != "soLD") return std::nullopt;
+        const uint32_t version = r.read_u32(), descriptorVersion = r.read_u32();
+        psd::DescriptorObject d = psd::read_descriptor(r);
+        const size_t tail = r.position();
+        auto warp = const_cast<psd::DescriptorObject*>(psd::descriptor_object(d, "warp"));
+        if (!warp) return std::nullopt;
+        auto put = [](psd::DescriptorObject& o, const std::string& k, bool longForm, V v) {
+            if (!o.values.count(k)) o.key_order.push_back({k, longForm});
+            o.values[k] = std::move(v);
+        };
+        V style; style.type = V::Type::Enum; style.enum_type = "warpStyle"; style.enum_type_long_form = true; style.enum_value = "warpCustom"; style.enum_value_long_form = true;
+        put(*warp, "warpStyle", true, style);
+        for (const char* k : {"warpValue", "warpPerspective", "warpPerspectiveOther"}) { V z; z.type = V::Type::Double; put(*warp, k, true, z); }
+        V u; u.type = V::Type::Integer; u.integer_value = mesh.uOrder; put(*warp, "uOrder", true, u);
+        V v; v.type = V::Type::Integer; v.integer_value = mesh.vOrder; put(*warp, "vOrder", true, v);
+        auto axis = [](const std::vector<double>& values) { V a; a.type = V::Type::UnitFloatArray; a.unit = "#Pxl"; a.unit_floats = values; return a; };
+        V points; points.type = V::Type::ObjectArray; points.integer_value = int32_t(mesh.xs.size());
+        points.object_value = std::make_shared<psd::DescriptorObject>();
+        points.object_value->class_id = "rationalPoint";
+        points.object_value->class_id_long_form = true;
+        put(*points.object_value, "Hrzn", false, axis(mesh.xs));
+        put(*points.object_value, "Vrtc", false, axis(mesh.ys));
+        V custom; custom.type = V::Type::Object; custom.object_value = std::make_shared<psd::DescriptorObject>();
+        custom.object_value->class_id = "customEnvelopeWarp";
+        custom.object_value->class_id_long_form = true;
+        put(*custom.object_value, "meshPoints", true, points);
+        put(*warp, "customEnvelopeWarp", true, custom);
+        for (const char* k : {"Trnf", "nonAffineTransform"})
+            if (auto q = const_cast<V*>(psd::descriptor_value(d, k)); q && quadOf(q))
+                for (size_t i = 0; i < 8; i++) q->list_value[i].double_value = quad[i];
+        psd::BigEndianWriter w;
+        for (char c : std::string("soLD")) w.write_u8(uint8_t(c));
+        w.write_u32(version);
+        w.write_u32(descriptorVersion);
+        psd::write_descriptor(w, d);
+        w.write_bytes(std::span<const uint8_t>(payload.data() + tail, payload.size() - tail));
+        return w.bytes();
     } catch (std::exception&) {}
     return std::nullopt;
 }
@@ -342,7 +449,21 @@ std::optional<std::vector<uint8_t>> repointPsdPlacement(const std::string& key, 
                     for (size_t i = 0; i < 8; i++) q->list_value[i].double_value = quad[i];
             if (auto size = const_cast<psd::DescriptorObject*>(psd::descriptor_object(d, "Sz  "))) { set(*size, "Wdth", width); set(*size, "Hght", height); }
             if (auto warp = const_cast<psd::DescriptorObject*>(psd::descriptor_object(d, "warp")))
-                if (auto bounds = const_cast<psd::DescriptorObject*>(psd::descriptor_object(*warp, "bounds"))) { set(*bounds, "Top ", 0); set(*bounds, "Left", 0); set(*bounds, "Btom", height); set(*bounds, "Rght", width); }
+                if (auto bounds = const_cast<psd::DescriptorObject*>(psd::descriptor_object(*warp, "bounds"))) {
+                    // A mesh lives in the contents' space: it scales with them onto the new bounds (the same surface).
+                    const double left = psd::descriptor_number(*bounds, "Left", 0), top = psd::descriptor_number(*bounds, "Top ", 0);
+                    const double bw = psd::descriptor_number(*bounds, "Rght", 0) - left, bh = psd::descriptor_number(*bounds, "Btom", 0) - top;
+                    if (auto custom = psd::descriptor_object(*warp, "customEnvelopeWarp"); custom && bw > 0 && bh > 0)
+                        if (auto points = psd::descriptor_value(*custom, "meshPoints"); points && points->object_value) {
+                            auto axis = [&](const char* k, double from, double extent, double to) {
+                                if (auto a = const_cast<psd::DescriptorValue*>(psd::descriptor_value(*points->object_value, k)))
+                                    for (double& v : a->unit_floats) v = (v - from) / extent * to;
+                            };
+                            axis("Hrzn", left, bw, width);
+                            axis("Vrtc", top, bh, height);
+                        }
+                    set(*bounds, "Top ", 0); set(*bounds, "Left", 0); set(*bounds, "Btom", height); set(*bounds, "Rght", width);
+                }
             psd::BigEndianWriter w;
             for (char c : std::string("soLD")) w.write_u8(uint8_t(c));
             w.write_u32(version);

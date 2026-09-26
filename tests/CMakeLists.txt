@@ -124,6 +124,10 @@ add_executable(smartobject_tests smartobject_tests.cpp)
 target_link_libraries(smartobject_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME smartobject_tests COMMAND smartobject_tests)
 
+add_executable(smartfilter_tests smartfilter_tests.cpp)
+target_link_libraries(smartfilter_tests PRIVATE compositor::core compositor_warnings)
+add_test(NAME smartfilter_tests COMMAND smartfilter_tests)
+
 add_executable(vectormask_tests vectormask_tests.cpp)
 target_link_libraries(vectormask_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME vectormask_tests COMMAND vectormask_tests)

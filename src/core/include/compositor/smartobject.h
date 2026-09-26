@@ -11,6 +11,7 @@
 #include "image.h"
 #include "psd_carry.h"
 #include "transform.h"
+#include "warpmesh.h"
 #include <array>
 #include <cstdint>
 #include <map>
@@ -56,6 +57,16 @@ struct SmartObjectInstance {
 
 const char* smartObjectLockDescription(SmartObjectInstance::Lock lock);
 
+/// The warp an unlocked instance is drawn through (read from its Photoshop placement); none when it is flat.
+std::optional<WarpMesh> smartObjectWarp(const SmartObjectInstance& instance);
+/// Whether an unlocked instance's pixels are its source placed as they are (no warp, no Smart Filters), so its
+/// layer transform is its placement.
+bool smartObjectPixelsArePlacement(const SmartObjectInstance& instance);
+/// Whether the instance carries Smart Filters.
+bool smartObjectFiltered(const SmartObjectInstance& instance);
+/// The instance's pixels when it is warped: `source` drawn through its warp onto `quad`.
+std::optional<WarpedRaster> warpedSmartObjectRaster(const SmartObjectInstance& instance, const Image& source, const std::array<double, 8>& quad);
+
 /// Where the raster point (x, y) of a `w` x `h` raster lands in the document under `t`.
 Point mapThroughTransform(const LayerTransform& t, int w, int h, double x, double y);
 /// The transform that places a `w` x `h` raster on `quad`; none when the quad is skewed or not a rectangle.
@@ -74,7 +85,8 @@ struct PsdPlacement {
     std::array<double, 8> quad{};
     std::optional<std::array<double, 8>> nonAffine;
     double width = 0, height = 0, resolution = 72;
-    bool warped = false, filtered = false;
+    std::optional<WarpMesh> warp;          // a warp NekoPhoto draws (a mesh, or a preset style baked to one)
+    bool warped = false, filtered = false; // warped: a warp it cannot draw
 };
 /// A 'SoLd' / 'SoLE' (descriptor) or 'PlLd' (fixed) block's placement; none when it cannot be read.
 std::optional<PsdPlacement> parsePsdPlacement(const std::string& key, const std::vector<uint8_t>& payload);
@@ -85,6 +97,10 @@ std::optional<std::vector<uint8_t>> patchPsdPlacement(const std::string& key, co
 std::optional<std::vector<uint8_t>> repointPsdPlacement(const std::string& key, const std::vector<uint8_t>& payload, const std::array<double, 8>& quad,
                                                         const std::string& sourceId, double width, double height);
 
+/// The block warped by `mesh` (contents space, as Photoshop's Custom warp stores it) on `quad` (the mesh's hull
+/// placed); a SoLd / SoLE only.
+std::optional<std::vector<uint8_t>> warpPsdPlacement(const std::string& key, const std::vector<uint8_t>& payload, const WarpMesh& mesh,
+                                                     const std::array<double, 8>& quad);
 /// A fresh id in Photoshop's form (lowercase).
 std::string newSmartObjectId();
 /// A 'SoLd' for a new placement, in Photoshop 2026's field order (Patchy's authoring shape).

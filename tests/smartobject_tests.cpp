@@ -9,6 +9,7 @@
 #include "compositor/render.h"
 #include "compositor/smartobject.h"
 #include "compositor/smartobject_edit.h"
+#include "compositor/smartfilter.h"
 #include "psd/psd_descriptor.hpp"
 #include <filesystem>
 
@@ -295,6 +296,186 @@ TEST_CASE(edited_contents_commit_to_every_instance) {
     std::string why;
     CHECK(!smartObjectContentsEditable(doc, doc.layers[1].smartObject->sourceId, &why));
     CHECK(why.find("warped") != std::string::npos);
+}
+
+TEST_CASE(warp_meshes_bake_like_photoshop) {
+    // Flat: the patch is the rectangle.
+    const WarpMesh flat = identityWarpMesh(0, 0, 40, 20, 4, 4);
+    const Point mid = evaluateWarpMesh(flat, 0.25, 0.5);
+    CHECK(std::abs(mid.x - 10) < 1e-9 && std::abs(mid.y - 10) < 1e-9);
+    // A preset at zero bend is flat; an arch lifts the top edge's middle, not its ends.
+    CHECK(*styleWarpMesh("warpArch", 0, false, 40, 20) == identityWarpMesh(0, 0, 40, 20, 4, 2));
+    const WarpMesh arch = *styleWarpMesh("warpArch", 50, false, 40, 20);
+    CHECK(evaluateWarpMesh(arch, 0.5, 0).y < -1);
+    CHECK(std::abs(evaluateWarpMesh(arch, 0, 0).y) < 1e-9);
+    CHECK(!styleWarpMesh("warpNone", 50, false, 40, 20));
+    // Vertical distortion widens the bottom row about its middle.
+    WarpMesh d = flat;
+    distortWarpMesh(d, 0, 50);
+    CHECK(std::abs(d.xs[12] + 10) < 1e-9 && std::abs(d.xs[15] - 50) < 1e-9);
+}
+
+TEST_CASE(a_warped_instance_draws_its_contents_through_the_mesh) {
+    // A 40 x 20 source, red on the left and blue on the right, arched on a 60 x 60 canvas.
+    Document doc(60, 60);
+    auto image = std::make_shared<Image>(40, 20);
+    for (int y = 0; y < 20; y++) for (int x = 0; x < 40; x++) { uint8_t* p = image->pixel(x, y); p[0] = x < 20 ? 255 : 0; p[2] = x < 20 ? 0 : 255; p[3] = 255; }
+    SmartObjectContents contents;
+    contents.image = image;
+    encodePngImage(*image, contents.bytes);
+    contents.fileName = "art.png";
+    auto source = makeSmartObjectSource(contents);
+    const WarpMesh arch = *styleWarpMesh("warpArch", 50, false, 40, 20);
+    const auto [x0, x1] = std::minmax_element(arch.xs.begin(), arch.xs.end());
+    const auto [y0, y1] = std::minmax_element(arch.ys.begin(), arch.ys.end());
+    // The hull 1:1 at (10, 15): the contents' (0, 0) lands at (10 - x0, 15 - y0).
+    const double ox = 10 - *x0, oy = 15 - *y0;
+    const std::array<double, 8> quad{10, 15, 10 + *x1 - *x0, 15, 10 + *x1 - *x0, 15 + *y1 - *y0, 10, 15 + *y1 - *y0};
+    Layer layer = smartObjectLayer(source, quad, "Art");
+    layer.smartObject->psdBlocks[0].data = *warpPsdPlacement("SoLd", layer.smartObject->psdBlocks[0].data, arch, quad);
+    doc.smartObjects[source->id] = source;
+    doc.layers.push_back(layer);
+    std::string error;
+    auto back = importPsdBytes(encodePsd(doc, {}, nullptr, &error), &error);
+    REQUIRE(back.has_value());
+    const Layer& warped = back->document.layers[0];
+    REQUIRE(warped.isLiveSmartObject());
+    CHECK(!warped.smartObject->locked());
+    REQUIRE(smartObjectWarp(*warped.smartObject).has_value());
+    CHECK(near(warped.smartObject->quad, quad));
+    auto out = renderFlattened(back->document);
+    auto at = [&](double u, double v) { const Point p = evaluateWarpMesh(arch, u, v); return out->pixel(int(p.x + ox), int(p.y + oy)); };
+    CHECK(at(0.25, 0.5)[0] > 200 && at(0.25, 0.5)[2] < 50);   // red where the left half went
+    CHECK(at(0.75, 0.5)[2] > 200 && at(0.75, 0.5)[0] < 50);   // blue on the right
+    CHECK(at(0.5, 0.05)[3] == 255);                              // the lifted top edge is drawn
+    CHECK(out->pixel(int(ox) + 20, int(oy) + 19)[3] == 0);       // and the arch left the old bottom middle
+    // Moved: the quad goes along, the mesh stays as it was.
+    Document moved = back->document;
+    moved.layers[0].transform.origin.x += 5;
+    auto again = importPsdBytes(encodePsd(moved, {}, nullptr, &error), &error);
+    REQUIRE(again.has_value());
+    auto shifted = quad;
+    for (size_t i = 0; i < 8; i += 2) shifted[i] += 5;
+    CHECK(near(again->document.layers[0].smartObject->quad, shifted));
+    CHECK(*smartObjectWarp(*again->document.layers[0].smartObject) == arch);
+    // Replaced by contents twice the size: the same cage, the mesh scaled onto them.
+    auto twice = std::make_shared<Image>(80, 40);
+    twice->fill(0, 255, 0, 255);
+    SmartObjectContents green;
+    green.image = twice;
+    encodePngImage(*twice, green.bytes);
+    green.fileName = "green.png";
+    auto replacement = makeSmartObjectSource(green);
+    CHECK_EQ(replaceSmartObjectSource(moved, source->id, replacement), 1);
+    CHECK(near(moved.layers[0].smartObject->quad, shifted));
+    CHECK(smartObjectWarp(*moved.layers[0].smartObject)->xs[1] == arch.xs[1] * 2);
+    auto green2 = renderFlattened(moved);
+    const Point p = evaluateWarpMesh(arch, 0.5, 0.5);
+    CHECK(green2->pixel(int(p.x + ox + 5), int(p.y + oy))[1] > 200);
+}
+
+namespace {
+/// The SoLd with a one-entry Smart Filter stack: Gaussian Blur at `radius`.
+std::vector<uint8_t> withGaussianBlur(const std::vector<uint8_t>& sold, double radius) {
+    using V = psd::DescriptorValue;
+    psd::BigEndianReader r(sold);
+    (void)r.read_bytes(4);
+    const uint32_t version = r.read_u32(), dv = r.read_u32();
+    psd::DescriptorObject d = psd::read_descriptor(r);
+    auto object = [](const char* cls, bool longForm) { V v; v.type = V::Type::Object; v.object_value = std::make_shared<psd::DescriptorObject>(); v.object_value->class_id = cls; v.object_value->class_id_long_form = longForm; return v; };
+    auto add = [](V& o, const std::string& k, V v) { o.object_value->key_order.push_back({k, k.size() != 4}); o.object_value->values[k] = std::move(v); };
+    auto boolean = [](bool b) { V v; v.type = V::Type::Bool; v.bool_value = b; return v; };
+    auto unit = [](const char* u, double x) { V v; v.type = V::Type::UnitFloat; v.unit = u; v.double_value = x; return v; };
+    auto integer = [](int32_t x) { V v; v.type = V::Type::Integer; v.integer_value = x; return v; };
+    V root = object("filterFXStyle", true);
+    add(root, "enab", boolean(true));
+    add(root, "validAtPosition", boolean(true));
+    add(root, "filterMaskEnable", boolean(true));
+    add(root, "filterMaskLinked", boolean(false));
+    add(root, "filterMaskExtendWithWhite", boolean(true));
+    V entry = object("filterFX", true);
+    add(entry, "Nm  ", text("Gaussian Blur..."));
+    V blend = object("blendOptions", true);
+    add(blend, "Opct", unit("#Prc", 100));
+    V mode; mode.type = V::Type::Enum; mode.enum_type = "BlnM"; mode.enum_value = "normal"; mode.enum_value_long_form = true;
+    add(blend, "Md  ", mode);
+    add(entry, "blendOptions", blend);
+    add(entry, "enab", boolean(true));
+    add(entry, "hasoptions", boolean(true));
+    for (const char* k : {"FrgC", "BckC"}) {
+        V c = object("RGBC", false);
+        for (const char* ch : {"Rd  ", "Grn ", "Bl  "}) add(c, ch, dbl(0));
+        add(entry, k, c);
+    }
+    V filter = object("GsnB", false);
+    add(filter, "Rds ", unit("#Pxl", radius));
+    add(entry, "Fltr", filter);
+    add(entry, "filterID", integer(0x47736e42));
+    V list; list.type = V::Type::List; list.list_value.push_back(entry);
+    add(root, "filterFXList", list);
+    d.key_order.push_back({"filterFX", true});
+    d.values["filterFX"] = root;
+    psd::BigEndianWriter w;
+    for (char c : std::string("soLD")) w.write_u8(uint8_t(c));
+    w.write_u32(version);
+    w.write_u32(dv);
+    psd::write_descriptor(w, d);
+    return w.bytes();
+}
+}
+
+TEST_CASE(smart_filters_draw_from_the_contents_and_their_cache_follows) {
+    // A 10 x 10 white square placed at (10, 10) on 30 x 30, blurred.
+    Document doc(30, 30);
+    auto source = makeSmartObjectSource(pngContents(10, 10, 255, "square.png"));
+    doc.smartObjects[source->id] = source;
+    const std::array<double, 8> quad{10, 10, 20, 10, 20, 20, 10, 20};
+    Layer layer = smartObjectLayer(source, quad, "Square");
+    layer.smartObject->psdBlocks[0].data = withGaussianBlur(layer.smartObject->psdBlocks[0].data, 2);
+    auto carry = std::make_shared<PsdDocumentCarry>();
+    carry->width = 30; carry->height = 30;
+    PlacedRaster unfiltered{std::make_shared<Image>(*source->image), 10, 10};
+    std::vector<uint8_t> feid{0, 0, 0, 3};
+    const auto record = authorSmartFilterRecord(layer.smartObject->placedId, PixelRect{0, 0, 30, 30}, unfiltered, nullptr, {}, 255);
+    for (int i = 7; i >= 0; i--) feid.push_back(uint8_t(uint64_t(record.size()) >> (8 * i)));
+    feid.insert(feid.end(), record.begin(), record.end());
+    while (feid.size() % 4) feid.push_back(0);
+    carry->globals.push_back({"FEid", feid});
+    doc.psdCarry = carry;
+    doc.layers.push_back(layer);
+    auto cache = findSmartFilterCache(carry->globals, layer.smartObject->placedId);
+    REQUIRE(cache.has_value());
+    CHECK(cache->canvas == (PixelRect{0, 0, 30, 30}));
+
+    auto back = throughPsd(doc);
+    REQUIRE(back.has_value());
+    const Layer& blurred = back->document.layers[0];
+    REQUIRE(blurred.isLiveSmartObject());
+    CHECK(!blurred.smartObject->locked());
+    auto out = renderFlattened(back->document);
+    CHECK(out->pixel(15, 15)[3] >= 250);                          // the middle stays solid
+    CHECK(out->pixel(9, 15)[3] > 0 && out->pixel(9, 15)[3] < 255);   // the edge spreads out
+    CHECK(out->pixel(3, 15)[3] == 0);
+
+    // Moved by 5: exported, its cache record is rewritten there (and the file still reads, drawn, not locked).
+    Document moved = back->document;
+    moved.layers[0].transform.origin.x += 5;
+    auto again = throughPsd(moved);
+    REQUIRE(again.has_value());
+    CHECK(!again->document.layers[0].smartObject->locked());
+    auto shifted = quad;
+    for (size_t i = 0; i < 8; i += 2) shifted[i] += 5;
+    CHECK(near(again->document.layers[0].smartObject->quad, shifted));
+    auto out2 = renderFlattened(again->document);
+    CHECK(out2->pixel(14, 15)[3] > 0 && out2->pixel(14, 15)[3] < 255);
+    CHECK(out2->pixel(20, 15)[3] >= 250);
+
+    // New contents: drawn through the same filter.
+    auto red = makeSmartObjectSource(pngContents(10, 10, 0, "other.png"));
+    CHECK_EQ(replaceSmartObjectSource(moved, source->id, red), 1);
+    CHECK(!moved.layers[0].smartObject->locked());
+    auto out3 = renderFlattened(moved);
+    CHECK(out3->pixel(14, 15)[3] > 0 && out3->pixel(14, 15)[3] < 255);
 }
 
 TEST_MAIN()
