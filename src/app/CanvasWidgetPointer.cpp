@@ -304,6 +304,9 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
         drag_ = Drag::Crop;
         return;
     }
+    case Tool::Artboard: case Tool::Slice:
+        pressBox(view, doc, modifiers);
+        return;
     case Tool::Eyedropper:
         sampleColor(doc, modifiers & Qt::AltModifier);
         return;
@@ -552,6 +555,9 @@ void CanvasWidget::move(QPointF view, Qt::MouseButtons buttons, Qt::KeyboardModi
         zoomRect_ = QRectF(dragStartDocument_, doc).normalized();
         update();
         break;
+    case Drag::Box:
+        moveBox(doc, modifiers);
+        break;
     default: break;
     }
     lastView_ = view;
@@ -640,6 +646,9 @@ void CanvasWidget::release(QPointF view, Qt::MouseButton button, Qt::KeyboardMod
         session_->endEdit();
         emit session_->historyChanged();
         emit session_->selectionChanged();
+        break;
+    case Drag::Box:
+        releaseBox();
         break;
     case Drag::Crop: case Drag::CropMove: case Drag::CropResize:
         session_->setSnapGuides({}, {});

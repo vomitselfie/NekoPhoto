@@ -52,6 +52,8 @@ std::optional<compositor::Sampling> samplingNamed(const QString& name);
 QJsonObject rectJson(const compositor::Rect& r);
 QJsonObject transformJson(const compositor::LayerTransform& t);
 QJsonObject layerJson(const compositor::Layer& layer, int depth);
+/// An artboard folder (AutomationArtboards.cpp): its rectangle, background and name.
+QJsonObject artboardJson(const compositor::Layer& layer);
 /// A text style from request parameters over `base`: text, font, size, bold, italic, color (CSS), align
 /// (left, center, right), lineSpacing, letterSpacing.
 compositor::LayerText textFromParams(const QJsonObject& p, compositor::LayerText base);

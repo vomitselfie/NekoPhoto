@@ -3,6 +3,8 @@
   <file alias="bandage.svg">icons/bandage.svg</file>
   <file alias="blend.svg">icons/blend.svg</file>
   <file alias="crop.svg">icons/crop.svg</file>
+  <file alias="frame.svg">icons/frame.svg</file>
+  <file alias="slice.svg">icons/slice.svg</file>
   <file alias="droplet.svg">icons/droplet.svg</file>
   <file alias="lollipop.svg">icons/lollipop.svg</file>
   <file alias="pen-tool.svg">icons/pen-tool.svg</file>

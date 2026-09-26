@@ -488,6 +488,15 @@ private:
         emptyChannels(folder);
         setMask(folder, l, doc_.rect(), false);
         applyCarry(folder, l);
+        // The artboard: the file's own block while it still says what the folder is, else one written anew.
+        bool artboardKept = false;
+        std::erase_if(folder.carried, [&](const PsdBlock& b) {
+            if (b.key != "artb" && b.key != "artd" && b.key != "abdd") return false;
+            const bool same = l.artboard && parseArtboardBlock(b.data) == l.artboard;
+            artboardKept |= same;
+            return !same;
+        });
+        if (l.artboard && !artboardKept) folder.carried.push_back({"artb", artboardBlock(*l.artboard)});
         records_.push_back(std::move(folder));
         summary_.folders++;
     }
@@ -886,6 +895,7 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
         res.str("8BIM"); res.u16(0x03ED); res.u8(0); res.u8(0); res.u32(16);
         res.u32(ppi); res.u16(1); res.u16(1); res.u32(ppi); res.u16(1); res.u16(1);
         // The PSD's own resources, when the document came from one.
+        bool slicesWritten = false;
         if (document.psdCarry) {
             const PsdDocumentCarry& c = *document.psdCarry;
             const bool sameCanvas = c.width == document.width && c.height == document.height;
@@ -893,6 +903,12 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
                 // Guides, slices and paths (stored relative to the canvas size) belong to the canvas they were made on.
                 const bool canvasBound = resource.id == 1032 || resource.id == 1050 || resource.id == 1025 || (resource.id >= 2000 && resource.id <= 2999);
                 if (!sameCanvas && canvasBound) continue;
+                if (resource.id == 1050) {
+                    // The file's slices while they are still the document's; else written anew below.
+                    std::vector<Slice> held;
+                    if (!parseSlicesResource(resource.data, held) || held != document.slices) continue;
+                    slicesWritten = true;
+                }
                 res.str("8BIM"); res.u16(resource.id);
                 const std::string name = resource.name.substr(0, 255);
                 res.u8(unsigned(name.size())); res.bytes(std::vector<uint8_t>(name.begin(), name.end()));
@@ -900,6 +916,12 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
                 res.u32(uint32_t(resource.data.size())); res.bytes(resource.data);
                 if (resource.data.size() & 1) res.u8(0);
             }
+        }
+        if (!slicesWritten && !document.slices.empty()) {
+            const std::vector<uint8_t> data = slicesResource(document.slices, document.width, document.height);
+            res.str("8BIM"); res.u16(1050); res.u8(0); res.u8(0);
+            res.u32(uint32_t(data.size())); res.bytes(data);
+            if (data.size() & 1) res.u8(0);
         }
         f.u32(uint32_t(res.b.size())); f.bytes(res.b);
     }

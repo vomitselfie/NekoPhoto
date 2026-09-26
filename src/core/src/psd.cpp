@@ -857,6 +857,11 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                 folder.passThrough = rec.blend == "pass";
                 if (auto lm = userMaskFor(int(width), int(height), 0, 0)) folder.mask = lm;   // over the canvas, as our folders are
                 folder.psdCarry = carryFor(rec, folder, false, maskRaw);
+                for (const char* key : {"artb", "artd", "abdd"}) {
+                    if (folder.artboard) break;
+                    auto it = rec.blocks.find(key);
+                    if (it != rec.blocks.end()) folder.artboard = parseArtboardBlock(std::vector<uint8_t>(it->second.first, it->second.first + it->second.second));
+                }
                 if (group.end) {
                     auto carry = std::make_shared<PsdLayerCarry>(folder.psdCarry ? *folder.psdCarry : PsdLayerCarry{});
                     for (auto& [key, data] : group.end->ordered)
@@ -1116,6 +1121,8 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             layers.push_back(background);
             if (records.empty()) notes.push_back("The file carries no layers (it was saved flattened); the merged image is the only layer.");
         }
+        for (const auto& resource : docCarry->resources)
+            if (resource.id == 1050) parseSlicesResource(resource.data, document.slices);
         if (!docCarry->resources.empty() || !docCarry->globals.empty()) document.psdCarry = docCarry;
         result.document = std::move(document);
         return result;

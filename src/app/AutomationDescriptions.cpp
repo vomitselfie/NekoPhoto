@@ -122,6 +122,22 @@ const MethodDoc methodDocs[] = {
      "id:layer The layer (default the active one); action:(add|addFromSelection|delete|toggle|invert|apply|link)! What to do; revealing:bool=true For add: white (reveal all) rather than black"},
     {"layers.merge", "Merge the selected layers, or the active layer into the one beneath.", "down:bool=false Merge the active layer down"},
     {"layers.group", "Put the selected layers in a new folder.", ""},
+    {"artboards.list", "The document's artboards: folders with a rectangle and a background, their children clipped to it.", ""},
+    {"artboards.add", "A new, empty artboard at the top of the layer stack (Photoshop's Artboard tool).",
+     "x:integer=0 Left edge; y:integer=0 Top edge; width:integer! Width in pixels; height:integer! Height in pixels; name:string Its name (default Artboard N); background:color=white white, black, transparent or a CSS colour"},
+    {"artboards.set", "Move, resize, rename or recolour an artboard; a move takes its layers along unless moveContents is false.",
+     "id:layer! The artboard; x:integer Left edge; y:integer Top edge; width:integer Width; height:integer Height; name:string New name; background:color white, black, transparent or a CSS colour; moveContents:bool=true Move the layers inside with it"},
+    {"artboards.delete", "Turn an artboard back into a plain folder, or delete it with everything in it.", "id:layer! The artboard; contents:bool=false Delete its layers too"},
+    {"artboards.export", "File > Export Artboards to Files: each visible artboard as its own image, named after it.",
+     "directory:string! Folder to write into (created when missing); format:string=png png or jpeg; prefix:string File name prefix; quality:integer=90 JPEG quality 1..100"},
+    {"slices.list", "The document's slices (named rectangles for export, kept in PSDs as Photoshop's slices).", ""},
+    {"slices.add", "A new user slice.",
+     "x:integer=0 Left edge; y:integer=0 Top edge; width:integer! Width; height:integer! Height; name:string Its name (default slice_N); url:string Link; target:string Link target; altTag:string Alt text"},
+    {"slices.set", "Change a slice's rectangle or fields.",
+     "id:integer! The slice id; x:integer Left edge; y:integer Top edge; width:integer Width; height:integer Height; name:string Name; url:string Link; target:string Link target; altTag:string Alt text"},
+    {"slices.delete", "Delete a slice.", "id:integer! The slice id"},
+    {"slices.export", "File > Export Slices: each slice as its own image, named after it.",
+     "directory:string! Folder to write into (created when missing); format:string=png png or jpeg; prefix:string File name prefix; quality:integer=90 JPEG quality 1..100"},
     {"smartObject.convert", "The selected layers (or ids) as one smart object: their PSD becomes its contents, placed where they were.", "ids:array Layer ids (default: the selection)"},
     {"smartObject.place", "Place an image or PSD file as an embedded smart object above the active layer, 1:1 in the middle (scaled to fit).", "path:string! File path"},
     {"smartObject.replace", "Swap a smart object's contents for a file's, in every layer placing them; each keeps its centre and scale.", "id:layer The smart object layer (default: active); path:string! File path"},
@@ -326,7 +342,7 @@ const std::map<QString, std::pair<const MethodDoc*, std::vector<Param>>>& table(
 
 const QStringList& toolNames() {
     static const QStringList names{"move", "marquee", "lasso", "wand", "quickselect", "crop", "brush", "healing", "clone", "smudge",
-                                   "gradient", "shape", "text", "eyedropper", "hand", "zoom"};
+                                   "gradient", "shape", "text", "eyedropper", "hand", "zoom", "artboard", "slice"};
     return names;
 }
 

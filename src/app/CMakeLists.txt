@@ -55,6 +55,8 @@ qt_add_executable(nekophoto
     EditorSessionQuickSelect.cpp
     EditorSessionSelection.cpp
     EditorSessionSmartObjects.cpp
+    EditorSessionArtboards.cpp
+    CanvasWidgetBoxes.cpp
     EditorSessionSmartFilters.cpp
     EditorSessionWatch.cpp
     EditorSessionTransform.cpp
@@ -109,6 +111,7 @@ qt_add_executable(nekophoto
     Automation.cpp
     AutomationDescriptions.cpp
     AutomationDocument.cpp
+    AutomationArtboards.cpp
     AutomationHandlers.h
     AutomationLayers.cpp
     AutomationPaint.cpp

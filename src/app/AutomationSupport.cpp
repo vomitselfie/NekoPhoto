@@ -131,6 +131,7 @@ QJsonObject layerJson(const Layer& layer, int depth) {
         {"clipping", layer.maskSourceId.has_value()}, {"transform", transformJson(layer.transform)},
     };
     if (layer.parentId) o["parent"] = qs(*layer.parentId);
+    if (layer.isGroup && layer.artboard) { QJsonObject a = artboardJson(layer); a.remove("id"); a.remove("name"); a.remove("visible"); o["artboard"] = a; }
     if (layer.isLiveSmartObject())
         o["smartObject"] = QJsonObject{{"source", qs(layer.smartObject->sourceId)}, {"locked", layer.smartObject->locked()},
                                        {"state", QString::fromUtf8(smartObjectLockDescription(layer.smartObject->lock))}};

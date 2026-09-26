@@ -131,6 +131,8 @@ private:
     void exportTga();
     /// A multi-size .ico (16, 32, 48 and 256 px).
     void exportIco();
+    /// File ▸ Export Artboards to Files, or Export Slices: each one as its own PNG or JPEG in a chosen folder.
+    void exportBoxes(bool slices);
     /// A layered PSD, after a summary of anything Photoshop cannot carry.
     void exportPsd();
 

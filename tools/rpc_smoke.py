@@ -266,6 +266,32 @@ def remaining_methods(rpc):
     rpc.call("history.undo")
     rpc.call("layers.select", id=placed["id"])
     rpc.call("layers.merge", down=True)
+    # Artboards and slices: made, changed, exported, through a PSD and back, removed.
+    board = rpc.call("artboards.add", x=10, y=10, width=80, height=60, background="#ff0000", name="Hero")
+    moved = rpc.call("artboards.set", id=board["id"], x=20, moveContents=True)
+    assert moved["x"] == 20 and moved["background"] == "#ff0000", moved
+    assert [a["name"] for a in rpc.call("artboards.list")["artboards"]] == ["Hero"]
+    assert rpc.call("layers.get", id=board["id"])["artboard"]["width"] == 80
+    piece = rpc.call("slices.add", x=0, y=0, width=50, height=40, name="top")
+    rpc.call("slices.set", id=piece["id"], altTag="Top")
+    assert rpc.call("slices.list")["slices"][0]["altTag"] == "Top"
+    written = rpc.call("artboards.export", directory=os.path.join(work, "boards"))["files"]
+    assert len(written) == 1 and os.path.getsize(written[0]) > 0, written
+    written = rpc.call("slices.export", directory=os.path.join(work, "slices"), format="jpeg", prefix="p_")["files"]
+    assert len(written) == 1 and written[0].endswith("p_top.jpg"), written
+    boards_psd = os.path.join(work, "boards.psd")
+    rpc.call("document.export", path=boards_psd)
+    here = rpc.call("tabs.list")
+    reopened = rpc.call("document.open", path=boards_psd)
+    assert [a["name"] for a in rpc.call("artboards.list")["artboards"]] == ["Hero"]
+    assert [s["name"] for s in rpc.call("slices.list")["slices"]] == ["top"]
+    rpc.call("tabs.close", index=reopened["tab"], discard=True)
+    rpc.call("tabs.select", index=next(t["index"] for t in here if t["current"]))
+    rpc.call("slices.delete", id=piece["id"])
+    rpc.call("artboards.delete", id=board["id"])
+    assert rpc.call("artboards.list")["artboards"] == [] and rpc.call("slices.list")["slices"] == []
+    for name in ("artboard", "slice"):
+        rpc.call("tool.select", name=name)
     rpc.call("canvas.flip", vertical=False)
     rpc.call("canvas.resize", width=220, height=140)
     rpc.call("canvas.crop", x=0, y=0, width=200, height=120)
