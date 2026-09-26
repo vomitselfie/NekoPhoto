@@ -11,6 +11,12 @@ UndefinedBehaviorSanitizer:
   blocks, mask parameters, fill gradients and patterns, the project's smart object and carry sidecars. It reaches
   their depths without first building a valid PSD around them.
 
+`fuzz_formats.cpp` builds one target per smaller reader: `fuzz_tga`, `fuzz_ico`, `fuzz_gif`, `fuzz_aseprite`,
+`fuzz_affinity`, `fuzz_svg` (import, then export), `fuzz_svgimport` (import only), `fuzz_presets` (first byte: 0 .pat,
+1 .asl, 2 .grd) and `fuzz_colorlookup` (first byte: 0 .cube, 1 .3dl, 2 ICC). Affinity seeds reach further with their
+streams rewritten as stored (uncompressed), so mutations land in the document tree instead of the zstd data.
+`tests/hostile_input_tests.cpp` and the Affinity tests keep each reproducer found this way as a regression test.
+
 A separate, instrumented build (the targets need Clang):
 
 ```bash
@@ -19,7 +25,7 @@ cmake -S . -B build-fuzz -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_CO
   -DCOMPOSITOR_WITH_OPENCV=OFF -DCOMPOSITOR_WITH_MYPAINT=OFF -DCOMPOSITOR_WITH_SQLITE=OFF \
   "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined,fuzzer-no-link -fno-omit-frame-pointer" \
   "-DCMAKE_C_FLAGS=-fsanitize=address,undefined,fuzzer-no-link" "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined"
-cmake --build build-fuzz --target fuzz_psd fuzz_psd_parts
+cmake --build build-fuzz --target fuzz_psd fuzz_psd_parts fuzz_tga fuzz_ico fuzz_gif fuzz_aseprite fuzz_affinity fuzz_svg fuzz_svgimport fuzz_presets fuzz_colorlookup
 ```
 
 Seed `fuzz_psd` with small real files (Patchy's `test-fixtures/psd`) and `fuzz_psd_parts` with blocks cut from them,
