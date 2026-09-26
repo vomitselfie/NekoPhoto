@@ -304,6 +304,13 @@ public:
     PenMode penMode = PenMode::Shape;
     /// Shape mode with a vector shape layer active: the new subpath goes into it instead of a new layer.
     bool penAddsToShape = false;
+    /// Photoshop's Auto Add/Delete: with no path being drawn, the Pen adds an anchor on the target path's outline and
+    /// deletes one it clicks.
+    bool penAutoAddDelete = true;
+    /// An anchor added on the target path's outline nearest `documentPoint` (within `radius` pixels), or the anchor
+    /// there deleted; one undo step each. False when nothing was near.
+    bool addAnchorAt(QPointF documentPoint, double radius);
+    bool deleteAnchorAt(QPointF documentPoint, double radius);
     const std::optional<compositor::VectorPath::Subpath>& penDraft() const { return penDraft_; }
     /// A click (a corner knot) or the start of a drag (a smooth one whose handles follow penDrag).
     void penPress(QPointF documentPoint);

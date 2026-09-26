@@ -32,6 +32,9 @@ kept in the document's PSD carry, so they go into PSD files and projects as Phot
 - The Pen (P): click for corner points, drag for smooth ones; click the first point to close, Enter leaves the path
   open, Esc cancels. In Shape mode the result is a new shape layer (or, with "Add to active shape", a new subpath of
   the active shape layer); in Path mode it goes into the chosen path, or a new Work Path.
+- Auto Add/Delete (the Pen's option, on by default, as in Photoshop): with no path being drawn, a click on the target
+  path's outline adds an anchor there (the curve split so its shape stays) and it can be dragged at once; a click on an
+  anchor deletes it. Automation: `paths.addAnchor`, `paths.deleteAnchor`.
 - Direct Selection (A) edits the target path: the path chosen in the Paths panel, or else the active shape layer's.
   Drag a point, a handle (a smooth point's other handle turns with it; Alt moves just the one), or a whole subpath
   (Shift constrains to an axis); Alt-click a point to turn it from smooth to corner or back; Delete removes the
@@ -51,5 +54,4 @@ are Patchy's, which were pinned against Photoshop 2026.
 
 Path operations between subpaths other than add in the tools (the blocks carry them), gradient and pattern fills
 for shapes, custom shapes from .csh files, live shape properties (Photoshop's `vogk`: a rectangle stays a rectangle
-with editable corner radii), converting text to a path, and Add/Delete Anchor Point tools (Direct Selection deletes;
-there is no add).
+with editable corner radii), converting text to a path.

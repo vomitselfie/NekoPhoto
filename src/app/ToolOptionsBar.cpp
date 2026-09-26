@@ -436,6 +436,10 @@ QWidget* ToolOptionsBar::buildPenOptions() {
     add->setToolTip(tr("With a vector shape layer active, the new outline goes into it"));
     connect(mode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, add](int i) { session_->penMode = i == 1 ? EditorSession::PenMode::Path : EditorSession::PenMode::Shape; add->setEnabled(i == 0); });
     connect(add, &QCheckBox::toggled, this, [this](bool on) { session_->penAddsToShape = on; });
+    auto* autoAdd = new QCheckBox(tr("Auto Add/Delete"));
+    autoAdd->setToolTip(tr("Click the target path's outline to add an anchor, an anchor to delete it"));
+    autoAdd->setChecked(session_->penAutoAddDelete);
+    connect(autoAdd, &QCheckBox::toggled, this, [this](bool on) { session_->penAutoAddDelete = on; });
     syncers_.push_back([this, mode, add] {
         QSignalBlocker b1(mode), b2(add);
         mode->setCurrentIndex(session_->penMode == EditorSession::PenMode::Path ? 1 : 0);
@@ -445,6 +449,7 @@ QWidget* ToolOptionsBar::buildPenOptions() {
     h->addWidget(new QLabel(tr("Pen")));
     h->addWidget(mode);
     h->addWidget(add);
+    h->addWidget(autoAdd);
     h->addStretch();
     return w;
 }

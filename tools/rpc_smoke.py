@@ -480,6 +480,9 @@ def main():
     assert len(got["path"][0]["knots"]) == 10 and got["stroke"]["enabled"], got
     edited = rpc.call("shape.set", id=star["id"], path=[{"closed": True, "knots": [[10, 10], [50, 10], [30, 40]]}], fill=False, strokeAlign="outside")
     assert len(edited["path"][0]["knots"]) == 3 and not edited["fill"], edited
+    rpc.call("layers.select", id=star["id"])
+    assert len(rpc.call("paths.addAnchor", x=30, y=10)["path"][0]["knots"]) == 4
+    assert len(rpc.call("paths.deleteAnchor", x=30, y=10)["path"][0]["knots"]) == 3
     made = rpc.call("paths.set", name="Triangle", path=[{"knots": [[5, 5], [45, 5], [25, 35]]}])
     assert any(p["id"] == made["id"] and p["name"] == "Triangle" for p in rpc.call("paths.list")["paths"])
     rpc.call("paths.toSelection", id=made["id"])

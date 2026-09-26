@@ -152,6 +152,24 @@ bool EditorSession::setTargetPath(const VectorPath& path, const QString& name) {
     return true;
 }
 
+bool EditorSession::addAnchorAt(QPointF p, double radius) {
+    auto path = targetPath();
+    if (!path) return false;
+    auto hit = nearestPathSegment(*path, toPoint(p));
+    if (!hit || hit->distance > radius) return false;
+    insertAnchor(*path, hit->subpath, hit->segment, hit->t);
+    return setTargetPath(*path, tr("Add Anchor Point"));
+}
+
+bool EditorSession::deleteAnchorAt(QPointF p, double radius) {
+    auto path = targetPath();
+    if (!path) return false;
+    auto knot = nearestKnot(*path, toPoint(p), radius);
+    if (!knot) return false;
+    removeAnchor(*path, knot->first, knot->second);
+    return setTargetPath(*path, tr("Delete Anchor Point"));
+}
+
 // ---- The Paths panel's commands ---------------------------------------------------------------------------------
 
 uint16_t EditorSession::newPath(const QString& name) {

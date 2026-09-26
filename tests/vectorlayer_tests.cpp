@@ -119,4 +119,32 @@ TEST_CASE(a_moved_shape_is_redrawn_on_its_path_and_a_painted_one_is_pixels) {
     CHECK(!isVectorShapeLayer(l));
 }
 
+TEST_CASE(anchors_are_added_without_changing_the_outline_and_removed) {
+    VectorPath path = ellipsePath(Rect(0, 0, 100, 60));
+    Document doc = canvas(120, 80);
+    auto before = rasterizeVectorMask(path, Rect(0, 0, 120, 80), 1, 120, 80);
+    auto hit = nearestPathSegment(path, Point(85, 5));
+    REQUIRE(hit.has_value());
+    CHECK(hit->distance < 10);
+    const int added = insertAnchor(path, hit->subpath, hit->segment, hit->t);
+    CHECK_EQ(int(path.subpaths[0].knots.size()), 5);
+    const auto& k = path.subpaths[0].knots[size_t(added)];
+    CHECK(knotIsSmooth(k));
+    auto after = rasterizeVectorMask(path, Rect(0, 0, 120, 80), 1, 120, 80);
+    int worst = 0;
+    for (int y = 0; y < 80; y++) for (int x = 0; x < 120; x++) worst = std::max(worst, std::abs(int(before->at(x, y)) - int(after->at(x, y))));
+    // The same outline: flattening chords fall elsewhere once a curve is split (a quarter pixel at most), so edge
+    // pixels move a little while the area does not.
+    long total = 0;
+    for (int y = 0; y < 80; y++) for (int x = 0; x < 120; x++) total += int(after->at(x, y)) - int(before->at(x, y));
+    CHECK(worst <= 40);
+    CHECK(std::abs(total) < 255 * 2);
+    auto knot = nearestKnot(path, Point(k.x + 1, k.y), 4);
+    REQUIRE(knot.has_value());
+    CHECK(knot->second == added);
+    removeAnchor(path, knot->first, knot->second);
+    CHECK_EQ(int(path.subpaths[0].knots.size()), 4);
+    CHECK(!nearestKnot(path, Point(-50, -50), 4));
+}
+
 TEST_MAIN()

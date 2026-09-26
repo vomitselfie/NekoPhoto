@@ -158,6 +158,27 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
             const QPointF first = viewPoint(QPointF(draft->knots[0].x, draft->knots[0].y));
             if (std::hypot(view.x() - first.x(), view.y() - first.y()) <= 7) { session_->penFinish(true); return; }
         }
+        if (!draft && session_->penAutoAddDelete) {
+            if (auto path = session_->targetPath()) {
+                // Auto Add/Delete: an anchor clicked goes; a click on the outline adds one, dragged at once.
+                const double radius = 6 / std::max(1e-6, session_->viewport.zoom);
+                if (auto knot = compositor::nearestKnot(*path, toPoint(doc), radius)) {
+                    compositor::removeAnchor(*path, knot->first, knot->second);
+                    session_->setTargetPath(*path, tr("Delete Anchor Point"));
+                    return;
+                }
+                auto hit = compositor::nearestPathSegment(*path, toPoint(doc));
+                if (hit && hit->distance <= radius && session_->beginPathEdit(tr("Add Anchor Point"))) {
+                    const int added = compositor::insertAnchor(*path, hit->subpath, hit->segment, hit->t);
+                    session_->updatePathEdit(*path);
+                    pathDragStart_ = *path;
+                    pathDrag_ = PathHit{hit->subpath, added, PathHit::Anchor};
+                    selectedKnot_ = std::make_pair(hit->subpath, added);
+                    drag_ = Drag::PathEdit;
+                    return;
+                }
+            }
+        }
         session_->penPress(doc);
         drag_ = Drag::Pen;
         return;

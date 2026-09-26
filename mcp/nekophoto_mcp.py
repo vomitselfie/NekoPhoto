@@ -731,6 +731,15 @@ def paths_apply(id: int, action: str, mode: str = "replace") -> str:
     return text(call(methods[action], id=id, mode=mode) if action == "select" else call(methods[action], id=id))
 
 
+@edit("Anchor point")
+def paths_anchor(x: float, y: float, action: str = "add", radius: float = 6) -> str:
+    """Add an anchor on the target path's outline at x, y (the curve is split, its shape unchanged), or delete the anchor there (action delete).
+    The target path is the one chosen with paths_apply(action=choose), or else the active shape layer's."""
+    if action not in ("add", "delete"):
+        return "action must be add or delete"
+    return text(call("paths.addAnchor" if action == "add" else "paths.deleteAnchor", x=x, y=y, radius=radius))
+
+
 @edit("Path from selection")
 def paths_from_selection(tolerance: float = 1.0) -> str:
     """Make the Work Path (id 1025) from the selection's outline; tolerance in pixels trades points for accuracy."""

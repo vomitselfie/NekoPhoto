@@ -333,6 +333,82 @@ void removeDocumentPath(Document& document, uint16_t id) {
     document.psdCarry = std::move(carry);
 }
 
+namespace {
+Point bezier(Point a, Point b, Point c, Point d, double t) {
+    const double u = 1 - t;
+    return {u * u * u * a.x + 3 * u * u * t * b.x + 3 * u * t * t * c.x + t * t * t * d.x,
+            u * u * u * a.y + 3 * u * u * t * b.y + 3 * u * t * t * c.y + t * t * t * d.y};
+}
+Point lerp(Point a, Point b, double t) { return {a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t}; }
+}
+
+std::optional<PathHit> nearestPathSegment(const VectorPath& path, Point p) {
+    std::optional<PathHit> best;
+    for (int si = 0; si < int(path.subpaths.size()); si++) {
+        const auto& s = path.subpaths[size_t(si)];
+        const int n = int(s.knots.size());
+        const int segments = s.closed ? n : n - 1;
+        for (int seg = 0; seg < segments; seg++) {
+            const auto& k0 = s.knots[size_t(seg)];
+            const auto& k1 = s.knots[size_t((seg + 1) % n)];
+            const Point a(k0.x, k0.y), b(k0.outX, k0.outY), c(k1.inX, k1.inY), d(k1.x, k1.y);
+            // Sampled, then refined around the best sample.
+            double bestT = 0, bestD = 1e300;
+            for (int i = 0; i <= 64; i++) {
+                const double t = i / 64.0;
+                const Point q = bezier(a, b, c, d, t);
+                const double dist = std::hypot(q.x - p.x, q.y - p.y);
+                if (dist < bestD) { bestD = dist; bestT = t; }
+            }
+            double lo = std::max(0.0, bestT - 1 / 64.0), hi = std::min(1.0, bestT + 1 / 64.0);
+            for (int i = 0; i < 30; i++) {
+                const double m1 = lo + (hi - lo) / 3, m2 = hi - (hi - lo) / 3;
+                const Point q1 = bezier(a, b, c, d, m1), q2 = bezier(a, b, c, d, m2);
+                if (std::hypot(q1.x - p.x, q1.y - p.y) < std::hypot(q2.x - p.x, q2.y - p.y)) hi = m2; else lo = m1;
+            }
+            bestT = (lo + hi) / 2;
+            const Point q = bezier(a, b, c, d, bestT);
+            bestD = std::hypot(q.x - p.x, q.y - p.y);
+            if (!best || bestD < best->distance) best = PathHit{si, seg, bestT, bestD};
+        }
+    }
+    return best;
+}
+
+int insertAnchor(VectorPath& path, int subpath, int segment, double t) {
+    auto& s = path.subpaths[size_t(subpath)];
+    const int n = int(s.knots.size());
+    auto& k0 = s.knots[size_t(segment)];
+    auto& k1 = s.knots[size_t((segment + 1) % n)];
+    const Point a(k0.x, k0.y), b(k0.outX, k0.outY), c(k1.inX, k1.inY), d(k1.x, k1.y);
+    // de Casteljau: the two halves' control points.
+    const Point ab = lerp(a, b, t), bc = lerp(b, c, t), cd = lerp(c, d, t);
+    const Point abc = lerp(ab, bc, t), bcd = lerp(bc, cd, t), m = lerp(abc, bcd, t);
+    k0.outX = ab.x; k0.outY = ab.y;
+    k1.inX = cd.x; k1.inY = cd.y;
+    const VectorPath::Knot added{abc.x, abc.y, m.x, m.y, bcd.x, bcd.y};
+    s.knots.insert(s.knots.begin() + segment + 1, added);
+    return segment + 1;
+}
+
+std::optional<std::pair<int, int>> nearestKnot(const VectorPath& path, Point p, double radius) {
+    std::optional<std::pair<int, int>> best;
+    double bestD = radius;
+    for (int si = 0; si < int(path.subpaths.size()); si++)
+        for (int ki = 0; ki < int(path.subpaths[size_t(si)].knots.size()); ki++) {
+            const auto& k = path.subpaths[size_t(si)].knots[size_t(ki)];
+            const double d = std::hypot(k.x - p.x, k.y - p.y);
+            if (d <= bestD) { bestD = d; best = std::make_pair(si, ki); }
+        }
+    return best;
+}
+
+void removeAnchor(VectorPath& path, int subpath, int knot) {
+    auto& knots = path.subpaths[size_t(subpath)].knots;
+    knots.erase(knots.begin() + knot);
+    if (knots.size() < 2) path.subpaths.erase(path.subpaths.begin() + subpath);
+}
+
 bool knotIsSmooth(const VectorPath::Knot& k) {
     const double ax = k.inX - k.x, ay = k.inY - k.y, bx = k.outX - k.x, by = k.outY - k.y;
     const double la = std::hypot(ax, ay), lb = std::hypot(bx, by);

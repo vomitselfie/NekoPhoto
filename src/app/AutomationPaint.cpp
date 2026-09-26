@@ -390,6 +390,20 @@ void AutomationServer::registerPaintHandlers() {
         const Layer* l = session()->activeLayer();
         return l ? layerJson(*l, 0) : QJsonObject{};
     });
+    add("paths.addAnchor", [session, document](const QJsonObject& p) {
+        // On the target path: the one chosen with paths.select, or else the active shape layer's.
+        document();
+        if (!session()->targetPath()) fail("no target path: choose one with paths.select, or make a shape layer active");
+        if (!session()->addAnchorAt(QPointF(num(p, "x"), num(p, "y")), num(p, "radius", 6))) fail("the point is not on the path's outline (within radius)");
+        return QJsonObject{{"path", pathToJson(*session()->targetPath())}};
+    });
+    add("paths.deleteAnchor", [session, document](const QJsonObject& p) {
+        document();
+        if (!session()->targetPath()) fail("no target path: choose one with paths.select, or make a shape layer active");
+        if (!session()->deleteAnchorAt(QPointF(num(p, "x"), num(p, "y")), num(p, "radius", 6))) fail("no anchor there (within radius)");
+        auto path = session()->targetPath();
+        return QJsonObject{{"path", path ? pathToJson(*path) : QJsonArray()}};
+    });
     add("paths.fromSelection", [session, document](const QJsonObject& p) {
         document();
         if (!session()->selectionToWorkPath(num(p, "tolerance", 1.0))) fail("no selection to make a path from (or its outline is too detailed)");

@@ -78,6 +78,20 @@ void removeDocumentPath(Document& document, uint16_t id);
 std::vector<uint8_t> authorPathResource(const VectorPath& path, int canvasWidth, int canvasHeight);
 std::optional<VectorPath> parsePathResource(const std::vector<uint8_t>& data, int canvasWidth, int canvasHeight);
 
+// ---- Anchor points -----------------------------------------------------------------------------------------------
+
+/// Where a point is nearest a path's outline: subpath, the segment from knot `segment` to the next, the curve
+/// parameter `t` (0..1) and the distance. None for an empty path.
+struct PathHit { int subpath = -1, segment = -1; double t = 0, distance = 1e300; };
+std::optional<PathHit> nearestPathSegment(const VectorPath& path, Point p);
+/// A new anchor at `t` on a segment, the curve split so the outline does not change (de Casteljau); the new knot's
+/// index in its subpath.
+int insertAnchor(VectorPath& path, int subpath, int segment, double t);
+/// The knot nearest `p` within `radius`; none when no knot is that close.
+std::optional<std::pair<int, int>> nearestKnot(const VectorPath& path, Point p, double radius);
+/// Removes a knot; a subpath left with fewer than two goes too.
+void removeAnchor(VectorPath& path, int subpath, int knot);
+
 /// Every knot's smoothness (in and out handles on one line through the anchor).
 bool knotIsSmooth(const VectorPath::Knot& knot);
 
