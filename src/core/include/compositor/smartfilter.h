@@ -121,7 +121,7 @@ std::optional<SmartFilterCache> findSmartFilterCache(const std::vector<PsdBlock>
 std::vector<uint8_t> authorSmartFilterRecord(const std::string& placedId, const PixelRect& document, const PlacedRaster& unfiltered,
                                              const GrayImage* mask, const PixelRect& maskBounds, uint8_t maskDefault);
 /// The FEid / FXid payload with the records named by `replacements` (placed id to new record body) swapped in, the
-/// rest byte for byte; none when the block cannot be walked.
+/// rest byte for byte; an empty body drops that record. None when the block cannot be walked.
 std::optional<std::vector<uint8_t>> replaceSmartFilterRecords(const std::vector<uint8_t>& payload,
                                                               const std::vector<std::pair<std::string, std::vector<uint8_t>>>& replacements);
 
@@ -149,6 +149,21 @@ std::string smartFilterName(const SmartFilterParameters& parameters);
 /// placement's 'filterFX' and the document's 'FEid' cache record for it are written, and the instance is drawn again.
 /// False, with `error`, for a layer that is not an editable smart object or a stack not drawn here.
 bool addSmartFilter(Document& document, Layer& layer, const SmartFilterEntry& entry, std::string* error);
+
+/// `parameters` held inside the ranges a Photoshop file may carry for that filter (what parseSmartFilterStack reads back).
+void clampSmartFilterParameters(SmartFilterParameters& parameters);
+
+/// A smart object's Smart Filters with the shared mask from the document's cache record; none when it has none.
+/// `supported` is false when an entry is not drawn here or the cache record cannot be read (the stack is then
+/// read-only: setSmartFilters refuses it).
+std::optional<SmartFilterStack> smartFilterStackOf(const Document& document, const Layer& layer);
+
+/// Replaces a smart object's Smart Filters with `stack` (its entries in running order, their switches, opacity and
+/// blend, the stack's switch and its shared mask, `mask` none meaning all `maskDefault`): the placement's 'filterFX'
+/// and the document's 'FEid' record are written anew and the instance is drawn again. No entries removes the stack
+/// (the 'filterFX' key and the record go; the instance is drawn unfiltered). False, with `error`, for a layer that is
+/// not an editable smart object, a stack that has an entry not drawn here, or one that cannot be written.
+bool setSmartFilters(Document& document, Layer& layer, const SmartFilterStack& stack, std::string* error);
 
 } // namespace compositor
 
