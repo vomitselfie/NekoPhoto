@@ -30,6 +30,18 @@ target_link_libraries(golden_tests PRIVATE compositor::core compositor_warnings)
 target_compile_definitions(golden_tests PRIVATE GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/golden")
 add_test(NAME golden_tests COMMAND golden_tests)
 
+# Render hashes over golden scenes, blend modes, brushes, filters and adjustments (docs/high-bit-depth-plan.md, P0).
+# COMPOSITOR_UPDATE_RENDER_HASHES=1 rewrites tests/render_hashes.txt.
+add_executable(render_hash_tests render_hash_tests.cpp)
+target_link_libraries(render_hash_tests PRIVATE compositor::core compositor_warnings)
+target_compile_definitions(render_hash_tests PRIVATE RENDER_HASHES_FILE="${CMAKE_CURRENT_SOURCE_DIR}/render_hashes.txt"
+                           MYPAINT_BRUSHES_DIR="${CMAKE_SOURCE_DIR}/src/app/brushes/mypaint")
+add_test(NAME render_hash_tests COMMAND render_hash_tests)
+
+# Timings for render, brush, blur and adjustments; not a test. Numbers in docs/benchmarks.md.
+add_executable(bench_core bench_core.cpp)
+target_link_libraries(bench_core PRIVATE compositor::core compositor_warnings)
+
 add_executable(resample_tests resample_tests.cpp)
 target_link_libraries(resample_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME resample_tests COMMAND resample_tests)
