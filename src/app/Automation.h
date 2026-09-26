@@ -53,6 +53,7 @@ private:
     void registerPixelsHandlers();
     void registerSelectionHandlers();
     void registerPaintHandlers();
+    void registerArtboardHandlers();   // artboards and slices (AutomationArtboards.cpp)
     void add(const QString& name, Handler handler) { handlers_[name] = std::move(handler); }
     /// An event for every subscribed client, coalesced per kind until the event loop turns.
     void notify(const QString& kind);

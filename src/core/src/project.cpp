@@ -57,6 +57,16 @@ bool getDouble(const json& j, const char* key, double& out, bool required) {
     return std::isfinite(out);
 }
 
+bool getInt(const json& j, const char* key, int& out, bool required) {
+    auto it = j.find(key);
+    if (it == j.end() || it->is_null()) return !required;
+    if (!it->is_number_integer()) return false;
+    const long long v = it->get<long long>();
+    if (v < -maxImageSide * 16LL || v > maxImageSide * 16LL) return false;
+    out = int(v);
+    return true;
+}
+
 bool getBool(const json& j, const char* key, bool& out, bool required) {
     auto it = j.find(key);
     if (it == j.end() || it->is_null()) return !required;
@@ -116,8 +126,8 @@ json transformJson(const LayerTransform& t) {
 }
 
 const std::set<std::string> knownLayerKeys = {"id", "name", "isVisible", "transform", "imageFile", "parentID", "isGroup", "opacity", "blendMode",
-    "maskFile", "maskEnabled", "maskSourceID", "adjustment", "maskPlacement", "maskLinked", "shape", "text", "passThrough"};
-const std::set<std::string> knownManifestKeys = {"format", "version", "colorSpace", "resolution", "documentID", "width", "height", "activeLayerID", "layers"};
+    "maskFile", "maskEnabled", "maskSourceID", "adjustment", "maskPlacement", "maskLinked", "shape", "text", "passThrough", "artboard"};
+const std::set<std::string> knownManifestKeys = {"format", "version", "colorSpace", "resolution", "documentID", "width", "height", "activeLayerID", "layers", "slices"};
 
 struct Record {
     Layer layer;
@@ -230,6 +240,15 @@ bool parseRecord(const json& j, Record& r) {
         }
         l.text = t;
     }
+    if (auto a = j.find("artboard"); a != j.end() && !a->is_null()) {
+        if (!a->is_object() || !isGroup) return false;
+        Artboard ab;
+        if (!getInt(*a, "x", ab.x, true) || !getInt(*a, "y", ab.y, true) || !getInt(*a, "width", ab.width, true) || !getInt(*a, "height", ab.height, true)) return false;
+        if (!getInt(*a, "background", ab.background, false) || !getString(*a, "preset", ab.presetName, false)) return false;
+        if (!getDouble(*a, "red", ab.red, false) || !getDouble(*a, "green", ab.green, false) || !getDouble(*a, "blue", ab.blue, false)) return false;
+        if (ab.width < 1 || ab.height < 1 || ab.width > maxImageSide || ab.height > maxImageSide || ab.background < 1 || ab.background > 4) return false;
+        l.artboard = ab;
+    }
     json extra = json::object();
     for (auto& [key, value] : j.items()) if (!knownLayerKeys.count(key)) extra[key] = value;
     if (!extra.empty()) l.extraJson = extra.dump();
@@ -247,6 +266,11 @@ json recordJson(const Layer& l) {
     if (l.parentId) j["parentID"] = *l.parentId;
     if (l.isGroup) j["isGroup"] = true;
     if (l.isGroup && !l.passThrough) j["passThrough"] = false;
+    if (l.isGroup && l.artboard) {
+        const Artboard& a = *l.artboard;
+        j["artboard"] = {{"x", a.x}, {"y", a.y}, {"width", a.width}, {"height", a.height}, {"background", a.background},
+                         {"red", number(a.red)}, {"green", number(a.green)}, {"blue", number(a.blue)}, {"preset", a.presetName}};
+    }
     if (l.opacity != 1) j["opacity"] = number(l.opacity);
     if (l.blendMode != BlendMode::Normal) j["blendMode"] = blendModeName(l.blendMode);
     if (l.mask && l.mask->asset.image) {
@@ -296,6 +320,7 @@ struct Manifest {
     int width = 0, height = 0;
     std::optional<Uuid> activeLayerId;
     std::vector<Record> records;
+    std::vector<Slice> slices;
     std::string extraJson;
 };
 
@@ -328,6 +353,18 @@ bool parseManifestJson(const json& j, Manifest& m, ProjectError& error) {
         Record r;
         if (!parseRecord(record, r)) { error = invalid(); return false; }
         m.records.push_back(std::move(r));
+    }
+    if (auto sl = j.find("slices"); sl != j.end() && !sl->is_null()) {
+        if (!sl->is_array() || sl->size() > 100000) { error = invalid(); return false; }
+        for (auto& e : *sl) {
+            Slice s;
+            int id = 1;
+            if (!e.is_object() || !getInt(e, "id", id, true) || id < 1 || !getString(e, "name", s.name, false) || !getInt(e, "x", s.x, true) || !getInt(e, "y", s.y, true)
+                || !getInt(e, "width", s.width, true) || !getInt(e, "height", s.height, true) || !getString(e, "url", s.url, false) || !getString(e, "target", s.target, false)
+                || !getString(e, "message", s.message, false) || !getString(e, "altTag", s.altTag, false) || s.width < 1 || s.height < 1) { error = invalid(); return false; }
+            s.id = uint32_t(id);
+            m.slices.push_back(std::move(s));
+        }
     }
     json extra = json::object();
     for (auto& [key, value] : j.items()) if (!knownManifestKeys.count(key)) extra[key] = value;
@@ -404,6 +441,7 @@ Document documentFrom(const Manifest& m) {
     d.height = m.height;
     d.resolution = m.resolution.value_or(72);
     d.extraJson = m.extraJson;
+    d.slices = m.slices;
     for (auto& r : m.records) d.layers.push_back(r.layer);
     return d;
 }
@@ -548,7 +586,8 @@ std::string manifestJson(const Document& document, const std::optional<Uuid>& ac
     if (!document.extraJson.empty()) { auto extra = json::parse(document.extraJson, nullptr, false); if (extra.is_object()) j = extra; }
     j["format"] = formatIdentifier;
     bool folders = false;
-    for (auto& l : document.layers) folders |= l.isGroup && (l.opacity != 1 || l.blendMode != BlendMode::Normal || !l.passThrough);
+    for (auto& l : document.layers) folders |= l.isGroup && (l.opacity != 1 || l.blendMode != BlendMode::Normal || !l.passThrough || l.artboard);
+    folders |= !document.slices.empty();   // artboards and slices are version 8 too: the Mac app has neither
     j["version"] = folders ? projectFormatVersion : projectMacFormatVersion;
     j["colorSpace"] = "sRGB";
     j["resolution"] = number(document.resolution);
@@ -558,6 +597,12 @@ std::string manifestJson(const Document& document, const std::optional<Uuid>& ac
     if (activeLayerId) j["activeLayerID"] = *activeLayerId; else j["activeLayerID"] = nullptr;
     j["layers"] = json::array();
     for (auto& l : document.layers) j["layers"].push_back(recordJson(l));
+    if (!document.slices.empty()) {
+        j["slices"] = json::array();
+        for (const Slice& s : document.slices)
+            j["slices"].push_back({{"id", s.id}, {"name", s.name}, {"x", s.x}, {"y", s.y}, {"width", s.width}, {"height", s.height},
+                                   {"url", s.url}, {"target", s.target}, {"message", s.message}, {"altTag", s.altTag}});
+    }
     return j.dump(2);
 }
 

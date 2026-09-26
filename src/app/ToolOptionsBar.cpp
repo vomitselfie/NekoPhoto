@@ -88,6 +88,8 @@ ToolOptionsBar::ToolOptionsBar(EditorSession* session, CanvasWidget* canvas, QWi
     stack_->addWidget(buildToningOptions());     // 15
     stack_->addWidget(buildBucketOptions());     // 16
     stack_->addWidget(buildPenOptions());        // 17
+    boxOptionsPage_ = stack_->count();
+    stack_->addWidget(buildBoxOptions());        // the Artboard and Slice tools
     addWidget(stack_);
     connect(session_, &EditorSession::toolChanged, this, &ToolOptionsBar::syncTool);
     connect(session_, &EditorSession::transformChanged, this, &ToolOptionsBar::syncTransformFields);
@@ -117,6 +119,7 @@ void ToolOptionsBar::syncTool() {
     case Tool::Dodge: index = 15; break;
     case Tool::PaintBucket: index = 16; break;
     case Tool::Pen: case Tool::DirectSelect: index = 17; break;
+    case Tool::Artboard: case Tool::Slice: index = boxOptionsPage_; break;
     }
     for (auto& s : syncers_) s();
     stack_->setCurrentIndex(index);
@@ -450,6 +453,57 @@ QWidget* ToolOptionsBar::buildPenOptions() {
     h->addWidget(mode);
     h->addWidget(add);
     h->addWidget(autoAdd);
+    h->addStretch();
+    return w;
+}
+
+QWidget* ToolOptionsBar::buildBoxOptions() {
+    QWidget* w = row();
+    auto* h = layoutOf(w);
+    auto* title = new QLabel;
+    // Artboard: the active artboard's background, as Photoshop's Artboard options.
+    auto* backgroundLabel = new QLabel(tr("Background"));
+    auto* background = new QComboBox;
+    background->addItems({tr("White"), tr("Black"), tr("Transparent"), tr("Other…")});
+    background->setToolTip(tr("The active artboard's background"));
+    connect(background, QOverload<int>::of(&QComboBox::activated), this, [this](int i) {
+        const Layer* l = session_->activeLayer();
+        if (!l || !l->artboard) return;
+        Artboard a = *l->artboard;
+        a.background = i + 1;
+        if (a.background == Artboard::Other) {
+            const QColor c = QColorDialog::getColor(QColor::fromRgbF(float(a.red), float(a.green), float(a.blue)), this, tr("Artboard Background"));
+            if (!c.isValid()) { emit session_->layersChanged(); return; }
+            a.red = c.redF(); a.green = c.greenF(); a.blue = c.blueF();
+        }
+        session_->setArtboard(l->id, a, false);
+    });
+    // Slice: remove them all.
+    auto* clear = new QPushButton(tr("Delete All Slices"));
+    connect(clear, &QPushButton::clicked, this, [this] {
+        if (!session_->document()) return;
+        std::vector<uint32_t> ids;
+        for (const Slice& s : session_->document()->slices) ids.push_back(s.id);
+        if (ids.empty()) return;
+        session_->beginEdit(tr("Delete Slices"));
+        for (uint32_t id : ids) session_->deleteSlice(id);
+        session_->endEdit();
+    });
+    syncers_.push_back([this, title, backgroundLabel, background, clear] {
+        const bool artboard = session_->tool() == Tool::Artboard;
+        title->setText(artboard ? tr("Artboard") : tr("Slice"));
+        const Layer* l = session_->activeLayer();
+        const bool onArtboard = artboard && l && l->artboard;
+        backgroundLabel->setVisible(artboard);
+        background->setVisible(artboard);
+        background->setEnabled(onArtboard);
+        if (onArtboard) { QSignalBlocker b(background); background->setCurrentIndex(std::clamp(l->artboard->background, 1, 4) - 1); }
+        clear->setVisible(!artboard);
+    });
+    h->addWidget(title);
+    h->addWidget(backgroundLabel);
+    h->addWidget(background);
+    h->addWidget(clear);
     h->addStretch();
     return w;
 }

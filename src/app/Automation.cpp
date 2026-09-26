@@ -203,6 +203,7 @@ void AutomationServer::registerHandlers() {
     registerPixelsHandlers();
     registerSelectionHandlers();
     registerPaintHandlers();
+    registerArtboardHandlers();
 }
 
 void AutomationServer::registerAppHandlers() {
@@ -363,7 +364,7 @@ void AutomationServer::registerAppHandlers() {
         static const QMap<QString, Tool> tools{{"move", Tool::Move}, {"marquee", Tool::Marquee}, {"lasso", Tool::Lasso}, {"wand", Tool::Wand}, {"crop", Tool::Crop},
             {"brush", Tool::Brush}, {"healing", Tool::SpotHealing}, {"clone", Tool::CloneStamp}, {"smudge", Tool::Smudge}, {"dodge", Tool::Dodge}, {"bucket", Tool::PaintBucket}, {"pen", Tool::Pen}, {"directselect", Tool::DirectSelect}, {"gradient", Tool::Gradient},
             {"shape", Tool::Shape}, {"eyedropper", Tool::Eyedropper}, {"hand", Tool::Hand}, {"zoom", Tool::Zoom},
-            {"quickselect", Tool::Scribble}, {"text", Tool::Text}};
+            {"quickselect", Tool::Scribble}, {"text", Tool::Text}, {"artboard", Tool::Artboard}, {"slice", Tool::Slice}};
         QString name = str(p, "name").toLower();
         if (!tools.contains(name)) fail("unknown tool; one of " + toolNames().join(", "), invalidParams);
         session()->selectTool(tools.value(name));

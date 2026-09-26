@@ -334,6 +334,8 @@ QString MainWindow::toolHint(Tool tool, bool erase) {
     case Tool::Eyedropper: return tr("Click sets the foreground colour, Alt-click the background");
     case Tool::Hand: return tr("Drag to pan; hold Space to pan from any tool");
     case Tool::Zoom: return tr("Click zooms in, Alt-click out, drag a box to zoom to it; Ctrl-wheel zooms anywhere");
+    case Tool::Artboard: return tr("Drag out an artboard; drag inside one to move it with its contents, an edge or corner to resize it");
+    case Tool::Slice: return tr("Drag out a slice; drag inside one to move it, an edge or corner to resize it; File ▸ Export Slices writes them");
     }
     return {};
 }

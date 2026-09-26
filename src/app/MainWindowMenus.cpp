@@ -67,6 +67,8 @@ void MainWindow::buildToolRail() {
     tool(Tool::Wand, tr("Magic Wand"), "wand-sparkles", QKeySequence("W"));
     tool(Tool::Scribble, tr("Quick Select"), "scribble", QKeySequence("Shift+W"));   // Photoshop's W group
     tool(Tool::Crop, tr("Crop"), "crop", QKeySequence("C"));
+    tool(Tool::Slice, tr("Slice (drag a slice; drag inside to move it, an edge to resize)"), "slice", QKeySequence("Shift+C"));   // Photoshop's C group
+    tool(Tool::Artboard, tr("Artboard (drag a new artboard; drag inside to move it with its contents, an edge to resize)"), "frame", QKeySequence("Shift+V"));   // Photoshop's V group
     rail->addSeparator();
     tool(Tool::Brush, tr("Brush"), "paintbrush", QKeySequence("B"));
     eraserAction_ = rail->addAction(toolIcon("eraser"), tr("Eraser"));
@@ -154,6 +156,8 @@ void MainWindow::buildMenus() {
     if (canWriteImageFormat("tiff")) needsDocument(file->addAction(tr("Export &TIFF…"), this, &MainWindow::exportTiff));
     needsDocument(file->addAction(tr("Export T&GA…"), this, &MainWindow::exportTga));
     needsDocument(file->addAction(tr("Export &Icon (ICO)…"), this, &MainWindow::exportIco));
+    needsDocument(file->addAction(tr("Export A&rtboards to Files…"), this, [this] { exportBoxes(false); }));
+    needsDocument(file->addAction(tr("Export S&lices…"), this, [this] { exportBoxes(true); }));
     file->addSeparator();
     file->addAction(tr("&Close Tab"), QKeySequence::Close, this, [this] { closeTab(current_); });
     file->addAction(tr("New &Tab"), QKeySequence::AddTab, this, [this] { addTab(false); });

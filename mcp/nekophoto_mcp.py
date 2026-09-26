@@ -425,6 +425,70 @@ def layers_group() -> str:
     return text(call("layers.group"))
 
 
+@look("List artboards")
+def artboards_list() -> str:
+    """The artboards: folders with a rectangle and a background that clip their layers (Photoshop's artboards)."""
+    return text(call("artboards.list"))
+
+
+@edit("Add an artboard")
+def artboards_add(width: int, height: int, x: int = 0, y: int = 0, name: Optional[str] = None, background: Optional[str] = None) -> str:
+    """A new, empty artboard at the top of the stack; background is white, black, transparent or a CSS colour.
+    Put layers inside it with layers_move (parent)."""
+    return text(call("artboards.add", x=x, y=y, width=width, height=height, name=name, background=background))
+
+
+@edit("Change an artboard")
+def artboards_set(id: str, x: Optional[int] = None, y: Optional[int] = None, width: Optional[int] = None, height: Optional[int] = None,
+                  name: Optional[str] = None, background: Optional[str] = None, move_contents: bool = True) -> str:
+    """Move, resize, rename or recolour an artboard; moving it takes its layers along unless move_contents is false."""
+    return text(call("artboards.set", id=id, x=x, y=y, width=width, height=height, name=name, background=background, moveContents=move_contents))
+
+
+@edit("Remove an artboard")
+def artboards_delete(id: str, contents: bool = False) -> str:
+    """Turn an artboard back into a plain folder, or with contents=true delete it and its layers."""
+    return text(call("artboards.delete", id=id, contents=contents))
+
+
+@outside("Export artboards to files")
+def artboards_export(directory: str, format: str = "png", prefix: Optional[str] = None, quality: int = 90) -> str:
+    """Each visible artboard as its own PNG or JPEG in directory, named after the artboard."""
+    return text(call("artboards.export", directory=os.path.abspath(directory), format=format, prefix=prefix, quality=quality))
+
+
+@look("List slices")
+def slices_list() -> str:
+    """The slices: named rectangles for export, kept in PSDs as Photoshop's slices."""
+    return text(call("slices.list"))
+
+
+@edit("Add a slice")
+def slices_add(width: int, height: int, x: int = 0, y: int = 0, name: Optional[str] = None, url: Optional[str] = None,
+               target: Optional[str] = None, alt_tag: Optional[str] = None) -> str:
+    """A new user slice."""
+    return text(call("slices.add", x=x, y=y, width=width, height=height, name=name, url=url, target=target, altTag=alt_tag))
+
+
+@edit("Change a slice")
+def slices_set(id: int, x: Optional[int] = None, y: Optional[int] = None, width: Optional[int] = None, height: Optional[int] = None,
+               name: Optional[str] = None, url: Optional[str] = None, target: Optional[str] = None, alt_tag: Optional[str] = None) -> str:
+    """Change a slice's rectangle, name, link or alt text."""
+    return text(call("slices.set", id=id, x=x, y=y, width=width, height=height, name=name, url=url, target=target, altTag=alt_tag))
+
+
+@edit("Delete a slice")
+def slices_delete(id: int) -> str:
+    """Delete a slice by its id."""
+    return text(call("slices.delete", id=id))
+
+
+@outside("Export slices")
+def slices_export(directory: str, format: str = "png", prefix: Optional[str] = None, quality: int = 90) -> str:
+    """Each slice as its own PNG or JPEG in directory, named after the slice."""
+    return text(call("slices.export", directory=os.path.abspath(directory), format=format, prefix=prefix, quality=quality))
+
+
 @edit("Convert to smart object")
 def smart_object_convert(ids: Optional[list[str]] = None) -> str:
     """Turn the selected layers (or these layer ids) into one smart object: their PSD becomes its contents, placed
@@ -887,7 +951,7 @@ def batch(calls: list[dict], name: Optional[str] = None) -> list:
 
 @edit("Pick a tool")
 def tool_select(name: str) -> str:
-    """Switch the tool the person sees (move, marquee, lasso, wand, quickselect, crop, brush, healing, clone, smudge, gradient, shape, text, eyedropper, hand, zoom). Tools that paint by coordinates do not need this."""
+    """Switch the tool the person sees (move, marquee, lasso, wand, quickselect, crop, brush, healing, clone, smudge, gradient, shape, text, eyedropper, hand, zoom, artboard, slice). Tools that paint by coordinates do not need this."""
     return text(call("tool.select", name=name))
 
 

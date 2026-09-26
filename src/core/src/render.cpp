@@ -573,6 +573,8 @@ struct Renderer {
             result = std::make_shared<GrayImage>(outWidth, outHeight, 0);
             sampleMaskCoverage(group.mask->asset.image, transformOf(group), region, scale, 0, *result, false);
         }
+        // An artboard clips its children to its rectangle.
+        if (group.artboard) result = multiply(result, artboardCoverage(*group.artboard));
         folderCoverage[group.id] = result;
         return result;
     }
@@ -597,6 +599,60 @@ struct Renderer {
         }
         chainCoverage[parent] = result;
         return result;
+    }
+
+    /// How much of each output pixel an artboard's rectangle covers.
+    std::shared_ptr<GrayImage> artboardCoverage(const Artboard& a) const {
+        auto result = std::make_shared<GrayImage>(outWidth, outHeight, 0);
+        auto span = [&](double lo, double hi, double origin, int n, std::vector<float>& out) {
+            out.assign(size_t(n), 0.0f);
+            for (int i = 0; i < n; i++) {
+                const double p0 = origin + i / scale, p1 = origin + (i + 1) / scale;
+                out[size_t(i)] = float(std::clamp((std::min(p1, hi) - std::max(p0, lo)) * scale, 0.0, 1.0));
+            }
+        };
+        std::vector<float> cx, cy;
+        span(a.x, a.x + a.width, region.x, outWidth, cx);
+        span(a.y, a.y + a.height, region.y, outHeight, cy);
+        for (int y = 0; y < outHeight; y++) {
+            if (cy[size_t(y)] <= 0) continue;
+            uint8_t* row = result->row(y);
+            for (int x = 0; x < outWidth; x++) row[x] = uint8_t(std::lround(cx[size_t(x)] * cy[size_t(y)] * 255));
+        }
+        return result;
+    }
+
+    /// An artboard's background, under its children (the artboard's entry in `order`).
+    void drawArtboardBackground(const Layer& group, Image& out) {
+        uint8_t colour[4];
+        group.artboard->fill(colour);
+        if (!colour[3]) return;
+        auto clip = multiply(foldersCoverage(group.parentId), artboardCoverage(*group.artboard));
+        parallelRows(0, outHeight, [&](int ya, int yb) {
+            for (int y = ya; y < yb; y++) {
+                const uint8_t* c = clip->row(y);
+                uint8_t* d = out.row(y);
+                for (int x = 0; x < outWidth; x++) if (c[x]) compositePixelAt(BlendMode::Normal, colour, c[x] / 255.0f, d + x * 4, docX(region, scale, x), docY(region, scale, y));
+            }
+        });
+    }
+
+    /// Visible artboards go into the drawing order just below their first child (or where they stand, when empty).
+    void insertArtboards() {
+        const std::set<Uuid> visible = effectiveVisibleIds(document.layers);
+        for (size_t li = 0; li < document.layers.size(); li++) {
+            const Layer& g = document.layers[li];
+            if (!g.isGroup || !g.artboard || !visible.count(g.id)) continue;
+            size_t at = SIZE_MAX;
+            for (size_t i = 0; i < order.size(); i++) if (within(*order[i], g.id)) { at = i; break; }
+            if (at == SIZE_MAX) {
+                // Empty: after the layers that come before it in the document.
+                at = 0;
+                for (size_t i = 0; i < order.size(); i++)
+                    if (!order[i]->isGroup && document.indexOf(order[i]->id) < int(li)) at = i + 1;
+            }
+            order.insert(order.begin() + std::ptrdiff_t(at), &g);
+        }
     }
 
     static std::shared_ptr<GrayImage> multiply(const std::shared_ptr<GrayImage>& a, const std::shared_ptr<GrayImage>& b) {
@@ -834,6 +890,7 @@ struct Renderer {
     }
 
     void drawComposite(const Layer& layer, Image& out) {
+        if (layer.isGroup) { if (layer.artboard) drawArtboardBackground(layer, out); return; }
         if (stacked.count(layer.id)) return;
         std::shared_ptr<GrayImage> folders = foldersCoverage(layer.parentId);
         if (layer.adjustment) {
@@ -963,6 +1020,7 @@ struct Renderer {
     void run(Image& out, RenderCache* cache, uint64_t version) {
         for (auto& l : document.layers) byId[l.id] = &l;
         order = renderLayers(document.layers);
+        insertArtboards();
         prepareStacks();
         prepareGroupStyles();
         const size_t edited = cache ? editedIndex() : SIZE_MAX;

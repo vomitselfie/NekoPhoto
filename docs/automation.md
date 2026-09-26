@@ -122,6 +122,13 @@ at the bottom and the only one visible), which open in a tab of their own and an
 `document.save` (answers `macCompatible`: false past the 100 megapixels of layers Compositor for
 macOS opens; projects here hold up to a gigapixel), `document.export` (.psd, layered, text layers as Photoshop text (`texts` counts them), answering with the counts and any `warnings` and `notes` about what Photoshop cannot carry; or .svg, answering with the `shapes`, `images` and `groups` written and `notes` on what became images (docs/svg-pdf.md); or the composite as .png, .jpg, .webp or .tif; `quality` for JPEG and WebP, where 100 is lossless; `background` behind a JPEG), `document.close`.
 
+Artboards and slices (docs/artboards-slices.md): `artboards.list`, `artboards.add` (`x`, `y`, `width`, `height`, `name`,
+`background`: white, black, transparent or a CSS colour), `artboards.set` (the same by `id`; a move takes its layers along
+unless `moveContents` is false), `artboards.delete` (a plain folder again, or with `contents` everything in it), `artboards.export`
+(`directory`, `format` png or jpeg, `prefix`, `quality`; answers the `files` written); `slices.list`, `slices.add`, `slices.set`
+(by numeric `id`; `name`, `url`, `target`, `altTag`), `slices.delete` and `slices.export` (as `artboards.export`). `layers.get`
+shows a folder's `artboard`; `tool.select` takes `artboard` and `slice`.
+
 Smart objects: `smartObject.convert` (the selection or `ids`), `smartObject.place` (`path`), `smartObject.replace`
 (`path`), `smartObject.rasterize`, `smartObject.editContents` (opens a tab) and `smartObject.commit` (in that tab).
 `smartObject.addFilter` adds a Smart Filter (any of the thirteen drawn here, with its settings, opacity and blend) on

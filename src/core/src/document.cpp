@@ -145,7 +145,7 @@ bool Layer::operator==(const Layer& o) const {
         && parentId == o.parentId && isGroup == o.isGroup && passThrough == o.passThrough && opacity == o.opacity && blendMode == o.blendMode
         && mask == o.mask && maskSourceId == o.maskSourceId && adjustment == o.adjustment
         && shape == o.shape && shapeImage == o.shapeImage && text == o.text && textImage == o.textImage && psdCarry == o.psdCarry
-        && smartObject == o.smartObject && smartImage == o.smartImage;
+        && smartObject == o.smartObject && smartImage == o.smartImage && artboard == o.artboard;
 }
 
 int Layer::pixelWidth() const { return asset && asset->image ? asset->image->width() : std::max(1, int(std::lround(transform.size.width))); }
@@ -171,7 +171,7 @@ Rect Selection::bounds() const {
 Document::Document(int width_, int height_) : id(makeUuid()), width(width_), height(height_) {}
 
 bool Document::operator==(const Document& o) const {
-    return id == o.id && width == o.width && height == o.height && resolution == o.resolution && layers == o.layers && selection == o.selection && psdCarry == o.psdCarry && smartObjects == o.smartObjects;
+    return id == o.id && width == o.width && height == o.height && resolution == o.resolution && layers == o.layers && selection == o.selection && psdCarry == o.psdCarry && smartObjects == o.smartObjects && slices == o.slices;
 }
 
 long long Document::layerPixels() const {

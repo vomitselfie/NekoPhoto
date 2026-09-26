@@ -60,7 +60,7 @@ private:
     /// the view must be rendered afresh.
     bool scrollCache(QRect visible, QPointF origin, double zoom);
     bool boxPainted_ = false;   // whether the last paint drew a transform box
-    enum class Drag { None, Pan, Move, Resize, Rotate, Distort, PixelMove, Brush, Warp, Gradient, Shape, Marquee, Lasso, Scribble, ClickBox, SelectionMove, Patch, Pen, PathEdit, WarpCage, Crop, CropMove, CropResize, ZoomRect, Hook };
+    enum class Drag { None, Pan, Move, Resize, Rotate, Distort, PixelMove, Brush, Warp, Gradient, Shape, Marquee, Lasso, Scribble, ClickBox, SelectionMove, Patch, Pen, PathEdit, WarpCage, Crop, CropMove, CropResize, ZoomRect, Hook, Box };
     struct HandleHit { bool hit = false; int index = 0; bool rotate = false; };
 
     /// Notes a changed part of the document for the next paint, which renders all of it at once (flushDirty).
@@ -146,6 +146,21 @@ private:
     QTimer antsTimer_;
     bool layerPickedOnPress_ = false;
     QCursor zoomInCursor_, zoomOutCursor_;
+    /// The Artboard and Slice tools (CanvasWidgetBoxes.cpp): a rectangle drawn, moved or resized by a corner or edge,
+    /// committed on release as one undo step.
+    struct BoxDrag {
+        enum class Kind { Draw, Move, Resize } kind = Kind::Draw;
+        std::optional<compositor::Uuid> artboard;
+        std::optional<uint32_t> slice;
+        QRectF origin;
+        int edges = 0;          // Resize: 1 left, 2 top, 4 right, 8 bottom
+    };
+    std::optional<BoxDrag> boxDrag_;
+    std::optional<QRectF> boxDraft_;
+    void pressBox(QPointF view, QPointF documentPoint, Qt::KeyboardModifiers modifiers);
+    void moveBox(QPointF documentPoint, Qt::KeyboardModifiers modifiers);
+    void releaseBox();
+    void drawBoxes(QPainter& painter);
 };
 
 } // namespace app

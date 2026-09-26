@@ -44,7 +44,7 @@ class QTimer;
 
 namespace app {
 
-enum class Tool { Move, Marquee, Lasso, Wand, Scribble, Crop, Brush, SpotHealing, CloneStamp, Smudge, Gradient, Shape, Eyedropper, Hand, Zoom, Text, Dodge, PaintBucket, Pen, DirectSelect };
+enum class Tool { Move, Marquee, Lasso, Wand, Scribble, Crop, Brush, SpotHealing, CloneStamp, Smudge, Gradient, Shape, Eyedropper, Hand, Zoom, Text, Dodge, PaintBucket, Pen, DirectSelect, Artboard, Slice };
 enum class MarqueeKind { Rectangle, Ellipse };
 enum class LassoKind { Freehand, Polygonal };
 enum class BlurToolMode { Liquify, Blur, Smudge, Sharpen };
@@ -579,6 +579,29 @@ public:
     compositor::Overrides renderOverrides() const;
     /// Bumped on every document notification; what render caches key on.
     uint64_t documentRevision() const { return documentRevision_; }
+
+    // ---- Artboards and slices (EditorSessionArtboards.cpp) -----------------------------------------------------
+    /// The document's artboards (folders with an artboard), bottom to top.
+    std::vector<const compositor::Layer*> artboards() const;
+    /// A new, empty artboard at the top of the stack (one undo step); its id, or none when it cannot be added.
+    std::optional<compositor::Uuid> addArtboard(const compositor::Artboard& artboard, const QString& name = {});
+    /// An artboard's rectangle and background changed (one undo step); with `moveContents`, the layers inside
+    /// follow the rectangle's move, as Photoshop moves an artboard with its contents.
+    bool setArtboard(const compositor::Uuid& id, const compositor::Artboard& artboard, bool moveContents = true, const QString& name = {});
+    /// The artboard's folder made a plain folder again, or with `contents` deleted with everything in it.
+    bool removeArtboard(const compositor::Uuid& id, bool contents);
+    /// The topmost artboard containing a document point.
+    std::optional<compositor::Uuid> artboardAt(QPointF documentPoint) const;
+    /// A new slice (its id is chosen when 0); one undo step.
+    std::optional<uint32_t> addSlice(compositor::Slice slice);
+    bool setSlice(const compositor::Slice& slice);
+    bool deleteSlice(uint32_t id);
+    /// The document rendered over `rect` (clipped to the canvas); null when nothing of it is on the canvas.
+    std::shared_ptr<compositor::Image> renderRect(const QRect& rect) const;
+    /// File ▸ Export Artboards to Files / Export Slices: each one written to `directory` as `format` ("png" or "jpeg"),
+    /// named `prefix` + its name. Returns the paths written; `error` says why one failed.
+    QStringList exportArtboards(const QString& directory, const QString& format, const QString& prefix, int quality, QString* error);
+    QStringList exportSlices(const QString& directory, const QString& format, const QString& prefix, int quality, QString* error);
 
     // ---- Smart objects (EditorSessionSmartObjects.cpp) --------------------------------------------------------
     /// The selected layers as one smart object (one undo step).
