@@ -20,7 +20,7 @@ distributed under the GPL.
 
 The texts named below are in [LICENSES/](LICENSES). Installed builds carry
 this file, `LICENSE` and `LICENSES/` in `share/doc/nekophoto/` (inside
-the AppImage and the tarball) or in `Contents/Resources/licenses/` (macOS).
+the AppImage and the tarball).
 
 ## Compiled into the program
 
@@ -40,7 +40,7 @@ the AppImage and the tarball) or in `Contents/Resources/licenses/` (macOS).
 
 | Component | Licence | Text |
 |---|---|---|
-| [Qt](https://www.qt.io) 6: Core, Gui, Widgets, Network, Svg, DBus, Wayland and the image format plugins, bundled in the AppImage and the macOS app | LGPL-3.0 (used under its terms; the libraries are unmodified and can be replaced) | [LGPL-3.0.txt](LICENSES/LGPL-3.0.txt) with [LICENSE](LICENSE); Qt's own third-party components are listed at <https://doc.qt.io/qt-6/licenses-used-in-qt.html> |
+| [Qt](https://www.qt.io) 6: Core, Gui, Widgets, Network, Svg, DBus, Wayland and the image format plugins, bundled in the AppImage | LGPL-3.0 (used under its terms; the libraries are unmodified and can be replaced) | [LGPL-3.0.txt](LICENSES/LGPL-3.0.txt) with [LICENSE](LICENSE); Qt's own third-party components are listed at <https://doc.qt.io/qt-6/licenses-used-in-qt.html> |
 | [libpng](http://www.libpng.org) | libpng / PNG Reference Library License v2 | [libpng.txt](LICENSES/libpng.txt) |
 | [zlib](https://zlib.net) | zlib | [zlib.txt](LICENSES/zlib.txt) |
 | [libmypaint](https://github.com/mypaint/libmypaint) 1.6, the MyPaint brush engine | ISC | [libmypaint-ISC.txt](LICENSES/libmypaint-ISC.txt) |

@@ -1,8 +1,7 @@
 name: release
 
 # Pushing a tag like v0.2.0 builds NekoPhoto, packages an AppImage and a
-# plain tarball on Linux and an unsigned app bundle on macOS, and publishes them
-# on a GitHub release with generated notes.
+# plain tarball on Linux and publishes them on a GitHub release with generated notes.
 # "Run workflow" from the Actions tab does a dry run: the artifacts are built
 # and attached to the workflow run only.
 
@@ -103,64 +102,10 @@ jobs:
             *.tar.gz
             SHA256SUMS
 
-  macos:
-    name: macOS app bundle
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
-      - name: Version from the tag
-        id: version
-        run: |
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then v="${GITHUB_REF#refs/tags/v}"; else v="0.0.0-dev.${GITHUB_SHA::7}"; fi
-          echo "version=$v" >> "$GITHUB_OUTPUT"
-
-      - name: Homebrew packages
-        run: brew install ninja qt libpng libmypaint libraw zstd pkg-config
-
-      - name: Vendored OpenCV (cached)
-        id: opencv
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830   # v4
-        with:
-          path: opencv-prefix
-          key: opencv-macos-14-${{ runner.arch }}-${{ hashFiles('tools/build-opencv.sh') }}
-      - name: Build OpenCV
-        if: steps.opencv.outputs.cache-hit != 'true'
-        run: tools/build-opencv.sh opencv-prefix "$(sysctl -n hw.ncpu)"
-
-      - name: Configure and build
-        run: |
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="$(brew --prefix qt)" \
-            -DOpenCV_DIR="$PWD/opencv-prefix/lib/cmake/opencv4" \
-            -DCOMPOSITOR_VERSION="${{ steps.version.outputs.version }}"
-          cmake --build build -j"$(sysctl -n hw.ncpu)"
-
-      - name: Tests and smoke test
-        run: |
-          ctest --test-dir build --output-on-failure
-          app=build/src/app/NekoPhoto.app/Contents/MacOS/NekoPhoto
-          QT_QPA_PLATFORM=offscreen "$app" --version
-          QT_QPA_PLATFORM=offscreen "$app" --demo --screenshot demo.png --save-as Demo.comp
-
-      - name: Bundle Qt, sign ad hoc, zip
-        run: |
-          v="${{ steps.version.outputs.version }}"
-          "$(brew --prefix qt)/bin/macdeployqt" build/src/app/NekoPhoto.app -always-overwrite -verbose=1
-          codesign --force --deep --sign - build/src/app/NekoPhoto.app
-          ditto -c -k --sequesterRsrc --keepParent build/src/app/NekoPhoto.app "NekoPhoto-$v-macos-arm64.zip"
-          shasum -a 256 "NekoPhoto-$v-macos-arm64.zip" > SHA256SUMS-macos
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
-        with:
-          name: NekoPhoto-${{ steps.version.outputs.version }}-macos
-          path: |
-            NekoPhoto-*-macos-arm64.zip
-            SHA256SUMS-macos
-
   publish:
     name: GitHub release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [appimage, macos]
+    needs: [appimage]
     runs-on: ubuntu-22.04
     permissions:
       contents: write   # creates the release and uploads the files
@@ -172,10 +117,6 @@ jobs:
         with:
           pattern: NekoPhoto-*
           merge-multiple: true
-      - name: Combined checksums
-        run: |
-          cat SHA256SUMS SHA256SUMS-macos > SHA256SUMS.all && mv SHA256SUMS.all SHA256SUMS && rm SHA256SUMS-macos
-          ls -la
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65   # v2
         with:
           name: NekoPhoto ${{ steps.version.outputs.version }}
@@ -184,5 +125,4 @@ jobs:
             *.AppImage
             *.AppImage.zsync
             *.tar.gz
-            *.zip
             SHA256SUMS

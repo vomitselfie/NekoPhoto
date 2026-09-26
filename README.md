@@ -92,10 +92,6 @@ offer it for `.psd` files, run the integration script once (no root needed;
 curl -fsSL https://raw.githubusercontent.com/vomitselfie/nekophoto/main/tools/integrate-appimage.sh | bash -s -- NekoPhoto-*.AppImage
 ```
 
-**On a Mac:** each release also has an unsigned app bundle for Apple
-Silicon. Unzip it, move it to Applications, and open it with right-click >
-Open the first time.
-
 **Remove Background** is off until you turn it on in Edit > Preferences,
 which downloads the model once.
 
@@ -122,7 +118,7 @@ cmake --build build -j
 ./build/src/app/nekophoto
 ```
 
-macOS, build options, command-line flags and keyboard shortcuts are in
+Build options, command-line flags and keyboard shortcuts are in
 [docs/linux-port.md](docs/linux-port.md).
 
 ## License
@@ -217,9 +213,6 @@ chmod +x NekoPhoto-*.AppImage
 curl -fsSL https://raw.githubusercontent.com/vomitselfie/nekophoto/main/tools/integrate-appimage.sh | bash -s -- NekoPhoto-*.AppImage
 ```
 
-**Mac の場合:** 各リリースには Apple シリコン向けの未署名アプリも含まれます。
-展開して「アプリケーション」に移動し、初回だけ右クリック >「開く」で起動してください。
-
 **背景を削除** は、編集 > 環境設定 でオンにすると使えるようになります(モデルを一度だけダウンロードします)。
 
 ### AI エージェントから使う
@@ -234,7 +227,7 @@ claude mcp add nekophoto -- uv run /path/to/nekophoto/mcp/nekophoto_mcp.py
 ### ソースからビルド
 
 必要なパッケージとビルド手順は、英語版の [Build from source](#build-from-source) と同じです。
-macOS でのビルド、オプション、キーボードショートカットは [docs/linux-port.md](docs/linux-port.md)(英語)にあります。
+ビルドオプション、キーボードショートカットは [docs/linux-port.md](docs/linux-port.md)(英語)にあります。
 
 ### ライセンス
 

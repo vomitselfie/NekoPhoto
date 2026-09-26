@@ -7,7 +7,7 @@ unchanged. The macOS application and its Xcode project are untouched; see
 `docs/linux-port-architecture.md` for how the two relate.
 
 Until 1.0 the project was called compositor-linux. The rename covers the
-program (`nekophoto`, `NekoPhoto.app` on the Mac), the desktop entry and icon,
+program (`nekophoto`), the desktop entry and icon,
 the settings and data folders (`~/.config/nekophoto/`, `~/.local/share/nekophoto/nekophoto/`),
 the automation socket (`nekophoto.sock`) and the MCP bridge (`mcp/nekophoto_mcp.py`,
 server name `nekophoto`). On the first launch after the rename the old settings
@@ -23,7 +23,7 @@ an older compositor-linux AppImage installed.
 Requirements: CMake 3.22+, Ninja (or Make), GCC 12+ or Clang 15+, Qt 6.4+
 (Core, Gui, Widgets, Network, Svg, plus the Wayland platform plugin), libpng;
 OpenCV for Remove Background; libmypaint 1.5 or newer for the MyPaint brushes; LibRaw for camera RAW files;
-SQLite for importing Clip Studio brushes; libzstd for Affinity documents; Qt PDF (Arch: qt6-webengine, Ubuntu: qt6-pdf-dev, Homebrew: part of qt) for opening PDF files.
+SQLite for importing Clip Studio brushes; libzstd for Affinity documents; Qt PDF (Arch: qt6-webengine, Ubuntu: qt6-pdf-dev) for opening PDF files.
 
 Arch / Manjaro:
 
@@ -46,14 +46,7 @@ ctest --test-dir build --output-on-failure
 ./build/src/app/nekophoto      # or: ./build/src/app/nekophoto Photo.comp
 ```
 
-macOS (Homebrew) builds an app bundle; the G'MIC filters appear once
-`brew install gmic` has put `gmic` on the path:
-
-```bash
-brew install cmake ninja qt libpng libmypaint libraw zstd opencv pkg-config
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
-cmake --build build -j && open build/src/app/NekoPhoto.app
-```
+NekoPhoto is built and released for Linux only; the macOS build was dropped after 1.5.3.
 
 Under a Wayland session Qt picks the Wayland platform on its own; force it with
 `QT_QPA_PLATFORM=wayland` if needed. `QT_QPA_PLATFORM=xcb` runs under X11 or
@@ -196,19 +189,6 @@ OpenCV is the vendored static build of `tools/build-opencv.sh` (4.14, `core`,
 `imgproc` and `dnn` only), linked through its CMake config, so the AppImage
 carries no OpenCV shared libraries and every release runs the model on the
 same version.
-
-A second job in the same workflow builds the app on a macOS Apple Silicon
-runner with Homebrew's Qt and libpng and the same vendored OpenCV, runs the tests and the offscreen
-smoke test, bundles Qt with `macdeployqt`, signs the bundle ad hoc (unsigned
-arm64 binaries do not launch at all; ad hoc signed ones do after Gatekeeper's
-Open Anyway) and zips it as `NekoPhoto-<version>-macos-arm64.zip`; a
-publish job then attaches both platforms' files to the release. The bundle's
-Info.plist comes from `packaging/Info.plist.in` and its icon from
-`packaging/nekophoto.icns`, built from the same SVG as the Linux icon.
-`.github/workflows/macos.yml` runs the same build on every push so the Mac
-side stays compiling; its zip is an artifact on the workflow run. Proper
-signing and notarisation are not set up: this is a way to try the editor on a
-Mac, not a Mac product.
 
 ## Layout
 
