@@ -508,6 +508,68 @@ TEST_CASE(psd_export_writes_text_as_photoshop_type_layers) {
     CHECK(std::string(flipped.begin(), flipped.end()).find("8BIMTySh") == std::string::npos);
 }
 
+TEST_CASE(text_in_several_styles_edits_and_round_trips) {
+    // "Big small": two runs.
+    LayerText text;
+    text.text = "Big small";
+    TextRun big; big.length = 4; big.fontSize = 40; big.red = 1; big.leading = 48;
+    TextRun small = big; small.length = 5; small.fontSize = 20; small.red = 0; small.blue = 1; small.underline = true; small.baselineShift = 3;
+    small.caps = TextRun::Caps::Small; small.weight = 300;
+    text.runs = {big, small};
+    settleTextRuns(text);
+    CHECK(text.runs.size() == 2 && text.fontSize == 40);   // the plain fields follow the first run
+
+    // Typing inside the first run grows it; deleting across the boundary shrinks both; appending joins the last.
+    auto runs = adjustTextRuns(text.runs, "Big small", "Bigger small");
+    CHECK(runs[0].length == 7 && runs[1].length == 5);
+    runs = adjustTextRuns(text.runs, "Big small", "Bimall");
+    CHECK(runs[0].length == 2 && runs[1].length == 4);
+    runs = adjustTextRuns(text.runs, "Big small", "Big small!");
+    CHECK(runs[0].length == 4 && runs[1].length == 6);
+    // All of the second run gone: one run left, and it says everything the plain fields do.
+    LayerText cut = text;
+    cut.text = "Big ";
+    LayerText edited = carryTextEdit(text, cut);
+    CHECK(edited.runs.empty() && edited.fontSize == 40);
+
+    // An edit through the plain fields: a new size scales each run, a colour goes to all.
+    LayerText bigger = text;
+    bigger.fontSize = 80;
+    bigger.green = 1;
+    edited = carryTextEdit(text, bigger);
+    REQUIRE(edited.runs.size() == 2);
+    CHECK(edited.runs[0].fontSize == 80 && edited.runs[1].fontSize == 40 && edited.runs[1].leading == 96);
+    CHECK(edited.runs[0].green == 1 && edited.runs[1].red == 1 && edited.runs[1].green == 1 && edited.runs[1].blue == 0);   // the whole new colour
+
+    // Written as Photoshop type and read back: the same runs.
+    Document doc(200, 80);
+    Layer layer(Asset::make(std::make_shared<Image>(120, 60), "Styled"), Point(10, 10));
+    layer.text = text;
+    layer.textImage = layer.asset->image;
+    doc.layers.push_back(layer);
+    PsdExportOptions options;
+    options.textMetrics = [](const LayerText& t) {
+        PsdTextMetrics m;
+        m.postScriptName = "ArialMT";
+        m.fontSize = t.fontSize; m.ascent = 36; m.lineHeight = 48; m.blockLeft = m.blockTop = 4; m.blockWidth = 100;
+        m.runs = {{"ArialMT", false, false}, {"Arial-Light", false, false}};
+        return std::optional<PsdTextMetrics>(m);
+    };
+    std::string error;
+    auto back = importPsdBytes(encodePsd(doc, options, nullptr, &error), &error);
+    REQUIRE(back.has_value());
+    REQUIRE(back->document.layers[0].text.has_value());
+    const LayerText& read = *back->document.layers[0].text;
+    REQUIRE(read.runs.size() == 2);
+    CHECK(read.runs[0].length == 4 && read.runs[1].length == 5);
+    CHECK(std::abs(read.runs[1].fontSize - 20) < 1e-6 && read.runs[1].blue == 1 && read.runs[1].underline);
+    CHECK(read.runs[1].caps == TextRun::Caps::Small && std::abs(read.runs[1].baselineShift - 3) < 1e-6);
+    CHECK(read.runs[1].weight == 300);   // from the face's name, Arial-Light
+    CHECK(std::abs(read.runs[0].leading - 48) < 1e-6);
+    REQUIRE(back->texts.size() == 1);
+    CHECK(back->texts[0].runPostScriptNames.size() == 2 && back->texts[0].runPostScriptNames[1] == "Arial-Light");
+}
+
 TEST_CASE(psb_export_reads_back_with_even_composite_rows) {
     Document doc(40, 30);
     doc.layers.push_back(pixels("A", softDisc(20, 200, 30, 30), {5, 5}));

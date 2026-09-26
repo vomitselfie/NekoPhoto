@@ -136,6 +136,24 @@ QJsonObject layerJson(const Layer& layer, int depth) {
         o["text"] = QJsonObject{{"text", qs(t.text)}, {"font", qs(t.fontFamily)}, {"size", t.fontSize}, {"bold", t.bold}, {"italic", t.italic},
                                 {"color", QColor::fromRgbF(float(t.red), float(t.green), float(t.blue)).name()}, {"align", t.alignment == 1 ? "center" : t.alignment == 2 ? "right" : "left"},
                                 {"lineSpacing", t.lineSpacing}, {"letterSpacing", t.letterSpacing}};
+        if (!t.runs.empty()) {
+            // Text in several styles: each run, in UTF-16 units of the text (read-only here; text.set carries
+            // changes into them).
+            QJsonArray runs;
+            for (const TextRun& r : t.runs) {
+                QJsonObject rj{{"length", r.length}, {"font", qs(r.fontFamily)}, {"size", r.fontSize}, {"bold", r.bold}, {"italic", r.italic},
+                               {"color", QColor::fromRgbF(float(r.red), float(r.green), float(r.blue)).name()}, {"letterSpacing", r.letterSpacing}};
+                if (r.baselineShift != 0) rj["baselineShift"] = r.baselineShift;
+                if (r.weight != 0) rj["weight"] = r.weight;
+                if (r.caps != TextRun::Caps::Normal) rj["caps"] = r.caps == TextRun::Caps::Small ? "small" : "all";
+                if (r.underline) rj["underline"] = true;
+                if (r.strikethrough) rj["strikethrough"] = true;
+                runs.append(rj);
+            }
+            QJsonObject text = o["text"].toObject();
+            text["runs"] = runs;
+            o["text"] = text;
+        }
     }
     return o;
 }

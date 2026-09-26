@@ -23,6 +23,9 @@ struct PsdTextMetrics {
     double lineHeight = 0;             // baseline to baseline
     double blockLeft = 0, blockTop = 0, blockWidth = 0;
     int lines = 1;
+    /// With runs: each run's face and synthesised styles, in order (the fields above are the first run's).
+    struct RunFace { std::string postScriptName; bool fauxBold = false, fauxItalic = false; };
+    std::vector<RunFace> runs;
 };
 
 struct PsdExportOptions {

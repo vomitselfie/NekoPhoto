@@ -83,6 +83,14 @@ TextDialog::TextDialog(EditorSession* session, Uuid layerId, QWidget* parent)
     styleRow->addWidget(colour_);
     layout->addLayout(styleRow);
 
+    if (text_.runs.size() > 1) {
+        auto* note = new QLabel(tr("This text has %n styles; a change here applies to all of them (a new size scales each one).", nullptr, int(text_.runs.size())));
+        note->setWordWrap(true);
+        layout->addWidget(note);
+    }
+    original_ = text_;
+    atStart_ = fromWidgets();
+
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -109,20 +117,39 @@ TextDialog::TextDialog(EditorSession* session, Uuid layerId, QWidget* parent)
 
 TextDialog::~TextDialog() { if (!finished_ && session_) session_->endTextEdit(false); }
 
+LayerText TextDialog::fromWidgets() const {
+    LayerText t = text_;
+    t.text = editor_->toPlainText().toStdString();
+    t.fontFamily = family_->family().toStdString();
+    t.fontSize = size_->value();
+    t.bold = bold_->isChecked();
+    t.italic = italic_->isChecked();
+    t.alignment = alignment_->currentIndex();
+    t.lineSpacing = lineSpacing_->value();
+    t.letterSpacing = letterSpacing_->value();
+    return t;
+}
+
 void TextDialog::apply() {
     if (!session_) return;
-    text_.text = editor_->toPlainText().toStdString();
-    text_.fontFamily = family_->family().toStdString();
-    text_.fontSize = size_->value();
-    text_.bold = bold_->isChecked();
-    text_.italic = italic_->isChecked();
-    text_.alignment = alignment_->currentIndex();
-    text_.lineSpacing = lineSpacing_->value();
-    text_.letterSpacing = letterSpacing_->value();
+    // Only what was changed here: a control's rounding (a whole-pixel size, a stand-in for a missing font) is not
+    // an edit, and would otherwise flatten text in several styles.
+    const LayerText now = fromWidgets();
+    text_ = original_;
+    text_.red = now.red; text_.green = now.green; text_.blue = now.blue;
+    if (now.text != atStart_.text) text_.text = now.text;
+    if (now.fontFamily != atStart_.fontFamily) text_.fontFamily = now.fontFamily;
+    if (now.fontSize != atStart_.fontSize) text_.fontSize = now.fontSize;
+    if (now.bold != atStart_.bold) text_.bold = now.bold;
+    if (now.italic != atStart_.italic) text_.italic = now.italic;
+    if (now.alignment != atStart_.alignment) text_.alignment = now.alignment;
+    if (now.lineSpacing != atStart_.lineSpacing) text_.lineSpacing = now.lineSpacing;
+    if (now.letterSpacing != atStart_.letterSpacing) text_.letterSpacing = now.letterSpacing;
     session_->setLayerText(layerId_, text_);
     // The style carries over to the next text.
     LayerText next = text_;
     next.text.clear();
+    next.runs.clear();
     session_->textStyle = next;
 }
 

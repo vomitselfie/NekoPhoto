@@ -31,6 +31,8 @@ private:
     QPointer<EditorSession> session_;
     compositor::Uuid layerId_;
     compositor::LayerText text_;
+    compositor::LayerText original_, atStart_;   // as opened, and as the controls first showed it
+    compositor::LayerText fromWidgets() const;
     QPlainTextEdit* editor_;
     FontPicker* family_;
     QDoubleSpinBox* size_;

@@ -547,10 +547,14 @@ void EditorSession::setLayerText(const Uuid& id, const LayerText& text) {
     if (!document_) return;
     Layer* layer = document_->find(id);
     if (!layer || !layer->text) return;
-    if (*layer->text == text && layer->isLiveText()) return;
+    // Text in several styles: an edit through the plain fields carries into its runs.
+    // While an edit session previews, each change is carried from the text as it was when editing began.
+    const bool fromOrigin = textEditing_ && textEditOriginal_ && textEditOriginal_->id == id && textEditOriginal_->text;
+    const LayerText edited = carryTextEdit(fromOrigin ? *textEditOriginal_->text : *layer->text, text);
+    if (*layer->text == edited && layer->isLiveText()) return;
     const bool standalone = !textEditing_;
     if (standalone) beginEdit("Edit Text");
-    layer->text = text;
+    layer->text = edited;
     redrawText(*layer);
     if (standalone) { endEdit(); notifyDocument(); }
     else { emit documentChanged({}); emit layersChanged(); }

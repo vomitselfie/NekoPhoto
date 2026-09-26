@@ -17,6 +17,7 @@ namespace compositor {
 struct PsdImportedText {
     Uuid layer;
     std::string postScriptName;        // the face, e.g. "Georgia-BoldItalic"
+    std::vector<std::string> runPostScriptNames;   // each run's face, when the text has runs
     double leading = 0;                // baseline to baseline in pixels; 0: automatic
     double autoLeading = 1.2;          // with automatic leading, the fraction of the size
 };
@@ -50,6 +51,7 @@ constexpr int psdSmartObjectDepthLimit = 4;
 struct PsdTypeLayer {
     LayerText text;
     std::string postScriptName;
+    std::vector<std::string> runPostScriptNames;
     double leading = 0, autoLeading = 1.2;
     double anchorX = 0, anchorY = 0;   // the first baseline's anchor in the document (by alignment)
 };

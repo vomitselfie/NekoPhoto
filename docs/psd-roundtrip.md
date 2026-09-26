@@ -41,7 +41,7 @@ save and reopen. When a carried block is left out, the export summary says which
 ## Text
 
 **Export.** A NekoPhoto text layer is written as a Photoshop type layer ('TySh', `src/core/src/psd_text.cpp`) over the
-pixels we drew: point text, one style, the face's PostScript name (read from the font's `name` table), its size in
+pixels we drew: point text, one style run per run (below), the face's PostScript name (read from the font's `name` table), its size in
 pixels (Photoshop's engine units are document pixels), colour, alignment, fixed leading equal to our line height,
 letter spacing as tracking, and bold or italic as faux styles where Qt synthesised them. It is anchored at the first
 baseline (on the left edge, the centre or the right edge of the block by alignment) through a matrix carrying the
@@ -51,14 +51,29 @@ stays even without a pad after its end-anchored tail. The metrics come from the 
 has no font engine, and without them text is written as pixels. A flipped layer is written as pixels.
 
 **Import.** A Photoshop type layer opens as NekoPhoto text when our model can hold it: horizontal point text, one
-style (runs are compared over the normal style sheet, as Photoshop leaves out what equals it), one alignment, RGB
-fill, no warp, rotation, skew, horizontal or vertical scale, baseline shift, caps or underline. It keeps Photoshop's
+alignment, RGB fill, no warp, rotation, skew, horizontal or vertical scale, superscript or subscript. A scale a hair
+uneven (under 1.5%, a transform nudged by hand) is read as its vertical scale. It keeps Photoshop's
 pixels until it is edited; the first redraw puts our first baseline where Photoshop anchored its own. The face is
 found among the installed families by its PostScript name ("ArialMT" is Arial); one that is not installed is spelled
 out for fontconfig ("TimesNewRomanPSMT" asks for Times New Roman, which gets its metric twin) and noted. Photoshop's
-leading, fixed or automatic, becomes our line spacing. Everything else (box text, vertical, warped, several styles)
+leading, fixed or automatic, becomes our line spacing. Everything else (box text, vertical, warped)
 shows as Photoshop's pixels, and its own 'TySh' comes back on export while those pixels are unchanged; so does the
 original block of a layer opened as text and not edited, since it says more than ours.
+
+**Several styles.** Text whose runs differ (runs are compared over the normal style sheet, as Photoshop leaves out what
+equals it) keeps them: `LayerText::runs`, each with its face, size, weight, bold and italic, colour, tracking,
+baseline shift, leading, caps (small or all) and underline or strikethrough, in UTF-16 units of the text. The face's
+weight comes from its name, in words ("Medium", "Light") or Linotype's abbreviations (`HelveticaNeueLTStd-Th`, `-Lt`,
+`-Md`, `-BdCn`). The app draws each line through QTextLayout with a format per run; a line sits the largest leading
+among its runs below the one before (Photoshop's rule), tabs stop every 36 pixels (Photoshop's half inch), and export
+writes one style run per run with its own face in the font set. Editing through the text dialog or `text.set`
+carries into the runs: typing extends the run it starts in, a new size scales every run (and its leading), and any
+other field changed applies to all of them; a field the dialog merely rounded (a whole-pixel size, a stand-in for a
+missing font) is not a change. Projects keep the runs in the manifest's text object (the Mac app ignores them).
+
+On the 2014 styleguide (a text-heavy corporate file), 16 of its 22 type layers now open as text, 13 of them in
+several styles; after a redraw their lines, tabs and indents land where Photoshop's do, the faces standing in for
+Helvetica Neue. The rest are five empty layers and one box of paragraph text.
 
 Checked on Patchy's Photoshop text fixtures: after an edit, our lines land within a pixel of Photoshop's (automatic
 and fixed leading, tracking, centred and right-aligned anchors), with Liberation Sans standing in for Arial.

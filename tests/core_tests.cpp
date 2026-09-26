@@ -645,6 +645,28 @@ TEST_CASE(project_round_trip_preserves_layers_masks_groups_and_unknown_fields) {
     fs::remove_all(dir);
 }
 
+TEST_CASE(text_runs_survive_a_project) {
+    Document doc(100, 50);
+    Layer l = imageLayer("Styled", solid(80, 30, 0, 0, 0, 255), {0, 0});
+    LayerText t;
+    t.text = "ab cd";
+    TextRun a; a.length = 3; a.fontSize = 30; a.weight = 500; a.leading = 36;
+    TextRun b = a; b.length = 2; b.fontSize = 12; b.caps = TextRun::Caps::All; b.underline = true; b.baselineShift = -2; b.red = 1;
+    t.runs = {a, b};
+    settleTextRuns(t);
+    l.text = t;
+    l.textImage = l.asset->image;
+    doc.layers.push_back(l);
+    fs::path dir = tempDir();
+    ProjectError error;
+    REQUIRE(saveProject(doc, std::nullopt, (dir / "Runs.comp").string(), error));
+    auto back = loadProject((dir / "Runs.comp").string(), error);
+    REQUIRE(back.has_value());
+    REQUIRE(back->layers[0].text.has_value());
+    CHECK(back->layers[0].text->runs == t.runs);
+    fs::remove_all(dir);
+}
+
 TEST_CASE(projects_past_the_macs_100_megapixels_save_and_load) {
     // Game texture stacks: layers that together pass Compositor for macOS's 100-megapixel project total.
     Document doc(6000, 6000);

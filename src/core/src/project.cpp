@@ -197,6 +197,28 @@ bool parseRecord(const json& j, Record& r) {
         if (tx->contains("letterSpacing") && !getDouble(*tx, "letterSpacing", letterSpacing, true)) return false;
         t.alignment = std::clamp(int(alignment), 0, 2); t.lineSpacing = lineSpacing; t.letterSpacing = letterSpacing;
         if (!(t.fontSize > 0) || !std::isfinite(t.fontSize) || !std::isfinite(t.lineSpacing) || !std::isfinite(t.letterSpacing)) return false;
+        if (auto rs = tx->find("runs"); rs != tx->end()) {
+            if (!rs->is_array() || rs->size() > 100000) return false;
+            for (const json& rj : *rs) {
+                if (!rj.is_object()) return false;
+                TextRun r;
+                double length = 0, caps = 0;
+                if (!getDouble(rj, "length", length, true) || !getDouble(rj, "fontSize", r.fontSize, true)) return false;
+                if (rj.contains("fontFamily") && !getString(rj, "fontFamily", r.fontFamily, true)) return false;
+                for (auto [key, field] : {std::pair{"bold", &r.bold}, {"italic", &r.italic}, {"underline", &r.underline}, {"strikethrough", &r.strikethrough}})
+                    if (rj.contains(key) && !getBool(rj, key, *field, true)) return false;
+                for (auto [key, field] : {std::pair{"red", &r.red}, {"green", &r.green}, {"blue", &r.blue}, {"letterSpacing", &r.letterSpacing}, {"baselineShift", &r.baselineShift}, {"leading", &r.leading}})
+                    if (rj.contains(key) && !getDouble(rj, key, *field, true)) return false;
+                if (rj.contains("caps") && !getDouble(rj, "caps", caps, true)) return false;
+                double weight = 0;
+                if (rj.contains("weight") && !getDouble(rj, "weight", weight, true)) return false;
+                r.weight = std::clamp(int(weight), 0, 1000);
+                if (!(length >= 0 && length < 1e9) || !(r.fontSize > 0) || !std::isfinite(r.fontSize) || !std::isfinite(r.letterSpacing) || !std::isfinite(r.baselineShift) || !std::isfinite(r.leading)) return false;
+                r.length = int(length);
+                r.caps = caps == 1 ? TextRun::Caps::Small : caps == 2 ? TextRun::Caps::All : TextRun::Caps::Normal;
+                t.runs.push_back(r);
+            }
+        }
         l.text = t;
     }
     json extra = json::object();
@@ -235,6 +257,21 @@ json recordJson(const Layer& l) {
         j["text"] = {{"text", t.text}, {"fontFamily", t.fontFamily}, {"fontSize", number(t.fontSize)}, {"bold", t.bold}, {"italic", t.italic},
                      {"red", number(t.red)}, {"green", number(t.green)}, {"blue", number(t.blue)}, {"alignment", t.alignment},
                      {"lineSpacing", number(t.lineSpacing)}, {"letterSpacing", number(t.letterSpacing)}};
+        if (!t.runs.empty()) {
+            json runs = json::array();
+            for (const TextRun& r : t.runs) {
+                json rj = {{"length", r.length}, {"fontFamily", r.fontFamily}, {"fontSize", number(r.fontSize)}, {"bold", r.bold}, {"italic", r.italic},
+                           {"red", number(r.red)}, {"green", number(r.green)}, {"blue", number(r.blue)}, {"letterSpacing", number(r.letterSpacing)}};
+                if (r.baselineShift != 0) rj["baselineShift"] = number(r.baselineShift);
+                if (r.leading != 0) rj["leading"] = number(r.leading);
+                if (r.weight != 0) rj["weight"] = r.weight;
+                if (r.caps != TextRun::Caps::Normal) rj["caps"] = r.caps == TextRun::Caps::Small ? 1 : 2;
+                if (r.underline) rj["underline"] = true;
+                if (r.strikethrough) rj["strikethrough"] = true;
+                runs.push_back(rj);
+            }
+            j["text"]["runs"] = runs;
+        }
     }
     return j;
 }

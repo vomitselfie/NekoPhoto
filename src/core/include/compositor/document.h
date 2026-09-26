@@ -74,6 +74,22 @@ struct LayerShapeStyle {
     bool operator==(const LayerShapeStyle&) const = default;
 };
 
+/// One stretch of a text layer in its own style (Photoshop's style runs).
+struct TextRun {
+    int length = 0;                    // UTF-16 code units of the layer's text (Qt's and Photoshop's unit)
+    std::string fontFamily;
+    double fontSize = 48;
+    bool bold = false, italic = false;
+    int weight = 0;                    // 100 (thin) .. 900 (black), from the face's name; 0: from `bold`
+    double red = 0, green = 0, blue = 0;
+    double letterSpacing = 0;
+    double baselineShift = 0;          // pixels, up
+    double leading = 0;                // baseline to baseline for a line holding it (the largest on a line wins); 0: 1.2 x size
+    enum class Caps { Normal, Small, All } caps = Caps::Normal;
+    bool underline = false, strikethrough = false;
+    bool operator==(const TextRun&) const = default;
+};
+
 /// A text layer's content and style. Its pixels are an ordinary raster the app renders from these (the
 /// core has no font engine), so every consumer of the document, the Mac app included, sees pixels.
 struct LayerText {
@@ -85,8 +101,28 @@ struct LayerText {
     int alignment = 0;                 // 0 left, 1 centre, 2 right (multi-line text)
     double lineSpacing = 1;            // multiple of the font's line height
     double letterSpacing = 0;          // extra pixels between glyphs
+    /// Text in more than one style: the runs, in order, covering the text (the fields above then mirror the first
+    /// run). Empty: all of it in the style above.
+    std::vector<TextRun> runs;
     bool operator==(const LayerText&) const = default;
 };
+
+/// The text's length in UTF-16 code units.
+int utf16Length(const std::string& utf8);
+/// The runs to draw `text` with: its own, fitted to its length (the last one stretched or cut), or one run of its
+/// style over all of it.
+std::vector<TextRun> textRuns(const LayerText& text);
+/// The layer's style as one run (its fields).
+TextRun baseTextRun(const LayerText& text);
+/// Runs kept in step with an edit that turned `before` into `after` (the changed middle takes the style of the run
+/// it starts in).
+std::vector<TextRun> adjustTextRuns(const std::vector<TextRun>& runs, const std::string& before, const std::string& after);
+/// Adjacent equal runs merged, the plain fields set from the first run, and a single run they say in full dropped.
+void settleTextRuns(LayerText& text);
+/// `after` (an edit of `before` through its plain fields, its runs untouched) with the edit carried into the runs:
+/// the text's change moves the run boundaries, a new size scales every run by the same factor, and any other
+/// field changed is given to every run.
+LayerText carryTextEdit(const LayerText& before, LayerText after);
 
 struct Layer {
     Uuid id;

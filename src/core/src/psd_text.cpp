@@ -7,6 +7,7 @@
 #include "compositor/psd_writer.h"
 #include "psd/psd_descriptor.hpp"
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <map>
@@ -61,42 +62,63 @@ std::string paragraph(int justification, double leadingFraction) {
            " /LeadingType 0 /Hanging false /Burasagari false /KinsokuOrder 0 /EveryLineComposer false >>";
 }
 
-std::string style(const LayerText& text, const PsdTextMetrics& m) {
-    const double size = std::max(1.0, m.fontSize);
-    std::string s = "<< /Font 1 /FontSize " + number(size);
-    s += std::string(" /FauxBold ") + (m.fauxBold ? "true" : "false");
-    s += std::string(" /FauxItalic ") + (m.fauxItalic ? "true" : "false");
-    s += " /AutoLeading false /Leading " + number(m.lineHeight);
+std::string style(const TextRun& run, int font, bool fauxBold, bool fauxItalic, double lineHeight) {
+    const double size = std::max(1.0, run.fontSize);
+    std::string s = "<< /Font " + std::to_string(font) + " /FontSize " + number(size);
+    s += std::string(" /FauxBold ") + (fauxBold ? "true" : "false");
+    s += std::string(" /FauxItalic ") + (fauxItalic ? "true" : "false");
+    s += " /AutoLeading false /Leading " + number(lineHeight);
     // Our spacing is extra pixels per glyph; Photoshop's tracking is thousandths of the size, an integer.
-    const long tracking = std::lround(text.letterSpacing * 1000 / size);
+    const long tracking = std::lround(run.letterSpacing * 1000 / size);
     if (tracking) s += " /Tracking " + std::to_string(tracking);
-    s += " /AutoKerning true /Kerning 0 /FillColor << /Type 1 /Values [ 1.0 " + number(std::clamp(text.red, 0.0, 1.0)) + " " +
-         number(std::clamp(text.green, 0.0, 1.0)) + " " + number(std::clamp(text.blue, 0.0, 1.0)) + " ] >> >>";
+    if (run.baselineShift != 0) s += " /BaselineShift " + number(run.baselineShift);
+    if (run.caps != TextRun::Caps::Normal) s += std::string(" /FontCaps ") + (run.caps == TextRun::Caps::Small ? "1" : "2");
+    if (run.underline) s += " /Underline true";
+    if (run.strikethrough) s += " /Strikethrough true";
+    s += " /AutoKerning true /Kerning 0 /FillColor << /Type 1 /Values [ 1.0 " + number(std::clamp(run.red, 0.0, 1.0)) + " " +
+         number(std::clamp(run.green, 0.0, 1.0)) + " " + number(std::clamp(run.blue, 0.0, 1.0)) + " ] >> >>";
     return s;
 }
 
 std::vector<uint8_t> engineData(const LayerText& text, const std::string& engineText, int units, int justification, const PsdTextMetrics& m) {
-    const double leadingFraction = m.lineHeight / std::max(1.0, m.fontSize);
     const std::string para = paragraph(justification, 1.2);
+    // The runs, their faces (font 0 is Photoshop's invisible font), the last run taking the closing return.
+    std::vector<TextRun> runs = textRuns(text);
+    std::vector<std::string> fonts;
+    std::vector<int> fontOf;
+    std::string styles, lengths;
+    int covered = 0;
+    for (size_t i = 0; i < runs.size(); i++) {
+        const PsdTextMetrics::RunFace face = i < m.runs.size() ? m.runs[i] : PsdTextMetrics::RunFace{m.postScriptName, m.fauxBold, m.fauxItalic};
+        const std::string name = face.postScriptName.empty() ? "ArialMT" : face.postScriptName;
+        auto at = std::find(fonts.begin(), fonts.end(), name);
+        if (at == fonts.end()) { fonts.push_back(name); at = fonts.end() - 1; }
+        const int font = int(at - fonts.begin()) + 1;
+        fontOf.push_back(font);
+        const int length = i + 1 == runs.size() ? units - covered : runs[i].length;
+        covered += length;
+        styles += " << /StyleSheet << /StyleSheetData " + style(runs[i], font, face.fauxBold, face.fauxItalic, runs[i].leading > 0 && !text.runs.empty() ? runs[i].leading : m.lineHeight) + " >> >>";
+        lengths += " " + std::to_string(length);
+    }
     std::string e = "<<\n/EngineDict <<\n/Editor << /Text " + engineString(engineText) + " >>\n";
     e += "/ParagraphRun << /DefaultRunData << /ParagraphSheet << /DefaultStyleSheet 0 /Properties << >> >> /Adjustments << /Axis [ 1.0 0.0 1.0 ] /XY [ 0.0 0.0 ] >> >>";
     e += " /RunArray [ << /ParagraphSheet << /DefaultStyleSheet 0 /Properties " + para + " >> /Adjustments << /Axis [ 1.0 0.0 1.0 ] /XY [ 0.0 0.0 ] >> >> ]";
     e += " /RunLengthArray [ " + std::to_string(units) + " ] /IsJoinable 1 >>\n";
-    e += "/StyleRun << /DefaultRunData << /StyleSheet << /StyleSheetData << >> >> >> /RunArray [ << /StyleSheet << /StyleSheetData " + style(text, m) +
-         " >> >> ] /RunLengthArray [ " + std::to_string(units) + " ] /IsJoinable 2 >>\n";
+    e += "/StyleRun << /DefaultRunData << /StyleSheet << /StyleSheetData << >> >> >> /RunArray [" + styles + " ] /RunLengthArray [" + lengths +
+         " ] /IsJoinable 2 >>\n";
     e += "/GridInfo << /GridIsOn false /ShowGrid false /GridSize 18.0 /GridLeading 22.0 /GridColor << /Type 1 /Values [ 1.0 0.0 0.0 1.0 ] >>"
          " /GridLeadingFillColor << /Type 1 /Values [ 1.0 0.0 0.0 1.0 ] >> /AlignLineHeightToGridFlags false >>\n";
     e += "/AntiAlias 3 /UseFractionalGlyphWidths true\n";
     e += "/Rendered << /Version 1 /Shapes << /WritingDirection 0 /Children [ << /ShapeType 0 /Procession 0 /Lines << /WritingDirection 0 /Children [ ] >>"
          " /Cookie << /Photoshop << /ShapeType 0 /PointBase [ 0.0 0.0 ] /Base << /ShapeType 0 /TransformPoint0 [ 1.0 0.0 ]"
          " /TransformPoint1 [ 0.0 1.0 ] /TransformPoint2 [ 0.0 0.0 ] >> >> >> >> ] >> >>\n>>\n";
-    (void)leadingFraction;
+    const PsdTextMetrics::RunFace first = m.runs.empty() ? PsdTextMetrics::RunFace{m.postScriptName, m.fauxBold, m.fauxItalic} : m.runs.front();
+    std::string fontSet = "<< /Name " + engineString("AdobeInvisFont") + " /Script 0 /FontType 0 /Synthetic 0 >>";
+    for (const std::string& f : fonts) fontSet += " << /Name " + engineString(f) + " /Script 0 /FontType 1 /Synthetic 0 >>";
     std::string resources = "<< /KinsokuSet [ ] /MojiKumiSet [ ] /TheNormalStyleSheet 0 /TheNormalParagraphSheet 0 /ParagraphSheetSet [ << /Name " +
         engineString("Normal RGB") + " /DefaultStyleSheet 0 /Properties " + para + " >> ] /StyleSheetSet [ << /Name " + engineString("Normal RGB") +
-        " /StyleSheetData " + style(text, m) + " >> ] /FontSet [ << /Name " + engineString("AdobeInvisFont") +
-        " /Script 0 /FontType 0 /Synthetic 0 >> << /Name " + engineString(m.postScriptName.empty() ? "ArialMT" : m.postScriptName) +
-        " /Script 0 /FontType 1 /Synthetic 0 >> ] /SuperscriptSize 0.583 /SuperscriptPosition 0.333 /SubscriptSize 0.583"
-        " /SubscriptPosition 0.333 /SmallCapSize 0.7 >>";
+        " /StyleSheetData " + style(runs.front(), fontOf.front(), first.fauxBold, first.fauxItalic, runs.front().leading > 0 && !text.runs.empty() ? runs.front().leading : m.lineHeight) + " >> ] /FontSet [ " + fontSet +
+        " ] /SuperscriptSize 0.583 /SuperscriptPosition 0.333 /SubscriptSize 0.583 /SubscriptPosition 0.333 /SmallCapSize 0.7 >>";
     e += "/ResourceDict " + resources + "\n/DocumentResources " + resources + "\n>>";
     return std::vector<uint8_t>(e.begin(), e.end());
 }
@@ -322,24 +344,6 @@ EngineValue effective(const EngineValue* normal, const EngineValue* run) {
     return merged;
 }
 
-bool sameValue(const EngineValue& a, const EngineValue& b) {
-    if (a.kind != b.kind) return false;
-    switch (a.kind) {
-    case EngineValue::Number: return std::abs(a.number - b.number) < 1e-6;
-    case EngineValue::Bool: return a.boolean == b.boolean;
-    case EngineValue::Name: case EngineValue::String: return a.text == b.text;
-    case EngineValue::Array:
-        if (a.items.size() != b.items.size()) return false;
-        for (size_t i = 0; i < a.items.size(); i++) if (!sameValue(a.items[i], b.items[i])) return false;
-        return true;
-    case EngineValue::Dict:
-        if (a.entries.size() != b.entries.size()) return false;
-        for (auto& [k, v] : a.entries) { auto o = b.get(k); if (!o || !sameValue(v, *o)) return false; }
-        return true;
-    default: return true;
-    }
-}
-
 } // namespace
 
 std::optional<PsdTypeLayer> readPhotoshopType(const uint8_t* data, size_t size, std::string* why) {
@@ -355,8 +359,10 @@ std::optional<PsdTypeLayer> readPhotoshopType(const uint8_t* data, size_t size, 
         const auto warp = patchy::psd::read_descriptor(r);
         if (auto style = patchy::psd::descriptor_value(warp, "warpStyle"); style && style->enum_value != "warpNone") return no("warped");
         if (auto orientation = patchy::psd::descriptor_value(descriptor, "Ornt"); orientation && orientation->enum_value == "Vrtc") return no("vertical");
-        if (std::abs(m[1]) > 1e-9 || std::abs(m[2]) > 1e-9 || !(m[0] > 0) || std::abs(m[0] - m[3]) > 1e-6) return no("rotated, skewed or stretched");
-        const double scale = m[0];
+        // A scale a hair uneven (a transform nudged by hand: under 1.5%) reads as the vertical one, which sets the
+        // size and the line pitch; the width then differs by less than that once the text is edited.
+        if (std::abs(m[1]) > 1e-9 || std::abs(m[2]) > 1e-9 || !(m[0] > 0) || !(m[3] > 0) || std::abs(m[0] / m[3] - 1) > 0.015) return no("rotated, skewed or stretched");
+        const double scale = m[3];
         auto engineItem = patchy::psd::descriptor_value(descriptor, "EngineData");
         if (!engineItem || engineItem->raw_value.empty()) return no("without engine data");
         EngineValue engine;
@@ -377,13 +383,9 @@ std::optional<PsdTypeLayer> readPhotoshopType(const uint8_t* data, size_t size, 
             normal = sheets->items[std::min(index, sheets->items.size() - 1)].get("StyleSheetData");
         }
         const EngineValue* runs = dict->path({"StyleRun", "RunArray"});
+        const EngineValue* lengths = dict->path({"StyleRun", "RunLengthArray"});
         if (!runs || runs->kind != EngineValue::Array || runs->items.empty()) return no("without styles");
-        std::optional<EngineValue> style;
-        for (auto& run : runs->items) {
-            EngineValue e = effective(normal, run.path({"StyleSheet", "StyleSheetData"}));
-            if (style && !sameValue(*style, e)) return no("in more than one style");
-            if (!style) style = e;
-        }
+        if (!lengths || lengths->kind != EngineValue::Array || lengths->items.size() != runs->items.size()) return no("without styles");
         int justification = 0;
         if (auto paragraphs = dict->path({"ParagraphRun", "RunArray"}); paragraphs && paragraphs->kind == EngineValue::Array) {
             std::optional<int> seen;
@@ -396,9 +398,6 @@ std::optional<PsdTypeLayer> readPhotoshopType(const uint8_t* data, size_t size, 
             justification = seen.value_or(0);
         }
         if (justification > 2) return no("justified");
-        if (std::abs(style->num("HorizontalScale", 1) - 1) > 1e-6 || std::abs(style->num("VerticalScale", 1) - 1) > 1e-6) return no("scaled horizontally or vertically");
-        if (std::abs(style->num("BaselineShift", 0)) > 1e-6 || style->num("FontCaps", 0) != 0 || style->num("FontBaseline", 0) != 0
-            || style->flag("Underline", false) || style->flag("Strikethrough", false)) return no("with baseline shift, caps, underline or strikethrough");
 
         PsdTypeLayer out;
         out.anchorX = m[4]; out.anchorY = m[5];
@@ -406,25 +405,86 @@ std::optional<PsdTypeLayer> readPhotoshopType(const uint8_t* data, size_t size, 
         std::replace(content.begin(), content.end(), '\r', '\n');
         while (!content.empty() && content.back() == '\n') content.pop_back();
         out.text.text = content;
-        const double fontSize = style->num("FontSize", 12) * scale;
-        out.text.fontSize = fontSize;
-        if (auto fill = style->get("FillColor")) {
-            const EngineValue* values = fill->get("Values");
-            if (fill->num("Type", 1) != 1 || !values || values->items.size() != 4) return no("filled with a non-RGB colour");
-            out.text.red = values->items[1].number; out.text.green = values->items[2].number; out.text.blue = values->items[3].number;
+        const int contentLength = utf16Length(content);
+        const EngineValue* fonts = resources->get("FontSet");
+        double autoFraction = 1.2;
+        if (auto paragraphs = dict->path({"ParagraphRun", "RunArray"}); paragraphs && paragraphs->kind == EngineValue::Array && !paragraphs->items.empty())
+            if (const EngineValue* props = paragraphs->items[0].path({"ParagraphSheet", "Properties"})) autoFraction = props->num("AutoLeading", 1.2);
+        double leading = 0;
+        bool autoLeading = true;
+        int covered = 0;
+        for (size_t i = 0; i < runs->items.size(); i++) {
+            const EngineValue style = effective(normal, runs->items[i].path({"StyleSheet", "StyleSheetData"}));
+            if (std::abs(style.num("HorizontalScale", 1) - 1) > 1e-6 || std::abs(style.num("VerticalScale", 1) - 1) > 1e-6) return no("scaled horizontally or vertically");
+            if (style.num("FontBaseline", 0) != 0) return no("superscript or subscript");
+            TextRun run;
+            run.length = int(lengths->items[i].number);
+            const double fontSize = style.num("FontSize", 12) * scale;
+            run.fontSize = fontSize;
+            if (auto fill = style.get("FillColor")) {
+                const EngineValue* values = fill->get("Values");
+                if (fill->num("Type", 1) != 1 || !values || values->items.size() != 4) return no("filled with a non-RGB colour");
+                run.red = values->items[1].number; run.green = values->items[2].number; run.blue = values->items[3].number;
+            }
+            run.letterSpacing = style.num("Tracking", 0) / 1000 * fontSize;
+            run.baselineShift = style.num("BaselineShift", 0) * scale;
+            const int caps = int(style.num("FontCaps", 0));
+            run.caps = caps == 1 ? TextRun::Caps::Small : caps == 2 ? TextRun::Caps::All : TextRun::Caps::Normal;
+            run.underline = style.flag("Underline", false);
+            run.strikethrough = style.flag("Strikethrough", false);
+            std::string postScript;
+            const int fontIndex = int(style.num("Font", 0));
+            if (fonts && fonts->kind == EngineValue::Array && fontIndex >= 0 && size_t(fontIndex) < fonts->items.size())
+                if (auto name = fonts->items[size_t(fontIndex)].get("Name")) postScript = name->text;
+            // Bold and italic from the face's name until the app finds the face; faux styles add to them.
+            const std::string suffix = postScript.find('-') == std::string::npos ? "" : postScript.substr(postScript.find('-') + 1);
+            auto has = [&](const char* w) { return suffix.find(w) != std::string::npos; };
+            // The face's name after its family: words ("Medium", "BoldItalic") or Linotype's abbreviations ("Md",
+            // "BdCn", "Th"), split where a capital starts a word.
+            std::vector<std::string> words;
+            for (char c : suffix) {
+                if (std::isupper(uint8_t(c)) || words.empty()) words.emplace_back();
+                words.back().push_back(c);
+            }
+            auto word = [&](std::initializer_list<const char*> any) {
+                for (const std::string& w : words) for (const char* a : any) if (w == a) return true;
+                return false;
+            };
+            run.bold = style.flag("FauxBold", false) || has("Bold") || has("Black") || has("Heavy") || word({"Bd", "Hv", "Blk"});
+            run.italic = run.italic || word({"It", "Obl"});
+            // The face's weight, when its name says one other than regular or bold.
+            if (has("Hairline") || has("Thin") || word({"Th", "UltTh"})) run.weight = 100;
+            else if (has("UltraLight") || has("ExtraLight") || word({"UltLt", "XLt"})) run.weight = 200;
+            else if (has("Light") || word({"Lt"})) run.weight = 300;
+            else if (has("Medium") || word({"Md"})) run.weight = 500;
+            else if (has("SemiBold") || has("Semibold") || has("DemiBold") || has("Demi")) run.weight = 600;
+            else if (has("ExtraBold") || has("UltraBold") || has("Heavy") || word({"Hv", "XBd"})) run.weight = 800;
+            else if (has("Black") || word({"Blk"})) run.weight = 900;
+            if (run.weight > 0 && style.flag("FauxBold", false)) run.weight = std::max(run.weight, 700);
+            run.italic = style.flag("FauxItalic", false) || has("Italic") || has("Oblique");
+            // Photoshop's line takes the largest leading on it.
+            if (!style.flag("AutoLeading", true)) { autoLeading = false; leading = std::max(leading, style.num("Leading", 0) * scale); run.leading = style.num("Leading", 0) * scale; }
+            else run.leading = autoFraction * fontSize;
+            // Only what covers the text (Photoshop's closing return is not ours).
+            run.length = std::clamp(run.length, 0, contentLength - covered);
+            covered += run.length;
+            if (run.length > 0 || out.text.runs.empty()) { out.text.runs.push_back(run); out.runPostScriptNames.push_back(postScript); }
         }
+        if (!out.text.runs.empty()) out.postScriptName = out.runPostScriptNames.front();
+        // Runs of the same style (and face) are one.
+        for (size_t i = 1; i < out.text.runs.size();) {
+            TextRun x = out.text.runs[i - 1], y = out.text.runs[i];
+            x.length = y.length = 0;
+            if (x == y && out.runPostScriptNames[i - 1] == out.runPostScriptNames[i]) {
+                out.text.runs[i - 1].length += out.text.runs[i].length;
+                out.text.runs.erase(out.text.runs.begin() + long(i));
+                out.runPostScriptNames.erase(out.runPostScriptNames.begin() + long(i));
+            } else i++;
+        }
+        settleTextRuns(out.text);
+        if (out.text.runs.empty()) out.runPostScriptNames.resize(std::min<size_t>(out.runPostScriptNames.size(), 1));
         out.text.alignment = justification == 2 ? 1 : justification == 1 ? 2 : 0;
-        out.text.letterSpacing = style->num("Tracking", 0) / 1000 * fontSize;
-        const int fontIndex = int(style->num("Font", 0));
-        if (auto fonts = resources->get("FontSet"); fonts && fonts->kind == EngineValue::Array && fontIndex >= 0 && size_t(fontIndex) < fonts->items.size())
-            if (auto name = fonts->items[size_t(fontIndex)].get("Name")) out.postScriptName = name->text;
-        // Bold and italic from the face's name until the app finds the face; faux styles add to them.
-        const std::string& ps = out.postScriptName;
-        const std::string suffix = ps.find('-') == std::string::npos ? "" : ps.substr(ps.find('-') + 1);
-        auto has = [&](const char* w) { return suffix.find(w) != std::string::npos; };
-        out.text.bold = style->flag("FauxBold", false) || has("Bold") || has("Black") || has("Heavy");
-        out.text.italic = style->flag("FauxItalic", false) || has("Italic") || has("Oblique");
-        if (!style->flag("AutoLeading", true)) out.leading = style->num("Leading", 0) * scale;
+        if (!autoLeading) out.leading = leading;
         if (auto paragraphs = dict->path({"ParagraphRun", "RunArray"}); paragraphs && !paragraphs->items.empty())
             if (const EngineValue* props = paragraphs->items[0].path({"ParagraphSheet", "Properties"})) out.autoLeading = props->num("AutoLeading", 1.2);
         return out;

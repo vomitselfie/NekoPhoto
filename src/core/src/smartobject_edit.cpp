@@ -251,7 +251,10 @@ int replaceSmartObjectSource(Document& document, const std::string& from, const 
         if (!oldStem.empty() && l.name.compare(0, oldStem.size(), oldStem) == 0) l.name = newStem + l.name.substr(oldStem.size());
         changed++;
     }
-    if (changed) document.smartObjects.erase(from);
+    // The old contents go once nothing places them (an instance that could not be redrawn keeps them).
+    bool stillPlaced = false;
+    for (const Layer& l : document.layers) stillPlaced |= l.smartObject && l.smartObject->sourceId == from;
+    if (changed && !stillPlaced) document.smartObjects.erase(from);
     return changed;
 }
 

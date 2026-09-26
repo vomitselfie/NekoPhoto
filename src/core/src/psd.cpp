@@ -759,7 +759,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             if (type && image) {
                 layer.text = type->text;
                 layer.textImage = layer.asset->image;
-                result.texts.push_back({layer.id, type->postScriptName, type->leading, type->autoLeading});
+                result.texts.push_back({layer.id, type->postScriptName, type->runPostScriptNames, type->leading, type->autoLeading});
             }
             if (lossyBlend) notes.push_back("Layer \"" + layer.name + "\": blend mode " + blendDescription(rec.blend) + " has no counterpart; " + blendModeName(blend) + " was used.");
             // The mask covers the layer's pixels (the canvas for a layer without any).

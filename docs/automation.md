@@ -123,7 +123,8 @@ Smart objects: `smartObject.convert` (the selection or `ids`), `smartObject.plac
 Layers: `layers.select`, `layers.set` (name, visible, opacity, blend (a folder also takes "Pass Through"), sampling,
 clipping), `layers.add` (pixels, group, adjustment, or text with `text`, `x`, `y`, `font`, `size`, `bold`,
 `italic`, `color`, `align`; `below: true` puts it under the active layer), `text.set` (a text layer's
-content and style, same keys plus `lineSpacing` and `letterSpacing`), `layers.delete`,
+content and style, same keys plus `lineSpacing` and `letterSpacing`; on text in several styles, which
+`layers.get` lists as `text.runs`, the change carries into every run and a new size scales each), `layers.delete`,
 `layers.duplicate`, `layers.move`, `layers.reorder`, `layers.setTransform`,
 `layers.flip`, `layers.mask` (add, addFromSelection, delete, toggle, invert,
 apply, link), `layers.merge`, `layers.group`, `adjustments.set`.

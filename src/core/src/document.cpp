@@ -287,3 +287,117 @@ Rect changedArea(const Document& before, const Document& after) {
 }
 
 } // namespace compositor
+
+namespace compositor {
+
+namespace {
+
+std::u16string toUtf16(const std::string& s) {
+    std::u16string out;
+    for (size_t i = 0; i < s.size();) {
+        uint32_t c = uint8_t(s[i]);
+        const int extra = c >= 0xF0 ? 3 : c >= 0xE0 ? 2 : c >= 0xC0 ? 1 : 0;
+        if (extra) c &= (0x3Fu >> extra);
+        i++;
+        for (int k = 0; k < extra && i < s.size(); k++, i++) c = (c << 6) | (uint8_t(s[i]) & 0x3Fu);
+        if (c >= 0x10000) { c -= 0x10000; out.push_back(char16_t(0xD800 + (c >> 10))); out.push_back(char16_t(0xDC00 + (c & 0x3FF))); }
+        else out.push_back(char16_t(c));
+    }
+    return out;
+}
+
+bool sameStyle(TextRun a, TextRun b) { a.length = b.length = 0; return a == b; }
+
+} // namespace
+
+int utf16Length(const std::string& utf8) { return int(toUtf16(utf8).size()); }
+
+TextRun baseTextRun(const LayerText& t) {
+    TextRun r;
+    r.fontFamily = t.fontFamily; r.fontSize = t.fontSize; r.bold = t.bold; r.italic = t.italic;
+    r.red = t.red; r.green = t.green; r.blue = t.blue; r.letterSpacing = t.letterSpacing;
+    return r;
+}
+
+std::vector<TextRun> textRuns(const LayerText& text) {
+    const int length = utf16Length(text.text);
+    std::vector<TextRun> out;
+    int covered = 0;
+    for (const TextRun& r : text.runs) {
+        if (covered >= length) break;
+        TextRun k = r;
+        k.length = std::clamp(r.length, 0, length - covered);
+        if (k.length == 0) continue;
+        covered += k.length;
+        out.push_back(k);
+    }
+    if (out.empty()) { TextRun r = baseTextRun(text); r.length = length; out.push_back(r); }
+    else if (covered < length) out.back().length += length - covered;
+    return out;
+}
+
+std::vector<TextRun> adjustTextRuns(const std::vector<TextRun>& runs, const std::string& before, const std::string& after) {
+    if (runs.empty()) return {};
+    const std::u16string a = toUtf16(before), b = toUtf16(after);
+    size_t prefix = 0;
+    while (prefix < a.size() && prefix < b.size() && a[prefix] == b[prefix]) prefix++;
+    size_t suffix = 0;
+    while (suffix < a.size() - prefix && suffix < b.size() - prefix && a[a.size() - 1 - suffix] == b[b.size() - 1 - suffix]) suffix++;
+    const int removedFrom = int(prefix), removedTo = int(a.size() - suffix), inserted = int(b.size() - prefix - suffix);
+    std::vector<TextRun> out;
+    int start = 0;
+    bool placed = false;
+    for (TextRun r : runs) {
+        const int end = start + r.length;
+        // The part of the run outside the removed stretch stays.
+        const int kept = std::max(0, std::min(end, removedFrom) - start) + std::max(0, end - std::max(start, removedTo));
+        int length = kept;
+        // What was typed takes the style of the run it starts in (or the last run at the very end).
+        if (!placed && removedFrom < end) { length += inserted; placed = true; }
+        start = end;
+        r.length = length;
+        if (r.length > 0) {
+            if (!out.empty() && sameStyle(out.back(), r)) out.back().length += r.length;
+            else out.push_back(r);
+        }
+    }
+    if (!placed && !out.empty()) out.back().length += inserted;
+    return out;
+}
+
+void settleTextRuns(LayerText& text) {
+    if (text.runs.empty()) return;
+    std::vector<TextRun> merged;
+    for (const TextRun& r : text.runs) {
+        if (r.length <= 0) continue;
+        if (!merged.empty() && sameStyle(merged.back(), r)) merged.back().length += r.length;
+        else merged.push_back(r);
+    }
+    text.runs = std::move(merged);
+    if (text.runs.empty()) return;
+    const TextRun& first = text.runs.front();
+    text.fontFamily = first.fontFamily; text.fontSize = first.fontSize; text.bold = first.bold; text.italic = first.italic;
+    text.red = first.red; text.green = first.green; text.blue = first.blue; text.letterSpacing = first.letterSpacing;
+    // One run that the plain fields say in full is no runs at all.
+    if (text.runs.size() == 1 && first.weight == 0 && first.baselineShift == 0 && first.caps == TextRun::Caps::Normal && !first.underline && !first.strikethrough) text.runs.clear();
+}
+
+LayerText carryTextEdit(const LayerText& before, LayerText after) {
+    if (before.runs.empty() || after.runs != before.runs) return after;
+    std::vector<TextRun> runs = adjustTextRuns(before.runs, before.text, after.text);
+    const double scale = before.fontSize > 0 ? after.fontSize / before.fontSize : 1;
+    for (TextRun& r : runs) {
+        if (after.fontSize != before.fontSize) { r.fontSize = std::max(1.0, r.fontSize * scale); r.leading *= scale; }
+        if (after.lineSpacing != before.lineSpacing && before.lineSpacing > 0) r.leading *= after.lineSpacing / before.lineSpacing;
+        if (after.fontFamily != before.fontFamily) r.fontFamily = after.fontFamily;
+        if (after.bold != before.bold) { r.bold = after.bold; r.weight = 0; }
+        if (after.italic != before.italic) r.italic = after.italic;
+        if (after.red != before.red || after.green != before.green || after.blue != before.blue) { r.red = after.red; r.green = after.green; r.blue = after.blue; }
+        if (after.letterSpacing != before.letterSpacing) r.letterSpacing = after.letterSpacing;
+    }
+    after.runs = std::move(runs);
+    settleTextRuns(after);
+    return after;
+}
+
+} // namespace compositor
