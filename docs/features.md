@@ -26,6 +26,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Add (Shift), subtract (Alt) and intersect (Shift+Alt)
 - Expand, Contract, Feather, Smooth, Border, Invert; load a layer or mask as a selection
 - Content-Aware Fill, which continues edges and patterns and can extend an image past its borders
+- Content-Aware Scale (Edit menu): seam carving narrows, widens, shortens or heightens a layer while the parts that carry detail keep their proportions; Protect keeps the selection, with a live preview ([details](content-aware-scale.md))
 
 ## Painting and retouching
 - Brush and eraser with size, hardness and opacity; Shift for straight lines

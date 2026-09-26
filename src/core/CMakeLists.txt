@@ -147,6 +147,7 @@ add_library(compositor_core STATIC
     src/resample.cpp
     src/heal.cpp
     src/inpaint.cpp
+    src/seamcarve.cpp
     src/psd.cpp
     src/layerstyle.cpp
     src/layerstyle_render.cpp

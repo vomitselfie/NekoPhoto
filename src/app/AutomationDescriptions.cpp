@@ -182,6 +182,9 @@ const MethodDoc methodDocs[] = {
     {"pixels.fill", "Fill the selection (or the whole layer) with a colour.", "color:color=#000000 The colour"},
     {"pixels.clear", "Clear the selection (or the whole layer) to transparent.", ""},
     {"pixels.contentAwareFill", "Fill the selection from its surroundings (needs a selection).", ""},
+    {"pixels.contentAwareScale", "Content-Aware Scale the active layer by seam carving: low-detail seams are removed or duplicated so the subject keeps its proportions.",
+     "width:integer New width in pixels; height:integer New height in pixels; widthPercent:number=100 Or the width in percent; heightPercent:number=100 Or the height in percent; "
+     "protectSelection:bool=false Keep the selected pixels"},
     {"pixels.gmic", "Run a G'MIC command line on the active layer, inside the selection. Only catalogue filters and common built-ins followed by numbers are allowed.",
      "command:string! E.g. \"fx_bokeh 3,8,0,30\", see gmic.filters; timeoutMs:integer=300000 Give up after this long"},
     {"gmic.filters", "The G'MIC filter catalogue with parameters and defaults; filters that do not work here are left out.",

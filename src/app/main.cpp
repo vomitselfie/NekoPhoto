@@ -1,3 +1,4 @@
+#include "ContentAwareScaleDialog.h"
 #include "MainWindow.h"
 #include "WelcomeDialog.h"
 #include "Bench.h"
@@ -399,6 +400,7 @@ int main(int argc, char** argv) {
             app::EditorSession* s = window.session();
             if (adjustments.contains(name)) (new app::PixelAdjustmentDialog(s, adjustments.value(name), &window))->show();
             else if (filters.contains(name)) (new app::FilterDialog(s, filters.value(name), &window))->show();
+            else if (name == "content-aware-scale") (new app::ContentAwareScaleDialog(s, &window))->show();
             else if (name == "gmic") (new app::GmicDialog(s, &window))->show();
             else if (name == "cameraraw" || name.startsWith("cameraraw:")) {
                 // cameraraw, or cameraraw:N to open on panel N (0 Basic ... 7 Calibration)

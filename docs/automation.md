@@ -161,7 +161,7 @@ Pixels of the active layer, inside the selection: `pixels.adjust`,
 `pixels.cameraRaw` (Filter > Camera Raw Filter: `settings` with the model's keys, nested `curve`, `mixer`, `grading`,
 `detail`, `optics`, `geometry` and `calibration` objects, unknown keys refused, `whiteBalance: "Auto"` balances the layer;
 `rpc.describe` lists every key and range and [camera-raw.md](camera-raw.md) what each does), `pixels.invert`, `pixels.fill`, `pixels.clear`,
-`pixels.contentAwareFill`, `pixels.removeBackground` (`refine`, and then `refineEdges`,
+`pixels.contentAwareFill`, `pixels.contentAwareScale` (Edit > Content-Aware Scale by seam carving: `width`/`height` in pixels or `widthPercent`/`heightPercent`, `protectSelection` keeps the selected pixels; see [content-aware-scale.md](content-aware-scale.md)), `pixels.removeBackground` (`refine`, and then `refineEdges`,
 `contrast`, `shiftEdge`, `matting`: the band width in pixels in which hair opacity is solved,
 `cleanup`: half-transparent specks touching no edge go, `decontaminate`: the edge pixels take the
 subject's own colour; both default true; `detail`: the model runs again on full-resolution windows

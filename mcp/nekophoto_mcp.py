@@ -590,6 +590,17 @@ def pixels_content_aware_fill() -> str:
     return text(call("pixels.contentAwareFill"))
 
 
+@edit("Content-Aware Scale")
+def pixels_content_aware_scale(width: int = 0, height: int = 0, width_percent: float = 100, height_percent: float = 100, protect_selection: bool = False) -> str:
+    """Content-Aware Scale the active layer (seam carving): width/height in pixels, or widthPercent/heightPercent; protect_selection keeps the selected pixels."""
+    params: dict = {"protectSelection": protect_selection}
+    if width: params["width"] = width
+    else: params["widthPercent"] = width_percent
+    if height: params["height"] = height
+    else: params["heightPercent"] = height_percent
+    return text(call("pixels.contentAwareScale", **params))
+
+
 @look("G'MIC catalogue")
 def gmic_filters(search: str = "") -> str:
     """The G'MIC filter catalogue (name, folder, command, parameters with defaults and ranges), optionally narrowed by a search string. G'MIC is the open-source filter framework GIMP and Krita use as a plugin."""

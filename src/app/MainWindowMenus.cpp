@@ -1,4 +1,5 @@
 // The main window's menus, tool rail and colour swatches.
+#include "ContentAwareScaleDialog.h"
 #include "MainWindow.h"
 #include <QDialog>
 #include <QHBoxLayout>
@@ -182,6 +183,7 @@ void MainWindow::buildMenus() {
     QAction* clear = needsDocument(edit->addAction(tr("Clear"), QKeySequence(Qt::Key_Delete), this, [this] { if (session_->document() && session_->document()->selection) session_->clearSelectionPixels(); else deleteSelectedLayers(); }));
     clear->setShortcuts({QKeySequence(Qt::Key_Delete), QKeySequence(Qt::Key_Backspace)});
     needsDocument(edit->addAction(tr("Content-Aware Fill"), QKeySequence("Shift+F5"), this, [this] { QString error; if (!session_->contentAwareFill(&error)) showError(tr("Content-Aware Fill"), error); }));
+    needsDocument(edit->addAction(tr("Content-Aware Scale…"), QKeySequence("Ctrl+Alt+Shift+C"), this, [this] { (new ContentAwareScaleDialog(session_, this))->show(); }));
 
     edit->addSeparator();
     edit->addAction(tr("&Preferences…"), QKeySequence::Preferences, this, &MainWindow::showPreferences);
