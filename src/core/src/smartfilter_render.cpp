@@ -1036,38 +1036,34 @@ Result renderEmboss(const Result& input, int32_t angleDegrees, int32_t heightPix
     if (pixelsEmpty(input)) return input;
     constexpr double kPi = 3.14159265358979323846;
     const auto w = input.pixels.width(), h = input.pixels.height();
-    const auto luminance = [](const uint8_t* px) { return (int(px[0]) * 30 + int(px[1]) * 59 + int(px[2]) * 11) / 100; };
-    const auto sampledLuminance = [&](double x, double y) {
+    const auto sampled = [&](double x, double y, int channel) {
         x = std::clamp(x, 0.0, double(std::max<int32_t>(0, w - 1)));
         y = std::clamp(y, 0.0, double(std::max<int32_t>(0, h - 1)));
-        const auto x0 = int32_t(std::floor(x));
-        const auto y0 = int32_t(std::floor(y));
-        const auto x1 = std::min<int32_t>(w - 1, x0 + 1);
-        const auto y1 = std::min<int32_t>(h - 1, y0 + 1);
-        const auto tx = x - double(x0);
-        const auto ty = y - double(y0);
-        const auto l00 = double(luminance(input.pixels.pixel(x0, y0)));
-        const auto l10 = double(luminance(input.pixels.pixel(x1, y0)));
-        const auto l01 = double(luminance(input.pixels.pixel(x0, y1)));
-        const auto l11 = double(luminance(input.pixels.pixel(x1, y1)));
-        const auto top = l00 * (1.0 - tx) + l10 * tx;
-        const auto bottom = l01 * (1.0 - tx) + l11 * tx;
+        const auto x0 = int32_t(std::floor(x)), y0 = int32_t(std::floor(y));
+        const auto x1 = std::min<int32_t>(w - 1, x0 + 1), y1 = std::min<int32_t>(h - 1, y0 + 1);
+        const auto tx = x - double(x0), ty = y - double(y0);
+        const auto top = input.pixels.pixel(x0, y0)[channel] * (1.0 - tx) + input.pixels.pixel(x1, y0)[channel] * tx;
+        const auto bottom = input.pixels.pixel(x0, y1)[channel] * (1.0 - tx) + input.pixels.pixel(x1, y1)[channel] * tx;
         return top * (1.0 - ty) + bottom * ty;
     };
+    // Fitted to Photoshop's own Smart Filter preview (a red rectangle on white, 135 degrees, height 3, amount 150):
+    // each channel is sampled half the height either side along the angle, the side toward the light counts as lit,
+    // and the difference is scaled by the amount about middle grey (red's 55-level step gives about 128 + 84, green
+    // and blue's larger ones clip). Not Patchy's grey relief, which differs from Photoshop's by some 46 levels there.
     const auto angle = double(angleDegrees) * kPi / 180.0;
-    const auto distance = double(heightPixels);
+    const auto distance = double(heightPixels) / 2.0;
     const auto offsetX = std::cos(angle) * distance;
     const auto offsetY = -std::sin(angle) * distance;
+    const auto scale = double(amountPercent) / 100.0;
     Result result = input;
     for (int32_t y = 0; y < h; ++y)
         for (int32_t x = 0; x < w; ++x) {
-            const auto highlight = sampledLuminance(double(x) - offsetX, double(y) - offsetY);
-            const auto shadow = sampledLuminance(double(x) + offsetX, double(y) + offsetY);
-            const auto value = clampLong(std::lround(128.0 + (highlight - shadow) * double(amountPercent) / 100.0));
             auto* px = result.pixels.pixel(x, y);
-            px[0] = value;
-            px[1] = value;
-            px[2] = value;
+            for (int c = 0; c < 3; c++) {
+                const auto lit = sampled(double(x) + offsetX, double(y) + offsetY, c);
+                const auto dark = sampled(double(x) - offsetX, double(y) - offsetY, c);
+                px[c] = clampLong(std::lround(128.0 + (lit - dark) * scale));
+            }
         }
     return result;
 }
@@ -1421,10 +1417,45 @@ struct RunEntry {
     Result operator()(const std::monostate&) const { return current; }
     Result operator()(const smartfilter::GaussianBlur& p) const { return gaussianStep(current, canvas, p.radius); }
     Result operator()(const smartfilter::HighPass& p) const { return renderHighPass(current, p.radius); }
-    Result operator()(const smartfilter::Median& p) const { return renderMedian(current, p.radius); }
-    Result operator()(const smartfilter::DustAndScratches& p) const { return renderDustAndScratches(current, p.radius, p.threshold); }
+    Result operator()(const smartfilter::Median& p) const {
+        // Photoshop's window sees the canvas past the layer's edge (transparent there), not the layer's own edge
+        // repeated: a rectangle filling its layer loses its corners. The bounds stay the layer's.
+        const int r = std::max(1, int(std::floor(p.radius)));
+        const PixelRect grown = intersectRect({current.bounds.x - r, current.bounds.y - r, current.bounds.width + 2 * r, current.bounds.height + 2 * r}, canvas);
+        if (grown.empty() || grown == current.bounds) return renderMedian(current, p.radius);
+        const Result wide = renderMedian(embedInFilterCanvas(current, grown), p.radius);
+        return Result{cropBuffer(wide.pixels, wide.bounds, current.bounds), current.bounds};
+    }
+    Result operator()(const smartfilter::DustAndScratches& p) const {
+        // Median's window, so Median's edge (the canvas past the layer, transparent).
+        const int r = std::max(1, int(p.radius));
+        const PixelRect grown = intersectRect({current.bounds.x - r, current.bounds.y - r, current.bounds.width + 2 * r, current.bounds.height + 2 * r}, canvas);
+        if (grown.empty() || grown == current.bounds) return renderDustAndScratches(current, p.radius, p.threshold);
+        const Result wide = renderDustAndScratches(embedInFilterCanvas(current, grown), p.radius, p.threshold);
+        return Result{cropBuffer(wide.pixels, wide.bounds, current.bounds), current.bounds};
+    }
     Result operator()(const smartfilter::SurfaceBlur& p) const { return surfaceStep(current, canvas, p.radius, p.threshold); }
-    Result operator()(const smartfilter::UnsharpMask& p) const { return renderUnsharpMask(current, p.amount, p.radius, p.threshold); }
+    Result operator()(const smartfilter::UnsharpMask& p) const {
+        Result out = renderUnsharpMask(current, p.amount, p.radius, p.threshold);
+        // Photoshop sharpens transparency too (a half-transparent band beside an opaque one comes out opaque): the
+        // same unsharp mask run over alpha as a channel.
+        // Past the layer its low-pass sees the canvas's transparency (zero), as Median's window does.
+        const int r = int(std::ceil(p.radius * 3)) + 1;
+        PixelRect grown = intersectRect({current.bounds.x - r, current.bounds.y - r, current.bounds.width + 2 * r, current.bounds.height + 2 * r}, canvas);
+        if (grown.empty()) grown = current.bounds;
+        Result alpha{Image(grown.width, grown.height), grown};
+        for (int y = 0; y < grown.height; y++)
+            for (int x = 0; x < grown.width; x++) {
+                const uint8_t* c = sampleResult(current, grown.x + x, grown.y + y);
+                uint8_t* q = alpha.pixels.pixel(x, y);
+                q[0] = q[1] = q[2] = c ? c[3] : 0; q[3] = 255;
+            }
+        const Result sharpened = renderUnsharpMask(alpha, p.amount, p.radius, p.threshold);
+        for (int y = 0; y < out.pixels.height(); y++)
+            for (int x = 0; x < out.pixels.width(); x++)
+                out.pixels.pixel(x, y)[3] = sampleResult(sharpened, out.bounds.x + x, out.bounds.y + y)[0];
+        return out;
+    }
     Result operator()(const smartfilter::MotionBlur& p) const { return motionStep(current, canvas, p.angle, p.distance); }
     Result operator()(const smartfilter::PlasticWrap& p) const { return renderPlasticWrap(current, p.highlight, p.detail, p.smoothness); }
     Result operator()(const smartfilter::Mosaic& p) const { return renderMosaic(current, p.cellSize); }

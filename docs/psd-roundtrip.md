@@ -51,7 +51,10 @@ stays even without a pad after its end-anchored tail. The metrics come from the 
 has no font engine, and without them text is written as pixels. A flipped layer is written as pixels.
 
 **Import.** A Photoshop type layer opens as NekoPhoto text when our model can hold it: horizontal point text, one
-alignment, RGB fill, no warp, rotation, skew, horizontal or vertical scale, superscript or subscript. Paragraph (box)
+alignment, RGB fill, no warp, skew, mirroring, horizontal or vertical scale, superscript or subscript. Turned text
+opens as text too: drawn upright at its scale, the layer turned by Photoshop's angle about the anchor on its first
+redraw; later redraws keep a turned layer's top-left corner where it is (a turned layer turns about its centre, so a
+new size would otherwise slide it). Glyphs are drawn unhinted, as Photoshop draws them. Paragraph (box)
 text keeps its frame (`boxWidth` / `boxHeight`): lines wrap at its width, a line that does not fit its height is
 hidden, and the first baseline sits the first line's cap height below the frame's top, the rules Patchy pinned
 against Photoshop; it is anchored at the frame's top-left and written back as `ShapeType 1` with `/BoxBounds [0 0 w

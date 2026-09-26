@@ -54,6 +54,7 @@ struct PsdTypeLayer {
     std::vector<std::string> runPostScriptNames;
     double leading = 0, autoLeading = 1.2;
     double anchorX = 0, anchorY = 0;   // the first baseline's anchor in the document (by alignment)
+    double rotation = 0;               // degrees clockwise the text is turned
 };
 std::optional<PsdTypeLayer> readPhotoshopType(const uint8_t* data, size_t size, std::string* why = nullptr);
 

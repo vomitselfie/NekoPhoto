@@ -375,4 +375,37 @@ std::optional<PlacedRaster> filteredSmartObjectRaster(const std::vector<PsdBlock
     return renderSmartFilterStack(*placed, cache->canvas, *stack);
 }
 
+int refreshSmartObjectRasters(Document& document) {
+    static const std::vector<PsdBlock> none;
+    int redrawn = 0;
+    for (Layer& layer : document.layers) {
+        if (!layer.isLiveSmartObject() || layer.smartObject->locked()) continue;
+        SmartObjectInstance& so = *layer.smartObject;
+        if (layer.transform == so.placedTransform || smartObjectPixelsArePlacement(so)) continue;
+        auto source = document.smartObjects.find(so.sourceId);
+        if (source == document.smartObjects.end() || !source->second->image) continue;
+        const int w = layer.asset->image->width(), h = layer.asset->image->height();
+        const std::array<double, 8> quad = moveQuad(so.quad, so.placedTransform, so.placedWidth, so.placedHeight, layer.transform, w, h);
+        std::optional<PlacedRaster> raster;
+        if (smartObjectFiltered(so)) raster = filteredSmartObjectRaster(document.psdCarry ? document.psdCarry->globals : none, so, *source->second->image, quad);
+        else if (auto warped = warpedSmartObjectRaster(so, *source->second->image, quad))
+            raster = PlacedRaster{warped->image, int(std::lround(warped->transform.origin.x)), int(std::lround(warped->transform.origin.y))};
+        if (!raster || !raster->image) continue;
+        // The mask stays where it was on the canvas.
+        if (layer.mask && !layer.mask->placement) layer.mask->placement = layer.maskTransform();
+        const Sampling sampling = layer.transform.sampling;
+        layer.asset = Asset::make(raster->image, layer.name);
+        layer.transform = LayerTransform(Point(raster->x, raster->y), Size(raster->image->width(), raster->image->height()));
+        layer.transform.sampling = sampling;
+        layer.smartImage = raster->image;
+        so.quad = quad;
+        so.placedTransform = layer.transform;
+        so.placedWidth = raster->image->width();
+        so.placedHeight = raster->image->height();
+        redrawn++;
+    }
+    return redrawn;
+}
+
 } // namespace compositor
+

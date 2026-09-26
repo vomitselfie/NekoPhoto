@@ -22,6 +22,8 @@ QFont fontFor(const compositor::LayerText& text) {
     font.setBold(text.bold);
     font.setItalic(text.italic);
     font.setLetterSpacing(QFont::AbsoluteSpacing, text.letterSpacing);
+    // Photoshop never hints glyphs (Patchy's calibration); hinting would move advances and stems off its layout.
+    font.setHintingPreference(QFont::PreferNoHinting);
     return font;
 }
 

@@ -358,6 +358,20 @@ TEST_CASE(a_warped_instance_draws_its_contents_through_the_mesh) {
     for (size_t i = 0; i < 8; i += 2) shifted[i] += 5;
     CHECK(near(again->document.layers[0].smartObject->quad, shifted));
     CHECK(*smartObjectWarp(*again->document.layers[0].smartObject) == arch);
+    // Scaled x2 about its origin: drawn again from the contents at twice the size, not resampled.
+    Document scaled = back->document;
+    Layer& big = scaled.layers[0];
+    const LayerTransform was = big.transform;
+    big.transform.size = Size(was.size.width * 2, was.size.height * 2);
+    CHECK_EQ(refreshSmartObjectRasters(scaled), 1);
+    CHECK(big.isLiveSmartObject());
+    CHECK(std::abs(big.asset->image->width() - 2 * was.size.width) <= 2);
+    CHECK(big.transform.size.width == big.asset->image->width());   // 1:1 again
+    CHECK_EQ(refreshSmartObjectRasters(scaled), 0);                  // nothing left to redraw
+    auto scaledBack = importPsdBytes(encodePsd(scaled, {}, nullptr, &error), &error);
+    REQUIRE(scaledBack.has_value());
+    const auto& q = scaledBack->document.layers[0].smartObject->quad;
+    CHECK(std::abs((q[2] - q[0]) - 2 * (quad[2] - quad[0])) < 1e-6);   // the written quad is twice as wide
     // Replaced by contents twice the size: the same cage, the mesh scaled onto them.
     auto twice = std::make_shared<Image>(80, 40);
     twice->fill(0, 255, 0, 255);

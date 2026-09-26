@@ -17,7 +17,9 @@ replaces its pixels) makes it a plain pixel layer, as with text.
 
 A **warped** or **filtered** instance is editable too, but its pixels are not the source under a transform: they
 are the source drawn through its warp and its Smart Filters onto the document's pixel grid (see below), redrawn
-whenever its contents change. Moving it moves those pixels; its quad follows.
+whenever its contents change. Moved, scaled or rotated, it previews by resampling those pixels and is drawn again
+from its contents when the edit ends (`refreshSmartObjectRasters`, from `EditorSession::endEdit`), so it stays sharp
+and the filter mask stays where it is on the canvas; export compares the quad with the one the file holds.
 
 A **preview-locked** instance shows the preview the file carried, because NekoPhoto cannot yet redraw it itself:
 a warp it does not draw (a quilt warp, a mesh with distortion), placed in perspective or skewed, a Smart Filter
@@ -131,8 +133,21 @@ unfiltered and the filtered pixels.
 Writing: while an instance and its contents are as they were read, its blocks and the cache go back byte for byte.
 Moved, or with new contents, its cache record is written anew in Photoshop 2026's shape (Patchy's authoring shape:
 record version 1, the unfiltered instance over the whole canvas as PackBits RGB and alpha, the mask as an explicit
-plane), the other records untouched, and its placement patched. Plastic Wrap, Mosaic, Emboss and Add Noise are
-Patchy's own compatible renders rather than Photoshop's pixels; Photoshop redraws them from the settings.
+plane), the other records untouched, and its placement patched. Plastic Wrap and Add Noise are Patchy's own
+compatible renders rather than Photoshop's pixels; Photoshop redraws them from the settings.
+
+Where Photoshop's own previews in Patchy's fixtures disagreed with Patchy's documented rules, the previews won:
+
+- Median and Dust & Scratches see the canvas past the layer's edge (transparent), not the layer's edge repeated, so
+  a rectangle filling its layer loses its corners (Median then Gaussian: 4.2 levels off, now 0.35).
+- Unsharp Mask sharpens transparency too, its low-pass seeing the transparent canvas past the layer (a
+  half-transparent band beside an opaque one comes out opaque: 2.8 levels off, now 0.34).
+- Emboss works per channel: half the height either side along the angle, the side toward the light lit, the
+  difference times the amount about middle grey (Patchy's grey relief was 46 levels off; now 0.29).
+
+Every other drawn filter matches Photoshop's preview exactly or within half a level, except two Gaussian layers with
+a five-tone filter mask, whose previews ignore the mask entirely (probably stale; a hard mask on the same stack
+matches exactly), Radial Blur (2.3) and the two above.
 
 ## Not yet
 

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(nekophoto VERSION 1.4.1 LANGUAGES C CXX)
+project(nekophoto VERSION 1.4.3 LANGUAGES C CXX)
 
 # Releases pass the tag version in with -DCOMPOSITOR_VERSION; a local build shows the project version
 # above. The override is a cache entry, so it defaults to empty rather than to the project version: a

@@ -367,10 +367,15 @@ std::optional<PsdTypeLayer> readPhotoshopType(const uint8_t* data, size_t size, 
         const auto warp = patchy::psd::read_descriptor(r);
         if (auto style = patchy::psd::descriptor_value(warp, "warpStyle"); style && style->enum_value != "warpNone") return no("warped");
         if (auto orientation = patchy::psd::descriptor_value(descriptor, "Ornt"); orientation && orientation->enum_value == "Vrtc") return no("vertical");
-        // A scale a hair uneven (a transform nudged by hand: under 1.5%) reads as the vertical one, which sets the
-        // size and the line pitch; the width then differs by less than that once the text is edited.
-        if (std::abs(m[1]) > 1e-9 || std::abs(m[2]) > 1e-9 || !(m[0] > 0) || !(m[3] > 0) || std::abs(m[0] / m[3] - 1) > 0.015) return no("rotated, skewed or stretched");
-        const double scale = m[3];
+        // A rotation with an even scale: the text upright at that scale, the layer turned (clockwise, y down). A scale
+        // a hair uneven (a transform nudged by hand: under 1.5%) reads as the vertical one, which sets the size and
+        // the line pitch; the width then differs by less than that once the text is edited.
+        const double scaleX = std::hypot(m[0], m[1]), scaleY = std::hypot(m[2], m[3]);
+        if (!(scaleX > 0) || !(scaleY > 0) || std::abs(scaleX / scaleY - 1) > 0.015) return no("skewed or stretched");
+        // Orthogonal and not mirrored: the second axis is the first turned a quarter.
+        if (std::abs(m[0] * m[2] + m[1] * m[3]) > 1e-6 * scaleX * scaleY || m[0] * m[3] - m[1] * m[2] <= 0) return no("skewed or mirrored");
+        const double scale = scaleY;
+        const double rotation = std::atan2(m[1], m[0]) * 180 / M_PI;
         auto engineItem = patchy::psd::descriptor_value(descriptor, "EngineData");
         if (!engineItem || engineItem->raw_value.empty()) return no("without engine data");
         EngineValue engine;
@@ -419,11 +424,12 @@ std::optional<PsdTypeLayer> readPhotoshopType(const uint8_t* data, size_t size, 
 
         PsdTypeLayer out;
         out.anchorX = m[4]; out.anchorY = m[5];
+        out.rotation = std::abs(rotation) < 1e-6 ? 0 : rotation;
         if (box) {
             // Anchored at the frame's top-left.
-            out.anchorX = m[4] + (*box)[0] * m[0];
-            out.anchorY = m[5] + (*box)[1] * scale;
-            out.text.boxWidth = ((*box)[2] - (*box)[0]) * m[0];
+            out.anchorX = m[4] + (*box)[0] * m[0] + (*box)[1] * m[2];
+            out.anchorY = m[5] + (*box)[0] * m[1] + (*box)[1] * m[3];
+            out.text.boxWidth = ((*box)[2] - (*box)[0]) * scaleX;
             out.text.boxHeight = ((*box)[3] - (*box)[1]) * scale;
         }
         std::string content = text->text;

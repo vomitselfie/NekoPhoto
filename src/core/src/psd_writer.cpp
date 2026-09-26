@@ -348,8 +348,12 @@ private:
             const double corners[4][2] = {{0, 0}, {double(w), 0}, {double(w), double(h)}, {0, double(h)}};
             for (int i = 0; i < 4; i++) { const Point p = mapThroughTransform(l.transform, w, h, corners[i][0], corners[i][1]); quad[size_t(i * 2)] = p.x; quad[size_t(i * 2 + 1)] = p.y; }
         } else quad = moveQuad(so.quad, so.placedTransform, so.placedWidth, so.placedHeight, l.transform, w, h);
+        // Moved: against the placement the blocks hold (a redrawn instance's own quad is already the new one).
+        std::array<double, 8> stored = so.quad;
+        for (const PsdBlock& b : so.psdBlocks)
+            if (auto p = parsePsdPlacement(b.key, b.data)) { stored = p->quad; break; }
         bool moved = false;
-        for (size_t i = 0; i < 8; i++) moved |= std::abs(quad[i] - so.quad[i]) > 1e-4;
+        for (size_t i = 0; i < 8; i++) moved |= std::abs(quad[i] - stored[i]) > 1e-4;
         const bool filtered = smartObjectFiltered(so);
         auto source = doc_.smartObjects.find(so.sourceId);
         if (filtered && !so.locked() && source != doc_.smartObjects.end() && source->second->image && (moved || !source->second->psdElement)) {

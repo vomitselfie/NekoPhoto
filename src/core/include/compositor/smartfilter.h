@@ -132,4 +132,9 @@ std::optional<PlacedRaster> filteredSmartObjectRaster(const std::vector<PsdBlock
 /// The instance placed on `quad` without its filters, on the document's pixel grid.
 std::optional<PlacedRaster> placedSmartObjectRaster(const SmartObjectInstance& instance, const Image& source, const std::array<double, 8>& quad);
 
+/// Warped and filtered instances whose layer was moved, scaled or rotated since they were drawn, drawn again from their
+/// contents on the moved quad (their pixels are not the placement, so resampling them would soften them and slide the
+/// filter mask). Returns how many were redrawn.
+int refreshSmartObjectRasters(Document& document);
+
 } // namespace compositor

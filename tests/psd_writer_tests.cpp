@@ -603,6 +603,32 @@ TEST_CASE(box_text_round_trips) {
 
 }
 
+TEST_CASE(turned_text_opens_as_text) {
+    Document doc(300, 200);
+    LayerText text;
+    text.text = "Turned";
+    text.fontSize = 30;
+    Layer layer(Asset::make(std::make_shared<Image>(120, 40), "Turned"), Point(80, 80));
+    layer.text = text;
+    layer.textImage = layer.asset->image;
+    layer.transform.rotation = 30;
+    doc.layers.push_back(layer);
+    PsdExportOptions options;
+    options.textMetrics = [](const LayerText& t) {
+        PsdTextMetrics m;
+        m.postScriptName = "ArialMT";
+        m.fontSize = t.fontSize; m.ascent = 28; m.lineHeight = 34; m.blockLeft = m.blockTop = 4; m.blockWidth = 112;
+        return std::optional<PsdTextMetrics>(m);
+    };
+    std::string error;
+    auto back = importPsdBytes(encodePsd(doc, options, nullptr, &error), &error);
+    REQUIRE(back.has_value());
+    const Layer& read = back->document.layers[0];
+    REQUIRE(read.text.has_value());
+    CHECK(std::abs(read.text->fontSize - 30) < 1e-6);
+    CHECK(read.extraJson.find("\"psdTextRotation\":30.0") != std::string::npos);
+}
+
 TEST_CASE(psb_export_reads_back_with_even_composite_rows) {
     Document doc(40, 30);
     doc.layers.push_back(pixels("A", softDisc(20, 200, 30, 30), {5, 5}));

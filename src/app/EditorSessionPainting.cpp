@@ -485,24 +485,46 @@ bool EditorSession::redrawText(Layer& layer) {
         scaleY = layer.transform.size.height / layer.asset->image->height();
     }
     if (layer.mask && !layer.mask->placement) layer.mask->placement = layer.maskTransform();
+    // A turned layer turns about its centre, so a new size would slide it: its top-left corner stays put instead.
+    std::optional<Point> corner;
+    if (layer.transform.rotation != 0 && !layer.transform.flipX && !layer.transform.flipY && layer.asset && layer.asset->image)
+        corner = mapThroughTransform(layer.transform, layer.asset->image->width(), layer.asset->image->height(), 0, 0);
     layer.asset = Asset::make(image, layer.name);
     layer.textImage = image;
     layer.transform.size = Size(image->width() * scaleX, image->height() * scaleY);
+    if (corner) {
+        const double a = layer.transform.radians(), c = std::cos(a), sn = std::sin(a);
+        const double hw = layer.transform.size.width / 2, hh = layer.transform.size.height / 2;
+        const Point centre(corner->x + hw * c - hh * sn, corner->y + hw * sn + hh * c);
+        layer.transform.origin = Point(centre.x - hw, centre.y - hh);
+    }
     // Text opened from a PSD shows Photoshop's pixels until this first redraw: put our first baseline where
     // Photoshop anchored its own, then forget the anchor.
     if (layer.extraJson.find("psdTextAnchor") != std::string::npos) {
         QJsonObject extra = QJsonDocument::fromJson(QByteArray::fromStdString(layer.extraJson)).object();
         const QJsonArray anchor = extra.value("psdTextAnchor").toArray();
-        if (anchor.size() == 2 && layer.transform.rotation == 0) {
+        // Text Photoshop turned: drawn upright, the layer turned by its angle about the anchor.
+        const double turned = extra.value("psdTextRotation").toDouble(0);
+        if (anchor.size() == 2 && (layer.transform.rotation == 0 || turned != 0)) {
             if (auto m = psdTextMetrics(*layer.text)) {
                 // Box text is anchored at its frame's top-left, point text at its first baseline.
                 const bool boxed = layer.text->boxWidth > 0 && layer.text->boxHeight > 0;
                 const double x = m->blockLeft + (boxed ? 0 : layer.text->alignment == 1 ? m->blockWidth / 2 : layer.text->alignment == 2 ? m->blockWidth : 0);
                 const double y = m->blockTop + (boxed ? 0 : m->ascent);
-                layer.transform.origin = Point(anchor[0].toDouble() - x * scaleX, anchor[1].toDouble() - y * scaleY);
+                if (turned == 0) layer.transform.origin = Point(anchor[0].toDouble() - x * scaleX, anchor[1].toDouble() - y * scaleY);
+                else {
+                    // The layer turns about its centre: put the centre where the turned anchor offset says.
+                    layer.transform.size = Size(image->width(), image->height());
+                    layer.transform.rotation = turned;
+                    const double a = turned * M_PI / 180, c = std::cos(a), sn = std::sin(a);
+                    const double dx = x - image->width() / 2.0, dy = y - image->height() / 2.0;
+                    const Point centre(anchor[0].toDouble() - (dx * c - dy * sn), anchor[1].toDouble() - (dx * sn + dy * c));
+                    layer.transform.origin = Point(centre.x - image->width() / 2.0, centre.y - image->height() / 2.0);
+                }
             }
         }
         extra.remove("psdTextAnchor");
+        extra.remove("psdTextRotation");
         layer.extraJson = extra.isEmpty() ? std::string() : QJsonDocument(extra).toJson(QJsonDocument::Compact).toStdString();
     }
     return true;

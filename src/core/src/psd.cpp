@@ -734,7 +734,12 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                 if (auto text = textFrom(block("TySh")->first, block("TySh")->second)) {
                     extraJson = "{\"psdText\":\"" + jsonEscape(*text) + "\"";
                     // Where Photoshop anchored the first baseline, so the first redraw here lands on it.
-                    if (type) { char anchor[96]; std::snprintf(anchor, sizeof anchor, ",\"psdTextAnchor\":[%.4f,%.4f]", type->anchorX, type->anchorY); extraJson += anchor; }
+                    if (type) {
+                        char anchor[128];
+                        std::snprintf(anchor, sizeof anchor, ",\"psdTextAnchor\":[%.4f,%.4f]", type->anchorX, type->anchorY);
+                        extraJson += anchor;
+                        if (type->rotation != 0) { std::snprintf(anchor, sizeof anchor, ",\"psdTextRotation\":%.6f", type->rotation); extraJson += anchor; }
+                    }
                     extraJson += "}";
                 }
                 if (!type) notes.push_back("Layer \"" + rec.name + "\": its text is " + (why.empty() ? std::string("without pixels") : why) + ", which NekoPhoto text cannot be; it shows as Photoshop drew it, and is Photoshop text again on PSD export while its pixels are unchanged.");
