@@ -101,6 +101,9 @@ struct LayerText {
     int alignment = 0;                 // 0 left, 1 centre, 2 right (multi-line text)
     double lineSpacing = 1;            // multiple of the font's line height
     double letterSpacing = 0;          // extra pixels between glyphs
+    /// Paragraph (box) text: lines wrap at the box's width and what does not fit its height is hidden; the first
+    /// baseline sits the first line's cap height below the box's top, as Photoshop sets it. 0: point text.
+    double boxWidth = 0, boxHeight = 0;
     /// Text in more than one style: the runs, in order, covering the text (the fields above then mirror the first
     /// run). Empty: all of it in the style above.
     std::vector<TextRun> runs;

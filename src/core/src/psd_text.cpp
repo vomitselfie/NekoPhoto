@@ -7,6 +7,7 @@
 #include "compositor/psd_writer.h"
 #include "psd/psd_descriptor.hpp"
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
@@ -109,8 +110,11 @@ std::vector<uint8_t> engineData(const LayerText& text, const std::string& engine
     e += "/GridInfo << /GridIsOn false /ShowGrid false /GridSize 18.0 /GridLeading 22.0 /GridColor << /Type 1 /Values [ 1.0 0.0 0.0 1.0 ] >>"
          " /GridLeadingFillColor << /Type 1 /Values [ 1.0 0.0 0.0 1.0 ] >> /AlignLineHeightToGridFlags false >>\n";
     e += "/AntiAlias 3 /UseFractionalGlyphWidths true\n";
-    e += "/Rendered << /Version 1 /Shapes << /WritingDirection 0 /Children [ << /ShapeType 0 /Procession 0 /Lines << /WritingDirection 0 /Children [ ] >>"
-         " /Cookie << /Photoshop << /ShapeType 0 /PointBase [ 0.0 0.0 ] /Base << /ShapeType 0 /TransformPoint0 [ 1.0 0.0 ]"
+    const bool boxed = text.boxWidth > 0 && text.boxHeight > 0;
+    const std::string shape = boxed ? "1" : "0";
+    const std::string frame = boxed ? " /BoxBounds [ 0.0 0.0 " + number(text.boxWidth) + " " + number(text.boxHeight) + " ]" : " /PointBase [ 0.0 0.0 ]";
+    e += "/Rendered << /Version 1 /Shapes << /WritingDirection 0 /Children [ << /ShapeType " + shape + " /Procession 0 /Lines << /WritingDirection 0 /Children [ ] >>"
+         " /Cookie << /Photoshop << /ShapeType " + shape + frame + " /Base << /ShapeType " + shape + " /TransformPoint0 [ 1.0 0.0 ]"
          " /TransformPoint1 [ 0.0 1.0 ] /TransformPoint2 [ 0.0 0.0 ] >> >> >> >> ] >> >>\n>>\n";
     const PsdTextMetrics::RunFace first = m.runs.empty() ? PsdTextMetrics::RunFace{m.postScriptName, m.fauxBold, m.fauxItalic} : m.runs.front();
     std::string fontSet = "<< /Name " + engineString("AdobeInvisFont") + " /Script 0 /FontType 0 /Synthetic 0 >>";
@@ -150,8 +154,11 @@ std::optional<std::vector<uint8_t>> photoshopTypeBlock(const LayerText& text, co
     if (t.flipX || t.flipY || imageWidth <= 0 || imageHeight <= 0 || !(m.fontSize > 0) || !(m.lineHeight > 0)) return std::nullopt;
     // Point text anchors at the first baseline, on the left edge, the centre or the right edge of the block.
     const int justification = text.alignment == 1 ? 2 : text.alignment == 2 ? 1 : 0;   // ours: left, centre, right
-    const double anchorX = m.blockLeft + (text.alignment == 1 ? m.blockWidth / 2 : text.alignment == 2 ? m.blockWidth : 0);
-    const double anchorY = m.blockTop + m.ascent;
+    // Box text anchors at its frame's top-left, the frame [0 0 w h] from there (a frame moved down moves Photoshop's
+    // text by twice as much, Patchy found, so it never is).
+    const bool boxed = text.boxWidth > 0 && text.boxHeight > 0;
+    const double anchorX = boxed ? m.blockLeft : m.blockLeft + (text.alignment == 1 ? m.blockWidth / 2 : text.alignment == 2 ? m.blockWidth : 0);
+    const double anchorY = boxed ? m.blockTop : m.blockTop + m.ascent;
     // Raster to document: scale to the placed size, then rotate clockwise about the centre.
     const double sx = t.size.width / imageWidth, sy = t.size.height / imageHeight;
     const double angle = t.rotation * M_PI / 180, c = std::cos(angle), s = std::sin(angle);
@@ -160,8 +167,9 @@ std::optional<std::vector<uint8_t>> photoshopTypeBlock(const LayerText& text, co
     const double tx = centre.x + px * c - py * s, ty = centre.y + px * s + py * c;
     const double matrix[6] = {sx * c, sx * s, -sy * s, sy * c, tx, ty};
     // The block around the anchor, in text units (raster pixels before the matrix).
-    const double left = m.blockLeft - anchorX, right = m.blockLeft + m.blockWidth - anchorX;
-    const double top = -m.ascent, bottom = m.lineHeight * std::max(1, m.lines) - m.ascent;
+    double left = m.blockLeft - anchorX, right = m.blockLeft + m.blockWidth - anchorX;
+    double top = -m.ascent, bottom = m.lineHeight * std::max(1, m.lines) - m.ascent;
+    if (boxed) { left = 0; top = 0; right = text.boxWidth; bottom = text.boxHeight; }
 
     std::string engineText = text.text;
     std::replace(engineText.begin(), engineText.end(), '\n', '\r');
@@ -370,9 +378,19 @@ std::optional<PsdTypeLayer> readPhotoshopType(const uint8_t* data, size_t size, 
         const EngineValue* dict = engine.get("EngineDict");
         const EngineValue* resources = engine.get("ResourceDict");
         if (!dict || !resources) return no("engine data that could not be read");
-        // Box text wraps in Photoshop's own way; only point text keeps its lines here.
-        if (auto children = dict->path({"Rendered", "Shapes", "Children"}); children && children->kind == EngineValue::Array)
-            for (auto& shape : children->items) if (shape.num("ShapeType", 0) != 0) return no("box (paragraph) text");
+        // Box (paragraph) text: its frame, in text units from the transform's origin.
+        std::optional<std::array<double, 4>> box;
+        if (auto children = dict->path({"Rendered", "Shapes", "Children"}); children && children->kind == EngineValue::Array) {
+            if (children->items.size() > 1) return no("in several frames");
+            for (auto& shape : children->items) {
+                if (shape.num("ShapeType", 0) == 0) continue;
+                if (shape.num("ShapeType", 0) != 1) return no("on a path");
+                const EngineValue* bounds = shape.path({"Cookie", "Photoshop", "BoxBounds"});
+                if (!bounds || bounds->kind != EngineValue::Array || bounds->items.size() != 4) return no("box text without its frame");
+                box = std::array<double, 4>{bounds->items[0].number, bounds->items[1].number, bounds->items[2].number, bounds->items[3].number};
+                if (!((*box)[2] > (*box)[0]) || !((*box)[3] > (*box)[1])) return no("box text without its frame");
+            }
+        }
         const EngineValue* text = dict->path({"Editor", "Text"});
         if (!text || text->kind != EngineValue::String) return no("empty");
 
@@ -401,6 +419,13 @@ std::optional<PsdTypeLayer> readPhotoshopType(const uint8_t* data, size_t size, 
 
         PsdTypeLayer out;
         out.anchorX = m[4]; out.anchorY = m[5];
+        if (box) {
+            // Anchored at the frame's top-left.
+            out.anchorX = m[4] + (*box)[0] * m[0];
+            out.anchorY = m[5] + (*box)[1] * scale;
+            out.text.boxWidth = ((*box)[2] - (*box)[0]) * m[0];
+            out.text.boxHeight = ((*box)[3] - (*box)[1]) * scale;
+        }
         std::string content = text->text;
         std::replace(content.begin(), content.end(), '\r', '\n');
         while (!content.empty() && content.back() == '\n') content.pop_back();

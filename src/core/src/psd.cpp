@@ -728,7 +728,9 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             std::optional<PsdTypeLayer> type;
             if (block("TySh")) {
                 std::string why;
-                type = image ? readPhotoshopType(block("TySh")->first, block("TySh")->second, &why) : std::nullopt;
+                type = readPhotoshopType(block("TySh")->first, block("TySh")->second, &why);
+                // Without pixels only an empty type layer (a click with the Type tool, nothing typed) can be text.
+                if (type && !image && !type->text.text.empty()) { type.reset(); why.clear(); }
                 if (auto text = textFrom(block("TySh")->first, block("TySh")->second)) {
                     extraJson = "{\"psdText\":\"" + jsonEscape(*text) + "\"";
                     // Where Photoshop anchored the first baseline, so the first redraw here lands on it.
@@ -756,7 +758,16 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             layer.blendMode = blend;
             layer.adjustment = adjustment;
             layer.extraJson = extraJson;
-            if (type && image) {
+            if (type && !image) {
+                // Empty text: a transparent pixel where Photoshop anchored it, so it is a text layer to type into.
+                layer = Layer(Asset::make(std::make_shared<Image>(1, 1), rec.name), Point(std::floor(type->anchorX), std::floor(type->anchorY)));
+                layer.name = rec.name.empty() ? "Layer" : rec.name;
+                layer.visible = !hidden;
+                layer.opacity = (rec.opacity / 255.0) * (rec.fillOpacity / 255.0);
+                layer.blendMode = blend;
+                layer.extraJson = extraJson;
+            }
+            if (type) {
                 layer.text = type->text;
                 layer.textImage = layer.asset->image;
                 result.texts.push_back({layer.id, type->postScriptName, type->runPostScriptNames, type->leading, type->autoLeading});

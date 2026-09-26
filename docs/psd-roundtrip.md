@@ -51,7 +51,12 @@ stays even without a pad after its end-anchored tail. The metrics come from the 
 has no font engine, and without them text is written as pixels. A flipped layer is written as pixels.
 
 **Import.** A Photoshop type layer opens as NekoPhoto text when our model can hold it: horizontal point text, one
-alignment, RGB fill, no warp, rotation, skew, horizontal or vertical scale, superscript or subscript. A scale a hair
+alignment, RGB fill, no warp, rotation, skew, horizontal or vertical scale, superscript or subscript. Paragraph (box)
+text keeps its frame (`boxWidth` / `boxHeight`): lines wrap at its width, a line that does not fit its height is
+hidden, and the first baseline sits the first line's cap height below the frame's top, the rules Patchy pinned
+against Photoshop; it is anchored at the frame's top-left and written back as `ShapeType 1` with `/BoxBounds [0 0 w
+h]` (a frame moved down would move Photoshop's text by twice as much). A type layer with nothing typed opens as
+empty text, a transparent pixel where Photoshop anchored it. A scale a hair
 uneven (under 1.5%, a transform nudged by hand) is read as its vertical scale. It keeps Photoshop's
 pixels until it is edited; the first redraw puts our first baseline where Photoshop anchored its own. The face is
 found among the installed families by its PostScript name ("ArialMT" is Arial); one that is not installed is spelled
@@ -71,9 +76,16 @@ carries into the runs: typing extends the run it starts in, a new size scales ev
 other field changed applies to all of them; a field the dialog merely rounded (a whole-pixel size, a stand-in for a
 missing font) is not a change. Projects keep the runs in the manifest's text object (the Mac app ignores them).
 
-On the 2014 styleguide (a text-heavy corporate file), 16 of its 22 type layers now open as text, 13 of them in
-several styles; after a redraw their lines, tabs and indents land where Photoshop's do, the faces standing in for
-Helvetica Neue. The rest are five empty layers and one box of paragraph text.
+**Missing faces.** A face that is not installed is asked for by its family name; for faces sold with Adobe's apps
+the app asks fontconfig for a free twin with the same metrics (Helvetica and Helvetica Neue: TeX Gyre Heros, Nimbus
+Sans, Liberation Sans; Myriad: Source Sans; Verdana: DejaVu Sans), since fontconfig aliases "Helvetica" but not
+"Helvetica Neue LT Std". A medium or heavier weight the stand-in lacks is drawn in its bold (Qt would fall back to
+regular). On Manjaro, `tex-gyre-fonts` and `gsfonts` give the closest Helvetica widths; no free font has Helvetica
+Neue's thin, light and medium weights.
+
+On the 2014 styleguide (a text-heavy corporate file), all 22 of its type layers now open as text: 14 in several
+styles, one box of paragraph text, five empty. After a redraw their lines, tabs, indents and frame land where
+Photoshop's do, Liberation Sans standing in for Helvetica Neue.
 
 Checked on Patchy's Photoshop text fixtures: after an edit, our lines land within a pixel of Photoshop's (automatic
 and fixed leading, tracking, centred and right-aligned anchors), with Liberation Sans standing in for Arial.

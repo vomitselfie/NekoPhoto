@@ -196,6 +196,9 @@ bool parseRecord(const json& j, Record& r) {
         if (tx->contains("lineSpacing") && !getDouble(*tx, "lineSpacing", lineSpacing, true)) return false;
         if (tx->contains("letterSpacing") && !getDouble(*tx, "letterSpacing", letterSpacing, true)) return false;
         t.alignment = std::clamp(int(alignment), 0, 2); t.lineSpacing = lineSpacing; t.letterSpacing = letterSpacing;
+        if (tx->contains("boxWidth") && !getDouble(*tx, "boxWidth", t.boxWidth, true)) return false;
+        if (tx->contains("boxHeight") && !getDouble(*tx, "boxHeight", t.boxHeight, true)) return false;
+        if (!std::isfinite(t.boxWidth) || !std::isfinite(t.boxHeight) || t.boxWidth < 0 || t.boxHeight < 0) return false;
         if (!(t.fontSize > 0) || !std::isfinite(t.fontSize) || !std::isfinite(t.lineSpacing) || !std::isfinite(t.letterSpacing)) return false;
         if (auto rs = tx->find("runs"); rs != tx->end()) {
             if (!rs->is_array() || rs->size() > 100000) return false;
@@ -257,6 +260,7 @@ json recordJson(const Layer& l) {
         j["text"] = {{"text", t.text}, {"fontFamily", t.fontFamily}, {"fontSize", number(t.fontSize)}, {"bold", t.bold}, {"italic", t.italic},
                      {"red", number(t.red)}, {"green", number(t.green)}, {"blue", number(t.blue)}, {"alignment", t.alignment},
                      {"lineSpacing", number(t.lineSpacing)}, {"letterSpacing", number(t.letterSpacing)}};
+        if (t.boxWidth > 0 && t.boxHeight > 0) { j["text"]["boxWidth"] = number(t.boxWidth); j["text"]["boxHeight"] = number(t.boxHeight); }
         if (!t.runs.empty()) {
             json runs = json::array();
             for (const TextRun& r : t.runs) {

@@ -570,6 +570,39 @@ TEST_CASE(text_in_several_styles_edits_and_round_trips) {
     CHECK(back->texts[0].runPostScriptNames.size() == 2 && back->texts[0].runPostScriptNames[1] == "Arial-Light");
 }
 
+TEST_CASE(box_text_round_trips) {
+    // Paragraph text in a 150 x 60 frame whose top-left is at (20, 10).
+    Document doc(200, 100);
+    LayerText text;
+    text.text = "A paragraph that wraps inside its frame";
+    text.fontSize = 14;
+    text.boxWidth = 150; text.boxHeight = 60;
+    Layer layer(Asset::make(std::make_shared<Image>(158, 68), "Frame"), Point(16, 6));   // the raster keeps 4 px of padding
+    layer.text = text;
+    layer.textImage = layer.asset->image;
+    doc.layers.push_back(layer);
+    PsdExportOptions options;
+    options.textMetrics = [](const LayerText& t) {
+        PsdTextMetrics m;
+        m.postScriptName = "ArialMT";
+        m.fontSize = t.fontSize; m.ascent = 10; m.lineHeight = 17; m.blockLeft = m.blockTop = 4; m.blockWidth = t.boxWidth; m.lines = 3;
+        return std::optional<PsdTextMetrics>(m);
+    };
+    std::string error;
+    const auto bytes = encodePsd(doc, options, nullptr, &error);
+    const std::string file(bytes.begin(), bytes.end());
+    CHECK(file.find("/ShapeType 1") != std::string::npos);
+    CHECK(file.find("/BoxBounds [ 0.0 0.0 150.0 60.0 ]") != std::string::npos);
+    auto back = importPsdBytes(bytes, &error);
+    REQUIRE(back.has_value());
+    const Layer& read = back->document.layers[0];
+    REQUIRE(read.text.has_value());
+    CHECK(read.text->boxWidth == 150 && read.text->boxHeight == 60);
+    // Anchored at the frame's top-left, where the first redraw puts it.
+    CHECK(read.extraJson.find("\"psdTextAnchor\":[20.0000,10.0000]") != std::string::npos);
+
+}
+
 TEST_CASE(psb_export_reads_back_with_even_composite_rows) {
     Document doc(40, 30);
     doc.layers.push_back(pixels("A", softDisc(20, 200, 30, 30), {5, 5}));

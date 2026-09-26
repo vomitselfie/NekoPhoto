@@ -31,24 +31,36 @@ QFont runFont(const compositor::LayerText& text, const compositor::TextRun& run)
     compositor::LayerText t = text;
     t.fontFamily = run.fontFamily; t.fontSize = run.fontSize; t.bold = run.bold; t.italic = run.italic; t.letterSpacing = run.letterSpacing;
     QFont font = fontFor(t);
-    if (run.weight > 0) font.setWeight(QFont::Weight(std::clamp(run.weight, 100, 900)));
+    if (run.weight > 0) {
+        font.setWeight(QFont::Weight(std::clamp(run.weight, 100, 900)));
+        // A stand-in without the weight falls back to regular; a medium or heavier face reads closer as its bold.
+        // (Qt reports the weight asked for, not the face's, so the family's faces are looked at.)
+        if (run.weight >= 500) {
+            const QString family = QFontInfo(font).family();
+            bool has = false;
+            for (const QString& style : QFontDatabase::styles(family)) has |= std::abs(QFontDatabase::weight(family, style) - run.weight) <= 50;
+            if (!has) font.setWeight(QFont::Bold);
+        }
+    }
     if (run.caps != compositor::TextRun::Caps::Normal) font.setCapitalization(run.caps == compositor::TextRun::Caps::Small ? QFont::SmallCaps : QFont::AllUppercase);
     return font;
 }
 
-/// Text in several styles, one QTextLayout a line, each run its own format.
+/// Text in several styles, or in a box: one QTextLayout a paragraph, each run its own format, and its lines placed
+/// by Photoshop's rules.
 struct RunLayout {
-    std::vector<std::unique_ptr<QTextLayout>> lines;
-    std::vector<double> widths;
-    std::vector<double> baselines;   // each line's, below the first
-    double width = 0, firstAscent = 0, lastDescent = 0, pitch = 0;
-    std::vector<QFont> fonts;   // each run's
+    std::vector<std::unique_ptr<QTextLayout>> paragraphs;
+    struct Line { size_t paragraph; int index; double width, baseline, descent; bool shown; };
+    std::vector<Line> lines;        // baselines below the text's top (the block's for point text, the box's for box text)
+    double width = 0, firstAscent = 0, pitch = 0, bottom = 0;
+    std::vector<QFont> fonts;       // each run's
 };
 
 RunLayout layoutRuns(const compositor::LayerText& text) {
     RunLayout out;
+    const bool boxed = text.boxWidth > 0 && text.boxHeight > 0;
     const std::vector<compositor::TextRun> runs = compositor::textRuns(text);
-    struct Span { int start, end; QTextCharFormat format; double leading; };
+    struct Span { int start, end; QTextCharFormat format; double leading, capHeight; };
     std::vector<Span> spans;
     int at = 0;
     for (const compositor::TextRun& run : runs) {
@@ -59,77 +71,89 @@ RunLayout layoutRuns(const compositor::LayerText& text) {
         f.setForeground(QColor::fromRgbF(float(std::clamp(run.red, 0.0, 1.0)), float(std::clamp(run.green, 0.0, 1.0)), float(std::clamp(run.blue, 0.0, 1.0))));
         f.setFontUnderline(run.underline);
         f.setFontStrikeOut(run.strikethrough);
-        if (run.baselineShift != 0) {
-            const double height = QFontMetricsF(font).height();
-            if (height > 0) f.setBaselineOffset(run.baselineShift / height * 100);
-        }
+        const QFontMetricsF metrics(font);
+        if (run.baselineShift != 0 && metrics.height() > 0) f.setBaselineOffset(run.baselineShift / metrics.height() * 100);
         // Photoshop's leading, or the font's own line height as NekoPhoto spaces plain text.
-        const double leading = run.leading > 0 ? run.leading : QFontMetricsF(font).height() * std::clamp(text.lineSpacing, 0.1, 10.0);
-        spans.push_back({at, at + run.length, f, leading});
+        const double leading = run.leading > 0 ? run.leading : metrics.height() * std::clamp(text.lineSpacing, 0.1, 10.0);
+        spans.push_back({at, at + run.length, f, leading, metrics.capHeight()});
         at += run.length;
     }
     const QFont base = out.fonts.empty() ? fontFor(text) : out.fonts.front();
     out.pitch = QFontMetricsF(base).height() * std::clamp(text.lineSpacing, 0.1, 10.0);
     const QString content = QString::fromStdString(text.text);
-    const QStringList lines = content.split('\n');
-    int lineStart = 0;
-    for (int i = 0; i < lines.size(); i++) {
-        const QString& line = lines[i];
-        auto layout = std::make_unique<QTextLayout>(line, base);
+    const QStringList paragraphs = content.split('\n');
+    int paragraphStart = 0;
+    bool first = true;
+    double baseline = 0;
+    for (int p = 0; p < paragraphs.size(); p++) {
+        const QString& para = paragraphs[p];
+        auto layout = std::make_unique<QTextLayout>(para, base);
         QList<QTextLayout::FormatRange> formats;
         for (const Span& sp : spans) {
-            const int s0 = std::max(sp.start, lineStart), s1 = std::min(sp.end, lineStart + int(line.size()));
-            if (s1 > s0) formats.append({s0 - lineStart, s1 - s0, sp.format});
+            const int s0 = std::max(sp.start, paragraphStart), s1 = std::min(sp.end, paragraphStart + int(para.size()));
+            if (s1 > s0) formats.append({s0 - paragraphStart, s1 - s0, sp.format});
         }
-        // An empty line keeps the height of the style it sits in.
-        if (line.isEmpty())
-            for (const Span& sp : spans) if (sp.start <= lineStart && lineStart <= sp.end) { layout->setFont(sp.format.font()); break; }
+        // An empty paragraph keeps the height of the style it sits in.
+        if (para.isEmpty())
+            for (const Span& sp : spans) if (sp.start <= paragraphStart && paragraphStart <= sp.end) { layout->setFont(sp.format.font()); break; }
         layout->setFormats(formats);
         QTextOption option;
-        option.setWrapMode(QTextOption::NoWrap);
+        option.setWrapMode(boxed ? QTextOption::WrapAtWordBoundaryOrAnywhere : QTextOption::NoWrap);
         option.setTabStopDistance(36);   // Photoshop's default tab stops: every half inch, 36 points
         layout->setTextOption(option);
         layout->beginLayout();
-        QTextLine l = layout->createLine();
-        if (l.isValid()) l.setLineWidth(1e7);
-        layout->endLayout();
-        // The line sits the largest leading among its runs below the one before (Photoshop's rule).
-        double lineLeading = 0;
-        for (const Span& sp : spans) {
-            const bool touches = line.isEmpty() ? (sp.start <= lineStart && lineStart <= sp.end) : (sp.start < lineStart + int(line.size()) && sp.end > lineStart);
-            if (touches) lineLeading = std::max(lineLeading, sp.leading);
+        std::vector<QTextLine> made;
+        for (;;) {
+            QTextLine l = layout->createLine();
+            if (!l.isValid()) break;
+            l.setLineWidth(boxed ? text.boxWidth : 1e7);
+            made.push_back(l);
         }
-        if (lineLeading <= 0) lineLeading = out.pitch;
-        out.baselines.push_back(i == 0 ? 0 : out.baselines.back() + lineLeading);
-        const double w = l.isValid() ? l.naturalTextWidth() : 0;
-        out.widths.push_back(w);
-        out.width = std::max(out.width, w);
-        if (i == 0) out.firstAscent = l.isValid() ? l.ascent() : QFontMetricsF(base).ascent();
-        out.lastDescent = l.isValid() ? l.descent() : QFontMetricsF(base).descent();
-        out.lines.push_back(std::move(layout));
-        lineStart += int(line.size()) + 1;
+        layout->endLayout();
+        for (QTextLine& l : made) {
+            // The runs on this line: their largest leading spaces it from the line before (Photoshop's rule), and in
+            // a box the first line's largest cap height sets the first baseline.
+            const int from = paragraphStart + l.textStart(), to = from + l.textLength();
+            double leading = 0, cap = 0;
+            for (const Span& sp : spans) {
+                const bool touches = l.textLength() == 0 ? (sp.start <= from && from <= sp.end) : (sp.start < to && sp.end > from);
+                if (touches) { leading = std::max(leading, sp.leading); cap = std::max(cap, sp.capHeight); }
+            }
+            if (leading <= 0) leading = out.pitch;
+            if (first) {
+                baseline = boxed ? (cap > 0 ? cap : l.ascent()) : l.ascent();
+                out.firstAscent = baseline;
+                first = false;
+            } else baseline += leading;
+            // A box shows only the lines that fit it whole.
+            const bool shown = !boxed || baseline + l.descent() <= text.boxHeight + 0.5;
+            out.lines.push_back({out.paragraphs.size(), l.lineNumber(), l.naturalTextWidth(), baseline, l.descent(), shown});
+            if (shown) { out.width = std::max(out.width, l.naturalTextWidth()); out.bottom = std::max(out.bottom, baseline + l.descent()); }
+        }
+        out.paragraphs.push_back(std::move(layout));
+        paragraphStart += int(para.size()) + 1;
     }
+    if (boxed) { out.width = text.boxWidth; out.bottom = text.boxHeight; }
     return out;
 }
 
 std::shared_ptr<compositor::Image> renderRuns(const compositor::LayerText& text) {
     RunLayout laid = layoutRuns(text);
     const int w = std::max(1, int(std::ceil(laid.width)) + 2 * textPadding);
-    const double lastBaseline = laid.firstAscent + laid.baselines.back();
-    const int h = std::max(1, int(std::ceil(lastBaseline + laid.lastDescent)) + 2 * textPadding);
+    const int h = std::max(1, int(std::ceil(laid.bottom)) + 2 * textPadding);
     if ((long long)w * h > compositor::Document::pixelBudget) return nullptr;
     QImage image(w, h, QImage::Format_ARGB32_Premultiplied);
     image.fill(Qt::transparent);
     QPainter painter(&image);
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setRenderHint(QPainter::TextAntialiasing);
-    for (size_t i = 0; i < laid.lines.size(); i++) {
-        QTextLayout& layout = *laid.lines[i];
-        if (layout.lineCount() == 0) continue;
-        const double x = textPadding + (text.alignment == 1 ? (laid.width - laid.widths[i]) / 2 : text.alignment == 2 ? laid.width - laid.widths[i] : 0);
-        const double baseline = textPadding + laid.firstAscent + laid.baselines[i];
-        layout.draw(&painter, QPointF(x, baseline - layout.lineAt(0).ascent()));
+    for (const RunLayout::Line& line : laid.lines) {
+        QTextLine l = laid.paragraphs[line.paragraph]->lineAt(line.index);
+        const double x = text.alignment == 1 ? (laid.width - line.width) / 2 : text.alignment == 2 ? laid.width - line.width : 0;
+        // A line a box hides goes far out of sight.
+        l.setPosition(line.shown ? QPointF(x, line.baseline - l.ascent()) : QPointF(0, -1e6));
     }
+    for (auto& paragraph : laid.paragraphs) paragraph->draw(&painter, QPointF(textPadding, textPadding));
     painter.end();
     return fromQImage(image);
 }
@@ -137,7 +161,7 @@ std::shared_ptr<compositor::Image> renderRuns(const compositor::LayerText& text)
 } // namespace
 
 std::shared_ptr<compositor::Image> renderTextLayer(const compositor::LayerText& text) {
-    if (!text.runs.empty()) return renderRuns(text);
+    if (!text.runs.empty() || (text.boxWidth > 0 && text.boxHeight > 0)) return renderRuns(text);
     const QFont font = fontFor(text);
     const QFontMetricsF metrics(font);
     QString content = QString::fromStdString(text.text);
@@ -192,18 +216,18 @@ QString postScriptName(const QRawFont& raw) {
 } // namespace
 
 std::optional<compositor::PsdTextMetrics> psdTextMetrics(const compositor::LayerText& text) {
-    if (!text.runs.empty()) {
+    if (!text.runs.empty() || (text.boxWidth > 0 && text.boxHeight > 0)) {
         if (text.text.empty()) return std::nullopt;
         const RunLayout laid = layoutRuns(text);
         compositor::PsdTextMetrics m;
         m.fontSize = laid.fonts.front().pixelSize();
         m.ascent = laid.firstAscent;
         // The block's height over its lines (the writer spaces the bounds by one pitch; each run keeps its own leading).
-        m.lineHeight = laid.lines.size() > 1 ? laid.baselines.back() / double(laid.lines.size() - 1) : laid.pitch;
+        m.lines = int(laid.lines.size());
+        m.lineHeight = laid.lines.size() > 1 ? (laid.lines.back().baseline - laid.lines.front().baseline) / double(laid.lines.size() - 1) : laid.pitch;
         if (!(m.lineHeight > 0)) m.lineHeight = laid.pitch;
         m.blockWidth = laid.width;
         m.blockLeft = m.blockTop = textPadding;
-        m.lines = int(laid.lines.size());
         const std::vector<compositor::TextRun> runs = compositor::textRuns(text);
         for (size_t i = 0; i < runs.size(); i++) {
             const QRawFont raw = QRawFont::fromFont(laid.fonts[i]);
@@ -261,6 +285,17 @@ QString familyForPostScriptName(const QString& postScriptName) {
             found += base[i];
         }
     }
+    // Faces sold with Adobe's apps have free twins with their metrics: ask for those when the face is missing, the
+    // twin that is installed first (fontconfig knows "Helvetica" but not "Helvetica Neue LT Std").
+    static const std::pair<const char*, QStringList> twins[] = {
+        {"helveticaneue", {"Helvetica", "TeX Gyre Heros", "Nimbus Sans", "Liberation Sans", "Arimo"}},
+        {"helvetica", {"TeX Gyre Heros", "Nimbus Sans", "Liberation Sans", "Arimo"}},
+        {"myriad", {"Source Sans 3", "Source Sans Pro", "PT Sans", "Noto Sans"}},
+        {"verdana", {"DejaVu Sans", "Bitstream Vera Sans"}},
+        {"minion", {"Crimson Pro", "Crimson Text", "Liberation Serif"}},
+    };
+    for (const auto& [prefix, list] : twins)
+        if (wanted.startsWith(QLatin1String(prefix)) && !QFontDatabase::families().contains(found, Qt::CaseInsensitive) && QFont::substitutes(found).isEmpty()) { QFont::insertSubstitutions(found, list); break; }
     cache.insert(postScriptName, found);
     return found;
 }

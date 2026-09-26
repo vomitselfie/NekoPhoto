@@ -495,8 +495,10 @@ bool EditorSession::redrawText(Layer& layer) {
         const QJsonArray anchor = extra.value("psdTextAnchor").toArray();
         if (anchor.size() == 2 && layer.transform.rotation == 0) {
             if (auto m = psdTextMetrics(*layer.text)) {
-                const double x = m->blockLeft + (layer.text->alignment == 1 ? m->blockWidth / 2 : layer.text->alignment == 2 ? m->blockWidth : 0);
-                const double y = m->blockTop + m->ascent;
+                // Box text is anchored at its frame's top-left, point text at its first baseline.
+                const bool boxed = layer.text->boxWidth > 0 && layer.text->boxHeight > 0;
+                const double x = m->blockLeft + (boxed ? 0 : layer.text->alignment == 1 ? m->blockWidth / 2 : layer.text->alignment == 2 ? m->blockWidth : 0);
+                const double y = m->blockTop + (boxed ? 0 : m->ascent);
                 layer.transform.origin = Point(anchor[0].toDouble() - x * scaleX, anchor[1].toDouble() - y * scaleY);
             }
         }
