@@ -982,15 +982,23 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                         : source == document.smartObjects.end() || source->second->kind == SmartObjectSource::Kind::Linked ? Lock::Linked
                         : !source->second->image ? Lock::Unreadable : placement->nonAffine || !placed ? Lock::Perspective : Lock::None;
                     std::optional<WarpedRaster> warped;
+                    bool keptFiltered = false;
                     if (instance.lock == Lock::Filters && source != document.smartObjects.end() && source->second->kind == SmartObjectSource::Kind::Embedded
                         && source->second->image) {
-                        // Smart Filters NekoPhoto draws: the contents placed (and warped), then the stack over them.
-                        if (auto filtered = filteredSmartObjectRaster(docCarry->globals, instance, *source->second->image, placement->quad)) {
-                            warped = WarpedRaster{filtered->image, LayerTransform(Point(filtered->x, filtered->y), Size(filtered->image->width(), filtered->image->height()))};
-                            instance.lock = Lock::None;
+                        // Smart Filters NekoPhoto draws: editable. The layer's pixels are Photoshop's own filtered raster
+                        // for this placement, so they are kept as read (drawing the stack here can take seconds);
+                        // moving, scaling or editing the filters draws it (refreshSmartObjectRasters, setSmartFilters).
+                        if (smartFiltersDrawable(docCarry->globals, instance)) {
+                            if (layer.asset && layer.asset->image && !layer.asset->image->isEmpty()) {
+                                instance.lock = Lock::None;
+                                keptFiltered = true;
+                            } else if (auto filtered = filteredSmartObjectRaster(docCarry->globals, instance, *source->second->image, placement->quad)) {
+                                warped = WarpedRaster{filtered->image, LayerTransform(Point(filtered->x, filtered->y), Size(filtered->image->width(), filtered->image->height()))};
+                                instance.lock = Lock::None;
+                            }
                         }
                     }
-                    if (!warped && placement->warp && (instance.lock == Lock::None || instance.lock == Lock::Perspective)) {
+                    if (!warped && !keptFiltered && placement->warp && (instance.lock == Lock::None || instance.lock == Lock::Perspective)) {
                         // A warp NekoPhoto draws: from the contents, through the mesh, onto the quad (any quad).
                         warped = renderWarpedImage(*source->second->image, *placement->warp, placement->quad);
                         instance.lock = warped ? Lock::None : Lock::Warp;
@@ -1001,7 +1009,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                         layer.transform = warped->transform;
                         layer.transform.sampling = raster.sampling;
                         if (layer.mask && !layer.mask->placement) layer.mask->placement = raster;
-                    } else if (!instance.locked()) {
+                    } else if (!instance.locked() && !keptFiltered) {
                         const LayerTransform raster = layer.transform;
                         layer.asset = Asset::make(source->second->image, layer.name);
                         layer.transform = *placed;

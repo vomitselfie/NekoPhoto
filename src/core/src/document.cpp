@@ -462,7 +462,9 @@ void TextRunPatch::applyTo(TextRun& r) const {
 
 void styleTextRange(LayerText& text, int start, int length, const TextRunPatch& patch) {
     const int total = utf16Length(text.text);
-    const int from = std::clamp(start, 0, total), to = std::clamp(start + std::max(0, length), from, total);
+    // In 64 bits: a start near INT_MAX plus a length would overflow.
+    const int from = std::clamp(start, 0, total);
+    const int to = int(std::clamp<int64_t>(int64_t(start) + std::max(0, length), from, total));
     if (from == to) return;
     std::vector<TextRun> out;
     int at = 0;

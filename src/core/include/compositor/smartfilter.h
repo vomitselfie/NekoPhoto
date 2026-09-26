@@ -125,6 +125,8 @@ std::vector<uint8_t> authorSmartFilterRecord(const std::string& placedId, const 
 std::optional<std::vector<uint8_t>> replaceSmartFilterRecords(const std::vector<uint8_t>& payload,
                                                               const std::vector<std::pair<std::string, std::vector<uint8_t>>>& replacements);
 
+/// Whether the instance's Smart Filters (stack and cache) are ones drawn here, without drawing them.
+bool smartFiltersDrawable(const std::vector<PsdBlock>& globals, const SmartObjectInstance& instance);
 /// The instance's pixels with its Smart Filters: `source` placed on `quad` (through its warp, if any), then the
 /// stack over it on the cache's canvas. None when the stack or its cache is not one drawn here.
 std::optional<PlacedRaster> filteredSmartObjectRaster(const std::vector<PsdBlock>& globals,

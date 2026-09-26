@@ -456,6 +456,17 @@ TEST_CASE(smart_filters_draw_from_the_contents_and_their_cache_follows) {
     while (feid.size() % 4) feid.push_back(0);
     carry->globals.push_back({"FEid", feid});
     doc.psdCarry = carry;
+    // The layer's pixels are the filtered raster, as Photoshop saves them (import keeps them rather than drawing the stack).
+    {
+        auto f = filteredSmartObjectRaster(carry->globals, *layer.smartObject, *source->image, quad);
+        REQUIRE(f.has_value());
+        layer.asset = Asset::make(f->image, layer.name);
+        layer.transform = LayerTransform(Point(f->x, f->y), Size(f->image->width(), f->image->height()));
+        layer.smartImage = f->image;
+        layer.smartObject->placedTransform = layer.transform;
+        layer.smartObject->placedWidth = f->image->width();
+        layer.smartObject->placedHeight = f->image->height();
+    }
     doc.layers.push_back(layer);
     auto cache = findSmartFilterCache(carry->globals, layer.smartObject->placedId);
     REQUIRE(cache.has_value());
@@ -470,6 +481,15 @@ TEST_CASE(smart_filters_draw_from_the_contents_and_their_cache_follows) {
     CHECK(out->pixel(15, 15)[3] >= 250);                          // the middle stays solid
     CHECK(out->pixel(9, 15)[3] > 0 && out->pixel(9, 15)[3] < 255);   // the edge spreads out
     CHECK(out->pixel(3, 15)[3] == 0);
+    // Opened, it shows the file's raster as read; scaled, it is drawn again from its contents and filters.
+    CHECK_EQ(refreshSmartObjectRasters(back->document), 0);
+    {
+        Document scaled = back->document;
+        LayerTransform& t = scaled.layers[0].transform;
+        t.size = Size(t.size.width * 2, t.size.height * 2);
+        CHECK_EQ(refreshSmartObjectRasters(scaled), 1);
+        CHECK(scaled.layers[0].smartObject->placedTransform == scaled.layers[0].transform);
+    }
 
     // Moved by 5: exported, its cache record is rewritten there (and the file still reads, drawn, not locked).
     Document moved = back->document;

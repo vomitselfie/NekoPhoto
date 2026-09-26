@@ -5,6 +5,7 @@
 #include <cmath>
 #include <map>
 #include <mutex>
+#include <set>
 
 namespace compositor {
 
@@ -159,7 +160,10 @@ uint64_t cachedContentHash(const std::shared_ptr<const Image>& image) {
     std::lock_guard lock(mutex);
     auto it = cache.find(image.get());
     if (it != cache.end() && it->second.first.lock() == image) return it->second.second;
-    if (cache.size() > 256) cache.clear();
+    // Bounded without thrashing: a document with more shape layers than the bound must not rehash every layer on
+    // every call, so drop the entries whose images are gone first, and clear only past a generous limit.
+    if (cache.size() >= 1024) std::erase_if(cache, [](const auto& entry) { return entry.second.first.expired(); });
+    if (cache.size() >= 16384) cache.clear();
     const uint64_t hash = psdContentHash(image.get());
     cache[image.get()] = {image, hash};
     return hash;
@@ -321,9 +325,15 @@ uint16_t setDocumentPath(Document& document, uint16_t id, const std::string& nam
     pathCanvas(document, w, h);
     if (!document.psdCarry) { w = document.width; h = document.height; }
     if (id == 0) {
-        id = 2000;
-        for (auto& r : carry->resources) if (r.id >= 2000 && r.id <= 2997) id = std::max<uint16_t>(id, uint16_t(r.id + 1));
-        if (id > 2997) id = 2997;
+        // The next id after the highest in use; past 2997, the first free one; none free: nothing is stored.
+        std::set<uint16_t> used;
+        for (auto& r : carry->resources) if (r.id >= 2000 && r.id <= 2997) used.insert(r.id);
+        id = used.empty() ? 2000 : uint16_t(*used.rbegin() + 1);
+        if (id > 2997) {
+            id = 0;
+            for (uint16_t candidate = 2000; candidate <= 2997; candidate++) if (!used.count(candidate)) { id = candidate; break; }
+            if (!id) return 0;
+        }
     }
     auto it = std::find_if(carry->resources.begin(), carry->resources.end(), [&](const PsdDocumentCarry::Resource& r) { return r.id == id; });
     PsdDocumentCarry::Resource resource{id, id == kWorkPathId ? std::string() : name, authorPathResource(path, w, h)};
@@ -496,9 +506,9 @@ VectorPath customShapePath(const std::string& name, const Rect& box) {
         // A rounded body with a tail at the lower left.
         VectorPath body = rectanglePath(Rect(box.x, box.y, box.width, box.height * 0.78), std::min(box.width, box.height) * 0.18);
         auto& k = body.subpaths[0].knots;
-        // Between the bottom-left pair of knots (indices 6 and 7 run along the bottom towards the left).
+        // On the straight bottom edge, which runs right to left from knot 5 to knot 6.
         const Point tail = at(0.12, 1.0), base0 = at(0.34, 0.78), base1 = at(0.2, 0.78);
-        k.insert(k.begin() + 7, {corner(base0.x, base0.y), corner(tail.x, tail.y), corner(base1.x, base1.y)});
+        k.insert(k.begin() + 6, {corner(base0.x, base0.y), corner(tail.x, tail.y), corner(base1.x, base1.y)});
         return body;
     }
     // Heart: two lobes meeting at the top centre and the bottom point.

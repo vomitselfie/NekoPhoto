@@ -71,7 +71,8 @@ void EditorSession::setActiveLayer(const std::optional<Uuid>& id) {
 }
 
 bool EditorSession::canEditLayers() const {
-    return document_ && !stroke_ && !warp_ && !transformEdit_ && !pixelMove_;
+    // An open warp cage, a live Layer Style edit or a path drag holds an undo step open: nothing else may land in it.
+    return document_ && !stroke_ && !warp_ && !transformEdit_ && !pixelMove_ && !warpCage_ && !styleEditLayer_ && !pathEditing_;
 }
 
 // ---- Document ----------------------------------------------------------------
@@ -220,12 +221,14 @@ bool EditorSession::canRedo() const { return document_ && !stroke_ && !warp_ && 
 void EditorSession::undo() {
     // Like Photoshop, the first Undo discards a pending gradient.
     if (gradient_) { cancelGradient(); return; }
+    if (warpCage_) { cancelWarpCage(); return; }   // likewise an open warp cage
     if (!canUndo()) return;
     auto snapshot = history_.undo();
     if (snapshot) restore(*snapshot);
 }
 
 void EditorSession::redo() {
+    if (warpCage_) cancelWarpCage();
     if (!canRedo()) return;
     auto snapshot = history_.redo();
     if (snapshot) restore(*snapshot);
@@ -342,7 +345,7 @@ void EditorSession::resizeImage(int width, int height, double resolution, int sa
 
 void EditorSession::selectTool(Tool tool) {
     if (stroke_ || warp_ || pixelMove_) return;
-    if (tool != tool_) { commitTransform(); resolveGradient(); cancelShape(); }
+    if (tool != tool_) { commitTransform(); resolveGradient(); cancelShape(); cancelWarpCage(); }
     tool_ = tool;
     emit toolChanged();
 }

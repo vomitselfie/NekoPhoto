@@ -68,7 +68,7 @@ size_t runAt(const std::vector<Stop>& stops, float t, float& u) {
     for (size_t i = 1; i < stops.size(); i++) {
         if (t > stops[i].location) continue;
         const float span = stops[i].location - stops[i - 1].location;
-        u = span > 1e-6f ? midpointRemap((t - stops[i - 1].location) / span, stops[i - 1].midpoint) : 1.0f;
+        u = span > 1e-6f ? midpointRemap((t - stops[i - 1].location) / span, stops[i].midpoint) : 1.0f;
         return i;
     }
     return stops.size();
@@ -94,12 +94,13 @@ void GradientStops::sample(float t, float out[4]) const {
 
 void GradientStops::reverse() {
     for (int c = 0; c < 4; c++) std::swap(start[c], end[c]);
-    // A stop's midpoint belongs to the run after it; mirrored, that run follows the stop before it.
+    // A stop's midpoint belongs to the run ending at it (Photoshop's and the layer-style renderer's convention);
+    // mirrored, that run ends at the stop that was its start. Filled from the top down, so each read is an original.
     auto mirror = [](auto& stops) {
         std::reverse(stops.begin(), stops.end());
         for (auto& s : stops) s.location = 1 - s.location;
-        for (size_t i = 0; i + 1 < stops.size(); i++) stops[i].midpoint = 1 - stops[i + 1].midpoint;
-        if (!stops.empty()) stops.back().midpoint = 0.5f;
+        for (size_t j = stops.size(); j-- > 1;) stops[j].midpoint = 1 - stops[j - 1].midpoint;
+        if (!stops.empty()) stops.front().midpoint = 0.5f;
     };
     mirror(colors);
     mirror(alphas);

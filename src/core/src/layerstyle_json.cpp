@@ -5,6 +5,10 @@
 #include <nlohmann/json.hpp>
 #include <cstdio>
 #include <set>
+#include <type_traits>
+#include <map>
+#include <cmath>
+#include <algorithm>
 #include <stdexcept>
 
 namespace compositor {
@@ -123,6 +127,9 @@ void In::operator()(const char* k, StyleGradient& g) {
         for (auto& s : *a) g.alphas.push_back({s.value("location", 0.0f), s.value("opacity", 1.0f), s.value("midpoint", 0.5f)});
     }
     in.finish();
+    // In order along the gradient, as the renderer expects and PSD stores them.
+    std::stable_sort(g.colors.begin(), g.colors.end(), [](auto& a, auto& b) { return a.location < b.location; });
+    std::stable_sort(g.alphas.begin(), g.alphas.end(), [](auto& a, auto& b) { return a.location < b.location; });
 }
 
 template <typename V> void fields(V& v, DropShadow& e) {
@@ -168,6 +175,39 @@ template <typename V> void fields(V& v, Bevel& e) {
     v("textureInvert", e.textureInvert); v("textureLinkWithLayer", e.textureLinkWithLayer);
 }
 
+/// Holds every number to the range the Layer Style dialog offers (and PSD round-trips); a non-finite one is an error.
+struct Clamp {
+    std::string where;
+    void operator()(const char* k, float& v) {
+        if (!std::isfinite(v)) throw Bad(where + "." + k + " must be a finite number");
+        static const std::map<std::string, std::pair<float, float>> ranges{
+            {"opacity", {0, 1}}, {"highlightOpacity", {0, 1}}, {"shadowOpacity", {0, 1}}, {"size", {0, 250}}, {"distance", {0, 30000}},
+            {"spread", {0, 100}}, {"choke", {0, 100}}, {"range", {1, 100}}, {"angle", {-360, 360}}, {"altitude", {0, 90}}, {"depth", {0.01f, 10}},
+            {"soften", {0, 16}}, {"scale", {0.01f, 10}}, {"textureScale", {0.01f, 10}}, {"textureDepth", {-10, 10}}, {"contourRange", {0, 1}},
+            {"offsetX", {-100, 100}}, {"offsetY", {-100, 100}}, {"smoothness", {0, 1}}, {"phaseX", {-30000, 30000}}, {"phaseY", {-30000, 30000}}};
+        auto it = ranges.find(k);
+        if (it != ranges.end()) v = std::clamp(v, it->second.first, it->second.second);
+    }
+    void operator()(const char*, bool&) {}
+    void operator()(const char*, std::string&) {}
+    void operator()(const char*, StyleColor&) {}
+    void operator()(const char*, EffectBlend&) {}
+    template <typename E> void choice(const char*, E&, std::initializer_list<const char*>) {}
+    void operator()(const char* k, StyleGradient& g) {
+        Clamp inner{where + "." + k};
+        fields(inner, g);
+        auto unit = [&](float& v, const char* what) { if (!std::isfinite(v)) throw Bad(inner.where + " " + what + " must be finite"); v = std::clamp(v, 0.0f, 1.0f); };
+        for (auto& s : g.colors) { unit(s.location, "locations"); unit(s.midpoint, "midpoints"); }
+        for (auto& s : g.alphas) { unit(s.location, "locations"); unit(s.midpoint, "midpoints"); unit(s.opacity, "opacities"); }
+    }
+    void operator()(const char* k, StyleContour& c) {
+        for (auto& p : c.points) {
+            if (!std::isfinite(p.x) || !std::isfinite(p.y)) throw Bad(where + "." + k + " points must be finite");
+            p.x = std::clamp(p.x, 0.0f, 255.0f); p.y = std::clamp(p.y, 0.0f, 255.0f);
+        }
+    }
+};
+
 /// Each effect list with its JSON name.
 template <typename F> void lists(LayerStyle& s, F f) {
     f("dropShadows", s.dropShadows); f("innerShadows", s.innerShadows); f("outerGlows", s.outerGlows); f("innerGlows", s.innerGlows);
@@ -206,6 +246,9 @@ bool layerStyleFromJson(const std::string& text, LayerStyle& out, std::string* e
                 In in{(*x)[i], std::string(name) + "[" + std::to_string(i) + "]", {}};
                 fields(in, e);
                 in.finish();
+                Clamp clamp{in.where};
+                fields(clamp, e);
+                if constexpr (std::is_same_v<std::decay_t<decltype(e)>, Stroke>) e.size = std::max(1.0f, e.size);
                 list.push_back(e);
             }
         });

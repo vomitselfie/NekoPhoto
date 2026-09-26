@@ -55,7 +55,7 @@ bool EditorSession::beginQuickMask() {
 }
 
 bool EditorSession::endQuickMask() {
-    if (!quickMaskActive()) { quickMaskLayer_.reset(); return false; }
+    if (!quickMaskActive()) return false;
     const Layer* layer = document_->find(*quickMaskLayer_);
     const int w = document_->width, h = document_->height;
     std::optional<Selection> selection;
@@ -79,7 +79,7 @@ bool EditorSession::endQuickMask() {
     const Uuid id = *quickMaskLayer_;
     document_->layers.erase(std::remove_if(document_->layers.begin(), document_->layers.end(), [&](const Layer& l) { return l.id == id; }), document_->layers.end());
     document_->selection = selection;
-    quickMaskLayer_.reset();
+    // The id stays: undoing this brings the layer back, and it is the Quick Mask again (so saving leaves it too).
     setActiveLayer(quickMaskReturnLayer_ && document_->find(*quickMaskReturnLayer_) ? quickMaskReturnLayer_
                    : (document_->layers.empty() ? std::nullopt : std::optional<Uuid>(document_->layers.back().id)));
     isMaskSelected_ = false;

@@ -18,6 +18,7 @@
 #include "compositor/render.h"
 #include "compositor/selection.h"
 #include "compositor/png.h"
+#include "compositor/vectorlayer.h"
 extern "C" {
 #include "HealPixels.h"
 #include "ContentFill.h"
@@ -114,6 +115,36 @@ int main(int argc, char** argv) {
             char name[64]; std::snprintf(name, sizeof name, "motion blur distance %.0f", d);
             report(name, timeMs([&] { img = base; applyFilter(FilterKind::MotionBlur, img, s, 1, 0); }, 1));
         }
+    }
+    if (want("shape")) {
+        // Vector shape layers (a 600 px ellipse each, half stroked): their masks and strokes are drawn per render,
+        // over the shape's box only. 1.5.1 drew them over the whole region (here ~550 ms a view, 3 s a flatten; now ~40 and ~110).
+        Document doc(W, H);
+        for (int i = 0; i < 50; i++) {
+            VectorShape s;
+            s.path = ellipsePath(Rect(10 + (i * 37) % 3000, 10 + (i * 53) % 2000, 600, 600));
+            s.r = uint8_t(i * 5); s.g = 100; s.b = 200;
+            s.stroke.enabled = i % 2 == 0;
+            s.stroke.width = 6;
+            s.stroke.align = i % 4 == 0 ? VectorStroke::Align::Outside : VectorStroke::Align::Center;
+            Layer layer(Asset::make(std::make_shared<Image>(1, 1), "S"), Point(0, 0));
+            setVectorShape(layer, doc, s);
+            doc.layers.push_back(layer);
+        }
+        Image out(1920, 1080);
+        RenderOptions o; o.region = Rect(1000, 1000, 1920, 1080);
+        report("50 shape layers, 1080p view", timeMs([&] { render(doc, o, out); }, 3));
+        report("50 shape layers, flatten", timeMs([&] { renderFlattened(doc); }, 2));
+        // More shape layers than the shape check's hash cache once held (256): each check must stay a lookup.
+        Document many(W, H);
+        for (int i = 0; i < 300; i++) {
+            VectorShape s;
+            s.path = rectanglePath(Rect(i * 10, i * 7, 400, 300));
+            Layer layer(Asset::make(std::make_shared<Image>(1, 1), "S"), Point(0, 0));
+            setVectorShape(layer, many, s);
+            many.layers.push_back(layer);
+        }
+        report("300 shape layers, endEdit refresh", timeMs([&] { refreshVectorShapes(many); }, 5));
     }
     if (want("composite")) {
         // Five layers over a 1080p view of the document, the interactive redraw case.
