@@ -62,7 +62,7 @@ void MainWindow::buildToolRail() {
     tool(Tool::Marquee, tr("Marquee"), "square-dashed", QKeySequence("M"));
     tool(Tool::Lasso, tr("Lasso"), "lasso", QKeySequence("L"));
     tool(Tool::Wand, tr("Magic Wand"), "wand-sparkles", QKeySequence("W"));
-    tool(Tool::Scribble, tr("Quick Select"), "scribble", QKeySequence("Q"));
+    tool(Tool::Scribble, tr("Quick Select"), "scribble", QKeySequence("Shift+W"));   // Photoshop's W group
     tool(Tool::Crop, tr("Crop"), "crop", QKeySequence("C"));
     rail->addSeparator();
     tool(Tool::Brush, tr("Brush"), "paintbrush", QKeySequence("B"));
@@ -77,7 +77,7 @@ void MainWindow::buildToolRail() {
     tool(Tool::Smudge, tr("Liquify / Blur / Smudge"), "droplet", QKeySequence("R"));
     tool(Tool::Dodge, tr("Dodge / Burn / Sponge"), "lollipop", QKeySequence("O"));
     tool(Tool::Gradient, tr("Gradient"), "blend", QKeySequence("G"));
-    tool(Tool::PaintBucket, tr("Paint Bucket"), "paint-bucket", QKeySequence("K"));
+    tool(Tool::PaintBucket, tr("Paint Bucket"), "paint-bucket", QKeySequence("Shift+G"));   // Photoshop's G group
     tool(Tool::Shape, tr("Shape (Shift-U switches Rectangle / Ellipse)"), "shapes", QKeySequence("U"));
     tool(Tool::Text, tr("Text"), "type", QKeySequence("T"));
     tool(Tool::Eyedropper, tr("Eyedropper"), "pipette", QKeySequence("I"));
@@ -329,7 +329,7 @@ void MainWindow::buildMenus() {
     needsDocument(select->addAction(tr("&All"), QKeySequence::SelectAll, this, [this] { session_->selectAll(); }));
     needsDocument(select->addAction(tr("&Deselect"), QKeySequence("Ctrl+D"), this, [this] { session_->deselect(); }));
     needsDocument(select->addAction(tr("&Inverse"), QKeySequence("Ctrl+Shift+I"), this, [this] { session_->invertSelection(); }));
-    needsDocument(select->addAction(tr("Edit in &Quick Mask Mode"), this, [this] { session_->toggleQuickMask(); }));
+    needsDocument(select->addAction(tr("Edit in &Quick Mask Mode"), QKeySequence("Q"), this, [this] { session_->toggleQuickMask(); }));
     select->addSeparator();
     QMenu* modify = select->addMenu(tr("&Modify"));
     needsDocument(modify->addAction(tr("&Expand…"), this, [this] { bool ok; int n = QInputDialog::getInt(this, tr("Expand Selection"), tr("Pixels"), 1, 1, 500, 1, &ok); if (ok) session_->selectionExpand(n); }));

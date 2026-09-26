@@ -22,7 +22,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 
 ## Selections
 - Rectangle and ellipse marquee, freehand and polygonal lasso, and an edge-aware magic wand: shading and texture stay in, edges between similar colours hold, and the tolerance can be changed right after a click
-- Quick Select (Q): scribble over the subject, or click it (a 48 MB model, downloaded from the options bar); the selection snaps to the image's edges
+- Quick Select (Shift+W): scribble over the subject, or click it (a 48 MB model, downloaded from the options bar); the selection snaps to the image's edges
 - Add (Shift), subtract (Alt) and intersect (Shift+Alt)
 - Expand, Contract, Feather, Smooth, Border, Invert; load a layer or mask as a selection
 - Content-Aware Fill, which continues edges and patterns and can extend an image past its borders
@@ -34,9 +34,9 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Spot Healing Brush and Clone Stamp; both ignore what a layer mask hides
 - Smudge, Liquify and Blur, on pixels or masks, and Sharpen
 - Dodge, Burn (Shadows, Midtones, Highlights; Protect Tones) and Sponge (desaturate or saturate), painted through the brush with Exposure or Flow as its opacity; their curves are shaped after Photoshop's behaviour, not measured against it
-- Paint Bucket with Tolerance, Contiguous, Anti-alias and All Layers, inside the selection
+- Paint Bucket (Shift+G) with Tolerance, Contiguous, Anti-alias and All Layers, inside the selection
 - Healing Brush (the healing tool's Sampled type: Alt-click a source, and the copied texture takes the tone around the stroke) and Patch (select the blemish, drag the selection to the area to copy from)
-- Quick Mask (Select ▸ Edit in Quick Mask Mode): the selection as a red overlay to paint with every mask tool, white selecting; saving or exporting leaves it first
+- Quick Mask (Q, or Select ▸ Edit in Quick Mask Mode): the selection as a red overlay to paint with every mask tool, white selecting; saving or exporting leaves it first
 - Gradients and shapes (rectangles, rounded rectangles, ellipses)
 - Text in any installed font, editable until you paint on the layer
 - Eyedropper and colour picker
@@ -97,7 +97,7 @@ Mac 版と同じ機能を、Linux のキー表記で使えます。キーボー�
 
 ### 選択範囲
 - 長方形選択・楕円選択、なげなわ・多角形選択、自動選択
-- クイック選択(Q):被写体をなぞるか、クリックするだけ(クリック用の 48 MB のモデルはオプションバーからダウンロード)。選択範囲は画像の輪郭に合わせて調整されます
+- クイック選択(Shift+W):被写体をなぞるか、クリックするだけ(クリック用の 48 MB のモデルはオプションバーからダウンロード)。選択範囲は画像の輪郭に合わせて調整されます
 - 追加(Shift)、削除(Alt)、共通範囲(Shift+Alt)
 - 拡張、縮小、境界をぼかす、滑らかに、境界線、選択範囲を反転。レイヤーやマスクから選択範囲を作成
 - コンテンツに応じた塗りつぶし:輪郭や模様をつなげ、画像の外側への拡張にも使えます
