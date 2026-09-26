@@ -6,6 +6,7 @@
 #include "CanvasWidget.h"
 #include "Dialogs.h"
 #include "ImageConvert.h"
+#include "compositor/affinity.h"
 #include "compositor/clip.h"
 #include "compositor/png.h"
 #include <QApplication>
@@ -38,16 +39,26 @@ QString imageFilter() {
 
 /// Everything File > Open and Import File take: Photoshop and Clip Studio files, images, and a project's manifest.json.
 QString openFilter() {
-    QStringList patterns = {"*.psd", "*.psb", "*.clip", "manifest.json"};
+    QStringList patterns = {"*.psd", "*.psb", "*.clip", "*.afphoto", "*.afdesign", "*.afpub", "*.af", "manifest.json"};
     for (auto& format : QImageReader::supportedImageFormats()) patterns << "*." + QString::fromLatin1(format);
     return QObject::tr("Images, layered files and projects (%1)").arg(patterns.join(' ')) + ";;" + imageFilter() + ";;"
-        + QObject::tr("Photoshop files (*.psd *.psb)") + ";;" + QObject::tr("Clip Studio files (*.clip)");
+        + QObject::tr("Photoshop files (*.psd *.psb)") + ";;" + QObject::tr("Clip Studio files (*.clip)") + ";;"
+        + QObject::tr("Affinity files (*.afphoto *.afdesign *.afpub *.af)");
 }
 
 bool isProjectPath(const QString& path) { return path.endsWith(".comp", Qt::CaseInsensitive) && QFileInfo(path).isDir(); }
-/// A layered file from another editor, opened in its own tab: Photoshop (.psd, .psb) or Clip Studio (.clip).
+/// An Affinity document (Photo, Designer, Publisher, or the unified app's .af).
+bool isAffinityPath(const QString& path) {
+    for (const char* suffix : {".afphoto", ".afdesign", ".afpub", ".af"})
+        if (path.endsWith(QLatin1String(suffix), Qt::CaseInsensitive)) return true;
+    return false;
+}
+
+/// A layered file from another editor, opened in its own tab: Photoshop (.psd, .psb), Clip Studio (.clip) or
+/// Affinity (.afphoto, .afdesign, .afpub, .af).
 bool isLayeredPath(const QString& path) {
-    return path.endsWith(".psd", Qt::CaseInsensitive) || path.endsWith(".psb", Qt::CaseInsensitive) || path.endsWith(".clip", Qt::CaseInsensitive);
+    return path.endsWith(".psd", Qt::CaseInsensitive) || path.endsWith(".psb", Qt::CaseInsensitive) || path.endsWith(".clip", Qt::CaseInsensitive)
+        || isAffinityPath(path);
 }
 
 } // namespace
@@ -86,11 +97,13 @@ void MainWindow::openLayeredFile(const QString& path) {
     // The import reads the whole file; a big one takes a moment.
     QApplication::setOverrideCursor(Qt::BusyCursor);
     std::string error;
-    const bool clip = path.endsWith(".clip", Qt::CaseInsensitive);
-    auto imported = clip ? compositor::importClip(path.toStdString(), &error) : compositor::importPsd(path.toStdString(), &error, app::psdImportOptions());
+    const bool clip = path.endsWith(".clip", Qt::CaseInsensitive), affinity = isAffinityPath(path);
+    auto imported = clip ? compositor::importClip(path.toStdString(), &error)
+                  : affinity ? compositor::importAffinity(path.toStdString(), &error, app::affinityImportOptions())
+                  : compositor::importPsd(path.toStdString(), &error, app::psdImportOptions());
     QApplication::restoreOverrideCursor();
     if (!imported) { showError(tr("Couldn’t open %1").arg(QFileInfo(path).fileName()), QString::fromStdString(error)); return; }
-    if (!clip) app::finishPsdText(*imported);
+    if (!clip && !affinity) app::finishPsdText(*imported);
     Tab& tab = addTab(true);
     tab.session->adoptDocument(imported->document, QFileInfo(path).completeBaseName());
     addRecent(path);
@@ -99,6 +112,7 @@ void MainWindow::openLayeredFile(const QString& path) {
     if (!lastImportNotes_.isEmpty() && isVisible()) {
         auto* box = new QMessageBox(QMessageBox::Information, tr("Imported %1").arg(QFileInfo(path).fileName()),
             (clip ? tr("%n layer(s) imported. Some things Clip Studio keeps have no counterpart here:", nullptr, int(imported->document.layers.size()))
+             : affinity ? tr("%n layer(s) imported. Some things Affinity keeps have no counterpart here:", nullptr, int(imported->document.layers.size()))
                   : tr("%n layer(s) imported. Some things Photoshop keeps have no counterpart here:", nullptr, int(imported->document.layers.size()))), QMessageBox::Ok, this);
         box->setDetailedText(lastImportNotes_.join('\n'));
         box->setInformativeText(lastImportNotes_.mid(0, 6).join('\n') + (lastImportNotes_.size() > 6 ? tr("\n… and %n more (see Details).", nullptr, lastImportNotes_.size() - 6) : QString()));

@@ -146,3 +146,11 @@ add_test(NAME toning_tests COMMAND toning_tests)
 add_executable(raw_tests raw_tests.cpp)
 target_link_libraries(raw_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME raw_tests COMMAND raw_tests)
+
+add_executable(affinity_tests affinity_tests.cpp)
+target_link_libraries(affinity_tests PRIVATE compositor::core compositor_warnings ZLIB::ZLIB)
+add_test(NAME affinity_tests COMMAND affinity_tests)
+
+# Not a test: dumps what the Affinity import makes of files (see the file's header).
+add_executable(affinity_check affinity_check.cpp)
+target_link_libraries(affinity_check PRIVATE compositor::core compositor_warnings)

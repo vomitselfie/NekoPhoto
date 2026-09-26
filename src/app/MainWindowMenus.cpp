@@ -131,7 +131,7 @@ void MainWindow::buildMenus() {
     file->addAction(tr("Import &Brushes…"), this, [this] { importBrushesInteractively(this, session_); });
     needsDocument(file->addAction(tr("Place &Embedded…"), this, [this] {
         const QString path = QFileDialog::getOpenFileName(this, tr("Place Embedded"), QSettings().value("lastDir").toString(),
-                                                          tr("Images and Photoshop documents (*.psd *.psb *.png *.jpg *.jpeg *.tif *.tiff *.webp *.bmp *.gif %1)").arg(compositor::rawSupported() ? QStringLiteral("*.cr2 *.cr3 *.crw *.nef *.nrw *.arw *.srf *.sr2 *.raf *.orf *.rw2 *.rwl *.pef *.dng *.3fr *.iiq *.erf *.kdc *.dcr *.mrw *.srw *.x3f") : QString()));
+                                                          tr("Images, Photoshop and Affinity documents (*.psd *.psb *.afphoto *.afdesign *.afpub *.af *.png *.jpg *.jpeg *.tif *.tiff *.webp *.bmp *.gif %1)").arg(compositor::rawSupported() ? QStringLiteral("*.cr2 *.cr3 *.crw *.nef *.nrw *.arw *.srf *.sr2 *.raf *.orf *.rw2 *.rwl *.pef *.dng *.3fr *.iiq *.erf *.kdc *.dcr *.mrw *.srw *.x3f") : QString()));
         if (path.isEmpty()) return;
         QSettings().setValue("lastDir", QFileInfo(path).path());
         QString error;
@@ -295,7 +295,7 @@ void MainWindow::buildMenus() {
     needsDocument(smart->addAction(tr("&Edit Contents"), this, [this] { editSmartObjectContents(); }));
     needsDocument(smart->addAction(tr("&Replace Contents…"), this, [this] {
         const QString path = QFileDialog::getOpenFileName(this, tr("Replace Contents"), QSettings().value("lastDir").toString(),
-                                                          tr("Images and Photoshop documents (*.psd *.psb *.png *.jpg *.jpeg *.tif *.tiff *.webp *.bmp *.gif %1)").arg(compositor::rawSupported() ? QStringLiteral("*.cr2 *.cr3 *.crw *.nef *.nrw *.arw *.srf *.sr2 *.raf *.orf *.rw2 *.rwl *.pef *.dng *.3fr *.iiq *.erf *.kdc *.dcr *.mrw *.srw *.x3f") : QString()));
+                                                          tr("Images, Photoshop and Affinity documents (*.psd *.psb *.afphoto *.afdesign *.afpub *.af *.png *.jpg *.jpeg *.tif *.tiff *.webp *.bmp *.gif %1)").arg(compositor::rawSupported() ? QStringLiteral("*.cr2 *.cr3 *.crw *.nef *.nrw *.arw *.srf *.sr2 *.raf *.orf *.rw2 *.rwl *.pef *.dng *.3fr *.iiq *.erf *.kdc *.dcr *.mrw *.srw *.x3f") : QString()));
         if (path.isEmpty()) return;
         QString error;
         if (!session_->replaceSmartObjectContents(path, &error)) showError(tr("Couldn’t replace the contents"), error);

@@ -277,7 +277,7 @@ def document_new(width: int = 1920, height: int = 1080, resolution: float = 72) 
 
 @edit("Open a file")
 def document_open(path: str) -> str:
-    """Open a .comp project (in its own tab), a Photoshop .psd/.psb (in its own tab, with its layers; the reply lists what could not be carried), or an image file, camera RAW files included (CR2, NEF, ARW, DNG, ...; developed with the camera white balance), as a layer (a first image creates the canvas)."""
+    """Open a .comp project (in its own tab), a Photoshop .psd/.psb, Clip Studio .clip or Affinity .afphoto/.afdesign/.afpub/.af (in its own tab, with its layers; the reply lists what could not be carried), or an image file, camera RAW files included (CR2, NEF, ARW, DNG, ...; developed with the camera white balance), as a layer (a first image creates the canvas)."""
     return text(call("document.open", path=os.path.abspath(path)))
 
 

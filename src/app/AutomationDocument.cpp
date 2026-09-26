@@ -89,8 +89,10 @@ void AutomationServer::registerDocumentHandlers() {
         w->openPath(path);
         EditorSession* s = session();
         QJsonObject out{{"tab", w->currentTabIndex()}, {"title", s->title()}, {"width", s->hasDocument() ? s->document()->width : 0}, {"height", s->hasDocument() ? s->document()->height : 0}};
-        if (path.endsWith(".psd", Qt::CaseInsensitive) || path.endsWith(".psb", Qt::CaseInsensitive) || path.endsWith(".clip", Qt::CaseInsensitive)) {
-            if (!s->hasDocument()) fail(path.endsWith(".clip", Qt::CaseInsensitive) ? "the Clip Studio file could not be imported" : "the Photoshop file could not be imported");
+        const QString suffix = QFileInfo(path).suffix().toLower();
+        const bool affinity = suffix == "afphoto" || suffix == "afdesign" || suffix == "afpub" || suffix == "af";
+        if (suffix == "psd" || suffix == "psb" || suffix == "clip" || affinity) {
+            if (!s->hasDocument()) fail(suffix == "clip" ? "the Clip Studio file could not be imported" : affinity ? "the Affinity file could not be imported" : "the Photoshop file could not be imported");
             out["layers"] = int(s->document()->layers.size());
             out["notes"] = QJsonArray::fromStringList(w->lastImportNotes());
         }

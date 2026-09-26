@@ -18,7 +18,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build cmake libpng-dev libmypaint-dev libraw-dev libsqlite3-dev qt6-base-dev qt6-svg-dev qt6-wayland libgl1-mesa-dev pkg-config clang
+          sudo apt-get install -y ninja-build cmake libpng-dev libmypaint-dev libraw-dev libzstd-dev libsqlite3-dev qt6-base-dev qt6-svg-dev qt6-wayland libgl1-mesa-dev pkg-config clang
       - name: Vendored OpenCV (cached)
         id: opencv
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830   # v4

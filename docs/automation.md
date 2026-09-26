@@ -113,7 +113,8 @@ layer alone; a masked layer as it shows, `masked: false` for its raw pixels),
 `screenshot` (the canvas as shown, or the `window`).
 
 Documents: `tabs.select`, `tabs.new`, `tabs.close`, `document.new`,
-`document.open` (.comp, a Photoshop .psd/.psb or a Clip Studio .clip, which answer with `layers`
+`document.open` (.comp, a Photoshop .psd/.psb, a Clip Studio .clip or an Affinity .afphoto, .afdesign, .afpub or .af,
+which answer with `layers`
 and the import `notes`, or an image), `document.import` (an image as a layer),
 `document.save` (answers `macCompatible`: false past the 100 megapixels of layers Compositor for
 macOS opens; projects here hold up to a gigapixel), `document.export` (.psd, layered, text layers as Photoshop text (`texts` counts them), answering with the counts and any `warnings` and `notes` about what Photoshop cannot carry; or the composite as .png, .jpg, .webp or .tif; `quality` for JPEG and WebP, where 100 is lossless; `background` behind a JPEG), `document.close`.

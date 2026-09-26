@@ -113,9 +113,9 @@ dark gradient behind it and export result.png". See
 
 ```bash
 # Arch / Manjaro
-sudo pacman -S cmake ninja qt6-base qt6-svg qt6-wayland qt6-imageformats libpng libmypaint libraw opencv
+sudo pacman -S cmake ninja qt6-base qt6-svg qt6-wayland qt6-imageformats libpng libmypaint libraw zstd opencv
 # Ubuntu 24.04
-sudo apt install cmake ninja-build qt6-base-dev qt6-svg-dev qt6-wayland qt6-image-formats-plugins libpng-dev libmypaint-dev libraw-dev libsqlite3-dev libgl1-mesa-dev libopencv-dev
+sudo apt install cmake ninja-build qt6-base-dev qt6-svg-dev qt6-wayland qt6-image-formats-plugins libpng-dev libmypaint-dev libraw-dev libzstd-dev libsqlite3-dev libgl1-mesa-dev libopencv-dev
 
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j

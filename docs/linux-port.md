@@ -23,18 +23,18 @@ an older compositor-linux AppImage installed.
 Requirements: CMake 3.22+, Ninja (or Make), GCC 12+ or Clang 15+, Qt 6.4+
 (Core, Gui, Widgets, Network, Svg, plus the Wayland platform plugin), libpng;
 OpenCV for Remove Background; libmypaint 1.5 or newer for the MyPaint brushes; LibRaw for camera RAW files;
-SQLite for importing Clip Studio brushes.
+SQLite for importing Clip Studio brushes; libzstd for Affinity documents.
 
 Arch / Manjaro:
 
 ```bash
-sudo pacman -S cmake ninja qt6-base qt6-svg qt6-wayland qt6-imageformats libpng libmypaint libraw opencv
+sudo pacman -S cmake ninja qt6-base qt6-svg qt6-wayland qt6-imageformats libpng libmypaint libraw zstd opencv
 ```
 
 Ubuntu 24.04:
 
 ```bash
-sudo apt install cmake ninja-build qt6-base-dev qt6-svg-dev qt6-wayland qt6-image-formats-plugins libpng-dev libmypaint-dev libraw-dev libsqlite3-dev libgl1-mesa-dev libopencv-dev
+sudo apt install cmake ninja-build qt6-base-dev qt6-svg-dev qt6-wayland qt6-image-formats-plugins libpng-dev libmypaint-dev libraw-dev libzstd-dev libsqlite3-dev libgl1-mesa-dev libopencv-dev
 ```
 
 Then:
@@ -50,7 +50,7 @@ macOS (Homebrew) builds an app bundle; the G'MIC filters appear once
 `brew install gmic` has put `gmic` on the path:
 
 ```bash
-brew install cmake ninja qt libpng libmypaint libraw opencv pkg-config
+brew install cmake ninja qt libpng libmypaint libraw zstd opencv pkg-config
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
 cmake --build build -j && open build/src/app/NekoPhoto.app
 ```

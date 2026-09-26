@@ -29,5 +29,8 @@ compositor::PsdExportOptions psdExportOptions();
 void finishPsdText(compositor::PsdImport& imported);
 /// PSD import options with the app's decoders for smart object contents the core cannot read (JPEG, TIFF, ...).
 compositor::PsdImportOptions psdImportOptions();
+/// Affinity import options: placed JPEG and other originals decoded by Qt exactly as stored (the import applies
+/// the EXIF orientation Affinity records itself).
+compositor::PsdImportOptions affinityImportOptions();
 
 } // namespace app

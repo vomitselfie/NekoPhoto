@@ -31,7 +31,7 @@ jobs:
       - name: System packages
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build libpng-dev libmypaint-dev libraw-dev libsqlite3-dev libgl1-mesa-dev pkg-config \
+          sudo apt-get install -y cmake ninja-build libpng-dev libmypaint-dev libraw-dev libzstd-dev libsqlite3-dev libgl1-mesa-dev pkg-config \
             libfuse2 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 libxcb-xkb1 file
 
       - name: Vendored OpenCV (cached)
@@ -115,7 +115,7 @@ jobs:
           echo "version=$v" >> "$GITHUB_OUTPUT"
 
       - name: Homebrew packages
-        run: brew install ninja qt libpng libmypaint libraw pkg-config
+        run: brew install ninja qt libpng libmypaint libraw zstd pkg-config
 
       - name: Vendored OpenCV (cached)
         id: opencv
