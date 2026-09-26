@@ -428,12 +428,15 @@ QWidget* ToolOptionsBar::buildToningOptions() {
 
 QComboBox* ToolOptionsBar::pathOperationBox(bool withNewLayer) {
     // Photoshop's path operations menu; New Layer only where an outline can start a layer of its own.
+    // Short names in the bar, Photoshop's in the tooltips.
     auto* box = new QComboBox;
-    if (withNewLayer) box->addItem(tr("New Layer"), -1);
-    box->addItem(tr("Combine Shapes"), int(VectorPath::Op::Add));
-    box->addItem(tr("Subtract Front Shape"), int(VectorPath::Op::Subtract));
-    box->addItem(tr("Intersect Shape Areas"), int(VectorPath::Op::Intersect));
-    box->addItem(tr("Exclude Overlapping Shapes"), int(VectorPath::Op::Xor));
+    box->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    auto item = [box](const QString& shortName, const QString& name, int op) { box->addItem(shortName, op); box->setItemData(box->count() - 1, name, Qt::ToolTipRole); };
+    if (withNewLayer) item(tr("New Layer"), tr("New Layer"), -1);
+    item(tr("Combine"), tr("Combine Shapes"), int(VectorPath::Op::Add));
+    item(tr("Subtract"), tr("Subtract Front Shape"), int(VectorPath::Op::Subtract));
+    item(tr("Intersect"), tr("Intersect Shape Areas"), int(VectorPath::Op::Intersect));
+    item(tr("Exclude"), tr("Exclude Overlapping Shapes"), int(VectorPath::Op::Xor));
     box->setToolTip(tr("How the next outline combines with the active shape layer (or the targeted vector mask, or the path)"));
     return box;
 }
@@ -647,6 +650,9 @@ QWidget* ToolOptionsBar::buildShapeOptions() {
     strokeType->setToolTip(tr("Stroke with a colour, a gradient or a pattern"));
     auto* strokeSource = new QComboBox;
     strokeSource->setToolTip(tr("The stroke's gradient preset or document pattern"));
+    for (QComboBox* c : {fillType, fillSource, strokeType, strokeSource}) c->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    fillSource->setMaximumWidth(180);
+    strokeSource->setMaximumWidth(180);
     for (QWidget* x : std::initializer_list<QWidget*>{fill, fillType, fillColour, fillSource, stroke, strokeType, strokeColour, strokeSource, strokeWidth, align, dash}) h->addWidget(x);
     // The sources a type offers: gradient presets, or the document's patterns (kept when unchanged).
     auto sources = [this](QComboBox* type, QComboBox* source) {
@@ -743,7 +749,20 @@ QWidget* ToolOptionsBar::buildShapeOptions() {
     for (int i = 0; i < 4; i++) liveR[size_t(i)] = numberField(0, 150000, 1, " px", corners[i]);
     h->addWidget(separator());
     h->addWidget(propertiesLabel);
-    for (QDoubleSpinBox* f : {liveW, liveH, liveX, liveY, liveR[0], liveR[1], liveR[2], liveR[3]}) { f->setKeyboardTracking(false); h->addWidget(f); }
+    // Compact fields, each after a one-letter label (W, H, X, Y; the radii clockwise from the top left).
+    std::vector<QLabel*> liveLabels;
+    const char* names[] = {"W", "H", "X", "Y", "R"};
+    int n = 0;
+    for (QDoubleSpinBox* f : {liveW, liveH, liveX, liveY, liveR[0], liveR[1], liveR[2], liveR[3]}) {
+        f->setKeyboardTracking(false);
+        f->setSuffix(QString());
+        f->setDecimals(1);
+        f->setButtonSymbols(QAbstractSpinBox::NoButtons);
+        f->setFixedWidth(56);
+        if (n <= 4) { auto* label = new QLabel(tr(names[n])); liveLabels.push_back(label); h->addWidget(label); }
+        h->addWidget(f);
+        n++;
+    }
     // The live shape shown: the one of the subpath Direct Selection picked, else the first.
     auto liveShown = [this]() -> std::optional<LiveShape> {
         const auto list = session_->activeLiveShapes();
@@ -786,6 +805,7 @@ QWidget* ToolOptionsBar::buildShapeOptions() {
         strokeColour->setVisible(sp.kind == VectorPaint::Kind::Solid);
         const auto live = liveShown();
         propertiesLabel->setVisible(live.has_value());
+        for (size_t i = 0; i < liveLabels.size(); i++) liveLabels[i]->setVisible(live && (i < 4 || live->kind == LiveShape::Kind::Rectangle));
         for (QDoubleSpinBox* f : {liveW, liveH, liveX, liveY}) f->setVisible(live.has_value());
         for (QDoubleSpinBox* f : liveR) f->setVisible(live && live->kind == LiveShape::Kind::Rectangle);
         if (live) {
