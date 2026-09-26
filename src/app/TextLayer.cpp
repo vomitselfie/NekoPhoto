@@ -359,6 +359,47 @@ void finishPsdText(compositor::PsdImport& imported) {
     }
 }
 
+void finishPendingText(compositor::PsdImport& imported) {
+    for (const compositor::PsdImport::PendingText& p : imported.pendingTexts) {
+        compositor::Layer* layer = imported.document.find(p.layer);
+        if (!layer || !layer->text) continue;
+        compositor::LayerText& text = *layer->text;
+        std::vector<std::string> missing;
+        auto check = [&](const std::string& family) {
+            if (!family.empty() && !installed(QString::fromStdString(family)) && std::find(missing.begin(), missing.end(), family) == missing.end()) missing.push_back(family);
+        };
+        check(text.fontFamily);
+        for (const compositor::TextRun& run : text.runs) check(run.fontFamily);
+        for (const std::string& family : missing)
+            imported.notes.push_back("Layer \"" + layer->name + "\": the font " + family + " is not installed; the closest match, " +
+                                     QFontInfo(QFont(QString::fromStdString(family))).family().toStdString() + ", draws it until you install it.");
+        auto image = renderTextLayer(text);
+        if (!image) continue;
+        const auto m = psdTextMetrics(text);
+        const double blockTop = m ? m->blockTop : textPadding, ascent = m ? m->ascent : 0;
+        double left = p.left - textPadding, top = p.top - blockTop;
+        if (!p.boxed && p.baseline > 0) top = p.baseline - ascent - blockTop;
+        if (!p.boxed && p.align > 0 && p.width > 0) {
+            const double slack = p.width - (image->width() - 2 * textPadding);
+            left += p.align == 1 ? slack / 2 : slack;
+        }
+        layer->asset = compositor::Asset::make(image, layer->name);
+        layer->textImage = image;
+        const double w = image->width(), h = image->height();
+        if (p.rotation == 0) {
+            layer->transform = compositor::LayerTransform(compositor::Point(std::round(left), std::round(top)), compositor::Size(w, h));
+        } else {
+            // The upright raster's corner and centre turned into the document; the layer turns about its centre.
+            const double a = p.rotation * M_PI / 180, c = std::cos(a), sn = std::sin(a);
+            const double cx = left + w / 2, cy = top + h / 2;
+            const compositor::Point centre(p.originX + cx * c - cy * sn, p.originY + cx * sn + cy * c);
+            layer->transform = compositor::LayerTransform(compositor::Point(centre.x - w / 2, centre.y - h / 2), compositor::Size(w, h));
+            layer->transform.rotation = p.rotation;
+        }
+    }
+    imported.pendingTexts.clear();
+}
+
 compositor::PsdImportOptions psdImportOptions() {
     compositor::PsdImportOptions options;
     options.decodeImage = [](const std::vector<uint8_t>& bytes, const std::string&, const std::string&) -> compositor::ImagePtr {

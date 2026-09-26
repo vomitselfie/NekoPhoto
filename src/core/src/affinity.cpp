@@ -2,8 +2,8 @@
 // src/third_party/patchy_psd/README.md), src/formats/af_document_io.cpp: Patchy derived the format from files
 // authored with a licensed Affinity and the MIT-licensed afread project's notes; the container walk, the tile
 // planes, the blend table and the placement rules below are its findings, kept as it pinned them. What differs:
-// NekoPhoto has no vector, text, adjustment or layer-effect model for Affinity's, so vector curves and the common
-// parametric shapes are drawn as pixels, and text, adjustments, live filters and effects are left out and listed.
+// vector curves and parametric shapes are drawn as pixels, text becomes NekoPhoto text (drawn by the app), and
+// adjustments, live filters and effects are left out and listed.
 //
 // Container (all integers little-endian): u32 magic 0x414BFF00, u16 version, u16 flags, u32 class tag, an "#Inf"
 // block (stream-table offset, thumbnail offset, sizes, dates), "Prot" + u32 revision (version > 7). The stream
@@ -1607,6 +1607,9 @@ struct Built {
     int maskX = 0, maskY = 0;
     uint8_t maskOutside = 255;   // what the mask is beyond its plane
     std::vector<Built> children;
+    /// Text: the layer's text, drawn by the app after the import, and where it goes.
+    std::optional<LayerText> text;
+    PsdImport::PendingText placement;
 };
 
 struct Context {
@@ -1621,7 +1624,8 @@ struct Context {
     int leftOut = 0;   // visible content not carried
 };
 
-Document readContainer(std::span<const uint8_t> bytes, std::vector<std::string>& notes, int embedDepth, const PsdImportOptions& options, ImagePtr* preview);
+Document readContainer(std::span<const uint8_t> bytes, std::vector<std::string>& notes, int embedDepth, const PsdImportOptions& options, ImagePtr* preview,
+                       std::vector<PsdImport::PendingText>* pending = nullptr);
 void buildLayers(Context& ctx, const ClassList& children, std::vector<Built>& out, bool foldErase = true);
 
 std::string layerName(const Class& node) {
@@ -1871,6 +1875,201 @@ std::optional<Built> buildShapeNode(Context& ctx, const Class& node, const std::
     return drawVector(ctx, node, name, std::move(*path), nodeTransform(ctx, node), why);
 }
 
+
+// ------------------------------------------------------------------------------------------------ text
+
+/// One code point of UTF-8 at `at` (a malformed byte reads as itself); `used` is its length.
+uint32_t utf8At(const std::string& s, size_t at, size_t& used) {
+    const auto b = [&](size_t i) { return i < s.size() ? uint8_t(s[i]) : uint8_t(0); };
+    const uint8_t c = b(at);
+    used = 1;
+    if (c < 0x80) return c;
+    int extra = c >= 0xF0 ? 3 : c >= 0xE0 ? 2 : c >= 0xC0 ? 1 : 0;
+    if (!extra || at + size_t(extra) >= s.size() + 1) return c;
+    uint32_t cp = c & (0x3F >> extra);
+    for (int i = 1; i <= extra; i++) {
+        if ((b(at + size_t(i)) & 0xC0) != 0x80) return c;
+        cp = cp << 6 | (b(at + size_t(i)) & 0x3F);
+    }
+    used = size_t(extra) + 1;
+    return cp;
+}
+
+/// A glyph run's caps from its OpenType feature list (OtAt > Setn): Affinity's own "CAP\1" is All Caps, the
+/// small-caps features Small Caps; none when the run has no feature list (it keeps the previous run's).
+std::optional<TextRun::Caps> runCaps(const Class& item) {
+    const ClassList* objects = item.list(tag("Objs"));
+    if (!objects) return std::nullopt;
+    for (const auto& object : *objects) {
+        if (!object || object->type != tag("OtAt")) continue;
+        TextRun::Caps caps = TextRun::Caps::Normal;
+        if (const ClassList* settings = object->list(tag("Setn")))
+            for (const auto& setting : *settings) {
+                if (!setting || setting->integer(tag("Valu"), 0) == 0) continue;
+                const auto feature = uint32_t(setting->integer(tag("Feat"), 0));
+                if (feature == tag("CAP\x01")) return TextRun::Caps::All;
+                if (feature == tag("smcp") || feature == tag("c2sc") || feature == tag("pcap") || feature == tag("c2pc")) caps = TextRun::Caps::Small;
+            }
+        return caps;
+    }
+    return std::nullopt;
+}
+
+/// A glyph-run item's style (DFnt family, weight, italic; Doub[0] size; the first fill's colour) over `run`.
+void applyRunItem(const Class& item, TextRun& run, double& alpha) {
+    if (const Class* font = item.child(tag("DFnt"))) {
+        const std::string family = font->string(tag("Famy"));
+        if (!family.empty()) run.fontFamily = family;
+        const int64_t weight = font->integer(tag("Wegt"), 400);
+        run.bold = weight >= 600;
+        run.weight = weight >= 100 && weight <= 900 && weight != 400 && weight != 700 ? int(weight) : 0;
+        run.italic = font->boolean(tag("Ital"), false);
+    }
+    const auto doubles = item.vector(tag("Doub"));
+    if (!doubles.empty() && doubles[0] > 0 && std::isfinite(doubles[0])) run.fontSize = doubles[0];
+    if (const ClassList* fills = item.list(tag("Objs")); fills && !fills->empty() && fills->front())
+        if (const Class* fill = fills->front()->child(tag("FDeF")))
+            if (auto c = readColor(fill->child(tag("Colr")))) { run.red = (*c)[0]; run.green = (*c)[1]; run.blue = (*c)[2]; alpha = (*c)[3]; }
+}
+
+/// Artistic (TxtA) or frame (TxtF) text as a NekoPhoto text layer: the story's blocks (paragraphs) joined with
+/// line breaks, its glyph runs as TextRuns (the run Indx values end each run, in code points of the block), the
+/// first paragraph's alignment, and the frame (TxtH > FrmB, node-local) placed through the node's transform.
+std::optional<Built> buildText(Context& ctx, const Class& node, const std::string& name, std::string* why) {
+    const Class* story = node.child(tag("StSt"));
+    const ClassList* blocks = story ? story->list(tag("Blok")) : nullptr;
+    const Class* frame = node.child(tag("TxtH"));
+    auto box = frame ? frame->vector(tag("FrmB")) : std::vector<double>{};
+    if (!blocks || blocks->empty() || box.size() != 4) { *why = "is text laid out in a way that is not read yet (on a path, say)"; return std::nullopt; }
+
+    LayerText text;
+    std::vector<TextRun> runs;
+    TextRun carry;
+    carry.fontFamily = "Arial";
+    carry.fontSize = 12;
+    TextRun::Caps carryCaps = TextRun::Caps::Normal;
+    double firstAlpha = 1;
+    bool styled = false, spacing = false, justified = false;
+    int64_t align = -1;
+    const auto push = [&](TextRun run, int length) {
+        if (length <= 0) return;
+        run.length = length;
+        runs.push_back(run);
+    };
+    for (const auto& block : *blocks) {
+        if (!block) continue;
+        std::string raw;
+        if (const Class* glyphs = block->child(tag("Glyp"))) raw = glyphs->string(tag("Utf8"));
+        if (!text.text.empty()) {
+            // The break between blocks belongs to no wire run: the previous run takes it.
+            text.text += '\n';
+            if (!runs.empty()) runs.back().length++;
+            else push(carry, 1);
+        }
+        // Paragraph and line separators become '\n', NULs drop; unitAt maps each code point boundary of the block
+        // (run Indx counts code points, the trailing NUL included) to UTF-16 units of the output.
+        std::vector<int> unitAt{0};
+        int local = 0;
+        for (size_t at = 0; at < raw.size();) {
+            size_t used = 1;
+            const uint32_t cp = utf8At(raw, at, used);
+            if (cp == 0x2029 || cp == 0x2028) { text.text += '\n'; local++; }
+            else if (cp != 0) { text.text.append(raw, at, used); local += cp > 0xFFFF ? 2 : 1; }
+            unitAt.push_back(local);
+            at += used;
+        }
+        const int count = int(unitAt.size()) - 1;
+        int prev = 0;
+        if (const Class* glyphAtts = block->child(tag("GAtt")))
+            if (const ClassList* wireRuns = glyphAtts->list(tag("Runs")))
+                for (const auto& run : *wireRuns) {
+                    if (!run) continue;
+                    const int end = std::clamp(int(run->integer(tag("Indx"), count)), prev, count);
+                    TextRun style = carry;
+                    if (const Class* item = run->child(tag("Item"))) {
+                        double alpha = 1;
+                        applyRunItem(*item, style, alpha);
+                        if (!styled) firstAlpha = alpha;
+                        styled = true;
+                        if (auto caps = runCaps(*item)) carryCaps = *caps;
+                    }
+                    style.caps = carryCaps;
+                    push(style, unitAt[size_t(end)] - unitAt[size_t(prev)]);
+                    carry = style;
+                    prev = end;
+                }
+        if (prev < count) { TextRun style = carry; style.caps = carryCaps; push(style, unitAt[size_t(count)] - unitAt[size_t(prev)]); }
+        if (const Class* paragraphAtts = block->child(tag("PAtt")))
+            if (const ClassList* wireRuns = paragraphAtts->list(tag("Runs")))
+                for (const auto& run : *wireRuns) {
+                    const Class* item = run ? run->child(tag("Item")) : nullptr;
+                    if (!item) continue;
+                    const auto ints = item->vector(tag("Ints"));
+                    const int64_t a = ints.empty() ? 0 : int64_t(ints[0]);
+                    if (align < 0) align = a;
+                    if (a == 3) justified = true;
+                    const auto d = item->vector(tag("Doub"));
+                    for (size_t i = 2; i < d.size() && i <= 6; i++) if (std::abs(d[i]) > 0.01) spacing = true;
+                }
+    }
+    if (text.text.find_first_not_of(" \t\r\n") == std::string::npos || !styled || runs.empty()) { *why = "is empty text"; return std::nullopt; }
+
+    // The frame through the node's transform: axis-aligned, with the scale folded into the sizes. A rotation or
+    // shear is approximated (drawn upright).
+    const Affine6 m = nodeTransform(ctx, node);
+    const double sx = std::hypot(m[0], m[3]), sy = std::hypot(m[1], m[4]), scale = (sx + sy) / 2;
+    if (!(scale > 0.01) || !std::isfinite(scale)) { *why = "is text with a degenerate transform"; return std::nullopt; }
+    const double angle = std::atan2(m[3], m[0]);
+    const bool even = std::abs(sx - sy) <= 0.05 * scale && std::abs(m[0] * m[1] + m[3] * m[4]) <= 0.05 * scale * scale;   // no shear
+    const bool upright = std::abs(angle) <= 0.003 && even;
+    const bool turned = !upright && even && node.type == tag("TxtA");
+    // Turned point text keeps its node-local frame at the uniform scale; the layer is turned about it.
+    const Affine6 frameMap = turned ? Affine6{scale, 0, 0, 0, scale, 0} : m;
+    double x0 = 1e18, y0 = 1e18, x1 = -1e18, y1 = -1e18;
+    for (auto [px, py] : {std::pair{box[0], box[1]}, {box[2], box[1]}, {box[0], box[3]}, {box[2], box[3]}}) {
+        const Point p = apply(frameMap, px, py);
+        x0 = std::min(x0, p.x); y0 = std::min(y0, p.y); x1 = std::max(x1, p.x); y1 = std::max(y1, p.y);
+    }
+    for (auto& r : runs) r.fontSize = std::clamp(r.fontSize * scale, 1.0, 4000.0);
+    text.runs = runs;
+    const TextRun& first = runs.front();
+    text.fontFamily = first.fontFamily;
+    text.fontSize = first.fontSize;
+    text.bold = first.bold;
+    text.italic = first.italic;
+    text.red = first.red; text.green = first.green; text.blue = first.blue;
+    text.alignment = align == 1 ? 1 : align == 2 ? 2 : 0;
+    const bool boxed = node.type == tag("TxtF");
+    if (boxed) { text.boxWidth = std::max(1.0, x1 - x0); text.boxHeight = std::max(1.0, y1 - y0); }
+    settleTextRuns(text);
+
+    Built b;
+    b.name = name;
+    b.text = text;
+    b.placement.left = x0;
+    b.placement.top = y0;
+    b.placement.width = x1 - x0;
+    b.placement.boxed = boxed;
+    b.placement.align = text.alignment;
+    if (!boxed) {
+        const double ascent = frame->number(tag("ArtV"), 0.0) * (turned ? scale : sy);
+        if (ascent > 0) b.placement.baseline = y0 + ascent;
+    }
+    applyCommon(ctx, node, b, name);
+    b.opacity *= std::clamp(firstAlpha, 0.0, 1.0);
+    applyMasks(ctx, node, b, name);
+    if (turned) {
+        b.placement.rotation = angle * 180 / M_PI;
+        b.placement.originX = m[2];
+        b.placement.originY = m[5];
+    } else if (!upright) {
+        ctx.notes.push_back("Layer \"" + name + "\": the text's rotation, shear or uneven scale was left out (it is drawn upright).");
+    }
+    if (justified) ctx.notes.push_back("Layer \"" + name + "\": justified text is aligned left.");
+    if (spacing) ctx.notes.push_back("Layer \"" + name + "\": paragraph indents and spacing were left out.");
+    return b;
+}
+
 Built makeGroup(const std::string& name) { Built g; g.name = name; g.group = true; return g; }
 
 /// A canvas mask clipping to the axis-aligned box.
@@ -2085,7 +2284,13 @@ void buildLayers(Context& ctx, const ClassList& children, std::vector<Built>& ou
             continue;
         }
         if (type == tag("TxtA") || type == tag("TxtF")) {
-            leaveOut("is text, which is not read yet");
+            std::string why;
+            if (auto text = buildText(ctx, node, display, &why)) {
+                out.push_back(std::move(*text));
+                emitClipped(false);
+                continue;
+            }
+            leaveOut(why);
             emitClipped(true);
             continue;
         }
@@ -2140,12 +2345,13 @@ void buildLayers(Context& ctx, const ClassList& children, std::vector<Built>& ou
 }
 
 bool anyPixels(const std::vector<Built>& layers) {
-    for (const auto& l : layers) if ((l.image && !l.image->isEmpty()) || anyPixels(l.children)) return true;
+    for (const auto& l : layers) if ((l.image && !l.image->isEmpty()) || l.text || anyPixels(l.children)) return true;
     return false;
 }
 
 /// The Built tree into the document's flat, bottom-to-top list.
-void emit(std::vector<Built>& layers, std::optional<Uuid> parent, Document& doc, std::vector<std::string>& notes, long long& total) {
+void emit(std::vector<Built>& layers, std::optional<Uuid> parent, Document& doc, std::vector<std::string>& notes, long long& total,
+          std::vector<PsdImport::PendingText>& pending) {
     std::optional<Uuid> base;   // the nearest unclipped pixel layer below, for clipping
     for (auto& b : layers) {
         Layer layer;
@@ -2154,6 +2360,16 @@ void emit(std::vector<Built>& layers, std::optional<Uuid> parent, Document& doc,
             layer = Layer(b.name, doc.size());
             layer.isGroup = true;
             layer.passThrough = b.passThrough;
+        } else if (b.text) {
+            // A transparent pixel where the text goes, until the app draws it (as for an empty PSD type layer).
+            lx = int(std::floor(b.placement.left));
+            ly = int(std::floor(b.placement.top));
+            lw = lh = 1;
+            layer = Layer(Asset::make(std::make_shared<Image>(1, 1), b.name), Point(lx, ly));
+            layer.text = *b.text;
+            layer.textImage = layer.asset->image;
+            b.placement.layer = layer.id;
+            pending.push_back(b.placement);
         } else {
             if (!b.image || b.image->isEmpty()) continue;
             premultiply(*b.image);
@@ -2176,7 +2392,8 @@ void emit(std::vector<Built>& layers, std::optional<Uuid> parent, Document& doc,
         layer.opacity = b.opacity;
         layer.blendMode = b.blend;
         layer.parentId = parent;
-        if (b.mask && plausibleSize(lw, lh)) {
+        if (b.text && b.mask) notes.push_back("Layer \"" + b.name + "\": the mask on this text was left out.");
+        if (b.mask && !b.text && plausibleSize(lw, lh)) {
             // Over the layer's own grid (a group's is the canvas); beyond the stored plane, its outside value.
             auto mask = std::make_shared<GrayImage>(lw, lh, b.maskOutside);
             for (int y = 0; y < lh; y++) {
@@ -2201,7 +2418,7 @@ void emit(std::vector<Built>& layers, std::optional<Uuid> parent, Document& doc,
         }
         const Uuid id = layer.id;
         doc.layers.push_back(std::move(layer));
-        if (b.group) emit(b.children, id, doc, notes, total);
+        if (b.group) emit(b.children, id, doc, notes, total, pending);
     }
 }
 
@@ -2239,7 +2456,7 @@ Document singleLayer(const ImagePtr& image, int width, int height, const std::st
 }
 
 Document buildDocument(const Source& src, const affinity::Tree& tree, std::vector<std::string>& notes, int embedDepth,
-                       const PsdImportOptions& options, const ImagePtr& preview, bool* fellBack) {
+                       const PsdImportOptions& options, const ImagePtr& preview, bool* fellBack, std::vector<PsdImport::PendingText>& pending) {
     if (!tree.root) fail("The Affinity document tree is empty.");
     const Class* docNode = tree.root->child(tag("DocR"));
     if (!docNode) fail("The Affinity document has no document node.");
@@ -2337,7 +2554,7 @@ Document buildDocument(const Source& src, const affinity::Tree& tree, std::vecto
         }
     }
     long long total = (long long)width * height;
-    emit(built, std::nullopt, doc, notes, total);
+    emit(built, std::nullopt, doc, notes, total, pending);
     if (ctx.leftOut > 0 && preview && embedDepth == 0) {
         // What was left out still shows in Affinity's own preview: kept hidden on top, for reference.
         Layer ref(Asset::make(preview, "Affinity preview (reference)"), Point(0, 0));
@@ -2349,7 +2566,8 @@ Document buildDocument(const Source& src, const affinity::Tree& tree, std::vecto
     return doc;
 }
 
-Document readContainer(std::span<const uint8_t> bytes, std::vector<std::string>& notes, int embedDepth, const PsdImportOptions& options, ImagePtr* previewOut) {
+Document readContainer(std::span<const uint8_t> bytes, std::vector<std::string>& notes, int embedDepth, const PsdImportOptions& options, ImagePtr* previewOut,
+                       std::vector<PsdImport::PendingText>* pendingOut) {
     if (bytes.size() < 4 || bytes[0] != 0x00 || bytes[1] != 0xFF || bytes[2] != 0x4B || bytes[3] != 0x41) fail("Not an Affinity document.");
     const Container container = parseContainer(bytes);
     if (container.version > newestVerifiedVersion)
@@ -2364,7 +2582,14 @@ Document readContainer(std::span<const uint8_t> bytes, std::vector<std::string>&
         try {
             const auto treeBytes = extractStream(bytes, docStream->second, "doc.dat", &notes);
             const affinity::Tree tree = affinity::parseTree(treeBytes);
-            return buildDocument(src, tree, notes, embedDepth, options, preview, nullptr);
+            std::vector<PsdImport::PendingText> pending;
+            Document doc = buildDocument(src, tree, notes, embedDepth, options, preview, nullptr, pending);
+            if (!pending.empty() && !pendingOut) {
+                // An embedded document is flattened here, where no fonts draw its text.
+                notes.push_back("Text inside an embedded document is not drawn.");
+            }
+            if (pendingOut) *pendingOut = std::move(pending);
+            return doc;
         } catch (const std::exception& e) {
             why = e.what();
         }
@@ -2382,7 +2607,7 @@ std::optional<PsdImport> importAffinityBytes(const std::vector<uint8_t>& file, s
     try {
         PsdImport result;
         ImagePtr preview;
-        result.document = readContainer(file, result.notes, 0, options, &preview);
+        result.document = readContainer(file, result.notes, 0, options, &preview, &result.pendingTexts);
         result.composite = preview;
         result.realComposite = false;
         if (result.document.layers.empty()) { if (error) *error = "The file holds no layers this reader can use."; return std::nullopt; }

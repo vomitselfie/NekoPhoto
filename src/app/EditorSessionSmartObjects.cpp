@@ -42,6 +42,7 @@ std::optional<SmartObjectContents> contentsFromFile(const QString& path, QString
         std::string why;
         auto imported = importAffinityBytes(c.bytes, &why, affinityImportOptions());
         if (!imported) { if (error) *error = QString::fromStdString(why); return std::nullopt; }
+        finishPendingText(*imported);
         c.image = renderFlattened(imported->document);
         c.resolution = imported->document.resolution;
     } else {

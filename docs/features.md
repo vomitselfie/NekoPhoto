@@ -69,7 +69,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Open SVG files (`.svg`, `.svgz`) as layers: paths and basic shapes with solid fills and strokes become editable vector shape layers, groups become folders with their opacity; gradients, patterns, text, images, filters, clip paths and masks come in as pixel layers drawn by Qt SVG (docs/svg-pdf.md)
 - Export SVG (File > Export SVG): vector shape layers as paths with their fill and stroke, folders as groups, every other layer as an embedded PNG, so the file looks like the document (docs/svg-pdf.md)
 - Open a PDF page as a pixel layer at a chosen resolution (Qt PDF; a multi-page file asks which page) (docs/svg-pdf.md)
-- Open Affinity documents (`.afphoto`, `.afdesign`, `.afpub`, and Affinity 3's `.af`) with their pixel layers, groups, masks, clipped layers, opacity, visibility and blend modes; vector shapes and artboards come in as pixels, and text, adjustments and effects are listed as left out (see [affinity-import.md](affinity-import.md))
+- Open Affinity documents (`.afphoto`, `.afdesign`, `.afpub`, and Affinity 3's `.af`) with their pixel layers, groups, masks, clipped layers, opacity, visibility and blend modes, and artistic and frame text as editable text layers; vector shapes and artboards come in as pixels, and adjustments and effects are listed as left out (see [affinity-import.md](affinity-import.md))
 - Open Aseprite `.ase`/`.aseprite` sprites with the first frame's layers, folders, opacity and blend modes
 - Open animated GIFs with each frame as a layer ("Frame N (D ms)", frame 1 visible), and icons (`.ico`, `.cur`) with each size as a layer
 - Open PNG, JPEG, TIFF, TGA, WebP and more; drop an image on the canvas to add it as a layer, or on the tab strip to open it

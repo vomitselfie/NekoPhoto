@@ -27,6 +27,9 @@ compositor::PsdExportOptions psdExportOptions();
 /// Finishes the type layers a PSD opened as text: the installed family for each face, the line spacing for
 /// Photoshop's leading. A face that is not installed is noted; the text keeps Photoshop's pixels until edited.
 void finishPsdText(compositor::PsdImport& imported);
+/// Draws the text layers an import left without pixels (`PsdImport::pendingTexts`, Affinity's) and places each
+/// where its frame says: point text on its first baseline, frame text with the first line's cap height at the top.
+void finishPendingText(compositor::PsdImport& imported);
 /// PSD import options with the app's decoders for smart object contents the core cannot read (JPEG, TIFF, ...).
 compositor::PsdImportOptions psdImportOptions();
 /// Affinity import options: placed JPEG and other originals decoded by Qt exactly as stored (the import applies

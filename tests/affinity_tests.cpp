@@ -82,7 +82,7 @@ void classListBegin(Bytes& b, const char (&t)[5], const char (&type)[5], uint32_
 void end(Bytes& b) { u8(b, 0); }
 
 /// A 3 x 2 RGBA8 bitmap in one 256 x 256 tile per channel, at (1, 1), in Multiply, 50% opacity, on a 5 x 4 canvas.
-Bytes makeDocument() {
+Bytes makeDocument(bool withText = false) {
     const int w = 3, h = 2;
     const uint8_t rgba[2][3][4] = {{{255, 0, 0, 255}, {0, 255, 0, 255}, {0, 0, 255, 255}}, {{10, 20, 30, 128}, {40, 50, 60, 255}, {70, 80, 90, 0}}};
     Bytes tree;
@@ -93,7 +93,9 @@ Bytes makeDocument() {
         classListBegin(tree, "Chld", "Sprd", 1);
         u8(tree, 1);   // the spread
         boolField(tree, "SprT", true);   // transparent: no background layer
-        classListBegin(tree, "Chld", "Rstr", 1);
+        // (A class list shares one type, so the text document holds only the text node.)
+        classListBegin(tree, "Chld", withText ? "TxtA" : "Rstr", 1);
+        if (!withText) {
         u8(tree, 1);   // the pixel layer
         stringField(tree, "Desc", "Paint");
         doubleField(tree, "Opac", 0.5);
@@ -116,6 +118,41 @@ Bytes makeDocument() {
         }
         end(tree);   // DyBm
         end(tree);   // layer
+        } else {
+            // Artistic text "Hi\u2029yo": two blocks' worth of story in one, bold 20 px red then regular, at (2, 3).
+            u8(tree, 1);
+            stringField(tree, "Desc", "Words");
+            field(tree, 0x28, "Xfrm"); for (double v : {1.0, 0.0, 2.0, 0.0, 1.0, 3.0}) f64(tree, v);
+            classBegin(tree, "TxtH", "TxtH");
+            field(tree, 0x26, "FrmB"); for (double v : {0.0, 0.0, 40.0, 30.0}) f64(tree, v);
+            doubleField(tree, "ArtV", 16);
+            end(tree);
+            classBegin(tree, "StSt", "Stry");
+            classListBegin(tree, "Blok", "Blok", 1);
+            u8(tree, 1);
+            classBegin(tree, "Glyp", "Glyp");
+            stringField(tree, "Utf8", std::string("Hi\xE2\x80\xA9yo") + '\0');
+            end(tree);
+            classBegin(tree, "GAtt", "GAtt");
+            classListBegin(tree, "Runs", "Run ", 2);
+            u8(tree, 1);
+            i32Field(tree, "Indx", 2);
+            classBegin(tree, "Item", "Item");
+            classBegin(tree, "DFnt", "DFnt"); stringField(tree, "Famy", "Test Sans"); i32Field(tree, "Wegt", 700); end(tree);
+            field(tree, 0x0A | 0x80, "Doub"); u32(tree, 1); f64(tree, 20);
+            end(tree);   // Item
+            end(tree);   // run
+            u8(tree, 1);
+            i32Field(tree, "Indx", 6);
+            classBegin(tree, "Item", "Item");
+            classBegin(tree, "DFnt", "DFnt"); stringField(tree, "Famy", "Test Sans"); i32Field(tree, "Wegt", 400); end(tree);
+            end(tree);   // Item
+            end(tree);   // run
+            end(tree);   // GAtt
+            end(tree);   // block
+            end(tree);   // story
+            end(tree);   // text node
+        }
         end(tree);   // spread
     }
     end(tree);   // Docu
@@ -192,6 +229,33 @@ TEST_CASE(a_written_document_opens_with_its_layer) {
     CHECK(imported->notes.empty());
 }
 
+TEST_CASE(artistic_text_becomes_a_text_layer_to_draw) {
+    std::string error;
+    auto imported = importAffinityBytes(makeDocument(true), &error);
+    if (!imported) std::fprintf(stderr, "  error: %s\n", error.c_str());
+    REQUIRE(imported.has_value());
+    const Document& doc = imported->document;
+    REQUIRE(doc.layers.size() == size_t(1));
+    const Layer& l = doc.layers[0];
+    CHECK_EQ(l.name, std::string("Words"));
+    REQUIRE(l.text.has_value());
+    CHECK_EQ(l.text->text, std::string("Hi\nyo"));
+    REQUIRE(l.text->runs.size() == size_t(2));
+    CHECK_EQ(l.text->runs[0].length, 2);          // the paragraph break goes with the second run
+    CHECK_EQ(l.text->runs[0].fontFamily, std::string("Test Sans"));
+    CHECK(l.text->runs[0].bold);
+    CHECK_NEAR(l.text->runs[0].fontSize, 20, 1e-9);
+    CHECK(!l.text->runs[1].bold);
+    CHECK(l.isLiveText());
+    REQUIRE(imported->pendingTexts.size() == size_t(1));
+    const auto& p = imported->pendingTexts[0];
+    CHECK(p.layer == l.id);
+    CHECK_NEAR(p.left, 2, 1e-9);
+    CHECK_NEAR(p.top, 3, 1e-9);
+    CHECK_NEAR(p.baseline, 19, 1e-9);            // the frame's top plus Affinity's ascent
+    CHECK(!p.boxed);
+}
+
 TEST_CASE(damaged_documents_are_refused) {
     std::string error;
     Bytes bytes = makeDocument();
@@ -229,7 +293,8 @@ TEST_CASE(real_documents_open_when_available) {
             for (int x = 0; x < cw * 4; x++) total += std::abs(int(reduced->row(y)[x]) - int(preview.row(y)[x]));
         const double mean = total / (double(cw) * ch * 4);
         std::fprintf(stderr, "  %-32s %3zu layers, %zu notes, %.2f from the preview\n", entry.path().filename().c_str(), imported->document.layers.size(), imported->notes.size(), mean);
-        if (imported->notes.empty()) CHECK(mean < 4.0);   // nothing left out: the import should look like Affinity's preview
+        // Nothing left out and no text (which only the app draws): the import should look like Affinity's preview.
+        if (imported->notes.empty() && imported->pendingTexts.empty()) CHECK(mean < 4.0);
     }
     CHECK(opened > 0);
 }

@@ -30,6 +30,18 @@ struct PsdImport {
     std::vector<std::string> notes;
     /// Type layers opened as text (see PsdImportedText).
     std::vector<PsdImportedText> texts;
+    /// Text layers read without pixels (the core has no fonts): the app draws each and places it (Affinity text).
+    struct PendingText {
+        Uuid layer;
+        double left = 0, top = 0, width = 0;   // the text's frame in the document
+        double baseline = 0;                   // point text: the first baseline's y; 0: the frame's top
+        bool boxed = false;                    // frame text: the first line's cap height sits at the top
+        int align = 0;                         // 0 left, 1 centre, 2 right, within `width` for point text
+        /// Turned text: the fields above are upright, and a document point is (x, y) turned by `rotation` degrees
+        /// (clockwise, y down) about the origin, then moved by (originX, originY).
+        double rotation = 0, originX = 0, originY = 0;
+    };
+    std::vector<PendingText> pendingTexts;
     /// Whether the merged image is Photoshop's own ("Maximize Compatibility"); without it the file stores a
     /// blank stand-in.
     bool realComposite = true;
