@@ -1,6 +1,7 @@
 // Unit tests for the portable core: geometry, transforms, blending, history,
 // compositing semantics, brush strokes, PNG and the .comp round trip.
 #include "check.h"
+#include <climits>
 #include "compositor/trim.h"
 #include "compositor/adjustments.h"
 #include <cstring>
@@ -659,6 +660,7 @@ TEST_CASE(text_style_range_splits_patches_and_merges) {
     // Overlapping a boundary, then undoing it: back to one run, which the plain fields say in full.
     TextRunPatch under; under.underline = true; under.caps = TextRun::Caps::Small;
     styleTextRange(t, 4, 6, under);
+    styleTextRange(t, INT_MAX - 2, 100, under);          // far past the end: nothing, and no overflow
     REQUIRE(t.runs.size() == 5);
     CHECK(!t.runs[0].underline && t.runs[1].underline && t.runs[1].length == 2 && t.runs[2].underline && t.runs[3].underline && t.runs[3].length == 2);
     TextRunPatch plain; plain.underline = false; plain.caps = TextRun::Caps::Normal; plain.color = std::array<double, 3>{0, 0, 0}; plain.fontSize = 20;

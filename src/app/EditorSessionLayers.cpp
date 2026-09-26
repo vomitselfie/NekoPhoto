@@ -14,7 +14,7 @@ namespace app {
 void EditorSession::selectLayer(const std::optional<Uuid>& id, bool mask) {
     if (stroke_ || warp_ || pixelMove_) return;
     if (filterMaskLayer() && id != filterMaskLayer_) endFilterMaskEdit();   // selecting a layer ends painting the filter mask
-    if (id != activeLayerId_ || (mask != isMaskSelected_)) { commitTransform(); resolveGradient(); }
+    if (id != activeLayerId_ || (mask != isMaskSelected_)) { commitTransform(); resolveGradient(); cancelWarpCage(); }
     setActiveLayer(id);
     const Layer* active = activeLayer();
     isMaskSelected_ = mask && active && active->mask;

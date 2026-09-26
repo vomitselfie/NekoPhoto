@@ -147,4 +147,22 @@ TEST_CASE(anchors_are_added_without_changing_the_outline_and_removed) {
     CHECK(!nearestKnot(path, Point(-50, -50), 4));
 }
 
+TEST_CASE(the_speech_bubble_tail_hangs_off_its_bottom_edge) {
+    // The bottom edge runs right to left; the tail's knots come in order along it, with no fold back.
+    const VectorPath bubble = customShapePath("Speech Bubble", Rect(0, 0, 100, 100));
+    const auto& k = bubble.subpaths[0].knots;
+    REQUIRE(k.size() == 11);
+    CHECK(k[5].x > k[6].x && k[6].x > k[8].x && k[8].x > k[9].x);   // 82 > 34 > 20 > 18
+    CHECK(std::abs(k[7].y - 100) < 1e-9);                            // the tip
+}
+
+TEST_CASE(a_full_set_of_paths_refuses_a_new_one_and_reuses_gaps) {
+    Document doc = canvas(10, 10);
+    for (int i = 0; i < 998; i++) REQUIRE(setDocumentPath(doc, 0, "p", rectanglePath(Rect(0, 0, 5, 5))) == uint16_t(2000 + i));
+    CHECK_EQ(int(setDocumentPath(doc, 0, "extra", rectanglePath(Rect(0, 0, 5, 5)))), 0);
+    CHECK_EQ(int(documentPath(doc, 2997)->name == "p"), 1);   // the last one was not overwritten
+    removeDocumentPath(doc, 2100);
+    CHECK_EQ(int(setDocumentPath(doc, 0, "gap", rectanglePath(Rect(0, 0, 5, 5)))), 2100);
+}
+
 TEST_MAIN()

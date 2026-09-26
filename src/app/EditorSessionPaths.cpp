@@ -73,11 +73,13 @@ void EditorSession::penFinish(bool close) {
     if (sub.knots.size() < 2 || !canEditLayers()) return;
     sub.closed = close || penMode == PenMode::Shape;   // a shape's outline is always closed
     if (penMode == PenMode::Path) {
-        const uint16_t id = activePathId_.value_or(kWorkPathId);
+        // The chosen path, if it is still there (undo may have taken it away); else the Work Path.
+        const bool chosen = activePathId_ && documentPath(*document_, *activePathId_);
+        const uint16_t id = chosen ? *activePathId_ : kWorkPathId;
         VectorPath path;
-        if (activePathId_) if (auto existing = documentPath(*document_, id)) path = existing->path;
+        if (auto existing = documentPath(*document_, id)) path = existing->path;
         path.subpaths.push_back(sub);
-        beginEdit(activePathId_ ? "Add Subpath" : "Work Path");
+        beginEdit(chosen ? "Add Subpath" : "Work Path");
         setDocumentPath(*document_, id, "", path);
         endEdit();
         activePathId_ = id;
@@ -177,6 +179,7 @@ uint16_t EditorSession::newPath(const QString& name) {
     beginEdit("New Path");
     const uint16_t id = setDocumentPath(*document_, 0, name.toStdString(), VectorPath{});
     endEdit();
+    if (!id) { emit error(tr("A document holds at most 998 saved paths.")); return 0; }
     activePathId_ = id;
     notifyDocument();
     emit pathsChanged();
@@ -188,6 +191,7 @@ uint16_t EditorSession::storePath(uint16_t id, const QString& name, const Vector
     beginEdit(id == 0 ? "New Path" : id == kWorkPathId ? "Work Path" : "Edit Path");
     id = setDocumentPath(*document_, id, name.toStdString(), path);
     endEdit();
+    if (!id) { emit error(tr("A document holds at most 998 saved paths.")); return 0; }
     activePathId_ = id;
     notifyDocument();
     emit pathsChanged();
@@ -221,8 +225,9 @@ void EditorSession::savePath(uint16_t id, const QString& name) {
     if (!p) return;
     beginEdit("Save Path");
     const uint16_t saved = setDocumentPath(*document_, 0, name.trimmed().isEmpty() ? std::string("Path") : name.trimmed().toStdString(), p->path);
-    if (id == kWorkPathId) removeDocumentPath(*document_, kWorkPathId);
+    if (saved && id == kWorkPathId) removeDocumentPath(*document_, kWorkPathId);   // no room: the Work Path stays
     endEdit();
+    if (!saved) { emit error(tr("A document holds at most 998 saved paths.")); return; }
     activePathId_ = saved;
     notifyDocument();
     emit pathsChanged();

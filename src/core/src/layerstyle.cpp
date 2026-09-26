@@ -418,7 +418,12 @@ std::shared_ptr<const LayerStyle> layerStyleOf(const Layer& layer, const Documen
     if (it != cache.end() && !it->second.first.expired() && it->second.first.lock() == layer.psdCarry) {
         const auto& s = it->second.second;
         bool sameLight = true;   // the global light can change when the document's resources do; cheap to check
-        for (auto& d : s ? s->dropShadows : std::vector<DropShadow>{}) if (d.useGlobalLight && d.angle != angle) sameLight = false;
+        if (s) {
+            // Every effect that follows the global light: shadows by angle, bevels by angle and altitude.
+            for (auto& d : s->dropShadows) if (d.useGlobalLight && d.angle != angle) sameLight = false;
+            for (auto& d : s->innerShadows) if (d.useGlobalLight && d.angle != angle) sameLight = false;
+            for (auto& b : s->bevels) if (b.useGlobalLight && (b.angle != angle || b.altitude != altitude)) sameLight = false;
+        }
         if (sameLight) return s;
     }
     std::shared_ptr<LayerStyle> style = readStyle(layer, *block, angle, altitude, false);

@@ -140,6 +140,7 @@ bool EditorSession::warpActiveLayer(const compositor::TextWarp& warp, QString* e
 }
 
 bool EditorSession::beginWarpCage(QString* error) {
+    if (warpCage_) { if (error) *error = tr("A warp cage is open: Enter applies it, Esc cancels it."); return false; }
     const Layer* layer = activeLayer();
     if (!canEditLayers() || !layer) { if (error) *error = tr("Select a layer to warp."); return false; }
     if (isMaskSelected_) { if (error) *error = tr("Warp the layer, not its mask."); return false; }

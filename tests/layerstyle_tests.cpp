@@ -198,4 +198,19 @@ TEST_CASE(a_style_set_here_draws_and_reads_back) {
     for (auto& b : doc.layers[1].psdCarry->blocks) CHECK(b.key != "lfx2");
 }
 
+TEST_CASE(style_json_is_held_to_the_dialog_ranges) {
+    LayerStyle style;
+    std::string error;
+    REQUIRE(layerStyleFromJson(R"({"dropShadows":[{"size":1e30,"distance":-5,"opacity":7}],
+        "gradientOverlays":[{"gradient":{"colors":[{"location":1,"color":"#ffffff"},{"location":0,"color":"#000000"}]}}]})", style, &error));
+    CHECK_EQ(style.dropShadows[0].size, 250.0f);
+    CHECK_EQ(style.dropShadows[0].distance, 0.0f);
+    CHECK_EQ(style.dropShadows[0].opacity, 1.0f);
+    const auto& colors = style.gradientOverlays[0].gradient.colors;
+    REQUIRE(colors.size() == 2);
+    CHECK(colors[0].location == 0 && colors[0].color.r == 0);   // sorted
+    // What is set is what PSD keeps.
+    CHECK(authorLayerStyleBlock(style) == authorLayerStyleBlock(style));
+}
+
 TEST_MAIN()

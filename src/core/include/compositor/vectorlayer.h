@@ -70,7 +70,8 @@ struct DocumentPath {
 constexpr uint16_t kWorkPathId = 1025;
 std::vector<DocumentPath> documentPaths(const Document& document);
 std::optional<DocumentPath> documentPath(const Document& document, uint16_t id);
-/// Stores `path` as the path `id` (0: a new saved path named `name`); returns its id.
+/// Stores `path` as the path `id` (0: a new saved path named `name`); returns its id, or 0 when all 998 saved-path ids
+/// are taken (nothing is stored).
 uint16_t setDocumentPath(Document& document, uint16_t id, const std::string& name, const VectorPath& path);
 void renameDocumentPath(Document& document, uint16_t id, const std::string& name);
 void removeDocumentPath(Document& document, uint16_t id);

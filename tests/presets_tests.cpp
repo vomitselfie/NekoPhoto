@@ -51,7 +51,8 @@ TEST_CASE(multi_stop_gradient_passes_through_each_stop) {
 
 TEST_CASE(gradient_midpoints_and_opacity_stops) {
     GradientStops s;
-    s.colors = {GradientColorStop{0, {0, 0, 0}, 0.25f}, GradientColorStop{1, {1, 1, 1}, 0.5f}};
+    // The run's midpoint sits on its end stop (Photoshop's convention).
+    s.colors = {GradientColorStop{0, {0, 0, 0}, 0.5f}, GradientColorStop{1, {1, 1, 1}, 0.25f}};
     s.alphas = {GradientAlphaStop{0, 1, 0.5f}, GradientAlphaStop{0.5f, 1, 0.5f}, GradientAlphaStop{1, 0, 0.5f}};
     float c[4];
     s.sample(0.25f, c);   // the midpoint: half way in colour

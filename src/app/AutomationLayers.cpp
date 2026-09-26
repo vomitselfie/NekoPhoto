@@ -258,6 +258,7 @@ void AutomationServer::registerLayersHandlers() {
         const QJsonArray points = p.value("points").toArray();
         if (points.size() != 16) fail("points must be the cage's 16 [x, y] points, row by row (layers.cage gives them)", invalidParams);
         QString error;
+        s->cancelWarpCage();   // one left open in the window gives way
         if (!s->beginWarpCage(&error)) fail(error);
         compositor::WarpMesh cage = *s->warpCage();
         for (int i = 0; i < 16; i++) { const QJsonArray xy = points[i].toArray(); cage.xs[size_t(i)] = xy.at(0).toDouble(); cage.ys[size_t(i)] = xy.at(1).toDouble(); }

@@ -664,6 +664,11 @@ bool setSmartFilters(Document& document, Layer& layer, const SmartFilterStack& w
         record = authorSmartFilterRecord(next.placedId, canvas, *unfiltered, stack.mask.get(), stack.maskBounds, stack.maskDefault);
     }
     bool placed = false;
+    // Where the record already is (a document may hold both an FEid and an FXid block): replaced there, never added
+    // to another block as well.
+    bool recorded = false;
+    for (const PsdBlock& b : carry->globals)
+        if ((b.key == "FEid" || b.key == "FXid") && findSmartFilterCache({b}, next.placedId)) recorded = true;
     for (size_t k = 0; k < carry->globals.size(); k++) {
         PsdBlock& b = carry->globals[k];
         if (b.key != "FEid" && b.key != "FXid") continue;
@@ -677,7 +682,7 @@ bool setSmartFilters(Document& document, Layer& layer, const SmartFilterStack& w
             if (auto left = walk(b.data); removing && left && left->empty()) { carry->globals.erase(carry->globals.begin() + std::ptrdiff_t(k)); k--; }
             continue;
         }
-        if (placed) continue;
+        if (placed || recorded || removing) continue;
         // A new record at the end of the block, aligned as Photoshop aligns them.
         psd::BigEndianWriter w;
         w.write_bytes(b.data);
