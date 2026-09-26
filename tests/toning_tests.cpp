@@ -1,6 +1,11 @@
 // The toning tools' full-strength images (toning.h): Dodge, Burn, Sponge and Sharpen.
 #include "check.h"
 #include "compositor/toning.h"
+#include "compositor/blur.h"
+#include "compositor/brush.h"
+#include "compositor/render.h"
+#include <cstdio>
+#include <functional>
 #include <cmath>
 
 using namespace compositor;
@@ -84,3 +89,70 @@ TEST_CASE(sharpen_raises_edge_contrast_and_leaves_flat_areas) {
 }
 
 TEST_MAIN()
+
+namespace {
+
+// A layer with detail everywhere, off the canvas origin and scaled, so tiles meet edges, seams and resampling.
+Document busyDocument(int w, int h) {
+    Document doc(w, h);
+    auto image = std::make_shared<Image>(w - 40, h - 30);
+    for (int y = 0; y < image->height(); y++)
+        for (int x = 0; x < image->width(); x++) {
+            uint8_t* p = image->pixel(x, y);
+            const unsigned a = (x * 7 + y * 3) % 50 < 44 ? 255 : unsigned((x * y) % 256);
+            p[0] = uint8_t(((x * 13 + y * 5) % 256) * a / 255); p[1] = uint8_t(((x ^ y) % 256) * a / 255);
+            p[2] = uint8_t(((x * y / 7) % 256) * a / 255); p[3] = uint8_t(a);
+        }
+    Layer layer(Asset::make(image, "Busy"), Point(17, 9));
+    layer.transform.size = Size(image->width() * 1.03, image->height() * 0.98);
+    doc.layers.push_back(layer);
+    return doc;
+}
+
+// A processed stroke (the Blur / Sharpen / toning tools) painted from the whole processed image and from the tiled one.
+int strokeDifference(const std::function<void(Image&)>& process, int margin, int* tilesMade = nullptr) {
+    Document doc = busyDocument(700, 520);
+    const Layer& layer = doc.layers[0];
+    Document single = doc;
+    auto whole = renderFlattened(single);
+    process(*whole);
+    auto tiled = tiledProcessedDocument(single, process, margin);
+    BrushSettings settings;
+    settings.diameter = 90;
+    settings.hardness = 0.4;
+    settings.opacity = 0.8;
+    const std::vector<Point> path{{20, 30}, {250, 260}, {520, 90}, {690, 510}, {300, 480}};
+    auto paint = [&](CloneSource source) {
+        BrushStroke stroke(layer, false, settings, doc.size());
+        stroke.setClone(std::move(source), false);
+        for (const Point& p : path) stroke.append(p);
+        return stroke.previewImage();
+    };
+    auto a = paint(CloneSource{whole, {0, 0}, nullptr});
+    auto b = paint(CloneSource{nullptr, {0, 0}, tiled});
+    if (tilesMade) *tilesMade = tiled->madeTiles();
+    int worst = 0;
+    for (int y = 0; y < a->height(); y++)
+        for (int x = 0; x < a->width() * 4; x++) worst = std::max(worst, std::abs(int(a->row(y)[x]) - int(b->row(y)[x])));
+    return worst;
+}
+
+} // namespace
+
+TEST_CASE(processed_strokes_paint_the_same_from_tiles) {
+    ToningSettings dodge;
+    dodge.kind = ToningKind::Dodge;
+    CHECK_EQ(strokeDifference([&](Image& i) { toneImage(i, dodge); }, 0), 0);
+    ToningSettings sponge;
+    sponge.kind = ToningKind::Sponge;
+    int tiles = 0;
+    CHECK_EQ(strokeDifference([&](Image& i) { toneImage(i, sponge); }, 0, &tiles), 0);
+    CHECK(tiles > 0);
+    CHECK_EQ(strokeDifference([](Image& i) { sharpenImage(i); }, 3), 0);
+    for (double sigma : {1.5, 4.0, 6.0}) CHECK_EQ(strokeDifference([sigma](Image& i) { gaussianBlur(i, sigma); }, int(std::ceil(sigma * 3))), 0);
+    for (double sigma : {12.0, 30.0}) {
+        const int d = strokeDifference([sigma](Image& i) { gaussianBlur(i, sigma); }, int(std::ceil(sigma * 4)));
+        std::printf("  blur sigma %.0f, margin 4 sigma: max difference %d\n", sigma, d);
+        CHECK(d <= 1);
+    }
+}

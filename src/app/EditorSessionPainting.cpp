@@ -51,7 +51,7 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
         } else sample = std::make_shared<Image>(document_->width, document_->height);
         cloneSample_ = sample; cloneSampleAll_ = cloneSampleAll; cloneSampleLayer_ = layer->id; cloneSampleRevision_ = documentRevision_;
         cloneOffset = offset;
-        clone = CloneSource{sample, {offset.x(), offset.y()}};
+        clone = CloneSource{sample, {offset.x(), offset.y()}, nullptr};
     }
     if (!mask && !effectiveVisibleIds(document_->layers).count(layer->id)) { emit error(tr("The active layer is hidden.")); return false; }
     BrushSettings settings = brushSettings;
@@ -274,8 +274,11 @@ bool EditorSession::beginWarp(QPointF documentPoint) {
     if (blurMode == BlurToolMode::Blur || blurMode == BlurToolMode::Sharpen) {
         // Blur paints a softened copy of the layer in place, through the tip; Sharpen a sharpened one.
         const double diameter = brushSettings.diameter;
-        if (blurMode == BlurToolMode::Sharpen) return beginProcessedStroke(documentPoint, [](Image& image) { sharpenImage(image); });
-        return beginProcessedStroke(documentPoint, [diameter](Image& image) { gaussianBlur(image, std::min(30.0, std::max(1.5, diameter / 10))); });
+        // Each needs its kernel's reach around a tile: Sharpen's blur is sigma 1 (radius 3), Blur's up to 3 sigma (a
+        // wider recursive blur past sigma 6 is within a level at 4 sigma).
+        if (blurMode == BlurToolMode::Sharpen) return beginProcessedStroke(documentPoint, [](Image& image) { sharpenImage(image); }, 3);
+        const double sigma = std::min(30.0, std::max(1.5, diameter / 10));
+        return beginProcessedStroke(documentPoint, [sigma](Image& image) { gaussianBlur(image, sigma); }, int(std::ceil(sigma * (sigma <= 6 ? 3 : 4))));
     }
     if (isMaskSelected_) { emit error(tr("Smudge and Liquify work on a layer's pixels, not its mask.")); return false; }
     if (!effectiveVisibleIds(document_->layers).count(layer->id)) return false;
@@ -295,22 +298,21 @@ bool EditorSession::beginWarp(QPointF documentPoint) {
     return true;
 }
 
-bool EditorSession::beginProcessedStroke(QPointF documentPoint, const std::function<void(Image&)>& process) {
+bool EditorSession::beginProcessedStroke(QPointF documentPoint, const std::function<void(Image&)>& process, int margin) {
     const Layer* layer = activeLayer();
     if (!document_ || !layer || stroke_ || warp_) return false;
     if (isMaskSelected_) { emit error(tr("This tool works on a layer's pixels, not its mask.")); return false; }
     if (!effectiveVisibleIds(document_->layers).count(layer->id)) return false;
-    // The layer as the canvas shows it, at document size, processed, then painted back through the tip.
+    // The layer as the canvas shows it, at document size, processed, then painted back through the tip. Processed a
+    // tile at a time as the tip reaches it, so pressing costs the same on any canvas.
     Document single(document_->width, document_->height);
     Layer copy = *layer;
     copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
     copy.transform = displayedTransform(*layer);
     single.layers = {copy};
-    auto rendered = renderFlattened(single);
-    process(*rendered);
     stroke_ = makeRasterEdit(*layer, false, brushSettings);
     if (!stroke_) return false;
-    stroke_->setClone(CloneSource{rendered, {0, 0}}, false);
+    stroke_->setClone(CloneSource{nullptr, {0, 0}, tiledProcessedDocument(std::move(single), process, margin)}, false);
     strokeLayerId_ = layer->id;
     strokeMask_ = false;
     stroke_->append(toPoint(documentPoint));
@@ -324,7 +326,7 @@ bool EditorSession::beginToning(QPointF documentPoint) {
     if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image) return false;
     if (smartObjectBlocksPixels(true)) return false;
     const ToningSettings settings = toning;
-    return beginProcessedStroke(documentPoint, [settings](Image& image) { toneImage(image, settings); });
+    return beginProcessedStroke(documentPoint, [settings](Image& image) { toneImage(image, settings); }, 0);   // per pixel
 }
 
 void EditorSession::continueWarp(QPointF documentPoint) {
@@ -350,7 +352,7 @@ void EditorSession::endWarp() {
     settings.opacity = 1;
     auto stroke = makeRasterEdit(*layer, false, settings);
     if (!stroke) { emit documentChanged({}); return; }
-    stroke->setClone(CloneSource{warp->image(), {0, 0}}, true);
+    stroke->setClone(CloneSource{warp->image(), {0, 0}, nullptr}, true);
     stroke->appendAll(warp->points());
     stroke->flush();
     commitRasterEdit(*stroke, layer->id, false, blurMode == BlurToolMode::Smudge ? "Smudge" : "Liquify");

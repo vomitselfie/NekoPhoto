@@ -1,4 +1,5 @@
 #include "compositor/brush.h"
+#include "compositor/render.h"
 #include "compositor/parallel.h"
 #include "compositor/shape.h"
 #include <algorithm>
@@ -389,10 +390,67 @@ void BrushStroke::dab(Point center) {
     markDirty(affected);
 }
 
+TiledSource::TiledSource(int width, int height, Compute compute, int tile)
+    : width_(std::max(0, width)), height_(std::max(0, height)), tile_(std::max(16, tile)), compute_(std::move(compute)) {
+    columns_ = (width_ + tile_ - 1) / tile_;
+    rows_ = (height_ + tile_ - 1) / tile_;
+    tiles_.resize(size_t(columns_) * size_t(rows_));
+}
+
+void TiledSource::ensure(int x0, int y0, int x1, int y1) {
+    const int tx0 = std::max(0, x0 / tile_), ty0 = std::max(0, y0 / tile_);
+    const int tx1 = std::min(columns_ - 1, (std::max(x0, x1) - 1) / tile_), ty1 = std::min(rows_ - 1, (std::max(y0, y1) - 1) / tile_);
+    if (x1 <= 0 || y1 <= 0 || x0 >= width_ || y0 >= height_) return;
+    for (int ty = ty0; ty <= ty1; ty++)
+        for (int tx = tx0; tx <= tx1; tx++) {
+            auto& slot = tiles_[size_t(ty) * size_t(columns_) + size_t(tx)];
+            if (slot) continue;
+            const int x = tx * tile_, y = ty * tile_, w = std::min(tile_, width_ - x), h = std::min(tile_, height_ - y);
+            auto image = std::make_unique<Image>(w, h);
+            compute_(x, y, w, h, *image);
+            slot = std::move(image);
+        }
+}
+
+std::shared_ptr<TiledSource> tiledProcessedDocument(Document document, std::function<void(Image&)> process, int margin) {
+    const int w = document.width, h = document.height;
+    margin = std::max(0, margin);
+    auto shared = std::make_shared<Document>(std::move(document));
+    return std::make_shared<TiledSource>(w, h, [shared, process = std::move(process), margin, w, h](int x, int y, int tw, int th, Image& out) {
+        // The tile and the margin around it, inside the canvas (past its edges the whole image has nothing either).
+        const int px0 = std::max(0, x - margin), py0 = std::max(0, y - margin);
+        const int px1 = std::min(w, x + tw + margin), py1 = std::min(h, y + th + margin);
+        RenderOptions options;
+        options.region = Rect(px0, py0, px1 - px0, py1 - py0);
+        Image padded;
+        render(*shared, options, padded);
+        process(padded);
+        for (int row = 0; row < th; row++) std::memcpy(out.row(row), padded.pixel(x - px0, y + row - py0), size_t(tw) * 4);
+    });
+}
+
+int TiledSource::madeTiles() const {
+    int n = 0;
+    for (auto& t : tiles_) n += t ? 1 : 0;
+    return n;
+}
+
 void BrushStroke::recompose(const Rect& gridRect) {
     if (painted_) return;   // another engine owns the working pixels
     Rect r = gridRect.intersection(Rect(0, 0, width_, height_));
     if (r.isEmpty()) return;
+    if (clone_ && clone_->tiled) {
+        // The document pixels the bilinear samples under this area read, made before the rows run in parallel.
+        const Rect grid = r.integral();
+        double minX = 1e300, minY = 1e300, maxX = -1e300, maxY = -1e300;
+        for (double gx : {grid.minX(), grid.maxX()})
+            for (double gy : {grid.minY(), grid.maxY()}) {
+                const Point d = pixelToDocument_.apply({gx, gy});
+                minX = std::min(minX, d.x); maxX = std::max(maxX, d.x); minY = std::min(minY, d.y); maxY = std::max(maxY, d.y);
+            }
+        const double ox = clone_->offset.x - 0.5, oy = clone_->offset.y - 0.5;
+        clone_->tiled->ensure(int(std::floor(minX + ox)) - 2, int(std::floor(minY + oy)) - 2, int(std::ceil(maxX + ox)) + 3, int(std::ceil(maxY + oy)) + 3);
+    }
     // Rows are independent: a large area (a big brush's dab) is recomposed on every core.
     if (areaOf(int(r.width), int(r.height)) < 65536) { recomposeRows(r); return; }
     parallelRows(int(r.minY()), int(r.maxY()), [&](int ya, int yb) { recomposeRows(Rect(r.minX(), ya, r.width, yb - ya)); }, 32);
@@ -464,9 +522,11 @@ void BrushStroke::recomposeRows(const Rect& r) {
         for (int x = x0; x < x1; x++, base += 4, out += 4, d = d + dd) {
             double c = cov[x] / 255.0 * opacity * (sel ? sel[x] / 255.0 : 1.0);
             if (c <= 0) { std::memcpy(out, base, 4); continue; }
-            if (clone_ && clone_->image) {
+            if (clone_ && (clone_->image || clone_->tiled)) {
                 // The sample under the source point, over the original through the tip.
-                const Image& src = *clone_->image;
+                const Image* src = clone_->image.get();
+                const TiledSource* tiled = clone_->tiled.get();
+                const int sw = src ? src->width() : tiled->width(), sh = src ? src->height() : tiled->height();
                 double sx = d.x + clone_->offset.x - 0.5, sy = d.y + clone_->offset.y - 0.5;
                 double s[4] = {0, 0, 0, 0};
                 int ix = int(std::floor(sx)), iy = int(std::floor(sy));
@@ -474,8 +534,9 @@ void BrushStroke::recomposeRows(const Rect& r) {
                 for (int j = 0; j < 2; j++) for (int i = 0; i < 2; i++) {
                     int px = ix + i, py = iy + j;
                     double w = (i ? fx : 1 - fx) * (j ? fy : 1 - fy);
-                    if (w <= 0 || px < 0 || py < 0 || px >= src.width() || py >= src.height()) continue;
-                    const uint8_t* p = src.pixel(px, py);
+                    if (w <= 0 || px < 0 || py < 0 || px >= sw || py >= sh) continue;
+                    const uint8_t* p = src ? src->pixel(px, py) : tiled->pixel(px, py);
+                    if (!p) continue;
                     for (int k = 0; k < 4; k++) s[k] += p[k] * w;
                 }
                 double sa = replacesWithClone_ ? c : s[3] / 255.0 * c;

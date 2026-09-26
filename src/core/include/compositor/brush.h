@@ -7,6 +7,8 @@
 #pragma once
 #include "document.h"
 #include "shape.h"
+#include <functional>
+#include <memory>
 #include <vector>
 
 namespace compositor {
@@ -29,10 +31,43 @@ struct BrushSettings {
     bool stampedDabs = true;
 };
 
+/// A document-sized image made a tile at a time, on demand: the processed layer the Blur, Sharpen, Dodge, Burn
+/// and Sponge tools paint from, so a stroke's start costs a tile rather than the whole canvas. `compute` fills
+/// `out` (sized to the rectangle) with the image's pixels over document pixels [x, x + w) x [y, y + h); it must give
+/// each pixel the value the whole image would have (a filter reads a margin around the rectangle to do so).
+class TiledSource {
+public:
+    using Compute = std::function<void(int x, int y, int w, int h, Image& out)>;
+    TiledSource(int width, int height, Compute compute, int tile = 256);
+    int width() const { return width_; }
+    int height() const { return height_; }
+    /// Makes every tile meeting the document rectangle [x0, x1) x [y0, y1) (not thread-safe; call before reading).
+    void ensure(int x0, int y0, int x1, int y1);
+    /// A pixel of an ensured tile; null outside the image or in a tile not made yet.
+    const uint8_t* pixel(int x, int y) const {
+        if (x < 0 || y < 0 || x >= width_ || y >= height_) return nullptr;
+        const Image* t = tiles_[size_t(y / tile_) * size_t(columns_) + size_t(x / tile_)].get();
+        return t ? t->pixel(x % tile_, y % tile_) : nullptr;
+    }
+    /// How many tiles have been made (for tests and benches).
+    int madeTiles() const;
+
+private:
+    int width_, height_, tile_, columns_, rows_;
+    Compute compute_;
+    std::vector<std::unique_ptr<Image>> tiles_;
+};
+
+/// `document` flattened at 1:1 and then `process`ed, as a TiledSource: each tile is rendered and processed with
+/// `margin` document pixels around it (a filter's reach), so it matches processing the whole flattened image.
+std::shared_ptr<TiledSource> tiledProcessedDocument(Document document, std::function<void(Image&)> process, int margin);
+
 /// Clone Stamp: a document-sized image to copy from, and the offset from each painted point to its source.
+/// `tiled` instead of `image`: the same, made on demand.
 struct CloneSource {
     std::shared_ptr<const Image> image;
     Point offset;
+    std::shared_ptr<TiledSource> tiled;
 };
 
 /// Soft-brush falloff across the band between the hardness radius and the rim.

@@ -808,7 +808,8 @@ private:
     /// The proxy's mask written into its smart object's stack when it changed (from endEdit, inside the step).
     void syncFilterMask();
     /// Starts a stroke that paints `process`'s version of the active layer (as the canvas shows it) through the tip.
-    bool beginProcessedStroke(QPointF documentPoint, const std::function<void(compositor::Image&)>& process);
+    /// `margin`: how far around a pixel `process` reads (it is run a tile at a time with that much around it).
+    bool beginProcessedStroke(QPointF documentPoint, const std::function<void(compositor::Image&)>& process, int margin);
     /// Fills the active layer (or its mask) with `color` through `coverage` (document size; null: everywhere) at
     /// `opacity`, as one undo step named `name`.
     /// With `from` (document size, premultiplied), each pixel takes `from`'s there instead of `color`.
