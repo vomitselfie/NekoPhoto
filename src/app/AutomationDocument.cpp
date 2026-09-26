@@ -121,7 +121,7 @@ void AutomationServer::registerDocumentHandlers() {
         return QJsonObject{{"path", path}, {"macCompatible", session()->document()->fitsMacBudget()}};
     });
     add("document.export", [session, document](const QJsonObject& p) {
-        session()->endQuickMask();   // the Quick Mask layer is never written
+        session()->endTemporaryLayers();   // the Quick Mask and filter-mask layers are never written
         const Document& doc = document();
         QString path = QFileInfo(str(p, "path")).absoluteFilePath();
         QString suffix = QFileInfo(path).suffix().toLower();

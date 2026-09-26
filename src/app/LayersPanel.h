@@ -9,6 +9,7 @@
 #include <QTreeWidget>
 #include <QWidget>
 #include <map>
+#include <set>
 
 class QToolButton;
 
@@ -61,6 +62,13 @@ public:
 private:
     void finishSwipe();
     QWidget* makeRow(const compositor::Layer& layer, int depth, bool visible);
+    /// A smart object's Smart Filters as child rows of its item: the stack's row (its mask, its switch), then each
+    /// entry, last applied first as in Photoshop. They are not layers: their data names the smart object.
+    void addSmartFilterRows(QTreeWidgetItem* item, const compositor::Layer& layer);
+    QWidget* makeSmartFilterHeader(const compositor::Layer& layer, const compositor::SmartFilterStack& stack, bool editable);
+    QWidget* makeSmartFilterEntry(const compositor::Layer& layer, const compositor::SmartFilterStack& stack, int index, bool editable);
+    void showSmartFilterMenu(QTreeWidgetItem* item, const QPoint& globalPos);
+    void editSmartFilter(const compositor::Uuid& id, int index, bool blending);
     void showContextMenu(const QPoint& pos);
     void startRename(const compositor::Uuid& id);
     QTreeWidgetItem* itemFor(const compositor::Uuid& id) const;
@@ -71,6 +79,7 @@ private:
     QSpinBox* opacitySpin_;
     LayerTree* tree_;
     std::map<compositor::Uuid, QTreeWidgetItem*> items_;
+    std::set<compositor::Uuid> collapsedSmartFilters_;   // smart objects whose Smart Filters are folded away
     bool rebuilding_ = false;
     bool pendingRebuild_ = false;
     bool rebuildAfterSwipe_ = false;

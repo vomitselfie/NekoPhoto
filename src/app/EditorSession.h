@@ -589,6 +589,38 @@ public:
     bool addSmartFilter(const compositor::SmartFilterEntry& entry, QString* error = nullptr);
     /// Whether the active layer is a smart object that can take Smart Filters (Photoshop's filter on a smart object).
     bool canAddSmartFilter() const;
+
+    // ---- Smart Filter editing (EditorSessionSmartFilters.cpp): each change one undo step ------------------------
+    /// Smart object `id`'s Smart Filters with their shared mask; none when it has none.
+    std::optional<compositor::SmartFilterStack> smartFilters(const compositor::Uuid& id) const;
+    /// Whether `id`'s Smart Filters can be changed here (an unlocked smart object whose entries are all drawn here).
+    bool canEditSmartFilters(const compositor::Uuid& id) const;
+    /// `id`'s stack replaced by `stack` (the core re-authors filterFX and the FEid record and redraws), as step `name`.
+    bool setSmartFilters(const compositor::Uuid& id, const compositor::SmartFilterStack& stack, const QString& name, QString* error = nullptr);
+    /// Entry `index` (running order, 0 = first applied) replaced by `entry`.
+    bool setSmartFilterEntry(const compositor::Uuid& id, int index, const compositor::SmartFilterEntry& entry, QString* error = nullptr);
+    /// Entry `index` switched on or off; -1: the whole stack.
+    bool setSmartFilterEnabled(const compositor::Uuid& id, int index, bool enabled, QString* error = nullptr);
+    /// Entry `from` moved to position `to` (running order).
+    bool moveSmartFilter(const compositor::Uuid& id, int from, int to, QString* error = nullptr);
+    /// Entry `index` deleted (the last one takes the stack with it).
+    bool removeSmartFilter(const compositor::Uuid& id, int index, QString* error = nullptr);
+    /// All of `id`'s Smart Filters removed (Clear Smart Filters).
+    bool clearSmartFilters(const compositor::Uuid& id, QString* error = nullptr);
+    enum class FilterMaskAction { Enable, Disable, Invert, Delete };
+    bool smartFilterMask(const compositor::Uuid& id, FilterMaskAction action, QString* error = nullptr);
+    /// Makes `id`'s shared filter mask the paint target: a temporary layer at the top holds it as its layer mask
+    /// (so every mask tool works on it), each edit re-authoring the stack; selecting another layer, saving or
+    /// exporting leaves it. `show` also shows the mask on the canvas (Alt-click).
+    bool beginFilterMaskEdit(const compositor::Uuid& id, bool show = false, QString* error = nullptr);
+    bool endFilterMaskEdit();
+    /// The smart object whose filter mask is being painted, when it is.
+    std::optional<compositor::Uuid> filterMaskOwner() const;
+    std::optional<compositor::Uuid> filterMaskLayer() const { return filterMaskOwner() ? filterMaskLayer_ : std::nullopt; }
+    bool filterMaskShown() const { return filterMaskOwner() && filterMaskShown_; }
+    void setFilterMaskShown(bool shown);
+    /// Leaves Quick Mask and filter-mask editing (their layers are never written).
+    void endTemporaryLayers();
     /// The active smart object's contents as a document to edit, with the source they belong to.
     std::optional<std::pair<compositor::Document, std::string>> smartObjectContentsForEditing(QString* error) const;
     /// New contents for source `sourceId`, placed in every layer that places it (one undo step).
@@ -748,6 +780,13 @@ private:
     std::optional<uint16_t> activePathId_;
     bool pathEditing_ = false;
     std::optional<compositor::Uuid> quickMaskLayer_, quickMaskReturnLayer_;
+    std::optional<compositor::Uuid> filterMaskLayer_, filterMaskOwner_;
+    compositor::GrayPtr filterMaskSynced_;    // the proxy's mask as last written into the stack
+    bool filterMaskShown_ = false;
+    mutable std::pair<compositor::GrayPtr, compositor::ImagePtr> filterMaskView_;   // the mask as gray pixels, cached
+    mutable compositor::GrayPtr filterMaskWhite_;
+    /// The proxy's mask written into its smart object's stack when it changed (from endEdit, inside the step).
+    void syncFilterMask();
     /// Starts a stroke that paints `process`'s version of the active layer (as the canvas shows it) through the tip.
     bool beginProcessedStroke(QPointF documentPoint, const std::function<void(compositor::Image&)>& process);
     /// Fills the active layer (or its mask) with `color` through `coverage` (document size; null: everywhere) at

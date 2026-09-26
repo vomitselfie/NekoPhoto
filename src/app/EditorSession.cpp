@@ -149,7 +149,7 @@ void EditorSession::adoptDocument(const Document& document, const QString& name)
 }
 
 bool EditorSession::saveProject(const QString& path, QString* error) {
-    endQuickMask();   // the Quick Mask layer is never saved
+    endTemporaryLayers();   // the Quick Mask and filter-mask layers are never saved
     if (!document_) return false;
     commitTransform();
     ProjectError err;
@@ -240,6 +240,7 @@ void EditorSession::restore(const DocumentHistory::Snapshot& snapshot) {
     setActiveLayer(snapshot.activeLayerId);
     const Layer* active = activeLayer();
     isMaskSelected_ = keepMask && active && active->mask;
+    if (active && active->mask && filterMaskLayer_ == activeLayerId_) isMaskSelected_ = true;   // the filter mask's layer paints its mask alone
     if (changedCanvas && document_) { viewport.fit({double(document_->width), double(document_->height)}); emit viewportChanged(); }
     if (changedCanvas) notifyDocument();
     else if (changed.isEmpty()) {
@@ -262,6 +263,7 @@ int EditorSession::squashHistory(uint64_t since, const QString& name) {
 void EditorSession::beginEdit(const QString& name) { history_.begin(name.toStdString(), document_, activeLayerId_); }
 void EditorSession::endEdit() {
     // Warped and filtered smart objects moved or scaled in this edit are drawn again from their contents.
+    syncFilterMask();   // a painted filter mask goes into its Smart Filters in the same step
     if (document_) { refreshSmartObjectRasters(*document_); refreshVectorShapes(*document_); }
     history_.end(document_, activeLayerId_);
 }
@@ -425,6 +427,28 @@ Overrides EditorSession::renderOverrides() const {
         o.transform = LayerTransform(Point(0, 0), document_->size());
         const Layer* layer = document_->find(warpLayerId_);
         if (layer && layer->mask && !layer->mask->placement) o.maskPlacement = std::optional<LayerTransform>(layer->transform);
+    }
+    if (filterMaskShown() && document_) {
+        // Alt-click on the filter mask: the mask (as it is being painted) in gray over everything.
+        const Layer* proxy = document_->find(*filterMaskLayer_);
+        auto it = overrides.find(proxy->id);
+        GrayPtr mask = it != overrides.end() && it->second.maskImage ? *it->second.maskImage : (proxy->mask ? proxy->mask->asset.image : nullptr);
+        if (mask) {
+            if (filterMaskView_.first != mask || stroke_ || gradient_) {
+                auto gray = std::make_shared<Image>(mask->width(), mask->height());
+                for (int y = 0; y < mask->height(); y++) {
+                    const uint8_t* m = mask->row(y);
+                    for (int x = 0; x < mask->width(); x++) { uint8_t* p = gray->pixel(x, y); p[0] = p[1] = p[2] = m[x]; p[3] = 255; }
+                }
+                filterMaskView_ = {mask, gray};
+            }
+            if (!filterMaskWhite_ || filterMaskWhite_->width() != mask->width() || filterMaskWhite_->height() != mask->height())
+                filterMaskWhite_ = std::make_shared<GrayImage>(mask->width(), mask->height(), 255);
+            LayerOverride& o = overrides[proxy->id];
+            o.image = filterMaskView_.second;
+            o.maskImage = filterMaskWhite_;
+            if (proxy->mask && proxy->mask->placement) o.transform = *proxy->mask->placement;
+        }
     }
     return overrides;
 }

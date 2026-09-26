@@ -92,31 +92,102 @@ void AutomationServer::registerLayersHandlers() {
     add("smartObject.addFilter", [session, layerOrActive, withActive](const QJsonObject& p) {
         const Uuid id = layerOrActive(p).id;
         const QString kind = str(p, "kind").toLower().remove(' ').remove('_').remove('&');
-        auto n = [&](const char* key, double fallback) { return num(p, key, fallback); };
-        auto i = [&](const char* key, double fallback) { return int32_t(std::lround(num(p, key, fallback))); };
-        compositor::SmartFilterEntry entry;
         using namespace compositor::smartfilter;
-        if (kind == "gaussianblur") entry.parameters = GaussianBlur{n("radius", 2)};
-        else if (kind == "highpass") entry.parameters = HighPass{n("radius", 10)};
-        else if (kind == "median") entry.parameters = Median{n("radius", 1)};
-        else if (kind == "dustandscratches" || kind == "dustscratches") entry.parameters = DustAndScratches{i("radius", 1), i("threshold", 0)};
-        else if (kind == "surfaceblur") entry.parameters = SurfaceBlur{n("radius", 5), i("threshold", 15)};
-        else if (kind == "unsharpmask") entry.parameters = UnsharpMask{n("amount", 150), n("radius", 2), i("threshold", 8)};
-        else if (kind == "motionblur") entry.parameters = MotionBlur{i("angle", 0), i("distance", 12)};
-        else if (kind == "plasticwrap") entry.parameters = PlasticWrap{i("highlight", 9), i("detail", 7), i("smoothness", 5)};
-        else if (kind == "mosaic") entry.parameters = Mosaic{i("cellSize", 8)};
-        else if (kind == "emboss") entry.parameters = Emboss{i("angle", 135), i("height", 2), i("amount", 100)};
-        else if (kind == "boxblur") entry.parameters = BoxBlur{n("radius", 1)};
-        else if (kind == "radialblur") entry.parameters = RadialBlur{i("amount", 10), i("samples", 16)};
-        else if (kind == "addnoise") entry.parameters = AddNoise{n("amount", 12.5), has(p, "gaussian") && flag(p, "gaussian", false), has(p, "monochromatic") && flag(p, "monochromatic", false), i("seed", 1)};
+        compositor::SmartFilterEntry entry;
+        // Defaults a first use of each filter starts from (Photoshop's).
+        if (kind == "gaussianblur") entry.parameters = GaussianBlur{2};
+        else if (kind == "highpass") entry.parameters = HighPass{10};
+        else if (kind == "median") entry.parameters = Median{1};
+        else if (kind == "dustandscratches" || kind == "dustscratches") entry.parameters = DustAndScratches{1, 0};
+        else if (kind == "surfaceblur") entry.parameters = SurfaceBlur{5, 15};
+        else if (kind == "unsharpmask") entry.parameters = UnsharpMask{150, 2, 8};
+        else if (kind == "motionblur") entry.parameters = MotionBlur{0, 12};
+        else if (kind == "plasticwrap") entry.parameters = PlasticWrap{9, 7, 5};
+        else if (kind == "mosaic") entry.parameters = Mosaic{8};
+        else if (kind == "emboss") entry.parameters = Emboss{135, 2, 100};
+        else if (kind == "boxblur") entry.parameters = BoxBlur{1};
+        else if (kind == "radialblur") entry.parameters = RadialBlur{10, 16};
+        else if (kind == "addnoise") entry.parameters = AddNoise{12.5, false, false, 1};
         else fail("kind must be one of the Smart Filters NekoPhoto draws: gaussian blur, high pass, median, dust and scratches, surface blur, unsharp mask, motion blur, plastic wrap, mosaic, emboss, box blur, radial blur, add noise", invalidParams);
-        entry.opacity = std::clamp(n("opacity", 100), 0.0, 100.0) / 100;
-        if (has(p, "blend") && !compositor::parseBlendMode(str(p, "blend").toStdString(), entry.blend)) fail("unknown blend mode", invalidParams);
+        smartFilterSettingsFrom(p, entry.parameters);
+        entry.opacity = std::clamp(num(p, "opacity", 100), 0.0, 100.0) / 100;
+        if (has(p, "blend")) { auto mode = blendModeNamed(str(p, "blend")); if (!mode) fail("unknown blend mode", invalidParams); entry.blend = *mode; }
         bool ok = false;
         QString error;
         withActive(id, [&] { ok = session()->addSmartFilter(entry, &error); });
         if (!ok) fail(error, invalidParams);
         return layerJson(*session()->document()->find(id), 0);
+    });
+    // Smart Filter editing: entries are addressed by `index` in running order (0 is applied first, the bottom row of
+    // the Layers panel's list).
+    auto stackOf = [session](const Uuid& id) {
+        auto stack = session()->smartFilters(id);
+        if (!stack) fail("that layer has no Smart Filters", invalidParams);
+        return *stack;
+    };
+    auto indexOf = [](const QJsonObject& p, const compositor::SmartFilterStack& stack) {
+        if (!has(p, "index")) fail("index is required", invalidParams);
+        const int index = int(num(p, "index", -1));
+        if (index < 0 || index >= int(stack.entries.size())) fail(QString("index must be 0..%1").arg(int(stack.entries.size()) - 1), invalidParams);
+        return index;
+    };
+    add("smartObject.filters", [session, layerOrActive](const QJsonObject& p) {
+        const Uuid id = layerOrActive(p).id;
+        return smartFiltersJson(*session(), id);
+    });
+    add("smartObject.setFilter", [session, layerOrActive, stackOf, indexOf](const QJsonObject& p) {
+        const Uuid id = layerOrActive(p).id;
+        const auto stack = stackOf(id);
+        QString error;
+        if (!has(p, "index")) {
+            // The whole stack's switch.
+            if (!has(p, "enabled")) fail("give index (one filter) or enabled (the whole stack)", invalidParams);
+            if (!session()->setSmartFilterEnabled(id, -1, flag(p, "enabled", true), &error)) fail(error, invalidParams);
+            return smartFiltersJson(*session(), id);
+        }
+        const int index = indexOf(p, stack);
+        compositor::SmartFilterEntry entry = stack.entries[size_t(index)];
+        if (std::holds_alternative<std::monostate>(entry.parameters)) fail("NekoPhoto does not draw that filter, so it cannot be changed", invalidParams);
+        smartFilterSettingsFrom(p, entry.parameters);
+        if (has(p, "enabled")) entry.enabled = flag(p, "enabled", true);
+        if (has(p, "opacity")) entry.opacity = std::clamp(num(p, "opacity", 100), 0.0, 100.0) / 100;
+        if (has(p, "blend")) { auto mode = blendModeNamed(str(p, "blend")); if (!mode) fail("unknown blend mode", invalidParams); entry.blend = *mode; }
+        if (!session()->setSmartFilterEntry(id, index, entry, &error)) fail(error, invalidParams);
+        return smartFiltersJson(*session(), id);
+    });
+    add("smartObject.removeFilter", [session, layerOrActive, stackOf, indexOf](const QJsonObject& p) {
+        const Uuid id = layerOrActive(p).id;
+        const auto stack = stackOf(id);
+        QString error;
+        const bool all = has(p, "all") && flag(p, "all", false);
+        if (all ? !session()->clearSmartFilters(id, &error) : !session()->removeSmartFilter(id, indexOf(p, stack), &error)) fail(error, invalidParams);
+        return smartFiltersJson(*session(), id);
+    });
+    add("smartObject.moveFilter", [session, layerOrActive, stackOf, indexOf](const QJsonObject& p) {
+        const Uuid id = layerOrActive(p).id;
+        const auto stack = stackOf(id);
+        const int from = indexOf(p, stack);
+        if (!has(p, "to")) fail("to is required", invalidParams);
+        QString error;
+        if (!session()->moveSmartFilter(id, from, int(num(p, "to", from)), &error)) fail(error, invalidParams);
+        return smartFiltersJson(*session(), id);
+    });
+    add("smartObject.filterMask", [session, layerOrActive, stackOf](const QJsonObject& p) {
+        const Uuid id = layerOrActive(p).id;
+        stackOf(id);
+        const QString action = str(p, "action").toLower();
+        using A = EditorSession::FilterMaskAction;
+        QString error;
+        bool ok = true;
+        if (action == "enable") ok = session()->smartFilterMask(id, A::Enable, &error);
+        else if (action == "disable") ok = session()->smartFilterMask(id, A::Disable, &error);
+        else if (action == "invert") ok = session()->smartFilterMask(id, A::Invert, &error);
+        else if (action == "delete") ok = session()->smartFilterMask(id, A::Delete, &error);
+        else if (action == "select") ok = session()->beginFilterMaskEdit(id, has(p, "show") && flag(p, "show", false), &error);
+        else if (action == "deselect") { if (session()->filterMaskOwner() == id) session()->endFilterMaskEdit(); }
+        else fail("action must be enable, disable, invert, delete, select or deselect", invalidParams);
+        if (!ok) fail(error, invalidParams);
+        return smartFiltersJson(*session(), id);
     });
     add("smartObject.editContents", [w, session, layerOrActive](const QJsonObject& p) {
         const Uuid id = layerOrActive(p).id;

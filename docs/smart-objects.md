@@ -167,8 +167,33 @@ automation adds any of the thirteen, with opacity and blend. The placement gets 
 shape (Patchy's authoring: `filterFXStyle`, each entry with its name, blend options, colours, `Fltr` and
 `filterID`, before the trailing `comp`); the document's `FEid` block gets the instance's record (a new block when
 the file had none), the unfiltered contents over the canvas and the mask kept or all white; the layer is drawn
-through the stack. A stack with a filter not drawn here cannot be added to.
+through the stack. A stack with a filter not drawn here cannot be added to. Adding goes through `setSmartFilters`
+(below).
+
+## Editing Smart Filters
+
+The Layers panel shows a smart object's stack under it, as Photoshop does: a **Smart Filters** row with the shared
+filter mask's thumbnail and an eye that turns the whole stack off, then each entry (last applied at the top) with its
+own eye, its name and a Blending Options button (opacity and mode). Double-click an entry to change its settings (a
+dialog per filter over all thirteen, with the canvas previewing the change); the context menu edits, disables, moves
+up or down, deletes one, or clears them all (the layer's own menu has Clear Smart Filters too). An entry NekoPhoto
+does not draw is shown greyed with a tooltip, and its stack is read-only, since `filterFX` could not be written
+back without it; so is a preview-locked instance's.
+
+The filter mask: click its thumbnail to paint it (brushes, fills, gradients, filters and Invert act on it as on a
+layer mask), Alt-click to show it on the canvas, Shift-click to turn it off or on; its menu enables, inverts or
+deletes it (all white). Painting it works the way Quick Mask does: a temporary top layer, hidden from the panel, holds
+the mask as its layer mask, active with the mask selected; each edit writes the mask into the stack in the same undo
+step. Selecting a layer, saving or exporting takes the temporary layer away.
+
+Each change is one undo step through `setSmartFilters` (`smartfilter.cpp`): the stack is written into the
+placement's `filterFX` and the instance's `FEid` record anew (the mask over the document), and the instance drawn
+again; an empty stack removes `filterFX` and the record (a block left with none goes). Settings are held to the
+ranges a Photoshop file may carry. `smartFilterStackOf` reads a stack with its mask. Automation: `smartObject.filters`,
+`smartObject.setFilter`, `smartObject.moveFilter`, `smartObject.removeFilter`, `smartObject.filterMask`
+(docs/automation.md). `tests/smartfilter_tests.cpp` covers reordering, editing, the mask and clearing through PSD.
 
 ## Not yet
 
-An interactive warp cage, editing or removing a Smart Filter, a linked filter mask, relinking linked files.
+An interactive warp cage, dragging Smart Filters to reorder them (the context menu moves them), editing a stack
+with a filter not drawn here, a linked filter mask, relinking linked files.
