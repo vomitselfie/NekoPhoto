@@ -9,6 +9,7 @@
 #include "compositor/uuid.h"
 #include "psd/psd_descriptor.hpp"
 #include <algorithm>
+#include <cstring>
 #include <cmath>
 #include <set>
 
@@ -61,11 +62,11 @@ RecordHeader readRecordHeader(psd::BigEndianReader& r, size_t start) {
 
 /// A record body (no length prefix) as a 'Patt' block entry: u32 length, the body, padding to four bytes.
 std::vector<uint8_t> blockEntry(const std::vector<uint8_t>& body) {
-    std::vector<uint8_t> out;
+    // Sized once and filled in place (GCC 11 misreads an insert after the four length bytes as an overread).
     const uint32_t n = uint32_t(body.size());
-    out = {uint8_t(n >> 24), uint8_t(n >> 16), uint8_t(n >> 8), uint8_t(n)};
-    out.insert(out.end(), body.begin(), body.end());
-    while (out.size() % 4) out.push_back(0);
+    std::vector<uint8_t> out((4 + body.size() + 3) / 4 * 4, 0);
+    out[0] = uint8_t(n >> 24); out[1] = uint8_t(n >> 16); out[2] = uint8_t(n >> 8); out[3] = uint8_t(n);
+    if (!body.empty()) std::memcpy(out.data() + 4, body.data(), body.size());
     return out;
 }
 
