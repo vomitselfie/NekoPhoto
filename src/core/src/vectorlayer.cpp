@@ -160,7 +160,10 @@ uint64_t cachedContentHash(const std::shared_ptr<const Image>& image) {
     std::lock_guard lock(mutex);
     auto it = cache.find(image.get());
     if (it != cache.end() && it->second.first.lock() == image) return it->second.second;
-    if (cache.size() > 256) cache.clear();
+    // Bounded without thrashing: a document with more shape layers than the bound must not rehash every layer on
+    // every call, so drop the entries whose images are gone first, and clear only past a generous limit.
+    if (cache.size() >= 1024) std::erase_if(cache, [](const auto& entry) { return entry.second.first.expired(); });
+    if (cache.size() >= 16384) cache.clear();
     const uint64_t hash = psdContentHash(image.get());
     cache[image.get()] = {image, hash};
     return hash;
