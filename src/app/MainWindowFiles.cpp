@@ -133,6 +133,7 @@ void MainWindow::openLayeredFile(const QString& path) {
         return;
     }
     if (psd) app::finishPsdText(*imported);
+    if (affinity) app::finishPendingText(*imported);
     Tab& tab = addTab(true);
     tab.session->adoptDocument(imported->document, QFileInfo(path).completeBaseName());
     addRecent(path);

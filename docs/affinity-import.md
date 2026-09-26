@@ -33,12 +33,15 @@ refused with a message saying so).
 | Artboards | folders clipped to the artboard, the artboard's own fill as the bottom layer |
 | Embedded Affinity documents | read and flattened into a pixel layer |
 | Canvas size and resolution, the spread's background colour | the same; the background becomes a bottom layer |
+| Artistic and frame text | editable text layers: the story's paragraphs, its glyph runs (font family, size, weight, italic, colour, All Caps and Small Caps), the first paragraph's alignment, frame text wrapping in its frame; turned artistic text as a turned layer |
 
 ## What is not
 
 Listed in the notes, layer by layer:
 
-- Text (artistic and frame text). The layer is left out.
+- Text on a path, and paragraph indents and spacing (noted). Justified text is aligned left; frame text that
+  is rotated, and any text with a shear or an uneven scale, is drawn upright (noted). Tracking, kerning and
+  leading take NekoPhoto's defaults. A mask on text is left out. Text inside an embedded document is not drawn.
 - Adjustments and live filters, including those attached to a layer. Left out.
 - Layer effects (shadows, glows, outlines, bevels, blur, gradient overlays). Left out.
 - Gradient fills and strokes on shapes, circle-rounded stars, arrows with end styles other than plain.
@@ -47,8 +50,23 @@ Listed in the notes, layer by layer:
 
 When something visible was left out, the document gets one more layer on top, hidden: Affinity's own preview of
 the whole document (at most 512 pixels, stretched over the canvas), to compare against. When nothing at all could
-be read (a document that is only text, say), that preview, or an old document's saved full-size snapshot, is
+be read, that preview, or an old document's saved full-size snapshot, is
 imported as the one layer instead.
+
+## Text
+
+The core reads text without drawing it (it has no fonts): each text layer comes with a transparent pixel where
+it goes, and `PsdImport::pendingTexts` says where it belongs. The app (`app::finishPendingText`, called by
+File > Open, `document.open` and Place Embedded) draws each one with Qt and places it: point text on the first
+baseline Affinity recorded (the frame's top plus its ascent, ArtV), centred or right-aligned text within its
+frame, frame text with the first line's cap height at the frame's top, as Patchy pinned against Affinity's
+renders. A font that is not installed is noted, with the family Qt picks instead.
+
+Opened in the app and compared with the embedded preview (reduced to the canvas, mean difference per channel,
+with Arial, Times New Roman and Courier New drawn by their Liberation stand-ins): artistic 0.73, runs 2.00,
+paragraph spacing 1.90, rotated 3.35, frame 4.81, caps 8.78, indents 12.31 (the indents are left out).
+`tiny-v2-shape-text.afphoto` differs by 118 because its embedded preview is of another picture; its text and
+shape land where Patchy's tests expect them.
 
 ## How it was checked
 

@@ -1,7 +1,8 @@
 // Affinity documents (.afphoto, .afdesign, .afpub and the unified app's .af) as layered documents: pixel layers,
 // groups, opacity, visibility, blend modes, raster and vector masks, clipped children, artboards, embedded
-// documents (flattened), and vector curves and the common parametric shapes drawn as pixels. Text, adjustments,
-// live filters and layer effects are not read; the notes list every layer left out or approximated.
+// documents (flattened), vector curves and parametric shapes drawn as pixels, and artistic and frame text as text
+// layers the app draws afterwards (`PsdImport::pendingTexts`). Adjustments, live filters and layer effects are not
+// read; the notes list every layer left out or approximated.
 //
 // Ported from Patchy (MIT, src/third_party/patchy_psd/README.md), its src/formats/af_document_io.cpp and
 // af_tree.cpp: the container walk, the stream table, the tile planes, the blend-mode table and the placement
