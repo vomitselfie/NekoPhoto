@@ -1,4 +1,5 @@
 // Automation methods: layers. Registered from AutomationServer::registerHandlers (Automation.cpp).
+#include "compositor/smartobject_edit.h"
 #include "Automation.h"
 #include "AutomationHandlers.h"
 #include "PresetLibrary.h"
@@ -170,6 +171,28 @@ void AutomationServer::registerLayersHandlers() {
         if (!session()->applyStylePreset(id, copy.style, PresetLibrary::instance().patternsFor(copy.style)))
             fail("this layer cannot have effects (an adjustment layer, or a locked document)");
         return QJsonDocument::fromJson(QByteArray::fromStdString(layerStyleToJson(session()->layerStyle(id)))).object();
+    });
+    add("layers.cage", [session, layer](const QJsonObject& p) {
+        // The warp cage a layer has now: 16 [x, y] points, row by row (flat over it, or a smart object's own warp).
+        std::string why;
+        auto cage = compositor::layerWarpCage(*session()->document(), layer(p), &why);
+        if (!cage) fail(QString::fromStdString(why), invalidParams);
+        QJsonArray points;
+        for (size_t i = 0; i < cage->xs.size(); i++) points.append(QJsonArray{cage->xs[i], cage->ys[i]});
+        return QJsonObject{{"points", points}};
+    });
+    add("layers.setCage", [session, layer](const QJsonObject& p) {
+        EditorSession* s = session();
+        s->selectLayer(layer(p).id);
+        const QJsonArray points = p.value("points").toArray();
+        if (points.size() != 16) fail("points must be the cage's 16 [x, y] points, row by row (layers.cage gives them)", invalidParams);
+        QString error;
+        if (!s->beginWarpCage(&error)) fail(error);
+        compositor::WarpMesh cage = *s->warpCage();
+        for (int i = 0; i < 16; i++) { const QJsonArray xy = points[i].toArray(); cage.xs[size_t(i)] = xy.at(0).toDouble(); cage.ys[size_t(i)] = xy.at(1).toDouble(); }
+        s->setWarpCage(cage);
+        if (!s->commitWarpCage(&error)) fail(error.isEmpty() ? QStringLiteral("the warp could not be applied") : error);
+        return layerJson(*s->activeLayer(), 0);
     });
     add("layers.select", [session, layer](const QJsonObject& p) {
         EditorSession* s = session();

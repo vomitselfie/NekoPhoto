@@ -406,6 +406,15 @@ int main(int argc, char** argv) {
                 if (auto* panels = dialog->findChild<QListWidget*>("cameraRawPanels")) panels->setCurrentRow(name.section(':', 1).toInt());
                 dialog->show();
             }
+            else if (name == "warpcage") {
+                // The cage on the demo's ellipse with its bottom-right corner pulled out.
+                for (const auto& l : s->document()->layers) if (l.name == "Ellipse 1") s->selectLayer(l.id);
+                if (s->beginWarpCage() && s->warpCage()) {
+                    compositor::WarpMesh cage = *s->warpCage();
+                    cage.xs[15] += 60; cage.ys[15] += 40; cage.xs[5] -= 30;
+                    s->setWarpCage(cage);
+                }
+            }
             else if (name.startsWith("layerstyle")) {
                 // layerstyle, or layerstyle:N to open on effect N (1 Bevel & Emboss ... 10 Drop Shadow) switched on
                 const int page = name.section(':', 1).toInt();

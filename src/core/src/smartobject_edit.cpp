@@ -4,6 +4,9 @@
 // Edit Contents commit) gives the source a fresh id and rebuilds every instance about its own centre, keeping the
 // instance's scale; Rasterize keeps the pixels.
 #include "compositor/smartobject_edit.h"
+#include "compositor/resample.h"
+#include "compositor/vectorlayer.h"
+#include "compositor/warp.h"
 #include "compositor/smartfilter.h"
 #include "compositor/warpmesh.h"
 #include "compositor/png.h"
@@ -360,6 +363,141 @@ bool warpLayer(Document& document, Layer& layer, const TextWarp& warp, std::stri
     layer.asset = Asset::make(bent->image, layer.name);
     layer.transform.origin = origin;
     layer.transform.size = Size(bent->image->width() * sx, bent->image->height() * sy);
+    layer.smartObject.reset();
+    layer.smartImage.reset();
+    return true;
+}
+
+// ---- The warp cage -------------------------------------------------------------------------------------------
+
+namespace {
+
+std::array<double, 8> hullQuad(const WarpMesh& mesh) {
+    const auto [x0, x1] = std::minmax_element(mesh.xs.begin(), mesh.xs.end());
+    const auto [y0, y1] = std::minmax_element(mesh.ys.begin(), mesh.ys.end());
+    return {*x0, *y0, *x1, *y0, *x1, *y1, *x0, *y1};
+}
+
+/// The pixels a cage bends: a smart object's contents, a layer's own pixels.
+const Image* cageSource(const Document& document, const Layer& layer) {
+    if (layer.isLiveSmartObject()) {
+        auto it = document.smartObjects.find(layer.smartObject->sourceId);
+        return it != document.smartObjects.end() && it->second->image ? it->second->image.get() : nullptr;
+    }
+    return layer.asset && layer.asset->image ? layer.asset->image.get() : nullptr;
+}
+
+} // namespace
+
+std::optional<WarpMesh> layerWarpCage(const Document& document, const Layer& layer, std::string* error) {
+    auto fail = [&](const char* why) -> std::optional<WarpMesh> { if (error) *error = why; return std::nullopt; };
+    if (layer.isGroup || layer.adjustment) return fail("Only smart objects and pixel layers take a warp cage.");
+    if (layer.isLiveText()) return fail("Convert the text to a smart object to warp it freely (Warp Text bends it with a style).");
+    if (!layer.asset || !layer.asset->image || layer.asset->image->isEmpty()) return fail("The layer has no pixels to warp.");
+    if (layer.isLiveSmartObject()) {
+        const SmartObjectInstance& so = *layer.smartObject;
+        if (so.locked()) return fail("This smart object shows the preview its file carried; it cannot be warped here.");
+        if (smartObjectFiltered(so)) return fail("This smart object has Smart Filters; the warp cage cannot draw through them yet.");
+        if (!cageSource(document, layer)) return fail("Its contents cannot be read.");
+        if (auto warp = smartObjectWarp(so)) {
+            // Its own warp, carried from contents space to where its placement puts the hull.
+            if (warp->uOrder != 4 || warp->vOrder != 4) return fail("This smart object's warp is not a 4 x 4 mesh.");
+            const auto hull = hullQuad(*warp);
+            const Corners quad{Point(so.quad[0], so.quad[1]), Point(so.quad[2], so.quad[3]), Point(so.quad[4], so.quad[5]), Point(so.quad[6], so.quad[7])};
+            const Homography h = Homography::unitTo(quad);
+            const double w = std::max(1e-9, hull[2] - hull[0]), hh = std::max(1e-9, hull[5] - hull[1]);
+            WarpMesh cage = *warp;
+            for (size_t i = 0; i < cage.xs.size(); i++) {
+                const Point p = h.map(Point((warp->xs[i] - hull[0]) / w, (warp->ys[i] - hull[1]) / hh));
+                cage.xs[i] = p.x; cage.ys[i] = p.y;
+            }
+            return cage;
+        }
+        if (!smartObjectPixelsArePlacement(so)) return fail("This smart object's warp is not one NekoPhoto draws.");
+    }
+    // Flat, over the layer's placed rectangle (its rotation and scale included).
+    const Image& shown = *layer.asset->image;
+    WarpMesh cage = identityWarpMesh(0, 0, shown.width(), shown.height(), 4, 4);
+    for (size_t i = 0; i < cage.xs.size(); i++) {
+        const Point p = mapThroughTransform(layer.transform, shown.width(), shown.height(), cage.xs[i], cage.ys[i]);
+        cage.xs[i] = p.x; cage.ys[i] = p.y;
+    }
+    return cage;
+}
+
+std::optional<WarpedRaster> previewWarpCage(const Document& document, const Layer& layer, const WarpMesh& cage, int maxSide) {
+    const Image* source = cageSource(document, layer);
+    if (!source || source->isEmpty()) return std::nullopt;
+    // A reduced copy keeps a drag live on big layers; the mesh's (u, v) cover the whole image either way.
+    const double scale = std::min(1.0, double(std::max(16, maxSide)) / std::max(source->width(), source->height()));
+    std::shared_ptr<Image> reduced;
+    if (scale < 1) {
+        const int w = std::max(1, int(source->width() * scale)), h = std::max(1, int(source->height() * scale));
+        const double stepX = double(source->width()) / w, stepY = double(source->height()) / h;
+        reduced = resampleAxisAligned(*source, w, h, stepX / 2, stepX, stepY / 2, stepY, ResampleFilter::Triangle);
+    }
+    return renderWarpedImage(reduced ? *reduced : *source, cage, hullQuad(cage));
+}
+
+bool warpLayerToCage(Document& document, Layer& layer, const WarpMesh& cage, std::string* error) {
+    auto fail = [&](const char* why) { if (error) *error = why; return false; };
+    std::string why;
+    if (!layerWarpCage(document, layer, &why)) { if (error) *error = why; return false; }
+    if (cage.uOrder != 4 || cage.vOrder != 4 || cage.xs.size() != 16 || cage.ys.size() != 16) return fail("The cage must be a 4 x 4 mesh.");
+    const Image& source = *cageSource(document, layer);
+    const auto quad = hullQuad(cage);
+    if (isVectorShapeLayer(layer)) {
+        // A shape bends as a path, as in Photoshop: each anchor and handle is carried through the cage from where it
+        // sits on the layer's flat rectangle, and the shape is drawn anew.
+        auto shape = vectorShapeOf(layer, document);
+        if (!shape) return fail("The shape cannot be read.");
+        const Affine m = layer.transform.unitToDocument();
+        const double det = m.a * m.d - m.b * m.c;
+        if (std::abs(det) < 1e-12) return fail("The layer has no area.");
+        auto carry = [&](double& x, double& y) {
+            // Document to the layer's unit square: the placement's inverse.
+            const double dx = x - m.tx, dy = y - m.ty;
+            const Point uv((m.d * dx - m.c * dy) / det, (-m.b * dx + m.a * dy) / det);
+            const Point p = evaluateWarpMesh(cage, uv.x, uv.y);
+            x = p.x; y = p.y;
+        };
+        for (auto& sub : shape->path.subpaths)
+            for (auto& k : sub.knots) { carry(k.inX, k.inY); carry(k.x, k.y); carry(k.outX, k.outY); }
+        setVectorShape(layer, document, *shape);
+        return true;
+    }
+    if (!(quad[2] - quad[0] > 0.5) || !(quad[5] - quad[1] > 0.5)) return fail("The cage has collapsed.");
+    if (layer.mask && !layer.mask->placement) layer.mask->placement = layer.maskTransform();
+    const Sampling sampling = layer.transform.sampling;
+    if (layer.isLiveSmartObject()) {
+        // Photoshop's Custom warp: the mesh in contents space, its hull placed on the quad (here the cage's own box,
+        // so contents space is the cage scaled to the contents' size).
+        SmartObjectInstance next = *layer.smartObject;
+        WarpMesh contents = cage;
+        const double sx = source.width() / std::max(1e-9, quad[2] - quad[0]), sy = source.height() / std::max(1e-9, quad[5] - quad[1]);
+        for (size_t i = 0; i < contents.xs.size(); i++) { contents.xs[i] = (cage.xs[i] - quad[0]) * sx; contents.ys[i] = (cage.ys[i] - quad[1]) * sy; }
+        bool written = false;
+        for (PsdBlock& b : next.psdBlocks)
+            if (auto warped = warpPsdPlacement(b.key, b.data, contents, quad)) { b.data = std::move(*warped); written = true; }
+        if (!written) return fail("Its placement cannot take a warp.");
+        auto raster = warpedSmartObjectRaster(next, source, quad);
+        if (!raster) return fail("The warp could not be drawn.");
+        layer.asset = Asset::make(raster->image, layer.name);
+        layer.transform = raster->transform;
+        layer.transform.sampling = sampling;
+        layer.smartImage = raster->image;
+        next.quad = quad;
+        next.placedTransform = layer.transform;
+        next.placedWidth = raster->image->width();
+        next.placedHeight = raster->image->height();
+        *layer.smartObject = std::move(next);
+        return true;
+    }
+    auto raster = renderWarpedImage(source, cage, quad);
+    if (!raster) return fail("The warp could not be drawn.");
+    layer.asset = Asset::make(raster->image, layer.name);
+    layer.transform = raster->transform;
+    layer.transform.sampling = sampling;
     layer.smartObject.reset();
     layer.smartImage.reset();
     return true;

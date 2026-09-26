@@ -429,6 +429,13 @@ def main():
         assert rpc.call("brush.stroke", points=[[20, 30], [200, 30]], size=20, opacity=0.5, **toning)["tool"] == toning["tool"]
     assert rpc.call("pixels.bucket", x=5, y=5, color="#336699", tolerance=10)["filled"]
     active_before = rpc.call("document.info")["activeLayer"]
+    stripe = rpc.call("shape.draw", kind="rectangle", x=300, y=300, width=60, height=20, color="#00aa00")
+    cage = rpc.call("layers.cage", id=stripe["id"])["points"]
+    assert len(cage) == 16 and abs(cage[0][0] - 300) < 3 and abs(cage[15][1] - 320) < 3, cage
+    cage[15] = [cage[15][0] + 20, cage[15][1] + 30]
+    bent = rpc.call("layers.setCage", id=stripe["id"], points=cage)
+    assert bent["pixelSize"]["height"] > 20, bent
+    rpc.call("layers.delete", id=stripe["id"])
     star = rpc.call("shape.draw", kind="star", x=20, y=20, width=60, height=60, color="#ffaa00", strokeWidth=2, strokeColor="#000000")
     assert star["kind"] == "shape", star
     got = rpc.call("shape.get", id=star["id"])

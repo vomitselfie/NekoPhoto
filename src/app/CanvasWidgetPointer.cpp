@@ -66,6 +66,18 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
     if (button != Qt::LeftButton) return;
     QPointF doc = dragStartDocument_;
     if (session_->canvasPressHook && session_->canvasPressHook(doc)) { drag_ = Drag::Hook; return; }
+    if (const auto& cage = session_->warpCage()) {
+        // The warp cage takes the canvas whatever the tool: a press on one of its points drags it.
+        cageIndex_ = -1;
+        double best = 9;
+        for (size_t i = 0; i < cage->xs.size(); i++) {
+            const QPointF v = viewPoint(QPointF(cage->xs[i], cage->ys[i]));
+            const double d = std::hypot(v.x() - view.x(), v.y() - view.y());
+            if (d < best) { best = d; cageIndex_ = int(i); }
+        }
+        if (cageIndex_ >= 0) drag_ = Drag::WarpCage;
+        return;
+    }
     switch (session_->tool()) {
     case Tool::Move: {
         const Layer* active = session_->activeLayer();
@@ -422,6 +434,9 @@ void CanvasWidget::move(QPointF view, Qt::MouseButtons buttons, Qt::KeyboardModi
     case Drag::Pen:
         if (dragMoved_) session_->penDrag(doc);
         break;
+    case Drag::WarpCage:
+        session_->moveWarpCagePoint(cageIndex_, doc);
+        break;
     case Drag::PathEdit: {
         if (!pathDragStart_) break;
         VectorPath path = *pathDragStart_;
@@ -569,6 +584,9 @@ void CanvasWidget::release(QPointF view, Qt::MouseButton button, Qt::KeyboardMod
         update();
         break;
     case Drag::Pen:
+        break;
+    case Drag::WarpCage:
+        cageIndex_ = -1;
         break;
     case Drag::PathEdit:
         pathDragStart_.reset();

@@ -27,6 +27,7 @@
 #include <QApplication>
 #include <QColorDialog>
 #include <QDockWidget>
+#include <QStatusBar>
 #include <QInputDialog>
 #include <QLineEdit>
 #include <QMenuBar>
@@ -170,6 +171,11 @@ void MainWindow::buildMenus() {
     edit->addSeparator();
     needsDocument(edit->addAction(tr("Free &Transform"), QKeySequence("Ctrl+T"), this, [this] { session_->transformCommand(); }));
     needsDocument(edit->addAction(tr("&Warp…"), this, [this] { WarpDialog(session_, this).exec(); }));
+    needsDocument(edit->addAction(tr("Warp &Cage"), this, [this] {
+        QString error;
+        if (!session_->beginWarpCage(&error)) showError(tr("Warp Cage"), error);
+        else statusBar()->showMessage(tr("Drag the cage's points; Enter applies, Esc cancels."), 8000);
+    }));
     needsDocument(edit->addAction(tr("Fill with Foreground"), QKeySequence("Alt+Backspace"), this, [this] { session_->fillSelection(session_->foregroundColor); }));
     needsDocument(edit->addAction(tr("Fill with Background"), QKeySequence("Ctrl+Backspace"), this, [this] { session_->fillSelection(session_->backgroundColor); }));
     QAction* clear = needsDocument(edit->addAction(tr("Clear"), QKeySequence(Qt::Key_Delete), this, [this] { if (session_->document() && session_->document()->selection) session_->clearSelectionPixels(); else deleteSelectedLayers(); }));

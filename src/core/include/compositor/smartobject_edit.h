@@ -62,4 +62,17 @@ void rasterizeSmartObject(Layer& layer);
 /// take it (a group, an adjustment, a preview-locked smart object, one already warped or filtered).
 bool warpLayer(Document& document, Layer& layer, const TextWarp& warp, std::string* error);
 
+// ---- The warp cage (Edit > Transform > Warp, Photoshop's Custom warp) -----------------------------------------
+// The cage is a 4 x 4 Bezier mesh in document pixels. On a pixel layer it starts flat over the layer's placed
+// rectangle and bends the pixels for good; on a smart object it starts from the instance's own warp (or flat) and is
+// written into its placement as Photoshop's Custom warp, the contents drawn again through it, so it stays editable.
+
+/// The layer's cage as it now stands; none, with `error`, when the layer cannot be warped this way (text: convert
+/// it to a smart object first; a group, an adjustment, a locked or filtered smart object, no pixels).
+std::optional<WarpMesh> layerWarpCage(const Document& document, const Layer& layer, std::string* error);
+/// A quick look at the layer through `cage`, drawn from a copy of its pixels at most `maxSide` pixels long.
+std::optional<WarpedRaster> previewWarpCage(const Document& document, const Layer& layer, const WarpMesh& cage, int maxSide);
+/// The layer bent through `cage`. False, with `error`, when it cannot be.
+bool warpLayerToCage(Document& document, Layer& layer, const WarpMesh& cage, std::string* error);
+
 } // namespace compositor

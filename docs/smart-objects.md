@@ -172,3 +172,14 @@ through the stack. A stack with a filter not drawn here cannot be added to.
 ## Not yet
 
 An interactive warp cage, editing or removing a Smart Filter, a linked filter mask, relinking linked files.
+
+## Warp Cage
+
+Edit ▸ Warp Cage shows a 4 x 4 Bezier mesh over the active layer (`layerWarpCage` in `smartobject_edit.h`): flat over
+a pixel layer's placed rectangle, or a smart object's own warp carried from contents space onto its placement quad.
+Dragging its points previews through a reduced copy (`previewWarpCage`); Enter applies (`warpLayerToCage`), Esc
+cancels. A smart object's cage is written into its placement as Photoshop's Custom warp: the mesh scaled into
+contents space, its hull placed on the cage's own bounding box (an axis-aligned quad, so the control points carry
+exactly), and the instance is drawn again from its contents; opening the cage again gives back the same points,
+through PSD too. Pixels are bent for good. A vector shape layer bends as a path (its anchors and handles carried
+through the mesh) and previews exactly. Automation: `layers.cage`, `layers.setCage`.

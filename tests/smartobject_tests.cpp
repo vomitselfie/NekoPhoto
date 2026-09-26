@@ -556,4 +556,47 @@ TEST_CASE(add_smart_filters_to_a_smart_object) {
     CHECK(!addSmartFilter(doc, doc.layers[1], blur, &error));
 }
 
+TEST_CASE(the_warp_cage_bends_and_stays_editable) {
+    Document doc(120, 80);
+    auto source = makeSmartObjectSource(pngContents(40, 20, 200, "banner.png"));
+    doc.smartObjects[source->id] = source;
+    doc.layers.push_back(smartObjectLayer(source, {20, 20, 60, 20, 60, 40, 20, 40}, "Banner"));
+    std::string error;
+    // A flat instance: the cage lies over its placed rectangle.
+    auto cage = layerWarpCage(doc, doc.layers[0], &error);
+    REQUIRE(cage.has_value());
+    CHECK(std::abs(cage->xs[0] - 20) < 1e-6 && std::abs(cage->ys[0] - 20) < 1e-6 && std::abs(cage->xs[15] - 60) < 1e-6 && std::abs(cage->ys[15] - 40) < 1e-6);
+    // Pull the bottom-right corner down and right: the pixels reach it, and the warp is the instance's own.
+    cage->xs[15] = 80; cage->ys[15] = 70;
+    REQUIRE(warpLayerToCage(doc, doc.layers[0], *cage, &error));
+    REQUIRE(doc.layers[0].isLiveSmartObject());
+    REQUIRE(smartObjectWarp(*doc.layers[0].smartObject).has_value());
+    const LayerTransform& t = doc.layers[0].transform;
+    CHECK(t.origin.x + t.size.width > 75 && t.origin.y + t.size.height > 65);
+    // Opened again, the cage is where it was left (the warp carried back through its placement).
+    auto again = layerWarpCage(doc, doc.layers[0], &error);
+    REQUIRE(again.has_value());
+    for (size_t i = 0; i < 16; i++) CHECK(std::abs(again->xs[i] - cage->xs[i]) < 1e-6 && std::abs(again->ys[i] - cage->ys[i]) < 1e-6);
+    // Through PSD it stays a warped, editable smart object.
+    auto back = throughPsd(doc);
+    REQUIRE(back.has_value());
+    REQUIRE(back->document.layers[0].isLiveSmartObject());
+    auto reopened = layerWarpCage(back->document, back->document.layers[0], &error);
+    REQUIRE(reopened.has_value());
+    CHECK(std::abs(reopened->xs[15] - 80) < 0.01 && std::abs(reopened->ys[15] - 70) < 0.01);
+    // A preview draws without touching the layer.
+    CHECK(previewWarpCage(doc, doc.layers[0], *cage, 32).has_value());
+
+    // Pixels: a flat cage leaves them as they were; a bent one moves them.
+    Layer pixels(Asset::make(filled(30, 10, 0, 0, 255), "Stripe"), Point(10, 50));
+    doc.layers.push_back(pixels);
+    auto flat = layerWarpCage(doc, doc.layers[1], &error);
+    REQUIRE(flat.has_value());
+    REQUIRE(warpLayerToCage(doc, doc.layers[1], *flat, &error));
+    CHECK(std::abs(doc.layers[1].transform.origin.x - 10) < 1.01 && std::abs(doc.layers[1].transform.size.width - 30) < 2.01);
+    flat->ys[0] -= 20;   // the top-left corner up
+    REQUIRE(warpLayerToCage(doc, doc.layers[1], *flat, &error));
+    CHECK(doc.layers[1].transform.origin.y < 35);
+}
+
 TEST_MAIN()

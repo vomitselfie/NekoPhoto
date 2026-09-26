@@ -1,5 +1,6 @@
 // Smart objects in the editor: the menu commands over the core's operations (smartobject_edit.h), each one undo
 // step, and a contents tab sending its document back to the smart object it came from.
+#include "compositor/vectorlayer.h"
 #include "EditorSession.h"
 #include "ImageConvert.h"
 #include "TextLayer.h"
@@ -135,6 +136,105 @@ bool EditorSession::warpActiveLayer(const compositor::TextWarp& warp, QString* e
     endEdit();
     notifyDocument();
     return true;
+}
+
+bool EditorSession::beginWarpCage(QString* error) {
+    const Layer* layer = activeLayer();
+    if (!canEditLayers() || !layer) { if (error) *error = tr("Select a layer to warp."); return false; }
+    if (isMaskSelected_) { if (error) *error = tr("Warp the layer, not its mask."); return false; }
+    std::string why;
+    auto cage = compositor::layerWarpCage(*document_, *layer, &why);
+    if (!cage) { if (error) *error = QString::fromStdString(why); return false; }
+    commitTransform();
+    warpCage_ = cage;
+    warpCageLayer_ = layer->id;
+    if (compositor::isVectorShapeLayer(*layer)) {
+        // A shape previews exactly: its bent path is applied as the cage moves, in one open undo step.
+        endOpacityEdit();
+        warpCageShapeBefore_ = *layer;
+        beginEdit("Warp");
+    }
+    emit transformChanged();
+    return true;
+}
+
+void EditorSession::previewWarpCage() {
+    if (warpCageShapeBefore_ && warpCage_) {
+        Layer* shape = document_ ? document_->find(warpCageLayer_) : nullptr;
+        if (!shape) return;
+        *shape = *warpCageShapeBefore_;
+        std::string why;
+        compositor::warpLayerToCage(*document_, *shape, *warpCage_, &why);
+        emit documentChanged({});
+        emit transformChanged();
+        return;
+    }
+    const Layer* layer = document_ ? document_->find(warpCageLayer_) : nullptr;
+    if (!warpCage_ || !layer) return;
+    // A reduced draw while dragging; Apply draws at full size.
+    auto preview = compositor::previewWarpCage(*document_, *layer, *warpCage_, 1024);
+    if (preview) setPixelPreview(preview->image, preview->transform, warpCageLayer_);
+    emit transformChanged();
+}
+
+void EditorSession::moveWarpCagePoint(int index, QPointF p) {
+    if (!warpCage_ || index < 0 || index >= int(warpCage_->xs.size())) return;
+    warpCage_->xs[size_t(index)] = p.x();
+    warpCage_->ys[size_t(index)] = p.y();
+    previewWarpCage();
+}
+
+void EditorSession::setWarpCage(const compositor::WarpMesh& cage) {
+    if (!warpCage_ || cage.xs.size() != warpCage_->xs.size()) return;
+    warpCage_ = cage;
+    previewWarpCage();
+}
+
+bool EditorSession::commitWarpCage(QString* error) {
+    if (!warpCage_) return false;
+    const compositor::WarpMesh cage = *warpCage_;
+    warpCage_.reset();
+    if (warpCageShapeBefore_) {
+        // Already applied as it moved: the step closes.
+        Layer* shape = document_ ? document_->find(warpCageLayer_) : nullptr;
+        if (shape) { *shape = *warpCageShapeBefore_; std::string why; compositor::warpLayerToCage(*document_, *shape, cage, &why); }
+        warpCageShapeBefore_.reset();
+        endEdit();
+        notifyDocument();
+        emit transformChanged();
+        return true;
+    }
+    clearPixelPreview();
+    Layer* layer = document_ ? document_->find(warpCageLayer_) : nullptr;
+    if (!layer || !canEditLayers()) { emit transformChanged(); return false; }
+    endOpacityEdit();
+    const Layer before = *layer;
+    beginEdit("Warp");
+    std::string why;
+    if (!compositor::warpLayerToCage(*document_, *layer, cage, &why)) {
+        *layer = before;
+        endEdit();
+        if (error) *error = QString::fromStdString(why);
+        emit transformChanged();
+        return false;
+    }
+    endEdit();
+    notifyDocument();
+    emit transformChanged();
+    return true;
+}
+
+void EditorSession::cancelWarpCage() {
+    if (!warpCage_) return;
+    warpCage_.reset();
+    if (warpCageShapeBefore_) {
+        if (Layer* shape = document_ ? document_->find(warpCageLayer_) : nullptr) *shape = *warpCageShapeBefore_;
+        warpCageShapeBefore_.reset();
+        endEdit();   // nothing changed: no step
+        notifyDocument();
+    }
+    clearPixelPreview();
+    emit transformChanged();
 }
 
 bool EditorSession::canAddSmartFilter() const {

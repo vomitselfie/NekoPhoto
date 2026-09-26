@@ -567,6 +567,19 @@ def brush_stroke(points: list[list[float]], tool: str = "brush", size: Optional[
     return text(call("brush.stroke", points=points, tool=tool, size=size, hardness=hardness, opacity=opacity, color=color, mask=mask, source=source, preset=preset, pressure=pressure, pressures=pressures, range=tone_range, protectTones=protect_tones, saturate=saturate))
 
 
+@look("Warp cage")
+def layers_cage(id: str) -> str:
+    """A layer's warp cage: the 16 [x, y] control points (row by row, document pixels) of the 4 x 4 Bezier mesh over it."""
+    return text(call("layers.cage", id=id))
+
+
+@edit("Warp through a cage")
+def layers_set_cage(id: str, points: list[list[float]]) -> str:
+    """Warp a layer freely (Photoshop's Custom warp): move some of the 16 points layers_cage gives and pass all 16 back.
+    Corners are points 0, 3, 12 and 15; the rest shape the edges and the inside. Pixels bend for good; a smart object keeps an editable warp."""
+    return text(call("layers.setCage", id=id, points=points))
+
+
 @edit("Quick Mask")
 def selection_quick_mask(on: Optional[bool] = None) -> str:
     """Quick Mask: enter (on=true) to edit the selection as a red overlay (paint it with brush_stroke mask=true: white selects, black masks; gradients, fills and blurs work too), then leave (on=false) to turn it back into the selection. Left out, it toggles."""

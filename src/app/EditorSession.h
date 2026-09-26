@@ -585,6 +585,14 @@ public:
     /// Warp the active layer with a preset (Edit ▸ Warp): Warp Text on text, a baked mesh on a smart object, bent
     /// pixels otherwise; one undo step. False, with `error`, when the layer cannot take it.
     bool warpActiveLayer(const compositor::TextWarp& warp, QString* error = nullptr);
+    /// The warp cage (Edit ▸ Warp Cage): a 4 x 4 mesh over the active layer, dragged on the canvas with a live preview,
+    /// then applied (one undo step) or cancelled.
+    bool beginWarpCage(QString* error = nullptr);
+    const std::optional<compositor::WarpMesh>& warpCage() const { return warpCage_; }
+    void moveWarpCagePoint(int index, QPointF documentPoint);
+    void setWarpCage(const compositor::WarpMesh& cage);
+    bool commitWarpCage(QString* error = nullptr);
+    void cancelWarpCage();
     /// Adds a Smart Filter on top of the active smart object's stack; one undo step.
     bool addSmartFilter(const compositor::SmartFilterEntry& entry, QString* error = nullptr);
     /// Whether the active layer is a smart object that can take Smart Filters (Photoshop's filter on a smart object).
@@ -746,6 +754,11 @@ private:
     std::optional<compositor::LayerStyle> styleClipboard_;
     std::optional<compositor::VectorPath::Subpath> penDraft_;
     std::optional<uint16_t> activePathId_;
+    std::optional<compositor::WarpMesh> warpCage_;
+    compositor::Uuid warpCageLayer_;
+    /// A shape layer bends live (its path redrawn inside the open undo step); this is how it was.
+    std::optional<compositor::Layer> warpCageShapeBefore_;
+    void previewWarpCage();
     bool pathEditing_ = false;
     std::optional<compositor::Uuid> quickMaskLayer_, quickMaskReturnLayer_;
     /// Starts a stroke that paints `process`'s version of the active layer (as the canvas shows it) through the tip.

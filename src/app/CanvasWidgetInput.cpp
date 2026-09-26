@@ -126,6 +126,7 @@ void CanvasWidget::keyPressEvent(QKeyEvent* e) {
         if (session_->gradientPending()) { session_->cancelGradient(); return; }
         if (session_->shapeDraft()) { session_->cancelShape(); return; }
         if (session_->penDraft()) { session_->penCancel(); return; }
+        if (session_->warpCage()) { session_->cancelWarpCage(); return; }
         if (selectedKnot_) { selectedKnot_.reset(); update(); return; }
         if (session_->transformEdit()) { session_->cancelTransform(); return; }
         if (!lassoPoints_.empty()) { cancelLasso(); return; }
@@ -136,6 +137,7 @@ void CanvasWidget::keyPressEvent(QKeyEvent* e) {
         if (session_->transformEdit()) { session_->commitTransform(); return; }
         if (session_->gradientPending()) { session_->commitGradient(); return; }
         if (session_->penDraft()) { session_->penFinish(false); return; }
+        if (session_->warpCage()) { QString error; if (!session_->commitWarpCage(&error) && !error.isEmpty()) emit session_->error(error); return; }
         if (!lassoPoints_.empty() && session_->lassoKind == LassoKind::Polygonal) { finishPolygonalLasso(); return; }
         if (crop_) { applyCrop(); return; }
         return;

@@ -1,6 +1,7 @@
 // The canvas overlays: transform box, selection ants, scribbles, crop, guides and the tool previews.
 #include "CanvasWidget.h"
 #include "VectorPathQt.h"
+#include "compositor/warpmesh.h"
 #include <cstring>
 #include "QtGeometry.h"
 #include <QPainter>
@@ -16,7 +17,7 @@ bool CanvasWidget::boxShown() const {
     const Layer* active = session_->activeLayer();
     if (!active) return false;
     if (session_->transformEdit()) return true;
-    return session_->tool() == Tool::Move && session_->showsTransformControls && session_->canTransform();
+    return session_->tool() == Tool::Move && session_->showsTransformControls && session_->canTransform() && !session_->warpCage();
 }
 
 void CanvasWidget::drawOverlays(QPainter& painter) {
@@ -63,6 +64,7 @@ void CanvasWidget::drawOverlays(QPainter& painter) {
         painter.drawEllipse(a, 4, 4); painter.drawEllipse(b, 4, 4);
     }
     drawPathOverlay(painter);
+    drawWarpCage(painter);
     if (auto path = session_->shapeDraftPath()) {
         painter.setBrush(QColor(session_->foregroundColor.red(), session_->foregroundColor.green(), session_->foregroundColor.blue(), 90));
         painter.setPen(QPen(Qt::black, 1, Qt::DashLine));
@@ -239,6 +241,35 @@ void CanvasWidget::refreshSelectionOutline() {
     if (selectionOutline_.empty() && !selectionRasterAnts_) antsTimer_.stop(); else if (!antsTimer_.isActive()) antsTimer_.start();
 }
 
+
+void CanvasWidget::drawWarpCage(QPainter& painter) {
+    const auto& cage = session_->warpCage();
+    if (!cage) return;
+    // The grid: the patch's own curves at thirds, and the control points with the corners' handle lines.
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(QColor(0, 120, 255), 1));
+    auto at = [&](double u, double v) { const compositor::Point p = compositor::evaluateWarpMesh(*cage, u, v); return viewPoint(QPointF(p.x, p.y)); };
+    for (int line = 0; line <= 3; line++) {
+        const double t = line / 3.0;
+        QPainterPath across, down;
+        across.moveTo(at(0, t)); down.moveTo(at(t, 0));
+        for (int k = 1; k <= 24; k++) { across.lineTo(at(k / 24.0, t)); down.lineTo(at(t, k / 24.0)); }
+        painter.drawPath(across);
+        painter.drawPath(down);
+    }
+    auto point = [&](int i) { return viewPoint(QPointF(cage->xs[size_t(i)], cage->ys[size_t(i)])); };
+    painter.setPen(QPen(QColor(0, 120, 255), 1, Qt::DashLine));
+    for (auto [a, b] : {std::pair{0, 1}, {0, 4}, {3, 2}, {3, 7}, {12, 13}, {12, 8}, {15, 14}, {15, 11}}) painter.drawLine(point(a), point(b));
+    painter.setPen(QPen(QColor(0, 120, 255), 1));
+    for (int i = 0; i < 16; i++) {
+        const bool corner = i == 0 || i == 3 || i == 12 || i == 15;
+        painter.setBrush(corner ? QColor(255, 255, 255) : QColor(0, 120, 255));
+        const QPointF p = point(i);
+        if (corner) painter.drawRect(QRectF(p.x() - 4, p.y() - 4, 8, 8));
+        else painter.drawEllipse(p, 3.5, 3.5);
+    }
+    painter.setBrush(Qt::NoBrush);
+}
 
 } // namespace app
 
