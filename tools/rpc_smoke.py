@@ -106,6 +106,13 @@ def remaining_methods(rpc):
     rpc.call("selection.polygon", points=[[10, 10], [90, 10], [50, 80]])
     rpc.call("pixels.clear")
     rpc.call("selection.none")
+    rpc.call("selection.rect", x=10, y=10, width=10, height=10)
+    assert rpc.call("selection.quickMask", on=True)["quickMask"]
+    rpc.call("brush.stroke", points=[[40, 60], [90, 60]], size=16, mask=True)
+    assert not rpc.call("selection.quickMask", on=False)["quickMask"]
+    grown = rpc.call("selection.info")
+    assert grown["active"] and grown["bounds"]["width"] > 60, grown   # painting white in Quick Mask selects
+    rpc.call("selection.none")
     rpc.call("layers.group")
     # Folders take Photoshop's modes: Pass Through by default, a blend mode isolates, opacity fades.
     listed = rpc.call("layers.list")
@@ -285,6 +292,10 @@ def main():
     for toning in ({"tool": "dodge", "range": "highlights"}, {"tool": "burn", "protectTones": False}, {"tool": "sponge", "saturate": True}, {"tool": "sharpen"}):
         assert rpc.call("brush.stroke", points=[[20, 30], [200, 30]], size=20, opacity=0.5, **toning)["tool"] == toning["tool"]
     assert rpc.call("pixels.bucket", x=5, y=5, color="#336699", tolerance=10)["filled"]
+    assert rpc.call("brush.stroke", tool="healingbrush", source={"x": 60, "y": 60}, points=[[20, 40], [60, 40]], size=12)["tool"] == "healingbrush"
+    rpc.call("selection.rect", x=10, y=10, width=20, height=20)
+    assert rpc.call("pixels.patch", dx=40, dy=0)["patched"]
+    rpc.call("selection.none")
     presets = rpc.call("brush.presets")
     if presets["supported"]:
         assert len(presets["presets"]) >= 196 and "Classic" in presets["groups"], presets["groups"]

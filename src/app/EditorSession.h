@@ -243,6 +243,9 @@ public:
     struct BucketSettings { int tolerance = 32; bool contiguous = true, antialias = true, allLayers = false; };
     BucketSettings bucket;
     bool paintBucket(QPointF documentPoint);
+    /// Patch (the healing tool's Patch mode): the selection's pixels on the active layer replaced by those `dx`, `dy`
+    /// away, their tone matched to the selection's edge (Photoshop's Patch, Source mode).
+    bool patchSelection(int dx, int dy);
     bool warpActive() const { return warp_ != nullptr; }
     bool beginWarp(QPointF documentPoint);
     void continueWarp(QPointF documentPoint);
@@ -312,6 +315,8 @@ public:
     void endBrush();
     void cancelBrush();
     std::optional<QPointF> lastBrushPoint() const { return lastBrushPoint_; }
+    /// 0 Content-Aware, 1 Create Texture, 2 Proximity Match (Spot Healing); 3 Sampled: the Healing Brush, from the
+    /// clone source (Alt-click); 4 Patch: drag the selection to where to copy from.
     int spotHealingMode = 0;
     bool cloneAligned = true;
     bool cloneSampleAll = false;
@@ -426,6 +431,15 @@ public:
     void pasteLayerStyle();
     void clearLayerStyle();
     bool activeLayerHasStyle() const;
+
+    // Quick Mask (Select ▸ Edit in Quick Mask Mode)
+    bool quickMaskActive() const;
+    /// Whether painting now goes to the Quick Mask (its mask values are the inverse of the selection's).
+    bool paintsQuickMask() const;
+    void toggleQuickMask();
+    bool beginQuickMask();
+    /// Leaves Quick Mask, its mask becoming the selection; false when it was not on.
+    bool endQuickMask();
 
     // Destructive adjustments and filters on the active layer's pixels, inside the selection.
     bool canAdjustPixels() const;
@@ -660,11 +674,13 @@ private:
     std::optional<compositor::Uuid> styleEditLayer_;
     std::shared_ptr<const compositor::PsdLayerCarry> styleEditCarry_;
     std::optional<compositor::LayerStyle> styleClipboard_;
+    std::optional<compositor::Uuid> quickMaskLayer_, quickMaskReturnLayer_;
     /// Starts a stroke that paints `process`'s version of the active layer (as the canvas shows it) through the tip.
     bool beginProcessedStroke(QPointF documentPoint, const std::function<void(compositor::Image&)>& process);
     /// Fills the active layer (or its mask) with `color` through `coverage` (document size; null: everywhere) at
     /// `opacity`, as one undo step named `name`.
-    bool fillThrough(const QColor& color, const compositor::GrayImage* coverage, double opacity, const char* name);
+    /// With `from` (document size, premultiplied), each pixel takes `from`'s there instead of `color`.
+    bool fillThrough(const QColor& color, const compositor::GrayImage* coverage, double opacity, const char* name, const compositor::Image* from = nullptr);
     std::shared_ptr<const compositor::Image> previewImage_;
     std::optional<compositor::LayerTransform> previewTransform_;
     std::optional<std::pair<compositor::Uuid, compositor::Uuid>> transformDuplicate_; // copy, source

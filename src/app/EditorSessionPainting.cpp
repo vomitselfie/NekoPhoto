@@ -27,12 +27,13 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
     if (!layer || layer->isGroup || layer->adjustment) return false;
     bool mask = isMaskSelected_ && layer->mask;
     if (!mask && smartObjectBlocksPixels(true)) return false;
-    bool healing = tool_ == Tool::SpotHealing, cloning = tool_ == Tool::CloneStamp;
+    bool healing = tool_ == Tool::SpotHealing, cloning = tool_ == Tool::CloneStamp || (healing && spotHealingMode == 3);
+    if (healing && spotHealingMode == 4) return false;   // Patch drags the selection instead
     // Spot Healing and Clone Stamp rework image pixels; they have nothing to do on a mask.
     if ((healing || cloning) && mask) return false;
     std::optional<CloneSource> clone;
     if (cloning) {
-        if (!cloneSource) { emit error(tr("Alt-click where Clone Stamp should copy from first.")); return false; }
+        if (!cloneSource) { emit error(healing ? tr("Alt-click where the Healing Brush should copy from first.") : tr("Alt-click where Clone Stamp should copy from first.")); return false; }
         QPointF offset = cloneAligned && cloneOffset ? *cloneOffset : QPointF(std::round(cloneSource->x() - documentPoint.x()), std::round(cloneSource->y() - documentPoint.y()));
         // The sample is the document (or the layer alone) at document size; keep it between strokes until
         // something changes, since a stroke start is where latency shows.
@@ -58,6 +59,7 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
     settings.healingMode = spotHealingMode;
     settings.healingSeed = uint32_t(std::random_device{}());
     if (mask) settings.maskValue = (maskPaintWhite != brushErase) ? 1 : 0;
+    if (mask && paintsQuickMask()) settings.maskValue = 1 - settings.maskValue;   // white selects: the Quick Mask holds the inverse
     else { settings.red = foregroundColor.redF(); settings.green = foregroundColor.greenF(); settings.blue = foregroundColor.blueF(); }
     const GrayImage* selection = document_->selection && document_->selection->coverage ? document_->selection->coverage.get() : nullptr;
     if (document_->selection && !selection) return false; // an explicit empty selection: touch nothing
@@ -181,7 +183,7 @@ void EditorSession::endBrush() {
     stroke->flush();
     Rect tail = stroke->takeDirtyRect();
     if (!tail.isEmpty()) strokeRegion_ = strokeRegion_.isEmpty() ? toQRect(tail) : strokeRegion_.united(toQRect(tail));
-    QString name = strokeMask_ ? "Paint Mask" : tool_ == Tool::SpotHealing ? "Spot Healing" : tool_ == Tool::CloneStamp ? "Clone Stamp" : tool_ == Tool::Smudge ? (blurMode == BlurToolMode::Sharpen ? "Sharpen" : "Blur")
+    QString name = strokeMask_ ? "Paint Mask" : tool_ == Tool::SpotHealing ? (spotHealingMode == 3 ? "Healing Brush" : "Spot Healing") : tool_ == Tool::CloneStamp ? "Clone Stamp" : tool_ == Tool::Smudge ? (blurMode == BlurToolMode::Sharpen ? "Sharpen" : "Blur")
                  : tool_ == Tool::Dodge ? (toning.kind == ToningKind::Dodge ? "Dodge" : toning.kind == ToningKind::Burn ? "Burn" : "Sponge") : (brushErase ? "Eraser" : "Brush Stroke");
     // Spot healing changes the pixels as it commits; every other brush commits what its preview showed.
     commitRasterEdit(*stroke, strokeLayerId_, strokeMask_, name, strokeRegion_, tool_ != Tool::SpotHealing);
@@ -407,6 +409,7 @@ void EditorSession::refreshGradient() {
         float start[4], end[4];
         if (gradient_->mask) {
             float f = fg.lightnessF() >= 0.5 ? 1 : 0, g = bg.lightnessF() >= 0.5 ? 1 : 0;
+            if (paintsQuickMask()) { f = 1 - f; g = 1 - g; }
             start[0] = start[1] = start[2] = f; start[3] = 1;
             end[0] = end[1] = end[2] = gradientSettings.style == GradientStyle::ForegroundToBackground ? g : f;
             end[3] = gradientSettings.style == GradientStyle::ForegroundToBackground ? 1 : 0;

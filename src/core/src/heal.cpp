@@ -372,4 +372,56 @@ void spotHeal(Image& image, const GrayImage& coverage, float opacity, int mode, 
         }
 }
 
+void healFrom(Image& image, const Image& source, const GrayImage& coverage, float opacity, const GrayImage* visible) {
+    const int W = image.width(), H = image.height();
+    if (source.width() != W || source.height() != H || coverage.width() != W || coverage.height() != H) return;
+    int x0 = W, y0 = H, x1 = -1, y1 = -1;
+    for (int y = 0; y < H; y++)
+        for (int x = 0; x < W; x++)
+            if (coverage.at(x, y)) { x0 = std::min(x0, x); y0 = std::min(y0, y); x1 = std::max(x1, x); y1 = std::max(y1, y); }
+    if (x1 < 0) return;
+    // The window: the hole and a ring of one pixel around it.
+    const int wx0 = std::max(0, x0 - 1), wy0 = std::max(0, y0 - 1), wx1 = std::min(W - 1, x1 + 1), wy1 = std::min(H - 1, y1 + 1);
+    const int ww = wx1 - wx0 + 1, wh = wy1 - wy0 + 1;
+    const size_t wn = size_t(ww) * size_t(wh);
+    auto shown = [&](int x, int y) { return !visible || visible->at(x, y) >= 128; };
+    std::vector<uint8_t> hole(wn), known(wn);
+    for (int y = 0; y < wh; y++)
+        for (int x = 0; x < ww; x++) hole[size_t(y) * ww + size_t(x)] = coverage.at(wx0 + x, wy0 + y) ? 1 : 0;
+    std::vector<float> value(wn * 4, 0.0f);
+    bool anyKnown = false;
+    for (int y = 0; y < wh; y++)
+        for (int x = 0; x < ww; x++) {
+            const size_t p = size_t(y) * ww + size_t(x);
+            if (hole[p]) continue;
+            bool touches = false;
+            const int n[4][2] = {{x - 1, y}, {x + 1, y}, {x, y - 1}, {x, y + 1}};
+            for (auto& o : n) if (o[0] >= 0 && o[1] >= 0 && o[0] < ww && o[1] < wh && hole[size_t(o[1]) * ww + size_t(o[0])]) touches = true;
+            if (!touches || !shown(wx0 + x, wy0 + y)) continue;
+            known[p] = 1;
+            anyKnown = true;
+            const uint8_t* t = image.pixel(wx0 + x, wy0 + y);
+            const uint8_t* s = source.pixel(wx0 + x, wy0 + y);
+            for (int c = 0; c < 4; c++) value[p * 4 + size_t(c)] = float(t[c]) - float(s[c]);
+        }
+    // No edge to match (the hole covers the image): the source goes in as it is.
+    if (anyKnown) membraneFill(value.data(), 4, hole.data(), known.data(), ww, wh);
+    parallelRows(0, wh, [&](int r0, int r1) {
+        for (int y = r0; y < r1; y++)
+            for (int x = 0; x < ww; x++) {
+                const size_t p = size_t(y) * ww + size_t(x);
+                if (!hole[p]) continue;
+                const int ix = wx0 + x, iy = wy0 + y;
+                uint8_t* t = image.pixel(ix, iy);
+                const uint8_t* s = source.pixel(ix, iy);
+                const double amount = coverage.at(ix, iy) / 255.0 * opacity;
+                double out[4];
+                for (int c = 0; c < 4; c++) out[c] = t[c] + (s[c] + value[p * 4 + size_t(c)] - t[c]) * amount;
+                const double a = std::clamp(out[3], 0.0, 255.0);
+                t[3] = uint8_t(std::lround(a));
+                for (int c = 0; c < 3; c++) t[c] = uint8_t(std::lround(std::clamp(out[c], 0.0, double(t[3]))));
+            }
+    });
+}
+
 } // namespace compositor

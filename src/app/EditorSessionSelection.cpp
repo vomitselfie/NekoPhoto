@@ -2,8 +2,10 @@
 #include "EditorSession.h"
 #include "compositor/smartwand.h"
 #include "compositor/morphology.h"
+#include "compositor/heal.h"
 #include "compositor/wand.h"
 #include <algorithm>
+#include <cstring>
 
 using namespace compositor;
 
@@ -181,7 +183,35 @@ bool EditorSession::paintBucket(QPointF documentPoint) {
     return fillThrough(foregroundColor, &coverage, brushSettings.opacity, "Paint Bucket");
 }
 
-bool EditorSession::fillThrough(const QColor& color, const GrayImage* selection, double opacity, const char* name) {
+bool EditorSession::patchSelection(int dx, int dy) {
+    if (!canEditLayers() || !document_->selection || !document_->selection->coverage || (dx == 0 && dy == 0)) return false;
+    const Layer* layer = activeLayer();
+    if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image) return false;
+    if (isMaskSelected_) { emit error(tr("Patch works on a layer's pixels, not its mask.")); return false; }
+    if (smartObjectBlocksPixels(true)) return false;
+    // The layer as the canvas shows it; the source is the same pixels shifted by the drag.
+    Document single(document_->width, document_->height);
+    Layer copy = *layer;
+    copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
+    copy.transform = displayedTransform(*layer);
+    single.layers = {copy};
+    auto shown = renderFlattened(single);
+    Image source(shown->width(), shown->height());
+    for (int y = 0; y < source.height(); y++) {
+        const int sy = y + dy;
+        if (sy < 0 || sy >= shown->height()) continue;
+        for (int x = 0; x < source.width(); x++) {
+            const int sx = x + dx;
+            if (sx >= 0 && sx < shown->width()) std::memcpy(source.pixel(x, y), shown->pixel(sx, sy), 4);
+        }
+    }
+    const GrayImage& selection = *document_->selection->coverage;
+    Image healed = *shown;
+    healFrom(healed, source, selection, 1.0f);
+    return fillThrough(foregroundColor, &selection, 1, "Patch", &healed);
+}
+
+bool EditorSession::fillThrough(const QColor& color, const GrayImage* selection, double opacity, const char* name, const Image* from) {
     Layer* layer = activeLayerMutable();
     if (!layer || layer->isGroup || layer->adjustment) return false;
     bool mask = isMaskSelected_ && layer->mask;
@@ -192,6 +222,7 @@ bool EditorSession::fillThrough(const QColor& color, const GrayImage* selection,
     settings.diameter = 1;
     settings.red = color.redF(); settings.green = color.greenF(); settings.blue = color.blueF();
     if (mask) settings.maskValue = color.lightnessF() >= 0.5 ? 1 : 0;
+    if (mask && paintsQuickMask()) settings.maskValue = 1 - settings.maskValue;
     BrushStroke stroke(*layer, mask, settings, document_->size(), selection);
     if (!stroke.isValid()) return false;
     // Direct fill over the working image rather than dabbing.
@@ -209,6 +240,11 @@ bool EditorSession::fillThrough(const QColor& color, const GrayImage* selection,
             v = uint8_t(v * (1 - c) + settings.maskValue * 255 * c + 0.5);
         } else {
             uint8_t* p = working->pixel(px, py);
+            if (from) {
+                const uint8_t* f = from->pixel(int(d.x), int(d.y));
+                for (int k = 0; k < 4; k++) p[k] = uint8_t(p[k] * (1 - c) + f[k] * c + 0.5);
+                continue;
+            }
             p[0] = uint8_t(p[0] * (1 - c) + color.red() * c + 0.5);
             p[1] = uint8_t(p[1] * (1 - c) + color.green() * c + 0.5);
             p[2] = uint8_t(p[2] * (1 - c) + color.blue() * c + 0.5);

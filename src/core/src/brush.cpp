@@ -432,7 +432,7 @@ void BrushStroke::recomposeRows(const Rect& r) {
         return;
     }
     double cr = settings_.red * 255, cg = settings_.green * 255, cb = settings_.blue * 255;
-    if (settings_.healing) { cr = cg = cb = 0.12 * 255; opacity *= 0.45; } // the wash shown while painting
+    if (settings_.healing && !clone_) { cr = cg = cb = 0.12 * 255; opacity *= 0.45; } // the wash shown while painting (the Healing Brush shows its source)
     if (!clone_) {
         // Plain paint or erase: integer lerps, one coverage step per pixel.
         const unsigned op = unsigned(clamp(opacity * 255 + 0.5, 0.0, 255.0));
@@ -590,6 +590,7 @@ void BrushStroke::heal() {
     if (!settings_.healing || isMask_ || !coverage_) return;
     PixelBounds b = nonzeroBounds(*coverage_);
     if (b.isEmpty()) return;
+    if (clone_ && clone_->image) { healFromClone(b); return; }
     // Room for the kernel's patch search, which looks up to about three spot-widths away.
     double reach = (std::max(b.x1 - b.x0, b.y1 - b.y0) + 32) * 3.2;
     Rect region = Rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0).insetBy(-reach, -reach).intersection(Rect(0, 0, width_, height_)).integral();
@@ -617,6 +618,42 @@ void BrushStroke::heal() {
             for (int c = 0; c < 4; c++) dst[c] = uint8_t((orig[c] * (255 - k) + healed[c] * k + 127) / 255);
         }
     }
+    refreshLevels(Rect(0, 0, width_, height_));
+}
+
+void BrushStroke::healFromClone(const PixelBounds& b) {
+    // The Healing Brush: the source under the stroke (as Clone Stamp samples it), its tone matched to the edge.
+    Rect region = Rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0).insetBy(-2, -2).intersection(Rect(0, 0, width_, height_)).integral();
+    const int rx = int(region.x), ry = int(region.y), rw = int(region.width), rh = int(region.height);
+    if (rw <= 0 || rh <= 0) return;
+    auto pixels = cropImage(*base_, rx, ry, rw, rh);
+    auto painting = cropGray(*coverage_, rx, ry, rw, rh);
+    if (selection_) for (int y = 0; y < rh; y++) for (int x = 0; x < rw; x++) painting->at(x, y) = uint8_t((painting->at(x, y) * selection_->at(x + rx, y + ry) + 127) / 255);
+    Image source(rw, rh);
+    const Image& src = *clone_->image;
+    for (int y = 0; y < rh; y++) {
+        Point d = pixelToDocument_.apply({rx + 0.5, y + ry + 0.5});
+        const Point dd = pixelToDocument_.applyVector({1, 0});
+        for (int x = 0; x < rw; x++, d = d + dd) {
+            const double sx = d.x + clone_->offset.x - 0.5, sy = d.y + clone_->offset.y - 0.5;
+            const int ix = int(std::floor(sx)), iy = int(std::floor(sy));
+            const double fx = sx - ix, fy = sy - iy;
+            double s[4] = {0, 0, 0, 0};
+            for (int j = 0; j < 2; j++) for (int i = 0; i < 2; i++) {
+                const int px = ix + i, py = iy + j;
+                const double w = (i ? fx : 1 - fx) * (j ? fy : 1 - fy);
+                if (w <= 0 || px < 0 || py < 0 || px >= src.width() || py >= src.height()) continue;
+                const uint8_t* p = src.pixel(px, py);
+                for (int k = 0; k < 4; k++) s[k] += p[k] * w;
+            }
+            uint8_t* out = source.pixel(x, y);
+            for (int k = 0; k < 4; k++) out[k] = uint8_t(std::lround(clamp(s[k], 0.0, 255.0)));
+        }
+    }
+    std::shared_ptr<GrayImage> visible = visible_ ? cropGray(*visible_, rx, ry, rw, rh) : nullptr;
+    healFrom(*pixels, source, *painting, float(settings_.opacity), visible.get());
+    working_ = std::make_shared<Image>(*base_);
+    for (int y = 0; y < rh; y++) std::memcpy(working_->pixel(rx, y + ry), pixels->row(y), size_t(rw) * 4);
     refreshLevels(Rect(0, 0, width_, height_));
 }
 

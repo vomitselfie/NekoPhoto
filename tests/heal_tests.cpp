@@ -2,6 +2,7 @@
 #include "check.h"
 #include "compositor/heal.h"
 #include "compositor/inpaint.h"
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -202,6 +203,26 @@ TEST_CASE(content_fill_keeps_a_flat_field_flat) {
     for (int y = 30; y < 66; y++) for (int x = 30; x < 66; x++) { hole.at(x, y) = 255; uint8_t* p = img.pixel(x, y); p[0] = p[1] = p[2] = 0; }
     REQUIRE(contentFill(img, hole));
     for (int y = 30; y < 66; y++) for (int x = 30; x < 66; x++) { const uint8_t* p = img.pixel(x, y); CHECK_EQ(int(p[0]), 90); CHECK_EQ(int(p[1]), 140); CHECK_EQ(int(p[2]), 200); CHECK_EQ(int(p[3]), 255); }
+}
+
+TEST_CASE(heal_from_takes_the_source_texture_at_the_surrounding_tone) {
+    // Destination: flat 100 with a black blemish; source: the same stripes at 200, a different tone.
+    const int w = 64, h = 64;
+    compositor::Image image(w, h), source(w, h);
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            uint8_t* d = image.pixel(x, y); d[0] = d[1] = d[2] = 100; d[3] = 255;
+            uint8_t* s = source.pixel(x, y); s[0] = s[1] = s[2] = uint8_t(200 + (x % 4 < 2 ? 10 : -10)); s[3] = 255;
+        }
+    compositor::GrayImage hole(w, h, 0);
+    for (int y = 24; y < 40; y++) for (int x = 24; x < 40; x++) { image.pixel(x, y)[0] = image.pixel(x, y)[1] = image.pixel(x, y)[2] = 0; hole.at(x, y) = 255; }
+    compositor::healFrom(image, source, hole, 1.0f);
+    // The blemish is gone: the tone meets the 100 around it, with the source's stripes on it.
+    double sum = 0; int lo = 255, hi = 0;
+    for (int y = 26; y < 38; y++) for (int x = 26; x < 38; x++) { const int v = image.pixel(x, y)[0]; sum += v; lo = std::min(lo, v); hi = std::max(hi, v); }
+    CHECK(std::abs(sum / 144 - 100) < 4);
+    CHECK(hi - lo >= 16);   // the texture came along
+    CHECK_EQ(int(image.pixel(10, 10)[0]), 100);   // outside the hole nothing moves
 }
 
 TEST_MAIN()

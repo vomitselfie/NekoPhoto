@@ -177,9 +177,10 @@ request and stops at the first error, answering the results so far and the error
 `name` the calls are one undo step and all or nothing: an error takes back what the earlier calls did
 (`rolledBack`). Nothing else runs between the calls of a batch.
 
-Painting by coordinates: `pixels.bucket` (Paint Bucket at `x`, `y` with `color`, `opacity`, `tolerance`,
+Quick Mask: `selection.quickMask` (`on` true enters, false turns the mask back into the selection; while on,
+paint the mask with `brush.stroke` and `mask: true`, white selecting). Painting by coordinates: `pixels.patch` (the selection repaired from `dx`, `dy` away), `pixels.bucket` (Paint Bucket at `x`, `y` with `color`, `opacity`, `tolerance`,
 `contiguous`, `antialias`, `allLayers`), `brush.stroke` (`points` as `[x, y]` pairs; `tool` brush,
-eraser, healing, clone with `source`, smudge, blur, sharpen or liquify, or dodge and burn (with `range`
+eraser, healing, healingbrush or clone with `source`, smudge, blur, sharpen or liquify, or dodge and burn (with `range`
 shadows, midtones or highlights and `protectTones`) and sponge (`saturate: true` to saturate), whose `opacity` is
 the Exposure or Flow; `size`,
 `hardness`, `opacity` 0..1, `color`, `mask: true` paints the active layer's

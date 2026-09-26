@@ -35,6 +35,14 @@ void AutomationServer::registerSelectionHandlers() {
     add("selection.all", [session, document](const QJsonObject&) { document(); session()->selectAll(); return QJsonObject{}; });
     add("selection.none", [session, document](const QJsonObject&) { document(); session()->deselect(); return QJsonObject{}; });
     add("selection.invert", [session, document](const QJsonObject&) { document(); session()->invertSelection(); return QJsonObject{}; });
+    add("selection.quickMask", [session, document](const QJsonObject& p) {
+        document();
+        EditorSession* s = session();
+        const bool on = has(p, "on") ? flag(p, "on", true) : !s->quickMaskActive();
+        if (on && !s->quickMaskActive() && !s->beginQuickMask()) fail("couldn't enter Quick Mask");
+        if (!on) s->endQuickMask();
+        return QJsonObject{{"quickMask", s->quickMaskActive()}, {"layer", s->quickMaskActive() && s->activeLayerId() ? qs(*s->activeLayerId()) : QString()}};
+    });
     add("selection.rect", [session, document](const QJsonObject& p) {
         const Document& doc = document();
         Rect r(num(p, "x"), num(p, "y"), num(p, "width"), num(p, "height"));

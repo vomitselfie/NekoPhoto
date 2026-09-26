@@ -329,6 +329,7 @@ void MainWindow::buildMenus() {
     needsDocument(select->addAction(tr("&All"), QKeySequence::SelectAll, this, [this] { session_->selectAll(); }));
     needsDocument(select->addAction(tr("&Deselect"), QKeySequence("Ctrl+D"), this, [this] { session_->deselect(); }));
     needsDocument(select->addAction(tr("&Inverse"), QKeySequence("Ctrl+Shift+I"), this, [this] { session_->invertSelection(); }));
+    needsDocument(select->addAction(tr("Edit in &Quick Mask Mode"), this, [this] { session_->toggleQuickMask(); }));
     select->addSeparator();
     QMenu* modify = select->addMenu(tr("&Modify"));
     needsDocument(modify->addAction(tr("&Expand…"), this, [this] { bool ok; int n = QInputDialog::getInt(this, tr("Expand Selection"), tr("Pixels"), 1, 1, 500, 1, &ok); if (ok) session_->selectionExpand(n); }));

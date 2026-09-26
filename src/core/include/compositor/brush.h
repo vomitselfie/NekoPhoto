@@ -112,6 +112,7 @@ private:
     void recomposeRows(const Rect& gridRect);   // recompose's work over whole rows of the grid
     void markDirty(const Rect& gridRect);
     void heal();
+    void healFromClone(const PixelBounds& bounds);
 
     bool valid_ = false;
     std::string error_;

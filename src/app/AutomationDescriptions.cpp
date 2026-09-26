@@ -171,6 +171,8 @@ const MethodDoc methodDocs[] = {
     {"selection.all", "Select the whole canvas.", ""},
     {"selection.none", "Deselect.", ""},
     {"selection.invert", "Invert the selection.", ""},
+    {"selection.quickMask", "Quick Mask: the selection as a mask to paint (brush.stroke with mask true, white selects; gradients, fills and filters too), then back.",
+     "on:bool Enter (true) or leave (false, the mask becoming the selection); left out, it toggles"},
     {"selection.rect", "Select a rectangle or ellipse.",
      "x:number! Left; y:number! Top; width:number! Width; height:number! Height; ellipse:bool=false An ellipse in that box; mode:<selectionMode>=replace How it combines with the current selection"},
     {"selection.polygon", "Select a polygon.", "points:array! At least three [x, y] points; mode:<selectionMode>=replace How it combines"},
@@ -197,10 +199,12 @@ const MethodDoc methodDocs[] = {
     {"brush.import", "Import brushes: Photoshop .abr, Procreate .brushset/.brush, Clip Studio .sut, or images as tips.",
      "path:string One file; paths:array Several files"},
     {"brush.stroke", "Paint a stroke through points on the active layer (or its mask); the person's tool and settings are put back afterwards.",
-     "points:array! [x, y] points in document pixels; tool:(brush|eraser|healing|clone|smudge|blur|sharpen|liquify|dodge|burn|sponge)=brush The tool (for dodge, burn and sponge opacity is the Exposure or Flow); size:number Diameter in pixels; hardness:number 0..1; opacity:number 0..1; "
-     "color:color Paint colour (default the foreground); mask:bool=false Paint the active layer's mask; erase:bool=false Erase with the brush; source:object {x, y} Clone source; "
+     "points:array! [x, y] points in document pixels; tool:(brush|eraser|healing|healingbrush|clone|smudge|blur|sharpen|liquify|dodge|burn|sponge)=brush The tool (healingbrush heals from source, as clone copies; for dodge, burn and sponge opacity is the Exposure or Flow); size:number Diameter in pixels; hardness:number 0..1; opacity:number 0..1; "
+     "color:color Paint colour (default the foreground); mask:bool=false Paint the active layer's mask; erase:bool=false Erase with the brush; source:object {x, y} Clone and Healing Brush source; "
      "preset:string A preset id from brush.presets, or round; pressure:number=0.5 Pen pressure 0..1; pressures:array One pressure per point; "
      "range:(shadows|midtones|highlights)=midtones Dodge and Burn: the tones they work on; protectTones:bool=true Dodge and Burn keep the colour; saturate:bool=false Sponge saturates instead"},
+    {"pixels.patch", "Patch: replace the selection's pixels on the active layer with those dx, dy away, their tone matched to the selection's edge.",
+     "dx:number! Horizontal offset to copy from; dy:number! Vertical offset to copy from"},
     {"pixels.bucket", "Paint Bucket: fill the pixels like the one at x, y on the active layer (or its mask), inside the selection.",
      "x:number! Document x; y:number! Document y; color:color Fill colour (default the foreground); opacity:number=1 0..1; tolerance:integer=32 0..255; "
      "contiguous:bool=true Only pixels connected to the point; antialias:bool=true Soften the edge; allLayers:bool=false Compare with the document as shown, not the active layer"},

@@ -117,10 +117,24 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
         drag_ = Drag::Move;
         return;
     }
-    case Tool::Brush: case Tool::SpotHealing: case Tool::CloneStamp:
-        if (session_->tool() == Tool::CloneStamp && (modifiers & Qt::AltModifier)) { session_->setCloneSource(doc); update(); return; }
+    case Tool::Brush: case Tool::SpotHealing: case Tool::CloneStamp: {
+        const bool sampled = session_->tool() == Tool::SpotHealing && session_->spotHealingMode == 3;
+        if ((session_->tool() == Tool::CloneStamp || sampled) && (modifiers & Qt::AltModifier)) { session_->setCloneSource(doc); update(); return; }
+        if (session_->tool() == Tool::SpotHealing && session_->spotHealingMode == 4) {
+            // Patch: drag the selection to the area to copy from.
+            const auto& d = session_->document();
+            const int x = int(std::floor(doc.x())), y = int(std::floor(doc.y()));
+            if (d->selection && d->selection->coverage && x >= 0 && y >= 0 && x < d->width && y < d->height && d->selection->coverage->at(x, y) > 127) {
+                selectionMoveOrigin_ = d->selection;
+                session_->beginEdit("Patch");
+                dragStartDocument_ = doc;
+                drag_ = Drag::Patch;
+            } else emit session_->notice(tr("Patch: select the area to repair, then drag it to the area to copy from"));
+            return;
+        }
         if (session_->beginBrush(doc, modifiers & Qt::ShiftModifier)) drag_ = Drag::Brush;
         return;
+    }
     case Tool::Smudge:
         if (session_->beginWarp(doc)) drag_ = Drag::Warp;
         return;
@@ -364,7 +378,7 @@ void CanvasWidget::move(QPointF view, Qt::MouseButtons buttons, Qt::KeyboardModi
         clickCurrent_ = doc;
         update();
         break;
-    case Drag::SelectionMove: {
+    case Drag::SelectionMove: case Drag::Patch: {
         if (!selectionMoveOrigin_ || !selectionMoveOrigin_->coverage) break;
         int dx = int(std::round(doc.x() - dragStartDocument_.x())), dy = int(std::round(doc.y() - dragStartDocument_.y()));
         const GrayImage& src = *selectionMoveOrigin_->coverage;
@@ -482,6 +496,18 @@ void CanvasWidget::release(QPointF view, Qt::MouseButton button, Qt::KeyboardMod
         else session_->addClickPrompt(clickStart_, clickBackground_);
         update();
         break;
+    case Drag::Patch: {
+        // The selection goes back where it was; its pixels come from where it was dragged to.
+        const int dx = int(std::round(doc.x() - dragStartDocument_.x())), dy = int(std::round(doc.y() - dragStartDocument_.y()));
+        if (selectionMoveOrigin_) const_cast<Document&>(*session_->document()).selection = selectionMoveOrigin_;   // inside the begin/end edit
+        selectionMoveOrigin_.reset();
+        refreshSelectionOutline();
+        session_->patchSelection(dx, dy);
+        session_->endEdit();
+        emit session_->historyChanged();
+        emit session_->selectionChanged();
+        break;
+    }
     case Drag::SelectionMove:
         selectionMoveOrigin_.reset();
         session_->endEdit();

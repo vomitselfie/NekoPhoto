@@ -24,4 +24,10 @@ void membraneFill(float* values, int channels, const uint8_t* hole, const uint8_
 /// a dab at the edge of a cut-out closes with the subject and not with the old background.
 void spotHeal(Image& image, const GrayImage& coverage, float opacity, int mode, uint32_t seed, const GrayImage* visible = nullptr);
 
+/// The Healing Brush and the Patch tool in place over premultiplied RGBA: `source` (the image's size, already
+/// placed where it lands) is copied into the pixels `coverage` marks, its tone shifted to meet the pixels around
+/// them (the difference along the edge membrane-filled across), and the result replaces the original by
+/// coverage x opacity. `visible` as for spotHeal: what it hides is not blended towards.
+void healFrom(Image& image, const Image& source, const GrayImage& coverage, float opacity, const GrayImage* visible = nullptr);
+
 } // namespace compositor

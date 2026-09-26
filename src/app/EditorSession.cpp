@@ -148,6 +148,7 @@ void EditorSession::adoptDocument(const Document& document, const QString& name)
 }
 
 bool EditorSession::saveProject(const QString& path, QString* error) {
+    endQuickMask();   // the Quick Mask layer is never saved
     if (!document_) return false;
     commitTransform();
     ProjectError err;

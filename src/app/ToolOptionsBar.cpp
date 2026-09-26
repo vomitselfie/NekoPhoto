@@ -318,7 +318,8 @@ QWidget* ToolOptionsBar::buildHealingOptions() {
     QWidget* w = row();
     auto* h = layoutOf(w);
     auto* mode = new QComboBox;
-    mode->addItems({tr("Content-Aware"), tr("Create Texture"), tr("Proximity Match")});
+    mode->addItems({tr("Content-Aware"), tr("Create Texture"), tr("Proximity Match"), tr("Sampled (Healing Brush)"), tr("Patch")});
+    mode->setToolTip(tr("Sampled heals from where you Alt-click, like Clone Stamp; Patch: drag the selection to the area to copy from"));
     connect(mode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->spotHealingMode = i; });
     h->addWidget(new QLabel(tr("Type")));
     h->addWidget(mode);

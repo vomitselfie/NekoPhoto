@@ -35,6 +35,8 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Smudge, Liquify and Blur, on pixels or masks, and Sharpen
 - Dodge, Burn (Shadows, Midtones, Highlights; Protect Tones) and Sponge (desaturate or saturate), painted through the brush with Exposure or Flow as its opacity; their curves are shaped after Photoshop's behaviour, not measured against it
 - Paint Bucket with Tolerance, Contiguous, Anti-alias and All Layers, inside the selection
+- Healing Brush (the healing tool's Sampled type: Alt-click a source, and the copied texture takes the tone around the stroke) and Patch (select the blemish, drag the selection to the area to copy from)
+- Quick Mask (Select ▸ Edit in Quick Mask Mode): the selection as a red overlay to paint with every mask tool, white selecting; saving or exporting leaves it first
 - Gradients and shapes (rectangles, rounded rectangles, ellipses)
 - Text in any installed font, editable until you paint on the layer
 - Eyedropper and colour picker

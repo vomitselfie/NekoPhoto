@@ -59,11 +59,12 @@ void AutomationServer::registerPaintHandlers() {
         QColor previousColor = s->foregroundColor;
         BlurToolMode previousBlur = s->blurMode;
         const ToningSettings previousToning = s->toning;
+        const int previousHealing = s->spotHealingMode;
         auto previousClone = s->cloneSource;
         auto previousActive = s->activeLayerId();
         const QString previousPreset = s->brushPreset;
         auto restore = [&] {
-            s->brushSettings = previousBrush; s->brushErase = previousErase; s->foregroundColor = previousColor; s->blurMode = previousBlur; s->toning = previousToning; s->cloneSource = previousClone;
+            s->brushSettings = previousBrush; s->brushErase = previousErase; s->foregroundColor = previousColor; s->blurMode = previousBlur; s->toning = previousToning; s->spotHealingMode = previousHealing; s->cloneSource = previousClone;
             s->brushPreset = previousPreset;
             if (previousActive && s->document() && s->document()->find(*previousActive)) s->selectLayer(previousActive, previousMask);
             s->selectTool(previousTool);
@@ -93,7 +94,12 @@ void AutomationServer::registerPaintHandlers() {
         };
         bool warp = false;
         if (tool == "brush" || tool == "eraser") { s->selectTool(Tool::Brush); s->brushErase = tool == "eraser" || flag(p, "erase", false); }
-        else if (tool == "healing") s->selectTool(Tool::SpotHealing);
+        else if (tool == "healing") { s->selectTool(Tool::SpotHealing); if (s->spotHealingMode > 2) s->spotHealingMode = 0; }
+        else if (tool == "healingbrush") {
+            s->selectTool(Tool::SpotHealing);
+            s->spotHealingMode = 3;
+            if (has(p, "source")) { QJsonObject src = obj(p, "source"); s->setCloneSource(QPointF(num(src, "x"), num(src, "y"))); }
+        }
         else if (tool == "clone") {
             s->selectTool(Tool::CloneStamp);
             if (has(p, "source")) { QJsonObject src = obj(p, "source"); s->setCloneSource(QPointF(num(src, "x"), num(src, "y"))); }
@@ -110,7 +116,7 @@ void AutomationServer::registerPaintHandlers() {
             s->toning.protectTones = flag(p, "protectTones", true);
             s->toning.saturate = flag(p, "saturate", false);
             warp = true;
-        } else { restore(); fail("tool must be brush, eraser, healing, clone, smudge, blur, sharpen, liquify, dodge, burn or sponge", invalidParams); }
+        } else { restore(); fail("tool must be brush, eraser, healing, healingbrush, clone, smudge, blur, sharpen, liquify, dodge, burn or sponge", invalidParams); }
         penAt(0);
         bool started = warp ? (tool == "dodge" || tool == "burn" || tool == "sponge" ? s->beginToning(pts[0]) : s->beginWarp(pts[0])) : s->beginBrush(pts[0], false);
         if (!started) { restore(); fail("couldn't start the stroke: the active layer must have pixels (clone needs a source; healing and clone can't paint a mask)"); }
@@ -139,6 +145,12 @@ void AutomationServer::registerPaintHandlers() {
         restore();
         if (!filled) fail("nothing was filled: the point must be on the canvas and inside the selection, on a pixel layer (or its mask)");
         return QJsonObject{{"filled", true}};
+    });
+    add("pixels.patch", [session, document](const QJsonObject& p) {
+        document();
+        if (!session()->patchSelection(int(std::lround(num(p, "dx"))), int(std::lround(num(p, "dy")))))
+            fail("nothing was patched: make a selection on a pixel layer and give an offset (dx, dy) to copy from");
+        return QJsonObject{{"patched", true}};
     });
     add("gradient.draw", [session, document](const QJsonObject& p) {
         if (session()->smartObjectBlocksPixels() && !flag(p, "mask", false))
