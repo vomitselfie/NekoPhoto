@@ -517,6 +517,7 @@ std::optional<VectorPath> EditorSession::shapeDraftPath() const {
 void EditorSession::finishShape() {
     if (!shapeDraft_) return;
     const std::optional<VectorPath> path = shapeDraftPath();
+    const std::optional<LiveShape> live = shapeDraftLive();
     shapeDraft_.reset();
     emit transformChanged();
     if (!canEditLayers() || !path) return;
@@ -524,12 +525,28 @@ void EditorSession::finishShape() {
     if (bounds.width * bounds.height > double(Document::pixelBudget)) { emit error(tr("That shape is too large. A shape can cover up to 100 megapixels.")); return; }
     static const char* const prefixes[] = {"Rectangle", "Ellipse", "Polygon", "Line", "Shape"};
     const std::string prefix = shapeTool.kind == VectorShapeKind::Custom ? shapeTool.custom : prefixes[int(shapeTool.kind)];
+    // With a path operation chosen (or the vector mask targeted), a component of the target instead of a new layer.
+    if (addComponentToTarget(*path, live, tr("Add Shape"))) return;
     VectorShape shape;
     shape.path = *path;
     shape.r = uint8_t(foregroundColor.red()); shape.g = uint8_t(foregroundColor.green()); shape.b = uint8_t(foregroundColor.blue());
     shape.fill = shapeTool.fill || !shapeTool.stroke.enabled;   // a shape with neither would be invisible
+    shape.fillPaint = shapeTool.fillPaint;
     shape.stroke = shapeTool.stroke;
+    if (live) shape.live.push_back(*live);
     addVectorShapeLayer(shape, QString::fromStdString(prefix));
+}
+
+std::optional<LiveShape> EditorSession::shapeDraftLive() const {
+    if (!shapeDraft_) return std::nullopt;
+    const Rect box(shapeDraft_->rect.x(), shapeDraft_->rect.y(), shapeDraft_->rect.width(), shapeDraft_->rect.height());
+    if (box.width < 1 || box.height < 1) return std::nullopt;
+    LiveShape live;
+    live.box = box;
+    if (shapeTool.kind == VectorShapeKind::Ellipse) live.kind = LiveShape::Kind::Ellipse;
+    else if (shapeTool.kind == VectorShapeKind::Rectangle) { const double r = std::max(0.0, shapeTool.cornerRadius); live.radii = {r, r, r, r}; }
+    else return std::nullopt;
+    return live;
 }
 
 bool EditorSession::addVectorShapeLayer(const VectorShape& shape, const QString& name) {

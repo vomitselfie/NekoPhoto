@@ -1,7 +1,9 @@
 // Paths: the Pen and Direct Selection tools and the Paths panel's commands (compositor/vectorlayer.h). The target
-// path is the Paths panel's choice, or else the active vector shape layer's path.
+// path is the Paths panel's choice, else the active layer's vector mask when it is targeted, else the active vector
+// shape layer's path.
 #include "EditorSession.h"
 #include "QtGeometry.h"
+#include "TextLayer.h"
 #include "compositor/selection.h"
 
 using namespace compositor;
@@ -42,13 +44,16 @@ void EditorSession::penFinish(bool close) {
     emit transformChanged();
     if (sub.knots.size() < 2 || !canEditLayers()) return;
     sub.closed = close || penMode == PenMode::Shape;   // a shape's outline is always closed
-    if (penMode == PenMode::Path) {
-        // The chosen path, if it is still there (undo may have taken it away); else the Work Path.
+    VectorPath added;
+    added.subpaths.push_back(sub);
+    if (penMode == PenMode::Path && !vectorMaskTargeted()) {
+        // The chosen path, if it is still there (undo may have taken it away); else the Work Path. The new outline
+        // is a component of it, combined by the path operation (Combine when none is chosen).
         const bool chosen = activePathId_ && documentPath(*document_, *activePathId_);
         const uint16_t id = chosen ? *activePathId_ : kWorkPathId;
         VectorPath path;
         if (auto existing = documentPath(*document_, id)) path = existing->path;
-        path.subpaths.push_back(sub);
+        addShapeComponent(path, added, pathOp.value_or(VectorPath::Op::Add));
         beginEdit(chosen ? "Add Subpath" : "Work Path");
         setDocumentPath(*document_, id, "", path);
         endEdit();
@@ -57,17 +62,199 @@ void EditorSession::penFinish(bool close) {
         emit pathsChanged();
         return;
     }
-    if (penAddsToShape) if (auto shape = activeVectorShape()) {
-        shape->path.subpaths.push_back(sub);
-        setActiveVectorShape(*shape, tr("Add Subpath"));
-        return;
-    }
+    if (addComponentToTarget(added, std::nullopt, tr("Add Subpath"))) return;
     VectorShape shape;
-    shape.path.subpaths.push_back(sub);
+    shape.path = added;
     shape.r = uint8_t(foregroundColor.red()); shape.g = uint8_t(foregroundColor.green()); shape.b = uint8_t(foregroundColor.blue());
     shape.fill = shapeTool.fill || !shapeTool.stroke.enabled;
+    shape.fillPaint = shapeTool.fillPaint;
     shape.stroke = shapeTool.stroke;
     addVectorShapeLayer(shape, QStringLiteral("Shape"));
+}
+
+bool EditorSession::addComponentToTarget(const VectorPath& path, const std::optional<LiveShape>& live, const QString& name) {
+    if (!canEditLayers()) return false;
+    if (vectorMaskTargeted()) {
+        // Into the layer's vector mask (an empty one, Reveal All, becomes just this outline).
+        Layer* layer = activeLayerMutable();
+        VectorPath mask = layerVectorMask(*layer, *document_).value_or(VectorPath{});
+        addShapeComponent(mask, path, pathOp.value_or(VectorPath::Op::Add));
+        beginEdit(name);
+        setLayerVectorMask(*layer, *document_, mask);
+        endEdit();
+        notifyDocument();
+        emit transformChanged();
+        return true;
+    }
+    if (!pathOp) return false;
+    auto shape = activeVectorShape();
+    if (!shape) return false;
+    const int32_t group = addShapeComponent(shape->path, path, *pathOp);
+    if (live) { LiveShape l = *live; l.group = group; shape->live.push_back(l); }
+    return setActiveVectorShape(*shape, name);
+}
+
+void EditorSession::setSelectedSubpath(std::optional<int> index) {
+    if (index == selectedSubpath_) return;
+    selectedSubpath_ = index;
+    emit toolChanged();
+}
+
+bool EditorSession::setSelectedSubpathOp(VectorPath::Op op) {
+    auto path = targetPath();
+    if (!path || !selectedSubpath_ || *selectedSubpath_ < 0 || *selectedSubpath_ >= int(path->subpaths.size())) return false;
+    if (path->subpaths[size_t(*selectedSubpath_)].op == op) return true;
+    setComponentOp(*path, *selectedSubpath_, op);
+    return setTargetPath(*path, tr("Path Operation"));
+}
+
+bool EditorSession::mergeTargetComponents() {
+    auto path = targetPath();
+    if (!path || path->subpaths.empty()) return false;
+    const VectorPath merged = mergeShapeComponents(*path);
+    if (merged.subpaths.empty()) return false;
+    selectedSubpath_.reset();
+    return setTargetPath(merged, tr("Merge Shape Components"));
+}
+
+// ---- Vector masks on layers -------------------------------------------------------------------------------------
+
+bool EditorSession::vectorMaskTargeted() const {
+    const Layer* layer = activeLayer();
+    return layer && document_ && vectorMaskTarget_ == activeLayerId_ && hasLayerVectorMask(*layer);
+}
+
+bool EditorSession::targetVectorMask(const Uuid& id) {
+    if (!document_) return false;
+    const Layer* layer = document_->find(id);
+    if (!layer || !hasLayerVectorMask(*layer)) return false;
+    selectLayer(id, false);
+    vectorMaskTarget_ = id;
+    activePathId_.reset();
+    selectedSubpath_.reset();
+    emit layersChanged();
+    emit pathsChanged();
+    emit transformChanged();
+    return true;
+}
+
+bool EditorSession::addVectorMask(VectorMaskKind kind, QString* error) {
+    auto fail = [&](const QString& why) { if (error) *error = why; return false; };
+    if (!canEditLayers()) return fail(tr("The document is busy."));
+    Layer* layer = activeLayerMutable();
+    if (!layer) return fail(tr("No active layer."));
+    if (layer->isGroup || layer->adjustment) return fail(tr("A vector mask goes on a layer here, not on a folder or an adjustment layer."));
+    if (isVectorShapeLayer(*layer)) return fail(tr("A shape layer's path is its vector mask already."));
+    if (hasLayerVectorMask(*layer)) return fail(tr("The layer has a vector mask already."));
+    VectorPath path;
+    if (kind == VectorMaskKind::HideAll) path.inverted = true;
+    if (kind == VectorMaskKind::CurrentPath) {
+        auto chosen = activePathId_ ? documentPath(*document_, *activePathId_) : std::nullopt;
+        if (!chosen || chosen->path.subpaths.empty()) return fail(tr("Choose a path in the Paths panel first."));
+        path = chosen->path;
+    }
+    beginEdit(kind == VectorMaskKind::CurrentPath ? "Add Vector Mask" : kind == VectorMaskKind::HideAll ? "Hide All Vector Mask" : "Reveal All Vector Mask");
+    setLayerVectorMask(*layer, *document_, path);
+    endEdit();
+    vectorMaskTarget_ = layer->id;
+    activePathId_.reset();
+    notifyDocument();
+    emit pathsChanged();
+    emit transformChanged();
+    return true;
+}
+
+bool EditorSession::deleteVectorMask() {
+    if (!canEditLayers()) return false;
+    Layer* layer = activeLayerMutable();
+    if (!layer || !hasLayerVectorMask(*layer)) return false;
+    beginEdit("Delete Vector Mask");
+    setLayerVectorMask(*layer, *document_, std::nullopt);
+    endEdit();
+    vectorMaskTarget_.reset();
+    notifyDocument();
+    emit transformChanged();
+    return true;
+}
+
+bool EditorSession::setVectorMaskPath(const Uuid& id, const VectorPath& path, QString* error) {
+    auto fail = [&](const QString& why) { if (error) *error = why; return false; };
+    if (!canEditLayers()) return fail(tr("The document is busy."));
+    Layer* layer = document_->find(id);
+    if (!layer) return fail(tr("No such layer."));
+    if (layer->isGroup || layer->adjustment) return fail(tr("A vector mask goes on a layer here, not on a folder or an adjustment layer."));
+    if (isVectorShapeLayer(*layer)) return fail(tr("A shape layer's path is its vector mask: change it with shape.set."));
+    beginEdit(hasLayerVectorMask(*layer) ? "Edit Vector Mask" : "Add Vector Mask");
+    setLayerVectorMask(*layer, *document_, path);
+    endEdit();
+    notifyDocument();
+    emit transformChanged();
+    return true;
+}
+
+// ---- Text to paths ----------------------------------------------------------------------------------------------
+
+bool EditorSession::textToWorkPath(const Uuid& id, QString* error) {
+    if (!canEditLayers()) { if (error) *error = tr("The document is busy."); return false; }
+    const Layer* layer = document_->find(id);
+    if (!layer) { if (error) *error = tr("No such layer."); return false; }
+    auto path = textLayerOutline(*layer, error);
+    if (!path) return false;
+    return storePath(kWorkPathId, QString(), *path) != 0;
+}
+
+bool EditorSession::textToShape(const Uuid& id, QString* error) {
+    if (!canEditLayers()) { if (error) *error = tr("The document is busy."); return false; }
+    const Layer* text = document_->find(id);
+    if (!text) { if (error) *error = tr("No such layer."); return false; }
+    auto path = textLayerOutline(*text, error);
+    if (!path) return false;
+    // The text layer becomes a shape layer in its place: its name, look and style stay, its type does not.
+    Layer layer = *text;
+    if (layer.psdCarry) {
+        auto carry = std::make_shared<PsdLayerCarry>(*layer.psdCarry);
+        carry->blocks.erase(std::remove_if(carry->blocks.begin(), carry->blocks.end(), [](const PsdBlock& b) { return b.key == "TySh" || b.key == "tySh"; }), carry->blocks.end());
+        layer.psdCarry = carry;
+    }
+    layer.extraJson.clear();
+    VectorShape shape;
+    shape.path = *path;
+    auto byte = [](double v) { return uint8_t(std::clamp(std::lround(v * 255), 0L, 255L)); };
+    shape.r = byte(layer.text->red); shape.g = byte(layer.text->green); shape.b = byte(layer.text->blue);
+    shape.fill = true;
+    shape.stroke.enabled = false;
+    setVectorShape(layer, *document_, shape);
+    const int index = document_->indexOf(id);
+    if (index < 0) return false;
+    endOpacityEdit();
+    beginEdit("Convert to Shape");
+    document_->layers[size_t(index)] = layer;
+    setActiveLayer(layer.id);
+    endEdit();
+    notifyDocument();
+    return true;
+}
+
+// ---- Live shape properties ------------------------------------------------------------------------------------
+
+std::vector<LiveShape> EditorSession::activeLiveShapes() const {
+    auto shape = activeVectorShape();
+    return shape ? shape->live : std::vector<LiveShape>{};
+}
+
+bool EditorSession::setActiveLiveShape(const LiveShape& live) {
+    auto shape = activeVectorShape();
+    if (!shape) return false;
+    auto entry = std::find_if(shape->live.begin(), shape->live.end(), [&](const LiveShape& l) { return l.group == live.group; });
+    if (entry == shape->live.end() || !(live.box.width > 0) || !(live.box.height > 0)) return false;
+    // The group's subpath redrawn from the new properties, where it was and with its operation.
+    auto at = std::find_if(shape->path.subpaths.begin(), shape->path.subpaths.end(), [&](const VectorPath::Subpath& s) { return s.group == live.group; });
+    if (at == shape->path.subpaths.end()) return false;
+    VectorPath::Subpath made = livePath(live).subpaths[0];
+    made.op = at->op;
+    *at = made;
+    *entry = live;
+    return setActiveVectorShape(*shape, tr("Live Shape Properties"));
 }
 
 // ---- The target path --------------------------------------------------------------------------------------------
@@ -78,6 +265,8 @@ void EditorSession::selectPath(std::optional<uint16_t> id) {
     if (id && (!document_ || !documentPath(*document_, *id))) id.reset();
     if (id == activePathId_) return;
     activePathId_ = id;
+    selectedSubpath_.reset();
+    if (id) vectorMaskTarget_.reset();
     emit pathsChanged();
     emit transformChanged();
 }
@@ -85,6 +274,7 @@ void EditorSession::selectPath(std::optional<uint16_t> id) {
 std::optional<VectorPath> EditorSession::targetPath() const {
     if (!document_) return std::nullopt;
     if (activePathId_) if (auto p = documentPath(*document_, *activePathId_)) return p->path;
+    if (vectorMaskTargeted()) if (auto mask = layerVectorMask(*activeLayer(), *document_)) return mask;
     if (auto shape = activeVectorShape()) return shape->path;
     return std::nullopt;
 }
@@ -99,6 +289,7 @@ bool EditorSession::beginPathEdit(const QString& name) {
 void EditorSession::updatePathEdit(const VectorPath& path) {
     if (!pathEditing_ || !document_) return;
     if (activePathId_ && documentPath(*document_, *activePathId_)) setDocumentPath(*document_, *activePathId_, "", path);
+    else if (vectorMaskTargeted()) setLayerVectorMask(*activeLayerMutable(), *document_, path);
     else if (Layer* layer = activeLayerMutable(); layer && isVectorShapeLayer(*layer)) {
         auto shape = vectorShapeOf(*layer, *document_);
         if (!shape) return;
@@ -243,6 +434,7 @@ bool EditorSession::pathToShapeLayer(uint16_t id) {
     for (auto& s : shape.path.subpaths) s.closed = true;
     shape.r = uint8_t(foregroundColor.red()); shape.g = uint8_t(foregroundColor.green()); shape.b = uint8_t(foregroundColor.blue());
     shape.fill = shapeTool.fill || !shapeTool.stroke.enabled;
+    shape.fillPaint = shapeTool.fillPaint;
     shape.stroke = shapeTool.stroke;
     return addVectorShapeLayer(shape, QString::fromStdString(p->name));
 }

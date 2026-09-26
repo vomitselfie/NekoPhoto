@@ -345,6 +345,18 @@ void MainWindow::buildMenus() {
     needsDocument(mask->addAction(tr("Invert"), this, [this] { session_->invertMask(); }));
     needsDocument(mask->addAction(tr("Apply"), this, [this] { session_->applyMask(); }));
     needsDocument(mask->addAction(tr("Delete"), this, [this] { session_->deleteLayerMask(); }));
+    // Photoshop's Layer > Vector Mask: a path that cuts the layer, edited with the Pen and Direct Selection.
+    QMenu* vectorMask = layer->addMenu(tr("&Vector Mask"));
+    auto addVector = [this](EditorSession::VectorMaskKind kind) {
+        QString error;
+        if (!session_->addVectorMask(kind, &error) && !error.isEmpty()) QMessageBox::information(this, tr("Vector Mask"), error);
+    };
+    needsDocument(vectorMask->addAction(tr("Reveal All"), this, [addVector] { addVector(EditorSession::VectorMaskKind::RevealAll); }));
+    needsDocument(vectorMask->addAction(tr("Hide All"), this, [addVector] { addVector(EditorSession::VectorMaskKind::HideAll); }));
+    needsDocument(vectorMask->addAction(tr("Current Path"), this, [addVector] { addVector(EditorSession::VectorMaskKind::CurrentPath); }));
+    vectorMask->addSeparator();
+    needsDocument(vectorMask->addAction(tr("Edit"), this, [this] { if (session_->activeLayerId()) session_->targetVectorMask(*session_->activeLayerId()); }));
+    needsDocument(vectorMask->addAction(tr("Delete"), this, [this] { session_->deleteVectorMask(); }));
     needsDocument(layer->addAction(tr("Create / Release &Clipping Mask"), QKeySequence("Ctrl+Alt+G"), this, [this] { if (session_->activeLayerId()) session_->toggleClippingMask(*session_->activeLayerId()); }));
     layer->addSeparator();
     needsDocument(layer->addAction(tr("Bring Forward"), QKeySequence("Ctrl+]"), this, [this] { session_->moveActiveLayer(1); }));
@@ -356,6 +368,17 @@ void MainWindow::buildMenus() {
     needsDocument(sampling->addAction(tr("High Quality"), this, [this] { session_->setLayerSampling(Sampling::High); }));
     needsDocument(sampling->addAction(tr("Smooth"), this, [this] { session_->setLayerSampling(Sampling::Smooth); }));
     needsDocument(sampling->addAction(tr("Nearest Neighbour"), this, [this] { session_->setLayerSampling(Sampling::Nearest); }));
+
+    // Photoshop's Type menu: the active text layer's outlines as a path or a shape.
+    QMenu* type = menuBar()->addMenu(tr("&Type"));
+    auto fromText = [this](bool shape) {
+        QString error;
+        const auto id = session_->activeLayerId();
+        const bool ok = id && (shape ? session_->textToShape(*id, &error) : session_->textToWorkPath(*id, &error));
+        if (!ok) QMessageBox::information(this, shape ? tr("Convert to Shape") : tr("Create Work Path"), error.isEmpty() ? tr("Choose a text layer first.") : error);
+    };
+    needsDocument(type->addAction(tr("Create &Work Path"), this, [fromText] { fromText(false); }));
+    needsDocument(type->addAction(tr("Convert to &Shape"), this, [fromText] { fromText(true); }));
 
     // Everything about the selection in one place, as Photoshop's Select menu: the whole-canvas commands,
     // then Modify, then loading a layer's pixels or mask as the selection.
