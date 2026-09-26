@@ -86,6 +86,8 @@ qt_add_executable(nekophoto
     PixelDialog.h
     PixelDialog.cpp
     ContentFillDialog.cpp
+    ContentAwareScaleDialog.h
+    ContentAwareScaleDialog.cpp
     Gmic.h
     Gmic.cpp
     GmicDialog.h

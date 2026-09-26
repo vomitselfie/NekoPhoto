@@ -5,7 +5,7 @@ see the header of `compositor/inpaint.h`) and on the healing membrane (`composit
 
 ## Content-Aware Fill
 
-Edit > Content-Aware Fill... (Shift+F5) needs a selection on a visible pixel layer. The dialog shows the document
+Edit > Content-Aware Fill… (Shift+F5) needs a selection on a visible pixel layer. The dialog shows the document
 with the selection in red and the sampling area in green:
 
 - **Auto** copies from the neighbourhood the fill chooses itself: the selection with twice its size around it,

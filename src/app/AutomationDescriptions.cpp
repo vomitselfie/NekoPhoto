@@ -188,6 +188,9 @@ const MethodDoc methodDocs[] = {
     {"pixels.contentAwareMove", "Content-Aware Move: move the selected pixels of the active layer dx, dy; the hole they leave is filled from its surroundings and the patch blended into its new place. The selection follows.",
      "dx:number! Horizontal offset; dy:number! Vertical offset; mode:(move|extend)=move Extend leaves the original and adds the copy; "
      "adaptation:integer=2 0 very strict .. 4 very loose: how far the patch's tone adapts and how wide a seam is blended"},
+    {"pixels.contentAwareScale", "Content-Aware Scale the active layer by seam carving: low-detail seams are removed or duplicated so the subject keeps its proportions.",
+     "width:integer New width in pixels; height:integer New height in pixels; widthPercent:number=100 Or the width in percent; heightPercent:number=100 Or the height in percent; "
+     "protectSelection:bool=false Keep the selected pixels"},
     {"pixels.gmic", "Run a G'MIC command line on the active layer, inside the selection. Only catalogue filters and common built-ins followed by numbers are allowed.",
      "command:string! E.g. \"fx_bokeh 3,8,0,30\", see gmic.filters; timeoutMs:integer=300000 Give up after this long"},
     {"gmic.filters", "The G'MIC filter catalogue with parameters and defaults; filters that do not work here are left out.",

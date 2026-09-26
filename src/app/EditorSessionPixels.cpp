@@ -1,10 +1,11 @@
-// EditorSession: Moving selected pixels, the clipboard and Content-Aware Fill.
+#include "compositor/seamcarve.h"
 #include "EditorSession.h"
 #include "ImageConvert.h"
 #include "QtGeometry.h"
 #include "compositor/filters.h"
 #include "compositor/inpaint.h"
 #include "compositor/contentmove.h"
+#include "compositor/seamcarve.h"
 #include <QApplication>
 #include <QClipboard>
 #include <QMimeData>
@@ -372,6 +373,26 @@ bool EditorSession::contentAwareMove(int dx, int dy, QString* errorText) {
     endEdit();
     notifyDocument();
     emit selectionChanged();
+    return true;
+}
+
+bool EditorSession::contentAwareScale(int width, int height, bool protectSelection, QString* errorText) {
+    if (!canAdjustPixels()) { if (errorText) *errorText = tr("Select a visible image layer to scale."); return false; }
+    Layer* layer = activeLayerMutable();
+    const ImagePtr src = layer->asset->image;
+    if (!Document::validDimension(width) || !Document::validDimension(height) || (long long)width * height > Document::pixelBudget) {
+        if (errorText) *errorText = tr("The size must be between 1 and %1 pixels a side, 100 megapixels at most.").arg(maxImageSide);
+        return false;
+    }
+    std::shared_ptr<GrayImage> protect;
+    if (protectSelection && document_->selection && document_->selection->coverage) protect = selectionOnGrid(layer->transform, src->width(), src->height());
+    SeamCarveOptions options;
+    options.protect = protect.get();
+    auto out = std::make_shared<Image>(seamCarve(*src, width, height, options));
+    if (out->isEmpty()) { if (errorText) *errorText = tr("Could not scale the layer."); return false; }
+    LayerTransform placed = layer->transform;
+    placed.size = {placed.size.width * width / src->width(), placed.size.height * height / src->height()};
+    commitPixels(out, placed, "Content-Aware Scale");
     return true;
 }
 

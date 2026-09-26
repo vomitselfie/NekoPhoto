@@ -1,5 +1,6 @@
 // The main window's menus, tool rail and colour swatches.
 #include "ContentFillDialog.h"
+#include "ContentAwareScaleDialog.h"
 #include "MainWindow.h"
 #include <QDialog>
 #include <QHBoxLayout>
@@ -182,10 +183,11 @@ void MainWindow::buildMenus() {
     needsDocument(edit->addAction(tr("Fill with Background"), QKeySequence("Ctrl+Backspace"), this, [this] { session_->fillSelection(session_->backgroundColor); }));
     QAction* clear = needsDocument(edit->addAction(tr("Clear"), QKeySequence(Qt::Key_Delete), this, [this] { if (session_->document() && session_->document()->selection) session_->clearSelectionPixels(); else deleteSelectedLayers(); }));
     clear->setShortcuts({QKeySequence(Qt::Key_Delete), QKeySequence(Qt::Key_Backspace)});
-    needsDocument(edit->addAction(tr("Content-Aware Fill..."), QKeySequence("Shift+F5"), this, [this] {
+    needsDocument(edit->addAction(tr("Content-Aware Fill…"), QKeySequence("Shift+F5"), this, [this] {
         if (!session_->canAdjustPixels() || !session_->document()->selection || !session_->document()->selection->coverage) { showError(tr("Content-Aware Fill"), tr("Select a visible image layer and an area to fill.")); return; }
         (new ContentFillDialog(session_, this))->show();
     }));
+    needsDocument(edit->addAction(tr("Content-Aware Scale…"), QKeySequence("Ctrl+Alt+Shift+C"), this, [this] { (new ContentAwareScaleDialog(session_, this))->show(); }));
 
     edit->addSeparator();
     edit->addAction(tr("&Preferences…"), QKeySequence::Preferences, this, &MainWindow::showPreferences);

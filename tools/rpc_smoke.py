@@ -390,6 +390,9 @@ def main():
     rpc.call("history.undo")
     assert rpc.call("pixels.contentAwareMove", dx=-20, dy=0, mode="extend")["mode"] == "extend"
     rpc.call("history.undo")
+    scaled = rpc.call("pixels.contentAwareScale", widthPercent=80, protectSelection=True)
+    assert scaled["width"] >= 1 and scaled["height"] >= 1, scaled
+    rpc.call("history.undo")
     rpc.call("selection.none")
     # Smart objects: place a file, convert layers, edit the contents in their tab, put them back, rasterize.
     import tempfile

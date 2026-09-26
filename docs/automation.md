@@ -165,7 +165,7 @@ Pixels of the active layer, inside the selection: `pixels.adjust`,
 `include` rectangles, the whole canvas when none, less the `exclude` rectangles; `output`: `current` or `new`, only
 the filled pixels on a new layer, whose id comes back as `layer`), `pixels.contentAwareMove` (Content-Aware Move:
 the selection's pixels move `dx`, `dy`, the hole is filled and the patch blended in; `mode` `move` or `extend`,
-`adaptation` 0 very strict to 4 very loose; the selection follows), `pixels.removeBackground` (`refine`, and then `refineEdges`,
+`adaptation` 0 very strict to 4 very loose; the selection follows), `pixels.contentAwareScale` (Edit > Content-Aware Scale by seam carving: `width`/`height` in pixels or `widthPercent`/`heightPercent`, `protectSelection` keeps the selected pixels; see [content-aware-scale.md](content-aware-scale.md)), `pixels.removeBackground` (`refine`, and then `refineEdges`,
 `contrast`, `shiftEdge`, `matting`: the band width in pixels in which hair opacity is solved,
 `cleanup`: half-transparent specks touching no edge go, `decontaminate`: the edge pixels take the
 subject's own colour; both default true; `detail`: the model runs again on full-resolution windows

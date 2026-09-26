@@ -425,6 +425,9 @@ public:
     bool contentAwareMove(int dx, int dy, QString* error);
     bool contentMoveExtend = false;
     int contentMoveAdaptation = 2;   // 0 very strict .. 4 very loose
+    /// Content-Aware Scale of the active layer's pixels to `width` x `height` by seam carving (seamcarve.h); with
+    /// `protectSelection`, the selected pixels are kept. The layer's origin stays; its size follows the pixels.
+    bool contentAwareScale(int width, int height, bool protectSelection, QString* error);
     /// Dragging a layer between projects: `id` (a folder with its contents) copied from `source` into this
     /// document, centred on `at` (or the canvas); clipping to layers left behind is baked in. A first copy
     /// into an empty tab makes the canvas the source's size.
