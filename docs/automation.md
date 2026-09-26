@@ -137,6 +137,11 @@ apply, link), `layers.merge`, `layers.group`, `adjustments.set`.
 `layers.style` gives a layer's effects (Photoshop's layer style) as JSON, every kind a list with switched-off
 effects kept (`enabled` false); `layers.setStyle` replaces them with an object of that shape (settings left out take
 Photoshop's defaults, `{}` clears the style). The style is written into the PSD as Photoshop's own `lfx2`.
+`layers.applyStyle` (`id`, `style`: an imported style preset's name) gives a layer a style preset, with the patterns it
+uses added to the document. `presets.import` (`path` or `paths`: Photoshop `.asl` styles, `.pat` patterns, `.grd`
+gradients) fills the preset library and answers the names imported, `patternsAddedToDocument` (a `.pat`'s patterns join
+the open document) and notes; `presets.list` (`kind` styles, gradients or patterns) lists it, gradients with their
+stops; `presets.remove` (`kind` style, gradient or pattern, `name`) takes one out ([presets.md](presets.md)).
 Hue/Saturation settings accept `"saturationCurve": "photoshop"` (+100 saturates fully,
 -100 greys out, lightness kept) beside the default `"scale"`.
 
@@ -197,7 +202,7 @@ a pen would), `brush.presets` (the MyPaint presets: `id`, `name`, `group`,
 `.abr`, Procreate `.brushset`/`.brush`, Clip Studio `.sut` or images as tips;
 answers the new preset ids and notes on what was approximated), `gradient.draw` (`x0, y0, x1, y1`, `shape` linear or radial, `style`
 foreground-to-transparent or foreground-to-background, `reversed`, `opacity`,
-`foreground`, `background`), `shape.draw` (a new shape layer: `kind` rectangle
+`foreground`, `background`, `preset`: an imported gradient's name, used instead of `style`), `shape.draw` (a new shape layer: `kind` rectangle
 or ellipse, `x, y, width, height`, `cornerRadius`, `color`). The person's tool,
 brush settings and colours are restored afterwards.
 

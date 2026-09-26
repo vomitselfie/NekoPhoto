@@ -1,6 +1,7 @@
 // Automation methods: layers. Registered from AutomationServer::registerHandlers (Automation.cpp).
 #include "Automation.h"
 #include "AutomationHandlers.h"
+#include "PresetLibrary.h"
 #include "compositor/warpmesh.h"
 #include "ImageConvert.h"
 #include "compositor/render.h"
@@ -159,6 +160,15 @@ void AutomationServer::registerLayersHandlers() {
         if (!p.value("style").isObject() || !layerStyleFromJson(json.toStdString(), style, &error))
             fail(QString::fromStdString(error.empty() ? "style must be an object, shaped as layers.style shows" : error), invalidParams);
         if (!session()->applyLayerStyle(id, style)) fail("this layer cannot have effects (an adjustment layer, or a locked document)");
+        return QJsonDocument::fromJson(QByteArray::fromStdString(layerStyleToJson(session()->layerStyle(id)))).object();
+    });
+    add("layers.applyStyle", [session, layer](const QJsonObject& p) {
+        const Uuid id = layer(p).id;
+        const StylePreset* preset = PresetLibrary::instance().findStyle(str(p, "style"));
+        if (!preset) fail("no style preset named " + str(p, "style") + " (presets.list shows them)", invalidParams);
+        const StylePreset copy = *preset;
+        if (!session()->applyStylePreset(id, copy.style, PresetLibrary::instance().patternsFor(copy.style)))
+            fail("this layer cannot have effects (an adjustment layer, or a locked document)");
         return QJsonDocument::fromJson(QByteArray::fromStdString(layerStyleToJson(session()->layerStyle(id)))).object();
     });
     add("layers.select", [session, layer](const QJsonObject& p) {

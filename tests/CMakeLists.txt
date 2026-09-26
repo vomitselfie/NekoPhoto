@@ -162,3 +162,7 @@ add_test(NAME affinity_tests COMMAND affinity_tests)
 # Not a test: dumps what the Affinity import makes of files (see the file's header).
 add_executable(affinity_check affinity_check.cpp)
 target_link_libraries(affinity_check PRIVATE compositor::core compositor_warnings)
+
+add_executable(presets_tests presets_tests.cpp)
+target_link_libraries(presets_tests PRIVATE compositor::core compositor_warnings)
+add_test(NAME presets_tests COMMAND presets_tests)

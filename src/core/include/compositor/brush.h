@@ -6,6 +6,7 @@
 // so overlapping dabs never exceed the stroke's opacity.
 #pragma once
 #include "document.h"
+#include "shape.h"
 #include <vector>
 
 namespace compositor {
@@ -57,6 +58,8 @@ public:
 
     /// Replaces this edit with a gradient over the whole canvas (or the selection) on the original pixels.
     void fillGradientOver(int shape, Point from, Point to, const float startColor[4], const float endColor[4], double opacity);
+    /// The same with any stops (a multi-stop gradient preset).
+    void fillGradientOver(int shape, Point from, Point to, const GradientStops& stops, double opacity);
     /// Fills the selection (or the whole canvas) with a colour (straight 0..1; the red channel on masks).
     void fillColor(double red, double green, double blue);
     bool isValid() const { return valid_; }

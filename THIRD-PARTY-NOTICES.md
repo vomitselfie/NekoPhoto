@@ -30,7 +30,7 @@ the AppImage and the tarball) or in `Contents/Resources/licenses/` (macOS).
 | Protocol Buffers, as bundled with OpenCV's dnn module | BSD-3-Clause | [protobuf.txt](LICENSES/protobuf.txt) |
 | Berkeley SoftFloat 3c, as bundled with OpenCV's core module | BSD-3-Clause | [Berkeley-SoftFloat.txt](LICENSES/Berkeley-SoftFloat.txt) |
 | DLPack headers, as bundled with OpenCV's dnn module | Apache-2.0 | [Apache-2.0.txt](LICENSES/Apache-2.0.txt) |
-| [Patchy](https://github.com/SethRobinson/Patchy) PSD primitives, binary I/O and Photoshop descriptors (`src/third_party/patchy_psd`), (c) 2026 Seth A. Robinson; its documented Photoshop write rules also inform `src/core/src/psd_writer.cpp` | MIT | [Patchy-MIT.txt](LICENSES/Patchy-MIT.txt) |
+| [Patchy](https://github.com/SethRobinson/Patchy) PSD primitives, binary I/O and Photoshop descriptors (`src/third_party/patchy_psd`), (c) 2026 Seth A. Robinson; its documented Photoshop write rules also inform `src/core/src/psd_writer.cpp`, and its preset-file codecs are ported in `src/core/src/presets.cpp` | MIT | [Patchy-MIT.txt](LICENSES/Patchy-MIT.txt) |
 | [Little CMS](https://www.littlecms.com) 2.17, core (`src/third_party/lcms2`), © Marti Maria Saguer: CMYK files through their own colour profiles | MIT | [LittleCMS-MIT.txt](LICENSES/LittleCMS-MIT.txt) |
 | [nlohmann/json](https://github.com/nlohmann/json) (`src/third_party/nlohmann`) | MIT | [nlohmann-json.txt](LICENSES/nlohmann-json.txt) |
 | [Lucide](https://lucide.dev) icons (`src/app/icons`) | ISC | [Lucide-ISC.txt](LICENSES/Lucide-ISC.txt) |

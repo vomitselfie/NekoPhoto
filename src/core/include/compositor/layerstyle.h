@@ -149,6 +149,11 @@ bool layerStyleFromJson(const std::string& json, LayerStyle& out, std::string* e
 /// The document's patterns (Photoshop 'Patt' blocks), by id, straight RGBA; parsed once per document carry.
 struct PatternTile { int width = 0, height = 0; std::vector<uint8_t> rgba; };
 std::shared_ptr<const std::map<std::string, PatternTile>> documentPatterns(const Document& document);
+/// The patterns of one 'Patt'-shaped payload (length-prefixed pattern records), by id.
+std::map<std::string, PatternTile> parsePatternBlock(const std::vector<uint8_t>& payload);
+/// An effects block in the 'lfx2' shape (u32 version, u32 16, descriptor) as an editable style, the effects that are
+/// off kept (a style preset's 'Lefx'); none when it cannot be read. Global-light flags stay as they are.
+std::optional<LayerStyle> parseLayerStyleBlock(const std::vector<uint8_t>& block);
 
 /// The document's global light (image resources 1037 and 1049), in degrees.
 void documentGlobalLight(const Document& document, float& angle, float& altitude);

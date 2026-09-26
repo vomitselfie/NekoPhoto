@@ -13,6 +13,7 @@
 #include "compositor/filters.h"
 #include "compositor/document.h"
 #include "compositor/layerstyle.h"
+#include "compositor/presets.h"
 #include "compositor/toning.h"
 #include "compositor/vectorlayer.h"
 #include "compositor/smartfilter.h"
@@ -78,6 +79,8 @@ struct TransformEdit {
 struct GradientSettings {
     compositor::GradientShape shape = compositor::GradientShape::Linear;
     GradientStyle style = GradientStyle::ForegroundToTransparent;
+    /// An imported gradient preset by name (PresetLibrary); empty for `style`.
+    QString preset;
     bool reversed = false;
     double opacity = 1;
 };
@@ -486,6 +489,10 @@ public:
     void endLayerStyleEdit(bool keep);
     /// Gives a layer `style` as one undo step (automation's layers.setStyle).
     bool applyLayerStyle(const compositor::Uuid& id, const compositor::LayerStyle& style);
+    /// A style preset on a layer as one undo step ("Apply Style"): the document first gets the patterns it uses.
+    bool applyStylePreset(const compositor::Uuid& id, const compositor::LayerStyle& style, const std::vector<compositor::PatternPreset>& patterns);
+    /// Gives the document patterns it does not have (one undo step); how many were added.
+    int addPatterns(const std::vector<compositor::PatternPreset>& patterns);
     /// Copy, Paste and Clear Layer Style on the active layer.
     void copyLayerStyle();
     bool canPasteLayerStyle() const { return styleClipboard_.has_value(); }
@@ -735,6 +742,7 @@ private:
     bool adjustmentEditing_ = false;
     std::optional<compositor::Uuid> styleEditLayer_;
     std::shared_ptr<const compositor::PsdLayerCarry> styleEditCarry_;
+    std::shared_ptr<const compositor::PsdDocumentCarry> styleEditDocumentCarry_;   // put back on Cancel (patterns the preview added)
     std::optional<compositor::LayerStyle> styleClipboard_;
     std::optional<compositor::VectorPath::Subpath> penDraft_;
     std::optional<uint16_t> activePathId_;

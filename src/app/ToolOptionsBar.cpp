@@ -4,6 +4,7 @@
 #include "TextLayer.h"
 #include "BrushImporter.h"
 #include "BrushLibrary.h"
+#include "PresetLibrary.h"
 #include "BrushPicker.h"
 #include "FontPicker.h"
 #include "CanvasWidget.h"
@@ -482,9 +483,32 @@ QWidget* ToolOptionsBar::buildGradientOptions() {
     shape->addItems({tr("Linear"), tr("Radial")});
     connect(shape, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->gradientSettings.shape = i == 1 ? GradientShape::Radial : GradientShape::Linear; session_->refreshGradient(); });
     h->addWidget(shape);
+    // The two built-in ramps, then the gradients imported from .grd files (PresetLibrary).
     auto* style = new QComboBox;
-    style->addItems({tr("Foreground to Transparent"), tr("Foreground to Background")});
-    connect(style, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->gradientSettings.style = i == 1 ? GradientStyle::ForegroundToBackground : GradientStyle::ForegroundToTransparent; session_->refreshGradient(); });
+    style->setToolTip(tr("Gradient preset (File ▸ Import Presets… adds Photoshop .grd gradients)"));
+    auto fillStyles = [this, style] {
+        QSignalBlocker b(style);
+        QStringList names;
+        for (const auto& g : PresetLibrary::instance().gradients()) names << QString::fromStdString(g.name);
+        QStringList shown;
+        for (int i = 2; i < style->count(); i++) shown << style->itemData(i).toString();
+        if (style->count() < 2 || shown != names) {   // rebuilt only when the library changed
+            style->clear();
+            style->addItems({tr("Foreground to Transparent"), tr("Foreground to Background")});
+            for (const QString& name : names) style->addItem(name, name);
+        }
+        const GradientSettings& s = session_->gradientSettings;
+        const int preset = s.preset.isEmpty() ? -1 : style->findData(s.preset);
+        style->setCurrentIndex(preset >= 0 ? preset : s.style == GradientStyle::ForegroundToBackground ? 1 : 0);
+    };
+    fillStyles();
+    connect(&PresetLibrary::instance(), &PresetLibrary::changed, style, fillStyles);
+    syncers_.push_back(fillStyles);
+    connect(style, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, style](int i) {
+        session_->gradientSettings.style = i == 1 ? GradientStyle::ForegroundToBackground : GradientStyle::ForegroundToTransparent;
+        session_->gradientSettings.preset = i >= 2 ? style->itemData(i).toString() : QString();
+        session_->refreshGradient();
+    });
     h->addWidget(style);
     auto* reverse = new QCheckBox(tr("Reverse"));
     connect(reverse, &QCheckBox::toggled, this, [this](bool on) { session_->gradientSettings.reversed = on; session_->refreshGradient(); });

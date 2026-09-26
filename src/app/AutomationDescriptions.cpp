@@ -86,6 +86,8 @@ const MethodDoc methodDocs[] = {
     {"layers.style", "A layer's effects (Photoshop's layer style): each kind as a list, the ones switched off too.", "id:layer! The layer"},
     {"layers.setStyle", "Replace a layer's effects, shaped as layers.style shows (settings left out take Photoshop's defaults; an empty object clears the style).",
      "id:layer! The layer; style:object! dropShadows, innerShadows, outerGlows, innerGlows, bevels, satins, colorOverlays, gradientOverlays, patternOverlays, strokes (lists), visible, maskHidesEffects, blendInteriorAsGroup"},
+    {"layers.applyStyle", "Give a layer an imported style preset (presets.list): its effects replace the layer's, and the document gets the patterns the style uses. Blending options in the preset are not applied.",
+     "id:layer! The layer; style:string! The style preset's name"},
     {"layers.select", "Make a layer (or its mask) active, or select several.",
      "id:layer The layer (the primary one with ids); ids:array Several layer ids; mask:bool=false Select the layer's mask for painting and filters"},
     {"layers.set", "Change a layer's properties.",
@@ -198,6 +200,11 @@ const MethodDoc methodDocs[] = {
     {"brush.presets", "The MyPaint brush presets and imported brushes: id, name, group, size, whether an eraser.", "group:string Only this group"},
     {"brush.import", "Import brushes: Photoshop .abr, Procreate .brushset/.brush, Clip Studio .sut, or images as tips.",
      "path:string One file; paths:array Several files"},
+    {"presets.import", "Import Photoshop presets into the library: styles (.asl, with the patterns they use), patterns (.pat, also added to the open document) and gradients (.grd). A style or gradient with an existing name replaces it.",
+     "path:string One file; paths:array Several files"},
+    {"presets.list", "The imported presets: styles (name and the pattern ids they use), gradients (name, colour and opacity stops) and patterns (id, name, size).",
+     "kind:(styles|gradients|patterns) Only this kind"},
+    {"presets.remove", "Remove an imported style, gradient or pattern from the library (the document keeps patterns it was given).", "kind:(style|gradient|pattern)! Which list; name:string! The preset's name (a pattern's id or name)"},
     {"brush.stroke", "Paint a stroke through points on the active layer (or its mask); the person's tool and settings are put back afterwards.",
      "points:array! [x, y] points in document pixels; tool:(brush|eraser|healing|healingbrush|clone|smudge|blur|sharpen|liquify|dodge|burn|sponge)=brush The tool (healingbrush heals from source, as clone copies; for dodge, burn and sponge opacity is the Exposure or Flow); size:number Diameter in pixels; hardness:number 0..1; opacity:number 0..1; "
      "color:color Paint colour (default the foreground); mask:bool=false Paint the active layer's mask; erase:bool=false Erase with the brush; source:object {x, y} Clone and Healing Brush source; "
@@ -210,7 +217,7 @@ const MethodDoc methodDocs[] = {
      "contiguous:bool=true Only pixels connected to the point; antialias:bool=true Soften the edge; allLayers:bool=false Compare with the document as shown, not the active layer"},
     {"gradient.draw", "Draw a gradient on the active layer, inside the selection.",
      "x0:number! Start; y0:number! Start; x1:number! End; y1:number! End; shape:(linear|radial)=linear Shape; "
-     "style:(foreground-to-transparent|foreground-to-background)=foreground-to-transparent Colours; reversed:bool=false Swap the ends; opacity:number=1 0..1; foreground:color Start colour; background:color End colour"},
+     "style:(foreground-to-transparent|foreground-to-background)=foreground-to-transparent Colours; reversed:bool=false Swap the ends; opacity:number=1 0..1; foreground:color Start colour; background:color End colour; preset:string An imported gradient preset by name (presets.list), which replaces style"},
     {"shape.draw", "Add a vector shape layer (editable: shape.get, shape.set, and PSD's own shape layer on export).",
      "x:number! Left (a line's start); y:number! Top; width:number Width; height:number Height; kind:(rectangle|ellipse|polygon|star|line|custom)=rectangle Shape; "
      "cornerRadius:number=0 Rectangle corners; sides:integer=5 Polygon or star points; star:number Star inset 0..0.99; x2:number Line end x; y2:number Line end y; weight:number=4 Line weight; "

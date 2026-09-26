@@ -3,6 +3,7 @@
 #include "AutomationHandlers.h"
 #include "BrushImporter.h"
 #include "BrushLibrary.h"
+#include "PresetLibrary.h"
 #include <QFileInfo>
 #include <algorithm>
 
@@ -83,6 +84,70 @@ void AutomationServer::registerPaintHandlers() {
         const BrushImportResult result = importBrushFiles(paths);
         if (result.ids.isEmpty()) fail(result.errors.isEmpty() ? QStringLiteral("nothing was imported") : result.errors.join("; "));
         return QJsonObject{{"presets", QJsonArray::fromStringList(result.ids)}, {"notes", QJsonArray::fromStringList(result.notes)}, {"errors", QJsonArray::fromStringList(result.errors)}};
+    });
+    add("presets.import", [session](const QJsonObject& p) {
+        // Photoshop styles (.asl), patterns (.pat) and gradients (.grd) into the preset library; a .pat's patterns go
+        // into the open document too.
+        QStringList paths;
+        if (has(p, "path")) paths << QFileInfo(str(p, "path")).absoluteFilePath();
+        for (QJsonValue v : p.value("paths").toArray()) paths << QFileInfo(v.toString()).absoluteFilePath();
+        if (paths.isEmpty()) fail("pass path or paths", invalidParams);
+        const PresetLibrary::ImportResult result = PresetLibrary::instance().importFiles(paths);
+        if (result.styles.isEmpty() && result.patterns.isEmpty() && result.gradients.isEmpty())
+            fail(result.errors.isEmpty() ? QStringLiteral("nothing was imported") : result.errors.join("; "));
+        EditorSession* s = session();
+        const int added = s->document() && !result.importedPatterns.empty() ? s->addPatterns(result.importedPatterns) : 0;
+        return QJsonObject{{"styles", QJsonArray::fromStringList(result.styles)}, {"patterns", QJsonArray::fromStringList(result.patterns)},
+                           {"gradients", QJsonArray::fromStringList(result.gradients)}, {"patternsAddedToDocument", added},
+                           {"notes", QJsonArray::fromStringList(result.notes)}, {"errors", QJsonArray::fromStringList(result.errors)}};
+    });
+    add("presets.list", [](const QJsonObject& p) {
+        const QString kind = str(p, "kind", QString()).toLower();
+        PresetLibrary& library = PresetLibrary::instance();
+        QJsonObject out;
+        if (kind.isEmpty() || kind == "styles") {
+            QJsonArray styles;
+            for (auto& s : library.styles()) {
+                QJsonArray patterns;
+                for (auto& id : stylePatternIds(s.style)) patterns.append(QString::fromStdString(id));
+                styles.append(QJsonObject{{"name", QString::fromStdString(s.name)}, {"patterns", patterns}});
+            }
+            out["styles"] = styles;
+        }
+        if (kind.isEmpty() || kind == "gradients") {
+            QJsonArray gradients;
+            for (auto& g : library.gradients()) {
+                QJsonArray colors;
+                for (auto& c : g.colors) {
+                    const QString source = c.source == GradientPreset::Source::Foreground ? QStringLiteral("foreground")
+                                         : c.source == GradientPreset::Source::Background ? QStringLiteral("background")
+                                         : QColor(c.color.r, c.color.g, c.color.b).name();
+                    colors.append(QJsonObject{{"location", double(c.location)}, {"color", source}, {"midpoint", double(c.midpoint)}});
+                }
+                QJsonArray alphas;
+                for (auto& a : g.alphas) alphas.append(QJsonObject{{"location", double(a.location)}, {"opacity", double(a.opacity)}, {"midpoint", double(a.midpoint)}});
+                gradients.append(QJsonObject{{"name", QString::fromStdString(g.name)}, {"colors", colors}, {"opacities", alphas}});
+            }
+            out["gradients"] = gradients;
+        }
+        if (kind.isEmpty() || kind == "patterns") {
+            QJsonArray patterns;
+            for (auto& pt : library.patterns())
+                patterns.append(QJsonObject{{"id", QString::fromStdString(pt.id)}, {"name", QString::fromStdString(pt.name)}, {"width", pt.width}, {"height", pt.height}});
+            out["patterns"] = patterns;
+        }
+        if (out.isEmpty()) fail("kind is styles, gradients or patterns", invalidParams);
+        return out;
+    });
+    add("presets.remove", [](const QJsonObject& p) {
+        const QString kind = str(p, "kind").toLower(), name = str(p, "name");
+        bool removed = false;
+        if (kind == "style" || kind == "styles") removed = PresetLibrary::instance().removeStyle(name);
+        else if (kind == "gradient" || kind == "gradients") removed = PresetLibrary::instance().removeGradient(name);
+        else if (kind == "pattern" || kind == "patterns") removed = PresetLibrary::instance().removePattern(name);
+        else fail("kind is style, gradient or pattern", invalidParams);
+        if (!removed) fail("no " + kind + " preset named " + name, invalidParams);
+        return QJsonObject{{"removed", name}};
     });
     add("brush.stroke", [session, document, pointList](const QJsonObject& p) {
         if (session()->smartObjectBlocksPixels() && !flag(p, "mask", false))
@@ -203,6 +268,12 @@ void AutomationServer::registerPaintHandlers() {
         QString style = str(p, "style", QStringLiteral("foreground-to-transparent")).toLower();
         s->gradientSettings.shape = shape == "radial" ? GradientShape::Radial : GradientShape::Linear;
         s->gradientSettings.style = style.contains("background") ? GradientStyle::ForegroundToBackground : GradientStyle::ForegroundToTransparent;
+        s->gradientSettings.preset.clear();
+        if (has(p, "preset")) {
+            const GradientPreset* preset = PresetLibrary::instance().findGradient(str(p, "preset"));
+            if (!preset) { restore(); fail("no gradient preset named " + str(p, "preset") + " (presets.list shows them)", invalidParams); }
+            s->gradientSettings.preset = QString::fromStdString(preset->name);
+        }
         s->gradientSettings.reversed = flag(p, "reversed", false);
         s->gradientSettings.opacity = std::clamp(num(p, "opacity", 1), 0.0, 1.0);
         if (has(p, "foreground")) s->foregroundColor = QColor(str(p, "foreground"));
