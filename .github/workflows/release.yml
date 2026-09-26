@@ -132,7 +132,8 @@ jobs:
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PREFIX_PATH="$(brew --prefix qt)" \
             -DOpenCV_DIR="$PWD/opencv-prefix/lib/cmake/opencv4" \
-            -DCOMPOSITOR_VERSION="${{ steps.version.outputs.version }}"
+            -DCOMPOSITOR_VERSION="${{ steps.version.outputs.version }}" \
+            -DCOMPOSITOR_WITH_QTPDF=OFF
           cmake --build build -j"$(sysctl -n hw.ncpu)"
 
       - name: Tests and smoke test
