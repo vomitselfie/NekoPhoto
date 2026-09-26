@@ -34,19 +34,8 @@ jobs:
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PREFIX_PATH="$(brew --prefix qt)" \
             -DOpenCV_DIR="$PWD/opencv-prefix/lib/cmake/opencv4" \
-            -DCOMPOSITOR_VERSION="0.0.0-dev.${GITHUB_SHA::7}" \
-            -DCOMPOSITOR_WITH_QTPDF=OFF
+            -DCOMPOSITOR_VERSION="0.0.0-dev.${GITHUB_SHA::7}"
           cmake --build build -j"$(sysctl -n hw.ncpu)"
-
-      - name: Diagnose moc (on failure)
-        if: failure()
-        run: |
-          cmake --version; brew list --versions qt qtbase qtpdf qtwebengine 2>/dev/null || true
-          grep -i "PDF:\|Qt6_DIR\|Qt6Core_DIR" build/CMakeCache.txt || true
-          ls build/src/app/nekophoto_autogen | head -20 || true
-          head -40 build/src/app/nekophoto_autogen/mocs_compilation.cpp || true
-          find build/src/app/nekophoto_autogen -name 'moc_*.cpp' | wc -l
-          find build/src/app/nekophoto_autogen -name 'moc_Ruler*' -exec head -30 {} \; || true
 
       - name: Unit and golden tests
         run: ctest --test-dir build --output-on-failure
@@ -74,28 +63,3 @@ jobs:
           path: |
             NekoPhoto-dev-macos-arm64.zip
             demo.png
-
-  # Qt PDF is off above while the macOS link failure (missing moc vtables since 1.5.0) is pinned down: this job builds
-  # the app with it on, does not fail the workflow, and prints what moc produced.
-  qtpdf-probe:
-    name: macOS build with Qt PDF (probe)
-    runs-on: macos-14
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
-      - name: Homebrew packages
-        run: brew install ninja qt libpng libmypaint libraw zstd pkg-config
-      - name: Configure and build the app only
-        run: |
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix qt)" -DCOMPOSITOR_WITH_QTPDF=ON
-          cmake --build build --target nekophoto -j"$(sysctl -n hw.ncpu)"
-
-      - name: Diagnose moc (on failure)
-        if: failure()
-        run: |
-          cmake --version; brew list --versions qt qtbase qtpdf qtwebengine 2>/dev/null || true
-          grep -i "PDF:\|Qt6_DIR\|Qt6Core_DIR" build/CMakeCache.txt || true
-          ls build/src/app/nekophoto_autogen | head -20 || true
-          head -40 build/src/app/nekophoto_autogen/mocs_compilation.cpp || true
-          find build/src/app/nekophoto_autogen -name 'moc_*.cpp' | wc -l
-          find build/src/app/nekophoto_autogen -name 'moc_Ruler*' -exec head -30 {} \; || true

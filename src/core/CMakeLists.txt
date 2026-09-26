@@ -43,7 +43,9 @@ if(COMPOSITOR_WITH_MYPAINT)
         foreach(property INTERFACE_LINK_OPTIONS INTERFACE_LINK_LIBRARIES INTERFACE_COMPILE_OPTIONS)
             get_target_property(values PkgConfig::MYPAINT ${property})
             if(values)
-                list(FILTER values EXCLUDE REGEX "^-f?openmp$|^-fopenmp")
+                # Homebrew's clang spells it "-Xpreprocessor -fopenmp": both go, or the lone -Xpreprocessor swallows
+                # whatever follows it on the link line (the app's moc object, on macOS).
+                list(FILTER values EXCLUDE REGEX "^-f?openmp$|^-fopenmp|^-Xpreprocessor$")
                 set_target_properties(PkgConfig::MYPAINT PROPERTIES ${property} "${values}")
             endif()
         endforeach()
@@ -65,7 +67,9 @@ if(COMPOSITOR_WITH_LIBRAW)
         foreach(property INTERFACE_LINK_OPTIONS INTERFACE_LINK_LIBRARIES INTERFACE_COMPILE_OPTIONS)
             get_target_property(values PkgConfig::LIBRAW ${property})
             if(values)
-                list(FILTER values EXCLUDE REGEX "^-f?openmp$|^-fopenmp")
+                # Homebrew's clang spells it "-Xpreprocessor -fopenmp": both go, or the lone -Xpreprocessor swallows
+                # whatever follows it on the link line (the app's moc object, on macOS).
+                list(FILTER values EXCLUDE REGEX "^-f?openmp$|^-fopenmp|^-Xpreprocessor$")
                 set_target_properties(PkgConfig::LIBRAW PROPERTIES ${property} "${values}")
             endif()
         endforeach()
