@@ -383,10 +383,10 @@ void AutomationServer::registerLayersHandlers() {
         const Layer* updated = s->document()->find(l.id);
         return updated ? layerJson(*updated, 0) : QJsonObject{};
     });
-    add("layers.delete", [session, layer](const QJsonObject& p) {
+    add("layers.delete", [session, layer, layerOrActive](const QJsonObject& p) {
         std::vector<Uuid> ids;
         if (has(p, "ids")) for (QJsonValue v : p.value("ids").toArray()) ids.push_back(layer(QJsonObject{{"id", v}}).id);
-        else ids.push_back(layer(p).id);
+        else ids.push_back(layerOrActive(p).id);
         session()->deleteLayersResolvingClipping(ids, flag(p, "bakeClipping", true));
         return QJsonObject{{"deleted", int(ids.size())}};
     });

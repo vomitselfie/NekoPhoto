@@ -70,8 +70,10 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Export SVG (File > Export SVG): vector shape layers as paths with their fill and stroke, folders as groups, every other layer as an embedded PNG, so the file looks like the document (docs/svg-pdf.md)
 - Open a PDF page as a pixel layer at a chosen resolution (Qt PDF; a multi-page file asks which page) (docs/svg-pdf.md)
 - Open Affinity documents (`.afphoto`, `.afdesign`, `.afpub`, and Affinity 3's `.af`) with their pixel layers, groups, masks, clipped layers, opacity, visibility and blend modes, and artistic and frame text as editable text layers; vector shapes and artboards come in as pixels, and adjustments and effects are listed as left out (see [affinity-import.md](affinity-import.md))
-- Open Aseprite `.ase`/`.aseprite` sprites with the first frame's layers, folders, opacity and blend modes
-- Open animated GIFs with each frame as a layer ("Frame N (D ms)", frame 1 visible), and icons (`.ico`, `.cur`) with each size as a layer
+- Open Aseprite `.ase`/`.aseprite` sprites with their layers, folders, opacity and blend modes; a sprite of several frames opens with a layer per cel and its frames on the Timeline, with their durations
+- Open animated GIFs with each frame as a layer ("Frame N (D ms)", frame 1 visible) and the frames, delays and looping on the Timeline, and icons (`.ico`, `.cur`) with each size as a layer
+- Frame animation (Window > Timeline), as Photoshop's Timeline in frame mode: frames that each show the layers with their own visibility, position and opacity for a delay you set; New, Delete and reorder frames, Make Frames From Layers, play it on the canvas, choose how many times it loops. Frames are saved in the project, and File > Export Animated GIF writes them (docs/animation.md)
+- Actions (Window > Actions, Alt+F9), as Photoshop's Actions panel: record menu commands, filters, adjustments, selections and brush strokes as you work, play them back on any document, switch steps off, reorder, delete or edit them, and share them as JSON; File > Automate > Batch runs an action over a folder of files and saves the results in the format you pick (docs/actions.md)
 - Open PNG, JPEG, TIFF, TGA, WebP and more; drop an image on the canvas to add it as a layer, or on the tab strip to open it
 - Projects of up to a gigapixel of layers; the Mac app opens projects up to 100 megapixels
 - Export PNG, TIFF, TGA, a multi-size Windows icon (16, 32, 48 and 256 px), or JPEG and WebP with a live preview (WebP keeps transparency, and is lossless at quality 100)
@@ -143,8 +145,10 @@ Mac 版と同じ機能を、Linux のキー表記で使えます。キーボー�
 - Photoshop の PSD/PSB を、レイヤー・フォルダー・マスク・描画モード・主な調整レイヤーを保ったまま開けます。引き継げなかった要素は開いた後に一覧表示されます
 - レイヤー付きの Photoshop PSD に書き出せます(ファイル > Photoshop ドキュメントとして書き出し):レイヤー、フォルダー、マスク、クリッピング、描画モード、レベル補正・トーンカーブ・露光量・色相/彩度の調整レイヤーと統合画像。Photoshop で再現できない要素は書き出す前に一覧表示されます
 - クリップスタジオの `.clip` を、レイヤー・フォルダー・マスク・クリッピング・不透明度・描画モードを保ったまま開けます(ベクターやテキストのレイヤーは画像として読み込みます)
-- Aseprite の `.ase`/`.aseprite` を、最初のフレームのレイヤー・フォルダー・不透明度・描画モードを保ったまま開けます
-- アニメーション GIF は各フレームをレイヤーとして(「Frame N (D ms)」、フレーム 1 のみ表示)、アイコン(`.ico`、`.cur`)は各サイズをレイヤーとして開けます
+- Aseprite の `.ase`/`.aseprite` を、レイヤー・フォルダー・不透明度・描画モードを保ったまま開けます。複数フレームのスプライトはセルごとのレイヤーとタイムラインのフレーム(表示時間つき)として開きます
+- アニメーション GIF は各フレームをレイヤーとして(「Frame N (D ms)」、フレーム 1 のみ表示)、フレーム・表示時間・ループ回数はタイムラインに、アイコン(`.ico`、`.cur`)は各サイズをレイヤーとして開けます
+- フレームアニメーション(ウィンドウ > タイムライン):Photoshop のフレームモードのタイムラインと同じく、各フレームがレイヤーの表示・位置・不透明度と表示時間を持ちます。フレームの追加・削除・並べ替え、レイヤーからフレームを作成、カンバス上での再生、ループ回数の指定。フレームはプロジェクトに保存され、ファイル > アニメーション GIF を書き出し で書き出せます
+- アクション(ウィンドウ > アクション、Alt+F9):メニューのコマンド、フィルター、色調補正、選択範囲、ブラシのストロークを記録して、どのドキュメントにも再生できます。ステップのオン/オフ・並べ替え・削除・編集、JSON での読み込みと書き出し。ファイル > 自動処理 > バッチ でフォルダー内のファイルにまとめて適用し、選んだ形式で保存します
 - PNG、JPEG、TIFF、TGA、WebP などを開けます。カンバスにドロップするとレイヤーとして追加、タブバーにドロップすると新しいドキュメントとして開きます
 - レイヤー合計 1 ギガピクセルまでのプロジェクト(Mac 版で開けるのは 1 億画素まで)
 - PNG・TIFF・TGA・複数サイズの Windows アイコン(16/32/48/256 px)書き出し、プレビュー付きの JPEG・WebP 書き出し(WebP は透明部分を保持し、品質 100 で可逆圧縮)

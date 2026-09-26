@@ -3,6 +3,9 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include "EditorSession.h"
+#include "ActionLibrary.h"
+#include <QJsonArray>
+#include <cmath>
 #include "BrushLibrary.h"
 #include "PresetLibrary.h"
 #include "QtGeometry.h"
@@ -91,6 +94,8 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
         stroke_->append(toPoint(documentPoint));
     }
     lastBrushPoint_ = documentPoint;
+    strokePoints_ = {documentPoint};
+    strokePressures_ = {pen.pressure};
     // Only what the press painted: a MyPaint press paints nothing until the pen moves, and an empty region
     // would make the canvas render the whole view again.
     strokeRegion_ = toQRect(stroke_->takeDirtyRect());
@@ -122,6 +127,7 @@ void EditorSession::continueBrush(QPointF documentPoint) {
     else if (myPaint_) { myPaintTo(documentPoint); myPaintSettle_.start(); }   // restarts: ticks only once input pauses
     else stroke_->append(toPoint(documentPoint));
     lastBrushPoint_ = documentPoint;
+    if (strokePoints_.size() < 20000) { strokePoints_.push_back(documentPoint); strokePressures_.push_back(pen.pressure); }
     Rect dirty = stroke_->takeDirtyRect();
     if (!dirty.isEmpty()) {
         strokeRegion_ = strokeRegion_.isEmpty() ? toQRect(dirty) : strokeRegion_.united(toQRect(dirty));
@@ -189,6 +195,23 @@ void EditorSession::endBrush() {
     // Spot healing changes the pixels as it commits; every other brush commits what its preview showed.
     commitRasterEdit(*stroke, strokeLayerId_, strokeMask_, name, strokeRegion_, tool_ != Tool::SpotHealing);
     strokeRegion_ = {};
+    // An action recording gets the stroke as brush.stroke (the Brush and Eraser, on pixels or a mask).
+    if (tool_ == Tool::Brush && ActionLibrary::instance().recording() && !strokePoints_.empty()) {
+        QJsonArray points, pressures;
+        for (size_t i = 0; i < strokePoints_.size(); i++) {
+            points.append(QJsonArray{std::round(strokePoints_[i].x() * 10) / 10, std::round(strokePoints_[i].y() * 10) / 10});
+            pressures.append(std::round(strokePressures_[i] * 1000) / 1000);
+        }
+        QJsonObject step{{"points", points}, {"size", brushSettings.diameter}, {"hardness", brushSettings.hardness}, {"opacity", brushSettings.opacity}};
+        if (strokeMask_) step["mask"] = true;
+        else step["color"] = foregroundColor.name();
+        if (brushErase) step["erase"] = true;
+        if (!brushPreset.isEmpty()) step["preset"] = brushPreset;
+        if (pen.tablet) step["pressures"] = pressures;
+        recordAction("brush.stroke", step);
+    }
+    strokePoints_.clear();
+    strokePressures_.clear();
 }
 
 void EditorSession::cancelBrush() {

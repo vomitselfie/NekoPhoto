@@ -263,11 +263,13 @@ int EditorSession::squashHistory(uint64_t since, const QString& name) {
     return merged;
 }
 
-void EditorSession::beginEdit(const QString& name) { history_.begin(name.toStdString(), document_, activeLayerId_); }
+void EditorSession::beginEdit(const QString& name) { endFramePreview(); history_.begin(name.toStdString(), document_, activeLayerId_); }
 void EditorSession::endEdit() {
     // Warped and filtered smart objects moved or scaled in this edit are drawn again from their contents.
     syncFilterMask();   // a painted filter mask goes into its Smart Filters in the same step
     if (document_) { refreshSmartObjectRasters(*document_); refreshVectorShapes(*document_); }
+    // The frame the layers show keeps what this edit did to their visibility, position and opacity.
+    if (document_) { pruneAnimation(*document_); syncCurrentFrame(*document_); }
     history_.end(document_, activeLayerId_);
 }
 
@@ -296,6 +298,7 @@ void EditorSession::cropTo(const QRectF& rectF, const char* action) {
         l.transform.origin.y -= rect.y;
         if (l.mask && l.mask->placement) { l.mask->placement->origin.x -= rect.x; l.mask->placement->origin.y -= rect.y; }
     }
+    offsetAnimation(doc, -rect.x, -rect.y);
     if (doc.selection && doc.selection->coverage) doc.selection->coverage = cropGray(*doc.selection->coverage, int(rect.x), int(rect.y), doc.width, doc.height);
     document_ = doc;
     endEdit();
@@ -318,6 +321,7 @@ void EditorSession::resizeCanvas(int width, int height, double anchorX, double a
         l.transform.origin.y += dy;
         if (l.mask && l.mask->placement) { l.mask->placement->origin.x += dx; l.mask->placement->origin.y += dy; }
     }
+    offsetAnimation(doc, dx, dy);
     doc.selection.reset();
     document_ = doc;
     endEdit();
@@ -331,7 +335,9 @@ void EditorSession::resizeImage(int width, int height, double resolution, int sa
     if (!canEditLayers() || !Document::validDimension(width) || !Document::validDimension(height)) return;
     Document doc = *document_;
     Sampling mode = sampling == 0 ? Sampling::Nearest : sampling == 1 ? Sampling::Smooth : Sampling::High;
+    const double sx = double(width) / doc.width, sy = double(height) / doc.height;
     if (!resizeDocument(doc, width, height, resolution, mode)) { emit error(tr("The resized image would exceed the 100-megapixel limit.")); return; }
+    scaleAnimation(doc, sx, sy);
     beginEdit("Image Size");
     document_ = doc;
     endEdit();

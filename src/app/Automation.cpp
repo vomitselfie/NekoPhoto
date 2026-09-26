@@ -1,5 +1,6 @@
 #include "compositor/raw.h"
 #include "Automation.h"
+#include "ActionLibrary.h"
 #include "AutomationHandlers.h"
 #include "LayersPanel.h"
 #include "ModelStore.h"
@@ -174,6 +175,10 @@ QJsonObject AutomationServer::handle(const QJsonObject& request) {
         response["error"] = QJsonObject{{"code", invalidParams}, {"message", wrong + describeHint(method)}};
         return response;
     }
+    // An editing request made while an action records becomes a step of it; the requests it makes itself (a
+    // batch's calls, an action's steps) and the menu hooks it passes through stay quiet.
+    const bool top = !ActionLibrary::instance().quiet();
+    std::optional<ActionLibrary::Quiet> quiet(std::in_place);
     // Errors the editor would have shown in a dialog come back in the response instead.
     QString captured;
     window_->setErrorSink(&captured);
@@ -191,12 +196,16 @@ QJsonObject AutomationServer::handle(const QJsonObject& request) {
         window_->setErrorSink(nullptr);
         response["error"] = QJsonObject{{"code", appError}, {"message", QString::fromUtf8(e.what())}};
     }
+    quiet.reset();
+    if (top && response.contains("result")) ActionLibrary::instance().record(method, params);
     return response;
 }
 
 // ---- Handlers -----------------------------------------------------------------------------------
 
 void AutomationServer::registerHandlers() {
+    registerActionsHandlers();
+    registerTimelineHandlers();
     registerAppHandlers();
     registerDocumentHandlers();
     registerLayersHandlers();

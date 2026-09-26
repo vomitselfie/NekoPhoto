@@ -6,6 +6,9 @@
 #include "PathsPanel.h"
 #include "AdjustmentsPanel.h"
 #include "Automation.h"
+#include "ActionLibrary.h"
+#include "ActionsPanel.h"
+#include "TimelinePanel.h"
 #include "TextDialog.h"
 #include "PreferencesDialog.h"
 #include "ToolOptionsBar.h"
@@ -109,6 +112,23 @@ MainWindow::MainWindow() {
     tabifyDockWidget(dock, pathsDock_);
     dock->raise();   // Layers is the tab in front
     adjustDock_ = adjustDock;
+    // Actions and Timeline (Window menu), hidden until asked for.
+    actionsDock_ = new QDockWidget(tr("Actions"), this);
+    actionsDock_->setObjectName("actionsDock");
+    actionsDock_->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable);
+    auto* actions = new ActionsPanel([this](const QString& name) { return playAction(name); });
+    connect(actions, &ActionsPanel::batchRequested, this, [this](const QString& name) { showBatchDialog(name); });
+    actionsDock_->setWidget(actions);
+    addDockWidget(Qt::RightDockWidgetArea, actionsDock_);
+    actionsDock_->hide();
+    timelineDock_ = new QDockWidget(tr("Timeline"), this);
+    timelineDock_->setObjectName("timelineDock");
+    timelineDock_->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable);
+    timeline_ = new TimelinePanel;
+    timelineDock_->setWidget(timeline_);
+    addDockWidget(Qt::BottomDockWidgetArea, timelineDock_);
+    timelineDock_->hide();
+    connect(timelineDock_, &QDockWidget::visibilityChanged, this, [this](bool shown) { if (shown && timeline_) timeline_->setSession(session_); });
 
     zoomBox_ = new QComboBox;
     zoomBox_->setEditable(true);
@@ -297,6 +317,7 @@ void MainWindow::switchTo(int index) {
     layersStack_->setCurrentWidget(tab.layers);
     pathsStack_->setCurrentWidget(tab.paths);
     adjustStack_->setCurrentWidget(tab.adjustments);
+    if (timeline_) timeline_->setSession(session_);
     tab.options->setVisible(true);
     { QSignalBlocker b(tabBar_); tabBar_->setCurrentIndex(index); }
     connectSession();
@@ -567,6 +588,37 @@ bool MainWindow::startAutomation(const QString& socketPath) {
         automationLabel_->setVisible(count > 0);
     });
     return true;
+}
+
+void MainWindow::showPanel(const QString& name) {
+    if (name == "actions") { actionsDock_->show(); actionsDock_->raise(); }
+    else if (name == "timeline") {
+        timelineDock_->show();
+        if (session_->hasDocument() && session_->document()->animation.empty()) session_->timelineFramesFromLayers();
+    } else if (name == "batch") {
+        if (ActionLibrary::instance().actions().empty()) {
+            RecordedAction sample{tr("Web Thumbnail"), {{"image.resize", QJsonObject{{"width", 400}}, true}, {"document.export", QJsonObject{{"path", "/tmp/thumb.png"}}, false}}};
+            ActionLibrary::instance().put(sample);
+        }
+        showBatchDialog();
+    }
+}
+
+AutomationServer* MainWindow::automationEngine() {
+    if (automation_) return automation_;
+    if (!engine_) engine_ = new AutomationServer(this);
+    return engine_;
+}
+
+QString MainWindow::playAction(const QString& name) {
+    try {
+        const QJsonObject reply = automationEngine()->playAction(name);
+        if (reply.value("completed").toBool()) return {};
+        const QJsonObject error = reply.value("error").toObject();
+        return tr("“%1” stopped at step %2 (%3): %4").arg(name).arg(error.value("index").toInt() + 1).arg(error.value("method").toString(), error.value("message").toString());
+    } catch (const std::exception& e) {
+        return QString::fromUtf8(e.what());
+    }
 }
 
 void MainWindow::showWelcome() {

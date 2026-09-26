@@ -564,6 +564,26 @@ public:
     void beginEdit(const QString& name);
     void endEdit();
 
+    // Timeline (frame animation, compositor/animation.h). Each change is one undo step; selecting a frame is one
+    // too, since it rewrites the layers' visibility, position and opacity.
+    bool timelineCreate();
+    /// Photoshop's Make Frames From Layers: a frame per top-level layer (the bottom one shown under each).
+    bool timelineFramesFromLayers();
+    bool timelineSelectFrame(int index);
+    /// A copy of the current frame after it (Photoshop's New Frame).
+    bool timelineDuplicateFrame();
+    bool timelineDeleteFrame(int index);
+    bool timelineMoveFrame(int from, int to);
+    /// Delay in milliseconds; index -1 sets every frame's.
+    bool timelineSetDelay(int index, int delayMs);
+    bool timelineSetLoopCount(int loops);
+    bool timelineClear();
+    /// Playback: shows a frame without touching history; endFramePreview puts the current frame back (any edit
+    /// does it first).
+    void previewFrame(int index);
+    void endFramePreview();
+    bool previewingFrames() const { return framePreview_; }
+
     // Tools and view
     Tool tool() const { return tool_; }
     void selectTool(Tool tool);
@@ -747,6 +767,10 @@ private:
     bool visibilitySwipe_ = false;
     /// Bumped on every document notification; cheap change detection for caches.
     uint64_t documentRevision_ = 0;
+    bool framePreview_ = false;
+    std::vector<QPointF> strokePoints_;   // the stroke so far, for an action recording it
+    std::vector<double> strokePressures_;
+    bool timelineEdit(const QString& name, const std::function<bool(compositor::Document&)>& change);
     QString importedName_;   // the title of a document that came from an import and has no project path
     std::shared_ptr<const compositor::Image> cloneSample_;
     bool cloneSampleAll_ = false;

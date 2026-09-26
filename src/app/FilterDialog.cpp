@@ -1,5 +1,8 @@
 #include "Style.h"
 #include "FilterDialog.h"
+#include "ActionLibrary.h"
+#include <QJsonDocument>
+#include <QJsonObject>
 #include "ModelStore.h"
 #include "compositor/subject.h"
 #include <QCheckBox>
@@ -70,6 +73,8 @@ bool PixelAdjustmentDialog::apply() {
     auto out = run(*source(), 1);
     throughSelection(*out);
     commit(out, placement(), QString::fromUtf8(adjustmentKindName(editor_->settings().kind)));
+    recordAction("pixels.adjust", {{"kind", QString::fromUtf8(adjustmentKindName(editor_->settings().kind))},
+                                   {"settings", QJsonDocument::fromJson(QByteArray::fromStdString(editor_->settings().toJson())).object()}});
     return true;
 }
 
@@ -175,6 +180,13 @@ bool FilterDialog::apply() {
     std::shared_ptr<const Image> image = out;
     if (kind_ == FilterKind::GaussianBlur || kind_ == FilterKind::MotionBlur) image = trimToPixels(*out, placement(), placed);
     commit(image, placed, QString::fromUtf8(filterKindName(kind_)));
+    const FilterSettings f = settings_.normalized();
+    QJsonObject step{{"kind", QString::fromUtf8(filterKindName(kind_))}};
+    if (kind_ == FilterKind::GaussianBlur) step["radius"] = f.radius;
+    else if (kind_ == FilterKind::MotionBlur) { step["angle"] = f.angle; step["distance"] = f.distance; }
+    else if (kind_ == FilterKind::AddNoise) { step["amount"] = f.amount; step["gaussian"] = f.gaussian; step["monochromatic"] = f.monochromatic; step["seed"] = int(seed_ % 1000000000u); }
+    else if (kind_ == FilterKind::LensCorrection) { step["distortion"] = f.distortion; step["bicubic"] = f.bicubic; }
+    recordAction("pixels.filter", step);
     return true;
 }
 

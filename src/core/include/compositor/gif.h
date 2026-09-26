@@ -31,5 +31,7 @@ struct GifEncodeFrame {
 std::vector<uint8_t> encodeGif(const std::vector<GifEncodeFrame>& frames, int loopCount, std::string* error = nullptr);
 /// The document's frames as a GIF, or its composite when it has no frames.
 std::vector<uint8_t> encodeDocumentGif(const Document& document, std::string* error = nullptr);
+/// encodeDocumentGif written to a file.
+bool writeDocumentGif(const std::string& path, const Document& document, std::string* error = nullptr);
 
 } // namespace compositor

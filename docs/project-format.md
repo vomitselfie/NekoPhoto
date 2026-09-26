@@ -31,3 +31,24 @@ a pass-through folder's children blend straight into what is below it and its op
 toward that backdrop; `passThrough: false` isolates the children and composites the folder's result in its
 blend mode and opacity, as Photoshop does. A save writes version 7 whenever no folder uses these, so the Mac app
 (which reads up to 7) still opens it; version 7 files cannot give a folder non-default values.
+
+## Frame animation (NekoPhoto)
+
+A document with frames (Window > Timeline) adds an `animation` object to the manifest; readers that do not know it
+ignore it, and a manifest without it is a still document, so no format version changes:
+
+```json
+"animation": {
+  "loopCount": 0,
+  "current": 1,
+  "frames": [
+    {"delay": 100, "layers": {"<layer UUID>": {"visible": true, "x": 0, "y": 0, "opacity": 1}}}
+  ]
+}
+```
+
+`loopCount` is how many times the animation plays (0: forever); `current` is the frame the layers' own visibility,
+origin and opacity show; each frame's `delay` is in milliseconds and `layers` holds each layer's visibility, transform
+origin (`x`, `y`) and opacity in that frame. A layer a frame does not list keeps its own state when the frame shows.
+Entries for layers that no longer exist are dropped on load, and a damaged `animation` object is dropped rather than
+refusing the project (see `src/core/include/compositor/animation.h`).

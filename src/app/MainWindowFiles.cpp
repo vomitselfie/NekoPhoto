@@ -1,6 +1,17 @@
 // The main window's file handling: new, open, import, save, export, and files dropped on the window.
 #include "TextLayer.h"
 #include "MainWindow.h"
+#include "ActionLibrary.h"
+#include "Automation.h"
+#include <QCheckBox>
+#include <QComboBox>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFormLayout>
+#include <QHBoxLayout>
+#include <QJsonArray>
+#include <QLineEdit>
+#include <QProgressDialog>
 #include "compositor/raw.h"
 #include "compositor/psd_writer.h"
 #include "CanvasWidget.h"
@@ -435,6 +446,87 @@ void MainWindow::exportIco() {
     if (path.isEmpty()) return;
     std::string error;
     if (!writeIco(path.toStdString(), *flattened, defaultIcoSizes, &error, &*session_->document())) showError(tr("Couldn’t export the icon"), QString::fromStdString(error));
+}
+
+void MainWindow::exportGif() {
+    session_->endTemporaryLayers();   // the Quick Mask and filter-mask layers are never written
+    session_->endFramePreview();
+    if (!session_->hasDocument()) return;
+    QString path = askExportPath(tr("Export Animated GIF"), tr("GIF image (*.gif)"), {"gif"});
+    if (path.isEmpty()) return;
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    std::string error;
+    const bool ok = compositor::writeDocumentGif(path.toStdString(), *session_->document(), &error);
+    QApplication::restoreOverrideCursor();
+    if (!ok) showError(tr("Couldn’t export the GIF"), QString::fromStdString(error));
+    else statusBar()->showMessage(tr("Exported %n frame(s) to %1", nullptr, std::max(1, int(session_->document()->animation.frames.size()))).arg(QFileInfo(path).fileName()), 6000);
+}
+
+void MainWindow::showBatchDialog(const QString& action) {
+    // File > Automate > Batch: an action over a folder of files, each exported to another folder.
+    if (ActionLibrary::instance().actions().empty()) { showError(tr("Batch"), tr("Record an action first (Window > Actions).")); return; }
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Batch"));
+    auto* form = new QFormLayout(&dialog);
+    auto* actions = new QComboBox;
+    for (const RecordedAction& a : ActionLibrary::instance().actions()) actions->addItem(a.name);
+    if (!action.isEmpty()) actions->setCurrentText(action);
+    form->addRow(tr("Action"), actions);
+    auto folderRow = [&](const QString& key) {
+        auto* row = new QHBoxLayout;
+        auto* edit = new QLineEdit(QSettings().value(key).toString());
+        auto* browse = new QPushButton(tr("Choose…"));
+        row->addWidget(edit, 1);
+        row->addWidget(browse);
+        connect(browse, &QPushButton::clicked, &dialog, [this, edit] {
+            const QString dir = QFileDialog::getExistingDirectory(this, tr("Choose a Folder"), edit->text());
+            if (!dir.isEmpty()) edit->setText(dir);
+        });
+        return std::make_pair(row, edit);
+    };
+    auto [sourceRow, source] = folderRow("batch/source");
+    auto [destinationRow, destination] = folderRow("batch/destination");
+    form->addRow(tr("Source folder"), sourceRow);
+    form->addRow(tr("Destination"), destinationRow);
+    auto* format = new QComboBox;
+    format->addItems({"png", "jpg", "webp", "tif", "psd", "gif", "tga"});
+    format->setCurrentText(QSettings().value("batch/format", "png").toString());
+    form->addRow(tr("Save as"), format);
+    auto* overwrite = new QCheckBox(tr("Replace files already in the destination"));
+    form->addRow(QString(), overwrite);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    form->addRow(buttons);
+    if (dialog.exec() != QDialog::Accepted) return;
+    QSettings().setValue("batch/source", source->text());
+    QSettings().setValue("batch/destination", destination->text());
+    QSettings().setValue("batch/format", format->currentText());
+    QProgressDialog progress(tr("Processing…"), tr("Stop"), 0, 100, this);
+    progress.setWindowModality(Qt::WindowModal);
+    progress.setMinimumDuration(300);
+    bool stopped = false;
+    QJsonObject result;
+    try {
+        result = automationEngine()->runBatch(actions->currentText(), source->text(), destination->text(), format->currentText(), overwrite->isChecked(),
+            [&](int done, int total, const QString& file) {
+                progress.setMaximum(std::max(1, total));
+                progress.setValue(done);
+                progress.setLabelText(file.isEmpty() ? tr("Done") : tr("%1 of %2: %3").arg(done + 1).arg(total).arg(QFileInfo(file).fileName()));
+                QApplication::processEvents();
+                stopped = stopped || progress.wasCanceled();
+                return !stopped;
+            });
+    } catch (const std::exception& e) {
+        showError(tr("Batch"), QString::fromUtf8(e.what()));
+        return;
+    }
+    progress.close();
+    QStringList lines{tr("%n file(s) written to %1.", nullptr, int(result.value("written").toArray().size())).arg(result.value("output").toString())};
+    for (const QJsonValue& v : result.value("failed").toArray())
+        lines << tr("%1: %2 failed: %3").arg(v.toObject().value("file").toString(), v.toObject().value("stage").toString(), v.toObject().value("message").toString());
+    if (!result.value("skipped").toArray().isEmpty()) lines << tr("%n skipped (already there, or stopped).", nullptr, int(result.value("skipped").toArray().size()));
+    QMessageBox::information(this, tr("Batch"), lines.join("\n"));
 }
 
 void MainWindow::dragEnterEvent(QDragEnterEvent* e) {

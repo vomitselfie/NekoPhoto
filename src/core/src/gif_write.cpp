@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <climits>
+#include <fstream>
 #include <unordered_map>
 
 namespace compositor {
@@ -285,6 +286,15 @@ std::vector<uint8_t> encodeDocumentGif(const Document& document, std::string* er
         }
     }
     return encodeGif(frames, a.frames.empty() ? 1 : a.loopCount, error);
+}
+
+bool writeDocumentGif(const std::string& path, const Document& document, std::string* error) {
+    const std::vector<uint8_t> bytes = encodeDocumentGif(document, error);
+    if (bytes.empty()) return false;
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+    if (!out) { if (error) *error = "The file could not be written."; return false; }
+    return true;
 }
 
 } // namespace compositor

@@ -304,8 +304,88 @@ def document_save(path: Optional[str] = None) -> str:
 def document_export(path: str, quality: int = 85, background: str = "#ffffff") -> str:
     """Flatten and export to a .png, .webp, .tif or .tga (these keep transparency; WebP at quality 100 is
     lossless), a .ico (16, 32, 48 and 256 px sizes), or .jpg (over background, at quality); .psd/.psb keep layers;
-    an .svg writes vector shape layers as paths, folders as groups and every other layer as an embedded PNG."""
+    an .svg writes vector shape layers as paths, folders as groups and every other layer as an embedded PNG; a .gif
+    writes the timeline's frames as an animated GIF (the composite when there are none)."""
     return text(call("document.export", path=os.path.abspath(path), quality=quality, background=background))
+
+
+# ---- actions and the timeline --------------------------------------------------------------------
+
+@look("Actions")
+def actions_list(name: Optional[str] = None) -> str:
+    """The recorded actions (Window > Actions): each one's steps as automation requests (method, params, enabled,
+    label), whether one is recording, and the library file. name lists one action."""
+    return text(call("actions.list", name=name))
+
+
+@outside("Record an action")
+def actions_record(action: str, name: Optional[str] = None) -> str:
+    """action start (with name: the action to record into, created or appended to) or stop. While recording, every
+    editing request and the person's menu commands, dialogs and brush strokes become steps."""
+    return text(call("actions.record", action=action, name=name))
+
+
+@edit("Play an action")
+def actions_play(name: str, times: int = 1) -> str:
+    """Play an action's enabled steps on the current document, stopping at the first error (the reply says which
+    step); steps that stay in one document become one undo step named after the action."""
+    return text(call("actions.play", name=name, times=times))
+
+
+@outside("Batch a folder through an action")
+def actions_batch(name: str, input: str, output: str, format: str = "png", overwrite: bool = False) -> str:
+    """File > Automate > Batch: every image, PSD or project in the input folder opened in a tab of its own, the
+    action played, the result exported to the output folder as format (png, jpg, webp, tif, psd, gif, tga) and
+    the tab closed. The reply lists what was written, failed and skipped."""
+    return text(call("actions.batch", name=name, input=os.path.abspath(input), output=os.path.abspath(output), format=format, overwrite=overwrite))
+
+
+@outside("Save an action")
+def actions_save(name: str, steps: list[dict]) -> str:
+    """Create an action or replace the one with this name: steps are {"method", "params", "enabled"} objects as
+    actions_list shows them (how to edit, reorder or switch off steps)."""
+    return text(call("actions.save", name=name, steps=steps))
+
+
+@outside("Delete an action")
+def actions_delete(name: str) -> str:
+    """Delete an action from the library."""
+    return text(call("actions.delete", name=name))
+
+
+@outside("Import actions")
+def actions_import(path: str) -> str:
+    """Import actions from a JSON file written by actions_export (names already used get a number)."""
+    return text(call("actions.import", path=os.path.abspath(path)))
+
+
+@outside("Export actions")
+def actions_export(path: str, name: Optional[str] = None, names: Optional[list[str]] = None) -> str:
+    """Write actions (one, several, or all) to a JSON file."""
+    return text(call("actions.export", path=os.path.abspath(path), name=name, names=names))
+
+
+@look("Timeline")
+def timeline_info() -> str:
+    """The frame animation (Window > Timeline): each frame's delay (ms) and visible layer ids, the current frame
+    (-1 without frames) and the loop count (0 forever)."""
+    return text(call("timeline.info"))
+
+
+@edit("Change the frames")
+def timeline_frame(action: str, index: Optional[int] = None, to: Optional[int] = None) -> str:
+    """action create (the first frame from the layers as they are), fromLayers (a frame per top-level layer),
+    duplicate (a copy of the current frame after it), select (the layers then show that frame; changes to layer
+    visibility, position and opacity go into it), delete, move (index to to) or clear. Export frames with
+    document_export to a .gif."""
+    return text(call("timeline.frame", action=action, index=index, to=to))
+
+
+@edit("Set frame delay and looping")
+def timeline_set(index: Optional[int] = None, delay: Optional[int] = None, loop_count: Optional[int] = None) -> str:
+    """Set a frame's delay in milliseconds (index defaults to the current frame; -1 sets every frame) and how many
+    times the animation plays (loop_count 0 forever)."""
+    return text(call("timeline.set", index=index, delay=delay, loopCount=loop_count))
 
 
 # ---- layers -------------------------------------------------------------------------------------
