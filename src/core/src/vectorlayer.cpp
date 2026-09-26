@@ -224,7 +224,9 @@ void setVectorShape(Layer& layer, const Document& document, const VectorShape& s
     // Pixels: the fill colour over the path's bounds and a margin for the stroke and antialiasing.
     const double margin = (shape.stroke.enabled ? shape.stroke.width : 0) + 2;
     Rect bounds = pathBounds(shape.path);
-    if (bounds.isEmpty()) bounds = Rect(0, 0, 1, 1);
+    // A straight line has no area but still has a place (its stroke margin gives it pixels); only no path has none.
+    const bool noKnots = std::all_of(shape.path.subpaths.begin(), shape.path.subpaths.end(), [](const auto& s) { return s.knots.empty(); });
+    if (noKnots) bounds = Rect(0, 0, 1, 1);
     const int x0 = int(std::floor(bounds.x - margin)), y0 = int(std::floor(bounds.y - margin));
     const int w = std::clamp(int(std::ceil(bounds.maxX() + margin)) - x0, 1, 30000), h = std::clamp(int(std::ceil(bounds.maxY() + margin)) - y0, 1, 30000);
     auto image = std::make_shared<Image>(w, h);

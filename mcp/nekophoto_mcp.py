@@ -276,9 +276,9 @@ def document_new(width: int = 1920, height: int = 1080, resolution: float = 72) 
 
 
 @edit("Open a file")
-def document_open(path: str) -> str:
-    """Open a .comp project (in its own tab), a Photoshop .psd/.psb (in its own tab, with its layers; the reply lists what could not be carried), or an image file, camera RAW files included (CR2, NEF, ARW, DNG, ...; developed with the camera white balance), as a layer (a first image creates the canvas)."""
-    return text(call("document.open", path=os.path.abspath(path)))
+def document_open(path: str, page: Optional[int] = None, resolution: Optional[float] = None) -> str:
+    """Open a .comp project (in its own tab), a Photoshop .psd/.psb (in its own tab, with its layers; the reply lists what could not be carried), an SVG (.svg/.svgz, in its own tab: paths and basic shapes with solid paint become editable vector shape layers, groups folders; gradients, text, images, filters, clip paths and masks are drawn as pixel layers, listed in the reply's notes), a PDF (in its own tab: one page rendered as a pixel layer; page is 1-based, resolution in pixels per inch, default 150; app_info reports pdf when this build reads PDFs), or an image file, camera RAW files included (CR2, NEF, ARW, DNG, ...; developed with the camera white balance), as a layer (a first image creates the canvas)."""
+    return text(call("document.open", path=os.path.abspath(path), page=page, resolution=resolution))
 
 
 @edit("Import an image as a layer")
@@ -298,7 +298,8 @@ def document_save(path: Optional[str] = None) -> str:
 @outside("Export an image")
 def document_export(path: str, quality: int = 85, background: str = "#ffffff") -> str:
     """Flatten and export to a .png, .webp or .tif (these keep transparency; WebP at quality 100 is
-    lossless) or .jpg (over background, at quality)."""
+    lossless) or .jpg (over background, at quality); or write a layered .psd, or an .svg (vector shape
+    layers as paths, folders as groups, every other layer as an embedded PNG; the reply counts them)."""
     return text(call("document.export", path=os.path.abspath(path), quality=quality, background=background))
 
 

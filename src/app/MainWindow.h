@@ -121,6 +121,7 @@ private:
     bool save(bool asNew);
     void exportPng();
     void exportJpeg();
+    void exportSvg();
     void exportWebp();
     void exportTiff();
     /// A layered PSD, after a summary of anything Photoshop cannot carry.

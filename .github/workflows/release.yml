@@ -48,7 +48,7 @@ jobs:
         uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125   # v4
         with:
           version: "6.7.3"
-          modules: "qtimageformats"
+          modules: "qtimageformats qtpdf"
           cache: true
 
       - name: Configure and build

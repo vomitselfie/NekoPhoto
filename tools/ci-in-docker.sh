@@ -26,14 +26,14 @@ FROM $image
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -q && apt-get install -y -q ninja-build cmake pkg-config libpng-dev libmypaint-dev libraw-dev libsqlite3-dev libgl1-mesa-dev g++ python3 python3-pip curl \\
     libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 libxcb-xkb1 libglib2.0-0 libfontconfig1 libdbus-1-3 \\
-    && pip3 install -q aqtinstall && aqt install-qt -O /opt/qt linux desktop 6.7.3 linux_gcc_64 -m qtimageformats >/dev/null && rm -rf /var/lib/apt/lists/*
+    && pip3 install -q aqtinstall && aqt install-qt -O /opt/qt linux desktop 6.7.3 linux_gcc_64 -m qtimageformats qtpdf >/dev/null && rm -rf /var/lib/apt/lists/*
 DOCKERFILE
 else
     docker build -q -t "$tag" - <<DOCKERFILE >/dev/null
 FROM $image
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -q && apt-get install -y -q ninja-build cmake pkg-config libpng-dev libmypaint-dev libraw-dev libsqlite3-dev qt6-base-dev libgl1-mesa-dev clang g++ python3 curl \\
-    && (apt-get install -y -q qt6-svg-dev || apt-get install -y -q libqt6svg6-dev) && rm -rf /var/lib/apt/lists/*
+    && (apt-get install -y -q qt6-svg-dev || apt-get install -y -q libqt6svg6-dev) && (apt-get install -y -q qt6-pdf-dev || true) && rm -rf /var/lib/apt/lists/*
 DOCKERFILE
 fi
 app=ON

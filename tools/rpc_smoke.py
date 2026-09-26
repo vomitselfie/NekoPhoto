@@ -540,6 +540,49 @@ def main():
     assert shown["masked"] and "masked" not in raw, (shown.keys(), raw.keys())
     assert shown["png"] != raw["png"]
 
+    # SVG: shape layers go out as paths (the rest as images) and come back as shape layers, in a tab of their own.
+    top = rpc.call("layers.list")[0]
+    drawn = rpc.call("shape.draw", kind="ellipse", x=40, y=40, width=100, height=60, color="#3366cc", strokeWidth=3, strokeColor="#000000")
+    rpc.call("layers.move", id=drawn["id"], above=top["id"])   # over the demo's adjustment, which flattens what is below it
+    svg_path = os.path.join(tempfile.mkdtemp(), "smoke.svg")
+    written = rpc.call("document.export", path=svg_path)
+    assert written["shapes"] >= 1 and written["images"] >= 1, written
+    with open(svg_path, "rb") as f:
+        assert b"<svg" in f.read(400)
+    size = (rpc.call("document.info")["width"], rpc.call("document.info")["height"])
+    reopened = rpc.call("document.open", path=svg_path)
+    assert (reopened["width"], reopened["height"]) == size and reopened["layers"] >= 2, reopened
+    assert any(l["kind"] == "shape" for l in rpc.call("layers.list")), "the SVG's paths came back as pixels"
+    try:
+        rpc.call("document.open", path=svg_path, page=2)
+        raise AssertionError("page is for PDF files")
+    except RuntimeError as e:
+        assert "PDF" in str(e), e
+
+    # PDF (when this build has Qt PDF): a hand-written two-page file, its second page at 144 ppi.
+    if rpc.call("app.info")["pdf"]:
+        objects = [b"<< /Type /Catalog /Pages 2 0 R >>", b"<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>"]
+        for n, content in ((4, b"1 0 0 rg 36 18 36 36 re f"), (6, b"0 0 1 rg 36 18 36 36 re f")):
+            objects.append(b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 144 72] /Contents %d 0 R >>" % n)
+            objects.append(b"<< /Length %d >>\nstream\n%s\nendstream" % (len(content), content))
+        pdf, offsets = b"%PDF-1.4\n", []
+        for n, body in enumerate(objects, 1):
+            offsets.append(len(pdf))
+            pdf += b"%d 0 obj\n%s\nendobj\n" % (n, body)
+        xref = len(pdf)
+        pdf += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objects) + 1) + b"".join(b"%010d 00000 n \n" % o for o in offsets)
+        pdf += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objects) + 1, xref)
+        pdf_path = os.path.join(tempfile.mkdtemp(), "smoke.pdf")
+        with open(pdf_path, "wb") as f:
+            f.write(pdf)
+        page = rpc.call("document.open", path=pdf_path, page=2, resolution=144)
+        assert (page["width"], page["height"]) == (288, 144), page
+        try:
+            rpc.call("document.open", path=pdf_path, page=3)
+            raise AssertionError("the PDF has two pages")
+        except RuntimeError:
+            pass
+
     print(len(methods), "methods; smoke test passed")
 
 

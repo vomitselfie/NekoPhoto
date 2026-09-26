@@ -23,18 +23,18 @@ an older compositor-linux AppImage installed.
 Requirements: CMake 3.22+, Ninja (or Make), GCC 12+ or Clang 15+, Qt 6.4+
 (Core, Gui, Widgets, Network, Svg, plus the Wayland platform plugin), libpng;
 OpenCV for Remove Background; libmypaint 1.5 or newer for the MyPaint brushes; LibRaw for camera RAW files;
-SQLite for importing Clip Studio brushes.
+SQLite for importing Clip Studio brushes; Qt PDF (Arch: qt6-webengine, Ubuntu: qt6-pdf-dev, Homebrew: part of qt) for opening PDF files.
 
 Arch / Manjaro:
 
 ```bash
-sudo pacman -S cmake ninja qt6-base qt6-svg qt6-wayland qt6-imageformats libpng libmypaint libraw opencv
+sudo pacman -S cmake ninja qt6-base qt6-svg qt6-wayland qt6-imageformats qt6-webengine libpng libmypaint libraw opencv
 ```
 
 Ubuntu 24.04:
 
 ```bash
-sudo apt install cmake ninja-build qt6-base-dev qt6-svg-dev qt6-wayland qt6-image-formats-plugins libpng-dev libmypaint-dev libraw-dev libsqlite3-dev libgl1-mesa-dev libopencv-dev
+sudo apt install cmake ninja-build qt6-base-dev qt6-svg-dev qt6-pdf-dev qt6-wayland qt6-image-formats-plugins libpng-dev libmypaint-dev libraw-dev libsqlite3-dev libgl1-mesa-dev libopencv-dev
 ```
 
 Then:
@@ -63,6 +63,7 @@ Options: `-DCOMPOSITOR_BUILD_APP=OFF` builds only the core and tests;
 `-DCOMPOSITOR_WITH_OPENCV=OFF` leaves out the Remove Background model;
 `-DCOMPOSITOR_WITH_MYPAINT=OFF` leaves out the MyPaint brushes (the round brush stays);
 `-DCOMPOSITOR_WITH_SQLITE=OFF` leaves out Clip Studio brush import;
+`-DCOMPOSITOR_WITH_QTPDF=OFF` leaves out PDF import;
 `-DCOMPOSITOR_WARNINGS_AS_ERRORS=ON` is what CI uses.
 `-DOpenCV_DIR=<prefix>/lib/cmake/opencv4` builds against the OpenCV that
 `tools/build-opencv.sh <prefix>` makes: a pinned 4.x, static, with only the
