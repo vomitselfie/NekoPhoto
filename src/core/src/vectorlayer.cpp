@@ -222,13 +222,27 @@ Rect pathBounds(const VectorPath& path) {
 
 void setVectorShape(Layer& layer, const Document& document, const VectorShape& shape) {
     // Pixels: the fill colour over the path's bounds and a margin for the stroke and antialiasing.
-    const double margin = (shape.stroke.enabled ? shape.stroke.width : 0) + 2;
+    const double strokeWidth = shape.stroke.enabled && std::isfinite(shape.stroke.width) ? std::clamp(shape.stroke.width, 0.0, 30000.0) : 0.0;
+    const double margin = strokeWidth + 2;
     Rect bounds = pathBounds(shape.path);
     // A straight line has no area but still has a place (its stroke margin gives it pixels); only no path has none.
+    // Non-finite coordinates (a damaged file) have no place either.
     const bool noKnots = std::all_of(shape.path.subpaths.begin(), shape.path.subpaths.end(), [](const auto& s) { return s.knots.empty(); });
-    if (noKnots) bounds = Rect(0, 0, 1, 1);
-    const int x0 = int(std::floor(bounds.x - margin)), y0 = int(std::floor(bounds.y - margin));
-    const int w = std::clamp(int(std::ceil(bounds.maxX() + margin)) - x0, 1, 30000), h = std::clamp(int(std::ceil(bounds.maxY() + margin)) - y0, 1, 30000);
+    if (noKnots || !std::isfinite(bounds.x) || !std::isfinite(bounds.y) || !std::isfinite(bounds.width) || !std::isfinite(bounds.height)) bounds = Rect(0, 0, 1, 1);
+    // The fill is kept over the part of the path near the canvas: a canvas's size beyond each edge (room to drag it
+    // on), narrowed to the canvas and the stroke margin when that would pass the pixel budget. Maths in double,
+    // clamped before converting.
+    double lx = std::floor(bounds.x - margin), ly = std::floor(bounds.y - margin), hx = std::ceil(bounds.maxX() + margin), hy = std::ceil(bounds.maxY() + margin);
+    auto clip = [&](double left, double top, double right, double bottom) {
+        lx = std::clamp(lx, left, right - 1); ly = std::clamp(ly, top, bottom - 1);
+        hx = std::clamp(hx, lx + 1, right); hy = std::clamp(hy, ly + 1, bottom);
+    };
+    const double dw = std::max(1, document.width), dh = std::max(1, document.height);
+    clip(-dw, -dh, 2 * dw, 2 * dh);
+    if ((hx - lx) * (hy - ly) > double(Document::pixelBudget)) clip(-margin, -margin, dw + margin, dh + margin);
+    hx = std::min(hx, lx + 30000); hy = std::min(hy, ly + 30000);
+    const int x0 = int(lx), y0 = int(ly);
+    const int w = std::max(1, int(hx - lx)), h = std::max(1, int(hy - ly));
     auto image = std::make_shared<Image>(w, h);
     image->fill(shape.r, shape.g, shape.b, 255);
     layer.asset = Asset::make(image, layer.name);

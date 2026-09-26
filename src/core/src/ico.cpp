@@ -33,6 +33,19 @@ bool hasPngSignature(const uint8_t* d, size_t n) {
     return n >= 8 && std::equal(sig, sig + 8, d);
 }
 
+/// A PNG entry's size from its IHDR, read before anything is decoded; false when the header is not there.
+bool pngHeaderSize(const uint8_t* d, size_t n, uint32_t& width, uint32_t& height) {
+    static const uint8_t ihdr[4] = {'I', 'H', 'D', 'R'};
+    if (n < 24 || !std::equal(ihdr, ihdr + 4, d + 12)) return false;
+    auto be = [&](size_t at) { return uint32_t(d[at]) << 24 | uint32_t(d[at + 1]) << 16 | uint32_t(d[at + 2]) << 8 | uint32_t(d[at + 3]); };
+    width = be(16);
+    height = be(20);
+    return true;
+}
+
+/// Real icons hold a handful of sizes; a directory claiming more is capped (each entry becomes a layer).
+constexpr size_t maxEntries = 256;
+
 /// A BITMAPINFOHEADER entry (height doubled for the AND mask): XOR pixels bottom-up, then a 1-bit mask.
 bool decodeBmpEntry(const uint8_t* bytes, size_t size, Rgba& image) {
     format_io::Reader r(bytes, size);
@@ -204,10 +217,13 @@ std::optional<PsdImport> importIcoBytes(const std::vector<uint8_t>& bytes, std::
     const uint16_t count = r.u16();
     struct Entry { uint32_t size, offset; };
     std::vector<Entry> entries;
-    for (uint16_t i = 0; i < count; i++) {
+    std::set<std::pair<uint32_t, uint32_t>> seen;   // entries sharing one payload are one image
+    int duplicates = 0;
+    for (uint16_t i = 0; i < count && entries.size() < maxEntries; i++) {
         r.skip(8);   // width, height, colours, reserved, planes/hotspot: the bitmap header is authoritative
         const uint32_t size = r.u32(), offset = r.u32();
         if (!r.ok) break;
+        if (!seen.insert({size, offset}).second) { duplicates++; continue; }
         entries.push_back({size, offset});
     }
     std::vector<Rgba> decoded;
@@ -216,6 +232,8 @@ std::optional<PsdImport> importIcoBytes(const std::vector<uint8_t>& bytes, std::
         if (e.offset > bytes.size() || e.size > bytes.size() - e.offset) { skipped++; continue; }
         const uint8_t* payload = bytes.data() + e.offset;
         if (hasPngSignature(payload, e.size)) {
+            uint32_t pngWidth = 0, pngHeight = 0;
+            if (!pngHeaderSize(payload, e.size, pngWidth, pngHeight) || pngWidth > maxIconSize * 4 || pngHeight > maxIconSize * 4) { skipped++; continue; }
             auto png = decodePngImage(payload, e.size);
             if (!png || png->width() > maxIconSize * 4 || png->height() > maxIconSize * 4) { skipped++; continue; }
             decoded.push_back(fromImage(*png));
@@ -243,6 +261,8 @@ std::optional<PsdImport> importIcoBytes(const std::vector<uint8_t>& bytes, std::
         layer.visible = i + 1 == decoded.size();
         result.document.layers.push_back(std::move(layer));
     }
+    if (duplicates || entries.size() + size_t(duplicates) < count)
+        result.notes.push_back("The icon's directory repeats entries or lists more than a file holds; only distinct entries were read.");
     if (skipped) result.notes.push_back(std::to_string(skipped) + " damaged or unsupported icon entr" + (skipped == 1 ? "y was" : "ies were") + " left out.");
     return result;
 }

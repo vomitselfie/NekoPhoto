@@ -30,6 +30,8 @@ constexpr size_t kMaximumDrawables = 4000;
 constexpr int kMaximumUseDepth = 32;
 constexpr size_t kMaximumUseExpansions = 20000;
 constexpr size_t kMaximumInflatedBytes = 256u << 20;
+constexpr size_t kMaximumUseCopiedNodes = 250000;          // nodes copied for <use> of a symbol, across the file
+constexpr size_t kMaximumRasterPartBytes = size_t(256) << 20;   // the standalone SVGs handed to the app, together
 constexpr double kEpsilon = 1e-9;
 
 bool isSpace(char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\f' || c == '\v'; }
@@ -771,11 +773,45 @@ bool isDefinition(const std::string& name) {
         || name == "mask" || name == "filter" || name == "symbol" || name == "marker" || name == "font" || name == "font-face";
 }
 
-void collectDefinitions(const XmlNode& node, std::string& out) {
+/// One definition a raster part may need: its id (empty for style sheets and the like, which every part takes).
+struct Definition {
+    std::string id, text;
+};
+
+/// Style sheets and fonts apply by selector or family name, not by "#id": every part takes them.
+bool sharedDefinition(const std::string& name) { return name == "style" || name == "font" || name == "font-face"; }
+
+/// The document's definitions, one entry per element (a <defs> block's children separately), so each raster part
+/// can take only what it references.
+void collectDefinitions(const XmlNode& node, std::vector<Definition>& out) {
     for (const auto& child : node.children) {
         if (child.is_text()) continue;
-        if (isDefinition(child.name)) writeNode(child, out);
-        else collectDefinitions(child, out);
+        if (child.name == "defs") {
+            for (const auto& inner : child.children) {
+                if (inner.is_text()) continue;
+                Definition d;
+                if (const std::string* id = inner.attribute("id"); id && !sharedDefinition(inner.name)) d.id = *id;
+                writeNode(inner, d.text);
+                out.push_back(std::move(d));
+            }
+        } else if (isDefinition(child.name)) {
+            Definition d;
+            if (const std::string* id = child.attribute("id"); id && !sharedDefinition(child.name)) d.id = *id;
+            writeNode(child, d.text);
+            out.push_back(std::move(d));
+        } else {
+            collectDefinitions(child, out);
+        }
+    }
+}
+
+/// Each "#name" reference in `text` (url(#name), href="#name").
+template <typename Visit>
+void forEachReference(const std::string& text, Visit&& visit) {
+    for (size_t at = text.find('#'); at != std::string::npos; at = text.find('#', at + 1)) {
+        size_t end = at + 1;
+        while (end < text.size() && text[end] != ')' && text[end] != '"' && text[end] != '\'' && text[end] != ' ' && text[end] != ';') end++;
+        if (end > at + 1) visit(std::string_view(text).substr(at + 1, end - at - 1));
     }
 }
 
@@ -786,8 +822,9 @@ struct Importer {
     SvgImport result;
     std::vector<CssRule> css;
     std::unordered_map<std::string, const XmlNode*> ids;
-    std::string definitions;
-    size_t drawables = 0, useExpansions = 0;
+    std::vector<Definition> definitions;
+    size_t drawables = 0, useExpansions = 0, useCopiedNodes = 0;
+    std::unordered_map<const XmlNode*, size_t> subtreeSizes;
     std::set<std::string> useStack;
     std::map<std::string, int> counters;
     /// The raster part the last layer of the current sibling run is, to merge neighbours into (index into rasterParts).
@@ -810,6 +847,14 @@ struct Importer {
         for (const auto& child : node.children)
             if (child.name == "title") if (auto title = trimmed(child.all_text()); !title.empty()) return std::string(title);
         return kind + " " + std::to_string(++counters[kind]);
+    }
+
+    size_t subtreeSize(const XmlNode& node) {
+        if (auto it = subtreeSizes.find(&node); it != subtreeSizes.end()) return it->second;
+        size_t n = 1;
+        for (const auto& child : node.children) n += subtreeSize(child);
+        subtreeSizes[&node] = n;
+        return n;
     }
 
     void countDrawable() {
@@ -923,6 +968,8 @@ struct Importer {
     }
 
     Layer& addLayer(Layer layer, const std::optional<Uuid>& parent) {
+        // Folders and placeholders count too: checked as layers are made, not once the import is over.
+        if (result.document.layers.size() >= size_t(Document::maxLayers)) throw std::runtime_error("the SVG has more elements than a document holds layers");
         layer.parentId = parent;
         result.document.layers.push_back(std::move(layer));
         return result.document.layers.back();
@@ -1043,10 +1090,14 @@ struct Importer {
     }
 
     void importChildren(const XmlNode& node, const Style& inherited, const Affine& ctm, const std::optional<Uuid>& parent, int useDepth, Run& run) {
-        for (const auto& child : node.children) {
+        for (const auto& child : node.children) importNode(child, inherited, ctm, parent, useDepth, run);
+    }
+
+    void importNode(const XmlNode& child, const Style& inherited, const Affine& ctm, const std::optional<Uuid>& parent, int useDepth, Run& run) {
+        {
             if (child.is_text() || isDefinition(child.name) || child.name == "title" || child.name == "desc" || child.name == "metadata"
                 || child.name == "script" || child.name.find(':') != std::string::npos)
-                continue;   // definitions, non-rendered content and foreign namespaces
+                return;   // definitions, non-rendered content and foreign namespaces
             const Style style = resolveStyle(child, inherited, css);
             if (child.name == "switch") {
                 for (const auto& candidate : child.children) {
@@ -1057,15 +1108,15 @@ struct Importer {
                     importChildren(wrapper, style, ctm, parent, useDepth, run);
                     break;
                 }
-                continue;
+                return;
             }
             if (child.name == "use") {
                 importUse(child, style, ctm, parent, useDepth, run);
-                continue;
+                return;
             }
             if (child.name == "a") {   // links are transparent containers
                 importChildren(child, style, ctm, parent, useDepth, run);
-                continue;
+                return;
             }
             if (child.name == "g" || child.name == "svg") {
                 const std::string reason = rasterReason(child, style);
@@ -1073,7 +1124,7 @@ struct Importer {
                     note("SVG " + reason + " have no counterpart in shape layers; the groups using them were drawn as pixels.");
                     countDrawable();
                     rasterize(child, inherited, ctm, parent, run, "Group");
-                    continue;
+                    return;
                 }
                 run.part.reset();
                 Affine local;
@@ -1092,11 +1143,11 @@ struct Importer {
                 const Uuid id = folder.id;
                 addLayer(std::move(folder), parent);
                 importChildren(child, style, compose(ctm, local), id, useDepth);
-                continue;
+                return;
             }
             static const std::set<std::string> shapes = {"path", "rect", "circle", "ellipse", "line", "polyline", "polygon"};
-            if (shapes.count(child.name)) { importShape(child, style, ctm, parent, run); continue; }
-            if (style.displayNone || !style.visible) continue;   // hidden text or images draw nothing
+            if (shapes.count(child.name)) { importShape(child, style, ctm, parent, run); return; }
+            if (style.displayNone || !style.visible) return;   // hidden text or images draw nothing
             countDrawable();
             const std::string kind = child.name == "text" ? "Text" : child.name == "image" ? "Image" : "Element";
             note(child.name == "text" ? "SVG text was drawn as pixels (it is not editable text here)."
@@ -1117,17 +1168,27 @@ struct Importer {
         else {
             Affine placement = Affine::translation(numberOr(child.attribute("x") ? *child.attribute("x") : "0", 0), numberOr(child.attribute("y") ? *child.attribute("y") : "0", 0));
             if (const std::string* t = child.attribute("transform")) placement = compose(parseTransform(*t), placement);
-            XmlNode wrapper;
-            wrapper.name = "g";
-            XmlNode instance = *found->second;
-            if (instance.name == "symbol" || instance.name == "svg") {
+            const XmlNode& target = *found->second;
+            if (target.name == "symbol" || target.name == "svg") {
+                // Renamed to a group, so this one is copied; copies are budgeted (a <use> can repeat a big subtree).
+                useCopiedNodes += subtreeSize(target);
+                if (useCopiedNodes > kMaximumUseCopiedNodes) {
+                    note("The SVG repeats too many <use> references; the rest were left out.");
+                    useStack.erase(*href);
+                    return;
+                }
+                XmlNode wrapper;
+                wrapper.name = "g";
+                XmlNode instance = target;
                 instance.name = "g";
                 if (instance.attribute("viewBox")) note("An SVG symbol's viewBox was left out (its contents were placed unscaled).");
                 instance.attributes.erase(std::remove_if(instance.attributes.begin(), instance.attributes.end(), [](const auto& a) {
                     return a.first == "viewBox" || a.first == "x" || a.first == "y" || a.first == "width" || a.first == "height" || a.first == "id"; }), instance.attributes.end());
+                wrapper.children.push_back(std::move(instance));
+                importChildren(wrapper, style, compose(ctm, placement), parent, useDepth + 1, run);
+            } else {
+                importNode(target, style, compose(ctm, placement), parent, useDepth + 1, run);
             }
-            wrapper.children.push_back(std::move(instance));
-            importChildren(wrapper, style, compose(ctm, placement), parent, useDepth + 1, run);
         }
         useStack.erase(*href);
     }
@@ -1206,8 +1267,29 @@ struct Importer {
         // Each raster part as a standalone SVG over the document, in document pixels.
         const std::string head = "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" version=\"1.1\" width=\""
             + std::to_string(result.document.width) + "\" height=\"" + std::to_string(result.document.height) + "\" viewBox=\"0 0 "
-            + std::to_string(result.document.width) + " " + std::to_string(result.document.height) + "\">" + (definitions.empty() ? std::string() : "<defs>" + definitions + "</defs>");
-        for (auto& part : result.rasterParts) part.svg = head + part.svg + "</svg>";
+            + std::to_string(result.document.width) + " " + std::to_string(result.document.height) + "\">";
+        // Each part takes the definitions it references (following references between definitions) and the unnamed
+        // ones (style sheets); the parts together are budgeted, as each is a standalone document the app parses.
+        std::unordered_map<std::string_view, size_t> byId;
+        for (size_t i = 0; i < definitions.size(); i++) if (!definitions[i].id.empty()) byId.emplace(definitions[i].id, i);
+        std::string shared;
+        for (const auto& d : definitions) if (d.id.empty()) shared += d.text;
+        size_t total = 0;
+        for (auto& part : result.rasterParts) {
+            std::vector<bool> taken(definitions.size(), false);
+            std::vector<size_t> pending;
+            auto want = [&](std::string_view id) {
+                if (auto it = byId.find(id); it != byId.end() && !taken[it->second]) { taken[it->second] = true; pending.push_back(it->second); }
+            };
+            forEachReference(part.svg, want);
+            forEachReference(shared, want);
+            std::string defs = shared;
+            for (size_t k = 0; k < pending.size(); k++) forEachReference(definitions[pending[k]].text, want);
+            for (size_t i = 0; i < definitions.size(); i++) if (taken[i] && !definitions[i].id.empty()) defs += definitions[i].text;
+            part.svg = head + (defs.empty() ? std::string() : "<defs>" + defs + "</defs>") + part.svg + "</svg>";
+            total += part.svg.size();
+            if (total > kMaximumRasterPartBytes) throw std::runtime_error("the SVG's pixel elements and their definitions are too large to draw");
+        }
     }
 };
 

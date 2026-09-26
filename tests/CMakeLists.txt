@@ -178,3 +178,7 @@ add_test(NAME presets_tests COMMAND presets_tests)
 add_executable(svg_tests svg_tests.cpp)
 target_link_libraries(svg_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME svg_tests COMMAND svg_tests)
+
+add_executable(hostile_input_tests hostile_input_tests.cpp)
+target_link_libraries(hostile_input_tests PRIVATE compositor::core compositor_warnings ZLIB::ZLIB)
+add_test(NAME hostile_input_tests COMMAND hostile_input_tests)

@@ -81,7 +81,7 @@ std::shared_ptr<Table> parse3dl(const std::string& text) {
     }
     const long count = long(values.size() / 3);
     int n = shaper.empty() ? int(std::lround(std::cbrt(double(count)))) : int(shaper.size());
-    if (n < 2 || long(n) * n * n != count) return nullptr;
+    if (n < 2 || n > 256 || long(n) * n * n != count) return nullptr;   // .cube's limit; also keeps n * n * n in range
     // The output's bit depth: the next power of two above the largest value.
     const long top = std::max(1L, *std::max_element(values.begin(), values.end()));
     double scale = 1;

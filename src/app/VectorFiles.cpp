@@ -19,27 +19,58 @@ namespace app {
 
 namespace {
 
-/// `svg` drawn over a width x height canvas, cropped to what it paints; none when it paints nothing.
+/// Where `alpha` (RGBA8) paints: x0, y0, x1, y1 inclusive; x1 < 0 when nowhere (or when a scanline is missing).
+QRect paintedArea(const QImage& image) {
+    const int w = image.width(), h = image.height();
+    int x0 = w, y0 = h, x1 = -1, y1 = -1;
+    for (int y = 0; y < h; y++) {
+        const uchar* row = image.constScanLine(y);
+        if (!row) return {};
+        for (int x = 0; x < w; x++)
+            if (row[x * 4 + 3]) { x0 = std::min(x0, x); x1 = std::max(x1, x); y0 = std::min(y0, y); y1 = y; }
+    }
+    return x1 < 0 ? QRect() : QRect(QPoint(x0, y0), QPoint(x1, y1));
+}
+
+/// `svg` drawn over a width x height canvas, cropped to what it paints; none when it paints nothing. On a large canvas
+/// a small probe render finds where it paints first, so only that part is drawn at full size (a file with thousands
+/// of small pixel elements over a large canvas would otherwise cost a whole canvas each).
 std::optional<std::pair<ImagePtr, Point>> renderSvg(const QByteArray& svg, int width, int height, bool fitViewBox) {
     QSvgRenderer renderer(svg);
     if (!renderer.isValid()) return std::nullopt;
     if (!fitViewBox) renderer.setAspectRatioMode(Qt::IgnoreAspectRatio);
-    QImage image(width, height, QImage::Format_RGBA8888_Premultiplied);
+    const QRectF target(0, 0, width, height);
+    QRect area(0, 0, width, height);
+    const int scale = std::clamp(int(std::ceil(std::sqrt(double(width) * height / 1e6))), 1, 16);
+    if (scale > 1) {
+        QImage probe((width + scale - 1) / scale, (height + scale - 1) / scale, QImage::Format_RGBA8888_Premultiplied);
+        if (probe.isNull()) return std::nullopt;   // allocation failed
+        probe.fill(Qt::transparent);
+        {
+            QPainter painter(&probe);
+            painter.setRenderHint(QPainter::Antialiasing);
+            painter.scale(1.0 / scale, 1.0 / scale);
+            renderer.render(&painter, target);
+        }
+        const QRect found = paintedArea(probe);
+        if (found.isEmpty()) return std::nullopt;
+        // Back to canvas pixels, grown by two probe pixels for what antialiasing at the small size lost.
+        area = QRect(found.x() * scale, found.y() * scale, found.width() * scale, found.height() * scale)
+                   .adjusted(-2 * scale, -2 * scale, 2 * scale, 2 * scale).intersected(area);
+    }
+    QImage image(area.size(), QImage::Format_RGBA8888_Premultiplied);
+    if (image.isNull()) return std::nullopt;   // allocation failed
     image.fill(Qt::transparent);
     {
         QPainter painter(&image);
         painter.setRenderHint(QPainter::Antialiasing);
         painter.setRenderHint(QPainter::SmoothPixmapTransform);
-        renderer.render(&painter, QRectF(0, 0, width, height));
+        painter.translate(-area.x(), -area.y());
+        renderer.render(&painter, target);
     }
-    int x0 = width, y0 = height, x1 = -1, y1 = -1;
-    for (int y = 0; y < height; y++) {
-        const uchar* row = image.constScanLine(y);
-        for (int x = 0; x < width; x++)
-            if (row[x * 4 + 3]) { x0 = std::min(x0, x); x1 = std::max(x1, x); y0 = std::min(y0, y); y1 = y; }
-    }
-    if (x1 < 0) return std::nullopt;
-    return std::pair{fromQImage(image.copy(x0, y0, x1 - x0 + 1, y1 - y0 + 1)), Point(x0, y0)};
+    const QRect painted = paintedArea(image);
+    if (painted.isEmpty()) return std::nullopt;
+    return std::pair{fromQImage(image.copy(painted)), Point(area.x() + painted.x(), area.y() + painted.y())};
 }
 
 } // namespace
@@ -58,6 +89,10 @@ std::optional<PsdImport> importSvgDocument(const QString& path, QString* error) 
         QSize size = probe.defaultSize();
         if (size.isEmpty()) size = QSize(300, 150);
         if (size.width() > maxImageSide || size.height() > maxImageSide) size.scale(maxImageSide, maxImageSide, Qt::KeepAspectRatio);
+        if ((long long)size.width() * size.height() > Document::pixelBudget) {   // the same budget the layered reader keeps
+            const double fit = std::sqrt(double(Document::pixelBudget) / (double(size.width()) * size.height()));
+            size = QSize(std::max(1, int(size.width() * fit)), std::max(1, int(size.height() * fit)));
+        }
         auto drawn = renderSvg(data, size.width(), size.height(), true);
         result.document = Document(size.width(), size.height());
         if (drawn) {

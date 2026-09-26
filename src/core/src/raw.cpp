@@ -1,4 +1,5 @@
 #include "compositor/raw.h"
+#include "compositor/document.h"
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -38,6 +39,10 @@ std::shared_ptr<Image> decodeRaw(const std::string& path, std::string* error) {
     if (int r = raw->open_file(path.c_str()); r != LIBRAW_SUCCESS) return fail(r);
     const auto& size = raw->imgdata.sizes;
     if (size.width > 30000 || size.height > 30000) { if (error) *error = "Images up to 30,000 pixels per side are supported."; return nullptr; }
+    if ((long long)size.width * size.height > Document::pixelBudget || (long long)size.raw_width * size.raw_height > 2 * Document::pixelBudget) {
+        if (error) *error = "The RAW image is larger than the 100-megapixel canvas budget.";
+        return nullptr;
+    }
     if (int r = raw->unpack(); r != LIBRAW_SUCCESS) return fail(r);
     if (int r = raw->dcraw_process(); r != LIBRAW_SUCCESS) return fail(r);
     int code = 0;

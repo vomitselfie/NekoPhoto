@@ -90,9 +90,10 @@ bool parse(const std::vector<uint8_t>& bytes, Gif& gif, bool withData) {
     return true;
 }
 
-/// Decodes the LZW stream into palette indices; stops at `count` (a short stream leaves the rest unset).
-size_t decodeLzw(const std::vector<uint8_t>& data, int minCodeSize, size_t count, std::vector<uint8_t>& out) {
-    out.assign(count, 0);
+/// Decodes the LZW stream, handing each palette index to `emit(position, index)`; stops at `count` (a short stream
+/// leaves the rest unset). Streaming keeps memory independent of the frame size the file claims.
+template <typename Emit>
+size_t decodeLzw(const std::vector<uint8_t>& data, int minCodeSize, size_t count, Emit&& emit) {
     if (minCodeSize < 2 || minCodeSize > 11) return 0;
     const int clear = 1 << minCodeSize, end = clear + 1;
     std::vector<uint16_t> prefix(4096);
@@ -111,7 +112,7 @@ size_t decodeLzw(const std::vector<uint8_t>& data, int minCodeSize, size_t count
         if (code == end) break;
         if (old < 0) {
             if (code >= clear) break;
-            out[written++] = uint8_t(code);
+            emit(written++, uint8_t(code));
             first = uint8_t(code);
             old = code;
             continue;
@@ -127,7 +128,7 @@ size_t decodeLzw(const std::vector<uint8_t>& data, int minCodeSize, size_t count
         if (code >= clear) break;
         first = uint8_t(code);
         stack.push_back(first);
-        for (size_t i = stack.size(); i-- > 0 && written < count;) out[written++] = stack[i];
+        for (size_t i = stack.size(); i-- > 0 && written < count;) emit(written++, stack[i]);
         if (next < 4096) {
             prefix[size_t(next)] = uint16_t(old);
             suffix[size_t(next)] = first;
@@ -170,16 +171,12 @@ std::optional<PsdImport> importGifBytes(const std::vector<uint8_t>& bytes, std::
         gif.frames.resize(limit);
     }
     Image canvas(width, height);   // premultiplied; a GIF pixel is opaque or clear, so it is also straight
-    std::vector<uint8_t> indices;
     int damaged = 0;
     for (size_t n = 0; n < gif.frames.size(); n++) {
         const Frame& f = gif.frames[n];
         const Palette& palette = f.local.empty() ? gif.global : f.local;
         std::optional<Image> saved;
         if (f.disposal == 3) saved = canvas;
-        const size_t count = size_t(f.width) * size_t(f.height);
-        const size_t decoded = decodeLzw(f.data, f.minCodeSize, count, indices);
-        if (decoded < count) damaged++;
         // Row order within the frame: interlaced frames arrive in four passes.
         std::vector<int> rows;
         rows.reserve(size_t(f.height));
@@ -189,19 +186,19 @@ std::optional<PsdImport> importGifBytes(const std::vector<uint8_t>& bytes, std::
         } else {
             for (int y = 0; y < f.height; y++) rows.push_back(y);
         }
-        for (size_t i = 0; i < rows.size(); i++) {
-            const int cy = f.y + rows[i];
-            if (cy >= height) continue;
-            for (int x = 0; x < f.width; x++) {
-                const size_t k = i * size_t(f.width) + size_t(x);
-                const int cx = f.x + x;
-                if (k >= decoded || cx >= width) continue;
-                const int index = indices[k];
-                if (index == f.transparent || size_t(index) >= palette.size()) continue;
-                uint8_t* d = canvas.pixel(cx, cy);
-                d[0] = palette[size_t(index)][0]; d[1] = palette[size_t(index)][1]; d[2] = palette[size_t(index)][2]; d[3] = 255;
-            }
-        }
+        // A frame may claim 65535 x 65535 over a small canvas: indices are drawn as they decode, never buffered, and
+        // a progressive frame stops after the last row that lands on the canvas.
+        size_t lastRow = 0;
+        for (size_t i = 0; i < rows.size(); i++) if (f.y + rows[i] < height) lastRow = i + 1;
+        const size_t count = f.x < width ? size_t(f.width) * lastRow : 0;
+        const size_t decoded = decodeLzw(f.data, f.minCodeSize, count, [&](size_t k, uint8_t index) {
+            const size_t i = k / size_t(f.width);
+            const int x = int(k % size_t(f.width)), cx = f.x + x, cy = f.y + rows[i];
+            if (cx >= width || cy >= height || index == f.transparent || size_t(index) >= palette.size()) return;
+            uint8_t* d = canvas.pixel(cx, cy);
+            d[0] = palette[index][0]; d[1] = palette[index][1]; d[2] = palette[index][2]; d[3] = 255;
+        });
+        if (decoded < count) damaged++;
         const int ms = f.delay * 10;
         const std::string name = "Frame " + std::to_string(n + 1) + " (" + std::to_string(ms) + " ms)";
         Layer layer(Asset::make(std::make_shared<Image>(canvas), name), Point(0, 0));

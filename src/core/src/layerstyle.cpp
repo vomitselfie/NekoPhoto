@@ -482,10 +482,15 @@ void readPatterns(const std::vector<uint8_t>& block, std::map<std::string, Patte
                 if (mode == 2) { auto p = r.read_span(768); palette.assign(p.begin(), p.end()); }
                 if (r.read_u32() != 3) { r.skip(end - r.position()); goto next; }
                 (void)r.read_u32();   // VMA list length
-                const int top = int(r.read_u32()), left = int(r.read_u32()), bottom = int(r.read_u32()), right = int(r.read_u32());
-                const int maxChannels = int(r.read_u32());
-                const int pw = right - left, ph = bottom - top;
-                if (pw <= 0 || ph <= 0 || pw > 4096 || ph > 4096 || w <= 0 || h <= 0) { r.skip(end - r.position()); goto next; }
+                // Rectangles in 64-bit: hostile edges must not overflow before the size checks.
+                const int64_t top = int32_t(r.read_u32()), left = int32_t(r.read_u32()), bottom = int32_t(r.read_u32()), right = int32_t(r.read_u32());
+                // Photoshop declares 24 channels; the slot count comes from the file, so it is capped.
+                const int maxChannels = int(std::min<uint32_t>(r.read_u32(), 56));
+                const int64_t pw64 = right - left, ph64 = bottom - top;
+                if (pw64 <= 0 || ph64 <= 0 || pw64 > 4096 || ph64 > 4096 || w <= 0 || h <= 0) { r.skip(end - r.position()); goto next; }
+                const int pw = int(pw64), ph = int(ph64);
+                // Only the planes the colour mode uses are kept (at most four colour planes and the alpha slot), and a
+                // plane is allocated only when its data can fill it.
                 std::vector<std::vector<uint8_t>> planes;
                 std::vector<uint8_t> alpha;
                 for (int slot = 0; slot < maxChannels + 2 && r.position() + 4 <= end; slot++) {
@@ -493,21 +498,24 @@ void readPatterns(const std::vector<uint8_t>& block, std::map<std::string, Patte
                     const uint32_t planeLength = r.read_u32();
                     const size_t planeEnd = r.position() + planeLength;
                     const uint32_t depth = r.read_u32();
-                    const int t = int(r.read_u32()), l = int(r.read_u32()), b = int(r.read_u32()), rr = int(r.read_u32());
+                    const int64_t t = int32_t(r.read_u32()), l = int32_t(r.read_u32()), b = int32_t(r.read_u32()), rr = int32_t(r.read_u32());
                     (void)r.read_u16();
                     const int compression = r.read_u8();
-                    const int cw = rr - l, ch = b - t;
-                    std::vector<uint8_t> plane(size_t(pw) * ph, 255);
-                    if (depth == 8 && cw == pw && ch == ph) {
-                        if (compression == 0) { auto d = r.read_span(size_t(cw) * ch); std::copy(d.begin(), d.end(), plane.begin()); }
-                        else if (compression == 1) {
-                            std::vector<size_t> counts(static_cast<size_t>(ch));
-                            for (auto& c : counts) c = r.read_u16();
-                            for (int y = 0; y < ch; y++) { auto row = r.read_span(counts[size_t(y)]); unpack(row.data(), row.size(), plane.data() + size_t(y) * cw, size_t(cw)); }
+                    const bool isAlpha = slot == maxChannels + 1;
+                    const bool wanted = isAlpha || planes.size() < 4;
+                    if (wanted) {
+                        std::vector<uint8_t> plane(size_t(pw) * size_t(ph), 255);
+                        if (depth == 8 && rr - l == pw64 && b - t == ph64) {
+                            if (compression == 0) { auto d = r.read_span(size_t(pw) * size_t(ph)); std::copy(d.begin(), d.end(), plane.begin()); }
+                            else if (compression == 1) {
+                                std::vector<size_t> counts(static_cast<size_t>(ph));
+                                for (auto& c : counts) c = r.read_u16();
+                                for (int y = 0; y < ph; y++) { auto row = r.read_span(counts[size_t(y)]); unpack(row.data(), row.size(), plane.data() + size_t(y) * size_t(pw), size_t(pw)); }
+                            }
                         }
+                        if (isAlpha) alpha = std::move(plane); else planes.push_back(std::move(plane));
                     }
                     r.skip(planeEnd > r.position() ? planeEnd - r.position() : 0);
-                    if (slot == maxChannels + 1) alpha = std::move(plane); else planes.push_back(std::move(plane));
                 }
                 PatternTile tile;
                 tile.width = pw; tile.height = ph;

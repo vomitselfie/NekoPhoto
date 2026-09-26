@@ -6,6 +6,7 @@
 #include "format_io.h"
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <map>
 #include <zlib.h>
 
@@ -75,11 +76,28 @@ std::string readString(format_io::Reader& r) {
     return text;
 }
 
+/// Inflates to exactly `expected` bytes. The output grows as data arrives (never past `expected`), so a stream that
+/// claims a huge cel but holds little costs only what it actually inflates to.
 bool inflateExact(const uint8_t* data, size_t size, size_t expected, std::vector<uint8_t>& out) {
-    out.resize(expected);
-    uLongf length = uLongf(expected);
+    out.clear();
     if (expected == 0) return true;
-    return uncompress(out.data(), &length, data, uLong(size)) == Z_OK && length == expected;
+    z_stream stream{};
+    if (inflateInit(&stream) != Z_OK) return false;
+    stream.next_in = const_cast<Bytef*>(data);
+    stream.avail_in = uInt(std::min<size_t>(size, UINT32_MAX));
+    constexpr size_t step = size_t(4) << 20;
+    int rc = Z_OK;
+    while (rc == Z_OK && out.size() < expected) {
+        const size_t have = out.size();
+        out.resize(std::min(expected, have + step));
+        stream.next_out = out.data() + have;
+        stream.avail_out = uInt(out.size() - have);
+        rc = inflate(&stream, Z_NO_FLUSH);
+        out.resize(out.size() - stream.avail_out);
+        if (rc == Z_OK && out.size() == have) break;   // no progress: truncated input
+    }
+    inflateEnd(&stream);
+    return (rc == Z_STREAM_END || rc == Z_OK) && out.size() == expected;
 }
 
 std::optional<PsdImport> fail(std::string* error, const std::string& why) { if (error) *error = why; return std::nullopt; }
@@ -114,6 +132,7 @@ std::optional<PsdImport> importAsepriteBytes(const std::vector<uint8_t>& bytes, 
     std::map<uint16_t, AseCel> cels;
     std::vector<std::array<uint8_t, 4>> palette;
     int tilemaps = 0;
+    long long celPixels = 0;
     {
         const size_t frameStart = r.pos;
         const uint32_t frameBytes = r.u32();
@@ -154,6 +173,11 @@ std::optional<PsdImport> importAsepriteBytes(const std::vector<uint8_t>& bytes, 
                     cel.height = cr.u16();
                     const size_t pixelBytes = size_t(cel.width) * size_t(cel.height) * bpp;
                     if (!cr.ok) return fail(error, "A cel chunk is truncated.");
+                    // Sizes from the file are checked before anything is allocated for them: the inflate buffer is
+                    // exactly this size, so this is also the decompression cap.
+                    if (cel.width > maxImageSide || cel.height > maxImageSide) return fail(error, "A cel is larger than a layer may be.");
+                    celPixels += (long long)cel.width * cel.height;
+                    if (celPixels > Document::projectPixelBudget) return fail(error, "The layers exceed the gigapixel a project may hold.");
                     if (celType == 0) {
                         if (!cr.has(pixelBytes)) return fail(error, "A cel chunk is truncated.");
                         cel.pixels.assign(bytes.begin() + std::ptrdiff_t(cr.pos), bytes.begin() + std::ptrdiff_t(cr.pos + pixelBytes));
