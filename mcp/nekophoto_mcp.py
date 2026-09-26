@@ -856,12 +856,20 @@ def presets_remove(kind: str, name: str) -> str:
 @edit("Draw a shape")
 def shape_draw(x: float, y: float, width: float = 0, height: float = 0, kind: str = "rectangle", corner_radius: float = 0, sides: int = 5, star: Optional[float] = None,
                x2: Optional[float] = None, y2: Optional[float] = None, weight: float = 4, name: Optional[str] = None, color: Optional[str] = None, fill: bool = True,
-               stroke_width: Optional[float] = None, stroke_color: Optional[str] = None, stroke_align: Optional[str] = None, stroke_dashes: Optional[list[float]] = None) -> str:
+               stroke_width: Optional[float] = None, stroke_color: Optional[str] = None, stroke_align: Optional[str] = None, stroke_dashes: Optional[list[float]] = None,
+               fill_type: Optional[str] = None, gradient: Optional[str] = None, gradient_type: Optional[str] = None, gradient_angle: Optional[float] = None,
+               pattern: Optional[str] = None, stroke_type: Optional[str] = None, stroke_gradient: Optional[str] = None, stroke_pattern: Optional[str] = None,
+               op: Optional[str] = None) -> str:
     """Add a vector shape layer (stays editable, and is a Photoshop shape layer in PSD exports). kind rectangle (corner_radius), ellipse, polygon (sides), star (sides, star = inset 0..0.99),
     line (from x, y to x2, y2, weight pixels) or custom (name: Heart, Star, Arrow, Speech Bubble, Check Mark, Lightning), in box x, y, width, height. color fills it (default the foreground);
-    fill=false with a stroke gives an outline; stroke_width / stroke_color / stroke_align (inside, center, outside) / stroke_dashes (in stroke widths, e.g. [4, 2]) stroke it."""
+    fill=false with a stroke gives an outline; stroke_width / stroke_color / stroke_align (inside, center, outside) / stroke_dashes (in stroke widths, e.g. [4, 2]) stroke it.
+    fill_type gradient (gradient: a preset name, empty for foreground to background; gradient_type linear/radial/angle/reflected/diamond; gradient_angle degrees) or pattern
+    (pattern: one of the document's patterns) paints the fill; stroke_type / stroke_gradient / stroke_pattern the stroke. op (combine, subtract, intersect, exclude) adds the
+    outline to the active shape layer instead, combined that way. Rectangles and ellipses keep live properties (shape_set live=...)."""
     return text(call("shape.draw", x=x, y=y, width=width, height=height, kind=kind, cornerRadius=corner_radius, sides=sides, star=star, x2=x2, y2=y2, weight=weight, name=name,
-                     color=color, fill=fill, strokeWidth=stroke_width, strokeColor=stroke_color, strokeAlign=stroke_align, strokeDashes=stroke_dashes))
+                     color=color, fill=fill, strokeWidth=stroke_width, strokeColor=stroke_color, strokeAlign=stroke_align, strokeDashes=stroke_dashes,
+                     fillType=fill_type, gradient=gradient, gradientType=gradient_type, gradientAngle=gradient_angle, pattern=pattern,
+                     strokeType=stroke_type, strokeGradient=stroke_gradient, strokePattern=stroke_pattern, op=op))
 
 
 @look("Shape")
@@ -872,9 +880,16 @@ def shape_get(id: str) -> str:
 
 @edit("Edit shape")
 def shape_set(id: str, path: Optional[list] = None, color: Optional[str] = None, fill: Optional[bool] = None, stroke: Optional[bool] = None, stroke_width: Optional[float] = None,
-              stroke_color: Optional[str] = None, stroke_align: Optional[str] = None, stroke_dashes: Optional[list[float]] = None) -> str:
-    """Change a vector shape layer: its path (as shape_get gives it; a knot may be just [x, y] for a corner), fill colour, fill on/off, or stroke."""
-    return text(call("shape.set", id=id, path=path, color=color, fill=fill, stroke=stroke, strokeWidth=stroke_width, strokeColor=stroke_color, strokeAlign=stroke_align, strokeDashes=stroke_dashes))
+              stroke_color: Optional[str] = None, stroke_align: Optional[str] = None, stroke_dashes: Optional[list[float]] = None,
+              fill_type: Optional[str] = None, gradient: Optional[str] = None, gradient_type: Optional[str] = None, gradient_angle: Optional[float] = None,
+              pattern: Optional[str] = None, stroke_type: Optional[str] = None, stroke_gradient: Optional[str] = None, stroke_pattern: Optional[str] = None,
+              live: Optional[dict] = None) -> str:
+    """Change a vector shape layer: its path (as shape_get gives it; a knot may be just [x, y] for a corner), fill colour, fill on/off, or stroke; fill_type / gradient /
+    pattern and stroke_type / stroke_gradient / stroke_pattern as shape_draw's. live changes a live rectangle's or ellipse's properties
+    {group, x, y, width, height, radius, radii: [topLeft, topRight, bottomRight, bottomLeft]} (shape_get lists them; they end once the path is edited directly)."""
+    return text(call("shape.set", id=id, path=path, color=color, fill=fill, stroke=stroke, strokeWidth=stroke_width, strokeColor=stroke_color, strokeAlign=stroke_align, strokeDashes=stroke_dashes,
+                     fillType=fill_type, gradient=gradient, gradientType=gradient_type, gradientAngle=gradient_angle, pattern=pattern,
+                     strokeType=stroke_type, strokeGradient=stroke_gradient, strokePattern=stroke_pattern, live=live))
 
 
 @look("Paths")
@@ -906,6 +921,35 @@ def paths_anchor(x: float, y: float, action: str = "add", radius: float = 6) -> 
     if action not in ("add", "delete"):
         return "action must be add or delete"
     return text(call("paths.addAnchor" if action == "add" else "paths.deleteAnchor", x=x, y=y, radius=radius))
+
+
+@edit("Path operation")
+def paths_operation(action: str = "set", subpath: int = 0, op: str = "combine") -> str:
+    """Photoshop's path operations on the target path (the chosen path, a targeted vector mask, or the active shape layer's): action set changes the component
+    holding subpath to combine, subtract, intersect or exclude with those before it; action merge is Merge Shape Components (add-only outlines, curves as corners)."""
+    if action == "merge":
+        return text(call("paths.mergeComponents"))
+    if action != "set":
+        return "action must be set or merge"
+    return text(call("paths.setOperation", subpath=subpath, op=op))
+
+
+@edit("Vector mask")
+def vector_mask(id: str, action: str = "get", mode: Optional[str] = None, path: Optional[list] = None, inverted: Optional[bool] = None) -> str:
+    """A layer's own vector mask (Layer > Vector Mask). action get reads it; set makes or replaces it (mode revealAll, hideAll, currentPath = the path paths_apply chose,
+    or path = subpaths as paths_list gives them; inverted hides inside); delete removes it; target makes it the path the Pen, Direct Selection and paths_anchor edit."""
+    methods = {"get": "vectorMask.get", "set": "vectorMask.set", "delete": "vectorMask.delete", "target": "vectorMask.target"}
+    if action not in methods:
+        return "action must be get, set, delete or target"
+    if action == "set":
+        return text(call("vectorMask.set", id=id, mode=mode, path=path, inverted=inverted))
+    return text(call(methods[action], id=id))
+
+
+@edit("Text to path")
+def text_to_path(id: str, shape: bool = False) -> str:
+    """Type > Create Work Path: a text layer's glyph outlines as the Work Path (id 1025); shape=true is Type > Convert to Shape (the text layer becomes a shape layer)."""
+    return text(call("text.toShape" if shape else "text.toPath", id=id))
 
 
 @edit("Path from selection")

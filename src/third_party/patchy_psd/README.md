@@ -25,3 +25,7 @@ Ported (not vendored) from the same repository, adapted to NekoPhoto's core, eac
   `src/formats/af_document_io.cpp` and `af_tree.{hpp,cpp}` at the commit above (the container and stream table,
   the doc.dat tree, the tile planes, the blend-mode table, placement, masks, artboards, the Erase fold and the
   parametric shapes). See `docs/affinity-import.md`.
+- `src/psd/psd_vector.cpp`'s `fill_content_object` and `vector_origination_block_payload` /
+  `parse_vector_origination_block` -> `src/core/src/layerstyle_write.cpp` (`authorGradientFill`, `authorPatternFill`) and
+  `src/core/src/vectorlayer.cpp` (a stroke's paint content, `authorVectorOrigination`, `parseVectorOrigination`): shape
+  layers' gradient and pattern fills and live shape properties. See `docs/vector-tools.md`.

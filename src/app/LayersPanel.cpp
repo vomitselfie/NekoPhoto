@@ -3,6 +3,7 @@
 #include "LayerStyleDialog.h"
 #include "SmartFilterDialog.h"
 #include "ImageConvert.h"
+#include "compositor/vectorlayer.h"
 #include <QStandardItemModel>
 #include <QApplication>
 #include <QDrag>
@@ -516,6 +517,25 @@ QWidget* LayersPanel::makeRow(const Layer& layer, int depth, bool visible) {
         mask->installEventFilter(this);
         h->addWidget(mask);
     }
+    if (hasLayerVectorMask(layer)) if (const Document* doc = session_->document() ? &*session_->document() : nullptr) {
+        // The vector mask's thumbnail: its path drawn small over the canvas; a click targets it for the Pen and
+        // Direct Selection.
+        auto* vector = new QLabel;
+        GrayPtr drawn;
+        if (auto path = layerVectorMask(layer, *doc)) {
+            const double scale = std::min(30.0 / std::max(1, doc->width), double(thumbHeight) / std::max(1, doc->height));
+            drawn = rasterizeVectorMask(*path, doc->rect(), scale, std::max(1, int(doc->width * scale)), std::max(1, int(doc->height * scale)));
+        }
+        vector->setPixmap(maskPixmap(drawn, true, dpr));
+        vector->setFixedSize(30, thumbHeight);
+        const bool targeted = session_->activeLayerId() == layer.id && session_->vectorMaskTargeted();
+        vector->setStyleSheet(targeted ? "border: 2px solid palette(highlight);" : "border: 2px solid transparent;");
+        vector->setToolTip(tr("Vector mask (click to edit its path with the Pen and Direct Selection)"));
+        vector->setProperty("layerId", QString::fromStdString(layer.id));
+        vector->setProperty("vectorMask", true);
+        vector->installEventFilter(this);
+        h->addWidget(vector);
+    }
     auto* name = new QLabel(QString::fromStdString(layer.name));
     name->setProperty("layerId", QString::fromStdString(layer.id));
     name->setProperty("name", true);
@@ -696,6 +716,10 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event) {
             if (!ok && !error.isEmpty()) QMessageBox::warning(this, tr("Smart Filters"), error);
             return true;
         }
+        if (w && w->property("vectorMask").toBool()) {
+            session_->targetVectorMask(w->property("layerId").toString().toStdString());
+            return true;
+        }
         if (w && w->property("mask").toBool()) {
             if (mouse->modifiers() & Qt::AltModifier) {
                 // Alt-drag a mask onto another layer to copy it there.
@@ -761,6 +785,11 @@ void LayersPanel::showContextMenu(const QPoint& pos) {
     } else {
         menu.addAction(tr("Add Reveal-All Mask"), this, [this] { session_->addMaskFromSelection(true); });
         menu.addAction(tr("Add Hide-All Mask"), this, [this] { session_->addMaskFromSelection(false); });
+    }
+    if (hasLayerVectorMask(*layer)) menu.addAction(tr("Delete Vector Mask"), this, [this] { session_->deleteVectorMask(); });
+    else if (!isVectorShapeLayer(*layer)) {
+        menu.addAction(tr("Add Reveal-All Vector Mask"), this, [this] { session_->addVectorMask(EditorSession::VectorMaskKind::RevealAll); });
+        menu.addAction(tr("Add Hide-All Vector Mask"), this, [this] { session_->addVectorMask(EditorSession::VectorMaskKind::HideAll); });
     }
     menu.exec(tree_->viewport()->mapToGlobal(pos));
 }

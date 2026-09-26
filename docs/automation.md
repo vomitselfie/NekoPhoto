@@ -224,7 +224,14 @@ opacity and moves go into that frame.
 Vector shapes and paths: `shape.draw` makes a vector shape layer (rectangle, ellipse, polygon, star, line or a
 custom shape, with fill and stroke), `shape.get` and `shape.set` read and change its path, fill and stroke;
 `paths.list`, `paths.set`, `paths.select`, `paths.delete`, `paths.fill`, `paths.stroke`, `paths.toSelection`,
-`paths.toShape`, `paths.fromSelection`, `paths.addAnchor` and `paths.deleteAnchor` work the Paths panel (docs/vector-tools.md). Quick Mask: `selection.quickMask` (`on` true enters, false turns the mask back into the selection; while on,
+`paths.toShape`, `paths.fromSelection`, `paths.addAnchor` and `paths.deleteAnchor` work the Paths panel (docs/vector-tools.md).
+`shape.draw` and `shape.set` also take gradient and pattern paints (`fillType`, `gradient`, `gradientType`, `gradientAngle`,
+`pattern`; `strokeType`, `strokeGradient`, `strokePattern`), `op` (combine, subtract, intersect, exclude: a component of
+the active shape layer instead of a new layer) and, on `shape.set`, `live` (a live rectangle's or ellipse's box and corner
+radii, which `shape.get` lists); `paths.setOperation` and `paths.mergeComponents` work the target path's components;
+`vectorMask.get`, `vectorMask.set` (Reveal All, Hide All, the chosen path or a path), `vectorMask.delete` and
+`vectorMask.target` (the Pen's and Direct Selection's target) handle a layer's own vector mask; `text.toPath` and
+`text.toShape` are Type > Create Work Path and Convert to Shape. Quick Mask: `selection.quickMask` (`on` true enters, false turns the mask back into the selection; while on,
 paint the mask with `brush.stroke` and `mask: true`, white selecting). Painting by coordinates: `pixels.patch` (the selection repaired from `dx`, `dy` away), `pixels.bucket` (Paint Bucket at `x`, `y` with `color`, `opacity`, `tolerance`,
 `contiguous`, `antialias`, `allLayers`), `brush.stroke` (`points` as `[x, y]` pairs; `tool` brush,
 eraser, healing, healingbrush or clone with `source`, smudge, blur, sharpen or liquify, or dodge and burn (with `range`

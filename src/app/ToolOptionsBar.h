@@ -8,6 +8,7 @@
 #include <vector>
 
 class QCheckBox;
+class QComboBox;
 class QHBoxLayout;
 class QResizeEvent;
 
@@ -55,6 +56,7 @@ private:
     QWidget* buildBucketOptions();
     QWidget* buildPenOptions();
     QWidget* buildBoxOptions();   // the Artboard and Slice tools
+    QComboBox* pathOperationBox(bool withNewLayer);
     std::vector<std::function<void()>> syncers_;
     /// Size, hardness and opacity; `strength` names the opacity (Exposure, Flow, Strength) for tools that use it so.
     void addBrushTipFields(QHBoxLayout* layout, const QString& strength = QString());

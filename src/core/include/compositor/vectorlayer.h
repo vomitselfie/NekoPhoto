@@ -7,17 +7,38 @@
 #pragma once
 #include "document.h"
 #include "vectormask.h"
+#include <array>
 #include <optional>
 #include <string>
 #include <vector>
 
 namespace compositor {
 
+/// Photoshop's live shape properties (the 'vogk' origination): a rectangle keeps its box and its corner radii, an
+/// ellipse its box, for as long as the shape group it describes is still the path they make (an anchor dragged, a
+/// rotation or an uneven scale ends it, as editing the path directly does in Photoshop).
+struct LiveShape {
+    enum class Kind { Rectangle, Ellipse } kind = Kind::Rectangle;
+    Rect box;                                     // document pixels
+    std::array<double, 4> radii{0, 0, 0, 0};      // top-left, top-right, bottom-right, bottom-left
+    int32_t group = 0;                            // the shape group (subpaths' group index) it describes
+    bool operator==(const LiveShape&) const = default;
+};
+/// The one closed subpath a live shape makes (in `group`).
+VectorPath livePath(const LiveShape& shape);
+/// Whether the path's subpaths of the live shape's group are still exactly what it makes.
+bool liveShapeHolds(const LiveShape& shape, const VectorPath& path);
+/// The 'vogk' payload (u32 1, u32 16, descriptor), and back (entries of other kinds or turned are left out).
+std::vector<uint8_t> authorVectorOrigination(const std::vector<LiveShape>& shapes);
+std::optional<std::vector<LiveShape>> parseVectorOrigination(const std::vector<uint8_t>& payload);
+
 struct VectorShape {
     VectorPath path;                       // document pixels
     bool fill = true;
-    uint8_t r = 0, g = 0, b = 0;           // the fill colour
+    uint8_t r = 0, g = 0, b = 0;           // the fill colour (a Solid fill; the fallback of the others)
+    VectorPaint fillPaint;                 // Solid, or a gradient ('GdFl') or pattern ('PtFl') fill
     VectorStroke stroke;                   // stroke.enabled false: no stroke
+    std::vector<LiveShape> live;           // live shape properties of its groups; kept only while they hold
 };
 
 /// The blocks, as Photoshop writes them. The path is stored against a `canvasWidth` x `canvasHeight` canvas.
@@ -28,7 +49,7 @@ std::vector<uint8_t> authorSolidColour(uint8_t r, uint8_t g, uint8_t b);
 /// The canvas a document's paths are stored against (a PSD's own, as read; else the document's).
 void pathCanvas(const Document& document, int& width, int& height);
 
-/// Whether the layer is a vector shape layer (a path with a solid fill, its pixels still that fill: painting on it makes
+/// Whether the layer is a vector shape layer (a path with a solid, gradient or pattern fill, its pixels still that fill: painting on it makes
 /// it pixels cut by a vector mask), and its shape as it now stands.
 bool isVectorShapeLayer(const Layer& layer);
 std::optional<VectorShape> vectorShapeOf(const Layer& layer, const Document& document);
@@ -44,9 +65,31 @@ int refreshVectorShapes(Document& document);
 /// The control-point bounds of a path (document pixels); empty for none.
 Rect pathBounds(const VectorPath& path);
 
+// ---- Path operations (Photoshop's Combine Shapes, Subtract Front Shape, Intersect, Exclude) -----------------------
+
+/// `added`'s subpaths put after `path`'s as one new shape group (one past the highest), combined with what comes
+/// before by `op`; returns the new group's index.
+int32_t addShapeComponent(VectorPath& path, const VectorPath& added, VectorPath::Op op);
+/// The operation of the shape group `subpath` belongs to (every subpath in it takes it).
+void setComponentOp(VectorPath& path, int subpath, VectorPath::Op op);
+/// Merge Shape Components: the combination as add-only geometry, one group, its outline traced from the path drawn
+/// at up to 8x (curves come back as corner points within about a tenth of a pixel; holes as even-odd subpaths).
+VectorPath mergeShapeComponents(const VectorPath& path);
+/// Douglas-Peucker on a closed loop: the points that keep it within `tolerance`.
+std::vector<Point> simplifyLoop(const std::vector<Point>& loop, double tolerance);
+
+// ---- Vector masks on ordinary layers ----------------------------------------------------------------------------
+
+/// A layer that is not a vector shape layer, with a vector mask ('vmsk') of its own.
+bool hasLayerVectorMask(const Layer& layer);
+/// Sets the layer's vector mask to `path` (document pixels, as the layer now stands), or removes it (none).
+void setLayerVectorMask(Layer& layer, const Document& document, const std::optional<VectorPath>& path);
+
 // ---- Paths the Shape tool draws (one closed subpath each, clockwise, document pixels) ---------------------------
 
 VectorPath rectanglePath(const Rect& box, double cornerRadius = 0);
+/// A rectangle with its own radius at each corner (top-left, top-right, bottom-right, bottom-left).
+VectorPath rectanglePath(const Rect& box, const std::array<double, 4>& radii);
 VectorPath ellipsePath(const Rect& box);
 /// A regular polygon, or a star when `starInset` (0..0.99, how far the inner points come in) is above zero, fitting
 /// `box`, its first point at the top.

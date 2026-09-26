@@ -349,6 +349,22 @@ void AutomationServer::registerLayersHandlers() {
         const Layer* updated = s->document()->find(l.id);
         return updated ? layerJson(*updated, 0) : QJsonObject{};
     });
+    add("text.toPath", [session, layer](const QJsonObject& p) {
+        // Type > Create Work Path: the text's glyph outlines as the Work Path (id 1025), the text layer kept.
+        const Uuid id = layer(p).id;
+        QString error;
+        if (!session()->textToWorkPath(id, &error)) fail(error.isEmpty() ? QStringLiteral("couldn't make a path from the text") : error, invalidParams);
+        const auto work = compositor::documentPath(*session()->document(), compositor::kWorkPathId);
+        return QJsonObject{{"id", int(compositor::kWorkPathId)}, {"subpaths", work ? int(work->path.subpaths.size()) : 0}};
+    });
+    add("text.toShape", [session, layer](const QJsonObject& p) {
+        // Type > Convert to Shape: the text layer becomes a shape layer of its glyph outlines, in its colour.
+        const Uuid id = layer(p).id;
+        QString error;
+        if (!session()->textToShape(id, &error)) fail(error.isEmpty() ? QStringLiteral("couldn't convert the text") : error, invalidParams);
+        const Layer* l = session()->document()->find(id);
+        return l ? layerJson(*l, 0) : QJsonObject{};
+    });
     add("text.styleRange", [session, layer](const QJsonObject& p) {
         // Photoshop's Character panel on selected letters: the fields given, over [start, start + length) in UTF-16
         // units of the text (default all of it).

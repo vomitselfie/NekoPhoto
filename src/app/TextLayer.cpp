@@ -1,5 +1,6 @@
 #include "TextLayer.h"
 #include "ImageConvert.h"
+#include "compositor/smartobject.h"
 #include "compositor/warpmesh.h"
 #include <QBuffer>
 #include <QFontDatabase>
@@ -8,7 +9,9 @@
 #include <QHash>
 #include <QFontMetricsF>
 #include <QImage>
+#include <QGlyphRun>
 #include <QPainter>
+#include <QPainterPath>
 #include <QRawFont>
 #include <QTextLayout>
 #include <algorithm>
@@ -214,6 +217,103 @@ std::shared_ptr<compositor::Image> renderUpright(const compositor::LayerText& te
     }
     painter.end();
     return fromQImage(image);
+}
+
+namespace {
+
+/// A Qt outline as path subpaths: each closed figure a subpath of corner and curve knots, `group` given.
+void appendOutline(const QPainterPath& outline, int32_t group, compositor::VectorPath& out) {
+    compositor::VectorPath::Subpath current;
+    auto flush = [&] {
+        auto& k = current.knots;
+        // A figure that returns to its start: the last knot is the first (its incoming handle goes to the first).
+        if (k.size() > 1 && std::abs(k.back().x - k.front().x) < 1e-9 && std::abs(k.back().y - k.front().y) < 1e-9) {
+            k.front().inX = k.back().inX; k.front().inY = k.back().inY;
+            k.pop_back();
+        }
+        if (k.size() >= 2) { current.closed = true; current.op = compositor::VectorPath::Op::Add; current.group = group; out.subpaths.push_back(current); }
+        current = {};
+    };
+    for (int i = 0; i < outline.elementCount(); i++) {
+        const QPainterPath::Element e = outline.elementAt(i);
+        if (e.isMoveTo()) { flush(); current.knots.push_back({e.x, e.y, e.x, e.y, e.x, e.y}); }
+        else if (e.isLineTo()) current.knots.push_back({e.x, e.y, e.x, e.y, e.x, e.y});
+        else if (e.isCurveTo() && i + 2 < outline.elementCount() && !current.knots.empty()) {
+            const QPainterPath::Element c2 = outline.elementAt(i + 1), end = outline.elementAt(i + 2);
+            current.knots.back().outX = e.x; current.knots.back().outY = e.y;
+            current.knots.push_back({c2.x, c2.y, end.x, end.y, end.x, end.y});
+            i += 2;
+        }
+    }
+    flush();
+}
+
+} // namespace
+
+std::optional<compositor::VectorPath> textLayerOutline(const compositor::Layer& layer, QString* error) {
+    auto fail = [&](const QString& why) { if (error) *error = why; return std::nullopt; };
+    if (!layer.isLiveText() || !layer.asset || !layer.asset->image) return fail(QObject::tr("The layer is not a text layer."));
+    const compositor::LayerText& text = *layer.text;
+    if (text.warp.active()) return fail(QObject::tr("Warped text cannot be made a path here; set its warp to None first."));
+    // The glyphs where renderUpright puts them in the layer's raster, one shape group each (overlapping letters
+    // add; a letter's own holes fill even-odd).
+    std::vector<QPainterPath> glyphs;
+    auto collect = [&](const QTextLayout& layout, QPointF offset) {
+        for (const QGlyphRun& run : layout.glyphRuns()) {
+            const QRawFont font = run.rawFont();
+            const auto indexes = run.glyphIndexes();
+            const auto positions = run.positions();
+            for (int i = 0; i < indexes.size() && i < positions.size(); i++) {
+                const QPointF at = positions[i] + layout.position() + offset;
+                if (at.y() < -1e5) continue;   // a line the box hides
+                QPainterPath g = font.pathForGlyph(indexes[i]);
+                if (g.isEmpty()) continue;
+                g.translate(at);
+                glyphs.push_back(g);
+            }
+        }
+    };
+    if (!text.runs.empty() || (text.boxWidth > 0 && text.boxHeight > 0)) {
+        RunLayout laid = layoutRuns(text);
+        for (const RunLayout::Line& line : laid.lines) {
+            QTextLine l = laid.paragraphs[line.paragraph]->lineAt(line.index);
+            const double x = text.alignment == 1 ? (laid.width - line.width) / 2 : text.alignment == 2 ? laid.width - line.width : 0;
+            l.setPosition(line.shown ? QPointF(x, line.baseline - l.ascent()) : QPointF(0, -1e6));
+        }
+        for (auto& paragraph : laid.paragraphs) collect(*paragraph, QPointF(textPadding, textPadding));
+    } else {
+        const QFont font = fontFor(text);
+        const QFontMetricsF metrics(font);
+        const QStringList lines = QString::fromStdString(text.text).split('\n');
+        const double lineHeight = metrics.height() * std::clamp(text.lineSpacing, 0.1, 10.0);
+        double width = 0;
+        for (const QString& line : lines) width = std::max(width, metrics.horizontalAdvance(line));
+        for (int i = 0; i < lines.size(); i++) {
+            const double lineWidth = metrics.horizontalAdvance(lines[i]);
+            const double x = textPadding + (text.alignment == 1 ? (width - lineWidth) / 2 : text.alignment == 2 ? width - lineWidth : 0);
+            const double baseline = textPadding + i * lineHeight + metrics.ascent();
+            // Shaped as drawText shapes it, glyph by glyph.
+            QTextLayout layout(lines[i], font);
+            layout.beginLayout();
+            QTextLine l = layout.createLine();
+            if (l.isValid()) l.setLineWidth(1e7);
+            layout.endLayout();
+            if (!l.isValid()) continue;
+            l.setPosition(QPointF(0, 0));
+            collect(layout, QPointF(x, baseline - l.ascent()));
+        }
+    }
+    compositor::VectorPath path;
+    for (size_t i = 0; i < glyphs.size(); i++) appendOutline(glyphs[i], int32_t(i), path);
+    if (path.subpaths.empty()) return fail(QObject::tr("The text has no outlines (only spaces?)."));
+    // From the raster to the document, through the layer's placement (moved, scaled or turned).
+    const int w = layer.asset->image->width(), h = layer.asset->image->height();
+    for (auto& s : path.subpaths)
+        for (auto& k : s.knots) {
+            auto map = [&](double& x, double& y) { const compositor::Point p = compositor::mapThroughTransform(layer.transform, w, h, x, y); x = p.x; y = p.y; };
+            map(k.inX, k.inY); map(k.x, k.y); map(k.outX, k.outY);
+        }
+    return path;
 }
 
 namespace {

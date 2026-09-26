@@ -113,6 +113,7 @@ struct ShapeToolSettings {
     double lineWeight = 4;
     std::string custom = "Heart";
     bool fill = true;
+    compositor::VectorPaint fillPaint;     // Solid: the foreground colour
     compositor::VectorStroke stroke;       // enabled false: none
 };
 
@@ -310,8 +311,17 @@ public:
     // or else the active vector shape layer's. Paths themselves are the document's (vectorlayer.h DocumentPath).
     enum class PenMode { Shape, Path };
     PenMode penMode = PenMode::Shape;
-    /// Shape mode with a vector shape layer active: the new subpath goes into it instead of a new layer.
-    bool penAddsToShape = false;
+    /// Photoshop's path operation for the next outline the Pen or the Shape tool adds: none (New Layer) makes a new
+    /// shape layer; Combine, Subtract Front Shape, Intersect or Exclude add it to the target (the active shape layer,
+    /// the targeted vector mask, or in Path mode the path) as a new component combined that way.
+    std::optional<compositor::VectorPath::Op> pathOp;
+    /// The subpath Direct Selection last picked on the target path (its component's operation is the bar's).
+    std::optional<int> selectedSubpath() const { return selectedSubpath_; }
+    void setSelectedSubpath(std::optional<int> index);
+    /// The picked subpath's component combined by `op` instead, as one undo step.
+    bool setSelectedSubpathOp(compositor::VectorPath::Op op);
+    /// Merge Shape Components on the target path (add-only geometry), as one undo step.
+    bool mergeTargetComponents();
     /// Photoshop's Auto Add/Delete: with no path being drawn, the Pen adds an anchor on the target path's outline and
     /// deletes one it clicks.
     bool penAutoAddDelete = true;
@@ -326,6 +336,25 @@ public:
     /// Ends the path being drawn: closed, or left open (Enter); cancelled with Esc.
     void penFinish(bool close);
     void penCancel();
+    /// The active layer's own vector mask as the target (clicking its thumbnail in the Layers panel); the Paths
+    /// panel's choice is let go. False when the layer has no vector mask.
+    bool targetVectorMask(const compositor::Uuid& layer);
+    bool vectorMaskTargeted() const;
+    /// Layer > Vector Mask: Reveal All, Hide All (an empty path, inverted), Current Path (the target path, or the
+    /// Paths panel's), and Delete; one undo step each.
+    enum class VectorMaskKind { RevealAll, HideAll, CurrentPath };
+    bool addVectorMask(VectorMaskKind kind, QString* error = nullptr);
+    bool deleteVectorMask();
+    /// The layer's vector mask made or replaced by `path` (document pixels), as one undo step (automation).
+    bool setVectorMaskPath(const compositor::Uuid& layer, const compositor::VectorPath& path, QString* error = nullptr);
+    /// Type > Create Work Path and Convert to Shape: a text layer's glyph outlines (as it is laid out upright) as the
+    /// Work Path, or as a new shape layer in place of the text layer (hidden, as Photoshop replaces it).
+    bool textToWorkPath(const compositor::Uuid& layer, QString* error = nullptr);
+    bool textToShape(const compositor::Uuid& layer, QString* error = nullptr);
+    /// The active shape layer's live properties (vectorlayer.h LiveShape), and one changed (its group redrawn) as
+    /// one undo step.
+    std::vector<compositor::LiveShape> activeLiveShapes() const;
+    bool setActiveLiveShape(const compositor::LiveShape& shape);
     /// The Paths panel's choice (none: the active shape layer's path is the target).
     std::optional<uint16_t> activePathId() const { return activePathId_; }
     void selectPath(std::optional<uint16_t> id);
@@ -861,6 +890,13 @@ private:
     std::optional<compositor::LayerStyle> styleClipboard_;
     std::optional<compositor::VectorPath::Subpath> penDraft_;
     std::optional<uint16_t> activePathId_;
+    std::optional<int> selectedSubpath_;
+    std::optional<compositor::Uuid> vectorMaskTarget_;
+    /// Where penFinish and finishShape put a new outline: `path` added to the target as a component by `pathOp`,
+    /// with `live` properties for it when it is a live shape. False when there is no target to add to.
+    bool addComponentToTarget(const compositor::VectorPath& path, const std::optional<compositor::LiveShape>& live, const QString& name);
+    /// The live shape a Shape-tool draft makes (rectangles and ellipses), none for the other kinds.
+    std::optional<compositor::LiveShape> shapeDraftLive() const;
     std::optional<compositor::WarpMesh> warpCage_;
     compositor::Uuid warpCageLayer_;
     /// A shape layer bends live (its path redrawn inside the open undo step); this is how it was.

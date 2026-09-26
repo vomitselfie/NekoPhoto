@@ -221,4 +221,31 @@ void importPresetsInteractively(QWidget* parent, EditorSession* session) {
     else QMessageBox::information(parent, QObject::tr("Import Presets"), text);
 }
 
+compositor::StyleGradient shapeGradient(const QString& name, const QColor& foreground, const QColor& background) {
+    using compositor::StyleColor;
+    compositor::StyleGradient g;
+    g.fillLayer = true;
+    g.angle = 90;
+    const StyleColor fg{uint8_t(foreground.red()), uint8_t(foreground.green()), uint8_t(foreground.blue())};
+    const StyleColor bg{uint8_t(background.red()), uint8_t(background.green()), uint8_t(background.blue())};
+    const compositor::GradientPreset* preset = name.isEmpty() ? nullptr : PresetLibrary::instance().findGradient(name);
+    if (preset && !preset->colors.empty()) {
+        for (const auto& c : preset->colors)
+            g.colors.push_back({c.location, c.source == compositor::GradientPreset::Source::Foreground ? fg : c.source == compositor::GradientPreset::Source::Background ? bg : c.color, c.midpoint});
+        g.alphas = preset->alphas;
+        g.smoothness = preset->smoothness;
+    } else g.colors = {{0, fg, 0.5f}, {1, bg, 0.5f}};
+    if (g.alphas.empty()) g.alphas = {{0, 1, 0.5f}, {1, 1, 0.5f}};
+    return g;
+}
+
+std::vector<std::pair<std::string, std::string>> documentPatternList(const compositor::Document& document) {
+    std::vector<std::pair<std::string, std::string>> out;
+    if (!document.psdCarry) return out;
+    for (const auto& g : document.psdCarry->globals)
+        if (g.key == "Patt" || g.key == "Pat2" || g.key == "Pat3")
+            for (const auto& p : compositor::patternRecords(g.data)) out.push_back({p.id, p.name.empty() ? p.id : p.name});
+    return out;
+}
+
 } // namespace app

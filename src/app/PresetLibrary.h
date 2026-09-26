@@ -4,6 +4,7 @@
 // tool's preset list and the Layer Style dialog's gradient rows read it. See docs/presets.md.
 #pragma once
 #include "compositor/presets.h"
+#include <QColor>
 #include <QObject>
 #include <QStringList>
 
@@ -54,6 +55,12 @@ private:
     std::vector<compositor::PatternPreset> patterns_;
     std::vector<compositor::GradientPreset> gradients_;
 };
+
+/// A shape's gradient fill from the gradient preset `name` (empty or unknown: foreground to background), its
+/// foreground and background stops taking `foreground` and `background`; linear at 90 degrees, as Photoshop starts one.
+compositor::StyleGradient shapeGradient(const QString& name, const QColor& foreground, const QColor& background);
+/// The document's patterns (its 'Patt' blocks) as id and name, for pattern fills.
+std::vector<std::pair<std::string, std::string>> documentPatternList(const compositor::Document& document);
 
 /// The file dialog's filter for preset files.
 QString presetFileFilter();

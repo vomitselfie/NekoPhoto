@@ -3,6 +3,7 @@
 #include "compositor/document.h"
 #include "compositor/psd.h"
 #include "compositor/psd_writer.h"
+#include "compositor/vectormask.h"
 #include <QFont>
 #include <QPointF>
 #include <QString>
@@ -20,6 +21,9 @@ constexpr int textPadding = 4;
 /// would exceed the document's pixel budget. Warped text (Warp Text) is bent over its layout box; `warpOffset`
 /// then gives where the bent raster's top-left sits from the upright one's.
 std::shared_ptr<compositor::Image> renderTextLayer(const compositor::LayerText& text, QPointF* warpOffset = nullptr);
+/// Type > Create Work Path: the text layer's glyph outlines as it is laid out upright, in document pixels (each glyph
+/// a shape group); none (with `error`) for warped text or text with no outlines.
+std::optional<compositor::VectorPath> textLayerOutline(const compositor::Layer& layer, QString* error = nullptr);
 /// How renderTextLayer lays `text` out, for writing it as a Photoshop type layer.
 std::optional<compositor::PsdTextMetrics> psdTextMetrics(const compositor::LayerText& text);
 /// PSD export options with text layers written as Photoshop type layers.

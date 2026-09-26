@@ -192,7 +192,8 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
     }
     case Tool::DirectSelect: {
         const PathHit hit = pathHit(view);
-        if (hit.part == PathHit::None) { selectedKnot_.reset(); update(); return; }
+        if (hit.part == PathHit::None) { selectedKnot_.reset(); session_->setSelectedSubpath(std::nullopt); update(); return; }
+        session_->setSelectedSubpath(hit.sub);   // its component's operation shows in the bar
         auto path = session_->targetPath();
         if (!path) return;
         if (hit.part == PathHit::Anchor && (modifiers & Qt::AltModifier)) {
