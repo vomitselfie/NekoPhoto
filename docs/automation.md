@@ -114,11 +114,13 @@ layer alone; a masked layer as it shows, `masked: false` for its raw pixels),
 
 Documents: `tabs.select`, `tabs.new`, `tabs.close`, `document.new`,
 `document.open` (.comp, a Photoshop .psd/.psb, a Clip Studio .clip, an Affinity .afphoto, .afdesign, .afpub or .af, an Aseprite .ase/.aseprite (first frame), an
-icon .ico/.cur (a layer per size, the largest visible) or an animated GIF (a layer per frame, "Frame N (D ms)", frame 1
+icon .ico/.cur (a layer per size, the largest visible), an SVG (.svg/.svgz: shapes as vector
+shape layers), a PDF page (`page`, 1-based, and `resolution` in pixels per inch, default 150; when `app.info` reports
+`pdf`) or an animated GIF (a layer per frame, "Frame N (D ms)", frame 1
 at the bottom and the only one visible), which open in a tab of their own and answer with `layers` and the import
 `notes`; or an image, .tga included), `document.import` (an image as a layer),
 `document.save` (answers `macCompatible`: false past the 100 megapixels of layers Compositor for
-macOS opens; projects here hold up to a gigapixel), `document.export` (.psd, layered, text layers as Photoshop text (`texts` counts them), answering with the counts and any `warnings` and `notes` about what Photoshop cannot carry; or the composite as .png, .jpg, .webp, .tif, .tga or .ico (16, 32, 48 and 256 px); `quality` for JPEG and WebP, where 100 is lossless; `background` behind a JPEG), `document.close`.
+macOS opens; projects here hold up to a gigapixel), `document.export` (.psd, layered, text layers as Photoshop text (`texts` counts them), answering with the counts and any `warnings` and `notes` about what Photoshop cannot carry; or .svg, answering with the `shapes`, `images` and `groups` written and `notes` on what became images (docs/svg-pdf.md); or the composite as .png, .jpg, .webp or .tif; `quality` for JPEG and WebP, where 100 is lossless; `background` behind a JPEG), `document.close`.
 
 Smart objects: `smartObject.convert` (the selection or `ids`), `smartObject.place` (`path`), `smartObject.replace`
 (`path`), `smartObject.rasterize`, `smartObject.editContents` (opens a tab) and `smartObject.commit` (in that tab).

@@ -11,6 +11,7 @@
 #include <QMouseEvent>
 #include <QToolButton>
 #include <QStandardPaths>
+#include "VectorFiles.h"
 #include <QJsonDocument>
 #include <QTimer>
 #include <algorithm>
@@ -276,7 +277,7 @@ void AutomationServer::registerAppHandlers() {
     add("app.info", [this, w](const QJsonObject&) {
         return QJsonObject{{"name", "nekophoto"}, {"version", QApplication::applicationVersion()}, {"protocolVersion", protocolVersion}, {"socket", path_},
                            {"platform", QApplication::platformName()}, {"tabs", w->tabCount()}, {"currentTab", w->currentTabIndex()},
-                           {"removeBackground", ModelStore::ready()}, {"scribble", scribbleSelectionSupported()}, {"clickSelect", ModelStore::promptReady()}, {"raw", compositor::rawSupported()}};
+                           {"removeBackground", ModelStore::ready()}, {"scribble", scribbleSelectionSupported()}, {"clickSelect", ModelStore::promptReady()}, {"raw", compositor::rawSupported()}, {"pdf", app::pdfSupported()}};
     });
     add("events.subscribe", [this](const QJsonObject& p) {
         // Notifications on this connection: {"method":"event","params":{"kind":...,"tab":N}}, one per kind per event-loop turn.

@@ -5,6 +5,8 @@
 #include "compositor/psd_writer.h"
 #include "CanvasWidget.h"
 #include "Dialogs.h"
+#include "VectorFiles.h"
+#include "compositor/svg.h"
 #include "ImageConvert.h"
 #include "compositor/aseprite.h"
 #include "compositor/affinity.h"
@@ -44,13 +46,15 @@ QString imageFilter() {
 /// Everything File > Open and Import File take: Photoshop, Clip Studio and Aseprite files, images (TGA, ICO and GIF
 /// through the core's own readers), and a project's manifest.json.
 QString openFilter() {
-    QStringList patterns = {"*.psd", "*.psb", "*.clip", "*.ase", "*.aseprite", "*.tga", "*.ico", "*.cur", "*.gif", "*.afphoto", "*.afdesign", "*.afpub", "*.af", "manifest.json"};
+    QStringList patterns = {"*.psd", "*.psb", "*.clip", "*.ase", "*.aseprite", "*.tga", "*.ico", "*.cur", "*.gif", "*.afphoto", "*.afdesign", "*.afpub", "*.af", "*.svg", "*.svgz", "manifest.json"};
+    if (pdfSupported()) patterns << "*.pdf";
     for (auto& format : QImageReader::supportedImageFormats()) patterns << "*." + QString::fromLatin1(format);
     patterns.removeDuplicates();
     return QObject::tr("Images, layered files and projects (%1)").arg(patterns.join(' ')) + ";;" + imageFilter() + ";;"
         + QObject::tr("Photoshop files (*.psd *.psb)") + ";;" + QObject::tr("Clip Studio files (*.clip)") + ";;"
         + QObject::tr("Aseprite files (*.ase *.aseprite)") + ";;" + QObject::tr("Icons (*.ico *.cur)") + ";;" + QObject::tr("TGA images (*.tga)") + ";;"
-        + QObject::tr("Affinity files (*.afphoto *.afdesign *.afpub *.af)");
+        + QObject::tr("Affinity files (*.afphoto *.afdesign *.afpub *.af)") + ";;" + QObject::tr("SVG files (*.svg *.svgz)")
+        + (pdfSupported() ? ";;" + QObject::tr("PDF files (*.pdf)") : QString());
 }
 
 bool isProjectPath(const QString& path) { return path.endsWith(".comp", Qt::CaseInsensitive) && QFileInfo(path).isDir(); }
@@ -60,10 +64,15 @@ bool hasSuffix(const QString& path, std::initializer_list<const char*> suffixes)
     return false;
 }
 
+/// SVG and PDF: opened through VectorFiles.h (shape layers, a rendered page).
+bool isVectorFilePath(const QString& path) {
+    return path.endsWith(".svg", Qt::CaseInsensitive) || path.endsWith(".svgz", Qt::CaseInsensitive) || path.endsWith(".pdf", Qt::CaseInsensitive);
+}
+
 } // namespace
 
 bool isLayeredPath(const QString& path) {
-    if (hasSuffix(path, {".psd", ".psb", ".clip", ".ico", ".cur", ".ase", ".aseprite", ".afphoto", ".afdesign", ".afpub", ".af"})) return true;
+    if (hasSuffix(path, {".psd", ".psb", ".clip", ".ico", ".cur", ".ase", ".aseprite", ".afphoto", ".afdesign", ".afpub", ".af"}) || isVectorFilePath(path)) return true;
     // An animated GIF's frames become layers; a still one opens as an image.
     return path.endsWith(".gif", Qt::CaseInsensitive) && QFileInfo(path).isFile() && compositor::gifFrameCount(path.toStdString()) > 1;
 }
@@ -105,15 +114,24 @@ void MainWindow::openLayeredFile(const QString& path) {
     const std::string file = path.toStdString();
     const bool affinity = hasSuffix(path, {".afphoto", ".afdesign", ".afpub", ".af"});
     const bool clip = hasSuffix(path, {".clip"}), ase = hasSuffix(path, {".ase", ".aseprite"}), psd = hasSuffix(path, {".psd", ".psb"});
+    const bool vector = isVectorFilePath(path);
     std::optional<PsdImport> imported;
-    if (clip) imported = compositor::importClip(file, &error);
+    if (vector) {
+        // SVG as shape layers, PDF as a rendered page (VectorFiles.h).
+        QString message;
+        imported = path.endsWith(".pdf", Qt::CaseInsensitive) ? app::importPdfDocument(path, &message, isVisible() ? this : nullptr) : app::importSvgDocument(path, &message);
+        error = message.toStdString();
+    } else if (clip) imported = compositor::importClip(file, &error);
     else if (affinity) imported = compositor::importAffinity(file, &error, app::affinityImportOptions());
     else if (ase) imported = compositor::importAseprite(file, &error);
     else if (hasSuffix(path, {".ico", ".cur"})) imported = compositor::importIco(file, &error);
     else if (hasSuffix(path, {".gif"})) imported = compositor::importGif(file, &error);
     else imported = compositor::importPsd(file, &error, app::psdImportOptions());
     QApplication::restoreOverrideCursor();
-    if (!imported) { showError(tr("Couldn’t open %1").arg(QFileInfo(path).fileName()), QString::fromStdString(error)); return; }
+    if (!imported) {
+        if (!error.empty() || !vector) showError(tr("Couldn’t open %1").arg(QFileInfo(path).fileName()), QString::fromStdString(error));   // empty: the page choice was cancelled
+        return;
+    }
     if (psd) app::finishPsdText(*imported);
     Tab& tab = addTab(true);
     tab.session->adoptDocument(imported->document, QFileInfo(path).completeBaseName());
@@ -122,7 +140,8 @@ void MainWindow::openLayeredFile(const QString& path) {
     for (const std::string& note : imported->notes) lastImportNotes_ << QString::fromStdString(note);
     if (!lastImportNotes_.isEmpty() && isVisible()) {
         auto* box = new QMessageBox(QMessageBox::Information, tr("Imported %1").arg(QFileInfo(path).fileName()),
-            (clip ? tr("%n layer(s) imported. Some things Clip Studio keeps have no counterpart here:", nullptr, int(imported->document.layers.size()))
+            (vector ? tr("%n layer(s) imported. Some things in the file were approximated or drawn as pixels:", nullptr, int(imported->document.layers.size()))
+             : clip ? tr("%n layer(s) imported. Some things Clip Studio keeps have no counterpart here:", nullptr, int(imported->document.layers.size()))
              : ase ? tr("%n layer(s) imported. Some things Aseprite keeps have no counterpart here:", nullptr, int(imported->document.layers.size()))
              : affinity ? tr("%n layer(s) imported. Some things Affinity keeps have no counterpart here:", nullptr, int(imported->document.layers.size()))
              : psd ? tr("%n layer(s) imported. Some things Photoshop keeps have no counterpart here:", nullptr, int(imported->document.layers.size()))
@@ -325,6 +344,22 @@ void MainWindow::exportPsd() {
     QApplication::restoreOverrideCursor();
     if (!ok) { showError(tr("Couldn’t export PSD"), QString::fromStdString(error)); return; }
     statusBar()->showMessage(tr("Exported %1").arg(QFileInfo(path).fileName()), 5000);
+}
+
+void MainWindow::exportSvg() {
+    session_->endQuickMask();   // the Quick Mask layer is never written
+    if (!session_->hasDocument()) return;
+    QString path = askExportPath(tr("Export SVG"), tr("SVG image (*.svg)"), {"svg"});
+    if (path.isEmpty()) return;
+    QSettings().setValue("lastDir", QFileInfo(path).absolutePath());
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    compositor::SvgExportSummary summary;
+    std::string error;
+    const bool ok = compositor::exportSvg(*session_->document(), path.toStdString(), &summary, &error);
+    QApplication::restoreOverrideCursor();
+    if (!ok) { showError(tr("Couldn’t export SVG"), QString::fromStdString(error)); return; }
+    statusBar()->showMessage(summary.images ? tr("Exported %1 (%n image(s) for what SVG cannot draw as paths)", nullptr, summary.images).arg(QFileInfo(path).fileName())
+                                            : tr("Exported %1").arg(QFileInfo(path).fileName()), 5000);
 }
 
 QString MainWindow::askExportPath(const QString& title, const QString& filter, const QStringList& suffixes) {

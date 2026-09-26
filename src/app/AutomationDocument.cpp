@@ -10,6 +10,8 @@
 #include "compositor/png.h"
 #include "compositor/psd_writer.h"
 #include "compositor/tga.h"
+#include "compositor/svg.h"
+#include "VectorFiles.h"
 #include <QFileInfo>
 #include <QPainter>
 #include <algorithm>
@@ -90,10 +92,27 @@ void AutomationServer::registerDocumentHandlers() {
     add("document.open", [w, session](const QJsonObject& p) {
         QString path = QFileInfo(str(p, "path")).absoluteFilePath();
         if (!QFileInfo::exists(path)) fail("no such file: " + path, invalidParams);
+        const bool pdf = path.endsWith(".pdf", Qt::CaseInsensitive), svg = path.endsWith(".svg", Qt::CaseInsensitive) || path.endsWith(".svgz", Qt::CaseInsensitive);
+        if (pdf) {
+            // One open's page and resolution (VectorFiles.h); the open resets them.
+            app::PdfOpenOptions& options = app::pdfOpenOptions();
+            options.page = integer(p, "page", 1);
+            options.resolution = num(p, "resolution", 150);
+            options.pageGiven = true;
+            if (options.page < 1) { app::pdfOpenOptions() = {}; fail("page must be 1 or more", invalidParams); }
+            if (options.resolution < 18 || options.resolution > 1200) { app::pdfOpenOptions() = {}; fail("resolution must be 18..1200", invalidParams); }
+        } else if (has(p, "page") || has(p, "resolution")) fail("page and resolution apply to PDF files", invalidParams);
+        const EditorSession* before = session();
+        const std::string beforeDocument = before->hasDocument() ? before->document()->id : std::string();
         w->openPath(path);
         EditorSession* s = session();
         QJsonObject out{{"tab", w->currentTabIndex()}, {"title", s->title()}, {"width", s->hasDocument() ? s->document()->width : 0}, {"height", s->hasDocument() ? s->document()->height : 0}};
-        if (isLayeredPath(path)) {
+        if (pdf || svg) {
+            app::pdfOpenOptions() = {};
+            if (!s->hasDocument() || (s == before && s->document()->id == beforeDocument)) fail(pdf ? (app::pdfSupported() ? "the PDF could not be opened" : "this build cannot open PDF files (Qt PDF was not found)") : "the SVG could not be opened");
+            out["layers"] = int(s->document()->layers.size());
+            out["notes"] = QJsonArray::fromStringList(w->lastImportNotes());
+        } else if (isLayeredPath(path)) {
             if (!s->hasDocument()) fail("the file could not be imported: " + QFileInfo(path).fileName());
             out["layers"] = int(s->document()->layers.size());
             out["notes"] = QJsonArray::fromStringList(w->lastImportNotes());
@@ -138,6 +157,15 @@ void AutomationServer::registerDocumentHandlers() {
             return QJsonObject{{"path", path}, {"width", doc.width}, {"height", doc.height}, {"layers", summary.layers}, {"folders", summary.folders},
                                {"masks", summary.masks}, {"clipped", summary.clipped}, {"adjustments", summary.adjustments}, {"texts", summary.texts}, {"smartObjects", summary.smartObjects}, {"warnings", warnings}, {"notes", notes}};
         }
+        if (suffix == "svg") {
+            // Shape layers as paths, folders as groups, the rest as embedded PNGs (compositor/svg.h).
+            SvgExportSummary summary;
+            std::string error;
+            if (!compositor::exportSvg(doc, path.toStdString(), &summary, &error)) fail("couldn't write " + path + ": " + qs(error));
+            QJsonArray notes;
+            for (auto& n : summary.notes) notes.append(qs(n));
+            return QJsonObject{{"path", path}, {"width", doc.width}, {"height", doc.height}, {"shapes", summary.shapes}, {"images", summary.images}, {"groups", summary.groups}, {"notes", notes}};
+        }
         auto flat = session()->flattened();
         if (!flat) fail("nothing to export");
         if (suffix == "png") {
@@ -162,7 +190,7 @@ void AutomationServer::registerDocumentHandlers() {
         } else if (suffix == "ico") {
             std::string error;
             if (!writeIco(path.toStdString(), *flat, defaultIcoSizes, &error, &doc)) fail("couldn't write " + path + ": " + qs(error));
-        } else fail("path must end in .psd, .psb, .png, .jpg, .jpeg, .webp, .tif, .tiff, .tga or .ico", invalidParams);
+        } else fail("path must end in .psd, .psb, .svg, .png, .jpg, .jpeg, .webp, .tif, .tiff, .tga or .ico", invalidParams);
         return QJsonObject{{"path", path}, {"width", flat->width()}, {"height", flat->height()}};
     });
     add("document.close", [session](const QJsonObject& p) {

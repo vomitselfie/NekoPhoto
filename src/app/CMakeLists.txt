@@ -123,6 +123,8 @@ qt_add_executable(nekophoto
     Autosave.cpp
     Bench.h
     Bench.cpp
+    VectorFiles.h
+    VectorFiles.cpp
 )
 
 target_compile_definitions(nekophoto PRIVATE COMPOSITOR_VERSION="${COMPOSITOR_VERSION_STRING}")
@@ -134,6 +136,19 @@ qt_add_resources(nekophoto "welcome" PREFIX "/" FILES images/welcome.jpg)
 qt_add_resources(nekophoto "gmic_lists" PREFIX "/" FILES gmic/unsupported.txt)
 qt_add_resources(nekophoto "mypaint_brushes" PREFIX "/" FILES ${COMPOSITOR_BRUSH_FILES} brushes/mypaint/order.conf)
 target_link_libraries(nekophoto PRIVATE compositor::core Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Svg compositor_warnings)
+# Qt PDF (PDFium, BSD-3 / LGPL Qt) renders PDF pages for File > Open. Optional: without it PDFs are refused with a
+# message. Looked up as its own package (not a Qt6 COMPONENT), so a missing module cannot fail the Qt lookup.
+option(COMPOSITOR_WITH_QTPDF "Open PDF files through Qt PDF when it is installed" ON)
+if(COMPOSITOR_WITH_QTPDF)
+    find_package(Qt6Pdf QUIET)
+    if(TARGET Qt6::Pdf)
+        target_link_libraries(nekophoto PRIVATE Qt6::Pdf)
+        target_compile_definitions(nekophoto PRIVATE COMPOSITOR_HAVE_QTPDF=1)
+        message(STATUS "PDF: Qt PDF ${Qt6Pdf_VERSION}")
+    else()
+        message(STATUS "PDF: Qt PDF not found, PDF import disabled")
+    endif()
+endif()
 # Off by default: linking libgmic makes it a hard dependency of the binary, and an installed build then
 # refuses to start once the library is upgraded or removed, while the gmic executable serves the same
 # filters. In-process G'MIC is for people who build with it on and keep libgmic around.

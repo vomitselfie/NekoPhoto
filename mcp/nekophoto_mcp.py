@@ -276,12 +276,14 @@ def document_new(width: int = 1920, height: int = 1080, resolution: float = 72) 
 
 
 @edit("Open a file")
-def document_open(path: str) -> str:
+def document_open(path: str, page: Optional[int] = None, resolution: Optional[float] = None) -> str:
     """Open a .comp project (in its own tab); a layered file in its own tab, the reply listing its layers and what could
-    not be carried: Photoshop .psd/.psb, Clip Studio .clip, Affinity .afphoto/.afdesign/.afpub/.af, Aseprite .ase/.aseprite (first frame), an icon .ico/.cur (a
+    not be carried: Photoshop .psd/.psb, Clip Studio .clip, Affinity .afphoto/.afdesign/.afpub/.af, Aseprite .ase/.aseprite (first frame), SVG .svg/.svgz (shapes as editable vector shape layers, the rest as pixels),
+    a PDF page (page, 1-based; resolution in ppi, default 150; when app_info reports pdf), an icon .ico/.cur (a
     layer per size) or an animated GIF (a layer per frame, frame 1 visible); or an image file, .tga and camera RAW files included (CR2, NEF, ARW, DNG, ...; developed with the
     camera white balance), as a layer (a first image creates the canvas)."""
     return text(call("document.open", path=os.path.abspath(path)))
+    return text(call("document.open", path=os.path.abspath(path), page=page, resolution=resolution))
 
 
 @edit("Import an image as a layer")
@@ -301,7 +303,8 @@ def document_save(path: Optional[str] = None) -> str:
 @outside("Export an image")
 def document_export(path: str, quality: int = 85, background: str = "#ffffff") -> str:
     """Flatten and export to a .png, .webp, .tif or .tga (these keep transparency; WebP at quality 100 is
-    lossless), a .ico (16, 32, 48 and 256 px sizes), or .jpg (over background, at quality); .psd/.psb keep layers."""
+    lossless), a .ico (16, 32, 48 and 256 px sizes), or .jpg (over background, at quality); .psd/.psb keep layers;
+    an .svg writes vector shape layers as paths, folders as groups and every other layer as an embedded PNG."""
     return text(call("document.export", path=os.path.abspath(path), quality=quality, background=background))
 
 

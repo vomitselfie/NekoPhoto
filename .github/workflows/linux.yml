@@ -19,6 +19,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ninja-build cmake libpng-dev libmypaint-dev libraw-dev libzstd-dev libsqlite3-dev qt6-base-dev qt6-svg-dev qt6-wayland libgl1-mesa-dev pkg-config clang
+          # Qt PDF opens PDF files; optional, so a runner image without the package still builds (PDF import off).
+          sudo apt-get install -y qt6-pdf-dev || echo "qt6-pdf-dev not available: building without PDF import"
       - name: Vendored OpenCV (cached)
         id: opencv
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830   # v4

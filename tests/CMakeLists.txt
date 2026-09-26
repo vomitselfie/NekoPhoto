@@ -166,3 +166,7 @@ target_link_libraries(affinity_check PRIVATE compositor::core compositor_warning
 add_executable(presets_tests presets_tests.cpp)
 target_link_libraries(presets_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME presets_tests COMMAND presets_tests)
+
+add_executable(svg_tests svg_tests.cpp)
+target_link_libraries(svg_tests PRIVATE compositor::core compositor_warnings)
+add_test(NAME svg_tests COMMAND svg_tests)

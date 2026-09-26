@@ -125,6 +125,7 @@ private:
     bool save(bool asNew);
     void exportPng();
     void exportJpeg();
+    void exportSvg();
     void exportWebp();
     void exportTiff();
     void exportTga();
