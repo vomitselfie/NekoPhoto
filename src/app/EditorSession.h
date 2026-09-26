@@ -13,6 +13,7 @@
 #include "compositor/filters.h"
 #include "compositor/document.h"
 #include "compositor/smartfilter.h"
+#include "compositor/trim.h"
 #include "compositor/history.h"
 #include "compositor/smartobject_edit.h"
 #include <QPointer>
@@ -23,6 +24,8 @@
 #include "compositor/warp.h"
 #include "compositor/warpstroke.h"
 #include <QElapsedTimer>
+class QFileSystemWatcher;
+class QTimer;
 #include <functional>
 #include <map>
 #include <QColor>
@@ -106,6 +109,11 @@ public:
     void installProject(LoadedProject project);
     bool openProject(const QString& path, QString* error);
     bool saveProject(const QString& path, QString* error);
+    /// The open project changed on disk (another app, an agent writing the package): after `resolveExternalChange`,
+    /// true reloads it in place (losing unsaved work), false keeps what is open.
+    void resolveExternalChange(bool revert);
+    /// Reloads that followed the package on disk (for tests and automation).
+    int externalReloads() const { return externalReloads_; }
     void closeDocument();
     /// Adds imported pixels as a new layer, centred on `at` (or the canvas); a first import creates the canvas.
     void insertImage(std::shared_ptr<const compositor::Image> image, const QString& name, std::optional<QPointF> at = std::nullopt);
@@ -414,7 +422,10 @@ public:
     void applySubjectMask(std::shared_ptr<const compositor::GrayImage> mask, std::shared_ptr<const compositor::Image> pixels = nullptr, std::optional<compositor::Uuid> layerId = std::nullopt);
 
     // Crop / canvas
-    void cropTo(const QRectF& rect);
+    void cropTo(const QRectF& rect, const char* action = "Crop");
+    /// Image ▸ Trim: the canvas cut to its content (transparency or a corner's colour); false when nothing would change
+    /// or nothing would remain.
+    bool trim(const compositor::TrimOptions& options);
     void resizeCanvas(int width, int height, double anchorX, double anchorY);
     void resizeImage(int width, int height, double resolution, int sampling = 2);
 
@@ -483,6 +494,10 @@ public:
     bool smartObjectBlocksPixels(bool ask = false);
 
 signals:
+    /// The open project changed on disk while there is unsaved work: ask, then call resolveExternalChange.
+    void externalChangeConflict(const QString& path);
+    /// The open project was reloaded because its package changed on disk.
+    void reloadedFromDisk();
     /// A pixel edit was stopped on smart object `id`: offer to edit its contents or rasterize it.
     void smartObjectPixelsRequested(compositor::Uuid id);
     /// The document's pixels or structure changed; `region` is the document area affected (empty means all).
@@ -540,6 +555,17 @@ private:
     std::set<compositor::Uuid> selectedLayerIds_;
     bool isMaskSelected_ = false;
     QString projectPath_;
+    // ---- following the package on disk (EditorSessionWatch.cpp)
+    void watchProject();
+    void stopWatchingProject();
+    void noteExternalChange();
+    void checkExternalChange();
+    void reloadFromDisk();
+    QFileSystemWatcher* watcher_ = nullptr;
+    QTimer* settle_ = nullptr;
+    QByteArray knownDigest_;
+    bool asking_ = false;
+    int externalReloads_ = 0;
     Tool tool_ = Tool::Move;
     std::optional<TransformEdit> transformEdit_;
     std::unique_ptr<compositor::BrushStroke> stroke_;

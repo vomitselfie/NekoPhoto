@@ -186,6 +186,21 @@ void AutomationServer::registerDocumentHandlers() {
         session()->resizeImage(width, height, num(p, "resolution", doc.resolution), mode);
         return QJsonObject{{"width", session()->document()->width}, {"height", session()->document()->height}};
     });
+    add("image.trim", [session](const QJsonObject& p) {
+        TrimOptions o;
+        const QString by = str(p, "basedOn", QStringLiteral("transparent")).toLower();
+        if (by.startsWith("transparent")) o.basedOn = TrimOptions::BasedOn::TransparentPixels;
+        else if (by.startsWith("topleft") || by.startsWith("top left") || by.startsWith("top-left")) o.basedOn = TrimOptions::BasedOn::TopLeftColor;
+        else if (by.startsWith("bottomright") || by.startsWith("bottom right") || by.startsWith("bottom-right")) o.basedOn = TrimOptions::BasedOn::BottomRightColor;
+        else fail("basedOn must be transparent, topLeft or bottomRight", invalidParams);
+        o.top = !has(p, "top") || flag(p, "top", true);
+        o.bottom = !has(p, "bottom") || flag(p, "bottom", true);
+        o.left = !has(p, "left") || flag(p, "left", true);
+        o.right = !has(p, "right") || flag(p, "right", true);
+        o.tolerance = uint8_t(std::clamp(integer(p, "tolerance", 0), 0, 255));
+        const bool trimmed = session()->trim(o);
+        return QJsonObject{{"trimmed", trimmed}, {"width", session()->document()->width}, {"height", session()->document()->height}};
+    });
 
     // ---- seeing the result
     add("render", [session, document](const QJsonObject& p) {

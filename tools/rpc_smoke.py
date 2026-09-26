@@ -117,6 +117,10 @@ def remaining_methods(rpc):
     rpc.call("canvas.flip", vertical=False)
     rpc.call("canvas.resize", width=220, height=140)
     rpc.call("canvas.crop", x=0, y=0, width=200, height=120)
+    trimmed = rpc.call("image.trim", basedOn="topLeft", tolerance=4)
+    assert "trimmed" in trimmed, trimmed
+    if trimmed["trimmed"]:
+        rpc.call("history.undo")
     rpc.call("image.resize", scale=0.5)
     for name in ("quickselect", "text", "brush"):
         rpc.call("tool.select", name=name)

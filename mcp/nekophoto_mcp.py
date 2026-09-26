@@ -637,6 +637,14 @@ def canvas_flip(vertical: bool = False) -> str:
     return text(call("canvas.flip", vertical=vertical))
 
 
+@edit("Trim the canvas")
+def image_trim(based_on: str = "transparent", top: bool = True, bottom: bool = True, left: bool = True, right: bool = True,
+               tolerance: int = 0) -> str:
+    """Cut the canvas down to its content, as Photoshop's Image > Trim: based_on transparent (transparent pixels),
+    topLeft or bottomRight (that corner's colour, within tolerance 0..255), on the sides chosen."""
+    return text(call("image.trim", basedOn=based_on, top=top, bottom=bottom, left=left, right=right, tolerance=tolerance))
+
+
 @edit("Resize the image")
 def image_resize(width: Optional[int] = None, height: Optional[int] = None, scale: Optional[float] = None, sampling: str = "high") -> str:
     """Resample the whole image (every layer) to width x height (one keeps the aspect ratio) or by scale; sampling nearest, smooth or high."""

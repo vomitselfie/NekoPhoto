@@ -118,6 +118,7 @@ void EditorSession::installProject(LoadedProject project) {
     setActiveLayer(project.activeLayer);
     projectPath_ = project.path;
     history_.reset();
+    watchProject();
     viewport.fit({double(document_->width), double(document_->height)});
     emit viewportChanged();
     emit projectPathChanged();
@@ -135,6 +136,7 @@ void EditorSession::adoptDocument(const Document& document, const QString& name)
     if (!active) for (auto it = document_->layers.rbegin(); it != document_->layers.rend(); ++it) if (!it->isGroup) { active = it->id; break; }
     setActiveLayer(active);
     projectPath_.clear();
+    stopWatchingProject();
     importedName_ = name;
     history_.reset();
     viewport.fit({double(document_->width), double(document_->height)});
@@ -155,6 +157,7 @@ bool EditorSession::saveProject(const QString& path, QString* error) {
     }
     projectPath_ = path;
     history_.markSaved();
+    watchProject();   // our own save is the package as we know it
     emit projectPathChanged();
     emit titleChanged();
     emit historyChanged();
@@ -167,6 +170,7 @@ void EditorSession::closeDocument() {
     document_.reset();
     setActiveLayer(std::nullopt);
     projectPath_.clear();
+    stopWatchingProject();
     history_.reset();
     emit projectPathChanged();
     notifyDocument();
@@ -263,11 +267,20 @@ void EditorSession::endEdit() {
 
 // ---- Crop and canvas --------------------------------------------------------------
 
-void EditorSession::cropTo(const QRectF& rectF) {
+bool EditorSession::trim(const TrimOptions& options) {
+    if (!canEditLayers()) return false;
+    auto flat = renderFlattened(*document_);
+    auto rect = flat ? trimRect(*flat, options) : std::nullopt;
+    if (!rect || *rect == document_->rect()) return false;
+    cropTo(QRectF(rect->x, rect->y, rect->width, rect->height), "Trim");
+    return true;
+}
+
+void EditorSession::cropTo(const QRectF& rectF, const char* action) {
     if (!canEditLayers()) return;
     Rect rect = Rect(rectF.x(), rectF.y(), rectF.width(), rectF.height()).integral().intersection(document_->rect());
     if (rect.isEmpty() || rect == document_->rect()) return;
-    beginEdit("Crop");
+    beginEdit(action);
     Document doc = *document_;
     doc.width = int(rect.width);
     doc.height = int(rect.height);

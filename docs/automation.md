@@ -160,7 +160,7 @@ model once downloaded: `foreground` and `background` points as `[x, y]` lists, a
 (`radius`), `selection.border` (`width`).
 
 Canvas and history: `canvas.resize`, `canvas.crop`, `canvas.flip`,
-`image.resize`, `history.undo`, `history.redo`, `history.beginGroup` (`name`) and
+`image.resize`, `image.trim` (Photoshop's Trim: `basedOn` transparent, topLeft or bottomRight, the sides, `tolerance`), `history.undo`, `history.redo`, `history.beginGroup` (`name`) and
 `history.endGroup`: the steps one connection records in between become one undo step with that name.
 Each call still records its own step while the group is open, so the person's Undo keeps working; the
 merge happens at the end, and only when no one else recorded a step in between (the reply says why

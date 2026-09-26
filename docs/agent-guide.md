@@ -103,6 +103,11 @@ done
 
 ## Things to know
 
+- An open project follows its package on disk: an agent that writes the `.comp` folder (its `manifest.json` and
+  `images/`, see project-format.md) sees the open tab reload in place about half a second later, as long as the
+  person has no unsaved changes there (they are asked otherwise). The socket is still the richer way in; writing
+  files suits agents that cannot reach it.
+
 - `layers.set` opacity is 0..1; blend names are the ones `layers.list` reports, in any case or
   spacing ("color-dodge"). Folders have no blend mode.
 - A misspelt parameter is refused with the list of the ones the method takes.

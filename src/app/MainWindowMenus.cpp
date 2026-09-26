@@ -1,5 +1,14 @@
 // The main window's menus, tool rail and colour swatches.
 #include "MainWindow.h"
+#include <QDialog>
+#include <QHBoxLayout>
+#include <QVBoxLayout>
+#include <QLabel>
+#include <QComboBox>
+#include <QSpinBox>
+#include <QCheckBox>
+#include <QFormLayout>
+#include <QDialogButtonBox>
 #include "WarpDialog.h"
 #include "CanvasFrame.h"
 #include "Dialogs.h"
@@ -167,6 +176,40 @@ void MainWindow::buildMenus() {
     needsDocument(image->addAction(tr("&Image Size…"), QKeySequence("Ctrl+Alt+I"), this, [this] {
         auto o = askImageSize(this, session_->document()->width, session_->document()->height, session_->document()->resolution);
         if (o) session_->resizeImage(o->width, o->height, o->resolution, o->sampling);
+    }));
+    needsDocument(image->addAction(tr("&Trim…"), this, [this] {
+        // Photoshop's dialog: what to trim by, and which sides.
+        QDialog dialog(this);
+        dialog.setWindowTitle(tr("Trim"));
+        auto* layout = new QVBoxLayout(&dialog);
+        auto* basedOn = new QComboBox;
+        basedOn->addItems({tr("Transparent Pixels"), tr("Top Left Pixel Color"), tr("Bottom Right Pixel Color")});
+        auto* form = new QFormLayout;
+        form->addRow(tr("Based on"), basedOn);
+        auto* tolerance = new QSpinBox;
+        tolerance->setRange(0, 255);
+        tolerance->setToolTip(tr("How far a pixel's channels may be from the corner's and still be trimmed"));
+        form->addRow(tr("Tolerance"), tolerance);
+        layout->addLayout(form);
+        auto* sides = new QHBoxLayout;
+        QCheckBox* side[4];
+        const QString names[4] = {tr("Top"), tr("Left"), tr("Bottom"), tr("Right")};
+        for (int i = 0; i < 4; i++) { side[i] = new QCheckBox(names[i]); side[i]->setChecked(true); sides->addWidget(side[i]); }
+        layout->addWidget(new QLabel(tr("Trim away")));
+        layout->addLayout(sides);
+        auto sync = [&] { tolerance->setEnabled(basedOn->currentIndex() != 0); };
+        connect(basedOn, QOverload<int>::of(&QComboBox::currentIndexChanged), &dialog, sync);
+        sync();
+        auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+        connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+        connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+        layout->addWidget(buttons);
+        if (dialog.exec() != QDialog::Accepted) return;
+        TrimOptions o;
+        o.basedOn = TrimOptions::BasedOn(basedOn->currentIndex());
+        o.top = side[0]->isChecked(); o.left = side[1]->isChecked(); o.bottom = side[2]->isChecked(); o.right = side[3]->isChecked();
+        o.tolerance = uint8_t(tolerance->value());
+        if (!session_->trim(o)) showError(tr("Trim"), tr("There is nothing to trim: the canvas already ends at its content, or nothing would remain."));
     }));
     needsDocument(image->addAction(tr("Crop to Selection"), this, [this] {
         const auto& d = session_->document();

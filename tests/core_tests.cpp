@@ -1,6 +1,7 @@
 // Unit tests for the portable core: geometry, transforms, blending, history,
 // compositing semantics, brush strokes, PNG and the .comp round trip.
 #include "check.h"
+#include "compositor/trim.h"
 #include "compositor/adjustments.h"
 #include <cstring>
 #include "compositor/blend.h"
@@ -665,6 +666,32 @@ TEST_CASE(text_runs_survive_a_project) {
     REQUIRE(back->layers[0].text.has_value());
     CHECK(back->layers[0].text->runs == t.runs);
     fs::remove_all(dir);
+}
+
+TEST_CASE(trim_by_transparency_and_by_corner_colour) {
+    // A 20 x 10 canvas: transparent but for a red block at (5, 2)-(12, 7).
+    Image flat(20, 10);
+    for (int y = 2; y < 7; y++) for (int x = 5; x < 12; x++) { uint8_t* p = flat.pixel(x, y); p[0] = 255; p[3] = 255; }
+    auto r = trimRect(flat, {});
+    REQUIRE(r.has_value());
+    CHECK(*r == Rect(5, 2, 7, 5));
+    TrimOptions onlyTop;
+    onlyTop.bottom = onlyTop.left = onlyTop.right = false;
+    CHECK(*trimRect(flat, onlyTop) == Rect(0, 2, 20, 8));
+    // By the top-left colour: a white canvas with a grey mark, trimmed within the tolerance.
+    Image white(20, 10);
+    white.fill(250, 250, 250, 255);
+    for (int y = 4; y < 6; y++) for (int x = 3; x < 9; x++) { uint8_t* p = white.pixel(x, y); p[0] = p[1] = p[2] = 128; }
+    TrimOptions byColour;
+    byColour.basedOn = TrimOptions::BasedOn::TopLeftColor;
+    byColour.tolerance = 10;
+    CHECK(*trimRect(white, byColour) == Rect(3, 4, 6, 2));
+    // Nothing but the corner's colour, or nothing but transparency: nothing to keep.
+    Image blank(8, 8);
+    CHECK(!trimRect(blank, {}).has_value());
+    TrimOptions none;
+    none.top = none.bottom = none.left = none.right = false;
+    CHECK(!trimRect(flat, none).has_value());
 }
 
 TEST_CASE(projects_past_the_macs_100_megapixels_save_and_load) {

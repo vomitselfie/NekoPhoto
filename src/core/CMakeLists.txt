@@ -123,6 +123,7 @@ add_library(compositor_core STATIC
     src/shape.cpp
     src/warp.cpp
     src/warpmesh.cpp
+    src/trim.cpp
     src/smartfilter_render.cpp
     src/warpstroke.cpp
     src/transform.cpp

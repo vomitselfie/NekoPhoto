@@ -328,6 +328,22 @@ void MainWindow::connectSession() {
     sessionConnections_.push_back(connect(session_, &EditorSession::quickSelectFailed, this, [this](const QString& error) { statusBar()->showMessage(error, 6000); }));
     sessionConnections_.push_back(connect(session_, &EditorSession::notice, this, [this](const QString& text) { statusBar()->showMessage(text, 6000); }));
     sessionConnections_.push_back(connect(session_, &EditorSession::projectPathChanged, this, &MainWindow::refreshTitle));
+    // The open project changed on disk while there is unsaved work here (a window nobody sees keeps it).
+    sessionConnections_.push_back(connect(session_, &EditorSession::externalChangeConflict, this, [this](const QString& path) {
+        EditorSession* s = session_;
+        if (!isVisible()) { s->resolveExternalChange(false); return; }
+        QMessageBox box(QMessageBox::Warning, tr("Changed on Disk"),
+                        tr("“%1” was changed on disk by another app.").arg(QFileInfo(path).fileName()), QMessageBox::NoButton, this);
+        box.setInformativeText(tr("You can revert to the version on disk, losing your unsaved changes, or keep what you have."));
+        QPushButton* revert = box.addButton(tr("Revert"), QMessageBox::DestructiveRole);
+        box.addButton(tr("Keep Mine"), QMessageBox::RejectRole);
+        box.exec();
+        s->resolveExternalChange(box.clickedButton() == revert);
+    }));
+    sessionConnections_.push_back(connect(session_, &EditorSession::reloadedFromDisk, this, [this] {
+        statusBar()->showMessage(tr("Reloaded: the project changed on disk."), 4000);
+        refreshTitle();
+    }));
     sessionConnections_.push_back(connect(session_, &EditorSession::historyChanged, this, &MainWindow::refreshActions));
     sessionConnections_.push_back(connect(session_, &EditorSession::documentChanged, this, [this] { emit automationEvent("document"); }));
     sessionConnections_.push_back(connect(session_, &EditorSession::documentChangedAsShown, this, [this] { emit automationEvent("document"); }));
