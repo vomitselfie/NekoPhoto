@@ -186,24 +186,62 @@ struct Writer {
         if (auto it = children.find(layer.id); it != children.end()) for (const Layer* c : it->second) descendants(*c, out);
     }
 
+    /// The document area `keep`'s layers can paint: their placed bounds grown by any layer style (theirs or a styled
+    /// folder's around them), whole pixels inside the canvas; the whole canvas when one of them has no pixels of its
+    /// own (a fill or an adjustment draws over everything).
+    Rect unitRegion(const std::set<Uuid>& keep, const std::set<Uuid>& ancestors) const {
+        const Rect canvas = document.rect();
+        double reach = 0;
+        auto styleReach = [&](const Layer& l) { if (auto st = layerStyleOf(l, document)) reach = std::max(reach, st->reach()); };
+        for (const Uuid& id : ancestors) if (auto it = byId.find(id); it != byId.end()) styleReach(*it->second);
+        Rect area;
+        bool any = false;
+        for (const Uuid& id : keep) {
+            auto it = byId.find(id);
+            if (it == byId.end()) continue;
+            const Layer& l = *it->second;
+            styleReach(l);
+            if (l.isGroup) continue;
+            if (!l.asset || !l.asset->image) return canvas;
+            const Rect b = l.transform.bounds();
+            area = any ? area.unionWith(b) : b;
+            any = true;
+        }
+        if (!any) return Rect();
+        if (!std::isfinite(reach) || reach > canvas.width + canvas.height) return canvas;
+        return area.insetBy(-reach - 2, -reach - 2).intersection(canvas).integral();
+    }
+
     /// The document with only `showing` (and what they hold) drawn, their folders neutral (the <g> elements carry
-    /// those), and `neutral` at full opacity in Normal: the pixels one <image> stands for.
-    std::shared_ptr<Image> renderOnly(const std::vector<const Layer*>& showing, const Layer* neutral) const {
+    /// those), and `neutral` at full opacity in Normal: the pixels one <image> stands for, over `origin` (document
+    /// pixels) of the area they can reach.
+    std::shared_ptr<Image> renderOnly(const std::vector<const Layer*>& showing, const Layer* neutral, Point& origin) const {
         std::set<Uuid> keep, ancestors;
         for (const Layer* l : showing) {
             descendants(*l, keep);
             for (auto p = l->parentId; p; ) { ancestors.insert(*p); auto it = byId.find(*p); p = it == byId.end() ? std::nullopt : it->second->parentId; }
         }
+        const Rect region = unitRegion(keep, ancestors);
+        if (region.isEmpty()) return nullptr;
+        // Only these layers go into the copy: rendering the rest hidden would still walk and clear for each of them.
         Document copy = document;
-        for (Layer& l : copy.layers) {
-            if (ancestors.count(l.id)) { l.visible = true; l.opacity = 1; l.blendMode = BlendMode::Normal; l.passThrough = true; l.mask.reset(); l.psdCarry.reset(); continue; }
-            if (!keep.count(l.id)) { l.visible = false; continue; }
-            if (neutral && l.id == neutral->id) { l.visible = true; l.opacity = 1; l.blendMode = BlendMode::Normal; }
+        copy.layers.clear();
+        for (const Layer& original : document.layers) {
+            if (!keep.count(original.id) && !ancestors.count(original.id)) continue;
+            Layer l = original;
+            if (ancestors.count(l.id)) { l.visible = true; l.opacity = 1; l.blendMode = BlendMode::Normal; l.passThrough = true; l.mask.reset(); l.psdCarry.reset(); }
+            else if (neutral && l.id == neutral->id) { l.visible = true; l.opacity = 1; l.blendMode = BlendMode::Normal; }
+            copy.layers.push_back(std::move(l));
         }
-        return renderFlattened(copy);
+        auto out = std::make_shared<Image>(int(region.width), int(region.height));
+        RenderOptions options;
+        options.region = region;
+        render(copy, options, *out);
+        origin = Point(region.x, region.y);
+        return out;
     }
 
-    void emitImage(const Image& pixels, const std::string& name, const std::string& style, int depth) {
+    void emitImage(const Image& pixels, Point origin, const std::string& name, const std::string& style, int depth) {
         int x0 = pixels.width(), y0 = pixels.height(), x1 = -1, y1 = -1;
         for (int y = 0; y < pixels.height(); y++) {
             const uint8_t* row = pixels.row(y);
@@ -217,7 +255,7 @@ struct Writer {
         if (!encodePngImage(crop, png)) { note("An image could not be encoded and was left out."); return; }
         const std::string data = "data:image/png;base64," + base64(png);
         indent(body, depth);
-        body += "<image id=\"" + escape(uniqueId(name)) + "\" x=\"" + std::to_string(x0) + "\" y=\"" + std::to_string(y0) + "\" width=\"" + std::to_string(crop.width())
+        body += "<image id=\"" + escape(uniqueId(name)) + "\" x=\"" + std::to_string(int(origin.x) + x0) + "\" y=\"" + std::to_string(int(origin.y) + y0) + "\" width=\"" + std::to_string(crop.width())
               + "\" height=\"" + std::to_string(crop.height()) + "\" href=\"" + data + "\" xlink:href=\"" + data + "\"";
         if (!style.empty()) body += " style=\"" + style + "\"";
         body += "/>\n";
@@ -229,7 +267,8 @@ struct Writer {
         if (run.size() > 1) note("Clipped layers over \"" + base.name + "\" were written as one image.");
         else if (base.isGroup) note("Folder \"" + base.name + "\" was written as one image (SVG cannot draw its style or blending).");
         else if (isVectorShapeLayer(base)) note("Shape layer \"" + base.name + "\" was written as an image (its style, mask or path combination has no SVG form).");
-        if (auto pixels = renderOnly(run, &base)) emitImage(*pixels, base.name, css(base), depth);
+        Point origin;
+        if (auto pixels = renderOnly(run, &base, origin)) emitImage(*pixels, origin, base.name, css(base), depth);
     }
 
     // ---- Shapes --------------------------------------------------------------------------------------------------
@@ -401,7 +440,8 @@ struct Writer {
             std::string names;
             for (size_t i = 0; i < start; i++) for (const Layer* l : units[i]) { merged.push_back(l); names += (names.empty() ? "" : ", ") + l->name; }
             note("Merged into one image, as SVG has no adjustment layers or these blend modes: " + names + ".");
-            if (auto pixels = renderOnly(merged, nullptr)) emitImage(*pixels, "Merged", "", depth);
+            Point origin;
+            if (auto pixels = renderOnly(merged, nullptr, origin)) emitImage(*pixels, origin, "Merged", "", depth);
         }
         for (size_t i = start; i < units.size(); i++) {
             const auto& unit = units[i];
