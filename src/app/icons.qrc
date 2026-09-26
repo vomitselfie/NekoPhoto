@@ -5,6 +5,8 @@
   <file alias="crop.svg">icons/crop.svg</file>
   <file alias="droplet.svg">icons/droplet.svg</file>
   <file alias="lollipop.svg">icons/lollipop.svg</file>
+  <file alias="pen-tool.svg">icons/pen-tool.svg</file>
+  <file alias="mouse-pointer-2.svg">icons/mouse-pointer-2.svg</file>
   <file alias="paint-bucket.svg">icons/paint-bucket.svg</file>
   <file alias="eraser.svg">icons/eraser.svg</file>
   <file alias="folder-plus.svg">icons/folder-plus.svg</file>

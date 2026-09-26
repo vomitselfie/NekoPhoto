@@ -117,8 +117,8 @@ void buildDemo(app::EditorSession& session, const QString& imagePath) {
     }
     // The newer tools: a rounded shape, a gradient on it, a distorted copy, a smudge, and moved pixels.
     session.selectLayer(session.document()->layers.back().id);
-    session.shapeKind = ShapeKind::Rectangle;
-    session.shapeCornerRadius = 24;
+    session.shapeTool.kind = app::VectorShapeKind::Rectangle;
+    session.shapeTool.cornerRadius = 24;
     session.foregroundColor = QColor(40, 200, 255);
     session.beginShape(QPointF(base.width() * 0.62, base.height() * 0.6));
     session.dragShape(QPointF(base.width() * 0.95, base.height() * 0.92), false, false);
@@ -138,7 +138,7 @@ void buildDemo(app::EditorSession& session, const QString& imagePath) {
     }
     session.commitTransform();
     session.deselect();
-    session.shapeKind = ShapeKind::Ellipse;
+    session.shapeTool.kind = app::VectorShapeKind::Ellipse;
     session.foregroundColor = QColor(255, 255, 255);
     session.beginShape(QPointF(base.width() * 0.05, base.height() * 0.55));
     session.dragShape(QPointF(base.width() * 0.25, base.height() * 0.75), true, false);
@@ -381,7 +381,7 @@ int main(int argc, char** argv) {
     }
     if (parser.isSet(toolOption)) {
         static const QMap<QString, app::Tool> tools{{"move", app::Tool::Move}, {"marquee", app::Tool::Marquee}, {"lasso", app::Tool::Lasso}, {"wand", app::Tool::Wand}, {"scribble", app::Tool::Scribble},
-            {"crop", app::Tool::Crop}, {"brush", app::Tool::Brush}, {"healing", app::Tool::SpotHealing}, {"clone", app::Tool::CloneStamp}, {"smudge", app::Tool::Smudge}, {"dodge", app::Tool::Dodge}, {"bucket", app::Tool::PaintBucket},
+            {"crop", app::Tool::Crop}, {"brush", app::Tool::Brush}, {"healing", app::Tool::SpotHealing}, {"clone", app::Tool::CloneStamp}, {"smudge", app::Tool::Smudge}, {"dodge", app::Tool::Dodge}, {"bucket", app::Tool::PaintBucket}, {"pen", app::Tool::Pen}, {"directselect", app::Tool::DirectSelect},
             {"gradient", app::Tool::Gradient}, {"shape", app::Tool::Shape}, {"eyedropper", app::Tool::Eyedropper}, {"hand", app::Tool::Hand}, {"zoom", app::Tool::Zoom}, {"text", app::Tool::Text}};
         QString name = parser.value(toolOption).toLower();
         if (tools.contains(name)) window.session()->selectTool(tools.value(name)); else qWarning("unknown tool: %s", qPrintable(name));

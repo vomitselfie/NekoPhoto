@@ -177,7 +177,10 @@ request and stops at the first error, answering the results so far and the error
 `name` the calls are one undo step and all or nothing: an error takes back what the earlier calls did
 (`rolledBack`). Nothing else runs between the calls of a batch.
 
-Quick Mask: `selection.quickMask` (`on` true enters, false turns the mask back into the selection; while on,
+Vector shapes and paths: `shape.draw` makes a vector shape layer (rectangle, ellipse, polygon, star, line or a
+custom shape, with fill and stroke), `shape.get` and `shape.set` read and change its path, fill and stroke;
+`paths.list`, `paths.set`, `paths.select`, `paths.delete`, `paths.fill`, `paths.stroke`, `paths.toSelection`,
+`paths.toShape` and `paths.fromSelection` work the Paths panel (docs/vector-tools.md). Quick Mask: `selection.quickMask` (`on` true enters, false turns the mask back into the selection; while on,
 paint the mask with `brush.stroke` and `mask: true`, white selecting). Painting by coordinates: `pixels.patch` (the selection repaired from `dx`, `dy` away), `pixels.bucket` (Paint Bucket at `x`, `y` with `color`, `opacity`, `tolerance`,
 `contiguous`, `antialias`, `allLayers`), `brush.stroke` (`points` as `[x, y]` pairs; `tool` brush,
 eraser, healing, healingbrush or clone with `source`, smudge, blur, sharpen or liquify, or dodge and burn (with `range`

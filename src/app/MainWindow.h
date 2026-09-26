@@ -100,6 +100,7 @@ private:
         EditorSession* session = nullptr;
         CanvasWidget* canvas = nullptr;
         LayersPanel* layers = nullptr;
+        class PathsPanel* paths = nullptr;
         AdjustmentsPanel* adjustments = nullptr;
         ToolOptionsBar* options = nullptr;
         QString defaultName;
@@ -164,6 +165,8 @@ private:
     ProjectTabBar* tabBar_;
     QStackedWidget* canvasStack_;
     QStackedWidget* layersStack_;
+    QStackedWidget* pathsStack_ = nullptr;
+    QDockWidget* pathsDock_ = nullptr;
     QStackedWidget* adjustStack_;
     std::vector<QMetaObject::Connection> sessionConnections_;
     QMenu* recentMenu_;

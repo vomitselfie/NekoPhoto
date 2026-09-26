@@ -292,6 +292,24 @@ def main():
     for toning in ({"tool": "dodge", "range": "highlights"}, {"tool": "burn", "protectTones": False}, {"tool": "sponge", "saturate": True}, {"tool": "sharpen"}):
         assert rpc.call("brush.stroke", points=[[20, 30], [200, 30]], size=20, opacity=0.5, **toning)["tool"] == toning["tool"]
     assert rpc.call("pixels.bucket", x=5, y=5, color="#336699", tolerance=10)["filled"]
+    active_before = rpc.call("document.info")["activeLayer"]
+    star = rpc.call("shape.draw", kind="star", x=20, y=20, width=60, height=60, color="#ffaa00", strokeWidth=2, strokeColor="#000000")
+    assert star["kind"] == "shape", star
+    got = rpc.call("shape.get", id=star["id"])
+    assert len(got["path"][0]["knots"]) == 10 and got["stroke"]["enabled"], got
+    edited = rpc.call("shape.set", id=star["id"], path=[{"closed": True, "knots": [[10, 10], [50, 10], [30, 40]]}], fill=False, strokeAlign="outside")
+    assert len(edited["path"][0]["knots"]) == 3 and not edited["fill"], edited
+    made = rpc.call("paths.set", name="Triangle", path=[{"knots": [[5, 5], [45, 5], [25, 35]]}])
+    assert any(p["id"] == made["id"] and p["name"] == "Triangle" for p in rpc.call("paths.list")["paths"])
+    rpc.call("paths.toSelection", id=made["id"])
+    assert rpc.call("selection.info")["active"]
+    assert rpc.call("paths.fromSelection")["id"] == 1025
+    triangle = rpc.call("paths.toShape", id=made["id"])
+    rpc.call("paths.delete", id=made["id"])
+    for made_layer in (triangle, star):   # the demo's layer list stays as the later checks expect
+        rpc.call("layers.delete", id=made_layer["id"])
+    rpc.call("layers.select", id=active_before)
+    rpc.call("selection.none")
     assert rpc.call("brush.stroke", tool="healingbrush", source={"x": 60, "y": 60}, points=[[20, 40], [60, 40]], size=12)["tool"] == "healingbrush"
     rpc.call("selection.rect", x=10, y=10, width=20, height=20)
     assert rpc.call("pixels.patch", dx=40, dy=0)["patched"]
@@ -490,6 +508,8 @@ def main():
 
     # The edge-aware wand: a keep-out (subtract) click right after a wand click is evidence for the same
     # selection, one undo step, not a second selection.
+    background = next(l for l in rpc.call("layers.list") if l["name"] == "Background")
+    rpc.call("layers.select", id=background["id"])   # a layer with pixels under both clicks
     rpc.call("selection.wand", x=20, y=20, tolerance=120)
     steps = len(rpc.call("history.list")["undo"])
     first = rpc.call("selection.info")["bounds"]

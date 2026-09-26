@@ -1,5 +1,6 @@
 // Canvas pointer gestures: press, drag and release for every tool, with snapping.
 #include "CanvasWidget.h"
+#include "VectorPathQt.h"
 #include <cstring>
 #include "QtGeometry.h"
 #include <QApplication>
@@ -138,6 +139,46 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
     case Tool::Smudge:
         if (session_->beginWarp(doc)) drag_ = Drag::Warp;
         return;
+    case Tool::Pen: {
+        // A click on the first knot closes the path; any other press adds a knot, and dragging shapes its handles.
+        const auto& draft = session_->penDraft();
+        if (draft && draft->knots.size() >= 2) {
+            const QPointF first = viewPoint(QPointF(draft->knots[0].x, draft->knots[0].y));
+            if (std::hypot(view.x() - first.x(), view.y() - first.y()) <= 7) { session_->penFinish(true); return; }
+        }
+        session_->penPress(doc);
+        drag_ = Drag::Pen;
+        return;
+    }
+    case Tool::DirectSelect: {
+        const PathHit hit = pathHit(view);
+        if (hit.part == PathHit::None) { selectedKnot_.reset(); update(); return; }
+        auto path = session_->targetPath();
+        if (!path) return;
+        if (hit.part == PathHit::Anchor && (modifiers & Qt::AltModifier)) {
+            // Alt-click: a smooth knot becomes a corner (its handles pulled in), a corner smooth (handles along its neighbours).
+            auto& sub = path->subpaths[size_t(hit.sub)];
+            auto& k = sub.knots[size_t(hit.knot)];
+            if (knotIsSmooth(k) || k.inX != k.x || k.outX != k.x || k.inY != k.y || k.outY != k.y) { k.inX = k.outX = k.x; k.inY = k.outY = k.y; }
+            else {
+                const size_t n = sub.knots.size(), i = size_t(hit.knot);
+                const auto& prev = sub.knots[(i + n - 1) % n];
+                const auto& next = sub.knots[(i + 1) % n];
+                const double dx = (next.x - prev.x) / 6, dy = (next.y - prev.y) / 6;
+                k.inX = k.x - dx; k.inY = k.y - dy; k.outX = k.x + dx; k.outY = k.y + dy;
+            }
+            session_->setTargetPath(*path, tr("Convert Point"));
+            selectedKnot_ = std::make_pair(hit.sub, hit.knot);
+            return;
+        }
+        if (hit.part != PathHit::Subpath) selectedKnot_ = std::make_pair(hit.sub, hit.knot);
+        if (!session_->beginPathEdit(hit.part == PathHit::Subpath ? tr("Move Path") : tr("Edit Path"))) return;
+        pathDragStart_ = *path;
+        pathDrag_ = hit;
+        drag_ = Drag::PathEdit;
+        update();
+        return;
+    }
     case Tool::Dodge:
         if (session_->beginToning(doc)) drag_ = Drag::Warp;   // a stroke, continued and ended as Blur's
         return;
@@ -378,6 +419,37 @@ void CanvasWidget::move(QPointF view, Qt::MouseButtons buttons, Qt::KeyboardModi
         clickCurrent_ = doc;
         update();
         break;
+    case Drag::Pen:
+        if (dragMoved_) session_->penDrag(doc);
+        break;
+    case Drag::PathEdit: {
+        if (!pathDragStart_) break;
+        VectorPath path = *pathDragStart_;
+        double dx = doc.x() - dragStartDocument_.x(), dy = doc.y() - dragStartDocument_.y();
+        if (modifiers & Qt::ShiftModifier) { if (std::fabs(dx) >= std::fabs(dy)) dy = 0; else dx = 0; }
+        auto shift = [&](double& x, double& y) { x += dx; y += dy; };
+        if (pathDrag_.part == PathHit::Subpath) {
+            for (auto& k : path.subpaths[size_t(pathDrag_.sub)].knots) { shift(k.inX, k.inY); shift(k.x, k.y); shift(k.outX, k.outY); }
+        } else {
+            auto& k = path.subpaths[size_t(pathDrag_.sub)].knots[size_t(pathDrag_.knot)];
+            if (pathDrag_.part == PathHit::Anchor) { shift(k.inX, k.inY); shift(k.x, k.y); shift(k.outX, k.outY); }
+            else {
+                // A handle; a smooth knot's other handle turns with it (Alt breaks the pair, as in Photoshop).
+                const bool smooth = knotIsSmooth(pathDragStart_->subpaths[size_t(pathDrag_.sub)].knots[size_t(pathDrag_.knot)]) && !(modifiers & Qt::AltModifier);
+                double& hx = pathDrag_.part == PathHit::In ? k.inX : k.outX;
+                double& hy = pathDrag_.part == PathHit::In ? k.inY : k.outY;
+                shift(hx, hy);
+                if (smooth) {
+                    double& ox = pathDrag_.part == PathHit::In ? k.outX : k.inX;
+                    double& oy = pathDrag_.part == PathHit::In ? k.outY : k.inY;
+                    const double other = std::hypot(ox - k.x, oy - k.y), here = std::hypot(hx - k.x, hy - k.y);
+                    if (here > 1e-6) { ox = k.x - (hx - k.x) / here * other; oy = k.y - (hy - k.y) / here * other; }
+                }
+            }
+        }
+        session_->updatePathEdit(path);
+        break;
+    }
     case Drag::SelectionMove: case Drag::Patch: {
         if (!selectionMoveOrigin_ || !selectionMoveOrigin_->coverage) break;
         int dx = int(std::round(doc.x() - dragStartDocument_.x())), dy = int(std::round(doc.y() - dragStartDocument_.y()));
@@ -495,6 +567,12 @@ void CanvasWidget::release(QPointF view, Qt::MouseButton button, Qt::KeyboardMod
         if (dragMoved_) session_->setClickBox(clickStart_, doc);
         else session_->addClickPrompt(clickStart_, clickBackground_);
         update();
+        break;
+    case Drag::Pen:
+        break;
+    case Drag::PathEdit:
+        pathDragStart_.reset();
+        session_->endPathEdit();
         break;
     case Drag::Patch: {
         // The selection goes back where it was; its pixels come from where it was dragged to.

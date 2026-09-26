@@ -1,4 +1,5 @@
 // Automation methods: document. Registered from AutomationServer::registerHandlers (Automation.cpp).
+#include "compositor/vectorlayer.h"
 #include "TextLayer.h"
 #include "Automation.h"
 #include "AutomationHandlers.h"
@@ -58,7 +59,7 @@ void AutomationServer::registerDocumentHandlers() {
             if (l.isGroup) bits << "folder";
             else if (l.adjustment) bits << QString::fromUtf8(adjustmentKindName(l.adjustment->kind)) + " adjustment";
             else {
-                bits << (l.isLiveText() ? "text" : l.isLiveShape() ? "shape" : "pixels");
+                bits << (l.isLiveText() ? "text" : (l.isLiveShape() || compositor::isVectorShapeLayer(l)) ? "shape" : "pixels");
                 const Rect r = l.transform.bounds();
                 bits << QStringLiteral("%1 x %2 at (%3, %4)").arg(r.width).arg(r.height).arg(r.x).arg(r.y);
                 if (!l.asset || !l.asset->image) bits << "blank";

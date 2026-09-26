@@ -42,7 +42,10 @@ qt_add_executable(nekophoto
     EditorSessionLayers.cpp
     EditorSessionStyles.cpp
     EditorSessionQuickMask.cpp
+    EditorSessionPaths.cpp
     LayerStyleDialog.cpp
+    PathsPanel.h
+    PathsPanel.cpp
     EditorSessionPainting.cpp
     EditorSessionPixels.cpp
     EditorSessionQuickSelect.cpp

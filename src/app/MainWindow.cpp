@@ -3,6 +3,7 @@
 #include "CanvasFrame.h"
 #include "Autosave.h"
 #include "LayersPanel.h"
+#include "PathsPanel.h"
 #include "AdjustmentsPanel.h"
 #include "Automation.h"
 #include "TextDialog.h"
@@ -98,6 +99,15 @@ MainWindow::MainWindow() {
     addDockWidget(Qt::RightDockWidgetArea, adjustDock);
     splitDockWidget(dock, adjustDock, Qt::Vertical);
     layersDock_ = dock;
+    // Paths, tabbed with Layers as in Photoshop.
+    pathsDock_ = new QDockWidget(tr("Paths"), this);
+    pathsDock_->setObjectName("pathsDock");
+    pathsDock_->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetClosable);
+    pathsStack_ = new QStackedWidget;
+    pathsDock_->setWidget(pathsStack_);
+    addDockWidget(Qt::RightDockWidgetArea, pathsDock_);
+    tabifyDockWidget(dock, pathsDock_);
+    dock->raise();   // Layers is the tab in front
     adjustDock_ = adjustDock;
 
     zoomBox_ = new QComboBox;
@@ -155,6 +165,13 @@ MainWindow::MainWindow() {
     if (forced.size() == 2) resize(forced[0].toInt(), forced[1].toInt());
     if (!restoreState(settings.value("window/state").toByteArray()))
         QTimer::singleShot(0, this, [this] { resizeDocks({layersDock_, adjustDock_}, {3, 1}, Qt::Vertical); });
+    // A layout saved before the Paths panel existed places it on its own: once, it joins Layers as a tab.
+    if (settings.value("window/pathsDockPlaced").toInt() < 1) {
+        tabifyDockWidget(layersDock_, pathsDock_);
+        pathsDock_->show();
+        layersDock_->raise();
+        settings.setValue("window/pathsDockPlaced", 1);
+    }
     // The saved state remembers each tab's options bar by name, and only the current tab's is visible when the
     // window closes; restoring it could hide the bar of the tab this launch shows. The current tab owns the bar.
     for (size_t i = 0; i < tabs_.size(); i++) tabs_[i].options->setVisible(int(i) == current_);
@@ -197,6 +214,8 @@ MainWindow::Tab& MainWindow::addTab(bool reuseEmpty) {
     tab.options->setVisible(false);
     canvasStack_->addWidget(tab.frame);
     layersStack_->addWidget(tab.layers);
+    tab.paths = new PathsPanel(tab.session);
+    pathsStack_->addWidget(tab.paths);
     adjustStack_->addWidget(tab.adjustments);
     tabs_.push_back(tab);
     int index = int(tabs_.size()) - 1;
@@ -276,6 +295,7 @@ void MainWindow::switchTo(int index) {
     options_ = tab.options;
     canvasStack_->setCurrentWidget(tab.frame);
     layersStack_->setCurrentWidget(tab.layers);
+    pathsStack_->setCurrentWidget(tab.paths);
     adjustStack_->setCurrentWidget(tab.adjustments);
     tab.options->setVisible(true);
     { QSignalBlocker b(tabBar_); tabBar_->setCurrentIndex(index); }
@@ -305,6 +325,8 @@ QString MainWindow::toolHint(Tool tool, bool erase) {
     case Tool::CloneStamp: return tr("Alt-click sets the source, then paint");
     case Tool::Smudge: return tr("Opacity is the strength; Liquify pushes pixels, Smudge drags colour, Blur softens");
     case Tool::Gradient: return tr("Drag a line; drag again to redo it; Enter applies, Esc discards; Shift snaps the angle");
+    case Tool::Pen: return tr("Click for corners, drag for curves; click the first point to close, Enter leaves the path open, Esc cancels");
+    case Tool::DirectSelect: return tr("Drag a point, a handle (Alt: just that one) or a path; Alt-click a point to convert it; Delete removes the chosen point");
     case Tool::Dodge: return tr("Opacity is the Exposure (Dodge, Burn) or Flow (Sponge); a stroke never goes past one full pass");
     case Tool::PaintBucket: return tr("Click to fill pixels like the one clicked with the foreground colour, inside the selection");
     case Tool::Shape: return tr("Drag a shape in the foreground colour; Shift squares, Alt grows from the centre; Shift-U switches kind");
@@ -395,6 +417,8 @@ void MainWindow::closeTab(int index) {
     { QSignalBlocker b(tabBar_); tabBar_->removeTab(index); }
     canvasStack_->removeWidget(tab.frame);
     layersStack_->removeWidget(tab.layers);
+    pathsStack_->removeWidget(tab.paths);
+    tab.paths->deleteLater();
     adjustStack_->removeWidget(tab.adjustments);
     removeToolBar(tab.options);
     tab.frame->deleteLater(); tab.layers->deleteLater(); tab.adjustments->deleteLater(); tab.options->deleteLater();

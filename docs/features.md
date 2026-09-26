@@ -33,6 +33,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Import your brushes (File > Import Brushes, or the button under the brush list): Photoshop `.abr` with its presets and dynamics, Procreate `.brushset` and `.brush` with shape, grain and pencil settings, Clip Studio `.sut` with its tip images, paper textures and settings, or any image as a tip. What a brush uses that cannot be carried over is listed after the import
 - Spot Healing Brush and Clone Stamp; both ignore what a layer mask hides
 - Smudge, Liquify and Blur, on pixels or masks, and Sharpen
+- Vector shape layers (Photoshop's shape layers, editable and written to PSD as such): the Shape tool's rectangle, ellipse, polygon, star, line and custom shapes with fill and stroke (colour, width, alignment, dashes) editable from the options bar; the Pen (P) and Direct Selection (A); the Paths panel (Work Path and saved paths: fill, stroke, load as selection, make from selection, make shape layer) (docs/vector-tools.md)
 - Dodge, Burn (Shadows, Midtones, Highlights; Protect Tones) and Sponge (desaturate or saturate), painted through the brush with Exposure or Flow as its opacity; their curves are shaped after Photoshop's behaviour, not measured against it
 - Paint Bucket (Shift+G) with Tolerance, Contiguous, Anti-alias and All Layers, inside the selection
 - Open camera RAW files (CR2, CR3, NEF, ARW, RAF, ORF, RW2, DNG and more) through LibRaw, developed with the camera's white balance into sRGB; Filter ▸ Camera Raw then adjusts them

@@ -211,8 +211,25 @@ const MethodDoc methodDocs[] = {
     {"gradient.draw", "Draw a gradient on the active layer, inside the selection.",
      "x0:number! Start; y0:number! Start; x1:number! End; y1:number! End; shape:(linear|radial)=linear Shape; "
      "style:(foreground-to-transparent|foreground-to-background)=foreground-to-transparent Colours; reversed:bool=false Swap the ends; opacity:number=1 0..1; foreground:color Start colour; background:color End colour"},
-    {"shape.draw", "Add a shape layer.",
-     "x:number! Left; y:number! Top; width:number! Width; height:number! Height; kind:(rectangle|ellipse)=rectangle Shape; cornerRadius:number=0 Rounded corners in pixels; color:color Fill (default the foreground)"},
+    {"shape.draw", "Add a vector shape layer (editable: shape.get, shape.set, and PSD's own shape layer on export).",
+     "x:number! Left (a line's start); y:number! Top; width:number Width; height:number Height; kind:(rectangle|ellipse|polygon|star|line|custom)=rectangle Shape; "
+     "cornerRadius:number=0 Rectangle corners; sides:integer=5 Polygon or star points; star:number Star inset 0..0.99; x2:number Line end x; y2:number Line end y; weight:number=4 Line weight; "
+     "name:string Custom shape (Heart, Star, Arrow, Speech Bubble, Check Mark, Lightning), or else the layer's name; color:color Fill (default the foreground); fill:bool=true Filled; "
+     "stroke:bool Stroked; strokeWidth:number Pixels; strokeColor:color Stroke colour; strokeAlign:(inside|center|outside) Where the stroke sits; strokeDashes:array Dash pattern in stroke widths"},
+    {"paths.list", "The document's paths (Photoshop's Paths panel): the Work Path (id 1025) and saved paths, each with its knots.", ""},
+    {"paths.set", "Make or replace a path: a new saved path (name), the Work Path (work true), or path id replaced.",
+     "path:array! Subpaths as shape.get gives them; id:integer An existing path to replace; name:string Name (a new path, or a rename); work:bool=false Make it the Work Path"},
+    {"paths.select", "Choose the path the Pen and Direct Selection work on (id left out: none, the active shape layer's path).", "id:integer The path"},
+    {"paths.delete", "Delete a path.", "id:integer! The path"},
+    {"paths.fill", "Fill a path on the active layer with the foreground colour at the brush's opacity.", "id:integer! The path"},
+    {"paths.stroke", "Stroke a path on the active layer with the brush's size and opacity in the foreground colour.", "id:integer! The path"},
+    {"paths.toSelection", "Load a path as the selection.", "id:integer! The path; mode:<selectionMode>=replace How it combines"},
+    {"paths.toShape", "Make a vector shape layer from a path, filled with the foreground colour.", "id:integer! The path"},
+    {"paths.fromSelection", "Make the Work Path from the selection's outline.", "tolerance:number=1 How far (pixels) the path may stray to use fewer points"},
+    {"shape.get", "A vector shape layer's path, fill and stroke.", "id:layer! The layer"},
+    {"shape.set", "Change a vector shape layer: its path, fill or stroke (keys as shape.draw's; path as shape.get gives it).",
+     "id:layer! The layer; path:array Subpaths {closed, op, knots: [[inX, inY, x, y, outX, outY] or [x, y], ...]}; color:color Fill; fill:bool Filled; stroke:bool Stroked; "
+     "strokeWidth:number Pixels; strokeColor:color Colour; strokeAlign:(inside|center|outside) Placement; strokeDashes:array Dash pattern"},
 };
 
 struct Param {

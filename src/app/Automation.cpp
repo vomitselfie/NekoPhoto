@@ -349,7 +349,7 @@ void AutomationServer::registerAppHandlers() {
     // ---- tools and view (what the person sees)
     add("tool.select", [session](const QJsonObject& p) {
         static const QMap<QString, Tool> tools{{"move", Tool::Move}, {"marquee", Tool::Marquee}, {"lasso", Tool::Lasso}, {"wand", Tool::Wand}, {"crop", Tool::Crop},
-            {"brush", Tool::Brush}, {"healing", Tool::SpotHealing}, {"clone", Tool::CloneStamp}, {"smudge", Tool::Smudge}, {"dodge", Tool::Dodge}, {"bucket", Tool::PaintBucket}, {"gradient", Tool::Gradient},
+            {"brush", Tool::Brush}, {"healing", Tool::SpotHealing}, {"clone", Tool::CloneStamp}, {"smudge", Tool::Smudge}, {"dodge", Tool::Dodge}, {"bucket", Tool::PaintBucket}, {"pen", Tool::Pen}, {"directselect", Tool::DirectSelect}, {"gradient", Tool::Gradient},
             {"shape", Tool::Shape}, {"eyedropper", Tool::Eyedropper}, {"hand", Tool::Hand}, {"zoom", Tool::Zoom},
             {"quickselect", Tool::Scribble}, {"text", Tool::Text}};
         QString name = str(p, "name").toLower();

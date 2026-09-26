@@ -454,6 +454,8 @@ void LayersPanel::rebuild() {
 QToolButton* LayersPanel::eyeButton(const Uuid& id) const {
     auto it = items_.find(id);
     if (it == items_.end()) return nullptr;
+    // In view, so a pointer event there reaches it (a long layer list scrolls).
+    tree_->scrollToItem(it->second);
     QWidget* row = tree_->itemWidget(it->second, 0);
     if (!row) return nullptr;
     for (auto* b : row->findChildren<QToolButton*>()) if (b->property("eye").toBool()) return b;

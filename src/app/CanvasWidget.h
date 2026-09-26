@@ -60,7 +60,7 @@ private:
     /// the view must be rendered afresh.
     bool scrollCache(QRect visible, QPointF origin, double zoom);
     bool boxPainted_ = false;   // whether the last paint drew a transform box
-    enum class Drag { None, Pan, Move, Resize, Rotate, Distort, PixelMove, Brush, Warp, Gradient, Shape, Marquee, Lasso, Scribble, ClickBox, SelectionMove, Patch, Crop, CropMove, CropResize, ZoomRect, Hook };
+    enum class Drag { None, Pan, Move, Resize, Rotate, Distort, PixelMove, Brush, Warp, Gradient, Shape, Marquee, Lasso, Scribble, ClickBox, SelectionMove, Patch, Pen, PathEdit, Crop, CropMove, CropResize, ZoomRect, Hook };
     struct HandleHit { bool hit = false; int index = 0; bool rotate = false; };
 
     /// Notes a changed part of the document for the next paint, which renders all of it at once (flushDirty).
@@ -116,6 +116,13 @@ private:
     bool dragMoved_ = false;
     bool spaceHeld_ = false;
     std::optional<QPointF> hover_;
+    /// Direct Selection: what a view point is over on the target path, the knot chosen, and a drag in progress.
+    struct PathHit { int sub = -1, knot = -1; enum Part { None, Anchor, In, Out, Subpath } part = None; };
+    PathHit pathHit(QPointF view) const;
+    std::optional<std::pair<int, int>> selectedKnot_;
+    std::optional<compositor::VectorPath> pathDragStart_;
+    PathHit pathDrag_;
+    void drawPathOverlay(QPainter& painter);
     std::vector<QPointF> lassoPoints_;
     std::vector<QPointF> scribblePoints_;
     bool scribbleBackground_ = false;

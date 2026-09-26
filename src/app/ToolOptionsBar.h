@@ -52,6 +52,7 @@ private:
     QWidget* buildScribbleOptions();
     QWidget* buildToningOptions();
     QWidget* buildBucketOptions();
+    QWidget* buildPenOptions();
     std::vector<std::function<void()>> syncers_;
     /// Size, hardness and opacity; `strength` names the opacity (Exposure, Flow, Strength) for tools that use it so.
     void addBrushTipFields(QHBoxLayout* layout, const QString& strength = QString());

@@ -130,6 +130,7 @@ add_library(compositor_core STATIC
     src/layerstyle_json.cpp
     src/toning.cpp
     src/raw.cpp
+    src/vectorlayer.cpp
     src/colour.cpp
     src/psd_carry.cpp
     src/smartobject.cpp

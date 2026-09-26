@@ -146,3 +146,7 @@ add_test(NAME toning_tests COMMAND toning_tests)
 add_executable(raw_tests raw_tests.cpp)
 target_link_libraries(raw_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME raw_tests COMMAND raw_tests)
+
+add_executable(vectorlayer_tests vectorlayer_tests.cpp)
+target_link_libraries(vectorlayer_tests PRIVATE compositor::core compositor_warnings)
+add_test(NAME vectorlayer_tests COMMAND vectorlayer_tests)

@@ -1,3 +1,4 @@
+#include "compositor/vectorlayer.h"
 #include "AutomationHandlers.h"
 #include "compositor/png.h"
 #include <QFileInfo>
@@ -124,7 +125,7 @@ QJsonObject transformJson(const LayerTransform& t) {
 QJsonObject layerJson(const Layer& layer, int depth) {
     QJsonObject o{
         {"id", qs(layer.id)}, {"name", qs(layer.name)}, {"depth", depth},
-        {"kind", layer.isGroup ? "group" : layer.adjustment ? "adjustment" : layer.isLiveShape() ? "shape" : layer.isLiveText() ? "text"
+        {"kind", layer.isGroup ? "group" : layer.adjustment ? "adjustment" : (layer.isLiveShape() || compositor::isVectorShapeLayer(layer)) ? "shape" : layer.isLiveText() ? "text"
                  : layer.isLiveSmartObject() ? "smartObject" : "pixels"},
         {"visible", layer.visible}, {"opacity", layer.opacity}, {"blend", layer.isGroup && layer.passThrough ? QStringLiteral("Pass Through") : QString::fromUtf8(blendModeName(layer.blendMode))},
         {"clipping", layer.maskSourceId.has_value()}, {"transform", transformJson(layer.transform)},

@@ -14,6 +14,7 @@
 #include "compositor/document.h"
 #include "compositor/layerstyle.h"
 #include "compositor/toning.h"
+#include "compositor/vectorlayer.h"
 #include "compositor/smartfilter.h"
 #include "compositor/trim.h"
 #include "compositor/history.h"
@@ -42,7 +43,7 @@ class QTimer;
 
 namespace app {
 
-enum class Tool { Move, Marquee, Lasso, Wand, Scribble, Crop, Brush, SpotHealing, CloneStamp, Smudge, Gradient, Shape, Eyedropper, Hand, Zoom, Text, Dodge, PaintBucket };
+enum class Tool { Move, Marquee, Lasso, Wand, Scribble, Crop, Brush, SpotHealing, CloneStamp, Smudge, Gradient, Shape, Eyedropper, Hand, Zoom, Text, Dodge, PaintBucket, Pen, DirectSelect };
 enum class MarqueeKind { Rectangle, Ellipse };
 enum class LassoKind { Freehand, Polygonal };
 enum class BlurToolMode { Liquify, Blur, Smudge, Sharpen };
@@ -87,6 +88,21 @@ struct ShapeDraft {
     QPointF anchor;
     QRectF rect;
     double cornerRadius = 0;
+    QPointF end;                           // where the drag is (a Line runs from the anchor to here)
+};
+
+/// The Shape tool's kinds (Photoshop's U group) and settings. New shapes are vector shape layers (vectorlayer.h)
+/// filled with the foreground colour.
+enum class VectorShapeKind { Rectangle, Ellipse, Polygon, Line, Custom };
+struct ShapeToolSettings {
+    VectorShapeKind kind = VectorShapeKind::Rectangle;
+    double cornerRadius = 0;
+    int sides = 5;
+    double starInset = 0;                  // 0: a polygon; above: a star, its inner points this far in (0..0.99)
+    double lineWeight = 4;
+    std::string custom = "Heart";
+    bool fill = true;
+    compositor::VectorStroke stroke;       // enabled false: none
 };
 
 class EditorSession : public QObject {
@@ -279,9 +295,54 @@ public:
     bool textEditing() const { return textEditing_; }
     void requestTextEdit(const compositor::Uuid& id) { emit textEditRequested(id); }
 
+    // Paths: the Pen (P) and Direct Selection (A) tools work on the target path: the path chosen in the Paths panel,
+    // or else the active vector shape layer's. Paths themselves are the document's (vectorlayer.h DocumentPath).
+    enum class PenMode { Shape, Path };
+    PenMode penMode = PenMode::Shape;
+    /// Shape mode with a vector shape layer active: the new subpath goes into it instead of a new layer.
+    bool penAddsToShape = false;
+    const std::optional<compositor::VectorPath::Subpath>& penDraft() const { return penDraft_; }
+    /// A click (a corner knot) or the start of a drag (a smooth one whose handles follow penDrag).
+    void penPress(QPointF documentPoint);
+    void penDrag(QPointF documentPoint);
+    /// Ends the path being drawn: closed, or left open (Enter); cancelled with Esc.
+    void penFinish(bool close);
+    void penCancel();
+    /// The Paths panel's choice (none: the active shape layer's path is the target).
+    std::optional<uint16_t> activePathId() const { return activePathId_; }
+    void selectPath(std::optional<uint16_t> id);
+    std::vector<compositor::DocumentPath> paths() const;
+    std::optional<compositor::VectorPath> targetPath() const;
+    /// Live edits of the target path: begin, update as often as needed, end (one undo step).
+    bool beginPathEdit(const QString& name);
+    void updatePathEdit(const compositor::VectorPath& path);
+    void endPathEdit();
+    /// The target path replaced as one undo step.
+    bool setTargetPath(const compositor::VectorPath& path, const QString& name);
+    // The Paths panel's commands.
+    uint16_t newPath(const QString& name);
+    /// `path` stored as path `id` (0: a new saved path named `name`; kWorkPathId: the Work Path) as one undo step, and chosen.
+    uint16_t storePath(uint16_t id, const QString& name, const compositor::VectorPath& path);
+    void renamePath(uint16_t id, const QString& name);
+    void deletePath(uint16_t id);
+    /// The Work Path saved under `name`.
+    void savePath(uint16_t id, const QString& name);
+    bool pathToSelection(uint16_t id, compositor::SelectionMode mode);
+    bool fillPath(uint16_t id);
+    bool strokePath(uint16_t id);
+    bool pathToShapeLayer(uint16_t id);
+    /// The selection's outline as a new Work Path (traced along its half-coverage edge, simplified by `tolerance` pixels).
+    bool selectionToWorkPath(double tolerance = 1.0);
+
     // Shape tool
-    compositor::ShapeKind shapeKind = compositor::ShapeKind::Rectangle;
-    double shapeCornerRadius = 0;
+    ShapeToolSettings shapeTool;
+    /// The path the shape being dragged will have.
+    std::optional<compositor::VectorPath> shapeDraftPath() const;
+    /// The active layer's vector shape, when it is a vector shape layer; and a change to it as one undo step.
+    std::optional<compositor::VectorShape> activeVectorShape() const;
+    bool setActiveVectorShape(const compositor::VectorShape& shape, const QString& name);
+    /// A new vector shape layer above the active one (named `name`, or after its kind), made active.
+    bool addVectorShapeLayer(const compositor::VectorShape& shape, const QString& name = QString());
     const std::optional<ShapeDraft>& shapeDraft() const { return shapeDraft_; }
     void beginShape(QPointF documentPoint);
     void dragShape(QPointF documentPoint, bool square, bool fromCenter);
@@ -536,6 +597,7 @@ public:
     bool smartObjectBlocksPixels(bool ask = false);
 
 signals:
+    void pathsChanged();
     /// The open project changed on disk while there is unsaved work: ask, then call resolveExternalChange.
     void externalChangeConflict(const QString& path);
     /// The open project was reloaded because its package changed on disk.
@@ -674,6 +736,9 @@ private:
     std::optional<compositor::Uuid> styleEditLayer_;
     std::shared_ptr<const compositor::PsdLayerCarry> styleEditCarry_;
     std::optional<compositor::LayerStyle> styleClipboard_;
+    std::optional<compositor::VectorPath::Subpath> penDraft_;
+    std::optional<uint16_t> activePathId_;
+    bool pathEditing_ = false;
     std::optional<compositor::Uuid> quickMaskLayer_, quickMaskReturnLayer_;
     /// Starts a stroke that paints `process`'s version of the active layer (as the canvas shows it) through the tip.
     bool beginProcessedStroke(QPointF documentPoint, const std::function<void(compositor::Image&)>& process);

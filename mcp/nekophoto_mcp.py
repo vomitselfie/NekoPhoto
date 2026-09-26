@@ -595,9 +595,55 @@ def gradient_draw(x0: float, y0: float, x1: float, y1: float, shape: str = "line
 
 
 @edit("Draw a shape")
-def shape_draw(x: float, y: float, width: float, height: float, kind: str = "rectangle", corner_radius: float = 0, color: Optional[str] = None) -> str:
-    """Add a filled rectangle (optionally rounded) or ellipse as a new shape layer."""
-    return text(call("shape.draw", x=x, y=y, width=width, height=height, kind=kind, cornerRadius=corner_radius, color=color))
+def shape_draw(x: float, y: float, width: float = 0, height: float = 0, kind: str = "rectangle", corner_radius: float = 0, sides: int = 5, star: Optional[float] = None,
+               x2: Optional[float] = None, y2: Optional[float] = None, weight: float = 4, name: Optional[str] = None, color: Optional[str] = None, fill: bool = True,
+               stroke_width: Optional[float] = None, stroke_color: Optional[str] = None, stroke_align: Optional[str] = None, stroke_dashes: Optional[list[float]] = None) -> str:
+    """Add a vector shape layer (stays editable, and is a Photoshop shape layer in PSD exports). kind rectangle (corner_radius), ellipse, polygon (sides), star (sides, star = inset 0..0.99),
+    line (from x, y to x2, y2, weight pixels) or custom (name: Heart, Star, Arrow, Speech Bubble, Check Mark, Lightning), in box x, y, width, height. color fills it (default the foreground);
+    fill=false with a stroke gives an outline; stroke_width / stroke_color / stroke_align (inside, center, outside) / stroke_dashes (in stroke widths, e.g. [4, 2]) stroke it."""
+    return text(call("shape.draw", x=x, y=y, width=width, height=height, kind=kind, cornerRadius=corner_radius, sides=sides, star=star, x2=x2, y2=y2, weight=weight, name=name,
+                     color=color, fill=fill, strokeWidth=stroke_width, strokeColor=stroke_color, strokeAlign=stroke_align, strokeDashes=stroke_dashes))
+
+
+@look("Shape")
+def shape_get(id: str) -> str:
+    """A vector shape layer's path (subpaths of [inX, inY, x, y, outX, outY] knots, document pixels), fill and stroke."""
+    return text(call("shape.get", id=id))
+
+
+@edit("Edit shape")
+def shape_set(id: str, path: Optional[list] = None, color: Optional[str] = None, fill: Optional[bool] = None, stroke: Optional[bool] = None, stroke_width: Optional[float] = None,
+              stroke_color: Optional[str] = None, stroke_align: Optional[str] = None, stroke_dashes: Optional[list[float]] = None) -> str:
+    """Change a vector shape layer: its path (as shape_get gives it; a knot may be just [x, y] for a corner), fill colour, fill on/off, or stroke."""
+    return text(call("shape.set", id=id, path=path, color=color, fill=fill, stroke=stroke, strokeWidth=stroke_width, strokeColor=stroke_color, strokeAlign=stroke_align, strokeDashes=stroke_dashes))
+
+
+@look("Paths")
+def paths_list() -> str:
+    """The document's paths (Photoshop's Paths panel): the Work Path (id 1025) and saved paths, with their knots."""
+    return text(call("paths.list"))
+
+
+@edit("Set path")
+def paths_set(path: list, id: Optional[int] = None, name: Optional[str] = None, work: bool = False) -> str:
+    """Make a saved path (name), the Work Path (work=true), or replace path id. path is a list of subpaths {closed, knots: [[x, y] or [inX, inY, x, y, outX, outY], ...]}."""
+    return text(call("paths.set", path=path, id=id, name=name, work=work))
+
+
+@edit("Use path")
+def paths_apply(id: int, action: str, mode: str = "replace") -> str:
+    """Use a path: action fill (foreground colour on the active layer), stroke (brush size), select (load as selection with mode replace/add/subtract/intersect),
+    shape (a new vector shape layer), delete, or choose (target it for the Pen and Direct Selection)."""
+    methods = {"fill": "paths.fill", "stroke": "paths.stroke", "select": "paths.toSelection", "shape": "paths.toShape", "delete": "paths.delete", "choose": "paths.select"}
+    if action not in methods:
+        return "action must be one of " + ", ".join(methods)
+    return text(call(methods[action], id=id, mode=mode) if action == "select" else call(methods[action], id=id))
+
+
+@edit("Path from selection")
+def paths_from_selection(tolerance: float = 1.0) -> str:
+    """Make the Work Path (id 1025) from the selection's outline; tolerance in pixels trades points for accuracy."""
+    return text(call("paths.fromSelection", tolerance=tolerance))
 
 
 # ---- selection ----------------------------------------------------------------------------------

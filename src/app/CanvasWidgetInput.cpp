@@ -52,6 +52,8 @@ void CanvasWidget::updateCursor(QPointF view, Qt::KeyboardModifiers modifiers) {
         return;
     }
     case Tool::Brush: case Tool::SpotHealing: case Tool::CloneStamp: case Tool::Smudge: case Tool::Dodge: setCursor(Qt::BlankCursor); return;
+    case Tool::Pen: setCursor(Qt::CrossCursor); return;
+    case Tool::DirectSelect: setCursor(Qt::ArrowCursor); return;
     case Tool::Marquee: case Tool::Lasso: case Tool::Wand: case Tool::Scribble: case Tool::Crop: case Tool::Gradient: case Tool::Shape: case Tool::Eyedropper: case Tool::PaintBucket: setCursor(Qt::CrossCursor); return;
     case Tool::Text: setCursor(Qt::IBeamCursor); return;
     case Tool::Zoom: setCursor((modifiers & Qt::AltModifier) ? zoomOutCursor_ : zoomInCursor_); return;
@@ -123,6 +125,8 @@ void CanvasWidget::keyPressEvent(QKeyEvent* e) {
         if (session_->pixelMoveActive()) { session_->cancelPixelMove(); return; }
         if (session_->gradientPending()) { session_->cancelGradient(); return; }
         if (session_->shapeDraft()) { session_->cancelShape(); return; }
+        if (session_->penDraft()) { session_->penCancel(); return; }
+        if (selectedKnot_) { selectedKnot_.reset(); update(); return; }
         if (session_->transformEdit()) { session_->cancelTransform(); return; }
         if (!lassoPoints_.empty()) { cancelLasso(); return; }
         if (session_->tool() == Tool::Scribble && (!session_->scribbles().empty() || !session_->clickPrompts().empty())) { session_->clearScribbles(); session_->clearClickPrompts(); return; }
@@ -131,11 +135,27 @@ void CanvasWidget::keyPressEvent(QKeyEvent* e) {
     case Qt::Key_Return: case Qt::Key_Enter:
         if (session_->transformEdit()) { session_->commitTransform(); return; }
         if (session_->gradientPending()) { session_->commitGradient(); return; }
+        if (session_->penDraft()) { session_->penFinish(false); return; }
         if (!lassoPoints_.empty() && session_->lassoKind == LassoKind::Polygonal) { finishPolygonalLasso(); return; }
         if (crop_) { applyCrop(); return; }
         return;
     case Qt::Key_Backspace: case Qt::Key_Delete:
         if (session_->lassoKind == LassoKind::Polygonal && !lassoPoints_.empty()) { lassoPoints_.pop_back(); update(); return; }
+        if (session_->tool() == Tool::DirectSelect && selectedKnot_) {
+            // The chosen knot goes; a subpath left with fewer than two goes with it.
+            if (auto path = session_->targetPath()) {
+                auto [sub, knot] = *selectedKnot_;
+                if (sub < int(path->subpaths.size()) && knot < int(path->subpaths[size_t(sub)].knots.size())) {
+                    auto& knots = path->subpaths[size_t(sub)].knots;
+                    knots.erase(knots.begin() + knot);
+                    if (knots.size() < 2) path->subpaths.erase(path->subpaths.begin() + sub);
+                    session_->setTargetPath(*path, tr("Delete Anchor Point"));
+                }
+            }
+            selectedKnot_.reset();
+            update();
+            return;
+        }
         if (session_->tool() == Tool::Scribble && session_->quickSelectClicks && !session_->clickPrompts().empty()) { session_->removeLastClickPrompt(); return; }
         if (session_->tool() == Tool::Scribble && !session_->quickSelectClicks && !session_->scribbles().empty()) { session_->removeLastScribble(); return; }
         break;

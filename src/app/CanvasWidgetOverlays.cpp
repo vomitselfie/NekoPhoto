@@ -1,5 +1,6 @@
 // The canvas overlays: transform box, selection ants, scribbles, crop, guides and the tool previews.
 #include "CanvasWidget.h"
+#include "VectorPathQt.h"
 #include <cstring>
 #include "QtGeometry.h"
 #include <QPainter>
@@ -61,12 +62,11 @@ void CanvasWidget::drawOverlays(QPainter& painter) {
         painter.setBrush(Qt::white);
         painter.drawEllipse(a, 4, 4); painter.drawEllipse(b, 4, 4);
     }
-    if (auto& draft = session_->shapeDraft()) {
-        QRectF r(viewPoint(draft->rect.topLeft()), viewPoint(draft->rect.bottomRight()));
+    drawPathOverlay(painter);
+    if (auto path = session_->shapeDraftPath()) {
         painter.setBrush(QColor(session_->foregroundColor.red(), session_->foregroundColor.green(), session_->foregroundColor.blue(), 90));
         painter.setPen(QPen(Qt::black, 1, Qt::DashLine));
-        if (draft->kind == ShapeKind::Ellipse) painter.drawEllipse(r);
-        else { double rad = std::min({draft->cornerRadius * ppp, r.width() / 2, r.height() / 2}); painter.drawRoundedRect(r, rad, rad); }
+        painter.drawPath(painterPath(*path, [this](double x, double y) { return viewPoint(QPointF(x, y)); }));
         painter.setBrush(Qt::NoBrush);
     }
     if (zoomRect_) {
@@ -239,5 +239,97 @@ void CanvasWidget::refreshSelectionOutline() {
     if (selectionOutline_.empty() && !selectionRasterAnts_) antsTimer_.stop(); else if (!antsTimer_.isActive()) antsTimer_.start();
 }
 
+
+} // namespace app
+
+namespace app {
+
+CanvasWidget::PathHit CanvasWidget::pathHit(QPointF view) const {
+    PathHit hit;
+    auto path = session_->targetPath();
+    if (!path) return hit;
+    auto near = [&](double x, double y) { const QPointF v = viewPoint(QPointF(x, y)); return std::hypot(v.x() - view.x(), v.y() - view.y()) <= 6; };
+    // The chosen knot's handles first, then any anchor, then a subpath's outline or inside.
+    if (selectedKnot_) {
+        auto [si, ki] = *selectedKnot_;
+        if (si < int(path->subpaths.size()) && ki < int(path->subpaths[size_t(si)].knots.size())) {
+            const auto& k = path->subpaths[size_t(si)].knots[size_t(ki)];
+            if ((k.outX != k.x || k.outY != k.y) && near(k.outX, k.outY)) return {si, ki, PathHit::Out};
+            if ((k.inX != k.x || k.inY != k.y) && near(k.inX, k.inY)) return {si, ki, PathHit::In};
+        }
+    }
+    for (int si = 0; si < int(path->subpaths.size()); si++)
+        for (int ki = 0; ki < int(path->subpaths[size_t(si)].knots.size()); ki++) {
+            const auto& k = path->subpaths[size_t(si)].knots[size_t(ki)];
+            if (near(k.x, k.y)) return {si, ki, PathHit::Anchor};
+        }
+    auto map = [this](double x, double y) { return viewPoint(QPointF(x, y)); };
+    for (int si = int(path->subpaths.size()) - 1; si >= 0; si--) {
+        compositor::VectorPath one;
+        one.subpaths.push_back(path->subpaths[size_t(si)]);
+        const QPainterPath outline = painterPath(one, map);
+        QPainterPathStroker stroker;
+        stroker.setWidth(10);
+        if ((one.subpaths[0].closed && outline.contains(view)) || stroker.createStroke(outline).contains(view)) return {si, -1, PathHit::Subpath};
+    }
+    return hit;
+}
+
+void CanvasWidget::drawPathOverlay(QPainter& painter) {
+    auto map = [this](double x, double y) { return viewPoint(QPointF(x, y)); };
+    const Tool tool = session_->tool();
+    // The pen's path so far, and the segment to where the pointer is.
+    if (const auto& draft = session_->penDraft()) {
+        compositor::VectorPath p;
+        p.subpaths.push_back(*draft);
+        p.subpaths[0].closed = false;
+        painter.setBrush(Qt::NoBrush);
+        painter.setPen(QPen(QColor(0, 120, 255), 1.5));
+        painter.drawPath(painterPath(p, map));
+        if (hover_ && !draft->knots.empty() && drag_ != Drag::Pen) {
+            const auto& last = draft->knots.back();
+            QPainterPath rubber;
+            rubber.moveTo(map(last.x, last.y));
+            rubber.cubicTo(map(last.outX, last.outY), *hover_, *hover_);
+            painter.setPen(QPen(QColor(0, 120, 255), 1, Qt::DashLine));
+            painter.drawPath(rubber);
+        }
+        painter.setPen(QPen(QColor(0, 120, 255), 1));
+        for (size_t i = 0; i < draft->knots.size(); i++) {
+            const auto& k = draft->knots[i];
+            const QPointF a = map(k.x, k.y);
+            if (i + 1 == draft->knots.size() && (k.outX != k.x || k.outY != k.y)) {
+                painter.drawLine(map(k.inX, k.inY), map(k.outX, k.outY));
+                painter.setBrush(QColor(0, 120, 255)); painter.drawEllipse(map(k.inX, k.inY), 3, 3); painter.drawEllipse(map(k.outX, k.outY), 3, 3);
+            }
+            painter.setBrush(i == 0 ? QColor(255, 255, 255) : QColor(0, 120, 255));
+            painter.drawRect(QRectF(a.x() - 3, a.y() - 3, 6, 6));
+        }
+        painter.setBrush(Qt::NoBrush);
+    }
+    // The target path, with its anchors for the Pen and Direct Selection.
+    if (tool != Tool::DirectSelect && tool != Tool::Pen && !session_->activePathId()) return;
+    auto path = session_->targetPath();
+    if (!path) return;
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(QColor(0, 120, 255), 1));
+    painter.drawPath(painterPath(*path, map));
+    if (tool != Tool::DirectSelect) return;
+    for (int si = 0; si < int(path->subpaths.size()); si++)
+        for (int ki = 0; ki < int(path->subpaths[size_t(si)].knots.size()); ki++) {
+            const auto& k = path->subpaths[size_t(si)].knots[size_t(ki)];
+            const QPointF a = map(k.x, k.y);
+            const bool chosen = selectedKnot_ && selectedKnot_->first == si && selectedKnot_->second == ki;
+            if (chosen) {
+                painter.setPen(QPen(QColor(0, 120, 255), 1));
+                if (k.inX != k.x || k.inY != k.y) { painter.drawLine(a, map(k.inX, k.inY)); painter.setBrush(QColor(0, 120, 255)); painter.drawEllipse(map(k.inX, k.inY), 3.5, 3.5); }
+                if (k.outX != k.x || k.outY != k.y) { painter.drawLine(a, map(k.outX, k.outY)); painter.setBrush(QColor(0, 120, 255)); painter.drawEllipse(map(k.outX, k.outY), 3.5, 3.5); }
+            }
+            painter.setBrush(chosen ? QColor(0, 120, 255) : QColor(255, 255, 255));
+            painter.setPen(QPen(QColor(0, 120, 255), 1));
+            painter.drawRect(QRectF(a.x() - 3, a.y() - 3, 6, 6));
+        }
+    painter.setBrush(Qt::NoBrush);
+}
 
 } // namespace app

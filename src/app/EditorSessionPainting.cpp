@@ -452,7 +452,7 @@ void EditorSession::resolveGradient() { if (gradient_) commitGradient(); }
 void EditorSession::beginShape(QPointF documentPoint) {
     if (!canEditLayers()) return;
     QPointF anchor(std::round(documentPoint.x()), std::round(documentPoint.y()));
-    shapeDraft_ = ShapeDraft{shapeKind, anchor, QRectF(anchor, QSizeF(0, 0)), shapeKind == ShapeKind::Rectangle ? shapeCornerRadius : 0};
+    shapeDraft_ = ShapeDraft{ShapeKind::Rectangle, anchor, QRectF(anchor, QSizeF(0, 0)), shapeTool.cornerRadius, anchor};
     emit transformChanged();
 }
 
@@ -460,7 +460,12 @@ void EditorSession::dragShape(QPointF point, bool square, bool fromCenter) {
     if (!shapeDraft_) return;
     QPointF anchor = shapeDraft_->anchor;
     double dx = std::round(point.x()) - anchor.x(), dy = std::round(point.y()) - anchor.y();
-    if (square) { double side = std::max(std::fabs(dx), std::fabs(dy)); dx = dx < 0 ? -side : side; dy = dy < 0 ? -side : side; }
+    if (shapeTool.kind == VectorShapeKind::Line && square) {
+        // Shift snaps a line to 45 degrees.
+        const double angle = std::round(std::atan2(dy, dx) / (M_PI / 4)) * (M_PI / 4), length = std::hypot(dx, dy);
+        dx = std::round(std::cos(angle) * length); dy = std::round(std::sin(angle) * length);
+    } else if (square) { double side = std::max(std::fabs(dx), std::fabs(dy)); dx = dx < 0 ? -side : side; dy = dy < 0 ? -side : side; }
+    shapeDraft_->end = QPointF(anchor.x() + dx, anchor.y() + dy);
     shapeDraft_->rect = fromCenter ? QRectF(anchor.x() - std::fabs(dx), anchor.y() - std::fabs(dy), std::fabs(dx) * 2, std::fabs(dy) * 2)
                                    : QRectF(std::min(anchor.x(), anchor.x() + dx), std::min(anchor.y(), anchor.y() + dy), std::fabs(dx), std::fabs(dy));
     emit transformChanged();
@@ -469,35 +474,78 @@ void EditorSession::dragShape(QPointF point, bool square, bool fromCenter) {
 void EditorSession::cancelShape() { if (shapeDraft_) { shapeDraft_.reset(); emit transformChanged(); } }
 
 void EditorSession::toggleShapeKind() {
+    // Shift-U steps through the kinds, as in Photoshop.
     cancelShape();
-    shapeKind = shapeKind == ShapeKind::Rectangle ? ShapeKind::Ellipse : ShapeKind::Rectangle;
+    shapeTool.kind = VectorShapeKind((int(shapeTool.kind) + 1) % 5);
     emit toolChanged();
+}
+
+std::optional<VectorPath> EditorSession::shapeDraftPath() const {
+    if (!shapeDraft_) return std::nullopt;
+    const ShapeDraft& d = *shapeDraft_;
+    const Rect box(d.rect.x(), d.rect.y(), d.rect.width(), d.rect.height());
+    switch (shapeTool.kind) {
+    case VectorShapeKind::Line:
+        if (d.end == d.anchor) return std::nullopt;
+        return linePath(toPoint(d.anchor), toPoint(d.end), std::max(0.5, shapeTool.lineWeight));
+    case VectorShapeKind::Ellipse: return box.width >= 1 && box.height >= 1 ? std::optional(ellipsePath(box)) : std::nullopt;
+    case VectorShapeKind::Polygon: return box.width >= 1 && box.height >= 1 ? std::optional(polygonPath(box, shapeTool.sides, shapeTool.starInset)) : std::nullopt;
+    case VectorShapeKind::Custom: return box.width >= 1 && box.height >= 1 ? std::optional(customShapePath(shapeTool.custom, box)) : std::nullopt;
+    case VectorShapeKind::Rectangle: break;
+    }
+    return box.width >= 1 && box.height >= 1 ? std::optional(rectanglePath(box, shapeTool.cornerRadius)) : std::nullopt;
 }
 
 void EditorSession::finishShape() {
     if (!shapeDraft_) return;
-    ShapeDraft draft = *shapeDraft_;
+    const std::optional<VectorPath> path = shapeDraftPath();
     shapeDraft_.reset();
     emit transformChanged();
-    if (!canEditLayers() || draft.rect.width() < 1 || draft.rect.height() < 1) return;
-    int w = int(draft.rect.width()), h = int(draft.rect.height());
-    if ((long long)w * h > Document::pixelBudget) { emit error(tr("That shape is too large. A shape can cover up to 100 megapixels.")); return; }
-    QColor c = foregroundColor;
-    auto image = shapeImage(draft.kind, w, h, c.redF(), c.greenF(), c.blueF(), draft.cornerRadius);
-    std::string prefix = draft.kind == ShapeKind::Ellipse ? "Ellipse" : "Rectangle";
-    Layer layer(Asset::make(image, nextLayerName(document_->layers, prefix)), toPoint(draft.rect.topLeft()));
+    if (!canEditLayers() || !path) return;
+    const Rect bounds = pathBounds(*path);
+    if (bounds.width * bounds.height > double(Document::pixelBudget)) { emit error(tr("That shape is too large. A shape can cover up to 100 megapixels.")); return; }
+    static const char* const prefixes[] = {"Rectangle", "Ellipse", "Polygon", "Line", "Shape"};
+    const std::string prefix = shapeTool.kind == VectorShapeKind::Custom ? shapeTool.custom : prefixes[int(shapeTool.kind)];
+    VectorShape shape;
+    shape.path = *path;
+    shape.r = uint8_t(foregroundColor.red()); shape.g = uint8_t(foregroundColor.green()); shape.b = uint8_t(foregroundColor.blue());
+    shape.fill = shapeTool.fill || !shapeTool.stroke.enabled;   // a shape with neither would be invisible
+    shape.stroke = shapeTool.stroke;
+    addVectorShapeLayer(shape, QString::fromStdString(prefix));
+}
+
+bool EditorSession::addVectorShapeLayer(const VectorShape& shape, const QString& name) {
+    if (!canEditLayers()) return false;
+    const std::string base = name.isEmpty() ? std::string("Shape") : name.toStdString();
+    Layer layer(Asset::make(std::make_shared<Image>(1, 1), nextLayerName(document_->layers, base)), Point(0, 0));
     layer.name = layer.asset->name;
-    layer.shape = LayerShapeStyle{draft.kind, c.redF(), c.greenF(), c.blueF(), draft.cornerRadius};
-    layer.shapeImage = image;
+    setVectorShape(layer, *document_, shape);
     const Layer* active = activeLayer();
     layer.parentId = active && active->isGroup ? activeLayerId_ : (active ? active->parentId : std::nullopt);
     int index = activeLayerId_ ? document_->indexOf(*activeLayerId_) + 1 : int(document_->layers.size());
     endOpacityEdit();
-    beginEdit(QString::fromStdString(prefix));
+    beginEdit(QString::fromStdString(base));
     document_->layers.insert(document_->layers.begin() + index, layer);
     setActiveLayer(layer.id);
     endEdit();
     notifyDocument();
+    return true;
+}
+
+std::optional<VectorShape> EditorSession::activeVectorShape() const {
+    const Layer* layer = activeLayer();
+    return layer && document_ ? vectorShapeOf(*layer, *document_) : std::nullopt;
+}
+
+bool EditorSession::setActiveVectorShape(const VectorShape& shape, const QString& name) {
+    if (!canEditLayers()) return false;
+    Layer* layer = activeLayerMutable();
+    if (!layer || !isVectorShapeLayer(*layer)) return false;
+    beginEdit(name);
+    setVectorShape(*layer, *document_, shape);
+    endEdit();
+    notifyDocument();
+    return true;
 }
 
 // ---- Text ----------------------------------------------------------------------------------

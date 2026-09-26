@@ -1,5 +1,6 @@
 #include "Style.h"
 #include "ToolOptionsBar.h"
+#include <QColorDialog>
 #include "TextLayer.h"
 #include "BrushImporter.h"
 #include "BrushLibrary.h"
@@ -85,6 +86,7 @@ ToolOptionsBar::ToolOptionsBar(EditorSession* session, CanvasWidget* canvas, QWi
     stack_->addWidget(buildScribbleOptions());   // 14
     stack_->addWidget(buildToningOptions());     // 15
     stack_->addWidget(buildBucketOptions());     // 16
+    stack_->addWidget(buildPenOptions());        // 17
     addWidget(stack_);
     connect(session_, &EditorSession::toolChanged, this, &ToolOptionsBar::syncTool);
     connect(session_, &EditorSession::transformChanged, this, &ToolOptionsBar::syncTransformFields);
@@ -113,6 +115,7 @@ void ToolOptionsBar::syncTool() {
     case Tool::Text: index = 13; break;
     case Tool::Dodge: index = 15; break;
     case Tool::PaintBucket: index = 16; break;
+    case Tool::Pen: case Tool::DirectSelect: index = 17; break;
     }
     for (auto& s : syncers_) s();
     stack_->setCurrentIndex(index);
@@ -422,6 +425,29 @@ QWidget* ToolOptionsBar::buildToningOptions() {
     return w;
 }
 
+QWidget* ToolOptionsBar::buildPenOptions() {
+    QWidget* w = row();
+    auto* h = layoutOf(w);
+    auto* mode = new QComboBox;
+    mode->addItems({tr("Shape"), tr("Path")});
+    mode->setToolTip(tr("Shape makes a vector shape layer; Path draws into the Paths panel's path (or a new Work Path)"));
+    auto* add = new QCheckBox(tr("Add to active shape"));
+    add->setToolTip(tr("With a vector shape layer active, the new outline goes into it"));
+    connect(mode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, add](int i) { session_->penMode = i == 1 ? EditorSession::PenMode::Path : EditorSession::PenMode::Shape; add->setEnabled(i == 0); });
+    connect(add, &QCheckBox::toggled, this, [this](bool on) { session_->penAddsToShape = on; });
+    syncers_.push_back([this, mode, add] {
+        QSignalBlocker b1(mode), b2(add);
+        mode->setCurrentIndex(session_->penMode == EditorSession::PenMode::Path ? 1 : 0);
+        add->setChecked(session_->penAddsToShape);
+        add->setEnabled(session_->penMode == EditorSession::PenMode::Shape);
+    });
+    h->addWidget(new QLabel(tr("Pen")));
+    h->addWidget(mode);
+    h->addWidget(add);
+    h->addStretch();
+    return w;
+}
+
 QWidget* ToolOptionsBar::buildBucketOptions() {
     QWidget* w = row();
     auto* h = layoutOf(w);
@@ -479,17 +505,113 @@ QWidget* ToolOptionsBar::buildGradientOptions() {
 }
 
 QWidget* ToolOptionsBar::buildShapeOptions() {
+    // New shapes take these settings; with a vector shape layer active, Fill and Stroke edit it (as Photoshop's bar does).
     QWidget* w = row();
     auto* h = layoutOf(w);
+    ShapeToolSettings& st = session_->shapeTool;
     auto* kind = new QComboBox;
-    kind->addItems({tr("Rectangle"), tr("Ellipse")});
-    connect(kind, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->shapeKind = i == 1 ? ShapeKind::Ellipse : ShapeKind::Rectangle; });
-    syncers_.push_back([this, kind] { QSignalBlocker b(kind); kind->setCurrentIndex(session_->shapeKind == ShapeKind::Ellipse ? 1 : 0); });
+    kind->addItems({tr("Rectangle"), tr("Ellipse"), tr("Polygon"), tr("Line"), tr("Custom Shape")});
     h->addWidget(kind);
-    h->addWidget(new QLabel(tr("Corner radius")));
-    auto* radius = numberField(0, 5000, 0, " px", tr("Corner radius, for rectangles"));
-    connect(radius, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double v) { session_->shapeCornerRadius = v; });
-    h->addWidget(radius);
+    // Per-kind fields.
+    auto* radiusLabel = new QLabel(tr("Radius"));
+    auto* radius = numberField(0, 5000, 0, " px", tr("Corner radius"));
+    auto* sidesLabel = new QLabel(tr("Sides"));
+    auto* sides = numberField(3, 100, 0, QString(), tr("Sides (points, for a star)"));
+    sides->setValue(st.sides);
+    auto* starLabel = new QLabel(tr("Star"));
+    auto* star = numberField(0, 99, 0, "%", tr("How far a star's inner points come in; 0 for a polygon"));
+    auto* weightLabel = new QLabel(tr("Weight"));
+    auto* weight = numberField(0.5, 1000, 1, " px", tr("Line weight"));
+    weight->setValue(st.lineWeight);
+    auto* custom = new QComboBox;
+    for (const auto& n : compositor::customShapeNames()) custom->addItem(QString::fromStdString(n));
+    for (QWidget* x : std::initializer_list<QWidget*>{radiusLabel, radius, sidesLabel, sides, starLabel, star, weightLabel, weight, custom}) h->addWidget(x);
+    auto showKind = [=, this] {
+        const VectorShapeKind k = session_->shapeTool.kind;
+        radiusLabel->setVisible(k == VectorShapeKind::Rectangle); radius->setVisible(k == VectorShapeKind::Rectangle);
+        for (QWidget* x : {static_cast<QWidget*>(sidesLabel), static_cast<QWidget*>(sides), static_cast<QWidget*>(starLabel), static_cast<QWidget*>(star)}) x->setVisible(k == VectorShapeKind::Polygon);
+        weightLabel->setVisible(k == VectorShapeKind::Line); weight->setVisible(k == VectorShapeKind::Line);
+        custom->setVisible(k == VectorShapeKind::Custom);
+    };
+    connect(kind, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, showKind](int i) { session_->shapeTool.kind = VectorShapeKind(i); showKind(); });
+    connect(radius, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double v) { session_->shapeTool.cornerRadius = v; });
+    connect(sides, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double v) { session_->shapeTool.sides = int(v); });
+    connect(star, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double v) { session_->shapeTool.starInset = v / 100; });
+    connect(weight, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double v) { session_->shapeTool.lineWeight = v; });
+    connect(custom, &QComboBox::currentTextChanged, this, [this](const QString& n) { session_->shapeTool.custom = n.toStdString(); });
+    h->addWidget(separator());
+
+    // Fill and stroke.
+    auto swatch = [](QToolButton* b, QColor c) { b->setStyleSheet(QStringLiteral("QToolButton { background: %1; min-width: 22px; border: 1px solid #888; }").arg(c.name())); };
+    auto* fill = new QCheckBox(tr("Fill"));
+    fill->setChecked(st.fill);
+    auto* fillColour = new QToolButton;
+    fillColour->setToolTip(tr("The active shape's fill colour (new shapes take the foreground colour)"));
+    auto* stroke = new QCheckBox(tr("Stroke"));
+    stroke->setChecked(st.stroke.enabled);
+    auto* strokeColour = new QToolButton;
+    strokeColour->setToolTip(tr("Stroke colour"));
+    auto* strokeWidth = numberField(0, 1000, 1, " px", tr("Stroke width"));
+    strokeWidth->setValue(st.stroke.width);
+    auto* align = new QComboBox;
+    align->addItems({tr("Inside"), tr("Center"), tr("Outside")});
+    align->setCurrentIndex(1);
+    auto* dash = new QComboBox;
+    dash->addItems({tr("Solid"), tr("Dashed"), tr("Dotted")});
+    for (QWidget* x : std::initializer_list<QWidget*>{fill, fillColour, stroke, strokeColour, strokeWidth, align, dash}) h->addWidget(x);
+    // Each change goes to the settings and, when a vector shape layer is active, to it as one step.
+    auto apply = [this](const QString& name, std::function<void(VectorShape&)> change) {
+        if (auto shape = session_->activeVectorShape()) { change(*shape); session_->setActiveVectorShape(*shape, name); }
+    };
+    connect(fill, &QCheckBox::toggled, this, [this, apply](bool on) { session_->shapeTool.fill = on; apply(tr("Shape Fill"), [on](VectorShape& s) { s.fill = on; }); });
+    connect(fillColour, &QToolButton::clicked, this, [this, apply, swatch, fillColour] {
+        auto shape = session_->activeVectorShape();
+        const QColor start = shape ? QColor(shape->r, shape->g, shape->b) : session_->foregroundColor;
+        const QColor c = QColorDialog::getColor(start, this, tr("Fill"));
+        if (!c.isValid()) return;
+        swatch(fillColour, c);
+        if (shape) apply(tr("Shape Fill"), [c](VectorShape& s) { s.r = uint8_t(c.red()); s.g = uint8_t(c.green()); s.b = uint8_t(c.blue()); s.fill = true; });
+        else { session_->foregroundColor = c; emit session_->toolChanged(); }
+    });
+    connect(stroke, &QCheckBox::toggled, this, [this, apply](bool on) { session_->shapeTool.stroke.enabled = on; apply(tr("Shape Stroke"), [on](VectorShape& s) { s.stroke.enabled = on; }); });
+    connect(strokeColour, &QToolButton::clicked, this, [this, apply, swatch, strokeColour] {
+        compositor::VectorStroke& t = session_->shapeTool.stroke;
+        const QColor c = QColorDialog::getColor(QColor(t.r, t.g, t.b), this, tr("Stroke"));
+        if (!c.isValid()) return;
+        t.r = uint8_t(c.red()); t.g = uint8_t(c.green()); t.b = uint8_t(c.blue());
+        swatch(strokeColour, c);
+        apply(tr("Shape Stroke"), [c](VectorShape& s) { s.stroke.r = uint8_t(c.red()); s.stroke.g = uint8_t(c.green()); s.stroke.b = uint8_t(c.blue()); s.stroke.enabled = true; });
+    });
+    connect(strokeWidth, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this, apply](double v) {
+        session_->shapeTool.stroke.width = v; apply(tr("Shape Stroke"), [v](VectorShape& s) { s.stroke.width = v; });
+    });
+    connect(align, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, apply](int i) {
+        const auto a = i == 0 ? compositor::VectorStroke::Align::Inside : i == 2 ? compositor::VectorStroke::Align::Outside : compositor::VectorStroke::Align::Center;
+        session_->shapeTool.stroke.align = a; apply(tr("Shape Stroke"), [a](VectorShape& s) { s.stroke.align = a; });
+    });
+    connect(dash, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, apply](int i) {
+        // Photoshop's presets, in stroke widths: dashes 4 on 2 off; dots 0 on 2 off with round caps.
+        auto set = [i](compositor::VectorStroke& t) {
+            t.dashes = i == 1 ? std::vector<double>{4, 2} : i == 2 ? std::vector<double>{0, 2} : std::vector<double>{};
+            t.cap = i == 2 ? compositor::VectorStroke::Cap::Round : compositor::VectorStroke::Cap::Butt;
+        };
+        set(session_->shapeTool.stroke); apply(tr("Shape Stroke"), [set](VectorShape& s) { set(s.stroke); });
+    });
+    // The bar shows the active shape's fill and stroke; otherwise the settings new shapes take.
+    syncers_.push_back([=, this] {
+        QSignalBlocker b1(kind), b2(fill), b3(stroke), b4(strokeWidth), b5(align), b6(dash);
+        kind->setCurrentIndex(int(session_->shapeTool.kind));
+        showKind();
+        const auto shape = session_->activeVectorShape();
+        const compositor::VectorStroke& t = shape ? shape->stroke : session_->shapeTool.stroke;
+        fill->setChecked(shape ? shape->fill : session_->shapeTool.fill);
+        swatch(fillColour, shape ? QColor(shape->r, shape->g, shape->b) : session_->foregroundColor);
+        stroke->setChecked(t.enabled);
+        swatch(strokeColour, QColor(t.r, t.g, t.b));
+        strokeWidth->setValue(t.width);
+        align->setCurrentIndex(t.align == compositor::VectorStroke::Align::Inside ? 0 : t.align == compositor::VectorStroke::Align::Outside ? 2 : 1);
+        dash->setCurrentIndex(t.dashes.empty() ? 0 : t.dashes.front() == 0 ? 2 : 1);
+    });
     h->addStretch();
     return w;
 }

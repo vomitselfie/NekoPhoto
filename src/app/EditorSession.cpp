@@ -1,4 +1,5 @@
 // EditorSession: The session: construction, the document, history, crop and canvas, tools and the view.
+#include "compositor/vectorlayer.h"
 #include "EditorSession.h"
 #include "compositor/smartfilter.h"
 #include "QtGeometry.h"
@@ -261,7 +262,7 @@ int EditorSession::squashHistory(uint64_t since, const QString& name) {
 void EditorSession::beginEdit(const QString& name) { history_.begin(name.toStdString(), document_, activeLayerId_); }
 void EditorSession::endEdit() {
     // Warped and filtered smart objects moved or scaled in this edit are drawn again from their contents.
-    if (document_) refreshSmartObjectRasters(*document_);
+    if (document_) { refreshSmartObjectRasters(*document_); refreshVectorShapes(*document_); }
     history_.end(document_, activeLayerId_);
 }
 

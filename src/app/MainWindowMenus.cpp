@@ -79,7 +79,9 @@ void MainWindow::buildToolRail() {
     tool(Tool::Dodge, tr("Dodge / Burn / Sponge"), "lollipop", QKeySequence("O"));
     tool(Tool::Gradient, tr("Gradient"), "blend", QKeySequence("G"));
     tool(Tool::PaintBucket, tr("Paint Bucket"), "paint-bucket", QKeySequence("Shift+G"));   // Photoshop's G group
-    tool(Tool::Shape, tr("Shape (Shift-U switches Rectangle / Ellipse)"), "shapes", QKeySequence("U"));
+    tool(Tool::Pen, tr("Pen (click corners, drag curves; click the first point or Enter to finish)"), "pen-tool", QKeySequence("P"));
+    tool(Tool::DirectSelect, tr("Direct Selection (drag points, handles or a whole path; Alt-click converts a point)"), "mouse-pointer-2", QKeySequence("A"));
+    tool(Tool::Shape, tr("Shape (Shift-U steps through Rectangle, Ellipse, Polygon, Line, Custom)"), "shapes", QKeySequence("U"));
     tool(Tool::Text, tr("Text"), "type", QKeySequence("T"));
     tool(Tool::Eyedropper, tr("Eyedropper"), "pipette", QKeySequence("I"));
     rail->addSeparator();
@@ -409,6 +411,8 @@ void MainWindow::buildMenus() {
     layersDock_->toggleViewAction()->setText(tr("&Layers Panel"));
     adjustDock_->toggleViewAction()->setText(tr("&Adjustments Panel"));
     view->addAction(layersDock_->toggleViewAction());
+    pathsDock_->toggleViewAction()->setText(tr("&Paths Panel"));
+    view->addAction(pathsDock_->toggleViewAction());
     view->addAction(adjustDock_->toggleViewAction());
     view->addSeparator();
     QAction* grid = view->addAction(tr("Pixel &Grid"), this, [this](bool on) { session_->showsPixelGrid = on; canvas_->update(); });
