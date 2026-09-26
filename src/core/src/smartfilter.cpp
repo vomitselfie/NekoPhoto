@@ -51,7 +51,12 @@ bool blendOf(const std::string& name, BlendMode& out) {
         {"normal", BlendMode::Normal}, {"multiply", BlendMode::Multiply}, {"screen", BlendMode::Screen}, {"overlay", BlendMode::Overlay},
         {"darken", BlendMode::Darken}, {"lighten", BlendMode::Lighten}, {"difference", BlendMode::Difference},
         {"colorDodge", BlendMode::ColorDodge}, {"colorBurn", BlendMode::ColorBurn}, {"hue", BlendMode::Hue},
-        {"saturation", BlendMode::Saturation}, {"color", BlendMode::Color}, {"luminosity", BlendMode::Luminosity}};
+        {"saturation", BlendMode::Saturation}, {"color", BlendMode::Color}, {"luminosity", BlendMode::Luminosity},
+        {"dissolve", BlendMode::Dissolve}, {"linearBurn", BlendMode::LinearBurn}, {"darkerColor", BlendMode::DarkerColor},
+        {"linearDodge", BlendMode::LinearDodge}, {"lighterColor", BlendMode::LighterColor}, {"softLight", BlendMode::SoftLight},
+        {"hardLight", BlendMode::HardLight}, {"vividLight", BlendMode::VividLight}, {"linearLight", BlendMode::LinearLight},
+        {"pinLight", BlendMode::PinLight}, {"hardMix", BlendMode::HardMix}, {"exclusion", BlendMode::Exclusion},
+        {"blendSubtraction", BlendMode::Subtract}, {"blendDivide", BlendMode::Divide}};
     for (auto& [n, m] : modes) if (name == n) { out = m; return true; }
     return false;
 }
@@ -443,6 +448,11 @@ const char* blendName(BlendMode m) {
     case BlendMode::Darken: return "darken"; case BlendMode::Lighten: return "lighten"; case BlendMode::Difference: return "difference";
     case BlendMode::ColorDodge: return "colorDodge"; case BlendMode::ColorBurn: return "colorBurn"; case BlendMode::Hue: return "hue";
     case BlendMode::Saturation: return "saturation"; case BlendMode::Color: return "color"; case BlendMode::Luminosity: return "luminosity";
+    case BlendMode::Dissolve: return "dissolve"; case BlendMode::LinearBurn: return "linearBurn"; case BlendMode::DarkerColor: return "darkerColor";
+    case BlendMode::LinearDodge: return "linearDodge"; case BlendMode::LighterColor: return "lighterColor"; case BlendMode::SoftLight: return "softLight";
+    case BlendMode::HardLight: return "hardLight"; case BlendMode::VividLight: return "vividLight"; case BlendMode::LinearLight: return "linearLight";
+    case BlendMode::PinLight: return "pinLight"; case BlendMode::HardMix: return "hardMix"; case BlendMode::Exclusion: return "exclusion";
+    case BlendMode::Subtract: return "blendSubtraction"; case BlendMode::Divide: return "blendDivide";
     default: return "normal";
     }
 }

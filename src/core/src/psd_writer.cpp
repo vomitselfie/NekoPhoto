@@ -148,6 +148,20 @@ const char* blendKey(BlendMode mode) {
     case BlendMode::Saturation: return "sat ";
     case BlendMode::Color: return "colr";
     case BlendMode::Luminosity: return "lum ";
+    case BlendMode::Dissolve: return "diss";
+    case BlendMode::LinearBurn: return "lbrn";
+    case BlendMode::DarkerColor: return "dkCl";
+    case BlendMode::LinearDodge: return "lddg";
+    case BlendMode::LighterColor: return "lgCl";
+    case BlendMode::SoftLight: return "sLit";
+    case BlendMode::HardLight: return "hLit";
+    case BlendMode::VividLight: return "vLit";
+    case BlendMode::LinearLight: return "lLit";
+    case BlendMode::PinLight: return "pLit";
+    case BlendMode::HardMix: return "hMix";
+    case BlendMode::Exclusion: return "smud";
+    case BlendMode::Subtract: return "fsub";
+    case BlendMode::Divide: return "fdiv";
     }
     return "norm";
 }

@@ -190,7 +190,7 @@ TEST_CASE(psd_layers_folders_masks_and_blends_come_through) {
     const Layer& clippedLayer = doc.layers[3];
     CHECK(clippedLayer.maskSourceId == std::optional<Uuid>(blueLayer.id));
     CHECK(!clippedLayer.visible);
-    CHECK(clippedLayer.blendMode == BlendMode::ColorBurn);            // the nearest to Linear Burn
+    CHECK(clippedLayer.blendMode == BlendMode::LinearBurn);           // Photoshop's own, exactly
     CHECK(clippedLayer.parentId == std::optional<Uuid>(group.id));
     const Layer& levelsLayer = doc.layers[4];
     REQUIRE(levelsLayer.adjustment.has_value());
@@ -201,12 +201,12 @@ TEST_CASE(psd_layers_folders_masks_and_blends_come_through) {
     CHECK_NEAR(parsed.levels.ranges[0].white, 235, 1e-9);
     CHECK_NEAR(parsed.levels.ranges[0].gamma, 1.2, 1e-9);
     CHECK(!levelsLayer.parentId.has_value());
-    // The merged image came along, and a note explains the blend mode.
+    // The merged image came along, and no note is needed for the blend mode.
     REQUIRE(imported->composite != nullptr);
     CHECK_EQ(int(imported->composite->pixel(1, 1)[0]), 255);
     bool blendNote = false;
     for (auto& n : imported->notes) if (n.find("Linear Burn") != std::string::npos) blendNote = true;
-    CHECK(blendNote);
+    CHECK(!blendNote);
     // The imported document renders.
     auto flat = renderFlattened(doc);
     CHECK_EQ(int(flat->pixel(0, 5)[0]), 255);

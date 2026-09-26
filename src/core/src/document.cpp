@@ -21,8 +21,42 @@ const char* blendModeName(BlendMode mode) {
     case BlendMode::Saturation: return "Saturation";
     case BlendMode::Color: return "Color";
     case BlendMode::Luminosity: return "Luminosity";
+    case BlendMode::Dissolve: return "Dissolve";
+    case BlendMode::LinearBurn: return "Linear Burn";
+    case BlendMode::DarkerColor: return "Darker Color";
+    case BlendMode::LinearDodge: return "Linear Dodge (Add)";
+    case BlendMode::LighterColor: return "Lighter Color";
+    case BlendMode::SoftLight: return "Soft Light";
+    case BlendMode::HardLight: return "Hard Light";
+    case BlendMode::VividLight: return "Vivid Light";
+    case BlendMode::LinearLight: return "Linear Light";
+    case BlendMode::PinLight: return "Pin Light";
+    case BlendMode::HardMix: return "Hard Mix";
+    case BlendMode::Exclusion: return "Exclusion";
+    case BlendMode::Subtract: return "Subtract";
+    case BlendMode::Divide: return "Divide";
     }
     return "Normal";
+}
+
+const std::vector<int>& blendModeMenuOrder() {
+    using B = BlendMode;
+    static const std::vector<int> order = [] {
+        std::vector<int> o;
+        for (auto m : {B::Normal, B::Dissolve}) o.push_back(int(m));
+        o.push_back(-1);
+        for (auto m : {B::Darken, B::Multiply, B::ColorBurn, B::LinearBurn, B::DarkerColor}) o.push_back(int(m));
+        o.push_back(-1);
+        for (auto m : {B::Lighten, B::Screen, B::ColorDodge, B::LinearDodge, B::LighterColor}) o.push_back(int(m));
+        o.push_back(-1);
+        for (auto m : {B::Overlay, B::SoftLight, B::HardLight, B::VividLight, B::LinearLight, B::PinLight, B::HardMix}) o.push_back(int(m));
+        o.push_back(-1);
+        for (auto m : {B::Difference, B::Exclusion, B::Subtract, B::Divide}) o.push_back(int(m));
+        o.push_back(-1);
+        for (auto m : {B::Hue, B::Saturation, B::Color, B::Luminosity}) o.push_back(int(m));
+        return o;
+    }();
+    return order;
 }
 
 bool parseBlendMode(const std::string& name, BlendMode& out) {

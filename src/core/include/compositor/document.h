@@ -17,8 +17,13 @@
 
 namespace compositor {
 
-enum class BlendMode { Normal, Multiply, Screen, Overlay, Darken, Lighten, Difference, ColorDodge, ColorBurn, Hue, Saturation, Color, Luminosity };
-constexpr int blendModeCount = 13;
+enum class BlendMode { Normal, Multiply, Screen, Overlay, Darken, Lighten, Difference, ColorDodge, ColorBurn, Hue, Saturation, Color, Luminosity,
+                       // Photoshop's others (appended: projects store names, and older ones keep their indices)
+                       Dissolve, LinearBurn, DarkerColor, LinearDodge, LighterColor, SoftLight, HardLight, VividLight, LinearLight, PinLight,
+                       HardMix, Exclusion, Subtract, Divide };
+constexpr int blendModeCount = 27;
+/// The modes in Photoshop's menu order and groups (a -1 between groups), for pickers.
+const std::vector<int>& blendModeMenuOrder();
 const char* blendModeName(BlendMode mode);          // "Color Dodge" etc, as in the manifest
 bool parseBlendMode(const std::string& name, BlendMode& out);
 

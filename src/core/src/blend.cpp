@@ -42,6 +42,74 @@ inline Rgb setSat(Rgb c, float s) {
     return out;
 }
 
+// ---- Photoshop's other modes: Patchy's byte kernels, pinned bit-exact against full 256 x 256 Photoshop 2026
+// captures (src/core/blend_math.cpp there, MIT; docs/blend-modes.md) ----
+
+int nearestHalfUp(int a, int b) { return (2 * a + b) / (2 * b); }
+int nearestHalfDown(int a, int b) { return (2 * a + b - 1) / (2 * b); }
+uint8_t byteClamp(float v) { return uint8_t(std::clamp(int(std::lround(v)), 0, 255)); }
+
+uint8_t softLight(int s, int d) {
+    const float source = s / 255.0f, base = d / 255.0f;
+    float out = base;
+    if (source <= 0.5f) out = base - (1 - 2 * source) * base * (1 - base);
+    else {
+        const float dd = base <= 0.25f ? ((16 * base - 12) * base + 4) * base : std::sqrt(base);
+        out = base + (2 * source - 1) * (dd - base);
+    }
+    return byteClamp(out * 255);
+}
+
+// Not the textbook burn(2s) / dodge(2s - 255): the burn half doubles as round(s * 255 / 128) and rounds half down;
+// the dodge half doubles as round((s - 128) * 255 / 127) and rounds half up.
+uint8_t vividLight(int s, int d) {
+    if (s == 0) return 0;
+    if (s == 255) return 255;
+    if (s < 128) {
+        const int doubled = nearestHalfUp(s * 255, 128), numerator = d + doubled - 255;
+        return numerator <= 0 ? 0 : uint8_t(std::min(255, nearestHalfDown(numerator * 255, doubled)));
+    }
+    const int divisor = 255 - nearestHalfUp((s - 128) * 255, 127);
+    return divisor <= 0 ? 255 : uint8_t(std::min(255, nearestHalfUp(d * 255, divisor)));
+}
+
+// Hard Mix thresholds the textbook floor-rounded vivid light at > 127, not Photoshop's own vivid light.
+uint8_t hardMix(int s, int d) {
+    int vivid;
+    if (s < 128) {
+        const int doubled = 2 * s;
+        vivid = doubled == 0 ? (d < 255 ? 0 : 255) : std::max(0, 255 - std::min(255, ((255 - d) * 255) / doubled));
+    } else vivid = std::min(255, (d * 255) / (255 - 2 * (s - 128)));
+    return vivid > 127 ? 255 : 0;
+}
+
+uint8_t photoshopChannel(BlendMode mode, uint8_t src, uint8_t dst) {
+    const int s = src, d = dst;
+    switch (mode) {
+    case BlendMode::LinearBurn: return uint8_t(std::clamp(s + d - 255, 0, 255));
+    case BlendMode::LinearDodge: return uint8_t(std::min(255, s + d));
+    case BlendMode::SoftLight: return softLight(s, d);
+    case BlendMode::HardLight: return s < 128 ? uint8_t((2 * s * d) / 255) : uint8_t(255 - (2 * (255 - s) * (255 - d)) / 255);
+    case BlendMode::VividLight: return vividLight(s, d);
+    case BlendMode::LinearLight: return uint8_t(std::clamp(d + 2 * s - 256, 0, 255));   // Photoshop's -256, not -255
+    case BlendMode::PinLight: return s < 128 ? uint8_t(std::min(d, std::clamp(2 * s, 0, 255))) : uint8_t(std::max(d, std::clamp(2 * (s - 128), 0, 255)));
+    case BlendMode::HardMix: return hardMix(s, d);
+    case BlendMode::Exclusion: return uint8_t(s + d - 2 * ((s * d + 127) / 255));   // the product rounded before doubling
+    case BlendMode::Subtract: return uint8_t(std::max(0, d - s));
+    case BlendMode::Divide: return s == 0 ? 255 : uint8_t(std::min(255, (d * 255 + s / 2) / s));
+    default: return src;
+    }
+}
+
+bool photoshopByteMode(BlendMode m) {
+    switch (m) {
+    case BlendMode::LinearBurn: case BlendMode::LinearDodge: case BlendMode::SoftLight: case BlendMode::HardLight: case BlendMode::VividLight:
+    case BlendMode::LinearLight: case BlendMode::PinLight: case BlendMode::HardMix: case BlendMode::Exclusion: case BlendMode::Subtract:
+    case BlendMode::Divide: return true;
+    default: return false;
+    }
+}
+
 inline float separable(BlendMode mode, float cb, float cs) {
     switch (mode) {
     case BlendMode::Normal: return cs;
@@ -59,6 +127,7 @@ inline float separable(BlendMode mode, float cb, float cs) {
         if (cb >= 1) return 1;
         if (cs <= 0) return 0;
         return 1 - std::min(1.0f, (1 - cb) / cs);
+    // Photoshop's others go through photoshopChannel (bytes) in blendColor.
     default: return cs;
     }
 }
@@ -159,11 +228,26 @@ void compositeNonSeparable(BlendMode mode, const uint8_t* src, unsigned k, uint8
 
 Rgb blendColor(BlendMode mode, Rgb cb, Rgb cs) {
     switch (mode) {
+    // The whole colour with the lower (Darker) or higher (Lighter) rounded 0.3 / 0.59 / 0.11 luma; ties keep the
+    // backdrop (Patchy's calibration).
+    case BlendMode::DarkerColor: case BlendMode::LighterColor: {
+        auto luma = [](Rgb c) {
+            const int w = 30 * byteClamp(c.r * 255) + 59 * byteClamp(c.g * 255) + 11 * byteClamp(c.b * 255);
+            return (2 * w + 100) / 200;
+        };
+        const int ls = luma(cs), lb = luma(cb);
+        return (mode == BlendMode::DarkerColor ? ls < lb : ls > lb) ? cs : cb;
+    }
     case BlendMode::Hue: return setLum(setSat(cs, sat(cb)), lum(cb));
     case BlendMode::Saturation: return setLum(setSat(cb, sat(cs)), lum(cb));
     case BlendMode::Color: return setLum(cs, lum(cb));
     case BlendMode::Luminosity: return setLum(cb, lum(cs));
-    default: return {separable(mode, cb.r, cs.r), separable(mode, cb.g, cs.g), separable(mode, cb.b, cs.b)};
+    default:
+        if (photoshopByteMode(mode)) {
+            auto ch = [&](float b, float s2) { return photoshopChannel(mode, byteClamp(s2 * 255), byteClamp(b * 255)) / 255.0f; };
+            return {ch(cb.r, cs.r), ch(cb.g, cs.g), ch(cb.b, cs.b)};
+        }
+        return {separable(mode, cb.r, cs.r), separable(mode, cb.g, cs.g), separable(mode, cb.b, cs.b)};
     }
 }
 
@@ -190,7 +274,21 @@ void compositePixelSteps(BlendMode mode, const uint8_t* src, unsigned k, uint8_t
 }
 
 void compositePixel(BlendMode mode, const uint8_t* src, float coverage, uint8_t* dst) {
-    compositePixelSteps(mode, src, coverageSteps(coverage), dst);
+    // Without a position Dissolve has no pattern: it draws as Normal.
+    compositePixelSteps(mode == BlendMode::Dissolve ? BlendMode::Normal : mode, src, coverageSteps(coverage), dst);
+}
+
+void compositePixelAt(BlendMode mode, const uint8_t* src, float coverage, uint8_t* dst, int x, int y) {
+    if (mode != BlendMode::Dissolve) { compositePixelSteps(mode, src, coverageSteps(coverage), dst); return; }
+    // Photoshop's Dissolve: each pixel whole or not at all, drawn with the chance its alpha (and coverage) gives it.
+    uint32_t h = uint32_t(x) * 0x9E3779B1u ^ uint32_t(y) * 0x85EBCA77u;
+    h ^= h >> 15; h *= 0x2C1B3C6Du; h ^= h >> 12; h *= 0x297A2D39u; h ^= h >> 15;
+    const float chance = src[3] / 255.0f * coverage;
+    if (float(h >> 8) / float(1u << 24) >= chance || src[3] == 0) return;
+    uint8_t opaque[4];
+    for (int c = 0; c < 3; c++) opaque[c] = uint8_t(std::min(255, src[c] * 255 / src[3]));
+    opaque[3] = 255;
+    compositePixelSteps(BlendMode::Normal, opaque, 256, dst);
 }
 
 void compositeSpanNormal(const uint8_t* src, const uint16_t* steps, uint8_t* dst, int count) {

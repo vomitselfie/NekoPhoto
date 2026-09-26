@@ -134,6 +134,11 @@ void sampleMaskCoverage(const GrayPtr& mask, const LayerTransform& transform, co
 
 // ---- Drawing a layer -------------------------------------------------------
 
+/// The document pixel under output pixel (x, y): Dissolve's pattern belongs to the document, so it stays put when
+/// the view pans or renders in tiles.
+inline int docX(const Rect& region, double scale, int x) { return int(std::floor(region.x + (x + 0.5) / scale)); }
+inline int docY(const Rect& region, double scale, int y) { return int(std::floor(region.y + (y + 0.5) / scale)); }
+
 void drawLayer(const DrawParams& params, const Rect& region, double scale, const GrayImage* coverage, Image& out) {
     if (!params.image || params.image->isEmpty() || out.isEmpty()) return;
     const Image& full = *params.image;
@@ -252,7 +257,7 @@ void drawLayer(const DrawParams& params, const Rect& region, double scale, const
             if (nearest) sampleNearest(*source, p.x, p.y, src);
             else samplePixels(params.transform.sampling, *source, p.x * invFactor, p.y * invFactor, src);
             if (!src[3]) continue;
-            compositePixel(params.mode, src, cov, row + x * 4);
+            compositePixelAt(params.mode, src, cov, row + x * 4, docX(region, scale, x), docY(region, scale, y));
         }
     }
     });
@@ -470,7 +475,7 @@ struct Renderer {
                 for (int y = ya; y < yb; y++) {
                     const uint8_t* src = f.buffer->row(y);
                     uint8_t* dst = cur->row(y);
-                    for (int x = 0; x < outWidth; x++) if (src[x * 4 + 3]) compositePixel(mode, src + x * 4, opacity, dst + x * 4);
+                    for (int x = 0; x < outWidth; x++) if (src[x * 4 + 3]) compositePixelAt(mode, src + x * 4, opacity, dst + x * 4, docX(region, scale, x), docY(region, scale, y));
                 }
             });
         } else if (f.before) {
@@ -677,7 +682,7 @@ struct Renderer {
                     const uint8_t* b = band->row(y);
                     const uint8_t* c = coverageWithoutVector ? coverageWithoutVector->row(y) : nullptr;
                     uint8_t* d = target.row(y);
-                    for (int x = 0; x < outWidth; x++) if (b[x]) compositePixel(mode, colour, b[x] / 255.0f * opacity * (c ? c[x] / 255.0f : 1.0f), d + x * 4);
+                    for (int x = 0; x < outWidth; x++) if (b[x]) compositePixelAt(mode, colour, b[x] / 255.0f * opacity * (c ? c[x] / 255.0f : 1.0f), d + x * 4, docX(region, scale, x), docY(region, scale, y));
                 }
             });
         };
@@ -872,7 +877,7 @@ struct Renderer {
             const uint8_t* c = folders ? folders->row(y) : nullptr;
             for (int x = 0; x < outWidth; x++, s += 4, d += 4) {
                 float cov = c ? c[x] / 255.0f : 1.0f;
-                if (cov > 0) compositePixel(mode, s, cov, d);
+                if (cov > 0) compositePixelAt(mode, s, cov, d, docX(region, scale, x), docY(region, scale, y));
             }
         }
         });

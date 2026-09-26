@@ -439,6 +439,20 @@ EffectBlend asEffect(BlendMode m) {
     case BlendMode::Saturation: return EffectBlend::Saturation;
     case BlendMode::Color: return EffectBlend::Color;
     case BlendMode::Luminosity: return EffectBlend::Luminosity;
+    case BlendMode::Dissolve: return EffectBlend::Dissolve;
+    case BlendMode::LinearBurn: return EffectBlend::LinearBurn;
+    case BlendMode::DarkerColor: return EffectBlend::DarkerColor;
+    case BlendMode::LinearDodge: return EffectBlend::LinearDodge;
+    case BlendMode::LighterColor: return EffectBlend::LighterColor;
+    case BlendMode::SoftLight: return EffectBlend::SoftLight;
+    case BlendMode::HardLight: return EffectBlend::HardLight;
+    case BlendMode::VividLight: return EffectBlend::VividLight;
+    case BlendMode::LinearLight: return EffectBlend::LinearLight;
+    case BlendMode::PinLight: return EffectBlend::PinLight;
+    case BlendMode::HardMix: return EffectBlend::HardMix;
+    case BlendMode::Exclusion: return EffectBlend::Exclusion;
+    case BlendMode::Subtract: return EffectBlend::Subtract;
+    case BlendMode::Divide: return EffectBlend::Divide;
     default: return EffectBlend::Normal;
     }
 }

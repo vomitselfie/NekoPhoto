@@ -261,11 +261,12 @@ BlendMode blendFor(const std::string& key, bool* lossy) {
     static const std::map<std::string, BlendMode> exact{
         {"norm", BlendMode::Normal}, {"pass", BlendMode::Normal}, {"mul ", BlendMode::Multiply}, {"scrn", BlendMode::Screen}, {"over", BlendMode::Overlay},
         {"dark", BlendMode::Darken}, {"lite", BlendMode::Lighten}, {"diff", BlendMode::Difference}, {"div ", BlendMode::ColorDodge}, {"idiv", BlendMode::ColorBurn},
-        {"hue ", BlendMode::Hue}, {"sat ", BlendMode::Saturation}, {"colr", BlendMode::Color}, {"lum ", BlendMode::Luminosity}};
-    static const std::map<std::string, BlendMode> nearest{
-        {"diss", BlendMode::Normal}, {"lbrn", BlendMode::ColorBurn}, {"dkCl", BlendMode::Darken}, {"lddg", BlendMode::Screen}, {"lgCl", BlendMode::Lighten},
-        {"sLit", BlendMode::Overlay}, {"hLit", BlendMode::Overlay}, {"vLit", BlendMode::Overlay}, {"lLit", BlendMode::Overlay}, {"pLit", BlendMode::Overlay},
-        {"hMix", BlendMode::Overlay}, {"smud", BlendMode::Difference}, {"fsub", BlendMode::Difference}, {"fdiv", BlendMode::Normal}};
+        {"hue ", BlendMode::Hue}, {"sat ", BlendMode::Saturation}, {"colr", BlendMode::Color}, {"lum ", BlendMode::Luminosity},
+        {"diss", BlendMode::Dissolve}, {"lbrn", BlendMode::LinearBurn}, {"dkCl", BlendMode::DarkerColor}, {"lddg", BlendMode::LinearDodge},
+        {"lgCl", BlendMode::LighterColor}, {"sLit", BlendMode::SoftLight}, {"hLit", BlendMode::HardLight}, {"vLit", BlendMode::VividLight},
+        {"lLit", BlendMode::LinearLight}, {"pLit", BlendMode::PinLight}, {"hMix", BlendMode::HardMix}, {"smud", BlendMode::Exclusion},
+        {"fsub", BlendMode::Subtract}, {"fdiv", BlendMode::Divide}};
+    static const std::map<std::string, BlendMode> nearest{};
     if (auto it = exact.find(key); it != exact.end()) { *lossy = false; return it->second; }
     *lossy = true;
     if (auto it = nearest.find(key); it != nearest.end()) return it->second;

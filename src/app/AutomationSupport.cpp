@@ -74,10 +74,12 @@ std::optional<AdjustmentKind> adjustmentKindNamed(QString name) {
 }
 
 namespace {
-QString bare(QString name) { return name.toLower().remove(' ').remove('-').remove('_'); }
+QString bare(QString name) { return name.toLower().remove(' ').remove('-').remove('_').remove('(').remove(')'); }
 } // namespace
 
 std::optional<BlendMode> blendModeNamed(const QString& name) {
+    // Photoshop's "Linear Dodge (Add)" answers to either half too.
+    if (bare(name) == "lineardodge" || bare(name) == "add") return BlendMode::LinearDodge;
     for (int i = 0; i < blendModeCount; i++)
         if (bare(QString::fromUtf8(blendModeName(BlendMode(i)))) == bare(name)) return BlendMode(i);
     return std::nullopt;

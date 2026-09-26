@@ -6,7 +6,7 @@ Everything the Mac app does, with Linux key names. Keyboard shortcuts are
 listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 
 ## Layers
-- Layers and folders with blend modes and opacity
+- Layers and folders with opacity and all 27 of Photoshop's blend modes plus Pass Through, drawn with its calibrated byte arithmetic (Vivid Light, Linear Light, Hard Mix, Darker/Lighter Color and the rest match Photoshop captures; Dissolve dithers by document position)
 - Layer masks: paint, fill, invert, blur and feather; link or unlink them from the layer
 - Clipping masks and folder masks
 - Adjustment layers: Hue/Saturation, Levels, Curves, Exposure, Gradient Map, Grain

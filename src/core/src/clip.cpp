@@ -48,15 +48,27 @@ BlendMode blendFor(int mode, bool* lossy) {
     case 26: return BlendMode::Luminosity;
     default: break;
     }
+    switch (mode) {
+    case 4: return BlendMode::LinearBurn;
+    case 5: return BlendMode::Subtract;
+    case 6: return BlendMode::DarkerColor;
+    case 11: return BlendMode::LinearDodge;           // add
+    case 13: return BlendMode::LighterColor;
+    case 15: return BlendMode::SoftLight;
+    case 16: return BlendMode::HardLight;
+    case 17: return BlendMode::VividLight;
+    case 18: return BlendMode::LinearLight;
+    case 19: return BlendMode::PinLight;
+    case 20: return BlendMode::HardMix;
+    case 22: return BlendMode::Exclusion;
+    case 27: return BlendMode::Divide;
+    default: break;
+    }
+    // Clip Studio's own: glow dodge and add (glow) have no Photoshop counterpart.
     *lossy = true;
     switch (mode) {
-    case 4: return BlendMode::ColorBurn;              // linear burn
-    case 5: case 22: return BlendMode::Difference;    // subtract, exclusion
-    case 6: return BlendMode::Darken;                 // darker colour
     case 10: return BlendMode::ColorDodge;            // glow dodge
-    case 11: case 12: return BlendMode::Screen;       // add, add (glow)
-    case 13: return BlendMode::Lighten;               // lighter colour
-    case 15: case 16: case 17: case 18: case 19: case 20: return BlendMode::Overlay;   // the light modes, hard mix
+    case 12: return BlendMode::LinearDodge;           // add (glow)
     default: return BlendMode::Normal;
     }
 }

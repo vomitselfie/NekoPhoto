@@ -227,8 +227,12 @@ LayersPanel::LayersPanel(EditorSession* session, QWidget* parent) : QWidget(pare
 
     auto* appearance = new QHBoxLayout;
     blendCombo_ = new QComboBox;
-    for (int i = 0; i < blendModeCount; i++) blendCombo_->addItem(QString::fromUtf8(blendModeName(BlendMode(i))));
-    blendCombo_->addItem(tr("Pass Through"));   // folders only: the last entry
+    // Photoshop's order and groups; each item holds its mode, Pass Through (folders only) -1 at the top.
+    blendCombo_->addItem(tr("Pass Through"), -1);
+    for (int m : blendModeMenuOrder()) {
+        if (m < 0) blendCombo_->insertSeparator(blendCombo_->count());
+        else blendCombo_->addItem(QString::fromUtf8(blendModeName(BlendMode(m))), m);
+    }
     blendCombo_->setToolTip(tr("Blend mode"));
     appearance->addWidget(blendCombo_, 1);
     opacitySlider_ = new QSlider(Qt::Horizontal);
@@ -275,11 +279,14 @@ LayersPanel::LayersPanel(EditorSession* session, QWidget* parent) : QWidget(pare
     layout->addLayout(footer);
 
     connect(blendCombo_, QOverload<int>::of(&QComboBox::activated), this, [this](int index) {
-        if (index == blendModeCount) session_->setLayerBlendMode(BlendMode::Normal, true);
-        else session_->setLayerBlendMode(BlendMode(index));
+        const QVariant mode = blendCombo_->itemData(index);
+        if (!mode.isValid()) return;
+        if (mode.toInt() < 0) session_->setLayerBlendMode(BlendMode::Normal, true);
+        else session_->setLayerBlendMode(BlendMode(mode.toInt()));
     });
     connect(blendCombo_, QOverload<int>::of(&QComboBox::highlighted), this, [this](int index) {
-        if (session_->canEditLayers() && index < blendModeCount) session_->previewBlendMode(BlendMode(index));
+        const QVariant mode = blendCombo_->itemData(index);
+        if (session_->canEditLayers() && mode.isValid() && mode.toInt() >= 0) session_->previewBlendMode(BlendMode(mode.toInt()));
     });
     blendCombo_->view()->installEventFilter(this);
     connect(opacitySlider_, &QSlider::sliderPressed, this, [this] { session_->beginOpacityEdit(); });
@@ -479,8 +486,9 @@ void LayersPanel::syncAppearance() {
     QSignalBlocker b1(blendCombo_), b2(opacitySlider_), b3(opacitySpin_);
     // Pass Through is a folder's alone.
     if (auto* model = qobject_cast<QStandardItemModel*>(blendCombo_->model()))
-        if (auto* item = model->item(blendModeCount)) item->setEnabled(active && active->isGroup);
-    blendCombo_->setCurrentIndex(!active ? 0 : active->isGroup && active->passThrough ? blendModeCount : int(active->blendMode));
+        if (auto* item = model->item(0)) item->setEnabled(active && active->isGroup);
+    const int shown = !active ? int(BlendMode::Normal) : active->isGroup && active->passThrough ? -1 : int(active->blendMode);
+    blendCombo_->setCurrentIndex(std::max(0, blendCombo_->findData(shown)));
     int opacity = active ? int(std::round(active->opacity * 100)) : 100;
     opacitySlider_->setValue(opacity);
     opacitySpin_->setValue(opacity);
