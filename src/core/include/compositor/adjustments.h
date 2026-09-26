@@ -168,6 +168,21 @@ struct SelectiveColorSettings {
     bool operator==(const SelectiveColorSettings&) const = default;
 };
 
+/// Color Lookup: a 3D table from a LUT file Photoshop embeds (a .cube or .3dl's text) or an ICC profile (abstract or
+/// device link, base64 here), applied with trilinear interpolation (colorlookup.cpp).
+struct ColorLookupSettings {
+    std::string name;                  // the LUT's file name, as Photoshop shows it
+    std::string format;                // "cube", "3dl" or "icc"; empty: none loaded
+    std::string data;                  // the file's text, or the profile's bytes in base64
+    bool dither = false;
+    bool operator==(const ColorLookupSettings&) const = default;
+};
+/// Whether the settings hold a LUT NekoPhoto can read.
+bool colorLookupReadable(const ColorLookupSettings& settings);
+void applyColorLookup(Image& image, const ColorLookupSettings& settings);
+std::string toBase64(const std::vector<uint8_t>& bytes);
+std::optional<std::vector<uint8_t>> fromBase64(const std::string& text);
+
 void applyThreshold(Image& image, const ThresholdSettings& settings);
 void applyBlackWhite(Image& image, const BlackWhiteSettings& settings);
 void applyColorBalance(Image& image, const ColorBalanceSettings& settings);
@@ -194,6 +209,7 @@ struct AdjustmentSettings {
     PhotoFilterSettings photoFilter;
     ChannelMixerSettings channelMixer;
     SelectiveColorSettings selectiveColor;
+    ColorLookupSettings colorLookup;
     /// Unknown fields, kept for the round trip.
     std::string extraJson;
     bool operator==(const AdjustmentSettings&) const = default;

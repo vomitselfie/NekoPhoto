@@ -547,7 +547,8 @@ private:
     bool otherAdjustment(const AdjustmentSettings& s, Record& r, const Layer& l) const {
         static const std::map<AdjustmentKind, const char*> keys{{AdjustmentKind::Invert, "nvrt"}, {AdjustmentKind::BrightnessContrast, "brit"},
             {AdjustmentKind::Posterize, "post"}, {AdjustmentKind::Threshold, "thrs"}, {AdjustmentKind::BlackWhite, "blwh"}, {AdjustmentKind::ColorBalance, "blnc"},
-            {AdjustmentKind::Vibrance, "vibA"}, {AdjustmentKind::PhotoFilter, "phfl"}, {AdjustmentKind::ChannelMixer, "mixr"}, {AdjustmentKind::SelectiveColor, "selc"}};
+            {AdjustmentKind::Vibrance, "vibA"}, {AdjustmentKind::PhotoFilter, "phfl"}, {AdjustmentKind::ChannelMixer, "mixr"}, {AdjustmentKind::SelectiveColor, "selc"},
+            {AdjustmentKind::ColorLookup, "clrL"}};
         auto key = keys.find(s.kind);
         if (key == keys.end()) return false;
         // Unchanged since the file was read: its carried block goes back as it was.
@@ -638,6 +639,37 @@ private:
             add(*colour.object_value, "Rd  ", false, dbl(t.red * 255)); add(*colour.object_value, "Grn ", false, dbl(t.green * 255)); add(*colour.object_value, "Bl  ", false, dbl(t.blue * 255));
             add(d, "tintColor", true, colour);
             add(d, "bwPresetKind", true, integer(1));
+            descriptor(d);
+            break;
+        }
+        case AdjustmentKind::ColorLookup: {
+            // Photoshop's descriptor with the LUT file embedded (or the profile), after a version.
+            const ColorLookupSettings& c = s.colorLookup;
+            if (c.format.empty() || !colorLookupReadable(c)) return false;
+            o.u16(1);
+            patchy::psd::DescriptorObject d;
+            d.class_id = "null";
+            auto text = [](const std::string& v) { DV x; x.type = DV::Type::String; x.string_value = v; return x; };
+            auto raw = [](std::vector<uint8_t> v) { DV x; x.type = DV::Type::Raw; x.raw_value = std::move(v); return x; };
+            auto enumeration = [](const char* type, const char* value) {
+                DV x; x.type = DV::Type::Enum; x.enum_type = type; x.enum_type_long_form = true; x.enum_value = value; x.enum_value_long_form = true; return x;
+            };
+            add(d, "Vrsn", false, integer(1));
+            const bool icc = c.format == "icc";
+            add(d, "lookupType", true, enumeration("colorLookupType", icc ? "abstractProfile" : "3DLUT"));
+            add(d, "Nm  ", false, text(c.name));
+            add(d, "Dthr", false, boolean(c.dither));
+            if (icc) {
+                auto bytes = fromBase64(c.data);
+                if (!bytes) return false;
+                add(d, "profile", true, raw(*bytes));
+            } else {
+                add(d, "LUTFormat", true, enumeration("LUTFormatType", c.format == "3dl" ? "LUTFormat3DL" : "LUTFormatCUBE"));
+                add(d, "dataOrder", true, enumeration("colorDataOrder", "rgbOrder"));
+                add(d, "tableOrder", true, enumeration("colorTableOrder", "bgrOrder"));
+                add(d, "LUT3DFileData", true, raw(std::vector<uint8_t>(c.data.begin(), c.data.end())));
+                add(d, "LUT3DFileName", true, text(c.name));
+            }
             descriptor(d);
             break;
         }

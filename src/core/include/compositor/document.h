@@ -53,8 +53,9 @@ struct LayerMask {
 };
 
 enum class AdjustmentKind { HueSaturation, Levels, Curves, Exposure, GradientMap, Grain,
-                            Invert, BrightnessContrast, Posterize, Threshold, BlackWhite, ColorBalance, Vibrance, PhotoFilter, ChannelMixer, SelectiveColor };
-constexpr int adjustmentKindCount = 16;
+                            Invert, BrightnessContrast, Posterize, Threshold, BlackWhite, ColorBalance, Vibrance, PhotoFilter, ChannelMixer, SelectiveColor,
+                            ColorLookup };
+constexpr int adjustmentKindCount = 17;
 const char* adjustmentKindName(AdjustmentKind kind);
 bool parseAdjustmentKind(const std::string& name, AdjustmentKind& out);
 

@@ -643,7 +643,7 @@ json hsvJson(const HueSaturationSettings& s) {
 
 const char* knownKeys[] = {"kind", "hue", "saturation", "lightness", "colorize", "hsvSettings", "levels", "curves", "exposureSettings", "gradientMapSettings", "grainSettings",
                            "brightnessContrastSettings", "posterizeSettings", "thresholdSettings", "blackWhiteSettings", "colorBalanceSettings", "vibranceSettings",
-                           "photoFilterSettings", "channelMixerSettings", "selectiveColorSettings"};
+                           "photoFilterSettings", "channelMixerSettings", "selectiveColorSettings", "colorLookupSettings"};
 
 json colourJson(const AdjustmentColor& c) { return {{"red", number(c.red)}, {"green", number(c.green)}, {"blue", number(c.blue)}}; }
 bool colourFrom(const json& j, AdjustmentColor& c) {
@@ -705,6 +705,11 @@ bool parseMore(const json& j, AdjustmentSettings& s) {
         for (size_t r = 0; r < 4; r++)
             if (auto v = it->find(names[r]); v != it->end() && !numbersFrom(*v, s.channelMixer.rows[r], -200, 200)) return false;
     }
+    if (auto it = j.find("colorLookupSettings"); it != j.end() && it->is_object()) {
+        auto text = [&](const char* k) { auto v = it->find(k); return v != it->end() && v->is_string() ? v->get<std::string>() : std::string(); };
+        s.colorLookup = {text("name"), text("format"), text("data"), boolean(*it, "dither", false)};
+        if (!s.colorLookup.format.empty() && s.colorLookup.format != "cube" && s.colorLookup.format != "3dl" && s.colorLookup.format != "icc") return false;
+    }
     if (auto it = j.find("selectiveColorSettings"); it != j.end() && it->is_object()) {
         s.selectiveColor.absolute = boolean(*it, "absolute", false);
         const char* names[9] = {"reds", "yellows", "greens", "cyans", "blues", "magentas", "whites", "neutrals", "blacks"};
@@ -736,6 +741,9 @@ void moreJson(const AdjustmentSettings& s, json& j) {
     case AdjustmentKind::ChannelMixer:
         j["channelMixerSettings"] = {{"monochrome", s.channelMixer.monochrome}, {"red", numbersJson(s.channelMixer.rows[0])}, {"green", numbersJson(s.channelMixer.rows[1])},
                                      {"blue", numbersJson(s.channelMixer.rows[2])}, {"gray", numbersJson(s.channelMixer.rows[3])}};
+        break;
+    case AdjustmentKind::ColorLookup:
+        j["colorLookupSettings"] = {{"name", s.colorLookup.name}, {"format", s.colorLookup.format}, {"data", s.colorLookup.data}, {"dither", s.colorLookup.dither}};
         break;
     case AdjustmentKind::SelectiveColor: {
         json r = {{"absolute", s.selectiveColor.absolute}};
@@ -857,6 +865,7 @@ bool AdjustmentSettings::isIdentity() const {
         for (auto& r : selectiveColor.ranges) for (double v : r) if (v != 0) return false;
         return true;
     }
+    case AdjustmentKind::ColorLookup: return !colorLookupReadable(colorLookup);
     }
     return true;
 }
@@ -883,6 +892,7 @@ bool applyAdjustment(const AdjustmentSettings& settings, Image& image, const Rec
     case AdjustmentKind::PhotoFilter: applyPhotoFilter(image, settings.photoFilter); return true;
     case AdjustmentKind::ChannelMixer: applyChannelMixer(image, settings.channelMixer); return true;
     case AdjustmentKind::SelectiveColor: applySelectiveColor(image, settings.selectiveColor); return true;
+    case AdjustmentKind::ColorLookup: applyColorLookup(image, settings.colorLookup); return true;
     }
     return false;
 }

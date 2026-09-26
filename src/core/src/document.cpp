@@ -49,6 +49,7 @@ const char* adjustmentKindName(AdjustmentKind kind) {
     case AdjustmentKind::PhotoFilter: return "Photo Filter";
     case AdjustmentKind::ChannelMixer: return "Channel Mixer";
     case AdjustmentKind::SelectiveColor: return "Selective Color";
+    case AdjustmentKind::ColorLookup: return "Color Lookup";
     }
     return "Levels";
 }

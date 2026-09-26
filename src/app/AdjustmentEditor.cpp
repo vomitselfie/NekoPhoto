@@ -1,5 +1,9 @@
 #include "Style.h"
 #include "AdjustmentEditor.h"
+#include <QMessageBox>
+#include <QFileInfo>
+#include <QFile>
+#include <QFileDialog>
 #include "EditorSession.h"
 #include <QApplication>
 #include <QButtonGroup>
@@ -606,6 +610,41 @@ QWidget* AdjustmentEditor::buildMore() {
         slider(tr("Green"), -200, 200, [this, row]() -> double& { return settings_.channelMixer.rows[row][1]; });
         slider(tr("Blue"), -200, 200, [this, row]() -> double& { return settings_.channelMixer.rows[row][2]; });
         slider(tr("Constant"), -200, 200, [this, row]() -> double& { return settings_.channelMixer.rows[row][3]; });
+        break;
+    }
+    case AdjustmentKind::ColorLookup: {
+        // A LUT file Photoshop reads too: a .cube or .3dl (kept as its text) or an ICC abstract or device-link profile.
+        auto* name = new QLabel;
+        name->setWordWrap(true);
+        syncers_.push_back([this, name] {
+            const auto& c = settings_.colorLookup;
+            name->setText(c.format.empty() ? tr("No LUT loaded.") : colorLookupReadable(c) ? QString::fromStdString(c.name) : tr("%1 (cannot be read)").arg(QString::fromStdString(c.name)));
+        });
+        v->addWidget(name);
+        auto* load = new QPushButton(tr("Load LUT…"));
+        connect(load, &QPushButton::clicked, this, [this] {
+            const QString path = QFileDialog::getOpenFileName(this, tr("Load a 3D LUT"), QString(), tr("LUTs and profiles (*.cube *.CUBE *.3dl *.3DL *.icc *.icm)"));
+            if (path.isEmpty()) return;
+            QFile file(path);
+            if (!file.open(QIODevice::ReadOnly) || file.size() > 64 * 1024 * 1024) { QMessageBox::warning(this, tr("Color Lookup"), tr("That file could not be read.")); return; }
+            const QByteArray bytes = file.readAll();
+            ColorLookupSettings next;
+            next.name = QFileInfo(path).fileName().toStdString();
+            next.dither = settings_.colorLookup.dither;
+            const QString ext = QFileInfo(path).suffix().toLower();
+            if (ext == "icc" || ext == "icm") { next.format = "icc"; next.data = toBase64(std::vector<uint8_t>(bytes.begin(), bytes.end())); }
+            else { next.format = ext == "3dl" ? "3dl" : "cube"; next.data = bytes.toStdString(); }
+            if (!colorLookupReadable(next)) {
+                QMessageBox::warning(this, tr("Color Lookup"), tr("That is not a LUT NekoPhoto can read: a .cube or .3dl table, or an ICC abstract or RGB device-link profile."));
+                return;
+            }
+            emit editStarted();
+            settings_.colorLookup = next;
+            changed();
+            emit editFinished();
+        });
+        v->addWidget(load);
+        v->addWidget(checkRow(tr("Dither"), [this] { return settings_.colorLookup.dither; }, [this](bool on) { settings_.colorLookup.dither = on; }));
         break;
     }
     case AdjustmentKind::SelectiveColor: {

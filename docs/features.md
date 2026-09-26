@@ -38,7 +38,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Eyedropper and colour picker
 
 ## Adjustments and filters
-- Sixteen adjustment layers, also as destructive adjustments: Levels, Curves, Hue/Saturation, Exposure, Gradient Map, Grain, and Photoshop's Invert, Brightness/Contrast, Posterize, Threshold, Color Balance, Black & White, Vibrance, Photo Filter, Channel Mixer and Selective Color, read from and written to PSD as Photoshop's own ([adjustment-layers.md](adjustment-layers.md))
+- Seventeen adjustment layers, also as destructive adjustments: Levels, Curves, Hue/Saturation, Exposure, Gradient Map, Grain, and Photoshop's Invert, Brightness/Contrast, Posterize, Threshold, Color Balance, Black & White, Vibrance, Photo Filter, Channel Mixer, Selective Color and Color Lookup (.cube, .3dl and ICC LUTs), read from and written to PSD as Photoshop's own ([adjustment-layers.md](adjustment-layers.md))
 - Levels (with Auto), Curves, Hue/Saturation, Exposure, Gradient Map, Grain, Invert
 - Gaussian Blur and Motion Blur, which spread past a layer's edges
 - Add Noise and Lens Correction
@@ -108,7 +108,7 @@ Mac 版と同じ機能を、Linux のキー表記で使えます。キーボー�
 - スポイトとカラーピッカー
 
 ### 色調補正とフィルター
-- 調整レイヤー 16 種(破壊的な色調補正としても):レベル補正、トーンカーブ、色相・彩度、露光量、グラデーションマップ、粒子に加え、Photoshop の階調の反転、明るさ・コントラスト、ポスタリゼーション、2 階調化、カラーバランス、白黒、自然な彩度、レンズフィルター、チャンネルミキサー、特定色域の選択。PSD では Photoshop 自身の調整レイヤーとして読み書きします
+- 調整レイヤー 17 種(破壊的な色調補正としても):レベル補正、トーンカーブ、色相・彩度、露光量、グラデーションマップ、粒子に加え、Photoshop の階調の反転、明るさ・コントラスト、ポスタリゼーション、2 階調化、カラーバランス、白黒、自然な彩度、レンズフィルター、チャンネルミキサー、特定色域の選択、カラールックアップ(.cube・.3dl・ICC)。PSD では Photoshop 自身の調整レイヤーとして読み書きします
 - レベル補正(自動補正付き)、トーンカーブ、色相・彩度、露光量、グラデーションマップ、粒子、階調の反転
 - ぼかし(ガウス)とぼかし(移動):レイヤーの端の外まで広がります
 - ノイズを加える、レンズ補正

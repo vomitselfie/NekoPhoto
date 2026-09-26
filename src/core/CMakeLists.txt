@@ -79,6 +79,7 @@ add_library(compositor_core STATIC
     src/abr.cpp
     src/adjustments.cpp
     src/adjustments_more.cpp
+    src/colorlookup.cpp
     src/clip.cpp
     src/blend.cpp
     src/blur.cpp

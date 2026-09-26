@@ -478,6 +478,39 @@ std::optional<AdjustmentSettings> simpleAdjustmentFrom(const std::string& key, c
             s.photoFilter.preserveLuminosity = r.remaining() > 0 && r.u8() != 0;
             return s;
         }
+        if (key == "clrL") {
+            // A version, then Photoshop's descriptor holding the LUT file itself (LUT3DFileData, its LUTFormat) or an
+            // ICC profile ('profile'), its name and Dither.
+            if (r.u16() != 1) return std::nullopt;
+            auto d = versionedDescriptor(data + 2, size - 2);
+            if (!d) return std::nullopt;
+            AdjustmentSettings s = AdjustmentSettings::defaults(AdjustmentKind::ColorLookup);
+            auto raw = [&](const char* k) -> std::vector<uint8_t> {
+                const auto* v = patchy::psd::descriptor_value(*d, k);
+                return v && v->type == patchy::psd::DescriptorValue::Type::Raw ? v->raw_value : std::vector<uint8_t>{};
+            };
+            auto text = [&](const char* k) {
+                const auto* v = patchy::psd::descriptor_value(*d, k);
+                return v && v->type == patchy::psd::DescriptorValue::Type::String ? v->string_value : std::string();
+            };
+            const std::vector<uint8_t> lut = raw("LUT3DFileData");
+            const std::vector<uint8_t> profile = raw("profile");
+            s.colorLookup.dither = patchy::psd::descriptor_bool(*d, "Dthr", false);
+            s.colorLookup.name = text("LUT3DFileName");
+            if (s.colorLookup.name.empty()) s.colorLookup.name = text("Nm  ");
+            if (!lut.empty()) {
+                std::string body(lut.begin(), lut.end());
+                const auto* fmt = patchy::psd::descriptor_value(*d, "LUTFormat");
+                const std::string f = fmt && fmt->type == patchy::psd::DescriptorValue::Type::Enum ? fmt->enum_value : std::string();
+                s.colorLookup.format = f.find("3DL") != std::string::npos ? "3dl"
+                    : f.find("CUBE") != std::string::npos || body.find("LUT_3D_SIZE") != std::string::npos || body.find("LUT_1D_SIZE") != std::string::npos ? "cube" : "3dl";
+                s.colorLookup.data = std::move(body);
+            } else if (!profile.empty()) {
+                s.colorLookup.format = "icc";
+                s.colorLookup.data = toBase64(profile);
+            }
+            return s;
+        }
         if (key == "blwh" || key == "vibA") {
             auto d = versionedDescriptor(data, size);
             if (!d) return std::nullopt;
@@ -852,7 +885,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             else if (auto b = block("grdm")) settings = gradientMapFrom(b->first, b->second);
             else if (block("CgEd") || block("brit")) settings = brightnessContrastFrom(block("CgEd"), block("brit"));
             if (!settings)
-                for (const char* key : {"nvrt", "post", "thrs", "blnc", "mixr", "selc", "phfl", "blwh", "vibA"})
+                for (const char* key : {"nvrt", "post", "thrs", "blnc", "mixr", "selc", "phfl", "blwh", "vibA", "clrL"})
                     if (auto b = block(key)) { settings = simpleAdjustmentFrom(key, b->first, b->second); break; }
             if (!settings) {
                 static const std::map<std::string, const char*> others{{"brit", "Brightness/Contrast"}, {"blwh", "Black & White"}, {"vibA", "Vibrance"}, {"phfl", "Photo Filter"}, {"mixr", "Channel Mixer"},

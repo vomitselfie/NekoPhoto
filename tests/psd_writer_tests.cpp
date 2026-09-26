@@ -699,6 +699,52 @@ TEST_CASE(photoshops_other_adjustment_layers_draw_and_round_trip) {
     CHECK((BrightnessContrastSettings{0, 100, true}.apply(126)) == 0);
 }
 
+TEST_CASE(color_lookup_reads_cube_and_3dl_and_round_trips) {
+    // A 2-point .cube swapping red and blue (red changes fastest).
+    std::string cube = "TITLE \"swap\"\nLUT_3D_SIZE 2\n";
+    for (int b = 0; b < 2; b++) for (int g = 0; g < 2; g++) for (int r = 0; r < 2; r++) cube += std::to_string(b) + " " + std::to_string(g) + " " + std::to_string(r) + "\n";
+    ColorLookupSettings c{"swap.cube", "cube", cube, false};
+    REQUIRE(colorLookupReadable(c));
+    Image px(1, 1);
+    px.fill(200, 50, 10, 255);
+    applyColorLookup(px, c);
+    CHECK(std::abs(px.pixel(0, 0)[0] - 10) <= 1 && std::abs(px.pixel(0, 0)[1] - 50) <= 1 && std::abs(px.pixel(0, 0)[2] - 200) <= 1);
+    // The same as a .3dl: a shaper line, then 12-bit triplets with blue fastest.
+    std::string three = "0 1023\n";
+    for (int r = 0; r < 2; r++) for (int g = 0; g < 2; g++) for (int b = 0; b < 2; b++) three += std::to_string(b * 4095) + " " + std::to_string(g * 4095) + " " + std::to_string(r * 4095) + "\n";
+    ColorLookupSettings t{"swap.3dl", "3dl", three, false};
+    REQUIRE(colorLookupReadable(t));
+    Image px2(1, 1);
+    px2.fill(200, 50, 10, 255);
+    applyColorLookup(px2, t);
+    CHECK(std::abs(px2.pixel(0, 0)[0] - 10) <= 1 && std::abs(px2.pixel(0, 0)[2] - 200) <= 1);
+    // A domain other than 0..1 maps the input first: DOMAIN_MAX 0.5 saturates at half.
+    ColorLookupSettings half = c;
+    half.data = "LUT_3D_SIZE 2\nDOMAIN_MIN 0 0 0\nDOMAIN_MAX 0.5 0.5 0.5\n" + cube.substr(cube.find("0 0 0"));
+    REQUIRE(colorLookupReadable(half));
+    // Damaged tables are refused, and base64 goes both ways.
+    CHECK(!colorLookupReadable({"bad", "cube", "LUT_3D_SIZE 2\n0 0 0\n", false}));
+    const std::vector<uint8_t> bytes{0, 1, 2, 250, 251, 252, 253};
+    CHECK(fromBase64(toBase64(bytes)) == bytes);
+    // Through a PSD: the LUT and its name come back.
+    AdjustmentSettings s = AdjustmentSettings::defaults(AdjustmentKind::ColorLookup);
+    s.colorLookup = c;
+    Document doc(4, 4);
+    doc.layers.push_back(pixels("Base", solid(4, 4, 200, 50, 10, 255), {0, 0}));
+    Layer adj("Look", doc.size());
+    adj.adjustment = s.toLayerAdjustment();
+    doc.layers.push_back(adj);
+    std::string error;
+    auto back = importPsdBytes(encodePsd(doc, {}, nullptr, &error), &error);
+    REQUIRE(back.has_value());
+    REQUIRE(back->document.layers.size() == 2 && back->document.layers[1].adjustment);
+    AdjustmentSettings read;
+    REQUIRE(AdjustmentSettings::parse(back->document.layers[1].adjustment->json, read));
+    CHECK(read.kind == AdjustmentKind::ColorLookup && read.colorLookup == c);
+    auto flat = renderFlattened(back->document);
+    CHECK(std::abs(flat->pixel(1, 1)[2] - 200) <= 1);
+}
+
 TEST_CASE(psb_export_reads_back_with_even_composite_rows) {
     Document doc(40, 30);
     doc.layers.push_back(pixels("A", softDisc(20, 200, 30, 30), {5, 5}));
