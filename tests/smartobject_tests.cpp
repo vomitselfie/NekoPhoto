@@ -382,7 +382,7 @@ TEST_CASE(a_warped_instance_draws_its_contents_through_the_mesh) {
     auto replacement = makeSmartObjectSource(green);
     CHECK_EQ(replaceSmartObjectSource(moved, source->id, replacement), 1);
     CHECK(near(moved.layers[0].smartObject->quad, shifted));
-    CHECK(smartObjectWarp(*moved.layers[0].smartObject)->xs[1] == arch.xs[1] * 2);
+    CHECK(std::abs(smartObjectWarp(*moved.layers[0].smartObject)->xs[1] - arch.xs[1] * 2) < 1e-9);   // (arm64 fuses the multiply-add)
     auto green2 = renderFlattened(moved);
     const Point p = evaluateWarpMesh(arch, 0.5, 0.5);
     CHECK(green2->pixel(int(p.x + ox + 5), int(p.y + oy))[1] > 200);
