@@ -483,6 +483,17 @@ def pixels_filter(kind: str, radius: Optional[float] = None, angle: Optional[flo
     return text(call("pixels.filter", kind=kind, radius=radius, angle=angle, distance=distance, amount=amount, gaussian=gaussian, monochromatic=monochromatic, distortion=distortion, bicubic=bicubic))
 
 
+@edit("Camera Raw Filter")
+def pixels_camera_raw(settings: dict, seed: int = 1) -> str:
+    """Filter > Camera Raw Filter on the active layer's pixels, inside the selection. settings uses the model's keys and
+    ranges (describe_method pixels.cameraRaw lists them all); anything left out keeps its default, which changes nothing.
+    Common ones: temperature, tint, exposure (-5..5 stops), contrast, highlights, shadows, whites, blacks, texture, clarity,
+    dehaze, vibrance, saturation (-100..100); whiteBalance "Auto" balances the layer; nested objects curve, mixer, grading,
+    detail, optics, geometry, calibration, e.g. {"detail": {"sharpenAmount": 40}, "grading": {"shadows": {"hue": 220, "saturation": 30}}}.
+    Replies with the settings it applied."""
+    return text(call("pixels.cameraRaw", settings=settings, seed=seed))
+
+
 @edit("Fill")
 def pixels_fill(color: str = "#000000") -> str:
     """Fill the selection (or the whole active layer) with a CSS colour."""

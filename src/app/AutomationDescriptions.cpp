@@ -133,6 +133,19 @@ const MethodDoc methodDocs[] = {
      "kind:<filter>! The filter; radius:number Gaussian Blur radius in pixels; angle:number Motion Blur angle in degrees; distance:number Motion Blur distance in pixels; "
      "amount:number Add Noise amount in percent; gaussian:bool Add Noise: Gaussian rather than uniform; monochromatic:bool Add Noise: grey noise; seed:integer=1 Add Noise seed; "
      "distortion:number Lens Correction distortion -100..100; bicubic:bool Lens Correction: sharper resample"},
+    {"pixels.cameraRaw", "Filter > Camera Raw Filter on the active layer's pixels, inside the selection; replies with the normalized settings it applied.",
+     "settings:object! The grade, keys as the model (defaults leave the image alone): whiteBalance (Custom|Auto), temperature, tint, exposure -5..5, "
+     "contrast, highlights, shadows, whites, blacks, vibrance, saturation, texture, clarity, dehaze (-100..100), glow 0..100, glowStyle (Diffusion|Bloom|Halation), "
+     "glowRange, glowSpread, glowWarmth, vignetteAmount, vignetteStyle (Highlight Priority|Color Priority|Paint Overlay), vignetteMidpoint, vignetteRoundness, "
+     "vignetteFeather, vignetteHighlights, grainAmount, grainSize, grainRoughness, and objects curve {shadows, darks, lights, highlights, shadowSplit, darkSplit, "
+     "lightSplit, rgb, red, green, blue ([[x, y], ...] on 0..1), refineSaturation}, mixer {hue, saturation, luminance ({reds, oranges, yellows, greens, aquas, "
+     "blues, purples, magentas} or 8 numbers), points}, grading {shadows, midtones, highlights, global ({hue, saturation, luminance}), blending, balance}, "
+     "detail {sharpenAmount 0..150, sharpenRadius, sharpenDetail, sharpenMasking, noiseLuminance, noiseLuminanceDetail, noiseLuminanceContrast, noiseColor, "
+     "noiseColorDetail, noiseColorSmoothness}, optics {removeChromaticAberration, enableLensProfile, profileDistortion, profileVignetting, distortion, "
+     "purpleAmount, purpleHueLow, purpleHueHigh, greenAmount, greenHueLow, greenHueHigh, vignetteAmount, vignetteMidpoint}, geometry {upright (Off|Guided), "
+     "projection (Perspective|Rectilinear), vertical, horizontal, rotate -45..45, aspect, scale, offsetX, offsetY, constrainCrop, guides [{startX, startY, endX, "
+     "endY} on 0..1 from the lower left]}, calibration {process 1..6, shadowTint, redHue, redSaturation, greenHue, greenSaturation, blueHue, blueSaturation}; "
+     "seed:integer=1 Grain seed"},
     {"pixels.invert", "Invert the active layer's colours inside the selection.", ""},
     {"pixels.fill", "Fill the selection (or the whole layer) with a colour.", "color:color=#000000 The colour"},
     {"pixels.clear", "Clear the selection (or the whole layer) to transparent.", ""},

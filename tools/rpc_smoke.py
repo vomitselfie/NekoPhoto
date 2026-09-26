@@ -183,6 +183,25 @@ def main():
     rpc.call("layers.select", id=target["id"])
     rpc.call("pixels.filter", kind="Gaussian Blur", radius=2)
     rpc.call("pixels.filter", kind="Lens Correction", distortion=20, bicubic=True)
+    # Camera Raw Filter: one undo step named for it, the model's keys (nested too), unknown keys refused.
+    before = rpc.call("layers.render", id=target["id"], maxSize=64)
+    graded = rpc.call("pixels.cameraRaw", settings={"exposure": 0.7, "whiteBalance": "Auto", "detail": {"sharpenAmount": 30},
+                                                    "grading": {"shadows": {"hue": 220, "saturation": 25}},
+                                                    "mixer": {"hue": {"reds": 20}}, "geometry": {"rotate": 3}})
+    assert graded["applied"] and abs(graded["settings"]["exposure"] - 0.7) < 1e-9, graded
+    assert graded["settings"]["detail"]["sharpenAmount"] == 30 and graded["settings"]["mixer"]["hue"]["reds"] == 20, graded
+    assert rpc.call("history.info")["undo"] == "Camera Raw Filter"
+    after = rpc.call("layers.render", id=target["id"], maxSize=64)
+    assert after != before, "the grade changes pixels"
+    rpc.call("history.undo")
+    assert rpc.call("layers.render", id=target["id"], maxSize=64) == before, "one undo takes it back"
+    assert rpc.call("pixels.cameraRaw", settings={})["applied"] is False
+    for bad in ({"exposure": 1, "sparkle": 2}, {"detail": {"sharpen": 1}}, {"glowStyle": "Sparkle"}):
+        try:
+            rpc.call("pixels.cameraRaw", settings=bad)
+            raise AssertionError("pixels.cameraRaw should refuse %r" % bad)
+        except RuntimeError as e:
+            assert "settings." in str(e), e
     if info.get("scribble"):
         scribble = rpc.call("selection.scribble", foreground=[[[300, 200], [340, 210]]], background=[[[20, 20], [60, 20]]], size=16, clear=True)
         assert scribble["strokes"] == 2, scribble

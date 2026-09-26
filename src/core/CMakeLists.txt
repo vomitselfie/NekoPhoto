@@ -83,6 +83,7 @@ add_library(compositor_core STATIC
     src/blur.cpp
     src/brushimport.cpp
     src/brush.cpp
+    src/cameraraw.cpp
     src/document.cpp
     src/filters.cpp
     src/history.cpp
