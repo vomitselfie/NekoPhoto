@@ -22,6 +22,13 @@ void compositePixelSteps(BlendMode mode, const uint8_t* src, unsigned steps, uin
 /// Normal-mode source-over of `count` pixels with a coverage step per pixel; identical to the per-pixel path.
 void compositeSpanNormal(const uint8_t* src, const uint16_t* steps, uint8_t* dst, int count);
 
+/// For tests: Photoshop's byte kernel for the modes it has one for (Linear Burn ... Divide), computed and through the
+/// lookup table the compositor uses; and the float-to-byte rounding the table is read with, and its reference.
+uint8_t photoshopBlendByte(BlendMode mode, uint8_t source, uint8_t backdrop);
+uint8_t photoshopBlendByteTabled(BlendMode mode, uint8_t source, uint8_t backdrop);
+uint8_t blendByteOf(float v);
+uint8_t blendByteReference(float v);
+
 /// Composites `source` over `destination` in place (same size), scaling source alpha by `opacity`.
 void compositeImage(BlendMode mode, const Image& source, double opacity, Image& destination);
 

@@ -1,5 +1,6 @@
 #include "compositor/blend.h"
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 namespace compositor {
@@ -99,6 +100,29 @@ uint8_t photoshopChannel(BlendMode mode, uint8_t src, uint8_t dst) {
     case BlendMode::Divide: return s == 0 ? 255 : uint8_t(std::min(255, (d * 255 + s / 2) / s));
     default: return src;
     }
+}
+
+/// photoshopChannel for every (source, backdrop) byte pair of a byte mode, 256 x 256, indexed [src * 256 + dst];
+/// built once per mode on first use (thread-safe static initialisation).
+const uint8_t* photoshopTable(BlendMode mode) {
+    struct Tables {
+        std::array<std::array<uint8_t, 65536>, blendModeCount> t{};
+        Tables() {
+            for (int m = 0; m < blendModeCount; m++)
+                for (int s = 0; s < 256; s++)
+                    for (int d = 0; d < 256; d++) t[size_t(m)][size_t(s * 256 + d)] = photoshopChannel(BlendMode(m), uint8_t(s), uint8_t(d));
+        }
+    };
+    static const Tables tables;
+    return tables.t[size_t(mode)].data();
+}
+
+/// byteClamp for the 0..1-scaled values the byte modes read, without lround: identical (v + 0.5 in double is exact
+/// for a float v, and floor of it is round-half-away-from-zero for v >= 0; the rest clamps to 0 as lround's does).
+inline uint8_t toByte(float v) {
+    if (!(v > 0)) return 0;
+    if (v >= 255) return 255;
+    return uint8_t(int(double(v) + 0.5));
 }
 
 bool photoshopByteMode(BlendMode m) {
@@ -244,12 +268,20 @@ Rgb blendColor(BlendMode mode, Rgb cb, Rgb cs) {
     case BlendMode::Luminosity: return setLum(cb, lum(cs));
     default:
         if (photoshopByteMode(mode)) {
-            auto ch = [&](float b, float s2) { return photoshopChannel(mode, byteClamp(s2 * 255), byteClamp(b * 255)) / 255.0f; };
+            const uint8_t* table = photoshopTable(mode);
+            auto ch = [&](float b, float s2) { return table[toByte(s2 * 255) * 256 + toByte(b * 255)] / 255.0f; };
             return {ch(cb.r, cs.r), ch(cb.g, cs.g), ch(cb.b, cs.b)};
         }
         return {separable(mode, cb.r, cs.r), separable(mode, cb.g, cs.g), separable(mode, cb.b, cs.b)};
     }
 }
+
+uint8_t photoshopBlendByte(BlendMode mode, uint8_t source, uint8_t backdrop) { return photoshopChannel(mode, source, backdrop); }
+uint8_t photoshopBlendByteTabled(BlendMode mode, uint8_t source, uint8_t backdrop) {
+    return photoshopByteMode(mode) ? photoshopTable(mode)[source * 256 + backdrop] : photoshopChannel(mode, source, backdrop);
+}
+uint8_t blendByteOf(float v) { return toByte(v); }
+uint8_t blendByteReference(float v) { return byteClamp(v); }
 
 unsigned coverageSteps(float coverage) {
     if (!(coverage > 0)) return 0;

@@ -160,3 +160,27 @@ TEST_CASE(photoshops_other_modes_match_its_captures) {
 }
 
 TEST_MAIN()
+
+TEST_CASE(byte_mode_tables_match_the_kernels_for_every_pair) {
+    // The lookup tables the compositor reads must be the byte kernels exactly, all 256 x 256 pairs per mode.
+    const BlendMode modes[] = {BlendMode::LinearBurn, BlendMode::LinearDodge, BlendMode::SoftLight, BlendMode::HardLight, BlendMode::VividLight,
+                               BlendMode::LinearLight, BlendMode::PinLight, BlendMode::HardMix, BlendMode::Exclusion, BlendMode::Subtract, BlendMode::Divide};
+    for (BlendMode m : modes) {
+        int mismatches = 0;
+        for (int s = 0; s < 256; s++)
+            for (int d = 0; d < 256; d++)
+                if (photoshopBlendByteTabled(m, uint8_t(s), uint8_t(d)) != photoshopBlendByte(m, uint8_t(s), uint8_t(d))) mismatches++;
+        CHECK_EQ(mismatches, 0);
+    }
+    // The rounding the tables are read with is lround's, at every half step (and around it) and on random values.
+    int bad = 0;
+    for (int k = -2; k <= 257; k++) {
+        float v = float(k) + 0.5f;
+        for (int i = 0; i < 4; i++) v = std::nextafter(v, -1e9f);
+        for (int i = 0; i < 9; i++, v = std::nextafter(v, 1e9f)) if (blendByteOf(v) != blendByteReference(v)) bad++;
+    }
+    std::mt19937 rng(7);
+    std::uniform_real_distribution<float> any(-2.0f, 258.0f);
+    for (int i = 0; i < 1000000; i++) { const float v = any(rng); if (blendByteOf(v) != blendByteReference(v)) bad++; }
+    CHECK_EQ(bad, 0);
+}
