@@ -3,6 +3,10 @@
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Widgets Network Svg)
 # DBus lets "System" appearance ask the desktop portal for the colour scheme (needed inside an AppImage).
 find_package(Qt6 6.4 QUIET COMPONENTS DBus)
+option(COMPOSITOR_WITH_QTPDF "Open PDF files through Qt PDF when it is installed" ON)
+if(COMPOSITOR_WITH_QTPDF)
+    find_package(Qt6 6.4 QUIET OPTIONAL_COMPONENTS Pdf)
+endif()
 
 # Some locked-down shells cannot execute binaries under /usr/lib. Point this at a
 # directory holding copies of moc, uic and rcc to build there anyway.
@@ -142,17 +146,14 @@ qt_add_resources(nekophoto "gmic_lists" PREFIX "/" FILES gmic/unsupported.txt)
 qt_add_resources(nekophoto "mypaint_brushes" PREFIX "/" FILES ${COMPOSITOR_BRUSH_FILES} brushes/mypaint/order.conf)
 target_link_libraries(nekophoto PRIVATE compositor::core Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Svg compositor_warnings)
 # Qt PDF (PDFium, BSD-3 / LGPL Qt) renders PDF pages for File > Open. Optional: without it PDFs are refused with a
-# message. Looked up as its own package (not a Qt6 COMPONENT), so a missing module cannot fail the Qt lookup.
-option(COMPOSITOR_WITH_QTPDF "Open PDF files through Qt PDF when it is installed" ON)
-if(COMPOSITOR_WITH_QTPDF)
-    find_package(Qt6Pdf QUIET)
-    if(TARGET Qt6::Pdf)
-        target_link_libraries(nekophoto PRIVATE Qt6::Pdf)
-        target_compile_definitions(nekophoto PRIVATE COMPOSITOR_HAVE_QTPDF=1)
-        message(STATUS "PDF: Qt PDF ${Qt6Pdf_VERSION}")
-    else()
-        message(STATUS "PDF: Qt PDF not found, PDF import disabled")
-    endif()
+# message. Found at the top as an optional component of the one Qt lookup (a separate find_package(Qt6Pdf) after the
+# target exists loaded Qt's packages a second time on Homebrew and left the app without its moc output).
+if(COMPOSITOR_WITH_QTPDF AND TARGET Qt6::Pdf)
+    target_link_libraries(nekophoto PRIVATE Qt6::Pdf)
+    target_compile_definitions(nekophoto PRIVATE COMPOSITOR_HAVE_QTPDF=1)
+    message(STATUS "PDF: Qt PDF ${Qt6Pdf_VERSION}")
+else()
+    message(STATUS "PDF: Qt PDF not found (or off), PDF import disabled")
 endif()
 # Off by default: linking libgmic makes it a hard dependency of the binary, and an installed build then
 # refuses to start once the library is upgraded or removed, while the gmic executable serves the same
