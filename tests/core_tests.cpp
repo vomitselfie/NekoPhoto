@@ -646,6 +646,43 @@ TEST_CASE(project_round_trip_preserves_layers_masks_groups_and_unknown_fields) {
     fs::remove_all(dir);
 }
 
+TEST_CASE(text_style_range_splits_patches_and_merges) {
+    LayerText t;
+    t.text = "Hello \xF0\x9F\x98\x80 world";   // the emoji is two UTF-16 units: 14 in all
+    t.fontSize = 20;
+    TextRunPatch red; red.color = std::array<double, 3>{1, 0, 0}; red.fontSize = 30;
+    styleTextRange(t, 6, 2, red);                       // just the emoji
+    REQUIRE(t.runs.size() == 3);
+    CHECK(t.runs[0].length == 6 && t.runs[1].length == 2 && t.runs[2].length == 6);
+    CHECK(t.runs[1].red == 1 && t.runs[1].fontSize == 30 && t.runs[2].fontSize == 20);
+    CHECK(t.fontSize == 20);                            // the plain fields mirror the first run
+    // Overlapping a boundary, then undoing it: back to one run, which the plain fields say in full.
+    TextRunPatch under; under.underline = true; under.caps = TextRun::Caps::Small;
+    styleTextRange(t, 4, 6, under);
+    REQUIRE(t.runs.size() == 5);
+    CHECK(!t.runs[0].underline && t.runs[1].underline && t.runs[1].length == 2 && t.runs[2].underline && t.runs[3].underline && t.runs[3].length == 2);
+    TextRunPatch plain; plain.underline = false; plain.caps = TextRun::Caps::Normal; plain.color = std::array<double, 3>{0, 0, 0}; plain.fontSize = 20;
+    styleTextRange(t, 0, 100, plain);
+    CHECK(t.runs.empty());
+    // Weight sets bold with it; bold clears the weight. A leading alone keeps the run.
+    TextRunPatch heavy; heavy.weight = 800;
+    styleTextRange(t, 0, 5, heavy);
+    CHECK(t.runs.size() == 2 && t.runs[0].bold && t.runs[0].weight == 800);
+    TextRunPatch bold; bold.bold = true;
+    styleTextRange(t, 0, 5, bold);
+    CHECK(t.runs[0].bold && t.runs[0].weight == 0);
+    LayerText l; l.text = "ab";
+    TextRunPatch lead; lead.leading = 50;
+    styleTextRange(l, 0, 2, lead);
+    REQUIRE(l.runs.size() == 1);
+    CHECK(l.runs[0].leading == 50);
+    // An empty or out-of-range stretch changes nothing.
+    LayerText before = l;
+    styleTextRange(l, 5, 3, red);
+    styleTextRange(l, 1, 0, red);
+    CHECK(l == before);
+}
+
 TEST_CASE(text_runs_survive_a_project) {
     Document doc(100, 50);
     Layer l = imageLayer("Styled", solid(80, 30, 0, 0, 0, 255), {0, 0});

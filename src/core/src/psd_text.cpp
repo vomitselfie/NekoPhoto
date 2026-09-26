@@ -531,7 +531,7 @@ std::optional<PsdTypeLayer> readPhotoshopType(const uint8_t* data, size_t size, 
                 out.runPostScriptNames.erase(out.runPostScriptNames.begin() + long(i));
             } else i++;
         }
-        settleTextRuns(out.text);
+        settleTextRuns(out.text, true);
         if (out.text.runs.empty()) out.runPostScriptNames.resize(std::min<size_t>(out.runPostScriptNames.size(), 1));
         out.text.alignment = justification == 2 ? 1 : justification == 1 ? 2 : 0;
         if (!autoLeading) out.leading = leading;

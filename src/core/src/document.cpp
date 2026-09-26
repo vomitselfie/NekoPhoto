@@ -410,7 +410,7 @@ std::vector<TextRun> adjustTextRuns(const std::vector<TextRun>& runs, const std:
     return out;
 }
 
-void settleTextRuns(LayerText& text) {
+void settleTextRuns(LayerText& text, bool leadingIsAuto) {
     if (text.runs.empty()) return;
     std::vector<TextRun> merged;
     for (const TextRun& r : text.runs) {
@@ -424,7 +424,7 @@ void settleTextRuns(LayerText& text) {
     text.fontFamily = first.fontFamily; text.fontSize = first.fontSize; text.bold = first.bold; text.italic = first.italic;
     text.red = first.red; text.green = first.green; text.blue = first.blue; text.letterSpacing = first.letterSpacing;
     // One run that the plain fields say in full is no runs at all.
-    if (text.runs.size() == 1 && first.weight == 0 && first.baselineShift == 0 && first.caps == TextRun::Caps::Normal && !first.underline && !first.strikethrough) text.runs.clear();
+    if (text.runs.size() == 1 && first.weight == 0 && (leadingIsAuto || first.leading == 0) && first.baselineShift == 0 && first.caps == TextRun::Caps::Normal && !first.underline && !first.strikethrough) text.runs.clear();
 }
 
 LayerText carryTextEdit(const LayerText& before, LayerText after) {
@@ -443,6 +443,44 @@ LayerText carryTextEdit(const LayerText& before, LayerText after) {
     after.runs = std::move(runs);
     settleTextRuns(after);
     return after;
+}
+
+void TextRunPatch::applyTo(TextRun& r) const {
+    if (fontFamily) r.fontFamily = *fontFamily;
+    if (fontSize) r.fontSize = std::max(1.0, *fontSize);
+    if (bold) { r.bold = *bold; r.weight = 0; }
+    if (weight) { r.weight = *weight; r.bold = *weight >= 600; }
+    if (italic) r.italic = *italic;
+    if (color) { r.red = (*color)[0]; r.green = (*color)[1]; r.blue = (*color)[2]; }
+    if (letterSpacing) r.letterSpacing = *letterSpacing;
+    if (baselineShift) r.baselineShift = *baselineShift;
+    if (leading) r.leading = std::max(0.0, *leading);
+    if (caps) r.caps = *caps;
+    if (underline) r.underline = *underline;
+    if (strikethrough) r.strikethrough = *strikethrough;
+}
+
+void styleTextRange(LayerText& text, int start, int length, const TextRunPatch& patch) {
+    const int total = utf16Length(text.text);
+    const int from = std::clamp(start, 0, total), to = std::clamp(start + std::max(0, length), from, total);
+    if (from == to) return;
+    std::vector<TextRun> out;
+    int at = 0;
+    for (const TextRun& r : textRuns(text)) {
+        const int end = at + r.length;
+        // Up to three pieces: before the range, inside it (patched), after it.
+        const int cuts[4] = {at, std::clamp(from, at, end), std::clamp(to, at, end), end};
+        for (int k = 0; k < 3; k++) {
+            if (cuts[k + 1] <= cuts[k]) continue;
+            TextRun piece = r;
+            piece.length = cuts[k + 1] - cuts[k];
+            if (k == 1) patch.applyTo(piece);
+            out.push_back(piece);
+        }
+        at = end;
+    }
+    text.runs = std::move(out);
+    settleTextRuns(text);
 }
 
 } // namespace compositor

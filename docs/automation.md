@@ -130,7 +130,10 @@ Layers: `layers.select`, `layers.set` (name, visible, opacity, blend (a folder a
 clipping), `layers.add` (pixels, group, adjustment, or text with `text`, `x`, `y`, `font`, `size`, `bold`,
 `italic`, `color`, `align`; `below: true` puts it under the active layer), `text.set` (a text layer's
 content and style, same keys plus `lineSpacing` and `letterSpacing`; on text in several styles, which
-`layers.get` lists as `text.runs`, the change carries into every run and a new size scales each), `layers.delete`,
+`layers.get` lists as `text.runs`, the change carries into every run and a new size scales each), `text.styleRange` (some letters' style, as
+Photoshop's Character panel on a selection: `start` and `length` in UTF-16 units of the text, default all of it, and
+any of `font`, `size`, `bold`, `weight`, `italic`, `color`, `letterSpacing`, `baselineShift`, `leading`, `caps`
+(normal, small, all), `underline`, `strikethrough`; the runs split and merge as needed), `layers.delete`,
 `layers.duplicate`, `layers.move`, `layers.reorder`, `layers.setTransform`,
 `layers.flip`, `layers.mask` (add, addFromSelection, delete, toggle, invert,
 apply, link), `layers.merge`, `layers.group`, `adjustments.set`.

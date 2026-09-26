@@ -86,6 +86,8 @@ qt_add_executable(nekophoto
     TextLayer.cpp
     TextDialog.h
     TextDialog.cpp
+    RichText.h
+    RichText.cpp
     WarpDialog.h
     WarpDialog.cpp
     FontPicker.h

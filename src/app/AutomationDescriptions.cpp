@@ -100,6 +100,11 @@ const MethodDoc methodDocs[] = {
     {"text.set", "Change a text layer's content or style; the layer must still be text (not painted on).",
      "id:layer The text layer (default the active one); text:string Content; font:string Font family; size:number Pixels 1..2000; bold:bool Bold; italic:bool Italic; color:color Colour; "
      "align:(left|center|right) Alignment; lineSpacing:number Multiple of the line height 0.5..5; letterSpacing:number Pixels -20..100"},
+    {"text.styleRange", "Style some letters of a text layer (Photoshop's Character panel on a selection): the fields given change, the rest stay.",
+     "id:layer The text layer (default the active one); start:integer=0 First letter, in UTF-16 units of the text; length:integer How many UTF-16 units (default to the end); "
+     "font:string Font family; size:number Pixels 1..2000; bold:bool Bold (clears weight); weight:integer 0 or 100..900 (bold follows from 600); italic:bool Italic; color:color Colour; "
+     "letterSpacing:number Tracking, extra pixels per letter; baselineShift:number Pixels up; leading:number Baseline to baseline in pixels, 0 auto; "
+     "caps:(normal|small|all) Capitals; underline:bool Underline; strikethrough:bool Strikethrough"},
     {"layers.delete", "Delete layers.", "id:layer One layer; ids:array Several layer ids; bakeClipping:bool=true Keep the look of layers clipped to a deleted one by baking them"},
     {"layers.duplicate", "Duplicate a layer above itself.", "id:layer The layer (default the active one)"},
     {"layers.move", "Move a layer in the tree: into a folder, directly above another layer, or to the bottom.",
