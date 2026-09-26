@@ -24,6 +24,7 @@
 #include <QPushButton>
 #include <QStyle>
 #include <QTimer>
+#include <QTreeWidgetItemIterator>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -159,14 +160,65 @@ QMimeData* LayerTree::mimeData(const QList<QTreeWidgetItem*>& items) const {
     return mime;
 }
 
+constexpr const char* smartFilterMime = "application/x-nekophoto-smartfilter";
+
+QTreeWidgetItem* LayerTree::smartFilterItem(const Uuid& id, int index) const {
+    for (QTreeWidgetItemIterator it(const_cast<LayerTree*>(this)); *it; ++it)
+        if (smartFilterRow(*it) == SmartFilterItem && (*it)->data(0, Qt::UserRole).toString().toStdString() == id && (*it)->data(0, smartFilterIndexRole).toInt() == index)
+            return *it;
+    return nullptr;
+}
+
+QTreeWidgetItem* LayerTree::smartFilterDropAt(const QMimeData* mime, QPoint pos, bool& above) const {
+    const QStringList parts = QString::fromUtf8(mime->data(smartFilterMime)).split(':');
+    if (parts.size() != 3 || parts[0] != QString::number(quintptr(session_))) return nullptr;   // another tab's panel
+    QTreeWidgetItem* target = itemAt(pos);
+    if (smartFilterRow(target) != SmartFilterItem || target->data(0, Qt::UserRole).toString() != parts[1]) return nullptr;
+    const QRect r = visualItemRect(target);
+    above = pos.y() < r.center().y();
+    return target;
+}
+
+bool LayerTree::dropSmartFilter(QTreeWidgetItem* target, bool above, const Uuid& id, int from) {
+    if (smartFilterRow(target) != SmartFilterItem || target->data(0, Qt::UserRole).toString().toStdString() != id) return false;
+    // Rows show the last applied first: above a row is later in the running order than it.
+    const int t = target->data(0, smartFilterIndexRole).toInt();
+    const int to = above ? (from < t ? t : t + 1) : (from < t ? t - 1 : t);
+    if (to != from) emit smartFilterMoveRequested(id, from, to);
+    return true;
+}
+
+void LayerTree::dragLeaveEvent(QDragLeaveEvent* event) {
+    if (!filterIndicator_.isNull()) { filterIndicator_ = {}; viewport()->update(); }
+    QTreeWidget::dragLeaveEvent(event);
+}
+
+void LayerTree::paintEvent(QPaintEvent* event) {
+    QTreeWidget::paintEvent(event);
+    if (filterIndicator_.isNull()) return;
+    QPainter p(viewport());
+    p.setPen(QPen(palette().color(QPalette::Highlight), 2));
+    p.drawLine(filterIndicator_.topLeft(), filterIndicator_.topRight());
+}
+
 void LayerTree::dragEnterEvent(QDragEnterEvent* event) {
     if (event->mimeData()->hasUrls()) { event->ignore(); return; }   // files dropped here are the window's to open
+    if (event->mimeData()->hasFormat(smartFilterMime)) { event->acceptProposedAction(); return; }
     if (event->mimeData()->hasFormat("application/x-nekophoto-mask")) { event->acceptProposedAction(); return; }
     QTreeWidget::dragEnterEvent(event);
 }
 
 void LayerTree::dragMoveEvent(QDragMoveEvent* event) {
     if (event->mimeData()->hasUrls()) { event->ignore(); return; }
+    if (event->mimeData()->hasFormat(smartFilterMime)) {
+        bool above = true;
+        QTreeWidgetItem* target = smartFilterDropAt(event->mimeData(), event->position().toPoint(), above);
+        QRect line;
+        if (target) { const QRect r = visualItemRect(target); line = QRect(r.left(), above ? r.top() : r.bottom(), r.width(), 1); }
+        if (line != filterIndicator_) { filterIndicator_ = line; viewport()->update(); }
+        if (target) event->acceptProposedAction(); else event->ignore();
+        return;
+    }
     if (event->mimeData()->hasFormat("application/x-nekophoto-mask")) { event->acceptProposedAction(); return; }
     QTreeWidget::dragMoveEvent(event);
 }
@@ -183,11 +235,28 @@ void LayerTree::mousePressEvent(QMouseEvent* event) {
             }
         }
     }
+    filterPress_.reset();
+    if (event->button() == Qt::LeftButton && !(event->modifiers() & (Qt::AltModifier | Qt::ShiftModifier | Qt::ControlModifier)))
+        if (QTreeWidgetItem* item = itemAt(event->position().toPoint());
+            smartFilterRow(item) == SmartFilterItem && session_->canEditSmartFilters(item->data(0, Qt::UserRole).toString().toStdString())) {
+            filterPress_ = std::make_pair(item->data(0, Qt::UserRole).toString().toStdString(), item->data(0, smartFilterIndexRole).toInt());
+            filterPressAt_ = event->position().toPoint();
+        }
     QTreeWidget::mousePressEvent(event);
 }
 
 void LayerTree::dropEvent(QDropEvent* event) {
     QTreeWidgetItem* target = itemAt(event->position().toPoint());
+    if (event->mimeData()->hasFormat(smartFilterMime)) {
+        filterIndicator_ = {};
+        viewport()->update();
+        bool above = true;
+        const QStringList parts = QString::fromUtf8(event->mimeData()->data(smartFilterMime)).split(':');
+        QTreeWidgetItem* at = smartFilterDropAt(event->mimeData(), event->position().toPoint(), above);
+        if (at && dropSmartFilter(at, above, parts[1].toStdString(), parts[2].toInt())) event->acceptProposedAction();
+        else event->ignore();
+        return;
+    }
     if (event->mimeData()->hasFormat("application/x-nekophoto-mask")) {
         event->ignore();
         if (!target) return;
@@ -237,11 +306,26 @@ void LayerTree::mouseMoveEvent(QMouseEvent* event) {
         if (w && w->property("eye").toBool()) session_->setVisibilityInSwipe(w->property("layerId").toString().toStdString(), swipeVisible);
         return;
     }
+    if (filterPress_ && (event->buttons() & Qt::LeftButton) && (event->position().toPoint() - filterPressAt_).manhattanLength() >= QApplication::startDragDistance()) {
+        // A Smart Filter entry dragged: it can only land between the rows of its own stack.
+        const auto [id, index] = *filterPress_;
+        filterPress_.reset();
+        auto* mime = new QMimeData;
+        mime->setData(smartFilterMime, (QString::number(quintptr(session_)) + ":" + QString::fromStdString(id) + ":" + QString::number(index)).toUtf8());
+        auto* drag = new QDrag(this);
+        drag->setMimeData(mime);
+        if (QTreeWidgetItem* item = smartFilterItem(id, index)) if (QWidget* row = itemWidget(item, 0)) drag->setPixmap(row->grab());
+        drag->exec(Qt::MoveAction);
+        filterIndicator_ = {};
+        viewport()->update();
+        return;
+    }
     QTreeWidget::mouseMoveEvent(event);
 }
 
 void LayerTree::mouseReleaseEvent(QMouseEvent* event) {
     if (swiping) { emit swipeEnded(); return; }
+    filterPress_.reset();
     QTreeWidget::mouseReleaseEvent(event);
 }
 
@@ -347,6 +431,10 @@ LayersPanel::LayersPanel(EditorSession* session, QWidget* parent) : QWidget(pare
         // Dropped "above" a shown item means directly above it in the stack: the item shown becomes the one below.
         if (tree_->dropDuplicates) session_->duplicateLayerTo(id, parent, above, atBottom && !above);
         else session_->placeLayer(id, parent, above, atBottom && !above);
+    });
+    connect(tree_, &LayerTree::smartFilterMoveRequested, this, [this](Uuid id, int from, int to) {
+        QString e;
+        if (!session_->moveSmartFilter(id, from, to, &e) && !e.isEmpty()) QMessageBox::warning(this, tr("Smart Filters"), e);
     });
     connect(tree_, &QWidget::customContextMenuRequested, this, &LayersPanel::showContextMenu);
     connect(tree_, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item, int) {
@@ -502,6 +590,13 @@ QToolButton* LayersPanel::eyeButton(const Uuid& id) const {
     if (!row) return nullptr;
     for (auto* b : row->findChildren<QToolButton*>()) if (b->property("eye").toBool()) return b;
     return nullptr;
+}
+
+bool LayersPanel::dropSmartFilterForTest(const Uuid& id, int from, const Uuid& ontoId, int onto, bool above) {
+    if (pendingRebuild_) { pendingRebuild_ = false; rebuild(); }
+    if (!tree_->smartFilterItem(id, from)) return false;
+    QTreeWidgetItem* target = tree_->smartFilterItem(ontoId, onto);
+    return target && tree_->dropSmartFilter(target, above, id, from);
 }
 
 void LayersPanel::syncEyes() {
@@ -683,7 +778,9 @@ void LayersPanel::addSmartFilterRows(QTreeWidgetItem* parent, const Layer& layer
         item->setData(0, smartFilterRole, kind);
         item->setData(0, smartFilterIndexRole, index);
         item->setSizeHint(0, QSize(0, kind == SmartFilterHeader ? thumbHeight + 6 : 26));
-        item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);   // not dragged, nothing dropped into it
+        // Not selectable (a click must not select or rebuild), not in Qt's drag and drop: an entry row is dragged by
+        // LayerTree itself, within its stack only.
+        item->setFlags(Qt::ItemIsEnabled);
         parent->addChild(item);
         tree_->setItemWidget(item, 0, row);
     };
