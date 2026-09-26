@@ -428,7 +428,13 @@ int refreshSmartObjectRasters(Document& document) {
         if (smartObjectFiltered(so)) raster = filteredSmartObjectRaster(document.psdCarry ? document.psdCarry->globals : none, so, *source->second->image, quad);
         else if (auto warped = warpedSmartObjectRaster(so, *source->second->image, quad))
             raster = PlacedRaster{warped->image, int(std::lround(warped->transform.origin.x)), int(std::lround(warped->transform.origin.y))};
-        if (!raster || !raster->image) continue;
+        if (!raster || !raster->image) {
+            // Filters that cannot be drawn after all (opened with Photoshop's raster, then moved): it goes back to
+            // showing that raster, moved and scaled like any locked smart object, rather than drawing again on every
+            // edit and failing.
+            if (smartObjectFiltered(so)) so.lock = SmartObjectInstance::Lock::Filters;
+            continue;
+        }
         // The mask stays where it was on the canvas.
         if (layer.mask && !layer.mask->placement) layer.mask->placement = layer.maskTransform();
         const Sampling sampling = layer.transform.sampling;

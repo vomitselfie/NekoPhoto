@@ -490,6 +490,22 @@ TEST_CASE(smart_filters_draw_from_the_contents_and_their_cache_follows) {
         CHECK_EQ(refreshSmartObjectRasters(scaled), 1);
         CHECK(scaled.layers[0].smartObject->placedTransform == scaled.layers[0].transform);
     }
+    // Its filters no longer drawable (the cache gone): moved, it falls back to a locked instance showing the raster
+    // it has, moved with the layer, instead of trying again on every edit.
+    {
+        Document broken = back->document;
+        auto noCache = std::make_shared<PsdDocumentCarry>(*broken.psdCarry);
+        noCache->globals.clear();
+        broken.psdCarry = noCache;
+        const ImagePtr before = broken.layers[0].asset->image;
+        broken.layers[0].transform.origin.x += 3;
+        CHECK_EQ(refreshSmartObjectRasters(broken), 0);
+        CHECK(broken.layers[0].smartObject->locked());
+        CHECK(broken.layers[0].asset->image == before);
+        CHECK_EQ(refreshSmartObjectRasters(broken), 0);
+        auto shown = renderFlattened(broken);
+        CHECK(shown->pixel(18, 15)[3] >= 250);   // the blurred square, 3 px along
+    }
 
     // Moved by 5: exported, its cache record is rewritten there (and the file still reads, drawn, not locked).
     Document moved = back->document;
