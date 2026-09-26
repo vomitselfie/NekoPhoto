@@ -21,7 +21,7 @@ QJsonArray pathToJson(const VectorPath& path) {
         QJsonArray knots;
         for (const auto& k : sp.knots) knots.append(QJsonArray{k.inX, k.inY, k.x, k.y, k.outX, k.outY});
         static const char* const ops[] = {"exclude", "add", "subtract", "intersect"};
-        subpaths.append(QJsonObject{{"closed", sp.closed}, {"op", ops[int(sp.op) & 3]}, {"knots", knots}});
+        subpaths.append(QJsonObject{{"closed", sp.closed}, {"op", ops[int(sp.op) & 3]}, {"group", int(sp.group)}, {"knots", knots}});
     }
     return subpaths;
 }
@@ -35,6 +35,7 @@ VectorPath pathFromJson(const QJsonValue& value) {
         sp.closed = o.value("closed").toBool(true);
         const QString op = o.value("op").toString("add");
         sp.op = op == "subtract" ? VectorPath::Op::Subtract : op == "intersect" ? VectorPath::Op::Intersect : op == "exclude" ? VectorPath::Op::Xor : VectorPath::Op::Add;
+        sp.group = int32_t(o.value("group").toInt(0));   // subpaths sharing a group fill even-odd together
         for (QJsonValue k : o.value("knots").toArray()) {
             const QJsonArray a = k.toArray();
             if (a.size() == 2) sp.knots.push_back({a[0].toDouble(), a[1].toDouble(), a[0].toDouble(), a[1].toDouble(), a[0].toDouble(), a[1].toDouble()});
@@ -46,6 +47,44 @@ VectorPath pathFromJson(const QJsonValue& value) {
     }
     if (path.subpaths.empty()) fail("path needs at least one subpath", invalidParams);
     return path;
+}
+
+/// A path operation's name (Photoshop's): combine, subtract, intersect, exclude; none for anything else.
+std::optional<VectorPath::Op> operationFrom(const QString& name) {
+    const QString n = name.toLower();
+    if (n == "combine" || n == "add") return VectorPath::Op::Add;
+    if (n == "subtract") return VectorPath::Op::Subtract;
+    if (n == "intersect") return VectorPath::Op::Intersect;
+    if (n == "exclude") return VectorPath::Op::Xor;
+    return std::nullopt;
+}
+
+const char* gradientTypeName(StyleGradient::Type t) {
+    switch (t) {
+    case StyleGradient::Type::Radial: return "radial";
+    case StyleGradient::Type::Angle: return "angle";
+    case StyleGradient::Type::Reflected: return "reflected";
+    case StyleGradient::Type::Diamond: return "diamond";
+    default: return "linear";
+    }
+}
+
+/// A fill's or stroke's paint as automation shows it.
+void paintToJson(const VectorPaint& paint, QJsonObject& out, const char* typeKey) {
+    out[typeKey] = paint.kind == VectorPaint::Kind::Gradient ? "gradient" : paint.kind == VectorPaint::Kind::Pattern ? "pattern" : "color";
+    if (paint.kind == VectorPaint::Kind::Gradient) {
+        QJsonArray stops;
+        for (const auto& c : paint.gradient.colors) stops.append(QJsonObject{{"location", c.location}, {"color", QColor(c.color.r, c.color.g, c.color.b).name()}});
+        out[QString(typeKey).replace("Type", "Gradient")] = QJsonObject{{"type", gradientTypeName(paint.gradient.type)}, {"angle", paint.gradient.angle}, {"stops", stops}};
+    }
+    if (paint.kind == VectorPaint::Kind::Pattern) out[QString(typeKey).replace("Type", "Pattern")] = QString::fromStdString(paint.pattern.id);
+}
+
+QJsonObject liveToJson(const LiveShape& l) {
+    QJsonObject o{{"kind", l.kind == LiveShape::Kind::Ellipse ? "ellipse" : "rectangle"}, {"group", int(l.group)},
+                  {"x", l.box.x}, {"y", l.box.y}, {"width", l.box.width}, {"height", l.box.height}};
+    if (l.kind == LiveShape::Kind::Rectangle) o["radii"] = QJsonArray{l.radii[0], l.radii[1], l.radii[2], l.radii[3]};
+    return o;
 }
 
 } // namespace
@@ -292,19 +331,74 @@ void AutomationServer::registerPaintHandlers() {
         const QJsonArray subpaths = pathToJson(shape.path);
         auto hex = [](int r, int g, int b) { return QColor(r, g, b).name(); };
         const VectorStroke& t = shape.stroke;
-        return QJsonObject{{"path", subpaths}, {"fill", shape.fill}, {"color", hex(shape.r, shape.g, shape.b)},
-                           {"stroke", QJsonObject{{"enabled", t.enabled}, {"width", t.width}, {"color", hex(t.r, t.g, t.b)}, {"opacity", t.opacity},
-                                                  {"align", t.align == VectorStroke::Align::Inside ? "inside" : t.align == VectorStroke::Align::Outside ? "outside" : "center"},
-                                                  {"dashes", QJsonArray::fromVariantList([&] { QVariantList l; for (double d : t.dashes) l << d; return l; }())}}}};
+        QJsonObject stroke{{"enabled", t.enabled}, {"width", t.width}, {"color", hex(t.r, t.g, t.b)}, {"opacity", t.opacity},
+                           {"align", t.align == VectorStroke::Align::Inside ? "inside" : t.align == VectorStroke::Align::Outside ? "outside" : "center"},
+                           {"dashes", QJsonArray::fromVariantList([&] { QVariantList l; for (double d : t.dashes) l << d; return l; }())}};
+        paintToJson(t.paint, stroke, "strokeType");
+        QJsonObject out{{"path", subpaths}, {"fill", shape.fill}, {"color", hex(shape.r, shape.g, shape.b)}, {"stroke", stroke}};
+        paintToJson(shape.fillPaint, out, "fillType");
+        QJsonArray live;
+        for (const LiveShape& l : shape.live) live.append(liveToJson(l));
+        out["live"] = live;
+        return out;
     };
     // Applies `p`'s fill and stroke keys onto `shape` (strokeWidth, strokeColor, ...); false with `why` on a bad value.
-    auto applyStyle = [](const QJsonObject& p, VectorShape& shape, QString& why) {
-        if (has(p, "color")) { QColor c(str(p, "color")); if (!c.isValid()) { why = "color must be a CSS colour"; return false; } shape.r = uint8_t(c.red()); shape.g = uint8_t(c.green()); shape.b = uint8_t(c.blue()); }
+    auto applyStyle = [session](const QJsonObject& p, VectorShape& shape, QString& why) {
+        // Gradient and pattern paints: a gradient preset (empty: foreground to background), its type and angle; a
+        // pattern among the document's.
+        auto paintFrom = [&](const char* typeKey, const char* gradientKey, const char* patternKey, VectorPaint& paint) {
+            if (!has(p, typeKey) && !has(p, gradientKey) && !has(p, patternKey)) return true;
+            const QString type = str(p, typeKey, has(p, gradientKey) ? QStringLiteral("gradient") : has(p, patternKey) ? QStringLiteral("pattern") : QStringLiteral("color")).toLower();
+            if (type == "color") { paint = {}; return true; }
+            if (type == "gradient") {
+                const QString preset = str(p, gradientKey, QString());
+                if (!preset.isEmpty() && !PresetLibrary::instance().findGradient(preset)) { why = "no gradient preset named " + preset + " (presets.list shows them)"; return false; }
+                paint.kind = VectorPaint::Kind::Gradient;
+                paint.gradient = shapeGradient(preset, session()->foregroundColor, session()->backgroundColor);
+                if (has(p, "gradientAngle")) paint.gradient.angle = float(num(p, "gradientAngle"));
+                if (has(p, "gradientType")) {
+                    const QString g = str(p, "gradientType").toLower();
+                    static const QMap<QString, StyleGradient::Type> types{{"linear", StyleGradient::Type::Linear}, {"radial", StyleGradient::Type::Radial},
+                        {"angle", StyleGradient::Type::Angle}, {"reflected", StyleGradient::Type::Reflected}, {"diamond", StyleGradient::Type::Diamond}};
+                    if (!types.contains(g)) { why = "gradientType must be linear, radial, angle, reflected or diamond"; return false; }
+                    paint.gradient.type = types.value(g);
+                }
+                return true;
+            }
+            if (type == "pattern") {
+                const std::string id = str(p, patternKey, QString()).toStdString();
+                bool found = false;
+                if (session()->document()) for (const auto& [pid, name] : documentPatternList(*session()->document())) found |= pid == id || name == id;
+                if (!found) { why = QString("%1 must name one of the document's patterns (layers.style lists them when a style uses them)").arg(patternKey); return false; }
+                std::string resolved = id;
+                for (const auto& [pid, name] : documentPatternList(*session()->document())) if (name == id && pid != id) resolved = pid;
+                paint.kind = VectorPaint::Kind::Pattern;
+                paint.pattern = FillPattern{};
+                paint.pattern.id = resolved;
+                return true;
+            }
+            why = QString("%1 must be color, gradient or pattern").arg(typeKey);
+            return false;
+        };
+        if (!paintFrom("fillType", "gradient", "pattern", shape.fillPaint)) return false;
+        if (!paintFrom("strokeType", "strokeGradient", "strokePattern", shape.stroke.paint)) return false;
+        if ((has(p, "strokeType") || has(p, "strokeGradient") || has(p, "strokePattern")) && shape.stroke.paint.kind != VectorPaint::Kind::Solid) shape.stroke.enabled = true;
+        if (has(p, "color")) {
+            QColor c(str(p, "color"));
+            if (!c.isValid()) { why = "color must be a CSS colour"; return false; }
+            shape.r = uint8_t(c.red()); shape.g = uint8_t(c.green()); shape.b = uint8_t(c.blue());
+            if (!has(p, "fillType") && !has(p, "gradient") && !has(p, "pattern")) shape.fillPaint = {};
+        }
         if (has(p, "fill")) shape.fill = flag(p, "fill", true);
         VectorStroke& t = shape.stroke;
         if (has(p, "stroke")) t.enabled = flag(p, "stroke", false);
         if (has(p, "strokeWidth")) { t.width = std::clamp(num(p, "strokeWidth"), 0.0, 1000.0); t.enabled = true; }
-        if (has(p, "strokeColor")) { QColor c(str(p, "strokeColor")); if (!c.isValid()) { why = "strokeColor must be a CSS colour"; return false; } t.r = uint8_t(c.red()); t.g = uint8_t(c.green()); t.b = uint8_t(c.blue()); t.enabled = true; }
+        if (has(p, "strokeColor")) {
+            QColor c(str(p, "strokeColor"));
+            if (!c.isValid()) { why = "strokeColor must be a CSS colour"; return false; }
+            t.r = uint8_t(c.red()); t.g = uint8_t(c.green()); t.b = uint8_t(c.blue()); t.enabled = true;
+            if (!has(p, "strokeType") && !has(p, "strokeGradient") && !has(p, "strokePattern")) t.paint = {};
+        }
         if (has(p, "strokeAlign")) {
             const QString a = str(p, "strokeAlign").toLower();
             if (a != "inside" && a != "center" && a != "outside") { why = "strokeAlign must be inside, center or outside"; return false; }
@@ -334,13 +428,30 @@ void AutomationServer::registerPaintHandlers() {
             path = customShapePath(name, box);
         } else if (kind == "rectangle" || kind == "rect") path = rectanglePath(box, std::max(0.0, num(p, "cornerRadius", 0)));
         else fail("kind must be rectangle, ellipse, polygon, star, line or custom", invalidParams);
+        // Rectangles and ellipses keep their live properties (Photoshop's vogk).
+        std::optional<LiveShape> live;
+        if (kind == "rectangle" || kind == "rect") { const double r = std::max(0.0, num(p, "cornerRadius", 0)); live = LiveShape{LiveShape::Kind::Rectangle, box, {r, r, r, r}, 0}; }
+        else if (kind.startsWith("ell") || kind == "circle") live = LiveShape{LiveShape::Kind::Ellipse, box, {0, 0, 0, 0}, 0};
+        (void)doc;
+        if (has(p, "op")) {
+            // A component of the active shape layer, combined by the path operation.
+            const auto op = operationFrom(str(p, "op"));
+            if (!op) fail("op must be combine, subtract, intersect or exclude", invalidParams);
+            auto shape = s->activeVectorShape();
+            if (!shape) fail("op adds to the active shape layer: select one first (layers.select)", invalidParams);
+            const int32_t group = addShapeComponent(shape->path, *path, *op);
+            if (live) { live->group = group; shape->live.push_back(*live); }
+            if (!s->setActiveVectorShape(*shape, QStringLiteral("Add Shape"))) fail("couldn't add to the shape layer");
+            const Layer* l = s->activeLayer();
+            return l ? layerJson(*l, 0) : QJsonObject{};
+        }
         VectorShape shape;
         shape.path = *path;
+        if (live) shape.live.push_back(*live);
         const QColor fg = s->foregroundColor;
         shape.r = uint8_t(fg.red()); shape.g = uint8_t(fg.green()); shape.b = uint8_t(fg.blue());
         QString why;
         if (!applyStyle(p, shape, why)) fail(why, invalidParams);
-        (void)doc;
         static const QMap<QString, QString> names{{"rectangle", "Rectangle"}, {"rect", "Rectangle"}, {"ellipse", "Ellipse"}, {"circle", "Ellipse"}, {"polygon", "Polygon"}, {"star", "Star"}, {"line", "Line"}};
         const QString layerName = has(p, "name") ? str(p, "name") : names.value(kind, QStringLiteral("Shape"));
         if (!s->addVectorShapeLayer(shape, layerName)) fail("couldn't add a shape layer here");
@@ -427,7 +538,92 @@ void AutomationServer::registerPaintHandlers() {
             shape->path = pathFromJson(p.value("path"));
         }
         if (!s->setActiveVectorShape(*shape, QStringLiteral("Edit Shape"))) fail("couldn't change the shape");
+        if (has(p, "live")) {
+            // A live rectangle's or ellipse's properties: the fields given change (group picks which; the first
+            // by default), and its outline is drawn from them.
+            const QJsonObject o = p.value("live").toObject();
+            const auto list = s->activeLiveShapes();
+            if (list.empty()) fail("the shape has no live properties (they end when its path is edited directly)", invalidParams);
+            auto it = o.contains("group") ? std::find_if(list.begin(), list.end(), [&](const LiveShape& l) { return l.group == o.value("group").toInt(); }) : list.begin();
+            if (it == list.end()) fail("no live shape in that group; shape.get lists them", invalidParams);
+            LiveShape l = *it;
+            if (o.contains("x")) l.box.x = o.value("x").toDouble();
+            if (o.contains("y")) l.box.y = o.value("y").toDouble();
+            if (o.contains("width")) l.box.width = o.value("width").toDouble();
+            if (o.contains("height")) l.box.height = o.value("height").toDouble();
+            if (o.contains("radius")) { const double r = std::max(0.0, o.value("radius").toDouble()); l.radii = {r, r, r, r}; }
+            if (o.contains("radii")) {
+                const QJsonArray r = o.value("radii").toArray();
+                if (r.size() != 4) fail("radii is [topLeft, topRight, bottomRight, bottomLeft]", invalidParams);
+                for (int i = 0; i < 4; i++) l.radii[size_t(i)] = std::max(0.0, r[i].toDouble());
+            }
+            if (!(l.box.width >= 1) || !(l.box.height >= 1)) fail("width and height must be at least 1", invalidParams);
+            if (!s->setActiveLiveShape(l)) fail("couldn't change the live shape");
+        }
         return shapeJson(*s->activeVectorShape());
+    });
+    add("paths.setOperation", [session, document](const QJsonObject& p) {
+        // The picked component of the target path (the chosen path, the targeted vector mask, or the active shape's).
+        document();
+        EditorSession* s = session();
+        auto path = s->targetPath();
+        if (!path) fail("no target path: choose one with paths.select, target a vector mask, or make a shape layer active");
+        const int index = int(num(p, "subpath"));
+        if (index < 0 || index >= int(path->subpaths.size())) fail("subpath is out of range; paths.list or shape.get gives the subpaths", invalidParams);
+        const auto op = operationFrom(str(p, "op"));
+        if (!op) fail("op must be combine, subtract, intersect or exclude", invalidParams);
+        s->setSelectedSubpath(index);
+        if (!s->setSelectedSubpathOp(*op)) fail("couldn't change the operation");
+        return QJsonObject{{"path", pathToJson(*s->targetPath())}};
+    });
+    add("paths.mergeComponents", [session, document](const QJsonObject&) {
+        document();
+        if (!session()->targetPath()) fail("no target path: choose one with paths.select, target a vector mask, or make a shape layer active");
+        if (!session()->mergeTargetComponents()) fail("nothing to merge: the path draws nothing");
+        return QJsonObject{{"path", pathToJson(*session()->targetPath())}};
+    });
+    // ---- vector masks on ordinary layers
+    auto vectorMaskJson = [session](const Layer& l) {
+        auto path = layerVectorMask(l, *session()->document());
+        return QJsonObject{{"id", QString::fromStdString(l.id)}, {"path", path ? pathToJson(*path) : QJsonArray()}, {"inverted", path && path->inverted},
+                           {"targeted", session()->activeLayerId() == l.id && session()->vectorMaskTargeted()}};
+    };
+    add("vectorMask.get", [layer, vectorMaskJson](const QJsonObject& p) {
+        const Layer& l = layer(p);
+        if (!hasLayerVectorMask(l)) fail("the layer has no vector mask (a shape layer's path is shape.get's)", invalidParams);
+        return vectorMaskJson(l);
+    });
+    add("vectorMask.set", [session, layer, vectorMaskJson](const QJsonObject& p) {
+        // Layer > Vector Mask: Reveal All, Hide All, Current Path (the path paths.select chose), or a path given.
+        EditorSession* s = session();
+        const Uuid id = layer(p).id;
+        const QString mode = str(p, "mode", has(p, "path") ? QStringLiteral("path") : QStringLiteral("revealAll"));
+        VectorPath path;
+        if (mode == "path") { if (!has(p, "path")) fail("mode path needs path", invalidParams); path = pathFromJson(p.value("path")); }
+        else if (mode == "hideAll") path.inverted = true;
+        else if (mode == "currentPath") {
+            auto chosen = s->activePathId() ? documentPath(*s->document(), *s->activePathId()) : std::nullopt;
+            if (!chosen || chosen->path.subpaths.empty()) fail("currentPath uses the path paths.select chose; choose one first", invalidParams);
+            path = chosen->path;
+        } else if (mode != "revealAll") fail("mode must be revealAll, hideAll, currentPath or path", invalidParams);
+        if (has(p, "inverted")) path.inverted = flag(p, "inverted", false);
+        QString error;
+        if (!s->setVectorMaskPath(id, path, &error)) fail(error.isEmpty() ? QStringLiteral("couldn't set the vector mask") : error, invalidParams);
+        return vectorMaskJson(*s->document()->find(id));
+    });
+    add("vectorMask.delete", [session, layer](const QJsonObject& p) {
+        EditorSession* s = session();
+        const Uuid id = layer(p).id;
+        s->selectLayer(id);
+        if (!s->deleteVectorMask()) fail("the layer has no vector mask", invalidParams);
+        return QJsonObject{{"deleted", true}};
+    });
+    add("vectorMask.target", [session, layer, vectorMaskJson](const QJsonObject& p) {
+        // Makes it the target path: the Pen, Direct Selection and paths.addAnchor / setOperation / mergeComponents
+        // then work on it (paths.select with an id lets it go).
+        const Uuid id = layer(p).id;
+        if (!session()->targetVectorMask(id)) fail("the layer has no vector mask", invalidParams);
+        return vectorMaskJson(*session()->document()->find(id));
     });
 }
 

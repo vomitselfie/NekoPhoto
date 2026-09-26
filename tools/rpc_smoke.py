@@ -500,6 +500,45 @@ def main():
     rpc.call("paths.delete", id=made["id"])
     for made_layer in (triangle, star):   # the demo's layer list stays as the later checks expect
         rpc.call("layers.delete", id=made_layer["id"])
+    # Path operations, gradient paints and live shape properties.
+    box = rpc.call("shape.draw", kind="rectangle", x=40, y=40, width=80, height=60, cornerRadius=6, color="#224488", fillType="gradient", gradientAngle=0)
+    got = rpc.call("shape.get", id=box["id"])
+    assert got["fillType"] == "gradient" and got["live"] and got["live"][0]["radii"] == [6, 6, 6, 6], got
+    rpc.call("layers.select", id=box["id"])
+    rpc.call("shape.draw", kind="ellipse", x=60, y=60, width=30, height=30, op="subtract")
+    got = rpc.call("shape.get", id=box["id"])
+    assert len(got["path"]) == 2 and got["path"][1]["op"] == "subtract" and len(got["live"]) == 2, got
+    got = rpc.call("shape.set", id=box["id"], live={"group": 0, "width": 100, "radii": [0, 10, 0, 10]}, strokeType="gradient", strokeWidth=3)
+    assert got["live"][0]["width"] == 100 and got["live"][0]["radii"] == [0, 10, 0, 10] and got["stroke"]["strokeType"] == "gradient", got
+    try:
+        rpc.call("shape.set", id=box["id"], fillType="pattern", pattern="no-such-pattern")
+        raise AssertionError("a pattern the document lacks should be refused")
+    except RuntimeError as e:
+        assert "patterns" in str(e), e
+    rpc.call("paths.select")
+    assert rpc.call("paths.setOperation", subpath=1, op="intersect")["path"][1]["op"] == "intersect"
+    merged = rpc.call("paths.mergeComponents")["path"]
+    assert merged and all(s["op"] == "add" for s in merged), merged
+    assert rpc.call("shape.get", id=box["id"])["live"] == []   # edited directly: no longer live
+    rpc.call("layers.delete", id=box["id"])
+    # A vector mask on a pixel layer, edited as the target path.
+    masked = rpc.call("layers.add", kind="pixels", name="Vector masked")
+    assert rpc.call("vectorMask.set", id=masked["id"], mode="hideAll")["inverted"]
+    square = rpc.call("vectorMask.set", id=masked["id"], path=[{"knots": [[10, 10], [60, 10], [60, 60], [10, 60]]}])
+    assert len(square["path"]) == 1 and not square["inverted"], square
+    assert rpc.call("vectorMask.target", id=masked["id"])["targeted"]
+    assert len(rpc.call("paths.addAnchor", x=35, y=10)["path"][0]["knots"]) == 5
+    assert len(rpc.call("vectorMask.get", id=masked["id"])["path"][0]["knots"]) == 5
+    rpc.call("vectorMask.delete", id=masked["id"])
+    rpc.call("layers.delete", id=masked["id"])
+    # Text to a path and to a shape.
+    words = rpc.call("layers.add", kind="text", text="Hi", x=20, y=20, size=40, color="#ff0000")
+    assert rpc.call("text.toPath", id=words["id"])["subpaths"] >= 2
+    shaped = rpc.call("text.toShape", id=words["id"])
+    assert shaped["kind"] == "shape", shaped
+    assert len(rpc.call("shape.get", id=words["id"])["path"]) >= 2
+    rpc.call("layers.delete", id=words["id"])
+    print("vector: path operations, paints, live shapes, vector masks, text to path")
     rpc.call("layers.select", id=active_before)
     rpc.call("selection.none")
     assert rpc.call("brush.stroke", tool="healingbrush", source={"x": 60, "y": 60}, points=[[20, 40], [60, 40]], size=12)["tool"] == "healingbrush"
