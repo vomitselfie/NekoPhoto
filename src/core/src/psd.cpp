@@ -1026,8 +1026,8 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             layers.push_back(layer);
             if (!open.empty()) open.back().members.push_back(layer.id);
         }
-        if (effectsCount) notes.push_back(std::to_string(effectsCount) + " layer style(s) (shadows, glows, strokes, bevels, overlays) show as Photoshop draws them and are written back on PSD export; they cannot be edited here yet.");
-        if (vectorMasks) notes.push_back(std::to_string(vectorMasks) + " vector mask(s) and shape(s) show as Photoshop draws them and follow their layers; their paths cannot be edited here yet.");
+        if (effectsCount) notes.push_back(std::to_string(effectsCount) + " layer style(s) (shadows, glows, strokes, bevels, overlays) show as Photoshop draws them, can be edited with Layer > Layer Style, and are written back on PSD export.");
+        if (vectorMasks) notes.push_back(std::to_string(vectorMasks) + " vector mask(s) and shape(s) show as Photoshop draws them and follow their layers; shape layers' paths, fill and stroke can be edited (Direct Selection, the Shape tool's bar), a vector mask on another layer cannot yet.");
         if (editableSmartObjects) notes.push_back(std::to_string(editableSmartObjects) + " smart object(s) place their contents here: moving or scaling one resamples the original, and each stays a smart object on PSD export.");
         for (auto& [why, count] : lockedSmartObjects)
             notes.push_back(std::to_string(count) + " smart object(s) " + why + " show Photoshop's preview: they can be moved and scaled, and stay smart objects on PSD export.");

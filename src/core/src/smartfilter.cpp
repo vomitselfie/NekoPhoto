@@ -57,7 +57,15 @@ bool blendOf(const std::string& name, BlendMode& out) {
         {"hardLight", BlendMode::HardLight}, {"vividLight", BlendMode::VividLight}, {"linearLight", BlendMode::LinearLight},
         {"pinLight", BlendMode::PinLight}, {"hardMix", BlendMode::HardMix}, {"exclusion", BlendMode::Exclusion},
         {"blendSubtraction", BlendMode::Subtract}, {"blendDivide", BlendMode::Divide}};
+    // Older files (and some writers) store the modes by their four-character ids.
+    static const std::pair<const char*, BlendMode> ids[] = {
+        {"Nrml", BlendMode::Normal}, {"Mltp", BlendMode::Multiply}, {"Scrn", BlendMode::Screen}, {"Ovrl", BlendMode::Overlay},
+        {"Drkn", BlendMode::Darken}, {"Lghn", BlendMode::Lighten}, {"Dfrn", BlendMode::Difference}, {"CDdg", BlendMode::ColorDodge},
+        {"CBrn", BlendMode::ColorBurn}, {"H   ", BlendMode::Hue}, {"Strt", BlendMode::Saturation}, {"Clr ", BlendMode::Color},
+        {"Lmns", BlendMode::Luminosity}, {"Dslv", BlendMode::Dissolve}, {"SftL", BlendMode::SoftLight}, {"HrdL", BlendMode::HardLight},
+        {"Xclu", BlendMode::Exclusion}};
     for (auto& [n, m] : modes) if (name == n) { out = m; return true; }
+    for (auto& [n, m] : ids) if (name == n) { out = m; return true; }
     return false;
 }
 
