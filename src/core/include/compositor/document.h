@@ -3,6 +3,7 @@
 // friends. Everything here is a plain value; images are shared immutably so
 // copying a Document (for undo) costs no pixels.
 #pragma once
+#include "artboard.h"
 #include "geometry.h"
 #include "psd_carry.h"
 #include "smartobject.h"
@@ -198,6 +199,8 @@ struct Layer {
     /// the layer is plain pixels again, as with text.
     std::optional<SmartObjectInstance> smartObject;
     ImagePtr smartImage;
+    /// A folder that is an artboard (artboard.h): its background fills the rectangle and its children are clipped to it.
+    std::optional<Artboard> artboard;
 
     Layer() = default;
     /// A new layer holding `asset`, its top-left at `origin`.
@@ -249,6 +252,8 @@ struct Document {
     std::shared_ptr<const PsdDocumentCarry> psdCarry;
     /// Smart object sources, by id, shared by every layer that places them (and by undo snapshots).
     std::map<std::string, std::shared_ptr<const SmartObjectSource>> smartObjects;
+    /// Slices (artboard.h), for Export Slices and the PSD's resource 1050.
+    std::vector<Slice> slices;
 
     Document() = default;
     Document(int width, int height);
@@ -274,7 +279,8 @@ struct Document {
     /// Whether Compositor for macOS can open this project: its loader allows pixelBudget in total.
     bool fitsMacBudget() const {
         // The Mac app reads projects up to version 7: folders with their own opacity, mode or isolation need 8.
-        for (const Layer& l : layers) if (l.isGroup && (l.opacity != 1 || l.blendMode != BlendMode::Normal || !l.passThrough)) return false;
+        for (const Layer& l : layers) if (l.isGroup && (l.opacity != 1 || l.blendMode != BlendMode::Normal || !l.passThrough || l.artboard)) return false;
+        if (!slices.empty()) return false;
         return layerPixels() <= pixelBudget && maskPixels() <= pixelBudget;
     }
 };

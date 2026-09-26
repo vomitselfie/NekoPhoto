@@ -116,6 +116,7 @@ endif()
 
 add_library(compositor_core STATIC
     src/abr.cpp
+    src/artboard.cpp
     src/aseprite.cpp
     src/gif.cpp
     src/ico.cpp
@@ -147,6 +148,8 @@ add_library(compositor_core STATIC
     src/resample.cpp
     src/heal.cpp
     src/inpaint.cpp
+    src/contentmove.cpp
+    src/seamcarve.cpp
     src/psd.cpp
     src/layerstyle.cpp
     src/layerstyle_render.cpp

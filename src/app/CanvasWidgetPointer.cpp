@@ -133,16 +133,22 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
     case Tool::Brush: case Tool::SpotHealing: case Tool::CloneStamp: {
         const bool sampled = session_->tool() == Tool::SpotHealing && session_->spotHealingMode == 3;
         if ((session_->tool() == Tool::CloneStamp || sampled) && (modifiers & Qt::AltModifier)) { session_->setCloneSource(doc); update(); return; }
-        if (session_->tool() == Tool::SpotHealing && session_->spotHealingMode == 4) {
-            // Patch: drag the selection to the area to copy from.
+        if (session_->tool() == Tool::SpotHealing && (session_->spotHealingMode == 4 || session_->spotHealingMode == 5)) {
+            // Patch: drag the selection to the area to copy from. Content-Aware Move: drag it to where it goes.
+            // Pressed outside the selection, both draw one with their lasso, as in Photoshop.
+            const bool moving = session_->spotHealingMode == 5;
             const auto& d = session_->document();
             const int x = int(std::floor(doc.x())), y = int(std::floor(doc.y()));
             if (d->selection && d->selection->coverage && x >= 0 && y >= 0 && x < d->width && y < d->height && d->selection->coverage->at(x, y) > 127) {
                 selectionMoveOrigin_ = d->selection;
-                session_->beginEdit("Patch");
+                session_->beginEdit(moving ? (session_->contentMoveExtend ? "Content-Aware Extend" : "Content-Aware Move") : "Patch");
                 dragStartDocument_ = doc;
+                contentMoveDrag_ = moving;
                 drag_ = Drag::Patch;
-            } else emit session_->notice(tr("Patch: select the area to repair, then drag it to the area to copy from"));
+            } else {
+                lassoPoints_ = {doc};
+                drag_ = Drag::Lasso;
+            }
             return;
         }
         if (session_->beginBrush(doc, modifiers & Qt::ShiftModifier)) drag_ = Drag::Brush;
@@ -298,6 +304,9 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
         drag_ = Drag::Crop;
         return;
     }
+    case Tool::Artboard: case Tool::Slice:
+        pressBox(view, doc, modifiers);
+        return;
     case Tool::Eyedropper:
         sampleColor(doc, modifiers & Qt::AltModifier);
         return;
@@ -546,6 +555,9 @@ void CanvasWidget::move(QPointF view, Qt::MouseButtons buttons, Qt::KeyboardModi
         zoomRect_ = QRectF(dragStartDocument_, doc).normalized();
         update();
         break;
+    case Drag::Box:
+        moveBox(doc, modifiers);
+        break;
     default: break;
     }
     lastView_ = view;
@@ -619,7 +631,11 @@ void CanvasWidget::release(QPointF view, Qt::MouseButton button, Qt::KeyboardMod
         if (selectionMoveOrigin_) const_cast<Document&>(*session_->document()).selection = selectionMoveOrigin_;   // inside the begin/end edit
         selectionMoveOrigin_.reset();
         refreshSelectionOutline();
-        session_->patchSelection(dx, dy);
+        if (contentMoveDrag_) {
+            QString error;
+            if (!session_->contentAwareMove(dx, dy, &error) && !error.isEmpty() && (dx || dy)) emit session_->notice(error);
+        } else session_->patchSelection(dx, dy);
+        contentMoveDrag_ = false;
         session_->endEdit();
         emit session_->historyChanged();
         emit session_->selectionChanged();
@@ -630,6 +646,9 @@ void CanvasWidget::release(QPointF view, Qt::MouseButton button, Qt::KeyboardMod
         session_->endEdit();
         emit session_->historyChanged();
         emit session_->selectionChanged();
+        break;
+    case Drag::Box:
+        releaseBox();
         break;
     case Drag::Crop: case Drag::CropMove: case Drag::CropResize:
         session_->setSnapGuides({}, {});

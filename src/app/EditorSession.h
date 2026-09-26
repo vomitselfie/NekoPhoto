@@ -44,7 +44,7 @@ class QTimer;
 
 namespace app {
 
-enum class Tool { Move, Marquee, Lasso, Wand, Scribble, Crop, Brush, SpotHealing, CloneStamp, Smudge, Gradient, Shape, Eyedropper, Hand, Zoom, Text, Dodge, PaintBucket, Pen, DirectSelect };
+enum class Tool { Move, Marquee, Lasso, Wand, Scribble, Crop, Brush, SpotHealing, CloneStamp, Smudge, Gradient, Shape, Eyedropper, Hand, Zoom, Text, Dodge, PaintBucket, Pen, DirectSelect, Artboard, Slice };
 enum class MarqueeKind { Rectangle, Ellipse };
 enum class LassoKind { Freehand, Polygonal };
 enum class BlurToolMode { Liquify, Blur, Smudge, Sharpen };
@@ -74,6 +74,14 @@ struct TransformEdit {
     std::optional<compositor::Corners> corners;
     std::optional<TransformGroup> group;
     std::optional<FloatingTransform> floating;
+};
+
+/// Content-Aware Fill's settings (its dialog, or the automation method).
+struct ContentFillRequest {
+    /// Auto: the fill's own neighbourhood; All: anywhere on the layer; Custom: the painted `sampleArea`.
+    enum class Sampling { Auto, All, Custom } sampling = Sampling::Auto;
+    std::shared_ptr<const compositor::GrayImage> sampleArea;   // document-sized, white = copy from here
+    bool newLayer = false;
 };
 
 struct GradientSettings {
@@ -387,7 +395,8 @@ public:
     void cancelBrush();
     std::optional<QPointF> lastBrushPoint() const { return lastBrushPoint_; }
     /// 0 Content-Aware, 1 Create Texture, 2 Proximity Match (Spot Healing); 3 Sampled: the Healing Brush, from the
-    /// clone source (Alt-click); 4 Patch: drag the selection to where to copy from.
+    /// clone source (Alt-click); 4 Patch: drag the selection to where to copy from; 5 Content-Aware Move: drag the
+    /// selection to where it should go.
     int spotHealingMode = 0;
     bool cloneAligned = true;
     bool cloneSampleAll = false;
@@ -406,7 +415,19 @@ public:
     void paste();
     void layerViaCopy();
     /// Content-Aware Fill of the selection on the active layer; the layer grows over any selection past its edge.
-    bool contentAwareFill(QString* error);
+    /// The request chooses where it copies from and whether the result goes on a new layer.
+    bool contentAwareFill(QString* error, const ContentFillRequest& request = {});
+    /// The fill without committing it (the dialog's preview): the layer's new pixels (only the filled ones for a new
+    /// layer) and where they sit.
+    std::shared_ptr<const compositor::Image> contentAwareFillResult(const ContentFillRequest& request, compositor::LayerTransform& placed, QString* error) const;
+    /// Content-Aware Move: the selected pixels move dx, dy (document pixels), the hole filled from its
+    /// surroundings (Extend: the original stays); the selection follows. One undo step.
+    bool contentAwareMove(int dx, int dy, QString* error);
+    bool contentMoveExtend = false;
+    int contentMoveAdaptation = 2;   // 0 very strict .. 4 very loose
+    /// Content-Aware Scale of the active layer's pixels to `width` x `height` by seam carving (seamcarve.h); with
+    /// `protectSelection`, the selected pixels are kept. The layer's origin stays; its size follows the pixels.
+    bool contentAwareScale(int width, int height, bool protectSelection, QString* error);
     /// Dragging a layer between projects: `id` (a folder with its contents) copied from `source` into this
     /// document, centred on `at` (or the canvas); clipping to layers left behind is baked in. A first copy
     /// into an empty tab makes the canvas the source's size.
@@ -579,6 +600,29 @@ public:
     compositor::Overrides renderOverrides() const;
     /// Bumped on every document notification; what render caches key on.
     uint64_t documentRevision() const { return documentRevision_; }
+
+    // ---- Artboards and slices (EditorSessionArtboards.cpp) -----------------------------------------------------
+    /// The document's artboards (folders with an artboard), bottom to top.
+    std::vector<const compositor::Layer*> artboards() const;
+    /// A new, empty artboard at the top of the stack (one undo step); its id, or none when it cannot be added.
+    std::optional<compositor::Uuid> addArtboard(const compositor::Artboard& artboard, const QString& name = {});
+    /// An artboard's rectangle and background changed (one undo step); with `moveContents`, the layers inside
+    /// follow the rectangle's move, as Photoshop moves an artboard with its contents.
+    bool setArtboard(const compositor::Uuid& id, const compositor::Artboard& artboard, bool moveContents = true, const QString& name = {});
+    /// The artboard's folder made a plain folder again, or with `contents` deleted with everything in it.
+    bool removeArtboard(const compositor::Uuid& id, bool contents);
+    /// The topmost artboard containing a document point.
+    std::optional<compositor::Uuid> artboardAt(QPointF documentPoint) const;
+    /// A new slice (its id is chosen when 0); one undo step.
+    std::optional<uint32_t> addSlice(compositor::Slice slice);
+    bool setSlice(const compositor::Slice& slice);
+    bool deleteSlice(uint32_t id);
+    /// The document rendered over `rect` (clipped to the canvas); null when nothing of it is on the canvas.
+    std::shared_ptr<compositor::Image> renderRect(const QRect& rect) const;
+    /// File ▸ Export Artboards to Files / Export Slices: each one written to `directory` as `format` ("png" or "jpeg"),
+    /// named `prefix` + its name. Returns the paths written; `error` says why one failed.
+    QStringList exportArtboards(const QString& directory, const QString& format, const QString& prefix, int quality, QString* error);
+    QStringList exportSlices(const QString& directory, const QString& format, const QString& prefix, int quality, QString* error);
 
     // ---- Smart objects (EditorSessionSmartObjects.cpp) --------------------------------------------------------
     /// The selected layers as one smart object (one undo step).

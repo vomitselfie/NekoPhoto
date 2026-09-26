@@ -55,6 +55,8 @@ qt_add_executable(nekophoto
     EditorSessionQuickSelect.cpp
     EditorSessionSelection.cpp
     EditorSessionSmartObjects.cpp
+    EditorSessionArtboards.cpp
+    CanvasWidgetBoxes.cpp
     EditorSessionSmartFilters.cpp
     EditorSessionWatch.cpp
     EditorSessionTransform.cpp
@@ -85,6 +87,9 @@ qt_add_executable(nekophoto
     CameraRawDialog.cpp
     PixelDialog.h
     PixelDialog.cpp
+    ContentFillDialog.cpp
+    ContentAwareScaleDialog.h
+    ContentAwareScaleDialog.cpp
     Gmic.h
     Gmic.cpp
     GmicDialog.h
@@ -106,6 +111,7 @@ qt_add_executable(nekophoto
     Automation.cpp
     AutomationDescriptions.cpp
     AutomationDocument.cpp
+    AutomationArtboards.cpp
     AutomationHandlers.h
     AutomationLayers.cpp
     AutomationPaint.cpp

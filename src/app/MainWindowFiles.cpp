@@ -16,6 +16,12 @@
 #include "compositor/tga.h"
 #include "compositor/png.h"
 #include <QApplication>
+#include <QComboBox>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFormLayout>
+#include <QLineEdit>
+#include <QSpinBox>
 #include <QDir>
 #include <QDragEnterEvent>
 #include <QDragLeaveEvent>
@@ -476,5 +482,38 @@ void MainWindow::dropEvent(QDropEvent* e) {
     }
 }
 
+
+void MainWindow::exportBoxes(bool slices) {
+    session_->endTemporaryLayers();   // the Quick Mask and filter-mask layers are never written
+    if (!session_->hasDocument()) return;
+    const bool none = slices ? session_->document()->slices.empty() : session_->artboards().empty();
+    if (none) { showError(slices ? tr("Export Slices") : tr("Export Artboards"), slices ? tr("The document has no slices; draw some with the Slice tool (Shift+C).") : tr("The document has no artboards; draw one with the Artboard tool (Shift+V).")); return; }
+    QDialog dialog(this);
+    dialog.setWindowTitle(slices ? tr("Export Slices") : tr("Artboards to Files"));
+    auto* form = new QFormLayout(&dialog);
+    auto* format = new QComboBox;
+    format->addItems({"PNG", "JPEG"});
+    auto* prefix = new QLineEdit(session_->projectPath().isEmpty() ? QString() : QFileInfo(session_->projectPath()).completeBaseName() + "_");
+    auto* quality = new QSpinBox;
+    quality->setRange(1, 100);
+    quality->setValue(90);
+    form->addRow(tr("Format"), format);
+    form->addRow(tr("File name prefix"), prefix);
+    form->addRow(tr("JPEG quality"), quality);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    form->addRow(buttons);
+    if (dialog.exec() != QDialog::Accepted) return;
+    const QString directory = QFileDialog::getExistingDirectory(this, tr("Export To"), QSettings().value("lastDir").toString());
+    if (directory.isEmpty()) return;
+    QSettings().setValue("lastDir", directory);
+    QString error;
+    const QString fmt = format->currentIndex() == 0 ? QStringLiteral("png") : QStringLiteral("jpeg");
+    const QStringList written = slices ? session_->exportSlices(directory, fmt, prefix->text(), quality->value(), &error)
+                                       : session_->exportArtboards(directory, fmt, prefix->text(), quality->value(), &error);
+    if (!error.isEmpty()) showError(tr("Couldn’t export"), error);
+    else statusBar()->showMessage(tr("Wrote %n file(s) to %1", "", int(written.size())).arg(directory), 8000);
+}
 
 } // namespace app

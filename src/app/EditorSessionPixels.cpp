@@ -1,9 +1,11 @@
-// EditorSession: Moving selected pixels, the clipboard and Content-Aware Fill.
+#include "compositor/seamcarve.h"
 #include "EditorSession.h"
 #include "ImageConvert.h"
 #include "QtGeometry.h"
 #include "compositor/filters.h"
 #include "compositor/inpaint.h"
+#include "compositor/contentmove.h"
+#include "compositor/seamcarve.h"
 #include <QApplication>
 #include <QClipboard>
 #include <QMimeData>
@@ -246,9 +248,9 @@ void EditorSession::addPixelLayer(std::shared_ptr<const Image> image, QPointF or
     if (dropsSelection) emit selectionChanged();
 }
 
-bool EditorSession::contentAwareFill(QString* errorText) {
-    if (!canAdjustPixels() || !document_->selection || !document_->selection->coverage) { if (errorText) *errorText = tr("Select a visible image layer and an area to fill."); return false; }
-    Layer* layer = activeLayerMutable();
+std::shared_ptr<const Image> EditorSession::contentAwareFillResult(const ContentFillRequest& request, LayerTransform& placed, QString* errorText) const {
+    if (!canAdjustPixels() || !document_->selection || !document_->selection->coverage) { if (errorText) *errorText = tr("Select a visible image layer and an area to fill."); return nullptr; }
+    const Layer* layer = activeLayer();
     // The layer grows over any of the selection on the canvas past its edge.
     Rect area = document_->selection->bounds().intersection(document_->rect());
     const Image& src = *layer->asset->image;
@@ -257,9 +259,9 @@ bool EditorSession::contentAwareFill(QString* errorText) {
     int margin = int(std::ceil(std::max({0.0, -wanted.minX(), -wanted.minY(), wanted.maxX() - src.width(), wanted.maxY() - src.height()})));
     LayerTransform grown;
     auto source = adjustmentSource(margin, grown);
-    if (!source) { if (errorText) *errorText = tr("The layer is too large to grow."); return false; }
+    if (!source) { if (errorText) *errorText = tr("The layer is too large to grow."); return nullptr; }
     auto coverage = selectionOnGrid(grown, source->width(), source->height());
-    if (!coverage) { if (errorText) *errorText = tr("Select an area to fill."); return false; }
+    if (!coverage) { if (errorText) *errorText = tr("Select an area to fill."); return nullptr; }
     auto out = std::make_shared<Image>(*source);
     // What the layer's mask hides is not copied from: a fill at the edge of a cut-out takes the subject.
     std::shared_ptr<GrayImage> visible;
@@ -268,10 +270,129 @@ bool EditorSession::contentAwareFill(QString* errorText) {
         const GrayImage& m = *layer->mask->asset.image;
         for (int y = 0; y < m.height(); y++) std::memcpy(visible->row(y + margin) + margin, m.row(y), size_t(m.width()));
     }
-    if (!contentFill(*out, *coverage, {}, visible.get())) { if (errorText) *errorText = tr("Not enough unselected, opaque image pixels to synthesize a fill. Use a smaller selection with some surrounding image."); return false; }
+    InpaintOptions options;
+    if (request.sampling != ContentFillRequest::Sampling::Auto) {
+        // All of the layer, or the area painted in the dialog, on the layer's grid and inside what its mask shows.
+        std::shared_ptr<GrayImage> sample;
+        if (request.sampling == ContentFillRequest::Sampling::Custom && request.sampleArea && request.sampleArea->width() == document_->width && request.sampleArea->height() == document_->height)
+            sample = selectionInGrid(*request.sampleArea, grown.pixelToDocument(source->width(), source->height()), source->width(), source->height());
+        else sample = std::make_shared<GrayImage>(source->width(), source->height(), 255);
+        if (visible) for (size_t i = 0; i < sample->byteCount(); i++) sample->data()[i] = uint8_t(sample->data()[i] * visible->data()[i] / 255);
+        visible = sample;
+        options.sampleWholeVisible = true;
+    }
+    if (!contentFill(*out, *coverage, options, visible.get())) {
+        if (errorText) *errorText = request.sampling == ContentFillRequest::Sampling::Custom ? tr("The sampling area holds no opaque image pixels outside the selection to copy from.")
+                                                                                               : tr("Not enough unselected, opaque image pixels to synthesize a fill. Use a smaller selection with some surrounding image.");
+        return nullptr;
+    }
+    if (request.newLayer) {
+        // Only the filled pixels, by the selection's coverage, for a layer of their own.
+        for (int y = 0; y < out->height(); y++)
+            for (int x = 0; x < out->width(); x++) {
+                uint8_t* p = out->pixel(x, y);
+                const int c = coverage->at(x, y);
+                for (int k = 0; k < 4; k++) p[k] = uint8_t((p[k] * c + 127) / 255);
+            }
+    }
+    return trimToPixels(*out, grown, placed);
+}
+
+bool EditorSession::contentAwareFill(QString* errorText, const ContentFillRequest& request) {
+    LayerTransform placed;
+    auto result = contentAwareFillResult(request, placed, errorText);
+    if (!result) return false;
+    if (!request.newLayer) { commitPixels(result, placed, "Content-Aware Fill"); return true; }
+    if (document_->layers.size() >= size_t(Document::maxLayers)) { if (errorText) *errorText = tr("The document has too many layers."); return false; }
+    const Layer* active = activeLayer();
+    Layer layer(Asset::make(result, nextLayerName(document_->layers, "Layer")), Point{0, 0});
+    layer.transform = placed;
+    layer.parentId = active ? active->parentId : std::nullopt;
+    const int index = activeLayerId_ ? document_->indexOf(*activeLayerId_) + 1 : int(document_->layers.size());
+    clearPixelPreview();
+    endOpacityEdit();
+    beginEdit("Content-Aware Fill");
+    document_->layers.insert(document_->layers.begin() + index, layer);
+    setActiveLayer(layer.id);
+    endEdit();
+    notifyDocument();
+    return true;
+}
+
+bool EditorSession::contentAwareMove(int dx, int dy, QString* errorText) {
+    auto failWith = [&](const QString& text) { if (errorText) *errorText = text; return false; };
+    if (!canAdjustPixels() || !document_->selection || !document_->selection->coverage) return failWith(tr("Select an area on a visible image layer, then drag it where it should go."));
+    if (dx == 0 && dy == 0) return failWith(tr("Drag the selection to where it should go."));
+    if (isMaskSelected_) return failWith(tr("Content-Aware Move works on a layer's pixels, not its mask."));
+    if (smartObjectBlocksPixels(true)) return false;
+    const Layer* layer = activeLayer();
+    // The layer grows over the selection and where it lands.
+    Rect sel = document_->selection->bounds();
+    Rect area = sel.unionWith(Rect(sel.x + dx, sel.y + dy, sel.width, sel.height)).intersection(document_->rect());
+    const Image& src = *layer->asset->image;
+    Affine toPixels = layer->transform.pixelToDocument(src.width(), src.height()).inverted();
+    Rect wanted = toPixels.mapBounds(area).integral().unionWith(Rect(0, 0, src.width(), src.height()));
+    int margin = int(std::ceil(std::max({0.0, -wanted.minX(), -wanted.minY(), wanted.maxX() - src.width(), wanted.maxY() - src.height()})));
+    LayerTransform grown;
+    auto source = adjustmentSource(margin, grown);
+    if (!source) return failWith(tr("The layer is too large to grow."));
+    auto coverage = selectionOnGrid(grown, source->width(), source->height());
+    if (!coverage) return failWith(tr("Select the area to move first."));
+    // The drag on the layer's own grid.
+    Affine gridFromDoc = grown.pixelToDocument(source->width(), source->height()).inverted();
+    const Point o = gridFromDoc.apply({0, 0}), d = gridFromDoc.apply({double(dx), double(dy)});
+    const int gdx = int(std::lround(d.x - o.x)), gdy = int(std::lround(d.y - o.y));
+    std::shared_ptr<GrayImage> visible;
+    if (layer->mask && layer->mask->enabled && !layer->mask->placement && layer->mask->asset.image && layer->mask->asset.image->width() == src.width() && layer->mask->asset.image->height() == src.height()) {
+        visible = std::make_shared<GrayImage>(source->width(), source->height(), 255);
+        const GrayImage& m = *layer->mask->asset.image;
+        for (int y = 0; y < m.height(); y++) std::memcpy(visible->row(y + margin) + margin, m.row(y), size_t(m.width()));
+    }
+    auto out = std::make_shared<Image>(*source);
+    ContentMoveOptions options;
+    options.extend = contentMoveExtend;
+    options.adaptation = contentMoveAdaptation;
+    if (!compositor::contentAwareMove(*out, *coverage, gdx, gdy, options, visible.get()))
+        return failWith(tr("Nothing could be moved there: the selection must land on the layer and leave opaque pixels around it to fill from."));
     LayerTransform placed;
     auto trimmed = trimToPixels(*out, grown, placed);
-    commitPixels(trimmed, placed, "Content-Aware Fill");
+    // The selection follows the patch, as in Photoshop.
+    const GrayImage& before = *document_->selection->coverage;
+    auto shifted = std::make_shared<GrayImage>(before.width(), before.height());
+    for (int y = 0; y < shifted->height(); y++) {
+        const int sy = y - dy;
+        if (sy < 0 || sy >= before.height()) continue;
+        for (int x = std::max(0, dx); x < std::min(shifted->width(), shifted->width() + dx); x++) shifted->at(x, y) = before.at(x - dx, sy);
+    }
+    const QString name = contentMoveExtend ? QStringLiteral("Content-Aware Extend") : QStringLiteral("Content-Aware Move");
+    beginEdit(name);
+    commitPixels(trimmed, placed, name);
+    Selection moved = *document_->selection;
+    moved.coverage = shifted;
+    document_->selection = moved;
+    endEdit();
+    notifyDocument();
+    emit selectionChanged();
+    return true;
+}
+
+bool EditorSession::contentAwareScale(int width, int height, bool protectSelection, QString* errorText) {
+    if (!canAdjustPixels()) { if (errorText) *errorText = tr("Select a visible image layer to scale."); return false; }
+    Layer* layer = activeLayerMutable();
+    const ImagePtr src = layer->asset->image;
+    if (!Document::validDimension(width) || !Document::validDimension(height) || (long long)width * height > Document::pixelBudget) {
+        if (errorText) *errorText = tr("The size must be between 1 and %1 pixels a side, 100 megapixels at most.").arg(maxImageSide);
+        return false;
+    }
+    std::shared_ptr<GrayImage> protect;
+    if (protectSelection && document_->selection && document_->selection->coverage) protect = selectionOnGrid(layer->transform, src->width(), src->height());
+    SeamCarveOptions options;
+    options.protect = protect.get();
+    auto out = std::make_shared<Image>(seamCarve(*src, width, height, options));
+    if (out->isEmpty()) { if (errorText) *errorText = tr("Could not scale the layer."); return false; }
+    LayerTransform placed = layer->transform;
+    placed.size = {placed.size.width * width / src->width(), placed.size.height * height / src->height()};
+    commitPixels(out, placed, "Content-Aware Scale");
     return true;
 }
 

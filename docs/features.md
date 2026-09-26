@@ -25,7 +25,8 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Quick Select (Shift+W): scribble over the subject, or click it (a 48 MB model, downloaded from the options bar); the selection snaps to the image's edges
 - Add (Shift), subtract (Alt) and intersect (Shift+Alt)
 - Expand, Contract, Feather, Smooth, Border, Invert; load a layer or mask as a selection
-- Content-Aware Fill, which continues edges and patterns and can extend an image past its borders
+- Content-Aware Fill, which continues edges and patterns and can extend an image past its borders; its dialog (Edit > Content-Aware Fill…) chooses the sampling area (Auto, the whole layer, or Custom painted with an include/exclude brush), previews on the canvas and can output to a new layer ([content-aware.md](content-aware.md))
+- Content-Aware Scale (Edit menu): seam carving narrows, widens, shortens or heightens a layer while the parts that carry detail keep their proportions; Protect keeps the selection, with a live preview ([details](content-aware-scale.md))
 
 ## Painting and retouching
 - Brush and eraser with size, hardness and opacity; Shift for straight lines
@@ -39,6 +40,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Paint Bucket (Shift+G) with Tolerance, Contiguous, Anti-alias and All Layers, inside the selection
 - Open camera RAW files (CR2, CR3, NEF, ARW, RAF, ORF, RW2, DNG and more) through LibRaw, developed with the camera's white balance into sRGB; Filter ▸ Camera Raw then adjusts them
 - Healing Brush (the healing tool's Sampled type: Alt-click a source, and the copied texture takes the tone around the stroke) and Patch (select the blemish, drag the selection to the area to copy from)
+- Content-Aware Move (the healing tool's last type): select an object, or draw round it with the tool's lasso, and drag it; the hole it leaves is filled from its surroundings and the patch blended into its new place. Extend mode leaves the original; Adaptation (Very Strict to Very Loose) sets how far the patch's tone follows its new place and how wide a seam is blended
 - Quick Mask (Q, or Select ▸ Edit in Quick Mask Mode): the selection as a red overlay to paint with every mask tool, white selecting; saving or exporting leaves it first
 - Gradients and shapes (rectangles, rounded rectangles, ellipses); the Gradient tool draws Foreground to Background, Foreground to Transparent or any multi-stop gradient imported from a Photoshop `.grd` file (docs/presets.md)
 - Text in any installed font, editable until you paint on the layer
@@ -78,6 +80,8 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Crash recovery: unsaved changes are autosaved in the background every few minutes (Preferences sets how often, or turns it off) and offered back after a crash; your own files are never touched
 - Several projects in tabs; opening a file from the file manager adds a tab to the running window
 - Crop, Canvas Size and Image Size; Image > Trim cuts the canvas to its content (by transparency or a corner's colour, on the sides you choose); rulers and a pixel grid
+- Artboards, as in Photoshop: the Artboard tool (Shift+V) drags out a named rectangle with a white, black, transparent or custom background whose layers are clipped to it; drag inside one to move it with its contents, an edge or corner to resize it; File > Export Artboards to Files writes each as PNG or JPEG; PSD artboards open and export as Photoshop's own, and projects keep them ([artboards-slices.md](artboards-slices.md))
+- Slices: the Slice tool (Shift+C) draws named rectangles, File > Export Slices writes each as PNG or JPEG; a PSD's slices (resource 1050) open as editable slices and go back out with the export ([artboards-slices.md](artboards-slices.md))
 - An open project follows its package on disk: when another app or an agent writes the `.comp`, the tab reloads in place (a package merely touched, or caught half written, is left alone, and unsaved work is never replaced without asking)
 
 ## Automation
@@ -148,6 +152,8 @@ Mac 版と同じ機能を、Linux のキー表記で使えます。キーボー�
 - PNG、JPEG、TIFF、TGA、WebP などを開けます。カンバスにドロップするとレイヤーとして追加、タブバーにドロップすると新しいドキュメントとして開きます
 - レイヤー合計 1 ギガピクセルまでのプロジェクト(Mac 版で開けるのは 1 億画素まで)
 - PNG・TIFF・TGA・複数サイズの Windows アイコン(16/32/48/256 px)書き出し、プレビュー付きの JPEG・WebP 書き出し(WebP は透明部分を保持し、品質 100 で可逆圧縮)
+- アートボード:アートボードツール(Shift+V)で名前と背景色(白・黒・透明・任意の色)を持つ矩形を作り、中のレイヤーはその範囲で切り抜かれます。ファイル > アートボードを書き出しで PNG/JPEG に書き出し、PSD のアートボードは Photoshop 形式のまま読み書きします
+- スライス:スライスツール(Shift+C)で名前付きの矩形を作り、ファイル > スライスを書き出しで PNG/JPEG に書き出します。PSD のスライス(リソース 1050)も編集できる形で読み書きします
 - クラッシュからの復元:未保存の変更を数分ごとにバックグラウンドで自動保存し、異常終了の後に復元を提案します(間隔の変更やオフは環境設定で)。元のファイルには触れません
 - タブで複数のプロジェクト。ファイルマネージャーから開いたファイルは起動中のウィンドウにタブとして追加
 - 切り抜き、カンバスサイズ、画像解像度。イメージ > トリミングで内容に合わせてカンバスを切り詰め(透明部分または角の色で、選んだ辺のみ)。定規とピクセルグリッド

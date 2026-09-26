@@ -266,6 +266,32 @@ def remaining_methods(rpc):
     rpc.call("history.undo")
     rpc.call("layers.select", id=placed["id"])
     rpc.call("layers.merge", down=True)
+    # Artboards and slices: made, changed, exported, through a PSD and back, removed.
+    board = rpc.call("artboards.add", x=10, y=10, width=80, height=60, background="#ff0000", name="Hero")
+    moved = rpc.call("artboards.set", id=board["id"], x=20, moveContents=True)
+    assert moved["x"] == 20 and moved["background"] == "#ff0000", moved
+    assert [a["name"] for a in rpc.call("artboards.list")["artboards"]] == ["Hero"]
+    assert rpc.call("layers.get", id=board["id"])["artboard"]["width"] == 80
+    piece = rpc.call("slices.add", x=0, y=0, width=50, height=40, name="top")
+    rpc.call("slices.set", id=piece["id"], altTag="Top")
+    assert rpc.call("slices.list")["slices"][0]["altTag"] == "Top"
+    written = rpc.call("artboards.export", directory=os.path.join(work, "boards"))["files"]
+    assert len(written) == 1 and os.path.getsize(written[0]) > 0, written
+    written = rpc.call("slices.export", directory=os.path.join(work, "slices"), format="jpeg", prefix="p_")["files"]
+    assert len(written) == 1 and written[0].endswith("p_top.jpg"), written
+    boards_psd = os.path.join(work, "boards.psd")
+    rpc.call("document.export", path=boards_psd)
+    here = rpc.call("tabs.list")
+    reopened = rpc.call("document.open", path=boards_psd)
+    assert [a["name"] for a in rpc.call("artboards.list")["artboards"]] == ["Hero"]
+    assert [s["name"] for s in rpc.call("slices.list")["slices"]] == ["top"]
+    rpc.call("tabs.close", index=reopened["tab"], discard=True)
+    rpc.call("tabs.select", index=next(t["index"] for t in here if t["current"]))
+    rpc.call("slices.delete", id=piece["id"])
+    rpc.call("artboards.delete", id=board["id"])
+    assert rpc.call("artboards.list")["artboards"] == [] and rpc.call("slices.list")["slices"] == []
+    for name in ("artboard", "slice"):
+        rpc.call("tool.select", name=name)
     rpc.call("canvas.flip", vertical=False)
     rpc.call("canvas.resize", width=220, height=140)
     rpc.call("canvas.crop", x=0, y=0, width=200, height=120)
@@ -373,6 +399,26 @@ def main():
         rpc.call("selection.none")
     rpc.call("selection.rect", x=40, y=40, width=30, height=30)
     rpc.call("pixels.contentAwareFill")
+    layers_before_fill = len(rpc.call("layers.list"))
+    filled = rpc.call("pixels.contentAwareFill", sampling="custom", include=[{"x": 0, "y": 0, "width": 140, "height": 140}], exclude=[{"x": 100, "y": 100, "width": 20, "height": 20}], output="new")
+    assert filled["filled"] and "layer" in filled, filled
+    assert len(rpc.call("layers.list")) == layers_before_fill + 1
+    rpc.call("history.undo")
+    try:
+        rpc.call("pixels.contentAwareFill", sampling="nearby")
+        raise AssertionError("an unknown sampling was accepted")
+    except RuntimeError as e:
+        assert "sampling" in str(e), e
+    moved = rpc.call("pixels.contentAwareMove", dx=30, dy=10, adaptation=3)
+    assert moved["moved"] and moved["mode"] == "move", moved
+    sel = rpc.call("selection.info")
+    assert abs(sel["bounds"]["x"] - 70) <= 1 and abs(sel["bounds"]["y"] - 50) <= 1, sel
+    rpc.call("history.undo")
+    assert rpc.call("pixels.contentAwareMove", dx=-20, dy=0, mode="extend")["mode"] == "extend"
+    rpc.call("history.undo")
+    scaled = rpc.call("pixels.contentAwareScale", widthPercent=80, protectSelection=True)
+    assert scaled["width"] >= 1 and scaled["height"] >= 1, scaled
+    rpc.call("history.undo")
     rpc.call("selection.none")
     # Smart objects: place a file, convert layers, edit the contents in their tab, put them back, rasterize.
     import tempfile

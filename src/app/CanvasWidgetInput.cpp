@@ -54,7 +54,7 @@ void CanvasWidget::updateCursor(QPointF view, Qt::KeyboardModifiers modifiers) {
     case Tool::Brush: case Tool::SpotHealing: case Tool::CloneStamp: case Tool::Smudge: case Tool::Dodge: setCursor(Qt::BlankCursor); return;
     case Tool::Pen: setCursor(Qt::CrossCursor); return;
     case Tool::DirectSelect: setCursor(Qt::ArrowCursor); return;
-    case Tool::Marquee: case Tool::Lasso: case Tool::Wand: case Tool::Scribble: case Tool::Crop: case Tool::Gradient: case Tool::Shape: case Tool::Eyedropper: case Tool::PaintBucket: setCursor(Qt::CrossCursor); return;
+    case Tool::Marquee: case Tool::Lasso: case Tool::Wand: case Tool::Scribble: case Tool::Crop: case Tool::Artboard: case Tool::Slice: case Tool::Gradient: case Tool::Shape: case Tool::Eyedropper: case Tool::PaintBucket: setCursor(Qt::CrossCursor); return;
     case Tool::Text: setCursor(Qt::IBeamCursor); return;
     case Tool::Zoom: setCursor((modifiers & Qt::AltModifier) ? zoomOutCursor_ : zoomInCursor_); return;
     case Tool::Hand: setCursor(Qt::OpenHandCursor); return;

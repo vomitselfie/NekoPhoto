@@ -2,6 +2,7 @@
 #include "check.h"
 #include "compositor/heal.h"
 #include "compositor/inpaint.h"
+#include "compositor/contentmove.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -223,6 +224,66 @@ TEST_CASE(heal_from_takes_the_source_texture_at_the_surrounding_tone) {
     CHECK(std::abs(sum / 144 - 100) < 4);
     CHECK(hi - lo >= 16);   // the texture came along
     CHECK_EQ(int(image.pixel(10, 10)[0]), 100);   // outside the hole nothing moves
+}
+
+namespace {
+/// A textured green field with a red square object at (20..40, 30..50).
+Image moveScene(int w, int h) {
+    Image img(w, h);
+    std::mt19937 rng(3);
+    std::uniform_int_distribution<int> noise(-6, 6);
+    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) { uint8_t* p = img.pixel(x, y); p[0] = uint8_t(40 + noise(rng)); p[1] = uint8_t(150 + noise(rng)); p[2] = uint8_t(60 + noise(rng)); p[3] = 255; }
+    for (int y = 30; y < 50; y++) for (int x = 20; x < 40; x++) { uint8_t* p = img.pixel(x, y); p[0] = 220; p[1] = 30; p[2] = 30; }
+    return img;
+}
+} // namespace
+
+TEST_CASE(content_aware_move_moves_the_object_and_fills_the_source) {
+    const int w = 128, h = 96;
+    const Image scene = moveScene(w, h);
+    GrayImage sel(w, h, 0);
+    for (int y = 27; y < 53; y++) for (int x = 17; x < 43; x++) sel.at(x, y) = 255;
+    for (int adaptation : {0, 2, 4}) {
+        Image img = scene;
+        ContentMoveOptions o; o.adaptation = adaptation;
+        REQUIRE(contentAwareMove(img, sel, 60, 5, o));
+        // The source is green again, the object sits at its new place (its middle untouched by the seam).
+        int redAtSource = 0, redAtTarget = 0;
+        for (int y = 30; y < 50; y++) for (int x = 20; x < 40; x++) { if (img.pixel(x, y)[0] > 150) redAtSource++; if (img.pixel(x + 60, y + 5)[0] > 150) redAtTarget++; }
+        CHECK(redAtSource < 10);
+        CHECK(redAtTarget > 300);
+        const uint8_t* mid = img.pixel(90, 45);
+        CHECK(mid[0] > 150 && mid[1] < 110);
+        // Far from both places nothing changed; everything stays opaque and valid premultiplied.
+        CHECK(std::memcmp(img.pixel(5, 5), scene.pixel(5, 5), 4) == 0);
+        CHECK(std::memcmp(img.pixel(120, 90), scene.pixel(120, 90), 4) == 0);
+        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) { const uint8_t* p = img.pixel(x, y); CHECK(p[3] == 255 && p[0] <= p[3]); }
+    }
+    // Extend keeps the original.
+    Image ext = scene;
+    ContentMoveOptions e; e.extend = true;
+    REQUIRE(contentAwareMove(ext, sel, 60, 5, e));
+    CHECK(ext.pixel(30, 40)[0] > 150);
+    CHECK(ext.pixel(90, 45)[0] > 150);
+    // Nothing to move, or moved wholly off the image: refused and untouched.
+    Image same = scene;
+    CHECK(!contentAwareMove(same, sel, 0, 0));
+    CHECK(!contentAwareMove(same, sel, 500, 0));
+    CHECK(!contentAwareMove(same, GrayImage(w, h, 0), 10, 0));
+    CHECK(same == scene);
+}
+
+TEST_CASE(content_fill_samples_only_the_chosen_area) {
+    // Left half blue, right half yellow, a hole in the blue half: sampled from the yellow half only, it fills yellow.
+    const int w = 200, h = 80;
+    Image img(w, h);
+    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) { uint8_t* p = img.pixel(x, y); if (x < 100) { p[0] = 20; p[1] = 40; p[2] = 220; } else { p[0] = 230; p[1] = 220; p[2] = 20; } p[3] = 255; }
+    GrayImage hole(w, h, 0), sample(w, h, 0);
+    for (int y = 30; y < 50; y++) for (int x = 30; x < 50; x++) hole.at(x, y) = 255;
+    for (int y = 0; y < h; y++) for (int x = 110; x < w; x++) sample.at(x, y) = 255;
+    InpaintOptions o; o.sampleWholeVisible = true;
+    REQUIRE(contentFill(img, hole, o, &sample));
+    CHECK(img.pixel(40, 40)[0] > 200 && img.pixel(40, 40)[2] < 60);
 }
 
 TEST_MAIN()

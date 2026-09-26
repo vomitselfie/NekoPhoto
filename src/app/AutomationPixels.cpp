@@ -7,6 +7,7 @@
 #include "compositor/matte.h"
 #include "compositor/subject.h"
 #include <QJsonDocument>
+#include <cmath>
 
 using namespace compositor;
 using namespace app::rpc;
@@ -121,12 +122,71 @@ void AutomationServer::registerPixelsHandlers() {
     });
     add("pixels.clear", [session, document](const QJsonObject&) {
         refuseSmartObject(session()); document(); session()->clearSelectionPixels(); return QJsonObject{}; });
-    add("pixels.contentAwareFill", [session, document](const QJsonObject&) {
+    add("pixels.contentAwareFill", [session, document](const QJsonObject& p) {
+        refuseSmartObject(session());
+        const Document& d = document();
+        ContentFillRequest request;
+        const QString sampling = str(p, "sampling", QStringLiteral("auto")).toLower();
+        if (sampling == "all") request.sampling = ContentFillRequest::Sampling::All;
+        else if (sampling == "custom") request.sampling = ContentFillRequest::Sampling::Custom;
+        else if (sampling != "auto") fail("sampling must be auto, all or custom", invalidParams);
+        const QString output = str(p, "output", QStringLiteral("current")).toLower();
+        if (output != "current" && output != "new") fail("output must be current or new", invalidParams);
+        request.newLayer = output == "new";
+        if ((has(p, "include") || has(p, "exclude")) && request.sampling != ContentFillRequest::Sampling::Custom) fail("include and exclude need sampling: custom", invalidParams);
+        if (request.sampling == ContentFillRequest::Sampling::Custom) {
+            // The sampling area: the include rectangles (everything when none), less the exclude rectangles.
+            auto area = std::make_shared<GrayImage>(d.width, d.height, has(p, "include") ? 0 : 255);
+            auto paint = [&](const char* key, uint8_t value) {
+                for (const QJsonValue& v : p.value(key).toArray()) {
+                    const QJsonObject r = v.toObject();
+                    if (!r.contains("x") || !r.contains("y") || !r.contains("width") || !r.contains("height")) fail(QString("%1 takes rectangles {x, y, width, height}").arg(key), invalidParams);
+                    const int x0 = std::clamp(int(std::floor(r.value("x").toDouble())), 0, d.width), y0 = std::clamp(int(std::floor(r.value("y").toDouble())), 0, d.height);
+                    const int x1 = std::clamp(int(std::ceil(r.value("x").toDouble() + r.value("width").toDouble())), 0, d.width);
+                    const int y1 = std::clamp(int(std::ceil(r.value("y").toDouble() + r.value("height").toDouble())), 0, d.height);
+                    for (int y = y0; y < y1; y++) std::memset(area->row(y) + x0, value, size_t(std::max(0, x1 - x0)));
+                }
+            };
+            paint("include", 255);
+            paint("exclude", 0);
+            request.sampleArea = area;
+        }
+        QString error;
+        if (!session()->contentAwareFill(&error, request)) fail(error.isEmpty() ? "content-aware fill needs a selection on a pixel layer" : error);
+        QJsonObject answer{{"filled", true}};
+        if (request.newLayer && session()->activeLayerId()) answer["layer"] = qs(*session()->activeLayerId());
+        return answer;
+    });
+    add("pixels.contentAwareMove", [session, document](const QJsonObject& p) {
         refuseSmartObject(session());
         document();
+        EditorSession* s = session();
+        const QString mode = str(p, "mode", QStringLiteral("move")).toLower();
+        if (mode != "move" && mode != "extend") fail("mode must be move or extend", invalidParams);
+        const int adaptation = int(std::lround(num(p, "adaptation", 2)));
+        if (adaptation < 0 || adaptation > 4) fail("adaptation must be 0 (very strict) to 4 (very loose)", invalidParams);
+        const bool extendBefore = s->contentMoveExtend;
+        const int adaptationBefore = s->contentMoveAdaptation;
+        s->contentMoveExtend = mode == "extend";
+        s->contentMoveAdaptation = adaptation;
         QString error;
-        if (!session()->contentAwareFill(&error)) fail(error.isEmpty() ? "content-aware fill needs a selection on a pixel layer" : error);
-        return QJsonObject{};
+        const bool moved = s->contentAwareMove(int(std::lround(num(p, "dx"))), int(std::lround(num(p, "dy"))), &error);
+        s->contentMoveExtend = extendBefore;
+        s->contentMoveAdaptation = adaptationBefore;
+        if (!moved) fail(error.isEmpty() ? "nothing was moved: make a selection on a pixel layer and give an offset (dx, dy)" : error);
+        return QJsonObject{{"moved", true}, {"mode", mode}};
+    });
+    add("pixels.contentAwareScale", [session, document](const QJsonObject& p) {
+        refuseSmartObject(session());
+        document();
+        const Layer* layer = session()->activeLayer();
+        if (!layer || layer->isGroup || !layer->asset || !layer->asset->image) fail("select an image layer");
+        const int w0 = layer->asset->image->width(), h0 = layer->asset->image->height();
+        int w = p.contains("width") ? p.value("width").toInt() : int(std::lround(w0 * p.value("widthPercent").toDouble(100) / 100));
+        int h = p.contains("height") ? p.value("height").toInt() : int(std::lround(h0 * p.value("heightPercent").toDouble(100) / 100));
+        QString error;
+        if (!session()->contentAwareScale(w, h, p.value("protectSelection").toBool(false), &error)) fail(error, invalidParams);
+        return QJsonObject{{"width", w}, {"height", h}};
     });
     add("pixels.gmic", [session, document](const QJsonObject& p) {
         refuseSmartObject(session());

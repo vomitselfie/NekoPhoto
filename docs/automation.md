@@ -122,6 +122,13 @@ at the bottom and the only one visible), which open in a tab of their own and an
 `document.save` (answers `macCompatible`: false past the 100 megapixels of layers Compositor for
 macOS opens; projects here hold up to a gigapixel), `document.export` (.psd, layered, text layers as Photoshop text (`texts` counts them), answering with the counts and any `warnings` and `notes` about what Photoshop cannot carry; or .svg, answering with the `shapes`, `images` and `groups` written and `notes` on what became images (docs/svg-pdf.md); or the composite as .png, .jpg, .webp or .tif; `quality` for JPEG and WebP, where 100 is lossless; `background` behind a JPEG), `document.close`.
 
+Artboards and slices (docs/artboards-slices.md): `artboards.list`, `artboards.add` (`x`, `y`, `width`, `height`, `name`,
+`background`: white, black, transparent or a CSS colour), `artboards.set` (the same by `id`; a move takes its layers along
+unless `moveContents` is false), `artboards.delete` (a plain folder again, or with `contents` everything in it), `artboards.export`
+(`directory`, `format` png or jpeg, `prefix`, `quality`; answers the `files` written); `slices.list`, `slices.add`, `slices.set`
+(by numeric `id`; `name`, `url`, `target`, `altTag`), `slices.delete` and `slices.export` (as `artboards.export`). `layers.get`
+shows a folder's `artboard`; `tool.select` takes `artboard` and `slice`.
+
 Smart objects: `smartObject.convert` (the selection or `ids`), `smartObject.place` (`path`), `smartObject.replace`
 (`path`), `smartObject.rasterize`, `smartObject.editContents` (opens a tab) and `smartObject.commit` (in that tab).
 `smartObject.addFilter` adds a Smart Filter (any of the thirteen drawn here, with its settings, opacity and blend) on
@@ -161,7 +168,11 @@ Pixels of the active layer, inside the selection: `pixels.adjust`,
 `pixels.cameraRaw` (Filter > Camera Raw Filter: `settings` with the model's keys, nested `curve`, `mixer`, `grading`,
 `detail`, `optics`, `geometry` and `calibration` objects, unknown keys refused, `whiteBalance: "Auto"` balances the layer;
 `rpc.describe` lists every key and range and [camera-raw.md](camera-raw.md) what each does), `pixels.invert`, `pixels.fill`, `pixels.clear`,
-`pixels.contentAwareFill`, `pixels.removeBackground` (`refine`, and then `refineEdges`,
+`pixels.contentAwareFill` (`sampling`: `auto` around the selection, `all` the whole layer, or `custom`: the
+`include` rectangles, the whole canvas when none, less the `exclude` rectangles; `output`: `current` or `new`, only
+the filled pixels on a new layer, whose id comes back as `layer`), `pixels.contentAwareMove` (Content-Aware Move:
+the selection's pixels move `dx`, `dy`, the hole is filled and the patch blended in; `mode` `move` or `extend`,
+`adaptation` 0 very strict to 4 very loose; the selection follows), `pixels.contentAwareScale` (Edit > Content-Aware Scale by seam carving: `width`/`height` in pixels or `widthPercent`/`heightPercent`, `protectSelection` keeps the selected pixels; see [content-aware-scale.md](content-aware-scale.md)), `pixels.removeBackground` (`refine`, and then `refineEdges`,
 `contrast`, `shiftEdge`, `matting`: the band width in pixels in which hair opacity is solved,
 `cleanup`: half-transparent specks touching no edge go, `decontaminate`: the edge pixels take the
 subject's own colour; both default true; `detail`: the model runs again on full-resolution windows

@@ -1,4 +1,6 @@
 // The main window's menus, tool rail and colour swatches.
+#include "ContentFillDialog.h"
+#include "ContentAwareScaleDialog.h"
 #include "MainWindow.h"
 #include <QDialog>
 #include <QHBoxLayout>
@@ -67,6 +69,8 @@ void MainWindow::buildToolRail() {
     tool(Tool::Wand, tr("Magic Wand"), "wand-sparkles", QKeySequence("W"));
     tool(Tool::Scribble, tr("Quick Select"), "scribble", QKeySequence("Shift+W"));   // Photoshop's W group
     tool(Tool::Crop, tr("Crop"), "crop", QKeySequence("C"));
+    tool(Tool::Slice, tr("Slice (drag a slice; drag inside to move it, an edge to resize)"), "slice", QKeySequence("Shift+C"));   // Photoshop's C group
+    tool(Tool::Artboard, tr("Artboard (drag a new artboard; drag inside to move it with its contents, an edge to resize)"), "frame", QKeySequence("Shift+V"));   // Photoshop's V group
     rail->addSeparator();
     tool(Tool::Brush, tr("Brush"), "paintbrush", QKeySequence("B"));
     eraserAction_ = rail->addAction(toolIcon("eraser"), tr("Eraser"));
@@ -154,6 +158,8 @@ void MainWindow::buildMenus() {
     if (canWriteImageFormat("tiff")) needsDocument(file->addAction(tr("Export &TIFF…"), this, &MainWindow::exportTiff));
     needsDocument(file->addAction(tr("Export T&GA…"), this, &MainWindow::exportTga));
     needsDocument(file->addAction(tr("Export &Icon (ICO)…"), this, &MainWindow::exportIco));
+    needsDocument(file->addAction(tr("Export A&rtboards to Files…"), this, [this] { exportBoxes(false); }));
+    needsDocument(file->addAction(tr("Export S&lices…"), this, [this] { exportBoxes(true); }));
     file->addSeparator();
     file->addAction(tr("&Close Tab"), QKeySequence::Close, this, [this] { closeTab(current_); });
     file->addAction(tr("New &Tab"), QKeySequence::AddTab, this, [this] { addTab(false); });
@@ -181,7 +187,11 @@ void MainWindow::buildMenus() {
     needsDocument(edit->addAction(tr("Fill with Background"), QKeySequence("Ctrl+Backspace"), this, [this] { session_->fillSelection(session_->backgroundColor); }));
     QAction* clear = needsDocument(edit->addAction(tr("Clear"), QKeySequence(Qt::Key_Delete), this, [this] { if (session_->document() && session_->document()->selection) session_->clearSelectionPixels(); else deleteSelectedLayers(); }));
     clear->setShortcuts({QKeySequence(Qt::Key_Delete), QKeySequence(Qt::Key_Backspace)});
-    needsDocument(edit->addAction(tr("Content-Aware Fill"), QKeySequence("Shift+F5"), this, [this] { QString error; if (!session_->contentAwareFill(&error)) showError(tr("Content-Aware Fill"), error); }));
+    needsDocument(edit->addAction(tr("Content-Aware Fill…"), QKeySequence("Shift+F5"), this, [this] {
+        if (!session_->canAdjustPixels() || !session_->document()->selection || !session_->document()->selection->coverage) { showError(tr("Content-Aware Fill"), tr("Select a visible image layer and an area to fill.")); return; }
+        (new ContentFillDialog(session_, this))->show();
+    }));
+    needsDocument(edit->addAction(tr("Content-Aware Scale…"), QKeySequence("Ctrl+Alt+Shift+C"), this, [this] { (new ContentAwareScaleDialog(session_, this))->show(); }));
 
     edit->addSeparator();
     edit->addAction(tr("&Preferences…"), QKeySequence::Preferences, this, &MainWindow::showPreferences);

@@ -20,6 +20,7 @@
 #include <QResizeEvent>
 #include <QSpinBox>
 #include <QToolButton>
+#include <algorithm>
 #include <cmath>
 
 using namespace compositor;
@@ -88,6 +89,8 @@ ToolOptionsBar::ToolOptionsBar(EditorSession* session, CanvasWidget* canvas, QWi
     stack_->addWidget(buildToningOptions());     // 15
     stack_->addWidget(buildBucketOptions());     // 16
     stack_->addWidget(buildPenOptions());        // 17
+    boxOptionsPage_ = stack_->count();
+    stack_->addWidget(buildBoxOptions());        // the Artboard and Slice tools
     addWidget(stack_);
     connect(session_, &EditorSession::toolChanged, this, &ToolOptionsBar::syncTool);
     connect(session_, &EditorSession::transformChanged, this, &ToolOptionsBar::syncTransformFields);
@@ -117,6 +120,7 @@ void ToolOptionsBar::syncTool() {
     case Tool::Dodge: index = 15; break;
     case Tool::PaintBucket: index = 16; break;
     case Tool::Pen: case Tool::DirectSelect: index = 17; break;
+    case Tool::Artboard: case Tool::Slice: index = boxOptionsPage_; break;
     }
     for (auto& s : syncers_) s();
     stack_->setCurrentIndex(index);
@@ -322,11 +326,33 @@ QWidget* ToolOptionsBar::buildHealingOptions() {
     QWidget* w = row();
     auto* h = layoutOf(w);
     auto* mode = new QComboBox;
-    mode->addItems({tr("Content-Aware"), tr("Create Texture"), tr("Proximity Match"), tr("Sampled (Healing Brush)"), tr("Patch")});
-    mode->setToolTip(tr("Sampled heals from where you Alt-click, like Clone Stamp; Patch: drag the selection to the area to copy from"));
-    connect(mode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->spotHealingMode = i; });
+    mode->addItems({tr("Content-Aware"), tr("Create Texture"), tr("Proximity Match"), tr("Sampled (Healing Brush)"), tr("Patch"), tr("Content-Aware Move")});
+    mode->setToolTip(tr("Sampled heals from where you Alt-click, like Clone Stamp; Patch: drag the selection to the area to copy from; "
+                        "Content-Aware Move: drag the selection (or lasso one) to where it should go"));
+    mode->setCurrentIndex(std::clamp(session_->spotHealingMode, 0, 5));
     h->addWidget(new QLabel(tr("Type")));
     h->addWidget(mode);
+    // Content-Aware Move's own options, shown while it is the type.
+    auto* moveOptions = new QWidget;
+    auto* mh = new QHBoxLayout(moveOptions);
+    mh->setContentsMargins(0, 0, 0, 0);
+    auto* moveMode = new QComboBox;
+    moveMode->addItems({tr("Move"), tr("Extend")});
+    moveMode->setToolTip(tr("Move fills where the selection was; Extend leaves it and adds a copy"));
+    moveMode->setCurrentIndex(session_->contentMoveExtend ? 1 : 0);
+    connect(moveMode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->contentMoveExtend = i == 1; });
+    auto* adaptation = new QComboBox;
+    adaptation->addItems({tr("Very Strict"), tr("Strict"), tr("Medium"), tr("Loose"), tr("Very Loose")});
+    adaptation->setToolTip(tr("How far the moved patch adapts to its new place: its tone, and how wide a seam is blended"));
+    adaptation->setCurrentIndex(std::clamp(session_->contentMoveAdaptation, 0, 4));
+    connect(adaptation, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->contentMoveAdaptation = i; });
+    mh->addWidget(new QLabel(tr("Mode")));
+    mh->addWidget(moveMode);
+    mh->addWidget(new QLabel(tr("Adaptation")));
+    mh->addWidget(adaptation);
+    h->addWidget(moveOptions);
+    moveOptions->setVisible(session_->spotHealingMode == 5);
+    connect(mode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, moveOptions](int i) { session_->spotHealingMode = i; moveOptions->setVisible(i == 5); });
     addBrushTipFields(h);
     h->addStretch();
     return w;
@@ -450,6 +476,57 @@ QWidget* ToolOptionsBar::buildPenOptions() {
     h->addWidget(mode);
     h->addWidget(add);
     h->addWidget(autoAdd);
+    h->addStretch();
+    return w;
+}
+
+QWidget* ToolOptionsBar::buildBoxOptions() {
+    QWidget* w = row();
+    auto* h = layoutOf(w);
+    auto* title = new QLabel;
+    // Artboard: the active artboard's background, as Photoshop's Artboard options.
+    auto* backgroundLabel = new QLabel(tr("Background"));
+    auto* background = new QComboBox;
+    background->addItems({tr("White"), tr("Black"), tr("Transparent"), tr("Other…")});
+    background->setToolTip(tr("The active artboard's background"));
+    connect(background, QOverload<int>::of(&QComboBox::activated), this, [this](int i) {
+        const Layer* l = session_->activeLayer();
+        if (!l || !l->artboard) return;
+        Artboard a = *l->artboard;
+        a.background = i + 1;
+        if (a.background == Artboard::Other) {
+            const QColor c = QColorDialog::getColor(QColor::fromRgbF(float(a.red), float(a.green), float(a.blue)), this, tr("Artboard Background"));
+            if (!c.isValid()) { emit session_->layersChanged(); return; }
+            a.red = c.redF(); a.green = c.greenF(); a.blue = c.blueF();
+        }
+        session_->setArtboard(l->id, a, false);
+    });
+    // Slice: remove them all.
+    auto* clear = new QPushButton(tr("Delete All Slices"));
+    connect(clear, &QPushButton::clicked, this, [this] {
+        if (!session_->document()) return;
+        std::vector<uint32_t> ids;
+        for (const Slice& s : session_->document()->slices) ids.push_back(s.id);
+        if (ids.empty()) return;
+        session_->beginEdit(tr("Delete Slices"));
+        for (uint32_t id : ids) session_->deleteSlice(id);
+        session_->endEdit();
+    });
+    syncers_.push_back([this, title, backgroundLabel, background, clear] {
+        const bool artboard = session_->tool() == Tool::Artboard;
+        title->setText(artboard ? tr("Artboard") : tr("Slice"));
+        const Layer* l = session_->activeLayer();
+        const bool onArtboard = artboard && l && l->artboard;
+        backgroundLabel->setVisible(artboard);
+        background->setVisible(artboard);
+        background->setEnabled(onArtboard);
+        if (onArtboard) { QSignalBlocker b(background); background->setCurrentIndex(std::clamp(l->artboard->background, 1, 4) - 1); }
+        clear->setVisible(!artboard);
+    });
+    h->addWidget(title);
+    h->addWidget(backgroundLabel);
+    h->addWidget(background);
+    h->addWidget(clear);
     h->addStretch();
     return w;
 }

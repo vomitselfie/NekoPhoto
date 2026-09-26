@@ -30,6 +30,7 @@ private:
     /// Narrow windows lose the percent fields and get shorter checkbox labels (level 1), then the transform fields (level 2).
     void applyCompact();
     int compact_ = 0;
+    int boxOptionsPage_ = 0;
     QCheckBox* controlsCheck_ = nullptr;
     QCheckBox* ratioCheck_ = nullptr;
     void syncTool();
@@ -53,6 +54,7 @@ private:
     QWidget* buildToningOptions();
     QWidget* buildBucketOptions();
     QWidget* buildPenOptions();
+    QWidget* buildBoxOptions();   // the Artboard and Slice tools
     std::vector<std::function<void()>> syncers_;
     /// Size, hardness and opacity; `strength` names the opacity (Exposure, Flow, Strength) for tools that use it so.
     void addBrushTipFields(QHBoxLayout* layout, const QString& strength = QString());
