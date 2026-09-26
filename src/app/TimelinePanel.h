@@ -26,6 +26,9 @@ public:
     void setSession(EditorSession* session);
     bool playing() const { return playTimer_.isActive(); }
 
+protected:
+    void showEvent(QShowEvent* event) override;
+
 private:
     void refresh();
     void refreshThumbnails();

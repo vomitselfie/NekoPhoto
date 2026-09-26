@@ -175,12 +175,19 @@ void TimelinePanel::setSession(EditorSession* session) {
     connections_.clear();
     session_ = session;
     if (session_) {
-        connections_ << connect(session_, &EditorSession::documentChanged, this, [this] { if (!playing()) { refresh(); thumbTimer_.start(); } });
-        connections_ << connect(session_, &EditorSession::documentChangedAsShown, this, [this] { thumbTimer_.start(); });
-        connections_ << connect(session_, &EditorSession::historyChanged, this, [this] { if (!playing()) refresh(); });
+        // Hidden, the panel catches up when it shows (showEvent).
+        connections_ << connect(session_, &EditorSession::documentChanged, this, [this] { if (!playing() && isVisible()) { refresh(); thumbTimer_.start(); } });
+        connections_ << connect(session_, &EditorSession::documentChangedAsShown, this, [this] { if (isVisible()) thumbTimer_.start(); });
+        connections_ << connect(session_, &EditorSession::historyChanged, this, [this] { if (!playing() && isVisible()) refresh(); });
     }
     refresh();
     refreshThumbnails();
+}
+
+void TimelinePanel::showEvent(QShowEvent* event) {
+    QWidget::showEvent(event);
+    refresh();
+    thumbTimer_.start();
 }
 
 void TimelinePanel::selectCell(int index) {
