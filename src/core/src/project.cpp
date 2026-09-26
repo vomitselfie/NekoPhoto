@@ -117,7 +117,7 @@ json transformJson(const LayerTransform& t) {
 
 const std::set<std::string> knownLayerKeys = {"id", "name", "isVisible", "transform", "imageFile", "parentID", "isGroup", "opacity", "blendMode",
     "maskFile", "maskEnabled", "maskSourceID", "adjustment", "maskPlacement", "maskLinked", "shape", "text", "passThrough"};
-const std::set<std::string> knownManifestKeys = {"format", "version", "colorSpace", "resolution", "documentID", "width", "height", "activeLayerID", "layers"};
+const std::set<std::string> knownManifestKeys = {"format", "version", "colorSpace", "resolution", "documentID", "width", "height", "activeLayerID", "layers", "animation"};
 
 struct Record {
     Layer layer;
@@ -297,6 +297,7 @@ struct Manifest {
     std::optional<Uuid> activeLayerId;
     std::vector<Record> records;
     std::string extraJson;
+    Animation animation;
 };
 
 bool parseManifestJson(const json& j, Manifest& m, ProjectError& error) {
@@ -329,6 +330,9 @@ bool parseManifestJson(const json& j, Manifest& m, ProjectError& error) {
         if (!parseRecord(record, r)) { error = invalid(); return false; }
         m.records.push_back(std::move(r));
     }
+    // Frame animation (NekoPhoto's own key, which other readers skip): a damaged one is dropped, not fatal.
+    if (auto a = j.find("animation"); a != j.end() && a->is_object())
+        if (auto parsed = parseAnimationJson(a->dump())) m.animation = std::move(*parsed);
     json extra = json::object();
     for (auto& [key, value] : j.items()) if (!knownManifestKeys.count(key)) extra[key] = value;
     if (!extra.empty()) m.extraJson = extra.dump();
@@ -405,6 +409,8 @@ Document documentFrom(const Manifest& m) {
     d.resolution = m.resolution.value_or(72);
     d.extraJson = m.extraJson;
     for (auto& r : m.records) d.layers.push_back(r.layer);
+    d.animation = m.animation;
+    pruneAnimation(d);
     return d;
 }
 
@@ -558,6 +564,8 @@ std::string manifestJson(const Document& document, const std::optional<Uuid>& ac
     if (activeLayerId) j["activeLayerID"] = *activeLayerId; else j["activeLayerID"] = nullptr;
     j["layers"] = json::array();
     for (auto& l : document.layers) j["layers"].push_back(recordJson(l));
+    if (!document.animation.empty()) j["animation"] = json::parse(animationJson(document.animation));
+    else j.erase("animation");
     return j.dump(2);
 }
 

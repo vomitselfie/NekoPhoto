@@ -3,6 +3,7 @@
 // friends. Everything here is a plain value; images are shared immutably so
 // copying a Document (for undo) costs no pixels.
 #pragma once
+#include "animation.h"
 #include "geometry.h"
 #include "psd_carry.h"
 #include "smartobject.h"
@@ -249,6 +250,8 @@ struct Document {
     std::shared_ptr<const PsdDocumentCarry> psdCarry;
     /// Smart object sources, by id, shared by every layer that places them (and by undo snapshots).
     std::map<std::string, std::shared_ptr<const SmartObjectSource>> smartObjects;
+    /// Frame animation (animation.h); empty for a still document.
+    Animation animation;
 
     Document() = default;
     Document(int width, int height);
