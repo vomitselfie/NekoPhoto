@@ -6,7 +6,11 @@
 #include "CanvasWidget.h"
 #include "Dialogs.h"
 #include "ImageConvert.h"
+#include "compositor/aseprite.h"
 #include "compositor/clip.h"
+#include "compositor/gif.h"
+#include "compositor/ico.h"
+#include "compositor/tga.h"
 #include "compositor/png.h"
 #include <QApplication>
 #include <QDir>
@@ -36,21 +40,31 @@ QString imageFilter() {
     return QObject::tr("Images (%1)").arg(patterns.join(' '));
 }
 
-/// Everything File > Open and Import File take: Photoshop and Clip Studio files, images, and a project's manifest.json.
+/// Everything File > Open and Import File take: Photoshop, Clip Studio and Aseprite files, images (TGA, ICO and GIF
+/// through the core's own readers), and a project's manifest.json.
 QString openFilter() {
-    QStringList patterns = {"*.psd", "*.psb", "*.clip", "manifest.json"};
+    QStringList patterns = {"*.psd", "*.psb", "*.clip", "*.ase", "*.aseprite", "*.tga", "*.ico", "*.cur", "*.gif", "manifest.json"};
     for (auto& format : QImageReader::supportedImageFormats()) patterns << "*." + QString::fromLatin1(format);
+    patterns.removeDuplicates();
     return QObject::tr("Images, layered files and projects (%1)").arg(patterns.join(' ')) + ";;" + imageFilter() + ";;"
-        + QObject::tr("Photoshop files (*.psd *.psb)") + ";;" + QObject::tr("Clip Studio files (*.clip)");
+        + QObject::tr("Photoshop files (*.psd *.psb)") + ";;" + QObject::tr("Clip Studio files (*.clip)") + ";;"
+        + QObject::tr("Aseprite files (*.ase *.aseprite)") + ";;" + QObject::tr("Icons (*.ico *.cur)") + ";;" + QObject::tr("TGA images (*.tga)");
 }
 
 bool isProjectPath(const QString& path) { return path.endsWith(".comp", Qt::CaseInsensitive) && QFileInfo(path).isDir(); }
-/// A layered file from another editor, opened in its own tab: Photoshop (.psd, .psb) or Clip Studio (.clip).
-bool isLayeredPath(const QString& path) {
-    return path.endsWith(".psd", Qt::CaseInsensitive) || path.endsWith(".psb", Qt::CaseInsensitive) || path.endsWith(".clip", Qt::CaseInsensitive);
+
+bool hasSuffix(const QString& path, std::initializer_list<const char*> suffixes) {
+    for (const char* s : suffixes) if (path.endsWith(QLatin1String(s), Qt::CaseInsensitive)) return true;
+    return false;
 }
 
 } // namespace
+
+bool isLayeredPath(const QString& path) {
+    if (hasSuffix(path, {".psd", ".psb", ".clip", ".ico", ".cur", ".ase", ".aseprite"})) return true;
+    // An animated GIF's frames become layers; a still one opens as an image.
+    return path.endsWith(".gif", Qt::CaseInsensitive) && QFileInfo(path).isFile() && compositor::gifFrameCount(path.toStdString()) > 1;
+}
 
 void MainWindow::newDocument() {
     auto options = askNewDocument(this, {});
@@ -86,11 +100,17 @@ void MainWindow::openLayeredFile(const QString& path) {
     // The import reads the whole file; a big one takes a moment.
     QApplication::setOverrideCursor(Qt::BusyCursor);
     std::string error;
-    const bool clip = path.endsWith(".clip", Qt::CaseInsensitive);
-    auto imported = clip ? compositor::importClip(path.toStdString(), &error) : compositor::importPsd(path.toStdString(), &error, app::psdImportOptions());
+    const std::string file = path.toStdString();
+    const bool clip = hasSuffix(path, {".clip"}), ase = hasSuffix(path, {".ase", ".aseprite"}), psd = hasSuffix(path, {".psd", ".psb"});
+    std::optional<PsdImport> imported;
+    if (clip) imported = compositor::importClip(file, &error);
+    else if (ase) imported = compositor::importAseprite(file, &error);
+    else if (hasSuffix(path, {".ico", ".cur"})) imported = compositor::importIco(file, &error);
+    else if (hasSuffix(path, {".gif"})) imported = compositor::importGif(file, &error);
+    else imported = compositor::importPsd(file, &error, app::psdImportOptions());
     QApplication::restoreOverrideCursor();
     if (!imported) { showError(tr("Couldn’t open %1").arg(QFileInfo(path).fileName()), QString::fromStdString(error)); return; }
-    if (!clip) app::finishPsdText(*imported);
+    if (psd) app::finishPsdText(*imported);
     Tab& tab = addTab(true);
     tab.session->adoptDocument(imported->document, QFileInfo(path).completeBaseName());
     addRecent(path);
@@ -99,7 +119,9 @@ void MainWindow::openLayeredFile(const QString& path) {
     if (!lastImportNotes_.isEmpty() && isVisible()) {
         auto* box = new QMessageBox(QMessageBox::Information, tr("Imported %1").arg(QFileInfo(path).fileName()),
             (clip ? tr("%n layer(s) imported. Some things Clip Studio keeps have no counterpart here:", nullptr, int(imported->document.layers.size()))
-                  : tr("%n layer(s) imported. Some things Photoshop keeps have no counterpart here:", nullptr, int(imported->document.layers.size()))), QMessageBox::Ok, this);
+             : ase ? tr("%n layer(s) imported. Some things Aseprite keeps have no counterpart here:", nullptr, int(imported->document.layers.size()))
+             : psd ? tr("%n layer(s) imported. Some things Photoshop keeps have no counterpart here:", nullptr, int(imported->document.layers.size()))
+                   : tr("%n layer(s) imported, with notes:", nullptr, int(imported->document.layers.size()))), QMessageBox::Ok, this);
         box->setDetailedText(lastImportNotes_.join('\n'));
         box->setInformativeText(lastImportNotes_.mid(0, 6).join('\n') + (lastImportNotes_.size() > 6 ? tr("\n… and %n more (see Details).", nullptr, lastImportNotes_.size() - 6) : QString()));
         box->setAttribute(Qt::WA_DeleteOnClose);
@@ -132,6 +154,13 @@ std::shared_ptr<const compositor::Image> readImageFile(const QString& path, QStr
         QApplication::restoreOverrideCursor();
         if (!developed && error) *error = QString::fromStdString(message);
         return developed;
+    }
+    // TGA through the core's reader, whichever Qt image plugins are installed.
+    if (path.endsWith(".tga", Qt::CaseInsensitive)) {
+        std::string why;
+        auto image = compositor::readTgaImage(path.toStdString(), &why);
+        if (!image && error) *error = QString::fromStdString(why);
+        return image;
     }
     QImageReader reader(path);
     reader.setAutoTransform(true);
@@ -343,6 +372,26 @@ void MainWindow::exportTiff() {
     if (path.isEmpty()) return;
     QString error;
     if (!writeQtImage(path, "tiff", toQImage(*flattened), 100, session_->document()->resolution, &error)) showError(tr("Couldn’t export TIFF"), error);
+}
+
+void MainWindow::exportTga() {
+    if (!session_->hasDocument()) return;
+    auto flattened = session_->flattened();
+    if (!flattened) return;
+    QString path = askExportPath(tr("Export TGA"), tr("TGA image (*.tga)"), {"tga"});
+    if (path.isEmpty()) return;
+    std::string error;
+    if (!writeTgaImage(path.toStdString(), *flattened, &error)) showError(tr("Couldn’t export TGA"), QString::fromStdString(error));
+}
+
+void MainWindow::exportIco() {
+    if (!session_->hasDocument()) return;
+    auto flattened = session_->flattened();
+    if (!flattened) return;
+    QString path = askExportPath(tr("Export Icon"), tr("Windows icon (*.ico)"), {"ico"});
+    if (path.isEmpty()) return;
+    std::string error;
+    if (!writeIco(path.toStdString(), *flattened, defaultIcoSizes, &error, &*session_->document())) showError(tr("Couldn’t export the icon"), QString::fromStdString(error));
 }
 
 void MainWindow::dragEnterEvent(QDragEnterEvent* e) {

@@ -5,8 +5,11 @@
 #include "AutomationHandlers.h"
 #include "CanvasWidget.h"
 #include "ImageConvert.h"
+#include "MainWindow.h"
+#include "compositor/ico.h"
 #include "compositor/png.h"
 #include "compositor/psd_writer.h"
+#include "compositor/tga.h"
 #include <QFileInfo>
 #include <QPainter>
 #include <algorithm>
@@ -90,8 +93,8 @@ void AutomationServer::registerDocumentHandlers() {
         w->openPath(path);
         EditorSession* s = session();
         QJsonObject out{{"tab", w->currentTabIndex()}, {"title", s->title()}, {"width", s->hasDocument() ? s->document()->width : 0}, {"height", s->hasDocument() ? s->document()->height : 0}};
-        if (path.endsWith(".psd", Qt::CaseInsensitive) || path.endsWith(".psb", Qt::CaseInsensitive) || path.endsWith(".clip", Qt::CaseInsensitive)) {
-            if (!s->hasDocument()) fail(path.endsWith(".clip", Qt::CaseInsensitive) ? "the Clip Studio file could not be imported" : "the Photoshop file could not be imported");
+        if (isLayeredPath(path)) {
+            if (!s->hasDocument()) fail("the file could not be imported: " + QFileInfo(path).fileName());
             out["layers"] = int(s->document()->layers.size());
             out["notes"] = QJsonArray::fromStringList(w->lastImportNotes());
         }
@@ -153,7 +156,13 @@ void AutomationServer::registerDocumentHandlers() {
             QString error;
             if (!writeQtImage(path, suffix == "webp" ? "webp" : "tiff", toQImage(*flat), integer(p, "quality", 90), session()->document()->resolution, &error))
                 fail("couldn't write " + path + ": " + error);
-        } else fail("path must end in .psd, .psb, .png, .jpg, .jpeg, .webp, .tif or .tiff", invalidParams);
+        } else if (suffix == "tga") {
+            std::string error;
+            if (!writeTgaImage(path.toStdString(), *flat, &error)) fail("couldn't write " + path + ": " + qs(error));
+        } else if (suffix == "ico") {
+            std::string error;
+            if (!writeIco(path.toStdString(), *flat, defaultIcoSizes, &error, &doc)) fail("couldn't write " + path + ": " + qs(error));
+        } else fail("path must end in .psd, .psb, .png, .jpg, .jpeg, .webp, .tif, .tiff, .tga or .ico", invalidParams);
         return QJsonObject{{"path", path}, {"width", flat->width()}, {"height", flat->height()}};
     });
     add("document.close", [session](const QJsonObject& p) {

@@ -277,7 +277,10 @@ def document_new(width: int = 1920, height: int = 1080, resolution: float = 72) 
 
 @edit("Open a file")
 def document_open(path: str) -> str:
-    """Open a .comp project (in its own tab), a Photoshop .psd/.psb (in its own tab, with its layers; the reply lists what could not be carried), or an image file, camera RAW files included (CR2, NEF, ARW, DNG, ...; developed with the camera white balance), as a layer (a first image creates the canvas)."""
+    """Open a .comp project (in its own tab); a layered file in its own tab, the reply listing its layers and what could
+    not be carried: Photoshop .psd/.psb, Clip Studio .clip, Aseprite .ase/.aseprite (first frame), an icon .ico/.cur (a
+    layer per size) or an animated GIF (a layer per frame, frame 1 visible); or an image file, .tga and camera RAW files included (CR2, NEF, ARW, DNG, ...; developed with the
+    camera white balance), as a layer (a first image creates the canvas)."""
     return text(call("document.open", path=os.path.abspath(path)))
 
 
@@ -297,8 +300,8 @@ def document_save(path: Optional[str] = None) -> str:
 
 @outside("Export an image")
 def document_export(path: str, quality: int = 85, background: str = "#ffffff") -> str:
-    """Flatten and export to a .png, .webp or .tif (these keep transparency; WebP at quality 100 is
-    lossless) or .jpg (over background, at quality)."""
+    """Flatten and export to a .png, .webp, .tif or .tga (these keep transparency; WebP at quality 100 is
+    lossless), a .ico (16, 32, 48 and 256 px sizes), or .jpg (over background, at quality); .psd/.psb keep layers."""
     return text(call("document.export", path=os.path.abspath(path), quality=quality, background=background))
 
 

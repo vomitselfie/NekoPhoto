@@ -150,3 +150,7 @@ add_test(NAME raw_tests COMMAND raw_tests)
 add_executable(vectorlayer_tests vectorlayer_tests.cpp)
 target_link_libraries(vectorlayer_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME vectorlayer_tests COMMAND vectorlayer_tests)
+
+add_executable(formats_tests formats_tests.cpp)
+target_link_libraries(formats_tests PRIVATE compositor::core compositor_warnings ZLIB::ZLIB)
+add_test(NAME formats_tests COMMAND formats_tests)

@@ -61,6 +61,17 @@ def remaining_methods(rpc):
     rpc.call("render", maxSize=64)
     image = os.path.join(work, "flat.png")
     rpc.call("document.export", path=image)
+    # TGA and ICO through the core's writers and readers: the TGA comes back as a layer, the icon in a tab of its own.
+    tga, ico = os.path.join(work, "flat.tga"), os.path.join(work, "flat.ico")
+    assert rpc.call("document.export", path=tga)["width"] == 200
+    rpc.call("document.export", path=ico)
+    rpc.call("document.import", path=tga)
+    rpc.call("history.undo")
+    here = rpc.call("tabs.list")
+    icon = rpc.call("document.open", path=ico)
+    assert (icon["width"], icon["layers"]) == (256, 4), icon
+    rpc.call("tabs.close", index=icon["tab"], discard=True)
+    rpc.call("tabs.select", index=next(t["index"] for t in here if t["current"]))
     placed = rpc.call("document.import", path=image, x=100, y=60)
     rpc.call("layers.duplicate")
     copy = rpc.call("layers.list")[0]

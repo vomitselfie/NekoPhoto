@@ -98,6 +98,10 @@ set(COMPOSITOR_HAVE_SQLITE ${COMPOSITOR_HAVE_SQLITE} PARENT_SCOPE)
 
 add_library(compositor_core STATIC
     src/abr.cpp
+    src/aseprite.cpp
+    src/gif.cpp
+    src/ico.cpp
+    src/tga.cpp
     src/adjustments.cpp
     src/adjustments_more.cpp
     src/colorlookup.cpp

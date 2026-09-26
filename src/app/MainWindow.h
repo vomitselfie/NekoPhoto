@@ -17,6 +17,10 @@ class QStackedWidget;
 
 namespace app {
 
+/// A file that opens in its own tab with its layers: .psd, .psb, .clip, .ico, .cur, .ase, .aseprite, or a GIF of
+/// more than one frame.
+bool isLayeredPath(const QString& path);
+
 class Autosave;
 
 class CanvasFrame;
@@ -53,8 +57,8 @@ public:
     /// A file handed over from another launch: a project or PSD as `openPath` does, an image as a document of
     /// its own rather than a layer of the current one (a double-click in the file manager means "open this").
     void openAsDocument(const QString& path);
-    /// Imports a PSD/PSB into a new tab; the notes say what was left behind.
-    /// A Photoshop or Clip Studio file in a new tab, with a note of what did not carry over.
+    /// A layered file (Photoshop, Clip Studio, Aseprite, an icon's sizes or an animated GIF's frames) in a new
+    /// tab, with a note of what did not carry over.
     void openLayeredFile(const QString& path);
     const QStringList& lastImportNotes() const { return lastImportNotes_; }
     EditorSession* session() const { return session_; }
@@ -123,6 +127,9 @@ private:
     void exportJpeg();
     void exportWebp();
     void exportTiff();
+    void exportTga();
+    /// A multi-size .ico (16, 32, 48 and 256 px).
+    void exportIco();
     /// A layered PSD, after a summary of anything Photoshop cannot carry.
     void exportPsd();
 
