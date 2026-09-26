@@ -430,9 +430,17 @@ int main(int argc, char** argv) {
                 const int page = name.section(':', 1).toInt();
                 for (auto* w : window.findChildren<app::WelcomeDialog*>()) for (int i = 0; i < page; i++) for (auto* b : w->findChildren<QPushButton*>()) if (b->text() == QObject::tr("Next")) { b->click(); break; }
             }
-            else if (name == "text" || name == "fonts") {
+            else if (name == "text" || name == "text:styled" || name == "fonts") {
                 compositor::LayerText text = s->textStyle;
                 text.text = "Hello";
+                if (name == "text:styled") {
+                    // Letters in several styles, to show the editor's runs and the Character section's mixed values.
+                    text.text = "Hello styled\nworld";
+                    compositor::TextRunPatch red; red.color = std::array<double, 3>{0.85, 0.1, 0.1}; red.fontSize = text.fontSize * 1.5; red.weight = 800;
+                    compositor::styleTextRange(text, 6, 6, red);
+                    compositor::TextRunPatch under; under.underline = true; under.italic = true; under.caps = compositor::TextRun::Caps::Small;
+                    compositor::styleTextRange(text, 13, 5, under);
+                }
                 if (s->hasDocument()) s->addTextLayer(QPointF(s->document()->width / 3.0, s->document()->height / 3.0), text, true);
                 if (name == "fonts") QTimer::singleShot(100, &window, [] { for (QWidget* w : QApplication::topLevelWidgets()) for (auto* picker : w->findChildren<app::FontPicker*>()) if (w->isVisible()) { picker->showPicker(); return; } });
             }

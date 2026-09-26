@@ -9,6 +9,7 @@
 #include "image.h"
 #include "transform.h"
 #include "uuid.h"
+#include <array>
 #include <map>
 #include <optional>
 #include <set>
@@ -140,11 +141,30 @@ TextRun baseTextRun(const LayerText& text);
 /// it starts in).
 std::vector<TextRun> adjustTextRuns(const std::vector<TextRun>& runs, const std::string& before, const std::string& after);
 /// Adjacent equal runs merged, the plain fields set from the first run, and a single run they say in full dropped.
-void settleTextRuns(LayerText& text);
+/// A lone run's leading keeps it unless `leadingIsAuto` (a PSD's reader, which records the automatic leading on
+/// every run and hands a single style's leading to the layer's line spacing).
+void settleTextRuns(LayerText& text, bool leadingIsAuto = false);
 /// `after` (an edit of `before` through its plain fields, its runs untouched) with the edit carried into the runs:
 /// the text's change moves the run boundaries, a new size scales every run by the same factor, and any other
 /// field changed is given to every run.
 LayerText carryTextEdit(const LayerText& before, LayerText after);
+
+/// A change to some of a run's style (Photoshop's Character panel on a selection): each field set is given to the
+/// runs it covers, the rest left alone.
+struct TextRunPatch {
+    std::optional<std::string> fontFamily;
+    std::optional<double> fontSize;
+    std::optional<bool> bold, italic;          // bold also clears the weight (the face is then chosen by `bold`)
+    std::optional<int> weight;                 // 0, or 100..900: bold follows (600 and up)
+    std::optional<std::array<double, 3>> color;
+    std::optional<double> letterSpacing, baselineShift, leading;
+    std::optional<TextRun::Caps> caps;
+    std::optional<bool> underline, strikethrough;
+    void applyTo(TextRun& run) const;
+};
+/// `text` with `patch` given to the UTF-16 units [start, start + length) (clamped to the text): the runs split at
+/// the range's ends, then settled (settleTextRuns).
+void styleTextRange(LayerText& text, int start, int length, const TextRunPatch& patch);
 
 struct Layer {
     Uuid id;

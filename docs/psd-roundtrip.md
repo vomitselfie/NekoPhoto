@@ -81,10 +81,15 @@ baseline shift, leading, caps (small or all) and underline or strikethrough, in 
 weight comes from its name, in words ("Medium", "Light") or Linotype's abbreviations (`HelveticaNeueLTStd-Th`, `-Lt`,
 `-Md`, `-BdCn`). The app draws each line through QTextLayout with a format per run; a line sits the largest leading
 among its runs below the one before (Photoshop's rule), tabs stop every 36 pixels (Photoshop's half inch), and export
-writes one style run per run with its own face in the font set. Editing through the text dialog or `text.set`
-carries into the runs: typing extends the run it starts in, a new size scales every run (and its leading), and any
-other field changed applies to all of them; a field the dialog merely rounded (a whole-pixel size, a stand-in for a
-missing font) is not a change. Projects keep the runs in the manifest's text object (the Mac app ignores them).
+writes one style run per run with its own face in the font set. The text dialog edits the runs letter by letter: its
+editor holds each run's style exactly in the character formats (`src/app/RichText.cpp`), so what is not touched comes
+back unchanged, typing takes the style of the letter before it, and its Character section restyles the selected
+letters (all of them when none are) through `styleTextRange`, which `text.styleRange` also uses. `text.set` carries
+into the runs: typing extends the run it starts in, a new size scales every run (and its leading), and any other field
+changed applies to all of them. A lone run left with a leading of its own stays a run (the plain fields cannot say a
+leading); a PSD's reader records the automatic leading on every run, so there a single style still becomes plain
+text. Export writes every run's leading as fixed leading (the line height the app draws), so runs that had automatic
+leading come back with that number. Projects keep the runs in the manifest's text object (the Mac app ignores them).
 
 **Missing faces.** A face that is not installed is asked for by its family name; for faces sold with Adobe's apps
 the app asks fontconfig for a free twin with the same metrics (Helvetica and Helvetica Neue: TeX Gyre Heros, Nimbus

@@ -277,6 +277,40 @@ void AutomationServer::registerLayersHandlers() {
         const Layer* updated = s->document()->find(l.id);
         return updated ? layerJson(*updated, 0) : QJsonObject{};
     });
+    add("text.styleRange", [session, layer](const QJsonObject& p) {
+        // Photoshop's Character panel on selected letters: the fields given, over [start, start + length) in UTF-16
+        // units of the text (default all of it).
+        EditorSession* s = session();
+        const Layer& l = has(p, "id") ? layer(p) : [&]() -> const Layer& { const Layer* a = s->activeLayer(); if (!a) fail("no active layer; pass the text layer's id"); return *a; }();
+        std::optional<LayerText> current = s->layerText(l.id);
+        if (!current) fail("the layer is not a text layer (or its pixels were edited); add one with layers.add kind text", invalidParams);
+        const int total = utf16Length(current->text);
+        const int start = has(p, "start") ? integer(p, "start") : 0;
+        const int length = has(p, "length") ? integer(p, "length") : total - start;
+        if (start < 0 || length < 0 || start + length > total) fail(QString("start and length must lie within the text's %1 UTF-16 units").arg(total), invalidParams);
+        TextRunPatch patch;
+        if (has(p, "font")) patch.fontFamily = str(p, "font").toStdString();
+        if (has(p, "size")) { double size = num(p, "size"); if (!(size >= 1 && size <= 2000)) fail("size must be 1..2000 pixels", invalidParams); patch.fontSize = size; }
+        if (has(p, "bold")) patch.bold = flag(p, "bold", false);
+        if (has(p, "weight")) { int w = integer(p, "weight"); if (w != 0 && (w < 100 || w > 900)) fail("weight must be 0 or 100..900", invalidParams); patch.weight = w; }
+        if (has(p, "italic")) patch.italic = flag(p, "italic", false);
+        if (has(p, "color")) { QColor c(str(p, "color")); if (!c.isValid()) fail("color must be a CSS colour", invalidParams); patch.color = std::array<double, 3>{c.redF(), c.greenF(), c.blueF()}; }
+        if (has(p, "letterSpacing")) patch.letterSpacing = std::clamp(num(p, "letterSpacing"), -100.0, 500.0);
+        if (has(p, "baselineShift")) patch.baselineShift = std::clamp(num(p, "baselineShift"), -1000.0, 1000.0);
+        if (has(p, "leading")) patch.leading = std::clamp(num(p, "leading"), 0.0, 5000.0);
+        if (has(p, "caps")) {
+            const QString c = str(p, "caps").toLower();
+            if (c == "normal") patch.caps = TextRun::Caps::Normal; else if (c == "small") patch.caps = TextRun::Caps::Small; else if (c == "all") patch.caps = TextRun::Caps::All;
+            else fail("caps must be normal, small or all", invalidParams);
+        }
+        if (has(p, "underline")) patch.underline = flag(p, "underline", false);
+        if (has(p, "strikethrough")) patch.strikethrough = flag(p, "strikethrough", false);
+        LayerText text = *current;
+        styleTextRange(text, start, length, patch);
+        s->setLayerText(l.id, text);
+        const Layer* updated = s->document()->find(l.id);
+        return updated ? layerJson(*updated, 0) : QJsonObject{};
+    });
     add("layers.delete", [session, layer](const QJsonObject& p) {
         std::vector<Uuid> ids;
         if (has(p, "ids")) for (QJsonValue v : p.value("ids").toArray()) ids.push_back(layer(QJsonObject{{"id", v}}).id);

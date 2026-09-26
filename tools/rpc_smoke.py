@@ -420,6 +420,19 @@ def main():
     assert text["pixelSize"]["width"] > 20 and text["pixelSize"]["height"] > 20, text
     edited = rpc.call("text.set", text="Hello there", bold=True, align="center")
     assert edited["text"]["bold"] and edited["text"]["align"] == "center" and edited["pixelSize"]["width"] > text["pixelSize"]["width"], edited
+    # Letters in their own style: "there" red, larger, small caps; then back to one style.
+    styled = rpc.call("text.styleRange", id=text["id"], start=6, length=5, color="#ff0000", size=48, caps="small", baselineShift=4, leading=60, underline=True)
+    runs = styled["text"]["runs"]
+    assert [r["length"] for r in runs] == [6, 5], runs
+    assert runs[1]["color"] == "#ff0000" and runs[1]["size"] == 48 and runs[1]["caps"] == "small" and runs[1]["leading"] == 60 and runs[1]["underline"], runs
+    assert runs[0]["size"] == 36 and "caps" not in runs[0], runs
+    try:
+        rpc.call("text.styleRange", id=text["id"], start=8, length=10, bold=True)
+        raise AssertionError("a range past the text should be refused")
+    except RuntimeError as e:
+        assert "UTF-16" in str(e), e
+    plain = rpc.call("text.styleRange", id=text["id"], color="#ff8800", size=36, caps="normal", baselineShift=0, leading=0, underline=False)
+    assert "runs" not in plain["text"], plain
     rpc.call("layers.delete", id=text["id"])
     rpc.call("layers.select", id=target["id"])
 

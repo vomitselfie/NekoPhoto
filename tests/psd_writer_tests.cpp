@@ -526,10 +526,15 @@ TEST_CASE(text_in_several_styles_edits_and_round_trips) {
     CHECK(runs[0].length == 2 && runs[1].length == 4);
     runs = adjustTextRuns(text.runs, "Big small", "Big small!");
     CHECK(runs[0].length == 4 && runs[1].length == 6);
-    // All of the second run gone: one run left, and it says everything the plain fields do.
+    // All of the second run gone: one run left; its leading, which the plain fields cannot say, keeps it.
     LayerText cut = text;
     cut.text = "Big ";
     LayerText edited = carryTextEdit(text, cut);
+    CHECK(edited.runs.size() == 1 && edited.runs[0].leading == 48 && edited.runs[0].length == 4 && edited.fontSize == 40);
+    // Without one, the plain fields say it all.
+    LayerText autoLeading = text;
+    for (TextRun& r : autoLeading.runs) r.leading = 0;
+    edited = carryTextEdit(autoLeading, LayerText{[&] { LayerText c = autoLeading; c.text = "Big "; return c; }()});
     CHECK(edited.runs.empty() && edited.fontSize == 40);
 
     // An edit through the plain fields: a new size scales each run, a colour goes to all.

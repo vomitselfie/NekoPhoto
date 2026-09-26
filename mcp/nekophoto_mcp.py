@@ -343,6 +343,16 @@ def text_set(id: Optional[str] = None, text_content: Optional[str] = None, font:
     return text(call("text.set", id=id, text=text_content, font=font, size=size, bold=bold, italic=italic, color=color, align=align, lineSpacing=line_spacing, letterSpacing=letter_spacing))
 
 
+@edit("Style letters of a text layer")
+def text_style_range(id: Optional[str] = None, start: Optional[int] = None, length: Optional[int] = None, font: Optional[str] = None, size: Optional[float] = None,
+                     bold: Optional[bool] = None, weight: Optional[int] = None, italic: Optional[bool] = None, color: Optional[str] = None,
+                     letter_spacing: Optional[float] = None, baseline_shift: Optional[float] = None, leading: Optional[float] = None, caps: Optional[str] = None,
+                     underline: Optional[bool] = None, strikethrough: Optional[bool] = None) -> str:
+    """Style some letters of a text layer (the active layer, or id), like Photoshop's Character panel on a selection: start and length count UTF-16 units of the text (default all of it); font, size (px), bold, weight (100..900, 0 for auto), italic, color (CSS), letter_spacing (tracking, px), baseline_shift (px up), leading (px, 0 auto), caps (normal, small, all), underline, strikethrough. Only the fields given change; layers_get lists the resulting text.runs."""
+    return text(call("text.styleRange", id=id, start=start, length=length, font=font, size=size, bold=bold, weight=weight, italic=italic, color=color,
+                     letterSpacing=letter_spacing, baselineShift=baseline_shift, leading=leading, caps=caps, underline=underline, strikethrough=strikethrough))
+
+
 @edit("Delete layers")
 def layers_delete(ids: list[str]) -> str:
     """Delete layers by id (layers clipped to them keep their masked look baked in)."""
