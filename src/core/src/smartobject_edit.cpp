@@ -5,6 +5,7 @@
 // instance's scale; Rasterize keeps the pixels.
 #include "compositor/smartobject_edit.h"
 #include "compositor/smartfilter.h"
+#include "compositor/warpmesh.h"
 #include "compositor/png.h"
 #include "compositor/psd.h"
 #include "compositor/psd_writer.h"
@@ -299,4 +300,70 @@ void rasterizeSmartObject(Layer& layer) {
     layer.smartImage.reset();
 }
 
+bool warpLayer(Document& document, Layer& layer, const TextWarp& warp, std::string* error) {
+    auto fail = [&](const char* why) { if (error) *error = why; return false; };
+    if (layer.isGroup || layer.adjustment) return fail("Only text, smart objects and pixel layers can be warped.");
+    if (layer.isLiveText()) { layer.text->warp = warp; return true; }   // the app redraws it
+    if (!warp.active()) return fail("Choose a warp style.");
+    if (!layer.asset || !layer.asset->image || layer.asset->image->isEmpty()) return fail("The layer has no pixels to warp.");
+    if (layer.isLiveSmartObject()) {
+        SmartObjectInstance& so = *layer.smartObject;
+        if (so.locked()) return fail("This smart object shows the preview its file carried; it cannot be warped here.");
+        if (!smartObjectPixelsArePlacement(so)) return fail("This smart object is already warped or has Smart Filters; rasterize it to warp it again.");
+        auto source = document.smartObjects.find(so.sourceId);
+        if (source == document.smartObjects.end() || !source->second->image) return fail("Its contents cannot be read.");
+        const int w = source->second->image->width(), h = source->second->image->height();
+        auto mesh = styleWarpMesh(warp.style, warp.bend, warp.verticalOrientation, w, h);
+        if (!mesh) return fail("That warp style is not one NekoPhoto draws.");
+        distortWarpMesh(*mesh, warp.horizontal, warp.vertical);
+        // The quad is the mesh's hull placed as the contents are: through the layer's own transform.
+        const auto [x0, x1] = std::minmax_element(mesh->xs.begin(), mesh->xs.end());
+        const auto [y0, y1] = std::minmax_element(mesh->ys.begin(), mesh->ys.end());
+        const double corners[4][2] = {{*x0, *y0}, {*x1, *y0}, {*x1, *y1}, {*x0, *y1}};
+        std::array<double, 8> quad{};
+        const int pw = layer.asset->image->width(), ph = layer.asset->image->height();
+        for (int i = 0; i < 4; i++) {
+            const Point p = mapThroughTransform(layer.transform, pw, ph, corners[i][0] * pw / w, corners[i][1] * ph / h);
+            quad[size_t(i * 2)] = p.x; quad[size_t(i * 2 + 1)] = p.y;
+        }
+        SmartObjectInstance next = so;
+        bool written = false;
+        for (PsdBlock& b : next.psdBlocks)
+            if (auto warped = warpPsdPlacement(b.key, b.data, *mesh, quad)) { b.data = std::move(*warped); written = true; }
+        if (!written) return fail("Its placement cannot take a warp.");
+        auto raster = warpedSmartObjectRaster(next, *source->second->image, quad);
+        if (!raster) return fail("The warp could not be drawn.");
+        if (layer.mask && !layer.mask->placement) layer.mask->placement = layer.maskTransform();
+        const Sampling sampling = layer.transform.sampling;
+        layer.asset = Asset::make(raster->image, layer.name);
+        layer.transform = raster->transform;
+        layer.transform.sampling = sampling;
+        layer.smartImage = raster->image;
+        next.quad = quad;
+        next.placedTransform = layer.transform;
+        next.placedWidth = raster->image->width();
+        next.placedHeight = raster->image->height();
+        so = std::move(next);
+        return true;
+    }
+    // Pixels: bent over their own rectangle, for good.
+    const Image& image = *layer.asset->image;
+    auto mesh = styleWarpMesh(warp.style, warp.bend, warp.verticalOrientation, image.width(), image.height());
+    if (!mesh) return fail("That warp style is not one NekoPhoto draws.");
+    distortWarpMesh(*mesh, warp.horizontal, warp.vertical);
+    auto bent = renderWarpedOverBox(image, *mesh, Rect(0, 0, image.width(), image.height()));
+    if (!bent) return fail("The warp could not be drawn.");
+    if (layer.mask && !layer.mask->placement) layer.mask->placement = layer.maskTransform();
+    // The bent raster's own offset, carried through the layer's scale (a turned layer keeps its turn about the new box).
+    const double sx = layer.transform.size.width / image.width(), sy = layer.transform.size.height / image.height();
+    const Point origin(layer.transform.origin.x + bent->transform.origin.x * sx, layer.transform.origin.y + bent->transform.origin.y * sy);
+    layer.asset = Asset::make(bent->image, layer.name);
+    layer.transform.origin = origin;
+    layer.transform.size = Size(bent->image->width() * sx, bent->image->height() * sy);
+    layer.smartObject.reset();
+    layer.smartImage.reset();
+    return true;
+}
+
 } // namespace compositor
+

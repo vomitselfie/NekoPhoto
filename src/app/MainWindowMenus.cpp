@@ -1,5 +1,6 @@
 // The main window's menus, tool rail and colour swatches.
 #include "MainWindow.h"
+#include "WarpDialog.h"
 #include "CanvasFrame.h"
 #include "Dialogs.h"
 #include "ImageConvert.h"
@@ -148,6 +149,7 @@ void MainWindow::buildMenus() {
     needsDocument(edit->addAction(tr("&Paste"), QKeySequence::Paste, this, [this] { session_->paste(); }));
     edit->addSeparator();
     needsDocument(edit->addAction(tr("Free &Transform"), QKeySequence("Ctrl+T"), this, [this] { session_->transformCommand(); }));
+    needsDocument(edit->addAction(tr("&Warp…"), this, [this] { WarpDialog(session_, this).exec(); }));
     needsDocument(edit->addAction(tr("Fill with Foreground"), QKeySequence("Alt+Backspace"), this, [this] { session_->fillSelection(session_->foregroundColor); }));
     needsDocument(edit->addAction(tr("Fill with Background"), QKeySequence("Ctrl+Backspace"), this, [this] { session_->fillSelection(session_->backgroundColor); }));
     QAction* clear = needsDocument(edit->addAction(tr("Clear"), QKeySequence(Qt::Key_Delete), this, [this] { if (session_->document() && session_->document()->selection) session_->clearSelectionPixels(); else deleteSelectedLayers(); }));
@@ -276,6 +278,8 @@ void MainWindow::buildMenus() {
     QMenu* filter = menuBar()->addMenu(tr("Filte&r"));
     auto filterAction = [this, filter, &needsDocument](const QString& label, FilterKind kind) {
         needsDocument(filter->addAction(label, this, [this, kind] {
+            // On a smart object the blurs and noise go on as Smart Filters, as in Photoshop.
+            if (kind != FilterKind::LensCorrection && session_->canAddSmartFilter()) { (new FilterDialog(session_, kind, this, true))->show(); return; }
             if (session_->smartObjectBlocksPixels(true)) return;
             if (!session_->canAdjustPixels()) { showError(tr("Filters"), tr("Select a visible image layer (not a mask) to filter its pixels.")); return; }
             (new FilterDialog(session_, kind, this))->show();

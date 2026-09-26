@@ -108,6 +108,52 @@ bool EditorSession::replaceSmartObjectContents(const QString& path, QString* err
     return true;
 }
 
+bool EditorSession::warpActiveLayer(const compositor::TextWarp& warp, QString* error) {
+    Layer* layer = activeLayerMutable();
+    if (!canEditLayers() || !layer) { if (error) *error = tr("Select a layer to warp."); return false; }
+    if (isMaskSelected_) { if (error) *error = tr("Warp the layer, not its mask."); return false; }
+    endOpacityEdit();
+    Layer before = *layer;
+    beginEdit("Warp");
+    std::string why;
+    bool ok = compositor::warpLayer(*document_, *layer, warp, &why);
+    if (ok && layer->text) ok = redrawText(*layer);
+    if (!ok) {
+        *layer = before;
+        endEdit();
+        if (error) *error = why.empty() ? tr("The layer could not be warped.") : QString::fromStdString(why);
+        return false;
+    }
+    endEdit();
+    notifyDocument();
+    return true;
+}
+
+bool EditorSession::canAddSmartFilter() const {
+    const Layer* layer = activeLayer();
+    return canEditLayers() && layer && layer->isLiveSmartObject() && !layer->smartObject->locked() && !isMaskSelected_;
+}
+
+bool EditorSession::addSmartFilter(const compositor::SmartFilterEntry& entry, QString* error) {
+    Layer* layer = activeLayerMutable();
+    if (!canAddSmartFilter() || !layer) { if (error) *error = tr("Select an editable smart object."); return false; }
+    endOpacityEdit();
+    const Layer before = *layer;
+    const auto carry = document_->psdCarry;
+    beginEdit("Smart Filter");
+    std::string why;
+    if (!compositor::addSmartFilter(*document_, *layer, entry, &why)) {
+        *layer = before;
+        document_->psdCarry = carry;
+        endEdit();
+        if (error) *error = QString::fromStdString(why);
+        return false;
+    }
+    endEdit();
+    notifyDocument();
+    return true;
+}
+
 bool EditorSession::rasterizeSmartObject() {
     Layer* layer = activeLayerMutable();
     if (!canEditLayers() || !layer || !layer->smartObject) return false;

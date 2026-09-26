@@ -130,11 +130,25 @@ std::optional<std::vector<uint8_t>> replaceSmartFilterRecords(const std::vector<
 std::optional<PlacedRaster> filteredSmartObjectRaster(const std::vector<PsdBlock>& globals,
                                                       const SmartObjectInstance& instance, const Image& source, const std::array<double, 8>& quad);
 /// The instance placed on `quad` without its filters, on the document's pixel grid.
-std::optional<PlacedRaster> placedSmartObjectRaster(const SmartObjectInstance& instance, const Image& source, const std::array<double, 8>& quad);
+/// `clip`, when given, bounds it (document pixels).
+std::optional<PlacedRaster> placedSmartObjectRaster(const SmartObjectInstance& instance, const Image& source, const std::array<double, 8>& quad,
+                                                    const Rect* clip = nullptr);
 
 /// Warped and filtered instances whose layer was moved, scaled or rotated since they were drawn, drawn again from their
 /// contents on the moved quad (their pixels are not the placement, so resampling them would soften them and slide the
 /// filter mask). Returns how many were redrawn.
 int refreshSmartObjectRasters(Document& document);
 
+/// The placement block with `stack` as its 'filterFX' (Photoshop 2026's shape, Patchy's authoring: its keys and id
+/// forms), replacing any stack it had; none for a block that is not a SoLd / SoLE or a stack with an entry not drawn here.
+std::optional<std::vector<uint8_t>> setPsdSmartFilterStack(const std::string& key, const std::vector<uint8_t>& payload, const SmartFilterStack& stack);
+/// Photoshop's entry name for a filter ("Gaussian Blur..."); empty for none.
+std::string smartFilterName(const SmartFilterParameters& parameters);
+
+/// Adds `entry` on top of a smart object's Smart Filters (a first filter starts the stack, its mask all white): the
+/// placement's 'filterFX' and the document's 'FEid' cache record for it are written, and the instance is drawn again.
+/// False, with `error`, for a layer that is not an editable smart object or a stack not drawn here.
+bool addSmartFilter(Document& document, Layer& layer, const SmartFilterEntry& entry, std::string* error);
+
 } // namespace compositor
+

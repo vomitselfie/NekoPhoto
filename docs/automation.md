@@ -120,6 +120,10 @@ macOS opens; projects here hold up to a gigapixel), `document.export` (.psd, lay
 
 Smart objects: `smartObject.convert` (the selection or `ids`), `smartObject.place` (`path`), `smartObject.replace`
 (`path`), `smartObject.rasterize`, `smartObject.editContents` (opens a tab) and `smartObject.commit` (in that tab).
+`smartObject.addFilter` adds a Smart Filter (any of the thirteen drawn here, with its settings, opacity and blend) on
+top of a smart object's stack. `layers.warp` bends a layer with one of Photoshop's fifteen presets (`style`, `bend`, `horizontal`, `vertical`,
+`orientation`): Warp Text on text (`none` removes it), a mesh baked into a smart object's placement, bent pixels
+otherwise.
 Layers: `layers.select`, `layers.set` (name, visible, opacity, blend (a folder also takes "Pass Through"), sampling,
 clipping), `layers.add` (pixels, group, adjustment, or text with `text`, `x`, `y`, `font`, `size`, `bold`,
 `italic`, `color`, `align`; `below: true` puts it under the active layer), `text.set` (a text layer's

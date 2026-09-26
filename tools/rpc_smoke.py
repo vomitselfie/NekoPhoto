@@ -219,6 +219,19 @@ def main():
             raise AssertionError(method + " should refuse a smart object")
         except RuntimeError as e:
             assert "smart object" in str(e), e
+    # A Smart Filter: still a smart object, drawn through its filter.
+    filtered = rpc.call("smartObject.addFilter", id=converted["id"], kind="gaussian blur", radius=3)
+    assert filtered["kind"] == "smartObject", filtered
+    rpc.call("history.undo")
+    # Warped: the smart object keeps its contents, the warp baked into its placement.
+    warped = rpc.call("layers.warp", id=converted["id"], style="arc", bend=40)
+    assert warped["kind"] == "smartObject", warped
+    rpc.call("history.undo")
+    try:
+        rpc.call("layers.warp", id=converted["id"], style="spiral")
+        raise AssertionError("an unknown warp style should be refused")
+    except RuntimeError as e:
+        assert "presets" in str(e), e
     assert rpc.call("smartObject.rasterize", id=converted["id"])["kind"] == "pixels"
     rpc.call("history.undo")
     print("smart objects: placed, converted, edited, committed, rasterized")

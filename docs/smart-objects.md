@@ -149,6 +149,26 @@ Every other drawn filter matches Photoshop's preview exactly or within half a le
 a five-tone filter mask, whose previews ignore the mask entirely (probably stale; a hard mask on the same stack
 matches exactly), Radial Blur (2.3) and the two above.
 
+## Warping and adding Smart Filters
+
+**Edit ▸ Warp…** (and `layers.warp`) bends the active layer with one of Photoshop's fifteen presets, with bend and
+horizontal and vertical distortion (`warpLayer` in `smartobject_edit.cpp`):
+
+- a smart object has the preset baked into its placement as a Custom mesh over its contents (value 0, the mesh's
+  hull as the quad, as Photoshop's own bakes are) and is drawn again from them, so it stays a smart object;
+- text gets Warp Text (see psd-roundtrip.md), "None" removing it;
+- pixels are bent over their own rectangle, for good.
+
+A smart object already warped or filtered is refused (rasterize it to warp it again).
+
+**Smart Filters** (`addSmartFilter` in `smartfilter.cpp`, `smartObject.addFilter`): Filter ▸ Gaussian Blur, Motion
+Blur and Add Noise on a smart object add a Smart Filter, as in Photoshop, instead of asking to rasterize;
+automation adds any of the thirteen, with opacity and blend. The placement gets its `filterFX` in Photoshop 2026's
+shape (Patchy's authoring: `filterFXStyle`, each entry with its name, blend options, colours, `Fltr` and
+`filterID`, before the trailing `comp`); the document's `FEid` block gets the instance's record (a new block when
+the file had none), the unfiltered contents over the canvas and the mask kept or all white; the layer is drawn
+through the stack. A stack with a filter not drawn here cannot be added to.
+
 ## Not yet
 
-A Warp tool, adding or editing Smart Filters, a linked filter mask, relinking linked files.
+An interactive warp cage, editing or removing a Smart Filter, a linked filter mask, relinking linked files.

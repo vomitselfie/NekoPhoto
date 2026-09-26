@@ -27,7 +27,8 @@ private:
 class FilterDialog : public PixelDialog {
     Q_OBJECT
 public:
-    FilterDialog(EditorSession* session, compositor::FilterKind kind, QWidget* parent = nullptr);
+    /// `smart`: on a smart object, OK adds the filter as a Smart Filter instead of changing pixels.
+    FilterDialog(EditorSession* session, compositor::FilterKind kind, QWidget* parent = nullptr, bool smart = false);
 protected:
     bool apply() override;
 private:
@@ -36,6 +37,7 @@ private:
     bool identity() const;
     std::shared_ptr<compositor::Image> run(const compositor::Image& source, double scale) const;
     compositor::FilterKind kind_;
+    bool smart_ = false;
     compositor::FilterSettings settings_;
     uint32_t seed_;
     int margin_ = -1;

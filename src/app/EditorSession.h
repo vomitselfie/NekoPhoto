@@ -12,6 +12,7 @@
 #include "compositor/tipbrush.h"
 #include "compositor/filters.h"
 #include "compositor/document.h"
+#include "compositor/smartfilter.h"
 #include "compositor/history.h"
 #include "compositor/smartobject_edit.h"
 #include <QPointer>
@@ -460,6 +461,13 @@ public:
     bool replaceSmartObjectContents(const QString& path, QString* error);
     /// The active smart object as plain pixels.
     bool rasterizeSmartObject();
+    /// Warp the active layer with a preset (Edit ▸ Warp): Warp Text on text, a baked mesh on a smart object, bent
+    /// pixels otherwise; one undo step. False, with `error`, when the layer cannot take it.
+    bool warpActiveLayer(const compositor::TextWarp& warp, QString* error = nullptr);
+    /// Adds a Smart Filter on top of the active smart object's stack; one undo step.
+    bool addSmartFilter(const compositor::SmartFilterEntry& entry, QString* error = nullptr);
+    /// Whether the active layer is a smart object that can take Smart Filters (Photoshop's filter on a smart object).
+    bool canAddSmartFilter() const;
     /// The active smart object's contents as a document to edit, with the source they belong to.
     std::optional<std::pair<compositor::Document, std::string>> smartObjectContentsForEditing(QString* error) const;
     /// New contents for source `sourceId`, placed in every layer that places it (one undo step).

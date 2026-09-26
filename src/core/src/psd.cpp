@@ -877,12 +877,15 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             } else if (compression == 1) {
                 // Row byte counts for every channel first, then the rows.
                 Reader counts(data, available);
-                std::vector<size_t> rows(size_t(planeCount) * height);
+                // The counts must be in the file before anything is sized by them (a hostile file claimed gigabytes).
+                if (size_t(planeCount) * height * (psb ? 4 : 2) > available) { ok = false; }
+                std::vector<size_t> rows(ok ? size_t(planeCount) * height : 0);
                 for (size_t i = 0; i < rows.size(); i++) rows[i] = psb ? counts.u32() : counts.u16();
                 size_t offset = counts.position();
                 for (int c = 0; c < planeCount && ok; c++) {
                     size_t total = 0;
                     for (uint32_t y = 0; y < height; y++) total += rows[size_t(c) * height + y];
+                    if (offset + total > available) { ok = false; break; }
                     // A channel's rows as their own RLE stream: its own counts, then its data.
                     std::vector<uint8_t> stream;
                     stream.reserve(total + height * (psb ? 4 : 2));

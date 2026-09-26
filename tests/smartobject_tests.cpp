@@ -492,4 +492,68 @@ TEST_CASE(smart_filters_draw_from_the_contents_and_their_cache_follows) {
     CHECK(out3->pixel(14, 15)[3] > 0 && out3->pixel(14, 15)[3] < 255);
 }
 
+TEST_CASE(warp_a_smart_object_and_pixels) {
+    Document doc(120, 80);
+    auto source = makeSmartObjectSource(pngContents(40, 20, 200, "banner.png"));
+    doc.smartObjects[source->id] = source;
+    Layer so = smartObjectLayer(source, {20, 20, 60, 20, 60, 40, 20, 40}, "Banner");
+    doc.layers.push_back(so);
+    std::string error;
+    CHECK(warpLayer(doc, doc.layers[0], TextWarp{"warpArc", 50, 0, 0, false}, &error));
+    const Layer& warped = doc.layers[0];
+    REQUIRE(warped.isLiveSmartObject());
+    CHECK(!warped.smartObject->locked());
+    REQUIRE(smartObjectWarp(*warped.smartObject).has_value());
+    CHECK(warped.asset->image->height() > 20);   // the arc lifts it
+    // Twice is refused (a warp over a warp is not modelled here).
+    CHECK(!warpLayer(doc, doc.layers[0], TextWarp{"warpFlag", 30, 0, 0, false}, &error));
+    // Through PSD: still a warped, editable smart object.
+    auto back = throughPsd(doc);
+    REQUIRE(back.has_value());
+    CHECK(back->document.layers[0].isLiveSmartObject() && !back->document.layers[0].smartObject->locked());
+    CHECK(smartObjectWarp(*back->document.layers[0].smartObject).has_value());
+
+    // Pixels are bent for good; an unknown style is refused.
+    Layer pixels(Asset::make(filled(30, 10, 0, 0, 255), "Stripe"), Point(10, 50));
+    doc.layers.push_back(pixels);
+    CHECK(!warpLayer(doc, doc.layers[1], TextWarp{"warpSpiral", 50, 0, 0, false}, &error));
+    CHECK(warpLayer(doc, doc.layers[1], TextWarp{"warpBulge", 50, 0, 0, false}, &error));
+    CHECK(doc.layers[1].asset->image->height() > 10);
+    CHECK(!doc.layers[1].smartObject);
+}
+
+TEST_CASE(add_smart_filters_to_a_smart_object) {
+    Document doc(60, 40);
+    auto source = makeSmartObjectSource(pngContents(20, 10, 255, "chip.png"));
+    doc.smartObjects[source->id] = source;
+    doc.layers.push_back(smartObjectLayer(source, {20, 15, 40, 15, 40, 25, 20, 25}, "Chip"));
+    std::string error;
+    SmartFilterEntry blur;
+    blur.parameters = smartfilter::GaussianBlur{2};
+    REQUIRE(addSmartFilter(doc, doc.layers[0], blur, &error));
+    const Layer& once = doc.layers[0];
+    CHECK(once.isLiveSmartObject() && !once.smartObject->locked());
+    CHECK(smartObjectFiltered(*once.smartObject));
+    REQUIRE(doc.psdCarry);
+    CHECK(findSmartFilterCache(doc.psdCarry->globals, once.smartObject->placedId).has_value());
+    auto out = renderFlattened(doc);
+    CHECK(out->pixel(18, 20)[3] > 0 && out->pixel(18, 20)[3] < 255);   // blurred past its edge
+    // A second filter goes on top of the first.
+    SmartFilterEntry mosaic;
+    mosaic.parameters = smartfilter::Mosaic{4};
+    REQUIRE(addSmartFilter(doc, doc.layers[0], mosaic, &error));
+    std::optional<SmartFilterStack> stack;
+    for (auto& b : doc.layers[0].smartObject->psdBlocks) if ((stack = parseSmartFilterStack(b.key, b.data))) break;
+    REQUIRE(stack.has_value());
+    CHECK(stack->supported && stack->entries.size() == 2 && stack->entries[0].name == "Gaussian Blur..." && stack->entries[1].name == "Mosaic...");
+    // Through PSD: still filtered and drawn, not locked.
+    auto back = throughPsd(doc);
+    REQUIRE(back.has_value());
+    CHECK(back->document.layers[0].isLiveSmartObject() && !back->document.layers[0].smartObject->locked());
+    CHECK(smartObjectFiltered(*back->document.layers[0].smartObject));
+    // Not on pixels.
+    doc.layers.push_back(Layer(Asset::make(filled(5, 5, 0, 0, 0), "Plain"), Point(0, 0)));
+    CHECK(!addSmartFilter(doc, doc.layers[1], blur, &error));
+}
+
 TEST_MAIN()

@@ -56,4 +56,10 @@ std::vector<uint8_t> encodeSmartObjectContents(const Document& contents, const S
 /// The layer as plain pixels (it keeps what it shows).
 void rasterizeSmartObject(Layer& layer);
 
+/// Warp (Photoshop's Edit > Transform > Warp with a preset): text gets it as Warp Text (the app redraws it); a smart
+/// object has the preset baked into its placement as a Custom mesh over its contents, as Photoshop's own bakes are,
+/// and is drawn again from them; pixels are bent over their own rectangle. False, with `error`, when the layer cannot
+/// take it (a group, an adjustment, a preview-locked smart object, one already warped or filtered).
+bool warpLayer(Document& document, Layer& layer, const TextWarp& warp, std::string* error);
+
 } // namespace compositor

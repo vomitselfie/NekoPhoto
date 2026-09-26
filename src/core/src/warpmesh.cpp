@@ -303,7 +303,7 @@ void distortWarpMesh(WarpMesh& m, double horizontal, double vertical) {
 namespace {
 
 // Draws `image` through a forward lattice: `at(u, v)` gives the document point for the image's (u, v) in [0, 1]^2.
-std::optional<WarpedRaster> resampleThrough(const Image& image, const std::function<Point(double, double)>& at) {
+std::optional<WarpedRaster> resampleThrough(const Image& image, const std::function<Point(double, double)>& at, const Rect* clip = nullptr) {
     double minX = 1e300, minY = 1e300, maxX = -1e300, maxY = -1e300;
     for (int j = 0; j <= 16; j++)
         for (int i = 0; i <= 16; i++) {
@@ -320,9 +320,15 @@ std::optional<WarpedRaster> resampleThrough(const Image& image, const std::funct
             lattice[size_t(j * (cellsX + 1) + i)] = p;
             minX = std::min(minX, p.x); maxX = std::max(maxX, p.x); minY = std::min(minY, p.y); maxY = std::max(maxY, p.y);
         }
+    if (clip) {
+        minX = std::max(minX, clip->x); minY = std::max(minY, clip->y);
+        maxX = std::min(maxX, clip->x + clip->width); maxY = std::min(maxY, clip->y + clip->height);
+        if (!(maxX > minX) || !(maxY > minY)) return std::nullopt;
+    }
     const int left = int(std::floor(minX)), top = int(std::floor(minY));
     const int w = std::max(1, int(std::ceil(maxX)) - left), hgt = std::max(1, int(std::ceil(maxY)) - top);
-    if (w > maxImageSide || hgt > maxImageSide) return std::nullopt;
+    // Never more than a document may hold (a degenerate placement in a hostile file claimed far more).
+    if (w > maxImageSide || hgt > maxImageSide || int64_t(w) * hgt > 100000000) return std::nullopt;
 
     // Minified: sample a reduction, not the full contents (bilinear alone would alias).
     const double spread = std::max(image.width() / std::max(1.0, maxX - minX), image.height() / std::max(1.0, maxY - minY));
@@ -356,7 +362,7 @@ std::optional<WarpedRaster> resampleThrough(const Image& image, const std::funct
 
 } // namespace
 
-std::optional<WarpedRaster> renderWarpedImage(const Image& image, const WarpMesh& mesh, const std::array<double, 8>& quad) {
+std::optional<WarpedRaster> renderWarpedImage(const Image& image, const WarpMesh& mesh, const std::array<double, 8>& quad, const Rect* clip) {
     if (image.isEmpty() || mesh.xs.size() != size_t(mesh.uOrder * mesh.vOrder) || mesh.ys.size() != mesh.xs.size()) return std::nullopt;
     for (double v : quad) if (!std::isfinite(v)) return std::nullopt;
     // The control-point hull, not the warp bounds, is what Photoshop's placement quad describes.
@@ -364,7 +370,7 @@ std::optional<WarpedRaster> renderWarpedImage(const Image& image, const WarpMesh
     const auto [y0, y1] = std::minmax_element(mesh.ys.begin(), mesh.ys.end());
     const auto h = rectToQuad(*x0, *y0, *x1, *y1, quad);
     if (!h) return std::nullopt;
-    return resampleThrough(image, [&](double u, double v) { return apply(*h, evaluateWarpMesh(mesh, u, v)); });
+    return resampleThrough(image, [&](double u, double v) { return apply(*h, evaluateWarpMesh(mesh, u, v)); }, clip);
 }
 
 std::optional<WarpedRaster> renderWarpedOverBox(const Image& image, const WarpMesh& mesh, const Rect& box) {

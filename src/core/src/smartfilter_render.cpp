@@ -108,6 +108,7 @@ const uint8_t* sampleResult(const Result& result, int32_t documentX, int32_t doc
 Result embedInFilterCanvas(const Result& placed, PixelRect canvasBounds) {
     if (canvasBounds.empty() || placed.bounds == canvasBounds) return placed;
     Image canvas(canvasBounds.width, canvasBounds.height);
+    if (canvas.isEmpty()) return placed;   // larger than a buffer may be
     const auto copied = intersectRect(placed.bounds, canvasBounds);
     if (!copied.empty()) {
         const int sx = copied.x - placed.bounds.x, sy = copied.y - placed.bounds.y;
@@ -1211,6 +1212,7 @@ Result renderMosaic(const Result& input, int32_t cellSizePixels) {
 
 Image cropBuffer(const Image& source, PixelRect sourceBounds, PixelRect cropBounds) {
     Image cropped(cropBounds.width, cropBounds.height);
+    if (cropped.isEmpty()) return cropped;
     const auto sx = cropBounds.x - sourceBounds.x, sy = cropBounds.y - sourceBounds.y;
     const auto rowBytes = size_t(cropBounds.width) * 4U;
     for (int32_t y = 0; y < cropBounds.height; ++y) {
@@ -1421,7 +1423,8 @@ struct RunEntry {
         // Photoshop's window sees the canvas past the layer's edge (transparent there), not the layer's own edge
         // repeated: a rectangle filling its layer loses its corners. The bounds stay the layer's.
         const int r = std::max(1, int(std::floor(p.radius)));
-        const PixelRect grown = intersectRect({current.bounds.x - r, current.bounds.y - r, current.bounds.width + 2 * r, current.bounds.height + 2 * r}, canvas);
+        PixelRect grown = intersectRect({current.bounds.x - r, current.bounds.y - r, current.bounds.width + 2 * r, current.bounds.height + 2 * r}, canvas);
+        grown = unionRect(grown, current.bounds);   // never less than the layer (it may reach past the canvas)
         if (grown.empty() || grown == current.bounds) return renderMedian(current, p.radius);
         const Result wide = renderMedian(embedInFilterCanvas(current, grown), p.radius);
         return Result{cropBuffer(wide.pixels, wide.bounds, current.bounds), current.bounds};
@@ -1429,7 +1432,8 @@ struct RunEntry {
     Result operator()(const smartfilter::DustAndScratches& p) const {
         // Median's window, so Median's edge (the canvas past the layer, transparent).
         const int r = std::max(1, int(p.radius));
-        const PixelRect grown = intersectRect({current.bounds.x - r, current.bounds.y - r, current.bounds.width + 2 * r, current.bounds.height + 2 * r}, canvas);
+        PixelRect grown = intersectRect({current.bounds.x - r, current.bounds.y - r, current.bounds.width + 2 * r, current.bounds.height + 2 * r}, canvas);
+        grown = unionRect(grown, current.bounds);   // never less than the layer (it may reach past the canvas)
         if (grown.empty() || grown == current.bounds) return renderDustAndScratches(current, p.radius, p.threshold);
         const Result wide = renderDustAndScratches(embedInFilterCanvas(current, grown), p.radius, p.threshold);
         return Result{cropBuffer(wide.pixels, wide.bounds, current.bounds), current.bounds};
@@ -1442,7 +1446,7 @@ struct RunEntry {
         // Past the layer its low-pass sees the canvas's transparency (zero), as Median's window does.
         const int r = int(std::ceil(p.radius * 3)) + 1;
         PixelRect grown = intersectRect({current.bounds.x - r, current.bounds.y - r, current.bounds.width + 2 * r, current.bounds.height + 2 * r}, canvas);
-        if (grown.empty()) grown = current.bounds;
+        grown = unionRect(grown, current.bounds);   // never less than the layer (it may reach past the canvas)
         Result alpha{Image(grown.width, grown.height), grown};
         for (int y = 0; y < grown.height; y++)
             for (int x = 0; x < grown.width; x++) {

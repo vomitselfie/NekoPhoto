@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <iterator>
+#include <type_traits>
 
 namespace compositor {
 
@@ -119,8 +121,10 @@ Record readRecord(std::span<const uint8_t> body) {
             psd::BigEndianReader c(body.subspan(cacheAt, size_t(cacheLength)));
             const int32_t top = i32(c.read_u32()), left = i32(c.read_u32()), bottom = i32(c.read_u32()), right = i32(c.read_u32());
             const uint32_t depth = c.read_u32(), channels = c.read_u32();
-            if (right <= left || bottom <= top || depth != 8 || channels > 64) return rec;
-            rec.cache.canvas = {left, top, right - left, bottom - top};
+            // Sizes in 64 bits: hostile edges would overflow an int (found by fuzzing). Photoshop's limit is 300,000.
+            const int64_t cw = int64_t(right) - left, ch = int64_t(bottom) - top;
+            if (cw <= 0 || ch <= 0 || cw > 300000 || ch > 300000 || depth != 8 || channels > 64) return rec;
+            rec.cache.canvas = {left, top, int(cw), int(ch)};
             for (uint32_t slot = 0; slot < channels + 2; slot++) {
                 const uint32_t written = c.read_u32();
                 if (!written) continue;
@@ -138,9 +142,9 @@ Record readRecord(std::span<const uint8_t> body) {
         if (present != 1) return rec;
         const int32_t top = i32(r.read_u32()), left = i32(r.read_u32()), bottom = i32(r.read_u32()), right = i32(r.read_u32());
         const uint64_t maskLength = r.read_u64();
-        if (right <= left || bottom <= top || maskLength != r.remaining()) return rec;
-        const int w = right - left, h = bottom - top;
-        if (w > maxImageSide || h > maxImageSide) return rec;
+        const int64_t mw = int64_t(right) - left, mh = int64_t(bottom) - top;
+        if (mw <= 0 || mh <= 0 || mw > maxImageSide || mh > maxImageSide || maskLength != r.remaining()) return rec;
+        const int w = int(mw), h = int(mh);
         auto mask = std::make_shared<GrayImage>(w, h);
         const uint16_t compression = r.read_u16();
         if (compression == 0) {
@@ -352,10 +356,11 @@ std::optional<std::vector<uint8_t>> replaceSmartFilterRecords(const std::vector<
     return w.bytes();
 }
 
-std::optional<PlacedRaster> placedSmartObjectRaster(const SmartObjectInstance& instance, const Image& source, const std::array<double, 8>& quad) {
+std::optional<PlacedRaster> placedSmartObjectRaster(const SmartObjectInstance& instance, const Image& source, const std::array<double, 8>& quad,
+                                                    const Rect* clip) {
     auto mesh = smartObjectWarp(instance);
     const WarpMesh flat = identityWarpMesh(0, 0, source.width(), source.height(), 2, 2);
-    auto raster = renderWarpedImage(source, mesh ? *mesh : flat, quad);
+    auto raster = renderWarpedImage(source, mesh ? *mesh : flat, quad, clip);
     if (!raster) return std::nullopt;
     return PlacedRaster{raster->image, int(std::lround(raster->transform.origin.x)), int(std::lround(raster->transform.origin.y))};
 }
@@ -367,10 +372,14 @@ std::optional<PlacedRaster> filteredSmartObjectRaster(const std::vector<PsdBlock
         if (b.key == "SoLd" || b.key == "SoLE") { stack = parseSmartFilterStack(b.key, b.data); break; }
     if (!stack || !stack->supported) return std::nullopt;
     auto cache = findSmartFilterCache(globals, instance.placedId);
-    if (!cache) return std::nullopt;
+    // A canvas past what a buffer can hold is not drawn here (a hostile file could claim 300,000 pixels a side).
+    if (!cache || cache->canvas.width > maxImageSide || cache->canvas.height > maxImageSide
+        || int64_t(cache->canvas.width) * cache->canvas.height > int64_t(Document::pixelBudget)) return std::nullopt;
     stack->mask = cache->mask;
     stack->maskBounds = cache->maskBounds;
-    auto placed = placedSmartObjectRaster(instance, source, quad);
+    // Only what lies on the filter canvas can show (past it the filters repeat the canvas's edge).
+    const Rect canvas(cache->canvas.x, cache->canvas.y, cache->canvas.width, cache->canvas.height);
+    auto placed = placedSmartObjectRaster(instance, source, quad, &canvas);
     if (!placed) return std::nullopt;
     return renderSmartFilterStack(*placed, cache->canvas, *stack);
 }
@@ -405,6 +414,216 @@ int refreshSmartObjectRasters(Document& document) {
         redrawn++;
     }
     return redrawn;
+}
+
+namespace {
+
+V dvObject(const char* cls, bool longForm, const std::string& name = {}) {
+    V v; v.type = V::Type::Object; v.object_value = std::make_shared<psd::DescriptorObject>();
+    v.object_value->class_id = cls; v.object_value->class_id_long_form = longForm; v.object_value->name = name;
+    return v;
+}
+void dvAdd(V& o, const char* key, bool longForm, V value) { o.object_value->key_order.push_back({key, longForm}); o.object_value->values[key] = std::move(value); }
+V dvBool(bool b) { V v; v.type = V::Type::Bool; v.bool_value = b; return v; }
+V dvInt(int32_t i) { V v; v.type = V::Type::Integer; v.integer_value = i; return v; }
+V dvDouble(double d) { V v; v.type = V::Type::Double; v.double_value = d; return v; }
+V dvUnit(const char* unit, double d) { V v; v.type = V::Type::UnitFloat; v.unit = unit; v.double_value = d; return v; }
+V dvText(const std::string& t) { V v; v.type = V::Type::String; v.string_value = t; return v; }
+V dvEnum(const char* type, bool typeLong, const char* value, bool valueLong) {
+    V v; v.type = V::Type::Enum; v.enum_type = type; v.enum_type_long_form = typeLong; v.enum_value = value; v.enum_value_long_form = valueLong; return v;
+}
+V dvColour(double r, double g, double b) {
+    V c = dvObject("RGBC", false);
+    dvAdd(c, "Rd  ", false, dvDouble(r)); dvAdd(c, "Grn ", false, dvDouble(g)); dvAdd(c, "Bl  ", false, dvDouble(b));
+    return c;
+}
+const char* blendName(BlendMode m) {
+    switch (m) {
+    case BlendMode::Multiply: return "multiply"; case BlendMode::Screen: return "screen"; case BlendMode::Overlay: return "overlay";
+    case BlendMode::Darken: return "darken"; case BlendMode::Lighten: return "lighten"; case BlendMode::Difference: return "difference";
+    case BlendMode::ColorDodge: return "colorDodge"; case BlendMode::ColorBurn: return "colorBurn"; case BlendMode::Hue: return "hue";
+    case BlendMode::Saturation: return "saturation"; case BlendMode::Color: return "color"; case BlendMode::Luminosity: return "luminosity";
+    default: return "normal";
+    }
+}
+
+// One filterFX entry in Patchy's authoring shape (Photoshop 2026's key orders, pinned by its captures).
+std::optional<V> entryDescriptor(const SmartFilterEntry& entry) {
+    using namespace smartfilter;
+    struct Spec { const char* name; const char* cls; bool longForm; uint32_t id; };
+    std::optional<Spec> spec;
+    std::vector<std::pair<const char*, V>> keys;
+    std::visit([&](const auto& p) {
+        using T = std::decay_t<decltype(p)>;
+        if constexpr (std::is_same_v<T, GaussianBlur>) { spec = Spec{"Gaussian Blur", "GsnB", false, 0x47736e42u}; keys = {{"Rds ", dvUnit("#Pxl", p.radius)}}; }
+        else if constexpr (std::is_same_v<T, HighPass>) { spec = Spec{"High Pass", "HghP", false, 0x48676850u}; keys = {{"Rds ", dvUnit("#Pxl", p.radius)}}; }
+        else if constexpr (std::is_same_v<T, Median>) { spec = Spec{"Median", "Mdn ", false, 0x4d646e20u}; keys = {{"Rds ", dvUnit("#Pxl", p.radius)}}; }
+        else if constexpr (std::is_same_v<T, DustAndScratches>) { spec = Spec{"Dust & Scratches", "DstS", false, 0x44737453u}; keys = {{"Rds ", dvInt(p.radius)}, {"Thsh", dvInt(p.threshold)}}; }
+        else if constexpr (std::is_same_v<T, SurfaceBlur>) { spec = Spec{"Surface Blur", "surfaceBlur", true, 854u}; keys = {{"Rds ", dvUnit("#Pxl", p.radius)}, {"Thsh", dvInt(p.threshold)}}; }
+        else if constexpr (std::is_same_v<T, UnsharpMask>) { spec = Spec{"Unsharp Mask", "UnsM", false, 0x556e734du}; keys = {{"Amnt", dvUnit("#Prc", p.amount)}, {"Rds ", dvUnit("#Pxl", p.radius)}, {"Thsh", dvInt(p.threshold)}}; }
+        else if constexpr (std::is_same_v<T, MotionBlur>) { spec = Spec{"Motion Blur", "MtnB", false, 0x4d746e42u}; keys = {{"Angl", dvInt(p.angle)}, {"Dstn", dvUnit("#Pxl", p.distance)}}; }
+        else if constexpr (std::is_same_v<T, PlasticWrap>) { spec = Spec{"Plastic Wrap", "PlsW", false, 0x506c7357u}; keys = {{"Hghl", dvInt(p.highlight)}, {"Dtl ", dvInt(p.detail)}, {"Smth", dvInt(p.smoothness)}}; }
+        else if constexpr (std::is_same_v<T, Mosaic>) { spec = Spec{"Mosaic", "Msc ", false, 0x4d736320u}; keys = {{"ClSz", dvUnit("#Pxl", p.cellSize)}}; }
+        else if constexpr (std::is_same_v<T, Emboss>) { spec = Spec{"Emboss", "Embs", false, 0x456d6273u}; keys = {{"Angl", dvInt(p.angle)}, {"Hght", dvInt(p.height)}, {"Amnt", dvInt(p.amount)}}; }
+        else if constexpr (std::is_same_v<T, BoxBlur>) { spec = Spec{"Box Blur", "boxblur", true, 843u}; keys = {{"Rds ", dvUnit("#Pxl", p.radius)}}; }
+        else if constexpr (std::is_same_v<T, RadialBlur>) {
+            spec = Spec{"Radial Blur", "RdlB", false, 0x52646c42u};
+            keys = {{"Amnt", dvInt(p.amount)}, {"BlrM", dvEnum("BlrM", false, "Spn ", false)},
+                    {"BlrQ", dvEnum("BlrQ", false, p.samples <= 8 ? "Drft" : p.samples <= 16 ? "Gd  " : "Bst ", false)}};
+        } else if constexpr (std::is_same_v<T, AddNoise>) {
+            spec = Spec{"Add Noise", "AdNs", false, 0x41644e73u};
+            keys = {{"Dstr", dvEnum("Dstr", false, p.gaussian ? "Gsn " : "Unfr", false)}, {"Nose", dvUnit("#Prc", p.amount)}, {"Mnch", dvBool(p.monochromatic)}, {"FlRs", dvInt(p.seed)}};
+        }
+    }, entry.parameters);
+    if (!spec) return std::nullopt;
+    V item = dvObject("filterFX", true);
+    dvAdd(item, "Nm  ", false, dvText(entry.name.empty() ? smartFilterName(entry.parameters) : entry.name));
+    V blend = dvObject("blendOptions", true);
+    dvAdd(blend, "Opct", false, dvUnit("#Prc", std::clamp(entry.opacity, 0.0, 1.0) * 100));
+    dvAdd(blend, "Md  ", false, dvEnum("BlnM", false, blendName(entry.blend), true));
+    dvAdd(item, "blendOptions", true, blend);
+    dvAdd(item, "enab", false, dvBool(entry.enabled));
+    dvAdd(item, "hasoptions", true, dvBool(true));
+    dvAdd(item, "FrgC", false, dvColour(0, 0, 0));
+    dvAdd(item, "BckC", false, dvColour(255, 255, 255));
+    V filter = dvObject(spec->cls, spec->longForm, spec->name);
+    for (auto& [k, v] : keys) dvAdd(filter, k, false, v);
+    dvAdd(item, "Fltr", false, filter);
+    dvAdd(item, "filterID", true, dvInt(int32_t(spec->id)));
+    return item;
+}
+
+} // namespace
+
+std::string smartFilterName(const SmartFilterParameters& parameters) {
+    static const char* names[] = {"", "Gaussian Blur...", "High Pass...", "Median...", "Dust && Scratches...", "Surface Blur...", "Unsharp Mask...",
+                                  "Motion Blur...", "Plastic Wrap...", "Mosaic...", "Emboss...", "Box Blur...", "Radial Blur...", "Add Noise..."};
+    return parameters.index() < std::size(names) ? names[parameters.index()] : "";
+}
+
+std::optional<std::vector<uint8_t>> setPsdSmartFilterStack(const std::string& key, const std::vector<uint8_t>& payload, const SmartFilterStack& stack) {
+    if ((key != "SoLd" && key != "SoLE") || stack.entries.empty()) return std::nullopt;
+    try {
+        psd::BigEndianReader r(payload);
+        if (r.read_bytes(4) != std::vector<uint8_t>{'s', 'o', 'L', 'D'}) return std::nullopt;
+        const uint32_t version = r.read_u32(), descriptorVersion = r.read_u32();
+        psd::DescriptorObject d = psd::read_descriptor(r);
+        const size_t tail = r.position();
+        V root = dvObject("filterFXStyle", true);
+        dvAdd(root, "enab", false, dvBool(stack.enabled));
+        dvAdd(root, "validAtPosition", true, dvBool(true));
+        dvAdd(root, "filterMaskEnable", true, dvBool(stack.maskEnabled));
+        dvAdd(root, "filterMaskLinked", true, dvBool(false));
+        dvAdd(root, "filterMaskExtendWithWhite", true, dvBool(stack.maskDefault == 255));
+        V list; list.type = V::Type::List;
+        for (const SmartFilterEntry& e : stack.entries) {
+            auto item = entryDescriptor(e);
+            if (!item) return std::nullopt;
+            list.list_value.push_back(std::move(*item));
+        }
+        dvAdd(root, "filterFXList", true, list);
+        if (!d.values.count("filterFX")) {
+            // Photoshop puts it before the trailing 'comp' / 'compInfo'.
+            auto at = std::find_if(d.key_order.begin(), d.key_order.end(), [](const psd::DescriptorObject::KeyEntry& k) { return k.key == "comp" || k.key == "compInfo"; });
+            d.key_order.insert(at, {"filterFX", true});
+        }
+        d.values["filterFX"] = root;
+        psd::BigEndianWriter w;
+        for (char c : std::string("soLD")) w.write_u8(uint8_t(c));
+        w.write_u32(version);
+        w.write_u32(descriptorVersion);
+        psd::write_descriptor(w, d);
+        w.write_bytes(std::span<const uint8_t>(payload.data() + tail, payload.size() - tail));
+        return w.bytes();
+    } catch (std::exception&) {}
+    return std::nullopt;
+}
+
+bool addSmartFilter(Document& document, Layer& layer, const SmartFilterEntry& entry, std::string* error) {
+    auto fail = [&](const char* why) { if (error) *error = why; return false; };
+    if (!layer.isLiveSmartObject()) return fail("Smart Filters go on a smart object: convert the layer first.");
+    SmartObjectInstance& so = *layer.smartObject;
+    if (so.locked()) return fail("This smart object shows the preview its file carried; its filters cannot be changed here.");
+    if (std::holds_alternative<std::monostate>(entry.parameters)) return fail("That filter is not one NekoPhoto draws as a Smart Filter.");
+    auto source = document.smartObjects.find(so.sourceId);
+    if (source == document.smartObjects.end() || !source->second->image) return fail("Its contents cannot be read.");
+    // The stack so far, if any.
+    SmartFilterStack stack;
+    stack.supported = true;
+    bool had = false;
+    for (const PsdBlock& b : so.psdBlocks)
+        if (auto existing = parseSmartFilterStack(b.key, b.data)) { stack = *existing; had = true; break; }
+    if (had && !stack.supported) return fail("Its Smart Filters include one NekoPhoto does not draw; they cannot be added to here.");
+    std::optional<SmartFilterCache> cache;
+    if (had) {
+        cache = document.psdCarry ? findSmartFilterCache(document.psdCarry->globals, so.placedId) : std::nullopt;
+        if (!cache) return fail("Its Smart Filters' cache cannot be read.");
+    }
+    stack.entries.push_back(entry);
+    stack.supported = true;
+    // Where it is now (a moved instance's quad follows the layer).
+    const std::array<double, 8> quad = moveQuad(so.quad, so.placedTransform, so.placedWidth, so.placedHeight, layer.transform,
+                                                layer.asset->image->width(), layer.asset->image->height());
+    SmartObjectInstance next = so;
+    if (next.placedId.empty()) next.placedId = newSmartObjectId();
+    bool written = false;
+    for (PsdBlock& b : next.psdBlocks) {
+        auto placed = patchPsdPlacement(b.key, b.data, quad, next.placedId);
+        auto withStack = placed ? setPsdSmartFilterStack(b.key, *placed, stack) : std::nullopt;
+        if (withStack) { b.data = std::move(*withStack); written = true; }
+    }
+    if (!written) return fail("Its placement cannot take Smart Filters.");
+    next.quad = quad;
+    // Its cache record: the unfiltered instance over the canvas, and the mask (kept, or all white).
+    const PixelRect canvas{0, 0, document.width, document.height};
+    auto unfiltered = placedSmartObjectRaster(next, *source->second->image, quad);
+    if (!unfiltered) return fail("It could not be drawn.");
+    const auto record = authorSmartFilterRecord(next.placedId, canvas, *unfiltered, cache && cache->mask ? cache->mask.get() : nullptr,
+                                                cache ? cache->maskBounds : PixelRect{}, stack.maskDefault);
+    auto carry = std::make_shared<PsdDocumentCarry>(document.psdCarry ? *document.psdCarry : PsdDocumentCarry{});
+    if (!document.psdCarry) { carry->width = document.width; carry->height = document.height; }
+    bool placed = false;
+    for (PsdBlock& b : carry->globals) {
+        if (b.key != "FEid" && b.key != "FXid") continue;
+        if (findSmartFilterCache({b}, next.placedId)) {
+            auto replaced = replaceSmartFilterRecords(b.data, {{next.placedId, record}});
+            if (!replaced) return fail("The document's filter cache cannot be rewritten.");
+            b.data = std::move(*replaced);
+        } else {
+            // A new record at the end of the block, aligned as Photoshop aligns them.
+            psd::BigEndianWriter w;
+            w.write_bytes(b.data);
+            while (w.bytes().size() % 4) w.write_u8(0);
+            w.write_u64(record.size());
+            w.write_bytes(record);
+            while (w.bytes().size() % 4) w.write_u8(0);
+            b.data = w.bytes();
+        }
+        placed = true;
+        break;
+    }
+    if (!placed) {
+        psd::BigEndianWriter w;
+        w.write_u32(3);
+        w.write_u64(record.size());
+        w.write_bytes(record);
+        while (w.bytes().size() % 4) w.write_u8(0);
+        carry->globals.push_back({"FEid", w.bytes()});
+    }
+    auto filtered = filteredSmartObjectRaster(carry->globals, next, *source->second->image, quad);
+    if (!filtered) return fail("The filters could not be drawn.");
+    document.psdCarry = carry;
+    if (layer.mask && !layer.mask->placement) layer.mask->placement = layer.maskTransform();
+    const Sampling sampling = layer.transform.sampling;
+    layer.asset = Asset::make(filtered->image, layer.name);
+    layer.transform = LayerTransform(Point(filtered->x, filtered->y), Size(filtered->image->width(), filtered->image->height()));
+    layer.transform.sampling = sampling;
+    layer.smartImage = filtered->image;
+    next.placedTransform = layer.transform;
+    next.placedWidth = filtered->image->width();
+    next.placedHeight = filtered->image->height();
+    so = std::move(next);
+    return true;
 }
 
 } // namespace compositor

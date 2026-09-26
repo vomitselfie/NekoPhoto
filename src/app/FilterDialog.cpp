@@ -75,9 +75,9 @@ bool PixelAdjustmentDialog::apply() {
 
 // ---- Filters ----------------------------------------------------------------------------------
 
-FilterDialog::FilterDialog(EditorSession* session, FilterKind kind, QWidget* parent)
-    : PixelDialog(session, parent), kind_(kind), seed_(uint32_t(std::random_device{}())) {
-    setWindowTitle(QString::fromUtf8(filterKindName(kind)));
+FilterDialog::FilterDialog(EditorSession* session, FilterKind kind, QWidget* parent, bool smart)
+    : PixelDialog(session, parent), kind_(kind), smart_(smart), seed_(uint32_t(std::random_device{}())) {
+    setWindowTitle(smart ? tr("%1 (Smart Filter)").arg(QString::fromUtf8(filterKindName(kind))) : QString::fromUtf8(filterKindName(kind)));
     setMinimumWidth(420);
     auto* layout = new QVBoxLayout(this);
     auto slider = [&](const QString& label, double min, double max, int decimals, double scale, std::function<double()> get, std::function<void(double)> apply) {
@@ -155,6 +155,19 @@ void FilterDialog::refreshPreview() {
 }
 
 bool FilterDialog::apply() {
+    if (smart_) {
+        // Photoshop's filter on a smart object: a Smart Filter on top of its stack, the contents untouched.
+        const FilterSettings f = settings_.normalized();
+        SmartFilterEntry entry;
+        if (kind_ == FilterKind::GaussianBlur) entry.parameters = smartfilter::GaussianBlur{std::clamp(f.radius, 0.1, 1000.0)};
+        else if (kind_ == FilterKind::MotionBlur) entry.parameters = smartfilter::MotionBlur{int32_t(std::lround(f.angle)), int32_t(std::clamp(std::lround(f.distance), 1L, 999L))};
+        else if (kind_ == FilterKind::AddNoise) entry.parameters = smartfilter::AddNoise{std::clamp(f.amount, 0.1, 400.0), f.gaussian, f.monochromatic, int32_t(seed_ % 1000000000u)};
+        else return false;
+        QString error;
+        if (!session()->addSmartFilter(entry, &error)) { QMessageBox::warning(this, windowTitle(), error); return false; }
+        clearPreview();
+        return true;
+    }
     if (identity()) return true;
     auto out = run(*source(), 1);
     throughSelection(*out);

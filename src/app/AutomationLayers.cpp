@@ -1,6 +1,7 @@
 // Automation methods: layers. Registered from AutomationServer::registerHandlers (Automation.cpp).
 #include "Automation.h"
 #include "AutomationHandlers.h"
+#include "compositor/warpmesh.h"
 #include "ImageConvert.h"
 #include "compositor/render.h"
 #include <QFileInfo>
@@ -58,6 +59,62 @@ void AutomationServer::registerLayersHandlers() {
         bool ok = false;
         withActive(id, [&] { ok = session()->rasterizeSmartObject(); });
         if (!ok) fail("not a smart object", invalidParams);
+        return layerJson(*session()->document()->find(id), 0);
+    });
+    add("layers.warp", [session, layerOrActive, withActive](const QJsonObject& p) {
+        const Uuid id = layerOrActive(p).id;
+        compositor::TextWarp warp;
+        warp.style = str(p, "style").toStdString();
+        if (!warp.style.empty() && warp.style.rfind("warp", 0) != 0) {
+            // Plain names too: "arc lower" is warpArcLower.
+            std::string id2 = "warp";
+            bool upper = true;
+            for (char c : warp.style) {
+                if (c == ' ' || c == '_' || c == '-') { upper = true; continue; }
+                id2.push_back(upper ? char(std::toupper(uint8_t(c))) : char(std::tolower(uint8_t(c))));
+                upper = false;
+            }
+            warp.style = id2;
+        }
+        if (warp.style == "warpNone") warp.style.clear();
+        if (!warp.style.empty() && !compositor::warpStyleBakes(warp.style)) fail("style must be one of Photoshop's presets (arc, arc lower, arc upper, arch, bulge, shell lower, shell upper, flag, wave, fish, rise, fisheye, inflate, squeeze, twist)", invalidParams);
+        warp.bend = std::clamp(num(p, "bend", 50), -100.0, 100.0);
+        warp.horizontal = std::clamp(num(p, "horizontal", 0), -100.0, 100.0);
+        warp.vertical = std::clamp(num(p, "vertical", 0), -100.0, 100.0);
+        warp.verticalOrientation = has(p, "orientation") && str(p, "orientation").toLower() == "vertical";
+        bool ok = false;
+        QString error;
+        withActive(id, [&] { ok = session()->warpActiveLayer(warp, &error); });
+        if (!ok) fail(error, invalidParams);
+        return layerJson(*session()->document()->find(id), 0);
+    });
+    add("smartObject.addFilter", [session, layerOrActive, withActive](const QJsonObject& p) {
+        const Uuid id = layerOrActive(p).id;
+        const QString kind = str(p, "kind").toLower().remove(' ').remove('_').remove('&');
+        auto n = [&](const char* key, double fallback) { return num(p, key, fallback); };
+        auto i = [&](const char* key, double fallback) { return int32_t(std::lround(num(p, key, fallback))); };
+        compositor::SmartFilterEntry entry;
+        using namespace compositor::smartfilter;
+        if (kind == "gaussianblur") entry.parameters = GaussianBlur{n("radius", 2)};
+        else if (kind == "highpass") entry.parameters = HighPass{n("radius", 10)};
+        else if (kind == "median") entry.parameters = Median{n("radius", 1)};
+        else if (kind == "dustandscratches" || kind == "dustscratches") entry.parameters = DustAndScratches{i("radius", 1), i("threshold", 0)};
+        else if (kind == "surfaceblur") entry.parameters = SurfaceBlur{n("radius", 5), i("threshold", 15)};
+        else if (kind == "unsharpmask") entry.parameters = UnsharpMask{n("amount", 150), n("radius", 2), i("threshold", 8)};
+        else if (kind == "motionblur") entry.parameters = MotionBlur{i("angle", 0), i("distance", 12)};
+        else if (kind == "plasticwrap") entry.parameters = PlasticWrap{i("highlight", 9), i("detail", 7), i("smoothness", 5)};
+        else if (kind == "mosaic") entry.parameters = Mosaic{i("cellSize", 8)};
+        else if (kind == "emboss") entry.parameters = Emboss{i("angle", 135), i("height", 2), i("amount", 100)};
+        else if (kind == "boxblur") entry.parameters = BoxBlur{n("radius", 1)};
+        else if (kind == "radialblur") entry.parameters = RadialBlur{i("amount", 10), i("samples", 16)};
+        else if (kind == "addnoise") entry.parameters = AddNoise{n("amount", 12.5), has(p, "gaussian") && flag(p, "gaussian", false), has(p, "monochromatic") && flag(p, "monochromatic", false), i("seed", 1)};
+        else fail("kind must be one of the Smart Filters NekoPhoto draws: gaussian blur, high pass, median, dust and scratches, surface blur, unsharp mask, motion blur, plastic wrap, mosaic, emboss, box blur, radial blur, add noise", invalidParams);
+        entry.opacity = std::clamp(n("opacity", 100), 0.0, 100.0) / 100;
+        if (has(p, "blend") && !compositor::parseBlendMode(str(p, "blend").toStdString(), entry.blend)) fail("unknown blend mode", invalidParams);
+        bool ok = false;
+        QString error;
+        withActive(id, [&] { ok = session()->addSmartFilter(entry, &error); });
+        if (!ok) fail(error, invalidParams);
         return layerJson(*session()->document()->find(id), 0);
     });
     add("smartObject.editContents", [w, session, layerOrActive](const QJsonObject& p) {

@@ -108,6 +108,16 @@ const MethodDoc methodDocs[] = {
     {"smartObject.place", "Place an image or PSD file as an embedded smart object above the active layer, 1:1 in the middle (scaled to fit).", "path:string! File path"},
     {"smartObject.replace", "Swap a smart object's contents for a file's, in every layer placing them; each keeps its centre and scale.", "id:layer The smart object layer (default: active); path:string! File path"},
     {"smartObject.rasterize", "A smart object as plain pixels.", "id:layer The smart object layer (default: active)"},
+    {"smartObject.addFilter", "Add a Smart Filter on top of a smart object's stack (its contents untouched, the filter kept as Photoshop keeps it).",
+     "id:layer The smart object layer (default: active); kind:string! gaussian blur, high pass, median, dust and scratches, surface blur, unsharp mask, motion blur, plastic wrap, mosaic, emboss, box blur, radial blur or add noise; "
+     "radius:number Pixels (blurs, high pass, median, dust and scratches, surface blur, unsharp mask); threshold:number Levels (dust and scratches, surface blur, unsharp mask); "
+     "amount:number Percent (unsharp mask, emboss, add noise) or Radial Blur's amount; angle:number Degrees (motion blur, emboss); distance:number Motion Blur pixels; "
+     "highlight:number Plastic Wrap; detail:number Plastic Wrap; smoothness:number Plastic Wrap; cellSize:number Mosaic pixels; height:number Emboss pixels; "
+     "samples:number Radial Blur 8, 16 or 32; gaussian:bool Add Noise distribution; monochromatic:bool Add Noise; seed:number Add Noise; "
+     "opacity:number=100 Percent; blend:<blend> How it blends over what is below it in the stack"},
+    {"layers.warp", "Warp a layer with one of Photoshop's presets: Warp Text on text (style none removes it), a mesh baked into a smart object's placement (redrawn from its contents), bent pixels otherwise.",
+     "id:layer The layer (default the active one); style:string arc, arc lower, arc upper, arch, bulge, shell lower, shell upper, flag, wave, fish, rise, fisheye, inflate, squeeze, twist, or none (text); "
+     "bend:number=50 Percent -100..100; horizontal:number=0 Horizontal distortion, percent; vertical:number=0 Vertical distortion, percent; orientation:(horizontal|vertical)=horizontal The warp's axis"},
     {"smartObject.editContents", "Open a smart object's contents in a new tab; smartObject.commit in that tab puts them back into every layer placing them.", "id:layer The smart object layer (default: active)"},
     {"smartObject.commit", "In a contents tab, put the contents back into the smart object they came from (as Save does).", ""},
     {"layers.render", "One layer alone as PNG, not composited with the others: with a mask, as it shows (mask applied, over the layer's bounds in document pixels); otherwise its own pixels.",

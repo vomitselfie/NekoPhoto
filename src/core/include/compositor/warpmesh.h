@@ -34,7 +34,8 @@ void distortWarpMesh(WarpMesh& mesh, double horizontal, double vertical);
 /// top-right, bottom-right, bottom-left, as Photoshop stores a warped placement): the pixels over the result's
 /// whole-pixel bounds and the axis-aligned transform placing them. None for an empty image or a degenerate quad.
 struct WarpedRaster { std::shared_ptr<Image> image; LayerTransform transform; };
-std::optional<WarpedRaster> renderWarpedImage(const Image& image, const WarpMesh& mesh, const std::array<double, 8>& quad);
+/// `clip` (document pixels), when given, bounds the result: only what falls inside it is drawn.
+std::optional<WarpedRaster> renderWarpedImage(const Image& image, const WarpMesh& mesh, const std::array<double, 8>& quad, const Rect* clip = nullptr);
 
 /// `image` bent by `mesh`, a patch over `box` (in the image's pixels; the mesh in the box's own space, 0..width by
 /// 0..height): the whole image, the patch extended past the box where the image reaches beyond it (Warp Text over

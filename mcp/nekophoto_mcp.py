@@ -417,6 +417,27 @@ def smart_object_rasterize(id: Optional[str] = None) -> str:
     return text(call("smartObject.rasterize", id=id))
 
 
+@edit("Add a Smart Filter")
+def smart_object_add_filter(kind: str, id: Optional[str] = None, radius: Optional[float] = None, threshold: Optional[float] = None,
+                            amount: Optional[float] = None, angle: Optional[float] = None, distance: Optional[float] = None,
+                            cell_size: Optional[float] = None, height: Optional[float] = None, opacity: float = 100) -> str:
+    """Add a Smart Filter on top of a smart object's stack, as Photoshop keeps it (non-destructive): gaussian blur,
+    high pass, median, dust and scratches, surface blur, unsharp mask, motion blur, plastic wrap, mosaic, emboss,
+    box blur, radial blur or add noise. Only the settings the filter uses matter."""
+    return text(call("smartObject.addFilter", id=id, kind=kind, radius=radius, threshold=threshold, amount=amount, angle=angle,
+                     distance=distance, cellSize=cell_size, height=height, opacity=opacity))
+
+
+@edit("Warp a layer")
+def layers_warp(style: str, id: Optional[str] = None, bend: float = 50, horizontal: float = 0, vertical: float = 0,
+                orientation: str = "horizontal") -> str:
+    """Warp a layer with one of Photoshop's presets (arc, arc lower, arc upper, arch, bulge, shell lower, shell upper,
+    flag, wave, fish, rise, fisheye, inflate, squeeze, twist). Text gets Warp Text (style "none" removes it), a smart
+    object keeps its contents and has the warp baked into its placement, pixels are bent for good. bend, horizontal and
+    vertical are percents (-100..100)."""
+    return text(call("layers.warp", id=id, style=style, bend=bend, horizontal=horizontal, vertical=vertical, orientation=orientation))
+
+
 @outside("Open smart object contents")
 def smart_object_edit_contents(id: Optional[str] = None) -> str:
     """Open a smart object's contents in a new tab. Edit them there with the usual tools, then smart_object_commit
