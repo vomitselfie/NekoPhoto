@@ -1,6 +1,7 @@
 // Aseprite import, ported from Patchy (MIT, src/third_party/patchy_psd/README.md):
 // src/formats/aseprite_document_io.cpp (the reader; its writer is not ported), following the published
-// specification (https://github.com/aseprite/aseprite/blob/main/docs/ase-file-specs.md). Frame 1 only; unknown
+// specification (https://github.com/aseprite/aseprite/blob/main/docs/ase-file-specs.md). Every frame: a layer per cel,
+// the timeline saying which show in which frame (animation.h); unknown
 // chunks are skipped by length. Compressed cels inflate through zlib instead of Patchy's vendored miniz.
 #include "compositor/aseprite.h"
 #include "format_io.h"
@@ -128,20 +129,28 @@ std::optional<PsdImport> importAsepriteBytes(const std::vector<uint8_t>& bytes, 
     if (frames == 0) return fail(error, "The sprite holds no frames.");
     const size_t bpp = depth / 8u;
 
+    using CelKey = std::pair<int, uint16_t>;   // frame, layer index
     std::vector<AseLayer> layers;
-    std::map<uint16_t, AseCel> cels;
+    std::map<CelKey, AseCel> cels;
+    std::map<CelKey, int> links;               // a linked cel: the frame whose cel it shows
+    std::vector<int> durations;                // per frame read, milliseconds
     std::vector<std::array<uint8_t, 4>> palette;
     int tilemaps = 0;
     long long celPixels = 0;
-    {
+    for (int frameIndex = 0; frameIndex < frames; frameIndex++) {
         const size_t frameStart = r.pos;
         const uint32_t frameBytes = r.u32();
-        if (r.u16() != frameMagic || !r.ok) return fail(error, "The sprite's first frame is damaged.");
+        if (r.u16() != frameMagic || !r.ok || frameBytes < 16) {
+            if (frameIndex == 0) return fail(error, "The sprite's first frame is damaged.");
+            break;
+        }
         const uint16_t oldChunks = r.u16();
-        r.skip(4);
+        const uint16_t duration = r.u16();
+        r.skip(2);
         const uint32_t newChunks = r.u32();
         const uint32_t chunkCount = newChunks ? newChunks : oldChunks;
         const size_t frameEnd = std::min(bytes.size(), frameStart + frameBytes);
+        durations.push_back(duration);
         for (uint32_t c = 0; c < chunkCount && r.ok && r.pos + 6 <= frameEnd; c++) {
             const size_t chunkStart = r.pos;
             const uint32_t chunkSize = r.u32();
@@ -168,7 +177,10 @@ std::optional<PsdImport> importAsepriteBytes(const std::vector<uint8_t>& bytes, 
                 cel.opacity = cr.u8();
                 const uint16_t celType = cr.u16();
                 cr.skip(2 + 5);
-                if ((celType == 0 || celType == 2) && cr.ok) {
+                if (celType == 1 && cr.ok) {
+                    const int linked = cr.u16();
+                    if (cr.ok && linked < frameIndex) links[{frameIndex, layerIndex}] = linked;
+                } else if ((celType == 0 || celType == 2) && cr.ok) {
                     cel.width = cr.u16();
                     cel.height = cr.u16();
                     const size_t pixelBytes = size_t(cel.width) * size_t(cel.height) * bpp;
@@ -184,9 +196,9 @@ std::optional<PsdImport> importAsepriteBytes(const std::vector<uint8_t>& bytes, 
                     } else if (!inflateExact(bytes.data() + cr.pos, chunkEnd - cr.pos, pixelBytes, cel.pixels)) {
                         return fail(error, "A cel's compressed pixels could not be read.");
                     }
-                    cels.emplace(layerIndex, std::move(cel));
+                    cels[{frameIndex, layerIndex}] = std::move(cel);
                 }
-                // Linked cels (type 1) cannot appear in frame 1; tilemap cels (3) belong to skipped layers.
+                // Tilemap cels (3) belong to skipped layers.
             } else if (type == chunkPaletteNew) {
                 const uint32_t size = cr.u32(), first = cr.u32(), last = cr.u32();
                 cr.skip(8);
@@ -217,15 +229,27 @@ std::optional<PsdImport> importAsepriteBytes(const std::vector<uint8_t>& bytes, 
             }
             r.seek(chunkEnd);
         }
+        if (frameStart + frameBytes > bytes.size()) break;
+        r.seek(frameStart + frameBytes);
     }
     if (layers.empty()) return fail(error, "The sprite holds no layers.");
     if (depth == 8 && palette.empty()) return fail(error, "The indexed sprite is missing its palette.");
+    const int framesRead = int(durations.size());
+    /// The frame whose cel a layer shows in `frame` (itself, or the one a linked cel points at); -1 for none.
+    auto celFrame = [&](int frame, uint16_t layer) {
+        if (cels.count({frame, layer})) return frame;
+        auto link = links.find({frame, layer});
+        return link != links.end() && cels.count({link->second, layer}) ? link->second : -1;
+    };
 
     PsdImport result;
     Document& document = result.document;
     document = Document(width, height);
     std::vector<std::string> lossy;
     std::vector<Uuid> parents;   // parents[k]: the folder open at child level k + 1
+    // Layers made from a cel: which Aseprite layer and frame, to say in which frames they show.
+    struct CelLayer { Uuid id; uint16_t layer; int frame; bool visible; };
+    std::vector<CelLayer> celLayers;
     long long total = 0;
     for (size_t index = 0; index < layers.size(); index++) {
         const AseLayer& source = layers[index];
@@ -237,19 +261,24 @@ std::optional<PsdImport> importAsepriteBytes(const std::vector<uint8_t>& bytes, 
         if (!blend) { lossy.push_back("\"" + source.name + "\" (" + asepriteBlendName(source.blendMode) + ")"); blend = BlendMode::Normal; }
         const double layerOpacity = layerOpacityValid && meaningful ? source.opacity / 255.0 : 1.0;
 
-        Layer layer;
-        auto found = isGroup ? cels.end() : cels.find(uint16_t(index));
+        // One layer per cel with pixels (a sprite of one frame: one per Aseprite layer, as before).
+        std::vector<int> sources;
+        if (!isGroup)
+            for (int f = 0; f < framesRead; f++) if (cels.count({f, uint16_t(index)}) && cels.at({f, uint16_t(index)}).width > 0 && cels.at({f, uint16_t(index)}).height > 0) sources.push_back(f);
+        std::vector<Layer> made;
         if (isGroup) {
-            layer = Layer(source.name, document.size());
+            Layer layer(source.name, document.size());
             layer.isGroup = true;
             layer.opacity = layerOpacity;
             layer.passThrough = *blend == BlendMode::Normal && layerOpacity >= 1;
-        } else if (found == cels.end() || found->second.width <= 0 || found->second.height <= 0) {
-            layer = Layer(source.name, document.size());   // no pixels in frame 1
+            made.push_back(std::move(layer));
+        } else if (sources.empty()) {
+            Layer layer(source.name, document.size());   // no pixels in any frame
             layer.opacity = layerOpacity;
-        } else {
-            const AseCel& cel = found->second;
-            if (cel.width > maxImageSide || cel.height > maxImageSide) return fail(error, "A cel is larger than a layer may be.");
+            made.push_back(std::move(layer));
+        }
+        for (int f : sources) {
+            const AseCel& cel = cels.at({f, uint16_t(index)});
             total += (long long)cel.width * cel.height;
             if (total > Document::projectPixelBudget) return fail(error, "The layers exceed the gigapixel a project may hold.");
             auto image = std::make_shared<Image>(cel.width, cel.height);
@@ -267,25 +296,47 @@ std::optional<PsdImport> importAsepriteBytes(const std::vector<uint8_t>& bytes, 
                 }
             }
             premultiply(*image);
-            layer = Layer(Asset::make(image, source.name), Point(cel.x, cel.y));
+            const std::string name = sources.size() > 1 ? source.name + " (frame " + std::to_string(f + 1) + ")" : source.name;
+            Layer layer(Asset::make(image, name), Point(cel.x, cel.y));
             layer.opacity = layerOpacity * cel.opacity / 255.0;
+            celLayers.push_back({layer.id, uint16_t(index), f, visible});
+            made.push_back(std::move(layer));
         }
-        layer.name = source.name;
-        layer.visible = visible;
-        layer.blendMode = *blend;
 
         // File order is bottom first, each group before its children. A level deeper than the open folders
         // (a damaged file, or a child of a skipped tilemap) lands at the top level.
         size_t level = source.childLevel;
         if (level > parents.size()) level = 0;
-        if (level > 0) layer.parentId = parents[level - 1];
+        std::optional<Uuid> parent = level > 0 ? std::optional<Uuid>(parents[level - 1]) : std::nullopt;
         parents.resize(level);
-        if (isGroup) parents.push_back(layer.id);
-        document.layers.push_back(std::move(layer));
+        for (Layer& layer : made) {
+            if (sources.size() <= 1 || isGroup) layer.name = source.name;
+            layer.visible = visible;
+            layer.blendMode = *blend;
+            layer.parentId = parent;
+            if (isGroup) parents.push_back(layer.id);
+            document.layers.push_back(std::move(layer));
+        }
         if (document.layers.size() > size_t(Document::maxLayers)) return fail(error, "The sprite has more layers than a document may hold.");
     }
     if (document.layers.empty()) return fail(error, "The sprite holds no layers this reader can use.");
-    if (frames > 1) result.notes.push_back("Only the first of " + std::to_string(frames) + " frames was imported.");
+
+    if (framesRead > 1) {
+        // The timeline: in each frame a cel layer shows when its Aseprite layer's cel there is that cel (or links to it).
+        Animation& animation = document.animation;
+        for (int f = 0; f < framesRead; f++) {
+            AnimationFrame frame;
+            frame.delayMs = durations[size_t(f)];
+            for (const Layer& l : document.layers) frame.layers[l.id] = {l.visible, l.transform.origin, l.opacity};
+            for (const CelLayer& c : celLayers) frame.layers[c.id].visible = c.visible && celFrame(f, c.layer) == c.frame;
+            animation.frames.push_back(std::move(frame));
+        }
+        animation.loopCount = 0;
+        applyFrame(document, animation.frames[0]);
+    } else {
+        for (const CelLayer& c : celLayers) if (Layer* l = document.find(c.id)) l->visible = c.visible && celFrame(0, c.layer) == c.frame;
+    }
+    if (framesRead < frames) result.notes.push_back("Only the first " + std::to_string(framesRead) + " of " + std::to_string(frames) + " frames could be read.");
     if (!lossy.empty()) {
         std::string names;
         for (const auto& n : lossy) names += (names.empty() ? "" : ", ") + n;

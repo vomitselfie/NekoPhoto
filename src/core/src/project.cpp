@@ -127,7 +127,7 @@ json transformJson(const LayerTransform& t) {
 
 const std::set<std::string> knownLayerKeys = {"id", "name", "isVisible", "transform", "imageFile", "parentID", "isGroup", "opacity", "blendMode",
     "maskFile", "maskEnabled", "maskSourceID", "adjustment", "maskPlacement", "maskLinked", "shape", "text", "passThrough", "artboard"};
-const std::set<std::string> knownManifestKeys = {"format", "version", "colorSpace", "resolution", "documentID", "width", "height", "activeLayerID", "layers", "slices"};
+const std::set<std::string> knownManifestKeys = {"format", "version", "colorSpace", "resolution", "documentID", "width", "height", "activeLayerID", "layers", "slices", "animation"};
 
 struct Record {
     Layer layer;
@@ -322,6 +322,7 @@ struct Manifest {
     std::vector<Record> records;
     std::vector<Slice> slices;
     std::string extraJson;
+    Animation animation;
 };
 
 bool parseManifestJson(const json& j, Manifest& m, ProjectError& error) {
@@ -366,6 +367,9 @@ bool parseManifestJson(const json& j, Manifest& m, ProjectError& error) {
             m.slices.push_back(std::move(s));
         }
     }
+    // Frame animation (NekoPhoto's own key, which other readers skip): a damaged one is dropped, not fatal.
+    if (auto a = j.find("animation"); a != j.end() && a->is_object())
+        if (auto parsed = parseAnimationJson(a->dump())) m.animation = std::move(*parsed);
     json extra = json::object();
     for (auto& [key, value] : j.items()) if (!knownManifestKeys.count(key)) extra[key] = value;
     if (!extra.empty()) m.extraJson = extra.dump();
@@ -443,6 +447,8 @@ Document documentFrom(const Manifest& m) {
     d.extraJson = m.extraJson;
     d.slices = m.slices;
     for (auto& r : m.records) d.layers.push_back(r.layer);
+    d.animation = m.animation;
+    pruneAnimation(d);
     return d;
 }
 
@@ -603,6 +609,8 @@ std::string manifestJson(const Document& document, const std::optional<Uuid>& ac
             j["slices"].push_back({{"id", s.id}, {"name", s.name}, {"x", s.x}, {"y", s.y}, {"width", s.width}, {"height", s.height},
                                    {"url", s.url}, {"target", s.target}, {"message", s.message}, {"altTag", s.altTag}});
     }
+    if (!document.animation.empty()) j["animation"] = json::parse(animationJson(document.animation));
+    else j.erase("animation");
     return j.dump(2);
 }
 

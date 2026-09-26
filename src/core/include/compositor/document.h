@@ -4,6 +4,7 @@
 // copying a Document (for undo) costs no pixels.
 #pragma once
 #include "artboard.h"
+#include "animation.h"
 #include "geometry.h"
 #include "psd_carry.h"
 #include "smartobject.h"
@@ -254,6 +255,8 @@ struct Document {
     std::map<std::string, std::shared_ptr<const SmartObjectSource>> smartObjects;
     /// Slices (artboard.h), for Export Slices and the PSD's resource 1050.
     std::vector<Slice> slices;
+    /// Frame animation (animation.h); empty for a still document.
+    Animation animation;
 
     Document() = default;
     Document(int width, int height);

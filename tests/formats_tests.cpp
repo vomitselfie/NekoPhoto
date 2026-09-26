@@ -1,6 +1,7 @@
 // TGA, ICO, animated GIF and Aseprite: TGA and ICO round-trip through the writers; GIF and Aseprite files are
 // built here byte by byte (the GIF's LZW encoder follows Patchy's, MIT, src/formats/gif_document_io.cpp).
 #include "check.h"
+#include "compositor/animation.h"
 #include "compositor/aseprite.h"
 #include "compositor/gif.h"
 #include "compositor/ico.h"
@@ -295,6 +296,123 @@ TEST_CASE(aseprite_first_frame_layers) {
     // Adobe's .ase swatch files are told apart.
     Bytes swatches = {'A', 'S', 'E', 'F', 0, 1, 0, 0};
     CHECK(!importAsepriteBytes(swatches, &error));
+}
+
+TEST_CASE(aseprite_frames_become_a_timeline) {
+    // Two layers over three frames: "Body" has one cel linked into frames 2 and 3; "Blink" has its own cel in
+    // frames 1 and 3 and none in frame 2.
+    auto frameBytes = [](const Bytes& chunks, int count, int duration) {
+        Bytes frame;
+        u32(frame, uint32_t(16 + chunks.size())); u16(frame, 0xF1FA); u16(frame, uint32_t(count)); u16(frame, uint32_t(duration)); u16(frame, 0); u32(frame, uint32_t(count));
+        frame.insert(frame.end(), chunks.begin(), chunks.end());
+        return frame;
+    };
+    auto linked = [](uint16_t layer, uint16_t frame) {
+        Bytes b;
+        u16(b, layer); u16(b, 0); u16(b, 0); u8(b, 255); u16(b, 1);
+        for (int i = 0; i < 7; i++) u8(b, 0);
+        u16(b, frame);
+        return aseChunk(0x2005, b);
+    };
+    Bytes f1, f2, f3;
+    auto add = [](Bytes& to, const Bytes& c) { to.insert(to.end(), c.begin(), c.end()); };
+    add(f1, aseLayer(1, 0, 0, 0, 255, "Body"));
+    add(f1, aseLayer(1, 0, 0, 0, 255, "Blink"));
+    add(f1, aseCel(0, 0, 0, 255, false, 1, 1, {255, 0, 0, 255}));
+    add(f1, aseCel(1, 1, 0, 255, false, 1, 1, {0, 255, 0, 255}));
+    add(f2, linked(0, 0));
+    add(f3, linked(0, 0));
+    add(f3, aseCel(1, 1, 1, 255, true, 1, 1, {0, 0, 255, 255}));
+    Bytes file;
+    const Bytes a = frameBytes(f1, 4, 100), b = frameBytes(f2, 1, 200), c = frameBytes(f3, 2, 300);
+    u32(file, uint32_t(128 + a.size() + b.size() + c.size())); u16(file, 0xA5E0); u16(file, 3); u16(file, 4); u16(file, 4); u16(file, 32); u32(file, 1);
+    file.resize(128, 0);
+    for (const Bytes* f : {&a, &b, &c}) file.insert(file.end(), f->begin(), f->end());
+
+    std::string error;
+    auto imported = importAsepriteBytes(file, &error);
+    REQUIRE(imported);
+    CHECK(imported->notes.empty());
+    const Document& doc = imported->document;
+    REQUIRE(doc.layers.size() == 3);
+    CHECK_EQ(doc.layers[0].name, std::string("Body"));
+    CHECK_EQ(doc.layers[1].name, std::string("Blink (frame 1)"));
+    CHECK_EQ(doc.layers[2].name, std::string("Blink (frame 3)"));
+    const Animation& anim = doc.animation;
+    REQUIRE(anim.frames.size() == 3);
+    CHECK_EQ(anim.frames[1].delayMs, 200);
+    auto shows = [&](int frame, size_t layer) { return anim.frames[size_t(frame)].layers.at(doc.layers[layer].id).visible; };
+    CHECK(shows(0, 0) && shows(0, 1) && !shows(0, 2));
+    CHECK(shows(1, 0) && !shows(1, 1) && !shows(1, 2));
+    CHECK(shows(2, 0) && !shows(2, 1) && shows(2, 2));
+    CHECK(doc.layers[1].visible && !doc.layers[2].visible);   // the layers show frame 1
+    auto third = renderFrame(doc, 2);
+    REQUIRE(third);
+    CHECK_EQ(int(third->pixel(1, 1)[2]), 255);
+    CHECK_EQ(int(third->pixel(0, 0)[0]), 255);
+}
+
+TEST_CASE(gif_encoder_round_trips_through_the_reader) {
+    // Frame 1: few colours (kept exactly) with a transparent corner; frame 2: a smooth ramp of many colours (median
+    // cut); frame 3 like frame 1 shifted. Long enough rows to push the LZW table through a clear.
+    const int w = 97, h = 61;
+    Image f1(w, h), f2(w, h), f3(w, h);
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            uint8_t* p = f1.pixel(x, y);
+            const int k = (x / 5 + y / 3) % 4;
+            const uint8_t c[4][3] = {{255, 0, 0}, {0, 128, 255}, {10, 200, 30}, {250, 250, 250}};
+            if (x < 6 && y < 6) { p[0] = p[1] = p[2] = p[3] = 0; }
+            else { p[0] = c[k][0]; p[1] = c[k][1]; p[2] = c[k][2]; p[3] = 255; }
+            uint8_t* q = f2.pixel(x, y);
+            q[0] = uint8_t(x * 255 / (w - 1)); q[1] = uint8_t(y * 255 / (h - 1)); q[2] = uint8_t((x + y) % 256); q[3] = 255;
+            std::memcpy(f3.pixel(x, y), f1.pixel((x + 7) % w, y), 4);
+        }
+    std::string error;
+    const Bytes bytes = encodeGif({{&f1, 100}, {&f2, 250}, {&f3, 40}}, 0, &error);
+    REQUIRE(!bytes.empty());
+    CHECK_EQ(gifFrameCount(bytes), 3);
+    auto imported = importGifBytes(bytes, &error);
+    REQUIRE(imported);
+    const Document& doc = imported->document;
+    REQUIRE(doc.layers.size() == 3);
+    CHECK(imported->notes.empty());
+    // Exact frames come back pixel for pixel, transparency included.
+    auto same = [](const Image& a, const Image& b) {
+        for (int y = 0; y < a.height(); y++) if (std::memcmp(a.row(y), b.row(y), size_t(a.width()) * 4) != 0) return false;
+        return true;
+    };
+    CHECK(same(*doc.layers[0].asset->image, f1));
+    CHECK(same(*doc.layers[2].asset->image, f3));
+    // The ramp comes back close.
+    int worst = 0;
+    const Image& r2 = *doc.layers[1].asset->image;
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++)
+            for (int c = 0; c < 4; c++) worst = std::max(worst, std::abs(int(r2.pixel(x, y)[c]) - int(f2.pixel(x, y)[c])));
+    CHECK(worst <= 24);
+    // Delays and looping become the timeline.
+    REQUIRE(doc.animation.frames.size() == 3);
+    CHECK_EQ(doc.animation.frames[1].delayMs, 250);
+    CHECK_EQ(doc.animation.frames[2].delayMs, 40);
+    CHECK_EQ(doc.animation.loopCount, 0);
+    CHECK(doc.animation.frames[1].layers.at(doc.layers[1].id).visible);
+    CHECK(!doc.animation.frames[1].layers.at(doc.layers[0].id).visible);
+    // Play three times: NETSCAPE says two repeats; play once: no block at all.
+    auto thrice = importGifBytes(encodeGif({{&f1, 100}, {&f3, 100}}, 3));
+    REQUIRE(thrice);
+    CHECK_EQ(thrice->document.animation.loopCount, 3);
+    auto once = importGifBytes(encodeGif({{&f1, 100}, {&f3, 100}}, 1));
+    REQUIRE(once);
+    CHECK_EQ(once->document.animation.loopCount, 1);
+    // A document's frames export as its animation.
+    const Bytes again = encodeDocumentGif(doc, &error);
+    auto reread = importGifBytes(again);
+    REQUIRE(reread);
+    CHECK_EQ(reread->document.animation.frames.size(), size_t(3));
+    CHECK(same(*reread->document.layers[0].asset->image, f1));
+    Image odd(3, 3);
+    CHECK(encodeGif({{&f1, 10}, {&odd, 10}}, 0, &error).empty());
 }
 
 TEST_MAIN()

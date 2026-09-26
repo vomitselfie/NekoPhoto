@@ -117,8 +117,10 @@ endif()
 add_library(compositor_core STATIC
     src/abr.cpp
     src/artboard.cpp
+    src/animation.cpp
     src/aseprite.cpp
     src/gif.cpp
+    src/gif_write.cpp
     src/ico.cpp
     src/tga.cpp
     src/affinity.cpp

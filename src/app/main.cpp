@@ -260,7 +260,7 @@ int main(int argc, char** argv) {
     parser.addOption(prefs);
     QCommandLineOption toolOption("tool", "Select tool <name> after opening (move, marquee, lasso, wand, crop, brush, healing, clone, smudge, gradient, shape, eyedropper, hand, zoom).", "name");
     parser.addOption(toolOption);
-    QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: welcome (or welcome:N for page N), new, canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, cameraraw (or cameraraw:N for panel N), gmic, content-fill, background, text, fonts, brushes.", "name");
+    QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: welcome (or welcome:N for page N), new, canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, cameraraw (or cameraraw:N for panel N), gmic, content-fill, background, text, fonts, brushes, actions, timeline (frames made from the layers when there are none), batch.", "name");
     parser.addOption(dialogOption);
     QCommandLineOption rpc("rpc", "Listen on the automation socket (JSON-RPC over a local socket, for the MCP bridge). Also on when the automation preference is set.");
     QCommandLineOption rpcSocket("rpc-socket", "Socket path for --rpc (default: $XDG_RUNTIME_DIR/nekophoto.sock, or $COMPOSITOR_RPC_SOCKET).", "path");
@@ -475,6 +475,7 @@ int main(int argc, char** argv) {
                     dialog->show();
                 }
             }
+            else if (name == "actions" || name == "timeline" || name == "batch") window.showPanel(name);
             else if (name == "new") app::askNewDocument(&window, {});
             else if (name == "canvas-size") app::askCanvasSize(&window, s->hasDocument() ? s->document()->width : 1920, s->hasDocument() ? s->document()->height : 1080);
             else if (name == "image-size") app::askImageSize(&window, s->hasDocument() ? s->document()->width : 1920, s->hasDocument() ? s->document()->height : 1080, 72);

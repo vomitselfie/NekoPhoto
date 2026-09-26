@@ -821,6 +821,87 @@ def main():
         except RuntimeError:
             pass
 
+    # Actions: record requests, play them back as one undo step, edit, export, import and batch a folder.
+    name = "rpc-smoke action"
+    for leftover in (name, name + " 2"):
+        if any(a["name"] == leftover for a in rpc.call("actions.list")["actions"]):
+            rpc.call("actions.delete", name=leftover)
+    rpc.call("document.new", width=48, height=32)
+    rpc.call("actions.record", action="start", name=name)
+    assert rpc.call("actions.list")["recording"]
+    rpc.call("selection.rect", x=2, y=2, width=10, height=10)
+    rpc.call("pixels.fill", color="#ff8800")
+    rpc.call("layers.list")   # looks are not recorded
+    rpc.call("selection.none")
+    stopped = rpc.call("actions.record", action="stop")
+    assert stopped["added"] == 3, stopped
+    recorded = rpc.call("actions.list", name=name)["actions"][0]
+    assert [s["method"] for s in recorded["steps"]] == ["selection.rect", "pixels.fill", "selection.none"], recorded
+    played = rpc.call("actions.play", name=name)
+    assert played["completed"] and played["played"] == 3, played
+    assert rpc.call("history.info")["undo"] == name, rpc.call("history.info")
+    steps = recorded["steps"]
+    steps[1]["enabled"] = False
+    steps.insert(0, {"method": "pixels.invert", "params": {}})
+    rpc.call("actions.save", name=name, steps=[{k: s[k] for k in ("method", "params", "enabled") if k in s} for s in steps])
+    assert rpc.call("actions.play", name=name)["played"] == 3
+    try:
+        rpc.call("actions.save", name=name + " bad", steps=[{"params": {}}])
+        raise AssertionError("a step without a method should be refused")
+    except RuntimeError:
+        pass
+    failing = rpc.call("actions.save", name=name + " 2", steps=[{"method": "canvas.crop", "params": {"x": 0}}])
+    assert failing["name"] == name + " 2"
+    stopped_at = rpc.call("actions.play", name=name + " 2")
+    assert not stopped_at["completed"] and stopped_at["error"]["index"] == 0, stopped_at
+    rpc.call("actions.delete", name=name + " 2")
+    work = tempfile.mkdtemp(prefix="nekophoto-actions-")
+    exported = rpc.call("actions.export", name=name, path=os.path.join(work, "actions.json"))
+    imported = rpc.call("actions.import", path=exported["path"])
+    assert imported["imported"] == [name + " 2"], imported
+    rpc.call("actions.delete", name=name + " 2")
+    source = os.path.join(work, "in")
+    os.makedirs(source)
+    rpc.call("document.export", path=os.path.join(source, "one.png"))
+    rpc.call("document.export", path=os.path.join(source, "two.png"))
+    tabs = len(rpc.call("tabs.list"))
+    batch = rpc.call("actions.batch", name=name, input=source, output=os.path.join(work, "out"), format="jpg")
+    assert sorted(batch["written"]) == ["one.jpg", "two.jpg"] and not batch["failed"], batch
+    assert len(rpc.call("tabs.list")) == tabs, "the batch left tabs open"
+    assert rpc.call("actions.batch", name=name, input=source, output=os.path.join(work, "out"), format="jpg")["skipped"] == ["one.png", "two.png"]
+    rpc.call("actions.delete", name=name)
+
+    # Frame animation: frames of layer states, delays and looping; an animated GIF out and back in.
+    rpc.call("document.new", width=32, height=24)
+    rpc.call("pixels.fill", color="#ff0000")
+    assert rpc.call("timeline.info")["count"] == 0
+    created = rpc.call("timeline.frame", action="create")
+    assert created["count"] == 1 and created["current"] == 0, created
+    second = rpc.call("layers.add")
+    rpc.call("pixels.fill", color="#0000ff")
+    rpc.call("timeline.frame", action="duplicate")
+    rpc.call("timeline.frame", action="select", index=0)
+    rpc.call("layers.set", id=second["id"], visible=False)
+    frames = rpc.call("timeline.set", delay=300, loopCount=2)
+    assert frames["count"] == 2 and frames["loopCount"] == 2 and frames["frames"][0]["delay"] == 300, frames
+    assert second["id"] not in frames["frames"][0]["visibleLayers"] and second["id"] in frames["frames"][1]["visibleLayers"], frames
+    rpc.call("timeline.frame", action="select", index=1)
+    assert next(l for l in rpc.call("layers.list") if l["id"] == second["id"])["visible"]
+    moved = rpc.call("timeline.frame", action="move", index=1, to=0)
+    assert moved["current"] == 0 and moved["frames"][1]["delay"] == 300, moved
+    gif_path = os.path.join(work, "frames.gif")
+    written = rpc.call("document.export", path=gif_path)
+    assert written["frames"] == 2, written
+    with open(gif_path, "rb") as f:
+        assert f.read(6) == b"GIF89a"
+    rpc.call("history.undo")   # the move
+    rpc.call("tabs.new")
+    rpc.call("document.open", path=gif_path)
+    back = rpc.call("timeline.info")
+    assert back["count"] == 2 and back["loopCount"] == 2 and [f["delay"] for f in back["frames"]] == [100, 300], back
+    cleared = rpc.call("timeline.frame", action="clear")
+    assert cleared["count"] == 0
+
     print(len(methods), "methods; smoke test passed")
 
 

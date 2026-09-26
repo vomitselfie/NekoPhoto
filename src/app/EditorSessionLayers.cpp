@@ -751,6 +751,13 @@ void EditorSession::flipCanvas(bool horizontal) {
         return t;
     };
     for (auto& l : document_->layers) {
+        // Where the layer sits in the other frames mirrors too.
+        for (AnimationFrame& f : document_->animation.frames) {
+            auto state = f.layers.find(l.id);
+            if (state == f.layers.end()) continue;
+            if (horizontal) state->second.position.x = w - state->second.position.x - l.transform.size.width;
+            else state->second.position.y = h - state->second.position.y - l.transform.size.height;
+        }
         l.transform = flip(l.transform);
         if (l.mask && l.mask->placement) l.mask->placement = flip(*l.mask->placement);
     }

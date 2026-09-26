@@ -8,6 +8,7 @@
 #include "compositor/blend.h"
 #include "compositor/filters.h"
 #include "compositor/brush.h"
+#include "compositor/animation.h"
 #include "compositor/document.h"
 #include "compositor/history.h"
 #include "compositor/png.h"
@@ -1803,6 +1804,88 @@ TEST_CASE(image_sizes_beyond_the_buffer_limit_are_empty_rather_than_short) {
     CHECK(atLimit.byteCount() == size_t(maxImageSide) * 4 * 2);
     GrayImage grayAtLimit(maxImageSide, 2);
     CHECK(grayAtLimit.byteCount() == size_t(maxImageSide) * 2);
+}
+
+TEST_CASE(animation_frames_hold_visibility_position_and_opacity) {
+    Document doc(20, 10);
+    Layer a = imageLayer("A", solid(4, 4, 255, 0, 0, 255), {0, 0});
+    Layer b = imageLayer("B", solid(4, 4, 0, 0, 255, 255), {10, 0});
+    doc.layers = {a, b};
+    ensureAnimation(doc, 120);
+    REQUIRE(doc.animation.frames.size() == 1u);
+    CHECK_EQ(doc.animation.frames[0].delayMs, 120);
+    // Frame 2: A hidden, B moved and half transparent; the edit is kept in the current frame.
+    CHECK(duplicateFrame(doc, 0));
+    CHECK_EQ(doc.animation.current, 1);
+    doc.layers[0].visible = false;
+    doc.layers[1].transform.origin = Point(12, 3);
+    doc.layers[1].opacity = 0.5;
+    syncCurrentFrame(doc);
+    CHECK(selectFrame(doc, 0));
+    CHECK(doc.layers[0].visible);
+    CHECK(doc.layers[1].transform.origin == Point(10, 0));
+    CHECK_NEAR(doc.layers[1].opacity, 1, 1e-9);
+    CHECK(selectFrame(doc, 1));
+    CHECK(!doc.layers[0].visible);
+    CHECK(doc.layers[1].transform.origin == Point(12, 3));
+    // Rendering a frame does not touch the document.
+    auto f0 = renderFrame(doc, 0);
+    REQUIRE(f0);
+    CHECK_EQ(int(f0->pixel(1, 1)[0]), 255);
+    CHECK(!doc.layers[0].visible);
+    auto f1 = renderFrame(doc, 1);
+    CHECK_EQ(int(f1->pixel(1, 1)[3]), 0);
+    // Reordering keeps the shown frame current; deleting moves to a neighbour; the last one clears the animation.
+    CHECK(moveFrame(doc, 1, 0));
+    CHECK_EQ(doc.animation.current, 0);
+    CHECK(!doc.animation.frames[0].layers.at(a.id).visible);
+    offsetAnimation(doc, 2, 1);
+    CHECK(doc.animation.frames[1].layers.at(a.id).position == Point(2, 1));
+    // A deleted layer's states go.
+    doc.layers.pop_back();
+    pruneAnimation(doc);
+    CHECK(!doc.animation.frames[0].layers.count(b.id));
+    CHECK(deleteFrame(doc, 0));
+    CHECK_EQ(doc.animation.frames.size(), size_t(1));
+    CHECK(doc.layers[0].visible);
+    CHECK(deleteFrame(doc, 0));
+    CHECK(doc.animation.empty());
+}
+
+TEST_CASE(project_round_trip_keeps_frames_and_old_projects_load) {
+    Document doc(20, 10);
+    Layer a = imageLayer("A", solid(4, 4, 255, 0, 0, 255), {0, 0});
+    Layer b = imageLayer("B", solid(4, 4, 0, 0, 255, 255), {10, 0});
+    doc.layers = {a, b};
+    ensureAnimation(doc, 50);
+    duplicateFrame(doc, 0);
+    doc.layers[0].visible = false;
+    doc.layers[1].opacity = 0.25;
+    syncCurrentFrame(doc);
+    doc.animation.frames[1].delayMs = 700;
+    doc.animation.loopCount = 3;
+    fs::path dir = tempDir();
+    fs::path package = dir / "Frames.comp";
+    ProjectError error;
+    REQUIRE(saveProject(doc, std::nullopt, package.string(), error));
+    auto loaded = loadProject(package.string(), error);
+    REQUIRE(loaded);
+    CHECK(loaded->animation == doc.animation);
+    CHECK_EQ(loaded->animation.frames[1].delayMs, 700);
+    CHECK_EQ(loaded->animation.loopCount, 3);
+    // A manifest without the key (every project before frames) loads as a still document, and one whose
+    // animation is damaged loads without it.
+    std::string manifest = manifestJson(doc, std::nullopt);
+    auto plain = parseManifest(manifestJson(Document(doc.width, doc.height), std::nullopt), error);
+    REQUIRE(plain);
+    CHECK(plain->animation.empty());
+    const size_t at = manifest.find("\"frames\"");
+    REQUIRE(at != std::string::npos);
+    manifest.replace(at, 8, "\"frameX\"");
+    auto damaged = parseManifest(manifest, error);
+    REQUIRE(damaged);
+    CHECK(damaged->animation.empty());
+    fs::remove_all(dir);
 }
 
 TEST_MAIN()

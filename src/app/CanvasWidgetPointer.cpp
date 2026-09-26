@@ -1,5 +1,6 @@
 // Canvas pointer gestures: press, drag and release for every tool, with snapping.
 #include "CanvasWidget.h"
+#include "ActionLibrary.h"
 #include "VectorPathQt.h"
 #include <cstring>
 #include "QtGeometry.h"
@@ -682,13 +683,16 @@ void CanvasWidget::finishMarquee(Qt::KeyboardModifiers modifiers) {
     update();
     if (!box) return;
     SelectionMode mode = selectionMode(modifiers);
-    if (box->width() < 1 || box->height() < 1) { if (mode == SelectionMode::Replace) session_->deselect(); return; }
+    if (box->width() < 1 || box->height() < 1) { if (mode == SelectionMode::Replace) { session_->deselect(); recordAction("selection.none"); } return; }
     QSizeF ds = documentSize();
     Rect rect(box->x(), box->y(), box->width(), box->height());
     auto shape = session_->marqueeKind == MarqueeKind::Ellipse
         ? rasterizeEllipse(rect, int(ds.width()), int(ds.height()), session_->selectionAntialiased)
         : rasterizeRect(rect, int(ds.width()), int(ds.height()), session_->selectionAntialiased);
     session_->applySelectionShape(*shape, mode, session_->marqueeKind == MarqueeKind::Ellipse ? "Elliptical Marquee" : "Rectangular Marquee");
+    static const char* const modes[] = {"replace", "add", "subtract", "intersect"};
+    recordAction("selection.rect", {{"x", box->x()}, {"y", box->y()}, {"width", box->width()}, {"height", box->height()},
+                                    {"ellipse", session_->marqueeKind == MarqueeKind::Ellipse}, {"mode", modes[std::clamp(int(mode), 0, 3)]}});
 }
 
 void CanvasWidget::finishFreehandLasso() {

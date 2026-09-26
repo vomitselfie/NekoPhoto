@@ -2,6 +2,7 @@
 #include "compositor/vectorlayer.h"
 #include "TextLayer.h"
 #include "Automation.h"
+#include "compositor/gif.h"
 #include "AutomationHandlers.h"
 #include "CanvasWidget.h"
 #include "ImageConvert.h"
@@ -166,6 +167,14 @@ void AutomationServer::registerDocumentHandlers() {
             for (auto& n : summary.notes) notes.append(qs(n));
             return QJsonObject{{"path", path}, {"width", doc.width}, {"height", doc.height}, {"shapes", summary.shapes}, {"images", summary.images}, {"groups", summary.groups}, {"notes", notes}};
         }
+        if (suffix == "gif") {
+            // The timeline's frames as an animated GIF, or the composite as a still one.
+            session()->endFramePreview();
+            std::string error;
+            if (!writeDocumentGif(path.toStdString(), document(), &error)) fail("couldn't write " + path + ": " + qs(error));
+            const Document& shown = document();
+            return QJsonObject{{"path", path}, {"width", shown.width}, {"height", shown.height}, {"frames", std::max(1, int(shown.animation.frames.size()))}};
+        }
         auto flat = session()->flattened();
         if (!flat) fail("nothing to export");
         if (suffix == "png") {
@@ -190,7 +199,7 @@ void AutomationServer::registerDocumentHandlers() {
         } else if (suffix == "ico") {
             std::string error;
             if (!writeIco(path.toStdString(), *flat, defaultIcoSizes, &error, &doc)) fail("couldn't write " + path + ": " + qs(error));
-        } else fail("path must end in .psd, .psb, .svg, .png, .jpg, .jpeg, .webp, .tif, .tiff, .tga or .ico", invalidParams);
+        } else fail("path must end in .psd, .psb, .svg, .png, .jpg, .jpeg, .webp, .tif, .tiff, .gif, .tga or .ico", invalidParams);
         return QJsonObject{{"path", path}, {"width", flat->width()}, {"height", flat->height()}};
     });
     add("document.close", [session](const QJsonObject& p) {

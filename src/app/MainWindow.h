@@ -86,6 +86,15 @@ public:
     void setErrorSink(QString* sink) { errorSink_ = sink; }
     /// Starts listening on `socketPath` (empty: the default); returns false with a warning on failure.
     bool startAutomation(const QString& socketPath);
+    /// What plays actions: the socket's server, or one of the window's own when automation is off.
+    AutomationServer* automationEngine();
+    /// Plays an action on the current tab; returns why it stopped, empty when it completed.
+    QString playAction(const QString& name);
+    /// File > Automate > Batch…, with `action` chosen.
+    void showBatchDialog(const QString& action = {});
+    /// For screenshots: the Actions or Timeline panel (with frames made from the layers when there are none), or
+    /// the Batch dialog.
+    void showPanel(const QString& name);
 
 signals:
     /// Something an agent may want to know about changed: document, layers, selection, history, tool, view, tabs.
@@ -135,6 +144,8 @@ private:
     void exportBoxes(bool slices);
     /// A layered PSD, after a summary of anything Photoshop cannot carry.
     void exportPsd();
+    /// The timeline's frames as an animated GIF (the composite when there are none).
+    void exportGif();
 
     QString askExportPath(const QString& title, const QString& filter, const QStringList& suffixes);
     bool confirmDiscard();
@@ -157,6 +168,10 @@ private:
     QString* errorSink_ = nullptr;
     bool skipConfirm_ = false;
     AutomationServer* automation_ = nullptr;
+    AutomationServer* engine_ = nullptr;   // plays actions when automation_ is off
+    QDockWidget* actionsDock_ = nullptr;
+    QDockWidget* timelineDock_ = nullptr;
+    class TimelinePanel* timeline_ = nullptr;
     Autosave* autosave_ = nullptr;
     void offerRecovery();
     void watchForRecovery(EditorSession* session);

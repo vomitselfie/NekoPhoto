@@ -19,7 +19,7 @@ Ported (not vendored) from the same repository, adapted to NekoPhoto's core, eac
 - `src/formats/tga_document_io.cpp` -> `src/core/src/tga.cpp` (TGA reader and RLE writer).
 - `src/formats/ico_document_io.cpp` -> `src/core/src/ico.cpp` (ICO/CUR reader, multi-size ICO writer).
 - `src/formats/aseprite_document_io.cpp` -> `src/core/src/aseprite.cpp` (reader only; zlib instead of miniz).
-- `src/formats/gif_document_io.cpp`'s LZW encoder -> `tests/formats_tests.cpp` (builds test GIFs; the GIF reader in
+- `src/formats/gif_document_io.cpp`'s LZW encoder -> `src/core/src/gif_write.cpp` (animated GIF export) and `tests/formats_tests.cpp` (builds test GIFs; the GIF reader in
   `src/core/src/gif.cpp` is NekoPhoto's own, as Patchy only writes GIFs).
 - `src/core/src/affinity.cpp` and `affinity_tree.{h,cpp}`: the Affinity document reader, from Patchy's
   `src/formats/af_document_io.cpp` and `af_tree.{hpp,cpp}` at the commit above (the container and stream table,

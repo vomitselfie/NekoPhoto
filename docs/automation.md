@@ -113,14 +113,14 @@ layer alone; a masked layer as it shows, `masked: false` for its raw pixels),
 `screenshot` (the canvas as shown, or the `window`).
 
 Documents: `tabs.select`, `tabs.new`, `tabs.close`, `document.new`,
-`document.open` (.comp, a Photoshop .psd/.psb, a Clip Studio .clip, an Affinity .afphoto, .afdesign, .afpub or .af, an Aseprite .ase/.aseprite (first frame), an
+`document.open` (.comp, a Photoshop .psd/.psb, a Clip Studio .clip, an Affinity .afphoto, .afdesign, .afpub or .af, an Aseprite .ase/.aseprite (a layer per cel, its frames on the timeline), an
 icon .ico/.cur (a layer per size, the largest visible), an SVG (.svg/.svgz: shapes as vector
 shape layers), a PDF page (`page`, 1-based, and `resolution` in pixels per inch, default 150; when `app.info` reports
 `pdf`) or an animated GIF (a layer per frame, "Frame N (D ms)", frame 1
-at the bottom and the only one visible), which open in a tab of their own and answer with `layers` and the import
+at the bottom and the only one visible, with the frames, delays and loop count on the timeline), which open in a tab of their own and answer with `layers` and the import
 `notes`; or an image, .tga included), `document.import` (an image as a layer),
 `document.save` (answers `macCompatible`: false past the 100 megapixels of layers Compositor for
-macOS opens; projects here hold up to a gigapixel), `document.export` (.psd, layered, text layers as Photoshop text (`texts` counts them), answering with the counts and any `warnings` and `notes` about what Photoshop cannot carry; or .svg, answering with the `shapes`, `images` and `groups` written and `notes` on what became images (docs/svg-pdf.md); or the composite as .png, .jpg, .webp or .tif; `quality` for JPEG and WebP, where 100 is lossless; `background` behind a JPEG), `document.close`.
+macOS opens; projects here hold up to a gigapixel), `document.export` (.psd, layered, text layers as Photoshop text (`texts` counts them), answering with the counts and any `warnings` and `notes` about what Photoshop cannot carry; or .svg, answering with the `shapes`, `images` and `groups` written and `notes` on what became images (docs/svg-pdf.md); an animated .gif of the timeline's frames (the composite when there are none; `frames` counts them); or the composite as .png, .jpg, .webp or .tif; `quality` for JPEG and WebP, where 100 is lossless; `background` behind a JPEG), `document.close`.
 
 Artboards and slices (docs/artboards-slices.md): `artboards.list`, `artboards.add` (`x`, `y`, `width`, `height`, `name`,
 `background`: white, black, transparent or a CSS colour), `artboards.set` (the same by `id`; a move takes its layers along
@@ -205,6 +205,21 @@ Batches: `rpc.batch` (`calls`: a list of `{"method", "params"}`; `name`) runs th
 request and stops at the first error, answering the results so far and the error's index. With a
 `name` the calls are one undo step and all or nothing: an error takes back what the earlier calls did
 (`rolledBack`). Nothing else runs between the calls of a batch.
+
+Actions ([actions.md](actions.md)): `actions.list` (each action's steps: `method`, `params`, `enabled`, a `label`;
+whether one is recording), `actions.record` (`action` start with a `name`, or stop: while it records, every editing
+request on any connection and the person's recordable menu commands, dialogs and strokes become steps; looks such as
+`layers.list` or `render` are not recorded), `actions.play` (`name`, `times`; stops at the first failing step and
+answers its `index`, `method` and `message`; steps that stay in one document merge into one undo step named after the
+action), `actions.batch` (`name`, `input` and `output` folders, `format` png, jpg, webp, tif, psd, gif or tga,
+`overwrite`: File > Automate > Batch), `actions.save` (`name`, `steps`: create or replace an action, which is how an
+agent edits, reorders or switches off steps), `actions.delete`, `actions.import` and `actions.export` (JSON files).
+
+Frame animation ([animation.md](animation.md)): `timeline.info` (frames with their `delay` in milliseconds and
+`visibleLayers`, `current`, `loopCount`, 0 for forever), `timeline.frame` (`action` create, fromLayers, duplicate,
+select, delete, move with `index` and `to`, or clear; one undo step each), `timeline.set` (`delay` for the frame at
+`index`, default the current one, -1 for all; `loopCount`). While a frame is selected, `layers.set` visibility,
+opacity and moves go into that frame.
 
 Vector shapes and paths: `shape.draw` makes a vector shape layer (rectangle, ellipse, polygon, star, line or a
 custom shape, with fill and stroke), `shape.get` and `shape.set` read and change its path, fill and stroke;

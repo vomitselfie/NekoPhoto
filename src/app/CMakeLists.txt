@@ -77,6 +77,14 @@ qt_add_executable(nekophoto
     BrushImporter.cpp
     PresetLibrary.h
     PresetLibrary.cpp
+    ActionLibrary.h
+    ActionLibrary.cpp
+    ActionsPanel.h
+    ActionsPanel.cpp
+    TimelinePanel.h
+    TimelinePanel.cpp
+    AutomationActions.cpp
+    EditorSessionTimeline.cpp
     BrushPicker.h
     BrushPicker.cpp
     FilterDialog.h

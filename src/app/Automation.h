@@ -37,6 +37,13 @@ public:
     QJsonObject handle(const QJsonObject& request);
     /// The method names, for `rpc.methods`.
     QStringList methods() const;
+    /// Plays an action's enabled steps on the current tab, stopping at the first error; when every step stayed in
+    /// one document they become one undo step named after the action. The reply is actions.play's.
+    QJsonObject playAction(const QString& name);
+    /// File > Automate > Batch: every image in `input` opened in a tab of its own, the action played, the result
+    /// exported to `output` as `format` (png, jpg, webp, tif, psd, gif, tga) and the tab closed.
+    QJsonObject runBatch(const QString& action, const QString& input, const QString& output, const QString& format, bool overwrite,
+                         const std::function<bool(int done, int total, const QString& file)>& progress = {});
 
 signals:
     void clientsChanged(int count);
@@ -54,6 +61,9 @@ private:
     void registerSelectionHandlers();
     void registerPaintHandlers();
     void registerArtboardHandlers();   // artboards and slices (AutomationArtboards.cpp)
+    // AutomationActions.cpp: actions (record, play, batch) and the frame animation timeline.
+    void registerActionsHandlers();
+    void registerTimelineHandlers();
     void add(const QString& name, Handler handler) { handlers_[name] = std::move(handler); }
     /// An event for every subscribed client, coalesced per kind until the event loop turns.
     void notify(const QString& kind);

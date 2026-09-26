@@ -23,6 +23,7 @@ struct Frame {
 
 struct Gif {
     int width = 0, height = 0;
+    int loops = -1;           // the NETSCAPE2.0 repeat count; -1 when there is none (play once)
     Palette global;
     std::vector<Frame> frames;
     bool truncated = false;   // the stream ended or broke before its trailer
@@ -68,6 +69,8 @@ bool parse(const std::vector<uint8_t>& bytes, Gif& gif, bool withData) {
                 disposal = (body[0] >> 2) & 7;
                 delay = body[1] | body[2] << 8;
                 transparent = (body[0] & 1) ? body[3] : -1;
+            } else if (label == 0xFF && body.size() >= 14 && std::memcmp(body.data(), "NETSCAPE2.0", 11) == 0 && body[11] == 1) {
+                gif.loops = body[12] | body[13] << 8;
             }
         } else if (block == 0x2C) {
             Frame f;
@@ -170,6 +173,9 @@ std::optional<PsdImport> importGifBytes(const std::vector<uint8_t>& bytes, std::
         result.notes.push_back("Only the first " + std::to_string(limit) + " of " + std::to_string(gif.frames.size()) + " frames fit in a document.");
         gif.frames.resize(limit);
     }
+    // Frames: frame n shows layer n alone, for as long as the GIF says.
+    Animation& animation = result.document.animation;
+    animation.loopCount = gif.loops < 0 ? 1 : gif.loops == 0 ? 0 : std::min(65535, gif.loops + 1);
     Image canvas(width, height);   // premultiplied; a GIF pixel is opaque or clear, so it is also straight
     int damaged = 0;
     for (size_t n = 0; n < gif.frames.size(); n++) {
@@ -210,6 +216,21 @@ std::optional<PsdImport> importGifBytes(const std::vector<uint8_t>& bytes, std::
         } else if (f.disposal == 3 && saved) {
             canvas = std::move(*saved);
         }
+    }
+    // Every frame names every layer, so a very long GIF opens as layers alone.
+    const size_t frameLimit = 2000;
+    if (result.document.layers.size() > frameLimit) {
+        result.notes.push_back("With more than " + std::to_string(frameLimit) + " frames, the timeline was left out; the frames are layers.");
+        animation = Animation{};
+    }
+    for (size_t n = 0; n < result.document.layers.size() && result.document.layers.size() <= frameLimit; n++) {
+        AnimationFrame frame;
+        frame.delayMs = gif.frames[n].delay * 10;
+        for (size_t k = 0; k < result.document.layers.size(); k++) {
+            const Layer& l = result.document.layers[k];
+            frame.layers[l.id] = {k == n, l.transform.origin, l.opacity};
+        }
+        animation.frames.push_back(std::move(frame));
     }
     if (damaged) result.notes.push_back(std::to_string(damaged) + " frame(s) ended early; their missing pixels show the frame before.");
     else if (gif.truncated) result.notes.push_back("The file ends before its trailer; the frames read up to there were kept.");
