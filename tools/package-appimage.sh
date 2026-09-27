@@ -42,6 +42,11 @@ linuxdeploy --appdir AppDir \
     --desktop-file AppDir/usr/share/applications/nekophoto.desktop \
     --icon-file "$root/packaging/nekophoto.svg" \
     --plugin qt
+# Qt's own Japanese strings (standard buttons, file dialogs); ours are compiled into the program. The plugin's
+# qt.conf puts Qt's translations folder at usr/translations, where src/app/Language.cpp also looks.
+qttranslations="$("$QMAKE" -query QT_INSTALL_TRANSLATIONS)"
+if [ -f "$qttranslations/qtbase_ja.qm" ]; then mkdir -p AppDir/usr/translations && cp "$qttranslations/qtbase_ja.qm" AppDir/usr/translations/
+else echo "note: $qttranslations/qtbase_ja.qm not found; Qt's standard buttons stay English in Japanese"; fi
 # Ship the copyright file of every distribution package whose library was bundled.
 # Qt comes from aqtinstall, not dpkg; its licences are in LICENSES/ and THIRD-PARTY-NOTICES.md.
 bundled=AppDir/usr/share/doc/nekophoto/bundled

@@ -20,6 +20,7 @@
 #include "FontPicker.h"
 #include "SingleInstance.h"
 #include "Platform.h"
+#include "Language.h"
 #include "ImageConvert.h"
 #include <QDialog>
 #include <cstdio>
@@ -224,6 +225,16 @@ int run(int argc, char** argv) {
     if (!QStandardPaths::locate(QStandardPaths::ApplicationsLocation, "nekophoto.desktop").isEmpty()) QApplication::setDesktopFileName("nekophoto");
     app.setWindowIcon(QIcon(QStringLiteral(":/app/icon.svg")));
     app::applyTheme();
+    {
+        // The interface language, before any window: --lang for one run, else Edit > Preferences. A headless or
+        // scripted run stays English unless --lang asks (the automation API is English either way).
+        QString lang;
+        for (int i = 1; i < argc; i++) {
+            if (std::strcmp(argv[i], "--lang") == 0 && i + 1 < argc) lang = QString::fromLocal8Bit(argv[i + 1]);
+            else if (std::strncmp(argv[i], "--lang=", 7) == 0) lang = QString::fromLocal8Bit(argv[i] + 7);
+        }
+        if (!lang.isEmpty() || !headless) app::language::install(lang);
+    }
     QCommandLineParser parser;
     parser.setApplicationDescription("NekoPhoto: a layered photo editor and painting app.");
     parser.addHelpOption();
@@ -260,6 +271,8 @@ int run(int argc, char** argv) {
     parser.addOption(benchView);
     parser.addOption(saveAs);
     parser.addOption(prefs);
+    QCommandLineOption langOption("lang", "Interface language for this run: en, ja or system (default: the Preferences choice).", "code");
+    parser.addOption(langOption);
     QCommandLineOption toolOption("tool", "Select tool <name> after opening (move, marquee, lasso, wand, crop, brush, healing, clone, smudge, gradient, shape, eyedropper, hand, zoom).", "name");
     parser.addOption(toolOption);
     QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: welcome (or welcome:N for page N), new, canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, cameraraw (or cameraraw:N for panel N), gmic, content-fill, background, text, fonts, brushes, actions, timeline (frames made from the layers when there are none), batch.", "name");
@@ -330,7 +343,7 @@ int run(int argc, char** argv) {
     // quits; anything that asks for a process of its own (screenshots, automation, --new-window) keeps one.
     QStringList handoff;
     for (const QString& path : parser.positionalArguments()) handoff << QDir::current().absoluteFilePath(path);
-    const bool ownProcess = parser.isSet(newWindow) || parser.isSet(benchBrush) || parser.isSet(benchView) || parser.isSet(screenshot) || parser.isSet(headlessOption) || parser.isSet(batchOption) || parser.isSet(dialogOption) || parser.isSet(saveAs) || parser.isSet(prefs) || parser.isSet(demo) || parser.isSet(toolOption);
+    const bool ownProcess = parser.isSet(newWindow) || parser.isSet(benchBrush) || parser.isSet(benchView) || parser.isSet(screenshot) || parser.isSet(headlessOption) || parser.isSet(batchOption) || parser.isSet(dialogOption) || parser.isSet(saveAs) || parser.isSet(prefs) || parser.isSet(langOption) || parser.isSet(demo) || parser.isSet(toolOption);
     const QString rpcRequested = parser.isSet(rpc) || parser.isSet(rpcSocket) ? (parser.value(rpcSocket).isEmpty() ? app::AutomationServer::defaultSocketPath() : parser.value(rpcSocket)) : QString();
     if (!ownProcess && app::SingleInstance::handOff(handoff, rpcRequested)) return 0;
     app::MainWindow window;

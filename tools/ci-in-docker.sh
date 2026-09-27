@@ -33,6 +33,7 @@ else
 FROM $image
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -q && apt-get install -y -q ninja-build cmake pkg-config libpng-dev libmypaint-dev libraw-dev libzstd-dev libsqlite3-dev qt6-base-dev libgl1-mesa-dev clang g++ python3 curl \\
+    && (apt-get install -y -q qt6-tools-dev qt6-l10n-tools qt6-translations-l10n || true) \\
     && (apt-get install -y -q qt6-svg-dev || apt-get install -y -q libqt6svg6-dev) && (apt-get install -y -q qt6-pdf-dev || true) && rm -rf /var/lib/apt/lists/*
 DOCKERFILE
 fi

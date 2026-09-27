@@ -2,6 +2,7 @@
 #include "PreferencesDialog.h"
 #include "Automation.h"
 #include "Theme.h"
+#include "Language.h"
 #include <QSettings>
 #include <QSpinBox>
 #include "Autosave.h"
@@ -50,6 +51,21 @@ PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent) {
     themeHint->setStyleSheet(hintStyle());
     appearanceRow->addWidget(themeHint, 2);
     layout->addWidget(appearance);
+
+    auto* languageBox = new QGroupBox(tr("Language"));
+    auto* languageRow = new QHBoxLayout(languageBox);
+    languageRow->addWidget(new QLabel(tr("Language")));
+    auto* language = new QComboBox;
+    language->addItem(tr("System default"), "system");
+    for (const QString& code : language::available()) language->addItem(language::nativeName(code), code);
+    language->setCurrentIndex(std::max(0, language->findData(language::setting())));
+    connect(language, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [language](int) { language::setSetting(language->currentData().toString()); });
+    languageRow->addWidget(language, 1);
+    auto* languageHint = new QLabel(tr("Takes effect the next time NekoPhoto starts."));
+    languageHint->setWordWrap(true);
+    languageHint->setStyleSheet(hintStyle());
+    languageRow->addWidget(languageHint, 2);
+    layout->addWidget(languageBox);
 
     auto* group = new QGroupBox(tr("AI background removal"));
     auto* v = new QVBoxLayout(group);

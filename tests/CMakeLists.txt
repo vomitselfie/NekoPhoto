@@ -202,3 +202,12 @@ add_test(NAME hostile_input_tests COMMAND hostile_input_tests)
 add_executable(seamcarve_tests seamcarve_tests.cpp)
 target_link_libraries(seamcarve_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME seamcarve_tests COMMAND seamcarve_tests)
+
+# Every Japanese string translated and none left over from removed code (tools/check_translations.py runs lupdate
+# over src/app into a copy of the .ts, so a new tr() string without a translation fails here).
+find_package(Qt6 QUIET COMPONENTS LinguistTools)
+find_package(Python3 QUIET COMPONENTS Interpreter)
+if(COMPOSITOR_BUILD_APP AND TARGET Qt6::lupdate AND Python3_Interpreter_FOUND)
+    add_test(NAME translations_check COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/check_translations.py
+        --lupdate $<TARGET_FILE:Qt6::lupdate>)
+endif()

@@ -121,7 +121,7 @@ jobs:
             curl zip
           pacboy: >-
             gcc:p cmake:p ninja:p pkgconf:p python:p
-            qt6-base:p qt6-svg:p qt6-imageformats:p qt6-tools:p
+            qt6-base:p qt6-svg:p qt6-imageformats:p qt6-tools:p qt6-translations:p
             libpng:p zlib:p libmypaint:p libraw:p zstd:p sqlite3:p
       - name: Version from the tag
         id: version

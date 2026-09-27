@@ -44,6 +44,14 @@ else
         if [ -f "$plugindir/$plugin" ]; then mkdir -p "$stage/$(dirname "$plugin")"; cp "$plugindir/$plugin" "$stage/$plugin"; fi
     done
 fi
+# Qt's own Japanese strings (standard buttons, file dialogs) beside the program, where src/app/Language.cpp looks;
+# our translations are compiled into the executable.
+[ -n "$plugindir" ] || plugindir="$(qtpaths6 --query QT_INSTALL_PLUGINS 2>/dev/null || qmake6 -query QT_INSTALL_PLUGINS || true)"
+qttranslations="$(qtpaths6 --query QT_INSTALL_TRANSLATIONS 2>/dev/null || true)"
+for dir in "$qttranslations" "$plugindir/../translations" "$dlldir/../share/qt6/translations"; do
+    if [ -n "$dir" ] && [ -f "$dir/qtbase_ja.qm" ]; then mkdir -p "$stage/translations" && cp "$dir/qtbase_ja.qm" "$stage/translations/"; break; fi
+done
+[ -f "$stage/translations/qtbase_ja.qm" ] || echo "note: qtbase_ja.qm not found; Qt's standard buttons stay English in Japanese"
 
 # Every DLL any shipped binary imports, transitively, when the toolchain has it (system DLLs are not there).
 declare -A seen=()

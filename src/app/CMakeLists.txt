@@ -153,6 +153,8 @@ qt_add_executable(nekophoto
     Bench.cpp
     VectorFiles.h
     VectorFiles.cpp
+    Language.h
+    Language.cpp
 )
 
 target_compile_definitions(nekophoto PRIVATE COMPOSITOR_VERSION="${COMPOSITOR_VERSION_STRING}")
@@ -163,6 +165,17 @@ file(GLOB_RECURSE COMPOSITOR_BRUSH_FILES CONFIGURE_DEPENDS RELATIVE ${CMAKE_CURR
 qt_add_resources(nekophoto "welcome" PREFIX "/" FILES images/welcome.jpg)
 qt_add_resources(nekophoto "gmic_lists" PREFIX "/" FILES gmic/unsupported.txt)
 qt_add_resources(nekophoto "mypaint_brushes" PREFIX "/" FILES ${COMPOSITOR_BRUSH_FILES} brushes/mypaint/order.conf)
+# Translations (Qt Linguist): translations/nekophoto_<lang>.ts is compiled to .qm and embedded under :/i18n, so
+# every package carries it. Optional: without Qt LinguistTools the app builds, in English only.
+# `cmake --build build --target update_translations` refreshes the .ts from the sources (docs/translating.md).
+find_package(Qt6 QUIET COMPONENTS LinguistTools)
+if(TARGET Qt6::lrelease AND TARGET Qt6::lupdate)
+    qt_add_translations(nekophoto TS_FILES ${CMAKE_SOURCE_DIR}/translations/nekophoto_ja.ts RESOURCE_PREFIX "/i18n"
+        LUPDATE_OPTIONS -no-obsolete -locations none)
+    message(STATUS "Translations: Japanese (Qt LinguistTools ${Qt6LinguistTools_VERSION})")
+else()
+    message(STATUS "Translations: Qt LinguistTools not found (qt6-l10n-tools on Debian/Ubuntu, qt6-tools elsewhere); the app will be English only")
+endif()
 target_link_libraries(nekophoto PRIVATE compositor::core Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Svg compositor_warnings)
 # Qt PDF (PDFium, BSD-3 / LGPL Qt) renders PDF pages for File > Open. Optional: without it PDFs are refused with a
 # message. Found at the top as an optional component of the one Qt lookup (a separate find_package(Qt6Pdf) after the

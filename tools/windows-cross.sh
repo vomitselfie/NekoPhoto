@@ -10,12 +10,12 @@
 set -euo pipefail
 jobs="${1:-6}"
 root="$(cd "$(dirname "$0")/.." && pwd)"
-tag="nekophoto-wincross:f42-v2"
+tag="nekophoto-wincross:f42-v3"
 volume="nekophoto-wincross-build"
 
 docker build -q -t "$tag" -f - "$root/tools" <<'DOCKERFILE' >/dev/null
 FROM fedora:42
-RUN dnf install -y -q mingw64-gcc-c++ mingw64-qt6-qtbase mingw64-qt6-qtsvg mingw64-qt6-qtimageformats mingw64-qt6-qttools \
+RUN dnf install -y -q mingw64-gcc-c++ mingw64-qt6-qtbase mingw64-qt6-qtsvg mingw64-qt6-qtimageformats mingw64-qt6-qttools mingw64-qt6-qttranslations qt6-linguist qt6-qttools-devel \
         mingw64-libpng mingw64-zlib mingw64-zstd mingw64-sqlite mingw64-LibRaw mingw64-winpthreads \
         cmake ninja-build make pkgconf python3 curl xz tar zip file findutils which wine-core wine-filesystem \
     && dnf clean all
@@ -48,7 +48,7 @@ export WINEDEBUG=-all WINEDLLOVERRIDES="mscoree,mshtml=" QT_QPA_PLATFORM=offscre
 unset DISPLAY WAYLAND_DISPLAY
 mingw64-cmake -S /src -B /build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCOMPOSITOR_WARNINGS_AS_ERRORS=ON \
     -DOpenCV_DIR=/opt/opencv/lib/cmake/opencv4 >/build/configure.log || { tail -40 /build/configure.log; exit 1; }
-grep -E "^-- (Remove Background|Brushes|RAW|Brush import|Affinity|PDF|G.MIC|Appearance)" /build/configure.log || true
+grep -E "^-- (Remove Background|Brushes|RAW|Brush import|Affinity|PDF|G.MIC|Appearance|Translations)" /build/configure.log || true
 [ "$SHELL_ONLY" = 1 ] && exec bash
 cmake --build /build -j"$JOBS"
 [ "$TESTS" = 1 ] || exit 0
