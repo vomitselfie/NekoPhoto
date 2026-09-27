@@ -10,7 +10,8 @@ constexpr SampleTypes eightAndSixteen = onlyEightBit | sampleTypeBit(SampleType:
 // automation method refused on a deeper document ("Not available in 16-bit yet").
 //
 // P2, the 16-bit core: the renderer, the layer structure and the files. P3a: adjustments, filters, selections and
-// pixel edits. Painting (P3b), layer styles, smart objects, text and vector editing follow (docs/bit-depth.md).
+// pixel edits. P3b: painting and retouching. Layer styles, smart objects, text and vector editing follow
+// (docs/bit-depth.md).
 constexpr FeatureSupport table[] = {
     {"render.document", eightAndSixteen},
     // Image > Mode > 8 Bits/Channel, 16 Bits/Channel.
@@ -87,6 +88,22 @@ constexpr FeatureSupport table[] = {
     {"edit.distort", eightAndSixteen},
     // Content-Aware Fill, Move, Extend and Scale: decided on the pixels rounded to 8 bits, the 16-bit pixels copied.
     {"edit.contentAware", eightAndSixteen},
+
+    // P3b: painting and retouching. The brush in every engine (round tip, tip brushes, MyPaint) and the eraser, on
+    // pixels, layer masks and the Quick Mask; brush.stroke.
+    {"tool.brush", eightAndSixteen},
+    // Spot Healing, the Healing Brush and Patch (the patch search and synthesis decide on the 8-bit rounding).
+    {"tool.spotHealing", eightAndSixteen},
+    {"tool.cloneStamp", eightAndSixteen},
+    // Blur, Sharpen, Smudge and Liquify.
+    {"tool.smudge", eightAndSixteen},
+    // Dodge, Burn and Sponge.
+    {"tool.dodge", eightAndSixteen},
+    {"tool.gradient", eightAndSixteen},
+    // The Paint Bucket: what it fills is chosen on the canvas as shown, in 8-bit levels, as the Magic Wand chooses.
+    {"tool.paintBucket", eightAndSixteen},
+    // Moving, duplicating and nudging selected pixels with the Move tool.
+    {"edit.movePixels", eightAndSixteen},
 };
 }   // namespace
 

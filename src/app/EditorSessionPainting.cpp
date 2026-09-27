@@ -10,12 +10,44 @@
 #include "PresetLibrary.h"
 #include "QtGeometry.h"
 #include "TextLayer.h"
+#include "compositor/blur.h"
+#include "compositor/depth.h"
 #include <algorithm>
 #include <random>
 
 using namespace compositor;
 
 namespace app {
+
+namespace {
+
+/// A stroke (or another raster edit) on `layer` at the document's depth, through the selection; null for an explicit
+/// empty selection, where nothing may be touched. The caller checks isValid().
+std::unique_ptr<BrushStroke> strokeAtDepth(const Document& document, const Layer& layer, bool mask, const BrushSettings& settings) {
+    const AnyGray* coverage = document.selection ? &document.selection->coverage : nullptr;
+    if (document.sampleType == SampleType::U16) {
+        const Gray16* selection = coverage ? coverage->u16().get() : nullptr;
+        if (document.selection && !selection) return nullptr;
+        return std::make_unique<BrushStroke>(layer, mask, settings, document.size(), SampleType::U16, selection);
+    }
+    const GrayImage* selection = coverage ? coverage->u8().get() : nullptr;
+    if (document.selection && !selection) return nullptr;
+    return std::make_unique<BrushStroke>(layer, mask, settings, document.size(), selection);
+}
+
+/// `layer` alone at document size, as the canvas shows it (visible, opaque, Normal, no mask), in a document of
+/// `document`'s size and depth.
+Document layerAlone(const Document& document, const Layer& layer, std::optional<LayerTransform> transform = std::nullopt) {
+    Document single(document.width, document.height);
+    single.sampleType = document.sampleType;
+    Layer copy = layer;
+    copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
+    if (transform) copy.transform = *transform;
+    single.layers = {copy};
+    return single;
+}
+
+} // namespace
 
 // ---- Brush ---------------------------------------------------------------------
 
@@ -26,8 +58,9 @@ std::optional<QPointF> EditorSession::cloneSamplePoint(QPointF point) const {
 }
 
 bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
-    if (refusedAtDepth("edit.paint", tr("Painting"))) return false;
+    if (refusedAtDepth(toolFeature(tool_), tr("Painting"))) return false;
     if (!document_ || stroke_ || transformEdit_) return false;
+    const bool deep = document_->sampleType == SampleType::U16;
     const Layer* layer = activeLayer();
     if (!layer || layer->isGroup || layer->adjustment) return false;
     bool mask = isMaskSelected_ && layer->mask;
@@ -42,20 +75,34 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
         QPointF offset = cloneAligned && cloneOffset ? *cloneOffset : QPointF(std::round(cloneSource->x() - documentPoint.x()), std::round(cloneSource->y() - documentPoint.y()));
         // The sample is the document (or the layer alone) at document size; keep it between strokes until
         // something changes, since a stroke start is where latency shows.
-        std::shared_ptr<const Image> sample;
-        bool cached = cloneSample_ && cloneSampleAll_ == cloneSampleAll && cloneSampleLayer_ == layer->id && cloneSampleRevision_ == documentRevision_;
-        if (cached) sample = cloneSample_;
-        else if (cloneSampleAll) sample = renderFlattened(*document_);
-        else if (layer->asset && layer->asset->image.u8()) {
-            Document single(document_->width, document_->height);
-            Layer copy = *layer;
-            copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
-            single.layers = {copy};
-            sample = renderFlattened(single);
-        } else sample = std::make_shared<Image>(document_->width, document_->height);
-        cloneSample_ = sample; cloneSampleAll_ = cloneSampleAll; cloneSampleLayer_ = layer->id; cloneSampleRevision_ = documentRevision_;
+        bool cached = (deep ? bool(cloneSample16_) : bool(cloneSample_)) && cloneSampleAll_ == cloneSampleAll && cloneSampleLayer_ == layer->id && cloneSampleRevision_ == documentRevision_;
+        if (deep) {
+            // A 16-bit document copies 16-bit pixels.
+            std::shared_ptr<const Image16> sample;
+            if (cached) sample = cloneSample16_;
+            else if (cloneSampleAll) sample = renderFlattened16(*document_);
+            else if (layer->asset && layer->asset->image) sample = renderFlattened16(layerAlone(*document_, *layer, layer->transform));
+            else sample = std::make_shared<Image16>(document_->width, document_->height);
+            cloneSample16_ = sample; cloneSample_.reset();
+            clone = CloneSource{};
+            clone->image16 = sample;
+            clone->offset = {offset.x(), offset.y()};
+        } else {
+            std::shared_ptr<const Image> sample;
+            if (cached) sample = cloneSample_;
+            else if (cloneSampleAll) sample = renderFlattened(*document_);
+            else if (layer->asset && layer->asset->image.u8()) {
+                Document single(document_->width, document_->height);
+                Layer copy = *layer;
+                copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
+                single.layers = {copy};
+                sample = renderFlattened(single);
+            } else sample = std::make_shared<Image>(document_->width, document_->height);
+            cloneSample_ = sample; cloneSample16_.reset();
+            clone = CloneSource{sample, {offset.x(), offset.y()}, nullptr};
+        }
+        cloneSampleAll_ = cloneSampleAll; cloneSampleLayer_ = layer->id; cloneSampleRevision_ = documentRevision_;
         cloneOffset = offset;
-        clone = CloneSource{sample, {offset.x(), offset.y()}, nullptr};
     }
     if (!mask && !effectiveVisibleIds(document_->layers).count(layer->id)) { emit error(tr("The active layer is hidden.")); return false; }
     BrushSettings settings = brushSettings;
@@ -66,9 +113,8 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
     if (mask) settings.maskValue = (maskPaintWhite != brushErase) ? 1 : 0;
     if (mask && paintsQuickMask()) settings.maskValue = 1 - settings.maskValue;   // white selects: the Quick Mask holds the inverse
     else { settings.red = foregroundColor.redF(); settings.green = foregroundColor.greenF(); settings.blue = foregroundColor.blueF(); }
-    const GrayImage* selection = document_->selection && document_->selection->coverage.u8() ? document_->selection->coverage.u8().get() : nullptr;
-    if (document_->selection && !selection) return false; // an explicit empty selection: touch nothing
-    stroke_ = std::make_unique<BrushStroke>(*layer, mask, settings, document_->size(), selection);
+    stroke_ = strokeAtDepth(*document_, *layer, mask, settings);
+    if (!stroke_) return false; // an explicit empty selection: touch nothing
     if (!stroke_->isValid()) { emit error(QString::fromStdString(stroke_->error())); stroke_.reset(); return false; }
     strokeLayerId_ = layer->id;
     strokeMask_ = mask;
@@ -116,10 +162,7 @@ BrushSample EditorSession::nextSample(QPointF documentPoint) {
     return sampleTrack_.add(sample);
 }
 
-void EditorSession::myPaintTo(QPointF documentPoint) {
-    if (refusedAtDepth("edit.paint", tr("Painting"))) return;
-    myPaint_->strokeTo(nextSample(documentPoint));
-}
+void EditorSession::myPaintTo(QPointF documentPoint) { myPaint_->strokeTo(nextSample(documentPoint)); }
 
 void EditorSession::tipTo(QPointF documentPoint) { tipStroke_->strokeTo(nextSample(documentPoint)); }
 
@@ -139,10 +182,8 @@ void EditorSession::continueBrush(QPointF documentPoint) {
 }
 
 std::unique_ptr<BrushStroke> EditorSession::makeRasterEdit(const Layer& layer, bool mask, const BrushSettings& settings) const {
-    const GrayImage* selection = document_->selection && document_->selection->coverage.u8() ? document_->selection->coverage.u8().get() : nullptr;
-    if (document_->selection && !selection) return nullptr; // an explicit empty selection: touch nothing
-    auto stroke = std::make_unique<BrushStroke>(layer, mask, settings, document_->size(), selection);
-    if (!stroke->isValid()) return nullptr;
+    auto stroke = strokeAtDepth(*document_, layer, mask, settings);
+    if (!stroke || !stroke->isValid()) return nullptr;   // null also for an explicit empty selection: touch nothing
     return stroke;
 }
 
@@ -287,12 +328,28 @@ void EditorSession::changeBrushSize(bool increase) {
 // ---- Blur / Smudge / Liquify ---------------------------------------------------------
 
 bool EditorSession::beginWarp(QPointF documentPoint) {
-    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return false;
+    if (refusedAtDepth("tool.smudge", tr("Editing pixels"))) return false;
     if (!document_ || stroke_ || warp_ || transformEdit_) return false;
     const Layer* layer = activeLayer();
-    if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image.u8()) return false;
+    if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image) return false;
     if (smartObjectBlocksPixels(true)) return false;
-    if (isMaskSelected_ && blurMode == BlurToolMode::Blur && layer->mask && layer->mask->asset.image.u8()) {
+    const bool deep = document_->sampleType == SampleType::U16;
+    if (deep && isMaskSelected_ && blurMode == BlurToolMode::Blur && layer->mask && layer->mask->asset.image.u16()) {
+        // Blur on a 16-bit mask: the mask as it sits on the document, softened at 16 bits.
+        const uint16_t background = widen8(LayerMask::background(*layer->mask->asset.thumbnail));
+        auto sample = std::make_shared<Gray16>(document_->width, document_->height, background);
+        sampleMaskCoverage(*layer->mask->asset.image.u16(), layer->maskTransform(), document_->rect(), 1, background, *sample, false);
+        gaussianBlur(*sample, std::min(30.0, std::max(1.5, brushSettings.diameter / 10)));
+        stroke_ = makeRasterEdit(*layer, true, brushSettings);
+        if (!stroke_) return false;
+        stroke_->setMaskClone(std::shared_ptr<const Gray16>(sample));
+        strokeLayerId_ = layer->id;
+        strokeMask_ = true;
+        stroke_->append(toPoint(documentPoint));
+        emit documentChanged({});
+        return true;
+    }
+    if (!deep && isMaskSelected_ && blurMode == BlurToolMode::Blur && layer->mask && layer->mask->asset.image.u8()) {
         // Blur on a mask: the mask as it sits on the document, its edge tone beyond its pixels, softened.
         const GrayImage& own = *layer->mask->asset.image.u8();
         uint8_t background = LayerMask::background(*layer->mask->asset.thumbnail);
@@ -316,12 +373,26 @@ bool EditorSession::beginWarp(QPointF documentPoint) {
         const double diameter = brushSettings.diameter;
         // Each needs its kernel's reach around a tile: Sharpen's blur is sigma 1 (radius 3), Blur's up to 3 sigma (a
         // wider recursive blur past sigma 6 is within a level at 4 sigma).
-        if (blurMode == BlurToolMode::Sharpen) return beginProcessedStroke(documentPoint, [](Image& image) { sharpenImage(image); }, 3);
+        if (blurMode == BlurToolMode::Sharpen)
+            return beginProcessedStroke(documentPoint, [](Image& image) { sharpenImage(image); }, 3, [](Image16& image) { sharpenImage(image); });
         const double sigma = std::min(30.0, std::max(1.5, diameter / 10));
-        return beginProcessedStroke(documentPoint, [sigma](Image& image) { gaussianBlur(image, sigma); }, int(std::ceil(sigma * (sigma <= 6 ? 3 : 4))));
+        return beginProcessedStroke(documentPoint, [sigma](Image& image) { gaussianBlur(image, sigma); }, int(std::ceil(sigma * (sigma <= 6 ? 3 : 4))),
+                                    [sigma](Image16& image) { gaussianBlur(image, sigma); });
     }
     if (isMaskSelected_) { emit error(tr("Smudge and Liquify work on a layer's pixels, not its mask.")); return false; }
     if (!effectiveVisibleIds(document_->layers).count(layer->id)) return false;
+    if (deep) {
+        // The layer as the canvas shows it, at document size and 16 bits.
+        const LayerTransform shown = displayedTransform(*layer);
+        auto rendered = renderFlattened16(layerAlone(*document_, *layer, shown));
+        warp_ = std::make_unique<WarpStroke>(rendered, blurMode == BlurToolMode::Smudge ? WarpMode::Smudge : WarpMode::Liquify, brushSettings.diameter, brushSettings.hardness, brushSettings.opacity);
+        warpLayerId_ = layer->id;
+        warpTransform_ = shown;
+        warp_->append(toPoint(documentPoint));
+        lastBrushPoint_ = documentPoint;
+        emit documentChanged({});
+        return true;
+    }
     // The layer as the canvas shows it, at document size.
     Document single(document_->width, document_->height);
     Layer copy = *layer;
@@ -338,14 +409,26 @@ bool EditorSession::beginWarp(QPointF documentPoint) {
     return true;
 }
 
-bool EditorSession::beginProcessedStroke(QPointF documentPoint, const std::function<void(Image&)>& process, int margin) {
-    if (refusedAtDepth("edit.paint", tr("Painting"))) return false;
+bool EditorSession::beginProcessedStroke(QPointF documentPoint, const std::function<void(Image&)>& process, int margin, const std::function<void(Image16&)>& process16) {
+    if (refusedAtDepth(toolFeature(tool_), tr("Painting"))) return false;
     const Layer* layer = activeLayer();
     if (!document_ || !layer || stroke_ || warp_) return false;
     if (isMaskSelected_) { emit error(tr("This tool works on a layer's pixels, not its mask.")); return false; }
     if (!effectiveVisibleIds(document_->layers).count(layer->id)) return false;
     // The layer as the canvas shows it, at document size, processed, then painted back through the tip. Processed a
     // tile at a time as the tip reaches it, so pressing costs the same on any canvas.
+    if (document_->sampleType == SampleType::U16) {
+        stroke_ = makeRasterEdit(*layer, false, brushSettings);
+        if (!stroke_) return false;
+        CloneSource source;
+        source.tiled16 = tiledProcessedDocument16(layerAlone(*document_, *layer, displayedTransform(*layer)), process16, margin);
+        stroke_->setClone(source, false);
+        strokeLayerId_ = layer->id;
+        strokeMask_ = false;
+        stroke_->append(toPoint(documentPoint));
+        emit documentChanged({});
+        return true;
+    }
     Document single(document_->width, document_->height);
     Layer copy = *layer;
     copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
@@ -362,13 +445,14 @@ bool EditorSession::beginProcessedStroke(QPointF documentPoint, const std::funct
 }
 
 bool EditorSession::beginToning(QPointF documentPoint) {
-    if (refusedAtDepth("edit.paint", tr("Painting"))) return false;
+    if (refusedAtDepth("tool.dodge", tr("Painting"))) return false;
     if (!document_ || stroke_ || warp_ || transformEdit_) return false;
     const Layer* layer = activeLayer();
-    if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image.u8()) return false;
+    if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image) return false;
     if (smartObjectBlocksPixels(true)) return false;
     const ToningSettings settings = toning;
-    return beginProcessedStroke(documentPoint, [settings](Image& image) { toneImage(image, settings); }, 0);   // per pixel
+    return beginProcessedStroke(documentPoint, [settings](Image& image) { toneImage(image, settings); }, 0,   // per pixel
+                                [settings](Image16& image) { toneImage(image, settings); });
 }
 
 void EditorSession::continueWarp(QPointF documentPoint) {
@@ -394,7 +478,9 @@ void EditorSession::endWarp() {
     settings.opacity = 1;
     auto stroke = makeRasterEdit(*layer, false, settings);
     if (!stroke) { emit documentChanged({}); return; }
-    stroke->setClone(CloneSource{warp->image(), {0, 0}, nullptr}, true);
+    CloneSource result{warp->image(), {0, 0}, nullptr};
+    result.image16 = warp->image16();
+    stroke->setClone(result, true);
     stroke->appendAll(warp->points());
     stroke->flush();
     commitRasterEdit(*stroke, layer->id, false, blurMode == BlurToolMode::Smudge ? QT_TRANSLATE_NOOP("History", "Smudge") : QT_TRANSLATE_NOOP("History", "Liquify"));
@@ -415,7 +501,7 @@ std::optional<std::pair<QPointF, QPointF>> EditorSession::gradientLine() const {
 }
 
 void EditorSession::beginGradient(QPointF documentPoint) {
-    if (refusedAtDepth("edit.paint", tr("Painting"))) return;
+    if (refusedAtDepth("tool.gradient", tr("Painting"))) return;
     if (!document_ || stroke_ || transformEdit_) return;
     const Layer* layer = activeLayer();
     if (!layer) return;

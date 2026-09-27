@@ -33,7 +33,7 @@ bool EditorSession::canMovePixels(QPointF documentPoint) const {
 }
 
 bool EditorSession::beginPixelMove(bool duplicate) {
-    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return false;
+    if (refusedAtDepth("edit.movePixels", tr("Editing pixels"))) return false;
     if (pixelMove_ || !document_ || !document_->selection || !document_->selection->coverage || document_->selection->isEmpty() || isMaskSelected_) return false;
     const Layer* layer = activeLayer();
     if (!layer || !layer->asset || layer->isGroup || layer->adjustment || stroke_ || transformEdit_) return false;
@@ -50,7 +50,7 @@ bool EditorSession::beginPixelMove(bool duplicate) {
 }
 
 void EditorSession::movePixels(QPointF offset) {
-    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return;
+    if (refusedAtDepth("edit.movePixels", tr("Editing pixels"))) return;
     if (!pixelMove_) return;
     QPointF rounded(std::round(offset.x()), std::round(offset.y()));
     pixelMove_->raster->moveLifted(toPoint(rounded), pixelMove_->duplicate);
@@ -135,7 +135,7 @@ void EditorSession::cancelPixelMove() {
 }
 
 void EditorSession::nudgePixels(double dx, double dy) {
-    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return;
+    if (refusedAtDepth("edit.movePixels", tr("Editing pixels"))) return;
     if (!beginPixelMove(false)) return;
     movePixels({dx, dy});
     finishPixelMove();

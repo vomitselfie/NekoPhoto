@@ -570,11 +570,14 @@ Overrides EditorSession::renderOverrides() const {
     auto strokeOverride = [&](const BrushStroke& stroke, const Uuid& layerId, bool mask) {
         LayerOverride& o = overrides[layerId];
         const Layer* layer = document_ ? document_->find(layerId) : nullptr;
+        const bool deep = stroke.sampleType() == SampleType::U16;
         if (mask) {
-            o.maskImage = stroke.previewMask();
+            if (deep) o.maskImage16 = stroke.previewMask16();
+            else o.maskImage = stroke.previewMask();
             if (layer && layer->mask && layer->mask->placement) o.maskPlacement = std::optional<LayerTransform>(stroke.paintTransform());
         } else {
-            o.image = stroke.previewImage();
+            if (deep) o.image16 = stroke.previewImage16();
+            else o.image = stroke.previewImage();
             o.transform = stroke.paintTransform();
             // A mask covering the old grid stays where it was while the layer grows under the edit.
             if (layer && layer->mask && !layer->mask->placement && layer->asset) o.maskPlacement = std::optional<LayerTransform>(layer->transform);
@@ -585,7 +588,8 @@ Overrides EditorSession::renderOverrides() const {
     if (pixelMove_) strokeOverride(*pixelMove_->raster, pixelMove_->layerId, false);
     if (warp_ && document_) {
         LayerOverride& o = overrides[warpLayerId_];
-        o.image = warp_->image();
+        if (warp_->image16()) o.image16 = warp_->image16();
+        else o.image = warp_->image();
         o.transform = LayerTransform(Point(0, 0), document_->size());
         const Layer* layer = document_->find(warpLayerId_);
         if (layer && layer->mask && !layer->mask->placement) o.maskPlacement = std::optional<LayerTransform>(layer->transform);

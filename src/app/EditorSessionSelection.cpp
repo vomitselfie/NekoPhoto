@@ -190,12 +190,41 @@ void EditorSession::fillSelection(const QColor& color) {
 }
 
 bool EditorSession::paintBucket(QPointF documentPoint) {
-    if (refusedAtDepth("edit.paint", tr("Painting"))) return false;
+    if (refusedAtDepth("tool.paintBucket", tr("Painting"))) return false;
     if (!canEditLayers()) return false;
     const int x = int(std::floor(documentPoint.x())), y = int(std::floor(documentPoint.y()));
     if (x < 0 || y < 0 || x >= document_->width || y >= document_->height) return false;
     const Layer* layer = activeLayer();
     if (!layer || layer->isGroup || layer->adjustment) return false;
+    if (document_->sampleType == SampleType::U16) {
+        // What to fill is chosen on the pixels as the canvas shows them (Tolerance counts 8-bit levels, as the Magic
+        // Wand's does); the fill itself, its antialiased edge and the selection are 16-bit.
+        const Gray16* selection = document_->selection ? document_->selection->coverage.u16().get() : nullptr;
+        if (document_->selection && (!selection || selection->at(x, y) == 0)) return false;
+        std::shared_ptr<Image16> shown16;
+        if (bucket.allLayers) shown16 = renderFlattened16(*document_);
+        else {
+            Document single(document_->width, document_->height);
+            single.sampleType = SampleType::U16;
+            Layer copy = *layer;
+            copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
+            copy.transform = displayedTransform(*layer);
+            single.layers = {copy};
+            shown16 = renderFlattened16(single);
+        }
+        GrayImage chosen(document_->width, document_->height);
+        if (wandMask(*narrowImage(*shown16), x, y, 0, std::clamp(bucket.tolerance, 0, 255), bucket.contiguous, chosen) <= 0) return false;
+        auto coverage = widenGray(chosen);
+        if (bucket.antialias) gaussianBlur(*coverage, 0.5);
+        const uint32_t opacity = uint32_t(std::lround(std::clamp(brushSettings.opacity, 0.0, 1.0) * one16));
+        for (int py = 0; py < coverage->height(); py++)
+            for (int px = 0; px < coverage->width(); px++) {
+                uint32_t c = mul15(coverage->at(px, py), opacity);
+                if (selection) c = mul15(c, std::min<uint32_t>(selection->at(px, py), one16));
+                coverage->at(px, py) = uint16_t(c);
+            }
+        return fillThrough16(foregroundColor, coverage.get(), QT_TRANSLATE_NOOP("History", "Paint Bucket"));
+    }
     const GrayImage* selection = document_->selection && document_->selection->coverage.u8() ? document_->selection->coverage.u8().get() : nullptr;
     if (document_->selection && (!selection || selection->at(x, y) == 0)) return false;   // a click outside the selection fills nothing
     // What the click is compared with: the document as shown, or the active layer's own pixels as placed (an empty
@@ -220,12 +249,35 @@ bool EditorSession::paintBucket(QPointF documentPoint) {
 }
 
 bool EditorSession::patchSelection(int dx, int dy) {
-    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return false;
+    if (refusedAtDepth("tool.spotHealing", tr("Editing pixels"))) return false;
     if (!canEditLayers() || !document_->selection || !document_->selection->coverage || (dx == 0 && dy == 0)) return false;
     const Layer* layer = activeLayer();
-    if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image.u8()) return false;
+    if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image) return false;
     if (isMaskSelected_) { emit error(tr("Patch works on a layer's pixels, not its mask.")); return false; }
     if (smartObjectBlocksPixels(true)) return false;
+    if (document_->sampleType == SampleType::U16) {
+        const Gray16* selection = document_->selection->coverage.u16().get();
+        if (!selection) return false;
+        Document single(document_->width, document_->height);
+        single.sampleType = SampleType::U16;
+        Layer copy = *layer;
+        copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
+        copy.transform = displayedTransform(*layer);
+        single.layers = {copy};
+        auto shown = renderFlattened16(single);
+        Image16 source(shown->width(), shown->height());
+        for (int y = 0; y < source.height(); y++) {
+            const int sy = y + dy;
+            if (sy < 0 || sy >= shown->height()) continue;
+            for (int x = 0; x < source.width(); x++) {
+                const int sx = x + dx;
+                if (sx >= 0 && sx < shown->width()) std::memcpy(source.pixel(x, y), shown->pixel(sx, sy), 4 * sizeof(uint16_t));
+            }
+        }
+        Image16 healed = *shown;
+        healFrom(healed, source, *selection, 1.0f);
+        return fillThrough16(foregroundColor, selection, QT_TRANSLATE_NOOP("History", "Patch"), &healed);
+    }
     // The layer as the canvas shows it; the source is the same pixels shifted by the drag.
     Document single(document_->width, document_->height);
     Layer copy = *layer;
@@ -308,7 +360,7 @@ bool EditorSession::fillThrough(const QColor& color, const GrayImage* selection,
     return true;
 }
 
-bool EditorSession::fillThrough16(const QColor& color, const Gray16* selection, const char* name) {
+bool EditorSession::fillThrough16(const QColor& color, const Gray16* selection, const char* name, const Image16* from) {
     Layer* layer = activeLayerMutable();
     if (!layer || layer->isGroup || layer->adjustment) return false;
     const bool mask = isMaskSelected_ && layer->mask;
@@ -358,10 +410,12 @@ bool EditorSession::fillThrough16(const QColor& color, const Gray16* selection, 
     const uint32_t fill[4] = {uint32_t(std::lround(color.redF() * one16)), uint32_t(std::lround(color.greenF() * one16)), uint32_t(std::lround(color.blueF() * one16)), one16};
     for (int py = 0; py < working->height(); py++)
         for (int px = 0; px < working->width(); px++) {
-            const uint32_t c = coverageAt(toDoc.apply({px + 0.5, py + 0.5}));
+            const Point d = toDoc.apply({px + 0.5, py + 0.5});
+            const uint32_t c = coverageAt(d);
             if (!c) continue;
             uint16_t* p = working->pixel(px, py);
-            for (int k = 0; k < 4; k++) p[k] = uint16_t((p[k] * (one16 - c) + fill[k] * c + one16 / 2) >> 15);
+            const uint16_t* f = from ? from->pixel(std::min(int(d.x), from->width() - 1), std::min(int(d.y), from->height() - 1)) : nullptr;
+            for (int k = 0; k < 4; k++) p[k] = uint16_t((p[k] * (one16 - c) + (f ? uint32_t(f[k]) : fill[k]) * c + one16 / 2) >> 15);
         }
     // Cropped to the pixels it holds, as the 8-bit fill does.
     LayerTransform placed;
