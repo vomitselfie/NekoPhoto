@@ -363,9 +363,22 @@ def sixteen_bit(rpc):
     rpc.call("layers.add", kind="group")
     shot = rpc.call("render", maxSize=64)
     assert base64.b64decode(shot["png"])[:8] == b"\x89PNG\r\n\x1a\n"
+    # Selections, fills, adjustments, filters and whole-image edits work at 16 bits (P3a).
+    rpc.call("layers.select", id=layer["id"])
+    rpc.call("selection.rect", x=20, y=15, width=60, height=40)
+    rpc.call("selection.feather", radius=3)
+    rpc.call("pixels.adjust", kind="Levels", settings={"ranges": [{"black": 10, "gamma": 1.3, "white": 240, "outputBlack": 0, "outputWhite": 255}]})
+    rpc.call("pixels.filter", kind="Gaussian Blur", radius=2)
+    rpc.call("pixels.fill", color="#ffaa00")
+    rpc.call("selection.rect", x=40, y=30, width=12, height=10)
+    rpc.call("pixels.contentAwareFill")
+    rpc.call("selection.none")
+    rpc.call("layers.add", kind="adjustment", adjustmentKind="Hue/Saturation")
+    assert rpc.call("image.resize", width=150, height=100)["width"] == 150
+    assert rpc.call("canvas.crop", x=5, y=5, width=130, height=90)["width"] == 130
+    assert rpc.call("document.info")["bits"] == 16
     # What is not ported yet is refused, saying so.
-    for method, params in (("pixels.fill", {"color": "#ff0000"}), ("selection.rect", {"x": 0, "y": 0, "width": 10, "height": 10}),
-                           ("pixels.filter", {"kind": "Gaussian Blur", "radius": 2}), ("layers.add", {"kind": "adjustment", "adjustmentKind": "Levels"}),
+    for method, params in (("pixels.cameraRaw", {"settings": {"exposure": 0.5}}), ("layers.merge", {}),
                            ("tool.select", {"name": "brush"})):
         try:
             rpc.call(method, **params)

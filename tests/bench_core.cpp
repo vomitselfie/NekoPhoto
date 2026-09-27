@@ -160,5 +160,18 @@ int main(int argc, char** argv) {
     bench("render16 4000x3000 to display", none, [&] { RenderOptions o; render(deep, o, out); });
     bench("render16 4000x3000 at 0.25", none, [&] { RenderOptions o; o.scale = 0.25; render16(deep, o, out16); });
     bench("render16 1024x768 region at 1", none, [&] { RenderOptions o; o.region = {1500, 1100, 1024, 768}; render16(deep, o, out16); });
+
+    // Editing at 16 bits (P3a): the same photo converted, blurred and adjusted there.
+    auto photo16 = widenImage(*photo);
+    Image16 work16;
+    auto fresh16 = [&] { work16 = *photo16; };
+    for (double radius : {2.0, 20.0}) {
+        std::string name = "u16 gaussian blur r" + std::to_string(int(radius));
+        bench(name.c_str(), fresh16, [&] { FilterSettings s; s.radius = radius; applyFilter(FilterKind::GaussianBlur, work16, s); });
+    }
+    auto adjust16 = [&](const char* name, AdjustmentSettings s) { bench(name, fresh16, [&] { applyAdjustment(s, work16, all, 1); }); };
+    adjust16("u16 levels", levels);
+    adjust16("u16 curves", curves);
+    adjust16("u16 hue/saturation", hsv);
     return 0;
 }
