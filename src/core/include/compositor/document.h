@@ -5,6 +5,7 @@
 #pragma once
 #include "artboard.h"
 #include "animation.h"
+#include "colorprofile.h"
 #include "geometry.h"
 #include "psd_carry.h"
 #include "smartobject.h"
@@ -273,6 +274,8 @@ struct Document {
     /// The depth of every layer, mask and selection (one per document, as in Photoshop). Always U8 until
     /// deeper documents land (docs/high-bit-depth-plan.md, P2).
     SampleType sampleType = SampleType::U8;
+    /// The colour profile the pixels are in (colorprofile.h, colormgmt.h); empty: untagged, treated as sRGB.
+    ColorProfile profile;
     std::vector<Layer> layers; // bottom to top
     std::optional<Selection> selection;
     std::string extraJson;

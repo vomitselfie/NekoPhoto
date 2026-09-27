@@ -251,3 +251,8 @@ if(COMPOSITOR_BUILD_APP AND NOT WIN32 AND TARGET Qt6::lupdate AND Python3_Interp
     add_test(NAME translations_check COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/check_translations.py
         --lupdate $<TARGET_FILE:Qt6::lupdate>)
 endif()
+
+# Colour management: transforms against Little CMS (linked directly for the reference values), proofing, Convert.
+add_executable(colormgmt_tests colormgmt_tests.cpp)
+target_link_libraries(colormgmt_tests PRIVATE compositor::core compositor_warnings nekophoto_lcms2)
+add_test(NAME colormgmt_tests COMMAND colormgmt_tests)

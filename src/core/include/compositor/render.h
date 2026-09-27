@@ -9,6 +9,8 @@
 
 namespace compositor {
 
+class ColorTransform;
+
 struct RenderOptions {
     /// The document rectangle to render; empty means the whole canvas.
     Rect region;
@@ -18,6 +20,9 @@ struct RenderOptions {
     bool clear = true;
     /// The caller's document version, for a RenderCache: bump it whenever the document changes.
     uint64_t version = 0;
+    /// The canvas's colour transform to the screen (colormgmt.h): RGBA8 to RGBA8 for an 8-bit document, RGBA16 to
+    /// RGBA8 for a 16-bit one, fused with its reduction to 8 bits. Null: none, the pixels as they are.
+    const ColorTransform* display = nullptr;
 };
 
 /// What a caller keeps between frames while one layer is being edited (the one layer with an override):

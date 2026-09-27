@@ -2,6 +2,7 @@
 // brush stroke, a gaussian blur and a few adjustments, each the median of N runs. Not a test (not in ctest):
 //   build/tests/bench_core [runs] [filter]
 // Results from this machine are kept in docs/benchmarks.md; later phases are held to them.
+#include "compositor/colormgmt.h"
 #include "compositor/adjustments.h"
 #include "compositor/brush.h"
 #include "compositor/depth.h"
@@ -185,6 +186,18 @@ int main(int argc, char** argv) {
     bench("render16 4000x3000 to display", none, [&] { RenderOptions o; render(deep, o, out); });
     bench("render16 4000x3000 at 0.25", none, [&] { RenderOptions o; o.scale = 0.25; render16(deep, o, out16); });
     bench("render16 1024x768 region at 1", none, [&] { RenderOptions o; o.region = {1500, 1100, 1024, 768}; render16(deep, o, out16); });
+
+    // Colour management (P4): Convert to Profile's pixel pass at 8 and 16 bits, and the canvas's display transform.
+    {
+        auto toAdobe8 = transformBetween(srgbProfile(), builtinProfile(WorkingSpace::AdobeRGB), {}, PixelFormat::RGBA8, PixelFormat::RGBA8);
+        auto toAdobe16 = transformBetween(srgbProfile(), builtinProfile(WorkingSpace::AdobeRGB), {}, PixelFormat::RGBA16, PixelFormat::RGBA16);
+        auto display16 = transformBetween(srgbProfile(), builtinProfile(WorkingSpace::AdobeRGB), {}, PixelFormat::RGBA16, PixelFormat::RGBA8);
+        Image16 work16;
+        bench("convertImage 8-bit 4000x3000", fresh, [&] { convertImage(work, toAdobe8.get()); });
+        bench("convertImage 16-bit 4000x3000", [&] { RenderOptions o; render16(deep, o, work16); }, [&] { convertImage(work16, toAdobe16.get()); });
+        bench("render 4000x3000 through display", none, [&] { RenderOptions o; o.display = toAdobe8.get(); render(doc, o, out); });
+        bench("render16 4000x3000 through display", none, [&] { RenderOptions o; o.display = display16.get(); render(deep, o, out); });
+    }
 
     // Layer counts: each edit as the app makes it, one history step around the change (EditorSession's
     // beginEdit/endEdit), with a history already full of steps as after a while of work.
