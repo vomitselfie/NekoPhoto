@@ -88,7 +88,7 @@ void executeRender<SampleType::U8>(const RenderPlan& plan, const Rect& region, d
 template <>
 void executeRender<SampleType::U16>(const RenderPlan& plan, const Rect& region, double scale, Image16& out, RenderCache* cache, uint64_t version);
 /// A 16-bit document's frame for the canvas (render_u16.cpp): rendered at 16 bits into `out`'s size and reduced to 8.
-void renderForDisplay16(const RenderPlan& plan, const Rect& region, double scale, Image& out, RenderCache* cache, uint64_t version, bool clear);
+void renderForDisplay16(const RenderPlan& plan, const Rect& region, double scale, Image& out, RenderCache* cache, uint64_t version, bool clear, const ColorTransform* display = nullptr);
 /// resizeDocument for a 16-bit document (render_u16.cpp).
 bool resizeDocument16(Document& document, int width, int height, double resolution, Sampling sampling);
 

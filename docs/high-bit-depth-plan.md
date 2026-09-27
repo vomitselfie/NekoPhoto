@@ -264,6 +264,38 @@ the engines: [brush-engine.md](brush-engine.md), "16 bits".
   bucket and the wand decide on the 8-bit display rounding, which for float needs the display transform (exposure) to
   be fixed first. The toning curves assume display-referred 0..1 values.
 
+**P4 landed (2026-09-27): colour management.** User-facing summary: [color-management.md](color-management.md).
+
+- `ColorProfile` (`colorprofile.h`) on the `Document`: ICC bytes verbatim, description, model; empty is untagged,
+  treated as sRGB. PSD resource 1039 reads into it and is written back byte for byte while unchanged (64 of 64 tagged RGB
+  PSDs in the corpus); projects store it as `profile.icc` (format 8, `"colorSpace": "icc"`); PNG iCCP both ways.
+- `colormgmt.h/.cpp` owns Little CMS for documents: built-in sRGB, Adobe RGB (1998), Display P3 and ProPhoto profiles
+  generated from their published primaries (fixed header date, so the bytes are stable), a mutex-guarded LRU cache of 24
+  transforms, `convertImage` at 8 and 16 bits on premultiplied pixels (made straight around the transform; 16-bit
+  through the float pipeline, since Little CMS's 16-bit one precalculates a grid that was off by up to 2.4% near the
+  gamut's edge), soft-proofing transforms with the gamut warning, `convertDocumentProfile`, and `TransferCurve` /
+  `documentTransfer` (a profile's tone curve both ways) for the masking lane's linear-light code.
+- The canvas transform rides in `RenderOptions::display`: applied to the 8-bit frame, fused with `toDisplay<U16>` for
+  16-bit documents. Null (no monitor profile, the default, or the monitor's profile is the document's) leaves the
+  render untouched. The monitor profile: X11 `_ICC_PROFILE` through libxcb loaded at run time, Windows
+  `GetICMProfileW`, or a file in Preferences (Wayland).
+- App: Edit > Color Settings (working space, policy, the two prompts off by default), Assign Profile and Convert to
+  Profile (one undo step; perceptual or relative colorimetric, black point compensation), View > Proof Setup, Proof
+  Colors, Gamut Warning; the open policy for PSD, PNG, JPEG and TIFF; imports converted to the document's profile;
+  exports embed the profile, and the web formats offer Convert to sRGB (on for GIF). Automation `document.profile`
+  and `color.settings`.
+- Not colour-managed yet: pasting pixels from other applications and Place Embedded (both taken as the document's
+  values), the Layers panel thumbnails and navigator-style previews (document values), the QColorDialog preview, TGA
+  and ICO (no profile to carry), smart object sources (their placed pixels are converted, the source is not), layer
+  patterns and blocks carried from a PSD that NekoPhoto does not model.
+- Gates: 8-bit render hashes unchanged; `colormgmt_tests` against Little CMS and the published matrices (round trips
+  through Adobe RGB, Display P3 and ProPhoto within Little CMS's own 8-bit loss and 16 of 32768 at 16 bits); PSD
+  corpus plus K.psd identical (118 files, 3,975 carried blocks); GCC and Clang `-Werror`; rpc smoke with a colour
+  section; `bench_core` 8-bit lines within ±2% of main.
+- For P5: a 32-bit document's working space is linear; `TransferCurve` gives the curve to linearise with, and
+  `PixelFormat` needs an `RGBAFloat` layout (Little CMS's float pipeline is already what the 16-bit path uses).
+  CMYK and Lab (P7) need `ColorModel`-aware transforms and a proof default (a CMYK profile, which the built-ins lack).
+
 ## Review notes
 
 - Mac project compatibility: since 2026-09-26 NekoPhoto no longer keeps Mac Compositor project-format parity, so

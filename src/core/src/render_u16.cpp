@@ -4,6 +4,7 @@
 #include "compositor/render.h"
 #include "render_plan.h"
 #include "compositor/blend.h"
+#include "compositor/colormgmt.h"
 #include "compositor/depth.h"
 #include "compositor/parallel.h"
 #include "compositor/resample.h"
@@ -286,13 +287,14 @@ std::shared_ptr<Gray16> resampleMask(const Gray16& mask, const LayerTransform& t
 
 // ---- Rendering a 16-bit document ------------------------------------------------------------------------------
 
-void renderForDisplay16(const RenderPlan& plan, const Rect& region, double scale, Image& out, RenderCache* cache, uint64_t version, bool clear) {
-    // The canvas takes 8 bits: the frame at the document's depth, then reduced with rounding (toDisplay<U16>; no
-    // colour transform until colour management lands).
+void renderForDisplay16(const RenderPlan& plan, const Rect& region, double scale, Image& out, RenderCache* cache, uint64_t version, bool clear, const ColorTransform* display) {
+    // The canvas takes 8 bits: the frame at the document's depth, then reduced with rounding (toDisplay<U16>), or
+    // through the display's colour transform in the same pass.
     Image16 deep(out.width(), out.height());
     if (!clear) deep = *widenImage(out);
     executeRender<SampleType::U16>(plan, region, scale, deep, cache, version);
-    narrowInto(deep, out);
+    if (display) convertImage16To8(deep, out, *display);
+    else narrowInto(deep, out);
 }
 
 void render16(const Document& document, const RenderOptions& options, Image16& out, const Overrides* overrides, RenderCache* cache) {

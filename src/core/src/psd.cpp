@@ -2,6 +2,7 @@
 #include "photoshop.h"
 #include "compositor/adjustments.h"
 #include "compositor/colour.h"
+#include "compositor/colormgmt.h"
 #include "compositor/depth.h"
 #include "compositor/png.h"
 #include "compositor/render.h"
@@ -706,6 +707,12 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             }
             if (id == 0x03ED && len >= 4) { double hres = r.u32() / 65536.0; if (hres > 0 && hres < 100000) document.resolution = hres; }
             if (id == 1057 && len >= 5) { r.u32(); result.realComposite = r.u8() != 0; }   // version info: hasRealMergedData
+            if (id == 1039 && mode == RGB && len <= r.remaining()) {
+                // An RGB file's profile: the document's (colormgmt.h), kept byte for byte for the round trip.
+                const uint8_t* icc = r.bytes(len);
+                if (auto profile = profileFromIcc(icc, len); profile && profile->model == ColorModel::RGB) document.profile = std::move(*profile);
+                r.seek(dataStart);
+            }
             if (id == 1039 && mode == CMYK && len <= r.remaining()) {
                 // The ICC profile: a CMYK file's colours go to sRGB through it.
                 const uint8_t* icc = r.bytes(len);

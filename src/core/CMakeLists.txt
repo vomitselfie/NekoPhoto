@@ -172,6 +172,8 @@ add_library(compositor_core STATIC
     src/svg_write.cpp
     src/svg_xml.cpp
     src/colour.cpp
+    src/colormgmt.cpp
+    src/colormgmt_document.cpp
     src/psd_carry.cpp
     src/smartobject.cpp
     src/smartobject_edit.cpp

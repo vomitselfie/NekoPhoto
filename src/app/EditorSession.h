@@ -11,6 +11,7 @@
 #include "compositor/mypaint.h"
 #include "compositor/tipbrush.h"
 #include "compositor/filters.h"
+#include "compositor/colormgmt.h"
 #include "compositor/document.h"
 #include "compositor/layerstyle.h"
 #include "compositor/presets.h"
@@ -163,6 +164,14 @@ public:
     /// Image > Mode > 8 Bits/Channel or 16 Bits/Channel: every layer, mask and the selection converted, one undo step.
     /// False, with `error` saying why (a 16-bit document holds half the pixels within the same memory), when it cannot.
     bool convertMode(compositor::SampleType type, QString* error = nullptr);
+    // Colour management (EditorSessionColor.cpp, docs/color-management.md).
+    /// Edit > Assign Profile: the document's profile only, no pixel changes; one undo step. Empty: untagged (sRGB).
+    bool assignProfile(const compositor::ColorProfile& profile);
+    /// Edit > Convert to Profile: every raster, the stored colours and the foreground and background colours
+    /// converted; one undo step. False, with `error`, when it cannot.
+    bool convertToProfile(const compositor::ColorProfile& profile, const compositor::ConvertOptions& options, QString* error = nullptr);
+    /// The profile a document takes as it opens or is made (no undo step: it is part of the opening).
+    void adoptProfile(const compositor::ColorProfile& profile);
     /// Whether `feature` (compositor/supports.h) works on this document: every feature does on an 8-bit one.
     bool supportsFeature(std::string_view feature) const;
     /// When it does not: says so, "<what> is not available for 16-bit documents yet" (in `errorText` when given, else

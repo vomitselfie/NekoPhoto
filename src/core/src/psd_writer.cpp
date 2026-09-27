@@ -999,7 +999,15 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
         res.str("8BIM"); res.u16(0x03ED); res.u8(0); res.u8(0); res.u32(16);
         res.u32(ppi); res.u16(1); res.u16(1); res.u32(ppi); res.u16(1); res.u16(1);
         // The PSD's own resources, when the document came from one.
-        bool slicesWritten = false;
+        bool slicesWritten = false, profileWritten = false;
+        auto writeProfile = [&](const std::string& name) {
+            res.str("8BIM"); res.u16(1039);
+            res.u8(unsigned(name.size())); res.bytes(std::vector<uint8_t>(name.begin(), name.end()));
+            if ((name.size() + 1) & 1) res.u8(0);
+            res.u32(uint32_t(document.profile.icc.size())); res.bytes(document.profile.icc);
+            if (document.profile.icc.size() & 1) res.u8(0);
+            profileWritten = true;
+        };
         if (document.psdCarry) {
             const PsdDocumentCarry& c = *document.psdCarry;
             const bool sameCanvas = c.width == document.width && c.height == document.height;
@@ -1007,6 +1015,15 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
                 // Guides, slices and paths (stored relative to the canvas size) belong to the canvas they were made on.
                 const bool canvasBound = resource.id == 1032 || resource.id == 1050 || resource.id == 1025 || (resource.id >= 2000 && resource.id <= 2999);
                 if (!sameCanvas && canvasBound) continue;
+                // The colour profile (1039) is the document's: the file's own bytes while they are still it, the
+                // document's in their place after Assign or Convert, none for an untagged document. The untagged flag
+                // (1041) goes with a profile written.
+                if (resource.id == 1039) {
+                    if (document.profile.empty()) continue;
+                    if (resource.data != document.profile.icc) { writeProfile(resource.name.substr(0, 255)); continue; }
+                    profileWritten = true;
+                }
+                if (resource.id == 1041 && !document.profile.empty() && !resource.data.empty() && resource.data[0] != 0) continue;
                 if (resource.id == 1050) {
                     // The file's slices while they are still the document's; else written anew below.
                     std::vector<Slice> held;
@@ -1021,6 +1038,7 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
                 if (resource.data.size() & 1) res.u8(0);
             }
         }
+        if (!profileWritten && !document.profile.empty()) writeProfile("");
         if (!slicesWritten && !document.slices.empty()) {
             const std::vector<uint8_t> data = slicesResource(document.slices, document.width, document.height);
             res.str("8BIM"); res.u16(1050); res.u8(0); res.u8(0);

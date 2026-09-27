@@ -3,6 +3,7 @@
 #include "compositor/depth.h"
 #include "compositor/image.h"
 #include <QBuffer>
+#include <QColorSpace>
 #include <QImage>
 #include <QImageReader>
 #include <QImageWriter>
@@ -38,7 +39,12 @@ inline std::shared_ptr<compositor::GrayImage> grayFromQImage(const QImage& sourc
 
 /// Writes a flattened image through Qt's image plugins (JPEG, WebP, TIFF), with its resolution. For WebP a
 /// quality of 100 is lossless; TIFF is LZW-compressed and keeps transparency.
-inline bool writeQtImage(const QString& path, const char* format, QImage image, int quality, double dpi, QString* error) {
+/// With `icc`, the file carries that colour profile (JPEG APP2, TIFF, WebP ICCP, as Qt's writers embed it).
+inline bool writeQtImage(const QString& path, const char* format, QImage image, int quality, double dpi, QString* error, const QByteArray& icc = {}) {
+    if (!icc.isEmpty()) {
+        const QColorSpace space = QColorSpace::fromIccProfile(icc);
+        if (space.isValid()) image.setColorSpace(space);
+    }
     const int dotsPerMeter = int(dpi / 0.0254 + 0.5);
     image.setDotsPerMeterX(dotsPerMeter);
     image.setDotsPerMeterY(dotsPerMeter);

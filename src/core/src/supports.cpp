@@ -16,6 +16,8 @@ constexpr FeatureSupport table[] = {
     {"render.document", eightAndSixteen},
     // Image > Mode > 8 Bits/Channel, 16 Bits/Channel.
     {"document.mode", eightAndSixteen},
+    // Edit > Assign Profile and Convert to Profile (P4, colormgmt.h).
+    {"document.profile", eightAndSixteen},
     // Saving, and exporting what the renderer draws (PSD and PNG at 16 bits; the 8-bit formats dithered down).
     {"document.save", eightAndSixteen},
     {"export.psd", eightAndSixteen},

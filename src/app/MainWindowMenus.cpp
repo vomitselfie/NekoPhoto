@@ -21,6 +21,8 @@
 #include "CameraRawDialog.h"
 #include "FilterDialog.h"
 #include "GmicDialog.h"
+#include "ColorDialogs.h"
+#include "ColorManagement.h"
 #include "ColorSwatches.h"
 #include "PreferencesDialog.h"
 #include "BrushImporter.h"
@@ -127,7 +129,9 @@ void MainWindow::buildToolRail() {
 }
 
 void MainWindow::updateColorSwatches() {
-    swatches_->setColors(session_->foregroundColor, session_->backgroundColor);
+    // Document values, shown through the monitor profile (the identity when none is known).
+    const compositor::ColorProfile profile = session_->hasDocument() ? session_->document()->profile : compositor::ColorProfile{};
+    swatches_->setColors(color::displayColor(session_->foregroundColor, profile), color::displayColor(session_->backgroundColor, profile));
 }
 
 void MainWindow::chooseColor(bool background) {
@@ -211,6 +215,32 @@ void MainWindow::buildMenus() {
         (new ContentFillDialog(session_, this))->show();
     }), "edit.fill");
     needsDocument(edit->addAction(tr("Content-Aware Scale…"), QKeySequence("Ctrl+Alt+Shift+C"), this, [this] { (new ContentAwareScaleDialog(session_, this))->show(); }), "edit.contentAware");
+
+    // Colour management (docs/color-management.md), as in Photoshop's Edit menu.
+    edit->addSeparator();
+    edit->addAction(tr("Color Settings…"), QKeySequence("Ctrl+Shift+K"), this, [this] { color::showColorSettings(this); });
+    auto profileKey = [](const compositor::ColorProfile& p) -> QString {
+        if (p.empty()) return QStringLiteral("none");
+        auto s = compositor::matchingWorkingSpace(p);
+        return s && p == compositor::builtinProfile(*s) ? QString::fromLatin1(compositor::workingSpaceKey(*s)) : QString();
+    };
+    needsDocument(edit->addAction(tr("Assign Profile…"), this, [this, profileKey] {
+        auto profile = color::askAssignProfile(this, session_->document()->profile);
+        if (!profile || !session_->assignProfile(*profile)) return;
+        if (const QString key = profileKey(*profile); !key.isEmpty()) recordAction("document.profile", {{"action", "assign"}, {"profile", key}});
+    }), "document.profile");
+    needsDocument(edit->addAction(tr("Convert to Profile…"), this, [this, profileKey] {
+        auto choice = color::askConvertProfile(this, session_->document()->profile);
+        if (!choice) return;
+        QString error;
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+        const bool ok = session_->convertToProfile(choice->profile, choice->options, &error);
+        QApplication::restoreOverrideCursor();
+        if (!ok) { showError(tr("Convert to Profile"), error); return; }
+        if (const QString key = profileKey(choice->profile); !key.isEmpty())
+            recordAction("document.profile", {{"action", "convert"}, {"profile", key}, {"intent", QString::fromLatin1(compositor::renderingIntentKey(choice->options.intent))},
+                                              {"blackPointCompensation", choice->options.blackPointCompensation}});
+    }), "document.profile");
 
     edit->addSeparator();
     edit->addAction(tr("Prefere&nces…"), QKeySequence::Preferences, this, &MainWindow::showPreferences);
@@ -522,6 +552,18 @@ void MainWindow::buildMenus() {
     pathsDock_->toggleViewAction()->setText(tr("&Paths Panel"));
     view->addAction(pathsDock_->toggleViewAction());
     view->addAction(adjustDock_->toggleViewAction());
+    view->addSeparator();
+    // Soft proofing (docs/color-management.md): Photoshop's Proof Setup, Proof Colors and Gamut Warning.
+    QMenu* proofSetup = view->addMenu(tr("Proof Set&up"));
+    proofSetup->addAction(tr("Custom…"), this, [this] { color::showProofSetup(this); });
+    QAction* proof = view->addAction(tr("Proof Colo&rs"), QKeySequence("Ctrl+Y"), this, [](bool on) { color::Settings s = color::settings(); s.proofColors = on; color::setSettings(s); });
+    QAction* gamut = view->addAction(tr("Gamut Wa&rning"), QKeySequence("Ctrl+Shift+Y"), this, [](bool on) { color::Settings s = color::settings(); s.gamutWarning = on; color::setSettings(s); });
+    for (QAction* a : {proof, gamut}) a->setCheckable(true);
+    connect(color::notifier(), &color::Notifier::changed, this, [this, proof, gamut] {
+        proof->setChecked(color::settings().proofColors);
+        gamut->setChecked(color::settings().gamutWarning);
+        updateColorSwatches();
+    });
     view->addSeparator();
     QAction* grid = view->addAction(tr("Pixel &Grid"), this, [this](bool on) { session_->showsPixelGrid = on; canvas_->update(); });
     grid->setCheckable(true);

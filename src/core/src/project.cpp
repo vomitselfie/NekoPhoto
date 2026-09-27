@@ -1,4 +1,5 @@
 #include "compositor/project.h"
+#include "compositor/colormgmt.h"
 #include "compositor/parallel.h"
 #include "compositor/png.h"
 #include <nlohmann/json.hpp>
@@ -127,7 +128,7 @@ json transformJson(const LayerTransform& t) {
 
 const std::set<std::string> knownLayerKeys = {"id", "name", "isVisible", "transform", "imageFile", "parentID", "isGroup", "opacity", "blendMode",
     "maskFile", "maskEnabled", "maskSourceID", "adjustment", "maskPlacement", "maskLinked", "shape", "text", "passThrough", "artboard"};
-const std::set<std::string> knownManifestKeys = {"format", "version", "colorSpace", "resolution", "documentID", "width", "height", "activeLayerID", "layers", "slices", "animation", "sampleType"};
+const std::set<std::string> knownManifestKeys = {"format", "version", "colorSpace", "resolution", "documentID", "width", "height", "activeLayerID", "layers", "slices", "animation", "sampleType", "profile"};
 
 struct Record {
     Layer layer;
@@ -324,6 +325,8 @@ struct Manifest {
     std::string extraJson;
     Animation animation;
     SampleType sampleType = SampleType::U8;
+    /// Version 8: the document's colour profile is the package's profile.icc ("colorSpace": "icc").
+    bool tagged = false;
 };
 
 bool parseManifestJson(const json& j, Manifest& m, ProjectError& error) {
@@ -335,7 +338,9 @@ bool parseManifestJson(const json& j, Manifest& m, ProjectError& error) {
     m.version = v->get<int>();
     if (m.version < 1 || m.version > projectFormatVersion) { error = version(m.version); return false; }
     std::string space;
-    if (!getString(j, "colorSpace", space, true) || space != "sRGB") { error = invalid(); return false; }
+    if (!getString(j, "colorSpace", space, true) || (space != "sRGB" && space != "icc") || (space == "icc" && m.version < 8)) { error = invalid(); return false; }
+    m.tagged = space == "icc";
+    if (auto p = j.find("profile"); p != j.end() && (!p->is_string() || p->get<std::string>() != "profile.icc" || !m.tagged)) { error = invalid(); return false; }
     // Version 8: the depth of every layer and mask ("u8" or "u16"; 8-bit when absent, as every older project is).
     if (auto t = j.find("sampleType"); t != j.end()) {
         if (!t->is_string() || m.version < 8) { error = invalid(); return false; }
@@ -571,6 +576,10 @@ std::optional<Document> loadProject(const std::string& pathText, ProjectError& e
     for (Layer& layer : d.layers)
         if (auto bytes = readCarry(path / "images" / (layer.id + ".psdcarry"))) layer.psdCarry = parsePsdLayerCarry(*bytes);
     if (auto bytes = readCarry(path / "images" / "document.psdcarry")) d.psdCarry = parsePsdDocumentCarry(*bytes);
+    // The colour profile, kept byte for byte (colorprofile.h); an unreadable one leaves the document untagged.
+    if (m.tagged)
+        if (auto bytes = readCarry(path / "profile.icc"))
+            if (auto profile = profileFromIcc(*bytes); profile && profile->model == ColorModel::RGB) d.profile = std::move(*profile);
     // Smart objects: the sources in smartobjects/ (each with its image as PNG), the instances beside their layers.
     // Their count, their files and their decoded pixels are limited in total, each image by the budget rules too.
     {
@@ -630,8 +639,11 @@ std::string manifestJson(const Document& document, const std::optional<Uuid>& ac
     for (auto& l : document.layers) folders |= l.isGroup && (l.opacity != 1 || l.blendMode != BlendMode::Normal || !l.passThrough || l.artboard);
     folders |= !document.slices.empty();   // artboards and slices are version 8 too: the Mac app has neither
     folders |= document.sampleType != SampleType::U8;   // so is a 16-bit document
+    folders |= !document.profile.empty();               // and one with a colour profile
     j["version"] = folders ? projectFormatVersion : projectMacFormatVersion;
-    j["colorSpace"] = "sRGB";
+    j["colorSpace"] = document.profile.empty() ? "sRGB" : "icc";
+    if (!document.profile.empty()) j["profile"] = "profile.icc";
+    else j.erase("profile");
     if (document.sampleType == SampleType::U16) j["sampleType"] = "u16";
     else j.erase("sampleType");
     j["resolution"] = number(document.resolution);
@@ -691,6 +703,7 @@ bool saveProject(const Document& document, const std::optional<Uuid>& activeLaye
         if (l.psdCarry && !writeBytes(staging / "images" / (l.id + ".psdcarry"), serializePsdCarry(*l.psdCarry))) { abandon(); error = ioError("could not write the PSD data of " + l.name); return false; }
     }
     if (document.psdCarry && !writeBytes(staging / "images" / "document.psdcarry", serializePsdCarry(*document.psdCarry))) { abandon(); error = ioError("could not write the PSD data"); return false; }
+    if (!document.profile.empty() && !writeBytes(staging / "profile.icc", document.profile.icc)) { abandon(); error = ioError("could not write the colour profile"); return false; }
     // Smart objects (see the loader): a live instance's record beside its layer; every source in smartobjects/.
     for (auto& l : document.layers)
         if (l.isLiveSmartObject() && !writeBytes(staging / "images" / (l.id + ".smartobject"), serializeSmartObjectInstance(*l.smartObject))) { abandon(); error = ioError("could not write the smart object of " + l.name); return false; }

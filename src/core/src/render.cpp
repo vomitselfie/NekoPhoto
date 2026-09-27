@@ -1,6 +1,7 @@
 #include "compositor/render.h"
 #include "render_plan.h"
 #include "compositor/blend.h"
+#include "compositor/colormgmt.h"
 #include "compositor/parallel.h"
 #include "compositor/resample.h"
 #include "compositor/warp.h"
@@ -411,8 +412,11 @@ void render(const Document& document, const RenderOptions& options, Image& out, 
     RenderCache* frameCache = options.clear ? cache : nullptr;
     // One switch per render on the document's depth; each executor is a separate instantiation.
     switch (document.sampleType) {
-    case SampleType::U8: executeRender<SampleType::U8>(plan, region, scale, out, frameCache, options.version); break;
-    case SampleType::U16: renderForDisplay16(plan, region, scale, out, frameCache, options.version, options.clear); break;
+    case SampleType::U8:
+        executeRender<SampleType::U8>(plan, region, scale, out, frameCache, options.version);
+        if (options.display) convertImage(out, options.display);
+        break;
+    case SampleType::U16: renderForDisplay16(plan, region, scale, out, frameCache, options.version, options.clear, options.display); break;
     case SampleType::F32: break;   // 32-bit documents arrive with their executor (P5)
     }
 }

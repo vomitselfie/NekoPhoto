@@ -192,6 +192,13 @@ bool readPngInfo(const std::string& path, PngInfo& out, std::string* error) {
     out.bitDepth = png_get_bit_depth(r.png, r.info);
     int type = png_get_color_type(r.png, r.info);
     out.gray = type == PNG_COLOR_TYPE_GRAY;
+    png_charp name = nullptr;
+    int compression = 0;
+    png_bytep profile = nullptr;
+    png_uint_32 length = 0;
+    out.icc.clear();
+    if (png_get_iCCP(r.png, r.info, &name, &compression, &profile, &length) && profile && length > 0 && length < (64u << 20))
+        out.icc.assign(profile, profile + length);
     return true;
 }
 
@@ -283,7 +290,7 @@ void filterRow(const uint8_t* row, const uint8_t* prior, int bytes, int bpp, uin
 using RowSource = std::function<void(int y, uint8_t* out)>;
 
 bool encodePng(int width, int height, int colorType, int bpp, const RowSource& source, double dpi, int level,
-               std::vector<uint8_t>& out, std::string* error, int bitDepth = 8) {
+               std::vector<uint8_t>& out, std::string* error, int bitDepth = 8, const std::vector<uint8_t>* icc = nullptr) {
     if (width <= 0 || height <= 0) { if (error) *error = "PNG encoding failed: empty image"; return false; }
     const int rowBytes = width * bpp;
     const size_t lineBytes = size_t(rowBytes) + 1;
@@ -342,7 +349,15 @@ bool encodePng(int width, int height, int colorType, int bpp, const RowSource& s
     putU32(header, uint32_t(height));
     header.insert(header.end(), {uint8_t(bitDepth), uint8_t(colorType), 0, 0, 0});
     putChunk(out, "IHDR", header.data(), header.size());
-    if (colorType == 6) {
+    if (colorType == 6 && icc && !icc->empty()) {
+        // The document's own profile: iCCP (which replaces the sRGB chunks), zlib-compressed after its name.
+        std::vector<uint8_t> chunk = {'I', 'C', 'C', ' ', 'P', 'r', 'o', 'f', 'i', 'l', 'e', 0, 0};
+        uLongf packedSize = compressBound(uLong(icc->size()));
+        std::vector<uint8_t> packed(packedSize);
+        if (compress2(packed.data(), &packedSize, icc->data(), uLong(icc->size()), 9) != Z_OK) { if (error) *error = "PNG encoding failed: profile"; return false; }
+        chunk.insert(chunk.end(), packed.begin(), packed.begin() + long(packedSize));
+        putChunk(out, "iCCP", chunk.data(), chunk.size());
+    } else if (colorType == 6) {
         // The chunks png_set_sRGB_gAMA_and_cHRM writes: sRGB, perceptual intent, with the matching fallbacks.
         std::vector<uint8_t> gamma, chroma;
         putU32(gamma, 45455);
@@ -387,7 +402,7 @@ bool writeFile(const std::string& path, const std::vector<uint8_t>& bytes, std::
 
 } // namespace
 
-bool encodePngImage(const Image& image, std::vector<uint8_t>& out, double dpi, std::string* error) {
+bool encodePngImage(const Image& image, std::vector<uint8_t>& out, double dpi, std::string* error, const std::vector<uint8_t>* icc) {
     // Straight alpha, one row at a time, with unpremultiply()'s rounding.
     auto straight = [&](int y, uint8_t* row) {
         std::memcpy(row, image.row(y), size_t(image.width()) * 4);
@@ -397,15 +412,15 @@ bool encodePngImage(const Image& image, std::vector<uint8_t>& out, double dpi, s
             for (int c = 0; c < 3; c++) row[c] = uint8_t(std::min(255u, (row[c] * 255u + a / 2) / a));
         }
     };
-    return encodePng(image.width(), image.height(), 6, 4, straight, dpi, pngCompressionLevel, out, error);
+    return encodePng(image.width(), image.height(), 6, 4, straight, dpi, pngCompressionLevel, out, error, 8, icc);
 }
 
-bool writePngImage(const std::string& path, const Image& image, double dpi, std::string* error) {
+bool writePngImage(const std::string& path, const Image& image, double dpi, std::string* error, const std::vector<uint8_t>* icc) {
     std::vector<uint8_t> bytes;
-    return encodePngImage(image, bytes, dpi, error) && writeFile(path, bytes, error);
+    return encodePngImage(image, bytes, dpi, error, icc) && writeFile(path, bytes, error);
 }
 
-bool encodePngImage16(const Image16& image, std::vector<uint8_t>& out, double dpi, std::string* error) {
+bool encodePngImage16(const Image16& image, std::vector<uint8_t>& out, double dpi, std::string* error, const std::vector<uint8_t>* icc) {
     // Straight alpha at 15 bits, then the file's 0..65535, big-endian.
     auto straight = [&](int y, uint8_t* row) {
         const uint16_t* p = image.row(y);
@@ -420,12 +435,12 @@ bool encodePngImage16(const Image16& image, std::vector<uint8_t>& out, double dp
             }
         }
     };
-    return encodePng(image.width(), image.height(), 6, 8, straight, dpi, pngCompressionLevel, out, error, 16);
+    return encodePng(image.width(), image.height(), 6, 8, straight, dpi, pngCompressionLevel, out, error, 16, icc);
 }
 
-bool writePngImage16(const std::string& path, const Image16& image, double dpi, std::string* error) {
+bool writePngImage16(const std::string& path, const Image16& image, double dpi, std::string* error, const std::vector<uint8_t>* icc) {
     std::vector<uint8_t> bytes;
-    return encodePngImage16(image, bytes, dpi, error) && writeFile(path, bytes, error);
+    return encodePngImage16(image, bytes, dpi, error, icc) && writeFile(path, bytes, error);
 }
 
 bool writePngGray16(const std::string& path, const Gray16& image, std::string* error) {

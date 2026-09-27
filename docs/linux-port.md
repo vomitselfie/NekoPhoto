@@ -434,4 +434,5 @@ uses a different model than Apple's Vision, so its cutouts differ in detail.
 | Alt Backspace, Ctrl Backspace, Delete, Shift F5 | Fill foreground / background, clear, content-aware fill |
 | Ctrl Z, Ctrl Shift Z | Undo, redo |
 | Ctrl Shift E, Ctrl Alt Shift S | Export PNG, export JPEG |
+| Ctrl Shift K, Ctrl Y, Ctrl Shift Y | Color Settings, Proof Colors, Gamut Warning |
 | Ctrl , | Preferences |

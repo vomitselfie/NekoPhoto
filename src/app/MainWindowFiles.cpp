@@ -3,6 +3,7 @@
 #include "MainWindow.h"
 #include "ActionLibrary.h"
 #include "Automation.h"
+#include "ColorManagement.h"
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialog>
@@ -99,6 +100,7 @@ void MainWindow::newDocument() {
     if (!options) return;
     Tab& tab = addTab(true);
     tab.session->createDocument(options->width, options->height, options->resolution, true);
+    tab.session->adoptProfile(color::newDocumentProfile());   // the working space (Edit > Color Settings)
 }
 
 void MainWindow::openAsDocument(const QString& path) {
@@ -154,7 +156,12 @@ void MainWindow::openLayeredFile(const QString& path) {
         showError(tr("Couldn’t open %1").arg(QFileInfo(path).fileName()), EditorSession::budgetText(check));
         return;
     }
-    if (psd) app::finishPsdText(*imported);
+    if (psd) {
+        app::finishPsdText(*imported);
+        // The file's profile (resource 1039) by Color Settings' policy: kept, converted to the working space, or dropped.
+        const compositor::ColorProfile embedded = imported->document.profile;
+        color::applyToDocument(imported->document, color::decideOnOpen(embedded.empty() ? std::nullopt : std::optional(embedded), this));
+    }
     if (affinity) app::finishPendingText(*imported);
     Tab& tab = addTab(true);
     tab.session->adoptDocument(imported->document, QFileInfo(path).completeBaseName());
@@ -192,8 +199,9 @@ void MainWindow::importFile(const QString& path, std::optional<QPointF> at) {
 }
 
 namespace {
-/// An image file's pixels: 16-bit PNG and TIFF files at 16 bits (they open as 16-bit documents), the rest at 8.
-compositor::AnyImage readImageFileUnchecked(const QString& path, QString* error) {
+/// An image file's pixels: 16-bit PNG and TIFF files at 16 bits (they open as 16-bit documents), the rest at 8; with
+/// the profile the file embeds (PNG iCCP, JPEG APP2, TIFF), when it has a usable one.
+compositor::AnyImage readImageFileUnchecked(const QString& path, QString* error, std::optional<compositor::ColorProfile>* embedded) {
     if (compositor::isRawPath(path.toStdString())) {
         // A camera RAW file, developed through LibRaw (a few seconds for a large sensor).
         QApplication::setOverrideCursor(Qt::BusyCursor);
@@ -213,6 +221,7 @@ compositor::AnyImage readImageFileUnchecked(const QString& path, QString* error)
     if (path.endsWith(".png", Qt::CaseInsensitive)) {
         compositor::PngInfo info;
         if (compositor::readPngInfo(path.toStdString(), info) && info.bitDepth == 16) {
+            *embedded = color::embeddedProfile(QByteArray(reinterpret_cast<const char*>(info.icc.data()), qsizetype(info.icc.size())));
             std::string why;
             auto deep = compositor::readPngImage16(path.toStdString(), &why);
             if (!deep && error) *error = QString::fromStdString(why);
@@ -231,14 +240,15 @@ compositor::AnyImage readImageFileUnchecked(const QString& path, QString* error)
     }
     QImage image = reader.read();
     if (image.isNull()) { if (error) *error = reader.errorString(); return nullptr; }
+    if (image.colorSpace().isValid()) *embedded = color::embeddedProfile(image.colorSpace().iccProfile());
     // 16 bits per channel through Qt (a 16-bit TIFF): kept at 16 bits.
     if (image.depth() == 64) return compositor::Image16Ptr(fromQImage16(image));
     return compositor::ImagePtr(fromQImage(image));
 }
 
 /// An image file's pixels, refused (saying why) when they break the budgets for a canvas or image at their depth.
-compositor::AnyImage readImageFile(const QString& path, QString* error) {
-    compositor::AnyImage image = readImageFileUnchecked(path, error);
+compositor::AnyImage readImageFile(const QString& path, QString* error, std::optional<compositor::ColorProfile>* embedded) {
+    compositor::AnyImage image = readImageFileUnchecked(path, error, embedded);
     if (!image) return image;
     if (const compositor::BudgetCheck check = compositor::Document::canCreate(image.width(), image.height(), image.sampleType()); !check) {
         if (error) *error = EditorSession::budgetText(check);
@@ -249,18 +259,30 @@ compositor::AnyImage readImageFile(const QString& path, QString* error) {
 } // namespace
 
 bool MainWindow::importImageFile(const QString& path, std::optional<QPointF> at, QString* error) {
-    auto image = readImageFile(path, error);
+    std::optional<compositor::ColorProfile> embedded;
+    auto image = readImageFile(path, error, &embedded);
     if (!image) return false;
+    // Into a document: converted from the file's profile to the document's. A first image makes the document, and
+    // its profile follows Color Settings' policy.
+    const bool first = !session_->hasDocument();
+    color::OpenDecision decision;
+    if (first) { decision = color::decideOnOpen(embedded, this); image = color::applyToImage(image, decision); }
+    else image = color::convertForDocument(image, embedded, session_->document()->profile);
     if (!session_->insertImage(image, QFileInfo(path).completeBaseName(), at, error)) return false;   // at the document's depth
+    if (first) session_->adoptProfile(decision.profile);
     addRecent(path);
     return true;
 }
 
 bool MainWindow::openImageAsDocument(const QString& path, QString* error) {
-    auto image = readImageFile(path, error);
+    std::optional<compositor::ColorProfile> embedded;
+    auto image = readImageFile(path, error, &embedded);
     if (!image) return false;
+    const color::OpenDecision decision = color::decideOnOpen(embedded, this);
+    image = color::applyToImage(image, decision);
     Tab& tab = addTab(true);
     tab.session->insertImage(image, QFileInfo(path).completeBaseName(), std::nullopt);   // a first image makes the canvas
+    tab.session->adoptProfile(decision.profile);
     tab.defaultName = QFileInfo(path).completeBaseName();
     refreshTabTitles();
     addRecent(path);
@@ -350,14 +372,20 @@ void MainWindow::exportPng() {
     if (path.isEmpty()) return;
     if (!path.endsWith(".png", Qt::CaseInsensitive)) path += ".png";
     std::string error;
+    // The document's profile embedded (iCCP), or the pixels converted to sRGB for the web.
+    const Document& doc = *session_->document();
+    const auto convert = color::askConvertToSrgb(this, doc, false);
+    if (!convert) return;
+    const color::ExportPlan plan = color::exportPlan(doc, *convert);
+    const std::vector<uint8_t>* icc = plan.icc.empty() ? nullptr : &plan.icc;
     // A 16-bit document as a 16-bit PNG.
     if (session_->sampleType() == SampleType::U16) {
-        auto deep = session_->flattened16();
-        if (!deep || !writePngImage16(path.toStdString(), *deep, session_->document()->resolution, &error)) showError(tr("Couldn’t export PNG"), QString::fromStdString(error));
+        auto deep = color::flatten16(doc, plan);
+        if (!deep || !writePngImage16(path.toStdString(), *deep, doc.resolution, &error, icc)) showError(tr("Couldn’t export PNG"), QString::fromStdString(error));
         return;
     }
-    auto image = session_->flattened();
-    if (!image || !writePngImage(path.toStdString(), *image, session_->document()->resolution, &error)) showError(tr("Couldn’t export PNG"), QString::fromStdString(error));
+    auto image = color::flatten8(doc, plan);
+    if (!image || !writePngImage(path.toStdString(), *image, doc.resolution, &error, icc)) showError(tr("Couldn’t export PNG"), QString::fromStdString(error));
 }
 
 void MainWindow::noteDitheredExport(const QString& path) {
@@ -438,7 +466,10 @@ QString MainWindow::askExportPath(const QString& title, const QString& filter, c
 void MainWindow::exportJpeg() {
     session_->endTemporaryLayers();   // the Quick Mask and filter-mask layers are never written
     if (!session_->hasDocument()) return;
-    auto flattened = session_->flattened();
+    const auto convert = color::askConvertToSrgb(this, *session_->document(), false);
+    if (!convert) return;
+    const color::ExportPlan plan = color::exportPlan(*session_->document(), *convert);
+    auto flattened = color::flatten8(*session_->document(), plan);
     if (!flattened) return;
     QImage image = toQImage(*flattened);
     auto options = askJpegExport(this, image);
@@ -451,14 +482,17 @@ void MainWindow::exportJpeg() {
     p.drawImage(0, 0, image);
     p.end();
     QString error;
-    if (!writeQtImage(path, "jpeg", flat, options->quality, session_->document()->resolution, &error)) showError(tr("Couldn’t export JPEG"), error);
+    if (!writeQtImage(path, "jpeg", flat, options->quality, session_->document()->resolution, &error, plan.iccBytes())) showError(tr("Couldn’t export JPEG"), error);
     else noteDitheredExport(path);
 }
 
 void MainWindow::exportWebp() {
     session_->endTemporaryLayers();   // the Quick Mask and filter-mask layers are never written
     if (!session_->hasDocument()) return;
-    auto flattened = session_->flattened();
+    const auto convert = color::askConvertToSrgb(this, *session_->document(), false);
+    if (!convert) return;
+    const color::ExportPlan plan = color::exportPlan(*session_->document(), *convert);
+    auto flattened = color::flatten8(*session_->document(), plan);
     if (!flattened) return;
     QImage image = toQImage(*flattened);
     auto options = askJpegExport(this, image, true);
@@ -466,7 +500,7 @@ void MainWindow::exportWebp() {
     QString path = askExportPath(tr("Export WebP"), tr("WebP image (*.webp)"), {"webp"});
     if (path.isEmpty()) return;
     QString error;
-    if (!writeQtImage(path, "webp", image, options->quality, session_->document()->resolution, &error)) showError(tr("Couldn’t export WebP"), error);
+    if (!writeQtImage(path, "webp", image, options->quality, session_->document()->resolution, &error, plan.iccBytes())) showError(tr("Couldn’t export WebP"), error);
     else noteDitheredExport(path);
 }
 
@@ -480,7 +514,9 @@ void MainWindow::exportTiff() {
     QString error;
     // A 16-bit document as a 16-bit TIFF, when Qt's TIFF plugin writes one.
     const bool deep = session_->sampleType() == SampleType::U16 && canWriteDeepTiff();
-    if (!writeQtImage(path, "tiff", deep ? toQImage16(*session_->flattened16()) : toQImage(*flattened), 100, session_->document()->resolution, &error)) showError(tr("Couldn’t export TIFF"), error);
+    // The document's profile embedded.
+    const QByteArray icc = color::exportPlan(*session_->document(), false).iccBytes();
+    if (!writeQtImage(path, "tiff", deep ? toQImage16(*session_->flattened16()) : toQImage(*flattened), 100, session_->document()->resolution, &error, icc)) showError(tr("Couldn’t export TIFF"), error);
     else if (!deep) noteDitheredExport(path);
 }
 
@@ -512,11 +548,19 @@ void MainWindow::exportGif() {
     session_->endTemporaryLayers();   // the Quick Mask and filter-mask layers are never written
     session_->endFramePreview();
     if (!session_->hasDocument()) return;
+    // GIF has no colour profile: converted to sRGB unless the person says otherwise.
+    const auto convert = color::askConvertToSrgb(this, *session_->document(), true);
+    if (!convert) return;
     QString path = askExportPath(tr("Export Animated GIF"), tr("GIF image (*.gif)"), {"gif"});
     if (path.isEmpty()) return;
     QApplication::setOverrideCursor(Qt::WaitCursor);
     std::string error;
-    const bool ok = compositor::writeDocumentGif(path.toStdString(), *session_->document(), &error);
+    std::optional<Document> converted;
+    if (*convert && color::hasNonSrgbProfile(*session_->document())) {
+        converted = *session_->document();
+        convertDocumentProfile(*converted, {}, {});
+    }
+    const bool ok = compositor::writeDocumentGif(path.toStdString(), converted ? *converted : *session_->document(), &error);
     QApplication::restoreOverrideCursor();
     if (!ok) showError(tr("Couldn’t export the GIF"), QString::fromStdString(error));
     else statusBar()->showMessage(tr("Exported %n frame(s) to %1", nullptr, std::max(1, int(session_->document()->animation.frames.size()))).arg(QFileInfo(path).fileName()), 6000);

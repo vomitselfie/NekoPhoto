@@ -63,6 +63,11 @@ qt_add_executable(nekophoto
     EditorSessionSmartFilters.cpp
     EditorSessionWatch.cpp
     EditorSessionTransform.cpp
+    EditorSessionColor.cpp
+    ColorManagement.h
+    ColorManagement.cpp
+    ColorDialogs.h
+    ColorDialogs.cpp
     CanvasWidget.h
     CanvasWidget.cpp
     CanvasWidgetInput.cpp
@@ -181,6 +186,8 @@ else()
     message(STATUS "Translations: Qt LinguistTools not found (qt6-l10n-tools on Debian/Ubuntu, qt6-tools elsewhere); the app will be English only")
 endif()
 target_link_libraries(nekophoto PRIVATE compositor::core Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Svg compositor_warnings)
+# dlopen for the X11 monitor profile (Platform.cpp).
+target_link_libraries(nekophoto PRIVATE ${CMAKE_DL_LIBS})
 # Qt PDF (PDFium, BSD-3 / LGPL Qt) renders PDF pages for File > Open. Optional: without it PDFs are refused with a
 # message. Found at the top as an optional component of the one Qt lookup (a separate find_package(Qt6Pdf) after the
 # target exists loaded Qt's packages a second time on Homebrew and left the app without its moc output).

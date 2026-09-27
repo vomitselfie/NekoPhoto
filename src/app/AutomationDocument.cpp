@@ -2,6 +2,7 @@
 #include "compositor/vectorlayer.h"
 #include "TextLayer.h"
 #include "Automation.h"
+#include "ColorManagement.h"
 #include "compositor/gif.h"
 #include "AutomationHandlers.h"
 #include "CanvasWidget.h"
@@ -34,7 +35,8 @@ void AutomationServer::registerDocumentHandlers() {
         EditorSession* s = session();
         QJsonObject o{{"width", doc.width}, {"height", doc.height}, {"resolution", doc.resolution}, {"layers", int(doc.layers.size())},
                       {"bits", QString::fromLatin1(sampleTypeName(doc.sampleType)).toInt()},
-                      {"modified", s->isModified()}, {"title", s->title()}, {"tab", w->currentTabIndex()}};
+                      {"modified", s->isModified()}, {"title", s->title()}, {"tab", w->currentTabIndex()},
+                      {"profile", color::profileLabel(doc.profile)}};
         if (!s->projectPath().isEmpty()) o["path"] = s->projectPath();
         if (auto id = s->activeLayerId()) { o["activeLayer"] = qs(*id); o["maskSelected"] = s->isMaskSelected(); }
         if (doc.selection && !doc.selection->isEmpty()) o["selection"] = rectJson(doc.selection->bounds());
@@ -90,6 +92,7 @@ void AutomationServer::registerDocumentHandlers() {
         if (const BudgetCheck check = Document::canCreate(width, height, SampleType::U8); !check) fail(qs(check.message()), invalidParams);
         if (session()->hasDocument()) w->newTab();
         session()->createDocument(width, height, num(p, "resolution", 72), flag(p, "emptyLayer", true));
+        session()->adoptProfile(color::newDocumentProfile());
         return QJsonObject{{"tab", w->currentTabIndex()}, {"width", width}, {"height", height}};
     });
     add("document.open", [w, session](const QJsonObject& p) {
@@ -161,6 +164,10 @@ void AutomationServer::registerDocumentHandlers() {
                                {"masks", summary.masks}, {"clipped", summary.clipped}, {"adjustments", summary.adjustments}, {"texts", summary.texts}, {"smartObjects", summary.smartObjects}, {"warnings", warnings}, {"notes", notes}};
         }
         const bool deep = doc.sampleType == SampleType::U16;
+        // The document's profile is embedded (PNG, JPEG, WebP, TIFF); convertToSrgb converts instead, as the web formats
+        // want (the default for GIF, which has no profile).
+        const bool gif = suffix == "gif";
+        const color::ExportPlan plan = color::exportPlan(doc, flag(p, "convertToSrgb", gif), flag(p, "embedProfile", true));
         if (suffix == "svg" && deep) fail("SVG export is not available for 16-bit documents yet");
         if (suffix == "svg") {
             // Shape layers as paths, folders as groups, the rest as embedded PNGs (compositor/svg.h).
@@ -175,24 +182,26 @@ void AutomationServer::registerDocumentHandlers() {
             // The timeline's frames as an animated GIF, or the composite as a still one.
             session()->endFramePreview();
             std::string error;
-            if (!writeDocumentGif(path.toStdString(), document(), &error)) fail("couldn't write " + path + ": " + qs(error));
+            std::optional<Document> converted;
+            if (plan.convert) { converted = document(); convertDocumentProfile(*converted, {}, {}); }
+            if (!writeDocumentGif(path.toStdString(), converted ? *converted : document(), &error)) fail("couldn't write " + path + ": " + qs(error));
             const Document& shown = document();
             return QJsonObject{{"path", path}, {"width", shown.width}, {"height", shown.height}, {"frames", std::max(1, int(shown.animation.frames.size()))}};
         }
         // A 16-bit document as a 16-bit PNG (and TIFF, when Qt writes one); the 8-bit formats get it dithered down.
         if (deep && (suffix == "png" || ((suffix == "tif" || suffix == "tiff") && canWriteDeepTiff()))) {
-            auto image = session()->flattened16();
+            auto image = color::flatten16(doc, plan);
             if (!image) fail("nothing to export");
             std::string error;
-            if (suffix == "png") { if (!writePngImage16(path.toStdString(), *image, doc.resolution, &error)) fail("couldn't write " + path + ": " + qs(error)); }
-            else { QString qerror; if (!writeQtImage(path, "tiff", toQImage16(*image), 100, doc.resolution, &qerror)) fail("couldn't write " + path + ": " + qerror); }
+            if (suffix == "png") { if (!writePngImage16(path.toStdString(), *image, doc.resolution, &error, plan.icc.empty() ? nullptr : &plan.icc)) fail("couldn't write " + path + ": " + qs(error)); }
+            else { QString qerror; if (!writeQtImage(path, "tiff", toQImage16(*image), 100, doc.resolution, &qerror, plan.iccBytes())) fail("couldn't write " + path + ": " + qerror); }
             return QJsonObject{{"path", path}, {"width", image->width()}, {"height", image->height()}, {"bits", 16}};
         }
-        auto flat = session()->flattened();
+        auto flat = color::flatten8(doc, plan);
         if (!flat) fail("nothing to export");
         if (suffix == "png") {
             std::string error;
-            if (!writePngImage(path.toStdString(), *flat, session()->document()->resolution, &error)) fail("couldn't write " + path + ": " + qs(error));
+            if (!writePngImage(path.toStdString(), *flat, session()->document()->resolution, &error, plan.icc.empty() ? nullptr : &plan.icc)) fail("couldn't write " + path + ": " + qs(error));
         } else if (suffix == "jpg" || suffix == "jpeg") {
             QImage image(flat->width(), flat->height(), QImage::Format_RGB32);
             image.fill(QColor(str(p, "background", QStringLiteral("#ffffff"))));
@@ -200,11 +209,11 @@ void AutomationServer::registerDocumentHandlers() {
             painter.drawImage(0, 0, wrapImage(*flat));
             painter.end();
             QString error;
-            if (!writeQtImage(path, "jpeg", image, integer(p, "quality", 85), session()->document()->resolution, &error)) fail("couldn't write " + path + ": " + error);
+            if (!writeQtImage(path, "jpeg", image, integer(p, "quality", 85), session()->document()->resolution, &error, plan.iccBytes())) fail("couldn't write " + path + ": " + error);
         } else if ((suffix == "webp" || suffix == "tif" || suffix == "tiff") && canWriteImageFormat(suffix == "webp" ? "webp" : "tiff")) {
             // WebP and TIFF keep transparency; WebP at quality 100 is lossless.
             QString error;
-            if (!writeQtImage(path, suffix == "webp" ? "webp" : "tiff", toQImage(*flat), integer(p, "quality", 90), session()->document()->resolution, &error))
+            if (!writeQtImage(path, suffix == "webp" ? "webp" : "tiff", toQImage(*flat), integer(p, "quality", 90), session()->document()->resolution, &error, plan.iccBytes()))
                 fail("couldn't write " + path + ": " + error);
         } else if (suffix == "tga") {
             std::string error;
@@ -213,9 +222,37 @@ void AutomationServer::registerDocumentHandlers() {
             std::string error;
             if (!writeIco(path.toStdString(), *flat, defaultIcoSizes, &error, &doc)) fail("couldn't write " + path + ": " + qs(error));
         } else fail("path must end in .psd, .psb, .svg, .png, .jpg, .jpeg, .webp, .tif, .tiff, .gif, .tga or .ico", invalidParams);
-        QJsonObject out{{"path", path}, {"width", flat->width()}, {"height", flat->height()}, {"bits", 8}};
+        QJsonObject out{{"path", path}, {"width", flat->width()}, {"height", flat->height()}, {"bits", 8}, {"profile", plan.icc.empty() ? QJsonValue::Null : QJsonValue(QString::fromStdString(doc.profile.description))}, {"convertedToSrgb", plan.convert}};
         if (deep) out["note"] = "reduced from 16 to 8 bits per channel with dithering";
         return out;
+    });
+    add("document.profile", [session, document](const QJsonObject& p) {
+        // Edit > Assign Profile (the tag only) and Convert to Profile (pixels and stored colours); one undo step each.
+        document();
+        const QString action = str(p, "action", QStringLiteral("get"));
+        if (action != "get" && action != "assign" && action != "convert") fail("action must be get, assign or convert", invalidParams);
+        if (action != "get") {
+            if (!has(p, "profile")) fail("give profile: srgb, adobe-rgb, display-p3, prophoto, working, none (assign only) or an ICC file's path", invalidParams);
+            QString key = str(p, "profile"), error;
+            if (key == "working") key = QString::fromLatin1(workingSpaceKey(color::settings().workingSpace));
+            if (key == "none" && action == "convert") key = "srgb";
+            auto profile = color::profileForKey(key, &error);
+            if (!profile) fail(error, invalidParams);
+            if (action == "assign") session()->assignProfile(*profile);
+            else {
+                ConvertOptions options;
+                auto intent = renderingIntentFromKey(str(p, "intent", QStringLiteral("relative")).toStdString());
+                if (!intent || (*intent != RenderingIntent::Perceptual && *intent != RenderingIntent::RelativeColorimetric)) fail("intent must be perceptual or relative", invalidParams);
+                options.intent = *intent;
+                options.blackPointCompensation = flag(p, "blackPointCompensation", true);
+                if (!session()->convertToProfile(*profile, options, &error)) fail(error);
+            }
+        } else if (has(p, "profile") || has(p, "intent") || has(p, "blackPointCompensation")) fail("profile, intent and blackPointCompensation go with assign or convert", invalidParams);
+        const Document& doc = document();
+        auto space = matchingWorkingSpace(doc.profile);
+        return QJsonObject{{"profile", color::profileLabel(doc.profile)}, {"tagged", !doc.profile.empty()},
+                           {"workingSpace", space ? QJsonValue(QString::fromLatin1(workingSpaceKey(*space))) : QJsonValue::Null},
+                           {"bytes", int(doc.profile.icc.size())}, {"undo", session()->canUndo() ? QJsonValue(session()->undoName()) : QJsonValue::Null}};
     });
     add("document.close", [session](const QJsonObject& p) {
         if (session()->isModified() && !flag(p, "discard", false)) fail("the document has unsaved changes; save first or pass discard: true");

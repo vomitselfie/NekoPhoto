@@ -117,7 +117,9 @@ shape layers), a PDF page (`page`, 1-based, and `resolution` in pixels per inch,
 at the bottom and the only one visible, with the frames, delays and loop count on the timeline), which open in a tab of their own and answer with `layers` and the import
 `notes`; or an image, .tga included), `document.import` (an image as a layer),
 `document.save` (answers `macCompatible`: false past the 100 megapixels of layers Compositor for
-macOS opens; projects here hold up to a gigapixel), `document.export` (.psd, layered, text layers as Photoshop text (`texts` counts them), answering with the counts and any `warnings` and `notes` about what Photoshop cannot carry; or .svg, answering with the `shapes`, `images` and `groups` written and `notes` on what became images (docs/svg-pdf.md); an animated .gif of the timeline's frames (the composite when there are none; `frames` counts them); or the composite as .png, .jpg, .webp or .tif; `quality` for JPEG and WebP, where 100 is lossless; `background` behind a JPEG), `document.close`.
+macOS opens; projects here hold up to a gigapixel), `document.export` (.psd, layered, text layers as Photoshop text (`texts` counts them), answering with the counts and any `warnings` and `notes` about what Photoshop cannot carry; or .svg, answering with the `shapes`, `images` and `groups` written and `notes` on what became images (docs/svg-pdf.md); an animated .gif of the timeline's frames (the composite when there are none; `frames` counts them); or the composite as .png, .jpg, .webp or .tif; `quality` for JPEG and WebP, where 100 is lossless; `background` behind a JPEG; PNG, JPEG, WebP, TIFF and PSD carry the
+document's colour profile, `embedProfile: false` leaves it out, and `convertToSrgb` converts to sRGB first, the default
+for GIF), `document.close`. `document.info` reports the document's `profile`.
 
 Artboards and slices (docs/artboards-slices.md): `artboards.list`, `artboards.add` (`x`, `y`, `width`, `height`, `name`,
 `background`: white, black, transparent or a CSS colour), `artboards.set` (the same by `id`; a move takes its layers along
@@ -194,7 +196,10 @@ model once downloaded: `foreground` and `background` points as `[x, y]` lists, a
 Canvas and history: `canvas.resize`, `canvas.crop`, `canvas.flip`,
 `image.resize`, `image.trim` (Photoshop's Trim: `basedOn` transparent, topLeft or bottomRight, the sides, `tolerance`),
 `image.mode` (`bits` 8 or 16: Image > Mode, one undo step; refused with the reason when a 16-bit document would not fit
-its byte budget, half the pixels of an 8-bit one), `history.undo`, `history.redo`, `history.beginGroup` (`name`) and
+its byte budget, half the pixels of an 8-bit one), `document.profile` (colour management, docs/color-management.md:
+`action` get, `assign` (Edit > Assign Profile, the tag only) or `convert` (Edit > Convert to Profile: every layer's pixels
+and the stored colours); `profile` srgb, adobe-rgb, display-p3, prophoto, working, none or an ICC file's path; `intent`
+perceptual or relative, `blackPointCompensation`; one undo step), `history.undo`, `history.redo`, `history.beginGroup` (`name`) and
 `history.endGroup`: the steps one connection records in between become one undo step with that name.
 Each call still records its own step while the group is open, so the person's Undo keeps working; the
 merge happens at the end, and only when no one else recorded a step in between (the reply says why
@@ -264,7 +269,10 @@ or ellipse, `x, y, width, height`, `cornerRadius`, `color`). The person's tool,
 brush settings and colours are restored afterwards.
 
 View: `tool.select` (`name`: move, marquee, lasso, wand, quickselect, crop, brush, healing, clone,
-smudge, gradient, shape, text, eyedropper, hand or zoom), `colors.set`, `view.zoom`.
+smudge, gradient, shape, text, eyedropper, hand or zoom), `colors.set`, `view.zoom`, `color.settings` (Edit > Color
+Settings: `workingSpace`, `policy` preserve, convert or off, `askMissing`, `askMismatch`; the monitor profile:
+`monitorProfile` (an ICC file, "" for the system's), `useSystemMonitor`; View > Proof Setup: `proofProfile`,
+`proofIntent`, `proofBlackPoint`, `proofColors`, `gamutWarning`, `gamutColor`; with no keys it only reads them).
 
 Events: `events.subscribe` (`kinds`: document, layers, selection, history,
 tool, view, tabs; default all) makes the server push

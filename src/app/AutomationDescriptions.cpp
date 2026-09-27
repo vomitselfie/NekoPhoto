@@ -49,6 +49,12 @@ const MethodDoc methodDocs[] = {
     // tools and view
     {"tool.select", "Pick the tool the person sees.", "name:<tool>! The tool"},
     {"colors.set", "Set the foreground and background colours.", "foreground:color Foreground; background:color Background"},
+    {"color.settings", "Edit > Color Settings, the monitor profile and View > Proof Setup: read them, or change the keys given (docs/color-management.md). Untagged images are always treated as sRGB; new documents take the working space.",
+     "workingSpace:(srgb|adobe-rgb|display-p3|prophoto) The RGB working space; policy:(preserve|convert|off) What happens to a file's embedded profile when it opens; "
+     "askMissing:bool Ask when a file has no profile; askMismatch:bool Ask when its profile is not the working space; "
+     "monitorProfile:string An ICC file for the monitor (\"\" to use the system's); useSystemMonitor:bool Read the system's monitor profile (X11, Windows); "
+     "proofProfile:string A working space or an ICC file to simulate; proofIntent:(perceptual|relative) How colours go to it; proofBlackPoint:bool Black point compensation; "
+     "proofColors:bool View > Proof Colors; gamutWarning:bool View > Gamut Warning; gamutColor:color The warning's colour"},
     {"view.zoom", "Zoom the view (not the document).", "zoom:number Zoom factor, 1 = 100%; fit:bool=false Fit the document in the window"},
     {"debug.eye", "Test hook: a pointer event on a layer's eye button in the Layers panel.",
      "id:layer! The layer whose eye is pressed; to:layer The eye the pointer is over; action:(press|move|release)! The event"},
@@ -85,7 +91,8 @@ const MethodDoc methodDocs[] = {
     {"document.import", "Import an image file as a new layer.", "path:string! File path; x:number Left edge in document pixels; y:number Top edge"},
     {"document.save", "Save as a project (.comp).", "path:string Where to save (default: where it was opened or last saved)"},
     {"document.export", "Export as a layered Photoshop .psd (the reply lists what Photoshop cannot carry), as .svg (vector shape layers as paths, folders as groups, other layers as embedded PNGs; the reply counts them and lists what became images), the timeline's frames as an animated .gif (the composite when there are none), or the composite as .png, .jpg, .webp, .tif, .tga or .ico (16, 32, 48 and 256 px; the extension decides).",
-     "path:string! Output file; quality:integer JPEG and WebP quality 1..100 (100 = lossless WebP; default 85 JPEG, 90 WebP); background:color=#ffffff Behind a JPEG's transparency"},
+     "path:string! Output file; quality:integer JPEG and WebP quality 1..100 (100 = lossless WebP; default 85 JPEG, 90 WebP); background:color=#ffffff Behind a JPEG's transparency; "
+     "embedProfile:bool=true Embed the document's colour profile (PNG, JPEG, WebP, TIFF; PSD always carries it); convertToSrgb:bool Convert to sRGB first, for the web (default true for GIF, false otherwise)"},
     {"document.close", "Close the document in the current tab.", "discard:bool=false Close even with unsaved changes"},
     {"canvas.resize", "Change the canvas size, keeping the layers' pixels.",
      "width:integer! Pixels; height:integer! Pixels; anchorX:number=0.5 0 keeps the left edge, 1 the right; anchorY:number=0.5 0 keeps the top, 1 the bottom"},
@@ -94,6 +101,9 @@ const MethodDoc methodDocs[] = {
     {"image.trim", "Cut the canvas down to its content, as Photoshop's Image > Trim (one undo step); trimmed is false when nothing would change or nothing would remain.",
      "basedOn:(transparent|topLeft|bottomRight)=transparent What is trimmed away: transparent pixels, or the colour of that corner; top:bool=true Trim the top; bottom:bool=true; left:bool=true; right:bool=true; "
      "tolerance:integer=0 For the colour modes: how far a channel may be from the corner's (0..255)"},
+    {"document.profile", "The document's colour profile: get it, assign one (Edit > Assign Profile: the tag only, the pixel values stay) or convert to one (Edit > Convert to Profile: every layer's pixels and the colours of text, shapes, styles and adjustments, and the foreground and background colours, so the document looks the same). One undo step.",
+     "action:(get|assign|convert)=get What to do; profile:string srgb, adobe-rgb, display-p3, prophoto, working (Color Settings' working space), none (assign only: untagged, treated as sRGB) or an ICC file's path; "
+     "intent:(perceptual|relative)=relative Convert only: the rendering intent; blackPointCompensation:bool=true Convert only"},
     {"image.mode", "Image > Mode: convert the document to 8 or 16 bits per channel, every layer, mask and the selection, as one undo step. A 16-bit document holds half the pixels of an 8-bit one within the same memory; what has not been ported to 16 bits yet is refused on it (docs/bit-depth.md).",
      "bits:integer! 8 or 16"},
     {"image.resize", "Resample the whole image (every layer).",

@@ -4,6 +4,7 @@
 // where the local sockets live (Unix domain sockets here, named pipes on Windows) and how a GUI-subsystem
 // executable on Windows still prints --version, --help and --call results to the console it was started from.
 
+#include <QByteArray>
 #include <QString>
 
 namespace app::platform {
@@ -28,5 +29,10 @@ QString defaultLocalSocket(const QString& baseName);
 /// named after it with the separators replaced; a full \\.\pipe\ name is kept. mcp/nekophoto_mcp.py and
 /// tools/rpc_smoke.py apply the same rule.
 QString localServerName(const QString& socket);
+
+/// The ICC profile the system has for the (primary) monitor, empty when it reports none: X11's _ICC_PROFILE on the
+/// root window (set by colord and other colour managers; read through libxcb, loaded at run time), the display
+/// profile on Windows (GetICMProfile). Wayland has no such property: Preferences takes a file there.
+QByteArray systemMonitorProfile();
 
 } // namespace app::platform

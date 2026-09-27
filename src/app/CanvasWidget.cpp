@@ -1,4 +1,5 @@
 #include "CanvasWidget.h"
+#include "ColorManagement.h"
 #include <QRegion>
 #include <cstring>
 #include "ImageConvert.h"
@@ -67,6 +68,7 @@ CanvasWidget::CanvasWidget(EditorSession* session, QWidget* parent) : QWidget(pa
         update();
     });
     connect(session_, &EditorSession::transformChanged, this, [this] { if (session_->transformEdit() && session_->transformEdit()->floating) refreshSelectionOutline(); update(); });
+    connect(color::notifier(), &color::Notifier::changed, this, [this] { cacheValid_ = false; update(); });
     zoomSettle_.setSingleShot(true);
     zoomSettle_.setInterval(120);
     connect(&zoomSettle_, &QTimer::timeout, this, [this] { update(); });
@@ -110,6 +112,9 @@ void CanvasWidget::renderInto(QImage& target, QRect deviceRect, QPointF document
     options.region = Rect((deviceRect.x() - documentOrigin.x()) / zoom, (deviceRect.y() - documentOrigin.y()) / zoom, deviceRect.width() / zoom, deviceRect.height() / zoom);
     options.scale = zoom;
     options.version = session_->documentRevision();
+    // Document to monitor, or the soft proof (ColorManagement.h); null, the usual case, leaves the pixels as they are.
+    const compositor::ColorTransformPtr display = color::displayTransform(*session_->document());
+    options.display = display.get();
     Image out;
     Overrides overrides = session_->renderOverrides();
     compositor::render(*session_->document(), options, out, overrides.empty() ? nullptr : &overrides, &renderCache_);

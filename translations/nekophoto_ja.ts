@@ -655,6 +655,14 @@
         <source>Delete Slices</source>
         <translation>スライスを削除</translation>
     </message>
+    <message>
+        <source>Assign Profile</source>
+        <translation>プロファイルの指定</translation>
+    </message>
+    <message>
+        <source>Convert to Profile</source>
+        <translation>プロファイル変換</translation>
+    </message>
 </context>
 <context>
     <name>Names</name>
@@ -1222,6 +1230,120 @@
         <translation>%1 を読み込めませんでした。</translation>
     </message>
     <message>
+        <source>%1 is too large to be a colour profile.</source>
+        <translation>%1 はカラープロファイルとしては大きすぎます。</translation>
+    </message>
+    <message>
+        <source>%1 is not a colour profile.</source>
+        <translation>%1 はカラープロファイルではありません。</translation>
+    </message>
+    <message>
+        <source>%1 is not an RGB profile.</source>
+        <translation>%1 は RGB プロファイルではありません。</translation>
+    </message>
+    <message>
+        <source>No profile given.</source>
+        <translation>プロファイルが指定されていません。</translation>
+    </message>
+    <message>
+        <source>Untagged RGB (treated as sRGB)</source>
+        <translation>タグなし RGB(sRGB として扱います)</translation>
+    </message>
+    <message>
+        <source>None: colours are shown as the document&apos;s values</source>
+        <translation>なし:ドキュメントの値のまま表示します</translation>
+    </message>
+    <message>
+        <source>System: %1</source>
+        <translation>システム:%1</translation>
+    </message>
+    <message>
+        <source>Missing Profile</source>
+        <translation>プロファイルなし</translation>
+    </message>
+    <message>
+        <source>The document does not have an embedded RGB profile.</source>
+        <translation>このドキュメントには RGB プロファイルが埋め込まれていません。</translation>
+    </message>
+    <message>
+        <source>Leave as is (treat as sRGB)</source>
+        <translation>そのままにする(sRGB として扱う)</translation>
+    </message>
+    <message>
+        <source>Assign working RGB: %1</source>
+        <translation>作業用 RGB を指定:%1</translation>
+    </message>
+    <message>
+        <source>Embedded Profile Mismatch</source>
+        <translation>埋め込みプロファイルの不一致</translation>
+    </message>
+    <message>
+        <source>The document has an embedded colour profile that does not match the working space.
+
+Embedded: %1
+Working: %2</source>
+        <translation>このドキュメントには、作業用スペースと一致しないカラープロファイルが埋め込まれています。
+
+埋め込み:%1
+作業用:%2</translation>
+    </message>
+    <message>
+        <source>Use the embedded profile</source>
+        <translation>埋め込みプロファイルを使用</translation>
+    </message>
+    <message>
+        <source>Convert to the working space</source>
+        <translation>作業用スペースに変換</translation>
+    </message>
+    <message>
+        <source>Discard the embedded profile</source>
+        <translation>埋め込みプロファイルを破棄</translation>
+    </message>
+    <message>
+        <source>Export Colour</source>
+        <translation>書き出しのカラー</translation>
+    </message>
+    <message>
+        <source>The document’s profile is %1. Browsers and most viewers assume sRGB.</source>
+        <translation>ドキュメントのプロファイルは %1 です。ブラウザーや多くのビューアーは sRGB を前提にしています。</translation>
+    </message>
+    <message>
+        <source>Convert to sRGB</source>
+        <translation>sRGB に変換</translation>
+    </message>
+    <message>
+        <source>Off: the pixels are written as they are, with the document’s profile embedded where the format allows.</source>
+        <translation>オフ:ピクセルをそのまま書き出し、形式が対応していればドキュメントのプロファイルを埋め込みます。</translation>
+    </message>
+    <message>
+        <source>Monitor colour profile</source>
+        <translation>モニターのカラープロファイル</translation>
+    </message>
+    <message>
+        <source>Use the system’s monitor profile when it reports one (X11, Windows)</source>
+        <translation>システムのモニタープロファイルがあれば使用する(X11、Windows)</translation>
+    </message>
+    <message>
+        <source>Choose Profile…</source>
+        <translation>プロファイルを選択…</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>消去</translation>
+    </message>
+    <message>
+        <source>The canvas converts the document’s colours to this profile. On Wayland, choose your monitor’s ICC file here. With none, colours are shown as the document’s values, as before.</source>
+        <translation>カンバスはドキュメントのカラーをこのプロファイルに変換して表示します。Wayland ではここでモニターの ICC ファイルを選んでください。なしの場合は、これまでどおりドキュメントの値のまま表示します。</translation>
+    </message>
+    <message>
+        <source>Current: %1</source>
+        <translation>現在:%1</translation>
+    </message>
+    <message>
+        <source>Monitor Profile</source>
+        <translation>モニタープロファイル</translation>
+    </message>
+    <message>
         <source>%1 is not an image NekoPhoto can read.</source>
         <translation>%1 は NekoPhoto で読み込める画像ではありません。</translation>
     </message>
@@ -1484,6 +1606,138 @@
     <message>
         <source>This build of NekoPhoto opens PDF files only with Qt PDF, which was not found when it was built.</source>
         <translation>この NekoPhoto のビルドは Qt PDF でのみ PDF ファイルを開けますが、ビルド時に Qt PDF が見つかりませんでした。</translation>
+    </message>
+    <message>
+        <source>Load…</source>
+        <translation>読み込み…</translation>
+    </message>
+    <message>
+        <source>Load Profile</source>
+        <translation>プロファイルを読み込み</translation>
+    </message>
+    <message>
+        <source>ICC profiles (*.icc *.icm)</source>
+        <translation>ICC プロファイル (*.icc *.icm)</translation>
+    </message>
+    <message>
+        <source>Perceptual</source>
+        <translation>知覚的</translation>
+    </message>
+    <message>
+        <source>Relative Colorimetric</source>
+        <translation>相対的な色域を維持</translation>
+    </message>
+    <message>
+        <source>Color Settings</source>
+        <translation>カラー設定</translation>
+    </message>
+    <message>
+        <source>Working space (RGB):</source>
+        <translation>作業用スペース(RGB):</translation>
+    </message>
+    <message>
+        <source>Preserve Embedded Profiles</source>
+        <translation>埋め込まれたプロファイルを保持</translation>
+    </message>
+    <message>
+        <source>Convert to Working RGB</source>
+        <translation>作業用 RGB に変換</translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation>オフ</translation>
+    </message>
+    <message>
+        <source>Color management policy (RGB):</source>
+        <translation>カラーマネジメントポリシー(RGB):</translation>
+    </message>
+    <message>
+        <source>Images without a profile are treated as sRGB. New documents take the working space.</source>
+        <translation>プロファイルのない画像は sRGB として扱います。新規ドキュメントには作業用スペースを指定します。</translation>
+    </message>
+    <message>
+        <source>Ask when opening a file without a profile</source>
+        <translation>プロファイルのないファイルを開くときに確認</translation>
+    </message>
+    <message>
+        <source>Ask when opening a file whose profile is not the working space</source>
+        <translation>プロファイルが作業用スペースと異なるファイルを開くときに確認</translation>
+    </message>
+    <message>
+        <source>Assign Profile</source>
+        <translation>プロファイルの指定</translation>
+    </message>
+    <message>
+        <source>Assign Profile:</source>
+        <translation>プロファイルの指定:</translation>
+    </message>
+    <message>
+        <source>Don’t Color Manage This Document (treated as sRGB)</source>
+        <translation>このドキュメントのカラーマネジメントを行わない(sRGB として扱う)</translation>
+    </message>
+    <message>
+        <source>Working RGB: %1</source>
+        <translation>作業用 RGB:%1</translation>
+    </message>
+    <message>
+        <source>Profile:</source>
+        <translation>プロファイル:</translation>
+    </message>
+    <message>
+        <source>Assigning changes how the colours are interpreted, not the pixel values. Convert to Profile keeps the colours&apos; appearance instead.</source>
+        <translation>プロファイルの指定はカラーの解釈を変えるだけで、ピクセルの値は変わりません。見た目のカラーを保つにはプロファイル変換を使います。</translation>
+    </message>
+    <message>
+        <source>Convert to Profile</source>
+        <translation>プロファイル変換</translation>
+    </message>
+    <message>
+        <source>Source space:</source>
+        <translation>変換元のカラースペース:</translation>
+    </message>
+    <message>
+        <source>Destination space:</source>
+        <translation>変換後のカラースペース:</translation>
+    </message>
+    <message>
+        <source>Intent:</source>
+        <translation>マッチング方法:</translation>
+    </message>
+    <message>
+        <source>Use Black Point Compensation</source>
+        <translation>黒点の補正を使用</translation>
+    </message>
+    <message>
+        <source>Every layer’s pixels and the colours of text, shapes, fills, styles and adjustments are converted, so the document looks the same in its new profile.</source>
+        <translation>すべてのレイヤーのピクセルと、テキスト・シェイプ・塗りつぶし・スタイル・色調補正のカラーを変換するので、新しいプロファイルでも同じ見た目になります。</translation>
+    </message>
+    <message>
+        <source>Customize Proof Condition</source>
+        <translation>校正条件をカスタマイズ</translation>
+    </message>
+    <message>
+        <source>Device to Simulate:</source>
+        <translation>シミュレートするデバイス:</translation>
+    </message>
+    <message>
+        <source>Rendering Intent:</source>
+        <translation>マッチング方法:</translation>
+    </message>
+    <message>
+        <source>Gamut Warning Colour</source>
+        <translation>色域外警告のカラー</translation>
+    </message>
+    <message>
+        <source>Gamut warning colour:</source>
+        <translation>色域外警告のカラー:</translation>
+    </message>
+    <message>
+        <source>Black Point Compensation</source>
+        <translation>黒点の補正を使用</translation>
+    </message>
+    <message>
+        <source>View ▸ Proof Colors shows the document as it would look on this device; View ▸ Gamut Warning marks the colours it cannot show.</source>
+        <translation>表示 ▸ 色の校正でこのデバイスでの見え方を表示し、表示 ▸ 色域外警告で表現できないカラーを示します。</translation>
     </message>
 </context>
 <context>
@@ -5212,6 +5466,22 @@ File &gt; New creates a blank canvas.</source>
         <translation>コンテンツに応じて拡大・縮小...</translation>
     </message>
     <message>
+        <source>Color Settings…</source>
+        <translation>カラー設定…</translation>
+    </message>
+    <message>
+        <source>Assign Profile…</source>
+        <translation>プロファイルの指定…</translation>
+    </message>
+    <message>
+        <source>Convert to Profile…</source>
+        <translation>プロファイル変換…</translation>
+    </message>
+    <message>
+        <source>Convert to Profile</source>
+        <translation>プロファイル変換</translation>
+    </message>
+    <message>
         <source>Prefere&amp;nces…</source>
         <translation>環境設定(&amp;N)...</translation>
     </message>
@@ -5866,6 +6136,22 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>&amp;Paths Panel</source>
         <translation>パスパネル(&amp;P)</translation>
+    </message>
+    <message>
+        <source>Proof Set&amp;up</source>
+        <translation>校正設定(&amp;U)</translation>
+    </message>
+    <message>
+        <source>Custom…</source>
+        <translation>カスタム…</translation>
+    </message>
+    <message>
+        <source>Proof Colo&amp;rs</source>
+        <translation>色の校正(&amp;R)</translation>
+    </message>
+    <message>
+        <source>Gamut Wa&amp;rning</source>
+        <translation>色域外警告(&amp;W)</translation>
     </message>
     <message>
         <source>Pixel &amp;Grid</source>
