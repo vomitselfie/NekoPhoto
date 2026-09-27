@@ -149,6 +149,9 @@ auto serially(F body) {
 /// Effects whose output quantises the input's colour or luma (a threshold, a palette, a sort order, a rounding), so a
 /// 16-bit input a fraction of a level off an 8-bit one may land on the other side and move a pixel by more than a level.
 const std::set<std::string_view> quantising = {"pixel-sort", "cga-8bit", "dither", "halftone", "dot-screen"};
+/// Effects that move each pixel by its own luma, so a fraction of a level in the input moves where a pixel is read from
+/// (Luma-Mesh at its variant setting moves 40 pixels per unit of luma): within a few levels.
+const std::set<std::string_view> lumaDisplaced = {"luma-mesh", "optical-flow"};
 
 } // namespace
 
@@ -166,13 +169,14 @@ TEST_CASE(registry_is_openmosh_shaped) {
             if (p.kind == mosh::ParamKind::Choice) CHECK_EQ(p.max, float(p.options.size() - 1));
         }
     }
-    CHECK_EQ(mosh::effects().size(), size_t(20));
+    CHECK_EQ(mosh::effects().size(), size_t(31));
     CHECK(mosh::findEffect("blur") == nullptr);   // NekoPhoto's own Gaussian Blur covers it
     const auto* sort = mosh::findEffect("pixel-sort");
     REQUIRE(sort);
     CHECK(sort->seeded);
     CHECK_EQ(std::string(sort->params[1].label), std::string("Threshold High"));
     CHECK_NEAR(sort->params[1].defaultValue, 0.85, 1e-7);
+    CHECK_EQ(mosh::findEffect("transform-3d")->params.size(), size_t(6));
 }
 
 TEST_CASE(settings_normalize) {
@@ -366,7 +370,7 @@ TEST_CASE(sixteen_bit_matches_eight_bit) {
                 int worst = 0;
                 for (int y = 0; y < eight->height(); y++)
                     for (int x = 0; x < eight->width() * 4; x++) worst = std::max(worst, std::abs(int(eight->row(y)[x]) - int(narrowed->row(y)[x])));
-                if (worst > 1) check::fail(__FILE__, __LINE__, std::string(e.id) + ": 16-bit differs from 8-bit by " + std::to_string(worst) + " levels");
+                if (worst > (lumaDisplaced.count(e.id) ? 4 : 1)) check::fail(__FILE__, __LINE__, std::string(e.id) + ": 16-bit differs from 8-bit by " + std::to_string(worst) + " levels");
             }
         }
     }

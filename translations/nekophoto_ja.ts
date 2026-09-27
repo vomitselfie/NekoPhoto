@@ -935,6 +935,50 @@
         <translation>ハーフトーン</translation>
     </message>
     <message>
+        <source>Bulge</source>
+        <translation>バルジ</translation>
+    </message>
+    <message>
+        <source>Stretch</source>
+        <translation>ストレッチ</translation>
+    </message>
+    <message>
+        <source>Push</source>
+        <translation>プッシュ</translation>
+    </message>
+    <message>
+        <source>Luma-Mesh</source>
+        <translation>ルマメッシュ</translation>
+    </message>
+    <message>
+        <source>3D Transform</source>
+        <translation>3D 変形</translation>
+    </message>
+    <message>
+        <source>Tile</source>
+        <translation>タイル</translation>
+    </message>
+    <message>
+        <source>Mirror</source>
+        <translation>ミラー</translation>
+    </message>
+    <message>
+        <source>Wobble</source>
+        <translation>ウォブル</translation>
+    </message>
+    <message>
+        <source>Smear</source>
+        <translation>スミア</translation>
+    </message>
+    <message>
+        <source>Twirl</source>
+        <translation>ツイスト</translation>
+    </message>
+    <message>
+        <source>Optical-Flow</source>
+        <translation>オプティカルフロー</translation>
+    </message>
+    <message>
         <source>Amount</source>
         <translation>量</translation>
     </message>
@@ -1067,6 +1111,74 @@
         <translation>スケール</translation>
     </message>
     <message>
+        <source>Strength</source>
+        <translation>強さ</translation>
+    </message>
+    <message>
+        <source>Radius</source>
+        <translation>半径</translation>
+    </message>
+    <message>
+        <source>Center X</source>
+        <translation>中心 X</translation>
+    </message>
+    <message>
+        <source>Center Y</source>
+        <translation>中心 Y</translation>
+    </message>
+    <message>
+        <source>Center</source>
+        <translation>中心</translation>
+    </message>
+    <message>
+        <source>Width</source>
+        <translation>幅</translation>
+    </message>
+    <message>
+        <source>Push X</source>
+        <translation>移動 X</translation>
+    </message>
+    <message>
+        <source>Push Y</source>
+        <translation>移動 Y</translation>
+    </message>
+    <message>
+        <source>Wrap</source>
+        <translation>折り返し</translation>
+    </message>
+    <message>
+        <source>Offset X</source>
+        <translation>オフセット X</translation>
+    </message>
+    <message>
+        <source>Offset Y</source>
+        <translation>オフセット Y</translation>
+    </message>
+    <message>
+        <source>Tilt X</source>
+        <translation>傾き X</translation>
+    </message>
+    <message>
+        <source>Tilt Y</source>
+        <translation>傾き Y</translation>
+    </message>
+    <message>
+        <source>Columns</source>
+        <translation>列数</translation>
+    </message>
+    <message>
+        <source>Rows</source>
+        <translation>行数</translation>
+    </message>
+    <message>
+        <source>Distance</source>
+        <translation>距離</translation>
+    </message>
+    <message>
+        <source>Swirl</source>
+        <translation>渦</translation>
+    </message>
+    <message>
         <source>Blackout</source>
         <translation>ブラックアウト</translation>
     </message>
@@ -1085,6 +1197,22 @@
     <message>
         <source>Grayscale</source>
         <translation>グレースケール</translation>
+    </message>
+    <message>
+        <source>Left → Right</source>
+        <translation>左 → 右</translation>
+    </message>
+    <message>
+        <source>Right → Left</source>
+        <translation>右 → 左</translation>
+    </message>
+    <message>
+        <source>Top → Bottom</source>
+        <translation>上 → 下</translation>
+    </message>
+    <message>
+        <source>Bottom → Top</source>
+        <translation>下 → 上</translation>
     </message>
     <message>
         <source>Luminosity</source>

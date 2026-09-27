@@ -369,12 +369,177 @@ void halftone(const Frame& in, const Uniforms& u, const RowSink& sink) {
     }, sink);
 }
 
+// ---- Distort, continued -------------------------------------------------------------------------------------------
+
+// Bulge: radial lens distortion. p0 = strength, p1 = radius, p2 = centre x, p3 = centre y.
+void bulge(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    const float strength = u.p[0], radius = u.p[1];
+    const vec2 center{u.p[2], u.p[3]};
+    const float aspect = u.resolution.x / u.resolution.y;
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        vec2 d = f.uv - center;
+        d.x *= aspect;
+        float dist = length(d);
+        if (dist < radius) {
+            float t = dist / radius;
+            float k = 1.0f - strength * (1.0f - t * t);
+            d = d * k;
+        }
+        d.x /= aspect;
+        return sample(in, center + d);
+    }, sink);
+}
+
+// Stretch: a Gaussian-weighted local stretch about a line. p0 = centre, p1 = width, p2 = amount, p3 = vertical.
+void stretch(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    const float c = u.p[0], w = u.p[1], k = u.p[2];
+    const bool vertical = u.p[3] > 0.5f;
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        vec2 uv = f.uv;
+        if (vertical) {
+            float d = uv.x - c;
+            uv.x = c + d / (1.0f + k * exp(-(d * d) / (w * w + 1e-5f)));
+        } else {
+            float d = uv.y - c;
+            uv.y = c + d / (1.0f + k * exp(-(d * d) / (w * w + 1e-5f)));
+        }
+        return sample(in, uv);
+    }, sink);
+}
+
+// Push: a translation, wrapping round or not. p0 = dx, p1 = dy, p2 = wrap.
+void push(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    const vec2 off{u.p[0], u.p[1]};
+    const bool wrap = u.p[2] > 0.5f;
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        vec2 uv = f.uv - off;
+        if (wrap) uv = fract(uv);
+        return sample(in, uv);
+    }, sink);
+}
+
+// Luma-Mesh: each pixel displaced along a direction by its luma. p0 = amount, p1 = angle.
+void lumaMesh(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    const vec2 dir{cos(u.p[1]), sin(u.p[1])};
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        float l = luma(sample(in, f.uv).rgb());
+        return sample(in, f.uv + dir * (l - 0.5f) * u.p[0]);
+    }, sink);
+}
+
+// 3D Transform: a perspective tilt, then scale, rotation and offset. p0 = scale, p1 = rotation, p2 = x, p3 = y,
+// p4 = tilt x, p5 = tilt y.
+void transform3d(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    const float aspect = u.resolution.x / u.resolution.y;
+    const vec2 shift = 0.5f - vec2{u.p[2], u.p[3]};
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        vec2 uv = f.uv - 0.5f;
+        uv.x *= aspect;
+        float z = 1.0f + u.p[4] * uv.x + u.p[5] * uv.y;
+        uv = uv * std::max(z, 0.1f);
+        uv = rotate(-u.p[1], uv);
+        uv = uv / std::max(u.p[0], 0.01f);
+        uv.x /= aspect;
+        uv = uv + shift;
+        return sample(in, uv);
+    }, sink);
+}
+
+// Tile: a grid of copies, alternate ones mirrored. p0 = columns, p1 = rows, p2 = mirror.
+void tile(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    const vec2 n{std::max(u.p[0], 1.0f), std::max(u.p[1], 1.0f)};
+    const bool mirrored = u.p[2] > 0.5f;
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        vec2 scaled = f.uv * n;
+        vec2 cell = floor(scaled);
+        vec2 uv = fract(scaled);
+        if (mirrored) {
+            if (toI32(cell.x) % 2 == 1) uv.x = 1.0f - uv.x;
+            if (toI32(cell.y) % 2 == 1) uv.y = 1.0f - uv.y;
+        }
+        return sample(in, uv);
+    }, sink);
+}
+
+// Mirror: one half reflected onto the other. p0 = mode (0 left to right, 1 right to left, 2 top to bottom, 3 bottom
+// to top).
+void mirror(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    const int mode = toI32(u.p[0] + 0.5f);
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        vec2 uv = f.uv;
+        if (mode == 0) { if (uv.x > 0.5f) uv.x = 1.0f - uv.x; }
+        else if (mode == 1) { if (uv.x < 0.5f) uv.x = 1.0f - uv.x; }
+        else if (mode == 2) { if (uv.y > 0.5f) uv.y = 1.0f - uv.y; }
+        else if (uv.y < 0.5f) uv.y = 1.0f - uv.y;
+        return sample(in, uv);
+    }, sink);
+}
+
+// Wobble: a sinusoidal warp on both axes. p0 = amount, p1 = frequency, p2 = phase.
+void wobble(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    const float amount = u.p[0], fr = u.p[1], ph = u.p[2];
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        vec2 uv = f.uv;
+        uv.x += sin(uv.y * fr + ph) * amount;
+        uv.y += cos(uv.x * fr + ph * 1.3f) * amount;
+        return sample(in, uv);
+    }, sink);
+}
+
+// Smear: a directional blur of eight taps, their spacing jittered per pixel. p0 = distance, p1 = angle. The jitter
+// hashes each pixel's coordinates, which a GPU interpolates to within a few units in the last place: the jitter is the
+// same kind as OpenMosh's but not the same draw (docs/mosh.md).
+void smear(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    const vec2 dir = vec2{cos(u.p[1]), sin(u.p[1])} * u.p[0];
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        float jitter = rand2(f.uv * u.resolution);
+        vec4 acc;
+        for (int i = 0; i < 8; i++) {
+            float t = (float(i) + jitter) / 8.0f;
+            acc = acc + sample(in, f.uv - dir * t);
+        }
+        return acc / 8.0f;
+    }, sink);
+}
+
+// Twirl: a swirl about the centre, fading out to the radius. p0 = angle, p1 = radius.
+void twirl(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    const float aspect = u.resolution.x / u.resolution.y;
+    const float radius = u.p[1];
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        vec2 d = f.uv - 0.5f;
+        d.x *= aspect;
+        float r = length(d);
+        if (r < radius) {
+            float t = 1.0f - r / radius;
+            d = rotate(u.p[0] * t * t, d);
+        }
+        d.x /= aspect;
+        return sample(in, d + 0.5f);
+    }, sink);
+}
+
+// Optical-Flow: a liquid warp along the luma gradient (or across it). p0 = amount, p1 = gradient distance in pixels,
+// p2 = swirl.
+void opticalFlow(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    const vec2 d = u.p[1] / u.resolution;
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        float gx = luma(sample(in, f.uv + vec2{d.x, 0.0f}).rgb()) - luma(sample(in, f.uv - vec2{d.x, 0.0f}).rgb());
+        float gy = luma(sample(in, f.uv + vec2{0.0f, d.y}).rgb()) - luma(sample(in, f.uv - vec2{0.0f, d.y}).rgb());
+        vec2 flow{mix(gx, -gy, u.p[2]), mix(gy, gx, u.p[2])};   // mix(gradient, curl, swirl)
+        float wob = sin(u.time + luma(sample(in, f.uv).rgb()) * 6.2831853f) * 0.5f + 0.5f;
+        return sample(in, f.uv + flow * u.p[0] * (0.5f + wob));
+    }, sink);
+}
+
 struct Entry { std::string_view id; EffectFn fn; };
 constexpr Entry kEffects[] = {
     {"soft-glitch", softGlitch}, {"hard-glitch", hardGlitch}, {"decimate", decimate}, {"data-mosh", dataMosh},
     {"splitter", splitter}, {"jitter", jitter}, {"slices", slices}, {"shake", shake}, {"pixel-sort", pixelSort},
     {"strobe", strobe}, {"wave", wave}, {"kaleidoscope", kaleidoscope}, {"pixelate", pixelate}, {"scanlines", scanlines},
     {"vhs", vhs}, {"cga-8bit", cga8bit}, {"crt", crt}, {"dither", dither}, {"dot-screen", dotScreen}, {"halftone", halftone},
+    {"bulge", bulge}, {"stretch", stretch}, {"push", push}, {"luma-mesh", lumaMesh}, {"transform-3d", transform3d}, {"tile", tile},
+    {"mirror", mirror}, {"wobble", wobble}, {"smear", smear}, {"twirl", twirl}, {"optical-flow", opticalFlow},
 };
 
 } // namespace
