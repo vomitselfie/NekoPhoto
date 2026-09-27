@@ -213,6 +213,12 @@ const MethodDoc methodDocs[] = {
      "kind:<filter>! The filter; radius:number Gaussian Blur radius in pixels; angle:number Motion Blur angle in degrees; distance:number Motion Blur distance in pixels; "
      "amount:number Add Noise amount in percent; gaussian:bool Add Noise: Gaussian rather than uniform; monochromatic:bool Add Noise: grey noise; seed:integer=1 Add Noise seed; "
      "distortion:number Lens Correction distortion -100..100; bicubic:bool Lens Correction: sharper resample"},
+    {"pixels.mosh", "Filter > Mosh: one of OpenMosh's glitch, distortion and retro effects on the active layer's pixels, inside the selection "
+                    "(docs/mosh.md lists every effect and its parameters). Replies with the settings it applied.",
+     "effect:string! soft-glitch, hard-glitch, decimate, data-mosh, splitter, jitter, slices, shake, pixel-sort, strobe, wave, kaleidoscope, "
+     "pixelate, scanlines, vhs, cga-8bit, crt, dither, dot-screen or halftone; params:object Parameters by OpenMosh's keys (e.g. {\"low\": 0.2, "
+     "\"vertical\": true}); numbers, booleans for switches, an index or an option's name for a choice; the rest keep their defaults; "
+     "seed:number=0 The random pattern of a seeded effect, 0..100"},
     {"pixels.cameraRaw", "Filter > Camera Raw Filter on the active layer's pixels, inside the selection; replies with the normalized settings it applied.",
      "settings:object! The grade, keys as the model (defaults leave the image alone): whiteBalance (Custom|Auto), temperature, tint, exposure -5..5, "
      "contrast, highlights, shadows, whites, blacks, vibrance, saturation, texture, clarity, dehaze (-100..100), glow 0..100, glowStyle (Diffusion|Bloom|Halation), "

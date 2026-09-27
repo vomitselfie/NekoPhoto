@@ -72,6 +72,8 @@ constexpr FeatureSupport table[] = {
     {"filter.Motion Blur", eightAndSixteen},
     {"filter.Add Noise", eightAndSixteen},
     {"filter.Lens Correction", eightAndSixteen},
+    // Filter > Mosh (compositor/mosh.h, pixels.mosh): straight float colour at either depth.
+    {"filter.Mosh", eightAndSixteen},
     // Selections at the document's depth: the marquee, lasso, Magic Wand and Quick Select tools (they read the
     // canvas as shown, in 8-bit levels, and make 16-bit coverage), the Select menu, Load as Selection, Quick Mask.
     {"edit.selection", eightAndSixteen},

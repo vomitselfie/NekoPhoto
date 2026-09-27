@@ -17,6 +17,7 @@
 #include "LayerStyleDialog.h"
 #include "FilterDialog.h"
 #include "GmicDialog.h"
+#include "MoshDialog.h"
 #include "BrushDynamicsDialog.h"
 #include "BrushPicker.h"
 #include "FontPicker.h"
@@ -277,7 +278,7 @@ int run(int argc, char** argv) {
     parser.addOption(langOption);
     QCommandLineOption toolOption("tool", "Select tool <name> after opening (move, marquee, lasso, wand, crop, brush, healing, clone, smudge, gradient, shape, eyedropper, hand, zoom).", "name");
     parser.addOption(toolOption);
-    QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: welcome (or welcome:N for page N), new, canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, cameraraw (or cameraraw:N for panel N), gmic, content-fill, background, text, fonts, brushes, brush-dynamics (the first imported tip brush), actions, timeline (frames made from the layers when there are none), batch, layers-menu (the active layer's context menu).", "name");
+    QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: welcome (or welcome:N for page N), new, canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, cameraraw (or cameraraw:N for panel N), gmic, mosh (or mosh:<effect id>), content-fill, background, text, fonts, brushes, brush-dynamics (the first imported tip brush), actions, timeline (frames made from the layers when there are none), batch, layers-menu (the active layer's context menu).", "name");
     parser.addOption(dialogOption);
     QCommandLineOption rpc("rpc", "Listen on the automation socket (JSON-RPC over a local socket, for the MCP bridge). Also on when the automation preference is set.");
     QCommandLineOption rpcSocket("rpc-socket", "Socket path for --rpc (default: $XDG_RUNTIME_DIR/nekophoto.sock, or $COMPOSITOR_RPC_SOCKET; on Windows the named pipe nekophoto-<user>).", "path");
@@ -425,6 +426,14 @@ int run(int argc, char** argv) {
                 (new app::ContentAwareScaleDialog(s, &window))->show();
             }
             else if (name == "gmic") (new app::GmicDialog(s, &window))->show();
+            else if (name == "mosh" || name.startsWith("mosh:")) {
+                // mosh, or mosh:<effect id> (pixel-sort, vhs, ...): the Mosh dialog on the demo's background
+                const QString id = name.section(':', 1).isEmpty() ? QStringLiteral("vhs") : name.section(':', 1);
+                if (const auto* spec = compositor::mosh::findEffect(id.toStdString())) {
+                    for (const auto& l : s->document()->layers) if (l.name == "Background") s->selectLayer(l.id);
+                    (new app::MoshDialog(s, *spec, &window))->show();
+                } else qWarning("unknown Mosh effect: %s", qPrintable(id));
+            }
             else if (name == "content-fill") {
                 // A selection in the middle of the canvas, then the dialog with Custom sampling.
                 compositor::GrayImage shape(s->document()->width, s->document()->height);

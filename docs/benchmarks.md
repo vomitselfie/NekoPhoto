@@ -141,6 +141,21 @@ medians of round medians, `bench_core 9 "brush stroke d80"` ten rounds, `--bench
 | dry_brush press / move p50 / move p95 / release (ms) | 5.14 / 1.55 / 2.60 / 7.95 | 5.01 / 1.49 / 2.34 / 7.95 |
 | u16 brush stroke d80 hardness 1 / 0.3 (ms) | | 27.3 / 36.5 |
 
+## Mosh
+
+2026-09-27, the same machine; `bench_core 9 mosh`: the heaviest Filter > Mosh effects ([mosh.md](mosh.md)) at their
+defaults on a 4000x3000 layer, straight-colour conversion in and out included.
+
+| Effect | Median (ms) |
+|---|---:|
+| mosh pixel-sort | 52.0 |
+| mosh vhs | 104.2 |
+| mosh crt | 69.2 |
+| mosh hard-glitch | 95.1 |
+
+The fingerprints of every effect (defaults, seeded settings, a translucent layer) are in `tests/mosh_hashes.txt`,
+checked by `mosh_tests`; `COMPOSITOR_UPDATE_MOSH_HASHES=1 build/tests/mosh_tests fingerprints` rewrites them.
+
 ## Render hashes
 
 The matching correctness gate is `render_hash_tests` (in ctest): 235 scenes (133 at 8 bits, 102 at 16 bits) hashed with FNV-1a 64 against

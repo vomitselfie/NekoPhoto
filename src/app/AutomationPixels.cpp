@@ -3,6 +3,7 @@
 #include "AutomationHandlers.h"
 #include "Gmic.h"
 #include "ModelStore.h"
+#include "MoshDialog.h"
 #include "compositor/cameraraw.h"
 #include "compositor/matte.h"
 #include "compositor/subject.h"
@@ -96,6 +97,63 @@ void AutomationServer::registerPixelsHandlers() {
         if (*kind == FilterKind::GaussianBlur || *kind == FilterKind::MotionBlur) image = trimToPixels(*out, transform, placed);
         s->commitPixels(image, placed, QString::fromUtf8(filterKindName(*kind)));
         return QJsonObject{{"applied", QString::fromUtf8(filterKindName(*kind))}};
+    });
+    add("pixels.mosh", [session, document](const QJsonObject& p) {
+        // Filter > Mosh: one of OpenMosh's effects by id, its parameters by OpenMosh's keys (docs/mosh.md).
+        refuseSmartObject(session());
+        document();
+        EditorSession* s = session();
+        if (!s->canAdjustPixels()) fail("the active layer has no pixels to filter; select a pixel layer");
+        const QString id = str(p, "effect");
+        const mosh::EffectSpec* spec = mosh::findEffect(id.toStdString());
+        if (!spec) {
+            QStringList ids;
+            for (const auto& e : mosh::effects()) ids << QString::fromUtf8(e.id.data(), qsizetype(e.id.size()));
+            fail("effect must be one of " + ids.join(", "), invalidParams);
+        }
+        mosh::Settings settings = mosh::Settings::defaults(*spec);
+        settings.seed = float(num(p, "seed", 0));
+        const QJsonObject given = obj(p, "params");
+        for (auto it = given.begin(); it != given.end(); ++it) {
+            const std::string key = it.key().toStdString();
+            const mosh::ParamSpec* param = nullptr;
+            for (const auto& q : spec->params) if (q.key == key) param = &q;
+            if (!param) {
+                QStringList keys;
+                for (const auto& q : spec->params) keys << QString::fromUtf8(q.key.data(), qsizetype(q.key.size()));
+                fail("params." + it.key() + ": " + id + " takes " + keys.join(", "), invalidParams);
+            }
+            float value = 0;
+            if (it->isBool()) value = it->toBool() ? 1.0f : 0.0f;
+            else if (it->isDouble()) value = float(it->toDouble());
+            else if (it->isString() && param->kind == mosh::ParamKind::Choice) {
+                int index = -1;
+                for (size_t i = 0; i < param->options.size(); i++)
+                    if (it->toString().compare(QString::fromUtf8(param->options[i].data(), qsizetype(param->options[i].size())), Qt::CaseInsensitive) == 0) index = int(i);
+                if (index < 0) fail("params." + it.key() + ": not one of the options", invalidParams);
+                value = float(index);
+            } else fail("params." + it.key() + " must be a number" + QString(param->kind == mosh::ParamKind::Bool ? " or a boolean" : param->kind == mosh::ParamKind::Choice ? " or an option's name" : ""), invalidParams);
+            settings.set(key, value);
+        }
+        settings = settings.normalized();
+        const QString name = QString::fromUtf8(spec->name.data(), qsizetype(spec->name.size()));
+        LayerTransform transform;
+        if (auto deep = s->adjustmentSource16(0, transform)) {
+            auto out = std::make_shared<Image16>(*deep);
+            mosh::apply(settings, *out);
+            if (auto coverage = s->selectionOnGrid16(transform, deep->width(), deep->height())) blendThroughCoverage(*out, *deep, *coverage);
+            s->commitPixels(Image16Ptr(out), transform, name);
+        } else {
+            auto source = s->adjustmentSource(0, transform);
+            if (!source) fail("the active layer has no pixels; select a pixel layer with layers.select (document.overview shows each layer's kind)");
+            auto out = std::make_shared<Image>(*source);
+            mosh::apply(settings, *out);
+            if (auto coverage = s->selectionOnGrid(transform, source->width(), source->height())) blendThroughCoverage(*out, *source, *coverage);
+            s->commitPixels(std::shared_ptr<const Image>(out), transform, name);
+        }
+        QJsonObject applied = moshRequest(settings);
+        applied["applied"] = applied.take("effect");
+        return applied;
     });
     add("pixels.cameraRaw", [session, document](const QJsonObject& p) {
         // Filter > Camera Raw Filter: `settings` has the model's keys (compositor/cameraraw.h); omitted keys keep their defaults.

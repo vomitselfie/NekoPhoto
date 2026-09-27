@@ -20,6 +20,7 @@
 #include "ImageConvert.h"
 #include "CameraRawDialog.h"
 #include "FilterDialog.h"
+#include "MoshDialog.h"
 #include "GmicDialog.h"
 #include "ColorDialogs.h"
 #include "ColorManagement.h"
@@ -502,6 +503,22 @@ void MainWindow::buildMenus() {
     filterAction(tr("Add &Noise…"), FilterKind::AddNoise);
     filterAction(tr("&Lens Correction…"), FilterKind::LensCorrection);
     filter->addSeparator();
+    // OpenMosh's glitch, distortion and retro effects (docs/mosh.md), a submenu per category.
+    QMenu* moshMenu = filter->addMenu(tr("M&osh"));
+    for (int c = 0; c < compositor::mosh::categoryCount; c++) {
+        const auto category = compositor::mosh::Category(c);
+        QMenu* sub = nullptr;
+        for (const compositor::mosh::EffectSpec& spec : compositor::mosh::effects()) {
+            if (spec.category != category) continue;
+            if (!sub) sub = moshMenu->addMenu(names::mosh(compositor::mosh::categoryName(category)));
+            const compositor::mosh::EffectSpec* effect = &spec;
+            needsDocument(sub->addAction(tr("%1…").arg(names::mosh(spec.name)), this, [this, effect] {
+                if (session_->smartObjectBlocksPixels(true)) return;
+                if (!session_->canAdjustPixels()) { showError(tr("Filters"), tr("Select a visible image layer (not a mask) to filter its pixels.")); return; }
+                (new MoshDialog(session_, *effect, this))->show();
+            }), "filter.Mosh");
+        }
+    }
     // Photoshop's shortcut. A destructive filter here: on a smart object it asks first, like the others.
     needsDocument(filter->addAction(tr("Camera &Raw Filter…"), QKeySequence("Shift+Ctrl+A"), this, [this] {
         if (session_->smartObjectBlocksPixels(true)) return;

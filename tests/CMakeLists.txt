@@ -42,6 +42,13 @@ target_compile_definitions(render_hash_tests PRIVATE RENDER_HASHES_FILE="${CMAKE
                            MYPAINT_BRUSHES_DIR="${CMAKE_SOURCE_DIR}/src/app/brushes/mypaint")
 add_test(NAME render_hash_tests COMMAND render_hash_tests)
 
+# The Mosh effects: fingerprints (COMPOSITOR_UPDATE_MOSH_HASHES=1 rewrites tests/mosh_hashes.txt), threads, depths.
+add_executable(mosh_tests mosh_tests.cpp)
+target_link_libraries(mosh_tests PRIVATE compositor::core compositor_warnings)
+target_include_directories(mosh_tests PRIVATE ${CMAKE_SOURCE_DIR}/src/core/src)
+target_compile_definitions(mosh_tests PRIVATE MOSH_HASHES_FILE="${CMAKE_CURRENT_SOURCE_DIR}/mosh_hashes.txt")
+add_test(NAME mosh_tests COMMAND mosh_tests)
+
 # Timings for render, brush, blur and adjustments; not a test. Numbers in docs/benchmarks.md.
 add_executable(bench_core bench_core.cpp)
 target_link_libraries(bench_core PRIVATE compositor::core compositor_warnings)

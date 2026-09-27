@@ -147,6 +147,8 @@ add_library(compositor_core STATIC
     src/kernels.cpp
     src/matte.cpp
     src/morphology.cpp
+    src/mosh.cpp
+    src/mosh_effects.cpp
     src/mypaint.cpp
     src/tipbrush.cpp
     src/parallel.cpp
@@ -219,6 +221,10 @@ target_link_libraries(compositor_core
     PRIVATE PkgConfig::PNG PkgConfig::ZLIB compositor_warnings
 )
 target_compile_definitions(compositor_core PRIVATE _USE_MATH_DEFINES)
+# The Mosh effects hash float bit patterns: no fused multiply-adds, so every CPU computes the same bits.
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    set_source_files_properties(src/mosh.cpp src/mosh_effects.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+endif()
 if(COMPOSITOR_HAVE_OPENCV)
     target_link_libraries(compositor_core PRIVATE ${COMPOSITOR_OPENCV_LIBS})
     target_compile_definitions(compositor_core PRIVATE COMPOSITOR_HAVE_OPENCV)
