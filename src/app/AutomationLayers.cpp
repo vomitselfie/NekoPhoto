@@ -430,7 +430,11 @@ void AutomationServer::registerLayersHandlers() {
     });
     add("layers.setTransform", [session, layerOrActive, withActive](const QJsonObject& p) {
         const Layer& l = layerOrActive(p);
+        const bool folder = l.isGroup;
+        Uuid id = l.id;
+        // A folder moves as a group, so the values are its contents' box, as the Move tool shows it.
         LayerTransform t = l.transform;
+        if (folder) withActive(id, [&] { if (auto box = session()->groupTransformBox()) t = *box; else fail("the folder has nothing to transform"); });
         if (has(p, "x")) t.origin.x = num(p, "x");
         if (has(p, "y")) t.origin.y = num(p, "y");
         if (has(p, "width")) t.size.width = std::max(1.0, num(p, "width"));
@@ -439,7 +443,6 @@ void AutomationServer::registerLayersHandlers() {
         if (has(p, "flipX")) t.flipX = flag(p, "flipX", false);
         if (has(p, "flipY")) t.flipY = flag(p, "flipY", false);
         if (has(p, "scale")) { double k = num(p, "scale"); Point c = t.center(); t.size = {std::max(1.0, t.size.width * k), std::max(1.0, t.size.height * k)}; t.origin = {c.x - t.size.width / 2, c.y - t.size.height / 2}; }
-        Uuid id = l.id;
         withActive(id, [&] {
             EditorSession* s = session();
             if (!s->canTransform()) fail("this layer can't be transformed");
@@ -447,6 +450,7 @@ void AutomationServer::registerLayersHandlers() {
             s->previewTransform(t);
             s->commitTransform();
         });
+        if (folder) { QJsonObject box; withActive(id, [&] { if (auto b = session()->groupTransformBox()) box = transformJson(*b); }); return box; }
         const Layer* now = session()->document()->find(id);
         return now ? transformJson(now->transform) : QJsonObject{};
     });

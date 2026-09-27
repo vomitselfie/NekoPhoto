@@ -491,7 +491,7 @@ def layers_flip(id: Optional[str] = None, vertical: bool = False) -> str:
 
 @edit("Place a layer")
 def layers_set_transform(id: str, x: Optional[float] = None, y: Optional[float] = None, width: Optional[float] = None, height: Optional[float] = None, rotation: Optional[float] = None, scale: Optional[float] = None, flip_x: Optional[bool] = None, flip_y: Optional[bool] = None) -> str:
-    """Place a layer non-destructively: top-left x, y and width, height in document pixels, rotation in degrees clockwise, or scale (a factor about its centre)."""
+    """Place a layer non-destructively: top-left x, y and width, height in document pixels, rotation in degrees clockwise, or scale (a factor about its centre). For a folder the values are its contents' box and everything inside moves with it."""
     return text(call("layers.setTransform", id=id, x=x, y=y, width=width, height=height, rotation=rotation, scale=scale, flipX=flip_x, flipY=flip_y))
 
 

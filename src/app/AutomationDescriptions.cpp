@@ -135,7 +135,7 @@ const MethodDoc methodDocs[] = {
     {"layers.move", "Move a layer in the tree: into a folder, directly above another layer, or to the bottom.",
      "id:layer! The layer; parent:layer The folder to move into (default the top level); above:layer Place directly above this layer; atBottom:bool=false Place at the bottom of the parent"},
     {"layers.reorder", "Move a layer up or down among its siblings.", "id:layer The layer (default the active one); offset:integer! Positive moves up, negative down"},
-    {"layers.setTransform", "Place, size, rotate or flip a layer.",
+    {"layers.setTransform", "Place, size, rotate or flip a layer. For a folder the values are its contents' box, and everything inside moves with it.",
      "id:layer The layer (default the active one); x:number Left; y:number Top; width:number Width; height:number Height; rotation:number Degrees clockwise; scale:number Scale the current size by this factor about its centre; flipX:bool Mirrored left to right; flipY:bool Mirrored top to bottom"},
     {"layers.flip", "Flip a layer's pixels.", "id:layer The layer (default the active one); vertical:bool=false Top to bottom instead of left to right"},
     {"layers.mask", "Add, remove or change a layer mask.",

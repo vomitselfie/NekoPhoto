@@ -71,7 +71,16 @@ void EditorSession::beginTransform(bool persistent) {
         if (!box) return;
         TransformGroup group;
         group.box = *box;
-        for (const Layer* l : groupTransformMembers()) group.originals[l->id] = l->transform;
+        // The box comes from the visible content, but everything under the selection moves with it, as in Photoshop:
+        // hidden layers, adjustment layers, and folders (their masks and vector masks follow their transforms).
+        for (auto& l : document_->layers) {
+            std::optional<Uuid> current = l.id;
+            for (int i = 0; i < 64 && current; i++) {
+                if (selectedLayerIds_.count(*current)) { group.originals[l.id] = l.transform; break; }
+                const Layer* parent = document_->find(*current);
+                current = parent ? parent->parentId : std::nullopt;
+            }
+        }
         TransformEdit edit{.layerId = layer->id, .draft = *box, .persistent = persistent, .mask = false};
         edit.group = group;
         transformEdit_ = edit;
