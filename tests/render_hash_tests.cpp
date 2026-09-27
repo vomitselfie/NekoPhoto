@@ -9,6 +9,9 @@
 // COMPOSITOR_UPDATE_RENDER_HASHES=1 rewrites the baseline after an intentional rendering change; otherwise the
 // test prints every entry that changed, appeared or went missing.
 //
+// 16-bit scenes ("u16/..."): the same documents converted to 16 bits and rendered at that depth (render16), hashed
+// over their 16-bit samples; and a check that each renders within one 8-bit level of its 8-bit render once reduced.
+//
 // Not covered, on purpose:
 // - Knockout: the engine has no knockout groups yet; an isolated (non pass-through) group stands in for it.
 // - Color Lookup: needs a LUT file; its interpolation is exercised by its own tests.
@@ -16,6 +19,7 @@
 #include "compositor/adjustments.h"
 #include "compositor/blur.h"
 #include "compositor/brush.h"
+#include "compositor/depth.h"
 #include "compositor/document.h"
 #include "compositor/filters.h"
 #include "compositor/mypaint.h"
@@ -36,6 +40,7 @@
 #include <map>
 #include <sstream>
 #include <string>
+#include <tuple>
 
 using namespace compositor;
 namespace fs = std::filesystem;
@@ -67,6 +72,15 @@ uint64_t hashGray(const GrayImage& image) {
     f.u32(uint32_t(image.height()));
     f.u32(0x67726179u);   // "gray", so a mask never collides with an RGBA image
     for (int y = 0; y < image.height(); y++) f.bytes(image.row(y), size_t(image.width()));
+    return f.h;
+}
+
+uint64_t hashImage16(const Image16& image) {
+    Fnv f;
+    f.u32(uint32_t(image.width()));
+    f.u32(uint32_t(image.height()));
+    f.u32(0x31366269u);   // "16bi"
+    for (int y = 0; y < image.height(); y++) f.bytes(reinterpret_cast<const uint8_t*>(image.row(y)), size_t(image.width()) * 8);
     return f.h;
 }
 
@@ -314,6 +328,69 @@ void addBlendScenes() {
         Document doc = blendDocument(BlendMode::Multiply);
         for (Layer& l : doc.layers) if (l.isGroup) { l.passThrough = true; l.blendMode = BlendMode::Normal; l.opacity = 1; }
         return hashImage(*renderFlattened(doc));
+    });
+}
+
+// ---- 16 bits ------------------------------------------------------------------------------------------------------
+
+Document sixteen(Document doc) {
+    std::string error;
+    if (!convertSampleType(doc, SampleType::U16, &error)) check::fail(__FILE__, __LINE__, "convertSampleType: " + error);
+    return doc;
+}
+
+uint64_t hash16(const Document& doc, const RenderOptions& options = {}) {
+    Image16 out;
+    render16(doc, options, out);
+    return hashImage16(out);
+}
+
+RenderOptions reducedRegion() {
+    RenderOptions options;
+    options.region = {16, 8, 200, 160};
+    options.scale = 0.5;
+    return options;
+}
+
+void add16BitScenes() {
+    for (int m = 0; m < blendModeCount; m++) {
+        const BlendMode mode = BlendMode(m);
+        const std::string name = slug(blendModeName(mode));
+        scene("u16/blend/" + name, [mode] { return hash16(sixteen(blendDocument(mode))); });
+        scene("u16/blend/" + name + "@0.5", [mode] { return hash16(sixteen(blendDocument(mode)), reducedRegion()); });
+    }
+    scene("u16/blend/pass_through_group", [] {
+        Document doc = blendDocument(BlendMode::Multiply);
+        for (Layer& l : doc.layers) if (l.isGroup) { l.passThrough = true; l.blendMode = BlendMode::Normal; l.opacity = 0.7; }
+        return hash16(sixteen(doc));
+    });
+    scene("u16/golden/transformed_layer", [] {
+        Document doc = goldenBase();
+        Layer top = layerOf("gradient", gradient(32, 32), {20, 10});
+        top.transform.size = {50, 40};
+        top.transform.rotation = 25;
+        top.transform.flipX = true;
+        doc.layers.push_back(top);
+        return hash16(sixteen(doc));
+    });
+    scene("u16/golden/placed_mask", [] {
+        Document doc = goldenBase();
+        Layer top = layerOf("gradient", gradient(64, 48), {16, 8});
+        top.mask = maskOf(radialMask(64, 48));
+        top.mask->placement = LayerTransform(Point(30, 16), Size(64, 48));
+        doc.layers.push_back(top);
+        return hash16(sixteen(doc));
+    });
+    scene("u16/adjust_layer/levels", [] {
+        Document doc(128, 96);
+        doc.layers.push_back(layerOf("base", noisyBase(128, 96), {0, 0}));
+        Layer adj("Levels", doc.size());
+        AdjustmentSettings s = AdjustmentSettings::defaults(AdjustmentKind::Levels);
+        s.levels.ranges[0] = {15, 1.2, 240, 0, 255};
+        adj.adjustment = s.toLayerAdjustment();
+        adj.opacity = 0.75;
+        doc.layers.push_back(adj);
+        return hash16(sixteen(doc));
     });
 }
 
@@ -584,6 +661,7 @@ TEST_CASE(render_hashes_match_the_baseline_on_the_pool_and_serially) {
     addAdjustmentScenes();
     addFilterScenes();
     addBrushScenes();
+    add16BitScenes();
 
     std::map<std::string, std::string> actual;
     int threadMismatch = 0;
@@ -628,6 +706,74 @@ TEST_CASE(render_hashes_match_the_baseline_on_the_pool_and_serially) {
     CHECK_EQ(changed, 0);
     CHECK_EQ(added, 0);
     CHECK_EQ(missing, 0);
+}
+
+/// How far the 16-bit render of a document, reduced to 8 bits, is from its 8-bit render: the largest difference in
+/// 8-bit levels and the share of samples more than a level apart.
+struct Apart { int worst = 0; double beyondOne = 0; };
+Apart levelsApart(const Document& doc, const RenderOptions& options) {
+    Image eight;
+    render(doc, options, eight);
+    Image16 deep;
+    render16(sixteen(doc), options, deep);
+    auto reduced = narrowImage(deep);
+    if (reduced->width() != eight.width() || reduced->height() != eight.height()) return {256, 1};
+    Apart apart;
+    size_t beyond = 0, total = 0;
+    for (int y = 0; y < eight.height(); y++)
+        for (int i = 0; i < eight.width() * 4; i++, total++) {
+            const int d = std::abs(int(eight.row(y)[i]) - int(reduced->row(y)[i]));
+            apart.worst = std::max(apart.worst, d);
+            beyond += d > 1;
+        }
+    apart.beyondOne = total ? double(beyond) / double(total) : 0;
+    return apart;
+}
+
+/// The calibration gate: an 8-bit document converted to 16 bits renders as its 8-bit render does, within a level.
+/// Exactly so where the 8-bit engine rounds nothing but the blend itself (opaque pixels at full coverage). With
+/// opacity, masks, soft edges and stacked layers the 8-bit engine rounds coverage to 1/256 and every layer's result
+/// to a byte, which the 16-bit engine does not; there the two may differ by more than a level on a small share of
+/// samples, most where a mode divides (dodge, burn, Vivid Light, Divide) or turns on hue (Hue, Saturation) and so
+/// magnifies the 8-bit rounding.
+TEST_CASE(sixteen_bit_renders_of_eight_bit_documents_are_within_a_level_in_every_mode) {
+    int failures = 0;
+    for (int m = 0; m < blendModeCount; m++) {
+        const BlendMode mode = BlendMode(m);
+        // An opaque layer in the mode over a busy opaque base, at 1:1.
+        Document opaque(256, 192);
+        opaque.layers.push_back(layerOf("base", noisyBase(256, 192), {0, 0}));
+        Layer top = layerOf("top", noisyBase(200, 150, 9), {30, 20});
+        top.blendMode = mode;
+        opaque.layers.push_back(top);
+        const Apart exact = levelsApart(opaque, RenderOptions());
+        // Photoshop's 8-bit Vivid Light rounds its divisor to a byte; the 16-bit one does not, which is two levels at most.
+        const int allowed = mode == BlendMode::VividLight ? 2 : 1;
+        if (exact.worst > allowed) { std::fprintf(stderr, "  %s, opaque: %d levels apart\n", blendModeName(mode), exact.worst); failures++; }
+
+        // A soft, masked, partly transparent layer at an opacity, and the blend scene (clipping, an isolated folder),
+        // at 1:1 and reduced.
+        Document single(256, 192);
+        single.layers.push_back(layerOf("base", noisyBase(256, 192), {0, 0}));
+        Layer soft = layerOf("top", paint(160, 128, 3), {20, 12});
+        soft.blendMode = mode;
+        soft.opacity = 0.35 + 0.65 * double((m * 7) % 13) / 12.0;
+        soft.mask = maskOf(radialMask(160, 128));
+        single.layers.push_back(soft);
+        Document full = blendDocument(mode);
+        for (auto [doc, options, what] : {std::tuple{&single, RenderOptions(), "soft layer"}, std::tuple{&single, reducedRegion(), "soft layer @0.5"},
+                                          std::tuple{&full, RenderOptions(), "blend scene"}, std::tuple{&full, reducedRegion(), "blend scene @0.5"}}) {
+            const Apart apart = levelsApart(*doc, options);
+            if (std::getenv("COMPOSITOR_REPORT_U16_CALIBRATION"))
+                std::fprintf(stderr, "  %-20s %-17s worst %3d, beyond a level %.4f%%\n", blendModeName(mode), what, apart.worst, apart.beyondOne * 100);
+            // A single layer: at most 1% of samples beyond a level. The stacked scene compounds the 8-bit rounding
+            // through clipping (8-bit unpremultiplied bases) and an isolated folder, so it is held to 10%: a bound
+            // that catches a broken path, not a calibration.
+            const double bound = doc == &single ? 0.01 : 0.10;
+            if (apart.beyondOne > bound) { std::fprintf(stderr, "  %s, %s: %.2f%% of samples more than a level apart\n", blendModeName(mode), what, apart.beyondOne * 100); failures++; }
+        }
+    }
+    CHECK_EQ(failures, 0);
 }
 
 TEST_MAIN()

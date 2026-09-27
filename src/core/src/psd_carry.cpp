@@ -1,4 +1,5 @@
 #include "compositor/psd_carry.h"
+#include "compositor/depth.h"
 #include <cstring>
 #include <set>
 
@@ -49,11 +50,23 @@ uint64_t psdMaskHash(const GrayImage* mask, bool enabled) {
     return h ? h : 1;
 }
 
+uint64_t psdContentHash(const AnyImage& image) {
+    if (image.u16()) return contentHash(image.u16().get());
+    return psdContentHash(image.u8().get());
+}
+
+uint64_t psdMaskHash(const AnyGray& mask, bool enabled) {
+    if (mask.u16()) { const uint64_t h = contentHash(mask.u16().get()); return h ? h ^ (enabled ? 0 : 0x5555) : 0; }
+    return psdMaskHash(mask.u8().get(), enabled);
+}
+
 namespace {
 
 constexpr uint32_t layerMagic = 0x4e50434c;   // NPCL
 constexpr uint32_t documentMagic = 0x4e504344; // NPCD
 constexpr uint32_t carryVersion = 1;
+/// A layer carry from a 16-bit file: version 1 and then its mask depth and carried planes.
+constexpr uint32_t carryVersionDeep = 2;
 
 struct Writer {
     std::vector<uint8_t> b;
@@ -99,7 +112,8 @@ bool readBlocks(Reader& r, std::vector<PsdBlock>& blocks) {
 
 std::vector<uint8_t> serializePsdCarry(const PsdLayerCarry& c) {
     Writer w;
-    w.u32(layerMagic); w.u32(carryVersion);
+    const bool deep = c.maskDepth != 8 || !c.planes.empty();
+    w.u32(layerMagic); w.u32(deep ? carryVersionDeep : carryVersion);
     writeBlocks(w, c.blocks);
     w.bytes(c.blendingRanges);
     w.u8(c.opacity); w.u8(c.fill); w.u32(c.layerId);
@@ -114,13 +128,21 @@ std::vector<uint8_t> serializePsdCarry(const PsdLayerCarry& c) {
     w.u64(c.maskHash);
     writeBlocks(w, c.endBlocks);
     w.bytes(c.endRanges);
-    if (!c.adjustmentJson.empty()) w.str(c.adjustmentJson);   // optional: older carries end before it
+    if (!c.adjustmentJson.empty() || deep) w.str(c.adjustmentJson);   // optional: older carries end before it
+    if (deep) {
+        w.u32(uint32_t(c.maskDepth));
+        w.u32(uint32_t(c.planes.size()));
+        for (auto& plane : c.planes) { w.u32(uint32_t(plane.id)); w.bytes(plane.data); }
+        w.u64(c.planesHash);
+    }
     return std::move(w.b);
 }
 
 std::shared_ptr<const PsdLayerCarry> parsePsdLayerCarry(const std::vector<uint8_t>& bytes) {
     Reader r{bytes};
-    if (r.u32() != layerMagic || r.u32() != carryVersion) return nullptr;
+    if (r.u32() != layerMagic) return nullptr;
+    const uint32_t version = r.u32();
+    if (version != carryVersion && version != carryVersionDeep) return nullptr;
     auto c = std::make_shared<PsdLayerCarry>();
     if (!readBlocks(r, c->blocks)) return nullptr;
     c->blendingRanges = r.bytes();
@@ -142,7 +164,20 @@ std::shared_ptr<const PsdLayerCarry> parsePsdLayerCarry(const std::vector<uint8_
     c->maskHash = r.u64();
     if (!readBlocks(r, c->endBlocks)) return nullptr;
     c->endRanges = r.bytes();
-    if (r.ok && r.at < bytes.size()) c->adjustmentJson = r.str();
+    if (r.ok && (r.at < bytes.size() || version == carryVersionDeep)) c->adjustmentJson = r.str();
+    if (version == carryVersionDeep) {
+        c->maskDepth = int(r.u32());
+        if (c->maskDepth != 8 && c->maskDepth != 16) return nullptr;
+        const uint32_t planes = r.u32();
+        for (uint32_t i = 0; i < planes && r.ok; i++) {
+            PsdLayerCarry::CarriedPlane plane;
+            plane.id = int(int32_t(r.u32()));
+            if (plane.id < -1 || plane.id > 2) return nullptr;
+            plane.data = r.bytes();
+            c->planes.push_back(std::move(plane));
+        }
+        c->planesHash = r.u64();
+    }
     if (!r.ok || r.at != bytes.size()) return nullptr;
     return c;
 }

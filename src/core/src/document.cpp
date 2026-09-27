@@ -1,4 +1,6 @@
 #include "compositor/document.h"
+#include "compositor/depth.h"
+#include <cstdio>
 #include <algorithm>
 #include <cmath>
 #include <functional>
@@ -102,6 +104,19 @@ Asset Asset::make(ImagePtr image, std::string name) {
     return asset;
 }
 
+Asset Asset::make(Image16Ptr image, std::string name) {
+    Asset asset;
+    asset.thumbnail = image ? makeThumbnail(*image) : nullptr;
+    asset.image = std::move(image);
+    asset.name = std::move(name);
+    return asset;
+}
+
+Asset Asset::makeAny(const AnyImage& image, std::string name) {
+    if (image.u16()) return make(image.u16(), std::move(name));
+    return make(image.u8(), std::move(name));
+}
+
 MaskAsset MaskAsset::make(GrayPtr image) {
     MaskAsset asset;
     asset.thumbnail = image ? makeGrayThumbnail(*image) : nullptr;
@@ -109,8 +124,25 @@ MaskAsset MaskAsset::make(GrayPtr image) {
     return asset;
 }
 
+MaskAsset MaskAsset::make(Gray16Ptr image) {
+    MaskAsset asset;
+    asset.thumbnail = image ? makeGrayThumbnail(*image) : nullptr;
+    asset.image = std::move(image);
+    return asset;
+}
+
+MaskAsset MaskAsset::makeAny(const AnyGray& image) {
+    if (image.u16()) return make(image.u16());
+    return make(image.u8());
+}
+
 MaskAsset MaskAsset::solid(bool revealing) {
     return make(std::make_shared<GrayImage>(1, 1, revealing ? 255 : 0));
+}
+
+MaskAsset MaskAsset::solid(bool revealing, SampleType type) {
+    if (type == SampleType::U16) return make(Gray16Ptr(std::make_shared<Gray16>(1, 1, uint16_t(revealing ? one16 : 0))));
+    return solid(revealing);
 }
 
 uint8_t LayerMask::background(const GrayImage& thumbnail) {
@@ -124,7 +156,7 @@ uint8_t LayerMask::background(const GrayImage& thumbnail) {
 }
 
 std::optional<LayerTransform> LayerMask::placementMovingLayer(const LayerTransform& from, const LayerTransform& to) const {
-    if (!asset.image.u8() || (asset.image.u8()->width() <= 1 && asset.image.u8()->height() <= 1)) return std::nullopt;
+    if (!asset.image || (asset.image.width() <= 1 && asset.image.height() <= 1)) return std::nullopt;
     std::optional<LayerTransform> moved;
     if (linked) { if (placement) moved = placement->following(from, to); }
     else moved = placement ? *placement : from;
@@ -152,9 +184,9 @@ int Layer::pixelWidth() const { return asset && asset->image ? asset->image.widt
 int Layer::pixelHeight() const { return asset && asset->image ? asset->image.height() : std::max(1, int(std::lround(transform.size.height))); }
 
 const PixelBounds& Selection::pixelBounds() const {
-    if (coverage.u8().get() != boundsFor_) {
-        bounds_ = coverage.u8() ? nonzeroBounds(*coverage.u8()) : PixelBounds{};
-        boundsFor_ = coverage.u8().get();
+    if (coverage.identity() != boundsFor_) {
+        bounds_ = coverage.u8() ? nonzeroBounds(*coverage.u8()) : coverage.u16() ? nonzeroBounds(*coverage.u16()) : PixelBounds{};
+        boundsFor_ = coverage.identity();
     }
     return bounds_;
 }
@@ -184,6 +216,79 @@ long long Document::maskPixels() const {
     long long total = 0;
     for (const Layer& l : layers) if (l.mask && l.mask->asset.image) total += (long long)l.mask->asset.image.width() * l.mask->asset.image.height();
     return total;
+}
+
+long long Document::layerBytes() const { return layerPixels() * 4 * (long long)sampleBytes(sampleType); }
+long long Document::maskBytes() const { return maskPixels() * (long long)sampleBytes(sampleType); }
+
+namespace {
+std::string megapixels(long long pixels) {
+    char text[32];
+    std::snprintf(text, sizeof text, "%.0f", double(pixels) / 1e6);
+    return text;
+}
+} // namespace
+
+std::string sampleTypeBudgetProblem(const Document& document, SampleType type) {
+    const long long image = Document::imagePixelBudget(type), project = Document::projectPixelBudgetAt(type);
+    const std::string depth = std::string(sampleTypeName(type)) + "-bit";
+    if ((long long)document.width * document.height > image)
+        return "A " + depth + " canvas holds up to " + megapixels(image) + " megapixels; this one has " + megapixels((long long)document.width * document.height) + ".";
+    for (const Layer& l : document.layers) {
+        if (l.asset && l.asset->image && (long long)l.asset->image.width() * l.asset->image.height() > image)
+            return "Layer \"" + l.name + "\" has " + megapixels((long long)l.asset->image.width() * l.asset->image.height()) + " megapixels; a " + depth + " layer holds up to " + megapixels(image) + ".";
+        if (l.mask && l.mask->asset.image && (long long)l.mask->asset.image.width() * l.mask->asset.image.height() > image)
+            return "The mask of \"" + l.name + "\" is larger than a " + depth + " mask can be (" + megapixels(image) + " megapixels).";
+    }
+    if (document.layerPixels() > project)
+        return "The layers total " + megapixels(document.layerPixels()) + " megapixels; a " + depth + " document holds up to " + megapixels(project) + " within the same memory.";
+    if (document.maskPixels() > project)
+        return "The masks total " + megapixels(document.maskPixels()) + " megapixels; a " + depth + " document holds up to " + megapixels(project) + " within the same memory.";
+    return {};
+}
+
+bool convertSampleType(Document& document, SampleType type, std::string* error) {
+    if (type == SampleType::F32) { if (error) *error = "32-bit documents are not available yet."; return false; }
+    if (document.sampleType == type) return true;
+    if (document.sampleType == SampleType::F32) { if (error) *error = "32-bit documents are not available yet."; return false; }
+    if (std::string problem = sampleTypeBudgetProblem(document, type); !problem.empty()) { if (error) *error = problem; return false; }
+    // Each buffer converted once: a live shape, text or smart object shares its raster with the layer's asset, and
+    // must still do so afterwards.
+    std::map<const void*, AnyImage> images;
+    std::map<const void*, AnyGray> grays;
+    auto image = [&](const AnyImage& in) -> AnyImage {
+        if (!in) return in;
+        auto it = images.find(in.identity());
+        if (it != images.end()) return it->second;
+        return images[in.identity()] = imageAtDepth(in, type);
+    };
+    auto gray = [&](const AnyGray& in) -> AnyGray {
+        if (!in) return in;
+        auto it = grays.find(in.identity());
+        if (it != grays.end()) return it->second;
+        return grays[in.identity()] = grayAtDepth(in, type);
+    };
+    Document out = document;
+    for (Layer& l : out.layers) {
+        const AnyImage before = l.asset ? l.asset->image : AnyImage();
+        const AnyGray maskBefore = l.mask ? l.mask->asset.image : AnyGray();
+        if (l.asset) l.asset->image = image(l.asset->image);   // the thumbnail stays: the same picture at 8 bits
+        if (l.mask) l.mask->asset.image = gray(l.mask->asset.image);
+        l.shapeImage = image(l.shapeImage);
+        l.textImage = image(l.textImage);
+        l.smartImage = image(l.smartImage);
+        if (l.psdCarry) {
+            // What the PSD's blocks are bound to follows the pixels to their new depth, while they are unchanged.
+            auto carry = std::make_shared<PsdLayerCarry>(*l.psdCarry);
+            if (carry->contentHash == psdContentHash(before)) carry->contentHash = psdContentHash(l.asset ? l.asset->image : AnyImage());
+            if (l.mask && carry->maskHash == psdMaskHash(maskBefore, l.mask->enabled)) carry->maskHash = psdMaskHash(l.mask->asset.image, l.mask->enabled);
+            l.psdCarry = carry;
+        }
+    }
+    if (out.selection) out.selection->coverage = gray(out.selection->coverage);
+    out.sampleType = type;
+    document = std::move(out);
+    return true;
 }
 
 const Layer* Document::find(const Uuid& lid) const {

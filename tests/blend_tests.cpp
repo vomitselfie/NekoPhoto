@@ -4,6 +4,7 @@
 #include <set>
 #include <array>
 #include "compositor/blend.h"
+#include "compositor/depth.h"
 #include <cmath>
 #include <random>
 
@@ -157,6 +158,106 @@ TEST_CASE(photoshops_other_modes_match_its_captures) {
     for (int m : blendModeMenuOrder()) if (m >= 0) CHECK(listed.insert(m).second);
     CHECK_EQ(int(listed.size()), blendModeCount);
     for (int i = 0; i < blendModeCount; i++) { BlendMode back; CHECK(parseBlendMode(blendModeName(BlendMode(i)), back) && back == BlendMode(i)); }
+}
+
+// ---- 16 bits -------------------------------------------------------------------------------------------------------
+
+namespace {
+
+/// The PDF general formula in double over straight colour, with the 16-bit kernels' B: what compositePixelSteps16
+/// computes in integers (or float) must land within a 15-bit step or two of it.
+void reference16(BlendMode mode, const uint16_t* src, double coverage, double out[4], const uint16_t* dst) {
+    const double one = 32768;
+    const double as = src[3] / one * coverage, ab = dst[3] / one;
+    double o[3];
+    for (int c = 0; c < 3; c++) {
+        const double sp = src[c] / one * coverage, bp = dst[c] / one;
+        if (mode == BlendMode::Normal || ab <= 0 || as <= 0) { o[c] = sp + bp * (1 - as); continue; }
+        const double cs = std::min(1.0, double(src[c]) / src[3]), cb = std::min(1.0, bp / ab);
+        o[c] = sp * (1 - ab) + bp * (1 - as) + as * ab * blendChannel16(mode, float(cb), float(cs));
+    }
+    const double ao = as + ab * (1 - as);
+    for (int c = 0; c < 3; c++) out[c] = std::min(o[c], ao) * one;
+    out[3] = ao * one;
+}
+
+void randomPremultiplied16(std::mt19937& rng, uint16_t* p) {
+    const uint32_t a = rng() % 4 == 0 ? one16 : rng() % (one16 + 1);
+    for (int c = 0; c < 3; c++) p[c] = uint16_t(mul15(rng() % (one16 + 1), a));
+    p[3] = uint16_t(a);
+}
+
+bool separableFormula(BlendMode m) {
+    switch (m) {
+    case BlendMode::Hue: case BlendMode::Saturation: case BlendMode::Color: case BlendMode::Luminosity: case BlendMode::DarkerColor:
+    case BlendMode::LighterColor: case BlendMode::HardMix: case BlendMode::Dissolve: return false;
+    default: return true;
+    }
+}
+
+} // namespace
+
+TEST_CASE(sixteen_bit_blends_match_the_float_formula) {
+    std::mt19937 rng(16);
+    for (int m = 0; m < blendModeCount; m++) {
+        const BlendMode mode = BlendMode(m);
+        if (!separableFormula(mode)) continue;
+        // Division-based modes magnify the rounding of the straight colour near their poles.
+        const bool divides = mode == BlendMode::ColorDodge || mode == BlendMode::ColorBurn || mode == BlendMode::VividLight || mode == BlendMode::Divide;
+        const double tolerance = divides ? 24 : 2.5;
+        double worst = 0;
+        for (int i = 0; i < 40000; i++) {
+            uint16_t src[4], dst[4];
+            randomPremultiplied16(rng, src);
+            randomPremultiplied16(rng, dst);
+            if (divides) { src[3] = uint16_t(one16); dst[3] = uint16_t(one16); for (int c = 0; c < 3; c++) { src[c] = uint16_t(rng() % (one16 + 1)); dst[c] = uint16_t(rng() % (one16 + 1)); } }
+            const unsigned k = i % 3 == 0 ? unsigned(one16) : unsigned(rng() % (one16 + 1));
+            double expect[4];
+            reference16(mode, src, k / 32768.0, expect, dst);
+            uint16_t got[4] = {dst[0], dst[1], dst[2], dst[3]};
+            compositePixelSteps16(mode, src, k, got);
+            if (k == 0 || src[3] == 0) { for (int c = 0; c < 4; c++) CHECK_EQ(int(got[c]), int(dst[c])); continue; }
+            for (int c = 0; c < 4; c++) worst = std::max(worst, std::fabs(got[c] - expect[c]));
+            CHECK(got[0] <= got[3] && got[1] <= got[3] && got[2] <= got[3] && got[3] <= one16);
+        }
+        if (worst > tolerance) std::fprintf(stderr, "  %s: %.1f steps from the formula\n", blendModeName(mode), worst);
+        CHECK(worst <= tolerance);
+    }
+}
+
+TEST_CASE(sixteen_bit_blends_of_eight_bit_pixels_are_within_a_level_of_the_eight_bit_kernels) {
+    // Opaque 8-bit pixels at full coverage, the case where the 8-bit kernel rounds nothing but the blend: every mode
+    // within a level (Vivid Light two: Photoshop's 8-bit kernel rounds its divisor to a byte).
+    for (int m = 0; m < blendModeCount; m++) {
+        const BlendMode mode = BlendMode(m);
+        if (mode == BlendMode::Dissolve) continue;
+        int worst = 0;
+        for (int s = 0; s < 256; s += 3)
+            for (int d = 0; d < 256; d += 3) {
+                const uint8_t src[4] = {uint8_t(s), uint8_t(255 - s), uint8_t((s * 7) & 255), 255}, dst[4] = {uint8_t(d), uint8_t((d * 3) & 255), uint8_t(255 - d), 255};
+                uint8_t eight[4] = {dst[0], dst[1], dst[2], dst[3]};
+                compositePixel(mode, src, 1.0f, eight);
+                uint16_t src16[4], deep[4];
+                for (int c = 0; c < 4; c++) { src16[c] = widen8(src[c]); deep[c] = widen8(dst[c]); }
+                compositePixelSteps16(mode, src16, coverageSteps16(1.0f), deep);
+                for (int c = 0; c < 4; c++) worst = std::max(worst, std::abs(int(narrow16(deep[c])) - int(eight[c])));
+            }
+        const int allowed = mode == BlendMode::VividLight ? 2 : 1;
+        if (worst > allowed) std::fprintf(stderr, "  %s: %d levels apart\n", blendModeName(mode), worst);
+        CHECK(worst <= allowed);
+    }
+}
+
+TEST_CASE(sixteen_bit_normal_is_exact_at_the_ends) {
+    const uint16_t opaque[4] = {1000, 20000, 32768, 32768};
+    uint16_t dst[4] = {5, 6, 7, 32768};
+    compositePixelSteps16(BlendMode::Normal, opaque, one16, dst);
+    for (int c = 0; c < 4; c++) CHECK_EQ(int(dst[c]), int(opaque[c]));
+    uint16_t keep[4] = {100, 200, 300, 400};
+    compositePixelSteps16(BlendMode::Multiply, opaque, 0, keep);
+    CHECK_EQ(int(keep[2]), 300);
+    for (int v = 0; v < 256; v++) CHECK_EQ(int(narrow16(widen8(uint8_t(v)))), v);
+    for (uint32_t v = 0; v <= one16; v++) if (from65535(to65535(v)) != v) { CHECK_EQ(int(from65535(to65535(v))), int(v)); break; }
 }
 
 TEST_MAIN()

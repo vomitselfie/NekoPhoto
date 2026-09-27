@@ -2,6 +2,9 @@
 // GrayImageT, the AnyImage / AnyGray holders that layers, masks and the selection keep, and the supports() registry.
 #include "check.h"
 #include "compositor/imaget.h"
+#include "compositor/depth.h"
+#include "compositor/document.h"
+#include "compositor/history.h"
 #include "compositor/supports.h"
 #include <type_traits>
 
@@ -78,6 +81,87 @@ TEST_CASE(support_registry_is_eight_bit_only) {
     size_t count = 0;
     const FeatureSupport* table = featureSupportTable(count);
     for (size_t i = 0; i < count; i++) CHECK(table[i].types & onlyEightBit);
+}
+
+TEST_CASE(depth_conversions_round_trip) {
+    for (int v = 0; v < 256; v++) CHECK_EQ(int(narrow16(widen8(uint8_t(v)))), v);
+    CHECK_EQ(int(widen8(255)), 32768);
+    CHECK_EQ(int(to65535(32768)), 65535);
+    CHECK_EQ(int(from65535(65535)), 32768);
+    CHECK_EQ(int(from65535(1)), 1);   // 0.5 rounds up
+    CHECK_EQ(int(mul15(32768, 12345)), 12345);
+    auto eight = std::make_shared<Image>(3, 2);
+    eight->fill(200, 100, 50, 255);
+    eight->pixel(1, 1)[3] = 128; eight->pixel(1, 1)[0] = 100;
+    auto deep = widenImage(*eight);
+    CHECK(*narrowImage(*deep) == *eight);
+    // A 16-bit ramp dithered to 8 bits keeps its mean where rounding would band it.
+    Image16 ramp(64, 64);
+    for (int y = 0; y < 64; y++) for (int x = 0; x < 64; x++) { uint16_t* p = ramp.pixel(x, y); p[0] = p[1] = p[2] = uint16_t(widen8(100) + 64); p[3] = 32768; }
+    auto dithered = ditherToEightBit(ramp);
+    double mean = 0;
+    for (int y = 0; y < 64; y++) for (int x = 0; x < 64; x++) mean += dithered->pixel(x, y)[0];
+    mean /= 64 * 64;
+    CHECK(mean > 100.3 && mean < 100.7);   // 64 / 128.5 of a level above 100
+}
+
+TEST_CASE(documents_convert_between_eight_and_sixteen_bits) {
+    Document doc(40, 30);
+    auto image = std::make_shared<Image>(20, 10);
+    image->fill(10, 20, 30, 255);
+    Layer layer(Asset::make(image, "text"), Point(5, 5));
+    layer.text = LayerText();
+    layer.textImage = layer.asset->image;
+    auto mask = std::make_shared<GrayImage>(20, 10, 77);
+    LayerMask m; m.asset = MaskAsset::make(mask); layer.mask = m;
+    doc.layers.push_back(layer);
+    Selection selection;
+    selection.coverage = std::make_shared<GrayImage>(40, 30, 0);
+    doc.selection = selection;
+    Document deep = doc;
+    std::string error;
+    REQUIRE(convertSampleType(deep, SampleType::U16, &error));
+    CHECK(deep.sampleType == SampleType::U16);
+    REQUIRE(deep.layers[0].asset->image.u16() != nullptr);
+    CHECK(deep.layers[0].isLiveText());   // the text still owns its raster
+    CHECK(deep.layers[0].mask->asset.image.u16() != nullptr);
+    CHECK(deep.selection->coverage.u16() != nullptr);
+    CHECK(deep.selection->isEmpty());
+    CHECK_EQ(deep.layerBytes(), 20LL * 10 * 8);
+    Document back = deep;
+    REQUIRE(convertSampleType(back, SampleType::U8, &error));
+    CHECK(*back.layers[0].asset->image.u8() == *image);
+    CHECK(*back.layers[0].mask->asset.image.u8() == *mask);
+    // A canvas an 8-bit document holds but a 16-bit one does not: refused, with the reason, and left as it was.
+    Document big(10000, 6000);
+    CHECK(!convertSampleType(big, SampleType::U16, &error));
+    CHECK(big.sampleType == SampleType::U8);
+    CHECK(error.find("16-bit") != std::string::npos);
+    CHECK(Document::imagePixelBudget(SampleType::U16) * 2 == Document::pixelBudget);
+    CHECK(!convertSampleType(doc, SampleType::F32, &error));
+}
+
+TEST_CASE(history_counts_sixteen_bit_pixels) {
+    Document doc(64, 64);
+    auto image = std::make_shared<Image16>(64, 32);
+    doc.sampleType = SampleType::U16;
+    doc.layers.push_back(Layer(Asset::make(Image16Ptr(image), "deep"), Point(0, 0)));
+    DocumentHistory history;
+    size_t expected = 0;
+    for (int i = 0; i < 3; i++) {
+        history.begin("Edit", doc, doc.layers[0].id);
+        const Asset before = *doc.layers[0].asset;
+        doc.layers[0].asset = Asset::make(Image16Ptr(std::make_shared<Image16>(64, 32)), "deep");
+        LayerMask mask; mask.asset = MaskAsset::make(Gray16Ptr(std::make_shared<Gray16>(64, 32, 100)));
+        doc.layers[0].mask = mask;
+        history.end(doc, doc.layers[0].id);
+        // The replaced raster (and its thumbnail) is now only in the history; so is the mask from the edit before.
+        expected += before.image.byteCount() + before.thumbnail->byteCount();
+    }
+    // Two masks replaced (the third is the live one), each 64 x 32 16-bit samples and an 8-bit thumbnail.
+    expected += 2 * (64 * 32 * 2 + 64 * 32);
+    CHECK_EQ(history.retainedBytes(doc), expected);
+    CHECK(history.retainedBytes(doc) >= 3 * size_t(64 * 32 * 8));
 }
 
 TEST_MAIN()

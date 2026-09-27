@@ -96,15 +96,20 @@ int DocumentHistory::squash(uint64_t since, const std::string& name) {
 
 size_t DocumentHistory::retainedBytes(const std::optional<Document>& current) const {
     std::set<const void*> seen;
+    // Pixels are counted at the depth they are held at, each buffer once however many layers and snapshots share it.
+    auto count = [&](const void* identity, size_t size, size_t* bytes) {
+        if (identity && seen.insert(identity).second && bytes) *bytes += size;
+    };
     auto note = [&](const Layer& layer, size_t* bytes) {
         if (layer.asset) {
-            for (auto& image : {layer.asset->image.u8(), layer.asset->thumbnail})
-                if (image && seen.insert(image.get()).second && bytes) *bytes += image->byteCount();
+            count(layer.asset->image.identity(), layer.asset->image.byteCount(), bytes);
+            if (layer.asset->thumbnail) count(layer.asset->thumbnail.get(), layer.asset->thumbnail->byteCount(), bytes);
         }
         if (layer.mask) {
-            for (auto& image : {layer.mask->asset.image.u8(), layer.mask->asset.thumbnail})
-                if (image && seen.insert(image.get()).second && bytes) *bytes += size_t(image->width()) * size_t(image->height());
+            count(layer.mask->asset.image.identity(), layer.mask->asset.image.byteCount(), bytes);
+            if (layer.mask->asset.thumbnail) count(layer.mask->asset.thumbnail.get(), layer.mask->asset.thumbnail->byteCount(), bytes);
         }
+        for (const AnyImage* image : {&layer.shapeImage, &layer.textImage, &layer.smartImage}) count(image->identity(), image->byteCount(), bytes);
     };
     if (current) for (auto& layer : current->layers) note(layer, nullptr);
     size_t bytes = 0;

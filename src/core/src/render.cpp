@@ -1,6 +1,7 @@
 #include "compositor/render.h"
 #include "render_plan.h"
 #include "compositor/blend.h"
+#include "compositor/depth.h"
 #include "compositor/parallel.h"
 #include "compositor/resample.h"
 #include "compositor/warp.h"
@@ -395,6 +396,242 @@ bool resizeDocument(Document& document, int width, int height, double resolution
     return true;
 }
 
+// ---- 16 bits: mask coverage, drawing a layer, resampling -------------------------------------------------------
+
+namespace {
+
+inline void sampleNearest16(const Image16& image, double x, double y, uint16_t out[4]) {
+    const int ix = clamp(int(std::floor(x)), 0, image.width() - 1), iy = clamp(int(std::floor(y)), 0, image.height() - 1);
+    std::memcpy(out, image.pixel(ix, iy), 4 * sizeof(uint16_t));
+}
+
+inline void samplePixels16(Sampling sampling, const Image16& image, double x, double y, uint16_t out[4]) {
+    if (sampling == Sampling::High) sampleBicubic(image, x, y, out);
+    else sampleBilinear(image, x, y, out);
+}
+
+inline int sampleGrayNearest16(const Gray16& image, double x, double y) {
+    const int ix = clamp(int(std::floor(x)), 0, image.width() - 1), iy = clamp(int(std::floor(y)), 0, image.height() - 1);
+    return image.at(ix, iy);
+}
+
+constexpr float inv16 = 1.0f / 32768.0f;
+
+void sampleMaskCoverage16(const Gray16& mask, const Gray16Ptr& owner, const LayerTransform& transform, const Rect& region, double scale, uint16_t outside, Gray16& out, bool multiply) {
+    const int mw = mask.width(), mh = mask.height();
+    if (!multiply) out.fill(outside);
+    if (mw <= 0 || mh <= 0) return;
+    Mapping m = mappingFor(transform, mw, mh, region, scale, out.width(), out.height(), 1);
+    const double sx = std::hypot(m.outputToPixel.a, m.outputToPixel.b), sy = std::hypot(m.outputToPixel.c, m.outputToPixel.d);
+    MipChoice mip = mipFor(transform.sampling, transform.size.width * scale, transform.size.height * scale, mw, mh);
+    std::shared_ptr<const Gray16> reduced;
+    if (mip.level > 0) reduced = owner && owner.get() == &mask ? MipCache::shared().level(owner, mip.level) : reduceGray(mask, mip.level);
+    const Gray16& src = reduced ? *reduced : mask;
+    const double factor = mip.factor;
+    const bool nearest = transform.sampling == Sampling::Nearest;
+    if (multiply && outside != one16) {
+        for (int y = 0; y < out.height(); y++) {
+            uint16_t* row = out.row(y);
+            for (int x = 0; x < out.width(); x++) {
+                const bool inside = x >= m.outputRect.minX() && x < m.outputRect.maxX() && y >= m.outputRect.minY() && y < m.outputRect.maxY();
+                if (!inside) row[x] = uint16_t(mul15(row[x], outside));
+            }
+        }
+    }
+    parallelRows(int(m.outputRect.minY()), int(m.outputRect.maxY()), [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++) {
+            uint16_t* row = out.row(y);
+            Point p = m.outputToPixel.apply({m.outputRect.minX() + 0.5, y + 0.5});
+            const Point dp = m.outputToPixel.applyVector({1, 0});
+            for (int x = int(m.outputRect.minX()); x < int(m.outputRect.maxX()); x++, p = p + dp) {
+                float value;
+                const bool inside = p.x >= 0 && p.x < mw && p.y >= 0 && p.y < mh;
+                if (nearest) value = inside ? float(sampleGrayNearest16(src, p.x, p.y)) : float(outside);
+                else {
+                    const double ex = std::min(p.x, mw - p.x) / std::max(1e-9, sx), ey = std::min(p.y, mh - p.y) / std::max(1e-9, sy);
+                    const float edge = float(clamp(std::min(ex, ey) + 0.5, 0.0, 1.0));
+                    value = float(sampleGrayBilinear(src, p.x / factor, p.y / factor)) * edge + float(outside) * (1 - edge);
+                }
+                const uint16_t v = uint16_t(clamp(value + 0.5f, 0.0f, 32768.0f));
+                row[x] = multiply ? uint16_t(mul15(row[x], v)) : v;
+            }
+        }
+    });
+}
+
+} // namespace
+
+void sampleMaskCoverage(const Gray16& mask, const LayerTransform& transform, const Rect& region, double scale, uint16_t outside, Gray16& out, bool multiply) {
+    sampleMaskCoverage16(mask, nullptr, transform, region, scale, outside, out, multiply);
+}
+void sampleMaskCoverage(const Gray16Ptr& mask, const LayerTransform& transform, const Rect& region, double scale, uint16_t outside, Gray16& out, bool multiply) {
+    if (mask) sampleMaskCoverage16(*mask, mask, transform, region, scale, outside, out, multiply);
+}
+
+void drawLayer(const DrawParams16& params, const Rect& region, double scale, const Gray16* coverage, Image16& out) {
+    if (!params.image || params.image->isEmpty() || out.isEmpty()) return;
+    const Image16& full = *params.image;
+    const int pw = full.width(), ph = full.height();
+    Mapping m = mappingFor(params.transform, pw, ph, region, scale, out.width(), out.height(), 1);
+    if (m.outputRect.isEmpty()) return;
+    const bool nearest = params.transform.sampling == Sampling::Nearest;
+    MipChoice mip = mipFor(params.transform.sampling, params.transform.size.width * scale, params.transform.size.height * scale, pw, ph);
+    Image16Ptr source = MipCache::shared().level(params.image, mip.level);
+    const double factor = mip.factor;
+    const double sx = std::hypot(m.outputToPixel.a, m.outputToPixel.b), sy = std::hypot(m.outputToPixel.c, m.outputToPixel.d);
+
+    const Gray16* mask = nullptr;
+    Gray16Ptr maskHold;
+    std::optional<LayerTransform> maskPlacement;
+    if (params.mask && params.mask->enabled) {
+        maskHold = params.maskImage ? params.maskImage : params.mask->asset.image.u16();
+        mask = maskHold.get();
+        maskPlacement = params.maskPlacement ? params.maskPlacement : params.mask->placement;
+        if (maskPlacement && maskPlacement->samePlacement(params.layerTransformForMask)) maskPlacement.reset();
+    }
+    std::shared_ptr<Gray16> placedMask;
+    if (mask && maskPlacement) {
+        const uint16_t background = widen8(params.mask->asset.thumbnail ? LayerMask::background(*params.mask->asset.thumbnail) : 255);
+        placedMask = std::make_shared<Gray16>(out.width(), out.height(), background);
+        sampleMaskCoverage(*mask, *maskPlacement, region, scale, background, *placedMask, false);
+    }
+    const double maskScaleX = mask ? double(mask->width()) / pw : 1, maskScaleY = mask ? double(mask->height()) / ph : 1;
+    const float opacity = float(clamp(params.opacity, 0.0, 1.0));
+    const double invFactor = 1.0 / factor;
+    const int xBegin = int(m.outputRect.minX()), xEnd = int(m.outputRect.maxX());
+    const Point dp = m.outputToPixel.applyVector({1, 0});
+    const BlendMode mode = params.mode;
+    const bool dissolve = mode == BlendMode::Dissolve;
+
+    // On the output grid at whole pixels: rows of the layer straight over the destination, one span per row.
+    const Affine& o2p = m.outputToPixel;
+    const bool onGrid = !dissolve && factor == 1 && std::fabs(o2p.a - 1) < 1e-9 && std::fabs(o2p.b) < 1e-9
+        && std::fabs(o2p.c) < 1e-9 && std::fabs(o2p.d - 1) < 1e-9 && std::fabs(o2p.tx - std::round(o2p.tx)) < 1e-9 && std::fabs(o2p.ty - std::round(o2p.ty)) < 1e-9
+        && (!mask || placedMask || (maskScaleX == 1 && maskScaleY == 1));
+    if (onGrid) {
+        const int offsetX = int(std::round(o2p.tx)), offsetY = int(std::round(o2p.ty));
+        const int spanBegin = std::max(xBegin, -offsetX), spanEnd = std::min(xEnd, pw - offsetX);
+        if (spanEnd <= spanBegin) return;
+        parallelRows(int(m.outputRect.minY()), int(m.outputRect.maxY()), [&](int ya, int yb) {
+            std::vector<uint32_t> steps(size_t(spanEnd - spanBegin));
+            for (int y = ya; y < yb; y++) {
+                const int py = y + offsetY;
+                if (py < 0 || py >= ph) continue;
+                const uint16_t* covRow = coverage ? coverage->row(y) : nullptr;
+                const uint16_t* placedRow = placedMask ? placedMask->row(y) : nullptr;
+                const uint16_t* maskRow = mask && !placedMask ? mask->row(py) : nullptr;
+                for (int x = spanBegin; x < spanEnd; x++) {
+                    float cov = opacity;
+                    if (covRow) cov *= covRow[x] * inv16;
+                    if (placedRow) cov *= placedRow[x] * inv16;
+                    else if (maskRow) cov *= maskRow[x + offsetX] * inv16;
+                    steps[size_t(x - spanBegin)] = coverageSteps16(cov);
+                }
+                compositeSpan16(mode, source->pixel(spanBegin + offsetX, py), steps.data(), out.pixel(spanBegin, y), spanEnd - spanBegin);
+            }
+        });
+        return;
+    }
+
+    parallelRows(int(m.outputRect.minY()), int(m.outputRect.maxY()), [&](int ya, int yb) {
+        std::vector<uint16_t> samples(size_t(xEnd - xBegin) * 4);
+        std::vector<uint32_t> steps(size_t(xEnd - xBegin));
+        for (int y = ya; y < yb; y++) {
+            const uint16_t* covRow = coverage ? coverage->row(y) : nullptr;
+            const uint16_t* placedRow = placedMask ? placedMask->row(y) : nullptr;
+            Point p = m.outputToPixel.apply({xBegin + 0.5, y + 0.5});
+            bool any = false;
+            for (int x = xBegin; x < xEnd; x++, p = p + dp) {
+                const size_t i = size_t(x - xBegin);
+                steps[i] = 0;
+                float edge;
+                if (nearest) {
+                    if (p.x < 0 || p.x >= pw || p.y < 0 || p.y >= ph) continue;
+                    edge = 1;
+                } else {
+                    const double ex = std::min(p.x, pw - p.x) / std::max(1e-9, sx), ey = std::min(p.y, ph - p.y) / std::max(1e-9, sy);
+                    edge = float(clamp(std::min(ex, ey) + 0.5, 0.0, 1.0));
+                    if (edge <= 0) continue;
+                }
+                float cov = edge * opacity;
+                if (covRow) cov *= covRow[x] * inv16;
+                if (mask) {
+                    if (placedRow) cov *= placedRow[x] * inv16;
+                    else cov *= float(nearest ? sampleGrayNearest16(*mask, p.x * maskScaleX, p.y * maskScaleY) : sampleGrayBilinear(*mask, p.x * maskScaleX, p.y * maskScaleY)) * inv16;
+                }
+                if (cov <= 0) continue;
+                uint16_t* src = &samples[i * 4];
+                if (nearest) sampleNearest16(*source, p.x, p.y, src);
+                else samplePixels16(params.transform.sampling, *source, p.x * invFactor, p.y * invFactor, src);
+                if (!src[3]) continue;
+                if (dissolve) { compositePixelAt16(mode, src, cov, out.pixel(x, y), docX(region, scale, x), docY(region, scale, y)); continue; }
+                steps[i] = coverageSteps16(cov);
+                any = any || steps[i];
+            }
+            if (any) compositeSpan16(mode, samples.data(), steps.data(), out.pixel(xBegin, y), xEnd - xBegin);
+        }
+    });
+}
+
+std::shared_ptr<Image16> resampleLayer(const Image16Ptr& image, const LayerTransform& transform, const LayerTransform& target, int width, int height) {
+    auto out = std::make_shared<Image16>(std::max(0, width), std::max(0, height));
+    if (!image || image->isEmpty() || width <= 0 || height <= 0) return out;
+    const Affine map = target.pixelToDocument(width, height).concatenating(transform.pixelToDocument(image->width(), image->height()).inverted());
+    const bool nearest = transform.sampling == Sampling::Nearest;
+    const double sx = std::hypot(map.a, map.b), sy = std::hypot(map.c, map.d);
+    const int level = nearest ? 0 : MipCache::levelFor(1.0 / std::max(sx, sy), transform.sampling == Sampling::High);
+    Image16Ptr source = MipCache::shared().level(image, level);
+    const double factor = std::ldexp(1.0, level);
+    const int pw = image->width(), ph = image->height();
+    parallelRows(0, height, [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++) {
+            uint16_t* row = out->row(y);
+            Point p = map.apply({0.5, y + 0.5});
+            const Point dp = map.applyVector({1, 0});
+            for (int x = 0; x < width; x++, p = p + dp, row += 4) {
+                if (nearest) {
+                    if (p.x < 0 || p.x >= pw || p.y < 0 || p.y >= ph) continue;
+                    sampleNearest16(*source, p.x, p.y, row);
+                } else {
+                    const double ex = std::min(p.x, pw - p.x) / std::max(1e-9, sx), ey = std::min(p.y, ph - p.y) / std::max(1e-9, sy);
+                    const uint32_t edge = uint32_t(clamp(std::min(ex, ey) + 0.5, 0.0, 1.0) * 32768 + 0.5);
+                    if (edge == 0) continue;
+                    uint16_t s[4];
+                    samplePixels16(transform.sampling, *source, p.x / factor, p.y / factor, s);
+                    for (int c = 0; c < 4; c++) row[c] = uint16_t(mul15(s[c], edge));
+                }
+            }
+        }
+    });
+    return out;
+}
+
+std::shared_ptr<Gray16> resampleMask(const Gray16& mask, const LayerTransform& transform, const LayerTransform& target, int width, int height, uint16_t outside) {
+    auto out = std::make_shared<Gray16>(std::max(0, width), std::max(0, height), outside);
+    if (mask.isEmpty() || width <= 0 || height <= 0) return out;
+    const Affine map = target.pixelToDocument(width, height).concatenating(transform.pixelToDocument(mask.width(), mask.height()).inverted());
+    const double sx = std::hypot(map.a, map.b), sy = std::hypot(map.c, map.d);
+    const int level = MipCache::levelFor(1.0 / std::max(sx, sy));
+    std::shared_ptr<const Gray16> reduced = level > 0 ? reduceGray(mask, level) : nullptr;
+    const Gray16& src = reduced ? *reduced : mask;
+    const double factor = std::ldexp(1.0, level);
+    const int mw = mask.width(), mh = mask.height();
+    parallelRows(0, height, [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++) {
+            uint16_t* row = out->row(y);
+            Point p = map.apply({0.5, y + 0.5});
+            const Point dp = map.applyVector({1, 0});
+            for (int x = 0; x < width; x++, p = p + dp) {
+                const double ex = std::min(p.x, mw - p.x) / std::max(1e-9, sx), ey = std::min(p.y, mh - p.y) / std::max(1e-9, sy);
+                const float edge = float(clamp(std::min(ex, ey) + 0.5, 0.0, 1.0));
+                const float in = float(sampleGrayBilinear(src, p.x / factor, p.y / factor));
+                row[x] = uint16_t(clamp(in * edge + float(outside) * (1 - edge) + 0.5f, 0.0f, 32768.0f));
+            }
+        }
+    });
+    return out;
+}
+
 // ---- Document rendering ------------------------------------------------------
 
 void render(const Document& document, const RenderOptions& options, Image& out, const Overrides* overrides, RenderCache* cache) {
@@ -410,9 +647,41 @@ void render(const Document& document, const RenderOptions& options, Image& out, 
     // One switch per render on the document's depth; each executor is a separate instantiation.
     switch (document.sampleType) {
     case SampleType::U8: executeRender<SampleType::U8>(plan, region, scale, out, frameCache, options.version); break;
-    case SampleType::U16:
-    case SampleType::F32: break;   // deeper documents arrive with their executors (P2, P5)
+    case SampleType::U16: {
+        // The canvas takes 8 bits: the frame at the document's depth, then reduced (toDisplay<U16>).
+        Image16 deep(w, h);
+        if (!options.clear) deep = *widenImage(out);
+        executeRender<SampleType::U16>(plan, region, scale, deep, frameCache, options.version);
+        narrowInto(deep, out);
+        break;
     }
+    case SampleType::F32: break;   // 32-bit documents arrive with their executor (P5)
+    }
+}
+
+void render16(const Document& document, const RenderOptions& options, Image16& out, const Overrides* overrides, RenderCache* cache) {
+    Rect region = options.region.isEmpty() ? document.rect() : options.region;
+    double scale = options.scale > 0 ? options.scale : 1;
+    int w = std::max(1, int(std::ceil(region.width * scale - 1e-9))), h = std::max(1, int(std::ceil(region.height * scale - 1e-9)));
+    if (out.width() != w || out.height() != h) out = Image16(w, h);
+    else if (options.clear) out.clear();
+    if (document.sampleType != SampleType::U16) {
+        Image eight = options.clear ? Image(w, h) : *narrowImage(out);
+        RenderOptions eightOptions = options;
+        eightOptions.clear = false;
+        render(document, eightOptions, eight, overrides, cache);
+        out = *widenImage(eight);
+        return;
+    }
+    RenderPlan plan(document, overrides);
+    plan.build();
+    executeRender<SampleType::U16>(plan, region, scale, out, options.clear ? cache : nullptr, options.version);
+}
+
+std::shared_ptr<Image16> renderFlattened16(const Document& document) {
+    auto out = std::make_shared<Image16>(document.width, document.height);
+    render16(document, RenderOptions(), *out);
+    return out;
 }
 
 std::shared_ptr<Image> renderFlattened(const Document& document) {

@@ -4,6 +4,7 @@
 // Results from this machine are kept in docs/benchmarks.md; later phases are held to them.
 #include "compositor/adjustments.h"
 #include "compositor/brush.h"
+#include "compositor/depth.h"
 #include "compositor/document.h"
 #include "compositor/filters.h"
 #include "compositor/parallel.h"
@@ -150,5 +151,14 @@ int main(int argc, char** argv) {
     AdjustmentSettings hsv = AdjustmentSettings::defaults(AdjustmentKind::HueSaturation);
     hsv.hsv.adjustments[0] = {20, 25, -5};
     adjust("hue/saturation", hsv);
+
+    // The same document at 16 bits (P2): the render at its depth, the canvas's (reduced to 8 bits), and reduced.
+    Document deep = doc;
+    if (!convertSampleType(deep, SampleType::U16)) { std::printf("16-bit conversion failed\n"); return 1; }
+    Image16 out16;
+    bench("render16 4000x3000, 12 layers", none, [&] { RenderOptions o; render16(deep, o, out16); });
+    bench("render16 4000x3000 to display", none, [&] { RenderOptions o; render(deep, o, out); });
+    bench("render16 4000x3000 at 0.25", none, [&] { RenderOptions o; o.scale = 0.25; render16(deep, o, out16); });
+    bench("render16 1024x768 region at 1", none, [&] { RenderOptions o; o.region = {1500, 1100, 1024, 768}; render16(deep, o, out16); });
     return 0;
 }

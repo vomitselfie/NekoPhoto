@@ -32,4 +32,21 @@ uint8_t blendByteReference(float v);
 /// Composites `source` over `destination` in place (same size), scaling source alpha by `opacity`.
 void compositeImage(BlendMode mode, const Image& source, double opacity, Image& destination);
 
+// ---- 16 bits (blend_u16.cpp) ---------------------------------------------------------------------------------
+//
+// Premultiplied samples in 0..32768 and coverage in 0..32768 steps (32768 = full). Normal and the separable modes
+// with a product form are exact 15-bit integer maths; the modes that divide or take a root (the dodge and burn
+// family, Soft Light, Hard Mix, Divide) and the non-separable ones blend straight colour in float.
+
+/// Coverage (0..1) as 0..32768 steps.
+unsigned coverageSteps16(float coverage);
+/// Composites a premultiplied 16-bit source pixel over a backdrop pixel in place, the source scaled by `k` steps.
+void compositePixelSteps16(BlendMode mode, const uint16_t* src, unsigned k, uint16_t* dst);
+/// The same with coverage 0..1, at a document pixel (Dissolve's pattern is the 8-bit one).
+void compositePixelAt16(BlendMode mode, const uint16_t* src, float coverage, uint16_t* dst, int x, int y);
+/// `count` pixels in one mode (not Dissolve), a step count per pixel (0 skips it): the mode is chosen once per span.
+void compositeSpan16(BlendMode mode, const uint16_t* src, const uint32_t* steps, uint16_t* dst, int count);
+/// B(cb, cs) as the 16-bit kernels compute it, for tests: straight colour in 0..1.
+float blendChannel16(BlendMode mode, float cb, float cs);
+
 } // namespace compositor

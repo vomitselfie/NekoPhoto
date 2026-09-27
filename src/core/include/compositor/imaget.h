@@ -132,6 +132,8 @@ public:
     /// The buffer's size whatever its depth (0 when there is none): geometry, not pixels.
     int width() const { return std::visit([](const auto& p) { return p ? p->width() : 0; }, v_); }
     int height() const { return std::visit([](const auto& p) { return p ? p->height() : 0; }, v_); }
+    /// The bytes its pixels take at their depth (0 when there is none): for memory accounting.
+    size_t byteCount() const { return std::visit([](const auto& p) -> size_t { return p ? p->byteCount() : 0; }, v_); }
     /// The buffer's address, whatever its depth: an identity for caches and comparisons.
     const void* identity() const { return std::visit([](const auto& p) -> const void* { return p.get(); }, v_); }
     /// Calls `f` with the typed shared pointer held.

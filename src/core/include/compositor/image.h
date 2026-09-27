@@ -12,8 +12,12 @@
 #include <utility>
 #include <mutex>
 #include <vector>
+#include "sampletype.h"
 
 namespace compositor {
+
+template <SampleType S> class ImageT;
+template <SampleType S> class GrayImageT;
 
 /// The largest side a pixel buffer may have. It is the document's own limit, kept here because the buffer
 /// classes enforce it: with the side bounded, `width * 4` cannot overflow an int, so a stride can never
@@ -137,6 +141,9 @@ public:
     /// `level` halvings of `image` (level 0 is the image itself).
     ImagePtr level(const ImagePtr& image, int level);
     GrayPtr level(const GrayPtr& image, int level);
+    /// The same at 16 bits: a 16-bit document's reductions keep its depth.
+    std::shared_ptr<const ImageT<SampleType::U16>> level(const std::shared_ptr<const ImageT<SampleType::U16>>& image, int level);
+    std::shared_ptr<const GrayImageT<SampleType::U16>> level(const std::shared_ptr<const GrayImageT<SampleType::U16>>& image, int level);
     /// The level for drawing an image at `factor` destination pixels per source pixel: halvings until the
     /// final resample is at most 2x reduction, or, `rounded`, until it is nearest to 1x (between 0.7x
     /// and 1.4x), which suits a bicubic final step.
@@ -165,6 +172,8 @@ private:
     void enforceBudget(uint64_t keep);
     std::vector<Entry<Image>> entries_;
     std::vector<Entry<GrayImage>> grayEntries_;
+    std::vector<Entry<ImageT<SampleType::U16>>> entries16_;
+    std::vector<Entry<GrayImageT<SampleType::U16>>> grayEntries16_;
     std::mutex mutex_;
     size_t budget_ = size_t(400) << 20;
     size_t used_ = 0;

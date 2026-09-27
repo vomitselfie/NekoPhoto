@@ -1,4 +1,5 @@
 #include "compositor/resample.h"
+#include "compositor/depth.h"
 #include "compositor/parallel.h"
 #include "compositor/simd.h"
 #include <algorithm>
@@ -268,6 +269,42 @@ std::shared_ptr<GrayImage> resampleAxisAligned(const GrayImage& mask, int width,
     const uint8_t fill[1] = {outside};
     resampleImpl<1>(mask.data(), mask.width(), mask.height(), size_t(mask.stride()), out->data(), width, height, size_t(out->stride()), filter, originX, stepX, originY, stepY, fill);
     return out;
+}
+
+// ---- 16-bit point samplers: the same taps, 64-bit sums -------------------------------------------
+
+void sampleBilinear(const Image16& image, double x, double y, uint16_t out[4]) {
+    const Taps2 tx = bilinearTaps(x, image.width()), ty = bilinearTaps(y, image.height());
+    const uint64_t fx = tx.f, gx = fractionOne - fx, fy = ty.f, gy = fractionOne - fy;
+    const uint16_t *a = image.pixel(tx.i0, ty.i0), *b = image.pixel(tx.i1, ty.i0), *c = image.pixel(tx.i0, ty.i1), *d = image.pixel(tx.i1, ty.i1);
+    for (int k = 0; k < 4; k++) {
+        const uint64_t top = a[k] * gx + b[k] * fx, bottom = c[k] * gx + d[k] * fx;
+        out[k] = uint16_t((top * gy + bottom * fy + (fractionOne * fractionOne / 2)) / (fractionOne * fractionOne));
+    }
+}
+
+void sampleBicubic(const Image16& image, double x, double y, uint16_t out[4]) {
+    const Taps4 tx = bicubicTaps(x, image.width()), ty = bicubicTaps(y, image.height());
+    int64_t acc[4] = {0, 0, 0, 0};
+    for (int j = 0; j < 4; j++) {
+        const uint16_t* row = image.row(ty.i[j]);
+        for (int k = 0; k < 4; k++) {
+            int64_t h = 0;
+            for (int i = 0; i < 4; i++) h += int64_t(row[size_t(tx.i[i]) * 4 + size_t(k)]) * tx.w[i];
+            acc[k] += h * ty.w[j];
+        }
+    }
+    int64_t v[4];
+    for (int k = 0; k < 4; k++) v[k] = std::clamp<int64_t>((acc[k] + 32768) >> 16, 0, one16);
+    for (int k = 0; k < 3; k++) out[k] = uint16_t(std::min(v[k], v[3]));
+    out[3] = uint16_t(v[3]);
+}
+
+int sampleGrayBilinear(const Gray16& image, double x, double y) {
+    const Taps2 tx = bilinearTaps(x, image.width()), ty = bilinearTaps(y, image.height());
+    const uint64_t fx = tx.f, gx = fractionOne - fx, fy = ty.f, gy = fractionOne - fy;
+    const uint64_t top = image.at(tx.i0, ty.i0) * gx + image.at(tx.i1, ty.i0) * fx, bottom = image.at(tx.i0, ty.i1) * gx + image.at(tx.i1, ty.i1) * fx;
+    return int((top * gy + bottom * fy + (fractionOne * fractionOne / 2)) / (fractionOne * fractionOne));
 }
 
 } // namespace compositor

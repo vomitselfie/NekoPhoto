@@ -9,7 +9,7 @@
 // the layer now is, so it is left out and the pixels stand. Styles, Blend If and the like are written back
 // whatever happens. See docs/psd-roundtrip.md.
 #pragma once
-#include "image.h"
+#include "imaget.h"
 #include "transform.h"
 #include <cstdint>
 #include <memory>
@@ -48,6 +48,14 @@ struct PsdLayerCarry {
     std::vector<uint8_t> maskData;
     std::vector<std::pair<int, std::vector<uint8_t>>> maskChannels;
     uint64_t maskHash = 0;
+    /// The bit depth the stored mask channels are in (8 or 16): they go back only into a file of that depth.
+    int maskDepth = 8;
+    /// A 16-bit file's own layer channels (-1 alpha, 0..2 colour) as stored: the compression word, then the data.
+    /// PSD's 0..65535 does not survive the trip through Photoshop's internal 0..32768, so while the layer's pixels
+    /// are the ones read from them (`planesHash`, psdContentHash) they are written back byte for byte.
+    struct CarriedPlane { int id = 0; std::vector<uint8_t> data; };
+    std::vector<CarriedPlane> planes;
+    uint64_t planesHash = 0;
     /// A folder's end-marker record: its blocks and blending ranges (colour label, locks and the like).
     std::vector<PsdBlock> endBlocks;
     std::vector<uint8_t> endRanges;
@@ -78,6 +86,9 @@ struct PsdDocumentCarry {
 uint64_t psdContentHash(const Image* image);
 /// The same for a layer mask (null: none), its pixels and whether it is on.
 uint64_t psdMaskHash(const GrayImage* mask, bool enabled);
+/// The same for pixels of any depth (the 8-bit fingerprint for 8-bit pixels).
+uint64_t psdContentHash(const AnyImage& image);
+uint64_t psdMaskHash(const AnyGray& mask, bool enabled);
 
 /// For the project package: the carry as one file's bytes, and back (null when the bytes are not one).
 std::vector<uint8_t> serializePsdCarry(const PsdLayerCarry& carry);

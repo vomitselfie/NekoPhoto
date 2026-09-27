@@ -37,6 +37,10 @@ struct Asset {
     ImagePtr thumbnail;
     std::string name;
     static Asset make(ImagePtr image, std::string name);
+    /// A 16-bit raster; its thumbnail is reduced to 8 bits.
+    static Asset make(Image16Ptr image, std::string name);
+    /// Whichever depth `image` holds.
+    static Asset makeAny(const AnyImage& image, std::string name);
 };
 
 struct MaskAsset {
@@ -44,7 +48,11 @@ struct MaskAsset {
     AnyGray image;
     GrayPtr thumbnail;
     static MaskAsset make(GrayPtr image);
+    static MaskAsset make(Gray16Ptr image);
+    static MaskAsset makeAny(const AnyGray& image);
     static MaskAsset solid(bool revealing);
+    /// A one-pixel white or black mask at `type`.
+    static MaskAsset solid(bool revealing, SampleType type);
 };
 
 /// A layer mask: gray coverage over the layer's pixel grid, or placed on its own (LayerMask).
@@ -240,7 +248,7 @@ struct Selection {
     const PixelBounds& pixelBounds() const;
 
 private:
-    mutable const GrayImage* boundsFor_ = nullptr;
+    mutable const void* boundsFor_ = nullptr;
     mutable PixelBounds bounds_;
 };
 
@@ -285,6 +293,17 @@ struct Document {
     /// The pixels held by every layer's image, and by every mask.
     long long layerPixels() const;
     long long maskPixels() const;
+
+    /// The budgets are bytes (docs/high-bit-depth-plan.md, section 8): the pixel budgets above are an 8-bit
+    /// document's, and a 16-bit one holds half as many pixels in the same memory (400 MB per image, 4 GB of
+    /// layers and as much of masks at 8 bits' 1 byte a mask sample).
+    static constexpr long long imagePixelBudget(SampleType type) { return pixelBudget / (long long)sampleBytes(type); }
+    static constexpr long long projectPixelBudgetAt(SampleType type) { return projectPixelBudget / (long long)sampleBytes(type); }
+    long long imagePixelBudget() const { return imagePixelBudget(sampleType); }
+    long long projectPixelBudgetAt() const { return projectPixelBudgetAt(sampleType); }
+    /// The bytes every layer's pixels and every mask take at the document's depth.
+    long long layerBytes() const;
+    long long maskBytes() const;
     /// Whether Compositor for macOS can open this project: its loader allows pixelBudget in total.
     bool fitsMacBudget() const {
         // The Mac app reads projects up to version 7: folders with their own opacity, mode or isolation need 8.
@@ -314,6 +333,14 @@ bool validateClipping(const std::vector<Layer>& layers, std::string* error = nul
 /// layer added, removed or changed. The whole canvas when something reaches further (a folder, an adjustment
 /// layer, the stacking order, the canvas size); an empty rectangle when nothing visible changed.
 Rect changedArea(const Document& before, const Document& after);
+
+/// Image > Mode > 8 Bits/Channel or 16 Bits/Channel: every layer, mask, placed raster and the selection converted
+/// to `type` (a 16-bit document widens exactly; going to 8 bits rounds), within the byte budgets. False, with `error`
+/// saying why, when the result would not fit (a 16-bit document holds half the pixels of an 8-bit one) or the
+/// depth is not supported; the document is then unchanged.
+bool convertSampleType(Document& document, SampleType type, std::string* error = nullptr);
+/// Why `document` would not fit its budgets at `type`, or empty when it would.
+std::string sampleTypeBudgetProblem(const Document& document, SampleType type);
 
 /// The name "Layer N" / "Folder N" not yet used.
 std::string nextLayerName(const std::vector<Layer>& layers, const std::string& prefix);
