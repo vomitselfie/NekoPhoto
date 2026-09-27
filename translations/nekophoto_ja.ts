@@ -3343,7 +3343,7 @@ File &gt; New creates a blank canvas.</source>
     </message>
     <message>
         <source>At its defaults this filter %1, which does not work here.</source>
-        <translation>このフィルターは初期設定のままでは %1 ため、ここでは動作しません。</translation>
+        <translation>初期設定のままでは、このフィルターはここでは動作しません(%1)。</translation>
     </message>
     <message>
         <source>Previewing…</source>
