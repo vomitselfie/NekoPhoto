@@ -92,6 +92,11 @@ offer it for `.psd` files, run the integration script once (no root needed;
 curl -fsSL https://raw.githubusercontent.com/vomitselfie/nekophoto/main/tools/integrate-appimage.sh | bash -s -- NekoPhoto-*.AppImage
 ```
 
+**Windows** (10 version 1903 or later, x86_64): download
+`NekoPhoto-<version>-windows-x86_64.zip` from the same page, unzip it anywhere
+and run `nekophoto.exe`. It is portable: nothing is installed, and settings
+live in your user profile. The G'MIC filters need `gmic.exe` on `PATH`.
+
 **Remove Background** is off until you turn it on in Edit > Preferences,
 which downloads the model once.
 
@@ -118,8 +123,9 @@ cmake --build build -j
 ./build/src/app/nekophoto
 ```
 
-Build options, command-line flags and keyboard shortcuts are in
-[docs/linux-port.md](docs/linux-port.md).
+Windows builds with MinGW-w64 in MSYS2 (UCRT64); the packages and steps are
+in [docs/linux-port.md](docs/linux-port.md#windows), as are build options,
+command-line flags and keyboard shortcuts.
 
 ## License
 
@@ -213,6 +219,10 @@ chmod +x NekoPhoto-*.AppImage
 curl -fsSL https://raw.githubusercontent.com/vomitselfie/nekophoto/main/tools/integrate-appimage.sh | bash -s -- NekoPhoto-*.AppImage
 ```
 
+**Windows**(10 バージョン 1903 以降、x86_64)では、同じページから `NekoPhoto-<version>-windows-x86_64.zip`
+をダウンロードし、好きな場所に展開して `nekophoto.exe` を起動します。インストール不要のポータブル版で、
+設定はユーザープロファイルに保存されます。G'MIC フィルターを使うには `gmic.exe` に PATH を通してください。
+
 **背景を削除** は、編集 > 環境設定 でオンにすると使えるようになります(モデルを一度だけダウンロードします)。
 
 ### AI エージェントから使う
@@ -227,7 +237,8 @@ claude mcp add nekophoto -- uv run /path/to/nekophoto/mcp/nekophoto_mcp.py
 ### ソースからビルド
 
 必要なパッケージとビルド手順は、英語版の [Build from source](#build-from-source) と同じです。
-ビルドオプション、キーボードショートカットは [docs/linux-port.md](docs/linux-port.md)(英語)にあります。
+Windows では MSYS2(UCRT64)の MinGW-w64 でビルドします。手順とビルドオプション、キーボードショートカットは
+[docs/linux-port.md](docs/linux-port.md)(英語)にあります。
 
 ### ライセンス
 

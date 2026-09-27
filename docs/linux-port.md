@@ -46,7 +46,46 @@ ctest --test-dir build --output-on-failure
 ./build/src/app/nekophoto      # or: ./build/src/app/nekophoto Photo.comp
 ```
 
-NekoPhoto is built and released for Linux only; the macOS build was dropped after 1.5.3.
+NekoPhoto is built and released for Linux and Windows; the macOS build was dropped after 1.5.3.
+
+### Windows
+
+The Windows build uses MinGW-w64 from [MSYS2](https://www.msys2.org), in its UCRT64 shell (MSVC is not
+supported). Install the packages, build OpenCV as on Linux, then configure as usual:
+
+```bash
+pacman -S --needed curl zip mingw-w64-ucrt-x86_64-{gcc,cmake,ninja,pkgconf,python,qt6-base,qt6-svg,qt6-imageformats,qt6-tools,libpng,zlib,libmypaint,libraw,zstd,sqlite3}
+tools/build-opencv.sh opencv-prefix
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DOpenCV_DIR="$PWD/opencv-prefix"
+cmake --build build -j
+QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure
+tools/package-windows.sh build 1.5.4     # NekoPhoto-1.5.4-windows-x86_64.zip
+```
+
+`.github/workflows/windows.yml` does this on every push and uploads the zip; the release workflow attaches
+the zip and its `.sha256` to the release. `tools/package-windows.sh` installs into a folder, runs
+`windeployqt` (plus the offscreen platform, which `--headless` needs), copies every DLL the program imports
+from the MSYS2 `bin` folder, collects their packages' licence folders into `LICENSES/bundled/` and zips it.
+
+On Linux, `tools/windows-cross.sh` cross-compiles the same tree in a Fedora container (its `mingw64-*` Qt 6
+and libraries; json-c, libmypaint and OpenCV built into the image) and runs the test executables, the
+offscreen smoke test and a `--call` over the automation pipe under Wine, headless. It is for iterating on
+Windows-only code without a Windows machine; CI's MSYS2 build is what ships.
+
+What differs on Windows:
+
+- `nekophoto.exe` is a GUI program (no console window from Explorer) that attaches to the console it was
+  started from, so `--version`, `--help`, `--call` and `--batch` still print there.
+- The automation socket and the single-instance hand-off are named pipes: by default
+  `\\.\pipe\nekophoto-<user>`. `--rpc-socket` takes a pipe name (`--rpc-socket my-pipe`); a path-like value
+  becomes a pipe named after it with its slashes replaced by underscores. `mcp/nekophoto_mcp.py` and
+  `tools/rpc_smoke.py` connect to the same pipes.
+- Settings, models, brushes and crash recovery live under `%APPDATA%\nekophoto` and `%LOCALAPPDATA%\nekophoto`
+  (Qt's standard locations).
+- The executable's manifest sets the UTF-8 code page, so file names outside the ANSI code page open
+  (Windows 10 1903 or later).
+- Not available: PDF import (MSYS2 has no Qt PDF), the desktop colour-scheme portal (DBus). G'MIC works when
+  `gmic.exe` is on `PATH`; in-process libgmic is not built. There is no installer and no file association.
 
 Under a Wayland session Qt picks the Wayland platform on its own; force it with
 `QT_QPA_PLATFORM=wayland` if needed. `QT_QPA_PLATFORM=xcb` runs under X11 or
