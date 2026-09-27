@@ -104,6 +104,9 @@ live in your user profile. The G'MIC filters need `gmic.exe` on `PATH`.
 **Remove Background** is off until you turn it on in Edit > Preferences,
 which downloads the model once.
 
+The interface is in English and Japanese: it follows the desktop's language,
+and Edit > Preferences > Language picks one (at the next launch).
+
 ## Use it with an AI agent
 
 ```bash
@@ -232,6 +235,9 @@ curl -fsSL https://raw.githubusercontent.com/vomitselfie/nekophoto/main/tools/in
 設定はユーザープロファイルに保存されます。G'MIC フィルターを使うには `gmic.exe` に PATH を通してください。
 
 **背景を削除** は、編集 > 環境設定 でオンにすると使えるようになります(モデルを一度だけダウンロードします)。
+
+画面表示は日本語と英語に対応しています。デスクトップの言語に合わせて切り替わり、編集 > 環境設定 > 言語 で
+選ぶこともできます(次回の起動から反映されます)。
 
 ### AI エージェントから使う
 

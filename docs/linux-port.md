@@ -117,6 +117,9 @@ editor, which opens them as tabs and raises its window, and quits (with
 (or canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map,
 grain, blur, motion-blur, noise, lens, gmic, background, text, fonts, brushes) opens that
 dialog; with `--screenshot` the dialog is what gets grabbed.
+`--lang ja` (or `en`, `system`) sets the interface language for one run, over the
+Preferences choice; headless and scripted runs are English unless it is given, and
+the automation socket answers in English either way ([translating.md](translating.md)).
 `nekophoto --demo --screenshot out.png --save-as Demo.comp` builds a layered
 demo document, grabs the window and saves a project without any interaction
 (works with `QT_QPA_PLATFORM=offscreen`); CI runs it as a smoke test.
