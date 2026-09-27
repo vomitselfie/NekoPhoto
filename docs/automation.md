@@ -217,7 +217,7 @@ agent edits, reorders or switches off steps), `actions.delete`, `actions.import`
 
 Frame animation ([animation.md](animation.md)): `timeline.info` (frames with their `delay` in milliseconds and
 `visibleLayers`, `current`, `loopCount`, 0 for forever), `timeline.frame` (`action` create, fromLayers, duplicate,
-select, delete, move with `index` and `to`, or clear; one undo step each), `timeline.set` (`delay` for the frame at
+select, delete, move with `index` and `to`, or clear; one undo step each except select), `timeline.set` (`delay` for the frame at
 `index`, default the current one, -1 for all; `loopCount`). While a frame is selected, `layers.set` visibility,
 opacity and moves go into that frame.
 

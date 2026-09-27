@@ -47,8 +47,13 @@ bool EditorSession::timelineFramesFromLayers() {
 
 bool EditorSession::timelineSelectFrame(int index) {
     if (!document_ || index < 0 || index >= int(document_->animation.frames.size())) return false;
-    if (index == document_->animation.current && !previewBase_) return true;
-    return timelineEdit("Select Frame", [index](Document& d) { return selectFrame(d, index); });
+    endFramePreview();
+    if (index == document_->animation.current) return true;
+    // As in Photoshop, choosing a frame is not an undo step: the layers show it and the history stays. Every entry
+    // records the current frame with the layers, so undoing an edit still returns to the frame it was made in.
+    if (!selectFrame(*document_, index)) return false;
+    notifyDocument();
+    return true;
 }
 
 bool EditorSession::timelineDuplicateFrame() {

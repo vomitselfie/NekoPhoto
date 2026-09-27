@@ -942,7 +942,9 @@ def main():
     second = rpc.call("layers.add")
     rpc.call("pixels.fill", color="#0000ff")
     rpc.call("timeline.frame", action="duplicate")
+    steps = len(rpc.call("history.list")["undo"])
     rpc.call("timeline.frame", action="select", index=0)
+    assert len(rpc.call("history.list")["undo"]) == steps, "selecting a frame is not an undo step"
     rpc.call("layers.set", id=second["id"], visible=False)
     frames = rpc.call("timeline.set", delay=300, loopCount=2)
     assert frames["count"] == 2 and frames["loopCount"] == 2 and frames["frames"][0]["delay"] == 300, frames
@@ -957,6 +959,7 @@ def main():
     with open(gif_path, "rb") as f:
         assert f.read(6) == b"GIF89a"
     rpc.call("history.undo")   # the move
+    assert rpc.call("timeline.info")["current"] == 1, "undoing the move returns to the frame it moved"
     rpc.call("tabs.new")
     rpc.call("document.open", path=gif_path)
     back = rpc.call("timeline.info")

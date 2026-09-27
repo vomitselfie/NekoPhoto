@@ -614,8 +614,8 @@ public:
     void beginEdit(const QString& name);
     void endEdit();
 
-    // Timeline (frame animation, compositor/animation.h). Each change is one undo step; selecting a frame is one
-    // too, since it rewrites the layers' visibility, position and opacity.
+    // Timeline (frame animation, compositor/animation.h). Each change to the frames is one undo step; selecting
+    // a frame is not (as in Photoshop), though it rewrites the layers' visibility, position and opacity.
     bool timelineCreate();
     /// Photoshop's Make Frames From Layers: a frame per top-level layer (the bottom one shown under each).
     bool timelineFramesFromLayers();

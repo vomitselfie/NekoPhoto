@@ -1929,4 +1929,56 @@ TEST_CASE(save_during_playback_writes_the_document_not_the_frame_shown) {
     fs::remove_all(dir);
 }
 
+TEST_CASE(selecting_a_frame_is_not_an_undo_step_but_edits_keep_their_frame) {
+    // What EditorSession does: frame edits and layer edits are begin/end pairs; selecting a frame (the Timeline
+    // panel, timeline.frame select) changes the document outside the history, as in Photoshop.
+    Document start(20, 10);
+    start.layers = {imageLayer("A", solid(4, 4, 255, 0, 0, 255), {0, 0}), imageLayer("B", solid(4, 4, 0, 0, 255, 255), {10, 0})};
+    std::optional<Document> doc = start;
+    DocumentHistory history;
+    auto edit = [&](const char* name, auto&& change) {
+        history.begin(name, doc, std::nullopt);
+        change(*doc);
+        syncCurrentFrame(*doc);   // as EditorSession::endEdit does
+        history.end(doc, std::nullopt);
+    };
+    edit("Create Frame Animation", [](Document& d) { ensureAnimation(d); });
+    edit("New Frame", [](Document& d) { duplicateFrame(d, 0); });
+    edit("Hide A", [](Document& d) { d.layers[0].visible = false; });   // into frame 1
+    CHECK_EQ(history.undoCount(), 3);
+    CHECK(selectFrame(*doc, 0));
+    CHECK(selectFrame(*doc, 1));
+    CHECK(selectFrame(*doc, 0));
+    CHECK_EQ(history.undoCount(), 3);   // selecting added nothing
+    CHECK(doc->layers[0].visible);
+    edit("Move B", [](Document& d) { d.layers[1].transform.origin = Point(12, 2); });   // into frame 0
+    CHECK_EQ(history.undoCount(), 4);
+    // Undo returns to the frame the undone edit was made in, with the layers as that frame showed them.
+    auto s = history.undo();
+    REQUIRE(s && s->document);
+    doc = s->document;
+    CHECK_EQ(doc->animation.current, 0);
+    CHECK(doc->layers[1].transform.origin == Point(10, 0));
+    CHECK(doc->layers[0].visible);
+    s = history.undo();   // Hide A, made in frame 1
+    REQUIRE(s && s->document);
+    doc = s->document;
+    CHECK_EQ(doc->animation.current, 1);
+    CHECK(doc->layers[0].visible);
+    CHECK(doc->animation.frames[1].layers.at(doc->layers[0].id).visible);
+    s = history.redo();
+    REQUIRE(s && s->document);
+    doc = s->document;
+    CHECK_EQ(doc->animation.current, 1);
+    CHECK(!doc->layers[0].visible);
+    s = history.redo();
+    REQUIRE(s && s->document);
+    doc = s->document;
+    CHECK_EQ(doc->animation.current, 0);
+    CHECK(doc->layers[0].visible);
+    CHECK(doc->layers[1].transform.origin == Point(12, 2));
+    CHECK(doc->animation.frames[0].layers.at(doc->layers[1].id).position == Point(12, 2));
+    CHECK(doc->animation.frames[1].layers.at(doc->layers[1].id).position == Point(10, 0));
+}
+
 TEST_MAIN()
