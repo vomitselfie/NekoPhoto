@@ -1,6 +1,6 @@
 # High bit depth and colour management: design plan
 
-Status: design, for review before any code. Surveyed against `src/core` (~31.5k lines), `src/app`, `tests/`.
+Status: P1–P4 landed in 1.7 (16-bit RGB editing, painting and colour management); see "Status" below for each phase and what is still gated at 16 bits. P5–P8 are planned. The design sections below are kept as written.
 
 ## 1. Where we are
 
