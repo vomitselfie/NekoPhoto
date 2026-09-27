@@ -1922,6 +1922,39 @@ TEST_CASE(matting_uncertainty_marks_what_two_colours_cannot_explain) {
     CHECK_EQ(debug.uncertainty.at(115, 40), 0.0f);
 }
 
+TEST_CASE(smart_wand_margin_is_a_confidence_not_an_opacity) {
+    // Red on the left, blue on the right, a soft 40-pixel blend between: a click on the red and an Alt-click on the
+    // blue. The margin is strongly positive on the red, strongly negative on the blue, and ambiguous in the blend,
+    // where the two clicks compete; another click in the blend moves its margin its way.
+    const int w = 200, h = 40;
+    Image image(w, h);
+    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+        const double t = std::clamp((x - 80) / 40.0, 0.0, 1.0);
+        uint8_t* p = image.pixel(x, y);
+        p[0] = uint8_t(std::lround(210 * (1 - t) + 30 * t)); p[1] = 40; p[2] = uint8_t(std::lround(40 * (1 - t) + 200 * t)); p[3] = 255;
+    }
+    SmartWandImage prepared(image);
+    const auto red = prepared.propagate(20, 20, 2, wandCost(255)), blue = prepared.propagate(180, 20, 2, wandCost(255));
+    const auto margin = wandMarginField({&red}, {&blue});
+    auto at = [&](int x) { return margin[size_t(20) * w + size_t(x)]; };
+    CHECK(at(20) > 0.9f);
+    CHECK(at(180) < -0.9f);
+    CHECK(std::fabs(at(100)) < wandAmbiguousMargin);
+    const GrayImage ambiguous = wandAmbiguity(margin, w, h);
+    CHECK_EQ(int(ambiguous.at(100, 20)), 255);
+    CHECK_EQ(int(ambiguous.at(20, 20)), 0);
+    CHECK_EQ(int(ambiguous.at(180, 20)), 0);
+    for (float m : margin) { CHECK(m >= -1.0f); CHECK(m <= 1.0f); }
+    // The difference form: in tolerance units, same sign.
+    const auto difference = wandMarginField({&red}, {&blue}, WandMargin::Difference);
+    CHECK(difference[size_t(20) * w + 20] > 32);
+    CHECK(difference[size_t(20) * w + 180] < -32);
+    // A second click in the blend's blue half pulls the blend towards the clicks.
+    const auto more = prepared.propagate(108, 20, 2, wandCost(255));
+    const auto after = wandMarginField({&red, &more}, {&blue});
+    CHECK(after[size_t(20) * w + 108] > at(108));
+}
+
 TEST_CASE(foreground_estimation_removes_the_background_tint) {
     // Red over blue through a 24-pixel ramp, with the true opacity as the matte: the estimated colour in the
     // band is the red, not the mix; opaque pixels and pixels away from the edge are untouched.
