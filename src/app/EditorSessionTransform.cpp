@@ -93,7 +93,7 @@ void EditorSession::beginTransform(bool persistent) {
 }
 
 void EditorSession::beginSelectionTransform() {
-    if (refusedAtDepth("edit.selection", tr("Selections"))) return;
+    if (refusedAtDepth("edit.transformSelection", tr("Transforming selected pixels"))) return;
     if (!canTransformSelection()) return;
     const Layer* source = activeLayer();
     auto lifted = renderSelectedPixels(false);
@@ -104,7 +104,7 @@ void EditorSession::beginSelectionTransform() {
     beginEdit(QT_TRANSLATE_NOOP("History", "Transform Selection"));
     Layer* src = document_->find(source->id);
     clearSelectedPixelsNow(*src);
-    Layer floating(Asset::make(lifted->image, QCoreApplication::translate("Names", "Floating Selection").toStdString()), toPoint(lifted->origin));
+    Layer floating(Asset::makeAny(lifted->image, QCoreApplication::translate("Names", "Floating Selection").toStdString()), toPoint(lifted->origin));
     floating.name = QCoreApplication::translate("Names", "Floating Selection").toStdString();
     floating.parentId = src->parentId;
     floating.opacity = src->opacity;
@@ -114,7 +114,7 @@ void EditorSession::beginSelectionTransform() {
     setActiveLayer(floating.id);
     tool_ = Tool::Move;
     TransformEdit edit{.layerId = floating.id, .draft = floating.transform, .persistent = true, .mask = false};
-    edit.floating = FloatingTransform{source->id, std::move(before), beforeActive, floating.transform, lifted->image->width(), lifted->image->height()};
+    edit.floating = FloatingTransform{source->id, std::move(before), beforeActive, floating.transform, lifted->image.width(), lifted->image.height()};
     transformEdit_ = edit;
     emit toolChanged();
     notifyDocument();

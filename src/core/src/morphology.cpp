@@ -1,5 +1,6 @@
 #include "compositor/morphology.h"
 #include "compositor/blur.h"
+#include "compositor/imaget.h"
 #include "compositor/parallel.h"
 #include <algorithm>
 #include <cmath>
@@ -10,6 +11,11 @@ namespace compositor {
 namespace {
 
 constexpr float farAway = 1e20f;
+
+/// Full scale and the "selected" threshold (half, rounded up as 128 is at 8 bits) of a coverage raster.
+template <class G> struct Scale;
+template <> struct Scale<GrayImage> { using Sample = uint8_t; static constexpr float one = 255.0f; static constexpr unsigned half = 128; };
+template <> struct Scale<Gray16> { using Sample = uint16_t; static constexpr float one = 32768.0f; static constexpr unsigned half = 16384; };
 
 /// One-dimensional squared distance transform of `f` (n samples, farAway where there is no source)
 /// into `d`, with scratch `v` (n ints) and `z` (n + 1 floats). Felzenszwalb & Huttenlocher 2012, §3.
@@ -39,9 +45,8 @@ void transform1d(const float* f, float* d, int n, int* v, float* z) {
     }
 }
 
-} // namespace
-
-std::vector<float> squaredDistanceTransform(const GrayImage& coverage, bool selected) {
+template <class G>
+std::vector<float> squaredDistanceTransformImpl(const G& coverage, bool selected) {
     const int w = coverage.width(), h = coverage.height();
     std::vector<float> d(size_t(w) * h);
     // Columns first: for each x, the 1-D transform down y of "0 where the pixel is a source, far otherwise".
@@ -50,7 +55,7 @@ std::vector<float> squaredDistanceTransform(const GrayImage& coverage, bool sele
         std::vector<float> f(n), out(n), z(n + 1);
         std::vector<int> v(n);
         for (int x = x0; x < x1; x++) {
-            for (int y = 0; y < h; y++) f[size_t(y)] = (coverage.at(x, y) >= 128) == selected ? 0.0f : farAway;
+            for (int y = 0; y < h; y++) f[size_t(y)] = (coverage.at(x, y) >= Scale<G>::half) == selected ? 0.0f : farAway;
             transform1d(f.data(), out.data(), h, v.data(), z.data());
             for (int y = 0; y < h; y++) d[size_t(y) * w + size_t(x)] = out[size_t(y)];
         }
@@ -70,34 +75,38 @@ std::vector<float> squaredDistanceTransform(const GrayImage& coverage, bool sele
     return d;
 }
 
-std::shared_ptr<GrayImage> growSelection(const GrayImage& coverage, int amount) {
+template <class G>
+std::shared_ptr<G> growSelectionImpl(const G& coverage, int amount) {
+    using S = typename Scale<G>::Sample;
+    constexpr float one = Scale<G>::one;
+    constexpr unsigned half = Scale<G>::half;
     const int w = coverage.width(), h = coverage.height();
-    auto out = std::make_shared<GrayImage>(w, h, 0);
+    auto out = std::make_shared<G>(w, h, 0);
     if (amount == 0) { *out = coverage; return out; }
     const float r = float(std::abs(amount));
     if (amount > 0) {
         // Outside pixels within r of the selection join it; the rim ramps over one pixel.
-        std::vector<float> d = squaredDistanceTransform(coverage, true);
+        std::vector<float> d = squaredDistanceTransformImpl(coverage, true);
         parallelRows(0, h, [&](int y0, int y1) {
             for (int y = y0; y < y1; y++) {
-                uint8_t* o = out->row(y);
+                S* o = out->row(y);
                 const float* dr = &d[size_t(y) * w];
                 for (int x = 0; x < w; x++) {
-                    float v = coverage.at(x, y) >= 128 ? 1.0f : std::clamp(r + 0.5f - std::sqrt(dr[x]), 0.0f, 1.0f);
-                    o[x] = uint8_t(v * 255 + 0.5f);
+                    float v = coverage.at(x, y) >= half ? 1.0f : std::clamp(r + 0.5f - std::sqrt(dr[x]), 0.0f, 1.0f);
+                    o[x] = S(v * one + 0.5f);
                 }
             }
         });
     } else {
         // Inside pixels within r of the outside leave it.
-        std::vector<float> d = squaredDistanceTransform(coverage, false);
+        std::vector<float> d = squaredDistanceTransformImpl(coverage, false);
         parallelRows(0, h, [&](int y0, int y1) {
             for (int y = y0; y < y1; y++) {
-                uint8_t* o = out->row(y);
+                S* o = out->row(y);
                 const float* dr = &d[size_t(y) * w];
                 for (int x = 0; x < w; x++) {
-                    float v = coverage.at(x, y) < 128 ? 0.0f : std::clamp(std::sqrt(dr[x]) - r + 0.5f, 0.0f, 1.0f);
-                    o[x] = uint8_t(v * 255 + 0.5f);
+                    float v = coverage.at(x, y) < half ? 0.0f : std::clamp(std::sqrt(dr[x]) - r + 0.5f, 0.0f, 1.0f);
+                    o[x] = S(v * one + 0.5f);
                 }
             }
         });
@@ -105,31 +114,35 @@ std::shared_ptr<GrayImage> growSelection(const GrayImage& coverage, int amount) 
     return out;
 }
 
-std::shared_ptr<GrayImage> borderSelection(const GrayImage& coverage, int width) {
+template <class G>
+std::shared_ptr<G> borderSelectionImpl(const G& coverage, int width) {
+    using S = typename Scale<G>::Sample;
     const int w = coverage.width(), h = coverage.height();
-    auto out = std::make_shared<GrayImage>(w, h, 0);
+    auto out = std::make_shared<G>(w, h, 0);
     if (width <= 0) return out;
-    std::vector<float> toSelected = squaredDistanceTransform(coverage, true);
-    std::vector<float> toOutside = squaredDistanceTransform(coverage, false);
+    std::vector<float> toSelected = squaredDistanceTransformImpl(coverage, true);
+    std::vector<float> toOutside = squaredDistanceTransformImpl(coverage, false);
     const float half = width / 2.0f;
     parallelRows(0, h, [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) {
-            uint8_t* o = out->row(y);
+            S* o = out->row(y);
             for (int x = 0; x < w; x++) {
                 size_t i = size_t(y) * w + size_t(x);
                 // Signed distance to the edge: positive inside (to the outside), negative outside (to the selection).
-                float signedDistance = coverage.at(x, y) >= 128 ? std::sqrt(toOutside[i]) - 0.5f : -(std::sqrt(toSelected[i]) - 0.5f);
+                float signedDistance = coverage.at(x, y) >= Scale<G>::half ? std::sqrt(toOutside[i]) - 0.5f : -(std::sqrt(toSelected[i]) - 0.5f);
                 float v = std::clamp(half + 0.5f - std::fabs(signedDistance), 0.0f, 1.0f);
-                o[x] = uint8_t(v * 255 + 0.5f);
+                o[x] = S(v * Scale<G>::one + 0.5f);
             }
         }
     });
     return out;
 }
 
-std::shared_ptr<GrayImage> smoothSelection(const GrayImage& coverage, int radius) {
+template <class G>
+std::shared_ptr<G> smoothSelectionImpl(const G& coverage, int radius) {
+    using S = typename Scale<G>::Sample;
     const int w = coverage.width(), h = coverage.height();
-    auto out = std::make_shared<GrayImage>(w, h, 0);
+    auto out = std::make_shared<G>(w, h, 0);
     if (radius <= 0) { *out = coverage; return out; }
     // Row prefix sums of the selected mask, then each pixel counts the disc as one span per row.
     std::vector<int32_t> prefix(size_t(w + 1) * h);
@@ -137,7 +150,7 @@ std::shared_ptr<GrayImage> smoothSelection(const GrayImage& coverage, int radius
         for (int y = y0; y < y1; y++) {
             int32_t* p = &prefix[size_t(y) * (w + 1)];
             p[0] = 0;
-            for (int x = 0; x < w; x++) p[x + 1] = p[x] + (coverage.at(x, y) >= 128 ? 1 : 0);
+            for (int x = 0; x < w; x++) p[x + 1] = p[x] + (coverage.at(x, y) >= Scale<G>::half ? 1 : 0);
         }
     });
     std::vector<int> halfWidth(size_t(radius) + 1);
@@ -145,7 +158,7 @@ std::shared_ptr<GrayImage> smoothSelection(const GrayImage& coverage, int radius
     for (int dy = 0; dy <= radius; dy++) { halfWidth[size_t(dy)] = int(std::floor(std::sqrt(double(radius) * radius - double(dy) * dy))); discArea += (dy == 0 ? 1 : 2) * (2 * halfWidth[size_t(dy)] + 1); }
     parallelRows(0, h, [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) {
-            uint8_t* o = out->row(y);
+            S* o = out->row(y);
             for (int x = 0; x < w; x++) {
                 long count = 0;
                 for (int dy = -radius; dy <= radius; dy++) {
@@ -156,17 +169,30 @@ std::shared_ptr<GrayImage> smoothSelection(const GrayImage& coverage, int radius
                     const int32_t* p = &prefix[size_t(yy) * (w + 1)];
                     count += p[xb] - p[xa];
                 }
-                o[x] = count * 2 > discArea ? 255 : 0;
+                o[x] = count * 2 > discArea ? S(Scale<G>::one) : S(0);
             }
         }
     });
     return out;
 }
 
-std::shared_ptr<GrayImage> featherSelection(const GrayImage& coverage, double radius) {
-    auto out = std::make_shared<GrayImage>(coverage);
+template <class G>
+std::shared_ptr<G> featherSelectionImpl(const G& coverage, double radius) {
+    auto out = std::make_shared<G>(coverage);
     if (radius > 0) gaussianBlur(*out, radius);
     return out;
 }
+
+} // namespace
+
+std::vector<float> squaredDistanceTransform(const GrayImage& coverage, bool selected) { return squaredDistanceTransformImpl(coverage, selected); }
+std::shared_ptr<GrayImage> growSelection(const GrayImage& coverage, int amount) { return growSelectionImpl(coverage, amount); }
+std::shared_ptr<GrayImage> smoothSelection(const GrayImage& coverage, int radius) { return smoothSelectionImpl(coverage, radius); }
+std::shared_ptr<GrayImage> borderSelection(const GrayImage& coverage, int width) { return borderSelectionImpl(coverage, width); }
+std::shared_ptr<GrayImage> featherSelection(const GrayImage& coverage, double radius) { return featherSelectionImpl(coverage, radius); }
+std::shared_ptr<Gray16> growSelection(const Gray16& coverage, int amount) { return growSelectionImpl(coverage, amount); }
+std::shared_ptr<Gray16> smoothSelection(const Gray16& coverage, int radius) { return smoothSelectionImpl(coverage, radius); }
+std::shared_ptr<Gray16> borderSelection(const Gray16& coverage, int width) { return borderSelectionImpl(coverage, width); }
+std::shared_ptr<Gray16> featherSelection(const Gray16& coverage, double radius) { return featherSelectionImpl(coverage, radius); }
 
 } // namespace compositor

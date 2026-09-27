@@ -14,6 +14,7 @@
 #include <cstring>
 #include <map>
 #include <set>
+#include <type_traits>
 
 using namespace compositor;
 
@@ -63,12 +64,7 @@ std::optional<Selection> EditorSession::displayedSelection() const {
     if (pixelMove_ && pixelMove_->origin.coverage) {
         int dx = int(pixelMove_->offset.x()), dy = int(pixelMove_->offset.y());
         if (dx == 0 && dy == 0) return pixelMove_->origin;
-        const GrayImage& src = *pixelMove_->origin.coverage.u8();
-        auto moved = std::make_shared<GrayImage>(src.width(), src.height(), 0);
-        for (int y = 0; y < src.height(); y++) { int sy = y - dy; if (sy < 0 || sy >= src.height()) continue; for (int x = 0; x < src.width(); x++) { int sx = x - dx; if (sx >= 0 && sx < src.width()) moved->at(x, y) = src.at(sx, sy); } }
-        Selection s = pixelMove_->origin;
-        s.coverage = moved;
-        return s;
+        return offsetSelection(pixelMove_->origin, dx, dy);
     }
     if (transformEdit_ && transformEdit_->floating && document_->selection->coverage) {
         const FloatingTransform& f = *transformEdit_->floating;
@@ -149,63 +145,97 @@ bool EditorSession::canCopyPixels() const {
 std::optional<EditorSession::PixelClipboard> EditorSession::renderSelectedPixels(bool merged) const {
     if (!document_) return std::nullopt;
     Rect region = document_->rect();
-    const GrayImage* coverage = nullptr;
     if (document_->selection) {
         if (!document_->selection->coverage || document_->selection->isEmpty()) return std::nullopt;
-        coverage = document_->selection->coverage.u8().get();
         region = document_->selection->bounds().intersection(document_->rect());
     }
     if (region.isEmpty()) return std::nullopt;
-    Image out(int(region.width), int(region.height));
     RenderOptions options;
     options.region = region;
-    if (merged) render(*document_, options, out);
-    else {
-        const Layer* layer = activeLayer();
-        if (!layer) return std::nullopt;
-        if (isMaskSelected_ && layer->mask) {
+    const Layer* layer = activeLayer();
+    if (!merged && !layer) return std::nullopt;
+    const bool deep = document_->sampleType == SampleType::U16;
+    // The pixels at the document's depth, then multiplied by the selection's coverage.
+    auto take = [&](auto& out, const auto* coverage) -> bool {
+        using Out = std::remove_cvref_t<decltype(out)>;
+        using Sample = std::remove_cvref_t<decltype(*out.data())>;
+        constexpr uint32_t full = std::is_same_v<Sample, uint8_t> ? 255u : one16;
+        if (merged) {
+            if constexpr (std::is_same_v<Out, Image>) render(*document_, options, out); else render16(*document_, options, out);
+        } else if (isMaskSelected_ && layer->mask) {
             // The mask as opaque gray, placed as it sits on the document.
-            GrayImage gray(out.width(), out.height(), layer->mask->placement ? LayerMask::background(*layer->mask->asset.thumbnail) : 0);
-            sampleMaskCoverage(*layer->mask->asset.image.u8(), layer->maskTransform(), region, 1, gray.at(0, 0), gray, false);
-            for (int y = 0; y < out.height(); y++) for (int x = 0; x < out.width(); x++) { uint8_t* p = out.pixel(x, y); p[0] = p[1] = p[2] = gray.at(x, y); p[3] = 255; }
-        } else if (layer->asset && layer->asset->image.u8()) {
+            using Gray = std::conditional_t<std::is_same_v<Out, Image>, GrayImage, Gray16>;
+            const uint8_t background8 = layer->mask->placement ? LayerMask::background(*layer->mask->asset.thumbnail) : 0;
+            const Sample background = std::is_same_v<Out, Image> ? Sample(background8) : Sample(widen8(background8));
+            Gray gray(out.width(), out.height(), background);
+            if constexpr (std::is_same_v<Out, Image>) {
+                if (!layer->mask->asset.image.u8()) return false;
+                sampleMaskCoverage(*layer->mask->asset.image.u8(), layer->maskTransform(), region, 1, gray.at(0, 0), gray, false);
+            } else {
+                if (!layer->mask->asset.image.u16()) return false;
+                sampleMaskCoverage(*layer->mask->asset.image.u16(), layer->maskTransform(), region, 1, gray.at(0, 0), gray, false);
+            }
+            for (int y = 0; y < out.height(); y++) for (int x = 0; x < out.width(); x++) { Sample* p = out.pixel(x, y); p[0] = p[1] = p[2] = gray.at(x, y); p[3] = Sample(full); }
+        } else if (layer->asset && layer->asset->image) {
             Document single(document_->width, document_->height);
+            single.sampleType = document_->sampleType;
             Layer copy = *layer;
             copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.maskSourceId.reset();
             single.layers = {copy};
-            render(single, options, out);
-        } else return std::nullopt;
+            if constexpr (std::is_same_v<Out, Image>) render(single, options, out); else render16(single, options, out);
+        } else return false;
+        if (coverage)
+            for (int y = 0; y < out.height(); y++) for (int x = 0; x < out.width(); x++) {
+                const uint32_t k = std::min<uint32_t>(coverage->at(x + int(region.x), y + int(region.y)), full);
+                Sample* p = out.pixel(x, y);
+                for (int c = 0; c < 4; c++) p[c] = Sample((p[c] * k + full / 2) / full);
+            }
+        return true;
+    };
+    if (deep) {
+        auto out = std::make_shared<Image16>(int(region.width), int(region.height));
+        const Gray16* coverage = document_->selection ? document_->selection->coverage.u16().get() : nullptr;
+        if (document_->selection && !coverage) return std::nullopt;
+        if (!take(*out, coverage)) return std::nullopt;
+        return PixelClipboard{Image16Ptr(out), QPointF(region.x, region.y)};
     }
-    if (coverage) {
-        for (int y = 0; y < out.height(); y++) for (int x = 0; x < out.width(); x++) {
-            unsigned k = coverage->at(x + int(region.x), y + int(region.y));
-            uint8_t* p = out.pixel(x, y);
-            for (int c = 0; c < 4; c++) p[c] = uint8_t((p[c] * k + 127) / 255);
-        }
-    }
+    Image out(int(region.width), int(region.height));
+    const GrayImage* coverage = document_->selection ? document_->selection->coverage.u8().get() : nullptr;
+    if (document_->selection && !coverage) return std::nullopt;
+    if (!take(out, coverage)) return std::nullopt;
     return PixelClipboard{std::make_shared<Image>(std::move(out)), QPointF(region.x, region.y)};
 }
 
+namespace {
+
+/// What the system clipboard gets: 8 bits whatever the document's depth.
+QImage clipboardImage(const AnyImage& image) {
+    if (image.u16()) return toQImage(*narrowImage(*image.u16())).convertToFormat(QImage::Format_ARGB32);
+    return image.u8() ? toQImage(*image.u8()).convertToFormat(QImage::Format_ARGB32) : QImage();
+}
+
+} // namespace
+
 void EditorSession::copySelection() {
-    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return;
+    if (refusedAtDepth("edit.clipboard", tr("Editing pixels"))) return;
     if (!canCopyPixels()) return;
     auto copied = renderSelectedPixels(false);
     if (!copied) return;
     pixelClipboard_ = copied;
-    QApplication::clipboard()->setImage(toQImage(*copied->image).convertToFormat(QImage::Format_ARGB32));
+    QApplication::clipboard()->setImage(clipboardImage(copied->image));
 }
 
 void EditorSession::copyMerged() {
-    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return;
+    if (refusedAtDepth("edit.clipboard", tr("Editing pixels"))) return;
     if (!canEditLayers() || (document_->selection && document_->selection->isEmpty())) return;
     auto copied = renderSelectedPixels(true);
     if (!copied) return;
     pixelClipboard_ = copied;
-    QApplication::clipboard()->setImage(toQImage(*copied->image).convertToFormat(QImage::Format_ARGB32));
+    QApplication::clipboard()->setImage(clipboardImage(copied->image));
 }
 
 void EditorSession::cutSelection() {
-    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return;
+    if (refusedAtDepth("edit.clipboard", tr("Editing pixels"))) return;
     if (!document_ || !document_->selection || !canCopyPixels()) return;
     copySelection();
     clearSelectionPixels();
@@ -217,12 +247,12 @@ bool EditorSession::canPaste() const {
 }
 
 void EditorSession::paste() {
-    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return;
+    if (refusedAtDepth("edit.clipboard", tr("Editing pixels"))) return;
     if (!canPaste()) return;
     const QMimeData* mime = QApplication::clipboard()->mimeData();
     QImage external = mime->hasImage() ? qvariant_cast<QImage>(mime->imageData()) : QImage();
     // Pixels copied here go back exactly where they came from unless another app copied since.
-    if (pixelClipboard_ && (!mime->hasImage() || (external.width() == pixelClipboard_->image->width() && external.height() == pixelClipboard_->image->height()))) {
+    if (pixelClipboard_ && (!mime->hasImage() || (external.width() == pixelClipboard_->image.width() && external.height() == pixelClipboard_->image.height()))) {
         addPixelLayer(pixelClipboard_->image, pixelClipboard_->origin, QT_TRANSLATE_NOOP("History", "Paste"), true);
         return;
     }
@@ -232,7 +262,7 @@ void EditorSession::paste() {
 }
 
 void EditorSession::layerViaCopy() {
-    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return;
+    if (refusedAtDepth("edit.clipboard", tr("Editing pixels"))) return;
     if (!canEditLayers()) return;
     const Layer* layer = activeLayer();
     if (!layer || layer->isGroup) return;
@@ -242,9 +272,11 @@ void EditorSession::layerViaCopy() {
     addPixelLayer(copied->image, copied->origin, QT_TRANSLATE_NOOP("History", "Layer via Copy"), false);
 }
 
-void EditorSession::addPixelLayer(std::shared_ptr<const Image> image, QPointF origin, const QString& editName, bool dropsSelection) {
+void EditorSession::addPixelLayer(AnyImage image, QPointF origin, const QString& editName, bool dropsSelection) {
     if (!document_ || !image || document_->layers.size() >= size_t(Document::maxLayers)) return;
-    Layer layer(Asset::make(image, nextLayerName(document_->layers, QCoreApplication::translate("Names", "Layer").toStdString())), toPoint(origin));
+    // Pixels copied from a document of the other depth (or another app, at 8 bits) take this one's.
+    image = imageAtDepth(image, document_->sampleType);
+    Layer layer(Asset::makeAny(image, nextLayerName(document_->layers, QCoreApplication::translate("Names", "Layer").toStdString())), toPoint(origin));
     const Layer* active = activeLayer();
     layer.parentId = active && active->isGroup ? activeLayerId_ : (active ? active->parentId : std::nullopt);
     int index = activeLayerId_ ? document_->indexOf(*activeLayerId_) + 1 : int(document_->layers.size());

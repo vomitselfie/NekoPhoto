@@ -486,6 +486,7 @@ public:
 
     // Selection
     void applySelectionShape(const compositor::GrayImage& shape, compositor::SelectionMode mode, const QString& name);
+    void applySelectionShape(const compositor::Gray16& shape, compositor::SelectionMode mode, const QString& name);
     void selectAll();
     void deselect();
     void invertSelection();
@@ -863,11 +864,13 @@ private:
     QRectF strokeRegion_;   // everything the stroke has painted so far, in document pixels
     bool strokeMask_ = false;
     std::optional<QPointF> lastBrushPoint_;
-    struct PixelClipboard { std::shared_ptr<const compositor::Image> image; QPointF origin; };
+    /// Copied pixels at the depth of the document they came from.
+    struct PixelClipboard { compositor::AnyImage image; QPointF origin; };
     std::optional<PixelClipboard> pixelClipboard_;
     /// The active layer's pixels (or the composite) as they sit on the canvas, inside the selection's whole-pixel bounds.
     std::optional<PixelClipboard> renderSelectedPixels(bool merged) const;
-    void addPixelLayer(std::shared_ptr<const compositor::Image> image, QPointF origin, const QString& editName, bool dropsSelection);
+    /// A new layer of `image`, brought to the document's depth.
+    void addPixelLayer(compositor::AnyImage image, QPointF origin, const QString& editName, bool dropsSelection);
     bool opacityEditing_ = false;
     bool visibilitySwipe_ = false;
     /// Bumped on every document notification; cheap change detection for caches.
@@ -950,6 +953,8 @@ private:
     /// `opacity`, as one undo step named `name`.
     /// With `from` (document size, premultiplied), each pixel takes `from`'s there instead of `color`.
     bool fillThrough(const QColor& color, const compositor::GrayImage* coverage, double opacity, const char* name, const compositor::Image* from = nullptr);
+    /// Fill and Fill Path in a 16-bit document: the colour through `coverage` (null: everywhere) at 16 bits.
+    bool fillThrough16(const QColor& color, const compositor::Gray16* coverage, const char* name);
     compositor::AnyImage previewImage_;
     std::optional<compositor::LayerTransform> previewTransform_;
     std::optional<std::pair<compositor::Uuid, compositor::Uuid>> transformDuplicate_; // copy, source

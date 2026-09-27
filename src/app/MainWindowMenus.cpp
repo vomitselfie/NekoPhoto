@@ -187,10 +187,10 @@ void MainWindow::buildMenus() {
     undoAction_ = edit->addAction(tr("&Undo"), QKeySequence::Undo, this, [this] { session_->undo(); });
     redoAction_ = edit->addAction(tr("&Redo"), QKeySequence("Ctrl+Shift+Z"), this, [this] { session_->redo(); });
     edit->addSeparator();
-    needsDocument(edit->addAction(tr("Cu&t"), QKeySequence::Cut, this, [this] { session_->cutSelection(); }));
-    needsDocument(edit->addAction(tr("&Copy"), QKeySequence::Copy, this, [this] { session_->copySelection(); }));
-    needsDocument(edit->addAction(tr("Copy &Merged"), QKeySequence("Ctrl+Shift+C"), this, [this] { session_->copyMerged(); }));
-    needsDocument(edit->addAction(tr("&Paste"), QKeySequence::Paste, this, [this] { session_->paste(); }));
+    needsDocument(edit->addAction(tr("Cu&t"), QKeySequence::Cut, this, [this] { session_->cutSelection(); }), "edit.clipboard");
+    needsDocument(edit->addAction(tr("&Copy"), QKeySequence::Copy, this, [this] { session_->copySelection(); }), "edit.clipboard");
+    needsDocument(edit->addAction(tr("Copy &Merged"), QKeySequence("Ctrl+Shift+C"), this, [this] { session_->copyMerged(); }), "edit.clipboard");
+    needsDocument(edit->addAction(tr("&Paste"), QKeySequence::Paste, this, [this] { session_->paste(); }), "edit.clipboard");
     edit->addSeparator();
     needsDocument(edit->addAction(tr("&Free Transform"), QKeySequence("Ctrl+T"), this, [this] { session_->transformCommand(); }), "layers.transform");
     needsDocument(edit->addAction(tr("&Warp…"), this, [this] { WarpDialog(session_, this).exec(); }));
@@ -199,8 +199,8 @@ void MainWindow::buildMenus() {
         if (!session_->beginWarpCage(&error)) showError(tr("Warp Cage"), error);
         else statusBar()->showMessage(tr("Drag the cage's points; Enter applies, Esc cancels."), 8000);
     }));
-    needsDocument(edit->addAction(tr("Fill with Foreground"), QKeySequence("Alt+Backspace"), this, [this] { session_->fillSelection(session_->foregroundColor); recordAction("pixels.fill", {{"color", session_->foregroundColor.name()}}); }));
-    needsDocument(edit->addAction(tr("Fill with Background"), QKeySequence("Ctrl+Backspace"), this, [this] { session_->fillSelection(session_->backgroundColor); recordAction("pixels.fill", {{"color", session_->backgroundColor.name()}}); }));
+    needsDocument(edit->addAction(tr("Fill with Foreground"), QKeySequence("Alt+Backspace"), this, [this] { session_->fillSelection(session_->foregroundColor); recordAction("pixels.fill", {{"color", session_->foregroundColor.name()}}); }), "edit.fill");
+    needsDocument(edit->addAction(tr("Fill with Background"), QKeySequence("Ctrl+Backspace"), this, [this] { session_->fillSelection(session_->backgroundColor); recordAction("pixels.fill", {{"color", session_->backgroundColor.name()}}); }), "edit.fill");
     QAction* clear = needsDocument(edit->addAction(tr("Clear"), QKeySequence(Qt::Key_Delete), this, [this] {
         if (session_->document() && session_->document()->selection) { session_->clearSelectionPixels(); recordAction("pixels.clear"); }
         else { deleteSelectedLayers(); recordAction("layers.delete"); }
@@ -209,7 +209,7 @@ void MainWindow::buildMenus() {
     needsDocument(edit->addAction(tr("Content-Aware Fill…"), QKeySequence("Shift+F5"), this, [this] {
         if (!session_->canAdjustPixels() || !session_->document()->selection || !session_->document()->selection->coverage) { showError(tr("Content-Aware Fill"), tr("Select a visible image layer and an area to fill.")); return; }
         (new ContentFillDialog(session_, this))->show();
-    }));
+    }), "edit.fill");
     needsDocument(edit->addAction(tr("Content-Aware Scale…"), QKeySequence("Ctrl+Alt+Shift+C"), this, [this] { (new ContentAwareScaleDialog(session_, this))->show(); }));
 
     edit->addSeparator();
@@ -322,7 +322,7 @@ void MainWindow::buildMenus() {
     needsDocument(layer->addAction(tr("New Layer &Below"), this, [this] { session_->addBlankLayer(true); recordAction("layers.add", {{"below", true}}); }), "layers.structure");
     needsDocument(layer->addAction(tr("New &Folder"), this, [this] { session_->addGroup(); recordAction("layers.add", {{"kind", "group"}}); }), "layers.structure");
     needsDocument(layer->addAction(tr("&Group Layers"), QKeySequence("Ctrl+G"), this, [this] { session_->groupSelectedLayers(); recordAction("layers.group"); }), "layers.structure");
-    needsDocument(layer->addAction(tr("Layer via &Copy"), QKeySequence("Ctrl+J"), this, [this] { session_->layerViaCopy(); }));
+    needsDocument(layer->addAction(tr("Layer via &Copy"), QKeySequence("Ctrl+J"), this, [this] { session_->layerViaCopy(); }), "edit.clipboard");
     needsDocument(layer->addAction(tr("&Duplicate Layer"), this, [this] { session_->duplicateActiveLayer(); recordAction("layers.duplicate"); }), "layers.structure");
     needsDocument(layer->addAction(tr("De&lete Layer"), this, [this] { deleteSelectedLayers(); recordAction("layers.delete"); }), "layers.structure");
     mergeAction_ = needsDocument(layer->addAction(tr("Merge Do&wn"), QKeySequence("Ctrl+E"), this, [this] { session_->mergeLayers(); recordAction("layers.merge"); }));
@@ -437,25 +437,25 @@ void MainWindow::buildMenus() {
     // Everything about the selection in one place, as Photoshop's Select menu: the whole-canvas commands,
     // then Modify, then loading a layer's pixels or mask as the selection.
     QMenu* select = menuBar()->addMenu(tr("&Select"));
-    needsDocument(select->addAction(tr("&All"), QKeySequence::SelectAll, this, [this] { session_->selectAll(); recordAction("selection.all"); }));
-    needsDocument(select->addAction(tr("&Deselect"), QKeySequence("Ctrl+D"), this, [this] { session_->deselect(); recordAction("selection.none"); }));
-    needsDocument(select->addAction(tr("&Inverse"), QKeySequence("Ctrl+Shift+I"), this, [this] { session_->invertSelection(); recordAction("selection.invert"); }));
-    needsDocument(select->addAction(tr("Edit in &Quick Mask Mode"), QKeySequence("Q"), this, [this] { session_->toggleQuickMask(); }));
+    needsDocument(select->addAction(tr("&All"), QKeySequence::SelectAll, this, [this] { session_->selectAll(); recordAction("selection.all"); }), "edit.selection");
+    needsDocument(select->addAction(tr("&Deselect"), QKeySequence("Ctrl+D"), this, [this] { session_->deselect(); recordAction("selection.none"); }), "edit.selection");
+    needsDocument(select->addAction(tr("&Inverse"), QKeySequence("Ctrl+Shift+I"), this, [this] { session_->invertSelection(); recordAction("selection.invert"); }), "edit.selection");
+    needsDocument(select->addAction(tr("Edit in &Quick Mask Mode"), QKeySequence("Q"), this, [this] { session_->toggleQuickMask(); }), "edit.selection");
     select->addSeparator();
     QMenu* modify = select->addMenu(tr("&Modify"));
-    needsDocument(modify->addAction(tr("&Expand…"), this, [this] { bool ok; int n = QInputDialog::getInt(this, tr("Expand Selection"), tr("Pixels"), 1, 1, 500, 1, &ok); if (ok) { session_->selectionExpand(n); recordAction("selection.grow", {{"amount", n}}); } }));
-    needsDocument(modify->addAction(tr("&Contract…"), this, [this] { bool ok; int n = QInputDialog::getInt(this, tr("Contract Selection"), tr("Pixels"), 1, 1, 500, 1, &ok); if (ok) { session_->selectionContract(n); recordAction("selection.grow", {{"amount", -n}}); } }));
-    needsDocument(modify->addAction(tr("&Feather…"), QKeySequence("Shift+F6"), this, [this] { bool ok; double r = QInputDialog::getDouble(this, tr("Feather Selection"), tr("Radius (pixels)"), 5, 0.1, 250, 1, &ok); if (ok) { session_->selectionFeather(r); recordAction("selection.feather", {{"radius", r}}); } }));
-    needsDocument(modify->addAction(tr("&Smooth…"), this, [this] { bool ok; int n = QInputDialog::getInt(this, tr("Smooth Selection"), tr("Sample radius (pixels)"), 3, 1, 100, 1, &ok); if (ok) { session_->selectionSmooth(n); recordAction("selection.smooth", {{"radius", n}}); } }));
-    needsDocument(modify->addAction(tr("&Border…"), this, [this] { bool ok; int n = QInputDialog::getInt(this, tr("Border Selection"), tr("Width (pixels)"), 4, 1, 200, 1, &ok); if (ok) { session_->selectionBorder(n); recordAction("selection.border", {{"width", n}}); } }));
+    needsDocument(modify->addAction(tr("&Expand…"), this, [this] { bool ok; int n = QInputDialog::getInt(this, tr("Expand Selection"), tr("Pixels"), 1, 1, 500, 1, &ok); if (ok) { session_->selectionExpand(n); recordAction("selection.grow", {{"amount", n}}); } }), "edit.selection");
+    needsDocument(modify->addAction(tr("&Contract…"), this, [this] { bool ok; int n = QInputDialog::getInt(this, tr("Contract Selection"), tr("Pixels"), 1, 1, 500, 1, &ok); if (ok) { session_->selectionContract(n); recordAction("selection.grow", {{"amount", -n}}); } }), "edit.selection");
+    needsDocument(modify->addAction(tr("&Feather…"), QKeySequence("Shift+F6"), this, [this] { bool ok; double r = QInputDialog::getDouble(this, tr("Feather Selection"), tr("Radius (pixels)"), 5, 0.1, 250, 1, &ok); if (ok) { session_->selectionFeather(r); recordAction("selection.feather", {{"radius", r}}); } }), "edit.selection");
+    needsDocument(modify->addAction(tr("&Smooth…"), this, [this] { bool ok; int n = QInputDialog::getInt(this, tr("Smooth Selection"), tr("Sample radius (pixels)"), 3, 1, 100, 1, &ok); if (ok) { session_->selectionSmooth(n); recordAction("selection.smooth", {{"radius", n}}); } }), "edit.selection");
+    needsDocument(modify->addAction(tr("&Border…"), this, [this] { bool ok; int n = QInputDialog::getInt(this, tr("Border Selection"), tr("Width (pixels)"), 4, 1, 200, 1, &ok); if (ok) { session_->selectionBorder(n); recordAction("selection.border", {{"width", n}}); } }), "edit.selection");
     select->addSeparator();
     QMenu* load = select->addMenu(tr("&Load as Selection"));
-    needsDocument(load->addAction(tr("Layer Pixels"), this, [this] { if (session_->activeLayerId()) { session_->loadLayerAsSelection(*session_->activeLayerId(), false, SelectionMode::Replace); recordAction("selection.fromLayer"); } }));
-    needsDocument(load->addAction(tr("Layer Mask"), this, [this] { if (session_->activeLayerId()) { session_->loadLayerAsSelection(*session_->activeLayerId(), true, SelectionMode::Replace); recordAction("selection.fromLayer", {{"mask", true}}); } }));
+    needsDocument(load->addAction(tr("Layer Pixels"), this, [this] { if (session_->activeLayerId()) { session_->loadLayerAsSelection(*session_->activeLayerId(), false, SelectionMode::Replace); recordAction("selection.fromLayer"); } }), "edit.selection");
+    needsDocument(load->addAction(tr("Layer Mask"), this, [this] { if (session_->activeLayerId()) { session_->loadLayerAsSelection(*session_->activeLayerId(), true, SelectionMode::Replace); recordAction("selection.fromLayer", {{"mask", true}}); } }), "edit.selection");
     load->addSeparator();
-    needsDocument(load->addAction(tr("Add Layer Pixels"), this, [this] { if (session_->activeLayerId()) session_->loadLayerAsSelection(*session_->activeLayerId(), false, SelectionMode::Add); }));
-    needsDocument(load->addAction(tr("Subtract Layer Pixels"), this, [this] { if (session_->activeLayerId()) session_->loadLayerAsSelection(*session_->activeLayerId(), false, SelectionMode::Subtract); }));
-    needsDocument(load->addAction(tr("Intersect with Layer Pixels"), this, [this] { if (session_->activeLayerId()) session_->loadLayerAsSelection(*session_->activeLayerId(), false, SelectionMode::Intersect); }));
+    needsDocument(load->addAction(tr("Add Layer Pixels"), this, [this] { if (session_->activeLayerId()) session_->loadLayerAsSelection(*session_->activeLayerId(), false, SelectionMode::Add); }), "edit.selection");
+    needsDocument(load->addAction(tr("Subtract Layer Pixels"), this, [this] { if (session_->activeLayerId()) session_->loadLayerAsSelection(*session_->activeLayerId(), false, SelectionMode::Subtract); }), "edit.selection");
+    needsDocument(load->addAction(tr("Intersect with Layer Pixels"), this, [this] { if (session_->activeLayerId()) session_->loadLayerAsSelection(*session_->activeLayerId(), false, SelectionMode::Intersect); }), "edit.selection");
 
     QMenu* filter = menuBar()->addMenu(tr("Filte&r"));
     auto filterAction = [this, filter, &needsDocument](const QString& label, FilterKind kind) {

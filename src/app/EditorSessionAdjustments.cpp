@@ -189,7 +189,7 @@ std::array<std::vector<double>, 4> EditorSession::activeHistogram() const {
 }
 
 void EditorSession::applySubjectMask(std::shared_ptr<const GrayImage> mask, std::shared_ptr<const Image> pixels, std::optional<Uuid> layerId) {
-    if (refusedAtDepth("edit.selection", tr("Selections"))) return;
+    if (refusedAtDepth("edit.removeBackground", tr("Remove Background"))) return;
     clearPixelPreview();
     Layer* layer = layerId ? (document_ ? document_->find(*layerId) : nullptr) : activeLayerMutable();
     if (!layer || !mask || !layer->asset || !layer->asset->image.u8()) return;

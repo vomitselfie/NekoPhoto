@@ -8,6 +8,8 @@
 #include "compositor/blur.h"
 #include "compositor/depth.h"
 #include "compositor/filters.h"
+#include "compositor/morphology.h"
+#include "compositor/selection.h"
 #include "compositor/render.h"
 #include <cmath>
 #include <cstdio>
@@ -277,6 +279,87 @@ TEST_CASE(sixteen_bit_selection_helpers_blend_through_coverage) {
     auto back = trimToPixels(*big, grown, trimmed);
     CHECK(*back == *source);
     CHECK(trimmed.samePlacement(t));
+}
+
+namespace {
+
+int grayApart(const GrayImage& eight, const Gray16& deep) {
+    auto reduced = narrowGray(deep);
+    int worst = 0;
+    for (int y = 0; y < eight.height(); y++) for (int x = 0; x < eight.width(); x++) worst = std::max(worst, std::abs(int(eight.at(x, y)) - int(reduced->at(x, y))));
+    return worst;
+}
+
+/// A soft-edged selection: an antialiased ellipse and a feathered rectangle.
+std::shared_ptr<GrayImage> softSelection() {
+    auto shape = rasterizeEllipse(Rect(12, 10, 70, 50), 120, 90, true);
+    auto rect = rasterizeRect(Rect(60, 40, 45, 35), 120, 90, true);
+    gaussianBlur(*rect, 2.5);
+    for (int y = 0; y < 90; y++) for (int x = 0; x < 120; x++) shape->at(x, y) = std::max(shape->at(x, y), rect->at(x, y));
+    return shape;
+}
+
+} // namespace
+
+/// Select > Modify and the selection operations at 16 bits: Expand, Contract, Border, Smooth and Feather decide on the
+/// same pixels as at 8 bits (selected from half coverage up), and their soft rims agree within a level.
+TEST_CASE(sixteen_bit_selection_operations_match_eight_bit) {
+    auto eight = softSelection();
+    auto deep = widenGray(*eight);
+    const bool report = std::getenv("COMPOSITOR_REPORT_U16_CALIBRATION") != nullptr;
+    auto check = [&](const char* what, const GrayImage& a, const Gray16& b) {
+        const int worst = grayApart(a, b);
+        if (report) std::fprintf(stderr, "  selection/%-26s worst %d\n", what, worst);
+        CHECK(worst <= 1);
+    };
+    for (int amount : {3, -2, 9}) check(amount > 0 ? "expand" : "contract", *growSelection(*eight, amount), *growSelection(*deep, amount));
+    check("border", *borderSelection(*eight, 5), *borderSelection(*deep, 5));
+    check("smooth", *smoothSelection(*eight, 4), *smoothSelection(*deep, 4));
+    check("feather", *featherSelection(*eight, 6.5), *featherSelection(*deep, 6.5));
+
+    // Combining a shape into a 16-bit selection keeps 16 bits; each mode as at 8 bits.
+    Selection current8;
+    current8.coverage = eight;
+    Selection current16;
+    current16.coverage = Gray16Ptr(deep);
+    auto shape = rasterizePolygon({{5, 5}, {110, 20}, {50, 85}}, 120, 90, true);
+    for (SelectionMode mode : {SelectionMode::Replace, SelectionMode::Add, SelectionMode::Subtract, SelectionMode::Intersect}) {
+        auto a = combineSelection(std::optional<Selection>(current8), *shape, mode, true);
+        auto b = combineSelection(std::optional<Selection>(current16), AnyGray(shape), mode, true, SampleType::U16);
+        CHECK(a && b && b->coverage.u16());
+        check("combine", *a->coverage.u8(), *b->coverage.u16());
+    }
+    // Inverse twice is the selection; a move keeps the depth.
+    Selection twice = invertSelection(invertSelection(current16, 120, 90), 120, 90);
+    CHECK(*twice.coverage.u16() == *deep);
+    Selection moved = offsetSelection(current16, 7, -3);
+    CHECK(moved.coverage.u16() && moved.coverage.u16()->at(50, 30) == deep->at(43, 33));
+    check("offset", *offsetSelection(current8, 7, -3).coverage.u8(), *moved.coverage.u16());
+    // A feathered 16-bit selection has far more than 256 steps.
+    auto soft = featherSelection(*rasterizeRect(Rect(20, 20, 80, 50), 120, 90, false), 12);
+    std::set<int> steps8;
+    for (int y = 0; y < 90; y++) for (int x = 0; x < 120; x++) steps8.insert(soft->at(x, y));
+    auto soft16 = featherSelection(*widenGray(*rasterizeRect(Rect(20, 20, 80, 50), 120, 90, false)), 12);
+    std::set<int> steps16;
+    for (int y = 0; y < 90; y++) for (int x = 0; x < 120; x++) steps16.insert(soft16->at(x, y));
+    CHECK(steps16.size() > steps8.size() * 4);
+}
+
+TEST_CASE(sixteen_bit_layer_as_selection) {
+    Document doc(64, 48);
+    auto eight = busyImage(40, 30);
+    doc.layers.push_back(Layer(Asset::make(eight, "a"), Point(10, 6)));
+    Layer turned(Asset::make(eight, "b"), Point(8, 8));
+    turned.transform.rotation = 20;
+    doc.layers.push_back(turned);
+    for (const Layer& layer : doc.layers) {
+        auto a = coverageFromLayer(doc, layer);
+        Document deepDoc = doc;
+        std::string error;
+        CHECK(convertSampleType(deepDoc, SampleType::U16, &error));
+        auto b = coverageFromLayer16(deepDoc, *deepDoc.find(layer.id));
+        CHECK(grayApart(*a, *b) <= 1);
+    }
 }
 
 TEST_MAIN()

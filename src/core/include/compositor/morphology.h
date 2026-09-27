@@ -3,6 +3,7 @@
 // Gaussian for Feather. Photoshop's kernels for these are circular; so are ours.
 #pragma once
 #include "image.h"
+#include "imaget.h"
 #include <memory>
 #include <vector>
 
@@ -22,5 +23,12 @@ std::shared_ptr<GrayImage> smoothSelection(const GrayImage& coverage, int radius
 std::shared_ptr<GrayImage> borderSelection(const GrayImage& coverage, int width);
 /// Photoshop's Feather: a Gaussian with sigma = `radius` over the coverage.
 std::shared_ptr<GrayImage> featherSelection(const GrayImage& coverage, double radius);
+
+/// The same on 16-bit coverage (selected at 16384 and up, as 128 and up at 8 bits); the rims and the feather keep
+/// 15 bits.
+std::shared_ptr<Gray16> growSelection(const Gray16& coverage, int amount);
+std::shared_ptr<Gray16> smoothSelection(const Gray16& coverage, int radius);
+std::shared_ptr<Gray16> borderSelection(const Gray16& coverage, int width);
+std::shared_ptr<Gray16> featherSelection(const Gray16& coverage, double radius);
 
 } // namespace compositor

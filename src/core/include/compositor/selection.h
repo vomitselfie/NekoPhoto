@@ -17,7 +17,12 @@ std::shared_ptr<GrayImage> rasterizeRect(const Rect& rect, int width, int height
 
 /// `current` combined with `shape` in `mode`; a null `current` means no selection.
 std::optional<Selection> combineSelection(const std::optional<Selection>& current, const GrayImage& shape, SelectionMode mode, bool antialiased);
+/// The same at a document's depth: `shape` (either depth) and the current coverage brought to `depth` first.
+std::optional<Selection> combineSelection(const std::optional<Selection>& current, const AnyGray& shape, SelectionMode mode, bool antialiased, SampleType depth);
+/// Inverse and Expand/Contract keep the selection's depth.
 Selection invertSelection(const Selection& selection, int width, int height);
+/// The selection moved by whole pixels, at its depth; what moves off the canvas is lost.
+Selection offsetSelection(const Selection& selection, int dx, int dy);
 /// Grows (positive) or shrinks (negative) the selection by `amount` pixels with round corners.
 Selection resizeSelection(const Selection& selection, int amount);
 
@@ -27,5 +32,7 @@ std::vector<std::vector<Point>> selectionOutline(const GrayImage& coverage, bool
 
 /// Alpha of `image` (the layer's pixels through its transform) as a document-sized coverage: Load Selection.
 std::shared_ptr<GrayImage> coverageFromLayer(const Document& document, const Layer& layer);
+/// The same for a 16-bit layer, at 16 bits.
+std::shared_ptr<Gray16> coverageFromLayer16(const Document& document, const Layer& layer);
 
 } // namespace compositor

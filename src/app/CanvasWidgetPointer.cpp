@@ -500,17 +500,9 @@ void CanvasWidget::move(QPointF view, Qt::MouseButtons buttons, Qt::KeyboardModi
         break;
     }
     case Drag::SelectionMove: case Drag::Patch: {
-        if (!selectionMoveOrigin_ || !selectionMoveOrigin_->coverage.u8()) break;   // moving a selection is 8-bit for now
+        if (!selectionMoveOrigin_ || !selectionMoveOrigin_->coverage) break;
         int dx = int(std::round(doc.x() - dragStartDocument_.x())), dy = int(std::round(doc.y() - dragStartDocument_.y()));
-        const GrayImage& src = *selectionMoveOrigin_->coverage.u8();
-        auto moved = std::make_shared<GrayImage>(src.width(), src.height(), 0);
-        for (int y = 0; y < src.height(); y++) {
-            int sy = y - dy;
-            if (sy < 0 || sy >= src.height()) continue;
-            for (int x = 0; x < src.width(); x++) { int sx = x - dx; if (sx >= 0 && sx < src.width()) moved->at(x, y) = src.at(sx, sy); }
-        }
-        Selection s = *selectionMoveOrigin_;
-        s.coverage = moved;
+        Selection s = offsetSelection(*selectionMoveOrigin_, dx, dy);
         const_cast<Document&>(*session_->document()).selection = s; // inside a begin/end edit
         refreshSelectionOutline();
         update();
