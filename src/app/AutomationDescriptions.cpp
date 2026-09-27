@@ -278,6 +278,7 @@ const MethodDoc methodDocs[] = {
      "points:array! [x, y] points in document pixels; tool:(brush|eraser|healing|healingbrush|clone|smudge|blur|sharpen|liquify|dodge|burn|sponge)=brush The tool (healingbrush heals from source, as clone copies; for dodge, burn and sponge opacity is the Exposure or Flow); size:number Diameter in pixels; hardness:number 0..1; opacity:number 0..1; "
      "color:color Paint colour (default the foreground); mask:bool=false Paint the active layer's mask; erase:bool=false Erase with the brush; source:object {x, y} Clone and Healing Brush source; "
      "preset:string A preset id from brush.presets, or round; pressure:number=0.5 Pen pressure 0..1; pressures:array One pressure per point; "
+     "tilts:array One [tiltX, tiltY] per point, degrees from upright; twists:array One barrel rotation per point, degrees; times:array One time per point, seconds (8 ms apart by default); seed:number The tip brushes' jitter seed, to repeat a stroke exactly; "
      "range:(shadows|midtones|highlights)=midtones Dodge and Burn: the tones they work on; protectTones:bool=true Dodge and Burn keep the colour; saturate:bool=false Sponge saturates instead"},
     {"pixels.patch", "Patch: replace the selection's pixels on the active layer with those dx, dy away, their tone matched to the selection's edge.",
      "dx:number! Horizontal offset to copy from; dy:number! Vertical offset to copy from"},

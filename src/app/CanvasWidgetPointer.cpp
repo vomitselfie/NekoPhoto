@@ -16,10 +16,10 @@ namespace app {
 
 // ---- Input ----------------------------------------------------------------------------
 
-// A mouse is a pen at half pressure without tilt; the MyPaint presets read pressure, tilt and timing.
-void CanvasWidget::mousePressEvent(QMouseEvent* e) { session_->pen = {0.5, 0, 0, qint64(e->timestamp()), false}; setFocus(); press(e->position(), e->button(), e->modifiers()); }
-void CanvasWidget::mouseMoveEvent(QMouseEvent* e) { session_->pen = {0.5, 0, 0, qint64(e->timestamp()), false}; move(e->position(), e->buttons(), e->modifiers()); }
-void CanvasWidget::mouseReleaseEvent(QMouseEvent* e) { session_->pen = {0.5, 0, 0, qint64(e->timestamp()), false}; release(e->position(), e->button(), e->modifiers()); }
+// A mouse is a pen at half pressure without tilt or twist (compositor::mouseSample); the brushes read the pen raw.
+void CanvasWidget::mousePressEvent(QMouseEvent* e) { session_->pen = mouseSample({}, e->timestamp() / 1000.0); setFocus(); press(e->position(), e->button(), e->modifiers()); }
+void CanvasWidget::mouseMoveEvent(QMouseEvent* e) { session_->pen = mouseSample({}, e->timestamp() / 1000.0); move(e->position(), e->buttons(), e->modifiers()); }
+void CanvasWidget::mouseReleaseEvent(QMouseEvent* e) { session_->pen = mouseSample({}, e->timestamp() / 1000.0); release(e->position(), e->button(), e->modifiers()); }
 
 void CanvasWidget::mouseDoubleClickEvent(QMouseEvent* e) {
     // Double-clicking text with any tool opens its editor (the Text tool needs only a click).
@@ -48,8 +48,18 @@ void CanvasWidget::mouseDoubleClickEvent(QMouseEvent* e) {
 
 void CanvasWidget::tabletEvent(QTabletEvent* e) {
     e->accept();
-    // Tilt arrives in degrees (about ±60 at most); MyPaint takes -1..1.
-    session_->pen = {std::clamp(double(e->pressure()), 0.0, 1.0), std::clamp(e->xTilt() / 60.0, -1.0, 1.0), std::clamp(e->yTilt() / 60.0, -1.0, 1.0), qint64(e->timestamp()), true};
+    // The pen as the tablet reports it: tilt in degrees (about ±60 at most), the barrel's rotation in degrees and
+    // the airbrush wheel's tangential pressure. Kept raw; each brush reads what it uses.
+    BrushSample pen;
+    pen.time = e->timestamp() / 1000.0;
+    pen.pressure = std::clamp(double(e->pressure()), 0.0, 1.0);
+    pen.tiltX = std::clamp(double(e->xTilt()), -90.0, 90.0);
+    pen.tiltY = std::clamp(double(e->yTilt()), -90.0, 90.0);
+    pen.twist = std::isfinite(e->rotation()) ? double(e->rotation()) : 0;
+    pen.tangentialPressure = std::clamp(double(e->tangentialPressure()), -1.0, 1.0);
+    pen.stylus = true;
+    pen.eraser = e->pointerType() == QPointingDevice::PointerType::Eraser;
+    session_->pen = pen;
     switch (e->type()) {
     case QEvent::TabletPress: setFocus(); press(e->position(), e->button(), e->modifiers()); break;
     case QEvent::TabletMove: move(e->position(), e->buttons(), e->modifiers()); break;

@@ -5,6 +5,7 @@
 //   original + colour x coverage x opacity
 // so overlapping dabs never exceed the stroke's opacity.
 #pragma once
+#include "brushsample.h"
 #include "document.h"
 #include "shape.h"
 #include <functional>
@@ -101,6 +102,8 @@ public:
     const std::string& error() const { return error_; }
 
     void append(Point documentPoint);
+    /// The round tip takes a brush sample's position; its size and opacity are the settings', whatever the pen does.
+    void append(const BrushSample& sample) { append(sample.position); }
     /// Every point of a finished path at once: one recompose at the end instead of one per point.
     void appendAll(const std::vector<Point>& documentPoints);
     /// Replaces the provisional tail with the final curve piece. Safe to repeat.

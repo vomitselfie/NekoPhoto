@@ -20,17 +20,24 @@ namespace {
 constexpr double pi = 3.14159265358979323846;
 constexpr double tick = 1.0 / 120;   // a tablet's report rate
 
+/// A stylus sample.
+BrushSample at(double t, double x, double y, double pressure) {
+    BrushSample s;
+    s.time = t;
+    s.position = {x, y};
+    s.pressure = pressure;
+    s.stylus = true;
+    return s;
+}
+
 /// `n` + 1 samples along a straight line, `tick` apart, with `fill` setting the pen at u = 0..1.
 StrokeFixture line(const std::string& name, int n, double x0, double y0, double x1, double y1,
-                   const std::function<void(StrokeSample&, double)>& fill) {
+                   const std::function<void(BrushSample&, double)>& fill) {
     StrokeFixture f;
     f.name = name;
     for (int i = 0; i <= n; i++) {
         const double u = double(i) / n;
-        StrokeSample s;
-        s.t = i * tick;
-        s.x = x0 + (x1 - x0) * u;
-        s.y = y0 + (y1 - y0) * u;
+        BrushSample s = at(i * tick, x0 + (x1 - x0) * u, y0 + (y1 - y0) * u, 1);
         fill(s, u);
         f.samples.push_back(s);
     }
@@ -48,7 +55,7 @@ StrokeFixture polyline(const std::string& name, const std::vector<Point>& corner
         const int n = std::max(1, int(std::ceil(length / step)));
         for (int j = (k == 0 ? 0 : 1); j <= n; j++) {
             const double u = double(j) / n;
-            f.samples.push_back({i++ * tick, a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u, pressure});
+            f.samples.push_back(at(i++ * tick, a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u, pressure));
         }
     }
     return f;
@@ -97,8 +104,8 @@ Preset tipPreset(const std::string& name, const TipPreset& tip, double maxDiamet
 
 std::vector<StrokeFixture> standardFixtures() {
     std::vector<StrokeFixture> out;
-    out.push_back(line("pressure_ramp", 160, 30, 100, 290, 100, [](StrokeSample& s, double u) { s.pressure = 1 - std::fabs(2 * u - 1); }));
-    out.push_back(line("pressure_sine", 160, 30, 100, 290, 100, [](StrokeSample& s, double u) { s.pressure = 0.5 + 0.45 * std::sin(4 * pi * u); }));
+    out.push_back(line("pressure_ramp", 160, 30, 100, 290, 100, [](BrushSample& s, double u) { s.pressure = 1 - std::fabs(2 * u - 1); }));
+    out.push_back(line("pressure_sine", 160, 30, 100, 290, 100, [](BrushSample& s, double u) { s.pressure = 0.5 + 0.45 * std::sin(4 * pi * u); }));
     {
         // Slow, fast, slow: evenly timed samples whose spacing follows the speed.
         StrokeFixture f;
@@ -110,27 +117,27 @@ std::vector<StrokeFixture> standardFixtures() {
         double walked = 0;
         for (int i = 0; i <= n; i++) {
             if (i) walked += speed[size_t(i)];
-            f.samples.push_back({i * tick, 30 + 260 * walked / total, 100, 0.7});
+            f.samples.push_back(at(i * tick, 30 + 260 * walked / total, 100, 0.7));
         }
         out.push_back(f);
     }
-    out.push_back(line("tilt_sweep", 160, 30, 100, 290, 100, [](StrokeSample& s, double u) {
+    out.push_back(line("tilt_sweep", 160, 30, 100, 290, 100, [](BrushSample& s, double u) {
         s.pressure = 0.7;
         s.tiltX = 60 * std::sin(pi * u);
         s.tiltY = -25 * std::sin(pi * u);
     }));
-    out.push_back(line("twist_sweep", 160, 30, 100, 290, 100, [](StrokeSample& s, double u) {
+    out.push_back(line("twist_sweep", 160, 30, 100, 290, 100, [](BrushSample& s, double u) {
         s.pressure = 0.7;
         s.twist = std::remainder(360 * u, 360.0);   // a full turn, wrapping from 180 to -180 halfway
     }));
-    out.push_back(line("straight_line", 130, 30, 60, 290, 140, [](StrokeSample& s, double) { s.pressure = 0.8; }));
+    out.push_back(line("straight_line", 130, 30, 60, 290, 140, [](BrushSample& s, double) { s.pressure = 0.8; }));
     {
         StrokeFixture f;
         f.name = "circle";
         const int n = 180;
         for (int i = 0; i <= n; i++) {
             const double a = 2 * pi * i / n;
-            f.samples.push_back({i * tick, 160 + 70 * std::cos(a), 100 + 70 * std::sin(a), 0.7});
+            f.samples.push_back(at(i * tick, 160 + 70 * std::cos(a), 100 + 70 * std::sin(a), 0.7));
         }
         out.push_back(f);
     }
@@ -140,7 +147,7 @@ std::vector<StrokeFixture> standardFixtures() {
         const int n = 150;
         for (int i = 0; i <= n; i++) {
             const double u = double(i) / n;
-            f.samples.push_back({i * tick, 30 + 260 * u, 100 - 60 * std::sin(2 * pi * u), 0.6 + 0.3 * std::sin(pi * u)});
+            f.samples.push_back(at(i * tick, 30 + 260 * u, 100 - 60 * std::sin(2 * pi * u), 0.6 + 0.3 * std::sin(pi * u)));
         }
         out.push_back(f);
     }
@@ -152,7 +159,7 @@ std::vector<StrokeFixture> standardFixtures() {
         const int n = 9;
         for (int i = 0; i <= n; i++) {
             const double u = double(i) / n, eased = 1 - (1 - u) * (1 - u);
-            f.samples.push_back({i * tick, 40 + 240 * eased, 150 - 100 * eased, 0.9 - 0.85 * u});
+            f.samples.push_back(at(i * tick, 40 + 240 * eased, 150 - 100 * eased, 0.9 - 0.85 * u));
         }
         out.push_back(f);
     }
@@ -162,7 +169,7 @@ std::vector<StrokeFixture> standardFixtures() {
         const int n = 720;
         for (int i = 0; i <= n; i++) {
             const double u = double(i) / n;
-            f.samples.push_back({i * tick, 20 + 280 * u, 100 + 50 * std::sin(3 * pi * u), 0.5 + 0.3 * std::sin(5 * pi * u)});
+            f.samples.push_back(at(i * tick, 20 + 280 * u, 100 + 50 * std::sin(3 * pi * u), 0.5 + 0.3 * std::sin(5 * pi * u)));
         }
         out.push_back(f);
     }
@@ -170,35 +177,9 @@ std::vector<StrokeFixture> standardFixtures() {
 }
 
 std::optional<StrokeFixture> fixtureFromJson(const std::string& text, const std::string& name, std::string* error) {
-    nlohmann::json j = nlohmann::json::parse(text, nullptr, false);
-    if (j.is_discarded()) { if (error) *error = "not JSON"; return std::nullopt; }
-    StrokeFixture f;
-    f.name = name;
-    const nlohmann::json* list = &j;
-    if (j.is_object()) {
-        auto it = j.find("samples");
-        if (it == j.end() || !it->is_array()) { if (error) *error = "no samples array"; return std::nullopt; }
-        list = &*it;
-        if (auto s = j.find("stylus"); s != j.end() && s->is_boolean()) f.stylus = s->get<bool>();
-        if (auto n = j.find("name"); n != j.end() && n->is_string()) f.name = n->get<std::string>();
-    }
-    if (!list->is_array()) { if (error) *error = "samples must be an array"; return std::nullopt; }
-    for (const auto& item : *list) {
-        if (!item.is_object()) { if (error) *error = "a sample is not an object"; return std::nullopt; }
-        auto number = [&](const char* key, double fallback) { auto it = item.find(key); return it != item.end() && it->is_number() ? it->get<double>() : fallback; };
-        StrokeSample s;
-        s.t = number("t", 0);
-        s.x = number("x", 0);
-        s.y = number("y", 0);
-        s.pressure = number("pressure", 1);
-        s.tiltX = number("tiltX", 0);
-        s.tiltY = number("tiltY", 0);
-        s.twist = number("twist", 0);
-        s.tangentialPressure = number("tangentialPressure", 0);
-        f.samples.push_back(s);
-    }
-    if (f.samples.empty()) { if (error) *error = "no samples"; return std::nullopt; }
-    return f;
+    auto stroke = recordedStrokeFromJson(text, error);
+    if (stroke && stroke->name.empty()) stroke->name = name;
+    return stroke;
 }
 
 std::optional<StrokeFixture> loadFixture(const std::string& path, std::string* error) {
@@ -206,14 +187,7 @@ std::optional<StrokeFixture> loadFixture(const std::string& path, std::string* e
     return fixtureFromJson(readText(path), fs::path(path).stem().string(), error);
 }
 
-std::string fixtureToJson(const StrokeFixture& fixture) {
-    nlohmann::json samples = nlohmann::json::array();
-    for (const StrokeSample& s : fixture.samples)
-        samples.push_back({{"t", s.t}, {"x", s.x}, {"y", s.y}, {"pressure", s.pressure}, {"tiltX", s.tiltX}, {"tiltY", s.tiltY},
-                           {"twist", s.twist}, {"tangentialPressure", s.tangentialPressure}});
-    nlohmann::json j = {{"format", "nekophoto-stroke"}, {"version", 1}, {"name", fixture.name}, {"stylus", fixture.stylus}, {"samples", samples}};
-    return j.dump(1);
-}
+std::string fixtureToJson(const StrokeFixture& fixture) { return recordedStrokeToJson(fixture); }
 
 std::vector<StrokeFixture> fileFixtures(const std::string& folder) {
     std::vector<std::string> files;
@@ -310,31 +284,22 @@ Render render(const StrokeFixture& fixture, const Preset& preset) {
     Layer layer(Asset::make(base, "Paper"), Point(0, 0));
     BrushStroke grid(layer, false, preset.settings, Size(canvasWidth, canvasHeight));
     if (!grid.isValid() || fixture.samples.empty()) return out;
-    const bool stylus = fixture.stylus;
+    // Every engine takes the same samples, derived as they arrive, as the canvas feeds them.
+    BrushSampleTrack track;
     switch (preset.engine) {
     case Preset::Engine::Round:
-        for (const StrokeSample& s : fixture.samples) grid.append({s.x, s.y});
+        for (const BrushSample& s : fixture.samples) grid.append(track.add(s));
         break;
     case Preset::Engine::Tip: {
         TipStroke stroke(grid, preset.tip->tip, preset.settings.diameter, preset.seed);
         if (!stroke.isValid()) return out;
-        for (const StrokeSample& s : fixture.samples) stroke.strokeTo({{s.x, s.y}, stylus ? s.pressure : 1.0});
+        for (const BrushSample& s : fixture.samples) stroke.strokeTo(track.add(s));
         break;
     }
     case Preset::Engine::MyPaint: {
         MyPaintStroke stroke(grid, preset.myPaintJson, preset.settings);
         if (!stroke.isValid()) return out;
-        for (size_t i = 0; i < fixture.samples.size(); i++) {
-            const StrokeSample& s = fixture.samples[i];
-            MyPaintInput input;
-            input.document = {s.x, s.y};
-            input.pressure = stylus ? s.pressure : 0.5;
-            input.xtilt = stylus ? std::clamp(s.tiltX / 60.0, -1.0, 1.0) : 0;
-            input.ytilt = stylus ? std::clamp(s.tiltY / 60.0, -1.0, 1.0) : 0;
-            const double dt = i ? s.t - fixture.samples[i - 1].t : 0;
-            input.seconds = dt > 0 ? dt : 1.0 / 120;
-            stroke.strokeTo(input);
-        }
+        for (const BrushSample& s : fixture.samples) stroke.strokeTo(track.add(s));
         stroke.finish();
         break;
     }
@@ -375,14 +340,14 @@ Metrics measure(const StrokeFixture& fixture, const Render& render) {
     // Stations along the path, by arc length.
     const auto& s = fixture.samples;
     std::vector<double> along(s.size(), 0);
-    for (size_t i = 1; i < s.size(); i++) along[i] = along[i - 1] + std::hypot(s[i].x - s[i - 1].x, s[i].y - s[i - 1].y);
+    for (size_t i = 1; i < s.size(); i++) along[i] = along[i - 1] + std::hypot(s[i].position.x - s[i - 1].position.x, s[i].position.y - s[i - 1].position.y);
     const double length = along.back();
     auto pointAt = [&](double d) {
         d = std::clamp(d, 0.0, length);
         size_t i = size_t(std::upper_bound(along.begin(), along.end(), d) - along.begin());
         i = std::clamp<size_t>(i, 1, s.size() - 1);
         const double span = along[i] - along[i - 1], u = span > 0 ? (d - along[i - 1]) / span : 0;
-        return Point{s[i - 1].x + (s[i].x - s[i - 1].x) * u, s[i - 1].y + (s[i].y - s[i - 1].y) * u};
+        return Point{s[i - 1].position.x + (s[i].position.x - s[i - 1].position.x) * u, s[i - 1].position.y + (s[i].position.y - s[i - 1].position.y) * u};
     };
     double edgeSum = 0;
     int edgeCount = 0;

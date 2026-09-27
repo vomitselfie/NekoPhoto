@@ -500,7 +500,13 @@ void addBrushScenes() {
         TipStroke stroke(grid, tip, diameter, 99);
         NEED(stroke.isValid());
         int i = 0;
-        for (Point p : wave(20, 240, 80, 45)) stroke.strokeTo({p, pressure ? 0.2 + 0.8 * std::fabs(std::sin(i++ * 0.13)) : 1.0});
+        for (Point p : wave(20, 240, 80, 45)) {
+            BrushSample input;
+            input.position = p;
+            input.stylus = true;
+            input.pressure = pressure ? 0.2 + 0.8 * std::fabs(std::sin(i++ * 0.13)) : 1.0;
+            stroke.strokeTo(input);
+        }
         return hashCommit(grid);
     };
     scene("brush/tip_square", [=] {
@@ -547,10 +553,11 @@ void addBrushScenes() {
                 NEED(stroke.isValid());
                 int i = 0;
                 for (Point p : wave(20, 220, 70, 40)) {
-                    MyPaintInput input;
-                    input.document = p;
+                    BrushSample input;   // a pen, events exactly 1/60 s apart
+                    input.position = p;
+                    input.stylus = true;
                     input.pressure = 0.3 + 0.6 * std::fabs(std::sin(i++ * 0.1));
-                    input.seconds = 1.0 / 60;
+                    input.dt = 1.0 / 60;
                     stroke.strokeTo(input);
                 }
                 stroke.finish();

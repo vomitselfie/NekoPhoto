@@ -8,6 +8,7 @@
 // optionally grain.png and preview.png.
 #pragma once
 #include "brush.h"
+#include "brushsample.h"
 #include <memory>
 #include <optional>
 #include <random>
@@ -54,18 +55,15 @@ std::optional<TipPreset> loadTipPreset(const std::string& folder, std::string* e
 /// Writes brush.json, tip.png and grain.png (when there is one) into `folder`, creating it.
 bool saveTipPreset(const std::string& folder, const TipPreset& preset, std::string* error = nullptr);
 
-struct TipInput {
-    Point document;
-    double pressure = 1;   // 0..1; a mouse is 1 for tip brushes, as in Photoshop
-};
-
 class TipStroke {
 public:
     /// Stamps `tip` into `grid`'s coverage at `diameter` document pixels (the size before pressure and
     /// jitter). `seed` makes the jitter repeatable. `grid` must outlive this object.
     TipStroke(BrushStroke& grid, BrushTip tip, double diameter, uint32_t seed = 1);
     bool isValid() const { return valid_; }
-    void strokeTo(const TipInput& input);
+    /// The next sample of the stroke (derived by a BrushSampleTrack). A mouse's pressure counts as full, as in
+    /// Photoshop: tip brushes read pressure only from a stylus.
+    void strokeTo(const BrushSample& input);
 
 private:
     struct Level { GrayImage image; double scale; };   // the tip, halved, and its size relative to the original
@@ -78,7 +76,7 @@ private:
     std::vector<Level> levels_;
     double diameter_ = 30;
     std::mt19937 rng_;
-    std::optional<TipInput> last_;
+    std::optional<BrushSample> last_;
     double carried_ = 0;   // distance walked since the last dab
     bool valid_ = false;
 };

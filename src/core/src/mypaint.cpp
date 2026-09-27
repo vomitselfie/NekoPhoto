@@ -170,9 +170,9 @@ MyPaintStroke::~MyPaintStroke() = default;
 
 bool MyPaintStroke::isValid() const { return engine_ != nullptr && error_.empty(); }
 
-void MyPaintStroke::strokeTo(const MyPaintInput& input) {
-    if (!isValid() || finished_ || !input.document.isFinite()) return;
-    Point p = grid_.documentToGrid().apply(input.document);
+void MyPaintStroke::strokeTo(const BrushSample& input) {
+    if (!isValid() || finished_ || !input.position.isFinite()) return;
+    Point p = grid_.documentToGrid().apply(input.position);
     if (std::fabs(p.x) > 1e7 || std::fabs(p.y) > 1e7) return;
     Tiles& t = engine_->tiles;
     // libmypaint's first-generation entry point, as GIMP uses it. The newer mypaint_brush_stroke_to_2 (view
@@ -189,7 +189,7 @@ void MyPaintStroke::strokeTo(const MyPaintInput& input) {
         for (MyPaintBrushState state : {MYPAINT_BRUSH_STATE_Y, MYPAINT_BRUSH_STATE_ACTUAL_Y}) mypaint_brush_set_state(engine_->brush, state, float(p.y));
         mypaint_brush_stroke_to(engine_->brush, surface, float(p.x), float(p.y), 0.0f, 0.0f, 0.0f, 1.0);
     }
-    const double seconds = std::clamp(input.seconds, 0.001, 5.0);
+    const double seconds = std::clamp(input.dt > 0 ? input.dt : 1.0 / 120, 0.001, 5.0);
     // A click leaves a mark, as in Photoshop and Krita: a preset that places dabs only by distance travelled
     // would paint nothing until the pen moved, so the press gets exactly one dab from a dab rate lent for it.
     const float rate = mypaint_brush_get_base_value(engine_->brush, MYPAINT_BRUSH_SETTING_DABS_PER_SECOND);
@@ -198,13 +198,13 @@ void MyPaintStroke::strokeTo(const MyPaintInput& input) {
     // bookkeeping just below zero ("Time is running backwards").
     if (lend) mypaint_brush_set_base_value(engine_->brush, MYPAINT_BRUSH_SETTING_DABS_PER_SECOND, float(1.5 / seconds));
     mypaint_brush_stroke_to(engine_->brush, surface, float(p.x), float(p.y), float(std::clamp(input.pressure, 0.0, 1.0)),
-                            float(std::clamp(input.xtilt, -1.0, 1.0)), float(std::clamp(input.ytilt, -1.0, 1.0)), seconds);
+                            float(std::clamp(input.tiltX / 60, -1.0, 1.0)), float(std::clamp(input.tiltY / 60, -1.0, 1.0)), seconds);
     if (lend) mypaint_brush_set_base_value(engine_->brush, MYPAINT_BRUSH_SETTING_DABS_PER_SECOND, rate);
     MyPaintRectangle rects[8];
     MyPaintRectangles changed{8, rects};
     mypaint_tiled_surface2_end_atomic(&t.parent, &changed);
     started_ = true;
-    last_ = input.document;
+    last_ = input;
 
     // The changed area back to 8 bits, through the selection: out = base + (paint - base) * selected.
     Image* working = grid_.gridWorking();
@@ -236,7 +236,7 @@ void MyPaintStroke::strokeTo(const MyPaintInput& input) {
 
 bool MyPaintStroke::settled() const {
     if (!isValid() || !started_ || finished_) return true;
-    const Point p = grid_.documentToGrid().apply(last_);
+    const Point p = grid_.documentToGrid().apply(last_.position);
     const float x = mypaint_brush_get_state(engine_->brush, MYPAINT_BRUSH_STATE_X);
     const float y = mypaint_brush_get_state(engine_->brush, MYPAINT_BRUSH_STATE_Y);
     return std::hypot(double(x) - p.x, double(y) - p.y) < 0.5;
@@ -249,19 +249,17 @@ void warmMyPaint(const std::string& brushJson) {
     settings.diameter = 4;
     BrushStroke grid(layer, false, settings, Size(8, 8));
     MyPaintStroke stroke(grid, brushJson, settings);
-    MyPaintInput input;
-    input.document = {4, 4};
-    input.seconds = 1.0 / 120;
+    BrushSample input = mouseSample({4, 4}, 0);
+    input.dt = 1.0 / 120;
     stroke.strokeTo(input);
     stroke.finish();
 }
 
 void MyPaintStroke::finish() {
     if (!isValid() || finished_ || !started_) return;
-    MyPaintInput lift;
-    lift.document = last_;
+    BrushSample lift = mouseSample(last_.position, last_.time + 0.01);
     lift.pressure = 0;
-    lift.seconds = 0.01;
+    lift.dt = 0.01;
     strokeTo(lift);
     finished_ = true;
 }
@@ -278,7 +276,7 @@ MyPaintStroke::MyPaintStroke(BrushStroke& grid, const std::string&, const BrushS
 }
 MyPaintStroke::~MyPaintStroke() = default;
 bool MyPaintStroke::isValid() const { return false; }
-void MyPaintStroke::strokeTo(const MyPaintInput&) {}
+void MyPaintStroke::strokeTo(const BrushSample&) {}
 bool MyPaintStroke::settled() const { return true; }
 void warmMyPaint(const std::string&) {}
 void MyPaintStroke::finish() {}

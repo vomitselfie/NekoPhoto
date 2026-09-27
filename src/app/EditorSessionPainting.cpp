@@ -72,30 +72,32 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
     strokeLayerId_ = layer->id;
     strokeMask_ = mask;
     if (clone) stroke_->setClone(*clone);
+    strokeSeed_ = brushSeed ? *brushSeed : uint32_t(std::random_device{}());
+    brushSeed.reset();
     const BrushPreset* preset = tool_ == Tool::Brush && !brushPreset.isEmpty() ? BrushLibrary::find(brushPreset) : nullptr;
     if (preset && preset->engine == BrushPreset::Engine::Tip) {
         auto tip = preset->tip();
         if (!tip) { emit error(tr("The brush %1 could not be read.").arg(preset->name)); stroke_.reset(); return false; }
-        tipStroke_ = std::make_unique<TipStroke>(*stroke_, tip->tip, settings.diameter, uint32_t(std::random_device{}()));
+        tipStroke_ = std::make_unique<TipStroke>(*stroke_, tip->tip, settings.diameter, strokeSeed_);
         if (!tipStroke_->isValid()) { emit error(tr("The brush %1 has no usable tip.").arg(preset->name)); tipStroke_.reset(); stroke_.reset(); return false; }
     } else if (preset && !mask) {
         myPaint_ = std::make_unique<MyPaintStroke>(*stroke_, preset->json, settings);
         if (!myPaint_->isValid()) { emit error(QString::fromStdString(myPaint_->error())); myPaint_.reset(); stroke_.reset(); return false; }
     }
+    sampleTrack_.reset();
     if (tipStroke_) {
         if (straightFromLast && lastBrushPoint_) tipTo(*lastBrushPoint_);
         tipTo(documentPoint);
     } else if (myPaint_) {
-        lastPenTime_ = pen.timeMs;
         if (straightFromLast && lastBrushPoint_) myPaintTo(*lastBrushPoint_);
         myPaintTo(documentPoint);
     } else {
-        if (straightFromLast && lastBrushPoint_) stroke_->append(toPoint(*lastBrushPoint_));
-        stroke_->append(toPoint(documentPoint));
+        if (straightFromLast && lastBrushPoint_) stroke_->append(nextSample(*lastBrushPoint_));
+        stroke_->append(nextSample(documentPoint));
     }
     lastBrushPoint_ = documentPoint;
     strokePoints_ = {documentPoint};
-    strokePressures_ = {pen.pressure};
+    strokeSamples_ = {pen};
     // Only what the press painted: a MyPaint press paints nothing until the pen moves, and an empty region
     // would make the canvas render the whole view again.
     strokeRegion_ = toQRect(stroke_->takeDirtyRect());
@@ -105,29 +107,25 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
     return true;
 }
 
-void EditorSession::myPaintTo(QPointF documentPoint) {
-    MyPaintInput input;
-    input.document = toPoint(documentPoint);
-    input.pressure = pen.pressure;
-    input.xtilt = pen.xtilt;
-    input.ytilt = pen.ytilt;
-    // Seconds since the last event; events without a timestamp count as 120 a second.
-    input.seconds = pen.timeMs > lastPenTime_ ? (pen.timeMs - lastPenTime_) / 1000.0 : 1.0 / 120;
-    lastPenTime_ = pen.timeMs;
-    myPaint_->strokeTo(input);
+BrushSample EditorSession::nextSample(QPointF documentPoint) {
+    // The pen as it came, at this point; the track adds speed, direction and the rest (events without a later
+    // timestamp than the last count as 120 a second).
+    BrushSample sample = pen;
+    sample.position = toPoint(documentPoint);
+    return sampleTrack_.add(sample);
 }
 
-void EditorSession::tipTo(QPointF documentPoint) {
-    tipStroke_->strokeTo({toPoint(documentPoint), pen.tablet ? pen.pressure : 1.0});
-}
+void EditorSession::myPaintTo(QPointF documentPoint) { myPaint_->strokeTo(nextSample(documentPoint)); }
+
+void EditorSession::tipTo(QPointF documentPoint) { tipStroke_->strokeTo(nextSample(documentPoint)); }
 
 void EditorSession::continueBrush(QPointF documentPoint) {
     if (!stroke_) return;
     if (tipStroke_) tipTo(documentPoint);
     else if (myPaint_) { myPaintTo(documentPoint); myPaintSettle_.start(); }   // restarts: ticks only once input pauses
-    else stroke_->append(toPoint(documentPoint));
+    else stroke_->append(nextSample(documentPoint));
     lastBrushPoint_ = documentPoint;
-    if (strokePoints_.size() < 20000) { strokePoints_.push_back(documentPoint); strokePressures_.push_back(pen.pressure); }
+    if (strokePoints_.size() < 20000) { strokePoints_.push_back(documentPoint); strokeSamples_.push_back(pen); }
     Rect dirty = stroke_->takeDirtyRect();
     if (!dirty.isEmpty()) {
         strokeRegion_ = strokeRegion_.isEmpty() ? toQRect(dirty) : strokeRegion_.united(toQRect(dirty));
@@ -195,23 +193,37 @@ void EditorSession::endBrush() {
     // Spot healing changes the pixels as it commits; every other brush commits what its preview showed.
     commitRasterEdit(*stroke, strokeLayerId_, strokeMask_, name, strokeRegion_, tool_ != Tool::SpotHealing);
     strokeRegion_ = {};
-    // An action recording gets the stroke as brush.stroke (the Brush and Eraser, on pixels or a mask).
+    // An action recording gets the stroke as brush.stroke (the Brush and Eraser, on pixels or a mask): the points, the
+    // pen at each (pressure, tilt and twist from a stylus), and for a preset the times and the seed, so a replay
+    // paints the same.
     if (tool_ == Tool::Brush && ActionLibrary::instance().recording() && !strokePoints_.empty()) {
-        QJsonArray points, pressures;
-        for (size_t i = 0; i < strokePoints_.size(); i++) {
+        QJsonArray points, pressures, tilts, twists, times;
+        bool tilted = false, twisted = false;
+        const double start = strokeSamples_.empty() ? 0 : strokeSamples_.front().time;
+        for (size_t i = 0; i < strokePoints_.size() && i < strokeSamples_.size(); i++) {
+            const BrushSample& s = strokeSamples_[i];
             points.append(QJsonArray{std::round(strokePoints_[i].x() * 10) / 10, std::round(strokePoints_[i].y() * 10) / 10});
-            pressures.append(std::round(strokePressures_[i] * 1000) / 1000);
+            pressures.append(std::round(s.pressure * 1000) / 1000);
+            tilts.append(QJsonArray{std::round(s.tiltX * 10) / 10, std::round(s.tiltY * 10) / 10});
+            twists.append(std::round(s.twist * 10) / 10);
+            times.append(std::round((s.time - start) * 1000) / 1000);
+            tilted = tilted || s.tiltX != 0 || s.tiltY != 0;
+            twisted = twisted || s.twist != 0;
         }
         QJsonObject step{{"points", points}, {"size", brushSettings.diameter}, {"hardness", brushSettings.hardness}, {"opacity", brushSettings.opacity}};
         if (strokeMask_) step["mask"] = true;
         else step["color"] = foregroundColor.name();
         if (brushErase) step["erase"] = true;
-        if (!brushPreset.isEmpty()) step["preset"] = brushPreset;
-        if (pen.tablet) step["pressures"] = pressures;
+        if (!brushPreset.isEmpty()) { step["preset"] = brushPreset; step["times"] = times; step["seed"] = double(strokeSeed_); }
+        if (pen.stylus) {
+            step["pressures"] = pressures;
+            if (tilted) step["tilts"] = tilts;
+            if (twisted) step["twists"] = twists;
+        }
         recordAction("brush.stroke", step);
     }
     strokePoints_.clear();
-    strokePressures_.clear();
+    strokeSamples_.clear();
 }
 
 void EditorSession::cancelBrush() {

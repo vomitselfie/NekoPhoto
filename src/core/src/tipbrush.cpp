@@ -227,15 +227,17 @@ void TipStroke::dab(Point center, double pressure, double direction, Rect& chang
     }
 }
 
-void TipStroke::strokeTo(const TipInput& input) {
-    if (!valid_ || !input.document.isFinite()) return;
+void TipStroke::strokeTo(const BrushSample& sample) {
+    if (!valid_ || !sample.position.isFinite()) return;
+    BrushSample input = sample;
+    if (!input.stylus) input.pressure = 1;
     Rect changed;
     if (!last_) {
-        dab(input.document, input.pressure, 0, changed);
+        dab(input.position, input.pressure, 0, changed);
         last_ = input;
         carried_ = 0;
     } else {
-        const Point from = last_->document, to = input.document;
+        const Point from = last_->position, to = input.position;
         const double dx = to.x - from.x, dy = to.y - from.y, length = std::hypot(dx, dy);
         if (length <= 0) return;
         const double direction = std::atan2(dy, dx);
@@ -268,9 +270,15 @@ std::shared_ptr<Image> renderTipPreview(const TipPreset& preset, int width, int 
     if (!grid.isValid() || !stroke.isValid()) return paper;
     // An S across the strip, pressing harder towards the middle.
     const int steps = 96;
+    BrushSampleTrack track;
     for (int i = 0; i <= steps; i++) {
         const double t = double(i) / steps;
-        stroke.strokeTo({{width * (0.08 + 0.84 * t), height * (0.5 - 0.22 * std::sin(t * 2 * pi))}, 0.35 + 0.65 * std::sin(t * pi)});
+        BrushSample s;
+        s.position = {width * (0.08 + 0.84 * t), height * (0.5 - 0.22 * std::sin(t * 2 * pi))};
+        s.time = i / 120.0;
+        s.pressure = 0.35 + 0.65 * std::sin(t * pi);
+        s.stylus = true;
+        stroke.strokeTo(track.add(s));
     }
     grid.flush();
     return std::make_shared<Image>(*grid.previewImage());

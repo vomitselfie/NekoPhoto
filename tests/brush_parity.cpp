@@ -8,6 +8,7 @@
 #include "brush_harness.h"
 #include "compositor/mypaint.h"
 #include "compositor/parallel.h"
+#include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <map>
@@ -41,9 +42,9 @@ TEST_CASE(fixtures_survive_a_json_round_trip) {
         CHECK_EQ(back->stylus, f.stylus);
         REQUIRE(back->samples.size() == f.samples.size());
         for (size_t i = 0; i < f.samples.size(); i++) {
-            const StrokeSample& a = f.samples[i];
-            const StrokeSample& b = back->samples[i];
-            CHECK(a.t == b.t && a.x == b.x && a.y == b.y && a.pressure == b.pressure && a.tiltX == b.tiltX && a.tiltY == b.tiltY
+            const BrushSample& a = f.samples[i];
+            const BrushSample& b = back->samples[i];
+            CHECK(a.time == b.time && a.position.x == b.position.x && a.position.y == b.position.y && a.pressure == b.pressure && a.tiltX == b.tiltX && a.tiltY == b.tiltY
                   && a.twist == b.twist && a.tangentialPressure == b.tangentialPressure);
         }
     }
@@ -55,6 +56,54 @@ TEST_CASE(fixtures_survive_a_json_round_trip) {
     CHECK_EQ(bare->samples[1].pressure, 0.5);
     CHECK(!fixtureFromJson("{}", "empty").has_value());
     CHECK(!fixtureFromJson("[1, 2]", "numbers").has_value());
+}
+
+TEST_CASE(brush_samples_derive_speed_direction_and_unwrapped_angles) {
+    constexpr double pi = 3.14159265358979323846;
+    CHECK_NEAR(unwrapAngle(3.1, -3.1), 2 * pi - 3.1, 1e-12);
+    CHECK_NEAR(unwrapAngle(-3.1, 3.1), 3.1 - 2 * pi, 1e-12);
+    CHECK_NEAR(unwrapAngle(0.2, 0.1), 0.1, 1e-12);
+    const std::vector<StrokeFixture> fixtures = standardFixtures();
+    auto named = [&](const std::string& name) {
+        for (const StrokeFixture& f : fixtures) if (f.name == name) return f;
+        return StrokeFixture{};
+    };
+    // A full barrel turn wraps from 180 to -180 degrees halfway; unwrapped, it climbs steadily to one turn.
+    std::vector<BrushSample> twist = named("twist_sweep").samples;
+    REQUIRE(!twist.empty());
+    deriveStroke(twist);
+    double biggest = 0;
+    for (size_t i = 1; i < twist.size(); i++) biggest = std::max(biggest, std::fabs(twist[i].twistAngle - twist[i - 1].twistAngle));
+    CHECK(biggest < 0.1);
+    CHECK_NEAR(twist.back().twistAngle - twist.front().twistAngle, 2 * pi, 1e-9);
+    // Round a circle, the direction turns once without a jump.
+    std::vector<BrushSample> circle = named("circle").samples;
+    deriveStroke(circle);
+    CHECK_NEAR(circle.back().direction - circle[1].direction, 2 * pi - 2 * pi / 180, 0.05);
+    CHECK_NEAR(circle.back().progress, 1.0, 1e-12);
+    CHECK_EQ(circle.front().progress, 0.0);
+    // Slow, fast, slow: the middle is several times the speed of the ends.
+    std::vector<BrushSample> speed = named("speed_sweep").samples;
+    deriveStroke(speed);
+    CHECK(speed[speed.size() / 2].speed > 4 * speed[5].speed);
+    CHECK(speed[speed.size() / 2].speed > 4 * speed[speed.size() - 2].speed);
+    // Tilted 60 degrees one way and 25 the other is full tilt, leaning down-right of the x axis.
+    std::vector<BrushSample> tilt = named("tilt_sweep").samples;
+    deriveStroke(tilt);
+    CHECK_NEAR(tilt[tilt.size() / 2].tiltMagnitude, 1.0, 1e-12);
+    CHECK_NEAR(tilt[tilt.size() / 2].tiltAzimuth, std::atan2(-25.0, 60.0), 1e-9);
+    // Between 170 and -170 degrees of twist lies 180, not 0.
+    BrushSampleTrack track;
+    BrushSample a, b;
+    a.twist = 170; b.twist = -170; b.position = {10, 0};
+    a = track.add(a); b = track.add(b);
+    CHECK_NEAR(std::fabs(interpolate(a, b, 0.5).twist), 180.0, 1e-9);
+    // A mouse is neutral; a replay derives the same values every time.
+    const BrushSample mouse = mouseSample({1, 2}, 0.5);
+    CHECK(!mouse.stylus && mouse.pressure == 0.5 && mouse.tiltX == 0 && mouse.twist == 0);
+    std::vector<BrushSample> again = named("twist_sweep").samples;
+    deriveStroke(again);
+    for (size_t i = 0; i < again.size(); i++) CHECK(again[i].twistAngle == twist[i].twistAngle && again[i].speed == twist[i].speed);
 }
 
 TEST_CASE(every_fixture_and_preset_matches_the_baseline) {

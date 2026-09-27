@@ -209,6 +209,7 @@ void AutomationServer::registerPaintHandlers() {
         auto restore = [&] {
             s->brushSettings = previousBrush; s->brushErase = previousErase; s->foregroundColor = previousColor; s->blurMode = previousBlur; s->toning = previousToning; s->spotHealingMode = previousHealing; s->cloneSource = previousClone;
             s->brushPreset = previousPreset;
+            s->brushSeed.reset();
             if (previousActive && s->document() && s->document()->find(*previousActive)) s->selectLayer(previousActive, previousMask);
             s->selectTool(previousTool);
         };
@@ -227,14 +228,28 @@ void AutomationServer::registerPaintHandlers() {
             s->brushPreset = id;
             if (preset && !has(p, "size")) s->brushSettings.diameter = preset->diameter;
         }
-        // Pen pressure: one value for the whole stroke, or one per point; events come 8 ms apart.
-        const QJsonArray pressures = p.value("pressures").toArray();
+        // The pen: pressure for the whole stroke or per point, tilt and twist per point (degrees), and the time of each
+        // point in seconds (8 ms apart unless given). Any of them makes it a pen; without, MyPaint sees a mouse (half
+        // pressure) and tip brushes full pressure. `seed` repeats a tip brush's jitter.
+        const QJsonArray pressures = p.value("pressures").toArray(), tilts = p.value("tilts").toArray(),
+                         twists = p.value("twists").toArray(), times = p.value("times").toArray();
         const double pressure = std::clamp(num(p, "pressure", 0.5), 0.0, 1.0);
+        const bool stylus = has(p, "pressure") || !pressures.isEmpty() || !tilts.isEmpty() || !twists.isEmpty();
         auto penAt = [&](size_t i) {
-            double value = i < size_t(pressures.size()) ? std::clamp(pressures[int(i)].toDouble(pressure), 0.0, 1.0) : pressure;
-            // Given pressure acts as a pen's; without it MyPaint sees a mouse (half) and tip brushes full pressure.
-            s->pen = {value, 0, 0, qint64(i) * 8, has(p, "pressure") || !pressures.isEmpty()};
+            const int k = int(i);
+            BrushSample pen;
+            pen.pressure = k < pressures.size() ? std::clamp(pressures[k].toDouble(pressure), 0.0, 1.0) : pressure;
+            if (k < tilts.size()) {
+                const QJsonArray tilt = tilts[k].toArray();
+                pen.tiltX = std::clamp(tilt.at(0).toDouble(), -90.0, 90.0);
+                pen.tiltY = std::clamp(tilt.at(1).toDouble(), -90.0, 90.0);
+            }
+            if (k < twists.size()) pen.twist = twists[k].toDouble();
+            pen.time = k < times.size() ? times[k].toDouble(i * 0.008) : i * 0.008;
+            pen.stylus = stylus;
+            s->pen = pen;
         };
+        if (has(p, "seed")) s->brushSeed = uint32_t(std::clamp(num(p, "seed"), 0.0, 4294967295.0));
         bool warp = false;
         if (tool == "brush" || tool == "eraser") { s->selectTool(Tool::Brush); s->brushErase = tool == "eraser" || flag(p, "erase", false); }
         else if (tool == "healing") { s->selectTool(Tool::SpotHealing); if (s->spotHealingMode > 2) s->spotHealingMode = 0; }

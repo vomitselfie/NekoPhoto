@@ -3,6 +3,7 @@
 // tests/brush_parity_baseline.txt; brush_parity_tool writes the images and measurements out for a look.
 #pragma once
 #include "compositor/brush.h"
+#include "compositor/brushsample.h"
 #include "compositor/tipbrush.h"
 #include <cstdint>
 #include <functional>
@@ -15,21 +16,9 @@ namespace brushharness {
 
 using namespace compositor;
 
-/// One recorded pointer event, as a fixture stores it: seconds since the stroke began, the document position,
-/// and the pen: pressure 0..1, tilt in degrees (-90..90 each way, as Qt reports it), barrel rotation (twist) in
-/// degrees, and tangential (barrel wheel) pressure -1..1.
-struct StrokeSample {
-    double t = 0, x = 0, y = 0;
-    double pressure = 1;
-    double tiltX = 0, tiltY = 0, twist = 0, tangentialPressure = 0;
-};
-
-/// A recorded stroke. `stylus` false plays it as a mouse (no pressure, tilt or twist).
-struct StrokeFixture {
-    std::string name;
-    std::vector<StrokeSample> samples;
-    bool stylus = true;
-};
+/// A recorded stroke (brushsample.h): raw samples, seconds since the stroke began, document positions and the pen.
+/// `stylus` false plays it as a mouse (neutral pressure, no tilt or twist).
+using StrokeFixture = RecordedStroke;
 
 /// Every fixture is drawn for a canvas this size.
 constexpr int canvasWidth = 320, canvasHeight = 200;

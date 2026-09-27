@@ -46,10 +46,10 @@ struct Painting {
 /// A horizontal stroke across the middle of the layer, one event every 4 pixels at 60 events a second.
 void drawLine(Painting& stroke, double y, double x0, double x1, double pressure = 0.7) {
     for (double x = x0; x <= x1; x += 4) {
-        MyPaintInput in;
-        in.document = {x, y};
+        BrushSample in;
+        in.position = {x, y};
         in.pressure = pressure;
-        in.seconds = 1.0 / 60;
+        in.dt = 1.0 / 60;
         stroke.engine.strokeTo(in);
     }
     stroke.engine.finish();
@@ -123,10 +123,10 @@ TEST_CASE(mypaint_click_leaves_a_mark_and_slow_tracking_catches_up) {
         Layer layer = whiteLayer(200, 100);
         Painting stroke(layer, dry, black(20), Size(200, 100));
         REQUIRE(stroke.isValid());
-        MyPaintInput click;
-        click.document = {100, 50};
+        BrushSample click;
+        click.position = {100, 50};
         click.pressure = 0.7;
-        click.seconds = 1.0 / 120;
+        click.dt = 1.0 / 120;
         stroke.engine.strokeTo(click);
         auto commit = stroke.commit();
         REQUIRE(commit.asset && commit.asset->image);
@@ -136,12 +136,12 @@ TEST_CASE(mypaint_click_leaves_a_mark_and_slow_tracking_catches_up) {
     {
         Layer layer = whiteLayer(300, 100);
         Painting stroke(layer, dry, black(10), Size(300, 100));
-        MyPaintInput in;
+        BrushSample in;
         in.pressure = 0.7;
-        in.seconds = 1.0 / 120;
-        in.document = {20, 50};
+        in.dt = 1.0 / 120;
+        in.position = {20, 50};
         stroke.engine.strokeTo(in);
-        in.document = {260, 50};   // a fast flick: the brush trails behind
+        in.position = {260, 50};   // a fast flick: the brush trails behind
         stroke.engine.strokeTo(in);
         CHECK(!stroke.engine.settled());
         int repeats = 0;
