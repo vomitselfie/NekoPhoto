@@ -56,6 +56,10 @@
         <translation>画像を読み込み</translation>
     </message>
     <message>
+        <source>Convert Mode</source>
+        <translation>モードを変更</translation>
+    </message>
+    <message>
         <source>Trim</source>
         <translation>トリミング</translation>
     </message>
@@ -2961,8 +2965,40 @@ File &gt; New creates a blank canvas.</source>
         <translation>名称未設定</translation>
     </message>
     <message>
+        <source>%1 is not available for %2-bit documents yet.</source>
+        <translation>%2 bit/チャンネルのドキュメントでは、%1 はまだ使用できません。</translation>
+    </message>
+    <message>
+        <source>32-bit documents are not available yet.</source>
+        <translation>32 bit/チャンネルのドキュメントはまだ使用できません。</translation>
+    </message>
+    <message>
+        <source>This document is too large for %1 bits per channel: %2</source>
+        <translation>このドキュメントは %1 bit/チャンネルには大きすぎます：%2</translation>
+    </message>
+    <message>
+        <source>Cropping</source>
+        <translation>切り抜き</translation>
+    </message>
+    <message>
+        <source>A %1-bit canvas holds up to %2 megapixels.</source>
+        <translation>%1 bit/チャンネルのカンバスは最大 %2 メガピクセルです。</translation>
+    </message>
+    <message>
+        <source>Image Size</source>
+        <translation>画像解像度</translation>
+    </message>
+    <message>
         <source>The resized image would exceed the 100-megapixel limit.</source>
         <translation>サイズ変更後の画像が 1 億ピクセルの上限を超えます。</translation>
+    </message>
+    <message>
+        <source>This tool</source>
+        <translation>このツール</translation>
+    </message>
+    <message>
+        <source>Artboards</source>
+        <translation>アートボード</translation>
     </message>
     <message>
         <source>The document has no visible artboards.</source>
@@ -2971,6 +3007,14 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>The document has no slices.</source>
         <translation>ドキュメントにスライスがありません。</translation>
+    </message>
+    <message>
+        <source>Baking a clipping mask into pixels</source>
+        <translation>クリッピングマスクのピクセルへの焼き付け</translation>
+    </message>
+    <message>
+        <source>Editing pixels</source>
+        <translation>ピクセルの編集</translation>
     </message>
     <message>
         <source>Nothing to merge: the layers have no visible pixels.</source>
@@ -3013,6 +3057,10 @@ File &gt; New creates a blank canvas.</source>
         <translation>テキストが大きすぎて描画できません。テキストは最大 1 億ピクセルまでです。</translation>
     </message>
     <message>
+        <source>Vector masks and paths</source>
+        <translation>ベクトルマスクとパス</translation>
+    </message>
+    <message>
         <source>The document is busy.</source>
         <translation>ドキュメントは処理中です。</translation>
     </message>
@@ -3043,6 +3091,14 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>A shape layer&apos;s path is its vector mask: change it with shape.set.</source>
         <translation>シェイプレイヤーのパスはベクトルマスクです。shape.set で変更してください。</translation>
+    </message>
+    <message>
+        <source>Text</source>
+        <translation>テキスト</translation>
+    </message>
+    <message>
+        <source>Painting</source>
+        <translation>ペイント</translation>
     </message>
     <message>
         <source>A document holds at most 998 saved paths.</source>
@@ -3173,6 +3229,10 @@ File &gt; New creates a blank canvas.</source>
         <translation>スマートフィルターのマスクをペイント中:終了するにはレイヤーを選択します</translation>
     </message>
     <message>
+        <source>Smart objects</source>
+        <translation>スマートオブジェクト</translation>
+    </message>
+    <message>
         <source>That file has no image to place.</source>
         <translation>このファイルには配置する画像がありません。</translation>
     </message>
@@ -3217,12 +3277,32 @@ File &gt; New creates a blank canvas.</source>
         <translation>このコンテンツの元のドキュメントは閉じられています。</translation>
     </message>
     <message>
+        <source>Distorting a layer</source>
+        <translation>レイヤーの自由な形に変形</translation>
+    </message>
+    <message>
         <source>That shape can&apos;t be applied.</source>
         <translation>このシェイプは適用できません。</translation>
     </message>
     <message>
         <source>The merged layer would exceed the size limits.</source>
         <translation>結合したレイヤーがサイズの上限を超えます。</translation>
+    </message>
+    <message>
+        <source>Adjustments</source>
+        <translation>色調補正</translation>
+    </message>
+    <message>
+        <source>Selections</source>
+        <translation>選択範囲</translation>
+    </message>
+    <message>
+        <source>Layer styles</source>
+        <translation>レイヤースタイル</translation>
+    </message>
+    <message>
+        <source>The timeline</source>
+        <translation>タイムライン</translation>
     </message>
 </context>
 <context>
@@ -3790,6 +3870,10 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Smart object (%1): click to edit its contents.</source>
         <translation>スマートオブジェクト (%1): クリックして内容を編集します。</translation>
+    </message>
+    <message>
+        <source>Not available in 16-bit yet</source>
+        <translation>16 bit/チャンネルではまだ使用できません</translation>
     </message>
     <message>
         <source>Edit Text…</source>
@@ -4437,6 +4521,10 @@ File &gt; New creates a blank canvas.</source>
         <translation>PNG を書き出せませんでした</translation>
     </message>
     <message>
+        <source>Exported %1, reduced from 16 to 8 bits per channel with dithering.</source>
+        <translation>%1 を書き出しました（16 bit/チャンネルから 8 bit/チャンネルにディザで変換）。</translation>
+    </message>
+    <message>
         <source>Couldn’t export PSD</source>
         <translation>PSD を書き出せませんでした</translation>
     </message>
@@ -5029,6 +5117,18 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>&amp;Image</source>
         <translation>イメージ(&amp;I)</translation>
+    </message>
+    <message>
+        <source>&amp;Mode</source>
+        <translation>モード(&amp;M)</translation>
+    </message>
+    <message>
+        <source>&amp;8 Bits/Channel</source>
+        <translation>8 bit/チャンネル(&amp;8)</translation>
+    </message>
+    <message>
+        <source>&amp;16 Bits/Channel</source>
+        <translation>16 bit/チャンネル(&amp;1)</translation>
     </message>
     <message>
         <source>&amp;Canvas Size…</source>
@@ -5705,6 +5805,18 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>&lt;b&gt;NekoPhoto&lt;/b&gt; %3&lt;br&gt;A layered photo editor and painting app for Linux. It began as a Linux port of &lt;a href=&quot;https://github.com/robbietilton/Compositor&quot;&gt;Compositor&lt;/a&gt; for macOS, and still opens its projects.&lt;br&gt;&lt;br&gt;Qt %1 &amp;middot; project format version %2&lt;br&gt;&lt;br&gt;Free software under the GNU General Public License, version 3 or later, with ABSOLUTELY NO WARRANTY. Compositor&apos;s own code is MIT licensed by Wonder Assembly LLC; the licences of the bundled components are in THIRD-PARTY-NOTICES.md, installed with the program.</source>
         <translation>&lt;b&gt;NekoPhoto&lt;/b&gt; %3&lt;br&gt;Linux 向けのレイヤー対応フォトエディター兼ペイントアプリです。macOS 用 &lt;a href=&quot;https://github.com/robbietilton/Compositor&quot;&gt;Compositor&lt;/a&gt; の Linux 移植として始まり、今もそのプロジェクトを開けます。&lt;br&gt;&lt;br&gt;Qt %1 &amp;middot; プロジェクト形式バージョン %2&lt;br&gt;&lt;br&gt;GNU 一般公衆利用許諾書(GPL)バージョン 3 以降のもとで配布されるフリーソフトウェアであり、一切の保証はありません。Compositor 自体のコードは Wonder Assembly LLC による MIT ライセンスです。同梱コンポーネントのライセンスは、プログラムと共にインストールされる THIRD-PARTY-NOTICES.md に記載されています。</translation>
+    </message>
+    <message>
+        <source>Mode</source>
+        <translation>モード</translation>
+    </message>
+    <message>
+        <source>The document could not be converted.</source>
+        <translation>ドキュメントを変換できませんでした。</translation>
+    </message>
+    <message>
+        <source>Not available in 16-bit yet</source>
+        <translation>16 bit/チャンネルではまだ使用できません</translation>
     </message>
 </context>
 <context>

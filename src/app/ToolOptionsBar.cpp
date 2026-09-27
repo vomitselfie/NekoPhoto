@@ -222,7 +222,7 @@ void ToolOptionsBar::syncTransformFields() {
     syncingFields_ = true;
     LayerTransform t = session_->editedTransform(*active);
     auto pixels = session_->transformPixelSize();
-    if (!pixels && !enabled && active->asset && active->asset->image.u8()) pixels = Size(active->asset->image.u8()->width(), active->asset->image.u8()->height());
+    if (!pixels && !enabled && active->asset && active->asset->image) pixels = Size(active->asset->image.width(), active->asset->image.height());
     xField_->setValue(t.origin.x);
     yField_->setValue(t.origin.y);
     wField_->setValue(t.size.width);

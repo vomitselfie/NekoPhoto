@@ -182,7 +182,8 @@ void CanvasWidget::drawScribbles(QPainter& painter) {
 void CanvasWidget::drawSelectionAnts(QPainter& painter) {
     if (selectionRasterAnts_) {
         auto selection = session_->displayedSelection();
-        if (selection && selection->coverage.u8()) drawRasterAnts(painter, *selection->coverage.u8());
+        auto coverage = selection ? EditorSession::coverage8(*selection) : nullptr;
+        if (coverage) drawRasterAnts(painter, *coverage);
         return;
     }
     if (selectionOutline_.empty()) return;
@@ -225,9 +226,10 @@ void CanvasWidget::refreshSelectionOutline() {
     selectionOutline_.clear();
     selectionRasterAnts_ = false;
     auto selection = session_->displayedSelection();
-    if (selection && selection->coverage) {
+    auto coverage = selection ? EditorSession::coverage8(*selection) : nullptr;
+    if (coverage) {
         bool tooDetailed = false;
-        auto loops = selectionOutline(*selection->coverage.u8(), &tooDetailed);
+        auto loops = selectionOutline(*coverage, &tooDetailed);
         size_t points = 0;
         for (auto& loop : loops) points += loop.size();
         // Past a couple of hundred thousand corners the vector ants cost more than a raster pass per tick.

@@ -338,6 +338,71 @@ def remaining_methods(rpc):
     rpc.call("tabs.close", index=tab["index"], discard=True)
 
 
+def sixteen_bit(rpc):
+    """Image > Mode > 16 Bits/Channel (docs/bit-depth.md): what works on a 16-bit document, what is refused with the
+    reason, and the files it writes; in a tab of its own that is closed afterwards."""
+    work = tempfile.mkdtemp()
+    first = rpc.call("tabs.list")
+    tab = rpc.call("tabs.new")
+    rpc.call("document.new", width=120, height=80)
+    rpc.call("shape.draw", kind="ellipse", x=10, y=10, width=100, height=60, color="#3366aa")
+    assert rpc.call("document.info")["bits"] == 8
+    converted = rpc.call("image.mode", bits=16)
+    assert converted["bits"] == 16 and converted["layerPixelBudget"] == 500000000, converted
+    assert rpc.call("document.info")["bits"] == 16
+    assert rpc.call("history.info")["undo"] == "Convert Mode"
+    # The layer structure, masks and transforms work at 16 bits.
+    layer = rpc.call("layers.list")[0]
+    rpc.call("layers.set", id=layer["id"], opacity=0.75, blend="Multiply")
+    rpc.call("layers.duplicate", id=layer["id"])
+    rpc.call("layers.mask", id=layer["id"], action="add", revealing=False)
+    rpc.call("layers.mask", id=layer["id"], action="invert")
+    rpc.call("layers.mask", id=layer["id"], action="toggle")
+    rpc.call("layers.setTransform", id=layer["id"], x=4, y=2)
+    rpc.call("canvas.flip", vertical=True)
+    rpc.call("layers.add", kind="group")
+    shot = rpc.call("render", maxSize=64)
+    assert base64.b64decode(shot["png"])[:8] == b"\x89PNG\r\n\x1a\n"
+    # What is not ported yet is refused, saying so.
+    for method, params in (("pixels.fill", {"color": "#ff0000"}), ("selection.rect", {"x": 0, "y": 0, "width": 10, "height": 10}),
+                           ("pixels.filter", {"kind": "Gaussian Blur", "radius": 2}), ("layers.add", {"kind": "adjustment", "adjustmentKind": "Levels"}),
+                           ("tool.select", {"name": "brush"})):
+        try:
+            rpc.call(method, **params)
+            raise AssertionError(method + " should be refused on a 16-bit document")
+        except RuntimeError as e:
+            assert "not available for 16-bit documents yet" in str(e), e
+    # PNG at 16 bits; an 8-bit format dithered down, with a note.
+    png = os.path.join(work, "deep.png")
+    assert rpc.call("document.export", path=png)["bits"] == 16
+    with open(png, "rb") as f:
+        assert f.read(25)[24] == 16, "a 16-bit PNG"
+    jpeg = rpc.call("document.export", path=os.path.join(work, "flat.jpg"))
+    assert jpeg["bits"] == 8 and "dithering" in jpeg["note"], jpeg
+    psd = os.path.join(work, "deep.psd")
+    rpc.call("document.export", path=psd)
+    with open(psd, "rb") as f:
+        assert f.read(24)[22:24] == b"\x00\x10", "a 16-bit PSD"
+    # A 16-bit project stays 16-bit.
+    project = os.path.join(work, "Deep.comp")
+    rpc.call("document.save", path=project)
+    rpc.call("document.close", discard=True)
+    rpc.call("document.open", path=project)
+    assert rpc.call("document.info")["bits"] == 16
+    # Back to 8 bits, and Undo takes the conversion back in one step.
+    assert rpc.call("image.mode", bits=8)["bits"] == 8
+    rpc.call("history.undo")
+    assert rpc.call("document.info")["bits"] == 16
+    try:
+        rpc.call("image.mode", bits=32)
+        raise AssertionError("32-bit documents are not available yet")
+    except RuntimeError as e:
+        print("expected error:", e)
+    rpc.call("document.close", discard=True)
+    rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
+    rpc.call("tabs.close", index=tab["index"], discard=True)
+
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else None
     if not path:
@@ -732,6 +797,7 @@ def main():
             print("gmic", cat["version"], "(no catalogue file)")
 
     remaining_methods(rpc)
+    sixteen_bit(rpc)
 
     # Errors come back as errors, not crashes.
     try:

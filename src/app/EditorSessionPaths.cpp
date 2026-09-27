@@ -15,6 +15,7 @@ namespace app {
 // ---- Pen --------------------------------------------------------------------------------------------------------
 
 void EditorSession::penPress(QPointF p) {
+    if (refusedAtDepth("edit.vector", tr("Vector masks and paths"))) return;
     if (!document_) return;
     const Point at = toPoint(p);
     if (!penDraft_) { penDraft_ = VectorPath::Subpath{}; penDraft_->closed = false; penDraft_->op = VectorPath::Op::Add; }
@@ -139,6 +140,7 @@ bool EditorSession::targetVectorMask(const Uuid& id) {
 }
 
 bool EditorSession::addVectorMask(VectorMaskKind kind, QString* error) {
+    if (refusedAtDepth("edit.vector", tr("Vector masks and paths"), error)) return false;
     auto fail = [&](const QString& why) { if (error) *error = why; return false; };
     if (!canEditLayers()) return fail(tr("The document is busy."));
     Layer* layer = activeLayerMutable();
@@ -165,6 +167,7 @@ bool EditorSession::addVectorMask(VectorMaskKind kind, QString* error) {
 }
 
 bool EditorSession::deleteVectorMask() {
+    if (refusedAtDepth("edit.vector", tr("Vector masks and paths"))) return false;
     if (!canEditLayers()) return false;
     Layer* layer = activeLayerMutable();
     if (!layer || !hasLayerVectorMask(*layer)) return false;
@@ -178,6 +181,7 @@ bool EditorSession::deleteVectorMask() {
 }
 
 bool EditorSession::setVectorMaskPath(const Uuid& id, const VectorPath& path, QString* error) {
+    if (refusedAtDepth("edit.vector", tr("Vector masks and paths"), error)) return false;
     auto fail = [&](const QString& why) { if (error) *error = why; return false; };
     if (!canEditLayers()) return fail(tr("The document is busy."));
     Layer* layer = document_->find(id);
@@ -195,6 +199,7 @@ bool EditorSession::setVectorMaskPath(const Uuid& id, const VectorPath& path, QS
 // ---- Text to paths ----------------------------------------------------------------------------------------------
 
 bool EditorSession::textToWorkPath(const Uuid& id, QString* error) {
+    if (refusedAtDepth("edit.text", tr("Text"), error)) return false;
     if (!canEditLayers()) { if (error) *error = tr("The document is busy."); return false; }
     const Layer* layer = document_->find(id);
     if (!layer) { if (error) *error = tr("No such layer."); return false; }
@@ -204,6 +209,7 @@ bool EditorSession::textToWorkPath(const Uuid& id, QString* error) {
 }
 
 bool EditorSession::textToShape(const Uuid& id, QString* error) {
+    if (refusedAtDepth("edit.paint", tr("Painting"), error)) return false;
     if (!canEditLayers()) { if (error) *error = tr("The document is busy."); return false; }
     const Layer* text = document_->find(id);
     if (!text) { if (error) *error = tr("No such layer."); return false; }
@@ -280,6 +286,7 @@ std::optional<VectorPath> EditorSession::targetPath() const {
 }
 
 bool EditorSession::beginPathEdit(const QString& name) {
+    if (refusedAtDepth("edit.vector", tr("Vector masks and paths"))) return false;
     if (pathEditing_ || !canEditLayers() || !targetPath()) return false;
     beginEdit(name);
     pathEditing_ = true;
@@ -316,6 +323,7 @@ bool EditorSession::setTargetPath(const VectorPath& path, const QString& name) {
 }
 
 bool EditorSession::addAnchorAt(QPointF p, double radius) {
+    if (refusedAtDepth("edit.vector", tr("Vector masks and paths"))) return false;
     auto path = targetPath();
     if (!path) return false;
     auto hit = nearestPathSegment(*path, toPoint(p));
@@ -325,6 +333,7 @@ bool EditorSession::addAnchorAt(QPointF p, double radius) {
 }
 
 bool EditorSession::deleteAnchorAt(QPointF p, double radius) {
+    if (refusedAtDepth("edit.vector", tr("Vector masks and paths"))) return false;
     auto path = targetPath();
     if (!path) return false;
     auto knot = nearestKnot(*path, toPoint(p), radius);
@@ -370,6 +379,7 @@ void EditorSession::renamePath(uint16_t id, const QString& name) {
 }
 
 void EditorSession::deletePath(uint16_t id) {
+    if (refusedAtDepth("edit.vector", tr("Vector masks and paths"))) return;
     if (!canEditLayers()) return;
     beginEdit(QT_TRANSLATE_NOOP("History", "Delete Path"));
     removeDocumentPath(*document_, id);
@@ -395,6 +405,7 @@ void EditorSession::savePath(uint16_t id, const QString& name) {
 }
 
 bool EditorSession::pathToSelection(uint16_t id, SelectionMode mode) {
+    if (refusedAtDepth("edit.selection", tr("Selections"))) return false;
     if (!document_) return false;
     auto p = documentPath(*document_, id);
     if (!p || p->path.subpaths.empty()) return false;
@@ -404,6 +415,7 @@ bool EditorSession::pathToSelection(uint16_t id, SelectionMode mode) {
 }
 
 bool EditorSession::fillPath(uint16_t id) {
+    if (refusedAtDepth("edit.paint", tr("Painting"))) return false;
     if (!canEditLayers()) return false;
     auto p = documentPath(*document_, id);
     if (!p || p->path.subpaths.empty()) return false;
@@ -412,6 +424,7 @@ bool EditorSession::fillPath(uint16_t id) {
 }
 
 bool EditorSession::strokePath(uint16_t id) {
+    if (refusedAtDepth("edit.paint", tr("Painting"))) return false;
     // With the brush's size and opacity in the foreground colour (Photoshop strokes with the chosen tool's tip).
     if (!canEditLayers()) return false;
     auto p = documentPath(*document_, id);
@@ -426,6 +439,7 @@ bool EditorSession::strokePath(uint16_t id) {
 }
 
 bool EditorSession::pathToShapeLayer(uint16_t id) {
+    if (refusedAtDepth("edit.paint", tr("Painting"))) return false;
     if (!document_) return false;
     auto p = documentPath(*document_, id);
     if (!p || p->path.subpaths.empty()) return false;
@@ -440,6 +454,7 @@ bool EditorSession::pathToShapeLayer(uint16_t id) {
 }
 
 bool EditorSession::selectionToWorkPath(double tolerance) {
+    if (refusedAtDepth("edit.selection", tr("Selections"))) return false;
     if (!canEditLayers() || !document_->selection || !document_->selection->coverage) return false;
     bool tooDetailed = false;
     const auto loops = selectionOutline(*document_->selection->coverage.u8(), &tooDetailed);

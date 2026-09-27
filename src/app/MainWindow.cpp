@@ -511,9 +511,10 @@ void MainWindow::refreshBackgroundAction() {
 
 void MainWindow::refreshActions() {
     bool has = session_->hasDocument();
-    for (auto* a : documentActions_) a->setEnabled(has);
-    if (mergeAction_) { mergeAction_->setText(tr("&%1").arg(names::history(session_->mergeTitle()))); mergeAction_->setEnabled(has && session_->canMergeLayers()); }
-    if (editTextAction_) { const Layer* l = has ? session_->activeLayer() : nullptr; editTextAction_->setEnabled(l && l->isLiveText()); }
+    refreshDepthGating();
+    const bool eightBit = session_->sampleType() == SampleType::U8;
+    if (mergeAction_) { mergeAction_->setText(tr("&%1").arg(names::history(session_->mergeTitle()))); mergeAction_->setEnabled(has && eightBit && session_->canMergeLayers()); }
+    if (editTextAction_) { const Layer* l = has ? session_->activeLayer() : nullptr; editTextAction_->setEnabled(eightBit && l && l->isLiveText()); }
     undoAction_->setEnabled(session_->canUndo());
     redoAction_->setEnabled(session_->canRedo());
     undoAction_->setText(session_->canUndo() ? tr("&Undo %1").arg(names::history(session_->undoName())) : tr("&Undo"));

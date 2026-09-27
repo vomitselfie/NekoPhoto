@@ -140,7 +140,8 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
             const bool moving = session_->spotHealingMode == 5;
             const auto& d = session_->document();
             const int x = int(std::floor(doc.x())), y = int(std::floor(doc.y()));
-            if (d->selection && d->selection->coverage && x >= 0 && y >= 0 && x < d->width && y < d->height && d->selection->coverage.u8()->at(x, y) > 127) {
+            auto coverage = session_->selectionCoverage8();
+            if (coverage && x >= 0 && y >= 0 && x < d->width && y < d->height && coverage->at(x, y) > 127) {
                 selectionMoveOrigin_ = d->selection;
                 session_->beginEdit(moving ? (session_->contentMoveExtend ? QT_TRANSLATE_NOOP("History", "Content-Aware Extend") : QT_TRANSLATE_NOOP("History", "Content-Aware Move")) : QT_TRANSLATE_NOOP("History", "Patch"));
                 dragStartDocument_ = doc;
@@ -249,7 +250,8 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
         const auto& d = session_->document();
         if (selectionMode(modifiers) == SelectionMode::Replace && d->selection && d->selection->coverage) {
             int x = int(std::floor(doc.x())), y = int(std::floor(doc.y()));
-            if (x >= 0 && y >= 0 && x < d->width && y < d->height && d->selection->coverage.u8()->at(x, y) > 127) {
+            auto coverage = session_->selectionCoverage8();
+            if (coverage && x >= 0 && y >= 0 && x < d->width && y < d->height && coverage->at(x, y) > 127) {
                 selectionMoveOrigin_ = d->selection;
                 session_->beginEdit(QT_TRANSLATE_NOOP("History", "Move Selection"));
                 drag_ = Drag::SelectionMove;
@@ -498,7 +500,7 @@ void CanvasWidget::move(QPointF view, Qt::MouseButtons buttons, Qt::KeyboardModi
         break;
     }
     case Drag::SelectionMove: case Drag::Patch: {
-        if (!selectionMoveOrigin_ || !selectionMoveOrigin_->coverage) break;
+        if (!selectionMoveOrigin_ || !selectionMoveOrigin_->coverage.u8()) break;   // moving a selection is 8-bit for now
         int dx = int(std::round(doc.x() - dragStartDocument_.x())), dy = int(std::round(doc.y() - dragStartDocument_.y()));
         const GrayImage& src = *selectionMoveOrigin_->coverage.u8();
         auto moved = std::make_shared<GrayImage>(src.width(), src.height(), 0);

@@ -135,7 +135,7 @@ QJsonObject layerJson(const Layer& layer, int depth) {
     if (layer.isLiveSmartObject())
         o["smartObject"] = QJsonObject{{"source", qs(layer.smartObject->sourceId)}, {"locked", layer.smartObject->locked()},
                                        {"state", QString::fromUtf8(smartObjectLockDescription(layer.smartObject->lock))}};
-    if (!layer.isGroup && !layer.adjustment) o["pixelSize"] = QJsonObject{{"width", layer.pixelWidth()}, {"height", layer.pixelHeight()}, {"blank", !layer.asset || !layer.asset->image.u8()}};
+    if (!layer.isGroup && !layer.adjustment) o["pixelSize"] = QJsonObject{{"width", layer.pixelWidth()}, {"height", layer.pixelHeight()}, {"blank", !layer.asset || !layer.asset->image}};
     if (layer.mask) o["mask"] = QJsonObject{{"enabled", layer.mask->enabled}, {"linked", layer.mask->linked}, {"placed", layer.mask->placement.has_value()}};
     if (layer.adjustment) {
         o["adjustmentKind"] = QString::fromUtf8(adjustmentKindName(layer.adjustment->kind));

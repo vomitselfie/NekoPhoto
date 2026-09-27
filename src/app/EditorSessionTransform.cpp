@@ -93,6 +93,7 @@ void EditorSession::beginTransform(bool persistent) {
 }
 
 void EditorSession::beginSelectionTransform() {
+    if (refusedAtDepth("edit.selection", tr("Selections"))) return;
     if (!canTransformSelection()) return;
     const Layer* source = activeLayer();
     auto lifted = renderSelectedPixels(false);
@@ -140,6 +141,7 @@ void EditorSession::previewTransform(const LayerTransform& value) {
 }
 
 void EditorSession::beginDistort() {
+    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return;
     if (!transformEdit_ || transformEdit_->corners || !transformEdit_->draft.isValid() || transformEdit_->mask) return;
     transformEdit_->corners = cornersOf(transformEdit_->draft);
     transformEdit_->persistent = true;
@@ -148,6 +150,7 @@ void EditorSession::beginDistort() {
 
 void EditorSession::previewCorners(const Corners& corners) {
     if (!transformEdit_ || !transformEdit_->corners || !cornersUsable(corners)) return;
+    if (refusedAtDepth("edit.pixels", tr("Distorting a layer"))) { transformEdit_->corners.reset(); return; }
     transformEdit_->corners = corners;
     emit documentChanged({});
     emit transformChanged();
@@ -402,13 +405,15 @@ std::optional<Uuid> EditorSession::layerAt(QPointF documentPoint) const {
     auto layers = renderLayers(document_->layers);
     for (auto it = layers.rbegin(); it != layers.rend(); ++it) {
         const Layer* layer = *it;
-        if (!layer->asset || !layer->asset->image.u8()) continue;
+        if (!layer->asset || !layer->asset->image) continue;
+        const AnyImage& image = layer->asset->image;
         LayerTransform t = displayedTransform(*layer);
         if (!t.contains(toPoint(documentPoint))) continue;
-        Point p = t.pixelToDocument(layer->asset->image.u8()->width(), layer->asset->image.u8()->height()).inverted().apply(toPoint(documentPoint));
+        Point p = t.pixelToDocument(image.width(), image.height()).inverted().apply(toPoint(documentPoint));
         int x = int(std::floor(p.x)), y = int(std::floor(p.y));
-        if (x < 0 || y < 0 || x >= layer->asset->image.u8()->width() || y >= layer->asset->image.u8()->height()) continue;
-        if (layer->asset->image.u8()->pixel(x, y)[3] > 0) return layer->id;
+        if (x < 0 || y < 0 || x >= image.width() || y >= image.height()) continue;
+        // Any alpha at all, at whatever depth the pixels are.
+        if (image.u8() ? image.u8()->pixel(x, y)[3] > 0 : image.u16() && image.u16()->pixel(x, y)[3] > 0) return layer->id;
     }
     return std::nullopt;
 }
@@ -419,14 +424,14 @@ std::optional<Size> EditorSession::transformPixelSize() const {
     if (transformEdit_ && transformEdit_->mask) return std::nullopt;
     if (transformEdit_ && transformEdit_->floating) return Size(transformEdit_->floating->pixelWidth, transformEdit_->floating->pixelHeight);
     const Layer* active = activeLayer();
-    if (!active || !active->asset || !active->asset->image.u8()) return std::nullopt;
-    return Size(active->asset->image.u8()->width(), active->asset->image.u8()->height());
+    if (!active || !active->asset || !active->asset->image) return std::nullopt;
+    return Size(active->asset->image.width(), active->asset->image.height());
 }
 
 void EditorSession::redrawShape(Layer& layer) {
     if (!layer.isLiveShape() || !layer.asset) return;
     int w = std::max(1, int(std::lround(layer.transform.size.width))), h = std::max(1, int(std::lround(layer.transform.size.height)));
-    if ((w == layer.asset->image.u8()->width() && h == layer.asset->image.u8()->height()) || (long long)w * h > Document::pixelBudget) return;
+    if ((w == layer.asset->image.width() && h == layer.asset->image.height()) || (long long)w * h > Document::pixelBudget) return;
     auto image = shapeImage(layer.shape->kind, w, h, layer.shape->red, layer.shape->green, layer.shape->blue, layer.shape->cornerRadius);
     // A mask that follows the layer's pixel grid stays exactly where it is while that grid changes size.
     if (layer.mask && !layer.mask->placement) layer.mask->placement = layer.maskTransform();

@@ -306,6 +306,8 @@ struct Document {
     long long maskBytes() const;
     /// Whether Compositor for macOS can open this project: its loader allows pixelBudget in total.
     bool fitsMacBudget() const {
+        // The Mac app is 8-bit only.
+        if (sampleType != SampleType::U8) return false;
         // The Mac app reads projects up to version 7: folders with their own opacity, mode or isolation need 8.
         for (const Layer& l : layers) if (l.isGroup && (l.opacity != 1 || l.blendMode != BlendMode::Normal || !l.passThrough || l.artboard)) return false;
         if (!slices.empty()) return false;

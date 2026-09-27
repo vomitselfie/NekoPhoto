@@ -94,6 +94,8 @@ const MethodDoc methodDocs[] = {
     {"image.trim", "Cut the canvas down to its content, as Photoshop's Image > Trim (one undo step); trimmed is false when nothing would change or nothing would remain.",
      "basedOn:(transparent|topLeft|bottomRight)=transparent What is trimmed away: transparent pixels, or the colour of that corner; top:bool=true Trim the top; bottom:bool=true; left:bool=true; right:bool=true; "
      "tolerance:integer=0 For the colour modes: how far a channel may be from the corner's (0..255)"},
+    {"image.mode", "Image > Mode: convert the document to 8 or 16 bits per channel, every layer, mask and the selection, as one undo step. A 16-bit document holds half the pixels of an 8-bit one within the same memory; what has not been ported to 16 bits yet is refused on it (docs/bit-depth.md).",
+     "bits:integer! 8 or 16"},
     {"image.resize", "Resample the whole image (every layer).",
      "width:integer New width (0 keeps the aspect from height); height:integer New height; scale:number Instead of a size: a factor; sampling:(nearest|smooth|high)=high Resampling; resolution:number Pixels per inch to record"},
     // seeing the result

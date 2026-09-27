@@ -20,11 +20,13 @@ bool EditorSession::paintsQuickMask() const {
 }
 
 void EditorSession::toggleQuickMask() {
+    if (refusedAtDepth("edit.selection", tr("Selections"))) return;
     if (quickMaskActive()) endQuickMask();
     else beginQuickMask();
 }
 
 bool EditorSession::beginQuickMask() {
+    if (refusedAtDepth("edit.selection", tr("Selections"))) return false;
     if (!canEditLayers() || quickMaskActive() || document_->layers.size() >= size_t(Document::maxLayers)) return false;
     const int w = document_->width, h = document_->height;
     auto red = std::make_shared<Image>(w, h);

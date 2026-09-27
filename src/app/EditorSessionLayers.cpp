@@ -1,5 +1,6 @@
 // EditorSession: Layers: adding, grouping, clipping, masks, merging, ordering and their properties.
 #include "EditorSession.h"
+#include "compositor/depth.h"
 #include "compositor/filters.h"
 #include <algorithm>
 #include <map>
@@ -177,6 +178,8 @@ std::optional<Asset> EditorSession::bakeClipping(const Uuid& target) const {
 
 void EditorSession::deleteLayersResolvingClipping(const std::vector<Uuid>& ids, bool bake) {
     if (!canEditLayers()) return;
+    // Baking the clipped look into the dependents' pixels is an 8-bit edit for now.
+    if (bake && !clippingDependents(ids).empty() && refusedAtDepth("edit.pixels", tr("Baking a clipping mask into pixels"))) return;
     std::map<Uuid, Asset> baked;
     if (bake) for (auto& id : clippingDependents(ids)) if (auto asset = bakeClipping(id)) baked[id] = *asset;
     finishDeleting(ids, baked);
@@ -322,6 +325,7 @@ bool EditorSession::canMergeLayers() const { return mergePlan().has_value(); }
 QString EditorSession::mergeTitle() const { auto plan = mergePlan(); return plan ? plan->action : QStringLiteral(QT_TRANSLATE_NOOP("History", "Merge Down")); }
 
 void EditorSession::mergeLayers() {
+    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return;
     commitTransform();
     auto plan = mergePlan();
     if (!plan) return;
@@ -622,7 +626,7 @@ void EditorSession::addLayerMask(bool revealing) {
     endOpacityEdit();
     beginEdit(revealing ? QT_TRANSLATE_NOOP("History", "Add Reveal-All Mask") : QT_TRANSLATE_NOOP("History", "Add Hide-All Mask"));
     LayerMask mask;
-    mask.asset = MaskAsset::solid(revealing);
+    mask.asset = MaskAsset::solid(revealing, document_->sampleType);
     layer->mask = mask;
     isMaskSelected_ = true;
     endEdit();
@@ -630,6 +634,7 @@ void EditorSession::addLayerMask(bool revealing) {
 }
 
 void EditorSession::addMaskFromSelection(bool revealing) {
+    if (refusedAtDepth("edit.selection", tr("Selections"))) return;
     if (!document_ || !document_->selection || !document_->selection->coverage) { addLayerMask(revealing); return; }
     if (!canEditLayers()) return;
     Layer* layer = activeLayerMutable();
@@ -688,6 +693,7 @@ void EditorSession::toggleMaskLink(const Uuid& id) {
 }
 
 void EditorSession::applyMask() {
+    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return;
     if (!canEditLayers()) return;
     Layer* layer = activeLayerMutable();
     if (!layer || !layer->mask || layer->isGroup || !layer->asset || !layer->asset->image.u8()) return;
@@ -714,11 +720,21 @@ void EditorSession::applyMask() {
 void EditorSession::invertMask() {
     if (!canEditLayers()) return;
     Layer* layer = activeLayerMutable();
-    if (!layer || !layer->mask) return;
-    auto out = std::make_shared<GrayImage>(*layer->mask->asset.image.u8());
-    for (size_t i = 0; i < out->byteCount(); i++) out->data()[i] = uint8_t(255 - out->data()[i]);
+    if (!layer || !layer->mask || !layer->mask->asset.image) return;
+    MaskAsset inverted;
+    if (auto deep = layer->mask->asset.image.u16()) {
+        // At the document's depth: 32768 - v.
+        auto out = std::make_shared<Gray16>(*deep);
+        const size_t n = size_t(out->width()) * size_t(out->height());
+        for (size_t i = 0; i < n; i++) out->data()[i] = uint16_t(one16 - out->data()[i]);
+        inverted = MaskAsset::make(Gray16Ptr(out));
+    } else {
+        auto out = std::make_shared<GrayImage>(*layer->mask->asset.image.u8());
+        for (size_t i = 0; i < out->byteCount(); i++) out->data()[i] = uint8_t(255 - out->data()[i]);
+        inverted = MaskAsset::make(out);
+    }
     beginEdit(QT_TRANSLATE_NOOP("History", "Invert Mask"));
-    layer->mask->asset = MaskAsset::make(out);
+    layer->mask->asset = inverted;
     endEdit();
     notifyDocument();
 }
@@ -764,10 +780,16 @@ void EditorSession::flipCanvas(bool horizontal) {
         if (l.mask && l.mask->placement) l.mask->placement = flip(*l.mask->placement);
     }
     if (document_->selection && document_->selection->coverage) {
-        auto out = std::make_shared<GrayImage>(*document_->selection->coverage.u8());
-        for (int y = 0; y < out->height(); y++) for (int x = 0; x < out->width(); x++)
-            out->at(x, y) = document_->selection->coverage.u8()->at(horizontal ? out->width() - 1 - x : x, horizontal ? y : out->height() - 1 - y);
-        document_->selection->coverage = out;
+        // The selection mirrors with the canvas, at whatever depth it is held.
+        auto flipped = [&](const auto& source) {
+            auto out = std::make_shared<std::remove_cv_t<std::remove_reference_t<decltype(*source)>>>(*source);
+            for (int y = 0; y < out->height(); y++) for (int x = 0; x < out->width(); x++)
+                out->at(x, y) = source->at(horizontal ? out->width() - 1 - x : x, horizontal ? y : out->height() - 1 - y);
+            return out;
+        };
+        const AnyGray& coverage = document_->selection->coverage;
+        if (coverage.u16()) document_->selection->coverage = Gray16Ptr(flipped(coverage.u16()));
+        else if (coverage.u8()) document_->selection->coverage = GrayPtr(flipped(coverage.u8()));
     }
     endEdit();
     notifyDocument();

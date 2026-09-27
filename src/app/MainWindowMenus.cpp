@@ -140,7 +140,8 @@ void MainWindow::chooseColor(bool background) {
 }
 
 void MainWindow::buildMenus() {
-    auto needsDocument = [this](QAction* a) { documentActions_ << a; return a; };
+    // A document action names the supports() feature it is; without one it is 8-bit only (greyed in a 16-bit document).
+    auto needsDocument = [this](QAction* a, const char* feature = nullptr) { documentActions_ << a; if (feature) actionFeatures_[a] = QString::fromLatin1(feature); return a; };
     QMenu* file = menuBar()->addMenu(tr("&File"));
     file->addAction(tr("&New…"), QKeySequence::New, this, &MainWindow::newDocument);
     file->addAction(tr("&Open…"), QKeySequence::Open, this, &MainWindow::openFiles);
@@ -158,20 +159,20 @@ void MainWindow::buildMenus() {
         if (!session_->placeEmbedded(path, &error)) showError(tr("Couldn’t place %1").arg(QFileInfo(path).fileName()), error);
     }));
     file->addSeparator();
-    needsDocument(file->addAction(tr("&Save"), QKeySequence::Save, this, [this] { save(false); }));
-    needsDocument(file->addAction(tr("Save &As…"), QKeySequence::SaveAs, this, [this] { save(true); }));
+    needsDocument(file->addAction(tr("&Save"), QKeySequence::Save, this, [this] { save(false); }), "document.save");
+    needsDocument(file->addAction(tr("Save &As…"), QKeySequence::SaveAs, this, [this] { save(true); }), "document.save");
     file->addSeparator();
-    needsDocument(file->addAction(tr("Export as Photoshop &Document (PSD)…"), this, &MainWindow::exportPsd));
-    needsDocument(file->addAction(tr("Export &PNG…"), QKeySequence("Ctrl+Shift+E"), this, &MainWindow::exportPng));
-    needsDocument(file->addAction(tr("Export &JPEG…"), QKeySequence("Ctrl+Alt+Shift+S"), this, &MainWindow::exportJpeg));
+    needsDocument(file->addAction(tr("Export as Photoshop &Document (PSD)…"), this, &MainWindow::exportPsd), "export.psd");
+    needsDocument(file->addAction(tr("Export &PNG…"), QKeySequence("Ctrl+Shift+E"), this, &MainWindow::exportPng), "export.png");
+    needsDocument(file->addAction(tr("Export &JPEG…"), QKeySequence("Ctrl+Alt+Shift+S"), this, &MainWindow::exportJpeg), "export.jpeg");
     needsDocument(file->addAction(tr("Export S&VG…"), this, &MainWindow::exportSvg));
-    if (canWriteImageFormat("webp")) needsDocument(file->addAction(tr("Export &WebP…"), this, &MainWindow::exportWebp));
-    if (canWriteImageFormat("tiff")) needsDocument(file->addAction(tr("Export &TIFF…"), this, &MainWindow::exportTiff));
-    needsDocument(file->addAction(tr("Export T&GA…"), this, &MainWindow::exportTga));
-    needsDocument(file->addAction(tr("Export &Icon (ICO)…"), this, &MainWindow::exportIco));
+    if (canWriteImageFormat("webp")) needsDocument(file->addAction(tr("Export &WebP…"), this, &MainWindow::exportWebp), "export.webp");
+    if (canWriteImageFormat("tiff")) needsDocument(file->addAction(tr("Export &TIFF…"), this, &MainWindow::exportTiff), "export.tiff");
+    needsDocument(file->addAction(tr("Export T&GA…"), this, &MainWindow::exportTga), "export.tga");
+    needsDocument(file->addAction(tr("Export &Icon (ICO)…"), this, &MainWindow::exportIco), "export.ico");
     needsDocument(file->addAction(tr("Export Artboards to Files…"), this, [this] { exportBoxes(false); }));
     needsDocument(file->addAction(tr("Export S&lices…"), this, [this] { exportBoxes(true); }));
-    needsDocument(file->addAction(tr("E&xport Animated GIF…"), this, &MainWindow::exportGif));
+    needsDocument(file->addAction(tr("E&xport Animated GIF…"), this, &MainWindow::exportGif), "export.gif");
     file->addSeparator();
     QMenu* automate = file->addMenu(tr("A&utomate"));
     automate->addAction(tr("&Batch…"), this, [this] { showBatchDialog(); });
@@ -191,7 +192,7 @@ void MainWindow::buildMenus() {
     needsDocument(edit->addAction(tr("Copy &Merged"), QKeySequence("Ctrl+Shift+C"), this, [this] { session_->copyMerged(); }));
     needsDocument(edit->addAction(tr("&Paste"), QKeySequence::Paste, this, [this] { session_->paste(); }));
     edit->addSeparator();
-    needsDocument(edit->addAction(tr("&Free Transform"), QKeySequence("Ctrl+T"), this, [this] { session_->transformCommand(); }));
+    needsDocument(edit->addAction(tr("&Free Transform"), QKeySequence("Ctrl+T"), this, [this] { session_->transformCommand(); }), "layers.transform");
     needsDocument(edit->addAction(tr("&Warp…"), this, [this] { WarpDialog(session_, this).exec(); }));
     needsDocument(edit->addAction(tr("Warp Ca&ge"), this, [this] {
         QString error;
@@ -203,7 +204,7 @@ void MainWindow::buildMenus() {
     QAction* clear = needsDocument(edit->addAction(tr("Clear"), QKeySequence(Qt::Key_Delete), this, [this] {
         if (session_->document() && session_->document()->selection) { session_->clearSelectionPixels(); recordAction("pixels.clear"); }
         else { deleteSelectedLayers(); recordAction("layers.delete"); }
-    }));
+    }), "layers.structure");
     clear->setShortcuts({QKeySequence(Qt::Key_Delete), QKeySequence(Qt::Key_Backspace)});
     needsDocument(edit->addAction(tr("Content-Aware Fill…"), QKeySequence("Shift+F5"), this, [this] {
         if (!session_->canAdjustPixels() || !session_->document()->selection || !session_->document()->selection->coverage) { showError(tr("Content-Aware Fill"), tr("Select a visible image layer and an area to fill.")); return; }
@@ -215,12 +216,21 @@ void MainWindow::buildMenus() {
     edit->addAction(tr("Prefere&nces…"), QKeySequence::Preferences, this, &MainWindow::showPreferences);
 
     QMenu* image = menuBar()->addMenu(tr("&Image"));
+    // Photoshop's Image > Mode: the document's bits per channel (docs/bit-depth.md).
+    QMenu* mode = image->addMenu(tr("&Mode"));
+    needsDocument(mode->menuAction(), "document.mode");
+    auto* depths = new QActionGroup(this);
+    mode8Action_ = needsDocument(mode->addAction(tr("&8 Bits/Channel"), this, [this] { convertMode(SampleType::U8); }), "document.mode");
+    mode16Action_ = needsDocument(mode->addAction(tr("&16 Bits/Channel"), this, [this] { convertMode(SampleType::U16); }), "document.mode");
+    for (QAction* a : {mode8Action_, mode16Action_}) { a->setCheckable(true); depths->addAction(a); }
+    mode8Action_->setChecked(true);
+    image->addSeparator();
     needsDocument(image->addAction(tr("&Canvas Size…"), QKeySequence("Ctrl+Alt+C"), this, [this] {
         auto o = askCanvasSize(this, session_->document()->width, session_->document()->height);
         if (!o) return;
         session_->resizeCanvas(o->width, o->height, o->anchorX, o->anchorY);
         recordAction("canvas.resize", {{"width", o->width}, {"height", o->height}, {"anchorX", o->anchorX}, {"anchorY", o->anchorY}});
-    }));
+    }), "canvas.size");
     needsDocument(image->addAction(tr("&Image Size…"), QKeySequence("Ctrl+Alt+I"), this, [this] {
         auto o = askImageSize(this, session_->document()->width, session_->document()->height, session_->document()->resolution);
         if (!o) return;
@@ -304,17 +314,17 @@ void MainWindow::buildMenus() {
     adjustments->addSeparator();
     needsDocument(adjustments->addAction(tr("&Invert"), QKeySequence("Ctrl+I"), this, [this] { session_->invertActive(); recordAction("pixels.invert"); }));
     image->addSeparator();
-    needsDocument(image->addAction(tr("Flip Canvas Horizontal"), this, [this] { session_->flipCanvas(true); recordAction("canvas.flip"); }));
-    needsDocument(image->addAction(tr("Flip Canvas Vertical"), this, [this] { session_->flipCanvas(false); recordAction("canvas.flip", {{"vertical", true}}); }));
+    needsDocument(image->addAction(tr("Flip Canvas Horizontal"), this, [this] { session_->flipCanvas(true); recordAction("canvas.flip"); }), "canvas.flip");
+    needsDocument(image->addAction(tr("Flip Canvas Vertical"), this, [this] { session_->flipCanvas(false); recordAction("canvas.flip", {{"vertical", true}}); }), "canvas.flip");
 
     QMenu* layer = menuBar()->addMenu(tr("&Layer"));
-    needsDocument(layer->addAction(tr("&New Layer"), QKeySequence("Ctrl+Shift+N"), this, [this] { session_->addBlankLayer(); recordAction("layers.add"); }));
-    needsDocument(layer->addAction(tr("New Layer &Below"), this, [this] { session_->addBlankLayer(true); recordAction("layers.add", {{"below", true}}); }));
-    needsDocument(layer->addAction(tr("New &Folder"), this, [this] { session_->addGroup(); recordAction("layers.add", {{"kind", "group"}}); }));
-    needsDocument(layer->addAction(tr("&Group Layers"), QKeySequence("Ctrl+G"), this, [this] { session_->groupSelectedLayers(); recordAction("layers.group"); }));
+    needsDocument(layer->addAction(tr("&New Layer"), QKeySequence("Ctrl+Shift+N"), this, [this] { session_->addBlankLayer(); recordAction("layers.add"); }), "layers.structure");
+    needsDocument(layer->addAction(tr("New Layer &Below"), this, [this] { session_->addBlankLayer(true); recordAction("layers.add", {{"below", true}}); }), "layers.structure");
+    needsDocument(layer->addAction(tr("New &Folder"), this, [this] { session_->addGroup(); recordAction("layers.add", {{"kind", "group"}}); }), "layers.structure");
+    needsDocument(layer->addAction(tr("&Group Layers"), QKeySequence("Ctrl+G"), this, [this] { session_->groupSelectedLayers(); recordAction("layers.group"); }), "layers.structure");
     needsDocument(layer->addAction(tr("Layer via &Copy"), QKeySequence("Ctrl+J"), this, [this] { session_->layerViaCopy(); }));
-    needsDocument(layer->addAction(tr("&Duplicate Layer"), this, [this] { session_->duplicateActiveLayer(); recordAction("layers.duplicate"); }));
-    needsDocument(layer->addAction(tr("De&lete Layer"), this, [this] { deleteSelectedLayers(); recordAction("layers.delete"); }));
+    needsDocument(layer->addAction(tr("&Duplicate Layer"), this, [this] { session_->duplicateActiveLayer(); recordAction("layers.duplicate"); }), "layers.structure");
+    needsDocument(layer->addAction(tr("De&lete Layer"), this, [this] { deleteSelectedLayers(); recordAction("layers.delete"); }), "layers.structure");
     mergeAction_ = needsDocument(layer->addAction(tr("Merge Do&wn"), QKeySequence("Ctrl+E"), this, [this] { session_->mergeLayers(); recordAction("layers.merge"); }));
     editTextAction_ = needsDocument(layer->addAction(tr("Edit &Text…"), this, [this] { const Layer* l = session_->activeLayer(); if (l && l->isLiveText()) session_->requestTextEdit(l->id); }));
     needsDocument(layer->addAction(tr("&Rename Layer…"), this, [this] {
@@ -323,8 +333,8 @@ void MainWindow::buildMenus() {
         bool ok;
         QString name = QInputDialog::getText(this, tr("Rename Layer"), tr("Name"), QLineEdit::Normal, QString::fromStdString(active->name), &ok);
         if (ok) session_->renameLayer(active->id, name);
-    }));
-    needsDocument(layer->addAction(tr("Move &Out of Folder"), QKeySequence("Ctrl+Shift+["), this, [this] { session_->moveActiveLayerOutOfGroup(); }));
+    }), "layers.structure");
+    needsDocument(layer->addAction(tr("Move &Out of Folder"), QKeySequence("Ctrl+Shift+["), this, [this] { session_->moveActiveLayerOutOfGroup(); }), "layers.structure");
     QMenu* adjustmentLayers = layer->addMenu(tr("New &Adjustment Layer"));
     for (int i = 0; i < adjustmentKindCount; i++) {
         AdjustmentKind kind = AdjustmentKind(i);
@@ -379,15 +389,15 @@ void MainWindow::buildMenus() {
     needsDocument(smart->addAction(tr("R&asterize"), this, [this] { session_->rasterizeSmartObject(); }));
     layer->addSeparator();
     QMenu* mask = layer->addMenu(tr("Layer &Mask"));
-    needsDocument(mask->addAction(tr("Reveal All"), this, [this] { session_->addLayerMask(true); recordAction("layers.mask", {{"action", "add"}}); }));
-    needsDocument(mask->addAction(tr("Hide All"), this, [this] { session_->addLayerMask(false); recordAction("layers.mask", {{"action", "add"}, {"revealing", false}}); }));
+    needsDocument(mask->addAction(tr("Reveal All"), this, [this] { session_->addLayerMask(true); recordAction("layers.mask", {{"action", "add"}}); }), "layers.mask");
+    needsDocument(mask->addAction(tr("Hide All"), this, [this] { session_->addLayerMask(false); recordAction("layers.mask", {{"action", "add"}, {"revealing", false}}); }), "layers.mask");
     needsDocument(mask->addAction(tr("From Selection (Reveal)"), this, [this] { session_->addMaskFromSelection(true); recordAction("layers.mask", {{"action", "addFromSelection"}}); }));
     needsDocument(mask->addAction(tr("From Selection (Hide)"), this, [this] { session_->addMaskFromSelection(false); recordAction("layers.mask", {{"action", "addFromSelection"}, {"revealing", false}}); }));
     mask->addSeparator();
-    needsDocument(mask->addAction(tr("Enable / Disable"), this, [this] { session_->toggleLayerMask(); recordAction("layers.mask", {{"action", "toggle"}}); }));
-    needsDocument(mask->addAction(tr("Invert"), this, [this] { session_->invertMask(); recordAction("layers.mask", {{"action", "invert"}}); }));
+    needsDocument(mask->addAction(tr("Enable / Disable"), this, [this] { session_->toggleLayerMask(); recordAction("layers.mask", {{"action", "toggle"}}); }), "layers.mask");
+    needsDocument(mask->addAction(tr("Invert"), this, [this] { session_->invertMask(); recordAction("layers.mask", {{"action", "invert"}}); }), "layers.mask");
     needsDocument(mask->addAction(tr("Apply"), this, [this] { session_->applyMask(); recordAction("layers.mask", {{"action", "apply"}}); }));
-    needsDocument(mask->addAction(tr("Delete"), this, [this] { session_->deleteLayerMask(); recordAction("layers.mask", {{"action", "delete"}}); }));
+    needsDocument(mask->addAction(tr("Delete"), this, [this] { session_->deleteLayerMask(); recordAction("layers.mask", {{"action", "delete"}}); }), "layers.mask");
     // Photoshop's Layer > Vector Mask: a path that cuts the layer, edited with the Pen and Direct Selection.
     QMenu* vectorMask = layer->addMenu(tr("&Vector Mask"));
     auto addVector = [this](EditorSession::VectorMaskKind kind) {
@@ -400,17 +410,17 @@ void MainWindow::buildMenus() {
     vectorMask->addSeparator();
     needsDocument(vectorMask->addAction(tr("Edit"), this, [this] { if (session_->activeLayerId()) session_->targetVectorMask(*session_->activeLayerId()); }));
     needsDocument(vectorMask->addAction(tr("Delete"), this, [this] { session_->deleteVectorMask(); }));
-    needsDocument(layer->addAction(tr("Create / Release Cl&ipping Mask"), QKeySequence("Ctrl+Alt+G"), this, [this] { if (session_->activeLayerId()) session_->toggleClippingMask(*session_->activeLayerId()); }));
+    needsDocument(layer->addAction(tr("Create / Release Cl&ipping Mask"), QKeySequence("Ctrl+Alt+G"), this, [this] { if (session_->activeLayerId()) session_->toggleClippingMask(*session_->activeLayerId()); }), "layers.structure");
     layer->addSeparator();
-    needsDocument(layer->addAction(tr("Bring Forward"), QKeySequence("Ctrl+]"), this, [this] { session_->moveActiveLayer(1); }));
-    needsDocument(layer->addAction(tr("Send Backward"), QKeySequence("Ctrl+["), this, [this] { session_->moveActiveLayer(-1); }));
+    needsDocument(layer->addAction(tr("Bring Forward"), QKeySequence("Ctrl+]"), this, [this] { session_->moveActiveLayer(1); }), "layers.structure");
+    needsDocument(layer->addAction(tr("Send Backward"), QKeySequence("Ctrl+["), this, [this] { session_->moveActiveLayer(-1); }), "layers.structure");
     layer->addSeparator();
-    needsDocument(layer->addAction(tr("Flip Layer Horizontal"), this, [this] { session_->flipLayer(true); recordAction("layers.flip"); }));
-    needsDocument(layer->addAction(tr("Flip Layer Vertical"), this, [this] { session_->flipLayer(false); recordAction("layers.flip", {{"vertical", true}}); }));
+    needsDocument(layer->addAction(tr("Flip Layer Horizontal"), this, [this] { session_->flipLayer(true); recordAction("layers.flip"); }), "layers.transform");
+    needsDocument(layer->addAction(tr("Flip Layer Vertical"), this, [this] { session_->flipLayer(false); recordAction("layers.flip", {{"vertical", true}}); }), "layers.transform");
     QMenu* sampling = layer->addMenu(tr("Resampling"));
-    needsDocument(sampling->addAction(tr("High Quality"), this, [this] { session_->setLayerSampling(Sampling::High); }));
-    needsDocument(sampling->addAction(tr("Smooth"), this, [this] { session_->setLayerSampling(Sampling::Smooth); }));
-    needsDocument(sampling->addAction(tr("Nearest Neighbour"), this, [this] { session_->setLayerSampling(Sampling::Nearest); }));
+    needsDocument(sampling->addAction(tr("High Quality"), this, [this] { session_->setLayerSampling(Sampling::High); }), "layers.structure");
+    needsDocument(sampling->addAction(tr("Smooth"), this, [this] { session_->setLayerSampling(Sampling::Smooth); }), "layers.structure");
+    needsDocument(sampling->addAction(tr("Nearest Neighbour"), this, [this] { session_->setLayerSampling(Sampling::Nearest); }), "layers.structure");
 
     // Photoshop's Type menu: the active text layer's outlines as a path or a shape.
     QMenu* type = menuBar()->addMenu(tr("&Type"));
@@ -492,10 +502,10 @@ void MainWindow::buildMenus() {
     refreshBackgroundAction();
 
     QMenu* view = menuBar()->addMenu(tr("&View"));
-    needsDocument(view->addAction(tr("Zoom &In"), QKeySequence::ZoomIn, this, [this] { session_->zoomTo(session_->viewport.zoom * 1.25); }));
-    needsDocument(view->addAction(tr("Zoom &Out"), QKeySequence::ZoomOut, this, [this] { session_->zoomTo(session_->viewport.zoom / 1.25); }));
-    needsDocument(view->addAction(tr("&Fit on Screen"), QKeySequence("Ctrl+0"), this, [this] { session_->fitView(); }));
-    needsDocument(view->addAction(tr("&Actual Pixels"), QKeySequence("Ctrl+1"), this, [this] { session_->zoomTo(1); }));
+    needsDocument(view->addAction(tr("Zoom &In"), QKeySequence::ZoomIn, this, [this] { session_->zoomTo(session_->viewport.zoom * 1.25); }), "view");
+    needsDocument(view->addAction(tr("Zoom &Out"), QKeySequence::ZoomOut, this, [this] { session_->zoomTo(session_->viewport.zoom / 1.25); }), "view");
+    needsDocument(view->addAction(tr("&Fit on Screen"), QKeySequence("Ctrl+0"), this, [this] { session_->fitView(); }), "view");
+    needsDocument(view->addAction(tr("&Actual Pixels"), QKeySequence("Ctrl+1"), this, [this] { session_->zoomTo(1); }), "view");
     view->addSeparator();
     rulersAction_ = view->addAction(tr("&Rulers"), QKeySequence("Ctrl+R"), this, [this](bool on) {
         for (auto& tab : tabs_) tab.frame->setRulersVisible(on);
@@ -541,6 +551,40 @@ void MainWindow::buildMenus() {
             "are in THIRD-PARTY-NOTICES.md, installed with the program.").arg(QT_VERSION_STR).arg(projectFormatVersion).arg(QApplication::applicationVersion()));
     });
     refreshRecent();
+}
+
+void MainWindow::convertMode(SampleType type) {
+    if (!session_->hasDocument() || session_->sampleType() == type) { refreshDepthGating(); return; }
+    QString error;
+    if (!session_->convertMode(type, &error)) showError(tr("Mode"), error.isEmpty() ? tr("The document could not be converted.") : error);
+    else recordAction("image.mode", {{"bits", type == SampleType::U16 ? 16 : 8}});
+    refreshActions();
+}
+
+void MainWindow::refreshDepthGating() {
+    const bool has = session_ && session_->hasDocument();
+    const bool deep = has && session_->sampleType() != SampleType::U8;
+    const QString notYet = tr("Not available in 16-bit yet");
+    // An action greyed for the depth says why; its own tooltip comes back at 8 bits.
+    auto gate = [&](QAction* a, bool allowed, bool enabled) {
+        a->setEnabled(enabled && allowed);
+        if (!allowed) {
+            if (!a->property("depthTip").isValid()) a->setProperty("depthTip", a->toolTip());
+            a->setToolTip(notYet);
+        } else if (a->property("depthTip").isValid()) {
+            a->setToolTip(a->property("depthTip").toString());
+            a->setProperty("depthTip", QVariant());
+        }
+    };
+    for (QAction* a : documentActions_) {
+        const QString feature = actionFeatures_.value(a);
+        gate(a, !deep || (!feature.isEmpty() && session_->supportsFeature(feature.toStdString())), has);
+    }
+    for (auto it = toolActions_.begin(); it != toolActions_.end(); ++it) gate(it.value(), !deep || session_->toolSupportedAtDepth(it.key()), true);
+    gate(eraserAction_, !deep || session_->toolSupportedAtDepth(Tool::Brush), true);
+    // Menus show their items' tooltips while something in them is greyed for the depth.
+    for (QMenu* menu : menuBar()->findChildren<QMenu*>()) menu->setToolTipsVisible(deep);
+    if (mode8Action_) { mode8Action_->setChecked(!deep); mode16Action_->setChecked(deep); }
 }
 
 

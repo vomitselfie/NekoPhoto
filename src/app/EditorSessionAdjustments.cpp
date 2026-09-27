@@ -11,6 +11,7 @@ namespace app {
 // ---- Adjustment layers and pixel adjustments --------------------------------------------
 
 void EditorSession::addAdjustmentLayer(AdjustmentKind kind) {
+    if (refusedAtDepth("adjustment.layers", tr("Adjustments"))) return;
     if (!canEditLayers() || document_->layers.size() >= size_t(Document::maxLayers)) return;
     Layer layer(names::adjustmentKind(kind).toStdString(), document_->size());
     AdjustmentSettings settings = AdjustmentSettings::defaults(kind);
@@ -32,12 +33,14 @@ void EditorSession::addAdjustmentLayer(AdjustmentKind kind) {
 }
 
 void EditorSession::beginAdjustmentEdit() {
+    if (refusedAtDepth("adjustment.layers", tr("Adjustments"))) return;
     if (adjustmentEditing_ || !document_) return;
     adjustmentEditing_ = true;
     beginEdit(QT_TRANSLATE_NOOP("History", "Adjustment"));
 }
 
 void EditorSession::setAdjustment(const Uuid& id, const AdjustmentSettings& settings) {
+    if (refusedAtDepth("adjustment.layers", tr("Adjustments"))) return;
     if (!document_ || !settings.isValid()) return;
     Layer* layer = document_->find(id);
     if (!layer || !layer->adjustment) return;
@@ -116,6 +119,7 @@ void EditorSession::commitPixels(std::shared_ptr<const Image> image, const Layer
 }
 
 void EditorSession::invertActive() {
+    if (refusedAtDepth("adjustment.layers", tr("Adjustments"))) return;
     if (!canEditLayers()) return;
     Layer* layer = activeLayerMutable();
     if (!layer || layer->isGroup) return;
@@ -147,6 +151,7 @@ std::array<std::vector<double>, 4> EditorSession::activeHistogram() const {
 }
 
 void EditorSession::applySubjectMask(std::shared_ptr<const GrayImage> mask, std::shared_ptr<const Image> pixels, std::optional<Uuid> layerId) {
+    if (refusedAtDepth("edit.selection", tr("Selections"))) return;
     clearPixelPreview();
     Layer* layer = layerId ? (document_ ? document_->find(*layerId) : nullptr) : activeLayerMutable();
     if (!layer || !mask || !layer->asset || !layer->asset->image.u8()) return;

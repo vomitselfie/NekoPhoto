@@ -1070,6 +1070,14 @@ def image_trim(based_on: str = "transparent", top: bool = True, bottom: bool = T
     return text(call("image.trim", basedOn=based_on, top=top, bottom=bottom, left=left, right=right, tolerance=tolerance))
 
 
+@edit("Change the bit depth")
+def image_mode(bits: int) -> str:
+    """Image > Mode: convert the document to 8 or 16 bits per channel (every layer, mask and the selection, one undo
+    step). A 16-bit document holds half the pixels of an 8-bit one in the same memory; methods not yet ported to 16 bits
+    are refused on it with "<method> is not available for 16-bit documents yet" (docs/bit-depth.md)."""
+    return text(call("image.mode", bits=bits))
+
+
 @edit("Resize the image")
 def image_resize(width: Optional[int] = None, height: Optional[int] = None, scale: Optional[float] = None, sampling: str = "high") -> str:
     """Resample the whole image (every layer) to width x height (one keeps the aspect ratio) or by scale; sampling nearest, smooth or high."""

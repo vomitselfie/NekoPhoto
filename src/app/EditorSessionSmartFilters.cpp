@@ -41,6 +41,7 @@ bool EditorSession::canEditSmartFilters(const Uuid& id) const {
 }
 
 bool EditorSession::setSmartFilters(const Uuid& id, const SmartFilterStack& stack, const QString& name, QString* error) {
+    if (refusedAtDepth("edit.smartObject", tr("Smart objects"), error)) return false;
     Layer* layer = document_ ? document_->find(id) : nullptr;
     if (!canEditLayers() || !layer) { if (error) *error = tr("Select a smart object."); return false; }
     endOpacityEdit();
@@ -75,6 +76,7 @@ std::optional<SmartFilterStack> editable(const EditorSession& s, const Uuid& id,
 } // namespace
 
 bool EditorSession::setSmartFilterEntry(const Uuid& id, int index, const SmartFilterEntry& entry, QString* error) {
+    if (refusedAtDepth("edit.smartObject", tr("Smart objects"), error)) return false;
     auto stack = editable(*this, id, index, error);
     if (!stack) return false;
     if (index < 0) { if (error) *error = tr("Name a Smart Filter."); return false; }
@@ -83,6 +85,7 @@ bool EditorSession::setSmartFilterEntry(const Uuid& id, int index, const SmartFi
 }
 
 bool EditorSession::setSmartFilterEnabled(const Uuid& id, int index, bool enabled, QString* error) {
+    if (refusedAtDepth("edit.smartObject", tr("Smart objects"), error)) return false;
     auto stack = editable(*this, id, index, error);
     if (!stack) return false;
     if (index < 0) stack->enabled = enabled;
@@ -91,6 +94,7 @@ bool EditorSession::setSmartFilterEnabled(const Uuid& id, int index, bool enable
 }
 
 bool EditorSession::moveSmartFilter(const Uuid& id, int from, int to, QString* error) {
+    if (refusedAtDepth("edit.smartObject", tr("Smart objects"), error)) return false;
     auto stack = editable(*this, id, from, error);
     if (!stack) return false;
     if (from < 0 || to < 0 || to >= int(stack->entries.size())) { if (error) *error = tr("No place %1 in the stack.").arg(to); return false; }
@@ -102,6 +106,7 @@ bool EditorSession::moveSmartFilter(const Uuid& id, int from, int to, QString* e
 }
 
 bool EditorSession::removeSmartFilter(const Uuid& id, int index, QString* error) {
+    if (refusedAtDepth("edit.smartObject", tr("Smart objects"), error)) return false;
     auto stack = editable(*this, id, index, error);
     if (!stack) return false;
     if (index < 0) { if (error) *error = tr("Name a Smart Filter."); return false; }
@@ -111,6 +116,7 @@ bool EditorSession::removeSmartFilter(const Uuid& id, int index, QString* error)
 }
 
 bool EditorSession::clearSmartFilters(const Uuid& id, QString* error) {
+    if (refusedAtDepth("edit.smartObject", tr("Smart objects"), error)) return false;
     auto stack = editable(*this, id, -1, error);
     if (!stack) return false;
     if (filterMaskOwner() == id) endFilterMaskEdit();
@@ -118,6 +124,7 @@ bool EditorSession::clearSmartFilters(const Uuid& id, QString* error) {
 }
 
 bool EditorSession::smartFilterMask(const Uuid& id, FilterMaskAction action, QString* error) {
+    if (refusedAtDepth("edit.smartObject", tr("Smart objects"), error)) return false;
     // A mask being painted is written first, so the action works on what the canvas shows.
     auto stack = editable(*this, id, -1, error);
     if (!stack) return false;
@@ -158,6 +165,7 @@ std::optional<Uuid> EditorSession::filterMaskOwner() const {
 }
 
 bool EditorSession::beginFilterMaskEdit(const Uuid& id, bool show, QString* error) {
+    if (refusedAtDepth("edit.smartObject", tr("Smart objects"), error)) return false;
     if (filterMaskOwner() == id) {
         if (activeLayerId_ != filterMaskLayer_) { setActiveLayer(filterMaskLayer_); isMaskSelected_ = true; emit layersChanged(); }
         setFilterMaskShown(show);

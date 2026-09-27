@@ -1,5 +1,6 @@
 #include "compositor/seamcarve.h"
 #include "EditorSession.h"
+#include "compositor/depth.h"
 #include "ImageConvert.h"
 #include "QtGeometry.h"
 #include "compositor/filters.h"
@@ -26,10 +27,12 @@ bool EditorSession::canMovePixels(QPointF documentPoint) const {
     if (!layer || !layer->asset || layer->isGroup || layer->adjustment) return false;
     int x = int(std::floor(documentPoint.x())), y = int(std::floor(documentPoint.y()));
     if (x < 0 || y < 0 || x >= document_->width || y >= document_->height) return false;
-    return document_->selection->coverage.u8()->at(x, y) > 127;
+    auto coverage = selectionCoverage8();
+    return coverage && coverage->at(x, y) > 127;
 }
 
 bool EditorSession::beginPixelMove(bool duplicate) {
+    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return false;
     if (pixelMove_ || !document_ || !document_->selection || !document_->selection->coverage || document_->selection->isEmpty() || isMaskSelected_) return false;
     const Layer* layer = activeLayer();
     if (!layer || !layer->asset || layer->isGroup || layer->adjustment || stroke_ || transformEdit_) return false;
@@ -46,6 +49,7 @@ bool EditorSession::beginPixelMove(bool duplicate) {
 }
 
 void EditorSession::movePixels(QPointF offset) {
+    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return;
     if (!pixelMove_) return;
     QPointF rounded(std::round(offset.x()), std::round(offset.y()));
     pixelMove_->raster->moveLifted(toPoint(rounded), pixelMove_->duplicate);
@@ -116,6 +120,7 @@ void EditorSession::cancelPixelMove() {
 }
 
 void EditorSession::nudgePixels(double dx, double dy) {
+    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return;
     if (!beginPixelMove(false)) return;
     movePixels({dx, dy});
     finishPixelMove();
@@ -182,6 +187,7 @@ std::optional<EditorSession::PixelClipboard> EditorSession::renderSelectedPixels
 }
 
 void EditorSession::copySelection() {
+    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return;
     if (!canCopyPixels()) return;
     auto copied = renderSelectedPixels(false);
     if (!copied) return;
@@ -190,6 +196,7 @@ void EditorSession::copySelection() {
 }
 
 void EditorSession::copyMerged() {
+    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return;
     if (!canEditLayers() || (document_->selection && document_->selection->isEmpty())) return;
     auto copied = renderSelectedPixels(true);
     if (!copied) return;
@@ -198,6 +205,7 @@ void EditorSession::copyMerged() {
 }
 
 void EditorSession::cutSelection() {
+    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return;
     if (!document_ || !document_->selection || !canCopyPixels()) return;
     copySelection();
     clearSelectionPixels();
@@ -209,6 +217,7 @@ bool EditorSession::canPaste() const {
 }
 
 void EditorSession::paste() {
+    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return;
     if (!canPaste()) return;
     const QMimeData* mime = QApplication::clipboard()->mimeData();
     QImage external = mime->hasImage() ? qvariant_cast<QImage>(mime->imageData()) : QImage();
@@ -223,6 +232,7 @@ void EditorSession::paste() {
 }
 
 void EditorSession::layerViaCopy() {
+    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return;
     if (!canEditLayers()) return;
     const Layer* layer = activeLayer();
     if (!layer || layer->isGroup) return;
@@ -299,6 +309,7 @@ std::shared_ptr<const Image> EditorSession::contentAwareFillResult(const Content
 }
 
 bool EditorSession::contentAwareFill(QString* errorText, const ContentFillRequest& request) {
+    if (refusedAtDepth("edit.pixels", tr("Editing pixels"), errorText)) return false;
     LayerTransform placed;
     auto result = contentAwareFillResult(request, placed, errorText);
     if (!result) return false;
@@ -320,6 +331,7 @@ bool EditorSession::contentAwareFill(QString* errorText, const ContentFillReques
 }
 
 bool EditorSession::contentAwareMove(int dx, int dy, QString* errorText) {
+    if (refusedAtDepth("edit.pixels", tr("Editing pixels"), errorText)) return false;
     auto failWith = [&](const QString& text) { if (errorText) *errorText = text; return false; };
     if (!canAdjustPixels() || !document_->selection || !document_->selection->coverage) return failWith(tr("Select an area on a visible image layer, then drag it where it should go."));
     if (dx == 0 && dy == 0) return failWith(tr("Drag the selection to where it should go."));
@@ -377,6 +389,7 @@ bool EditorSession::contentAwareMove(int dx, int dy, QString* errorText) {
 }
 
 bool EditorSession::contentAwareScale(int width, int height, bool protectSelection, QString* errorText) {
+    if (refusedAtDepth("edit.pixels", tr("Editing pixels"), errorText)) return false;
     if (!canAdjustPixels()) { if (errorText) *errorText = tr("Select a visible image layer to scale."); return false; }
     Layer* layer = activeLayerMutable();
     const ImagePtr src = layer->asset->image.u8();
@@ -406,8 +419,9 @@ bool EditorSession::copyLayerFrom(const EditorSession& source, const Uuid& id, s
     for (auto& l : from.layers) if (included.count(l.id)) copied.push_back(l);
     const long long used = document_ ? document_->layerPixels() : 0;
     long long added = 0;
-    for (auto& l : copied) if (l.asset && l.asset->image.u8()) added += (long long)l.asset->image.u8()->width() * l.asset->image.u8()->height();
-    if (used + added > Document::projectPixelBudget) { if (errorText) *errorText = tr("The copied layers would take this project past its 1-gigapixel limit for all layers together."); return false; }
+    for (auto& l : copied) if (l.asset && l.asset->image) added += (long long)l.asset->image.width() * l.asset->image.height();
+    // The budget in bytes: a 16-bit document holds half the pixels.
+    if (used + added > (document_ ? document_->projectPixelBudgetAt() : Document::projectPixelBudget)) { if (errorText) *errorText = tr("The copied layers would take this project past its 1-gigapixel limit for all layers together."); return false; }
     // Clipping to a layer that stays behind is baked into the pixels.
     for (auto& l : copied) {
         if (l.maskSourceId && !included.count(*l.maskSourceId)) {

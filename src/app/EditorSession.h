@@ -120,6 +120,7 @@ struct ShapeToolSettings {
 
 class EditorSession : public QObject {
     Q_OBJECT
+    mutable std::pair<const void*, std::shared_ptr<const compositor::GrayImage>> selection8_;
 public:
     explicit EditorSession(QObject* parent = nullptr);
     ~EditorSession() override;
@@ -146,9 +147,29 @@ public:
     /// Reloads that followed the package on disk (for tests and automation).
     int externalReloads() const { return externalReloads_; }
     void closeDocument();
-    /// Adds imported pixels as a new layer, centred on `at` (or the canvas); a first import creates the canvas.
-    void insertImage(std::shared_ptr<const compositor::Image> image, const QString& name, std::optional<QPointF> at = std::nullopt);
+    /// Adds imported pixels as a new layer, centred on `at` (or the canvas); a first import creates the canvas, at the
+    /// image's depth (a 16-bit PNG opens as a 16-bit document). Into an existing document they take its depth.
+    void insertImage(const compositor::AnyImage& image, const QString& name, std::optional<QPointF> at = std::nullopt);
+    /// The composite at 8 bits: a 16-bit document's is dithered down (for the 8-bit formats and the clipboard).
     std::shared_ptr<compositor::Image> flattened() const;
+    /// The composite at the document's depth (16-bit exports); an 8-bit document's widened.
+    std::shared_ptr<compositor::Image16> flattened16() const;
+
+    // Bit depth (docs/bit-depth.md)
+    compositor::SampleType sampleType() const { return document_ ? document_->sampleType : compositor::SampleType::U8; }
+    /// Image > Mode > 8 Bits/Channel or 16 Bits/Channel: every layer, mask and the selection converted, one undo step.
+    /// False, with `error` saying why (a 16-bit document holds half the pixels within the same memory), when it cannot.
+    bool convertMode(compositor::SampleType type, QString* error = nullptr);
+    /// Whether `feature` (compositor/supports.h) works on this document: every feature does on an 8-bit one.
+    bool supportsFeature(std::string_view feature) const;
+    /// When it does not: says so, "<what> is not available for 16-bit documents yet" (in `errorText` when given, else
+    /// through `error`, which automation returns), and returns true.
+    bool refusedAtDepth(std::string_view feature, const QString& what, QString* errorText = nullptr);
+    /// The selection's coverage at 8 bits, for drawing its outline and testing a point (a 16-bit selection reduced,
+    /// once per selection).
+    std::shared_ptr<const compositor::GrayImage> selectionCoverage8() const;
+    /// The same for any selection (the one displayed while it moves, say).
+    static std::shared_ptr<const compositor::GrayImage> coverage8(const compositor::Selection& selection);
 
     // Layers
     std::optional<compositor::Uuid> activeLayerId() const { return activeLayerId_; }
@@ -640,7 +661,11 @@ public:
 
     // Tools and view
     Tool tool() const { return tool_; }
+    /// Refused, with a message, for a tool that does not work at the document's depth.
     void selectTool(Tool tool);
+    /// The supports() feature a tool is ("tool.move", "tool.brush", ...), and whether it works at the document's depth.
+    static const char* toolFeature(Tool tool);
+    bool toolSupportedAtDepth(Tool tool) const { return supportsFeature(toolFeature(tool)); }
     Viewport viewport;
     bool showsPixelGrid = true;
     void fitView();

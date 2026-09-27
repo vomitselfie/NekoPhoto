@@ -167,6 +167,36 @@ QJsonObject AutomationServer::endGroup(QLocalSocket* owner) {
     return out;
 }
 
+namespace {
+
+/// Whether `method` works on a document of `session`'s depth (docs/bit-depth.md). Every method works on an 8-bit
+/// document; on a 16-bit one, those that read, those outside the document, and those whose feature supports() lists
+/// at 16 bits. The rest are refused, "<method> is not available for 16-bit documents yet", until they are ported.
+bool worksAtDepth(const QString& method, const EditorSession& session) {
+    if (!session.hasDocument() || session.sampleType() == SampleType::U8) return true;
+    static const QSet<QString> always = {
+        "app.info", "tabs.list", "tabs.new", "tabs.select", "tabs.close", "history.undo", "history.redo", "history.list", "history.info",
+        "history.beginGroup", "history.endGroup", "rpc.methods", "rpc.describe", "rpc.batch", "events.subscribe", "events.unsubscribe",
+        "view.zoom", "screenshot", "render", "colors.set", "presets.list", "brush.presets", "gmic.filters", "tool.select",
+        "actions.list", "actions.record", "actions.save", "actions.delete", "actions.export", "actions.import", "actions.play", "actions.batch",
+        "document.new", "document.open", "document.close", "document.info", "document.overview",
+        "layers.list", "layers.get", "layers.select", "layers.style", "layers.cage", "selection.info", "selection.render",
+        "adjustments.get", "adjustments.defaults", "paths.list", "vectorMask.get", "shape.get", "smartObject.filters", "timeline.info",
+        "artboards.list", "slices.list"};
+    static const QHash<QString, const char*> features = {
+        {"document.save", "document.save"}, {"document.export", "render.document"}, {"document.import", "document.import"}, {"image.mode", "document.mode"},
+        {"layers.set", "layers.structure"}, {"layers.add", "layers.structure"}, {"layers.delete", "layers.structure"}, {"layers.duplicate", "layers.structure"},
+        {"layers.move", "layers.structure"}, {"layers.reorder", "layers.structure"}, {"layers.group", "layers.structure"},
+        {"layers.setTransform", "layers.transform"}, {"layers.flip", "layers.transform"}, {"layers.mask", "layers.mask"}, {"layers.render", "render.document"},
+        {"canvas.resize", "canvas.size"}, {"canvas.flip", "canvas.flip"},
+        {"slices.add", "tool.slice"}, {"slices.set", "tool.slice"}, {"slices.delete", "tool.slice"}};
+    if (always.contains(method)) return true;
+    auto it = features.find(method);
+    return it != features.end() && session.supportsFeature(it.value());
+}
+
+} // namespace
+
 QJsonObject AutomationServer::handle(const QJsonObject& request) {
     QJsonValue id = request.value("id");
     QString method = request.value("method").toString();
@@ -182,6 +212,11 @@ QJsonObject AutomationServer::handle(const QJsonObject& request) {
     if (wrong.isEmpty()) wrong = missingParameter(method, params);
     if (!wrong.isEmpty()) {
         response["error"] = QJsonObject{{"code", invalidParams}, {"message", wrong + describeHint(method)}};
+        return response;
+    }
+    // A 16-bit document takes only what has been ported to it (compositor/supports.h).
+    if (EditorSession* s = window_->session(); s && !worksAtDepth(method, *s)) {
+        response["error"] = QJsonObject{{"code", appError}, {"message", method + " is not available for " + QString::fromLatin1(sampleTypeName(s->sampleType())) + "-bit documents yet"}};
         return response;
     }
     // An editing request made while an action records becomes a step of it; the requests it makes itself (a

@@ -753,20 +753,28 @@ void LayersPanel::showContextMenu(const QPoint& pos) {
     if (!layer) return;
     auto* menu = new QMenu(this);
     menu->setAttribute(Qt::WA_DeleteOnClose);
-    if (layer->isLiveText()) menu->addAction(tr("Edit Text…"), this, [this, id] { session_->requestTextEdit(id); });
+    // What has not been ported to a 16-bit document's depth is greyed, saying so (compositor/supports.h).
+    const bool deep = session_->sampleType() != SampleType::U8;
+    menu->setToolTipsVisible(deep);
+    auto eightBitOnly = [&](QAction* a) {
+        if (deep) { a->setEnabled(false); a->setToolTip(tr("Not available in 16-bit yet")); }
+        return a;
+    };
+    if (layer->isLiveText()) eightBitOnly(menu->addAction(tr("Edit Text…"), this, [this, id] { session_->requestTextEdit(id); }));
     menu->addAction(tr("Rename…"), this, [this, id] { startRename(id); });
     if (session_->canStyleLayer(id)) {
-        menu->addAction(tr("Layer Style…"), this, [this, id] { LayerStyleDialog(session_, id, this).exec(); });
+        eightBitOnly(menu->addAction(tr("Layer Style…"), this, [this, id] { LayerStyleDialog(session_, id, this).exec(); }));
         if (session_->activeLayerHasStyle()) {
-            menu->addAction(tr("Copy Layer Style"), this, [this] { session_->copyLayerStyle(); });
-            menu->addAction(tr("Clear Layer Style"), this, [this] { session_->clearLayerStyle(); });
+            eightBitOnly(menu->addAction(tr("Copy Layer Style"), this, [this] { session_->copyLayerStyle(); }));
+            eightBitOnly(menu->addAction(tr("Clear Layer Style"), this, [this] { session_->clearLayerStyle(); }));
         }
-        if (session_->canPasteLayerStyle()) menu->addAction(tr("Paste Layer Style"), this, [this] { session_->pasteLayerStyle(); });
+        if (session_->canPasteLayerStyle()) eightBitOnly(menu->addAction(tr("Paste Layer Style"), this, [this] { session_->pasteLayerStyle(); }));
     }
 
     if (session_->smartFilters(id)) {
         QAction* clear = menu->addAction(tr("Clear Smart Filters"), this, [this, id] { QString e; if (!session_->clearSmartFilters(id, &e)) QMessageBox::warning(this, tr("Smart Filters"), e); });
         clear->setEnabled(session_->canEditSmartFilters(id));
+        if (deep) eightBitOnly(clear);
         menu->addSeparator();
     }
     menu->addAction(tr("Duplicate Layer"), this, [this] { session_->duplicateActiveLayer(); });
@@ -775,23 +783,23 @@ void LayersPanel::showContextMenu(const QPoint& pos) {
     if (!layer->isGroup) {
         QAction* clip = menu->addAction(layer->maskSourceId ? tr("Release Clipping Mask") : tr("Create Clipping Mask"), this, [this, id] { session_->toggleClippingMask(id); });
         clip->setEnabled(session_->canToggleClippingMask(id));
-        menu->addAction(tr("Merge Down"), this, [this] { session_->mergeDown(); });
+        eightBitOnly(menu->addAction(tr("Merge Down"), this, [this] { session_->mergeDown(); }));
         menu->addSeparator();
     }
     if (layer->mask) {
         menu->addAction(layer->mask->enabled ? tr("Disable Layer Mask") : tr("Enable Layer Mask"), this, [this] { session_->toggleLayerMask(); });
         menu->addAction(layer->mask->linked ? tr("Unlink Layer Mask") : tr("Link Layer Mask"), this, [this, id] { session_->toggleMaskLink(id); });
         menu->addAction(tr("Invert Mask"), this, [this] { session_->invertMask(); });
-        if (!layer->isGroup) menu->addAction(tr("Apply Layer Mask"), this, [this] { session_->applyMask(); });
+        if (!layer->isGroup) eightBitOnly(menu->addAction(tr("Apply Layer Mask"), this, [this] { session_->applyMask(); }));
         menu->addAction(tr("Delete Layer Mask"), this, [this] { session_->deleteLayerMask(); });
     } else {
         menu->addAction(tr("Add Reveal-All Mask"), this, [this] { session_->addMaskFromSelection(true); });
         menu->addAction(tr("Add Hide-All Mask"), this, [this] { session_->addMaskFromSelection(false); });
     }
-    if (hasLayerVectorMask(*layer)) menu->addAction(tr("Delete Vector Mask"), this, [this] { session_->deleteVectorMask(); });
+    if (hasLayerVectorMask(*layer)) eightBitOnly(menu->addAction(tr("Delete Vector Mask"), this, [this] { session_->deleteVectorMask(); }));
     else if (!isVectorShapeLayer(*layer)) {
-        menu->addAction(tr("Add Reveal-All Vector Mask"), this, [this] { session_->addVectorMask(EditorSession::VectorMaskKind::RevealAll); });
-        menu->addAction(tr("Add Hide-All Vector Mask"), this, [this] { session_->addVectorMask(EditorSession::VectorMaskKind::HideAll); });
+        eightBitOnly(menu->addAction(tr("Add Reveal-All Vector Mask"), this, [this] { session_->addVectorMask(EditorSession::VectorMaskKind::RevealAll); }));
+        eightBitOnly(menu->addAction(tr("Add Hide-All Vector Mask"), this, [this] { session_->addVectorMask(EditorSession::VectorMaskKind::HideAll); }));
     }
     menu->popup(tree_->viewport()->mapToGlobal(pos));
 }

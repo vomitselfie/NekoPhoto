@@ -25,11 +25,13 @@ void EditorSession::setSelection(const std::optional<Selection>& selection, cons
 }
 
 void EditorSession::applySelectionShape(const GrayImage& shape, SelectionMode mode, const QString& name) {
+    if (refusedAtDepth("edit.selection", tr("Selections"))) return;
     if (!document_) return;
     setSelection(combineSelection(document_->selection, shape, mode, selectionAntialiased), name);
 }
 
 void EditorSession::selectAll() {
+    if (refusedAtDepth("edit.selection", tr("Selections"))) return;
     if (!document_) return;
     Selection s;
     s.coverage = std::make_shared<GrayImage>(document_->width, document_->height, 255);
@@ -43,11 +45,13 @@ void EditorSession::deselect() {
 }
 
 void EditorSession::invertSelection() {
+    if (refusedAtDepth("edit.selection", tr("Selections"))) return;
     if (!document_ || !document_->selection) return;
     setSelection(compositor::invertSelection(*document_->selection, document_->width, document_->height), QT_TRANSLATE_NOOP("History", "Inverse"));
 }
 
 void EditorSession::magicWand(QPointF documentPoint, int tolerance, bool contiguous, bool sampleAllLayers, SelectionMode mode, int sampleRadius, bool edgeAware, std::optional<bool> refineEdge) {
+    if (refusedAtDepth("edit.selection", tr("Selections"))) return;
     if (refineEdge) wandRefineEdge = *refineEdge;
     if (!document_ || !canEditLayers()) return;
     int x = int(std::floor(documentPoint.x())), y = int(std::floor(documentPoint.y()));
@@ -114,6 +118,7 @@ bool EditorSession::wandSessionLive() const {
 }
 
 void EditorSession::applyWandSession(int tolerance, bool replaceStep) {
+    if (refusedAtDepth("edit.selection", tr("Selections"))) return;
     WandSession& session = *wandSession_;
     std::vector<const SmartWandImage::Field*> positive, negative;
     for (WandClick& click : session.clicks) {
@@ -148,6 +153,7 @@ bool EditorSession::retolerateWand(int tolerance) {
 }
 
 void EditorSession::fillSelection(const QColor& color) {
+    if (refusedAtDepth("edit.paint", tr("Painting"))) return;
     if (!canEditLayers()) return;
     const GrayImage* selection = document_->selection && document_->selection->coverage.u8() ? document_->selection->coverage.u8().get() : nullptr;
     if (document_->selection && !selection) return;
@@ -155,6 +161,7 @@ void EditorSession::fillSelection(const QColor& color) {
 }
 
 bool EditorSession::paintBucket(QPointF documentPoint) {
+    if (refusedAtDepth("edit.paint", tr("Painting"))) return false;
     if (!canEditLayers()) return false;
     const int x = int(std::floor(documentPoint.x())), y = int(std::floor(documentPoint.y()));
     if (x < 0 || y < 0 || x >= document_->width || y >= document_->height) return false;
@@ -184,6 +191,7 @@ bool EditorSession::paintBucket(QPointF documentPoint) {
 }
 
 bool EditorSession::patchSelection(int dx, int dy) {
+    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return false;
     if (!canEditLayers() || !document_->selection || !document_->selection->coverage || (dx == 0 && dy == 0)) return false;
     const Layer* layer = activeLayer();
     if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image.u8()) return false;
@@ -301,6 +309,7 @@ void EditorSession::clearSelectedPixelsNow(Layer& layer) {
 }
 
 void EditorSession::clearSelectionPixels() {
+    if (refusedAtDepth("edit.paint", tr("Painting"))) return;
     if (!canEditLayers() || smartObjectBlocksPixels(true)) return;
     Layer* layer = activeLayerMutable();
     if (!layer || layer->isGroup || !layer->asset || !layer->asset->image.u8()) return;
@@ -312,6 +321,7 @@ void EditorSession::clearSelectionPixels() {
 }
 
 void EditorSession::nudgeSelection(double dx, double dy) {
+    if (refusedAtDepth("edit.selection", tr("Selections"))) return;
     if (!document_ || !document_->selection || !document_->selection->coverage || !canEditLayers()) return;
     const GrayImage& src = *document_->selection->coverage.u8();
     int ix = int(std::lround(dx)), iy = int(std::lround(dy));
@@ -323,6 +333,7 @@ void EditorSession::nudgeSelection(double dx, double dy) {
 }
 
 void EditorSession::loadLayerAsSelection(const Uuid& id, bool mask, SelectionMode mode) {
+    if (refusedAtDepth("edit.selection", tr("Selections"))) return;
     if (!document_ || !canEditLayers()) return;
     const Layer* layer = document_->find(id);
     if (!layer) return;
@@ -339,11 +350,13 @@ void EditorSession::loadLayerAsSelection(const Uuid& id, bool mask, SelectionMod
 }
 
 void EditorSession::selectionExpand(int amount) {
+    if (refusedAtDepth("edit.selection", tr("Selections"))) return;
     if (!document_ || !document_->selection || !document_->selection->coverage || amount <= 0 || amount > 500) return;
     setSelection(resizeSelection(*document_->selection, amount), QT_TRANSLATE_NOOP("History", "Expand Selection"));
 }
 
 void EditorSession::selectionFeather(double radius) {
+    if (refusedAtDepth("edit.selection", tr("Selections"))) return;
     if (!document_ || !document_->selection || !document_->selection->coverage || !(radius > 0) || radius > 250) return;
     Selection s = *document_->selection;
     s.coverage = featherSelection(*s.coverage.u8(), radius);
@@ -351,6 +364,7 @@ void EditorSession::selectionFeather(double radius) {
 }
 
 void EditorSession::selectionSmooth(int radius) {
+    if (refusedAtDepth("edit.selection", tr("Selections"))) return;
     if (!document_ || !document_->selection || !document_->selection->coverage || radius <= 0 || radius > 100) return;
     Selection s = *document_->selection;
     s.coverage = smoothSelection(*s.coverage.u8(), radius);
@@ -358,6 +372,7 @@ void EditorSession::selectionSmooth(int radius) {
 }
 
 void EditorSession::selectionBorder(int width) {
+    if (refusedAtDepth("edit.selection", tr("Selections"))) return;
     if (!document_ || !document_->selection || !document_->selection->coverage || width <= 0 || width > 200) return;
     Selection s = *document_->selection;
     s.coverage = borderSelection(*s.coverage.u8(), width);
@@ -365,6 +380,7 @@ void EditorSession::selectionBorder(int width) {
 }
 
 void EditorSession::selectionContract(int amount) {
+    if (refusedAtDepth("edit.selection", tr("Selections"))) return;
     if (!document_ || !document_->selection || !document_->selection->coverage || amount <= 0 || amount > 500) return;
     setSelection(resizeSelection(*document_->selection, -amount), QT_TRANSLATE_NOOP("History", "Contract Selection"));
 }

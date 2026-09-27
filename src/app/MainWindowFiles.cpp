@@ -187,7 +187,8 @@ void MainWindow::importFile(const QString& path, std::optional<QPointF> at) {
 }
 
 namespace {
-std::shared_ptr<const compositor::Image> readImageFile(const QString& path, QString* error) {
+/// An image file's pixels: 16-bit PNG and TIFF files at 16 bits (they open as 16-bit documents), the rest at 8.
+compositor::AnyImage readImageFile(const QString& path, QString* error) {
     if (compositor::isRawPath(path.toStdString())) {
         // A camera RAW file, developed through LibRaw (a few seconds for a large sensor).
         QApplication::setOverrideCursor(Qt::BusyCursor);
@@ -204,19 +205,30 @@ std::shared_ptr<const compositor::Image> readImageFile(const QString& path, QStr
         if (!image && error) *error = QString::fromStdString(why);
         return image;
     }
+    if (path.endsWith(".png", Qt::CaseInsensitive)) {
+        compositor::PngInfo info;
+        if (compositor::readPngInfo(path.toStdString(), info) && info.bitDepth == 16) {
+            std::string why;
+            auto deep = compositor::readPngImage16(path.toStdString(), &why);
+            if (!deep && error) *error = QString::fromStdString(why);
+            return compositor::Image16Ptr(deep);
+        }
+    }
     QImageReader reader(path);
     reader.setAutoTransform(true);
     QImage image = reader.read();
     if (image.isNull()) { if (error) *error = reader.errorString(); return nullptr; }
     if (image.width() > 30000 || image.height() > 30000) { if (error) *error = QObject::tr("Images up to 30,000 pixels per side are supported."); return nullptr; }
-    return fromQImage(image);
+    // 16 bits per channel through Qt (a 16-bit TIFF): kept at 16 bits.
+    if (image.depth() == 64) return compositor::Image16Ptr(fromQImage16(image));
+    return compositor::ImagePtr(fromQImage(image));
 }
 } // namespace
 
 bool MainWindow::importImageFile(const QString& path, std::optional<QPointF> at, QString* error) {
     auto image = readImageFile(path, error);
     if (!image) return false;
-    session_->insertImage(image, QFileInfo(path).completeBaseName(), at);
+    session_->insertImage(image, QFileInfo(path).completeBaseName(), at);   // at the document's depth
     addRecent(path);
     return true;
 }
@@ -314,9 +326,21 @@ void MainWindow::exportPng() {
     QString path = QFileDialog::getSaveFileName(this, tr("Export PNG"), suggested, tr("PNG image (*.png)"));
     if (path.isEmpty()) return;
     if (!path.endsWith(".png", Qt::CaseInsensitive)) path += ".png";
-    auto image = session_->flattened();
     std::string error;
+    // A 16-bit document as a 16-bit PNG.
+    if (session_->sampleType() == SampleType::U16) {
+        auto deep = session_->flattened16();
+        if (!deep || !writePngImage16(path.toStdString(), *deep, session_->document()->resolution, &error)) showError(tr("Couldn’t export PNG"), QString::fromStdString(error));
+        return;
+    }
+    auto image = session_->flattened();
     if (!image || !writePngImage(path.toStdString(), *image, session_->document()->resolution, &error)) showError(tr("Couldn’t export PNG"), QString::fromStdString(error));
+}
+
+void MainWindow::noteDitheredExport(const QString& path) {
+    // The 8-bit formats take a 16-bit document dithered down to 8 bits per channel (EditorSession::flattened).
+    if (session_->sampleType() != SampleType::U8)
+        statusBar()->showMessage(tr("Exported %1, reduced from 16 to 8 bits per channel with dithering.").arg(QFileInfo(path).fileName()), 8000);
 }
 
 void MainWindow::exportPsd() {
@@ -405,6 +429,7 @@ void MainWindow::exportJpeg() {
     p.end();
     QString error;
     if (!writeQtImage(path, "jpeg", flat, options->quality, session_->document()->resolution, &error)) showError(tr("Couldn’t export JPEG"), error);
+    else noteDitheredExport(path);
 }
 
 void MainWindow::exportWebp() {
@@ -419,6 +444,7 @@ void MainWindow::exportWebp() {
     if (path.isEmpty()) return;
     QString error;
     if (!writeQtImage(path, "webp", image, options->quality, session_->document()->resolution, &error)) showError(tr("Couldn’t export WebP"), error);
+    else noteDitheredExport(path);
 }
 
 void MainWindow::exportTiff() {
@@ -429,7 +455,10 @@ void MainWindow::exportTiff() {
     QString path = askExportPath(tr("Export TIFF"), tr("TIFF image (*.tif *.tiff)"), {"tif", "tiff"});
     if (path.isEmpty()) return;
     QString error;
-    if (!writeQtImage(path, "tiff", toQImage(*flattened), 100, session_->document()->resolution, &error)) showError(tr("Couldn’t export TIFF"), error);
+    // A 16-bit document as a 16-bit TIFF, when Qt's TIFF plugin writes one.
+    const bool deep = session_->sampleType() == SampleType::U16 && canWriteDeepTiff();
+    if (!writeQtImage(path, "tiff", deep ? toQImage16(*session_->flattened16()) : toQImage(*flattened), 100, session_->document()->resolution, &error)) showError(tr("Couldn’t export TIFF"), error);
+    else if (!deep) noteDitheredExport(path);
 }
 
 void MainWindow::exportTga() {
@@ -441,6 +470,7 @@ void MainWindow::exportTga() {
     if (path.isEmpty()) return;
     std::string error;
     if (!writeTgaImage(path.toStdString(), *flattened, &error)) showError(tr("Couldn’t export TGA"), QString::fromStdString(error));
+    else noteDitheredExport(path);
 }
 
 void MainWindow::exportIco() {
@@ -452,6 +482,7 @@ void MainWindow::exportIco() {
     if (path.isEmpty()) return;
     std::string error;
     if (!writeIco(path.toStdString(), *flattened, defaultIcoSizes, &error, &*session_->document())) showError(tr("Couldn’t export the icon"), QString::fromStdString(error));
+    else noteDitheredExport(path);
 }
 
 void MainWindow::exportGif() {

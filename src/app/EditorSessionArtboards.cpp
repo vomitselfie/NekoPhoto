@@ -36,6 +36,7 @@ std::vector<const Layer*> EditorSession::artboards() const {
 }
 
 std::optional<Uuid> EditorSession::addArtboard(const Artboard& artboard, const QString& name) {
+    if (refusedAtDepth("edit.artboard", tr("Artboards"))) return std::nullopt;
     if (!canEditLayers() || document_->layers.size() >= size_t(Document::maxLayers)) return std::nullopt;
     if (!validRect(artboard.x, artboard.y, artboard.width, artboard.height) || artboard.background < 1 || artboard.background > 4) return std::nullopt;
     Layer group(name.isEmpty() ? nextLayerName(document_->layers, QCoreApplication::translate("Names", "Artboard").toStdString()) : name.toStdString(), document_->size());
@@ -51,6 +52,7 @@ std::optional<Uuid> EditorSession::addArtboard(const Artboard& artboard, const Q
 }
 
 bool EditorSession::setArtboard(const Uuid& id, const Artboard& artboard, bool moveContents, const QString& name) {
+    if (refusedAtDepth("edit.artboard", tr("Artboards"))) return false;
     if (!canEditLayers()) return false;
     Layer* group = document_->find(id);
     if (!group || !group->isGroup || !group->artboard) return false;
@@ -74,6 +76,7 @@ bool EditorSession::setArtboard(const Uuid& id, const Artboard& artboard, bool m
 }
 
 bool EditorSession::removeArtboard(const Uuid& id, bool contents) {
+    if (refusedAtDepth("edit.artboard", tr("Artboards"))) return false;
     if (!canEditLayers()) return false;
     const Layer* group = document_->find(id);
     if (!group || !group->isGroup || !group->artboard) return false;

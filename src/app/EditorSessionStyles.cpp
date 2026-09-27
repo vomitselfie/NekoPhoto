@@ -20,6 +20,7 @@ bool EditorSession::canStyleLayer(const Uuid& id) const {
 }
 
 bool EditorSession::beginLayerStyleEdit(const Uuid& id) {
+    if (refusedAtDepth("edit.style", tr("Layer styles"))) return false;
     if (styleEditLayer_ || !canStyleLayer(id)) return false;
     beginEdit(QT_TRANSLATE_NOOP("History", "Layer Style"));
     styleEditLayer_ = id;
@@ -52,6 +53,7 @@ void EditorSession::endLayerStyleEdit(bool keep) {
 }
 
 bool EditorSession::applyLayerStyle(const Uuid& id, const LayerStyle& style) {
+    if (refusedAtDepth("edit.style", tr("Layer styles"))) return false;
     if (styleEditLayer_ || !canStyleLayer(id)) return false;
     beginEdit(QT_TRANSLATE_NOOP("History", "Layer Style"));
     addDocumentPatterns(*document_, PresetLibrary::instance().patternsFor(style));   // library patterns it names
@@ -62,6 +64,7 @@ bool EditorSession::applyLayerStyle(const Uuid& id, const LayerStyle& style) {
 }
 
 bool EditorSession::applyStylePreset(const Uuid& id, const LayerStyle& style, const std::vector<PatternPreset>& patterns) {
+    if (refusedAtDepth("edit.style", tr("Layer styles"))) return false;
     if (styleEditLayer_ || !canStyleLayer(id)) return false;
     beginEdit(QT_TRANSLATE_NOOP("History", "Apply Style"));
     addDocumentPatterns(*document_, patterns);
@@ -89,6 +92,7 @@ void EditorSession::copyLayerStyle() {
 }
 
 void EditorSession::pasteLayerStyle() {
+    if (refusedAtDepth("edit.style", tr("Layer styles"))) return;
     if (!styleClipboard_ || !activeLayerId_ || !canStyleLayer(*activeLayerId_)) return;
     beginEdit(QT_TRANSLATE_NOOP("History", "Paste Layer Style"));
     setLayerStyle(*activeLayerMutable(), *styleClipboard_);
@@ -97,6 +101,7 @@ void EditorSession::pasteLayerStyle() {
 }
 
 void EditorSession::clearLayerStyle() {
+    if (refusedAtDepth("edit.style", tr("Layer styles"))) return;
     if (!activeLayerHasStyle() || !canStyleLayer(*activeLayerId_)) return;
     beginEdit(QT_TRANSLATE_NOOP("History", "Clear Layer Style"));
     setLayerStyle(*activeLayerMutable(), LayerStyle{});

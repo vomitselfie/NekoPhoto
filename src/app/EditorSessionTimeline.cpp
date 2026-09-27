@@ -21,11 +21,13 @@ bool EditorSession::timelineEdit(const QString& name, const std::function<bool(D
 }
 
 bool EditorSession::timelineCreate() {
+    if (refusedAtDepth("edit.timeline", tr("The timeline"))) return false;
     if (document_ && !document_->animation.empty()) return false;
     return timelineEdit(QT_TRANSLATE_NOOP("History", "Create Frame Animation"), [](Document& d) { ensureAnimation(d); return true; });
 }
 
 bool EditorSession::timelineFramesFromLayers() {
+    if (refusedAtDepth("edit.timeline", tr("The timeline"))) return false;
     return timelineEdit(QT_TRANSLATE_NOOP("History", "Make Frames From Layers"), [](Document& d) {
         std::vector<Uuid> top;
         for (const Layer& l : d.layers) if (!l.parentId) top.push_back(l.id);
@@ -57,6 +59,7 @@ bool EditorSession::timelineSelectFrame(int index) {
 }
 
 bool EditorSession::timelineDuplicateFrame() {
+    if (refusedAtDepth("edit.timeline", tr("The timeline"))) return false;
     return timelineEdit(QT_TRANSLATE_NOOP("History", "New Frame"), [](Document& d) {
         if (d.animation.empty()) { ensureAnimation(d); }
         return duplicateFrame(d, d.animation.current);
@@ -64,14 +67,17 @@ bool EditorSession::timelineDuplicateFrame() {
 }
 
 bool EditorSession::timelineDeleteFrame(int index) {
+    if (refusedAtDepth("edit.timeline", tr("The timeline"))) return false;
     return timelineEdit(QT_TRANSLATE_NOOP("History", "Delete Frame"), [index](Document& d) { return deleteFrame(d, index); });
 }
 
 bool EditorSession::timelineMoveFrame(int from, int to) {
+    if (refusedAtDepth("edit.timeline", tr("The timeline"))) return false;
     return timelineEdit(QT_TRANSLATE_NOOP("History", "Move Frame"), [from, to](Document& d) { return from != to && moveFrame(d, from, to); });
 }
 
 bool EditorSession::timelineSetDelay(int index, int delayMs) {
+    if (refusedAtDepth("edit.timeline", tr("The timeline"))) return false;
     if (delayMs < 0 || delayMs > maxFrameDelayMs) return false;
     return timelineEdit(QT_TRANSLATE_NOOP("History", "Frame Delay"), [index, delayMs](Document& d) {
         auto& frames = d.animation.frames;
@@ -83,6 +89,7 @@ bool EditorSession::timelineSetDelay(int index, int delayMs) {
 }
 
 bool EditorSession::timelineSetLoopCount(int loops) {
+    if (refusedAtDepth("edit.timeline", tr("The timeline"))) return false;
     if (loops < 0 || loops > 65535) return false;
     return timelineEdit(QT_TRANSLATE_NOOP("History", "Looping Options"), [loops](Document& d) {
         if (d.animation.empty() || d.animation.loopCount == loops) return false;
@@ -92,6 +99,7 @@ bool EditorSession::timelineSetLoopCount(int loops) {
 }
 
 bool EditorSession::timelineClear() {
+    if (refusedAtDepth("edit.timeline", tr("The timeline"))) return false;
     return timelineEdit(QT_TRANSLATE_NOOP("History", "Delete Animation"), [](Document& d) {
         if (d.animation.empty()) return false;
         d.animation = Animation{};

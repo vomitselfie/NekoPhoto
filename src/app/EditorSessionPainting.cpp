@@ -26,6 +26,7 @@ std::optional<QPointF> EditorSession::cloneSamplePoint(QPointF point) const {
 }
 
 bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
+    if (refusedAtDepth("edit.paint", tr("Painting"))) return false;
     if (!document_ || stroke_ || transformEdit_) return false;
     const Layer* layer = activeLayer();
     if (!layer || layer->isGroup || layer->adjustment) return false;
@@ -106,6 +107,7 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
 }
 
 void EditorSession::myPaintTo(QPointF documentPoint) {
+    if (refusedAtDepth("edit.paint", tr("Painting"))) return;
     MyPaintInput input;
     input.document = toPoint(documentPoint);
     input.pressure = pen.pressure;
@@ -271,6 +273,7 @@ void EditorSession::changeBrushSize(bool increase) {
 // ---- Blur / Smudge / Liquify ---------------------------------------------------------
 
 bool EditorSession::beginWarp(QPointF documentPoint) {
+    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return false;
     if (!document_ || stroke_ || warp_ || transformEdit_) return false;
     const Layer* layer = activeLayer();
     if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image.u8()) return false;
@@ -322,6 +325,7 @@ bool EditorSession::beginWarp(QPointF documentPoint) {
 }
 
 bool EditorSession::beginProcessedStroke(QPointF documentPoint, const std::function<void(Image&)>& process, int margin) {
+    if (refusedAtDepth("edit.paint", tr("Painting"))) return false;
     const Layer* layer = activeLayer();
     if (!document_ || !layer || stroke_ || warp_) return false;
     if (isMaskSelected_) { emit error(tr("This tool works on a layer's pixels, not its mask.")); return false; }
@@ -344,6 +348,7 @@ bool EditorSession::beginProcessedStroke(QPointF documentPoint, const std::funct
 }
 
 bool EditorSession::beginToning(QPointF documentPoint) {
+    if (refusedAtDepth("edit.paint", tr("Painting"))) return false;
     if (!document_ || stroke_ || warp_ || transformEdit_) return false;
     const Layer* layer = activeLayer();
     if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image.u8()) return false;
@@ -396,6 +401,7 @@ std::optional<std::pair<QPointF, QPointF>> EditorSession::gradientLine() const {
 }
 
 void EditorSession::beginGradient(QPointF documentPoint) {
+    if (refusedAtDepth("edit.paint", tr("Painting"))) return;
     if (!document_ || stroke_ || transformEdit_) return;
     const Layer* layer = activeLayer();
     if (!layer) return;
@@ -491,6 +497,7 @@ void EditorSession::resolveGradient() { if (gradient_) commitGradient(); }
 // ---- Shape ------------------------------------------------------------------------------
 
 void EditorSession::beginShape(QPointF documentPoint) {
+    if (refusedAtDepth("edit.paint", tr("Painting"))) return;
     if (!canEditLayers()) return;
     QPointF anchor(std::round(documentPoint.x()), std::round(documentPoint.y()));
     shapeDraft_ = ShapeDraft{ShapeKind::Rectangle, anchor, QRectF(anchor, QSizeF(0, 0)), shapeTool.cornerRadius, anchor};
@@ -574,6 +581,7 @@ std::optional<LiveShape> EditorSession::shapeDraftLive() const {
 }
 
 bool EditorSession::addVectorShapeLayer(const VectorShape& shape, const QString& name) {
+    if (refusedAtDepth("edit.paint", tr("Painting"))) return false;
     if (!canEditLayers()) return false;
     const std::string base = name.isEmpty() ? QCoreApplication::translate("Names", "Shape").toStdString() : name.toStdString();
     Layer layer(Asset::make(std::make_shared<Image>(1, 1), nextLayerName(document_->layers, base)), Point(0, 0));
@@ -623,15 +631,15 @@ bool EditorSession::redrawText(Layer& layer) {
     if (!image) { emit error(tr("That text is too large to render. Text can cover up to 100 megapixels.")); return false; }
     // A layer scaled on the canvas keeps its scale; the box follows the new raster.
     double scaleX = 1, scaleY = 1;
-    if (layer.asset && layer.asset->image.u8() && layer.asset->image.u8()->width() > 0 && layer.asset->image.u8()->height() > 0) {
-        scaleX = layer.transform.size.width / layer.asset->image.u8()->width();
-        scaleY = layer.transform.size.height / layer.asset->image.u8()->height();
+    if (layer.asset && layer.asset->image && layer.asset->image.width() > 0 && layer.asset->image.height() > 0) {
+        scaleX = layer.transform.size.width / layer.asset->image.width();
+        scaleY = layer.transform.size.height / layer.asset->image.height();
     }
     if (layer.mask && !layer.mask->placement) layer.mask->placement = layer.maskTransform();
     // A turned layer turns about its centre, so a new size would slide it: its top-left corner stays put instead.
     std::optional<Point> corner;
-    if (layer.transform.rotation != 0 && !layer.transform.flipX && !layer.transform.flipY && layer.asset && layer.asset->image.u8())
-        corner = mapThroughTransform(layer.transform, layer.asset->image.u8()->width(), layer.asset->image.u8()->height(), 0, 0);
+    if (layer.transform.rotation != 0 && !layer.transform.flipX && !layer.transform.flipY && layer.asset && layer.asset->image)
+        corner = mapThroughTransform(layer.transform, layer.asset->image.width(), layer.asset->image.height(), 0, 0);
     layer.asset = Asset::make(image, layer.name);
     layer.textImage = image;
     layer.transform.size = Size(image->width() * scaleX, image->height() * scaleY);
@@ -688,6 +696,7 @@ bool EditorSession::redrawText(Layer& layer) {
 }
 
 std::optional<Uuid> EditorSession::addTextLayer(QPointF documentPoint, const LayerText& text, bool openEditor) {
+    if (refusedAtDepth("edit.text", tr("Text"))) return std::nullopt;
     if (!canEditLayers()) return std::nullopt;
     auto image = renderTextLayer(text);
     if (!image) { emit error(tr("That text is too large to render. Text can cover up to 100 megapixels.")); return std::nullopt; }
@@ -716,6 +725,7 @@ std::optional<LayerText> EditorSession::layerText(const Uuid& id) const {
 }
 
 void EditorSession::beginTextEdit(const Uuid& id) {
+    if (refusedAtDepth("edit.text", tr("Text"))) return;
     if (textEditing_ || !document_) return;
     const Layer* layer = document_->find(id);
     if (!layer || !layer->text) return;
@@ -725,6 +735,7 @@ void EditorSession::beginTextEdit(const Uuid& id) {
 }
 
 void EditorSession::setLayerText(const Uuid& id, const LayerText& text) {
+    if (refusedAtDepth("edit.text", tr("Text"))) return;
     if (!document_) return;
     Layer* layer = document_->find(id);
     if (!layer || !layer->text) return;

@@ -66,6 +66,7 @@ bool EditorSession::smartObjectBlocksPixels(bool ask) {
 }
 
 bool EditorSession::convertToSmartObject(QString* error) {
+    if (refusedAtDepth("edit.smartObject", tr("Smart objects"), error)) return false;
     if (!canEditLayers()) return false;
     std::vector<Uuid> ids(selectedLayerIds_.begin(), selectedLayerIds_.end());
     if (ids.empty() && activeLayerId_) ids.push_back(*activeLayerId_);
@@ -83,6 +84,7 @@ bool EditorSession::convertToSmartObject(QString* error) {
 }
 
 bool EditorSession::placeEmbedded(const QString& path, QString* error) {
+    if (refusedAtDepth("edit.smartObject", tr("Smart objects"), error)) return false;
     if (!canEditLayers()) return false;
     auto contents = contentsFromFile(path, error);
     if (!contents) return false;
@@ -102,6 +104,7 @@ bool EditorSession::placeEmbedded(const QString& path, QString* error) {
 }
 
 bool EditorSession::replaceSmartObjectContents(const QString& path, QString* error) {
+    if (refusedAtDepth("edit.smartObject", tr("Smart objects"), error)) return false;
     const Layer* layer = activeLayer();
     if (!canEditLayers() || !layer || !layer->isLiveSmartObject()) { if (error) *error = tr("Select a smart object."); return false; }
     std::string why;
@@ -119,6 +122,7 @@ bool EditorSession::replaceSmartObjectContents(const QString& path, QString* err
 }
 
 bool EditorSession::warpActiveLayer(const compositor::TextWarp& warp, QString* error) {
+    if (refusedAtDepth("edit.pixels", tr("Editing pixels"), error)) return false;
     Layer* layer = activeLayerMutable();
     if (!canEditLayers() || !layer) { if (error) *error = tr("Select a layer to warp."); return false; }
     if (isMaskSelected_) { if (error) *error = tr("Warp the layer, not its mask."); return false; }
@@ -140,6 +144,7 @@ bool EditorSession::warpActiveLayer(const compositor::TextWarp& warp, QString* e
 }
 
 bool EditorSession::beginWarpCage(QString* error) {
+    if (refusedAtDepth("edit.pixels", tr("Editing pixels"), error)) return false;
     if (warpCage_) { if (error) *error = tr("A warp cage is open: Enter applies it, Esc cancels it."); return false; }
     const Layer* layer = activeLayer();
     if (!canEditLayers() || !layer) { if (error) *error = tr("Select a layer to warp."); return false; }
@@ -187,6 +192,7 @@ void EditorSession::moveWarpCagePoint(int index, QPointF p) {
 }
 
 void EditorSession::setWarpCage(const compositor::WarpMesh& cage) {
+    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return;
     if (!warpCage_ || cage.xs.size() != warpCage_->xs.size()) return;
     warpCage_ = cage;
     previewWarpCage();
@@ -245,6 +251,7 @@ bool EditorSession::canAddSmartFilter() const {
 }
 
 bool EditorSession::addSmartFilter(const compositor::SmartFilterEntry& entry, QString* error) {
+    if (refusedAtDepth("edit.smartObject", tr("Smart objects"), error)) return false;
     Layer* layer = activeLayerMutable();
     if (!canAddSmartFilter() || !layer) { if (error) *error = tr("Select an editable smart object."); return false; }
     endOpacityEdit();
@@ -265,6 +272,7 @@ bool EditorSession::addSmartFilter(const compositor::SmartFilterEntry& entry, QS
 }
 
 bool EditorSession::rasterizeSmartObject() {
+    if (refusedAtDepth("edit.smartObject", tr("Smart objects"))) return false;
     Layer* layer = activeLayerMutable();
     if (!canEditLayers() || !layer || !layer->smartObject) return false;
     endOpacityEdit();
@@ -296,6 +304,7 @@ std::optional<std::pair<Document, std::string>> EditorSession::smartObjectConten
 }
 
 bool EditorSession::commitSmartObjectContents(const std::string& sourceId, const Document& contents, QString* error) {
+    if (refusedAtDepth("edit.smartObject", tr("Smart objects"), error)) return false;
     if (!document_) return false;
     auto it = document_->smartObjects.find(sourceId);
     if (it == document_->smartObjects.end()) { if (error) *error = tr("The smart object these contents came from is gone."); return false; }

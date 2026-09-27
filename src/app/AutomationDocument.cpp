@@ -33,6 +33,7 @@ void AutomationServer::registerDocumentHandlers() {
         const Document& doc = document();
         EditorSession* s = session();
         QJsonObject o{{"width", doc.width}, {"height", doc.height}, {"resolution", doc.resolution}, {"layers", int(doc.layers.size())},
+                      {"bits", QString::fromLatin1(sampleTypeName(doc.sampleType)).toInt()},
                       {"modified", s->isModified()}, {"title", s->title()}, {"tab", w->currentTabIndex()}};
         if (!s->projectPath().isEmpty()) o["path"] = s->projectPath();
         if (auto id = s->activeLayerId()) { o["activeLayer"] = qs(*id); o["maskSelected"] = s->isMaskSelected(); }
@@ -68,7 +69,7 @@ void AutomationServer::registerDocumentHandlers() {
                 bits << (l.isLiveText() ? "text" : (l.isLiveShape() || compositor::isVectorShapeLayer(l)) ? "shape" : "pixels");
                 const Rect r = l.transform.bounds();
                 bits << QStringLiteral("%1 x %2 at (%3, %4)").arg(r.width).arg(r.height).arg(r.x).arg(r.y);
-                if (!l.asset || !l.asset->image.u8()) bits << "blank";
+                if (!l.asset || !l.asset->image) bits << "blank";
             }
             if (l.opacity < 1) bits << QStringLiteral("%1%").arg(std::lround(l.opacity * 100));
             if (l.blendMode != BlendMode::Normal) bits << QString::fromUtf8(blendModeName(l.blendMode));
@@ -158,6 +159,8 @@ void AutomationServer::registerDocumentHandlers() {
             return QJsonObject{{"path", path}, {"width", doc.width}, {"height", doc.height}, {"layers", summary.layers}, {"folders", summary.folders},
                                {"masks", summary.masks}, {"clipped", summary.clipped}, {"adjustments", summary.adjustments}, {"texts", summary.texts}, {"smartObjects", summary.smartObjects}, {"warnings", warnings}, {"notes", notes}};
         }
+        const bool deep = doc.sampleType == SampleType::U16;
+        if (suffix == "svg" && deep) fail("SVG export is not available for 16-bit documents yet");
         if (suffix == "svg") {
             // Shape layers as paths, folders as groups, the rest as embedded PNGs (compositor/svg.h).
             SvgExportSummary summary;
@@ -174,6 +177,15 @@ void AutomationServer::registerDocumentHandlers() {
             if (!writeDocumentGif(path.toStdString(), document(), &error)) fail("couldn't write " + path + ": " + qs(error));
             const Document& shown = document();
             return QJsonObject{{"path", path}, {"width", shown.width}, {"height", shown.height}, {"frames", std::max(1, int(shown.animation.frames.size()))}};
+        }
+        // A 16-bit document as a 16-bit PNG (and TIFF, when Qt writes one); the 8-bit formats get it dithered down.
+        if (deep && (suffix == "png" || ((suffix == "tif" || suffix == "tiff") && canWriteDeepTiff()))) {
+            auto image = session()->flattened16();
+            if (!image) fail("nothing to export");
+            std::string error;
+            if (suffix == "png") { if (!writePngImage16(path.toStdString(), *image, doc.resolution, &error)) fail("couldn't write " + path + ": " + qs(error)); }
+            else { QString qerror; if (!writeQtImage(path, "tiff", toQImage16(*image), 100, doc.resolution, &qerror)) fail("couldn't write " + path + ": " + qerror); }
+            return QJsonObject{{"path", path}, {"width", image->width()}, {"height", image->height()}, {"bits", 16}};
         }
         auto flat = session()->flattened();
         if (!flat) fail("nothing to export");
@@ -200,7 +212,9 @@ void AutomationServer::registerDocumentHandlers() {
             std::string error;
             if (!writeIco(path.toStdString(), *flat, defaultIcoSizes, &error, &doc)) fail("couldn't write " + path + ": " + qs(error));
         } else fail("path must end in .psd, .psb, .svg, .png, .jpg, .jpeg, .webp, .tif, .tiff, .gif, .tga or .ico", invalidParams);
-        return QJsonObject{{"path", path}, {"width", flat->width()}, {"height", flat->height()}};
+        QJsonObject out{{"path", path}, {"width", flat->width()}, {"height", flat->height()}, {"bits", 8}};
+        if (deep) out["note"] = "reduced from 16 to 8 bits per channel with dithering";
+        return out;
     });
     add("document.close", [session](const QJsonObject& p) {
         if (session()->isModified() && !flag(p, "discard", false)) fail("the document has unsaved changes; save first or pass discard: true");
@@ -222,6 +236,18 @@ void AutomationServer::registerDocumentHandlers() {
         return QJsonObject{{"width", session()->document()->width}, {"height", session()->document()->height}};
     });
     add("canvas.flip", [session, document](const QJsonObject& p) { document(); session()->flipCanvas(!flag(p, "vertical", false)); return QJsonObject{}; });
+    add("image.mode", [session, document](const QJsonObject& p) {
+        // Image > Mode > 8 or 16 Bits/Channel: every layer, mask and the selection converted, one undo step.
+        document();
+        const int bits = integer(p, "bits");
+        if (bits != 8 && bits != 16) fail("bits must be 8 or 16 (32-bit documents are not available yet)", invalidParams);
+        QString error;
+        if (!session()->convertMode(bits == 16 ? SampleType::U16 : SampleType::U8, &error)) fail(error.isEmpty() ? QStringLiteral("the document could not be converted") : error);
+        const Document& now = document();
+        return QJsonObject{{"bits", bits}, {"width", now.width}, {"height", now.height}, {"layerBytes", double(now.layerBytes())},
+                           {"layerBudgetBytes", double(Document::projectPixelBudgetAt(now.sampleType) * 4 * (long long)sampleBytes(now.sampleType))},
+                           {"layerPixelBudget", double(Document::projectPixelBudgetAt(now.sampleType))}};
+    });
     add("image.resize", [session, document](const QJsonObject& p) {
         const Document& doc = document();
         int width = integer(p, "width", 0), height = integer(p, "height", 0);

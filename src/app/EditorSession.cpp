@@ -1,6 +1,8 @@
 // EditorSession: The session: construction, the document, history, crop and canvas, tools and the view.
 #include "compositor/vectorlayer.h"
 #include "EditorSession.h"
+#include "compositor/depth.h"
+#include "compositor/supports.h"
 #include "compositor/smartfilter.h"
 #include "QtGeometry.h"
 #include "compositor/project.h"
@@ -184,19 +186,20 @@ void EditorSession::closeDocument() {
     emit selectionChanged();
 }
 
-void EditorSession::insertImage(std::shared_ptr<const Image> image, const QString& name, std::optional<QPointF> at) {
-    if (!image || image->isEmpty()) return;
+void EditorSession::insertImage(const AnyImage& image, const QString& name, std::optional<QPointF> at) {
+    if (!image || image.width() <= 0 || image.height() <= 0) return;
     cancelBrush();
     commitTransform();
     beginEdit(QT_TRANSLATE_NOOP("History", "Import Image"));
     if (!document_) {
-        document_ = Document(image->width(), image->height());
-        viewport.fit({double(image->width()), double(image->height())});
+        document_ = Document(image.width(), image.height());
+        document_->sampleType = image.sampleType();
+        viewport.fit({double(image.width()), double(image.height())});
         emit viewportChanged();
         at.reset();
     }
     Point center = at ? toPoint(*at) : Point(document_->width / 2.0, document_->height / 2.0);
-    Layer layer(Asset::make(image, name.toStdString()), Point(std::floor(center.x - image->width() / 2.0), std::floor(center.y - image->height() / 2.0)));
+    Layer layer(Asset::makeAny(image, name.toStdString()), Point(std::floor(center.x - image.width() / 2.0), std::floor(center.y - image.height() / 2.0)));
     const Layer* active = activeLayer();
     layer.parentId = active && active->isGroup ? activeLayerId_ : (active ? active->parentId : std::nullopt);
     if (layer.parentId) collapsedGroupIds.erase(*layer.parentId);
@@ -214,7 +217,64 @@ void EditorSession::insertImage(std::shared_ptr<const Image> image, const QStrin
 
 std::shared_ptr<Image> EditorSession::flattened() const {
     if (!document_) return nullptr;
+    if (document_->sampleType == SampleType::U16) return ditherToEightBit(*renderFlattened16(*document_));
     return renderFlattened(*document_);
+}
+
+std::shared_ptr<Image16> EditorSession::flattened16() const {
+    if (!document_) return nullptr;
+    return renderFlattened16(*document_);
+}
+
+// ---- Bit depth ---------------------------------------------------------------
+
+bool EditorSession::supportsFeature(std::string_view feature) const { return supports(feature, sampleType()); }
+
+bool EditorSession::refusedAtDepth(std::string_view feature, const QString& what, QString* errorText) {
+    if (supportsFeature(feature)) return false;
+    const QString message = tr("%1 is not available for %2-bit documents yet.").arg(what, QString::fromLatin1(sampleTypeName(sampleType())));
+    if (errorText) *errorText = message;
+    else emit error(message);
+    return true;
+}
+
+std::shared_ptr<const GrayImage> EditorSession::selectionCoverage8() const {
+    if (!document_ || !document_->selection) return nullptr;
+    return coverage8(*document_->selection);
+}
+
+std::shared_ptr<const GrayImage> EditorSession::coverage8(const Selection& selection) {
+    const AnyGray& coverage = selection.coverage;
+    if (!coverage || coverage.u8()) return coverage.u8();
+    // One reduction kept, for the selection on screen (the canvas asks on every tick of its outline).
+    static std::weak_ptr<const Gray16> held;
+    static std::shared_ptr<const GrayImage> reduced;
+    if (held.lock() != coverage.u16()) { held = coverage.u16(); reduced = coverage.u16() ? narrowGray(*coverage.u16()) : nullptr; }
+    return reduced;
+}
+
+bool EditorSession::convertMode(SampleType type, QString* errorText) {
+    if (!document_ || type == document_->sampleType) return document_.has_value();
+    if (type == SampleType::F32) { if (errorText) *errorText = tr("32-bit documents are not available yet."); return false; }
+    commitTransform();
+    const std::string problem = sampleTypeBudgetProblem(*document_, type);
+    if (!problem.empty()) {
+        if (errorText) *errorText = tr("This document is too large for %1 bits per channel: %2").arg(QString::fromLatin1(sampleTypeName(type)), QString::fromStdString(problem));
+        return false;
+    }
+    // Leaving a tool mid-way first: a stroke or a floating edit holds pixels at the old depth.
+    cancelBrush();
+    beginEdit(QT_TRANSLATE_NOOP("History", "Convert Mode"));
+    std::string why;
+    const bool ok = convertSampleType(*document_, type, &why);
+    endEdit();
+    if (!ok) { if (errorText) *errorText = QString::fromStdString(why); return false; }
+    // A tool that does not work at the new depth gives way to the Move tool.
+    if (!toolSupportedAtDepth(tool_)) selectTool(Tool::Move);
+    notifyDocument();
+    emit selectionChanged();
+    emit toolChanged();
+    return true;
 }
 
 // ---- History -----------------------------------------------------------------
@@ -275,6 +335,9 @@ void EditorSession::endEdit() {
     if (document_) { refreshSmartObjectRasters(*document_); refreshVectorShapes(*document_); }
     // The frame the layers show keeps what this edit did to their visibility, position and opacity.
     if (document_) { pruneAnimation(*document_); syncCurrentFrame(*document_); }
+    // One depth per document: pixels this edit brought in at another depth (an 8-bit file imported into a 16-bit
+    // document, a raster an 8-bit path drew) are converted to the document's.
+    if (document_) conformToSampleType(*document_);
     history_.end(document_, activeLayerId_);
 }
 
@@ -282,6 +345,7 @@ void EditorSession::endEdit() {
 // ---- Crop and canvas --------------------------------------------------------------
 
 bool EditorSession::trim(const TrimOptions& options) {
+    if (refusedAtDepth("edit.crop", tr("Cropping"))) return false;
     if (!canEditLayers()) return false;
     auto flat = renderFlattened(*document_);
     auto rect = flat ? trimRect(*flat, options) : std::nullopt;
@@ -291,6 +355,7 @@ bool EditorSession::trim(const TrimOptions& options) {
 }
 
 void EditorSession::cropTo(const QRectF& rectF, const char* action) {
+    if (refusedAtDepth("edit.crop", tr("Cropping"))) return;
     if (!canEditLayers()) return;
     Rect rect = Rect(rectF.x(), rectF.y(), rectF.width(), rectF.height()).integral().intersection(document_->rect());
     if (rect.isEmpty() || rect == document_->rect()) return;
@@ -316,6 +381,11 @@ void EditorSession::cropTo(const QRectF& rectF, const char* action) {
 void EditorSession::resizeCanvas(int width, int height, double anchorX, double anchorY) {
     if (!canEditLayers() || !Document::validDimension(width) || !Document::validDimension(height)) return;
     if (width == document_->width && height == document_->height) return;
+    // The canvas budget in bytes: a 16-bit canvas holds half the pixels of an 8-bit one.
+    if (document_->sampleType != SampleType::U8 && (long long)width * height > document_->imagePixelBudget()) {
+        emit error(tr("A %1-bit canvas holds up to %2 megapixels.").arg(QString::fromLatin1(sampleTypeName(document_->sampleType))).arg(document_->imagePixelBudget() / 1000000));
+        return;
+    }
     double dx = std::round((width - document_->width) * anchorX), dy = std::round((height - document_->height) * anchorY);
     beginEdit(QT_TRANSLATE_NOOP("History", "Canvas Size"));
     Document doc = *document_;
@@ -337,6 +407,7 @@ void EditorSession::resizeCanvas(int width, int height, double anchorX, double a
 }
 
 void EditorSession::resizeImage(int width, int height, double resolution, int sampling) {
+    if (refusedAtDepth("edit.imageSize", tr("Image Size"))) return;
     if (!canEditLayers() || !Document::validDimension(width) || !Document::validDimension(height)) return;
     Document doc = *document_;
     Sampling mode = sampling == 0 ? Sampling::Nearest : sampling == 1 ? Sampling::Smooth : Sampling::High;
@@ -354,8 +425,37 @@ void EditorSession::resizeImage(int width, int height, double resolution, int sa
 
 // ---- Tools and view -----------------------------------------------------------------
 
+const char* EditorSession::toolFeature(Tool tool) {
+    switch (tool) {
+    case Tool::Move: return "tool.move";
+    case Tool::Marquee: return "tool.marquee";
+    case Tool::Lasso: return "tool.lasso";
+    case Tool::Wand: return "tool.wand";
+    case Tool::Scribble: return "tool.quickSelect";
+    case Tool::Crop: return "tool.crop";
+    case Tool::Brush: return "tool.brush";
+    case Tool::SpotHealing: return "tool.spotHealing";
+    case Tool::CloneStamp: return "tool.cloneStamp";
+    case Tool::Smudge: return "tool.smudge";
+    case Tool::Gradient: return "tool.gradient";
+    case Tool::Shape: return "tool.shape";
+    case Tool::Eyedropper: return "tool.eyedropper";
+    case Tool::Hand: return "tool.hand";
+    case Tool::Zoom: return "tool.zoom";
+    case Tool::Text: return "tool.text";
+    case Tool::Dodge: return "tool.dodge";
+    case Tool::PaintBucket: return "tool.paintBucket";
+    case Tool::Pen: return "tool.pen";
+    case Tool::DirectSelect: return "tool.directSelect";
+    case Tool::Artboard: return "tool.artboard";
+    case Tool::Slice: return "tool.slice";
+    }
+    return "tool.unknown";
+}
+
 void EditorSession::selectTool(Tool tool) {
     if (stroke_ || warp_ || pixelMove_) return;
+    if (!toolSupportedAtDepth(tool)) { refusedAtDepth(toolFeature(tool), tr("This tool")); return; }
     if (tool != tool_) { commitTransform(); resolveGradient(); cancelShape(); cancelWarpCage(); }
     tool_ = tool;
     emit toolChanged();

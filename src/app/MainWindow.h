@@ -209,6 +209,16 @@ private:
     QAction* undoAction_;
     QAction* redoAction_;
     QList<QAction*> documentActions_;
+    /// The supports() feature each document action is (compositor/supports.h); an action without one is 8-bit only.
+    QMap<QAction*, QString> actionFeatures_;
+    QAction* mode8Action_ = nullptr;
+    QAction* mode16Action_ = nullptr;
+    /// Image > Mode: converts the document, or says why it cannot.
+    void convertMode(compositor::SampleType type);
+    /// Greys out what the document's depth does not support, with a tooltip saying so.
+    void refreshDepthGating();
+    /// After exporting a 16-bit document to an 8-bit format: says it was dithered down.
+    void noteDitheredExport(const QString& path);
     QMap<Tool, QAction*> toolActions_;
     QAction* eraserAction_;
 };

@@ -1,6 +1,7 @@
 // Automation methods: layers. Registered from AutomationServer::registerHandlers (Automation.cpp).
 #include "compositor/smartobject_edit.h"
 #include "Automation.h"
+#include "compositor/depth.h"
 #include "AutomationHandlers.h"
 #include "PresetLibrary.h"
 #include "compositor/warpmesh.h"
@@ -313,6 +314,8 @@ void AutomationServer::registerLayersHandlers() {
         document();
         EditorSession* s = session();
         QString kind = str(p, "kind", QStringLiteral("pixels")).toLower();
+        if ((kind == "adjustment" || kind == "text") && s->sampleType() != SampleType::U8)
+            fail("layers.add kind " + kind + " is not available for " + QString::fromLatin1(sampleTypeName(s->sampleType())) + "-bit documents yet");
         if (kind == "pixels" || kind == "blank") s->addBlankLayer(flag(p, "below", false));
         else if (kind == "group" || kind == "folder") s->addGroup();
         else if (kind == "adjustment") {
@@ -492,11 +495,12 @@ void AutomationServer::registerLayersHandlers() {
         // mask applied, placed and rotated as on the canvas, over the layer's bounds (masked: false for the
         // raw pixels).
         const Layer& l = layer(p);
-        if (!l.asset || !l.asset->image.u8()) fail("the layer has no pixels (a folder, adjustment or blank layer); document.overview shows each layer's kind");
+        if (!l.asset || !l.asset->image) fail("the layer has no pixels (a folder, adjustment or blank layer); document.overview shows each layer's kind");
         if (l.mask && l.mask->enabled && flag(p, "masked", true)) {
             const Rect bounds = l.transform.bounds().integral();
             if (!Document::validDimension(int(bounds.width)) || !Document::validDimension(int(bounds.height))) fail("the layer is too large to render alone; pass masked: false");
             Document solo(int(bounds.width), int(bounds.height));
+            solo.sampleType = l.asset->image.sampleType();
             Layer alone = l;
             alone.parentId.reset();
             alone.maskSourceId.reset();
@@ -514,7 +518,9 @@ void AutomationServer::registerLayersHandlers() {
             render(solo, options, out, nullptr);
             return deliverPng(out, p, {{"id", qs(l.id)}, {"masked", true}, {"region", rectJson(bounds)}, {"transform", transformJson(l.transform)}});
         }
-        auto copy = scaledCopy(*l.asset->image.u8(), num(p, "maxSize", 1024));
+        // A 16-bit layer's pixels reduced to 8 bits for the PNG.
+        const ImagePtr pixels = l.asset->image.u8() ? l.asset->image.u8() : ImagePtr(narrowImage(*l.asset->image.u16()));
+        auto copy = scaledCopy(*pixels, num(p, "maxSize", 1024));
         return deliverPng(*copy, p, {{"id", qs(l.id)}, {"transform", transformJson(l.transform)}, {"pixelWidth", l.pixelWidth()}, {"pixelHeight", l.pixelHeight()}});
     });
 
