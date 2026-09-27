@@ -37,7 +37,7 @@ bool nestsTooDeep(const json& root, size_t limit = 64) {
     }
     return false;
 }
-ProjectError version(int v) { return {ProjectError::Version, "This project uses format version " + std::to_string(v) + ". This app supports versions 1-7.", v}; }
+ProjectError version(int v) { return {ProjectError::Version, "This project uses format version " + std::to_string(v) + ". This app supports versions 1-" + std::to_string(projectFormatVersion) + ".", v}; }
 ProjectError missingImage() { return {ProjectError::MissingImage, "An image inside the project is missing or damaged. The current document has not been replaced."}; }
 ProjectError tooLarge() { return {ProjectError::TooLarge, "This project exceeds the supported canvas, layer or file size, the 100-megapixel limit for one image, or the 1-gigapixel limit for all layers together."}; }
 ProjectError encodeError() { return {ProjectError::Encode, "An image could not be saved. The previous project has not been replaced."}; }
