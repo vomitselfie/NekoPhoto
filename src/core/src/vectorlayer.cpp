@@ -198,10 +198,26 @@ uint64_t cachedContentHash(const std::shared_ptr<const Image>& image) {
     return hash;
 }
 
-/// The blocks are there and the pixels are still the fill they describe (wherever the layer now is).
+/// The same for a 16-bit raster (psdContentHash at its depth).
+uint64_t cachedContentHash(const Image16Ptr& image) {
+    static std::mutex mutex;
+    static std::map<const Image16*, std::pair<std::weak_ptr<const Image16>, uint64_t>> cache;
+    std::lock_guard lock(mutex);
+    auto it = cache.find(image.get());
+    if (it != cache.end() && it->second.first.lock() == image) return it->second.second;
+    if (cache.size() >= 1024) std::erase_if(cache, [](const auto& entry) { return entry.second.first.expired(); });
+    if (cache.size() >= 16384) cache.clear();
+    const uint64_t hash = psdContentHash(AnyImage(image));
+    cache[image.get()] = {image, hash};
+    return hash;
+}
+
+/// The blocks are there and the pixels are still the fill they describe (wherever the layer now is), at any depth.
 bool hasShapeBlocks(const Layer& layer) {
-    return !layer.isGroup && !layer.adjustment && layer.asset && layer.asset->image.u8() && (block(layer, "vsms") || block(layer, "vmsk"))
-        && (block(layer, "SoCo") || block(layer, "GdFl") || block(layer, "PtFl")) && layer.psdCarry->contentHash == cachedContentHash(layer.asset->image.u8());
+    if (layer.isGroup || layer.adjustment || !layer.asset || !layer.asset->image || !(block(layer, "vsms") || block(layer, "vmsk"))
+        || !(block(layer, "SoCo") || block(layer, "GdFl") || block(layer, "PtFl"))) return false;
+    const AnyImage& image = layer.asset->image;
+    return layer.psdCarry->contentHash == (image.u16() ? cachedContentHash(image.u16()) : cachedContentHash(image.u8()));
 }
 }
 
@@ -813,7 +829,7 @@ void setLayerVectorMask(Layer& layer, const Document& document, const std::optio
     auto carry = layer.psdCarry ? std::make_shared<PsdLayerCarry>(*layer.psdCarry) : std::make_shared<PsdLayerCarry>();
     if (!layer.psdCarry) {
         carry->placement = layer.transform;
-        carry->contentHash = psdContentHash(layer.asset ? layer.asset->image.u8().get() : nullptr);
+        carry->contentHash = psdContentHash(layer.asset ? layer.asset->image : AnyImage());
     }
     auto& blocks = carry->blocks;
     const bool had = std::any_of(blocks.begin(), blocks.end(), [](const PsdBlock& b) { return b.key == "vmsk" || b.key == "vsms"; });

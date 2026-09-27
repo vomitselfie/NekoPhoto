@@ -394,8 +394,9 @@ private:
         const uint64_t contentNow = psdContentHash(l.asset ? l.asset->image : AnyImage());
         const bool contentKept = sameContent && placementKept && c.contentHash == contentNow;
         // A 16-bit layer as read: its channels go back as they were stored, since 0..65535 does not survive the trip
-        // through 0..32768 (CarriedPlane); any edit changes the fingerprint and they are written anew.
-        if (deep_ && sameContent && placementKept && !c.planes.empty() && c.planesHash == contentNow && l.asset && l.asset->image.u16()) {
+        // through 0..32768 (CarriedPlane); any edit changes the fingerprint and they are written anew. PSD to PSD only
+        // (a PSB's RLE rows count in 32 bits).
+        if (deep_ && !options_.large && sameContent && placementKept && !c.planes.empty() && c.planesHash == contentNow && l.asset && l.asset->image.u16()) {
             std::vector<std::pair<int, std::vector<uint8_t>>> channels;
             for (const auto& plane : c.planes) channels.push_back({plane.id, plane.data});
             for (auto& ch : r.channels) if (ch.first < -1) channels.push_back(std::move(ch));
@@ -1065,6 +1066,8 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
             }
         if (document.psdCarry) for (const PsdBlock& stored : document.psdCarry->globals) {
             if (rebuildLinks && stored.key == "lnk2") continue;
+            // Smart Filter caches are 8-bit pixels: a 16-bit file leaves them for Photoshop to rebuild, as the reader does.
+            if (deep && (stored.key == "FEid" || stored.key == "FXid")) continue;
             PsdBlock block = stored;
             if (!writer.filterRecords_.empty() && (block.key == "FEid" || block.key == "FXid"))
                 if (auto replaced = replaceSmartFilterRecords(block.data, writer.filterRecords_)) block.data = std::move(*replaced);

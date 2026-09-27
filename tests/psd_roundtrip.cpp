@@ -140,6 +140,9 @@ bool check(const fs::path& path, int& carriedBlocks) {
     // PSD_ROUNDTRIP_PSB=1: export as PSB instead (Photoshop's large format, 64-bit lengths).
     compositor::PsdExportOptions options;
     options.large = std::getenv("PSD_ROUNDTRIP_PSB") != nullptr;
+    // PSD_ROUNDTRIP_16=1: convert to 16 bits first (Image > Mode), so the 16-bit writer carries the same blocks.
+    const bool sixteen = std::getenv("PSD_ROUNDTRIP_16") != nullptr;
+    if (sixteen && !compositor::convertSampleType(imported->document, compositor::SampleType::U16, &error)) { std::printf("SKIP %s: %s\n", path.filename().string().c_str(), error.c_str()); return true; }
     Bytes out = compositor::encodePsd(imported->document, options, &summary, &error);
     if (out.empty()) { std::printf("FAIL %s: export: %s\n", path.filename().string().c_str(), error.c_str()); return false; }
     FileDump a, b;
@@ -147,7 +150,7 @@ bool check(const fs::path& path, int& carriedBlocks) {
     try { b = dump(out); } catch (std::exception& e) { std::printf("FAIL %s: our file does not parse: %s\n", path.filename().string().c_str(), e.what()); return false; }
     std::vector<std::string> problems;
     // Records: ours has the same folders and layers in the same order, unless the importer dropped some.
-    const bool reduced = a.reduced;
+    const bool reduced = a.reduced || sixteen;
     static const std::set<std::string> ours{"luni", "lsct", "lsdk", "lyid", "iOpa", "levl", "curv", "hue2", "expA", "grdm"};
     if (a.records.empty()) {}   // a flat file opens as one layer
     else if (a.records.size() != b.records.size()) problems.push_back("record count " + std::to_string(a.records.size()) + " -> " + std::to_string(b.records.size()));
@@ -180,14 +183,16 @@ bool check(const fs::path& path, int& carriedBlocks) {
     }
     static const std::set<std::string> droppedGlobals{"Lr16", "Lr32", "Layr", "LMsk", "Mt16", "Mt32", "Mtrn", "Alph"};
     for (auto& [key, data] : a.globals) {
-        if (droppedGlobals.count(key)) continue;
+        if (droppedGlobals.count(key) || (sixteen && (key == "FEid" || key == "FXid"))) continue;   // 8-bit filter caches stay out of a 16-bit file
         auto it = b.globals.find(key);
         if (it == b.globals.end() || it->second != data) problems.push_back("global " + key + (it == b.globals.end() ? " lost" : " changed"));
     }
     // Round trip once more: our own file must read back.
     const fs::path again = fs::temp_directory_path() / ("psd_roundtrip_" + std::to_string(::getpid()) + (options.large ? ".psb" : ".psd"));
     { std::ofstream o(again, std::ios::binary); o.write(reinterpret_cast<const char*>(out.data()), std::streamsize(out.size())); }
-    if (!compositor::importPsd(again.string(), &error)) problems.push_back("our file does not reopen: " + error);
+    auto reopened = compositor::importPsd(again.string(), &error);
+    if (!reopened) problems.push_back("our file does not reopen: " + error);
+    else if (sixteen && reopened->document.sampleType != compositor::SampleType::U16) problems.push_back("our file does not reopen at 16 bits");
     fs::remove(again);
     std::printf("%s %s", problems.empty() ? "ok  " : "FAIL", path.filename().string().c_str());
     if (!imported->texts.empty()) std::printf("  [%zu text layer(s) opened as text]", imported->texts.size());

@@ -796,7 +796,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                 if (c.id == -2) { w = rec.mask.width(); h = rec.mask.height(); }
                 if (c.id == -3) { w = rec.mask.realWidth(); h = rec.mask.realHeight(); }
                 if (c.id == -2 || c.id == -3) maskRaw.push_back({c.id, std::vector<uint8_t>(file.data() + cursor, file.data() + cursor + size_t(c.length))});
-                else if (deep && c.id >= -1 && c.id <= 2) rawPlanes.push_back({c.id, std::vector<uint8_t>(file.data() + cursor, file.data() + cursor + size_t(c.length))});
+                else if (deep && !psb && c.id >= -1 && c.id <= 2) rawPlanes.push_back({c.id, std::vector<uint8_t>(file.data() + cursor, file.data() + cursor + size_t(c.length))});
                 std::vector<uint8_t> plane;
                 std::vector<uint16_t> wide;
                 std::string why;
