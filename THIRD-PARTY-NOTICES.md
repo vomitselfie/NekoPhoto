@@ -60,7 +60,7 @@ The Windows zip carries the same libraries as DLLs next to `nekophoto.exe`, buil
 | [Zstandard](https://facebook.github.io/zstd/), which reads Affinity documents | BSD-3-Clause | `LICENSES/bundled/zstd/` in the zip |
 | The GCC runtime (`libgcc_s_seh-1.dll`, `libstdc++-6.dll`) | GPL-3.0 with the GCC Runtime Library Exception | `LICENSES/bundled/gcc-libs/` in the zip |
 | MinGW-w64 winpthreads (`libwinpthread-1.dll`) | MIT and BSD-3-Clause | `LICENSES/bundled/libwinpthread/` in the zip |
-| The libraries Qt loads on Windows (FreeType, HarfBuzz, ICU, PCRE2, double-conversion, Brotli, bzip2, Graphite, libjpeg-turbo, libwebp, libtiff, md4c and their dependencies) | Various permissive licences; FreeType under the FTL, Graphite under the LGPL-2.1 | the licence folder of each MSYS2 package, collected into `LICENSES/bundled/` by `tools/package-windows.sh` |
+| The libraries Qt and LibRaw load on Windows (FreeType, HarfBuzz, ICU, PCRE2, double-conversion, Brotli, bzip2, Graphite, GLib, libintl, libiconv, OpenSSL, Little CMS, libjpeg-turbo, libwebp, libtiff, md4c and their dependencies) | Various permissive licences; FreeType under the FTL, OpenSSL under Apache-2.0, Graphite, GLib, libintl and libiconv under the LGPL (unmodified, replaceable DLLs) | the licence folder of each MSYS2 package, collected into `LICENSES/bundled/` by `tools/package-windows.sh` |
 
 The zip holds this file, `LICENSE` and `LICENSES/` at its top level.
 
