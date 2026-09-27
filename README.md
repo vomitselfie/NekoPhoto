@@ -1,18 +1,35 @@
 <p align="center">
-  <img src="docs/images/nekophoto.png" alt="NekoPhoto: みんなのためのエディタ (an editor for everyone)" width="720">
+  <img src="docs/images/nekophoto.png" alt="NekoPhoto: みんなのためのエディタ (an editor for everyone)" width="240">
+</p>
+
+<p align="center">
+  <img src="docs/images/hero.jpg" alt="NekoPhoto with a layered PSD open: a folder holding a masked photo and a clipped Curves adjustment, a shape layer with a drop shadow, and two editable text layers in the Layers panel" width="100%">
 </p>
 
 # NekoPhoto
 
 **English** · [日本語](#日本語)
 
-**Bring your work with you from any major platform.** NekoPhoto is a fast,
-focused photo editor and painting app for Linux and Windows that opens the files and brushes
-you already have: Photoshop and Clip Studio projects with their layers intact,
-and brushes from Photoshop, Clip Studio and Procreate. It saves back to layered
-PSD, so it fits into a workflow shared with Photoshop, Krita and Photopea. Layers, masks,
-selections, brushes, adjustments and filters work with the tools and shortcuts
-you know.
+**Bring your work with you.** NekoPhoto is a photo editor and painting app for Linux and Windows that opens
+your Photoshop and Clip Studio files with their layers, masks and text intact, paints with your Photoshop,
+Clip Studio and Procreate brushes, and saves back to layered PSD.
+
+**[Download for Linux (AppImage)](https://github.com/vomitselfie/nekophoto/releases/latest)** ·
+**[Download for Windows (portable zip)](https://github.com/vomitselfie/nekophoto/releases/latest)**<br>
+Linux: any x86_64 distribution from 2022 on, Wayland or X11. Windows: 10 version 1903 or later, x86_64.
+
+**Your PSDs come back as you sent them.** All 117 PSD and PSB test files in our round-trip corpus (nearly all saved
+by Photoshop 2026, covering text, smart objects and Smart Filters, layer styles, shapes, masks and PSB) open, export and
+reopen with nothing lost: 3,675 blocks NekoPhoto does not edit go back byte for byte. What PSD cannot carry is
+listed before you export. The counts, the known gaps and how to rerun the checks are in
+[Compatibility & correctness](docs/compatibility.md).
+
+| Open a PSD, edit, save it as PSD, reopen | Import a Photoshop brush set and paint |
+|:---:|:---:|
+| <img src="docs/images/demo-psd-roundtrip.webp" alt="Opening a layered PSD, its folder, mask, clipped adjustment and text intact; retitling the text; saving as layered PSD; reopening it with everything intact" width="440"> | <img src="docs/images/demo-brush-import.webp" alt="Importing a Photoshop .abr brush set of 148 brushes and stamping trees, a church, a windmill, a town and a ship with them" width="440"> |
+
+<sub>Recorded headless from NekoPhoto 1.6.1 over its automation socket. Artwork: CC0 photos and the CC0 “Myer
+Settlement Brushes” by K. M. Alexander, from Patchy's test fixtures.</sub>
 
 NekoPhoto began as a Linux port of [Compositor](https://github.com/robbietilton/Compositor)
 for macOS, and opens its older `.comp` projects. Until version 1.0 it was
@@ -20,6 +37,9 @@ called compositor-linux; your settings, brushes and downloaded model move over
 by themselves the first time you start it.
 
 ## Bring your work with you
+
+NekoPhoto fits into a workflow shared with Photoshop, Krita and Photopea. Layers, masks, selections, brushes,
+adjustments and filters work with the tools and shortcuts you know.
 
 | Coming from | Your files | Your brushes and habits |
 |---|---|---|
@@ -30,10 +50,10 @@ by themselves the first time you start it.
 
 PSD export is round-trip tested: every layered PSD we have, from Photoshop and Clip Studio (up to 54
 layers in 16 folders at 4096 × 4096), exports and reopens with the same pixels, and the files open in other
-PSD readers with their structure intact. What NekoPhoto does not edit yet goes back byte for byte (118
-Photoshop-saved test files round-trip unchanged), and layer styles, vector shapes and folders are drawn as
+PSD readers with their structure intact. What NekoPhoto does not edit yet goes back byte for byte (all 117
+files of the round-trip corpus come back unchanged), and layer styles, vector shapes and folders are drawn as
 Photoshop draws them, most within a level of its own renders. What PSD cannot carry is listed before you export
-([docs/psd-roundtrip.md](docs/psd-roundtrip.md), [docs/psd-export.md](docs/psd-export.md)).
+([docs/psd-roundtrip.md](docs/psd-roundtrip.md), [docs/psd-export.md](docs/psd-export.md), [docs/compatibility.md](docs/compatibility.md)).
 
 Coming next:
 
@@ -134,6 +154,12 @@ Windows builds with MinGW-w64 in MSYS2 (UCRT64); the packages and steps are
 in [docs/linux-port.md](docs/linux-port.md#windows), as are build options,
 command-line flags and keyboard shortcuts.
 
+## Contributing
+
+Building, the code's layout, the rules a change has to follow and how CI checks a pull request are in
+[CONTRIBUTING.md](CONTRIBUTING.md). Report security problems privately as [SECURITY.md](SECURITY.md) describes.
+What is tested and what still differs from Photoshop: [docs/compatibility.md](docs/compatibility.md).
+
 ## License
 
 GPL-3.0-or-later; see [LICENSE](LICENSE). Based on Compositor by Wonder
@@ -148,17 +174,35 @@ components and their licences are listed in
 
 [English](#nekophoto) · **日本語**
 
-**どのアプリからでも、作品をそのまま持ってこられます。** NekoPhoto は Linux 向けの軽快でシンプルな
-写真編集・お絵描きソフトです(Linux・Windows 対応)。Photoshop とクリップスタジオのファイルをレイヤーを保ったまま開け、
-Photoshop・クリップスタジオ・Procreate のブラシも読み込めます。レイヤー付きの PSD に保存し直せるので、
-Photoshop・Krita・Photopea を使う人とのやり取りにもそのまま組み込めます。レイヤー、マスク、選択範囲、ブラシ、
-色調補正、フィルターを、おなじみのツールとショートカットで操作できます。
+**作品をそのまま持ってこられます。** NekoPhoto は Linux・Windows 向けの写真編集・お絵描きソフトです。
+Photoshop とクリップスタジオのファイルをレイヤー・マスク・テキストを保ったまま開け、Photoshop・クリップスタジオ・Procreate
+のブラシで描け、レイヤー付きの PSD に保存し直せます。
+
+**[Linux 版をダウンロード(AppImage)](https://github.com/vomitselfie/nekophoto/releases/latest)** ·
+**[Windows 版をダウンロード(ポータブル zip)](https://github.com/vomitselfie/nekophoto/releases/latest)**<br>
+Linux: 2022 年以降の x86_64 ディストリビューション(Wayland・X11)。Windows: 10 バージョン 1903 以降(x86_64)。
+
+**PSD は送ったときのまま戻ってきます。** 往復テスト用の PSD・PSB ファイル 117 個(ほぼすべて Photoshop 2026 で保存。
+テキスト、スマートオブジェクトとスマートフィルター、レイヤースタイル、シェイプ、マスク、PSB を網羅)は、開いて書き出し、
+開き直しても何も失われません。NekoPhoto が編集しない 3,675 個のブロックはバイト単位でそのまま戻ります。PSD で表現できない
+要素は書き出す前に一覧表示されます。集計値・既知の差異・検証の再実行方法は
+[互換性と正確さ](docs/compatibility.md#日本語)にまとめています。
+
+| PSD を開いて編集し、PSD に保存して開き直す | Photoshop のブラシセットを読み込んで描く |
+|:---:|:---:|
+| <img src="docs/images/demo-psd-roundtrip.webp" alt="レイヤー付き PSD を開き、グループ・マスク・クリッピングした調整レイヤー・テキストがそのまま残っていることを確認し、テキストを書き換え、レイヤー付き PSD に保存して開き直すところ" width="440"> | <img src="docs/images/demo-brush-import.webp" alt="Photoshop の .abr ブラシセット(148 種類)を読み込み、木・教会・風車・町・船を描くところ" width="440"> |
+
+<sub>NekoPhoto 1.6.1 を画面なしで起動し、自動操作ソケット経由で記録しました。素材: CC0 の写真と、K. M. Alexander による CC0 の
+「Myer Settlement Brushes」(Patchy のテスト用ファイルより)。</sub>
 
 NekoPhoto は macOS 版 [Compositor](https://github.com/robbietilton/Compositor) の
 Linux 移植として始まり、Mac 版の以前の `.comp` プロジェクトも開けます。バージョン 1.0 までは
 compositor-linux という名前でした。設定・ブラシ・ダウンロード済みのモデルは、初回起動時に自動で引き継がれます。
 
 ### 作品をそのまま持ってくる
+
+Photoshop・Krita・Photopea を使う人とのやり取りにもそのまま組み込めます。レイヤー、マスク、選択範囲、ブラシ、
+色調補正、フィルターを、おなじみのツールとショートカットで操作できます。
 
 | 移行元 | ファイル | ブラシと操作 |
 |---|---|---|
@@ -168,7 +212,7 @@ compositor-linux という名前でした。設定・ブラシ・ダウンロー
 | **Krita・GIMP** | 共同作業者から届いた Photoshop ファイルや画像 | おなじみの MyPaint ブラシエンジンと G'MIC フィルター |
 
 PSD の書き出しは往復テスト済みです。手元にあるレイヤー付き PSD(Photoshop とクリップスタジオ製、4096 × 4096 で最大 54 レイヤー・16 グループ)は、
-書き出して開き直してもピクセル単位で同じになり、ほかの PSD リーダーでも構造を保ったまま開けます。NekoPhoto がまだ編集できない要素はバイト単位でそのまま戻り(Photoshop で保存したテストファイル 118 個が変化なく往復します)、レイヤースタイル・ベクターシェイプ・グループは Photoshop と同じように描画されます。PSD で表現できない要素は書き出す前に一覧表示されます
+書き出して開き直してもピクセル単位で同じになり、ほかの PSD リーダーでも構造を保ったまま開けます。NekoPhoto がまだ編集できない要素はバイト単位でそのまま戻り(往復テスト用のファイル 117 個すべてが変化なく戻ります)、レイヤースタイル・ベクターシェイプ・グループは Photoshop と同じように描画されます。PSD で表現できない要素は書き出す前に一覧表示されます
 ([docs/psd-export.md](docs/psd-export.md)、英語)。
 
 今後の予定:
@@ -253,6 +297,12 @@ claude mcp add nekophoto -- uv run /path/to/nekophoto/mcp/nekophoto_mcp.py
 必要なパッケージとビルド手順は、英語版の [Build from source](#build-from-source) と同じです。
 Windows では MSYS2(UCRT64)の MinGW-w64 でビルドします。手順とビルドオプション、キーボードショートカットは
 [docs/linux-port.md](docs/linux-port.md)(英語)にあります。
+
+### 開発に参加する
+
+ビルド方法、コードの構成、変更が守るべきルール、プルリクエストで CI が確認する内容は [CONTRIBUTING.md](CONTRIBUTING.md)(英語)に、
+セキュリティ上の問題の非公開での報告方法は [SECURITY.md](SECURITY.md)(英語)にあります。テストの内容と Photoshop との既知の差異は
+[docs/compatibility.md](docs/compatibility.md#日本語) をご覧ください。
 
 ### ライセンス
 
