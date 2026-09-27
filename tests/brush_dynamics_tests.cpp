@@ -141,8 +141,12 @@ TEST_CASE(the_old_settings_are_mappings_that_paint_the_same) {
     }
     // Saved again, it keeps the mappings and no longer the old fields.
     REQUIRE(saveTipPreset(dir.string(), *preset));
-    std::ifstream in(dir / "brush.json");
-    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    std::string text;
+    {
+        // Closed before the folder is removed: Windows will not delete a file that is still open.
+        std::ifstream in(dir / "brush.json");
+        text.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    }
     CHECK(text.find("\"dynamics\"") != std::string::npos);
     CHECK(text.find("sizeJitter") == std::string::npos);
     auto again = loadTipPreset(dir.string());
