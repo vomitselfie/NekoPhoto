@@ -84,6 +84,10 @@ add_executable(artboard_tests artboard_tests.cpp)
 target_link_libraries(artboard_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME artboard_tests COMMAND artboard_tests)
 
+add_executable(depth_format_tests depth_format_tests.cpp)
+target_link_libraries(depth_format_tests PRIVATE compositor::core compositor_warnings z)
+add_test(NAME depth_format_tests COMMAND depth_format_tests)
+
 add_executable(psd_writer_tests psd_writer_tests.cpp)
 target_link_libraries(psd_writer_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME psd_writer_tests COMMAND psd_writer_tests)
@@ -113,7 +117,7 @@ add_test(NAME procreate_tests COMMAND procreate_tests)
 add_executable(sut_tests sut_tests.cpp)
 # zlib compresses the test's layer tiles, as Clip Studio does.
 find_package(ZLIB REQUIRED)
-target_link_libraries(sut_tests PRIVATE compositor::core compositor_warnings ZLIB::ZLIB)
+target_link_libraries(sut_tests PRIVATE compositor::core compositor_warnings z)
 if(COMPOSITOR_HAVE_SQLITE)
     find_package(SQLite3 REQUIRED)
     if(TARGET SQLite3::SQLite3)
@@ -126,7 +130,7 @@ endif()
 add_test(NAME sut_tests COMMAND sut_tests)
 
 add_executable(clip_tests clip_tests.cpp)
-target_link_libraries(clip_tests PRIVATE compositor::core compositor_warnings ZLIB::ZLIB)
+target_link_libraries(clip_tests PRIVATE compositor::core compositor_warnings z)
 if(COMPOSITOR_HAVE_SQLITE)
     if(TARGET SQLite3::SQLite3)
         target_link_libraries(clip_tests PRIVATE SQLite3::SQLite3)
@@ -180,11 +184,11 @@ target_link_libraries(vectorlayer_tests PRIVATE compositor::core compositor_warn
 add_test(NAME vectorlayer_tests COMMAND vectorlayer_tests)
 
 add_executable(formats_tests formats_tests.cpp)
-target_link_libraries(formats_tests PRIVATE compositor::core compositor_warnings ZLIB::ZLIB)
+target_link_libraries(formats_tests PRIVATE compositor::core compositor_warnings z)
 add_test(NAME formats_tests COMMAND formats_tests)
 
 add_executable(affinity_tests affinity_tests.cpp)
-target_link_libraries(affinity_tests PRIVATE compositor::core compositor_warnings ZLIB::ZLIB)
+target_link_libraries(affinity_tests PRIVATE compositor::core compositor_warnings z)
 add_test(NAME affinity_tests COMMAND affinity_tests)
 
 # Not a test: dumps what the Affinity import makes of files (see the file's header).
@@ -200,7 +204,7 @@ target_link_libraries(svg_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME svg_tests COMMAND svg_tests)
 
 add_executable(hostile_input_tests hostile_input_tests.cpp)
-target_link_libraries(hostile_input_tests PRIVATE compositor::core compositor_warnings ZLIB::ZLIB)
+target_link_libraries(hostile_input_tests PRIVATE compositor::core compositor_warnings z)
 add_test(NAME hostile_input_tests COMMAND hostile_input_tests)
 
 add_executable(seamcarve_tests seamcarve_tests.cpp)

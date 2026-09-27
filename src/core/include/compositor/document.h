@@ -339,6 +339,9 @@ Rect changedArea(const Document& before, const Document& after);
 /// saying why, when the result would not fit (a 16-bit document holds half the pixels of an 8-bit one) or the
 /// depth is not supported; the document is then unchanged.
 bool convertSampleType(Document& document, SampleType type, std::string* error = nullptr);
+/// Brings every buffer held at another depth to the document's own (a layer imported from an 8-bit file into a 16-bit
+/// document, say), sharing converted buffers as the originals were. No budget check. True when anything changed.
+bool conformToSampleType(Document& document);
 /// Why `document` would not fit its budgets at `type`, or empty when it would.
 std::string sampleTypeBudgetProblem(const Document& document, SampleType type);
 

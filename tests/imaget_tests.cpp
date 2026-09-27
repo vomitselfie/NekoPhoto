@@ -68,10 +68,18 @@ TEST_CASE(any_image_holds_each_depth) {
     CHECK(floatMask.f32()->at(0, 0) == 1.0f);
 }
 
-TEST_CASE(support_registry_is_eight_bit_only) {
-    // Every feature supports 8-bit; nothing is ported deeper yet, listed or not.
+TEST_CASE(support_registry_lists_what_p2_ports) {
+    // Every feature supports 8-bit; P2 ports the renderer, the layer structure, masks and the files to 16 bits.
     CHECK(supports("render.document", SampleType::U8));
-    CHECK(!supports("render.document", SampleType::U16));
+    CHECK(supports("render.document", SampleType::U16));
+    CHECK(!supports("render.document", SampleType::F32));
+    for (const char* ported : {"document.mode", "layers.structure", "layers.transform", "layers.mask", "export.psd", "export.png", "tool.move"})
+        CHECK(supports(ported, SampleType::U16));
+    // Painting, selections, filters and adjustments wait for P3.
+    for (const char* later : {"edit.paint", "edit.selection", "edit.pixels", "tool.brush", "filter.gaussianBlur"}) {
+        CHECK(supports(later, SampleType::U8));
+        CHECK(!supports(later, SampleType::U16));
+    }
     CHECK(supports("filter.never-heard-of-it", SampleType::U8));
     CHECK(!supports("filter.never-heard-of-it", SampleType::F32));
     for (int k = 0; k < adjustmentKindCount; k++) {

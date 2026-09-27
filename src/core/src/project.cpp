@@ -127,7 +127,7 @@ json transformJson(const LayerTransform& t) {
 
 const std::set<std::string> knownLayerKeys = {"id", "name", "isVisible", "transform", "imageFile", "parentID", "isGroup", "opacity", "blendMode",
     "maskFile", "maskEnabled", "maskSourceID", "adjustment", "maskPlacement", "maskLinked", "shape", "text", "passThrough", "artboard"};
-const std::set<std::string> knownManifestKeys = {"format", "version", "colorSpace", "resolution", "documentID", "width", "height", "activeLayerID", "layers", "slices", "animation"};
+const std::set<std::string> knownManifestKeys = {"format", "version", "colorSpace", "resolution", "documentID", "width", "height", "activeLayerID", "layers", "slices", "animation", "sampleType"};
 
 struct Record {
     Layer layer;
@@ -262,7 +262,7 @@ json recordJson(const Layer& l) {
     j["name"] = l.name;
     j["isVisible"] = l.visible;
     j["transform"] = transformJson(l.transform);
-    if (l.asset && l.asset->image.u8()) j["imageFile"] = l.id + ".png";
+    if (l.asset && l.asset->image) j["imageFile"] = l.id + ".png";
     if (l.parentId) j["parentID"] = *l.parentId;
     if (l.isGroup) j["isGroup"] = true;
     if (l.isGroup && !l.passThrough) j["passThrough"] = false;
@@ -273,7 +273,7 @@ json recordJson(const Layer& l) {
     }
     if (l.opacity != 1) j["opacity"] = number(l.opacity);
     if (l.blendMode != BlendMode::Normal) j["blendMode"] = blendModeName(l.blendMode);
-    if (l.mask && l.mask->asset.image.u8()) {
+    if (l.mask && l.mask->asset.image) {
         j["maskFile"] = l.id + ".mask.png";
         j["maskEnabled"] = l.mask->enabled;
         if (l.mask->placement) j["maskPlacement"] = transformJson(*l.mask->placement);
@@ -323,6 +323,7 @@ struct Manifest {
     std::vector<Slice> slices;
     std::string extraJson;
     Animation animation;
+    SampleType sampleType = SampleType::U8;
 };
 
 bool parseManifestJson(const json& j, Manifest& m, ProjectError& error) {
@@ -335,6 +336,13 @@ bool parseManifestJson(const json& j, Manifest& m, ProjectError& error) {
     if (m.version < 1 || m.version > projectFormatVersion) { error = version(m.version); return false; }
     std::string space;
     if (!getString(j, "colorSpace", space, true) || space != "sRGB") { error = invalid(); return false; }
+    // Version 8: the depth of every layer and mask ("u8" or "u16"; 8-bit when absent, as every older project is).
+    if (auto t = j.find("sampleType"); t != j.end()) {
+        if (!t->is_string() || m.version < 8) { error = invalid(); return false; }
+        const std::string type = t->get<std::string>();
+        if (type == "u16") m.sampleType = SampleType::U16;
+        else if (type != "u8") { error = invalid(); return false; }
+    }
     double resolution = 0;
     if (j.contains("resolution") && !j["resolution"].is_null()) {
         if (!getDouble(j, "resolution", resolution, true) || resolution < 1 || resolution > 9600) { error = invalid(); return false; }
@@ -412,9 +420,11 @@ bool validateManifest(const Manifest& m, ProjectError& error) {
     return true;
 }
 
-bool checkSize(int width, int height, long long& used) {
+bool checkSize(int width, int height, long long& used, SampleType type = SampleType::U8) {
     if (!Document::validDimension(width) || !Document::validDimension(height)) return false;
-    if ((long long)width * height > Document::pixelBudget || (long long)width * height > Document::projectPixelBudget - used) return false;
+    // Byte budgets: a 16-bit document holds half the pixels of an 8-bit one.
+    const long long image = Document::imagePixelBudget(type), project = Document::projectPixelBudgetAt(type);
+    if ((long long)width * height > image || (long long)width * height > project - used) return false;
     used += (long long)width * height;
     return true;
 }
@@ -445,6 +455,7 @@ Document documentFrom(const Manifest& m) {
     d.height = m.height;
     d.resolution = m.resolution.value_or(72);
     d.extraJson = m.extraJson;
+    d.sampleType = m.sampleType;
     d.slices = m.slices;
     for (auto& r : m.records) d.layers.push_back(r.layer);
     d.animation = m.animation;
@@ -496,7 +507,8 @@ std::optional<Document> loadProject(const std::string& pathText, ProjectError& e
 
     Document d = documentFrom(m);
     // Every file is checked against the budgets from its header first; then the images decode side by side.
-    struct Load { size_t layer; bool isMask; fs::path file; std::shared_ptr<Image> image; std::shared_ptr<GrayImage> gray; };
+    struct Load { size_t layer; bool isMask; fs::path file; AnyImage image; AnyGray gray; };
+    const bool deep = d.sampleType == SampleType::U16;
     std::vector<Load> loads;
     long long pixels = 0, maskPixels = 0;
     for (size_t i = 0; i < m.records.size(); i++) {
@@ -507,16 +519,20 @@ std::optional<Document> loadProject(const std::string& pathText, ProjectError& e
             fs::path file = path / "images" / *filename;
             if (!checkFile(file, path, assetLimit)) { error = tooLarge(); return std::nullopt; }
             PngInfo info;
-            if (!readPngInfo(file.string(), info) || info.bitDepth > 8) { error = missingImage(); return std::nullopt; }
-            if (!checkSize(info.width, info.height, isMask ? maskPixels : pixels)) { error = tooLarge(); return std::nullopt; }
+            if (!readPngInfo(file.string(), info) || info.bitDepth > (deep ? 16 : 8)) { error = missingImage(); return std::nullopt; }
+            if (!checkSize(info.width, info.height, isMask ? maskPixels : pixels, d.sampleType)) { error = tooLarge(); return std::nullopt; }
             loads.push_back({i, isMask, file, nullptr, nullptr});
         }
     }
     parallelFor(0, int(loads.size()), 1, [&](int a, int b) {
         for (int k = a; k < b; k++) {
             Load& load = loads[size_t(k)];
-            if (load.isMask) load.gray = readPngGray(load.file.string());
-            else load.image = readPngImage(load.file.string());
+            if (deep) {
+                // A 16-bit document's layers and masks are 16-bit PNGs.
+                if (load.isMask) load.gray = Gray16Ptr(readPngGray16(load.file.string()));
+                else load.image = Image16Ptr(readPngImage16(load.file.string()));
+            } else if (load.isMask) load.gray = GrayPtr(readPngGray(load.file.string()));
+            else load.image = ImagePtr(readPngImage(load.file.string()));
         }
     });
     for (Load& load : loads) {
@@ -525,14 +541,14 @@ std::optional<Document> loadProject(const std::string& pathText, ProjectError& e
         if (load.isMask) {
             if (!load.gray) { error = invalid(); return std::nullopt; }
             LayerMask mask;
-            mask.asset = MaskAsset::make(load.gray);
+            mask.asset = MaskAsset::makeAny(load.gray);
             mask.enabled = r.maskEnabled.value_or(true);
             mask.placement = r.maskPlacement;
             mask.linked = r.maskLinked.value_or(true);
             layer.mask = mask;
         } else {
             if (!load.image) { error = missingImage(); return std::nullopt; }
-            layer.asset = Asset::make(load.image, layer.name);
+            layer.asset = Asset::makeAny(load.image, layer.name);
             if (layer.shape) layer.shapeImage = layer.asset->image;
             if (layer.text) layer.textImage = layer.asset->image;
         }
@@ -567,7 +583,7 @@ std::optional<Document> loadProject(const std::string& pathText, ProjectError& e
             }
     }
     for (Layer& layer : d.layers) {
-        auto bytes = layer.asset && layer.asset->image.u8() ? readCarry(path / "images" / (layer.id + ".smartobject")) : std::nullopt;
+        auto bytes = layer.asset && layer.asset->image ? readCarry(path / "images" / (layer.id + ".smartobject")) : std::nullopt;
         if (auto instance = bytes ? parseSmartObjectInstance(*bytes) : std::nullopt) {
             layer.smartObject = std::move(*instance);
             layer.smartImage = layer.asset->image;
@@ -594,8 +610,11 @@ std::string manifestJson(const Document& document, const std::optional<Uuid>& ac
     bool folders = false;
     for (auto& l : document.layers) folders |= l.isGroup && (l.opacity != 1 || l.blendMode != BlendMode::Normal || !l.passThrough || l.artboard);
     folders |= !document.slices.empty();   // artboards and slices are version 8 too: the Mac app has neither
+    folders |= document.sampleType != SampleType::U8;   // so is a 16-bit document
     j["version"] = folders ? projectFormatVersion : projectMacFormatVersion;
     j["colorSpace"] = "sRGB";
+    if (document.sampleType == SampleType::U16) j["sampleType"] = "u16";
+    else j.erase("sampleType");
     j["resolution"] = number(document.resolution);
     j["documentID"] = document.id;
     j["width"] = document.width;
@@ -622,10 +641,12 @@ bool saveProject(const Document& document, const std::optional<Uuid>& activeLaye
         ProjectError parseError;
         if (!parseManifest(manifest, parseError)) { error = parseError; return false; }
     }
+    if (document.sampleType == SampleType::F32) { error = encodeError(); return false; }
     long long pixels = 0, maskPixels = 0;
     for (auto& l : document.layers) {
-        if (l.asset && l.asset->image.u8() && !checkSize(l.asset->image.u8()->width(), l.asset->image.u8()->height(), pixels)) { error = tooLarge(); return false; }
-        if (l.mask && l.mask->asset.image.u8() && !checkSize(l.mask->asset.image.u8()->width(), l.mask->asset.image.u8()->height(), maskPixels)) { error = tooLarge(); return false; }
+        // Every buffer must be at the document's depth: the package says one depth for all.
+        if (l.asset && l.asset->image && (l.asset->image.sampleType() != document.sampleType || !checkSize(l.asset->image.width(), l.asset->image.height(), pixels, document.sampleType))) { error = tooLarge(); return false; }
+        if (l.mask && l.mask->asset.image && (l.mask->asset.image.sampleType() != document.sampleType || !checkSize(l.mask->asset.image.width(), l.mask->asset.image.height(), maskPixels, document.sampleType))) { error = tooLarge(); return false; }
     }
     fs::path path(pathText);
     fs::path parent = path.parent_path().empty() ? fs::path(".") : path.parent_path();
@@ -643,8 +664,11 @@ bool saveProject(const Document& document, const std::optional<Uuid>& activeLaye
     }
     for (auto& l : document.layers) {
         std::string err;
-        if (l.asset && l.asset->image.u8() && !writePngImage((staging / "images" / (l.id + ".png")).string(), *l.asset->image.u8(), 0, &err)) { abandon(); error = encodeError(); return false; }
-        if (l.mask && l.mask->asset.image.u8() && !writePngGray((staging / "images" / (l.id + ".mask.png")).string(), *l.mask->asset.image.u8(), &err)) { abandon(); error = encodeError(); return false; }
+        const std::string imageFile = (staging / "images" / (l.id + ".png")).string(), maskFile = (staging / "images" / (l.id + ".mask.png")).string();
+        if (l.asset && l.asset->image.u8() && !writePngImage(imageFile, *l.asset->image.u8(), 0, &err)) { abandon(); error = encodeError(); return false; }
+        if (l.asset && l.asset->image.u16() && !writePngImage16(imageFile, *l.asset->image.u16(), 0, &err)) { abandon(); error = encodeError(); return false; }
+        if (l.mask && l.mask->asset.image.u8() && !writePngGray(maskFile, *l.mask->asset.image.u8(), &err)) { abandon(); error = encodeError(); return false; }
+        if (l.mask && l.mask->asset.image.u16() && !writePngGray16(maskFile, *l.mask->asset.image.u16(), &err)) { abandon(); error = encodeError(); return false; }
         if (l.psdCarry && !writeBytes(staging / "images" / (l.id + ".psdcarry"), serializePsdCarry(*l.psdCarry))) { abandon(); error = ioError("could not write the PSD data of " + l.name); return false; }
     }
     if (document.psdCarry && !writeBytes(staging / "images" / "document.psdcarry", serializePsdCarry(*document.psdCarry))) { abandon(); error = ioError("could not write the PSD data"); return false; }

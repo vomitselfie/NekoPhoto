@@ -25,7 +25,7 @@ inline bool supports(std::string_view feature, SampleType type) { return (suppor
 bool supports(AdjustmentKind kind, SampleType type);
 
 struct FeatureSupport { std::string_view feature; SampleTypes types; };
-/// The features the registry lists (all 8-bit only in P1).
+/// The features the registry lists (P2: the renderer, the layer structure, masks and the files at 16 bits).
 const FeatureSupport* featureSupportTable(size_t& count);
 
 } // namespace compositor

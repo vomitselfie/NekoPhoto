@@ -2,6 +2,7 @@
 // layer record's tagged blocks (but the ones we write ourselves), Blend If ranges and mask section, the
 // image resources and the global blocks. `psd_roundtrip FILE_OR_DIR...`; exit 1 when anything was lost.
 // Patchy's fixtures (Photoshop-saved) are the corpus: psd_roundtrip ../Patchy/test-fixtures/psd
+// A 16-bit file must also come back with every layer's channel data byte for byte (the carried planes, psd_carry.h).
 #include "compositor/psd.h"
 #include "compositor/psd_writer.h"
 #include "psd/psd_binary.hpp"
@@ -29,6 +30,8 @@ struct RecordDump {
     int section = 0;
     std::string blend;
     uint8_t flags = 0, opacity = 255, clipping = 0;
+    std::vector<std::pair<int, uint64_t>> channelLengths;
+    std::map<int, Bytes> channels;   // a 16-bit file's channel data as stored
 };
 
 struct FileDump {
@@ -36,6 +39,7 @@ struct FileDump {
     std::map<std::string, Bytes> globals;
     std::vector<RecordDump> records;
     bool reduced = false;   // PSB or not 8-bit: masks are written anew, not carried
+    int depth = 8;
 };
 
 std::string key4(BigEndianReader& r) { auto s = r.read_span(4); return std::string(s.begin(), s.end()); }
@@ -51,6 +55,7 @@ FileDump dump(const Bytes& file) {
     auto header = patchy::psd::read_header(r);
     const bool psb = header.large_document;
     d.reduced = psb || header.depth != 8;
+    d.depth = header.depth;
     r.skip(r.read_u32());
     const size_t resourcesEnd = r.position() + r.read_u32() + 4;
     while (r.position() + 12 <= resourcesEnd) {
@@ -75,7 +80,10 @@ FileDump dump(const Bytes& file) {
             RecordDump rec;
             in.skip(16);
             const int channels = in.read_u16();
-            in.skip(size_t(channels) * (psb ? 10 : 6));
+            for (int c = 0; c < channels; c++) {
+                const int id = int16_t(in.read_u16());
+                rec.channelLengths.push_back({id, psb ? in.read_u64() : in.read_u32()});
+            }
             in.skip(4);
             rec.blend = key4(in);
             rec.opacity = in.read_u8(); rec.clipping = in.read_u8(); rec.flags = in.read_u8(); in.skip(1);
@@ -98,6 +106,9 @@ FileDump dump(const Bytes& file) {
             in.skip(extraEnd - in.position());
             d.records.push_back(std::move(rec));
         }
+        if (d.depth == 16)
+            for (RecordDump& rec : d.records)
+                for (auto& [id, length] : rec.channelLengths) rec.channels[id] = in.read_bytes(size_t(length));
     };
     if (infoLen) readRecords(r);
     r.skip(infoEnd - r.position());
@@ -156,6 +167,10 @@ bool check(const fs::path& path, int& carriedBlocks) {
         if (x.section != 3 && x.ranges != y.ranges) problems.push_back("\"" + x.name + "\": Blend If ranges changed");
         if (x.section != 3 && !reduced && !x.mask.empty() && x.mask != y.mask) problems.push_back("\"" + x.name + "\": mask section changed");
         if (x.blocks.count("iOpa") && x.blocks.at("iOpa") != (y.blocks.count("iOpa") ? y.blocks.at("iOpa") : Bytes{255, 0, 0, 0})) problems.push_back("\"" + x.name + "\": Fill changed");
+        // A 16-bit layer's pixels: exactly the bytes it was stored with.
+        if (a.depth == 16 && x.section != 3)
+            for (auto& [id, data] : x.channels)
+                if (!y.channels.count(id) || y.channels.at(id) != data) problems.push_back("\"" + x.name + "\": 16-bit channel " + std::to_string(id) + " changed");
     }
     static const std::set<int> droppedResources{1005, 1033, 1036, 1024, 1026, 1069, 1072, 1044, 1006, 1045, 1053, 1077, 1007, 1047, 1039, 1041, 1013, 1014, 1016, 1017, 1018};
     for (auto& [id, data] : a.resources) {

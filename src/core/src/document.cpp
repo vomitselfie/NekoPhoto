@@ -247,29 +247,29 @@ std::string sampleTypeBudgetProblem(const Document& document, SampleType type) {
     return {};
 }
 
-bool convertSampleType(Document& document, SampleType type, std::string* error) {
-    if (type == SampleType::F32) { if (error) *error = "32-bit documents are not available yet."; return false; }
-    if (document.sampleType == type) return true;
-    if (document.sampleType == SampleType::F32) { if (error) *error = "32-bit documents are not available yet."; return false; }
-    if (std::string problem = sampleTypeBudgetProblem(document, type); !problem.empty()) { if (error) *error = problem; return false; }
+bool conformToSampleType(Document& document) {
+    const SampleType type = document.sampleType;
+    if (type == SampleType::F32) return false;
+    bool changed = false;
     // Each buffer converted once: a live shape, text or smart object shares its raster with the layer's asset, and
     // must still do so afterwards.
     std::map<const void*, AnyImage> images;
     std::map<const void*, AnyGray> grays;
     auto image = [&](const AnyImage& in) -> AnyImage {
-        if (!in) return in;
+        if (!in || in.sampleType() == type) return in;
+        changed = true;
         auto it = images.find(in.identity());
         if (it != images.end()) return it->second;
         return images[in.identity()] = imageAtDepth(in, type);
     };
     auto gray = [&](const AnyGray& in) -> AnyGray {
-        if (!in) return in;
+        if (!in || in.sampleType() == type) return in;
+        changed = true;
         auto it = grays.find(in.identity());
         if (it != grays.end()) return it->second;
         return grays[in.identity()] = grayAtDepth(in, type);
     };
-    Document out = document;
-    for (Layer& l : out.layers) {
+    for (Layer& l : document.layers) {
         const AnyImage before = l.asset ? l.asset->image : AnyImage();
         const AnyGray maskBefore = l.mask ? l.mask->asset.image : AnyGray();
         if (l.asset) l.asset->image = image(l.asset->image);   // the thumbnail stays: the same picture at 8 bits
@@ -277,7 +277,7 @@ bool convertSampleType(Document& document, SampleType type, std::string* error) 
         l.shapeImage = image(l.shapeImage);
         l.textImage = image(l.textImage);
         l.smartImage = image(l.smartImage);
-        if (l.psdCarry) {
+        if (l.psdCarry && ((l.asset && !(l.asset->image == before)) || (l.mask && !(l.mask->asset.image == maskBefore)))) {
             // What the PSD's blocks are bound to follows the pixels to their new depth, while they are unchanged.
             auto carry = std::make_shared<PsdLayerCarry>(*l.psdCarry);
             if (carry->contentHash == psdContentHash(before)) carry->contentHash = psdContentHash(l.asset ? l.asset->image : AnyImage());
@@ -285,8 +285,18 @@ bool convertSampleType(Document& document, SampleType type, std::string* error) 
             l.psdCarry = carry;
         }
     }
-    if (out.selection) out.selection->coverage = gray(out.selection->coverage);
+    if (document.selection) document.selection->coverage = gray(document.selection->coverage);
+    return changed;
+}
+
+bool convertSampleType(Document& document, SampleType type, std::string* error) {
+    if (type == SampleType::F32) { if (error) *error = "32-bit documents are not available yet."; return false; }
+    if (document.sampleType == type) return true;
+    if (document.sampleType == SampleType::F32) { if (error) *error = "32-bit documents are not available yet."; return false; }
+    if (std::string problem = sampleTypeBudgetProblem(document, type); !problem.empty()) { if (error) *error = problem; return false; }
+    Document out = document;
     out.sampleType = type;
+    conformToSampleType(out);
     document = std::move(out);
     return true;
 }

@@ -1,7 +1,8 @@
 // Photoshop PSD and PSB files as documents: layers with their names, positions, opacity, blend modes,
 // visibility, groups, clipping and masks; Levels, Curves, Hue/Saturation, Exposure and Gradient Map
 // adjustment layers as ours; solid colour fills as pixels; text and smart objects as the pixels
-// Photoshop rendered; 16- and 32-bit files reduced to 8 bits; and the merged image Photoshop saved,
+// Photoshop rendered; 16-bit RGB and grayscale files as 16-bit documents (other deep files reduced to 8 bits);
+// and the merged image Photoshop saved,
 // which stands in when a file has no layers. Whatever cannot be carried over is listed in the notes.
 #pragma once
 #include "document.h"
@@ -26,6 +27,8 @@ struct PsdImport {
     Document document;
     /// Photoshop's own flattened image, for checking the import against.
     ImagePtr composite;
+    /// The same at 16 bits, from a 16-bit file.
+    Image16Ptr composite16;
     /// What the import left behind, one line each (effects, unknown adjustments, rasterised text, ...).
     std::vector<std::string> notes;
     /// Type layers opened as text (see PsdImportedText).

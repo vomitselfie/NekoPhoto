@@ -2,6 +2,7 @@
 #include "photoshop.h"
 #include "compositor/adjustments.h"
 #include "compositor/colour.h"
+#include "compositor/depth.h"
 #include "compositor/png.h"
 #include "compositor/render.h"
 #include "compositor/smartfilter.h"
@@ -48,7 +49,8 @@ uint8_t encodeLinear(float v) {
 
 /// Decodes one plane of `width` x `height` samples to 8 bits from `compression` (0 raw, 1 RLE, 2 zip,
 /// 3 zip with prediction) and `depth` bits. False when the data does not add up.
-bool decodePlane(const uint8_t* data, size_t size, int compression, int width, int height, int depth, bool psb, std::vector<uint8_t>& out, std::string* why) {
+bool decodePlane(const uint8_t* data, size_t size, int compression, int width, int height, int depth, bool psb, std::vector<uint8_t>& out, std::string* why,
+                 std::vector<uint16_t>* wide = nullptr) {
     const size_t bytesPer = size_t(depth) / 8, rowBytes = size_t(width) * bytesPer, total = rowBytes * size_t(height);
     if (depth != 8 && depth != 16 && depth != 32) { if (why) *why = "unsupported bit depth"; return false; }
     std::vector<uint8_t> raw(total);
@@ -81,6 +83,11 @@ bool decodePlane(const uint8_t* data, size_t size, int compression, int width, i
         } else { if (why) *why = "unknown compression"; return false; }
     } catch (Truncated&) { if (why) *why = "channel data ends early"; return false; }
     out.resize(size_t(width) * size_t(height));
+    // A 16-bit plane also at Photoshop's internal 0..32768, for a 16-bit document.
+    if (wide && depth == 16) {
+        wide->resize(out.size());
+        for (size_t i = 0; i < out.size(); i++) (*wide)[i] = from65535(unsigned(raw[i * 2]) * 256 + raw[i * 2 + 1]);
+    }
     if (depth == 8) out = std::move(raw);
     else if (depth == 16) for (size_t i = 0; i < out.size(); i++) out[i] = uint8_t((unsigned(raw[i * 2]) * 256 + raw[i * 2 + 1] + 128) / 257);
     else for (size_t i = 0; i < out.size(); i++) { uint32_t bits = (uint32_t(raw[i * 4]) << 24) | (uint32_t(raw[i * 4 + 1]) << 16) | (uint32_t(raw[i * 4 + 2]) << 8) | raw[i * 4 + 3]; float f; std::memcpy(&f, &bits, 4); out[i] = encodeLinear(f); }
@@ -144,6 +151,23 @@ std::shared_ptr<Image> assemble(int mode, int width, int height, const std::map<
             const unsigned a = alpha ? alpha[i] : 255;
             for (int c = 0; c < 3; c++) p[c] = uint8_t((rgb[c] * a + 127) / 255);
             p[3] = uint8_t(a);
+        }
+    }
+    return image;
+}
+
+/// An RGB or grayscale 16-bit document's planes (0..32768, straight colour) as a premultiplied 16-bit image.
+std::shared_ptr<Image16> assemble16(int mode, int width, int height, const std::map<int, std::vector<uint16_t>>& planes) {
+    auto image = std::make_shared<Image16>(width, height);
+    auto plane = [&](int id) -> const uint16_t* { auto it = planes.find(id); return it == planes.end() ? nullptr : it->second.data(); };
+    const uint16_t *c0 = plane(0), *c1 = mode == RGB ? plane(1) : c0, *c2 = mode == RGB ? plane(2) : c0, *alpha = plane(-1);
+    for (int y = 0; y < height; y++) {
+        uint16_t* p = image->row(y);
+        for (int x = 0; x < width; x++, p += 4) {
+            const size_t i = size_t(y) * width + size_t(x);
+            const uint32_t a = alpha ? alpha[i] : one16;
+            p[0] = uint16_t(mul15(c0 ? c0[i] : 0, a)); p[1] = uint16_t(mul15(c1 ? c1[i] : 0, a)); p[2] = uint16_t(mul15(c2 ? c2[i] : 0, a));
+            p[3] = uint16_t(a);
         }
     }
     return image;
@@ -642,10 +666,16 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
         const uint32_t height = r.u32(), width = r.u32();
         const int depth = r.u16(), mode = r.u16();
         if (width < 1 || height < 1 || width > 30000 || height > 30000) { if (error) *error = "The canvas size is outside the supported range (up to 30,000 pixels per side)."; return std::nullopt; }
-        if ((long long)width * height > Document::pixelBudget) { if (error) *error = "The canvas exceeds the 100-megapixel budget."; return std::nullopt; }
+        // A 16-bit RGB or grayscale file opens as a 16-bit document (docs/bit-depth.md); other depths and modes are reduced.
+        const bool deep = depth == 16 && (mode == RGB || mode == Grayscale);
+        const SampleType sampleType = deep ? SampleType::U16 : SampleType::U8;
+        if ((long long)width * height > Document::imagePixelBudget(sampleType)) {
+            if (error) *error = deep ? "The canvas exceeds the 50-megapixel budget of a 16-bit document." : "The canvas exceeds the 100-megapixel budget.";
+            return std::nullopt;
+        }
         PsdImport result;
         std::vector<std::string>& notes = result.notes;
-        if (depth != 8) notes.push_back(std::to_string(depth) + "-bit channels were reduced to 8 bits.");
+        if (depth != 8 && !deep) notes.push_back(std::to_string(depth) + "-bit channels were reduced to 8 bits.");
         if (mode == CMYK) notes.push_back("CMYK colour was converted with a plain formula, not a colour profile.");
         else if (mode == Lab) notes.push_back("Lab colour was converted to sRGB.");
         else if (mode == Indexed || mode == Duotone || mode == Multichannel || mode == Bitmap) notes.push_back("The file's colour mode (" + std::string(mode == Indexed ? "indexed" : mode == Duotone ? "duotone" : mode == Multichannel ? "multichannel" : "bitmap") + ") was converted to RGB.");
@@ -743,14 +773,17 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             layerTotal += (long long)rec.width() * rec.height();
             maskTotal += (long long)rec.mask.width() * rec.mask.height();
         }
-        if (layerTotal > Document::projectPixelBudget || maskTotal > Document::projectPixelBudget) {
-            if (error) *error = "The layers total " + std::to_string(std::max(layerTotal, maskTotal) / 1000000) + " megapixels; a project holds up to 1,000.";
+        const long long projectBudget = Document::projectPixelBudgetAt(sampleType);
+        if (layerTotal > projectBudget || maskTotal > projectBudget) {
+            if (error) *error = "The layers total " + std::to_string(std::max(layerTotal, maskTotal) / 1000000) + " megapixels; a " + (deep ? "16-bit document holds up to 500." : "project holds up to 1,000.");
             return std::nullopt;
         }
 
         // Channel image data follows the records, one channel after another in record order.
+        using WidePlanes = std::map<int, std::vector<uint16_t>>;
         auto decodeRecordChannels = [&](const Record& rec, std::map<int, std::vector<uint8_t>>& planes, std::map<int, std::vector<uint8_t>>& maskPlanes, size_t& cursor,
-                                        std::vector<std::pair<int, std::vector<uint8_t>>>& maskRaw) {
+                                        std::vector<std::pair<int, std::vector<uint8_t>>>& maskRaw, WidePlanes& widePlanes, WidePlanes& wideMaskPlanes,
+                                        std::vector<PsdLayerCarry::CarriedPlane>& rawPlanes) {
             for (const Channel& c : rec.channels) {
                 // Subtraction, not addition: a PSB's channel length is a full 64-bit field, so `cursor +
                 // c.length` wraps and a wrapped sum passes the test while the reader runs off the file.
@@ -763,9 +796,15 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                 if (c.id == -2) { w = rec.mask.width(); h = rec.mask.height(); }
                 if (c.id == -3) { w = rec.mask.realWidth(); h = rec.mask.realHeight(); }
                 if (c.id == -2 || c.id == -3) maskRaw.push_back({c.id, std::vector<uint8_t>(file.data() + cursor, file.data() + cursor + size_t(c.length))});
+                else if (deep && c.id >= -1 && c.id <= 2) rawPlanes.push_back({c.id, std::vector<uint8_t>(file.data() + cursor, file.data() + cursor + size_t(c.length))});
                 std::vector<uint8_t> plane;
+                std::vector<uint16_t> wide;
                 std::string why;
-                if (w > 0 && h > 0 && decodePlane(data, size, compression, w, h, depth, psb, plane, &why)) (c.id == -2 || c.id == -3 ? maskPlanes : planes)[c.id] = std::move(plane);
+                if (w > 0 && h > 0 && decodePlane(data, size, compression, w, h, depth, psb, plane, &why, deep ? &wide : nullptr)) {
+                    const bool isMask = c.id == -2 || c.id == -3;
+                    (isMask ? maskPlanes : planes)[c.id] = std::move(plane);
+                    if (deep) (isMask ? wideMaskPlanes : widePlanes)[c.id] = std::move(wide);
+                }
                 else if (w > 0 && h > 0) notes.push_back("Layer \"" + rec.name + "\": a channel could not be read (" + why + ").");
                 cursor += size_t(c.length);
             }
@@ -782,7 +821,8 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
         std::map<std::string, int> lockedSmartObjects;
         // What the record holds that NekoPhoto does not model, bound to the layer's content as imported.
         auto carryFor = [&](const Record& rec, const Layer& layer, bool modelledAdjustment,
-                            const std::vector<std::pair<int, std::vector<uint8_t>>>& maskRaw) -> std::shared_ptr<const PsdLayerCarry> {
+                            const std::vector<std::pair<int, std::vector<uint8_t>>>& maskRaw,
+                            std::vector<PsdLayerCarry::CarriedPlane> rawPlanes = {}) -> std::shared_ptr<const PsdLayerCarry> {
             auto carry = std::make_shared<PsdLayerCarry>();
             for (auto& [key, data] : rec.ordered)
                 if (carriedLayerBlock(key, modelledAdjustment, layer.smartObject.has_value())) carry->blocks.push_back({key, std::vector<uint8_t>(data.first, data.first + data.second)});
@@ -795,27 +835,35 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             carry->fill = rec.fillOpacity;
             auto lyid = rec.blocks.find("lyid");
             if (lyid != rec.blocks.end() && lyid->second.second >= 4) { Reader id(lyid->second.first, 4); carry->layerId = id.u32(); }
-            carry->contentHash = psdContentHash(layer.asset ? layer.asset->image.u8().get() : nullptr);
+            carry->contentHash = psdContentHash(layer.asset ? layer.asset->image : AnyImage());
+            // A 16-bit layer's channels as stored: written back while its pixels are these (psd_carry.h).
+            if (!rawPlanes.empty() && layer.asset && layer.asset->image.u16()) {
+                carry->planes = std::move(rawPlanes);
+                carry->planesHash = carry->contentHash;
+            }
             if (layer.adjustment) {
                 // Settings as read, so an unchanged adjustment's own block goes back byte for byte.
                 AdjustmentSettings read;
                 if (AdjustmentSettings::parse(layer.adjustment->json, read)) carry->adjustmentJson = read.toJson();
             }
             carry->placement = layer.transform;
-            if (!psb && depth == 8 && !rec.mask.section.empty()) {
+            if (!psb && (depth == 8 || deep) && !rec.mask.section.empty()) {
                 carry->maskData = rec.mask.section;
                 carry->maskChannels = maskRaw;
-                carry->maskHash = layer.mask ? psdMaskHash(layer.mask->asset.image.u8().get(), layer.mask->enabled) : 0;
+                carry->maskDepth = depth;
+                carry->maskHash = layer.mask ? psdMaskHash(layer.mask->asset.image, layer.mask->enabled) : 0;
             }
             const bool plainBlend = rec.blend == "norm" || (rec.blend == "pass" && layer.isGroup);
             if (carry->blocks.empty() && carry->blendingRanges.empty() && carry->fill == 255 && carry->layerId == 0 && carry->maskData.empty()
-                && plainBlend && (rec.flags & ~0x0A) == 0 && !carry->closedFolder) return nullptr;
+                && plainBlend && (rec.flags & ~0x0A) == 0 && !carry->closedFolder && carry->planes.empty()) return nullptr;
             return carry;
         };
         for (const Record& rec : records) {
             std::map<int, std::vector<uint8_t>> planes, maskPlanes;
             std::vector<std::pair<int, std::vector<uint8_t>>> maskRaw;
-            decodeRecordChannels(rec, planes, maskPlanes, cursor, maskRaw);
+            WidePlanes widePlanes, wideMaskPlanes;
+            std::vector<PsdLayerCarry::CarriedPlane> rawPlanes;
+            decodeRecordChannels(rec, planes, maskPlanes, cursor, maskRaw, widePlanes, wideMaskPlanes, rawPlanes);
             const bool hidden = rec.flags & 2;
             std::optional<Uuid> parent = open.empty() ? std::nullopt : std::optional<Uuid>();
             bool lossyBlend = false;
@@ -828,19 +876,31 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                 // Without a painted mask, a plane "rendered from other data" (flag bit 3) is the vector mask baked,
                 // unfeathered: the vector mask itself draws it here, and the section goes back as stored.
                 if (!real && (rec.mask.flags & 0x08)) return std::nullopt;
-                auto userMask = maskPlanes.find(real ? -3 : -2);
-                if (!rec.mask.present || userMask == maskPlanes.end() || lw <= 0 || lh <= 0) return std::nullopt;
+                if (!rec.mask.present || lw <= 0 || lh <= 0) return std::nullopt;
                 const int top = real ? rec.mask.realTop : rec.mask.top, left = real ? rec.mask.realLeft : rec.mask.left;
                 const int mw = real ? rec.mask.realWidth() : rec.mask.width(), mh = real ? rec.mask.realHeight() : rec.mask.height();
-                auto mask = std::make_shared<GrayImage>(lw, lh, real ? rec.mask.realDefault : rec.mask.defaultColour);
-                if (size_t(std::max(0, mw)) * size_t(std::max(0, mh)) > userMask->second.size()) return std::nullopt;
-                for (int y = 0; y < mh; y++) {
-                    const int ty = top + y - ly;
-                    if (ty < 0 || ty >= lh) continue;
-                    for (int x = 0; x < mw; x++) { const int tx = left + x - lx; if (tx >= 0 && tx < lw) mask->at(tx, ty) = userMask->second[size_t(y) * mw + size_t(x)]; }
-                }
+                const uint8_t outside = real ? rec.mask.realDefault : rec.mask.defaultColour;
+                // The mask over the layer's grid at the document's depth; the default colour beyond its rectangle.
+                auto place = [&](const auto& maskPlanesAt, auto mask) -> bool {
+                    auto userMask = maskPlanesAt.find(real ? -3 : -2);
+                    if (userMask == maskPlanesAt.end() || size_t(std::max(0, mw)) * size_t(std::max(0, mh)) > userMask->second.size()) return false;
+                    for (int y = 0; y < mh; y++) {
+                        const int ty = top + y - ly;
+                        if (ty < 0 || ty >= lh) continue;
+                        for (int x = 0; x < mw; x++) { const int tx = left + x - lx; if (tx >= 0 && tx < lw) mask->at(tx, ty) = userMask->second[size_t(y) * mw + size_t(x)]; }
+                    }
+                    return true;
+                };
                 LayerMask lm;
-                lm.asset = MaskAsset::make(mask);
+                if (deep) {
+                    auto mask = std::make_shared<Gray16>(lw, lh, widen8(outside));
+                    if (!place(wideMaskPlanes, mask)) return std::nullopt;
+                    lm.asset = MaskAsset::make(Gray16Ptr(mask));
+                } else {
+                    auto mask = std::make_shared<GrayImage>(lw, lh, outside);
+                    if (!place(maskPlanes, mask)) return std::nullopt;
+                    lm.asset = MaskAsset::make(mask);
+                }
                 lm.enabled = !((real ? rec.mask.realFlags : rec.mask.flags) & 2);
                 return lm;
             };
@@ -954,6 +1014,10 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                 layer.blendMode = blend;
                 layer.extraJson = extraJson;
             }
+            // A 16-bit file's pixels at their depth: the 8-bit image stood in for the checks above.
+            if (deep && image && layer.asset && layer.asset->image.u8() == image && !widePlanes.empty()) {
+                layer.asset = Asset::make(Image16Ptr(assemble16(mode, rec.width(), rec.height(), widePlanes)), layer.asset->name);
+            }
             if (type) {
                 layer.text = type->text;
                 layer.textImage = layer.asset->image;
@@ -994,7 +1058,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                         // for this placement, so they are kept as read (drawing the stack here can take seconds);
                         // moving, scaling or editing the filters draws it (refreshSmartObjectRasters, setSmartFilters).
                         if (smartFiltersDrawable(docCarry->globals, instance)) {
-                            if (layer.asset && layer.asset->image.u8() && !layer.asset->image.u8()->isEmpty()) {
+                            if (layer.asset && layer.asset->image && layer.asset->image.width() > 0 && layer.asset->image.height() > 0) {
                                 instance.lock = Lock::None;
                                 keptFiltered = true;
                             } else if (auto filtered = filteredSmartObjectRaster(docCarry->globals, instance, *source->second->image, placement->quad)) {
@@ -1022,15 +1086,15 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                         if (layer.mask && !layer.mask->placement) layer.mask->placement = raster;
                     }
                     instance.placedTransform = layer.transform;
-                    instance.placedWidth = layer.asset->image.u8()->width();
-                    instance.placedHeight = layer.asset->image.u8()->height();
+                    instance.placedWidth = layer.asset->image.width();
+                    instance.placedHeight = layer.asset->image.height();
                     layer.smartImage = layer.asset->image;
                     layer.smartObject = std::move(instance);
                     if (layer.smartObject->locked()) lockedSmartObjects[smartObjectLockDescription(layer.smartObject->lock)]++;
                     else editableSmartObjects++;
                 }
             }
-            layer.psdCarry = carryFor(rec, layer, settings.has_value(), maskRaw);
+            layer.psdCarry = carryFor(rec, layer, settings.has_value(), maskRaw, std::move(rawPlanes));
             if (rec.clipping) {
                 // Clipped to the nearest unclipped layer below it in the same folder.
                 const size_t from = open.empty() ? 0 : open.back().firstChild;
@@ -1057,12 +1121,13 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             size_t available = file.size() - r.position();
             const size_t planeTotal = static_cast<size_t>(planeCount);
             std::vector<std::vector<uint8_t>> decoded(planeTotal);
+            std::vector<std::vector<uint16_t>> decodedWide(planeTotal);
             bool ok = true;
             if (compression == 0) {
                 for (int c = 0; c < planeCount && ok; c++) {
                     if (size_t(c + 1) * planeBytes > available) { ok = false; break; }
                     std::string why;
-                    ok = decodePlane(data + size_t(c) * planeBytes, planeBytes, 0, int(width), int(height), depth, psb, decoded[size_t(c)], &why);
+                    ok = decodePlane(data + size_t(c) * planeBytes, planeBytes, 0, int(width), int(height), depth, psb, decoded[size_t(c)], &why, deep ? &decodedWide[size_t(c)] : nullptr);
                 }
             } else if (compression == 1) {
                 // Row byte counts for every channel first, then the rows.
@@ -1084,14 +1149,29 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                     stream.insert(stream.end(), data + offset, data + offset + total);
                     offset += total;
                     std::string why;
-                    ok = decodePlane(stream.data(), stream.size(), 1, int(width), int(height), depth, psb, decoded[size_t(c)], &why);
+                    ok = decodePlane(stream.data(), stream.size(), 1, int(width), int(height), depth, psb, decoded[size_t(c)], &why, deep ? &decodedWide[size_t(c)] : nullptr);
                 }
             } else ok = false;
             if (ok) {
                 const int colourChannels = mode == RGB || mode == Lab ? 3 : mode == CMYK ? 4 : 1;
+                std::map<int, std::vector<uint16_t>> widePlanes;
                 for (int c = 0; c < planeCount; c++) {
-                    if (c < colourChannels) planes[c] = std::move(decoded[size_t(c)]);
-                    else if (c == colourChannels && transparencyFirst) planes[-1] = std::move(decoded[size_t(c)]);
+                    const int id = c < colourChannels ? c : c == colourChannels && transparencyFirst ? -1 : -9;
+                    if (id == -9) continue;
+                    planes[id] = std::move(decoded[size_t(c)]);
+                    if (deep) widePlanes[id] = std::move(decodedWide[size_t(c)]);
+                }
+                // The same at 16 bits, the white matte taken out likewise.
+                if (deep && widePlanes.count(0)) {
+                    if (auto alpha = widePlanes.find(-1); alpha != widePlanes.end())
+                        for (auto& [id, plane] : widePlanes) {
+                            if (id < 0 || plane.size() != alpha->second.size()) continue;
+                            for (size_t i = 0; i < plane.size(); i++) {
+                                const int64_t A = alpha->second[i];
+                                plane[i] = A == 0 ? 0 : uint16_t(std::clamp<int64_t>((int64_t(plane[i]) - (int64_t(one16) - A)) * int64_t(one16) / A, 0, one16));
+                            }
+                        }
+                    result.composite16 = assemble16(mode, int(width), int(height), widePlanes);
                 }
                 if (mode == Bitmap) {
                     // One bit per pixel, 1 = black, rows padded to bytes.
@@ -1116,7 +1196,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
         }
         if (layers.empty()) {
             if (!result.composite) { if (error) *error = "The file has neither layers nor a readable merged image."; return std::nullopt; }
-            Layer background(Asset::make(result.composite, "Background"), Point(0, 0));
+            Layer background(result.composite16 ? Asset::make(result.composite16, "Background") : Asset::make(result.composite, "Background"), Point(0, 0));
             background.name = "Background";
             layers.push_back(background);
             if (records.empty()) notes.push_back("The file carries no layers (it was saved flattened); the merged image is the only layer.");
@@ -1124,6 +1204,12 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
         for (const auto& resource : docCarry->resources)
             if (resource.id == 1050) parseSlicesResource(resource.data, document.slices);
         if (!docCarry->resources.empty() || !docCarry->globals.empty()) document.psdCarry = docCarry;
+        if (deep) {
+            // What was not read from 16-bit planes (fills, smart object contents, text drawn anew) is widened, so the
+            // document holds one depth throughout.
+            std::string why;
+            if (!convertSampleType(document, SampleType::U16, &why)) { if (error) *error = why; return std::nullopt; }
+        }
         result.document = std::move(document);
         return result;
     } catch (Truncated&) {

@@ -2,6 +2,7 @@
 #include "compositor/smartfilter.h"
 #include "psd/psd_descriptor.hpp"
 #include "compositor/adjustments.h"
+#include "compositor/depth.h"
 #include "compositor/parallel.h"
 #include "compositor/render.h"
 #include "compositor/vectormask.h"
@@ -14,6 +15,7 @@
 #include <fstream>
 #include <map>
 #include <set>
+#include <zlib.h>
 
 namespace compositor {
 
@@ -111,6 +113,60 @@ std::vector<uint8_t> encodeChannel(const std::vector<uint8_t>& plane, int w, int
     o.u16(0);
     o.bytes(plane);
     return o.b;
+}
+
+/// A 16-bit channel (0..65535 samples) as a layer record stores it: zip with prediction, as Photoshop writes 16-bit
+/// layers (each sample the difference from the one to its left, big-endian, deflated), or raw.
+std::vector<uint8_t> encodeChannel16(const std::vector<uint16_t>& plane, int w, int h, bool compress) {
+    Out o;
+    if (w <= 0 || h <= 0) { o.u16(0); return o.b; }
+    std::vector<uint8_t> bytes(plane.size() * 2);
+    for (int y = 0; y < h; y++) {
+        const uint16_t* row = plane.data() + size_t(y) * size_t(w);
+        uint8_t* out = bytes.data() + size_t(y) * size_t(w) * 2;
+        for (int x = 0; x < w; x++) {
+            const uint16_t v = compress ? uint16_t(row[x] - (x ? row[x - 1] : 0)) : row[x];
+            out[x * 2] = uint8_t(v >> 8); out[x * 2 + 1] = uint8_t(v);
+        }
+    }
+    if (compress) {
+        uLongf size = compressBound(uLong(bytes.size()));
+        std::vector<uint8_t> packed(size);
+        if (compress2(packed.data(), &size, bytes.data(), uLong(bytes.size()), 6) == Z_OK) {
+            packed.resize(size);
+            o.b.reserve(2 + packed.size());
+            o.u16(3);
+            o.bytes(packed);
+            return o.b;
+        }
+        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {   // deflate failed: raw after all
+            const uint16_t v = plane[size_t(y) * size_t(w) + size_t(x)];
+            bytes[(size_t(y) * size_t(w) + size_t(x)) * 2] = uint8_t(v >> 8); bytes[(size_t(y) * size_t(w) + size_t(x)) * 2 + 1] = uint8_t(v);
+        }
+    }
+    o.b.reserve(2 + bytes.size());
+    o.u16(0);
+    o.bytes(bytes);
+    return o.b;
+}
+
+/// Straight 0..65535 planes from a premultiplied 16-bit image, as straightPlanes does at 8 bits.
+std::array<std::vector<uint16_t>, 4> straightPlanes16(const Image16& image) {
+    const int w = image.width(), h = image.height();
+    std::array<std::vector<uint16_t>, 4> planes;
+    for (auto& p : planes) p.resize(size_t(w) * h);
+    parallelRows(0, h, [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++) {
+            const uint16_t* s = image.row(y);
+            for (int x = 0; x < w; x++, s += 4) {
+                const size_t i = size_t(y) * w + x;
+                const uint32_t a = s[3];
+                planes[3][i] = to65535(a);
+                for (int c = 0; c < 3; c++) planes[size_t(c)][i] = a == 0 ? 0 : to65535(std::min<uint32_t>(one16, (s[c] * one16 + a / 2) / a));
+            }
+        }
+    }, 64);
+    return planes;
 }
 
 /// Straight (not premultiplied) planes from premultiplied RGBA: PSD channels hold straight colour, and
@@ -224,7 +280,7 @@ struct Record {
 class Writer {
 public:
     Writer(const Document& document, const PsdExportOptions& options, bool encode, PsdExportSummary& summary)
-        : doc_(document), options_(options), encode_(encode), summary_(summary) {
+        : doc_(document), options_(options), encode_(encode), deep_(document.sampleType == SampleType::U16), summary_(summary) {
         for (const Layer& l : doc_.layers) byId_[l.id] = &l;
     }
 
@@ -244,6 +300,8 @@ private:
     const Document& doc_;
     const PsdExportOptions& options_;
     const bool encode_;
+    /// A 16-bit document: 16-bit channels, masks at the same depth.
+    const bool deep_;
     PsdExportSummary& summary_;
     std::map<Uuid, const Layer*> byId_;
     std::vector<Record> records_;
@@ -259,7 +317,16 @@ private:
         for (int id : {-1, 0, 1, 2}) if (id != -1 || alpha) r.channels.push_back({id, encodeChannel({}, 0, 0, false, options_.large)});
     }
 
+    void setPixels(Record& r, const Image16& image, int left, int top) const {
+        r.left = left; r.top = top; r.right = left + image.width(); r.bottom = top + image.height();
+        if (!encode_) return;
+        auto planes = straightPlanes16(image);
+        r.channels.push_back({-1, encodeChannel16(planes[3], image.width(), image.height(), options_.compress)});
+        for (int c = 0; c < 3; c++) r.channels.push_back({c, encodeChannel16(planes[size_t(c)], image.width(), image.height(), options_.compress)});
+    }
+
     void setPixels(Record& r, const Image& image, int left, int top) const {
+        if (deep_ && encode_) { setPixels(r, *widenImage(image), left, top); return; }
         r.left = left; r.top = top; r.right = left + image.width(); r.bottom = top + image.height();
         if (!encode_) return;
         auto planes = straightPlanes(image);
@@ -270,6 +337,7 @@ private:
     /// The layer's mask over `rect` (document pixels): a copy when it lies on the layer's own pixel grid,
     /// else sampled the way the renderer samples it.
     void setMask(Record& r, const Layer& layer, const Rect& rect, bool onGrid) const {
+        if (deep_) { setMask16(r, layer, rect, onGrid); return; }
         if (!layer.mask || !layer.mask->asset.image.u8() || rect.isEmpty()) return;
         const GrayImage& mask = *layer.mask->asset.image.u8();
         r.mask = true;
@@ -292,6 +360,27 @@ private:
         summary_.masks++;
     }
 
+    /// setMask for a 16-bit document: the mask's own 16 bits.
+    void setMask16(Record& r, const Layer& layer, const Rect& rect, bool onGrid) const {
+        if (!layer.mask || !layer.mask->asset.image || rect.isEmpty()) return;
+        Gray16Ptr mask = layer.mask->asset.image.u16() ? layer.mask->asset.image.u16() : Gray16Ptr(widenGray(*layer.mask->asset.image.u8()));
+        r.mask = true;
+        r.maskLeft = int(rect.x); r.maskTop = int(rect.y); r.maskRight = int(rect.x + rect.width); r.maskBottom = int(rect.y + rect.height);
+        r.maskFlags = layer.mask->enabled ? 0 : 2;
+        const int w = int(rect.width), h = int(rect.height);
+        std::vector<uint16_t> plane(size_t(w) * h);
+        const bool copy = onGrid && !layer.mask->placement && mask->width() == w && mask->height() == h;
+        r.maskDefault = copy ? 255 : 0;
+        if (encode_) {
+            Gray16 sampled(w, h, 0);
+            if (!copy) sampleMaskCoverage(mask, layer.mask->placement ? *layer.mask->placement : layer.transform, rect, 1.0, 0, sampled, false);
+            const Gray16& from = copy ? *mask : sampled;
+            for (size_t i = 0; i < plane.size(); i++) plane[i] = to65535(from.data()[i]);
+            r.channels.push_back({-2, encodeChannel16(plane, w, h, options_.compress)});
+        }
+        summary_.masks++;
+    }
+
     /// What the layer carries from its PSD, onto the finished record: the blocks still true of it, Blend
     /// If, Fill, its id, and the mask section as stored while the mask is unchanged. `sameContent` is false
     /// when the record's pixels are not the layer's own (written clipped or resampled). `freshText` when a new type
@@ -302,7 +391,16 @@ private:
         const LayerTransform& t = l.transform;
         const bool placementKept = c.placement.origin == t.origin && c.placement.size == t.size && c.placement.rotation == t.rotation
             && c.placement.flipX == t.flipX && c.placement.flipY == t.flipY;
-        const bool contentKept = sameContent && placementKept && c.contentHash == psdContentHash(l.asset ? l.asset->image.u8().get() : nullptr);
+        const uint64_t contentNow = psdContentHash(l.asset ? l.asset->image : AnyImage());
+        const bool contentKept = sameContent && placementKept && c.contentHash == contentNow;
+        // A 16-bit layer as read: its channels go back as they were stored, since 0..65535 does not survive the trip
+        // through 0..32768 (CarriedPlane); any edit changes the fingerprint and they are written anew.
+        if (deep_ && sameContent && placementKept && !c.planes.empty() && c.planesHash == contentNow && l.asset && l.asset->image.u16()) {
+            std::vector<std::pair<int, std::vector<uint8_t>>> channels;
+            for (const auto& plane : c.planes) channels.push_back({plane.id, plane.data});
+            for (auto& ch : r.channels) if (ch.first < -1) channels.push_back(std::move(ch));
+            r.channels = std::move(channels);
+        }
         std::set<std::string> dropped;
         for (const PsdBlock& block : c.blocks) {
             const auto binding = PsdLayerCarry::binding(block.key);
@@ -335,9 +433,9 @@ private:
         if (r.section == 1 && c.closedFolder) r.section = 2;
         // Opacity and Fill as they were while the combined opacity is unchanged; else ours alone.
         if (std::abs(l.opacity - c.opacity / 255.0 * (c.fill / 255.0)) < 0.5 / 255) { r.opacity = c.opacity; r.fill = c.fill; }
-        const uint64_t maskHash = l.mask ? psdMaskHash(l.mask->asset.image.u8().get(), l.mask->enabled) : 0;
-        // The stored mask channels are PSD's (16-bit row counts): as they are into a PSD only.
-        if (!options_.large && !c.maskData.empty() && placementKept && maskHash == c.maskHash && !dropped.count("vmsk") && !dropped.count("vsms")) {
+        const uint64_t maskHash = l.mask ? psdMaskHash(l.mask->asset.image, l.mask->enabled) : 0;
+        // The stored mask channels are PSD's (16-bit row counts) at the file's depth: as they are into a PSD of that depth only.
+        if (!options_.large && !c.maskData.empty() && c.maskDepth == (deep_ ? 16 : 8) && placementKept && maskHash == c.maskHash && !dropped.count("vmsk") && !dropped.count("vsms")) {
             r.rawMask = c.maskData;
             r.channels.erase(std::remove_if(r.channels.begin(), r.channels.end(), [](auto& ch) { return ch.first == -2 || ch.first == -3; }), r.channels.end());
             if (encode_) for (auto& ch : c.maskChannels) r.channels.push_back(ch);
@@ -353,14 +451,14 @@ public:
 private:
 
     /// A smart object still placed by the layer: its Photoshop blocks, the quad following the layer's transform.
-    void applySmartObject(Record& r, const Layer& l, const Image& image) {
+    void applySmartObject(Record& r, const Layer& l, int imageWidth, int imageHeight) {
         if (!l.smartObject) return;
         const SmartObjectInstance& so = *l.smartObject;
         if (!l.isLiveSmartObject()) {
             summary_.notes.push_back("Layer \"" + l.name + "\": its pixels changed here, so it is written as pixels, not a smart object.");
             return;
         }
-        const int w = image.width(), h = image.height();
+        const int w = imageWidth, h = imageHeight;
         std::array<double, 8> quad{};
         if (!so.locked() && smartObjectPixelsArePlacement(so)) {
             const double corners[4][2] = {{0, 0}, {double(w), 0}, {double(w), double(h)}, {0, double(h)}};
@@ -732,7 +830,7 @@ private:
 
     void emitPixels(const Layer& l) {
         Record r = base(l);
-        const bool hasPixels = l.asset && l.asset->image.u8() && !l.asset->image.u8()->isEmpty();
+        const bool hasPixels = l.asset && l.asset->image && l.asset->image.width() > 0 && l.asset->image.height() > 0;
         std::optional<PsdTextMetrics> textMetrics;
         if (l.isLiveText() && options_.textMetrics) textMetrics = options_.textMetrics(*l.text);
         if (l.isLiveText() && !textMetrics) summary_.notes.push_back("Text \"" + l.name + "\" is written as pixels; it stays editable text in the NekoPhoto project.");
@@ -749,10 +847,10 @@ private:
             records_.push_back(std::move(r));
             return;
         }
-        const Image& image = *l.asset->image.u8();
+        const int imageWidth = l.asset->image.width(), imageHeight = l.asset->image.height();
         const LayerTransform& t = l.transform;
         const bool onGrid = t.rotation == 0 && !t.flipX && !t.flipY && t.origin.x == std::round(t.origin.x) && t.origin.y == std::round(t.origin.y)
-            && t.size.width == image.width() && t.size.height == image.height();
+            && t.size.width == imageWidth && t.size.height == imageHeight;
         if (clipped && !clipFits) {
             // PSD clips only to the layer right beneath: this one is written as it shows, clip and mask applied.
             summary_.warnings.push_back("Layer \"" + l.name + "\" is clipped to a layer that is not right beneath it, which PSD cannot say; it is written as it shows, unclipped.");
@@ -779,28 +877,29 @@ private:
         }
         r.clipping = clipFits;
         if (onGrid) {
-            setPixels(r, image, int(t.origin.x), int(t.origin.y));
-            setMask(r, l, Rect(t.origin.x, t.origin.y, image.width(), image.height()), true);
+            if (l.asset->image.u16()) setPixels(r, *l.asset->image.u16(), int(t.origin.x), int(t.origin.y));
+            else setPixels(r, *l.asset->image.u8(), int(t.origin.x), int(t.origin.y));
+            setMask(r, l, Rect(t.origin.x, t.origin.y, imageWidth, imageHeight), true);
         } else {
             // Live text is redrawn by Photoshop from its type data, so resampling its preview pixels is not worth a note.
             if (!textMetrics) summary_.notes.push_back("Layer \"" + l.name + "\" is scaled, rotated or flipped; it is written resampled into place.");
             const Rect bounds = t.bounds().integral();
             if (encode_ && !bounds.isEmpty()) {
                 LayerTransform target(Point(bounds.x, bounds.y), Size(bounds.width, bounds.height));
-                auto placed = resampleLayer(l.asset->image.u8(), t, target, int(bounds.width), int(bounds.height));
-                setPixels(r, *placed, int(bounds.x), int(bounds.y));
+                if (l.asset->image.u16()) setPixels(r, *resampleLayer(l.asset->image.u16(), t, target, int(bounds.width), int(bounds.height)), int(bounds.x), int(bounds.y));
+                else setPixels(r, *resampleLayer(l.asset->image.u8(), t, target, int(bounds.width), int(bounds.height)), int(bounds.x), int(bounds.y));
             } else { r.left = int(bounds.x); r.top = int(bounds.y); r.right = int(bounds.x + bounds.width); r.bottom = int(bounds.y + bounds.height); }
             setMask(r, l, bounds, false);
         }
         summary_.layers++;
         if (r.clipping) summary_.clipped++;
         applyCarry(r, l, onGrid, textMetrics.has_value());
-        applySmartObject(r, l, image);
+        applySmartObject(r, l, imageWidth, imageHeight);
         // Photoshop's own type layer, still true of the pixels, says more than ours can (several styles, warps).
         if (textMetrics && std::any_of(r.carried.begin(), r.carried.end(), [](const PsdBlock& b) { return b.key == "TySh"; })) { textMetrics.reset(); summary_.texts++; }
         if (textMetrics) {
             const Rect bounds(r.left, r.top, r.right - r.left, r.bottom - r.top);
-            if (auto block = photoshopTypeBlock(*l.text, *textMetrics, t, image.width(), image.height(), bounds)) {
+            if (auto block = photoshopTypeBlock(*l.text, *textMetrics, t, imageWidth, imageHeight, bounds)) {
                 r.carried.push_back({"TySh", std::move(*block)});
                 summary_.texts++;
             } else summary_.notes.push_back("Text \"" + l.name + "\" is flipped, which Photoshop text cannot be; it is written as pixels.");
@@ -888,7 +987,9 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
     f.str("8BPS"); f.u16(large ? 2 : 1); for (int i = 0; i < 6; i++) f.u8(0);
     f.u16(4);   // RGB and the merged image's transparency
     f.u32(uint32_t(document.height)); f.u32(uint32_t(document.width));
-    f.u16(8); f.u16(3);
+    const bool deep = document.sampleType == SampleType::U16;
+    if (document.sampleType == SampleType::F32) { if (error) *error = "32-bit documents cannot be written as PSD yet."; return {}; }
+    f.u16(deep ? 16 : 8); f.u16(3);
     f.u32(0);   // colour mode data
     {
         // The resolution (ResolutionInfo, 0x03ED): pixels per inch as 16.16 fixed point, both axes.
@@ -935,9 +1036,19 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
         for (const Record& r : records) for (auto& [id, data] : r.channels) info.bytes(data);
         if (info.b.size() & 1) info.u8(0);
         Out section;
-        section.length(info.b.size(), large);
-        section.bytes(info.b);
-        section.u32(0);   // global layer mask info
+        if (deep) {
+            // A 16-bit file keeps its layers in the 'Lr16' block after an empty layer information, as Photoshop writes it.
+            section.length(0, large);
+            section.u32(0);   // global layer mask info
+            section.str("8BIM"); section.str("Lr16");
+            section.length(info.b.size(), large);
+            section.bytes(info.b);
+            for (size_t n = info.b.size(); n % 4; n++) section.u8(0);
+        } else {
+            section.length(info.b.size(), large);
+            section.bytes(info.b);
+            section.u32(0);   // global layer mask info
+        }
         // Global blocks from the PSD the document came from (linked smart object data, patterns, text
         // engine data), each padded to four bytes outside its declared length, as Photoshop reads them.
         // Smart object sources: while every embedded one is as it was read, the file's own 'lnk2' goes back as it
@@ -973,6 +1084,42 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
     {
         // The merged image from our own renderer, the look the layers should have. Its colour is matted
         // against white where it is transparent, as Photoshop stores it: premultiplied plus the white behind.
+        if (deep) {
+            auto flat = renderFlattened16(document);
+            const int w = document.width, h = document.height;
+            std::vector<std::vector<uint8_t>> rows(size_t(h) * 4);
+            std::array<std::vector<uint8_t>, 4> raw;
+            for (auto& p : raw) p.resize(size_t(w) * h * 2);
+            parallelRows(0, h, [&](int ya, int yb) {
+                for (int y = ya; y < yb; y++) {
+                    const uint16_t* s = flat->row(y);
+                    for (int x = 0; x < w; x++, s += 4) {
+                        const size_t i = (size_t(y) * w + x) * 2;
+                        for (int c = 0; c < 4; c++) {
+                            const uint16_t v = to65535(c == 3 ? s[3] : std::min<uint32_t>(one16, uint32_t(s[c]) + one16 - s[3]));
+                            raw[size_t(c)][i] = uint8_t(v >> 8); raw[size_t(c)][i + 1] = uint8_t(v);
+                        }
+                    }
+                }
+            }, 64);
+            if (options.compress) {
+                parallelRows(0, h, [&](int ya, int yb) {
+                    for (int c = 0; c < 4; c++) for (int y = ya; y < yb; y++) {
+                        const uint8_t* row = raw[size_t(c)].data() + size_t(y) * w * 2;
+                        packBits(row, w * 2, rows[size_t(c) * h + size_t(y)]);
+                        makeRowEven(rows[size_t(c) * h + size_t(y)], row, w * 2);
+                    }
+                }, 64);
+                f.u16(1);
+                for (auto& r : rows) { if (large) f.u32(uint32_t(r.size())); else f.u16(unsigned(r.size())); }
+                for (auto& r : rows) f.bytes(r);
+            } else {
+                f.u16(0);
+                for (auto& p : raw) f.bytes(p);
+            }
+            if (summaryOut) *summaryOut = summary;
+            return std::move(f.b);
+        }
         auto flat = renderFlattened(document);
         std::array<std::vector<uint8_t>, 4> planes;
         for (auto& p : planes) p.resize(size_t(document.width) * document.height);

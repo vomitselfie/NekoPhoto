@@ -1,4 +1,5 @@
 #include "compositor/png.h"
+#include "compositor/depth.h"
 #include "compositor/parallel.h"
 #include <algorithm>
 #include <atomic>
@@ -69,6 +70,35 @@ bool pngExpandToRgba(png_structp png, png_infop info) {
     return true;
 }
 
+/// Asks for 16-bit RGBA, native byte order, whatever the file holds (8-bit samples are scaled up).
+bool pngExpandToRgba16(png_structp png, png_infop info) {
+    if (setjmp(png_jmpbuf(png))) return false;
+    const int depth = png_get_bit_depth(png, info), type = png_get_color_type(png, info);
+    if (type == PNG_COLOR_TYPE_PALETTE) png_set_palette_to_rgb(png);
+    if (type == PNG_COLOR_TYPE_GRAY && depth < 8) png_set_expand_gray_1_2_4_to_8(png);
+    if (png_get_valid(png, info, PNG_INFO_tRNS)) png_set_tRNS_to_alpha(png);
+    if (depth < 8) png_set_packing(png);
+    if (depth < 16) png_set_expand_16(png);
+    if (type == PNG_COLOR_TYPE_GRAY || type == PNG_COLOR_TYPE_GRAY_ALPHA) png_set_gray_to_rgb(png);
+    png_set_filler(png, 0xFFFF, PNG_FILLER_AFTER);
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    png_set_swap(png);
+#endif
+    png_set_interlace_handling(png);
+    png_read_update_info(png, info);
+    return true;
+}
+
+bool pngExpandGray16(png_structp png, png_infop info) {
+    if (setjmp(png_jmpbuf(png))) return false;
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    png_set_swap(png);
+#endif
+    png_set_interlace_handling(png);
+    png_read_update_info(png, info);
+    return true;
+}
+
 bool pngExpandGray(png_structp png, png_infop info) {
     if (setjmp(png_jmpbuf(png))) return false;
     if (png_get_bit_depth(png, info) < 8) png_set_expand_gray_1_2_4_to_8(png);
@@ -97,7 +127,61 @@ std::shared_ptr<Image> readRgba(png_structp png, png_infop info, std::string* er
     return image;
 }
 
+std::shared_ptr<Image16> readRgba16(png_structp png, png_infop info, std::string* error) {
+    if (!pngReadInfo(png, info)) { if (error) *error = "PNG decoding failed"; return nullptr; }
+    const png_uint_32 width = png_get_image_width(png, info), height = png_get_image_height(png, info);
+    if (width == 0 || height == 0 || width > 30000 || height > 30000) { if (error) *error = "PNG too large"; return nullptr; }
+    if (!pngExpandToRgba16(png, info)) { if (error) *error = "PNG decoding failed"; return nullptr; }
+    auto image = std::make_shared<Image16>(int(width), int(height));
+    std::vector<png_bytep> rows(height);
+    for (png_uint_32 y = 0; y < height; y++) rows[y] = reinterpret_cast<png_bytep>(image->row(int(y)));
+    if (!pngReadRows(png, rows.data())) { if (error) *error = "PNG decoding failed"; return nullptr; }
+    const size_t n = size_t(width) * height * 4;
+    for (size_t i = 0; i < n; i++) image->data()[i] = from65535(image->data()[i]);
+    premultiply(*image);
+    return image;
+}
+
 } // namespace
+
+std::shared_ptr<Image16> readPngImage16(const std::string& path, std::string* error) {
+    Reader r;
+    if (!r.open(path, error)) return nullptr;
+    return readRgba16(r.png, r.info, error);
+}
+
+std::shared_ptr<Image16> decodePngImage16(const uint8_t* data, size_t size, std::string* error) {
+    if (size < 8 || png_sig_cmp(data, 0, 8)) { if (error) *error = "not a PNG"; return nullptr; }
+    png_structp png = png_create_read_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
+    png_infop info = png ? png_create_info_struct(png) : nullptr;
+    if (!png || !info) { if (png) png_destroy_read_struct(&png, nullptr, nullptr); if (error) *error = "libpng initialisation failed"; return nullptr; }
+    MemorySource source{data, size, 0};
+    png_set_read_fn(png, &source, readFromMemory);
+    auto image = readRgba16(png, info, error);
+    png_destroy_read_struct(&png, &info, nullptr);
+    return image;
+}
+
+std::shared_ptr<Gray16> readPngGray16(const std::string& path, std::string* error) {
+    Reader r;
+    if (!r.open(path, error)) return nullptr;
+    if (!pngReadInfo(r.png, r.info)) { if (error) *error = "PNG decoding failed"; return nullptr; }
+    const png_uint_32 width = png_get_image_width(r.png, r.info), height = png_get_image_height(r.png, r.info);
+    const int depth = png_get_bit_depth(r.png, r.info), type = png_get_color_type(r.png, r.info);
+    if (type != PNG_COLOR_TYPE_GRAY || depth != 16 || png_get_valid(r.png, r.info, PNG_INFO_tRNS)) {
+        if (error) *error = "mask is not 16-bit grayscale without alpha";
+        return nullptr;
+    }
+    if (width == 0 || height == 0 || width > 30000 || height > 30000) { if (error) *error = "PNG too large"; return nullptr; }
+    if (!pngExpandGray16(r.png, r.info)) { if (error) *error = "PNG decoding failed"; return nullptr; }
+    auto image = std::make_shared<Gray16>(int(width), int(height));
+    std::vector<png_bytep> rows(height);
+    for (png_uint_32 y = 0; y < height; y++) rows[y] = reinterpret_cast<png_bytep>(image->row(int(y)));
+    if (!pngReadRows(r.png, rows.data())) { if (error) *error = "PNG decoding failed"; return nullptr; }
+    const size_t n = size_t(width) * height;
+    for (size_t i = 0; i < n; i++) image->data()[i] = from65535(image->data()[i]);
+    return image;
+}
 
 bool readPngInfo(const std::string& path, PngInfo& out, std::string* error) {
     Reader r;
@@ -199,7 +283,7 @@ void filterRow(const uint8_t* row, const uint8_t* prior, int bytes, int bpp, uin
 using RowSource = std::function<void(int y, uint8_t* out)>;
 
 bool encodePng(int width, int height, int colorType, int bpp, const RowSource& source, double dpi, int level,
-               std::vector<uint8_t>& out, std::string* error) {
+               std::vector<uint8_t>& out, std::string* error, int bitDepth = 8) {
     if (width <= 0 || height <= 0) { if (error) *error = "PNG encoding failed: empty image"; return false; }
     const int rowBytes = width * bpp;
     const size_t lineBytes = size_t(rowBytes) + 1;
@@ -256,7 +340,7 @@ bool encodePng(int width, int height, int colorType, int bpp, const RowSource& s
     std::vector<uint8_t> header;
     putU32(header, uint32_t(width));
     putU32(header, uint32_t(height));
-    header.insert(header.end(), {8, uint8_t(colorType), 0, 0, 0});
+    header.insert(header.end(), {uint8_t(bitDepth), uint8_t(colorType), 0, 0, 0});
     putChunk(out, "IHDR", header.data(), header.size());
     if (colorType == 6) {
         // The chunks png_set_sRGB_gAMA_and_cHRM writes: sRGB, perceptual intent, with the matching fallbacks.
@@ -319,6 +403,38 @@ bool encodePngImage(const Image& image, std::vector<uint8_t>& out, double dpi, s
 bool writePngImage(const std::string& path, const Image& image, double dpi, std::string* error) {
     std::vector<uint8_t> bytes;
     return encodePngImage(image, bytes, dpi, error) && writeFile(path, bytes, error);
+}
+
+bool encodePngImage16(const Image16& image, std::vector<uint8_t>& out, double dpi, std::string* error) {
+    // Straight alpha at 15 bits, then the file's 0..65535, big-endian.
+    auto straight = [&](int y, uint8_t* row) {
+        const uint16_t* p = image.row(y);
+        for (int x = 0; x < image.width(); x++, p += 4, row += 8) {
+            const uint32_t a = p[3];
+            for (int c = 0; c < 4; c++) {
+                uint32_t v = p[c];
+                if (c < 3 && a != 0 && a < one16) v = std::min<uint32_t>(one16, (v * one16 + a / 2) / a);
+                if (c < 3 && a == 0) v = 0;
+                const uint16_t w = to65535(v);
+                row[c * 2] = uint8_t(w >> 8); row[c * 2 + 1] = uint8_t(w);
+            }
+        }
+    };
+    return encodePng(image.width(), image.height(), 6, 8, straight, dpi, pngCompressionLevel, out, error, 16);
+}
+
+bool writePngImage16(const std::string& path, const Image16& image, double dpi, std::string* error) {
+    std::vector<uint8_t> bytes;
+    return encodePngImage16(image, bytes, dpi, error) && writeFile(path, bytes, error);
+}
+
+bool writePngGray16(const std::string& path, const Gray16& image, std::string* error) {
+    std::vector<uint8_t> bytes;
+    auto copy = [&](int y, uint8_t* row) {
+        const uint16_t* p = image.row(y);
+        for (int x = 0; x < image.width(); x++) { const uint16_t w = to65535(p[x]); row[x * 2] = uint8_t(w >> 8); row[x * 2 + 1] = uint8_t(w); }
+    };
+    return encodePng(image.width(), image.height(), 0, 2, copy, 0, pngCompressionLevel, bytes, error, 16) && writeFile(path, bytes, error);
 }
 
 bool writePngGray(const std::string& path, const GrayImage& image, std::string* error) {
