@@ -1,7 +1,8 @@
 // The typed image skeleton for high bit depth (docs/high-bit-depth-plan.md, P1): sample traits, ImageT,
-// GrayImageT and the AnyImage / AnyGray holders that layers, masks and the selection keep.
+// GrayImageT, the AnyImage / AnyGray holders that layers, masks and the selection keep, and the supports() registry.
 #include "check.h"
 #include "compositor/imaget.h"
+#include "compositor/supports.h"
 #include <type_traits>
 
 using namespace compositor;
@@ -62,6 +63,21 @@ TEST_CASE(any_image_holds_each_depth) {
     AnyGray floatMask = GrayFPtr(std::make_shared<GrayF>(1, 1, 1.0f));
     CHECK(floatMask.sampleType() == SampleType::F32);
     CHECK(floatMask.f32()->at(0, 0) == 1.0f);
+}
+
+TEST_CASE(support_registry_is_eight_bit_only) {
+    // Every feature supports 8-bit; nothing is ported deeper yet, listed or not.
+    CHECK(supports("render.document", SampleType::U8));
+    CHECK(!supports("render.document", SampleType::U16));
+    CHECK(supports("filter.never-heard-of-it", SampleType::U8));
+    CHECK(!supports("filter.never-heard-of-it", SampleType::F32));
+    for (int k = 0; k < adjustmentKindCount; k++) {
+        CHECK(supports(AdjustmentKind(k), SampleType::U8));
+        CHECK(!supports(AdjustmentKind(k), SampleType::U16));
+    }
+    size_t count = 0;
+    const FeatureSupport* table = featureSupportTable(count);
+    for (size_t i = 0; i < count; i++) CHECK(table[i].types & onlyEightBit);
 }
 
 TEST_MAIN()

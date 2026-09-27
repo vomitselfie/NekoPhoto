@@ -160,6 +160,7 @@ add_library(compositor_core STATIC
     src/toning.cpp
     src/raw.cpp
     src/vectorlayer.cpp
+    src/supports.cpp
     src/svg.cpp
     src/svg_write.cpp
     src/svg_xml.cpp
