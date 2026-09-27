@@ -172,8 +172,12 @@ it did; saving writes version 2.
 ### Editing
 
 The Dynamics… button in the Brush tool's options bar (for a tip brush) edits pressure on size and on flow, each as a
-curve with a minimum, and the two options. The brush's other mappings stay as they are. The changes are saved to the
-brush's folder with a new preview.
+curve with a minimum, the two options, and Pen tilt shapes the tip with its flattest roundness. The brush's other
+mappings stay as they are. The changes are saved to the brush's folder with a new preview.
+
+**A tilted pencil** (`tiltShapesTip(flattest)`, for any tip brush, which Pen tilt shapes the tip adds): Tilt on roundness
+from 1 upright to `flattest` at full tilt, and TiltDirection on the angle with a depth of −360, so the tip flattens as the
+pen leans and its long side points the way it leans, like the side of a pencil. The harness paints it as `tip_tilt_shape`.
 
 ## Importers
 
@@ -261,7 +265,7 @@ mouse scribble with uneven timing). Every input a mapping can read has a fixture
 
 **Presets.** The round tip hard and soft, the eraser (on an opaque grey layer), tip brushes made in code (a square tip
 following the stroke; a textured tip with jitters, scatter, count and pressure; a flat tip with a mapping on every pen
-input; a tight light-flow tip with density by spacing and mouse speed as pressure), the tips the importers make of their
+input; a tight light-flow tip with density by spacing and mouse speed as pressure; a tilted pencil), the tips the importers make of their
 own tests' files (the Photoshop `.abr` "Leaf", Procreate's "Soft Ink", Clip Studio's "Soft Pencil" and "Spray" when the
 build has SQLite; `tests/brush_import_fixtures.h` writes those files for both), and four MyPaint presets (pencil,
 charcoal, dry brush, calligraphy) when the build has libmypaint. Tip brushes use a fixed seed.
@@ -350,5 +354,4 @@ baseline's `u16/` section, with each scene's distance from its 8-bit render (`vs
 
 ## Not yet
 
-- Clip Studio's effector curves, texture coordinate modes (canvas, stroke, dab), tilt and twist shaping the tip's
-  geometry, stabilisation, a continuous swept round brush, and MyPaint's newer inputs.
+- Clip Studio's effector curves, texture coordinate modes (canvas, stroke, dab), stabilisation, a continuous swept round brush, and MyPaint's newer inputs.

@@ -154,6 +154,29 @@ TEST_CASE(roll_follows_the_barrel_or_the_stroke_without_a_jump_at_359_to_0) {
     CHECK(std::string(dynamicsInputName(DynamicsInput::Roll)) == "roll");
 }
 
+TEST_CASE(a_tilted_pencil_flattens_and_turns_the_way_it_leans) {
+    BrushDynamics d = {dynamicsMapping(DynamicsInput::Pressure, DynamicsTarget::Size, 0.2, 0.8)};
+    CHECK(!tiltShapeOf(d).has_value());
+    for (const DynamicsMapping& m : tiltShapesTip(0.3)) d.push_back(m);
+    REQUIRE(tiltShapeOf(d).has_value());
+    CHECK_NEAR(*tiltShapeOf(d), 0.3, 1e-12);
+    // Leaning fully towards the bottom right: roundness at its flattest, the tip's x axis along the lean.
+    BrushSampleTrack track;
+    BrushSample s;
+    s.stylus = true;
+    s.tiltX = 60;
+    s.tiltY = 60;
+    const BrushSample leaning = track.add(s);
+    CHECK_NEAR(applyDynamics(d, DynamicsTarget::Roundness, 1, leaning, 20), 0.3, 1e-12);
+    CHECK_NEAR(std::remainder(applyDynamics(d, DynamicsTarget::Angle, 0, leaning, 20), 360.0), -45.0, 1e-9);
+    // Upright, the tip keeps its shape.
+    BrushSampleTrack still;
+    CHECK_NEAR(applyDynamics(d, DynamicsTarget::Roundness, 1, still.add(BrushSample{}), 20), 1.0, 1e-12);
+    removeTiltShape(d);
+    CHECK_EQ(d.size(), size_t(1));
+    CHECK(!tiltShapeOf(d).has_value());
+}
+
 TEST_CASE(the_old_settings_are_mappings_that_paint_the_same) {
     // What the engine computed before mappings, for pressure on size (full) and flow (half), and the jitters.
     const LegacyTipDynamics legacy{.sizeJitter = 0.4, .flowJitter = 0.3, .angleJitter = 60, .pressureSize = 1, .minimumSize = 0.2, .pressureFlow = 0.5};

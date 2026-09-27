@@ -64,6 +64,8 @@ private:
     Row size_, flow_;
     QCheckBox* density_ = nullptr;
     QCheckBox* mouseSpeed_ = nullptr;
+    QCheckBox* tiltShape_ = nullptr;
+    QDoubleSpinBox* flattest_ = nullptr;
 };
 
 } // namespace app

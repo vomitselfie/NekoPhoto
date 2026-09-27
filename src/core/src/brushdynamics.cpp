@@ -171,6 +171,36 @@ BrushDynamics legacyDynamics(const LegacyTipDynamics& l) {
     return out;
 }
 
+// ---- A tilted pencil ---------------------------------------------------------------------------------------------
+
+namespace {
+bool isTiltRoundness(const DynamicsMapping& m) {
+    return m.input == DynamicsInput::Tilt && m.target == DynamicsTarget::Roundness && m.offset == 1 && m.depth <= 0 && m.curve.isIdentity();
+}
+bool isAzimuthAngle(const DynamicsMapping& m) {
+    return m.input == DynamicsInput::TiltDirection && m.target == DynamicsTarget::Angle && m.offset == 0 && m.depth == -360 && m.curve.isIdentity();
+}
+} // namespace
+
+BrushDynamics tiltShapesTip(double flattest) {
+    const double f = std::clamp(std::isfinite(flattest) ? flattest : 1.0, 0.01, 1.0);
+    return {dynamicsMapping(DynamicsInput::Tilt, DynamicsTarget::Roundness, 1, f - 1),
+            dynamicsMapping(DynamicsInput::TiltDirection, DynamicsTarget::Angle, 0, -360)};
+}
+
+std::optional<double> tiltShapeOf(const BrushDynamics& dynamics) {
+    const auto roundness = std::find_if(dynamics.begin(), dynamics.end(), isTiltRoundness);
+    if (roundness == dynamics.end() || std::none_of(dynamics.begin(), dynamics.end(), isAzimuthAngle)) return std::nullopt;
+    return 1 + roundness->depth;
+}
+
+void removeTiltShape(BrushDynamics& dynamics) {
+    if (!tiltShapeOf(dynamics)) return;
+    auto first = [&](auto predicate) { auto it = std::find_if(dynamics.begin(), dynamics.end(), predicate); if (it != dynamics.end()) dynamics.erase(it); };
+    first(isTiltRoundness);
+    first(isAzimuthAngle);
+}
+
 // ---- Names -------------------------------------------------------------------------------------------------------
 
 namespace {

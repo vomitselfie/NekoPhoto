@@ -2851,6 +2851,22 @@ Add one from the Layers panel or Layer &gt; New Adjustment Layer.</source>
         <source>For a mouse only: moving slowly presses harder and a quick flick lifts, with a short ramp in at the start. A pen always uses its own pressure.</source>
         <translation>マウス専用: ゆっくり動かすと強く、素早く払うと弱くなり、描き始めは少しずつ強まります。ペンでは常にペン自身の筆圧を使います。</translation>
     </message>
+    <message>
+        <source>Pen tilt shapes the tip</source>
+        <translation>ペンの傾きで先端の形を変える</translation>
+    </message>
+    <message>
+        <source>Like the side of a pencil: the tip flattens as the pen leans and turns the way it leans.</source>
+        <translation>鉛筆を寝かせて描くように、ペンを傾けると先端が平たくなり、傾けた向きに回ります。</translation>
+    </message>
+    <message>
+        <source>Flattest</source>
+        <translation>最も平たいとき</translation>
+    </message>
+    <message>
+        <source>The tip&apos;s roundness with the pen fully tilted</source>
+        <translation>ペンをいっぱいに傾けたときの先端の真円率</translation>
+    </message>
     <message numerus="yes">
         <source>Other dynamics of this brush (%n: jitter, tilt, fade and the like) stay as they are.</source>
         <translation>

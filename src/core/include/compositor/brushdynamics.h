@@ -87,6 +87,14 @@ struct LegacyTipDynamics {
 };
 BrushDynamics legacyDynamics(const LegacyTipDynamics& legacy);
 
+/// A tilted pencil's tip, for any tip brush: it flattens as the pen leans (Tilt on roundness, down to `flattest` at
+/// full tilt) and turns so its long side points the way the pen leans (TiltDirection on the angle, a depth of -360).
+BrushDynamics tiltShapesTip(double flattest);
+/// Whether `dynamics` has tiltShapesTip's mappings, and if so its `flattest`.
+std::optional<double> tiltShapeOf(const BrushDynamics& dynamics);
+/// `dynamics` without them.
+void removeTiltShape(BrushDynamics& dynamics);
+
 /// Names as brush.json stores them: "pressure", "tiltDirection", "size", "grainRotation"...
 const char* dynamicsInputName(DynamicsInput input);
 const char* dynamicsTargetName(DynamicsTarget target);

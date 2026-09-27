@@ -283,6 +283,13 @@ std::vector<Preset> standardPresets(const std::string& myPaintFolder) {
         dense.tip.dynamics = {dynamicsMapping(DynamicsInput::Pressure, DynamicsTarget::Size, 0.2, 0.8)};
         dense.diameter = 22;
         out.push_back(tipPreset("tip_density_speed", dense, 40));
+        // A native brush with a tilted pencil's tip (tiltShapesTip): flattening and turning with the pen's lean.
+        TipPreset pencil;
+        pencil.tip.shape = radialTip(64);
+        pencil.tip.spacing = 0.1;
+        pencil.tip.dynamics = tiltShapesTip(0.25);
+        pencil.diameter = 24;
+        out.push_back(tipPreset("tip_tilt_shape", pencil, 40));
     }
     // What the importers make of the files their own tests write.
     if (auto abr = importBrushFile(brushfixtures::writeTemp("parity-v6.abr", brushfixtures::abrVersion6File())); abr && !abr->brushes.empty())
