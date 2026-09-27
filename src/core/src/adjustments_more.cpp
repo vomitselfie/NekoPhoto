@@ -4,6 +4,7 @@
 // AdjustPixels.c (MIT); Vibrance, Photo Filter, Channel Mixer and Selective Color from their
 // published formulas, unchecked against Photoshop (docs/adjustment-layers.md).
 #include "compositor/adjustments.h"
+#include "compositor/imaget.h"
 #include "compositor/parallel.h"
 #include <algorithm>
 #include <cmath>
@@ -26,6 +27,26 @@ void perPixel(Image& image, F&& f) {
                 for (int i = 0; i < 3; i++) c[i] = std::min(255, p[i] * 255 / a) / 255.0;
                 f(c[0], c[1], c[2]);
                 for (int i = 0; i < 3; i++) p[i] = uint8_t(std::clamp(std::lround(std::clamp(c[i], 0.0, 1.0) * a), 0L, long(a)));
+            }
+        }
+    });
+}
+
+// The same at 16 bits: the straight colour is exact (no rounding to a level before `f`).
+template <class F>
+void perPixel(Image16& image, F&& f) {
+    parallelRows(0, image.height(), [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++) {
+            uint16_t* row = image.row(y);
+            for (int x = 0; x < image.width(); x++) {
+                uint16_t* p = row + x * 4;
+                const int a = p[3];
+                if (!a) continue;
+                const double inverse = 1.0 / a;
+                double c[3];
+                for (int i = 0; i < 3; i++) c[i] = std::min(1.0, p[i] * inverse);
+                f(c[0], c[1], c[2]);
+                for (int i = 0; i < 3; i++) p[i] = uint16_t(std::clamp(std::lround(std::clamp(c[i], 0.0, 1.0) * a), 0L, long(a)));
             }
         }
     });
@@ -117,7 +138,8 @@ void applyThreshold(Image& image, const ThresholdSettings& s) {
     });
 }
 
-void applyBlackWhite(Image& image, const BlackWhiteSettings& s) {
+template <class I>
+void applyBlackWhiteImpl(I& image, const BlackWhiteSettings& s) {
     // A colour is min of grey, plus (mid - min) of the secondary between its two brightest channels, plus (max - mid)
     // of the primary of its brightest: each weighted by its slider (upstream's adjust_black_white).
     double w[6];
@@ -142,7 +164,8 @@ void applyBlackWhite(Image& image, const BlackWhiteSettings& s) {
     });
 }
 
-void applyColorBalance(Image& image, const ColorBalanceSettings& s) {
+template <class I>
+void applyColorBalanceImpl(I& image, const ColorBalanceSettings& s) {
     // Fitted to Photoshop's own composites of Patchy's two Color Balance files. Midtones are a gamma per channel,
     // v^(2^(-amount / 100)), exact on every sample; shadows and highlights move the channel's black and white points
     // (a shadow towards the colour lifts the output black, away from it clips the input black; highlights the same at
@@ -179,7 +202,8 @@ void applyColorBalance(Image& image, const ColorBalanceSettings& s) {
     });
 }
 
-void applyVibrance(Image& image, const VibranceSettings& s) {
+template <class I>
+void applyVibranceImpl(I& image, const VibranceSettings& s) {
     // Saturation scales every colour's distance from its luminance; Vibrance does the same weighted towards the
     // muted ones (a saturated colour moves little), as Photoshop's does.
     const double sat = std::clamp(s.saturation, -100.0, 100.0) / 100, vib = std::clamp(s.vibrance, -100.0, 100.0) / 100;
@@ -198,7 +222,8 @@ void applyVibrance(Image& image, const VibranceSettings& s) {
     });
 }
 
-void applyPhotoFilter(Image& image, const PhotoFilterSettings& s) {
+template <class I>
+void applyPhotoFilterImpl(I& image, const PhotoFilterSettings& s) {
     // The colour laid over the image as a lens filter would: each channel multiplied by the filter's, mixed in by the
     // density; Preserve Luminosity keeps each pixel's luminance.
     const double d = std::clamp(s.density, 0.0, 100.0) / 100;
@@ -216,7 +241,8 @@ void applyPhotoFilter(Image& image, const PhotoFilterSettings& s) {
     });
 }
 
-void applyChannelMixer(Image& image, const ChannelMixerSettings& s) {
+template <class I>
+void applyChannelMixerImpl(I& image, const ChannelMixerSettings& s) {
     std::array<std::array<double, 4>, 4> m;
     for (int row = 0; row < 4; row++) for (int k = 0; k < 4; k++) m[size_t(row)][size_t(k)] = std::clamp(s.rows[size_t(row)][size_t(k)], -200.0, 200.0) / 100;
     perPixel(image, [&](double& r, double& g, double& b) {
@@ -227,7 +253,8 @@ void applyChannelMixer(Image& image, const ChannelMixerSettings& s) {
     });
 }
 
-void applySelectiveColor(Image& image, const SelectiveColorSettings& s) {
+template <class I>
+void applySelectiveColorImpl(I& image, const SelectiveColorSettings& s) {
     // Each colour belongs to its hue ranges by (max - mid) for the primaries' and (mid - min) for the secondaries'
     // ranges, to whites above mid-grey, blacks below, and neutrals by how far it is from both; each range moves the
     // ink (1 - channel) of cyan, magenta and yellow, and black moves all three.
@@ -263,6 +290,51 @@ void applySelectiveColor(Image& image, const SelectiveColorSettings& s) {
         g = std::clamp(1 - ((1 - g) + delta[1]), 0.0, 1.0);
         b = std::clamp(1 - ((1 - b) + delta[2]), 0.0, 1.0);
     });
+}
+
+void applyBlackWhite(Image& image, const BlackWhiteSettings& s) { applyBlackWhiteImpl(image, s); }
+void applyBlackWhite(Image16& image, const BlackWhiteSettings& s) { applyBlackWhiteImpl(image, s); }
+void applyColorBalance(Image& image, const ColorBalanceSettings& s) { applyColorBalanceImpl(image, s); }
+void applyColorBalance(Image16& image, const ColorBalanceSettings& s) { applyColorBalanceImpl(image, s); }
+void applyVibrance(Image& image, const VibranceSettings& s) { applyVibranceImpl(image, s); }
+void applyVibrance(Image16& image, const VibranceSettings& s) { applyVibranceImpl(image, s); }
+void applyPhotoFilter(Image& image, const PhotoFilterSettings& s) { applyPhotoFilterImpl(image, s); }
+void applyPhotoFilter(Image16& image, const PhotoFilterSettings& s) { applyPhotoFilterImpl(image, s); }
+void applyChannelMixer(Image& image, const ChannelMixerSettings& s) { applyChannelMixerImpl(image, s); }
+void applyChannelMixer(Image16& image, const ChannelMixerSettings& s) { applyChannelMixerImpl(image, s); }
+void applySelectiveColor(Image& image, const SelectiveColorSettings& s) { applySelectiveColorImpl(image, s); }
+void applySelectiveColor(Image16& image, const SelectiveColorSettings& s) { applySelectiveColorImpl(image, s); }
+
+void applyThreshold(Image16& image, const ThresholdSettings& s) {
+    // Photoshop's luminance weights on the exact straight colour. The half-unit allowance makes a 16-bit copy of an
+    // 8-bit image split exactly where the 8-bit integer sum does (its colours are within 0.4 units of the bytes').
+    const double level = std::clamp(s.level, 1, 255) * 100.0 - 0.5;
+    parallelRows(0, image.height(), [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++)
+            for (int x = 0; x < image.width(); x++) {
+                uint16_t* p = image.pixel(x, y);
+                const int a = p[3];
+                if (!a) continue;
+                const double k = 255.0 / a;
+                const double sum = std::min(255.0, p[0] * k) * 30 + std::min(255.0, p[1] * k) * 59 + std::min(255.0, p[2] * k) * 11;
+                p[0] = p[1] = p[2] = sum >= level ? uint16_t(a) : 0;
+            }
+    });
+}
+
+double brightnessContrastAt(const BrightnessContrastSettings& settings, double value) {
+    const BrightnessContrastSettings s = settings.normalized();
+    value = std::clamp(value, 0.0, 1.0);
+    if (!s.legacy) return std::clamp(contrastValue(s.contrast, brightnessValue(s.brightness, value)), 0.0, 1.0);
+    // The legacy formulas of apply() on the 0..255 scale, unrounded.
+    const double v = value * 255;
+    const int b = s.brightness, c = s.contrast;
+    double out;
+    if (c == 0) out = v + b;
+    else if (c >= 100) out = v + b >= 126.5 ? 255 : 0;
+    else if (c > 0) out = (v + b - 127.5) * 100.0 / (100.0 - c) + 127.5;
+    else out = (v - 127.5) * (100.0 + c) / 100.0 + 127.5 + b;
+    return std::clamp(out / 255, 0.0, 1.0);
 }
 
 } // namespace compositor

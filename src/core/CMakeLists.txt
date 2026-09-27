@@ -127,6 +127,7 @@ add_library(compositor_core STATIC
     src/affinity_tree.cpp
     src/adjustments.cpp
     src/adjustments_more.cpp
+    src/adjustments_u16.cpp
     src/colorlookup.cpp
     src/clip.cpp
     src/blend_u8.cpp
@@ -136,6 +137,7 @@ add_library(compositor_core STATIC
     src/cameraraw.cpp
     src/document.cpp
     src/filters.cpp
+    src/filters_u16.cpp
     src/history.cpp
     src/image.cpp
     src/kernels.cpp

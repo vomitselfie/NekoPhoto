@@ -2,9 +2,9 @@
 // coverage (masks, folder masks, clipping) at the same depth.
 //
 // What is drawn natively: pixel layers in every blend mode with opacity, pixel and vector masks, clipping stacks,
-// folders (Pass Through, faded and isolated), artboards and shape strokes. What has no 16-bit path yet is drawn at
-// 8 bits and applied as a difference, so the pixels it does not touch keep their full precision: layer styles and
-// adjustment layers (P3 and P8 port them; docs/bit-depth.md).
+// folders (Pass Through, faded and isolated), artboards, shape strokes and adjustment layers. What has no 16-bit
+// path yet is drawn at 8 bits and applied as a difference, so the pixels it does not touch keep their full
+// precision: layer styles (P8 ports them; docs/bit-depth.md).
 #include "render_plan.h"
 #include "compositor/layerstyle.h"
 #include "layerstyle_render.h"
@@ -446,11 +446,9 @@ struct RenderExec<SampleType::U16> {
 
     void adjust(const Layer& layer, Image16& target, Cover coverage) {
         if (!layer.adjustment) return;
-        // The adjustment at 8 bits, applied as a difference: an identity setting leaves every 16-bit value as it was.
+        // The adjustment at 16 bits (adjustments_u16.cpp).
         Image16 adjusted = target;
-        bool applied = true;
-        via8(adjusted, [&](Image& eight) { applied = applyAdjustment(*layer.adjustment, eight, region, scale); });
-        if (!applied) return;
+        if (!applyAdjustment(*layer.adjustment, adjusted, region, scale)) return;
         const BlendMode mode = blendOf(layer);
         const float opacity = float(clamp(layer.opacity, 0.0, 1.0));
         Cover clip = coverage;

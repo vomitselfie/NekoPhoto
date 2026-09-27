@@ -88,6 +88,10 @@ add_executable(depth_format_tests depth_format_tests.cpp)
 target_link_libraries(depth_format_tests PRIVATE compositor::core compositor_warnings z)
 add_test(NAME depth_format_tests COMMAND depth_format_tests)
 
+add_executable(depth_edit_tests depth_edit_tests.cpp)
+target_link_libraries(depth_edit_tests PRIVATE compositor::core compositor_warnings)
+add_test(NAME depth_edit_tests COMMAND depth_edit_tests)
+
 add_executable(psd_writer_tests psd_writer_tests.cpp)
 target_link_libraries(psd_writer_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME psd_writer_tests COMMAND psd_writer_tests)

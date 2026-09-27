@@ -3,6 +3,7 @@
 // Mac's Codable structures; the JSON encoding is the manifest's.
 #pragma once
 #include "document.h"
+#include "imaget.h"
 #include <array>
 #include <map>
 #include <optional>
@@ -257,6 +258,29 @@ std::optional<Transfer> adjustmentTransfer(const AdjustmentSettings& settings);
 
 /// The default settings JSON for a new adjustment layer of `kind`.
 std::string defaultAdjustmentJson(AdjustmentKind kind);
+
+// ---- 16 bits (0..32768) ----------------------------------------------------------------------------------------
+// Every kind works on the exact straight colour: the table-driven ones (Levels, Curves, Exposure, Invert,
+// Brightness/Contrast, Posterize) through 32769-entry tables per channel built from their functions, the others
+// with their per-pixel maths in double (adjustments_u16.cpp). Posterize and Threshold decide as the 8-bit kernels
+// do on an 8-bit image converted to 16 bits.
+
+bool applyAdjustment(const AdjustmentSettings& settings, Image16& image, const Rect& region, double scale);
+bool applyAdjustment(const LayerAdjustment& adjustment, Image16& image, const Rect& region, double scale);
+void applyInvert(Image16& image);
+void applyInvert(Gray16& mask);
+void applyThreshold(Image16& image, const ThresholdSettings& settings);
+void applyBlackWhite(Image16& image, const BlackWhiteSettings& settings);
+void applyColorBalance(Image16& image, const ColorBalanceSettings& settings);
+void applyVibrance(Image16& image, const VibranceSettings& settings);
+void applyPhotoFilter(Image16& image, const PhotoFilterSettings& settings);
+void applyChannelMixer(Image16& image, const ChannelMixerSettings& settings);
+void applySelectiveColor(Image16& image, const SelectiveColorSettings& settings);
+void applyColorLookup(Image16& image, const ColorLookupSettings& settings);
+/// Brightness/Contrast's curve at a straight value (0..1), unrounded.
+double brightnessContrastAt(const BrightnessContrastSettings& settings, double value);
+/// The Levels histograms of a 16-bit image, in the same 256 bins.
+std::array<std::vector<double>, 4> levelsHistogram(const Image16& image, const Gray16* coverage);
 
 /// Levels helpers: the four histograms (RGB mean, R, G, B) of an image, optionally weighted by coverage.
 std::array<std::vector<double>, 4> levelsHistogram(const Image& image, const GrayImage* coverage);
