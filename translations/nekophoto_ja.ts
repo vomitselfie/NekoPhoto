@@ -3721,6 +3721,10 @@ File &gt; New creates a blank canvas.</source>
 <context>
     <name>app::GmicDialog</name>
     <message>
+        <source>Testing (experimental)</source>
+        <translation>テスト中(実験的)</translation>
+    </message>
+    <message>
         <source>G&apos;MIC</source>
         <translation>G&apos;MIC</translation>
     </message>

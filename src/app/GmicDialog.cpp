@@ -245,15 +245,41 @@ void GmicDialog::fillTree(const QString& search) {
     tree_->clear();
     QString needle = search.trimmed();
     auto addList = [&](const std::vector<GmicFilter>& list, bool builtin) {
+        // Folders nest ("Testing / Author" is Author inside Testing), so G'MIC's experimental Testing section is one
+        // node, not a top-level entry per author; it goes last, labelled as experimental, as G'MIC's own plugin does.
         std::map<QString, QTreeWidgetItem*> folders;
+        auto folderFor = [&](const QString& path) {
+            QTreeWidgetItem* parent = nullptr;
+            QString sofar;
+            for (const QString& part : (path.isEmpty() ? tr("Filters") : path).split(QStringLiteral(" / "))) {
+                sofar = sofar.isEmpty() ? part : sofar + QStringLiteral(" / ") + part;
+                QTreeWidgetItem*& node = folders[sofar];
+                if (!node) {
+                    const bool testing = !parent && !builtin && part == QLatin1String("Testing");
+                    const QString label = testing ? tr("Testing (experimental)") : part;
+                    node = parent ? new QTreeWidgetItem(parent, {label}) : new QTreeWidgetItem({label});
+                    if (!parent) {
+                        // Top-level folders keep the catalogue's order, with Testing moved to the end.
+                        if (testing) tree_->addTopLevelItem(node);
+                        else {
+                            int at = tree_->topLevelItemCount();
+                            while (at > 0 && tree_->topLevelItem(at - 1)->data(0, Qt::UserRole + 2).toBool()) at--;
+                            tree_->insertTopLevelItem(at, node);
+                        }
+                        node->setData(0, Qt::UserRole + 2, testing);
+                    }
+                    node->setFlags(Qt::ItemIsEnabled);
+                }
+                parent = node;
+            }
+            return parent;
+        };
         for (size_t i = 0; i < list.size(); i++) {
             const GmicFilter& f = list[i];
             if (!needle.isEmpty() && !f.name.contains(needle, Qt::CaseInsensitive) && !f.folder.contains(needle, Qt::CaseInsensitive)) continue;
             const QString problem = builtin ? QString() : GmicCatalogue::unsupported().value(f.command);
             if (!problem.isEmpty() && !showAll_->isChecked()) continue;
-            QTreeWidgetItem*& folder = folders[f.folder];
-            if (!folder) { folder = new QTreeWidgetItem(tree_, {f.folder.isEmpty() ? tr("Filters") : f.folder}); folder->setFlags(Qt::ItemIsEnabled); }
-            auto* item = new QTreeWidgetItem(folder, {f.name});
+            auto* item = new QTreeWidgetItem(folderFor(f.folder), {f.name});
             if (!problem.isEmpty()) {
                 item->setToolTip(0, tr("At its defaults this filter %1, which does not work here.").arg(problem));
                 item->setForeground(0, palette().color(QPalette::Disabled, QPalette::Text));
@@ -261,6 +287,7 @@ void GmicDialog::fillTree(const QString& search) {
             item->setData(0, Qt::UserRole, int(i));
             item->setData(0, Qt::UserRole + 1, builtin);
         }
+        // The essentials open; the catalogue's folders stay closed, and a search opens what it found.
         for (auto& [name, item] : folders) item->setExpanded(!needle.isEmpty() || builtin);
     };
     addList(presets_, true);
