@@ -790,3 +790,46 @@ TEST_CASE(psb_export_reads_back_with_even_composite_rows) {
 }
 
 TEST_MAIN()
+
+TEST_CASE(retyped_text_from_a_psd_is_written_as_text_without_a_pixels_note) {
+    // A type layer opened from a PSD, then retyped: its pixels change, so the carried 'TySh' goes, but a fresh one is
+    // written from the text model, and the export must not claim the layer became pixels.
+    auto metrics = [](const LayerText& t) {
+        PsdTextMetrics m;
+        m.postScriptName = "ArialMT";
+        m.fontSize = t.fontSize; m.ascent = 24; m.lineHeight = 32; m.blockLeft = m.blockTop = 4; m.blockWidth = 100;
+        return std::optional<PsdTextMetrics>(m);
+    };
+    Document doc(200, 80);
+    LayerText text;
+    text.text = "Golden Hour";
+    text.fontSize = 24;
+    Layer layer(Asset::make(std::make_shared<Image>(120, 40), "Title"), Point(10.5, 10.25));   // off the pixel grid
+    layer.text = text;
+    layer.textImage = layer.asset->image;
+    doc.layers.push_back(layer);
+    PsdExportOptions options;
+    options.textMetrics = metrics;
+    std::string error;
+    auto opened = importPsdBytes(encodePsd(doc, options, nullptr, &error), &error);
+    REQUIRE(opened.has_value());
+    Document edited = opened->document;
+    Layer& title = edited.layers[0];
+    REQUIRE(title.text.has_value() && title.psdCarry);
+    title.text->text = "Blue Hour";
+    auto repainted = std::make_shared<Image>(110, 40);
+    repainted->pixel(5, 5)[3] = 255;   // different pixels from the ones the PSD held
+    title.asset = Asset::make(repainted, "Title");
+    title.textImage = title.asset->image;
+    title.transform.size = Size(110, 40);   // retyping sizes the layer to its new raster
+    PsdExportSummary summary;
+    auto back = importPsdBytes(encodePsd(edited, options, &summary, &error), &error);
+    REQUIRE(back.has_value());
+    CHECK(summary.texts == 1);
+    for (const std::string& note : summary.notes) {
+        CHECK(note.find("not editable text") == std::string::npos);
+        CHECK(note.find("resampled into place") == std::string::npos);
+    }
+    REQUIRE(back->document.layers[0].text.has_value());
+    CHECK(back->document.layers[0].text->text == "Blue Hour");
+}

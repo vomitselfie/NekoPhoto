@@ -294,8 +294,9 @@ private:
 
     /// What the layer carries from its PSD, onto the finished record: the blocks still true of it, Blend
     /// If, Fill, its id, and the mask section as stored while the mask is unchanged. `sameContent` is false
-    /// when the record's pixels are not the layer's own (written clipped or resampled).
-    void applyCarry(Record& r, const Layer& l, bool sameContent = true) const {
+    /// when the record's pixels are not the layer's own (written clipped or resampled). `freshText` when a new type
+    /// layer is written from the text model, so a dropped 'TySh' is replaced rather than lost.
+    void applyCarry(Record& r, const Layer& l, bool sameContent = true, bool freshText = false) const {
         if (!l.psdCarry) return;
         const PsdLayerCarry& c = *l.psdCarry;
         const LayerTransform& t = l.transform;
@@ -320,7 +321,7 @@ private:
             r.carried.push_back(block);
         }
         auto droppedAny = [&](std::initializer_list<const char*> keys) { for (const char* k : keys) if (dropped.count(k)) return true; return false; };
-        if (droppedAny({"TySh", "tySh"})) summary_.notes.push_back("Layer \"" + l.name + "\": its pixels changed here, so it is written as pixels, not editable text.");
+        if (!freshText && droppedAny({"TySh", "tySh"})) summary_.notes.push_back("Layer \"" + l.name + "\": its pixels changed here, so it is written as pixels, not editable text.");
         if (droppedAny({"SoLd", "SoLE", "PlLd", "plLd"})) summary_.notes.push_back("Layer \"" + l.name + "\": its pixels changed here, so it is written as pixels, not a smart object.");
         if (droppedAny({"GdFl", "PtFl", "SoCo"})) summary_.notes.push_back("Layer \"" + l.name + "\": its pixels changed here, so it is written as pixels, not a fill layer.");
         if (droppedAny({"vmsk", "vsms"})) summary_.warnings.push_back("Layer \"" + l.name + "\": its vector mask could not be moved with it, so it is left out.");
@@ -781,7 +782,8 @@ private:
             setPixels(r, image, int(t.origin.x), int(t.origin.y));
             setMask(r, l, Rect(t.origin.x, t.origin.y, image.width(), image.height()), true);
         } else {
-            summary_.notes.push_back("Layer \"" + l.name + "\" is scaled, rotated or flipped; it is written resampled into place.");
+            // Live text is redrawn by Photoshop from its type data, so resampling its preview pixels is not worth a note.
+            if (!textMetrics) summary_.notes.push_back("Layer \"" + l.name + "\" is scaled, rotated or flipped; it is written resampled into place.");
             const Rect bounds = t.bounds().integral();
             if (encode_ && !bounds.isEmpty()) {
                 LayerTransform target(Point(bounds.x, bounds.y), Size(bounds.width, bounds.height));
@@ -792,7 +794,7 @@ private:
         }
         summary_.layers++;
         if (r.clipping) summary_.clipped++;
-        applyCarry(r, l, onGrid);
+        applyCarry(r, l, onGrid, textMetrics.has_value());
         applySmartObject(r, l, image);
         // Photoshop's own type layer, still true of the pixels, says more than ours can (several styles, warps).
         if (textMetrics && std::any_of(r.carried.begin(), r.carried.end(), [](const PsdBlock& b) { return b.key == "TySh"; })) { textMetrics.reset(); summary_.texts++; }
