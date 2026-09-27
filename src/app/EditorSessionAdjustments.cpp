@@ -11,7 +11,7 @@ namespace app {
 // ---- Adjustment layers and pixel adjustments --------------------------------------------
 
 void EditorSession::addAdjustmentLayer(AdjustmentKind kind) {
-    if (refusedAtDepth("adjustment.layers", tr("Adjustments"))) return;
+    if (refusedAtDepth(std::string("adjustment.") + adjustmentKindName(kind), tr("Adjustments"))) return;
     if (!canEditLayers() || document_->layers.size() >= size_t(Document::maxLayers)) return;
     Layer layer(names::adjustmentKind(kind).toStdString(), document_->size());
     AdjustmentSettings settings = AdjustmentSettings::defaults(kind);
@@ -33,14 +33,13 @@ void EditorSession::addAdjustmentLayer(AdjustmentKind kind) {
 }
 
 void EditorSession::beginAdjustmentEdit() {
-    if (refusedAtDepth("adjustment.layers", tr("Adjustments"))) return;
     if (adjustmentEditing_ || !document_) return;
     adjustmentEditing_ = true;
     beginEdit(QT_TRANSLATE_NOOP("History", "Adjustment"));
 }
 
 void EditorSession::setAdjustment(const Uuid& id, const AdjustmentSettings& settings) {
-    if (refusedAtDepth("adjustment.layers", tr("Adjustments"))) return;
+    if (refusedAtDepth(std::string("adjustment.") + adjustmentKindName(settings.kind), tr("Adjustments"))) return;
     if (!document_ || !settings.isValid()) return;
     Layer* layer = document_->find(id);
     if (!layer || !layer->adjustment) return;
@@ -70,14 +69,14 @@ std::optional<AdjustmentSettings> EditorSession::adjustmentSettings(const Uuid& 
 bool EditorSession::canAdjustPixels() const {
     if (!canEditLayers()) return false;
     const Layer* layer = activeLayer();
-    if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image.u8() || isMaskSelected_) return false;
+    if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image || isMaskSelected_) return false;
     if (!effectiveVisibleIds(document_->layers).count(layer->id)) return false;
     if (document_->selection && document_->selection->isEmpty()) return false;
     if (layer->isLiveSmartObject()) return false;   // its contents: Edit Contents or Rasterize first
     return selectedLayerIds_.size() == 1;
 }
 
-void EditorSession::setPixelPreview(std::shared_ptr<const Image> image, std::optional<LayerTransform> transform, std::optional<Uuid> layerId) {
+void EditorSession::setPixelPreview(AnyImage image, std::optional<LayerTransform> transform, std::optional<Uuid> layerId) {
     previewImage_ = std::move(image);
     previewTransform_ = transform;
     previewLayerId_ = layerId ? layerId : activeLayerId_;
@@ -100,18 +99,30 @@ std::shared_ptr<const Image> EditorSession::adjustmentSource(int margin, LayerTr
 }
 
 std::shared_ptr<GrayImage> EditorSession::selectionOnGrid(const LayerTransform& transform, int width, int height) const {
-    if (!document_ || !document_->selection || !document_->selection->coverage) return nullptr;
+    if (!document_ || !document_->selection || !document_->selection->coverage.u8()) return nullptr;
     return selectionInGrid(*document_->selection->coverage.u8(), transform.pixelToDocument(width, height), width, height);
 }
 
-void EditorSession::commitPixels(std::shared_ptr<const Image> image, const LayerTransform& transform, const QString& name, std::optional<Uuid> layerId) {
+std::shared_ptr<const Image16> EditorSession::adjustmentSource16(int margin, LayerTransform& transform, std::optional<Uuid> layerId) const {
+    const Layer* layer = layerId ? (document_ ? document_->find(*layerId) : nullptr) : activeLayer();
+    if (!layer || !layer->asset || !layer->asset->image.u16()) return nullptr;
+    if (margin <= 0) { transform = layer->transform; return layer->asset->image.u16(); }
+    return growImage(*layer->asset->image.u16(), layer->transform, margin, transform);
+}
+
+std::shared_ptr<Gray16> EditorSession::selectionOnGrid16(const LayerTransform& transform, int width, int height) const {
+    if (!document_ || !document_->selection || !document_->selection->coverage.u16()) return nullptr;
+    return selectionInGrid(*document_->selection->coverage.u16(), transform.pixelToDocument(width, height), width, height);
+}
+
+void EditorSession::commitPixels(AnyImage image, const LayerTransform& transform, const QString& name, std::optional<Uuid> layerId) {
     clearPixelPreview();
     Layer* layer = layerId ? (document_ ? document_->find(*layerId) : nullptr) : activeLayerMutable();
     if (!layer || !image) return;
     beginEdit(name);
     // A mask covering the old grid stays where it was when the layer grows.
     if (layer->mask && !layer->mask->placement && !transform.samePlacement(layer->transform)) layer->mask->placement = layer->transform;
-    layer->asset = Asset::make(image, layer->name);
+    layer->asset = Asset::makeAny(image, layer->name);
     layer->transform = transform;
     layer->shapeImage.reset();
     endEdit();
@@ -119,10 +130,24 @@ void EditorSession::commitPixels(std::shared_ptr<const Image> image, const Layer
 }
 
 void EditorSession::invertActive() {
-    if (refusedAtDepth("adjustment.layers", tr("Adjustments"))) return;
+    if (refusedAtDepth("adjustment.Invert", tr("Adjustments"))) return;
     if (!canEditLayers()) return;
     Layer* layer = activeLayerMutable();
     if (!layer || layer->isGroup) return;
+    if (isMaskSelected_ && layer->mask && layer->mask->asset.image.u16()) {
+        const Gray16& before = *layer->mask->asset.image.u16();
+        auto out = std::make_shared<Gray16>(before);
+        applyInvert(*out);
+        if (document_->selection && document_->selection->coverage.u16() && out->width() > 1) {
+            auto coverage = selectionInGrid(*document_->selection->coverage.u16(), layer->maskTransform().pixelToDocument(out->width(), out->height()), out->width(), out->height());
+            blendThroughCoverage(*out, before, *coverage);
+        }
+        beginEdit(QT_TRANSLATE_NOOP("History", "Invert"));
+        layer->mask->asset = MaskAsset::make(Gray16Ptr(out));
+        endEdit();
+        notifyDocument();
+        return;
+    }
     if (isMaskSelected_ && layer->mask) {
         auto out = std::make_shared<GrayImage>(*layer->mask->asset.image.u8());
         applyInvert(*out);
@@ -136,6 +161,14 @@ void EditorSession::invertActive() {
         notifyDocument();
         return;
     }
+    if (layer->asset && layer->asset->image.u16()) {
+        const Image16& before = *layer->asset->image.u16();
+        auto out = std::make_shared<Image16>(before);
+        applyInvert(*out);
+        if (auto coverage = selectionOnGrid16(layer->transform, out->width(), out->height())) blendThroughCoverage(*out, before, *coverage);
+        commitPixels(Image16Ptr(out), layer->transform, QT_TRANSLATE_NOOP("History", "Invert"));
+        return;
+    }
     if (!layer->asset || !layer->asset->image.u8()) return;
     auto out = std::make_shared<Image>(*layer->asset->image.u8());
     applyInvert(*out);
@@ -145,6 +178,11 @@ void EditorSession::invertActive() {
 
 std::array<std::vector<double>, 4> EditorSession::activeHistogram() const {
     const Layer* layer = activeLayer();
+    if (layer && layer->asset && layer->asset->image.u16()) {
+        const Image16& image = *layer->asset->image.u16();
+        auto coverage = selectionOnGrid16(layer->transform, image.width(), image.height());
+        return levelsHistogram(image, coverage.get());
+    }
     if (!layer || !layer->asset || !layer->asset->image.u8()) return {};
     auto coverage = selectionOnGrid(layer->transform, layer->asset->image.u8()->width(), layer->asset->image.u8()->height());
     return levelsHistogram(*layer->asset->image.u8(), coverage.get());

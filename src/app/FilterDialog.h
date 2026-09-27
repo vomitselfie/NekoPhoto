@@ -20,6 +20,7 @@ protected:
 private:
     void refreshPreview();
     std::shared_ptr<compositor::Image> run(const compositor::Image& source, double scale) const;
+    std::shared_ptr<compositor::Image16> run(const compositor::Image16& source, double scale) const;
     AdjustmentEditor* editor_;
 };
 
@@ -36,6 +37,7 @@ private:
     void refreshPreview();
     bool identity() const;
     std::shared_ptr<compositor::Image> run(const compositor::Image& source, double scale) const;
+    std::shared_ptr<compositor::Image16> run(const compositor::Image16& source, double scale) const;
     compositor::FilterKind kind_;
     bool smart_ = false;
     compositor::FilterSettings settings_;

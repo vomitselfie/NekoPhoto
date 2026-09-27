@@ -592,16 +592,19 @@ public:
     bool canAdjustPixels() const;
     /// Shows `image` (placed by `transform`, or the layer's own) in place of a layer's pixels until cleared: `layerId`'s, or the active layer's at the time
     /// of the call. The preview stays with that layer whatever becomes active meanwhile.
-    void setPixelPreview(std::shared_ptr<const compositor::Image> image, std::optional<compositor::LayerTransform> transform, std::optional<compositor::Uuid> layerId = std::nullopt);
+    void setPixelPreview(compositor::AnyImage image, std::optional<compositor::LayerTransform> transform, std::optional<compositor::Uuid> layerId = std::nullopt);
     void clearPixelPreview();
     /// A layer's pixels, `layerId`'s or the active layer's (grown by `margin` layer pixels for blurs), and the
     /// transform placing them.
     std::shared_ptr<const compositor::Image> adjustmentSource(int margin, compositor::LayerTransform& transform, std::optional<compositor::Uuid> layerId = std::nullopt) const;
     /// The selection as coverage on that grid, or null when everything is selected.
     std::shared_ptr<compositor::GrayImage> selectionOnGrid(const compositor::LayerTransform& transform, int width, int height) const;
+    /// The same in a 16-bit document.
+    std::shared_ptr<const compositor::Image16> adjustmentSource16(int margin, compositor::LayerTransform& transform, std::optional<compositor::Uuid> layerId = std::nullopt) const;
+    std::shared_ptr<compositor::Gray16> selectionOnGrid16(const compositor::LayerTransform& transform, int width, int height) const;
     /// Replaces a layer's pixels as one undo step: `layerId`'s, or the active layer's. A dialog that opened on
     /// one layer passes that layer, so its result never lands on whatever was selected since.
-    void commitPixels(std::shared_ptr<const compositor::Image> image, const compositor::LayerTransform& transform, const QString& name, std::optional<compositor::Uuid> layerId = std::nullopt);
+    void commitPixels(compositor::AnyImage image, const compositor::LayerTransform& transform, const QString& name, std::optional<compositor::Uuid> layerId = std::nullopt);
     void invertActive();
     std::array<std::vector<double>, 4> activeHistogram() const;
     /// Remove Background: `mask` (white over the subject, on the layer's pixel grid) becomes the layer mask,
@@ -947,7 +950,7 @@ private:
     /// `opacity`, as one undo step named `name`.
     /// With `from` (document size, premultiplied), each pixel takes `from`'s there instead of `color`.
     bool fillThrough(const QColor& color, const compositor::GrayImage* coverage, double opacity, const char* name, const compositor::Image* from = nullptr);
-    std::shared_ptr<const compositor::Image> previewImage_;
+    compositor::AnyImage previewImage_;
     std::optional<compositor::LayerTransform> previewTransform_;
     std::optional<std::pair<compositor::Uuid, compositor::Uuid>> transformDuplicate_; // copy, source
     struct DistortCache { compositor::Corners corners; compositor::LayerTransform transform; compositor::ImagePtr source; compositor::GrayPtr mask; std::optional<compositor::WarpedImage> image; compositor::GrayPtr warpedMask; };

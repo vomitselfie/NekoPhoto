@@ -293,7 +293,7 @@ void MainWindow::buildMenus() {
             if (session_->smartObjectBlocksPixels(true)) return;
             if (!session_->canAdjustPixels()) { showError(tr("Adjustments"), tr("Select a visible image layer (not a mask) to adjust its pixels.")); return; }
             (new PixelAdjustmentDialog(session_, kind, this))->show();
-        }));
+        }), (std::string("adjustment.") + adjustmentKindName(kind)).c_str());
     };
     pixelAdjustment(tr("&Levels…"), QKeySequence("Ctrl+L"), AdjustmentKind::Levels);
     pixelAdjustment(tr("&Curves…"), QKeySequence("Ctrl+M"), AdjustmentKind::Curves);
@@ -312,7 +312,7 @@ void MainWindow::buildMenus() {
     pixelAdjustment(tr("P&osterize…"), QKeySequence(), AdjustmentKind::Posterize);
     pixelAdjustment(tr("&Threshold…"), QKeySequence(), AdjustmentKind::Threshold);
     adjustments->addSeparator();
-    needsDocument(adjustments->addAction(tr("&Invert"), QKeySequence("Ctrl+I"), this, [this] { session_->invertActive(); recordAction("pixels.invert"); }));
+    needsDocument(adjustments->addAction(tr("&Invert"), QKeySequence("Ctrl+I"), this, [this] { session_->invertActive(); recordAction("pixels.invert"); }), "adjustment.Invert");
     image->addSeparator();
     needsDocument(image->addAction(tr("Flip Canvas Horizontal"), this, [this] { session_->flipCanvas(true); recordAction("canvas.flip"); }), "canvas.flip");
     needsDocument(image->addAction(tr("Flip Canvas Vertical"), this, [this] { session_->flipCanvas(false); recordAction("canvas.flip", {{"vertical", true}}); }), "canvas.flip");
@@ -338,7 +338,8 @@ void MainWindow::buildMenus() {
     QMenu* adjustmentLayers = layer->addMenu(tr("New &Adjustment Layer"));
     for (int i = 0; i < adjustmentKindCount; i++) {
         AdjustmentKind kind = AdjustmentKind(i);
-        needsDocument(adjustmentLayers->addAction(names::adjustmentKind(kind), this, [this, kind] { session_->addAdjustmentLayer(kind); recordAction("layers.add", {{"kind", "adjustment"}, {"adjustmentKind", QString::fromUtf8(adjustmentKindName(kind))}}); }));
+        needsDocument(adjustmentLayers->addAction(names::adjustmentKind(kind), this, [this, kind] { session_->addAdjustmentLayer(kind); recordAction("layers.add", {{"kind", "adjustment"}, {"adjustmentKind", QString::fromUtf8(adjustmentKindName(kind))}}); }),
+                      (std::string("adjustment.") + adjustmentKindName(kind)).c_str());
     }
     QMenu* styles = layer->addMenu(tr("Layer St&yle"));
     const char* const stylePages[] = {QT_TRANSLATE_NOOP("app::MainWindow", "Blending Options…"), QT_TRANSLATE_NOOP("app::MainWindow", "Bevel & Emboss…"), QT_TRANSLATE_NOOP("app::MainWindow", "Stroke…"), QT_TRANSLATE_NOOP("app::MainWindow", "Inner Shadow…"), QT_TRANSLATE_NOOP("app::MainWindow", "Inner Glow…"), QT_TRANSLATE_NOOP("app::MainWindow", "Satin…"), QT_TRANSLATE_NOOP("app::MainWindow", "Color Overlay…"),
@@ -464,7 +465,7 @@ void MainWindow::buildMenus() {
             if (session_->smartObjectBlocksPixels(true)) return;
             if (!session_->canAdjustPixels()) { showError(tr("Filters"), tr("Select a visible image layer (not a mask) to filter its pixels.")); return; }
             (new FilterDialog(session_, kind, this))->show();
-        }));
+        }), (std::string("filter.") + filterKindName(kind)).c_str());
     };
     filterAction(tr("&Gaussian Blur…"), FilterKind::GaussianBlur);
     filterAction(tr("&Motion Blur…"), FilterKind::MotionBlur);

@@ -514,7 +514,8 @@ Overrides EditorSession::renderOverrides() const {
     if (blendPreview_ && activeLayerId_) overrides[*activeLayerId_].blendMode = *blendPreview_;
     if (previewImage_ && previewLayerId_ && document_ && document_->find(*previewLayerId_)) {
         LayerOverride& o = overrides[*previewLayerId_];
-        o.image = previewImage_;
+        if (previewImage_.u16()) o.image16 = previewImage_.u16();
+        else o.image = previewImage_.u8();
         if (previewTransform_) o.transform = *previewTransform_;
         const Layer* layer = document_->find(*previewLayerId_);
         if (layer && layer->mask && !layer->mask->placement && previewTransform_ && !previewTransform_->samePlacement(layer->transform)) o.maskPlacement = std::optional<LayerTransform>(layer->transform);

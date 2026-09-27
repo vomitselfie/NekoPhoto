@@ -50,6 +50,7 @@ PixelAdjustmentDialog::PixelAdjustmentDialog(EditorSession* session, AdjustmentK
     // the rest from a reduced copy.
     capture(0, kind == AdjustmentKind::Grain ? 0 : (kind == AdjustmentKind::Levels || kind == AdjustmentKind::HueSaturation) ? 8000 : previewLimit);
     if (source() && kind == AdjustmentKind::Levels) editor_->setHistogram(levelsHistogram(*source(), coverage()));
+    if (source16() && kind == AdjustmentKind::Levels) editor_->setHistogram(session->activeHistogram());
     connect(editor_, &AdjustmentEditor::settingsChanged, this, [this] { refreshPreview(); });
     connect(preview, &QCheckBox::toggled, this, [this] { refreshPreview(); });
     refreshPreview();
@@ -63,17 +64,31 @@ std::shared_ptr<Image> PixelAdjustmentDialog::run(const Image& source, double sc
     return out;
 }
 
+std::shared_ptr<Image16> PixelAdjustmentDialog::run(const Image16& source, double scale) const {
+    auto out = std::make_shared<Image16>(source);
+    applyAdjustment(editor_->settings(), *out, Rect(0, 0, source.width(), source.height()), scale);
+    return out;
+}
+
 void PixelAdjustmentDialog::refreshPreview() {
-    if (!previewSource()) return;
+    if (!hasPreviewSource()) return;
     if (!previewing() || editor_->settings().isIdentity()) { clearPreview(); return; }
-    showPreview(run(*previewSource(), previewScale()));
+    if (previewSource16()) showPreview(run(*previewSource16(), previewScale()));
+    else showPreview(run(*previewSource(), previewScale()));
 }
 
 bool PixelAdjustmentDialog::apply() {
     if (editor_->settings().isIdentity()) return true;
-    auto out = run(*source(), 1);
-    throughSelection(*out);
-    commit(out, placement(), QString::fromUtf8(adjustmentKindName(editor_->settings().kind)));
+    const QString name = QString::fromUtf8(adjustmentKindName(editor_->settings().kind));
+    if (source16()) {
+        auto out = run(*source16(), 1);
+        throughSelection(*out);
+        commit(Image16Ptr(out), placement(), name);
+    } else {
+        auto out = run(*source(), 1);
+        throughSelection(*out);
+        commit(out, placement(), name);
+    }
     recordAction("pixels.adjust", {{"kind", QString::fromUtf8(adjustmentKindName(editor_->settings().kind))},
                                    {"settings", QJsonDocument::fromJson(QByteArray::fromStdString(editor_->settings().toJson())).object()}});
     return true;
@@ -139,7 +154,7 @@ FilterDialog::FilterDialog(EditorSession* session, FilterKind kind, QWidget* par
 void FilterDialog::prepareSource() {
     // A blur grows the layer by its reach; only ever grows, so easing the amount off rebuilds nothing.
     int margin = int(std::ceil(blurMargin(kind_, settings_)));
-    if (source() && margin <= margin_) return;
+    if (hasSource() && margin <= margin_) return;
     margin_ = std::max(margin_, margin);
     capture(margin_, kind_ == FilterKind::AddNoise ? 0 : previewLimit);
 }
@@ -152,12 +167,19 @@ std::shared_ptr<Image> FilterDialog::run(const Image& source, double scale) cons
     return out;
 }
 
+std::shared_ptr<Image16> FilterDialog::run(const Image16& source, double scale) const {
+    auto out = std::make_shared<Image16>(source);
+    applyFilter(kind_, *out, settings_, scale, seed_);
+    return out;
+}
+
 void FilterDialog::refreshPreview() {
     if (finished()) return;
     prepareSource();
-    if (!previewSource()) return;
+    if (!hasPreviewSource()) return;
     if (!previewing() || identity()) { clearPreview(); return; }
-    showPreview(run(*previewSource(), previewScale()), placement());
+    if (previewSource16()) showPreview(run(*previewSource16(), previewScale()), placement());
+    else showPreview(run(*previewSource(), previewScale()), placement());
 }
 
 bool FilterDialog::apply() {
@@ -175,12 +197,21 @@ bool FilterDialog::apply() {
         return true;
     }
     if (identity()) return true;
-    auto out = run(*source(), 1);
-    throughSelection(*out);
     LayerTransform placed = placement();
-    std::shared_ptr<const Image> image = out;
-    if (kind_ == FilterKind::GaussianBlur || kind_ == FilterKind::MotionBlur) image = trimToPixels(*out, placement(), placed);
-    commit(image, placed, QString::fromUtf8(filterKindName(kind_)));
+    const bool trims = kind_ == FilterKind::GaussianBlur || kind_ == FilterKind::MotionBlur;
+    if (source16()) {
+        auto out = run(*source16(), 1);
+        throughSelection(*out);
+        Image16Ptr image = out;
+        if (trims) image = trimToPixels(*out, placement(), placed);
+        commit(image, placed, QString::fromUtf8(filterKindName(kind_)));
+    } else {
+        auto out = run(*source(), 1);
+        throughSelection(*out);
+        std::shared_ptr<const Image> image = out;
+        if (trims) image = trimToPixels(*out, placement(), placed);
+        commit(image, placed, QString::fromUtf8(filterKindName(kind_)));
+    }
     const FilterSettings f = settings_.normalized();
     QJsonObject step{{"kind", QString::fromUtf8(filterKindName(kind_))}};
     if (kind_ == FilterKind::GaussianBlur) step["radius"] = f.radius;

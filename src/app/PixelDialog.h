@@ -22,7 +22,8 @@ protected:
     PixelDialog(EditorSession* session, QWidget* parent);
 
     /// Takes the pinned layer's pixels, grown by `margin` for blurs, with the selection on their grid and
-    /// copies reduced to `previewLimit` on the longest side for previewing (0 previews at full size).
+    /// copies reduced to `previewLimit` on the longest side for previewing (0 previews at full size). In a 16-bit
+    /// document the 16-bit accessors hold them (source16() and so on) and the 8-bit ones are null.
     void capture(int margin, int previewLimit);
     /// Adds the Preview check box and the OK / Cancel buttons at the bottom of `layout`; returns the check box.
     QCheckBox* addPreviewAndButtons(QVBoxLayout* layout);
@@ -30,11 +31,13 @@ protected:
 
     /// Shows `image`, computed from previewSource(), through the selection. Ignored once the dialog is done.
     void showPreview(std::shared_ptr<compositor::Image> image, std::optional<compositor::LayerTransform> placement = std::nullopt);
+    void showPreview(std::shared_ptr<compositor::Image16> image, std::optional<compositor::LayerTransform> placement = std::nullopt);
     void clearPreview();
     /// Blends a full-size result computed from source() through the selection.
     void throughSelection(compositor::Image& result) const;
+    void throughSelection(compositor::Image16& result) const;
     /// Replaces the pinned layer's pixels as one undo step and marks the dialog finished.
-    void commit(std::shared_ptr<const compositor::Image> image, const compositor::LayerTransform& placement, const QString& name);
+    void commit(compositor::AnyImage image, const compositor::LayerTransform& placement, const QString& name);
     /// Closes with `result` without committing anything further (after an asynchronous commit, say).
     void finish(int result);
 
@@ -45,6 +48,11 @@ protected:
     EditorSession* session() const { return session_; }
     const std::shared_ptr<const compositor::Image>& source() const { return source_; }
     const std::shared_ptr<const compositor::Image>& previewSource() const { return previewSource_; }
+    const std::shared_ptr<const compositor::Image16>& source16() const { return source16_; }
+    const std::shared_ptr<const compositor::Image16>& previewSource16() const { return previewSource16_; }
+    /// Whether the pinned layer's pixels were captured at all, at either depth.
+    bool hasSource() const { return source_ || source16_; }
+    bool hasPreviewSource() const { return previewSource_ || previewSource16_; }
     const compositor::LayerTransform& placement() const { return transform_; }
     /// The selection on source()'s grid, or null when everything is selected.
     const compositor::GrayImage* coverage() const { return coverage_.get(); }
@@ -59,6 +67,8 @@ private:
     compositor::LayerTransform transform_;
     double previewScale_ = 1;
     std::shared_ptr<compositor::GrayImage> coverage_, previewCoverage_;
+    std::shared_ptr<const compositor::Image16> source16_, previewSource16_;
+    std::shared_ptr<compositor::Gray16> coverage16_, previewCoverage16_;
     QCheckBox* preview_ = nullptr;
     bool finished_ = false;
 };
