@@ -143,11 +143,11 @@ void MainWindow::buildMenus() {
     QMenu* file = menuBar()->addMenu(tr("&File"));
     file->addAction(tr("&New…"), QKeySequence::New, this, &MainWindow::newDocument);
     file->addAction(tr("&Open…"), QKeySequence::Open, this, &MainWindow::openFiles);
-    file->addAction(tr("Open &Project…"), this, &MainWindow::openProject);
+    file->addAction(tr("Open Project…"), this, &MainWindow::openProject);
     recentMenu_ = file->addMenu(tr("Open &Recent"));
     file->addAction(tr("Import &File…"), QKeySequence("Ctrl+Shift+O"), this, &MainWindow::importFiles);
     file->addAction(tr("Import &Brushes…"), this, [this] { importBrushesInteractively(this, session_); });
-    file->addAction(tr("Import Pre&sets…"), this, [this] { importPresetsInteractively(this, session_); });
+    file->addAction(tr("I&mport Presets…"), this, [this] { importPresetsInteractively(this, session_); });
     needsDocument(file->addAction(tr("Place &Embedded…"), this, [this] {
         const QString path = QFileDialog::getOpenFileName(this, tr("Place Embedded"), QSettings().value("lastDir").toString(),
                                                           tr("Images, Photoshop and Affinity documents (*.psd *.psb *.afphoto *.afdesign *.afpub *.af *.png *.jpg *.jpeg *.tif *.tiff *.webp *.bmp *.gif %1)").arg(compositor::rawSupported() ? QStringLiteral("*.cr2 *.cr3 *.crw *.nef *.nrw *.arw *.srf *.sr2 *.raf *.orf *.rw2 *.rwl *.pef *.dng *.3fr *.iiq *.erf *.kdc *.dcr *.mrw *.srw *.x3f") : QString()));
@@ -168,15 +168,15 @@ void MainWindow::buildMenus() {
     if (canWriteImageFormat("tiff")) needsDocument(file->addAction(tr("Export &TIFF…"), this, &MainWindow::exportTiff));
     needsDocument(file->addAction(tr("Export T&GA…"), this, &MainWindow::exportTga));
     needsDocument(file->addAction(tr("Export &Icon (ICO)…"), this, &MainWindow::exportIco));
-    needsDocument(file->addAction(tr("Export A&rtboards to Files…"), this, [this] { exportBoxes(false); }));
+    needsDocument(file->addAction(tr("Export Artboards to Files…"), this, [this] { exportBoxes(false); }));
     needsDocument(file->addAction(tr("Export S&lices…"), this, [this] { exportBoxes(true); }));
-    needsDocument(file->addAction(tr("Export Animated &GIF…"), this, &MainWindow::exportGif));
+    needsDocument(file->addAction(tr("E&xport Animated GIF…"), this, &MainWindow::exportGif));
     file->addSeparator();
     QMenu* automate = file->addMenu(tr("A&utomate"));
     automate->addAction(tr("&Batch…"), this, [this] { showBatchDialog(); });
     file->addSeparator();
     file->addAction(tr("&Close Tab"), QKeySequence::Close, this, [this] { closeTab(current_); });
-    file->addAction(tr("New &Tab"), QKeySequence::AddTab, this, [this] { addTab(false); });
+    file->addAction(tr("New Tab"), QKeySequence::AddTab, this, [this] { addTab(false); });
     file->addAction(tr("Next Tab"), QKeySequence("Ctrl+Tab"), this, [this] { if (tabs_.size() > 1) switchTo((current_ + 1) % int(tabs_.size())); });
     file->addAction(tr("Previous Tab"), QKeySequence("Ctrl+Shift+Tab"), this, [this] { if (tabs_.size() > 1) switchTo((current_ + int(tabs_.size()) - 1) % int(tabs_.size())); });
     file->addAction(tr("&Quit"), QKeySequence::Quit, this, &QWidget::close);
@@ -190,9 +190,9 @@ void MainWindow::buildMenus() {
     needsDocument(edit->addAction(tr("Copy &Merged"), QKeySequence("Ctrl+Shift+C"), this, [this] { session_->copyMerged(); }));
     needsDocument(edit->addAction(tr("&Paste"), QKeySequence::Paste, this, [this] { session_->paste(); }));
     edit->addSeparator();
-    needsDocument(edit->addAction(tr("Free &Transform"), QKeySequence("Ctrl+T"), this, [this] { session_->transformCommand(); }));
+    needsDocument(edit->addAction(tr("&Free Transform"), QKeySequence("Ctrl+T"), this, [this] { session_->transformCommand(); }));
     needsDocument(edit->addAction(tr("&Warp…"), this, [this] { WarpDialog(session_, this).exec(); }));
-    needsDocument(edit->addAction(tr("Warp &Cage"), this, [this] {
+    needsDocument(edit->addAction(tr("Warp Ca&ge"), this, [this] {
         QString error;
         if (!session_->beginWarpCage(&error)) showError(tr("Warp Cage"), error);
         else statusBar()->showMessage(tr("Drag the cage's points; Enter applies, Esc cancels."), 8000);
@@ -211,7 +211,7 @@ void MainWindow::buildMenus() {
     needsDocument(edit->addAction(tr("Content-Aware Scale…"), QKeySequence("Ctrl+Alt+Shift+C"), this, [this] { (new ContentAwareScaleDialog(session_, this))->show(); }));
 
     edit->addSeparator();
-    edit->addAction(tr("&Preferences…"), QKeySequence::Preferences, this, &MainWindow::showPreferences);
+    edit->addAction(tr("Prefere&nces…"), QKeySequence::Preferences, this, &MainWindow::showPreferences);
 
     QMenu* image = menuBar()->addMenu(tr("&Image"));
     needsDocument(image->addAction(tr("&Canvas Size…"), QKeySequence("Ctrl+Alt+C"), this, [this] {
@@ -314,7 +314,7 @@ void MainWindow::buildMenus() {
     needsDocument(layer->addAction(tr("Layer via &Copy"), QKeySequence("Ctrl+J"), this, [this] { session_->layerViaCopy(); }));
     needsDocument(layer->addAction(tr("&Duplicate Layer"), this, [this] { session_->duplicateActiveLayer(); recordAction("layers.duplicate"); }));
     needsDocument(layer->addAction(tr("De&lete Layer"), this, [this] { deleteSelectedLayers(); recordAction("layers.delete"); }));
-    mergeAction_ = needsDocument(layer->addAction(tr("Merge &Down"), QKeySequence("Ctrl+E"), this, [this] { session_->mergeLayers(); recordAction("layers.merge"); }));
+    mergeAction_ = needsDocument(layer->addAction(tr("Merge Do&wn"), QKeySequence("Ctrl+E"), this, [this] { session_->mergeLayers(); recordAction("layers.merge"); }));
     editTextAction_ = needsDocument(layer->addAction(tr("Edit &Text…"), this, [this] { const Layer* l = session_->activeLayer(); if (l && l->isLiveText()) session_->requestTextEdit(l->id); }));
     needsDocument(layer->addAction(tr("&Rename Layer…"), this, [this] {
         const Layer* active = session_->activeLayer();
@@ -362,7 +362,7 @@ void MainWindow::buildMenus() {
         }
     });
     styles->addAction(tr("&Import Styles…"), this, [this] { importPresetsInteractively(this, session_); });
-    QMenu* smart = layer->addMenu(tr("S&mart Objects"));
+    QMenu* smart = layer->addMenu(tr("Smart Ob&jects"));
     needsDocument(smart->addAction(tr("&Convert to Smart Object"), this, [this] {
         QString error;
         if (!session_->convertToSmartObject(&error) && !error.isEmpty()) showError(tr("Couldn’t convert to a smart object"), error);
@@ -399,7 +399,7 @@ void MainWindow::buildMenus() {
     vectorMask->addSeparator();
     needsDocument(vectorMask->addAction(tr("Edit"), this, [this] { if (session_->activeLayerId()) session_->targetVectorMask(*session_->activeLayerId()); }));
     needsDocument(vectorMask->addAction(tr("Delete"), this, [this] { session_->deleteVectorMask(); }));
-    needsDocument(layer->addAction(tr("Create / Release &Clipping Mask"), QKeySequence("Ctrl+Alt+G"), this, [this] { if (session_->activeLayerId()) session_->toggleClippingMask(*session_->activeLayerId()); }));
+    needsDocument(layer->addAction(tr("Create / Release Cl&ipping Mask"), QKeySequence("Ctrl+Alt+G"), this, [this] { if (session_->activeLayerId()) session_->toggleClippingMask(*session_->activeLayerId()); }));
     layer->addSeparator();
     needsDocument(layer->addAction(tr("Bring Forward"), QKeySequence("Ctrl+]"), this, [this] { session_->moveActiveLayer(1); }));
     needsDocument(layer->addAction(tr("Send Backward"), QKeySequence("Ctrl+["), this, [this] { session_->moveActiveLayer(-1); }));
