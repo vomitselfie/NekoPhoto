@@ -12,6 +12,15 @@ namespace fs = std::filesystem;
 
 namespace {
 
+/// A stylus sample at `p` with `pressure`.
+BrushSample pen(Point p, double pressure) {
+    BrushSample s;
+    s.position = p;
+    s.pressure = pressure;
+    s.stylus = true;
+    return s;
+}
+
 Layer paper(int w, int h) {
     auto image = std::make_shared<Image>(w, h);
     image->fill(255, 255, 255, 255);
@@ -54,7 +63,7 @@ TEST_CASE(a_single_dab_stamps_the_tip_at_its_size_and_orientation) {
     Layer layer = paper(200, 200);
     Painting p(layer, tip, 40);
     REQUIRE(p.tip.isValid());
-    p.tip.strokeTo({{100, 100}, 1});
+    p.tip.strokeTo(pen({100, 100}, 1));
     auto image = p.finish();
     // 40 px square centred on (100, 100), with its top-left quarter empty.
     CHECK(image->pixel(110, 110)[0] < 16);
@@ -66,7 +75,7 @@ TEST_CASE(a_single_dab_stamps_the_tip_at_its_size_and_orientation) {
     tip.angle = 90;
     Layer again = paper(200, 200);
     Painting q(again, tip, 40);
-    q.tip.strokeTo({{100, 100}, 1});
+    q.tip.strokeTo(pen({100, 100}, 1));
     auto turned = q.finish();
     CHECK(turned->pixel(90, 110)[0] > 240);
     CHECK(turned->pixel(90, 90)[0] < 16);
@@ -78,8 +87,8 @@ TEST_CASE(spacing_places_separate_dabs_and_tight_spacing_joins_them) {
     tip.spacing = 2;   // twice the size: 20 px dabs every 40 px
     Layer layer = paper(300, 60);
     Painting p(layer, tip, 20);
-    p.tip.strokeTo({{20, 30}, 1});
-    p.tip.strokeTo({{280, 30}, 1});
+    p.tip.strokeTo(pen({20, 30}, 1));
+    p.tip.strokeTo(pen({280, 30}, 1));
     auto image = p.finish();
     CHECK(image->pixel(20, 30)[0] < 16);
     CHECK(image->pixel(60, 30)[0] < 16);
@@ -87,8 +96,8 @@ TEST_CASE(spacing_places_separate_dabs_and_tight_spacing_joins_them) {
     tip.spacing = 0.2;
     Layer joined = paper(300, 60);
     Painting q(joined, tip, 20);
-    q.tip.strokeTo({{20, 30}, 1});
-    q.tip.strokeTo({{280, 30}, 1});
+    q.tip.strokeTo(pen({20, 30}, 1));
+    q.tip.strokeTo(pen({280, 30}, 1));
     auto line = q.finish();
     for (int x = 25; x < 275; x += 10) CHECK(line->pixel(x, 30)[0] < 16);
 }
@@ -97,23 +106,22 @@ TEST_CASE(pressure_drives_size_and_the_selection_clips) {
     BrushTip tip;
     tip.shape = std::make_shared<GrayImage>(32, 32, 255);
     tip.spacing = 0.1;
-    tip.pressureSize = 1;
-    tip.minimumSize = 0.1;
+    tip.dynamics = {dynamicsMapping(DynamicsInput::Pressure, DynamicsTarget::Size, 0.1, 0.9)};
     Layer layer = paper(300, 100);
     Painting p(layer, tip, 60);
-    p.tip.strokeTo({{30, 50}, 0});
-    p.tip.strokeTo({{270, 50}, 1});
+    p.tip.strokeTo(pen({30, 50}, 0));
+    p.tip.strokeTo(pen({270, 50}, 1));
     auto image = p.finish();
     // Thin where the pen was light, full width where it pressed.
     CHECK(dark(*image, 40, 25, 50, 75) < dark(*image, 250, 25, 260, 75) / 3);
 
     GrayImage selection(300, 100, 0);
     for (int y = 0; y < 100; y++) for (int x = 150; x < 300; x++) selection.at(x, y) = 255;
-    tip.pressureSize = 0;
+    tip.dynamics.clear();
     Layer clipped = paper(300, 100);
     Painting q(clipped, tip, 30, &selection);
-    q.tip.strokeTo({{30, 50}, 1});
-    q.tip.strokeTo({{270, 50}, 1});
+    q.tip.strokeTo(pen({30, 50}, 1));
+    q.tip.strokeTo(pen({270, 50}, 1));
     auto half = q.finish();
     CHECK_EQ(dark(*half, 0, 0, 148, 100), 0);
     CHECK(dark(*half, 152, 40, 260, 60) > 1000);
@@ -124,13 +132,12 @@ TEST_CASE(jitter_is_repeatable_for_a_seed) {
     tip.shape = notchedSquare(32);
     tip.spacing = 0.5;
     tip.scatter = 1;
-    tip.angleJitter = 180;
-    tip.sizeJitter = 0.5;
+    tip.dynamics = {dynamicsMapping(DynamicsInput::Random, DynamicsTarget::Angle, 0, 180), dynamicsMapping(DynamicsInput::Random, DynamicsTarget::Size, 1, -0.5)};
     tip.count = 3;
     auto paint = [&] {
         Layer layer = paper(300, 120);
         Painting p(layer, tip, 24);
-        for (int x = 20; x <= 280; x += 20) p.tip.strokeTo({{double(x), 60}, 1});
+        for (int x = 20; x <= 280; x += 20) p.tip.strokeTo(pen({double(x), 60}, 1));
         return p.finish();
     };
     auto a = paint(), b = paint();
@@ -152,7 +159,11 @@ TEST_CASE(tip_presets_round_trip_through_their_folder) {
     preset.tip.followStroke = true;
     preset.tip.scatter = 0.4;
     preset.tip.count = 2;
-    preset.tip.pressureSize = 0.8;
+    DynamicsMapping curved = dynamicsMapping(DynamicsInput::Pressure, DynamicsTarget::Size, 0.2, 0.8);
+    curved.curve = {DynamicsCurve::Kind::Smooth, {{0, 0}, {0.4, 0.7}, {1, 1}}};
+    preset.tip.dynamics = {curved, dynamicsMapping(DynamicsInput::Speed, DynamicsTarget::Flow, 1, -0.5, 1500)};
+    preset.tip.densityBySpacing = true;
+    preset.tip.mousePressureFromSpeed = true;
     preset.tip.randomFlipX = true;
     fs::path dir = fs::temp_directory_path() / "compositor-tip-preset-test";
     fs::remove_all(dir);
@@ -167,6 +178,14 @@ TEST_CASE(tip_presets_round_trip_through_their_folder) {
     CHECK(back->tip.followStroke);
     CHECK_EQ(back->tip.count, 2);
     CHECK(back->tip.randomFlipX);
+    REQUIRE(back->tip.dynamics.size() == 2);
+    CHECK(back->tip.dynamics[0].input == DynamicsInput::Pressure && back->tip.dynamics[0].target == DynamicsTarget::Size);
+    CHECK_EQ(back->tip.dynamics[0].offset, 0.2);
+    CHECK(back->tip.dynamics[0].curve.kind == DynamicsCurve::Kind::Smooth);
+    CHECK_EQ(back->tip.dynamics[0].curve.points.size(), size_t(3));
+    CHECK_EQ(back->tip.dynamics[1].scale, 1500.0);
+    CHECK_EQ(back->tip.dynamics[1].depth, -0.5);
+    CHECK(back->tip.densityBySpacing && back->tip.mousePressureFromSpeed);
     REQUIRE(back->tip.shape && back->tip.grain);
     CHECK_EQ(int(back->tip.shape->at(2, 2)), 0);
     CHECK_EQ(int(back->tip.shape->at(15, 15)), 255);

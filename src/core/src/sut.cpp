@@ -369,8 +369,16 @@ std::optional<BrushImport> readClipStudio(const std::string& path, const std::st
             return has(key) && sqlite3_column_type(rows, column[key]) == SQLITE_BLOB
                 ? pressureMinimum(sqlite3_column_blob(rows, column[key]), sqlite3_column_bytes(rows, column[key])) : std::nullopt;
         };
-        if (auto minimum = effector("BrushSizeEffector")) { tip.pressureSize = 1; tip.minimumSize = *minimum; pressured++; }
-        if (effector("BrushOpacityEffector") || effector("BrushFlowEffector")) { tip.pressureFlow = 1; pressured++; }
+        // Pressure as mappings (brushdynamics.h): size from the effector's minimum up, opacity or flow from nothing up.
+        // The effector's curve is not decoded yet: the response is linear.
+        if (auto minimum = effector("BrushSizeEffector")) {
+            tip.dynamics.push_back(dynamicsMapping(DynamicsInput::Pressure, DynamicsTarget::Size, *minimum, 1 - *minimum));
+            pressured++;
+        }
+        if (effector("BrushOpacityEffector") || effector("BrushFlowEffector")) {
+            tip.dynamics.push_back(dynamicsMapping(DynamicsInput::Pressure, DynamicsTarget::Flow, 0, 1));
+            pressured++;
+        }
         Wants want;
         if (number("BrushUsePatternImage", 0) != 0) want.tip = reference("BrushPatternImageArray");
         want.texture = reference("TextureImage");

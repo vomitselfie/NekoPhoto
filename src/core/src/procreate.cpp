@@ -105,17 +105,23 @@ std::optional<TipPreset> readBrush(const ZipArchive& zip, const std::string& fol
     const double rotation = number(s, "shapeRotation", 0);
     tip.followStroke = std::fabs(rotation) >= 0.5;
     tip.angle = number(s, "shapeAngle", 0) * 180 / pi + (rotation <= -0.5 ? 180 : 0);
-    tip.angleJitter = std::min(180.0, number(s, "shapeScatter", 0) * 180);
+    const double angleJitter = std::clamp(number(s, "shapeScatter", 0) * 180, 0.0, 180.0);
     tip.count = int(std::clamp(std::lround(number(s, "shapeCount", 0) * 16), 1L, 16L));
     tip.roundness = number(s, "shapeRoundness", 1);
     tip.randomFlipX = number(s, "shapeFlipXJitter", 0) != 0;
     tip.randomFlipY = number(s, "shapeFlipYJitter", 0) != 0;
-    // Dynamics and the pencil.
-    tip.sizeJitter = number(s, "dynamicsJitterSize", 0);
-    tip.flowJitter = number(s, "dynamicsJitterOpacity", 0);
+    // Dynamics and the pencil, as mappings (brushdynamics.h). Procreate's opacity is per dab, so it maps to flow;
+    // its size pressure is how much of the size pressure takes away at its lightest.
+    auto add = [&](DynamicsInput input, DynamicsTarget target, double offset, double depth) { tip.dynamics.push_back(dynamicsMapping(input, target, offset, depth)); };
     const double pressureSize = number(s, "dynamicsPressureSize", 0);
-    if (pressureSize > 0) { tip.pressureSize = 1; tip.minimumSize = 1 - std::min(1.0, pressureSize); }
-    tip.pressureFlow = std::max(0.0, number(s, "dynamicsPressureOpacity", 0));
+    if (pressureSize > 0) { const double minimum = 1 - std::min(1.0, pressureSize); add(DynamicsInput::Pressure, DynamicsTarget::Size, minimum, 1 - minimum); }
+    const double sizeJitter = std::clamp(number(s, "dynamicsJitterSize", 0), 0.0, 1.0);
+    if (sizeJitter > 0) add(DynamicsInput::Random, DynamicsTarget::Size, 1, -sizeJitter);
+    const double pressureOpacity = std::clamp(number(s, "dynamicsPressureOpacity", 0), 0.0, 1.0);
+    if (pressureOpacity > 0) add(DynamicsInput::Pressure, DynamicsTarget::Flow, 1 - pressureOpacity, pressureOpacity);
+    const double opacityJitter = std::clamp(number(s, "dynamicsJitterOpacity", 0), 0.0, 1.0);
+    if (opacityJitter > 0) add(DynamicsInput::Random, DynamicsTarget::Flow, 1, -opacityJitter);
+    if (angleJitter > 0) add(DynamicsInput::Random, DynamicsTarget::Angle, 0, angleJitter);
     tip.flow = number(s, "maxOpacity", 1);
     // Size: Procreate's are relative, with no pixel size in the file. 200 pixels for a maximum of 1 matches the
     // proportions of Procreate's own thumbnails (a 0.04 ink is a fine line, a 0.4 velvet a broad stroke).

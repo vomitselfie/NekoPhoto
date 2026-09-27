@@ -158,7 +158,7 @@ QString ActionLibrary::describe(const ActionStep& step) {
     QStringList parts;
     if (step.method == "brush.stroke") parts << tr("%n point(s)", nullptr, int(step.params.value("points").toArray().size()));
     for (auto it = step.params.begin(); it != step.params.end(); ++it) {
-        if (step.method == "brush.stroke" && (it.key() == "points" || it.key() == "pressures")) continue;
+        if (step.method == "brush.stroke" && (it.key() == "points" || it.key() == "pressures" || it.key() == "tilts" || it.key() == "twists" || it.key() == "times")) continue;
         parts << it.key() + " " + valueText(it.value());
     }
     QString text = title(step.method);

@@ -1,0 +1,252 @@
+# The brush engine
+
+How a stroke gets from the pen to the pixels, what the brush dynamics are, how imported brushes land in them, and the
+harness that measures all of it. The code: `src/core/include/compositor/brushsample.h`, `brushdynamics.h`,
+`tipbrush.h`, `brush.h` (the round tip and the stroke's grid), `mypaint.h`, the importers in `src/core/src/abr.cpp`,
+`procreate.cpp` and `sut.cpp`, and the harness in `tests/brush_harness.*`.
+
+```
+pointer events ──> BrushSample (raw) ──> BrushSampleTrack (derived) ──> engine
+                                                                        ├─ round tip: the position
+                                                                        ├─ tip brushes: dynamics ──> dabs ──> coverage
+                                                                        └─ MyPaint: pressure, tilt, time (stroke_to)
+```
+
+## Samples
+
+`BrushSample` is one pointer event, the same for every engine.
+
+Raw, as the device reported it (`CanvasWidget::tabletEvent`, or `mouseSample` for a mouse):
+
+| Field | Meaning |
+|---|---|
+| `position` | document pixels |
+| `time` | seconds; only differences matter |
+| `pressure` | 0..1; a mouse reports 0.5 |
+| `tiltX`, `tiltY` | degrees from upright, as Qt reports them (about ±60) |
+| `twist` | the barrel's rotation in degrees (Qt's `rotation()`) |
+| `tangentialPressure` | the airbrush wheel, -1..1 |
+| `stylus` | the pressure, tilt and twist are a pen's; false for a mouse |
+| `eraser` | the pen's eraser end |
+
+Nothing is folded in at capture: pressure is not turned into size there, and tilt stays in degrees. Each engine reads
+what it uses.
+
+`BrushSampleTrack` derives the rest from the samples before:
+
+| Field | How |
+|---|---|
+| `dt` | seconds since the previous sample; 1/120 when the times do not say (the first sample, equal or missing times) |
+| `speed` | document pixels per second, smoothed with a 20 ms time constant |
+| `acceleration` | of that speed |
+| `direction` | radians of travel, unwrapped |
+| `tiltMagnitude` | 0 upright to 1 at 60 degrees or more |
+| `tiltAzimuth` | radians the pen leans towards, unwrapped; kept while the pen is upright |
+| `twistAngle` | the twist in radians, unwrapped |
+| `distance` | document pixels since the stroke began |
+| `progress` | 0..1 along the stroke when its whole length is known (`deriveStroke`, a replay); -1 while painting |
+
+Angles are unwrapped (`unwrapAngle`) so a twist going from 179 to -179 degrees reads as two degrees of turn, not 358.
+`interpolate` blends two samples along the unwrapped values, which is what a tip brush uses between events.
+
+Qt delivers tablet events one by one (it does not coalesce them unless `AA_CompressTabletEvents` is set), so every
+report reaches the brush; there is no platform batch to unpack.
+
+A recorded stroke is JSON (`recordedStrokeFromJson`, `recordedStrokeToJson`):
+
+```json
+{"format": "nekophoto-stroke", "version": 1, "stylus": true,
+ "samples": [{"t": 0, "x": 100, "y": 100, "pressure": 0.1, "tiltX": 0, "tiltY": 0, "twist": 0, "tangentialPressure": 0}]}
+```
+
+A bare array of samples also reads; missing fields take their defaults, and a stroke with `"stylus": false` reads with a
+mouse's neutral values whatever it holds.
+
+## The engines
+
+- **Round tip** (`BrushStroke`): takes the sample's position. Size, hardness and opacity are the options bar's; it has
+  no dynamics.
+- **MyPaint** (`MyPaintStroke`): libmypaint's first-generation `mypaint_brush_stroke_to`, on purpose (the newer entry
+  point reads uninitialised memory in 1.6), fed from the sample: pressure as given (a mouse's 0.5, as in MyPaint), tilt
+  as `tiltX / 60` and `tiltY / 60` clamped to -1..1, and `dt`. The presets' own settings do the rest.
+- **Tip brushes** (`TipStroke`): the stamp engine for imported and image brushes. Dabs are placed every
+  `spacing × size` along the path and stamped into the stroke's coverage, so colour, opacity, the selection, erasing,
+  masks, the preview and undo are the round tip's. Everything that varies per dab comes from the dynamics.
+
+A tip brush reads pressure only from a stylus: a mouse is full pressure, as in Photoshop, unless the brush turns on
+Mouse speed as pressure.
+
+## Dynamics
+
+A tip brush's `dynamics` is a list of mappings. Each reads one input, shapes it through a curve, and scales the result
+into a range:
+
+```
+output = offset + depth × curve(input)        (the range runs from offset to offset + depth; depth may be negative)
+```
+
+### Inputs
+
+| Input | Value, 0..1 |
+|---|---|
+| Pressure | the pen's pressure (a mouse: 1, or its speed when simulated) |
+| Speed | `speed / scale`, `scale` in document pixels per second (default 2000) |
+| Tilt | `tiltMagnitude` |
+| TiltDirection | `tiltAzimuth` as a fraction of a turn |
+| Twist | `twistAngle` as a fraction of a turn |
+| Random | a draw from the stroke's seeded generator; on angles, -1..1 |
+| StrokeProgress | `distance / (scale × diameter)` with a `scale`; else `progress` when the stroke's length is known; else 25 diameters, Photoshop's default Fade |
+
+### Targets and the combination rule
+
+| Target | Base | Range |
+|---|---|---|
+| Size | the brush size in pixels | 0..10000 |
+| Flow | the brush's flow (each dab's alpha) | 0..1 |
+| Opacity | 1: the most a dab builds the stroke up to | 0..1 |
+| Angle | the tip's angle, degrees | circular |
+| Roundness | the tip's roundness | 0.01..1 |
+| Spacing | the brush's spacing, a fraction of the size | 0.01..10 |
+| Scatter | the brush's scatter | 0..10 |
+| GrainDepth | the grain's depth | 0..1 |
+| GrainRotation | 0 degrees (the grain turned about the document's origin) | circular |
+
+One rule for every brush and every importer:
+
+- **Scalar targets:** `value = base × Π (offset + depth × curve(input))`, over the mappings on that target in the order
+  listed, then clamped to the target's range. There is no additive term.
+- **Circular targets** (Angle, GrainRotation): `value = base + Σ (offset + depth × curve(input))`, in degrees. A
+  multiple of an angle means nothing, and a sum stays continuous across a turn: a mapping from TiltDirection with a depth
+  of 360 turns the tip with the pen, with no jump where the azimuth wraps.
+
+A Random mapping on an angle is centred: the draw runs -1..1 and the curve shapes its size and keeps its sign, so a jitter
+of 60 turns up to 60 degrees either way. Elsewhere a jitter is a Random mapping with `offset` 1 and a negative `depth`:
+the target drops by up to that fraction.
+
+The spacing is measured in the size without its Random mappings, so a size jitter varies the dabs without making the
+spacing stagger.
+
+### Curves
+
+A curve maps 0..1 to 0..1 through points: straight lines between them (Linear), or a monotone cubic through them
+(Smooth: PCHIP, Fritsch–Carlson tangents), which cannot overshoot, so a curve never leaves the range its points span and
+a rising curve never dips. No points is the identity.
+
+### Randomness
+
+Each stroke gets a seed (fresh per stroke in the app, recorded with an action's `brush.stroke` as `seed`, and fixed in
+tests). Every dab draws a size, a flow and a signed angle value, then the flips and scatter it uses, in that order,
+whether or not a mapping reads them; draws for Random mappings on the other targets come after, only when such a mapping
+exists. So a fixed seed paints the same stroke on replay and in the harness, and brushes painted before the other targets
+existed paint as they did.
+
+### Options
+
+- **Density by spacing** (`densityBySpacing`, off by default). For repeated source-over dabs, `1 - A = Π (1 - aᵢ)`; with
+  the option on, a dab's alpha `a` is spread over the spacing actually used, `a(s) = 1 - (1 - a)^(s / r)`, where `r` is
+  `densityReference` (25% by default) and `s` the step divided by the dab size. Applied per pixel through a 256-entry
+  table. In the harness a light flow's interior alpha stays within about 1% from 2% to 50% spacing with the option on,
+  and falls from 1.0 to 0.5 over the same range with it off.
+- **Mouse speed as pressure** (`mousePressureFromSpeed`, off by default, labelled simulated). For a mouse only:
+  `pressure = clamp(1.1 - speed / 1500, 0.25, 1) × min(1, 0.3 + 0.7 × distance / (2 × diameter))`: slow presses harder,
+  a flick lifts, and the first two diameters ramp in. A stylus's pressure is never replaced.
+
+### On disk
+
+`brush.json` version 2 keeps the mappings:
+
+```json
+"dynamics": [
+  {"input": "pressure", "target": "size", "offset": 0.25, "depth": 0.75, "curve": [[0, 0], [0.4, 0.7], [1, 1]], "smooth": true},
+  {"input": "random", "target": "angle", "offset": 0, "depth": 60}
+],
+"densityBySpacing": false, "densityReference": 0.25, "mousePressureFromSpeed": false
+```
+
+A version 1 preset (with `pressureSize`, `minimumSize`, `pressureFlow`, `sizeJitter`, `flowJitter`, `angleJitter` and no
+`dynamics`) opens with those as mappings (`legacyDynamics`), in the order the old engine multiplied them, and paints as
+it did; saving writes version 2.
+
+### Editing
+
+The Dynamics… button in the Brush tool's options bar (for a tip brush) edits pressure on size and on flow, each as a
+curve with a minimum, and the two options. The brush's other mappings stay as they are. The changes are saved to the
+brush's folder with a new preview.
+
+## Importers
+
+What each format's settings become. What a format holds that has no mapping yet is listed in the import's notes.
+
+**Photoshop (`.abr` 6–10).** A control (`bVTy`) drives its target from the minimum up, and a jitter follows it:
+
+| Photoshop | Mappings |
+|---|---|
+| Size jitter, control Pen Pressure / Pen Tilt / Fade, Minimum Diameter | Pressure → Size (`offset` minimum, `depth` 1 − minimum); Tilt → Size (full upright, the minimum lying flat); StrokeProgress → Size over the fade's steps × spacing; Random → Size |
+| Angle jitter, control Pen Tilt, Direction | Random → Angle (jitter × 180 degrees); TiltDirection → Angle (depth 360); Direction sets `followStroke` |
+| Roundness jitter and control, Minimum Roundness | the same shapes on Roundness |
+| Scatter, control Pen Pressure | `scatter`; Pressure → Scatter |
+| Transfer: Flow jitter and control | on Flow |
+| Transfer: Opacity jitter and control | on Opacity (the most a dab builds up to) |
+
+Texture, dual brush, colour dynamics, wet edges, noise and build-up are noted as left out. Versions 1 and 2 hold no
+dynamics.
+
+**Procreate (`.brushset`, `.brush`).** `dynamicsPressureSize` → Pressure → Size from 1 − that amount; `dynamicsJitterSize`
+→ Random → Size; `dynamicsPressureOpacity` → Pressure → Flow from 1 − that amount (Procreate's opacity is per dab);
+`dynamicsJitterOpacity` → Random → Flow; `shapeScatter` → Random → Angle (× 180 degrees). Speed and tilt settings are not
+decoded yet.
+
+**Clip Studio (`.sut`).** `BrushSizeEffector` with pressure → Pressure → Size from the effector's minimum;
+`BrushOpacityEffector` or `BrushFlowEffector` with pressure → Pressure → Flow from 0. The effector's own curve is not
+decoded yet (it needs Clip Studio to make reference files), so the response is linear; when it is, it goes into the
+mapping's curve with no change to the engine.
+
+## The parity harness
+
+`tests/brush_harness.{h,cpp}` paints recorded strokes with a set of brushes and measures the result.
+
+**Fixtures.** Made in code (`standardFixtures`): a pressure ramp (0 → 1 → 0), a pressure sine, a speed sweep (slow,
+fast, slow at even timing), a tilt sweep, a twist sweep (a full turn, wrapping from 180 to -180 halfway), a straight
+line, a circle, an S curve, corners, a fast flick (ten reports over 240 pixels) and a long slow stroke (720 reports);
+and the JSON files under `tests/brush_fixtures/` (a recorded pen hook with tilt, twist and tangential pressure, and a
+mouse scribble with uneven timing). Every input a mapping can read has a fixture that moves it.
+
+**Presets.** The round tip hard and soft, the eraser (on an opaque grey layer), tip brushes made in code (a square tip
+following the stroke; a textured tip with jitters, scatter, count and pressure; a flat tip with a mapping on every pen
+input; a tight light-flow tip with density by spacing and mouse speed as pressure), the tips the importers make of their
+own tests' files (the Photoshop `.abr` "Leaf", Procreate's "Soft Ink", Clip Studio's "Soft Pencil" and "Spray" when the
+build has SQLite; `tests/brush_import_fixtures.h` writes those files for both), and four MyPaint presets (pencil,
+charcoal, dry brush, calligraphy) when the build has libmypaint. Tip brushes use a fixed seed.
+
+**Metrics** (`measure`): where paint landed (bounding box), total and mean alpha, the width across the stroke at ten
+stations along it (pixels at 10% alpha or more), the peak alpha at each, the mean distance from 90% to 10% of the peak
+(the edge), and the start and end taper (the width at 5% and 95% over the median width).
+
+**Baseline.** `brush_parity` (a ctest) paints every fixture with every preset, on the worker pool and serially (the two
+must agree), and holds each render's FNV-1a hash to `tests/brush_parity_baseline.txt`, which also carries the
+measurements so a change shows how a stroke moved, not only that it did. `COMPOSITOR_UPDATE_BRUSH_PARITY=1
+build/tests/brush_parity` rewrites it after an intentional change. GCC and Clang builds produce the same file. The test
+also checks sample derivation (unwrapping, speed, progress), the density option across 2–50% spacing, and the mouse
+speed option.
+
+**By hand.** `build/tests/brush_parity_tool list` names the fixtures and presets; `dump <folder> [filter]` writes every
+render as a PNG with `metrics.txt` and the fixtures as JSON; `render <stroke.json> <preset> <out.png>` paints one
+recorded stroke.
+
+`render_hash_tests` keeps its own brush scenes, and `brush_dynamics_tests` covers curves, the combination rule, circular
+targets, the inputs and the migration of old presets.
+
+## Automation
+
+`brush.stroke` takes, besides `points`, `pressure` and `pressures`: `tilts` (`[tiltX, tiltY]` degrees per point),
+`twists` (degrees per point), `times` (seconds per point; 8 ms apart by default) and `seed` (the tip brushes' jitter).
+Any pen field makes the stroke a stylus's. A recorded action keeps them (and, for a preset, the times and the seed), so
+a stroke replays exactly.
+
+## Not yet
+
+- **16 bits.** The tip engine's coverage is 8-bit (`GrayImage`) like the round tip's. The samples and the dynamics are
+  plain doubles and do not assume a depth; the parts to port are `TipStroke::dab` (the coverage write and the density
+  table, 256 entries today) and the coverage grid it writes into, which the 16-bit brush work brings.
+- Clip Studio's effector curves, texture coordinate modes (canvas, stroke, dab), tilt and twist shaping the tip's
+  geometry, stabilisation, a continuous swept round brush, and MyPaint's newer inputs.

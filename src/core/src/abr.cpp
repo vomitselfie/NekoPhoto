@@ -103,13 +103,15 @@ std::optional<BrushImport> readOld(Reader& r, int version, const std::string& na
 
 // ---- Versions 6 to 10 ----------------------------------------------------------------------------
 
-/// A dynamics setting (brVr): its jitter as 0..1, and whether pen pressure controls it.
-struct Variation { double jitter = 0; bool pressure = false; double minimum = 0; };
+/// One of Photoshop's dynamics: its jitter, what controls it (brVr, bVTy: 0 off, 1 fade, 2 pen pressure, 3 pen tilt,
+/// 4 stylus wheel, 6 direction on the angle), the fade's steps and the minimum the control goes down to.
+struct Variation { double jitter = 0; int control = 0; double steps = 0; double minimum = 0; };
 Variation variation(const Descriptor* d) {
     Variation v;
     if (!d) return v;
     v.jitter = d->numberAt("jitter", 0) / 100.0;
-    v.pressure = int(d->numberAt("bVTy", 0)) == 2;   // 0 off, 1 fade, 2 pen pressure, 3 tilt, 4 stylus wheel
+    v.control = int(d->numberAt("bVTy", 0));
+    v.steps = std::clamp(d->numberAt("fStp", 25), 1.0, 9999.0);
     v.minimum = d->numberAt("Mnm ", 0) / 100.0;
     return v;
 }
@@ -182,25 +184,41 @@ std::optional<BrushImport> readSections(Reader& r, const std::string& name, std:
             }
             if (!tip.shape) continue;
             preset.diameter = std::clamp(diameter, 1.0, 2000.0);
+            // Dynamics as mappings (brushdynamics.h): a control (pen pressure, pen tilt, fade) drives its target from
+            // the minimum up, and a jitter lowers it by up to its amount at random, in that order.
+            auto add = [&](DynamicsInput input, DynamicsTarget target, double offset, double depth, double scale = 0) {
+                tip.dynamics.push_back(dynamicsMapping(input, target, offset, depth, scale));
+            };
+            auto control = [&](const Variation& v, DynamicsTarget target, double minimum) {
+                const double low = std::clamp(minimum, 0.0, 1.0);
+                if (v.control == 2) add(DynamicsInput::Pressure, target, low, 1 - low);
+                else if (v.control == 3) add(DynamicsInput::Tilt, target, 1, low - 1);   // upright is full, flat the minimum
+                else if (v.control == 1 && v.steps > 0) add(DynamicsInput::StrokeProgress, target, 1, low - 1, v.steps * tip.spacing);
+                if (v.jitter > 0) add(DynamicsInput::Random, target, 1, -std::min(1.0, v.jitter));
+            };
             if (entry.numberAt("useTipDynamics", 0)) {
-                const Variation size = variation(entry.item("szVr"));
-                tip.sizeJitter = size.jitter;
-                if (size.pressure) { tip.pressureSize = 1; tip.minimumSize = entry.numberAt("minimumDiameter", 0) / 100.0; }
+                control(variation(entry.item("szVr")), DynamicsTarget::Size, entry.numberAt("minimumDiameter", 0) / 100.0);
                 const Variation angle = variation(entry.item("angleDynamics"));
-                tip.angleJitter = angle.jitter * 180;
-                if (int(entry.item("angleDynamics") ? entry.item("angleDynamics")->numberAt("bVTy", 0) : 0) == 6) tip.followStroke = true;   // direction
+                if (angle.control == 3) add(DynamicsInput::TiltDirection, DynamicsTarget::Angle, 0, 360);   // pen tilt turns the tip
+                if (angle.jitter > 0) add(DynamicsInput::Random, DynamicsTarget::Angle, 0, std::min(180.0, angle.jitter * 180));
+                if (angle.control == 6) tip.followStroke = true;   // direction
+                const Variation roundness = variation(entry.item("roundnessDynamics"));
+                control(roundness, DynamicsTarget::Roundness, entry.numberAt("minimumRoundness", 0) / 100.0);
                 tip.randomFlipX = entry.numberAt("flipX", 0) != 0;
                 tip.randomFlipY = entry.numberAt("flipY", 0) != 0;
             }
             if (entry.numberAt("useScatter", 0)) {
-                tip.scatter = variation(entry.item("scatterDynamics")).jitter;
+                const Variation scatter = variation(entry.item("scatterDynamics"));
+                tip.scatter = scatter.jitter;
+                if (scatter.control == 2) add(DynamicsInput::Pressure, DynamicsTarget::Scatter, 0, 1);
                 tip.scatterBothAxes = entry.numberAt("bothAxes", 0) != 0;
                 tip.count = int(std::lround(entry.numberAt("Cnt ", 1)));
             }
             if (entry.numberAt("usePaintDynamics", 0)) {
+                // Photoshop's Transfer: flow per dab, and opacity as the most a dab builds up to.
                 const Variation flow = variation(entry.item("prVr")), opacity = variation(entry.item("opVr"));
-                tip.flowJitter = std::max(flow.jitter, opacity.jitter);
-                if (flow.pressure || opacity.pressure) tip.pressureFlow = 1;
+                control(flow, DynamicsTarget::Flow, flow.minimum);
+                control(opacity, DynamicsTarget::Opacity, opacity.minimum);
             }
             for (const char* feature : {"useTexture", "useColorDynamics", "Wtdg", "Nose", "Rpt "})
                 if (entry.numberAt(feature, 0)) ignored[feature]++;

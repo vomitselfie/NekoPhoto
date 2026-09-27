@@ -577,7 +577,13 @@ void addBrushScenes() {
         TipStroke stroke(grid, tip, diameter, 99);
         NEED(stroke.isValid());
         int i = 0;
-        for (Point p : wave(20, 240, 80, 45)) stroke.strokeTo({p, pressure ? 0.2 + 0.8 * std::fabs(std::sin(i++ * 0.13)) : 1.0});
+        for (Point p : wave(20, 240, 80, 45)) {
+            BrushSample input;
+            input.position = p;
+            input.stylus = true;
+            input.pressure = pressure ? 0.2 + 0.8 * std::fabs(std::sin(i++ * 0.13)) : 1.0;
+            stroke.strokeTo(input);
+        }
         return hashCommit(grid);
     };
     scene("brush/tip_square", [=] {
@@ -596,15 +602,10 @@ void addBrushScenes() {
         for (int y = 0; y < 32; y++) for (int x = 0; x < 32; x++) grain->at(x, y) = uint8_t(mix(uint32_t(y * 32 + x)) & 255);
         tip.grain = grain;
         tip.spacing = 0.1;
-        tip.angleJitter = 60;
-        tip.sizeJitter = 0.4;
+        tip.dynamics = legacyDynamics({.sizeJitter = 0.4, .flowJitter = 0.3, .angleJitter = 60, .pressureSize = 1, .minimumSize = 0.2, .pressureFlow = 0.5});
         tip.scatter = 0.5;
         tip.count = 2;
-        tip.flowJitter = 0.3;
         tip.roundness = 0.6;
-        tip.pressureSize = 1;
-        tip.minimumSize = 0.2;
-        tip.pressureFlow = 0.5;
         return tipStroke(tip, 30, true);
     });
     // MyPaint is exact across runs (libmypaint's jitter is seeded; mypaint_tests checks that). Its output also
@@ -624,10 +625,11 @@ void addBrushScenes() {
                 NEED(stroke.isValid());
                 int i = 0;
                 for (Point p : wave(20, 220, 70, 40)) {
-                    MyPaintInput input;
-                    input.document = p;
+                    BrushSample input;   // a pen, events exactly 1/60 s apart
+                    input.position = p;
+                    input.stylus = true;
                     input.pressure = 0.3 + 0.6 * std::fabs(std::sin(i++ * 0.1));
-                    input.seconds = 1.0 / 60;
+                    input.dt = 1.0 / 60;
                     stroke.strokeTo(input);
                 }
                 stroke.finish();

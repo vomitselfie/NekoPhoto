@@ -3,6 +3,7 @@
 #include <QColorDialog>
 #include "TextLayer.h"
 #include "BrushImporter.h"
+#include "BrushDynamicsDialog.h"
 #include "BrushLibrary.h"
 #include "PresetLibrary.h"
 #include "BrushPicker.h"
@@ -318,6 +319,18 @@ QWidget* ToolOptionsBar::buildBrushOptions() {
     spin(tr("Size"), "size", 1, 2000, session_->brushSettings.diameter, " px", [this](double v) { session_->brushSettings.diameter = v; });
     spin(tr("Hardness"), "hardness", 0, 100, session_->brushSettings.hardness * 100, "%", [this](double v) { session_->brushSettings.hardness = v / 100; });
     spin(tr("Opacity"), "opacity", 1, 100, session_->brushSettings.opacity * 100, "%", [this](double v) { session_->brushSettings.opacity = v / 100; });
+    // A tip brush's pressure curves, density and mouse options.
+    auto* dynamics = new QToolButton;
+    dynamics->setText(BrushDynamicsDialog::buttonText());
+    dynamics->setAutoRaise(true);
+    connect(dynamics, &QToolButton::clicked, this, [this] { BrushDynamicsDialog::edit(window(), session_->brushPreset); });
+    syncers_.push_back([this, dynamics] {
+        const BrushPreset* preset = session_->brushPreset.isEmpty() ? nullptr : BrushLibrary::find(session_->brushPreset);
+        const bool tip = preset && preset->engine == BrushPreset::Engine::Tip;
+        dynamics->setEnabled(tip);
+        dynamics->setToolTip(BrushDynamicsDialog::unavailableText());
+    });
+    h->addWidget(dynamics);
     h->addStretch();
     return w;
 }

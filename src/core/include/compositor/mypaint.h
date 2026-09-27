@@ -6,6 +6,7 @@
 // Optional at build time (COMPOSITOR_HAVE_MYPAINT).
 #pragma once
 #include "brush.h"
+#include "brushsample.h"
 #include <memory>
 #include <string>
 
@@ -21,14 +22,6 @@ void warmMyPaint(const std::string& brushJson);
 struct MyPaintPresetInfo { double radius = 2; bool eraser = false; bool valid = false; };
 MyPaintPresetInfo myPaintPresetInfo(const std::string& brushJson);
 
-/// One pointer event: a document point with the pen's pressure (0..1; 0.5 for a mouse), tilt (-1..1) and the
-/// seconds since the previous event.
-struct MyPaintInput {
-    Point document;
-    double pressure = 0.5, xtilt = 0, ytilt = 0;
-    double seconds = 0;
-};
-
 class MyPaintStroke {
 public:
     /// Paints onto `grid`, a stroke begun on a layer's pixels (not a mask), with the preset `brushJson`. The
@@ -42,7 +35,9 @@ public:
 
     bool isValid() const;
     const std::string& error() const { return error_; }
-    void strokeTo(const MyPaintInput& input);
+    /// The next sample of the stroke: its position, pressure (a mouse's 0.5 as in MyPaint), tilt (degrees, 60 read
+    /// as full tilt) and `dt`, the seconds since the previous sample, which BrushSampleTrack fills.
+    void strokeTo(const BrushSample& input);
     /// Whether the brush has caught up with the pointer. Presets with slow position tracking follow the
     /// pointer with a lag and only move on input, so while it is held still the caller repeats the last
     /// input until this is true.
@@ -56,7 +51,7 @@ private:
     BrushStroke& grid_;
     std::unique_ptr<Engine> engine_;
     std::string error_;
-    Point last_;
+    BrushSample last_;
     bool started_ = false, finished_ = false;
 };
 

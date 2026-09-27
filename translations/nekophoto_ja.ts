@@ -2300,6 +2300,79 @@ Add one from the Layers panel or Layer &gt; New Adjustment Layer.</source>
     </message>
 </context>
 <context>
+    <name>app::BrushDynamicsDialog</name>
+    <message>
+        <source>Dynamics…</source>
+        <translation>ダイナミクス...</translation>
+    </message>
+    <message>
+        <source>Brush dynamics: pen pressure curves and spacing for imported tip brushes. The round tip and the MyPaint presets keep their own.</source>
+        <translation>ブラシのダイナミクス: 読み込んだ先端ブラシの筆圧カーブと間隔の設定です。円形の先端と MyPaint プリセットは独自の設定を使います。</translation>
+    </message>
+    <message>
+        <source>Brush Dynamics: %1</source>
+        <translation>ブラシのダイナミクス: %1</translation>
+    </message>
+    <message>
+        <source>Size follows pen pressure</source>
+        <translation>サイズを筆圧に追従</translation>
+    </message>
+    <message>
+        <source>Flow follows pen pressure</source>
+        <translation>流量を筆圧に追従</translation>
+    </message>
+    <message>
+        <source>Density by spacing</source>
+        <translation>間隔に合わせて濃度を保つ</translation>
+    </message>
+    <message>
+        <source>Spacing leaves the stroke&apos;s density alone: closer dabs each lay down less, so the stroke looks the same at any spacing. Off, closer dabs build up more paint.</source>
+        <translation>間隔を変えてもストロークの濃度は変わりません。間隔が狭いほど 1 つのブラシ跡が塗る量を減らすので、どの間隔でも同じ濃さに見えます。オフのときは、間隔が狭いほど絵の具が重なって濃くなります。</translation>
+    </message>
+    <message>
+        <source>Mouse speed as pressure (simulated)</source>
+        <translation>マウスの速度を筆圧として使う (擬似)</translation>
+    </message>
+    <message>
+        <source>For a mouse only: moving slowly presses harder and a quick flick lifts, with a short ramp in at the start. A pen always uses its own pressure.</source>
+        <translation>マウス専用: ゆっくり動かすと強く、素早く払うと弱くなり、描き始めは少しずつ強まります。ペンでは常にペン自身の筆圧を使います。</translation>
+    </message>
+    <message numerus="yes">
+        <source>Other dynamics of this brush (%n: jitter, tilt, fade and the like) stay as they are.</source>
+        <translation>
+            <numerusform>このブラシのその他のダイナミクス (%n 個: ジッター、傾き、フェードなど) はそのまま残ります。</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Pressure across, response up. Drag a point to move it, click to add one, double-click to remove it.</source>
+        <translation>横軸が筆圧、縦軸が反応です。点をドラッグして移動、クリックで追加、ダブルクリックで削除します。</translation>
+    </message>
+    <message>
+        <source>Minimum</source>
+        <translation>最小</translation>
+    </message>
+    <message>
+        <source>What the lightest touch still gives, as a share of the full value</source>
+        <translation>最も軽いタッチでも得られる値 (最大値に対する割合)</translation>
+    </message>
+    <message>
+        <source>Smooth</source>
+        <translation>滑らか</translation>
+    </message>
+    <message>
+        <source>A smooth curve through the points; off, straight lines between them</source>
+        <translation>点を通る滑らかなカーブ。オフのときは点の間を直線で結びます</translation>
+    </message>
+    <message>
+        <source>Brush Dynamics</source>
+        <translation>ブラシのダイナミクス</translation>
+    </message>
+    <message>
+        <source>The brush could not be saved: %1</source>
+        <translation>ブラシを保存できませんでした: %1</translation>
+    </message>
+</context>
+<context>
     <name>app::BrushImporter</name>
     <message>
         <source>nothing in the image would paint</source>

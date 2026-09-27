@@ -277,11 +277,12 @@ public:
     /// round tip. A MyPaint preset paints layer pixels only (a mask gets the round tip); a tip brush paints
     /// masks too.
     QString brushPreset;
-    /// The pen as the canvas last saw it: pressure 0..1, tilt -1..1, the event time in milliseconds, and
-    /// whether a tablet sent it. A mouse is half pressure to MyPaint (as in MyPaint) and full pressure to tip
-    /// brushes (as in Photoshop).
-    struct PenSample { double pressure = 0.5, xtilt = 0, ytilt = 0; qint64 timeMs = 0; bool tablet = false; };
-    PenSample pen;
+    /// The pen as the canvas last saw it, raw (brushsample.h): pressure, tilt in degrees, twist, tangential pressure,
+    /// the event time in seconds and whether a stylus sent it; a mouse sends neutral values. The brush takes its
+    /// position from the point it is given.
+    compositor::BrushSample pen;
+    /// The seed of the next stroke's tip-brush jitter (a replayed stroke); a fresh one per stroke when unset.
+    std::optional<uint32_t> brushSeed;
     /// Photoshop's opacity keys: 1 = 10% ... 9 = 90%, 0 = 100%; two digits typed quickly set an exact value.
     void typeOpacityDigit(int digit);
     void changeBrushHardness(bool increase);
@@ -857,9 +858,11 @@ private:
     std::unique_ptr<compositor::BrushStroke> stroke_;
     std::unique_ptr<compositor::MyPaintStroke> myPaint_;   // paints stroke_ when a MyPaint preset is chosen
     std::unique_ptr<compositor::TipStroke> tipStroke_;     // stamps into stroke_ when a tip brush is chosen
+    compositor::BrushSampleTrack sampleTrack_;   // derives each brush sample from the ones before
+    compositor::BrushSample nextSample(QPointF documentPoint);
     void tipTo(QPointF documentPoint);
-    qint64 lastPenTime_ = 0;
     void myPaintTo(QPointF documentPoint);
+    uint32_t strokeSeed_ = 0;
     QTimer healPreview_;   // a healing stroke shows its result once the pointer pauses
     QTimer myPaintSettle_; // while the pointer rests, a MyPaint brush with slow tracking catches up to it
     compositor::Uuid strokeLayerId_;
@@ -877,7 +880,7 @@ private:
     uint64_t documentRevision_ = 0;
     std::optional<compositor::AnimationFrame> previewBase_;   // the layer states playback began from
     std::vector<QPointF> strokePoints_;   // the stroke so far, for an action recording it
-    std::vector<double> strokePressures_;
+    std::vector<compositor::BrushSample> strokeSamples_;   // the pen at each of those points
     bool timelineEdit(const QString& name, const std::function<bool(compositor::Document&)>& change);
     QString importedName_;   // the title of a document that came from an import and has no project path
     std::shared_ptr<const compositor::Image> cloneSample_;
