@@ -1,5 +1,6 @@
 #include "Style.h"
 #include "PreferencesDialog.h"
+#include "ColorManagement.h"
 #include "Automation.h"
 #include "Theme.h"
 #include "Language.h"
@@ -139,6 +140,8 @@ PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent) {
     recoveryHint->setStyleSheet(hintStyle());
     recoveryRow->addWidget(recoveryHint, 1);
     layout->addWidget(recovery);
+
+    layout->addWidget(color::monitorPreferences(this));   // the canvas's colour transform (ColorManagement.h)
 
     auto* automation = new QGroupBox(tr("Automation"));
     auto* av = new QVBoxLayout(automation);
