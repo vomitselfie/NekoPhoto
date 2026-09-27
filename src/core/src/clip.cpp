@@ -178,7 +178,7 @@ std::optional<PsdImport> importClip(const std::string& path, std::string* error)
                 if (csp_clip_decode_layer_mask_gray8(doc.get(), i, &maskRaw, &mw, &mh, &maskStride, &mx, &my, message, sizeof message) == CSP_CLIP_OK) {
                     std::unique_ptr<uint8_t, Freer> maskPixels(maskRaw);
                     const bool placed = layer.asset.has_value();
-                    const int lw = placed ? layer.asset->image->width() : document.width, lh = placed ? layer.asset->image->height() : document.height;
+                    const int lw = placed ? layer.asset->image.u8()->width() : document.width, lh = placed ? layer.asset->image.u8()->height() : document.height;
                     const int lx = placed ? int(layer.transform.origin.x) : 0, ly = placed ? int(layer.transform.origin.y) : 0;
                     auto mask = std::make_shared<GrayImage>(lw, lh, maskRaw[0]);
                     for (int row = 0; row < lh; row++) {

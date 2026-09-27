@@ -285,8 +285,8 @@ bool encodeIco(const Image& flattened, const std::vector<int>& requested, std::v
         if (document) {
             const std::string name = std::to_string(size) + "x" + std::to_string(size);
             for (const Layer& l : document->layers)
-                if (!l.isGroup && l.name == name && l.asset && l.asset->image && l.asset->image->width() == size && l.asset->image->height() == size)
-                    return fromImage(*l.asset->image);
+                if (!l.isGroup && l.name == name && l.asset && l.asset->image.u8() && l.asset->image.u8()->width() == size && l.asset->image.u8()->height() == size)
+                    return fromImage(*l.asset->image.u8());
         }
         if (!flat) flat = fromImage(flattened);
         if (flat->width == size && flat->height == size) return *flat;

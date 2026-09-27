@@ -202,7 +202,7 @@ struct Writer {
             const Layer& l = *it->second;
             styleReach(l);
             if (l.isGroup) continue;
-            if (!l.asset || !l.asset->image) return canvas;
+            if (!l.asset || !l.asset->image.u8()) return canvas;
             const Rect b = l.transform.bounds();
             area = any ? area.unionWith(b) : b;
             any = true;
@@ -367,10 +367,10 @@ struct Writer {
 
     std::string folderMask(const Layer& folder) {
         std::string out;
-        if (folder.mask && folder.mask->enabled && folder.mask->asset.image) {
+        if (folder.mask && folder.mask->enabled && folder.mask->asset.image.u8()) {
             GrayImage coverage(document.width, document.height, 0);
             const uint8_t outside = folder.mask->asset.thumbnail ? LayerMask::background(*folder.mask->asset.thumbnail) : 255;
-            sampleMaskCoverage(folder.mask->asset.image, folder.maskTransform(), document.rect(), 1, outside, coverage, false);
+            sampleMaskCoverage(folder.mask->asset.image.u8(), folder.maskTransform(), document.rect(), 1, outside, coverage, false);
             Image grey(document.width, document.height);
             for (int y = 0; y < document.height; y++) {
                 const uint8_t* s = coverage.row(y);

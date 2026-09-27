@@ -176,7 +176,7 @@ bool EditorSession::beginFilterMaskEdit(const Uuid& id, bool show, QString* erro
     layer.mask = m;
     filterMaskLayer_ = layer.id;
     filterMaskOwner_ = id;
-    filterMaskSynced_ = layer.mask->asset.image;
+    filterMaskSynced_ = layer.mask->asset.image.u8();
     filterMaskShown_ = show;
     document_->layers.push_back(layer);
     setActiveLayer(layer.id);
@@ -226,14 +226,14 @@ void EditorSession::syncFilterMask() {
     if (!owner) return;
     Layer* proxy = document_->find(*filterMaskLayer_);
     Layer* layer = document_->find(*owner);
-    if (!proxy->mask || !proxy->mask->asset.image || proxy->mask->asset.image == filterMaskSynced_) return;
+    if (!proxy->mask || !proxy->mask->asset.image.u8() || proxy->mask->asset.image.u8() == filterMaskSynced_) return;
     auto stack = smartFilterStackOf(*document_, *layer);
     if (!stack || !stack->supported) return;
     // The mask as it sits on the canvas (it may have been moved).
     const int w = document_->width, h = document_->height;
     const uint8_t background = proxy->mask->placement ? LayerMask::background(*proxy->mask->asset.thumbnail) : stack->maskDefault;
     auto mask = std::make_shared<GrayImage>(w, h, background);
-    sampleMaskCoverage(*proxy->mask->asset.image, proxy->maskTransform(), document_->rect(), 1, background, *mask, false);
+    sampleMaskCoverage(*proxy->mask->asset.image.u8(), proxy->maskTransform(), document_->rect(), 1, background, *mask, false);
     stack->mask = mask;
     stack->maskBounds = {0, 0, w, h};
     stack->maskDefault = background;
@@ -245,7 +245,7 @@ void EditorSession::syncFilterMask() {
         document_->psdCarry = carry;
         emit error(QString::fromStdString(why));
     }
-    filterMaskSynced_ = proxy->mask->asset.image;
+    filterMaskSynced_ = proxy->mask->asset.image.u8();
 }
 
 } // namespace app

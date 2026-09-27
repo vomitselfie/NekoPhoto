@@ -129,7 +129,7 @@ add_library(compositor_core STATIC
     src/adjustments_more.cpp
     src/colorlookup.cpp
     src/clip.cpp
-    src/blend.cpp
+    src/blend_u8.cpp
     src/blur.cpp
     src/brushimport.cpp
     src/brush.cpp
@@ -160,6 +160,7 @@ add_library(compositor_core STATIC
     src/toning.cpp
     src/raw.cpp
     src/vectorlayer.cpp
+    src/supports.cpp
     src/svg.cpp
     src/svg_write.cpp
     src/svg_xml.cpp
@@ -181,6 +182,8 @@ add_library(compositor_core STATIC
     src/procreate.cpp
     src/project.cpp
     src/render.cpp
+    src/render_plan.cpp
+    src/render_exec_u8.cpp
     src/selection.cpp
     src/shape.cpp
     src/warp.cpp

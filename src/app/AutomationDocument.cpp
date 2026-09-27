@@ -68,7 +68,7 @@ void AutomationServer::registerDocumentHandlers() {
                 bits << (l.isLiveText() ? "text" : (l.isLiveShape() || compositor::isVectorShapeLayer(l)) ? "shape" : "pixels");
                 const Rect r = l.transform.bounds();
                 bits << QStringLiteral("%1 x %2 at (%3, %4)").arg(r.width).arg(r.height).arg(r.x).arg(r.y);
-                if (!l.asset || !l.asset->image) bits << "blank";
+                if (!l.asset || !l.asset->image.u8()) bits << "blank";
             }
             if (l.opacity < 1) bits << QStringLiteral("%1%").arg(std::lround(l.opacity * 100));
             if (l.blendMode != BlendMode::Normal) bits << QString::fromUtf8(blendModeName(l.blendMode));

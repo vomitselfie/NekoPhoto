@@ -29,7 +29,7 @@ int main(int argc, char** argv) {
             int depth = 0;
             for (auto p = l.parentId; p; p = doc.find(*p) ? doc.find(*p)->parentId : std::nullopt) depth++;
             std::printf("   %*s%s \"%s\" at %.0f,%.0f %dx%d opacity %.2f %s%s%s%s%s\n", depth * 2, "", l.isGroup ? "group" : "layer", l.name.c_str(),
-                        l.transform.origin.x, l.transform.origin.y, l.asset ? l.asset->image->width() : 0, l.asset ? l.asset->image->height() : 0, l.opacity,
+                        l.transform.origin.x, l.transform.origin.y, l.asset ? l.asset->image.u8()->width() : 0, l.asset ? l.asset->image.u8()->height() : 0, l.opacity,
                         blendModeName(l.blendMode), l.isGroup && l.passThrough ? " pass-through" : "", l.visible ? "" : " hidden", l.mask ? " masked" : "",
                         l.maskSourceId ? " clipped" : "");
         }

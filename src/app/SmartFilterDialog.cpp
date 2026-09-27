@@ -130,7 +130,7 @@ void SmartFilterDialog::preview() {
     Document copy = current;
     Layer* target = copy.find(layerId_);
     if (!target || !compositor::setSmartFilters(copy, *target, *stack, nullptr)) return;
-    session_->setPixelPreview(target->asset->image, target->transform, layerId_);
+    session_->setPixelPreview(target->asset->image.u8(), target->transform, layerId_);
     previewing_ = true;
 }
 

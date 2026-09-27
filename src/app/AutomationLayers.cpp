@@ -492,7 +492,7 @@ void AutomationServer::registerLayersHandlers() {
         // mask applied, placed and rotated as on the canvas, over the layer's bounds (masked: false for the
         // raw pixels).
         const Layer& l = layer(p);
-        if (!l.asset || !l.asset->image) fail("the layer has no pixels (a folder, adjustment or blank layer); document.overview shows each layer's kind");
+        if (!l.asset || !l.asset->image.u8()) fail("the layer has no pixels (a folder, adjustment or blank layer); document.overview shows each layer's kind");
         if (l.mask && l.mask->enabled && flag(p, "masked", true)) {
             const Rect bounds = l.transform.bounds().integral();
             if (!Document::validDimension(int(bounds.width)) || !Document::validDimension(int(bounds.height))) fail("the layer is too large to render alone; pass masked: false");
@@ -514,7 +514,7 @@ void AutomationServer::registerLayersHandlers() {
             render(solo, options, out, nullptr);
             return deliverPng(out, p, {{"id", qs(l.id)}, {"masked", true}, {"region", rectJson(bounds)}, {"transform", transformJson(l.transform)}});
         }
-        auto copy = scaledCopy(*l.asset->image, num(p, "maxSize", 1024));
+        auto copy = scaledCopy(*l.asset->image.u8(), num(p, "maxSize", 1024));
         return deliverPng(*copy, p, {{"id", qs(l.id)}, {"transform", transformJson(l.transform)}, {"pixelWidth", l.pixelWidth()}, {"pixelHeight", l.pixelHeight()}});
     });
 

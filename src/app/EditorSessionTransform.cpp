@@ -186,16 +186,16 @@ void EditorSession::commitDistort(const TransformEdit& edit) {
     beginEdit(edit.group ? QT_TRANSLATE_NOOP("History", "Distort Layers") : QT_TRANSLATE_NOOP("History", "Distort"));
     for (auto& id : ids) {
         Layer* layer = document_->find(id);
-        if (!layer || !layer->asset || !layer->asset->image) continue;
+        if (!layer || !layer->asset || !layer->asset->image.u8()) continue;
         auto target = distortTarget(*layer, edit);
         if (!target) continue;
         Rect crop;
-        auto warped = warpImageTrimmed(layer->asset->image, target->first, target->second, &crop);
+        auto warped = warpImageTrimmed(layer->asset->image.u8(), target->first, target->second, &crop);
         if (!warped) { emit error(tr("That shape can't be applied.")); continue; }
-        if (layer->mask && layer->mask->asset.image) {
+        if (layer->mask && layer->mask->asset.image.u8()) {
             LayerMask& mask = *layer->mask;
             if (!mask.placement && mask.linked) {
-                auto wm = warpMask(mask.asset.image, target->first, target->second, 0, 0);
+                auto wm = warpMask(mask.asset.image.u8(), target->first, target->second, 0, 0);
                 if (wm) {
                     if (wm->image->width() == 1 && wm->image->height() == 1) {}
                     else mask.asset = MaskAsset::make(cropGray(*wm->image, int(crop.x), int(crop.y), int(crop.width), int(crop.height)));
@@ -204,7 +204,7 @@ void EditorSession::commitDistort(const TransformEdit& edit) {
                 LayerTransform placement = mask.placement->following(layer->transform, target->first);
                 Corners carried = carriedCorners(placement, target->first, target->second);
                 if (cornersUsable(carried)) {
-                    auto wm = warpMask(mask.asset.image, placement, carried, LayerMask::background(*mask.asset.thumbnail), 0);
+                    auto wm = warpMask(mask.asset.image.u8(), placement, carried, LayerMask::background(*mask.asset.thumbnail), 0);
                     if (wm) { mask.asset = MaskAsset::make(wm->image); mask.placement = wm->transform; }
                 }
             } else if (!mask.placement) {
@@ -223,7 +223,7 @@ void EditorSession::mergeFloatingTransform(const TransformEdit& edit) {
     Layer* moving = document_->find(edit.layerId);
     Layer* source = document_->find(floating.sourceId);
     if (!moving || !source || !moving->asset || !source->asset || !edit.draft.isValid()) { cancelFloatingTransform(floating); return; }
-    std::shared_ptr<const Image> pixels = moving->asset->image;
+    std::shared_ptr<const Image> pixels = moving->asset->image.u8();
     LayerTransform placed = edit.draft;
     if (edit.corners) {
         auto warped = warpImageTrimmed(pixels, edit.draft, *edit.corners);
@@ -232,7 +232,7 @@ void EditorSession::mergeFloatingTransform(const TransformEdit& edit) {
         placed = warped->transform;
     }
     // Draw the floating pixels onto the source's own grid, growing it where they now extend past it.
-    const Image& src = *source->asset->image;
+    const Image& src = *source->asset->image.u8();
     int w = src.width(), h = src.height();
     Affine toPixels = source->transform.pixelToDocument(w, h).inverted();
     Rect floatBounds = toPixels.mapBounds(placed.pixelToDocument(pixels->width(), pixels->height()).mapBounds(Rect(0, 0, pixels->width(), pixels->height())));
@@ -246,8 +246,8 @@ void EditorSession::mergeFloatingTransform(const TransformEdit& edit) {
     grownTransform.origin = {center.x - grownTransform.size.width / 2, center.y - grownTransform.size.height / 2};
     auto onto = resampleLayer(pixels, placed, grownTransform, grown->width(), grown->height());
     compositeImage(BlendMode::Normal, *onto, 1, *grown);
-    if (source->mask && !source->mask->placement && source->mask->asset.image && (extent.width != w || extent.height != h)) {
-        const GrayImage& old = *source->mask->asset.image;
+    if (source->mask && !source->mask->placement && source->mask->asset.image.u8() && (extent.width != w || extent.height != h)) {
+        const GrayImage& old = *source->mask->asset.image.u8();
         auto mask = std::make_shared<GrayImage>(grown->width(), grown->height(), 255);
         if (old.width() == 1 && old.height() == 1) mask->fill(old.at(0, 0));
         else for (int y = 0; y < h; y++) std::memcpy(mask->row(y + int(-extent.y)) + int(-extent.x), old.row(y), size_t(w));
@@ -256,11 +256,11 @@ void EditorSession::mergeFloatingTransform(const TransformEdit& edit) {
     // The selection follows the pixels.
     if (document_->selection && document_->selection->coverage) {
         std::shared_ptr<GrayImage> moved;
-        if (edit.corners) moved = warpCoverage(*document_->selection->coverage, floating.original, floating.pixelWidth, floating.pixelHeight, *edit.corners);
+        if (edit.corners) moved = warpCoverage(*document_->selection->coverage.u8(), floating.original, floating.pixelWidth, floating.pixelHeight, *edit.corners);
         else {
             Affine map = floating.original.pixelToDocument(floating.pixelWidth, floating.pixelHeight).inverted().concatenating(edit.draft.pixelToDocument(floating.pixelWidth, floating.pixelHeight));
             Affine inv = map.inverted();
-            const GrayImage& cov = *document_->selection->coverage;
+            const GrayImage& cov = *document_->selection->coverage.u8();
             moved = std::make_shared<GrayImage>(cov.width(), cov.height(), 0);
             for (int y = 0; y < cov.height(); y++) for (int x = 0; x < cov.width(); x++) {
                 Point p = inv.apply({x + 0.5, y + 0.5});
@@ -402,13 +402,13 @@ std::optional<Uuid> EditorSession::layerAt(QPointF documentPoint) const {
     auto layers = renderLayers(document_->layers);
     for (auto it = layers.rbegin(); it != layers.rend(); ++it) {
         const Layer* layer = *it;
-        if (!layer->asset || !layer->asset->image) continue;
+        if (!layer->asset || !layer->asset->image.u8()) continue;
         LayerTransform t = displayedTransform(*layer);
         if (!t.contains(toPoint(documentPoint))) continue;
-        Point p = t.pixelToDocument(layer->asset->image->width(), layer->asset->image->height()).inverted().apply(toPoint(documentPoint));
+        Point p = t.pixelToDocument(layer->asset->image.u8()->width(), layer->asset->image.u8()->height()).inverted().apply(toPoint(documentPoint));
         int x = int(std::floor(p.x)), y = int(std::floor(p.y));
-        if (x < 0 || y < 0 || x >= layer->asset->image->width() || y >= layer->asset->image->height()) continue;
-        if (layer->asset->image->pixel(x, y)[3] > 0) return layer->id;
+        if (x < 0 || y < 0 || x >= layer->asset->image.u8()->width() || y >= layer->asset->image.u8()->height()) continue;
+        if (layer->asset->image.u8()->pixel(x, y)[3] > 0) return layer->id;
     }
     return std::nullopt;
 }
@@ -419,14 +419,14 @@ std::optional<Size> EditorSession::transformPixelSize() const {
     if (transformEdit_ && transformEdit_->mask) return std::nullopt;
     if (transformEdit_ && transformEdit_->floating) return Size(transformEdit_->floating->pixelWidth, transformEdit_->floating->pixelHeight);
     const Layer* active = activeLayer();
-    if (!active || !active->asset || !active->asset->image) return std::nullopt;
-    return Size(active->asset->image->width(), active->asset->image->height());
+    if (!active || !active->asset || !active->asset->image.u8()) return std::nullopt;
+    return Size(active->asset->image.u8()->width(), active->asset->image.u8()->height());
 }
 
 void EditorSession::redrawShape(Layer& layer) {
     if (!layer.isLiveShape() || !layer.asset) return;
     int w = std::max(1, int(std::lround(layer.transform.size.width))), h = std::max(1, int(std::lround(layer.transform.size.height)));
-    if ((w == layer.asset->image->width() && h == layer.asset->image->height()) || (long long)w * h > Document::pixelBudget) return;
+    if ((w == layer.asset->image.u8()->width() && h == layer.asset->image.u8()->height()) || (long long)w * h > Document::pixelBudget) return;
     auto image = shapeImage(layer.shape->kind, w, h, layer.shape->red, layer.shape->green, layer.shape->blue, layer.shape->cornerRadius);
     // A mask that follows the layer's pixel grid stays exactly where it is while that grid changes size.
     if (layer.mask && !layer.mask->placement) layer.mask->placement = layer.maskTransform();

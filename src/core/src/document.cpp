@@ -124,7 +124,7 @@ uint8_t LayerMask::background(const GrayImage& thumbnail) {
 }
 
 std::optional<LayerTransform> LayerMask::placementMovingLayer(const LayerTransform& from, const LayerTransform& to) const {
-    if (!asset.image || (asset.image->width() <= 1 && asset.image->height() <= 1)) return std::nullopt;
+    if (!asset.image.u8() || (asset.image.u8()->width() <= 1 && asset.image.u8()->height() <= 1)) return std::nullopt;
     std::optional<LayerTransform> moved;
     if (linked) { if (placement) moved = placement->following(from, to); }
     else moved = placement ? *placement : from;
@@ -133,7 +133,7 @@ std::optional<LayerTransform> LayerMask::placementMovingLayer(const LayerTransfo
 }
 
 Layer::Layer(Asset asset_, Point origin) : id(makeUuid()), asset(std::move(asset_)) {
-    transform = LayerTransform(origin, Size(double(asset->image->width()), double(asset->image->height())));
+    transform = LayerTransform(origin, Size(double(asset->image.width()), double(asset->image.height())));
     name = asset->name;
 }
 
@@ -141,20 +141,20 @@ Layer::Layer(std::string name_, Size blankSize) : id(makeUuid()), transform(Poin
 
 bool Layer::operator==(const Layer& o) const {
     return id == o.id && name == o.name && visible == o.visible && transform == o.transform
-        && (asset ? asset->image : nullptr) == (o.asset ? o.asset->image : nullptr)
+        && (asset ? asset->image : AnyImage()) == (o.asset ? o.asset->image : AnyImage())
         && parentId == o.parentId && isGroup == o.isGroup && passThrough == o.passThrough && opacity == o.opacity && blendMode == o.blendMode
         && mask == o.mask && maskSourceId == o.maskSourceId && adjustment == o.adjustment
         && shape == o.shape && shapeImage == o.shapeImage && text == o.text && textImage == o.textImage && psdCarry == o.psdCarry
         && smartObject == o.smartObject && smartImage == o.smartImage && artboard == o.artboard;
 }
 
-int Layer::pixelWidth() const { return asset && asset->image ? asset->image->width() : std::max(1, int(std::lround(transform.size.width))); }
-int Layer::pixelHeight() const { return asset && asset->image ? asset->image->height() : std::max(1, int(std::lround(transform.size.height))); }
+int Layer::pixelWidth() const { return asset && asset->image ? asset->image.width() : std::max(1, int(std::lround(transform.size.width))); }
+int Layer::pixelHeight() const { return asset && asset->image ? asset->image.height() : std::max(1, int(std::lround(transform.size.height))); }
 
 const PixelBounds& Selection::pixelBounds() const {
-    if (coverage.get() != boundsFor_) {
-        bounds_ = coverage ? nonzeroBounds(*coverage) : PixelBounds{};
-        boundsFor_ = coverage.get();
+    if (coverage.u8().get() != boundsFor_) {
+        bounds_ = coverage.u8() ? nonzeroBounds(*coverage.u8()) : PixelBounds{};
+        boundsFor_ = coverage.u8().get();
     }
     return bounds_;
 }
@@ -171,18 +171,18 @@ Rect Selection::bounds() const {
 Document::Document(int width_, int height_) : id(makeUuid()), width(width_), height(height_) {}
 
 bool Document::operator==(const Document& o) const {
-    return id == o.id && width == o.width && height == o.height && resolution == o.resolution && layers == o.layers && selection == o.selection && psdCarry == o.psdCarry && smartObjects == o.smartObjects && slices == o.slices && animation == o.animation;
+    return id == o.id && width == o.width && height == o.height && resolution == o.resolution && sampleType == o.sampleType && layers == o.layers && selection == o.selection && psdCarry == o.psdCarry && smartObjects == o.smartObjects && slices == o.slices && animation == o.animation;
 }
 
 long long Document::layerPixels() const {
     long long total = 0;
-    for (const Layer& l : layers) if (l.asset && l.asset->image) total += (long long)l.asset->image->width() * l.asset->image->height();
+    for (const Layer& l : layers) if (l.asset && l.asset->image) total += (long long)l.asset->image.width() * l.asset->image.height();
     return total;
 }
 
 long long Document::maskPixels() const {
     long long total = 0;
-    for (const Layer& l : layers) if (l.mask && l.mask->asset.image) total += (long long)l.mask->asset.image->width() * l.mask->asset.image->height();
+    for (const Layer& l : layers) if (l.mask && l.mask->asset.image) total += (long long)l.mask->asset.image.width() * l.mask->asset.image.height();
     return total;
 }
 

@@ -200,8 +200,8 @@ uint64_t cachedContentHash(const std::shared_ptr<const Image>& image) {
 
 /// The blocks are there and the pixels are still the fill they describe (wherever the layer now is).
 bool hasShapeBlocks(const Layer& layer) {
-    return !layer.isGroup && !layer.adjustment && layer.asset && layer.asset->image && (block(layer, "vsms") || block(layer, "vmsk"))
-        && (block(layer, "SoCo") || block(layer, "GdFl") || block(layer, "PtFl")) && layer.psdCarry->contentHash == cachedContentHash(layer.asset->image);
+    return !layer.isGroup && !layer.adjustment && layer.asset && layer.asset->image.u8() && (block(layer, "vsms") || block(layer, "vmsk"))
+        && (block(layer, "SoCo") || block(layer, "GdFl") || block(layer, "PtFl")) && layer.psdCarry->contentHash == cachedContentHash(layer.asset->image.u8());
 }
 }
 
@@ -813,7 +813,7 @@ void setLayerVectorMask(Layer& layer, const Document& document, const std::optio
     auto carry = layer.psdCarry ? std::make_shared<PsdLayerCarry>(*layer.psdCarry) : std::make_shared<PsdLayerCarry>();
     if (!layer.psdCarry) {
         carry->placement = layer.transform;
-        carry->contentHash = psdContentHash(layer.asset ? layer.asset->image.get() : nullptr);
+        carry->contentHash = psdContentHash(layer.asset ? layer.asset->image.u8().get() : nullptr);
     }
     auto& blocks = carry->blocks;
     const bool had = std::any_of(blocks.begin(), blocks.end(), [](const PsdBlock& b) { return b.key == "vmsk" || b.key == "vsms"; });

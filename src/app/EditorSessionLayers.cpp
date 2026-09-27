@@ -158,7 +158,7 @@ std::vector<Uuid> EditorSession::clippingDependents(const std::vector<Uuid>& ids
 
 std::optional<Asset> EditorSession::bakeClipping(const Uuid& target) const {
     const Layer* layer = document_->find(target);
-    if (!layer || !layer->asset || !layer->asset->image || !layer->maskSourceId) return std::nullopt;
+    if (!layer || !layer->asset || !layer->asset->image.u8() || !layer->maskSourceId) return std::nullopt;
     // The source's coverage (its alpha with its own mask and upstream clipping), ignoring visibility, at document size.
     Document chain(document_->width, document_->height);
     std::set<Uuid> keep;
@@ -168,7 +168,7 @@ std::optional<Asset> EditorSession::bakeClipping(const Uuid& target) const {
     auto flat = renderFlattened(chain);
     GrayImage coverage(document_->width, document_->height);
     for (int y = 0; y < coverage.height(); y++) for (int x = 0; x < coverage.width(); x++) coverage.at(x, y) = flat->pixel(x, y)[3];
-    const Image& src = *layer->asset->image;
+    const Image& src = *layer->asset->image.u8();
     auto inGrid = resampleMask(coverage, LayerTransform(Point(0, 0), document_->size()), layer->transform, src.width(), src.height(), 0);
     auto out = std::make_shared<Image>(src);
     for (int y = 0; y < src.height(); y++) for (int x = 0; x < src.width(); x++) { unsigned k = inGrid->at(x, y); uint8_t* p = out->pixel(x, y); for (int c = 0; c < 4; c++) p[c] = uint8_t((p[c] * k + 127) / 255); }
@@ -638,7 +638,7 @@ void EditorSession::addMaskFromSelection(bool revealing) {
     if ((long long)width * height > Document::pixelBudget) return;
     // The selection resampled into the layer's own pixel grid; the selected area gets the opposite value.
     LayerTransform docTransform(Point(0, 0), document_->size());
-    auto selected = resampleMask(*document_->selection->coverage, docTransform, layer->transform, width, height, 0);
+    auto selected = resampleMask(*document_->selection->coverage.u8(), docTransform, layer->transform, width, height, 0);
     auto mask = std::make_shared<GrayImage>(width, height, revealing ? 255 : 0);
     for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) {
         int s = selected->at(x, y);
@@ -690,10 +690,10 @@ void EditorSession::toggleMaskLink(const Uuid& id) {
 void EditorSession::applyMask() {
     if (!canEditLayers()) return;
     Layer* layer = activeLayerMutable();
-    if (!layer || !layer->mask || layer->isGroup || !layer->asset || !layer->asset->image) return;
-    const Image& src = *layer->asset->image;
+    if (!layer || !layer->mask || layer->isGroup || !layer->asset || !layer->asset->image.u8()) return;
+    const Image& src = *layer->asset->image.u8();
     int w = src.width(), h = src.height();
-    std::shared_ptr<const GrayImage> mask = layer->mask->asset.image;
+    std::shared_ptr<const GrayImage> mask = layer->mask->asset.image.u8();
     if (layer->mask->placement) mask = resampleMask(*mask, *layer->mask->placement, layer->transform, w, h, LayerMask::background(*layer->mask->asset.thumbnail));
     auto out = std::make_shared<Image>(w, h);
     for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
@@ -715,7 +715,7 @@ void EditorSession::invertMask() {
     if (!canEditLayers()) return;
     Layer* layer = activeLayerMutable();
     if (!layer || !layer->mask) return;
-    auto out = std::make_shared<GrayImage>(*layer->mask->asset.image);
+    auto out = std::make_shared<GrayImage>(*layer->mask->asset.image.u8());
     for (size_t i = 0; i < out->byteCount(); i++) out->data()[i] = uint8_t(255 - out->data()[i]);
     beginEdit(QT_TRANSLATE_NOOP("History", "Invert Mask"));
     layer->mask->asset = MaskAsset::make(out);
@@ -764,9 +764,9 @@ void EditorSession::flipCanvas(bool horizontal) {
         if (l.mask && l.mask->placement) l.mask->placement = flip(*l.mask->placement);
     }
     if (document_->selection && document_->selection->coverage) {
-        auto out = std::make_shared<GrayImage>(*document_->selection->coverage);
+        auto out = std::make_shared<GrayImage>(*document_->selection->coverage.u8());
         for (int y = 0; y < out->height(); y++) for (int x = 0; x < out->width(); x++)
-            out->at(x, y) = document_->selection->coverage->at(horizontal ? out->width() - 1 - x : x, horizontal ? y : out->height() - 1 - y);
+            out->at(x, y) = document_->selection->coverage.u8()->at(horizontal ? out->width() - 1 - x : x, horizontal ? y : out->height() - 1 - y);
         document_->selection->coverage = out;
     }
     endEdit();

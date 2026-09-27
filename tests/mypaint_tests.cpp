@@ -108,11 +108,11 @@ TEST_CASE(mypaint_pencil_draws_along_the_path_and_repeats_exactly) {
         return stroke.commit();
     };
     auto first = paint(), second = paint();
-    REQUIRE(first.asset && first.asset->image);
-    const Image& image = *first.asset->image;
+    REQUIRE(first.asset && first.asset->image.u8());
+    const Image& image = *first.asset->image.u8();
     CHECK(darkest(image, 40, 44, 160, 57) < 200);     // on the line (graphite, so a light grey)
     CHECK(darkest(image, 40, 5, 160, 30) == 255);     // well away from it
-    CHECK(same(image, *second.asset->image));         // libmypaint's jitter is seeded, so a stroke repeats
+    CHECK(same(image, *second.asset->image.u8()));         // libmypaint's jitter is seeded, so a stroke repeats
 }
 
 TEST_CASE(mypaint_click_leaves_a_mark_and_slow_tracking_catches_up) {
@@ -129,9 +129,9 @@ TEST_CASE(mypaint_click_leaves_a_mark_and_slow_tracking_catches_up) {
         click.seconds = 1.0 / 120;
         stroke.engine.strokeTo(click);
         auto commit = stroke.commit();
-        REQUIRE(commit.asset && commit.asset->image);
-        CHECK(darkest(*commit.asset->image, 90, 40, 110, 60) < 200);   // the dab where it was clicked
-        CHECK(darkest(*commit.asset->image, 10, 5, 60, 30) == 255);    // and nothing else
+        REQUIRE(commit.asset && commit.asset->image.u8());
+        CHECK(darkest(*commit.asset->image.u8(), 90, 40, 110, 60) < 200);   // the dab where it was clicked
+        CHECK(darkest(*commit.asset->image.u8(), 10, 5, 60, 30) == 255);    // and nothing else
     }
     {
         Layer layer = whiteLayer(300, 100);
@@ -149,8 +149,8 @@ TEST_CASE(mypaint_click_leaves_a_mark_and_slow_tracking_catches_up) {
         CHECK(stroke.engine.settled());
         CHECK(repeats > 0 && repeats < 500);
         auto commit = stroke.commit();
-        REQUIRE(commit.asset && commit.asset->image);
-        CHECK(darkest(*commit.asset->image, 250, 42, 266, 58) < 220);  // it painted all the way to where the pointer stopped
+        REQUIRE(commit.asset && commit.asset->image.u8());
+        CHECK(darkest(*commit.asset->image.u8(), 250, 42, 266, 58) < 220);  // it painted all the way to where the pointer stopped
     }
 }
 
@@ -165,9 +165,9 @@ TEST_CASE(mypaint_respects_the_selection_and_erases) {
     REQUIRE(stroke.isValid());
     drawLine(stroke, 50, 20, 180);
     auto commit = stroke.commit();
-    REQUIRE(commit.asset && commit.asset->image);
-    CHECK(darkest(*commit.asset->image, 20, 40, 95, 60) < 128);
-    CHECK(darkest(*commit.asset->image, 105, 0, 200, 100) == 255);
+    REQUIRE(commit.asset && commit.asset->image.u8());
+    CHECK(darkest(*commit.asset->image.u8(), 20, 40, 95, 60) < 128);
+    CHECK(darkest(*commit.asset->image.u8(), 105, 0, 200, 100) == 255);
 
     BrushSettings eraser = black(20);
     eraser.erasing = true;
@@ -176,9 +176,9 @@ TEST_CASE(mypaint_respects_the_selection_and_erases) {
     REQUIRE(erase.isValid());
     drawLine(erase, 50, 20, 180);
     auto erased = erase.commit();
-    REQUIRE(erased.asset && erased.asset->image);
-    CHECK(erased.asset->image->pixel(100, 50)[3] < 64);
-    CHECK_EQ(int(erased.asset->image->pixel(100, 5)[3]), 255);
+    REQUIRE(erased.asset && erased.asset->image.u8());
+    CHECK(erased.asset->image.u8()->pixel(100, 50)[3] < 64);
+    CHECK_EQ(int(erased.asset->image.u8()->pixel(100, 5)[3]), 255);
 }
 
 TEST_MAIN()

@@ -262,7 +262,7 @@ json recordJson(const Layer& l) {
     j["name"] = l.name;
     j["isVisible"] = l.visible;
     j["transform"] = transformJson(l.transform);
-    if (l.asset && l.asset->image) j["imageFile"] = l.id + ".png";
+    if (l.asset && l.asset->image.u8()) j["imageFile"] = l.id + ".png";
     if (l.parentId) j["parentID"] = *l.parentId;
     if (l.isGroup) j["isGroup"] = true;
     if (l.isGroup && !l.passThrough) j["passThrough"] = false;
@@ -273,7 +273,7 @@ json recordJson(const Layer& l) {
     }
     if (l.opacity != 1) j["opacity"] = number(l.opacity);
     if (l.blendMode != BlendMode::Normal) j["blendMode"] = blendModeName(l.blendMode);
-    if (l.mask && l.mask->asset.image) {
+    if (l.mask && l.mask->asset.image.u8()) {
         j["maskFile"] = l.id + ".mask.png";
         j["maskEnabled"] = l.mask->enabled;
         if (l.mask->placement) j["maskPlacement"] = transformJson(*l.mask->placement);
@@ -567,7 +567,7 @@ std::optional<Document> loadProject(const std::string& pathText, ProjectError& e
             }
     }
     for (Layer& layer : d.layers) {
-        auto bytes = layer.asset && layer.asset->image ? readCarry(path / "images" / (layer.id + ".smartobject")) : std::nullopt;
+        auto bytes = layer.asset && layer.asset->image.u8() ? readCarry(path / "images" / (layer.id + ".smartobject")) : std::nullopt;
         if (auto instance = bytes ? parseSmartObjectInstance(*bytes) : std::nullopt) {
             layer.smartObject = std::move(*instance);
             layer.smartImage = layer.asset->image;
@@ -624,8 +624,8 @@ bool saveProject(const Document& document, const std::optional<Uuid>& activeLaye
     }
     long long pixels = 0, maskPixels = 0;
     for (auto& l : document.layers) {
-        if (l.asset && l.asset->image && !checkSize(l.asset->image->width(), l.asset->image->height(), pixels)) { error = tooLarge(); return false; }
-        if (l.mask && l.mask->asset.image && !checkSize(l.mask->asset.image->width(), l.mask->asset.image->height(), maskPixels)) { error = tooLarge(); return false; }
+        if (l.asset && l.asset->image.u8() && !checkSize(l.asset->image.u8()->width(), l.asset->image.u8()->height(), pixels)) { error = tooLarge(); return false; }
+        if (l.mask && l.mask->asset.image.u8() && !checkSize(l.mask->asset.image.u8()->width(), l.mask->asset.image.u8()->height(), maskPixels)) { error = tooLarge(); return false; }
     }
     fs::path path(pathText);
     fs::path parent = path.parent_path().empty() ? fs::path(".") : path.parent_path();
@@ -643,8 +643,8 @@ bool saveProject(const Document& document, const std::optional<Uuid>& activeLaye
     }
     for (auto& l : document.layers) {
         std::string err;
-        if (l.asset && l.asset->image && !writePngImage((staging / "images" / (l.id + ".png")).string(), *l.asset->image, 0, &err)) { abandon(); error = encodeError(); return false; }
-        if (l.mask && l.mask->asset.image && !writePngGray((staging / "images" / (l.id + ".mask.png")).string(), *l.mask->asset.image, &err)) { abandon(); error = encodeError(); return false; }
+        if (l.asset && l.asset->image.u8() && !writePngImage((staging / "images" / (l.id + ".png")).string(), *l.asset->image.u8(), 0, &err)) { abandon(); error = encodeError(); return false; }
+        if (l.mask && l.mask->asset.image.u8() && !writePngGray((staging / "images" / (l.id + ".mask.png")).string(), *l.mask->asset.image.u8(), &err)) { abandon(); error = encodeError(); return false; }
         if (l.psdCarry && !writeBytes(staging / "images" / (l.id + ".psdcarry"), serializePsdCarry(*l.psdCarry))) { abandon(); error = ioError("could not write the PSD data of " + l.name); return false; }
     }
     if (document.psdCarry && !writeBytes(staging / "images" / "document.psdcarry", serializePsdCarry(*document.psdCarry))) { abandon(); error = ioError("could not write the PSD data"); return false; }

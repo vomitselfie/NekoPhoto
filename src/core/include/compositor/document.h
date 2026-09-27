@@ -8,7 +8,7 @@
 #include "geometry.h"
 #include "psd_carry.h"
 #include "smartobject.h"
-#include "image.h"
+#include "imaget.h"
 #include "transform.h"
 #include "uuid.h"
 #include <array>
@@ -32,14 +32,16 @@ bool parseBlendMode(const std::string& name, BlendMode& out);
 
 /// An imported or painted raster with its 96 px thumbnail (ImportedImage).
 struct Asset {
-    ImagePtr image;
+    /// The pixels, at the document's depth; 8-bit code reads them with `image.u8()`.
+    AnyImage image;
     ImagePtr thumbnail;
     std::string name;
     static Asset make(ImagePtr image, std::string name);
 };
 
 struct MaskAsset {
-    GrayPtr image;
+    /// At the document's depth; 8-bit code reads it with `image.u8()`. The thumbnail is always 8-bit.
+    AnyGray image;
     GrayPtr thumbnail;
     static MaskAsset make(GrayPtr image);
     static MaskAsset solid(bool revealing);
@@ -187,11 +189,11 @@ struct Layer {
     /// A shape layer's style (its pixels are an ordinary raster). `shapeImage` is the raster the shape drew;
     /// once the pixels change the layer is plain pixels again.
     std::optional<LayerShapeStyle> shape;
-    ImagePtr shapeImage;
+    AnyImage shapeImage;
     /// A text layer's content and style, with the raster it rendered; once the pixels change the layer is
     /// plain pixels again, as with shapes.
     std::optional<LayerText> text;
-    ImagePtr textImage;
+    AnyImage textImage;
     /// Manifest fields this build does not understand, kept for the round trip.
     std::string extraJson;
     /// What the PSD this layer came from held that NekoPhoto does not model (psd_carry.h).
@@ -199,7 +201,7 @@ struct Layer {
     /// A smart object instance (smartobject.h), with the raster it placed; once the pixels change some other way
     /// the layer is plain pixels again, as with text.
     std::optional<SmartObjectInstance> smartObject;
-    ImagePtr smartImage;
+    AnyImage smartImage;
     /// A folder that is an artboard (artboard.h): its background fills the rectangle and its children are clipped to it.
     std::optional<Artboard> artboard;
 
@@ -228,7 +230,8 @@ struct Layer {
 /// A selection: document-sized coverage (white = selected) with a flag for antialiased edges.
 /// Session-only, never saved. A selection with no coverage at all is an explicit empty selection.
 struct Selection {
-    GrayPtr coverage;
+    /// At the document's depth; 8-bit code reads it with `coverage.u8()`.
+    AnyGray coverage;
     bool antialiased = true;
     bool operator==(const Selection& o) const { return coverage == o.coverage && antialiased == o.antialiased; }
     bool isEmpty() const;
@@ -246,6 +249,9 @@ struct Document {
     int width = 0;
     int height = 0;
     double resolution = 72;
+    /// The depth of every layer, mask and selection (one per document, as in Photoshop). Always U8 until
+    /// deeper documents land (docs/high-bit-depth-plan.md, P2).
+    SampleType sampleType = SampleType::U8;
     std::vector<Layer> layers; // bottom to top
     std::optional<Selection> selection;
     std::string extraJson;

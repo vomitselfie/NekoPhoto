@@ -252,7 +252,7 @@ void appendOutline(const QPainterPath& outline, int32_t group, compositor::Vecto
 
 std::optional<compositor::VectorPath> textLayerOutline(const compositor::Layer& layer, QString* error) {
     auto fail = [&](const QString& why) { if (error) *error = why; return std::nullopt; };
-    if (!layer.isLiveText() || !layer.asset || !layer.asset->image) return fail(QObject::tr("The layer is not a text layer."));
+    if (!layer.isLiveText() || !layer.asset || !layer.asset->image.u8()) return fail(QObject::tr("The layer is not a text layer."));
     const compositor::LayerText& text = *layer.text;
     if (text.warp.active()) return fail(QObject::tr("Warped text cannot be made a path here; set its warp to None first."));
     // The glyphs where renderUpright puts them in the layer's raster, one shape group each (overlapping letters
@@ -307,7 +307,7 @@ std::optional<compositor::VectorPath> textLayerOutline(const compositor::Layer& 
     for (size_t i = 0; i < glyphs.size(); i++) appendOutline(glyphs[i], int32_t(i), path);
     if (path.subpaths.empty()) return fail(QObject::tr("The text has no outlines (only spaces?)."));
     // From the raster to the document, through the layer's placement (moved, scaled or turned).
-    const int w = layer.asset->image->width(), h = layer.asset->image->height();
+    const int w = layer.asset->image.u8()->width(), h = layer.asset->image.u8()->height();
     for (auto& s : path.subpaths)
         for (auto& k : s.knots) {
             auto map = [&](double& x, double& y) { const compositor::Point p = compositor::mapThroughTransform(layer.transform, w, h, x, y); x = p.x; y = p.y; };

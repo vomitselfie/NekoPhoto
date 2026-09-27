@@ -120,7 +120,7 @@ std::optional<Uuid> convertToSmartObject(Document& document, const std::vector<U
     double x0 = 1e300, y0 = 1e300, x1 = -1e300, y1 = -1e300;
     for (size_t i : members) {
         const Layer& l = document.layers[i];
-        if (l.isGroup || l.adjustment || !l.asset || !l.asset->image) continue;
+        if (l.isGroup || l.adjustment || !l.asset || !l.asset->image.u8()) continue;
         const Rect b = l.transform.bounds();
         x0 = std::min(x0, b.x); y0 = std::min(y0, b.y); x1 = std::max(x1, b.x + b.width); y1 = std::max(y1, b.y + b.height);
     }
@@ -208,7 +208,7 @@ int replaceSmartObjectSource(Document& document, const std::string& from, const 
             // Warped or filtered: the quad (the warp cage) stays where it is and the new contents are drawn through
             // the same warp and filters.
             const std::array<double, 8> quad = moveQuad(so.quad, so.placedTransform, so.placedWidth, so.placedHeight,
-                                                        l.transform, l.asset->image->width(), l.asset->image->height());
+                                                        l.transform, l.asset->image.u8()->width(), l.asset->image.u8()->height());
             SmartObjectInstance next = so;
             for (PsdBlock& b : next.psdBlocks)
                 if (auto patched = repointPsdPlacement(b.key, b.data, quad, replacement->id, replacement->width, replacement->height)) b.data = std::move(*patched);
@@ -235,7 +235,7 @@ int replaceSmartObjectSource(Document& document, const std::string& from, const 
             continue;
         }
         // About its own centre, at its own scale.
-        const int w0 = l.asset->image->width(), h0 = l.asset->image->height();
+        const int w0 = l.asset->image.u8()->width(), h0 = l.asset->image.u8()->height();
         LayerTransform t = l.transform;
         const Point centre = t.center();
         const double sx = t.size.width / std::max(1, w0), sy = t.size.height / std::max(1, h0);
@@ -308,7 +308,7 @@ bool warpLayer(Document& document, Layer& layer, const TextWarp& warp, std::stri
     if (layer.isGroup || layer.adjustment) return fail("Only text, smart objects and pixel layers can be warped.");
     if (layer.isLiveText()) { layer.text->warp = warp; return true; }   // the app redraws it
     if (!warp.active()) return fail("Choose a warp style.");
-    if (!layer.asset || !layer.asset->image || layer.asset->image->isEmpty()) return fail("The layer has no pixels to warp.");
+    if (!layer.asset || !layer.asset->image.u8() || layer.asset->image.u8()->isEmpty()) return fail("The layer has no pixels to warp.");
     if (layer.isLiveSmartObject()) {
         SmartObjectInstance& so = *layer.smartObject;
         if (so.locked()) return fail("This smart object shows the preview its file carried; it cannot be warped here.");
@@ -324,7 +324,7 @@ bool warpLayer(Document& document, Layer& layer, const TextWarp& warp, std::stri
         const auto [y0, y1] = std::minmax_element(mesh->ys.begin(), mesh->ys.end());
         const double corners[4][2] = {{*x0, *y0}, {*x1, *y0}, {*x1, *y1}, {*x0, *y1}};
         std::array<double, 8> quad{};
-        const int pw = layer.asset->image->width(), ph = layer.asset->image->height();
+        const int pw = layer.asset->image.u8()->width(), ph = layer.asset->image.u8()->height();
         for (int i = 0; i < 4; i++) {
             const Point p = mapThroughTransform(layer.transform, pw, ph, corners[i][0] * pw / w, corners[i][1] * ph / h);
             quad[size_t(i * 2)] = p.x; quad[size_t(i * 2 + 1)] = p.y;
@@ -350,7 +350,7 @@ bool warpLayer(Document& document, Layer& layer, const TextWarp& warp, std::stri
         return true;
     }
     // Pixels: bent over their own rectangle, for good.
-    const Image& image = *layer.asset->image;
+    const Image& image = *layer.asset->image.u8();
     auto mesh = styleWarpMesh(warp.style, warp.bend, warp.verticalOrientation, image.width(), image.height());
     if (!mesh) return fail("That warp style is not one NekoPhoto draws.");
     distortWarpMesh(*mesh, warp.horizontal, warp.vertical);
@@ -384,7 +384,7 @@ const Image* cageSource(const Document& document, const Layer& layer) {
         auto it = document.smartObjects.find(layer.smartObject->sourceId);
         return it != document.smartObjects.end() && it->second->image ? it->second->image.get() : nullptr;
     }
-    return layer.asset && layer.asset->image ? layer.asset->image.get() : nullptr;
+    return layer.asset && layer.asset->image.u8() ? layer.asset->image.u8().get() : nullptr;
 }
 
 } // namespace
@@ -393,7 +393,7 @@ std::optional<WarpMesh> layerWarpCage(const Document& document, const Layer& lay
     auto fail = [&](const char* why) -> std::optional<WarpMesh> { if (error) *error = why; return std::nullopt; };
     if (layer.isGroup || layer.adjustment) return fail("Only smart objects and pixel layers take a warp cage.");
     if (layer.isLiveText()) return fail("Convert the text to a smart object to warp it freely (Warp Text bends it with a style).");
-    if (!layer.asset || !layer.asset->image || layer.asset->image->isEmpty()) return fail("The layer has no pixels to warp.");
+    if (!layer.asset || !layer.asset->image.u8() || layer.asset->image.u8()->isEmpty()) return fail("The layer has no pixels to warp.");
     if (layer.isLiveSmartObject()) {
         const SmartObjectInstance& so = *layer.smartObject;
         if (so.locked()) return fail("This smart object shows the preview its file carried; it cannot be warped here.");
@@ -416,7 +416,7 @@ std::optional<WarpMesh> layerWarpCage(const Document& document, const Layer& lay
         if (!smartObjectPixelsArePlacement(so)) return fail("This smart object's warp is not one NekoPhoto draws.");
     }
     // Flat, over the layer's placed rectangle (its rotation and scale included).
-    const Image& shown = *layer.asset->image;
+    const Image& shown = *layer.asset->image.u8();
     WarpMesh cage = identityWarpMesh(0, 0, shown.width(), shown.height(), 4, 4);
     for (size_t i = 0; i < cage.xs.size(); i++) {
         const Point p = mapThroughTransform(layer.transform, shown.width(), shown.height(), cage.xs[i], cage.ys[i]);

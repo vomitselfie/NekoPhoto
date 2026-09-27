@@ -442,7 +442,7 @@ bool EditorSession::pathToShapeLayer(uint16_t id) {
 bool EditorSession::selectionToWorkPath(double tolerance) {
     if (!canEditLayers() || !document_->selection || !document_->selection->coverage) return false;
     bool tooDetailed = false;
-    const auto loops = selectionOutline(*document_->selection->coverage, &tooDetailed);
+    const auto loops = selectionOutline(*document_->selection->coverage.u8(), &tooDetailed);
     if (tooDetailed || loops.empty()) { if (tooDetailed) emit error(tr("The selection's outline is too detailed to make a path from.")); return false; }
     VectorPath path;
     for (const auto& loop : loops) {

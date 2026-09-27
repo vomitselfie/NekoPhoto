@@ -395,7 +395,7 @@ TEST_CASE(brush_paints_and_erases_within_opacity_cap) {
     CHECK(stroke.touched());
     auto commit = stroke.commit();
     REQUIRE(commit.asset.has_value());
-    const Image& img = *commit.asset->image;
+    const Image& img = *commit.asset->image.u8();
     // Cropped to the painted pixels; the transform places them where they were painted.
     CHECK(img.width() < 64);
     CHECK_NEAR(commit.transform.origin.x, 10, 1.5);
@@ -418,7 +418,7 @@ TEST_CASE(brush_paints_and_erases_within_opacity_cap) {
     auto erased = eraser.commit();
     REQUIRE(erased.asset.has_value());
     int ex = int(32 - erased.transform.origin.x), ey = int(32 - erased.transform.origin.y);
-    CHECK_EQ(int(erased.asset->image->pixel(ex, ey)[3]), 0);
+    CHECK_EQ(int(erased.asset->image.u8()->pixel(ex, ey)[3]), 0);
 }
 
 TEST_CASE(brush_heals_and_clones) {
@@ -438,7 +438,7 @@ TEST_CASE(brush_heals_and_clones) {
     auto commit = stroke.commit();
     REQUIRE(commit.asset.has_value());
     int x = int(32 - commit.transform.origin.x), y = int(32 - commit.transform.origin.y);
-    CHECK(commit.asset->image->pixel(x, y)[0] > 90); // the black spot is gone
+    CHECK(commit.asset->image.u8()->pixel(x, y)[0] > 90); // the black spot is gone
     // Clone: copy from 20 px to the right, where the field is plain gray, onto the spot.
     auto sample = renderFlattened([&] { Document d(64, 64); d.layers.push_back(imageLayer("f", field, {0, 0})); return d; }());
     BrushSettings cloneSettings;
@@ -450,7 +450,7 @@ TEST_CASE(brush_heals_and_clones) {
     auto cloned = cloner.commit();
     REQUIRE(cloned.asset.has_value());
     int cx = int(32 - cloned.transform.origin.x), cy = int(32 - cloned.transform.origin.y);
-    CHECK(std::abs(int(cloned.asset->image->pixel(cx, cy)[0]) - 120) <= 2);
+    CHECK(std::abs(int(cloned.asset->image.u8()->pixel(cx, cy)[0]) - 120) <= 2);
 }
 
 TEST_CASE(brush_paints_mask_and_soft_tip_falls_off) {
@@ -472,9 +472,9 @@ TEST_CASE(brush_paints_mask_and_soft_tip_falls_off) {
     stroke.flush();
     auto commit = stroke.commit();
     REQUIRE(commit.mask.has_value());
-    CHECK_EQ(commit.mask->image->width(), 32);
-    CHECK(commit.mask->image->at(16, 16) < 20); // a hardness-0 tip falls off from its very center
-    CHECK_EQ(int(commit.mask->image->at(0, 0)), 255);
+    CHECK_EQ(commit.mask->image.u8()->width(), 32);
+    CHECK(commit.mask->image.u8()->at(16, 16) < 20); // a hardness-0 tip falls off from its very center
+    CHECK_EQ(int(commit.mask->image.u8()->at(0, 0)), 255);
     CHECK(!commit.maskPlacement.has_value());
 }
 
@@ -619,14 +619,14 @@ TEST_CASE(project_round_trip_preserves_layers_masks_groups_and_unknown_fields) {
     CHECK(la.transform.flipX);
     CHECK(la.transform.sampling == Sampling::Smooth);
     REQUIRE(la.asset.has_value());
-    CHECK_EQ(la.asset->image->width(), 10);
-    CHECK_EQ(int(la.asset->image->pixel(0, 0)[0]), 200);
+    CHECK_EQ(la.asset->image.u8()->width(), 10);
+    CHECK_EQ(int(la.asset->image.u8()->pixel(0, 0)[0]), 200);
     REQUIRE(la.mask.has_value());
     CHECK(!la.mask->enabled);
     CHECK(!la.mask->linked);
     REQUIRE(la.mask->placement.has_value());
     CHECK_NEAR(la.mask->placement->origin.x, 5, 1e-9);
-    CHECK_EQ(int(la.mask->asset.image->at(2, 2)), 0);
+    CHECK_EQ(int(la.mask->asset.image.u8()->at(2, 2)), 0);
     CHECK(loaded->layers[2].maskSourceId == a.id);
     CHECK(loaded->layers[2].extraJson.find("futureField") != std::string::npos);
     REQUIRE(loaded->layers[3].adjustment.has_value());
@@ -753,7 +753,7 @@ TEST_CASE(projects_past_the_macs_100_megapixels_save_and_load) {
     // One layer still stops at 100 megapixels, as on the Mac.
     Document one(10, 10);
     one.layers.push_back(imageLayer("Too big", std::make_shared<Image>(10001, 10000), {0, 0}));
-    CHECK(one.layers.back().asset->image->width() == 10001);
+    CHECK(one.layers.back().asset->image.u8()->width() == 10001);
     dir = tempDir();
     CHECK(!saveProject(one, std::nullopt, (dir / "Big.comp").string(), error));
     CHECK(error.kind == ProjectError::TooLarge);
@@ -826,12 +826,12 @@ TEST_CASE(selection_rasterizes_and_combines) {
     REQUIRE(sel.has_value());
     auto more = rasterizeRect({5, 5, 4, 4}, 10, 10, false);
     sel = combineSelection(sel, *more, SelectionMode::Add, true);
-    CHECK_EQ(int(sel->coverage->at(7, 7)), 255);
+    CHECK_EQ(int(sel->coverage.u8()->at(7, 7)), 255);
     sel = combineSelection(sel, *rect, SelectionMode::Subtract, true);
-    CHECK_EQ(int(sel->coverage->at(3, 3)), 0);
-    CHECK_EQ(int(sel->coverage->at(7, 7)), 255);
+    CHECK_EQ(int(sel->coverage.u8()->at(3, 3)), 0);
+    CHECK_EQ(int(sel->coverage.u8()->at(7, 7)), 255);
     auto inverted = invertSelection(*sel, 10, 10);
-    CHECK_EQ(int(inverted.coverage->at(3, 3)), 255);
+    CHECK_EQ(int(inverted.coverage.u8()->at(3, 3)), 255);
     auto loops = selectionOutline(*rect);
     CHECK_EQ(loops.size(), size_t(1));
     CHECK_EQ(loops[0].size(), size_t(4));
@@ -1063,8 +1063,8 @@ TEST_CASE(shape_rasters_and_gradients) {
     stroke.fillGradientOver(0, {0, 8}, {16, 8}, a, b, 1);
     auto commit = stroke.commit();
     REQUIRE(commit.asset.has_value());
-    CHECK(commit.asset->image->pixel(0, 8)[3] > 240);
-    CHECK(commit.asset->image->pixel(commit.asset->image->width() - 1, 8)[3] < 40);
+    CHECK(commit.asset->image.u8()->pixel(0, 8)[3] > 240);
+    CHECK(commit.asset->image.u8()->pixel(commit.asset->image.u8()->width() - 1, 8)[3] < 40);
 }
 
 TEST_CASE(pixel_move_lifts_and_places) {
@@ -1127,12 +1127,12 @@ TEST_CASE(image_size_resamples_layers) {
     CHECK_EQ(doc.width, 80);
     CHECK_NEAR(doc.resolution, 150, 1e-9);
     const Layer& l = doc.layers[0];
-    CHECK_EQ(l.asset->image->width(), 40);
-    CHECK_EQ(l.asset->image->height(), 20);
+    CHECK_EQ(l.asset->image.u8()->width(), 40);
+    CHECK_EQ(l.asset->image.u8()->height(), 20);
     CHECK_NEAR(l.transform.origin.x, 20, 1e-9);
-    CHECK_EQ(l.mask->asset.image->width(), 40);
-    CHECK_EQ(int(l.mask->asset.image->at(5, 5)), 0);
-    CHECK_EQ(int(l.mask->asset.image->at(35, 5)), 255);
+    CHECK_EQ(l.mask->asset.image.u8()->width(), 40);
+    CHECK_EQ(int(l.mask->asset.image.u8()->at(5, 5)), 0);
+    CHECK_EQ(int(l.mask->asset.image.u8()->at(35, 5)), 255);
     auto flat = renderFlattened(doc);
     CHECK_EQ(int(flat->pixel(50, 20)[0]), 255);
     CHECK_EQ(int(flat->pixel(25, 20)[3]), 0);
