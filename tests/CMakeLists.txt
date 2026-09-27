@@ -121,6 +121,28 @@ if(COMPOSITOR_HAVE_SQLITE)
 endif()
 add_test(NAME sut_tests COMMAND sut_tests)
 
+# The brush parity harness (docs/brush-engine.md): standard motions and recorded strokes painted with every kind of
+# brush, hashed and measured against tests/brush_parity_baseline.txt (COMPOSITOR_UPDATE_BRUSH_PARITY=1 rewrites it).
+# brush_parity_tool writes the images and measurements out; it is not a test.
+add_library(brush_harness STATIC brush_harness.cpp)
+target_link_libraries(brush_harness PUBLIC compositor::core compositor_warnings ZLIB::ZLIB)
+target_compile_definitions(brush_harness PUBLIC BRUSH_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/brush_fixtures"
+                           MYPAINT_BRUSHES_DIR="${CMAKE_SOURCE_DIR}/src/app/brushes/mypaint")
+if(COMPOSITOR_HAVE_SQLITE)
+    if(TARGET SQLite3::SQLite3)
+        target_link_libraries(brush_harness PUBLIC SQLite3::SQLite3)
+    else()
+        target_link_libraries(brush_harness PUBLIC SQLite::SQLite3)
+    endif()
+    target_compile_definitions(brush_harness PUBLIC COMPOSITOR_HAVE_SQLITE)
+endif()
+add_executable(brush_parity brush_parity.cpp)
+target_link_libraries(brush_parity PRIVATE brush_harness)
+target_compile_definitions(brush_parity PRIVATE BRUSH_PARITY_BASELINE="${CMAKE_CURRENT_SOURCE_DIR}/brush_parity_baseline.txt")
+add_test(NAME brush_parity COMMAND brush_parity)
+add_executable(brush_parity_tool brush_parity_tool.cpp)
+target_link_libraries(brush_parity_tool PRIVATE brush_harness)
+
 add_executable(clip_tests clip_tests.cpp)
 target_link_libraries(clip_tests PRIVATE compositor::core compositor_warnings ZLIB::ZLIB)
 if(COMPOSITOR_HAVE_SQLITE)
