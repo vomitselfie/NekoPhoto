@@ -1,6 +1,6 @@
 // Quick Select by scribble: the subject from a few foreground and background strokes, by GrabCut (Rother,
 // Kolmogorov & Blake 2004) on a reduced copy, for a selection that needs no model and works in every build
-// with OpenCV (docs/background-removal-review.md item 9). The refinement to the image's edges is the matte
+// with OpenCV. The refinement to the image's edges is the matte
 // panel's, applied by the caller.
 #pragma once
 #include "image.h"

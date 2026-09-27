@@ -1,7 +1,7 @@
 // Remove Background's model side: one ONNX segmentation network through OpenCV's DNN module, run once on
 // the whole layer (`subjectMask`), and optionally again on native-resolution windows along the edge, where
 // the 1024-pixel pass blurred away hair and thin structures (`subjectMaskDetailed`; the boundary-window
-// heuristics of LawDIS, PDFNet and SegRefiner, docs/background-removal-review.md item 7). The window planner
+// heuristics of LawDIS, PDFNet and SegRefiner). The window planner
 // and the frequency fusion are plain pixel maths and always available.
 #include "compositor/subject.h"
 #include "compositor/blur.h"

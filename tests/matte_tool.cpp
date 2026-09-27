@@ -1,4 +1,4 @@
-// The background-removal harness (docs/background-removal-review.md, item 10).
+// The background-removal harness: scores mattes against image/alpha pairs.
 //
 //   matte_tool run <image.png> <model.onnx|none> <outdir> [--refine R] [--band B] [--contrast C] [--shift S]
 //                  [--no-cleanup] [--no-decontaminate] [--raw] [--detail N] [--mask <mask.png>]

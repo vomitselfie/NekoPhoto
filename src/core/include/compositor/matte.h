@@ -23,7 +23,7 @@ struct MatteSettings {
     /// The edge pixels' colours are replaced by the subject's own colour, so no rim of the old background
     /// tints them over a new one (`estimateForeground`; Photoshop's Decontaminate Colors).
     bool decontaminate = true;
-    // Variants judged by the harness (docs/background-removal-review.md items 13 to 15); off unless adopted.
+    // Variants judged by the matte_tool harness; off unless adopted.
     bool highPass = false;     // the guided filter on Gaussian high-passed signals (Zhao & He 2025)
     bool sideWindows = false;  // side-window coefficients where the mask is soft (Yin, Gong & Qiu 2019)
     bool narrowBand = false;   // band pixels whose colour clearly belongs to one side are decided before matting

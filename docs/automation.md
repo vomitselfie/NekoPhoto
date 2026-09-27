@@ -25,9 +25,6 @@ MCP SDK on first run.
 claude mcp add nekophoto -- uv run /path/to/nekophoto/mcp/nekophoto_mcp.py
 ```
 
-Inside this repository nothing needs adding: `.mcp.json` declares the server,
-so Claude Code offers it when a session starts here.
-
 Without `uv`: `pip install "mcp<2"` and run `python3 mcp/nekophoto_mcp.py` instead.
 The bridge uses the 1.x MCP SDK API (2.x renamed its server class).
 

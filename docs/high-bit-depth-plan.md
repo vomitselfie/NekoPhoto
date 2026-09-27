@@ -87,7 +87,7 @@ Status: design, for review before any code. Surveyed against `src/core` (~31.5k 
   honoured by brush, fill and filter write-back helpers; the all-channels case keeps the old path through a template flag.
 - Display of one channel as grey, several as overlays, in the display step. Save Selection, Load Selection
   (add/subtract/intersect), New/Duplicate/Delete, Edit as Quick Mask. Apply Image and Calculations later.
-- `ChannelsPanel` following the Layers panel; automation `channels.*` per CLAUDE.md.
+- `ChannelsPanel` following the Layers panel; automation `channels.*` with the usual handler, description, MCP tool, docs and smoke coverage (CONTRIBUTING.md).
 
 ## 8. Formats, memory, undo
 
@@ -141,7 +141,7 @@ Calculations; CMYK non-separable modes (fall back to Normal with a notice); tili
 P0–P4 plus P6: 16-bit RGB, a colour-managed display with Assign/Convert and soft proof, lossless 16-bit PSD round trips,
 and a Channels panel, with 8-bit documents untouched throughout.
 
-## Review notes (the lead)
+## Review notes
 
 - Mac project compatibility: since 2026-09-26 NekoPhoto no longer keeps Mac Compositor project-format parity, so
   "8-bit sRGB keeps writing version 7" is a convenience, not a requirement; a single version-8 writer is acceptable.
