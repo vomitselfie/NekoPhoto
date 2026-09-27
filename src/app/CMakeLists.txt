@@ -90,6 +90,8 @@ qt_add_executable(nekophoto
     EditorSessionTimeline.cpp
     BrushPicker.h
     BrushPicker.cpp
+    BrushDynamicsDialog.h
+    BrushDynamicsDialog.cpp
     FilterDialog.h
     FilterDialog.cpp
     SmartFilterDialog.h

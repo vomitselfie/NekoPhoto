@@ -17,6 +17,7 @@
 #include "LayerStyleDialog.h"
 #include "FilterDialog.h"
 #include "GmicDialog.h"
+#include "BrushDynamicsDialog.h"
 #include "BrushPicker.h"
 #include "FontPicker.h"
 #include "SingleInstance.h"
@@ -276,7 +277,7 @@ int run(int argc, char** argv) {
     parser.addOption(langOption);
     QCommandLineOption toolOption("tool", "Select tool <name> after opening (move, marquee, lasso, wand, crop, brush, healing, clone, smudge, gradient, shape, eyedropper, hand, zoom).", "name");
     parser.addOption(toolOption);
-    QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: welcome (or welcome:N for page N), new, canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, cameraraw (or cameraraw:N for panel N), gmic, content-fill, background, text, fonts, brushes, actions, timeline (frames made from the layers when there are none), batch, layers-menu (the active layer's context menu).", "name");
+    QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: welcome (or welcome:N for page N), new, canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, cameraraw (or cameraraw:N for panel N), gmic, content-fill, background, text, fonts, brushes, brush-dynamics (the first imported tip brush), actions, timeline (frames made from the layers when there are none), batch, layers-menu (the active layer's context menu).", "name");
     parser.addOption(dialogOption);
     QCommandLineOption rpc("rpc", "Listen on the automation socket (JSON-RPC over a local socket, for the MCP bridge). Also on when the automation preference is set.");
     QCommandLineOption rpcSocket("rpc-socket", "Socket path for --rpc (default: $XDG_RUNTIME_DIR/nekophoto.sock, or $COMPOSITOR_RPC_SOCKET; on Windows the named pipe nekophoto-<user>).", "path");
@@ -480,6 +481,17 @@ int run(int argc, char** argv) {
             else if (name == "brushes") {
                 s->selectTool(app::Tool::Brush);
                 QTimer::singleShot(100, &window, [] { for (QWidget* w : QApplication::topLevelWidgets()) for (auto* picker : w->findChildren<app::BrushPicker*>()) if (picker->isVisible()) { picker->showPicker(); return; } });
+            }
+            else if (name == "brush-dynamics") {
+                // The first imported tip brush's dynamics.
+                for (const app::BrushPreset& preset : app::BrushLibrary::presets())
+                    if (preset.engine == app::BrushPreset::Engine::Tip) {
+                        s->selectTool(app::Tool::Brush);
+                        s->brushPreset = preset.id;
+                        emit s->toolChanged();
+                        QTimer::singleShot(100, &window, [&window, id = preset.id] { app::BrushDynamicsDialog::edit(&window, id); });
+                        break;
+                    }
             }
             else if (name == "background") {
                 if (!app::ModelStore::ready()) qWarning("Remove Background is off or its model is missing");

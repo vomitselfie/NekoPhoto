@@ -1,5 +1,6 @@
 #include "BrushLibrary.h"
 #include "compositor/mypaint.h"
+#include "compositor/png.h"
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -120,6 +121,18 @@ std::shared_ptr<const compositor::TipPreset> BrushPreset::tip() const {
         if (auto loaded = compositor::loadTipPreset(folder.toStdString(), &error)) tip_ = std::make_shared<const compositor::TipPreset>(std::move(*loaded));
     }
     return tip_;
+}
+
+bool BrushLibrary::saveTip(const QString& id, const compositor::TipPreset& preset, QString* error) {
+    const BrushPreset* found = find(id);
+    if (!found || found->engine != BrushPreset::Engine::Tip) { if (error) *error = QStringLiteral("no tip brush %1").arg(id); return false; }
+    std::string message;
+    const std::string folder = found->folder.toStdString();
+    if (!compositor::saveTipPreset(folder, preset, &message)) { if (error) *error = QString::fromStdString(message); return false; }
+    if (auto preview = compositor::renderTipPreview(preset, 256, 64))
+        compositor::writePngImage((QDir(found->folder).filePath("preview.png")).toStdString(), *preview);
+    found->replaceTip(std::make_shared<const compositor::TipPreset>(preset));
+    return true;
 }
 
 const BrushPreset* BrushLibrary::find(const QString& id) {
