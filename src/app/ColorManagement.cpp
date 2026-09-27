@@ -7,6 +7,7 @@
 #include <QCheckBox>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QGuiApplication>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -125,6 +126,14 @@ QString profileLabel(const ColorProfile& profile) {
     return QString::fromStdString(profile.description);
 }
 
+/// Headless and offscreen runs have no screen to match: the system's profile is not looked up there (Windows always
+/// answers with its default), so scripts and screenshots see the document's values on every platform. A profile file
+/// chosen in Preferences still applies.
+static bool screenless() {
+    const QString platform = QGuiApplication::platformName();
+    return platform == QLatin1String("offscreen") || platform == QLatin1String("minimal");
+}
+
 ColorProfile monitorProfile() {
     std::lock_guard<std::mutex> lock(monitorMutex);
     if (monitorRead) return monitorCache;
@@ -134,7 +143,7 @@ ColorProfile monitorProfile() {
     const Settings& s = settings();
     if (!s.monitorFile.isEmpty()) {
         if (auto p = readProfileFile(s.monitorFile)) { monitorCache = *p; monitorSource = QFileInfo(s.monitorFile).fileName(); }
-    } else if (s.useSystemMonitor) {
+    } else if (s.useSystemMonitor && !screenless()) {
         const QByteArray bytes = platform::systemMonitorProfile();
         if (auto p = profileFromIcc(reinterpret_cast<const uint8_t*>(bytes.constData()), size_t(bytes.size())); p && p->model == ColorModel::RGB) {
             monitorCache = *p;
