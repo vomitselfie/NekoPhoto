@@ -150,6 +150,7 @@ auto serially(F body) {
 /// 16-bit input a fraction of a level off an 8-bit one may land on the other side and move a pixel by more than a level.
 const std::set<std::string_view> quantising = {"pixel-sort", "cga-8bit", "dither", "halftone", "dot-screen",
                                                 "ascii",        // a glyph per luma band
+                                                "solarize",     // a step at the centre
                                                 "watercolor"};  // the least varied quadrant wins
 /// Effects that move each pixel by its own luma, so a fraction of a level in the input moves where a pixel is read from
 /// (Luma-Mesh at its variant setting moves 40 pixels per unit of luma): within a few levels.
@@ -171,7 +172,7 @@ TEST_CASE(registry_is_openmosh_shaped) {
             if (p.kind == mosh::ParamKind::Choice) CHECK_EQ(p.max, float(p.options.size() - 1));
         }
     }
-    CHECK_EQ(mosh::effects().size(), size_t(44));
+    CHECK_EQ(mosh::effects().size(), size_t(49));
     CHECK(mosh::findEffect("blur") == nullptr);   // NekoPhoto's own Gaussian Blur covers it
     const auto* sort = mosh::findEffect("pixel-sort");
     REQUIRE(sort);

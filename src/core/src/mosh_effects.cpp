@@ -797,6 +797,68 @@ void feedback(const Frame& in, const Uniforms& u, const RowSink& sink) {
     shade(in.width(), in.height(), iteration(cur), sink);
 }
 
+// ---- Color ----------------------------------------------------------------------------------------------------
+
+// Color Correction: brightness, contrast, saturation and gamma. p0 = brightness, p1 = contrast, p2 = saturation,
+// p3 = gamma.
+void colorCorrection(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    const float g = 1.0f / std::max(u.p[3], 0.05f);
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        vec4 src = sample(in, f.uv);
+        vec3 c = src.rgb() + u.p[0] * 0.5f;
+        c = (c - 0.5f) * (1.0f + u.p[1]) + 0.5f;
+        float l = luma(c);
+        c = mix(v3(l), c, 1.0f + u.p[2]);
+        c = pow(clamp(c, 0.0f, 1.0f), v3(g));
+        return v4(c, src.w);
+    }, sink);
+}
+
+// Duotone: luma mapped between a dark and a light hue. p0 = shadow hue, p1 = highlight hue, p2 = mix.
+void duotone(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    const vec3 dark = hsv2rgb(vec3{u.p[0], 0.75f, 0.30f});
+    const vec3 light = hsv2rgb(vec3{u.p[1], 0.55f, 0.97f});
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        vec4 src = sample(in, f.uv);
+        float l = luma(src.rgb());
+        vec3 mapped = mix(dark, light, l);
+        return v4(mix(src.rgb(), mapped, u.p[2]), src.w);
+    }, sink);
+}
+
+// Solarize: channels above a threshold inverted. p0 = centre, p1 = amount.
+void solarize(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        vec4 src = sample(in, f.uv);
+        vec3 c = src.rgb();
+        vec3 flipped = mix(c, 1.0f - c, vec3{step(u.p[0], c.x), step(u.p[0], c.y), step(u.p[0], c.z)});
+        return v4(mix(c, flipped, u.p[1]), src.w);
+    }, sink);
+}
+
+// Chromatic Warp: red and blue scaled about a centre, the other way from each other. p0 = amount, p1 = centre x,
+// p2 = centre y.
+void chromaticWarp(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    const vec2 center{u.p[1], u.p[2]};
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        vec2 d = f.uv - center;
+        float r = sample(in, center + d * (1.0f - u.p[0])).x;
+        vec4 ga = sample(in, f.uv);
+        float b = sample(in, center + d * (1.0f + u.p[0])).z;
+        return vec4{r, ga.y, b, ga.w};
+    }, sink);
+}
+
+// Sepia. p0 = amount.
+void sepia(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        vec4 src = sample(in, f.uv);
+        vec3 c = src.rgb();
+        vec3 s{dot(c, vec3{0.393f, 0.769f, 0.189f}), dot(c, vec3{0.349f, 0.686f, 0.168f}), dot(c, vec3{0.272f, 0.534f, 0.131f})};
+        return v4(mix(c, clamp(s, 0.0f, 1.0f), u.p[0]), src.w);
+    }, sink);
+}
+
 struct Entry { std::string_view id; EffectFn fn; };
 constexpr Entry kEffects[] = {
     {"soft-glitch", softGlitch}, {"hard-glitch", hardGlitch}, {"decimate", decimate}, {"data-mosh", dataMosh},
@@ -808,6 +870,7 @@ constexpr Entry kEffects[] = {
     {"super8", super8}, {"bad-tv", badTv}, {"ascii", ascii},
     {"bleach", bleach}, {"edges", edges}, {"emboss", emboss}, {"vignette", vignette}, {"noise-displace", noiseDisplace},
     {"watercolor", watercolor}, {"zoom-blur", zoomBlur}, {"glow", glow}, {"light-streak", lightStreak}, {"feedback", feedback},
+    {"color-correction", colorCorrection}, {"duotone", duotone}, {"solarize", solarize}, {"chromatic-warp", chromaticWarp}, {"sepia", sepia},
 };
 
 } // namespace

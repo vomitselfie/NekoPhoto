@@ -1031,6 +1031,26 @@
         <translation>フィードバック</translation>
     </message>
     <message>
+        <source>Color Correction</source>
+        <translation>カラー補正</translation>
+    </message>
+    <message>
+        <source>Duotone</source>
+        <translation>ダブルトーン</translation>
+    </message>
+    <message>
+        <source>Solarize</source>
+        <translation>ソラリゼーション</translation>
+    </message>
+    <message>
+        <source>Chromatic Warp</source>
+        <translation>色収差ワープ</translation>
+    </message>
+    <message>
+        <source>Sepia</source>
+        <translation>セピア</translation>
+    </message>
+    <message>
         <source>Amount</source>
         <translation>量</translation>
     </message>
@@ -1261,6 +1281,30 @@
     <message>
         <source>Decay</source>
         <translation>減衰</translation>
+    </message>
+    <message>
+        <source>Brightness</source>
+        <translation>明るさ</translation>
+    </message>
+    <message>
+        <source>Contrast</source>
+        <translation>コントラスト</translation>
+    </message>
+    <message>
+        <source>Gamma</source>
+        <translation>ガンマ</translation>
+    </message>
+    <message>
+        <source>Shadow Hue</source>
+        <translation>シャドウの色相</translation>
+    </message>
+    <message>
+        <source>Highlight Hue</source>
+        <translation>ハイライトの色相</translation>
+    </message>
+    <message>
+        <source>Mix</source>
+        <translation>ミックス</translation>
     </message>
     <message>
         <source>Softness</source>

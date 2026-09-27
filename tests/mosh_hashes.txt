@@ -14,6 +14,12 @@ bulge/variant 15f09d3cc25e30bc
 cga-8bit/default 95592e33e6b3a18f
 cga-8bit/translucent 9982e5f1b51b6c76
 cga-8bit/variant 3cdcb7488d35a03c
+chromatic-warp/default e0424299103fe9f3
+chromatic-warp/translucent 6f542c72a4a376ab
+chromatic-warp/variant c9cc7e08a40a78f3
+color-correction/default 4c9a66821f7e8ebd
+color-correction/translucent c359c02c8e641ac7
+color-correction/variant 73f95717d542c577
 crt/default de86078160ec5775
 crt/translucent b83b31337c4384be
 crt/variant a911eae14770eb04
@@ -29,6 +35,9 @@ dither/variant 48f651a833777fe1
 dot-screen/default b591511a8ecdf913
 dot-screen/translucent 58224e056665b3ce
 dot-screen/variant 9e39f7a820a9d556
+duotone/default 89c26fb1fdbb40ba
+duotone/translucent 3d0afd40d53f5e89
+duotone/variant 901e305553db2535
 edges/default bf25332fa5d8f20b
 edges/translucent 6bd35b181a5d232f
 edges/variant 4b79238c72af9be5
@@ -80,6 +89,9 @@ push/variant 272b5de2c5e538c7
 scanlines/default 657525d59fe3b051
 scanlines/translucent b9acc146ae75691d
 scanlines/variant 9102fc643ff67546
+sepia/default e3a05ef9e02b0710
+sepia/translucent ead2a9a1e3943946
+sepia/variant 91454cf0a346555a
 shake/default 0d56de2e125aa9cf
 shake/translucent 0da619923c965cac
 shake/variant 88a933bbb2b377e3
@@ -92,6 +104,9 @@ smear/variant 6db5b571fe7f52ed
 soft-glitch/default 57c99f44251d67d2
 soft-glitch/translucent 140d12574dfe6e1e
 soft-glitch/variant 1aa2ca9dc2979166
+solarize/default 078b82402fdf97b0
+solarize/translucent 48c6b093bcbedaaf
+solarize/variant 311f55f0204afcae
 splitter/default a1c68074ceac70f0
 splitter/translucent 1837eef379dd9647
 splitter/variant 546d58cbf02292d2

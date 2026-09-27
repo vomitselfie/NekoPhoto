@@ -113,6 +113,16 @@ std::vector<EffectSpec> makeEffects() {
             floatParam("intensity", "Intensity", 0, 2, 1)}),
         fx("feedback", "Feedback", C::Stylize,
            {floatParam("zoom", "Zoom", -0.2f, 0.2f, 0.05f), floatParam("rotation", "Rotation", -0.5f, 0.5f, 0.05f), floatParam("decay", "Decay", 0, 1, 0.85f)}),
+        // ---- Color
+        fx("color-correction", "Color Correction", C::Color,
+           {floatParam("brightness", "Brightness", -1, 1, 0), floatParam("contrast", "Contrast", -1, 1, 0), floatParam("saturation", "Saturation", -1, 1, 0),
+            floatParam("gamma", "Gamma", 0.2f, 3, 1)}),
+        fx("duotone", "Duotone", C::Color,
+           {floatParam("shadow", "Shadow Hue", 0, 1, 0.66f), floatParam("highlight", "Highlight Hue", 0, 1, 0.12f), floatParam("mix", "Mix", 0, 1, 1)}),
+        fx("solarize", "Solarize", C::Color, {floatParam("center", "Center", 0, 1, 0.5f), floatParam("amount", "Amount", 0, 1, 1)}),
+        fx("chromatic-warp", "Chromatic Warp", C::Color,
+           {floatParam("amount", "Amount", 0, 0.2f, 0.05f), floatParam("cx", "Center X", 0, 1, 0.5f), floatParam("cy", "Center Y", 0, 1, 0.5f)}),
+        fx("sepia", "Sepia", C::Color, {floatParam("amount", "Amount", 0, 1, 0.8f)}),
     };
 }
 

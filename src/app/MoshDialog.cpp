@@ -65,6 +65,13 @@ namespace {
     QT_TRANSLATE_NOOP("Names", "Intensity"), QT_TRANSLATE_NOOP("Names", "Light Streak"),
     QT_TRANSLATE_NOOP("Names", "Length"), QT_TRANSLATE_NOOP("Names", "Feedback"), QT_TRANSLATE_NOOP("Names", "Zoom"),
     QT_TRANSLATE_NOOP("Names", "Decay"),
+    // the effects added since, their parameters and options
+    QT_TRANSLATE_NOOP("Names", "Color Correction"), QT_TRANSLATE_NOOP("Names", "Brightness"),
+    QT_TRANSLATE_NOOP("Names", "Contrast"), QT_TRANSLATE_NOOP("Names", "Saturation"),
+    QT_TRANSLATE_NOOP("Names", "Gamma"), QT_TRANSLATE_NOOP("Names", "Duotone"),
+    QT_TRANSLATE_NOOP("Names", "Shadow Hue"), QT_TRANSLATE_NOOP("Names", "Highlight Hue"),
+    QT_TRANSLATE_NOOP("Names", "Mix"), QT_TRANSLATE_NOOP("Names", "Solarize"),
+    QT_TRANSLATE_NOOP("Names", "Chromatic Warp"), QT_TRANSLATE_NOOP("Names", "Sepia"),
     // parameters
     QT_TRANSLATE_NOOP("Names", "Amount"), QT_TRANSLATE_NOOP("Names", "Angle"), QT_TRANSLATE_NOOP("Names", "Blocks"),
     QT_TRANSLATE_NOOP("Names", "Color Shift"), QT_TRANSLATE_NOOP("Names", "Block Size"), QT_TRANSLATE_NOOP("Names", "Drift"),
