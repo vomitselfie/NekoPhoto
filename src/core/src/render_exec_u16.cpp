@@ -6,6 +6,7 @@
 // 8 bits and applied as a difference, so the pixels it does not touch keep their full precision: layer styles and
 // adjustment layers (P3 and P8 port them; docs/bit-depth.md).
 #include "render_plan.h"
+#include "compositor/fill_cache.h"
 #include "compositor/layerstyle.h"
 #include "layerstyle_render.h"
 #include "compositor/vectormask.h"
@@ -294,16 +295,12 @@ struct RenderExec<SampleType::U16> {
 
     /// A gradient or pattern fill layer's contents, drawn at 8 bits (vectormask.h) and widened, kept while its carry lives.
     Image16Ptr fillImage(const Layer& layer) {
-        static std::mutex m;
-        static std::vector<std::tuple<std::weak_ptr<const PsdLayerCarry>, int, int, Image16Ptr>> cache;
+        static FillLayerCache<Image16Ptr> cache;
         if (!layer.psdCarry) return nullptr;
-        std::lock_guard<std::mutex> lock(m);
-        for (auto& [carry, w, h, image] : cache)
-            if (carry.lock() == layer.psdCarry && w == document.width && h == document.height) return image;
+        if (auto cached = cache.find(layer.psdCarry, document.width, document.height)) return *cached;
         ImagePtr eight = renderFillLayer(layer, document);
         Image16Ptr image = eight ? Image16Ptr(widenImage(*eight)) : nullptr;
-        if (cache.size() > 32) cache.erase(cache.begin());
-        cache.emplace_back(layer.psdCarry, document.width, document.height, image);
+        cache.insert(layer.psdCarry, document.width, document.height, image);
         return image;
     }
 

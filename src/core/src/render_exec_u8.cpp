@@ -1,6 +1,7 @@
 // The renderer's pixels at 8 bits (render_plan.h): the former body of render.cpp's Renderer, moved as it was.
 // It draws a RenderPlan into premultiplied RGBA8.
 #include "render_plan.h"
+#include "compositor/fill_cache.h"
 #include "compositor/layerstyle.h"
 #include "layerstyle_render.h"
 #include "compositor/vectormask.h"
@@ -223,17 +224,14 @@ struct RenderExec<SampleType::U8> {
         return params;
     }
 
-    /// A gradient or pattern fill layer's contents (they have no pixels of their own), kept while its carry lives.
+    /// A gradient or pattern fill layer's contents (they have no pixels of their own), kept while its carry lives
+    /// (fill_cache.h: least recently used first out, within 256 MB).
     ImagePtr fillImage(const Layer& layer) {
-        static std::mutex m;
-        static std::vector<std::tuple<std::weak_ptr<const PsdLayerCarry>, int, int, ImagePtr>> cache;
+        static FillLayerCache<ImagePtr> cache;
         if (!layer.psdCarry) return nullptr;
-        std::lock_guard<std::mutex> lock(m);
-        for (auto& [carry, w, h, image] : cache)
-            if (carry.lock() == layer.psdCarry && w == document.width && h == document.height) return image;
+        if (auto cached = cache.find(layer.psdCarry, document.width, document.height)) return *cached;
         ImagePtr image = renderFillLayer(layer, document);
-        if (cache.size() > 32) cache.erase(cache.begin());
-        cache.emplace_back(layer.psdCarry, document.width, document.height, image);
+        cache.insert(layer.psdCarry, document.width, document.height, image);
         return image;
     }
 

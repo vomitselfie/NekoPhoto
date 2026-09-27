@@ -25,6 +25,7 @@
 #include "compositor/transform.h"
 #include "compositor/parallel.h"
 #include "compositor/psd_carry.h"
+#include "compositor/fill_cache.h"
 #include "compositor/smartobject.h"
 #include <thread>
 
@@ -259,6 +260,35 @@ TEST_CASE(history_counts_selection_carry_and_smart_object_sources) {
     doc.smartObjects.clear();
     history.end(doc, doc.layers[0].id);
     CHECK_EQ(history.retainedBytes(doc), before + 1800 + 2700 + 4000 + 10 * 10 * 4);
+}
+
+// The fill-layer cache holds a byte budget, least recently used first out, and forgets layers that are gone.
+TEST_CASE(fill_layer_cache_evicts_by_bytes) {
+    FillLayerCache<ImagePtr> cache(1000);   // two 10 x 10 images (400 bytes each), not three
+    auto a = std::make_shared<const PsdLayerCarry>(), b = std::make_shared<const PsdLayerCarry>(), c = std::make_shared<const PsdLayerCarry>();
+    auto image = [] { return ImagePtr(std::make_shared<Image>(10, 10)); };
+    cache.insert(a, 100, 100, image());
+    cache.insert(b, 100, 100, image());
+    CHECK_EQ(cache.bytes(), size_t(800));
+    CHECK(cache.find(a, 100, 100).has_value());   // a is now the most recent: b goes first
+    CHECK(!cache.find(a, 200, 100).has_value());  // another canvas size is another entry
+    cache.insert(c, 100, 100, image());
+    CHECK_EQ(cache.bytes(), size_t(800));
+    CHECK(cache.find(a, 100, 100).has_value());
+    CHECK(!cache.find(b, 100, 100).has_value());
+    CHECK(cache.find(c, 100, 100).has_value());
+    // A layer that draws nothing is remembered as such, at no cost.
+    cache.insert(b, 100, 100, nullptr);
+    auto nothing = cache.find(b, 100, 100);
+    CHECK(nothing.has_value() && !*nothing);
+    // Entries whose carries are gone are swept out as the cache grows.
+    {
+        std::vector<std::shared_ptr<const PsdLayerCarry>> gone;
+        for (int i = 0; i < 40; i++) { gone.push_back(std::make_shared<const PsdLayerCarry>()); cache.insert(gone.back(), 1, 1, nullptr); }
+    }
+    for (int i = 0; i < 40; i++) cache.insert(std::make_shared<const PsdLayerCarry>(), 1, 1, nullptr);
+    CHECK(cache.size() < 60);
+    CHECK(cache.find(a, 100, 100).has_value());
 }
 
 TEST_CASE(history_records_only_real_changes_and_shares_images) {
