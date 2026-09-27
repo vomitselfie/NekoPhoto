@@ -13,9 +13,9 @@ run them again.
 | PSD round trip over Patchy's fixtures | **117 of 117 files pass**, 3,675 carried blocks back byte for byte, 20 type layers opened as editable text | `build/tests/psd_roundtrip ../Patchy/test-fixtures/psd` |
 | The same converted to 16 bits | **118 of 118 files pass** (Patchy's and K.psd): every carried block comes back from a 16-bit export too (3,975 with K.psd) | `PSD_ROUNDTRIP_16=1 build/tests/psd_roundtrip ../Patchy/test-fixtures/psd ../K.psd` |
 | 16-bit PSD round trip | an unedited layer's 16-bit channels come back **byte for byte** | `ctest -R depth_format_tests` |
-| Render hashes | **191 scenes**: 133 at 8 bits (blend modes, brushes, filters, adjustments, golden scenes) and 58 at 16 bits, each rendered on the worker pool and serially | `ctest -R render_hash_tests` |
+| Render hashes | **235 scenes**: 133 at 8 bits (blend modes, brushes, filters, adjustments, golden scenes) and 102 at 16 bits (blend modes, adjustments and adjustment layers, filters), each rendered on the worker pool and serially | `ctest -R render_hash_tests` |
 | Golden images | **6 golden test cases over 21 reference PNGs** in `tests/golden/` | `ctest -R golden_tests` |
-| Test suites | **40 CTest suites** (342 `TEST_CASE`s), 40 of 40 passing | `ctest --test-dir build` |
+| Test suites | **41 CTest suites** (354 `TEST_CASE`s), 41 of 41 passing | `ctest --test-dir build` |
 | Compiler warnings | none: CI builds with `-Werror` on GCC and Clang | `-DCOMPOSITOR_WARNINGS_AS_ERRORS=ON` |
 
 ## The PSD corpus
@@ -139,7 +139,7 @@ NekoPhoto 1.6.1 でツールを実行して集計したものです。
 
 - **PSD の往復**: [Patchy](https://github.com/SethRobinson/Patchy) の MIT ライセンスのテストファイル 117 個(2 個を除き
   Photoshop 2026 で保存)すべてが合格し、3,675 個のブロックがバイト単位で変化なく戻りました。テキストレイヤー 20 個は編集可能なテキストとして開きます。
-- **描画のハッシュ**: 191 シーン(8 bit 133、16 bit 58)。**ゴールデン画像**: 6 テスト・参照 PNG 21 枚。**テストスイート**: CTest 40 個(すべて合格)。
+- **描画のハッシュ**: 235 シーン(8 bit 133、16 bit 102)。**ゴールデン画像**: 6 テスト・参照 PNG 21 枚。**テストスイート**: CTest 41 個(すべて合格)。
 - **対応している PSD の要素**: レイヤーとグループ、描画モード、マスク(レイヤーマスク・ベクターマスク・両方・濃度とぼかし)、
   クリッピング、調整レイヤー、レイヤースタイル、シェイプ、編集可能なテキスト、スマートオブジェクトとスマートフィルター、PSB。
 - **16 bit**: 16 bit の PSD は 16 bit のまま開いて書き出し、編集していないレイヤーのチャンネルデータはバイト単位で戻ります。

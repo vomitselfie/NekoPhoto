@@ -79,9 +79,24 @@ The same document at 16 bits (`convertSampleType`), new lines of `bench_core`:
 
 The 16-bit render includes the two adjustment layers, drawn at 8 bits and applied as a difference.
 
+## P3a: editing at 16 bits
+
+2026-09-27, P3a against 68435cb, four alternating rounds of `bench_core 9` (median of round medians). The 8-bit
+object code of the benched functions is identical to 68435cb, so the 8-bit differences (brush -8% to +3%, blur r2
++2.9%) are the desktop's load; render16 now draws its two adjustment layers natively.
+
+| Operation | 68435cb (ms) | P3a (ms) |
+|---|---:|---:|
+| render 4000x3000, 12 layers | 205.3 | 205.6 |
+| gaussian blur r2 / r20 | 51.3 / 84.1 | 52.8 / 85.1 |
+| levels / curves / hue/saturation | 1.69 / 1.78 / 19.3 | 1.72 / 1.80 / 19.1 |
+| render16 4000x3000, 12 layers | 231.6 | 214.0 |
+| u16 gaussian blur r2 / r20 | | 53.5 / 87.0 |
+| u16 levels / curves / hue/saturation | | 7.7 / 8.0 / 46.2 |
+
 ## Render hashes
 
-The matching correctness gate is `render_hash_tests` (in ctest): 191 scenes (133 at 8 bits, 58 at 16 bits) hashed with FNV-1a 64 against
+The matching correctness gate is `render_hash_tests` (in ctest): 235 scenes (133 at 8 bits, 102 at 16 bits) hashed with FNV-1a 64 against
 `tests/render_hashes.txt`, each rendered on the worker pool and serially. After an intentional rendering change:
 
 ```bash
