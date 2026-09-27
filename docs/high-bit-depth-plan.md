@@ -161,6 +161,45 @@ and a Channels panel, with 8-bit documents untouched throughout.
   `-Werror`, rpc smoke; `bench_core 9` A/B against 1.6.1 within ±2% (medians of alternating rounds, render 201.7 →
   201.2 ms, brush 21.9 → 22.1 ms, blur r20 82.2 → 82.8 ms).
 
+**P2 landed (2026-09-27): the 16-bit RGB core.** User-facing summary: [bit-depth.md](bit-depth.md).
+
+- `RenderExec<U16>` (`render_exec_u16.cpp`) is a separate specialisation, so the U8 executor and its codegen are
+  untouched: pixel layers in every mode, opacity, pixel and vector masks, clipping stacks, folders (pass-through,
+  faded, isolated), artboards, strokes and Dissolve at 0..32768 with coverage at the same depth. Layer styles and
+  adjustment layers are drawn by their 8-bit code and applied as a difference (`via8`), so pixels they leave alone
+  keep 16 bits; they get native paths with P3 and P8. `drawLayer`, mask sampling, resampling, `LayerOverride`
+  (`image16`, `maskImage16`), `RenderCache` (`backdrop16`, `above16`), `DrawParams16` and `MipCache` (16-bit levels)
+  have their 16-bit forms. `render()` hands the canvas a 16-bit document reduced with rounding (`toDisplay<U16>`,
+  no colour transform yet); `render16()` is the document at its depth.
+- `blend_u16.cpp`: Normal and the product-form modes (Multiply, Screen, Overlay, Hard Light, Darken, Lighten,
+  Difference, Exclusion, Linear Burn and Dodge, Subtract, Linear Light, Pin Light) are exact 15-bit integer maths on
+  premultiplied samples; Color Dodge and Burn, Vivid Light, Soft Light, Divide, Hard Mix and the non-separable modes
+  are float per pixel. Calibration against the 8-bit kernels: opaque pixels at full coverage are within one 8-bit
+  level in every mode (Vivid Light two: Photoshop's 8-bit kernel rounds its divisor to a byte), and a soft, masked
+  layer at an opacity keeps 99% of samples within a level; stacked scenes differ more where the 8-bit engine's own
+  rounding (coverage in 1/256 steps, bytes between layers, 8-bit unpremultiplied clipping bases) is magnified by a
+  dividing mode. Hard Mix, Darker Color and Lighter Color decide on the pixels rounded to 8 bits, so an 8-bit
+  document converted to 16 bits chooses as its 8-bit render does.
+- Formats: 16-bit RGB and grayscale PSDs open as 16-bit documents and export as 16-bit PSDs (layers in `Lr16`, zip
+  with prediction); an unedited layer's channels come back byte for byte from `PsdLayerCarry::planes`, bound to the
+  layer's pixels by their fingerprint (PSD to PSD; a PSB, or an edited layer, is written from 0..32768). The stored
+  mask channels carry at their depth. 16-bit PNG read and write; TIFF at 16 bits through Qt's plugin (probed at run
+  time); JPEG, WebP, TGA, ICO and GIF dither down with a notice. Project format 8 gains `sampleType` (`"u16"`, 16-bit
+  PNGs); 8-bit documents write what they wrote before.
+- Budgets are bytes: `Document::imagePixelBudget(type)`, `projectPixelBudgetAt(type)`, checked by the mode
+  conversion, the PSD reader and the project loader and writer. `DocumentHistory::retainedBytes` counts buffers at
+  their depth.
+- The `supports()` table lists what P2 ports (rendering, the layer structure, masks, whole-layer transforms, canvas
+  size and flip, import, save and export, the tools that do not touch pixels). The app greys every other menu entry
+  and tool in a 16-bit document ("Not available in 16-bit yet"), automation refuses the other methods ("<method> is
+  not available for 16-bit documents yet"), and the session's 8-bit-only entry points refuse with the same wording.
+  Every edit brings buffers held at another depth to the document's (`conformToSampleType`), so a document keeps one
+  depth even when an 8-bit path (a shape or text raster, an imported file) adds pixels.
+- Gates: 8-bit render hashes identical (133 scenes) plus 58 16-bit scenes; full ctest; GCC and Clang `-Werror`; rpc
+  smoke with a 16-bit section; PSD corpus plus K.psd identical (118 files, 3,975 carried blocks); a constructed
+  16-bit PSD round trips byte for byte (`depth_format_tests`). No Photoshop-saved 16-bit PSD was available; the
+  fixture is built in the test the way Photoshop lays one out.
+
 ## Review notes
 
 - Mac project compatibility: since 2026-09-26 NekoPhoto no longer keeps Mac Compositor project-format parity, so

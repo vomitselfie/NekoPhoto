@@ -32,6 +32,12 @@ toward that backdrop; `passThrough: false` isolates the children and composites 
 blend mode and opacity, as Photoshop does. A save writes version 7 whenever no folder uses these, so the Mac app
 (which reads up to 7) still opens it; version 7 files cannot give a folder non-default values.
 
+Version 8 also carries the document's depth (docs/bit-depth.md): `"sampleType": "u16"` makes every layer's
+`imageFile` a 16-bit RGBA PNG and every `maskFile` a 16-bit grayscale PNG (0..65535 on disk, 0..32768 in memory,
+the values mapped on the way in and out). An 8-bit document writes no `sampleType` and its PNGs as before; a manifest
+without the key, or with `"u8"`, is 8-bit, and `sampleType` in a manifest below version 8 is refused as damage. The
+byte budgets apply: a 16-bit project holds half the pixels of an 8-bit one.
+
 ## Frame animation (NekoPhoto)
 
 A document with frames (Window > Timeline) adds an `animation` object to the manifest; readers that do not know it

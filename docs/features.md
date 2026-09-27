@@ -76,6 +76,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Open animated GIFs with each frame as a layer ("Frame N (D ms)", frame 1 visible) and the frames, delays and looping on the Timeline, and icons (`.ico`, `.cur`) with each size as a layer
 - Frame animation (Window > Timeline), as Photoshop's Timeline in frame mode: frames that each show the layers with their own visibility, position and opacity for a delay you set; New, Delete and reorder frames, Make Frames From Layers, play it on the canvas, choose how many times it loops. Frames are saved in the project, and File > Export Animated GIF writes them (docs/animation.md)
 - Actions (Window > Actions, Alt+F9), as Photoshop's Actions panel: record menu commands, filters, adjustments, selections and brush strokes as you work, play them back on any document, switch steps off, reorder, delete or edit them, and share them as JSON; File > Automate > Batch runs an action over a folder of files and saves the results in the format you pick (docs/actions.md)
+- 16 bits per channel (Image ▸ Mode ▸ 8 Bits/Channel, 16 Bits/Channel): 16-bit PSD, PNG and TIFF files open as 16-bit documents, and every blend mode, mask, clipping mask and folder renders at 16 bits; an unedited layer of a 16-bit PSD goes back out byte for byte. Painting, selections, adjustments and filters are still 8-bit only and greyed out in a 16-bit document ([bit-depth.md](bit-depth.md))
 - Open PNG, JPEG, TIFF, TGA, WebP and more; drop an image on the canvas to add it as a layer, or on the tab strip to open it
 - Projects of up to a gigapixel of layers; the Mac app opens projects up to 100 megapixels
 - Export PNG, TIFF, TGA, a multi-size Windows icon (16, 32, 48 and 256 px), or JPEG and WebP with a live preview (WebP keeps transparency, and is lossless at quality 100)
@@ -155,6 +156,7 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 - アニメーション GIF は各フレームをレイヤーとして(「Frame N (D ms)」、フレーム 1 のみ表示)、フレーム・表示時間・ループ回数はタイムラインに、アイコン(`.ico`、`.cur`)は各サイズをレイヤーとして開けます
 - フレームアニメーション(ウィンドウ > タイムライン):Photoshop のフレームモードのタイムラインと同じく、各フレームがレイヤーの表示・位置・不透明度と表示時間を持ちます。フレームの追加・削除・並べ替え、レイヤーからフレームを作成、カンバス上での再生、ループ回数の指定。フレームはプロジェクトに保存され、ファイル > アニメーション GIF を書き出し で書き出せます
 - アクション(ウィンドウ > アクション、Alt+F9):メニューのコマンド、フィルター、色調補正、選択範囲、ブラシのストロークを記録して、どのドキュメントにも再生できます。ステップのオン/オフ・並べ替え・削除・編集、JSON での読み込みと書き出し。ファイル > 自動処理 > バッチ でフォルダー内のファイルにまとめて適用し、選んだ形式で保存します
+- 16 bit/チャンネル(イメージ ▸ モード ▸ 8 bit/チャンネル、16 bit/チャンネル):16 bit の PSD・PNG・TIFF は 16 bit のドキュメントとして開き、すべての描画モード・マスク・クリッピングマスク・グループを 16 bit で合成します。16 bit の PSD の編集していないレイヤーはバイト単位でそのまま書き出されます。ペイント、選択範囲、色調補正、フィルターはまだ 8 bit のみで、16 bit のドキュメントではグレー表示になります([bit-depth.md](bit-depth.md))
 - PNG、JPEG、TIFF、TGA、WebP などを開けます。カンバスにドロップするとレイヤーとして追加、タブバーにドロップすると新しいドキュメントとして開きます
 - レイヤー合計 1 ギガピクセルまでのプロジェクト(Mac 版で開けるのは 1 億画素まで)
 - PNG・TIFF・TGA・複数サイズの Windows アイコン(16/32/48/256 px)書き出し、プレビュー付きの JPEG・WebP 書き出し(WebP は透明部分を保持し、品質 100 で可逆圧縮)

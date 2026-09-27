@@ -11,9 +11,11 @@ run them again.
 | Check | Result (2026-09-27) | How to rerun |
 |---|---|---|
 | PSD round trip over Patchy's fixtures | **117 of 117 files pass**, 3,675 carried blocks back byte for byte, 20 type layers opened as editable text | `build/tests/psd_roundtrip ../Patchy/test-fixtures/psd` |
-| Render hashes | **133 scenes** (blend modes, brushes, filters, adjustments, golden scenes), each rendered on the worker pool and serially | `ctest -R render_hash_tests` |
+| The same converted to 16 bits | **118 of 118 files pass** (Patchy's and K.psd): every carried block comes back from a 16-bit export too (3,975 with K.psd) | `PSD_ROUNDTRIP_16=1 build/tests/psd_roundtrip ../Patchy/test-fixtures/psd ../K.psd` |
+| 16-bit PSD round trip | an unedited layer's 16-bit channels come back **byte for byte** | `ctest -R depth_format_tests` |
+| Render hashes | **191 scenes**: 133 at 8 bits (blend modes, brushes, filters, adjustments, golden scenes) and 58 at 16 bits, each rendered on the worker pool and serially | `ctest -R render_hash_tests` |
 | Golden images | **6 golden test cases over 21 reference PNGs** in `tests/golden/` | `ctest -R golden_tests` |
-| Test suites | **38 CTest suites** (326 `TEST_CASE`s), 38 of 38 passing | `ctest --test-dir build` |
+| Test suites | **40 CTest suites** (342 `TEST_CASE`s), 40 of 40 passing | `ctest --test-dir build` |
 | Compiler warnings | none: CI builds with `-Werror` on GCC and Clang | `-DCOMPOSITOR_WARNINGS_AS_ERRORS=ON` |
 
 ## The PSD corpus
@@ -67,8 +69,12 @@ Collected from the pages above; each is also listed before you export or in the 
 - **Not verified in Photoshop.** The files match what Photoshop wrote, structure for structure, but they have
   not been opened in Photoshop itself, so a warning on open or a re-layout of our type layers there is not ruled
   out.
-- **Export is 8 bits per channel, RGB.** A CMYK, Lab or grayscale file opens converted and exports as RGB,
-  without its original colour profile. 16-bit and PSB Smart Filter caches are left for Photoshop to rebuild.
+- **Export is RGB, at 8 or 16 bits per channel.** A 16-bit RGB or grayscale file opens and exports at 16 bits
+  ([bit-depth.md](bit-depth.md)); an unedited layer keeps its channel data byte for byte, an edited one (or a PSB) is
+  written from NekoPhoto's 0..32768, dropping the file's lowest bit. A 32-bit, CMYK or Lab file opens converted to
+  8-bit RGB and exports as that, without its original colour profile. 16-bit and PSB Smart Filter caches are left for
+  Photoshop to rebuild. No Photoshop-saved 16-bit file is in the corpus: the 16-bit round trip is checked on a file
+  built the way Photoshop lays one out, and on the corpus converted to 16 bits.
 - **Written as pixels**: scaled, rotated or flipped layers are resampled into place; shape layers made in
   NekoPhoto; flipped text; adjustments Photoshop has no equivalent for (Grain, Gradient Map, Hue/Saturation on
   the plain scale) become a pixel layer of their result; a layer clipped to one not directly beneath it is
@@ -118,6 +124,7 @@ AMD Ryzen AI 9 HX 370 (12 cores, 24 worker threads), Manjaro, GCC 16, Release bu
 | 80 px brush stroke across 4000 × 3000, hard / soft | 20 ms / 45 ms |
 | Gaussian blur on 4000 × 3000, radius 2 / 20 | 50 ms / 85 ms |
 | Levels / Curves / Hue/Saturation | 1.7 ms / 1.7 ms / 18.6 ms |
+| The 4000 × 3000 document at 16 bits / reduced for the screen | 230 ms / 262 ms |
 
 Application-level timings (opening a 70 MB PSD in 0.7 s and so on) are in the [README](../README.md#performance).
 
@@ -132,10 +139,12 @@ NekoPhoto 1.6.1 でツールを実行して集計したものです。
 
 - **PSD の往復**: [Patchy](https://github.com/SethRobinson/Patchy) の MIT ライセンスのテストファイル 117 個(2 個を除き
   Photoshop 2026 で保存)すべてが合格し、3,675 個のブロックがバイト単位で変化なく戻りました。テキストレイヤー 20 個は編集可能なテキストとして開きます。
-- **描画のハッシュ**: 133 シーン。**ゴールデン画像**: 6 テスト・参照 PNG 21 枚。**テストスイート**: CTest 38 個(すべて合格)。
+- **描画のハッシュ**: 191 シーン(8 bit 133、16 bit 58)。**ゴールデン画像**: 6 テスト・参照 PNG 21 枚。**テストスイート**: CTest 40 個(すべて合格)。
 - **対応している PSD の要素**: レイヤーとグループ、描画モード、マスク(レイヤーマスク・ベクターマスク・両方・濃度とぼかし)、
   クリッピング、調整レイヤー、レイヤースタイル、シェイプ、編集可能なテキスト、スマートオブジェクトとスマートフィルター、PSB。
-- **既知の差異**: Photoshop 本体で開いての確認はまだです。書き出しは 8 ビット RGB のみ。変形したレイヤーや Photoshop に
+- **16 bit**: 16 bit の PSD は 16 bit のまま開いて書き出し、編集していないレイヤーのチャンネルデータはバイト単位で戻ります。
+  上のテストファイルを 16 bit に変換して書き出しても、118 個すべてで引き継いだブロックが戻ります([bit-depth.md](bit-depth.md))。
+- **既知の差異**: Photoshop 本体で開いての確認はまだです。書き出しは RGB(8 bit/チャンネルまたは 16 bit/チャンネル)。変形したレイヤーや Photoshop に
   相当するもののない調整はピクセルとして書き出されます。一部のレイヤースタイル(シャドウ・光彩の輪郭、ノイズ、ディザ合成)は
   まだ描画されません。
 - **CI**: GCC と Clang(Ubuntu 24.04、`-Werror`)、Windows(MSYS2 の MinGW-w64)でビルドとテスト、画面なしのスモークテスト、
