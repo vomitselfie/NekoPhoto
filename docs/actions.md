@@ -41,7 +41,7 @@ the same format: `{"format": "nekophoto.actions", "version": 1, "actions": [{"na
 | Image > Canvas Size, Image Size, Trim, Crop to Selection, Flip Canvas | `canvas.resize`, `image.resize`, `image.trim`, `canvas.crop`, `canvas.flip` |
 | Image > Adjustments (every dialog), Invert | `pixels.adjust` with the dialog's settings, `pixels.invert` |
 | Filter > Gaussian Blur, Motion Blur, Add Noise (with its seed), Lens Correction | `pixels.filter` |
-| Edit > Fill with Foreground / Background, Clear, Content-Aware Fill | `pixels.fill` with the colour, `pixels.clear` (or `layers.delete` without a selection), `pixels.contentAwareFill` |
+| Edit > Fill with Foreground / Background, Clear, Content-Aware Fill | `pixels.fill` with the colour, `pixels.clear` (or `layers.delete` without a selection), `pixels.contentAwareFill` (Auto and All sampling; a painted Custom area is not recorded) |
 | Layer > New Layer, New Layer Below, New Folder, Group, Duplicate, Delete, Merge Down, New Adjustment Layer, Layer Mask (every item), Flip Layer | `layers.add`, `layers.group`, `layers.duplicate`, `layers.delete`, `layers.merge`, `layers.mask`, `layers.flip` |
 | Select > All, Deselect, Inverse, Modify (Expand, Contract, Feather, Smooth, Border), Load Layer Pixels / Mask | `selection.all`, `selection.none`, `selection.invert`, `selection.grow`, `selection.feather`, `selection.smooth`, `selection.border`, `selection.fromLayer` |
 | A rectangular or elliptical marquee | `selection.rect` with its box and mode |

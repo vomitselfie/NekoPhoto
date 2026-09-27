@@ -1,4 +1,5 @@
 #include "ContentFillDialog.h"
+#include "ActionLibrary.h"
 #include "ImageConvert.h"
 #include "compositor/render.h"
 #include <QApplication>
@@ -187,9 +188,13 @@ void ContentFillDialog::apply() {
     if (previewShown_) { session_->clearPixelPreview(); previewShown_ = false; }
     QString error;
     QApplication::setOverrideCursor(Qt::WaitCursor);
-    const bool done = session_->contentAwareFill(&error, request());
+    const ContentFillRequest r = request();
+    const bool done = session_->contentAwareFill(&error, r);
     QApplication::restoreOverrideCursor();
     if (!done) { QMessageBox::warning(this, windowTitle(), error); return; }
+    // A painted custom sampling area has no request form (the method takes rectangles), so only Auto and All record.
+    if (r.sampling != ContentFillRequest::Sampling::Custom)
+        recordAction("pixels.contentAwareFill", {{"sampling", r.sampling == ContentFillRequest::Sampling::All ? "all" : "auto"}, {"output", r.newLayer ? "new" : "current"}});
     accept();
 }
 
