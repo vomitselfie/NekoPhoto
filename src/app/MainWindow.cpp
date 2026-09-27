@@ -513,7 +513,7 @@ void MainWindow::refreshActions() {
     bool has = session_->hasDocument();
     refreshDepthGating();
     const bool eightBit = session_->sampleType() == SampleType::U8;
-    if (mergeAction_) { mergeAction_->setText(tr("&%1").arg(names::history(session_->mergeTitle()))); mergeAction_->setEnabled(has && eightBit && session_->canMergeLayers()); }
+    if (mergeAction_) { mergeAction_->setText(tr("&%1").arg(names::history(session_->mergeTitle()))); mergeAction_->setEnabled(has && session_->supportsFeature("layers.merge") && session_->canMergeLayers()); }
     if (editTextAction_) { const Layer* l = has ? session_->activeLayer() : nullptr; editTextAction_->setEnabled(eightBit && l && l->isLiveText()); }
     undoAction_->setEnabled(session_->canUndo());
     redoAction_->setEnabled(session_->canRedo());

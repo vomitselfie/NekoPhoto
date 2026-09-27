@@ -104,6 +104,9 @@ constexpr FeatureSupport table[] = {
     {"tool.paintBucket", eightAndSixteen},
     // Moving, duplicating and nudging selected pixels with the Move tool.
     {"edit.movePixels", eightAndSixteen},
+    // Merge Down, Merge Layers and Merge Group (rendered at 16 bits), and Layer > Layer Mask > Apply.
+    {"layers.merge", eightAndSixteen},
+    {"layers.applyMask", eightAndSixteen},
 };
 }   // namespace
 

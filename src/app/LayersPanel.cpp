@@ -783,14 +783,14 @@ void LayersPanel::showContextMenu(const QPoint& pos) {
     if (!layer->isGroup) {
         QAction* clip = menu->addAction(layer->maskSourceId ? tr("Release Clipping Mask") : tr("Create Clipping Mask"), this, [this, id] { session_->toggleClippingMask(id); });
         clip->setEnabled(session_->canToggleClippingMask(id));
-        eightBitOnly(menu->addAction(tr("Merge Down"), this, [this] { session_->mergeDown(); }));
+        menu->addAction(tr("Merge Down"), this, [this] { session_->mergeDown(); });
         menu->addSeparator();
     }
     if (layer->mask) {
         menu->addAction(layer->mask->enabled ? tr("Disable Layer Mask") : tr("Enable Layer Mask"), this, [this] { session_->toggleLayerMask(); });
         menu->addAction(layer->mask->linked ? tr("Unlink Layer Mask") : tr("Link Layer Mask"), this, [this, id] { session_->toggleMaskLink(id); });
         menu->addAction(tr("Invert Mask"), this, [this] { session_->invertMask(); });
-        if (!layer->isGroup) eightBitOnly(menu->addAction(tr("Apply Layer Mask"), this, [this] { session_->applyMask(); }));
+        if (!layer->isGroup) menu->addAction(tr("Apply Layer Mask"), this, [this] { session_->applyMask(); });
         menu->addAction(tr("Delete Layer Mask"), this, [this] { session_->deleteLayerMask(); });
     } else {
         menu->addAction(tr("Add Reveal-All Mask"), this, [this] { session_->addMaskFromSelection(true); });

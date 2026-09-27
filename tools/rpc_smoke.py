@@ -413,10 +413,18 @@ def sixteen_bit(rpc):
     rpc.call("layers.select", id=layer["id"])
     if rpc.call("brush.presets")["supported"]:
         assert rpc.call("brush.stroke", points=[[30, 40], [100, 45]], preset="classic/pencil", pressures=[0.3, 0.9], color="#000000")["preset"] == "classic/pencil"
+    # Apply Mask and Merge Down at 16 bits.
+    rpc.call("layers.mask", id=layer["id"], action="apply")
+    assert rpc.call("history.info")["undo"] == "Apply Layer Mask"
+    above = rpc.call("layers.add")
+    rpc.call("brush.stroke", points=[[10, 70], [110, 70]], size=6, color="#224466")
+    rpc.call("layers.select", id=above["id"])
+    count = len(rpc.call("layers.list"))
+    rpc.call("layers.merge")
+    assert len(rpc.call("layers.list")) == count - 1
     assert rpc.call("document.info")["bits"] == 16
     # What is not ported yet is refused, saying so.
-    for method, params in (("pixels.cameraRaw", {"settings": {"exposure": 0.5}}), ("layers.merge", {}),
-                           ("tool.select", {"name": "shape"})):
+    for method, params in (("pixels.cameraRaw", {"settings": {"exposure": 0.5}}), ("tool.select", {"name": "shape"})):
         try:
             rpc.call(method, **params)
             raise AssertionError(method + " should be refused on a 16-bit document")
