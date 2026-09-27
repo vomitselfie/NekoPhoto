@@ -1,6 +1,7 @@
 #include "brush_harness.h"
 #include "brush_import_fixtures.h"
 #include "compositor/brushimport.h"
+#include "compositor/depth.h"
 #include "compositor/mypaint.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -300,14 +301,18 @@ std::vector<Preset> standardPresets(const std::string& myPaintFolder) {
 
 // ---- Rendering ---------------------------------------------------------------------------------------------------
 
-Render render(const StrokeFixture& fixture, const Preset& preset) {
-    Render out;
-    const bool erasing = preset.settings.erasing;
+namespace {
+
+/// The paper a fixture is painted on: transparent, or an opaque grey for the eraser.
+std::shared_ptr<Image> paper(const Preset& preset) {
     auto base = std::make_shared<Image>(canvasWidth, canvasHeight);
-    if (erasing) base->fill(128, 128, 128, 255);
-    Layer layer(Asset::make(base, "Paper"), Point(0, 0));
-    BrushStroke grid(layer, false, preset.settings, Size(canvasWidth, canvasHeight));
-    if (!grid.isValid() || fixture.samples.empty()) return out;
+    if (preset.settings.erasing) base->fill(128, 128, 128, 255);
+    return base;
+}
+
+/// Paints the fixture into `grid` with the preset's engine; false when the engine could not start.
+bool paint(BrushStroke& grid, const StrokeFixture& fixture, const Preset& preset) {
+    if (!grid.isValid() || fixture.samples.empty()) return false;
     // Every engine takes the same samples, derived as they arrive, as the canvas feeds them.
     BrushSampleTrack track;
     switch (preset.engine) {
@@ -316,28 +321,72 @@ Render render(const StrokeFixture& fixture, const Preset& preset) {
         break;
     case Preset::Engine::Tip: {
         TipStroke stroke(grid, preset.tip->tip, preset.settings.diameter, preset.seed);
-        if (!stroke.isValid()) return out;
+        if (!stroke.isValid()) return false;
         for (const BrushSample& s : fixture.samples) stroke.strokeTo(track.add(s));
         break;
     }
     case Preset::Engine::MyPaint: {
         MyPaintStroke stroke(grid, preset.myPaintJson, preset.settings);
-        if (!stroke.isValid()) return out;
+        if (!stroke.isValid()) return false;
         for (const BrushSample& s : fixture.samples) stroke.strokeTo(track.add(s));
         stroke.finish();
         break;
     }
     }
     grid.flush();
+    return true;
+}
+
+/// The alpha a stroke laid down (or took away) per pixel of an 8-bit layer.
+std::vector<uint8_t> paintOf(const Image& image, bool erasing) {
+    std::vector<uint8_t> out(size_t(canvasWidth) * canvasHeight, 0);
+    for (int y = 0; y < canvasHeight; y++)
+        for (int x = 0; x < canvasWidth; x++) {
+            const uint8_t a = image.pixel(x, y)[3];
+            out[size_t(y) * canvasWidth + size_t(x)] = erasing ? uint8_t(255 - a) : a;
+        }
+    return out;
+}
+
+} // namespace
+
+Render16 render16(const StrokeFixture& fixture, const Preset& preset) {
+    Render16 out;
+    Layer layer(Asset::make(Image16Ptr(widenImage(*paper(preset))), "Paper"), Point(0, 0));
+    BrushStroke grid(layer, false, preset.settings, Size(canvasWidth, canvasHeight), SampleType::U16, nullptr);
+    if (!paint(grid, fixture, preset)) return out;
+    const Image16Ptr preview = grid.previewImage16();
+    if (!preview || preview->width() != canvasWidth || preview->height() != canvasHeight) return out;
+    out.image = std::make_shared<Image16>(*preview);
+    out.eight.image = narrowImage(*preview);
+    out.eight.paint = paintOf(*out.eight.image, preset.settings.erasing);
+    return out;
+}
+
+Calibration compare(const Render& eight, const Render16& deep) {
+    Calibration out;
+    if (!eight.image || !deep.eight.image) return {256, 1};
+    long beyond = 0, total = 0;
+    for (int y = 0; y < canvasHeight; y++)
+        for (int x = 0; x < canvasWidth; x++)
+            for (int c = 0; c < 4; c++, total++) {
+                const int d = std::abs(int(eight.image->pixel(x, y)[c]) - int(deep.eight.image->pixel(x, y)[c]));
+                out.worst = std::max(out.worst, d);
+                beyond += d > 1;
+            }
+    out.beyondOne = double(beyond) / double(total);
+    return out;
+}
+
+Render render(const StrokeFixture& fixture, const Preset& preset) {
+    Render out;
+    Layer layer(Asset::make(paper(preset), "Paper"), Point(0, 0));
+    BrushStroke grid(layer, false, preset.settings, Size(canvasWidth, canvasHeight));
+    if (!paint(grid, fixture, preset)) return out;
     const ImagePtr preview = grid.previewImage();
     if (!preview || preview->width() != canvasWidth || preview->height() != canvasHeight) return out;
     out.image = std::make_shared<Image>(*preview);
-    out.paint.assign(size_t(canvasWidth) * canvasHeight, 0);
-    for (int y = 0; y < canvasHeight; y++)
-        for (int x = 0; x < canvasWidth; x++) {
-            const uint8_t a = out.image->pixel(x, y)[3];
-            out.paint[size_t(y) * canvasWidth + size_t(x)] = erasing ? uint8_t(255 - a) : a;
-        }
+    out.paint = paintOf(*out.image, preset.settings.erasing);
     return out;
 }
 
@@ -445,6 +494,19 @@ uint64_t hashRender(const Render& render) {
     const uint32_t size[2] = {uint32_t(render.image->width()), uint32_t(render.image->height())};
     for (uint32_t v : size) { const uint8_t b[4] = {uint8_t(v), uint8_t(v >> 8), uint8_t(v >> 16), uint8_t(v >> 24)}; bytes(b, 4); }
     for (int y = 0; y < render.image->height(); y++) bytes(render.image->row(y), size_t(render.image->width()) * 4);
+    return h;
+}
+
+uint64_t hashRender(const Render16& render) {
+    uint64_t h = 1469598103934665603ull;
+    auto bytes = [&](const uint8_t* p, size_t n) { for (size_t i = 0; i < n; i++) { h ^= p[i]; h *= 1099511628211ull; } };
+    if (!render.image) return 0;
+    const uint32_t size[2] = {uint32_t(render.image->width()), uint32_t(render.image->height())};
+    for (uint32_t v : size) { const uint8_t b[4] = {uint8_t(v), uint8_t(v >> 8), uint8_t(v >> 16), uint8_t(v >> 24)}; bytes(b, 4); }
+    for (int y = 0; y < render.image->height(); y++) {
+        const uint16_t* row = render.image->row(y);
+        for (int i = 0; i < render.image->width() * 4; i++) { const uint8_t b[2] = {uint8_t(row[i]), uint8_t(row[i] >> 8)}; bytes(b, 2); }
+    }
     return h;
 }
 

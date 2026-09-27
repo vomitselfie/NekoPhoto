@@ -57,6 +57,20 @@ struct Render {
 };
 Render render(const StrokeFixture& fixture, const Preset& preset);
 
+/// The same fixture painted on a 16-bit layer (the same paper, widened to 0..32768) by the 16-bit stroke. `image` is the
+/// layer at 16 bits; `eight` is it reduced to 8 bits, with its paint, for the measurements and the comparison with the
+/// 8-bit render.
+struct Render16 {
+    std::shared_ptr<Image16> image;
+    Render eight;
+};
+Render16 render16(const StrokeFixture& fixture, const Preset& preset);
+
+/// How far a 16-bit render reduced to 8 bits is from the 8-bit render: the largest difference in any sample, and the
+/// share of samples more than a level apart.
+struct Calibration { int worst = 0; double beyondOne = 0; };
+Calibration compare(const Render& eight, const Render16& deep);
+
 /// Measurements of a render along the fixture's path.
 struct Metrics {
     int boxX = 0, boxY = 0, boxWidth = 0, boxHeight = 0;   // where any paint landed
@@ -72,6 +86,8 @@ std::string formatMetrics(const Metrics& metrics);
 
 /// FNV-1a 64 over the layer's pixels.
 uint64_t hashRender(const Render& render);
+/// FNV-1a 64 over the 16-bit layer's samples (little-endian).
+uint64_t hashRender(const Render16& render);
 std::string hex(uint64_t value);
 
 /// A scene: one fixture painted with one preset, named "<fixture>/<preset>".
