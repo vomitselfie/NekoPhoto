@@ -131,6 +131,33 @@ and none of the eye whites, bone charms, skin or highlights; the result holds fr
 Refine Edge and Delete, the outlines come out clean over any colour. A few tiny or oddly mixed pockets can
 still be missed (a Shift-click takes each).
 
+## Confidence margin between clicks
+
+With Shift-clicks and Alt-clicks the wand knows, per pixel, p (the cheapest cost from any click) and n (the
+cheapest from any Alt-click). `wandMarginField` turns them into a confidence field: positive where the pixel belongs
+with the clicks, negative where it belongs with the Alt-clicks, near zero where the two compete. It is a float field
+for guiding refinement and for showing where another click would help (`wandAmbiguity` makes an overlay of the
+ambiguous areas); it says which clicks a pixel resembles and connects to, not how much of it is covered, and is
+never used as opacity.
+
+The normalisation was chosen on the benchmark's scenes (`wand_bench margin`), each with a click and an Alt-click
+12 to 20 pixels outside the true region, scoring how well a small |margin| picks out the pixels the two clicks
+decide wrongly at tolerance 32, and pixels at a true boundary against pixels deep inside:
+
+| Margin | Wrong pixels, AUC (pooled) | Boundary vs interior, AUC (pooled) |
+|---|---:|---:|
+| n - p | 0.836 | 0.578 |
+| **(n - p) / (n + p + 1)** | **0.977** | **0.699** |
+| (n - p) / (n + p + 4) | 0.959 | 0.676 |
+| (n - p) / (n + p + 16) | 0.931 | 0.657 |
+| (n - p) / (n + p + 64) | 0.879 | 0.616 |
+
+The relative form (costs in tolerance units) is the default. The raw difference grows with how far the costs run, so
+a threshold that suits one image does not suit another; the relative margin is -1..1 everywhere. An ambiguity
+threshold of |m| < 0.5 takes 90% of the wrongly decided pixels and 6% of the rightly decided ones. The
+Bottleneck field is flat behind each wall, so the margin marks competing regions rather than a thin band at
+every edge.
+
 ## Tests
 
 `core_tests` covers the wand on tiny and transparent layers, a click in a grid, keep-out clicks, and the

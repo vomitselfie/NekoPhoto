@@ -98,6 +98,29 @@ long thresholdWandField(const SmartWandImage::Field& field, int tolerance, bool 
 long thresholdWandFields(const std::vector<const SmartWandImage::Field*>& positive, const std::vector<const SmartWandImage::Field*>& negative,
                          int tolerance, bool soft, GrayImage& mask);
 
+/// How the confidence margin between positive and negative clicks is scaled (see wandMarginField).
+///   Difference: n - p, in tolerance units (0 where the two kinds of click reach a pixel equally cheaply).
+///   Relative:   (n - p) / (n + p + epsilon), -1..1: the same difference as a share of the costs.
+enum class WandMargin { Difference, Relative };
+
+/// The Smart Wand's confidence margin: per pixel, the cheapest negative cost minus the cheapest positive one
+/// (unreached counts as just past the fields' limit), scaled by `kind`. Strongly positive where the pixel clearly
+/// belongs with the clicks, strongly negative where it belongs with the Alt-clicks, near zero where the evidence
+/// competes: where another click would help and where refinement should look. It says which clicks a pixel
+/// resembles and connects to, not how much of it is covered: never use it as opacity.
+/// `epsilon` (tolerance units) keeps Relative stable where both costs are small. Relative with epsilon 1 is the
+/// default: on the wand benchmark's scenes (`wand_bench margin`) a small relative margin finds the pixels a click
+/// and an Alt-click decide wrongly far better than the raw difference (docs/smart-wand.md).
+std::vector<float> wandMarginField(const std::vector<const SmartWandImage::Field*>& positive, const std::vector<const SmartWandImage::Field*>& negative,
+                                   WandMargin kind = WandMargin::Relative, float epsilon = 1);
+
+/// The relative margin under which a pixel counts as ambiguous: it takes 90% of the wrongly decided pixels on the
+/// benchmark's scenes and 6% of the rightly decided ones.
+constexpr float wandAmbiguousMargin = 0.5f;
+
+/// Where the margin is within `threshold` of zero, as 255 (0 elsewhere): the ambiguous areas, for an overlay.
+GrayImage wandAmbiguity(const std::vector<float>& margin, int width, int height, float threshold = wandAmbiguousMargin);
+
 /// Softens a wand selection's edge by unmixing: within `band` pixels of it (both sides), each pixel is taken as
 /// a mix of the selected colour nearby (the background it was clicked on, say) and the most different colour
 /// nearby (the line), pixel = a * selected + (1 - a) * other, and gets coverage a. Antialiased and smudged

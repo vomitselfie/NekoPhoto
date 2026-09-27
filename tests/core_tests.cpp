@@ -1813,6 +1813,148 @@ TEST_CASE(matte_cleanup_removes_speckle_but_keeps_the_edge) {
     CHECK_NEAR(wide.normalized().matting, 300, 1e-9);
 }
 
+TEST_CASE(alpha_plane_keeps_soft_levels_through_repeated_refinement) {
+    // A 1000-pixel soft ramp under a guide with the same ramp, refined four times over: the float pipeline keeps
+    // every level (no progressive collapse onto fewer alpha levels), where the byte one can hold at most 256.
+    const int w = 1200, h = 40;
+    auto guide = std::make_shared<Image>(w, h);
+    AlphaPlane mask(w, h);
+    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+        const float a = std::clamp((x - 100) / 1000.0f, 0.0f, 1.0f);
+        mask.at(x, y) = a;
+        uint8_t* p = guide->pixel(x, y);
+        p[0] = p[1] = p[2] = uint8_t(std::lround(40 + 180 * a)); p[3] = 255;
+    }
+    MatteSettings s{8, 0, 0, 0};
+    AlphaPlane plane = mask;
+    std::shared_ptr<GrayImage> bytes = mask.toGray();
+    for (int round = 0; round < 4; round++) { plane = refineMatte(plane, *guide, s, 0); bytes = refineMatte(*bytes, *guide, s, 0); }
+    auto levels16 = [&](const Gray16& g) { std::vector<uint16_t> v; for (int x = 150; x < 1050; x++) v.push_back(g.at(x, 20)); std::sort(v.begin(), v.end()); return long(std::unique(v.begin(), v.end()) - v.begin()); };
+    auto levels8 = [&](const GrayImage& g) { std::vector<uint8_t> v; for (int x = 150; x < 1050; x++) v.push_back(g.at(x, 20)); std::sort(v.begin(), v.end()); return long(std::unique(v.begin(), v.end()) - v.begin()); };
+    const long floatLevels = levels16(*plane.toGray16()), byteLevels = levels8(*bytes);
+    std::printf("  soft ramp after four refinements: %ld levels at 16 bits (float stages), %ld at 8 bits\n", floatLevels, byteLevels);
+    CHECK(floatLevels >= 850);
+    CHECK(byteLevels >= 220);                          // the 8-bit commit keeps the whole range too
+    CHECK_EQ(levels8(*plane.toGray()), levels8(*mask.toGray()));
+    double worst = 0;
+    for (int x = 150; x < 1050; x++) worst = std::max(worst, double(std::fabs(plane.at(x, 20) - mask.at(x, 20))));
+    CHECK(worst < 0.01);
+    for (int x = 151; x < 1050; x++) CHECK(plane.at(x, 20) >= plane.at(x - 1, 20));
+}
+
+TEST_CASE(alpha_plane_commits_once_at_the_documents_depth) {
+    AlphaPlane plane(3, 1);
+    plane.values = {0.0f, 0.5f, 1.2f};
+    CHECK_EQ(int(plane.toGray()->at(1, 0)), 128);
+    CHECK_EQ(int(plane.toGray()->at(2, 0)), 255);
+    const AnyGray deep = plane.commit(SampleType::U16);
+    CHECK(deep.u16() != nullptr);
+    CHECK_EQ(int(deep.u16()->at(1, 0)), 16384);
+    CHECK_EQ(int(deep.u16()->at(2, 0)), 32768);
+    CHECK(plane.commit(SampleType::U8).u8() != nullptr);
+    CHECK_NEAR(AlphaPlane(*deep.u16()).at(1, 0), 0.5, 1e-6);
+    // The transfer curves: sRGB's knee, round trips, and the identity.
+    const TransferCurve srgb = TransferCurve::srgb();
+    CHECK_NEAR(toLinear(srgb, 0.5f), 0.214, 1e-3);
+    CHECK_NEAR(toLinear(srgb, 0.02f), 0.02 / 12.92, 1e-6);
+    for (float v : {0.0f, 0.01f, 0.2f, 0.5f, 0.9f, 1.0f}) {
+        CHECK_NEAR(fromLinear(srgb, toLinear(srgb, v)), v, 1e-5);
+        CHECK_NEAR(fromLinear(TransferCurve::power(2.2f), toLinear(TransferCurve::power(2.2f), v)), v, 1e-5);
+        CHECK_NEAR(toLinear(TransferCurve::identity(), v), v, 1e-7);
+    }
+}
+
+TEST_CASE(linear_light_matting_recovers_a_linear_composite) {
+    // Dark over light through a 24-pixel ramp mixed in linear light, as light mixes on a sensor; the coarse matte is
+    // the hard threshold. Solved in linear light the ramp comes back; solved on the stored values the dark side of
+    // the ramp reads as far more opaque than it is.
+    const int w = 120, h = 60;
+    auto image = std::make_shared<Image>(w, h);
+    auto truth = [](int x) { return std::clamp((72 - x) / 24.0, 0.0, 1.0); };
+    const float F[3] = {0.02f, 0.015f, 0.01f}, B[3] = {0.8f, 0.75f, 0.7f};
+    const TransferCurve srgb = TransferCurve::srgb();
+    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+        const float a = float(truth(x));
+        uint8_t* p = image->pixel(x, y);
+        for (int c = 0; c < 3; c++) p[c] = uint8_t(std::lround(fromLinear(srgb, a * F[c] + (1 - a) * B[c]) * 255));
+        p[3] = 255;
+    }
+    AlphaPlane coarse(w, h);
+    for (int y = 0; y < h; y++) for (int x = 0; x < 60; x++) coarse.at(x, y) = 1;
+    auto errorOf = [&](const TransferCurve& curve) {
+        const AlphaPlane matted = matteBand(coarse, *image, 14, 0, nullptr, nullptr, false, curve);
+        double worst = 0;
+        for (int y = 8; y < h - 8; y++) for (int x = 50; x < 70; x++) worst = std::max(worst, std::fabs(matted.at(x, y) - truth(x)));
+        return worst;
+    };
+    const double linear = errorOf(srgb), stored = errorOf(TransferCurve::identity());
+    std::printf("  linear composite: worst alpha error %.3f in linear light, %.3f on the stored values\n", linear, stored);
+    CHECK(linear <= 0.08);
+    CHECK(linear < stored);
+}
+
+TEST_CASE(matting_uncertainty_marks_what_two_colours_cannot_explain) {
+    // Red over blue through a ramp, with a green stripe crossing the band halfway down: the two-colour model explains
+    // the ramp and not the stripe, so the uncertainty is low on the ramp and high on the stripe, and zero outside the band.
+    const int w = 120, h = 80;
+    auto image = std::make_shared<Image>(w, h);
+    auto truth = [](int x) { return std::clamp((72 - x) / 24.0, 0.0, 1.0); };
+    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+        const double a = truth(x);
+        uint8_t* p = image->pixel(x, y);
+        const bool stripe = y >= 38 && y < 42 && x >= 50 && x < 70;
+        p[0] = stripe ? 30 : uint8_t(std::lround(220 * a + 30 * (1 - a)));
+        p[1] = stripe ? 200 : uint8_t(std::lround(40 * a + 60 * (1 - a)));
+        p[2] = stripe ? 40 : uint8_t(std::lround(30 * a + 200 * (1 - a)));
+        p[3] = 255;
+    }
+    AlphaPlane coarse(w, h);
+    for (int y = 0; y < h; y++) for (int x = 0; x < 60; x++) coarse.at(x, y) = 1;
+    MatteDebug debug;
+    (void)matteBand(coarse, *image, 14, 0, nullptr, &debug, false, TransferCurve::identity());
+    CHECK_EQ(debug.uncertainty.width, w);
+    double ramp = 0, stripe = 0;
+    for (int x = 52; x < 68; x++) { ramp = std::max(ramp, double(debug.uncertainty.at(x, 15))); stripe += debug.uncertainty.at(x, 40) / 16.0; }
+    std::printf("  uncertainty: at most %.3f on the ramp, %.3f on average across the stripe\n", ramp, stripe);
+    CHECK(ramp < 0.1);
+    CHECK(stripe > 0.3);
+    CHECK_EQ(debug.uncertainty.at(5, 40), 0.0f);
+    CHECK_EQ(debug.uncertainty.at(115, 40), 0.0f);
+}
+
+TEST_CASE(smart_wand_margin_is_a_confidence_not_an_opacity) {
+    // Red on the left, blue on the right, a soft 40-pixel blend between: a click on the red and an Alt-click on the
+    // blue. The margin is strongly positive on the red, strongly negative on the blue, and ambiguous in the blend,
+    // where the two clicks compete; another click in the blend moves its margin its way.
+    const int w = 200, h = 40;
+    Image image(w, h);
+    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+        const double t = std::clamp((x - 80) / 40.0, 0.0, 1.0);
+        uint8_t* p = image.pixel(x, y);
+        p[0] = uint8_t(std::lround(210 * (1 - t) + 30 * t)); p[1] = 40; p[2] = uint8_t(std::lround(40 * (1 - t) + 200 * t)); p[3] = 255;
+    }
+    SmartWandImage prepared(image);
+    const auto red = prepared.propagate(20, 20, 2, wandCost(255)), blue = prepared.propagate(180, 20, 2, wandCost(255));
+    const auto margin = wandMarginField({&red}, {&blue});
+    auto at = [&](int x) { return margin[size_t(20) * w + size_t(x)]; };
+    CHECK(at(20) > 0.9f);
+    CHECK(at(180) < -0.9f);
+    CHECK(std::fabs(at(100)) < wandAmbiguousMargin);
+    const GrayImage ambiguous = wandAmbiguity(margin, w, h);
+    CHECK_EQ(int(ambiguous.at(100, 20)), 255);
+    CHECK_EQ(int(ambiguous.at(20, 20)), 0);
+    CHECK_EQ(int(ambiguous.at(180, 20)), 0);
+    for (float m : margin) { CHECK(m >= -1.0f); CHECK(m <= 1.0f); }
+    // The difference form: in tolerance units, same sign.
+    const auto difference = wandMarginField({&red}, {&blue}, WandMargin::Difference);
+    CHECK(difference[size_t(20) * w + 20] > 32);
+    CHECK(difference[size_t(20) * w + 180] < -32);
+    // A second click in the blend's blue half pulls the blend towards the clicks.
+    const auto more = prepared.propagate(108, 20, 2, wandCost(255));
+    const auto after = wandMarginField({&red, &more}, {&blue});
+    CHECK(after[size_t(20) * w + 108] > at(108));
+}
+
 TEST_CASE(foreground_estimation_removes_the_background_tint) {
     // Red over blue through a 24-pixel ramp, with the true opacity as the matte: the estimated colour in the
     // band is the red, not the mix; opaque pixels and pixels away from the edge are untouched.

@@ -504,6 +504,36 @@ long thresholdWandFields(const std::vector<const SmartWandImage::Field*>& positi
     return count;
 }
 
+std::vector<float> wandMarginField(const std::vector<const SmartWandImage::Field*>& positive, const std::vector<const SmartWandImage::Field*>& negative, WandMargin kind, float epsilon) {
+    if (positive.empty() && negative.empty()) return {};
+    const SmartWandImage::Field& first = positive.empty() ? *negative[0] : *positive[0];
+    const size_t n = first.cost.size();
+    // A pixel no click of a kind reached costs just past the furthest limit any field was propagated to.
+    int limit = 0;
+    for (auto* f : positive) limit = std::max(limit, f->limit);
+    for (auto* f : negative) limit = std::max(limit, f->limit);
+    const int cap = std::min(65534, (limit + 1) * quarter);
+    std::vector<float> margin(n);
+    const float eps = std::max(0.0f, epsilon) * quarter;
+    parallelRows(0, first.height, [&](int ya, int yb) {
+        for (size_t i = size_t(ya) * size_t(first.width); i < size_t(yb) * size_t(first.width); i++) {
+            int p = cap, q = cap;
+            for (auto* f : positive) p = std::min<int>(p, f->cost[i]);
+            for (auto* f : negative) q = std::min<int>(q, f->cost[i]);
+            const float d = float(q - p);
+            margin[i] = kind == WandMargin::Difference ? d / quarter : d / (float(p + q) + eps + 1e-6f);
+        }
+    }, 32);
+    return margin;
+}
+
+GrayImage wandAmbiguity(const std::vector<float>& margin, int width, int height, float threshold) {
+    GrayImage out(width, height, 0);
+    if (margin.size() != size_t(width) * size_t(height)) return out;
+    for (size_t i = 0; i < margin.size(); i++) out.data()[i] = std::fabs(margin[i]) < threshold ? 255 : 0;
+    return out;
+}
+
 void refineWandEdge(const Image& pixels, GrayImage& mask, int band, std::vector<uint32_t>* lineColours) {
     const int W = pixels.width(), H = pixels.height();
     if (W != mask.width() || H != mask.height() || band <= 0) return;

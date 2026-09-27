@@ -4,11 +4,18 @@
 //
 //   wand_bench            the table
 //   wand_bench dump DIR   also writes each scene, its answer and each method's selection as PNGs
+//   wand_bench margin [DIR]
+//       the confidence margin between a click and an Alt-click (wandMarginField) under each normalisation: how
+//       well its size tells pixels at a true boundary from pixels deep inside either region, per scene and pooled
+//       over the scenes (one threshold for all, as an overlay uses), and how many interior pixels an overlay that
+//       finds 80% of the boundary pixels also flags; DIR gets each scene's margin as a picture (blue: the click's
+//       side, red: the Alt-click's, white: ambiguous) and its ambiguous areas
 #include "compositor/png.h"
 #include "compositor/smartwand.h"
 #include "compositor/wand.h"
 #include "compositor/morphology.h"
 #include "compositor/selection.h"
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -142,6 +149,145 @@ double iou(const GrayImage& sel, const Scene& s) {
 }
 
 using Method = std::function<std::function<void(int, GrayImage&)>(const Scene&)>;   // prepare once, then select at a tolerance
+
+/// The area under the ROC curve of `score` for telling `label` 1 from 0.
+double areaUnder(const std::vector<float>& score, const std::vector<uint8_t>& label) {
+    std::vector<size_t> order(score.size());
+    for (size_t i = 0; i < order.size(); i++) order[i] = i;
+    std::sort(order.begin(), order.end(), [&](size_t a, size_t b) { return score[a] < score[b]; });
+    double rankSum = 0, pos = 0;
+    for (size_t i = 0; i < order.size();) {
+        size_t j = i;
+        while (j + 1 < order.size() && score[order[j + 1]] == score[order[i]]) j++;
+        for (size_t k = i; k <= j; k++) if (label[order[k]]) { rankSum += double(i + j) / 2 + 1; pos++; }
+        i = j + 1;
+    }
+    const double neg = double(score.size()) - pos;
+    return pos > 0 && neg > 0 ? (rankSum - pos * (pos + 1) / 2) / (pos * neg) : 0.5;
+}
+
+int marginMode(const std::string& dir) {
+    struct Variant { const char* name; WandMargin kind; float epsilon; };
+    const Variant variants[] = {{"n - p", WandMargin::Difference, 0}, {"(n - p) / (n + p + 1)", WandMargin::Relative, 1},
+                                {"(n - p) / (n + p + 4)", WandMargin::Relative, 4}, {"(n - p) / (n + p + 16)", WandMargin::Relative, 16},
+                                {"(n - p) / (n + p + 64)", WandMargin::Relative, 64}};
+    constexpr size_t V = std::size(variants);
+    std::vector<float> pooled[V];
+    std::vector<uint8_t> pooledLabel;
+    double perScene[V] = {}, wrongAuc[V] = {};
+    int wrongScenes = 0;
+    std::vector<float> pooledWrong[V];
+    std::vector<uint8_t> pooledWrongLabel;
+    const auto all = scenes();
+    std::printf("%-26s %8s %8s", "scene", "boundary", "interior");
+    for (const Variant& v : variants) std::printf(" %22s", v.name);
+    std::printf("\n");
+    for (const Scene& s : all) {
+        SmartWandImage image(s.image);
+        const SmartWandOptions options;
+        // The Alt-click: on the other side, 12 to 20 pixels from the true boundary, nearest the click.
+        auto near = [&](int x, int y, int r) {   // the truth changes within r pixels
+            const bool me = s.truth.at(x, y) >= 128;
+            for (int j = -r; j <= r; j++) for (int i = -r; i <= r; i++) {
+                const int X = x + i, Y = y + j;
+                if (X >= 0 && Y >= 0 && X < S && Y < S && (s.truth.at(X, Y) >= 128) != me) return true;
+            }
+            return false;
+        };
+        int nx = -1, ny = -1;
+        long best = -1;
+        for (int y = 0; y < S; y += 2)
+            for (int x = 0; x < S; x += 2) {
+                if (s.truth.at(x, y) >= 128 || !s.scored.at(x, y) || near(x, y, 11) || !near(x, y, 20)) continue;
+                const long d = long(x - s.x) * (x - s.x) + long(y - s.y) * (y - s.y);
+                if (best < 0 || d < best) { best = d; nx = x; ny = y; }
+            }
+        if (nx < 0) continue;
+        const auto pos = image.propagate(s.x, s.y, 2, wandCost(255), options), neg = image.propagate(nx, ny, 2, wandCost(255), options);
+        // Pixels within 2 of the true boundary (ambiguous by construction) against pixels 12 or more from it.
+        std::vector<size_t> pixels;
+        std::vector<uint8_t> label;
+        for (int y = 0; y < S; y++)
+            for (int x = 0; x < S; x++) {
+                if (near(x, y, 2)) { pixels.push_back(size_t(y) * S + size_t(x)); label.push_back(1); }
+                else if (!near(x, y, 12)) { pixels.push_back(size_t(y) * S + size_t(x)); label.push_back(0); }
+            }
+        // The pixels the two clicks decide wrongly at the default tolerance, among the scored ones.
+        GrayImage decided(S, S, 0);
+        thresholdWandFields({&pos}, {&neg}, 32, true, decided);
+        std::vector<size_t> scoredPixels;
+        std::vector<uint8_t> wrongLabel;
+        for (int y = 0; y < S; y++) for (int x = 0; x < S; x++) {
+            if (!s.scored.at(x, y)) continue;
+            scoredPixels.push_back(size_t(y) * S + size_t(x));
+            wrongLabel.push_back((decided.at(x, y) >= 128) != (s.truth.at(x, y) >= 128));
+        }
+        const long wrongCount = long(std::count(wrongLabel.begin(), wrongLabel.end(), 1));
+        const long boundary = long(std::count(label.begin(), label.end(), 1));
+        std::printf("%-26s %8ld %8ld", s.name.c_str(), boundary, long(label.size()) - boundary);
+        for (size_t v = 0; v < V; v++) {
+            const auto margin = wandMarginField({&pos}, {&neg}, variants[v].kind, variants[v].epsilon);
+            std::vector<float> score;
+            for (size_t i : pixels) score.push_back(-std::fabs(margin[i]));   // small margin: ambiguous
+            const double a = areaUnder(score, label);
+            perScene[v] += a;
+            pooled[v].insert(pooled[v].end(), score.begin(), score.end());
+            std::printf(" %22.3f", a);
+            if (wrongCount > 0) {
+                std::vector<float> w;
+                for (size_t i : scoredPixels) w.push_back(-std::fabs(margin[i]));
+                wrongAuc[v] += areaUnder(w, wrongLabel);
+                if (v == 0) wrongScenes++;
+                pooledWrong[v].insert(pooledWrong[v].end(), w.begin(), w.end());
+                if (v == 0) pooledWrongLabel.insert(pooledWrongLabel.end(), wrongLabel.begin(), wrongLabel.end());
+            }
+            if (!dir.empty() && (v == 0 || v == 1)) {
+                // Scaled so the 80th percentile of the boundary pixels' |margin| is the colour's half-way point.
+                std::vector<float> atBoundary;
+                for (size_t k = 0; k < pixels.size(); k++) if (label[k]) atBoundary.push_back(std::fabs(margin[pixels[k]]));
+                std::sort(atBoundary.begin(), atBoundary.end());
+                const float scale = std::max(1e-6f, atBoundary.empty() ? 1.0f : atBoundary[atBoundary.size() * 8 / 10]);
+                Image view(S, S);
+                for (int y = 0; y < S; y++) for (int x = 0; x < S; x++) {
+                    const float m = std::clamp(margin[size_t(y) * S + size_t(x)] / (2 * scale), -1.0f, 1.0f);
+                    uint8_t* q = view.pixel(x, y);
+                    const uint8_t fade = uint8_t(std::lround(255 * (1 - std::fabs(m))));
+                    q[0] = m < 0 ? 255 : fade; q[1] = fade; q[2] = m > 0 ? 255 : fade; q[3] = 255;
+                }
+                const std::string base = dir + "/" + s.name + (v == 0 ? " - margin difference" : " - margin relative");
+                writePngImage(base + ".png", view, 72, nullptr);
+                if (v == 1) writePngGray(base + " ambiguous.png", wandAmbiguity(margin, S, S), nullptr);
+            }
+        }
+        std::printf("   wrong %ld\n", wrongCount);
+        pooledLabel.insert(pooledLabel.end(), label.begin(), label.end());
+        if (!dir.empty()) writePngImage(dir + "/" + s.name + ".png", s.image, 72, nullptr);
+    }
+    std::printf("\n%-22s %10s %10s %14s %12s %12s %20s\n", "normalisation", "mean AUC", "pooled AUC", "interior @80%", "wrong AUC", "wrong pooled", "|m| for 90% wrong");
+    for (size_t v = 0; v < V; v++) {
+        // One threshold for all scenes: the one that flags 80% of the boundary pixels; the share of interior pixels flagged too.
+        std::vector<float> atBoundary;
+        for (size_t k = 0; k < pooled[v].size(); k++) if (pooledLabel[k]) atBoundary.push_back(pooled[v][k]);
+        std::sort(atBoundary.begin(), atBoundary.end());
+        const float threshold = atBoundary.empty() ? 0 : atBoundary[atBoundary.size() * 2 / 10];
+        long flagged = 0, interior = 0;
+        for (size_t k = 0; k < pooled[v].size(); k++) if (!pooledLabel[k]) { interior++; flagged += pooled[v][k] >= threshold; }
+        std::printf("%-22s %10.3f %10.3f %13.1f%% %12.3f %12.3f\n", variants[v].name, perScene[v] / double(all.size()), areaUnder(pooled[v], pooledLabel), 100.0 * double(flagged) / double(std::max(1L, interior)),
+                    wrongScenes ? wrongAuc[v] / wrongScenes : 0.5, areaUnder(pooledWrong[v], pooledWrongLabel));
+        // The overlay's threshold: the |margin| under which 90% of the wrongly decided pixels fall, and the share of
+        // rightly decided pixels it flags too.
+        std::vector<float> wrongMargins;
+        for (size_t k = 0; k < pooledWrong[v].size(); k++) if (pooledWrongLabel[k]) wrongMargins.push_back(-pooledWrong[v][k]);
+        std::sort(wrongMargins.begin(), wrongMargins.end());
+        if (!wrongMargins.empty()) {
+            const float t = wrongMargins[wrongMargins.size() * 9 / 10];
+            long right = 0, flaggedRight = 0;
+            for (size_t k = 0; k < pooledWrong[v].size(); k++) if (!pooledWrongLabel[k]) { right++; flaggedRight += -pooledWrong[v][k] <= t; }
+            std::printf("%22s %77s %.3f (flags %.1f%% of the right ones)\n", "", "", t, 100.0 * double(flaggedRight) / double(std::max(1L, right)));
+        }
+    }
+    return 0;
+}
 
 } // namespace
 
@@ -308,6 +454,7 @@ int main(int argc, char** argv) {
         }
         return 0;
     }
+    if (argc > 1 && std::string(argv[1]) == "margin") return marginMode(argc > 2 ? argv[2] : "");
     // wand_bench check: the benchmark's recorded results as a test (tests/CMakeLists.txt runs it).
     const bool check = argc > 1 && std::string(argv[1]) == "check";
     const bool dump = argc > 2 && std::string(argv[1]) == "dump";

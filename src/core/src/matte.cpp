@@ -24,7 +24,67 @@ namespace compositor {
 
 MatteSettings MatteSettings::normalized() const {
     auto c = [](double v, double lo, double hi, double f) { return std::isfinite(v) ? std::min(hi, std::max(lo, v)) : f; };
-    return {c(refineEdges, 0, 40, 12), c(contrast, 0, 100, 25), c(shiftEdge, -10, 10, 0), c(matting, 0, 400, 0), cleanup, decontaminate, highPass, sideWindows, narrowBand};
+    TransferCurve curve = decode;
+    if (curve.kind == TransferCurve::Kind::Gamma && !(std::isfinite(curve.gamma) && curve.gamma >= 0.1f && curve.gamma <= 10)) curve = TransferCurve::srgb();
+    return {c(refineEdges, 0, 40, 12), c(contrast, 0, 100, 25), c(shiftEdge, -10, 10, 0), c(matting, 0, 400, 0), cleanup, decontaminate, highPass, sideWindows, narrowBand, curve};
+}
+
+float toLinear(const TransferCurve& curve, float v) {
+    v = std::clamp(v, 0.0f, 1.0f);
+    switch (curve.kind) {
+    case TransferCurve::Kind::Srgb: return v <= 0.04045f ? v / 12.92f : std::pow((v + 0.055f) / 1.055f, 2.4f);
+    case TransferCurve::Kind::Gamma: return std::pow(v, curve.gamma);
+    case TransferCurve::Kind::Identity: break;
+    }
+    return v;
+}
+
+float fromLinear(const TransferCurve& curve, float v) {
+    v = std::clamp(v, 0.0f, 1.0f);
+    switch (curve.kind) {
+    case TransferCurve::Kind::Srgb: return v <= 0.0031308f ? v * 12.92f : 1.055f * std::pow(v, 1 / 2.4f) - 0.055f;
+    case TransferCurve::Kind::Gamma: return std::pow(v, 1 / curve.gamma);
+    case TransferCurve::Kind::Identity: break;
+    }
+    return v;
+}
+
+AlphaPlane::AlphaPlane(const GrayImage& mask) : width(mask.width()), height(mask.height()), values(size_t(mask.width()) * size_t(mask.height())) {
+    const uint8_t* d = mask.data();
+    float* v = values.data();
+    const size_t w = size_t(width);
+    parallelRows(0, height, [&](int y0, int y1) { for (size_t i = size_t(y0) * w; i < size_t(y1) * w; i++) v[i] = d[i] * (1.0f / 255); }, 64);
+}
+
+AlphaPlane::AlphaPlane(const Gray16& mask) : width(mask.width()), height(mask.height()), values(size_t(mask.width()) * size_t(mask.height())) {
+    const uint16_t* d = mask.data();
+    for (size_t i = 0; i < values.size(); i++) values[i] = std::min(1.0f, d[i] / 32768.0f);
+}
+
+std::shared_ptr<GrayImage> AlphaPlane::toGray() const {
+    auto out = std::make_shared<GrayImage>(width, height);
+    uint8_t* d = out->data();
+    const float* v = values.data();
+    const size_t w = size_t(width);
+    parallelRows(0, height, [&](int y0, int y1) { for (size_t i = size_t(y0) * w; i < size_t(y1) * w; i++) d[i] = uint8_t(std::clamp(v[i], 0.0f, 1.0f) * 255 + 0.5f); }, 64);
+    return out;
+}
+
+std::shared_ptr<Gray16> AlphaPlane::toGray16() const {
+    auto out = std::make_shared<Gray16>(width, height);
+    uint16_t* d = out->data();
+    for (size_t i = 0; i < values.size(); i++) d[i] = uint16_t(std::clamp(values[i], 0.0f, 1.0f) * 32768 + 0.5f);
+    return out;
+}
+
+AnyGray AlphaPlane::commit(SampleType depth) const {
+    if (depth == SampleType::U16) return std::shared_ptr<const Gray16>(toGray16());
+    if (depth == SampleType::F32) {
+        auto out = std::make_shared<GrayF>(width, height);
+        for (size_t i = 0; i < values.size(); i++) out->data()[i] = std::clamp(values[i], 0.0f, 1.0f);
+        return std::shared_ptr<const GrayF>(out);
+    }
+    return std::shared_ptr<const GrayImage>(toGray());
 }
 
 namespace {
@@ -72,6 +132,12 @@ Map upsample(const Map& src, int sw, int sh, int dw, int dh) {
     if (sw == dw && sh == dh) return src;
     Map out(size_t(dw) * dh);
     const double fx = double(sw) / dw, fy = double(sh) / dh;
+    std::vector<int> x0(static_cast<size_t>(dw)), x1(static_cast<size_t>(dw));
+    std::vector<float> wx(static_cast<size_t>(dw));
+    for (int x = 0; x < dw; x++) {
+        const double sx = std::clamp((x + 0.5) * fx - 0.5, 0.0, double(sw - 1));
+        x0[size_t(x)] = int(sx); x1[size_t(x)] = std::min(int(sx) + 1, sw - 1); wx[size_t(x)] = float(sx - int(sx));
+    }
     parallelRows(0, dh, [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) {
             double sy = std::clamp((y + 0.5) * fy - 0.5, 0.0, double(sh - 1));
@@ -80,18 +146,87 @@ Map upsample(const Map& src, int sw, int sh, int dw, int dh) {
             const float *r0 = &src[size_t(iy) * sw], *r1 = &src[size_t(iy1) * sw];
             float* o = &out[size_t(y) * dw];
             for (int x = 0; x < dw; x++) {
-                double sx = std::clamp((x + 0.5) * fx - 0.5, 0.0, double(sw - 1));
-                int ix = int(sx), ix1 = std::min(ix + 1, sw - 1);
-                float wx = float(sx - ix);
-                o[x] = (r0[ix] * (1 - wx) + r0[ix1] * wx) * (1 - wy) + (r1[ix] * (1 - wx) + r1[ix1] * wx) * wy;
+                const int a = x0[size_t(x)], b = x1[size_t(x)];
+                const float w = wx[size_t(x)];
+                const float top = r0[a] + (r0[b] - r0[a]) * w, bottom = r1[a] + (r1[b] - r1[a]) * w;
+                o[x] = top + (bottom - top) * wy;
             }
         }
     });
     return out;
 }
 
-/// The guide's straight R, G, B in 0..1 at (width, height).
-std::array<Map, 3> colourLevels(const Image& image, int width, int height) {
+/// A plane resized from (sw, sh) to (dw, dh): area averages going down, bilinear going up.
+Map resizeLevels(const Map& src, int sw, int sh, int dw, int dh) {
+    if (sw == dw && sh == dh) return src;
+    if (dw >= sw && dh >= sh) return upsample(src, sw, sh, dw, dh);
+    // Separable box coverage: each output cell averages the source it covers, fractional edges weighted.
+    auto weights = [](int from, int to) {
+        std::vector<std::vector<std::pair<int, float>>> out(static_cast<size_t>(to));
+        const double scale = double(from) / to;
+        for (int i = 0; i < to; i++) {
+            const double a = i * scale, b = std::min(double(from), (i + 1) * scale);
+            if (scale <= 1) {   // this axis grows: bilinear taps
+                const double s = std::clamp((i + 0.5) * scale - 0.5, 0.0, double(from - 1));
+                const int k = int(s), k1 = std::min(k + 1, from - 1);
+                const float w = float(s - k);
+                out[size_t(i)] = {{k, 1 - w}, {k1, w}};
+                continue;
+            }
+            for (int k = int(a); k < int(std::ceil(b)) && k < from; k++) {
+                const double overlap = std::min(b, k + 1.0) - std::max(a, double(k));
+                if (overlap > 0) out[size_t(i)].push_back({k, float(overlap / (b - a))});
+            }
+        }
+        return out;
+    };
+    const auto wx = weights(sw, dw), wy = weights(sh, dh);
+    Map rows(size_t(dw) * sh);
+    parallelRows(0, sh, [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++)
+            for (int x = 0; x < dw; x++) {
+                float v = 0;
+                for (auto [k, w] : wx[size_t(x)]) v += w * src[size_t(y) * sw + size_t(k)];
+                rows[size_t(y) * dw + size_t(x)] = v;
+            }
+    });
+    Map out(size_t(dw) * dh);
+    parallelRows(0, dh, [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++)
+            for (int x = 0; x < dw; x++) {
+                float v = 0;
+                for (auto [k, w] : wy[size_t(y)]) v += w * rows[size_t(k) * dw + size_t(x)];
+                out[size_t(y) * dw + size_t(x)] = v;
+            }
+    });
+    return out;
+}
+
+/// Decodes stored values to linear light through a table (the values are 0..1 straight colour).
+class Decoder {
+public:
+    explicit Decoder(const TransferCurve& curve) : identity_(curve.isIdentity()) {
+        if (identity_) return;
+        for (int i = 0; i <= size; i++) table_[size_t(i)] = toLinear(curve, float(i) / size);
+    }
+    bool identity() const { return identity_; }
+    float operator()(float v) const {
+        if (identity_) return v;
+        const float s = std::clamp(v, 0.0f, 1.0f) * size;
+        const int i = std::min(size - 1, int(s));
+        const float t = s - float(i);
+        return table_[size_t(i)] * (1 - t) + table_[size_t(i + 1)] * t;
+    }
+
+private:
+    static constexpr int size = 4096;
+    bool identity_ = true;
+    std::array<float, size + 1> table_{};
+};
+
+/// The guide's straight R, G, B in 0..1 at (width, height): unpremultiplied first, then, with a decoder,
+/// decoded to linear light.
+std::array<Map, 3> colourLevels(const Image& image, int width, int height, const Decoder* decode = nullptr) {
     std::shared_ptr<const Image> source = std::make_shared<Image>(image);
     if (width != image.width() || height != image.height()) {
         LayerTransform full(Point(0, 0), Size(image.width(), image.height()));
@@ -99,35 +234,37 @@ std::array<Map, 3> colourLevels(const Image& image, int width, int height) {
     }
     std::array<Map, 3> out;
     for (auto& m : out) m.resize(size_t(width) * height);
+    const bool linear = decode && !decode->identity();
     parallelRows(0, height, [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) {
             const uint8_t* p = source->row(y);
             for (int x = 0; x < width; x++, p += 4) {
                 float a = p[3] ? p[3] / 255.0f : 1.0f;
-                for (int c = 0; c < 3; c++) out[size_t(c)][size_t(y) * width + size_t(x)] = p[c] / 255.0f / a;
+                for (int c = 0; c < 3; c++) {
+                    const float v = std::min(1.0f, p[c] / 255.0f / a);
+                    out[size_t(c)][size_t(y) * width + size_t(x)] = linear ? (*decode)(v) : v;
+                }
             }
         }
     });
     return out;
 }
 
-Map maskLevels(const GrayImage& mask, int width, int height) {
-    std::shared_ptr<const GrayImage> source = std::make_shared<GrayImage>(mask);
-    if (width != mask.width() || height != mask.height()) {
-        LayerTransform full(Point(0, 0), Size(mask.width(), mask.height()));
-        source = resampleMask(mask, full, full, width, height, 0);
-    }
-    Map out(size_t(width) * height);
-    for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) out[size_t(y) * width + size_t(x)] = source->at(x, y) / 255.0f;
-    return out;
+/// The plane at (width, height).
+Map maskLevels(const AlphaPlane& mask, int width, int height) {
+    return resizeLevels(mask.values, mask.width, mask.height, width, height);
 }
 
-std::shared_ptr<GrayImage> fromLevels(const Map& levels, int width, int height, int fullWidth, int fullHeight) {
-    auto small = std::make_shared<GrayImage>(width, height);
-    for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) small->at(x, y) = uint8_t(std::min(255.0f, std::max(0.0f, levels[size_t(y) * width + size_t(x)] * 255 + 0.5f)));
-    if (width == fullWidth && height == fullHeight) return small;
-    LayerTransform full(Point(0, 0), Size(fullWidth, fullHeight));
-    return resampleMask(*small, full, full, fullWidth, fullHeight, 0);
+/// Working levels back to a full-size plane, clamped to 0..1.
+AlphaPlane fromLevels(const Map& levels, int width, int height, int fullWidth, int fullHeight) {
+    AlphaPlane out;
+    out.width = fullWidth; out.height = fullHeight;
+    out.values = resizeLevels(levels, width, height, fullWidth, fullHeight);
+    float* v = out.values.data();
+    parallelRows(0, fullHeight, [&](int y0, int y1) {
+        for (size_t i = size_t(y0) * size_t(fullWidth); i < size_t(y1) * size_t(fullWidth); i++) v[i] = std::clamp(v[i], 0.0f, 1.0f);
+    }, 64);
+    return out;
 }
 
 /// Solves the N x N system A x = b (a covariance matrix plus regularisation) in place by Gaussian elimination.
@@ -154,14 +291,16 @@ void solve(double A[N][N], double b[N], float out[N]) {
 }
 
 /// Running max (or min) over a window of 2r+1 along each row, then each column: van Herk / Gil-Werman, O(N).
-void runningExtreme(GrayImage& image, int r, bool takeMax) {
-    const int w = image.width(), h = image.height(), n = 2 * r + 1;
-    auto pick = [takeMax](uint8_t a, uint8_t b) { return takeMax ? std::max(a, b) : std::min(a, b); };
-    const uint8_t pad = takeMax ? 0 : 255;
+/// Outside the image counts as `lowest` for a max and `highest` for a min.
+template <class T>
+void runningExtreme(T* data, int w, int h, int r, bool takeMax, T lowest, T highest) {
+    const int n = 2 * r + 1;
+    auto pick = [takeMax](T a, T b) { return takeMax ? std::max(a, b) : std::min(a, b); };
+    const T pad = takeMax ? lowest : highest;
     auto pass = [&](int length, auto get, auto set) {
         // Prefix extremes within blocks of n and suffix extremes within blocks; the window max is their combination.
         const size_t count = static_cast<size_t>(length);
-        std::vector<uint8_t> prefix(count), suffix(count), values(count);
+        std::vector<T> prefix(count), suffix(count), values(count);
         for (int i = 0; i < length; i++) values[size_t(i)] = get(i);
         for (int start = 0; start < length; start += n) {
             int end = std::min(length, start + n);
@@ -172,7 +311,7 @@ void runningExtreme(GrayImage& image, int r, bool takeMax) {
         }
         for (int i = 0; i < length; i++) {
             int lo = i - r, hi = i + r;
-            uint8_t v = pad;
+            T v = pad;
             if (lo >= 0 && hi < length) v = pick(suffix[size_t(lo)], prefix[size_t(hi)]);
             else for (int k = std::max(0, lo); k <= std::min(length - 1, hi); k++) v = pick(v, values[size_t(k)]);
             set(i, v);
@@ -180,14 +319,17 @@ void runningExtreme(GrayImage& image, int r, bool takeMax) {
     };
     parallelRows(0, h, [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) {
-            uint8_t* row = image.row(y);
-            pass(w, [&](int i) { return row[i]; }, [&](int i, uint8_t v) { row[i] = v; });
+            T* row = data + size_t(y) * size_t(w);
+            pass(w, [&](int i) { return row[i]; }, [&](int i, T v) { row[i] = v; });
         }
     });
     parallelRows(0, w, [&](int x0, int x1) {
-        for (int x = x0; x < x1; x++) pass(h, [&](int i) { return image.at(x, i); }, [&](int i, uint8_t v) { image.at(x, i) = v; });
+        for (int x = x0; x < x1; x++) pass(h, [&](int i) { return data[size_t(i) * size_t(w) + size_t(x)]; }, [&](int i, T v) { data[size_t(i) * size_t(w) + size_t(x)] = v; });
     }, 16);
 }
+
+void runningExtreme(GrayImage& image, int r, bool takeMax) { runningExtreme<uint8_t>(image.data(), image.width(), image.height(), r, takeMax, 0, 255); }
+void runningExtreme(AlphaPlane& plane, int r, bool takeMax) { runningExtreme<float>(plane.values.data(), plane.width, plane.height, r, takeMax, 0.0f, 1.0f); }
 
 } // namespace
 
@@ -224,8 +366,12 @@ struct Integral {
 } // namespace
 
 std::shared_ptr<GrayImage> guidedRefine(const GrayImage& mask, const Image& guide, double radius, int limit, bool highPass, bool sideWindows) {
+    return guidedRefine(AlphaPlane(mask), guide, radius, limit, highPass, sideWindows).toGray();
+}
+
+AlphaPlane guidedRefine(const AlphaPlane& mask, const Image& guide, double radius, int limit, bool highPass, bool sideWindows) {
     constexpr int C = 3;   // guide channels: R, G, B
-    const int fullW = mask.width(), fullH = mask.height();
+    const int fullW = mask.width, fullH = mask.height;
     const double factor = limit > 0 ? std::min(1.0, double(limit) / std::max(fullW, fullH)) : 1;
     const int width = std::max(1, int(std::lround(fullW * factor))), height = std::max(1, int(std::lround(fullH * factor)));
     // Coefficients on a coarser grid for large images (the fast guided filter); the output uses the full guide.
@@ -386,6 +532,9 @@ struct Pair { float fr = 0, fg = 0, fb = 0, br = 0, bg = 0, bb = 0, alpha = 0, c
 
 constexpr float priorWeight = 0.25f;
 
+/// The smallest separation a pair's cost divides by (colour units of the solve's space).
+constexpr float separationFloor = 0.05f;
+
 inline void score(const float colour[3], float fr, float fg, float fb, float br, float bg, float bb, float spatial, float prior, Pair& best) {
     const float dr = fr - br, dg = fg - bg, db = fb - bb;
     const float separation = dr * dr + dg * dg + db * db;
@@ -393,18 +542,33 @@ inline void score(const float colour[3], float fr, float fg, float fb, float br,
     alpha = std::clamp(alpha, 0.0f, 1.0f);
     const float er = colour[0] - (alpha * fr + (1 - alpha) * br), eg = colour[1] - (alpha * fg + (1 - alpha) * bg), eb = colour[2] - (alpha * fb + (1 - alpha) * bb);
     const float chroma = std::sqrt(er * er + eg * eg + eb * eb);
-    const float cost = chroma / std::max(0.05f, std::sqrt(separation)) + spatial + priorWeight * std::fabs(alpha - prior);
+    const float cost = chroma / std::max(separationFloor, std::sqrt(separation)) + spatial + priorWeight * std::fabs(alpha - prior);
     if (cost < best.cost) best = {fr, fg, fb, br, bg, bb, alpha, cost};
 }
 
 } // namespace
 
-std::shared_ptr<GrayImage> matteBand(const GrayImage& matte, const Image& guide, double bandFull, int limit, const GrayImage* trimapFrom, MatteDebug* debug, bool narrow) {
-    const int fullW = matte.width(), fullH = matte.height();
+std::shared_ptr<GrayImage> matteBand(const GrayImage& matte, const Image& guide, double bandFull, int limit, const GrayImage* trimapFrom, MatteDebug* debug, bool narrow, const TransferCurve& decode) {
+    std::unique_ptr<AlphaPlane> shape = trimapFrom ? std::make_unique<AlphaPlane>(*trimapFrom) : nullptr;
+    return matteBand(AlphaPlane(matte), guide, bandFull, limit, shape.get(), debug, narrow, decode).toGray();
+}
+
+AlphaPlane matteBand(const AlphaPlane& matte, const Image& guide, double bandFull, int limit, const AlphaPlane* trimapFrom, MatteDebug* debug, bool narrow, const TransferCurve& decode) {
+    const int fullW = matte.width, fullH = matte.height;
     const double factor = limit > 0 ? std::min(1.0, double(limit) / std::max(fullW, fullH)) : 1;
     const int width = std::max(1, int(std::lround(fullW * factor))), height = std::max(1, int(std::lround(fullH * factor)));
     const int band = std::max(1, int(std::lround(bandFull * factor)));
+    // Two views of the colours: as stored (perceptual: which colours are alike, how candidates sort) and in linear
+    // light, where a pixel really is alpha * F + (1 - alpha) * B and the pairs are solved.
     std::array<Map, 3> colour = colourLevels(guide, width, height);
+    const Decoder decoder(decode);
+    std::array<Map, 3> linearColour;
+    if (!decoder.identity())
+        for (int c = 0; c < 3; c++) {
+            linearColour[size_t(c)].resize(colour[size_t(c)].size());
+            for (size_t i = 0; i < colour[size_t(c)].size(); i++) linearColour[size_t(c)][i] = decoder(colour[size_t(c)][i]);
+        }
+    const std::array<Map, 3>& solveColour = decoder.identity() ? colour : linearColour;
     Map levels = maskLevels(matte, width, height);
     // The trimap: sure foreground is the mask eroded by the band, sure background the eroded complement
     // (running min and max, O(N)); everything else is unknown and gets solved. The mask that shapes it, and
@@ -412,7 +576,7 @@ std::shared_ptr<GrayImage> matteBand(const GrayImage& matte, const Image& guide,
     // it: the filtered matte can dip inside the subject where fur changes colour near the edge, and a dip
     // would open a hole in the sure foreground or vote the fur out. Half-transparent pixels beyond the band
     // are hardened with their region; the cleanup handles the specks that remain.
-    const bool shaped = trimapFrom && trimapFrom->width() == fullW && trimapFrom->height() == fullH;
+    const bool shaped = trimapFrom && trimapFrom->width == fullW && trimapFrom->height == fullH;
     const Map shape = shaped ? maskLevels(*trimapFrom, width, height) : levels;
     GrayImage eroded(width, height), dilated(width, height);
     for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) eroded.at(x, y) = dilated.at(x, y) = shape[size_t(y) * width + size_t(x)] >= 0.5f ? 255 : 0;
@@ -426,6 +590,7 @@ std::shared_ptr<GrayImage> matteBand(const GrayImage& matte, const Image& guide,
     }
     auto at = [&](int x, int y) { return size_t(y) * width + size_t(x); };
     auto colourAt = [&](size_t i, float out[3]) { out[0] = colour[0][i]; out[1] = colour[1][i]; out[2] = colour[2][i]; };
+    auto solveColourAt = [&](size_t i, float out[3]) { out[0] = solveColour[0][i]; out[1] = solveColour[1][i]; out[2] = solveColour[2][i]; };
 
     // Global sampling (He, Rhemann, Rother, Tang & Sun 2011): the candidates are every sure pixel within a few
     // pixels of the band, sorted by luma so that nearby indices are similar colours, and each unknown pixel
@@ -437,14 +602,14 @@ std::shared_ptr<GrayImage> matteBand(const GrayImage& matte, const Image& guide,
     GrayImage innerF = eroded, outerB = dilated;
     runningExtreme(innerF, depth, false);
     runningExtreme(outerB, depth, true);
-    struct Candidate { float r, g, b, luma; int x, y; };
+    struct Candidate { float r, g, b, luma; int x, y; float lr, lg, lb; };   // stored colour, and in the solve's space
     std::vector<Candidate> fs, bs;
     for (int y = 0; y < height; y++)
         for (int x = 0; x < width; x++) {
             const size_t i = at(x, y);
             const bool nearF = region[i] == Foreground && !innerF.data()[i], nearB = region[i] == Background && outerB.data()[i];
             if (!nearF && !nearB) continue;
-            Candidate c{colour[0][i], colour[1][i], colour[2][i], 0, x, y};
+            Candidate c{colour[0][i], colour[1][i], colour[2][i], 0, x, y, solveColour[0][i], solveColour[1][i], solveColour[2][i]};
             c.luma = 0.299f * c.r + 0.587f * c.g + 0.114f * c.b;
             (nearF ? fs : bs).push_back(c);
         }
@@ -492,12 +657,12 @@ std::shared_ptr<GrayImage> matteBand(const GrayImage& matte, const Image& guide,
             const size_t s = size_t(slot[p]);
             const Candidate &f = fs[size_t(iF)], &b = bs[size_t(iB)];
             float c[3];
-            colourAt(p, c);
+            solveColourAt(p, c);
             const float dfx = float(f.x - x), dfy = float(f.y - y), dbx = float(b.x - x), dby = float(b.y - y);
             const float spatial = 0.02f * (std::sqrt(dfx * dfx + dfy * dfy) / std::max(1.0f, std::sqrt(toF[p])) + std::sqrt(dbx * dbx + dby * dby) / std::max(1.0f, std::sqrt(toB[p])));
             Pair& best = pairs[s];
             const float before = best.cost;
-            score(c, f.r, f.g, f.b, b.r, b.g, b.b, spatial, shape[p], best);
+            score(c, f.lr, f.lg, f.lb, b.lr, b.lg, b.lb, spatial, shape[p], best);
             if (best.cost < before) { chosenF[s] = iF; chosenB[s] = iB; }
         };
         auto hash = [](uint32_t a, uint32_t b, uint32_t c) {
@@ -605,6 +770,9 @@ std::shared_ptr<GrayImage> matteBand(const GrayImage& matte, const Image& guide,
         debug->chosenF = std::make_shared<Image>(width, height);
         debug->chosenB = std::make_shared<Image>(width, height);
         auto byte = [](float v) { return uint8_t(std::lround(std::clamp(v, 0.0f, 1.0f) * 255)); };
+        auto shown = [&](float v) { return byte(decoder.identity() ? v : fromLinear(decode, v)); };
+        // How badly the chosen pair explains each band pixel at its final opacity, over the pair's separation.
+        Map uncertainty(size_t(width) * height, 0.0f);
         for (int y = 0; y < height; y++)
             for (int x = 0; x < width; x++) {
                 const size_t p = at(x, y);
@@ -614,33 +782,41 @@ std::shared_ptr<GrayImage> matteBand(const GrayImage& matte, const Image& guide,
                 if (pr.cost >= 1e9f) continue;
                 debug->pairAlpha->at(x, y) = byte(pr.alpha);
                 uint8_t* f = debug->chosenF->pixel(x, y);
-                f[0] = byte(pr.fr); f[1] = byte(pr.fg); f[2] = byte(pr.fb); f[3] = 255;
+                f[0] = shown(pr.fr); f[1] = shown(pr.fg); f[2] = shown(pr.fb); f[3] = 255;
                 uint8_t* b = debug->chosenB->pixel(x, y);
-                b[0] = byte(pr.br); b[1] = byte(pr.bg); b[2] = byte(pr.bb); b[3] = 255;
+                b[0] = shown(pr.br); b[1] = shown(pr.bg); b[2] = shown(pr.bb); b[3] = 255;
+                float c[3];
+                solveColourAt(p, c);
+                const float a = result[p];
+                const float er = c[0] - (a * pr.fr + (1 - a) * pr.br), eg = c[1] - (a * pr.fg + (1 - a) * pr.bg), eb = c[2] - (a * pr.fb + (1 - a) * pr.bb);
+                const float dr = pr.fr - pr.br, dg = pr.fg - pr.bg, db = pr.fb - pr.bb;
+                uncertainty[p] = std::sqrt(er * er + eg * eg + eb * eb) / (std::sqrt(dr * dr + dg * dg + db * db) + uncertaintyEpsilon);
             }
+        debug->uncertainty.width = fullW; debug->uncertainty.height = fullH;
+        debug->uncertainty.values = resizeLevels(uncertainty, width, height, fullW, fullH);
     }
     return fromLevels(result, width, height, fullW, fullH);
 }
 
-std::shared_ptr<GrayImage> refineMatte(const GrayImage& mask, const Image& guide, const MatteSettings& raw, int limit) {
+std::shared_ptr<GrayImage> refineMatte(const GrayImage& mask, const Image& guide, const MatteSettings& settings, int limit) {
+    return refineMatte(AlphaPlane(mask), guide, settings, limit).toGray();
+}
+
+AlphaPlane refineMatte(const AlphaPlane& mask, const Image& guide, const MatteSettings& raw, int limit, MatteDebug* debug) {
     MatteSettings s = raw.normalized();
-    std::shared_ptr<GrayImage> out = s.refineEdges > 0 ? guidedRefine(mask, guide, s.refineEdges, limit, s.highPass, s.sideWindows) : std::make_shared<GrayImage>(mask);
-    if (s.matting > 0) out = matteBand(*out, guide, s.matting, limit, &mask, nullptr, s.narrowBand);
-    if (s.cleanup) cleanMatte(*out);
+    AlphaPlane out = s.refineEdges > 0 ? guidedRefine(mask, guide, s.refineEdges, limit, s.highPass, s.sideWindows) : mask;
+    if (s.matting > 0) out = matteBand(out, guide, s.matting, limit, &mask, debug, s.narrowBand, s.decode);
+    if (s.cleanup) cleanMatte(out);
     if (s.shiftEdge != 0) {
         // Grey-level dilation or erosion: every iso-contour moves by the amount and the soft ramp survives.
         int r = std::max(1, int(std::lround(std::fabs(s.shiftEdge))));
-        runningExtreme(*out, r, s.shiftEdge > 0);
+        runningExtreme(out, r, s.shiftEdge > 0);
     }
     if (s.contrast > 0) {
         // 0 leaves the mask as it is; 100 is a hard cut at the middle.
-        float strength = float(s.contrast / 100);
-        float slope = 1 / std::max(0.02f, 1 - strength * 0.98f);
-        for (size_t i = 0; i < out->byteCount(); i++) {
-            float v = out->data()[i] / 255.0f;
-            v = slope * v + (1 - slope) / 2;
-            out->data()[i] = uint8_t(std::min(255.0f, std::max(0.0f, v * 255 + 0.5f)));
-        }
+        const float strength = float(s.contrast / 100);
+        const float slope = 1 / std::max(0.02f, 1 - strength * 0.98f);
+        for (float& v : out.values) v = std::clamp(slope * v + (1 - slope) / 2, 0.0f, 1.0f);
     }
     return out;
 }
@@ -682,6 +858,41 @@ void cleanMatte(GrayImage& matte) {
         }
         if (touchesF == touchesB) continue;   // the edge itself (or a soft image with no sure pixels at all)
         const uint8_t value = touchesF ? 255 : 0;
+        for (int32_t i : component) d[i] = value;
+    }
+}
+
+void cleanMatte(AlphaPlane& matte) {
+    const int w = matte.width, h = matte.height;
+    if (w <= 0 || h <= 0) return;
+    // The byte version's thresholds (at most 25: background, at least 230: foreground) on unrounded values.
+    constexpr float low = 25.5f / 255, high = 229.5f / 255;
+    float* d = matte.values.data();
+    const size_t n = size_t(w) * h;
+    std::vector<uint8_t> visited(n, 0);
+    std::vector<int32_t> stack, component;
+    for (size_t start = 0; start < n; start++) {
+        if (visited[start] || d[start] < low || d[start] >= high) continue;
+        bool touchesF = false, touchesB = false;
+        component.clear();
+        stack.assign(1, int32_t(start));
+        visited[start] = 1;
+        while (!stack.empty()) {
+            const int32_t i = stack.back();
+            stack.pop_back();
+            component.push_back(i);
+            const int x = i % w, y = i / w;
+            const int32_t around[4] = {x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, y > 0 ? i - w : -1, y < h - 1 ? i + w : -1};
+            for (int32_t q : around) {
+                if (q < 0) continue;
+                const float v = d[q];
+                if (v >= high) touchesF = true;
+                else if (v < low) touchesB = true;
+                else if (!visited[q]) { visited[q] = 1; stack.push_back(q); }
+            }
+        }
+        if (touchesF == touchesB) continue;
+        const float value = touchesF ? 1.0f : 0.0f;
         for (int32_t i : component) d[i] = value;
     }
 }
@@ -775,24 +986,30 @@ std::vector<uint8_t> workNear(const Map& alpha, int w, int h, int margin) {
 
 } // namespace
 
-std::shared_ptr<Image> estimateForeground(const Image& image, const GrayImage& matte) {
+std::shared_ptr<Image> estimateForeground(const Image& image, const GrayImage& matte, const TransferCurve& decode) {
+    return estimateForeground(image, AlphaPlane(matte), decode);
+}
+
+std::shared_ptr<Image> estimateForeground(const Image& image, const AlphaPlane& matte, const TransferCurve& decode) {
     const int w = image.width(), h = image.height();
     auto out = std::make_shared<Image>(image);
-    if (w <= 0 || h <= 0 || matte.width() != w || matte.height() != h) return out;
+    if (w <= 0 || h <= 0 || matte.width != w || matte.height != h) return out;
+    // Solved in linear light when the curve is a real one: unpremultiplied, decoded, solved, encoded.
+    const Decoder decoder(decode);
     // Which pixels get new colours: soft ones, and their transparent neighbours (a resampled mask blends them in).
     std::vector<uint8_t> replace(size_t(w) * h, 0);
     bool any = false;
     for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++) {
-            const uint8_t m = matte.at(x, y);
-            if (m == 255) continue;
+            const float m = matte.at(x, y);
+            if (m >= 1.0f) continue;
             bool near = false;
             for (int j = -1; j <= 1 && !near; j++)
                 for (int i = -1; i <= 1 && !near; i++) {
                     const int sx = x + i, sy = y + j;
                     if (sx < 0 || sy < 0 || sx >= w || sy >= h) continue;
-                    const uint8_t v = matte.at(sx, sy);
-                    near = v > 0 && v < 255;
+                    const float v = matte.at(sx, sy);
+                    near = v > 0 && v < 1.0f;
                 }
             if (near) { replace[size_t(y) * w + size_t(x)] = 1; any = true; }
         }
@@ -804,7 +1021,7 @@ std::shared_ptr<Image> estimateForeground(const Image& image, const GrayImage& m
         ForegroundLevel base;
         base.width = w; base.height = h;
         while (std::max(base.width, base.height) > 2048) { base.width = (base.width + 1) / 2; base.height = (base.height + 1) / 2; }
-        base.colour = colourLevels(image, base.width, base.height);
+        base.colour = colourLevels(image, base.width, base.height, &decoder);
         base.alpha = maskLevels(matte, base.width, base.height);
         levels.push_back(std::move(base));
         while (std::max(levels.back().width, levels.back().height) > 2) {
@@ -833,7 +1050,10 @@ std::shared_ptr<Image> estimateForeground(const Image& image, const GrayImage& m
     auto write = [&](int x, int y, const float f[3]) {
         uint8_t* p = out->pixel(x, y);
         const float a = p[3];
-        for (int c = 0; c < 3; c++) p[c] = uint8_t(std::lround(std::clamp(f[c], 0.0f, 1.0f) * a));
+        for (int c = 0; c < 3; c++) {
+            const float v = std::clamp(f[c], 0.0f, 1.0f);
+            p[c] = uint8_t(std::lround((decoder.identity() ? v : fromLinear(decode, v)) * a));
+        }
     };
     if (base.width == w && base.height == h) {
         for (int y = 0; y < h; y++)
@@ -870,8 +1090,8 @@ std::shared_ptr<Image> estimateForeground(const Image& image, const GrayImage& m
                     for (int x = lx0; x < lx1; x++, p += 4) {
                         const size_t i = size_t(y - ly0) * local.width + size_t(x - lx0);
                         const float a = p[3] ? p[3] / 255.0f : 1.0f;
-                        for (int c = 0; c < 3; c++) local.colour[size_t(c)][i] = p[c] / 255.0f / a;
-                        local.alpha[i] = matte.at(x, y) / 255.0f;
+                        for (int c = 0; c < 3; c++) local.colour[size_t(c)][i] = decoder(std::min(1.0f, p[c] / 255.0f / a));
+                        local.alpha[i] = matte.at(x, y);
                         // Bilinear sample of the base level's F and B.
                         const double bx = std::clamp((x + 0.5) * sx - 0.5, 0.0, double(base.width - 1)), by = std::clamp((y + 0.5) * sy - 0.5, 0.0, double(base.height - 1));
                         const int ix = int(bx), iy = int(by), ix1 = std::min(ix + 1, base.width - 1), iy1 = std::min(iy + 1, base.height - 1);
