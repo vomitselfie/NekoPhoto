@@ -146,6 +146,7 @@ TEST_CASE(clip_layers_folders_clipping_masks_and_placement_come_through) {
     sqlite3_close(db);
     std::ifstream dbIn(dbPath, std::ios::binary);
     const Bytes database((std::istreambuf_iterator<char>(dbIn)), std::istreambuf_iterator<char>());
+    dbIn.close();   // Windows will not delete a file that is still open
     fs::remove(dbPath);
 
     // The container: CSFCHUNK, its length and the first chunk's offset, then chunks of [tag][be64 length][payload].

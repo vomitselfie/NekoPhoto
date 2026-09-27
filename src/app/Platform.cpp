@@ -20,11 +20,23 @@ void attachParentConsole() {
         return h != nullptr && h != INVALID_HANDLE_VALUE && GetFileType(h) != FILE_TYPE_UNKNOWN;
     };
     const bool out = redirected(STD_OUTPUT_HANDLE), err = redirected(STD_ERROR_HANDLE);
-    if (out && err) return;
-    if (!AttachConsole(ATTACH_PARENT_PROCESS)) return;   // started from Explorer: no console, nothing to print to
-    FILE* ignored = nullptr;
-    if (!out) freopen_s(&ignored, "CONOUT$", "w", stdout);
-    if (!err) freopen_s(&ignored, "CONOUT$", "w", stderr);
+    if (!out || !err) {
+        if (AttachConsole(ATTACH_PARENT_PROCESS)) {
+            FILE* ignored = nullptr;
+            if (!out) freopen_s(&ignored, "CONOUT$", "w", stdout);
+            if (!err) freopen_s(&ignored, "CONOUT$", "w", stderr);
+        } else if (!out && !err) {
+            return;   // started from Explorer: nowhere to print, so Qt keeps showing --help in a message box
+        }
+    }
+    // Qt's parser shows --help and --version in a message box in a GUI program; print them for the caller instead.
+    _putenv_s("QT_COMMAND_LINE_PARSER_NO_GUI_MESSAGE_BOXES", "1");
+}
+
+int finishProcess(int status) {
+    std::fflush(nullptr);
+    TerminateProcess(GetCurrentProcess(), UINT(status));
+    return status;
 }
 
 QString defaultLocalSocket(const QString& baseName) {
@@ -46,6 +58,8 @@ QString localServerName(const QString& socket) {
 #else
 
 void attachParentConsole() {}
+
+int finishProcess(int status) { return status; }
 
 QString defaultLocalSocket(const QString& baseName) {
     QString runtime = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);

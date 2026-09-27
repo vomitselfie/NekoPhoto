@@ -207,7 +207,7 @@ static void migrateFromOldName() {
     QDir().rmdir(config + "/compositor-linux");
 }
 
-int main(int argc, char** argv) {
+int run(int argc, char** argv) {
     // --headless: no window on screen; the automation socket is the only way in. Must be decided before QApplication.
     // --call and --batch never show a window either, so they must work without a display.
     bool headless = false;
@@ -521,4 +521,9 @@ int main(int argc, char** argv) {
         });
     }
     return app.exec();
+}
+
+int main(int argc, char** argv) {
+    const int status = run(argc, argv);   // every Qt object is gone by here
+    return app::platform::finishProcess(status);
 }

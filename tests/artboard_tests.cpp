@@ -181,6 +181,7 @@ TEST_CASE(artboards_slices_project_round_trip) {
     // Version 8: the Mac app has no artboards.
     std::ifstream in(std::filesystem::path(package) / "manifest.json");
     std::stringstream text; text << in.rdbuf();
+    in.close();   // Windows will not delete a file that is still open
     CHECK(text.str().find("\"version\": 8") != std::string::npos);
     CHECK(!doc.fitsMacBudget());
     // Without them the Mac's version stays.

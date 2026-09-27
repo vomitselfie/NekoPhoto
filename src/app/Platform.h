@@ -13,6 +13,11 @@ namespace app::platform {
 /// already redirected to a file or pipe is left alone. Nothing to do elsewhere.
 void attachParentConsole();
 
+/// Called with main's exit status once everything main owns is destroyed; returns it on Linux. On Windows it
+/// flushes the C streams and ends the process there, without the DLL teardown that follows main: under Wine that
+/// teardown hung for minutes in libstdc++'s DLL detach once a document had been open.
+int finishProcess(int status);
+
 /// The default name of a per-user local socket, e.g. "nekophoto.sock": a file in the runtime directory on
 /// Linux ($XDG_RUNTIME_DIR, else Qt's private temp folder), a named pipe carrying the user name on Windows
 /// (\\.\pipe\nekophoto-<user>), since pipes live in one namespace for the whole machine.
