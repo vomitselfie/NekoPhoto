@@ -141,6 +141,26 @@ Calculations; CMYK non-separable modes (fall back to Normal with a notice); tili
 P0–P4 plus P6: 16-bit RGB, a colour-managed display with Assign/Convert and soft proof, lossless 16-bit PSD round trips,
 and a Channels panel, with 8-bit documents untouched throughout.
 
+## Status
+
+**P1 landed (2026-09-27), no behaviour change.**
+
+- `sampletype.h`: `SampleType`, `SampleTraits` (U16 one = 32768). `imaget.h`: `ImageT<S>` / `GrayImageT<S>` for U16 and
+  F32 (a channel count, byte stride), `ImageOf<S>` / `GrayOf<S>` mapping U8 to the untouched `Image` / `GrayImage`,
+  and `AnyImage` / `AnyGray` (a variant of the three shared pointers, `u8()`, `u16()`, `f32()`, depth-agnostic
+  `width()`, `height()`, `identity()`, `visit`). `Image` was kept as it is rather than made an alias.
+- `Asset::image`, `MaskAsset::image`, `Layer::shapeImage` / `textImage` / `smartImage` and `Selection::coverage` hold
+  `AnyImage` / `AnyGray`; every reader goes through `.u8()` (null for a deeper buffer). Asset and mask thumbnails,
+  `LayerOverride`, `RenderCache` and `DrawParams` stay 8-bit. `Document::sampleType` exists (always U8); the project
+  and PSD formats are unchanged.
+- `render.cpp` keeps the primitives (`drawLayer`, mask sampling, resampling, `resizeDocument`) and the entry point;
+  `render_plan.h/.cpp` is the depth-agnostic `RenderPlan`; `render_exec_u8.cpp` is `RenderExec<SampleType::U8>`, the
+  former `Renderer` body moved. `render()` switches on `document.sampleType` once. `blend.cpp` is now `blend_u8.cpp`.
+- `supports.h`: `supports(feature, SampleType)` over a table in `supports.cpp`; an unlisted feature is 8-bit only.
+- Gates: render hashes identical, full ctest, PSD corpus identical (117 files, 3675 carried blocks), GCC and Clang
+  `-Werror`, rpc smoke; `bench_core 9` A/B against 1.6.1 within ±2% (medians of alternating rounds, render 201.7 →
+  201.2 ms, brush 21.9 → 22.1 ms, blur r20 82.2 → 82.8 ms).
+
 ## Review notes (the lead)
 
 - Mac project compatibility: since 2026-09-26 NekoPhoto no longer keeps Mac Compositor project-format parity, so
