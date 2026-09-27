@@ -1,7 +1,8 @@
 name: release
 
 # Pushing a tag like v0.2.0 builds NekoPhoto, packages an AppImage and a
-# plain tarball on Linux and publishes them on a GitHub release with generated notes.
+# plain tarball on Linux and a portable zip on Windows, and publishes them on a
+# GitHub release with generated notes.
 # "Run workflow" from the Actions tab does a dry run: the artifacts are built
 # and attached to the workflow run only.
 
@@ -100,12 +101,75 @@ jobs:
             *.AppImage
             *.AppImage.zsync
             *.tar.gz
+            *.zip
+            *.zip.sha256
             SHA256SUMS
+
+  windows:
+    name: Windows zip
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
+      - uses: msys2/setup-msys2@f84a36b4009b96413f91c01441130855db9392e5   # v2.9.0
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            curl zip
+          pacboy: >-
+            gcc:p cmake:p ninja:p pkgconf:p python:p
+            qt6-base:p qt6-svg:p qt6-imageformats:p qt6-tools:p
+            libpng:p zlib:p libmypaint:p libraw:p zstd:p sqlite3:p
+      - name: Version from the tag
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then v="${GITHUB_REF#refs/tags/v}"; else v="0.0.0-dev.${GITHUB_SHA::7}"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "Building version $v"
+
+      - name: Vendored OpenCV (cached)
+        id: opencv
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830   # v4
+        with:
+          path: opencv-prefix
+          key: opencv-windows-ucrt64-${{ hashFiles('tools/build-opencv.sh') }}
+      - name: Build OpenCV
+        if: steps.opencv.outputs.cache-hit != 'true'
+        run: tools/build-opencv.sh opencv-prefix
+
+      - name: Configure and build
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCOMPOSITOR_VERSION="${{ steps.version.outputs.version }}" \
+            -DCOMPOSITOR_WARNINGS_AS_ERRORS=ON \
+            -DOpenCV_DIR="$PWD/opencv-prefix"
+          cmake --build build -j"$(nproc)"
+
+      - name: Tests
+        run: QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure
+
+      - name: Zip
+        run: |
+          v="${{ steps.version.outputs.version }}"
+          tools/package-windows.sh build "$v"
+          (cd "NekoPhoto-$v-windows-x86_64" && PATH="/c/Windows/System32:/c/Windows" ./nekophoto.exe --version \
+            && PATH="/c/Windows/System32:/c/Windows" QT_QPA_PLATFORM=offscreen ./nekophoto.exe --demo --screenshot ../zip-demo.png)
+          sha256sum "NekoPhoto-$v-windows-x86_64.zip" > "NekoPhoto-$v-windows-x86_64.zip.sha256"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
+        with:
+          name: NekoPhoto-${{ steps.version.outputs.version }}-windows
+          path: |
+            NekoPhoto-*-windows-x86_64.zip
+            NekoPhoto-*-windows-x86_64.zip.sha256
 
   publish:
     name: GitHub release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [appimage]
+    needs: [appimage, windows]
     runs-on: ubuntu-22.04
     permissions:
       contents: write   # creates the release and uploads the files
@@ -125,4 +189,6 @@ jobs:
             *.AppImage
             *.AppImage.zsync
             *.tar.gz
+            *.zip
+            *.zip.sha256
             SHA256SUMS

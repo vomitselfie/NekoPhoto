@@ -1,0 +1,85 @@
+name: Windows
+
+# The Windows x86_64 build: MinGW-w64 (UCRT) from MSYS2, Qt 6 and the libraries from its packages, OpenCV from
+# tools/build-opencv.sh as on Linux. Builds, runs the tests and the offscreen smoke test, drives the automation
+# pipe with tools/rpc_smoke.py, and uploads the portable zip. tools/windows-cross.sh does the same locally.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: MinGW (UCRT64) build, tests and zip
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
+      - uses: msys2/setup-msys2@f84a36b4009b96413f91c01441130855db9392e5   # v2.9.0
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            curl zip
+          pacboy: >-
+            gcc:p cmake:p ninja:p pkgconf:p python:p
+            qt6-base:p qt6-svg:p qt6-imageformats:p qt6-tools:p
+            libpng:p zlib:p libmypaint:p libraw:p zstd:p sqlite3:p
+      - name: Version
+        id: version
+        run: echo "version=0.0.0-dev.${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Vendored OpenCV (cached)
+        id: opencv
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830   # v4
+        with:
+          path: opencv-prefix
+          key: opencv-windows-ucrt64-${{ hashFiles('tools/build-opencv.sh') }}
+      - name: Build OpenCV
+        if: steps.opencv.outputs.cache-hit != 'true'
+        run: tools/build-opencv.sh opencv-prefix
+
+      - name: Configure and build
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCOMPOSITOR_WARNINGS_AS_ERRORS=ON \
+            -DCOMPOSITOR_VERSION="${{ steps.version.outputs.version }}" \
+            -DOpenCV_DIR="$PWD/opencv-prefix"
+          cmake --build build -j"$(nproc)"
+
+      - name: Tests
+        run: QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure
+
+      - name: Smoke test
+        run: |
+          ./build/src/app/nekophoto.exe --version
+          QT_QPA_PLATFORM=offscreen ./build/src/app/nekophoto.exe --demo --screenshot demo.png --save-as Demo.comp
+          QT_QPA_PLATFORM=offscreen ./build/src/app/nekophoto.exe Demo.comp --screenshot reopened.png
+
+      - name: Automation pipe smoke test
+        run: |
+          ./build/src/app/nekophoto.exe --headless --rpc-socket nekophoto-ci --demo &
+          COMPOSITOR_BIN="$PWD/build/src/app/nekophoto.exe" python tools/rpc_smoke.py nekophoto-ci
+          kill %1 || true
+
+      - name: Zip
+        run: |
+          tools/package-windows.sh build "${{ steps.version.outputs.version }}"
+          # The unpacked folder must run on its own: nothing from MSYS2 on PATH.
+          cd NekoPhoto-*-windows-x86_64
+          PATH="/c/Windows/System32:/c/Windows" ./nekophoto.exe --version
+          PATH="/c/Windows/System32:/c/Windows" QT_QPA_PLATFORM=offscreen ./nekophoto.exe --demo --screenshot ../zip-demo.png
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
+        with:
+          name: NekoPhoto-windows-x86_64
+          path: |
+            NekoPhoto-*-windows-x86_64.zip
+            demo.png
+            zip-demo.png
