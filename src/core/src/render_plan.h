@@ -87,5 +87,7 @@ template <>
 void executeRender<SampleType::U8>(const RenderPlan& plan, const Rect& region, double scale, Image& out, RenderCache* cache, uint64_t version);
 template <>
 void executeRender<SampleType::U16>(const RenderPlan& plan, const Rect& region, double scale, Image16& out, RenderCache* cache, uint64_t version);
+/// A 16-bit document's frame for the canvas (render_u16.cpp): rendered at 16 bits into `out`'s size and reduced to 8.
+void renderForDisplay16(const RenderPlan& plan, const Rect& region, double scale, Image& out, RenderCache* cache, uint64_t version, bool clear);
 
 } // namespace compositor

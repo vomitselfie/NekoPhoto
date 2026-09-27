@@ -130,8 +130,6 @@ add_library(compositor_core STATIC
     src/colorlookup.cpp
     src/clip.cpp
     src/blend_u8.cpp
-    src/blend_u16.cpp
-    src/depth.cpp
     src/blur.cpp
     src/brushimport.cpp
     src/brush.cpp
@@ -186,7 +184,6 @@ add_library(compositor_core STATIC
     src/render.cpp
     src/render_plan.cpp
     src/render_exec_u8.cpp
-    src/render_exec_u16.cpp
     src/selection.cpp
     src/shape.cpp
     src/warp.cpp
@@ -196,6 +193,11 @@ add_library(compositor_core STATIC
     src/warpstroke.cpp
     src/transform.cpp
     src/uuid.cpp
+    # 16 bits per channel (P2), last so the 8-bit code keeps its place in the library
+    src/depth.cpp
+    src/blend_u16.cpp
+    src/render_exec_u16.cpp
+    src/render_u16.cpp
 )
 add_library(compositor::core ALIAS compositor_core)
 

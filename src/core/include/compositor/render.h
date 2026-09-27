@@ -31,9 +31,9 @@ struct RenderCache {
     int width = 0, height = 0;
     Uuid layer;
     std::shared_ptr<Image> backdrop, above;
+    bool aboveFlat = false;
     /// The same for a 16-bit document.
     std::shared_ptr<Image16> backdrop16, above16;
-    bool aboveFlat = false;
 };
 
 /// Per-layer overrides while an edit is in progress (a transform being dragged, a brush stroke).

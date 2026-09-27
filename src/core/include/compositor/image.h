@@ -172,12 +172,13 @@ private:
     void enforceBudget(uint64_t keep);
     std::vector<Entry<Image>> entries_;
     std::vector<Entry<GrayImage>> grayEntries_;
-    std::vector<Entry<ImageT<SampleType::U16>>> entries16_;
-    std::vector<Entry<GrayImageT<SampleType::U16>>> grayEntries16_;
     std::mutex mutex_;
     size_t budget_ = size_t(400) << 20;
     size_t used_ = 0;
     uint64_t clock_ = 0;
+    // A 16-bit document's reductions (after the 8-bit members, which keep their places).
+    std::vector<Entry<ImageT<SampleType::U16>>> entries16_;
+    std::vector<Entry<GrayImageT<SampleType::U16>>> grayEntries16_;
 };
 
 } // namespace compositor
