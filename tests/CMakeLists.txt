@@ -151,7 +151,9 @@ add_test(NAME sut_tests COMMAND sut_tests)
 add_library(brush_harness STATIC brush_harness.cpp)
 target_link_libraries(brush_harness PUBLIC compositor::core compositor_warnings ZLIB::ZLIB)
 target_compile_definitions(brush_harness PUBLIC BRUSH_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/brush_fixtures"
-                           MYPAINT_BRUSHES_DIR="${CMAKE_SOURCE_DIR}/src/app/brushes/mypaint")
+                           MYPAINT_BRUSHES_DIR="${CMAKE_SOURCE_DIR}/src/app/brushes/mypaint"
+                           PROCREATE_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/brushes/procreate"
+                           LOCAL_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/local-fixtures")
 if(COMPOSITOR_HAVE_SQLITE)
     if(TARGET SQLite3::SQLite3)
         target_link_libraries(brush_harness PUBLIC SQLite3::SQLite3)

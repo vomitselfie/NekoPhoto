@@ -10,6 +10,8 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <map>
+#include <set>
 #include <sstream>
 
 namespace brushharness {
@@ -174,6 +176,17 @@ std::vector<StrokeFixture> standardFixtures() {
         }
         out.push_back(f);
     }
+    // The pen held at 45 degrees from upright while the way it leans goes once round.
+    out.push_back(line("azimuth_sweep", 160, 30, 100, 290, 100, [](BrushSample& s, double u) {
+        s.pressure = 0.7;
+        s.tiltX = 45 * std::cos(2 * pi * u);
+        s.tiltY = 45 * std::sin(2 * pi * u);
+    }));
+    // The barrel turned from 340 through 359, 0 and 1 to 20 degrees, as a pen that reports 0..360 does.
+    out.push_back(line("twist_wrap", 160, 30, 100, 290, 100, [](BrushSample& s, double u) {
+        s.pressure = 0.7;
+        s.twist = std::fmod(340 + 40 * u, 360.0);
+    }));
     return out;
 }
 
@@ -517,6 +530,200 @@ std::vector<Scene> scenes(const std::vector<StrokeFixture>& fixtures, const std:
     for (const StrokeFixture& f : fixtures)
         for (const Preset& p : presets) out.push_back({f.name + "/" + p.name, &f, &p});
     return out;
+}
+
+// ---- Brushes checked against expectations ---------------------------------------------------------------------------
+
+namespace {
+
+std::optional<nlohmann::json> readJson(const fs::path& path) {
+    if (!fs::exists(path)) return std::nullopt;
+    nlohmann::json j = nlohmann::json::parse(readText(path.string()), nullptr, false);
+    if (j.is_discarded() || !j.is_object()) return std::nullopt;
+    return j;
+}
+
+std::string field(const nlohmann::json& j, const char* key) {
+    auto it = j.find(key);
+    return it != j.end() && it->is_string() ? it->get<std::string>() : std::string();
+}
+
+const Preset* presetNamed(const FixtureBrushes& brushes, const std::string& name) {
+    for (const Preset& p : brushes.presets) if (p.name == name) return &p;
+    return nullptr;
+}
+
+const StrokeFixture* fixtureNamed(const std::vector<StrokeFixture>& fixtures, const std::string& name) {
+    for (const StrokeFixture& f : fixtures) if (f.name == name) return &f;
+    return nullptr;
+}
+
+/// A stroke's metric where its input is high (stations 4 and 5) over where it is low (0 and 9).
+double highOverLow(const std::vector<double>& v) {
+    if (v.size() < 10) return 0;
+    return ((v[4] + v[5]) / 2 + 1e-3) / ((v[0] + v[9]) / 2 + 1e-3);
+}
+
+double range(const std::vector<double>& v) {
+    if (v.empty()) return 0;
+    return *std::max_element(v.begin(), v.end()) - *std::min_element(v.begin(), v.end());
+}
+
+double largestStep(const std::vector<double>& v) {
+    double out = 0;
+    for (size_t i = 1; i < v.size(); i++) out = std::max(out, std::fabs(v[i] - v[i - 1]));
+    return out;
+}
+
+} // namespace
+
+FixtureBrushes syntheticProcreate(const std::string& folder) {
+    FixtureBrushes out;
+    const auto manifest = readJson(fs::path(folder) / "manifest.json");
+    if (!manifest) return out;
+    const std::string baselineFile = field(*manifest, "baseline");
+    auto stem = [](const std::string& file) { return fs::path(file).stem().string(); };
+    auto load = [&](const std::string& file) {
+        if (presetNamed(out, stem(file))) return;
+        const std::string path = (fs::path(folder) / file).string();
+        auto import = importBrushFile(path);
+        if (!import || import->brushes.empty()) return;
+        for (const std::string& note : import->notes) out.notes.push_back(file + ": " + note);
+        Preset p = tipPreset(stem(file), import->brushes[0], 40);
+        p.seed = 99;
+        out.presets.push_back(std::move(p));
+    };
+    load(baselineFile);
+    auto brushes = manifest->find("brushes");
+    if (brushes == manifest->end() || !brushes->is_object()) return out;
+    for (auto it = brushes->begin(); it != brushes->end(); ++it) {
+        load(it.key());
+        std::vector<const nlohmann::json*> checks = {&it.value()};
+        if (auto also = it.value().find("also"); also != it.value().end() && also->is_object()) checks.push_back(&*also);
+        for (const nlohmann::json* c : checks) {
+            Expectation e;
+            e.brush = stem(it.key());
+            e.stroke = field(*c, "stroke");
+            e.measure = field(*c, "measure");
+            e.expect = field(*c, "expect");
+            e.against = stem(field(*c, "against").empty() ? baselineFile : field(*c, "against"));
+            e.weakerThan = field(*c, "weakerThan").empty() ? std::string() : stem(field(*c, "weakerThan"));
+            e.setting = field(it.value(), "setting");
+            out.expectations.push_back(e);
+        }
+    }
+    for (const Expectation& e : out.expectations) { load(e.against + ".brush"); if (!e.weakerThan.empty()) load(e.weakerThan + ".brush"); }
+    return out;
+}
+
+std::optional<FixtureBrushes> localFixtures(const std::string& folder) {
+    const auto manifest = readJson(fs::path(folder) / "manifest.json");
+    if (!manifest) return std::nullopt;
+    FixtureBrushes out;
+    std::map<std::string, std::optional<BrushImport>> sets;
+    auto brushes = manifest->find("brushes");
+    if (brushes == manifest->end() || !brushes->is_array()) return out;
+    for (const nlohmann::json& b : *brushes) {
+        const std::string set = field(b, "set"), name = field(b, "name");
+        if (!sets.count(set)) {
+            const fs::path path = fs::path(folder) / set;
+            sets[set] = fs::exists(path) ? importBrushFile(path.string()) : std::nullopt;
+            if (sets[set]) for (const std::string& note : sets[set]->notes) out.notes.push_back(set + ": " + note);
+            else out.notes.push_back(set + ": not found or not readable");
+        }
+        if (!sets[set]) continue;
+        const TipPreset* found = nullptr;
+        for (const TipPreset& t : sets[set]->brushes) if (t.name.find(name) != std::string::npos) { found = &t; break; }
+        if (!found) { out.notes.push_back(set + ": no brush named " + name); continue; }
+        const auto input = dynamicsInputFromName(field(b, "input"));
+        Expectation e;
+        e.brush = "local_" + name;
+        e.stroke = field(b, "stroke");
+        e.measure = field(b, "measure");
+        e.expect = field(b, "expect");
+        e.setting = field(b, "setting");
+        e.against = e.brush + "~no_" + field(b, "input");
+        if (!presetNamed(out, e.brush)) {
+            // 28 pixels unless the entry asks for more: a spacing of a hundredth of the size needs a larger dab to step.
+            auto size = b.find("diameter");
+            Preset p = tipPreset(e.brush, *found, size != b.end() && size->is_number() ? size->get<double>() : 28.0);
+            p.seed = 99;
+            out.presets.push_back(p);
+            // The control: the same brush without the mappings from that input.
+            Preset control = p;
+            control.name = e.against;
+            auto& d = control.tip->tip.dynamics;
+            if (input) d.erase(std::remove_if(d.begin(), d.end(), [&](const DynamicsMapping& m) { return m.input == *input; }), d.end());
+            out.presets.push_back(control);
+        } else if (!presetNamed(out, e.against)) {
+            Preset control = *presetNamed(out, e.brush);
+            control.name = e.against;
+            auto& d = control.tip->tip.dynamics;
+            if (input) d.erase(std::remove_if(d.begin(), d.end(), [&](const DynamicsMapping& m) { return m.input == *input; }), d.end());
+            out.presets.push_back(control);
+        }
+        out.expectations.push_back(e);
+    }
+    return out;
+}
+
+std::vector<Scene> expectationScenes(const std::vector<StrokeFixture>& fixtures, const FixtureBrushes& brushes) {
+    std::vector<Scene> out;
+    std::set<std::string> seen;
+    auto add = [&](const std::string& stroke, const std::string& brush) {
+        const StrokeFixture* f = fixtureNamed(fixtures, stroke);
+        const Preset* p = presetNamed(brushes, brush);
+        if (!f || !p || !seen.insert(stroke + "/" + brush).second) return;
+        out.push_back({stroke + "/" + brush, f, p});
+    };
+    for (const Expectation& e : brushes.expectations) {
+        add(e.stroke, e.brush);
+        add(e.stroke, e.against);
+        if (!e.weakerThan.empty()) add(e.stroke, e.weakerThan);
+    }
+    return out;
+}
+
+bool checkExpectation(const Expectation& e, const std::vector<StrokeFixture>& fixtures, const FixtureBrushes& brushes, std::string* why) {
+    const StrokeFixture* stroke = fixtureNamed(fixtures, e.stroke);
+    const Preset* brush = presetNamed(brushes, e.brush);
+    const Preset* against = presetNamed(brushes, e.against);
+    if (!stroke || !brush || !against) { if (why) *why = "missing stroke or brush"; return false; }
+    const Render a = render(*stroke, *brush), b = render(*stroke, *against);
+    const Metrics ma = measure(*stroke, a), mb = measure(*stroke, b);
+    char buffer[256];
+    if (e.measure == "render" || e.expect == "differs") {
+        const bool differs = hashRender(a) != hashRender(b);
+        if (why) *why = differs ? "the render differs" : "the render is the same";
+        return differs;
+    }
+    const std::vector<double>& va = e.measure == "peak" ? ma.peak : ma.width;
+    const std::vector<double>& vb = e.measure == "peak" ? mb.peak : mb.width;
+    if (e.expect == "turns") {
+        std::snprintf(buffer, sizeof buffer, "%s swings %.1f against %.1f", e.measure.c_str(), range(va), range(vb));
+        if (why) *why = buffer;
+        return range(va) > range(vb) + 1.5;
+    }
+    if (e.expect == "continuous") {
+        std::snprintf(buffer, sizeof buffer, "largest %s step between stations %.2f (against %.2f)", e.measure.c_str(), largestStep(va), largestStep(vb));
+        if (why) *why = buffer;
+        return largestStep(va) <= largestStep(vb) + 2.0;
+    }
+    const double ra = highOverLow(va), rb = highOverLow(vb);
+    std::snprintf(buffer, sizeof buffer, "%s high/low %.3f against %.3f", e.measure.c_str(), ra, rb);
+    bool ok = e.expect == "up" ? ra > rb * 1.02 : e.expect == "down" ? ra < rb * 0.98 : false;
+    std::string detail = buffer;
+    if (ok && !e.weakerThan.empty()) {
+        const Preset* stronger = presetNamed(brushes, e.weakerThan);
+        if (!stronger) { if (why) *why = "missing " + e.weakerThan; return false; }
+        const Metrics ms = measure(*stroke, render(*stroke, *stronger));
+        const double rs = highOverLow(e.measure == "peak" ? ms.peak : ms.width);
+        std::snprintf(buffer, sizeof buffer, ", %.3f for %s", rs, e.weakerThan.c_str());
+        detail += buffer;
+        ok = std::fabs(ra - rb) < std::fabs(rs - rb);
+    }
+    if (why) *why = detail;
+    return ok;
 }
 
 } // namespace brushharness

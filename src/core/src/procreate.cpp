@@ -10,6 +10,7 @@
 #include "zip.h"
 #include <algorithm>
 #include <cmath>
+#include <map>
 
 namespace compositor {
 
@@ -59,7 +60,61 @@ std::string text(const std::map<std::string, plist::Value>& s, const char* key) 
     return it != s.end() && it->second.kind == plist::Value::Kind::String && it->second.text != "$null" ? it->second.text : std::string();
 }
 
-struct Notes { int bundledShapes = 0, bundledGrains = 0, movingGrain = 0; };
+struct Notes {
+    int bundledShapes = 0, bundledGrains = 0, movingGrain = 0;
+    std::map<std::string, int> notCarried;   // setting -> brushes using it
+};
+
+// ---- Procreate's dynamics, scaled in one place ---------------------------------------------------------------------
+//
+// Every Procreate setting this reader turns into a dynamics mapping (brushdynamics.h) is scaled here and nowhere
+// else, so the one-setting reference brushes made in Procreate can tune each in one spot. The mapping table in
+// docs/brush-engine.md lists the same; the assumptions it marks as pending are the ones those files will settle.
+namespace scaling {
+
+/// The speed, in document pixels per second, at which a speed setting has its full effect (assumed).
+constexpr double fullSpeed = 1500;
+
+/// dynamicsSpeedSize, -1..1: positive grows the size with speed, to 1 + amount at full speed; negative shrinks it.
+DynamicsMapping speedSize(double amount) {
+    return dynamicsMapping(DynamicsInput::Speed, DynamicsTarget::Size, 1, std::clamp(amount, -0.95, 1.0), fullSpeed);
+}
+
+/// dynamicsSpeedOpacity, -1..1: positive makes slow strokes lighter (from 1 - amount at rest to full at full speed);
+/// negative makes fast strokes lighter (to 1 + amount at full speed). Opacity is the most a stroke builds up to.
+DynamicsMapping speedOpacity(double amount) {
+    const double a = std::clamp(amount, -1.0, 1.0);
+    return a > 0 ? dynamicsMapping(DynamicsInput::Speed, DynamicsTarget::Opacity, 1 - a, a, fullSpeed)
+                 : dynamicsMapping(DynamicsInput::Speed, DynamicsTarget::Opacity, 1, a, fullSpeed);
+}
+
+/// plotSpacingSpeed, 0 and up: the spacing widens with speed, to 1 + amount times at full speed.
+DynamicsMapping speedSpacing(double amount) {
+    return dynamicsMapping(DynamicsInput::Speed, DynamicsTarget::Spacing, 1, std::clamp(amount, 0.0, 10.0), fullSpeed);
+}
+
+} // namespace scaling
+
+/// Settings that change how a brush paints and have no mapping here yet. A setting counts when it is off its
+/// neutral value; the import's notes list how many brushes use each. As a setting gets a mapping it leaves this list.
+/// dynamicsPressure*Speed are not speed dynamics: they follow dynamicsPressureResponse (how quickly the size,
+/// opacity and bleed catch up with the pressure), which has no counterpart in the engine.
+const char* const notCarriedSettings[] = {
+    "dynamicsPressureSizeSpeed", "dynamicsPressureOpacitySpeed", "dynamicsPressureBleedSpeed",
+    "dynamicsTiltSize", "dynamicsTiltOpacity", "dynamicsTiltBleed", "dynamicsTiltShapeRoundness", "dynamicsTiltCompression",
+    "dynamicsTiltGradation", "shapeAzimuth", "shapeRoll", "shapeRollMode",
+    "dynamicsTiltHue", "dynamicsTiltSaturation", "dynamicsTiltBrightness", "dynamicsTiltSecondaryColor",
+    "dynamicsPressureHue", "dynamicsPressureSaturation", "dynamicsPressureBrightness", "dynamicsPressureSecondaryColor",
+    "dynamicsPressureBleed", "dynamicsPressureShapeRoundness"};
+
+bool inUse(const std::map<std::string, plist::Value>& s, const std::string& key) {
+    if (std::fabs(number(s, key.c_str(), 0)) < 1e-6) return false;
+    // Roundness by pressure or tilt does nothing while its minimum is the full roundness.
+    if (key.size() > 14 && key.compare(key.size() - 14, 14, "ShapeRoundness") == 0) return number(s, (key + "Minimum").c_str(), 1) < 1;
+    // Compression only qualifies a tilt on the size.
+    if (key == "dynamicsTiltCompression") return std::fabs(number(s, "dynamicsTiltSize", 0)) >= 1e-6;
+    return true;
+}
 
 std::optional<TipPreset> readBrush(const ZipArchive& zip, const std::string& folder, Notes& notes) {
     auto archive = zip.read(folder + "Brush.archive", 16u << 20);
@@ -122,6 +177,12 @@ std::optional<TipPreset> readBrush(const ZipArchive& zip, const std::string& fol
     const double opacityJitter = std::clamp(number(s, "dynamicsJitterOpacity", 0), 0.0, 1.0);
     if (opacityJitter > 0) add(DynamicsInput::Random, DynamicsTarget::Flow, 1, -opacityJitter);
     if (angleJitter > 0) add(DynamicsInput::Random, DynamicsTarget::Angle, 0, angleJitter);
+    // Speed (scaling above).
+    if (const double v = number(s, "dynamicsSpeedSize", 0); std::fabs(v) >= 1e-6) tip.dynamics.push_back(scaling::speedSize(v));
+    if (const double v = number(s, "dynamicsSpeedOpacity", 0); std::fabs(v) >= 1e-6) tip.dynamics.push_back(scaling::speedOpacity(v));
+    if (const double v = number(s, "plotSpacingSpeed", 0); v >= 1e-6) tip.dynamics.push_back(scaling::speedSpacing(v));
+    for (const char* key : notCarriedSettings)
+        if (inUse(s, key)) notes.notCarried[key]++;
     tip.flow = number(s, "maxOpacity", 1);
     // Size: Procreate's are relative, with no pixel size in the file. 200 pixels for a maximum of 1 matches the
     // proportions of Procreate's own thumbnails (a 0.04 ink is a fine line, a 0.4 velvet a broad stroke).
@@ -163,6 +224,11 @@ std::optional<BrushImport> readProcreate(const uint8_t* data, size_t size, const
     note(notes.bundledShapes, "brushes whose shape is from Procreate's own library, not in the file (a soft round tip stands in)");
     note(notes.bundledGrains, "brushes whose grain is from Procreate's own library, not in the file (they paint without grain)");
     note(notes.movingGrain, "brushes whose grain moves with the stroke (here it stays put on the canvas)");
+    if (!notes.notCarried.empty()) {
+        std::string list;
+        for (const auto& [key, count] : notes.notCarried) list += (list.empty() ? "" : ", ") + key + " " + std::to_string(count);
+        import.notes.push_back("settings not carried over, with the brushes using each: " + list);
+    }
     if (import.brushes.empty()) { if (error) *error = "the file holds no Procreate brush this reader can use"; return std::nullopt; }
     return import;
 }

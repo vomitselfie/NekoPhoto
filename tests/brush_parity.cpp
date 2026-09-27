@@ -32,6 +32,13 @@ std::vector<StrokeFixture> allFixtures() {
     return fixtures;
 }
 
+/// Every fixture with every preset, then the synthetic Procreate brushes on the strokes their manifest names.
+std::vector<Scene> allScenes(const std::vector<StrokeFixture>& fixtures, const std::vector<Preset>& presets, const FixtureBrushes& synthetic) {
+    std::vector<Scene> out = scenes(fixtures, presets);
+    for (Scene& s : expectationScenes(fixtures, synthetic)) out.push_back(std::move(s));
+    return out;
+}
+
 // The baseline file has two sections: the 8-bit scenes, then the 16-bit ones, named "u16/<fixture>/<preset>". Each
 // test reads and rewrites its own section and keeps the other as it is.
 const std::string deepPrefix = "u16/";
@@ -330,13 +337,48 @@ TEST_CASE(a_mouse_can_press_by_its_speed_when_asked) {
     CHECK(std::abs(width(*pen, 200) - width(*pen, 60)) <= 1);
 }
 
+TEST_CASE(synthetic_procreate_brushes_change_the_way_their_setting_says) {
+    // One setting at a time against the baseline brush (tests/fixtures/brushes/procreate/manifest.json): the direction
+    // of the change where the stroke's input is high, the tip turning with the pen, and no jump where the twist wraps.
+    const std::vector<StrokeFixture> fixtures = allFixtures();
+    const FixtureBrushes synthetic = syntheticProcreate(PROCREATE_FIXTURES_DIR);
+    REQUIRE(!synthetic.expectations.empty());
+    for (const std::string& note : synthetic.notes) std::fprintf(stderr, "  note %s\n", note.c_str());
+    int failed = 0;
+    for (const Expectation& e : synthetic.expectations) {
+        std::string why;
+        const bool ok = checkExpectation(e, fixtures, synthetic, &why);
+        std::fprintf(stderr, "  %-4s %-26s %-14s %-10s %s\n", ok ? "ok" : "FAIL", e.brush.c_str(), e.stroke.c_str(), e.expect.c_str(), why.c_str());
+        failed += !ok;
+    }
+    CHECK_EQ(failed, 0);
+}
+
+TEST_CASE(local_third_party_brushes_when_present) {
+    // tests/local-fixtures/ (git-ignored) holds brush sets that may not be shared; with its manifest.json this checks
+    // them the same way against themselves without the input's mappings, and prints what the importer left out.
+    const auto local = localFixtures(LOCAL_FIXTURES_DIR);
+    if (!local) { std::fprintf(stderr, "  no tests/local-fixtures/manifest.json: skipped\n"); return; }
+    const std::vector<StrokeFixture> fixtures = allFixtures();
+    for (const std::string& note : local->notes) std::fprintf(stderr, "  note %s\n", note.c_str());
+    int failed = 0;
+    for (const Expectation& e : local->expectations) {
+        std::string why;
+        const bool ok = checkExpectation(e, fixtures, *local, &why);
+        std::fprintf(stderr, "  %-4s %-28s %-14s %-10s %s\n", ok ? "ok" : "FAIL", e.brush.c_str(), e.stroke.c_str(), e.expect.c_str(), why.c_str());
+        failed += !ok;
+    }
+    CHECK_EQ(failed, 0);
+}
+
 TEST_CASE(every_fixture_and_preset_matches_the_baseline) {
     const std::vector<StrokeFixture> fixtures = allFixtures();
     const std::vector<Preset> presets = standardPresets(MYPAINT_BRUSHES_DIR);
     CHECK(fixtures.size() >= 12);
     std::map<std::string, std::string> actual;
     int threadMismatch = 0, empty = 0;
-    for (const Scene& scene : scenes(fixtures, presets)) {
+    const FixtureBrushes synthetic = syntheticProcreate(PROCREATE_FIXTURES_DIR);
+    for (const Scene& scene : allScenes(fixtures, presets, synthetic)) {
         const Render pooled = render(*scene.fixture, *scene.preset);
         const Render serial = serially([&] { return render(*scene.fixture, *scene.preset); });
         const uint64_t hash = hashRender(pooled);
@@ -374,7 +416,8 @@ TEST_CASE(every_fixture_and_preset_matches_the_baseline_at_16_bits) {
     std::map<std::string, std::string> actual;
     std::map<std::string, Calibration> worstByPreset;
     int threadMismatch = 0, empty = 0, apart = 0;
-    for (const Scene& scene : scenes(fixtures, presets)) {
+    const FixtureBrushes synthetic = syntheticProcreate(PROCREATE_FIXTURES_DIR);
+    for (const Scene& scene : allScenes(fixtures, presets, synthetic)) {
         const Render16 pooled = render16(*scene.fixture, *scene.preset);
         const Render16 serial = [&] {
             if (workerCount() <= 1) return render16(*scene.fixture, *scene.preset);

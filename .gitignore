@@ -32,3 +32,6 @@ opencv-prefix/
 
 # Evaluation data (AIM-500 and the like), fetched by hand
 data/
+
+# Third-party brush sets for the brush harness, kept locally only (docs/brush-engine.md)
+tests/local-fixtures/

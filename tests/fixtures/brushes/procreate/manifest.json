@@ -1,0 +1,13 @@
+{
+  "format": "nekophoto-brush-fixtures",
+  "version": 1,
+  "about": "Synthetic Procreate brushes (make_fixtures.py): the baseline and copies with one setting changed. Each is painted along `stroke` (a harness fixture) and compared with the baseline painted along the same stroke. `measure` is width (pixels across the stroke) or peak (the strongest alpha across it), at the stations where the input is high against those where it is low; `expect` is the direction of change against the baseline: up, down, turns (the width swings more as the tip turns), continuous (no jump between neighbouring stations) or differs (the render is not the baseline's). These test the reader and the engine, not Procreate's own meaning: the iPad reference files decide that.",
+  "baseline": "syn_00_baseline.brush",
+  "brushes": {
+    "syn_01_speed_size_pos.brush": {"setting": "dynamicsSpeedSize", "value": 0.8, "input": "speed", "target": "size", "stroke": "speed_sweep", "measure": "width", "expect": "up"},
+    "syn_02_speed_size_neg.brush": {"setting": "dynamicsSpeedSize", "value": -0.8, "input": "speed", "target": "size", "stroke": "speed_sweep", "measure": "width", "expect": "down"},
+    "syn_03_speed_opacity_pos.brush": {"setting": "dynamicsSpeedOpacity", "value": 0.8, "input": "speed", "target": "opacity", "stroke": "speed_sweep", "measure": "peak", "expect": "up"},
+    "syn_04_speed_opacity_neg.brush": {"setting": "dynamicsSpeedOpacity", "value": -0.8, "input": "speed", "target": "opacity", "stroke": "speed_sweep", "measure": "peak", "expect": "down"},
+    "syn_05_speed_spacing.brush": {"setting": "plotSpacingSpeed", "value": 1.0, "input": "speed", "target": "spacing", "stroke": "speed_sweep", "measure": "peak", "expect": "down"}
+  }
+}

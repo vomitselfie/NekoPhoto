@@ -191,10 +191,33 @@ What each format's settings become. What a format holds that has no mapping yet 
 Texture, dual brush, colour dynamics, wet edges, noise and build-up are noted as left out. Versions 1 and 2 hold no
 dynamics.
 
-**Procreate (`.brushset`, `.brush`).** `dynamicsPressureSize` → Pressure → Size from 1 − that amount; `dynamicsJitterSize`
-→ Random → Size; `dynamicsPressureOpacity` → Pressure → Flow from 1 − that amount (Procreate's opacity is per dab);
-`dynamicsJitterOpacity` → Random → Flow; `shapeScatter` → Random → Angle (× 180 degrees). Speed and tilt settings are not
-decoded yet.
+**Procreate (`.brushset`, `.brush`).** Each setting below becomes a mapping; every scaling lives in one block at the top
+of `procreate.cpp` (`namespace scaling`), so the reference brushes made in Procreate can tune each in one place. Curves
+are the identity unless the row says otherwise. Confidence: *high* where the meaning is plain from the setting and real
+brushes agree, *assumed* where the direction or scale is a reading that the reference brushes (below) still have to
+confirm.
+
+| Procreate | Input → target | Offset, depth | Confidence |
+|---|---|---|---|
+| `dynamicsPressureSize` p | Pressure → Size | 1 − p, p | high |
+| `dynamicsJitterSize` j | Random → Size | 1, −j | high |
+| `dynamicsPressureOpacity` p | Pressure → Flow (Procreate's opacity is per dab) | 1 − p, p | high |
+| `dynamicsJitterOpacity` j | Random → Flow | 1, −j | high |
+| `shapeScatter` s | Random → Angle | 0, s × 180 degrees | high |
+| `dynamicsSpeedSize` a, −1..1 | Speed → Size, full at `fullSpeed` | 1, a: grows with speed when positive, shrinks when negative | sign and scale assumed |
+| `dynamicsSpeedOpacity` a, −1..1 | Speed → Opacity, full at `fullSpeed` | positive: 1 − a, a (slow strokes lighter); negative: 1, a (fast strokes lighter) | sign and scale assumed |
+| `plotSpacingSpeed` a, 0.. | Speed → Spacing, full at `fullSpeed` | 1, a: the spacing widens with speed | direction high, scale assumed |
+
+`fullSpeed` is 1500 document pixels per second: the speed at which a speed setting has its whole effect. Procreate
+measures speed on the screen, not in the document, so this is a guess to tune.
+
+`dynamicsPressureSizeSpeed`, `dynamicsPressureOpacitySpeed` and `dynamicsPressureBleedSpeed` are not speed dynamics:
+their values follow `dynamicsPressureResponse` (0.3, 0.6 and so on together in real brushes), so they read as how quickly
+size, opacity and bleed catch up with a change of pressure. The engine has no such lag; they are left out and listed.
+
+What a brush uses that has no mapping is listed in the import's notes, one line naming each setting with the number of
+brushes using it (`notCarriedSettings` in `procreate.cpp`; a setting counts when it is off its neutral value, and a
+roundness setting only while its minimum is below full).
 
 **Clip Studio (`.sut`).** `BrushSizeEffector` with pressure → Pressure → Size from the effector's minimum;
 `BrushOpacityEffector` or `BrushFlowEffector` with pressure → Pressure → Flow from 0. The effector's own curve is not
@@ -207,8 +230,9 @@ mapping's curve with no change to the engine.
 
 **Fixtures.** Made in code (`standardFixtures`): a pressure ramp (0 → 1 → 0), a pressure sine, a speed sweep (slow,
 fast, slow at even timing), a tilt sweep, a twist sweep (a full turn, wrapping from 180 to -180 halfway), a straight
-line, a circle, an S curve, corners, a fast flick (ten reports over 240 pixels) and a long slow stroke (720 reports);
-and the JSON files under `tests/brush_fixtures/` (a recorded pen hook with tilt, twist and tangential pressure, and a
+line, a circle, an S curve, corners, a fast flick (ten reports over 240 pixels), a long slow stroke (720 reports), an
+azimuth sweep (the pen at 45 degrees from upright, leaning once round) and a twist wrap (the barrel from 340 through
+359, 0 and 1 to 20 degrees); and the JSON files under `tests/brush_fixtures/` (a recorded pen hook with tilt, twist and tangential pressure, and a
 mouse scribble with uneven timing). Every input a mapping can read has a fixture that moves it.
 
 **Presets.** The round tip hard and soft, the eraser (on an opaque grey layer), tip brushes made in code (a square tip
@@ -230,6 +254,28 @@ holds the same scenes painted on a 16-bit layer (see 16 bits above); each test r
 builds produce the same file. The test
 also checks sample derivation (unwrapping, speed, progress), the density option across 2–50% spacing, and the mouse
 speed option.
+
+**Fixture brushes.** `tests/fixtures/brushes/procreate/` holds synthetic Procreate brushes (`syn_00_baseline.brush` and
+copies with one setting changed, written by `make_fixtures.py` there) and a `manifest.json` that names, for each, the
+stroke it is checked on, what is measured and the direction expected against the baseline: `up` or `down` (the width or
+peak at the stations where the stroke's input is high, 4 and 5 of 10, over those where it is low, 0 and 9, against the
+same for the baseline), `turns` (the width swings as the tip turns), `continuous` (no jump between neighbouring
+stations) or `differs`. `synthetic_procreate_brushes_change_the_way_their_setting_says` checks every entry, and the
+brushes' scenes on their strokes join the baseline (8 and 16 bits). They test this reader and the engine, not
+Procreate's meaning: that is for brushes made in Procreate on an iPad with one setting each, which will replace the
+assumptions in the table above.
+
+`tests/local-fixtures/` (git-ignored) is for brush sets that may not be shared. With a `manifest.json` there:
+
+```json
+{"brushes": [{"set": "Some Set.brushset", "name": "Brush name", "input": "speed", "stroke": "speed_sweep",
+              "measure": "peak", "expect": "down", "diameter": 120}]}
+```
+
+`local_third_party_brushes_when_present` imports each set, prints the importer's notes (what was not carried over), and
+checks each brush against itself without its mappings from `input` (`diameter` paints it larger than the default 28
+pixels, for spacings too fine to step at that size). Nothing from them enters the baseline; without the manifest the
+test is skipped.
 
 **By hand.** `build/tests/brush_parity_tool list` names the fixtures and presets; `dump <folder> [filter]` writes every
 render as a PNG with `metrics.txt` and the fixtures as JSON; `render <stroke.json> <preset> <out.png>` paints one
