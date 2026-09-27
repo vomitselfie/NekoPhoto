@@ -498,8 +498,10 @@ struct Renderer {
             // Through), or fades them (Pass Through below full opacity).
             if (!g.isGroup || !g.visible || suppressedGroups.count(g.id)) continue;
             if (!layerStyleOf(g, document) && !isolates(g) && !fades(g)) continue;
+            // An artboard's own entry (its background) belongs inside: it takes the folder's mode and opacity with its
+            // layers instead of painting beneath the folder at full strength.
             size_t first = SIZE_MAX, last = 0;
-            for (size_t i = 0; i < order.size(); i++) if (within(*order[i], g.id)) { first = std::min(first, i); last = i; }
+            for (size_t i = 0; i < order.size(); i++) if (order[i] == &g || within(*order[i], g.id)) { first = std::min(first, i); last = i; }
             if (first == SIZE_MAX) continue;
             groupsOpen[first].push_back(&g);
             groupsClose[last].insert(groupsClose[last].begin(), &g);

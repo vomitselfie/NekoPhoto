@@ -129,6 +129,43 @@ TEST_CASE(artboards_render_background_and_clip) {
     CHECK_EQ(int(at(*h, 70, 15)[3]), 0);
 }
 
+TEST_CASE(artboard_background_stays_inside_in_every_blend_mode) {
+    // Over a grey canvas, in every mode, isolated or Pass Through, the background paints inside the artboard's
+    // rectangle only; inside, it goes through the folder with its layers, so the folder's mode and opacity apply
+    // to it too (it used to be drawn beneath an isolated folder, at full strength in Normal).
+    for (int m = 0; m < blendModeCount; m++) for (int passThrough = 0; passThrough < 2; passThrough++) for (double opacity : {1.0, 0.5}) {
+        if (passThrough && m) continue;   // Pass Through has no mode of its own
+        Document doc = artboardDocument();
+        auto grey = std::make_shared<Image>(100, 60);
+        grey->fill(128, 128, 128, 255);
+        doc.layers.insert(doc.layers.begin(), Layer(Asset::make(grey, "Grey"), Point(0, 0)));
+        for (Layer& l : doc.layers) if (l.artboard) { l.passThrough = passThrough; l.blendMode = BlendMode(m); l.opacity = opacity; }
+        auto out = renderFlattened(doc);
+        int outside = 0;
+        for (int y = 0; y < 60; y++) for (int x = 0; x < 100; x++) {
+            const bool inside = (x >= 10 && x < 50 && y >= 8 && y < 38) || (x >= 60 && x < 90 && y >= 10 && y < 30);
+            const uint8_t* p = at(*out, x, y);
+            if (!inside && (p[0] != 128 || p[1] != 128 || p[2] != 128 || p[3] != 255)) outside++;
+        }
+        if (outside) std::printf("  %s%s at %.1f: %d pixels outside changed\n", passThrough ? "Pass Through" : "", passThrough ? "" : blendModeName(BlendMode(m)), opacity, outside);
+        CHECK_EQ(outside, 0);
+        const uint8_t* bg = at(*out, 12, 10);   // red background over grey
+        const BlendMode mode = BlendMode(m);
+        if (mode == BlendMode::Normal || passThrough) {
+            CHECK_NEAR(bg[0], opacity == 1 ? 255 : 191.5, 1.5);
+            CHECK_NEAR(bg[1], opacity == 1 ? 0 : 64, 1.5);
+            CHECK_NEAR(at(*out, 45, 25)[2], opacity == 1 ? 255 : 191.5, 1);   // the child, clipped at the edge
+            CHECK_EQ(int(at(*out, 55, 25)[2]), 128);
+        } else if (mode == BlendMode::Multiply) {
+            CHECK_NEAR(bg[0], 128, 1.5);
+            CHECK_NEAR(bg[1], opacity == 1 ? 0 : 64, 1.5);
+        } else if (mode == BlendMode::Screen) {
+            CHECK_NEAR(bg[0], opacity == 1 ? 255 : 191.5, 1.5);
+            CHECK_NEAR(bg[1], 128, 1.5);
+        }
+    }
+}
+
 TEST_CASE(artboards_slices_psd_round_trip) {
     const Document doc = artboardDocument();
     std::string error;

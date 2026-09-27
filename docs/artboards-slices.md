@@ -4,6 +4,8 @@
 
 An artboard is a folder with a rectangle and a background, as in Photoshop. Its background fills the rectangle
 under its layers, and its layers are clipped to the rectangle; what lies outside every artboard shows the canvas.
+The background belongs to the folder: in any blend mode, Pass Through or not, and at any opacity, it is composited
+with the artboard's layers and stays inside the rectangle.
 
 - **Artboard tool** (Shift+V, next to Move): drag on the canvas to add an artboard (it goes to the top of the
   layer stack; move layers into it in the Layers panel). Drag inside an artboard to move it together with its
