@@ -525,15 +525,10 @@ void addBrushScenes() {
         for (int y = 0; y < 32; y++) for (int x = 0; x < 32; x++) grain->at(x, y) = uint8_t(mix(uint32_t(y * 32 + x)) & 255);
         tip.grain = grain;
         tip.spacing = 0.1;
-        tip.angleJitter = 60;
-        tip.sizeJitter = 0.4;
+        tip.dynamics = legacyDynamics({.sizeJitter = 0.4, .flowJitter = 0.3, .angleJitter = 60, .pressureSize = 1, .minimumSize = 0.2, .pressureFlow = 0.5});
         tip.scatter = 0.5;
         tip.count = 2;
-        tip.flowJitter = 0.3;
         tip.roundness = 0.6;
-        tip.pressureSize = 1;
-        tip.minimumSize = 0.2;
-        tip.pressureFlow = 0.5;
         return tipStroke(tip, 30, true);
     });
     // MyPaint is exact across runs (libmypaint's jitter is seeded; mypaint_tests checks that). Its output also

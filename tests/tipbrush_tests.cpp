@@ -106,8 +106,7 @@ TEST_CASE(pressure_drives_size_and_the_selection_clips) {
     BrushTip tip;
     tip.shape = std::make_shared<GrayImage>(32, 32, 255);
     tip.spacing = 0.1;
-    tip.pressureSize = 1;
-    tip.minimumSize = 0.1;
+    tip.dynamics = {dynamicsMapping(DynamicsInput::Pressure, DynamicsTarget::Size, 0.1, 0.9)};
     Layer layer = paper(300, 100);
     Painting p(layer, tip, 60);
     p.tip.strokeTo(pen({30, 50}, 0));
@@ -118,7 +117,7 @@ TEST_CASE(pressure_drives_size_and_the_selection_clips) {
 
     GrayImage selection(300, 100, 0);
     for (int y = 0; y < 100; y++) for (int x = 150; x < 300; x++) selection.at(x, y) = 255;
-    tip.pressureSize = 0;
+    tip.dynamics.clear();
     Layer clipped = paper(300, 100);
     Painting q(clipped, tip, 30, &selection);
     q.tip.strokeTo(pen({30, 50}, 1));
@@ -133,8 +132,7 @@ TEST_CASE(jitter_is_repeatable_for_a_seed) {
     tip.shape = notchedSquare(32);
     tip.spacing = 0.5;
     tip.scatter = 1;
-    tip.angleJitter = 180;
-    tip.sizeJitter = 0.5;
+    tip.dynamics = {dynamicsMapping(DynamicsInput::Random, DynamicsTarget::Angle, 0, 180), dynamicsMapping(DynamicsInput::Random, DynamicsTarget::Size, 1, -0.5)};
     tip.count = 3;
     auto paint = [&] {
         Layer layer = paper(300, 120);
@@ -161,7 +159,11 @@ TEST_CASE(tip_presets_round_trip_through_their_folder) {
     preset.tip.followStroke = true;
     preset.tip.scatter = 0.4;
     preset.tip.count = 2;
-    preset.tip.pressureSize = 0.8;
+    DynamicsMapping curved = dynamicsMapping(DynamicsInput::Pressure, DynamicsTarget::Size, 0.2, 0.8);
+    curved.curve = {DynamicsCurve::Kind::Smooth, {{0, 0}, {0.4, 0.7}, {1, 1}}};
+    preset.tip.dynamics = {curved, dynamicsMapping(DynamicsInput::Speed, DynamicsTarget::Flow, 1, -0.5, 1500)};
+    preset.tip.densityBySpacing = true;
+    preset.tip.mousePressureFromSpeed = true;
     preset.tip.randomFlipX = true;
     fs::path dir = fs::temp_directory_path() / "compositor-tip-preset-test";
     fs::remove_all(dir);
@@ -176,6 +178,14 @@ TEST_CASE(tip_presets_round_trip_through_their_folder) {
     CHECK(back->tip.followStroke);
     CHECK_EQ(back->tip.count, 2);
     CHECK(back->tip.randomFlipX);
+    REQUIRE(back->tip.dynamics.size() == 2);
+    CHECK(back->tip.dynamics[0].input == DynamicsInput::Pressure && back->tip.dynamics[0].target == DynamicsTarget::Size);
+    CHECK_EQ(back->tip.dynamics[0].offset, 0.2);
+    CHECK(back->tip.dynamics[0].curve.kind == DynamicsCurve::Kind::Smooth);
+    CHECK_EQ(back->tip.dynamics[0].curve.points.size(), size_t(3));
+    CHECK_EQ(back->tip.dynamics[1].scale, 1500.0);
+    CHECK_EQ(back->tip.dynamics[1].depth, -0.5);
+    CHECK(back->tip.densityBySpacing && back->tip.mousePressureFromSpeed);
     REQUIRE(back->tip.shape && back->tip.grain);
     CHECK_EQ(int(back->tip.shape->at(2, 2)), 0);
     CHECK_EQ(int(back->tip.shape->at(15, 15)), 255);

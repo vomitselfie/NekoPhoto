@@ -57,10 +57,10 @@ TEST_CASE(clip_studio_brushes_come_through_with_their_tips_and_textures) {
     CHECK_EQ(spray.tip.shape->height(), 200);
     CHECK_EQ(int(spray.tip.shape->at(10, 20)), (tileValue(10, 20) * 255 + 50) / 100);
     CHECK(spray.tip.grain == nullptr);
-    CHECK_EQ(spray.tip.pressureSize, 1.0);
-    CHECK_EQ(spray.tip.minimumSize, 0.1);
-    CHECK_EQ(spray.tip.pressureFlow, 0.0);
-    CHECK_EQ(pencil.tip.pressureSize, 0.0);
+    REQUIRE(spray.tip.dynamics.size() == 1);   // size on pressure down to 10%; opacity left alone
+    CHECK(spray.tip.dynamics[0].input == DynamicsInput::Pressure && spray.tip.dynamics[0].target == DynamicsTarget::Size);
+    CHECK_EQ(spray.tip.dynamics[0].offset, 0.1);
+    CHECK(pencil.tip.dynamics.empty());
     fs::remove(path);
 }
 
@@ -79,7 +79,8 @@ TEST_CASE(clip_studio_sample_file_when_available) {
     for (const TipPreset& brush : import->brushes) {
         std::fprintf(stderr, "  %s: %.0f px, tip %dx%d, grain %dx%d\n", brush.name.c_str(), brush.diameter, brush.tip.shape->width(), brush.tip.shape->height(),
             brush.tip.grain ? brush.tip.grain->width() : 0, brush.tip.grain ? brush.tip.grain->height() : 0);
-        std::fprintf(stderr, "    pressure: size %.0f (minimum %.2f), flow %.0f\n", brush.tip.pressureSize, brush.tip.minimumSize, brush.tip.pressureFlow);
+        for (const DynamicsMapping& m : brush.tip.dynamics)
+            std::fprintf(stderr, "    %s -> %s: %.2f + %.2f\n", dynamicsInputName(m.input), dynamicsTargetName(m.target), m.offset, m.depth);
     }
     for (const std::string& note : import->notes) std::fprintf(stderr, "  note: %s\n", note.c_str());
     CHECK(!import->brushes.empty());

@@ -232,17 +232,41 @@ std::vector<Preset> standardPresets(const std::string& myPaintFolder) {
         for (int y = 0; y < 32; y++) for (int x = 0; x < 32; x++) grain->at(x, y) = uint8_t(mix(uint32_t(y * 32 + x)) & 255);
         textured.tip.grain = grain;
         textured.tip.spacing = 0.1;
-        textured.tip.angleJitter = 60;
-        textured.tip.sizeJitter = 0.4;
+        textured.tip.dynamics = legacyDynamics({.sizeJitter = 0.4, .flowJitter = 0.3, .angleJitter = 60, .pressureSize = 1, .minimumSize = 0.2, .pressureFlow = 0.5});
         textured.tip.scatter = 0.5;
         textured.tip.count = 2;
-        textured.tip.flowJitter = 0.3;
         textured.tip.roundness = 0.6;
-        textured.tip.pressureSize = 1;
-        textured.tip.minimumSize = 0.2;
-        textured.tip.pressureFlow = 0.5;
         textured.diameter = 26;
         out.push_back(tipPreset("tip_textured", textured, 40));
+    }
+    {
+        // Every pen input on something: tilt flattens the tip and turns it, the barrel turns it too, speed thins the
+        // flow, the stroke fades in size along its length, and chance varies each dab's opacity.
+        TipPreset pen;
+        auto shape = std::make_shared<GrayImage>(48, 16, 255);
+        pen.tip.shape = shape;
+        pen.tip.spacing = 0.08;
+        auto smooth = dynamicsMapping(DynamicsInput::Pressure, DynamicsTarget::Size, 0.3, 0.7);
+        smooth.curve = {DynamicsCurve::Kind::Smooth, {{0, 0}, {0.5, 0.8}, {1, 1}}};
+        pen.tip.dynamics = {smooth,
+                            dynamicsMapping(DynamicsInput::StrokeProgress, DynamicsTarget::Size, 1, -0.5),
+                            dynamicsMapping(DynamicsInput::Tilt, DynamicsTarget::Roundness, 1, -0.7),
+                            dynamicsMapping(DynamicsInput::TiltDirection, DynamicsTarget::Angle, 0, 360),
+                            dynamicsMapping(DynamicsInput::Twist, DynamicsTarget::Angle, 0, 360),
+                            dynamicsMapping(DynamicsInput::Speed, DynamicsTarget::Flow, 1, -0.6, 600),
+                            dynamicsMapping(DynamicsInput::Random, DynamicsTarget::Opacity, 1, -0.5)};
+        pen.diameter = 24;
+        out.push_back(tipPreset("tip_pen_dynamics", pen, 40));
+        // Tight spacing at light flow with density by spacing, and a mouse's speed as its pressure.
+        TipPreset dense;
+        dense.tip.shape = radialTip(64);
+        dense.tip.spacing = 0.04;
+        dense.tip.flow = 0.35;
+        dense.tip.densityBySpacing = true;
+        dense.tip.mousePressureFromSpeed = true;
+        dense.tip.dynamics = {dynamicsMapping(DynamicsInput::Pressure, DynamicsTarget::Size, 0.2, 0.8)};
+        dense.diameter = 22;
+        out.push_back(tipPreset("tip_density_speed", dense, 40));
     }
     // What the importers make of the files their own tests write.
     if (auto abr = importBrushFile(brushfixtures::writeTemp("parity-v6.abr", brushfixtures::abrVersion6File())); abr && !abr->brushes.empty())

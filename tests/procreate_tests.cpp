@@ -31,10 +31,13 @@ TEST_CASE(procreate_brushset_reads_its_brushes_in_order_with_their_settings) {
     CHECK_EQ(ink.tip.spacing, 0.08);
     CHECK_EQ(ink.tip.scatter, 0.5);
     CHECK(ink.tip.followStroke);
-    CHECK_EQ(ink.tip.angleJitter, 90.0);
+    const DynamicsMapping* angle = findMapping(ink.tip.dynamics, DynamicsInput::Random, DynamicsTarget::Angle);
+    REQUIRE(angle != nullptr);
+    CHECK_EQ(angle->depth, 90.0);
     CHECK_EQ(ink.tip.count, 4);
-    CHECK_EQ(ink.tip.pressureSize, 1.0);
-    CHECK_EQ(ink.tip.minimumSize, 0.25);
+    const DynamicsMapping* size = findMapping(ink.tip.dynamics, DynamicsInput::Pressure, DynamicsTarget::Size);
+    REQUIRE(size != nullptr);
+    CHECK_EQ(size->offset, 0.25);
     CHECK_EQ(ink.tip.flow, 0.8);
     CHECK_EQ(ink.diameter, 20.0);
     // White paints; the near-black background is taken off.

@@ -67,9 +67,13 @@ TEST_CASE(abr_version_6_ties_presets_to_their_samples_and_reads_dynamics) {
     CHECK_EQ(leaf.tip.angle, 30.0);
     CHECK_EQ(leaf.tip.roundness, 0.8);
     CHECK_EQ(leaf.tip.spacing, 0.4);
-    CHECK_EQ(leaf.tip.pressureSize, 1.0);
-    CHECK_EQ(leaf.tip.minimumSize, 0.25);
-    CHECK_EQ(leaf.tip.sizeJitter, 0.2);
+    // Pressure on size from 25% up, then 20% size jitter, as mappings in that order.
+    REQUIRE(leaf.tip.dynamics.size() == 2);
+    CHECK(leaf.tip.dynamics[0].input == DynamicsInput::Pressure && leaf.tip.dynamics[0].target == DynamicsTarget::Size);
+    CHECK_EQ(leaf.tip.dynamics[0].offset, 0.25);
+    CHECK_EQ(leaf.tip.dynamics[0].depth, 0.75);
+    CHECK(leaf.tip.dynamics[1].input == DynamicsInput::Random && leaf.tip.dynamics[1].target == DynamicsTarget::Size);
+    CHECK_EQ(leaf.tip.dynamics[1].depth, -0.2);
     CHECK_EQ(leaf.tip.scatter, 1.5);
     CHECK_EQ(leaf.tip.count, 3);
     REQUIRE(leaf.tip.shape != nullptr);

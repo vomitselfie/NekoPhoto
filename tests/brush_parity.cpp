@@ -106,6 +106,100 @@ TEST_CASE(brush_samples_derive_speed_direction_and_unwrapped_angles) {
     for (size_t i = 0; i < again.size(); i++) CHECK(again[i].twistAngle == twist[i].twistAngle && again[i].speed == twist[i].speed);
 }
 
+namespace {
+
+/// A hard disc as a tip.
+std::shared_ptr<GrayImage> disc(int side) {
+    auto tip = std::make_shared<GrayImage>(side, side, 0);
+    for (int y = 0; y < side; y++)
+        for (int x = 0; x < side; x++)
+            if (std::hypot(x + 0.5 - side / 2.0, y + 0.5 - side / 2.0) <= side / 2.0) tip->at(x, y) = 255;
+    return tip;
+}
+
+/// Paints `tip` along `samples` on a transparent 400 x 100 layer and returns the layer.
+std::shared_ptr<Image> paintTip(const BrushTip& tip, double diameter, const std::vector<BrushSample>& samples) {
+    auto image = std::make_shared<Image>(400, 100);
+    Layer layer(Asset::make(image, "Paper"), Point(0, 0));
+    BrushSettings settings;
+    settings.diameter = diameter;
+    BrushStroke grid(layer, false, settings, Size(400, 100));
+    TipStroke stroke(grid, tip, diameter, 5);
+    BrushSampleTrack track;
+    for (const BrushSample& s : samples) stroke.strokeTo(track.add(s));
+    grid.flush();
+    return std::make_shared<Image>(*grid.previewImage());
+}
+
+/// The mean alpha (0..1) over a rectangle.
+double meanAlpha(const Image& image, int x0, int y0, int x1, int y1) {
+    double sum = 0;
+    for (int y = y0; y < y1; y++) for (int x = x0; x < x1; x++) sum += image.pixel(x, y)[3];
+    return sum / (255.0 * (x1 - x0) * (y1 - y0));
+}
+
+/// A straight pen stroke across the layer's middle.
+std::vector<BrushSample> straightStroke(bool stylus) {
+    std::vector<BrushSample> out;
+    for (int i = 0; i <= 180; i++) {
+        BrushSample s = stylus ? BrushSample{} : mouseSample({}, 0);
+        s.position = {20 + 2.0 * i, 50};
+        s.time = i / 120.0;
+        s.pressure = stylus ? 1 : 0.5;
+        s.stylus = stylus;
+        out.push_back(s);
+    }
+    return out;
+}
+
+} // namespace
+
+TEST_CASE(density_by_spacing_keeps_the_interior_alpha_across_spacings) {
+    const double spacings[] = {0.02, 0.05, 0.1, 0.25, 0.5};
+    std::vector<double> on, off;
+    for (double spacing : spacings) {
+        BrushTip tip;
+        tip.shape = disc(64);
+        tip.flow = 0.3;
+        tip.spacing = spacing;
+        tip.densityBySpacing = true;
+        on.push_back(meanAlpha(*paintTip(tip, 20, straightStroke(true)), 100, 46, 300, 54));
+        tip.densityBySpacing = false;
+        off.push_back(meanAlpha(*paintTip(tip, 20, straightStroke(true)), 100, 46, 300, 54));
+        std::fprintf(stderr, "  spacing %4.0f%%: interior alpha %.3f with density by spacing, %.3f without\n", spacing * 100, on.back(), off.back());
+    }
+    // On: within 8% of the reference spacing's (25%) interior alpha from 2% to 50%.
+    for (double a : on) CHECK(std::fabs(a - on[3]) < 0.08 * on[3]);
+    // At the reference spacing it changes nothing; off, tight spacing builds up far more paint.
+    CHECK_EQ(on[3], off[3]);
+    CHECK(off[0] > 1.5 * off[4]);
+}
+
+TEST_CASE(a_mouse_can_press_by_its_speed_when_asked) {
+    // Evenly timed mouse events whose spacing follows a slow, fast, slow sweep.
+    std::vector<BrushSample> samples;
+    for (int i = 0; i <= 120; i++) {
+        const double u = i / 120.0, eased = u - std::sin(2 * 3.14159265358979323846 * u) / (2 * 3.14159265358979323846);
+        BrushSample s = mouseSample({30 + 340 * eased, 50}, i / 120.0);
+        samples.push_back(s);
+    }
+    BrushTip tip;
+    tip.shape = disc(64);
+    tip.spacing = 0.1;
+    tip.dynamics = {dynamicsMapping(DynamicsInput::Pressure, DynamicsTarget::Size, 0.2, 0.8)};
+    auto width = [](const Image& image, int x) { int n = 0; for (int y = 0; y < 100; y++) n += image.pixel(x, y)[3] > 128; return n; };
+    // Off (the default), a mouse is full pressure: the same width all along.
+    const auto plain = paintTip(tip, 24, samples);
+    CHECK(std::abs(width(*plain, 200) - width(*plain, 60)) <= 1);
+    // On, the fast middle is thinner than the slow ends; a stylus's pressure is never replaced.
+    tip.mousePressureFromSpeed = true;
+    const auto simulated = paintTip(tip, 24, samples);
+    std::fprintf(stderr, "  mouse speed as pressure: %d px wide slow, %d px fast\n", width(*simulated, 350), width(*simulated, 200));
+    CHECK(width(*simulated, 200) + 3 < width(*simulated, 350));
+    const auto pen = paintTip(tip, 24, straightStroke(true));
+    CHECK(std::abs(width(*pen, 200) - width(*pen, 60)) <= 1);
+}
+
 TEST_CASE(every_fixture_and_preset_matches_the_baseline) {
     const std::vector<StrokeFixture> fixtures = allFixtures();
     const std::vector<Preset> presets = standardPresets(MYPAINT_BRUSHES_DIR);
