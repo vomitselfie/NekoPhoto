@@ -24,6 +24,8 @@
 #include "compositor/warpstroke.h"
 #include "compositor/transform.h"
 #include "compositor/parallel.h"
+#include "compositor/psd_carry.h"
+#include "compositor/smartobject.h"
 #include <thread>
 
 #include <atomic>
@@ -211,6 +213,52 @@ TEST_CASE(composite_pixel_source_over_and_dodge_soft_edge) {
     compositePixel(BlendMode::ColorDodge, white, 0.5f, half);
     CHECK_EQ(int(full[0]), 255);
     CHECK(std::abs(int(half[0]) - (64 + 255) / 2) <= 2);
+}
+
+// Everything heavy a snapshot keeps counts toward the history's memory, each shared buffer once.
+TEST_CASE(history_counts_selection_carry_and_smart_object_sources) {
+    Document doc(64, 64);
+    doc.layers.push_back(imageLayer("A", solid(8, 8, 255, 0, 0), {0, 0}));
+    DocumentHistory history;
+    // A selection replaced: the old coverage is held only by history.
+    Selection all;
+    all.coverage = std::make_shared<GrayImage>(64, 64, 255);
+    doc.selection = all;
+    history.begin("Select", doc, doc.layers[0].id);
+    Selection part;
+    part.coverage = std::make_shared<GrayImage>(64, 64, 10);
+    doc.selection = part;
+    history.end(doc, doc.layers[0].id);
+    CHECK_EQ(history.retainedBytes(doc), size_t(64 * 64));
+    // Carried PSD data and a smart object source dropped by an edit: all of their bytes.
+    auto layerCarry = std::make_shared<PsdLayerCarry>();
+    layerCarry->blocks.push_back({"lfx2", std::vector<uint8_t>(1000)});
+    layerCarry->planes.push_back({-2, std::vector<uint8_t>(500)});
+    layerCarry->maskChannels.push_back({-2, std::vector<uint8_t>(300)});
+    auto documentCarry = std::make_shared<PsdDocumentCarry>();
+    documentCarry->resources.push_back({1039, "", std::vector<uint8_t>(2000)});
+    documentCarry->globals.push_back({"Patt", std::vector<uint8_t>(700)});
+    auto source = std::make_shared<SmartObjectSource>();
+    source->id = "source";
+    source->bytes = std::make_shared<const std::vector<uint8_t>>(4000);
+    source->image = std::make_shared<Image>(10, 10);
+    doc.layers[0].psdCarry = layerCarry;
+    doc.psdCarry = documentCarry;
+    doc.smartObjects["source"] = source;
+    // Two layers sharing one carry, and several snapshots: still counted once.
+    doc.layers.push_back(doc.layers[0]);
+    doc.layers.back().id = makeUuid();
+    history.begin("Keep", doc, doc.layers[0].id);
+    doc.layers[1].visible = false;
+    history.end(doc, doc.layers[0].id);
+    const size_t before = history.retainedBytes(doc);
+    CHECK_EQ(before, size_t(64 * 64));   // everything else is still the live document's
+    history.begin("Drop", doc, doc.layers[0].id);
+    for (auto& l : doc.layers) l.psdCarry.reset();
+    doc.psdCarry.reset();
+    doc.smartObjects.clear();
+    history.end(doc, doc.layers[0].id);
+    CHECK_EQ(history.retainedBytes(doc), before + 1800 + 2700 + 4000 + 10 * 10 * 4);
 }
 
 TEST_CASE(history_records_only_real_changes_and_shares_images) {

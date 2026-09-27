@@ -34,7 +34,13 @@ void EditorSession::selectAll() {
     if (refusedAtDepth("edit.selection", tr("Selections"))) return;
     if (!document_) return;
     Selection s;
-    s.coverage = std::make_shared<GrayImage>(document_->width, document_->height, 255);
+    // Already all selected by an earlier Select All: the same buffer again, so nothing changes and no step is added.
+    GrayPtr full = selectAllCoverage_.lock();
+    if (!full || full->width() != document_->width || full->height() != document_->height || !document_->selection || document_->selection->coverage.identity() != full.get()) {
+        full = std::make_shared<GrayImage>(document_->width, document_->height, 255);
+        selectAllCoverage_ = full;
+    }
+    s.coverage = full;
     s.antialiased = selectionAntialiased;
     setSelection(s, QT_TRANSLATE_NOOP("History", "Select All"));
 }

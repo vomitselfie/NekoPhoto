@@ -806,6 +806,9 @@ signals:
     void textEditRequested(compositor::Uuid id);
 
 private:
+    /// The coverage Select All last made: Select All over it again reuses it, so the document is unchanged and no
+    /// history step is added (without comparing pixels).
+    std::weak_ptr<const compositor::GrayImage> selectAllCoverage_;
     void restore(const compositor::DocumentHistory::Snapshot& snapshot);
     void setActiveLayer(const std::optional<compositor::Uuid>& id);
     void finishDeleting(const std::vector<compositor::Uuid>& ids);

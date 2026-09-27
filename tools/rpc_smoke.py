@@ -253,7 +253,12 @@ def remaining_methods(rpc):
     rpc.call("layers.add", kind="adjustment", adjustmentKind="Exposure")
     rpc.call("adjustments.set", settings={})
     rpc.call("layers.select", id=placed["id"])
-    rpc.call("selection.all")
+    before = rpc.call("history.list")["undo"]
+    for _ in range(3):
+        rpc.call("selection.all")
+    after = rpc.call("history.list")["undo"]
+    # Select All over a Select All changes nothing: one step, not three.
+    assert before[-1] != "Select All" and after[-1] == "Select All" and after[-2] == before[-1], (before[-3:], after[-3:])
     assert rpc.call("selection.info")
     rpc.call("selection.invert")
     rpc.call("selection.invert")

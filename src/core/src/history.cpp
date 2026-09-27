@@ -1,4 +1,6 @@
 #include "compositor/history.h"
+#include "compositor/psd_carry.h"
+#include "compositor/smartobject.h"
 #include <set>
 
 namespace compositor {
@@ -96,10 +98,13 @@ int DocumentHistory::squash(uint64_t since, const std::string& name) {
 
 size_t DocumentHistory::retainedBytes(const std::optional<Document>& current) const {
     std::set<const void*> seen;
-    // Pixels are counted at the depth they are held at, each buffer once however many layers and snapshots share it.
+    // Every heavy buffer a snapshot keeps, at the depth it is held at, each once however many layers and snapshots
+    // share it (keyed on the buffer's identity). The live document's buffers are seen first and cost nothing.
     auto count = [&](const void* identity, size_t size, size_t* bytes) {
         if (identity && seen.insert(identity).second && bytes) *bytes += size;
     };
+    auto vector = [&](const auto& v, size_t* bytes) { if (!v.empty()) count(v.data(), v.size() * sizeof(v[0]), bytes); };
+    auto blocks = [&](const std::vector<PsdBlock>& list, size_t* bytes) { for (const PsdBlock& b : list) vector(b.data, bytes); };
     auto note = [&](const Layer& layer, size_t* bytes) {
         if (layer.asset) {
             count(layer.asset->image.identity(), layer.asset->image.byteCount(), bytes);
@@ -110,13 +115,40 @@ size_t DocumentHistory::retainedBytes(const std::optional<Document>& current) co
             if (layer.mask->asset.thumbnail) count(layer.mask->asset.thumbnail.get(), layer.mask->asset.thumbnail->byteCount(), bytes);
         }
         for (const AnyImage* image : {&layer.shapeImage, &layer.textImage, &layer.smartImage}) count(image->identity(), image->byteCount(), bytes);
+        // What a PSD layer carried: shared between snapshots, so counted by the carry's identity.
+        if (const PsdLayerCarry* carry = layer.psdCarry.get(); carry && seen.insert(carry).second && bytes) {
+            size_t total = carry->blendingRanges.size() + carry->maskData.size() + carry->endRanges.size() + carry->adjustmentJson.size();
+            for (const PsdBlock& b : carry->blocks) total += b.data.size();
+            for (const PsdBlock& b : carry->endBlocks) total += b.data.size();
+            for (const auto& channel : carry->maskChannels) total += channel.second.size();
+            for (const auto& plane : carry->planes) total += plane.data.size();
+            *bytes += total;
+        }
+        // A smart object instance's blocks are held by value: each copy is its own.
+        if (layer.smartObject) blocks(layer.smartObject->psdBlocks, bytes);
     };
-    if (current) for (auto& layer : current->layers) note(layer, nullptr);
+    auto noteDocument = [&](const Document& document, size_t* bytes) {
+        for (const Layer& layer : document.layers) note(layer, bytes);
+        if (document.selection) count(document.selection->coverage.identity(), document.selection->coverage.byteCount(), bytes);
+        if (const PsdDocumentCarry* carry = document.psdCarry.get(); carry && seen.insert(carry).second && bytes) {
+            size_t total = 0;
+            for (const auto& resource : carry->resources) total += resource.data.size();
+            for (const PsdBlock& b : carry->globals) total += b.data.size();
+            *bytes += total;
+        }
+        for (const auto& [id, source] : document.smartObjects) {
+            if (!source) continue;
+            if (source->bytes) count(source->bytes.get(), source->bytes->size(), bytes);
+            if (source->image) count(source->image.get(), source->image->byteCount(), bytes);
+            if (source->psdElement) count(source->psdElement.get(), source->psdElement->size(), bytes);
+        }
+    };
+    if (current) noteDocument(*current, nullptr);
     size_t bytes = 0;
     for (auto* list : {&past_, &future_})
         for (auto& entry : *list)
             for (auto* snapshot : {&entry.before, &entry.after})
-                if (snapshot->document) for (auto& layer : snapshot->document->layers) note(layer, &bytes);
+                if (snapshot->document) noteDocument(*snapshot->document, &bytes);
     return bytes;
 }
 
