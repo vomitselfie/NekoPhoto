@@ -7,11 +7,16 @@
 #include "compositor/gif.h"
 #include "compositor/ico.h"
 #include "compositor/presets.h"
+#include "compositor/project.h"
+#include "compositor/smartobject.h"
 #include "compositor/svg.h"
 #include "compositor/tga.h"
 #include "compositor/vectorlayer.h"
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <limits>
 #include <zlib.h>
 
@@ -311,6 +316,56 @@ TEST_CASE(vector_shapes_with_non_finite_geometry_get_a_small_place) {
     REQUIRE(layer.asset.has_value());
     CHECK(layer.asset->image.u8()->width() <= 30000);
     CHECK((long long)layer.asset->image.u8()->width() * layer.asset->image.u8()->height() <= Document::pixelBudget);
+}
+
+// ---- .comp: smart objects that are each valid but too many or too large together ---------------------------------
+
+TEST_CASE(project_smart_objects_have_aggregate_limits) {
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() / ("nekophoto-hostile-" + std::to_string(std::rand()));
+    fs::create_directories(dir);
+    Document doc(10, 10);
+    doc.layers.emplace_back(Asset::make(ImagePtr(std::make_shared<Image>(10, 10)), "Pixels"), Point{0, 0});
+    for (int i = 0; i < 3; i++) {
+        auto source = std::make_shared<SmartObjectSource>();
+        source->id = "source-" + std::to_string(i);
+        source->fileName = "Art.png";
+        source->fileType = "png ";
+        source->bytes = std::make_shared<const std::vector<uint8_t>>(1000, uint8_t(i));
+        source->image = std::make_shared<Image>(64, 64);
+        source->width = source->height = 64;
+        doc.smartObjects[source->id] = source;
+    }
+    const std::string path = (dir / "Sources.comp").string();
+    ProjectError error;
+    REQUIRE(saveProject(doc, std::nullopt, path, error));
+    auto loaded = loadProject(path, error);
+    REQUIRE(loaded.has_value());
+    CHECK_EQ(int(loaded->smartObjects.size()), 3);
+    // Each is fine alone; together they pass a limit.
+    ProjectLoadLimits pixels;
+    pixels.smartObjectPixels = 2 * 64 * 64;
+    CHECK(!loadProject(path, error, pixels));
+    CHECK(error.kind == ProjectError::TooLarge);
+    ProjectLoadLimits count;
+    count.smartObjects = 2;
+    CHECK(!loadProject(path, error, count));
+    CHECK(error.kind == ProjectError::TooLarge);
+    ProjectLoadLimits bytes;
+    bytes.sidecarBytes = 2500;
+    CHECK(!loadProject(path, error, bytes));
+    CHECK(error.kind == ProjectError::TooLarge);
+    // And with the real limits: more sources than a package may hold, each a few bytes.
+    const std::vector<uint8_t> one = serializeSmartObjectSource(*doc.smartObjects.begin()->second);
+    for (int i = 0; i < ProjectLoadLimits{}.smartObjects + 1; i++) {
+        std::ofstream out(dir / "Sources.comp" / "smartobjects" / ("extra-" + std::to_string(i) + ".source"), std::ios::binary);
+        out.write(reinterpret_cast<const char*>(one.data()), std::streamsize(one.size()));
+    }
+    Timer timer;
+    CHECK(!loadProject(path, error));
+    CHECK(error.kind == ProjectError::TooLarge);
+    CHECK(timer.seconds() < 10);
+    fs::remove_all(dir);
 }
 
 TEST_MAIN()

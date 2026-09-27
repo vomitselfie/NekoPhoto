@@ -19,8 +19,18 @@ constexpr int projectFormatVersion = 8;
 /// What a save writes when the document needs nothing past it (the Mac app reads up to 7).
 constexpr int projectMacFormatVersion = 7;
 
+/// What a package may hold beside its layers, in total, however valid each file is on its own: a hostile package
+/// could otherwise hold thousands of individually acceptable smart objects and carried blocks.
+struct ProjectLoadLimits {
+    /// The smart objects' decoded contents together (held at 8 bits): the same gigapixel as all the layers.
+    long long smartObjectPixels = Document::projectPixelBudgetAt(SampleType::U8);
+    /// Every sidecar file read (carried PSD data, smart object sources with their embedded files, instances).
+    unsigned long long sidecarBytes = 4ULL << 30;
+    int smartObjects = 4096;
+};
+
 /// Loads a package directory. On failure the error says why, in the Mac app's words.
-std::optional<Document> loadProject(const std::string& path, ProjectError& error);
+std::optional<Document> loadProject(const std::string& path, ProjectError& error, const ProjectLoadLimits& limits = {});
 /// Saves atomically: writes a sibling temporary package, then swaps it in.
 bool saveProject(const Document& document, const std::optional<Uuid>& activeLayerId, const std::string& path, ProjectError& error);
 

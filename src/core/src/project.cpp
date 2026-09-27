@@ -483,7 +483,7 @@ std::optional<Document> parseManifest(const std::string& text, ProjectError& err
     return d;
 }
 
-std::optional<Document> loadProject(const std::string& pathText, ProjectError& error) {
+std::optional<Document> loadProject(const std::string& pathText, ProjectError& error, const ProjectLoadLimits& limits) {
     fs::path path(pathText);
     std::error_code ec;
     if (!fs::is_directory(path, ec)) { error = invalid(); return std::nullopt; }
@@ -553,9 +553,16 @@ std::optional<Document> loadProject(const std::string& pathText, ProjectError& e
         }
     }
     // What a PSD held that we do not model (psd_carry.h), beside the images; optional, and dropped if unreadable.
+    // Every sidecar counts toward one total (limits.sidecarBytes); past it the package is refused.
+    unsigned long long sidecarBytes = 0;
+    bool overLimit = false;
     auto readCarry = [&](const fs::path& file) -> std::optional<std::vector<uint8_t>> {
         std::error_code ec;
-        if (!fs::is_regular_file(file, ec) || !checkFile(file, path, assetLimit)) return std::nullopt;
+        if (overLimit || !fs::is_regular_file(file, ec) || !checkFile(file, path, assetLimit)) return std::nullopt;
+        const uintmax_t size = fs::file_size(file, ec);
+        if (ec) return std::nullopt;
+        if (size > limits.sidecarBytes - sidecarBytes) { overLimit = true; return std::nullopt; }
+        sidecarBytes += size;
         std::ifstream in(file, std::ios::binary);
         std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
         if (!in.good() && !in.eof()) return std::nullopt;
@@ -565,18 +572,30 @@ std::optional<Document> loadProject(const std::string& pathText, ProjectError& e
         if (auto bytes = readCarry(path / "images" / (layer.id + ".psdcarry"))) layer.psdCarry = parsePsdLayerCarry(*bytes);
     if (auto bytes = readCarry(path / "images" / "document.psdcarry")) d.psdCarry = parsePsdDocumentCarry(*bytes);
     // Smart objects: the sources in smartobjects/ (each with its image as PNG), the instances beside their layers.
+    // Their count, their files and their decoded pixels are limited in total, each image by the budget rules too.
     {
         std::error_code ec;
         const fs::path dir = path / "smartobjects";
+        int sources = 0;
+        long long sourcePixels = 0;
         if (fs::is_directory(dir, ec))
             for (auto& entry : fs::directory_iterator(dir, ec)) {
-                if (entry.path().extension() != ".source" || d.smartObjects.size() >= 4096) continue;
+                if (entry.path().extension() != ".source") continue;
+                if (++sources > limits.smartObjects) { error = tooLarge(); return std::nullopt; }
                 auto bytes = readCarry(entry.path());
                 auto source = bytes ? parseSmartObjectSource(*bytes) : std::nullopt;
                 if (!source) continue;
                 fs::path png = entry.path();
                 png.replace_extension(".png");
-                if (fs::is_regular_file(png, ec) && checkFile(png, path, assetLimit)) source->image = readPngImage(png.string());
+                PngInfo info;
+                if (fs::is_regular_file(png, ec) && checkFile(png, path, assetLimit) && readPngInfo(png.string(), info)) {
+                    if (!Document::canCreate(info.width, info.height, SampleType::U8) || (long long)info.width * info.height > limits.smartObjectPixels - sourcePixels) {
+                        error = tooLarge();
+                        return std::nullopt;
+                    }
+                    sourcePixels += (long long)info.width * info.height;
+                    source->image = readPngImage(png.string());
+                }
                 const std::string id = source->id;
                 d.smartObjects[id] = std::make_shared<const SmartObjectSource>(std::move(*source));
             }
@@ -588,6 +607,7 @@ std::optional<Document> loadProject(const std::string& pathText, ProjectError& e
             layer.smartImage = layer.asset->image;
         }
     }
+    if (overLimit) { error = tooLarge(); return std::nullopt; }
     return d;
 }
 
