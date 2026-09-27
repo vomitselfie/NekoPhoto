@@ -34,6 +34,9 @@ public:
     static Pool& shared() { static Pool pool; return pool; }
 
     void run(Job& job) {
+        // One top-level loop at a time: current_ is shared, so a second caller on another thread (Quick Select's
+        // worker and the UI thread, say) waits here for the first loop to finish rather than replacing its job.
+        std::lock_guard<std::mutex> serial(runMutex_);
         {
             std::lock_guard<std::mutex> lock(mutex_);
             current_ = &job;
@@ -77,6 +80,7 @@ private:
     }
 
     std::vector<std::thread> workers_;
+    std::mutex runMutex_;
     std::mutex mutex_;
     std::condition_variable wake_, finished_;
     Job* current_ = nullptr;

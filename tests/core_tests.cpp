@@ -23,6 +23,8 @@
 #include "compositor/warp.h"
 #include "compositor/warpstroke.h"
 #include "compositor/transform.h"
+#include "compositor/parallel.h"
+#include <thread>
 
 #include <atomic>
 #include <cstdlib>
@@ -54,6 +56,25 @@ fs::path tempDir() {
 }
 
 } // namespace
+
+// Two OS threads start top-level loops at once (Quick Select's worker and the UI thread do): each loop must
+// still run every index exactly once, with no job swapped out from under the other.
+TEST_CASE(parallel_for_from_two_threads_runs_every_index_once) {
+    constexpr int rows = 257, rounds = 400;
+    std::atomic<int> bad{0};
+    auto caller = [&] {
+        std::vector<std::atomic<int>> hits(rows);
+        for (int round = 0; round < rounds; round++) {
+            for (auto& h : hits) h.store(0, std::memory_order_relaxed);
+            parallelFor(0, rows, 1, [&](int y0, int y1) { for (int y = y0; y < y1; y++) hits[y].fetch_add(1, std::memory_order_relaxed); });
+            for (auto& h : hits) if (h.load() != 1) bad++;
+        }
+    };
+    std::thread a(caller), b(caller);
+    a.join();
+    b.join();
+    CHECK_EQ(bad.load(), 0);
+}
 
 TEST_CASE(affine_matches_core_graphics_conventions) {
     Affine t = Affine::translation(10, 20).rotated(M_PI / 2).scaledBy(2, 3);
