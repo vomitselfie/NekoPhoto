@@ -532,6 +532,70 @@ void opticalFlow(const Frame& in, const Uniforms& u, const RowSink& sink) {
     }, sink);
 }
 
+// ---- Retro, continued ---------------------------------------------------------------------------------------------
+
+// Super 8: film grain, a vignette and a warm cast. p0 = grain, p1 = vignette, p2 = warmth. The grain hashes pixel
+// coordinates, as VHS's noise does (a different draw of the same grain).
+void super8(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    const vec2 seedOff{u.seed * 91.7f, u.seed * 33.1f};
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        vec4 c0 = sample(in, f.uv);
+        vec3 c = c0.rgb();
+        float n = rand2(f.uv * u.resolution + seedOff) - 0.5f;
+        c = c + n * u.p[0] * 0.3f;
+        float d = distance(f.uv, v2(0.5f));
+        c = c * (1.0f - u.p[1] * smoothstep(0.35f, 0.85f, d));
+        c = mix(c, c * vec3{1.12f, 0.96f, 0.72f}, u.p[2]);
+        return v4(clamp(c, 0.0f, 1.0f), c0.w);
+    }, sink);
+}
+
+// Bad TV: a rolled picture, a wavy distortion and static. p0 = distortion, p1 = roll, p2 = noise. The static hashes
+// pixel coordinates (a different draw of the same noise; docs/mosh.md).
+void badTv(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    const float distortion = u.p[0];
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        vec2 uv = f.uv;
+        uv.y = fract(uv.y + u.p[1]);
+        uv.x += sin(uv.y * 12.0f + u.seed * 6.2831853f) * distortion * 0.04f;
+        uv.x += (vnoise(vec2{uv.y * 4.0f, u.seed * 10.0f}) - 0.5f) * distortion * 0.2f;
+        vec4 c0 = sample(in, uv);
+        vec3 c = c0.rgb();
+        float n = rand2(f.uv * u.resolution + u.seed * 47.0f);
+        c = mix(c, v3(n), u.p[2] * 0.35f);
+        return v4(c, c0.w);
+    }, sink);
+}
+
+// Ascii: an 8x8 glyph per cell, from a density ramp by the cell's luma. p0 = cell size in pixels, p1 = colour (0 green,
+// 1 white, 2 the image's), p2 = invert.
+void ascii(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    const float size = std::max(u.p[0], 4.0f);
+    const bool invert = u.p[2] > 0.5f;
+    const int mode = toI32(u.p[1] + 0.5f);
+    // ' ' . : = + * # @, each as two words of four rows, a byte a row, bit N the pixel at x = N.
+    static constexpr uint32_t glyphs[8][2] = {
+        {0x00000000u, 0x00000000u}, {0x00000000u, 0x00181800u}, {0x00181800u, 0x00181800u}, {0x007e0000u, 0x0000007eu},
+        {0x7e181800u, 0x0018187eu}, {0xff3c6600u, 0x0000663cu}, {0x24247e24u, 0x0024247eu}, {0xffff7e3cu, 0x3c7effffu},
+    };
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        vec2 cellUv = (floor(f.uv * u.resolution / size) + 0.5f) * size / u.resolution;
+        vec4 c = sample(in, clamp(cellUv, 0.0f, 1.0f));
+        float l = luma(c.rgb());
+        if (invert) l = 1.0f - l;
+        int idx = std::clamp(toI32(l * 8.0f), 0, 7);
+        vec2 pf = floor(fract(f.uv * u.resolution / size) * 8.0f);
+        uint32_t px = toU32(pf.x), py = toU32(pf.y);
+        uint32_t rowWord = py >= 4u ? glyphs[idx][1] : glyphs[idx][0];
+        uint32_t rowByte = (rowWord >> ((py & 3u) * 8u)) & 0xffu;
+        float on = float((rowByte >> (px & 31u)) & 1u);
+        vec3 ink{0.3f, 1.0f, 0.4f};
+        if (mode == 1) ink = v3(1.0f);
+        else if (mode == 2) ink = c.rgb() / std::max(l, 0.05f);
+        return v4(clamp(ink * on, 0.0f, 1.0f), c.w);
+    }, sink);
+}
+
 struct Entry { std::string_view id; EffectFn fn; };
 constexpr Entry kEffects[] = {
     {"soft-glitch", softGlitch}, {"hard-glitch", hardGlitch}, {"decimate", decimate}, {"data-mosh", dataMosh},
@@ -540,6 +604,7 @@ constexpr Entry kEffects[] = {
     {"vhs", vhs}, {"cga-8bit", cga8bit}, {"crt", crt}, {"dither", dither}, {"dot-screen", dotScreen}, {"halftone", halftone},
     {"bulge", bulge}, {"stretch", stretch}, {"push", push}, {"luma-mesh", lumaMesh}, {"transform-3d", transform3d}, {"tile", tile},
     {"mirror", mirror}, {"wobble", wobble}, {"smear", smear}, {"twirl", twirl}, {"optical-flow", opticalFlow},
+    {"super8", super8}, {"bad-tv", badTv}, {"ascii", ascii},
 };
 
 } // namespace

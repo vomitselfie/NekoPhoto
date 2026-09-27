@@ -979,6 +979,22 @@
         <translation>オプティカルフロー</translation>
     </message>
     <message>
+        <source>Super 8</source>
+        <translation>スーパー 8</translation>
+    </message>
+    <message>
+        <source>Bad TV</source>
+        <translation>バッド TV</translation>
+    </message>
+    <message>
+        <source>Ascii</source>
+        <translation>アスキー</translation>
+    </message>
+    <message>
+        <source>Vignette</source>
+        <translation>ビネット</translation>
+    </message>
+    <message>
         <source>Amount</source>
         <translation>量</translation>
     </message>
@@ -1179,6 +1195,22 @@
         <translation>渦</translation>
     </message>
     <message>
+        <source>Warmth</source>
+        <translation>暖かさ</translation>
+    </message>
+    <message>
+        <source>Distortion</source>
+        <translation>歪み</translation>
+    </message>
+    <message>
+        <source>Roll</source>
+        <translation>ロール</translation>
+    </message>
+    <message>
+        <source>Cell Size</source>
+        <translation>セルサイズ</translation>
+    </message>
+    <message>
         <source>Blackout</source>
         <translation>ブラックアウト</translation>
     </message>
@@ -1213,6 +1245,18 @@
     <message>
         <source>Bottom → Top</source>
         <translation>下 → 上</translation>
+    </message>
+    <message>
+        <source>Terminal Green</source>
+        <translation>ターミナルグリーン</translation>
+    </message>
+    <message>
+        <source>White</source>
+        <translation>ホワイト</translation>
+    </message>
+    <message>
+        <source>Original</source>
+        <translation>元の色</translation>
     </message>
     <message>
         <source>Luminosity</source>

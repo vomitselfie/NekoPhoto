@@ -83,13 +83,19 @@ std::vector<EffectSpec> makeEffects() {
         fx("scanlines", "Scan Lines", C::Retro, {floatParam("density", "Density", 10, 800, 250), floatParam("opacity", "Opacity", 0, 1, 0.5f)}),
         seeded("vhs", "VHS", C::Retro,
                {floatParam("tracking", "Tracking", 0, 1, 0.4f), floatParam("bleed", "Color Bleed", 0, 1, 0.4f), floatParam("noise", "Noise", 0, 1, 0.3f)}),
+        seeded("super8", "Super 8", C::Retro,
+               {floatParam("grain", "Grain", 0, 1, 0.4f), floatParam("vignette", "Vignette", 0, 1, 0.5f), floatParam("warmth", "Warmth", 0, 1, 0.4f)}),
         fx("cga-8bit", "8-Bit CGA", C::Retro,
            {floatParam("size", "Pixel Size", 1, 64, 6), choiceParam("palette", "Palette", {"Cyan/Magenta", "Green/Red", "Grayscale"}, 0)}),
         fx("crt", "CRT", C::Retro,
            {floatParam("curvature", "Curvature", 0, 1, 0.3f), floatParam("scan", "Scanlines", 0, 1, 0.5f), floatParam("mask", "Aperture Mask", 0, 1, 0.3f)}),
         fx("dither", "Dither", C::Retro, {floatParam("scale", "Scale", 1, 16, 2), floatParam("levels", "Levels", 2, 8, 2)}),
+        seeded("bad-tv", "Bad TV", C::Retro,
+               {floatParam("distortion", "Distortion", 0, 1, 0.3f), floatParam("roll", "Roll", 0, 1, 0), floatParam("noise", "Noise", 0, 1, 0.3f)}),
         fx("dot-screen", "Dot Screen", C::Retro, {floatParam("scale", "Scale", 2, 64, 8), floatParam("angle", "Angle", 0, pi, 0.4f)}),
         fx("halftone", "Halftone", C::Retro, {floatParam("scale", "Scale", 2, 64, 10), floatParam("angle", "Angle", 0, pi, 0.4f)}),
+        fx("ascii", "Ascii", C::Retro,
+           {floatParam("size", "Cell Size", 4, 32, 10), choiceParam("mode", "Color", {"Terminal Green", "White", "Original"}, 0), boolParam("invert", "Invert", false)}),
     };
 }
 

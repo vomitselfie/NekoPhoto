@@ -1,4 +1,10 @@
 # Mosh render fingerprints (tests/mosh_tests.cpp): FNV-1a 64 of the 8-bit pixels.
+ascii/default eb2583f03627bcce
+ascii/translucent 94173bfb5bfc2ba3
+ascii/variant 526aaacfbce19187
+bad-tv/default 7f08809487b13081
+bad-tv/translucent e72a83a4d58bed80
+bad-tv/variant 443f0bc7e874bec1
 bulge/default a96cb9f7ecf57b6d
 bulge/translucent fcd88d07d47b5a22
 bulge/variant 15f09d3cc25e30bc
@@ -74,6 +80,9 @@ stretch/variant 0ab1698f544eb1ba
 strobe/default 4c9a66821f7e8ebd
 strobe/translucent 72205e1dd71e4ac3
 strobe/variant db5c26c8112485e7
+super8/default 218577890a4333f5
+super8/translucent afac58a06c6f5b6f
+super8/variant 0b9ce2155c97eecd
 tile/default 6b17f6e9ef27c0ed
 tile/translucent 1a46eac72bb7255a
 tile/variant 5c3fadc15ba19104

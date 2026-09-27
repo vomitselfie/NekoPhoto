@@ -51,6 +51,12 @@ namespace {
     QT_TRANSLATE_NOOP("Names", "Bottom → Top"), QT_TRANSLATE_NOOP("Names", "Wobble"),
     QT_TRANSLATE_NOOP("Names", "Smear"), QT_TRANSLATE_NOOP("Names", "Distance"), QT_TRANSLATE_NOOP("Names", "Twirl"),
     QT_TRANSLATE_NOOP("Names", "Optical-Flow"), QT_TRANSLATE_NOOP("Names", "Swirl"),
+    // the effects added since, their parameters and options
+    QT_TRANSLATE_NOOP("Names", "Super 8"), QT_TRANSLATE_NOOP("Names", "Grain"), QT_TRANSLATE_NOOP("Names", "Vignette"),
+    QT_TRANSLATE_NOOP("Names", "Warmth"), QT_TRANSLATE_NOOP("Names", "Bad TV"),
+    QT_TRANSLATE_NOOP("Names", "Distortion"), QT_TRANSLATE_NOOP("Names", "Roll"), QT_TRANSLATE_NOOP("Names", "Ascii"),
+    QT_TRANSLATE_NOOP("Names", "Cell Size"), QT_TRANSLATE_NOOP("Names", "Terminal Green"),
+    QT_TRANSLATE_NOOP("Names", "White"), QT_TRANSLATE_NOOP("Names", "Original"),
     // parameters
     QT_TRANSLATE_NOOP("Names", "Amount"), QT_TRANSLATE_NOOP("Names", "Angle"), QT_TRANSLATE_NOOP("Names", "Blocks"),
     QT_TRANSLATE_NOOP("Names", "Color Shift"), QT_TRANSLATE_NOOP("Names", "Block Size"), QT_TRANSLATE_NOOP("Names", "Drift"),
