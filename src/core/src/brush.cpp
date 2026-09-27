@@ -53,8 +53,8 @@ BrushStroke::BrushStroke(const Layer& layer, bool mask, BrushSettings settings, 
     : isMask_(mask), settings_(settings), canvas_(0, 0, canvas.width, canvas.height), name_(layer.name), layerTransform_(layer.transform) {
     const GrayImage* placedMask = nullptr;
     LayerTransform base = layer.transform;
-    if (mask && layer.mask && layer.mask->placement && layer.mask->asset.image) {
-        placedMask = layer.mask->asset.image.get();
+    if (mask && layer.mask && layer.mask->placement && layer.mask->asset.image.u8()) {
+        placedMask = layer.mask->asset.image.u8().get();
         base = *layer.mask->placement;
     }
     int originalWidth = placedMask ? placedMask->width() : layer.pixelWidth();
@@ -84,19 +84,19 @@ BrushStroke::BrushStroke(const Layer& layer, bool mask, BrushSettings settings, 
 
     if (mask) {
         baseMask_ = std::make_shared<GrayImage>(width_, height_, 255);
-        const GrayImage* source = placedMask ? placedMask : (layer.mask && layer.mask->asset.image ? layer.mask->asset.image.get() : nullptr);
+        const GrayImage* source = placedMask ? placedMask : (layer.mask && layer.mask->asset.image.u8() ? layer.mask->asset.image.u8().get() : nullptr);
         if (source) stretchGray(*source, *baseMask_, sourceRect_);
         workingMask_ = std::make_shared<GrayImage>(*baseMask_);
     } else {
         // The grid usually is the layer's own pixel grid: then the layer image (immutable, shared) is the base
         // and only the working copy is made.
-        const bool sameGrid = layer.asset && layer.asset->image && sourceRect_ == Rect(0, 0, width_, height_)
-            && layer.asset->image->width() == width_ && layer.asset->image->height() == height_;
+        const bool sameGrid = layer.asset && layer.asset->image.u8() && sourceRect_ == Rect(0, 0, width_, height_)
+            && layer.asset->image.u8()->width() == width_ && layer.asset->image.u8()->height() == height_;
         // A blank layer (no pixels yet) needs no copy and no scan: two images of zero pages, which cost nothing
         // until painted. A layer smaller than the grid is scanned at its own size.
-        const bool blank = !(layer.asset && layer.asset->image);
+        const bool blank = !(layer.asset && layer.asset->image.u8());
         if (sameGrid) {
-            base_ = layer.asset->image;
+            base_ = layer.asset->image.u8();
             baseBounds_ = alphaBounds(*base_);
         } else {
             // Base and working copy each get the layer's own pixels; the rest of the grid is zero pages in both,
@@ -105,9 +105,9 @@ BrushStroke::BrushStroke(const Layer& layer, bool mask, BrushSettings settings, 
             auto working = std::make_shared<Image>(width_, height_);
             if (!blank) {
                 const int dx = int(sourceRect_.minX()), dy = int(sourceRect_.minY());
-                copyImage(*layer.asset->image, *copy, dx, dy);
-                copyImage(*layer.asset->image, *working, dx, dy);
-                PixelBounds b = alphaBounds(*layer.asset->image);
+                copyImage(*layer.asset->image.u8(), *copy, dx, dy);
+                copyImage(*layer.asset->image.u8(), *working, dx, dy);
+                PixelBounds b = alphaBounds(*layer.asset->image.u8());
                 if (!b.isEmpty()) {
                     b = {std::max(0, b.x0 + dx), std::max(0, b.y0 + dy), std::min(width_, b.x1 + dx), std::min(height_, b.y1 + dy)};
                     baseBounds_ = b.isEmpty() ? PixelBounds{} : b;
@@ -118,10 +118,10 @@ BrushStroke::BrushStroke(const Layer& layer, bool mask, BrushSettings settings, 
         }
         if (!working_) working_ = std::make_shared<Image>(*base_);
         // The healers copy only from what the mask shows: a dab at a cut-out's edge closes with the subject.
-        if (layer.mask && layer.mask->enabled && !layer.mask->placement && layer.mask->asset.image
-            && layer.mask->asset.image->width() == originalWidth && layer.mask->asset.image->height() == originalHeight) {
+        if (layer.mask && layer.mask->enabled && !layer.mask->placement && layer.mask->asset.image.u8()
+            && layer.mask->asset.image.u8()->width() == originalWidth && layer.mask->asset.image.u8()->height() == originalHeight) {
             visible_ = std::make_shared<GrayImage>(width_, height_, 255);
-            stretchGray(*layer.mask->asset.image, *visible_, sourceRect_);
+            stretchGray(*layer.mask->asset.image.u8(), *visible_, sourceRect_);
         }
     }
     coverage_ = std::make_shared<GrayImage>(width_, height_, 0);

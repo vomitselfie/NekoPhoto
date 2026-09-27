@@ -45,7 +45,7 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
         bool cached = cloneSample_ && cloneSampleAll_ == cloneSampleAll && cloneSampleLayer_ == layer->id && cloneSampleRevision_ == documentRevision_;
         if (cached) sample = cloneSample_;
         else if (cloneSampleAll) sample = renderFlattened(*document_);
-        else if (layer->asset && layer->asset->image) {
+        else if (layer->asset && layer->asset->image.u8()) {
             Document single(document_->width, document_->height);
             Layer copy = *layer;
             copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
@@ -65,7 +65,7 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
     if (mask) settings.maskValue = (maskPaintWhite != brushErase) ? 1 : 0;
     if (mask && paintsQuickMask()) settings.maskValue = 1 - settings.maskValue;   // white selects: the Quick Mask holds the inverse
     else { settings.red = foregroundColor.redF(); settings.green = foregroundColor.greenF(); settings.blue = foregroundColor.blueF(); }
-    const GrayImage* selection = document_->selection && document_->selection->coverage ? document_->selection->coverage.get() : nullptr;
+    const GrayImage* selection = document_->selection && document_->selection->coverage.u8() ? document_->selection->coverage.u8().get() : nullptr;
     if (document_->selection && !selection) return false; // an explicit empty selection: touch nothing
     stroke_ = std::make_unique<BrushStroke>(*layer, mask, settings, document_->size(), selection);
     if (!stroke_->isValid()) { emit error(QString::fromStdString(stroke_->error())); stroke_.reset(); return false; }
@@ -137,7 +137,7 @@ void EditorSession::continueBrush(QPointF documentPoint) {
 }
 
 std::unique_ptr<BrushStroke> EditorSession::makeRasterEdit(const Layer& layer, bool mask, const BrushSettings& settings) const {
-    const GrayImage* selection = document_->selection && document_->selection->coverage ? document_->selection->coverage.get() : nullptr;
+    const GrayImage* selection = document_->selection && document_->selection->coverage.u8() ? document_->selection->coverage.u8().get() : nullptr;
     if (document_->selection && !selection) return nullptr; // an explicit empty selection: touch nothing
     auto stroke = std::make_unique<BrushStroke>(layer, mask, settings, document_->size(), selection);
     if (!stroke->isValid()) return nullptr;
@@ -273,11 +273,11 @@ void EditorSession::changeBrushSize(bool increase) {
 bool EditorSession::beginWarp(QPointF documentPoint) {
     if (!document_ || stroke_ || warp_ || transformEdit_) return false;
     const Layer* layer = activeLayer();
-    if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image) return false;
+    if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image.u8()) return false;
     if (smartObjectBlocksPixels(true)) return false;
-    if (isMaskSelected_ && blurMode == BlurToolMode::Blur && layer->mask && layer->mask->asset.image) {
+    if (isMaskSelected_ && blurMode == BlurToolMode::Blur && layer->mask && layer->mask->asset.image.u8()) {
         // Blur on a mask: the mask as it sits on the document, its edge tone beyond its pixels, softened.
-        const GrayImage& own = *layer->mask->asset.image;
+        const GrayImage& own = *layer->mask->asset.image.u8();
         uint8_t background = LayerMask::background(*layer->mask->asset.thumbnail);
         auto sample = std::make_shared<GrayImage>(document_->width, document_->height, background);
         sampleMaskCoverage(own, layer->maskTransform(), document_->rect(), 1, background, *sample, false);
@@ -346,7 +346,7 @@ bool EditorSession::beginProcessedStroke(QPointF documentPoint, const std::funct
 bool EditorSession::beginToning(QPointF documentPoint) {
     if (!document_ || stroke_ || warp_ || transformEdit_) return false;
     const Layer* layer = activeLayer();
-    if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image) return false;
+    if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image.u8()) return false;
     if (smartObjectBlocksPixels(true)) return false;
     const ToningSettings settings = toning;
     return beginProcessedStroke(documentPoint, [settings](Image& image) { toneImage(image, settings); }, 0);   // per pixel
@@ -623,15 +623,15 @@ bool EditorSession::redrawText(Layer& layer) {
     if (!image) { emit error(tr("That text is too large to render. Text can cover up to 100 megapixels.")); return false; }
     // A layer scaled on the canvas keeps its scale; the box follows the new raster.
     double scaleX = 1, scaleY = 1;
-    if (layer.asset && layer.asset->image && layer.asset->image->width() > 0 && layer.asset->image->height() > 0) {
-        scaleX = layer.transform.size.width / layer.asset->image->width();
-        scaleY = layer.transform.size.height / layer.asset->image->height();
+    if (layer.asset && layer.asset->image.u8() && layer.asset->image.u8()->width() > 0 && layer.asset->image.u8()->height() > 0) {
+        scaleX = layer.transform.size.width / layer.asset->image.u8()->width();
+        scaleY = layer.transform.size.height / layer.asset->image.u8()->height();
     }
     if (layer.mask && !layer.mask->placement) layer.mask->placement = layer.maskTransform();
     // A turned layer turns about its centre, so a new size would slide it: its top-left corner stays put instead.
     std::optional<Point> corner;
-    if (layer.transform.rotation != 0 && !layer.transform.flipX && !layer.transform.flipY && layer.asset && layer.asset->image)
-        corner = mapThroughTransform(layer.transform, layer.asset->image->width(), layer.asset->image->height(), 0, 0);
+    if (layer.transform.rotation != 0 && !layer.transform.flipX && !layer.transform.flipY && layer.asset && layer.asset->image.u8())
+        corner = mapThroughTransform(layer.transform, layer.asset->image.u8()->width(), layer.asset->image.u8()->height(), 0, 0);
     layer.asset = Asset::make(image, layer.name);
     layer.textImage = image;
     layer.transform.size = Size(image->width() * scaleX, image->height() * scaleY);

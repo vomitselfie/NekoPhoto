@@ -161,7 +161,7 @@ int main(int argc, char** argv) {
         report("composite 5 layers -> 1920 px", timeMs([&] { render(doc, o, out); }, 5));
         // Painting on the middle layer: the layers around it come from the cache after the first frame.
         Overrides overrides;
-        overrides[doc.layers[2].id].image = doc.layers[2].asset->image;
+        overrides[doc.layers[2].id].image = doc.layers[2].asset->image.u8();
         RenderCache cache;
         o.version = 1;
         render(doc, o, out, &overrides, &cache);

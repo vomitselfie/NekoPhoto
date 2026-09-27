@@ -180,8 +180,8 @@ void AutomationServer::registerPixelsHandlers() {
         refuseSmartObject(session());
         document();
         const Layer* layer = session()->activeLayer();
-        if (!layer || layer->isGroup || !layer->asset || !layer->asset->image) fail("select an image layer");
-        const int w0 = layer->asset->image->width(), h0 = layer->asset->image->height();
+        if (!layer || layer->isGroup || !layer->asset || !layer->asset->image.u8()) fail("select an image layer");
+        const int w0 = layer->asset->image.u8()->width(), h0 = layer->asset->image.u8()->height();
         int w = p.contains("width") ? p.value("width").toInt() : int(std::lround(w0 * p.value("widthPercent").toDouble(100) / 100));
         int h = p.contains("height") ? p.value("height").toInt() : int(std::lround(h0 * p.value("heightPercent").toDouble(100) / 100));
         QString error;

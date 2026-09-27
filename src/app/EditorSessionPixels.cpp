@@ -26,7 +26,7 @@ bool EditorSession::canMovePixels(QPointF documentPoint) const {
     if (!layer || !layer->asset || layer->isGroup || layer->adjustment) return false;
     int x = int(std::floor(documentPoint.x())), y = int(std::floor(documentPoint.y()));
     if (x < 0 || y < 0 || x >= document_->width || y >= document_->height) return false;
-    return document_->selection->coverage->at(x, y) > 127;
+    return document_->selection->coverage.u8()->at(x, y) > 127;
 }
 
 bool EditorSession::beginPixelMove(bool duplicate) {
@@ -59,7 +59,7 @@ std::optional<Selection> EditorSession::displayedSelection() const {
     if (pixelMove_ && pixelMove_->origin.coverage) {
         int dx = int(pixelMove_->offset.x()), dy = int(pixelMove_->offset.y());
         if (dx == 0 && dy == 0) return pixelMove_->origin;
-        const GrayImage& src = *pixelMove_->origin.coverage;
+        const GrayImage& src = *pixelMove_->origin.coverage.u8();
         auto moved = std::make_shared<GrayImage>(src.width(), src.height(), 0);
         for (int y = 0; y < src.height(); y++) { int sy = y - dy; if (sy < 0 || sy >= src.height()) continue; for (int x = 0; x < src.width(); x++) { int sx = x - dx; if (sx >= 0 && sx < src.width()) moved->at(x, y) = src.at(sx, sy); } }
         Selection s = pixelMove_->origin;
@@ -68,7 +68,7 @@ std::optional<Selection> EditorSession::displayedSelection() const {
     }
     if (transformEdit_ && transformEdit_->floating && document_->selection->coverage) {
         const FloatingTransform& f = *transformEdit_->floating;
-        const GrayImage& cov = *document_->selection->coverage;
+        const GrayImage& cov = *document_->selection->coverage.u8();
         auto moved = std::make_shared<GrayImage>(cov.width(), cov.height(), 0);
         if (transformEdit_->corners) moved = warpCoverage(cov, f.original, f.pixelWidth, f.pixelHeight, *transformEdit_->corners);
         else {
@@ -147,7 +147,7 @@ std::optional<EditorSession::PixelClipboard> EditorSession::renderSelectedPixels
     const GrayImage* coverage = nullptr;
     if (document_->selection) {
         if (!document_->selection->coverage || document_->selection->isEmpty()) return std::nullopt;
-        coverage = document_->selection->coverage.get();
+        coverage = document_->selection->coverage.u8().get();
         region = document_->selection->bounds().intersection(document_->rect());
     }
     if (region.isEmpty()) return std::nullopt;
@@ -161,9 +161,9 @@ std::optional<EditorSession::PixelClipboard> EditorSession::renderSelectedPixels
         if (isMaskSelected_ && layer->mask) {
             // The mask as opaque gray, placed as it sits on the document.
             GrayImage gray(out.width(), out.height(), layer->mask->placement ? LayerMask::background(*layer->mask->asset.thumbnail) : 0);
-            sampleMaskCoverage(*layer->mask->asset.image, layer->maskTransform(), region, 1, gray.at(0, 0), gray, false);
+            sampleMaskCoverage(*layer->mask->asset.image.u8(), layer->maskTransform(), region, 1, gray.at(0, 0), gray, false);
             for (int y = 0; y < out.height(); y++) for (int x = 0; x < out.width(); x++) { uint8_t* p = out.pixel(x, y); p[0] = p[1] = p[2] = gray.at(x, y); p[3] = 255; }
-        } else if (layer->asset && layer->asset->image) {
+        } else if (layer->asset && layer->asset->image.u8()) {
             Document single(document_->width, document_->height);
             Layer copy = *layer;
             copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.maskSourceId.reset();
@@ -253,7 +253,7 @@ std::shared_ptr<const Image> EditorSession::contentAwareFillResult(const Content
     const Layer* layer = activeLayer();
     // The layer grows over any of the selection on the canvas past its edge.
     Rect area = document_->selection->bounds().intersection(document_->rect());
-    const Image& src = *layer->asset->image;
+    const Image& src = *layer->asset->image.u8();
     Affine toPixels = layer->transform.pixelToDocument(src.width(), src.height()).inverted();
     Rect wanted = toPixels.mapBounds(area).integral().unionWith(Rect(0, 0, src.width(), src.height()));
     int margin = int(std::ceil(std::max({0.0, -wanted.minX(), -wanted.minY(), wanted.maxX() - src.width(), wanted.maxY() - src.height()})));
@@ -265,9 +265,9 @@ std::shared_ptr<const Image> EditorSession::contentAwareFillResult(const Content
     auto out = std::make_shared<Image>(*source);
     // What the layer's mask hides is not copied from: a fill at the edge of a cut-out takes the subject.
     std::shared_ptr<GrayImage> visible;
-    if (layer->mask && layer->mask->enabled && !layer->mask->placement && layer->mask->asset.image && layer->mask->asset.image->width() == src.width() && layer->mask->asset.image->height() == src.height()) {
+    if (layer->mask && layer->mask->enabled && !layer->mask->placement && layer->mask->asset.image.u8() && layer->mask->asset.image.u8()->width() == src.width() && layer->mask->asset.image.u8()->height() == src.height()) {
         visible = std::make_shared<GrayImage>(source->width(), source->height(), 255);
-        const GrayImage& m = *layer->mask->asset.image;
+        const GrayImage& m = *layer->mask->asset.image.u8();
         for (int y = 0; y < m.height(); y++) std::memcpy(visible->row(y + margin) + margin, m.row(y), size_t(m.width()));
     }
     InpaintOptions options;
@@ -329,7 +329,7 @@ bool EditorSession::contentAwareMove(int dx, int dy, QString* errorText) {
     // The layer grows over the selection and where it lands.
     Rect sel = document_->selection->bounds();
     Rect area = sel.unionWith(Rect(sel.x + dx, sel.y + dy, sel.width, sel.height)).intersection(document_->rect());
-    const Image& src = *layer->asset->image;
+    const Image& src = *layer->asset->image.u8();
     Affine toPixels = layer->transform.pixelToDocument(src.width(), src.height()).inverted();
     Rect wanted = toPixels.mapBounds(area).integral().unionWith(Rect(0, 0, src.width(), src.height()));
     int margin = int(std::ceil(std::max({0.0, -wanted.minX(), -wanted.minY(), wanted.maxX() - src.width(), wanted.maxY() - src.height()})));
@@ -343,9 +343,9 @@ bool EditorSession::contentAwareMove(int dx, int dy, QString* errorText) {
     const Point o = gridFromDoc.apply({0, 0}), d = gridFromDoc.apply({double(dx), double(dy)});
     const int gdx = int(std::lround(d.x - o.x)), gdy = int(std::lround(d.y - o.y));
     std::shared_ptr<GrayImage> visible;
-    if (layer->mask && layer->mask->enabled && !layer->mask->placement && layer->mask->asset.image && layer->mask->asset.image->width() == src.width() && layer->mask->asset.image->height() == src.height()) {
+    if (layer->mask && layer->mask->enabled && !layer->mask->placement && layer->mask->asset.image.u8() && layer->mask->asset.image.u8()->width() == src.width() && layer->mask->asset.image.u8()->height() == src.height()) {
         visible = std::make_shared<GrayImage>(source->width(), source->height(), 255);
-        const GrayImage& m = *layer->mask->asset.image;
+        const GrayImage& m = *layer->mask->asset.image.u8();
         for (int y = 0; y < m.height(); y++) std::memcpy(visible->row(y + margin) + margin, m.row(y), size_t(m.width()));
     }
     auto out = std::make_shared<Image>(*source);
@@ -357,7 +357,7 @@ bool EditorSession::contentAwareMove(int dx, int dy, QString* errorText) {
     LayerTransform placed;
     auto trimmed = trimToPixels(*out, grown, placed);
     // The selection follows the patch, as in Photoshop.
-    const GrayImage& before = *document_->selection->coverage;
+    const GrayImage& before = *document_->selection->coverage.u8();
     auto shifted = std::make_shared<GrayImage>(before.width(), before.height());
     for (int y = 0; y < shifted->height(); y++) {
         const int sy = y - dy;
@@ -379,7 +379,7 @@ bool EditorSession::contentAwareMove(int dx, int dy, QString* errorText) {
 bool EditorSession::contentAwareScale(int width, int height, bool protectSelection, QString* errorText) {
     if (!canAdjustPixels()) { if (errorText) *errorText = tr("Select a visible image layer to scale."); return false; }
     Layer* layer = activeLayerMutable();
-    const ImagePtr src = layer->asset->image;
+    const ImagePtr src = layer->asset->image.u8();
     if (!Document::validDimension(width) || !Document::validDimension(height) || (long long)width * height > Document::pixelBudget) {
         if (errorText) *errorText = tr("The size must be between 1 and %1 pixels a side, 100 megapixels at most.").arg(maxImageSide);
         return false;
@@ -406,7 +406,7 @@ bool EditorSession::copyLayerFrom(const EditorSession& source, const Uuid& id, s
     for (auto& l : from.layers) if (included.count(l.id)) copied.push_back(l);
     const long long used = document_ ? document_->layerPixels() : 0;
     long long added = 0;
-    for (auto& l : copied) if (l.asset && l.asset->image) added += (long long)l.asset->image->width() * l.asset->image->height();
+    for (auto& l : copied) if (l.asset && l.asset->image.u8()) added += (long long)l.asset->image.u8()->width() * l.asset->image.u8()->height();
     if (used + added > Document::projectPixelBudget) { if (errorText) *errorText = tr("The copied layers would take this project past its 1-gigapixel limit for all layers together."); return false; }
     // Clipping to a layer that stays behind is baked into the pixels.
     for (auto& l : copied) {

@@ -173,8 +173,8 @@ TEST_CASE(psd_export_masks_and_clipping) {
     CHECK(back.layers[2].maskSourceId == std::optional<Uuid>(back.layers[1].id));
     CHECK(back.layers[3].maskSourceId == std::optional<Uuid>(back.layers[1].id));
     REQUIRE(back.layers[4].mask.has_value());
-    CHECK_EQ(int(back.layers[4].mask->asset.image->at(30, 10)), 255);
-    CHECK_EQ(int(back.layers[4].mask->asset.image->at(2, 10)), 0);
+    CHECK_EQ(int(back.layers[4].mask->asset.image.u8()->at(30, 10)), 255);
+    CHECK_EQ(int(back.layers[4].mask->asset.image.u8()->at(2, 10)), 0);
     REQUIRE(back.layers[5].mask.has_value());
     CHECK(!back.layers[5].mask->enabled);
     CHECK_EQ(rt.summary.clipped, 2);
@@ -221,8 +221,8 @@ TEST_CASE(psd_export_keeps_soft_edges_clean) {
     doc.layers.push_back(pixels("Glow", softDisc(64, 255, 220, 40), {0, 0}));
     auto rt = roundTrip(doc, "13_soft_edges.psd");
     REQUIRE(rt.imported.has_value());
-    const Image& back = *rt.imported->document.layers[0].asset->image;
-    const Image& original = *doc.layers[0].asset->image;
+    const Image& back = *rt.imported->document.layers[0].asset->image.u8();
+    const Image& original = *doc.layers[0].asset->image.u8();
     CHECK(worstDifference(original, back) <= 1);
     checkLooksTheSame(doc, *rt.imported);
 }
@@ -419,7 +419,7 @@ TEST_CASE(psd_carry_survives_a_project_save) {
     CHECK(loaded->layers[0].psdCarry->blocks == doc.layers[0].psdCarry->blocks);
     CHECK_EQ(loaded->layers[0].psdCarry->contentHash, doc.layers[0].psdCarry->contentHash);
     // The pixels came back through PNG, and still match what the text describes.
-    CHECK_EQ(psdContentHash(loaded->layers[0].asset->image.get()), doc.layers[0].psdCarry->contentHash);
+    CHECK_EQ(psdContentHash(loaded->layers[0].asset->image.u8().get()), doc.layers[0].psdCarry->contentHash);
     REQUIRE(loaded->psdCarry);
     CHECK_EQ(int(loaded->psdCarry->resources.size()), 2);
     CHECK(loaded->psdCarry->globals == dc->globals);

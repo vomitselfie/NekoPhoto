@@ -27,7 +27,7 @@ void AutomationServer::registerSelectionHandlers() {
         // The selection as a mask image: white selected, black not, downscaled to maxSize.
         const Document& doc = document();
         if (!doc.selection || !doc.selection->coverage) fail("there is no selection; make one with selection.rect, selection.wand or selection.fromLayer");
-        QImage mask = toQImage(*doc.selection->coverage);
+        QImage mask = toQImage(*doc.selection->coverage.u8());
         double maxSize = num(p, "maxSize", 1024);
         if (maxSize > 0 && std::max(mask.width(), mask.height()) > maxSize) mask = mask.scaled(int(maxSize), int(maxSize), Qt::KeepAspectRatio, Qt::SmoothTransformation);
         return deliverPng(*fromQImage(mask), p, {{"bounds", rectJson(doc.selection->bounds())}});

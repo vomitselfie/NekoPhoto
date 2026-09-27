@@ -422,7 +422,7 @@ int refreshSmartObjectRasters(Document& document) {
         if (layer.transform == so.placedTransform || smartObjectPixelsArePlacement(so)) continue;
         auto source = document.smartObjects.find(so.sourceId);
         if (source == document.smartObjects.end() || !source->second->image) continue;
-        const int w = layer.asset->image->width(), h = layer.asset->image->height();
+        const int w = layer.asset->image.u8()->width(), h = layer.asset->image.u8()->height();
         const std::array<double, 8> quad = moveQuad(so.quad, so.placedTransform, so.placedWidth, so.placedHeight, layer.transform, w, h);
         std::optional<PlacedRaster> raster;
         if (smartObjectFiltered(so)) raster = filteredSmartObjectRaster(document.psdCarry ? document.psdCarry->globals : none, so, *source->second->image, quad);
@@ -663,7 +663,7 @@ bool setSmartFilters(Document& document, Layer& layer, const SmartFilterStack& w
     if (removing && !smartObjectFiltered(so)) return true;   // nothing to remove
     // Where it is now (a moved instance's quad follows the layer).
     const std::array<double, 8> quad = moveQuad(so.quad, so.placedTransform, so.placedWidth, so.placedHeight, layer.transform,
-                                                layer.asset->image->width(), layer.asset->image->height());
+                                                layer.asset->image.u8()->width(), layer.asset->image.u8()->height());
     SmartObjectInstance next = so;
     if (next.placedId.empty()) next.placedId = newSmartObjectId();
     bool written = false;

@@ -191,7 +191,7 @@ TEST_CASE(image_size_scales_the_placement_not_the_pixels) {
     Document doc = placed();
     REQUIRE(resizeDocument(doc, 40, 20, 144, Sampling::High));
     REQUIRE(doc.layers[0].isLiveSmartObject());
-    CHECK(doc.layers[0].asset->image->width() == 4);   // still the source
+    CHECK(doc.layers[0].asset->image.u8()->width() == 4);   // still the source
     CHECK(std::abs(doc.layers[0].transform.origin.x - 12) < 1e-9 && std::abs(doc.layers[0].transform.size.width - 16) < 1e-9);
 }
 
@@ -365,8 +365,8 @@ TEST_CASE(a_warped_instance_draws_its_contents_through_the_mesh) {
     big.transform.size = Size(was.size.width * 2, was.size.height * 2);
     CHECK_EQ(refreshSmartObjectRasters(scaled), 1);
     CHECK(big.isLiveSmartObject());
-    CHECK(std::abs(big.asset->image->width() - 2 * was.size.width) <= 2);
-    CHECK(big.transform.size.width == big.asset->image->width());   // 1:1 again
+    CHECK(std::abs(big.asset->image.u8()->width() - 2 * was.size.width) <= 2);
+    CHECK(big.transform.size.width == big.asset->image.u8()->width());   // 1:1 again
     CHECK_EQ(refreshSmartObjectRasters(scaled), 0);                  // nothing left to redraw
     auto scaledBack = importPsdBytes(encodePsd(scaled, {}, nullptr, &error), &error);
     REQUIRE(scaledBack.has_value());
@@ -497,11 +497,11 @@ TEST_CASE(smart_filters_draw_from_the_contents_and_their_cache_follows) {
         auto noCache = std::make_shared<PsdDocumentCarry>(*broken.psdCarry);
         noCache->globals.clear();
         broken.psdCarry = noCache;
-        const ImagePtr before = broken.layers[0].asset->image;
+        const ImagePtr before = broken.layers[0].asset->image.u8();
         broken.layers[0].transform.origin.x += 3;
         CHECK_EQ(refreshSmartObjectRasters(broken), 0);
         CHECK(broken.layers[0].smartObject->locked());
-        CHECK(broken.layers[0].asset->image == before);
+        CHECK(broken.layers[0].asset->image.u8() == before);
         CHECK_EQ(refreshSmartObjectRasters(broken), 0);
         auto shown = renderFlattened(broken);
         CHECK(shown->pixel(18, 15)[3] >= 250);   // the blurred square, 3 px along
@@ -540,7 +540,7 @@ TEST_CASE(warp_a_smart_object_and_pixels) {
     REQUIRE(warped.isLiveSmartObject());
     CHECK(!warped.smartObject->locked());
     REQUIRE(smartObjectWarp(*warped.smartObject).has_value());
-    CHECK(warped.asset->image->height() > 20);   // the arc lifts it
+    CHECK(warped.asset->image.u8()->height() > 20);   // the arc lifts it
     // Twice is refused (a warp over a warp is not modelled here).
     CHECK(!warpLayer(doc, doc.layers[0], TextWarp{"warpFlag", 30, 0, 0, false}, &error));
     // Through PSD: still a warped, editable smart object.
@@ -554,7 +554,7 @@ TEST_CASE(warp_a_smart_object_and_pixels) {
     doc.layers.push_back(pixels);
     CHECK(!warpLayer(doc, doc.layers[1], TextWarp{"warpSpiral", 50, 0, 0, false}, &error));
     CHECK(warpLayer(doc, doc.layers[1], TextWarp{"warpBulge", 50, 0, 0, false}, &error));
-    CHECK(doc.layers[1].asset->image->height() > 10);
+    CHECK(doc.layers[1].asset->image.u8()->height() > 10);
     CHECK(!doc.layers[1].smartObject);
 }
 

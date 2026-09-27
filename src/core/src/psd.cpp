@@ -795,7 +795,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             carry->fill = rec.fillOpacity;
             auto lyid = rec.blocks.find("lyid");
             if (lyid != rec.blocks.end() && lyid->second.second >= 4) { Reader id(lyid->second.first, 4); carry->layerId = id.u32(); }
-            carry->contentHash = psdContentHash(layer.asset ? layer.asset->image.get() : nullptr);
+            carry->contentHash = psdContentHash(layer.asset ? layer.asset->image.u8().get() : nullptr);
             if (layer.adjustment) {
                 // Settings as read, so an unchanged adjustment's own block goes back byte for byte.
                 AdjustmentSettings read;
@@ -805,7 +805,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             if (!psb && depth == 8 && !rec.mask.section.empty()) {
                 carry->maskData = rec.mask.section;
                 carry->maskChannels = maskRaw;
-                carry->maskHash = layer.mask ? psdMaskHash(layer.mask->asset.image.get(), layer.mask->enabled) : 0;
+                carry->maskHash = layer.mask ? psdMaskHash(layer.mask->asset.image.u8().get(), layer.mask->enabled) : 0;
             }
             const bool plainBlend = rec.blend == "norm" || (rec.blend == "pass" && layer.isGroup);
             if (carry->blocks.empty() && carry->blendingRanges.empty() && carry->fill == 255 && carry->layerId == 0 && carry->maskData.empty()
@@ -994,7 +994,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                         // for this placement, so they are kept as read (drawing the stack here can take seconds);
                         // moving, scaling or editing the filters draws it (refreshSmartObjectRasters, setSmartFilters).
                         if (smartFiltersDrawable(docCarry->globals, instance)) {
-                            if (layer.asset && layer.asset->image && !layer.asset->image->isEmpty()) {
+                            if (layer.asset && layer.asset->image.u8() && !layer.asset->image.u8()->isEmpty()) {
                                 instance.lock = Lock::None;
                                 keptFiltered = true;
                             } else if (auto filtered = filteredSmartObjectRaster(docCarry->globals, instance, *source->second->image, placement->quad)) {
@@ -1022,8 +1022,8 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                         if (layer.mask && !layer.mask->placement) layer.mask->placement = raster;
                     }
                     instance.placedTransform = layer.transform;
-                    instance.placedWidth = layer.asset->image->width();
-                    instance.placedHeight = layer.asset->image->height();
+                    instance.placedWidth = layer.asset->image.u8()->width();
+                    instance.placedHeight = layer.asset->image.u8()->height();
                     layer.smartImage = layer.asset->image;
                     layer.smartObject = std::move(instance);
                     if (layer.smartObject->locked()) lockedSmartObjects[smartObjectLockDescription(layer.smartObject->lock)]++;

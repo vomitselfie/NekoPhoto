@@ -85,7 +85,7 @@ ContentFillDialog::ContentFillDialog(EditorSession* session, QWidget* parent) : 
     QImage picture = toQImage(*flat).scaled(size, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
     QImage selection(size, QImage::Format_Grayscale8);
     selection.fill(0);
-    if (doc.selection && doc.selection->coverage) selection = toQImage(*doc.selection->coverage).convertToFormat(QImage::Format_Grayscale8).scaled(size);
+    if (doc.selection && doc.selection->coverage.u8()) selection = toQImage(*doc.selection->coverage.u8()).convertToFormat(QImage::Format_Grayscale8).scaled(size);
     canvas_ = new SamplingCanvas(picture, selection);
     // Auto's area, roughly: the neighbourhood the fill searches (twice the selection's size around it, 64 to 384 pixels).
     if (doc.selection) {

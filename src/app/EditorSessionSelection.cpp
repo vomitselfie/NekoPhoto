@@ -53,7 +53,7 @@ void EditorSession::magicWand(QPointF documentPoint, int tolerance, bool contigu
     int x = int(std::floor(documentPoint.x())), y = int(std::floor(documentPoint.y()));
     if (x < 0 || y < 0 || x >= document_->width || y >= document_->height) return;
     const Layer* layer = sampleAllLayers ? nullptr : activeLayer();
-    if (!sampleAllLayers && (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image)) {
+    if (!sampleAllLayers && (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image.u8())) {
         emit notice(tr("The Magic Wand reads the active layer's pixels: select a pixel layer, or turn on Sample All Layers"));
         return;
     }
@@ -134,7 +134,7 @@ void EditorSession::applyWandSession(int tolerance, bool replaceStep) {
     session.revisionAfter = documentRevision_;
     // The unmixed colours belong to this wand selection only when it replaced the selection outright.
     wandLineColours_ = std::move(lineColours);
-    wandLineSelection_ = session.mode == SelectionMode::Replace && document_->selection ? document_->selection->coverage : nullptr;
+    wandLineSelection_ = session.mode == SelectionMode::Replace && document_->selection ? document_->selection->coverage.u8() : nullptr;
     const int next = wandNextTolerance(positive, negative, tolerance);
     emit notice(next < 0 ? tr("Tolerance %1: %L2 pixels").arg(tolerance).arg(count)
                          : tr("Tolerance %1: %L2 pixels; the selection grows next at %3").arg(tolerance).arg(count).arg(next));
@@ -149,7 +149,7 @@ bool EditorSession::retolerateWand(int tolerance) {
 
 void EditorSession::fillSelection(const QColor& color) {
     if (!canEditLayers()) return;
-    const GrayImage* selection = document_->selection && document_->selection->coverage ? document_->selection->coverage.get() : nullptr;
+    const GrayImage* selection = document_->selection && document_->selection->coverage.u8() ? document_->selection->coverage.u8().get() : nullptr;
     if (document_->selection && !selection) return;
     fillThrough(color, selection, 1, QT_TRANSLATE_NOOP("History", "Fill"));
 }
@@ -160,7 +160,7 @@ bool EditorSession::paintBucket(QPointF documentPoint) {
     if (x < 0 || y < 0 || x >= document_->width || y >= document_->height) return false;
     const Layer* layer = activeLayer();
     if (!layer || layer->isGroup || layer->adjustment) return false;
-    const GrayImage* selection = document_->selection && document_->selection->coverage ? document_->selection->coverage.get() : nullptr;
+    const GrayImage* selection = document_->selection && document_->selection->coverage.u8() ? document_->selection->coverage.u8().get() : nullptr;
     if (document_->selection && (!selection || selection->at(x, y) == 0)) return false;   // a click outside the selection fills nothing
     // What the click is compared with: the document as shown, or the active layer's own pixels as placed (an empty
     // layer is all transparent, so it fills everywhere the fill reaches).
@@ -186,7 +186,7 @@ bool EditorSession::paintBucket(QPointF documentPoint) {
 bool EditorSession::patchSelection(int dx, int dy) {
     if (!canEditLayers() || !document_->selection || !document_->selection->coverage || (dx == 0 && dy == 0)) return false;
     const Layer* layer = activeLayer();
-    if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image) return false;
+    if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image.u8()) return false;
     if (isMaskSelected_) { emit error(tr("Patch works on a layer's pixels, not its mask.")); return false; }
     if (smartObjectBlocksPixels(true)) return false;
     // The layer as the canvas shows it; the source is the same pixels shifted by the drag.
@@ -205,7 +205,7 @@ bool EditorSession::patchSelection(int dx, int dy) {
             if (sx >= 0 && sx < shown->width()) std::memcpy(source.pixel(x, y), shown->pixel(sx, sy), 4);
         }
     }
-    const GrayImage& selection = *document_->selection->coverage;
+    const GrayImage& selection = *document_->selection->coverage.u8();
     Image healed = *shown;
     healFrom(healed, source, selection, 1.0f);
     return fillThrough(foregroundColor, &selection, 1, QT_TRANSLATE_NOOP("History", "Patch"), &healed);
@@ -272,9 +272,9 @@ bool EditorSession::fillThrough(const QColor& color, const GrayImage* selection,
 }
 
 void EditorSession::clearSelectedPixelsNow(Layer& layer) {
-    const GrayImage* selection = document_->selection && document_->selection->coverage ? document_->selection->coverage.get() : nullptr;
-    if (!selection || !layer.asset || !layer.asset->image) return;
-    const Image& src = *layer.asset->image;
+    const GrayImage* selection = document_->selection && document_->selection->coverage.u8() ? document_->selection->coverage.u8().get() : nullptr;
+    if (!selection || !layer.asset || !layer.asset->image.u8()) return;
+    const Image& src = *layer.asset->image.u8();
     auto out = std::make_shared<Image>(src);
     // Right after a refined wand selection, on a layer that covers the canvas pixel for pixel: the cleared edge
     // takes the line's own colour (no rim of the old background).
@@ -303,7 +303,7 @@ void EditorSession::clearSelectedPixelsNow(Layer& layer) {
 void EditorSession::clearSelectionPixels() {
     if (!canEditLayers() || smartObjectBlocksPixels(true)) return;
     Layer* layer = activeLayerMutable();
-    if (!layer || layer->isGroup || !layer->asset || !layer->asset->image) return;
+    if (!layer || layer->isGroup || !layer->asset || !layer->asset->image.u8()) return;
     if (!document_->selection || !document_->selection->coverage) return;
     beginEdit(QT_TRANSLATE_NOOP("History", "Clear"));
     clearSelectedPixelsNow(*layer);
@@ -313,7 +313,7 @@ void EditorSession::clearSelectionPixels() {
 
 void EditorSession::nudgeSelection(double dx, double dy) {
     if (!document_ || !document_->selection || !document_->selection->coverage || !canEditLayers()) return;
-    const GrayImage& src = *document_->selection->coverage;
+    const GrayImage& src = *document_->selection->coverage.u8();
     int ix = int(std::lround(dx)), iy = int(std::lround(dy));
     auto moved = std::make_shared<GrayImage>(src.width(), src.height(), 0);
     for (int y = 0; y < src.height(); y++) { int sy = y - iy; if (sy < 0 || sy >= src.height()) continue; for (int x = 0; x < src.width(); x++) { int sx = x - ix; if (sx >= 0 && sx < src.width()) moved->at(x, y) = src.at(sx, sy); } }
@@ -328,11 +328,11 @@ void EditorSession::loadLayerAsSelection(const Uuid& id, bool mask, SelectionMod
     if (!layer) return;
     std::shared_ptr<GrayImage> shape;
     if (mask) {
-        if (!layer->mask || !layer->mask->asset.image) return;
+        if (!layer->mask || !layer->mask->asset.image.u8()) return;
         shape = std::make_shared<GrayImage>(document_->width, document_->height, 0);
-        sampleMaskCoverage(*layer->mask->asset.image, layer->maskTransform(), document_->rect(), 1, 0, *shape, false);
+        sampleMaskCoverage(*layer->mask->asset.image.u8(), layer->maskTransform(), document_->rect(), 1, 0, *shape, false);
     } else {
-        if (!layer->asset || !layer->asset->image) return;
+        if (!layer->asset || !layer->asset->image.u8()) return;
         shape = coverageFromLayer(*document_, *layer);
     }
     applySelectionShape(*shape, mode, mask ? QT_TRANSLATE_NOOP("History", "Load Mask as Selection") : QT_TRANSLATE_NOOP("History", "Load Layer as Selection"));
@@ -346,21 +346,21 @@ void EditorSession::selectionExpand(int amount) {
 void EditorSession::selectionFeather(double radius) {
     if (!document_ || !document_->selection || !document_->selection->coverage || !(radius > 0) || radius > 250) return;
     Selection s = *document_->selection;
-    s.coverage = featherSelection(*s.coverage, radius);
+    s.coverage = featherSelection(*s.coverage.u8(), radius);
     setSelection(s, QT_TRANSLATE_NOOP("History", "Feather Selection"));
 }
 
 void EditorSession::selectionSmooth(int radius) {
     if (!document_ || !document_->selection || !document_->selection->coverage || radius <= 0 || radius > 100) return;
     Selection s = *document_->selection;
-    s.coverage = smoothSelection(*s.coverage, radius);
+    s.coverage = smoothSelection(*s.coverage.u8(), radius);
     setSelection(s, QT_TRANSLATE_NOOP("History", "Smooth Selection"));
 }
 
 void EditorSession::selectionBorder(int width) {
     if (!document_ || !document_->selection || !document_->selection->coverage || width <= 0 || width > 200) return;
     Selection s = *document_->selection;
-    s.coverage = borderSelection(*s.coverage, width);
+    s.coverage = borderSelection(*s.coverage.u8(), width);
     setSelection(s, QT_TRANSLATE_NOOP("History", "Border Selection"));
 }
 

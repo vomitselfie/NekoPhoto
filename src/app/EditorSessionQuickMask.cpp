@@ -32,7 +32,7 @@ bool EditorSession::beginQuickMask() {
     // Red over what is not selected; with no selection, nothing is masked yet.
     auto mask = std::make_shared<GrayImage>(w, h, 0);
     if (document_->selection && document_->selection->coverage) {
-        const GrayImage& selected = *document_->selection->coverage;
+        const GrayImage& selected = *document_->selection->coverage.u8();
         for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) mask->at(x, y) = uint8_t(255 - selected.at(x, y));
     }
     beginEdit(QT_TRANSLATE_NOOP("History", "Quick Mask"));
@@ -59,11 +59,11 @@ bool EditorSession::endQuickMask() {
     const Layer* layer = document_->find(*quickMaskLayer_);
     const int w = document_->width, h = document_->height;
     std::optional<Selection> selection;
-    if (layer->mask && layer->mask->asset.image) {
+    if (layer->mask && layer->mask->asset.image.u8()) {
         // The mask as it sits on the canvas (it may have been moved), inverted: what is not masked is selected.
         const uint8_t background = LayerMask::background(*layer->mask->asset.thumbnail);
         auto masked = std::make_shared<GrayImage>(w, h, background);
-        sampleMaskCoverage(*layer->mask->asset.image, layer->maskTransform(), document_->rect(), 1, background, *masked, false);
+        sampleMaskCoverage(*layer->mask->asset.image.u8(), layer->maskTransform(), document_->rect(), 1, background, *masked, false);
         bool all = true, none = true;
         for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++) {

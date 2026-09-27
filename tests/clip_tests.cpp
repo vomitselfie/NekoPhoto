@@ -180,9 +180,9 @@ TEST_CASE(clip_layers_folders_clipping_masks_and_placement_come_through) {
     CHECK(base.name == "Base" && group.name == "Group" && moved.name == "Moved" && shade.name == "Shade" && hidden.name == "Hidden");
     // Base, cropped to its blue 200 columns.
     REQUIRE(base.asset.has_value());
-    CHECK_EQ(base.asset->image->width(), 200);
-    CHECK_EQ(base.asset->image->height(), 260);
-    CHECK_EQ(int(base.asset->image->pixel(10, 10)[2]), 255);
+    CHECK_EQ(base.asset->image.u8()->width(), 200);
+    CHECK_EQ(base.asset->image.u8()->height(), 260);
+    CHECK_EQ(int(base.asset->image.u8()->pixel(10, 10)[2]), 255);
     // The folder and its children.
     CHECK(group.isGroup);
     CHECK(moved.parentId == group.id && shade.parentId == group.id && !base.parentId && !hidden.parentId);
@@ -190,14 +190,14 @@ TEST_CASE(clip_layers_folders_clipping_masks_and_placement_come_through) {
     REQUIRE(moved.asset.has_value());
     CHECK_EQ(moved.transform.origin.x, 44.0);
     CHECK_EQ(moved.transform.origin.y, 50.0);
-    CHECK_EQ(moved.asset->image->width(), 40);
-    CHECK_EQ(int(moved.asset->image->pixel(5, 5)[0]), 255);
+    CHECK_EQ(moved.asset->image.u8()->width(), 40);
+    CHECK_EQ(int(moved.asset->image.u8()->pixel(5, 5)[0]), 255);
     // Its mask covers its pixels: canvas x < 64 shows (the square's first 20 columns), the rest is hidden.
     REQUIRE(moved.mask.has_value());
     CHECK(moved.mask->enabled);
-    CHECK_EQ(moved.mask->asset.image->width(), 40);
-    CHECK_EQ(int(moved.mask->asset.image->at(10, 5)), 255);
-    CHECK_EQ(int(moved.mask->asset.image->at(30, 5)), 0);
+    CHECK_EQ(moved.mask->asset.image.u8()->width(), 40);
+    CHECK_EQ(int(moved.mask->asset.image.u8()->at(10, 5)), 255);
+    CHECK_EQ(int(moved.mask->asset.image.u8()->at(30, 5)), 0);
     // Shade: clipped to Moved, Multiply, half opacity.
     CHECK(shade.maskSourceId == moved.id);
     CHECK(shade.blendMode == BlendMode::Multiply);

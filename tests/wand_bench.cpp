@@ -281,14 +281,14 @@ int main(int argc, char** argv) {
             GrayImage m(N, N, 0); thresholdWandField(field, t, true, m);
             Selection s; s.coverage = std::make_shared<GrayImage>(m);
             Selection grown = resizeSelection(s, 2);
-            auto smooth = smoothSelection(*grown.coverage, 3);
+            auto smooth = smoothSelection(*grown.coverage.u8(), 3);
             return score(clearPlain(*smooth));
         });
         report("classic wand, expand 2, smooth 3, delete", [&](int t) {
             GrayImage m(N, N, 0); wandMask(image, 5, 5, 1, t, true, m);
             Selection s; s.coverage = std::make_shared<GrayImage>(m);
             Selection grown = resizeSelection(s, 2);
-            auto smooth = smoothSelection(*grown.coverage, 3);
+            auto smooth = smoothSelection(*grown.coverage.u8(), 3);
             return score(clearPlain(*smooth));
         });
         report("wand, refined edge, delete", [&](int t) { GrayImage m(N, N, 0); thresholdWandField(field, t, true, m); refineWandEdge(image, m, 3); return score(clearPlain(m)); });
@@ -303,7 +303,7 @@ int main(int argc, char** argv) {
             writePngImage(std::string(argv[2]) + "/lines-clean.png", out, 72, nullptr);
             GrayImage m2(N, N, 0); thresholdWandField(field, 32, true, m2);
             Selection s; s.coverage = std::make_shared<GrayImage>(m2);
-            auto smooth = smoothSelection(*resizeSelection(s, 2).coverage, 3);
+            auto smooth = smoothSelection(*resizeSelection(s, 2).coverage.u8(), 3);
             writePngImage(std::string(argv[2]) + "/lines-routine.png", clearPlain(*smooth), 72, nullptr);
         }
         return 0;

@@ -270,8 +270,8 @@ private:
     /// The layer's mask over `rect` (document pixels): a copy when it lies on the layer's own pixel grid,
     /// else sampled the way the renderer samples it.
     void setMask(Record& r, const Layer& layer, const Rect& rect, bool onGrid) const {
-        if (!layer.mask || !layer.mask->asset.image || rect.isEmpty()) return;
-        const GrayImage& mask = *layer.mask->asset.image;
+        if (!layer.mask || !layer.mask->asset.image.u8() || rect.isEmpty()) return;
+        const GrayImage& mask = *layer.mask->asset.image.u8();
         r.mask = true;
         r.maskLeft = int(rect.x); r.maskTop = int(rect.y); r.maskRight = int(rect.x + rect.width); r.maskBottom = int(rect.y + rect.height);
         r.maskFlags = layer.mask->enabled ? 0 : 2;
@@ -284,7 +284,7 @@ private:
             r.maskDefault = 0;
             if (encode_) {
                 GrayImage sampled(w, h, 0);
-                sampleMaskCoverage(layer.mask->asset.image, layer.mask->placement ? *layer.mask->placement : layer.transform, rect, 1.0, 0, sampled, false);
+                sampleMaskCoverage(layer.mask->asset.image.u8(), layer.mask->placement ? *layer.mask->placement : layer.transform, rect, 1.0, 0, sampled, false);
                 for (int y = 0; y < h; y++) std::memcpy(plane.data() + size_t(y) * w, sampled.row(y), size_t(w));
             }
         }
@@ -301,7 +301,7 @@ private:
         const LayerTransform& t = l.transform;
         const bool placementKept = c.placement.origin == t.origin && c.placement.size == t.size && c.placement.rotation == t.rotation
             && c.placement.flipX == t.flipX && c.placement.flipY == t.flipY;
-        const bool contentKept = sameContent && placementKept && c.contentHash == psdContentHash(l.asset ? l.asset->image.get() : nullptr);
+        const bool contentKept = sameContent && placementKept && c.contentHash == psdContentHash(l.asset ? l.asset->image.u8().get() : nullptr);
         std::set<std::string> dropped;
         for (const PsdBlock& block : c.blocks) {
             const auto binding = PsdLayerCarry::binding(block.key);
@@ -334,7 +334,7 @@ private:
         if (r.section == 1 && c.closedFolder) r.section = 2;
         // Opacity and Fill as they were while the combined opacity is unchanged; else ours alone.
         if (std::abs(l.opacity - c.opacity / 255.0 * (c.fill / 255.0)) < 0.5 / 255) { r.opacity = c.opacity; r.fill = c.fill; }
-        const uint64_t maskHash = l.mask ? psdMaskHash(l.mask->asset.image.get(), l.mask->enabled) : 0;
+        const uint64_t maskHash = l.mask ? psdMaskHash(l.mask->asset.image.u8().get(), l.mask->enabled) : 0;
         // The stored mask channels are PSD's (16-bit row counts): as they are into a PSD only.
         if (!options_.large && !c.maskData.empty() && placementKept && maskHash == c.maskHash && !dropped.count("vmsk") && !dropped.count("vsms")) {
             r.rawMask = c.maskData;
@@ -731,7 +731,7 @@ private:
 
     void emitPixels(const Layer& l) {
         Record r = base(l);
-        const bool hasPixels = l.asset && l.asset->image && !l.asset->image->isEmpty();
+        const bool hasPixels = l.asset && l.asset->image.u8() && !l.asset->image.u8()->isEmpty();
         std::optional<PsdTextMetrics> textMetrics;
         if (l.isLiveText() && options_.textMetrics) textMetrics = options_.textMetrics(*l.text);
         if (l.isLiveText() && !textMetrics) summary_.notes.push_back("Text \"" + l.name + "\" is written as pixels; it stays editable text in the NekoPhoto project.");
@@ -748,7 +748,7 @@ private:
             records_.push_back(std::move(r));
             return;
         }
-        const Image& image = *l.asset->image;
+        const Image& image = *l.asset->image.u8();
         const LayerTransform& t = l.transform;
         const bool onGrid = t.rotation == 0 && !t.flipX && !t.flipY && t.origin.x == std::round(t.origin.x) && t.origin.y == std::round(t.origin.y)
             && t.size.width == image.width() && t.size.height == image.height();
@@ -785,7 +785,7 @@ private:
             const Rect bounds = t.bounds().integral();
             if (encode_ && !bounds.isEmpty()) {
                 LayerTransform target(Point(bounds.x, bounds.y), Size(bounds.width, bounds.height));
-                auto placed = resampleLayer(l.asset->image, t, target, int(bounds.width), int(bounds.height));
+                auto placed = resampleLayer(l.asset->image.u8(), t, target, int(bounds.width), int(bounds.height));
                 setPixels(r, *placed, int(bounds.x), int(bounds.y));
             } else { r.left = int(bounds.x); r.top = int(bounds.y); r.right = int(bounds.x + bounds.width); r.bottom = int(bounds.y + bounds.height); }
             setMask(r, l, bounds, false);

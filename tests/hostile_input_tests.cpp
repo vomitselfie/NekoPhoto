@@ -76,7 +76,7 @@ TEST_CASE(gif_frame_pixels_outside_the_canvas_are_dropped) {
     auto imported = importGifBytes(gif);
     REQUIRE(imported.has_value());
     REQUIRE(imported->document.layers.size() == size_t(1));
-    const Image& frame = *imported->document.layers[0].asset->image;
+    const Image& frame = *imported->document.layers[0].asset->image.u8();
     CHECK_EQ(frame.width(), 2);
     CHECK_EQ(int(frame.pixel(0, 0)[0]), 60);
     CHECK_EQ(int(frame.pixel(1, 0)[0]), 60);
@@ -289,8 +289,8 @@ TEST_CASE(svg_shape_pixels_stay_near_the_canvas) {
     REQUIRE(imported->document.layers.size() == size_t(4));
     for (const Layer& l : imported->document.layers) {
         REQUIRE(l.asset.has_value());
-        CHECK(l.asset->image->width() <= 40);    // once 30000 x 30000 each
-        CHECK(l.asset->image->height() <= 40);
+        CHECK(l.asset->image.u8()->width() <= 40);    // once 30000 x 30000 each
+        CHECK(l.asset->image.u8()->height() <= 40);
     }
 }
 
@@ -309,8 +309,8 @@ TEST_CASE(vector_shapes_with_non_finite_geometry_get_a_small_place) {
     shape.stroke.width = inf;
     setVectorShape(layer, doc, shape);
     REQUIRE(layer.asset.has_value());
-    CHECK(layer.asset->image->width() <= 30000);
-    CHECK((long long)layer.asset->image->width() * layer.asset->image->height() <= Document::pixelBudget);
+    CHECK(layer.asset->image.u8()->width() <= 30000);
+    CHECK((long long)layer.asset->image.u8()->width() * layer.asset->image.u8()->height() <= Document::pixelBudget);
 }
 
 TEST_MAIN()

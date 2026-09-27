@@ -53,8 +53,8 @@ ContentAwareScaleDialog::ContentAwareScaleDialog(EditorSession* session, QWidget
     // A reduced copy of the layer (and of the selection over it) for the preview.
     const Document* doc = session_->document() ? &*session_->document() : nullptr;
     const Layer* layer = session_->activeLayer();
-    if (doc && layer && !layer->isGroup && layer->asset && layer->asset->image) {
-        const Image& src = *layer->asset->image;
+    if (doc && layer && !layer->isGroup && layer->asset && layer->asset->image.u8()) {
+        const Image& src = *layer->asset->image.u8();
         pixelWidth_ = src.width(); pixelHeight_ = src.height();
         const double f = std::min(1.0, double(previewSide) / std::max(pixelWidth_, pixelHeight_));
         const int tw = std::max(1, int(std::lround(pixelWidth_ * f))), th = std::max(1, int(std::lround(pixelHeight_ * f)));
@@ -64,7 +64,7 @@ ContentAwareScaleDialog::ContentAwareScaleDialog(EditorSession* session, QWidget
             std::memcpy(thumb_->pixel(x, y), src.pixel(sx, sy), 4);
         }
         if (doc->selection && doc->selection->coverage) {
-            const GrayImage& cov = *doc->selection->coverage;
+            const GrayImage& cov = *doc->selection->coverage.u8();
             const Affine toDoc = layer->transform.pixelToDocument(pixelWidth_, pixelHeight_);
             thumbProtect_ = std::make_shared<GrayImage>(tw, th, 0);
             for (int y = 0; y < th; y++) for (int x = 0; x < tw; x++) {

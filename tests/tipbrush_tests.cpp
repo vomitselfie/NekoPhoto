@@ -37,7 +37,7 @@ struct Painting {
     TipStroke tip;
     Painting(const Layer& layer, const BrushTip& t, double diameter, const GrayImage* selection = nullptr)
         : grid(layer, false, black(diameter), Size(layer.pixelWidth(), layer.pixelHeight()), selection), tip(grid, t, diameter) {}
-    std::shared_ptr<const Image> finish() { grid.flush(); return grid.commit().asset->image; }
+    std::shared_ptr<const Image> finish() { grid.flush(); return grid.commit().asset->image.u8(); }
 };
 
 int dark(const Image& image, int x0, int y0, int x1, int y1) {

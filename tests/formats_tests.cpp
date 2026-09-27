@@ -97,14 +97,14 @@ TEST_CASE(ico_round_trip) {
         CHECK_EQ(doc.layers[i].visible, i == 3);
     }
     // 32 px: the 64x32 source becomes 32x16, rows 8..23; the rest is clear.
-    const Image& s32 = *doc.layers[1].asset->image;
+    const Image& s32 = *doc.layers[1].asset->image.u8();
     CHECK_EQ(s32.width(), 32);
     CHECK_EQ(int(s32.pixel(0, 7)[3]), 0);
     CHECK_EQ(int(s32.pixel(0, 8)[3]), 200);
     CHECK_EQ(int(s32.pixel(31, 23)[2]), 200);
     CHECK_EQ(int(s32.pixel(31, 24)[3]), 0);
     // The 256 px entry is PNG and keeps partial alpha exactly.
-    const Image& s256 = *doc.layers[3].asset->image;
+    const Image& s256 = *doc.layers[3].asset->image.u8();
     CHECK_EQ(int(s256.pixel(128, 128)[3]), 200);
 
     // An opened icon exports its own sizes back unchanged.
@@ -112,7 +112,7 @@ TEST_CASE(ico_round_trip) {
     REQUIRE(encodeIco(source, {16, 32}, again, nullptr, &doc));
     auto reopened = importIcoBytes(again);
     REQUIRE(reopened && reopened->document.layers.size() == 2);
-    CHECK(*reopened->document.layers[1].asset->image == s32);
+    CHECK(*reopened->document.layers[1].asset->image.u8() == s32);
 }
 
 namespace {
@@ -188,7 +188,7 @@ TEST_CASE(gif_frames_become_layers) {
     CHECK_EQ(doc.layers[2].name, std::string("Frame 3 (0 ms)"));
     CHECK(doc.layers[0].visible && !doc.layers[1].visible && !doc.layers[2].visible);
     CHECK(imported->notes.empty());
-    const Image& f1 = *doc.layers[0].asset->image;
+    const Image& f1 = *doc.layers[0].asset->image.u8();
     bool matches = true;
     const uint8_t colours[3][3] = {{255, 0, 0}, {0, 0, 255}, {0, 255, 0}};
     for (int i = 0; i < 400; i++) {
@@ -197,12 +197,12 @@ TEST_CASE(gif_frames_become_layers) {
         matches = matches && p[0] == c[0] && p[1] == c[1] && p[2] == c[2] && p[3] == 255;
     }
     CHECK(matches);
-    const Image& f2 = *doc.layers[1].asset->image;
+    const Image& f2 = *doc.layers[1].asset->image.u8();
     CHECK_EQ(int(f2.pixel(5, 5)[2]), 255);
     CHECK(std::memcmp(f2.pixel(6, 5), f1.pixel(6, 5), 4) == 0);
     CHECK_EQ(int(f2.pixel(5, 6)[1]), 255);
     // Frame 2 disposed to background: its patch is clear under frame 3, apart from frame 3's own pixel.
-    const Image& f3 = *doc.layers[2].asset->image;
+    const Image& f3 = *doc.layers[2].asset->image.u8();
     CHECK_EQ(int(f3.pixel(5, 5)[1]), 255);
     CHECK_EQ(int(f3.pixel(6, 6)[3]), 0);
     CHECK(std::memcmp(f3.pixel(0, 0), f1.pixel(0, 0), 4) == 0);
@@ -278,7 +278,7 @@ TEST_CASE(aseprite_first_frame_layers) {
     CHECK_NEAR(shade.opacity, 128 / 255.0, 1e-9);
     CHECK_EQ(shade.origin().x, 3.0);
     CHECK_EQ(shade.origin().y, -1.0);
-    const Image& pixels = *shade.asset->image;
+    const Image& pixels = *shade.asset->image.u8();
     CHECK_EQ(int(pixels.pixel(0, 0)[0]), 255);
     CHECK_EQ(int(pixels.pixel(1, 0)[1]), 128);   // premultiplied
     CHECK_EQ(int(pixels.pixel(0, 1)[3]), 0);
@@ -382,11 +382,11 @@ TEST_CASE(gif_encoder_round_trips_through_the_reader) {
         for (int y = 0; y < a.height(); y++) if (std::memcmp(a.row(y), b.row(y), size_t(a.width()) * 4) != 0) return false;
         return true;
     };
-    CHECK(same(*doc.layers[0].asset->image, f1));
-    CHECK(same(*doc.layers[2].asset->image, f3));
+    CHECK(same(*doc.layers[0].asset->image.u8(), f1));
+    CHECK(same(*doc.layers[2].asset->image.u8(), f3));
     // The ramp comes back close.
     int worst = 0;
-    const Image& r2 = *doc.layers[1].asset->image;
+    const Image& r2 = *doc.layers[1].asset->image.u8();
     for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++)
             for (int c = 0; c < 4; c++) worst = std::max(worst, std::abs(int(r2.pixel(x, y)[c]) - int(f2.pixel(x, y)[c])));
@@ -410,7 +410,7 @@ TEST_CASE(gif_encoder_round_trips_through_the_reader) {
     auto reread = importGifBytes(again);
     REQUIRE(reread);
     CHECK_EQ(reread->document.animation.frames.size(), size_t(3));
-    CHECK(same(*reread->document.layers[0].asset->image, f1));
+    CHECK(same(*reread->document.layers[0].asset->image.u8(), f1));
     Image odd(3, 3);
     CHECK(encodeGif({{&f1, 10}, {&odd, 10}}, 0, &error).empty());
 }

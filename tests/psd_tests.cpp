@@ -169,7 +169,7 @@ TEST_CASE(psd_layers_folders_masks_and_blends_come_through) {
     REQUIRE(doc.layers.size() == 5u);
     const Layer& background = doc.layers[0];
     CHECK_EQ(background.name, std::string("Background"));
-    CHECK_EQ(int(background.asset->image->pixel(3, 3)[0]), 255);
+    CHECK_EQ(int(background.asset->image.u8()->pixel(3, 3)[0]), 255);
     const Layer& group = doc.layers[1];
     CHECK(group.isGroup);
     CHECK_EQ(group.name, std::string("Group A"));
@@ -181,12 +181,12 @@ TEST_CASE(psd_layers_folders_masks_and_blends_come_through) {
     CHECK_NEAR(blueLayer.opacity, 200 / 255.0, 1e-9);
     CHECK_NEAR(blueLayer.transform.origin.x, 2, 1e-9);
     CHECK_NEAR(blueLayer.transform.origin.y, 1, 1e-9);
-    CHECK_EQ(blueLayer.asset->image->width(), 4);
-    CHECK_EQ(int(blueLayer.asset->image->pixel(0, 0)[3]), 128);       // alpha from channel -1
-    CHECK_EQ(int(blueLayer.asset->image->pixel(0, 0)[2]), 128);       // premultiplied blue
+    CHECK_EQ(blueLayer.asset->image.u8()->width(), 4);
+    CHECK_EQ(int(blueLayer.asset->image.u8()->pixel(0, 0)[3]), 128);       // alpha from channel -1
+    CHECK_EQ(int(blueLayer.asset->image.u8()->pixel(0, 0)[2]), 128);       // premultiplied blue
     REQUIRE(blueLayer.mask.has_value());
-    CHECK_EQ(int(blueLayer.mask->asset.image->at(0, 0)), 0);           // inside the mask rect
-    CHECK_EQ(int(blueLayer.mask->asset.image->at(3, 0)), 255);         // beyond it: the default
+    CHECK_EQ(int(blueLayer.mask->asset.image.u8()->at(0, 0)), 0);           // inside the mask rect
+    CHECK_EQ(int(blueLayer.mask->asset.image.u8()->at(3, 0)), 255);         // beyond it: the default
     const Layer& clippedLayer = doc.layers[3];
     CHECK(clippedLayer.maskSourceId == std::optional<Uuid>(blueLayer.id));
     CHECK(!clippedLayer.visible);
@@ -221,7 +221,7 @@ TEST_CASE(psd_without_layers_becomes_one_background_layer) {
     REQUIRE(imported.has_value());
     REQUIRE(imported->document.layers.size() == 1u);
     CHECK_EQ(imported->document.layers[0].name, std::string("Background"));
-    CHECK_EQ(int(imported->document.layers[0].asset->image->pixel(2, 2)[1]), 200);
+    CHECK_EQ(int(imported->document.layers[0].asset->image.u8()->pixel(2, 2)[1]), 200);
     CHECK(!imported->notes.empty());
     // Not a PSD at all.
     std::string bogus = writeTemp({'h', 'e', 'l', 'l', 'o'}, "bogus.psd");

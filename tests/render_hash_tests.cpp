@@ -441,9 +441,9 @@ std::vector<Point> wave(double x0, double x1, double y, double amp) {
 uint64_t hashCommit(BrushStroke& grid) {
     grid.flush();
     auto commit = grid.commit();
-    NEED(commit.asset && commit.asset->image);
+    NEED(commit.asset && commit.asset->image.u8());
     Fnv f;
-    f.h = hashImage(*commit.asset->image);
+    f.h = hashImage(*commit.asset->image.u8());
     // Where the result lands matters as much as its pixels.
     f.u32(uint32_t(std::lround(commit.transform.origin.x * 64)));
     f.u32(uint32_t(std::lround(commit.transform.origin.y * 64)));
@@ -491,7 +491,7 @@ void addBrushScenes() {
         grid.flush();
         auto commit = grid.commit();
         NEED(commit.mask && commit.mask->image);
-        return hashGray(*commit.mask->image);
+        return hashGray(*commit.mask->image.u8());
     });
     auto tipStroke = [](BrushTip tip, double diameter, bool pressure) {
         Layer layer = paper(260, 160);

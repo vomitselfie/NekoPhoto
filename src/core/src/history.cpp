@@ -98,11 +98,11 @@ size_t DocumentHistory::retainedBytes(const std::optional<Document>& current) co
     std::set<const void*> seen;
     auto note = [&](const Layer& layer, size_t* bytes) {
         if (layer.asset) {
-            for (auto& image : {layer.asset->image, layer.asset->thumbnail})
+            for (auto& image : {layer.asset->image.u8(), layer.asset->thumbnail})
                 if (image && seen.insert(image.get()).second && bytes) *bytes += image->byteCount();
         }
         if (layer.mask) {
-            for (auto& image : {layer.mask->asset.image, layer.mask->asset.thumbnail})
+            for (auto& image : {layer.mask->asset.image.u8(), layer.mask->asset.thumbnail})
                 if (image && seen.insert(image.get()).second && bytes) *bytes += size_t(image->width()) * size_t(image->height());
         }
     };

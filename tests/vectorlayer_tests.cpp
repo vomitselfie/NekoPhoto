@@ -116,7 +116,7 @@ TEST_CASE(a_moved_shape_is_redrawn_on_its_path_and_a_painted_one_is_pixels) {
     CHECK(std::abs(b.width - 40) < 0.5);
     CHECK_EQ(refreshVectorShapes(doc), 0);
     // Painted on: its pixels are no longer the fill, so it is not a shape any more.
-    auto painted = std::make_shared<Image>(*l.asset->image);
+    auto painted = std::make_shared<Image>(*l.asset->image.u8());
     painted->pixel(0, 0)[0] = 1;
     l.asset = Asset::make(painted, "Shape");
     CHECK(!isVectorShapeLayer(l));

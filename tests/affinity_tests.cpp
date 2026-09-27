@@ -334,7 +334,7 @@ TEST_CASE(a_written_document_opens_with_its_layer) {
     // The fully transparent corner is cropped away; what remains starts at the translation.
     CHECK_EQ(l.transform.origin.x, 1.0);
     CHECK_EQ(l.transform.origin.y, 1.0);
-    const Image& img = *l.asset->image;
+    const Image& img = *l.asset->image.u8();
     CHECK_EQ(img.width(), 3);
     CHECK_EQ(img.height(), 2);
     CHECK_EQ(int(img.pixel(1, 0)[1]), 255);        // green, opaque

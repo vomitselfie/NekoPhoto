@@ -129,6 +129,9 @@ public:
     const P8& u8() const { if (auto* p = std::get_if<0>(&v_)) return *p; return none8(); }
     const P16& u16() const { if (auto* p = std::get_if<1>(&v_)) return *p; return none16(); }
     const PF& f32() const { if (auto* p = std::get_if<2>(&v_)) return *p; return noneF(); }
+    /// The buffer's size whatever its depth (0 when there is none): geometry, not pixels.
+    int width() const { return std::visit([](const auto& p) { return p ? p->width() : 0; }, v_); }
+    int height() const { return std::visit([](const auto& p) { return p ? p->height() : 0; }, v_); }
     /// The buffer's address, whatever its depth: an identity for caches and comparisons.
     const void* identity() const { return std::visit([](const auto& p) -> const void* { return p.get(); }, v_); }
     /// Calls `f` with the typed shared pointer held.

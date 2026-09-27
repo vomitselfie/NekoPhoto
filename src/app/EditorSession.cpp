@@ -304,7 +304,7 @@ void EditorSession::cropTo(const QRectF& rectF, const char* action) {
         if (l.mask && l.mask->placement) { l.mask->placement->origin.x -= rect.x; l.mask->placement->origin.y -= rect.y; }
     }
     offsetAnimation(doc, -rect.x, -rect.y);
-    if (doc.selection && doc.selection->coverage) doc.selection->coverage = cropGray(*doc.selection->coverage, int(rect.x), int(rect.y), doc.width, doc.height);
+    if (doc.selection && doc.selection->coverage.u8()) doc.selection->coverage = cropGray(*doc.selection->coverage.u8(), int(rect.x), int(rect.y), doc.width, doc.height);
     document_ = doc;
     endEdit();
     viewport.fit({double(doc.width), double(doc.height)});
@@ -386,15 +386,15 @@ Overrides EditorSession::renderOverrides() const {
             LayerTransform shown = displayedTransform(*layer);
             o.transform = shown;
             if (layer->mask) o.maskPlacement = displayedMaskPlacement(*layer);
-            if (edit.corners && layer->asset && layer->asset->image) {
+            if (edit.corners && layer->asset && layer->asset->image.u8()) {
                 // The layer warped into the pending distortion, at preview size, cached while nothing changes.
                 auto target = distortTarget(*layer, edit);
                 if (!target) continue;
-                GrayPtr maskImage = layer->mask && layer->mask->enabled ? layer->mask->asset.image : nullptr;
+                GrayPtr maskImage = layer->mask && layer->mask->enabled ? layer->mask->asset.image.u8() : nullptr;
                 auto it = distortCache_.find(layer->id);
-                bool fresh = it != distortCache_.end() && it->second.corners == target->second && it->second.transform == target->first && it->second.source == layer->asset->image && it->second.mask == maskImage;
+                bool fresh = it != distortCache_.end() && it->second.corners == target->second && it->second.transform == target->first && it->second.source == layer->asset->image.u8() && it->second.mask == maskImage;
                 if (!fresh) {
-                    DistortCache cache{target->second, target->first, layer->asset->image, maskImage, warpImage(layer->asset->image, target->first, target->second, 2048), nullptr};
+                    DistortCache cache{target->second, target->first, layer->asset->image.u8(), maskImage, warpImage(layer->asset->image.u8(), target->first, target->second, 2048), nullptr};
                     if (cache.image && maskImage && !layer->mask->placement && layer->mask->linked) {
                         auto wm = warpMask(maskImage, target->first, target->second, 0, 2048);
                         if (wm) cache.warpedMask = wm->image;
@@ -446,7 +446,7 @@ Overrides EditorSession::renderOverrides() const {
         // Alt-click on the filter mask: the mask (as it is being painted) in gray over everything.
         const Layer* proxy = document_->find(*filterMaskLayer_);
         auto it = overrides.find(proxy->id);
-        GrayPtr mask = it != overrides.end() && it->second.maskImage ? *it->second.maskImage : (proxy->mask ? proxy->mask->asset.image : nullptr);
+        GrayPtr mask = it != overrides.end() && it->second.maskImage ? *it->second.maskImage : (proxy->mask ? proxy->mask->asset.image.u8() : nullptr);
         if (mask) {
             if (filterMaskView_.first != mask || stroke_ || gradient_) {
                 auto gray = std::make_shared<Image>(mask->width(), mask->height());

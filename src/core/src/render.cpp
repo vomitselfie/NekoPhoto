@@ -158,7 +158,7 @@ void drawLayer(const DrawParams& params, const Rect& region, double scale, const
     GrayPtr maskHold;
     std::optional<LayerTransform> maskPlacement;
     if (params.mask && params.mask->enabled) {
-        maskHold = params.maskImage ? params.maskImage : params.mask->asset.image;
+        maskHold = params.maskImage ? params.maskImage : params.mask->asset.image.u8();
         mask = maskHold.get();
         maskPlacement = params.maskPlacement ? params.maskPlacement : params.mask->placement;
         if (maskPlacement && maskPlacement->samePlacement(params.layerTransformForMask)) maskPlacement.reset();
@@ -358,7 +358,7 @@ bool resizeDocument(Document& document, int width, int height, double resolution
             const LayerTransform old = layer.transform;
             layer.transform = old.placing(old.unitToDocument().concatenating(scale));
             layer.transform.sampling = old.sampling;
-            if (layer.mask && layer.mask->asset.image) {
+            if (layer.mask && layer.mask->asset.image.u8()) {
                 const LayerTransform placement = layer.mask->placement.value_or(old);
                 layer.mask->placement = placement.placing(placement.unitToDocument().concatenating(scale));
             }
@@ -374,7 +374,7 @@ bool resizeDocument(Document& document, int width, int height, double resolution
         LayerTransform box(Point(left, top), Size(w, h));
         box.sampling = sampling;
         if (!box.isValid()) return false;
-        if (layer.asset && layer.asset->image) {
+        if (layer.asset && layer.asset->image.u8()) {
             if (w > 30000 || h > 30000 || (long long)w * h > Document::pixelBudget || (long long)w * h > Document::projectPixelBudget - used) return false;
             used += (long long)w * h;
             // Shear can't be expressed as a LayerTransform, so resample through the scaled corner mapping directly.
@@ -382,15 +382,15 @@ bool resizeDocument(Document& document, int width, int height, double resolution
             for (size_t i = 0; i < 4; i++) corners[i] = {c[i].x * sx, c[i].y * sy};
             LayerTransform sampled = layer.transform;
             sampled.sampling = sampling;   // the dialog's choice, not the layer's own
-            auto warped = warpImage(layer.asset->image, sampled, corners, 0);
+            auto warped = warpImage(layer.asset->image.u8(), sampled, corners, 0);
             if (!warped) return false;
             layer.asset = Asset::make(warped->image, layer.name);
             layer.shapeImage.reset();
             box = warped->transform;
             box.sampling = sampling;
         }
-        if (layer.mask && layer.mask->asset.image) {
-            const GrayImage& mask = *layer.mask->asset.image;
+        if (layer.mask && layer.mask->asset.image.u8()) {
+            const GrayImage& mask = *layer.mask->asset.image.u8();
             if (layer.mask->placement) layer.mask->placement = layer.mask->placement->placing(layer.mask->placement->unitToDocument().concatenating(scale));
             else if (mask.width() > 1 || mask.height() > 1) {
                 if ((long long)w * h > Document::pixelBudget || (long long)w * h > Document::projectPixelBudget - usedMask) return false;
@@ -399,7 +399,7 @@ bool resizeDocument(Document& document, int width, int height, double resolution
                 for (size_t i = 0; i < 4; i++) corners[i] = {c[i].x * sx, c[i].y * sy};
                 LayerTransform sampled = layer.transform;
                 sampled.sampling = sampling;
-                auto warped = warpMask(layer.mask->asset.image, sampled, corners, 0, 0);
+                auto warped = warpMask(layer.mask->asset.image.u8(), sampled, corners, 0, 0);
                 if (!warped) return false;
                 // The warp's bounds equal the box; the pixel grid now matches the layer's.
                 layer.mask->asset = MaskAsset::make(warped->image);
@@ -556,7 +556,7 @@ struct Renderer {
     ImagePtr imageOf(const Layer& l) const {
         auto* o = over(l.id);
         if (o && o->image) return *o->image;
-        return l.asset ? l.asset->image : nullptr;
+        return l.asset ? l.asset->image.u8() : nullptr;
     }
     BlendMode blendOf(const Layer& l) const {
         auto* o = over(l.id);
@@ -571,9 +571,9 @@ struct Renderer {
         auto it = folderCoverage.find(group.id);
         if (it != folderCoverage.end()) return it->second;
         std::shared_ptr<GrayImage> result;
-        if (group.mask && group.mask->enabled && group.mask->asset.image) {
+        if (group.mask && group.mask->enabled && group.mask->asset.image.u8()) {
             result = std::make_shared<GrayImage>(outWidth, outHeight, 0);
-            sampleMaskCoverage(group.mask->asset.image, transformOf(group), region, scale, 0, *result, false);
+            sampleMaskCoverage(group.mask->asset.image.u8(), transformOf(group), region, scale, 0, *result, false);
         }
         // An artboard clips its children to its rectangle.
         if (group.artboard) result = multiply(result, artboardCoverage(*group.artboard));
@@ -714,9 +714,9 @@ struct Renderer {
         }
         // A pixel mask with Photoshop's density or feather: drawn here with them, instead of by drawLayer.
         std::shared_ptr<GrayImage> userCut;
-        if (maskParameters && (maskParameters->userDensity || maskParameters->userFeather) && layer.mask && layer.mask->enabled && layer.mask->asset.image) {
+        if (maskParameters && (maskParameters->userDensity || maskParameters->userFeather) && layer.mask && layer.mask->enabled && layer.mask->asset.image.u8()) {
             userCut = std::make_shared<GrayImage>(outWidth, outHeight, 0);
-            sampleMaskCoverage(layer.mask->asset.image, layer.maskTransform(), region, scale, 0, *userCut, false);
+            sampleMaskCoverage(layer.mask->asset.image.u8(), layer.maskTransform(), region, scale, 0, *userCut, false);
             applyMaskParameters(*userCut, maskParameters->userDensity, maskParameters->userFeather, scale, true);
             if (coverage) for (size_t i = 0; i < userCut->byteCount(); i++) userCut->data()[i] = uint8_t((userCut->data()[i] * coverage->data()[i] + 127) / 255);
             coverage = userCut.get();
@@ -834,9 +834,9 @@ struct Renderer {
         float opacity = float(clamp(layer.opacity, 0.0, 1.0));
         // Clip: the layer's own mask over its transform (and folder masks in `coverage`).
         std::shared_ptr<GrayImage> clip = coverage;
-        if (layer.mask && layer.mask->enabled && layer.mask->asset.image) {
+        if (layer.mask && layer.mask->enabled && layer.mask->asset.image.u8()) {
             auto own = std::make_shared<GrayImage>(outWidth, outHeight, 0);
-            sampleMaskCoverage(layer.mask->asset.image, transformOf(layer), region, scale, 0, *own, false);
+            sampleMaskCoverage(layer.mask->asset.image.u8(), transformOf(layer), region, scale, 0, *own, false);
             clip = multiply(clip, own);
         }
         if (mode == BlendMode::Normal) {
@@ -904,7 +904,7 @@ struct Renderer {
     std::optional<Transfer> fusibleTransfer(const Layer& layer) {
         if (!layer.adjustment || layer.maskSourceId || stacked.count(layer.id)) return std::nullopt;
         if (blendOf(layer) != BlendMode::Normal || clamp(layer.opacity, 0.0, 1.0) < 1) return std::nullopt;
-        if (layer.mask && layer.mask->enabled && layer.mask->asset.image) return std::nullopt;
+        if (layer.mask && layer.mask->enabled && layer.mask->asset.image.u8()) return std::nullopt;
         if (foldersCoverage(layer.parentId)) return std::nullopt;
         AdjustmentSettings settings;
         if (!AdjustmentSettings::parse(layer.adjustment->json, settings)) return std::nullopt;

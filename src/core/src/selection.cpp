@@ -198,17 +198,17 @@ std::optional<Selection> combineSelection(const std::optional<Selection>& curren
         return result;
     case SelectionMode::Add: {
         if (!current || !current->coverage) { result.coverage = std::make_shared<GrayImage>(shape); return result; }
-        result.coverage = combineRows(*current->coverage, shape, [](uint8_t a, uint8_t b) { return std::max(a, b); });
+        result.coverage = combineRows(*current->coverage.u8(), shape, [](uint8_t a, uint8_t b) { return std::max(a, b); });
         return result;
     }
     case SelectionMode::Subtract: {
         if (!current || !current->coverage) return current;
-        result.coverage = combineRows(*current->coverage, shape, [](uint8_t a, uint8_t b) { return uint8_t(a > b ? a - b : 0); });
+        result.coverage = combineRows(*current->coverage.u8(), shape, [](uint8_t a, uint8_t b) { return uint8_t(a > b ? a - b : 0); });
         return result;
     }
     case SelectionMode::Intersect: {
         if (!current || !current->coverage) return current;
-        result.coverage = combineRows(*current->coverage, shape, [](uint8_t a, uint8_t b) { return std::min(a, b); });
+        result.coverage = combineRows(*current->coverage.u8(), shape, [](uint8_t a, uint8_t b) { return std::min(a, b); });
         return result;
     }
     }
@@ -220,7 +220,7 @@ Selection invertSelection(const Selection& selection, int width, int height) {
     auto out = std::make_shared<GrayImage>(width, height, 255);
     if (selection.coverage)
         for (int y = 0; y < height; y++) {
-            const uint8_t* in = selection.coverage->row(y);
+            const uint8_t* in = selection.coverage.u8()->row(y);
             uint8_t* po = out->row(y);
             for (int x = 0; x < width; x++) po[x] = uint8_t(255 - in[x]);
         }
@@ -231,7 +231,7 @@ Selection invertSelection(const Selection& selection, int width, int height) {
 Selection resizeSelection(const Selection& selection, int amount) {
     Selection result = selection;
     if (!selection.coverage || amount == 0) return result;
-    result.coverage = growSelection(*selection.coverage, amount);
+    result.coverage = growSelection(*selection.coverage.u8(), amount);
     return result;
 }
 
@@ -258,8 +258,8 @@ std::vector<std::vector<Point>> selectionOutline(const GrayImage& coverage, bool
 
 std::shared_ptr<GrayImage> coverageFromLayer(const Document& document, const Layer& layer) {
     auto out = std::make_shared<GrayImage>(document.width, document.height);
-    if (!layer.asset || !layer.asset->image) return out;
-    const Image& image = *layer.asset->image;
+    if (!layer.asset || !layer.asset->image.u8()) return out;
+    const Image& image = *layer.asset->image.u8();
     const LayerTransform& t = layer.transform;
     // Pixels sitting on the document grid at whole coordinates: copy their alpha straight across.
     bool onGrid = t.rotation == 0 && !t.flipX && !t.flipY && t.size.width == image.width() && t.size.height == image.height()
@@ -277,7 +277,7 @@ std::shared_ptr<GrayImage> coverageFromLayer(const Document& document, const Lay
     Image pixels(document.width, document.height);
     {
         DrawParams params;
-        params.image = layer.asset->image;
+        params.image = layer.asset->image.u8();
         params.transform = layer.transform;
         params.layerTransformForMask = layer.transform;
         drawLayer(params, document.rect(), 1, nullptr, pixels);
