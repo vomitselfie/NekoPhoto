@@ -411,6 +411,15 @@ def sixteen_bit(rpc):
     rpc.call("gradient.draw", x0=0, y0=0, x1=0, y1=80)
     assert rpc.call("history.info")["undo"] == "Gradient Mask"
     rpc.call("layers.select", id=layer["id"])
+    # Quick Mask painting: white selects, at 16 bits.
+    rpc.call("selection.rect", x=10, y=10, width=10, height=10)
+    assert rpc.call("selection.quickMask", on=True)["quickMask"]
+    rpc.call("brush.stroke", points=[[40, 60], [90, 60]], size=16, mask=True)
+    assert not rpc.call("selection.quickMask", on=False)["quickMask"]
+    grown = rpc.call("selection.info")
+    assert grown["active"] and grown["bounds"]["width"] > 60, grown
+    rpc.call("selection.none")
+    rpc.call("layers.select", id=layer["id"])
     if rpc.call("brush.presets")["supported"]:
         assert rpc.call("brush.stroke", points=[[30, 40], [100, 45]], preset="classic/pencil", pressures=[0.3, 0.9], color="#000000")["preset"] == "classic/pencil"
     # Apply Mask and Merge Down at 16 bits.

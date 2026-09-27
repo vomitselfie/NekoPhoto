@@ -224,8 +224,10 @@ stations along it (pixels at 10% alpha or more), the peak alpha at each, the mea
 
 **Baseline.** `brush_parity` (a ctest) paints every fixture with every preset, on the worker pool and serially (the two
 must agree), and holds each render's FNV-1a hash to `tests/brush_parity_baseline.txt`, which also carries the
-measurements so a change shows how a stroke moved, not only that it did. `COMPOSITOR_UPDATE_BRUSH_PARITY=1
-build/tests/brush_parity` rewrites it after an intentional change. GCC and Clang builds produce the same file. The test
+measurements so a change shows how a stroke moved, not only that it did. A second section, `u16/<fixture>/<preset>`,
+holds the same scenes painted on a 16-bit layer (see 16 bits above); each test rewrites only its own section.
+`COMPOSITOR_UPDATE_BRUSH_PARITY=1 build/tests/brush_parity` rewrites it after an intentional change. GCC and Clang
+builds produce the same file. The test
 also checks sample derivation (unwrapping, speed, progress), the density option across 2–50% spacing, and the mouse
 speed option.
 
@@ -243,10 +245,40 @@ targets, the inputs and the migration of old presets.
 Any pen field makes the stroke a stylus's. A recorded action keeps them (and, for a preset, the times and the seed), so
 a stroke replays exactly.
 
+## 16 bits
+
+A stroke on a 16-bit document (`BrushStroke(layer, mask, settings, canvas, SampleType::U16, selection)`, in
+`brush_u16.cpp`) keeps everything at 0..32768: the working pixels or mask, the coverage grid, the selection, the dab
+profile table and the stamps. The samples and the dynamics are depth-free doubles, so every engine places the same
+dabs at either depth; only what a dab writes differs:
+
+- **Round tip.** The dab table holds 15-bit values; hard tips merge by max, soft ones by screen
+  (`old + v × (1 − old)`, rounded at 15 bits), and the recompose is `base + (colour − base) × coverage × opacity` in
+  15-bit integers.
+- **Tip brushes.** `TipStroke::dab` writes the grid's own depth: each dab's alpha builds up towards its opacity at 15
+  bits, and density by spacing has a table entry per 15-bit level (kept while the spacing ratio stays the same) instead
+  of 256.
+- **MyPaint.** libmypaint paints in 15-bit fixed point, which is the 16-bit document's range: a 16-bit layer's pixels
+  go into its tiles as they are and come back as they are, so a MyPaint stroke on an 8-bit layer converted to 16 bits
+  reduces to exactly the 8-bit stroke.
+- **The rest of the stroke:** the eraser, masks and the Quick Mask, clone and processed sources (Clone Stamp, the
+  Healing Brush, Blur, Sharpen, Dodge, Burn and Sponge read a 16-bit sample, or a `TiledSource16` rendered and
+  processed at 16 bits), Smudge and Liquify (`WarpStroke` on a 16-bit image), gradients, lifting and moving selected
+  pixels, healing, the preview (the renderer's `image16` and `maskImage16` overrides, and `MipCache` refreshing its
+  16-bit levels in place) and the commit.
+
+Against the 8-bit stroke on the same 8-bit-sourced layer, reduced to 8 bits: hard tips, MyPaint, clones, the healers,
+toning, gradients and moved pixels are within a level. Soft tips and tip brushes differ by up to a few levels in a
+small share of samples (at most 4 levels and 0.72% of samples in `depth_paint_tests`; 5 levels and 0.88% for a light
+flow with density by spacing at 2% spacing in the parity harness): the 8-bit coverage rounds to 1/255 at every dab of a
+screen build-up, and against the exact coverage in double precision the 8-bit stroke is up to 3 levels off in about
+0.9% of its pixels where the 16-bit one is within a level. Density by spacing holds the interior alpha within 0.2%
+across 2–50% spacing at 16 bits (1.2% at 8).
+
+The parity harness paints every scene again on a 16-bit layer (`render16`) and holds its 16-bit samples to the
+baseline's `u16/` section, with each scene's distance from its 8-bit render (`vs8=`).
+
 ## Not yet
 
-- **16 bits.** The tip engine's coverage is 8-bit (`GrayImage`) like the round tip's. The samples and the dynamics are
-  plain doubles and do not assume a depth; the parts to port are `TipStroke::dab` (the coverage write and the density
-  table, 256 entries today) and the coverage grid it writes into, which the 16-bit brush work brings.
 - Clip Studio's effector curves, texture coordinate modes (canvas, stroke, dab), tilt and twist shaping the tip's
   geometry, stabilisation, a continuous swept round brush, and MyPaint's newer inputs.

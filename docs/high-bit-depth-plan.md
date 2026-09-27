@@ -221,6 +221,49 @@ and a Channels panel, with 8-bit documents untouched throughout.
 - For P3b: `BrushStroke` (fill-through at 8 bits, `liftSelection`, `commit`) needs a 16-bit raster, then the
   Move-tool pixel move, Paint Bucket, Patch, gradients and the healing/clone/smudge engines follow it.
 
+**P3b landed (2026-09-27): painting and retouching at 16 bits.** User-facing summary: [bit-depth.md](bit-depth.md);
+the engines: [brush-engine.md](brush-engine.md), "16 bits".
+
+- `BrushStroke` takes the document's depth (`SampleType::U16` and a 16-bit selection): its working pixels, mask,
+  coverage, selection, dab table and stamps are 0..32768 (`brush_u16.cpp`), and every step (dabs, the screen and max
+  build-up, the recompose, clone and processed sources, lifting and moving selected pixels, gradients, healing, the
+  commit) follows the 8-bit code with 15-bit samples. The 8-bit paths are unchanged; each entry point branches once.
+- `TipStroke::dab` writes the grid's depth, with a density-by-spacing table per 15-bit level. MyPaint's tiles take a
+  16-bit layer's samples as they are (libmypaint's fixed point is 0..32768) and write them back; `MipCache::refresh`
+  has 16-bit forms. 16-bit `spotHeal`, `healFrom` (patch search and synthesis on the 8-bit rounding, the membrane and
+  copied pixels at 16 bits), `toneImage`, `sharpenImage`, `fillGradient`, `WarpStroke` and `TiledSource16`.
+- In the editor: the brush in every engine and the eraser on pixels, masks and the Quick Mask; Clone Stamp, Healing
+  Brush, Spot Healing, Patch; Blur, Sharpen, Smudge, Liquify; Dodge, Burn, Sponge; gradients; the Paint Bucket
+  (chosen on the canvas as shown, filled at 16 bits); moving selected pixels; Merge Down and Apply Layer Mask. Each has
+  its own `supports()` line (`tool.brush`, `tool.spotHealing`, `tool.cloneStamp`, `tool.smudge`, `tool.dodge`,
+  `tool.gradient`, `tool.paintBucket`, `edit.movePixels`, `layers.merge`, `layers.applyMask`); `supports()` answers
+  8-bit questions without looking at the table.
+- Calibration (`depth_paint_tests`, 8-bit-sourced layers, the 16-bit result reduced to 8 bits against the 8-bit
+  result): hard tips, masks painted with hard tips, clones, Spot Healing in its three modes, Patch, Liquify, the six
+  processed tools, gradients (linear, radial, multi-stop, on masks, through selections) and moved pixels are within a
+  level. Soft tips reach 4 levels in at most 0.72% of samples, tip brushes 2 levels (0.06%), a replacing clone and the
+  Healing Brush through a soft tip 3 and 2 levels (under 0.01%), and Smudge 2 levels (0.04%): the 8-bit coverage rounds
+  to 1/255 at every step of a screen build-up (and Smudge rounds the pixels it picks up again), and against the exact
+  coverage in double precision the 8-bit soft stroke is up to 3 levels off in 0.9% of its pixels while the 16-bit one
+  is within a level. The healers treat coverage under half an 8-bit level as outside the spot (the rim it rounds away
+  at 8 bits would otherwise move the membrane's ring: 7 levels before, 2 after).
+- Brush parity: a `u16/` section of `brush_parity_baseline.txt` holds all 195 scenes painted on a 16-bit layer, each
+  with its distance from the 8-bit render: MyPaint 0 levels (identical after reduction), the hard round tip, Leaf and
+  Soft Ink 1, soft tips and tip brushes up to 4, a light flow with density by spacing at 2% spacing 5 (0.88%). The
+  8-bit section is unchanged. Density by spacing keeps the interior alpha within 0.2% across 2–50% spacing at 16 bits
+  (1.2% at 8).
+- Still gated: the shape and text tools, Fill Path and Stroke Path, baking a clipping mask when its base is deleted,
+  editing layer styles (their rendering stays `via8`), smart objects, vectors, Camera Raw, G'MIC, Remove Background,
+  artboard and slice export, the timeline.
+- For P5 (32-bit float): `BrushStroke` holds a second set of buffers behind `depth_`; a third depth argues for a
+  templated raster (`StrokeRaster<S>`) rather than a third copy. `TiledSourceOf<Img>` and the `StampOf<T>` stamps are
+  already templates. Painting in linear light changes how soft edges and gradients look (Photoshop's 32-bit mode does
+  so too), so a U8 calibration will not hold there; gate it against a float reference instead. libmypaint's tiles are
+  15-bit fixed point: a float layer would be clamped to 0..1 and quantised at the tile edge, so MyPaint needs either a
+  float surface or a documented 15-bit round trip (and a choice of which transfer curve it paints in). Healing, the
+  bucket and the wand decide on the 8-bit display rounding, which for float needs the display transform (exposure) to
+  be fixed first. The toning curves assume display-referred 0..1 values.
+
 ## Review notes
 
 - Mac project compatibility: since 2026-09-26 NekoPhoto no longer keeps Mac Compositor project-format parity, so

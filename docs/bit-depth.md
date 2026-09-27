@@ -44,20 +44,28 @@ Files store 0 to 65535; the values are mapped when a file is read and written.
   other depth are converted); Content-Aware Fill, Content-Aware Scale, and Content-Aware Move through automation
   (their patch search and seams are chosen on the pixels rounded to 8 bits, and the pixels they copy are 16-bit);
   Free Transform of selected pixels.
+- **Painting and retouching**: the Brush in every engine (the round tip, imported tip brushes and the MyPaint
+  presets) and the Eraser, on pixels, on layer masks and in Quick Mask; Clone Stamp and the Healing Brush (they copy
+  16-bit pixels), Spot Healing and the Patch tool; Blur, Sharpen, Smudge and Liquify; Dodge, Burn and Sponge; the
+  Gradient tool and the Paint Bucket; and moving or duplicating selected pixels with the Move tool. A stroke builds up
+  at 16 bits, so a soft brush's edge or a long gradient has thousands of steps where 8 bits have a few dozen. The tools
+  that choose what to change read the image as the canvas shows it: the Paint Bucket's Tolerance counts 8-bit levels,
+  and Spot Healing and Patch pick the patch they copy on the pixels rounded to 8 bits, as Content-Aware Fill does.
 - **Image Size** (each resampling method), **Crop**, the Crop tool, Crop to Selection and **Trim**; **Canvas Size**
   and Flip Canvas.
 - **Layers**: new layers and folders, delete, duplicate, group, rename, reorder, move in and out of folders,
-  visibility, opacity, blend mode, clipping, and the resampling mode.
+  visibility, opacity, blend mode, clipping, the resampling mode, and Merge Down (merged at 16 bits).
 - **Transforming layers**: the Move tool, Free Transform (move, scale, rotate), Distort and Perspective, Edit ▸ Warp,
   Warp Cage, and Flip Layer. A warp bends the 16-bit pixels; the cage previews from an 8-bit copy while you drag.
-- **Layer masks**: Reveal All, Hide All, enable and disable, link, invert and delete.
+- **Layer masks**: Reveal All, Hide All, enable and disable, link, invert, apply and delete, and painting them.
 - **Importing** an image as a layer (it takes the document's depth).
 - **Saving and exporting**: projects at 16 bits; Photoshop PSD at 16 bits; PNG at 16 bits; TIFF at 16 bits (through
   Qt's TIFF plugin, which writes 16 bits); JPEG, WebP, TGA, ICO and GIF are 8-bit formats, so they get the document
   dithered down to 8 bits, and the status bar says so.
 - **Automation**: `image.mode` converts; `document.info` reports `bits`; the selection, `pixels.adjust`,
   `pixels.filter`, `pixels.fill`, `pixels.clear`, the content-aware methods, `image.resize`, `image.trim`,
-  `canvas.crop`, `layers.warp` and `layers.setCage` work on a 16-bit document ([automation.md](automation.md)).
+  `canvas.crop`, `layers.warp`, `layers.setCage`, `brush.stroke` (every tool it takes), `gradient.draw`,
+  `pixels.bucket`, `pixels.patch` and `layers.merge` work on a 16-bit document ([automation.md](automation.md)).
 
 A 16-bit PSD that NekoPhoto opened and exports again as PSD keeps each unedited layer's channel data byte for byte,
 so a round trip does not lose Photoshop's full 16 bits; a layer you edit (and a PSB) is written from its 0..32768
@@ -68,15 +76,15 @@ values, which drops the lowest of the file's 16 bits. PNG and TIFF are always wr
 What has not been ported is greyed out, with the tooltip "Not available in 16-bit yet", and automation answers
 "<method> is not available for 16-bit documents yet". For now, convert to 8 bits for these:
 
-- painting and retouching tools (brushes, eraser, healing and the Patch tool, clone, smudge, blur and sharpen, dodge
-  and burn, gradient, paint bucket), moving selected pixels with the Move tool, and the shape and text tools;
+- the shape and text tools, and Fill Path and Stroke Path;
 - Camera Raw Filter, G'MIC and Remove Background;
-- Merge Down and Merge Visible, Apply layer mask, and baking a clipping mask into pixels;
-- layer styles, smart objects and Smart Filters, vector masks and paths, artboards, and the timeline;
+- baking a clipping mask into pixels when its base layer is deleted;
+- editing layer styles (they are shown, worked out at 8 bits), smart objects and Smart Filters, vector masks and
+  paths, artboards, and the timeline;
 - SVG export, and exporting artboards and slices.
 
-Painting comes next, on the new brush engine; colour management, 32-bit float, channels, CMYK and Lab follow
-([high-bit-depth-plan.md](high-bit-depth-plan.md), section 9).
+Colour management, 32-bit float, channels, CMYK and Lab follow ([high-bit-depth-plan.md](high-bit-depth-plan.md),
+section 9).
 
 ## Memory
 
@@ -131,20 +139,28 @@ Photoshop と同じく 16 bit の値は 0〜32768 で保持し、合成は正確
   ペーストしたピクセルは変換します)。コンテンツに応じた塗りつぶし、コンテンツに応じて拡大・縮小、コンテンツに
   応じた移動(自動化から。パッチの探索とシームは 8 bit に丸めた画像で決め、コピーするピクセルは 16 bit)。選択した
   ピクセルの自由変形。
+- **ペイントとレタッチ**:すべてのエンジンのブラシ(円形の先端、読み込んだ先端ブラシ、MyPaint のプリセット)と
+  消しゴム(ピクセル、レイヤーマスク、クイックマスク)。コピースタンプと修復ブラシ(16 bit のピクセルをコピー)、
+  スポット修復ブラシとパッチツール。ぼかし・シャープ・指先・ゆがみ。覆い焼き・焼き込み・スポンジ。グラデーション
+  ツールと塗りつぶしツール。移動ツールでの選択したピクセルの移動と複製。ストロークは 16 bit で重なるので、ソフト
+  ブラシの縁や長いグラデーションの階調は 8 bit の数十段階ではなく数千段階になります。変更する場所を選ぶツールは
+  カンバスの表示どおりに画像を読みます(塗りつぶしツールの許容値は 8 bit の段階、スポット修復ブラシとパッチは
+  コンテンツに応じた塗りつぶしと同じく 8 bit に丸めた画像でコピー元を選びます)。
 - **画像解像度**(各補間方法)、**切り抜き**、切り抜きツール、選択範囲で切り抜き、**トリミング**。**カンバス
   サイズ**、カンバスの反転。
 - **レイヤー**:新規レイヤー・グループ、削除、複製、グループ化、名前の変更、重ね順、グループへの出し入れ、
-  表示/非表示、不透明度、描画モード、クリッピング、補間方法。
+  表示/非表示、不透明度、描画モード、クリッピング、補間方法、下のレイヤーと結合(16 bit で結合)。
 - **レイヤーの変形**:移動ツール、自由変形(移動・拡大縮小・回転)、自由な形に・遠近法、編集 ▸ ワープ、ワープ
   ケージ、レイヤーの反転。ワープは 16 bit のピクセルを変形します(ケージのドラッグ中は 8 bit のコピーで
   プレビュー)。
-- **レイヤーマスク**:すべての領域を表示/隠す、有効/無効、リンク、反転、削除。
+- **レイヤーマスク**:すべての領域を表示/隠す、有効/無効、リンク、反転、適用、削除、マスクへのペイント。
 - **画像の読み込み**(ドキュメントのビット数に合わせます)。
 - **保存と書き出し**:16 bit のプロジェクト、16 bit の PSD、16 bit の PNG、16 bit の TIFF(Qt の TIFF プラグイン経由)。
   JPEG・WebP・TGA・ICO・GIF は 8 bit の形式なので、ディザをかけて 8 bit に変換し、ステータスバーでお知らせします。
 - **自動化**:`image.mode` で変換、`document.info` の `bits` でビット数がわかります。選択範囲、`pixels.adjust`、
   `pixels.filter`、`pixels.fill`、`pixels.clear`、コンテンツに応じた各メソッド、`image.resize`、`image.trim`、
-  `canvas.crop`、`layers.warp`、`layers.setCage` も 16 bit のドキュメントで使えます。
+  `canvas.crop`、`layers.warp`、`layers.setCage`、`brush.stroke`(指定できるすべてのツール)、`gradient.draw`、
+  `pixels.bucket`、`pixels.patch`、`layers.merge` も 16 bit のドキュメントで使えます。
 
 NekoPhoto で開いた 16 bit の PSD を PSD に書き出すと、編集していないレイヤーのチャンネルデータはバイト単位でそのまま
 戻るので、Photoshop の 16 bit の値は失われません。編集したレイヤー(と PSB)は 0〜32768 の値から書き出すため、
@@ -155,16 +171,14 @@ NekoPhoto で開いた 16 bit の PSD を PSD に書き出すと、編集して�
 移植していない機能はグレー表示になり、ツールチップに「16 bit/チャンネルではまだ使用できません」と表示されます。
 自動化では「<メソッド> is not available for 16-bit documents yet」が返ります。当面は 8 bit に変換して使ってください。
 
-- ペイントとレタッチのツール(ブラシ、消しゴム、修復とパッチツール、コピースタンプ、指先、ぼかしとシャープ、
-  覆い焼きと焼き込み、グラデーション、塗りつぶしツール)、移動ツールでの選択したピクセルの移動、シェイプと
-  テキストのツール
+- シェイプとテキストのツール、パスの塗りつぶしとパスの境界線を描く
 - Camera Raw フィルター、G'MIC、背景を削除
-- 下のレイヤーと結合・表示レイヤーを結合、レイヤーマスクを適用、クリッピングマスクのピクセルへの焼き込み
-- レイヤースタイル、スマートオブジェクトとスマートフィルター、ベクトルマスクとパス、アートボード、タイムライン
+- ベースのレイヤーを削除するときのクリッピングマスクのピクセルへの焼き込み
+- レイヤースタイルの編集(表示はされ、8 bit で計算します)、スマートオブジェクトとスマートフィルター、ベクトル
+  マスクとパス、アートボード、タイムライン
 - SVG の書き出し、アートボードとスライスの書き出し
 
-次はペイントを新しいブラシエンジンで移植します。その後にカラーマネジメント、32 bit 浮動小数点、チャンネル、
-CMYK と Lab が続きます。
+この後にカラーマネジメント、32 bit 浮動小数点、チャンネル、CMYK と Lab が続きます。
 
 ### メモリ
 
