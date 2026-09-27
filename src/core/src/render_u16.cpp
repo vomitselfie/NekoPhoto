@@ -7,6 +7,7 @@
 #include "compositor/depth.h"
 #include "compositor/parallel.h"
 #include "compositor/resample.h"
+#include "compositor/warp.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -319,5 +320,108 @@ std::shared_ptr<Image16> renderFlattened16(const Document& document) {
     return out;
 }
 
+
+/// resizeDocument for a 16-bit document (render.cpp hands it over): the same steps, 16-bit layers and masks resampled
+/// at 16 bits, and byte budgets.
+bool resizeDocument16(Document& document, int width, int height, double resolution, Sampling sampling) {
+    if (!Document::validDimension(width) || !Document::validDimension(height) || (long long)width * height > Document::pixelBudget) return false;
+    // A 16-bit canvas holds half the pixels (byte budgets).
+    if (document.sampleType != SampleType::U8 && (long long)width * height > document.imagePixelBudget()) return false;
+    double sx = double(width) / document.width, sy = double(height) / document.height;
+    if (document.width == width && document.height == height) { document.resolution = resolution; return true; }
+    Document out = document;
+    out.width = width; out.height = height; out.resolution = resolution;
+    out.selection.reset();
+    long long used = 0, usedMask = 0;
+    Affine scale = Affine::scaling(sx, sy);
+    for (auto& layer : out.layers) {
+        // A smart object keeps its source: its placement scales instead (where no shear arises), so resizing
+        // never resamples it into pixels.
+        if (layer.isLiveSmartObject() && (layer.transform.rotation == 0 || std::abs(sx - sy) < 1e-9)) {
+            const LayerTransform old = layer.transform;
+            layer.transform = old.placing(old.unitToDocument().concatenating(scale));
+            layer.transform.sampling = old.sampling;
+            if (layer.mask && layer.mask->asset.image) {
+                const LayerTransform placement = layer.mask->placement.value_or(old);
+                layer.mask->placement = placement.placing(placement.unitToDocument().concatenating(scale));
+            }
+            continue;
+        }
+        // The scaled corners' axis-aligned box: nonuniform scaling of a rotated rectangle adds shear that
+        // width/height/angle cannot hold, so each layer is rasterised into its box.
+        auto c = layer.transform.corners();
+        double minX = 1e300, minY = 1e300, maxX = -1e300, maxY = -1e300;
+        for (auto& p : c) { minX = std::min(minX, p.x * sx); minY = std::min(minY, p.y * sy); maxX = std::max(maxX, p.x * sx); maxY = std::max(maxY, p.y * sy); }
+        double left = std::floor(minX), top = std::floor(minY);
+        int w = std::max(1, int(std::ceil(maxX) - left)), h = std::max(1, int(std::ceil(maxY) - top));
+        LayerTransform box(Point(left, top), Size(w, h));
+        box.sampling = sampling;
+        if (!box.isValid()) return false;
+        if (layer.asset && layer.asset->image.u8()) {
+            if (w > 30000 || h > 30000 || (long long)w * h > Document::pixelBudget || (long long)w * h > Document::projectPixelBudget - used) return false;
+            used += (long long)w * h;
+            // Shear can't be expressed as a LayerTransform, so resample through the scaled corner mapping directly.
+            Corners corners;
+            for (size_t i = 0; i < 4; i++) corners[i] = {c[i].x * sx, c[i].y * sy};
+            LayerTransform sampled = layer.transform;
+            sampled.sampling = sampling;   // the dialog's choice, not the layer's own
+            auto warped = warpImage(layer.asset->image.u8(), sampled, corners, 0);
+            if (!warped) return false;
+            layer.asset = Asset::make(warped->image, layer.name);
+            layer.shapeImage.reset();
+            box = warped->transform;
+            box.sampling = sampling;
+        } else if (layer.asset && layer.asset->image.u16()) {
+            // At 16 bits: the same warp through the scaled corners, and a budget in bytes.
+            if (w > 30000 || h > 30000 || (long long)w * h > document.imagePixelBudget() || (long long)w * h > document.projectPixelBudgetAt() - used) return false;
+            used += (long long)w * h;
+            Corners corners;
+            for (size_t i = 0; i < 4; i++) corners[i] = {c[i].x * sx, c[i].y * sy};
+            LayerTransform sampled = layer.transform;
+            sampled.sampling = sampling;
+            auto warped = warpImage(layer.asset->image.u16(), sampled, corners, 0);
+            if (!warped) return false;
+            layer.asset = Asset::make(Image16Ptr(warped->image), layer.name);
+            layer.shapeImage.reset();
+            box = warped->transform;
+            box.sampling = sampling;
+        }
+        if (layer.mask && layer.mask->asset.image.u16()) {
+            const Gray16& mask = *layer.mask->asset.image.u16();
+            if (layer.mask->placement) layer.mask->placement = layer.mask->placement->placing(layer.mask->placement->unitToDocument().concatenating(scale));
+            else if (mask.width() > 1 || mask.height() > 1) {
+                if ((long long)w * h > document.imagePixelBudget() || (long long)w * h > document.projectPixelBudgetAt() - usedMask) return false;
+                usedMask += (long long)w * h;
+                Corners corners;
+                for (size_t i = 0; i < 4; i++) corners[i] = {c[i].x * sx, c[i].y * sy};
+                LayerTransform sampled = layer.transform;
+                sampled.sampling = sampling;
+                auto warped = warpMask(mask, sampled, corners, 0, 0);
+                if (!warped) return false;
+                layer.mask->asset = MaskAsset::make(Gray16Ptr(warped->image));
+                if (!layer.asset) box = warped->transform;
+            }
+        } else if (layer.mask && layer.mask->asset.image.u8()) {
+            const GrayImage& mask = *layer.mask->asset.image.u8();
+            if (layer.mask->placement) layer.mask->placement = layer.mask->placement->placing(layer.mask->placement->unitToDocument().concatenating(scale));
+            else if (mask.width() > 1 || mask.height() > 1) {
+                if ((long long)w * h > Document::pixelBudget || (long long)w * h > Document::projectPixelBudget - usedMask) return false;
+                usedMask += (long long)w * h;
+                Corners corners;
+                for (size_t i = 0; i < 4; i++) corners[i] = {c[i].x * sx, c[i].y * sy};
+                LayerTransform sampled = layer.transform;
+                sampled.sampling = sampling;
+                auto warped = warpMask(layer.mask->asset.image.u8(), sampled, corners, 0, 0);
+                if (!warped) return false;
+                // The warp's bounds equal the box; the pixel grid now matches the layer's.
+                layer.mask->asset = MaskAsset::make(warped->image);
+                if (!layer.asset) box = warped->transform;
+            }
+        }
+        layer.transform = box;
+    }
+    document = out;
+    return true;
+}
 
 } // namespace compositor

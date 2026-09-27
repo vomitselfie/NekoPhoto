@@ -132,6 +132,7 @@ add_library(compositor_core STATIC
     src/clip.cpp
     src/blend_u8.cpp
     src/blur.cpp
+    src/blur_u16.cpp
     src/brushimport.cpp
     src/brush.cpp
     src/cameraraw.cpp
@@ -150,6 +151,7 @@ add_library(compositor_core STATIC
     src/smartwand.cpp
     src/zip.cpp
     src/resample.cpp
+    src/resample_u16.cpp
     src/heal.cpp
     src/inpaint.cpp
     src/contentmove.cpp
