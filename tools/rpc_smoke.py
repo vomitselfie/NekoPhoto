@@ -293,6 +293,7 @@ def remaining_methods(rpc):
     board = rpc.call("artboards.add", x=10, y=10, width=80, height=60, background="#ff0000", name="Hero")
     moved = rpc.call("artboards.set", id=board["id"], x=20, moveContents=True)
     assert moved["x"] == 20 and moved["background"] == "#ff0000", moved
+    assert rpc.call("history.list")["undo"][-1] == "Move Artboard"   # one step, contents and all
     assert [a["name"] for a in rpc.call("artboards.list")["artboards"]] == ["Hero"]
     assert rpc.call("layers.get", id=board["id"])["artboard"]["width"] == 80
     piece = rpc.call("slices.add", x=0, y=0, width=50, height=40, name="top")

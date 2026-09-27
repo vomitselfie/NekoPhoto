@@ -247,6 +247,19 @@ std::set<Uuid> descendantIds(const std::vector<Layer>& layers, const Uuid& id) {
     return result;
 }
 
+void translateLayers(Document& document, const std::set<Uuid>& ids, double dx, double dy) {
+    if (dx == 0 && dy == 0) return;
+    const Point by(dx, dy);
+    for (Layer& l : document.layers) {
+        if (!ids.count(l.id)) continue;
+        l.transform.origin = l.transform.origin + by;
+        // A placed mask moves by the same amount; one without a placement follows the transform already.
+        if (l.mask && l.mask->placement) l.mask->placement->origin = l.mask->placement->origin + by;
+    }
+    for (AnimationFrame& f : document.animation.frames)
+        for (auto& [id, state] : f.layers) if (ids.count(id)) state.position = state.position + by;
+}
+
 bool validateHierarchy(const std::vector<Layer>& layers, std::string* error) {
     std::map<Uuid, const Layer*> byId;
     for (auto& l : layers) {

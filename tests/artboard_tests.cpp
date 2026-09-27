@@ -6,6 +6,9 @@
 #include "compositor/psd.h"
 #include "compositor/psd_writer.h"
 #include "compositor/render.h"
+#include "compositor/animation.h"
+#include "compositor/vectorlayer.h"
+#include "compositor/vectormask.h"
 #include "psd/psd_descriptor.hpp"
 #include <cstring>
 #include <filesystem>
@@ -164,6 +167,70 @@ TEST_CASE(artboard_background_stays_inside_in_every_blend_mode) {
             CHECK_NEAR(bg[1], 128, 1.5);
         }
     }
+}
+
+TEST_CASE(moving_an_artboard_carries_everything_inside) {
+    // An artboard holding a folder with a mask of its own (following its transform) and a vector mask, and in it
+    // a layer whose mask is placed and unlinked and one with a vector mask: moving the artboard with its contents
+    // moves every one of them, so the picture inside moves rigidly.
+    Document doc = artboardDocument();
+    const Uuid boardId = doc.layers[1].id;
+    Layer folder("Nested", doc.size());
+    folder.isGroup = true;
+    folder.parentId = boardId;
+    auto hole = std::make_shared<GrayImage>(100, 60, 255);
+    for (int y = 15; y < 25; y++) for (int x = 20; x < 30; x++) hole->row(y)[x] = 0;
+    folder.mask = LayerMask{MaskAsset::make(hole), true, std::nullopt, true};
+    auto green = std::make_shared<Image>(30, 20);
+    green->fill(0, 255, 0, 255);
+    Layer inner(Asset::make(green, "Green"), Point(15, 12));
+    inner.parentId = folder.id;
+    auto band = std::make_shared<GrayImage>(10, 30, 0);
+    for (int y = 0; y < 30; y++) for (int x = 0; x < 5; x++) band->row(y)[x] = 255;
+    inner.mask = LayerMask{MaskAsset::make(band), true, LayerTransform(Point(35, 10), Size(10, 30)), false};   // unlinked
+    auto white = std::make_shared<Image>(6, 6);
+    white->fill(255, 255, 255, 255);
+    Layer shape(Asset::make(white, "Vector"), Point(12, 30));
+    shape.parentId = folder.id;
+    setLayerVectorMask(shape, doc, rectanglePath(Rect(13, 31, 3, 3)));
+    setLayerVectorMask(folder, doc, rectanglePath(Rect(10, 8, 30, 25)));
+    // Bottom to top: the blue child, the vector layer, the green layer, their folder, the artboard, the empty one.
+    std::vector<Layer> layers = doc.layers;
+    layers.insert(layers.begin() + 1, {shape, inner, folder});
+    doc.layers = layers;
+    std::string error;
+    REQUIRE(validateHierarchy(doc.layers, &error));
+    ensureAnimation(doc);
+    duplicateFrame(doc, 0);
+    auto before = renderFlattened(doc);
+    const auto folderPath = layerVectorMask(*doc.find(folder.id), doc), shapePath = layerVectorMask(*doc.find(shape.id), doc);
+    REQUIRE(folderPath && shapePath);
+
+    std::set<Uuid> moving = descendantIds(doc.layers, boardId);
+    moving.insert(boardId);
+    CHECK_EQ(moving.size(), size_t(5));
+    doc.find(boardId)->artboard->x += 7;
+    doc.find(boardId)->artboard->y += 3;
+    translateLayers(doc, moving, 7, 3);
+    auto after = renderFlattened(doc);
+    int differ = 0;
+    for (int y = 8; y < 38; y++) for (int x = 10; x < 50; x++) if (std::memcmp(before->pixel(x, y), after->pixel(x + 7, y + 3), 4)) differ++;
+    CHECK_EQ(differ, 0);
+    CHECK(doc.find(folder.id)->transform.origin == Point(7, 3));
+    CHECK(doc.find(inner.id)->mask->placement->origin == Point(42, 13));
+    auto movedPath = layerVectorMask(*doc.find(folder.id), doc);
+    REQUIRE(movedPath);
+    CHECK_NEAR(movedPath->subpaths[0].knots[0].x, folderPath->subpaths[0].knots[0].x + 7, 1e-3);
+    CHECK_NEAR(movedPath->subpaths[0].knots[0].y, folderPath->subpaths[0].knots[0].y + 3, 1e-3);
+    auto movedShape = layerVectorMask(*doc.find(shape.id), doc);
+    REQUIRE(movedShape);
+    CHECK_NEAR(movedShape->subpaths[0].knots[0].x, shapePath->subpaths[0].knots[0].x + 7, 1e-3);
+    // Every frame keeps the moved positions, so showing another frame does not pull the contents back.
+    for (const AnimationFrame& f : doc.animation.frames) CHECK(f.layers.at(inner.id).position == Point(22, 15));
+    CHECK(selectFrame(doc, 0));
+    CHECK(doc.find(inner.id)->transform.origin == Point(22, 15));
+    // The other artboard stays.
+    CHECK(doc.layers.back().artboard->x == 60);
 }
 
 TEST_CASE(artboards_slices_psd_round_trip) {
