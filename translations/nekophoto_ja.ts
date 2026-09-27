@@ -827,8 +827,264 @@
         <translation>彩度</translation>
     </message>
     <message>
+        <source>Mosh</source>
+        <translation>Mosh</translation>
+    </message>
+    <message>
+        <source>Glitch</source>
+        <translation>グリッチ</translation>
+    </message>
+    <message>
+        <source>Distort</source>
+        <translation>変形</translation>
+    </message>
+    <message>
         <source>Color</source>
         <translation>カラー</translation>
+    </message>
+    <message>
+        <source>Retro</source>
+        <translation>レトロ</translation>
+    </message>
+    <message>
+        <source>Stylize</source>
+        <translation>表現手法</translation>
+    </message>
+    <message>
+        <source>Composite</source>
+        <translation>合成</translation>
+    </message>
+    <message>
+        <source>Soft Glitch</source>
+        <translation>ソフトグリッチ</translation>
+    </message>
+    <message>
+        <source>Hard Glitch</source>
+        <translation>ハードグリッチ</translation>
+    </message>
+    <message>
+        <source>Decimate</source>
+        <translation>デシメート</translation>
+    </message>
+    <message>
+        <source>Data-Mosh</source>
+        <translation>データモッシュ</translation>
+    </message>
+    <message>
+        <source>Splitter</source>
+        <translation>スプリッター</translation>
+    </message>
+    <message>
+        <source>Jitter</source>
+        <translation>ジッター</translation>
+    </message>
+    <message>
+        <source>Slices</source>
+        <translation>スライス</translation>
+    </message>
+    <message>
+        <source>Shake</source>
+        <translation>シェイク</translation>
+    </message>
+    <message>
+        <source>Pixel Sort</source>
+        <translation>ピクセルソート</translation>
+    </message>
+    <message>
+        <source>Strobe</source>
+        <translation>ストロボ</translation>
+    </message>
+    <message>
+        <source>Wave</source>
+        <translation>波形</translation>
+    </message>
+    <message>
+        <source>Kaleidoscope</source>
+        <translation>万華鏡</translation>
+    </message>
+    <message>
+        <source>Pixelate</source>
+        <translation>ピクセレート</translation>
+    </message>
+    <message>
+        <source>Scan Lines</source>
+        <translation>走査線</translation>
+    </message>
+    <message>
+        <source>VHS</source>
+        <translation>VHS</translation>
+    </message>
+    <message>
+        <source>8-Bit CGA</source>
+        <translation>8 ビット CGA</translation>
+    </message>
+    <message>
+        <source>CRT</source>
+        <translation>CRT</translation>
+    </message>
+    <message>
+        <source>Dither</source>
+        <translation>ディザ</translation>
+    </message>
+    <message>
+        <source>Dot Screen</source>
+        <translation>ドットスクリーン</translation>
+    </message>
+    <message>
+        <source>Halftone</source>
+        <translation>ハーフトーン</translation>
+    </message>
+    <message>
+        <source>Amount</source>
+        <translation>量</translation>
+    </message>
+    <message>
+        <source>Angle</source>
+        <translation>角度</translation>
+    </message>
+    <message>
+        <source>Blocks</source>
+        <translation>ブロック数</translation>
+    </message>
+    <message>
+        <source>Color Shift</source>
+        <translation>カラーシフト</translation>
+    </message>
+    <message>
+        <source>Block Size</source>
+        <translation>ブロックサイズ</translation>
+    </message>
+    <message>
+        <source>Drift</source>
+        <translation>ずれ</translation>
+    </message>
+    <message>
+        <source>Stuck Blocks</source>
+        <translation>固着ブロック</translation>
+    </message>
+    <message>
+        <source>Strips</source>
+        <translation>帯の数</translation>
+    </message>
+    <message>
+        <source>Offset</source>
+        <translation>オフセット</translation>
+    </message>
+    <message>
+        <source>Vertical</source>
+        <translation>垂直方向</translation>
+    </message>
+    <message>
+        <source>Band Height</source>
+        <translation>帯の高さ</translation>
+    </message>
+    <message>
+        <source>Count</source>
+        <translation>数</translation>
+    </message>
+    <message>
+        <source>Threshold Low</source>
+        <translation>しきい値（下限）</translation>
+    </message>
+    <message>
+        <source>Threshold High</source>
+        <translation>しきい値（上限）</translation>
+    </message>
+    <message>
+        <source>Reverse</source>
+        <translation>逆順</translation>
+    </message>
+    <message>
+        <source>Phase</source>
+        <translation>位相</translation>
+    </message>
+    <message>
+        <source>Rate</source>
+        <translation>速さ</translation>
+    </message>
+    <message>
+        <source>Mode</source>
+        <translation>モード</translation>
+    </message>
+    <message>
+        <source>Amplitude</source>
+        <translation>振幅</translation>
+    </message>
+    <message>
+        <source>Frequency</source>
+        <translation>周波数</translation>
+    </message>
+    <message>
+        <source>Segments</source>
+        <translation>分割数</translation>
+    </message>
+    <message>
+        <source>Rotation</source>
+        <translation>回転</translation>
+    </message>
+    <message>
+        <source>Density</source>
+        <translation>密度</translation>
+    </message>
+    <message>
+        <source>Opacity</source>
+        <translation>不透明度</translation>
+    </message>
+    <message>
+        <source>Tracking</source>
+        <translation>トラッキング</translation>
+    </message>
+    <message>
+        <source>Color Bleed</source>
+        <translation>色のにじみ</translation>
+    </message>
+    <message>
+        <source>Noise</source>
+        <translation>ノイズ</translation>
+    </message>
+    <message>
+        <source>Pixel Size</source>
+        <translation>ピクセルサイズ</translation>
+    </message>
+    <message>
+        <source>Palette</source>
+        <translation>パレット</translation>
+    </message>
+    <message>
+        <source>Curvature</source>
+        <translation>湾曲</translation>
+    </message>
+    <message>
+        <source>Scanlines</source>
+        <translation>走査線</translation>
+    </message>
+    <message>
+        <source>Aperture Mask</source>
+        <translation>アパーチャマスク</translation>
+    </message>
+    <message>
+        <source>Scale</source>
+        <translation>スケール</translation>
+    </message>
+    <message>
+        <source>Blackout</source>
+        <translation>ブラックアウト</translation>
+    </message>
+    <message>
+        <source>Whiteout</source>
+        <translation>ホワイトアウト</translation>
+    </message>
+    <message>
+        <source>Cyan/Magenta</source>
+        <translation>シアン／マゼンタ</translation>
+    </message>
+    <message>
+        <source>Green/Red</source>
+        <translation>グリーン／レッド</translation>
+    </message>
+    <message>
+        <source>Grayscale</source>
+        <translation>グレースケール</translation>
     </message>
     <message>
         <source>Luminosity</source>
@@ -1773,6 +2029,10 @@ Working: %2</source>
     <message>
         <source>Camera Raw Filter</source>
         <translation>Camera Raw フィルター</translation>
+    </message>
+    <message>
+        <source>Mosh</source>
+        <translation>Mosh</translation>
     </message>
     <message>
         <source>Canvas Size</source>
@@ -6066,6 +6326,14 @@ File &gt; New creates a blank canvas.</source>
         <translation>レンズ補正(&amp;L)...</translation>
     </message>
     <message>
+        <source>M&amp;osh</source>
+        <translation>Mosh(&amp;O)</translation>
+    </message>
+    <message>
+        <source>%1…</source>
+        <translation>%1…</translation>
+    </message>
+    <message>
         <source>Camera &amp;Raw Filter…</source>
         <translation>Camera Raw フィルター(&amp;R)...</translation>
     </message>
@@ -6204,6 +6472,25 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Not available in 16-bit yet</source>
         <translation>16 bit/チャンネルではまだ使用できません</translation>
+    </message>
+</context>
+<context>
+    <name>app::MoshDialog</name>
+    <message>
+        <source>Seed</source>
+        <translation>シード</translation>
+    </message>
+    <message>
+        <source>The random pattern: the same seed always gives the same result</source>
+        <translation>ランダムなパターン：同じシードからは常に同じ結果になります</translation>
+    </message>
+    <message>
+        <source>Reroll</source>
+        <translation>振り直す</translation>
+    </message>
+    <message>
+        <source>A new random pattern</source>
+        <translation>新しいランダムパターン</translation>
     </message>
 </context>
 <context>

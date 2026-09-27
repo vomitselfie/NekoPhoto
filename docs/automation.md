@@ -164,6 +164,8 @@ Hue/Saturation settings accept `"saturationCurve": "photoshop"` (+100 saturates 
 
 Pixels of the active layer, inside the selection: `pixels.adjust`,
 `pixels.filter` (`kind` and its settings; Lens Correction takes `bicubic: true` for a sharper resample),
+`pixels.mosh` (Filter > Mosh: `effect`, an OpenMosh id such as `pixel-sort` or `vhs`, `params` by OpenMosh's keys, `seed`
+0..100 for the seeded effects; replies with the settings applied; [mosh.md](mosh.md) lists every effect and parameter),
 `pixels.cameraRaw` (Filter > Camera Raw Filter: `settings` with the model's keys, nested `curve`, `mixer`, `grading`,
 `detail`, `optics`, `geometry` and `calibration` objects, unknown keys refused, `whiteBalance: "Auto"` balances the layer;
 `rpc.describe` lists every key and range and [camera-raw.md](camera-raw.md) what each does), `pixels.invert`, `pixels.fill`, `pixels.clear`,
@@ -210,7 +212,7 @@ that read, those outside the document, saving, exporting, `image.mode`, and the 
 layers and folders, `layers.set`, `layers.delete`, `layers.duplicate`, `layers.move`, `layers.reorder`, `layers.group`,
 `layers.setTransform`, `layers.flip`, `layers.mask` add, toggle, invert, link and delete, `canvas.resize`,
 `canvas.flip`, `document.import`, the slices) work, and since P3a the selection methods, `paths.toSelection`,
-`pixels.adjust`, `pixels.invert`, `pixels.filter`, `pixels.fill`, `pixels.clear`, `pixels.contentAwareFill`,
+`pixels.adjust`, `pixels.invert`, `pixels.filter`, `pixels.mosh`, `pixels.fill`, `pixels.clear`, `pixels.contentAwareFill`,
 `pixels.contentAwareMove`, `pixels.contentAwareScale`, `adjustments.set`, `layers.add` of adjustment layers,
 `image.resize`, `image.trim`, `canvas.crop`, `layers.warp` and `layers.setCage` too, and since P3b `brush.stroke`
 (every tool it takes, presets included), `gradient.draw`, `pixels.bucket`, `pixels.patch`, `layers.merge` and

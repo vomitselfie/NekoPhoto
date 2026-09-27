@@ -729,6 +729,17 @@ def pixels_filter(kind: str, radius: Optional[float] = None, angle: Optional[flo
     return text(call("pixels.filter", kind=kind, radius=radius, angle=angle, distance=distance, amount=amount, gaussian=gaussian, monochromatic=monochromatic, distortion=distortion, bicubic=bicubic))
 
 
+@edit("Mosh effect")
+def pixels_mosh(effect: str, params: Optional[dict] = None, seed: float = 0) -> str:
+    """Filter > Mosh: one of OpenMosh's glitch, distortion and retro effects on the active layer's pixels, inside the
+    selection. effect is an OpenMosh id: soft-glitch, hard-glitch, decimate, data-mosh, splitter, jitter, slices, shake,
+    pixel-sort, strobe, wave, kaleidoscope, pixelate, scanlines, vhs, cga-8bit, crt, dither, dot-screen, halftone.
+    params takes OpenMosh's keys (pixel-sort: low, high, reverse, vertical; vhs: tracking, bleed, noise; ...), numbers,
+    booleans for switches, an index or option name for a choice; the rest keep their defaults. seed (0..100) picks the
+    random pattern of the seeded effects; the same seed repeats it. The reply has the settings applied."""
+    return text(call("pixels.mosh", effect=effect, params=params or {}, seed=seed))
+
+
 @edit("Camera Raw Filter")
 def pixels_camera_raw(settings: dict, seed: int = 1) -> str:
     """Filter > Camera Raw Filter on the active layer's pixels, inside the selection. settings uses the model's keys and

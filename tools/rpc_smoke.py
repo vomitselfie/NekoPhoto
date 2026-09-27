@@ -374,6 +374,7 @@ def sixteen_bit(rpc):
     rpc.call("selection.feather", radius=3)
     rpc.call("pixels.adjust", kind="Levels", settings={"ranges": [{"black": 10, "gamma": 1.3, "white": 240, "outputBlack": 0, "outputWhite": 255}]})
     rpc.call("pixels.filter", kind="Gaussian Blur", radius=2)
+    assert rpc.call("pixels.mosh", effect="vhs", seed=3)["applied"] == "vhs"
     rpc.call("pixels.fill", color="#ffaa00")
     rpc.call("selection.rect", x=40, y=30, width=12, height=10)
     rpc.call("pixels.contentAwareFill")
@@ -617,6 +618,28 @@ def main():
     rpc.call("layers.select", id=target["id"])
     rpc.call("pixels.filter", kind="Gaussian Blur", radius=2)
     rpc.call("pixels.filter", kind="Lens Correction", distortion=20, bicubic=True)
+    # Filter > Mosh: an OpenMosh effect by id and key, one undo step named for it; the same seed repeats the pattern.
+    before = rpc.call("layers.render", id=target["id"], maxSize=64)
+    moshed = rpc.call("pixels.mosh", effect="pixel-sort", params={"low": 0.1, "reverse": True}, seed=12.5)
+    assert moshed["applied"] == "pixel-sort" and moshed["params"]["reverse"] is True and abs(moshed["params"]["low"] - 0.1) < 1e-6, moshed
+    assert abs(moshed["seed"] - 12.5) < 1e-6 and abs(moshed["params"]["high"] - 0.85) < 1e-6, moshed
+    assert rpc.call("history.info")["undo"] == "Pixel Sort"
+    first = rpc.call("layers.render", id=target["id"], maxSize=64)
+    rpc.call("history.undo")
+    rpc.call("pixels.mosh", effect="pixel-sort", params={"low": 0.1, "reverse": True}, seed=12.5)
+    assert rpc.call("layers.render", id=target["id"], maxSize=64) == first, "the same seed gives the same pixels"
+    rpc.call("history.undo")
+    strobe = rpc.call("pixels.mosh", effect="strobe", params={"phase": 0.7, "mode": "Invert"})
+    assert strobe["params"]["mode"] == 2 and "seed" not in strobe, strobe
+    assert rpc.call("layers.render", id=target["id"], maxSize=64) != before, "the flash inverts the pixels"
+    rpc.call("history.undo")
+    assert rpc.call("layers.render", id=target["id"], maxSize=64) == before, "one undo step"
+    for bad in ({"effect": "blur"}, {"effect": "vhs", "params": {"nope": 1}}, {"effect": "strobe", "params": {"mode": "Sideways"}}):
+        try:
+            rpc.call("pixels.mosh", **bad)
+            raise AssertionError("pixels.mosh took " + str(bad))
+        except RuntimeError as e:
+            print("expected error:", e)
     # Camera Raw Filter: one undo step named for it, the model's keys (nested too), unknown keys refused.
     before = rpc.call("layers.render", id=target["id"], maxSize=64)
     graded = rpc.call("pixels.cameraRaw", settings={"exposure": 0.7, "whiteBalance": "Auto", "detail": {"sharpenAmount": 30},

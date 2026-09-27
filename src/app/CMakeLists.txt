@@ -99,6 +99,8 @@ qt_add_executable(nekophoto
     BrushDynamicsDialog.cpp
     FilterDialog.h
     FilterDialog.cpp
+    MoshDialog.h
+    MoshDialog.cpp
     SmartFilterDialog.h
     SmartFilterDialog.cpp
     CameraRawDialog.h
