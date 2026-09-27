@@ -3,8 +3,10 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/hero.jpg" alt="NekoPhoto with a layered PSD open: a folder holding a masked photo and a clipped Curves adjustment, a shape layer with a drop shadow, and two editable text layers in the Layers panel" width="100%">
+  <img src="docs/images/hero.jpg" alt="NekoPhoto with K.psd, a Photoshop file by Nathan Lincoln, open: its folders, masked layers, adjustment layers and a smart object with Smart Filters in the Layers panel" width="100%">
 </p>
+
+<p align="center"><sub>Artwork: <em>K</em> by Nathan Lincoln, used with permission.</sub></p>
 
 # NekoPhoto
 
@@ -26,10 +28,10 @@ listed before you export. The counts, the known gaps and how to rerun the checks
 
 | Open a PSD, edit, save it as PSD, reopen | Import a Photoshop brush set and paint |
 |:---:|:---:|
-| <img src="docs/images/demo-psd-roundtrip.webp" alt="Opening a layered PSD, its folder, mask, clipped adjustment and text intact; retitling the text; saving as layered PSD; reopening it with everything intact" width="440"> | <img src="docs/images/demo-brush-import.webp" alt="Importing a Photoshop .abr brush set of 148 brushes and stamping trees, a church, a windmill, a town and a ship with them" width="440"> |
+| <img src="docs/images/demo-psd-roundtrip.webp" alt="Opening K.psd by Nathan Lincoln, saved by Photoshop, with its folders, masks, Smart Filters and adjustment layers intact; fading its Exposure adjustment layer to 50%; exporting it as layered PSD; reopening it with the same 33 layers" width="440"> | <img src="docs/images/demo-brush-import.webp" alt="Importing a Photoshop .abr brush set of 148 brushes and stamping trees, a church, a windmill, a town and a ship with them" width="440"> |
 
-<sub>Recorded headless from NekoPhoto 1.6.1 over its automation socket. Artwork: CC0 photos and the CC0 “Myer
-Settlement Brushes” by K. M. Alexander, from Patchy's test fixtures.</sub>
+<sub>Recorded headless from NekoPhoto 1.6.1 over its automation socket. PSD demo artwork: <em>K</em> by Nathan Lincoln,
+used with permission (also in the screenshot above). Brush demo: the CC0 “Myer Settlement Brushes” by K. M. Alexander, from Patchy's test fixtures.</sub>
 
 NekoPhoto began as a Linux port of [Compositor](https://github.com/robbietilton/Compositor)
 for macOS, and opens its older `.comp` projects. Until version 1.0 it was
@@ -190,10 +192,10 @@ Linux: 2022 年以降の x86_64 ディストリビューション(Wayland・X11)
 
 | PSD を開いて編集し、PSD に保存して開き直す | Photoshop のブラシセットを読み込んで描く |
 |:---:|:---:|
-| <img src="docs/images/demo-psd-roundtrip.webp" alt="レイヤー付き PSD を開き、グループ・マスク・クリッピングした調整レイヤー・テキストがそのまま残っていることを確認し、テキストを書き換え、レイヤー付き PSD に保存して開き直すところ" width="440"> | <img src="docs/images/demo-brush-import.webp" alt="Photoshop の .abr ブラシセット(148 種類)を読み込み、木・教会・風車・町・船を描くところ" width="440"> |
+| <img src="docs/images/demo-psd-roundtrip.webp" alt="Nathan Lincoln の Photoshop で保存された K.psd を開き、グループ・マスク・スマートフィルター・調整レイヤーがそのまま残っていることを確認し、露光量の調整レイヤーの不透明度を 50% に下げ、レイヤー付き PSD に書き出して開き直し、同じ 33 レイヤーを確認するところ" width="440"> | <img src="docs/images/demo-brush-import.webp" alt="Photoshop の .abr ブラシセット(148 種類)を読み込み、木・教会・風車・町・船を描くところ" width="440"> |
 
-<sub>NekoPhoto 1.6.1 を画面なしで起動し、自動操作ソケット経由で記録しました。素材: CC0 の写真と、K. M. Alexander による CC0 の
-「Myer Settlement Brushes」(Patchy のテスト用ファイルより)。</sub>
+<sub>NekoPhoto 1.6.1 を画面なしで起動し、自動操作ソケット経由で記録しました。冒頭の画像と PSD のデモの作品: Nathan Lincoln
+『K』(許可を得て使用)。ブラシのデモ: K. M. Alexander による CC0 の「Myer Settlement Brushes」(Patchy のテスト用ファイルより)。</sub>
 
 NekoPhoto は macOS 版 [Compositor](https://github.com/robbietilton/Compositor) の
 Linux 移植として始まり、Mac 版の以前の `.comp` プロジェクトも開けます。バージョン 1.0 までは
