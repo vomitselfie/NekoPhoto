@@ -113,7 +113,7 @@ jobs:
         shell: msys2 {0}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
-      - uses: msys2/setup-msys2@f84a36b4009b96413f91c01441130855db9392e5   # v2.9.0
+      - uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e   # v2.33.0
         with:
           msystem: UCRT64
           update: true
