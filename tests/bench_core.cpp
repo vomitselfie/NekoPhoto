@@ -7,8 +7,10 @@
 #include "compositor/depth.h"
 #include "compositor/document.h"
 #include "compositor/filters.h"
+#include "compositor/history.h"
 #include "compositor/parallel.h"
 #include "compositor/render.h"
+#include "render_plan.h"
 
 #include <algorithm>
 #include <chrono>
@@ -81,6 +83,29 @@ Document largeDocument() {
         adj.adjustment = s.toLayerAdjustment();
         doc.layers.push_back(adj);
     }
+    return doc;
+}
+
+/// `count` layers as a large PSD brings them: small pixel layers sharing one raster, a folder of five every tenth.
+Document manyLayers(int count) {
+    Document doc(2000, 2000);
+    const Asset shared = Asset::make(ImagePtr(busy(32, 32, 3, true)), "tile");
+    std::optional<Uuid> folder;
+    for (int i = 0; i < count; i++) {
+        if (i % 10 == 0) {
+            Layer group("Folder", doc.size());
+            group.isGroup = true;
+            doc.layers.push_back(group);
+            folder = group.id;
+            continue;
+        }
+        Layer l(shared, Point((i * 37) % 1968, (i * 91) % 1968));
+        l.name = "Layer " + std::to_string(i);
+        if (i % 10 <= 5) l.parentId = folder;
+        doc.layers.push_back(l);
+    }
+    // Groups are listed after their children in the stack (bottom to top), as the app keeps them.
+    std::stable_partition(doc.layers.begin(), doc.layers.end(), [](const Layer& l) { return !l.isGroup; });
     return doc;
 }
 
@@ -160,5 +185,43 @@ int main(int argc, char** argv) {
     bench("render16 4000x3000 to display", none, [&] { RenderOptions o; render(deep, o, out); });
     bench("render16 4000x3000 at 0.25", none, [&] { RenderOptions o; o.scale = 0.25; render16(deep, o, out16); });
     bench("render16 1024x768 region at 1", none, [&] { RenderOptions o; o.region = {1500, 1100, 1024, 768}; render16(deep, o, out16); });
+
+    // Layer counts: each edit as the app makes it, one history step around the change (EditorSession's
+    // beginEdit/endEdit), with a history already full of steps as after a while of work.
+    for (int count : {1000, 5000, 10000}) {
+        Document layered = manyLayers(count);
+        DocumentHistory history;
+        const Uuid middle = layered.layers[size_t(count / 2)].id;
+        for (int i = 0; i < 100; i++) {
+            history.begin("Hide", layered, middle);
+            layered.find(middle)->visible = !layered.find(middle)->visible;
+            history.end(layered, middle);
+        }
+        auto step = [&](const char* edit, const std::function<void()>& change) {
+            const std::string name = "layers " + std::to_string(count) + ": " + edit;
+            bench(name.c_str(), none, [&] { history.begin(edit, layered, middle); change(); history.end(layered, middle); });
+        };
+        int renamed = 0;
+        step("rename", [&] { layered.find(middle)->name = "Renamed " + std::to_string(renamed++); });
+        step("visibility", [&] { Layer* l = layered.find(middle); l->visible = !l->visible; });
+        step("move", [&] {
+            // The bottom pixel layer to the middle of the stack and back on the next run: a drag in the panel.
+            const size_t from = 1, to = size_t(count / 2);
+            if (renamed++ % 2) std::rotate(layered.layers.begin() + long(from), layered.layers.begin() + long(from) + 1, layered.layers.begin() + long(to) + 1);
+            else std::rotate(layered.layers.begin() + long(from), layered.layers.begin() + long(to), layered.layers.begin() + long(to) + 1);
+        });
+        step("beginEdit/endEdit", [] {});
+        std::string name = "layers " + std::to_string(count) + ": undo+redo";
+        bench(name.c_str(), none, [&] {
+            if (auto back = history.undo()) layered = *back->document;
+            if (auto again = history.redo()) layered = *again->document;
+        });
+        name = "layers " + std::to_string(count) + ": plan build";
+        bench(name.c_str(), none, [&] { RenderPlan plan(layered, nullptr); plan.build(); });
+        name = "layers " + std::to_string(count) + ": find each by id";
+        size_t found = 0;
+        bench(name.c_str(), none, [&] { for (const Layer& l : layered.layers) found += layered.indexOf(l.id) >= 0; });
+        if (found == 0) std::printf("(no layers found)\n");
+    }
     return 0;
 }

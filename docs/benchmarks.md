@@ -79,6 +79,40 @@ The same document at 16 bits (`convertSampleType`), new lines of `bench_core`:
 
 The 16-bit render includes the two adjustment layers, drawn at 8 bits and applied as a difference.
 
+## Layer counts
+
+`bench_core` also times edits on documents of 1,000, 5,000 and 10,000 layers: 32 x 32 pixel layers sharing one
+raster, a folder for every ten, and a history already holding 100 steps. Each edit is timed as the app makes it,
+inside one history step (`begin`/`end`, what `beginEdit`/`endEdit` do): renaming the middle layer, toggling its
+visibility, moving the bottom layer to the middle of the stack, an empty step (the snapshot and comparison alone), an
+undo and a redo together, building the render plan, and looking every layer up by id with `indexOf`.
+
+2026-09-27, with other builds running on the machine (the 4000 x 3000 render was about 30% slower than above), median
+of 9 runs, three rounds:
+
+| Operation | 1,000 (ms) | 5,000 (ms) | 10,000 (ms) |
+|---|---:|---:|---:|
+| rename | 0.75 | 4.89 | 10.55 |
+| visibility | 0.74 | 4.82 | 10.63 |
+| move | 0.76 | 4.94 | 10.65 |
+| beginEdit/endEdit | 0.38 | 3.73 | 8.02 |
+| undo + redo | 0.34 | 2.88 | 7.07 |
+| plan build | 0.55 | 5.15 | 12.84 |
+| find each by id | 1.22 | 27.46 | 130.57 |
+
+Each single edit grows about linearly with the layers. Before this table, keeping the history within its byte
+limit walked every layer of every snapshot after each edit, undo and redo: 92 ms to rename a layer and 174 ms for an
+undo and a redo at 10,000 layers. Each history step now lists its buffers once when it is recorded.
+
+Finding every layer by id one after another is quadratic (`indexOf` is a linear search): 130 ms for all 10,000, about
+13 µs per lookup. No single edit makes that many lookups, so it is left as it is; a pass that needs them should build
+its own id-to-index map, as the render plan does.
+
+The existing lines, A/B against 68435cb in the same session (three alternating rounds of `bench_core 9`, the lines
+past 2% rerun in six to ten alternating rounds of 25 to 51 runs): every line within ±2% but render at 0.25, brush
+stroke d80 hardness 1 and curves in the first rounds (+3.1%, +8.4%, +7.2%), which the reruns put at -11.8%, +1.1% and
+-2.8%: the machine's load, as the only change on those paths is one uncontended mutex per top-level parallel loop.
+
 ## Render hashes
 
 The matching correctness gate is `render_hash_tests` (in ctest): 191 scenes (133 at 8 bits, 58 at 16 bits) hashed with FNV-1a 64 against

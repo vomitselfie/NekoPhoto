@@ -45,6 +45,7 @@ add_test(NAME render_hash_tests COMMAND render_hash_tests)
 # Timings for render, brush, blur and adjustments; not a test. Numbers in docs/benchmarks.md.
 add_executable(bench_core bench_core.cpp)
 target_link_libraries(bench_core PRIVATE compositor::core compositor_warnings)
+target_include_directories(bench_core PRIVATE ${CMAKE_SOURCE_DIR}/src/core/src)   # the render plan, for the layer-count lines
 
 add_executable(resample_tests resample_tests.cpp)
 target_link_libraries(resample_tests PRIVATE compositor::core compositor_warnings)
