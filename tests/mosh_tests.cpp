@@ -172,13 +172,15 @@ TEST_CASE(registry_is_openmosh_shaped) {
             if (p.kind == mosh::ParamKind::Choice) CHECK_EQ(p.max, float(p.options.size() - 1));
         }
     }
-    CHECK_EQ(mosh::effects().size(), size_t(49));
+    CHECK_EQ(mosh::effects().size(), size_t(54));
     CHECK(mosh::findEffect("blur") == nullptr);   // NekoPhoto's own Gaussian Blur covers it
     const auto* sort = mosh::findEffect("pixel-sort");
     REQUIRE(sort);
     CHECK(sort->seeded);
     CHECK_EQ(std::string(sort->params[1].label), std::string("Threshold High"));
     CHECK_NEAR(sort->params[1].defaultValue, 0.85, 1e-7);
+    CHECK(mosh::findEffect("overlay")->auxImage && mosh::findEffect("mask")->auxImage && !mosh::findEffect("mask-blocks")->auxImage);
+    CHECK(mosh::findEffect("caption")->text && !mosh::findEffect("caption")->auxImage);
     CHECK_EQ(mosh::findEffect("transform-3d")->params.size(), size_t(6));
 }
 

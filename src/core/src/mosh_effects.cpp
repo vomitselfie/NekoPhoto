@@ -859,6 +859,86 @@ void sepia(const Frame& in, const Uniforms& u, const RowSink& sink) {
     }, sink);
 }
 
+// ---- Composite ------------------------------------------------------------------------------------------------
+
+/// Mask's and Mask Blocks' result: the original where `m` is 0, the image where it is 1. With no original, the
+/// premultiplied mix with a transparent one: the image with its alpha scaled by `m`.
+vec4 reveal(const Uniforms& u, const Frag& f, vec4 moshed, float m) {
+    if (!u.source) return vec4{moshed.x, moshed.y, moshed.z, moshed.w * m};
+    return mix(sample(*u.source, f.uv), moshed, m);
+}
+
+// Overlay: the aux image blended over. p0 = blend (0 normal, 1 multiply, 2 screen, 3 lighten, 4 darken), p1 = opacity.
+void overlay(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    const int mode = toI32(u.p[0] + 0.5f);
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        vec4 base = sample(in, f.uv);
+        vec4 over = sample(*u.aux, f.uv);
+        vec3 blended = over.rgb();
+        if (mode == 1) blended = base.rgb() * over.rgb();
+        else if (mode == 2) blended = 1.0f - (1.0f - base.rgb()) * (1.0f - over.rgb());
+        else if (mode == 3) blended = max(base.rgb(), over.rgb());
+        else if (mode == 4) blended = min(base.rgb(), over.rgb());
+        float a = over.w * u.p[1];
+        return v4(mix(base.rgb(), blended, a), base.w);
+    }, sink);
+}
+
+// Mask: the image kept where the aux mask is bright, the original revealed where it is dark. p0 = low, p1 = high,
+// p2 = invert.
+void mask(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        vec4 moshed = sample(in, f.uv);
+        float m = smoothstep(u.p[0], std::max(u.p[1], u.p[0] + 1e-4f), luma(sample(*u.aux, f.uv).rgb()));
+        if (u.p[2] > 0.5f) m = 1.0f - m;
+        return reveal(u, f, moshed, m);
+    }, sink);
+}
+
+// Mask Blocks: random blocks revert to the original. p0 = block size in pixels, p1 = amount.
+void maskBlocks(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    const vec2 grid = u.resolution / std::max(u.p[0], 2.0f);
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        vec2 cell = floor(f.uv * grid);
+        vec4 moshed = sample(in, f.uv);
+        float r = rand2(fma32(cell, v2(0.617f), v2(u.seed)));   // cell * 0.617 + seed, fused as the GPU does
+        return reveal(u, f, moshed, r < u.p[1] ? 0.0f : 1.0f);
+    }, sink);
+}
+
+// ChromaKey: pixels of the key hue made transparent, weighed by saturation times value so greys and darks stay.
+// p0 = key hue, p1 = tolerance, p2 = softness.
+void chromaKey(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    const float tol = u.p[1] * 0.25f;
+    const float soft = std::max(u.p[2] * 0.25f, 1e-4f);
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        vec4 c = sample(in, f.uv);
+        vec3 hsv = rgb2hsv(c.rgb());
+        float dh = std::fabs(hsv.x - u.p[0]);
+        dh = std::min(dh, 1.0f - dh);
+        float keyStrength = hsv.y * hsv.z;
+        float matched = (1.0f - smoothstep(tol, tol + soft, dh)) * smoothstep(0.15f, 0.5f, keyStrength);
+        return vec4{c.x, c.y, c.z, c.w * (1.0f - matched)};
+    }, sink);
+}
+
+// Caption: the text (the aux image, white on transparent) stamped in a colour. p0 = x, p1 = y (the text's centre),
+// p2 = scale (image pixels per text pixel), p3 = hue, p4 = saturation.
+void caption(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    const vec2 textSize = u.auxSize * u.p[2];
+    const vec2 center = vec2{u.p[0], u.p[1]} * u.resolution;
+    const vec2 origin = center - textSize * 0.5f;
+    const vec2 extent = max(textSize, v2(1e-4f));
+    const vec3 ink = hsv2rgb(vec3{u.p[3], u.p[4], 1.0f});
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        vec4 base = sample(in, f.uv);
+        vec2 local = (f.uv * u.resolution - origin) / extent;
+        if (local.x < 0.0f || local.x >= 1.0f || local.y < 0.0f || local.y >= 1.0f) return base;
+        vec4 glyph = sample(*u.aux, local);
+        return v4(mix(base.rgb(), ink, glyph.w), base.w);
+    }, sink);
+}
+
 struct Entry { std::string_view id; EffectFn fn; };
 constexpr Entry kEffects[] = {
     {"soft-glitch", softGlitch}, {"hard-glitch", hardGlitch}, {"decimate", decimate}, {"data-mosh", dataMosh},
@@ -871,6 +951,7 @@ constexpr Entry kEffects[] = {
     {"bleach", bleach}, {"edges", edges}, {"emboss", emboss}, {"vignette", vignette}, {"noise-displace", noiseDisplace},
     {"watercolor", watercolor}, {"zoom-blur", zoomBlur}, {"glow", glow}, {"light-streak", lightStreak}, {"feedback", feedback},
     {"color-correction", colorCorrection}, {"duotone", duotone}, {"solarize", solarize}, {"chromatic-warp", chromaticWarp}, {"sepia", sepia},
+    {"overlay", overlay}, {"mask", mask}, {"mask-blocks", maskBlocks}, {"chroma-key", chromaKey}, {"caption", caption},
 };
 
 } // namespace

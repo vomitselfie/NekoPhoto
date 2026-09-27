@@ -730,14 +730,25 @@ def pixels_filter(kind: str, radius: Optional[float] = None, angle: Optional[flo
 
 
 @edit("Mosh effect")
-def pixels_mosh(effect: str, params: Optional[dict] = None, seed: float = 0) -> str:
-    """Filter > Mosh: one of OpenMosh's glitch, distortion and retro effects on the active layer's pixels, inside the
-    selection. effect is an OpenMosh id: soft-glitch, hard-glitch, decimate, data-mosh, splitter, jitter, slices, shake,
-    pixel-sort, strobe, wave, kaleidoscope, pixelate, scanlines, vhs, cga-8bit, crt, dither, dot-screen, halftone.
-    params takes OpenMosh's keys (pixel-sort: low, high, reverse, vertical; vhs: tracking, bleed, noise; ...), numbers,
-    booleans for switches, an index or option name for a choice; the rest keep their defaults. seed (0..100) picks the
-    random pattern of the seeded effects; the same seed repeats it. The reply has the settings applied."""
-    return text(call("pixels.mosh", effect=effect, params=params or {}, seed=seed))
+def pixels_mosh(effect: str, params: Optional[dict] = None, seed: float = 0, layer: Optional[str] = None,
+                caption: Optional[str] = None) -> str:
+    """Filter > Mosh: one of OpenMosh's effects on the active layer's pixels, inside the selection. effect is an OpenMosh
+    id. Glitch: soft-glitch, hard-glitch, decimate, data-mosh, splitter, jitter, slices, shake, pixel-sort, strobe.
+    Distort: wave, bulge, stretch, push, luma-mesh, transform-3d, tile, kaleidoscope, mirror, wobble, smear, twirl,
+    optical-flow. Retro: pixelate, scanlines, vhs, super8, cga-8bit, crt, dither, bad-tv, dot-screen, halftone, ascii.
+    Stylize: bleach, edges, emboss, vignette, noise-displace, watercolor, zoom-blur, glow, light-streak, feedback.
+    Color: color-correction, duotone, solarize, chromatic-warp, sepia. Composite: overlay, mask, mask-blocks, chroma-key,
+    caption. params takes OpenMosh's keys (pixel-sort: low, high, reverse, vertical; vhs: tracking, bleed, noise; ...),
+    numbers, booleans for switches, an index or option name for a choice; the rest keep their defaults. seed (0..100)
+    picks the random pattern of the seeded effects; the same seed repeats it. overlay and mask need layer, the id of the
+    layer they read (where it lies over the active one); caption needs caption, its text. The reply has the settings
+    applied."""
+    extra = {}
+    if layer is not None:
+        extra["layer"] = layer
+    if caption is not None:
+        extra["text"] = caption
+    return text(call("pixels.mosh", effect=effect, params=params or {}, seed=seed, **extra))
 
 
 @edit("Camera Raw Filter")

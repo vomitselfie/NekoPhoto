@@ -35,6 +35,12 @@ std::vector<EffectSpec> makeEffects() {
     auto seeded = [](std::string_view id, std::string_view name, C category, std::vector<ParamSpec> params) {
         return EffectSpec{id, name, category, true, std::move(params)};
     };
+    auto aux = [](std::string_view id, std::string_view name, std::vector<ParamSpec> params) {
+        return EffectSpec{id, name, C::Composite, false, std::move(params), true, false};
+    };
+    auto text = [](std::string_view id, std::string_view name, std::vector<ParamSpec> params) {
+        return EffectSpec{id, name, C::Composite, false, std::move(params), false, true};
+    };
     return {
         // ---- Glitch
         fx("soft-glitch", "Soft Glitch", C::Glitch, {floatParam("amount", "Amount", 0, 1, 0.3f), floatParam("angle", "Angle", 0, tau, 0)}),
@@ -123,6 +129,15 @@ std::vector<EffectSpec> makeEffects() {
         fx("chromatic-warp", "Chromatic Warp", C::Color,
            {floatParam("amount", "Amount", 0, 0.2f, 0.05f), floatParam("cx", "Center X", 0, 1, 0.5f), floatParam("cy", "Center Y", 0, 1, 0.5f)}),
         fx("sepia", "Sepia", C::Color, {floatParam("amount", "Amount", 0, 1, 0.8f)}),
+        // ---- Composite
+        aux("overlay", "Overlay", {choiceParam("blend", "Blend", {"Normal", "Multiply", "Screen", "Lighten", "Darken"}, 0), floatParam("opacity", "Opacity", 0, 1, 1)}),
+        aux("mask", "Mask", {floatParam("low", "Low", 0, 1, 0.3f), floatParam("high", "High", 0, 1, 0.7f), boolParam("invert", "Invert", false)}),
+        seeded("mask-blocks", "Mask Blocks", C::Composite, {floatParam("size", "Block Size", 2, 128, 32), floatParam("amount", "Amount", 0, 1, 0.5f)}),
+        fx("chroma-key", "ChromaKey", C::Composite,
+           {floatParam("hue", "Key Hue", 0, 1, 0.33f), floatParam("tolerance", "Tolerance", 0, 1, 0.3f), floatParam("softness", "Softness", 0, 1, 0.1f)}),
+        text("caption", "Caption",
+             {floatParam("x", "Position X", 0, 1, 0.5f), floatParam("y", "Position Y", 0, 1, 0.85f), floatParam("scale", "Scale", 1, 16, 4),
+              floatParam("hue", "Hue", 0, 1, 0), floatParam("saturation", "Saturation", 0, 1, 0)}),
     };
 }
 

@@ -1051,6 +1051,22 @@
         <translation>セピア</translation>
     </message>
     <message>
+        <source>Mask</source>
+        <translation>マスク</translation>
+    </message>
+    <message>
+        <source>Mask Blocks</source>
+        <translation>マスクブロック</translation>
+    </message>
+    <message>
+        <source>ChromaKey</source>
+        <translation>クロマキー</translation>
+    </message>
+    <message>
+        <source>Caption</source>
+        <translation>キャプション</translation>
+    </message>
+    <message>
         <source>Amount</source>
         <translation>量</translation>
     </message>
@@ -1307,8 +1323,36 @@
         <translation>ミックス</translation>
     </message>
     <message>
+        <source>Blend</source>
+        <translation>描画モード</translation>
+    </message>
+    <message>
+        <source>Low</source>
+        <translation>下限</translation>
+    </message>
+    <message>
+        <source>High</source>
+        <translation>上限</translation>
+    </message>
+    <message>
+        <source>Key Hue</source>
+        <translation>キーの色相</translation>
+    </message>
+    <message>
+        <source>Tolerance</source>
+        <translation>許容値</translation>
+    </message>
+    <message>
         <source>Softness</source>
         <translation>ぼかし</translation>
+    </message>
+    <message>
+        <source>Position X</source>
+        <translation>位置 X</translation>
+    </message>
+    <message>
+        <source>Position Y</source>
+        <translation>位置 Y</translation>
     </message>
     <message>
         <source>Blackout</source>
@@ -6752,6 +6796,26 @@ File &gt; New creates a blank canvas.</source>
 </context>
 <context>
     <name>app::MoshDialog</name>
+    <message>
+        <source>Layer</source>
+        <translation>レイヤー</translation>
+    </message>
+    <message>
+        <source>The layer this effect reads, where it lies over this one</source>
+        <translation>このエフェクトが読み込むレイヤー（このレイヤーと重なる位置で）</translation>
+    </message>
+    <message>
+        <source>(no other layer)</source>
+        <translation>（ほかのレイヤーがありません）</translation>
+    </message>
+    <message>
+        <source>Text</source>
+        <translation>テキスト</translation>
+    </message>
+    <message>
+        <source>Caption</source>
+        <translation>キャプション</translation>
+    </message>
     <message>
         <source>Seed</source>
         <translation>シード</translation>

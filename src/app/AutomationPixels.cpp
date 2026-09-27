@@ -136,22 +136,36 @@ void AutomationServer::registerPixelsHandlers() {
             settings.set(key, value);
         }
         settings = settings.normalized();
+        // Overlay and Mask read another layer (by id, where it lies over this one); Caption stamps text.
+        std::optional<Uuid> auxLayer;
+        if (has(p, "layer")) {
+            if (!spec->auxImage) fail("layer: " + id + " reads no other layer (overlay and mask do)", invalidParams);
+            const LayerOf layerOf{document};
+            const Layer& layer = layerOf(p, "layer");
+            if (layer.isGroup || layer.adjustment || !layer.asset || !layer.asset->image) fail("layer: that layer has no pixels", invalidParams);
+            auxLayer = layer.id;
+        } else if (spec->auxImage) fail(id + " reads another layer: give its id in layer (document.overview lists them)", invalidParams);
+        const QString text = str(p, "text", QString());
+        if (has(p, "text") && !spec->text) fail("text: only caption takes text", invalidParams);
+        if (spec->text && text.trimmed().isEmpty()) fail("caption needs text", invalidParams);
         const QString name = QString::fromUtf8(spec->name.data(), qsizetype(spec->name.size()));
         LayerTransform transform;
         if (auto deep = s->adjustmentSource16(0, transform)) {
+            const MoshExtras more = moshExtras(*spec, settings, document(), auxLayer, text, transform, deep->width(), deep->height());
             auto out = std::make_shared<Image16>(*deep);
-            mosh::apply(settings, *out);
+            mosh::apply(settings, *out, more.sources());
             if (auto coverage = s->selectionOnGrid16(transform, deep->width(), deep->height())) blendThroughCoverage(*out, *deep, *coverage);
             s->commitPixels(Image16Ptr(out), transform, name);
         } else {
             auto source = s->adjustmentSource(0, transform);
             if (!source) fail("the active layer has no pixels; select a pixel layer with layers.select (document.overview shows each layer's kind)");
+            const MoshExtras more = moshExtras(*spec, settings, document(), auxLayer, text, transform, source->width(), source->height());
             auto out = std::make_shared<Image>(*source);
-            mosh::apply(settings, *out);
+            mosh::apply(settings, *out, more.sources());
             if (auto coverage = s->selectionOnGrid(transform, source->width(), source->height())) blendThroughCoverage(*out, *source, *coverage);
             s->commitPixels(std::shared_ptr<const Image>(out), transform, name);
         }
-        QJsonObject applied = moshRequest(settings);
+        QJsonObject applied = moshRequest(settings, auxLayer, text);
         applied["applied"] = applied.take("effect");
         return applied;
     });

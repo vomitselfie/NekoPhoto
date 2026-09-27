@@ -634,6 +634,31 @@ def main():
     assert rpc.call("layers.render", id=target["id"], maxSize=64) != before, "the flash inverts the pixels"
     rpc.call("history.undo")
     assert rpc.call("layers.render", id=target["id"], maxSize=64) == before, "one undo step"
+    # A Composite effect reads another layer by id, where it lies over this one: Overlay's Multiply with a red layer
+    # takes the green and blue out; Caption stamps text.
+    source = rpc.call("layers.add", name="Overlay source")
+    rpc.call("pixels.fill", color="#ff0000")
+    rpc.call("layers.select", id=target["id"])
+    over = rpc.call("pixels.mosh", effect="overlay", params={"blend": "Multiply"}, layer=source["id"])
+    assert over["applied"] == "overlay" and over["layer"] == source["id"] and over["params"]["blend"] == 1, over
+    assert rpc.call("history.info")["undo"] == "Overlay"
+    assert rpc.call("layers.render", id=target["id"], maxSize=64) != before, "the red layer multiplies over the pixels"
+    rpc.call("history.undo")
+    assert rpc.call("layers.render", id=target["id"], maxSize=64) == before
+    rpc.call("layers.select", id=source["id"])   # solid red: blue text shows wherever it lands
+    red = rpc.call("layers.render", id=source["id"], maxSize=64)
+    cap = rpc.call("pixels.mosh", effect="caption", text="NekoPhoto", params={"scale": 6, "y": 0.5, "hue": 0.6, "saturation": 1})
+    assert cap["text"] == "NekoPhoto" and rpc.call("layers.render", id=source["id"], maxSize=64) != red, cap
+    rpc.call("history.undo")
+    rpc.call("layers.select", id=target["id"])
+    for bad in ({"effect": "overlay"}, {"effect": "vhs", "layer": source["id"]}, {"effect": "caption"}, {"effect": "overlay", "layer": "nope"}):
+        try:
+            rpc.call("pixels.mosh", **bad)
+            raise AssertionError("pixels.mosh took " + str(bad))
+        except RuntimeError as e:
+            print("expected error:", e)
+    rpc.call("layers.delete", id=source["id"])
+    rpc.call("layers.select", id=target["id"])
     for bad in ({"effect": "blur"}, {"effect": "vhs", "params": {"nope": 1}}, {"effect": "strobe", "params": {"mode": "Sideways"}}):
         try:
             rpc.call("pixels.mosh", **bad)
