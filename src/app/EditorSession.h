@@ -816,6 +816,7 @@ private:
     static void releaseDetachedClipping(std::vector<compositor::Layer>& layers);
     void commitMaskTransform(const TransformEdit& edit);
     void distortLayer16(compositor::Layer& layer, const TransformEdit& edit);
+    void mergeFloatingTransform16(const TransformEdit& edit);
     void commitDistort(const TransformEdit& edit);
     void mergeFloatingTransform(const TransformEdit& edit);
     void cancelFloatingTransform(const FloatingTransform& floating);

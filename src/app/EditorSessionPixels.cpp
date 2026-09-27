@@ -66,6 +66,25 @@ std::optional<Selection> EditorSession::displayedSelection() const {
         if (dx == 0 && dy == 0) return pixelMove_->origin;
         return offsetSelection(pixelMove_->origin, dx, dy);
     }
+    if (transformEdit_ && transformEdit_->floating && document_->selection->coverage.u16()) {
+        const FloatingTransform& f = *transformEdit_->floating;
+        const Gray16& cov = *document_->selection->coverage.u16();
+        std::shared_ptr<Gray16> moved;
+        if (transformEdit_->corners) moved = warpCoverage(cov, f.original, f.pixelWidth, f.pixelHeight, *transformEdit_->corners);
+        else {
+            moved = std::make_shared<Gray16>(cov.width(), cov.height(), 0);
+            const Affine map = f.original.pixelToDocument(f.pixelWidth, f.pixelHeight).inverted().concatenating(transformEdit_->draft.pixelToDocument(f.pixelWidth, f.pixelHeight));
+            const Affine inv = map.inverted();
+            for (int y = 0; y < cov.height(); y++) for (int x = 0; x < cov.width(); x++) {
+                const Point p = inv.apply({x + 0.5, y + 0.5});
+                const int sx = int(std::floor(p.x)), sy = int(std::floor(p.y));
+                if (sx >= 0 && sy >= 0 && sx < cov.width() && sy < cov.height()) moved->at(x, y) = cov.at(sx, sy);
+            }
+        }
+        Selection s = *document_->selection;
+        s.coverage = Gray16Ptr(moved);
+        return s;
+    }
     if (transformEdit_ && transformEdit_->floating && document_->selection->coverage) {
         const FloatingTransform& f = *transformEdit_->floating;
         const GrayImage& cov = *document_->selection->coverage.u8();
