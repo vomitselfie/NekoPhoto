@@ -9,6 +9,7 @@
 #include "compositor/document.h"
 #include "compositor/filters.h"
 #include "compositor/history.h"
+#include "compositor/mosh.h"
 #include "compositor/parallel.h"
 #include "compositor/render.h"
 #include "render_plan.h"
@@ -177,6 +178,12 @@ int main(int argc, char** argv) {
     AdjustmentSettings hsv = AdjustmentSettings::defaults(AdjustmentKind::HueSaturation);
     hsv.hsv.adjustments[0] = {20, 25, -5};
     adjust("hue/saturation", hsv);
+    // Mosh (docs/mosh.md): the heaviest ports, at their defaults.
+    for (const char* id : {"pixel-sort", "vhs", "crt", "hard-glitch"}) {
+        const std::string name = std::string("mosh ") + id;
+        const mosh::Settings s = mosh::Settings::defaults(*mosh::findEffect(id));
+        bench(name.c_str(), fresh, [&] { mosh::apply(s, work); });
+    }
 
     // The same document at 16 bits (P2): the render at its depth, the canvas's (reduced to 8 bits), and reduced.
     Document deep = doc;
