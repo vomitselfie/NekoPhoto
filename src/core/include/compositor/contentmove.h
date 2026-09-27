@@ -3,6 +3,7 @@
 // the new place (heal.h) and its rim resynthesised so the seam disappears. Extend leaves the original where it was.
 #pragma once
 #include "image.h"
+#include "imaget.h"
 #include <cstdint>
 
 namespace compositor {
@@ -20,5 +21,9 @@ struct ContentMoveOptions {
 /// `visible` as for contentFill: what it hides is not copied from.
 bool contentAwareMove(Image& image, const GrayImage& selection, int dx, int dy, const ContentMoveOptions& options = {},
                       const GrayImage* visible = nullptr);
+/// The same at 16 bits: decisions on 8-bit masks and the image rounded to 8 bits, the moved, filled and blended
+/// pixels at 16 bits.
+bool contentAwareMove(Image16& image, const Gray16& selection, int dx, int dy, const ContentMoveOptions& options = {},
+                      const Gray16* visible = nullptr);
 
 } // namespace compositor

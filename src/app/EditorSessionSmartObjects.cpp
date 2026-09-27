@@ -130,10 +130,11 @@ bool EditorSession::replaceSmartObjectContents(const QString& path, QString* err
 }
 
 bool EditorSession::warpActiveLayer(const compositor::TextWarp& warp, QString* error) {
-    if (refusedAtDepth("edit.pixels", tr("Editing pixels"), error)) return false;
+    if (refusedAtDepth("edit.distort", tr("Warping a layer"), error)) return false;
     Layer* layer = activeLayerMutable();
     if (!canEditLayers() || !layer) { if (error) *error = tr("Select a layer to warp."); return false; }
     if (isMaskSelected_) { if (error) *error = tr("Warp the layer, not its mask."); return false; }
+    if (layer->text && refusedAtDepth("edit.text", tr("Text"), error)) return false;
     endOpacityEdit();
     Layer before = *layer;
     beginEdit(QT_TRANSLATE_NOOP("History", "Warp"));
@@ -152,7 +153,7 @@ bool EditorSession::warpActiveLayer(const compositor::TextWarp& warp, QString* e
 }
 
 bool EditorSession::beginWarpCage(QString* error) {
-    if (refusedAtDepth("edit.pixels", tr("Editing pixels"), error)) return false;
+    if (refusedAtDepth("edit.distort", tr("Warping a layer"), error)) return false;
     if (warpCage_) { if (error) *error = tr("A warp cage is open: Enter applies it, Esc cancels it."); return false; }
     const Layer* layer = activeLayer();
     if (!canEditLayers() || !layer) { if (error) *error = tr("Select a layer to warp."); return false; }
@@ -200,7 +201,7 @@ void EditorSession::moveWarpCagePoint(int index, QPointF p) {
 }
 
 void EditorSession::setWarpCage(const compositor::WarpMesh& cage) {
-    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return;
+    if (refusedAtDepth("edit.distort", tr("Warping a layer"))) return;
     if (!warpCage_ || cage.xs.size() != warpCage_->xs.size()) return;
     warpCage_ = cage;
     previewWarpCage();

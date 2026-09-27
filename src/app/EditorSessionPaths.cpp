@@ -454,7 +454,7 @@ bool EditorSession::pathToShapeLayer(uint16_t id) {
 }
 
 bool EditorSession::selectionToWorkPath(double tolerance) {
-    if (refusedAtDepth("edit.selection", tr("Selections"))) return false;
+    if (refusedAtDepth("edit.vector", tr("Vector masks and paths"))) return false;
     if (!canEditLayers() || !document_->selection || !document_->selection->coverage) return false;
     bool tooDetailed = false;
     const auto loops = selectionOutline(*document_->selection->coverage.u8(), &tooDetailed);

@@ -1,10 +1,12 @@
 #include "compositor/selection.h"
+#include "compositor/depth.h"
 #include "compositor/morphology.h"
 #include "compositor/render.h"
 #include <algorithm>
 #include <cstring>
 #include <cmath>
 #include <cstdlib>
+#include <type_traits>
 
 extern "C" {
 #include "BrushPixels.h"
@@ -174,18 +176,44 @@ std::shared_ptr<GrayImage> rasterizeEllipse(const Rect& rect, int width, int hei
 
 namespace {
 /// `op(a, b)` per pixel into a fresh raster, row by row so the compiler vectorises the byte operation.
-template <class Op>
-std::shared_ptr<GrayImage> combineRows(const GrayImage& a, const GrayImage& b, Op op) {
-    auto out = std::make_shared<GrayImage>(a.width(), a.height());
+template <class G, class Op>
+std::shared_ptr<G> combineRows(const G& a, const G& b, Op op) {
+    using S = std::remove_cvref_t<decltype(*a.row(0))>;
+    auto out = std::make_shared<G>(a.width(), a.height());
     const int w = std::min(a.width(), b.width()), h = std::min(a.height(), b.height());
     for (int y = 0; y < h; y++) {
-        const uint8_t *pa = a.row(y), *pb = b.row(y);
-        uint8_t* po = out->row(y);
+        const S *pa = a.row(y), *pb = b.row(y);
+        S* po = out->row(y);
         for (int x = 0; x < w; x++) po[x] = op(pa[x], pb[x]);
         for (int x = w; x < a.width(); x++) po[x] = pa[x];
     }
-    for (int y = h; y < a.height(); y++) std::memcpy(out->row(y), a.row(y), size_t(a.width()));
+    for (int y = h; y < a.height(); y++) std::memcpy(out->row(y), a.row(y), size_t(a.width()) * sizeof(S));
     return out;
+}
+
+std::optional<Selection> combine16(const std::optional<Selection>& current, const Gray16& shape, SelectionMode mode, bool antialiased) {
+    Selection result;
+    result.antialiased = antialiased;
+    Gray16Ptr before = current && current->coverage ? current->coverage.u16() : nullptr;
+    if (current && current->coverage.u8()) before = widenGray(*current->coverage.u8());
+    switch (mode) {
+    case SelectionMode::Replace:
+        result.coverage = Gray16Ptr(std::make_shared<Gray16>(shape));
+        return result;
+    case SelectionMode::Add:
+        if (!before) { result.coverage = Gray16Ptr(std::make_shared<Gray16>(shape)); return result; }
+        result.coverage = Gray16Ptr(combineRows(*before, shape, [](uint16_t a, uint16_t b) { return std::max(a, b); }));
+        return result;
+    case SelectionMode::Subtract:
+        if (!before) return current;
+        result.coverage = Gray16Ptr(combineRows(*before, shape, [](uint16_t a, uint16_t b) { return uint16_t(a > b ? a - b : 0); }));
+        return result;
+    case SelectionMode::Intersect:
+        if (!before) return current;
+        result.coverage = Gray16Ptr(combineRows(*before, shape, [](uint16_t a, uint16_t b) { return std::min(a, b); }));
+        return result;
+    }
+    return current;
 }
 } // namespace
 
@@ -215,8 +243,27 @@ std::optional<Selection> combineSelection(const std::optional<Selection>& curren
     return current;
 }
 
+std::optional<Selection> combineSelection(const std::optional<Selection>& current, const AnyGray& shape, SelectionMode mode, bool antialiased, SampleType depth) {
+    if (depth == SampleType::U16) {
+        if (shape.u16()) return combine16(current, *shape.u16(), mode, antialiased);
+        if (shape.u8()) return combine16(current, *widenGray(*shape.u8()), mode, antialiased);
+        return current;
+    }
+    if (shape.u8()) return combineSelection(current, *shape.u8(), mode, antialiased);
+    if (shape.u16()) return combineSelection(current, *narrowGray(*shape.u16()), mode, antialiased);
+    return current;
+}
+
 Selection invertSelection(const Selection& selection, int width, int height) {
     Selection result = selection;
+    if (selection.coverage.u16()) {
+        auto out = std::make_shared<Gray16>(width, height, uint16_t(one16));
+        const Gray16& in = *selection.coverage.u16();
+        for (int y = 0; y < std::min(height, in.height()); y++)
+            for (int x = 0; x < std::min(width, in.width()); x++) out->at(x, y) = uint16_t(one16 - std::min<uint32_t>(in.at(x, y), one16));
+        result.coverage = Gray16Ptr(out);
+        return result;
+    }
     auto out = std::make_shared<GrayImage>(width, height, 255);
     if (selection.coverage)
         for (int y = 0; y < height; y++) {
@@ -228,10 +275,28 @@ Selection invertSelection(const Selection& selection, int width, int height) {
     return result;
 }
 
+Selection offsetSelection(const Selection& selection, int dx, int dy) {
+    Selection result = selection;
+    auto shift = [&](const auto& src) {
+        using G = std::remove_cvref_t<decltype(src)>;
+        auto moved = std::make_shared<G>(src.width(), src.height(), 0);
+        for (int y = 0; y < src.height(); y++) {
+            const int sy = y - dy;
+            if (sy < 0 || sy >= src.height()) continue;
+            for (int x = 0; x < src.width(); x++) { const int sx = x - dx; if (sx >= 0 && sx < src.width()) moved->at(x, y) = src.at(sx, sy); }
+        }
+        return std::shared_ptr<const G>(moved);
+    };
+    if (selection.coverage.u16()) result.coverage = shift(*selection.coverage.u16());
+    else if (selection.coverage.u8()) result.coverage = shift(*selection.coverage.u8());
+    return result;
+}
+
 Selection resizeSelection(const Selection& selection, int amount) {
     Selection result = selection;
     if (!selection.coverage || amount == 0) return result;
-    result.coverage = growSelection(*selection.coverage.u8(), amount);
+    if (selection.coverage.u16()) result.coverage = Gray16Ptr(growSelection(*selection.coverage.u16(), amount));
+    else result.coverage = growSelection(*selection.coverage.u8(), amount);
     return result;
 }
 
@@ -283,6 +348,31 @@ std::shared_ptr<GrayImage> coverageFromLayer(const Document& document, const Lay
         drawLayer(params, document.rect(), 1, nullptr, pixels);
     }
     layer_extract_alpha(pixels.data(), size_t(pixels.stride()), out->data(), size_t(out->stride()), size_t(document.width), size_t(document.height));
+    return out;
+}
+
+std::shared_ptr<Gray16> coverageFromLayer16(const Document& document, const Layer& layer) {
+    auto out = std::make_shared<Gray16>(document.width, document.height);
+    if (!layer.asset || !layer.asset->image.u16()) return out;
+    const Image16& image = *layer.asset->image.u16();
+    const LayerTransform& t = layer.transform;
+    const bool onGrid = t.rotation == 0 && !t.flipX && !t.flipY && t.size.width == image.width() && t.size.height == image.height()
+        && t.origin.x == std::floor(t.origin.x) && t.origin.y == std::floor(t.origin.y);
+    if (onGrid) {
+        const int ox = int(t.origin.x), oy = int(t.origin.y);
+        const int x0 = std::max(0, ox), y0 = std::max(0, oy), x1 = std::min(document.width, ox + image.width()), y1 = std::min(document.height, oy + image.height());
+        for (int y = y0; y < y1; y++)
+            for (int x = x0; x < x1; x++) out->at(x, y) = image.pixel(x - ox, y - oy)[3];
+        return out;
+    }
+    Image16 pixels(document.width, document.height);
+    DrawParams16 params;
+    params.image = layer.asset->image.u16();
+    params.transform = layer.transform;
+    params.layerTransformForMask = layer.transform;
+    drawLayer(params, document.rect(), 1, nullptr, pixels);
+    for (int y = 0; y < document.height; y++)
+        for (int x = 0; x < document.width; x++) out->at(x, y) = pixels.pixel(x, y)[3];
     return out;
 }
 

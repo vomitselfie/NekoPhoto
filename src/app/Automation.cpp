@@ -189,7 +189,18 @@ bool worksAtDepth(const QString& method, const EditorSession& session) {
         {"layers.move", "layers.structure"}, {"layers.reorder", "layers.structure"}, {"layers.group", "layers.structure"},
         {"layers.setTransform", "layers.transform"}, {"layers.flip", "layers.transform"}, {"layers.mask", "layers.mask"}, {"layers.render", "render.document"},
         {"canvas.resize", "canvas.size"}, {"canvas.flip", "canvas.flip"},
-        {"slices.add", "tool.slice"}, {"slices.set", "tool.slice"}, {"slices.delete", "tool.slice"}};
+        {"slices.add", "tool.slice"}, {"slices.set", "tool.slice"}, {"slices.delete", "tool.slice"},
+        {"pixels.adjust", "adjustment.pixels"}, {"pixels.invert", "adjustment.Invert"}, {"adjustments.set", "adjustment.pixels"},
+        {"pixels.filter", "filter.pixels"},
+        {"selection.all", "edit.selection"}, {"selection.none", "edit.selection"}, {"selection.invert", "edit.selection"},
+        {"selection.quickMask", "edit.selection"}, {"selection.rect", "edit.selection"}, {"selection.polygon", "edit.selection"},
+        {"selection.wand", "edit.selection"}, {"selection.scribble", "edit.selection"}, {"selection.subject", "edit.selection"},
+        {"selection.fromLayer", "edit.selection"}, {"selection.feather", "edit.selection"}, {"selection.smooth", "edit.selection"},
+        {"selection.border", "edit.selection"}, {"selection.grow", "edit.selection"}, {"paths.toSelection", "edit.selection"},
+        {"pixels.fill", "edit.fill"}, {"pixels.clear", "edit.fill"},
+        {"image.resize", "edit.imageSize"}, {"image.trim", "edit.crop"}, {"canvas.crop", "edit.crop"},
+        {"layers.warp", "edit.distort"}, {"layers.setCage", "edit.distort"},
+        {"pixels.contentAwareFill", "edit.contentAware"}, {"pixels.contentAwareMove", "edit.contentAware"}, {"pixels.contentAwareScale", "edit.contentAware"}};
     if (always.contains(method)) return true;
     auto it = features.find(method);
     return it != features.end() && session.supportsFeature(it.value());

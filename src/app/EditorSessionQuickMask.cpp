@@ -5,6 +5,7 @@
 // painting with white does. Leaving turns the mask back into the selection and takes the layer away; saving and
 // exporting leave it first, so it is never written.
 #include "EditorSession.h"
+#include "compositor/depth.h"
 #include "compositor/render.h"
 
 using namespace compositor;
@@ -29,19 +30,36 @@ bool EditorSession::beginQuickMask() {
     if (refusedAtDepth("edit.selection", tr("Selections"))) return false;
     if (!canEditLayers() || quickMaskActive() || document_->layers.size() >= size_t(Document::maxLayers)) return false;
     const int w = document_->width, h = document_->height;
-    auto red = std::make_shared<Image>(w, h);
-    red->fill(255, 0, 0, 255);
-    // Red over what is not selected; with no selection, nothing is masked yet.
-    auto mask = std::make_shared<GrayImage>(w, h, 0);
-    if (document_->selection && document_->selection->coverage) {
-        const GrayImage& selected = *document_->selection->coverage.u8();
-        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) mask->at(x, y) = uint8_t(255 - selected.at(x, y));
+    const std::string name = QCoreApplication::translate("Names", "Quick Mask").toStdString();
+    // Red over what is not selected; with no selection, nothing is masked yet. At the document's depth, so a
+    // feathered 16-bit selection comes back with all its steps.
+    Asset red;
+    LayerMask m;
+    if (document_->sampleType == SampleType::U16) {
+        auto pixels = std::make_shared<Image16>(w, h);
+        const uint16_t colour[4] = {uint16_t(one16), 0, 0, uint16_t(one16)};
+        pixels->fill(colour);
+        auto mask = std::make_shared<Gray16>(w, h, 0);
+        if (document_->selection && document_->selection->coverage.u16()) {
+            const Gray16& selected = *document_->selection->coverage.u16();
+            for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) mask->at(x, y) = uint16_t(one16 - std::min<uint32_t>(selected.at(x, y), one16));
+        }
+        red = Asset::make(Image16Ptr(pixels), name);
+        m.asset = MaskAsset::make(Gray16Ptr(mask));
+    } else {
+        auto pixels = std::make_shared<Image>(w, h);
+        pixels->fill(255, 0, 0, 255);
+        auto mask = std::make_shared<GrayImage>(w, h, 0);
+        if (document_->selection && document_->selection->coverage.u8()) {
+            const GrayImage& selected = *document_->selection->coverage.u8();
+            for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) mask->at(x, y) = uint8_t(255 - selected.at(x, y));
+        }
+        red = Asset::make(pixels, name);
+        m.asset = MaskAsset::make(mask);
     }
     beginEdit(QT_TRANSLATE_NOOP("History", "Quick Mask"));
-    Layer layer(Asset::make(red, QCoreApplication::translate("Names", "Quick Mask").toStdString()), Point(0, 0));
+    Layer layer(red, Point(0, 0));
     layer.opacity = 0.5;
-    LayerMask m;
-    m.asset = MaskAsset::make(mask);
     layer.mask = m;
     quickMaskReturnLayer_ = activeLayerId_;
     quickMaskLayer_ = layer.id;
@@ -61,7 +79,20 @@ bool EditorSession::endQuickMask() {
     const Layer* layer = document_->find(*quickMaskLayer_);
     const int w = document_->width, h = document_->height;
     std::optional<Selection> selection;
-    if (layer->mask && layer->mask->asset.image.u8()) {
+    if (layer->mask && layer->mask->asset.image.u16()) {
+        const uint16_t background = widen8(LayerMask::background(*layer->mask->asset.thumbnail));
+        auto masked = std::make_shared<Gray16>(w, h, background);
+        sampleMaskCoverage(*layer->mask->asset.image.u16(), layer->maskTransform(), document_->rect(), 1, background, *masked, false);
+        bool all = true, none = true;
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++) {
+                uint16_t& v = masked->at(x, y);
+                v = uint16_t(one16 - std::min<uint32_t>(v, one16));
+                all = all && v == one16;
+                none = none && v == 0;
+            }
+        if (!all && !none) { Selection s; s.coverage = Gray16Ptr(masked); s.antialiased = true; selection = s; }
+    } else if (layer->mask && layer->mask->asset.image.u8()) {
         // The mask as it sits on the canvas (it may have been moved), inverted: what is not masked is selected.
         const uint8_t background = LayerMask::background(*layer->mask->asset.thumbnail);
         auto masked = std::make_shared<GrayImage>(w, h, background);

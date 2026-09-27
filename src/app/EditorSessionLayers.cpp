@@ -649,16 +649,26 @@ void EditorSession::addMaskFromSelection(bool revealing) {
     if ((long long)width * height > Document::pixelBudget) return;
     // The selection resampled into the layer's own pixel grid; the selected area gets the opposite value.
     LayerTransform docTransform(Point(0, 0), document_->size());
-    auto selected = resampleMask(*document_->selection->coverage.u8(), docTransform, layer->transform, width, height, 0);
-    auto mask = std::make_shared<GrayImage>(width, height, revealing ? 255 : 0);
-    for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) {
-        int s = selected->at(x, y);
-        mask->at(x, y) = uint8_t(revealing ? 255 - s : s);
+    LayerMask m;
+    if (const Gray16Ptr& deep = document_->selection->coverage.u16()) {
+        auto selected = resampleMask(*deep, docTransform, layer->transform, width, height, 0);
+        auto mask = std::make_shared<Gray16>(width, height);
+        for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) {
+            const uint32_t s = std::min<uint32_t>(selected->at(x, y), one16);
+            mask->at(x, y) = uint16_t(revealing ? one16 - s : s);
+        }
+        m.asset = MaskAsset::make(Gray16Ptr(mask));
+    } else {
+        auto selected = resampleMask(*document_->selection->coverage.u8(), docTransform, layer->transform, width, height, 0);
+        auto mask = std::make_shared<GrayImage>(width, height, revealing ? 255 : 0);
+        for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) {
+            int s = selected->at(x, y);
+            mask->at(x, y) = uint8_t(revealing ? 255 - s : s);
+        }
+        m.asset = MaskAsset::make(mask);
     }
     endOpacityEdit();
     beginEdit(QT_TRANSLATE_NOOP("History", "Add Mask from Selection"));
-    LayerMask m;
-    m.asset = MaskAsset::make(mask);
     layer->mask = m;
     document_->selection.reset();
     isMaskSelected_ = true;

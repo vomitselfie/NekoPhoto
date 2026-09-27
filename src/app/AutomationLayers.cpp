@@ -314,7 +314,7 @@ void AutomationServer::registerLayersHandlers() {
         document();
         EditorSession* s = session();
         QString kind = str(p, "kind", QStringLiteral("pixels")).toLower();
-        if ((kind == "adjustment" || kind == "text") && s->sampleType() != SampleType::U8)
+        if (kind == "text" && s->sampleType() != SampleType::U8)
             fail("layers.add kind " + kind + " is not available for " + QString::fromLatin1(sampleTypeName(s->sampleType())) + "-bit documents yet");
         if (kind == "pixels" || kind == "blank") s->addBlankLayer(flag(p, "below", false));
         else if (kind == "group" || kind == "folder") s->addGroup();

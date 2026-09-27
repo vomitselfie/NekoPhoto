@@ -200,6 +200,27 @@ and a Channels panel, with 8-bit documents untouched throughout.
   16-bit PSD round trips byte for byte (`depth_format_tests`). No Photoshop-saved 16-bit PSD was available; the
   fixture is built in the test the way Photoshop lays one out.
 
+**P3a landed (2026-09-27): editing at 16 bits, painting aside.** User-facing summary: [bit-depth.md](bit-depth.md).
+
+- Adjustments: every `AdjustmentKind` on `Image16` (`adjustments_u16.cpp`): table kinds through 32769-entry tables
+  built from their functions, colour kinds with their per-pixel maths on the exact straight colour, Hue/Saturation
+  through a float 33-point cube; Posterize and Threshold decide as at 8 bits on 8-bit-sourced pixels. Adjustment
+  layers render natively in `RenderExec<U16>` (no more `via8` for them; layer styles still use it).
+- Filters: Gaussian and Motion Blur (and 16-bit masks), Add Noise, Lens Correction; grow/trim/selection helpers.
+- Selections at document depth: combine, invert, expand/contract/border/smooth/feather on `Gray16`, Load as
+  Selection, Quick Mask, offset; the wand and Quick Select read the 8-bit display render and widen their result.
+- Pixel edits: fill, clear, clipboard, Free Transform of selected pixels, content-aware fill/move/scale (decisions
+  on the 8-bit rounding, 16-bit pixels copied), Image Size, Crop, Trim, Distort, Warp and Warp Cage.
+- Gates: `depth_edit_tests` (U16 vs U8 calibration per port), 44 new U16 render-hash scenes (8-bit hashes
+  unchanged; `u16/adjust_layer/levels` changed as it is no longer drawn at 8 bits), full ctest, GCC and Clang
+  `-Werror`, rpc smoke's 16-bit section, PSD corpus 118 files / 3,975 blocks at 8 and 16 bits. The 8-bit object
+  code of blur, resample, render_exec_u8, blend_u8, brush, kernels, adjustments and filters matches 68435cb
+  function for function (16-bit code lives in separate `_u16` units).
+- Still gated: painting and brush tools, Patch, Paint Bucket, moving selected pixels with the Move tool, Camera
+  Raw, G'MIC, Remove Background, merges, Apply Mask, layer styles, smart objects, vectors, text, timeline.
+- For P3b: `BrushStroke` (fill-through at 8 bits, `liftSelection`, `commit`) needs a 16-bit raster, then the
+  Move-tool pixel move, Paint Bucket, Patch, gradients and the healing/clone/smudge engines follow it.
+
 ## Review notes
 
 - Mac project compatibility: since 2026-09-26 NekoPhoto no longer keeps Mac Compositor project-format parity, so

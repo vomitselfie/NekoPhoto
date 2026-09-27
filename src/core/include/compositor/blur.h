@@ -5,6 +5,7 @@
 // depends on the distance. Outside the image is transparent (zero).
 #pragma once
 #include "image.h"
+#include "imaget.h"
 
 namespace compositor {
 
@@ -12,9 +13,13 @@ namespace compositor {
 void gaussianBlur(Image& image, double sigma);
 /// The same for an 8-bit mask or coverage raster.
 void gaussianBlur(GrayImage& image, double sigma);
+/// The same at 16 bits (0..32768).
+void gaussianBlur(Image16& image, double sigma);
+void gaussianBlur(Gray16& image, double sigma);
 
 /// Photoshop's Motion Blur: an even smear along `distance` pixels at `angleDegrees` (counterclockwise from
 /// horizontal, y down), in place.
 void motionBlur(Image& image, double distance, double angleDegrees);
+void motionBlur(Image16& image, double distance, double angleDegrees);
 
 } // namespace compositor

@@ -4,6 +4,7 @@
 // the constructions were pinned by Patchy against Photoshop 2026's own bakes (docs/smart-objects.md).
 #pragma once
 #include "image.h"
+#include "imaget.h"
 #include "transform.h"
 #include <array>
 #include <optional>
@@ -41,5 +42,10 @@ std::optional<WarpedRaster> renderWarpedImage(const Image& image, const WarpMesh
 /// 0..height): the whole image, the patch extended past the box where the image reaches beyond it (Warp Text over
 /// its layout box, ink poking out of it). The result's transform places it in the image's pixel space.
 std::optional<WarpedRaster> renderWarpedOverBox(const Image& image, const WarpMesh& mesh, const Rect& box);
+
+/// The same at 16 bits.
+struct WarpedRaster16 { std::shared_ptr<Image16> image; LayerTransform transform; };
+std::optional<WarpedRaster16> renderWarpedImage(const Image16& image, const WarpMesh& mesh, const std::array<double, 8>& quad, const Rect* clip = nullptr);
+std::optional<WarpedRaster16> renderWarpedOverBox(const Image16& image, const WarpMesh& mesh, const Rect& box);
 
 } // namespace compositor

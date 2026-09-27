@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <type_traits>
 
 namespace compositor {
 
@@ -212,20 +213,24 @@ std::optional<std::array<double, 2>> invertCell(double x, double y, Point p00, P
 }
 
 // Half the size, each pixel the mean of four (premultiplied, so a plain mean is right).
-Image halve(const Image& src) {
-    Image out(std::max(1, src.width() / 2), std::max(1, src.height() / 2));
+template <class I>
+I halve(const I& src) {
+    using Sample = std::remove_cvref_t<decltype(*src.data())>;
+    I out(std::max(1, src.width() / 2), std::max(1, src.height() / 2));
     for (int y = 0; y < out.height(); y++)
         for (int x = 0; x < out.width(); x++) {
             const int x0 = std::min(2 * x, src.width() - 1), x1 = std::min(2 * x + 1, src.width() - 1);
             const int y0 = std::min(2 * y, src.height() - 1), y1 = std::min(2 * y + 1, src.height() - 1);
             for (int c = 0; c < 4; c++)
-                out.pixel(x, y)[c] = uint8_t((src.pixel(x0, y0)[c] + src.pixel(x1, y0)[c] + src.pixel(x0, y1)[c] + src.pixel(x1, y1)[c] + 2) / 4);
+                out.pixel(x, y)[c] = Sample((uint32_t(src.pixel(x0, y0)[c]) + src.pixel(x1, y0)[c] + src.pixel(x0, y1)[c] + src.pixel(x1, y1)[c] + 2) / 4);
         }
     return out;
 }
 
 // Bilinear at (x, y) in pixel units (centres at +0.5), the edges extended (the surface's own edge bounds it).
-void sample(const Image& img, double x, double y, uint8_t* out) {
+template <class I, class Sample>
+void sample(const I& img, double x, double y, Sample* out) {
+    constexpr long full = std::is_same_v<Sample, uint8_t> ? 255L : 32768L;
     x -= 0.5; y -= 0.5;
     const int x0 = int(std::floor(x)), y0 = int(std::floor(y));
     const double fx = x - x0, fy = y - y0;
@@ -234,10 +239,10 @@ void sample(const Image& img, double x, double y, uint8_t* out) {
         for (int i = 0; i < 2; i++) {
             const int px = std::clamp(x0 + i, 0, img.width() - 1), py = std::clamp(y0 + j, 0, img.height() - 1);
             const double w = (i ? fx : 1 - fx) * (j ? fy : 1 - fy);
-            const uint8_t* p = img.pixel(px, py);
+            const Sample* p = img.pixel(px, py);
             for (int c = 0; c < 4; c++) acc[c] += w * p[c];
         }
-    for (int c = 0; c < 4; c++) out[c] = uint8_t(std::clamp(std::lround(acc[c]), 0L, 255L));
+    for (int c = 0; c < 4; c++) out[c] = Sample(std::clamp(std::lround(acc[c]), 0L, full));
 }
 
 } // namespace
@@ -303,7 +308,13 @@ void distortWarpMesh(WarpMesh& m, double horizontal, double vertical) {
 namespace {
 
 // Draws `image` through a forward lattice: `at(u, v)` gives the document point for the image's (u, v) in [0, 1]^2.
-std::optional<WarpedRaster> resampleThrough(const Image& image, const std::function<Point(double, double)>& at, const Rect* clip = nullptr) {
+template <class I>
+struct RasterOf { using Type = WarpedRaster; };
+template <>
+struct RasterOf<Image16> { using Type = WarpedRaster16; };
+
+template <class I>
+std::optional<typename RasterOf<I>::Type> resampleThrough(const I& image, const std::function<Point(double, double)>& at, const Rect* clip = nullptr) {
     double minX = 1e300, minY = 1e300, maxX = -1e300, maxY = -1e300;
     for (int j = 0; j <= 16; j++)
         for (int i = 0; i <= 16; i++) {
@@ -332,11 +343,11 @@ std::optional<WarpedRaster> resampleThrough(const Image& image, const std::funct
 
     // Minified: sample a reduction, not the full contents (bilinear alone would alias).
     const double spread = std::max(image.width() / std::max(1.0, maxX - minX), image.height() / std::max(1.0, maxY - minY));
-    const Image* src = &image;
-    Image reduced;
+    const I* src = &image;
+    I reduced;
     for (double s = spread; s >= 2 && src->width() > 1 && src->height() > 1; s /= 2) { reduced = halve(*src); src = &reduced; }
 
-    auto out = std::make_shared<Image>(w, hgt);
+    auto out = std::make_shared<I>(w, hgt);
     std::vector<uint8_t> written(size_t(w) * size_t(hgt), 0);   // first writer wins where the surface folds
     for (int j = 0; j < cellsY; j++)
         for (int i = 0; i < cellsX; i++) {
@@ -357,7 +368,7 @@ std::optional<WarpedRaster> resampleThrough(const Image& image, const std::funct
                     sample(*src, u * src->width(), v * src->height(), out->pixel(x, y));
                 }
         }
-    return WarpedRaster{out, LayerTransform(Point(left, top), Size(w, hgt))};
+    return typename RasterOf<I>::Type{out, LayerTransform(Point(left, top), Size(w, hgt))};
 }
 
 } // namespace
@@ -374,6 +385,30 @@ std::optional<WarpedRaster> renderWarpedImage(const Image& image, const WarpMesh
 }
 
 std::optional<WarpedRaster> renderWarpedOverBox(const Image& image, const WarpMesh& mesh, const Rect& box) {
+    if (image.isEmpty() || !(box.width > 0) || !(box.height > 0) || mesh.xs.size() != size_t(mesh.uOrder * mesh.vOrder) || mesh.ys.size() != mesh.xs.size())
+        return std::nullopt;
+    // The image's (u, v) as the box's parameters: past the box they run outside [0, 1], where the Bernstein patch
+    // extrapolates smoothly.
+    const double u0 = -box.x / box.width, u1 = (image.width() - box.x) / box.width;
+    const double v0 = -box.y / box.height, v1 = (image.height() - box.y) / box.height;
+    return resampleThrough(image, [&](double u, double v) {
+        const Point p = evaluateWarpMesh(mesh, u0 + (u1 - u0) * u, v0 + (v1 - v0) * v);
+        return Point(box.x + p.x, box.y + p.y);
+    });
+}
+
+std::optional<WarpedRaster16> renderWarpedImage(const Image16& image, const WarpMesh& mesh, const std::array<double, 8>& quad, const Rect* clip) {
+    if (image.isEmpty() || mesh.xs.size() != size_t(mesh.uOrder * mesh.vOrder) || mesh.ys.size() != mesh.xs.size()) return std::nullopt;
+    for (double v : quad) if (!std::isfinite(v)) return std::nullopt;
+    // The control-point hull, not the warp bounds, is what Photoshop's placement quad describes.
+    const auto [x0, x1] = std::minmax_element(mesh.xs.begin(), mesh.xs.end());
+    const auto [y0, y1] = std::minmax_element(mesh.ys.begin(), mesh.ys.end());
+    const auto h = rectToQuad(*x0, *y0, *x1, *y1, quad);
+    if (!h) return std::nullopt;
+    return resampleThrough(image, [&](double u, double v) { return apply(*h, evaluateWarpMesh(mesh, u, v)); }, clip);
+}
+
+std::optional<WarpedRaster16> renderWarpedOverBox(const Image16& image, const WarpMesh& mesh, const Rect& box) {
     if (image.isEmpty() || !(box.width > 0) || !(box.height > 0) || mesh.xs.size() != size_t(mesh.uOrder * mesh.vOrder) || mesh.ys.size() != mesh.xs.size())
         return std::nullopt;
     // The image's (u, v) as the box's parameters: past the box they run outside [0, 1], where the Bernstein patch

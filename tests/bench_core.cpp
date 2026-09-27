@@ -223,5 +223,17 @@ int main(int argc, char** argv) {
         bench(name.c_str(), none, [&] { for (const Layer& l : layered.layers) found += layered.indexOf(l.id) >= 0; });
         if (found == 0) std::printf("(no layers found)\n");
     }
+    // Editing at 16 bits (P3a): the same photo converted, blurred and adjusted there.
+    auto photo16 = widenImage(*photo);
+    Image16 work16;
+    auto fresh16 = [&] { work16 = *photo16; };
+    for (double radius : {2.0, 20.0}) {
+        std::string name = "u16 gaussian blur r" + std::to_string(int(radius));
+        bench(name.c_str(), fresh16, [&] { FilterSettings s; s.radius = radius; applyFilter(FilterKind::GaussianBlur, work16, s); });
+    }
+    auto adjust16 = [&](const char* name, AdjustmentSettings s) { bench(name, fresh16, [&] { applyAdjustment(s, work16, all, 1); }); };
+    adjust16("u16 levels", levels);
+    adjust16("u16 curves", curves);
+    adjust16("u16 hue/saturation", hsv);
     return 0;
 }

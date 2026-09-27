@@ -1,5 +1,6 @@
 // EditorSession: Free transform, distort and floating selections.
 #include "EditorSession.h"
+#include "compositor/depth.h"
 #include "QtGeometry.h"
 #include "compositor/blend.h"
 #include <algorithm>
@@ -104,7 +105,7 @@ void EditorSession::beginSelectionTransform() {
     beginEdit(QT_TRANSLATE_NOOP("History", "Transform Selection"));
     Layer* src = document_->find(source->id);
     clearSelectedPixelsNow(*src);
-    Layer floating(Asset::make(lifted->image, QCoreApplication::translate("Names", "Floating Selection").toStdString()), toPoint(lifted->origin));
+    Layer floating(Asset::makeAny(lifted->image, QCoreApplication::translate("Names", "Floating Selection").toStdString()), toPoint(lifted->origin));
     floating.name = QCoreApplication::translate("Names", "Floating Selection").toStdString();
     floating.parentId = src->parentId;
     floating.opacity = src->opacity;
@@ -114,7 +115,7 @@ void EditorSession::beginSelectionTransform() {
     setActiveLayer(floating.id);
     tool_ = Tool::Move;
     TransformEdit edit{.layerId = floating.id, .draft = floating.transform, .persistent = true, .mask = false};
-    edit.floating = FloatingTransform{source->id, std::move(before), beforeActive, floating.transform, lifted->image->width(), lifted->image->height()};
+    edit.floating = FloatingTransform{source->id, std::move(before), beforeActive, floating.transform, lifted->image.width(), lifted->image.height()};
     transformEdit_ = edit;
     emit toolChanged();
     notifyDocument();
@@ -141,7 +142,7 @@ void EditorSession::previewTransform(const LayerTransform& value) {
 }
 
 void EditorSession::beginDistort() {
-    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return;
+    if (refusedAtDepth("edit.distort", tr("Distorting a layer"))) return;
     if (!transformEdit_ || transformEdit_->corners || !transformEdit_->draft.isValid() || transformEdit_->mask) return;
     transformEdit_->corners = cornersOf(transformEdit_->draft);
     transformEdit_->persistent = true;
@@ -150,7 +151,7 @@ void EditorSession::beginDistort() {
 
 void EditorSession::previewCorners(const Corners& corners) {
     if (!transformEdit_ || !transformEdit_->corners || !cornersUsable(corners)) return;
-    if (refusedAtDepth("edit.pixels", tr("Distorting a layer"))) { transformEdit_->corners.reset(); return; }
+    if (refusedAtDepth("edit.distort", tr("Distorting a layer"))) { transformEdit_->corners.reset(); return; }
     transformEdit_->corners = corners;
     emit documentChanged({});
     emit transformChanged();
@@ -189,6 +190,7 @@ void EditorSession::commitDistort(const TransformEdit& edit) {
     beginEdit(edit.group ? QT_TRANSLATE_NOOP("History", "Distort Layers") : QT_TRANSLATE_NOOP("History", "Distort"));
     for (auto& id : ids) {
         Layer* layer = document_->find(id);
+        if (layer && layer->asset && layer->asset->image.u16()) { distortLayer16(*layer, edit); continue; }
         if (!layer || !layer->asset || !layer->asset->image.u8()) continue;
         auto target = distortTarget(*layer, edit);
         if (!target) continue;
@@ -221,11 +223,43 @@ void EditorSession::commitDistort(const TransformEdit& edit) {
     endEdit();
 }
 
+void EditorSession::distortLayer16(Layer& layer, const TransformEdit& edit) {
+    // commitDistort's steps at 16 bits: the pixels through the homography, cropped to what is there, and a mask
+    // that follows them.
+    auto target = distortTarget(layer, edit);
+    if (!target) return;
+    Rect crop;
+    auto warped = warpImageTrimmed(layer.asset->image.u16(), target->first, target->second, &crop);
+    if (!warped) { emit error(tr("That shape can't be applied.")); return; }
+    if (layer.mask && layer.mask->asset.image.u16()) {
+        LayerMask& mask = *layer.mask;
+        const Gray16& image = *mask.asset.image.u16();
+        if (!mask.placement && mask.linked) {
+            auto wm = warpMask(image, target->first, target->second, 0, 0);
+            if (wm && (wm->image->width() > 1 || wm->image->height() > 1))
+                mask.asset = MaskAsset::make(Gray16Ptr(cropGray(*wm->image, int(crop.x), int(crop.y), int(crop.width), int(crop.height))));
+        } else if (mask.linked && mask.placement) {
+            LayerTransform placement = mask.placement->following(layer.transform, target->first);
+            Corners carried = carriedCorners(placement, target->first, target->second);
+            if (cornersUsable(carried)) {
+                auto wm = warpMask(image, placement, carried, widen8(LayerMask::background(*mask.asset.thumbnail)), 0);
+                if (wm) { mask.asset = MaskAsset::make(Gray16Ptr(wm->image)); mask.placement = wm->transform; }
+            }
+        } else if (!mask.placement) {
+            mask.placement = layer.transform;
+        }
+    }
+    layer.asset = Asset::make(Image16Ptr(warped->image), layer.name);
+    layer.transform = warped->transform;
+    layer.shapeImage.reset();
+}
+
 void EditorSession::mergeFloatingTransform(const TransformEdit& edit) {
     const FloatingTransform& floating = *edit.floating;
     Layer* moving = document_->find(edit.layerId);
     Layer* source = document_->find(floating.sourceId);
     if (!moving || !source || !moving->asset || !source->asset || !edit.draft.isValid()) { cancelFloatingTransform(floating); return; }
+    if (moving->asset->image.u16() && source->asset->image.u16()) { mergeFloatingTransform16(edit); return; }
     std::shared_ptr<const Image> pixels = moving->asset->image.u8();
     LayerTransform placed = edit.draft;
     if (edit.corners) {
@@ -277,6 +311,73 @@ void EditorSession::mergeFloatingTransform(const TransformEdit& edit) {
     source->transform = grownTransform;
     source->shapeImage.reset();
     Uuid sourceId = source->id;
+    document_->layers.erase(document_->layers.begin() + document_->indexOf(edit.layerId));
+    setActiveLayer(sourceId);
+    endEdit();
+}
+
+void EditorSession::mergeFloatingTransform16(const TransformEdit& edit) {
+    // mergeFloatingTransform's steps at 16 bits: the floating pixels (warped when distorted) drawn Normal onto the
+    // source layer's own grid, grown where they reach past it; its mask grows with it and the selection follows.
+    const FloatingTransform& floating = *edit.floating;
+    Layer* moving = document_->find(edit.layerId);
+    Layer* source = document_->find(floating.sourceId);
+    Image16Ptr pixels = moving->asset->image.u16();
+    LayerTransform placed = edit.draft;
+    if (edit.corners) {
+        auto warped = warpImageTrimmed(pixels, edit.draft, *edit.corners);
+        if (!warped) { cancelFloatingTransform(floating); return; }
+        pixels = warped->image;
+        placed = warped->transform;
+    }
+    const Image16& src = *source->asset->image.u16();
+    const int w = src.width(), h = src.height();
+    const Affine toPixels = source->transform.pixelToDocument(w, h).inverted();
+    const Rect floatBounds = toPixels.mapBounds(placed.pixelToDocument(pixels->width(), pixels->height()).mapBounds(Rect(0, 0, pixels->width(), pixels->height())));
+    const Rect extent = Rect(0, 0, w, h).unionWith(floatBounds).integral();
+    if (extent.width > 30000 || extent.height > 30000 || extent.width * extent.height > double(document_->imagePixelBudget())) { cancelFloatingTransform(floating); emit error(tr("The merged layer would exceed the size limits.")); return; }
+    auto grown = std::make_shared<Image16>(int(extent.width), int(extent.height));
+    for (int y = 0; y < h; y++) std::memcpy(grown->pixel(int(-extent.x), y + int(-extent.y)), src.row(y), size_t(w) * 4 * sizeof(uint16_t));
+    LayerTransform grownTransform = source->transform;
+    grownTransform.size = {extent.width * source->transform.size.width / w, extent.height * source->transform.size.height / h};
+    const Point center = source->transform.pixelToDocument(w, h).apply({extent.midX(), extent.midY()});
+    grownTransform.origin = {center.x - grownTransform.size.width / 2, center.y - grownTransform.size.height / 2};
+    auto onto = resampleLayer(pixels, placed, grownTransform, grown->width(), grown->height());
+    for (int y = 0; y < grown->height(); y++) {
+        const uint16_t* f = onto->row(y);
+        uint16_t* d = grown->row(y);
+        for (int x = 0; x < grown->width() * 4; x += 4) {
+            const uint32_t keep = one16 - std::min<uint32_t>(f[x + 3], one16);
+            for (int c = 0; c < 4; c++) d[x + c] = uint16_t(std::min<uint32_t>(one16, f[x + c] + mul15(d[x + c], keep)));
+        }
+    }
+    if (source->mask && !source->mask->placement && source->mask->asset.image.u16() && (extent.width != w || extent.height != h)) {
+        const Gray16& old = *source->mask->asset.image.u16();
+        auto mask = std::make_shared<Gray16>(grown->width(), grown->height(), uint16_t(one16));
+        if (old.width() == 1 && old.height() == 1) mask->fill(old.at(0, 0));
+        else for (int y = 0; y < h; y++) std::memcpy(mask->row(y + int(-extent.y)) + int(-extent.x), old.row(y), size_t(w) * sizeof(uint16_t));
+        source->mask->asset = MaskAsset::make(Gray16Ptr(mask));
+    }
+    if (document_->selection && document_->selection->coverage.u16()) {
+        const Gray16& cov = *document_->selection->coverage.u16();
+        std::shared_ptr<Gray16> moved;
+        if (edit.corners) moved = warpCoverage(cov, floating.original, floating.pixelWidth, floating.pixelHeight, *edit.corners);
+        else {
+            const Affine map = floating.original.pixelToDocument(floating.pixelWidth, floating.pixelHeight).inverted().concatenating(edit.draft.pixelToDocument(floating.pixelWidth, floating.pixelHeight));
+            const Affine inv = map.inverted();
+            moved = std::make_shared<Gray16>(cov.width(), cov.height(), 0);
+            for (int y = 0; y < cov.height(); y++) for (int x = 0; x < cov.width(); x++) {
+                const Point p = inv.apply({x + 0.5, y + 0.5});
+                const int sx = int(std::floor(p.x)), sy = int(std::floor(p.y));
+                if (sx >= 0 && sy >= 0 && sx < cov.width() && sy < cov.height()) moved->at(x, y) = cov.at(sx, sy);
+            }
+        }
+        document_->selection->coverage = Gray16Ptr(moved);
+    }
+    source->asset = Asset::make(Image16Ptr(grown), source->name);
+    source->transform = grownTransform;
+    source->shapeImage.reset();
+    const Uuid sourceId = source->id;
     document_->layers.erase(document_->layers.begin() + document_->indexOf(edit.layerId));
     setActiveLayer(sourceId);
     endEdit();

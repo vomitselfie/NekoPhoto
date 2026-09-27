@@ -5,6 +5,7 @@
 // repeating patterns stay in phase, and several random starts compete at the coarsest level.
 #pragma once
 #include "image.h"
+#include "imaget.h"
 #include <cstdint>
 
 namespace compositor {
@@ -24,5 +25,10 @@ struct InpaintOptions {
 /// given at the image's size, limits the sources to the pixels it marks (128 and up): what a layer mask hides
 /// is not copied from.
 bool contentFill(Image& image, const GrayImage& hole, const InpaintOptions& options = {}, const GrayImage* visible = nullptr);
+/// The same at 16 bits: the nearest-neighbour field is found on the image rounded to 8 bits, and the hole is voted
+/// from the 16-bit pixels it points at, so the copied texture keeps its 16 bits.
+bool contentFill(Image16& image, const Gray16& hole, const InpaintOptions& options = {}, const Gray16* visible = nullptr);
+/// With the decisions' masks at 8 bits (the hole nonzero, the sources 128 and up).
+bool contentFill16(Image16& image, const GrayImage& hole, const InpaintOptions& options = {}, const GrayImage* visible = nullptr);
 
 } // namespace compositor

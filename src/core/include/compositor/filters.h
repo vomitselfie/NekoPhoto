@@ -5,6 +5,7 @@
 #pragma once
 #include "blur.h"
 #include "document.h"
+#include "imaget.h"
 #include <cstdint>
 
 namespace compositor {
@@ -49,5 +50,13 @@ std::shared_ptr<GrayImage> selectionInGrid(const GrayImage& selection, const Aff
 /// coverage x adjusted + (1 - coverage) x original, per pixel, into `adjusted`.
 void blendThroughCoverage(Image& adjusted, const Image& original, const GrayImage& coverage);
 void blendThroughCoverage(GrayImage& adjusted, const GrayImage& original, const GrayImage& coverage);
+
+// The same at 16 bits (filters_u16.cpp): Add Noise draws the same pattern for a seed, Lens Correction the same taps.
+std::shared_ptr<Image16> growImage(const Image16& image, const LayerTransform& transform, int margin, LayerTransform& grownTransform);
+std::shared_ptr<Image16> trimToPixels(const Image16& image, const LayerTransform& transform, LayerTransform& trimmedTransform);
+void applyFilter(FilterKind kind, Image16& image, const FilterSettings& settings, double scale = 1, uint32_t seed = 0);
+std::shared_ptr<Gray16> selectionInGrid(const Gray16& selection, const Affine& pixelToDocument, int width, int height);
+void blendThroughCoverage(Image16& adjusted, const Image16& original, const Gray16& coverage);
+void blendThroughCoverage(Gray16& adjusted, const Gray16& original, const Gray16& coverage);
 
 } // namespace compositor

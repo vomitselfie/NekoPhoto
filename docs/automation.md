@@ -204,8 +204,11 @@ not). A connection that closes with a group open has it closed.
 that read, those outside the document, saving, exporting, `image.mode`, and the layer structure (`layers.add` of pixel
 layers and folders, `layers.set`, `layers.delete`, `layers.duplicate`, `layers.move`, `layers.reorder`, `layers.group`,
 `layers.setTransform`, `layers.flip`, `layers.mask` add, toggle, invert, link and delete, `canvas.resize`,
-`canvas.flip`, `document.import`, the slices) work; anything else answers "<method> is not available for 16-bit
-documents yet" until it is ported. `document.export` writes a 16-bit PNG (and TIFF, when the Qt TIFF plugin writes
+`canvas.flip`, `document.import`, the slices) work, and since P3a the selection methods, `paths.toSelection`,
+`pixels.adjust`, `pixels.invert`, `pixels.filter`, `pixels.fill`, `pixels.clear`, `pixels.contentAwareFill`,
+`pixels.contentAwareMove`, `pixels.contentAwareScale`, `adjustments.set`, `layers.add` of adjustment layers,
+`image.resize`, `image.trim`, `canvas.crop`, `layers.warp` and `layers.setCage` too; anything else answers "<method>
+is not available for 16-bit documents yet" until it is ported. `document.export` writes a 16-bit PNG (and TIFF, when the Qt TIFF plugin writes
 16 bits) from a 16-bit document; the 8-bit formats get it dithered down, and the reply says so in `note`.
 
 Batches: `rpc.batch` (`calls`: a list of `{"method", "params"}`; `name`) runs the calls in order in one

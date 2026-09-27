@@ -1,9 +1,12 @@
 #include "compositor/warp.h"
+#include "compositor/depth.h"
 #include "compositor/resample.h"
 #include "compositor/parallel.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <type_traits>
+#include <utility>
 
 namespace compositor {
 
@@ -142,18 +145,27 @@ std::optional<AxisAlignedWarp> axisAlignedWarp(const WarpFrame& f, const Corners
 }
 
 /// The pixels a warp samples from: the image itself, or a reduction (cached when the image is shared).
+template <class I>
 struct MipSource {
-    const Image* image;
-    ImagePtr holder;
+    const I* image;
+    std::shared_ptr<const I> holder;
 };
 
-MipSource mipSourceFor(const Image& image, const ImagePtr& owner, int level) {
+template <class I>
+MipSource<I> mipSourceFor(const I& image, const std::shared_ptr<const I>& owner, int level) {
     if (level <= 0) return {&image, nullptr};
-    ImagePtr reduced = owner && owner.get() == &image ? MipCache::shared().level(owner, level) : reduceImage(image, level);
+    std::shared_ptr<const I> reduced = owner && owner.get() == &image ? MipCache::shared().level(owner, level) : std::shared_ptr<const I>(reduceImage(image, level));
     return {reduced.get(), reduced};
 }
 
-std::optional<WarpedImage> warpImageImpl(const Image& image, const ImagePtr& owner, const LayerTransform& transform, const Corners& corners, int limit) {
+template <class I> struct Warped;
+template <> struct Warped<Image> { using Type = WarpedImage; using Mask = WarpedMask; };
+template <> struct Warped<Image16> { using Type = WarpedImage16; using Mask = WarpedMask16; };
+
+template <class I>
+std::optional<typename Warped<I>::Type> warpImageImpl(const I& image, const std::shared_ptr<const I>& owner, const LayerTransform& transform, const Corners& corners, int limit) {
+    using Result = typename Warped<I>::Type;
+    using Sample = std::remove_cvref_t<decltype(*image.data())>;
     auto frame = frameFor(transform, corners, limit);
     if (!frame || image.isEmpty()) return std::nullopt;
     const WarpFrame& f = *frame;
@@ -163,18 +175,18 @@ std::optional<WarpedImage> warpImageImpl(const Image& image, const ImagePtr& own
     placed.sampling = transform.sampling;
     if (!nearest)
         if (auto axis = axisAlignedWarp(f, corners, pw, ph))
-            return WarpedImage{resampleAxisAligned(image, f.width, f.height, axis->originX, axis->stepX, axis->originY, axis->stepY, filterFor(transform.sampling)), placed};
-    auto out = std::make_shared<Image>(f.width, f.height);
+            return Result{resampleAxisAligned(image, f.width, f.height, axis->originX, axis->stepX, axis->originY, axis->stepY, filterFor(transform.sampling)), placed};
+    auto out = std::make_shared<I>(f.width, f.height);
     // Mip level from the average reduction across the shape.
     double areaOut = f.bounds.width * f.bounds.height * f.factor * f.factor;
     int level = nearest ? 0 : MipCache::levelFor(std::sqrt(areaOut / std::max(1.0, double(pw) * ph)), transform.sampling == Sampling::High);
-    MipSource mipSource = mipSourceFor(image, owner, level);
-    const Image* source = mipSource.image;
+    MipSource<I> mipSource = mipSourceFor(image, owner, level);
+    const I* source = mipSource.image;
     double mip = std::ldexp(1.0, level);
     const HomographyStepper stepper(f);
     parallelRows(0, f.height, [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) {
-            uint8_t* row = out->row(y);
+            Sample* row = out->row(y);
             HomographyStepper::Row r = stepper.row(y);
             for (int x = 0; x < f.width; x++, row += 4, r.advance()) {
                 Point u = r.unit();
@@ -189,21 +201,22 @@ std::optional<WarpedImage> warpImageImpl(const Image& image, const ImagePtr& own
                     if (edge <= 0) continue;
                 }
                 if (nearest) {
-                    std::memcpy(row, source->pixel(clamp(int(std::floor(px.x)), 0, pw - 1), clamp(int(std::floor(px.y)), 0, ph - 1)), 4);
+                    std::memcpy(row, source->pixel(clamp(int(std::floor(px.x)), 0, pw - 1), clamp(int(std::floor(px.y)), 0, ph - 1)), 4 * sizeof(Sample));
                     continue;
                 }
-                uint8_t s[4];
+                Sample s[4];
                 if (transform.sampling == Sampling::High) sampleBicubic(*source, px.x / mip, px.y / mip, s);
                 else sampleBilinear(*source, px.x / mip, px.y / mip, s);
                 const int e = int(edge * 256 + 0.5f);
-                for (int c = 0; c < 4; c++) row[c] = uint8_t((s[c] * e + 128) >> 8);
+                for (int c = 0; c < 4; c++) row[c] = Sample((uint32_t(s[c]) * uint32_t(e) + 128) >> 8);
             }
         }
     });
-    return WarpedImage{out, placed};
+    return Result{out, placed};
 }
 
-std::optional<WarpedImage> trimWarped(std::optional<WarpedImage> warped, Rect* crop) {
+template <class W>
+std::optional<W> trimWarped(std::optional<W> warped, Rect* crop) {
     if (!warped) return std::nullopt;
     PixelBounds b = alphaBounds(*warped->image);
     Rect full(0, 0, warped->image->width(), warped->image->height());
@@ -211,7 +224,7 @@ std::optional<WarpedImage> trimWarped(std::optional<WarpedImage> warped, Rect* c
     if (b.isEmpty() || (b.x0 == 0 && b.y0 == 0 && b.x1 == warped->image->width() && b.y1 == warped->image->height())) return warped;
     Rect c(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0);
     if (crop) *crop = c;
-    WarpedImage result;
+    W result;
     result.image = cropImage(*warped->image, int(c.x), int(c.y), int(c.width), int(c.height));
     result.transform = warped->transform;
     result.transform.origin = {warped->transform.origin.x + c.x, warped->transform.origin.y + c.y};
@@ -226,12 +239,19 @@ std::optional<WarpedImage> warpImage(const ImagePtr& image, const LayerTransform
     return warpImageImpl(*image, image, transform, corners, limit);
 }
 std::optional<WarpedImage> warpImage(const Image& image, const LayerTransform& transform, const Corners& corners, int limit) {
-    return warpImageImpl(image, nullptr, transform, corners, limit);
+    return warpImageImpl(image, ImagePtr(), transform, corners, limit);
 }
 std::optional<WarpedImage> warpImageTrimmed(const ImagePtr& image, const LayerTransform& transform, const Corners& corners, Rect* crop) {
     return trimWarped(warpImage(image, transform, corners, 0), crop);
 }
 std::optional<WarpedImage> warpImageTrimmed(const Image& image, const LayerTransform& transform, const Corners& corners, Rect* crop) {
+    return trimWarped(warpImage(image, transform, corners, 0), crop);
+}
+std::optional<WarpedImage16> warpImage(const Image16Ptr& image, const LayerTransform& transform, const Corners& corners, int limit) {
+    if (!image) return std::nullopt;
+    return warpImageImpl(*image, image, transform, corners, limit);
+}
+std::optional<WarpedImage16> warpImageTrimmed(const Image16Ptr& image, const LayerTransform& transform, const Corners& corners, Rect* crop) {
     return trimWarped(warpImage(image, transform, corners, 0), crop);
 }
 
@@ -240,23 +260,29 @@ std::optional<WarpedMask> warpMask(const GrayPtr& mask, const LayerTransform& tr
     return warpMask(*mask, transform, corners, background, limit);
 }
 
-std::optional<WarpedMask> warpMask(const GrayImage& mask, const LayerTransform& transform, const Corners& corners, uint8_t background, int limit) {
+namespace {
+
+template <class G>
+std::optional<typename Warped<std::conditional_t<std::is_same_v<G, GrayImage>, Image, Image16>>::Mask> warpMaskImpl(const G& mask, const LayerTransform& transform, const Corners& corners, std::remove_cvref_t<decltype(std::declval<G&>().at(0, 0))> background, int limit) {
+    using Result = typename Warped<std::conditional_t<std::is_same_v<G, GrayImage>, Image, Image16>>::Mask;
+    using Sample = std::remove_cvref_t<decltype(std::declval<G&>().at(0, 0))>;
+    constexpr float full = std::is_same_v<G, GrayImage> ? 255.0f : 32768.0f;
     auto frame = frameFor(transform, corners, limit);
     if (!frame || mask.isEmpty()) return std::nullopt;
     const WarpFrame& f = *frame;
     LayerTransform placed(f.bounds.origin(), f.bounds.size());
     placed.sampling = transform.sampling;
     // A uniform 1x1 mask already covers any shape.
-    if (mask.width() == 1 && mask.height() == 1) return WarpedMask{std::make_shared<GrayImage>(mask), placed};
+    if (mask.width() == 1 && mask.height() == 1) return Result{std::make_shared<G>(mask), placed};
     int pw = mask.width(), ph = mask.height();
     if (transform.sampling != Sampling::Nearest)
         if (auto axis = axisAlignedWarp(f, corners, pw, ph))
-            return WarpedMask{resampleAxisAligned(mask, f.width, f.height, axis->originX, axis->stepX, axis->originY, axis->stepY, filterFor(transform.sampling), background), placed};
-    auto out = std::make_shared<GrayImage>(f.width, f.height, background);
+            return Result{resampleAxisAligned(mask, f.width, f.height, axis->originX, axis->stepX, axis->originY, axis->stepY, filterFor(transform.sampling), background), placed};
+    auto out = std::make_shared<G>(f.width, f.height, background);
     const HomographyStepper stepper(f);
     parallelRows(0, f.height, [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) {
-            uint8_t* row = out->row(y);
+            Sample* row = out->row(y);
             HomographyStepper::Row r = stepper.row(y);
             for (int x = 0; x < f.width; x++, r.advance()) {
                 Point u = r.unit();
@@ -266,11 +292,20 @@ std::optional<WarpedMask> warpMask(const GrayImage& mask, const LayerTransform& 
                 float edge = float(clamp(e + 0.5, 0.0, 1.0));
                 if (edge <= 0) continue;
                 float v = float(sampleGrayBilinear(mask, px.x, px.y));
-                row[x] = uint8_t(clamp(v * edge + background * (1 - edge) + 0.5f, 0.0f, 255.0f));
+                row[x] = Sample(clamp(v * edge + float(background) * (1 - edge) + 0.5f, 0.0f, full));
             }
         }
     });
-    return WarpedMask{out, placed};
+    return Result{out, placed};
+}
+
+} // namespace
+
+std::optional<WarpedMask> warpMask(const GrayImage& mask, const LayerTransform& transform, const Corners& corners, uint8_t background, int limit) {
+    return warpMaskImpl(mask, transform, corners, background, limit);
+}
+std::optional<WarpedMask16> warpMask(const Gray16& mask, const LayerTransform& transform, const Corners& corners, uint16_t background, int limit) {
+    return warpMaskImpl(mask, transform, corners, background, limit);
 }
 
 Corners carriedCorners(const LayerTransform& placement, const LayerTransform& by, const Corners& corners) {
@@ -282,8 +317,13 @@ Corners carriedCorners(const LayerTransform& placement, const LayerTransform& by
     return result;
 }
 
-std::shared_ptr<GrayImage> warpCoverage(const GrayImage& coverage, const LayerTransform& original, int pixelWidth, int pixelHeight, const Corners& corners) {
-    auto out = std::make_shared<GrayImage>(coverage.width(), coverage.height(), 0);
+namespace {
+
+template <class G>
+std::shared_ptr<G> warpCoverageImpl(const G& coverage, const LayerTransform& original, int pixelWidth, int pixelHeight, const Corners& corners) {
+    using Sample = std::remove_cvref_t<decltype(std::declval<G&>().at(0, 0))>;
+    constexpr float full = std::is_same_v<G, GrayImage> ? 255.0f : 32768.0f;
+    auto out = std::make_shared<G>(coverage.width(), coverage.height(), 0);
     if (!cornersUsable(corners)) return out;
     Corners target = corners;
     if (original.flipX) { std::swap(target[0], target[1]); std::swap(target[3], target[2]); }
@@ -305,11 +345,20 @@ std::shared_ptr<GrayImage> warpCoverage(const GrayImage& coverage, const LayerTr
                 int x0 = int(bx), yy0 = int(by), x1 = std::min(x0 + 1, w - 1), yy1 = std::min(yy0 + 1, h - 1);
                 float fx = float(bx - x0), fy = float(by - yy0);
                 float v = coverage.at(x0, yy0) * (1 - fx) * (1 - fy) + coverage.at(x1, yy0) * fx * (1 - fy) + coverage.at(x0, yy1) * (1 - fx) * fy + coverage.at(x1, yy1) * fx * fy;
-                out->at(x, y) = uint8_t(clamp(v + 0.5f, 0.0f, 255.0f));
+                out->at(x, y) = Sample(clamp(v + 0.5f, 0.0f, full));
             }
         }
     });
     return out;
+}
+
+} // namespace
+
+std::shared_ptr<GrayImage> warpCoverage(const GrayImage& coverage, const LayerTransform& original, int pixelWidth, int pixelHeight, const Corners& corners) {
+    return warpCoverageImpl(coverage, original, pixelWidth, pixelHeight, corners);
+}
+std::shared_ptr<Gray16> warpCoverage(const Gray16& coverage, const LayerTransform& original, int pixelWidth, int pixelHeight, const Corners& corners) {
+    return warpCoverageImpl(coverage, original, pixelWidth, pixelHeight, corners);
 }
 
 } // namespace compositor

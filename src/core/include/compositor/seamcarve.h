@@ -5,6 +5,7 @@
 // in about a second instead of the minutes of one seam per pass.
 #pragma once
 #include "image.h"
+#include "imaget.h"
 
 namespace compositor {
 
@@ -20,5 +21,7 @@ struct SeamCarveOptions {
 /// seams duplicated (each at most once per round, rounds of up to half the size) where it grows. Width first,
 /// then height. Returns an empty image for a size below 1 or above maxImageSide.
 Image seamCarve(const Image& image, int width, int height, const SeamCarveOptions& options = {});
+/// The same at 16 bits: the seams chosen on the image rounded to 8 bits, the 16-bit pixels carried.
+Image16 seamCarve(const Image16& image, int width, int height, const SeamCarveOptions& options = {});
 
 } // namespace compositor

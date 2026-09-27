@@ -4,6 +4,7 @@
 // Edit Contents commit) gives the source a fresh id and rebuilds every instance about its own centre, keeping the
 // instance's scale; Rasterize keeps the pixels.
 #include "compositor/smartobject_edit.h"
+#include "compositor/depth.h"
 #include "compositor/resample.h"
 #include "compositor/vectorlayer.h"
 #include "compositor/warp.h"
@@ -308,9 +309,10 @@ bool warpLayer(Document& document, Layer& layer, const TextWarp& warp, std::stri
     if (layer.isGroup || layer.adjustment) return fail("Only text, smart objects and pixel layers can be warped.");
     if (layer.isLiveText()) { layer.text->warp = warp; return true; }   // the app redraws it
     if (!warp.active()) return fail("Choose a warp style.");
-    if (!layer.asset || !layer.asset->image.u8() || layer.asset->image.u8()->isEmpty()) return fail("The layer has no pixels to warp.");
+    if (!layer.asset || !layer.asset->image || layer.asset->image.width() <= 0 || layer.asset->image.height() <= 0) return fail("The layer has no pixels to warp.");
     if (layer.isLiveSmartObject()) {
         SmartObjectInstance& so = *layer.smartObject;
+        if (!layer.asset->image.u8()) return fail("Smart objects are not available for 16-bit documents yet.");
         if (so.locked()) return fail("This smart object shows the preview its file carried; it cannot be warped here.");
         if (!smartObjectPixelsArePlacement(so)) return fail("This smart object is already warped or has Smart Filters; rasterize it to warp it again.");
         auto source = document.smartObjects.find(so.sourceId);
@@ -350,6 +352,25 @@ bool warpLayer(Document& document, Layer& layer, const TextWarp& warp, std::stri
         return true;
     }
     // Pixels: bent over their own rectangle, for good.
+    if (layer.asset && layer.asset->image.u16()) {
+        // A 16-bit layer bends at 16 bits.
+        const Image16& deep = *layer.asset->image.u16();
+        auto mesh = styleWarpMesh(warp.style, warp.bend, warp.verticalOrientation, deep.width(), deep.height());
+        if (!mesh) return fail("That warp style is not one NekoPhoto draws.");
+        distortWarpMesh(*mesh, warp.horizontal, warp.vertical);
+        auto bent = renderWarpedOverBox(deep, *mesh, Rect(0, 0, deep.width(), deep.height()));
+        if (!bent) return fail("The warp could not be drawn.");
+        if (layer.mask && !layer.mask->placement) layer.mask->placement = layer.maskTransform();
+        const double sx = layer.transform.size.width / deep.width(), sy = layer.transform.size.height / deep.height();
+        const Point origin(layer.transform.origin.x + bent->transform.origin.x * sx, layer.transform.origin.y + bent->transform.origin.y * sy);
+        layer.asset = Asset::make(Image16Ptr(bent->image), layer.name);
+        layer.transform.origin = origin;
+        layer.transform.size = Size(bent->image->width() * sx, bent->image->height() * sy);
+        layer.smartObject.reset();
+        layer.smartImage.reset();
+        return true;
+    }
+    if (!layer.asset || !layer.asset->image.u8()) return fail("The layer has no pixels to warp.");
     const Image& image = *layer.asset->image.u8();
     auto mesh = styleWarpMesh(warp.style, warp.bend, warp.verticalOrientation, image.width(), image.height());
     if (!mesh) return fail("That warp style is not one NekoPhoto draws.");
@@ -393,7 +414,7 @@ std::optional<WarpMesh> layerWarpCage(const Document& document, const Layer& lay
     auto fail = [&](const char* why) -> std::optional<WarpMesh> { if (error) *error = why; return std::nullopt; };
     if (layer.isGroup || layer.adjustment) return fail("Only smart objects and pixel layers take a warp cage.");
     if (layer.isLiveText()) return fail("Convert the text to a smart object to warp it freely (Warp Text bends it with a style).");
-    if (!layer.asset || !layer.asset->image.u8() || layer.asset->image.u8()->isEmpty()) return fail("The layer has no pixels to warp.");
+    if (!layer.asset || !layer.asset->image || layer.asset->image.width() <= 0 || layer.asset->image.height() <= 0) return fail("The layer has no pixels to warp.");
     if (layer.isLiveSmartObject()) {
         const SmartObjectInstance& so = *layer.smartObject;
         if (so.locked()) return fail("This smart object shows the preview its file carried; it cannot be warped here.");
@@ -416,10 +437,10 @@ std::optional<WarpMesh> layerWarpCage(const Document& document, const Layer& lay
         if (!smartObjectPixelsArePlacement(so)) return fail("This smart object's warp is not one NekoPhoto draws.");
     }
     // Flat, over the layer's placed rectangle (its rotation and scale included).
-    const Image& shown = *layer.asset->image.u8();
-    WarpMesh cage = identityWarpMesh(0, 0, shown.width(), shown.height(), 4, 4);
+    const int shownWidth = layer.asset->image.width(), shownHeight = layer.asset->image.height();
+    WarpMesh cage = identityWarpMesh(0, 0, shownWidth, shownHeight, 4, 4);
     for (size_t i = 0; i < cage.xs.size(); i++) {
-        const Point p = mapThroughTransform(layer.transform, shown.width(), shown.height(), cage.xs[i], cage.ys[i]);
+        const Point p = mapThroughTransform(layer.transform, shownWidth, shownHeight, cage.xs[i], cage.ys[i]);
         cage.xs[i] = p.x; cage.ys[i] = p.y;
     }
     return cage;
@@ -427,6 +448,10 @@ std::optional<WarpMesh> layerWarpCage(const Document& document, const Layer& lay
 
 std::optional<WarpedRaster> previewWarpCage(const Document& document, const Layer& layer, const WarpMesh& cage, int maxSide) {
     const Image* source = cageSource(document, layer);
+    // A 16-bit layer previews from its pixels reduced to 8 bits (the renderer widens the preview); Apply bends
+    // the 16-bit pixels.
+    std::shared_ptr<Image> narrowed;
+    if (!source && !layer.isLiveSmartObject() && layer.asset && layer.asset->image.u16()) { narrowed = narrowImage(*layer.asset->image.u16()); source = narrowed.get(); }
     if (!source || source->isEmpty()) return std::nullopt;
     // A reduced copy keeps a drag live on big layers; the mesh's (u, v) cover the whole image either way.
     const double scale = std::min(1.0, double(std::max(16, maxSide)) / std::max(source->width(), source->height()));
@@ -444,7 +469,7 @@ bool warpLayerToCage(Document& document, Layer& layer, const WarpMesh& cage, std
     std::string why;
     if (!layerWarpCage(document, layer, &why)) { if (error) *error = why; return false; }
     if (cage.uOrder != 4 || cage.vOrder != 4 || cage.xs.size() != 16 || cage.ys.size() != 16) return fail("The cage must be a 4 x 4 mesh.");
-    const Image& source = *cageSource(document, layer);
+    const Image* sourcePixels = cageSource(document, layer);
     const auto quad = hullQuad(cage);
     if (isVectorShapeLayer(layer)) {
         // A shape bends as a path, as in Photoshop: each anchor and handle is carried through the cage from where it
@@ -474,6 +499,8 @@ bool warpLayerToCage(Document& document, Layer& layer, const WarpMesh& cage, std
         // so contents space is the cage scaled to the contents' size).
         SmartObjectInstance next = *layer.smartObject;
         WarpMesh contents = cage;
+        if (!sourcePixels) return fail("Its contents cannot be read.");
+        const Image& source = *sourcePixels;
         const double sx = source.width() / std::max(1e-9, quad[2] - quad[0]), sy = source.height() / std::max(1e-9, quad[5] - quad[1]);
         for (size_t i = 0; i < contents.xs.size(); i++) { contents.xs[i] = (cage.xs[i] - quad[0]) * sx; contents.ys[i] = (cage.ys[i] - quad[1]) * sy; }
         bool written = false;
@@ -493,7 +520,18 @@ bool warpLayerToCage(Document& document, Layer& layer, const WarpMesh& cage, std
         *layer.smartObject = std::move(next);
         return true;
     }
-    auto raster = renderWarpedImage(source, cage, quad);
+    if (layer.asset && layer.asset->image.u16()) {
+        auto raster = renderWarpedImage(*layer.asset->image.u16(), cage, quad);
+        if (!raster) return fail("The warp could not be drawn.");
+        layer.asset = Asset::make(Image16Ptr(raster->image), layer.name);
+        layer.transform = raster->transform;
+        layer.transform.sampling = sampling;
+        layer.smartObject.reset();
+        layer.smartImage.reset();
+        return true;
+    }
+    if (!sourcePixels) return fail("The layer has no pixels to warp.");
+    auto raster = renderWarpedImage(*sourcePixels, cage, quad);
     if (!raster) return fail("The warp could not be drawn.");
     layer.asset = Asset::make(raster->image, layer.name);
     layer.transform = raster->transform;

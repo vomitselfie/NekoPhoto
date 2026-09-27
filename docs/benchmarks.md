@@ -113,9 +113,24 @@ past 2% rerun in six to ten alternating rounds of 25 to 51 runs): every line wit
 stroke d80 hardness 1 and curves in the first rounds (+3.1%, +8.4%, +7.2%), which the reruns put at -11.8%, +1.1% and
 -2.8%: the machine's load, as the only change on those paths is one uncontended mutex per top-level parallel loop.
 
+## P3a: editing at 16 bits
+
+2026-09-27, P3a against 68435cb, four alternating rounds of `bench_core 9` (median of round medians). The 8-bit
+object code of the benched functions is identical to 68435cb, so the 8-bit differences (brush -8% to +3%, blur r2
++2.9%) are the desktop's load; render16 now draws its two adjustment layers natively.
+
+| Operation | 68435cb (ms) | P3a (ms) |
+|---|---:|---:|
+| render 4000x3000, 12 layers | 205.3 | 205.6 |
+| gaussian blur r2 / r20 | 51.3 / 84.1 | 52.8 / 85.1 |
+| levels / curves / hue/saturation | 1.69 / 1.78 / 19.3 | 1.72 / 1.80 / 19.1 |
+| render16 4000x3000, 12 layers | 231.6 | 214.0 |
+| u16 gaussian blur r2 / r20 | | 53.5 / 87.0 |
+| u16 levels / curves / hue/saturation | | 7.7 / 8.0 / 46.2 |
+
 ## Render hashes
 
-The matching correctness gate is `render_hash_tests` (in ctest): 191 scenes (133 at 8 bits, 58 at 16 bits) hashed with FNV-1a 64 against
+The matching correctness gate is `render_hash_tests` (in ctest): 235 scenes (133 at 8 bits, 102 at 16 bits) hashed with FNV-1a 64 against
 `tests/render_hashes.txt`, each rendered on the worker pool and serially. After an intentional rendering change:
 
 ```bash

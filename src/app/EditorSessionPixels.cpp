@@ -14,6 +14,7 @@
 #include <cstring>
 #include <map>
 #include <set>
+#include <type_traits>
 
 using namespace compositor;
 
@@ -63,11 +64,25 @@ std::optional<Selection> EditorSession::displayedSelection() const {
     if (pixelMove_ && pixelMove_->origin.coverage) {
         int dx = int(pixelMove_->offset.x()), dy = int(pixelMove_->offset.y());
         if (dx == 0 && dy == 0) return pixelMove_->origin;
-        const GrayImage& src = *pixelMove_->origin.coverage.u8();
-        auto moved = std::make_shared<GrayImage>(src.width(), src.height(), 0);
-        for (int y = 0; y < src.height(); y++) { int sy = y - dy; if (sy < 0 || sy >= src.height()) continue; for (int x = 0; x < src.width(); x++) { int sx = x - dx; if (sx >= 0 && sx < src.width()) moved->at(x, y) = src.at(sx, sy); } }
-        Selection s = pixelMove_->origin;
-        s.coverage = moved;
+        return offsetSelection(pixelMove_->origin, dx, dy);
+    }
+    if (transformEdit_ && transformEdit_->floating && document_->selection->coverage.u16()) {
+        const FloatingTransform& f = *transformEdit_->floating;
+        const Gray16& cov = *document_->selection->coverage.u16();
+        std::shared_ptr<Gray16> moved;
+        if (transformEdit_->corners) moved = warpCoverage(cov, f.original, f.pixelWidth, f.pixelHeight, *transformEdit_->corners);
+        else {
+            moved = std::make_shared<Gray16>(cov.width(), cov.height(), 0);
+            const Affine map = f.original.pixelToDocument(f.pixelWidth, f.pixelHeight).inverted().concatenating(transformEdit_->draft.pixelToDocument(f.pixelWidth, f.pixelHeight));
+            const Affine inv = map.inverted();
+            for (int y = 0; y < cov.height(); y++) for (int x = 0; x < cov.width(); x++) {
+                const Point p = inv.apply({x + 0.5, y + 0.5});
+                const int sx = int(std::floor(p.x)), sy = int(std::floor(p.y));
+                if (sx >= 0 && sy >= 0 && sx < cov.width() && sy < cov.height()) moved->at(x, y) = cov.at(sx, sy);
+            }
+        }
+        Selection s = *document_->selection;
+        s.coverage = Gray16Ptr(moved);
         return s;
     }
     if (transformEdit_ && transformEdit_->floating && document_->selection->coverage) {
@@ -149,63 +164,97 @@ bool EditorSession::canCopyPixels() const {
 std::optional<EditorSession::PixelClipboard> EditorSession::renderSelectedPixels(bool merged) const {
     if (!document_) return std::nullopt;
     Rect region = document_->rect();
-    const GrayImage* coverage = nullptr;
     if (document_->selection) {
         if (!document_->selection->coverage || document_->selection->isEmpty()) return std::nullopt;
-        coverage = document_->selection->coverage.u8().get();
         region = document_->selection->bounds().intersection(document_->rect());
     }
     if (region.isEmpty()) return std::nullopt;
-    Image out(int(region.width), int(region.height));
     RenderOptions options;
     options.region = region;
-    if (merged) render(*document_, options, out);
-    else {
-        const Layer* layer = activeLayer();
-        if (!layer) return std::nullopt;
-        if (isMaskSelected_ && layer->mask) {
+    const Layer* layer = activeLayer();
+    if (!merged && !layer) return std::nullopt;
+    const bool deep = document_->sampleType == SampleType::U16;
+    // The pixels at the document's depth, then multiplied by the selection's coverage.
+    auto take = [&](auto& out, const auto* coverage) -> bool {
+        using Out = std::remove_cvref_t<decltype(out)>;
+        using Sample = std::remove_cvref_t<decltype(*out.data())>;
+        constexpr uint32_t full = std::is_same_v<Sample, uint8_t> ? 255u : one16;
+        if (merged) {
+            if constexpr (std::is_same_v<Out, Image>) render(*document_, options, out); else render16(*document_, options, out);
+        } else if (isMaskSelected_ && layer->mask) {
             // The mask as opaque gray, placed as it sits on the document.
-            GrayImage gray(out.width(), out.height(), layer->mask->placement ? LayerMask::background(*layer->mask->asset.thumbnail) : 0);
-            sampleMaskCoverage(*layer->mask->asset.image.u8(), layer->maskTransform(), region, 1, gray.at(0, 0), gray, false);
-            for (int y = 0; y < out.height(); y++) for (int x = 0; x < out.width(); x++) { uint8_t* p = out.pixel(x, y); p[0] = p[1] = p[2] = gray.at(x, y); p[3] = 255; }
-        } else if (layer->asset && layer->asset->image.u8()) {
+            using Gray = std::conditional_t<std::is_same_v<Out, Image>, GrayImage, Gray16>;
+            const uint8_t background8 = layer->mask->placement ? LayerMask::background(*layer->mask->asset.thumbnail) : 0;
+            const Sample background = std::is_same_v<Out, Image> ? Sample(background8) : Sample(widen8(background8));
+            Gray gray(out.width(), out.height(), background);
+            if constexpr (std::is_same_v<Out, Image>) {
+                if (!layer->mask->asset.image.u8()) return false;
+                sampleMaskCoverage(*layer->mask->asset.image.u8(), layer->maskTransform(), region, 1, gray.at(0, 0), gray, false);
+            } else {
+                if (!layer->mask->asset.image.u16()) return false;
+                sampleMaskCoverage(*layer->mask->asset.image.u16(), layer->maskTransform(), region, 1, gray.at(0, 0), gray, false);
+            }
+            for (int y = 0; y < out.height(); y++) for (int x = 0; x < out.width(); x++) { Sample* p = out.pixel(x, y); p[0] = p[1] = p[2] = gray.at(x, y); p[3] = Sample(full); }
+        } else if (layer->asset && layer->asset->image) {
             Document single(document_->width, document_->height);
+            single.sampleType = document_->sampleType;
             Layer copy = *layer;
             copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.maskSourceId.reset();
             single.layers = {copy};
-            render(single, options, out);
-        } else return std::nullopt;
+            if constexpr (std::is_same_v<Out, Image>) render(single, options, out); else render16(single, options, out);
+        } else return false;
+        if (coverage)
+            for (int y = 0; y < out.height(); y++) for (int x = 0; x < out.width(); x++) {
+                const uint32_t k = std::min<uint32_t>(coverage->at(x + int(region.x), y + int(region.y)), full);
+                Sample* p = out.pixel(x, y);
+                for (int c = 0; c < 4; c++) p[c] = Sample((p[c] * k + full / 2) / full);
+            }
+        return true;
+    };
+    if (deep) {
+        auto out = std::make_shared<Image16>(int(region.width), int(region.height));
+        const Gray16* coverage = document_->selection ? document_->selection->coverage.u16().get() : nullptr;
+        if (document_->selection && !coverage) return std::nullopt;
+        if (!take(*out, coverage)) return std::nullopt;
+        return PixelClipboard{Image16Ptr(out), QPointF(region.x, region.y)};
     }
-    if (coverage) {
-        for (int y = 0; y < out.height(); y++) for (int x = 0; x < out.width(); x++) {
-            unsigned k = coverage->at(x + int(region.x), y + int(region.y));
-            uint8_t* p = out.pixel(x, y);
-            for (int c = 0; c < 4; c++) p[c] = uint8_t((p[c] * k + 127) / 255);
-        }
-    }
+    Image out(int(region.width), int(region.height));
+    const GrayImage* coverage = document_->selection ? document_->selection->coverage.u8().get() : nullptr;
+    if (document_->selection && !coverage) return std::nullopt;
+    if (!take(out, coverage)) return std::nullopt;
     return PixelClipboard{std::make_shared<Image>(std::move(out)), QPointF(region.x, region.y)};
 }
 
+namespace {
+
+/// What the system clipboard gets: 8 bits whatever the document's depth.
+QImage clipboardImage(const AnyImage& image) {
+    if (image.u16()) return toQImage(*narrowImage(*image.u16())).convertToFormat(QImage::Format_ARGB32);
+    return image.u8() ? toQImage(*image.u8()).convertToFormat(QImage::Format_ARGB32) : QImage();
+}
+
+} // namespace
+
 void EditorSession::copySelection() {
-    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return;
+    if (refusedAtDepth("edit.clipboard", tr("Editing pixels"))) return;
     if (!canCopyPixels()) return;
     auto copied = renderSelectedPixels(false);
     if (!copied) return;
     pixelClipboard_ = copied;
-    QApplication::clipboard()->setImage(toQImage(*copied->image).convertToFormat(QImage::Format_ARGB32));
+    QApplication::clipboard()->setImage(clipboardImage(copied->image));
 }
 
 void EditorSession::copyMerged() {
-    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return;
+    if (refusedAtDepth("edit.clipboard", tr("Editing pixels"))) return;
     if (!canEditLayers() || (document_->selection && document_->selection->isEmpty())) return;
     auto copied = renderSelectedPixels(true);
     if (!copied) return;
     pixelClipboard_ = copied;
-    QApplication::clipboard()->setImage(toQImage(*copied->image).convertToFormat(QImage::Format_ARGB32));
+    QApplication::clipboard()->setImage(clipboardImage(copied->image));
 }
 
 void EditorSession::cutSelection() {
-    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return;
+    if (refusedAtDepth("edit.clipboard", tr("Editing pixels"))) return;
     if (!document_ || !document_->selection || !canCopyPixels()) return;
     copySelection();
     clearSelectionPixels();
@@ -217,12 +266,12 @@ bool EditorSession::canPaste() const {
 }
 
 void EditorSession::paste() {
-    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return;
+    if (refusedAtDepth("edit.clipboard", tr("Editing pixels"))) return;
     if (!canPaste()) return;
     const QMimeData* mime = QApplication::clipboard()->mimeData();
     QImage external = mime->hasImage() ? qvariant_cast<QImage>(mime->imageData()) : QImage();
     // Pixels copied here go back exactly where they came from unless another app copied since.
-    if (pixelClipboard_ && (!mime->hasImage() || (external.width() == pixelClipboard_->image->width() && external.height() == pixelClipboard_->image->height()))) {
+    if (pixelClipboard_ && (!mime->hasImage() || (external.width() == pixelClipboard_->image.width() && external.height() == pixelClipboard_->image.height()))) {
         addPixelLayer(pixelClipboard_->image, pixelClipboard_->origin, QT_TRANSLATE_NOOP("History", "Paste"), true);
         return;
     }
@@ -232,7 +281,7 @@ void EditorSession::paste() {
 }
 
 void EditorSession::layerViaCopy() {
-    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return;
+    if (refusedAtDepth("edit.clipboard", tr("Editing pixels"))) return;
     if (!canEditLayers()) return;
     const Layer* layer = activeLayer();
     if (!layer || layer->isGroup) return;
@@ -242,10 +291,12 @@ void EditorSession::layerViaCopy() {
     addPixelLayer(copied->image, copied->origin, QT_TRANSLATE_NOOP("History", "Layer via Copy"), false);
 }
 
-void EditorSession::addPixelLayer(std::shared_ptr<const Image> image, QPointF origin, const QString& editName, bool dropsSelection) {
+void EditorSession::addPixelLayer(AnyImage image, QPointF origin, const QString& editName, bool dropsSelection) {
     if (!document_ || !image) return;
-    if (const BudgetCheck check = document_->canInsertImage(image->width(), image->height()); !check) { emit error(budgetText(check)); return; }
-    Layer layer(Asset::make(image, nextLayerName(document_->layers, QCoreApplication::translate("Names", "Layer").toStdString())), toPoint(origin));
+    if (const BudgetCheck check = document_->canInsertImage(image.width(), image.height()); !check) { emit error(budgetText(check)); return; }
+    // Pixels copied from a document of the other depth (or another app, at 8 bits) take this one's.
+    image = imageAtDepth(image, document_->sampleType);
+    Layer layer(Asset::makeAny(image, nextLayerName(document_->layers, QCoreApplication::translate("Names", "Layer").toStdString())), toPoint(origin));
     const Layer* active = activeLayer();
     layer.parentId = active && active->isGroup ? activeLayerId_ : (active ? active->parentId : std::nullopt);
     int index = activeLayerId_ ? document_->indexOf(*activeLayerId_) + 1 : int(document_->layers.size());
@@ -259,11 +310,53 @@ void EditorSession::addPixelLayer(std::shared_ptr<const Image> image, QPointF or
     if (dropsSelection) emit selectionChanged();
 }
 
-std::shared_ptr<const Image> EditorSession::contentAwareFillResult(const ContentFillRequest& request, LayerTransform& placed, QString* errorText) const {
+AnyImage EditorSession::contentAwareFillResult(const ContentFillRequest& request, LayerTransform& placed, QString* errorText) const {
     if (!canAdjustPixels() || !document_->selection || !document_->selection->coverage) { if (errorText) *errorText = tr("Select a visible image layer and an area to fill."); return nullptr; }
     const Layer* layer = activeLayer();
     // The layer grows over any of the selection on the canvas past its edge.
     Rect area = document_->selection->bounds().intersection(document_->rect());
+    if (layer->asset->image.u16()) {
+        // At 16 bits: the same steps on the layer's 16-bit pixels (the fill votes from 16-bit texture, inpaint.h).
+        const Image16& src = *layer->asset->image.u16();
+        Affine toPixels = layer->transform.pixelToDocument(src.width(), src.height()).inverted();
+        Rect wanted = toPixels.mapBounds(area).integral().unionWith(Rect(0, 0, src.width(), src.height()));
+        int margin = int(std::ceil(std::max({0.0, -wanted.minX(), -wanted.minY(), wanted.maxX() - src.width(), wanted.maxY() - src.height()})));
+        LayerTransform grown;
+        auto source = adjustmentSource16(margin, grown);
+        if (!source) { if (errorText) *errorText = tr("The layer is too large to grow."); return nullptr; }
+        auto coverage = selectionOnGrid16(grown, source->width(), source->height());
+        if (!coverage) { if (errorText) *errorText = tr("Select an area to fill."); return nullptr; }
+        auto out = std::make_shared<Image16>(*source);
+        std::shared_ptr<Gray16> visible;
+        const Gray16* m = layer->mask && layer->mask->enabled && !layer->mask->placement ? layer->mask->asset.image.u16().get() : nullptr;
+        if (m && m->width() == src.width() && m->height() == src.height()) {
+            visible = std::make_shared<Gray16>(source->width(), source->height(), uint16_t(one16));
+            for (int y = 0; y < m->height(); y++) std::memcpy(visible->row(y + margin) + margin, m->row(y), size_t(m->width()) * sizeof(uint16_t));
+        }
+        InpaintOptions options;
+        if (request.sampling != ContentFillRequest::Sampling::Auto) {
+            std::shared_ptr<Gray16> sample;
+            if (request.sampling == ContentFillRequest::Sampling::Custom && request.sampleArea && request.sampleArea->width() == document_->width && request.sampleArea->height() == document_->height)
+                sample = widenGray(*selectionInGrid(*request.sampleArea, grown.pixelToDocument(source->width(), source->height()), source->width(), source->height()));
+            else sample = std::make_shared<Gray16>(source->width(), source->height(), uint16_t(one16));
+            if (visible) for (int y = 0; y < sample->height(); y++) for (int x = 0; x < sample->width(); x++) sample->at(x, y) = uint16_t(mul15(sample->at(x, y), visible->at(x, y)));
+            visible = sample;
+            options.sampleWholeVisible = true;
+        }
+        if (!contentFill(*out, *coverage, options, visible.get())) {
+            if (errorText) *errorText = request.sampling == ContentFillRequest::Sampling::Custom ? tr("The sampling area holds no opaque image pixels outside the selection to copy from.")
+                                                                                                   : tr("Not enough unselected, opaque image pixels to synthesize a fill. Use a smaller selection with some surrounding image.");
+            return nullptr;
+        }
+        if (request.newLayer)
+            for (int y = 0; y < out->height(); y++)
+                for (int x = 0; x < out->width(); x++) {
+                    uint16_t* p = out->pixel(x, y);
+                    const uint32_t c = std::min<uint32_t>(coverage->at(x, y), one16);
+                    for (int k = 0; k < 4; k++) p[k] = uint16_t(mul15(p[k], c));
+                }
+        return Image16Ptr(trimToPixels(*out, grown, placed));
+    }
     const Image& src = *layer->asset->image.u8();
     Affine toPixels = layer->transform.pixelToDocument(src.width(), src.height()).inverted();
     Rect wanted = toPixels.mapBounds(area).integral().unionWith(Rect(0, 0, src.width(), src.height()));
@@ -306,18 +399,18 @@ std::shared_ptr<const Image> EditorSession::contentAwareFillResult(const Content
                 for (int k = 0; k < 4; k++) p[k] = uint8_t((p[k] * c + 127) / 255);
             }
     }
-    return trimToPixels(*out, grown, placed);
+    return std::shared_ptr<const Image>(trimToPixels(*out, grown, placed));
 }
 
 bool EditorSession::contentAwareFill(QString* errorText, const ContentFillRequest& request) {
-    if (refusedAtDepth("edit.pixels", tr("Editing pixels"), errorText)) return false;
+    if (refusedAtDepth("edit.contentAware", tr("Content-aware editing"), errorText)) return false;
     LayerTransform placed;
     auto result = contentAwareFillResult(request, placed, errorText);
     if (!result) return false;
     if (!request.newLayer) { commitPixels(result, placed, QT_TRANSLATE_NOOP("History", "Content-Aware Fill")); return true; }
-    if (const BudgetCheck check = document_->canInsertImage(result->width(), result->height()); !check) { if (errorText) *errorText = budgetText(check); return false; }
+    if (const BudgetCheck check = document_->canInsertImage(result.width(), result.height()); !check) { if (errorText) *errorText = budgetText(check); return false; }
     const Layer* active = activeLayer();
-    Layer layer(Asset::make(result, nextLayerName(document_->layers, QCoreApplication::translate("Names", "Layer").toStdString())), Point{0, 0});
+    Layer layer(Asset::makeAny(result, nextLayerName(document_->layers, QCoreApplication::translate("Names", "Layer").toStdString())), Point{0, 0});
     layer.transform = placed;
     layer.parentId = active ? active->parentId : std::nullopt;
     const int index = activeLayerId_ ? document_->indexOf(*activeLayerId_) + 1 : int(document_->layers.size());
@@ -332,7 +425,7 @@ bool EditorSession::contentAwareFill(QString* errorText, const ContentFillReques
 }
 
 bool EditorSession::contentAwareMove(int dx, int dy, QString* errorText) {
-    if (refusedAtDepth("edit.pixels", tr("Editing pixels"), errorText)) return false;
+    if (refusedAtDepth("edit.contentAware", tr("Content-aware editing"), errorText)) return false;
     auto failWith = [&](const QString& text) { if (errorText) *errorText = text; return false; };
     if (!canAdjustPixels() || !document_->selection || !document_->selection->coverage) return failWith(tr("Select an area on a visible image layer, then drag it where it should go."));
     if (dx == 0 && dy == 0) return failWith(tr("Drag the selection to where it should go."));
@@ -342,6 +435,43 @@ bool EditorSession::contentAwareMove(int dx, int dy, QString* errorText) {
     // The layer grows over the selection and where it lands.
     Rect sel = document_->selection->bounds();
     Rect area = sel.unionWith(Rect(sel.x + dx, sel.y + dy, sel.width, sel.height)).intersection(document_->rect());
+    const QString name = contentMoveExtend ? QStringLiteral(QT_TRANSLATE_NOOP("History", "Content-Aware Extend")) : QStringLiteral(QT_TRANSLATE_NOOP("History", "Content-Aware Move"));
+    if (layer->asset->image.u16()) {
+        // At 16 bits: the same steps on the 16-bit pixels and selection (contentmove.h).
+        const Image16& src = *layer->asset->image.u16();
+        Affine toPixels = layer->transform.pixelToDocument(src.width(), src.height()).inverted();
+        Rect wanted = toPixels.mapBounds(area).integral().unionWith(Rect(0, 0, src.width(), src.height()));
+        int margin = int(std::ceil(std::max({0.0, -wanted.minX(), -wanted.minY(), wanted.maxX() - src.width(), wanted.maxY() - src.height()})));
+        LayerTransform grown;
+        auto source = adjustmentSource16(margin, grown);
+        if (!source) return failWith(tr("The layer is too large to grow."));
+        auto coverage = selectionOnGrid16(grown, source->width(), source->height());
+        if (!coverage) return failWith(tr("Select the area to move first."));
+        Affine gridFromDoc = grown.pixelToDocument(source->width(), source->height()).inverted();
+        const Point o = gridFromDoc.apply({0, 0}), d = gridFromDoc.apply({double(dx), double(dy)});
+        const int gdx = int(std::lround(d.x - o.x)), gdy = int(std::lround(d.y - o.y));
+        std::shared_ptr<Gray16> visible;
+        const Gray16* m = layer->mask && layer->mask->enabled && !layer->mask->placement ? layer->mask->asset.image.u16().get() : nullptr;
+        if (m && m->width() == src.width() && m->height() == src.height()) {
+            visible = std::make_shared<Gray16>(source->width(), source->height(), uint16_t(one16));
+            for (int y = 0; y < m->height(); y++) std::memcpy(visible->row(y + margin) + margin, m->row(y), size_t(m->width()) * sizeof(uint16_t));
+        }
+        auto out = std::make_shared<Image16>(*source);
+        ContentMoveOptions options;
+        options.extend = contentMoveExtend;
+        options.adaptation = contentMoveAdaptation;
+        if (!compositor::contentAwareMove(*out, *coverage, gdx, gdy, options, visible.get()))
+            return failWith(tr("Nothing could be moved there: the selection must land on the layer and leave opaque pixels around it to fill from."));
+        LayerTransform placed;
+        auto trimmed = trimToPixels(*out, grown, placed);
+        beginEdit(name);
+        commitPixels(Image16Ptr(trimmed), placed, name);
+        document_->selection = offsetSelection(*document_->selection, dx, dy);
+        endEdit();
+        notifyDocument();
+        emit selectionChanged();
+        return true;
+    }
     const Image& src = *layer->asset->image.u8();
     Affine toPixels = layer->transform.pixelToDocument(src.width(), src.height()).inverted();
     Rect wanted = toPixels.mapBounds(area).integral().unionWith(Rect(0, 0, src.width(), src.height()));
@@ -377,7 +507,6 @@ bool EditorSession::contentAwareMove(int dx, int dy, QString* errorText) {
         if (sy < 0 || sy >= before.height()) continue;
         for (int x = std::max(0, dx); x < std::min(shifted->width(), shifted->width() + dx); x++) shifted->at(x, y) = before.at(x - dx, sy);
     }
-    const QString name = contentMoveExtend ? QStringLiteral(QT_TRANSLATE_NOOP("History", "Content-Aware Extend")) : QStringLiteral(QT_TRANSLATE_NOOP("History", "Content-Aware Move"));
     beginEdit(name);
     commitPixels(trimmed, placed, name);
     Selection moved = *document_->selection;
@@ -390,9 +519,27 @@ bool EditorSession::contentAwareMove(int dx, int dy, QString* errorText) {
 }
 
 bool EditorSession::contentAwareScale(int width, int height, bool protectSelection, QString* errorText) {
-    if (refusedAtDepth("edit.pixels", tr("Editing pixels"), errorText)) return false;
+    if (refusedAtDepth("edit.contentAware", tr("Content-aware editing"), errorText)) return false;
     if (!canAdjustPixels()) { if (errorText) *errorText = tr("Select a visible image layer to scale."); return false; }
     Layer* layer = activeLayerMutable();
+    if (const Image16Ptr deep = layer->asset->image.u16()) {
+        // At 16 bits: seams chosen on the pixels rounded to 8 bits, the 16-bit pixels carried (seamcarve.h).
+        if (!Document::validDimension(width) || !Document::validDimension(height) || (long long)width * height > document_->imagePixelBudget()) {
+            if (errorText) *errorText = tr("The size must be between 1 and %1 pixels a side, %2 megapixels at most.").arg(maxImageSide).arg(document_->imagePixelBudget() / 1000000);
+            return false;
+        }
+        std::shared_ptr<GrayImage> protect;
+        if (protectSelection && document_->selection && document_->selection->coverage.u16())
+            protect = narrowGray(*selectionOnGrid16(layer->transform, deep->width(), deep->height()));
+        SeamCarveOptions options;
+        options.protect = protect.get();
+        auto out = std::make_shared<Image16>(seamCarve(*deep, width, height, options));
+        if (out->isEmpty()) { if (errorText) *errorText = tr("Could not scale the layer."); return false; }
+        LayerTransform placed = layer->transform;
+        placed.size = {placed.size.width * width / deep->width(), placed.size.height * height / deep->height()};
+        commitPixels(Image16Ptr(out), placed, QT_TRANSLATE_NOOP("History", "Content-Aware Scale"));
+        return true;
+    }
     const ImagePtr src = layer->asset->image.u8();
     if (const BudgetCheck check = Document::canCreate(width, height, document_->sampleType); !check) { if (errorText) *errorText = budgetText(check); return false; }
     std::shared_ptr<GrayImage> protect;

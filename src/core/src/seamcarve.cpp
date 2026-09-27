@@ -1,4 +1,5 @@
 #include "compositor/seamcarve.h"
+#include "compositor/depth.h"
 #include "compositor/parallel.h"
 #include <algorithm>
 #include <cstdlib>
@@ -14,6 +15,9 @@ struct Grid {
     int w = 0, h = 0, stride = 0;
     std::vector<uint32_t> px;
     std::vector<uint8_t> keep;
+    /// At 16 bits, the pixels themselves (four 16-bit samples packed), carried through every step beside `px`,
+    /// which then holds them rounded to 8 bits for the energy.
+    std::vector<uint64_t> deep;
 };
 
 inline int diff(uint32_t a, uint32_t b) {
@@ -107,11 +111,13 @@ void removeSeams(Grid& g, const std::vector<std::vector<int>>& seams) {
             std::sort(cols.begin(), cols.end());
             uint32_t* r = g.px.data() + size_t(y) * size_t(g.stride);
             uint8_t* kp = g.keep.empty() ? nullptr : g.keep.data() + size_t(y) * size_t(g.stride);
+            uint64_t* dp = g.deep.empty() ? nullptr : g.deep.data() + size_t(y) * size_t(g.stride);
             int out = 0, c = 0;
             for (int x = 0; x < g.w; x++) {
                 if (c < k && cols[size_t(c)] == x) { c++; continue; }
                 r[out] = r[x];
                 if (kp) kp[out] = kp[x];
+                if (dp) dp[out] = dp[x];
                 out++;
             }
         }
@@ -127,6 +133,7 @@ void insertSeams(Grid& g, const std::vector<std::vector<int>>& seams) {
     out.w = nw; out.h = g.h; out.stride = nw;
     out.px.resize(size_t(nw) * size_t(g.h));
     if (!g.keep.empty()) out.keep.resize(out.px.size());
+    if (!g.deep.empty()) out.deep.resize(out.px.size());
     parallelRows(0, g.h, [&](int y0, int y1) {
         std::vector<int> cols(static_cast<size_t>(k));
         for (int y = y0; y < y1; y++) {
@@ -136,10 +143,13 @@ void insertSeams(Grid& g, const std::vector<std::vector<int>>& seams) {
             const uint8_t* kp = g.keep.empty() ? nullptr : g.keep.data() + size_t(y) * size_t(g.stride);
             uint32_t* o = out.px.data() + size_t(y) * size_t(nw);
             uint8_t* ok = out.keep.empty() ? nullptr : out.keep.data() + size_t(y) * size_t(nw);
+            const uint64_t* dp = g.deep.empty() ? nullptr : g.deep.data() + size_t(y) * size_t(g.stride);
+            uint64_t* od = out.deep.empty() ? nullptr : out.deep.data() + size_t(y) * size_t(nw);
             int j = 0, c = 0;
             for (int x = 0; x < g.w; x++) {
                 o[j] = r[x];
                 if (ok) ok[j] = kp[x];
+                if (od) od[j] = dp[x];
                 j++;
                 if (c < k && cols[size_t(c)] == x) {
                     c++;
@@ -147,6 +157,12 @@ void insertSeams(Grid& g, const std::vector<std::vector<int>>& seams) {
                     for (int s = 0; s < 32; s += 8) m |= ((((a >> s) & 255u) + ((b >> s) & 255u) + 1u) / 2u) << s;
                     o[j] = m;
                     if (ok) ok[j] = kp[x];
+                    if (od) {
+                        const uint64_t da = dp[x], db = dp[std::min(x + 1, g.w - 1)];
+                        uint64_t dm = 0;
+                        for (int s = 0; s < 64; s += 16) dm |= ((((da >> s) & 0xffffu) + ((db >> s) & 0xffffu) + 1u) / 2u) << s;
+                        od[j] = dm;
+                    }
                     j++;
                 }
             }
@@ -172,11 +188,13 @@ Grid transpose(const Grid& g) {
     t.w = g.h; t.h = g.w; t.stride = g.h;
     t.px.resize(size_t(t.stride) * size_t(t.h));
     if (!g.keep.empty()) t.keep.resize(t.px.size());
+    if (!g.deep.empty()) t.deep.resize(t.px.size());
     parallelRows(0, t.h, [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) for (int x = 0; x < t.w; x++) {
             size_t src = size_t(x) * size_t(g.stride) + size_t(y);
             t.px[size_t(y) * size_t(t.stride) + size_t(x)] = g.px[src];
             if (!g.keep.empty()) t.keep[size_t(y) * size_t(t.stride) + size_t(x)] = g.keep[src];
+            if (!g.deep.empty()) t.deep[size_t(y) * size_t(t.stride) + size_t(x)] = g.deep[src];
         }
     }, 32);
     return t;
@@ -184,12 +202,9 @@ Grid transpose(const Grid& g) {
 
 } // namespace
 
-Image seamCarve(const Image& image, int width, int height, const SeamCarveOptions& options) {
-    if (image.isEmpty() || width < 1 || height < 1 || width > maxImageSide || height > maxImageSide) return {};
-    Grid g;
-    g.w = image.width(); g.h = image.height(); g.stride = g.w;
-    g.px.resize(size_t(g.w) * size_t(g.h));
-    for (int y = 0; y < g.h; y++) std::memcpy(g.px.data() + size_t(y) * size_t(g.w), image.row(y), size_t(g.w) * 4);
+namespace {
+
+void carve(Grid& g, int width, int height, const SeamCarveOptions& options) {
     const GrayImage* p = options.protect;
     if (p && p->width() == g.w && p->height() == g.h) {
         g.keep.resize(g.px.size());
@@ -202,8 +217,48 @@ Image seamCarve(const Image& image, int width, int height, const SeamCarveOption
         carveWidth(t, height, fraction);
         g = transpose(t);
     }
+}
+
+} // namespace
+
+Image seamCarve(const Image& image, int width, int height, const SeamCarveOptions& options) {
+    if (image.isEmpty() || width < 1 || height < 1 || width > maxImageSide || height > maxImageSide) return {};
+    Grid g;
+    g.w = image.width(); g.h = image.height(); g.stride = g.w;
+    g.px.resize(size_t(g.w) * size_t(g.h));
+    for (int y = 0; y < g.h; y++) std::memcpy(g.px.data() + size_t(y) * size_t(g.w), image.row(y), size_t(g.w) * 4);
+    carve(g, width, height, options);
     Image out(g.w, g.h);
     for (int y = 0; y < g.h; y++) std::memcpy(out.row(y), g.px.data() + size_t(y) * size_t(g.stride), size_t(g.w) * 4);
+    return out;
+}
+
+Image16 seamCarve(const Image16& image, int width, int height, const SeamCarveOptions& options) {
+    // The seams are chosen on the image rounded to 8 bits; the pixels removed, kept and doubled are the 16-bit ones.
+    if (image.isEmpty() || width < 1 || height < 1 || width > maxImageSide || height > maxImageSide) return {};
+    Grid g;
+    g.w = image.width(); g.h = image.height(); g.stride = g.w;
+    g.px.resize(size_t(g.w) * size_t(g.h));
+    g.deep.resize(g.px.size());
+    for (int y = 0; y < g.h; y++) {
+        const uint16_t* row = image.row(y);
+        for (int x = 0; x < g.w; x++) {
+            uint32_t packed = 0;
+            uint64_t deep = 0;
+            for (int c = 0; c < 4; c++) { packed |= uint32_t(narrow16(row[x * 4 + c])) << (8 * c); deep |= uint64_t(row[x * 4 + c]) << (16 * c); }
+            g.px[size_t(y) * size_t(g.w) + size_t(x)] = packed;
+            g.deep[size_t(y) * size_t(g.w) + size_t(x)] = deep;
+        }
+    }
+    carve(g, width, height, options);
+    Image16 out(g.w, g.h);
+    for (int y = 0; y < g.h; y++) {
+        uint16_t* row = out.row(y);
+        for (int x = 0; x < g.w; x++) {
+            const uint64_t deep = g.deep[size_t(y) * size_t(g.stride) + size_t(x)];
+            for (int c = 0; c < 4; c++) row[x * 4 + c] = uint16_t((deep >> (16 * c)) & 0xffffu);
+        }
+    }
     return out;
 }
 

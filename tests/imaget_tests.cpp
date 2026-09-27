@@ -68,24 +68,29 @@ TEST_CASE(any_image_holds_each_depth) {
     CHECK(floatMask.f32()->at(0, 0) == 1.0f);
 }
 
-TEST_CASE(support_registry_lists_what_p2_ports) {
+TEST_CASE(support_registry_lists_what_p2_and_p3a_port) {
     // Every feature supports 8-bit; P2 ports the renderer, the layer structure, masks and the files to 16 bits.
     CHECK(supports("render.document", SampleType::U8));
     CHECK(supports("render.document", SampleType::U16));
     CHECK(!supports("render.document", SampleType::F32));
     for (const char* ported : {"document.mode", "layers.structure", "layers.transform", "layers.mask", "export.psd", "export.png", "tool.move"})
         CHECK(supports(ported, SampleType::U16));
-    // Painting, selections, filters and adjustments wait for P3.
-    for (const char* later : {"edit.paint", "edit.selection", "edit.pixels", "tool.brush", "filter.gaussianBlur"}) {
+    // P3a: adjustments, the built-in filters, selections, fill, the clipboard, Image Size, crops and distortion.
+    for (const char* ported : {"edit.selection", "tool.marquee", "tool.wand", "tool.quickSelect", "edit.fill", "edit.clipboard", "filter.Gaussian Blur",
+                               "filter.Lens Correction", "edit.imageSize", "edit.crop", "edit.distort"})
+        CHECK(supports(ported, SampleType::U16));
+    for (int k = 0; k < adjustmentKindCount; k++) {
+        CHECK(supports(AdjustmentKind(k), SampleType::U8));
+        CHECK(supports(AdjustmentKind(k), SampleType::U16));
+    }
+    // Painting (P3b) and the rest wait.
+    for (const char* later : {"edit.paint", "edit.pixels", "tool.brush", "tool.gradient", "edit.style", "edit.smartObject", "edit.transformSelection"}) {
         CHECK(supports(later, SampleType::U8));
         CHECK(!supports(later, SampleType::U16));
     }
     CHECK(supports("filter.never-heard-of-it", SampleType::U8));
+    CHECK(!supports("filter.never-heard-of-it", SampleType::U16));
     CHECK(!supports("filter.never-heard-of-it", SampleType::F32));
-    for (int k = 0; k < adjustmentKindCount; k++) {
-        CHECK(supports(AdjustmentKind(k), SampleType::U8));
-        CHECK(!supports(AdjustmentKind(k), SampleType::U16));
-    }
     size_t count = 0;
     const FeatureSupport* table = featureSupportTable(count);
     for (size_t i = 0; i < count; i++) CHECK(table[i].types & onlyEightBit);

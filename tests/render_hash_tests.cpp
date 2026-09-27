@@ -492,6 +492,61 @@ void addFilterScenes() {
     scene("filter/invert", [] { auto image = filterInput(); applyInvert(*image); return hashImage(*image); });
 }
 
+// ---- adjustments and filters at 16 bits (P3a) ---------------------------------------------------------------------
+
+void add16BitEditScenes() {
+    for (int k = 0; k < adjustmentKindCount; k++) {
+        AdjustmentKind kind = AdjustmentKind(k);
+        if (kind == AdjustmentKind::ColorLookup) continue;
+        std::string name = slug(adjustmentKindName(kind));
+        // The adjust/ scene's input converted to 16 bits, adjusted there.
+        scene("u16/adjust/" + name, [kind] {
+            auto image = noisyBase(200, 150);
+            auto over = paint(200, 150, 7);
+            for (int y = 0; y < 150; y++) for (int x = 0; x < 100; x++) std::memcpy(image->pixel(x, y), over->pixel(x, y), 4);
+            auto deep = widenImage(*image);
+            NEED(applyAdjustment(exampleAdjustment(kind), *deep, Rect{0, 0, 200, 150}, 1));
+            return hashImage16(*deep);
+        });
+        // The adjust_layer/ document at 16 bits.
+        scene("u16/adjust_layer/" + name, [kind] {
+            Document doc(200, 150);
+            doc.id = "00000000-0000-4000-8000-000000000003";
+            doc.layers.push_back(layerOf("base", noisyBase(200, 150), {0, 0}));
+            doc.layers.push_back(layerOf("paint", paint(120, 100, 9), {40, 25}));
+            Layer adj("Adjustment", doc.size());
+            adj.adjustment = exampleAdjustment(kind).toLayerAdjustment();
+            adj.opacity = 0.7;
+            adj.mask = maskOf(radialMask(200, 150));
+            doc.layers.push_back(adj);
+            return hash16(sixteen(doc));
+        });
+    }
+    auto filter = [](FilterKind kind, FilterSettings s, uint32_t seed = 0) {
+        auto image = widenImage(*filterInput());
+        applyFilter(kind, *image, s, 1, seed);
+        return hashImage16(*image);
+    };
+    for (double r : {0.6, 2.0, 7.5, 30.0})
+        scene("u16/filter/gaussian_blur_" + std::to_string(int(r * 10)), [=] { FilterSettings s; s.radius = r; return filter(FilterKind::GaussianBlur, s); });
+    for (double a : {0.0, 30.0, -90.0})
+        scene("u16/filter/motion_blur_" + std::to_string(int(a)), [=] { FilterSettings s; s.angle = a; s.distance = 15; return filter(FilterKind::MotionBlur, s); });
+    scene("u16/filter/add_noise_uniform", [=] { FilterSettings s; s.amount = 25; return filter(FilterKind::AddNoise, s, 42); });
+    scene("u16/filter/add_noise_gaussian_mono", [=] { FilterSettings s; s.amount = 40; s.gaussian = true; s.monochromatic = true; return filter(FilterKind::AddNoise, s, 7); });
+    scene("u16/filter/lens_correction", [=] { FilterSettings s; s.distortion = 35; return filter(FilterKind::LensCorrection, s); });
+    scene("u16/filter/lens_correction_bicubic", [=] { FilterSettings s; s.distortion = -40; s.bicubic = true; return filter(FilterKind::LensCorrection, s); });
+    scene("u16/filter/gaussian_blur_gray", [] {
+        auto mask = widenGray(*radialMask(180, 140));
+        gaussianBlur(*mask, 4.5);
+        Fnv f;
+        f.u32(uint32_t(mask->width())); f.u32(uint32_t(mask->height()));
+        for (int y = 0; y < mask->height(); y++)
+            for (int x = 0; x < mask->width(); x++) { const uint16_t v = mask->at(x, y); const uint8_t b[2] = {uint8_t(v), uint8_t(v >> 8)}; f.bytes(b, 2); }
+        return f.h;
+    });
+    scene("u16/filter/invert", [] { auto image = widenImage(*filterInput()); applyInvert(*image); return hashImage16(*image); });
+}
+
 // ---- brushes -----------------------------------------------------------------------------------------------------
 
 Layer paper(int w, int h) {
@@ -664,6 +719,7 @@ TEST_CASE(render_hashes_match_the_baseline_on_the_pool_and_serially) {
     addFilterScenes();
     addBrushScenes();
     add16BitScenes();
+    add16BitEditScenes();
 
     std::map<std::string, std::string> actual;
     int threadMismatch = 0;

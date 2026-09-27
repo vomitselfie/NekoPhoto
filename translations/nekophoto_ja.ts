@@ -3210,6 +3210,10 @@ File &gt; New creates a blank canvas.</source>
         <translation>塗りつぶしを合成するための、選択されていない不透明なピクセルが足りません。周囲の画像を含む、より小さな選択範囲を使用してください。</translation>
     </message>
     <message>
+        <source>Content-aware editing</source>
+        <translation>コンテンツに応じた編集</translation>
+    </message>
+    <message>
         <source>The document has too many layers.</source>
         <translation>ドキュメントのレイヤーが多すぎます。</translation>
     </message>
@@ -3236,6 +3240,10 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Select a visible image layer to scale.</source>
         <translation>拡大・縮小する表示中の画像レイヤーを選択してください。</translation>
+    </message>
+    <message>
+        <source>The size must be between 1 and %1 pixels a side, %2 megapixels at most.</source>
+        <translation>サイズは 1 辺 1〜%1 ピクセル、最大 %2 メガピクセルにしてください。</translation>
     </message>
     <message>
         <source>Could not scale the layer.</source>
@@ -3266,8 +3274,20 @@ File &gt; New creates a blank canvas.</source>
         <translation>許容値 %1:%L2 ピクセル、次は %3 で選択範囲が広がります</translation>
     </message>
     <message>
+        <source>Fill</source>
+        <translation>塗りつぶし</translation>
+    </message>
+    <message>
         <source>Patch works on a layer&apos;s pixels, not its mask.</source>
         <translation>パッチツールはマスクではなく、レイヤーのピクセルに対して機能します。</translation>
+    </message>
+    <message>
+        <source>The filled layer would exceed the size limits.</source>
+        <translation>塗りつぶしたレイヤーがサイズの上限を超えます。</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>消去</translation>
     </message>
     <message>
         <source>Select a smart object.</source>
@@ -3312,6 +3332,10 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>That file has no image.</source>
         <translation>このファイルには画像がありません。</translation>
+    </message>
+    <message>
+        <source>Warping a layer</source>
+        <translation>レイヤーのワープ</translation>
     </message>
     <message>
         <source>Select a layer to warp.</source>
@@ -3364,6 +3388,10 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Adjustments</source>
         <translation>色調補正</translation>
+    </message>
+    <message>
+        <source>Remove Background</source>
+        <translation>背景を削除</translation>
     </message>
     <message>
         <source>Selections</source>

@@ -14,6 +14,7 @@
 #include <memory>
 #include <mutex>
 #include <sstream>
+#include <type_traits>
 
 namespace compositor {
 
@@ -194,7 +195,10 @@ std::optional<std::vector<uint8_t>> fromBase64(const std::string& text) {
 
 bool colorLookupReadable(const ColorLookupSettings& s) { return tableFor(s) != nullptr; }
 
-void applyColorLookup(Image& image, const ColorLookupSettings& s) {
+namespace {
+
+template <class I>
+void applyColorLookupImpl(I& image, const ColorLookupSettings& s) {
     const auto table = tableFor(s);
     if (!table) return;
     const Table& t = *table;
@@ -208,11 +212,12 @@ void applyColorLookup(Image& image, const ColorLookupSettings& s) {
     parallelRows(0, image.height(), [&](int y0, int y1) {
         for (int y = y0; y < y1; y++)
             for (int x = 0; x < image.width(); x++) {
-                uint8_t* p = image.pixel(x, y);
+                auto* p = image.pixel(x, y);
                 const int a = p[3];
                 if (!a) continue;
                 double in[3];
-                for (int c = 0; c < 3; c++) in[c] = std::min(255, p[c] * 255 / a) / 255.0;
+                if constexpr (std::is_same_v<I, Image>) { for (int c = 0; c < 3; c++) in[c] = std::min(255, p[c] * 255 / a) / 255.0; }
+                else { for (int c = 0; c < 3; c++) in[c] = std::min(1.0, double(p[c]) / a); }
                 double out[3];
                 if (t.oneD) {
                     for (int c = 0; c < 3; c++) out[c] = lookup1D(c, in[c]);
@@ -236,9 +241,15 @@ void applyColorLookup(Image& image, const ColorLookupSettings& s) {
                         out[c] = acc;
                     }
                 }
-                for (int c = 0; c < 3; c++) p[c] = uint8_t(std::clamp(std::lround(std::clamp(out[c], 0.0, 1.0) * a), 0L, long(a)));
+                using Sample = std::remove_reference_t<decltype(*p)>;
+                for (int c = 0; c < 3; c++) p[c] = Sample(std::clamp(std::lround(std::clamp(out[c], 0.0, 1.0) * a), 0L, long(a)));
             }
     });
 }
+
+} // namespace
+
+void applyColorLookup(Image& image, const ColorLookupSettings& s) { applyColorLookupImpl(image, s); }
+void applyColorLookup(Image16& image, const ColorLookupSettings& s) { applyColorLookupImpl(image, s); }
 
 } // namespace compositor

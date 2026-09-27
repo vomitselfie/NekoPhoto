@@ -127,10 +127,12 @@ add_library(compositor_core STATIC
     src/affinity_tree.cpp
     src/adjustments.cpp
     src/adjustments_more.cpp
+    src/adjustments_u16.cpp
     src/colorlookup.cpp
     src/clip.cpp
     src/blend_u8.cpp
     src/blur.cpp
+    src/blur_u16.cpp
     src/brushimport.cpp
     src/brush.cpp
     src/brushdynamics.cpp
@@ -138,6 +140,7 @@ add_library(compositor_core STATIC
     src/cameraraw.cpp
     src/document.cpp
     src/filters.cpp
+    src/filters_u16.cpp
     src/history.cpp
     src/image.cpp
     src/kernels.cpp
@@ -150,6 +153,7 @@ add_library(compositor_core STATIC
     src/smartwand.cpp
     src/zip.cpp
     src/resample.cpp
+    src/resample_u16.cpp
     src/heal.cpp
     src/inpaint.cpp
     src/contentmove.cpp
