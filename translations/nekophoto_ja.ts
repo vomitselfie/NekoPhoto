@@ -991,8 +991,44 @@
         <translation>アスキー</translation>
     </message>
     <message>
+        <source>Bleach</source>
+        <translation>ブリーチ</translation>
+    </message>
+    <message>
+        <source>Edges</source>
+        <translation>エッジ</translation>
+    </message>
+    <message>
+        <source>Emboss</source>
+        <translation>エンボス</translation>
+    </message>
+    <message>
         <source>Vignette</source>
         <translation>ビネット</translation>
+    </message>
+    <message>
+        <source>Noise Displace</source>
+        <translation>ノイズ置き換え</translation>
+    </message>
+    <message>
+        <source>Watercolor</source>
+        <translation>水彩</translation>
+    </message>
+    <message>
+        <source>Zoom Blur</source>
+        <translation>ズームブラー</translation>
+    </message>
+    <message>
+        <source>Glow</source>
+        <translation>グロー</translation>
+    </message>
+    <message>
+        <source>Light Streak</source>
+        <translation>ライトストリーク</translation>
+    </message>
+    <message>
+        <source>Feedback</source>
+        <translation>フィードバック</translation>
     </message>
     <message>
         <source>Amount</source>
@@ -1209,6 +1245,26 @@
     <message>
         <source>Cell Size</source>
         <translation>セルサイズ</translation>
+    </message>
+    <message>
+        <source>Intensity</source>
+        <translation>強度</translation>
+    </message>
+    <message>
+        <source>Length</source>
+        <translation>長さ</translation>
+    </message>
+    <message>
+        <source>Zoom</source>
+        <translation>ズーム</translation>
+    </message>
+    <message>
+        <source>Decay</source>
+        <translation>減衰</translation>
+    </message>
+    <message>
+        <source>Softness</source>
+        <translation>ぼかし</translation>
     </message>
     <message>
         <source>Blackout</source>

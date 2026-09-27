@@ -57,6 +57,14 @@ namespace {
     QT_TRANSLATE_NOOP("Names", "Distortion"), QT_TRANSLATE_NOOP("Names", "Roll"), QT_TRANSLATE_NOOP("Names", "Ascii"),
     QT_TRANSLATE_NOOP("Names", "Cell Size"), QT_TRANSLATE_NOOP("Names", "Terminal Green"),
     QT_TRANSLATE_NOOP("Names", "White"), QT_TRANSLATE_NOOP("Names", "Original"),
+    // the effects added since, their parameters and options
+    QT_TRANSLATE_NOOP("Names", "Bleach"), QT_TRANSLATE_NOOP("Names", "Edges"), QT_TRANSLATE_NOOP("Names", "Emboss"),
+    QT_TRANSLATE_NOOP("Names", "Softness"), QT_TRANSLATE_NOOP("Names", "Noise Displace"),
+    QT_TRANSLATE_NOOP("Names", "Watercolor"), QT_TRANSLATE_NOOP("Names", "Zoom Blur"),
+    QT_TRANSLATE_NOOP("Names", "Glow"), QT_TRANSLATE_NOOP("Names", "Threshold"),
+    QT_TRANSLATE_NOOP("Names", "Intensity"), QT_TRANSLATE_NOOP("Names", "Light Streak"),
+    QT_TRANSLATE_NOOP("Names", "Length"), QT_TRANSLATE_NOOP("Names", "Feedback"), QT_TRANSLATE_NOOP("Names", "Zoom"),
+    QT_TRANSLATE_NOOP("Names", "Decay"),
     // parameters
     QT_TRANSLATE_NOOP("Names", "Amount"), QT_TRANSLATE_NOOP("Names", "Angle"), QT_TRANSLATE_NOOP("Names", "Blocks"),
     QT_TRANSLATE_NOOP("Names", "Color Shift"), QT_TRANSLATE_NOOP("Names", "Block Size"), QT_TRANSLATE_NOOP("Names", "Drift"),

@@ -96,6 +96,23 @@ std::vector<EffectSpec> makeEffects() {
         fx("halftone", "Halftone", C::Retro, {floatParam("scale", "Scale", 2, 64, 10), floatParam("angle", "Angle", 0, pi, 0.4f)}),
         fx("ascii", "Ascii", C::Retro,
            {floatParam("size", "Cell Size", 4, 32, 10), choiceParam("mode", "Color", {"Terminal Green", "White", "Original"}, 0), boolParam("invert", "Invert", false)}),
+        // ---- Stylize
+        fx("bleach", "Bleach", C::Stylize, {floatParam("amount", "Amount", 0, 1, 0.6f)}),
+        fx("edges", "Edges", C::Stylize, {floatParam("amount", "Amount", 0, 4, 1.5f), boolParam("invert", "Invert", false)}),
+        fx("emboss", "Emboss", C::Stylize, {floatParam("strength", "Strength", 0, 8, 2), floatParam("angle", "Angle", 0, tau, 0.8f)}),
+        fx("vignette", "Vignette", C::Stylize,
+           {floatParam("amount", "Amount", 0, 1, 0.6f), floatParam("radius", "Radius", 0, 1.5f, 0.7f), floatParam("softness", "Softness", 0.01f, 1, 0.4f)}),
+        seeded("noise-displace", "Noise Displace", C::Stylize, {floatParam("amount", "Amount", 0, 0.3f, 0.06f), floatParam("scale", "Scale", 1, 60, 12)}),
+        fx("watercolor", "Watercolor", C::Stylize, {floatParam("radius", "Radius", 1, 8, 4)}),
+        fx("zoom-blur", "Zoom Blur", C::Stylize,
+           {floatParam("strength", "Strength", 0, 0.5f, 0.15f), floatParam("cx", "Center X", 0, 1, 0.5f), floatParam("cy", "Center Y", 0, 1, 0.5f)}),
+        fx("glow", "Glow", C::Stylize,
+           {floatParam("threshold", "Threshold", 0, 1, 0.6f), floatParam("intensity", "Intensity", 0, 2, 0.8f), floatParam("radius", "Radius", 0, 16, 6)}),
+        fx("light-streak", "Light Streak", C::Stylize,
+           {floatParam("threshold", "Threshold", 0, 1, 0.6f), floatParam("length", "Length", 0, 1, 0.5f), floatParam("angle", "Angle", 0, tau, 0),
+            floatParam("intensity", "Intensity", 0, 2, 1)}),
+        fx("feedback", "Feedback", C::Stylize,
+           {floatParam("zoom", "Zoom", -0.2f, 0.2f, 0.05f), floatParam("rotation", "Rotation", -0.5f, 0.5f, 0.05f), floatParam("decay", "Decay", 0, 1, 0.85f)}),
     };
 }
 

@@ -596,6 +596,207 @@ void ascii(const Frame& in, const Uniforms& u, const RowSink& sink) {
     }, sink);
 }
 
+// ---- Stylize --------------------------------------------------------------------------------------------------
+
+// Bleach: bleach bypass, the image overlaid with its own luma. p0 = amount.
+void bleach(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        vec4 c = sample(in, f.uv);
+        float l = luma(c.rgb());
+        vec3 blend = mix(2.0f * c.rgb() * l, 1.0f - 2.0f * (1.0f - c.rgb()) * (1.0f - l), step(0.5f, l));
+        return v4(mix(c.rgb(), blend, u.p[0]), c.w);
+    }, sink);
+}
+
+// Edges: the Sobel magnitude of the luma. p0 = amount, p1 = invert.
+void edges(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    const vec2 px = 1.0f / u.resolution;
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        float gx = 0, gy = 0;
+        for (int y = -1; y <= 1; y++)
+            for (int x = -1; x <= 1; x++) {
+                float l = luma(sample(in, f.uv + vec2{float(x), float(y)} * px).rgb());
+                gx += l * float(x) * (y == 0 ? 2.0f : 1.0f);
+                gy += l * float(y) * (x == 0 ? 2.0f : 1.0f);
+            }
+        float v = clamp(std::sqrt(gx * gx + gy * gy) * u.p[0], 0.0f, 1.0f);
+        if (u.p[1] > 0.5f) v = 1.0f - v;
+        return v4(v3(v), sample(in, f.uv).w);
+    }, sink);
+}
+
+// Emboss: a directional relief of the luma. p0 = strength, p1 = angle.
+void emboss(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    const vec2 dir = vec2{cos(u.p[1]), sin(u.p[1])} * u.p[0] / u.resolution;
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        float a = luma(sample(in, f.uv - dir).rgb());
+        float b = luma(sample(in, f.uv + dir).rgb());
+        float alpha = sample(in, f.uv).w;
+        return v4(v3(clamp(0.5f + (a - b) * 2.0f, 0.0f, 1.0f)), alpha);
+    }, sink);
+}
+
+// Vignette: darkened corners. p0 = amount, p1 = radius, p2 = softness.
+void vignette(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        vec4 c = sample(in, f.uv);
+        float d = distance(f.uv, v2(0.5f)) * 1.4142f;
+        float v = smoothstep(u.p[1], u.p[1] + u.p[2], d);
+        return v4(c.rgb() * (1.0f - u.p[0] * v), c.w);
+    }, sink);
+}
+
+// Noise Displace: a smooth-noise warp. p0 = amount, p1 = scale.
+void noiseDisplace(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    const float scale = u.p[1];
+    const float s = u.seed * 13.7f;
+    const vec2 second = vec2{91.3f, 41.9f} + s;
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        float n1 = vnoise(f.uv * scale + s);
+        float n2 = vnoise(f.uv * scale + second);
+        vec2 uv = f.uv + (vec2{n1, n2} - 0.5f) * u.p[0];
+        return sample(in, uv);
+    }, sink);
+}
+
+/// luma as a GPU evaluates the dot product: a multiply and two fused multiply-adds.
+float lumaFused(vec3 c) { return fma32(c.z, 0.114f, fma32(c.y, 0.587f, c.x * 0.299f)); }
+
+// Watercolor: a Kuwahara filter, each pixel the mean of the least varied of four 3x3 quadrants. p0 = radius.
+void watercolor(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    const vec2 px = u.p[0] / (2.0f * u.resolution);
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        vec3 best;
+        float bestv = 1e9f;
+        for (int q = 0; q < 4; q++) {
+            float sx = q % 2 == 0 ? 1.0f : -1.0f;
+            float sy = q < 2 ? 1.0f : -1.0f;
+            vec3 mean;
+            float m2 = 0;
+            for (int y = 0; y <= 2; y++)
+                for (int x = 0; x <= 2; x++) {
+                    vec2 o = vec2{float(x) * sx, float(y) * sy} * px;
+                    vec3 s = sample(in, f.uv + o).rgb();
+                    mean = mean + s;
+                    float l = lumaFused(s);
+                    m2 = fma32(l, l, m2);
+                }
+            mean = mean / 9.0f;
+            const float lm = lumaFused(mean);
+            float variance = fma32(-lm, lm, m2 / 9.0f);
+            if (variance < bestv) { bestv = variance; best = mean; }
+        }
+        return v4(best, sample(in, f.uv).w);
+    }, sink);
+}
+
+// Zoom Blur: radial streaks toward a centre, twelve taps jittered per pixel (the jitter as Smear's). p0 = strength,
+// p1 = centre x, p2 = centre y.
+void zoomBlur(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    const vec2 center{u.p[1], u.p[2]};
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        vec2 d = (f.uv - center) * u.p[0];
+        float jitter = rand2(f.uv * u.resolution);
+        vec4 acc;
+        for (int i = 0; i < 12; i++) {
+            float t = (float(i) + jitter) / 12.0f;
+            acc = acc + sample(in, f.uv - d * t);
+        }
+        return acc / 12.0f;
+    }, sink);
+}
+
+/// One pass of Glow's separable 13-tap Gaussian along `step`.
+Frame glowBlur(const Frame& in, vec2 step) {
+    float w[13], wsum = 0;
+    for (int i = -6; i <= 6; i++) {
+        w[i + 6] = exp(-float(i * i) * 0.056f);
+        wsum += w[i + 6];
+    }
+    return pass(in.width(), in.height(), [&](const Frag& f) {
+        vec4 acc;
+        for (int i = -6; i <= 6; i++) acc = acc + sample(in, f.uv + step * float(i)) * w[i + 6];
+        return acc / wsum;
+    });
+}
+
+// Glow: a bright pass, blurred across and down, added over the image. p0 = threshold, p1 = intensity, p2 = radius in
+// pixels. Four passes, the frames between them at 16 bits.
+void glow(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    const Frame bright = pass(in.width(), in.height(), [&](const Frag& f) {
+        vec4 c = sample(in, f.uv);
+        return v4(max(c.rgb() - u.p[0], v3(0.0f)), c.w);
+    });
+    const Frame across = glowBlur(bright, vec2{u.p[2] / 6.0f / u.resolution.x, 0.0f});
+    const Frame down = glowBlur(across, vec2{0.0f, u.p[2] / 6.0f / u.resolution.y});
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        vec4 base = sample(in, f.uv);
+        vec3 g = sample(down, f.uv).rgb();
+        return v4(clamp(base.rgb() + g * u.p[1] * 2.0f, 0.0f, 1.0f), base.w);
+    }, sink);
+}
+
+// Light Streak: a bright pass drawn out along a direction by three passes of a symmetric streak whose tap spacing grows
+// fourfold each pass, added over the image. p0 = threshold, p1 = length, p2 = angle, p3 = intensity.
+void lightStreak(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    const float threshold = u.p[0];
+    Frame cur = pass(in.width(), in.height(), [&](const Frag& f) {
+        vec4 c = sample(in, f.uv);
+        vec3 b = max(c.rgb() - threshold, v3(0.0f)) / std::max(1.0f - threshold, 1e-4f);
+        return v4(b, c.w);
+    });
+    const vec2 dir = vec2{cos(u.p[2]), sin(u.p[2])} / u.resolution;
+    const float att = 0.90f + u.p[1] * 0.08f;
+    for (int p = 1; p <= 3; p++) {
+        const float stride = pow(4.0f, float(p) - 1.0f);
+        const float spread = stride * (2.0f + u.p[1] * 6.0f);
+        float w[4] = {1.0f, 0, 0, 0};
+        for (int s = 1; s < 4; s++) w[s] = pow(att, stride * float(s));
+        const Frame& src = cur;
+        Frame next = pass(in.width(), in.height(), [&](const Frag& f) {
+            vec3 acc = sample(src, f.uv).rgb();
+            float wsum = 1.0f;
+            for (int s = 1; s < 4; s++) {
+                acc = acc + sample(src, f.uv + dir * spread * float(s)).rgb() * w[s];
+                acc = acc + sample(src, f.uv - dir * spread * float(s)).rgb() * w[s];
+                wsum += 2.0f * w[s];
+            }
+            return v4(acc / wsum, sample(src, f.uv).w);
+        });
+        cur = std::move(next);
+    }
+    shade(in.width(), in.height(), [&](const Frag& f) {
+        vec4 base = sample(in, f.uv);
+        vec3 streak = sample(cur, f.uv).rgb();
+        return v4(clamp(base.rgb() + streak * u.p[3], 0.0f, 1.0f), base.w);
+    }, sink);
+}
+
+// Feedback: video-feedback trails, ten iterations each zooming and turning the last and keeping the brighter of it
+// (decayed) and the image. p0 = zoom, p1 = rotation per iteration, p2 = decay.
+void feedback(const Frame& in, const Uniforms& u, const RowSink& sink) {
+    constexpr int iterations = 10;   // OpenMosh's FEEDBACK_ITERATIONS
+    const float aspect = u.resolution.x / u.resolution.y;
+    auto iteration = [&](const Frame& previous) {
+        const Frame* prev = &previous;
+        return [&in, &u, prev, aspect](const Frag& f) {
+            vec2 d = f.uv - 0.5f;
+            d.x *= aspect;
+            d = rotate(-u.p[1], d) / (1.0f + u.p[0]);
+            d.x /= aspect;
+            vec4 trail = sample(*prev, d + 0.5f);
+            vec4 base = sample(in, f.uv);
+            return v4(max(base.rgb(), trail.rgb() * u.p[2]), base.w);
+        };
+    };
+    Frame cur = pass(in.width(), in.height(), iteration(in));
+    for (int i = 1; i < iterations - 1; i++) {
+        Frame next = pass(in.width(), in.height(), iteration(cur));
+        cur = std::move(next);
+    }
+    shade(in.width(), in.height(), iteration(cur), sink);
+}
+
 struct Entry { std::string_view id; EffectFn fn; };
 constexpr Entry kEffects[] = {
     {"soft-glitch", softGlitch}, {"hard-glitch", hardGlitch}, {"decimate", decimate}, {"data-mosh", dataMosh},
@@ -605,6 +806,8 @@ constexpr Entry kEffects[] = {
     {"bulge", bulge}, {"stretch", stretch}, {"push", push}, {"luma-mesh", lumaMesh}, {"transform-3d", transform3d}, {"tile", tile},
     {"mirror", mirror}, {"wobble", wobble}, {"smear", smear}, {"twirl", twirl}, {"optical-flow", opticalFlow},
     {"super8", super8}, {"bad-tv", badTv}, {"ascii", ascii},
+    {"bleach", bleach}, {"edges", edges}, {"emboss", emboss}, {"vignette", vignette}, {"noise-displace", noiseDisplace},
+    {"watercolor", watercolor}, {"zoom-blur", zoomBlur}, {"glow", glow}, {"light-streak", lightStreak}, {"feedback", feedback},
 };
 
 } // namespace
