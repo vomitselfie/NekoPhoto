@@ -751,48 +751,54 @@ void LayersPanel::showContextMenu(const QPoint& pos) {
     if (session_->activeLayerId() != id) session_->selectLayer(id);
     const Layer* layer = session_->document() ? session_->document()->find(id) : nullptr;
     if (!layer) return;
-    QMenu menu(this);
-    if (layer->isLiveText()) menu.addAction(tr("Edit Text…"), this, [this, id] { session_->requestTextEdit(id); });
-    menu.addAction(tr("Rename…"), this, [this, id] { startRename(id); });
+    auto* menu = new QMenu(this);
+    menu->setAttribute(Qt::WA_DeleteOnClose);
+    if (layer->isLiveText()) menu->addAction(tr("Edit Text…"), this, [this, id] { session_->requestTextEdit(id); });
+    menu->addAction(tr("Rename…"), this, [this, id] { startRename(id); });
     if (session_->canStyleLayer(id)) {
-        menu.addAction(tr("Layer Style…"), this, [this, id] { LayerStyleDialog(session_, id, this).exec(); });
+        menu->addAction(tr("Layer Style…"), this, [this, id] { LayerStyleDialog(session_, id, this).exec(); });
         if (session_->activeLayerHasStyle()) {
-            menu.addAction(tr("Copy Layer Style"), this, [this] { session_->copyLayerStyle(); });
-            menu.addAction(tr("Clear Layer Style"), this, [this] { session_->clearLayerStyle(); });
+            menu->addAction(tr("Copy Layer Style"), this, [this] { session_->copyLayerStyle(); });
+            menu->addAction(tr("Clear Layer Style"), this, [this] { session_->clearLayerStyle(); });
         }
-        if (session_->canPasteLayerStyle()) menu.addAction(tr("Paste Layer Style"), this, [this] { session_->pasteLayerStyle(); });
+        if (session_->canPasteLayerStyle()) menu->addAction(tr("Paste Layer Style"), this, [this] { session_->pasteLayerStyle(); });
     }
 
     if (session_->smartFilters(id)) {
-        QAction* clear = menu.addAction(tr("Clear Smart Filters"), this, [this, id] { QString e; if (!session_->clearSmartFilters(id, &e)) QMessageBox::warning(this, tr("Smart Filters"), e); });
+        QAction* clear = menu->addAction(tr("Clear Smart Filters"), this, [this, id] { QString e; if (!session_->clearSmartFilters(id, &e)) QMessageBox::warning(this, tr("Smart Filters"), e); });
         clear->setEnabled(session_->canEditSmartFilters(id));
-        menu.addSeparator();
+        menu->addSeparator();
     }
-    menu.addAction(tr("Duplicate Layer"), this, [this] { session_->duplicateActiveLayer(); });
-    menu.addAction(tr("Delete Layer"), this, [this, id] { session_->deleteLayer(id); });
-    menu.addSeparator();
+    menu->addAction(tr("Duplicate Layer"), this, [this] { session_->duplicateActiveLayer(); });
+    menu->addAction(tr("Delete Layer"), this, [this, id] { session_->deleteLayer(id); });
+    menu->addSeparator();
     if (!layer->isGroup) {
-        QAction* clip = menu.addAction(layer->maskSourceId ? tr("Release Clipping Mask") : tr("Create Clipping Mask"), this, [this, id] { session_->toggleClippingMask(id); });
+        QAction* clip = menu->addAction(layer->maskSourceId ? tr("Release Clipping Mask") : tr("Create Clipping Mask"), this, [this, id] { session_->toggleClippingMask(id); });
         clip->setEnabled(session_->canToggleClippingMask(id));
-        menu.addAction(tr("Merge Down"), this, [this] { session_->mergeDown(); });
-        menu.addSeparator();
+        menu->addAction(tr("Merge Down"), this, [this] { session_->mergeDown(); });
+        menu->addSeparator();
     }
     if (layer->mask) {
-        menu.addAction(layer->mask->enabled ? tr("Disable Layer Mask") : tr("Enable Layer Mask"), this, [this] { session_->toggleLayerMask(); });
-        menu.addAction(layer->mask->linked ? tr("Unlink Layer Mask") : tr("Link Layer Mask"), this, [this, id] { session_->toggleMaskLink(id); });
-        menu.addAction(tr("Invert Mask"), this, [this] { session_->invertMask(); });
-        if (!layer->isGroup) menu.addAction(tr("Apply Layer Mask"), this, [this] { session_->applyMask(); });
-        menu.addAction(tr("Delete Layer Mask"), this, [this] { session_->deleteLayerMask(); });
+        menu->addAction(layer->mask->enabled ? tr("Disable Layer Mask") : tr("Enable Layer Mask"), this, [this] { session_->toggleLayerMask(); });
+        menu->addAction(layer->mask->linked ? tr("Unlink Layer Mask") : tr("Link Layer Mask"), this, [this, id] { session_->toggleMaskLink(id); });
+        menu->addAction(tr("Invert Mask"), this, [this] { session_->invertMask(); });
+        if (!layer->isGroup) menu->addAction(tr("Apply Layer Mask"), this, [this] { session_->applyMask(); });
+        menu->addAction(tr("Delete Layer Mask"), this, [this] { session_->deleteLayerMask(); });
     } else {
-        menu.addAction(tr("Add Reveal-All Mask"), this, [this] { session_->addMaskFromSelection(true); });
-        menu.addAction(tr("Add Hide-All Mask"), this, [this] { session_->addMaskFromSelection(false); });
+        menu->addAction(tr("Add Reveal-All Mask"), this, [this] { session_->addMaskFromSelection(true); });
+        menu->addAction(tr("Add Hide-All Mask"), this, [this] { session_->addMaskFromSelection(false); });
     }
-    if (hasLayerVectorMask(*layer)) menu.addAction(tr("Delete Vector Mask"), this, [this] { session_->deleteVectorMask(); });
+    if (hasLayerVectorMask(*layer)) menu->addAction(tr("Delete Vector Mask"), this, [this] { session_->deleteVectorMask(); });
     else if (!isVectorShapeLayer(*layer)) {
-        menu.addAction(tr("Add Reveal-All Vector Mask"), this, [this] { session_->addVectorMask(EditorSession::VectorMaskKind::RevealAll); });
-        menu.addAction(tr("Add Hide-All Vector Mask"), this, [this] { session_->addVectorMask(EditorSession::VectorMaskKind::HideAll); });
+        menu->addAction(tr("Add Reveal-All Vector Mask"), this, [this] { session_->addVectorMask(EditorSession::VectorMaskKind::RevealAll); });
+        menu->addAction(tr("Add Hide-All Vector Mask"), this, [this] { session_->addVectorMask(EditorSession::VectorMaskKind::HideAll); });
     }
-    menu.exec(tree_->viewport()->mapToGlobal(pos));
+    menu->popup(tree_->viewport()->mapToGlobal(pos));
+}
+
+void LayersPanel::showActiveLayerMenu() {
+    if (!session_->activeLayerId()) return;
+    if (QTreeWidgetItem* item = itemFor(*session_->activeLayerId())) showContextMenu(tree_->visualItemRect(item).center());
 }
 
 // ---- Smart Filters -------------------------------------------------------------------------------

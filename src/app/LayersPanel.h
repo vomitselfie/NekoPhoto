@@ -77,6 +77,8 @@ public:
     QToolButton* eyeButton(const compositor::Uuid& id) const;
     /// Test hook: drops Smart Filter `from` of `id` above or below the row of entry `onto` (any smart object's) as a
     /// drag's release would; false when refused.
+    /// The active layer's context menu, as a right-click on its row opens it (for --dialog layers-menu).
+    void showActiveLayerMenu();
     bool dropSmartFilterForTest(const compositor::Uuid& id, int from, const compositor::Uuid& ontoId, int onto, bool above);
 private:
     void finishSwipe();
