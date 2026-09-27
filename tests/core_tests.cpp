@@ -1854,13 +1854,13 @@ TEST_CASE(alpha_plane_commits_once_at_the_documents_depth) {
     CHECK(plane.commit(SampleType::U8).u8() != nullptr);
     CHECK_NEAR(AlphaPlane(*deep.u16()).at(1, 0), 0.5, 1e-6);
     // The transfer curves: sRGB's knee, round trips, and the identity.
-    const TransferCurve srgb = TransferCurve::srgb();
+    const MatteTransfer srgb = MatteTransfer::srgb();
     CHECK_NEAR(toLinear(srgb, 0.5f), 0.214, 1e-3);
     CHECK_NEAR(toLinear(srgb, 0.02f), 0.02 / 12.92, 1e-6);
     for (float v : {0.0f, 0.01f, 0.2f, 0.5f, 0.9f, 1.0f}) {
         CHECK_NEAR(fromLinear(srgb, toLinear(srgb, v)), v, 1e-5);
-        CHECK_NEAR(fromLinear(TransferCurve::power(2.2f), toLinear(TransferCurve::power(2.2f), v)), v, 1e-5);
-        CHECK_NEAR(toLinear(TransferCurve::identity(), v), v, 1e-7);
+        CHECK_NEAR(fromLinear(MatteTransfer::power(2.2f), toLinear(MatteTransfer::power(2.2f), v)), v, 1e-5);
+        CHECK_NEAR(toLinear(MatteTransfer::identity(), v), v, 1e-7);
     }
 }
 
@@ -1872,7 +1872,7 @@ TEST_CASE(linear_light_matting_recovers_a_linear_composite) {
     auto image = std::make_shared<Image>(w, h);
     auto truth = [](int x) { return std::clamp((72 - x) / 24.0, 0.0, 1.0); };
     const float F[3] = {0.02f, 0.015f, 0.01f}, B[3] = {0.8f, 0.75f, 0.7f};
-    const TransferCurve srgb = TransferCurve::srgb();
+    const MatteTransfer srgb = MatteTransfer::srgb();
     for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
         const float a = float(truth(x));
         uint8_t* p = image->pixel(x, y);
@@ -1881,13 +1881,13 @@ TEST_CASE(linear_light_matting_recovers_a_linear_composite) {
     }
     AlphaPlane coarse(w, h);
     for (int y = 0; y < h; y++) for (int x = 0; x < 60; x++) coarse.at(x, y) = 1;
-    auto errorOf = [&](const TransferCurve& curve) {
+    auto errorOf = [&](const MatteTransfer& curve) {
         const AlphaPlane matted = matteBand(coarse, *image, 14, 0, nullptr, nullptr, false, curve);
         double worst = 0;
         for (int y = 8; y < h - 8; y++) for (int x = 50; x < 70; x++) worst = std::max(worst, std::fabs(matted.at(x, y) - truth(x)));
         return worst;
     };
-    const double linear = errorOf(srgb), stored = errorOf(TransferCurve::identity());
+    const double linear = errorOf(srgb), stored = errorOf(MatteTransfer::identity());
     std::printf("  linear composite: worst alpha error %.3f in linear light, %.3f on the stored values\n", linear, stored);
     CHECK(linear <= 0.08);
     CHECK(linear < stored);
@@ -1911,7 +1911,7 @@ TEST_CASE(matting_uncertainty_marks_what_two_colours_cannot_explain) {
     AlphaPlane coarse(w, h);
     for (int y = 0; y < h; y++) for (int x = 0; x < 60; x++) coarse.at(x, y) = 1;
     MatteDebug debug;
-    (void)matteBand(coarse, *image, 14, 0, nullptr, &debug, false, TransferCurve::identity());
+    (void)matteBand(coarse, *image, 14, 0, nullptr, &debug, false, MatteTransfer::identity());
     CHECK_EQ(debug.uncertainty.width, w);
     double ramp = 0, stripe = 0;
     for (int x = 52; x < 68; x++) { ramp = std::max(ramp, double(debug.uncertainty.at(x, 15))); stripe += debug.uncertainty.at(x, 40) / 16.0; }

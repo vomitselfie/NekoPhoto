@@ -24,27 +24,27 @@ namespace compositor {
 
 MatteSettings MatteSettings::normalized() const {
     auto c = [](double v, double lo, double hi, double f) { return std::isfinite(v) ? std::min(hi, std::max(lo, v)) : f; };
-    TransferCurve curve = decode;
-    if (curve.kind == TransferCurve::Kind::Gamma && !(std::isfinite(curve.gamma) && curve.gamma >= 0.1f && curve.gamma <= 10)) curve = TransferCurve::srgb();
+    MatteTransfer curve = decode;
+    if (curve.kind == MatteTransfer::Kind::Gamma && !(std::isfinite(curve.gamma) && curve.gamma >= 0.1f && curve.gamma <= 10)) curve = MatteTransfer::srgb();
     return {c(refineEdges, 0, 40, 12), c(contrast, 0, 100, 25), c(shiftEdge, -10, 10, 0), c(matting, 0, 400, 0), cleanup, decontaminate, highPass, sideWindows, narrowBand, curve};
 }
 
-float toLinear(const TransferCurve& curve, float v) {
+float toLinear(const MatteTransfer& curve, float v) {
     v = std::clamp(v, 0.0f, 1.0f);
     switch (curve.kind) {
-    case TransferCurve::Kind::Srgb: return v <= 0.04045f ? v / 12.92f : std::pow((v + 0.055f) / 1.055f, 2.4f);
-    case TransferCurve::Kind::Gamma: return std::pow(v, curve.gamma);
-    case TransferCurve::Kind::Identity: break;
+    case MatteTransfer::Kind::Srgb: return v <= 0.04045f ? v / 12.92f : std::pow((v + 0.055f) / 1.055f, 2.4f);
+    case MatteTransfer::Kind::Gamma: return std::pow(v, curve.gamma);
+    case MatteTransfer::Kind::Identity: break;
     }
     return v;
 }
 
-float fromLinear(const TransferCurve& curve, float v) {
+float fromLinear(const MatteTransfer& curve, float v) {
     v = std::clamp(v, 0.0f, 1.0f);
     switch (curve.kind) {
-    case TransferCurve::Kind::Srgb: return v <= 0.0031308f ? v * 12.92f : 1.055f * std::pow(v, 1 / 2.4f) - 0.055f;
-    case TransferCurve::Kind::Gamma: return std::pow(v, 1 / curve.gamma);
-    case TransferCurve::Kind::Identity: break;
+    case MatteTransfer::Kind::Srgb: return v <= 0.0031308f ? v * 12.92f : 1.055f * std::pow(v, 1 / 2.4f) - 0.055f;
+    case MatteTransfer::Kind::Gamma: return std::pow(v, 1 / curve.gamma);
+    case MatteTransfer::Kind::Identity: break;
     }
     return v;
 }
@@ -205,7 +205,7 @@ Map resizeLevels(const Map& src, int sw, int sh, int dw, int dh) {
 /// Decodes stored values to linear light through a table (the values are 0..1 straight colour).
 class Decoder {
 public:
-    explicit Decoder(const TransferCurve& curve) : identity_(curve.isIdentity()) {
+    explicit Decoder(const MatteTransfer& curve) : identity_(curve.isIdentity()) {
         if (identity_) return;
         for (int i = 0; i <= size; i++) table_[size_t(i)] = toLinear(curve, float(i) / size);
     }
@@ -548,12 +548,12 @@ inline void score(const float colour[3], float fr, float fg, float fb, float br,
 
 } // namespace
 
-std::shared_ptr<GrayImage> matteBand(const GrayImage& matte, const Image& guide, double bandFull, int limit, const GrayImage* trimapFrom, MatteDebug* debug, bool narrow, const TransferCurve& decode) {
+std::shared_ptr<GrayImage> matteBand(const GrayImage& matte, const Image& guide, double bandFull, int limit, const GrayImage* trimapFrom, MatteDebug* debug, bool narrow, const MatteTransfer& decode) {
     std::unique_ptr<AlphaPlane> shape = trimapFrom ? std::make_unique<AlphaPlane>(*trimapFrom) : nullptr;
     return matteBand(AlphaPlane(matte), guide, bandFull, limit, shape.get(), debug, narrow, decode).toGray();
 }
 
-AlphaPlane matteBand(const AlphaPlane& matte, const Image& guide, double bandFull, int limit, const AlphaPlane* trimapFrom, MatteDebug* debug, bool narrow, const TransferCurve& decode) {
+AlphaPlane matteBand(const AlphaPlane& matte, const Image& guide, double bandFull, int limit, const AlphaPlane* trimapFrom, MatteDebug* debug, bool narrow, const MatteTransfer& decode) {
     const int fullW = matte.width, fullH = matte.height;
     const double factor = limit > 0 ? std::min(1.0, double(limit) / std::max(fullW, fullH)) : 1;
     const int width = std::max(1, int(std::lround(fullW * factor))), height = std::max(1, int(std::lround(fullH * factor)));
@@ -986,11 +986,11 @@ std::vector<uint8_t> workNear(const Map& alpha, int w, int h, int margin) {
 
 } // namespace
 
-std::shared_ptr<Image> estimateForeground(const Image& image, const GrayImage& matte, const TransferCurve& decode) {
+std::shared_ptr<Image> estimateForeground(const Image& image, const GrayImage& matte, const MatteTransfer& decode) {
     return estimateForeground(image, AlphaPlane(matte), decode);
 }
 
-std::shared_ptr<Image> estimateForeground(const Image& image, const AlphaPlane& matte, const TransferCurve& decode) {
+std::shared_ptr<Image> estimateForeground(const Image& image, const AlphaPlane& matte, const MatteTransfer& decode) {
     const int w = image.width(), h = image.height();
     auto out = std::make_shared<Image>(image);
     if (w <= 0 || h <= 0 || matte.width != w || matte.height != h) return out;

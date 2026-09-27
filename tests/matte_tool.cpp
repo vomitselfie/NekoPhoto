@@ -94,8 +94,8 @@ Options parse(int argc, char** argv, int from) {
         else if (a == "--highpass") o.settings.highPass = true;
         else if (a == "--sidewindows") o.settings.sideWindows = true;
         else if (a == "--narrow") o.settings.narrowBand = true;
-        else if (a == "--gamma") o.settings.decode = TransferCurve::identity();
-        else if (a == "--linear") o.settings.decode = TransferCurve::srgb();
+        else if (a == "--gamma") o.settings.decode = MatteTransfer::identity();
+        else if (a == "--linear") o.settings.decode = MatteTransfer::srgb();
         else if (a == "--mask-cache") o.maskCache = next();
         else if (a == "--fg-gamma") o.foregroundSpace = -1;
         else if (a == "--fg-linear") o.foregroundSpace = 1;
@@ -427,7 +427,7 @@ int evalMode(int argc, char** argv) {
         const fs::path fgPath = files[k].parent_path() / (in.stem + "_fg.png");
         if (fs::exists(fgPath)) {
             if (auto trueF = readPngImage(fgPath.string())) {
-                const TransferCurve space = o.foregroundSpace < 0 ? TransferCurve::identity() : o.foregroundSpace > 0 ? TransferCurve::srgb() : o.settings.normalized().decode;
+                const MatteTransfer space = o.foregroundSpace < 0 ? MatteTransfer::identity() : o.foregroundSpace > 0 ? MatteTransfer::srgb() : o.settings.normalized().decode;
                 auto estimated = o.settings.decontaminate ? estimateForeground(*in.image, plane, space) : std::make_shared<Image>(*in.image);
                 row.fore = scoreForeground(*estimated, *matte, *trueF, *in.truth);
                 row.haveFore = true;
@@ -477,7 +477,7 @@ int evalMode(int argc, char** argv) {
 
 // ---- Synthetic composites in linear light --------------------------------------------------------------
 
-float srgbEncode(float v) { return fromLinear(TransferCurve::srgb(), v); }
+float srgbEncode(float v) { return fromLinear(MatteTransfer::srgb(), v); }
 
 int synthMode(int argc, char** argv) {
     if (argc < 3) { std::fprintf(stderr, "usage: matte_tool synth <outdir> [--size N]\n"); return 2; }
