@@ -431,7 +431,7 @@ bool checkFile(const fs::path& file, const fs::path& package, uintmax_t maximumB
     if (ec) return false;
     fs::path resolved = fs::weakly_canonical(file, ec);
     if (ec) return false;
-    std::string rootText = root.string() + "/";
+    std::string rootText = (root / "").string();   // with the trailing separator: "/" here, "\\" on Windows
     if (resolved.string().rfind(rootText, 0) != 0) return false;
     if (fs::is_symlink(file, ec) || !fs::is_regular_file(file, ec)) return false;
     uintmax_t size = fs::file_size(file, ec);

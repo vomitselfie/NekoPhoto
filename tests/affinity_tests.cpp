@@ -392,7 +392,7 @@ TEST_CASE(real_documents_open_when_available) {
         if (ext != ".af" && ext != ".afphoto" && ext != ".afdesign") continue;
         std::string error;
         auto imported = importAffinity(entry.path().string(), &error);
-        if (!imported) { std::fprintf(stderr, "  %s: %s\n", entry.path().filename().c_str(), error.c_str()); CHECK(imported.has_value()); continue; }
+        if (!imported) { std::fprintf(stderr, "  %s: %s\n", entry.path().filename().string().c_str(), error.c_str()); CHECK(imported.has_value()); continue; }
         opened++;
         // The import, reduced to the preview's size, against the preview: loose, since left-out text and effects differ.
         if (!imported->composite) continue;
@@ -407,7 +407,7 @@ TEST_CASE(real_documents_open_when_available) {
         for (int y = 0; y < ch; y++)
             for (int x = 0; x < cw * 4; x++) total += std::abs(int(reduced->row(y)[x]) - int(preview.row(y)[x]));
         const double mean = total / (double(cw) * ch * 4);
-        std::fprintf(stderr, "  %-32s %3zu layers, %zu notes, %.2f from the preview\n", entry.path().filename().c_str(), imported->document.layers.size(), imported->notes.size(), mean);
+        std::fprintf(stderr, "  %-32s %3zu layers, %zu notes, %.2f from the preview\n", entry.path().filename().string().c_str(), imported->document.layers.size(), imported->notes.size(), mean);
         // Nothing left out and no text (which only the app draws): the import should look like Affinity's preview.
         if (imported->notes.empty() && imported->pendingTexts.empty()) CHECK(mean < 4.0);
     }

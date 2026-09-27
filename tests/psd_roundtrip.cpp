@@ -124,16 +124,16 @@ Bytes readFile(const fs::path& p) {
 bool check(const fs::path& path, int& carriedBlocks) {
     std::string error;
     auto imported = compositor::importPsd(path.string(), &error);
-    if (!imported) { std::printf("SKIP %s: %s\n", path.filename().c_str(), error.c_str()); return true; }
+    if (!imported) { std::printf("SKIP %s: %s\n", path.filename().string().c_str(), error.c_str()); return true; }
     compositor::PsdExportSummary summary;
     // PSD_ROUNDTRIP_PSB=1: export as PSB instead (Photoshop's large format, 64-bit lengths).
     compositor::PsdExportOptions options;
     options.large = std::getenv("PSD_ROUNDTRIP_PSB") != nullptr;
     Bytes out = compositor::encodePsd(imported->document, options, &summary, &error);
-    if (out.empty()) { std::printf("FAIL %s: export: %s\n", path.filename().c_str(), error.c_str()); return false; }
+    if (out.empty()) { std::printf("FAIL %s: export: %s\n", path.filename().string().c_str(), error.c_str()); return false; }
     FileDump a, b;
-    try { a = dump(readFile(path)); } catch (std::exception& e) { std::printf("SKIP %s: unreadable here (%s)\n", path.filename().c_str(), e.what()); return true; }
-    try { b = dump(out); } catch (std::exception& e) { std::printf("FAIL %s: our file does not parse: %s\n", path.filename().c_str(), e.what()); return false; }
+    try { a = dump(readFile(path)); } catch (std::exception& e) { std::printf("SKIP %s: unreadable here (%s)\n", path.filename().string().c_str(), e.what()); return true; }
+    try { b = dump(out); } catch (std::exception& e) { std::printf("FAIL %s: our file does not parse: %s\n", path.filename().string().c_str(), e.what()); return false; }
     std::vector<std::string> problems;
     // Records: ours has the same folders and layers in the same order, unless the importer dropped some.
     const bool reduced = a.reduced;
@@ -174,7 +174,7 @@ bool check(const fs::path& path, int& carriedBlocks) {
     { std::ofstream o(again, std::ios::binary); o.write(reinterpret_cast<const char*>(out.data()), std::streamsize(out.size())); }
     if (!compositor::importPsd(again.string(), &error)) problems.push_back("our file does not reopen: " + error);
     fs::remove(again);
-    std::printf("%s %s", problems.empty() ? "ok  " : "FAIL", path.filename().c_str());
+    std::printf("%s %s", problems.empty() ? "ok  " : "FAIL", path.filename().string().c_str());
     if (!imported->texts.empty()) std::printf("  [%zu text layer(s) opened as text]", imported->texts.size());
     if (std::getenv("PSD_ROUNDTRIP_NOTES")) for (auto& n : imported->notes) if (std::string(std::getenv("PSD_ROUNDTRIP_NOTES")) == "all" || n.find("text") != std::string::npos) std::printf("\n     note: %s", n.c_str());
     for (auto& p : problems) std::printf("\n     %s", p.c_str());

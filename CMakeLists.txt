@@ -39,6 +39,11 @@ if(NOT COMPOSITOR_ARCH_FLAGS STREQUAL "")
     add_compile_options(${COMPOSITOR_ARCH_FLAG_LIST})
 endif()
 
+# MinGW's <cmath> hides M_PI under strict -std=c++20 unless asked (glibc shows it anyway).
+if(WIN32)
+    add_compile_definitions(_USE_MATH_DEFINES)
+endif()
+
 add_library(compositor_warnings INTERFACE)
 target_compile_options(compositor_warnings INTERFACE
     $<$<COMPILE_LANG_AND_ID:C,GNU,Clang>:-Wall -Wextra>

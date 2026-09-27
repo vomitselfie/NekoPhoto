@@ -35,7 +35,7 @@ int worstDifference(const Image& a, const Image& b) {
 bool check(const fs::path& path, int& restyled) {
     std::string error;
     auto imported = importPsd(path.string(), &error);
-    if (!imported) { std::printf("SKIP %s: %s\n", path.filename().c_str(), error.c_str()); return true; }
+    if (!imported) { std::printf("SKIP %s: %s\n", path.filename().string().c_str(), error.c_str()); return true; }
     Document& doc = imported->document;
     std::vector<std::string> problems;
     int here = 0;
@@ -56,7 +56,7 @@ bool check(const fs::path& path, int& restyled) {
     }
     restyled += here;
     if (here || !problems.empty()) {
-        std::printf("%s %s  [%d styled layer(s)]", problems.empty() ? "ok  " : "FAIL", path.filename().c_str(), here);
+        std::printf("%s %s  [%d styled layer(s)]", problems.empty() ? "ok  " : "FAIL", path.filename().string().c_str(), here);
         for (auto& p : problems) std::printf("\n     %s", p.c_str());
         std::printf("\n");
     }

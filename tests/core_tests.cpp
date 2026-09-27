@@ -645,6 +645,7 @@ TEST_CASE(project_round_trip_preserves_layers_masks_groups_and_unknown_fields) {
     CHECK(text.find("\"origin\": [") != std::string::npos);
     CHECK(text.find("\"blendMode\": \"Color Dodge\"") != std::string::npos);
     CHECK(text.find("\"sampling\": \"Smooth\"") != std::string::npos);
+    in.close();   // Windows will not delete a file that is still open
     fs::remove_all(dir);
 }
 
