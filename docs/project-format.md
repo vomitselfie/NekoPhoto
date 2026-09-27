@@ -38,6 +38,11 @@ the values mapped on the way in and out). An 8-bit document writes no `sampleTyp
 without the key, or with `"u8"`, is 8-bit, and `sampleType` in a manifest below version 8 is refused as damage. The
 byte budgets apply: a 16-bit project holds half the pixels of an 8-bit one.
 
+Version 8 also carries a colour profile (docs/color-management.md): `"colorSpace": "icc"` with `"profile":
+"profile.icc"` means the document's profile is the package's `profile.icc`, the ICC bytes kept verbatim. An untagged
+document writes `"colorSpace": "sRGB"` and no profile, as before; `"icc"` below version 8, or a `profile` key with
+`"sRGB"`, is refused as damage, and an unreadable `profile.icc` leaves the document untagged.
+
 ## Frame animation (NekoPhoto)
 
 A document with frames (Window > Timeline) adds an `animation` object to the manifest; readers that do not know it

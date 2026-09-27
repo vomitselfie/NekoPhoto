@@ -13,6 +13,7 @@ run them again.
 | PSD round trip over Patchy's fixtures | **117 of 117 files pass**, 3,675 carried blocks back byte for byte, 20 type layers opened as editable text | `build/tests/psd_roundtrip ../Patchy/test-fixtures/psd` |
 | The same converted to 16 bits | **118 of 118 files pass** (Patchy's and K.psd): every carried block comes back from a 16-bit export too (3,975 with K.psd) | `PSD_ROUNDTRIP_16=1 build/tests/psd_roundtrip ../Patchy/test-fixtures/psd ../K.psd` |
 | 16-bit PSD round trip | an unedited layer's 16-bit channels come back **byte for byte** | `ctest -R depth_format_tests` |
+| Colour profiles | the ICC profile (resource 1039) of **64 of 64** tagged RGB PSDs in the corpus is written back **byte for byte**; conversions match Little CMS and the published sRGB and Adobe RGB matrices; untagged 8-bit documents render bit for bit as before | `ctest -R colormgmt_tests` ([color-management.md](color-management.md)) |
 | Render hashes | **235 scenes**: 133 at 8 bits (blend modes, brushes, filters, adjustments, golden scenes) and 102 at 16 bits (blend modes, adjustments and adjustment layers, filters), each rendered on the worker pool and serially | `ctest -R render_hash_tests` |
 | Golden images | **6 golden test cases over 21 reference PNGs** in `tests/golden/` | `ctest -R golden_tests` |
 | Test suites | **41 CTest suites** (354 `TEST_CASE`s), 41 of 41 passing | `ctest --test-dir build` |
@@ -144,6 +145,8 @@ NekoPhoto 1.6.1 でツールを実行して集計したものです。
   クリッピング、調整レイヤー、レイヤースタイル、シェイプ、編集可能なテキスト、スマートオブジェクトとスマートフィルター、PSB。
 - **16 bit**: 16 bit の PSD は 16 bit のまま開いて書き出し、編集していないレイヤーのチャンネルデータはバイト単位で戻ります。
   上のテストファイルを 16 bit に変換して書き出しても、118 個すべてで引き継いだブロックが戻ります([bit-depth.md](bit-depth.md))。
+- **カラープロファイル**: テストファイルのうちプロファイル付きの RGB の PSD 64 個すべてで、ICC プロファイル(リソース 1039)が
+  バイト単位でそのまま戻ります。変換は Little CMS と sRGB・Adobe RGB の公開された行列に一致します([color-management.md](color-management.md))。
 - **既知の差異**: Photoshop 本体で開いての確認はまだです。書き出しは RGB(8 bit/チャンネルまたは 16 bit/チャンネル)。変形したレイヤーや Photoshop に
   相当するもののない調整はピクセルとして書き出されます。一部のレイヤースタイル(シャドウ・光彩の輪郭、ノイズ、ディザ合成)は
   まだ描画されません。

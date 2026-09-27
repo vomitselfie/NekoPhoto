@@ -75,7 +75,11 @@ What has not been ported is greyed out, with the tooltip "Not available in 16-bi
 - layer styles, smart objects and Smart Filters, vector masks and paths, artboards, and the timeline;
 - SVG export, and exporting artboards and slices.
 
-Painting comes next, on the new brush engine; colour management, 32-bit float, channels, CMYK and Lab follow
+Colour management works at both depths: a 16-bit document keeps its profile, converts with Convert to Profile at
+16 bits, and is shown through the monitor profile in the same pass that reduces it to the screen's 8 bits
+([color-management.md](color-management.md)).
+
+Painting comes next, on the new brush engine; 32-bit float, channels, CMYK and Lab follow
 ([high-bit-depth-plan.md](high-bit-depth-plan.md), section 9).
 
 ## Memory
@@ -163,8 +167,10 @@ NekoPhoto で開いた 16 bit の PSD を PSD に書き出すと、編集して�
 - レイヤースタイル、スマートオブジェクトとスマートフィルター、ベクトルマスクとパス、アートボード、タイムライン
 - SVG の書き出し、アートボードとスライスの書き出し
 
-次はペイントを新しいブラシエンジンで移植します。その後にカラーマネジメント、32 bit 浮動小数点、チャンネル、
-CMYK と Lab が続きます。
+カラーマネジメントはどちらのビット数でも使えます。16 bit のドキュメントもプロファイルを持ち、プロファイル変換は 16 bit の
+まま行い、画面の 8 bit への変換と同じ処理でモニタープロファイルを通して表示します([color-management.md](color-management.md))。
+
+次はペイントを新しいブラシエンジンで移植します。その後に 32 bit 浮動小数点、チャンネル、CMYK と Lab が続きます。
 
 ### メモリ
 
