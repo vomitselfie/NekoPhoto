@@ -130,7 +130,7 @@ bool EditorSession::runClickSelection(SelectionMode mode, QString* error) {
     auto coverage = subjectFromPrompts(*composite, ModelStore::pathFor(ModelStore::promptModel()).toStdString(), promptsOf(clickPrompts_), &why);
     if (!coverage) { if (error) *error = QString::fromStdString(why); return false; }
     coverage = refinedQuickSelect(*coverage, *composite, scribbleRefine);
-    applySelectionShape(*coverage, mode, "Select Subject");
+    applySelectionShape(*coverage, mode, QT_TRANSLATE_NOOP("History", "Select Subject"));
     return true;
 }
 
@@ -183,7 +183,7 @@ void EditorSession::startQuickSelectJob() {
                 startQuickSelectJob();
                 return;
             }
-            if (coverage) applySelectionShape(*coverage, SelectionMode::Replace, in->clicks ? "Select Subject" : "Quick Select");
+            if (coverage) applySelectionShape(*coverage, SelectionMode::Replace, in->clicks ? QT_TRANSLATE_NOOP("History", "Select Subject") : QT_TRANSLATE_NOOP("History", "Quick Select"));
             else emit quickSelectFailed(QString::fromStdString(why));
             if (quickSelectAgain_) { quickSelectAgain_ = false; startQuickSelectJob(); }
         }, Qt::QueuedConnection);
@@ -205,7 +205,7 @@ bool EditorSession::runScribbleSelection(SelectionMode mode, QString* error) {
     auto coverage = scribbleSelection(*composite, labels, scribbleLimit, scribbleIterations, &why);
     if (!coverage) { if (error) *error = QString::fromStdString(why); return false; }
     coverage = refinedQuickSelect(*coverage, *composite, scribbleRefine);
-    applySelectionShape(*coverage, mode, "Quick Select");
+    applySelectionShape(*coverage, mode, QT_TRANSLATE_NOOP("History", "Quick Select"));
     return true;
 }
 

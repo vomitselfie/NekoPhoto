@@ -19,4 +19,14 @@ QString install(const QString& override = {});
 /// The code install() settled on.
 QString current();
 
+/// While one exists, tr() answers in English: the automation socket's replies (errors, names, labels) are API and
+/// stay English whatever the interface language. Nests.
+class EnglishScope {
+public:
+    EnglishScope();
+    ~EnglishScope();
+    EnglishScope(const EnglishScope&) = delete;
+    EnglishScope& operator=(const EnglishScope&) = delete;
+};
+
 } // namespace app::language

@@ -34,17 +34,17 @@ void EditorSession::selectAll() {
     Selection s;
     s.coverage = std::make_shared<GrayImage>(document_->width, document_->height, 255);
     s.antialiased = selectionAntialiased;
-    setSelection(s, "Select All");
+    setSelection(s, QT_TRANSLATE_NOOP("History", "Select All"));
 }
 
 void EditorSession::deselect() {
     if (!document_ || !document_->selection) return;
-    setSelection(std::nullopt, "Deselect");
+    setSelection(std::nullopt, QT_TRANSLATE_NOOP("History", "Deselect"));
 }
 
 void EditorSession::invertSelection() {
     if (!document_ || !document_->selection) return;
-    setSelection(compositor::invertSelection(*document_->selection, document_->width, document_->height), "Inverse");
+    setSelection(compositor::invertSelection(*document_->selection, document_->width, document_->height), QT_TRANSLATE_NOOP("History", "Inverse"));
 }
 
 void EditorSession::magicWand(QPointF documentPoint, int tolerance, bool contiguous, bool sampleAllLayers, SelectionMode mode, int sampleRadius, bool edgeAware, std::optional<bool> refineEdge) {
@@ -106,7 +106,7 @@ void EditorSession::magicWand(QPointF documentPoint, int tolerance, bool contigu
     auto mask = std::make_shared<GrayImage>(document_->width, document_->height);
     long count = wandMask(*wandSample_, x, y, std::clamp(sampleRadius, 0, 2), tolerance, contiguous, *mask);
     if (count < 0) return;
-    applySelectionShape(*mask, mode, "Magic Wand");
+    applySelectionShape(*mask, mode, QT_TRANSLATE_NOOP("History", "Magic Wand"));
 }
 
 bool EditorSession::wandSessionLive() const {
@@ -128,7 +128,7 @@ void EditorSession::applyWandSession(int tolerance, bool replaceStep) {
     if (wandRefineEdge) refineWandEdge(*wandSample_, mask, 3, &lineColours);
     if (replaceStep && session.hasStep) undo();
     const size_t steps = undoNames().size();
-    setSelection(combineSelection(session.before, mask, session.mode, selectionAntialiased), "Magic Wand");
+    setSelection(combineSelection(session.before, mask, session.mode, selectionAntialiased), QT_TRANSLATE_NOOP("History", "Magic Wand"));
     // A selection equal to the one before records no step; the next change then has nothing to take back.
     session.hasStep = undoNames().size() > steps;
     session.revisionAfter = documentRevision_;
@@ -151,7 +151,7 @@ void EditorSession::fillSelection(const QColor& color) {
     if (!canEditLayers()) return;
     const GrayImage* selection = document_->selection && document_->selection->coverage ? document_->selection->coverage.get() : nullptr;
     if (document_->selection && !selection) return;
-    fillThrough(color, selection, 1, "Fill");
+    fillThrough(color, selection, 1, QT_TRANSLATE_NOOP("History", "Fill"));
 }
 
 bool EditorSession::paintBucket(QPointF documentPoint) {
@@ -180,7 +180,7 @@ bool EditorSession::paintBucket(QPointF documentPoint) {
     if (selection)
         for (int py = 0; py < coverage.height(); py++)
             for (int px = 0; px < coverage.width(); px++) coverage.at(px, py) = uint8_t((coverage.at(px, py) * selection->at(px, py) + 127) / 255);
-    return fillThrough(foregroundColor, &coverage, brushSettings.opacity, "Paint Bucket");
+    return fillThrough(foregroundColor, &coverage, brushSettings.opacity, QT_TRANSLATE_NOOP("History", "Paint Bucket"));
 }
 
 bool EditorSession::patchSelection(int dx, int dy) {
@@ -208,7 +208,7 @@ bool EditorSession::patchSelection(int dx, int dy) {
     const GrayImage& selection = *document_->selection->coverage;
     Image healed = *shown;
     healFrom(healed, source, selection, 1.0f);
-    return fillThrough(foregroundColor, &selection, 1, "Patch", &healed);
+    return fillThrough(foregroundColor, &selection, 1, QT_TRANSLATE_NOOP("History", "Patch"), &healed);
 }
 
 bool EditorSession::fillThrough(const QColor& color, const GrayImage* selection, double opacity, const char* name, const Image* from) {
@@ -305,7 +305,7 @@ void EditorSession::clearSelectionPixels() {
     Layer* layer = activeLayerMutable();
     if (!layer || layer->isGroup || !layer->asset || !layer->asset->image) return;
     if (!document_->selection || !document_->selection->coverage) return;
-    beginEdit("Clear");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Clear"));
     clearSelectedPixelsNow(*layer);
     endEdit();
     notifyDocument();
@@ -319,7 +319,7 @@ void EditorSession::nudgeSelection(double dx, double dy) {
     for (int y = 0; y < src.height(); y++) { int sy = y - iy; if (sy < 0 || sy >= src.height()) continue; for (int x = 0; x < src.width(); x++) { int sx = x - ix; if (sx >= 0 && sx < src.width()) moved->at(x, y) = src.at(sx, sy); } }
     Selection s = *document_->selection;
     s.coverage = moved;
-    setSelection(s, "Move Selection");
+    setSelection(s, QT_TRANSLATE_NOOP("History", "Move Selection"));
 }
 
 void EditorSession::loadLayerAsSelection(const Uuid& id, bool mask, SelectionMode mode) {
@@ -335,38 +335,38 @@ void EditorSession::loadLayerAsSelection(const Uuid& id, bool mask, SelectionMod
         if (!layer->asset || !layer->asset->image) return;
         shape = coverageFromLayer(*document_, *layer);
     }
-    applySelectionShape(*shape, mode, mask ? "Load Mask as Selection" : "Load Layer as Selection");
+    applySelectionShape(*shape, mode, mask ? QT_TRANSLATE_NOOP("History", "Load Mask as Selection") : QT_TRANSLATE_NOOP("History", "Load Layer as Selection"));
 }
 
 void EditorSession::selectionExpand(int amount) {
     if (!document_ || !document_->selection || !document_->selection->coverage || amount <= 0 || amount > 500) return;
-    setSelection(resizeSelection(*document_->selection, amount), "Expand Selection");
+    setSelection(resizeSelection(*document_->selection, amount), QT_TRANSLATE_NOOP("History", "Expand Selection"));
 }
 
 void EditorSession::selectionFeather(double radius) {
     if (!document_ || !document_->selection || !document_->selection->coverage || !(radius > 0) || radius > 250) return;
     Selection s = *document_->selection;
     s.coverage = featherSelection(*s.coverage, radius);
-    setSelection(s, "Feather Selection");
+    setSelection(s, QT_TRANSLATE_NOOP("History", "Feather Selection"));
 }
 
 void EditorSession::selectionSmooth(int radius) {
     if (!document_ || !document_->selection || !document_->selection->coverage || radius <= 0 || radius > 100) return;
     Selection s = *document_->selection;
     s.coverage = smoothSelection(*s.coverage, radius);
-    setSelection(s, "Smooth Selection");
+    setSelection(s, QT_TRANSLATE_NOOP("History", "Smooth Selection"));
 }
 
 void EditorSession::selectionBorder(int width) {
     if (!document_ || !document_->selection || !document_->selection->coverage || width <= 0 || width > 200) return;
     Selection s = *document_->selection;
     s.coverage = borderSelection(*s.coverage, width);
-    setSelection(s, "Border Selection");
+    setSelection(s, QT_TRANSLATE_NOOP("History", "Border Selection"));
 }
 
 void EditorSession::selectionContract(int amount) {
     if (!document_ || !document_->selection || !document_->selection->coverage || amount <= 0 || amount > 500) return;
-    setSelection(resizeSelection(*document_->selection, -amount), "Contract Selection");
+    setSelection(resizeSelection(*document_->selection, -amount), QT_TRANSLATE_NOOP("History", "Contract Selection"));
 }
 
 } // namespace app

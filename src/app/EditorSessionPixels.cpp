@@ -95,7 +95,7 @@ void EditorSession::finishPixelMove() {
     Layer* layer = document_->find(move->layerId);
     if (!layer) return;
     BrushStroke::Commit commit = move->raster->commit();
-    beginEdit(move->duplicate ? "Duplicate Pixels" : "Move Pixels");
+    beginEdit(move->duplicate ? QT_TRANSLATE_NOOP("History", "Duplicate Pixels") : QT_TRANSLATE_NOOP("History", "Move Pixels"));
     if (commit.asset) {
         if (layer->mask && layer->mask->linked && !layer->mask->placement && !commit.transform.samePlacement(layer->transform)) layer->mask->placement = layer->transform;
         layer->asset = commit.asset;
@@ -214,12 +214,12 @@ void EditorSession::paste() {
     QImage external = mime->hasImage() ? qvariant_cast<QImage>(mime->imageData()) : QImage();
     // Pixels copied here go back exactly where they came from unless another app copied since.
     if (pixelClipboard_ && (!mime->hasImage() || (external.width() == pixelClipboard_->image->width() && external.height() == pixelClipboard_->image->height()))) {
-        addPixelLayer(pixelClipboard_->image, pixelClipboard_->origin, "Paste", true);
+        addPixelLayer(pixelClipboard_->image, pixelClipboard_->origin, QT_TRANSLATE_NOOP("History", "Paste"), true);
         return;
     }
     if (external.isNull()) return;
     QPointF origin(std::floor((document_->width - external.width()) / 2.0), std::floor((document_->height - external.height()) / 2.0));
-    addPixelLayer(fromQImage(external), origin, "Paste", true);
+    addPixelLayer(fromQImage(external), origin, QT_TRANSLATE_NOOP("History", "Paste"), true);
 }
 
 void EditorSession::layerViaCopy() {
@@ -229,12 +229,12 @@ void EditorSession::layerViaCopy() {
     if (!document_->selection) { duplicateActiveLayer(); return; }
     auto copied = renderSelectedPixels(false);
     if (!copied) return;
-    addPixelLayer(copied->image, copied->origin, "Layer via Copy", false);
+    addPixelLayer(copied->image, copied->origin, QT_TRANSLATE_NOOP("History", "Layer via Copy"), false);
 }
 
 void EditorSession::addPixelLayer(std::shared_ptr<const Image> image, QPointF origin, const QString& editName, bool dropsSelection) {
     if (!document_ || !image || document_->layers.size() >= size_t(Document::maxLayers)) return;
-    Layer layer(Asset::make(image, nextLayerName(document_->layers, "Layer")), toPoint(origin));
+    Layer layer(Asset::make(image, nextLayerName(document_->layers, QCoreApplication::translate("Names", "Layer").toStdString())), toPoint(origin));
     const Layer* active = activeLayer();
     layer.parentId = active && active->isGroup ? activeLayerId_ : (active ? active->parentId : std::nullopt);
     int index = activeLayerId_ ? document_->indexOf(*activeLayerId_) + 1 : int(document_->layers.size());
@@ -302,16 +302,16 @@ bool EditorSession::contentAwareFill(QString* errorText, const ContentFillReques
     LayerTransform placed;
     auto result = contentAwareFillResult(request, placed, errorText);
     if (!result) return false;
-    if (!request.newLayer) { commitPixels(result, placed, "Content-Aware Fill"); return true; }
+    if (!request.newLayer) { commitPixels(result, placed, QT_TRANSLATE_NOOP("History", "Content-Aware Fill")); return true; }
     if (document_->layers.size() >= size_t(Document::maxLayers)) { if (errorText) *errorText = tr("The document has too many layers."); return false; }
     const Layer* active = activeLayer();
-    Layer layer(Asset::make(result, nextLayerName(document_->layers, "Layer")), Point{0, 0});
+    Layer layer(Asset::make(result, nextLayerName(document_->layers, QCoreApplication::translate("Names", "Layer").toStdString())), Point{0, 0});
     layer.transform = placed;
     layer.parentId = active ? active->parentId : std::nullopt;
     const int index = activeLayerId_ ? document_->indexOf(*activeLayerId_) + 1 : int(document_->layers.size());
     clearPixelPreview();
     endOpacityEdit();
-    beginEdit("Content-Aware Fill");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Content-Aware Fill"));
     document_->layers.insert(document_->layers.begin() + index, layer);
     setActiveLayer(layer.id);
     endEdit();
@@ -364,7 +364,7 @@ bool EditorSession::contentAwareMove(int dx, int dy, QString* errorText) {
         if (sy < 0 || sy >= before.height()) continue;
         for (int x = std::max(0, dx); x < std::min(shifted->width(), shifted->width() + dx); x++) shifted->at(x, y) = before.at(x - dx, sy);
     }
-    const QString name = contentMoveExtend ? QStringLiteral("Content-Aware Extend") : QStringLiteral("Content-Aware Move");
+    const QString name = contentMoveExtend ? QStringLiteral(QT_TRANSLATE_NOOP("History", "Content-Aware Extend")) : QStringLiteral(QT_TRANSLATE_NOOP("History", "Content-Aware Move"));
     beginEdit(name);
     commitPixels(trimmed, placed, name);
     Selection moved = *document_->selection;
@@ -392,7 +392,7 @@ bool EditorSession::contentAwareScale(int width, int height, bool protectSelecti
     if (out->isEmpty()) { if (errorText) *errorText = tr("Could not scale the layer."); return false; }
     LayerTransform placed = layer->transform;
     placed.size = {placed.size.width * width / src->width(), placed.size.height * height / src->height()};
-    commitPixels(out, placed, "Content-Aware Scale");
+    commitPixels(out, placed, QT_TRANSLATE_NOOP("History", "Content-Aware Scale"));
     return true;
 }
 
@@ -419,7 +419,7 @@ bool EditorSession::copyLayerFrom(const EditorSession& source, const Uuid& id, s
     for (auto& l : copied) mapping[l.id] = makeUuid();
     commitTransform();
     resolveGradient();
-    beginEdit("Copy Layer");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Copy Layer"));
     if (!document_) {
         document_ = Document(from.width, from.height);
         document_->resolution = from.resolution;

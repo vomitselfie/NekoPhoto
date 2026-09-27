@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "Names.h"
 #include "BrushImporter.h"
 #include "CanvasFrame.h"
 #include "Autosave.h"
@@ -511,12 +512,12 @@ void MainWindow::refreshBackgroundAction() {
 void MainWindow::refreshActions() {
     bool has = session_->hasDocument();
     for (auto* a : documentActions_) a->setEnabled(has);
-    if (mergeAction_) { mergeAction_->setText(tr("&%1").arg(session_->mergeTitle())); mergeAction_->setEnabled(has && session_->canMergeLayers()); }
+    if (mergeAction_) { mergeAction_->setText(tr("&%1").arg(names::history(session_->mergeTitle()))); mergeAction_->setEnabled(has && session_->canMergeLayers()); }
     if (editTextAction_) { const Layer* l = has ? session_->activeLayer() : nullptr; editTextAction_->setEnabled(l && l->isLiveText()); }
     undoAction_->setEnabled(session_->canUndo());
     redoAction_->setEnabled(session_->canRedo());
-    undoAction_->setText(session_->canUndo() ? tr("&Undo %1").arg(session_->undoName()) : tr("&Undo"));
-    redoAction_->setText(session_->canRedo() ? tr("&Redo %1").arg(session_->redoName()) : tr("&Redo"));
+    undoAction_->setText(session_->canUndo() ? tr("&Undo %1").arg(names::history(session_->undoName())) : tr("&Undo"));
+    redoAction_->setText(session_->canRedo() ? tr("&Redo %1").arg(names::history(session_->redoName())) : tr("&Redo"));
     if (has) sizeLabel_->setText(QStringLiteral("%1 × %2 px").arg(session_->document()->width).arg(session_->document()->height));
     else sizeLabel_->clear();
 }

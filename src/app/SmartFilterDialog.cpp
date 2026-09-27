@@ -1,4 +1,5 @@
 #include "SmartFilterDialog.h"
+#include "Names.h"
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -49,7 +50,7 @@ SmartFilterDialog::SmartFilterDialog(EditorSession* session, Uuid layerId, int i
         auto* mode = new QComboBox;
         for (int m : blendModeMenuOrder()) {
             if (m < 0) mode->insertSeparator(mode->count());
-            else mode->addItem(QString::fromUtf8(blendModeName(BlendMode(m))), m);
+            else mode->addItem(names::blendMode(BlendMode(m)), m);
         }
         mode->setCurrentIndex(std::max(0, mode->findData(int(entry_.blend))));
         connect(mode, QOverload<int>::of(&QComboBox::activated), this, [this, mode](int i) {

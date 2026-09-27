@@ -451,8 +451,8 @@ void finishPsdText(compositor::PsdImport& imported) {
             check(t.runPostScriptNames[i], runFamily);
         }
         for (const std::string& postScript : missing)
-            imported.notes.push_back("Layer \"" + layer->name + "\": the font " + postScript + " is not installed; the text keeps Photoshop's pixels until you edit it, then uses the closest match, " +
-                                     QFontInfo(fontFor(text)).family().toStdString() + ".");
+            imported.notes.push_back(QCoreApplication::translate("app::TextLayer", "Layer \"%1\": the font %2 is not installed; the text keeps Photoshop's pixels until you edit it, then uses the closest match, %3.")
+                                         .arg(QString::fromStdString(layer->name), QString::fromStdString(postScript), QFontInfo(fontFor(text)).family()).toStdString());
         const QFontMetricsF metrics(fontFor(text));
         const double leading = t.leading > 0 ? t.leading : t.autoLeading * text.fontSize;
         if (metrics.height() > 0) text.lineSpacing = std::clamp(leading / metrics.height(), 0.1, 10.0);
@@ -471,8 +471,8 @@ void finishPendingText(compositor::PsdImport& imported) {
         check(text.fontFamily);
         for (const compositor::TextRun& run : text.runs) check(run.fontFamily);
         for (const std::string& family : missing)
-            imported.notes.push_back("Layer \"" + layer->name + "\": the font " + family + " is not installed; the closest match, " +
-                                     QFontInfo(QFont(QString::fromStdString(family))).family().toStdString() + ", draws it until you install it.");
+            imported.notes.push_back(QCoreApplication::translate("app::TextLayer", "Layer \"%1\": the font %2 is not installed; the closest match, %3, draws it until you install it.")
+                                         .arg(QString::fromStdString(layer->name), QString::fromStdString(family), QFontInfo(QFont(QString::fromStdString(family))).family()).toStdString());
         auto image = renderTextLayer(text);
         if (!image) continue;
         const auto m = psdTextMetrics(text);

@@ -151,7 +151,7 @@ void CanvasWidget::keyPressEvent(QKeyEvent* e) {
                     auto& knots = path->subpaths[size_t(sub)].knots;
                     knots.erase(knots.begin() + knot);
                     if (knots.size() < 2) path->subpaths.erase(path->subpaths.begin() + sub);
-                    session_->setTargetPath(*path, tr("Delete Anchor Point"));
+                    session_->setTargetPath(*path, QT_TRANSLATE_NOOP("History", "Delete Anchor Point"));
                 }
             }
             selectedKnot_.reset();

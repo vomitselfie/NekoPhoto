@@ -142,7 +142,7 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
             const int x = int(std::floor(doc.x())), y = int(std::floor(doc.y()));
             if (d->selection && d->selection->coverage && x >= 0 && y >= 0 && x < d->width && y < d->height && d->selection->coverage->at(x, y) > 127) {
                 selectionMoveOrigin_ = d->selection;
-                session_->beginEdit(moving ? (session_->contentMoveExtend ? "Content-Aware Extend" : "Content-Aware Move") : "Patch");
+                session_->beginEdit(moving ? (session_->contentMoveExtend ? QT_TRANSLATE_NOOP("History", "Content-Aware Extend") : QT_TRANSLATE_NOOP("History", "Content-Aware Move")) : QT_TRANSLATE_NOOP("History", "Patch"));
                 dragStartDocument_ = doc;
                 contentMoveDrag_ = moving;
                 drag_ = Drag::Patch;
@@ -171,7 +171,7 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
                 const double radius = 6 / std::max(1e-6, session_->viewport.zoom);
                 if (auto knot = compositor::nearestKnot(*path, toPoint(doc), radius)) {
                     compositor::removeAnchor(*path, knot->first, knot->second);
-                    session_->setTargetPath(*path, tr("Delete Anchor Point"));
+                    session_->setTargetPath(*path, QT_TRANSLATE_NOOP("History", "Delete Anchor Point"));
                     return;
                 }
                 auto hit = compositor::nearestPathSegment(*path, toPoint(doc));
@@ -208,7 +208,7 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
                 const double dx = (next.x - prev.x) / 6, dy = (next.y - prev.y) / 6;
                 k.inX = k.x - dx; k.inY = k.y - dy; k.outX = k.x + dx; k.outY = k.y + dy;
             }
-            session_->setTargetPath(*path, tr("Convert Point"));
+            session_->setTargetPath(*path, QT_TRANSLATE_NOOP("History", "Convert Point"));
             selectedKnot_ = std::make_pair(hit.sub, hit.knot);
             return;
         }
@@ -251,7 +251,7 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
             int x = int(std::floor(doc.x())), y = int(std::floor(doc.y()));
             if (x >= 0 && y >= 0 && x < d->width && y < d->height && d->selection->coverage->at(x, y) > 127) {
                 selectionMoveOrigin_ = d->selection;
-                session_->beginEdit("Move Selection");
+                session_->beginEdit(QT_TRANSLATE_NOOP("History", "Move Selection"));
                 drag_ = Drag::SelectionMove;
                 return;
             }
@@ -690,7 +690,7 @@ void CanvasWidget::finishMarquee(Qt::KeyboardModifiers modifiers) {
     auto shape = session_->marqueeKind == MarqueeKind::Ellipse
         ? rasterizeEllipse(rect, int(ds.width()), int(ds.height()), session_->selectionAntialiased)
         : rasterizeRect(rect, int(ds.width()), int(ds.height()), session_->selectionAntialiased);
-    session_->applySelectionShape(*shape, mode, session_->marqueeKind == MarqueeKind::Ellipse ? "Elliptical Marquee" : "Rectangular Marquee");
+    session_->applySelectionShape(*shape, mode, session_->marqueeKind == MarqueeKind::Ellipse ? QT_TRANSLATE_NOOP("History", "Elliptical Marquee") : QT_TRANSLATE_NOOP("History", "Rectangular Marquee"));
     static const char* const modes[] = {"replace", "add", "subtract", "intersect"};
     recordAction("selection.rect", {{"x", box->x()}, {"y", box->y()}, {"width", box->width()}, {"height", box->height()},
                                     {"ellipse", session_->marqueeKind == MarqueeKind::Ellipse}, {"mode", modes[std::clamp(int(mode), 0, 3)]}});
@@ -706,7 +706,7 @@ void CanvasWidget::finishFreehandLasso() {
     for (auto& p : points) poly.push_back(toPoint(p));
     QSizeF ds = documentSize();
     auto shape = rasterizePolygon(poly, int(ds.width()), int(ds.height()), session_->selectionAntialiased);
-    session_->applySelectionShape(*shape, mode, "Lasso");
+    session_->applySelectionShape(*shape, mode, QT_TRANSLATE_NOOP("History", "Lasso"));
 }
 
 void CanvasWidget::finishPolygonalLasso() {
@@ -719,7 +719,7 @@ void CanvasWidget::finishPolygonalLasso() {
     for (auto& p : points) poly.push_back(toPoint(p));
     QSizeF ds = documentSize();
     auto shape = rasterizePolygon(poly, int(ds.width()), int(ds.height()), session_->selectionAntialiased);
-    session_->applySelectionShape(*shape, selectionMode(QApplication::keyboardModifiers()), "Polygonal Lasso");
+    session_->applySelectionShape(*shape, selectionMode(QApplication::keyboardModifiers()), QT_TRANSLATE_NOOP("History", "Polygonal Lasso"));
 }
 
 void CanvasWidget::cancelLasso() { lassoPoints_.clear(); lassoCursor_.reset(); update(); }

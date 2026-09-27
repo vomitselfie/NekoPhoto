@@ -49,6 +49,9 @@ class MainWindow : public QMainWindow {
 public:
     MainWindow();
     void openPath(const QString& path);
+    /// The menu and title texts that follow the document (Undo/Redo, Merge), set again after an automation
+    /// request, which runs in English (language::EnglishScope).
+    void refreshTranslatedTexts() { if (session_) { refreshActions(); refreshTitle(); } }
     /// The first-run introduction (WelcomeDialog), opened over the window.
     void showWelcome();
     /// Crash recovery for an interactive launch: autosaves each tab's unsaved changes and offers back what

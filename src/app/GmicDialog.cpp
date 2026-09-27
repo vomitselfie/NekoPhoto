@@ -462,7 +462,7 @@ bool GmicDialog::apply() {
         if (finished()) return;   // the tab closed meanwhile
         if (!result) { status_->setText(error); QMessageBox::warning(this, tr("G'MIC"), error); return; }
         throughSelection(*result);
-        commit(result, placement(), tr("G'MIC: %1").arg(customCommand_ ? command.section(' ', 0, 0) : current_.name));
+        commit(result, placement(), QStringLiteral("G'MIC: %1").arg(customCommand_ ? command.section(' ', 0, 0) : current_.name));
         finish(QDialog::Accepted);
     });
     runner->start(source(), command, 5 * 60 * 1000);   // the dialog is disabled meanwhile, so a run must end

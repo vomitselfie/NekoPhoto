@@ -1,5 +1,6 @@
 #include "compositor/raw.h"
 #include "Automation.h"
+#include "Language.h"
 #include "ActionLibrary.h"
 #include "AutomationHandlers.h"
 #include "LayersPanel.h"
@@ -69,7 +70,15 @@ bool AutomationServer::listen(const QString& path, QString* error) {
                     QJsonObject response;
                     if (parseError.error != QJsonParseError::NoError || !doc.isObject())
                         response = {{"jsonrpc", "2.0"}, {"id", QJsonValue::Null}, {"error", QJsonObject{{"code", -32700}, {"message", "parse error: " + parseError.errorString()}}}};
-                    else { current_ = socket; response = handle(doc.object()); current_ = nullptr; }
+                    else {
+                        current_ = socket;
+                        {
+                            language::EnglishScope english;   // replies are API: English in every interface language
+                            response = handle(doc.object());
+                        }
+                        current_ = nullptr;
+                        window_->refreshTranslatedTexts();    // labels the request changed, back in the interface language
+                    }
                     if (!clients_.count(socket)) return;   // the request closed the connection
                     socket->write(QJsonDocument(response).toJson(QJsonDocument::Compact) + "\n");
                     socket->flush();

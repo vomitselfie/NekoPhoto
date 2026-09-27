@@ -51,7 +51,7 @@ void EditorSession::toggleGroupExpansion(const Uuid& id) {
 
 void EditorSession::addBlankLayer(bool below) {
     if (!canEditLayers() || document_->layers.size() >= size_t(Document::maxLayers)) return;
-    Layer layer(nextLayerName(document_->layers, "Layer"), document_->size());
+    Layer layer(nextLayerName(document_->layers, QCoreApplication::translate("Names", "Layer").toStdString()), document_->size());
     const Layer* active = activeLayer();
     bool intoGroup = active && active->isGroup && !below;
     layer.parentId = intoGroup ? activeLayerId_ : (active ? active->parentId : std::nullopt);
@@ -62,7 +62,7 @@ void EditorSession::addBlankLayer(bool below) {
         auto inside = descendantIds(document_->layers, active->id);
         for (size_t i = 0; i < document_->layers.size(); i++) if (inside.count(document_->layers[i].id)) insertion = std::max(insertion, int(i) + 1);
     }
-    beginEdit("New Blank Layer");
+    beginEdit(QT_TRANSLATE_NOOP("History", "New Blank Layer"));
     document_->layers.insert(document_->layers.begin() + insertion, layer);
     setActiveLayer(layer.id);
     endEdit();
@@ -71,7 +71,7 @@ void EditorSession::addBlankLayer(bool below) {
 
 void EditorSession::addGroup() {
     if (!canEditLayers() || document_->layers.size() >= size_t(Document::maxLayers)) return;
-    Layer group(nextLayerName(document_->layers, "Folder"), document_->size());
+    Layer group(nextLayerName(document_->layers, QCoreApplication::translate("Names", "Folder").toStdString()), document_->size());
     group.isGroup = true;
     const Layer* active = activeLayer();
     group.parentId = active && active->isGroup ? activeLayerId_ : (active ? active->parentId : std::nullopt);
@@ -79,7 +79,7 @@ void EditorSession::addGroup() {
     std::vector<Layer> layers = document_->layers;
     layers.insert(layers.begin() + insertion, group);
     if (!validateHierarchy(layers)) return;
-    beginEdit("New Folder");
+    beginEdit(QT_TRANSLATE_NOOP("History", "New Folder"));
     document_->layers = layers;
     setActiveLayer(group.id);
     if (group.parentId) collapsedGroupIds.erase(*group.parentId);
@@ -117,7 +117,7 @@ void EditorSession::groupSelectedLayers() {
         for (auto& id : ordered) { auto anc = ancestors(id); if (std::find(anc.begin(), anc.end(), candidate) == anc.end()) all = false; }
         if (all) { parent = candidate; break; }
     }
-    Layer group(nextLayerName(document_->layers, "Folder"), document_->size());
+    Layer group(nextLayerName(document_->layers, QCoreApplication::translate("Names", "Folder").toStdString()), document_->size());
     group.isGroup = true;
     group.parentId = parent;
     std::vector<Uuid> branches;
@@ -139,7 +139,7 @@ void EditorSession::groupSelectedLayers() {
     layers.insert(layers.begin() + std::min(insertion, int(layers.size())), group);
     for (auto& id : ordered) { Layer child = *byId[id]; child.parentId = group.id; layers.push_back(child); }
     if (!validateHierarchy(layers)) return;
-    beginEdit("Group Layers");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Group Layers"));
     document_->layers = layers;
     setActiveLayer(group.id);
     if (parent) collapsedGroupIds.erase(*parent);
@@ -184,7 +184,7 @@ void EditorSession::deleteLayersResolvingClipping(const std::vector<Uuid>& ids, 
 
 bool EditorSession::duplicateLayerTo(const Uuid& id, const std::optional<Uuid>& parent, const std::optional<Uuid>& above, bool atBottom) {
     if (!canEditLayers() || !document_->find(id) || document_->find(id)->isGroup) return false;
-    beginEdit("Duplicate Layer");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Duplicate Layer"));
     selectLayer(id);
     duplicateActiveLayer();
     bool ok = activeLayerId_ && *activeLayerId_ != id && placeLayer(*activeLayerId_, parent, above, atBottom);
@@ -202,7 +202,7 @@ bool EditorSession::copyMask(const Uuid& source, const Uuid& target) {
     endOpacityEdit();
     LayerMask mask = *from->mask;
     mask.placement = from->maskTransform();
-    beginEdit(to->mask ? "Replace Layer Mask" : "Copy Layer Mask");
+    beginEdit(to->mask ? QT_TRANSLATE_NOOP("History", "Replace Layer Mask") : QT_TRANSLATE_NOOP("History", "Copy Layer Mask"));
     to->mask = mask;
     setActiveLayer(target);
     isMaskSelected_ = true;
@@ -225,7 +225,7 @@ void EditorSession::finishDeleting(const std::vector<Uuid>& ids, const std::map<
         for (auto& d : descendantIds(document_->layers, id)) removed.insert(d);
     }
     if (removed.empty()) return;
-    beginEdit(ids.size() > 1 ? "Delete Layers" : "Delete Layer");
+    beginEdit(ids.size() > 1 ? QT_TRANSLATE_NOOP("History", "Delete Layers") : QT_TRANSLATE_NOOP("History", "Delete Layer"));
     std::vector<Layer> kept;
     for (auto& l : document_->layers) if (!removed.count(l.id)) kept.push_back(l);
     for (auto& l : kept) if (l.maskSourceId && removed.count(*l.maskSourceId)) { l.maskSourceId.reset(); auto b = baked.find(l.id); if (b != baked.end()) { l.asset = b->second; l.shapeImage.reset(); } }
@@ -274,9 +274,9 @@ void EditorSession::duplicateActiveLayer() {
         if (c.parentId && newIds.count(*c.parentId)) c.parentId = newIds[*c.parentId];
         if (c.maskSourceId && newIds.count(*c.maskSourceId)) c.maskSourceId = newIds[*c.maskSourceId];
     }
-    copies.front().name = source.name + " copy";
+    copies.front().name = QCoreApplication::translate("Names", "%1 copy").arg(QString::fromStdString(source.name)).toStdString();
     int insertion = indices.back() + 1;
-    beginEdit("Duplicate Layer");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Duplicate Layer"));
     document_->layers.insert(document_->layers.begin() + insertion, copies.begin(), copies.end());
     releaseDetachedClipping(document_->layers);
     setActiveLayer(copies.front().id);
@@ -297,7 +297,7 @@ std::optional<EditorSession::MergePlan> EditorSession::mergePlan() const {
         bool anyPixels = false;
         for (auto& l : layers) if (picked.count(l.id)) { plan.ids.push_back(l.id); if (!l.isGroup) anyPixels = true; if (selectedLayerIds_.count(l.id)) top = &l; }
         if (!anyPixels || !top) return std::nullopt;
-        plan.removed = picked; plan.name = top->name; plan.parent = top->parentId; plan.anchor = top->id; plan.action = "Merge Layers";
+        plan.removed = picked; plan.name = top->name; plan.parent = top->parentId; plan.anchor = top->id; plan.action = QT_TRANSLATE_NOOP("History", "Merge Layers");
         return plan;
     }
     if (active->isGroup) {
@@ -306,7 +306,7 @@ std::optional<EditorSession::MergePlan> EditorSession::mergePlan() const {
         for (auto& l : layers) if (inside.count(l.id) && !l.isGroup) anyPixels = true;
         if (!anyPixels) return std::nullopt;
         for (auto& l : layers) if (inside.count(l.id) || l.id == active->id) { plan.ids.push_back(l.id); plan.removed.insert(l.id); }
-        plan.name = active->name; plan.parent = active->parentId; plan.anchor = active->id; plan.action = "Merge Group";
+        plan.name = active->name; plan.parent = active->parentId; plan.anchor = active->id; plan.action = QT_TRANSLATE_NOOP("History", "Merge Group");
         return plan;
     }
     int index = document_->indexOf(active->id);
@@ -314,12 +314,12 @@ std::optional<EditorSession::MergePlan> EditorSession::mergePlan() const {
     for (int i = index - 1; i >= 0; i--) if (layers[size_t(i)].parentId == active->parentId) { below = &layers[size_t(i)]; break; }
     if (!below || below->isGroup) return std::nullopt;
     plan.ids = {below->id, active->id}; plan.removed = {below->id, active->id};
-    plan.name = below->name; plan.parent = active->parentId; plan.anchor = active->id; plan.action = "Merge Down";
+    plan.name = below->name; plan.parent = active->parentId; plan.anchor = active->id; plan.action = QT_TRANSLATE_NOOP("History", "Merge Down");
     return plan;
 }
 
 bool EditorSession::canMergeLayers() const { return mergePlan().has_value(); }
-QString EditorSession::mergeTitle() const { auto plan = mergePlan(); return plan ? plan->action : QStringLiteral("Merge Down"); }
+QString EditorSession::mergeTitle() const { auto plan = mergePlan(); return plan ? plan->action : QStringLiteral(QT_TRANSLATE_NOOP("History", "Merge Down")); }
 
 void EditorSession::mergeLayers() {
     commitTransform();
@@ -378,7 +378,7 @@ void EditorSession::renameLayer(const Uuid& id, const QString& name) {
     if (!document_ || trimmed.isEmpty()) return;
     Layer* layer = document_->find(id);
     if (!layer || layer->name == trimmed.toStdString()) return;
-    beginEdit("Rename Layer");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Rename Layer"));
     layer->name = trimmed.toStdString();
     endEdit();
     notifyDocument();
@@ -388,7 +388,7 @@ void EditorSession::toggleLayerVisibility(const Uuid& id) {
     if (!canEditLayers()) return;
     Layer* layer = document_->find(id);
     if (!layer) return;
-    beginEdit(layer->visible ? "Hide Layer" : "Show Layer");
+    beginEdit(layer->visible ? QT_TRANSLATE_NOOP("History", "Hide Layer") : QT_TRANSLATE_NOOP("History", "Show Layer"));
     layer->visible = !layer->visible;
     endEdit();
     notifyDocument();
@@ -399,7 +399,7 @@ void EditorSession::beginVisibilitySwipe(const Uuid& id) {
     Layer* layer = document_->find(id);
     if (!layer) return;
     visibilitySwipe_ = true;
-    beginEdit(layer->visible ? "Hide Layer" : "Show Layer");
+    beginEdit(layer->visible ? QT_TRANSLATE_NOOP("History", "Hide Layer") : QT_TRANSLATE_NOOP("History", "Show Layer"));
     setVisibilityInSwipe(id, !layer->visible);
 }
 
@@ -443,7 +443,7 @@ void EditorSession::moveActiveLayer(int offset) {
         return;
     }
     int a = document_->indexOf(active->id), b = document_->indexOf(target->id);
-    beginEdit("Reorder Layers");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Reorder Layers"));
     std::swap(document_->layers[size_t(a)], document_->layers[size_t(b)]);
     releaseDetachedClipping(document_->layers);
     endEdit();
@@ -511,7 +511,7 @@ bool EditorSession::placeLayer(const Uuid& id, const std::optional<Uuid>& parent
     adoptClipping(id, layers);
     releaseDetachedClipping(layers);
     if (!validateHierarchy(layers)) return false;
-    beginEdit("Move Layer");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Move Layer"));
     document_->layers = layers;
     setActiveLayer(id);
     if (parent) collapsedGroupIds.erase(*parent);
@@ -522,7 +522,7 @@ bool EditorSession::placeLayer(const Uuid& id, const std::optional<Uuid>& parent
 
 void EditorSession::beginOpacityEdit() {
     if (!canEditLayers() || opacityEditing_ || !activeLayerId_) return;
-    beginEdit("Layer Opacity");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Layer Opacity"));
     opacityEditing_ = true;
 }
 
@@ -540,7 +540,7 @@ void EditorSession::setLayerOpacity(double opacity) {
     for (auto& l : document_->layers) if (selectedLayerIds_.count(l.id) && l.opacity != value) targets.push_back(&l);
     if (targets.empty()) return;
     bool standalone = !opacityEditing_;
-    if (standalone) beginEdit("Layer Opacity");
+    if (standalone) beginEdit(QT_TRANSLATE_NOOP("History", "Layer Opacity"));
     for (Layer* l : targets) l->opacity = value;
     if (standalone) { endEdit(); notifyDocument(); }
     else { emit documentChanged({}); emit layersChanged(); }
@@ -562,7 +562,7 @@ void EditorSession::setLayerBlendMode(BlendMode mode, bool passThrough) {
     if (passThrough) mode = BlendMode::Normal;
     if (layer->blendMode == mode && (!layer->isGroup || layer->passThrough == passThrough)) return;
     endOpacityEdit();
-    beginEdit("Layer Blend Mode");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Layer Blend Mode"));
     layer->blendMode = mode;
     if (layer->isGroup) layer->passThrough = passThrough;
     endEdit();
@@ -596,7 +596,7 @@ void EditorSession::toggleClippingMask(const Uuid& id) {
         for (auto& l : document_->layers) if (l.parentId == layer->parentId) siblings.push_back(&l);
         int index = -1;
         for (size_t i = 0; i < siblings.size(); i++) if (siblings[i]->id == id) index = int(i);
-        beginEdit("Release Clipping Mask");
+        beginEdit(QT_TRANSLATE_NOOP("History", "Release Clipping Mask"));
         for (size_t i = size_t(index); i < siblings.size(); i++) {
             if (siblings[i]->id == id || siblings[i]->maskSourceId == source) siblings[i]->maskSourceId.reset();
             else break;
@@ -608,7 +608,7 @@ void EditorSession::toggleClippingMask(const Uuid& id) {
         int index = -1;
         for (size_t i = 0; i < siblings.size(); i++) if (siblings[i]->id == id) index = int(i);
         const Layer* below = siblings[size_t(index - 1)];
-        beginEdit("Create Clipping Mask");
+        beginEdit(QT_TRANSLATE_NOOP("History", "Create Clipping Mask"));
         layer->maskSourceId = below->maskSourceId ? below->maskSourceId : std::optional<Uuid>(below->id);
         endEdit();
     }
@@ -620,7 +620,7 @@ void EditorSession::addLayerMask(bool revealing) {
     Layer* layer = activeLayerMutable();
     if (!layer || layer->mask) return;
     endOpacityEdit();
-    beginEdit(revealing ? "Add Reveal-All Mask" : "Add Hide-All Mask");
+    beginEdit(revealing ? QT_TRANSLATE_NOOP("History", "Add Reveal-All Mask") : QT_TRANSLATE_NOOP("History", "Add Hide-All Mask"));
     LayerMask mask;
     mask.asset = MaskAsset::solid(revealing);
     layer->mask = mask;
@@ -645,7 +645,7 @@ void EditorSession::addMaskFromSelection(bool revealing) {
         mask->at(x, y) = uint8_t(revealing ? 255 - s : s);
     }
     endOpacityEdit();
-    beginEdit("Add Mask from Selection");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Add Mask from Selection"));
     LayerMask m;
     m.asset = MaskAsset::make(mask);
     layer->mask = m;
@@ -660,7 +660,7 @@ void EditorSession::toggleLayerMask() {
     if (!canEditLayers()) return;
     Layer* layer = activeLayerMutable();
     if (!layer || !layer->mask) return;
-    beginEdit(layer->mask->enabled ? "Disable Layer Mask" : "Enable Layer Mask");
+    beginEdit(layer->mask->enabled ? QT_TRANSLATE_NOOP("History", "Disable Layer Mask") : QT_TRANSLATE_NOOP("History", "Enable Layer Mask"));
     layer->mask->enabled = !layer->mask->enabled;
     endEdit();
     notifyDocument();
@@ -670,7 +670,7 @@ void EditorSession::deleteLayerMask() {
     if (!canEditLayers()) return;
     Layer* layer = activeLayerMutable();
     if (!layer || !layer->mask) return;
-    beginEdit("Delete Layer Mask");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Delete Layer Mask"));
     layer->mask.reset();
     isMaskSelected_ = false;
     endEdit();
@@ -681,7 +681,7 @@ void EditorSession::toggleMaskLink(const Uuid& id) {
     if (!canEditLayers()) return;
     Layer* layer = document_->find(id);
     if (!layer || !layer->mask) return;
-    beginEdit(layer->mask->linked ? "Unlink Layer Mask" : "Link Layer Mask");
+    beginEdit(layer->mask->linked ? QT_TRANSLATE_NOOP("History", "Unlink Layer Mask") : QT_TRANSLATE_NOOP("History", "Link Layer Mask"));
     layer->mask->linked = !layer->mask->linked;
     endEdit();
     notifyDocument();
@@ -702,7 +702,7 @@ void EditorSession::applyMask() {
         uint8_t* d = out->pixel(x, y);
         for (int c = 0; c < 4; c++) d[c] = uint8_t((s[c] * m + 127) / 255);
     }
-    beginEdit("Apply Layer Mask");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Apply Layer Mask"));
     layer->asset = Asset::make(out, layer->name);
     layer->mask.reset();
     layer->shapeImage.reset();
@@ -717,7 +717,7 @@ void EditorSession::invertMask() {
     if (!layer || !layer->mask) return;
     auto out = std::make_shared<GrayImage>(*layer->mask->asset.image);
     for (size_t i = 0; i < out->byteCount(); i++) out->data()[i] = uint8_t(255 - out->data()[i]);
-    beginEdit("Invert Mask");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Invert Mask"));
     layer->mask->asset = MaskAsset::make(out);
     endEdit();
     notifyDocument();
@@ -728,7 +728,7 @@ void EditorSession::flipLayer(bool horizontal) {
     std::vector<Layer*> targets;
     for (auto& l : document_->layers) if (selectedLayerIds_.count(l.id) && !l.isGroup && l.asset) targets.push_back(&l);
     if (targets.empty()) return;
-    beginEdit(horizontal ? "Flip Layer Horizontal" : "Flip Layer Vertical");
+    beginEdit(horizontal ? QT_TRANSLATE_NOOP("History", "Flip Layer Horizontal") : QT_TRANSLATE_NOOP("History", "Flip Layer Vertical"));
     for (Layer* l : targets) {
         LayerTransform t = l->transform;
         // Flipping about the layer's own axis: mirror the flag and the rotation.
@@ -743,7 +743,7 @@ void EditorSession::flipLayer(bool horizontal) {
 
 void EditorSession::flipCanvas(bool horizontal) {
     if (!canEditLayers()) return;
-    beginEdit(horizontal ? "Flip Canvas Horizontal" : "Flip Canvas Vertical");
+    beginEdit(horizontal ? QT_TRANSLATE_NOOP("History", "Flip Canvas Horizontal") : QT_TRANSLATE_NOOP("History", "Flip Canvas Vertical"));
     double w = document_->width, h = document_->height;
     auto flip = [&](LayerTransform t) {
         Point c = t.center();
@@ -778,7 +778,7 @@ void EditorSession::setLayerSampling(Sampling sampling) {
     if (!canEditLayers()) return;
     Layer* layer = activeLayerMutable();
     if (!layer || layer->transform.sampling == sampling) return;
-    beginEdit("Layer Sampling");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Layer Sampling"));
     layer->transform.sampling = sampling;
     endEdit();
     notifyDocument();

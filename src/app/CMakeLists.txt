@@ -155,6 +155,8 @@ qt_add_executable(nekophoto
     VectorFiles.cpp
     Language.h
     Language.cpp
+    Names.h
+    Names.cpp
 )
 
 target_compile_definitions(nekophoto PRIVATE COMPOSITOR_VERSION="${COMPOSITOR_VERSION_STRING}")

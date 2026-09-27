@@ -54,7 +54,7 @@ void EditorSession::penFinish(bool close) {
         VectorPath path;
         if (auto existing = documentPath(*document_, id)) path = existing->path;
         addShapeComponent(path, added, pathOp.value_or(VectorPath::Op::Add));
-        beginEdit(chosen ? "Add Subpath" : "Work Path");
+        beginEdit(chosen ? QT_TRANSLATE_NOOP("History", "Add Subpath") : QT_TRANSLATE_NOOP("History", "Work Path"));
         setDocumentPath(*document_, id, "", path);
         endEdit();
         activePathId_ = id;
@@ -62,14 +62,14 @@ void EditorSession::penFinish(bool close) {
         emit pathsChanged();
         return;
     }
-    if (addComponentToTarget(added, std::nullopt, tr("Add Subpath"))) return;
+    if (addComponentToTarget(added, std::nullopt, QT_TRANSLATE_NOOP("History", "Add Subpath"))) return;
     VectorShape shape;
     shape.path = added;
     shape.r = uint8_t(foregroundColor.red()); shape.g = uint8_t(foregroundColor.green()); shape.b = uint8_t(foregroundColor.blue());
     shape.fill = shapeTool.fill || !shapeTool.stroke.enabled;
     shape.fillPaint = shapeTool.fillPaint;
     shape.stroke = shapeTool.stroke;
-    addVectorShapeLayer(shape, QStringLiteral("Shape"));
+    addVectorShapeLayer(shape, QCoreApplication::translate("Names", "Shape"));
 }
 
 bool EditorSession::addComponentToTarget(const VectorPath& path, const std::optional<LiveShape>& live, const QString& name) {
@@ -105,7 +105,7 @@ bool EditorSession::setSelectedSubpathOp(VectorPath::Op op) {
     if (!path || !selectedSubpath_ || *selectedSubpath_ < 0 || *selectedSubpath_ >= int(path->subpaths.size())) return false;
     if (path->subpaths[size_t(*selectedSubpath_)].op == op) return true;
     setComponentOp(*path, *selectedSubpath_, op);
-    return setTargetPath(*path, tr("Path Operation"));
+    return setTargetPath(*path, QT_TRANSLATE_NOOP("History", "Path Operation"));
 }
 
 bool EditorSession::mergeTargetComponents() {
@@ -114,7 +114,7 @@ bool EditorSession::mergeTargetComponents() {
     const VectorPath merged = mergeShapeComponents(*path);
     if (merged.subpaths.empty()) return false;
     selectedSubpath_.reset();
-    return setTargetPath(merged, tr("Merge Shape Components"));
+    return setTargetPath(merged, QT_TRANSLATE_NOOP("History", "Merge Shape Components"));
 }
 
 // ---- Vector masks on layers -------------------------------------------------------------------------------------
@@ -153,7 +153,7 @@ bool EditorSession::addVectorMask(VectorMaskKind kind, QString* error) {
         if (!chosen || chosen->path.subpaths.empty()) return fail(tr("Choose a path in the Paths panel first."));
         path = chosen->path;
     }
-    beginEdit(kind == VectorMaskKind::CurrentPath ? "Add Vector Mask" : kind == VectorMaskKind::HideAll ? "Hide All Vector Mask" : "Reveal All Vector Mask");
+    beginEdit(kind == VectorMaskKind::CurrentPath ? QT_TRANSLATE_NOOP("History", "Add Vector Mask") : kind == VectorMaskKind::HideAll ? QT_TRANSLATE_NOOP("History", "Hide All Vector Mask") : QT_TRANSLATE_NOOP("History", "Reveal All Vector Mask"));
     setLayerVectorMask(*layer, *document_, path);
     endEdit();
     vectorMaskTarget_ = layer->id;
@@ -168,7 +168,7 @@ bool EditorSession::deleteVectorMask() {
     if (!canEditLayers()) return false;
     Layer* layer = activeLayerMutable();
     if (!layer || !hasLayerVectorMask(*layer)) return false;
-    beginEdit("Delete Vector Mask");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Delete Vector Mask"));
     setLayerVectorMask(*layer, *document_, std::nullopt);
     endEdit();
     vectorMaskTarget_.reset();
@@ -184,7 +184,7 @@ bool EditorSession::setVectorMaskPath(const Uuid& id, const VectorPath& path, QS
     if (!layer) return fail(tr("No such layer."));
     if (layer->isGroup || layer->adjustment) return fail(tr("A vector mask goes on a layer here, not on a folder or an adjustment layer."));
     if (isVectorShapeLayer(*layer)) return fail(tr("A shape layer's path is its vector mask: change it with shape.set."));
-    beginEdit(hasLayerVectorMask(*layer) ? "Edit Vector Mask" : "Add Vector Mask");
+    beginEdit(hasLayerVectorMask(*layer) ? QT_TRANSLATE_NOOP("History", "Edit Vector Mask") : QT_TRANSLATE_NOOP("History", "Add Vector Mask"));
     setLayerVectorMask(*layer, *document_, path);
     endEdit();
     notifyDocument();
@@ -227,7 +227,7 @@ bool EditorSession::textToShape(const Uuid& id, QString* error) {
     const int index = document_->indexOf(id);
     if (index < 0) return false;
     endOpacityEdit();
-    beginEdit("Convert to Shape");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Convert to Shape"));
     document_->layers[size_t(index)] = layer;
     setActiveLayer(layer.id);
     endEdit();
@@ -254,7 +254,7 @@ bool EditorSession::setActiveLiveShape(const LiveShape& live) {
     made.op = at->op;
     *at = made;
     *entry = live;
-    return setActiveVectorShape(*shape, tr("Live Shape Properties"));
+    return setActiveVectorShape(*shape, QT_TRANSLATE_NOOP("History", "Live Shape Properties"));
 }
 
 // ---- The target path --------------------------------------------------------------------------------------------
@@ -321,7 +321,7 @@ bool EditorSession::addAnchorAt(QPointF p, double radius) {
     auto hit = nearestPathSegment(*path, toPoint(p));
     if (!hit || hit->distance > radius) return false;
     insertAnchor(*path, hit->subpath, hit->segment, hit->t);
-    return setTargetPath(*path, tr("Add Anchor Point"));
+    return setTargetPath(*path, QT_TRANSLATE_NOOP("History", "Add Anchor Point"));
 }
 
 bool EditorSession::deleteAnchorAt(QPointF p, double radius) {
@@ -330,14 +330,14 @@ bool EditorSession::deleteAnchorAt(QPointF p, double radius) {
     auto knot = nearestKnot(*path, toPoint(p), radius);
     if (!knot) return false;
     removeAnchor(*path, knot->first, knot->second);
-    return setTargetPath(*path, tr("Delete Anchor Point"));
+    return setTargetPath(*path, QT_TRANSLATE_NOOP("History", "Delete Anchor Point"));
 }
 
 // ---- The Paths panel's commands ---------------------------------------------------------------------------------
 
 uint16_t EditorSession::newPath(const QString& name) {
     if (!canEditLayers()) return 0;
-    beginEdit("New Path");
+    beginEdit(QT_TRANSLATE_NOOP("History", "New Path"));
     const uint16_t id = setDocumentPath(*document_, 0, name.toStdString(), VectorPath{});
     endEdit();
     if (!id) { emit error(tr("A document holds at most 998 saved paths.")); return 0; }
@@ -349,7 +349,7 @@ uint16_t EditorSession::newPath(const QString& name) {
 
 uint16_t EditorSession::storePath(uint16_t id, const QString& name, const VectorPath& path) {
     if (!canEditLayers()) return 0;
-    beginEdit(id == 0 ? "New Path" : id == kWorkPathId ? "Work Path" : "Edit Path");
+    beginEdit(id == 0 ? QT_TRANSLATE_NOOP("History", "New Path") : id == kWorkPathId ? QT_TRANSLATE_NOOP("History", "Work Path") : QT_TRANSLATE_NOOP("History", "Edit Path"));
     id = setDocumentPath(*document_, id, name.toStdString(), path);
     endEdit();
     if (!id) { emit error(tr("A document holds at most 998 saved paths.")); return 0; }
@@ -362,7 +362,7 @@ uint16_t EditorSession::storePath(uint16_t id, const QString& name, const Vector
 
 void EditorSession::renamePath(uint16_t id, const QString& name) {
     if (!canEditLayers() || id == kWorkPathId || name.trimmed().isEmpty()) return;
-    beginEdit("Rename Path");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Rename Path"));
     renameDocumentPath(*document_, id, name.trimmed().toStdString());
     endEdit();
     notifyDocument();
@@ -371,7 +371,7 @@ void EditorSession::renamePath(uint16_t id, const QString& name) {
 
 void EditorSession::deletePath(uint16_t id) {
     if (!canEditLayers()) return;
-    beginEdit("Delete Path");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Delete Path"));
     removeDocumentPath(*document_, id);
     endEdit();
     if (activePathId_ == id) activePathId_.reset();
@@ -384,8 +384,8 @@ void EditorSession::savePath(uint16_t id, const QString& name) {
     if (!canEditLayers()) return;
     auto p = documentPath(*document_, id);
     if (!p) return;
-    beginEdit("Save Path");
-    const uint16_t saved = setDocumentPath(*document_, 0, name.trimmed().isEmpty() ? std::string("Path") : name.trimmed().toStdString(), p->path);
+    beginEdit(QT_TRANSLATE_NOOP("History", "Save Path"));
+    const uint16_t saved = setDocumentPath(*document_, 0, name.trimmed().isEmpty() ? QCoreApplication::translate("Names", "Path").toStdString() : name.trimmed().toStdString(), p->path);
     if (saved && id == kWorkPathId) removeDocumentPath(*document_, kWorkPathId);   // no room: the Work Path stays
     endEdit();
     if (!saved) { emit error(tr("A document holds at most 998 saved paths.")); return; }
@@ -399,7 +399,7 @@ bool EditorSession::pathToSelection(uint16_t id, SelectionMode mode) {
     auto p = documentPath(*document_, id);
     if (!p || p->path.subpaths.empty()) return false;
     auto coverage = rasterizeVectorMask(p->path, document_->rect(), 1, document_->width, document_->height);
-    applySelectionShape(*coverage, mode, "Make Selection");
+    applySelectionShape(*coverage, mode, QT_TRANSLATE_NOOP("History", "Make Selection"));
     return true;
 }
 
@@ -408,7 +408,7 @@ bool EditorSession::fillPath(uint16_t id) {
     auto p = documentPath(*document_, id);
     if (!p || p->path.subpaths.empty()) return false;
     auto coverage = rasterizeVectorMask(p->path, document_->rect(), 1, document_->width, document_->height);
-    return fillThrough(foregroundColor, coverage.get(), brushSettings.opacity, "Fill Path");
+    return fillThrough(foregroundColor, coverage.get(), brushSettings.opacity, QT_TRANSLATE_NOOP("History", "Fill Path"));
 }
 
 bool EditorSession::strokePath(uint16_t id) {
@@ -422,7 +422,7 @@ bool EditorSession::strokePath(uint16_t id) {
     stroke.cap = VectorStroke::Cap::Round;
     stroke.join = VectorStroke::Join::Round;
     auto band = rasterizeVectorStroke(p->path, stroke, document_->rect(), 1, document_->width, document_->height);
-    return fillThrough(foregroundColor, band.get(), brushSettings.opacity, "Stroke Path");
+    return fillThrough(foregroundColor, band.get(), brushSettings.opacity, QT_TRANSLATE_NOOP("History", "Stroke Path"));
 }
 
 bool EditorSession::pathToShapeLayer(uint16_t id) {
@@ -455,7 +455,7 @@ bool EditorSession::selectionToWorkPath(double tolerance) {
         path.subpaths.push_back(std::move(sub));
     }
     if (path.subpaths.empty()) return false;
-    beginEdit("Make Work Path");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Make Work Path"));
     setDocumentPath(*document_, kWorkPathId, "", path);
     endEdit();
     activePathId_ = kWorkPathId;

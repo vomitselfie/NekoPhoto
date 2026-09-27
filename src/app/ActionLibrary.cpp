@@ -1,4 +1,5 @@
 #include "ActionLibrary.h"
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -25,25 +26,26 @@ bool writeAll(const QString& path, const QByteArray& bytes) {
 
 /// Friendlier names for the steps the menus record.
 QString title(const QString& method) {
-    static const QHash<QString, QString> names = {
-        {"pixels.filter", "Filter"}, {"pixels.adjust", "Adjust"}, {"pixels.invert", "Invert"}, {"pixels.fill", "Fill"}, {"pixels.clear", "Clear"},
-        {"pixels.contentAwareFill", "Content-Aware Fill"}, {"pixels.gmic", "G'MIC"}, {"pixels.cameraRaw", "Camera Raw Filter"},
-        {"canvas.resize", "Canvas Size"}, {"image.resize", "Image Size"}, {"image.trim", "Trim"}, {"canvas.crop", "Crop"}, {"canvas.flip", "Flip Canvas"},
-        {"layers.add", "New Layer"}, {"layers.duplicate", "Duplicate Layer"}, {"layers.delete", "Delete Layer"}, {"layers.merge", "Merge"},
-        {"layers.group", "Group Layers"}, {"layers.flip", "Flip Layer"}, {"layers.mask", "Layer Mask"}, {"layers.set", "Set Layer"},
-        {"selection.all", "Select All"}, {"selection.none", "Deselect"}, {"selection.invert", "Select Inverse"}, {"selection.rect", "Marquee"},
-        {"selection.grow", "Expand/Contract Selection"}, {"selection.feather", "Feather"}, {"selection.smooth", "Smooth Selection"},
-        {"selection.border", "Border Selection"}, {"selection.fromLayer", "Load Selection"}, {"brush.stroke", "Brush Stroke"},
-        {"colors.set", "Set Colours"}, {"document.export", "Export"}, {"document.save", "Save"}, {"timeline.frame", "Frame"}, {"timeline.set", "Timeline"},
+    static const QHash<QString, const char*> names = {
+        {"pixels.filter", QT_TRANSLATE_NOOP("app::ActionLibrary", "Filter")}, {"pixels.adjust", QT_TRANSLATE_NOOP("app::ActionLibrary", "Adjust")}, {"pixels.invert", QT_TRANSLATE_NOOP("app::ActionLibrary", "Invert")}, {"pixels.fill", QT_TRANSLATE_NOOP("app::ActionLibrary", "Fill")}, {"pixels.clear", QT_TRANSLATE_NOOP("app::ActionLibrary", "Clear")},
+        {"pixels.contentAwareFill", QT_TRANSLATE_NOOP("app::ActionLibrary", "Content-Aware Fill")}, {"pixels.gmic", QT_TRANSLATE_NOOP("app::ActionLibrary", "G'MIC")}, {"pixels.cameraRaw", QT_TRANSLATE_NOOP("app::ActionLibrary", "Camera Raw Filter")},
+        {"canvas.resize", QT_TRANSLATE_NOOP("app::ActionLibrary", "Canvas Size")}, {"image.resize", QT_TRANSLATE_NOOP("app::ActionLibrary", "Image Size")}, {"image.trim", QT_TRANSLATE_NOOP("app::ActionLibrary", "Trim")}, {"canvas.crop", QT_TRANSLATE_NOOP("app::ActionLibrary", "Crop")}, {"canvas.flip", QT_TRANSLATE_NOOP("app::ActionLibrary", "Flip Canvas")},
+        {"layers.add", QT_TRANSLATE_NOOP("app::ActionLibrary", "New Layer")}, {"layers.duplicate", QT_TRANSLATE_NOOP("app::ActionLibrary", "Duplicate Layer")}, {"layers.delete", QT_TRANSLATE_NOOP("app::ActionLibrary", "Delete Layer")}, {"layers.merge", QT_TRANSLATE_NOOP("app::ActionLibrary", "Merge")},
+        {"layers.group", QT_TRANSLATE_NOOP("app::ActionLibrary", "Group Layers")}, {"layers.flip", QT_TRANSLATE_NOOP("app::ActionLibrary", "Flip Layer")}, {"layers.mask", QT_TRANSLATE_NOOP("app::ActionLibrary", "Layer Mask")}, {"layers.set", QT_TRANSLATE_NOOP("app::ActionLibrary", "Set Layer")},
+        {"selection.all", QT_TRANSLATE_NOOP("app::ActionLibrary", "Select All")}, {"selection.none", QT_TRANSLATE_NOOP("app::ActionLibrary", "Deselect")}, {"selection.invert", QT_TRANSLATE_NOOP("app::ActionLibrary", "Select Inverse")}, {"selection.rect", QT_TRANSLATE_NOOP("app::ActionLibrary", "Marquee")},
+        {"selection.grow", QT_TRANSLATE_NOOP("app::ActionLibrary", "Expand/Contract Selection")}, {"selection.feather", QT_TRANSLATE_NOOP("app::ActionLibrary", "Feather")}, {"selection.smooth", QT_TRANSLATE_NOOP("app::ActionLibrary", "Smooth Selection")},
+        {"selection.border", QT_TRANSLATE_NOOP("app::ActionLibrary", "Border Selection")}, {"selection.fromLayer", QT_TRANSLATE_NOOP("app::ActionLibrary", "Load Selection")}, {"brush.stroke", QT_TRANSLATE_NOOP("app::ActionLibrary", "Brush Stroke")},
+        {"colors.set", QT_TRANSLATE_NOOP("app::ActionLibrary", "Set Colours")}, {"document.export", QT_TRANSLATE_NOOP("app::ActionLibrary", "Export")}, {"document.save", QT_TRANSLATE_NOOP("app::ActionLibrary", "Save")}, {"timeline.frame", QT_TRANSLATE_NOOP("app::ActionLibrary", "Frame")}, {"timeline.set", QT_TRANSLATE_NOOP("app::ActionLibrary", "Timeline")},
     };
-    return names.value(method, method);
+    const char* name = names.value(method, nullptr);
+    return name ? QCoreApplication::translate("app::ActionLibrary", name) : method;
 }
 
 QString valueText(const QJsonValue& v) {
     if (v.isDouble()) return QString::number(v.toDouble(), 'g', 6);
-    if (v.isBool()) return v.toBool() ? QStringLiteral("on") : QStringLiteral("off");
+    if (v.isBool()) return v.toBool() ? QCoreApplication::translate("app::ActionLibrary", "on") : QCoreApplication::translate("app::ActionLibrary", "off");
     if (v.isString()) return v.toString();
-    if (v.isArray()) return QStringLiteral("[%1 items]").arg(v.toArray().size());
+    if (v.isArray()) return QCoreApplication::translate("app::ActionLibrary", "[%n item(s)]", nullptr, int(v.toArray().size()));
     return QString::fromUtf8(QJsonDocument(v.toObject()).toJson(QJsonDocument::Compact));
 }
 
@@ -118,7 +120,7 @@ bool ActionLibrary::rename(const QString& from, const QString& to) {
 }
 
 QString ActionLibrary::uniqueName(const QString& base) {
-    const QString trimmed = base.trimmed().isEmpty() ? QStringLiteral("Action") : base.trimmed();
+    const QString trimmed = base.trimmed().isEmpty() ? tr("Action") : base.trimmed();
     if (!find(trimmed)) return trimmed;
     for (int n = 2;; n++) if (!find(QStringLiteral("%1 %2").arg(trimmed).arg(n))) return QStringLiteral("%1 %2").arg(trimmed).arg(n);
 }
@@ -137,14 +139,14 @@ std::optional<RecordedAction> ActionLibrary::fromJson(const QJsonObject& json, Q
     auto fail = [error](const QString& why) { if (error) *error = why; return std::nullopt; };
     RecordedAction action;
     action.name = json.value("name").toString().trimmed();
-    if (action.name.isEmpty()) return fail(QStringLiteral("an action needs a name"));
-    if (!json.value("steps").isArray()) return fail(QStringLiteral("%1: steps must be an array").arg(action.name));
+    if (action.name.isEmpty()) return fail(tr("an action needs a name"));
+    if (!json.value("steps").isArray()) return fail(tr("%1: steps must be an array").arg(action.name));
     for (const QJsonValue& v : json.value("steps").toArray()) {
         const QJsonObject o = v.toObject();
         ActionStep step;
         step.method = o.value("method").toString();
-        if (step.method.isEmpty()) return fail(QStringLiteral("%1: every step needs a method").arg(action.name));
-        if (o.contains("params") && !o.value("params").isObject()) return fail(QStringLiteral("%1: a step's params must be an object").arg(action.name));
+        if (step.method.isEmpty()) return fail(tr("%1: every step needs a method").arg(action.name));
+        if (o.contains("params") && !o.value("params").isObject()) return fail(tr("%1: a step's params must be an object").arg(action.name));
         step.params = o.value("params").toObject();
         step.enabled = o.value("enabled").toBool(true);
         action.steps.push_back(std::move(step));
@@ -154,7 +156,7 @@ std::optional<RecordedAction> ActionLibrary::fromJson(const QJsonObject& json, Q
 
 QString ActionLibrary::describe(const ActionStep& step) {
     QStringList parts;
-    if (step.method == "brush.stroke") parts << QStringLiteral("%1 points").arg(step.params.value("points").toArray().size());
+    if (step.method == "brush.stroke") parts << tr("%n point(s)", nullptr, int(step.params.value("points").toArray().size()));
     for (auto it = step.params.begin(); it != step.params.end(); ++it) {
         if (step.method == "brush.stroke" && (it.key() == "points" || it.key() == "pressures")) continue;
         parts << it.key() + " " + valueText(it.value());
@@ -177,7 +179,7 @@ QStringList ActionLibrary::importFile(const QString& path, QString* error) {
         if (!action) return {};
         read.push_back(std::move(*action));
     }
-    if (read.empty()) { if (error) *error = QStringLiteral("the file holds no actions"); return {}; }
+    if (read.empty()) { if (error) *error = tr("the file holds no actions"); return {}; }
     load();
     QStringList names;
     for (RecordedAction& a : read) {
@@ -193,11 +195,11 @@ bool ActionLibrary::exportFile(const QStringList& names, const QString& path, QS
     QJsonArray array;
     for (const QString& name : names) {
         const RecordedAction* a = find(name);
-        if (!a) { if (error) *error = QStringLiteral("there is no action named %1").arg(name); return false; }
+        if (!a) { if (error) *error = tr("there is no action named %1").arg(name); return false; }
         array.append(toJson(*a));
     }
     if (!writeAll(path, QJsonDocument(QJsonObject{{"format", formatName}, {"version", formatVersion}, {"actions", array}}).toJson())) {
-        if (error) *error = QStringLiteral("couldn't write %1").arg(path);
+        if (error) *error = tr("couldn't write %1").arg(path);
         return false;
     }
     return true;

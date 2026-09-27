@@ -190,8 +190,8 @@ void EditorSession::endBrush() {
     stroke->flush();
     Rect tail = stroke->takeDirtyRect();
     if (!tail.isEmpty()) strokeRegion_ = strokeRegion_.isEmpty() ? toQRect(tail) : strokeRegion_.united(toQRect(tail));
-    QString name = strokeMask_ ? "Paint Mask" : tool_ == Tool::SpotHealing ? (spotHealingMode == 3 ? "Healing Brush" : "Spot Healing") : tool_ == Tool::CloneStamp ? "Clone Stamp" : tool_ == Tool::Smudge ? (blurMode == BlurToolMode::Sharpen ? "Sharpen" : "Blur")
-                 : tool_ == Tool::Dodge ? (toning.kind == ToningKind::Dodge ? "Dodge" : toning.kind == ToningKind::Burn ? "Burn" : "Sponge") : (brushErase ? "Eraser" : "Brush Stroke");
+    QString name = strokeMask_ ? QT_TRANSLATE_NOOP("History", "Paint Mask") : tool_ == Tool::SpotHealing ? (spotHealingMode == 3 ? QT_TRANSLATE_NOOP("History", "Healing Brush") : QT_TRANSLATE_NOOP("History", "Spot Healing")) : tool_ == Tool::CloneStamp ? QT_TRANSLATE_NOOP("History", "Clone Stamp") : tool_ == Tool::Smudge ? (blurMode == BlurToolMode::Sharpen ? QT_TRANSLATE_NOOP("History", "Sharpen") : QT_TRANSLATE_NOOP("History", "Blur"))
+                 : tool_ == Tool::Dodge ? (toning.kind == ToningKind::Dodge ? QT_TRANSLATE_NOOP("History", "Dodge") : toning.kind == ToningKind::Burn ? QT_TRANSLATE_NOOP("History", "Burn") : QT_TRANSLATE_NOOP("History", "Sponge")) : (brushErase ? QT_TRANSLATE_NOOP("History", "Eraser") : QT_TRANSLATE_NOOP("History", "Brush Stroke"));
     // Spot healing changes the pixels as it commits; every other brush commits what its preview showed.
     commitRasterEdit(*stroke, strokeLayerId_, strokeMask_, name, strokeRegion_, tool_ != Tool::SpotHealing);
     strokeRegion_ = {};
@@ -245,7 +245,7 @@ void EditorSession::typeOpacityDigit(int digit) {
         for (auto& l : document_->layers) if (selectedLayerIds_.count(l.id) && l.opacity != value) targets.push_back(&l);
         if (targets.empty()) return;
         endOpacityEdit();
-        beginEdit("Layer Opacity");
+        beginEdit(QT_TRANSLATE_NOOP("History", "Layer Opacity"));
         for (Layer* l : targets) l->opacity = value;
         endEdit();
         notifyDocument();
@@ -378,7 +378,7 @@ void EditorSession::endWarp() {
     stroke->setClone(CloneSource{warp->image(), {0, 0}, nullptr}, true);
     stroke->appendAll(warp->points());
     stroke->flush();
-    commitRasterEdit(*stroke, layer->id, false, blurMode == BlurToolMode::Smudge ? "Smudge" : "Liquify");
+    commitRasterEdit(*stroke, layer->id, false, blurMode == BlurToolMode::Smudge ? QT_TRANSLATE_NOOP("History", "Smudge") : QT_TRANSLATE_NOOP("History", "Liquify"));
 }
 
 void EditorSession::cancelWarp() {
@@ -483,7 +483,7 @@ void EditorSession::commitGradient() {
     std::unique_ptr<GradientEdit> edit = std::move(gradient_);
     QPointF a = edit->start, b = edit->end;
     if (std::hypot(b.x() - a.x(), b.y() - a.y()) < 0.5) { emit documentChanged({}); return; }
-    commitRasterEdit(*edit->raster, edit->layerId, edit->mask, edit->mask ? "Gradient Mask" : "Gradient");
+    commitRasterEdit(*edit->raster, edit->layerId, edit->mask, edit->mask ? QT_TRANSLATE_NOOP("History", "Gradient Mask") : QT_TRANSLATE_NOOP("History", "Gradient"));
 }
 
 void EditorSession::resolveGradient() { if (gradient_) commitGradient(); }
@@ -546,10 +546,11 @@ void EditorSession::finishShape() {
     if (!canEditLayers() || !path) return;
     const Rect bounds = pathBounds(*path);
     if (bounds.width * bounds.height > double(Document::pixelBudget)) { emit error(tr("That shape is too large. A shape can cover up to 100 megapixels.")); return; }
-    static const char* const prefixes[] = {"Rectangle", "Ellipse", "Polygon", "Line", "Shape"};
-    const std::string prefix = shapeTool.kind == VectorShapeKind::Custom ? shapeTool.custom : prefixes[int(shapeTool.kind)];
+    static const char* const prefixes[] = {QT_TRANSLATE_NOOP("Names", "Rectangle"), QT_TRANSLATE_NOOP("Names", "Ellipse"), QT_TRANSLATE_NOOP("Names", "Polygon"),
+                                           QT_TRANSLATE_NOOP("Names", "Line"), QT_TRANSLATE_NOOP("Names", "Shape")};
+    const std::string prefix = shapeTool.kind == VectorShapeKind::Custom ? shapeTool.custom : QCoreApplication::translate("Names", prefixes[int(shapeTool.kind)]).toStdString();
     // With a path operation chosen (or the vector mask targeted), a component of the target instead of a new layer.
-    if (addComponentToTarget(*path, live, tr("Add Shape"))) return;
+    if (addComponentToTarget(*path, live, QT_TRANSLATE_NOOP("History", "Add Shape"))) return;
     VectorShape shape;
     shape.path = *path;
     shape.r = uint8_t(foregroundColor.red()); shape.g = uint8_t(foregroundColor.green()); shape.b = uint8_t(foregroundColor.blue());
@@ -574,7 +575,7 @@ std::optional<LiveShape> EditorSession::shapeDraftLive() const {
 
 bool EditorSession::addVectorShapeLayer(const VectorShape& shape, const QString& name) {
     if (!canEditLayers()) return false;
-    const std::string base = name.isEmpty() ? std::string("Shape") : name.toStdString();
+    const std::string base = name.isEmpty() ? QCoreApplication::translate("Names", "Shape").toStdString() : name.toStdString();
     Layer layer(Asset::make(std::make_shared<Image>(1, 1), nextLayerName(document_->layers, base)), Point(0, 0));
     layer.name = layer.asset->name;
     setVectorShape(layer, *document_, shape);
@@ -690,7 +691,7 @@ std::optional<Uuid> EditorSession::addTextLayer(QPointF documentPoint, const Lay
     if (!canEditLayers()) return std::nullopt;
     auto image = renderTextLayer(text);
     if (!image) { emit error(tr("That text is too large to render. Text can cover up to 100 megapixels.")); return std::nullopt; }
-    Layer layer(Asset::make(image, nextLayerName(document_->layers, "Text")), Point(documentPoint.x() - textPadding, documentPoint.y() - textPadding));
+    Layer layer(Asset::make(image, nextLayerName(document_->layers, QCoreApplication::translate("Names", "Text").toStdString())), Point(documentPoint.x() - textPadding, documentPoint.y() - textPadding));
     layer.name = layer.asset->name;
     layer.text = text;
     layer.textImage = image;
@@ -698,7 +699,7 @@ std::optional<Uuid> EditorSession::addTextLayer(QPointF documentPoint, const Lay
     layer.parentId = active && active->isGroup ? activeLayerId_ : (active ? active->parentId : std::nullopt);
     int index = activeLayerId_ ? document_->indexOf(*activeLayerId_) + 1 : int(document_->layers.size());
     endOpacityEdit();
-    beginEdit("Add Text");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Add Text"));
     document_->layers.insert(document_->layers.begin() + index, layer);
     setActiveLayer(layer.id);
     endEdit();
@@ -720,7 +721,7 @@ void EditorSession::beginTextEdit(const Uuid& id) {
     if (!layer || !layer->text) return;
     textEditing_ = true;
     textEditOriginal_ = *layer;
-    beginEdit("Edit Text");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Edit Text"));
 }
 
 void EditorSession::setLayerText(const Uuid& id, const LayerText& text) {
@@ -733,7 +734,7 @@ void EditorSession::setLayerText(const Uuid& id, const LayerText& text) {
     const LayerText edited = carryTextEdit(fromOrigin ? *textEditOriginal_->text : *layer->text, text);
     if (*layer->text == edited && layer->isLiveText()) return;
     const bool standalone = !textEditing_;
-    if (standalone) beginEdit("Edit Text");
+    if (standalone) beginEdit(QT_TRANSLATE_NOOP("History", "Edit Text"));
     layer->text = edited;
     redrawText(*layer);
     if (standalone) { endEdit(); notifyDocument(); }

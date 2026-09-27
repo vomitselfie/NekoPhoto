@@ -1,4 +1,5 @@
 #include "Style.h"
+#include "Names.h"
 #include "FilterDialog.h"
 #include "ActionLibrary.h"
 #include <QJsonDocument>
@@ -31,7 +32,7 @@ constexpr int previewLimit = 2048;
 
 PixelAdjustmentDialog::PixelAdjustmentDialog(EditorSession* session, AdjustmentKind kind, QWidget* parent)
     : PixelDialog(session, parent) {
-    setWindowTitle(QString::fromUtf8(adjustmentKindName(kind)));
+    setWindowTitle(names::adjustmentKind(kind));
     auto* layout = new QVBoxLayout(this);
     editor_ = new AdjustmentEditor;
     editor_->setSession(session);
@@ -82,7 +83,7 @@ bool PixelAdjustmentDialog::apply() {
 
 FilterDialog::FilterDialog(EditorSession* session, FilterKind kind, QWidget* parent, bool smart)
     : PixelDialog(session, parent), kind_(kind), smart_(smart), seed_(uint32_t(std::random_device{}())) {
-    setWindowTitle(smart ? tr("%1 (Smart Filter)").arg(QString::fromUtf8(filterKindName(kind))) : QString::fromUtf8(filterKindName(kind)));
+    setWindowTitle(smart ? tr("%1 (Smart Filter)").arg(names::filterKind(kind)) : names::filterKind(kind));
     setMinimumWidth(420);
     auto* layout = new QVBoxLayout(this);
     auto slider = [&](const QString& label, double min, double max, int decimals, double scale, std::function<double()> get, std::function<void(double)> apply) {

@@ -1,4 +1,5 @@
 #include "LayerStyleDialog.h"
+#include "Names.h"
 #include "PresetLibrary.h"
 #include <QCheckBox>
 #include <QColorDialog>
@@ -19,8 +20,8 @@ namespace app {
 
 namespace {
 
-const char* const kEffectNames[] = {"Bevel & Emboss", "Stroke", "Inner Shadow", "Inner Glow", "Satin", "Color Overlay",
-                                    "Gradient Overlay", "Pattern Overlay", "Outer Glow", "Drop Shadow"};
+const char* const kEffectNames[] = {QT_TRANSLATE_NOOP("app::LayerStyleDialog", "Bevel & Emboss"), QT_TRANSLATE_NOOP("app::LayerStyleDialog", "Stroke"), QT_TRANSLATE_NOOP("app::LayerStyleDialog", "Inner Shadow"), QT_TRANSLATE_NOOP("app::LayerStyleDialog", "Inner Glow"), QT_TRANSLATE_NOOP("app::LayerStyleDialog", "Satin"), QT_TRANSLATE_NOOP("app::LayerStyleDialog", "Color Overlay"),
+                                    QT_TRANSLATE_NOOP("app::LayerStyleDialog", "Gradient Overlay"), QT_TRANSLATE_NOOP("app::LayerStyleDialog", "Pattern Overlay"), QT_TRANSLATE_NOOP("app::LayerStyleDialog", "Outer Glow"), QT_TRANSLATE_NOOP("app::LayerStyleDialog", "Drop Shadow")};
 
 /// EffectBlend's order is Photoshop's menu order.
 const char* const kBlendNames[] = {"Normal", "Dissolve", "Darken", "Multiply", "Color Burn", "Linear Burn", "Darker Color", "Lighten", "Screen",
@@ -61,7 +62,9 @@ LayerStyleDialog::LayerStyleDialog(EditorSession* session, const Uuid& layer, QW
     auto* outer = new QVBoxLayout(this);
     auto* row = new QHBoxLayout;
     list_ = new QListWidget(this);
-    list_->setFixedWidth(fontMetrics().horizontalAdvance(QStringLiteral("Gradient Overlay")) + 64);
+    int listWidth = fontMetrics().horizontalAdvance(tr("Blending Options"));
+    for (const char* name : kEffectNames) listWidth = std::max(listWidth, fontMetrics().horizontalAdvance(tr(name)));
+    list_->setFixedWidth(listWidth + 64);
     pages_ = new QStackedWidget(this);
     row->addWidget(list_);
     row->addWidget(pages_, 1);
@@ -313,7 +316,7 @@ QFormLayout* LayerStyleDialog::newPage(const QString& title) {
 
 void LayerStyleDialog::blendRow(QFormLayout* form, const QString& label, EffectBlend* mode) {
     QStringList names;
-    for (int i = 0; i < kBlendCount; i++) names << tr(kBlendNames[i]);
+    for (int i = 0; i < kBlendCount; i++) names << app::names::core(kBlendNames[i]);
     comboRow(form, label, names, [mode] { return int(*mode); }, [mode](int i) { *mode = EffectBlend(std::clamp(i, 0, kBlendCount - 1)); });
 }
 

@@ -35,8 +35,8 @@ bool EditorSession::beginQuickMask() {
         const GrayImage& selected = *document_->selection->coverage;
         for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) mask->at(x, y) = uint8_t(255 - selected.at(x, y));
     }
-    beginEdit("Quick Mask");
-    Layer layer(Asset::make(red, "Quick Mask"), Point(0, 0));
+    beginEdit(QT_TRANSLATE_NOOP("History", "Quick Mask"));
+    Layer layer(Asset::make(red, QCoreApplication::translate("Names", "Quick Mask").toStdString()), Point(0, 0));
     layer.opacity = 0.5;
     LayerMask m;
     m.asset = MaskAsset::make(mask);
@@ -75,7 +75,7 @@ bool EditorSession::endQuickMask() {
         // Nothing masked (or everything): no selection, as Photoshop leaves it.
         if (!all && !none) { Selection s; s.coverage = masked; s.antialiased = true; selection = s; }
     }
-    beginEdit("Exit Quick Mask");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Exit Quick Mask"));
     const Uuid id = *quickMaskLayer_;
     document_->layers.erase(std::remove_if(document_->layers.begin(), document_->layers.end(), [&](const Layer& l) { return l.id == id; }), document_->layers.end());
     document_->selection = selection;

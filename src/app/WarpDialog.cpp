@@ -10,14 +10,14 @@ namespace app {
 
 const std::vector<std::pair<const char*, const char*>>& WarpDialog::styles() {
     static const std::vector<std::pair<const char*, const char*>> list = {
-        {QT_TRANSLATE_NOOP("WarpDialog", "Arc"), "warpArc"}, {QT_TRANSLATE_NOOP("WarpDialog", "Arc Lower"), "warpArcLower"},
-        {QT_TRANSLATE_NOOP("WarpDialog", "Arc Upper"), "warpArcUpper"}, {QT_TRANSLATE_NOOP("WarpDialog", "Arch"), "warpArch"},
-        {QT_TRANSLATE_NOOP("WarpDialog", "Bulge"), "warpBulge"}, {QT_TRANSLATE_NOOP("WarpDialog", "Shell Lower"), "warpShellLower"},
-        {QT_TRANSLATE_NOOP("WarpDialog", "Shell Upper"), "warpShellUpper"}, {QT_TRANSLATE_NOOP("WarpDialog", "Flag"), "warpFlag"},
-        {QT_TRANSLATE_NOOP("WarpDialog", "Wave"), "warpWave"}, {QT_TRANSLATE_NOOP("WarpDialog", "Fish"), "warpFish"},
-        {QT_TRANSLATE_NOOP("WarpDialog", "Rise"), "warpRise"}, {QT_TRANSLATE_NOOP("WarpDialog", "Fisheye"), "warpFisheye"},
-        {QT_TRANSLATE_NOOP("WarpDialog", "Inflate"), "warpInflate"}, {QT_TRANSLATE_NOOP("WarpDialog", "Squeeze"), "warpSqueeze"},
-        {QT_TRANSLATE_NOOP("WarpDialog", "Twist"), "warpTwist"},
+        {QT_TRANSLATE_NOOP("app::WarpDialog", "Arc"), "warpArc"}, {QT_TRANSLATE_NOOP("app::WarpDialog", "Arc Lower"), "warpArcLower"},
+        {QT_TRANSLATE_NOOP("app::WarpDialog", "Arc Upper"), "warpArcUpper"}, {QT_TRANSLATE_NOOP("app::WarpDialog", "Arch"), "warpArch"},
+        {QT_TRANSLATE_NOOP("app::WarpDialog", "Bulge"), "warpBulge"}, {QT_TRANSLATE_NOOP("app::WarpDialog", "Shell Lower"), "warpShellLower"},
+        {QT_TRANSLATE_NOOP("app::WarpDialog", "Shell Upper"), "warpShellUpper"}, {QT_TRANSLATE_NOOP("app::WarpDialog", "Flag"), "warpFlag"},
+        {QT_TRANSLATE_NOOP("app::WarpDialog", "Wave"), "warpWave"}, {QT_TRANSLATE_NOOP("app::WarpDialog", "Fish"), "warpFish"},
+        {QT_TRANSLATE_NOOP("app::WarpDialog", "Rise"), "warpRise"}, {QT_TRANSLATE_NOOP("app::WarpDialog", "Fisheye"), "warpFisheye"},
+        {QT_TRANSLATE_NOOP("app::WarpDialog", "Inflate"), "warpInflate"}, {QT_TRANSLATE_NOOP("app::WarpDialog", "Squeeze"), "warpSqueeze"},
+        {QT_TRANSLATE_NOOP("app::WarpDialog", "Twist"), "warpTwist"},
     };
     return list;
 }

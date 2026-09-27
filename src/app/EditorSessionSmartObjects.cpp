@@ -74,7 +74,7 @@ bool EditorSession::convertToSmartObject(QString* error) {
     auto id = compositor::convertToSmartObject(next, ids, &why, psdExportOptions());
     if (!id) { if (error) *error = QString::fromStdString(why); return false; }
     endOpacityEdit();
-    beginEdit("Convert to Smart Object");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Convert to Smart Object"));
     *document_ = std::move(next);
     endEdit();
     setActiveLayer(*id);
@@ -93,7 +93,7 @@ bool EditorSession::placeEmbedded(const QString& path, QString* error) {
     std::optional<Uuid> parent;
     if (active) { index = size_t(document_->indexOf(active->id)) + 1; parent = active->isGroup ? active->id : active->parentId; }
     endOpacityEdit();
-    beginEdit("Place Embedded");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Place Embedded"));
     const Uuid id = placeSmartObject(*document_, source, index, parent);
     endEdit();
     setActiveLayer(id);
@@ -111,7 +111,7 @@ bool EditorSession::replaceSmartObjectContents(const QString& path, QString* err
     auto source = makeSmartObjectSource(std::move(*contents));
     if (!source) { if (error) *error = tr("That file has no image."); return false; }
     endOpacityEdit();
-    beginEdit("Replace Contents");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Replace Contents"));
     replaceSmartObjectSource(*document_, layer->smartObject->sourceId, source);
     endEdit();
     notifyDocument();
@@ -124,7 +124,7 @@ bool EditorSession::warpActiveLayer(const compositor::TextWarp& warp, QString* e
     if (isMaskSelected_) { if (error) *error = tr("Warp the layer, not its mask."); return false; }
     endOpacityEdit();
     Layer before = *layer;
-    beginEdit("Warp");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Warp"));
     std::string why;
     bool ok = compositor::warpLayer(*document_, *layer, warp, &why);
     if (ok && layer->text) ok = redrawText(*layer);
@@ -154,7 +154,7 @@ bool EditorSession::beginWarpCage(QString* error) {
         // A shape previews exactly: its bent path is applied as the cage moves, in one open undo step.
         endOpacityEdit();
         warpCageShapeBefore_ = *layer;
-        beginEdit("Warp");
+        beginEdit(QT_TRANSLATE_NOOP("History", "Warp"));
     }
     emit transformChanged();
     return true;
@@ -211,7 +211,7 @@ bool EditorSession::commitWarpCage(QString* error) {
     if (!layer || !canEditLayers()) { emit transformChanged(); return false; }
     endOpacityEdit();
     const Layer before = *layer;
-    beginEdit("Warp");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Warp"));
     std::string why;
     if (!compositor::warpLayerToCage(*document_, *layer, cage, &why)) {
         *layer = before;
@@ -250,7 +250,7 @@ bool EditorSession::addSmartFilter(const compositor::SmartFilterEntry& entry, QS
     endOpacityEdit();
     const Layer before = *layer;
     const auto carry = document_->psdCarry;
-    beginEdit("Smart Filter");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Smart Filter"));
     std::string why;
     if (!compositor::addSmartFilter(*document_, *layer, entry, &why)) {
         *layer = before;
@@ -268,7 +268,7 @@ bool EditorSession::rasterizeSmartObject() {
     Layer* layer = activeLayerMutable();
     if (!canEditLayers() || !layer || !layer->smartObject) return false;
     endOpacityEdit();
-    beginEdit("Rasterize Smart Object");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Rasterize Smart Object"));
     compositor::rasterizeSmartObject(*layer);
     endEdit();
     notifyDocument();
@@ -324,7 +324,7 @@ bool EditorSession::commitSmartObjectContents(const std::string& sourceId, const
     c.resolution = contents.resolution;
     auto source = makeSmartObjectSource(std::move(c));
     endOpacityEdit();
-    beginEdit("Edit Smart Object Contents");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Edit Smart Object Contents"));
     replaceSmartObjectSource(*document_, sourceId, source);
     endEdit();
     notifyDocument();

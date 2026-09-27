@@ -1,5 +1,6 @@
 // The main window's menus, tool rail and colour swatches.
 #include "ContentFillDialog.h"
+#include "Names.h"
 #include "ContentAwareScaleDialog.h"
 #include "MainWindow.h"
 #include <QDialog>
@@ -327,11 +328,11 @@ void MainWindow::buildMenus() {
     QMenu* adjustmentLayers = layer->addMenu(tr("New &Adjustment Layer"));
     for (int i = 0; i < adjustmentKindCount; i++) {
         AdjustmentKind kind = AdjustmentKind(i);
-        needsDocument(adjustmentLayers->addAction(QString::fromUtf8(adjustmentKindName(kind)), this, [this, kind] { session_->addAdjustmentLayer(kind); recordAction("layers.add", {{"kind", "adjustment"}, {"adjustmentKind", QString::fromUtf8(adjustmentKindName(kind))}}); }));
+        needsDocument(adjustmentLayers->addAction(names::adjustmentKind(kind), this, [this, kind] { session_->addAdjustmentLayer(kind); recordAction("layers.add", {{"kind", "adjustment"}, {"adjustmentKind", QString::fromUtf8(adjustmentKindName(kind))}}); }));
     }
     QMenu* styles = layer->addMenu(tr("Layer St&yle"));
-    const char* const stylePages[] = {"Blending Options…", "Bevel & Emboss…", "Stroke…", "Inner Shadow…", "Inner Glow…", "Satin…", "Color Overlay…",
-                                      "Gradient Overlay…", "Pattern Overlay…", "Outer Glow…", "Drop Shadow…"};
+    const char* const stylePages[] = {QT_TRANSLATE_NOOP("app::MainWindow", "Blending Options…"), QT_TRANSLATE_NOOP("app::MainWindow", "Bevel & Emboss…"), QT_TRANSLATE_NOOP("app::MainWindow", "Stroke…"), QT_TRANSLATE_NOOP("app::MainWindow", "Inner Shadow…"), QT_TRANSLATE_NOOP("app::MainWindow", "Inner Glow…"), QT_TRANSLATE_NOOP("app::MainWindow", "Satin…"), QT_TRANSLATE_NOOP("app::MainWindow", "Color Overlay…"),
+                                      QT_TRANSLATE_NOOP("app::MainWindow", "Gradient Overlay…"), QT_TRANSLATE_NOOP("app::MainWindow", "Pattern Overlay…"), QT_TRANSLATE_NOOP("app::MainWindow", "Outer Glow…"), QT_TRANSLATE_NOOP("app::MainWindow", "Drop Shadow…")};
     for (int page = 0; page < int(std::size(stylePages)); page++) {
         needsDocument(styles->addAction(tr(stylePages[page]), this, [this, page] {
             if (session_->activeLayerId()) LayerStyleDialog(session_, *session_->activeLayerId(), this, page).exec();

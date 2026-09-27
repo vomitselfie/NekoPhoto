@@ -1,4 +1,5 @@
 #include "Style.h"
+#include "Names.h"
 #include "LayersPanel.h"
 #include "LayerStyleDialog.h"
 #include "SmartFilterDialog.h"
@@ -343,7 +344,7 @@ LayersPanel::LayersPanel(EditorSession* session, QWidget* parent) : QWidget(pare
     blendCombo_->addItem(tr("Pass Through"), -1);
     for (int m : blendModeMenuOrder()) {
         if (m < 0) blendCombo_->insertSeparator(blendCombo_->count());
-        else blendCombo_->addItem(QString::fromUtf8(blendModeName(BlendMode(m))), m);
+        else blendCombo_->addItem(names::blendMode(BlendMode(m)), m);
     }
     blendCombo_->setToolTip(tr("Blend mode"));
     appearance->addWidget(blendCombo_, 1);
@@ -382,7 +383,7 @@ LayersPanel::LayersPanel(EditorSession* session, QWidget* parent) : QWidget(pare
     auto* adjustMenu = new QMenu(adjust);
     for (int i = 0; i < adjustmentKindCount; i++) {
         AdjustmentKind kind = AdjustmentKind(i);
-        adjustMenu->addAction(QString::fromUtf8(adjustmentKindName(kind)), this, [this, kind] { session_->addAdjustmentLayer(kind); });
+        adjustMenu->addAction(names::adjustmentKind(kind), this, [this, kind] { session_->addAdjustmentLayer(kind); });
     }
     adjust->setMenu(adjustMenu);
     adjust->setPopupMode(QToolButton::InstantPopup);
@@ -496,7 +497,7 @@ QWidget* LayersPanel::makeRow(const Layer& layer, int depth, bool visible) {
     auto* thumb = new QLabel;
     thumb->setPixmap(thumbnailPixmap(layer.asset ? layer.asset->thumbnail : nullptr, layer.isGroup, dpr));
     thumb->setFixedSize(thumbWidth, thumbHeight);
-    if (layer.adjustment) { thumb->setPixmap(renderIcon("sliders-horizontal", palette().color(QPalette::Text), 20, dpr)); thumb->setAlignment(Qt::AlignCenter); thumb->setToolTip(QString::fromUtf8(adjustmentKindName(layer.adjustment->kind))); }
+    if (layer.adjustment) { thumb->setPixmap(renderIcon("sliders-horizontal", palette().color(QPalette::Text), 20, dpr)); thumb->setAlignment(Qt::AlignCenter); thumb->setToolTip(names::adjustmentKind(layer.adjustment->kind)); }
     bool activeImage = session_->activeLayerId() == layer.id && !session_->isMaskSelected();
     thumb->setStyleSheet(activeImage ? "border: 2px solid palette(highlight);" : "border: 2px solid transparent;");
     if (layer.isLiveText()) {

@@ -547,7 +547,7 @@ QWidget* ToolOptionsBar::buildBoxOptions() {
         std::vector<uint32_t> ids;
         for (const Slice& s : session_->document()->slices) ids.push_back(s.id);
         if (ids.empty()) return;
-        session_->beginEdit(tr("Delete Slices"));
+        session_->beginEdit(QT_TRANSLATE_NOOP("History", "Delete Slices"));
         for (uint32_t id : ids) session_->deleteSlice(id);
         session_->endEdit();
     });

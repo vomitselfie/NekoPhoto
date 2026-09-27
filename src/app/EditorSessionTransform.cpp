@@ -100,11 +100,11 @@ void EditorSession::beginSelectionTransform() {
     Document before = *document_;
     std::optional<Uuid> beforeActive = activeLayerId_;
     // Outer edit: closed by commitTransform (merge) or cancelTransform (restore).
-    beginEdit("Transform Selection");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Transform Selection"));
     Layer* src = document_->find(source->id);
     clearSelectedPixelsNow(*src);
-    Layer floating(Asset::make(lifted->image, "Floating Selection"), toPoint(lifted->origin));
-    floating.name = "Floating Selection";
+    Layer floating(Asset::make(lifted->image, QCoreApplication::translate("Names", "Floating Selection").toStdString()), toPoint(lifted->origin));
+    floating.name = QCoreApplication::translate("Names", "Floating Selection").toStdString();
     floating.parentId = src->parentId;
     floating.opacity = src->opacity;
     floating.blendMode = src->blendMode;
@@ -125,7 +125,7 @@ void EditorSession::beginDuplicateTransform() {
     Uuid source = *activeLayerId_;
     commitTransform();
     if (!canTransform()) return;
-    beginEdit("Duplicate Layer");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Duplicate Layer"));
     duplicateActiveLayer();
     if (!activeLayerId_ || *activeLayerId_ == source) { endEdit(); return; }
     transformDuplicate_ = std::make_pair(*activeLayerId_, source);
@@ -174,7 +174,7 @@ void EditorSession::commitMaskTransform(const TransformEdit& edit) {
     if (!layer || !layer->mask || !edit.draft.isValid()) return;
     std::optional<LayerTransform> placement = edit.draft.samePlacement(layer->transform) ? std::nullopt : std::optional<LayerTransform>(edit.draft);
     if (placement == layer->mask->placement) return;
-    beginEdit("Transform Layer Mask");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Transform Layer Mask"));
     layer->mask->placement = placement;
     endEdit();
 }
@@ -183,7 +183,7 @@ void EditorSession::commitDistort(const TransformEdit& edit) {
     distortCache_.clear();
     std::vector<Uuid> ids;
     if (edit.group) for (auto& [id, t] : edit.group->originals) ids.push_back(id); else ids.push_back(edit.layerId);
-    beginEdit(edit.group ? "Distort Layers" : "Distort");
+    beginEdit(edit.group ? QT_TRANSLATE_NOOP("History", "Distort Layers") : QT_TRANSLATE_NOOP("History", "Distort"));
     for (auto& id : ids) {
         Layer* layer = document_->find(id);
         if (!layer || !layer->asset || !layer->asset->image) continue;
@@ -304,7 +304,7 @@ void EditorSession::commitTransform() {
     if (edit.corners) { commitDistort(edit); finishDuplicate(); notifyDocument(); emit transformChanged(); return; }
     if (edit.group) {
         if (edit.draft.isValid()) {
-            beginEdit("Transform Layers");
+            beginEdit(QT_TRANSLATE_NOOP("History", "Transform Layers"));
             for (auto& [id, original] : edit.group->originals) {
                 Layer* layer = document_->find(id);
                 if (!layer) continue;
@@ -321,7 +321,7 @@ void EditorSession::commitTransform() {
     }
     Layer* layer = document_ ? document_->find(edit.layerId) : nullptr;
     if (layer && edit.draft.isValid() && !edit.draft.samePlacement(layer->transform)) {
-        beginEdit("Transform Layer");
+        beginEdit(QT_TRANSLATE_NOOP("History", "Transform Layer"));
         if (layer->mask) layer->mask->placement = layer->mask->placementMovingLayer(layer->transform, edit.draft);
         layer->transform = edit.draft;
         redrawShape(*layer);

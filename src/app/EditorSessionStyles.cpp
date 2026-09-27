@@ -21,7 +21,7 @@ bool EditorSession::canStyleLayer(const Uuid& id) const {
 
 bool EditorSession::beginLayerStyleEdit(const Uuid& id) {
     if (styleEditLayer_ || !canStyleLayer(id)) return false;
-    beginEdit("Layer Style");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Layer Style"));
     styleEditLayer_ = id;
     styleEditCarry_ = document_->find(id)->psdCarry;
     styleEditDocumentCarry_ = document_->psdCarry;
@@ -53,7 +53,7 @@ void EditorSession::endLayerStyleEdit(bool keep) {
 
 bool EditorSession::applyLayerStyle(const Uuid& id, const LayerStyle& style) {
     if (styleEditLayer_ || !canStyleLayer(id)) return false;
-    beginEdit("Layer Style");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Layer Style"));
     addDocumentPatterns(*document_, PresetLibrary::instance().patternsFor(style));   // library patterns it names
     setLayerStyle(*document_->find(id), style);
     endEdit();
@@ -63,7 +63,7 @@ bool EditorSession::applyLayerStyle(const Uuid& id, const LayerStyle& style) {
 
 bool EditorSession::applyStylePreset(const Uuid& id, const LayerStyle& style, const std::vector<PatternPreset>& patterns) {
     if (styleEditLayer_ || !canStyleLayer(id)) return false;
-    beginEdit("Apply Style");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Apply Style"));
     addDocumentPatterns(*document_, patterns);
     setLayerStyle(*document_->find(id), style);
     endEdit();
@@ -73,7 +73,7 @@ bool EditorSession::applyStylePreset(const Uuid& id, const LayerStyle& style, co
 
 int EditorSession::addPatterns(const std::vector<PatternPreset>& patterns) {
     if (!canEditLayers() || styleEditLayer_) return 0;
-    beginEdit("Add Patterns");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Add Patterns"));
     const int added = addDocumentPatterns(*document_, patterns);
     endEdit();
     if (added) notifyDocument();
@@ -90,7 +90,7 @@ void EditorSession::copyLayerStyle() {
 
 void EditorSession::pasteLayerStyle() {
     if (!styleClipboard_ || !activeLayerId_ || !canStyleLayer(*activeLayerId_)) return;
-    beginEdit("Paste Layer Style");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Paste Layer Style"));
     setLayerStyle(*activeLayerMutable(), *styleClipboard_);
     endEdit();
     notifyDocument();
@@ -98,7 +98,7 @@ void EditorSession::pasteLayerStyle() {
 
 void EditorSession::clearLayerStyle() {
     if (!activeLayerHasStyle() || !canStyleLayer(*activeLayerId_)) return;
-    beginEdit("Clear Layer Style");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Clear Layer Style"));
     setLayerStyle(*activeLayerMutable(), LayerStyle{});
     endEdit();
     notifyDocument();

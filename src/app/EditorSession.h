@@ -20,6 +20,7 @@
 #include "compositor/trim.h"
 #include "compositor/history.h"
 #include "compositor/smartobject_edit.h"
+#include <QCoreApplication>
 #include <QPointer>
 #include "compositor/render.h"
 #include "compositor/selection.h"
@@ -589,7 +590,7 @@ public:
     void applySubjectMask(std::shared_ptr<const compositor::GrayImage> mask, std::shared_ptr<const compositor::Image> pixels = nullptr, std::optional<compositor::Uuid> layerId = std::nullopt);
 
     // Crop / canvas
-    void cropTo(const QRectF& rect, const char* action = "Crop");
+    void cropTo(const QRectF& rect, const char* action = QT_TRANSLATE_NOOP("History", "Crop"));
     /// Image ▸ Trim: the canvas cut to its content (transparency or a corner's colour); false when nothing would change
     /// or nothing would remain.
     bool trim(const compositor::TrimOptions& options);

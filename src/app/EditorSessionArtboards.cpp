@@ -38,11 +38,11 @@ std::vector<const Layer*> EditorSession::artboards() const {
 std::optional<Uuid> EditorSession::addArtboard(const Artboard& artboard, const QString& name) {
     if (!canEditLayers() || document_->layers.size() >= size_t(Document::maxLayers)) return std::nullopt;
     if (!validRect(artboard.x, artboard.y, artboard.width, artboard.height) || artboard.background < 1 || artboard.background > 4) return std::nullopt;
-    Layer group(name.isEmpty() ? nextLayerName(document_->layers, "Artboard") : name.toStdString(), document_->size());
+    Layer group(name.isEmpty() ? nextLayerName(document_->layers, QCoreApplication::translate("Names", "Artboard").toStdString()) : name.toStdString(), document_->size());
     group.isGroup = true;
     group.artboard = artboard;
     commitTransform();
-    beginEdit("New Artboard");
+    beginEdit(QT_TRANSLATE_NOOP("History", "New Artboard"));
     document_->layers.push_back(group);   // artboards sit at the top level, as in Photoshop
     setActiveLayer(group.id);
     endEdit();
@@ -58,7 +58,7 @@ bool EditorSession::setArtboard(const Uuid& id, const Artboard& artboard, bool m
     if (*group->artboard == artboard && (name.isEmpty() || name.toStdString() == group->name)) return true;
     const int dx = artboard.x - group->artboard->x, dy = artboard.y - group->artboard->y;
     commitTransform();
-    beginEdit(group->artboard->width == artboard.width && group->artboard->height == artboard.height && (dx || dy) ? "Move Artboard" : "Edit Artboard");
+    beginEdit(group->artboard->width == artboard.width && group->artboard->height == artboard.height && (dx || dy) ? QT_TRANSLATE_NOOP("History", "Move Artboard") : QT_TRANSLATE_NOOP("History", "Edit Artboard"));
     group = document_->find(id);
     group->artboard = artboard;
     if (!name.isEmpty()) group->name = name.toStdString();
@@ -79,7 +79,7 @@ bool EditorSession::removeArtboard(const Uuid& id, bool contents) {
     if (!group || !group->isGroup || !group->artboard) return false;
     if (contents) { deleteLayersResolvingClipping({id}, false); return !document_->find(id); }
     commitTransform();
-    beginEdit("Convert Artboard to Folder");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Convert Artboard to Folder"));
     document_->find(id)->artboard.reset();
     endEdit();
     notifyDocument();
@@ -100,7 +100,7 @@ std::optional<uint32_t> EditorSession::addSlice(Slice slice) {
     if (!canEditLayers() || !validRect(slice.x, slice.y, slice.width, slice.height) || document_->slices.size() >= 10000) return std::nullopt;
     if (slice.id == 0 || std::any_of(document_->slices.begin(), document_->slices.end(), [&](const Slice& s) { return s.id == slice.id; })) slice.id = nextSliceId(document_->slices);
     if (slice.name.empty()) slice.name = "slice_" + std::to_string(slice.id);
-    beginEdit("New Slice");
+    beginEdit(QT_TRANSLATE_NOOP("History", "New Slice"));
     document_->slices.push_back(slice);
     endEdit();
     notifyDocument();
@@ -113,7 +113,7 @@ bool EditorSession::setSlice(const Slice& slice) {
     if (it == document_->slices.end()) return false;
     if (*it == slice) return true;
     const size_t index = size_t(it - document_->slices.begin());
-    beginEdit("Edit Slice");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Edit Slice"));
     document_->slices[index] = slice;
     endEdit();
     notifyDocument();
@@ -125,7 +125,7 @@ bool EditorSession::deleteSlice(uint32_t id) {
     auto it = std::find_if(document_->slices.begin(), document_->slices.end(), [&](const Slice& s) { return s.id == id; });
     if (it == document_->slices.end()) return false;
     const size_t index = size_t(it - document_->slices.begin());
-    beginEdit("Delete Slice");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Delete Slice"));
     document_->slices.erase(document_->slices.begin() + std::ptrdiff_t(index));
     endEdit();
     notifyDocument();

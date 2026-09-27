@@ -31,7 +31,7 @@ BrushImportResult importBrushFiles(const QStringList& paths) {
             if (!image.isNull()) {
                 if (auto preset = compositor::presetFromImage(*fromQImage(image), info.completeBaseName().toStdString()))
                     import = compositor::BrushImport{"Images", {*preset}, {}};
-                else error = "nothing in the image would paint";
+                else error = QCoreApplication::translate("app::BrushImporter", "nothing in the image would paint").toStdString();
             }
         }
         if (!import) { result.errors << QObject::tr("%1: %2").arg(info.fileName(), QString::fromStdString(error)); continue; }

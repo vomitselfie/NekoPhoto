@@ -1,5 +1,6 @@
 // EditorSession: Adjustment layers and the destructive adjustments and filters on pixels.
 #include "EditorSession.h"
+#include "Names.h"
 #include "compositor/filters.h"
 #include <random>
 
@@ -11,7 +12,7 @@ namespace app {
 
 void EditorSession::addAdjustmentLayer(AdjustmentKind kind) {
     if (!canEditLayers() || document_->layers.size() >= size_t(Document::maxLayers)) return;
-    Layer layer(adjustmentKindName(kind), document_->size());
+    Layer layer(names::adjustmentKind(kind).toStdString(), document_->size());
     AdjustmentSettings settings = AdjustmentSettings::defaults(kind);
     if (kind == AdjustmentKind::GradientMap) {
         settings.gradientMap.shadows = {foregroundColor.redF(), foregroundColor.greenF(), foregroundColor.blueF()};
@@ -22,7 +23,7 @@ void EditorSession::addAdjustmentLayer(AdjustmentKind kind) {
     const Layer* active = activeLayer();
     layer.parentId = active && active->isGroup ? activeLayerId_ : (active ? active->parentId : std::nullopt);
     int index = activeLayerId_ ? document_->indexOf(*activeLayerId_) + 1 : int(document_->layers.size());
-    beginEdit(QStringLiteral("New %1 Adjustment").arg(adjustmentKindName(kind)));
+    beginEdit(QStringLiteral(QT_TRANSLATE_NOOP("History", "New %1 Adjustment")).arg(adjustmentKindName(kind)));
     document_->layers.insert(document_->layers.begin() + index, layer);
     if (layer.parentId) collapsedGroupIds.erase(*layer.parentId);
     setActiveLayer(layer.id);
@@ -33,7 +34,7 @@ void EditorSession::addAdjustmentLayer(AdjustmentKind kind) {
 void EditorSession::beginAdjustmentEdit() {
     if (adjustmentEditing_ || !document_) return;
     adjustmentEditing_ = true;
-    beginEdit("Adjustment");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Adjustment"));
 }
 
 void EditorSession::setAdjustment(const Uuid& id, const AdjustmentSettings& settings) {
@@ -41,7 +42,7 @@ void EditorSession::setAdjustment(const Uuid& id, const AdjustmentSettings& sett
     Layer* layer = document_->find(id);
     if (!layer || !layer->adjustment) return;
     bool standalone = !adjustmentEditing_;
-    if (standalone) beginEdit("Adjustment");
+    if (standalone) beginEdit(QT_TRANSLATE_NOOP("History", "Adjustment"));
     layer->adjustment = settings.toLayerAdjustment();
     if (standalone) { endEdit(); notifyDocument(); }
     else emit documentChanged({});
@@ -125,7 +126,7 @@ void EditorSession::invertActive() {
             auto coverage = selectionInGrid(*document_->selection->coverage, layer->maskTransform().pixelToDocument(out->width(), out->height()), out->width(), out->height());
             blendThroughCoverage(*out, *layer->mask->asset.image, *coverage);
         }
-        beginEdit("Invert");
+        beginEdit(QT_TRANSLATE_NOOP("History", "Invert"));
         layer->mask->asset = MaskAsset::make(out);
         endEdit();
         notifyDocument();
@@ -135,7 +136,7 @@ void EditorSession::invertActive() {
     auto out = std::make_shared<Image>(*layer->asset->image);
     applyInvert(*out);
     if (auto coverage = selectionOnGrid(layer->transform, out->width(), out->height())) blendThroughCoverage(*out, *layer->asset->image, *coverage);
-    commitPixels(out, layer->transform, "Invert");
+    commitPixels(out, layer->transform, QT_TRANSLATE_NOOP("History", "Invert"));
 }
 
 std::array<std::vector<double>, 4> EditorSession::activeHistogram() const {
@@ -164,7 +165,7 @@ void EditorSession::applySubjectMask(std::shared_ptr<const GrayImage> mask, std:
         GrayImage base = existing ? *existing : GrayImage(src.width(), src.height(), 255);
         blendThroughCoverage(*out, base, *coverage);
     }
-    beginEdit("Remove Background");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Remove Background"));
     LayerMask m;
     if (layer->mask) { m = *layer->mask; m.placement.reset(); }
     m.asset = MaskAsset::make(out);

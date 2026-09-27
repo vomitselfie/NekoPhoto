@@ -79,7 +79,7 @@ bool EditorSession::setSmartFilterEntry(const Uuid& id, int index, const SmartFi
     if (!stack) return false;
     if (index < 0) { if (error) *error = tr("Name a Smart Filter."); return false; }
     stack->entries[size_t(index)] = entry;
-    return setSmartFilters(id, *stack, tr("Smart Filter Settings"), error);
+    return setSmartFilters(id, *stack, QT_TRANSLATE_NOOP("History", "Smart Filter Settings"), error);
 }
 
 bool EditorSession::setSmartFilterEnabled(const Uuid& id, int index, bool enabled, QString* error) {
@@ -87,7 +87,7 @@ bool EditorSession::setSmartFilterEnabled(const Uuid& id, int index, bool enable
     if (!stack) return false;
     if (index < 0) stack->enabled = enabled;
     else stack->entries[size_t(index)].enabled = enabled;
-    return setSmartFilters(id, *stack, enabled ? tr("Enable Smart Filter") : tr("Disable Smart Filter"), error);
+    return setSmartFilters(id, *stack, enabled ? QT_TRANSLATE_NOOP("History", "Enable Smart Filter") : QT_TRANSLATE_NOOP("History", "Disable Smart Filter"), error);
 }
 
 bool EditorSession::moveSmartFilter(const Uuid& id, int from, int to, QString* error) {
@@ -98,7 +98,7 @@ bool EditorSession::moveSmartFilter(const Uuid& id, int from, int to, QString* e
     SmartFilterEntry moved = stack->entries[size_t(from)];
     stack->entries.erase(stack->entries.begin() + from);
     stack->entries.insert(stack->entries.begin() + to, moved);
-    return setSmartFilters(id, *stack, tr("Move Smart Filter"), error);
+    return setSmartFilters(id, *stack, QT_TRANSLATE_NOOP("History", "Move Smart Filter"), error);
 }
 
 bool EditorSession::removeSmartFilter(const Uuid& id, int index, QString* error) {
@@ -107,14 +107,14 @@ bool EditorSession::removeSmartFilter(const Uuid& id, int index, QString* error)
     if (index < 0) { if (error) *error = tr("Name a Smart Filter."); return false; }
     stack->entries.erase(stack->entries.begin() + index);
     if (stack->entries.empty() && filterMaskOwner() == id) endFilterMaskEdit();
-    return setSmartFilters(id, *stack, tr("Delete Smart Filter"), error);
+    return setSmartFilters(id, *stack, QT_TRANSLATE_NOOP("History", "Delete Smart Filter"), error);
 }
 
 bool EditorSession::clearSmartFilters(const Uuid& id, QString* error) {
     auto stack = editable(*this, id, -1, error);
     if (!stack) return false;
     if (filterMaskOwner() == id) endFilterMaskEdit();
-    return setSmartFilters(id, SmartFilterStack{}, tr("Clear Smart Filters"), error);
+    return setSmartFilters(id, SmartFilterStack{}, QT_TRANSLATE_NOOP("History", "Clear Smart Filters"), error);
 }
 
 bool EditorSession::smartFilterMask(const Uuid& id, FilterMaskAction action, QString* error) {
@@ -169,8 +169,8 @@ bool EditorSession::beginFilterMaskEdit(const Uuid& id, bool show, QString* erro
     if (document_->layers.size() >= size_t(Document::maxLayers)) { if (error) *error = tr("The document has too many layers."); return false; }
     const int w = document_->width, h = document_->height;
     auto mask = documentMask(*stack, w, h);
-    beginEdit("Edit Filter Mask");
-    Layer layer(Asset::make(std::make_shared<Image>(w, h), "Smart Filter Mask"), Point(0, 0));
+    beginEdit(QT_TRANSLATE_NOOP("History", "Edit Filter Mask"));
+    Layer layer(Asset::make(std::make_shared<Image>(w, h), QCoreApplication::translate("Names", "Smart Filter Mask").toStdString()), Point(0, 0));
     LayerMask m;
     m.asset = MaskAsset::make(mask);
     layer.mask = m;
@@ -195,7 +195,7 @@ bool EditorSession::endFilterMaskEdit() {
     }
     const std::optional<Uuid> owner = filterMaskOwner_ && document_->find(*filterMaskOwner_) ? filterMaskOwner_ : std::nullopt;
     const Uuid proxy = *filterMaskLayer_;
-    beginEdit("Exit Filter Mask");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Exit Filter Mask"));
     document_->layers.erase(std::remove_if(document_->layers.begin(), document_->layers.end(), [&](const Layer& l) { return l.id == proxy; }),
                             document_->layers.end());
     filterMaskSynced_.reset();

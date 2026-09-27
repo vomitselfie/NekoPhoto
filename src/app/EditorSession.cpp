@@ -41,7 +41,7 @@ EditorSession::EditorSession(QObject* parent) : QObject(parent) {
 
 QString EditorSession::title() const {
     if (!document_) return QStringLiteral("NekoPhoto");
-    QString name = !projectPath_.isEmpty() ? QFileInfo(projectPath_).completeBaseName() : !importedName_.isEmpty() ? importedName_ : QStringLiteral("Untitled");
+    QString name = !projectPath_.isEmpty() ? QFileInfo(projectPath_).completeBaseName() : !importedName_.isEmpty() ? importedName_ : tr("Untitled");
     return name + (isModified() ? QStringLiteral(" *") : QString());
 }
 
@@ -80,11 +80,11 @@ bool EditorSession::canEditLayers() const {
 void EditorSession::createDocument(int width, int height, double resolution, bool emptyLayer) {
     if (!Document::validDimension(width) || !Document::validDimension(height)) return;
     commitTransform();
-    beginEdit("New Canvas");
+    beginEdit(QT_TRANSLATE_NOOP("History", "New Canvas"));
     Document doc(width, height);
     doc.resolution = resolution;
     std::optional<Uuid> active;
-    if (emptyLayer) { doc.layers.emplace_back("Layer 1", doc.size()); active = doc.layers.back().id; }
+    if (emptyLayer) { doc.layers.emplace_back(QCoreApplication::translate("Names", "Layer 1").toStdString(), doc.size()); active = doc.layers.back().id; }
     document_ = doc;
     setActiveLayer(active);
     projectPath_.clear();
@@ -188,7 +188,7 @@ void EditorSession::insertImage(std::shared_ptr<const Image> image, const QStrin
     if (!image || image->isEmpty()) return;
     cancelBrush();
     commitTransform();
-    beginEdit("Import Image");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Import Image"));
     if (!document_) {
         document_ = Document(image->width(), image->height());
         viewport.fit({double(image->width()), double(image->height())});
@@ -286,7 +286,7 @@ bool EditorSession::trim(const TrimOptions& options) {
     auto flat = renderFlattened(*document_);
     auto rect = flat ? trimRect(*flat, options) : std::nullopt;
     if (!rect || *rect == document_->rect()) return false;
-    cropTo(QRectF(rect->x, rect->y, rect->width, rect->height), "Trim");
+    cropTo(QRectF(rect->x, rect->y, rect->width, rect->height), QT_TRANSLATE_NOOP("History", "Trim"));
     return true;
 }
 
@@ -317,7 +317,7 @@ void EditorSession::resizeCanvas(int width, int height, double anchorX, double a
     if (!canEditLayers() || !Document::validDimension(width) || !Document::validDimension(height)) return;
     if (width == document_->width && height == document_->height) return;
     double dx = std::round((width - document_->width) * anchorX), dy = std::round((height - document_->height) * anchorY);
-    beginEdit("Canvas Size");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Canvas Size"));
     Document doc = *document_;
     doc.width = width;
     doc.height = height;
@@ -343,7 +343,7 @@ void EditorSession::resizeImage(int width, int height, double resolution, int sa
     const double sx = double(width) / doc.width, sy = double(height) / doc.height;
     if (!resizeDocument(doc, width, height, resolution, mode)) { emit error(tr("The resized image would exceed the 100-megapixel limit.")); return; }
     scaleAnimation(doc, sx, sy);
-    beginEdit("Image Size");
+    beginEdit(QT_TRANSLATE_NOOP("History", "Image Size"));
     document_ = doc;
     endEdit();
     viewport.fit({double(width), double(height)});

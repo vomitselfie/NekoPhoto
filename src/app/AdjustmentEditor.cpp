@@ -1,4 +1,5 @@
 #include "Style.h"
+#include "Names.h"
 #include "AdjustmentEditor.h"
 #include <QMessageBox>
 #include <QFileInfo>
@@ -238,7 +239,7 @@ QWidget* AdjustmentEditor::buildLevels() {
     auto* channelRow = new QHBoxLayout;
     channelRow->addWidget(new QLabel(tr("Channel")));
     auto* channel = new QComboBox;
-    for (int i = 0; i < 4; i++) channel->addItem(QString::fromUtf8(levelsChannelName(i)));
+    for (int i = 0; i < 4; i++) channel->addItem(names::levelsChannel(i));
     connect(channel, QOverload<int>::of(&QComboBox::activated), this, [this](int i) { settings_.levels.channel = i; changed(); });
     syncers_.push_back([this, channel] { channel->setCurrentIndex(settings_.levels.channel); });
     channelRow->addWidget(channel, 1);
@@ -298,7 +299,7 @@ QWidget* AdjustmentEditor::buildCurves() {
     auto* channelRow = new QHBoxLayout;
     channelRow->addWidget(new QLabel(tr("Channel")));
     auto* channel = new QComboBox;
-    for (int i = 0; i < 4; i++) channel->addItem(QString::fromUtf8(levelsChannelName(i)));
+    for (int i = 0; i < 4; i++) channel->addItem(names::levelsChannel(i));
     connect(channel, QOverload<int>::of(&QComboBox::activated), this, [this](int i) { settings_.curves.channel = i; changed(); });
     syncers_.push_back([this, channel] { channel->setCurrentIndex(settings_.curves.channel); });
     channelRow->addWidget(channel, 1);
@@ -325,7 +326,7 @@ QWidget* AdjustmentEditor::buildHsv() {
     auto* rangeRow = new QHBoxLayout;
     rangeRow->addWidget(new QLabel(tr("Range")));
     auto* range = new QComboBox;
-    for (int i = 0; i < 7; i++) range->addItem(QString::fromUtf8(colorRangeName(i)));
+    for (int i = 0; i < 7; i++) range->addItem(names::colorRange(i));
     connect(range, QOverload<int>::of(&QComboBox::activated), this, [this](int i) { settings_.hsv.range = i; changed(); });
     syncers_.push_back([this, range] { range->setCurrentIndex(settings_.hsv.range); range->setEnabled(!settings_.hsv.colorize); });
     rangeRow->addWidget(range, 1);

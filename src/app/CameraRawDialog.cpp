@@ -2,6 +2,7 @@
 // CameraRawColorControls.swift, CameraRawDetailOpticsControls.swift, CameraRawGeometryCalibrationControls.swift
 // and RawDevelopSheet.swift (MIT, see LICENSES/MIT-Compositor.txt); the grade itself is compositor/cameraraw.h.
 #include "CameraRawDialog.h"
+#include "Names.h"
 #include "Style.h"
 #include <QCheckBox>
 #include <QComboBox>
@@ -279,7 +280,7 @@ QWidget* CameraRawDialog::colorPage() {
     choice(mixer, tr("Adjust"), {tr("Hue"), tr("Saturation"), tr("Luminance")}, [this] { return mixerChannel_; },
            [this](int index) { mixerChannel_ = index; sync(); });
     for (size_t i = 0; i < 8; i++)
-        slider(mixer, tr(CameraRawMixerSettings::names[i]), -100, 100, 1, [this, &m, i]() -> double& {
+        slider(mixer, app::names::core(CameraRawMixerSettings::names[i]), -100, 100, 1, [this, &m, i]() -> double& {
             return mixerChannel_ == 0 ? m.hue[i] : mixerChannel_ == 1 ? m.saturation[i] : m.luminance[i];
         });
 
@@ -412,7 +413,7 @@ bool CameraRawDialog::apply() {
     if (settings_.normalized().isIdentity()) return true;   // an unchanged grade is not an edit
     auto out = run(*source(), 1, {});
     throughSelection(*out);
-    commit(out, placement(), tr("Camera Raw Filter"));
+    commit(out, placement(), QT_TRANSLATE_NOOP("History", "Camera Raw Filter"));
     return true;
 }
 

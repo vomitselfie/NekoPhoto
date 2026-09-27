@@ -1,4 +1,5 @@
 #include "Style.h"
+#include "Names.h"
 #include "AdjustmentsPanel.h"
 #include <QVBoxLayout>
 
@@ -38,7 +39,7 @@ void AdjustmentsPanel::sync() {
     if (!settings) { editor_->setVisible(false); title_->setText(tr("This adjustment can't be edited here.")); return; }
     bool changedLayer = layerId_ != layer->id;
     layerId_ = layer->id;
-    title_->setText(QStringLiteral("<b>%1</b> — %2").arg(QString::fromUtf8(adjustmentKindName(settings->kind)), QString::fromStdString(layer->name)));
+    title_->setText(QStringLiteral("<b>%1</b> — %2").arg(names::adjustmentKind(settings->kind), QString::fromStdString(layer->name)));
     editor_->setVisible(true);
     if (changedLayer || !(editor_->settings() == *settings)) editor_->setSettings(*settings);
     if (settings->kind == AdjustmentKind::Levels && changedLayer) {
