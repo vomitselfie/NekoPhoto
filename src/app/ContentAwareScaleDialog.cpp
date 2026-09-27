@@ -1,4 +1,5 @@
 #include "ContentAwareScaleDialog.h"
+#include "compositor/depth.h"
 #include "EditorSession.h"
 #include "ImageConvert.h"
 #include "compositor/seamcarve.h"
@@ -53,8 +54,11 @@ ContentAwareScaleDialog::ContentAwareScaleDialog(EditorSession* session, QWidget
     // A reduced copy of the layer (and of the selection over it) for the preview.
     const Document* doc = session_->document() ? &*session_->document() : nullptr;
     const Layer* layer = session_->activeLayer();
-    if (doc && layer && !layer->isGroup && layer->asset && layer->asset->image.u8()) {
-        const Image& src = *layer->asset->image.u8();
+    // The preview is drawn at 8 bits whatever the document's depth.
+    std::shared_ptr<const Image> shown = layer && layer->asset ? layer->asset->image.u8() : nullptr;
+    if (!shown && layer && layer->asset && layer->asset->image.u16()) shown = narrowImage(*layer->asset->image.u16());
+    if (doc && layer && !layer->isGroup && shown) {
+        const Image& src = *shown;
         pixelWidth_ = src.width(); pixelHeight_ = src.height();
         const double f = std::min(1.0, double(previewSide) / std::max(pixelWidth_, pixelHeight_));
         const int tw = std::max(1, int(std::lround(pixelWidth_ * f))), th = std::max(1, int(std::lround(pixelHeight_ * f)));
@@ -63,8 +67,8 @@ ContentAwareScaleDialog::ContentAwareScaleDialog(EditorSession* session, QWidget
             int sx = std::min(pixelWidth_ - 1, int((x + 0.5) / f)), sy = std::min(pixelHeight_ - 1, int((y + 0.5) / f));
             std::memcpy(thumb_->pixel(x, y), src.pixel(sx, sy), 4);
         }
-        if (doc->selection && doc->selection->coverage) {
-            const GrayImage& cov = *doc->selection->coverage.u8();
+        if (auto coverage = doc->selection ? EditorSession::coverage8(*doc->selection) : nullptr) {
+            const GrayImage& cov = *coverage;
             const Affine toDoc = layer->transform.pixelToDocument(pixelWidth_, pixelHeight_);
             thumbProtect_ = std::make_shared<GrayImage>(tw, th, 0);
             for (int y = 0; y < th; y++) for (int x = 0; x < tw; x++) {

@@ -1,9 +1,11 @@
 #include "compositor/inpaint.h"
+#include "compositor/depth.h"
 #include "compositor/heal.h"
 #include "compositor/parallel.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <functional>
 #include <unordered_map>
 #include <vector>
 
@@ -283,9 +285,10 @@ void smoothStart(Level& L) {
     }
 }
 
-} // namespace
+/// The finest level once synthesised, where it sits in the image (x0, y0), and the patch radius.
+using FinalLevel = std::function<void(const Level&, int, int, int)>;
 
-bool contentFill(Image& image, const GrayImage& hole, const InpaintOptions& options, const GrayImage* visible) {
+bool contentFillImpl(Image& image, const GrayImage& hole, const InpaintOptions& options, const GrayImage* visible, const FinalLevel* onFinal) {
     const int r = std::clamp(options.patchRadius, 1, 8);
     if (visible && (visible->width() != image.width() || visible->height() != image.height())) visible = nullptr;
     PixelBounds b = nonzeroBounds(hole);
@@ -385,12 +388,76 @@ bool contentFill(Image& image, const GrayImage& hole, const InpaintOptions& opti
         for (int it = 0; it < options.iterations; it++) pass(L, (it & 1) == 0);
     }
     const Level& L = levels[0];
+    if (onFinal) { (*onFinal)(L, x0, y0, r); return true; }
     for (int y = 0; y < L.h; y++)
         for (int x = 0; x < L.w; x++) {
             const size_t p = L.at(x, y);
             if (L.hole[p]) std::memcpy(image.pixel(x0 + x, y0 + y), &L.pix[p * 4], 4);
         }
     return true;
+}
+
+} // namespace
+
+bool contentFill(Image& image, const GrayImage& hole, const InpaintOptions& options, const GrayImage* visible) {
+    return contentFillImpl(image, hole, options, visible, nullptr);
+}
+
+bool contentFill16(Image16& image, const GrayImage& hole, const InpaintOptions& options, const GrayImage* visible) {
+    // The nearest-neighbour field is found on the image rounded to 8 bits; the hole is then voted from the 16-bit
+    // pixels the field points at, with the same weights, so the synthesis copies 16-bit texture.
+    auto eight = narrowImage(image);
+    const FinalLevel vote16 = [&](const Level& L, int x0, int y0, int r) {
+        const float scale = distanceScale(L);
+        parallelRows(L.ty0, L.ty1, [&](int ya, int yb) {
+            for (int y = ya; y < yb; y++)
+                for (int x = L.tx0; x < L.tx1; x++) {
+                    const size_t p = L.at(x, y);
+                    if (!L.hole[p]) continue;
+                    int best = INT32_MAX;
+                    for (int j = -r; j <= r; j++)
+                        for (int i = -r; i <= r; i++) {
+                            const int cx = x - i, cy = y - j;
+                            if (cx < 0 || cy < 0 || cx >= L.w || cy >= L.h) continue;
+                            const size_t c = L.at(cx, cy);
+                            if (L.target[c]) best = std::min(best, L.dist[c]);
+                        }
+                    if (best == INT32_MAX) continue;
+                    double acc[4] = {0, 0, 0, 0}, total = 0;
+                    for (int j = -r; j <= r; j++)
+                        for (int i = -r; i <= r; i++) {
+                            const int cx = x - i, cy = y - j;
+                            if (cx < 0 || cy < 0 || cx >= L.w || cy >= L.h) continue;
+                            const size_t c = L.at(cx, cy);
+                            if (!L.target[c]) continue;
+                            const double w = std::exp(-double(L.dist[c] - best) / scale);
+                            const uint16_t* src = image.pixel(x0 + L.nn[c * 2] + i, y0 + L.nn[c * 2 + 1] + j);
+                            for (int k = 0; k < 4; k++) acc[k] += w * src[k];
+                            total += w;
+                        }
+                    uint16_t* o = image.pixel(x0 + x, y0 + y);
+                    o[3] = uint16_t(std::lround(acc[3] / total));
+                    for (int k = 0; k < 3; k++) o[k] = uint16_t(std::min<long>(o[3], std::lround(acc[k] / total)));
+                }
+        }, 8);
+    };
+    return contentFillImpl(*eight, hole, options, visible, &vote16);
+}
+
+namespace {
+/// A 16-bit mask as the 8-bit decisions read it: anything nonzero stays nonzero.
+GrayImage decisions(const Gray16& mask) {
+    GrayImage out(mask.width(), mask.height());
+    for (int y = 0; y < mask.height(); y++)
+        for (int x = 0; x < mask.width(); x++) { const uint16_t v = mask.at(x, y); out.at(x, y) = v ? std::max<uint8_t>(1, narrow16(v)) : 0; }
+    return out;
+}
+} // namespace
+
+bool contentFill(Image16& image, const Gray16& hole, const InpaintOptions& options, const Gray16* visible) {
+    const GrayImage hole8 = decisions(hole);
+    std::shared_ptr<GrayImage> visible8 = visible ? narrowGray(*visible) : nullptr;
+    return contentFill16(image, hole8, options, visible8.get());
 }
 
 } // namespace compositor

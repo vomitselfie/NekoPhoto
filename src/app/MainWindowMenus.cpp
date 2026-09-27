@@ -210,7 +210,7 @@ void MainWindow::buildMenus() {
         if (!session_->canAdjustPixels() || !session_->document()->selection || !session_->document()->selection->coverage) { showError(tr("Content-Aware Fill"), tr("Select a visible image layer and an area to fill.")); return; }
         (new ContentFillDialog(session_, this))->show();
     }), "edit.fill");
-    needsDocument(edit->addAction(tr("Content-Aware Scale…"), QKeySequence("Ctrl+Alt+Shift+C"), this, [this] { (new ContentAwareScaleDialog(session_, this))->show(); }));
+    needsDocument(edit->addAction(tr("Content-Aware Scale…"), QKeySequence("Ctrl+Alt+Shift+C"), this, [this] { (new ContentAwareScaleDialog(session_, this))->show(); }), "edit.contentAware");
 
     edit->addSeparator();
     edit->addAction(tr("Prefere&nces…"), QKeySequence::Preferences, this, &MainWindow::showPreferences);
@@ -325,7 +325,7 @@ void MainWindow::buildMenus() {
     needsDocument(layer->addAction(tr("Layer via &Copy"), QKeySequence("Ctrl+J"), this, [this] { session_->layerViaCopy(); }), "edit.clipboard");
     needsDocument(layer->addAction(tr("&Duplicate Layer"), this, [this] { session_->duplicateActiveLayer(); recordAction("layers.duplicate"); }), "layers.structure");
     needsDocument(layer->addAction(tr("De&lete Layer"), this, [this] { deleteSelectedLayers(); recordAction("layers.delete"); }), "layers.structure");
-    mergeAction_ = needsDocument(layer->addAction(tr("Merge Do&wn"), QKeySequence("Ctrl+E"), this, [this] { session_->mergeLayers(); recordAction("layers.merge"); }));
+    mergeAction_ = needsDocument(layer->addAction(tr("Merge Do&wn"), QKeySequence("Ctrl+E"), this, [this] { session_->mergeLayers(); recordAction("layers.merge"); }), "edit.contentAware");
     editTextAction_ = needsDocument(layer->addAction(tr("Edit &Text…"), this, [this] { const Layer* l = session_->activeLayer(); if (l && l->isLiveText()) session_->requestTextEdit(l->id); }));
     needsDocument(layer->addAction(tr("&Rename Layer…"), this, [this] {
         const Layer* active = session_->activeLayer();

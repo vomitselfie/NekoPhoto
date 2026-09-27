@@ -470,7 +470,7 @@ public:
     bool contentAwareFill(QString* error, const ContentFillRequest& request = {});
     /// The fill without committing it (the dialog's preview): the layer's new pixels (only the filled ones for a new
     /// layer) and where they sit.
-    std::shared_ptr<const compositor::Image> contentAwareFillResult(const ContentFillRequest& request, compositor::LayerTransform& placed, QString* error) const;
+    compositor::AnyImage contentAwareFillResult(const ContentFillRequest& request, compositor::LayerTransform& placed, QString* error) const;
     /// Content-Aware Move: the selected pixels move dx, dy (document pixels), the hole filled from its
     /// surroundings (Extend: the original stays); the selection follows. One undo step.
     bool contentAwareMove(int dx, int dy, QString* error);

@@ -7,8 +7,11 @@
 #include "compositor/adjustments.h"
 #include "compositor/blur.h"
 #include "compositor/depth.h"
+#include "compositor/contentmove.h"
 #include "compositor/filters.h"
+#include "compositor/inpaint.h"
 #include "compositor/morphology.h"
+#include "compositor/seamcarve.h"
 #include "compositor/selection.h"
 #include "compositor/warp.h"
 #include "compositor/warpmesh.h"
@@ -435,6 +438,41 @@ TEST_CASE(sixteen_bit_distort_and_warp_match_eight_bit) {
     const Apart bent = apart(*bentA->image, *bentB->image);
     report("warp/arc", bent);
     CHECK(bent.worst <= 1);
+}
+
+/// The content-aware tools decide on the pixels rounded to 8 bits and copy 16-bit pixels: on an 8-bit image
+/// converted to 16 bits they choose exactly what the 8-bit tools choose, so the results agree within a level.
+TEST_CASE(sixteen_bit_content_aware_tools_match_eight_bit) {
+    auto source = busyImage(120, 90, 6);
+    for (int y = 0; y < 90; y++) for (int x = 60; x < 120; x++) { uint8_t* p = source->pixel(x, y); p[3] = 255; }
+    GrayImage hole(120, 90, 0);
+    for (int y = 30; y < 55; y++) for (int x = 40; x < 70; x++) hole.at(x, y) = 255;
+    Image a = *source;
+    CHECK(contentFill(a, hole));
+    auto b = widenImage(*source);
+    CHECK(contentFill(*b, *widenGray(hole)));
+    const Apart fill = apart(a, *b);
+    report("content-aware fill", fill);
+    CHECK(fill.worst <= 1);
+
+    Image moveA = *source;
+    CHECK(contentAwareMove(moveA, hole, 25, -10));
+    auto moveB = widenImage(*source);
+    CHECK(contentAwareMove(*moveB, *widenGray(hole), 25, -10));
+    const Apart move = apart(moveA, *moveB);
+    report("content-aware move", move);
+    // The tone adaptation is worked out at 8 bits in both; its offset is added to the 16-bit patch, which rounds
+    // once instead of twice. That level of difference can steer the seam's resynthesis to other, equally good
+    // patches, so a thin band along the patch's rim differs (under 1% of the samples).
+    CHECK(move.beyondOne < 0.01);
+
+    for (auto [w, h] : {std::pair{90, 90}, std::pair{150, 70}}) {
+        Image carved = seamCarve(*source, w, h);
+        Image16 carved16 = seamCarve(*widenImage(*source), w, h);
+        const Apart d = apart(carved, carved16);
+        report("content-aware scale " + std::to_string(w) + "x" + std::to_string(h), d);
+        CHECK(d.worst <= 1);
+    }
 }
 
 TEST_MAIN()

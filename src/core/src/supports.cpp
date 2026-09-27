@@ -85,6 +85,8 @@ constexpr FeatureSupport table[] = {
     {"tool.crop", eightAndSixteen},
     // Distort and Perspective in Free Transform, Edit > Warp and Warp Cage on whole pixel layers.
     {"edit.distort", eightAndSixteen},
+    // Content-Aware Fill, Move, Extend and Scale: decided on the pixels rounded to 8 bits, the 16-bit pixels copied.
+    {"edit.contentAware", eightAndSixteen},
 };
 }   // namespace
 
