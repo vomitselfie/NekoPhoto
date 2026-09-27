@@ -179,7 +179,7 @@ int main(int argc, char** argv) {
     hsv.hsv.adjustments[0] = {20, 25, -5};
     adjust("hue/saturation", hsv);
     // Mosh (docs/mosh.md): the heaviest ports, at their defaults.
-    for (const char* id : {"pixel-sort", "vhs", "crt", "hard-glitch"}) {
+    for (const char* id : {"pixel-sort", "vhs", "crt", "hard-glitch", "glow", "light-streak", "feedback", "optical-flow"}) {
         const std::string name = std::string("mosh ") + id;
         const mosh::Settings s = mosh::Settings::defaults(*mosh::findEffect(id));
         bench(name.c_str(), fresh, [&] { mosh::apply(s, work); });

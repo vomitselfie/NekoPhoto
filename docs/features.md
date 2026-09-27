@@ -55,7 +55,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Add Noise and Lens Correction
 - Filter > Camera Raw Filter (Shift+Ctrl+A): white balance, tone, presence, curve, colour mixer, colour grading, detail, optics, geometry, effects and calibration on a layer's pixels ([camera-raw.md](camera-raw.md))
 - Filter > G'MIC: over 850 filters with their own controls, when `gmic` is installed (Update Filters fetches the catalogue; the few that cannot work here, such as those that resize the image or make layers, are hidden unless Show all filters is on)
-- Filter > Mosh: twenty glitch, distortion and retro effects from OpenMosh (Pixel Sort, Data-Mosh, Hard Glitch, VHS, CRT, Halftone, Kaleidoscope and more), with a live preview and a reroll for the random ones, at 8 and 16 bits ([mosh.md](mosh.md))
+- Filter > Mosh: OpenMosh's 54 glitch, distortion, retro, stylize, colour and composite effects (Pixel Sort, Data-Mosh, Hard Glitch, VHS, CRT, Halftone, Kaleidoscope, Glow, Light Streak, Feedback, Optical-Flow, Ascii, ChromaKey and more), with a live preview and a reroll for the random ones, at 8 and 16 bits; Overlay and Mask read another layer where it lies over this one, and Caption stamps text ([mosh.md](mosh.md))
 - Smart Filters on smart objects, edited as in Photoshop's Layers panel: each filter's settings (double-click), blending options, on/off per filter or for the whole stack, reorder by dragging (or from the menu), delete or clear them, and paint, show, invert, disable or delete the shared filter mask; PSD export keeps them ([smart-objects.md](smart-objects.md))
 - Live previews on the canvas, limited to the selection when there is one
 
@@ -144,7 +144,7 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 - ノイズを加える、レンズ補正
 - フィルター > Camera Raw フィルター(Shift+Ctrl+A):ホワイトバランス、階調、外観、トーンカーブ、カラーミキサー、カラーグレーディング、ディテール、光学、ジオメトリ、効果、キャリブレーションをレイヤーのピクセルに適用
 - フィルター > G'MIC:`gmic` をインストールすると、850 種類以上のフィルターを専用の設定画面で使えます(画像サイズを変えるものやレイヤーを作るものなど、ここで使えないものは「Show all filters」をオンにしない限り非表示)
-- フィルター > Mosh:OpenMosh のグリッチ・変形・レトロ系エフェクト 20 種(ピクセルソート、データモッシュ、ハードグリッチ、VHS、CRT、ハーフトーン、万華鏡など)。ライブプレビュー付きで、ランダムなものはシードを振り直せます。8 ビットと 16 ビットに対応
+- フィルター > Mosh:OpenMosh のグリッチ・変形・レトロ・表現手法・カラー・合成のエフェクト 54 種(ピクセルソート、データモッシュ、ハードグリッチ、VHS、CRT、ハーフトーン、万華鏡、グロー、ライトストリーク、フィードバック、オプティカルフロー、アスキー、クロマキーなど)。ライブプレビュー付きで、ランダムなものはシードを振り直せます。8 ビットと 16 ビットに対応。オーバーレイとマスクはほかのレイヤーを重なる位置で読み込み、キャプションはテキストを描き込みます
 - スマートオブジェクトのスマートフィルターを Photoshop のレイヤーパネルと同じように編集:各フィルターの設定(ダブルクリック)、描画オプション、フィルターごと・全体のオン/オフ、ドラッグ(またはメニュー)での並べ替え、削除・すべて消去、共有フィルターマスクへの描画・表示・反転・無効化・削除。PSD に書き出しても保たれます
 - カンバス上でのライブプレビュー(選択範囲があればその中だけ)
 

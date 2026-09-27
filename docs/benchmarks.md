@@ -152,6 +152,12 @@ defaults on a 4000x3000 layer, straight-colour conversion in and out included.
 | mosh vhs | 104.2 |
 | mosh crt | 69.2 |
 | mosh hard-glitch | 95.1 |
+| mosh glow (four passes) | 747.8 |
+| mosh light-streak (five passes) | 704.4 |
+| mosh feedback (ten passes) | 888.5 |
+| mosh optical-flow | 228.8 |
+
+The multi-pass effects keep their frames between passes at 16 bits a channel.
 
 The fingerprints of every effect (defaults, seeded settings, a translucent layer) are in `tests/mosh_hashes.txt`,
 checked by `mosh_tests`; `COMPOSITOR_UPDATE_MOSH_HASHES=1 build/tests/mosh_tests fingerprints` rewrites them.
