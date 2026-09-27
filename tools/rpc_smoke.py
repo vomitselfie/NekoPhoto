@@ -7,6 +7,7 @@ through a few calls and checks the answers. CI starts the app headless with
     python3 tools/rpc_smoke.py /tmp/c.sock
 """
 import base64
+import io
 import json
 import os
 import socket
@@ -17,11 +18,33 @@ import time
 import zlib
 
 
+def pipe_name(path):
+    r"""The named pipe the editor listens on for a --rpc-socket value on Windows (src/app/Platform.cpp's rule):
+    a full \\.\pipe\ name as it is, anything else with its slashes and backslashes made underscores."""
+    prefix = "\\\\.\\pipe\\"
+    if path.lower().startswith(prefix):
+        return path
+    return prefix + path.replace("\\", "_").replace("/", "_")
+
+
+def open_local_socket(path):
+    """Connects to the editor's local socket: a Unix domain socket, or a named pipe on Windows.
+    Returns (handle, text file); close both. Raises OSError while nothing is listening."""
+    if os.name == "nt":
+        raw = open(pipe_name(path), "r+b", buffering=0)
+        return raw, io.TextIOWrapper(io.BufferedRWPair(raw, raw), encoding="utf-8", newline="\n")
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        sock.connect(path)
+    except OSError:
+        sock.close()
+        raise
+    return sock, sock.makefile("rw", encoding="utf-8")
+
+
 class Rpc:
     def __init__(self, path):
-        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self.sock.connect(path)
-        self.file = self.sock.makefile("rw", encoding="utf-8")
+        self.sock, self.file = open_local_socket(path)
         self.next_id = 0
         self.events = []
 
@@ -674,7 +697,7 @@ def main():
 
     # The command-line client and batch mode.
     import subprocess
-    binary = os.environ.get("COMPOSITOR_BIN", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "build", "src", "app", "nekophoto"))
+    binary = os.environ.get("COMPOSITOR_BIN", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "build", "src", "app", "nekophoto.exe" if os.name == "nt" else "nekophoto"))
     if os.path.exists(binary):
         env = dict(os.environ); env.pop("QT_QPA_PLATFORM", None)
         out = subprocess.run([binary, "--rpc-socket", path, "--call", "app.info"], capture_output=True, text=True, env=env, timeout=60)

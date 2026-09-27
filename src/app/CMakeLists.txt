@@ -2,7 +2,10 @@
 
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Widgets Network Svg)
 # DBus lets "System" appearance ask the desktop portal for the colour scheme (needed inside an AppImage).
-find_package(Qt6 6.4 QUIET COMPONENTS DBus)
+# Not on Windows, which has no session bus.
+if(NOT WIN32)
+    find_package(Qt6 6.4 QUIET COMPONENTS DBus)
+endif()
 option(COMPOSITOR_WITH_QTPDF "Open PDF files through Qt PDF when it is installed" ON)
 if(COMPOSITOR_WITH_QTPDF)
     find_package(Qt6 6.4 QUIET OPTIONAL_COMPONENTS Pdf)
@@ -113,6 +116,8 @@ qt_add_executable(nekophoto
     FontPicker.h
     FontPicker.cpp
     SingleInstance.cpp
+    Platform.h
+    Platform.cpp
     FontGroups.h
     FontGroups.cpp
     Automation.h
@@ -190,6 +195,23 @@ if(TARGET Qt6::DBus)
     target_compile_definitions(nekophoto PRIVATE COMPOSITOR_HAVE_DBUS)
     message(STATUS "Appearance: desktop colour scheme via the XDG portal (Qt DBus)")
 endif()
+if(WIN32)
+    # A GUI-subsystem program (no console window when started from Explorer) that attaches to the calling
+    # console for --version, --help and --call (Platform.cpp). The resource file carries the icon, the version
+    # information and the manifest (UTF-8 code page for the core's narrow file APIs).
+    set_target_properties(nekophoto PROPERTIES WIN32_EXECUTABLE TRUE)
+    set(COMPOSITOR_WIN_ICON "${CMAKE_SOURCE_DIR}/packaging/windows/nekophoto.ico")
+    set(COMPOSITOR_WIN_MANIFEST "${CMAKE_SOURCE_DIR}/packaging/windows/nekophoto.manifest")
+    # FILEVERSION wants four numbers; a pre-release suffix ("1.6.0-dev.abc") is dropped there and kept in the strings.
+    string(REGEX MATCHALL "[0-9]+" COMPOSITOR_WIN_VERSION_PARTS "${COMPOSITOR_VERSION_STRING}")
+    list(APPEND COMPOSITOR_WIN_VERSION_PARTS 0 0 0 0)
+    list(SUBLIST COMPOSITOR_WIN_VERSION_PARTS 0 4 COMPOSITOR_WIN_VERSION_PARTS)
+    string(REPLACE ";" "," COMPOSITOR_WIN_VERSION_COMMAS "${COMPOSITOR_WIN_VERSION_PARTS}")
+    configure_file(${CMAKE_SOURCE_DIR}/packaging/windows/nekophoto.rc.in ${CMAKE_CURRENT_BINARY_DIR}/nekophoto.rc @ONLY)
+    target_sources(nekophoto PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/nekophoto.rc)
+    set_property(SOURCE ${CMAKE_CURRENT_BINARY_DIR}/nekophoto.rc APPEND PROPERTY OBJECT_DEPENDS ${COMPOSITOR_WIN_ICON} ${COMPOSITOR_WIN_MANIFEST})
+endif()
+
 # nekophoto on Linux (the command people type); NekoPhoto.app on the Mac, as apps there are named.
 if(APPLE)
     set_target_properties(nekophoto PROPERTIES OUTPUT_NAME NekoPhoto)
@@ -219,13 +241,20 @@ if(APPLE)
         MACOSX_BUNDLE_SHORT_VERSION_STRING "${COMPOSITOR_VERSION_STRING}"
         MACOSX_BUNDLE_BUNDLE_VERSION "${COMPOSITOR_VERSION_STRING}")
     install(TARGETS nekophoto BUNDLE DESTINATION .)
+elseif(WIN32)
+    # A portable folder: nekophoto.exe with its DLLs beside it (tools/package-windows.sh) and the licences.
+    install(TARGETS nekophoto RUNTIME DESTINATION .)
+    install(FILES ${COMPOSITOR_LICENSE_FILES} DESTINATION .)
+    install(FILES ${COMPOSITOR_LICENSE_TEXTS} DESTINATION LICENSES)
 else()
     install(TARGETS nekophoto RUNTIME DESTINATION bin)
 endif()
-install(FILES ${CMAKE_SOURCE_DIR}/packaging/nekophoto.desktop DESTINATION share/applications)
-install(FILES ${CMAKE_SOURCE_DIR}/packaging/nekophoto.svg DESTINATION share/icons/hicolor/scalable/apps)
-install(FILES ${CMAKE_SOURCE_DIR}/packaging/nekophoto-mime.xml DESTINATION share/mime/packages RENAME nekophoto.xml)
-if(NOT APPLE)
+if(NOT WIN32)
+    install(FILES ${CMAKE_SOURCE_DIR}/packaging/nekophoto.desktop DESTINATION share/applications)
+    install(FILES ${CMAKE_SOURCE_DIR}/packaging/nekophoto.svg DESTINATION share/icons/hicolor/scalable/apps)
+    install(FILES ${CMAKE_SOURCE_DIR}/packaging/nekophoto-mime.xml DESTINATION share/mime/packages RENAME nekophoto.xml)
+endif()
+if(NOT APPLE AND NOT WIN32)
     install(FILES ${COMPOSITOR_LICENSE_FILES} DESTINATION share/doc/nekophoto)
     install(FILES ${COMPOSITOR_LICENSE_TEXTS} DESTINATION share/doc/nekophoto/LICENSES)
 endif()

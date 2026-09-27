@@ -7,6 +7,7 @@
 #include "compositor/scribble.h"
 #include <QApplication>
 #include <QDir>
+#include "Platform.h"
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QMouseEvent>
@@ -30,23 +31,22 @@ AutomationServer::AutomationServer(MainWindow* window) : QObject(window), window
 }
 
 AutomationServer::~AutomationServer() {
-    if (server_) { server_->close(); QLocalServer::removeServer(path_); }
+    if (server_) { server_->close(); QLocalServer::removeServer(platform::localServerName(path_)); }
 }
 
 QString AutomationServer::defaultSocketPath() {
     QString env = qEnvironmentVariable("COMPOSITOR_RPC_SOCKET");
     if (!env.isEmpty()) return env;
-    QString runtime = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
-    if (runtime.isEmpty()) runtime = QDir::tempPath();
-    return runtime + "/nekophoto.sock";
+    return platform::defaultLocalSocket("nekophoto.sock");
 }
 
 bool AutomationServer::listen(const QString& path, QString* error) {
     path_ = path;
-    QLocalServer::removeServer(path);
+    const QString name = platform::localServerName(path);
+    QLocalServer::removeServer(name);
     server_ = new QLocalServer(this);
     server_->setSocketOptions(QLocalServer::UserAccessOption);
-    if (!server_->listen(path)) {
+    if (!server_->listen(name)) {
         if (error) *error = server_->errorString();
         return false;
     }

@@ -19,6 +19,7 @@
 #include "BrushPicker.h"
 #include "FontPicker.h"
 #include "SingleInstance.h"
+#include "Platform.h"
 #include "ImageConvert.h"
 #include <QDialog>
 #include <cstdio>
@@ -212,6 +213,7 @@ int main(int argc, char** argv) {
     bool headless = false;
     for (int i = 1; i < argc; i++) if (std::strcmp(argv[i], "--headless") == 0 || std::strcmp(argv[i], "--call") == 0 || std::strcmp(argv[i], "--batch") == 0) headless = true;
     if (headless && !qEnvironmentVariableIsSet("QT_QPA_PLATFORM")) qputenv("QT_QPA_PLATFORM", "offscreen");
+    app::platform::attachParentConsole();   // Windows: --version, --help and --call print to the calling console
     QApplication app(argc, argv);
     QApplication::setOrganizationName("nekophoto");
     QApplication::setApplicationName("nekophoto");
@@ -263,7 +265,7 @@ int main(int argc, char** argv) {
     QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: welcome (or welcome:N for page N), new, canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, cameraraw (or cameraraw:N for panel N), gmic, content-fill, background, text, fonts, brushes, actions, timeline (frames made from the layers when there are none), batch.", "name");
     parser.addOption(dialogOption);
     QCommandLineOption rpc("rpc", "Listen on the automation socket (JSON-RPC over a local socket, for the MCP bridge). Also on when the automation preference is set.");
-    QCommandLineOption rpcSocket("rpc-socket", "Socket path for --rpc (default: $XDG_RUNTIME_DIR/nekophoto.sock, or $COMPOSITOR_RPC_SOCKET).", "path");
+    QCommandLineOption rpcSocket("rpc-socket", "Socket path for --rpc (default: $XDG_RUNTIME_DIR/nekophoto.sock, or $COMPOSITOR_RPC_SOCKET; on Windows the named pipe nekophoto-<user>).", "path");
     QCommandLineOption headlessOption("headless", "Run without a visible window (offscreen) with the automation socket on; implies --rpc.");
     parser.addOption(rpc);
     parser.addOption(rpcSocket);
@@ -294,7 +296,7 @@ int main(int argc, char** argv) {
         // A client, not the editor: one request over the socket, the result on stdout.
         QString path = parser.value(rpcSocket).isEmpty() ? app::AutomationServer::defaultSocketPath() : parser.value(rpcSocket);
         QLocalSocket socket;
-        socket.connectToServer(path);
+        socket.connectToServer(app::platform::localServerName(path));
         if (!socket.waitForConnected(3000)) { std::fprintf(stderr, "nothing is listening at %s (start nekophoto --rpc, or --headless)\n", qPrintable(path)); return 2; }
         QJsonObject params;
         if (parser.isSet(paramsOption)) {

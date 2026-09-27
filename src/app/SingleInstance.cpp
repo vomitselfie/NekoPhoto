@@ -5,6 +5,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include "Platform.h"
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QLockFile>
@@ -26,7 +27,7 @@ QString runtimeDirectory() {
 SingleInstance::SingleInstance(QObject* parent) : QObject(parent) {}
 SingleInstance::~SingleInstance() = default;
 
-QString SingleInstance::socketPath() { return runtimeDirectory() + "/nekophoto-instance.sock"; }
+QString SingleInstance::socketPath() { return platform::localServerName(platform::defaultLocalSocket("nekophoto-instance.sock")); }
 QString SingleInstance::lockPath() { return runtimeDirectory() + "/nekophoto-instance.lock"; }
 
 bool SingleInstance::handOff(const QStringList& files, const QString& rpcSocket) {

@@ -12,7 +12,8 @@ launches one itself.
 
 Environment:
   COMPOSITOR_RPC_SOCKET  socket path (default $XDG_RUNTIME_DIR/nekophoto.sock, else Qt's private
-                         /tmp/runtime-<user>/, never the shared /tmp itself)
+                         /tmp/runtime-<user>/, never the shared /tmp itself; on Windows the named
+                         pipe nekophoto-<user>)
   COMPOSITOR_BIN         binary to launch when nothing is listening (default: nekophoto on PATH,
                          else the build next to this file)
   COMPOSITOR_MCP_LAUNCH  "0" to never launch the app; "headless" to launch it without a window
@@ -21,6 +22,7 @@ from __future__ import annotations
 
 import base64
 import getpass
+import io
 import json
 import os
 import shutil
@@ -66,6 +68,8 @@ def socket_path() -> str:
     env = os.environ.get("COMPOSITOR_RPC_SOCKET")
     if env:
         return env
+    if os.name == "nt":
+        return "nekophoto-" + (os.environ.get("USERNAME") or "user")
     runtime = os.environ.get("XDG_RUNTIME_DIR") or private_runtime_dir()
     return os.path.join(runtime, "nekophoto.sock")
 
@@ -81,9 +85,33 @@ def private_runtime_dir() -> str:
     return path
 
 
+def pipe_name(path):
+    r"""The named pipe the editor listens on for a --rpc-socket value on Windows (src/app/Platform.cpp's rule):
+    a full \\.\pipe\ name as it is, anything else with its slashes and backslashes made underscores."""
+    prefix = "\\\\.\\pipe\\"
+    if path.lower().startswith(prefix):
+        return path
+    return prefix + path.replace("\\", "_").replace("/", "_")
+
+
+def open_local_socket(path):
+    """Connects to the editor's local socket: a Unix domain socket, or a named pipe on Windows.
+    Returns (handle, text file); close both. Raises OSError while nothing is listening."""
+    if os.name == "nt":
+        raw = open(pipe_name(path), "r+b", buffering=0)
+        return raw, io.TextIOWrapper(io.BufferedRWPair(raw, raw), encoding="utf-8", newline="\n")
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        sock.connect(path)
+    except OSError:
+        sock.close()
+        raise
+    return sock, sock.makefile("rw", encoding="utf-8")
+
+
 class Connection:
     def __init__(self) -> None:
-        self.sock: Optional[socket.socket] = None
+        self.sock: Any = None
         self.file = None
         self.next_id = 0
         self.child: Optional[subprocess.Popen] = None
@@ -101,13 +129,14 @@ class Connection:
         binary = os.environ.get("COMPOSITOR_BIN") or shutil.which("nekophoto")
         if not binary:
             # The build next to this bridge (mcp/ sits in the source tree), never one relative to the current folder.
-            candidate = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build", "src", "app", "nekophoto")
+            candidate = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build", "src", "app",
+                                     "nekophoto.exe" if os.name == "nt" else "nekophoto")
             if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
                 binary = candidate
         if not binary:
             raise RuntimeError(f"nothing listening at {path} and no nekophoto binary found; set COMPOSITOR_BIN")
         args = [binary, "--rpc", "--rpc-socket", path]
-        if mode == "headless" or not (os.environ.get("WAYLAND_DISPLAY") or os.environ.get("DISPLAY")):
+        if mode == "headless" or (os.name != "nt" and not (os.environ.get("WAYLAND_DISPLAY") or os.environ.get("DISPLAY"))):
             args.append("--headless")
         self.child = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         deadline = time.time() + 20
@@ -120,10 +149,7 @@ class Connection:
         raise RuntimeError(f"launched {binary} but no socket appeared at {path}")
 
     def _open(self, path: str) -> None:
-        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        sock.connect(path)
-        self.sock = sock
-        self.file = sock.makefile("rw", encoding="utf-8")
+        self.sock, self.file = open_local_socket(path)
 
     def call(self, method: str, params: Optional[dict] = None) -> Any:
         if self.file is None:
