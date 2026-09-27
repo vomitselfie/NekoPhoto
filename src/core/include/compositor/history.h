@@ -62,7 +62,15 @@ public:
     size_t retainedBytes(const std::optional<Document>& current) const;
 
 private:
-    struct Entry { std::string name; Snapshot before, after; Rect region; };
+    struct Entry {
+        std::string name;
+        Snapshot before, after;
+        Rect region;
+        /// The heavy buffers the two snapshots hold (identity, bytes), each once, listed when the entry is made:
+        /// snapshots never change, so counting the history's memory need not walk their layers again.
+        std::vector<std::pair<const void*, size_t>> buffers;
+    };
+    static Entry makeEntry(std::string name, Snapshot before, Snapshot after, Rect region);
     void trim(const std::optional<Document>& current);
     uint64_t nextRevision() { return ++counter_; }
 

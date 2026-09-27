@@ -2,6 +2,7 @@
 #include "compositor/psd_carry.h"
 #include "compositor/smartobject.h"
 #include <set>
+#include <unordered_set>
 
 namespace compositor {
 
@@ -35,7 +36,7 @@ void DocumentHistory::end(const std::optional<Document>& document, const std::op
     // Selecting, navigating, and no-op edits must preserve redo history.
     if (before.document == document) return;
     revision_ = nextRevision();
-    past_.push_back({pendingName_, std::move(before), Snapshot{document, selection, revision_}, pendingRegion_});
+    past_.push_back(makeEntry(pendingName_, std::move(before), Snapshot{document, selection, revision_}, pendingRegion_));
     pendingRegion_ = {};
     future_.clear();
     trim(document);
@@ -87,7 +88,7 @@ int DocumentHistory::squash(uint64_t since, const std::string& name) {
     while (k < past_.size() && past_[k].before.revision != since) k++;
     const int count = int(past_.size() - k);
     if (count < 2) return count;
-    Entry merged{name, std::move(past_[k].before), std::move(past_.back().after), past_[k].region};
+    Entry merged = makeEntry(name, std::move(past_[k].before), std::move(past_.back().after), past_[k].region);
     // A region is exact only when every step noted one; otherwise the caller works the change out.
     for (size_t i = k + 1; i < past_.size() && !merged.region.isEmpty(); i++)
         merged.region = past_[i].region.isEmpty() ? Rect() : merged.region.unionWith(past_[i].region);
@@ -96,59 +97,74 @@ int DocumentHistory::squash(uint64_t since, const std::string& name) {
     return count;
 }
 
-size_t DocumentHistory::retainedBytes(const std::optional<Document>& current) const {
-    std::set<const void*> seen;
-    // Every heavy buffer a snapshot keeps, at the depth it is held at, each once however many layers and snapshots
-    // share it (keyed on the buffer's identity). The live document's buffers are seen first and cost nothing.
-    auto count = [&](const void* identity, size_t size, size_t* bytes) {
-        if (identity && seen.insert(identity).second && bytes) *bytes += size;
-    };
-    auto vector = [&](const auto& v, size_t* bytes) { if (!v.empty()) count(v.data(), v.size() * sizeof(v[0]), bytes); };
-    auto blocks = [&](const std::vector<PsdBlock>& list, size_t* bytes) { for (const PsdBlock& b : list) vector(b.data, bytes); };
-    auto note = [&](const Layer& layer, size_t* bytes) {
+namespace {
+
+/// Calls `add(identity, bytes)` for every heavy buffer `document` holds, at the depth it is held at (a buffer shared
+/// by several layers comes up once for each; the caller keeps each identity once).
+template <class Add>
+void heavyBuffers(const Document& document, Add&& add) {
+    auto image = [&](const auto& any) { if (any.identity()) add(any.identity(), any.byteCount()); };
+    for (const Layer& layer : document.layers) {
         if (layer.asset) {
-            count(layer.asset->image.identity(), layer.asset->image.byteCount(), bytes);
-            if (layer.asset->thumbnail) count(layer.asset->thumbnail.get(), layer.asset->thumbnail->byteCount(), bytes);
+            image(layer.asset->image);
+            if (layer.asset->thumbnail) add(layer.asset->thumbnail.get(), layer.asset->thumbnail->byteCount());
         }
         if (layer.mask) {
-            count(layer.mask->asset.image.identity(), layer.mask->asset.image.byteCount(), bytes);
-            if (layer.mask->asset.thumbnail) count(layer.mask->asset.thumbnail.get(), layer.mask->asset.thumbnail->byteCount(), bytes);
+            image(layer.mask->asset.image);
+            if (layer.mask->asset.thumbnail) add(layer.mask->asset.thumbnail.get(), layer.mask->asset.thumbnail->byteCount());
         }
-        for (const AnyImage* image : {&layer.shapeImage, &layer.textImage, &layer.smartImage}) count(image->identity(), image->byteCount(), bytes);
+        image(layer.shapeImage);
+        image(layer.textImage);
+        image(layer.smartImage);
         // What a PSD layer carried: shared between snapshots, so counted by the carry's identity.
-        if (const PsdLayerCarry* carry = layer.psdCarry.get(); carry && seen.insert(carry).second && bytes) {
+        if (const PsdLayerCarry* carry = layer.psdCarry.get()) {
             size_t total = carry->blendingRanges.size() + carry->maskData.size() + carry->endRanges.size() + carry->adjustmentJson.size();
             for (const PsdBlock& b : carry->blocks) total += b.data.size();
             for (const PsdBlock& b : carry->endBlocks) total += b.data.size();
             for (const auto& channel : carry->maskChannels) total += channel.second.size();
             for (const auto& plane : carry->planes) total += plane.data.size();
-            *bytes += total;
+            add(carry, total);
         }
         // A smart object instance's blocks are held by value: each copy is its own.
-        if (layer.smartObject) blocks(layer.smartObject->psdBlocks, bytes);
-    };
-    auto noteDocument = [&](const Document& document, size_t* bytes) {
-        for (const Layer& layer : document.layers) note(layer, bytes);
-        if (document.selection) count(document.selection->coverage.identity(), document.selection->coverage.byteCount(), bytes);
-        if (const PsdDocumentCarry* carry = document.psdCarry.get(); carry && seen.insert(carry).second && bytes) {
-            size_t total = 0;
-            for (const auto& resource : carry->resources) total += resource.data.size();
-            for (const PsdBlock& b : carry->globals) total += b.data.size();
-            *bytes += total;
-        }
-        for (const auto& [id, source] : document.smartObjects) {
-            if (!source) continue;
-            if (source->bytes) count(source->bytes.get(), source->bytes->size(), bytes);
-            if (source->image) count(source->image.get(), source->image->byteCount(), bytes);
-            if (source->psdElement) count(source->psdElement.get(), source->psdElement->size(), bytes);
-        }
-    };
-    if (current) noteDocument(*current, nullptr);
+        if (layer.smartObject)
+            for (const PsdBlock& b : layer.smartObject->psdBlocks) if (!b.data.empty()) add(b.data.data(), b.data.size());
+    }
+    if (document.selection) image(document.selection->coverage);
+    if (const PsdDocumentCarry* carry = document.psdCarry.get()) {
+        size_t total = 0;
+        for (const auto& resource : carry->resources) total += resource.data.size();
+        for (const PsdBlock& b : carry->globals) total += b.data.size();
+        add(carry, total);
+    }
+    for (const auto& [id, source] : document.smartObjects) {
+        if (!source) continue;
+        if (source->bytes) add(source->bytes.get(), source->bytes->size());
+        if (source->image) add(source->image.get(), source->image->byteCount());
+        if (source->psdElement) add(source->psdElement.get(), source->psdElement->size());
+    }
+}
+
+} // namespace
+
+DocumentHistory::Entry DocumentHistory::makeEntry(std::string name, Snapshot before, Snapshot after, Rect region) {
+    Entry entry{std::move(name), std::move(before), std::move(after), region, {}};
+    std::unordered_set<const void*> seen;
+    auto add = [&](const void* identity, size_t bytes) { if (seen.insert(identity).second) entry.buffers.emplace_back(identity, bytes); };
+    for (const Snapshot* snapshot : {&entry.before, &entry.after})
+        if (snapshot->document) heavyBuffers(*snapshot->document, add);
+    return entry;
+}
+
+size_t DocumentHistory::retainedBytes(const std::optional<Document>& current) const {
+    // Every heavy buffer the snapshots keep, each once however many layers and snapshots share it (keyed on the
+    // buffer's identity); the live document's buffers are seen first and cost nothing.
+    std::unordered_set<const void*> seen;
+    if (current) heavyBuffers(*current, [&](const void* identity, size_t) { seen.insert(identity); });
     size_t bytes = 0;
     for (auto* list : {&past_, &future_})
-        for (auto& entry : *list)
-            for (auto* snapshot : {&entry.before, &entry.after})
-                if (snapshot->document) noteDocument(*snapshot->document, &bytes);
+        for (const Entry& entry : *list)
+            for (const auto& [identity, size] : entry.buffers)
+                if (seen.insert(identity).second) bytes += size;
     return bytes;
 }
 
