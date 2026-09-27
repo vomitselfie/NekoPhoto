@@ -35,5 +35,9 @@ struct GradientStops {
 void fillGradient(const Image& base, Image& out, const Affine& pixelToDocument, GradientShape shape, Point from, Point to, const GradientStops& stops, double opacity, const GrayImage* selection);
 /// The same on a mask (gray): the stops' red channel is the gray value.
 void fillGradient(const GrayImage& base, GrayImage& out, const Affine& pixelToDocument, GradientShape shape, Point from, Point to, const GradientStops& stops, double opacity, const GrayImage* selection);
+/// Both at 16 bits (0..32768, the selection too): the colour of each pixel from the same stops, rounded to 15 bits, so a
+/// long gradient has 32,768 steps where 8 bits have 256.
+void fillGradient(const Image16& base, Image16& out, const Affine& pixelToDocument, GradientShape shape, Point from, Point to, const GradientStops& stops, double opacity, const Gray16* selection);
+void fillGradient(const Gray16& base, Gray16& out, const Affine& pixelToDocument, GradientShape shape, Point from, Point to, const GradientStops& stops, double opacity, const Gray16* selection);
 
 } // namespace compositor

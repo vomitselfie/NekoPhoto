@@ -155,6 +155,8 @@ void BrushStroke::refreshLevels(const Rect& grid) const {
     const int x0 = int(std::floor(grid.minX())), y0 = int(std::floor(grid.minY())), x1 = int(std::ceil(grid.maxX())), y1 = int(std::ceil(grid.maxY()));
     if (working_) MipCache::shared().refresh(working_.get(), x0, y0, x1, y1);
     if (workingMask_) MipCache::shared().refresh(workingMask_.get(), x0, y0, x1, y1);
+    if (working16_) MipCache::shared().refresh(working16_.get(), x0, y0, x1, y1);
+    if (workingMask16_) MipCache::shared().refresh(workingMask16_.get(), x0, y0, x1, y1);
 }
 
 Rect BrushStroke::takeDirtyRect() {
@@ -171,7 +173,8 @@ void BrushStroke::append(Point point) {
     // Undo the provisional tail.
     if (hasTail_) {
         int x0 = int(tailRect_.minX()), y0 = int(tailRect_.minY()), w = int(tailRect_.width), h = int(tailRect_.height);
-        for (int y = 0; y < h; y++) std::memcpy(coverage_->row(y0 + y) + x0, &tailBackup_[size_t(y) * w], size_t(w));
+        if (coverage16_) restoreTail();
+        else for (int y = 0; y < h; y++) std::memcpy(coverage_->row(y0 + y) + x0, &tailBackup_[size_t(y) * w], size_t(w));
         previous_ = tailPrevious_;
         distanceToNext_ = tailDistance_;
         hasTail_ = false;
@@ -193,8 +196,11 @@ void BrushStroke::append(Point point) {
         if (!affected.isEmpty()) {
             tailRect_ = affected;
             int x0 = int(affected.minX()), y0 = int(affected.minY()), w = int(affected.width), h = int(affected.height);
-            tailBackup_.resize(size_t(w) * h);
-            for (int y = 0; y < h; y++) std::memcpy(&tailBackup_[size_t(y) * w], coverage_->row(y0 + y) + x0, size_t(w));
+            if (coverage16_) saveTail(affected);
+            else {
+                tailBackup_.resize(size_t(w) * h);
+                for (int y = 0; y < h; y++) std::memcpy(&tailBackup_[size_t(y) * w], coverage_->row(y0 + y) + x0, size_t(w));
+            }
             hasTail_ = true;
         }
         walk(point);
@@ -215,7 +221,8 @@ void BrushStroke::flush() {
     if (!valid_) return;
     if (hasTail_) {
         int x0 = int(tailRect_.minX()), y0 = int(tailRect_.minY()), w = int(tailRect_.width), h = int(tailRect_.height);
-        for (int y = 0; y < h; y++) std::memcpy(coverage_->row(y0 + y) + x0, &tailBackup_[size_t(y) * w], size_t(w));
+        if (coverage16_) restoreTail();
+        else for (int y = 0; y < h; y++) std::memcpy(coverage_->row(y0 + y) + x0, &tailBackup_[size_t(y) * w], size_t(w));
         previous_ = tailPrevious_;
         distanceToNext_ = tailDistance_;
         hasTail_ = false;
@@ -349,6 +356,7 @@ bool BrushStroke::stampDab(Point center, double radius, const Rect& affected) {
 }
 
 void BrushStroke::dab(Point center) {
+    if (depth_ != SampleType::U8) { dab16(center); return; }
     double radius = settings_.diameter / 2;
     Rect circle(center.x - radius, center.y - radius, radius * 2, radius * 2);
     Rect clipped = circle.intersection(canvas_);
@@ -390,28 +398,6 @@ void BrushStroke::dab(Point center) {
     markDirty(affected);
 }
 
-TiledSource::TiledSource(int width, int height, Compute compute, int tile)
-    : width_(std::max(0, width)), height_(std::max(0, height)), tile_(std::max(16, tile)), compute_(std::move(compute)) {
-    columns_ = (width_ + tile_ - 1) / tile_;
-    rows_ = (height_ + tile_ - 1) / tile_;
-    tiles_.resize(size_t(columns_) * size_t(rows_));
-}
-
-void TiledSource::ensure(int x0, int y0, int x1, int y1) {
-    const int tx0 = std::max(0, x0 / tile_), ty0 = std::max(0, y0 / tile_);
-    const int tx1 = std::min(columns_ - 1, (std::max(x0, x1) - 1) / tile_), ty1 = std::min(rows_ - 1, (std::max(y0, y1) - 1) / tile_);
-    if (x1 <= 0 || y1 <= 0 || x0 >= width_ || y0 >= height_) return;
-    for (int ty = ty0; ty <= ty1; ty++)
-        for (int tx = tx0; tx <= tx1; tx++) {
-            auto& slot = tiles_[size_t(ty) * size_t(columns_) + size_t(tx)];
-            if (slot) continue;
-            const int x = tx * tile_, y = ty * tile_, w = std::min(tile_, width_ - x), h = std::min(tile_, height_ - y);
-            auto image = std::make_unique<Image>(w, h);
-            compute_(x, y, w, h, *image);
-            slot = std::move(image);
-        }
-}
-
 std::shared_ptr<TiledSource> tiledProcessedDocument(Document document, std::function<void(Image&)> process, int margin) {
     const int w = document.width, h = document.height;
     margin = std::max(0, margin);
@@ -429,17 +415,11 @@ std::shared_ptr<TiledSource> tiledProcessedDocument(Document document, std::func
     });
 }
 
-int TiledSource::madeTiles() const {
-    int n = 0;
-    for (auto& t : tiles_) n += t ? 1 : 0;
-    return n;
-}
-
 void BrushStroke::recompose(const Rect& gridRect) {
     if (painted_) return;   // another engine owns the working pixels
     Rect r = gridRect.intersection(Rect(0, 0, width_, height_));
     if (r.isEmpty()) return;
-    if (clone_ && clone_->tiled) {
+    if (clone_ && (clone_->tiled || clone_->tiled16)) {
         // The document pixels the bilinear samples under this area read, made before the rows run in parallel.
         const Rect grid = r.integral();
         double minX = 1e300, minY = 1e300, maxX = -1e300, maxY = -1e300;
@@ -449,9 +429,16 @@ void BrushStroke::recompose(const Rect& gridRect) {
                 minX = std::min(minX, d.x); maxX = std::max(maxX, d.x); minY = std::min(minY, d.y); maxY = std::max(maxY, d.y);
             }
         const double ox = clone_->offset.x - 0.5, oy = clone_->offset.y - 0.5;
-        clone_->tiled->ensure(int(std::floor(minX + ox)) - 2, int(std::floor(minY + oy)) - 2, int(std::ceil(maxX + ox)) + 3, int(std::ceil(maxY + oy)) + 3);
+        const int ex0 = int(std::floor(minX + ox)) - 2, ey0 = int(std::floor(minY + oy)) - 2, ex1 = int(std::ceil(maxX + ox)) + 3, ey1 = int(std::ceil(maxY + oy)) + 3;
+        if (clone_->tiled) clone_->tiled->ensure(ex0, ey0, ex1, ey1);
+        if (clone_->tiled16) clone_->tiled16->ensure(ex0, ey0, ex1, ey1);
     }
     // Rows are independent: a large area (a big brush's dab) is recomposed on every core.
+    if (depth_ != SampleType::U8) {
+        if (areaOf(int(r.width), int(r.height)) < 65536) { recomposeRows16(r); return; }
+        parallelRows(int(r.minY()), int(r.maxY()), [&](int ya, int yb) { recomposeRows16(Rect(r.minX(), ya, r.width, yb - ya)); }, 32);
+        return;
+    }
     if (areaOf(int(r.width), int(r.height)) < 65536) { recomposeRows(r); return; }
     parallelRows(int(r.minY()), int(r.maxY()), [&](int ya, int yb) { recomposeRows(Rect(r.minX(), ya, r.width, yb - ya)); }, 32);
 }
@@ -556,6 +543,7 @@ void BrushStroke::recomposeRows(const Rect& r) {
 }
 
 bool BrushStroke::liftSelection() {
+    if (depth_ != SampleType::U8) return liftSelection16();
     if (isMask_ || !selection_ || !base_) return false;
     PixelBounds b = nonzeroBounds(*selection_);
     Rect region = b.isEmpty() ? Rect() : Rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0).intersection(sourceRect_).integral();
@@ -575,6 +563,7 @@ bool BrushStroke::liftSelection() {
 }
 
 void BrushStroke::moveLifted(Point offset, bool duplicate) {
+    if (depth_ != SampleType::U8) { moveLifted16(offset, duplicate); return; }
     if (!lifted_ || !selection_) return;
     // The offset in grid pixels (whole document pixels may land between grid pixels on a scaled layer).
     Point zero = documentToPixel_.apply({0, 0}), moved = documentToPixel_.apply(offset);
@@ -631,6 +620,7 @@ void BrushStroke::fillGradientOver(int shape, Point from, Point to, const float 
 
 void BrushStroke::fillGradientOver(int shape, Point from, Point to, const GradientStops& stops, double opacity) {
     if (!valid_) return;
+    if (depth_ != SampleType::U8) { fillGradientOver16(shape, from, to, stops, opacity); return; }
     touched_ = true;
     dirtyGrid_ = {}; // the working image is composed here, not from the coverage
     // Pixels outside the canvas are left alone: the canvas as grid coverage, times the selection.
@@ -652,6 +642,7 @@ void BrushStroke::fillColor(double red, double green, double blue) {
 }
 
 void BrushStroke::heal() {
+    if (depth_ != SampleType::U8) { heal16(); return; }
     if (!settings_.healing || isMask_ || !coverage_) return;
     PixelBounds b = nonzeroBounds(*coverage_);
     if (b.isEmpty()) return;
@@ -732,6 +723,7 @@ BrushStroke::Commit BrushStroke::commit() {
     Commit result;
     result.transform = layerTransform_;
     if (!valid_) return result;
+    if (depth_ != SampleType::U8) return commit16();
     flush();
     if (settings_.healing) heal();
     if (isMask_) {

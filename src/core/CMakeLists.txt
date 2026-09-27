@@ -135,6 +135,7 @@ add_library(compositor_core STATIC
     src/blur_u16.cpp
     src/brushimport.cpp
     src/brush.cpp
+    src/brush_u16.cpp
     src/brushdynamics.cpp
     src/brushsample.cpp
     src/cameraraw.cpp

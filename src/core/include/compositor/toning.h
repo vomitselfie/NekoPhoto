@@ -4,6 +4,7 @@
 // after Photoshop's behaviour, not calibrated against it (docs/features.md).
 #pragma once
 #include "image.h"
+#include "imaget.h"
 
 namespace compositor {
 
@@ -29,5 +30,8 @@ double burnTone(double v, ToneRange range);
 void toneImage(Image& image, const ToningSettings& settings);
 /// `image` sharpened at full strength (the Sharpen tool): an unsharp mask of 100% at `radius` pixels.
 void sharpenImage(Image& image, double radius = 1.0);
+/// Both on a 16-bit image (0..32768): the same curves on the exact straight colour, stored at 15 bits.
+void toneImage(ImageT<SampleType::U16>& image, const ToningSettings& settings);
+void sharpenImage(ImageT<SampleType::U16>& image, double radius = 1.0);
 
 } // namespace compositor

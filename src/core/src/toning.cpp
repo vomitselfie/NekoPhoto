@@ -49,9 +49,35 @@ void eachStraight(Image& image, F f) {
     });
 }
 
+/// The same over a 16-bit image: straight colour from the 15-bit samples, written back rounded to 15 bits.
+template <typename F>
+void eachStraight(Image16& image, F f) {
+    parallelRows(0, image.height(), [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++)
+            for (int x = 0; x < image.width(); x++) {
+                uint16_t* p = image.pixel(x, y);
+                const int a = std::min<int>(p[3], 32768);
+                if (!a) continue;
+                double c[3];
+                for (int i = 0; i < 3; i++) c[i] = std::min(1.0, p[i] / double(a));
+                f(c);
+                for (int i = 0; i < 3; i++) p[i] = uint16_t(std::lround(std::clamp(c[i], 0.0, 1.0) * a));
+            }
+    });
+}
+
+template <typename Img>
+void toneAny(Img& image, const ToningSettings& s);
+
 } // namespace
 
-void toneImage(Image& image, const ToningSettings& s) {
+void toneImage(Image& image, const ToningSettings& s) { toneAny(image, s); }
+void toneImage(Image16& image, const ToningSettings& s) { toneAny(image, s); }
+
+namespace {
+
+template <typename Img>
+void toneAny(Img& image, const ToningSettings& s) {
     if (s.kind == ToningKind::Sponge) {
         const double k = s.saturate ? 2.0 : 0.0;   // twice the chroma, or none
         eachStraight(image, [&](double c[3]) {
@@ -90,6 +116,8 @@ void toneImage(Image& image, const ToningSettings& s) {
     });
 }
 
+} // namespace
+
 void sharpenImage(Image& image, double radius) {
     Image blurred = image;
     gaussianBlur(blurred, std::max(0.3, radius));
@@ -105,6 +133,25 @@ void sharpenImage(Image& image, double radius) {
                 for (int i = 0; i < 3; i++) {
                     const double c = p[i] / double(a), blur = b[i] / ba;
                     p[i] = uint8_t(std::lround(std::clamp(c + (c - blur), 0.0, 1.0) * a));
+                }
+            }
+    });
+}
+
+void sharpenImage(Image16& image, double radius) {
+    Image16 blurred = image;
+    gaussianBlur(blurred, std::max(0.3, radius));
+    parallelRows(0, image.height(), [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++)
+            for (int x = 0; x < image.width(); x++) {
+                uint16_t* p = image.pixel(x, y);
+                const uint16_t* b = blurred.pixel(x, y);
+                const int a = std::min<int>(p[3], 32768);
+                if (!a) continue;
+                const double ba = std::max(1, int(b[3]));
+                for (int i = 0; i < 3; i++) {
+                    const double c = p[i] / double(a), blur = b[i] / ba;
+                    p[i] = uint16_t(std::lround(std::clamp(c + (c - blur), 0.0, 1.0) * a));
                 }
             }
     });

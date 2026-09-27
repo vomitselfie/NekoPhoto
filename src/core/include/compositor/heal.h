@@ -5,6 +5,7 @@
 // membrane in place of its relaxation sweeps.
 #pragma once
 #include "image.h"
+#include "imaget.h"
 #include <cstdint>
 
 namespace compositor {
@@ -29,5 +30,11 @@ void spotHeal(Image& image, const GrayImage& coverage, float opacity, int mode, 
 /// them (the difference along the edge membrane-filled across), and the result replaces the original by
 /// coverage x opacity. `visible` as for spotHeal: what it hides is not blended towards.
 void healFrom(Image& image, const Image& source, const GrayImage& coverage, float opacity, const GrayImage* visible = nullptr);
+
+/// Both at 16 bits (0..32768, the coverage and `visible` too). Spot Healing chooses what it copies (the patch, or the
+/// synthesis) on the pixels rounded to 8 bits, so an 8-bit-sourced image heals from the place its 8-bit copy would; the
+/// membrane, the grain and the pixels copied are 16-bit.
+void spotHeal(Image16& image, const Gray16& coverage, float opacity, int mode, uint32_t seed, const Gray16* visible = nullptr);
+void healFrom(Image16& image, const Image16& source, const Gray16& coverage, float opacity, const Gray16* visible = nullptr);
 
 } // namespace compositor

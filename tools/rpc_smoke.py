@@ -382,9 +382,58 @@ def sixteen_bit(rpc):
     assert rpc.call("image.resize", width=150, height=100)["width"] == 150
     assert rpc.call("canvas.crop", x=5, y=5, width=130, height=90)["width"] == 130
     assert rpc.call("document.info")["bits"] == 16
+    # Painting and retouching work at 16 bits (P3b): the brush (round and MyPaint), the eraser, a mask, clone, the
+    # healers, smudge, blur, dodge, gradients, the bucket and Patch, each one undo step.
+    rpc.call("layers.select", id=layer["id"])
+    painting = [
+        ("Brush Stroke", "brush.stroke", {"points": [[20, 20], [60, 40], [100, 30]], "size": 10, "color": "#ff0000"}),
+        ("Eraser", "brush.stroke", {"tool": "eraser", "points": [[30, 50], [80, 50]], "size": 8}),
+        ("Clone Stamp", "brush.stroke", {"tool": "clone", "source": {"x": 30, "y": 30}, "points": [[70, 50], [90, 55]], "size": 12}),
+        ("Spot Healing", "brush.stroke", {"tool": "healing", "points": [[50, 40], [55, 42]], "size": 10}),
+        ("Healing Brush", "brush.stroke", {"tool": "healingbrush", "source": {"x": 30, "y": 30}, "points": [[60, 30], [70, 32]], "size": 10}),
+        ("Smudge", "brush.stroke", {"tool": "smudge", "points": [[20, 60], [50, 62]], "size": 12}),
+        ("Blur", "brush.stroke", {"tool": "blur", "points": [[40, 20], [80, 22]], "size": 14}),
+        ("Burn", "brush.stroke", {"tool": "burn", "points": [[30, 30], [90, 40]], "size": 14, "range": "shadows"}),
+        ("Gradient", "gradient.draw", {"x0": 0, "y0": 0, "x1": 120, "y1": 0, "foreground": "#102030", "background": "#f0e0d0",
+                                       "style": "foreground-to-background", "opacity": 0.5}),
+        ("Paint Bucket", "pixels.bucket", {"x": 5, "y": 5, "color": "#00ff00", "tolerance": 10}),
+    ]
+    for name, method, params in painting:
+        rpc.call(method, **params)
+        assert rpc.call("history.info")["undo"] == name, (name, rpc.call("history.info"))
+    rpc.call("selection.rect", x=10, y=10, width=20, height=20)
+    assert rpc.call("pixels.patch", dx=40, dy=0)["patched"]
+    assert rpc.call("history.info")["undo"] == "Patch"
+    rpc.call("selection.none")
+    rpc.call("brush.stroke", points=[[20, 20], [90, 60]], size=12, mask=True)
+    assert rpc.call("history.info")["undo"] == "Paint Mask"
+    rpc.call("layers.select", id=layer["id"], mask=True)
+    rpc.call("gradient.draw", x0=0, y0=0, x1=0, y1=80)
+    assert rpc.call("history.info")["undo"] == "Gradient Mask"
+    rpc.call("layers.select", id=layer["id"])
+    # Quick Mask painting: white selects, at 16 bits.
+    rpc.call("selection.rect", x=10, y=10, width=10, height=10)
+    assert rpc.call("selection.quickMask", on=True)["quickMask"]
+    rpc.call("brush.stroke", points=[[40, 60], [90, 60]], size=16, mask=True)
+    assert not rpc.call("selection.quickMask", on=False)["quickMask"]
+    grown = rpc.call("selection.info")
+    assert grown["active"] and grown["bounds"]["width"] > 60, grown
+    rpc.call("selection.none")
+    rpc.call("layers.select", id=layer["id"])
+    if rpc.call("brush.presets")["supported"]:
+        assert rpc.call("brush.stroke", points=[[30, 40], [100, 45]], preset="classic/pencil", pressures=[0.3, 0.9], color="#000000")["preset"] == "classic/pencil"
+    # Apply Mask and Merge Down at 16 bits.
+    rpc.call("layers.mask", id=layer["id"], action="apply")
+    assert rpc.call("history.info")["undo"] == "Apply Layer Mask"
+    above = rpc.call("layers.add")
+    rpc.call("brush.stroke", points=[[10, 70], [110, 70]], size=6, color="#224466")
+    rpc.call("layers.select", id=above["id"])
+    count = len(rpc.call("layers.list"))
+    rpc.call("layers.merge")
+    assert len(rpc.call("layers.list")) == count - 1
+    assert rpc.call("document.info")["bits"] == 16
     # What is not ported yet is refused, saying so.
-    for method, params in (("pixels.cameraRaw", {"settings": {"exposure": 0.5}}), ("layers.merge", {}),
-                           ("tool.select", {"name": "brush"})):
+    for method, params in (("pixels.cameraRaw", {"settings": {"exposure": 0.5}}), ("tool.select", {"name": "shape"})):
         try:
             rpc.call(method, **params)
             raise AssertionError(method + " should be refused on a 16-bit document")

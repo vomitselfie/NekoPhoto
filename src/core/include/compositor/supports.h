@@ -20,7 +20,9 @@ constexpr SampleTypes onlyEightBit = sampleTypeBit(SampleType::U8);
 
 /// The sample types `feature` works at; 8-bit alone for a feature the registry does not list.
 SampleTypes supportedSampleTypes(std::string_view feature);
-inline bool supports(std::string_view feature, SampleType type) { return (supportedSampleTypes(feature) & sampleTypeBit(type)) != 0; }
+inline bool supports(std::string_view feature, SampleType type) {
+    return type == SampleType::U8 || (supportedSampleTypes(feature) & sampleTypeBit(type)) != 0;   // every feature works at 8 bits
+}
 /// An adjustment (layer or destructive), by its kind: "adjustment.<name>".
 bool supports(AdjustmentKind kind, SampleType type);
 

@@ -32,6 +32,57 @@ std::vector<StrokeFixture> allFixtures() {
     return fixtures;
 }
 
+// The baseline file has two sections: the 8-bit scenes, then the 16-bit ones, named "u16/<fixture>/<preset>". Each
+// test reads and rewrites its own section and keeps the other as it is.
+const std::string deepPrefix = "u16/";
+
+std::map<std::string, std::string> readSection(const std::string& path, bool deep) {
+    std::map<std::string, std::string> lines;
+    std::ifstream in(path);
+    for (std::string line; std::getline(in, line);) {
+        if (line.empty() || line[0] == '#') continue;
+        const size_t space = line.find(' ');
+        if (space == std::string::npos || (line.rfind(deepPrefix, 0) == 0) != deep) continue;
+        lines[line.substr(0, space)] = line.substr(space + 1);
+    }
+    return lines;
+}
+
+void writeBaseline(const std::string& path, const std::map<std::string, std::string>& eight, const std::map<std::string, std::string>& deep) {
+    std::ofstream out(path);
+    out << "# Brush parity baseline: <fixture>/<preset> <FNV-1a 64 of the layer's pixels> <measurements>, from tests/brush_parity.cpp.\n"
+           "# Regenerate after an intentional brush change: COMPOSITOR_UPDATE_BRUSH_PARITY=1 build/tests/brush_parity\n";
+    for (auto& [name, line] : eight) out << name << ' ' << line << '\n';
+    if (deep.empty()) return;
+    out << "# 16 bits: u16/<fixture>/<preset> <FNV-1a 64 of the 16-bit layer's samples> <measurements of it reduced to 8 bits>\n"
+           "# vs8=<largest difference from the 8-bit render, in 8-bit levels>,<share of samples more than a level apart>\n";
+    for (auto& [name, line] : deep) out << name << ' ' << line << '\n';
+}
+
+/// Compares `actual` with the baseline's section; returns the number of scenes changed, new and missing.
+int compareSection(const std::map<std::string, std::string>& actual, const std::map<std::string, std::string>& expected, const std::string& path) {
+    auto hashOf = [](const std::string& line) { return line.substr(0, line.find(' ')); };
+    int changed = 0, added = 0, missing = 0;
+    for (auto& [name, line] : actual) {
+        auto it = expected.find(name);
+        if (it == expected.end()) { std::fprintf(stderr, "  new      %s %s\n", name.c_str(), line.c_str()); added++; }
+        else if (hashOf(it->second) != hashOf(line)) {
+            std::fprintf(stderr, "  changed  %s\n    was %s\n    now %s\n", name.c_str(), it->second.c_str(), line.c_str());
+            changed++;
+        }
+    }
+    for (auto& [name, line] : expected)
+        if (!actual.count(name)) {
+            // MyPaint and Clip Studio scenes exist only in builds with libmypaint and SQLite.
+            if ((name.find("/mypaint_") != std::string::npos && !myPaintSupported()) || name.find("/sut_") != std::string::npos) continue;
+            std::fprintf(stderr, "  missing  %s\n", name.c_str());
+            missing++;
+        }
+    if (changed || added || missing)
+        std::fprintf(stderr, "  %d changed, %d new, %d missing; COMPOSITOR_UPDATE_BRUSH_PARITY=1 rewrites %s\n", changed, added, missing, path.c_str());
+    return changed + added + missing;
+}
+
 } // namespace
 
 TEST_CASE(fixtures_survive_a_json_round_trip) {
@@ -131,11 +182,29 @@ std::shared_ptr<Image> paintTip(const BrushTip& tip, double diameter, const std:
     return std::make_shared<Image>(*grid.previewImage());
 }
 
+/// The same on a 16-bit layer.
+std::shared_ptr<Image16> paintTip16(const BrushTip& tip, double diameter, const std::vector<BrushSample>& samples) {
+    Layer layer(Asset::make(Image16Ptr(std::make_shared<Image16>(400, 100)), "Paper"), Point(0, 0));
+    BrushSettings settings;
+    settings.diameter = diameter;
+    BrushStroke grid(layer, false, settings, Size(400, 100), SampleType::U16, nullptr);
+    TipStroke stroke(grid, tip, diameter, 5);
+    BrushSampleTrack track;
+    for (const BrushSample& s : samples) stroke.strokeTo(track.add(s));
+    grid.flush();
+    return std::make_shared<Image16>(*grid.previewImage16());
+}
+
 /// The mean alpha (0..1) over a rectangle.
 double meanAlpha(const Image& image, int x0, int y0, int x1, int y1) {
     double sum = 0;
     for (int y = y0; y < y1; y++) for (int x = x0; x < x1; x++) sum += image.pixel(x, y)[3];
     return sum / (255.0 * (x1 - x0) * (y1 - y0));
+}
+double meanAlpha(const Image16& image, int x0, int y0, int x1, int y1) {
+    double sum = 0;
+    for (int y = y0; y < y1; y++) for (int x = x0; x < x1; x++) sum += image.pixel(x, y)[3];
+    return sum / (32768.0 * (x1 - x0) * (y1 - y0));
 }
 
 /// A straight pen stroke across the layer's middle.
@@ -156,7 +225,7 @@ std::vector<BrushSample> straightStroke(bool stylus) {
 
 TEST_CASE(density_by_spacing_keeps_the_interior_alpha_across_spacings) {
     const double spacings[] = {0.02, 0.05, 0.1, 0.25, 0.5};
-    std::vector<double> on, off;
+    std::vector<double> on, off, on16;
     for (double spacing : spacings) {
         BrushTip tip;
         tip.shape = disc(64);
@@ -164,12 +233,21 @@ TEST_CASE(density_by_spacing_keeps_the_interior_alpha_across_spacings) {
         tip.spacing = spacing;
         tip.densityBySpacing = true;
         on.push_back(meanAlpha(*paintTip(tip, 20, straightStroke(true)), 100, 46, 300, 54));
+        on16.push_back(meanAlpha(*paintTip16(tip, 20, straightStroke(true)), 100, 46, 300, 54));
         tip.densityBySpacing = false;
         off.push_back(meanAlpha(*paintTip(tip, 20, straightStroke(true)), 100, 46, 300, 54));
-        std::fprintf(stderr, "  spacing %4.0f%%: interior alpha %.3f with density by spacing, %.3f without\n", spacing * 100, on.back(), off.back());
+        std::fprintf(stderr, "  spacing %4.0f%%: interior alpha %.3f with density by spacing (%.3f at 16 bits), %.3f without\n", spacing * 100, on.back(), on16.back(), off.back());
     }
-    // On: within 8% of the reference spacing's (25%) interior alpha from 2% to 50%.
-    for (double a : on) CHECK(std::fabs(a - on[3]) < 0.08 * on[3]);
+    // On: within 8% of the reference spacing's (25%) interior alpha from 2% to 50%; at 16 bits, where a light dab is
+    // not rounded to whole 8-bit levels, closer still.
+    double spread8 = 0, spread16 = 0;
+    for (size_t i = 0; i < on.size(); i++) {
+        spread8 = std::max(spread8, std::fabs(on[i] - on[3]) / on[3]);
+        spread16 = std::max(spread16, std::fabs(on16[i] - on16[3]) / on16[3]);
+    }
+    std::fprintf(stderr, "  interior alpha across spacings: within %.1f%% at 8 bits, %.1f%% at 16 bits\n", spread8 * 100, spread16 * 100);
+    CHECK(spread8 < 0.08);
+    CHECK(spread16 <= spread8);
     // At the reference spacing it changes nothing; off, tight spacing builds up far more paint.
     CHECK_EQ(on[3], off[3]);
     CHECK(off[0] > 1.5 * off[4]);
@@ -223,45 +301,65 @@ TEST_CASE(every_fixture_and_preset_matches_the_baseline) {
 
     const std::string path = BRUSH_PARITY_BASELINE;
     if (std::getenv("COMPOSITOR_UPDATE_BRUSH_PARITY")) {
-        std::ofstream out(path);
-        out << "# Brush parity baseline: <fixture>/<preset> <FNV-1a 64 of the layer's pixels> <measurements>, from tests/brush_parity.cpp.\n"
-               "# Regenerate after an intentional brush change: COMPOSITOR_UPDATE_BRUSH_PARITY=1 build/tests/brush_parity\n";
-        for (auto& [name, line] : actual) out << name << ' ' << line << '\n';
+        writeBaseline(path, actual, readSection(path, true));
         std::fprintf(stderr, "  wrote %s\n", path.c_str());
         return;
     }
-    std::map<std::string, std::string> expected;
-    {
-        std::ifstream in(path);
-        for (std::string line; std::getline(in, line);) {
-            if (line.empty() || line[0] == '#') continue;
-            const size_t space = line.find(' ');
-            if (space != std::string::npos) expected[line.substr(0, space)] = line.substr(space + 1);
-        }
-    }
+    const std::map<std::string, std::string> expected = readSection(path, false);
     REQUIRE(!expected.empty());
-    auto hashOf = [](const std::string& line) { return line.substr(0, line.find(' ')); };
-    int changed = 0, added = 0, missing = 0;
-    for (auto& [name, line] : actual) {
-        auto it = expected.find(name);
-        if (it == expected.end()) { std::fprintf(stderr, "  new      %s %s\n", name.c_str(), line.c_str()); added++; }
-        else if (hashOf(it->second) != hashOf(line)) {
-            std::fprintf(stderr, "  changed  %s\n    was %s\n    now %s\n", name.c_str(), it->second.c_str(), line.c_str());
-            changed++;
-        }
+    CHECK_EQ(compareSection(actual, expected, path), 0);
+}
+
+/// The same scenes painted on a 16-bit layer (the same paper widened): each render's 16-bit samples held to the
+/// baseline's 16-bit section, and each reduced to 8 bits held to its 8-bit render. Hard tips and MyPaint land within a
+/// level (libmypaint paints in 15-bit fixed point, the depth of a 16-bit layer, so its tiles are the same at either
+/// depth); soft tips and the tip brushes build their coverage up dab over dab, where the 8-bit coverage rounds at every
+/// step (depth_paint_tests measures that against the exact coverage), so they may differ by a few levels in a small
+/// share of samples.
+TEST_CASE(every_fixture_and_preset_matches_the_baseline_at_16_bits) {
+    const std::vector<StrokeFixture> fixtures = allFixtures();
+    const std::vector<Preset> presets = standardPresets(MYPAINT_BRUSHES_DIR);
+    std::map<std::string, std::string> actual;
+    std::map<std::string, Calibration> worstByPreset;
+    int threadMismatch = 0, empty = 0, apart = 0;
+    for (const Scene& scene : scenes(fixtures, presets)) {
+        const Render16 pooled = render16(*scene.fixture, *scene.preset);
+        const Render16 serial = [&] {
+            if (workerCount() <= 1) return render16(*scene.fixture, *scene.preset);
+            Render16 result;
+            parallelFor(0, 2, 1, [&](int y0, int) { if (y0 == 0) result = render16(*scene.fixture, *scene.preset); });
+            return result;
+        }();
+        if (!pooled.image) { std::fprintf(stderr, "  u16/%s: nothing rendered\n", scene.name.c_str()); empty++; continue; }
+        const uint64_t hash = hashRender(pooled);
+        if (hash != hashRender(serial)) { std::fprintf(stderr, "  u16/%s: differs between the worker pool and a serial run\n", scene.name.c_str()); threadMismatch++; }
+        const Calibration c = compare(render(*scene.fixture, *scene.preset), pooled);
+        Calibration& byPreset = worstByPreset[scene.preset->name];
+        byPreset.worst = std::max(byPreset.worst, c.worst);
+        byPreset.beyondOne = std::max(byPreset.beyondOne, c.beyondOne);
+        // Density by spacing at a tight spacing spreads a light flow over many dabs, each laying down a level or two at
+        // 8 bits, where the 256-entry table's rounding is a large share of the dab (measured: 5 levels, under 0.9%).
+        const bool spread = scene.preset->tip && scene.preset->tip->tip.densityBySpacing;
+        if (c.worst > (spread ? 6 : 4) || c.beyondOne >= 0.01) { std::fprintf(stderr, "  u16/%s: %d levels from the 8-bit render, %.3f%% beyond a level\n", scene.name.c_str(), c.worst, c.beyondOne * 100); apart++; }
+        char vs8[64];
+        std::snprintf(vs8, sizeof vs8, " vs8=%d,%.4f%%", c.worst, c.beyondOne * 100);
+        actual[deepPrefix + scene.name] = hex(hash) + " " + formatMetrics(measure(*scene.fixture, pooled.eight)) + vs8;
     }
-    for (auto& [name, line] : expected)
-        if (!actual.count(name)) {
-            // MyPaint and Clip Studio scenes exist only in builds with libmypaint and SQLite.
-            if ((name.find("/mypaint_") != std::string::npos && !myPaintSupported()) || name.find("/sut_") != std::string::npos) continue;
-            std::fprintf(stderr, "  missing  %s\n", name.c_str());
-            missing++;
-        }
-    if (changed || added || missing)
-        std::fprintf(stderr, "  %d changed, %d new, %d missing; COMPOSITOR_UPDATE_BRUSH_PARITY=1 rewrites %s\n", changed, added, missing, path.c_str());
-    CHECK_EQ(changed, 0);
-    CHECK_EQ(added, 0);
-    CHECK_EQ(missing, 0);
+    CHECK_EQ(empty, 0);
+    CHECK_EQ(threadMismatch, 0);
+    CHECK_EQ(apart, 0);
+    for (auto& [name, c] : worstByPreset)
+        std::fprintf(stderr, "  %-22s at 16 bits against 8: worst %d levels, at most %.3f%% of samples beyond a level\n", name.c_str(), c.worst, c.beyondOne * 100);
+
+    const std::string path = BRUSH_PARITY_BASELINE;
+    if (std::getenv("COMPOSITOR_UPDATE_BRUSH_PARITY")) {
+        writeBaseline(path, readSection(path, false), actual);
+        std::fprintf(stderr, "  wrote the 16-bit section of %s\n", path.c_str());
+        return;
+    }
+    const std::map<std::string, std::string> expected = readSection(path, true);
+    REQUIRE(!expected.empty());
+    CHECK_EQ(compareSection(actual, expected, path), 0);
 }
 
 TEST_MAIN()

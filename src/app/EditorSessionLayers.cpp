@@ -331,7 +331,7 @@ bool EditorSession::canMergeLayers() const { return mergePlan().has_value(); }
 QString EditorSession::mergeTitle() const { auto plan = mergePlan(); return plan ? plan->action : QStringLiteral(QT_TRANSLATE_NOOP("History", "Merge Down")); }
 
 void EditorSession::mergeLayers() {
-    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return;
+    if (refusedAtDepth("layers.merge", tr("Editing pixels"))) return;
     commitTransform();
     auto plan = mergePlan();
     if (!plan) return;
@@ -346,12 +346,22 @@ void EditorSession::mergeLayers() {
         if (copy.maskSourceId && !kept.count(*copy.maskSourceId)) copy.maskSourceId.reset();
         flat.layers.push_back(copy);
     }
-    auto full = renderFlattened(flat);
     LayerTransform canvas(Point(0, 0), document_->size());
     LayerTransform placed;
-    auto trimmed = trimToPixels(*full, canvas, placed);
-    if (alphaBounds(*trimmed).isEmpty()) { emit error(tr("Nothing to merge: the layers have no visible pixels.")); return; }
-    Layer merged(Asset::make(trimmed, plan->name), placed.origin);
+    Asset result;
+    if (document_->sampleType == SampleType::U16) {
+        // A 16-bit document merges at its depth.
+        flat.sampleType = SampleType::U16;
+        auto trimmed = trimToPixels(*renderFlattened16(flat), canvas, placed);
+        if (alphaBounds(*trimmed).isEmpty()) { emit error(tr("Nothing to merge: the layers have no visible pixels.")); return; }
+        result = Asset::make(Image16Ptr(trimmed), plan->name);
+    } else {
+        auto full = renderFlattened(flat);
+        auto trimmed = trimToPixels(*full, canvas, placed);
+        if (alphaBounds(*trimmed).isEmpty()) { emit error(tr("Nothing to merge: the layers have no visible pixels.")); return; }
+        result = Asset::make(trimmed, plan->name);
+    }
+    Layer merged(result, placed.origin);
     merged.transform = placed;
     merged.name = plan->name;
     merged.parentId = plan->parent;
@@ -709,9 +719,33 @@ void EditorSession::toggleMaskLink(const Uuid& id) {
 }
 
 void EditorSession::applyMask() {
-    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return;
+    if (refusedAtDepth("layers.applyMask", tr("Editing pixels"))) return;
     if (!canEditLayers()) return;
     Layer* layer = activeLayerMutable();
+    if (layer && layer->mask && !layer->isGroup && layer->asset && layer->asset->image.u16() && layer->mask->asset.image.u16()) {
+        // At 16 bits: the pixels times the mask, as below.
+        const Image16& src = *layer->asset->image.u16();
+        const int w = src.width(), h = src.height();
+        std::shared_ptr<const Gray16> mask = layer->mask->asset.image.u16();
+        if (layer->mask->placement) mask = resampleMask(*mask, *layer->mask->placement, layer->transform, w, h, widen8(LayerMask::background(*layer->mask->asset.thumbnail)));
+        auto out = std::make_shared<Image16>(w, h);
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++) {
+                const uint32_t m = std::min<uint32_t>(mask->width() == 1 && mask->height() == 1 ? mask->at(0, 0)
+                    : mask->at(std::min(x * mask->width() / w, mask->width() - 1), std::min(y * mask->height() / h, mask->height() - 1)), one16);
+                const uint16_t* s = src.pixel(x, y);
+                uint16_t* d = out->pixel(x, y);
+                for (int c = 0; c < 4; c++) d[c] = uint16_t(mul15(s[c], m));
+            }
+        beginEdit(QT_TRANSLATE_NOOP("History", "Apply Layer Mask"));
+        layer->asset = Asset::make(Image16Ptr(out), layer->name);
+        layer->mask.reset();
+        layer->shapeImage.reset();
+        isMaskSelected_ = false;
+        endEdit();
+        notifyDocument();
+        return;
+    }
     if (!layer || !layer->mask || layer->isGroup || !layer->asset || !layer->asset->image.u8()) return;
     const Image& src = *layer->asset->image.u8();
     int w = src.width(), h = src.height();

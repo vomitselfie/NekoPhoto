@@ -1,4 +1,5 @@
 #include "compositor/heal.h"
+#include "compositor/depth.h"
 #include "compositor/inpaint.h"
 #include "compositor/parallel.h"
 #include <algorithm>
@@ -214,12 +215,22 @@ void membraneFill(float* values, int channels, const uint8_t* hole, const uint8_
     }, 4);
 }
 
-void spotHeal(Image& image, const GrayImage& coverage, float opacity, int mode, uint32_t seed, const GrayImage* visible) {
+namespace {
+
+/// Where a spot is healed from, decided on 8-bit pixels: the work box (the spot and its ring, clipped to the image),
+/// each pixel's role in it, and for Proximity Match (and Content-Aware without a synthesis) the offset of the patch
+/// whose ring matches best.
+struct SpotPlan {
+    int wx0 = 0, wy0 = 0, ww = 0, wh = 0;
+    std::vector<uint8_t> role;
+    long ringCount = 0;
+    int ox = 0, oy = 0;
+    bool haveSource = false;
+};
+
+/// The plan for the spot `coverage` marks (nonzero) within `b`; false when nothing known surrounds it.
+bool planSpot(const Image& image, const GrayImage& coverage, const PixelBounds& b, int mode, uint32_t seed, const GrayImage* visible, SpotPlan& plan) {
     const int W = image.width(), H = image.height();
-    if (visible && (visible->width() != W || visible->height() != H)) visible = nullptr;
-    PixelBounds b = nonzeroBounds(coverage);
-    if (b.isEmpty()) return;
-    if (mode == 0 && healBySynthesis(image, coverage, b, opacity, seed, visible)) return;
     const int size = std::max(b.x1 - b.x0, b.y1 - b.y0);
     const int ring = std::clamp(size / 8, 2, 16);
     // Work box: the spot plus its ring, clipped to the image.
@@ -228,7 +239,9 @@ void spotHeal(Image& image, const GrayImage& coverage, float opacity, int mode, 
     const int ww = wx1 - wx0, wh = wy1 - wy0;
     const size_t wn = size_t(ww) * wh;
 
-    std::vector<uint8_t> role(wn, Outside), near(wn, 0);
+    std::vector<uint8_t>& role = plan.role;
+    role.assign(wn, Outside);
+    std::vector<uint8_t> near(wn, 0);
     for (int y = 0; y < wh; y++) for (int x = 0; x < ww; x++) role[size_t(y) * ww + size_t(x)] = coverage.at(wx0 + x, wy0 + y) ? Hole : Outside;
     // The ring: pixels within `ring` of the spot (a square dilation, row pass then column pass).
     std::vector<int> prefix(size_t(std::max(ww, wh)) + 1);
@@ -254,7 +267,7 @@ void spotHeal(Image& image, const GrayImage& coverage, float opacity, int mode, 
             }
     long ringCount = 0;
     for (uint8_t r : role) ringCount += r == Ring;
-    if (!ringCount) return;
+    if (!ringCount) return false;
 
     // Source patch for Proximity Match (and Content-Aware when there was nothing to synthesise from): 24
     // directions at a few distances, the nearer winning ties, then a fine alignment so repeating texture lines up.
@@ -316,6 +329,29 @@ void spotHeal(Image& image, const GrayImage& coverage, float opacity, int mode, 
             haveSource = true;
         }
     }
+    plan.wx0 = wx0; plan.wy0 = wy0; plan.ww = ww; plan.wh = wh;
+    plan.ringCount = ringCount;
+    plan.ox = ox; plan.oy = oy;
+    plan.haveSource = haveSource;
+    return true;
+}
+
+} // namespace
+
+void spotHeal(Image& image, const GrayImage& coverage, float opacity, int mode, uint32_t seed, const GrayImage* visible) {
+    const int W = image.width(), H = image.height();
+    if (visible && (visible->width() != W || visible->height() != H)) visible = nullptr;
+    PixelBounds b = nonzeroBounds(coverage);
+    if (b.isEmpty()) return;
+    if (mode == 0 && healBySynthesis(image, coverage, b, opacity, seed, visible)) return;
+    SpotPlan plan;
+    if (!planSpot(image, coverage, b, mode, seed, visible, plan)) return;
+    const int wx0 = plan.wx0, wy0 = plan.wy0, ww = plan.ww, wh = plan.wh;
+    const size_t wn = size_t(ww) * wh;
+    const std::vector<uint8_t>& role = plan.role;
+    const long ringCount = plan.ringCount;
+    const int ox = plan.ox, oy = plan.oy;
+    const bool haveSource = plan.haveSource;
 
     // Membrane: the difference between the original and the patch along the ring (or the original itself
     // for a smooth fill), spread across the spot.
@@ -420,6 +456,208 @@ void healFrom(Image& image, const Image& source, const GrayImage& coverage, floa
                 const double a = std::clamp(out[3], 0.0, 255.0);
                 t[3] = uint8_t(std::lround(a));
                 for (int c = 0; c < 3; c++) t[c] = uint8_t(std::lround(std::clamp(out[c], 0.0, double(t[3]))));
+            }
+    });
+}
+
+// ---- 16 bits ---------------------------------------------------------------------------------------------
+
+namespace {
+
+constexpr double one15 = 32768.0;
+/// A layer mask shows a pixel from half up: 128 of 255 at 8 bits, the same level widened at 16.
+constexpr uint16_t shownFrom16 = widen8(128);
+/// Coverage under half an 8-bit level (the faint outer rim of a soft tip) is no part of the spot: at 8 bits it
+/// rounds to nothing, and letting it in would move the ring the membrane is taken from by a pixel.
+constexpr uint16_t spotFrom16 = 65;
+
+/// `coverage` with what is below spotFrom16 cleared (shared when nothing is).
+std::shared_ptr<const Gray16> spotCoverage(const Gray16& coverage) {
+    bool faint = false;
+    for (int y = 0; y < coverage.height() && !faint; y++)
+        for (int x = 0; x < coverage.width(); x++) {
+            const uint16_t v = coverage.at(x, y);
+            if (v && v < spotFrom16) { faint = true; break; }
+        }
+    if (!faint) return std::shared_ptr<const Gray16>(std::shared_ptr<const Gray16>(), &coverage);
+    auto out = std::make_shared<Gray16>(coverage);
+    for (int y = 0; y < out->height(); y++)
+        for (int x = 0; x < out->width(); x++)
+            if (out->at(x, y) < spotFrom16) out->at(x, y) = 0;
+    return out;
+}
+
+/// The healed value `out` (premultiplied, 0..32768 scale) stored with colour kept within alpha.
+inline void store16(uint16_t* t, const double out[4]) {
+    t[3] = uint16_t(std::lround(std::clamp(out[3], 0.0, one15)));
+    for (int c = 0; c < 3; c++) t[c] = uint16_t(std::lround(std::clamp(out[c], 0.0, double(t[3]))));
+}
+
+bool healBySynthesis16(Image16& image, const Gray16& coverage, const PixelBounds& b, float opacity, uint32_t seed, const Gray16* visible) {
+    const int W = image.width(), H = image.height(), band = 2;
+    Gray16 grown(W, H, 0);
+    for (int y = std::max(0, b.y0 - band); y < std::min(H, b.y1 + band); y++)
+        for (int x = std::max(0, b.x0 - band); x < std::min(W, b.x1 + band); x++) {
+            bool near = false;
+            for (int j = -band; j <= band && !near; j++)
+                for (int i = -band; i <= band && !near; i++) {
+                    const int sx = x + i, sy = y + j;
+                    near = sx >= 0 && sy >= 0 && sx < W && sy < H && coverage.at(sx, sy) != 0;
+                }
+            grown.at(x, y) = near ? uint16_t(one16) : 0;
+        }
+    Image16 synthesised = image;
+    InpaintOptions options;
+    options.seed = seed;
+    if (!contentFill(synthesised, grown, options, visible)) return false;
+    const int x0 = std::max(0, b.x0 - band - 1), y0 = std::max(0, b.y0 - band - 1);
+    const int x1 = std::min(W, b.x1 + band + 1), y1 = std::min(H, b.y1 + band + 1);
+    const int ww = x1 - x0, wh = y1 - y0;
+    std::vector<float> values(size_t(ww) * wh * 4, 0.0f);
+    std::vector<uint8_t> hole(size_t(ww) * wh, 0), known(size_t(ww) * wh, 0);
+    for (int y = 0; y < wh; y++)
+        for (int x = 0; x < ww; x++) {
+            const size_t p = size_t(y) * ww + size_t(x);
+            const int ix = x0 + x, iy = y0 + y;
+            if (coverage.at(ix, iy)) { hole[p] = 1; continue; }
+            if (!grown.at(ix, iy) || image.pixel(ix, iy)[3] < one16 || (visible && visible->at(ix, iy) < shownFrom16)) continue;
+            known[p] = 1;
+            for (int c = 0; c < 4; c++) values[p * 4 + size_t(c)] = float(image.pixel(ix, iy)[c]) - float(synthesised.pixel(ix, iy)[c]);
+        }
+    membraneFill(values.data(), 4, hole.data(), known.data(), ww, wh);
+    for (int y = 0; y < wh; y++)
+        for (int x = 0; x < ww; x++) {
+            const size_t p = size_t(y) * ww + size_t(x);
+            if (!hole[p]) continue;
+            const int ix = x0 + x, iy = y0 + y;
+            uint16_t* t = image.pixel(ix, iy);
+            const uint16_t* s = synthesised.pixel(ix, iy);
+            const double amount = std::min<uint32_t>(coverage.at(ix, iy), one16) / one15 * opacity;
+            double out[4];
+            for (int c = 0; c < 4; c++) out[c] = t[c] + (s[c] + values[p * 4 + size_t(c)] - t[c]) * amount;
+            store16(t, out);
+        }
+    return true;
+}
+
+} // namespace
+
+void spotHeal(Image16& image, const Gray16& painted, float opacity, int mode, uint32_t seed, const Gray16* visible) {
+    const int W = image.width(), H = image.height();
+    if (painted.width() != W || painted.height() != H) return;
+    const std::shared_ptr<const Gray16> held = spotCoverage(painted);
+    const Gray16& coverage = *held;
+    if (visible && (visible->width() != W || visible->height() != H)) visible = nullptr;
+    const PixelBounds b = nonzeroBounds(coverage);
+    if (b.isEmpty()) return;
+    if (mode == 0 && healBySynthesis16(image, coverage, b, opacity, seed, visible)) return;
+    // The plan (the ring, and the patch to copy) on the pixels rounded to 8 bits, the spot being every touched pixel.
+    const std::shared_ptr<Image> eight = narrowImage(image);
+    GrayImage spot(W, H, 0);
+    for (int y = b.y0; y < b.y1; y++)
+        for (int x = b.x0; x < b.x1; x++) spot.at(x, y) = coverage.at(x, y) ? 255 : 0;
+    std::shared_ptr<GrayImage> visible8 = visible ? narrowGray(*visible) : nullptr;
+    SpotPlan plan;
+    if (!planSpot(*eight, spot, b, mode, seed, visible8.get(), plan)) return;
+    const int wx0 = plan.wx0, wy0 = plan.wy0, ww = plan.ww, wh = plan.wh;
+    const size_t wn = size_t(ww) * wh;
+    const std::vector<uint8_t>& role = plan.role;
+    const int ox = plan.ox, oy = plan.oy;
+    const bool haveSource = plan.haveSource;
+
+    // The membrane and the grain at 16 bits, as spotHeal does at 8.
+    std::vector<float> value(wn * 4, 0.0f);
+    std::vector<uint8_t> hole(wn), known(wn);
+    double detail[3] = {0, 0, 0};
+    for (int y = 0; y < wh; y++)
+        for (int x = 0; x < ww; x++) {
+            const size_t p = size_t(y) * ww + size_t(x);
+            hole[p] = role[p] == Hole; known[p] = role[p] == Ring;
+            if (role[p] != Ring) continue;
+            const int ix = wx0 + x, iy = wy0 + y;
+            const uint16_t* t = image.pixel(ix, iy);
+            const uint16_t* s = haveSource ? image.pixel(ix + ox, iy + oy) : nullptr;
+            for (int c = 0; c < 4; c++) value[p * 4 + size_t(c)] = float(t[c]) - (s ? float(s[c]) : 0.0f);
+            if (!haveSource)
+                for (int c = 0; c < 3; c++) {
+                    double around = 0; int n = 0;
+                    const int offsets[4][2] = {{ix - 1, iy}, {ix + 1, iy}, {ix, iy - 1}, {ix, iy + 1}};
+                    for (auto& o : offsets) {
+                        if (o[0] < 0 || o[1] < 0 || o[0] >= W || o[1] >= H) continue;
+                        around += image.pixel(o[0], o[1])[c];
+                        n++;
+                    }
+                    if (n) { const double d = t[c] - around / n; detail[c] += d * d; }
+                }
+        }
+    membraneFill(value.data(), 4, hole.data(), known.data(), ww, wh);
+    for (int c = 0; c < 3; c++) detail[c] = std::sqrt(detail[c] / double(plan.ringCount)) * 0.9;
+    for (int y = 0; y < wh; y++)
+        for (int x = 0; x < ww; x++) {
+            const size_t p = size_t(y) * ww + size_t(x);
+            if (role[p] != Hole) continue;
+            const int ix = wx0 + x, iy = wy0 + y;
+            uint16_t* t = image.pixel(ix, iy);
+            const uint16_t* s = haveSource ? image.pixel(ix + ox, iy + oy) : nullptr;
+            const double amount = std::min<uint32_t>(coverage.at(ix, iy), one16) / one15 * opacity;
+            double grain = 0;
+            if (!haveSource) {
+                const uint32_t key = hash32(seed ^ hash32(uint32_t(long(iy) * W + ix)));
+                const double u1 = unitRandom(key), u2 = unitRandom(key ^ 0x68e31da4U);
+                grain = std::sqrt(-2.0 * std::log(1.0 - u1)) * std::cos(2.0 * M_PI * u2);
+            }
+            double out[4];
+            for (int c = 0; c < 4; c++) {
+                const double healed = (s ? s[c] : 0) + value[p * 4 + size_t(c)] + (c < 3 ? grain * detail[c] : 0);
+                out[c] = t[c] + (healed - t[c]) * amount;
+            }
+            store16(t, out);
+        }
+}
+
+void healFrom(Image16& image, const Image16& source, const Gray16& painted, float opacity, const Gray16* visible) {
+    const int W = image.width(), H = image.height();
+    if (source.width() != W || source.height() != H || painted.width() != W || painted.height() != H) return;
+    const std::shared_ptr<const Gray16> held = spotCoverage(painted);
+    const Gray16& coverage = *held;
+    const PixelBounds bounds = nonzeroBounds(coverage);
+    if (bounds.isEmpty()) return;
+    const int wx0 = std::max(0, bounds.x0 - 1), wy0 = std::max(0, bounds.y0 - 1), wx1 = std::min(W - 1, bounds.x1), wy1 = std::min(H - 1, bounds.y1);
+    const int ww = wx1 - wx0 + 1, wh = wy1 - wy0 + 1;
+    const size_t wn = size_t(ww) * size_t(wh);
+    auto shown = [&](int x, int y) { return !visible || visible->at(x, y) >= shownFrom16; };
+    std::vector<uint8_t> hole(wn), known(wn);
+    for (int y = 0; y < wh; y++)
+        for (int x = 0; x < ww; x++) hole[size_t(y) * ww + size_t(x)] = coverage.at(wx0 + x, wy0 + y) ? 1 : 0;
+    std::vector<float> value(wn * 4, 0.0f);
+    bool anyKnown = false;
+    for (int y = 0; y < wh; y++)
+        for (int x = 0; x < ww; x++) {
+            const size_t p = size_t(y) * ww + size_t(x);
+            if (hole[p]) continue;
+            bool touches = false;
+            const int n[4][2] = {{x - 1, y}, {x + 1, y}, {x, y - 1}, {x, y + 1}};
+            for (auto& o : n) if (o[0] >= 0 && o[1] >= 0 && o[0] < ww && o[1] < wh && hole[size_t(o[1]) * ww + size_t(o[0])]) touches = true;
+            if (!touches || !shown(wx0 + x, wy0 + y)) continue;
+            known[p] = 1;
+            anyKnown = true;
+            const uint16_t* t = image.pixel(wx0 + x, wy0 + y);
+            const uint16_t* s = source.pixel(wx0 + x, wy0 + y);
+            for (int c = 0; c < 4; c++) value[p * 4 + size_t(c)] = float(t[c]) - float(s[c]);
+        }
+    if (anyKnown) membraneFill(value.data(), 4, hole.data(), known.data(), ww, wh);
+    parallelRows(0, wh, [&](int r0, int r1) {
+        for (int y = r0; y < r1; y++)
+            for (int x = 0; x < ww; x++) {
+                const size_t p = size_t(y) * ww + size_t(x);
+                if (!hole[p]) continue;
+                const int ix = wx0 + x, iy = wy0 + y;
+                uint16_t* t = image.pixel(ix, iy);
+                const uint16_t* s = source.pixel(ix, iy);
+                const double amount = std::min<uint32_t>(coverage.at(ix, iy), one16) / one15 * opacity;
+                double out[4];
+                for (int c = 0; c < 4; c++) out[c] = t[c] + (s[c] + value[p * 4 + size_t(c)] - t[c]) * amount;
+                store16(t, out);
             }
     });
 }

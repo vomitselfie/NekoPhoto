@@ -325,7 +325,7 @@ void MainWindow::buildMenus() {
     needsDocument(layer->addAction(tr("Layer via &Copy"), QKeySequence("Ctrl+J"), this, [this] { session_->layerViaCopy(); }), "edit.clipboard");
     needsDocument(layer->addAction(tr("&Duplicate Layer"), this, [this] { session_->duplicateActiveLayer(); recordAction("layers.duplicate"); }), "layers.structure");
     needsDocument(layer->addAction(tr("De&lete Layer"), this, [this] { deleteSelectedLayers(); recordAction("layers.delete"); }), "layers.structure");
-    mergeAction_ = needsDocument(layer->addAction(tr("Merge Do&wn"), QKeySequence("Ctrl+E"), this, [this] { session_->mergeLayers(); recordAction("layers.merge"); }), "edit.contentAware");
+    mergeAction_ = needsDocument(layer->addAction(tr("Merge Do&wn"), QKeySequence("Ctrl+E"), this, [this] { session_->mergeLayers(); recordAction("layers.merge"); }), "layers.merge");
     editTextAction_ = needsDocument(layer->addAction(tr("Edit &Text…"), this, [this] { const Layer* l = session_->activeLayer(); if (l && l->isLiveText()) session_->requestTextEdit(l->id); }));
     needsDocument(layer->addAction(tr("&Rename Layer…"), this, [this] {
         const Layer* active = session_->activeLayer();
@@ -397,7 +397,7 @@ void MainWindow::buildMenus() {
     mask->addSeparator();
     needsDocument(mask->addAction(tr("Enable / Disable"), this, [this] { session_->toggleLayerMask(); recordAction("layers.mask", {{"action", "toggle"}}); }), "layers.mask");
     needsDocument(mask->addAction(tr("Invert"), this, [this] { session_->invertMask(); recordAction("layers.mask", {{"action", "invert"}}); }), "layers.mask");
-    needsDocument(mask->addAction(tr("Apply"), this, [this] { session_->applyMask(); recordAction("layers.mask", {{"action", "apply"}}); }));
+    needsDocument(mask->addAction(tr("Apply"), this, [this] { session_->applyMask(); recordAction("layers.mask", {{"action", "apply"}}); }), "layers.applyMask");
     needsDocument(mask->addAction(tr("Delete"), this, [this] { session_->deleteLayerMask(); recordAction("layers.mask", {{"action", "delete"}}); }), "layers.mask");
     // Photoshop's Layer > Vector Mask: a path that cuts the layer, edited with the Pen and Direct Selection.
     QMenu* vectorMask = layer->addMenu(tr("&Vector Mask"));

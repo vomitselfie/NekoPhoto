@@ -83,8 +83,11 @@ TEST_CASE(support_registry_lists_what_p2_and_p3a_port) {
         CHECK(supports(AdjustmentKind(k), SampleType::U8));
         CHECK(supports(AdjustmentKind(k), SampleType::U16));
     }
-    // Painting (P3b) and the rest wait.
-    for (const char* later : {"edit.paint", "edit.pixels", "tool.brush", "tool.gradient", "edit.style", "edit.smartObject", "edit.transformSelection"}) {
+    // P3b: painting and retouching.
+    for (const char* painting : {"tool.brush", "tool.spotHealing", "tool.cloneStamp", "tool.smudge", "tool.dodge", "tool.gradient", "tool.paintBucket", "edit.movePixels", "layers.merge", "layers.applyMask"})
+        CHECK(supports(painting, SampleType::U16));
+    // Shapes, paths, merges, layer styles and the rest wait.
+    for (const char* later : {"edit.paint", "edit.pixels", "tool.shape", "tool.text", "edit.style", "edit.smartObject", "edit.transformSelection"}) {
         CHECK(supports(later, SampleType::U8));
         CHECK(!supports(later, SampleType::U16));
     }

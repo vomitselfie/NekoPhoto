@@ -892,6 +892,7 @@ private:
     bool timelineEdit(const QString& name, const std::function<bool(compositor::Document&)>& change);
     QString importedName_;   // the title of a document that came from an import and has no project path
     std::shared_ptr<const compositor::Image> cloneSample_;
+    std::shared_ptr<const compositor::Image16> cloneSample16_;   // a 16-bit document's
     bool cloneSampleAll_ = false;
     compositor::Uuid cloneSampleLayer_;
     uint64_t cloneSampleRevision_ = 0;
@@ -959,13 +960,16 @@ private:
     void syncFilterMask();
     /// Starts a stroke that paints `process`'s version of the active layer (as the canvas shows it) through the tip.
     /// `margin`: how far around a pixel `process` reads (it is run a tile at a time with that much around it).
-    bool beginProcessedStroke(QPointF documentPoint, const std::function<void(compositor::Image&)>& process, int margin);
+    /// `process16` is the same for a 16-bit document.
+    bool beginProcessedStroke(QPointF documentPoint, const std::function<void(compositor::Image&)>& process, int margin,
+                              const std::function<void(compositor::Image16&)>& process16);
     /// Fills the active layer (or its mask) with `color` through `coverage` (document size; null: everywhere) at
     /// `opacity`, as one undo step named `name`.
     /// With `from` (document size, premultiplied), each pixel takes `from`'s there instead of `color`.
     bool fillThrough(const QColor& color, const compositor::GrayImage* coverage, double opacity, const char* name, const compositor::Image* from = nullptr);
-    /// Fill and Fill Path in a 16-bit document: the colour through `coverage` (null: everywhere) at 16 bits.
-    bool fillThrough16(const QColor& color, const compositor::Gray16* coverage, const char* name);
+    /// Fill and Fill Path in a 16-bit document: the colour through `coverage` (null: everywhere) at 16 bits. With
+    /// `from` (document size), each pixel takes `from`'s there instead of `color` (the Patch tool).
+    bool fillThrough16(const QColor& color, const compositor::Gray16* coverage, const char* name, const compositor::Image16* from = nullptr);
     compositor::AnyImage previewImage_;
     std::optional<compositor::LayerTransform> previewTransform_;
     std::optional<std::pair<compositor::Uuid, compositor::Uuid>> transformDuplicate_; // copy, source

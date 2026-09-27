@@ -88,6 +88,9 @@ private:
     double carried_ = 0;   // distance walked since the last dab
     std::array<bool, dynamicsTargetCount> randomOn_{};   // targets a Random mapping drives
     bool valid_ = false;
+    /// Density by spacing on a 16-bit grid: an entry per 15-bit level, for the spacing ratio `density16K_`.
+    std::vector<uint16_t> density16_;
+    double density16K_ = -1;
 };
 
 /// A preview stroke of `preset` (an S curve in black on transparent), for pickers.

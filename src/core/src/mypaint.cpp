@@ -46,6 +46,7 @@ constexpr uint32_t one = 1u << 15;   // libmypaint's fixed-point 1.0
 struct Tiles {
     MyPaintTiledSurface2 parent;
     const Image* base = nullptr;
+    const Image16* base16 = nullptr;   // a 16-bit layer: its 0..32768 samples are libmypaint's own fixed point
     int width = 0, height = 0, columns = 0, rows = 0;
     std::vector<std::unique_ptr<uint16_t[]>> tiles;
     std::mutex lock;
@@ -57,6 +58,16 @@ struct Tiles {
         if (!slot) {
             // First touch: the layer's own pixels, so smudging and blending read what is really there.
             slot.reset(new uint16_t[size_t(tileSize) * tileSize * 4]());
+            if (base16) {
+                // The same range as libmypaint's: copied as they are.
+                for (int y = 0; y < tileSize; y++) {
+                    const int py = ty * tileSize + y;
+                    if (py >= height) break;
+                    const int px = tx * tileSize, n = std::min(tileSize, width - px);
+                    if (n > 0) std::memcpy(slot.get() + size_t(y) * tileSize * 4, base16->pixel(px, py), size_t(n) * 4 * sizeof(uint16_t));
+                }
+                return slot.get();
+            }
             for (int y = 0; y < tileSize; y++) {
                 const int py = ty * tileSize + y;
                 if (py >= height) break;
@@ -135,14 +146,16 @@ bool myPaintSupported() { return true; }
 MyPaintStroke::MyPaintStroke(BrushStroke& grid, const std::string& brushJson, const BrushSettings& settings) : grid_(grid) {
     if (!grid_.isValid()) { error_ = grid_.error(); return; }
     const Image* base = grid_.gridBase();
-    if (!base) { error_ = "MyPaint brushes paint layer pixels only."; return; }
+    const Image16* base16 = grid_.gridBase16();
+    if (!base && !base16) { error_ = "MyPaint brushes paint layer pixels only."; return; }
     engine_ = std::make_unique<Engine>();
     Tiles& t = engine_->tiles;
     mypaint_tiled_surface2_init(&t.parent, requestStart, requestEnd);
     t.parent.threadsafe_tile_requests = TRUE;   // Tiles::tile locks, so libmypaint may render tiles in parallel
     t.base = base;
-    t.width = base->width();
-    t.height = base->height();
+    t.base16 = base16;
+    t.width = base ? base->width() : base16->width();
+    t.height = base ? base->height() : base16->height();
     t.columns = (t.width + tileSize - 1) / tileSize;
     t.rows = (t.height + tileSize - 1) / tileSize;
     t.tiles.resize(size_t(t.columns) * size_t(t.rows));
@@ -206,6 +219,37 @@ void MyPaintStroke::strokeTo(const BrushSample& input) {
     started_ = true;
     last_ = input;
 
+    if (t.base16) {
+        // A 16-bit layer takes the tiles' samples as they are, through the selection.
+        Image16* working = grid_.gridWorking16();
+        const Image16* base16 = t.base16;
+        const Gray16* selection = grid_.gridSelection16();
+        for (int i = 0; i < changed.num_rectangles; i++) {
+            const MyPaintRectangle& r = rects[i];
+            const int x0 = std::max(0, r.x), y0 = std::max(0, r.y), x1 = std::min(t.width, r.x + r.width), y1 = std::min(t.height, r.y + r.height);
+            if (x0 >= x1 || y0 >= y1) continue;
+            parallelRows(y0, y1, [&](int ya, int yb) {
+                for (int y = ya; y < yb; y++) {
+                    const uint16_t* b = base16->row(y);
+                    uint16_t* out = working->row(y);
+                    const uint16_t* sel = selection ? selection->row(y) : nullptr;
+                    for (int x = x0; x < x1; x++) {
+                        const uint16_t* tile = t.painted(x / tileSize, y / tileSize);
+                        if (!tile) continue;
+                        const uint16_t* px = tile + (size_t(y % tileSize) * tileSize + size_t(x % tileSize)) * 4;
+                        for (int c = 0; c < 4; c++) {
+                            const int painted = int(std::min<uint32_t>(px[c], one)), under = b[x * 4 + c];
+                            if (!sel) { out[x * 4 + c] = uint16_t(painted); continue; }
+                            const int delta = painted - under, k = int(std::min<uint32_t>(sel[x], one));
+                            out[x * 4 + c] = uint16_t(under + (delta * k + (delta >= 0 ? int(one / 2) : -int(one / 2))) / int(one));
+                        }
+                    }
+                }
+            }, 16);
+            grid_.markPainted(Rect(x0, y0, x1 - x0, y1 - y0));
+        }
+        return;
+    }
     // The changed area back to 8 bits, through the selection: out = base + (paint - base) * selected.
     Image* working = grid_.gridWorking();
     const Image* base = grid_.gridBase();

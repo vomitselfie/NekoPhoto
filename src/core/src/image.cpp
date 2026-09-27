@@ -423,6 +423,42 @@ void MipCache::refreshOf(std::vector<Entry<Img>>& entries, const Img* image, int
     }
 }
 
+template <typename Img>
+void MipCache::refreshOf16(std::vector<Entry<Img>>& entries, const Img* image, int x0, int y0, int x1, int y1) {
+    constexpr int channels = std::is_same_v<Img, Image16> ? 4 : 1;
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (auto& e : entries) {
+        auto source = e.source.lock();
+        if (source.get() != image) continue;
+        const Img* above = image;
+        for (auto& levelPtr : e.levels) {
+            // As refreshOf: the level's pixels over the changed rect, the rounded mean halveImage takes at 16 bits.
+            x0 = x0 / 2; y0 = y0 / 2; x1 = (x1 + 1) / 2; y1 = (y1 + 1) / 2;
+            Img& level = const_cast<Img&>(*levelPtr);
+            x1 = std::min(x1, level.width()); y1 = std::min(y1, level.height());
+            if (x0 >= x1 || y0 >= y1) break;
+            const int sw = above->width(), sh = above->height();
+            const Img& src = *above;
+            parallelRows(y0, y1, [&](int ya, int yb) {
+                for (int y = ya; y < yb; y++) {
+                    const uint16_t* r0 = src.row(std::min(2 * y, sh - 1));
+                    const uint16_t* r1 = src.row(std::min(2 * y + 1, sh - 1));
+                    uint16_t* o = level.row(y);
+                    for (int x = x0; x < x1; x++) {
+                        const int a = std::min(2 * x, sw - 1) * channels, b = std::min(2 * x + 1, sw - 1) * channels;
+                        for (int c = 0; c < channels; c++) o[x * channels + c] = uint16_t((uint32_t(r0[a + c]) + r0[b + c] + r1[a + c] + r1[b + c] + 2) / 4);
+                    }
+                }
+            }, 64);
+            above = &level;
+        }
+        return;
+    }
+}
+
+void MipCache::refresh(const Image16* image, int x0, int y0, int x1, int y1) { if (image) refreshOf16(entries16_, image, x0, y0, x1, y1); }
+void MipCache::refresh(const Gray16* image, int x0, int y0, int x1, int y1) { if (image) refreshOf16(grayEntries16_, image, x0, y0, x1, y1); }
+
 void MipCache::refresh(const Image* image, int x0, int y0, int x1, int y1) { if (image) refreshOf(entries_, image, x0, y0, x1, y1); }
 void MipCache::refresh(const GrayImage* image, int x0, int y0, int x1, int y1) { if (image) refreshOf(grayEntries_, image, x0, y0, x1, y1); }
 

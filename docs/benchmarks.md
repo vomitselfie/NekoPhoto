@@ -128,6 +128,19 @@ object code of the benched functions is identical to 68435cb, so the 8-bit diffe
 | u16 gaussian blur r2 / r20 | | 53.5 / 87.0 |
 | u16 levels / curves / hue/saturation | | 7.7 / 8.0 / 46.2 |
 
+## P3b: painting at 16 bits
+
+2026-09-27, P3b against 1efe1c2, alternating rounds on a loaded machine (load average 9 to 29 from other builds;
+medians of round medians, `bench_core 9 "brush stroke d80"` ten rounds, `--bench-brush classic/dry_brush --bench-size
+1086x1448` twelve rounds, per-stroke medians). The 8-bit differences are within the rounds' spread.
+
+| Operation | 1efe1c2 | P3b |
+|---|---:|---:|
+| brush stroke d80 hardness 1 (ms) | 28.4 | 28.7 |
+| brush stroke d80 hardness 0.3 (ms) | 70.4 | 66.5 |
+| dry_brush press / move p50 / move p95 / release (ms) | 5.14 / 1.55 / 2.60 / 7.95 | 5.01 / 1.49 / 2.34 / 7.95 |
+| u16 brush stroke d80 hardness 1 / 0.3 (ms) | | 27.3 / 36.5 |
+
 ## Render hashes
 
 The matching correctness gate is `render_hash_tests` (in ctest): 235 scenes (133 at 8 bits, 102 at 16 bits) hashed with FNV-1a 64 against
