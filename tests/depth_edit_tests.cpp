@@ -10,6 +10,8 @@
 #include "compositor/filters.h"
 #include "compositor/morphology.h"
 #include "compositor/selection.h"
+#include "compositor/warp.h"
+#include "compositor/warpmesh.h"
 #include "compositor/render.h"
 #include <cmath>
 #include <cstdio>
@@ -290,6 +292,16 @@ int grayApart(const GrayImage& eight, const Gray16& deep) {
     return worst;
 }
 
+std::shared_ptr<GrayImage> radialGray(int w, int h) {
+    auto out = std::make_shared<GrayImage>(w, h);
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            const double dx = (x - w / 2.0) / (w / 2.0), dy = (y - h / 2.0) / (h / 2.0);
+            out->at(x, y) = uint8_t(std::clamp(std::lround(255 * (1.1 - std::sqrt(dx * dx + dy * dy))), 0L, 255L));
+        }
+    return out;
+}
+
 /// A soft-edged selection: an antialiased ellipse and a feathered rectangle.
 std::shared_ptr<GrayImage> softSelection() {
     auto shape = rasterizeEllipse(Rect(12, 10, 70, 50), 120, 90, true);
@@ -360,6 +372,69 @@ TEST_CASE(sixteen_bit_layer_as_selection) {
         auto b = coverageFromLayer16(deepDoc, *deepDoc.find(layer.id));
         CHECK(grayApart(*a, *b) <= 1);
     }
+}
+
+/// Image Size at 16 bits: a document resized in each resampling mode renders within a level of the 8-bit resize,
+/// bar a small share of samples at the layers' soft edges (the 8-bit resampler rounds its intermediate to 8.8 fixed
+/// point and each pass to bytes).
+TEST_CASE(sixteen_bit_image_size_matches_eight_bit) {
+    Document doc(160, 120);
+    doc.layers.push_back(Layer(Asset::make(busyImage(160, 120, 5), "base"), Point(0, 0)));
+    Layer turned(Asset::make(busyImage(70, 50, 8), "turned"), Point(40, 30));
+    turned.transform.rotation = 25;
+    auto mask = std::make_shared<GrayImage>(70, 50);
+    for (int y = 0; y < 50; y++) for (int x = 0; x < 70; x++) mask->at(x, y) = uint8_t(std::min(255, x * 4));
+    turned.mask = LayerMask();
+    turned.mask->asset = MaskAsset::make(mask);
+    doc.layers.push_back(turned);
+    for (Sampling mode : {Sampling::High, Sampling::Smooth, Sampling::Nearest}) {
+        for (auto [w, h] : {std::pair{237, 171}, std::pair{97, 61}}) {
+            Document eight = doc;
+            CHECK(resizeDocument(eight, w, h, 72, mode));
+            Document deep = doc;
+            std::string error;
+            CHECK(convertSampleType(deep, SampleType::U16, &error));
+            CHECK(resizeDocument(deep, w, h, 72, mode));
+            CHECK(deep.layers[1].asset->image.u16() && deep.layers[1].mask->asset.image.u16());
+            Image a;
+            render(eight, RenderOptions(), a);
+            Image16 b;
+            render16(deep, RenderOptions(), b);
+            const Apart d = apart(a, b);
+            report(std::string("image size/") + samplingName(mode) + " " + std::to_string(w), d);
+            CHECK(d.beyondOne < 0.01);
+        }
+    }
+}
+
+/// Distort, Warp and Warp Cage bend 16-bit pixels as they bend 8-bit ones.
+TEST_CASE(sixteen_bit_distort_and_warp_match_eight_bit) {
+    auto eight = busyImage(90, 70, 4);
+    Image16Ptr deep = widenImage(*eight);
+    LayerTransform t(Point(10, 12), Size(90, 70));
+    const Corners corners{Point(14, 8), Point(110, 20), Point(96, 95), Point(6, 80)};
+    for (Sampling mode : {Sampling::High, Sampling::Smooth, Sampling::Nearest}) {
+        t.sampling = mode;
+        auto a = warpImage(ImagePtr(eight), t, corners, 0);
+        auto b = warpImage(deep, t, corners, 0);
+        CHECK(a && b);
+        const Apart d = apart(*a->image, *b->image);
+        report(std::string("distort/") + samplingName(mode), d);
+        CHECK(d.worst <= 1);
+        CHECK(a->transform == b->transform);
+    }
+    auto maskA = warpMask(*radialGray(90, 70), t, corners, 0, 0);
+    auto maskB = warpMask(*widenGray(*radialGray(90, 70)), t, corners, 0, 0);
+    CHECK(maskA && maskB && grayApart(*maskA->image, *maskB->image) <= 1);
+    // Edit > Warp's bend and a cage.
+    auto mesh = styleWarpMesh("warpArc", 35, false, 90, 70);
+    CHECK(mesh.has_value());
+    auto bentA = renderWarpedOverBox(*eight, *mesh, Rect(0, 0, 90, 70));
+    auto bentB = renderWarpedOverBox(*deep, *mesh, Rect(0, 0, 90, 70));
+    CHECK(bentA && bentB);
+    const Apart bent = apart(*bentA->image, *bentB->image);
+    report("warp/arc", bent);
+    CHECK(bent.worst <= 1);
 }
 
 TEST_MAIN()

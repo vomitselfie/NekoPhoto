@@ -197,7 +197,9 @@ bool worksAtDepth(const QString& method, const EditorSession& session) {
         {"selection.wand", "edit.selection"}, {"selection.scribble", "edit.selection"}, {"selection.subject", "edit.selection"},
         {"selection.fromLayer", "edit.selection"}, {"selection.feather", "edit.selection"}, {"selection.smooth", "edit.selection"},
         {"selection.border", "edit.selection"}, {"selection.grow", "edit.selection"}, {"paths.toSelection", "edit.selection"},
-        {"pixels.fill", "edit.fill"}, {"pixels.clear", "edit.fill"}};
+        {"pixels.fill", "edit.fill"}, {"pixels.clear", "edit.fill"},
+        {"image.resize", "edit.imageSize"}, {"image.trim", "edit.crop"}, {"canvas.crop", "edit.crop"},
+        {"layers.warp", "edit.distort"}, {"layers.setCage", "edit.distort"}};
     if (always.contains(method)) return true;
     auto it = features.find(method);
     return it != features.end() && session.supportsFeature(it.value());

@@ -79,6 +79,12 @@ constexpr FeatureSupport table[] = {
     // Fill and Clear through the selection; Cut, Copy, Copy Merged, Paste and Layer via Copy.
     {"edit.fill", eightAndSixteen},
     {"edit.clipboard", eightAndSixteen},
+    // Image Size (16-bit resampling), Crop, the Crop tool, Crop to Selection and Trim.
+    {"edit.imageSize", eightAndSixteen},
+    {"edit.crop", eightAndSixteen},
+    {"tool.crop", eightAndSixteen},
+    // Distort and Perspective in Free Transform, Edit > Warp and Warp Cage on whole pixel layers.
+    {"edit.distort", eightAndSixteen},
 };
 }   // namespace
 

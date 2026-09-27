@@ -193,12 +193,12 @@ void MainWindow::buildMenus() {
     needsDocument(edit->addAction(tr("&Paste"), QKeySequence::Paste, this, [this] { session_->paste(); }), "edit.clipboard");
     edit->addSeparator();
     needsDocument(edit->addAction(tr("&Free Transform"), QKeySequence("Ctrl+T"), this, [this] { session_->transformCommand(); }), "layers.transform");
-    needsDocument(edit->addAction(tr("&Warp…"), this, [this] { WarpDialog(session_, this).exec(); }));
+    needsDocument(edit->addAction(tr("&Warp…"), this, [this] { WarpDialog(session_, this).exec(); }), "edit.distort");
     needsDocument(edit->addAction(tr("Warp Ca&ge"), this, [this] {
         QString error;
         if (!session_->beginWarpCage(&error)) showError(tr("Warp Cage"), error);
         else statusBar()->showMessage(tr("Drag the cage's points; Enter applies, Esc cancels."), 8000);
-    }));
+    }), "edit.distort");
     needsDocument(edit->addAction(tr("Fill with Foreground"), QKeySequence("Alt+Backspace"), this, [this] { session_->fillSelection(session_->foregroundColor); recordAction("pixels.fill", {{"color", session_->foregroundColor.name()}}); }), "edit.fill");
     needsDocument(edit->addAction(tr("Fill with Background"), QKeySequence("Ctrl+Backspace"), this, [this] { session_->fillSelection(session_->backgroundColor); recordAction("pixels.fill", {{"color", session_->backgroundColor.name()}}); }), "edit.fill");
     QAction* clear = needsDocument(edit->addAction(tr("Clear"), QKeySequence(Qt::Key_Delete), this, [this] {
@@ -237,7 +237,7 @@ void MainWindow::buildMenus() {
         session_->resizeImage(o->width, o->height, o->resolution, o->sampling);
         recordAction("image.resize", {{"width", o->width}, {"height", o->height}, {"resolution", o->resolution},
                                       {"sampling", o->sampling == 0 ? "nearest" : o->sampling == 1 ? "smooth" : "high"}});
-    }));
+    }), "edit.imageSize");
     needsDocument(image->addAction(tr("&Trim…"), this, [this] {
         // Photoshop's dialog: what to trim by, and which sides.
         QDialog dialog(this);
@@ -273,7 +273,7 @@ void MainWindow::buildMenus() {
         if (!session_->trim(o)) { showError(tr("Trim"), tr("There is nothing to trim: the canvas already ends at its content, or nothing would remain.")); return; }
         static const char* const bases[] = {"transparent", "topLeft", "bottomRight"};
         recordAction("image.trim", {{"basedOn", bases[std::clamp(basedOn->currentIndex(), 0, 2)]}, {"top", o.top}, {"left", o.left}, {"bottom", o.bottom}, {"right", o.right}, {"tolerance", int(o.tolerance)}});
-    }));
+    }), "edit.crop");
     needsDocument(image->addAction(tr("Crop to Selection"), this, [this] {
         const auto& d = session_->document();
         if (d && d->selection) {
@@ -285,7 +285,7 @@ void MainWindow::buildMenus() {
                 recordAction("selection.none");
             }
         }
-    }));
+    }), "edit.crop");
     image->addSeparator();
     QMenu* adjustments = image->addMenu(tr("&Adjustments"));
     auto pixelAdjustment = [this, adjustments, &needsDocument](const QString& label, const QKeySequence& key, AdjustmentKind kind) {

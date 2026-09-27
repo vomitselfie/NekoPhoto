@@ -815,6 +815,7 @@ private:
     static void adoptClipping(const compositor::Uuid& id, std::vector<compositor::Layer>& layers);
     static void releaseDetachedClipping(std::vector<compositor::Layer>& layers);
     void commitMaskTransform(const TransformEdit& edit);
+    void distortLayer16(compositor::Layer& layer, const TransformEdit& edit);
     void commitDistort(const TransformEdit& edit);
     void mergeFloatingTransform(const TransformEdit& edit);
     void cancelFloatingTransform(const FloatingTransform& floating);
@@ -958,7 +959,11 @@ private:
     compositor::AnyImage previewImage_;
     std::optional<compositor::LayerTransform> previewTransform_;
     std::optional<std::pair<compositor::Uuid, compositor::Uuid>> transformDuplicate_; // copy, source
-    struct DistortCache { compositor::Corners corners; compositor::LayerTransform transform; compositor::ImagePtr source; compositor::GrayPtr mask; std::optional<compositor::WarpedImage> image; compositor::GrayPtr warpedMask; };
+    struct DistortCache {
+        compositor::Corners corners; compositor::LayerTransform transform; compositor::ImagePtr source; compositor::GrayPtr mask; std::optional<compositor::WarpedImage> image; compositor::GrayPtr warpedMask;
+        // The same for a 16-bit layer.
+        compositor::Image16Ptr source16; compositor::Gray16Ptr mask16; std::optional<compositor::WarpedImage16> image16; compositor::Gray16Ptr warpedMask16;
+    };
     mutable std::map<compositor::Uuid, DistortCache> distortCache_;
     struct PixelMove { std::unique_ptr<compositor::BrushStroke> raster; compositor::Selection origin; bool duplicate; QPointF offset; compositor::Uuid layerId; };
     std::unique_ptr<PixelMove> pixelMove_;

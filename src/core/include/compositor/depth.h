@@ -62,6 +62,8 @@ std::shared_ptr<Gray16> cropGray(const Gray16& image, int x, int y, int width, i
 
 /// Half-open bounds of the nonzero samples, as nonzeroBounds does at 8 bits.
 PixelBounds nonzeroBounds(const Gray16& image);
+/// Half-open bounds of the pixels with any alpha, as alphaBounds does at 8 bits.
+PixelBounds alphaBounds(const Image16& image);
 
 /// A fingerprint of a 16-bit layer's pixels or mask (null: none), for the PSD carry's content binding.
 uint64_t contentHash(const Image16* image);

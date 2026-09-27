@@ -370,6 +370,7 @@ void EditorSession::cropTo(const QRectF& rectF, const char* action) {
     }
     offsetAnimation(doc, -rect.x, -rect.y);
     if (doc.selection && doc.selection->coverage.u8()) doc.selection->coverage = cropGray(*doc.selection->coverage.u8(), int(rect.x), int(rect.y), doc.width, doc.height);
+    else if (doc.selection && doc.selection->coverage.u16()) doc.selection->coverage = Gray16Ptr(cropGray(*doc.selection->coverage.u16(), int(rect.x), int(rect.y), doc.width, doc.height));
     document_ = doc;
     endEdit();
     viewport.fit({double(doc.width), double(doc.height)});
@@ -486,7 +487,34 @@ Overrides EditorSession::renderOverrides() const {
             LayerTransform shown = displayedTransform(*layer);
             o.transform = shown;
             if (layer->mask) o.maskPlacement = displayedMaskPlacement(*layer);
-            if (edit.corners && layer->asset && layer->asset->image.u8()) {
+            if (edit.corners && layer->asset && layer->asset->image.u16()) {
+                // The same at 16 bits.
+                auto target = distortTarget(*layer, edit);
+                if (!target) continue;
+                Gray16Ptr maskImage = layer->mask && layer->mask->enabled ? layer->mask->asset.image.u16() : nullptr;
+                auto it = distortCache_.find(layer->id);
+                bool fresh = it != distortCache_.end() && it->second.corners == target->second && it->second.transform == target->first && it->second.source16 == layer->asset->image.u16() && it->second.mask16 == maskImage;
+                if (!fresh) {
+                    DistortCache cache;
+                    cache.corners = target->second;
+                    cache.transform = target->first;
+                    cache.source16 = layer->asset->image.u16();
+                    cache.mask16 = maskImage;
+                    cache.image16 = warpImage(layer->asset->image.u16(), target->first, target->second, 2048);
+                    if (cache.image16 && maskImage && !layer->mask->placement && layer->mask->linked) {
+                        auto wm = warpMask(*maskImage, target->first, target->second, 0, 2048);
+                        if (wm) cache.warpedMask16 = wm->image;
+                    }
+                    it = distortCache_.insert_or_assign(layer->id, std::move(cache)).first;
+                }
+                const DistortCache& cache = it->second;
+                if (cache.image16) {
+                    o.image16 = Image16Ptr(cache.image16->image);
+                    o.transform = cache.image16->transform;
+                    if (cache.warpedMask16) { o.maskImage16 = cache.warpedMask16; o.maskPlacement = std::optional<LayerTransform>(); }
+                    else if (layer->mask) o.maskPlacement = std::optional<LayerTransform>(layer->mask->placement ? *layer->mask->placement : layer->transform);
+                }
+            } else if (edit.corners && layer->asset && layer->asset->image.u8()) {
                 // The layer warped into the pending distortion, at preview size, cached while nothing changes.
                 auto target = distortTarget(*layer, edit);
                 if (!target) continue;

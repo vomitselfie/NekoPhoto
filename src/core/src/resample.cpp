@@ -199,6 +199,59 @@ void resampleImpl(const uint8_t* src, int sw, int sh, size_t srcStride, uint8_t*
     });
 }
 
+/// resampleImpl at 16 bits (0..32768): the same taps, float sums, so no 8-bit step is introduced.
+template <int C>
+void resampleImpl16(const uint16_t* src, int sw, int sh, size_t srcStride, uint16_t* dst, int dw, int dh, size_t dstStride,
+                    ResampleFilter filter, double originX, double stepX, double originY, double stepY, const uint16_t outside[C]) {
+    const AxisTaps tx = axisTaps(filter, dw, originX, stepX, sw), ty = axisTaps(filter, dh, originY, stepY, sh);
+    constexpr float one = 32768.0f, unit = 1.0f / 256.0f;
+    std::vector<float> mid(size_t(dw) * sh * C);
+    parallelRows(0, sh, [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++) {
+            const uint16_t* row = src + size_t(y) * srcStride;
+            float* o = &mid[size_t(y) * dw * C];
+            for (int x = 0; x < dw; x++, o += C) {
+                const int16_t* w = &tx.weights[tx.offset[size_t(x)]];
+                const uint16_t* p = row + size_t(tx.first[size_t(x)]) * C;
+                const int n = tx.count[size_t(x)];
+                float acc[C] = {};
+                for (int k = 0; k < n; k++, p += C) for (int c = 0; c < C; c++) acc[c] += float(p[c]) * float(w[k]);
+                for (int c = 0; c < C; c++) o[c] = std::clamp(acc[c] * unit, 0.0f, one);
+            }
+        }
+    });
+    const size_t rowValues = size_t(dw) * C;
+    parallelRows(0, dh, [&](int y0, int y1) {
+        std::vector<float> acc(rowValues);
+        for (int y = y0; y < y1; y++) {
+            std::fill(acc.begin(), acc.end(), 0.0f);
+            const int16_t* w = &ty.weights[ty.offset[size_t(y)]];
+            for (int k = 0, n = ty.count[size_t(y)]; k < n; k++) {
+                const float* m = &mid[size_t(ty.first[size_t(y)] + k) * rowValues];
+                const float wk = float(w[k]);
+                for (size_t i = 0; i < rowValues; i++) acc[i] += m[i] * wk;
+            }
+            uint16_t* o = dst + size_t(y) * dstStride;
+            const int edgeY = ty.edge[size_t(y)];
+            for (int x = 0; x < dw; x++, o += C) {
+                const float edge = float((tx.edge[size_t(x)] * edgeY + 128) >> 8) * unit;   // 0..1
+                if constexpr (C == 4) {
+                    const float a = std::clamp(acc[size_t(x) * 4 + 3] * unit, 0.0f, one) * edge;
+                    const uint16_t alpha = uint16_t(a + 0.5f);
+                    for (int c = 0; c < 3; c++) {
+                        const float v = std::clamp(acc[size_t(x) * 4 + size_t(c)] * unit, 0.0f, one) * edge;
+                        o[c] = std::min(alpha, uint16_t(v + 0.5f));
+                    }
+                    o[3] = alpha;
+                } else {
+                    const float v = std::clamp(acc[size_t(x)] * unit, 0.0f, one);
+                    o[0] = uint16_t(v * edge + float(outside[0]) * (1 - edge) + 0.5f);
+                }
+            }
+        }
+    });
+}
+
 } // namespace
 
 const int16_t* catmullRomWeights(int fraction256) { return catmullRom().weights[std::clamp(fraction256, 0, 256)]; }
@@ -268,6 +321,24 @@ std::shared_ptr<GrayImage> resampleAxisAligned(const GrayImage& mask, int width,
     if (mask.isEmpty() || width <= 0 || height <= 0) return out;
     const uint8_t fill[1] = {outside};
     resampleImpl<1>(mask.data(), mask.width(), mask.height(), size_t(mask.stride()), out->data(), width, height, size_t(out->stride()), filter, originX, stepX, originY, stepY, fill);
+    return out;
+}
+
+std::shared_ptr<Image16> resampleAxisAligned(const Image16& image, int width, int height, double originX, double stepX, double originY, double stepY, ResampleFilter filter) {
+    auto out = std::make_shared<Image16>(std::max(1, width), std::max(1, height));
+    if (image.isEmpty() || width <= 0 || height <= 0) return out;
+    const uint16_t transparent[4] = {0, 0, 0, 0};
+    resampleImpl16<4>(image.data(), image.width(), image.height(), size_t(image.width()) * 4, out->data(), width, height, size_t(out->width()) * 4,
+                      filter, originX, stepX, originY, stepY, transparent);
+    return out;
+}
+
+std::shared_ptr<Gray16> resampleAxisAligned(const Gray16& mask, int width, int height, double originX, double stepX, double originY, double stepY, ResampleFilter filter, uint16_t outside) {
+    auto out = std::make_shared<Gray16>(std::max(1, width), std::max(1, height), outside);
+    if (mask.isEmpty() || width <= 0 || height <= 0) return out;
+    const uint16_t fill[1] = {outside};
+    resampleImpl16<1>(mask.data(), mask.width(), mask.height(), size_t(mask.width()), out->data(), width, height, size_t(out->width()),
+                      filter, originX, stepX, originY, stepY, fill);
     return out;
 }
 

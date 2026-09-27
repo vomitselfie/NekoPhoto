@@ -1,5 +1,6 @@
 // EditorSession: Free transform, distort and floating selections.
 #include "EditorSession.h"
+#include "compositor/depth.h"
 #include "QtGeometry.h"
 #include "compositor/blend.h"
 #include <algorithm>
@@ -141,7 +142,7 @@ void EditorSession::previewTransform(const LayerTransform& value) {
 }
 
 void EditorSession::beginDistort() {
-    if (refusedAtDepth("edit.pixels", tr("Editing pixels"))) return;
+    if (refusedAtDepth("edit.distort", tr("Distorting a layer"))) return;
     if (!transformEdit_ || transformEdit_->corners || !transformEdit_->draft.isValid() || transformEdit_->mask) return;
     transformEdit_->corners = cornersOf(transformEdit_->draft);
     transformEdit_->persistent = true;
@@ -150,7 +151,7 @@ void EditorSession::beginDistort() {
 
 void EditorSession::previewCorners(const Corners& corners) {
     if (!transformEdit_ || !transformEdit_->corners || !cornersUsable(corners)) return;
-    if (refusedAtDepth("edit.pixels", tr("Distorting a layer"))) { transformEdit_->corners.reset(); return; }
+    if (refusedAtDepth("edit.distort", tr("Distorting a layer"))) { transformEdit_->corners.reset(); return; }
     transformEdit_->corners = corners;
     emit documentChanged({});
     emit transformChanged();
@@ -189,6 +190,7 @@ void EditorSession::commitDistort(const TransformEdit& edit) {
     beginEdit(edit.group ? QT_TRANSLATE_NOOP("History", "Distort Layers") : QT_TRANSLATE_NOOP("History", "Distort"));
     for (auto& id : ids) {
         Layer* layer = document_->find(id);
+        if (layer && layer->asset && layer->asset->image.u16()) { distortLayer16(*layer, edit); continue; }
         if (!layer || !layer->asset || !layer->asset->image.u8()) continue;
         auto target = distortTarget(*layer, edit);
         if (!target) continue;
@@ -219,6 +221,37 @@ void EditorSession::commitDistort(const TransformEdit& edit) {
         layer->shapeImage.reset();
     }
     endEdit();
+}
+
+void EditorSession::distortLayer16(Layer& layer, const TransformEdit& edit) {
+    // commitDistort's steps at 16 bits: the pixels through the homography, cropped to what is there, and a mask
+    // that follows them.
+    auto target = distortTarget(layer, edit);
+    if (!target) return;
+    Rect crop;
+    auto warped = warpImageTrimmed(layer.asset->image.u16(), target->first, target->second, &crop);
+    if (!warped) { emit error(tr("That shape can't be applied.")); return; }
+    if (layer.mask && layer.mask->asset.image.u16()) {
+        LayerMask& mask = *layer.mask;
+        const Gray16& image = *mask.asset.image.u16();
+        if (!mask.placement && mask.linked) {
+            auto wm = warpMask(image, target->first, target->second, 0, 0);
+            if (wm && (wm->image->width() > 1 || wm->image->height() > 1))
+                mask.asset = MaskAsset::make(Gray16Ptr(cropGray(*wm->image, int(crop.x), int(crop.y), int(crop.width), int(crop.height))));
+        } else if (mask.linked && mask.placement) {
+            LayerTransform placement = mask.placement->following(layer.transform, target->first);
+            Corners carried = carriedCorners(placement, target->first, target->second);
+            if (cornersUsable(carried)) {
+                auto wm = warpMask(image, placement, carried, widen8(LayerMask::background(*mask.asset.thumbnail)), 0);
+                if (wm) { mask.asset = MaskAsset::make(Gray16Ptr(wm->image)); mask.placement = wm->transform; }
+            }
+        } else if (!mask.placement) {
+            mask.placement = layer.transform;
+        }
+    }
+    layer.asset = Asset::make(Image16Ptr(warped->image), layer.name);
+    layer.transform = warped->transform;
+    layer.shapeImage.reset();
 }
 
 void EditorSession::mergeFloatingTransform(const TransformEdit& edit) {

@@ -109,7 +109,9 @@ void lensDistort16(const Image16& source, Image16& destination, double k, bool b
     });
 }
 
-PixelBounds alphaBounds16(const Image16& image) {
+} // namespace
+
+PixelBounds alphaBounds(const Image16& image) {
     PixelBounds b{image.width(), image.height(), 0, 0};
     for (int y = 0; y < image.height(); y++) {
         const uint16_t* p = image.row(y);
@@ -119,8 +121,6 @@ PixelBounds alphaBounds16(const Image16& image) {
     if (b.x1 <= b.x0) return {};
     return b;
 }
-
-} // namespace
 
 std::shared_ptr<Image16> growImage(const Image16& image, const LayerTransform& transform, int margin, LayerTransform& grownTransform) {
     if (margin <= 0) { grownTransform = transform; return std::make_shared<Image16>(image); }
@@ -137,7 +137,7 @@ std::shared_ptr<Image16> growImage(const Image16& image, const LayerTransform& t
 }
 
 std::shared_ptr<Image16> trimToPixels(const Image16& image, const LayerTransform& transform, LayerTransform& trimmedTransform) {
-    const PixelBounds b = alphaBounds16(image);
+    const PixelBounds b = alphaBounds(image);
     trimmedTransform = transform;
     if (b.isEmpty() || (b.x0 == 0 && b.y0 == 0 && b.x1 == image.width() && b.y1 == image.height())) return std::make_shared<Image16>(image);
     auto cropped = cropImage(image, b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0);
