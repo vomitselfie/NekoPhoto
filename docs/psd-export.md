@@ -29,7 +29,7 @@ Colour is written straight (not premultiplied), so soft edges keep their colour.
 Each is listed before you export (the export dialog) or in the reply (`warnings`, `notes`):
 
 - **Scaled, rotated or flipped layers** are resampled into place (a note; the look is the same).
-- **Shape layers** are written as pixels; they stay editable in the NekoPhoto project (a note). **Text layers** are
+- **Shape layers** are written as Photoshop live shape layers (see [vector-tools.md](vector-tools.md)). **Text layers** are
   written as Photoshop type layers over the same pixels (see [psd-roundtrip.md](psd-roundtrip.md#text)); flipped text
   is written as pixels (a note).
 - **Adjustments Photoshop has no equivalent for** (Grain; Gradient Map, whose ramp between its ends is
@@ -45,8 +45,9 @@ Each is listed before you export (the export dialog) or in the reply (`warnings`
   compressed rows, which Photoshop requires of a smart object's embedded file when the document keeps Smart Filter
   caches.
 - 8 bits per channel, RGB.
-- Not yet: editable Photoshop text, layer effects, smart objects, Gradient Map and other adjustments as
-  Photoshop adjustment layers.
+- Text, layer styles ([layer-styles.md](layer-styles.md)), shape layers and smart objects
+  ([smart-objects.md](smart-objects.md)) are written as Photoshop's own; adjustments Photoshop has no equivalent for
+  are baked as described above.
 
 ## How it is tested
 
