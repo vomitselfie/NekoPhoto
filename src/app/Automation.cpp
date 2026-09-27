@@ -1,5 +1,6 @@
 #include "compositor/raw.h"
 #include "Automation.h"
+#include "ColorManagement.h"
 #include "Language.h"
 #include "ActionLibrary.h"
 #include "AutomationHandlers.h"
@@ -177,14 +178,14 @@ bool worksAtDepth(const QString& method, const EditorSession& session) {
     static const QSet<QString> always = {
         "app.info", "tabs.list", "tabs.new", "tabs.select", "tabs.close", "history.undo", "history.redo", "history.list", "history.info",
         "history.beginGroup", "history.endGroup", "rpc.methods", "rpc.describe", "rpc.batch", "events.subscribe", "events.unsubscribe",
-        "view.zoom", "screenshot", "render", "colors.set", "presets.list", "brush.presets", "gmic.filters", "tool.select",
+        "view.zoom", "screenshot", "render", "colors.set", "color.settings", "presets.list", "brush.presets", "gmic.filters", "tool.select",
         "actions.list", "actions.record", "actions.save", "actions.delete", "actions.export", "actions.import", "actions.play", "actions.batch",
         "document.new", "document.open", "document.close", "document.info", "document.overview",
         "layers.list", "layers.get", "layers.select", "layers.style", "layers.cage", "selection.info", "selection.render",
         "adjustments.get", "adjustments.defaults", "paths.list", "vectorMask.get", "shape.get", "smartObject.filters", "timeline.info",
         "artboards.list", "slices.list"};
     static const QHash<QString, const char*> features = {
-        {"document.save", "document.save"}, {"document.export", "render.document"}, {"document.import", "document.import"}, {"image.mode", "document.mode"},
+        {"document.save", "document.save"}, {"document.export", "render.document"}, {"document.import", "document.import"}, {"image.mode", "document.mode"}, {"document.profile", "document.profile"},
         {"layers.set", "layers.structure"}, {"layers.add", "layers.structure"}, {"layers.delete", "layers.structure"}, {"layers.duplicate", "layers.structure"},
         {"layers.move", "layers.structure"}, {"layers.reorder", "layers.structure"}, {"layers.group", "layers.structure"},
         {"layers.setTransform", "layers.transform"}, {"layers.flip", "layers.transform"}, {"layers.mask", "layers.mask"}, {"layers.render", "render.document"},
@@ -440,6 +441,52 @@ void AutomationServer::registerAppHandlers() {
         if (has(p, "background")) { QColor c(str(p, "background")); if (!c.isValid()) fail("background must be a CSS colour", invalidParams); s->backgroundColor = c; }
         emit s->toolChanged();
         return QJsonObject{{"foreground", s->foregroundColor.name()}, {"background", s->backgroundColor.name()}};
+    });
+    add("color.settings", [](const QJsonObject& p) {
+        // Edit > Color Settings, the monitor profile (Preferences) and View > Proof Setup / Proof Colors (docs/color-management.md).
+        color::Settings s = color::settings();
+        if (has(p, "workingSpace")) {
+            auto space = workingSpaceFromKey(str(p, "workingSpace").toStdString());
+            if (!space) fail("workingSpace must be srgb, adobe-rgb, display-p3 or prophoto", invalidParams);
+            s.workingSpace = *space;
+        }
+        if (has(p, "policy")) {
+            auto policy = color::policyFromKey(str(p, "policy"));
+            if (!policy) fail("policy must be preserve, convert or off", invalidParams);
+            s.policy = *policy;
+        }
+        s.askMissing = flag(p, "askMissing", s.askMissing);
+        s.askMismatch = flag(p, "askMismatch", s.askMismatch);
+        s.useSystemMonitor = flag(p, "useSystemMonitor", s.useSystemMonitor);
+        if (has(p, "monitorProfile")) {
+            const QString path = str(p, "monitorProfile");
+            QString error;
+            if (!path.isEmpty() && !color::readProfileFile(path, &error)) fail(error, invalidParams);
+            s.monitorFile = path;
+        }
+        if (has(p, "proofProfile")) {
+            const QString key = str(p, "proofProfile");
+            QString error;
+            if (key == "none" || !color::profileForKey(key, &error)) fail(error.isEmpty() ? QStringLiteral("proofProfile must be a working space or an ICC file") : error, invalidParams);
+            s.proofProfile = key;
+        }
+        if (has(p, "proofIntent")) {
+            auto intent = renderingIntentFromKey(str(p, "proofIntent").toStdString());
+            if (!intent) fail("proofIntent must be perceptual or relative", invalidParams);
+            s.proofIntent = *intent;
+        }
+        s.proofBlackPoint = flag(p, "proofBlackPoint", s.proofBlackPoint);
+        s.proofColors = flag(p, "proofColors", s.proofColors);
+        s.gamutWarning = flag(p, "gamutWarning", s.gamutWarning);
+        if (has(p, "gamutColor")) { QColor c(str(p, "gamutColor")); if (!c.isValid()) fail("gamutColor must be a CSS colour", invalidParams); s.gamutColor = c; }
+        if (p.size() > 0) color::setSettings(s);
+        const ColorProfile monitor = color::monitorProfile();
+        return QJsonObject{{"workingSpace", QString::fromLatin1(workingSpaceKey(s.workingSpace))}, {"workingSpaceName", QString::fromLatin1(workingSpaceName(s.workingSpace))},
+                           {"policy", QString::fromLatin1(color::policyKey(s.policy))}, {"untagged", "srgb"}, {"askMissing", s.askMissing}, {"askMismatch", s.askMismatch},
+                           {"useSystemMonitor", s.useSystemMonitor}, {"monitorProfile", s.monitorFile},
+                           {"monitor", monitor.empty() ? QJsonValue::Null : QJsonValue(QString::fromStdString(monitor.description))},
+                           {"proofProfile", s.proofProfile}, {"proofIntent", QString::fromLatin1(renderingIntentKey(s.proofIntent))}, {"proofBlackPoint", s.proofBlackPoint},
+                           {"proofColors", s.proofColors}, {"gamutWarning", s.gamutWarning}, {"gamutColor", s.gamutColor.name()}};
     });
     add("view.zoom", [session, document](const QJsonObject& p) {
         document();

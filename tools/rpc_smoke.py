@@ -421,6 +421,97 @@ def sixteen_bit(rpc):
     rpc.call("tabs.close", index=tab["index"], discard=True)
 
 
+def colour_management(rpc):
+    """Colour management (docs/color-management.md): Color Settings, Assign and Convert to Profile, the profile in
+    exports, PSDs and projects, soft proofing; in a tab of its own that is closed afterwards."""
+    work = tempfile.mkdtemp()
+    first = rpc.call("tabs.list")
+    tab = rpc.call("tabs.new")
+    settings = rpc.call("color.settings")
+    assert settings["workingSpace"] == "srgb" and settings["policy"] == "preserve" and settings["untagged"] == "srgb", settings
+    assert settings["monitor"] is None, "no monitor profile in a headless run"
+    rpc.call("document.new", width=64, height=48)
+    rpc.call("shape.draw", kind="rectangle", x=0, y=0, width=64, height=48, color="#ff0000")
+    got = rpc.call("document.profile")
+    assert not got["tagged"] and got["workingSpace"] == "srgb", got
+    before = rpc.call("render", maxSize=64)["png"]
+    # Assign: the tag only (with no monitor profile the canvas shows the same values), one undo step.
+    assigned = rpc.call("document.profile", action="assign", profile="adobe-rgb")
+    assert assigned["tagged"] and assigned["profile"] == "Adobe RGB (1998)" and assigned["undo"] == "Assign Profile", assigned
+    assert rpc.call("render", maxSize=64)["png"] == before
+    assert rpc.call("document.info")["profile"] == "Adobe RGB (1998)"
+    rpc.call("history.undo")
+    assert not rpc.call("document.profile")["tagged"]
+    # Convert: the pixels change so the colours look the same (sRGB red is about 219, 0, 0 in Adobe RGB).
+    converted = rpc.call("document.profile", action="convert", profile="adobe-rgb", intent="perceptual", blackPointCompensation=True)
+    assert converted["undo"] == "Convert to Profile" and converted["workingSpace"] == "adobe-rgb", converted
+    assert rpc.call("render", maxSize=64)["png"] != before
+    # Exports embed the profile, or convert to sRGB for the web.
+    png = os.path.join(work, "tagged.png")
+    assert rpc.call("document.export", path=png)["profile"] == "Adobe RGB (1998)"
+    with open(png, "rb") as f:
+        assert b"iCCP" in f.read(), "PNG embeds the profile"
+    jpg = os.path.join(work, "tagged.jpg")
+    rpc.call("document.export", path=jpg)
+    with open(jpg, "rb") as f:
+        assert b"ICC_PROFILE" in f.read(), "JPEG embeds the profile"
+    web = rpc.call("document.export", path=os.path.join(work, "web.png"), convertToSrgb=True)
+    assert web["convertedToSrgb"] and web["profile"] is None, web
+    with open(os.path.join(work, "web.png"), "rb") as f:
+        assert b"iCCP" not in f.read()
+    rpc.call("document.export", path=os.path.join(work, "web.gif"))
+    # PSD (resource 1039) and the project keep it.
+    psd = os.path.join(work, "tagged.psd")
+    rpc.call("document.export", path=psd)
+    project = os.path.join(work, "Tagged.comp")
+    rpc.call("document.save", path=project)
+    rpc.call("document.close", discard=True)
+    rpc.call("document.open", path=project)
+    assert rpc.call("document.profile")["profile"] == "Adobe RGB (1998)"
+    rpc.call("document.close", discard=True)
+    rpc.call("document.open", path=psd)
+    assert rpc.call("document.profile")["profile"] == "Adobe RGB (1998)"
+    rpc.call("document.close", discard=True)
+    # An image with a profile opens with it (Preserve); into a document it is converted to the document's.
+    rpc.call("document.open", path=png)
+    assert rpc.call("document.profile")["profile"] == "Adobe RGB (1998)"
+    rpc.call("document.close", discard=True)
+    # Proof Colors and the gamut warning draw the canvas through the proofing profile: ProPhoto's pure green is far
+    # outside sRGB, so the warning colour covers it.
+    rpc.call("document.new", width=32, height=32)
+    rpc.call("document.profile", action="assign", profile="prophoto")
+    rpc.call("shape.draw", kind="rectangle", x=0, y=0, width=32, height=32, color="#00ff00")
+    plain = rpc.call("screenshot", maxSize=64)["png"]
+    proof = rpc.call("color.settings", proofProfile="srgb", proofIntent="relative", proofColors=True, gamutWarning=True, gamutColor="#ff00ff")
+    assert proof["proofColors"] and proof["gamutWarning"] and proof["gamutColor"] == "#ff00ff", proof
+    assert rpc.call("screenshot", maxSize=64)["png"] != plain, "the gamut warning shows on the canvas"
+    rpc.call("color.settings", proofColors=False, gamutWarning=False)
+    assert rpc.call("screenshot", maxSize=64)["png"] == plain
+    rpc.call("document.close", discard=True)
+    rpc.call("document.open", path=project)
+    # At 16 bits too.
+    rpc.call("image.mode", bits=16)
+    assert rpc.call("document.profile", action="convert", profile="prophoto")["profile"] == "ProPhoto RGB"
+    rpc.call("document.close", discard=True)
+    # New documents take the working space.
+    rpc.call("color.settings", workingSpace="display-p3", policy="convert")
+    rpc.call("document.new", width=16, height=16)
+    assert rpc.call("document.profile")["profile"] == "Display P3"
+    rpc.call("document.close", discard=True)
+    rpc.call("color.settings", workingSpace="srgb", policy="preserve")
+    for bad in ({"action": "assign", "profile": "cmyk"}, {"action": "convert"}, {"action": "get", "profile": "srgb"}):
+        try:
+            rpc.call("document.new", width=8, height=8)
+            rpc.call("document.profile", **bad)
+            raise AssertionError(f"document.profile {bad} should be refused")
+        except RuntimeError as e:
+            print("expected error:", e)
+        finally:
+            rpc.call("document.close", discard=True)
+    rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
+    rpc.call("tabs.close", index=tab["index"], discard=True)
+
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else None
     if not path:
@@ -819,6 +910,7 @@ def main():
 
     remaining_methods(rpc)
     sixteen_bit(rpc)
+    colour_management(rpc)
 
     # Errors come back as errors, not crashes.
     try:

@@ -327,12 +327,16 @@ def document_save(path: Optional[str] = None) -> str:
 
 
 @outside("Export an image")
-def document_export(path: str, quality: int = 85, background: str = "#ffffff") -> str:
+def document_export(path: str, quality: int = 85, background: str = "#ffffff", embed_profile: bool = True,
+                    convert_to_srgb: Optional[bool] = None) -> str:
     """Flatten and export to a .png, .webp, .tif or .tga (these keep transparency; WebP at quality 100 is
     lossless), a .ico (16, 32, 48 and 256 px sizes), or .jpg (over background, at quality); .psd/.psb keep layers;
     an .svg writes vector shape layers as paths, folders as groups and every other layer as an embedded PNG; a .gif
-    writes the timeline's frames as an animated GIF (the composite when there are none)."""
-    return text(call("document.export", path=os.path.abspath(path), quality=quality, background=background))
+    writes the timeline's frames as an animated GIF (the composite when there are none). PNG, JPEG, WebP, TIFF and PSD
+    carry the document's colour profile (embed_profile=false leaves it out); convert_to_srgb converts the pixels to
+    sRGB first, for the web (the default for GIF)."""
+    return text(call("document.export", path=os.path.abspath(path), quality=quality, background=background,
+                     embedProfile=embed_profile, convertToSrgb=convert_to_srgb))
 
 
 # ---- actions and the timeline --------------------------------------------------------------------
@@ -1070,6 +1074,18 @@ def image_trim(based_on: str = "transparent", top: bool = True, bottom: bool = T
     return text(call("image.trim", basedOn=based_on, top=top, bottom=bottom, left=left, right=right, tolerance=tolerance))
 
 
+@edit("Assign or convert the colour profile")
+def document_profile(action: str = "get", profile: Optional[str] = None, intent: Optional[str] = None,
+                     black_point_compensation: Optional[bool] = None) -> str:
+    """The document's colour profile. action=get reads it; assign (Edit > Assign Profile) changes only the tag, so the
+    same values look different; convert (Edit > Convert to Profile) converts every layer's pixels and the stored colours
+    so the document looks the same. profile: srgb, adobe-rgb, display-p3, prophoto, working, none (assign: untagged,
+    treated as sRGB) or an ICC file's path; intent perceptual or relative (default). One undo step."""
+    if profile is not None and os.path.exists(profile):
+        profile = os.path.abspath(profile)
+    return text(call("document.profile", action=action, profile=profile, intent=intent, blackPointCompensation=black_point_compensation))
+
+
 @edit("Change the bit depth")
 def image_mode(bits: int) -> str:
     """Image > Mode: convert the document to 8 or 16 bits per channel (every layer, mask and the selection, one undo
@@ -1141,6 +1157,20 @@ def tool_select(name: str) -> str:
 def colors_set(foreground: Optional[str] = None, background: Optional[str] = None) -> str:
     """Set the foreground and background colours (CSS), which painting, fills and gradients default to."""
     return text(call("colors.set", foreground=foreground, background=background))
+
+
+@outside("Colour settings")
+def color_settings(working_space: Optional[str] = None, policy: Optional[str] = None, ask_missing: Optional[bool] = None,
+                   ask_mismatch: Optional[bool] = None, monitor_profile: Optional[str] = None, use_system_monitor: Optional[bool] = None,
+                   proof_profile: Optional[str] = None, proof_intent: Optional[str] = None, proof_black_point: Optional[bool] = None,
+                   proof_colors: Optional[bool] = None, gamut_warning: Optional[bool] = None, gamut_color: Optional[str] = None) -> str:
+    """Edit > Color Settings (working_space srgb, adobe-rgb, display-p3 or prophoto; policy preserve, convert or off for
+    embedded profiles; ask_missing, ask_mismatch), the monitor profile (an ICC path, "" for the system's) and View >
+    Proof Setup / Proof Colors / Gamut Warning. With no arguments it only reads them. Untagged images count as sRGB."""
+    return text(call("color.settings", workingSpace=working_space, policy=policy, askMissing=ask_missing, askMismatch=ask_mismatch,
+                     monitorProfile=monitor_profile, useSystemMonitor=use_system_monitor, proofProfile=proof_profile,
+                     proofIntent=proof_intent, proofBlackPoint=proof_black_point, proofColors=proof_colors,
+                     gamutWarning=gamut_warning, gamutColor=gamut_color))
 
 
 @edit("Zoom the view")
