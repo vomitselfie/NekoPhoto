@@ -111,6 +111,49 @@ TEST_CASE(inputs_read_speed_tilt_and_progress) {
     CHECK_NEAR(dynamicsInput(dynamicsMapping(DynamicsInput::StrokeProgress, DynamicsTarget::Size, 0, 1), s, 20, 0), 0.2, 1e-12);
 }
 
+TEST_CASE(roll_follows_the_barrel_or_the_stroke_without_a_jump_at_359_to_0) {
+    // The barrel from 340 through 359, 0 and 1 to 20 degrees, a report every quarter degree: the tip's angle (mod 360)
+    // never moves more than the barrel did between two reports.
+    const BrushDynamics roll = {dynamicsMapping(DynamicsInput::Roll, DynamicsTarget::Angle, 0, -360)};
+    BrushSampleTrack track;
+    double previous = 0, largest = 0;
+    bool first = true, passed359 = false, passed0 = false, passed1 = false;
+    for (int i = 0; i <= 160; i++) {
+        BrushSample s;
+        s.position = {double(i), 0};
+        s.time = i / 120.0;
+        s.stylus = true;
+        s.twist = std::fmod(340 + i * 0.25, 360.0);
+        s.twistReported = true;
+        passed359 |= s.twist >= 359 && s.twist < 359.25;
+        passed0 |= s.twist == 0;
+        passed1 |= s.twist == 1;
+        const double angle = applyDynamics(roll, DynamicsTarget::Angle, 0, track.add(s), 20);
+        if (!first) largest = std::max(largest, std::fabs(std::remainder(angle - previous, 360.0)));
+        previous = angle;
+        first = false;
+    }
+    CHECK(passed359 && passed0 && passed1);
+    CHECK(largest <= 0.25 + 1e-9);
+    // On a pen that reports no twist it follows the stroke: heading down the page (90 degrees in the y-down frame)
+    // turns the tip a quarter turn clockwise, an angle of -90.
+    BrushSampleTrack plain;
+    BrushSample a, b;
+    a.stylus = b.stylus = true;
+    b.position = {0, 10};
+    b.time = 0.01;
+    plain.add(a);
+    CHECK_NEAR(std::remainder(applyDynamics(roll, DynamicsTarget::Angle, 0, plain.add(b), 20), 360.0), -90.0, 1e-9);
+    // With a twist reported, the twist wins over the direction.
+    b.twist = 30;
+    b.twistReported = true;
+    BrushSampleTrack pen;
+    pen.add(a);
+    CHECK_NEAR(std::remainder(applyDynamics(roll, DynamicsTarget::Angle, 0, pen.add(b), 20), 360.0), -30.0, 1e-9);
+    CHECK(dynamicsInputFromName("roll") == DynamicsInput::Roll);
+    CHECK(std::string(dynamicsInputName(DynamicsInput::Roll)) == "roll");
+}
+
 TEST_CASE(the_old_settings_are_mappings_that_paint_the_same) {
     // What the engine computed before mappings, for pressure on size (full) and flow (half), and the jitters.
     const LegacyTipDynamics legacy{.sizeJitter = 0.4, .flowJitter = 0.3, .angleJitter = 60, .pressureSize = 1, .minimumSize = 0.2, .pressureFlow = 0.5};

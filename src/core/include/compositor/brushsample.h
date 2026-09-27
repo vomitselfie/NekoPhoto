@@ -20,6 +20,7 @@ struct BrushSample {
     double tangentialPressure = 0;  // the airbrush wheel, -1..1
     bool stylus = false;            // a pen: its pressure, tilt and twist are real; false for a mouse
     bool eraser = false;            // the pen's eraser end
+    bool twistReported = false;     // the pen reports its barrel's twist (not every pen can): the Roll input reads it
 
     // ---- Derived by BrushSampleTrack ----
     double dt = 0;                  // seconds since the previous sample (1/120 when the times do not say)

@@ -244,7 +244,7 @@ void AutomationServer::registerPaintHandlers() {
                 pen.tiltX = std::clamp(tilt.at(0).toDouble(), -90.0, 90.0);
                 pen.tiltY = std::clamp(tilt.at(1).toDouble(), -90.0, 90.0);
             }
-            if (k < twists.size()) pen.twist = twists[k].toDouble();
+            if (k < twists.size()) { pen.twist = twists[k].toDouble(); pen.twistReported = true; }
             pen.time = k < times.size() ? times[k].toDouble(i * 0.008) : i * 0.008;
             pen.stylus = stylus;
             s->pen = pen;

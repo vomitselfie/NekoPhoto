@@ -138,6 +138,16 @@ DynamicsMapping tiltRoundness(double amount, double minimum, double storedAngle)
     return withCurve(dynamicsMapping(DynamicsInput::Tilt, DynamicsTarget::Roundness, 1, -depth), tiltCurve(storedAngle));
 }
 
+// Orientation. The tip's angle is counterclockwise on screen while the pen's azimuth, twist and the stroke's direction
+// turn clockwise in the document's y-down frame, so a tip that follows one of them takes a depth of -360: its x axis
+// then points the way the pen leans, or turns with the barrel. The sum of angles stays continuous across a turn.
+
+/// shapeAzimuth: the tip turns to the way the pen leans.
+DynamicsMapping azimuthAngle() { return dynamicsMapping(DynamicsInput::TiltDirection, DynamicsTarget::Angle, 0, -360); }
+
+/// shapeRoll: the tip turns with the barrel on a pen that reports its twist, and with the stroke on one that does not.
+DynamicsMapping rollAngle() { return dynamicsMapping(DynamicsInput::Roll, DynamicsTarget::Angle, 0, -360); }
+
 } // namespace scaling
 
 /// Settings that change how a brush paints and have no mapping here yet. A setting counts when it is off its
@@ -146,7 +156,7 @@ DynamicsMapping tiltRoundness(double amount, double minimum, double storedAngle)
 /// opacity and bleed catch up with the pressure), which has no counterpart in the engine.
 const char* const notCarriedSettings[] = {
     "dynamicsPressureSizeSpeed", "dynamicsPressureOpacitySpeed", "dynamicsPressureBleedSpeed",
-    "dynamicsTiltCompression", "dynamicsTiltGradation", "shapeAzimuth", "shapeRoll", "shapeRollMode",
+    "dynamicsTiltCompression", "dynamicsTiltGradation", "shapeRollMode",
     "dynamicsTiltHue", "dynamicsTiltSaturation", "dynamicsTiltBrightness", "dynamicsTiltSecondaryColor",
     "dynamicsPressureHue", "dynamicsPressureSaturation", "dynamicsPressureBrightness", "dynamicsPressureSecondaryColor",
     "dynamicsPressureBleed", "dynamicsPressureShapeRoundness"};
@@ -234,6 +244,13 @@ std::optional<TipPreset> readBrush(const ZipArchive& zip, const std::string& fol
     if (inUse(s, "dynamicsTiltShapeRoundness"))
         tip.dynamics.push_back(scaling::tiltRoundness(number(s, "dynamicsTiltShapeRoundness", 0), number(s, "dynamicsTiltShapeRoundnessMinimum", 1),
                                                       angleFor("shapeRoundnessTiltAngle")));
+    // Orientation (scaling above). Roll already follows the stroke where the pen has no twist, so a brush with both
+    // stops following the stroke on its own rather than turning twice.
+    if (number(s, "shapeAzimuth", 0) != 0) tip.dynamics.push_back(scaling::azimuthAngle());
+    if (number(s, "shapeRoll", 0) != 0) {
+        tip.dynamics.push_back(scaling::rollAngle());
+        tip.followStroke = false;
+    }
     for (const char* key : notCarriedSettings)
         if (inUse(s, key)) notes.notCarried[key]++;
     tip.flow = number(s, "maxOpacity", 1);

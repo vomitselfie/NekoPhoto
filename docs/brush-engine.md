@@ -28,6 +28,7 @@ Raw, as the device reported it (`CanvasWidget::tabletEvent`, or `mouseSample` fo
 | `tangentialPressure` | the airbrush wheel, -1..1 |
 | `stylus` | the pressure, tilt and twist are a pen's; false for a mouse |
 | `eraser` | the pen's eraser end |
+| `twistReported` | the pen reports its barrel's twist (Qt's Rotation capability; in a recorded stroke, a sample with `twist`) |
 
 Nothing is folded in at capture: pressure is not turned into size there, and tilt stays in degrees. Each engine reads
 what it uses.
@@ -96,6 +97,7 @@ output = offset + depth × curve(input)        (the range runs from offset to of
 | Twist | `twistAngle` as a fraction of a turn |
 | Random | a draw from the stroke's seeded generator; on angles, -1..1 |
 | StrokeProgress | `distance / (scale × diameter)` with a `scale`; else `progress` when the stroke's length is known; else 25 diameters, Photoshop's default Fade |
+| Roll | `twistAngle` as a fraction of a turn when the pen reports its twist, else the stroke's `direction`: a tip that turns with the barrel follows the stroke on a pen without one |
 
 ### Targets and the combination rule
 
@@ -211,6 +213,15 @@ confirm.
 | `dynamicsTiltOpacity` a | Tilt → Opacity, tilt curve | 1, −a: lighter as the pen leans | direction assumed |
 | `dynamicsTiltBleed` a | Tilt → Flow, tilt curve | 1, −`tiltBleedFlow` × a (0.5 × a): each dab thins | meaning and scale assumed |
 | `dynamicsTiltShapeRoundness` a, `…Minimum` m | Tilt → Roundness, tilt curve | 1, −a × (1 − m); nothing while m is 1, as in nearly every brush | high |
+| `shapeAzimuth` | TiltDirection → Angle | 0, −360: the tip's x axis points the way the pen leans | meaning high, which axis assumed |
+| `shapeRoll` | Roll → Angle (the barrel's twist, else the stroke's direction); `followStroke` off | 0, −360: the tip turns with the barrel | meaning high, sign assumed |
+
+The tip's angle turns counterclockwise on screen, while the azimuth, the twist and the stroke's direction turn
+clockwise in the document's y-down frame, hence the depth of −360. The sum on an angle is continuous across a turn: the
+harness's twist wrap (340 through 359, 0 and 1 to 20 degrees) paints without a jump, and `brush_dynamics_tests` holds
+the tip's angle to the barrel's quarter-degree steps across 359 → 0 → 1. A brush with both `shapeRoll` and a rotation
+that follows the stroke stops following the stroke on its own, since Roll follows it where the pen has no twist.
+`shapeRollMode` (not in any brush seen so far) is listed as not carried over.
 
 `fullSpeed` is 1500 document pixels per second: the speed at which a speed setting has its whole effect. Procreate
 measures speed on the screen, not in the document, so this is a guess to tune.
@@ -300,7 +311,7 @@ targets, the inputs and the migration of old presets.
 ## Automation
 
 `brush.stroke` takes, besides `points`, `pressure` and `pressures`: `tilts` (`[tiltX, tiltY]` degrees per point),
-`twists` (degrees per point), `times` (seconds per point; 8 ms apart by default) and `seed` (the tip brushes' jitter).
+`twists` (degrees per point; with them the pen reports its twist, which Roll reads), `times` (seconds per point; 8 ms apart by default) and `seed` (the tip brushes' jitter).
 Any pen field makes the stroke a stylus's. A recorded action keeps them (and, for a preset, the times and the seed), so
 a stroke replays exactly.
 

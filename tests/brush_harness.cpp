@@ -132,6 +132,7 @@ std::vector<StrokeFixture> standardFixtures() {
     out.push_back(line("twist_sweep", 160, 30, 100, 290, 100, [](BrushSample& s, double u) {
         s.pressure = 0.7;
         s.twist = std::remainder(360 * u, 360.0);   // a full turn, wrapping from 180 to -180 halfway
+        s.twistReported = true;
     }));
     out.push_back(line("straight_line", 130, 30, 60, 290, 140, [](BrushSample& s, double) { s.pressure = 0.8; }));
     {
@@ -186,6 +187,7 @@ std::vector<StrokeFixture> standardFixtures() {
     out.push_back(line("twist_wrap", 160, 30, 100, 290, 100, [](BrushSample& s, double u) {
         s.pressure = 0.7;
         s.twist = std::fmod(340 + 40 * u, 360.0);
+        s.twistReported = true;
     }));
     return out;
 }
@@ -599,7 +601,8 @@ FixtureBrushes syntheticProcreate(const std::string& folder) {
     for (auto it = brushes->begin(); it != brushes->end(); ++it) {
         load(it.key());
         std::vector<const nlohmann::json*> checks = {&it.value()};
-        if (auto also = it.value().find("also"); also != it.value().end() && also->is_object()) checks.push_back(&*also);
+        if (auto also = it.value().find("also"); also != it.value().end() && also->is_array())
+            for (const nlohmann::json& a : *also) if (a.is_object()) checks.push_back(&a);
         for (const nlohmann::json* c : checks) {
             Expectation e;
             e.brush = stem(it.key());
@@ -700,6 +703,11 @@ bool checkExpectation(const Expectation& e, const std::vector<StrokeFixture>& fi
         std::snprintf(buffer, sizeof buffer, "%s swings %.1f against %.1f", e.measure.c_str(), range(va), range(vb));
         if (why) *why = buffer;
         return range(va) > range(vb) + 1.5;
+    }
+    if (e.expect == "steady") {
+        std::snprintf(buffer, sizeof buffer, "%s swings %.1f against %.1f", e.measure.c_str(), range(va), range(vb));
+        if (why) *why = buffer;
+        return range(va) + 1.5 < range(vb);
     }
     if (e.expect == "continuous") {
         std::snprintf(buffer, sizeof buffer, "largest %s step between stations %.2f (against %.2f)", e.measure.c_str(), largestStep(va), largestStep(vb));

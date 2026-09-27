@@ -62,7 +62,7 @@ bool BrushTip::normalize() {
     // Mappings with numbers that mean nothing go; the rest keep their order, which is the order they multiply in.
     BrushDynamics kept;
     for (DynamicsMapping m : dynamics) {
-        if (!std::isfinite(m.offset) || !std::isfinite(m.depth) || int(m.input) < 0 || int(m.input) > int(DynamicsInput::StrokeProgress)
+        if (!std::isfinite(m.offset) || !std::isfinite(m.depth) || int(m.input) < 0 || int(m.input) >= dynamicsInputCount
             || int(m.target) < 0 || int(m.target) >= dynamicsTargetCount || kept.size() >= 64) continue;
         m.offset = std::clamp(m.offset, -3600.0, 3600.0);
         m.depth = std::clamp(m.depth, -3600.0, 3600.0);

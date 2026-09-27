@@ -22,7 +22,10 @@
 
 namespace compositor {
 
-enum class DynamicsInput { Pressure, Speed, Tilt, TiltDirection, Twist, Random, StrokeProgress };
+/// Roll is the barrel's twist when the pen reports one (BrushSample::twistReported) and the stroke's direction when it does
+/// not, so a tip that turns with the barrel on a pen that has one follows the stroke on a pen that has not.
+enum class DynamicsInput { Pressure, Speed, Tilt, TiltDirection, Twist, Random, StrokeProgress, Roll };
+constexpr int dynamicsInputCount = 8;
 enum class DynamicsTarget { Size, Flow, Opacity, Angle, Roundness, Spacing, Scatter, GrainDepth, GrainRotation };
 constexpr int dynamicsTargetCount = 9;
 

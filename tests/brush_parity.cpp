@@ -155,7 +155,7 @@ TEST_CASE(fixtures_survive_a_json_round_trip) {
             const BrushSample& a = f.samples[i];
             const BrushSample& b = back->samples[i];
             CHECK(a.time == b.time && a.position.x == b.position.x && a.position.y == b.position.y && a.pressure == b.pressure && a.tiltX == b.tiltX && a.tiltY == b.tiltY
-                  && a.twist == b.twist && a.tangentialPressure == b.tangentialPressure);
+                  && a.twist == b.twist && a.twistReported == b.twistReported && a.tangentialPressure == b.tangentialPressure);
         }
     }
     // A bare array with missing fields takes the defaults.
