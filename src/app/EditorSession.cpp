@@ -80,7 +80,7 @@ bool EditorSession::canEditLayers() const {
 // ---- Document ----------------------------------------------------------------
 
 void EditorSession::createDocument(int width, int height, double resolution, bool emptyLayer) {
-    if (!Document::validDimension(width) || !Document::validDimension(height)) return;
+    if (const BudgetCheck check = Document::canCreate(width, height, SampleType::U8); !check) { emit error(budgetText(check)); return; }
     commitTransform();
     beginEdit(QT_TRANSLATE_NOOP("History", "New Canvas"));
     Document doc(width, height);
@@ -186,8 +186,28 @@ void EditorSession::closeDocument() {
     emit selectionChanged();
 }
 
-void EditorSession::insertImage(const AnyImage& image, const QString& name, std::optional<QPointF> at) {
-    if (!image || image.width() <= 0 || image.height() <= 0) return;
+QString EditorSession::budgetText(const BudgetCheck& check) {
+    const QString depth = QString::fromLatin1(sampleTypeName(check.type));
+    const QString megapixels = QString::number(check.limit / 1000000);
+    switch (check.kind) {
+    case BudgetCheck::Ok: return {};
+    case BudgetCheck::Side: return tr("An image, layer or canvas can be at most %1 pixels a side.").arg(check.limit);
+    case BudgetCheck::Image: return tr("An image, layer or canvas holds up to %1 megapixels at %2 bits per channel.").arg(megapixels, depth);
+    case BudgetCheck::Project: return tr("This would take the %1-bit document past its %2 megapixels for all layers together.").arg(depth, megapixels);
+    case BudgetCheck::Masks: return tr("This would take the %1-bit document past its %2 megapixels for all masks together.").arg(depth, megapixels);
+    case BudgetCheck::Layers: return tr("A document holds up to %1 layers.").arg(check.limit);
+    }
+    return {};
+}
+
+bool EditorSession::insertImage(const AnyImage& image, const QString& name, std::optional<QPointF> at, QString* errorText) {
+    if (!image || image.width() <= 0 || image.height() <= 0) return false;
+    const BudgetCheck check = document_ ? document_->canInsertImage(image.width(), image.height()) : Document::canCreate(image.width(), image.height(), image.sampleType());
+    if (!check) {
+        if (errorText) *errorText = budgetText(check);
+        else emit error(budgetText(check));
+        return false;
+    }
     cancelBrush();
     commitTransform();
     beginEdit(QT_TRANSLATE_NOOP("History", "Import Image"));
@@ -213,6 +233,7 @@ void EditorSession::insertImage(const AnyImage& image, const QString& name, std:
     setActiveLayer(layer.id);
     endEdit();
     notifyDocument();
+    return true;
 }
 
 std::shared_ptr<Image> EditorSession::flattened() const {
@@ -382,10 +403,7 @@ void EditorSession::resizeCanvas(int width, int height, double anchorX, double a
     if (!canEditLayers() || !Document::validDimension(width) || !Document::validDimension(height)) return;
     if (width == document_->width && height == document_->height) return;
     // The canvas budget in bytes: a 16-bit canvas holds half the pixels of an 8-bit one.
-    if (document_->sampleType != SampleType::U8 && (long long)width * height > document_->imagePixelBudget()) {
-        emit error(tr("A %1-bit canvas holds up to %2 megapixels.").arg(QString::fromLatin1(sampleTypeName(document_->sampleType))).arg(document_->imagePixelBudget() / 1000000));
-        return;
-    }
+    if (const BudgetCheck check = Document::canCreate(width, height, document_->sampleType); !check) { emit error(budgetText(check)); return; }
     double dx = std::round((width - document_->width) * anchorX), dy = std::round((height - document_->height) * anchorY);
     beginEdit(QT_TRANSLATE_NOOP("History", "Canvas Size"));
     Document doc = *document_;
@@ -408,11 +426,12 @@ void EditorSession::resizeCanvas(int width, int height, double anchorX, double a
 
 void EditorSession::resizeImage(int width, int height, double resolution, int sampling) {
     if (refusedAtDepth("edit.imageSize", tr("Image Size"))) return;
-    if (!canEditLayers() || !Document::validDimension(width) || !Document::validDimension(height)) return;
+    if (!canEditLayers()) return;
+    if (const BudgetCheck check = Document::canCreate(width, height, document_->sampleType); !check) { emit error(budgetText(check)); return; }
     Document doc = *document_;
     Sampling mode = sampling == 0 ? Sampling::Nearest : sampling == 1 ? Sampling::Smooth : Sampling::High;
     const double sx = double(width) / doc.width, sy = double(height) / doc.height;
-    if (!resizeDocument(doc, width, height, resolution, mode)) { emit error(tr("The resized image would exceed the 100-megapixel limit.")); return; }
+    if (!resizeDocument(doc, width, height, resolution, mode)) { emit error(tr("The resized layers would not fit the document's budgets.")); return; }
     scaleAnimation(doc, sx, sy);
     beginEdit(QT_TRANSLATE_NOOP("History", "Image Size"));
     document_ = doc;

@@ -252,6 +252,19 @@ private:
     mutable PixelBounds bounds_;
 };
 
+/// The outcome of a budget check (Document::canCreate and the rest): which rule a size or an addition breaks,
+/// and that rule's limit, so the app can say it in the reader's language.
+struct BudgetCheck {
+    enum Kind { Ok, Side, Image, Project, Masks, Layers };
+    Kind kind = Ok;
+    SampleType type = SampleType::U8;
+    /// The side in pixels (Side), the pixel budget (Image, Project, Masks) or the layer count (Layers).
+    long long limit = 0;
+    explicit operator bool() const { return kind == Ok; }
+    /// In English, for automation and logs.
+    std::string message() const;
+};
+
 struct Document {
     Uuid id;
     int width = 0;
@@ -304,6 +317,18 @@ struct Document {
     /// The bytes every layer's pixels and every mask take at the document's depth.
     long long layerBytes() const;
     long long maskBytes() const;
+
+    /// The budget rules every path that makes a canvas, a layer or pixels goes through, so the limits agree:
+    /// a side of at most maxImageSide, one image within imagePixelBudget(type), all the layers' pixels (and
+    /// separately all the masks') within projectPixelBudgetAt(type), and at most maxLayers layers.
+    /// A canvas, or one image, `width` x `height` at `type`.
+    static BudgetCheck canCreate(int width, int height, SampleType type);
+    /// One more `width` x `height` image as a new layer of this document, at its depth.
+    BudgetCheck canInsertImage(int width, int height) const;
+    /// `count` more layers holding `pixels` of layer pixels and `maskPixels` of mask pixels in all.
+    BudgetCheck canAddLayers(long long count, long long pixels = 0, long long maskPixels = 0) const;
+    /// A whole document (an import, a loaded project, a resize's result) at its own depth.
+    static BudgetCheck withinBudget(const Document& document);
     /// Whether Compositor for macOS can open this project: its loader allows pixelBudget in total.
     bool fitsMacBudget() const {
         // The Mac app is 8-bit only.

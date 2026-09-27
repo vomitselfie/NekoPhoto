@@ -277,6 +277,12 @@ void EditorSession::duplicateActiveLayer() {
         if (c.parentId && newIds.count(*c.parentId)) c.parentId = newIds[*c.parentId];
         if (c.maskSourceId && newIds.count(*c.maskSourceId)) c.maskSourceId = newIds[*c.maskSourceId];
     }
+    long long pixels = 0, maskPixels = 0;
+    for (const Layer& c : copies) {
+        if (c.asset && c.asset->image) pixels += (long long)c.asset->image.width() * c.asset->image.height();
+        if (c.mask && c.mask->asset.image) maskPixels += (long long)c.mask->asset.image.width() * c.mask->asset.image.height();
+    }
+    if (const BudgetCheck check = document_->canAddLayers((long long)copies.size(), pixels, maskPixels); !check) { emit error(budgetText(check)); return; }
     copies.front().name = QCoreApplication::translate("Names", "%1 copy").arg(QString::fromStdString(source.name)).toStdString();
     int insertion = indices.back() + 1;
     beginEdit(QT_TRANSLATE_NOOP("History", "Duplicate Layer"));

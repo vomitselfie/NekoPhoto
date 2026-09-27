@@ -87,6 +87,7 @@ void AutomationServer::registerDocumentHandlers() {
     add("document.new", [w, session](const QJsonObject& p) {
         int width = integer(p, "width", 1920), height = integer(p, "height", 1080);
         if (!Document::validDimension(width) || !Document::validDimension(height)) fail("width and height must be 1..30000", invalidParams);
+        if (const BudgetCheck check = Document::canCreate(width, height, SampleType::U8); !check) fail(qs(check.message()), invalidParams);
         if (session()->hasDocument()) w->newTab();
         session()->createDocument(width, height, num(p, "resolution", 72), flag(p, "emptyLayer", true));
         return QJsonObject{{"tab", w->currentTabIndex()}, {"width", width}, {"height", height}};
@@ -227,6 +228,7 @@ void AutomationServer::registerDocumentHandlers() {
         document();
         int width = integer(p, "width"), height = integer(p, "height");
         if (!Document::validDimension(width) || !Document::validDimension(height)) fail("width and height must be 1..30000", invalidParams);
+        if (const BudgetCheck check = Document::canCreate(width, height, document().sampleType); !check) fail(qs(check.message()), invalidParams);
         session()->resizeCanvas(width, height, std::clamp(num(p, "anchorX", 0.5), 0.0, 1.0), std::clamp(num(p, "anchorY", 0.5), 0.0, 1.0));
         return QJsonObject{{"width", session()->document()->width}, {"height", session()->document()->height}};
     });
@@ -255,6 +257,7 @@ void AutomationServer::registerDocumentHandlers() {
         else if (width > 0 && height <= 0) height = int(std::lround(double(width) * doc.height / doc.width));
         else if (height > 0 && width <= 0) width = int(std::lround(double(height) * doc.width / doc.height));
         if (!Document::validDimension(width) || !Document::validDimension(height)) fail("give width and/or height (1..30000) or scale", invalidParams);
+        if (const BudgetCheck check = Document::canCreate(width, height, doc.sampleType); !check) fail(qs(check.message()), invalidParams);
         QString sampling = str(p, "sampling", QStringLiteral("high")).toLower();
         int mode = sampling.startsWith("near") ? 0 : sampling.startsWith("smooth") || sampling == "bilinear" ? 1 : 2;
         session()->resizeImage(width, height, num(p, "resolution", doc.resolution), mode);

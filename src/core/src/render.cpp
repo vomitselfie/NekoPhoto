@@ -326,7 +326,8 @@ std::shared_ptr<GrayImage> resampleMask(const GrayImage& mask, const LayerTransf
 }
 
 bool resizeDocument(Document& document, int width, int height, double resolution, Sampling sampling) {
-    if (!Document::validDimension(width) || !Document::validDimension(height) || (long long)width * height > Document::pixelBudget) return false;
+    if (!Document::canCreate(width, height, document.sampleType)) return false;
+    const long long project = Document::projectPixelBudgetAt(document.sampleType);
     double sx = double(width) / document.width, sy = double(height) / document.height;
     if (document.width == width && document.height == height) { document.resolution = resolution; return true; }
     Document out = document;
@@ -358,7 +359,7 @@ bool resizeDocument(Document& document, int width, int height, double resolution
         box.sampling = sampling;
         if (!box.isValid()) return false;
         if (layer.asset && layer.asset->image.u8()) {
-            if (w > 30000 || h > 30000 || (long long)w * h > Document::pixelBudget || (long long)w * h > Document::projectPixelBudget - used) return false;
+            if (!Document::canCreate(w, h, document.sampleType) || (long long)w * h > project - used) return false;
             used += (long long)w * h;
             // Shear can't be expressed as a LayerTransform, so resample through the scaled corner mapping directly.
             Corners corners;
@@ -376,7 +377,7 @@ bool resizeDocument(Document& document, int width, int height, double resolution
             const GrayImage& mask = *layer.mask->asset.image.u8();
             if (layer.mask->placement) layer.mask->placement = layer.mask->placement->placing(layer.mask->placement->unitToDocument().concatenating(scale));
             else if (mask.width() > 1 || mask.height() > 1) {
-                if ((long long)w * h > Document::pixelBudget || (long long)w * h > Document::projectPixelBudget - usedMask) return false;
+                if (!Document::canCreate(w, h, document.sampleType) || (long long)w * h > project - usedMask) return false;
                 usedMask += (long long)w * h;
                 Corners corners;
                 for (size_t i = 0; i < 4; i++) corners[i] = {c[i].x * sx, c[i].y * sy};

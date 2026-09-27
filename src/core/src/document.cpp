@@ -229,6 +229,52 @@ std::string megapixels(long long pixels) {
 }
 } // namespace
 
+std::string BudgetCheck::message() const {
+    const std::string depth = std::string(sampleTypeName(type)) + "-bit";
+    switch (kind) {
+    case Ok: return {};
+    case Side: return "an image, layer or canvas can be at most " + std::to_string(limit) + " pixels a side";
+    case Image: return "an image, layer or canvas holds up to " + megapixels(limit) + " megapixels at " + sampleTypeName(type) + " bits per channel";
+    case Project: return "the layers would take this " + depth + " document past its " + megapixels(limit) + " megapixels for all layers together";
+    case Masks: return "the masks would take this " + depth + " document past its " + megapixels(limit) + " megapixels for all masks together";
+    case Layers: return "a document holds up to " + std::to_string(limit) + " layers";
+    }
+    return {};
+}
+
+BudgetCheck Document::canCreate(int width, int height, SampleType type) {
+    if (!validDimension(width) || !validDimension(height)) return {BudgetCheck::Side, type, maxImageSide};
+    if ((long long)width * height > imagePixelBudget(type)) return {BudgetCheck::Image, type, imagePixelBudget(type)};
+    return {BudgetCheck::Ok, type, 0};
+}
+
+BudgetCheck Document::canAddLayers(long long count, long long pixels, long long masks) const {
+    if (count < 0 || (long long)layers.size() + count > maxLayers) return {BudgetCheck::Layers, sampleType, maxLayers};
+    const long long project = projectPixelBudgetAt(sampleType);
+    if (pixels > 0 && (pixels > project || layerPixels() > project - pixels)) return {BudgetCheck::Project, sampleType, project};
+    if (masks > 0 && (masks > project || maskPixels() > project - masks)) return {BudgetCheck::Masks, sampleType, project};
+    return {BudgetCheck::Ok, sampleType, 0};
+}
+
+BudgetCheck Document::canInsertImage(int width, int height) const {
+    if (BudgetCheck check = canCreate(width, height, sampleType); !check) return check;
+    return canAddLayers(1, (long long)width * height);
+}
+
+BudgetCheck Document::withinBudget(const Document& document) {
+    const SampleType type = document.sampleType;
+    if (BudgetCheck check = canCreate(document.width, document.height, type); !check) return check;
+    if (document.layers.size() > size_t(maxLayers)) return {BudgetCheck::Layers, type, maxLayers};
+    const long long project = projectPixelBudgetAt(type);
+    for (const Layer& l : document.layers) {
+        if (l.asset && l.asset->image) if (BudgetCheck check = canCreate(l.asset->image.width(), l.asset->image.height(), type); !check) return check;
+        if (l.mask && l.mask->asset.image) if (BudgetCheck check = canCreate(l.mask->asset.image.width(), l.mask->asset.image.height(), type); !check) return check;
+    }
+    if (document.layerPixels() > project) return {BudgetCheck::Project, type, project};
+    if (document.maskPixels() > project) return {BudgetCheck::Masks, type, project};
+    return {BudgetCheck::Ok, type, 0};
+}
+
 std::string sampleTypeBudgetProblem(const Document& document, SampleType type) {
     const long long image = Document::imagePixelBudget(type), project = Document::projectPixelBudgetAt(type);
     const std::string depth = std::string(sampleTypeName(type)) + "-bit";

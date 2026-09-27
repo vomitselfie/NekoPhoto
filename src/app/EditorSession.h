@@ -149,7 +149,10 @@ public:
     void closeDocument();
     /// Adds imported pixels as a new layer, centred on `at` (or the canvas); a first import creates the canvas, at the
     /// image's depth (a 16-bit PNG opens as a 16-bit document). Into an existing document they take its depth.
-    void insertImage(const compositor::AnyImage& image, const QString& name, std::optional<QPointF> at = std::nullopt);
+    /// False, saying why (in `errorText` when given, else through `error`), when the image would break a budget rule.
+    bool insertImage(const compositor::AnyImage& image, const QString& name, std::optional<QPointF> at = std::nullopt, QString* errorText = nullptr);
+    /// A refused budget check (Document::canCreate and the rest) in the reader's language.
+    static QString budgetText(const compositor::BudgetCheck& check);
     /// The composite at 8 bits: a 16-bit document's is dithered down (for the 8-bit formats and the clipboard).
     std::shared_ptr<compositor::Image> flattened() const;
     /// The composite at the document's depth (16-bit exports); an 8-bit document's widened.

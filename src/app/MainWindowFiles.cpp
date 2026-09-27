@@ -149,6 +149,11 @@ void MainWindow::openLayeredFile(const QString& path) {
         if (!error.empty() || !vector) showError(tr("Couldn’t open %1").arg(QFileInfo(path).fileName()), QString::fromStdString(error));   // empty: the page choice was cancelled
         return;
     }
+    // The same budgets as every other way in (each importer also stops early on its own limits).
+    if (const compositor::BudgetCheck check = compositor::Document::withinBudget(imported->document); !check) {
+        showError(tr("Couldn’t open %1").arg(QFileInfo(path).fileName()), EditorSession::budgetText(check));
+        return;
+    }
     if (psd) app::finishPsdText(*imported);
     if (affinity) app::finishPendingText(*imported);
     Tab& tab = addTab(true);
@@ -188,7 +193,7 @@ void MainWindow::importFile(const QString& path, std::optional<QPointF> at) {
 
 namespace {
 /// An image file's pixels: 16-bit PNG and TIFF files at 16 bits (they open as 16-bit documents), the rest at 8.
-compositor::AnyImage readImageFile(const QString& path, QString* error) {
+compositor::AnyImage readImageFileUnchecked(const QString& path, QString* error) {
     if (compositor::isRawPath(path.toStdString())) {
         // A camera RAW file, developed through LibRaw (a few seconds for a large sensor).
         QApplication::setOverrideCursor(Qt::BusyCursor);
@@ -216,19 +221,37 @@ compositor::AnyImage readImageFile(const QString& path, QString* error) {
     }
     QImageReader reader(path);
     reader.setAutoTransform(true);
+    // The size from the header, when the format gives one, before anything is decoded (at 8 bits, the larger budget:
+    // the decoded image is checked again at its own depth).
+    if (const QSize size = reader.size(); size.isValid()) {
+        if (const compositor::BudgetCheck check = compositor::Document::canCreate(size.width(), size.height(), compositor::SampleType::U8); !check) {
+            if (error) *error = EditorSession::budgetText(check);
+            return nullptr;
+        }
+    }
     QImage image = reader.read();
     if (image.isNull()) { if (error) *error = reader.errorString(); return nullptr; }
-    if (image.width() > 30000 || image.height() > 30000) { if (error) *error = QObject::tr("Images up to 30,000 pixels per side are supported."); return nullptr; }
     // 16 bits per channel through Qt (a 16-bit TIFF): kept at 16 bits.
     if (image.depth() == 64) return compositor::Image16Ptr(fromQImage16(image));
     return compositor::ImagePtr(fromQImage(image));
+}
+
+/// An image file's pixels, refused (saying why) when they break the budgets for a canvas or image at their depth.
+compositor::AnyImage readImageFile(const QString& path, QString* error) {
+    compositor::AnyImage image = readImageFileUnchecked(path, error);
+    if (!image) return image;
+    if (const compositor::BudgetCheck check = compositor::Document::canCreate(image.width(), image.height(), image.sampleType()); !check) {
+        if (error) *error = EditorSession::budgetText(check);
+        return nullptr;
+    }
+    return image;
 }
 } // namespace
 
 bool MainWindow::importImageFile(const QString& path, std::optional<QPointF> at, QString* error) {
     auto image = readImageFile(path, error);
     if (!image) return false;
-    session_->insertImage(image, QFileInfo(path).completeBaseName(), at);   // at the document's depth
+    if (!session_->insertImage(image, QFileInfo(path).completeBaseName(), at, error)) return false;   // at the document's depth
     addRecent(path);
     return true;
 }

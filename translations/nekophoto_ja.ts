@@ -1226,10 +1226,6 @@
         <translation>%1 は NekoPhoto で読み込める画像ではありません。</translation>
     </message>
     <message>
-        <source>That image is larger than a document can hold.</source>
-        <translation>この画像はドキュメントに収まる大きさを超えています。</translation>
-    </message>
-    <message>
         <source>Couldn&apos;t read %1</source>
         <translation>%1 を読み込めませんでした</translation>
     </message>
@@ -1320,10 +1316,6 @@
     <message>
         <source>PDF files (*.pdf)</source>
         <translation>PDF ファイル (*.pdf)</translation>
-    </message>
-    <message>
-        <source>Images up to 30,000 pixels per side are supported.</source>
-        <translation>1 辺 30,000 ピクセルまでの画像に対応しています。</translation>
     </message>
     <message>
         <source>IS-Net (general use)</source>
@@ -2965,6 +2957,26 @@ File &gt; New creates a blank canvas.</source>
         <translation>名称未設定</translation>
     </message>
     <message>
+        <source>An image, layer or canvas can be at most %1 pixels a side.</source>
+        <translation>画像、レイヤー、カンバスの 1 辺は最大 %1 ピクセルです。</translation>
+    </message>
+    <message>
+        <source>An image, layer or canvas holds up to %1 megapixels at %2 bits per channel.</source>
+        <translation>%2 bit/チャンネルの画像、レイヤー、カンバスは最大 %1 メガピクセルです。</translation>
+    </message>
+    <message>
+        <source>This would take the %1-bit document past its %2 megapixels for all layers together.</source>
+        <translation>%1 bit/チャンネルのドキュメントで、すべてのレイヤーの合計が上限の %2 メガピクセルを超えます。</translation>
+    </message>
+    <message>
+        <source>This would take the %1-bit document past its %2 megapixels for all masks together.</source>
+        <translation>%1 bit/チャンネルのドキュメントで、すべてのマスクの合計が上限の %2 メガピクセルを超えます。</translation>
+    </message>
+    <message>
+        <source>A document holds up to %1 layers.</source>
+        <translation>1 つのドキュメントに置けるレイヤーは最大 %1 個です。</translation>
+    </message>
+    <message>
         <source>%1 is not available for %2-bit documents yet.</source>
         <translation>%2 bit/チャンネルのドキュメントでは、%1 はまだ使用できません。</translation>
     </message>
@@ -2981,16 +2993,12 @@ File &gt; New creates a blank canvas.</source>
         <translation>切り抜き</translation>
     </message>
     <message>
-        <source>A %1-bit canvas holds up to %2 megapixels.</source>
-        <translation>%1 bit/チャンネルのカンバスは最大 %2 メガピクセルです。</translation>
+        <source>The resized layers would not fit the document&apos;s budgets.</source>
+        <translation>サイズ変更後のレイヤーがドキュメントの上限に収まりません。</translation>
     </message>
     <message>
         <source>Image Size</source>
         <translation>画像解像度</translation>
-    </message>
-    <message>
-        <source>The resized image would exceed the 100-megapixel limit.</source>
-        <translation>サイズ変更後の画像が 1 億ピクセルの上限を超えます。</translation>
     </message>
     <message>
         <source>This tool</source>
@@ -3157,16 +3165,8 @@ File &gt; New creates a blank canvas.</source>
         <translation>拡大・縮小する表示中の画像レイヤーを選択してください。</translation>
     </message>
     <message>
-        <source>The size must be between 1 and %1 pixels a side, 100 megapixels at most.</source>
-        <translation>サイズは 1 辺 1〜%1 ピクセル、最大 1 億ピクセルにしてください。</translation>
-    </message>
-    <message>
         <source>Could not scale the layer.</source>
         <translation>レイヤーを拡大・縮小できませんでした。</translation>
-    </message>
-    <message>
-        <source>The copied layers would take this project past its 1-gigapixel limit for all layers together.</source>
-        <translation>コピーしたレイヤーにより、プロジェクト全体のレイヤーの合計が 10 億ピクセルの上限を超えます。</translation>
     </message>
     <message>
         <source>Quick Mask: paint white to select, black to mask; Select ▸ Edit in Quick Mask Mode again to finish</source>

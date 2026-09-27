@@ -76,6 +76,47 @@ TEST_CASE(parallel_for_from_two_threads_runs_every_index_once) {
     CHECK_EQ(bad.load(), 0);
 }
 
+// One set of budget rules: side, one image, all layers, all masks and the layer count, at the document's depth.
+TEST_CASE(budget_rules_agree_at_each_depth) {
+    CHECK(Document::canCreate(10000, 10000, SampleType::U8));
+    CHECK_EQ(int(Document::canCreate(30000, 30000, SampleType::U8).kind), int(BudgetCheck::Image));   // a side fits, the area does not
+    CHECK_EQ(int(Document::canCreate(30001, 1, SampleType::U8).kind), int(BudgetCheck::Side));
+    CHECK_EQ(int(Document::canCreate(0, 10, SampleType::U8).kind), int(BudgetCheck::Side));
+    CHECK_EQ(int(Document::canCreate(10000, 10000, SampleType::U16).kind), int(BudgetCheck::Image));
+    CHECK(Document::canCreate(7000, 7000, SampleType::U16));
+    CHECK(Document::canCreate(30000, 30000, SampleType::U8).message().find("100 megapixels") != std::string::npos);
+
+    Document doc(100, 100);
+    const Asset big = Asset::make(ImagePtr(std::make_shared<Image>(10000, 9000)), "Big");
+    for (int i = 0; i < 11; i++) doc.layers.emplace_back(big, Point{0, 0});   // 990 MP of the gigapixel
+    CHECK(doc.canInsertImage(100, 100));
+    CHECK(doc.canInsertImage(10000, 1000));   // exactly the gigapixel
+    CHECK_EQ(int(doc.canInsertImage(10000, 1001).kind), int(BudgetCheck::Project));
+    CHECK_EQ(int(doc.canAddLayers(1, 20000000).kind), int(BudgetCheck::Project));
+    CHECK(Document::withinBudget(doc));
+    doc.layers.emplace_back(big, Point{0, 0});
+    CHECK_EQ(int(Document::withinBudget(doc).kind), int(BudgetCheck::Project));
+    doc.layers.pop_back();
+    doc.sampleType = SampleType::U16;   // the same layers are twice the bytes at 16 bits: each is past the 50 MP a 16-bit image holds
+    CHECK_EQ(int(Document::withinBudget(doc).kind), int(BudgetCheck::Image));
+
+    Document many(10, 10);
+    many.layers.resize(size_t(Document::maxLayers) - 1);
+    CHECK(many.canAddLayers(1));
+    CHECK_EQ(int(many.canAddLayers(2).kind), int(BudgetCheck::Layers));
+    CHECK(many.canInsertImage(1, 1));
+    many.layers.emplace_back();
+    CHECK_EQ(int(many.canInsertImage(1, 1).kind), int(BudgetCheck::Layers));
+    CHECK(Document::withinBudget(many));
+
+    // Image Size goes through the same rules: past the canvas budget it is refused, the document untouched.
+    Document small(100, 100);
+    small.layers.emplace_back(Asset::make(ImagePtr(std::make_shared<Image>(100, 100)), "Small"), Point{0, 0});
+    CHECK(!resizeDocument(small, 20000, 20000, 72, Sampling::Nearest));
+    CHECK_EQ(small.width, 100);
+    CHECK(resizeDocument(small, 200, 200, 72, Sampling::Nearest));
+}
+
 TEST_CASE(affine_matches_core_graphics_conventions) {
     Affine t = Affine::translation(10, 20).rotated(M_PI / 2).scaledBy(2, 3);
     // Apply order: scale, then rotate, then translate (CG: t.rotated(by:).scaledBy() applies inner ops first).
@@ -777,6 +818,12 @@ TEST_CASE(projects_past_the_macs_100_megapixels_save_and_load) {
     CHECK(one.layers.back().asset->image.u8()->width() == 10001);
     dir = tempDir();
     CHECK(!saveProject(one, std::nullopt, (dir / "Big.comp").string(), error));
+    CHECK(error.kind == ProjectError::TooLarge);
+    fs::remove_all(dir);
+    // A canvas follows the same rule on load: 30,000 pixels a side is allowed, 900 megapixels is not.
+    dir = tempDir();
+    REQUIRE(saveProject(Document(30000, 30000), std::nullopt, (dir / "Wide.comp").string(), error));
+    CHECK(!loadProject((dir / "Wide.comp").string(), error));
     CHECK(error.kind == ProjectError::TooLarge);
     fs::remove_all(dir);
 }

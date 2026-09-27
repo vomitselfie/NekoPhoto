@@ -421,10 +421,8 @@ bool validateManifest(const Manifest& m, ProjectError& error) {
 }
 
 bool checkSize(int width, int height, long long& used, SampleType type = SampleType::U8) {
-    if (!Document::validDimension(width) || !Document::validDimension(height)) return false;
-    // Byte budgets: a 16-bit document holds half the pixels of an 8-bit one.
-    const long long image = Document::imagePixelBudget(type), project = Document::projectPixelBudgetAt(type);
-    if ((long long)width * height > image || (long long)width * height > project - used) return false;
+    // The document's budget rules (Document::canCreate), in bytes: a 16-bit document holds half the pixels of an 8-bit one.
+    if (!Document::canCreate(width, height, type) || (long long)width * height > Document::projectPixelBudgetAt(type) - used) return false;
     used += (long long)width * height;
     return true;
 }
@@ -506,6 +504,7 @@ std::optional<Document> loadProject(const std::string& pathText, ProjectError& e
     if (!parseManifestJson(j, m, error) || !validateManifest(m, error)) return std::nullopt;
 
     Document d = documentFrom(m);
+    if (!Document::canCreate(d.width, d.height, d.sampleType)) { error = tooLarge(); return std::nullopt; }
     // Every file is checked against the budgets from its header first; then the images decode side by side.
     struct Load { size_t layer; bool isMask; fs::path file; AnyImage image; AnyGray gray; };
     const bool deep = d.sampleType == SampleType::U16;

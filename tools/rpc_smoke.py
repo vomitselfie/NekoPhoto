@@ -806,6 +806,31 @@ def main():
         print("expected error:", e)
     else:
         raise SystemExit("missing-layer lookup should have failed")
+    # The budgets: a side may be 30,000 pixels, but a canvas holds 100 megapixels (at 8 bits).
+    budget_refusals = [("document.new", {"width": 30000, "height": 30000}),
+                       ("canvas.resize", {"width": 20000, "height": 20000}),
+                       ("image.resize", {"width": 20000, "height": 20000})]
+    for method, params in budget_refusals:
+        try:
+            rpc.call(method, **params)
+        except RuntimeError as e:
+            assert "megapixels" in str(e), e
+            print("expected error:", e)
+        else:
+            raise SystemExit(f"{method} past the canvas budget should have failed")
+    # A PNG whose header claims 20000 x 20000 is refused from the header, before anything is decoded.
+    header = struct.pack(">IIBBBBB", 20000, 20000, 8, 6, 0, 0, 0)
+    png_chunk = lambda kind, data: struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+    huge = os.path.join(tempfile.mkdtemp(), "huge.png")
+    with open(huge, "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n" + png_chunk(b"IHDR", header) + png_chunk(b"IDAT", zlib.compress(b"\0" * 64)) + png_chunk(b"IEND", b""))
+    try:
+        rpc.call("document.import", path=huge)
+    except RuntimeError as e:
+        assert "megapixels" in str(e), e
+        print("expected error:", e)
+    else:
+        raise SystemExit("a 400-megapixel PNG should have been refused")
     methods = rpc.call("rpc.methods")
     # Every method is described, request keys are checked against the description, and names are forgiving.
     described = rpc.call("rpc.describe")

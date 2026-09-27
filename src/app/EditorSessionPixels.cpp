@@ -243,7 +243,8 @@ void EditorSession::layerViaCopy() {
 }
 
 void EditorSession::addPixelLayer(std::shared_ptr<const Image> image, QPointF origin, const QString& editName, bool dropsSelection) {
-    if (!document_ || !image || document_->layers.size() >= size_t(Document::maxLayers)) return;
+    if (!document_ || !image) return;
+    if (const BudgetCheck check = document_->canInsertImage(image->width(), image->height()); !check) { emit error(budgetText(check)); return; }
     Layer layer(Asset::make(image, nextLayerName(document_->layers, QCoreApplication::translate("Names", "Layer").toStdString())), toPoint(origin));
     const Layer* active = activeLayer();
     layer.parentId = active && active->isGroup ? activeLayerId_ : (active ? active->parentId : std::nullopt);
@@ -314,7 +315,7 @@ bool EditorSession::contentAwareFill(QString* errorText, const ContentFillReques
     auto result = contentAwareFillResult(request, placed, errorText);
     if (!result) return false;
     if (!request.newLayer) { commitPixels(result, placed, QT_TRANSLATE_NOOP("History", "Content-Aware Fill")); return true; }
-    if (document_->layers.size() >= size_t(Document::maxLayers)) { if (errorText) *errorText = tr("The document has too many layers."); return false; }
+    if (const BudgetCheck check = document_->canInsertImage(result->width(), result->height()); !check) { if (errorText) *errorText = budgetText(check); return false; }
     const Layer* active = activeLayer();
     Layer layer(Asset::make(result, nextLayerName(document_->layers, QCoreApplication::translate("Names", "Layer").toStdString())), Point{0, 0});
     layer.transform = placed;
@@ -393,10 +394,7 @@ bool EditorSession::contentAwareScale(int width, int height, bool protectSelecti
     if (!canAdjustPixels()) { if (errorText) *errorText = tr("Select a visible image layer to scale."); return false; }
     Layer* layer = activeLayerMutable();
     const ImagePtr src = layer->asset->image.u8();
-    if (!Document::validDimension(width) || !Document::validDimension(height) || (long long)width * height > Document::pixelBudget) {
-        if (errorText) *errorText = tr("The size must be between 1 and %1 pixels a side, 100 megapixels at most.").arg(maxImageSide);
-        return false;
-    }
+    if (const BudgetCheck check = Document::canCreate(width, height, document_->sampleType); !check) { if (errorText) *errorText = budgetText(check); return false; }
     std::shared_ptr<GrayImage> protect;
     if (protectSelection && document_->selection && document_->selection->coverage) protect = selectionOnGrid(layer->transform, src->width(), src->height());
     SeamCarveOptions options;
@@ -417,11 +415,19 @@ bool EditorSession::copyLayerFrom(const EditorSession& source, const Uuid& id, s
     included.insert(id);
     std::vector<Layer> copied;
     for (auto& l : from.layers) if (included.count(l.id)) copied.push_back(l);
-    const long long used = document_ ? document_->layerPixels() : 0;
-    long long added = 0;
-    for (auto& l : copied) if (l.asset && l.asset->image) added += (long long)l.asset->image.width() * l.asset->image.height();
-    // The budget in bytes: a 16-bit document holds half the pixels.
-    if (used + added > (document_ ? document_->projectPixelBudgetAt() : Document::projectPixelBudget)) { if (errorText) *errorText = tr("The copied layers would take this project past its 1-gigapixel limit for all layers together."); return false; }
+    long long added = 0, addedMasks = 0;
+    for (auto& l : copied) {
+        if (l.asset && l.asset->image) added += (long long)l.asset->image.width() * l.asset->image.height();
+        if (l.mask && l.mask->asset.image) addedMasks += (long long)l.mask->asset.image.width() * l.mask->asset.image.height();
+    }
+    // The budgets in bytes, at the receiving document's depth (a new one takes the source's size, at 8 bits).
+    {
+        Document empty(from.width, from.height);
+        const Document& into = document_ ? *document_ : empty;
+        BudgetCheck check = document_ ? BudgetCheck{} : Document::canCreate(from.width, from.height, SampleType::U8);
+        if (check) check = into.canAddLayers((long long)copied.size(), added, addedMasks);
+        if (!check) { if (errorText) *errorText = budgetText(check); return false; }
+    }
     // Clipping to a layer that stays behind is baked into the pixels.
     for (auto& l : copied) {
         if (l.maskSourceId && !included.count(*l.maskSourceId)) {

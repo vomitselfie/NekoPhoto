@@ -48,7 +48,7 @@ std::optional<SmartObjectContents> contentsFromFile(const QString& path, QString
     } else {
         QImage image;
         if (!image.loadFromData(data)) { if (error) *error = QObject::tr("%1 is not an image NekoPhoto can read.").arg(QFileInfo(path).fileName()); return std::nullopt; }
-        if ((long long)image.width() * image.height() > Document::pixelBudget) { if (error) *error = QObject::tr("That image is larger than a document can hold."); return std::nullopt; }
+        if (const BudgetCheck check = Document::canCreate(image.width(), image.height(), SampleType::U8); !check) { if (error) *error = EditorSession::budgetText(check); return std::nullopt; }
         c.image = fromQImage(image);
         if (image.dotsPerMeterX() > 0) c.resolution = image.dotsPerMeterX() * 0.0254;
     }
@@ -94,9 +94,17 @@ bool EditorSession::placeEmbedded(const QString& path, QString* error) {
     size_t index = document_->layers.size();
     std::optional<Uuid> parent;
     if (active) { index = size_t(document_->indexOf(active->id)) + 1; parent = active->isGroup ? active->id : active->parentId; }
+    // The placed raster and the decoded contents, against the same budgets as any new layer.
+    Document next = *document_;
+    const Uuid id = placeSmartObject(next, source, index, parent);
+    const Layer* placed = next.find(id);
+    const long long pixels = placed && placed->asset && placed->asset->image ? (long long)placed->asset->image.width() * placed->asset->image.height() : 0;
+    BudgetCheck check = Document::canCreate(std::max(1, source->width), std::max(1, source->height), document_->sampleType);
+    if (check) check = document_->canAddLayers(1, pixels);
+    if (!check) { if (error) *error = budgetText(check); return false; }
     endOpacityEdit();
     beginEdit(QT_TRANSLATE_NOOP("History", "Place Embedded"));
-    const Uuid id = placeSmartObject(*document_, source, index, parent);
+    *document_ = std::move(next);
     endEdit();
     setActiveLayer(id);
     notifyDocument();
