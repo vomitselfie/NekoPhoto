@@ -7,7 +7,7 @@
 **English** · [日本語](#日本語)
 
 **Bring your work with you from any major platform.** NekoPhoto is a fast,
-focused photo editor and painting app for Linux that opens the files and brushes
+focused photo editor and painting app for Linux and Windows that opens the files and brushes
 you already have: Photoshop and Clip Studio projects with their layers intact,
 and brushes from Photoshop, Clip Studio and Procreate. It saves back to layered
 PSD, so it fits into a workflow shared with Photoshop, Krita and Photopea. Layers, masks,
@@ -15,7 +15,7 @@ selections, brushes, adjustments and filters work with the tools and shortcuts
 you know.
 
 NekoPhoto began as a Linux port of [Compositor](https://github.com/robbietilton/Compositor)
-for macOS, and still opens its `.comp` projects. Until version 1.0 it was
+for macOS, and opens its older `.comp` projects. Until version 1.0 it was
 called compositor-linux; your settings, brushes and downloaded model move over
 by themselves the first time you start it.
 
@@ -42,14 +42,18 @@ Coming next:
 ## What it does
 
 - **Layers:** folders, blend modes, opacity, layer masks, clipping masks and adjustment layers
-- **Transform:** move, scale, rotate and distort without losing resolution
+- **Transform:** move, scale, rotate and distort without losing resolution; Content-Aware Scale and Content-Aware Move
 - **Selections:** marquee, lasso, Quick Select by scribble or by click, Content-Aware Fill, and an edge-aware magic wand: shading and texture stay in, edges hold, the tolerance can be changed right after a click, Shift/Alt-clicks add what belongs and what doesn't, and with Contiguous off one click takes a background in many pockets (a baked checkerboard around a character) and Delete leaves the line art without a rim of the background ([docs/smart-wand.md](docs/smart-wand.md))
 - **Painting:** brush, eraser, spot healing, clone stamp, smudge, liquify, gradients, shapes and text
 - **Brushes:** 196 MyPaint brushes (pencils, inks, charcoal, paint, smudging) that follow pen pressure and tilt, and your own brushes imported from Photoshop (`.abr`), Procreate (`.brushset`, `.brush`) and Clip Studio (`.sut`), or any image as a brush tip
+- **Vectors:** Pen and shape tools with path operations, gradient and pattern fills, live rectangles and ellipses, vector masks on any layer, and text to path ([docs/vector-tools.md](docs/vector-tools.md))
+- **Artboards and slices,** exported to files in one go ([docs/artboards-slices.md](docs/artboards-slices.md))
+- **Actions and Batch:** record steps, play them back, and run them over a folder of files ([docs/actions.md](docs/actions.md))
+- **Animation:** a frame Timeline with animated GIF export; GIF and Aseprite files open with their frames ([docs/animation.md](docs/animation.md))
 - **Adjustments and filters:** levels, curves, hue/saturation, exposure, gradient map, grain, blurs, noise and lens correction
 - **Remove Background:** an AI model that runs on your own machine; nothing is uploaded
 - **G'MIC:** over 850 more filters with a live preview, when `gmic` is installed
-- **Files:** Photoshop PSD and PSB, and Clip Studio `.clip` projects, with layers, folders, masks, clipping and blend modes; Photoshop's layer styles, vector shapes and masks drawn as it draws them ([docs/layer-styles.md](docs/layer-styles.md), [docs/vector-masks.md](docs/vector-masks.md)); smart objects you can place, convert, edit and replace without losing resolution ([docs/smart-objects.md](docs/smart-objects.md)); text that stays editable both ways; layered PSD export; projects of up to a gigapixel of layers; PNG, JPEG, WebP and TIFF export; several projects in tabs; crash recovery
+- **Files:** Photoshop PSD and PSB, and Clip Studio `.clip` projects, with layers, folders, masks, clipping and blend modes; Photoshop's layer styles, vector shapes and masks drawn as it draws them ([docs/layer-styles.md](docs/layer-styles.md), [docs/vector-masks.md](docs/vector-masks.md)); smart objects you can place, convert, edit and replace without losing resolution ([docs/smart-objects.md](docs/smart-objects.md)); text that stays editable both ways; layered PSD export; projects of up to a gigapixel of layers; camera RAW, Affinity, SVG, PDF, GIF, TGA and ICO; PNG, JPEG, WebP, TIFF, SVG, GIF, TGA and ICO export; several projects in tabs; crash recovery
 - **AI agents:** Claude Code or any MCP client can drive the editor
 
 The full list is in [docs/features.md](docs/features.md).
@@ -142,13 +146,13 @@ components and their licences are listed in
 [English](#nekophoto) · **日本語**
 
 **どのアプリからでも、作品をそのまま持ってこられます。** NekoPhoto は Linux 向けの軽快でシンプルな
-写真編集・お絵描きソフトです。Photoshop とクリップスタジオのファイルをレイヤーを保ったまま開け、
+写真編集・お絵描きソフトです(Linux・Windows 対応)。Photoshop とクリップスタジオのファイルをレイヤーを保ったまま開け、
 Photoshop・クリップスタジオ・Procreate のブラシも読み込めます。レイヤー付きの PSD に保存し直せるので、
 Photoshop・Krita・Photopea を使う人とのやり取りにもそのまま組み込めます。レイヤー、マスク、選択範囲、ブラシ、
 色調補正、フィルターを、おなじみのツールとショートカットで操作できます。
 
 NekoPhoto は macOS 版 [Compositor](https://github.com/robbietilton/Compositor) の
-Linux 移植として始まり、今も Mac 版の `.comp` プロジェクトを開けます。バージョン 1.0 までは
+Linux 移植として始まり、Mac 版の以前の `.comp` プロジェクトも開けます。バージョン 1.0 までは
 compositor-linux という名前でした。設定・ブラシ・ダウンロード済みのモデルは、初回起動時に自動で引き継がれます。
 
 ### 作品をそのまま持ってくる
@@ -171,14 +175,18 @@ PSD の書き出しは往復テスト済みです。手元にあるレイヤー�
 ### できること
 
 - **レイヤー:** フォルダー、描画モード、不透明度、レイヤーマスク、クリッピングマスク、調整レイヤー
-- **変形:** 解像度を落とさずに移動・拡大縮小・回転・自由変形
+- **変形:** 解像度を落とさずに移動・拡大縮小・回転・自由変形。コンテンツに応じて拡大・縮小、コンテンツに応じた移動
 - **選択範囲:** 長方形・楕円選択、なげなわ、なぞる/クリックするだけのクイック選択、コンテンツに応じた塗りつぶし、そして輪郭を読み取る自動選択(陰影やテクスチャは含め、境界では止まります。クリック直後に許容値を変えて調整でき、Shift/Alt クリックで含めるもの・除くものを指示できます。「隣接」をオフにすれば、キャラクターの周りに分かれた背景も 1 クリックで選択でき、削除しても線画に背景の色が残りません)
 - **描画:** ブラシ、消しゴム、スポット修復ブラシ、コピースタンプ、指先ツール、ゆがみ、グラデーション、シェイプ、テキスト
 - **ブラシ:** 筆圧と傾きに反応する MyPaint ブラシ 196 種類(鉛筆、インク、木炭、絵の具、ぼかし)。Photoshop(`.abr`)、Procreate(`.brushset`・`.brush`)、クリップスタジオ(`.sut`)のブラシや、任意の画像をブラシ先端として読み込めます
+- **ベクター:** パスの結合・型抜きができるペンとシェイプ、グラデーション・パターンの塗り、ライブシェイプ、あらゆるレイヤーのベクターマスク、テキストのパス化
+- **アートボードとスライス:** まとめてファイルに書き出せます
+- **アクションとバッチ:** 操作を記録・再生し、フォルダー内のファイルに一括適用できます
+- **アニメーション:** フレームタイムラインとアニメーション GIF の書き出し。GIF・Aseprite ファイルはフレームごと開けます
 - **色調補正とフィルター:** レベル補正、トーンカーブ、色相・彩度、露光量、グラデーションマップ、粒子、ぼかし、ノイズ、レンズ補正
 - **背景を削除:** AI モデルは手元のマシンで動作し、画像はどこにも送信されません
 - **G'MIC:** `gmic` をインストールすると、850 種類以上のフィルターをライブプレビュー付きで使えます
-- **ファイル:** レイヤー・フォルダー・マスク・クリッピング・描画モードを保ったまま PSD/PSB とクリップスタジオの `.clip` を開け、レイヤー付き PSD に書き出せます。1 ギガピクセルまでのプロジェクト、PNG・JPEG・WebP・TIFF 書き出し、タブで複数のプロジェクト、クラッシュからの復元
+- **ファイル:** レイヤー・フォルダー・マスク・クリッピング・描画モードを保ったまま PSD/PSB とクリップスタジオの `.clip` を開け、レイヤー付き PSD に書き出せます。1 ギガピクセルまでのプロジェクト、カメラ RAW・Affinity・SVG・PDF・GIF・TGA・ICO の読み込み、PNG・JPEG・WebP・TIFF・SVG・GIF・TGA・ICO 書き出し、タブで複数のプロジェクト、クラッシュからの復元
 - **AI エージェント:** Claude Code などの MCP クライアントから操作できます
 
 機能の一覧は [docs/features.md](docs/features.md#日本語) にあります。

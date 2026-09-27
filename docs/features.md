@@ -2,7 +2,7 @@
 
 **English** · [日本語](#日本語)
 
-Everything the Mac app does, with Linux key names. Keyboard shortcuts are
+Everything NekoPhoto does, on Linux and Windows. Keyboard shortcuts follow Photoshop's and are
 listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 
 ## Layers
@@ -95,7 +95,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 
 [English](#what-nekophoto-can-do) · **日本語**
 
-Mac 版と同じ機能を、Linux のキー表記で使えます。キーボードショートカットは
+NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショートカットは Photoshop に合わせてあり、
 [linux-port.md](linux-port.md#keyboard-shortcuts)(英語)に一覧があります。
 
 ### レイヤー

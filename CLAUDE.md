@@ -3,6 +3,8 @@
 A Qt 6 / C++20 image editor: a Linux port of the macOS app Compositor. The Mac
 sources under `Compositor/` and `Compositor.xcodeproj` are a reference and stay
 untouched; the port lives in `src/`, `tests/`, `mcp/`, `tools/`, `docs/`.
+It ships for Linux (AppImage, tarball) and Windows (MinGW-w64 UCRT, portable zip); platform code for Windows is kept
+in `src/app/Platform.{h,cpp}`, and `tools/windows-cross.sh` cross-builds and tests it under Wine locally.
 
 ## Build and test
 
