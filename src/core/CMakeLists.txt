@@ -129,7 +129,7 @@ add_library(compositor_core STATIC
     src/adjustments_more.cpp
     src/colorlookup.cpp
     src/clip.cpp
-    src/blend.cpp
+    src/blend_u8.cpp
     src/blur.cpp
     src/brushimport.cpp
     src/brush.cpp
