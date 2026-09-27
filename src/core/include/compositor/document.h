@@ -295,6 +295,10 @@ std::vector<HierarchyEntry> hierarchyEntries(const std::vector<Layer>& layers, b
 std::vector<const Layer*> renderLayers(const std::vector<Layer>& layers);
 std::set<Uuid> effectiveVisibleIds(const std::vector<Layer>& layers);
 std::set<Uuid> descendantIds(const std::vector<Layer>& layers, const Uuid& id);
+/// Shifts the layers `ids` by (dx, dy) as one rigid move: pixel layers and folders alike, each mask with them
+/// (placed or not, linked or not), a vector mask or shape by way of the transform it follows, and the positions
+/// the timeline's frames keep for them. Moving an artboard with its contents uses it.
+void translateLayers(Document& document, const std::set<Uuid>& ids, double dx, double dy);
 /// Parents must exist and be groups, no cycles, nesting at most 64 deep, groups carry no image.
 bool validateHierarchy(const std::vector<Layer>& layers, std::string* error = nullptr);
 /// Clipping links: sources exist, are not groups or adjustments, no self links or cycles, chains under 256.

@@ -1889,4 +1889,96 @@ TEST_CASE(project_round_trip_keeps_frames_and_old_projects_load) {
     fs::remove_all(dir);
 }
 
+TEST_CASE(save_during_playback_writes_the_document_not_the_frame_shown) {
+    // Playback writes each frame into the layers (EditorSession::previewFrame) after capturing their own states; a
+    // save meanwhile writes the document with those states back, and the frames are left as they were.
+    Document doc(20, 10);
+    Layer a = imageLayer("A", solid(4, 4, 255, 0, 0, 255), {0, 0});
+    Layer b = imageLayer("B", solid(4, 4, 0, 0, 255, 255), {10, 0});
+    doc.layers = {a, b};
+    ensureAnimation(doc, 50);
+    duplicateFrame(doc, 0);
+    doc.layers[0].visible = false;
+    doc.layers[1].transform.origin = Point(14, 5);
+    doc.layers[1].opacity = 0.25;
+    syncCurrentFrame(doc);
+    CHECK(selectFrame(doc, 0));   // the real state: frame 0, both shown where they started
+    const Document before = doc;
+    const AnimationFrame base = captureFrame(doc);
+    applyFrame(doc, doc.animation.frames[1]);   // playback now shows frame 1
+    CHECK(!doc.layers[0].visible);
+    fs::path dir = tempDir();
+    fs::path package = dir / "Playing.comp";
+    ProjectError error;
+    REQUIRE(saveProject(withFrameStates(doc, base), std::nullopt, package.string(), error));
+    auto loaded = loadProject(package.string(), error);
+    REQUIRE(loaded);
+    REQUIRE(loaded->layers.size() == 2u);
+    for (size_t i = 0; i < 2; i++) {
+        CHECK_EQ(loaded->layers[i].visible, before.layers[i].visible);
+        CHECK(loaded->layers[i].transform.origin == before.layers[i].transform.origin);
+        CHECK_NEAR(loaded->layers[i].opacity, before.layers[i].opacity, 1e-6);
+    }
+    CHECK(loaded->animation == before.animation);
+    CHECK_EQ(loaded->animation.current, 0);
+    // Stopping puts the same states back on the live document.
+    applyFrame(doc, base);
+    CHECK(doc.layers[0].visible);
+    CHECK(doc.layers[1].transform.origin == Point(10, 0));
+    CHECK(doc.animation == before.animation);
+    fs::remove_all(dir);
+}
+
+TEST_CASE(selecting_a_frame_is_not_an_undo_step_but_edits_keep_their_frame) {
+    // What EditorSession does: frame edits and layer edits are begin/end pairs; selecting a frame (the Timeline
+    // panel, timeline.frame select) changes the document outside the history, as in Photoshop.
+    Document start(20, 10);
+    start.layers = {imageLayer("A", solid(4, 4, 255, 0, 0, 255), {0, 0}), imageLayer("B", solid(4, 4, 0, 0, 255, 255), {10, 0})};
+    std::optional<Document> doc = start;
+    DocumentHistory history;
+    auto edit = [&](const char* name, auto&& change) {
+        history.begin(name, doc, std::nullopt);
+        change(*doc);
+        syncCurrentFrame(*doc);   // as EditorSession::endEdit does
+        history.end(doc, std::nullopt);
+    };
+    edit("Create Frame Animation", [](Document& d) { ensureAnimation(d); });
+    edit("New Frame", [](Document& d) { duplicateFrame(d, 0); });
+    edit("Hide A", [](Document& d) { d.layers[0].visible = false; });   // into frame 1
+    CHECK_EQ(history.undoCount(), 3);
+    CHECK(selectFrame(*doc, 0));
+    CHECK(selectFrame(*doc, 1));
+    CHECK(selectFrame(*doc, 0));
+    CHECK_EQ(history.undoCount(), 3);   // selecting added nothing
+    CHECK(doc->layers[0].visible);
+    edit("Move B", [](Document& d) { d.layers[1].transform.origin = Point(12, 2); });   // into frame 0
+    CHECK_EQ(history.undoCount(), 4);
+    // Undo returns to the frame the undone edit was made in, with the layers as that frame showed them.
+    auto s = history.undo();
+    REQUIRE(s && s->document);
+    doc = s->document;
+    CHECK_EQ(doc->animation.current, 0);
+    CHECK(doc->layers[1].transform.origin == Point(10, 0));
+    CHECK(doc->layers[0].visible);
+    s = history.undo();   // Hide A, made in frame 1
+    REQUIRE(s && s->document);
+    doc = s->document;
+    CHECK_EQ(doc->animation.current, 1);
+    CHECK(doc->layers[0].visible);
+    CHECK(doc->animation.frames[1].layers.at(doc->layers[0].id).visible);
+    s = history.redo();
+    REQUIRE(s && s->document);
+    doc = s->document;
+    CHECK_EQ(doc->animation.current, 1);
+    CHECK(!doc->layers[0].visible);
+    s = history.redo();
+    REQUIRE(s && s->document);
+    doc = s->document;
+    CHECK_EQ(doc->animation.current, 0);
+    CHECK(doc->layers[0].visible);
+    CHECK(doc->layers[1].transform.origin == Point(12, 2));
+    CHECK(doc->animation.frames[0].layers.at(doc->layers[1].id).position == Point(12, 2));
+    CHECK(doc->animation.frames[1].layers.at(doc->layers[1].id).position == Point(10, 0));
+}
+
 TEST_MAIN()

@@ -293,6 +293,7 @@ def remaining_methods(rpc):
     board = rpc.call("artboards.add", x=10, y=10, width=80, height=60, background="#ff0000", name="Hero")
     moved = rpc.call("artboards.set", id=board["id"], x=20, moveContents=True)
     assert moved["x"] == 20 and moved["background"] == "#ff0000", moved
+    assert rpc.call("history.list")["undo"][-1] == "Move Artboard"   # one step, contents and all
     assert [a["name"] for a in rpc.call("artboards.list")["artboards"]] == ["Hero"]
     assert rpc.call("layers.get", id=board["id"])["artboard"]["width"] == 80
     piece = rpc.call("slices.add", x=0, y=0, width=50, height=40, name="top")
@@ -942,7 +943,9 @@ def main():
     second = rpc.call("layers.add")
     rpc.call("pixels.fill", color="#0000ff")
     rpc.call("timeline.frame", action="duplicate")
+    steps = len(rpc.call("history.list")["undo"])
     rpc.call("timeline.frame", action="select", index=0)
+    assert len(rpc.call("history.list")["undo"]) == steps, "selecting a frame is not an undo step"
     rpc.call("layers.set", id=second["id"], visible=False)
     frames = rpc.call("timeline.set", delay=300, loopCount=2)
     assert frames["count"] == 2 and frames["loopCount"] == 2 and frames["frames"][0]["delay"] == 300, frames
@@ -957,6 +960,7 @@ def main():
     with open(gif_path, "rb") as f:
         assert f.read(6) == b"GIF89a"
     rpc.call("history.undo")   # the move
+    assert rpc.call("timeline.info")["current"] == 1, "undoing the move returns to the frame it moved"
     rpc.call("tabs.new")
     rpc.call("document.open", path=gif_path)
     back = rpc.call("timeline.info")

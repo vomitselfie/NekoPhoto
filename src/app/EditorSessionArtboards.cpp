@@ -63,13 +63,10 @@ bool EditorSession::setArtboard(const Uuid& id, const Artboard& artboard, bool m
     group->artboard = artboard;
     if (!name.isEmpty()) group->name = name.toStdString();
     if (moveContents && (dx || dy)) {
-        for (const Uuid& child : descendantIds(document_->layers, id)) {
-            Layer* l = document_->find(child);
-            if (!l || l->isGroup) continue;
-            const LayerTransform from = l->transform;
-            l->transform.origin = Point(from.origin.x + dx, from.origin.y + dy);
-            if (l->mask) l->mask->placement = l->mask->placementMovingLayer(from, l->transform);
-        }
+        // Everything inside goes along, nested folders and their masks too, and the artboard folder's own mask.
+        std::set<Uuid> moving = descendantIds(document_->layers, id);
+        moving.insert(id);
+        translateLayers(*document_, moving, dx, dy);
     }
     endEdit();
     notifyDocument();

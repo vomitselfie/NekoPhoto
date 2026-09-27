@@ -77,7 +77,7 @@ void Autosave::tick() {
         entry.dirty = false;
         entry.saving = true;
         // The copy shares the layers' pixels with the document; the worker only reads it.
-        auto document = std::make_shared<const compositor::Document>(*session->document());
+        auto document = std::make_shared<const compositor::Document>(session->documentToSave());   // never playback's frame
         const std::optional<compositor::Uuid> active = session->activeLayerId();
         const QString key = entry.key, dir = dir_, title = entry.title ? entry.title() : QString(), original = session->projectPath();
         EditorSession* owner = session;

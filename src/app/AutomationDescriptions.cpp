@@ -70,7 +70,7 @@ const MethodDoc methodDocs[] = {
     {"actions.export", "Write actions to a JSON file to share or back up.", "path:string! Where to write; name:string One action; names:array Several (default every action)"},
     // frame animation
     {"timeline.info", "The frame animation (Window > Timeline): each frame's delay and the layers it shows, the current frame (-1 without frames) and the loop count (0 forever).", ""},
-    {"timeline.frame", "Change the frames (one undo step): create the first from the layers as they are, fromLayers (a frame per top-level layer), duplicate the current frame (Photoshop's New Frame), select one (the layers then show it; edits to visibility, position and opacity go into it), delete, move, or clear the animation.",
+    {"timeline.frame", "Change the frames (one undo step each, except select, which is none, as in Photoshop): create the first from the layers as they are, fromLayers (a frame per top-level layer), duplicate the current frame (Photoshop's New Frame), select one (the layers then show it; edits to visibility, position and opacity go into it), delete, move, or clear the animation.",
      "action:(create|fromLayers|duplicate|select|delete|move|clear)! What to do; index:integer The frame (default the current one); to:integer For move: where it goes"},
     {"timeline.set", "Set a frame's delay and the loop count.",
      "index:integer The frame (default the current one; -1 every frame); delay:integer Milliseconds 0..655350; loopCount:integer 0 forever, 1 once, n times"},

@@ -614,8 +614,8 @@ public:
     void beginEdit(const QString& name);
     void endEdit();
 
-    // Timeline (frame animation, compositor/animation.h). Each change is one undo step; selecting a frame is one
-    // too, since it rewrites the layers' visibility, position and opacity.
+    // Timeline (frame animation, compositor/animation.h). Each change to the frames is one undo step; selecting
+    // a frame is not (as in Photoshop), though it rewrites the layers' visibility, position and opacity.
     bool timelineCreate();
     /// Photoshop's Make Frames From Layers: a frame per top-level layer (the bottom one shown under each).
     bool timelineFramesFromLayers();
@@ -628,11 +628,14 @@ public:
     bool timelineSetDelay(int index, int delayMs);
     bool timelineSetLoopCount(int loops);
     bool timelineClear();
-    /// Playback: shows a frame without touching history; endFramePreview puts the current frame back (any edit
-    /// does it first).
+    /// Playback: shows a frame without touching history or the frames; endFramePreview puts back the layer states
+    /// playback began from (any edit, save or export does it first).
     void previewFrame(int index);
     void endFramePreview();
-    bool previewingFrames() const { return framePreview_; }
+    bool previewingFrames() const { return previewBase_.has_value(); }
+    /// The document as it really is: while playback shows a frame, a copy with the layers' own states back. What
+    /// saves and autosaves write.
+    compositor::Document documentToSave() const;
 
     // Tools and view
     Tool tool() const { return tool_; }
@@ -840,7 +843,7 @@ private:
     bool visibilitySwipe_ = false;
     /// Bumped on every document notification; cheap change detection for caches.
     uint64_t documentRevision_ = 0;
-    bool framePreview_ = false;
+    std::optional<compositor::AnimationFrame> previewBase_;   // the layer states playback began from
     std::vector<QPointF> strokePoints_;   // the stroke so far, for an action recording it
     std::vector<double> strokePressures_;
     bool timelineEdit(const QString& name, const std::function<bool(compositor::Document&)>& change);

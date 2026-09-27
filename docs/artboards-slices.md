@@ -4,10 +4,12 @@
 
 An artboard is a folder with a rectangle and a background, as in Photoshop. Its background fills the rectangle
 under its layers, and its layers are clipped to the rectangle; what lies outside every artboard shows the canvas.
+The background belongs to the folder: in any blend mode, Pass Through or not, and at any opacity, it is composited
+with the artboard's layers and stays inside the rectangle.
 
 - **Artboard tool** (Shift+V, next to Move): drag on the canvas to add an artboard (it goes to the top of the
-  layer stack; move layers into it in the Layers panel). Drag inside an artboard to move it together with its
-  layers, drag an edge or a corner to resize it (its layers stay put). Ctrl turns snapping off. The options bar
+  layer stack; move layers into it in the Layers panel). Drag inside an artboard to move it together with everything
+  in it (layers, nested folders, their masks, raster or vector, and shapes; one undo step), drag an edge or a corner to resize it (its layers stay put). Ctrl turns snapping off. The options bar
   sets the active artboard's background: White, Black, Transparent or Other (a colour).
 - **File > Export Artboards to Files**: every visible artboard as its own PNG or JPEG (over white), named after the
   artboard with an optional prefix, into a folder you choose.

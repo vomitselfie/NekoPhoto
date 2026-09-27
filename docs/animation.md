@@ -14,10 +14,12 @@ text) are shared by all frames, exactly as in Photoshop: painting on a layer cha
   earlier or later. Deleting the last frame turns the document back into a still one.
 - **Delay** is how long the selected frame shows, in milliseconds; **All** gives every frame that delay.
 - The loop menu sets how many times the animation plays: Forever, Once, 3 times, or any number.
-- **Play** shows the frames on the canvas at their delays without touching the undo history; any edit, or Stop,
-  returns to the selected frame.
+- **Play** shows the frames on the canvas at their delays without touching the undo history or the frames; any
+  edit, save or export, or Stop, returns to the layers as they were. Saves and autosaves always write the document
+  itself, never the frame playback happens to show.
 
-Every change to the frames (select, add, delete, move, delay, looping) is one undo step.
+Every change to the frames (add, delete, move, delay, looping, and an edit that goes into a frame) is one undo
+step. Selecting a frame is not, as in Photoshop; undoing an edit returns to the frame it was made in.
 
 A layer added after a frame was made is not listed in that frame, so it keeps whatever state it has when the frame
 shows; select each frame and hide it where it should not appear, as in Photoshop.
