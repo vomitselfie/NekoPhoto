@@ -235,5 +235,22 @@ int main(int argc, char** argv) {
     adjust16("u16 levels", levels);
     adjust16("u16 curves", curves);
     adjust16("u16 hue/saturation", hsv);
+
+    // Painting at 16 bits (P3b): the brush strokes above on the same canvas converted.
+    Layer canvas16(Asset::make(Image16Ptr(widenImage(*canvas.asset->image.u8())), "canvas"), Point(0, 0));
+    for (double hardness : {1.0, 0.3}) {
+        BrushSettings s;
+        s.diameter = 80;
+        s.hardness = hardness;
+        s.opacity = 0.8;
+        s.red = 0.9;
+        std::string name = std::string("u16 brush stroke d80 hardness ") + (hardness == 1 ? "1" : "0.3");
+        bench(name.c_str(), none, [&] {
+            BrushStroke stroke(canvas16, false, s, Size(4000, 3000), SampleType::U16, nullptr);
+            stroke.appendAll(path);
+            stroke.flush();
+            auto commit = stroke.commit();
+        });
+    }
     return 0;
 }

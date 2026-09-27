@@ -47,14 +47,28 @@ void copyImage(const Image16& source, Image16& target, int dx, int dy) {
     });
 }
 
-/// Half-open bounds of the pixels with any alpha within `within`.
+/// Half-open bounds of the pixels with any alpha within `within`: each row scanned in from both ends, rows in parallel.
 PixelBounds alphaBoundsWithin(const Image16& image, const PixelBounds& within) {
     const int x0 = std::max(0, within.x0), y0 = std::max(0, within.y0), x1 = std::min(image.width(), within.x1), y1 = std::min(image.height(), within.y1);
+    if (x0 >= x1 || y0 >= y1) return {};
+    std::vector<int> first(size_t(y1 - y0), x1), last(size_t(y1 - y0), x0);
+    parallelRows(y0, y1, [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++) {
+            const uint16_t* row = image.row(y);
+            int a = x0;
+            while (a < x1 && !row[a * 4 + 3]) a++;
+            if (a == x1) continue;
+            int b = x1;
+            while (b > a && !row[(b - 1) * 4 + 3]) b--;
+            first[size_t(y - y0)] = a;
+            last[size_t(y - y0)] = b;
+        }
+    }, 64);
     int bx0 = x1, by0 = y1, bx1 = x0, by1 = y0;
     for (int y = y0; y < y1; y++) {
-        const uint16_t* row = image.row(y);
-        for (int x = x0; x < x1; x++)
-            if (row[x * 4 + 3]) { bx0 = std::min(bx0, x); bx1 = std::max(bx1, x + 1); by0 = std::min(by0, y); by1 = std::max(by1, y + 1); }
+        const int a = first[size_t(y - y0)], b = last[size_t(y - y0)];
+        if (a >= b) continue;
+        bx0 = std::min(bx0, a); bx1 = std::max(bx1, b); by0 = std::min(by0, y); by1 = std::max(by1, y + 1);
     }
     if (bx0 >= bx1 || by0 >= by1) return {};
     return {bx0, by0, bx1, by1};
@@ -132,7 +146,10 @@ void BrushStroke::initSixteen(const Layer& layer, bool mask, const Gray16* selec
         const bool sameGrid = own && sourceRect_ == Rect(0, 0, width_, height_) && own->width() == width_ && own->height() == height_;
         if (sameGrid) {
             base16_ = layer.asset->image.u16();
-            baseBounds_ = alphaBounds(*base16_);
+            baseBounds_ = alphaBoundsWithin(*base16_, {0, 0, width_, height_});
+            auto working = std::make_shared<Image16>(width_, height_);
+            copyImage(*base16_, *working, 0, 0);
+            working16_ = working;
         } else {
             auto copy = std::make_shared<Image16>(width_, height_);
             auto working = std::make_shared<Image16>(width_, height_);
@@ -140,7 +157,7 @@ void BrushStroke::initSixteen(const Layer& layer, bool mask, const Gray16* selec
                 const int dx = int(sourceRect_.minX()), dy = int(sourceRect_.minY());
                 copyImage(*own, *copy, dx, dy);
                 copyImage(*own, *working, dx, dy);
-                PixelBounds b = alphaBounds(*own);
+                PixelBounds b = alphaBoundsWithin(*own, {0, 0, own->width(), own->height()});
                 if (!b.isEmpty()) {
                     b = {std::max(0, b.x0 + dx), std::max(0, b.y0 + dy), std::min(width_, b.x1 + dx), std::min(height_, b.y1 + dy)};
                     baseBounds_ = b.isEmpty() ? PixelBounds{} : b;
