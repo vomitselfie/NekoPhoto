@@ -9,6 +9,7 @@
 // shrinks with the drag length as Photoshop's does.
 #pragma once
 #include "image.h"
+#include "imaget.h"
 #include "geometry.h"
 #include <memory>
 #include <vector>
@@ -21,8 +22,12 @@ class WarpStroke {
 public:
     /// `image` is the layer rendered at document size (`width` x `height`).
     WarpStroke(std::shared_ptr<Image> image, WarpMode mode, double diameter, double hardness, double strength);
+    /// The same on a 16-bit document's layer (0..32768): the smudge carries and the warp resamples 16-bit pixels.
+    WarpStroke(std::shared_ptr<ImageT<SampleType::U16>> image, WarpMode mode, double diameter, double hardness, double strength);
     void append(Point point);
+    /// The image being worked: 8-bit, or `image16` for a 16-bit stroke (the other is null).
     std::shared_ptr<const Image> image() const { return image_; }
+    std::shared_ptr<const ImageT<SampleType::U16>> image16() const { return image16_; }
     /// The pixels changed since the last call (document pixels: the image is at document size). Also brings
     /// the renderer's reduced copies of the image up to date there.
     Rect takeDirtyRect();
@@ -57,6 +62,8 @@ private:
     Point last_;
     std::vector<float> carried_;
     Field field_;
+    std::shared_ptr<ImageT<SampleType::U16>> image16_;
+    std::shared_ptr<const ImageT<SampleType::U16>> original16_;
 };
 
 } // namespace compositor

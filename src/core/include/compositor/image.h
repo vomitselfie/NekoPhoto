@@ -152,6 +152,9 @@ public:
     /// part of each cached level under `pixelRect` up to date; the levels assume images never change.
     void refresh(const Image* image, int x0, int y0, int x1, int y1);
     void refresh(const GrayImage* image, int x0, int y0, int x1, int y1);
+    /// The same for a 16-bit stroke's pixels and mask.
+    void refresh(const ImageT<SampleType::U16>* image, int x0, int y0, int x1, int y1);
+    void refresh(const GrayImageT<SampleType::U16>* image, int x0, int y0, int x1, int y1);
     void clear();
     void setBudget(size_t bytes);
     size_t budget() const { return budget_; }
@@ -169,6 +172,8 @@ private:
     std::shared_ptr<const Img> levelOf(std::vector<Entry<Img>>& entries, const std::shared_ptr<const Img>& image, int level);
     template <typename Img>
     void refreshOf(std::vector<Entry<Img>>& entries, const Img* image, int x0, int y0, int x1, int y1);
+    template <typename Img>
+    void refreshOf16(std::vector<Entry<Img>>& entries, const Img* image, int x0, int y0, int x1, int y1);
     void enforceBudget(uint64_t keep);
     std::vector<Entry<Image>> entries_;
     std::vector<Entry<GrayImage>> grayEntries_;

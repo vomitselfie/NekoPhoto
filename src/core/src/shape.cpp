@@ -146,4 +146,47 @@ void fillGradient(const GrayImage& base, GrayImage& out, const Affine& pixelToDo
     });
 }
 
+// ---- 16 bits ---------------------------------------------------------------------------------------------
+
+void fillGradient(const Image16& base, Image16& out, const Affine& pixelToDocument, GradientShape shape, Point from, Point to, const GradientStops& stops, double opacity, const Gray16* selection) {
+    const int w = out.width(), h = out.height();
+    constexpr float one = 32768.0f;
+    parallelRows(0, h, [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++) {
+            Point d = pixelToDocument.apply({0.5, y + 0.5});
+            const Point dd = pixelToDocument.applyVector({1, 0});
+            const uint16_t* b = base.row(y);
+            uint16_t* o = out.row(y);
+            for (int x = 0; x < w; x++, d = d + dd, b += 4, o += 4) {
+                const double t = gradientPosition(shape, from, to, d);
+                float col[4];
+                stops.sample(float(t), col);
+                const double cov = opacity * (selection ? std::min<uint32_t>(selection->at(x, y), 32768) / 32768.0 : 1.0);
+                const float a = col[3] * float(cov);
+                if (a <= 0) { for (int c = 0; c < 4; c++) o[c] = b[c]; continue; }
+                for (int c = 0; c < 3; c++) o[c] = uint16_t(clamp(col[c] * a * one + b[c] * (1 - a) + 0.5f, 0.0f, one));
+                o[3] = uint16_t(clamp(a * one + b[3] * (1 - a) + 0.5f, 0.0f, one));
+            }
+        }
+    });
+}
+
+void fillGradient(const Gray16& base, Gray16& out, const Affine& pixelToDocument, GradientShape shape, Point from, Point to, const GradientStops& stops, double opacity, const Gray16* selection) {
+    const int w = out.width(), h = out.height();
+    parallelRows(0, h, [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++) {
+            Point d = pixelToDocument.apply({0.5, y + 0.5});
+            const Point dd = pixelToDocument.applyVector({1, 0});
+            for (int x = 0; x < w; x++, d = d + dd) {
+                const double t = gradientPosition(shape, from, to, d);
+                float col[4];
+                stops.sample(float(t), col);
+                const float value = col[0], alpha = col[3];
+                const double cov = opacity * alpha * (selection ? std::min<uint32_t>(selection->at(x, y), 32768) / 32768.0 : 1.0);
+                out.at(x, y) = uint16_t(clamp(value * 32768.0 * cov + base.at(x, y) * (1 - cov) + 0.5, 0.0, 32768.0));
+            }
+        }
+    });
+}
+
 } // namespace compositor

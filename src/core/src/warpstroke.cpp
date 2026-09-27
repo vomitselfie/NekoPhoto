@@ -1,4 +1,5 @@
 #include "compositor/warpstroke.h"
+#include "compositor/depth.h"
 #include "compositor/resample.h"
 #include "compositor/parallel.h"
 #include <algorithm>
@@ -10,6 +11,12 @@ WarpStroke::WarpStroke(std::shared_ptr<Image> image, WarpMode mode, double diame
     : image_(std::move(image)), mode_(mode), diameter_(std::max(2.0, diameter)), hardness_(std::min(0.98, std::max(0.0, hardness))),
       strength_(std::min(1.0, std::max(0.01, strength))), width_(image_->width()), height_(image_->height()) {
     if (mode_ == WarpMode::Liquify) original_ = std::make_shared<Image>(*image_);
+}
+
+WarpStroke::WarpStroke(std::shared_ptr<Image16> image, WarpMode mode, double diameter, double hardness, double strength)
+    : mode_(mode), diameter_(std::max(2.0, diameter)), hardness_(std::min(0.98, std::max(0.0, hardness))),
+      strength_(std::min(1.0, std::max(0.01, strength))), width_(image->width()), height_(image->height()), image16_(std::move(image)) {
+    if (mode_ == WarpMode::Liquify) original16_ = std::make_shared<Image16>(*image16_);
 }
 
 float WarpStroke::weight(float u) const {
@@ -52,7 +59,8 @@ void WarpStroke::markDirty(int x0, int y0, int x1, int y1) {
 Rect WarpStroke::takeDirtyRect() {
     if (dirtyX0_ >= dirtyX1_) return {};
     // The renderer draws zoomed-out layers from reduced copies cached by image; this image changes in place.
-    MipCache::shared().refresh(image_.get(), dirtyX0_, dirtyY0_, dirtyX1_, dirtyY1_);
+    if (image16_) MipCache::shared().refresh(image16_.get(), dirtyX0_, dirtyY0_, dirtyX1_, dirtyY1_);
+    else MipCache::shared().refresh(image_.get(), dirtyX0_, dirtyY0_, dirtyX1_, dirtyY1_);
     Rect r(dirtyX0_, dirtyY0_, dirtyX1_ - dirtyX0_, dirtyY1_ - dirtyY0_);
     dirtyX0_ = dirtyX1_ = 0;
     return r;
@@ -68,8 +76,13 @@ void WarpStroke::pickUp(Point center) {
         for (int dx = -r; dx <= r; dx++) {
             int x = cx + dx;
             if (x < 0 || x >= width_) continue;
-            const uint8_t* p = image_->pixel(x, y);
             size_t c = (size_t(dy + r) * side + size_t(dx + r)) * 4;
+            if (image16_) {
+                const uint16_t* p = image16_->pixel(x, y);
+                for (int k = 0; k < 4; k++) carried_[c + k] = p[k];
+                continue;
+            }
+            const uint8_t* p = image_->pixel(x, y);
             for (int k = 0; k < 4; k++) carried_[c + k] = p[k];
         }
     }
@@ -88,8 +101,18 @@ void WarpStroke::smudge(Point center) {
             if (x < 0 || x >= width_) continue;
             float w = weight(std::sqrt(float(dx * dx + dy * dy)) * invR);
             if (w <= 0) continue;
-            uint8_t* p = image_->pixel(x, y);
             size_t c = (size_t(dy + r) * side + size_t(dx + r)) * 4;
+            if (image16_) {
+                uint16_t* p = image16_->pixel(x, y);
+                for (int k = 0; k < 4; k++) {
+                    float under = p[k];
+                    float painted = under + (carried_[c + k] - under) * w;
+                    p[k] = uint16_t(std::max(0.0f, std::min(32768.0f, std::round(painted))));
+                    carried_[c + k] = painted + (carried_[c + k] - painted) * keep;
+                }
+                continue;
+            }
+            uint8_t* p = image_->pixel(x, y);
             for (int k = 0; k < 4; k++) {
                 float under = p[k];
                 float painted = under + (carried_[c + k] - under) * w;
@@ -168,7 +191,8 @@ void WarpStroke::push(Point a, Point b) {
     for (int y = ya; y < yb; y++)
         for (int x = x0; x <= x1; x++) {
             const float* d = &field_.offsets[(size_t(y - field_.y0) * field_.width + size_t(x - field_.x0)) * 2];
-            sampleBicubic(*original_, x + 0.5 + d[0], y + 0.5 + d[1], image_->pixel(x, y));
+            if (image16_) sampleBicubic(*original16_, x + 0.5 + d[0], y + 0.5 + d[1], image16_->pixel(x, y));
+            else sampleBicubic(*original_, x + 0.5 + d[0], y + 0.5 + d[1], image_->pixel(x, y));
         }
     }, 16);
 }
