@@ -2,1086 +2,2201 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="ja_JP">
 <context>
+    <name>History</name>
+    <message>
+        <source>Camera Raw Filter</source>
+        <translation>Camera Raw フィルター</translation>
+    </message>
+    <message>
+        <source>Delete Anchor Point</source>
+        <translation>アンカーポイントを削除</translation>
+    </message>
+    <message>
+        <source>Content-Aware Extend</source>
+        <translation>コンテンツに応じた拡張</translation>
+    </message>
+    <message>
+        <source>Content-Aware Move</source>
+        <translation>コンテンツに応じた移動</translation>
+    </message>
+    <message>
+        <source>Patch</source>
+        <translation>パッチ</translation>
+    </message>
+    <message>
+        <source>Convert Point</source>
+        <translation>アンカーポイントの切り替え</translation>
+    </message>
+    <message>
+        <source>Move Selection</source>
+        <translation>選択範囲を移動</translation>
+    </message>
+    <message>
+        <source>Elliptical Marquee</source>
+        <translation>楕円形選択</translation>
+    </message>
+    <message>
+        <source>Rectangular Marquee</source>
+        <translation>長方形選択</translation>
+    </message>
+    <message>
+        <source>Lasso</source>
+        <translation>なげなわ</translation>
+    </message>
+    <message>
+        <source>Polygonal Lasso</source>
+        <translation>多角形選択</translation>
+    </message>
+    <message>
+        <source>New Canvas</source>
+        <translation>新規カンバス</translation>
+    </message>
+    <message>
+        <source>Import Image</source>
+        <translation>画像を読み込み</translation>
+    </message>
+    <message>
+        <source>Trim</source>
+        <translation>トリミング</translation>
+    </message>
+    <message>
+        <source>Canvas Size</source>
+        <translation>カンバスサイズ</translation>
+    </message>
+    <message>
+        <source>Image Size</source>
+        <translation>画像解像度</translation>
+    </message>
+    <message>
+        <source>Crop</source>
+        <translation>切り抜き</translation>
+    </message>
+    <message>
+        <source>New %1 Adjustment</source>
+        <translation>新規%1レイヤー</translation>
+    </message>
+    <message>
+        <source>Adjustment</source>
+        <translation>色調補正</translation>
+    </message>
+    <message>
+        <source>Invert</source>
+        <translation>階調の反転</translation>
+    </message>
+    <message>
+        <source>Remove Background</source>
+        <translation>背景を削除</translation>
+    </message>
+    <message>
+        <source>New Artboard</source>
+        <translation>新規アートボード</translation>
+    </message>
+    <message>
+        <source>Move Artboard</source>
+        <translation>アートボードを移動</translation>
+    </message>
+    <message>
+        <source>Edit Artboard</source>
+        <translation>アートボードを編集</translation>
+    </message>
+    <message>
+        <source>Convert Artboard to Folder</source>
+        <translation>アートボードをグループに変換</translation>
+    </message>
+    <message>
+        <source>New Slice</source>
+        <translation>新規スライス</translation>
+    </message>
+    <message>
+        <source>Edit Slice</source>
+        <translation>スライスを編集</translation>
+    </message>
+    <message>
+        <source>Delete Slice</source>
+        <translation>スライスを削除</translation>
+    </message>
+    <message>
+        <source>New Blank Layer</source>
+        <translation>新規レイヤー</translation>
+    </message>
+    <message>
+        <source>New Folder</source>
+        <translation>新規グループ</translation>
+    </message>
+    <message>
+        <source>Group Layers</source>
+        <translation>レイヤーをグループ化</translation>
+    </message>
+    <message>
+        <source>Duplicate Layer</source>
+        <translation>レイヤーを複製</translation>
+    </message>
+    <message>
+        <source>Replace Layer Mask</source>
+        <translation>レイヤーマスクを置き換え</translation>
+    </message>
+    <message>
+        <source>Copy Layer Mask</source>
+        <translation>レイヤーマスクをコピー</translation>
+    </message>
+    <message>
+        <source>Delete Layers</source>
+        <translation>レイヤーを削除</translation>
+    </message>
+    <message>
+        <source>Delete Layer</source>
+        <translation>レイヤーを削除</translation>
+    </message>
+    <message>
+        <source>Merge Layers</source>
+        <translation>レイヤーを結合</translation>
+    </message>
+    <message>
+        <source>Merge Group</source>
+        <translation>グループを結合</translation>
+    </message>
+    <message>
+        <source>Merge Down</source>
+        <translation>下のレイヤーと結合</translation>
+    </message>
+    <message>
+        <source>Rename Layer</source>
+        <translation>レイヤー名の変更</translation>
+    </message>
+    <message>
+        <source>Hide Layer</source>
+        <translation>レイヤーを非表示</translation>
+    </message>
+    <message>
+        <source>Show Layer</source>
+        <translation>レイヤーを表示</translation>
+    </message>
+    <message>
+        <source>Reorder Layers</source>
+        <translation>レイヤーの重ね順を変更</translation>
+    </message>
+    <message>
+        <source>Move Layer</source>
+        <translation>レイヤーを移動</translation>
+    </message>
+    <message>
+        <source>Layer Opacity</source>
+        <translation>レイヤーの不透明度</translation>
+    </message>
+    <message>
+        <source>Layer Blend Mode</source>
+        <translation>レイヤーの描画モード</translation>
+    </message>
+    <message>
+        <source>Release Clipping Mask</source>
+        <translation>クリッピングマスクを解除</translation>
+    </message>
+    <message>
+        <source>Create Clipping Mask</source>
+        <translation>クリッピングマスクを作成</translation>
+    </message>
+    <message>
+        <source>Add Reveal-All Mask</source>
+        <translation>すべての領域を表示するマスクを追加</translation>
+    </message>
+    <message>
+        <source>Add Hide-All Mask</source>
+        <translation>すべての領域を隠すマスクを追加</translation>
+    </message>
+    <message>
+        <source>Add Mask from Selection</source>
+        <translation>選択範囲からマスクを追加</translation>
+    </message>
+    <message>
+        <source>Disable Layer Mask</source>
+        <translation>レイヤーマスクを使用しない</translation>
+    </message>
+    <message>
+        <source>Enable Layer Mask</source>
+        <translation>レイヤーマスクを使用</translation>
+    </message>
+    <message>
+        <source>Delete Layer Mask</source>
+        <translation>レイヤーマスクを削除</translation>
+    </message>
+    <message>
+        <source>Unlink Layer Mask</source>
+        <translation>レイヤーマスクのリンクを解除</translation>
+    </message>
+    <message>
+        <source>Link Layer Mask</source>
+        <translation>レイヤーマスクをリンク</translation>
+    </message>
+    <message>
+        <source>Apply Layer Mask</source>
+        <translation>レイヤーマスクを適用</translation>
+    </message>
+    <message>
+        <source>Invert Mask</source>
+        <translation>マスクを反転</translation>
+    </message>
+    <message>
+        <source>Flip Layer Horizontal</source>
+        <translation>レイヤーを水平方向に反転</translation>
+    </message>
+    <message>
+        <source>Flip Layer Vertical</source>
+        <translation>レイヤーを垂直方向に反転</translation>
+    </message>
+    <message>
+        <source>Flip Canvas Horizontal</source>
+        <translation>カンバスを左右に反転</translation>
+    </message>
+    <message>
+        <source>Flip Canvas Vertical</source>
+        <translation>カンバスを上下に反転</translation>
+    </message>
+    <message>
+        <source>Layer Sampling</source>
+        <translation>レイヤーのサンプリング</translation>
+    </message>
+    <message>
+        <source>Paint Mask</source>
+        <translation>マスクをペイント</translation>
+    </message>
+    <message>
+        <source>Healing Brush</source>
+        <translation>修復ブラシ</translation>
+    </message>
+    <message>
+        <source>Spot Healing</source>
+        <translation>スポット修復</translation>
+    </message>
+    <message>
+        <source>Clone Stamp</source>
+        <translation>コピースタンプ</translation>
+    </message>
+    <message>
+        <source>Sharpen</source>
+        <translation>シャープ</translation>
+    </message>
+    <message>
+        <source>Blur</source>
+        <translation>ぼかし</translation>
+    </message>
+    <message>
+        <source>Dodge</source>
+        <translation>覆い焼き</translation>
+    </message>
+    <message>
+        <source>Burn</source>
+        <translation>焼き込み</translation>
+    </message>
+    <message>
+        <source>Sponge</source>
+        <translation>スポンジ</translation>
+    </message>
+    <message>
+        <source>Eraser</source>
+        <translation>消しゴム</translation>
+    </message>
+    <message>
+        <source>Brush Stroke</source>
+        <translation>ブラシストローク</translation>
+    </message>
+    <message>
+        <source>Smudge</source>
+        <translation>指先</translation>
+    </message>
+    <message>
+        <source>Liquify</source>
+        <translation>ゆがみ</translation>
+    </message>
+    <message>
+        <source>Gradient Mask</source>
+        <translation>グラデーションマスク</translation>
+    </message>
+    <message>
+        <source>Gradient</source>
+        <translation>グラデーション</translation>
+    </message>
+    <message>
+        <source>Add Shape</source>
+        <translation>シェイプを追加</translation>
+    </message>
+    <message>
+        <source>Add Text</source>
+        <translation>テキストを追加</translation>
+    </message>
+    <message>
+        <source>Edit Text</source>
+        <translation>テキストを編集</translation>
+    </message>
+    <message>
+        <source>Add Subpath</source>
+        <translation>サブパスを追加</translation>
+    </message>
+    <message>
+        <source>Work Path</source>
+        <translation>作業用パス</translation>
+    </message>
+    <message>
+        <source>Path Operation</source>
+        <translation>パスの操作</translation>
+    </message>
+    <message>
+        <source>Merge Shape Components</source>
+        <translation>シェイプコンポーネントを結合</translation>
+    </message>
+    <message>
+        <source>Add Vector Mask</source>
+        <translation>ベクトルマスクを追加</translation>
+    </message>
+    <message>
+        <source>Hide All Vector Mask</source>
+        <translation>すべての領域を隠すベクトルマスクを追加</translation>
+    </message>
+    <message>
+        <source>Reveal All Vector Mask</source>
+        <translation>すべての領域を表示するベクトルマスクを追加</translation>
+    </message>
+    <message>
+        <source>Delete Vector Mask</source>
+        <translation>ベクトルマスクを削除</translation>
+    </message>
+    <message>
+        <source>Edit Vector Mask</source>
+        <translation>ベクトルマスクを編集</translation>
+    </message>
+    <message>
+        <source>Convert to Shape</source>
+        <translation>シェイプに変換</translation>
+    </message>
+    <message>
+        <source>Live Shape Properties</source>
+        <translation>ライブシェイプ属性</translation>
+    </message>
+    <message>
+        <source>Add Anchor Point</source>
+        <translation>アンカーポイントを追加</translation>
+    </message>
+    <message>
+        <source>New Path</source>
+        <translation>新規パス</translation>
+    </message>
+    <message>
+        <source>Edit Path</source>
+        <translation>パスを編集</translation>
+    </message>
+    <message>
+        <source>Rename Path</source>
+        <translation>パス名の変更</translation>
+    </message>
+    <message>
+        <source>Delete Path</source>
+        <translation>パスを削除</translation>
+    </message>
+    <message>
+        <source>Save Path</source>
+        <translation>パスを保存</translation>
+    </message>
+    <message>
+        <source>Make Selection</source>
+        <translation>選択範囲を作成</translation>
+    </message>
+    <message>
+        <source>Fill Path</source>
+        <translation>パスを塗りつぶし</translation>
+    </message>
+    <message>
+        <source>Stroke Path</source>
+        <translation>パスの境界線を描く</translation>
+    </message>
+    <message>
+        <source>Make Work Path</source>
+        <translation>作業用パスを作成</translation>
+    </message>
+    <message>
+        <source>Duplicate Pixels</source>
+        <translation>ピクセルを複製</translation>
+    </message>
+    <message>
+        <source>Move Pixels</source>
+        <translation>ピクセルを移動</translation>
+    </message>
+    <message>
+        <source>Paste</source>
+        <translation>ペースト</translation>
+    </message>
+    <message>
+        <source>Layer via Copy</source>
+        <translation>選択範囲をコピーしたレイヤー</translation>
+    </message>
+    <message>
+        <source>Content-Aware Fill</source>
+        <translation>コンテンツに応じた塗りつぶし</translation>
+    </message>
+    <message>
+        <source>Content-Aware Scale</source>
+        <translation>コンテンツに応じて拡大・縮小</translation>
+    </message>
+    <message>
+        <source>Copy Layer</source>
+        <translation>レイヤーをコピー</translation>
+    </message>
+    <message>
+        <source>Quick Mask</source>
+        <translation>クイックマスク</translation>
+    </message>
+    <message>
+        <source>Exit Quick Mask</source>
+        <translation>クイックマスクを終了</translation>
+    </message>
+    <message>
+        <source>Select Subject</source>
+        <translation>被写体を選択</translation>
+    </message>
+    <message>
+        <source>Quick Select</source>
+        <translation>クイック選択</translation>
+    </message>
+    <message>
+        <source>Select All</source>
+        <translation>すべてを選択</translation>
+    </message>
+    <message>
+        <source>Deselect</source>
+        <translation>選択を解除</translation>
+    </message>
+    <message>
+        <source>Inverse</source>
+        <translation>選択範囲を反転</translation>
+    </message>
+    <message>
+        <source>Magic Wand</source>
+        <translation>自動選択</translation>
+    </message>
+    <message>
+        <source>Fill</source>
+        <translation>塗りつぶし</translation>
+    </message>
+    <message>
+        <source>Paint Bucket</source>
+        <translation>塗りつぶしツール</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>消去</translation>
+    </message>
+    <message>
+        <source>Load Mask as Selection</source>
+        <translation>マスクを選択範囲として読み込む</translation>
+    </message>
+    <message>
+        <source>Load Layer as Selection</source>
+        <translation>レイヤーを選択範囲として読み込む</translation>
+    </message>
+    <message>
+        <source>Expand Selection</source>
+        <translation>選択範囲を拡張</translation>
+    </message>
+    <message>
+        <source>Feather Selection</source>
+        <translation>境界をぼかす</translation>
+    </message>
+    <message>
+        <source>Smooth Selection</source>
+        <translation>選択範囲を滑らかに</translation>
+    </message>
+    <message>
+        <source>Border Selection</source>
+        <translation>選択範囲の境界線</translation>
+    </message>
+    <message>
+        <source>Contract Selection</source>
+        <translation>選択範囲を縮小</translation>
+    </message>
+    <message>
+        <source>Smart Filter Settings</source>
+        <translation>スマートフィルターの設定</translation>
+    </message>
+    <message>
+        <source>Enable Smart Filter</source>
+        <translation>スマートフィルターを使用</translation>
+    </message>
+    <message>
+        <source>Disable Smart Filter</source>
+        <translation>スマートフィルターを使用しない</translation>
+    </message>
+    <message>
+        <source>Move Smart Filter</source>
+        <translation>スマートフィルターを移動</translation>
+    </message>
+    <message>
+        <source>Delete Smart Filter</source>
+        <translation>スマートフィルターを削除</translation>
+    </message>
+    <message>
+        <source>Clear Smart Filters</source>
+        <translation>スマートフィルターを消去</translation>
+    </message>
+    <message>
+        <source>Edit Filter Mask</source>
+        <translation>フィルターマスクを編集</translation>
+    </message>
+    <message>
+        <source>Exit Filter Mask</source>
+        <translation>フィルターマスクを終了</translation>
+    </message>
+    <message>
+        <source>Convert to Smart Object</source>
+        <translation>スマートオブジェクトに変換</translation>
+    </message>
+    <message>
+        <source>Place Embedded</source>
+        <translation>埋め込みを配置</translation>
+    </message>
+    <message>
+        <source>Replace Contents</source>
+        <translation>内容を置き換え</translation>
+    </message>
+    <message>
+        <source>Warp</source>
+        <translation>ワープ</translation>
+    </message>
+    <message>
+        <source>Smart Filter</source>
+        <translation>スマートフィルター</translation>
+    </message>
+    <message>
+        <source>Rasterize Smart Object</source>
+        <translation>スマートオブジェクトをラスタライズ</translation>
+    </message>
+    <message>
+        <source>Edit Smart Object Contents</source>
+        <translation>スマートオブジェクトの内容を編集</translation>
+    </message>
+    <message>
+        <source>Layer Style</source>
+        <translation>レイヤースタイル</translation>
+    </message>
+    <message>
+        <source>Apply Style</source>
+        <translation>スタイルを適用</translation>
+    </message>
+    <message>
+        <source>Add Patterns</source>
+        <translation>パターンを追加</translation>
+    </message>
+    <message>
+        <source>Paste Layer Style</source>
+        <translation>レイヤースタイルをペースト</translation>
+    </message>
+    <message>
+        <source>Clear Layer Style</source>
+        <translation>レイヤースタイルを消去</translation>
+    </message>
+    <message>
+        <source>Create Frame Animation</source>
+        <translation>フレームアニメーションを作成</translation>
+    </message>
+    <message>
+        <source>Make Frames From Layers</source>
+        <translation>レイヤーからフレームを作成</translation>
+    </message>
+    <message>
+        <source>New Frame</source>
+        <translation>新規フレーム</translation>
+    </message>
+    <message>
+        <source>Delete Frame</source>
+        <translation>フレームを削除</translation>
+    </message>
+    <message>
+        <source>Move Frame</source>
+        <translation>フレームを移動</translation>
+    </message>
+    <message>
+        <source>Frame Delay</source>
+        <translation>フレームの遅延</translation>
+    </message>
+    <message>
+        <source>Looping Options</source>
+        <translation>ループオプション</translation>
+    </message>
+    <message>
+        <source>Delete Animation</source>
+        <translation>アニメーションを削除</translation>
+    </message>
+    <message>
+        <source>Transform Selection</source>
+        <translation>選択範囲を変形</translation>
+    </message>
+    <message>
+        <source>Transform Layer Mask</source>
+        <translation>レイヤーマスクを変形</translation>
+    </message>
+    <message>
+        <source>Distort Layers</source>
+        <translation>レイヤーを自由な形に</translation>
+    </message>
+    <message>
+        <source>Distort</source>
+        <translation>自由な形に</translation>
+    </message>
+    <message>
+        <source>Transform Layers</source>
+        <translation>レイヤーを変形</translation>
+    </message>
+    <message>
+        <source>Transform Layer</source>
+        <translation>レイヤーを変形</translation>
+    </message>
+    <message>
+        <source>Delete Slices</source>
+        <translation>スライスを削除</translation>
+    </message>
+</context>
+<context>
+    <name>Names</name>
+    <message>
+        <source>Layer 1</source>
+        <translation>レイヤー 1</translation>
+    </message>
+    <message>
+        <source>Artboard</source>
+        <translation>アートボード</translation>
+    </message>
+    <message>
+        <source>Layer</source>
+        <translation>レイヤー</translation>
+    </message>
+    <message>
+        <source>Folder</source>
+        <translation>グループ</translation>
+    </message>
+    <message>
+        <source>%1 copy</source>
+        <translation>%1 のコピー</translation>
+    </message>
+    <message>
+        <source>Rectangle</source>
+        <translation>長方形</translation>
+    </message>
+    <message>
+        <source>Ellipse</source>
+        <translation>楕円形</translation>
+    </message>
+    <message>
+        <source>Polygon</source>
+        <translation>多角形</translation>
+    </message>
+    <message>
+        <source>Line</source>
+        <translation>ライン</translation>
+    </message>
+    <message>
+        <source>Shape</source>
+        <translation>シェイプ</translation>
+    </message>
+    <message>
+        <source>Text</source>
+        <translation>テキスト</translation>
+    </message>
+    <message>
+        <source>Path</source>
+        <translation>パス</translation>
+    </message>
+    <message>
+        <source>Quick Mask</source>
+        <translation>クイックマスク</translation>
+    </message>
+    <message>
+        <source>Smart Filter Mask</source>
+        <translation>スマートフィルターマスク</translation>
+    </message>
+    <message>
+        <source>Floating Selection</source>
+        <translation>フローティング選択範囲</translation>
+    </message>
+    <message>
+        <source>Normal</source>
+        <translation>通常</translation>
+    </message>
+    <message>
+        <source>Dissolve</source>
+        <translation>ディザ合成</translation>
+    </message>
+    <message>
+        <source>Darken</source>
+        <translation>比較(暗)</translation>
+    </message>
+    <message>
+        <source>Multiply</source>
+        <translation>乗算</translation>
+    </message>
+    <message>
+        <source>Color Burn</source>
+        <translation>焼き込みカラー</translation>
+    </message>
+    <message>
+        <source>Linear Burn</source>
+        <translation>焼き込み(リニア)</translation>
+    </message>
+    <message>
+        <source>Darker Color</source>
+        <translation>カラー比較(暗)</translation>
+    </message>
+    <message>
+        <source>Lighten</source>
+        <translation>比較(明)</translation>
+    </message>
+    <message>
+        <source>Screen</source>
+        <translation>スクリーン</translation>
+    </message>
+    <message>
+        <source>Color Dodge</source>
+        <translation>覆い焼きカラー</translation>
+    </message>
+    <message>
+        <source>Linear Dodge (Add)</source>
+        <translation>覆い焼き(リニア)-加算</translation>
+    </message>
+    <message>
+        <source>Lighter Color</source>
+        <translation>カラー比較(明)</translation>
+    </message>
+    <message>
+        <source>Overlay</source>
+        <translation>オーバーレイ</translation>
+    </message>
+    <message>
+        <source>Soft Light</source>
+        <translation>ソフトライト</translation>
+    </message>
+    <message>
+        <source>Hard Light</source>
+        <translation>ハードライト</translation>
+    </message>
+    <message>
+        <source>Vivid Light</source>
+        <translation>ビビッドライト</translation>
+    </message>
+    <message>
+        <source>Linear Light</source>
+        <translation>リニアライト</translation>
+    </message>
+    <message>
+        <source>Pin Light</source>
+        <translation>ピンライト</translation>
+    </message>
+    <message>
+        <source>Hard Mix</source>
+        <translation>ハードミックス</translation>
+    </message>
+    <message>
+        <source>Difference</source>
+        <translation>差の絶対値</translation>
+    </message>
+    <message>
+        <source>Exclusion</source>
+        <translation>除外</translation>
+    </message>
+    <message>
+        <source>Subtract</source>
+        <translation>減算</translation>
+    </message>
+    <message>
+        <source>Divide</source>
+        <translation>除算</translation>
+    </message>
+    <message>
+        <source>Hue</source>
+        <translation>色相</translation>
+    </message>
+    <message>
+        <source>Saturation</source>
+        <translation>彩度</translation>
+    </message>
+    <message>
+        <source>Color</source>
+        <translation>カラー</translation>
+    </message>
+    <message>
+        <source>Luminosity</source>
+        <translation>輝度</translation>
+    </message>
+    <message>
+        <source>Pass Through</source>
+        <translation>通過</translation>
+    </message>
+    <message>
+        <source>Hue/Saturation</source>
+        <translation>色相・彩度</translation>
+    </message>
+    <message>
+        <source>Levels</source>
+        <translation>レベル補正</translation>
+    </message>
+    <message>
+        <source>Curves</source>
+        <translation>トーンカーブ</translation>
+    </message>
+    <message>
+        <source>Exposure</source>
+        <translation>露光量</translation>
+    </message>
+    <message>
+        <source>Gradient Map</source>
+        <translation>グラデーションマップ</translation>
+    </message>
+    <message>
+        <source>Grain</source>
+        <translation>粒子</translation>
+    </message>
+    <message>
+        <source>Invert</source>
+        <translation>階調の反転</translation>
+    </message>
+    <message>
+        <source>Brightness/Contrast</source>
+        <translation>明るさ・コントラスト</translation>
+    </message>
+    <message>
+        <source>Posterize</source>
+        <translation>ポスタリゼーション</translation>
+    </message>
+    <message>
+        <source>Threshold</source>
+        <translation>2階調化</translation>
+    </message>
+    <message>
+        <source>Black &amp; White</source>
+        <translation>白黒</translation>
+    </message>
+    <message>
+        <source>Color Balance</source>
+        <translation>カラーバランス</translation>
+    </message>
+    <message>
+        <source>Vibrance</source>
+        <translation>自然な彩度</translation>
+    </message>
+    <message>
+        <source>Photo Filter</source>
+        <translation>フォトフィルター</translation>
+    </message>
+    <message>
+        <source>Channel Mixer</source>
+        <translation>チャンネルミキサー</translation>
+    </message>
+    <message>
+        <source>Selective Color</source>
+        <translation>特定色域の選択</translation>
+    </message>
+    <message>
+        <source>Color Lookup</source>
+        <translation>カラールックアップ</translation>
+    </message>
+    <message>
+        <source>Gaussian Blur</source>
+        <translation>ぼかし(ガウス)</translation>
+    </message>
+    <message>
+        <source>Motion Blur</source>
+        <translation>ぼかし(移動)</translation>
+    </message>
+    <message>
+        <source>Add Noise</source>
+        <translation>ノイズを加える</translation>
+    </message>
+    <message>
+        <source>Lens Correction</source>
+        <translation>レンズ補正</translation>
+    </message>
+    <message>
+        <source>RGB</source>
+        <translation>RGB</translation>
+    </message>
+    <message>
+        <source>Red</source>
+        <translation>レッド</translation>
+    </message>
+    <message>
+        <source>Green</source>
+        <translation>グリーン</translation>
+    </message>
+    <message>
+        <source>Blue</source>
+        <translation>ブルー</translation>
+    </message>
+    <message>
+        <source>Master</source>
+        <translation>マスター</translation>
+    </message>
+    <message>
+        <source>Reds</source>
+        <translation>レッド系</translation>
+    </message>
+    <message>
+        <source>Yellows</source>
+        <translation>イエロー系</translation>
+    </message>
+    <message>
+        <source>Greens</source>
+        <translation>グリーン系</translation>
+    </message>
+    <message>
+        <source>Cyans</source>
+        <translation>シアン系</translation>
+    </message>
+    <message>
+        <source>Blues</source>
+        <translation>ブルー系</translation>
+    </message>
+    <message>
+        <source>Magentas</source>
+        <translation>マゼンタ系</translation>
+    </message>
+    <message>
+        <source>Oranges</source>
+        <translation>オレンジ系</translation>
+    </message>
+    <message>
+        <source>Aquas</source>
+        <translation>アクア系</translation>
+    </message>
+    <message>
+        <source>Purples</source>
+        <translation>パープル系</translation>
+    </message>
+    <message>
+        <source>Nearest</source>
+        <translation>ニアレストネイバー</translation>
+    </message>
+    <message>
+        <source>Smooth</source>
+        <translation>滑らか</translation>
+    </message>
+    <message>
+        <source>High quality</source>
+        <translation>高品質</translation>
+    </message>
+</context>
+<context>
     <name>QObject</name>
     <message>
         <source>Brushes (*.abr *.brushset *.brush *.sut *.png *.jpg *.jpeg *.webp *.tif *.tiff *.bmp);;All files (*)</source>
-        <translation type="unfinished"></translation>
+        <translation>ブラシ (*.abr *.brushset *.brush *.sut *.png *.jpg *.jpeg *.webp *.tif *.tiff *.bmp);;すべてのファイル (*)</translation>
     </message>
     <message>
         <source>%1: %2</source>
-        <translation type="unfinished"></translation>
+        <translation>%1: %2</translation>
     </message>
     <message>
         <source>Import Brushes</source>
-        <translation type="unfinished"></translation>
+        <translation>ブラシを読み込み</translation>
     </message>
     <message numerus="yes">
         <source>Imported %n brush(es). They are in the Brush tool&apos;s picker.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n 個のブラシを読み込みました。ブラシツールのピッカーにあります。</numerusform>
         </translation>
     </message>
     <message>
         <source>Approximated:</source>
-        <translation type="unfinished"></translation>
+        <translation>近似で読み込み:</translation>
     </message>
     <message>
         <source>Not imported:</source>
-        <translation type="unfinished"></translation>
+        <translation>読み込めなかったもの:</translation>
     </message>
     <message>
         <source>My Brushes</source>
-        <translation type="unfinished"></translation>
+        <translation>マイブラシ</translation>
     </message>
     <message>
         <source> px/in</source>
-        <translation type="unfinished"></translation>
+        <translation> px/in</translation>
     </message>
     <message>
         <source>%1 × %2 in at %3 px/in</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 × %2 in(%3 px/in)</translation>
     </message>
     <message>
         <source>%1 × %2 px, %3 MP</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 × %2 px、%3 MP</translation>
     </message>
     <message>
         <source>New Canvas</source>
-        <translation type="unfinished"></translation>
+        <translation>新規カンバス</translation>
     </message>
     <message>
         <source>Custom</source>
-        <translation type="unfinished"></translation>
+        <translation>カスタム</translation>
     </message>
     <message>
         <source>HD 1920 × 1080</source>
-        <translation type="unfinished"></translation>
+        <translation>HD 1920 × 1080</translation>
     </message>
     <message>
         <source>4K UHD 3840 × 2160</source>
-        <translation type="unfinished"></translation>
+        <translation>4K UHD 3840 × 2160</translation>
     </message>
     <message>
         <source>Square 2048 × 2048</source>
-        <translation type="unfinished"></translation>
+        <translation>正方形 2048 × 2048</translation>
     </message>
     <message>
         <source>Portrait 1080 × 1350</source>
-        <translation type="unfinished"></translation>
+        <translation>縦長 1080 × 1350</translation>
     </message>
     <message>
         <source>A4 at 300 px/in</source>
-        <translation type="unfinished"></translation>
+        <translation>A4(300 px/in)</translation>
     </message>
     <message>
         <source>US Letter at 300 px/in</source>
-        <translation type="unfinished"></translation>
+        <translation>US レター(300 px/in)</translation>
     </message>
     <message>
         <source>Clipboard %1 × %2</source>
-        <translation type="unfinished"></translation>
+        <translation>クリップボード %1 × %2</translation>
     </message>
     <message>
         <source>Preset</source>
-        <translation type="unfinished"></translation>
+        <translation>プリセット</translation>
     </message>
     <message>
         <source>Swap width and height</source>
-        <translation type="unfinished"></translation>
+        <translation>幅と高さを入れ替え</translation>
     </message>
     <message>
         <source>Width / Height</source>
-        <translation type="unfinished"></translation>
+        <translation>幅 / 高さ</translation>
     </message>
     <message>
         <source>Resolution</source>
-        <translation type="unfinished"></translation>
+        <translation>解像度</translation>
     </message>
     <message>
         <source>Create</source>
-        <translation type="unfinished"></translation>
+        <translation>作成</translation>
     </message>
     <message>
         <source>Canvas Size</source>
-        <translation type="unfinished"></translation>
+        <translation>カンバスサイズ</translation>
     </message>
     <message>
         <source>Current size</source>
-        <translation type="unfinished"></translation>
+        <translation>現在のサイズ</translation>
     </message>
     <message>
         <source>Relative</source>
-        <translation type="unfinished"></translation>
+        <translation>相対</translation>
     </message>
     <message>
         <source>Enter how much to add (or, negative, remove) instead of the new size</source>
-        <translation type="unfinished"></translation>
+        <translation>新しいサイズの代わりに、追加する量(マイナスで削除する量)を入力します。</translation>
     </message>
     <message>
         <source>Width</source>
-        <translation type="unfinished"></translation>
+        <translation>幅</translation>
     </message>
     <message>
         <source>Height</source>
-        <translation type="unfinished"></translation>
+        <translation>高さ</translation>
     </message>
     <message>
         <source>Anchor</source>
-        <translation type="unfinished"></translation>
+        <translation>基準位置</translation>
     </message>
     <message>
         <source>New size %1 × %2 px (%3%4 × %5%6)</source>
-        <translation type="unfinished"></translation>
+        <translation>新しいサイズ %1 × %2 px(%3%4 × %5%6)</translation>
     </message>
     <message>
         <source>Image Size</source>
-        <translation type="unfinished"></translation>
+        <translation>画像解像度</translation>
     </message>
     <message>
         <source>Constrain proportions</source>
-        <translation type="unfinished"></translation>
+        <translation>縦横比を固定</translation>
     </message>
     <message>
         <source>Scale</source>
-        <translation type="unfinished"></translation>
+        <translation>拡大・縮小</translation>
     </message>
     <message>
         <source>Nearest Neighbour (hard pixels)</source>
-        <translation type="unfinished"></translation>
+        <translation>ニアレストネイバー(ハードなピクセル)</translation>
     </message>
     <message>
         <source>Smooth (bilinear)</source>
-        <translation type="unfinished"></translation>
+        <translation>滑らか(バイリニア)</translation>
     </message>
     <message>
         <source>High Quality (area average, best for reducing)</source>
-        <translation type="unfinished"></translation>
+        <translation>高品質(平均法、縮小に最適)</translation>
     </message>
     <message>
         <source>Resampling</source>
-        <translation type="unfinished"></translation>
+        <translation>再サンプル</translation>
     </message>
     <message>
         <source>Every layer&apos;s pixels and mask are resampled; the layout scales with them.</source>
-        <translation type="unfinished"></translation>
+        <translation>すべてのレイヤーのピクセルとマスクが再サンプルされ、レイアウトも合わせて拡大・縮小されます。</translation>
     </message>
     <message>
         <source>New size %1
 %2</source>
-        <translation type="unfinished"></translation>
+        <translation>新しいサイズ %1
+%2</translation>
     </message>
     <message>
         <source>Resize</source>
-        <translation type="unfinished"></translation>
+        <translation>サイズを変更</translation>
     </message>
     <message>
         <source>Export WebP</source>
-        <translation type="unfinished"></translation>
+        <translation>WebP を書き出し</translation>
     </message>
     <message>
         <source>Export JPEG</source>
-        <translation type="unfinished"></translation>
+        <translation>JPEG を書き出し</translation>
     </message>
     <message>
         <source>Quality</source>
-        <translation type="unfinished"></translation>
+        <translation>画質</translation>
     </message>
     <message>
         <source>White</source>
-        <translation type="unfinished"></translation>
+        <translation>ホワイト</translation>
     </message>
     <message>
         <source>Black</source>
-        <translation type="unfinished"></translation>
+        <translation>ブラック</translation>
     </message>
     <message>
         <source>Behind transparency</source>
-        <translation type="unfinished"></translation>
+        <translation>透明部分の背景</translation>
     </message>
     <message>
         <source>File size</source>
-        <translation type="unfinished"></translation>
+        <translation>ファイルサイズ</translation>
     </message>
     <message>
         <source>about %1 MB</source>
-        <translation type="unfinished"></translation>
+        <translation>約 %1 MB</translation>
     </message>
     <message>
         <source>about %1 KB</source>
-        <translation type="unfinished"></translation>
+        <translation>約 %1 KB</translation>
     </message>
     <message>
         <source>Colour behind transparent areas</source>
-        <translation type="unfinished"></translation>
+        <translation>透明部分の背後のカラー</translation>
     </message>
     <message>
         <source>The format must be png or jpeg.</source>
-        <translation type="unfinished"></translation>
+        <translation>形式は png または jpeg にしてください。</translation>
     </message>
     <message>
         <source>Could not create %1.</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 を作成できませんでした。</translation>
     </message>
     <message>
         <source>That layer has no Smart Filters.</source>
-        <translation type="unfinished"></translation>
+        <translation>そのレイヤーにはスマートフィルターがありません。</translation>
     </message>
     <message>
         <source>These Smart Filters include one NekoPhoto does not draw (or the smart object is locked); they cannot be changed here.</source>
-        <translation type="unfinished"></translation>
+        <translation>これらのスマートフィルターには NekoPhoto が描画できないもの(またはスマートオブジェクトがロックされている)が含まれるため、ここでは変更できません。</translation>
     </message>
     <message>
         <source>No Smart Filter at index %1.</source>
-        <translation type="unfinished"></translation>
+        <translation>インデックス %1 にスマートフィルターがありません。</translation>
     </message>
     <message>
         <source>Couldn’t read %1.</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 を読み込めませんでした。</translation>
     </message>
     <message>
         <source>%1 is not an image NekoPhoto can read.</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 は NekoPhoto で読み込める画像ではありません。</translation>
     </message>
     <message>
         <source>That image is larger than a document can hold.</source>
-        <translation type="unfinished"></translation>
+        <translation>この画像はドキュメントに収まる大きさを超えています。</translation>
     </message>
     <message>
         <source>Couldn&apos;t read %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 を読み込めませんでした</translation>
     </message>
     <message>
         <source>%1 is not a G&apos;MIC definition file</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 は G&apos;MIC の定義ファイルではありません</translation>
     </message>
     <message>
         <source>The filter makes %1 layers; only filters that give back one image are supported here.</source>
-        <translation type="unfinished"></translation>
+        <translation>このフィルターは %1 個のレイヤーを生成します。ここでは 1 枚の画像を返すフィルターのみ使用できます。</translation>
     </message>
     <message>
         <source>G&apos;MIC produced no image.</source>
-        <translation type="unfinished"></translation>
+        <translation>G&apos;MIC から画像が出力されませんでした。</translation>
     </message>
     <message>
         <source>G&apos;MIC produced no image (%1).</source>
-        <translation type="unfinished"></translation>
+        <translation>G&apos;MIC から画像が出力されませんでした(%1)。</translation>
     </message>
     <message>
         <source>The filter changed the image size (%1 x %2 to %3 x %4); only filters that keep it are supported here.</source>
-        <translation type="unfinished"></translation>
+        <translation>フィルターによって画像サイズが変更されました(%1 x %2 から %3 x %4)。ここではサイズを保つフィルターのみ使用できます。</translation>
     </message>
     <message>
         <source>G&apos;MIC is not installed (no gmic executable on PATH).</source>
-        <translation type="unfinished"></translation>
+        <translation>G&apos;MIC がインストールされていません(PATH に gmic 実行ファイルがありません)。</translation>
     </message>
     <message>
         <source>Couldn&apos;t create a temporary folder.</source>
-        <translation type="unfinished"></translation>
+        <translation>一時フォルダーを作成できませんでした。</translation>
     </message>
     <message>
         <source>G&apos;MIC took too long and was stopped.</source>
-        <translation type="unfinished"></translation>
+        <translation>G&apos;MIC の処理に時間がかかりすぎたため停止しました。</translation>
     </message>
     <message>
         <source>G&apos;MIC failed.</source>
-        <translation type="unfinished"></translation>
+        <translation>G&apos;MIC の処理に失敗しました。</translation>
     </message>
     <message>
         <source>Essentials</source>
-        <translation type="unfinished"></translation>
+        <translation>基本</translation>
     </message>
     <message>
         <source>Notes</source>
-        <translation type="unfinished"></translation>
+        <translation>メモ</translation>
     </message>
     <message>
         <source>Next</source>
-        <translation type="unfinished"></translation>
+        <translation>次へ</translation>
     </message>
     <message>
         <source>Images (%1)</source>
-        <translation type="unfinished"></translation>
+        <translation>画像 (%1)</translation>
     </message>
     <message>
         <source>Images, layered files and projects (%1)</source>
-        <translation type="unfinished"></translation>
+        <translation>画像、レイヤー付きファイル、プロジェクト (%1)</translation>
     </message>
     <message>
         <source>Photoshop files (*.psd *.psb)</source>
-        <translation type="unfinished"></translation>
+        <translation>Photoshop ファイル (*.psd *.psb)</translation>
     </message>
     <message>
         <source>Clip Studio files (*.clip)</source>
-        <translation type="unfinished"></translation>
+        <translation>Clip Studio ファイル (*.clip)</translation>
     </message>
     <message>
         <source>Aseprite files (*.ase *.aseprite)</source>
-        <translation type="unfinished"></translation>
+        <translation>Aseprite ファイル (*.ase *.aseprite)</translation>
     </message>
     <message>
         <source>Icons (*.ico *.cur)</source>
-        <translation type="unfinished"></translation>
+        <translation>アイコン (*.ico *.cur)</translation>
     </message>
     <message>
         <source>TGA images (*.tga)</source>
-        <translation type="unfinished"></translation>
+        <translation>TGA 画像 (*.tga)</translation>
     </message>
     <message>
         <source>Affinity files (*.afphoto *.afdesign *.afpub *.af)</source>
-        <translation type="unfinished"></translation>
+        <translation>Affinity ファイル (*.afphoto *.afdesign *.afpub *.af)</translation>
     </message>
     <message>
         <source>SVG files (*.svg *.svgz)</source>
-        <translation type="unfinished"></translation>
+        <translation>SVG ファイル (*.svg *.svgz)</translation>
     </message>
     <message>
         <source>PDF files (*.pdf)</source>
-        <translation type="unfinished"></translation>
+        <translation>PDF ファイル (*.pdf)</translation>
     </message>
     <message>
         <source>Images up to 30,000 pixels per side are supported.</source>
-        <translation type="unfinished"></translation>
+        <translation>1 辺 30,000 ピクセルまでの画像に対応しています。</translation>
     </message>
     <message>
         <source>IS-Net (general use)</source>
-        <translation type="unfinished"></translation>
+        <translation>IS-Net(汎用)</translation>
     </message>
     <message>
         <source>Best quality of the permissively licensed models; keeps hair and whiskers. 1024 px input, about half a second per image.</source>
-        <translation type="unfinished"></translation>
+        <translation>寛容なライセンスのモデルの中で最高品質です。髪やひげも残ります。入力 1024 px、1 枚あたり約 0.5 秒です。</translation>
     </message>
     <message>
         <source>U2Net portrait</source>
-        <translation type="unfinished"></translation>
+        <translation>U2Net ポートレート</translation>
     </message>
     <message>
         <source>Trained on people; the better choice for portraits and full-body shots. 320 px input, about a quarter of a second per image.</source>
-        <translation type="unfinished"></translation>
+        <translation>人物で学習したモデルです。ポートレートや全身写真に適しています。入力 320 px、1 枚あたり約 0.25 秒です。</translation>
     </message>
     <message>
         <source>U2Net small</source>
-        <translation type="unfinished"></translation>
+        <translation>U2Net スモール</translation>
     </message>
     <message>
         <source>A tiny model with coarser edges; quick to download and run.</source>
-        <translation type="unfinished"></translation>
+        <translation>エッジは粗めの小さなモデルです。ダウンロードも処理もすばやく行えます。</translation>
     </message>
     <message>
         <source>PP-HumanSeg (instant)</source>
-        <translation type="unfinished"></translation>
+        <translation>PP-HumanSeg(即時)</translation>
     </message>
     <message>
         <source>Baidu&apos;s people segmenter from OpenCV&apos;s model zoo: a coarse mask in a few milliseconds. When downloaded it also shows an instant preview while a slower model runs.</source>
-        <translation type="unfinished"></translation>
+        <translation>OpenCV のモデルズーにある Baidu の人物セグメンテーションモデルです。数ミリ秒で大まかなマスクを作成します。ダウンロード済みの場合、低速なモデルの処理中に即時プレビューも表示します。</translation>
     </message>
     <message>
         <source>EfficientSAM (click to select)</source>
-        <translation type="unfinished"></translation>
+        <translation>EfficientSAM(クリックで選択)</translation>
     </message>
     <message>
         <source>Meta&apos;s EfficientSAM-Ti as packaged by OpenCV&apos;s model zoo (Apache-2.0): click the subject and it is selected, Alt-click what is not it. About a second per click.</source>
-        <translation type="unfinished"></translation>
+        <translation>OpenCV のモデルズーでパッケージ化された Meta の EfficientSAM-Ti(Apache-2.0)です。被写体をクリックすると選択され、対象外の部分は Alt+クリックで除外します。1 クリックあたり約 1 秒です。</translation>
     </message>
     <message>
         <source>Couldn’t write to %1.</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 に書き込めませんでした。</translation>
     </message>
     <message>
         <source>The downloaded file didn’t match its expected checksum.</source>
-        <translation type="unfinished"></translation>
+        <translation>ダウンロードしたファイルのチェックサムが一致しませんでした。</translation>
     </message>
     <message>
         <source>Couldn’t save the model file into %1.</source>
-        <translation type="unfinished"></translation>
+        <translation>モデルファイルを %1 に保存できませんでした。</translation>
     </message>
     <message>
         <source>Photoshop presets (*.asl *.pat *.grd);;Styles (*.asl);;Patterns (*.pat);;Gradients (*.grd)</source>
-        <translation type="unfinished"></translation>
+        <translation>Photoshop プリセット (*.asl *.pat *.grd);;スタイル (*.asl);;パターン (*.pat);;グラデーション (*.grd)</translation>
     </message>
     <message>
         <source>Import Presets</source>
-        <translation type="unfinished"></translation>
+        <translation>プリセットを読み込み</translation>
     </message>
     <message numerus="yes">
         <source>%n style(s), in Layer ▸ Layer Style ▸ Apply Style.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n 個のスタイル(レイヤー ▸ レイヤースタイル ▸ スタイルを適用 にあります)。</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <source>%n gradient(s), in the Gradient tool&apos;s options.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n 個のグラデーション(グラデーションツールのオプションにあります)。</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <source>%n pattern(s), added to this document for pattern overlays and textures.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n 個のパターン(パターンオーバーレイとテクスチャ用にこのドキュメントへ追加しました)。</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <source>%n pattern(s), kept for the styles that use them.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n 個のパターン(使用するスタイル用に保持しました)。</numerusform>
         </translation>
     </message>
     <message>
         <source>Imported:</source>
-        <translation type="unfinished"></translation>
+        <translation>読み込み済み:</translation>
     </message>
     <message>
         <source>Notes:</source>
-        <translation type="unfinished"></translation>
+        <translation>メモ:</translation>
     </message>
     <message>
         <source>The layer is not a text layer.</source>
-        <translation type="unfinished"></translation>
+        <translation>このレイヤーはテキストレイヤーではありません。</translation>
     </message>
     <message>
         <source>Warped text cannot be made a path here; set its warp to None first.</source>
-        <translation type="unfinished"></translation>
+        <translation>ワープしたテキストはここではパスに変換できません。先にワープを「なし」に設定してください。</translation>
     </message>
     <message>
         <source>The text has no outlines (only spaces?).</source>
-        <translation type="unfinished"></translation>
+        <translation>テキストにアウトラインがありません(スペースのみの可能性があります)。</translation>
     </message>
     <message>
         <source>The SVG could not be read: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>SVG を読み込めませんでした: %1</translation>
     </message>
     <message>
         <source>The SVG could not be opened as layers (%1); it was drawn as one pixel layer.</source>
-        <translation type="unfinished"></translation>
+        <translation>SVG をレイヤーとして開けませんでした(%1)。1 つのピクセルレイヤーとして描画しました。</translation>
     </message>
     <message numerus="yes">
         <source>%n SVG element(s) Qt SVG could not draw (filters, masks and clip paths need Qt 6.7 or later) were left out.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Qt SVG で描画できない SVG 要素 %n 個を除外しました(フィルター、マスク、クリッピングパスには Qt 6.7 以降が必要です)。</numerusform>
         </translation>
     </message>
     <message>
         <source>The PDF is password protected.</source>
-        <translation type="unfinished"></translation>
+        <translation>この PDF はパスワードで保護されています。</translation>
     </message>
     <message>
         <source>The PDF uses a security scheme that cannot be opened.</source>
-        <translation type="unfinished"></translation>
+        <translation>この PDF は開けないセキュリティ方式を使用しています。</translation>
     </message>
     <message>
         <source>The file could not be found.</source>
-        <translation type="unfinished"></translation>
+        <translation>ファイルが見つかりませんでした。</translation>
     </message>
     <message>
         <source>This is not a PDF that can be read.</source>
-        <translation type="unfinished"></translation>
+        <translation>読み込める PDF ではありません。</translation>
     </message>
     <message>
         <source>Open PDF</source>
-        <translation type="unfinished"></translation>
+        <translation>PDF を開く</translation>
     </message>
     <message>
         <source>%1 has %2 pages. Open page:</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 には %2 ページあります。開くページ:</translation>
     </message>
     <message numerus="yes">
         <source>The PDF has %n page(s); page %1 is not one of them.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>この PDF は %n ページです。ページ %1 はありません。</numerusform>
         </translation>
     </message>
     <message>
         <source>The page has no size.</source>
-        <translation type="unfinished"></translation>
+        <translation>ページにサイズがありません。</translation>
     </message>
     <message>
         <source>The page was rendered at %1 pixels per inch to fit the canvas limits.</source>
-        <translation type="unfinished"></translation>
+        <translation>カンバスの上限に収まるよう、ページを %1 pixel/inch でレンダリングしました。</translation>
     </message>
     <message>
         <source>The page could not be rendered.</source>
-        <translation type="unfinished"></translation>
+        <translation>ページをレンダリングできませんでした。</translation>
     </message>
     <message>
         <source>Page %1</source>
-        <translation type="unfinished"></translation>
+        <translation>ページ %1</translation>
     </message>
     <message>
         <source>This build of NekoPhoto opens PDF files only with Qt PDF, which was not found when it was built.</source>
-        <translation type="unfinished"></translation>
+        <translation>この NekoPhoto のビルドは Qt PDF でのみ PDF ファイルを開けますが、ビルド時に Qt PDF が見つかりませんでした。</translation>
     </message>
 </context>
 <context>
-    <name>WarpDialog</name>
+    <name>app::ActionLibrary</name>
     <message>
-        <source>Arc</source>
-        <translation type="unfinished"></translation>
+        <source>Filter</source>
+        <translation>フィルター</translation>
     </message>
     <message>
-        <source>Arc Lower</source>
-        <translation type="unfinished"></translation>
+        <source>Adjust</source>
+        <translation>色調補正</translation>
     </message>
     <message>
-        <source>Arc Upper</source>
-        <translation type="unfinished"></translation>
+        <source>Invert</source>
+        <translation>階調の反転</translation>
     </message>
     <message>
-        <source>Arch</source>
-        <translation type="unfinished"></translation>
+        <source>Fill</source>
+        <translation>塗りつぶし</translation>
     </message>
     <message>
-        <source>Bulge</source>
-        <translation type="unfinished"></translation>
+        <source>Clear</source>
+        <translation>消去</translation>
     </message>
     <message>
-        <source>Shell Lower</source>
-        <translation type="unfinished"></translation>
+        <source>Content-Aware Fill</source>
+        <translation>コンテンツに応じた塗りつぶし</translation>
     </message>
     <message>
-        <source>Shell Upper</source>
-        <translation type="unfinished"></translation>
+        <source>G&apos;MIC</source>
+        <translation>G&apos;MIC</translation>
     </message>
     <message>
-        <source>Flag</source>
-        <translation type="unfinished"></translation>
+        <source>Camera Raw Filter</source>
+        <translation>Camera Raw フィルター</translation>
     </message>
     <message>
-        <source>Wave</source>
-        <translation type="unfinished"></translation>
+        <source>Canvas Size</source>
+        <translation>カンバスサイズ</translation>
     </message>
     <message>
-        <source>Fish</source>
-        <translation type="unfinished"></translation>
+        <source>Image Size</source>
+        <translation>画像解像度</translation>
     </message>
     <message>
-        <source>Rise</source>
-        <translation type="unfinished"></translation>
+        <source>Trim</source>
+        <translation>トリミング</translation>
     </message>
     <message>
-        <source>Fisheye</source>
-        <translation type="unfinished"></translation>
+        <source>Crop</source>
+        <translation>切り抜き</translation>
     </message>
     <message>
-        <source>Inflate</source>
-        <translation type="unfinished"></translation>
+        <source>Flip Canvas</source>
+        <translation>カンバスを反転</translation>
     </message>
     <message>
-        <source>Squeeze</source>
-        <translation type="unfinished"></translation>
+        <source>New Layer</source>
+        <translation>新規レイヤー</translation>
     </message>
     <message>
-        <source>Twist</source>
-        <translation type="unfinished"></translation>
+        <source>Duplicate Layer</source>
+        <translation>レイヤーを複製</translation>
+    </message>
+    <message>
+        <source>Delete Layer</source>
+        <translation>レイヤーを削除</translation>
+    </message>
+    <message>
+        <source>Merge</source>
+        <translation>結合</translation>
+    </message>
+    <message>
+        <source>Group Layers</source>
+        <translation>レイヤーをグループ化</translation>
+    </message>
+    <message>
+        <source>Flip Layer</source>
+        <translation>レイヤーを反転</translation>
+    </message>
+    <message>
+        <source>Layer Mask</source>
+        <translation>レイヤーマスク</translation>
+    </message>
+    <message>
+        <source>Set Layer</source>
+        <translation>レイヤーを設定</translation>
+    </message>
+    <message>
+        <source>Select All</source>
+        <translation>すべてを選択</translation>
+    </message>
+    <message>
+        <source>Deselect</source>
+        <translation>選択を解除</translation>
+    </message>
+    <message>
+        <source>Select Inverse</source>
+        <translation>選択範囲を反転</translation>
+    </message>
+    <message>
+        <source>Marquee</source>
+        <translation>選択範囲を作成</translation>
+    </message>
+    <message>
+        <source>Expand/Contract Selection</source>
+        <translation>選択範囲を拡張・縮小</translation>
+    </message>
+    <message>
+        <source>Feather</source>
+        <translation>境界をぼかす</translation>
+    </message>
+    <message>
+        <source>Smooth Selection</source>
+        <translation>選択範囲を滑らかに</translation>
+    </message>
+    <message>
+        <source>Border Selection</source>
+        <translation>選択範囲の境界線</translation>
+    </message>
+    <message>
+        <source>Load Selection</source>
+        <translation>選択範囲を読み込む</translation>
+    </message>
+    <message>
+        <source>Brush Stroke</source>
+        <translation>ブラシストローク</translation>
+    </message>
+    <message>
+        <source>Set Colours</source>
+        <translation>カラーを設定</translation>
+    </message>
+    <message>
+        <source>Export</source>
+        <translation>書き出し</translation>
+    </message>
+    <message>
+        <source>Save</source>
+        <translation>保存</translation>
+    </message>
+    <message>
+        <source>Frame</source>
+        <translation>フレーム</translation>
+    </message>
+    <message>
+        <source>Timeline</source>
+        <translation>タイムライン</translation>
+    </message>
+    <message>
+        <source>on</source>
+        <translation>オン</translation>
+    </message>
+    <message>
+        <source>off</source>
+        <translation>オフ</translation>
+    </message>
+    <message numerus="yes">
+        <source>[%n item(s)]</source>
+        <translation>
+            <numerusform>[%n 項目]</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Action</source>
+        <translation>アクション</translation>
+    </message>
+    <message>
+        <source>an action needs a name</source>
+        <translation>アクションには名前が必要です</translation>
+    </message>
+    <message>
+        <source>%1: steps must be an array</source>
+        <translation>%1: steps は配列である必要があります</translation>
+    </message>
+    <message>
+        <source>%1: every step needs a method</source>
+        <translation>%1: 各ステップには method が必要です</translation>
+    </message>
+    <message>
+        <source>%1: a step&apos;s params must be an object</source>
+        <translation>%1: ステップの params はオブジェクトである必要があります</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n point(s)</source>
+        <translation>
+            <numerusform>%n 点</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>the file holds no actions</source>
+        <translation>ファイルにアクションが含まれていません</translation>
+    </message>
+    <message>
+        <source>there is no action named %1</source>
+        <translation>%1 という名前のアクションはありません</translation>
+    </message>
+    <message>
+        <source>couldn&apos;t write %1</source>
+        <translation>%1 に書き込めませんでした</translation>
     </message>
 </context>
 <context>
     <name>app::ActionsPanel</name>
     <message>
         <source>Tick a step to include it when the action plays; double-click a step to edit its parameters.</source>
-        <translation type="unfinished"></translation>
+        <translation>チェックを入れたステップがアクションの再生時に実行されます。ステップをダブルクリックするとパラメーターを編集できます。</translation>
     </message>
     <message>
         <source>Stop</source>
-        <translation type="unfinished"></translation>
+        <translation>停止</translation>
     </message>
     <message>
         <source>Stop recording</source>
-        <translation type="unfinished"></translation>
+        <translation>記録を停止</translation>
     </message>
     <message>
         <source>Record: every edit is added to the selected action (or a new one)</source>
-        <translation type="unfinished"></translation>
+        <translation>記録: すべての編集が選択中のアクション(または新しいアクション)に追加されます</translation>
     </message>
     <message>
         <source>Play</source>
-        <translation type="unfinished"></translation>
+        <translation>再生</translation>
     </message>
     <message>
         <source>Play the selected action on the current document</source>
-        <translation type="unfinished"></translation>
+        <translation>選択したアクションを現在のドキュメントで再生</translation>
     </message>
     <message>
         <source>New action</source>
-        <translation type="unfinished"></translation>
+        <translation>新規アクション</translation>
     </message>
     <message>
         <source>Delete the selected action or step</source>
-        <translation type="unfinished"></translation>
+        <translation>選択したアクションまたはステップを削除</translation>
     </message>
     <message>
         <source>Up</source>
-        <translation type="unfinished"></translation>
+        <translation>上へ</translation>
     </message>
     <message>
         <source>Move the step up</source>
-        <translation type="unfinished"></translation>
+        <translation>ステップを上へ移動</translation>
     </message>
     <message>
         <source>Down</source>
-        <translation type="unfinished"></translation>
+        <translation>下へ</translation>
     </message>
     <message>
         <source>Move the step down</source>
-        <translation type="unfinished"></translation>
+        <translation>ステップを下へ移動</translation>
     </message>
     <message>
         <source>Import, export, rename and batch</source>
-        <translation type="unfinished"></translation>
+        <translation>読み込み、書き出し、名前の変更、バッチ</translation>
     </message>
     <message>
         <source>Rename Action…</source>
-        <translation type="unfinished"></translation>
+        <translation>アクション名を変更...</translation>
     </message>
     <message>
         <source>Rename Action</source>
-        <translation type="unfinished"></translation>
+        <translation>アクション名を変更</translation>
     </message>
     <message>
         <source>Name</source>
-        <translation type="unfinished"></translation>
+        <translation>名前</translation>
     </message>
     <message>
         <source>That name is empty or already used.</source>
-        <translation type="unfinished"></translation>
+        <translation>名前が空か、既に使用されています。</translation>
     </message>
     <message>
         <source>Edit Step…</source>
-        <translation type="unfinished"></translation>
+        <translation>ステップを編集...</translation>
     </message>
     <message>
         <source>Import Actions…</source>
-        <translation type="unfinished"></translation>
+        <translation>アクションを読み込み...</translation>
     </message>
     <message>
         <source>Export Actions…</source>
-        <translation type="unfinished"></translation>
+        <translation>アクションを書き出し...</translation>
     </message>
     <message>
         <source>Batch…</source>
-        <translation type="unfinished"></translation>
+        <translation>バッチ...</translation>
     </message>
     <message>
         <source>Recording “%1”</source>
-        <translation type="unfinished"></translation>
+        <translation>「%1」を記録中</translation>
     </message>
     <message>
         <source>  (recording)</source>
-        <translation type="unfinished"></translation>
+        <translation>  (記録中)</translation>
     </message>
     <message>
         <source>No actions yet: press + or ● to record one.</source>
-        <translation type="unfinished"></translation>
+        <translation>アクションはまだありません。+ または ● を押して記録してください。</translation>
     </message>
     <message>
         <source>Play Action</source>
-        <translation type="unfinished"></translation>
+        <translation>アクションを再生</translation>
     </message>
     <message>
         <source>Stop recording first.</source>
-        <translation type="unfinished"></translation>
+        <translation>先に記録を停止してください。</translation>
     </message>
     <message>
         <source>Played “%1”.</source>
-        <translation type="unfinished"></translation>
+        <translation>「%1」を再生しました。</translation>
     </message>
     <message>
         <source>New Action</source>
-        <translation type="unfinished"></translation>
+        <translation>新規アクション</translation>
     </message>
     <message>
         <source>Action</source>
-        <translation type="unfinished"></translation>
+        <translation>アクション</translation>
     </message>
     <message>
         <source>There is an action with that name already.</source>
-        <translation type="unfinished"></translation>
+        <translation>その名前のアクションは既に存在します。</translation>
     </message>
     <message>
         <source>Delete Action</source>
-        <translation type="unfinished"></translation>
+        <translation>アクションを削除</translation>
     </message>
     <message>
         <source>Delete the action “%1”?</source>
-        <translation type="unfinished"></translation>
+        <translation>アクション「%1」を削除しますか?</translation>
     </message>
     <message>
         <source>Edit Step: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>ステップを編集: %1</translation>
     </message>
     <message>
         <source>The parameters, as the automation method %1 takes them (rpc.describe lists them):</source>
-        <translation type="unfinished"></translation>
+        <translation>自動操作メソッド %1 が受け取る形式のパラメーター(rpc.describe で一覧表示できます):</translation>
     </message>
     <message>
         <source>That is not a JSON object: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>JSON オブジェクトではありません: %1</translation>
     </message>
     <message>
         <source>Import Actions</source>
-        <translation type="unfinished"></translation>
+        <translation>アクションを読み込み</translation>
     </message>
     <message>
         <source>Actions (*.json)</source>
-        <translation type="unfinished"></translation>
+        <translation>アクション (*.json)</translation>
     </message>
     <message>
         <source>Couldn’t import the actions: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>アクションを読み込めませんでした: %1</translation>
     </message>
     <message>
         <source>Imported %1.</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 を読み込みました。</translation>
     </message>
     <message>
         <source>Export Actions</source>
-        <translation type="unfinished"></translation>
+        <translation>アクションを書き出し</translation>
     </message>
 </context>
 <context>
     <name>app::AdjustmentEditor</name>
     <message>
         <source>Channel</source>
-        <translation type="unfinished"></translation>
+        <translation>チャンネル</translation>
     </message>
     <message>
         <source>Input black</source>
-        <translation type="unfinished"></translation>
+        <translation>入力(黒)</translation>
     </message>
     <message>
         <source>Gamma</source>
-        <translation type="unfinished"></translation>
+        <translation>ガンマ</translation>
     </message>
     <message>
         <source>Input white</source>
-        <translation type="unfinished"></translation>
+        <translation>入力(白)</translation>
     </message>
     <message>
         <source>Output black</source>
-        <translation type="unfinished"></translation>
+        <translation>出力(黒)</translation>
     </message>
     <message>
         <source>Output white</source>
-        <translation type="unfinished"></translation>
+        <translation>出力(白)</translation>
     </message>
     <message>
         <source>Auto Contrast</source>
-        <translation type="unfinished"></translation>
+        <translation>自動コントラスト</translation>
     </message>
     <message>
         <source>Auto Color</source>
-        <translation type="unfinished"></translation>
+        <translation>自動カラー補正</translation>
     </message>
     <message>
         <source>Auto + Neutral</source>
-        <translation type="unfinished"></translation>
+        <translation>自動 + ニュートラル</translation>
     </message>
     <message>
         <source>Reset</source>
-        <translation type="unfinished"></translation>
+        <translation>初期化</translation>
     </message>
     <message>
         <source>Sample</source>
-        <translation type="unfinished"></translation>
+        <translation>サンプル</translation>
     </message>
     <message>
         <source>Click the image to set the %1 point</source>
-        <translation type="unfinished"></translation>
+        <translation>画像をクリックして%1点を設定</translation>
     </message>
     <message>
         <source>Black</source>
-        <translation type="unfinished"></translation>
+        <translation>黒</translation>
     </message>
     <message>
         <source>Gray</source>
-        <translation type="unfinished"></translation>
+        <translation>グレー</translation>
     </message>
     <message>
         <source>White</source>
-        <translation type="unfinished"></translation>
+        <translation>白</translation>
     </message>
     <message>
         <source>Click the curve to add a point, drag to move, double-click to remove.</source>
-        <translation type="unfinished"></translation>
+        <translation>カーブをクリックしてポイントを追加、ドラッグで移動、ダブルクリックで削除します。</translation>
     </message>
     <message>
         <source>Range</source>
-        <translation type="unfinished"></translation>
+        <translation>範囲</translation>
     </message>
     <message>
         <source>Hue</source>
-        <translation type="unfinished"></translation>
+        <translation>色相</translation>
     </message>
     <message>
         <source>Saturation</source>
-        <translation type="unfinished"></translation>
+        <translation>彩度</translation>
     </message>
     <message>
         <source>Lightness</source>
-        <translation type="unfinished"></translation>
+        <translation>明度</translation>
     </message>
     <message>
         <source>Colorize</source>
-        <translation type="unfinished"></translation>
+        <translation>色彩の統一</translation>
     </message>
     <message>
         <source>Invert range</source>
-        <translation type="unfinished"></translation>
+        <translation>範囲を反転</translation>
     </message>
     <message>
         <source>Photoshop saturation curve</source>
-        <translation type="unfinished"></translation>
+        <translation>Photoshop の彩度カーブ</translation>
     </message>
     <message>
         <source>+100 reaches full saturation and -100 grey, keeping the lightness, as Photoshop&apos;s slider does; off scales saturation as the Mac app does.</source>
-        <translation type="unfinished"></translation>
+        <translation>Photoshop のスライダーと同様に、明度を保ったまま +100 で最大彩度、-100 でグレーになります。オフにすると Mac 版と同様に彩度を比例で変更します。</translation>
     </message>
     <message>
         <source>Click the image to centre this range on that colour</source>
-        <translation type="unfinished"></translation>
+        <translation>画像をクリックして、その色を範囲の中心にします</translation>
     </message>
     <message>
         <source>+</source>
-        <translation type="unfinished"></translation>
+        <translation>+</translation>
     </message>
     <message>
         <source>Click the image to widen this range to include that colour</source>
-        <translation type="unfinished"></translation>
+        <translation>画像をクリックして、その色を含むように範囲を広げます</translation>
     </message>
     <message>
         <source>−</source>
-        <translation type="unfinished"></translation>
+        <translation>−</translation>
     </message>
     <message>
         <source>Click the image to narrow this range to exclude that colour</source>
-        <translation type="unfinished"></translation>
+        <translation>画像をクリックして、その色を除くように範囲を狭めます</translation>
     </message>
     <message>
         <source>Targeted</source>
-        <translation type="unfinished"></translation>
+        <translation>ターゲット調整</translation>
     </message>
     <message>
         <source>Drag on the image: right raises saturation of the colour under the pointer, left lowers it (Ctrl: hue)</source>
-        <translation type="unfinished"></translation>
+        <translation>画像上をドラッグ: 右でポインター下の色の彩度を上げ、左で下げます(Ctrl: 色相)</translation>
     </message>
     <message>
         <source>Exposure</source>
-        <translation type="unfinished"></translation>
+        <translation>露光量</translation>
     </message>
     <message>
         <source>Offset</source>
-        <translation type="unfinished"></translation>
+        <translation>オフセット</translation>
     </message>
     <message>
         <source>Shadows</source>
-        <translation type="unfinished"></translation>
+        <translation>シャドウ</translation>
     </message>
     <message>
         <source>Highlights</source>
-        <translation type="unfinished"></translation>
+        <translation>ハイライト</translation>
     </message>
     <message>
         <source>Reverse</source>
-        <translation type="unfinished"></translation>
+        <translation>逆方向</translation>
     </message>
     <message>
         <source>Amount</source>
-        <translation type="unfinished"></translation>
+        <translation>量</translation>
     </message>
     <message>
         <source>Size</source>
-        <translation type="unfinished"></translation>
+        <translation>サイズ</translation>
     </message>
     <message>
         <source>Roughness</source>
-        <translation type="unfinished"></translation>
+        <translation>粗さ</translation>
     </message>
     <message>
         <source>New Pattern</source>
-        <translation type="unfinished"></translation>
+        <translation>新規パターン</translation>
     </message>
     <message>
         <source>Inverts every colour below it. Nothing to set.</source>
-        <translation type="unfinished"></translation>
+        <translation>下にあるすべての色を反転します。設定項目はありません。</translation>
     </message>
     <message>
         <source>Brightness</source>
-        <translation type="unfinished"></translation>
+        <translation>明るさ</translation>
     </message>
     <message>
         <source>Contrast</source>
-        <translation type="unfinished"></translation>
+        <translation>コントラスト</translation>
     </message>
     <message>
         <source>Use Legacy</source>
-        <translation type="unfinished"></translation>
+        <translation>従来方式を使用</translation>
     </message>
     <message>
         <source>Levels</source>
-        <translation type="unfinished"></translation>
+        <translation>階調数</translation>
     </message>
     <message>
         <source>Threshold Level</source>
-        <translation type="unfinished"></translation>
+        <translation>しきい値</translation>
     </message>
     <message>
         <source>Reds</source>
-        <translation type="unfinished"></translation>
+        <translation>レッド系</translation>
     </message>
     <message>
         <source>Yellows</source>
-        <translation type="unfinished"></translation>
+        <translation>イエロー系</translation>
     </message>
     <message>
         <source>Greens</source>
-        <translation type="unfinished"></translation>
+        <translation>グリーン系</translation>
     </message>
     <message>
         <source>Cyans</source>
-        <translation type="unfinished"></translation>
+        <translation>シアン系</translation>
     </message>
     <message>
         <source>Blues</source>
-        <translation type="unfinished"></translation>
+        <translation>ブルー系</translation>
     </message>
     <message>
         <source>Magentas</source>
-        <translation type="unfinished"></translation>
+        <translation>マゼンタ系</translation>
     </message>
     <message>
         <source>Tint</source>
-        <translation type="unfinished"></translation>
+        <translation>着色</translation>
     </message>
     <message>
         <source>Tint colour</source>
-        <translation type="unfinished"></translation>
+        <translation>着色のカラー</translation>
     </message>
     <message>
         <source>Midtones</source>
-        <translation type="unfinished"></translation>
+        <translation>中間調</translation>
     </message>
     <message>
         <source>Cyan / Red</source>
-        <translation type="unfinished"></translation>
+        <translation>シアン / レッド</translation>
     </message>
     <message>
         <source>Magenta / Green</source>
-        <translation type="unfinished"></translation>
+        <translation>マゼンタ / グリーン</translation>
     </message>
     <message>
         <source>Yellow / Blue</source>
-        <translation type="unfinished"></translation>
+        <translation>イエロー / ブルー</translation>
     </message>
     <message>
         <source>Preserve Luminosity</source>
-        <translation type="unfinished"></translation>
+        <translation>輝度を保持</translation>
     </message>
     <message>
         <source>Vibrance</source>
-        <translation type="unfinished"></translation>
+        <translation>自然な彩度</translation>
     </message>
     <message>
         <source>Filter colour</source>
-        <translation type="unfinished"></translation>
+        <translation>フィルターのカラー</translation>
     </message>
     <message>
         <source>Density</source>
-        <translation type="unfinished"></translation>
+        <translation>適用量</translation>
     </message>
     <message>
         <source>Monochrome</source>
-        <translation type="unfinished"></translation>
+        <translation>モノクロ</translation>
     </message>
     <message>
         <source>Output: Red</source>
-        <translation type="unfinished"></translation>
+        <translation>出力先: レッド</translation>
     </message>
     <message>
         <source>Output: Green</source>
-        <translation type="unfinished"></translation>
+        <translation>出力先: グリーン</translation>
     </message>
     <message>
         <source>Output: Blue</source>
-        <translation type="unfinished"></translation>
+        <translation>出力先: ブルー</translation>
     </message>
     <message>
         <source>Red</source>
-        <translation type="unfinished"></translation>
+        <translation>レッド</translation>
     </message>
     <message>
         <source>Green</source>
-        <translation type="unfinished"></translation>
+        <translation>グリーン</translation>
     </message>
     <message>
         <source>Blue</source>
-        <translation type="unfinished"></translation>
+        <translation>ブルー</translation>
     </message>
     <message>
         <source>Constant</source>
-        <translation type="unfinished"></translation>
+        <translation>定数</translation>
     </message>
     <message>
         <source>No LUT loaded.</source>
-        <translation type="unfinished"></translation>
+        <translation>LUT が読み込まれていません。</translation>
     </message>
     <message>
         <source>%1 (cannot be read)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1(読み込めません)</translation>
     </message>
     <message>
         <source>Load LUT…</source>
-        <translation type="unfinished"></translation>
+        <translation>LUT を読み込み...</translation>
     </message>
     <message>
         <source>Load a 3D LUT</source>
-        <translation type="unfinished"></translation>
+        <translation>3D LUT を読み込み</translation>
     </message>
     <message>
         <source>LUTs and profiles (*.cube *.CUBE *.3dl *.3DL *.icc *.icm)</source>
-        <translation type="unfinished"></translation>
+        <translation>LUT とプロファイル (*.cube *.CUBE *.3dl *.3DL *.icc *.icm)</translation>
     </message>
     <message>
         <source>Color Lookup</source>
-        <translation type="unfinished"></translation>
+        <translation>カラールックアップ</translation>
     </message>
     <message>
         <source>That file could not be read.</source>
-        <translation type="unfinished"></translation>
+        <translation>ファイルを読み込めませんでした。</translation>
     </message>
     <message>
         <source>That is not a LUT NekoPhoto can read: a .cube or .3dl table, or an ICC abstract or RGB device-link profile.</source>
-        <translation type="unfinished"></translation>
+        <translation>NekoPhoto で読み込める LUT ではありません。.cube または .3dl のテーブル、ICC のアブストラクトプロファイルまたは RGB デバイスリンクプロファイルに対応しています。</translation>
     </message>
     <message>
         <source>Dither</source>
-        <translation type="unfinished"></translation>
+        <translation>ディザ</translation>
     </message>
     <message>
         <source>Whites</source>
-        <translation type="unfinished"></translation>
+        <translation>ホワイト系</translation>
     </message>
     <message>
         <source>Neutrals</source>
-        <translation type="unfinished"></translation>
+        <translation>中間色系</translation>
     </message>
     <message>
         <source>Blacks</source>
-        <translation type="unfinished"></translation>
+        <translation>ブラック系</translation>
     </message>
     <message>
         <source>Cyan</source>
-        <translation type="unfinished"></translation>
+        <translation>シアン</translation>
     </message>
     <message>
         <source>Magenta</source>
-        <translation type="unfinished"></translation>
+        <translation>マゼンタ</translation>
     </message>
     <message>
         <source>Yellow</source>
-        <translation type="unfinished"></translation>
+        <translation>イエロー</translation>
     </message>
     <message>
         <source>Absolute (else Relative)</source>
-        <translation type="unfinished"></translation>
+        <translation>絶対値(オフで相対値)</translation>
     </message>
 </context>
 <context>
@@ -1089,612 +2204,620 @@
     <message>
         <source>Select an adjustment layer to edit it here.
 Add one from the Layers panel or Layer &gt; New Adjustment Layer.</source>
-        <translation type="unfinished"></translation>
+        <translation>調整レイヤーを選択すると、ここで編集できます。
+レイヤーパネル、または レイヤー &gt; 新規調整レイヤー から追加してください。</translation>
     </message>
     <message>
         <source>This adjustment can&apos;t be edited here.</source>
-        <translation type="unfinished"></translation>
+        <translation>この色調補正はここでは編集できません。</translation>
     </message>
 </context>
 <context>
     <name>app::BackgroundDialog</name>
     <message>
         <source>Remove Background</source>
-        <translation type="unfinished"></translation>
+        <translation>背景を削除</translation>
     </message>
     <message>
         <source>Quality</source>
-        <translation type="unfinished"></translation>
+        <translation>品質</translation>
     </message>
     <message>
         <source>Basic</source>
-        <translation type="unfinished"></translation>
+        <translation>基本</translation>
     </message>
     <message>
         <source>Advanced</source>
-        <translation type="unfinished"></translation>
+        <translation>詳細</translation>
     </message>
     <message>
         <source>Best (hair and fur)</source>
-        <translation type="unfinished"></translation>
+        <translation>最高(髪や毛並み)</translation>
     </message>
     <message>
         <source>Basic is the model&apos;s mask as it comes; Advanced refines it against the image&apos;s own edges; Best adds matting and the detail pass, for hair, fur and thin structures (slower)</source>
-        <translation type="unfinished"></translation>
+        <translation>基本はモデルのマスクをそのまま使います。詳細は画像のエッジに合わせてマスクを調整します。最高はマット処理とディテール処理を加え、髪、毛並み、細い部分に対応します(低速)</translation>
     </message>
     <message>
         <source>Refine Edges</source>
-        <translation type="unfinished"></translation>
+        <translation>エッジを調整</translation>
     </message>
     <message>
         <source>Pulls the mask onto the image&apos;s own edges, recovering hair and fur (layer pixels)</source>
-        <translation type="unfinished"></translation>
+        <translation>マスクを画像のエッジに合わせ、髪や毛並みを復元します(レイヤーのピクセル)</translation>
     </message>
     <message>
         <source>Contrast</source>
-        <translation type="unfinished"></translation>
+        <translation>コントラスト</translation>
     </message>
     <message>
         <source>Pushes the mask&apos;s grays toward black and white, clearing haze</source>
-        <translation type="unfinished"></translation>
+        <translation>マスクのグレーを黒と白に寄せ、かすみを取り除きます</translation>
     </message>
     <message>
         <source>Matting</source>
-        <translation type="unfinished"></translation>
+        <translation>マット処理</translation>
     </message>
     <message>
         <source>Solves the true opacity of hair and fur in a band this wide around the edge from foreground and background colours (slower)</source>
-        <translation type="unfinished"></translation>
+        <translation>エッジ周囲のこの幅の範囲で、前景と背景の色から髪や毛並みの正確な不透明度を求めます(低速)</translation>
     </message>
     <message>
         <source>Shift Edge</source>
-        <translation type="unfinished"></translation>
+        <translation>エッジをシフト</translation>
     </message>
     <message>
         <source>Contracts (negative) or expands the edge, dropping the rim of background colour</source>
-        <translation type="unfinished"></translation>
+        <translation>エッジを縮小(マイナス)または拡張し、背景色の縁を取り除きます</translation>
     </message>
     <message>
         <source>Detail pass (native resolution, slower)</source>
-        <translation type="unfinished"></translation>
+        <translation>ディテール処理(元の解像度、低速)</translation>
     </message>
     <message>
         <source>Runs the model again on full-resolution windows along the edge, where the whole-image pass blurred away hair and thin structures; a few seconds more on a large photo</source>
-        <translation type="unfinished"></translation>
+        <translation>画像全体の処理でぼやけた髪や細い部分に対して、エッジに沿ってフル解像度でモデルを再実行します。大きな写真では数秒長くかかります</translation>
     </message>
     <message>
         <source>Clean up speckle</source>
-        <translation type="unfinished"></translation>
+        <translation>斑点を除去</translation>
     </message>
     <message>
         <source>Half-transparent specks that touch no edge go: inside the subject they become opaque, out in the background transparent</source>
-        <translation type="unfinished"></translation>
+        <translation>エッジに接していない半透明の斑点を除去します。被写体内では不透明に、背景では透明になります</translation>
     </message>
     <message>
         <source>Clean edge colours</source>
-        <translation type="unfinished"></translation>
+        <translation>エッジのカラーを除去</translation>
     </message>
     <message>
         <source>The edge pixels take the subject&apos;s own colour, so no rim of the old background shows over a new one (those pixels of the layer change)</source>
-        <translation type="unfinished"></translation>
+        <translation>エッジのピクセルを被写体自身の色にし、新しい背景の上に元の背景の縁が見えないようにします(レイヤーの該当ピクセルが変更されます)</translation>
     </message>
     <message>
         <source>The background is hidden by a layer mask, not erased: paint the mask, disable it or delete it to bring it back. Clean edge colours changes the edge pixels themselves.</source>
-        <translation type="unfinished"></translation>
+        <translation>背景は消去されず、レイヤーマスクで隠されます。マスクをペイント、無効化、または削除すると元に戻せます。「エッジのカラーを除去」はエッジのピクセル自体を変更します。</translation>
     </message>
     <message>
         <source>No subject mask could be made.</source>
-        <translation type="unfinished"></translation>
+        <translation>被写体のマスクを作成できませんでした。</translation>
+    </message>
+</context>
+<context>
+    <name>app::BrushImporter</name>
+    <message>
+        <source>nothing in the image would paint</source>
+        <translation>画像内にペイントされる部分がありません</translation>
     </message>
 </context>
 <context>
     <name>app::BrushPicker</name>
     <message>
         <source>Brush: the round tip, or one of the MyPaint presets (pencils, inks, charcoal, paint, smudging). Presets respond to pen pressure and tilt; Size and Opacity still apply.</source>
-        <translation type="unfinished"></translation>
+        <translation>ブラシ: 円形の先端、または MyPaint プリセット(鉛筆、インク、木炭、絵の具、ぼかし)。プリセットは筆圧と傾きに反応し、サイズと不透明度も適用されます。</translation>
     </message>
     <message>
         <source>Round</source>
-        <translation type="unfinished"></translation>
+        <translation>円形</translation>
     </message>
     <message>
         <source>Filter brushes</source>
-        <translation type="unfinished"></translation>
+        <translation>ブラシを絞り込み</translation>
     </message>
     <message>
         <source>Import Brushes…</source>
-        <translation type="unfinished"></translation>
+        <translation>ブラシを読み込み...</translation>
     </message>
     <message>
         <source>Photoshop .abr, Procreate .brushset and .brush, Clip Studio .sut, or images to use as tips</source>
-        <translation type="unfinished"></translation>
+        <translation>Photoshop .abr、Procreate .brushset と .brush、Clip Studio .sut、または先端として使う画像</translation>
     </message>
     <message>
         <source>The classic round tip: Size, Hardness and Opacity</source>
-        <translation type="unfinished"></translation>
+        <translation>標準の円形の先端: サイズ、硬さ、不透明度</translation>
     </message>
     <message>
         <source>%1 (erases)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1(消去)</translation>
     </message>
 </context>
 <context>
     <name>app::CameraRawDialog</name>
     <message>
         <source>Camera Raw Filter</source>
-        <translation type="unfinished"></translation>
+        <translation>Camera Raw フィルター</translation>
     </message>
     <message>
         <source>Basic</source>
-        <translation type="unfinished"></translation>
+        <translation>基本補正</translation>
     </message>
     <message>
         <source>Curve</source>
-        <translation type="unfinished"></translation>
+        <translation>カーブ</translation>
     </message>
     <message>
         <source>Detail</source>
-        <translation type="unfinished"></translation>
+        <translation>ディテール</translation>
     </message>
     <message>
         <source>Color</source>
-        <translation type="unfinished"></translation>
+        <translation>カラー</translation>
     </message>
     <message>
         <source>Optics</source>
-        <translation type="unfinished"></translation>
+        <translation>光学</translation>
     </message>
     <message>
         <source>Geometry</source>
-        <translation type="unfinished"></translation>
+        <translation>ジオメトリ</translation>
     </message>
     <message>
         <source>Effects</source>
-        <translation type="unfinished"></translation>
+        <translation>効果</translation>
     </message>
     <message>
         <source>Calibration</source>
-        <translation type="unfinished"></translation>
+        <translation>キャリブレーション</translation>
     </message>
     <message>
         <source>Color Mixer and Color Grading</source>
-        <translation type="unfinished"></translation>
+        <translation>カラーミキサーとカラーグレーディング</translation>
     </message>
     <message>
         <source>Reset All</source>
-        <translation type="unfinished"></translation>
+        <translation>すべて初期化</translation>
     </message>
     <message>
         <source>Put every panel back to its defaults</source>
-        <translation type="unfinished"></translation>
+        <translation>すべてのパネルを初期設定に戻します</translation>
     </message>
     <message>
         <source>White Balance</source>
-        <translation type="unfinished"></translation>
+        <translation>ホワイトバランス</translation>
     </message>
     <message>
         <source>Mode</source>
-        <translation type="unfinished"></translation>
+        <translation>モード</translation>
     </message>
     <message>
         <source>Custom</source>
-        <translation type="unfinished"></translation>
+        <translation>カスタム</translation>
     </message>
     <message>
         <source>Auto</source>
-        <translation type="unfinished"></translation>
+        <translation>自動</translation>
     </message>
     <message>
         <source>Temperature</source>
-        <translation type="unfinished"></translation>
+        <translation>色温度</translation>
     </message>
     <message>
         <source>Tint</source>
-        <translation type="unfinished"></translation>
+        <translation>色かぶり補正</translation>
     </message>
     <message>
         <source>Light</source>
-        <translation type="unfinished"></translation>
+        <translation>ライト</translation>
     </message>
     <message>
         <source>Exposure</source>
-        <translation type="unfinished"></translation>
+        <translation>露光量</translation>
     </message>
     <message>
         <source>Contrast</source>
-        <translation type="unfinished"></translation>
+        <translation>コントラスト</translation>
     </message>
     <message>
         <source>Highlights</source>
-        <translation type="unfinished"></translation>
+        <translation>ハイライト</translation>
     </message>
     <message>
         <source>Shadows</source>
-        <translation type="unfinished"></translation>
+        <translation>シャドウ</translation>
     </message>
     <message>
         <source>Whites</source>
-        <translation type="unfinished"></translation>
+        <translation>白レベル</translation>
     </message>
     <message>
         <source>Blacks</source>
-        <translation type="unfinished"></translation>
+        <translation>黒レベル</translation>
     </message>
     <message>
         <source>Show shadow clipping (blue)</source>
-        <translation type="unfinished"></translation>
+        <translation>シャドウのクリッピングを表示(ブルー)</translation>
     </message>
     <message>
         <source>Show highlight clipping (red)</source>
-        <translation type="unfinished"></translation>
+        <translation>ハイライトのクリッピングを表示(レッド)</translation>
     </message>
     <message>
         <source>Presence</source>
-        <translation type="unfinished"></translation>
+        <translation>外観</translation>
     </message>
     <message>
         <source>Texture</source>
-        <translation type="unfinished"></translation>
+        <translation>テクスチャ</translation>
     </message>
     <message>
         <source>Clarity</source>
-        <translation type="unfinished"></translation>
+        <translation>明瞭度</translation>
     </message>
     <message>
         <source>Dehaze</source>
-        <translation type="unfinished"></translation>
+        <translation>かすみの除去</translation>
     </message>
     <message>
         <source>Vibrance</source>
-        <translation type="unfinished"></translation>
+        <translation>自然な彩度</translation>
     </message>
     <message>
         <source>Saturation</source>
-        <translation type="unfinished"></translation>
+        <translation>彩度</translation>
     </message>
     <message>
         <source>Parametric Curve</source>
-        <translation type="unfinished"></translation>
+        <translation>パラメトリックカーブ</translation>
     </message>
     <message>
         <source>Lights</source>
-        <translation type="unfinished"></translation>
+        <translation>ライト</translation>
     </message>
     <message>
         <source>Darks</source>
-        <translation type="unfinished"></translation>
+        <translation>ダーク</translation>
     </message>
     <message>
         <source>Shadow split</source>
-        <translation type="unfinished"></translation>
+        <translation>シャドウの分割</translation>
     </message>
     <message>
         <source>Dark split</source>
-        <translation type="unfinished"></translation>
+        <translation>ダークの分割</translation>
     </message>
     <message>
         <source>Light split</source>
-        <translation type="unfinished"></translation>
+        <translation>ライトの分割</translation>
     </message>
     <message>
         <source>Point Curve</source>
-        <translation type="unfinished"></translation>
+        <translation>ポイントカーブ</translation>
     </message>
     <message>
         <source>RGB curve</source>
-        <translation type="unfinished"></translation>
+        <translation>RGB カーブ</translation>
     </message>
     <message>
         <source>Linear</source>
-        <translation type="unfinished"></translation>
+        <translation>リニア</translation>
     </message>
     <message>
         <source>Medium Contrast</source>
-        <translation type="unfinished"></translation>
+        <translation>コントラスト(中)</translation>
     </message>
     <message>
         <source>Strong Contrast</source>
-        <translation type="unfinished"></translation>
+        <translation>コントラスト(強)</translation>
     </message>
     <message>
         <source>Refine saturation</source>
-        <translation type="unfinished"></translation>
+        <translation>彩度を調整</translation>
     </message>
     <message>
         <source>Red, green and blue point curves are set through automation (pixels.cameraRaw).</source>
-        <translation type="unfinished"></translation>
+        <translation>レッド、グリーン、ブルーのポイントカーブは自動操作 (pixels.cameraRaw) で設定します。</translation>
     </message>
     <message>
         <source>Sharpening</source>
-        <translation type="unfinished"></translation>
+        <translation>シャープ</translation>
     </message>
     <message>
         <source>Amount</source>
-        <translation type="unfinished"></translation>
+        <translation>量</translation>
     </message>
     <message>
         <source>Radius</source>
-        <translation type="unfinished"></translation>
+        <translation>半径</translation>
     </message>
     <message>
         <source>Masking</source>
-        <translation type="unfinished"></translation>
+        <translation>マスク</translation>
     </message>
     <message>
         <source>Show the sharpening mask</source>
-        <translation type="unfinished"></translation>
+        <translation>シャープのマスクを表示</translation>
     </message>
     <message>
         <source>Noise Reduction</source>
-        <translation type="unfinished"></translation>
+        <translation>ノイズ軽減</translation>
     </message>
     <message>
         <source>Luminance</source>
-        <translation type="unfinished"></translation>
+        <translation>輝度</translation>
     </message>
     <message>
         <source>Color detail</source>
-        <translation type="unfinished"></translation>
+        <translation>カラーのディテール</translation>
     </message>
     <message>
         <source>Smoothness</source>
-        <translation type="unfinished"></translation>
+        <translation>滑らかさ</translation>
     </message>
     <message>
         <source>Color Mixer</source>
-        <translation type="unfinished"></translation>
+        <translation>カラーミキサー</translation>
     </message>
     <message>
         <source>Adjust</source>
-        <translation type="unfinished"></translation>
+        <translation>調整</translation>
     </message>
     <message>
         <source>Hue</source>
-        <translation type="unfinished"></translation>
+        <translation>色相</translation>
     </message>
     <message>
         <source>Color Grading</source>
-        <translation type="unfinished"></translation>
+        <translation>カラーグレーディング</translation>
     </message>
     <message>
         <source>Wheel</source>
-        <translation type="unfinished"></translation>
+        <translation>ホイール</translation>
     </message>
     <message>
         <source>Midtones</source>
-        <translation type="unfinished"></translation>
+        <translation>中間調</translation>
     </message>
     <message>
         <source>Global</source>
-        <translation type="unfinished"></translation>
+        <translation>グローバル</translation>
     </message>
     <message>
         <source>Blending</source>
-        <translation type="unfinished"></translation>
+        <translation>ブレンド</translation>
     </message>
     <message>
         <source>Balance</source>
-        <translation type="unfinished"></translation>
+        <translation>バランス</translation>
     </message>
     <message>
         <source>Lens</source>
-        <translation type="unfinished"></translation>
+        <translation>レンズ</translation>
     </message>
     <message>
         <source>Remove chromatic aberration</source>
-        <translation type="unfinished"></translation>
+        <translation>色収差を除去</translation>
     </message>
     <message>
         <source>Use profile corrections (generic)</source>
-        <translation type="unfinished"></translation>
+        <translation>プロファイル補正を使用 (汎用)</translation>
     </message>
     <message>
         <source>Profile distortion</source>
-        <translation type="unfinished"></translation>
+        <translation>プロファイルのゆがみ</translation>
     </message>
     <message>
         <source>Profile vignetting</source>
-        <translation type="unfinished"></translation>
+        <translation>プロファイルの周辺光量</translation>
     </message>
     <message>
         <source>Distortion</source>
-        <translation type="unfinished"></translation>
+        <translation>ゆがみ</translation>
     </message>
     <message>
         <source>Vignetting</source>
-        <translation type="unfinished"></translation>
+        <translation>周辺光量</translation>
     </message>
     <message>
         <source>Midpoint</source>
-        <translation type="unfinished"></translation>
+        <translation>中心点</translation>
     </message>
     <message>
         <source>Defringe</source>
-        <translation type="unfinished"></translation>
+        <translation>フリンジ除去</translation>
     </message>
     <message>
         <source>Purple amount</source>
-        <translation type="unfinished"></translation>
+        <translation>パープルの適用量</translation>
     </message>
     <message>
         <source>Purple hue from</source>
-        <translation type="unfinished"></translation>
+        <translation>パープルの色相 (開始)</translation>
     </message>
     <message>
         <source>Purple hue to</source>
-        <translation type="unfinished"></translation>
+        <translation>パープルの色相 (終了)</translation>
     </message>
     <message>
         <source>Green amount</source>
-        <translation type="unfinished"></translation>
+        <translation>グリーンの適用量</translation>
     </message>
     <message>
         <source>Green hue from</source>
-        <translation type="unfinished"></translation>
+        <translation>グリーンの色相 (開始)</translation>
     </message>
     <message>
         <source>Green hue to</source>
-        <translation type="unfinished"></translation>
+        <translation>グリーンの色相 (終了)</translation>
     </message>
     <message>
         <source>Transform</source>
-        <translation type="unfinished"></translation>
+        <translation>変形</translation>
     </message>
     <message>
         <source>Projection</source>
-        <translation type="unfinished"></translation>
+        <translation>投影</translation>
     </message>
     <message>
         <source>Perspective</source>
-        <translation type="unfinished"></translation>
+        <translation>遠近法</translation>
     </message>
     <message>
         <source>Rectilinear</source>
-        <translation type="unfinished"></translation>
+        <translation>直線的</translation>
     </message>
     <message>
         <source>Vertical</source>
-        <translation type="unfinished"></translation>
+        <translation>垂直方向</translation>
     </message>
     <message>
         <source>Horizontal</source>
-        <translation type="unfinished"></translation>
+        <translation>水平方向</translation>
     </message>
     <message>
         <source>Rotate</source>
-        <translation type="unfinished"></translation>
+        <translation>回転</translation>
     </message>
     <message>
         <source>Aspect</source>
-        <translation type="unfinished"></translation>
+        <translation>縦横比</translation>
     </message>
     <message>
         <source>Scale</source>
-        <translation type="unfinished"></translation>
+        <translation>拡大・縮小</translation>
     </message>
     <message>
         <source>Offset X</source>
-        <translation type="unfinished"></translation>
+        <translation>X オフセット</translation>
     </message>
     <message>
         <source>Offset Y</source>
-        <translation type="unfinished"></translation>
+        <translation>Y オフセット</translation>
     </message>
     <message>
         <source>Constrain crop</source>
-        <translation type="unfinished"></translation>
+        <translation>切り抜きを制限</translation>
     </message>
     <message>
         <source>Upright &gt; Guided reads guide lines, which are set through automation (pixels.cameraRaw).</source>
-        <translation type="unfinished"></translation>
+        <translation>Upright &gt; ガイド付きはガイド線を使用します。ガイド線は自動操作 (pixels.cameraRaw) で設定します。</translation>
     </message>
     <message>
         <source>Glow</source>
-        <translation type="unfinished"></translation>
+        <translation>グロー</translation>
     </message>
     <message>
         <source>Style</source>
-        <translation type="unfinished"></translation>
+        <translation>スタイル</translation>
     </message>
     <message>
         <source>Diffusion</source>
-        <translation type="unfinished"></translation>
+        <translation>拡散</translation>
     </message>
     <message>
         <source>Bloom</source>
-        <translation type="unfinished"></translation>
+        <translation>ブルーム</translation>
     </message>
     <message>
         <source>Halation</source>
-        <translation type="unfinished"></translation>
+        <translation>ハレーション</translation>
     </message>
     <message>
         <source>Range</source>
-        <translation type="unfinished"></translation>
+        <translation>範囲</translation>
     </message>
     <message>
         <source>Spread</source>
-        <translation type="unfinished"></translation>
+        <translation>スプレッド</translation>
     </message>
     <message>
         <source>Warmth</source>
-        <translation type="unfinished"></translation>
+        <translation>暖かさ</translation>
     </message>
     <message>
         <source>Vignette</source>
-        <translation type="unfinished"></translation>
+        <translation>周辺光量補正</translation>
     </message>
     <message>
         <source>Highlight Priority</source>
-        <translation type="unfinished"></translation>
+        <translation>ハイライト優先</translation>
     </message>
     <message>
         <source>Color Priority</source>
-        <translation type="unfinished"></translation>
+        <translation>カラー優先</translation>
     </message>
     <message>
         <source>Paint Overlay</source>
-        <translation type="unfinished"></translation>
+        <translation>ペイントオーバーレイ</translation>
     </message>
     <message>
         <source>Roundness</source>
-        <translation type="unfinished"></translation>
+        <translation>丸み</translation>
     </message>
     <message>
         <source>Feather</source>
-        <translation type="unfinished"></translation>
+        <translation>ぼかし</translation>
     </message>
     <message>
         <source>Grain</source>
-        <translation type="unfinished"></translation>
+        <translation>粒子</translation>
     </message>
     <message>
         <source>Size</source>
-        <translation type="unfinished"></translation>
+        <translation>サイズ</translation>
     </message>
     <message>
         <source>Roughness</source>
-        <translation type="unfinished"></translation>
+        <translation>粗さ</translation>
     </message>
     <message>
         <source>Process</source>
-        <translation type="unfinished"></translation>
+        <translation>プロセス</translation>
     </message>
     <message>
         <source>Version %1</source>
-        <translation type="unfinished"></translation>
+        <translation>バージョン %1</translation>
     </message>
     <message>
         <source>Shadows tint</source>
-        <translation type="unfinished"></translation>
+        <translation>シャドウの色かぶり</translation>
     </message>
     <message>
         <source>Primaries</source>
-        <translation type="unfinished"></translation>
+        <translation>色域</translation>
     </message>
     <message>
         <source>Red hue</source>
-        <translation type="unfinished"></translation>
+        <translation>レッドの色相</translation>
     </message>
     <message>
         <source>Red saturation</source>
-        <translation type="unfinished"></translation>
+        <translation>レッドの彩度</translation>
     </message>
     <message>
         <source>Green hue</source>
-        <translation type="unfinished"></translation>
+        <translation>グリーンの色相</translation>
     </message>
     <message>
         <source>Green saturation</source>
-        <translation type="unfinished"></translation>
+        <translation>グリーンの彩度</translation>
     </message>
     <message>
         <source>Blue hue</source>
-        <translation type="unfinished"></translation>
+        <translation>ブルーの色相</translation>
     </message>
     <message>
         <source>Blue saturation</source>
-        <translation type="unfinished"></translation>
+        <translation>ブルーの彩度</translation>
     </message>
 </context>
 <context>
@@ -1702,3534 +2825,3571 @@ Add one from the Layers panel or Layer &gt; New Adjustment Layer.</source>
     <message>
         <source>Open an image or project, or drop one here.
 File &gt; New creates a blank canvas.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Delete Anchor Point</source>
-        <translation type="unfinished"></translation>
+        <translation>画像またはプロジェクトを開くか、ここにドロップしてください。
+ファイル &gt; 新規 で空白のカンバスを作成できます。</translation>
     </message>
     <message>
         <source>Add Anchor Point</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Convert Point</source>
-        <translation type="unfinished"></translation>
+        <translation>アンカーポイントを追加</translation>
     </message>
     <message>
         <source>Move Path</source>
-        <translation type="unfinished"></translation>
+        <translation>パスを移動</translation>
     </message>
     <message>
         <source>Edit Path</source>
-        <translation type="unfinished"></translation>
+        <translation>パスを編集</translation>
     </message>
     <message>
         <source>Text</source>
-        <translation type="unfinished"></translation>
+        <translation>テキスト</translation>
     </message>
 </context>
 <context>
     <name>app::ColorSwatches</name>
     <message>
         <source>Foreground and background colours. Click one to change it; X swaps them, D resets them.</source>
-        <translation type="unfinished"></translation>
+        <translation>描画色と背景色です。クリックして変更します。X で入れ替え、D で初期設定に戻します。</translation>
     </message>
 </context>
 <context>
     <name>app::ContentAwareScaleDialog</name>
     <message>
         <source>Content-Aware Scale</source>
-        <translation type="unfinished"></translation>
+        <translation>コンテンツに応じて拡大・縮小</translation>
     </message>
     <message>
         <source>Protect the selection</source>
-        <translation type="unfinished"></translation>
+        <translation>選択範囲を保護</translation>
     </message>
     <message>
         <source>Width:</source>
-        <translation type="unfinished"></translation>
+        <translation>幅:</translation>
     </message>
     <message>
         <source>Height:</source>
-        <translation type="unfinished"></translation>
+        <translation>高さ:</translation>
     </message>
     <message>
         <source>Result:</source>
-        <translation type="unfinished"></translation>
+        <translation>結果:</translation>
     </message>
     <message>
         <source>Select an image layer.</source>
-        <translation type="unfinished"></translation>
+        <translation>画像レイヤーを選択してください。</translation>
     </message>
     <message>
         <source>%1 x %2 px</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 x %2 px</translation>
     </message>
 </context>
 <context>
     <name>app::ContentFillDialog</name>
     <message>
         <source>Content-Aware Fill</source>
-        <translation type="unfinished"></translation>
+        <translation>コンテンツに応じた塗りつぶし</translation>
     </message>
     <message>
         <source>Sampling Area</source>
-        <translation type="unfinished"></translation>
+        <translation>サンプリング領域</translation>
     </message>
     <message>
         <source>Auto</source>
-        <translation type="unfinished"></translation>
+        <translation>自動</translation>
     </message>
     <message>
         <source>All of the Layer</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤー全体</translation>
     </message>
     <message>
         <source>Custom</source>
-        <translation type="unfinished"></translation>
+        <translation>カスタム</translation>
     </message>
     <message>
         <source>Copy from around the selection</source>
-        <translation type="unfinished"></translation>
+        <translation>選択範囲の周囲からコピーします</translation>
     </message>
     <message>
         <source>Copy from anywhere on the layer</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤー上のどこからでもコピーします</translation>
     </message>
     <message>
         <source>Copy only from the area painted green: the left button adds, the right button or Alt removes</source>
-        <translation type="unfinished"></translation>
+        <translation>緑で塗った領域からのみコピーします。左ボタンで追加、右ボタンまたは Alt で削除します</translation>
     </message>
     <message>
         <source>Brush</source>
-        <translation type="unfinished"></translation>
+        <translation>ブラシ</translation>
     </message>
     <message>
         <source> px</source>
-        <translation type="unfinished"></translation>
+        <translation> px</translation>
     </message>
     <message>
         <source>The sampling brush&apos;s diameter on this picture</source>
-        <translation type="unfinished"></translation>
+        <translation>この画像上でのサンプリングブラシの直径です</translation>
     </message>
     <message>
         <source>Output</source>
-        <translation type="unfinished"></translation>
+        <translation>出力</translation>
     </message>
     <message>
         <source>Output To</source>
-        <translation type="unfinished"></translation>
+        <translation>出力先</translation>
     </message>
     <message>
         <source>Current Layer</source>
-        <translation type="unfinished"></translation>
+        <translation>現在のレイヤー</translation>
     </message>
     <message>
         <source>New Layer</source>
-        <translation type="unfinished"></translation>
+        <translation>新規レイヤー</translation>
     </message>
     <message>
         <source>Preview</source>
-        <translation type="unfinished"></translation>
+        <translation>プレビュー</translation>
     </message>
     <message>
         <source>Show the fill on the canvas</source>
-        <translation type="unfinished"></translation>
+        <translation>カンバス上に塗りつぶしを表示します</translation>
     </message>
 </context>
 <context>
     <name>app::EditorSession</name>
     <message>
+        <source>Untitled</source>
+        <translation>名称未設定</translation>
+    </message>
+    <message>
         <source>The resized image would exceed the 100-megapixel limit.</source>
-        <translation type="unfinished"></translation>
+        <translation>サイズ変更後の画像が 1 億ピクセルの上限を超えます。</translation>
     </message>
     <message>
         <source>The document has no visible artboards.</source>
-        <translation type="unfinished"></translation>
+        <translation>ドキュメントに表示されているアートボードがありません。</translation>
     </message>
     <message>
         <source>The document has no slices.</source>
-        <translation type="unfinished"></translation>
+        <translation>ドキュメントにスライスがありません。</translation>
     </message>
     <message>
         <source>Nothing to merge: the layers have no visible pixels.</source>
-        <translation type="unfinished"></translation>
+        <translation>結合するものがありません。レイヤーに表示されるピクセルがありません。</translation>
     </message>
     <message>
         <source>Alt-click where the Healing Brush should copy from first.</source>
-        <translation type="unfinished"></translation>
+        <translation>先に Alt キーを押しながら、修復ブラシのコピー元をクリックしてください。</translation>
     </message>
     <message>
         <source>Alt-click where Clone Stamp should copy from first.</source>
-        <translation type="unfinished"></translation>
+        <translation>先に Alt キーを押しながら、コピースタンプのコピー元をクリックしてください。</translation>
     </message>
     <message>
         <source>The active layer is hidden.</source>
-        <translation type="unfinished"></translation>
+        <translation>アクティブなレイヤーが非表示です。</translation>
     </message>
     <message>
         <source>The brush %1 could not be read.</source>
-        <translation type="unfinished"></translation>
+        <translation>ブラシ %1 を読み込めませんでした。</translation>
     </message>
     <message>
         <source>The brush %1 has no usable tip.</source>
-        <translation type="unfinished"></translation>
+        <translation>ブラシ %1 には使用できるブラシ先端がありません。</translation>
     </message>
     <message>
         <source>Smudge and Liquify work on a layer&apos;s pixels, not its mask.</source>
-        <translation type="unfinished"></translation>
+        <translation>指先ツールとゆがみはマスクではなく、レイヤーのピクセルに対して機能します。</translation>
     </message>
     <message>
         <source>This tool works on a layer&apos;s pixels, not its mask.</source>
-        <translation type="unfinished"></translation>
+        <translation>このツールはマスクではなく、レイヤーのピクセルに対して機能します。</translation>
     </message>
     <message>
         <source>That shape is too large. A shape can cover up to 100 megapixels.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Add Shape</source>
-        <translation type="unfinished"></translation>
+        <translation>シェイプが大きすぎます。シェイプは最大 1 億ピクセルまでです。</translation>
     </message>
     <message>
         <source>That text is too large to render. Text can cover up to 100 megapixels.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Add Subpath</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Path Operation</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Merge Shape Components</source>
-        <translation type="unfinished"></translation>
+        <translation>テキストが大きすぎて描画できません。テキストは最大 1 億ピクセルまでです。</translation>
     </message>
     <message>
         <source>The document is busy.</source>
-        <translation type="unfinished"></translation>
+        <translation>ドキュメントは処理中です。</translation>
     </message>
     <message>
         <source>No active layer.</source>
-        <translation type="unfinished"></translation>
+        <translation>アクティブなレイヤーがありません。</translation>
     </message>
     <message>
         <source>A vector mask goes on a layer here, not on a folder or an adjustment layer.</source>
-        <translation type="unfinished"></translation>
+        <translation>ベクトルマスクはレイヤーに追加します。グループや調整レイヤーには追加できません。</translation>
     </message>
     <message>
         <source>A shape layer&apos;s path is its vector mask already.</source>
-        <translation type="unfinished"></translation>
+        <translation>シェイプレイヤーのパスは、すでにベクトルマスクです。</translation>
     </message>
     <message>
         <source>The layer has a vector mask already.</source>
-        <translation type="unfinished"></translation>
+        <translation>このレイヤーにはすでにベクトルマスクがあります。</translation>
     </message>
     <message>
         <source>Choose a path in the Paths panel first.</source>
-        <translation type="unfinished"></translation>
+        <translation>先にパスパネルでパスを選択してください。</translation>
     </message>
     <message>
         <source>No such layer.</source>
-        <translation type="unfinished"></translation>
+        <translation>該当するレイヤーがありません。</translation>
     </message>
     <message>
         <source>A shape layer&apos;s path is its vector mask: change it with shape.set.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Live Shape Properties</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Add Anchor Point</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Delete Anchor Point</source>
-        <translation type="unfinished"></translation>
+        <translation>シェイプレイヤーのパスはベクトルマスクです。shape.set で変更してください。</translation>
     </message>
     <message>
         <source>A document holds at most 998 saved paths.</source>
-        <translation type="unfinished"></translation>
+        <translation>ドキュメントに保存できるパスは最大 998 個です。</translation>
     </message>
     <message>
         <source>The selection&apos;s outline is too detailed to make a path from.</source>
-        <translation type="unfinished"></translation>
+        <translation>選択範囲の輪郭が複雑すぎて、パスを作成できません。</translation>
     </message>
     <message>
         <source>Select a visible image layer and an area to fill.</source>
-        <translation type="unfinished"></translation>
+        <translation>表示されている画像レイヤーと、塗りつぶす範囲を選択してください。</translation>
     </message>
     <message>
         <source>The layer is too large to grow.</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーが大きすぎて拡張できません。</translation>
     </message>
     <message>
         <source>Select an area to fill.</source>
-        <translation type="unfinished"></translation>
+        <translation>塗りつぶす範囲を選択してください。</translation>
     </message>
     <message>
         <source>The sampling area holds no opaque image pixels outside the selection to copy from.</source>
-        <translation type="unfinished"></translation>
+        <translation>サンプリング領域の選択範囲外に、コピー元となる不透明なピクセルがありません。</translation>
     </message>
     <message>
         <source>Not enough unselected, opaque image pixels to synthesize a fill. Use a smaller selection with some surrounding image.</source>
-        <translation type="unfinished"></translation>
+        <translation>塗りつぶしを合成するための、選択されていない不透明なピクセルが足りません。周囲の画像を含む、より小さな選択範囲を使用してください。</translation>
     </message>
     <message>
         <source>The document has too many layers.</source>
-        <translation type="unfinished"></translation>
+        <translation>ドキュメントのレイヤーが多すぎます。</translation>
     </message>
     <message>
         <source>Select an area on a visible image layer, then drag it where it should go.</source>
-        <translation type="unfinished"></translation>
+        <translation>表示されている画像レイヤー上で範囲を選択し、移動先へドラッグしてください。</translation>
     </message>
     <message>
         <source>Drag the selection to where it should go.</source>
-        <translation type="unfinished"></translation>
+        <translation>選択範囲を移動先へドラッグしてください。</translation>
     </message>
     <message>
         <source>Content-Aware Move works on a layer&apos;s pixels, not its mask.</source>
-        <translation type="unfinished"></translation>
+        <translation>コンテンツに応じた移動は、マスクではなくレイヤーのピクセルに対して機能します。</translation>
     </message>
     <message>
         <source>Select the area to move first.</source>
-        <translation type="unfinished"></translation>
+        <translation>先に移動する範囲を選択してください。</translation>
     </message>
     <message>
         <source>Nothing could be moved there: the selection must land on the layer and leave opaque pixels around it to fill from.</source>
-        <translation type="unfinished"></translation>
+        <translation>その位置には移動できません。選択範囲がレイヤー上に収まり、その周囲に塗りつぶしに使う不透明なピクセルが必要です。</translation>
     </message>
     <message>
         <source>Select a visible image layer to scale.</source>
-        <translation type="unfinished"></translation>
+        <translation>拡大・縮小する表示中の画像レイヤーを選択してください。</translation>
     </message>
     <message>
         <source>The size must be between 1 and %1 pixels a side, 100 megapixels at most.</source>
-        <translation type="unfinished"></translation>
+        <translation>サイズは 1 辺 1〜%1 ピクセル、最大 1 億ピクセルにしてください。</translation>
     </message>
     <message>
         <source>Could not scale the layer.</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーを拡大・縮小できませんでした。</translation>
     </message>
     <message>
         <source>The copied layers would take this project past its 1-gigapixel limit for all layers together.</source>
-        <translation type="unfinished"></translation>
+        <translation>コピーしたレイヤーにより、プロジェクト全体のレイヤーの合計が 10 億ピクセルの上限を超えます。</translation>
     </message>
     <message>
         <source>Quick Mask: paint white to select, black to mask; Select ▸ Edit in Quick Mask Mode again to finish</source>
-        <translation type="unfinished"></translation>
+        <translation>クイックマスク:白で塗ると選択、黒で塗るとマスクします。終了するには再度 選択範囲 ▸ クイックマスクモードで編集 を実行します</translation>
     </message>
     <message>
         <source>The click-to-select model is not downloaded: choose the Click engine in the Quick Select options and download it, or scribble instead.</source>
-        <translation type="unfinished"></translation>
+        <translation>クリックで選択するモデルがダウンロードされていません。クイック選択のオプションでクリックエンジンを選んでダウンロードするか、代わりに走り書きで選択してください。</translation>
     </message>
     <message>
         <source>The click-to-select model is not downloaded: use the Download button in the options bar, or the Scribble engine.</source>
-        <translation type="unfinished"></translation>
+        <translation>クリックで選択するモデルがダウンロードされていません。オプションバーのダウンロードボタンを使うか、なぞり書きエンジンを使用してください。</translation>
     </message>
     <message>
         <source>The Magic Wand reads the active layer&apos;s pixels: select a pixel layer, or turn on Sample All Layers</source>
-        <translation type="unfinished"></translation>
+        <translation>自動選択ツールはアクティブなレイヤーのピクセルを参照します。ピクセルレイヤーを選択するか、全レイヤーを対象 をオンにしてください</translation>
     </message>
     <message>
         <source>Tolerance %1: %L2 pixels</source>
-        <translation type="unfinished"></translation>
+        <translation>許容値 %1:%L2 ピクセル</translation>
     </message>
     <message>
         <source>Tolerance %1: %L2 pixels; the selection grows next at %3</source>
-        <translation type="unfinished"></translation>
+        <translation>許容値 %1:%L2 ピクセル、次は %3 で選択範囲が広がります</translation>
     </message>
     <message>
         <source>Patch works on a layer&apos;s pixels, not its mask.</source>
-        <translation type="unfinished"></translation>
+        <translation>パッチツールはマスクではなく、レイヤーのピクセルに対して機能します。</translation>
     </message>
     <message>
         <source>Select a smart object.</source>
-        <translation type="unfinished"></translation>
+        <translation>スマートオブジェクトを選択してください。</translation>
     </message>
     <message>
         <source>Name a Smart Filter.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Smart Filter Settings</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Enable Smart Filter</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Disable Smart Filter</source>
-        <translation type="unfinished"></translation>
+        <translation>スマートフィルターを指定してください。</translation>
     </message>
     <message>
         <source>No place %1 in the stack.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Move Smart Filter</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Delete Smart Filter</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Clear Smart Filters</source>
-        <translation type="unfinished"></translation>
+        <translation>スタック内に位置 %1 はありません。</translation>
     </message>
     <message>
         <source>Enable Filter Mask</source>
-        <translation type="unfinished"></translation>
+        <translation>フィルターマスクを使用</translation>
     </message>
     <message>
         <source>Disable Filter Mask</source>
-        <translation type="unfinished"></translation>
+        <translation>フィルターマスクを使用しない</translation>
     </message>
     <message>
         <source>Delete Filter Mask</source>
-        <translation type="unfinished"></translation>
+        <translation>フィルターマスクを削除</translation>
     </message>
     <message>
         <source>Invert Filter Mask</source>
-        <translation type="unfinished"></translation>
+        <translation>フィルターマスクを反転</translation>
     </message>
     <message>
         <source>Painting the Smart Filters&apos; mask: select a layer to finish</source>
-        <translation type="unfinished"></translation>
+        <translation>スマートフィルターのマスクをペイント中:終了するにはレイヤーを選択します</translation>
     </message>
     <message>
         <source>That file has no image to place.</source>
-        <translation type="unfinished"></translation>
+        <translation>このファイルには配置する画像がありません。</translation>
     </message>
     <message>
         <source>That file has no image.</source>
-        <translation type="unfinished"></translation>
+        <translation>このファイルには画像がありません。</translation>
     </message>
     <message>
         <source>Select a layer to warp.</source>
-        <translation type="unfinished"></translation>
+        <translation>ワープするレイヤーを選択してください。</translation>
     </message>
     <message>
         <source>Warp the layer, not its mask.</source>
-        <translation type="unfinished"></translation>
+        <translation>マスクではなくレイヤーをワープしてください。</translation>
     </message>
     <message>
         <source>The layer could not be warped.</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーをワープできませんでした。</translation>
     </message>
     <message>
         <source>A warp cage is open: Enter applies it, Esc cancels it.</source>
-        <translation type="unfinished"></translation>
+        <translation>ワープケージが開いています。Enter で適用、Esc でキャンセルします。</translation>
     </message>
     <message>
         <source>Select an editable smart object.</source>
-        <translation type="unfinished"></translation>
+        <translation>編集可能なスマートオブジェクトを選択してください。</translation>
     </message>
     <message>
         <source>Its contents could not be opened.</source>
-        <translation type="unfinished"></translation>
+        <translation>コンテンツを開けませんでした。</translation>
     </message>
     <message>
         <source>The smart object these contents came from is gone.</source>
-        <translation type="unfinished"></translation>
+        <translation>このコンテンツの元のスマートオブジェクトは存在しません。</translation>
     </message>
     <message>
         <source>The contents could not be written.</source>
-        <translation type="unfinished"></translation>
+        <translation>コンテンツを書き込めませんでした。</translation>
     </message>
     <message>
         <source>The document these contents came from is closed.</source>
-        <translation type="unfinished"></translation>
+        <translation>このコンテンツの元のドキュメントは閉じられています。</translation>
     </message>
     <message>
         <source>That shape can&apos;t be applied.</source>
-        <translation type="unfinished"></translation>
+        <translation>このシェイプは適用できません。</translation>
     </message>
     <message>
         <source>The merged layer would exceed the size limits.</source>
-        <translation type="unfinished"></translation>
+        <translation>結合したレイヤーがサイズの上限を超えます。</translation>
     </message>
 </context>
 <context>
     <name>app::FilterDialog</name>
     <message>
         <source>%1 (Smart Filter)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 (スマートフィルター)</translation>
     </message>
     <message>
         <source>Radius</source>
-        <translation type="unfinished"></translation>
+        <translation>半径</translation>
     </message>
     <message>
         <source>Angle</source>
-        <translation type="unfinished"></translation>
+        <translation>角度</translation>
     </message>
     <message>
         <source>Distance</source>
-        <translation type="unfinished"></translation>
+        <translation>距離</translation>
     </message>
     <message>
         <source>Amount</source>
-        <translation type="unfinished"></translation>
+        <translation>量</translation>
     </message>
     <message>
         <source>Gaussian</source>
-        <translation type="unfinished"></translation>
+        <translation>ガウス分布</translation>
     </message>
     <message>
         <source>Monochromatic</source>
-        <translation type="unfinished"></translation>
+        <translation>グレースケールノイズ</translation>
     </message>
     <message>
         <source>Remove Distortion</source>
-        <translation type="unfinished"></translation>
+        <translation>ゆがみを除去</translation>
     </message>
     <message>
         <source>Bicubic</source>
-        <translation type="unfinished"></translation>
+        <translation>バイキュービック法</translation>
     </message>
 </context>
 <context>
     <name>app::FontPicker</name>
     <message>
         <source>Font family. Families sharing a name are folded into one row; expand it for the whole set, or type to filter.</source>
-        <translation type="unfinished"></translation>
+        <translation>フォントファミリーです。同じ名前のファミリーは 1 行にまとめられています。展開するとすべてを表示します。入力して絞り込むこともできます。</translation>
     </message>
     <message>
         <source>Filter fonts</source>
-        <translation type="unfinished"></translation>
+        <translation>フォントを絞り込み</translation>
     </message>
     <message>
         <source>%1 families; this row is %2</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 ファミリー、この行は %2</translation>
     </message>
     <message>
         <source>Recent</source>
-        <translation type="unfinished"></translation>
+        <translation>最近使用</translation>
     </message>
 </context>
 <context>
     <name>app::GmicDialog</name>
     <message>
         <source>G&apos;MIC</source>
-        <translation type="unfinished"></translation>
+        <translation>G&apos;MIC</translation>
     </message>
     <message>
         <source>Search filters</source>
-        <translation type="unfinished"></translation>
+        <translation>フィルターを検索</translation>
     </message>
     <message>
         <source>Show all filters</source>
-        <translation type="unfinished"></translation>
+        <translation>すべてのフィルターを表示</translation>
     </message>
     <message>
         <source>Also list the filters that do not work here at their defaults: they change the image size, make several layers, fail or give a blank image</source>
-        <translation type="unfinished"></translation>
+        <translation>初期設定のままではここで動作しないフィルターも表示します(画像サイズを変更する、複数のレイヤーを作成する、失敗する、空白の画像になるもの)</translation>
     </message>
     <message>
         <source>Update Filters…</source>
-        <translation type="unfinished"></translation>
+        <translation>フィルターを更新...</translation>
     </message>
     <message>
         <source>Download the filter definitions for the installed G&apos;MIC version from gmic.eu</source>
-        <translation type="unfinished"></translation>
+        <translation>インストールされている G&apos;MIC のバージョン用のフィルター定義を gmic.eu からダウンロードします</translation>
     </message>
     <message>
         <source>Command</source>
-        <translation type="unfinished"></translation>
+        <translation>コマンド</translation>
     </message>
     <message>
         <source>The G&apos;MIC command line that runs on the layer; edit it freely</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーに対して実行される G&apos;MIC のコマンドラインです。自由に編集できます</translation>
     </message>
     <message>
         <source>Preview</source>
-        <translation type="unfinished"></translation>
+        <translation>プレビュー</translation>
     </message>
     <message>
         <source>Apply</source>
-        <translation type="unfinished"></translation>
+        <translation>適用</translation>
     </message>
     <message>
         <source>G&apos;MIC is not installed. Install the gmic package (Arch: pacman -S gmic; Ubuntu: apt install gmic) and reopen this dialog.</source>
-        <translation type="unfinished"></translation>
+        <translation>G&apos;MIC がインストールされていません。gmic パッケージをインストールして (Arch:pacman -S gmic、Ubuntu:apt install gmic)、このダイアログを開き直してください。</translation>
     </message>
     <message>
         <source>%1 filters from %2 (G&apos;MIC %3); %4 that do not work here are hidden</source>
-        <translation type="unfinished"></translation>
+        <translation>%2 の %1 個のフィルター (G&apos;MIC %3)。ここで動作しない %4 個は非表示です</translation>
     </message>
     <message>
         <source>Only the essentials are listed until the full catalogue is downloaded with Update Filters (about 1 MB from gmic.eu).</source>
-        <translation type="unfinished"></translation>
+        <translation>完全なカタログを フィルターを更新 でダウンロードするまで (gmic.eu から約 1 MB)、基本的なフィルターのみ表示されます。</translation>
     </message>
     <message>
         <source>Filters</source>
-        <translation type="unfinished"></translation>
+        <translation>フィルター</translation>
     </message>
     <message>
         <source>At its defaults this filter %1, which does not work here.</source>
-        <translation type="unfinished"></translation>
+        <translation>このフィルターは初期設定のままでは %1 ため、ここでは動作しません。</translation>
     </message>
     <message>
         <source>Previewing…</source>
-        <translation type="unfinished"></translation>
+        <translation>プレビュー中...</translation>
     </message>
     <message>
         <source>Applying %1…</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>G&apos;MIC: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 を適用中...</translation>
     </message>
     <message>
         <source>Downloading %1…</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 をダウンロード中...</translation>
     </message>
     <message>
         <source>Download failed: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>ダウンロードに失敗しました:%1</translation>
     </message>
     <message>
         <source>Couldn&apos;t save %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 を保存できませんでした</translation>
     </message>
     <message>
         <source>The download held no filters; the current ones are kept.</source>
-        <translation type="unfinished"></translation>
+        <translation>ダウンロードにフィルターが含まれていなかったため、現在のフィルターを維持します。</translation>
     </message>
     <message>
         <source>%1 filters ready.</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 個のフィルターを使用できます。</translation>
     </message>
 </context>
 <context>
     <name>app::LayerStyleDialog</name>
     <message>
+        <source>Bevel &amp; Emboss</source>
+        <translation>ベベルとエンボス</translation>
+    </message>
+    <message>
+        <source>Stroke</source>
+        <translation>境界線</translation>
+    </message>
+    <message>
+        <source>Inner Shadow</source>
+        <translation>シャドウ(内側)</translation>
+    </message>
+    <message>
+        <source>Inner Glow</source>
+        <translation>光彩(内側)</translation>
+    </message>
+    <message>
+        <source>Satin</source>
+        <translation>サテン</translation>
+    </message>
+    <message>
+        <source>Color Overlay</source>
+        <translation>カラーオーバーレイ</translation>
+    </message>
+    <message>
+        <source>Gradient Overlay</source>
+        <translation>グラデーションオーバーレイ</translation>
+    </message>
+    <message>
+        <source>Pattern Overlay</source>
+        <translation>パターンオーバーレイ</translation>
+    </message>
+    <message>
+        <source>Outer Glow</source>
+        <translation>光彩(外側)</translation>
+    </message>
+    <message>
+        <source>Drop Shadow</source>
+        <translation>ドロップシャドウ</translation>
+    </message>
+    <message>
         <source>Layer Style</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤースタイル</translation>
     </message>
     <message>
         <source>This layer cannot have effects.</source>
-        <translation type="unfinished"></translation>
+        <translation>このレイヤーには効果を適用できません。</translation>
     </message>
     <message>
         <source>Blending Options</source>
-        <translation type="unfinished"></translation>
+        <translation>描画オプション</translation>
     </message>
     <message>
         <source>Show effects</source>
-        <translation type="unfinished"></translation>
+        <translation>効果を表示</translation>
     </message>
     <message>
         <source>Layer mask hides effects</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーマスクで効果を隠す</translation>
     </message>
     <message>
         <source>Blend interior effects as group</source>
-        <translation type="unfinished"></translation>
+        <translation>内部効果をグループとして描画</translation>
     </message>
     <message>
         <source>Softer</source>
-        <translation type="unfinished"></translation>
+        <translation>ソフト</translation>
     </message>
     <message>
         <source>Precise</source>
-        <translation type="unfinished"></translation>
+        <translation>精細</translation>
     </message>
     <message>
         <source>Style</source>
-        <translation type="unfinished"></translation>
+        <translation>スタイル</translation>
     </message>
     <message>
         <source>Outer Bevel</source>
-        <translation type="unfinished"></translation>
+        <translation>ベベル(外側)</translation>
     </message>
     <message>
         <source>Inner Bevel</source>
-        <translation type="unfinished"></translation>
+        <translation>ベベル(内側)</translation>
     </message>
     <message>
         <source>Emboss</source>
-        <translation type="unfinished"></translation>
+        <translation>エンボス</translation>
     </message>
     <message>
         <source>Pillow Emboss</source>
-        <translation type="unfinished"></translation>
+        <translation>ピローエンボス</translation>
     </message>
     <message>
         <source>Stroke Emboss</source>
-        <translation type="unfinished"></translation>
+        <translation>エンボス(境界線)</translation>
     </message>
     <message>
         <source>Technique</source>
-        <translation type="unfinished"></translation>
+        <translation>テクニック</translation>
     </message>
     <message>
         <source>Smooth</source>
-        <translation type="unfinished"></translation>
+        <translation>滑らかに</translation>
     </message>
     <message>
         <source>Chisel Hard</source>
-        <translation type="unfinished"></translation>
+        <translation>シゼルハード</translation>
     </message>
     <message>
         <source>Chisel Soft</source>
-        <translation type="unfinished"></translation>
+        <translation>シゼルソフト</translation>
     </message>
     <message>
         <source>Depth</source>
-        <translation type="unfinished"></translation>
+        <translation>深さ</translation>
     </message>
     <message>
         <source>Direction</source>
-        <translation type="unfinished"></translation>
+        <translation>方向</translation>
     </message>
     <message>
         <source>Up</source>
-        <translation type="unfinished"></translation>
+        <translation>上へ</translation>
     </message>
     <message>
         <source>Down</source>
-        <translation type="unfinished"></translation>
+        <translation>下へ</translation>
     </message>
     <message>
         <source>Size</source>
-        <translation type="unfinished"></translation>
+        <translation>サイズ</translation>
     </message>
     <message>
         <source>Soften</source>
-        <translation type="unfinished"></translation>
+        <translation>ソフト</translation>
     </message>
     <message>
         <source>Highlight mode</source>
-        <translation type="unfinished"></translation>
+        <translation>ハイライトのモード</translation>
     </message>
     <message>
         <source>Highlight colour</source>
-        <translation type="unfinished"></translation>
+        <translation>ハイライトのカラー</translation>
     </message>
     <message>
         <source>Highlight opacity</source>
-        <translation type="unfinished"></translation>
+        <translation>ハイライトの不透明度</translation>
     </message>
     <message>
         <source>Shadow mode</source>
-        <translation type="unfinished"></translation>
+        <translation>シャドウのモード</translation>
     </message>
     <message>
         <source>Shadow colour</source>
-        <translation type="unfinished"></translation>
+        <translation>シャドウのカラー</translation>
     </message>
     <message>
         <source>Shadow opacity</source>
-        <translation type="unfinished"></translation>
+        <translation>シャドウの不透明度</translation>
     </message>
     <message>
         <source>Contour</source>
-        <translation type="unfinished"></translation>
+        <translation>輪郭</translation>
     </message>
     <message>
         <source>Contour range</source>
-        <translation type="unfinished"></translation>
+        <translation>輪郭の範囲</translation>
     </message>
     <message>
         <source>Texture</source>
-        <translation type="unfinished"></translation>
+        <translation>テクスチャ</translation>
     </message>
     <message>
         <source>Texture scale</source>
-        <translation type="unfinished"></translation>
+        <translation>テクスチャの比率</translation>
     </message>
     <message>
         <source>Texture depth</source>
-        <translation type="unfinished"></translation>
+        <translation>テクスチャの深さ</translation>
     </message>
     <message>
         <source>Invert texture</source>
-        <translation type="unfinished"></translation>
+        <translation>テクスチャを反転</translation>
     </message>
     <message>
         <source>Position</source>
-        <translation type="unfinished"></translation>
+        <translation>位置</translation>
     </message>
     <message>
         <source>Outside</source>
-        <translation type="unfinished"></translation>
+        <translation>外側</translation>
     </message>
     <message>
         <source>Inside</source>
-        <translation type="unfinished"></translation>
+        <translation>内側</translation>
     </message>
     <message>
         <source>Center</source>
-        <translation type="unfinished"></translation>
+        <translation>中央</translation>
     </message>
     <message>
         <source>Blend mode</source>
-        <translation type="unfinished"></translation>
+        <translation>描画モード</translation>
     </message>
     <message>
         <source>Opacity</source>
-        <translation type="unfinished"></translation>
+        <translation>不透明度</translation>
     </message>
     <message>
         <source>Overprint</source>
-        <translation type="unfinished"></translation>
+        <translation>オーバープリント</translation>
     </message>
     <message>
         <source>Fill type</source>
-        <translation type="unfinished"></translation>
+        <translation>塗りつぶしタイプ</translation>
     </message>
     <message>
         <source>Color</source>
-        <translation type="unfinished"></translation>
+        <translation>カラー</translation>
     </message>
     <message>
         <source>Gradient</source>
-        <translation type="unfinished"></translation>
+        <translation>グラデーション</translation>
     </message>
     <message>
         <source>Colour</source>
-        <translation type="unfinished"></translation>
+        <translation>カラー</translation>
     </message>
     <message>
         <source>Distance</source>
-        <translation type="unfinished"></translation>
+        <translation>距離</translation>
     </message>
     <message>
         <source>Choke</source>
-        <translation type="unfinished"></translation>
+        <translation>チョーク</translation>
     </message>
     <message>
         <source>Source</source>
-        <translation type="unfinished"></translation>
+        <translation>ソース</translation>
     </message>
     <message>
         <source>Edge</source>
-        <translation type="unfinished"></translation>
+        <translation>エッジ</translation>
     </message>
     <message>
         <source>Range</source>
-        <translation type="unfinished"></translation>
+        <translation>範囲</translation>
     </message>
     <message>
         <source>Angle</source>
-        <translation type="unfinished"></translation>
+        <translation>角度</translation>
     </message>
     <message>
         <source>Invert</source>
-        <translation type="unfinished"></translation>
+        <translation>反転</translation>
     </message>
     <message>
         <source>%1 (imported)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 (読み込み)</translation>
     </message>
     <message>
         <source>This document has no patterns. File ▸ Import Presets… adds Photoshop .pat patterns.</source>
-        <translation type="unfinished"></translation>
+        <translation>このドキュメントにはパターンがありません。ファイル ▸ プリセットを読み込み... で Photoshop の .pat パターンを追加できます。</translation>
     </message>
     <message>
         <source>Pattern</source>
-        <translation type="unfinished"></translation>
+        <translation>パターン</translation>
     </message>
     <message>
         <source>Scale</source>
-        <translation type="unfinished"></translation>
+        <translation>比率</translation>
     </message>
     <message>
         <source>Link with layer</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーにリンク</translation>
     </message>
     <message>
         <source>Spread</source>
-        <translation type="unfinished"></translation>
+        <translation>スプレッド</translation>
     </message>
     <message>
         <source>Layer knocks out drop shadow</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーがドロップシャドウをノックアウト</translation>
     </message>
     <message>
         <source>Altitude</source>
-        <translation type="unfinished"></translation>
+        <translation>高度</translation>
     </message>
     <message>
         <source>Use Global Light</source>
-        <translation type="unfinished"></translation>
+        <translation>包括光源を使用</translation>
     </message>
     <message>
         <source>Custom</source>
-        <translation type="unfinished"></translation>
+        <translation>カスタム</translation>
     </message>
     <message>
         <source>Preset</source>
-        <translation type="unfinished"></translation>
+        <translation>プリセット</translation>
     </message>
     <message>
         <source>Start colour</source>
-        <translation type="unfinished"></translation>
+        <translation>開始色</translation>
     </message>
     <message>
         <source>End colour</source>
-        <translation type="unfinished"></translation>
+        <translation>終了色</translation>
     </message>
     <message>
         <source>Linear</source>
-        <translation type="unfinished"></translation>
+        <translation>線形</translation>
     </message>
     <message>
         <source>Radial</source>
-        <translation type="unfinished"></translation>
+        <translation>円形</translation>
     </message>
     <message>
         <source>Reflected</source>
-        <translation type="unfinished"></translation>
+        <translation>反射</translation>
     </message>
     <message>
         <source>Diamond</source>
-        <translation type="unfinished"></translation>
+        <translation>菱形</translation>
     </message>
     <message>
         <source>Shape Burst</source>
-        <translation type="unfinished"></translation>
+        <translation>シェイプバースト</translation>
     </message>
     <message>
         <source>Reverse</source>
-        <translation type="unfinished"></translation>
+        <translation>反転</translation>
     </message>
     <message>
         <source>Dither</source>
-        <translation type="unfinished"></translation>
+        <translation>ディザ</translation>
     </message>
     <message>
         <source>Align with layer</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーに揃える</translation>
     </message>
 </context>
 <context>
     <name>app::LayersPanel</name>
     <message>
         <source>Pass Through</source>
-        <translation type="unfinished"></translation>
+        <translation>通過</translation>
     </message>
     <message>
         <source>Blend mode</source>
-        <translation type="unfinished"></translation>
+        <translation>描画モード</translation>
     </message>
     <message>
         <source>Opacity</source>
-        <translation type="unfinished"></translation>
+        <translation>不透明度</translation>
     </message>
     <message>
         <source>New layer (Ctrl-click: below the current layer)</source>
-        <translation type="unfinished"></translation>
+        <translation>新規レイヤー (Ctrl+クリック: 現在のレイヤーの下に作成)</translation>
     </message>
     <message>
         <source>New folder</source>
-        <translation type="unfinished"></translation>
+        <translation>新規グループ</translation>
     </message>
     <message>
         <source>Add layer mask (reveal all, or hide the selection)</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーマスクを追加 (すべて表示、または選択範囲を隠す)</translation>
     </message>
     <message>
         <source>New adjustment layer</source>
-        <translation type="unfinished"></translation>
+        <translation>新規調整レイヤー</translation>
     </message>
     <message>
         <source>Delete the selected layers</source>
-        <translation type="unfinished"></translation>
+        <translation>選択したレイヤーを削除</translation>
     </message>
     <message>
         <source>Smart Filters</source>
-        <translation type="unfinished"></translation>
+        <translation>スマートフィルター</translation>
     </message>
     <message>
         <source>Show or hide (drag across other eyes to set them too)</source>
-        <translation type="unfinished"></translation>
+        <translation>表示/非表示 (他の目のアイコンの上をドラッグすると一括で切り替え)</translation>
     </message>
     <message>
         <source>Clipped to the layer below</source>
-        <translation type="unfinished"></translation>
+        <translation>下のレイヤーにクリッピング</translation>
     </message>
     <message>
         <source>Text layer: double-click to edit the text</source>
-        <translation type="unfinished"></translation>
+        <translation>テキストレイヤー: ダブルクリックでテキストを編集</translation>
     </message>
     <message>
         <source>Layer mask (click to paint on it)</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーマスク (クリックしてマスクにペイント)</translation>
     </message>
     <message>
         <source>Layer mask, unlinked</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーマスク (リンク解除)</translation>
     </message>
     <message>
         <source>Vector mask (click to edit its path with the Pen and Direct Selection)</source>
-        <translation type="unfinished"></translation>
+        <translation>ベクトルマスク (ペンツールと直接選択ツールでパスを編集)</translation>
     </message>
     <message>
         <source>its contents</source>
-        <translation type="unfinished"></translation>
+        <translation>その内容</translation>
     </message>
     <message>
         <source>Smart object (%1), %2: it shows its stored preview and can be moved and scaled.</source>
-        <translation type="unfinished"></translation>
+        <translation>スマートオブジェクト (%1)、%2: 保存されたプレビューを表示します。移動と拡大・縮小ができます。</translation>
     </message>
     <message>
         <source>Smart object (%1): click to edit its contents.</source>
-        <translation type="unfinished"></translation>
+        <translation>スマートオブジェクト (%1): クリックして内容を編集します。</translation>
     </message>
     <message>
         <source>Edit Text…</source>
-        <translation type="unfinished"></translation>
+        <translation>テキストを編集...</translation>
     </message>
     <message>
         <source>Rename…</source>
-        <translation type="unfinished"></translation>
+        <translation>名前を変更...</translation>
     </message>
     <message>
         <source>Layer Style…</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤースタイル...</translation>
     </message>
     <message>
         <source>Copy Layer Style</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤースタイルをコピー</translation>
     </message>
     <message>
         <source>Clear Layer Style</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤースタイルを消去</translation>
     </message>
     <message>
         <source>Paste Layer Style</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤースタイルをペースト</translation>
     </message>
     <message>
         <source>Clear Smart Filters</source>
-        <translation type="unfinished"></translation>
+        <translation>スマートフィルターを消去</translation>
     </message>
     <message>
         <source>Duplicate Layer</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーを複製</translation>
     </message>
     <message>
         <source>Delete Layer</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーを削除</translation>
     </message>
     <message>
         <source>Release Clipping Mask</source>
-        <translation type="unfinished"></translation>
+        <translation>クリッピングマスクを解除</translation>
     </message>
     <message>
         <source>Create Clipping Mask</source>
-        <translation type="unfinished"></translation>
+        <translation>クリッピングマスクを作成</translation>
     </message>
     <message>
         <source>Merge Down</source>
-        <translation type="unfinished"></translation>
+        <translation>下のレイヤーと結合</translation>
     </message>
     <message>
         <source>Disable Layer Mask</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーマスクを使用しない</translation>
     </message>
     <message>
         <source>Enable Layer Mask</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーマスクを使用</translation>
     </message>
     <message>
         <source>Unlink Layer Mask</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーマスクのリンクを解除</translation>
     </message>
     <message>
         <source>Link Layer Mask</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーマスクをリンク</translation>
     </message>
     <message>
         <source>Invert Mask</source>
-        <translation type="unfinished"></translation>
+        <translation>マスクを反転</translation>
     </message>
     <message>
         <source>Apply Layer Mask</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーマスクを適用</translation>
     </message>
     <message>
         <source>Delete Layer Mask</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーマスクを削除</translation>
     </message>
     <message>
         <source>Add Reveal-All Mask</source>
-        <translation type="unfinished"></translation>
+        <translation>すべての領域を表示するマスクを追加</translation>
     </message>
     <message>
         <source>Add Hide-All Mask</source>
-        <translation type="unfinished"></translation>
+        <translation>すべての領域を隠すマスクを追加</translation>
     </message>
     <message>
         <source>Delete Vector Mask</source>
-        <translation type="unfinished"></translation>
+        <translation>ベクトルマスクを削除</translation>
     </message>
     <message>
         <source>Add Reveal-All Vector Mask</source>
-        <translation type="unfinished"></translation>
+        <translation>すべての領域を表示するベクトルマスクを追加</translation>
     </message>
     <message>
         <source>Add Hide-All Vector Mask</source>
-        <translation type="unfinished"></translation>
+        <translation>すべての領域を隠すベクトルマスクを追加</translation>
     </message>
     <message>
         <source>Turn all Smart Filters on or off</source>
-        <translation type="unfinished"></translation>
+        <translation>すべてのスマートフィルターのオン/オフを切り替え</translation>
     </message>
     <message>
         <source>Filter mask: click to paint on it, Alt-click to show it, Shift-click to turn it off or on</source>
-        <translation type="unfinished"></translation>
+        <translation>フィルターマスク: クリックでペイント、Alt+クリックで表示、Shift+クリックでオン/オフを切り替え</translation>
     </message>
     <message>
         <source>Filter mask (these Smart Filters cannot be changed here)</source>
-        <translation type="unfinished"></translation>
+        <translation>フィルターマスク (これらのスマートフィルターはここでは変更できません)</translation>
     </message>
     <message>
         <source>Smart Filters (mask shown)</source>
-        <translation type="unfinished"></translation>
+        <translation>スマートフィルター (マスクを表示中)</translation>
     </message>
     <message>
         <source>Turn this Smart Filter on or off</source>
-        <translation type="unfinished"></translation>
+        <translation>このスマートフィルターのオン/オフを切り替え</translation>
     </message>
     <message>
         <source>Smart Filter</source>
-        <translation type="unfinished"></translation>
+        <translation>スマートフィルター</translation>
     </message>
     <message>
         <source>NekoPhoto does not draw this filter: the layer keeps the preview the file carried, and it cannot be edited here.</source>
-        <translation type="unfinished"></translation>
+        <translation>このフィルターは NekoPhoto では描画されません。レイヤーはファイルに含まれていたプレビューを保持し、ここでは編集できません。</translation>
     </message>
     <message>
         <source>Double-click to change its settings</source>
-        <translation type="unfinished"></translation>
+        <translation>ダブルクリックして設定を変更</translation>
     </message>
     <message>
         <source>These Smart Filters cannot be changed here.</source>
-        <translation type="unfinished"></translation>
+        <translation>これらのスマートフィルターはここでは変更できません。</translation>
     </message>
     <message>
         <source>Blending Options (opacity and mode)</source>
-        <translation type="unfinished"></translation>
+        <translation>描画オプション (不透明度とモード)</translation>
     </message>
     <message>
         <source>This Smart Filter cannot be edited here: NekoPhoto does not draw it (or one beside it), or the smart object is locked.</source>
-        <translation type="unfinished"></translation>
+        <translation>このスマートフィルターはここでは編集できません。NekoPhoto がこのフィルター (または隣接するフィルター) を描画できないか、スマートオブジェクトがロックされています。</translation>
     </message>
     <message>
         <source>Edit Smart Filter…</source>
-        <translation type="unfinished"></translation>
+        <translation>スマートフィルターを編集...</translation>
     </message>
     <message>
         <source>Edit Smart Filter Blending Options…</source>
-        <translation type="unfinished"></translation>
+        <translation>スマートフィルターの描画オプションを編集...</translation>
     </message>
     <message>
         <source>Disable Smart Filter</source>
-        <translation type="unfinished"></translation>
+        <translation>スマートフィルターを使用しない</translation>
     </message>
     <message>
         <source>Enable Smart Filter</source>
-        <translation type="unfinished"></translation>
+        <translation>スマートフィルターを使用</translation>
     </message>
     <message>
         <source>Move Up</source>
-        <translation type="unfinished"></translation>
+        <translation>上へ移動</translation>
     </message>
     <message>
         <source>Move Down</source>
-        <translation type="unfinished"></translation>
+        <translation>下へ移動</translation>
     </message>
     <message>
         <source>Delete Smart Filter</source>
-        <translation type="unfinished"></translation>
+        <translation>スマートフィルターを削除</translation>
     </message>
     <message>
         <source>Disable Filter Mask</source>
-        <translation type="unfinished"></translation>
+        <translation>フィルターマスクを使用しない</translation>
     </message>
     <message>
         <source>Enable Filter Mask</source>
-        <translation type="unfinished"></translation>
+        <translation>フィルターマスクを使用</translation>
     </message>
     <message>
         <source>Invert Filter Mask</source>
-        <translation type="unfinished"></translation>
+        <translation>フィルターマスクを反転</translation>
     </message>
     <message>
         <source>Delete Filter Mask</source>
-        <translation type="unfinished"></translation>
+        <translation>フィルターマスクを削除</translation>
     </message>
     <message>
         <source>Disable Smart Filters</source>
-        <translation type="unfinished"></translation>
+        <translation>スマートフィルターを使用しない</translation>
     </message>
     <message>
         <source>Enable Smart Filters</source>
-        <translation type="unfinished"></translation>
+        <translation>スマートフィルターを使用</translation>
     </message>
 </context>
 <context>
     <name>app::MainWindow</name>
     <message>
         <source>Layers</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤー</translation>
     </message>
     <message>
         <source>Adjustments</source>
-        <translation type="unfinished"></translation>
+        <translation>色調補正</translation>
     </message>
     <message>
         <source>Paths</source>
-        <translation type="unfinished"></translation>
+        <translation>パス</translation>
     </message>
     <message>
         <source>Actions</source>
-        <translation type="unfinished"></translation>
+        <translation>アクション</translation>
     </message>
     <message>
         <source>Timeline</source>
-        <translation type="unfinished"></translation>
+        <translation>タイムライン</translation>
     </message>
     <message>
         <source>Zoom (Ctrl+0 fits, Ctrl+1 is 100%)</source>
-        <translation type="unfinished"></translation>
+        <translation>ズーム (Ctrl+0 で画面に合わせる、Ctrl+1 で 100%)</translation>
     </message>
     <message>
         <source>Fit</source>
-        <translation type="unfinished"></translation>
+        <translation>全体</translation>
     </message>
     <message>
         <source>Untitled</source>
-        <translation type="unfinished"></translation>
+        <translation>名称未設定</translation>
     </message>
     <message>
         <source>Untitled %1</source>
-        <translation type="unfinished"></translation>
+        <translation>名称未設定 %1</translation>
     </message>
     <message>
         <source>Smart object</source>
-        <translation type="unfinished"></translation>
+        <translation>スマートオブジェクト</translation>
     </message>
     <message>
         <source>“%1” is a smart object. Painting or filtering it would replace its contents with pixels.</source>
-        <translation type="unfinished"></translation>
+        <translation>「%1」はスマートオブジェクトです。ペイントやフィルターを適用すると、内容がピクセルに置き換えられます。</translation>
     </message>
     <message>
         <source>Rasterize it to work on its pixels.</source>
-        <translation type="unfinished"></translation>
+        <translation>ピクセルを編集するにはラスタライズしてください。</translation>
     </message>
     <message>
         <source>Edit its contents instead, or rasterize it to work on its pixels.</source>
-        <translation type="unfinished"></translation>
+        <translation>内容を編集するか、ラスタライズしてピクセルを編集してください。</translation>
     </message>
     <message>
         <source>Edit Contents</source>
-        <translation type="unfinished"></translation>
+        <translation>内容を編集</translation>
     </message>
     <message>
         <source>Rasterize</source>
-        <translation type="unfinished"></translation>
+        <translation>ラスタライズ</translation>
     </message>
     <message>
         <source>Rasterized: paint again to work on its pixels.</source>
-        <translation type="unfinished"></translation>
+        <translation>ラスタライズしました。もう一度ペイントしてピクセルを編集してください。</translation>
     </message>
     <message>
         <source>%1, saved %2</source>
-        <translation type="unfinished"></translation>
+        <translation>%1、%2 に保存</translation>
     </message>
     <message>
         <source>Recover Unsaved Work</source>
-        <translation type="unfinished"></translation>
+        <translation>未保存の作業を復元</translation>
     </message>
     <message numerus="yes">
         <source>Compositor did not close properly last time. Recover %n document(s) with unsaved changes?</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>前回 Compositor が正しく終了しませんでした。未保存の変更がある %n 個のドキュメントを復元しますか?</numerusform>
         </translation>
     </message>
     <message>
         <source>Recover</source>
-        <translation type="unfinished"></translation>
+        <translation>復元</translation>
     </message>
     <message>
         <source>Discard</source>
-        <translation type="unfinished"></translation>
+        <translation>破棄</translation>
     </message>
     <message>
         <source>Later</source>
-        <translation type="unfinished"></translation>
+        <translation>後で</translation>
     </message>
     <message>
         <source>%1 (recovered)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 (復元)</translation>
     </message>
     <message>
         <source>Some documents could not be recovered</source>
-        <translation type="unfinished"></translation>
+        <translation>一部のドキュメントを復元できませんでした</translation>
     </message>
     <message>
         <source>Drag to move; handles scale, just outside a corner rotates; Ctrl-drag a handle distorts; Ctrl-click picks a layer</source>
-        <translation type="unfinished"></translation>
+        <translation>ドラッグで移動、ハンドルで拡大・縮小、角のすぐ外側で回転。Ctrl+ハンドルをドラッグで自由な形に、Ctrl+クリックでレイヤーを選択</translation>
     </message>
     <message>
         <source>Drag to select; Shift adds, Alt subtracts; drag inside a selection to move its outline</source>
-        <translation type="unfinished"></translation>
+        <translation>ドラッグで選択。Shift で追加、Alt で削除。選択範囲の内側をドラッグすると境界線を移動</translation>
     </message>
     <message>
         <source>Freehand: drag around an area. Polygonal: click points, double-click or Enter closes, Backspace removes the last</source>
-        <translation type="unfinished"></translation>
+        <translation>フリーハンド: 領域を囲むようにドラッグ。多角形: クリックで点を追加し、ダブルクリックか Enter で閉じる。Backspace で最後の点を削除</translation>
     </message>
     <message>
         <source>Click to select a region; then Shift-click more of it, Alt-click what should stay out, or change Tolerance to adjust it</source>
-        <translation type="unfinished"></translation>
+        <translation>クリックして領域を選択。Shift+クリックで追加、Alt+クリックで除外、許容値を変えて調整</translation>
     </message>
     <message>
         <source>Scribble over the subject (Alt: the background), or with the Click engine click it (Alt-click what is not it, drag a box); Backspace takes one back, Esc clears</source>
-        <translation type="unfinished"></translation>
+        <translation>被写体の上をなぞる (Alt: 背景)。クリックエンジンでは被写体をクリック (Alt+クリックで除外、ドラッグで矩形指定)。Backspace で 1 つ戻し、Esc で消去</translation>
     </message>
     <message>
         <source>Drag the crop, then press Enter or double-click; Shift squares, Alt grows from the centre</source>
-        <translation type="unfinished"></translation>
+        <translation>切り抜き範囲をドラッグし、Enter キーかダブルクリックで確定。Shift で正方形、Alt で中心から拡大</translation>
     </message>
     <message>
         <source>Drag to erase; [ and ] change the size; Shift-click erases a straight line</source>
-        <translation type="unfinished"></translation>
+        <translation>ドラッグで消去。[ と ] でサイズ変更。Shift+クリックで直線を消去</translation>
     </message>
     <message>
         <source>Drag to paint; [ and ] change the size, digits set the opacity; Shift-click paints a straight line</source>
-        <translation type="unfinished"></translation>
+        <translation>ドラッグでペイント。[ と ] でサイズ変更、数字キーで不透明度を設定。Shift+クリックで直線を描画</translation>
     </message>
     <message>
         <source>Paint over a blemish and it is filled from its surroundings</source>
-        <translation type="unfinished"></translation>
+        <translation>傷の上をペイントすると、周囲の画像で埋められます</translation>
     </message>
     <message>
         <source>Alt-click sets the source, then paint</source>
-        <translation type="unfinished"></translation>
+        <translation>Alt+クリックでソースを設定してからペイント</translation>
     </message>
     <message>
         <source>Opacity is the strength; Liquify pushes pixels, Smudge drags colour, Blur softens</source>
-        <translation type="unfinished"></translation>
+        <translation>不透明度が強さになります。ゆがみはピクセルを押し出し、指先はカラーを引き伸ばし、ぼかしは柔らかくします</translation>
     </message>
     <message>
         <source>Drag a line; drag again to redo it; Enter applies, Esc discards; Shift snaps the angle</source>
-        <translation type="unfinished"></translation>
+        <translation>ラインをドラッグ。もう一度ドラッグでやり直し。Enter で適用、Esc で破棄。Shift で角度をスナップ</translation>
     </message>
     <message>
         <source>Click for corners, drag for curves; click the first point to close, Enter leaves the path open, Esc cancels</source>
-        <translation type="unfinished"></translation>
+        <translation>クリックでコーナー、ドラッグで曲線。最初の点をクリックで閉じる。Enter でパスを開いたまま終了、Esc でキャンセル</translation>
     </message>
     <message>
         <source>Drag a point, a handle (Alt: just that one) or a path; Alt-click a point to convert it; Delete removes the chosen point</source>
-        <translation type="unfinished"></translation>
+        <translation>点、ハンドル (Alt: そのハンドルのみ)、パスをドラッグ。Alt+クリックで点を切り替え。Delete で選択した点を削除</translation>
     </message>
     <message>
         <source>Opacity is the Exposure (Dodge, Burn) or Flow (Sponge); a stroke never goes past one full pass</source>
-        <translation type="unfinished"></translation>
+        <translation>不透明度が露光量 (覆い焼き、焼き込み) または流量 (スポンジ) になります。1 回のストロークで 1 パス分を超えることはありません</translation>
     </message>
     <message>
         <source>Click to fill pixels like the one clicked with the foreground colour, inside the selection</source>
-        <translation type="unfinished"></translation>
+        <translation>クリックすると、選択範囲内でクリックした色に近いピクセルを描画色で塗りつぶします</translation>
     </message>
     <message>
         <source>Drag a shape in the foreground colour; Shift squares, Alt grows from the centre; Shift-U switches kind</source>
-        <translation type="unfinished"></translation>
+        <translation>描画色でシェイプをドラッグ。Shift で正方形、Alt で中心から拡大。Shift+U で種類を切り替え</translation>
     </message>
     <message>
         <source>Click to add text in the foreground colour, or click a text layer to edit it; the options bar sets the font</source>
-        <translation type="unfinished"></translation>
+        <translation>クリックして描画色でテキストを追加、またはテキストレイヤーをクリックして編集。フォントはオプションバーで設定</translation>
     </message>
     <message>
         <source>Click sets the foreground colour, Alt-click the background</source>
-        <translation type="unfinished"></translation>
+        <translation>クリックで描画色、Alt+クリックで背景色を設定</translation>
     </message>
     <message>
         <source>Drag to pan; hold Space to pan from any tool</source>
-        <translation type="unfinished"></translation>
+        <translation>ドラッグでスクロール。どのツールでも Space キーを押しながらスクロール可能</translation>
     </message>
     <message>
         <source>Click zooms in, Alt-click out, drag a box to zoom to it; Ctrl-wheel zooms anywhere</source>
-        <translation type="unfinished"></translation>
+        <translation>クリックでズームイン、Alt+クリックでズームアウト、ドラッグで範囲にズーム。Ctrl+ホイールはどこでもズーム</translation>
     </message>
     <message>
         <source>Drag out an artboard; drag inside one to move it with its contents, an edge or corner to resize it</source>
-        <translation type="unfinished"></translation>
+        <translation>ドラッグでアートボードを作成。内側をドラッグで内容ごと移動、辺や角でサイズ変更</translation>
     </message>
     <message>
         <source>Drag out a slice; drag inside one to move it, an edge or corner to resize it; File ▸ Export Slices writes them</source>
-        <translation type="unfinished"></translation>
+        <translation>ドラッグでスライスを作成。内側をドラッグで移動、辺や角でサイズ変更。ファイル ▸ スライスを書き出しで保存</translation>
     </message>
     <message>
         <source>Finding the subject…</source>
-        <translation type="unfinished"></translation>
+        <translation>被写体を検出中...</translation>
     </message>
     <message>
         <source>Changed on Disk</source>
-        <translation type="unfinished"></translation>
+        <translation>ディスク上で変更されました</translation>
     </message>
     <message>
         <source>“%1” was changed on disk by another app.</source>
-        <translation type="unfinished"></translation>
+        <translation>「%1」が他のアプリによってディスク上で変更されました。</translation>
     </message>
     <message>
         <source>You can revert to the version on disk, losing your unsaved changes, or keep what you have.</source>
-        <translation type="unfinished"></translation>
+        <translation>ディスク上のバージョンに復帰して未保存の変更を破棄するか、現在の内容を保持できます。</translation>
     </message>
     <message>
         <source>Revert</source>
-        <translation type="unfinished"></translation>
+        <translation>復帰</translation>
     </message>
     <message>
         <source>Keep Mine</source>
-        <translation type="unfinished"></translation>
+        <translation>現在の内容を保持</translation>
     </message>
     <message>
         <source>Reloaded: the project changed on disk.</source>
-        <translation type="unfinished"></translation>
+        <translation>再読み込みしました。プロジェクトがディスク上で変更されました。</translation>
     </message>
     <message>
         <source>NekoPhoto</source>
-        <translation type="unfinished"></translation>
+        <translation>NekoPhoto</translation>
     </message>
     <message>
         <source>Unsaved Changes</source>
-        <translation type="unfinished"></translation>
+        <translation>未保存の変更</translation>
     </message>
     <message>
         <source>Save the changes to %1?</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 への変更を保存しますか?</translation>
     </message>
     <message>
         <source>Copy Layer</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーをコピー</translation>
     </message>
     <message>
         <source>This layer supplies a clipping mask</source>
-        <translation type="unfinished"></translation>
+        <translation>このレイヤーはクリッピングマスクのベースです</translation>
     </message>
     <message>
         <source>These layers supply clipping masks</source>
-        <translation type="unfinished"></translation>
+        <translation>これらのレイヤーはクリッピングマスクのベースです</translation>
     </message>
     <message>
         <source>Bake keeps the current masked appearance in the dependent layers’ pixels. Remove Links reveals their pixels. You can undo either choice.</source>
-        <translation type="unfinished"></translation>
+        <translation>「焼き付け」は、依存するレイヤーのピクセルに現在のマスク結果を保持します。「リンクを解除」は、それらのピクセルをそのまま表示します。どちらも取り消せます。</translation>
     </message>
     <message>
         <source>Bake and Delete</source>
-        <translation type="unfinished"></translation>
+        <translation>焼き付けて削除</translation>
     </message>
     <message>
         <source>Remove Links and Delete</source>
-        <translation type="unfinished"></translation>
+        <translation>リンクを解除して削除</translation>
     </message>
     <message>
         <source>Unavailable: this build has no OpenCV</source>
-        <translation type="unfinished"></translation>
+        <translation>使用不可: このビルドには OpenCV が含まれていません</translation>
     </message>
     <message>
         <source>Off: enable it in Edit &gt; Preferences</source>
-        <translation type="unfinished"></translation>
+        <translation>オフ: 編集 &gt; 環境設定で有効にしてください</translation>
     </message>
     <message>
         <source>The model isn’t downloaded yet: see Edit &gt; Preferences</source>
-        <translation type="unfinished"></translation>
+        <translation>モデルがまだダウンロードされていません。編集 &gt; 環境設定を参照してください</translation>
     </message>
     <message>
         <source>Hide the background of the active layer with a mask (%1)</source>
-        <translation type="unfinished"></translation>
+        <translation>アクティブレイヤーの背景をマスクで隠します (%1)</translation>
     </message>
     <message>
         <source>Remove &amp;Background…</source>
-        <translation type="unfinished"></translation>
+        <translation>背景を削除(&amp;B)...</translation>
     </message>
     <message>
         <source>Remove &amp;Background (off)…</source>
-        <translation type="unfinished"></translation>
+        <translation>背景を削除 (オフ)(&amp;B)...</translation>
     </message>
     <message>
         <source>&amp;%1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1</translation>
     </message>
     <message>
         <source>&amp;Undo %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 の取り消し(&amp;U)</translation>
     </message>
     <message>
         <source>&amp;Undo</source>
-        <translation type="unfinished"></translation>
+        <translation>取り消し(&amp;U)</translation>
     </message>
     <message>
         <source>&amp;Redo %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 のやり直し(&amp;R)</translation>
     </message>
     <message>
         <source>&amp;Redo</source>
-        <translation type="unfinished"></translation>
+        <translation>やり直し(&amp;R)</translation>
     </message>
     <message>
         <source>An agent is connected to the automation socket at %1</source>
-        <translation type="unfinished"></translation>
+        <translation>エージェントが %1 の自動操作ソケットに接続しています</translation>
     </message>
     <message>
         <source>Agent connected</source>
-        <translation type="unfinished"></translation>
+        <translation>エージェント接続中</translation>
     </message>
     <message>
         <source>Web Thumbnail</source>
-        <translation type="unfinished"></translation>
+        <translation>Web サムネール</translation>
     </message>
     <message>
         <source>“%1” stopped at step %2 (%3): %4</source>
-        <translation type="unfinished"></translation>
+        <translation>「%1」はステップ %2 (%3) で停止しました: %4</translation>
     </message>
     <message>
         <source>Couldn’t open the file</source>
-        <translation type="unfinished"></translation>
+        <translation>ファイルを開けませんでした</translation>
     </message>
     <message>
         <source>Couldn’t open the project</source>
-        <translation type="unfinished"></translation>
+        <translation>プロジェクトを開けませんでした</translation>
     </message>
     <message>
         <source>Couldn’t open %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 を開けませんでした</translation>
     </message>
     <message>
         <source>Imported %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 を読み込みました</translation>
     </message>
     <message numerus="yes">
         <source>%n layer(s) imported. Some things in the file were approximated or drawn as pixels:</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n 個のレイヤーを読み込みました。ファイル内の一部の要素は近似されるか、ピクセルとして描画されました:</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <source>%n layer(s) imported. Some things Clip Studio keeps have no counterpart here:</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n 個のレイヤーを読み込みました。Clip Studio の一部の要素には対応するものがありません:</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <source>%n layer(s) imported. Some things Aseprite keeps have no counterpart here:</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n 個のレイヤーを読み込みました。Aseprite の一部の要素には対応するものがありません:</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <source>%n layer(s) imported. Some things Affinity keeps have no counterpart here:</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n 個のレイヤーを読み込みました。Affinity の一部の要素には対応するものがありません:</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <source>%n layer(s) imported. Some things Photoshop keeps have no counterpart here:</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n 個のレイヤーを読み込みました。Photoshop の一部の要素には対応するものがありません:</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <source>%n layer(s) imported, with notes:</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n 個のレイヤーを読み込みました。注意事項:</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <source>
 … and %n more (see Details).</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>
+... ほか %n 件 (詳細を参照)。</numerusform>
         </translation>
     </message>
     <message>
         <source>Open Project (a .comp folder)</source>
-        <translation type="unfinished"></translation>
+        <translation>プロジェクトを開く (.comp フォルダー)</translation>
     </message>
     <message>
         <source>Not a project</source>
-        <translation type="unfinished"></translation>
+        <translation>プロジェクトではありません</translation>
     </message>
     <message>
         <source>Choose a folder ending in .comp.</source>
-        <translation type="unfinished"></translation>
+        <translation>末尾が .comp のフォルダーを選択してください。</translation>
     </message>
     <message>
         <source>Couldn’t import %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 を読み込めませんでした</translation>
     </message>
     <message>
         <source>Open</source>
-        <translation type="unfinished"></translation>
+        <translation>開く</translation>
     </message>
     <message>
         <source>Import File</source>
-        <translation type="unfinished"></translation>
+        <translation>ファイルを読み込み</translation>
     </message>
     <message>
         <source>Couldn’t open the contents</source>
-        <translation type="unfinished"></translation>
+        <translation>内容を開けませんでした</translation>
     </message>
     <message>
         <source>Contents</source>
-        <translation type="unfinished"></translation>
+        <translation>内容</translation>
     </message>
     <message>
         <source>%1 (in %2)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 (%2 内)</translation>
     </message>
     <message>
         <source>Editing the contents of %1: Save puts them back.</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 の内容を編集中: 保存すると元に戻されます。</translation>
     </message>
     <message>
         <source>Couldn’t put the contents back</source>
-        <translation type="unfinished"></translation>
+        <translation>内容を元に戻せませんでした</translation>
     </message>
     <message>
         <source>Contents saved into the smart object.</source>
-        <translation type="unfinished"></translation>
+        <translation>内容をスマートオブジェクトに保存しました。</translation>
     </message>
     <message>
         <source>Save Project</source>
-        <translation type="unfinished"></translation>
+        <translation>プロジェクトを保存</translation>
     </message>
     <message>
         <source>Compositor project (*.comp)</source>
-        <translation type="unfinished"></translation>
+        <translation>Compositor プロジェクト (*.comp)</translation>
     </message>
     <message>
         <source>Couldn’t save the project</source>
-        <translation type="unfinished"></translation>
+        <translation>プロジェクトを保存できませんでした</translation>
     </message>
     <message>
         <source>Saved. With %1 megapixels of layers this project is larger than Compositor for macOS opens (100); it opens here.</source>
-        <translation type="unfinished"></translation>
+        <translation>保存しました。レイヤーが %1 メガピクセルあるため、このプロジェクトは macOS 版 Compositor で開ける上限 (100) を超えていますが、ここでは開けます。</translation>
     </message>
     <message>
         <source>Export PNG</source>
-        <translation type="unfinished"></translation>
+        <translation>PNG を書き出し</translation>
     </message>
     <message>
         <source>PNG image (*.png)</source>
-        <translation type="unfinished"></translation>
+        <translation>PNG 画像 (*.png)</translation>
     </message>
     <message>
         <source>Couldn’t export PNG</source>
-        <translation type="unfinished"></translation>
+        <translation>PNG を書き出せませんでした</translation>
     </message>
     <message>
         <source>Couldn’t export PSD</source>
-        <translation type="unfinished"></translation>
+        <translation>PSD を書き出せませんでした</translation>
     </message>
     <message>
         <source>This document is larger than PSD allows (%1 pixels a side). PSB export is not supported yet.</source>
-        <translation type="unfinished"></translation>
+        <translation>このドキュメントは PSD の上限 (1 辺 %1 ピクセル) を超えています。PSB の書き出しにはまだ対応していません。</translation>
     </message>
     <message numerus="yes">
         <source>%n layer(s)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n 個のレイヤー</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <source>, %n folder(s)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>、%n 個のグループ</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <source>, %n mask(s)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>、%n 個のマスク</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <source>, %n clipped</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>、%n 個のクリッピング</numerusform>
         </translation>
     </message>
     <message>
         <source>Export Photoshop Document</source>
-        <translation type="unfinished"></translation>
+        <translation>Photoshop ドキュメントを書き出し</translation>
     </message>
     <message>
         <source>&lt;p&gt;%1 will be written.&lt;/p&gt;&lt;p&gt;Some things will look or behave differently in Photoshop:&lt;/p&gt;&lt;ul&gt;%2&lt;/ul&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;p&gt;%1 を書き出します。&lt;/p&gt;&lt;p&gt;Photoshop では一部の表示や動作が異なります:&lt;/p&gt;&lt;ul&gt;%2&lt;/ul&gt;</translation>
     </message>
     <message>
         <source>Export…</source>
-        <translation type="unfinished"></translation>
+        <translation>書き出し...</translation>
     </message>
     <message>
         <source>Photoshop document (*.psd);;Photoshop large document (*.psb)</source>
-        <translation type="unfinished"></translation>
+        <translation>Photoshop ドキュメント (*.psd);;Photoshop ラージドキュメント (*.psb)</translation>
     </message>
     <message>
         <source>Exported %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 を書き出しました</translation>
     </message>
     <message>
         <source>Export SVG</source>
-        <translation type="unfinished"></translation>
+        <translation>SVG を書き出し</translation>
     </message>
     <message>
         <source>SVG image (*.svg)</source>
-        <translation type="unfinished"></translation>
+        <translation>SVG 画像 (*.svg)</translation>
     </message>
     <message>
         <source>Couldn’t export SVG</source>
-        <translation type="unfinished"></translation>
+        <translation>SVG を書き出せませんでした</translation>
     </message>
     <message numerus="yes">
         <source>Exported %1 (%n image(s) for what SVG cannot draw as paths)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%1 を書き出しました (SVG でパスとして描画できない部分は %n 個の画像)</numerusform>
         </translation>
     </message>
     <message>
         <source>Export JPEG</source>
-        <translation type="unfinished"></translation>
+        <translation>JPEG を書き出し</translation>
     </message>
     <message>
         <source>JPEG image (*.jpg *.jpeg)</source>
-        <translation type="unfinished"></translation>
+        <translation>JPEG 画像 (*.jpg *.jpeg)</translation>
     </message>
     <message>
         <source>Couldn’t export JPEG</source>
-        <translation type="unfinished"></translation>
+        <translation>JPEG を書き出せませんでした</translation>
     </message>
     <message>
         <source>Export WebP</source>
-        <translation type="unfinished"></translation>
+        <translation>WebP を書き出し</translation>
     </message>
     <message>
         <source>WebP image (*.webp)</source>
-        <translation type="unfinished"></translation>
+        <translation>WebP 画像 (*.webp)</translation>
     </message>
     <message>
         <source>Couldn’t export WebP</source>
-        <translation type="unfinished"></translation>
+        <translation>WebP を書き出せませんでした</translation>
     </message>
     <message>
         <source>Export TIFF</source>
-        <translation type="unfinished"></translation>
+        <translation>TIFF を書き出し</translation>
     </message>
     <message>
         <source>TIFF image (*.tif *.tiff)</source>
-        <translation type="unfinished"></translation>
+        <translation>TIFF 画像 (*.tif *.tiff)</translation>
     </message>
     <message>
         <source>Couldn’t export TIFF</source>
-        <translation type="unfinished"></translation>
+        <translation>TIFF を書き出せませんでした</translation>
     </message>
     <message>
         <source>Export TGA</source>
-        <translation type="unfinished"></translation>
+        <translation>TGA を書き出し</translation>
     </message>
     <message>
         <source>TGA image (*.tga)</source>
-        <translation type="unfinished"></translation>
+        <translation>TGA 画像 (*.tga)</translation>
     </message>
     <message>
         <source>Couldn’t export TGA</source>
-        <translation type="unfinished"></translation>
+        <translation>TGA を書き出せませんでした</translation>
     </message>
     <message>
         <source>Export Icon</source>
-        <translation type="unfinished"></translation>
+        <translation>アイコンを書き出し</translation>
     </message>
     <message>
         <source>Windows icon (*.ico)</source>
-        <translation type="unfinished"></translation>
+        <translation>Windows アイコン (*.ico)</translation>
     </message>
     <message>
         <source>Couldn’t export the icon</source>
-        <translation type="unfinished"></translation>
+        <translation>アイコンを書き出せませんでした</translation>
     </message>
     <message>
         <source>Export Animated GIF</source>
-        <translation type="unfinished"></translation>
+        <translation>アニメーション GIF を書き出し</translation>
     </message>
     <message>
         <source>GIF image (*.gif)</source>
-        <translation type="unfinished"></translation>
+        <translation>GIF 画像 (*.gif)</translation>
     </message>
     <message>
         <source>Couldn’t export the GIF</source>
-        <translation type="unfinished"></translation>
+        <translation>GIF を書き出せませんでした</translation>
     </message>
     <message numerus="yes">
         <source>Exported %n frame(s) to %1</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n 個のフレームを %1 に書き出しました</numerusform>
         </translation>
     </message>
     <message>
         <source>Batch</source>
-        <translation type="unfinished"></translation>
+        <translation>バッチ</translation>
     </message>
     <message>
         <source>Record an action first (Window &gt; Actions).</source>
-        <translation type="unfinished"></translation>
+        <translation>先にアクションを記録してください (ウィンドウ &gt; アクション)。</translation>
     </message>
     <message>
         <source>Action</source>
-        <translation type="unfinished"></translation>
+        <translation>アクション</translation>
     </message>
     <message>
         <source>Choose…</source>
-        <translation type="unfinished"></translation>
+        <translation>選択...</translation>
     </message>
     <message>
         <source>Choose a Folder</source>
-        <translation type="unfinished"></translation>
+        <translation>フォルダーを選択</translation>
     </message>
     <message>
         <source>Source folder</source>
-        <translation type="unfinished"></translation>
+        <translation>ソースフォルダー</translation>
     </message>
     <message>
         <source>Destination</source>
-        <translation type="unfinished"></translation>
+        <translation>実行後</translation>
     </message>
     <message>
         <source>Save as</source>
-        <translation type="unfinished"></translation>
+        <translation>保存形式</translation>
     </message>
     <message>
         <source>Replace files already in the destination</source>
-        <translation type="unfinished"></translation>
+        <translation>保存先の既存ファイルを置き換える</translation>
     </message>
     <message>
         <source>Processing…</source>
-        <translation type="unfinished"></translation>
+        <translation>処理中...</translation>
     </message>
     <message>
         <source>Stop</source>
-        <translation type="unfinished"></translation>
+        <translation>停止</translation>
     </message>
     <message>
         <source>Done</source>
-        <translation type="unfinished"></translation>
+        <translation>完了</translation>
     </message>
     <message>
         <source>%1 of %2: %3</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 / %2: %3</translation>
     </message>
     <message numerus="yes">
         <source>%n file(s) written to %1.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n 個のファイルを %1 に書き出しました。</numerusform>
         </translation>
     </message>
     <message>
         <source>%1: %2 failed: %3</source>
-        <translation type="unfinished"></translation>
+        <translation>%1: %2 が失敗しました: %3</translation>
     </message>
     <message numerus="yes">
         <source>%n skipped (already there, or stopped).</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n 個をスキップしました (既に存在するか、停止しました)。</numerusform>
         </translation>
     </message>
     <message>
         <source>Drop to open as a new document</source>
-        <translation type="unfinished"></translation>
+        <translation>ドロップして新規ドキュメントとして開く</translation>
     </message>
     <message>
         <source>Drop to add as a layer (drop on the tab strip to open as a new document)</source>
-        <translation type="unfinished"></translation>
+        <translation>ドロップしてレイヤーとして追加 (タブバーにドロップすると新規ドキュメントとして開く)</translation>
     </message>
     <message>
         <source>Dropped Image</source>
-        <translation type="unfinished"></translation>
+        <translation>ドロップした画像</translation>
     </message>
     <message>
         <source>Export Slices</source>
-        <translation type="unfinished"></translation>
+        <translation>スライスを書き出し</translation>
     </message>
     <message>
         <source>Export Artboards</source>
-        <translation type="unfinished"></translation>
+        <translation>アートボードを書き出し</translation>
     </message>
     <message>
         <source>The document has no slices; draw some with the Slice tool (Shift+C).</source>
-        <translation type="unfinished"></translation>
+        <translation>ドキュメントにスライスがありません。スライスツール (Shift+C) で作成してください。</translation>
     </message>
     <message>
         <source>The document has no artboards; draw one with the Artboard tool (Shift+V).</source>
-        <translation type="unfinished"></translation>
+        <translation>ドキュメントにアートボードがありません。アートボードツール (Shift+V) で作成してください。</translation>
     </message>
     <message>
         <source>Artboards to Files</source>
-        <translation type="unfinished"></translation>
+        <translation>アートボードからファイル</translation>
     </message>
     <message>
         <source>Format</source>
-        <translation type="unfinished"></translation>
+        <translation>形式</translation>
     </message>
     <message>
         <source>File name prefix</source>
-        <translation type="unfinished"></translation>
+        <translation>ファイル名の接頭辞</translation>
     </message>
     <message>
         <source>JPEG quality</source>
-        <translation type="unfinished"></translation>
+        <translation>JPEG 画質</translation>
     </message>
     <message>
         <source>Export To</source>
-        <translation type="unfinished"></translation>
+        <translation>書き出し先</translation>
     </message>
     <message>
         <source>Couldn’t export</source>
-        <translation type="unfinished"></translation>
+        <translation>書き出せませんでした</translation>
     </message>
     <message numerus="yes">
         <source>Wrote %n file(s) to %1</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n 個のファイルを %1 に書き出しました</numerusform>
         </translation>
     </message>
     <message>
         <source>Tools</source>
-        <translation type="unfinished"></translation>
+        <translation>ツール</translation>
     </message>
     <message>
         <source>Move / Transform</source>
-        <translation type="unfinished"></translation>
+        <translation>移動 / 変形</translation>
     </message>
     <message>
         <source>Marquee</source>
-        <translation type="unfinished"></translation>
+        <translation>選択ツール</translation>
     </message>
     <message>
         <source>Lasso</source>
-        <translation type="unfinished"></translation>
+        <translation>なげなわ</translation>
     </message>
     <message>
         <source>Magic Wand</source>
-        <translation type="unfinished"></translation>
+        <translation>自動選択</translation>
     </message>
     <message>
         <source>Quick Select</source>
-        <translation type="unfinished"></translation>
+        <translation>クイック選択</translation>
     </message>
     <message>
         <source>Crop</source>
-        <translation type="unfinished"></translation>
+        <translation>切り抜き</translation>
     </message>
     <message>
         <source>Slice (drag a slice; drag inside to move it, an edge to resize)</source>
-        <translation type="unfinished"></translation>
+        <translation>スライス (ドラッグで作成、内側をドラッグで移動、辺でサイズ変更)</translation>
     </message>
     <message>
         <source>Artboard (drag a new artboard; drag inside to move it with its contents, an edge to resize)</source>
-        <translation type="unfinished"></translation>
+        <translation>アートボード (ドラッグで作成、内側をドラッグで内容ごと移動、辺でサイズ変更)</translation>
     </message>
     <message>
         <source>Brush</source>
-        <translation type="unfinished"></translation>
+        <translation>ブラシ</translation>
     </message>
     <message>
         <source>Eraser</source>
-        <translation type="unfinished"></translation>
+        <translation>消しゴム</translation>
     </message>
     <message>
         <source>Eraser (E)</source>
-        <translation type="unfinished"></translation>
+        <translation>消しゴム (E)</translation>
     </message>
     <message>
         <source>Spot Healing Brush</source>
-        <translation type="unfinished"></translation>
+        <translation>スポット修復ブラシ</translation>
     </message>
     <message>
         <source>Clone Stamp (Alt-click sets the source)</source>
-        <translation type="unfinished"></translation>
+        <translation>コピースタンプ (Alt+クリックでソースを設定)</translation>
     </message>
     <message>
         <source>Liquify / Blur / Smudge</source>
-        <translation type="unfinished"></translation>
+        <translation>ゆがみ / ぼかし / 指先</translation>
     </message>
     <message>
         <source>Dodge / Burn / Sponge</source>
-        <translation type="unfinished"></translation>
+        <translation>覆い焼き / 焼き込み / スポンジ</translation>
     </message>
     <message>
         <source>Gradient</source>
-        <translation type="unfinished"></translation>
+        <translation>グラデーション</translation>
     </message>
     <message>
         <source>Paint Bucket</source>
-        <translation type="unfinished"></translation>
+        <translation>塗りつぶし</translation>
     </message>
     <message>
         <source>Pen (click corners, drag curves; click the first point or Enter to finish)</source>
-        <translation type="unfinished"></translation>
+        <translation>ペン (クリックでコーナー、ドラッグで曲線。最初の点か Enter で終了)</translation>
     </message>
     <message>
         <source>Direct Selection (drag points, handles or a whole path; Alt-click converts a point)</source>
-        <translation type="unfinished"></translation>
+        <translation>直接選択 (点、ハンドル、パス全体をドラッグ。Alt+クリックで点を切り替え)</translation>
     </message>
     <message>
         <source>Shape (Shift-U steps through Rectangle, Ellipse, Polygon, Line, Custom)</source>
-        <translation type="unfinished"></translation>
+        <translation>シェイプ (Shift+U で長方形、楕円形、多角形、ライン、カスタムを切り替え)</translation>
     </message>
     <message>
         <source>Text</source>
-        <translation type="unfinished"></translation>
+        <translation>テキスト</translation>
     </message>
     <message>
         <source>Eyedropper</source>
-        <translation type="unfinished"></translation>
+        <translation>スポイト</translation>
     </message>
     <message>
         <source>Hand</source>
-        <translation type="unfinished"></translation>
+        <translation>手のひら</translation>
     </message>
     <message>
         <source>Zoom</source>
-        <translation type="unfinished"></translation>
+        <translation>ズーム</translation>
     </message>
     <message>
         <source>Swap colours</source>
-        <translation type="unfinished"></translation>
+        <translation>描画色と背景色を入れ替え</translation>
     </message>
     <message>
         <source>Default colours</source>
-        <translation type="unfinished"></translation>
+        <translation>初期設定の描画色と背景色</translation>
     </message>
     <message>
         <source>Background Colour</source>
-        <translation type="unfinished"></translation>
+        <translation>背景色</translation>
     </message>
     <message>
         <source>Foreground Colour</source>
-        <translation type="unfinished"></translation>
+        <translation>描画色</translation>
     </message>
     <message>
         <source>&amp;File</source>
-        <translation type="unfinished"></translation>
+        <translation>ファイル(&amp;F)</translation>
     </message>
     <message>
         <source>&amp;New…</source>
-        <translation type="unfinished"></translation>
+        <translation>新規(&amp;N)...</translation>
     </message>
     <message>
         <source>&amp;Open…</source>
-        <translation type="unfinished"></translation>
+        <translation>開く(&amp;O)...</translation>
     </message>
     <message>
         <source>Open Project…</source>
-        <translation type="unfinished"></translation>
+        <translation>プロジェクトを開く...</translation>
     </message>
     <message>
         <source>Open &amp;Recent</source>
-        <translation type="unfinished"></translation>
+        <translation>最近使用したファイルを開く(&amp;R)</translation>
     </message>
     <message>
         <source>Import &amp;File…</source>
-        <translation type="unfinished"></translation>
+        <translation>ファイルを読み込み(&amp;F)...</translation>
     </message>
     <message>
         <source>Import &amp;Brushes…</source>
-        <translation type="unfinished"></translation>
+        <translation>ブラシを読み込み(&amp;B)...</translation>
     </message>
     <message>
         <source>I&amp;mport Presets…</source>
-        <translation type="unfinished"></translation>
+        <translation>プリセットを読み込み(&amp;M)...</translation>
     </message>
     <message>
         <source>Place &amp;Embedded…</source>
-        <translation type="unfinished"></translation>
+        <translation>埋め込みを配置(&amp;E)...</translation>
     </message>
     <message>
         <source>Place Embedded</source>
-        <translation type="unfinished"></translation>
+        <translation>埋め込みを配置</translation>
     </message>
     <message>
         <source>Images, Photoshop and Affinity documents (*.psd *.psb *.afphoto *.afdesign *.afpub *.af *.png *.jpg *.jpeg *.tif *.tiff *.webp *.bmp *.gif %1)</source>
-        <translation type="unfinished"></translation>
+        <translation>画像、Photoshop および Affinity ドキュメント (*.psd *.psb *.afphoto *.afdesign *.afpub *.af *.png *.jpg *.jpeg *.tif *.tiff *.webp *.bmp *.gif %1)</translation>
     </message>
     <message>
         <source>Couldn’t place %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 を配置できませんでした</translation>
     </message>
     <message>
         <source>&amp;Save</source>
-        <translation type="unfinished"></translation>
+        <translation>保存(&amp;S)</translation>
     </message>
     <message>
         <source>Save &amp;As…</source>
-        <translation type="unfinished"></translation>
+        <translation>別名で保存(&amp;A)...</translation>
     </message>
     <message>
         <source>Export as Photoshop &amp;Document (PSD)…</source>
-        <translation type="unfinished"></translation>
+        <translation>Photoshop ドキュメント (PSD) として書き出し(&amp;D)...</translation>
     </message>
     <message>
         <source>Export &amp;PNG…</source>
-        <translation type="unfinished"></translation>
+        <translation>PNG を書き出し(&amp;P)...</translation>
     </message>
     <message>
         <source>Export &amp;JPEG…</source>
-        <translation type="unfinished"></translation>
+        <translation>JPEG を書き出し(&amp;J)...</translation>
     </message>
     <message>
         <source>Export S&amp;VG…</source>
-        <translation type="unfinished"></translation>
+        <translation>SVG を書き出し(&amp;V)...</translation>
     </message>
     <message>
         <source>Export &amp;WebP…</source>
-        <translation type="unfinished"></translation>
+        <translation>WebP を書き出し(&amp;W)...</translation>
     </message>
     <message>
         <source>Export &amp;TIFF…</source>
-        <translation type="unfinished"></translation>
+        <translation>TIFF を書き出し(&amp;T)...</translation>
     </message>
     <message>
         <source>Export T&amp;GA…</source>
-        <translation type="unfinished"></translation>
+        <translation>TGA を書き出し(&amp;G)...</translation>
     </message>
     <message>
         <source>Export &amp;Icon (ICO)…</source>
-        <translation type="unfinished"></translation>
+        <translation>アイコン (ICO) を書き出し(&amp;I)...</translation>
     </message>
     <message>
         <source>Export Artboards to Files…</source>
-        <translation type="unfinished"></translation>
+        <translation>アートボードからファイルを書き出し...</translation>
     </message>
     <message>
         <source>Export S&amp;lices…</source>
-        <translation type="unfinished"></translation>
+        <translation>スライスを書き出し(&amp;L)...</translation>
     </message>
     <message>
         <source>E&amp;xport Animated GIF…</source>
-        <translation type="unfinished"></translation>
+        <translation>アニメーション GIF を書き出し(&amp;X)...</translation>
     </message>
     <message>
         <source>A&amp;utomate</source>
-        <translation type="unfinished"></translation>
+        <translation>自動処理(&amp;U)</translation>
     </message>
     <message>
         <source>&amp;Batch…</source>
-        <translation type="unfinished"></translation>
+        <translation>バッチ(&amp;B)...</translation>
     </message>
     <message>
         <source>&amp;Close Tab</source>
-        <translation type="unfinished"></translation>
+        <translation>タブを閉じる(&amp;C)</translation>
     </message>
     <message>
         <source>New Tab</source>
-        <translation type="unfinished"></translation>
+        <translation>新規タブ</translation>
     </message>
     <message>
         <source>Next Tab</source>
-        <translation type="unfinished"></translation>
+        <translation>次のタブ</translation>
     </message>
     <message>
         <source>Previous Tab</source>
-        <translation type="unfinished"></translation>
+        <translation>前のタブ</translation>
     </message>
     <message>
         <source>&amp;Quit</source>
-        <translation type="unfinished"></translation>
+        <translation>終了(&amp;Q)</translation>
     </message>
     <message>
         <source>&amp;Edit</source>
-        <translation type="unfinished"></translation>
+        <translation>編集(&amp;E)</translation>
     </message>
     <message>
         <source>Cu&amp;t</source>
-        <translation type="unfinished"></translation>
+        <translation>カット(&amp;T)</translation>
     </message>
     <message>
         <source>&amp;Copy</source>
-        <translation type="unfinished"></translation>
+        <translation>コピー(&amp;C)</translation>
     </message>
     <message>
         <source>Copy &amp;Merged</source>
-        <translation type="unfinished"></translation>
+        <translation>結合部分をコピー(&amp;M)</translation>
     </message>
     <message>
         <source>&amp;Paste</source>
-        <translation type="unfinished"></translation>
+        <translation>ペースト(&amp;P)</translation>
     </message>
     <message>
         <source>&amp;Free Transform</source>
-        <translation type="unfinished"></translation>
+        <translation>自由変形(&amp;F)</translation>
     </message>
     <message>
         <source>&amp;Warp…</source>
-        <translation type="unfinished"></translation>
+        <translation>ワープ(&amp;W)...</translation>
     </message>
     <message>
         <source>Warp Ca&amp;ge</source>
-        <translation type="unfinished"></translation>
+        <translation>ワープケージ(&amp;G)</translation>
     </message>
     <message>
         <source>Warp Cage</source>
-        <translation type="unfinished"></translation>
+        <translation>ワープケージ</translation>
     </message>
     <message>
         <source>Drag the cage&apos;s points; Enter applies, Esc cancels.</source>
-        <translation type="unfinished"></translation>
+        <translation>ケージのポイントをドラッグします。Enter で適用、Esc でキャンセルします。</translation>
     </message>
     <message>
         <source>Fill with Foreground</source>
-        <translation type="unfinished"></translation>
+        <translation>描画色で塗りつぶし</translation>
     </message>
     <message>
         <source>Fill with Background</source>
-        <translation type="unfinished"></translation>
+        <translation>背景色で塗りつぶし</translation>
     </message>
     <message>
         <source>Clear</source>
-        <translation type="unfinished"></translation>
+        <translation>消去</translation>
     </message>
     <message>
         <source>Content-Aware Fill…</source>
-        <translation type="unfinished"></translation>
+        <translation>コンテンツに応じた塗りつぶし...</translation>
     </message>
     <message>
         <source>Content-Aware Fill</source>
-        <translation type="unfinished"></translation>
+        <translation>コンテンツに応じた塗りつぶし</translation>
     </message>
     <message>
         <source>Select a visible image layer and an area to fill.</source>
-        <translation type="unfinished"></translation>
+        <translation>表示されている画像レイヤーと塗りつぶす範囲を選択してください。</translation>
     </message>
     <message>
         <source>Content-Aware Scale…</source>
-        <translation type="unfinished"></translation>
+        <translation>コンテンツに応じて拡大・縮小...</translation>
     </message>
     <message>
         <source>Prefere&amp;nces…</source>
-        <translation type="unfinished"></translation>
+        <translation>環境設定(&amp;N)...</translation>
     </message>
     <message>
         <source>&amp;Image</source>
-        <translation type="unfinished"></translation>
+        <translation>イメージ(&amp;I)</translation>
     </message>
     <message>
         <source>&amp;Canvas Size…</source>
-        <translation type="unfinished"></translation>
+        <translation>カンバスサイズ(&amp;C)...</translation>
     </message>
     <message>
         <source>&amp;Image Size…</source>
-        <translation type="unfinished"></translation>
+        <translation>画像解像度(&amp;I)...</translation>
     </message>
     <message>
         <source>&amp;Trim…</source>
-        <translation type="unfinished"></translation>
+        <translation>トリミング(&amp;T)...</translation>
     </message>
     <message>
         <source>Trim</source>
-        <translation type="unfinished"></translation>
+        <translation>トリミング</translation>
     </message>
     <message>
         <source>Transparent Pixels</source>
-        <translation type="unfinished"></translation>
+        <translation>透明ピクセル</translation>
     </message>
     <message>
         <source>Top Left Pixel Color</source>
-        <translation type="unfinished"></translation>
+        <translation>左上のピクセルの色</translation>
     </message>
     <message>
         <source>Bottom Right Pixel Color</source>
-        <translation type="unfinished"></translation>
+        <translation>右下のピクセルの色</translation>
     </message>
     <message>
         <source>Based on</source>
-        <translation type="unfinished"></translation>
+        <translation>基準</translation>
     </message>
     <message>
         <source>How far a pixel&apos;s channels may be from the corner&apos;s and still be trimmed</source>
-        <translation type="unfinished"></translation>
+        <translation>コーナーのピクセルとのチャンネル値の差がこの範囲内ならトリミングされます</translation>
     </message>
     <message>
         <source>Tolerance</source>
-        <translation type="unfinished"></translation>
+        <translation>許容値</translation>
     </message>
     <message>
         <source>Top</source>
-        <translation type="unfinished"></translation>
+        <translation>上</translation>
     </message>
     <message>
         <source>Left</source>
-        <translation type="unfinished"></translation>
+        <translation>左</translation>
     </message>
     <message>
         <source>Bottom</source>
-        <translation type="unfinished"></translation>
+        <translation>下</translation>
     </message>
     <message>
         <source>Right</source>
-        <translation type="unfinished"></translation>
+        <translation>右</translation>
     </message>
     <message>
         <source>Trim away</source>
-        <translation type="unfinished"></translation>
+        <translation>トリミングする辺</translation>
     </message>
     <message>
         <source>There is nothing to trim: the canvas already ends at its content, or nothing would remain.</source>
-        <translation type="unfinished"></translation>
+        <translation>トリミングする部分がありません。カンバスがすでに内容の端に合っているか、何も残らなくなります。</translation>
     </message>
     <message>
         <source>Crop to Selection</source>
-        <translation type="unfinished"></translation>
+        <translation>選択範囲で切り抜き</translation>
     </message>
     <message>
         <source>&amp;Adjustments</source>
-        <translation type="unfinished"></translation>
+        <translation>色調補正(&amp;A)</translation>
     </message>
     <message>
         <source>Select a visible image layer (not a mask) to adjust its pixels.</source>
-        <translation type="unfinished"></translation>
+        <translation>ピクセルを補正するには、表示されている画像レイヤー(マスク以外)を選択してください。</translation>
     </message>
     <message>
         <source>&amp;Levels…</source>
-        <translation type="unfinished"></translation>
+        <translation>レベル補正(&amp;L)...</translation>
     </message>
     <message>
         <source>&amp;Curves…</source>
-        <translation type="unfinished"></translation>
+        <translation>トーンカーブ(&amp;C)...</translation>
     </message>
     <message>
         <source>&amp;Hue/Saturation…</source>
-        <translation type="unfinished"></translation>
+        <translation>色相・彩度(&amp;H)...</translation>
     </message>
     <message>
         <source>&amp;Exposure…</source>
-        <translation type="unfinished"></translation>
+        <translation>露光量(&amp;E)...</translation>
     </message>
     <message>
         <source>&amp;Gradient Map…</source>
-        <translation type="unfinished"></translation>
+        <translation>グラデーションマップ(&amp;G)...</translation>
     </message>
     <message>
         <source>G&amp;rain…</source>
-        <translation type="unfinished"></translation>
+        <translation>粒子(&amp;R)...</translation>
     </message>
     <message>
         <source>&amp;Brightness/Contrast…</source>
-        <translation type="unfinished"></translation>
+        <translation>明るさ・コントラスト(&amp;B)...</translation>
     </message>
     <message>
         <source>&amp;Vibrance…</source>
-        <translation type="unfinished"></translation>
+        <translation>自然な彩度(&amp;V)...</translation>
     </message>
     <message>
         <source>Color &amp;Balance…</source>
-        <translation type="unfinished"></translation>
+        <translation>カラーバランス(&amp;B)...</translation>
     </message>
     <message>
         <source>Black &amp;&amp; &amp;White…</source>
-        <translation type="unfinished"></translation>
+        <translation>白黒(&amp;W)...</translation>
     </message>
     <message>
         <source>&amp;Photo Filter…</source>
-        <translation type="unfinished"></translation>
+        <translation>フォトフィルター(&amp;P)...</translation>
     </message>
     <message>
         <source>Channel &amp;Mixer…</source>
-        <translation type="unfinished"></translation>
+        <translation>チャンネルミキサー(&amp;M)...</translation>
     </message>
     <message>
         <source>&amp;Selective Color…</source>
-        <translation type="unfinished"></translation>
+        <translation>特定色域の選択(&amp;S)...</translation>
     </message>
     <message>
         <source>P&amp;osterize…</source>
-        <translation type="unfinished"></translation>
+        <translation>ポスタリゼーション(&amp;O)...</translation>
     </message>
     <message>
         <source>&amp;Threshold…</source>
-        <translation type="unfinished"></translation>
+        <translation>2階調化(&amp;T)...</translation>
     </message>
     <message>
         <source>&amp;Invert</source>
-        <translation type="unfinished"></translation>
+        <translation>階調の反転(&amp;I)</translation>
     </message>
     <message>
         <source>Flip Canvas Horizontal</source>
-        <translation type="unfinished"></translation>
+        <translation>カンバスを左右に反転</translation>
     </message>
     <message>
         <source>Flip Canvas Vertical</source>
-        <translation type="unfinished"></translation>
+        <translation>カンバスを上下に反転</translation>
     </message>
     <message>
         <source>&amp;Layer</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤー(&amp;L)</translation>
     </message>
     <message>
         <source>&amp;New Layer</source>
-        <translation type="unfinished"></translation>
+        <translation>新規レイヤー(&amp;N)</translation>
     </message>
     <message>
         <source>New Layer &amp;Below</source>
-        <translation type="unfinished"></translation>
+        <translation>下に新規レイヤー(&amp;B)</translation>
     </message>
     <message>
         <source>New &amp;Folder</source>
-        <translation type="unfinished"></translation>
+        <translation>新規グループ(&amp;F)</translation>
     </message>
     <message>
         <source>&amp;Group Layers</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーをグループ化(&amp;G)</translation>
     </message>
     <message>
         <source>Layer via &amp;Copy</source>
-        <translation type="unfinished"></translation>
+        <translation>選択範囲をコピーしたレイヤー(&amp;C)</translation>
     </message>
     <message>
         <source>&amp;Duplicate Layer</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーを複製(&amp;D)</translation>
     </message>
     <message>
         <source>De&amp;lete Layer</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーを削除(&amp;L)</translation>
     </message>
     <message>
         <source>Merge Do&amp;wn</source>
-        <translation type="unfinished"></translation>
+        <translation>下のレイヤーと結合(&amp;W)</translation>
     </message>
     <message>
         <source>Edit &amp;Text…</source>
-        <translation type="unfinished"></translation>
+        <translation>テキストを編集(&amp;T)...</translation>
     </message>
     <message>
         <source>&amp;Rename Layer…</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤー名を変更(&amp;R)...</translation>
     </message>
     <message>
         <source>Rename Layer</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤー名を変更</translation>
     </message>
     <message>
         <source>Name</source>
-        <translation type="unfinished"></translation>
+        <translation>名前</translation>
     </message>
     <message>
         <source>Move &amp;Out of Folder</source>
-        <translation type="unfinished"></translation>
+        <translation>グループから出す(&amp;O)</translation>
     </message>
     <message>
         <source>New &amp;Adjustment Layer</source>
-        <translation type="unfinished"></translation>
+        <translation>新規調整レイヤー(&amp;A)</translation>
     </message>
     <message>
         <source>Layer St&amp;yle</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤースタイル(&amp;Y)</translation>
+    </message>
+    <message>
+        <source>Blending Options…</source>
+        <translation>描画オプション...</translation>
+    </message>
+    <message>
+        <source>Bevel &amp; Emboss…</source>
+        <translation>ベベルとエンボス...</translation>
+    </message>
+    <message>
+        <source>Stroke…</source>
+        <translation>境界線...</translation>
+    </message>
+    <message>
+        <source>Inner Shadow…</source>
+        <translation>シャドウ(内側)...</translation>
+    </message>
+    <message>
+        <source>Inner Glow…</source>
+        <translation>光彩(内側)...</translation>
+    </message>
+    <message>
+        <source>Satin…</source>
+        <translation>サテン...</translation>
+    </message>
+    <message>
+        <source>Color Overlay…</source>
+        <translation>カラーオーバーレイ...</translation>
+    </message>
+    <message>
+        <source>Gradient Overlay…</source>
+        <translation>グラデーションオーバーレイ...</translation>
+    </message>
+    <message>
+        <source>Pattern Overlay…</source>
+        <translation>パターンオーバーレイ...</translation>
+    </message>
+    <message>
+        <source>Outer Glow…</source>
+        <translation>光彩(外側)...</translation>
+    </message>
+    <message>
+        <source>Drop Shadow…</source>
+        <translation>ドロップシャドウ...</translation>
     </message>
     <message>
         <source>&amp;Copy Layer Style</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤースタイルをコピー(&amp;C)</translation>
     </message>
     <message>
         <source>&amp;Paste Layer Style</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤースタイルをペースト(&amp;P)</translation>
     </message>
     <message>
         <source>C&amp;lear Layer Style</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤースタイルを消去(&amp;L)</translation>
     </message>
     <message>
         <source>&amp;Apply Style</source>
-        <translation type="unfinished"></translation>
+        <translation>スタイルを適用(&amp;A)</translation>
     </message>
     <message>
         <source>No styles yet: Import Styles…</source>
-        <translation type="unfinished"></translation>
+        <translation>スタイルがありません: スタイルを読み込み...</translation>
     </message>
     <message>
         <source>Couldn’t apply the style</source>
-        <translation type="unfinished"></translation>
+        <translation>スタイルを適用できませんでした</translation>
     </message>
     <message>
         <source>This layer cannot have effects.</source>
-        <translation type="unfinished"></translation>
+        <translation>このレイヤーには効果を適用できません。</translation>
     </message>
     <message>
         <source>&amp;Import Styles…</source>
-        <translation type="unfinished"></translation>
+        <translation>スタイルを読み込み(&amp;I)...</translation>
     </message>
     <message>
         <source>Smart Ob&amp;jects</source>
-        <translation type="unfinished"></translation>
+        <translation>スマートオブジェクト(&amp;J)</translation>
     </message>
     <message>
         <source>&amp;Convert to Smart Object</source>
-        <translation type="unfinished"></translation>
+        <translation>スマートオブジェクトに変換(&amp;C)</translation>
     </message>
     <message>
         <source>Couldn’t convert to a smart object</source>
-        <translation type="unfinished"></translation>
+        <translation>スマートオブジェクトに変換できませんでした</translation>
     </message>
     <message>
         <source>&amp;Edit Contents</source>
-        <translation type="unfinished"></translation>
+        <translation>コンテンツを編集(&amp;E)</translation>
     </message>
     <message>
         <source>&amp;Replace Contents…</source>
-        <translation type="unfinished"></translation>
+        <translation>コンテンツを置換(&amp;R)...</translation>
     </message>
     <message>
         <source>Replace Contents</source>
-        <translation type="unfinished"></translation>
+        <translation>コンテンツを置換</translation>
     </message>
     <message>
         <source>Couldn’t replace the contents</source>
-        <translation type="unfinished"></translation>
+        <translation>コンテンツを置換できませんでした</translation>
     </message>
     <message>
         <source>R&amp;asterize</source>
-        <translation type="unfinished"></translation>
+        <translation>ラスタライズ(&amp;A)</translation>
     </message>
     <message>
         <source>Layer &amp;Mask</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーマスク(&amp;M)</translation>
     </message>
     <message>
         <source>Reveal All</source>
-        <translation type="unfinished"></translation>
+        <translation>すべての領域を表示</translation>
     </message>
     <message>
         <source>Hide All</source>
-        <translation type="unfinished"></translation>
+        <translation>すべての領域を隠す</translation>
     </message>
     <message>
         <source>From Selection (Reveal)</source>
-        <translation type="unfinished"></translation>
+        <translation>選択範囲から作成(表示)</translation>
     </message>
     <message>
         <source>From Selection (Hide)</source>
-        <translation type="unfinished"></translation>
+        <translation>選択範囲から作成(非表示)</translation>
     </message>
     <message>
         <source>Enable / Disable</source>
-        <translation type="unfinished"></translation>
+        <translation>有効 / 無効</translation>
     </message>
     <message>
         <source>Invert</source>
-        <translation type="unfinished"></translation>
+        <translation>反転</translation>
     </message>
     <message>
         <source>Apply</source>
-        <translation type="unfinished"></translation>
+        <translation>適用</translation>
     </message>
     <message>
         <source>Delete</source>
-        <translation type="unfinished"></translation>
+        <translation>削除</translation>
     </message>
     <message>
         <source>&amp;Vector Mask</source>
-        <translation type="unfinished"></translation>
+        <translation>ベクトルマスク(&amp;V)</translation>
     </message>
     <message>
         <source>Vector Mask</source>
-        <translation type="unfinished"></translation>
+        <translation>ベクトルマスク</translation>
     </message>
     <message>
         <source>Current Path</source>
-        <translation type="unfinished"></translation>
+        <translation>現在のパス</translation>
     </message>
     <message>
         <source>Edit</source>
-        <translation type="unfinished"></translation>
+        <translation>編集</translation>
     </message>
     <message>
         <source>Create / Release Cl&amp;ipping Mask</source>
-        <translation type="unfinished"></translation>
+        <translation>クリッピングマスクを作成 / 解除(&amp;I)</translation>
     </message>
     <message>
         <source>Bring Forward</source>
-        <translation type="unfinished"></translation>
+        <translation>前面へ</translation>
     </message>
     <message>
         <source>Send Backward</source>
-        <translation type="unfinished"></translation>
+        <translation>背面へ</translation>
     </message>
     <message>
         <source>Flip Layer Horizontal</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーを水平方向に反転</translation>
     </message>
     <message>
         <source>Flip Layer Vertical</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーを垂直方向に反転</translation>
     </message>
     <message>
         <source>Resampling</source>
-        <translation type="unfinished"></translation>
+        <translation>再サンプル</translation>
     </message>
     <message>
         <source>High Quality</source>
-        <translation type="unfinished"></translation>
+        <translation>高品質</translation>
     </message>
     <message>
         <source>Smooth</source>
-        <translation type="unfinished"></translation>
+        <translation>滑らか</translation>
     </message>
     <message>
         <source>Nearest Neighbour</source>
-        <translation type="unfinished"></translation>
+        <translation>ニアレストネイバー</translation>
     </message>
     <message>
         <source>&amp;Type</source>
-        <translation type="unfinished"></translation>
+        <translation>書式(&amp;T)</translation>
     </message>
     <message>
         <source>Convert to Shape</source>
-        <translation type="unfinished"></translation>
+        <translation>シェイプに変換</translation>
     </message>
     <message>
         <source>Create Work Path</source>
-        <translation type="unfinished"></translation>
+        <translation>作業用パスを作成</translation>
     </message>
     <message>
         <source>Choose a text layer first.</source>
-        <translation type="unfinished"></translation>
+        <translation>先にテキストレイヤーを選択してください。</translation>
     </message>
     <message>
         <source>Create &amp;Work Path</source>
-        <translation type="unfinished"></translation>
+        <translation>作業用パスを作成(&amp;W)</translation>
     </message>
     <message>
         <source>Convert to &amp;Shape</source>
-        <translation type="unfinished"></translation>
+        <translation>シェイプに変換(&amp;S)</translation>
     </message>
     <message>
         <source>&amp;Select</source>
-        <translation type="unfinished"></translation>
+        <translation>選択範囲(&amp;S)</translation>
     </message>
     <message>
         <source>&amp;All</source>
-        <translation type="unfinished"></translation>
+        <translation>すべてを選択(&amp;A)</translation>
     </message>
     <message>
         <source>&amp;Deselect</source>
-        <translation type="unfinished"></translation>
+        <translation>選択を解除(&amp;D)</translation>
     </message>
     <message>
         <source>&amp;Inverse</source>
-        <translation type="unfinished"></translation>
+        <translation>選択範囲を反転(&amp;I)</translation>
     </message>
     <message>
         <source>Edit in &amp;Quick Mask Mode</source>
-        <translation type="unfinished"></translation>
+        <translation>クイックマスクモードで編集(&amp;Q)</translation>
     </message>
     <message>
         <source>&amp;Modify</source>
-        <translation type="unfinished"></translation>
+        <translation>選択範囲を変更(&amp;M)</translation>
     </message>
     <message>
         <source>&amp;Expand…</source>
-        <translation type="unfinished"></translation>
+        <translation>拡張(&amp;E)...</translation>
     </message>
     <message>
         <source>Expand Selection</source>
-        <translation type="unfinished"></translation>
+        <translation>選択範囲を拡張</translation>
     </message>
     <message>
         <source>Pixels</source>
-        <translation type="unfinished"></translation>
+        <translation>ピクセル</translation>
     </message>
     <message>
         <source>&amp;Contract…</source>
-        <translation type="unfinished"></translation>
+        <translation>縮小(&amp;C)...</translation>
     </message>
     <message>
         <source>Contract Selection</source>
-        <translation type="unfinished"></translation>
+        <translation>選択範囲を縮小</translation>
     </message>
     <message>
         <source>&amp;Feather…</source>
-        <translation type="unfinished"></translation>
+        <translation>境界をぼかす(&amp;F)...</translation>
     </message>
     <message>
         <source>Feather Selection</source>
-        <translation type="unfinished"></translation>
+        <translation>境界をぼかす</translation>
     </message>
     <message>
         <source>Radius (pixels)</source>
-        <translation type="unfinished"></translation>
+        <translation>半径(ピクセル)</translation>
     </message>
     <message>
         <source>&amp;Smooth…</source>
-        <translation type="unfinished"></translation>
+        <translation>滑らかに(&amp;S)...</translation>
     </message>
     <message>
         <source>Smooth Selection</source>
-        <translation type="unfinished"></translation>
+        <translation>選択範囲を滑らかに</translation>
     </message>
     <message>
         <source>Sample radius (pixels)</source>
-        <translation type="unfinished"></translation>
+        <translation>サンプル半径(ピクセル)</translation>
     </message>
     <message>
         <source>&amp;Border…</source>
-        <translation type="unfinished"></translation>
+        <translation>境界線(&amp;B)...</translation>
     </message>
     <message>
         <source>Border Selection</source>
-        <translation type="unfinished"></translation>
+        <translation>選択範囲の境界線</translation>
     </message>
     <message>
         <source>Width (pixels)</source>
-        <translation type="unfinished"></translation>
+        <translation>幅(ピクセル)</translation>
     </message>
     <message>
         <source>&amp;Load as Selection</source>
-        <translation type="unfinished"></translation>
+        <translation>選択範囲として読み込む(&amp;L)</translation>
     </message>
     <message>
         <source>Layer Pixels</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーのピクセル</translation>
     </message>
     <message>
         <source>Layer Mask</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーマスク</translation>
     </message>
     <message>
         <source>Add Layer Pixels</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーのピクセルを追加</translation>
     </message>
     <message>
         <source>Subtract Layer Pixels</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーのピクセルを削除</translation>
     </message>
     <message>
         <source>Intersect with Layer Pixels</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーのピクセルと交差</translation>
     </message>
     <message>
         <source>Filte&amp;r</source>
-        <translation type="unfinished"></translation>
+        <translation>フィルター(&amp;R)</translation>
     </message>
     <message>
         <source>Filters</source>
-        <translation type="unfinished"></translation>
+        <translation>フィルター</translation>
     </message>
     <message>
         <source>Select a visible image layer (not a mask) to filter its pixels.</source>
-        <translation type="unfinished"></translation>
+        <translation>ピクセルにフィルターを適用するには、表示されている画像レイヤー(マスク以外)を選択してください。</translation>
     </message>
     <message>
         <source>&amp;Gaussian Blur…</source>
-        <translation type="unfinished"></translation>
+        <translation>ぼかし(ガウス)(&amp;G)...</translation>
     </message>
     <message>
         <source>&amp;Motion Blur…</source>
-        <translation type="unfinished"></translation>
+        <translation>ぼかし(移動)(&amp;M)...</translation>
     </message>
     <message>
         <source>Add &amp;Noise…</source>
-        <translation type="unfinished"></translation>
+        <translation>ノイズを加える(&amp;N)...</translation>
     </message>
     <message>
         <source>&amp;Lens Correction…</source>
-        <translation type="unfinished"></translation>
+        <translation>レンズ補正(&amp;L)...</translation>
     </message>
     <message>
         <source>Camera &amp;Raw Filter…</source>
-        <translation type="unfinished"></translation>
+        <translation>Camera Raw フィルター(&amp;R)...</translation>
     </message>
     <message>
         <source>Camera Raw Filter</source>
-        <translation type="unfinished"></translation>
+        <translation>Camera Raw フィルター</translation>
     </message>
     <message>
         <source>&amp;G&apos;MIC…</source>
-        <translation type="unfinished"></translation>
+        <translation>G&apos;MIC(&amp;G)...</translation>
     </message>
     <message>
         <source>G&apos;MIC</source>
-        <translation type="unfinished"></translation>
+        <translation>G&apos;MIC</translation>
     </message>
     <message>
         <source>Select a layer with pixels first.</source>
-        <translation type="unfinished"></translation>
+        <translation>先にピクセルのあるレイヤーを選択してください。</translation>
     </message>
     <message>
         <source>Remove Background</source>
-        <translation type="unfinished"></translation>
+        <translation>背景を削除</translation>
     </message>
     <message>
         <source>AI background removal is turned off. Open Preferences to enable it and download the model?</source>
-        <translation type="unfinished"></translation>
+        <translation>AI による背景の削除はオフになっています。環境設定を開いて有効にし、モデルをダウンロードしますか？</translation>
     </message>
     <message>
         <source>This build was made without OpenCV, which runs the segmentation model.</source>
-        <translation type="unfinished"></translation>
+        <translation>このビルドは、セグメンテーションモデルの実行に必要な OpenCV なしで作成されています。</translation>
     </message>
     <message>
         <source>Select a visible image layer (not a mask) to remove its background.</source>
-        <translation type="unfinished"></translation>
+        <translation>背景を削除するには、表示されている画像レイヤー(マスク以外)を選択してください。</translation>
     </message>
     <message>
         <source>&amp;View</source>
-        <translation type="unfinished"></translation>
+        <translation>表示(&amp;V)</translation>
     </message>
     <message>
         <source>Zoom &amp;In</source>
-        <translation type="unfinished"></translation>
+        <translation>ズームイン(&amp;I)</translation>
     </message>
     <message>
         <source>Zoom &amp;Out</source>
-        <translation type="unfinished"></translation>
+        <translation>ズームアウト(&amp;O)</translation>
     </message>
     <message>
         <source>&amp;Fit on Screen</source>
-        <translation type="unfinished"></translation>
+        <translation>画面サイズに合わせる(&amp;F)</translation>
     </message>
     <message>
         <source>&amp;Actual Pixels</source>
-        <translation type="unfinished"></translation>
+        <translation>100%表示(&amp;A)</translation>
     </message>
     <message>
         <source>&amp;Rulers</source>
-        <translation type="unfinished"></translation>
+        <translation>定規(&amp;R)</translation>
     </message>
     <message>
         <source>&amp;Layers Panel</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーパネル(&amp;L)</translation>
     </message>
     <message>
         <source>&amp;Adjustments Panel</source>
-        <translation type="unfinished"></translation>
+        <translation>色調補正パネル(&amp;A)</translation>
     </message>
     <message>
         <source>&amp;Paths Panel</source>
-        <translation type="unfinished"></translation>
+        <translation>パスパネル(&amp;P)</translation>
     </message>
     <message>
         <source>Pixel &amp;Grid</source>
-        <translation type="unfinished"></translation>
+        <translation>ピクセルグリッド(&amp;G)</translation>
     </message>
     <message>
         <source>Transform &amp;Controls</source>
-        <translation type="unfinished"></translation>
+        <translation>変形コントロール(&amp;C)</translation>
     </message>
     <message>
         <source>&amp;Window</source>
-        <translation type="unfinished"></translation>
+        <translation>ウィンドウ(&amp;W)</translation>
     </message>
     <message>
         <source>&amp;Actions</source>
-        <translation type="unfinished"></translation>
+        <translation>アクション(&amp;A)</translation>
     </message>
     <message>
         <source>&amp;Timeline</source>
-        <translation type="unfinished"></translation>
+        <translation>タイムライン(&amp;T)</translation>
     </message>
     <message>
         <source>&amp;Help</source>
-        <translation type="unfinished"></translation>
+        <translation>ヘルプ(&amp;H)</translation>
     </message>
     <message>
         <source>&amp;Welcome to NekoPhoto</source>
-        <translation type="unfinished"></translation>
+        <translation>NekoPhoto へようこそ(&amp;W)</translation>
     </message>
     <message>
         <source>&amp;About NekoPhoto</source>
-        <translation type="unfinished"></translation>
+        <translation>NekoPhoto について(&amp;A)</translation>
     </message>
     <message>
         <source>About NekoPhoto</source>
-        <translation type="unfinished"></translation>
+        <translation>NekoPhoto について</translation>
     </message>
     <message>
         <source>&lt;b&gt;NekoPhoto&lt;/b&gt; %3&lt;br&gt;A layered photo editor and painting app for Linux. It began as a Linux port of &lt;a href=&quot;https://github.com/robbietilton/Compositor&quot;&gt;Compositor&lt;/a&gt; for macOS, and still opens its projects.&lt;br&gt;&lt;br&gt;Qt %1 &amp;middot; project format version %2&lt;br&gt;&lt;br&gt;Free software under the GNU General Public License, version 3 or later, with ABSOLUTELY NO WARRANTY. Compositor&apos;s own code is MIT licensed by Wonder Assembly LLC; the licences of the bundled components are in THIRD-PARTY-NOTICES.md, installed with the program.</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;b&gt;NekoPhoto&lt;/b&gt; %3&lt;br&gt;Linux 向けのレイヤー対応フォトエディター兼ペイントアプリです。macOS 用 &lt;a href=&quot;https://github.com/robbietilton/Compositor&quot;&gt;Compositor&lt;/a&gt; の Linux 移植として始まり、今もそのプロジェクトを開けます。&lt;br&gt;&lt;br&gt;Qt %1 &amp;middot; プロジェクト形式バージョン %2&lt;br&gt;&lt;br&gt;GNU 一般公衆利用許諾書(GPL)バージョン 3 以降のもとで配布されるフリーソフトウェアであり、一切の保証はありません。Compositor 自体のコードは Wonder Assembly LLC による MIT ライセンスです。同梱コンポーネントのライセンスは、プログラムと共にインストールされる THIRD-PARTY-NOTICES.md に記載されています。</translation>
     </message>
 </context>
 <context>
     <name>app::PathsPanel</name>
     <message>
         <source>Fill</source>
-        <translation type="unfinished"></translation>
+        <translation>塗りつぶし</translation>
     </message>
     <message>
         <source>Fill the path with the foreground colour</source>
-        <translation type="unfinished"></translation>
+        <translation>パスを描画色で塗りつぶします</translation>
     </message>
     <message>
         <source>Stroke</source>
-        <translation type="unfinished"></translation>
+        <translation>境界線</translation>
     </message>
     <message>
         <source>Stroke the path with the brush&apos;s size in the foreground colour</source>
-        <translation type="unfinished"></translation>
+        <translation>ブラシの直径と描画色でパスの境界線を描きます</translation>
     </message>
     <message>
         <source>Select</source>
-        <translation type="unfinished"></translation>
+        <translation>選択</translation>
     </message>
     <message>
         <source>Load the path as a selection</source>
-        <translation type="unfinished"></translation>
+        <translation>パスを選択範囲として読み込みます</translation>
     </message>
     <message>
         <source>From Sel.</source>
-        <translation type="unfinished"></translation>
+        <translation>選択範囲から</translation>
     </message>
     <message>
         <source>Make a work path from the selection</source>
-        <translation type="unfinished"></translation>
+        <translation>選択範囲から作業用パスを作成します</translation>
     </message>
     <message>
         <source>Shape</source>
-        <translation type="unfinished"></translation>
+        <translation>シェイプ</translation>
     </message>
     <message>
         <source>Make a shape layer from the path</source>
-        <translation type="unfinished"></translation>
+        <translation>パスからシェイプレイヤーを作成します</translation>
     </message>
     <message>
         <source>New</source>
-        <translation type="unfinished"></translation>
+        <translation>新規</translation>
     </message>
     <message>
         <source>Create a new path</source>
-        <translation type="unfinished"></translation>
+        <translation>新規パスを作成します</translation>
     </message>
     <message>
         <source>Path %1</source>
-        <translation type="unfinished"></translation>
+        <translation>パス %1</translation>
     </message>
     <message>
         <source>Delete</source>
-        <translation type="unfinished"></translation>
+        <translation>削除</translation>
     </message>
     <message>
         <source>Delete the path</source>
-        <translation type="unfinished"></translation>
+        <translation>パスを削除します</translation>
     </message>
     <message>
         <source>Save Path</source>
-        <translation type="unfinished"></translation>
+        <translation>パスを保存</translation>
     </message>
     <message>
         <source>Rename Path</source>
-        <translation type="unfinished"></translation>
+        <translation>パス名を変更</translation>
     </message>
     <message>
         <source>Name</source>
-        <translation type="unfinished"></translation>
+        <translation>名前</translation>
     </message>
     <message>
         <source>Make Selection</source>
-        <translation type="unfinished"></translation>
+        <translation>選択範囲を作成</translation>
     </message>
     <message>
         <source>Add to Selection</source>
-        <translation type="unfinished"></translation>
+        <translation>選択範囲に追加</translation>
     </message>
     <message>
         <source>Fill Path</source>
-        <translation type="unfinished"></translation>
+        <translation>パスを塗りつぶす</translation>
     </message>
     <message>
         <source>Stroke Path</source>
-        <translation type="unfinished"></translation>
+        <translation>パスの境界線を描く</translation>
     </message>
     <message>
         <source>Make Shape Layer</source>
-        <translation type="unfinished"></translation>
+        <translation>シェイプレイヤーを作成</translation>
     </message>
     <message>
         <source>Deselect Path</source>
-        <translation type="unfinished"></translation>
+        <translation>パスの選択を解除</translation>
     </message>
     <message>
         <source>Delete Path</source>
-        <translation type="unfinished"></translation>
+        <translation>パスを削除</translation>
     </message>
 </context>
 <context>
     <name>app::PixelDialog</name>
     <message>
         <source>Preview</source>
-        <translation type="unfinished"></translation>
+        <translation>プレビュー</translation>
     </message>
 </context>
 <context>
     <name>app::PreferencesDialog</name>
     <message>
         <source>Preferences</source>
-        <translation type="unfinished"></translation>
+        <translation>環境設定</translation>
     </message>
     <message>
         <source>Appearance</source>
-        <translation type="unfinished"></translation>
+        <translation>外観</translation>
     </message>
     <message>
         <source>Theme</source>
-        <translation type="unfinished"></translation>
+        <translation>テーマ</translation>
     </message>
     <message>
         <source>System</source>
-        <translation type="unfinished"></translation>
+        <translation>システム</translation>
     </message>
     <message>
         <source>Dark</source>
-        <translation type="unfinished"></translation>
+        <translation>ダーク</translation>
     </message>
     <message>
         <source>Light</source>
-        <translation type="unfinished"></translation>
+        <translation>ライト</translation>
     </message>
     <message>
         <source>System follows the desktop (through its portal when running as an AppImage). Some text colours refresh at the next launch.</source>
-        <translation type="unfinished"></translation>
+        <translation>「システム」はデスクトップの設定に従います(AppImage で実行中はポータル経由)。一部の文字色は次回起動時に更新されます。</translation>
     </message>
     <message>
         <source>Language</source>
-        <translation type="unfinished"></translation>
+        <translation>言語</translation>
     </message>
     <message>
         <source>System default</source>
-        <translation type="unfinished"></translation>
+        <translation>システムの設定</translation>
     </message>
     <message>
         <source>Takes effect the next time NekoPhoto starts.</source>
-        <translation type="unfinished"></translation>
+        <translation>NekoPhoto の次回起動時に反映されます。</translation>
     </message>
     <message>
         <source>AI background removal</source>
-        <translation type="unfinished"></translation>
+        <translation>AI による背景の削除</translation>
     </message>
     <message>
         <source>Enable Filter &gt; Remove Background</source>
-        <translation type="unfinished"></translation>
+        <translation>フィルター &gt; 背景を削除 を有効にする</translation>
     </message>
     <message>
         <source>Finds the subject of a layer with a segmentation model that runs on this computer; nothing is sent anywhere. The model is a separate download from the rembg project (Apache-2.0), kept in the folder below.</source>
-        <translation type="unfinished"></translation>
+        <translation>このコンピューター上で動作するセグメンテーションモデルでレイヤーの被写体を検出します。データはどこにも送信されません。モデルは rembg プロジェクト(Apache-2.0)から別途ダウンロードし、下のフォルダーに保存されます。</translation>
     </message>
     <message>
         <source>This build was made without OpenCV, which runs the segmentation model, so the feature is unavailable.</source>
-        <translation type="unfinished"></translation>
+        <translation>このビルドは、セグメンテーションモデルの実行に必要な OpenCV なしで作成されているため、この機能は使用できません。</translation>
     </message>
     <message>
         <source>Model</source>
-        <translation type="unfinished"></translation>
+        <translation>モデル</translation>
     </message>
     <message>
         <source>Average with the mirrored image (steadier edges, twice the model time)</source>
-        <translation type="unfinished"></translation>
+        <translation>反転画像と平均化(境界が安定、処理時間は 2 倍)</translation>
     </message>
     <message>
         <source>The model runs on the image and on its mirror and the two masks are averaged. Measured on AIM-500 this lowers the error on most subjects, portraits and furniture most of all.</source>
-        <translation type="unfinished"></translation>
+        <translation>画像とその左右反転画像でモデルを実行し、2 つのマスクを平均化します。AIM-500 での測定では、ほとんどの被写体、特に人物と家具で誤差が減少します。</translation>
     </message>
     <message>
         <source>Download</source>
-        <translation type="unfinished"></translation>
+        <translation>ダウンロード</translation>
     </message>
     <message>
         <source>Remove</source>
-        <translation type="unfinished"></translation>
+        <translation>削除</translation>
     </message>
     <message>
         <source>Cancel</source>
-        <translation type="unfinished"></translation>
+        <translation>キャンセル</translation>
     </message>
     <message>
         <source>Show Folder</source>
-        <translation type="unfinished"></translation>
+        <translation>フォルダーを表示</translation>
     </message>
     <message>
         <source>Crash recovery</source>
-        <translation type="unfinished"></translation>
+        <translation>クラッシュからの復元</translation>
     </message>
     <message>
         <source>Autosave every</source>
-        <translation type="unfinished"></translation>
+        <translation>自動保存の間隔</translation>
     </message>
     <message>
         <source> min</source>
-        <translation type="unfinished"></translation>
+        <translation> 分</translation>
     </message>
     <message>
         <source>Off</source>
-        <translation type="unfinished"></translation>
+        <translation>オフ</translation>
     </message>
     <message>
         <source>Unsaved changes are kept aside in the background, and offered back if the editor quits unexpectedly. Your files are not touched.</source>
-        <translation type="unfinished"></translation>
+        <translation>未保存の変更をバックグラウンドで退避し、エディターが予期せず終了した場合に復元を提案します。元のファイルは変更されません。</translation>
     </message>
     <message>
         <source>Automation</source>
-        <translation type="unfinished"></translation>
+        <translation>自動操作</translation>
     </message>
     <message>
         <source>Listen for agents on the automation socket at startup</source>
-        <translation type="unfinished"></translation>
+        <translation>起動時に自動操作ソケットでエージェントを待ち受ける</translation>
     </message>
     <message>
         <source>Lets an MCP bridge or a script drive the editor over a local socket (%1). Only programs running as you can connect. Takes effect at the next launch; nekophoto --rpc turns it on for one run.</source>
-        <translation type="unfinished"></translation>
+        <translation>MCP ブリッジやスクリプトが、ローカルソケット(%1)経由でエディターを操作できるようにします。接続できるのは同じユーザーで実行中のプログラムのみです。次回起動時に反映されます。nekophoto --rpc で 1 回の実行に限り有効にできます。</translation>
     </message>
     <message>
         <source>Downloading %1…</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 をダウンロード中...</translation>
     </message>
     <message>
         <source>Downloaded and ready.</source>
-        <translation type="unfinished"></translation>
+        <translation>ダウンロード済みで使用できます。</translation>
     </message>
     <message>
         <source>Not downloaded (%1 MB).</source>
-        <translation type="unfinished"></translation>
+        <translation>未ダウンロード(%1 MB)。</translation>
     </message>
     <message>
         <source>Models folder: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>モデルフォルダー: %1</translation>
     </message>
     <message>
         <source>Download failed</source>
-        <translation type="unfinished"></translation>
+        <translation>ダウンロードに失敗しました</translation>
     </message>
     <message>
         <source>Download cancelled.</source>
-        <translation type="unfinished"></translation>
+        <translation>ダウンロードをキャンセルしました。</translation>
     </message>
     <message>
         <source>Remove the model?</source>
-        <translation type="unfinished"></translation>
+        <translation>モデルを削除しますか？</translation>
     </message>
     <message>
         <source>Delete %1 from disk? It can be downloaded again later.</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 をディスクから削除しますか？後で再ダウンロードできます。</translation>
     </message>
 </context>
 <context>
     <name>app::PresetLibrary</name>
     <message>
         <source>the file is empty</source>
-        <translation type="unfinished"></translation>
+        <translation>ファイルが空です</translation>
     </message>
     <message>
         <source>%1: not a Photoshop styles (.asl), patterns (.pat) or gradients (.grd) file</source>
-        <translation type="unfinished"></translation>
+        <translation>%1: Photoshop のスタイル(.asl)、パターン(.pat)、グラデーション(.grd)ファイルではありません</translation>
     </message>
 </context>
 <context>
     <name>app::SmartFilterDialog</name>
     <message>
         <source>Blending Options (%1)</source>
-        <translation type="unfinished"></translation>
+        <translation>描画オプション(%1)</translation>
     </message>
     <message>
         <source>%1 (Smart Filter)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1(スマートフィルター)</translation>
     </message>
     <message>
         <source>Mode</source>
-        <translation type="unfinished"></translation>
+        <translation>モード</translation>
     </message>
     <message>
         <source>Opacity</source>
-        <translation type="unfinished"></translation>
+        <translation>不透明度</translation>
     </message>
     <message>
         <source>Radius</source>
-        <translation type="unfinished"></translation>
+        <translation>半径</translation>
     </message>
     <message>
         <source> px</source>
-        <translation type="unfinished"></translation>
+        <translation> px</translation>
     </message>
     <message>
         <source>Threshold</source>
-        <translation type="unfinished"></translation>
+        <translation>しきい値</translation>
     </message>
     <message>
         <source>Amount</source>
-        <translation type="unfinished"></translation>
+        <translation>量</translation>
     </message>
     <message>
         <source>Angle</source>
-        <translation type="unfinished"></translation>
+        <translation>角度</translation>
     </message>
     <message>
         <source>Distance</source>
-        <translation type="unfinished"></translation>
+        <translation>距離</translation>
     </message>
     <message>
         <source>Highlight Strength</source>
-        <translation type="unfinished"></translation>
+        <translation>ハイライトの強さ</translation>
     </message>
     <message>
         <source>Detail</source>
-        <translation type="unfinished"></translation>
+        <translation>ディテール</translation>
     </message>
     <message>
         <source>Smoothness</source>
-        <translation type="unfinished"></translation>
+        <translation>滑らかさ</translation>
     </message>
     <message>
         <source>Cell Size</source>
-        <translation type="unfinished"></translation>
+        <translation>セルの大きさ</translation>
     </message>
     <message>
         <source>Height</source>
-        <translation type="unfinished"></translation>
+        <translation>高さ</translation>
     </message>
     <message>
         <source>Draft</source>
-        <translation type="unfinished"></translation>
+        <translation>ドラフト</translation>
     </message>
     <message>
         <source>Good</source>
-        <translation type="unfinished"></translation>
+        <translation>標準</translation>
     </message>
     <message>
         <source>Best</source>
-        <translation type="unfinished"></translation>
+        <translation>最高</translation>
     </message>
     <message>
         <source>Quality</source>
-        <translation type="unfinished"></translation>
+        <translation>画質</translation>
     </message>
     <message>
         <source>Gaussian</source>
-        <translation type="unfinished"></translation>
+        <translation>ガウス分布</translation>
     </message>
     <message>
         <source>Monochromatic</source>
-        <translation type="unfinished"></translation>
+        <translation>グレースケールノイズ</translation>
     </message>
 </context>
 <context>
     <name>app::TextDialog</name>
     <message>
         <source>Text</source>
-        <translation type="unfinished"></translation>
+        <translation>テキスト</translation>
     </message>
     <message>
         <source>Character</source>
-        <translation type="unfinished"></translation>
+        <translation>文字</translation>
     </message>
     <message>
         <source>Font family</source>
-        <translation type="unfinished"></translation>
+        <translation>フォントファミリー</translation>
     </message>
     <message>
         <source>Size, in document pixels</source>
-        <translation type="unfinished"></translation>
+        <translation>サイズ(ドキュメントのピクセル単位)</translation>
     </message>
     <message>
         <source>Auto weight</source>
-        <translation type="unfinished"></translation>
+        <translation>自動ウェイト</translation>
     </message>
     <message>
         <source>Thin</source>
-        <translation type="unfinished"></translation>
+        <translation>Thin</translation>
     </message>
     <message>
         <source>Extra Light</source>
-        <translation type="unfinished"></translation>
+        <translation>Extra Light</translation>
     </message>
     <message>
         <source>Light</source>
-        <translation type="unfinished"></translation>
+        <translation>Light</translation>
     </message>
     <message>
         <source>Regular</source>
-        <translation type="unfinished"></translation>
+        <translation>Regular</translation>
     </message>
     <message>
         <source>Medium</source>
-        <translation type="unfinished"></translation>
+        <translation>Medium</translation>
     </message>
     <message>
         <source>Semibold</source>
-        <translation type="unfinished"></translation>
+        <translation>Semibold</translation>
     </message>
     <message>
         <source>Bold</source>
-        <translation type="unfinished"></translation>
+        <translation>Bold</translation>
     </message>
     <message>
         <source>Extra Bold</source>
-        <translation type="unfinished"></translation>
+        <translation>Extra Bold</translation>
     </message>
     <message>
         <source>Black</source>
-        <translation type="unfinished"></translation>
+        <translation>Black</translation>
     </message>
     <message>
         <source>The face&apos;s weight (Auto: regular, or bold with B)</source>
-        <translation type="unfinished"></translation>
+        <translation>書体のウェイト(自動: 標準、B 使用時は太字)</translation>
     </message>
     <message>
         <source>B</source>
-        <translation type="unfinished"></translation>
+        <translation>B</translation>
     </message>
     <message>
         <source>I</source>
-        <translation type="unfinished"></translation>
+        <translation>I</translation>
     </message>
     <message>
         <source>Italic</source>
-        <translation type="unfinished"></translation>
+        <translation>斜体</translation>
     </message>
     <message>
         <source>U</source>
-        <translation type="unfinished"></translation>
+        <translation>U</translation>
     </message>
     <message>
         <source>Underline</source>
-        <translation type="unfinished"></translation>
+        <translation>下線</translation>
     </message>
     <message>
         <source>S</source>
-        <translation type="unfinished"></translation>
+        <translation>S</translation>
     </message>
     <message>
         <source>Strikethrough</source>
-        <translation type="unfinished"></translation>
+        <translation>取り消し線</translation>
     </message>
     <message>
         <source>Tracking</source>
-        <translation type="unfinished"></translation>
+        <translation>トラッキング</translation>
     </message>
     <message>
         <source>Extra space after each letter, in pixels (Photoshop&apos;s tracking)</source>
-        <translation type="unfinished"></translation>
+        <translation>各文字の後に追加する間隔(ピクセル、Photoshop のトラッキング)</translation>
     </message>
     <message>
         <source>Baseline</source>
-        <translation type="unfinished"></translation>
+        <translation>ベースライン</translation>
     </message>
     <message>
         <source>Baseline shift, in pixels up</source>
-        <translation type="unfinished"></translation>
+        <translation>ベースラインシフト (上方向のピクセル数)</translation>
     </message>
     <message>
         <source>Leading</source>
-        <translation type="unfinished"></translation>
+        <translation>行送り</translation>
     </message>
     <message>
         <source>Baseline to baseline for lines holding these letters (the largest on a line wins); Auto: 1.2 x size</source>
-        <translation type="unfinished"></translation>
+        <translation>この文字を含む行のベースライン間の距離です (行内で最大の値が適用されます)。自動: サイズの 1.2 倍。</translation>
     </message>
     <message>
         <source>Auto</source>
-        <translation type="unfinished"></translation>
+        <translation>自動</translation>
     </message>
     <message>
         <source>Normal case</source>
-        <translation type="unfinished"></translation>
+        <translation>通常</translation>
     </message>
     <message>
         <source>Small Caps</source>
-        <translation type="unfinished"></translation>
+        <translation>スモールキャップス</translation>
     </message>
     <message>
         <source>All Caps</source>
-        <translation type="unfinished"></translation>
+        <translation>オールキャップス</translation>
     </message>
     <message>
         <source>Capitals</source>
-        <translation type="unfinished"></translation>
+        <translation>大文字</translation>
     </message>
     <message>
         <source>Colour</source>
-        <translation type="unfinished"></translation>
+        <translation>カラー</translation>
     </message>
     <message>
         <source>The letters&apos; colour</source>
-        <translation type="unfinished"></translation>
+        <translation>文字のカラーです。</translation>
     </message>
     <message>
         <source>Left</source>
-        <translation type="unfinished"></translation>
+        <translation>左揃え</translation>
     </message>
     <message>
         <source>Centre</source>
-        <translation type="unfinished"></translation>
+        <translation>中央揃え</translation>
     </message>
     <message>
         <source>Right</source>
-        <translation type="unfinished"></translation>
+        <translation>右揃え</translation>
     </message>
     <message>
         <source>Alignment of the lines</source>
-        <translation type="unfinished"></translation>
+        <translation>行の揃え方です。</translation>
     </message>
     <message>
         <source>Line spacing</source>
-        <translation type="unfinished"></translation>
+        <translation>行間</translation>
     </message>
     <message>
         <source>Line spacing, as a multiple of the font&apos;s line height</source>
-        <translation type="unfinished"></translation>
+        <translation>行間 (フォントの行の高さに対する倍率)</translation>
     </message>
     <message>
         <source>Select letters to style them; with nothing selected, a change applies to all the text.</source>
-        <translation type="unfinished"></translation>
+        <translation>文字を選択してスタイルを設定します。何も選択していない場合は、テキスト全体に適用されます。</translation>
     </message>
     <message>
         <source>Text Colour</source>
-        <translation type="unfinished"></translation>
+        <translation>テキストカラー</translation>
+    </message>
+</context>
+<context>
+    <name>app::TextLayer</name>
+    <message>
+        <source>Layer &quot;%1&quot;: the font %2 is not installed; the text keeps Photoshop&apos;s pixels until you edit it, then uses the closest match, %3.</source>
+        <translation>レイヤー「%1」: フォント %2 がインストールされていません。編集するまでは Photoshop のピクセルを保持し、編集後は最も近いフォント %3 を使用します。</translation>
+    </message>
+    <message>
+        <source>Layer &quot;%1&quot;: the font %2 is not installed; the closest match, %3, draws it until you install it.</source>
+        <translation>レイヤー「%1」: フォント %2 がインストールされていません。インストールするまでは最も近いフォント %3 で表示します。</translation>
     </message>
 </context>
 <context>
     <name>app::TimelinePanel</name>
     <message>
         <source>Create Frame Animation</source>
-        <translation type="unfinished"></translation>
+        <translation>フレームアニメーションを作成</translation>
     </message>
     <message>
         <source>Make Frames From Layers</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーからフレームを作成</translation>
     </message>
     <message>
         <source>Click a frame to show it; changes to layer visibility, position and opacity go into the selected frame.</source>
-        <translation type="unfinished"></translation>
+        <translation>フレームをクリックすると表示されます。レイヤーの表示、位置、不透明度の変更は選択中のフレームに記録されます。</translation>
     </message>
     <message>
         <source>First</source>
-        <translation type="unfinished"></translation>
+        <translation>最初</translation>
     </message>
     <message>
         <source>Select the first frame</source>
-        <translation type="unfinished"></translation>
+        <translation>最初のフレームを選択します。</translation>
     </message>
     <message>
         <source>Previous</source>
-        <translation type="unfinished"></translation>
+        <translation>前へ</translation>
     </message>
     <message>
         <source>Select the previous frame</source>
-        <translation type="unfinished"></translation>
+        <translation>前のフレームを選択します。</translation>
     </message>
     <message>
         <source>Play</source>
-        <translation type="unfinished"></translation>
+        <translation>再生</translation>
     </message>
     <message>
         <source>Play the animation</source>
-        <translation type="unfinished"></translation>
+        <translation>アニメーションを再生します。</translation>
     </message>
     <message>
         <source>Next</source>
-        <translation type="unfinished"></translation>
+        <translation>次へ</translation>
     </message>
     <message>
         <source>Select the next frame</source>
-        <translation type="unfinished"></translation>
+        <translation>次のフレームを選択します。</translation>
     </message>
     <message>
         <source>Forever</source>
-        <translation type="unfinished"></translation>
+        <translation>無限</translation>
     </message>
     <message>
         <source>Once</source>
-        <translation type="unfinished"></translation>
+        <translation>1 回</translation>
     </message>
     <message>
         <source>3 times</source>
-        <translation type="unfinished"></translation>
+        <translation>3 回</translation>
     </message>
     <message>
         <source>Other…</source>
-        <translation type="unfinished"></translation>
+        <translation>その他...</translation>
     </message>
     <message>
         <source>How many times the animation plays (saved in the project and the GIF)</source>
-        <translation type="unfinished"></translation>
+        <translation>アニメーションの再生回数です (プロジェクトと GIF に保存されます)。</translation>
     </message>
     <message>
         <source> ms</source>
-        <translation type="unfinished"></translation>
+        <translation> ms</translation>
     </message>
     <message>
         <source>How long the selected frame shows</source>
-        <translation type="unfinished"></translation>
+        <translation>選択中のフレームの表示時間です。</translation>
     </message>
     <message>
         <source>All</source>
-        <translation type="unfinished"></translation>
+        <translation>すべて</translation>
     </message>
     <message>
         <source>Give every frame this delay</source>
-        <translation type="unfinished"></translation>
+        <translation>すべてのフレームにこの遅延時間を設定します。</translation>
     </message>
     <message>
         <source>Left</source>
-        <translation type="unfinished"></translation>
+        <translation>左へ</translation>
     </message>
     <message>
         <source>Move the frame earlier</source>
-        <translation type="unfinished"></translation>
+        <translation>フレームを前に移動します。</translation>
     </message>
     <message>
         <source>Right</source>
-        <translation type="unfinished"></translation>
+        <translation>右へ</translation>
     </message>
     <message>
         <source>Move the frame later</source>
-        <translation type="unfinished"></translation>
+        <translation>フレームを後ろに移動します。</translation>
     </message>
     <message>
         <source>New frame: a copy of the selected one</source>
-        <translation type="unfinished"></translation>
+        <translation>新規フレーム: 選択中のフレームを複製します。</translation>
     </message>
     <message>
         <source>Delete</source>
-        <translation type="unfinished"></translation>
+        <translation>削除</translation>
     </message>
     <message>
         <source>Delete the selected frame</source>
-        <translation type="unfinished"></translation>
+        <translation>選択中のフレームを削除します。</translation>
     </message>
     <message>
         <source>From Layers</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーから</translation>
     </message>
     <message>
         <source>Make Frames From Layers: a frame per top-level layer</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーからフレームを作成: 最上位のレイヤーごとに 1 フレームを作成します。</translation>
     </message>
     <message>
         <source>Delay</source>
-        <translation type="unfinished"></translation>
+        <translation>遅延</translation>
     </message>
     <message>
         <source>Looping Options</source>
-        <translation type="unfinished"></translation>
+        <translation>ループオプション</translation>
     </message>
     <message>
         <source>Play this many times</source>
-        <translation type="unfinished"></translation>
+        <translation>再生回数</translation>
     </message>
     <message>
         <source>%1 times</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 回</translation>
     </message>
     <message numerus="yes">
         <source>%n frame(s), %1</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n フレーム、%1</numerusform>
         </translation>
     </message>
 </context>
@@ -5237,933 +6397,989 @@ File &gt; New creates a blank canvas.</source>
     <name>app::ToolOptionsBar</name>
     <message>
         <source>Tool Options</source>
-        <translation type="unfinished"></translation>
+        <translation>ツールオプション</translation>
     </message>
     <message>
         <source>Auto-Select</source>
-        <translation type="unfinished"></translation>
+        <translation>自動選択</translation>
     </message>
     <message>
         <source>Click picks the layer under the pointer (or hold Ctrl)</source>
-        <translation type="unfinished"></translation>
+        <translation>クリックでポインター下のレイヤーを選択します (または Ctrl キーを押しながらクリック)。</translation>
     </message>
     <message>
         <source>Transform Controls</source>
-        <translation type="unfinished"></translation>
+        <translation>バウンディングボックスを表示</translation>
     </message>
     <message>
         <source>Keep Ratio</source>
-        <translation type="unfinished"></translation>
+        <translation>縦横比を固定</translation>
     </message>
     <message>
         <source>Corner handles keep the proportions (Shift reverses)</source>
-        <translation type="unfinished"></translation>
+        <translation>コーナーハンドルで縦横比を保持します (Shift キーで反転)。</translation>
     </message>
     <message>
         <source>Left</source>
-        <translation type="unfinished"></translation>
+        <translation>左</translation>
     </message>
     <message>
         <source>Top</source>
-        <translation type="unfinished"></translation>
+        <translation>上</translation>
     </message>
     <message>
         <source>Width</source>
-        <translation type="unfinished"></translation>
+        <translation>幅</translation>
     </message>
     <message>
         <source>Height</source>
-        <translation type="unfinished"></translation>
+        <translation>高さ</translation>
     </message>
     <message>
         <source>Width as a percentage of the pixels</source>
-        <translation type="unfinished"></translation>
+        <translation>幅 (ピクセルに対するパーセント)</translation>
     </message>
     <message>
         <source>Height as a percentage of the pixels</source>
-        <translation type="unfinished"></translation>
+        <translation>高さ (ピクセルに対するパーセント)</translation>
     </message>
     <message>
         <source>Rotation, clockwise</source>
-        <translation type="unfinished"></translation>
+        <translation>回転 (時計回り)</translation>
     </message>
     <message>
         <source>Angle</source>
-        <translation type="unfinished"></translation>
+        <translation>角度</translation>
     </message>
     <message>
         <source>Apply</source>
-        <translation type="unfinished"></translation>
+        <translation>適用</translation>
     </message>
     <message>
         <source>Apply the pending transform (Enter)</source>
-        <translation type="unfinished"></translation>
+        <translation>保留中の変形を適用します (Enter)。</translation>
     </message>
     <message>
         <source>Cancel</source>
-        <translation type="unfinished"></translation>
+        <translation>キャンセル</translation>
     </message>
     <message>
         <source>Controls</source>
-        <translation type="unfinished"></translation>
+        <translation>コントロール</translation>
     </message>
     <message>
         <source>Ratio</source>
-        <translation type="unfinished"></translation>
+        <translation>比率</translation>
     </message>
     <message>
         <source>Paint</source>
-        <translation type="unfinished"></translation>
+        <translation>ペイント</translation>
     </message>
     <message>
         <source>Erase</source>
-        <translation type="unfinished"></translation>
+        <translation>消去</translation>
     </message>
     <message>
         <source>Size</source>
-        <translation type="unfinished"></translation>
+        <translation>直径</translation>
     </message>
     <message>
         <source>Hardness</source>
-        <translation type="unfinished"></translation>
+        <translation>硬さ</translation>
     </message>
     <message>
         <source>Opacity</source>
-        <translation type="unfinished"></translation>
+        <translation>不透明度</translation>
     </message>
     <message>
         <source>Content-Aware</source>
-        <translation type="unfinished"></translation>
+        <translation>コンテンツに応じる</translation>
     </message>
     <message>
         <source>Create Texture</source>
-        <translation type="unfinished"></translation>
+        <translation>テクスチャを作成</translation>
     </message>
     <message>
         <source>Proximity Match</source>
-        <translation type="unfinished"></translation>
+        <translation>近似色に合わせる</translation>
     </message>
     <message>
         <source>Sampled (Healing Brush)</source>
-        <translation type="unfinished"></translation>
+        <translation>ソース (修復ブラシ)</translation>
     </message>
     <message>
         <source>Patch</source>
-        <translation type="unfinished"></translation>
+        <translation>パッチ</translation>
     </message>
     <message>
         <source>Content-Aware Move</source>
-        <translation type="unfinished"></translation>
+        <translation>コンテンツに応じた移動</translation>
     </message>
     <message>
         <source>Sampled heals from where you Alt-click, like Clone Stamp; Patch: drag the selection to the area to copy from; Content-Aware Move: drag the selection (or lasso one) to where it should go</source>
-        <translation type="unfinished"></translation>
+        <translation>ソース: コピースタンプと同様に、Alt キーを押しながらクリックした場所から修復します。パッチ: 選択範囲をコピー元の領域にドラッグします。コンテンツに応じた移動: 選択範囲をドラッグして (またはなげなわで囲んで) 移動先に置きます。</translation>
     </message>
     <message>
         <source>Type</source>
-        <translation type="unfinished"></translation>
+        <translation>種類</translation>
     </message>
     <message>
         <source>Move</source>
-        <translation type="unfinished"></translation>
+        <translation>移動</translation>
     </message>
     <message>
         <source>Extend</source>
-        <translation type="unfinished"></translation>
+        <translation>拡張</translation>
     </message>
     <message>
         <source>Move fills where the selection was; Extend leaves it and adds a copy</source>
-        <translation type="unfinished"></translation>
+        <translation>移動では元の場所が塗りつぶされ、拡張では元の場所を残してコピーを追加します。</translation>
     </message>
     <message>
         <source>Very Strict</source>
-        <translation type="unfinished"></translation>
+        <translation>非常に厳密</translation>
     </message>
     <message>
         <source>Strict</source>
-        <translation type="unfinished"></translation>
+        <translation>厳密</translation>
     </message>
     <message>
         <source>Medium</source>
-        <translation type="unfinished"></translation>
+        <translation>中</translation>
     </message>
     <message>
         <source>Loose</source>
-        <translation type="unfinished"></translation>
+        <translation>ゆるい</translation>
     </message>
     <message>
         <source>Very Loose</source>
-        <translation type="unfinished"></translation>
+        <translation>非常にゆるい</translation>
     </message>
     <message>
         <source>How far the moved patch adapts to its new place: its tone, and how wide a seam is blended</source>
-        <translation type="unfinished"></translation>
+        <translation>移動したパッチが新しい場所になじむ度合い (トーンと、ブレンドする継ぎ目の幅) です。</translation>
     </message>
     <message>
         <source>Mode</source>
-        <translation type="unfinished"></translation>
+        <translation>モード</translation>
     </message>
     <message>
         <source>Adaptation</source>
-        <translation type="unfinished"></translation>
+        <translation>適応</translation>
     </message>
     <message>
         <source>Aligned</source>
-        <translation type="unfinished"></translation>
+        <translation>調整あり</translation>
     </message>
     <message>
         <source>The source moves with the brush and keeps its offset between strokes</source>
-        <translation type="unfinished"></translation>
+        <translation>ソースがブラシと一緒に移動し、ストローク間でもオフセットを保持します。</translation>
     </message>
     <message>
         <source>Edge Aware</source>
-        <translation type="unfinished"></translation>
+        <translation>エッジを考慮</translation>
     </message>
     <message>
         <source>Follow the image: shading and texture stay in, edges between similar colours hold. Change the tolerance right after a click to adjust that selection.</source>
-        <translation type="unfinished"></translation>
+        <translation>画像に沿って選択します。陰影や質感は含め、似た色同士の境界は保持します。クリック直後に許容値を変更すると、その選択範囲を調整できます。</translation>
     </message>
     <message>
         <source>Refine Edge</source>
-        <translation type="unfinished"></translation>
+        <translation>境界線を調整</translation>
     </message>
     <message>
         <source>Unmix the edge: the fringe of a line is partly selected, and Delete right after leaves the line its own colour, without a rim of the background&apos;s</source>
-        <translation type="unfinished"></translation>
+        <translation>エッジの色を分離します。線の縁が部分的に選択され、直後に Delete キーを押すと、背景色の縁取りを残さず線本来の色が残ります。</translation>
     </message>
     <message>
         <source>Sample All Layers</source>
-        <translation type="unfinished"></translation>
+        <translation>全レイヤーを対象</translation>
     </message>
     <message>
         <source>Liquify</source>
-        <translation type="unfinished"></translation>
+        <translation>ゆがみ</translation>
     </message>
     <message>
         <source>Blur</source>
-        <translation type="unfinished"></translation>
+        <translation>ぼかし</translation>
     </message>
     <message>
         <source>Smudge</source>
-        <translation type="unfinished"></translation>
+        <translation>指先</translation>
     </message>
     <message>
         <source>Sharpen</source>
-        <translation type="unfinished"></translation>
+        <translation>シャープ</translation>
     </message>
     <message>
         <source>Dodge</source>
-        <translation type="unfinished"></translation>
+        <translation>覆い焼き</translation>
     </message>
     <message>
         <source>Burn</source>
-        <translation type="unfinished"></translation>
+        <translation>焼き込み</translation>
     </message>
     <message>
         <source>Sponge</source>
-        <translation type="unfinished"></translation>
+        <translation>スポンジ</translation>
     </message>
     <message>
         <source>Shadows</source>
-        <translation type="unfinished"></translation>
+        <translation>シャドウ</translation>
     </message>
     <message>
         <source>Midtones</source>
-        <translation type="unfinished"></translation>
+        <translation>中間調</translation>
     </message>
     <message>
         <source>Highlights</source>
-        <translation type="unfinished"></translation>
+        <translation>ハイライト</translation>
     </message>
     <message>
         <source>Protect Tones</source>
-        <translation type="unfinished"></translation>
+        <translation>トーンを保護</translation>
     </message>
     <message>
         <source>Desaturate</source>
-        <translation type="unfinished"></translation>
+        <translation>彩度を下げる</translation>
     </message>
     <message>
         <source>Saturate</source>
-        <translation type="unfinished"></translation>
+        <translation>彩度を上げる</translation>
     </message>
     <message>
         <source>Range</source>
-        <translation type="unfinished"></translation>
+        <translation>範囲</translation>
     </message>
     <message>
         <source>Tool</source>
-        <translation type="unfinished"></translation>
+        <translation>ツール</translation>
     </message>
     <message>
         <source>Exposure</source>
-        <translation type="unfinished"></translation>
+        <translation>露光量</translation>
     </message>
     <message>
         <source>New Layer</source>
-        <translation type="unfinished"></translation>
+        <translation>新規レイヤー</translation>
     </message>
     <message>
         <source>Combine</source>
-        <translation type="unfinished"></translation>
+        <translation>結合</translation>
     </message>
     <message>
         <source>Combine Shapes</source>
-        <translation type="unfinished"></translation>
+        <translation>シェイプを結合</translation>
     </message>
     <message>
         <source>Subtract</source>
-        <translation type="unfinished"></translation>
+        <translation>前面</translation>
     </message>
     <message>
         <source>Subtract Front Shape</source>
-        <translation type="unfinished"></translation>
+        <translation>前面シェイプを削除</translation>
     </message>
     <message>
         <source>Intersect</source>
-        <translation type="unfinished"></translation>
+        <translation>交差</translation>
     </message>
     <message>
         <source>Intersect Shape Areas</source>
-        <translation type="unfinished"></translation>
+        <translation>シェイプが重なる領域を交差</translation>
     </message>
     <message>
         <source>Exclude</source>
-        <translation type="unfinished"></translation>
+        <translation>中マド</translation>
     </message>
     <message>
         <source>Exclude Overlapping Shapes</source>
-        <translation type="unfinished"></translation>
+        <translation>重なり合うシェイプを中マド</translation>
     </message>
     <message>
         <source>How the next outline combines with the active shape layer (or the targeted vector mask, or the path)</source>
-        <translation type="unfinished"></translation>
+        <translation>次のアウトラインを、アクティブなシェイプレイヤー (またはターゲットのベクトルマスクやパス) とどう組み合わせるかです。</translation>
     </message>
     <message>
         <source>Shape</source>
-        <translation type="unfinished"></translation>
+        <translation>シェイプ</translation>
     </message>
     <message>
         <source>Path</source>
-        <translation type="unfinished"></translation>
+        <translation>パス</translation>
     </message>
     <message>
         <source>Shape makes a vector shape layer; Path draws into the Paths panel&apos;s path (or a new Work Path)</source>
-        <translation type="unfinished"></translation>
+        <translation>シェイプはベクトルシェイプレイヤーを作成し、パスはパスパネルのパス (または新しい作業用パス) に描画します。</translation>
     </message>
     <message>
         <source>Merge Shape Components</source>
-        <translation type="unfinished"></translation>
+        <translation>シェイプコンポーネントを結合</translation>
     </message>
     <message>
         <source>Flatten the target path&apos;s components into one outline (curves become corner points)</source>
-        <translation type="unfinished"></translation>
+        <translation>ターゲットパスのコンポーネントを 1 つのアウトラインに統合します (曲線はコーナーポイントになります)。</translation>
     </message>
     <message>
         <source>Auto Add/Delete</source>
-        <translation type="unfinished"></translation>
+        <translation>自動追加・削除</translation>
     </message>
     <message>
         <source>Click the target path&apos;s outline to add an anchor, an anchor to delete it</source>
-        <translation type="unfinished"></translation>
+        <translation>ターゲットパスのアウトラインをクリックするとアンカーを追加し、アンカーをクリックすると削除します。</translation>
     </message>
     <message>
         <source>Pen</source>
-        <translation type="unfinished"></translation>
+        <translation>ペン</translation>
     </message>
     <message>
         <source>Direct Selection</source>
-        <translation type="unfinished"></translation>
+        <translation>直接選択</translation>
     </message>
     <message>
         <source>The picked subpath&apos;s component: how it combines with the ones before it</source>
-        <translation type="unfinished"></translation>
+        <translation>選択したサブパスのコンポーネントを、前のコンポーネントとどう組み合わせるかです。</translation>
     </message>
     <message>
         <source>Background</source>
-        <translation type="unfinished"></translation>
+        <translation>背景</translation>
     </message>
     <message>
         <source>White</source>
-        <translation type="unfinished"></translation>
+        <translation>ホワイト</translation>
     </message>
     <message>
         <source>Black</source>
-        <translation type="unfinished"></translation>
+        <translation>ブラック</translation>
     </message>
     <message>
         <source>Transparent</source>
-        <translation type="unfinished"></translation>
+        <translation>透明</translation>
     </message>
     <message>
         <source>Other…</source>
-        <translation type="unfinished"></translation>
+        <translation>その他...</translation>
     </message>
     <message>
         <source>The active artboard&apos;s background</source>
-        <translation type="unfinished"></translation>
+        <translation>アクティブなアートボードの背景です。</translation>
     </message>
     <message>
         <source>Artboard Background</source>
-        <translation type="unfinished"></translation>
+        <translation>アートボードの背景</translation>
     </message>
     <message>
         <source>Delete All Slices</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Delete Slices</source>
-        <translation type="unfinished"></translation>
+        <translation>すべてのスライスを削除</translation>
     </message>
     <message>
         <source>Artboard</source>
-        <translation type="unfinished"></translation>
+        <translation>アートボード</translation>
     </message>
     <message>
         <source>Slice</source>
-        <translation type="unfinished"></translation>
+        <translation>スライス</translation>
     </message>
     <message>
         <source>Tolerance</source>
-        <translation type="unfinished"></translation>
+        <translation>許容値</translation>
     </message>
     <message>
         <source>Anti-alias</source>
-        <translation type="unfinished"></translation>
+        <translation>アンチエイリアス</translation>
     </message>
     <message>
         <source>Contiguous</source>
-        <translation type="unfinished"></translation>
+        <translation>隣接</translation>
     </message>
     <message>
         <source>All Layers</source>
-        <translation type="unfinished"></translation>
+        <translation>全レイヤー</translation>
     </message>
     <message>
         <source>Linear</source>
-        <translation type="unfinished"></translation>
+        <translation>線形</translation>
     </message>
     <message>
         <source>Radial</source>
-        <translation type="unfinished"></translation>
+        <translation>円形</translation>
     </message>
     <message>
         <source>Gradient preset (File ▸ Import Presets… adds Photoshop .grd gradients)</source>
-        <translation type="unfinished"></translation>
+        <translation>グラデーションプリセット (ファイル ▸ プリセットを読み込み... で Photoshop の .grd グラデーションを追加できます)</translation>
     </message>
     <message>
         <source>Foreground to Transparent</source>
-        <translation type="unfinished"></translation>
+        <translation>描画色から透明に</translation>
     </message>
     <message>
         <source>Foreground to Background</source>
-        <translation type="unfinished"></translation>
+        <translation>描画色から背景色へ</translation>
     </message>
     <message>
         <source>Reverse</source>
-        <translation type="unfinished"></translation>
+        <translation>逆方向</translation>
     </message>
     <message>
         <source>Rectangle</source>
-        <translation type="unfinished"></translation>
+        <translation>長方形</translation>
     </message>
     <message>
         <source>Ellipse</source>
-        <translation type="unfinished"></translation>
+        <translation>楕円形</translation>
     </message>
     <message>
         <source>Polygon</source>
-        <translation type="unfinished"></translation>
+        <translation>多角形</translation>
     </message>
     <message>
         <source>Line</source>
-        <translation type="unfinished"></translation>
+        <translation>ライン</translation>
     </message>
     <message>
         <source>Custom Shape</source>
-        <translation type="unfinished"></translation>
+        <translation>カスタムシェイプ</translation>
     </message>
     <message>
         <source>Radius</source>
-        <translation type="unfinished"></translation>
+        <translation>半径</translation>
     </message>
     <message>
         <source>Corner radius</source>
-        <translation type="unfinished"></translation>
+        <translation>角の半径</translation>
     </message>
     <message>
         <source>Sides</source>
-        <translation type="unfinished"></translation>
+        <translation>辺</translation>
     </message>
     <message>
         <source>Sides (points, for a star)</source>
-        <translation type="unfinished"></translation>
+        <translation>辺の数 (星形の場合は頂点の数)</translation>
     </message>
     <message>
         <source>Star</source>
-        <translation type="unfinished"></translation>
+        <translation>星形</translation>
     </message>
     <message>
         <source>How far a star&apos;s inner points come in; 0 for a polygon</source>
-        <translation type="unfinished"></translation>
+        <translation>星形の内側の頂点をくぼませる度合いです。0 で多角形になります。</translation>
     </message>
     <message>
         <source>Weight</source>
-        <translation type="unfinished"></translation>
+        <translation>線の太さ</translation>
     </message>
     <message>
         <source>Line weight</source>
-        <translation type="unfinished"></translation>
+        <translation>線の太さ</translation>
     </message>
     <message>
         <source>Merge</source>
-        <translation type="unfinished"></translation>
+        <translation>結合</translation>
     </message>
     <message>
         <source>Merge Shape Components: flatten the active shape&apos;s components into one outline</source>
-        <translation type="unfinished"></translation>
+        <translation>シェイプコンポーネントを結合: アクティブなシェイプのコンポーネントを 1 つのアウトラインに統合します。</translation>
     </message>
     <message>
         <source>Fill</source>
-        <translation type="unfinished"></translation>
+        <translation>塗り</translation>
     </message>
     <message>
         <source>The active shape&apos;s fill colour (new shapes take the foreground colour)</source>
-        <translation type="unfinished"></translation>
+        <translation>アクティブなシェイプの塗りのカラーです (新しいシェイプには描画色が使われます)。</translation>
     </message>
     <message>
         <source>Stroke</source>
-        <translation type="unfinished"></translation>
+        <translation>線</translation>
     </message>
     <message>
         <source>Stroke colour</source>
-        <translation type="unfinished"></translation>
+        <translation>線のカラー</translation>
     </message>
     <message>
         <source>Stroke width</source>
-        <translation type="unfinished"></translation>
+        <translation>線の幅</translation>
     </message>
     <message>
         <source>Inside</source>
-        <translation type="unfinished"></translation>
+        <translation>内側</translation>
     </message>
     <message>
         <source>Center</source>
-        <translation type="unfinished"></translation>
+        <translation>中央</translation>
     </message>
     <message>
         <source>Outside</source>
-        <translation type="unfinished"></translation>
+        <translation>外側</translation>
     </message>
     <message>
         <source>Solid</source>
-        <translation type="unfinished"></translation>
+        <translation>実線</translation>
     </message>
     <message>
         <source>Dashed</source>
-        <translation type="unfinished"></translation>
+        <translation>破線</translation>
     </message>
     <message>
         <source>Dotted</source>
-        <translation type="unfinished"></translation>
+        <translation>点線</translation>
     </message>
     <message>
         <source>Color</source>
-        <translation type="unfinished"></translation>
+        <translation>カラー</translation>
     </message>
     <message>
         <source>Gradient</source>
-        <translation type="unfinished"></translation>
+        <translation>グラデーション</translation>
     </message>
     <message>
         <source>Pattern</source>
-        <translation type="unfinished"></translation>
+        <translation>パターン</translation>
     </message>
     <message>
         <source>Fill with a colour, a gradient or a pattern</source>
-        <translation type="unfinished"></translation>
+        <translation>カラー、グラデーション、パターンのいずれかで塗りつぶします。</translation>
     </message>
     <message>
         <source>The fill&apos;s gradient preset or document pattern</source>
-        <translation type="unfinished"></translation>
+        <translation>塗りのグラデーションプリセットまたはドキュメントのパターン</translation>
     </message>
     <message>
         <source>Stroke with a colour, a gradient or a pattern</source>
-        <translation type="unfinished"></translation>
+        <translation>カラー、グラデーション、パターンのいずれかで線を描きます。</translation>
     </message>
     <message>
         <source>The stroke&apos;s gradient preset or document pattern</source>
-        <translation type="unfinished"></translation>
+        <translation>線のグラデーションプリセットまたはドキュメントのパターン</translation>
     </message>
     <message>
         <source>No patterns in the document</source>
-        <translation type="unfinished"></translation>
+        <translation>ドキュメントにパターンがありません</translation>
     </message>
     <message>
         <source>Shape Fill</source>
-        <translation type="unfinished"></translation>
+        <translation>シェイプの塗り</translation>
     </message>
     <message>
         <source>Shape Stroke</source>
-        <translation type="unfinished"></translation>
+        <translation>シェイプの線</translation>
     </message>
     <message>
         <source>Properties</source>
-        <translation type="unfinished"></translation>
+        <translation>属性</translation>
     </message>
     <message>
         <source>Top-left corner radius</source>
-        <translation type="unfinished"></translation>
+        <translation>左上の角の半径</translation>
     </message>
     <message>
         <source>Top-right corner radius</source>
-        <translation type="unfinished"></translation>
+        <translation>右上の角の半径</translation>
     </message>
     <message>
         <source>Bottom-right corner radius</source>
-        <translation type="unfinished"></translation>
+        <translation>右下の角の半径</translation>
     </message>
     <message>
         <source>Bottom-left corner radius</source>
-        <translation type="unfinished"></translation>
+        <translation>左下の角の半径</translation>
     </message>
     <message>
         <source>Size, in document pixels</source>
-        <translation type="unfinished"></translation>
+        <translation>サイズ (ドキュメントのピクセル単位)</translation>
     </message>
     <message>
         <source>B</source>
-        <translation type="unfinished"></translation>
+        <translation>B</translation>
     </message>
     <message>
         <source>Bold</source>
-        <translation type="unfinished"></translation>
+        <translation>太字</translation>
     </message>
     <message>
         <source>I</source>
-        <translation type="unfinished"></translation>
+        <translation>I</translation>
     </message>
     <message>
         <source>Italic</source>
-        <translation type="unfinished"></translation>
+        <translation>斜体</translation>
     </message>
     <message>
         <source>Centre</source>
-        <translation type="unfinished"></translation>
+        <translation>中央揃え</translation>
     </message>
     <message>
         <source>Right</source>
-        <translation type="unfinished"></translation>
+        <translation>右揃え</translation>
     </message>
     <message>
         <source>Alignment of the lines</source>
-        <translation type="unfinished"></translation>
+        <translation>行の揃え方です。</translation>
     </message>
     <message>
         <source>Edit Text…</source>
-        <translation type="unfinished"></translation>
+        <translation>テキストを編集...</translation>
     </message>
     <message>
         <source>Open the editor for the active text layer</source>
-        <translation type="unfinished"></translation>
+        <translation>アクティブなテキストレイヤーのエディターを開きます。</translation>
     </message>
     <message>
         <source>Freehand</source>
-        <translation type="unfinished"></translation>
+        <translation>フリーハンド</translation>
     </message>
     <message>
         <source>Polygonal</source>
-        <translation type="unfinished"></translation>
+        <translation>多角形</translation>
     </message>
     <message>
         <source>Engine</source>
-        <translation type="unfinished"></translation>
+        <translation>エンジン</translation>
     </message>
     <message>
         <source>Scribble</source>
-        <translation type="unfinished"></translation>
+        <translation>なぞり書き</translation>
     </message>
     <message>
         <source>Click</source>
-        <translation type="unfinished"></translation>
+        <translation>クリック</translation>
     </message>
     <message>
         <source>Scribble: strokes segmented by GrabCut, no model. Click: EfficientSAM finds the object under a click; Alt-click marks what is not it, a drag draws a box; up to six prompts count</source>
-        <translation type="unfinished"></translation>
+        <translation>なぞり書き: ストロークを GrabCut で分割します (モデル不要)。クリック: EfficientSAM がクリックした位置のオブジェクトを検出します。Alt キーを押しながらクリックで対象外を指定し、ドラッグで範囲を囲みます。指定は 6 つまで有効です。</translation>
     </message>
     <message>
         <source>Download model (48 MB)</source>
-        <translation type="unfinished"></translation>
+        <translation>モデルをダウンロード (48 MB)</translation>
     </message>
     <message>
         <source>Meta&apos;s EfficientSAM as packaged by OpenCV&apos;s model zoo (Apache-2.0), kept in the models folder next to the Remove Background ones; nothing is uploaded</source>
-        <translation type="unfinished"></translation>
+        <translation>OpenCV のモデルズーでパッケージされた Meta の EfficientSAM (Apache-2.0) です。背景を削除用のモデルと同じ models フォルダーに保存されます。アップロードは一切行いません。</translation>
     </message>
     <message>
         <source>Downloading… %1%</source>
-        <translation type="unfinished"></translation>
+        <translation>ダウンロード中... %1%</translation>
     </message>
     <message>
         <source>Download failed</source>
-        <translation type="unfinished"></translation>
+        <translation>ダウンロードに失敗しました</translation>
     </message>
     <message>
         <source>Subject</source>
-        <translation type="unfinished"></translation>
+        <translation>被写体</translation>
     </message>
     <message>
         <source>What a stroke marks; Alt flips it for one stroke</source>
-        <translation type="unfinished"></translation>
+        <translation>ストロークで指定する対象です。Alt キーを押すと 1 回のストロークだけ反転します。</translation>
     </message>
     <message>
         <source>Refine</source>
-        <translation type="unfinished"></translation>
+        <translation>調整</translation>
     </message>
     <message>
         <source>Pulls the selection onto the image&apos;s own edges by this many pixels; 0 keeps the segmentation as it is</source>
-        <translation type="unfinished"></translation>
+        <translation>選択範囲をこのピクセル数だけ画像のエッジに吸着させます。0 の場合はセグメンテーションをそのまま使います。</translation>
     </message>
     <message>
         <source>Clear</source>
-        <translation type="unfinished"></translation>
+        <translation>消去</translation>
     </message>
     <message>
         <source>Forgets the strokes and clicks (Esc); Backspace takes back the last one</source>
-        <translation type="unfinished"></translation>
+        <translation>ストロークとクリックを破棄します (Esc)。Backspace で最後の 1 つを取り消します。</translation>
     </message>
     <message>
         <source>Sample</source>
-        <translation type="unfinished"></translation>
+        <translation>サンプル</translation>
     </message>
     <message>
         <source>Point Sample</source>
-        <translation type="unfinished"></translation>
+        <translation>指定したピクセル</translation>
     </message>
     <message>
         <source>3 by 3 Average</source>
-        <translation type="unfinished"></translation>
+        <translation>3 ピクセル四方の平均</translation>
     </message>
     <message>
         <source>5 by 5 Average</source>
-        <translation type="unfinished"></translation>
+        <translation>5 ピクセル四方の平均</translation>
     </message>
     <message>
         <source>Free</source>
-        <translation type="unfinished"></translation>
+        <translation>自由</translation>
     </message>
     <message>
         <source>Original</source>
-        <translation type="unfinished"></translation>
+        <translation>元の縦横比</translation>
     </message>
     <message>
         <source>Crop</source>
-        <translation type="unfinished"></translation>
+        <translation>切り抜き</translation>
     </message>
     <message>
         <source>Fit</source>
-        <translation type="unfinished"></translation>
+        <translation>全体表示</translation>
     </message>
     <message>
         <source>100%</source>
-        <translation type="unfinished"></translation>
+        <translation>100%</translation>
     </message>
 </context>
 <context>
     <name>app::WarpDialog</name>
     <message>
+        <source>Arc</source>
+        <translation>円弧</translation>
+    </message>
+    <message>
+        <source>Arc Lower</source>
+        <translation>下弦</translation>
+    </message>
+    <message>
+        <source>Arc Upper</source>
+        <translation>上弦</translation>
+    </message>
+    <message>
+        <source>Arch</source>
+        <translation>アーチ</translation>
+    </message>
+    <message>
+        <source>Bulge</source>
+        <translation>でこぼこ</translation>
+    </message>
+    <message>
+        <source>Shell Lower</source>
+        <translation>貝殻 (下向き)</translation>
+    </message>
+    <message>
+        <source>Shell Upper</source>
+        <translation>貝殻 (上向き)</translation>
+    </message>
+    <message>
+        <source>Flag</source>
+        <translation>旗</translation>
+    </message>
+    <message>
+        <source>Wave</source>
+        <translation>波形</translation>
+    </message>
+    <message>
+        <source>Fish</source>
+        <translation>魚形</translation>
+    </message>
+    <message>
+        <source>Rise</source>
+        <translation>上昇</translation>
+    </message>
+    <message>
+        <source>Fisheye</source>
+        <translation>魚眼レンズ</translation>
+    </message>
+    <message>
+        <source>Inflate</source>
+        <translation>膨張</translation>
+    </message>
+    <message>
+        <source>Squeeze</source>
+        <translation>絞り込み</translation>
+    </message>
+    <message>
+        <source>Twist</source>
+        <translation>旋回</translation>
+    </message>
+    <message>
         <source>Warp</source>
-        <translation type="unfinished"></translation>
+        <translation>ワープ</translation>
     </message>
     <message>
         <source>None</source>
-        <translation type="unfinished"></translation>
+        <translation>なし</translation>
     </message>
     <message>
         <source>Style</source>
-        <translation type="unfinished"></translation>
+        <translation>スタイル</translation>
     </message>
     <message>
         <source>Horizontal</source>
-        <translation type="unfinished"></translation>
+        <translation>水平方向</translation>
     </message>
     <message>
         <source>Vertical</source>
-        <translation type="unfinished"></translation>
+        <translation>垂直方向</translation>
     </message>
     <message>
         <source>Orientation</source>
-        <translation type="unfinished"></translation>
+        <translation>方向</translation>
     </message>
     <message>
         <source>Bend</source>
-        <translation type="unfinished"></translation>
+        <translation>カーブ</translation>
     </message>
     <message>
         <source>Horizontal distortion</source>
-        <translation type="unfinished"></translation>
+        <translation>水平方向のゆがみ</translation>
     </message>
     <message>
         <source>Vertical distortion</source>
-        <translation type="unfinished"></translation>
+        <translation>垂直方向のゆがみ</translation>
     </message>
 </context>
 <context>
     <name>app::WelcomeDialog</name>
     <message>
         <source>Welcome to NekoPhoto</source>
-        <translation type="unfinished"></translation>
+        <translation>NekoPhoto へようこそ</translation>
     </message>
     <message>
         <source>Bring your work with you.</source>
-        <translation type="unfinished"></translation>
+        <translation>これまでの作品をそのまま持ち込めます。</translation>
     </message>
     <message>
         <source>NekoPhoto opens the files and brushes you already have, from Photoshop, Clip Studio Paint, Procreate and more. A few pages on what comes along, or skip ahead and start.</source>
-        <translation type="unfinished"></translation>
+        <translation>NekoPhoto は、Photoshop、Clip Studio Paint、Procreate などで使っているファイルやブラシをそのまま開けます。持ち込めるものを数ページで紹介します。スキップしてすぐに始めることもできます。</translation>
     </message>
     <message>
         <source>Coming from Photoshop</source>
-        <translation type="unfinished"></translation>
+        <translation>Photoshop から移行する方へ</translation>
     </message>
     <message>
         <source>Your files, your brushes, your muscle memory.</source>
-        <translation type="unfinished"></translation>
+        <translation>ファイルも、ブラシも、手に馴染んだ操作も。</translation>
     </message>
     <message>
         <source>Open &lt;b&gt;.psd&lt;/b&gt; and &lt;b&gt;.psb&lt;/b&gt; files with their layers, folders, masks, clipping masks and blend modes, and export back to layered &lt;b&gt;.psd&lt;/b&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;b&gt;.psd&lt;/b&gt; や &lt;b&gt;.psb&lt;/b&gt; ファイルをレイヤー、グループ、マスク、クリッピングマスク、描画モードを保ったまま開き、レイヤー付きの &lt;b&gt;.psd&lt;/b&gt; に書き出せます</translation>
     </message>
     <message>
         <source>Import your &lt;b&gt;.abr&lt;/b&gt; brushes</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;b&gt;.abr&lt;/b&gt; ブラシの読み込み</translation>
     </message>
     <message>
         <source>The shortcuts you know: V, M, L, W, B, E, [ and ], Ctrl+T, Ctrl+J, Ctrl+G, Ctrl+Alt+G</source>
-        <translation type="unfinished"></translation>
+        <translation>おなじみのショートカット: V、M、L、W、B、E、[ と ]、Ctrl+T、Ctrl+J、Ctrl+G、Ctrl+Alt+G</translation>
     </message>
     <message>
         <source>Adjustment layers (Levels, Curves, Hue/Saturation, Exposure, Gradient Map), Content-Aware Fill and Spot Healing</source>
-        <translation type="unfinished"></translation>
+        <translation>調整レイヤー (レベル補正、トーンカーブ、色相・彩度、露光量、グラデーションマップ)、コンテンツに応じた塗りつぶし、スポット修復</translation>
     </message>
     <message>
         <source>Coming from Clip Studio Paint</source>
-        <translation type="unfinished"></translation>
+        <translation>Clip Studio Paint から移行する方へ</translation>
     </message>
     <message>
         <source>Your projects and your brushes.</source>
-        <translation type="unfinished"></translation>
+        <translation>プロジェクトもブラシも。</translation>
     </message>
     <message>
         <source>Open &lt;b&gt;.clip&lt;/b&gt; projects with their layers, folders, masks, clipping and blend modes</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;b&gt;.clip&lt;/b&gt; プロジェクトをレイヤー、グループ、マスク、クリッピング、描画モードを保ったまま開けます</translation>
     </message>
     <message>
         <source>Import your &lt;b&gt;.sut&lt;/b&gt; brushes: their tips come along as brushes that follow your pen</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;b&gt;.sut&lt;/b&gt; ブラシの読み込み: ブラシ先端がペンに追従するブラシとして取り込まれます</translation>
     </message>
     <message>
         <source>Clipping masks, folders and layer masks work the way you expect</source>
-        <translation type="unfinished"></translation>
+        <translation>クリッピングマスク、グループ、レイヤーマスクは期待どおりに動作します</translation>
     </message>
     <message>
         <source>Quick Select by a scribble or a single click, for masking off flats and fills</source>
-        <translation type="unfinished"></translation>
+        <translation>なぞり書きやワンクリックのクイック選択で、ベタ塗りや塗り分けのマスクも簡単に</translation>
     </message>
     <message>
         <source>Coming from Procreate</source>
-        <translation type="unfinished"></translation>
+        <translation>Procreate から移行する方へ</translation>
     </message>
     <message>
         <source>Bring your brush sets.</source>
-        <translation type="unfinished"></translation>
+        <translation>ブラシセットを持ち込めます。</translation>
     </message>
     <message>
         <source>Import &lt;b&gt;.brushset&lt;/b&gt; and &lt;b&gt;.brush&lt;/b&gt; files</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;b&gt;.brushset&lt;/b&gt; や &lt;b&gt;.brush&lt;/b&gt; ファイルの読み込み</translation>
     </message>
     <message>
         <source>196 MyPaint brushes (pencils, inks, charcoal, paint, smudging) that follow pen pressure and tilt</source>
-        <translation type="unfinished"></translation>
+        <translation>筆圧と傾きに追従する 196 種類の MyPaint ブラシ (鉛筆、インク、木炭、絵の具、ぼかし)</translation>
     </message>
     <message>
         <source>Canvases of up to a gigapixel of layers, with crash recovery if anything goes wrong</source>
-        <translation type="unfinished"></translation>
+        <translation>最大 1 ギガピクセル分のレイヤーを扱えるカンバス。万一のときはクラッシュから復元できます</translation>
     </message>
     <message>
         <source>Export to PNG, JPEG, WebP and TIFF</source>
-        <translation type="unfinished"></translation>
+        <translation>PNG、JPEG、WebP、TIFF への書き出し</translation>
     </message>
     <message>
         <source>Coming from Krita or GIMP</source>
-        <translation type="unfinished"></translation>
+        <translation>Krita や GIMP から移行する方へ</translation>
     </message>
     <message>
         <source>Familiar engines in a lighter app.</source>
-        <translation type="unfinished"></translation>
+        <translation>おなじみのエンジンを、より軽快なアプリで。</translation>
     </message>
     <message>
         <source>The MyPaint brush engine that Krita and GIMP offer too</source>
-        <translation type="unfinished"></translation>
+        <translation>Krita や GIMP でも使われている MyPaint ブラシエンジン</translation>
     </message>
     <message>
         <source>Over 850 G&apos;MIC filters with a live preview, when &lt;b&gt;gmic&lt;/b&gt; is installed</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;b&gt;gmic&lt;/b&gt; がインストールされていれば、ライブプレビュー付きの 850 種類以上の G&apos;MIC フィルター</translation>
     </message>
     <message>
         <source>Photoshop and Clip Studio files open with their layers, and layered PSD goes back out, for working with collaborators</source>
-        <translation type="unfinished"></translation>
+        <translation>Photoshop や Clip Studio のファイルをレイヤーを保ったまま開き、レイヤー付き PSD で書き出せるので、共同作業にも便利です</translation>
     </message>
     <message>
         <source>Runs natively on Wayland and X11</source>
-        <translation type="unfinished"></translation>
+        <translation>Wayland と X11 でネイティブ動作</translation>
     </message>
     <message>
         <source>Ready when you are</source>
-        <translation type="unfinished"></translation>
+        <translation>準備ができたら始めましょう</translation>
     </message>
     <message>
         <source>A few more things you might like:</source>
-        <translation type="unfinished"></translation>
+        <translation>ほかにもこんな機能があります:</translation>
     </message>
     <message>
         <source>&lt;b&gt;Remove Background&lt;/b&gt; with an AI model that runs on your machine; nothing is uploaded (turn it on in Edit &gt; Preferences)</source>
-        <translation type="unfinished"></translation>
+        <translation>手元のマシンで動作する AI モデルによる&lt;b&gt;背景を削除&lt;/b&gt;。アップロードは一切行いません (編集 &gt; 環境設定で有効にします)</translation>
     </message>
     <message>
         <source>Several projects in tabs, and your work recovered if the app ever closes unexpectedly</source>
-        <translation type="unfinished"></translation>
+        <translation>複数のプロジェクトをタブで開けます。アプリが予期せず終了しても作業を復元できます</translation>
     </message>
     <message>
         <source>AI agents such as Claude Code can drive the editor for you</source>
-        <translation type="unfinished"></translation>
+        <translation>Claude Code などの AI エージェントがエディターを操作できます</translation>
     </message>
     <message>
         <source>Open a File…</source>
-        <translation type="unfinished"></translation>
+        <translation>ファイルを開く...</translation>
     </message>
     <message>
         <source>New Canvas…</source>
-        <translation type="unfinished"></translation>
+        <translation>新規カンバス...</translation>
     </message>
     <message>
         <source>Import Brushes…</source>
-        <translation type="unfinished"></translation>
+        <translation>ブラシを読み込み...</translation>
     </message>
     <message>
         <source>Skip Intro</source>
-        <translation type="unfinished"></translation>
+        <translation>紹介をスキップ</translation>
     </message>
     <message>
         <source>Back</source>
-        <translation type="unfinished"></translation>
+        <translation>戻る</translation>
     </message>
     <message>
         <source>Start</source>
-        <translation type="unfinished"></translation>
+        <translation>開始</translation>
     </message>
     <message>
         <source>Next</source>
-        <translation type="unfinished"></translation>
+        <translation>次へ</translation>
     </message>
 </context>
 </TS>
