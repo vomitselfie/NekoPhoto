@@ -56,6 +56,8 @@ inline vec3 operator*(float s, vec3 a) { return {s * a.x, s * a.y, s * a.z}; }
 inline vec4 operator+(vec4 a, vec4 b) { return {a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w}; }
 inline vec4 operator*(vec4 a, float s) { return {a.x * s, a.y * s, a.z * s, a.w * s}; }
 inline vec4 operator/(vec4 a, float s) { return {a.x / s, a.y / s, a.z / s, a.w / s}; }
+inline vec4 operator-(vec4 a, vec4 b) { return {a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w}; }
+inline vec3 operator/(vec3 a, vec3 b) { return {a.x / b.x, a.y / b.y, a.z / b.z}; }
 
 // ---- built-ins ---------------------------------------------------------------------------------------------------
 
@@ -67,10 +69,13 @@ inline float clamp(float v, float lo, float hi) { return std::min(std::max(v, lo
 inline vec2 clamp(vec2 v, float lo, float hi) { return {clamp(v.x, lo, hi), clamp(v.y, lo, hi)}; }
 inline vec3 clamp(vec3 v, float lo, float hi) { return {clamp(v.x, lo, hi), clamp(v.y, lo, hi), clamp(v.z, lo, hi)}; }
 inline vec2 max(vec2 a, vec2 b) { return {std::max(a.x, b.x), std::max(a.y, b.y)}; }
+inline vec3 max(vec3 a, vec3 b) { return {std::max(a.x, b.x), std::max(a.y, b.y), std::max(a.z, b.z)}; }
+inline vec3 min(vec3 a, vec3 b) { return {std::min(a.x, b.x), std::min(a.y, b.y), std::min(a.z, b.z)}; }
 /// WGSL's mix: a * (1 - t) + b * t.
 inline float mix(float a, float b, float t) { return a * (1.0f - t) + b * t; }
 inline vec3 mix(vec3 a, vec3 b, float t) { return {mix(a.x, b.x, t), mix(a.y, b.y, t), mix(a.z, b.z, t)}; }
 inline vec3 mix(vec3 a, vec3 b, vec3 t) { return {mix(a.x, b.x, t.x), mix(a.y, b.y, t.y), mix(a.z, b.z, t.z)}; }
+inline vec4 mix(vec4 a, vec4 b, float t) { return {mix(a.x, b.x, t), mix(a.y, b.y, t), mix(a.z, b.z, t), mix(a.w, b.w, t)}; }
 inline float step(float edge, float v) { return v >= edge ? 1.0f : 0.0f; }
 inline float smoothstep(float e0, float e1, float v) {
     float t = clamp((v - e0) / (e1 - e0), 0.0f, 1.0f);
@@ -79,6 +84,7 @@ inline float smoothstep(float e0, float e1, float v) {
 inline float dot(vec2 a, vec2 b) { return a.x * b.x + a.y * b.y; }
 inline float dot(vec3 a, vec3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
 inline float length(vec2 v) { return std::sqrt(dot(v, v)); }
+inline float distance(vec2 a, vec2 b) { return length(a - b); }
 inline vec3 abs(vec3 v) { return {std::fabs(v.x), std::fabs(v.y), std::fabs(v.z)}; }
 /// WGSL's i32(f): truncation toward zero, saturating (as WGSL does) for values past the range.
 inline int32_t toI32(float v) {
@@ -99,13 +105,21 @@ inline float fma32(float a, float b, float c) { return float(double(a) * double(
 inline vec2 fma32(vec2 a, vec2 b, vec2 c) { return {fma32(a.x, b.x, c.x), fma32(a.y, b.y, c.y)}; }
 inline uint32_t bitsOf(float v) { uint32_t u; std::memcpy(&u, &v, 4); return u; }
 
-// sin, cos and atan2 in double from fixed polynomials: IEEE arithmetic only, so every platform gets the same bits.
+// sin, cos, atan2, exp and log in double from fixed polynomials: IEEE arithmetic only, so every platform gets the same
+// bits.
 double sinD(double x);
 double cosD(double x);
 double atan2D(double y, double x);
+double expD(double x);
+double logD(double x);
+/// WGSL's pow: exp(y log x), for x >= 0 (0 to a positive power is 0; a negative x gives NaN).
+double powD(double x, double y);
 inline float sin(float v) { return float(sinD(v)); }
 inline float cos(float v) { return float(cosD(v)); }
 inline float atan2(float y, float x) { return float(atan2D(y, x)); }
+inline float exp(float v) { return float(expD(v)); }
+inline float pow(float x, float y) { return float(powD(x, y)); }
+inline vec3 pow(vec3 x, vec3 y) { return {pow(x.x, y.x), pow(x.y, y.y), pow(x.z, y.z)}; }
 
 // ---- common.wgsl -------------------------------------------------------------------------------------------------
 
@@ -224,13 +238,19 @@ struct Frag {
 };
 
 /// OpenMosh's uniforms: the parameters positional in p[0..7], the seed, time (0 for a still image) and, for
-/// multi-pass effects, the pass index.
+/// multi-pass effects, the pass index. With them, the textures a Composite effect reads besides its input: `aux` (an
+/// overlay, a mask or a caption's text; a 1x1 transparent texel when there is none, as OpenMosh binds) with the size
+/// the effect takes it to be, and `source`, the original the mask effects reveal (null: transparent, so the masked-out
+/// pixels show what is beneath the layer).
 struct Uniforms {
     vec2 resolution;
     float time = 0;
     float seed = 0;
     float p[8] = {};
     int pass = 0;
+    const Frame* aux = nullptr;
+    vec2 auxSize{1.0f, 1.0f};
+    const Frame* source = nullptr;
 };
 
 /// Runs `shader(Frag) -> vec4` over every pixel of a width x height target, rows on the worker pool, handing each

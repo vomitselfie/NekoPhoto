@@ -224,6 +224,44 @@ double cosD(double x) {
     }
 }
 
+double expD(double x) {
+    if (std::isnan(x)) return x;
+    if (x > 709.0) return HUGE_VAL;
+    if (x < -745.0) return 0;
+    // x = k ln 2 + r, |r| <= ln 2 / 2; the series to r^16 is exact to well past a double's resolution there.
+    constexpr double ln2Hi = 6.93147180369123816490e-01, ln2Lo = 1.90821492927058770002e-10;
+    const double k = std::floor(x * 1.44269504088896338700 + 0.5);
+    const double r = (x - k * ln2Hi) - k * ln2Lo;
+    double term = 1, sum = 1;
+    for (int n = 1; n <= 16; n++) {
+        term *= r / n;
+        sum += term;
+    }
+    return std::ldexp(sum, int(k));
+}
+
+double logD(double x) {
+    if (std::isnan(x) || x < 0) return std::nan("");
+    if (x == 0) return -HUGE_VAL;
+    if (std::isinf(x)) return x;
+    int e = 0;
+    double m = std::frexp(x, &e);   // [0.5, 1)
+    if (m < 0.70710678118654752440) { m *= 2; e--; }
+    // log m = 2 atanh(s), s = (m - 1) / (m + 1), |s| < 0.172.
+    const double s = (m - 1) / (m + 1), s2 = s * s;
+    double term = s, sum = s;
+    for (int n = 1; n <= 13; n++) {
+        term *= s2;
+        sum += term / (2 * n + 1);
+    }
+    return e * 6.93147180559945309417e-01 + 2 * sum;
+}
+
+double powD(double x, double y) {
+    if (x == 0) return y > 0 ? 0.0 : y == 0 ? 1.0 : HUGE_VAL;
+    return expD(y * logD(x));
+}
+
 double atan2D(double y, double x) {
     if (std::isnan(x) || std::isnan(y)) return std::nan("");
     if (x == 0) return y > 0 ? piD / 2 : y < 0 ? -piD / 2 : 0;
@@ -323,8 +361,14 @@ void storePremultiplied(uint16_t* p, vec4 c) {
 
 namespace {
 
+/// A 1x1 transparent texel: OpenMosh's stand-in for a missing aux texture.
+const rt::Frame& emptyFrame() {
+    static const rt::Frame f(1, 1);
+    return f;
+}
+
 template <class Img>
-bool applyTo(const Settings& settings, Img& image) {
+bool applyTo(const Settings& settings, Img& image, const Sources& sources) {
     const EffectSpec* spec = findEffect(settings.effect);
     const EffectFn run = spec ? effectFunction(spec->id) : nullptr;
     if (!run) return false;
@@ -334,6 +378,21 @@ bool applyTo(const Settings& settings, Img& image) {
     u.resolution = {float(image.width()), float(image.height())};
     u.seed = s.seed;
     for (size_t i = 0; i < s.values.size() && i < 8; i++) u.p[i] = s.values[i];
+    rt::Frame aux, source;
+    u.aux = &emptyFrame();
+    if (spec->auxImage || spec->text) {
+        if (sources.aux16 && sources.aux16->width() > 0 && sources.aux16->height() > 0) aux = rt::toFrame(*sources.aux16);
+        else if (sources.aux && sources.aux->width() > 0 && sources.aux->height() > 0) aux = rt::toFrame(*sources.aux);
+        if (aux.width() > 0) {
+            u.aux = &aux;
+            u.auxSize = {sources.auxWidth > 0 ? sources.auxWidth : float(aux.width()), sources.auxHeight > 0 ? sources.auxHeight : float(aux.height())};
+        }
+    }
+    const bool sameSize16 = sources.source16 && sources.source16->width() == image.width() && sources.source16->height() == image.height();
+    const bool sameSize8 = sources.source && sources.source->width() == image.width() && sources.source->height() == image.height();
+    if (sameSize16) source = rt::toFrame(*sources.source16);
+    else if (sameSize8) source = rt::toFrame(*sources.source);
+    if (source.width() > 0) u.source = &source;
     const rt::Frame in = rt::toFrame(image);
     run(in, u, [&](int y, const rt::vec4* row) {
         auto* p = image.row(y);
@@ -342,9 +401,35 @@ bool applyTo(const Settings& settings, Img& image) {
     return true;
 }
 
+template <class Img>
+std::shared_ptr<Img> onGridOf(const Img& image, const Affine& imageToDocument, const Affine& gridToDocument, int width, int height) {
+    auto out = std::make_shared<Img>(std::max(width, 0), std::max(height, 0));
+    const Affine map = gridToDocument.concatenating(imageToDocument.inverted());   // grid pixels to image pixels
+    parallelRows(0, out->height(), [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++) {
+            auto* row = out->row(y);
+            for (int x = 0; x < out->width(); x++) {
+                const Point p = map.apply({x + 0.5, y + 0.5});
+                const double fx = std::floor(p.x), fy = std::floor(p.y);
+                if (!(fx >= 0 && fy >= 0 && fx < image.width() && fy < image.height())) continue;
+                const auto* s = image.row(int(fy)) + size_t(fx) * 4;
+                std::copy(s, s + 4, row + size_t(x) * 4);
+            }
+        }
+    });
+    return out;
+}
+
 } // namespace
 
-bool apply(const Settings& settings, Image& image) { return applyTo(settings, image); }
-bool apply(const Settings& settings, Image16& image) { return applyTo(settings, image); }
+bool apply(const Settings& settings, Image& image, const Sources& sources) { return applyTo(settings, image, sources); }
+bool apply(const Settings& settings, Image16& image, const Sources& sources) { return applyTo(settings, image, sources); }
+
+std::shared_ptr<Image> onGrid(const Image& image, const Affine& imageToDocument, const Affine& gridToDocument, int width, int height) {
+    return onGridOf(image, imageToDocument, gridToDocument, width, height);
+}
+std::shared_ptr<Image16> onGrid(const Image16& image, const Affine& imageToDocument, const Affine& gridToDocument, int width, int height) {
+    return onGridOf(image, imageToDocument, gridToDocument, width, height);
+}
 
 } // namespace compositor::mosh

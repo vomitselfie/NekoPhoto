@@ -5,7 +5,7 @@
 // COMPOSITOR_UPDATE_MOSH_HASHES=1 rewrites the fingerprints after an intentional change.
 //
 // Also a tool for checking the ports against OpenMosh's own renders:
-//   mosh_tests --run <in.png> <effect-id> <out.png> [seed=<n>] [<key>=<value> ...]
+//   mosh_tests --run <in.png> <effect-id> <out.png> [seed=<n>] [aux=<png>] [source=<png>] [<key>=<value> ...]
 #include "check.h"
 #include "compositor/depth.h"
 #include "compositor/mosh.h"
@@ -88,9 +88,53 @@ mosh::Settings variant(const mosh::EffectSpec& spec) {
     return s;
 }
 
-std::shared_ptr<Image> run(const mosh::Settings& s, const Image& source) {
+/// What a Composite effect reads besides its image: an aux image (a cross of soft bars with a translucent edge, or a
+/// line of blocky "text" for Caption) and, for the variant settings, an original to reveal.
+struct Extras {
+    std::shared_ptr<Image> aux, original;
+    mosh::Sources sources;
+};
+
+Extras extrasFor(const mosh::EffectSpec& spec, int w, int h, bool withOriginal) {
+    Extras e;
+    if (spec.text) {
+        e.aux = std::make_shared<Image>(40, 8);
+        for (int y = 0; y < 8; y++)
+            for (int x = 0; x < 40; x++)
+                if ((x / 2 + y) % 3 != 0 && x % 8 != 7) std::memset(e.aux->pixel(x, y), 255, 4);
+    } else if (spec.auxImage) {
+        e.aux = std::make_shared<Image>(w, h);
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++) {
+                const int v = std::abs(x - w / 2) < w / 6 || std::abs(y - h / 2) < h / 6 ? 230 : 255 * x / (2 * w);
+                const unsigned a = x > w * 7 / 8 ? 96 : 255;
+                uint8_t* p = e.aux->pixel(x, y);
+                p[0] = uint8_t(v * a / 255);
+                p[1] = uint8_t((255 - v) * a / 255);
+                p[2] = uint8_t((y * 255 / h) * a / 255);
+                p[3] = uint8_t(a);
+            }
+    }
+    if (withOriginal && (spec.id == "mask" || spec.id == "mask-blocks")) {
+        e.original = std::make_shared<Image>(w, h);
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++) {
+                uint8_t* p = e.original->pixel(x, y);
+                p[0] = uint8_t(x * 255 / w);
+                p[1] = 128;
+                p[2] = uint8_t(y * 255 / h);
+                p[3] = 255;
+            }
+    }
+    e.sources.aux = e.aux.get();
+    e.sources.source = e.original.get();
+    return e;
+}
+
+std::shared_ptr<Image> run(const mosh::Settings& s, const Image& source, bool withOriginal = false) {
+    const Extras extras = extrasFor(*mosh::findEffect(s.effect), source.width(), source.height(), withOriginal);
     auto out = std::make_shared<Image>(source);
-    if (!mosh::apply(s, *out)) return nullptr;
+    if (!mosh::apply(s, *out, extras.sources)) return nullptr;
     return out;
 }
 
@@ -159,6 +203,10 @@ TEST_CASE(runtime_maths) {
     }
     for (double y = -3; y <= 3; y += 0.25)
         for (double x = -3; x <= 3; x += 0.25) CHECK_NEAR(atan2D(y, x), std::atan2(y, x), 1e-14);
+    for (double x = -80; x < 80; x += 0.173) CHECK_NEAR(expD(x) / std::exp(x), 1.0, 1e-14);
+    for (double x = 1e-6; x < 1e6; x *= 1.37) CHECK_NEAR(logD(x), std::log(x), 1e-13);
+    CHECK_NEAR(powD(4.0, 1.5), 8.0, 1e-13);
+    CHECK_EQ(powD(0.0, 2.0), 0.0);
     // WGSL's semantics where C++ differs.
     CHECK_EQ(fract(-0.25f), 0.75f);
     CHECK_EQ(toI32(-1.5f), -1);
@@ -246,7 +294,7 @@ TEST_CASE(fingerprints) {
     for (const auto& e : mosh::effects()) {
         const std::string id(e.id);
         mosh::Settings d = mosh::Settings::defaults(e), v = variant(e);
-        auto a = run(d, *base), b = run(v, *base), c = run(v, *clear);
+        auto a = run(d, *base), b = run(v, *base, true), c = run(v, *clear, true);
         REQUIRE(a && b && c);
         got[id + "/default"] = hashImage(*a);
         got[id + "/variant"] = hashImage(*b);
@@ -290,8 +338,8 @@ TEST_CASE(thread_count_does_not_change_pixels) {
     const auto base = testImage(301, 157);
     for (const auto& e : mosh::effects()) {
         for (const mosh::Settings& s : {mosh::Settings::defaults(e), variant(e)}) {
-            auto pooled = run(s, *base);
-            uint64_t alone = serially([&] { return hashImage(*run(s, *base)); });
+            auto pooled = run(s, *base, true);
+            uint64_t alone = serially([&] { return hashImage(*run(s, *base, true)); });
             if (hashImage(*pooled) != alone) check::fail(__FILE__, __LINE__, "thread count changed " + std::string(e.id));
         }
     }
@@ -305,9 +353,14 @@ TEST_CASE(sixteen_bit_matches_eight_bit) {
     for (const auto& e : mosh::effects()) {
         for (const auto& source : {base, clear}) {
             for (const mosh::Settings& s : {mosh::Settings::defaults(e), variant(e)}) {
-                auto eight = run(s, *source);
+                auto eight = run(s, *source, true);
                 auto deep = widenImage(*source);
-                REQUIRE(mosh::apply(s, *deep));
+                const Extras extras = extrasFor(e, source->width(), source->height(), true);
+                mosh::Sources wide;   // the aux and the original at 16 bits too
+                std::shared_ptr<Image16> aux16, original16;
+                if (extras.aux) wide.aux16 = (aux16 = widenImage(*extras.aux)).get();
+                if (extras.original) wide.source16 = (original16 = widenImage(*extras.original)).get();
+                REQUIRE(mosh::apply(s, *deep, wide));
                 auto narrowed = narrowImage(*deep);
                 if (quantising.count(e.id)) continue;
                 int worst = 0;
@@ -329,16 +382,26 @@ int runTool(int argc, char** argv) {
     auto image = readPngImage(argv[2], &error);
     if (!image) { std::fprintf(stderr, "%s\n", error.c_str()); return 1; }
     mosh::Settings s = mosh::Settings::defaults(*spec);
+    std::shared_ptr<Image> aux, original;
+    mosh::Sources sources;
     for (int i = 5; i < argc; i++) {
         std::string arg = argv[i];
         auto eq = arg.find('=');
         if (eq == std::string::npos) continue;
         const std::string key = arg.substr(0, eq);
+        if (key == "aux" || key == "source") {
+            auto png = readPngImage(arg.substr(eq + 1), &error);
+            if (!png) { std::fprintf(stderr, "%s\n", error.c_str()); return 1; }
+            (key == "aux" ? aux : original) = png;
+            continue;
+        }
         const float value = std::strtof(arg.c_str() + eq + 1, nullptr);
         if (key == "seed") s.seed = value;
         else if (!s.set(key, value)) { std::fprintf(stderr, "unknown parameter %s\n", key.c_str()); return 2; }
     }
-    mosh::apply(s, *image);
+    sources.aux = aux.get();
+    sources.source = original.get();
+    mosh::apply(s, *image, sources);
     return writePngImage(argv[4], *image) ? 0 : 1;
 }
 
