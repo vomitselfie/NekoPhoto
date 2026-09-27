@@ -181,6 +181,8 @@ add_library(compositor_core STATIC
     src/procreate.cpp
     src/project.cpp
     src/render.cpp
+    src/render_plan.cpp
+    src/render_exec_u8.cpp
     src/selection.cpp
     src/shape.cpp
     src/warp.cpp
