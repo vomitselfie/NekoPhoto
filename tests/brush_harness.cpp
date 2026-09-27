@@ -636,26 +636,23 @@ std::optional<FixtureBrushes> localFixtures(const std::string& folder) {
         for (const TipPreset& t : sets[set]->brushes) if (t.name.find(name) != std::string::npos) { found = &t; break; }
         if (!found) { out.notes.push_back(set + ": no brush named " + name); continue; }
         const auto input = dynamicsInputFromName(field(b, "input"));
+        // 28 pixels unless the entry asks for more: a spacing of a hundredth of the size needs a larger dab to step.
+        auto size = b.find("diameter");
+        const double diameter = size != b.end() && size->is_number() ? size->get<double>() : 28.0;
         Expectation e;
-        e.brush = "local_" + name;
+        e.brush = "local_" + name + (diameter != 28 ? "@" + std::to_string(int(diameter)) : std::string());
         e.stroke = field(b, "stroke");
         e.measure = field(b, "measure");
         e.expect = field(b, "expect");
         e.setting = field(b, "setting");
         e.against = e.brush + "~no_" + field(b, "input");
         if (!presetNamed(out, e.brush)) {
-            // 28 pixels unless the entry asks for more: a spacing of a hundredth of the size needs a larger dab to step.
-            auto size = b.find("diameter");
-            Preset p = tipPreset(e.brush, *found, size != b.end() && size->is_number() ? size->get<double>() : 28.0);
+            Preset p = tipPreset(e.brush, *found, diameter);
             p.seed = 99;
             out.presets.push_back(p);
+        }
+        if (!presetNamed(out, e.against)) {
             // The control: the same brush without the mappings from that input.
-            Preset control = p;
-            control.name = e.against;
-            auto& d = control.tip->tip.dynamics;
-            if (input) d.erase(std::remove_if(d.begin(), d.end(), [&](const DynamicsMapping& m) { return m.input == *input; }), d.end());
-            out.presets.push_back(control);
-        } else if (!presetNamed(out, e.against)) {
             Preset control = *presetNamed(out, e.brush);
             control.name = e.against;
             auto& d = control.tip->tip.dynamics;
@@ -717,10 +714,12 @@ bool checkExpectation(const Expectation& e, const std::vector<StrokeFixture>& fi
         const Preset* stronger = presetNamed(brushes, e.weakerThan);
         if (!stronger) { if (why) *why = "missing " + e.weakerThan; return false; }
         const Metrics ms = measure(*stroke, render(*stroke, *stronger));
-        const double rs = highOverLow(e.measure == "peak" ? ms.peak : ms.width);
-        std::snprintf(buffer, sizeof buffer, ", %.3f for %s", rs, e.weakerThan.c_str());
+        // Where the input is low (stations 0 and 9) this brush stays nearer the one it is compared with.
+        const std::vector<double>& vs = e.measure == "peak" ? ms.peak : ms.width;
+        const double low = (va[0] + va[9]) / 2, lowAgainst = (vb[0] + vb[9]) / 2, lowStronger = (vs[0] + vs[9]) / 2;
+        std::snprintf(buffer, sizeof buffer, "; where low %.2f against %.2f, %.2f for %s", low, lowAgainst, lowStronger, e.weakerThan.c_str());
         detail += buffer;
-        ok = std::fabs(ra - rb) < std::fabs(rs - rb);
+        ok = std::fabs(low - lowAgainst) < std::fabs(lowStronger - lowAgainst);
     }
     if (why) *why = detail;
     return ok;

@@ -8,6 +8,11 @@
     "syn_02_speed_size_neg.brush": {"setting": "dynamicsSpeedSize", "value": -0.8, "input": "speed", "target": "size", "stroke": "speed_sweep", "measure": "width", "expect": "down"},
     "syn_03_speed_opacity_pos.brush": {"setting": "dynamicsSpeedOpacity", "value": 0.8, "input": "speed", "target": "opacity", "stroke": "speed_sweep", "measure": "peak", "expect": "up"},
     "syn_04_speed_opacity_neg.brush": {"setting": "dynamicsSpeedOpacity", "value": -0.8, "input": "speed", "target": "opacity", "stroke": "speed_sweep", "measure": "peak", "expect": "down"},
-    "syn_05_speed_spacing.brush": {"setting": "plotSpacingSpeed", "value": 1.0, "input": "speed", "target": "spacing", "stroke": "speed_sweep", "measure": "peak", "expect": "down"}
+    "syn_05_speed_spacing.brush": {"setting": "plotSpacingSpeed", "value": 1.0, "input": "speed", "target": "spacing", "stroke": "speed_sweep", "measure": "peak", "expect": "down"},
+    "syn_06_tilt_size.brush": {"setting": "dynamicsTiltSize", "value": 0.8, "input": "tilt", "target": "size", "stroke": "tilt_sweep", "measure": "width", "expect": "up"},
+    "syn_07_tilt_opacity.brush": {"setting": "dynamicsTiltOpacity", "value": 0.8, "input": "tilt", "target": "opacity", "stroke": "tilt_sweep", "measure": "peak", "expect": "down"},
+    "syn_08_tilt_angle_30.brush": {"setting": "sizeTiltAngle", "value": 0.3333, "input": "tilt", "target": "size", "stroke": "tilt_sweep", "measure": "width", "expect": "up", "weakerThan": "syn_06_tilt_size.brush"},
+    "syn_09_tilt_bleed.brush": {"setting": "dynamicsTiltBleed", "value": 0.8, "input": "tilt", "target": "flow", "stroke": "tilt_sweep", "measure": "peak", "expect": "down"},
+    "syn_10_tilt_roundness.brush": {"setting": "dynamicsTiltShapeRoundness", "value": 1.0, "input": "tilt", "target": "roundness", "stroke": "tilt_sweep", "measure": "width", "expect": "down"}
   }
 }

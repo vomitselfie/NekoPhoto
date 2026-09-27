@@ -207,9 +207,22 @@ confirm.
 | `dynamicsSpeedSize` a, −1..1 | Speed → Size, full at `fullSpeed` | 1, a: grows with speed when positive, shrinks when negative | sign and scale assumed |
 | `dynamicsSpeedOpacity` a, −1..1 | Speed → Opacity, full at `fullSpeed` | positive: 1 − a, a (slow strokes lighter); negative: 1, a (fast strokes lighter) | sign and scale assumed |
 | `plotSpacingSpeed` a, 0.. | Speed → Spacing, full at `fullSpeed` | 1, a: the spacing widens with speed | direction high, scale assumed |
+| `dynamicsTiltSize` a, −1..1 | Tilt → Size, tilt curve | 1, a: grows as the pen leans | sign assumed |
+| `dynamicsTiltOpacity` a | Tilt → Opacity, tilt curve | 1, −a: lighter as the pen leans | direction assumed |
+| `dynamicsTiltBleed` a | Tilt → Flow, tilt curve | 1, −`tiltBleedFlow` × a (0.5 × a): each dab thins | meaning and scale assumed |
+| `dynamicsTiltShapeRoundness` a, `…Minimum` m | Tilt → Roundness, tilt curve | 1, −a × (1 − m); nothing while m is 1, as in nearly every brush | high |
 
 `fullSpeed` is 1500 document pixels per second: the speed at which a speed setting has its whole effect. Procreate
 measures speed on the screen, not in the document, so this is a guess to tune.
+
+**Tilt, as this reader takes it** (`scaling::tiltCurve`, the one place to change): Procreate's tilt is the pen's angle
+from upright, the same as the Tilt input (`tiltMagnitude`, 0 upright to 1 at 60 degrees). Each tilt setting has a tilt
+angle (`sizeTiltAngle`, `opacityTiltAngle`, `bleedTiltAngle`, `shapeRoundnessTiltAngle`; else `dynamicsTiltAngle`),
+stored as a fraction of Procreate's 0–90 degree tilt graph and read as the lean from upright at which the setting starts
+to count: the Tilt input's curve is zero up to it and rises straight to full at 60 degrees. Real brushes store 0.1 (9
+degrees) for most, so a slight lean starts it. If the reference brushes show the angle is measured from the screen, or
+the effect ramps differently, only `tiltCurve` changes. `dynamicsTiltCompression` (whether the grain scales with a tilted
+size) and `dynamicsTiltGradation` are not carried over.
 
 `dynamicsPressureSizeSpeed`, `dynamicsPressureOpacitySpeed` and `dynamicsPressureBleedSpeed` are not speed dynamics:
 their values follow `dynamicsPressureResponse` (0.3, 0.6 and so on together in real brushes), so they read as how quickly

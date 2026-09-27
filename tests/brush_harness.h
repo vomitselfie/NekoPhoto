@@ -110,7 +110,7 @@ struct Expectation {
     std::string measure;
     std::string expect;
     std::string against;      // the preset it is compared with
-    std::string weakerThan;   // optional: a preset whose change against `against` this one's stays inside
+    std::string weakerThan;   // optional: a preset that changes more where the input is low (a tilt threshold holds it back)
     std::string setting;      // what the brush sets, for messages
 };
 
