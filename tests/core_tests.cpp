@@ -1889,4 +1889,44 @@ TEST_CASE(project_round_trip_keeps_frames_and_old_projects_load) {
     fs::remove_all(dir);
 }
 
+TEST_CASE(save_during_playback_writes_the_document_not_the_frame_shown) {
+    // Playback writes each frame into the layers (EditorSession::previewFrame) after capturing their own states; a
+    // save meanwhile writes the document with those states back, and the frames are left as they were.
+    Document doc(20, 10);
+    Layer a = imageLayer("A", solid(4, 4, 255, 0, 0, 255), {0, 0});
+    Layer b = imageLayer("B", solid(4, 4, 0, 0, 255, 255), {10, 0});
+    doc.layers = {a, b};
+    ensureAnimation(doc, 50);
+    duplicateFrame(doc, 0);
+    doc.layers[0].visible = false;
+    doc.layers[1].transform.origin = Point(14, 5);
+    doc.layers[1].opacity = 0.25;
+    syncCurrentFrame(doc);
+    CHECK(selectFrame(doc, 0));   // the real state: frame 0, both shown where they started
+    const Document before = doc;
+    const AnimationFrame base = captureFrame(doc);
+    applyFrame(doc, doc.animation.frames[1]);   // playback now shows frame 1
+    CHECK(!doc.layers[0].visible);
+    fs::path dir = tempDir();
+    fs::path package = dir / "Playing.comp";
+    ProjectError error;
+    REQUIRE(saveProject(withFrameStates(doc, base), std::nullopt, package.string(), error));
+    auto loaded = loadProject(package.string(), error);
+    REQUIRE(loaded);
+    REQUIRE(loaded->layers.size() == 2u);
+    for (size_t i = 0; i < 2; i++) {
+        CHECK_EQ(loaded->layers[i].visible, before.layers[i].visible);
+        CHECK(loaded->layers[i].transform.origin == before.layers[i].transform.origin);
+        CHECK_NEAR(loaded->layers[i].opacity, before.layers[i].opacity, 1e-6);
+    }
+    CHECK(loaded->animation == before.animation);
+    CHECK_EQ(loaded->animation.current, 0);
+    // Stopping puts the same states back on the live document.
+    applyFrame(doc, base);
+    CHECK(doc.layers[0].visible);
+    CHECK(doc.layers[1].transform.origin == Point(10, 0));
+    CHECK(doc.animation == before.animation);
+    fs::remove_all(dir);
+}
+
 TEST_MAIN()

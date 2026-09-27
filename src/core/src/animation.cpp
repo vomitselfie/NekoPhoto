@@ -32,6 +32,12 @@ void applyFrame(Document& document, const AnimationFrame& frame) {
     }
 }
 
+Document withFrameStates(const Document& document, const AnimationFrame& states) {
+    Document copy = document;
+    applyFrame(copy, states);
+    return copy;
+}
+
 void syncCurrentFrame(Document& document) {
     Animation& a = document.animation;
     if (a.frames.empty()) return;

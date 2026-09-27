@@ -45,6 +45,10 @@ constexpr int maxFrameDelayMs = 655350;   // what a GIF's delay can say
 AnimationFrame captureFrame(const Document& document, int delayMs = 100);
 /// Writes the frame's states into the layers it mentions.
 void applyFrame(Document& document, const AnimationFrame& frame);
+/// A copy of the document with `states` written back. Playback shows frames by writing them into the layers; the
+/// states captured when it began (captureFrame) turn what is on screen back into the real document, which is what
+/// a save or an autosave during playback writes.
+Document withFrameStates(const Document& document, const AnimationFrame& states);
 /// Keeps the current frame in step with the layers (after an edit). Does nothing without frames.
 void syncCurrentFrame(Document& document);
 /// Makes `index` current: the current frame is synced first, then `index` is applied. False when out of range.

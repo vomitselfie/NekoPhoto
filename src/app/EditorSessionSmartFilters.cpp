@@ -216,6 +216,7 @@ void EditorSession::setFilterMaskShown(bool shown) {
 }
 
 void EditorSession::endTemporaryLayers() {
+    endFramePreview();   // likewise playback's frame: saves and exports write the document, not what it shows
     endFilterMaskEdit();
     endQuickMask();
 }

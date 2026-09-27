@@ -99,6 +99,7 @@ void EditorSession::reloadFromDisk() {
     if (!project) return;   // half written or mid-sync: the next change is checked afresh
     commitTransform();
     const std::optional<compositor::Uuid> active = activeLayerId_;
+    previewBase_.reset();
     document_ = std::move(project->document);
     setActiveLayer(active && document_->find(*active) ? active : project->activeLayer);
     history_.reset();

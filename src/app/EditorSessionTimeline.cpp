@@ -47,7 +47,7 @@ bool EditorSession::timelineFramesFromLayers() {
 
 bool EditorSession::timelineSelectFrame(int index) {
     if (!document_ || index < 0 || index >= int(document_->animation.frames.size())) return false;
-    if (index == document_->animation.current && !framePreview_) return true;
+    if (index == document_->animation.current && !previewBase_) return true;
     return timelineEdit("Select Frame", [index](Document& d) { return selectFrame(d, index); });
 }
 
@@ -96,7 +96,9 @@ bool EditorSession::timelineClear() {
 
 void EditorSession::previewFrame(int index) {
     if (!document_ || index < 0 || index >= int(document_->animation.frames.size())) return;
-    framePreview_ = true;
+    // The states the layers had before playback, so saves write them and Stop restores them exactly (a frame
+    // need not mention every layer the previewed ones did).
+    if (!previewBase_) previewBase_ = captureFrame(*document_);
     applyFrame(*document_, document_->animation.frames[size_t(index)]);
     documentRevision_++;
     emit documentChanged({});
@@ -104,14 +106,19 @@ void EditorSession::previewFrame(int index) {
 }
 
 void EditorSession::endFramePreview() {
-    if (!framePreview_) return;
-    framePreview_ = false;
-    if (!document_ || document_->animation.empty()) return;
-    const Animation& a = document_->animation;
-    applyFrame(*document_, a.frames[size_t(std::clamp(a.current, 0, int(a.frames.size()) - 1))]);
+    if (!previewBase_) return;
+    const AnimationFrame base = std::move(*previewBase_);
+    previewBase_.reset();
+    if (!document_) return;
+    applyFrame(*document_, base);
     documentRevision_++;
     emit documentChanged({});
     emit layersChanged();
+}
+
+Document EditorSession::documentToSave() const {
+    if (!document_) return Document(1, 1);
+    return previewBase_ ? withFrameStates(*document_, *previewBase_) : *document_;
 }
 
 } // namespace app

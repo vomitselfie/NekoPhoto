@@ -116,6 +116,7 @@ bool EditorSession::openProject(const QString& path, QString* error) {
 
 void EditorSession::installProject(LoadedProject project) {
     commitTransform();
+    previewBase_.reset();   // playback was over the document this replaces
     document_ = std::move(project.document);
     setActiveLayer(project.activeLayer);
     projectPath_ = project.path;
@@ -130,6 +131,7 @@ void EditorSession::installProject(LoadedProject project) {
 
 void EditorSession::adoptDocument(const Document& document, const QString& name) {
     commitTransform();
+    previewBase_.reset();
     document_ = document;
     // The topmost visible pixel layer starts active (a hidden top layer, common in exports, would confuse).
     std::optional<Uuid> active;
@@ -154,7 +156,8 @@ bool EditorSession::saveProject(const QString& path, QString* error) {
     if (!document_) return false;
     commitTransform();
     ProjectError err;
-    if (!compositor::saveProject(*document_, activeLayerId_, path.toStdString(), err)) {
+    // The document itself, never a frame playback shows (endTemporaryLayers stops playback; this holds regardless).
+    if (!compositor::saveProject(documentToSave(), activeLayerId_, path.toStdString(), err)) {
         if (error) *error = QString::fromStdString(err.message);
         return false;
     }
@@ -170,6 +173,7 @@ bool EditorSession::saveProject(const QString& path, QString* error) {
 void EditorSession::closeDocument() {
     cancelBrush();
     cancelTransform();
+    previewBase_.reset();
     document_.reset();
     setActiveLayer(std::nullopt);
     projectPath_.clear();
@@ -238,6 +242,7 @@ void EditorSession::restore(const DocumentHistory::Snapshot& snapshot) {
     bool changedCanvas = !document_ || !snapshot.document || document_->id != snapshot.document->id || document_->width != snapshot.document->width || document_->height != snapshot.document->height;
     bool keepMask = isMaskSelected_ && activeLayerId_ == snapshot.activeLayerId;
     // Only what the step changed is rendered again: undoing a brush stroke redraws the stroke's layer, not the view.
+    previewBase_.reset();   // the snapshot is the document as it was; playback's states belong to the one it replaces
     const Rect changed = changedCanvas ? Rect() : !history_.stepRegion().isEmpty() ? history_.stepRegion() : changedArea(*document_, *snapshot.document);
     document_ = snapshot.document;
     setActiveLayer(snapshot.activeLayerId);
