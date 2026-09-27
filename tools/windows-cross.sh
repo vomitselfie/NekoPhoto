@@ -60,9 +60,6 @@ failed=()
 for test in $(ctest --test-dir /build -N | sed -n "s/^ *Test *#[0-9]*: //p"); do
     exe="$test.exe"; [ -f "$exe" ] || { echo "SKIP $test (no $exe)"; continue; }
     if timeout 600 wine "$exe" >"/build/$test.log" 2>&1; then echo "PASS $test"
-    elif [ "$test" = blend_tests ] && grep -q "1 test(s) failed\|5 test(s), 1 failure(s)" "/build/$test.log" && grep -q "blend_tests.cpp:185" "/build/$test.log"; then
-        # Its reference is lround, which Wine (msvcrt) rounds wrongly at 0.49999997; the kernel under test is right.
-        echo "XFAIL $test (Wine lround)"
     else echo "FAIL $test"; tail -15 "/build/$test.log"; failed+=("$test"); fi
 done
 cd /tmp

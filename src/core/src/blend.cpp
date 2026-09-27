@@ -48,7 +48,12 @@ inline Rgb setSat(Rgb c, float s) {
 
 int nearestHalfUp(int a, int b) { return (2 * a + b) / (2 * b); }
 int nearestHalfDown(int a, int b) { return (2 * a + b - 1) / (2 * b); }
-uint8_t byteClamp(float v) { return uint8_t(std::clamp(int(std::lround(v)), 0, 255)); }
+// Round half away from zero, as lround does, but by hand: a float plus 0.5 is exact in double, so this matches a correct
+// lround everywhere and does not depend on the C library (Wine's msvcrt rounds 0.49999997f up).
+uint8_t byteClamp(float v) {
+    const double r = v >= 0 ? std::floor(double(v) + 0.5) : std::ceil(double(v) - 0.5);
+    return uint8_t(std::clamp(r, 0.0, 255.0));
+}
 
 uint8_t softLight(int s, int d) {
     const float source = s / 255.0f, base = d / 255.0f;
