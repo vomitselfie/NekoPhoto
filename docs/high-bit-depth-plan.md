@@ -296,6 +296,37 @@ the engines: [brush-engine.md](brush-engine.md), "16 bits".
   `PixelFormat` needs an `RGBAFloat` layout (Little CMS's float pipeline is already what the 16-bit path uses).
   CMYK and Lab (P7) need `ColorModel`-aware transforms and a proof default (a CMYK profile, which the built-ins lack).
 
+**Text, vectors and layer styles at 16 bits (2026-09-27).** User-facing summary: [bit-depth.md](bit-depth.md).
+
+- Text is painted into Qt's `Format_RGBA64_Premultiplied` (`renderTextLayer16`, `renderTextLayerAt`): colours and
+  overlapping runs composite at 16 bits; the glyph coverage is Qt's, 8-bit. Rich text, Warp Text (the 16-bit
+  `renderWarpedOverBox`), Create Work Path and Convert to Shape; 16-bit PSD type layers go out as `TySh` and back.
+- Vectors: `rasterizeVectorMask16` / `rasterizeVectorStroke16` are the same float coverage quantised to 15 bits;
+  `renderVectorPaint16` / `renderFillLayer16` draw gradients from `gradientColorExact` (the unrounded ramp) and widen
+  pattern tiles; `applyMaskParameters(Gray16&)`. `setVectorShape` makes a 16-bit document's shape pixels at 16 bits.
+  `RenderExec<U16>` uses them for vector masks, shape strokes, fill layers and mask density/feather. Fill Path and
+  Stroke Path fill through 16-bit coverage.
+- Layer styles: `drawStyledLayer` is one template over the sample type (`StyledDraw::drawSource16`, `coverage16`);
+  the effects are float masks either way, only reading and writing pixels differ, so the 8-bit instantiation is the
+  former code. `via8` is gone. At 16 bits a matte sample under half an 8-bit level is clear (as the healers treat it).
+- Baking a clipping mask when its base is deleted renders the base chain at 16 bits and multiplies at 15 bits.
+- Calibration (`depth_vector_tests`, `depth_text_tests`; 8-bit-sourced documents, 16-bit render reduced against the
+  8-bit render): at 1:1 every style scene (each of the ten effects, bevel kinds and techniques, textures, a
+  multiplied layer, opacity 0.6, folder styles pass-through and isolated) is within 1 level, except all ten effects
+  together: 2 levels on 0.004% of samples (the 8-bit engine rounds to a byte after each effect). Shapes, strokes, vector
+  masks and text: within 1 level; gradient fills and strokes 2 levels on 0.005% (shape) and 0.02% (fill layer at 70%),
+  from the 8-bit ramp's three roundings (colour, premultiply, composite). Vector coverage: within 1 level. Reduced
+  views (0.5): the layer is resampled at each depth (P2's resampling differs by up to 2 levels), so effects that
+  decide on the matte (stroke contour, precise glow, chisel distance fields) move an edge pixel on up to 1.1% of
+  samples (worst 152 levels on 0.49% for Stroke Emboss); blurred effects stay within 2 levels on under 0.3%.
+- Gates: 8-bit render hashes and existing 16-bit hashes unchanged; 20 new U16 scenes (shapes, vector masks, a fill
+  layer, each effect, all ten, a folder style); brush parity untouched; PSD corpus plus K.psd 118 files / 3,975
+  blocks at 8 and 16 bits; rpc smoke's 16-bit section covers text, shapes, paths, vector masks and styles.
+- Still gated: smart objects and Smart Filters (`SmartObjectSource::image` is 8-bit; placing and converting at 16
+  bits needs the source at its own depth: an `Image16Ptr` beside it, 16-bit decoding in `contentsFromFile`, a 16-bit
+  child document in Convert, 16-bit PNG in projects; Smart Filters have their own calibrated 8-bit kernels in
+  `smartfilter_render.cpp`), Camera Raw, G'MIC, Remove Background, artboards, the timeline, SVG and slice export.
+
 ## Review notes
 
 - Mac project compatibility: since 2026-09-26 NekoPhoto no longer keeps Mac Compositor project-format parity, so
