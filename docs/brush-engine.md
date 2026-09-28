@@ -82,7 +82,10 @@ mouse's neutral values whatever it holds.
   as `tiltX / 60` and `tiltY / 60` clamped to -1..1, and `dt`. The presets' own settings do the rest.
 - **Tip brushes** (`TipStroke`): the stamp engine for imported and image brushes. Dabs are placed every
   `spacing × size` along the path and stamped into the stroke's coverage, so colour, opacity, the selection, erasing,
-  masks, the preview and undo are the round tip's. Everything that varies per dab comes from the dynamics.
+  masks, the preview and undo are the round tip's. Everything that varies per dab comes from the dynamics. The dabs
+  of one sample are placed first (dynamics, random draws, grain frame) and then drawn together: bands of rows go to
+  the worker pool, and each band runs through the dabs in the order they were placed, so every pixel takes the same
+  dabs in the same order as it would one dab at a time.
 
 A tip brush reads pressure only from a stylus: a mouse is full pressure, as in Photoshop, unless the brush turns on
 Mouse speed as pressure.

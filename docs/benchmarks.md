@@ -182,6 +182,98 @@ median of 3 runs:
 The stroke paints about three times slower than it was drawn: at these settings (16 dabs of 200 pixels every 4 pixels)
 the engine cannot keep up with the pen. Both depths cost the same; the dab count, not the sample depth, sets the time.
 
+The bench also prints a fingerprint of the painted pixels (FNV-1a 64 over the working image, taken after the timing):
+`9bc4ba5c82371c2c` at 8 bits and `994448994d69ca4c` at 16. A change that is meant to be faster must leave both alone.
+
+## Brush performance pass
+
+2026-09-27, after NekoPhoto 1.8.1 (7fd93d8), same machine and compiler. Every change keeps the output byte for byte:
+`brush_parity` (8-bit, u16 and synthetic scenes), `brush_grain_tests`, `render_hash_tests`, `depth_paint_tests` and
+the worst case's fingerprints are unchanged.
+
+`bench_core` gained four lines for it: `brush stroke d400 hardness 0` (a 400-pixel soft round brush along the d80 path)
+and `tip brush textured d60` (a 64-pixel soft tip at 10% spacing, two dabs a step scattered a quarter size, canvas
+grain, pressure on size and a size jitter, pressed along the same path at 120 reports a second), each at 8 and 16 bits.
+
+**Profiles before.** Sampled at 1 kHz of CPU time over all threads (a `SIGPROF` sampler; `perf` is not installed):
+
+- Worst case: 72% of the CPU in the worker pool waking and parking threads (condition variable broadcast and the
+  futex behind it), 20% stamping dabs (the per-pixel loop 14%, the bilinear sample of the tip 5%, `lround` 2%). Every
+  dab handed its rows to the pool on its own, and every hand-out woke all 23 workers.
+- Round d400 soft: 75% waking and parking workers; the rest the 8-bit merge and the recompose.
+- Round d80: the 8-bit soft merge (`row + t × (255 − row) / 255`) 18%, the recompose 8% at 8 bits and 20% at 16.
+  The 8-bit merge ran slower than the 16-bit one: it did not vectorise.
+- Textured tip d60: the per-pixel loop 33%, the bilinear sample 13%, `lround` 9%, the recompose 12%.
+- Dry brush (MyPaint) through the canvas: libmypaint and the repaint; nothing in the stamp engines.
+
+**Profiles after.** Worst case: the per-pixel loop 37%, the bilinear sample 17%, the rounding 13%, the pool 6%. Round
+d400: the merge on the calling thread and the recompose; the pool's share is what the recompose's own hand-outs cost.
+
+**The changes**, each measured against the one before (fastest of alternating rounds for the everyday lines, one run
+for the worst case):
+
+| Change | What it measured |
+|---|---|
+| The pool wakes one worker per spare chunk instead of all of them | round d400 soft 133 → 118 ms (8 bits), 142 → 125 ms (16) |
+| Tip brushes place a step's dabs first, then draw them in bands of rows, each band through the dabs in order | worst case 29.4 → 4.6 s (8 bits), 29.1 → 4.6 s (16) |
+| A leaner per-pixel loop: direct bilinear reads inside the tip, inline rounding, a grain factor table, a mask for power-of-two grains, only the span of each row the tip can land on | worst case 4.6 → 4.2 s |
+| Pixels a dab cannot raise (at its ceiling, or so near that its largest step rounds to nothing) are passed over before sampling | worst case 4.2 → 2.6 s (8 bits), 2.8 s (16) |
+| The rounding without a branch (the branch on the fraction made the textured tip 30% slower than `lround`) | worst case 2.6 → 2.0 s; textured tip 103 → 86 ms |
+| The 8-bit stamp merge vectorises (the row length was read through a reference a byte store may alias) | round d80 hardness 1 19.2 → 12.1 ms, hardness 0.3 43.8 → 15.4 ms |
+| A stamped dab merges on one core up to 2^20 pixels | round d400 soft 116 → 40 ms (8 bits), 126 → 71 ms (16) |
+
+**Before and after.** 7fd93d8 against the pass, alternating rounds (six rounds of `bench_core 15 "brush "`, ten of 25
+for the u16 d80 lines, two of `bench_core 3 worst`): the median of the round medians, and the fastest run.
+
+| Operation | 7fd93d8 median (fastest) | After median (fastest) | Change (median) |
+|---|---:|---:|---:|
+| worst case, 8 bits (ms) | 31 928 (29 522) | 2 104 (2 045) | -93.4% |
+| worst case, 16 bits (ms) | 32 662 (30 217) | 2 144 (2 085) | -93.4% |
+| brush stroke d80 hardness 1 | 22.46 (17.57) | 14.45 (11.23) | -35.7% |
+| brush stroke d80 hardness 0.3 | 46.64 (43.15) | 18.07 (15.50) | -61.3% |
+| brush stroke d400 hardness 0 | 148.92 (133.48) | 45.81 (39.98) | -69.2% |
+| tip brush textured d60 | 123.22 (101.69) | 97.20 (79.11) | -21.1% |
+| u16 brush stroke d80 hardness 1 | 23.29 (20.17) | 23.07 (20.09) | -0.9% |
+| u16 brush stroke d80 hardness 0.3 | 30.12 (26.47) | 30.33 (26.65) | +0.7% |
+| u16 brush stroke d400 hardness 0 | 160.91 (140.13) | 80.34 (70.62) | -50.1% |
+| u16 tip brush textured d60 | 125.22 (103.67) | 96.31 (78.32) | -23.1% |
+
+The worst case now paints 287 472 dabs in about 2.1 s (about 135 000 dabs a second): the 10-second stroke paints in a
+fifth of the time it took to draw, at either depth, with the same peak memory (80 and 160 MiB).
+
+Brush latency through the canvas (`--bench-brush`, 1086 x 1448, `COMPOSITOR_WINDOW_SIZE=1400x1000
+QT_SCALE_FACTOR=2.25`, eight alternating rounds, medians of the per-run medians; press / move p50 / move p95 /
+release, ms):
+
+| Brush | 7fd93d8 | After |
+|---|---:|---:|
+| classic/dry_brush | 1.96 / 1.15 / 1.43 / 4.70 | 2.06 / 1.07 / 1.42 / 4.58 |
+| round 80 px, hardness 0.3 | 2.45 / 1.62 / 2.12 / 3.92 | 2.19 / 1.44 / 1.98 / 3.28 |
+| round 400 px, hardness 0 | 5.01 / 5.36 / 6.27 / 4.83 | 4.94 / 5.43 / 6.55 / 4.87 |
+
+Dry brush is libmypaint's and the large round brush's moves are the repaint's, so both stay where they were.
+
+This laptop has two kinds of core (4 at 5.2 GHz, 8 at 3.3 GHz): a single-threaded line runs about 20% slower when the
+scheduler puts its thread on a slow core, so round medians are bimodal. Compare many alternating rounds, and the
+fastest runs beside the medians.
+
+**Not done because the output would change:**
+
+- Dividing by the dab's scale through a reciprocal (`× (1 / sx)`): `brush_parity` fails, and the worst case measured
+  2.09 s against 2.01 s, no gain.
+- Stepping the tip's u and v along a row by adding a per-pixel delta instead of computing them from the position:
+  rounding differs in the last bits, which moves the bilinear taps.
+- `floor(v + 0.5)` for the value's rounding: differs from `lround` just below a half.
+- A stamp cache keyed by a quantised size, angle and roundness: every dab of the worst case has its own size, angle,
+  roundness and scatter, so a cache would only help by snapping them, which changes every dab.
+- Single precision in the per-pixel loop.
+
+**What is left.** The worst case is now compute-bound in the per-pixel loop (two divisions, the bilinear sample and
+the grain lookup per pixel, about 15 ns a pixel on a fast core, over 2.7 billion pixel visits). The recompose of each
+sample's area (0.3 s of the 2.1) and placing the dabs (0.1 s) are next. A tip brush's batch goes to the pool only
+from 65 536 pixels; lowering it to 4 096 did not help the textured tip measurably. The round brush's 8-bit recompose
+has a branch per pixel and stays scalar.
+
 ## Render hashes
 
 The matching correctness gate is `render_hash_tests` (in ctest): 235 scenes (133 at 8 bits, 102 at 16 bits) hashed with FNV-1a 64 against
