@@ -159,13 +159,26 @@ std::vector<Uuid> EditorSession::clippingDependents(const std::vector<Uuid>& ids
 
 std::optional<Asset> EditorSession::bakeClipping(const Uuid& target) const {
     const Layer* layer = document_->find(target);
-    if (!layer || !layer->asset || !layer->asset->image.u8() || !layer->maskSourceId) return std::nullopt;
+    if (!layer || !layer->asset || !layer->asset->image || !layer->maskSourceId) return std::nullopt;
     // The source's coverage (its alpha with its own mask and upstream clipping), ignoring visibility, at document size.
     Document chain(document_->width, document_->height);
     std::set<Uuid> keep;
     std::optional<Uuid> current = layer->maskSourceId;
     for (int i = 0; i < 256 && current; i++) { keep.insert(*current); const Layer* l = document_->find(*current); current = l ? l->maskSourceId : std::nullopt; }
     for (auto& l : document_->layers) if (keep.count(l.id)) { Layer c = l; c.parentId.reset(); c.visible = true; chain.layers.push_back(c); }
+    if (const Image16Ptr deep = layer->asset->image.u16()) {
+        // At 16 bits: the source's coverage and the multiplication at 15 bits.
+        chain.sampleType = SampleType::U16;
+        auto flat = renderFlattened16(chain);
+        Gray16 coverage(document_->width, document_->height);
+        for (int y = 0; y < coverage.height(); y++) for (int x = 0; x < coverage.width(); x++) coverage.at(x, y) = flat->pixel(x, y)[3];
+        auto inGrid = resampleMask(coverage, LayerTransform(Point(0, 0), document_->size()), layer->transform, deep->width(), deep->height(), 0);
+        auto out = std::make_shared<Image16>(*deep);
+        for (int y = 0; y < deep->height(); y++)
+            for (int x = 0; x < deep->width(); x++) { const uint32_t k = inGrid->at(x, y); uint16_t* p = out->pixel(x, y); for (int c = 0; c < 4; c++) p[c] = uint16_t(mul15(p[c], k)); }
+        return Asset::make(Image16Ptr(out), layer->name);
+    }
+    if (!layer->asset->image.u8()) return std::nullopt;
     auto flat = renderFlattened(chain);
     GrayImage coverage(document_->width, document_->height);
     for (int y = 0; y < coverage.height(); y++) for (int x = 0; x < coverage.width(); x++) coverage.at(x, y) = flat->pixel(x, y)[3];
@@ -178,8 +191,6 @@ std::optional<Asset> EditorSession::bakeClipping(const Uuid& target) const {
 
 void EditorSession::deleteLayersResolvingClipping(const std::vector<Uuid>& ids, bool bake) {
     if (!canEditLayers()) return;
-    // Baking the clipped look into the dependents' pixels is an 8-bit edit for now.
-    if (bake && !clippingDependents(ids).empty() && refusedAtDepth("edit.pixels", tr("Baking a clipping mask into pixels"))) return;
     std::map<Uuid, Asset> baked;
     if (bake) for (auto& id : clippingDependents(ids)) if (auto asset = bakeClipping(id)) baked[id] = *asset;
     finishDeleting(ids, baked);
