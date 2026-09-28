@@ -425,13 +425,12 @@ TEST_CASE(twist_roll_azimuth_and_the_tip_angle_pass_358_359_0_1_2_without_a_jump
                     CHECK_NEAR(turnDegrees(applyDynamics(roll, DynamicsTarget::Angle, 0, samples[i - 1], 20), applyDynamics(roll, DynamicsTarget::Angle, 0, samples[i], 20)), -sense, 1e-9);
             }
             // The tip's resolved angle, dab by dab (twenty between reports): never more than a report's degree apart,
-            // and a stroke's worth of them adds up to the pen's four degrees, not a turn. (Following the travel, the
-            // first dab has no direction yet and faces the x axis, as a tip following the stroke always has: from the
-            // second on.)
+            // and a stroke's worth of them adds up to the pen's four degrees, not a turn. Following the travel, the
+            // first dab waits for the stroke's direction, so it too is within a degree of the next.
             const Painted painted = paintTurning(turningStroke(degrees, what), dynamics, false);
             REQUIRE(painted.dabs.size() > 10);
             double largest = 0, total = 0;
-            for (size_t k = (what == Turning::Travel ? 2 : 1); k < painted.dabs.size(); k++) {
+            for (size_t k = 1; k < painted.dabs.size(); k++) {
                 const double step = std::remainder(painted.dabs[k].rotation - painted.dabs[k - 1].rotation, 2 * pi) * 180 / pi;
                 largest = std::max(largest, std::fabs(step));
                 total += step;
@@ -443,9 +442,53 @@ TEST_CASE(twist_roll_azimuth_and_the_tip_angle_pass_358_359_0_1_2_without_a_jump
     // A tip that follows the stroke passes 359 -> 0 the same way.
     const Painted follow = paintTurning(turningStroke({358, 359, 0, 1, 2}, Turning::Travel), {}, true);
     double largest = 0;
-    for (size_t k = 2; k < follow.dabs.size(); k++)
+    for (size_t k = 1; k < follow.dabs.size(); k++)
         largest = std::max(largest, std::fabs(std::remainder(follow.dabs[k].rotation - follow.dabs[k - 1].rotation, 2 * pi)) * 180 / pi);
     CHECK(largest <= 1.0 + 1e-9);
+}
+
+TEST_CASE(the_first_dab_points_the_way_the_stroke_goes) {
+    // A stroke drawn up and to the left (135 degrees on screen): a tip that follows the stroke, and Roll on a pen
+    // without twist, start turned that way rather than along +x, as the first dab did up to 1.8.2.
+    std::vector<BrushSample> samples;
+    for (int i = 0; i < 6; i++) {
+        BrushSample s;
+        s.time = i / 120.0;
+        s.position = {150 - 8.0 * i, 80 - 8.0 * i};
+        s.pressure = 0.8;
+        s.stylus = true;
+        samples.push_back(s);
+    }
+    const double travel = std::atan2(-8.0, -8.0);
+    const BrushDynamics roll = {dynamicsMapping(DynamicsInput::Roll, DynamicsTarget::Angle, 0, -360)};
+    auto turned = [](double rotation, double expected) { return std::fabs(std::remainder(rotation - expected, 2 * pi)) < 1e-9; };
+    const Painted follow = paintTurning(samples, {}, true), rolled = paintTurning(samples, roll, false);
+    REQUIRE(follow.dabs.size() > 2 && rolled.dabs.size() > 2);
+    CHECK(turned(follow.dabs[0].rotation, travel));
+    CHECK(turned(follow.dabs[0].rotation, follow.dabs[1].rotation));
+    CHECK(follow.dabs[0].center.x == 150 && follow.dabs[0].center.y == 80);   // where the pen went down
+    CHECK(turned(rolled.dabs[0].rotation, rolled.dabs[1].rotation));
+    // With the barrel reported, Roll reads it from the first report: no wait, the first dab turned by the barrel.
+    std::vector<BrushSample> barrel = samples;
+    for (BrushSample& s : barrel) { s.twist = 30; s.twistReported = true; }
+    const Painted twisted = paintTurning(barrel, roll, false);
+    REQUIRE(twisted.dabs.size() > 2);
+    CHECK(turned(twisted.dabs[0].rotation, 30 * pi / 180));
+    // A click that never moves still stamps its dab (on finish), facing +x as there is no direction.
+    const Painted click = paintTurning({samples.front()}, {}, true);
+    CHECK_EQ(click.dabs.size(), size_t(1));
+    // A plain tip does not wait: its first dab is stamped at the press.
+    BrushTip tip;
+    tip.shape = std::make_shared<GrayImage>(10, 10, 255);
+    auto image = std::make_shared<Image>(200, 100);
+    Layer layer(Asset::make(image, "Paper"), Point(0, 0));
+    BrushSettings settings;
+    settings.diameter = 20;
+    BrushStroke grid(layer, false, settings, Size(200, 100));
+    TipStroke stroke(grid, tip, 20, 11);
+    BrushSampleTrack track;
+    stroke.strokeTo(track.add(samples.front()));
+    CHECK_EQ(stroke.dabCount(), size_t(1));
 }
 
 TEST_CASE(a_stroke_across_the_wrap_replays_the_same) {

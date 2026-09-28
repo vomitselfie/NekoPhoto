@@ -164,6 +164,15 @@ input|stabilizer|pulled|pressure|all`), every mode's move median stays within th
 A tip brush reads pressure only from a stylus: a mouse is full pressure, as in Photoshop, unless the brush turns on
 Mouse speed as pressure.
 
+**The first dab waits for the direction** when anything about it turns with the stroke: Stroke grain, a tip that
+follows the stroke (`followStroke`), or a Roll mapping on a pen that does not report its twist. The press has no
+direction of its own (the track gives the first sample 0, along +x), so its dab is placed when the next sample that
+moves arrives, at the press's point, with the pen as it was at the press and the direction of that first step; a click
+that never moves is stamped by `TipStroke::finish`, facing +x. Up to 1.8.2 only Stroke grain waited, so a tip following
+the stroke, or rolling with it, stamped its first dab facing +x: a stroke started in any other direction began with a
+dab turned the wrong way (a square tip showed a crooked corner at the start). A tip that turns with nothing, or Roll on
+a pen reporting its barrel, does not wait. `the_first_dab_points_the_way_the_stroke_goes` holds it.
+
 ## Dynamics
 
 A tip brush's `dynamics` is a list of mappings. Each reads one input, shapes it through a curve, and scales the result
@@ -473,6 +482,14 @@ records every dab's centre, size, the path's direction, the grain's tangent and 
 
 `render_hash_tests` keeps its own brush scenes, and `brush_dynamics_tests` covers curves, the combination rule, circular
 targets, the inputs and the migration of old presets.
+
+**Baseline changes after 1.8.2** (the first dab's direction, above). 17 scenes changed at 8 bits and the same 17 at 16:
+`tip_square` and `procreate_soft_ink` (both follow the stroke: Soft Ink has `shapeRotation`) on `straight_line`,
+`circle`, `s_curve`, `corners`, `fast_flick`, `long_slow`, `pen_hook` and `mouse_scribble`, the fixtures whose first
+step is not along +x; and `syn_12_roll` on `circle`, the one Roll scene without a reported twist (its `twist_sweep` and
+`twist_wrap` report the barrel). Only the start moves: the bounding box and total alpha of the first dab, not the
+stations along the stroke. The fixtures drawn along +x (the pressure, speed, tilt and twist sweeps) are unchanged. In
+`render_hash_tests` the one scene with such a tip, `brush/tip_square`, changed for the same reason.
 
 ## Automation
 

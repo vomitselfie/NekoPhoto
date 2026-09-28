@@ -230,6 +230,7 @@ TipStroke::TipStroke(BrushStroke& grid, BrushTip tip, double diameter, uint32_t 
         level.peak = *std::max_element(p, p + size_t(level.image.width()) * level.image.height());
     }
     for (int i = 0; i < dynamicsTargetCount; i++) randomOn_[size_t(i)] = hasMapping(tip_.dynamics, DynamicsTarget(i), DynamicsInput::Random);
+    rollOn_ = std::any_of(tip_.dynamics.begin(), tip_.dynamics.end(), [](const DynamicsMapping& m) { return m.input == DynamicsInput::Roll; });
     valid_ = true;
 }
 
@@ -547,8 +548,10 @@ void TipStroke::strokeTo(const BrushSample& sample) {
     if (!last_) {
         last_ = input;
         carried_ = 0;
-        // Stroke grain turns with the stroke from its first dab: that dab waits until the stroke has a direction.
-        if (tip_.grain && tip_.grainMode == BrushTip::GrainMode::Stroke) { firstPending_ = true; return; }
+        // Whatever turns with the stroke (Stroke grain, a tip following the stroke, Roll on a pen without twist) turns
+        // from the first dab: that dab waits until the stroke has a direction.
+        const bool strokeGrain = tip_.grain && tip_.grainMode == BrushTip::GrainMode::Stroke;
+        if (strokeGrain || tip_.followStroke || (rollOn_ && !input.twistReported)) { firstPending_ = true; return; }
         dab(input.position, input, 0, tip_.spacing, changed);
     } else {
         const Point from = last_->position, to = input.position;
@@ -556,7 +559,10 @@ void TipStroke::strokeTo(const BrushSample& sample) {
         if (length <= 0) return;
         const double direction = std::atan2(dy, dx);
         if (firstPending_) {
-            dab(from, *last_, direction, tip_.spacing, changed);
+            // The first sample has no direction of its own (the track gives it 0, along +x): it takes the stroke's.
+            BrushSample first = *last_;
+            first.direction = direction;
+            dab(from, first, direction, tip_.spacing, changed);
             firstPending_ = false;
         }
         // Dabs every `spacing` of the dab's size, the size read at the point reached so far.
