@@ -32,12 +32,19 @@ EditorSession::EditorSession(QObject* parent) : QObject(parent) {
     myPaintSettle_.setInterval(16);
     connect(&myPaintSettle_, &QTimer::timeout, this, [this] {
         if (!myPaint_ || !stroke_ || !lastBrushPoint_ || myPaint_->settled()) { myPaintSettle_.stop(); return; }
-        myPaintTo(*lastBrushPoint_);
-        Rect dirty = stroke_->takeDirtyRect();
-        if (!dirty.isEmpty()) {
-            strokeRegion_ = strokeRegion_.isEmpty() ? toQRect(dirty) : strokeRegion_.united(toQRect(dirty));
-            emit documentChanged(toQRect(dirty));
-        }
+        // With smoothing on, the stroke's own last sample repeats: the pen's point would jump past the stabiliser.
+        if (stabilizing_ && lastGiven_) strokeSample(*lastGiven_);
+        else brushTo(*lastBrushPoint_, true);
+        takeBrushDirty();
+    });
+    // Stroke Catch-Up: the stabilised brush keeps closing on a pen held still, which sends no events.
+    stabilizerTick_.setInterval(16);
+    connect(&stabilizerTick_, &QTimer::timeout, this, [this] {
+        if (!stroke_ || !stabilizing_ || !sincePen_.isValid()) { stabilizerTick_.stop(); return; }
+        stabilized_.clear();
+        stabilizer_.tick(stabilizer_.pen().time + sincePen_.elapsed() / 1000.0, stabilized_);
+        for (const BrushSample& s : stabilized_) strokeSample(s);
+        takeBrushDirty();
     });
 }
 

@@ -4,6 +4,7 @@
 #pragma once
 #include "compositor/brush.h"
 #include "compositor/brushsample.h"
+#include "compositor/brushsmoothing.h"
 #include "compositor/tipbrush.h"
 #include <cstdint>
 #include <functional>
@@ -164,5 +165,26 @@ std::vector<Scene> expectationScenes(const std::vector<StrokeFixture>& fixtures,
 /// Paints and checks one expectation; `why` says what was measured.
 bool checkExpectation(const Expectation& expectation, const std::vector<StrokeFixture>& fixtures, const FixtureBrushes& brushes,
                       std::string* why);
+
+// ---- Smoothing (brush_smoothing_tests) ------------------------------------------------------------------------------
+
+/// A clean path at a steady speed, and the same path with seeded noise: 1.5 pixels on each axis of the position, 0.05
+/// on the pressure and 3 degrees on a twist that sits at 0 (so its noise crosses the wrap).
+struct JitterFixture {
+    std::string name;
+    StrokeFixture clean, noisy;
+};
+/// A line, an S curve and a circle at about 500 pixels a second, and a fast line at about 2000; 120 reports a second.
+std::vector<JitterFixture> jitterFixtures();
+
+/// What smoothing made of a noisy fixture, against its clean path.
+struct SmoothingMetrics {
+    double deviation = 0, deviationP95 = 0;   // from each sample given to the stroke to the clean path, pixels
+    double lag = 0, lagMax = 0;               // after each report, from the brush to where the clean pen was, pixels
+    double endGap = 0;                        // from the stroke's last sample to the clean path's end, pixels
+    double pressureNoise = 0;                 // the RMS of the stroke's pressure against the clean pressure
+    size_t samples = 0;                       // samples given to the stroke
+};
+SmoothingMetrics measureSmoothing(const JitterFixture& fixture, const BrushSmoothing& smoothing, std::vector<BrushSample>* out = nullptr);
 
 } // namespace brushharness

@@ -207,7 +207,9 @@ void AutomationServer::registerPaintHandlers() {
         auto previousClone = s->cloneSource;
         auto previousActive = s->activeLayerId();
         const QString previousPreset = s->brushPreset;
+        const BrushSmoothing previousSmoothing = s->brushSmoothing;
         auto restore = [&] {
+            s->brushSmoothing = previousSmoothing;
             s->brushSettings = previousBrush; s->brushErase = previousErase; s->foregroundColor = previousColor; s->blurMode = previousBlur; s->toning = previousToning; s->spotHealingMode = previousHealing; s->cloneSource = previousClone;
             s->brushPreset = previousPreset;
             s->brushSeed.reset();
@@ -254,6 +256,17 @@ void AutomationServer::registerPaintHandlers() {
             pen.viewScale = viewScale;
             s->pen = pen;
         };
+        // Smoothing (the Brush tool's): none unless asked, whatever the options bar has, so a stroke paints the same
+        // wherever it is sent from.
+        BrushSmoothing smoothing;
+        smoothing.stabilizer = std::clamp(num(p, "smoothing", 0), 0.0, 100.0);
+        smoothing.input = std::clamp(num(p, "inputSmoothing", 0), 0.0, 100.0);
+        smoothing.pressure = std::clamp(num(p, "pressureSmoothing", 0), 0.0, 100.0);
+        smoothing.pulledString = flag(p, "pulledString", smoothing.pulledString);
+        smoothing.strokeCatchUp = flag(p, "strokeCatchUp", smoothing.strokeCatchUp);
+        smoothing.catchUpOnEnd = flag(p, "catchUpOnEnd", smoothing.catchUpOnEnd);
+        smoothing.adjustForZoom = flag(p, "adjustForZoom", smoothing.adjustForZoom);
+        s->brushSmoothing = smoothing;
         if (has(p, "seed")) s->brushSeed = uint32_t(std::clamp(num(p, "seed"), 0.0, 4294967295.0));
         bool warp = false;
         if (tool == "brush" || tool == "eraser") { s->selectTool(Tool::Brush); s->brushErase = tool == "eraser" || flag(p, "erase", false); }
@@ -289,6 +302,7 @@ void AutomationServer::registerPaintHandlers() {
         restore();
         QJsonObject answer{{"points", int(pts.size())}, {"tool", tool}};
         if (!usedPreset.isEmpty()) answer["preset"] = usedPreset;
+        if (smoothing.active()) answer["smoothed"] = true;
         return answer;
     });
     add("pixels.bucket", [session, document](const QJsonObject& p) {

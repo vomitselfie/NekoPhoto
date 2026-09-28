@@ -3163,10 +3163,6 @@ Add one from the Layers panel or Layer &gt; New Adjustment Layer.</source>
         <translation>ダイナミクス...</translation>
     </message>
     <message>
-        <source>Brush dynamics: pen pressure curves and spacing for imported tip brushes. The round tip and the MyPaint presets keep their own.</source>
-        <translation>ブラシのダイナミクス: 読み込んだ先端ブラシの筆圧カーブと間隔の設定です。円形の先端と MyPaint プリセットは独自の設定を使います。</translation>
-    </message>
-    <message>
         <source>Pressure</source>
         <translation>筆圧</translation>
     </message>
@@ -3243,6 +3239,62 @@ Add one from the Layers panel or Layer &gt; New Adjustment Layer.</source>
         <translation>ブラシのダイナミクス: %1</translation>
     </message>
     <message>
+        <source>Smoothing</source>
+        <translation>スムージング</translation>
+    </message>
+    <message>
+        <source>The line trails the pen and evens out its wobble: the higher, the steadier and the further behind</source>
+        <translation>線がペンの後を追い、揺れをならします。値を上げるほど安定し、遅れも大きくなります</translation>
+    </message>
+    <message>
+        <source>Pulled String Mode</source>
+        <translation>ひもを引くモード</translation>
+    </message>
+    <message>
+        <source>Paints only when the string is taut: moving the pen within the smoothing radius leaves no mark</source>
+        <translation>ひもがぴんと張ったときにのみペイントされます。スムージングの半径内でペンを動かしても描画されません</translation>
+    </message>
+    <message>
+        <source>Stroke Catch-Up</source>
+        <translation>ストロークのキャッチアップ</translation>
+    </message>
+    <message>
+        <source>The paint keeps catching up with the pen while you pause; off, it stops as soon as the pen stops</source>
+        <translation>ストロークを一時停止している間も、ペイントがペンに追いつき続けます。オフにすると、ペンが止まるとすぐにペイントも止まります</translation>
+    </message>
+    <message>
+        <source>Catch-Up On Stroke End</source>
+        <translation>ストローク終点のキャッチアップ</translation>
+    </message>
+    <message>
+        <source>Completes the stroke from the last paint position to where you released the pen</source>
+        <translation>最後にペイントされた位置から、ペンを離した位置までストロークを完了します</translation>
+    </message>
+    <message>
+        <source>Adjust For Zoom</source>
+        <translation>ズームの調整</translation>
+    </message>
+    <message>
+        <source>Less smoothing when zoomed in, more when zoomed out, so it feels the same on screen</source>
+        <translation>ズームインするとスムージングを弱め、ズームアウトすると強めて、画面上で同じ感触に保ちます</translation>
+    </message>
+    <message>
+        <source>Input smoothing</source>
+        <translation>入力のスムージング</translation>
+    </message>
+    <message>
+        <source>Steadies a jittery tablet with little lag: a slow pen is held still, a fast one followed closely</source>
+        <translation>タブレットのぶれを、ほとんど遅れなしに抑えます。ゆっくりしたペンは安定させ、速いペンにはそのまま追従します</translation>
+    </message>
+    <message>
+        <source>Pressure smoothing</source>
+        <translation>筆圧のスムージング</translation>
+    </message>
+    <message>
+        <source>Evens out uneven pressure without slowing the line</source>
+        <translation>線を遅らせずに、筆圧のむらをならします</translation>
+    </message>
+    <message>
         <source>Size follows pen pressure</source>
         <translation>サイズを筆圧に追従</translation>
     </message>
@@ -3315,6 +3367,10 @@ Add one from the Layers panel or Layer &gt; New Adjustment Layer.</source>
     <message>
         <source>Brush Dynamics</source>
         <translation>ブラシのダイナミクス</translation>
+    </message>
+    <message>
+        <source>Smoothing for every brush; pen pressure curves and spacing for imported tip brushes (the round tip and the MyPaint presets keep their own).</source>
+        <translation>すべてのブラシのスムージングと、読み込んだ先端ブラシの筆圧カーブと間隔(円形の先端と MyPaint プリセットは独自の設定を使います)。</translation>
     </message>
     <message>
         <source>The brush could not be saved: %1</source>
@@ -7739,6 +7795,10 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Opacity</source>
         <translation>不透明度</translation>
+    </message>
+    <message>
+        <source>Smoothing</source>
+        <translation>スムージング</translation>
     </message>
     <message>
         <source>Content-Aware</source>

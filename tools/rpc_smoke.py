@@ -277,6 +277,12 @@ def remaining_methods(rpc):
     grown = rpc.call("selection.info")
     assert grown["active"] and grown["bounds"]["width"] > 60, grown   # painting white in Quick Mask selects
     rpc.call("selection.none")
+    # Smoothing: the stabiliser with its modes, input and pressure smoothing, each one undo step.
+    smoothed = rpc.call("brush.stroke", points=[[20, 20], [40, 22], [60, 19], [80, 21]], size=6, smoothing=50, pulledString=False,
+                        strokeCatchUp=True, catchUpOnEnd=True, adjustForZoom=True, inputSmoothing=20, pressureSmoothing=30, pressures=[0.2, 0.9, 0.3, 0.8])
+    assert smoothed.get("smoothed"), smoothed
+    assert rpc.call("history.info")["undo"] == "Brush Stroke"
+    assert not rpc.call("brush.stroke", points=[[20, 30], [80, 30]], size=6, smoothing=0).get("smoothed")
     rpc.call("layers.group")
     # Folders take Photoshop's modes: Pass Through by default, a blend mode isolates, opacity fades.
     listed = rpc.call("layers.list")

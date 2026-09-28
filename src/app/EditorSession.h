@@ -8,6 +8,7 @@
 #include "Viewport.h"
 #include "compositor/adjustments.h"
 #include "compositor/brush.h"
+#include "compositor/brushsmoothing.h"
 #include "compositor/mypaint.h"
 #include "compositor/tipbrush.h"
 #include "compositor/filters.h"
@@ -290,6 +291,9 @@ public:
     /// the event time in seconds and whether a stylus sent it; a mouse sends neutral values. The brush takes its
     /// position from the point it is given.
     compositor::BrushSample pen;
+    /// Smoothing for the Brush tool's strokes (brushsmoothing.h): input smoothing, the stabiliser (the options bar's
+    /// Smoothing) with its modes, and pressure smoothing. All 0 by default: the pen is followed as it came.
+    compositor::BrushSmoothing brushSmoothing;
     /// The seed of the next stroke's tip-brush jitter (a replayed stroke); a fresh one per stroke when unset.
     std::optional<uint32_t> brushSeed;
     /// Photoshop's opacity keys: 1 = 10% ... 9 = 90%, 0 = 100%; two digits typed quickly set an exact value.
@@ -874,9 +878,17 @@ private:
     std::unique_ptr<compositor::MyPaintStroke> myPaint_;   // paints stroke_ when a MyPaint preset is chosen
     std::unique_ptr<compositor::TipStroke> tipStroke_;     // stamps into stroke_ when a tip brush is chosen
     compositor::BrushSampleTrack sampleTrack_;   // derives each brush sample from the ones before
-    compositor::BrushSample nextSample(QPointF documentPoint);
-    void tipTo(QPointF documentPoint);
-    void myPaintTo(QPointF documentPoint);
+    /// The pen at `documentPoint` into the stroke: through the stabiliser while smoothing is on (unless `direct`), then
+    /// derived and given to the engine painting it.
+    void brushTo(QPointF documentPoint, bool direct = false);
+    void strokeSample(const compositor::BrushSample& raw);
+    void takeBrushDirty();
+    compositor::BrushStabilizer stabilizer_;
+    bool stabilizing_ = false;
+    std::vector<compositor::BrushSample> stabilized_;
+    std::optional<compositor::BrushSample> lastGiven_;   // the last sample given to the engine, raw
+    QTimer stabilizerTick_;       // Stroke Catch-Up: while the pen rests, the stabilised brush closes on it
+    QElapsedTimer sincePen_;      // since the last pen event, for the stabiliser's clock between events
     uint32_t strokeSeed_ = 0;
     QTimer healPreview_;   // a healing stroke shows its result once the pointer pauses
     QTimer myPaintSettle_; // while the pointer rests, a MyPaint brush with slow tracking catches up to it
