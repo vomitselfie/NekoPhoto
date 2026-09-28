@@ -342,7 +342,8 @@ bool BrushStroke::stampDab(Point center, double radius, const Rect& affected) {
     if (x0 >= x1 || y0 >= y1) return true;
     const std::vector<uint8_t>& tile = stamp_.tiles[phase];
     const int n = x1 - x0;
-    auto merge = [&](int ya, int yb) {
+    auto merge = [&, n](int ya, int yb) {
+        // `n` by value: a byte store may alias anything captured by reference, which would keep the loops scalar.
         for (int y = ya; y < yb; y++) {
             uint8_t* row = coverage_->row(y) + x0;
             const uint8_t* t = &tile[size_t(y - oy) * side + size_t(x0 - ox)];
