@@ -95,6 +95,28 @@ Liquify also render only what they changed instead of the whole view. The test
 The strokes match: the same strokes painted by both builds differ only on the rim of the hard one, by the
 eighth of a pixel every stamped tip already had (`large_stamped_dabs_match_the_general_path`).
 
+## Smoothing (September 2026)
+
+`--bench-smoothing input|stabilizer|pulled|pressure|all` runs `--bench-brush` with that smoothing at 50% (`all`: the
+three filters with Catch-Up On Stroke End; see [brush-engine.md](brush-engine.md#smoothing)). Medians of five
+interleaved runs of 5 strokes of 200 moves, 1086 × 1448, offscreen, against the build before smoothing:
+
+| ms | round: press | move p50 | move p95 | release | dry brush: press | move p50 | move p95 | release |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| before | 2.19 | 0.25 | 0.31 | 2.47 | 2.14 | 0.33 | 0.45 | 3.22 |
+| off | 1.85 | 0.20 | 0.27 | 2.32 | 2.12 | 0.31 | 0.43 | 3.32 |
+| input | 1.79 | 0.21 | 0.31 | 2.63 | 2.14 | 0.33 | 0.44 | 2.90 |
+| stabiliser | 1.91 | 0.23 | 0.30 | 2.56 | 1.84 | 0.32 | 0.45 | 2.80 |
+| pulled string | 1.89 | 0.20 | 0.31 | 2.29 | 1.62 | 0.20 | 0.37 | 2.25 |
+| pressure | 1.91 | 0.25 | 0.31 | 2.86 | 2.32 | 0.36 | 0.46 | 3.42 |
+| all | 2.20 | 0.28 | 0.38 | 3.38 | 1.95 | 0.34 | 0.46 | 3.61 |
+
+Input smoothing adds 0.01–0.02 ms to a move's median, inside the run-to-run noise (the budget was 1 ms); the filters
+themselves cost 0.1 µs a report (input) to 0.4 µs (all three), per `brush_smoothing_tests`. Pulled String paints
+less, since the brush stays a string's length behind the pen, so its moves are the cheapest. What smoothing does add
+is the lag it is there for: the brush trailing the pen, measured in pixels in brush-engine.md, not in milliseconds of
+work.
+
 ## Viewing: `--bench-view`
 
 `nekophoto --bench-view` builds a document (`--bench-size`, default 4096 × 4096) with a photo-like base and
