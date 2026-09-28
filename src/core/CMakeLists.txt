@@ -201,6 +201,7 @@ add_library(compositor_core STATIC
     src/warpmesh.cpp
     src/trim.cpp
     src/smartfilter_render.cpp
+    src/smartfilter_render16.cpp
     src/warpstroke.cpp
     src/transform.cpp
     src/uuid.cpp

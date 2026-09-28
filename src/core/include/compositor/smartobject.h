@@ -9,6 +9,7 @@
 // Photoshop data is written back with the placement patched in, never rewritten.
 #pragma once
 #include "image.h"
+#include "imaget.h"
 #include "psd_carry.h"
 #include "transform.h"
 #include "warpmesh.h"
@@ -16,11 +17,21 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
 
 namespace compositor {
+
+/// A source's contents converted to another depth, made on first use and shared by every instance that places it in
+/// a document of that depth. Keyed on the buffer it was made from, so a copied source with new contents never sees a
+/// stale one.
+struct SmartObjectDepthCache {
+    std::mutex mutex;
+    const void* from = nullptr;
+    AnyImage converted;
+};
 
 struct SmartObjectSource {
     enum class Kind { Embedded, Linked };
@@ -30,7 +41,10 @@ struct SmartObjectSource {
     std::string fileType;                  // four characters: "8BPB", "8BPS", "png ", "JPEG", ...
     std::shared_ptr<const std::vector<uint8_t>> bytes;   // the embedded file, shared by every copy
     std::string linkedPath;                // a linked source's path, as the file gave it
-    ImagePtr image;                        // the contents as an image; null when they cannot be read here
+    /// The contents as an image at their own depth (an 8-bit PNG 8-bit, a 16-bit PSB 16-bit), whatever the depth of
+    /// the documents placing it; null when they cannot be read here.
+    AnyImage image;
+    std::shared_ptr<SmartObjectDepthCache> depthCache = std::make_shared<SmartObjectDepthCache>();
     int width = 0, height = 0;             // the contents' size in pixels
     double resolution = 72;
     /// Where it came from in a PSD: the global block ('lnk2', 'lnkE', ...) and the element as stored, written back
@@ -57,6 +71,12 @@ struct SmartObjectInstance {
 
 const char* smartObjectLockDescription(SmartObjectInstance::Lock lock);
 
+/// The source's contents at `type` (U8 or U16): the image itself at its own depth, else a converted copy made once
+/// and shared. Null when the contents cannot be read.
+AnyImage smartObjectSourceImage(const SmartObjectSource& source, SampleType type);
+/// A PNG file's pixels at its own depth: a 16-bit PNG as 16 bits, any other as 8. Null when it is not one.
+AnyImage decodeSmartObjectPng(const std::vector<uint8_t>& bytes);
+
 /// The warp an unlocked instance is drawn through (read from its Photoshop placement); none when it is flat.
 std::optional<WarpMesh> smartObjectWarp(const SmartObjectInstance& instance);
 /// Whether an unlocked instance's pixels are its source placed as they are (no warp, no Smart Filters), so its
@@ -66,6 +86,7 @@ bool smartObjectPixelsArePlacement(const SmartObjectInstance& instance);
 bool smartObjectFiltered(const SmartObjectInstance& instance);
 /// The instance's pixels when it is warped: `source` drawn through its warp onto `quad`.
 std::optional<WarpedRaster> warpedSmartObjectRaster(const SmartObjectInstance& instance, const Image& source, const std::array<double, 8>& quad);
+std::optional<WarpedRaster16> warpedSmartObjectRaster(const SmartObjectInstance& instance, const Image16& source, const std::array<double, 8>& quad);
 
 /// Where the raster point (x, y) of a `w` x `h` raster lands in the document under `t`.
 Point mapThroughTransform(const LayerTransform& t, int w, int h, double x, double y);
@@ -109,7 +130,8 @@ std::vector<uint8_t> authorPsdPlacement(const std::string& sourceId, const std::
 /// A 'lnk2' element (version 7 'liFD') for an embedded source.
 std::vector<uint8_t> psdEmbeddedElement(const SmartObjectSource& source);
 
-/// For the project package: a source's record (its image is stored beside it as PNG) and an instance's.
+/// For the project package: a source's record (its image is stored beside it as PNG, 16-bit for a 16-bit source) and
+/// an instance's.
 std::vector<uint8_t> serializeSmartObjectSource(const SmartObjectSource& source);
 std::optional<SmartObjectSource> parseSmartObjectSource(const std::vector<uint8_t>& bytes);
 std::vector<uint8_t> serializeSmartObjectInstance(const SmartObjectInstance& instance);
