@@ -285,7 +285,7 @@ MoshDialog::MoshDialog(EditorSession* session, const mosh::EffectSpec& spec, QWi
         reroll->setToolTip(tr("A new random pattern"));
         grid->addWidget(reroll, row, 2);
         connect(seed, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double v) { settings_.seed = float(v); schedulePreview(); });
-        connect(reroll, &QPushButton::clicked, this, [this, seed] { seed->setValue(mosh::seedFrom(uint32_t(std::random_device{}()))); });
+        connect(reroll, &QPushButton::clicked, this, [seed] { seed->setValue(mosh::seedFrom(uint32_t(std::random_device{}()))); });
         syncers_.push_back([this, seed] { QSignalBlocker b(seed); seed->setValue(settings_.seed); });
     }
     for (auto& sync : syncers_) sync();
