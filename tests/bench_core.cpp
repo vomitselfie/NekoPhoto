@@ -269,6 +269,7 @@ void worstCaseBrush(Layer& layer, SampleType depth, int runs) {
     settings.red = 0.2; settings.green = 0.3; settings.blue = 0.6;
     std::vector<double> ms;
     size_t dabs = 0;
+    unsigned long long hash = 0;
     long long extraHeld = 0, extraResident = 0;
     for (int run = 0; run < runs; run++) {
         const long long heldBefore = mallocHeld(), residentBefore = residentBytes();
@@ -284,8 +285,17 @@ void worstCaseBrush(Layer& layer, SampleType depth, int runs) {
             stroke->flush();
             auto commit = stroke->commit();
             dabs = tipStroke.dabCount();
+            ms.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
+            // The painted pixels' fingerprint (FNV-1a 64), outside the timing: a speed-up must leave it alone.
+            hash = 1469598103934665603ull;
+            auto fold = [&](const void* bytes, size_t n) {
+                for (size_t i = 0; i < n; i++) hash = (hash ^ static_cast<const uint8_t*>(bytes)[i]) * 1099511628211ull;
+            };
+            if (auto deep = stroke->previewImage16())
+                for (int y = 0; y < deep->height(); y++) fold(deep->row(y), size_t(deep->width()) * 4 * sizeof(uint16_t));
+            else if (auto eight = stroke->previewImage())
+                for (int y = 0; y < eight->height(); y++) fold(eight->row(y), size_t(eight->width()) * 4);
         }
-        ms.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
         extraHeld = std::max(extraHeld, sampler.peakHeld - heldBefore);
         extraResident = std::max(extraResident, sampler.peakResident - residentBefore);
     }
@@ -298,6 +308,7 @@ void worstCaseBrush(Layer& layer, SampleType depth, int runs) {
                 median, ms.front(), ms.back(), runs);
     std::printf("    %zu samples (%.0f/s), %zu dabs (%.0f/s), peak temporary memory %s\n", samples.size(), samples.size() / (median / 1000),
                 dabs, dabs / (median / 1000), memory);
+    std::printf("    pixels %016llx\n", hash);
     std::fflush(stdout);
 }
 

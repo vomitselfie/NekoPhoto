@@ -230,21 +230,25 @@ void TipStroke::dab(Point center, const BrushSample& pen, double direction, doub
     std::uniform_real_distribution<double> unit(0.0, 1.0), signedUnit(-1.0, 1.0);
     const BrushDynamics& dynamics = tip_.dynamics;
     auto draw = [&](DynamicsTarget target) { return randomOn_[size_t(target)] ? unit(rng_) : 0.0; };
-    // Spacing-independent density: the alpha a dab would have at the reference spacing, spread over this one.
-    std::array<uint8_t, 256> density{};
+    // Spacing-independent density: the alpha a dab would have at the reference spacing, spread over this one. The
+    // table (an entry per level: 256 at 8 bits, one per 15-bit level at 16) is kept while the spacing ratio stays the
+    // same; one replaced while dabs still wait to be drawn with it is kept until they are.
     const bool compensate = tip_.densityBySpacing && spacing > 0 && std::fabs(spacing / tip_.densityReference - 1) > 1e-9;
     Gray16* coverage16 = grid_.gridCoverage16();
-    if (compensate && coverage16) {
-        // At 16 bits the table has an entry per 15-bit level, kept while the spacing stays the same.
+    const void* density = nullptr;
+    if (compensate) {
         const double k = spacing / tip_.densityReference;
-        if (density16K_ != k) {
-            density16_.resize(size_t(one16) + 1);
-            for (uint32_t v = 0; v <= one16; v++) density16_[v] = uint16_t(std::lround(one16 * (1 - std::pow(1 - v / double(one16), k))));
-            density16K_ = k;
+        if (!densityTable_ || densityK_ != k) {
+            if (densityTable_) retiredDensity_.push_back(std::move(densityTable_));
+            auto table = std::make_shared<std::vector<uint16_t>>(coverage16 ? size_t(one16) + 1 : 256);
+            if (coverage16)
+                for (uint32_t v = 0; v <= one16; v++) (*table)[v] = uint16_t(std::lround(one16 * (1 - std::pow(1 - v / double(one16), k))));
+            else
+                for (int v = 0; v < 256; v++) (*table)[size_t(v)] = uint16_t(std::lround(255 * (1 - std::pow(1 - v / 255.0, k))));
+            densityTable_ = std::move(table);
+            densityK_ = k;
         }
-    } else if (compensate) {
-        const double k = spacing / tip_.densityReference;
-        for (int v = 0; v < 256; v++) density[size_t(v)] = uint8_t(std::lround(255 * (1 - std::pow(1 - v / 255.0, k))));
+        density = densityTable_->data();
     }
     // Stroke grain turns with the stroke's tangent smoothed over about two diameters, so a corner or a jittered dab
     // does not spin it. The direction is unwrapped against the last dab's direction, not the lagging tangent, so a
@@ -316,81 +320,127 @@ void TipStroke::dab(Point center, const BrushSample& pen, double direction, doub
         const int gridHeight = coverage16 ? coverage16->height() : grid_.gridCoverage()->height();
         Rect box = toGrid.mapBounds(docBox).integral().intersection(Rect(0, 0, gridWidth, gridHeight));
         if (box.isEmpty()) continue;
-        const Affine& toDocument = grid_.gridToDocument();
-        const Point step = toDocument.applyVector({1, 0});
+        const Point step = grid_.gridToDocument().applyVector({1, 0});
         const double footprint = std::hypot(step.x, step.y);
         const Level& level = levelFor(footprint / scale);
-        const double lx = level.image.width() / double(shape.width()), ly = level.image.height() / double(shape.height());
-        const GrayImage* grain = tip_.grain.get();
-        const double grainStrength = grain ? applyDynamics(dynamics, DynamicsTarget::GrainDepth, tip_.grainDepth, pen, diameter_, grainDepthRandom) : 0;
+        const bool grain = tip_.grain != nullptr;
+        // The dab as it will be drawn (drawPending), with everything that varies from one dab to the next.
+        Stamp st;
+        st.center = center;
+        st.at = at;
+        st.c = c; st.s = s; st.sx = sx; st.sy = sy;
+        st.flipX = flipX; st.flipY = flipY;
+        st.level = &level;
+        st.lx = level.image.width() / double(shape.width());
+        st.ly = level.image.height() / double(shape.height());
+        st.flow = flow;
+        st.ceiling = ceiling;
+        st.grainStrength = grain ? applyDynamics(dynamics, DynamicsTarget::GrainDepth, tip_.grainDepth, pen, diameter_, grainDepthRandom) : 0;
         // The grain turned about the document's origin, when a mapping turns it.
-        const double grainTurn = grain ? applyDynamics(dynamics, DynamicsTarget::GrainRotation, 0, pen, diameter_, grainRotationRandom) * pi / 180 : 0;
-        const double gc = std::cos(grainTurn), gs = std::sin(grainTurn);
-        const int x0 = int(box.minX()), x1 = int(box.maxX()), y0 = int(box.minY()), y1 = int(box.maxY());
-        // The coverage at the grid's depth: 0..255 or 0..32768, the same sampling either way.
-        auto stamp = [&](auto& coverage, int ya, int yb) {
-            constexpr bool deep = std::is_same_v<std::remove_reference_t<decltype(coverage)>, Gray16>;
-            for (int y = ya; y < yb; y++) {
-                auto* row = coverage.row(y);
-                Point d = toDocument.apply({x0 + 0.5, y + 0.5});
-                for (int x = x0; x < x1; x++, d = d + step) {
-                    // Into the tip's frame: undo the rotation, then the scale, then the flips.
-                    const double vx = d.x - at.x, vy = d.y - at.y;
-                    double u = (c * vx + s * vy) / sx, v = (-s * vx + c * vy) / sy;
-                    if (flipX) u = -u;
-                    if (flipY) v = -v;
-                    const double tx = (u + shape.width() / 2.0) * lx, ty = (v + shape.height() / 2.0) * ly;
-                    if (tx < -1 || ty < -1 || tx > level.image.width() + 1 || ty > level.image.height() + 1) continue;
-                    double value = sample(level.image, tx, ty) * flow;
-                    if (grain && value > 0) {
-                        // The grain's frame: the document, the stroke (along its smoothed tangent, travelling with it)
-                        // or the dab (its turn and flips).
-                        double px = d.x, py = d.y;
-                        if (tip_.grainMode == BrushTip::GrainMode::Stroke) {
-                            const double ox = d.x - center.x, oy = d.y - center.y;
-                            px = tc * ox + ts * oy + grainOffset.x;
-                            py = -ts * ox + tc * oy + grainOffset.y;
-                        } else if (tip_.grainMode == BrushTip::GrainMode::Dab) {
-                            px = (flipX ? -1 : 1) * (c * vx + s * vy);
-                            py = (flipY ? -1 : 1) * (-s * vx + c * vy);
-                        }
-                        const double gxd = grainTurn != 0 ? gc * px + gs * py : px, gyd = grainTurn != 0 ? -gs * px + gc * py : py;
-                        int gx = int(std::floor(gxd * tip_.grainScale)) % grain->width(), gy = int(std::floor(gyd * tip_.grainScale)) % grain->height();
-                        if (gx < 0) gx += grain->width();
-                        if (gy < 0) gy += grain->height();
-                        value *= 1 - grainStrength + grainStrength * grain->at(gx, gy) / 255.0;
-                    }
-                    if constexpr (deep) {
-                        uint32_t add = uint32_t(std::lround(std::clamp(value, 0.0, 255.0) * (one16 / 255.0)));
-                        if (compensate) add = density16_[add];
-                        if (!add) continue;
-                        const uint32_t old = row[x];
-                        if (old >= ceiling) continue;
-                        row[x] = uint16_t(old + ((add * (ceiling - old) + one16 / 2) >> 15));
-                    } else {
-                        unsigned add = unsigned(std::lround(std::clamp(value, 0.0, 255.0)));
-                        if (compensate) add = density[add];
-                        if (!add) continue;
-                        // Build up towards the dab's opacity (all the way, without an Opacity mapping).
-                        const unsigned old = row[x];
-                        if (old >= ceiling) continue;
-                        row[x] = uint8_t(old + (add * (ceiling - old) + 127) / 255);
-                    }
-                }
-            }
-        };
-        if (coverage16) {
-            auto rows = [&](int ya, int yb) { stamp(*coverage16, ya, yb); };
-            if (y1 - y0 >= 64) parallelRows(y0, y1, rows, 16);
-            else rows(y0, y1);
-        } else {
-            GrayImage& coverage = *grid_.gridCoverage();
-            auto rows = [&](int ya, int yb) { stamp(coverage, ya, yb); };
-            if (y1 - y0 >= 64) parallelRows(y0, y1, rows, 16);
-            else rows(y0, y1);
-        }
+        st.grainTurn = grain ? applyDynamics(dynamics, DynamicsTarget::GrainRotation, 0, pen, diameter_, grainRotationRandom) * pi / 180 : 0;
+        st.gc = std::cos(st.grainTurn); st.gs = std::sin(st.grainTurn);
+        st.tc = tc; st.ts = ts;
+        st.grainOffset = grainOffset;
+        st.density = static_cast<const uint16_t*>(density);
+        st.x0 = int(box.minX()); st.x1 = int(box.maxX()); st.y0 = int(box.minY()); st.y1 = int(box.maxY());
+        pending_.push_back(st);
         changed = changed.unionWith(box);
     }
+}
+
+template <typename Coverage>
+void TipStroke::stampRows(const Stamp& st, Coverage& coverage, int ya, int yb) const {
+    // The coverage at the grid's depth: 0..255 or 0..32768, the same sampling either way.
+    constexpr bool deep = std::is_same_v<Coverage, Gray16>;
+    const GrayImage& shape = *tip_.shape;
+    const GrayImage& levelImage = st.level->image;
+    const GrayImage* grain = tip_.grain.get();
+    const Affine& toDocument = grid_.gridToDocument();
+    const Point step = toDocument.applyVector({1, 0});
+    const Point center = st.center, at = st.at, grainOffset = st.grainOffset;
+    const double c = st.c, s = st.s, sx = st.sx, sy = st.sy, lx = st.lx, ly = st.ly, flow = st.flow;
+    const double tc = st.tc, ts = st.ts, gc = st.gc, gs = st.gs, grainTurn = st.grainTurn, grainStrength = st.grainStrength;
+    const bool flipX = st.flipX, flipY = st.flipY;
+    const unsigned ceiling = st.ceiling;
+    const uint16_t* density = st.density;
+    const int x0 = st.x0, x1 = st.x1;
+    for (int y = ya; y < yb; y++) {
+        auto* row = coverage.row(y);
+        Point d = toDocument.apply({x0 + 0.5, y + 0.5});
+        for (int x = x0; x < x1; x++, d = d + step) {
+            // Into the tip's frame: undo the rotation, then the scale, then the flips.
+            const double vx = d.x - at.x, vy = d.y - at.y;
+            double u = (c * vx + s * vy) / sx, v = (-s * vx + c * vy) / sy;
+            if (flipX) u = -u;
+            if (flipY) v = -v;
+            const double tx = (u + shape.width() / 2.0) * lx, ty = (v + shape.height() / 2.0) * ly;
+            if (tx < -1 || ty < -1 || tx > levelImage.width() + 1 || ty > levelImage.height() + 1) continue;
+            double value = sample(levelImage, tx, ty) * flow;
+            if (grain && value > 0) {
+                // The grain's frame: the document, the stroke (along its smoothed tangent, travelling with it)
+                // or the dab (its turn and flips).
+                double px = d.x, py = d.y;
+                if (tip_.grainMode == BrushTip::GrainMode::Stroke) {
+                    const double ox = d.x - center.x, oy = d.y - center.y;
+                    px = tc * ox + ts * oy + grainOffset.x;
+                    py = -ts * ox + tc * oy + grainOffset.y;
+                } else if (tip_.grainMode == BrushTip::GrainMode::Dab) {
+                    px = (flipX ? -1 : 1) * (c * vx + s * vy);
+                    py = (flipY ? -1 : 1) * (-s * vx + c * vy);
+                }
+                const double gxd = grainTurn != 0 ? gc * px + gs * py : px, gyd = grainTurn != 0 ? -gs * px + gc * py : py;
+                int gx = int(std::floor(gxd * tip_.grainScale)) % grain->width(), gy = int(std::floor(gyd * tip_.grainScale)) % grain->height();
+                if (gx < 0) gx += grain->width();
+                if (gy < 0) gy += grain->height();
+                value *= 1 - grainStrength + grainStrength * grain->at(gx, gy) / 255.0;
+            }
+            if constexpr (deep) {
+                uint32_t add = uint32_t(std::lround(std::clamp(value, 0.0, 255.0) * (one16 / 255.0)));
+                if (density) add = density[add];
+                if (!add) continue;
+                const uint32_t old = row[x];
+                if (old >= ceiling) continue;
+                row[x] = uint16_t(old + ((add * (ceiling - old) + one16 / 2) >> 15));
+            } else {
+                unsigned add = unsigned(std::lround(std::clamp(value, 0.0, 255.0)));
+                if (density) add = density[add];
+                if (!add) continue;
+                // Build up towards the dab's opacity (all the way, without an Opacity mapping).
+                const unsigned old = row[x];
+                if (old >= ceiling) continue;
+                row[x] = uint8_t(old + (add * (ceiling - old) + 127) / 255);
+            }
+        }
+    }
+}
+
+void TipStroke::drawPending() {
+    if (pending_.empty()) return;
+    // The dabs placed since the last call, drawn in the order they were placed. A pixel's value depends only on the
+    // dabs over it and their order, so bands of rows can be drawn on every core at once, each band running through
+    // all the dabs: the same pixels as one dab after another, with one hand-out to the workers for the lot instead of
+    // one per dab.
+    int y0 = pending_.front().y0, y1 = pending_.front().y1;
+    double area = 0;
+    for (const Stamp& st : pending_) {
+        y0 = std::min(y0, st.y0);
+        y1 = std::max(y1, st.y1);
+        area += double(st.x1 - st.x0) * (st.y1 - st.y0);
+    }
+    auto drawOn = [&](auto& coverage) {
+        auto rows = [&](int ya, int yb) {
+            for (const Stamp& st : pending_) {
+                const int a = std::max(ya, st.y0), b = std::min(yb, st.y1);
+                if (a < b) stampRows(st, coverage, a, b);
+            }
+        };
+        if (area >= 65536) parallelRows(y0, y1, rows, 4);
+        else rows(y0, y1);
+    };
+    if (Gray16* coverage16 = grid_.gridCoverage16()) drawOn(*coverage16);
+    else drawOn(*grid_.gridCoverage());
+    pending_.clear();
+    retiredDensity_.clear();
 }
 
 namespace {
@@ -442,6 +492,7 @@ void TipStroke::strokeTo(const BrushSample& sample) {
         }
         last_ = input;
     }
+    drawPending();
     if (!changed.isEmpty()) grid_.recomposeCovered(changed);
 }
 
@@ -450,6 +501,7 @@ void TipStroke::finish() {
     firstPending_ = false;
     Rect changed;
     dab(last_->position, *last_, 0, tip_.spacing, changed);
+    drawPending();
     if (!changed.isEmpty()) grid_.recomposeCovered(changed);
 }
 

@@ -106,7 +106,22 @@ private:
     struct Level { GrayImage image; double scale; };   // the tip, halved, and its size relative to the original
     /// The dab size at `sample` before its random part: what the spacing is measured in.
     double steadySize(const BrushSample& sample) const;
+    /// Places the dabs of one spacing step (resolving their dynamics, in the random draws' order); drawPending draws them.
     void dab(Point center, const BrushSample& sample, double direction, double spacing, Rect& changed);
+    /// A placed dab: where it lands in the grid and everything its pixels are drawn with.
+    struct Stamp {
+        Point center, at, grainOffset;
+        double c = 1, s = 0, sx = 1, sy = 1, lx = 1, ly = 1, flow = 1;
+        double tc = 1, ts = 0, gc = 1, gs = 0, grainTurn = 0, grainStrength = 0;
+        const Level* level = nullptr;
+        const uint16_t* density = nullptr;   // density by spacing, indexed by the dab's value; null without
+        unsigned ceiling = 0;
+        int x0 = 0, x1 = 0, y0 = 0, y1 = 0;
+        bool flipX = false, flipY = false;
+    };
+    template <typename Coverage> void stampRows(const Stamp& stamp, Coverage& coverage, int y0, int y1) const;
+    /// Draws the placed dabs in order into the coverage, bands of rows on every core.
+    void drawPending();
     const Level& levelFor(double tipPixelsPerGridPixel) const;
 
     BrushStroke& grid_;
@@ -126,9 +141,12 @@ private:
     bool firstPending_ = false;   // Stroke grain: the first sample is in, its dab waits for the direction
     std::array<bool, dynamicsTargetCount> randomOn_{};   // targets a Random mapping drives
     bool valid_ = false;
-    /// Density by spacing on a 16-bit grid: an entry per 15-bit level, for the spacing ratio `density16K_`.
-    std::vector<uint16_t> density16_;
-    double density16K_ = -1;
+    /// Density by spacing: an entry per level of the grid's depth, for the spacing ratio `densityK_`; tables replaced
+    /// while placed dabs still point at them wait in `retiredDensity_` until those are drawn.
+    std::shared_ptr<std::vector<uint16_t>> densityTable_;
+    std::vector<std::shared_ptr<std::vector<uint16_t>>> retiredDensity_;
+    double densityK_ = -1;
+    std::vector<Stamp> pending_;   // placed, not yet drawn
     std::vector<TipDab>* trace_ = nullptr;
     size_t dabCount_ = 0;
 };
