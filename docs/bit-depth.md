@@ -68,19 +68,35 @@ Files store 0 to 65535; the values are mapped when a file is read and written.
 - **Transforming layers**: the Move tool, Free Transform (move, scale, rotate), Distort and Perspective, Edit ▸ Warp,
   Warp Cage, and Flip Layer. A warp bends the 16-bit pixels; the cage previews from an 8-bit copy while you drag.
 - **Layer masks**: Reveal All, Hide All, enable and disable, link, invert, apply and delete, and painting them.
+- **Smart objects**: Place Embedded, Convert to Smart Object, Edit Contents, Replace Contents, Rasterize, moving,
+  scaling, Edit ▸ Warp and the Warp Cage on them. A smart object's contents keep their own depth: an 8-bit PNG placed
+  in a 16-bit document stays an 8-bit source (its instances are drawn at 16 bits), and a 16-bit PNG, TIFF or PSB placed
+  in an 8-bit document stays 16-bit, so converting the document back to 16 bits later loses nothing. Convert to Smart
+  Object in a 16-bit document makes a 16-bit PSB; Edit Contents opens the contents at their own depth.
+- **Smart Filters**: every Smart Filter NekoPhoto draws, except Unsharp Mask (below), is drawn at 16 bits on the
+  instance: Gaussian, Motion, Box, Surface and Radial Blur, High Pass, Median, Dust & Scratches, Add Noise, Mosaic,
+  Emboss and Plastic Wrap, with their opacity, blend mode and the shared filter mask. On an 8-bit image each is
+  within a level of its 8-bit result ([smart-objects.md](smart-objects.md) has the figures).
 - **Importing** an image as a layer (it takes the document's depth).
-- **Saving and exporting**: projects at 16 bits; Photoshop PSD at 16 bits; PNG at 16 bits; TIFF at 16 bits (through
+- **Saving and exporting**: projects at 16 bits (a 16-bit smart object source is kept as a 16-bit PNG beside the
+  project); Photoshop PSD at 16 bits, smart objects included; PNG at 16 bits; TIFF at 16 bits (through
   Qt's TIFF plugin, which writes 16 bits); JPEG, WebP, TGA, ICO and GIF are 8-bit formats, so they get the document
   dithered down to 8 bits, and the status bar says so.
 - **Automation**: `image.mode` converts; `document.info` reports `bits`; the selection, `pixels.adjust`,
   `pixels.filter`, `pixels.fill`, `pixels.clear`, the content-aware methods, `image.resize`, `image.trim`,
   `canvas.crop`, `layers.warp`, `layers.setCage`, `brush.stroke` (every tool it takes), `gradient.draw`,
   `pixels.bucket`, `pixels.patch`, `layers.merge`, `text.*`, `shape.draw`, `shape.set`, `paths.*`, `vectorMask.*`,
-  `layers.setStyle` and `layers.applyStyle` work on a 16-bit document ([automation.md](automation.md)).
+  `layers.setStyle`, `layers.applyStyle` and every `smartObject.*` method work on a 16-bit document
+  ([automation.md](automation.md)).
 
 A 16-bit PSD that NekoPhoto opened and exports again as PSD keeps each unedited layer's channel data byte for byte,
 so a round trip does not lose Photoshop's full 16 bits; a layer you edit (and a PSB) is written from its 0..32768
 values, which drops the lowest of the file's 16 bits. PNG and TIFF are always written from 0..32768.
+
+A 16-bit PSD does not get Photoshop's Smart Filter cache (it is 8-bit data; Photoshop rebuilds it). Opening a 16-bit
+PSD that has none, NekoPhoto draws each Smart Filter stack over the whole canvas with its filter mask all white, so the
+filters stay editable; a filter mask painted in NekoPhoto is not kept in a 16-bit PSD (it is in a project and an 8-bit
+PSD).
 
 ## Not yet: greyed out in a 16-bit document
 
@@ -88,8 +104,10 @@ What has not been ported is greyed out, with the tooltip "Not available in 16-bi
 "<method> is not available for 16-bit documents yet". For now, convert to 8 bits for these:
 
 - Camera Raw Filter, G'MIC and Remove Background;
-- smart objects and Smart Filters (a 16-bit PSD's smart objects are shown, and move and scale with their layer),
-  artboards, and the timeline;
+- Unsharp Mask as a Smart Filter ("Unsharp Mask is not available as a Smart Filter in 16-bit documents yet"): its
+  16-bit version is two to four levels from the 8-bit one at usual amounts, more than the one level the others keep,
+  so it waits for a calibration of its own. An instance that already has it shows the pixels it was saved with;
+- artboards, and the timeline;
 - SVG export, and exporting artboards and slices.
 
 Colour management works at both depths: a 16-bit document keeps its profile, converts with Convert to Profile at
@@ -179,17 +197,34 @@ Photoshop と同じく 16 bit の値は 0〜32768 で保持し、合成は正確
   ケージ、レイヤーの反転。ワープは 16 bit のピクセルを変形します(ケージのドラッグ中は 8 bit のコピーで
   プレビュー)。
 - **レイヤーマスク**:すべての領域を表示/隠す、有効/無効、リンク、反転、適用、削除、マスクへのペイント。
+- **スマートオブジェクト**:埋め込みを配置、スマートオブジェクトに変換、コンテンツを編集、内容を置き換え、ラスタライズ、
+  移動・拡大縮小、編集 ▸ ワープとワープケージ。スマートオブジェクトの内容は元のビット数のままです。16 bit の
+  ドキュメントに配置した 8 bit の PNG は 8 bit のソースのまま(インスタンスは 16 bit で描画)、8 bit のドキュメントに
+  配置した 16 bit の PNG・TIFF・PSB は 16 bit のままなので、後でドキュメントを 16 bit に戻しても失われません。16 bit
+  のドキュメントでスマートオブジェクトに変換すると 16 bit の PSB になり、コンテンツを編集は内容をそのビット数で開きます。
+- **スマートフィルター**:NekoPhoto が描画するスマートフィルターは、アンシャープマスク(後述)を除いてすべて
+  インスタンス上で 16 bit で描画します:ぼかし(ガウス)、ぼかし(移動)、ぼかし(ボックス)、ぼかし(表面)、ぼかし
+  (放射状)、ハイパス、中間値、ダスト&スクラッチ、ノイズを加える、モザイク、エンボス、ラップ。不透明度、描画モード、
+  共有のフィルターマスクも含みます。8 bit の画像ではそれぞれ 8 bit の結果と 1 段階以内です(数値は
+  [smart-objects.md](smart-objects.md))。
 - **画像の読み込み**(ドキュメントのビット数に合わせます)。
-- **保存と書き出し**:16 bit のプロジェクト、16 bit の PSD、16 bit の PNG、16 bit の TIFF(Qt の TIFF プラグイン経由)。
+- **保存と書き出し**:16 bit のプロジェクト(16 bit のスマートオブジェクトのソースは 16 bit の PNG として保存)、
+  スマートオブジェクトを含む 16 bit の PSD、16 bit の PNG、16 bit の TIFF(Qt の TIFF プラグイン経由)。
   JPEG・WebP・TGA・ICO・GIF は 8 bit の形式なので、ディザをかけて 8 bit に変換し、ステータスバーでお知らせします。
 - **自動化**:`image.mode` で変換、`document.info` の `bits` でビット数がわかります。選択範囲、`pixels.adjust`、
   `pixels.filter`、`pixels.fill`、`pixels.clear`、コンテンツに応じた各メソッド、`image.resize`、`image.trim`、
   `canvas.crop`、`layers.warp`、`layers.setCage`、`brush.stroke`(指定できるすべてのツール)、`gradient.draw`、
-  `pixels.bucket`、`pixels.patch`、`layers.merge` も 16 bit のドキュメントで使えます。
+  `pixels.bucket`、`pixels.patch`、`layers.merge`、すべての `smartObject.*` メソッドも 16 bit のドキュメントで
+  使えます。
 
 NekoPhoto で開いた 16 bit の PSD を PSD に書き出すと、編集していないレイヤーのチャンネルデータはバイト単位でそのまま
 戻るので、Photoshop の 16 bit の値は失われません。編集したレイヤー(と PSB)は 0〜32768 の値から書き出すため、
 ファイルの 16 bit のうち最下位の 1 bit が落ちます。PNG と TIFF は常に 0〜32768 の値から書き出します。
+
+16 bit の PSD には Photoshop のスマートフィルターのキャッシュを書き出しません(8 bit のデータで、Photoshop が作り
+直します)。キャッシュのない 16 bit の PSD を開くと、NekoPhoto は各スマートフィルターをカンバス全体に、フィルター
+マスクをすべて白として描画するので、フィルターは編集できるままです。NekoPhoto で描いたフィルターマスクは 16 bit の
+PSD には残りません(プロジェクトと 8 bit の PSD には残ります)。
 
 ### まだ使えないもの(16 bit のドキュメントではグレー表示)
 
@@ -197,8 +232,10 @@ NekoPhoto で開いた 16 bit の PSD を PSD に書き出すと、編集して�
 自動化では「<メソッド> is not available for 16-bit documents yet」が返ります。当面は 8 bit に変換して使ってください。
 
 - Camera Raw フィルター、G'MIC、背景を削除
-- スマートオブジェクトとスマートフィルター(16 bit の PSD のスマートオブジェクトは表示され、レイヤーとともに移動・
-  拡大縮小できます)、アートボード、タイムライン
+- スマートフィルターとしてのアンシャープマスク(「Unsharp Mask is not available as a Smart Filter in 16-bit
+  documents yet」):16 bit 版は通常の量で 8 bit 版と 2〜4 段階ずれ、ほかのフィルターが保つ 1 段階を超えるため、専用の
+  調整を待ちます。すでに適用されているインスタンスは保存されたときのピクセルを表示します
+- アートボード、タイムライン
 - SVG の書き出し、アートボードとスライスの書き出し
 
 カラーマネジメントはどちらのビット数でも使えます。16 bit のドキュメントもプロファイルを持ち、プロファイル変換は 16 bit の

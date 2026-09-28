@@ -327,6 +327,39 @@ the engines: [brush-engine.md](brush-engine.md), "16 bits".
   child document in Convert, 16-bit PNG in projects; Smart Filters have their own calibrated 8-bit kernels in
   `smartfilter_render.cpp`), Camera Raw, G'MIC, Remove Background, artboards, the timeline, SVG and slice export.
 
+**Smart objects and Smart Filters at 16 bits (2026-09-28).** User-facing summary: [bit-depth.md](bit-depth.md);
+details and the calibration table: [smart-objects.md](smart-objects.md#at-16-bits).
+
+- `SmartObjectSource::image` is an `AnyImage` at the source's own depth; `smartObjectSourceImage` gives it at a
+  document's depth (a converted copy made once per source, shared by its instances, `SmartObjectDepthCache`).
+  Image ▸ Mode converts instances with their layers and leaves sources alone. The embedded-file decoders keep 16 bits
+  (`decodeSmartObjectPng`, a nested PSD's `composite16`, Qt's 64-bit formats in the app's `contentsFromFile`).
+- Convert to Smart Object builds the child at the document's depth (a 16-bit PSB); `smartObjectContentsDocument`
+  opens contents at the source's depth; `encodeSmartObjectContents` writes a 16-bit PNG from a 16-bit child. Place,
+  Replace, Rasterize, warps and the cage draw through `drawSmartObjectRaster` (either depth, filtered, warped or plain).
+- Smart Filters at 16 bits: `smartfilter_render16.cpp`, the thirteen kernels on 15-bit straight colour, sharing the
+  Gaussian line plans, the parameter checks and the noise hash with the 8-bit file (`smartfilter_kernels.h`; the 8-bit
+  kernels are otherwise untouched). Twelve are offered; Unsharp Mask is gated at 16 bits with a message naming it (its
+  8-bit reference amplifies its own byte-rounded low-pass: 2 levels apart at 50%, 4 at 400%). Every offered kernel is
+  within one level of its 8-bit twin on 8-bit-sourced input; stacks with a blend or a gray mask differ by 2 levels on
+  one or two isolated samples (the 8-bit engine's rounding between entries). The `FEid` record, the filter mask and
+  the cache stay 8-bit, as Photoshop's 8-bit cache is.
+- PSD: 16-bit documents write and read their smart objects (sources as they are in `lnk2`, untouched instances byte
+  for byte). A 16-bit PSD gets no `FEid`, as before; opening one with no cache at all, supported stacks get a record
+  made here (document canvas, white mask: `addDefaultSmartFilterCache`) and stay editable. Photoshop's own 16-bit
+  `FEid` is still not read (no fixture has one), so such files keep filtered instances preview-locked.
+- Projects: 16-bit sources are 16-bit PNG sidecars; `ProjectLoadLimits::smartObjectBytes` (was `smartObjectPixels`)
+  counts decoded bytes at each source's depth.
+- App: the filter-mask proxy layer is made at the document's depth and synced back to the 8-bit stack mask; the Smart
+  Filter dialog previews at 16 bits.
+- Gates: `edit.smartObject` in supports.cpp, the menu actions carry the feature, the automation `smartObject.*`
+  methods are in `worksAtDepth`. 8-bit render hashes and existing 16-bit ones unchanged; 18 new U16 scenes; PSD corpus
+  plus K.psd 118 files / 3,975 blocks at 8 and 16 bits; K.psd at 16 bits keeps its three editable and three linked
+  smart objects, redraws the editable ones at 16 bits and keeps them editable through a 16-bit PSD; rpc smoke's
+  16-bit section places, converts, edits contents, filters, paints the filter mask, warps, replaces and rasterizes.
+- Still gated at 16 bits: Unsharp Mask as a Smart Filter, Camera Raw, G'MIC, Remove Background, artboards, the
+  timeline, SVG and slice export.
+
 ## Review notes
 
 - Mac project compatibility: since 2026-09-26 NekoPhoto no longer keeps Mac Compositor project-format parity, so
