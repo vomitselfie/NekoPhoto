@@ -113,6 +113,12 @@ output = offset + depth × curve(input)        (the range runs from offset to of
 | GrainDepth | the grain's depth | 0..1 |
 | GrainRotation | 0 degrees (the grain turned about the document's origin) | circular |
 
+**Grain modes** (`grainMode`): Canvas (the default) fixes the grain to the document, so a stroke reveals it; Stroke
+fixes it to the stroke, the grain travelling `grainMovement` (0..1) of each pixel walked along the stroke's tangent,
+smoothed over about two diameters so a corner or a jittered dab does not spin it; Dab fixes it to each dab, turning and
+flipping with it. GrainRotation turns it within whichever frame. `brush.json` keeps `grainMode` ("canvas", "stroke",
+"dab") and `grainMovement`.
+
 One rule for every brush and every importer:
 
 - **Scalar targets:** `value = base × Π (offset + depth × curve(input))`, over the mappings on that target in the order
@@ -218,6 +224,7 @@ confirm.
 | `dynamicsTiltBleed` a | Tilt → Flow, tilt curve | 1, −`tiltBleedFlow` × a (0.5 × a): each dab thins | meaning and scale assumed |
 | `dynamicsTiltShapeRoundness` a, `…Minimum` m | Tilt → Roundness, tilt curve | 1, −a × (1 − m); nothing while m is 1, as in nearly every brush | high |
 | `shapeAzimuth` | TiltDirection → Angle | 0, −360: the tip's x axis points the way the pen leans | meaning high, which axis assumed |
+| `textureApplication` 0 (moving grain), `textureMovement` m | grain mode Stroke, `grainMovement` m (texturized grain, 1: Canvas) | not a mapping | which value is moving from the earlier reader; Movement's scale assumed |
 | `shapeRoll` | Roll → Angle (the barrel's twist, else the stroke's direction); `followStroke` off | 0, −360: the tip turns with the barrel | meaning high, sign assumed |
 
 The tip's angle turns counterclockwise on screen, while the azimuth, the twist and the stroke's direction turn
@@ -354,4 +361,8 @@ baseline's `u16/` section, with each scene's distance from its 8-bit render (`vs
 
 ## Not yet
 
-- Clip Studio's effector curves, texture coordinate modes (canvas, stroke, dab), stabilisation, a continuous swept round brush, and MyPaint's newer inputs.
+- Clip Studio's effector curves, stabilisation, a continuous swept round brush, and MyPaint's newer inputs.
+- Colour by tilt or pressure (Procreate's `dynamicsTilt/PressureHue`, `Saturation`, `Brightness`, `SecondaryColor` and the
+  colour jitters): a stroke's colour is one value for the whole stroke, laid down through its coverage, so a colour per dab
+  does not fit the dynamics layer as a target; it would need the stroke to carry colour per pixel. Listed as not carried
+  over.

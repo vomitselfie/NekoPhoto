@@ -58,6 +58,8 @@ bool BrushTip::normalize() {
     fix(flow, 0, 1, 1);
     fix(grainScale, 0.01, 100, 1);
     fix(grainDepth, 0, 1, 1);
+    fix(grainMovement, 0, 1, 1);
+    if (int(grainMode) < 0 || int(grainMode) > int(GrainMode::Dab)) grainMode = GrainMode::Canvas;
     fix(densityReference, 0.01, 10, 0.25);
     // Mappings with numbers that mean nothing go; the rest keep their order, which is the order they multiply in.
     BrushDynamics kept;
@@ -141,6 +143,9 @@ std::optional<TipPreset> loadTipPreset(const std::string& folder, std::string* e
     t.randomFlipY = boolean("randomFlipY", t.randomFlipY);
     t.grainScale = number("grainScale", t.grainScale);
     t.grainDepth = number("grainDepth", t.grainDepth);
+    if (auto it = j.find("grainMode"); it != j.end() && it->is_string())
+        t.grainMode = *it == "stroke" ? BrushTip::GrainMode::Stroke : *it == "dab" ? BrushTip::GrainMode::Dab : BrushTip::GrainMode::Canvas;
+    t.grainMovement = number("grainMovement", t.grainMovement);
     t.densityBySpacing = boolean("densityBySpacing", t.densityBySpacing);
     t.densityReference = number("densityReference", t.densityReference);
     t.mousePressureFromSpeed = boolean("mousePressureFromSpeed", t.mousePressureFromSpeed);
@@ -181,7 +186,9 @@ bool saveTipPreset(const std::string& folder, const TipPreset& preset, std::stri
         {"spacing", t.spacing}, {"angle", t.angle}, {"followStroke", t.followStroke}, {"roundness", t.roundness},
         {"scatter", t.scatter}, {"scatterBothAxes", t.scatterBothAxes}, {"count", t.count}, {"flow", t.flow},
         {"flipX", t.flipX}, {"flipY", t.flipY}, {"randomFlipX", t.randomFlipX}, {"randomFlipY", t.randomFlipY},
-        {"grainScale", t.grainScale}, {"grainDepth", t.grainDepth}, {"dynamics", dynamics},
+        {"grainScale", t.grainScale}, {"grainDepth", t.grainDepth},
+        {"grainMode", t.grainMode == BrushTip::GrainMode::Stroke ? "stroke" : t.grainMode == BrushTip::GrainMode::Dab ? "dab" : "canvas"},
+        {"grainMovement", t.grainMovement}, {"dynamics", dynamics},
         {"densityBySpacing", t.densityBySpacing}, {"densityReference", t.densityReference},
         {"mousePressureFromSpeed", t.mousePressureFromSpeed}};
     std::ofstream out(dir / "brush.json");
@@ -239,6 +246,17 @@ void TipStroke::dab(Point center, const BrushSample& pen, double direction, doub
         const double k = spacing / tip_.densityReference;
         for (int v = 0; v < 256; v++) density[size_t(v)] = uint8_t(std::lround(255 * (1 - std::pow(1 - v / 255.0, k))));
     }
+    // Stroke grain turns with the stroke's tangent smoothed over about two diameters, so a corner or a jittered dab
+    // does not spin it.
+    if (tip_.grain && tip_.grainMode == BrushTip::GrainMode::Stroke) {
+        if (!grainTangentSet_) { grainTangent_ = direction; grainTangentSet_ = true; }
+        else {
+            const double walked = std::max(0.0, pen.distance - grainTangentAt_);
+            grainTangent_ += (unwrapAngle(grainTangent_, direction) - grainTangent_) * (1 - std::exp(-walked / std::max(1.0, 2 * diameter_)));
+        }
+        grainTangentAt_ = pen.distance;
+    }
+    const double tc = std::cos(grainTangent_), ts = std::sin(grainTangent_);
     for (int n = 0; n < tip_.count; n++) {
         // The draws every dab makes, in the order brushes were first painted with, so a seed paints the same.
         const double sizeRandom = unit(rng_), flowRandom = unit(rng_), angleRandom = signedUnit(rng_);
@@ -311,7 +329,18 @@ void TipStroke::dab(Point center, const BrushSample& pen, double direction, doub
                     if (tx < -1 || ty < -1 || tx > level.image.width() + 1 || ty > level.image.height() + 1) continue;
                     double value = sample(level.image, tx, ty) * flow;
                     if (grain && value > 0) {
-                        const double gxd = grainTurn != 0 ? gc * d.x + gs * d.y : d.x, gyd = grainTurn != 0 ? -gs * d.x + gc * d.y : d.y;
+                        // The grain's frame: the document, the stroke (along its smoothed tangent, travelling with it)
+                        // or the dab (its turn and flips).
+                        double px = d.x, py = d.y;
+                        if (tip_.grainMode == BrushTip::GrainMode::Stroke) {
+                            const double ox = d.x - center.x, oy = d.y - center.y;
+                            px = tc * ox + ts * oy + tip_.grainMovement * pen.distance;
+                            py = -ts * ox + tc * oy;
+                        } else if (tip_.grainMode == BrushTip::GrainMode::Dab) {
+                            px = (flipX ? -1 : 1) * (c * vx + s * vy);
+                            py = (flipY ? -1 : 1) * (-s * vx + c * vy);
+                        }
+                        const double gxd = grainTurn != 0 ? gc * px + gs * py : px, gyd = grainTurn != 0 ? -gs * px + gc * py : py;
                         int gx = int(std::floor(gxd * tip_.grainScale)) % grain->width(), gy = int(std::floor(gyd * tip_.grainScale)) % grain->height();
                         if (gx < 0) gx += grain->width();
                         if (gy < 0) gy += grain->height();

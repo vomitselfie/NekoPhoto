@@ -61,7 +61,7 @@ std::string text(const std::map<std::string, plist::Value>& s, const char* key) 
 }
 
 struct Notes {
-    int bundledShapes = 0, bundledGrains = 0, movingGrain = 0;
+    int bundledShapes = 0, bundledGrains = 0;
     std::map<std::string, int> notCarried;   // setting -> brushes using it
 };
 
@@ -201,7 +201,12 @@ std::optional<TipPreset> readBrush(const ZipArchive& zip, const std::string& fol
             tip.grain = procreateTip(*image, number(s, "textureInverted", 0) != 0, false);
             tip.grainDepth = std::clamp(number(s, "grainDepth", 1), 0.0, 1.0);
             tip.grainScale = 1 / std::clamp(number(s, "textureScale", 1), 0.05, 16.0);
-            if (number(s, "textureApplication", 1) == 0) notes.movingGrain++;
+            // Moving grain (textureApplication 0) rolls with the stroke, as far as its Movement says; texturized grain
+            // stays on the canvas.
+            if (number(s, "textureApplication", 1) == 0) {
+                tip.grainMode = BrushTip::GrainMode::Stroke;
+                tip.grainMovement = std::clamp(number(s, "textureMovement", 1), 0.0, 1.0);
+            }
         }
     } else if (!text(s, "bundledGrainPath").empty()) notes.bundledGrains++;
 
@@ -293,7 +298,6 @@ std::optional<BrushImport> readProcreate(const uint8_t* data, size_t size, const
     auto note = [&](int count, const char* what) { if (count) import.notes.push_back(what + std::string(": ") + std::to_string(count)); };
     note(notes.bundledShapes, "brushes whose shape is from Procreate's own library, not in the file (a soft round tip stands in)");
     note(notes.bundledGrains, "brushes whose grain is from Procreate's own library, not in the file (they paint without grain)");
-    note(notes.movingGrain, "brushes whose grain moves with the stroke (here it stays put on the canvas)");
     if (!notes.notCarried.empty()) {
         std::string list;
         for (const auto& [key, count] : notes.notCarried) list += (list.empty() ? "" : ", ") + key + " " + std::to_string(count);

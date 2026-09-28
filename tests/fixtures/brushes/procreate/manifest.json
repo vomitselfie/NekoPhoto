@@ -17,6 +17,8 @@
     "syn_11_azimuth.brush": {"setting": "shapeAzimuth", "value": true, "input": "tiltDirection", "target": "angle", "stroke": "azimuth_sweep", "measure": "width", "expect": "turns"},
     "syn_12_roll.brush": {"setting": "shapeRoll", "value": true, "input": "roll", "target": "angle", "stroke": "twist_sweep", "measure": "width", "expect": "turns",
                           "also": [{"stroke": "twist_wrap", "measure": "width", "expect": "continuous"},
-                                   {"stroke": "circle", "measure": "width", "expect": "steady"}]}
+                                   {"stroke": "circle", "measure": "width", "expect": "steady"}]},
+    "syn_13_grain_moving.brush": {"setting": "textureApplication", "value": 0, "input": "grain", "target": "stroke", "stroke": "straight_line", "measure": "render", "expect": "differs", "against": "syn_14_grain_texturized.brush"},
+    "syn_14_grain_texturized.brush": {"setting": "textureApplication", "value": 1, "input": "grain", "target": "canvas", "stroke": "straight_line", "measure": "render", "expect": "differs"}
   }
 }
