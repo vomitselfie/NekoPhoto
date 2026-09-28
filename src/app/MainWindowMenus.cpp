@@ -162,7 +162,7 @@ void MainWindow::buildMenus() {
         QSettings().setValue("lastDir", QFileInfo(path).path());
         QString error;
         if (!session_->placeEmbedded(path, &error)) showError(tr("Couldn’t place %1").arg(QFileInfo(path).fileName()), error);
-    }));
+    }), "edit.smartObject");
     file->addSeparator();
     needsDocument(file->addAction(tr("&Save"), QKeySequence::Save, this, [this] { save(false); }), "document.save");
     needsDocument(file->addAction(tr("Save &As…"), QKeySequence::SaveAs, this, [this] { save(true); }), "document.save");
@@ -409,16 +409,16 @@ void MainWindow::buildMenus() {
     needsDocument(smart->addAction(tr("&Convert to Smart Object"), this, [this] {
         QString error;
         if (!session_->convertToSmartObject(&error) && !error.isEmpty()) showError(tr("Couldn’t convert to a smart object"), error);
-    }));
-    needsDocument(smart->addAction(tr("&Edit Contents"), this, [this] { editSmartObjectContents(); }));
+    }), "edit.smartObject");
+    needsDocument(smart->addAction(tr("&Edit Contents"), this, [this] { editSmartObjectContents(); }), "edit.smartObject");
     needsDocument(smart->addAction(tr("&Replace Contents…"), this, [this] {
         const QString path = QFileDialog::getOpenFileName(this, tr("Replace Contents"), QSettings().value("lastDir").toString(),
                                                           tr("Images, Photoshop and Affinity documents (*.psd *.psb *.afphoto *.afdesign *.afpub *.af *.png *.jpg *.jpeg *.tif *.tiff *.webp *.bmp *.gif %1)").arg(compositor::rawSupported() ? QStringLiteral("*.cr2 *.cr3 *.crw *.nef *.nrw *.arw *.srf *.sr2 *.raf *.orf *.rw2 *.rwl *.pef *.dng *.3fr *.iiq *.erf *.kdc *.dcr *.mrw *.srw *.x3f") : QString()));
         if (path.isEmpty()) return;
         QString error;
         if (!session_->replaceSmartObjectContents(path, &error)) showError(tr("Couldn’t replace the contents"), error);
-    }));
-    needsDocument(smart->addAction(tr("R&asterize"), this, [this] { session_->rasterizeSmartObject(); }));
+    }), "edit.smartObject");
+    needsDocument(smart->addAction(tr("R&asterize"), this, [this] { session_->rasterizeSmartObject(); }), "edit.smartObject");
     layer->addSeparator();
     QMenu* mask = layer->addMenu(tr("Layer &Mask"));
     needsDocument(mask->addAction(tr("Reveal All"), this, [this] { session_->addLayerMask(true); recordAction("layers.mask", {{"action", "add"}}); }), "layers.mask");

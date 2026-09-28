@@ -632,9 +632,10 @@ std::optional<PsdImport> importPsd(const std::string& path, std::string* error, 
 
 namespace {
 
-/// A smart object source's contents as an image: an embedded PSD/PSB through this importer (Photoshop's merged
-/// image when it is real, else our render of its layers), PNG directly, anything else through the app's hook.
-ImagePtr decodeSource(const SmartObjectSource& source, const PsdImportOptions& options) {
+/// A smart object source's contents as an image at their own depth: an embedded PSD/PSB through this importer
+/// (Photoshop's merged image when it is real, else our render of its layers; 16 bits from a 16-bit file), PNG
+/// directly (16 bits from a 16-bit PNG), anything else through the app's hook.
+AnyImage decodeSource(const SmartObjectSource& source, const PsdImportOptions& options) {
     if (source.kind != SmartObjectSource::Kind::Embedded || !source.bytes || source.bytes->empty()) return nullptr;
     const std::vector<uint8_t>& bytes = *source.bytes;
     const bool psdFile = bytes.size() >= 4 && std::memcmp(bytes.data(), "8BPS", 4) == 0;
@@ -645,10 +646,14 @@ ImagePtr decodeSource(const SmartObjectSource& source, const PsdImportOptions& o
         std::string error;
         auto nested = importPsdBytes(bytes, &error, inner);
         if (!nested) return nullptr;
+        if (nested->document.sampleType == SampleType::U16) {
+            if (nested->realComposite && nested->composite16) return nested->composite16;
+            return Image16Ptr(renderFlattened16(nested->document));
+        }
         if (nested->realComposite && nested->composite) return nested->composite;
-        return renderFlattened(nested->document);
+        return ImagePtr(renderFlattened(nested->document));
     }
-    if (bytes.size() >= 8 && std::memcmp(bytes.data(), "\x89PNG", 4) == 0) return decodePngImage(bytes.data(), bytes.size());
+    if (bytes.size() >= 8 && std::memcmp(bytes.data(), "\x89PNG", 4) == 0) return decodeSmartObjectPng(bytes);
     if (options.decodeImage) return options.decodeImage(bytes, source.fileType, source.fileName);
     return nullptr;
 }
@@ -670,6 +675,8 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
         // A 16-bit RGB or grayscale file opens as a 16-bit document (docs/bit-depth.md); other depths and modes are reduced.
         const bool deep = depth == 16 && (mode == RGB || mode == Grayscale);
         const SampleType sampleType = deep ? SampleType::U16 : SampleType::U8;
+        // Whether the file holds a Smart Filter cache at all (a 16-bit one is not read here, see the instances below).
+        bool fileHasFilterCache = false;
         if ((long long)width * height > Document::imagePixelBudget(sampleType)) {
             if (error) *error = deep ? "The canvas exceeds the 50-megapixel budget of a 16-bit document." : "The canvas exceeds the 100-megapixel budget.";
             return std::nullopt;
@@ -750,6 +757,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             std::vector<std::pair<std::string, std::pair<const uint8_t*, size_t>>> globalOrder;
             if (r.position() < layerMaskEnd) readTaggedBlocks(r, layerMaskEnd, psb, 4, globalBlocks, &globalOrder);
             for (auto& [key, data] : globalOrder) {
+                if (key == "FEid" || key == "FXid") fileHasFilterCache = true;
                 if (carriedGlobalBlock(key) && !((psb || depth != 8) && (key == "FEid" || key == "FXid"))) docCarry->globals.push_back({key, std::vector<uint8_t>(data.first, data.first + data.second)});
                 // Smart object sources: the linked-file blocks' embedded (and linked) files.
                 if (key == "lnk2" || key == "lnkD" || key == "lnk3" || key == "lnkE")
@@ -757,7 +765,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                         if (s.id.empty() || document.smartObjects.count(s.id)) continue;
                         s.psdBlock = key;
                         s.image = decodeSource(s, options);
-                        if (s.image) { s.width = s.image->width(); s.height = s.image->height(); }
+                        if (s.image) { s.width = s.image.width(); s.height = s.image.height(); }
                         const std::string id = s.id;
                         document.smartObjects[id] = std::make_shared<const SmartObjectSource>(std::move(s));
                     }
@@ -1052,42 +1060,53 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                     const bool legacy = !block("SoLd") && !block("SoLE");
                     std::optional<LayerTransform> placed;
                     if (source != document.smartObjects.end() && source->second->image)
-                        placed = transformForQuad(placement->quad, source->second->image->width(), source->second->image->height());
+                        placed = transformForQuad(placement->quad, source->second->image.width(), source->second->image.height());
                     using Lock = SmartObjectInstance::Lock;
                     instance.lock = legacy ? Lock::Legacy : placement->warped ? Lock::Warp : placement->filtered ? Lock::Filters
                         : source == document.smartObjects.end() || source->second->kind == SmartObjectSource::Kind::Linked ? Lock::Linked
                         : !source->second->image ? Lock::Unreadable : placement->nonAffine || !placed ? Lock::Perspective : Lock::None;
-                    std::optional<WarpedRaster> warped;
+                    std::optional<AnyPlacedRaster> warped;
                     bool keptFiltered = false;
                     if (instance.lock == Lock::Filters && source != document.smartObjects.end() && source->second->kind == SmartObjectSource::Kind::Embedded
                         && source->second->image) {
                         // Smart Filters NekoPhoto draws: editable. The layer's pixels are Photoshop's own filtered raster
                         // for this placement, so they are kept as read (drawing the stack here can take seconds);
                         // moving, scaling or editing the filters draws it (refreshSmartObjectRasters, setSmartFilters).
+                        // A 16-bit file with no cache at all (as NekoPhoto's 16-bit writer leaves it): the stack is drawn
+                        // on the document's canvas with its mask all white, a cache record made for it here.
+                        if (deep && !fileHasFilterCache && !psb)
+                            addDefaultSmartFilterCache(docCarry->globals, instance, *source->second, int(width), int(height));
                         if (smartFiltersDrawable(docCarry->globals, instance)) {
                             if (layer.asset && layer.asset->image && layer.asset->image.width() > 0 && layer.asset->image.height() > 0) {
                                 instance.lock = Lock::None;
                                 keptFiltered = true;
-                            } else if (auto filtered = filteredSmartObjectRaster(docCarry->globals, instance, *source->second->image, placement->quad)) {
-                                warped = WarpedRaster{filtered->image, LayerTransform(Point(filtered->x, filtered->y), Size(filtered->image->width(), filtered->image->height()))};
+                            } else if (auto filtered = drawSmartObjectRaster(docCarry->globals, instance, *source->second, placement->quad, sampleType,
+                                                                             SmartObjectDraw::Filtered)) {
+                                warped = std::move(filtered);
                                 instance.lock = Lock::None;
                             }
                         }
                     }
                     if (!warped && !keptFiltered && placement->warp && (instance.lock == Lock::None || instance.lock == Lock::Perspective)) {
                         // A warp NekoPhoto draws: from the contents, through the mesh, onto the quad (any quad).
-                        warped = renderWarpedImage(*source->second->image, *placement->warp, placement->quad);
+                        if (const AnyImage contents = smartObjectSourceImage(*source->second, sampleType); contents.u16()) {
+                            if (auto w = renderWarpedImage(*contents.u16(), *placement->warp, placement->quad))
+                                warped = AnyPlacedRaster{Image16Ptr(w->image), 0, 0, w->transform};
+                        } else if (contents.u8()) {
+                            if (auto w = renderWarpedImage(*contents.u8(), *placement->warp, placement->quad))
+                                warped = AnyPlacedRaster{ImagePtr(w->image), 0, 0, w->transform};
+                        }
                         instance.lock = warped ? Lock::None : Lock::Warp;
                     }
                     if (warped) {
                         const LayerTransform raster = layer.transform;
-                        layer.asset = Asset::make(warped->image, layer.name);
+                        layer.asset = Asset::makeAny(warped->image, layer.name);
                         layer.transform = warped->transform;
                         layer.transform.sampling = raster.sampling;
                         if (layer.mask && !layer.mask->placement) layer.mask->placement = raster;
                     } else if (!instance.locked() && !keptFiltered) {
                         const LayerTransform raster = layer.transform;
-                        layer.asset = Asset::make(source->second->image, layer.name);
+                        layer.asset = Asset::makeAny(smartObjectSourceImage(*source->second, sampleType), layer.name);
                         layer.transform = *placed;
                         layer.transform.sampling = raster.sampling;
                         if (layer.mask && !layer.mask->placement) layer.mask->placement = raster;

@@ -12,6 +12,7 @@
 // sums at large radii).
 #include "compositor/smartfilter.h"
 #include "compositor/blend.h"
+#include "smartfilter_kernels.h"
 
 #include <algorithm>
 #include <array>
@@ -130,16 +131,11 @@ uint8_t roundedByte(double value) {
 
 uint8_t clampLong(long value) { return uint8_t(std::clamp(value, 0L, 255L)); }
 
-// ---- Gaussian line plans -----------------------------------------------------------------------------------
+} // namespace
 
-struct GaussianLinePlan {
-    bool direct = false;
-    std::vector<double> kernel;
-    double gain = 1.0;
-    double coefficient1 = 0.0;
-    double coefficient2 = 0.0;
-    double coefficient3 = 0.0;
-};
+// ---- Gaussian line plans (shared with the 16-bit kernels, smartfilter_kernels.h) -----------------------------
+
+namespace smartfilter_detail {
 
 GaussianLinePlan makeGaussianLinePlan(double radius, int margin) {
     GaussianLinePlan plan;
@@ -309,6 +305,23 @@ void filterGaussianLine(std::vector<double>& values, std::vector<double>& scratc
                         plan.coefficient3 * following3;
     }
 }
+
+// Patchy's filter_noise_hash (filter_engine.cpp), which its destructive add_noise and the Smart Filter share.
+uint32_t addNoiseHash(int32_t x, int32_t y, uint32_t seed) {
+    auto value = uint32_t(x + 16384) * 374761393U;
+    value ^= uint32_t(y + 8192) * 668265263U;
+    value ^= seed * 2246822519U;
+    value ^= value >> 13U;
+    value *= 1274126177U;
+    value ^= value >> 16U;
+    return value;
+}
+
+} // namespace smartfilter_detail
+
+namespace {
+
+using namespace smartfilter_detail;
 
 // ---- Gaussian, High Pass, Unsharp Mask ---------------------------------------------------------------------
 
@@ -1136,17 +1149,6 @@ Result renderRadialBlur(const Result& input, int32_t amount, int32_t samples, do
 
 // ---- Add Noise ---------------------------------------------------------------------------------------------
 
-// Patchy's filter_noise_hash (filter_engine.cpp), which its destructive add_noise and the Smart Filter share.
-uint32_t addNoiseHash(int32_t x, int32_t y, uint32_t seed) {
-    auto value = uint32_t(x + 16384) * 374761393U;
-    value ^= uint32_t(y + 8192) * 668265263U;
-    value ^= seed * 2246822519U;
-    value ^= value >> 13U;
-    value *= 1274126177U;
-    value ^= value >> 16U;
-    return value;
-}
-
 // RGB gains position-hashed deltas (buffer-local coordinates); alpha and bounds stay byte-identical.
 Result renderAddNoise(const Result& input, double amountPercent, bool gaussian, bool monochromatic, int32_t seed) {
     if (pixelsEmpty(input)) return input;
@@ -1412,6 +1414,12 @@ struct ParametersValid {
                p.seed <= kMaximumAddNoiseSeed;
     }
 };
+
+} // namespace
+
+bool smartfilter_detail::parametersValid(const SmartFilterParameters& parameters) { return std::visit(ParametersValid{}, parameters); }
+
+namespace {
 
 struct RunEntry {
     const Result& current;

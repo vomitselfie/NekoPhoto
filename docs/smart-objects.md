@@ -50,8 +50,10 @@ the file's own linked-file blocks, byte for byte. The layer's pixels are our ren
 
 ## In a project
 
-Sources are `smartobjects/<n>.source` (the record and the file's bytes) with `<n>.png` (the contents), instances
-`images/<layer id>.smartobject`; the manifest does not change, so the Mac app still opens the project (as pixels).
+Sources are `smartobjects/<n>.source` (the record and the file's bytes) with `<n>.png` (the contents, a 16-bit PNG for
+a 16-bit source), instances `images/<layer id>.smartobject`; the manifest does not change, so the Mac app still opens
+the project (as pixels). The loader's limits for a hostile package (`ProjectLoadLimits`) count the sources' decoded
+bytes at each one's depth (4 GB together, a 16-bit source counting twice its 8-bit size), their number and their files.
 
 ## Checked
 
@@ -198,6 +200,83 @@ ranges a Photoshop file may carry. `smartFilterStackOf` reads a stack with its m
 
 Dragging a Smart Filter to another smart object (a drag reorders within its own stack only), editing a stack with
 a filter not drawn here, a linked filter mask, relinking linked files.
+
+## At 16 bits
+
+Smart objects and Smart Filters work in 16-bit documents (docs/bit-depth.md).
+
+- **Sources keep their own depth.** `SmartObjectSource::image` is an `AnyImage`: an 8-bit PNG or JPEG is 8-bit, a
+  16-bit PNG, TIFF or PSD/PSB is 16-bit (`decodeSmartObjectPng`, the importer's `composite16`, Qt's 64-bit formats),
+  whatever the document placing it. An instance's pixels are the source at the document's depth
+  (`smartObjectSourceImage`): the source itself when the depths agree, else a converted copy made once per source and
+  shared by its instances (`SmartObjectDepthCache`, keyed on the buffer it came from). Image ▸ Mode converts the
+  instances with their layers and leaves the sources alone, so 8 to 16 to 8 bits loses nothing in the contents.
+- **Operations**: Place Embedded, Convert to Smart Object (the child document takes the document's depth, so a 16-bit
+  document's layers become a 16-bit PSB), Edit Contents (the contents open at their own depth: a 16-bit PSB or PNG as
+  a 16-bit document, an 8-bit one as 8-bit; a 16-bit PNG is written back as a 16-bit PNG, a 16-bit TIFF through Qt
+  at 16 bits when its plugin keeps them), Replace, Rasterize, moving and scaling, Edit ▸ Warp and the Warp Cage (the
+  cage previews from an 8-bit copy of 16-bit contents, and Apply draws at 16 bits). `drawSmartObjectRaster` is the one
+  entry point that draws an instance (filtered, warped or plain) at a depth.
+- **Smart Filters** run on the 16-bit instance through `smartfilter_render16.cpp`: the thirteen kernels with their
+  byte arithmetic carried to 15 bits (the same Gaussian line plans and Photoshop captures, the same edge rules; every
+  rounding to a byte becomes a rounding to the 15-bit grid; level-valued constants such as middle grey, thresholds and
+  Surface Blur's weight triangle scaled by one level, 32768 / 255). Plastic Wrap finds its relief and highlight at 8-bit
+  precision, as its 8-bit look defines them, and shades the 16-bit colour; the thresholds of Dust & Scratches compare
+  at the midpoint between two levels; Median keeps one plain 32,769-bin window histogram; Surface Blur's wide radii sum
+  per 8-bit level as the centre and interpolate each pixel between the two levels about its value. Blending between
+  entries uses the 16-bit blend engine; the shared filter mask stays Photoshop's 8-bit plane, and the `FEid` record
+  stays 8-bit (it is Photoshop's 8-bit cache, made from the source at 8 bits).
+- **Unsharp Mask is not drawn at 16 bits**: it is refused as a Smart Filter in a 16-bit document ("Unsharp Mask is not
+  available as a Smart Filter in 16-bit documents yet"), and an instance that has it keeps the pixels it was saved
+  with (preview-locked when it must be drawn again). Its detail term multiplies the 8-bit kernel's byte-rounded
+  low-pass by the amount, so the 8-bit result it would be calibrated against is itself amount / 100 levels from the
+  unrounded one; the 16-bit kernel (in the file, not offered) is 2 levels from it at 50% to 4 at 400%.
+- **PSD**: a 16-bit document's smart objects go out and come back as smart objects (their `SoLd`, the sources in
+  `lnk2`, a 16-bit PSB or PNG embedded as it is), and untouched instances go back byte for byte. A 16-bit PSD gets no
+  `FEid` (Photoshop's cache is 8-bit data; it rebuilds it), as before; opening a 16-bit PSD with no `FEid` or `FXid` at
+  all, each supported stack gets a cache record made here (`addDefaultSmartFilterCache`: the document as the canvas,
+  the mask all white), so its filters are drawn and stay editable. A filter mask painted here is therefore not kept in
+  a 16-bit PSD (it is in a project and an 8-bit PSD). A 16-bit PSD that does carry a cache (Photoshop's 16-bit one,
+  which NekoPhoto does not read yet) keeps its filtered instances preview-locked, showing Photoshop's pixels.
+
+Calibration (`smartfilter_tests`, `sixteen_bit_kernels_agree_with_eight_bit_on_eight_bit_input`): a 48 x 40 picture
+with ramps, a hashed texture, hard edges, a half-transparent band and a clear margin, on a 64 x 56 canvas, run
+through the 8-bit stack and, as the same straight colours at 16 bits, through the 16-bit one; the 16-bit result
+reduced to 8 bits against the 8-bit one, every sample of both results' bounds:
+
+| Filter | Worst | Samples more than a level apart |
+|---|---|---|
+| Gaussian Blur 0.5, 2.5, 12 | 1 | none |
+| High Pass 3, 10 | 1 | none |
+| Median 1, 4 | 1, 0 | none |
+| Dust & Scratches 2/0, 3/20 | 0 | none |
+| Surface Blur 5/15, 12/40 (direct and per-level sums) | 1 | none |
+| Motion Blur 0°/12, 33°/25 | 1 | none |
+| Plastic Wrap 9/7/5, 20/15/1 | 1 | none |
+| Mosaic 8 | 1 | none |
+| Emboss 135°/2/100, 45°/3/150 | 1 | none |
+| Box Blur 3, 20 (direct and sliding) | 1 | none |
+| Radial Blur 10/16 | 1 | none |
+| Add Noise 12.5 uniform, 40 Gaussian mono | 1 | none |
+| Gaussian Blur 3 at 60% Multiply | 2 | 2 of 12,064 (0.017%) |
+| Mosaic 6 at 50% Screen | 1 | none |
+| Gaussian Blur 2 through a gray mask | 2 | 1 of 9,568 |
+| Unsharp Mask 50/1/0, 150/2/8, 175/2.5/7, 400/3/2 (not offered) | 2, 2, 2, 4 | 0.02%, 0.08%, 0.13%, 7.7% |
+
+Every kernel is within a level. The two stacked cases pass through the 8-bit engine between entries (straight
+bytes, the 8-bit blend), which adds its own rounding on an isolated sample. The straight colours matter: widening
+the premultiplied bytes instead hands the 16-bit kernels colour the 8-bit ones never had (the 8-bit unpremultiply is
+up to 255 / 2a levels coarse at alpha a), which put Emboss and Plastic Wrap two and three levels off at half-transparent
+pixels. `sixteen_bit_kernels_keep_sixteen_bit_precision` checks what 16 bits are for: a blurred ramp finer than 8 bits
+keeps over 900 distinct values, and Median returns a window's exact 16-bit middle value.
+
+`smartobject_tests` covers mixed depths (8-bit sources in a 16-bit document and the reverse, shared converted pixels,
+Image ▸ Mode), Convert (a 16-bit PSB) and Edit Contents at 16 bits, a 16-bit PNG written back as one, warps and the
+cage at 16 bits, a 16-bit project with 8- and 16-bit sources, and 16-bit PSD round trips, with a Smart Filter stack
+that comes back editable. The render hashes gain 18 U16 scenes (placed 8- and 16-bit sources, turned at 0.5, warped,
+each Smart Filter drawn at 16 bits, a stack with blends and a mask); the existing hashes are unchanged. K.psd
+converted to 16 bits keeps its six smart objects (three editable, each with Gaussian Smart Filters, three linked),
+redraws the editable ones at 16 bits when moved, and keeps them editable through a 16-bit PSD.
 
 ## Warp Cage
 

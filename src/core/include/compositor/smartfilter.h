@@ -76,6 +76,21 @@ struct PlacedRaster {
     PixelRect bounds() const { return image ? PixelRect{x, y, image->width(), image->height()} : PixelRect{}; }
 };
 
+/// The same at 16 bits (0..32768).
+struct PlacedRaster16 {
+    std::shared_ptr<Image16> image;
+    int x = 0, y = 0;
+    PixelRect bounds() const { return image ? PixelRect{x, y, image->width(), image->height()} : PixelRect{}; }
+};
+
+/// Either depth, as a layer holds it. `transform` is where the raster goes exactly (a warp's may start between
+/// pixels); `x`, `y` its origin rounded to the pixel grid.
+struct AnyPlacedRaster {
+    AnyImage image;
+    int x = 0, y = 0;
+    LayerTransform transform;
+};
+
 // ---- the filters ------------------------------------------------------------------------------------------
 // Each takes the current result and `canvas` (Photoshop's filter canvas: the document, or the FEid cache's rect)
 // and returns the next result. Filters that grow (the blurs) grow inside the canvas, sampling past it by its
@@ -99,6 +114,12 @@ PlacedRaster smartAddNoise(const PlacedRaster& in, double amount, bool gaussian,
 /// its blend and opacity (Normal at 100% replaces it), then the shared mask between the unfiltered and filtered
 /// pixels. None when the stack is not supported.
 std::optional<PlacedRaster> renderSmartFilterStack(const PlacedRaster& placed, const PixelRect& canvas, const SmartFilterStack& stack);
+/// The stack at 16 bits (smartfilter_render16.cpp): the same kernels on 15-bit straight colour, each calibrated
+/// against the 8-bit one (docs/smart-objects.md gives the figures). None when the stack is not supported, or has an
+/// entry not drawn at 16 bits (smartFilterDrawsAt16).
+std::optional<PlacedRaster16> renderSmartFilterStack(const PlacedRaster16& placed, const PixelRect& canvas, const SmartFilterStack& stack);
+/// Whether a filter is drawn at 16 bits.
+bool smartFilterDrawsAt16(const SmartFilterParameters& parameters);
 
 // ---- Photoshop's structures ---------------------------------------------------------------------------------
 
@@ -125,6 +146,12 @@ std::vector<uint8_t> authorSmartFilterRecord(const std::string& placedId, const 
 std::optional<std::vector<uint8_t>> replaceSmartFilterRecords(const std::vector<uint8_t>& payload,
                                                               const std::vector<std::pair<std::string, std::vector<uint8_t>>>& replacements);
 
+/// A cache record for `instance` on the whole `width` x `height` document with its mask all white, added to `globals`
+/// (to the 'FEid' block, a new one when there is none). For a 16-bit PSD, which carries no cache NekoPhoto reads (its
+/// 16-bit writer leaves the 8-bit one out): its supported stacks are then drawn and editable here. False when the
+/// stack is not one drawn here or the instance cannot be placed.
+bool addDefaultSmartFilterCache(std::vector<PsdBlock>& globals, const SmartObjectInstance& instance, const SmartObjectSource& source, int width, int height);
+
 /// Whether the instance's Smart Filters (stack and cache) are ones drawn here, without drawing them.
 bool smartFiltersDrawable(const std::vector<PsdBlock>& globals, const SmartObjectInstance& instance);
 /// The instance's pixels with its Smart Filters: `source` placed on `quad` (through its warp, if any), then the
@@ -135,6 +162,20 @@ std::optional<PlacedRaster> filteredSmartObjectRaster(const std::vector<PsdBlock
 /// `clip`, when given, bounds it (document pixels).
 std::optional<PlacedRaster> placedSmartObjectRaster(const SmartObjectInstance& instance, const Image& source, const std::array<double, 8>& quad,
                                                     const Rect* clip = nullptr);
+/// The same at 16 bits.
+std::optional<PlacedRaster16> filteredSmartObjectRaster(const std::vector<PsdBlock>& globals,
+                                                        const SmartObjectInstance& instance, const Image16& source, const std::array<double, 8>& quad);
+std::optional<PlacedRaster16> placedSmartObjectRaster(const SmartObjectInstance& instance, const Image16& source, const std::array<double, 8>& quad,
+                                                      const Rect* clip = nullptr);
+
+/// How an instance is drawn: with its Smart Filters (and warp), through its warp only, or placed without filters
+/// (through its warp, if any).
+enum class SmartObjectDraw { Filtered, Warped, Unfiltered };
+/// The instance drawn from `source` at `type` (the document's depth; the source is converted when its own differs):
+/// the one entry point that picks the 8- or 16-bit path. None when it cannot be drawn that way.
+std::optional<AnyPlacedRaster> drawSmartObjectRaster(const std::vector<PsdBlock>& globals, const SmartObjectInstance& instance,
+                                                     const SmartObjectSource& source, const std::array<double, 8>& quad, SampleType type,
+                                                     SmartObjectDraw how);
 
 /// Warped and filtered instances whose layer was moved, scaled or rotated since they were drawn, drawn again from their
 /// contents on the moved quad (their pixels are not the placement, so resampling them would soften them and slide the

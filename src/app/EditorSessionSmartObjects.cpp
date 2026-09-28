@@ -5,6 +5,7 @@
 #include "ImageConvert.h"
 #include "TextLayer.h"
 #include "compositor/affinity.h"
+#include "compositor/depth.h"
 #include "compositor/png.h"
 #include "compositor/psd.h"
 #include "compositor/render.h"
@@ -20,8 +21,9 @@ namespace app {
 
 namespace {
 
-/// A file as smart object contents: its bytes, and its image (a PSD's merged image or our render of it; any
-/// image Qt reads).
+/// A file as smart object contents: its bytes, and its image at the file's own depth (a PSD's merged image or our
+/// render of it, 16-bit from a 16-bit PSD; a PNG, 16-bit when it is; any image Qt reads, 16-bit when Qt reads it at
+/// 16 bits per channel, as a 16-bit TIFF).
 std::optional<SmartObjectContents> contentsFromFile(const QString& path, QString* error) {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) { if (error) *error = QObject::tr("Couldn’t read %1.").arg(QFileInfo(path).fileName()); return std::nullopt; }
@@ -34,7 +36,9 @@ std::optional<SmartObjectContents> contentsFromFile(const QString& path, QString
         std::string why;
         auto imported = importPsdBytes(c.bytes, &why);
         if (!imported) { if (error) *error = QString::fromStdString(why); return std::nullopt; }
-        c.image = imported->realComposite && imported->composite ? imported->composite : renderFlattened(imported->document);
+        if (imported->document.sampleType == SampleType::U16)
+            c.image = imported->realComposite && imported->composite16 ? imported->composite16 : Image16Ptr(renderFlattened16(imported->document));
+        else c.image = imported->realComposite && imported->composite ? imported->composite : ImagePtr(renderFlattened(imported->document));
         c.resolution = imported->document.resolution;
         if (data.size() > 5 && data[5] == 2) c.fileType = "8BPB";
     } else if (data.size() >= 4 && data[0] == '\0' && uint8_t(data[1]) == 0xFF && data[2] == 'K' && data[3] == 'A') {
@@ -43,13 +47,21 @@ std::optional<SmartObjectContents> contentsFromFile(const QString& path, QString
         auto imported = importAffinityBytes(c.bytes, &why, affinityImportOptions());
         if (!imported) { if (error) *error = QString::fromStdString(why); return std::nullopt; }
         finishPendingText(*imported);
-        c.image = renderFlattened(imported->document);
+        if (imported->document.sampleType == SampleType::U16) c.image = Image16Ptr(renderFlattened16(imported->document));
+        else c.image = ImagePtr(renderFlattened(imported->document));
         c.resolution = imported->document.resolution;
     } else {
         QImage image;
         if (!image.loadFromData(data)) { if (error) *error = QObject::tr("%1 is not an image NekoPhoto can read.").arg(QFileInfo(path).fileName()); return std::nullopt; }
-        if (const BudgetCheck check = Document::canCreate(image.width(), image.height(), SampleType::U8); !check) { if (error) *error = EditorSession::budgetText(check); return std::nullopt; }
-        c.image = fromQImage(image);
+        // A 16-bit PNG (its IHDR's bit depth) goes through the core's reader, which keeps the 16 bits.
+        const bool deepPng = data.startsWith("\x89PNG") && data.size() > 24 && uint8_t(data[24]) == 16;
+        const bool deep = deepPng || image.depth() == 64;
+        if (const BudgetCheck check = Document::canCreate(image.width(), image.height(), deep ? SampleType::U16 : SampleType::U8); !check) {
+            if (error) *error = EditorSession::budgetText(check);
+            return std::nullopt;
+        }
+        if (deepPng) c.image = decodeSmartObjectPng(c.bytes);
+        if (!c.image) c.image = deep ? AnyImage(Image16Ptr(fromQImage16(image))) : AnyImage(ImagePtr(fromQImage(image)));
         if (image.dotsPerMeterX() > 0) c.resolution = image.dotsPerMeterX() * 0.0254;
     }
     if (c.fileType.empty()) c.fileType = "    ";
@@ -322,18 +334,28 @@ bool EditorSession::commitSmartObjectContents(const std::string& sourceId, const
     const SmartObjectSource& original = *it->second;
     SmartObjectContents c;
     c.bytes = encodeSmartObjectContents(contents, original, psdExportOptions());
-    c.image = renderFlattened(contents);
+    // The contents at the depth they were edited at (a 16-bit child document makes a 16-bit source).
+    std::shared_ptr<Image16> deep = contents.sampleType == SampleType::U16 ? renderFlattened16(contents) : nullptr;
+    std::shared_ptr<Image> flat = deep ? nullptr : renderFlattened(contents);
+    if (deep) c.image = Image16Ptr(deep);
+    else if (flat) c.image = ImagePtr(flat);
     if (c.bytes.empty() && c.image) {
-        // A type the core does not write (JPEG, TIFF, ...): Qt writes it in the same format.
+        // A type the core does not write (JPEG, TIFF, ...): Qt writes it in the same format (a 16-bit TIFF at 16 bits
+        // when Qt's plugin keeps them).
         QByteArray format = QByteArray::fromStdString(original.fileType).trimmed().toLower();
         if (format == "jpeg") format = "jpg";
+        if (format == "tiff" || format == "tif") format = "tiff";
         QBuffer buffer;
         buffer.open(QIODevice::WriteOnly);
         QImageWriter writer(&buffer, format);
-        if (!writer.write(toQImage(*c.image))) {
+        const QImage written = deep ? (format == "tiff" && canWriteDeepTiff() ? toQImage16(*deep) : toQImage(*ditherToEightBit(*deep))) : toQImage(*flat);
+        if (!writer.write(written)) {
             // Nothing writes it: the contents go back as PNG.
             std::vector<uint8_t> png;
-            if (encodePngImage(*c.image, png)) { c.bytes = std::move(png); c.fileType = "png "; c.fileName = QFileInfo(QString::fromStdString(original.fileName)).completeBaseName().toStdString() + ".png"; }
+            if (deep ? encodePngImage16(*deep, png) : encodePngImage(*flat, png)) {
+                c.bytes = std::move(png); c.fileType = "png ";
+                c.fileName = QFileInfo(QString::fromStdString(original.fileName)).completeBaseName().toStdString() + ".png";
+            }
         } else c.bytes.assign(buffer.data().begin(), buffer.data().end());
     }
     if (c.bytes.empty() || !c.image) { if (error) *error = tr("The contents could not be written."); return false; }

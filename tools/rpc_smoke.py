@@ -476,6 +476,51 @@ def sixteen_bit(rpc):
     assert base64.b64decode(shot["png"])[:8] == b"\x89PNG\r\n\x1a\n"
     assert "strokes" not in rpc.call("layers.setStyle", id=box["id"], style={})
     assert rpc.call("document.info")["bits"] == 16
+    # Smart objects at 16 bits: sources keep their own depth (an 8-bit tile, a 16-bit PNG), instances are drawn at the
+    # document's; convert (a 16-bit PSB), edit the contents (a 16-bit tab), Smart Filters, warp, replace, rasterize.
+    tile = os.path.join(work, "tile8.png")
+    rpc.call("render", region={"x": 0, "y": 0, "width": 16, "height": 16}, maxSize=0, path=tile)
+    deep_tile = os.path.join(work, "tile16.png")
+    assert rpc.call("document.export", path=deep_tile)["bits"] == 16
+    placed8 = rpc.call("smartObject.place", path=tile)
+    assert placed8["kind"] == "smartObject" and not placed8["smartObject"]["locked"], placed8
+    placed16 = rpc.call("smartObject.place", path=deep_tile)
+    assert placed16["kind"] == "smartObject" and not placed16["smartObject"]["locked"], placed16
+    assert rpc.call("history.info")["undo"] == "Place Embedded"
+    converted16 = rpc.call("smartObject.convert", ids=[placed8["id"]])
+    assert converted16["kind"] == "smartObject", converted16
+    opened16 = rpc.call("smartObject.editContents", id=converted16["id"])
+    assert rpc.call("document.info")["bits"] == 16, "a 16-bit document's layers convert to a 16-bit PSB"
+    rpc.call("layers.add", kind="pixels", name="Inside")
+    assert rpc.call("smartObject.commit")["committed"]
+    rpc.call("tabs.close", index=opened16["tab"])
+    assert rpc.call("layers.get", id=converted16["id"])["kind"] == "smartObject"
+    fx = rpc.call("smartObject.addFilter", id=converted16["id"], kind="gaussian blur", radius=2)
+    assert fx["kind"] == "smartObject", fx
+    rpc.call("smartObject.addFilter", id=converted16["id"], kind="mosaic", cellSize=4)
+    fx = rpc.call("smartObject.setFilter", id=converted16["id"], index=0, radius=3, opacity=60, blend="screen")
+    assert fx["filters"][0]["opacity"] == 60, fx
+    assert rpc.call("smartObject.filterMask", id=converted16["id"], action="invert")["mask"]["outside"] == 0
+    # The filter mask painted at 16 bits, kept in the stack.
+    assert rpc.call("smartObject.filterMask", id=converted16["id"], action="select")["mask"]["painting"]
+    rpc.call("brush.stroke", points=[[2, 2], [40, 30]], size=10, color="#ffffff", mask=True)
+    rpc.call("smartObject.filterMask", id=converted16["id"], action="deselect")
+    assert rpc.call("smartObject.filters", id=converted16["id"])["mask"]["maskedPixels"] > 0
+    rpc.call("layers.setTransform", id=converted16["id"], x=12, y=9)
+    assert rpc.call("layers.get", id=converted16["id"])["kind"] == "smartObject"
+    try:
+        rpc.call("smartObject.addFilter", id=converted16["id"], kind="unsharp mask")
+        raise AssertionError("Unsharp Mask should be refused as a 16-bit Smart Filter")
+    except RuntimeError as e:
+        assert "not available as a Smart Filter in 16-bit documents" in str(e), e
+    warped = rpc.call("layers.warp", id=placed16["id"], style="arc", bend=30)
+    assert warped["kind"] == "smartObject", warped
+    rpc.call("smartObject.replace", id=placed16["id"], path=tile)
+    assert rpc.call("layers.get", id=placed16["id"])["kind"] == "smartObject"
+    assert rpc.call("smartObject.rasterize", id=placed16["id"])["kind"] == "pixels"
+    assert rpc.call("document.info")["bits"] == 16
+    shot = rpc.call("render", maxSize=64)
+    assert base64.b64decode(shot["png"])[:8] == b"\x89PNG\r\n\x1a\n"
     # What is not ported yet is refused, saying so.
     for method, params in (("pixels.cameraRaw", {"settings": {"exposure": 0.5}}), ("tool.select", {"name": "artboard"})):
         try:
@@ -500,6 +545,7 @@ def sixteen_bit(rpc):
     rpc.call("document.close", discard=True)
     rpc.call("document.open", path=project)
     assert rpc.call("document.info")["bits"] == 16
+    assert any(l["kind"] == "smartObject" for l in rpc.call("layers.list")), "the smart object survives the 16-bit project"
     # Back to 8 bits, and Undo takes the conversion back in one step.
     assert rpc.call("image.mode", bits=8)["bits"] == 8
     rpc.call("history.undo")

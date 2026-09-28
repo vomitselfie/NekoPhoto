@@ -10,8 +10,8 @@ constexpr SampleTypes eightAndSixteen = onlyEightBit | sampleTypeBit(SampleType:
 // automation method refused on a deeper document ("Not available in 16-bit yet").
 //
 // P2, the 16-bit core: the renderer, the layer structure and the files. P3a: adjustments, filters, selections and
-// pixel edits. P3b: painting and retouching. Then text, vectors and layer styles; smart objects follow
-// (docs/bit-depth.md).
+// pixel edits. P3b: painting and retouching. Then text, vectors and layer styles, and smart objects with their
+// Smart Filters (docs/bit-depth.md).
 constexpr FeatureSupport table[] = {
     {"render.document", eightAndSixteen},
     // Image > Mode > 8 Bits/Channel, 16 Bits/Channel.
@@ -129,6 +129,11 @@ constexpr FeatureSupport table[] = {
     // Layer styles: all ten effects and folder styles drawn at 16 bits (layerstyle_render.cpp), the Layer Style
     // dialog, copy, paste, clear and style presets.
     {"edit.style", eightAndSixteen},
+
+    // Smart objects: sources at their own depth, placed at the document's; Place Embedded, Convert (a 16-bit
+    // child PSB), Edit Contents, Replace, Rasterize, warps, and Smart Filters with their 16-bit kernels
+    // (smartfilter_render16.cpp).
+    {"edit.smartObject", eightAndSixteen},
 };
 }   // namespace
 

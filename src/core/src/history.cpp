@@ -139,7 +139,7 @@ void heavyBuffers(const Document& document, Add&& add) {
     for (const auto& [id, source] : document.smartObjects) {
         if (!source) continue;
         if (source->bytes) add(source->bytes.get(), source->bytes->size());
-        if (source->image) add(source->image.get(), source->image->byteCount());
+        image(source->image);   // at its own depth; a copy converted for the document is counted as the layers' pixels
         if (source->psdElement) add(source->psdElement.get(), source->psdElement->size());
     }
 }

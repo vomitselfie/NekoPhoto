@@ -477,7 +477,9 @@ private:
             // Drawn here, and moved or given new contents: Photoshop's cache for it (the unfiltered pixels over the
             // canvas, and the shared mask) is written anew.
             auto cache = doc_.psdCarry ? findSmartFilterCache(doc_.psdCarry->globals, so.placedId) : std::nullopt;
-            auto unfiltered = cache ? placedSmartObjectRaster(so, *source->second->image, quad) : std::nullopt;
+            // The cache is 8-bit whatever the source's depth.
+            const AnyImage eight = cache ? smartObjectSourceImage(*source->second, SampleType::U8) : AnyImage();
+            auto unfiltered = eight.u8() ? placedSmartObjectRaster(so, *eight.u8(), quad) : std::nullopt;
             if (!unfiltered || !placedIds_.insert(so.placedId).second) {
                 summary_.warnings.push_back("Layer \"" + l.name + "\": its Smart Filters' cache could not be rewritten, so it is written as pixels.");
                 return;

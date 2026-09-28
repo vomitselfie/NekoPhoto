@@ -49,21 +49,22 @@ std::string smartObjectFileType(const std::string& fileName) {
 }
 
 std::shared_ptr<const SmartObjectSource> makeSmartObjectSource(SmartObjectContents contents) {
-    if (!contents.image || contents.image->isEmpty()) return nullptr;
+    if (!contents.image || contents.image.width() <= 0 || contents.image.height() <= 0 || contents.image.f32()) return nullptr;
     auto s = std::make_shared<SmartObjectSource>();
     s->id = newSmartObjectId();
     s->fileName = contents.fileName;
     s->fileType = contents.fileType.empty() ? smartObjectFileType(contents.fileName) : contents.fileType;
     s->bytes = std::make_shared<const std::vector<uint8_t>>(std::move(contents.bytes));
     s->image = contents.image;
-    s->width = contents.image->width();
-    s->height = contents.image->height();
+    s->width = contents.image.width();
+    s->height = contents.image.height();
     s->resolution = contents.resolution;
     return s;
 }
 
-Layer smartObjectLayer(const std::shared_ptr<const SmartObjectSource>& source, const std::array<double, 8>& quad, const std::string& name) {
-    Layer layer(Asset::make(source->image, name), Point(quad[0], quad[1]));
+Layer smartObjectLayer(const std::shared_ptr<const SmartObjectSource>& source, const std::array<double, 8>& quad, const std::string& name,
+                       SampleType type) {
+    Layer layer(Asset::makeAny(smartObjectSourceImage(*source, type), name), Point(quad[0], quad[1]));
     layer.name = name;
     if (auto t = transformForQuad(quad, source->width, source->height)) layer.transform = *t;
     SmartObjectInstance instance;
@@ -75,7 +76,7 @@ Layer smartObjectLayer(const std::shared_ptr<const SmartObjectSource>& source, c
     instance.placedWidth = source->width;
     instance.placedHeight = source->height;
     layer.smartObject = std::move(instance);
-    layer.smartImage = source->image;
+    layer.smartImage = layer.asset->image;
     return layer;
 }
 
@@ -91,7 +92,8 @@ Uuid placeSmartObject(Document& document, const std::shared_ptr<const SmartObjec
     document.smartObjects[source->id] = source;
     std::string name = source->fileName;
     if (auto dot = name.rfind('.'); dot != std::string::npos && dot > 0) name.resize(dot);
-    Layer layer = smartObjectLayer(source, placementQuad(document, source->width, source->height), name.empty() ? "Smart Object" : name);
+    Layer layer = smartObjectLayer(source, placementQuad(document, source->width, source->height), name.empty() ? "Smart Object" : name,
+                                   document.sampleType);
     layer.parentId = parent;
     const Uuid id = layer.id;
     document.layers.insert(document.layers.begin() + long(std::min(index, document.layers.size())), std::move(layer));
@@ -121,7 +123,7 @@ std::optional<Uuid> convertToSmartObject(Document& document, const std::vector<U
     double x0 = 1e300, y0 = 1e300, x1 = -1e300, y1 = -1e300;
     for (size_t i : members) {
         const Layer& l = document.layers[i];
-        if (l.isGroup || l.adjustment || !l.asset || !l.asset->image.u8()) continue;
+        if (l.isGroup || l.adjustment || !l.asset || !l.asset->image) continue;
         const Rect b = l.transform.bounds();
         x0 = std::min(x0, b.x); y0 = std::min(y0, b.y); x1 = std::max(x1, b.x + b.width); y1 = std::max(y1, b.y + b.height);
     }
@@ -131,6 +133,8 @@ std::optional<Uuid> convertToSmartObject(Document& document, const std::vector<U
     if (w > psbMaxSide || h > psbMaxSide) return fail("The layers are too large for a smart object (300,000 pixels a side).");
     Document child(w, h);
     child.resolution = document.resolution;
+    // The child is a document of the same depth (a 16-bit document's layers become a 16-bit PSB).
+    child.sampleType = document.sampleType;
     child.psdCarry = document.psdCarry;   // the global light and patterns the members' styles use
     for (size_t i : members) {
         Layer l = document.layers[i];
@@ -158,11 +162,12 @@ std::optional<Uuid> convertToSmartObject(Document& document, const std::vector<U
     contents.bytes = std::move(bytes);
     contents.fileName = top->name + ".psb";
     contents.fileType = "8BPB";
-    contents.image = renderFlattened(child);
+    if (child.sampleType == SampleType::U16) contents.image = Image16Ptr(renderFlattened16(child));
+    else contents.image = ImagePtr(renderFlattened(child));
     contents.resolution = document.resolution;
     auto source = makeSmartObjectSource(std::move(contents));
     if (!source) return fail("The layers could not be drawn.");
-    Layer layer = smartObjectLayer(source, {left, topY, left + w, topY, left + w, topY + h, left, topY + h}, top->name);
+    Layer layer = smartObjectLayer(source, {left, topY, left + w, topY, left + w, topY + h, left, topY + h}, top->name, document.sampleType);
     layer.parentId = top->parentId;
     const Uuid topId = top->id;
     // Out go the members; in at the topmost one's place goes the smart object.
@@ -209,42 +214,39 @@ int replaceSmartObjectSource(Document& document, const std::string& from, const 
             // Warped or filtered: the quad (the warp cage) stays where it is and the new contents are drawn through
             // the same warp and filters.
             const std::array<double, 8> quad = moveQuad(so.quad, so.placedTransform, so.placedWidth, so.placedHeight,
-                                                        l.transform, l.asset->image.u8()->width(), l.asset->image.u8()->height());
+                                                        l.transform, l.asset->image.width(), l.asset->image.height());
             SmartObjectInstance next = so;
             for (PsdBlock& b : next.psdBlocks)
                 if (auto patched = repointPsdPlacement(b.key, b.data, quad, replacement->id, replacement->width, replacement->height)) b.data = std::move(*patched);
-            std::optional<WarpedRaster> raster;
-            if (smartObjectFiltered(next)) {
-                static const std::vector<PsdBlock> none;
-                if (auto f = filteredSmartObjectRaster(document.psdCarry ? document.psdCarry->globals : none, next, *replacement->image, quad))
-                    raster = WarpedRaster{f->image, LayerTransform(Point(f->x, f->y), Size(f->image->width(), f->image->height()))};
-            } else raster = warpedSmartObjectRaster(next, *replacement->image, quad);
+            static const std::vector<PsdBlock> none;
+            auto raster = drawSmartObjectRaster(document.psdCarry ? document.psdCarry->globals : none, next, *replacement, quad, document.sampleType,
+                                                smartObjectFiltered(next) ? SmartObjectDraw::Filtered : SmartObjectDraw::Warped);
             if (!raster) continue;
             next.sourceId = replacement->id;
             next.quad = quad;
             const Sampling sampling = l.transform.sampling;
-            l.asset = Asset::make(raster->image, l.name);
+            l.asset = Asset::makeAny(raster->image, l.name);
             l.transform = raster->transform;
             l.transform.sampling = sampling;
             l.smartImage = raster->image;
             next.placedTransform = l.transform;
-            next.placedWidth = raster->image->width();
-            next.placedHeight = raster->image->height();
+            next.placedWidth = raster->image.width();
+            next.placedHeight = raster->image.height();
             so = std::move(next);
             if (!oldStem.empty() && l.name.compare(0, oldStem.size(), oldStem) == 0) l.name = newStem + l.name.substr(oldStem.size());
             changed++;
             continue;
         }
         // About its own centre, at its own scale.
-        const int w0 = l.asset->image.u8()->width(), h0 = l.asset->image.u8()->height();
+        const int w0 = l.asset->image.width(), h0 = l.asset->image.height();
         LayerTransform t = l.transform;
         const Point centre = t.center();
         const double sx = t.size.width / std::max(1, w0), sy = t.size.height / std::max(1, h0);
         t.size = Size(replacement->width * sx, replacement->height * sy);
         t.origin = Point(centre.x - t.size.width / 2, centre.y - t.size.height / 2);
-        l.asset = Asset::make(replacement->image, l.name);
+        l.asset = Asset::makeAny(smartObjectSourceImage(*replacement, document.sampleType), l.name);
         l.transform = t;
-        l.smartImage = replacement->image;
+        l.smartImage = l.asset->image;
         so.sourceId = replacement->id;
         so.quad = quadOf(t, replacement->width, replacement->height);
         for (PsdBlock& b : so.psdBlocks)
@@ -273,12 +275,13 @@ std::optional<Document> smartObjectContentsDocument(const Document& document, co
         if (auto imported = importPsdBytes(bytes, &error)) return std::move(imported->document);
         return std::nullopt;
     }
-    if (!s.image) return std::nullopt;
-    Document d(s.image->width(), s.image->height());
+    if (!s.image || s.image.f32()) return std::nullopt;
+    Document d(s.image.width(), s.image.height());
     d.resolution = s.resolution;
+    d.sampleType = s.image.sampleType();   // the contents open at their own depth
     std::string name = s.fileName;
     if (auto dot = name.rfind('.'); dot != std::string::npos && dot > 0) name.resize(dot);
-    Layer layer(Asset::make(s.image, name.empty() ? "Contents" : name), Point(0, 0));
+    Layer layer(Asset::makeAny(s.image, name.empty() ? "Contents" : name), Point(0, 0));
     layer.name = name.empty() ? "Contents" : name;
     d.layers.push_back(layer);
     return d;
@@ -294,7 +297,9 @@ std::vector<uint8_t> encodeSmartObjectContents(const Document& contents, const S
     }
     if (source.fileType == "png ") {
         std::vector<uint8_t> out;
-        if (auto flat = renderFlattened(contents); flat && encodePngImage(*flat, out, contents.resolution)) return out;
+        if (contents.sampleType == SampleType::U16) {
+            if (auto flat = renderFlattened16(contents); flat && encodePngImage16(*flat, out, contents.resolution)) return out;
+        } else if (auto flat = renderFlattened(contents); flat && encodePngImage(*flat, out, contents.resolution)) return out;
     }
     return {};
 }
@@ -312,12 +317,11 @@ bool warpLayer(Document& document, Layer& layer, const TextWarp& warp, std::stri
     if (!layer.asset || !layer.asset->image || layer.asset->image.width() <= 0 || layer.asset->image.height() <= 0) return fail("The layer has no pixels to warp.");
     if (layer.isLiveSmartObject()) {
         SmartObjectInstance& so = *layer.smartObject;
-        if (!layer.asset->image.u8()) return fail("Smart objects are not available for 16-bit documents yet.");
         if (so.locked()) return fail("This smart object shows the preview its file carried; it cannot be warped here.");
         if (!smartObjectPixelsArePlacement(so)) return fail("This smart object is already warped or has Smart Filters; rasterize it to warp it again.");
         auto source = document.smartObjects.find(so.sourceId);
         if (source == document.smartObjects.end() || !source->second->image) return fail("Its contents cannot be read.");
-        const int w = source->second->image->width(), h = source->second->image->height();
+        const int w = source->second->image.width(), h = source->second->image.height();
         auto mesh = styleWarpMesh(warp.style, warp.bend, warp.verticalOrientation, w, h);
         if (!mesh) return fail("That warp style is not one NekoPhoto draws.");
         distortWarpMesh(*mesh, warp.horizontal, warp.vertical);
@@ -326,7 +330,7 @@ bool warpLayer(Document& document, Layer& layer, const TextWarp& warp, std::stri
         const auto [y0, y1] = std::minmax_element(mesh->ys.begin(), mesh->ys.end());
         const double corners[4][2] = {{*x0, *y0}, {*x1, *y0}, {*x1, *y1}, {*x0, *y1}};
         std::array<double, 8> quad{};
-        const int pw = layer.asset->image.u8()->width(), ph = layer.asset->image.u8()->height();
+        const int pw = layer.asset->image.width(), ph = layer.asset->image.height();
         for (int i = 0; i < 4; i++) {
             const Point p = mapThroughTransform(layer.transform, pw, ph, corners[i][0] * pw / w, corners[i][1] * ph / h);
             quad[size_t(i * 2)] = p.x; quad[size_t(i * 2 + 1)] = p.y;
@@ -336,18 +340,18 @@ bool warpLayer(Document& document, Layer& layer, const TextWarp& warp, std::stri
         for (PsdBlock& b : next.psdBlocks)
             if (auto warped = warpPsdPlacement(b.key, b.data, *mesh, quad)) { b.data = std::move(*warped); written = true; }
         if (!written) return fail("Its placement cannot take a warp.");
-        auto raster = warpedSmartObjectRaster(next, *source->second->image, quad);
+        auto raster = drawSmartObjectRaster({}, next, *source->second, quad, document.sampleType, SmartObjectDraw::Warped);
         if (!raster) return fail("The warp could not be drawn.");
         if (layer.mask && !layer.mask->placement) layer.mask->placement = layer.maskTransform();
         const Sampling sampling = layer.transform.sampling;
-        layer.asset = Asset::make(raster->image, layer.name);
+        layer.asset = Asset::makeAny(raster->image, layer.name);
         layer.transform = raster->transform;
         layer.transform.sampling = sampling;
         layer.smartImage = raster->image;
         next.quad = quad;
         next.placedTransform = layer.transform;
-        next.placedWidth = raster->image->width();
-        next.placedHeight = raster->image->height();
+        next.placedWidth = raster->image.width();
+        next.placedHeight = raster->image.height();
         so = std::move(next);
         return true;
     }
@@ -399,13 +403,13 @@ std::array<double, 8> hullQuad(const WarpMesh& mesh) {
     return {*x0, *y0, *x1, *y0, *x1, *y1, *x0, *y1};
 }
 
-/// The pixels a cage bends: a smart object's contents, a layer's own pixels.
-const Image* cageSource(const Document& document, const Layer& layer) {
+/// The pixels a cage bends, at their own depth: a smart object's contents, a layer's own pixels.
+AnyImage cageSource(const Document& document, const Layer& layer) {
     if (layer.isLiveSmartObject()) {
         auto it = document.smartObjects.find(layer.smartObject->sourceId);
-        return it != document.smartObjects.end() && it->second->image ? it->second->image.get() : nullptr;
+        return it != document.smartObjects.end() ? it->second->image : AnyImage();
     }
-    return layer.asset && layer.asset->image.u8() ? layer.asset->image.u8().get() : nullptr;
+    return layer.asset ? layer.asset->image : AnyImage();
 }
 
 } // namespace
@@ -447,11 +451,12 @@ std::optional<WarpMesh> layerWarpCage(const Document& document, const Layer& lay
 }
 
 std::optional<WarpedRaster> previewWarpCage(const Document& document, const Layer& layer, const WarpMesh& cage, int maxSide) {
-    const Image* source = cageSource(document, layer);
-    // A 16-bit layer previews from its pixels reduced to 8 bits (the renderer widens the preview); Apply bends
-    // the 16-bit pixels.
+    const AnyImage pixels = cageSource(document, layer);
+    // 16-bit pixels (a layer's, or a smart object's contents) preview reduced to 8 bits (the renderer widens the
+    // preview); Apply bends them at 16 bits.
+    const Image* source = pixels.u8().get();
     std::shared_ptr<Image> narrowed;
-    if (!source && !layer.isLiveSmartObject() && layer.asset && layer.asset->image.u16()) { narrowed = narrowImage(*layer.asset->image.u16()); source = narrowed.get(); }
+    if (!source && pixels.u16()) { narrowed = narrowImage(*pixels.u16()); source = narrowed.get(); }
     if (!source || source->isEmpty()) return std::nullopt;
     // A reduced copy keeps a drag live on big layers; the mesh's (u, v) cover the whole image either way.
     const double scale = std::min(1.0, double(std::max(16, maxSide)) / std::max(source->width(), source->height()));
@@ -469,7 +474,7 @@ bool warpLayerToCage(Document& document, Layer& layer, const WarpMesh& cage, std
     std::string why;
     if (!layerWarpCage(document, layer, &why)) { if (error) *error = why; return false; }
     if (cage.uOrder != 4 || cage.vOrder != 4 || cage.xs.size() != 16 || cage.ys.size() != 16) return fail("The cage must be a 4 x 4 mesh.");
-    const Image* sourcePixels = cageSource(document, layer);
+    const AnyImage sourcePixels = cageSource(document, layer);
     const auto quad = hullQuad(cage);
     if (isVectorShapeLayer(layer)) {
         // A shape bends as a path, as in Photoshop: each anchor and handle is carried through the cage from where it
@@ -499,24 +504,24 @@ bool warpLayerToCage(Document& document, Layer& layer, const WarpMesh& cage, std
         // so contents space is the cage scaled to the contents' size).
         SmartObjectInstance next = *layer.smartObject;
         WarpMesh contents = cage;
-        if (!sourcePixels) return fail("Its contents cannot be read.");
-        const Image& source = *sourcePixels;
-        const double sx = source.width() / std::max(1e-9, quad[2] - quad[0]), sy = source.height() / std::max(1e-9, quad[5] - quad[1]);
+        auto source = document.smartObjects.find(next.sourceId);
+        if (!sourcePixels || source == document.smartObjects.end()) return fail("Its contents cannot be read.");
+        const double sx = sourcePixels.width() / std::max(1e-9, quad[2] - quad[0]), sy = sourcePixels.height() / std::max(1e-9, quad[5] - quad[1]);
         for (size_t i = 0; i < contents.xs.size(); i++) { contents.xs[i] = (cage.xs[i] - quad[0]) * sx; contents.ys[i] = (cage.ys[i] - quad[1]) * sy; }
         bool written = false;
         for (PsdBlock& b : next.psdBlocks)
             if (auto warped = warpPsdPlacement(b.key, b.data, contents, quad)) { b.data = std::move(*warped); written = true; }
         if (!written) return fail("Its placement cannot take a warp.");
-        auto raster = warpedSmartObjectRaster(next, source, quad);
+        auto raster = drawSmartObjectRaster({}, next, *source->second, quad, document.sampleType, SmartObjectDraw::Warped);
         if (!raster) return fail("The warp could not be drawn.");
-        layer.asset = Asset::make(raster->image, layer.name);
+        layer.asset = Asset::makeAny(raster->image, layer.name);
         layer.transform = raster->transform;
         layer.transform.sampling = sampling;
         layer.smartImage = raster->image;
         next.quad = quad;
         next.placedTransform = layer.transform;
-        next.placedWidth = raster->image->width();
-        next.placedHeight = raster->image->height();
+        next.placedWidth = raster->image.width();
+        next.placedHeight = raster->image.height();
         *layer.smartObject = std::move(next);
         return true;
     }
@@ -530,8 +535,8 @@ bool warpLayerToCage(Document& document, Layer& layer, const WarpMesh& cage, std
         layer.smartImage.reset();
         return true;
     }
-    if (!sourcePixels) return fail("The layer has no pixels to warp.");
-    auto raster = renderWarpedImage(*sourcePixels, cage, quad);
+    if (!sourcePixels.u8()) return fail("The layer has no pixels to warp.");
+    auto raster = renderWarpedImage(*sourcePixels.u8(), cage, quad);
     if (!raster) return fail("The warp could not be drawn.");
     layer.asset = Asset::make(raster->image, layer.name);
     layer.transform = raster->transform;

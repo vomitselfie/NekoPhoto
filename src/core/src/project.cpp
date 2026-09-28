@@ -580,13 +580,14 @@ std::optional<Document> loadProject(const std::string& pathText, ProjectError& e
     if (m.tagged)
         if (auto bytes = readCarry(path / "profile.icc"))
             if (auto profile = profileFromIcc(*bytes); profile && profile->model == ColorModel::RGB) d.profile = std::move(*profile);
-    // Smart objects: the sources in smartobjects/ (each with its image as PNG), the instances beside their layers.
-    // Their count, their files and their decoded pixels are limited in total, each image by the budget rules too.
+    // Smart objects: the sources in smartobjects/ (each with its image as PNG, 16-bit for a 16-bit source), the
+    // instances beside their layers. Their count, their files and their decoded bytes are limited in total, each image
+    // by the budget rules at its depth too.
     {
         std::error_code ec;
         const fs::path dir = path / "smartobjects";
         int sources = 0;
-        long long sourcePixels = 0;
+        long long sourceBytes = 0;
         if (fs::is_directory(dir, ec))
             for (auto& entry : fs::directory_iterator(dir, ec)) {
                 if (entry.path().extension() != ".source") continue;
@@ -598,12 +599,15 @@ std::optional<Document> loadProject(const std::string& pathText, ProjectError& e
                 png.replace_extension(".png");
                 PngInfo info;
                 if (fs::is_regular_file(png, ec) && checkFile(png, path, assetLimit) && readPngInfo(png.string(), info)) {
-                    if (!Document::canCreate(info.width, info.height, SampleType::U8) || (long long)info.width * info.height > limits.smartObjectPixels - sourcePixels) {
+                    const SampleType depth = info.bitDepth == 16 ? SampleType::U16 : SampleType::U8;
+                    const long long bytesNeeded = (long long)info.width * info.height * 4 * (long long)sampleBytes(depth);
+                    if (!Document::canCreate(info.width, info.height, depth) || bytesNeeded > limits.smartObjectBytes - sourceBytes) {
                         error = tooLarge();
                         return std::nullopt;
                     }
-                    sourcePixels += (long long)info.width * info.height;
-                    source->image = readPngImage(png.string());
+                    sourceBytes += bytesNeeded;
+                    if (depth == SampleType::U16) source->image = Image16Ptr(readPngImage16(png.string()));
+                    else source->image = ImagePtr(readPngImage(png.string()));
                 }
                 const std::string id = source->id;
                 d.smartObjects[id] = std::make_shared<const SmartObjectSource>(std::move(*source));
@@ -715,7 +719,8 @@ bool saveProject(const Document& document, const std::optional<Uuid>& activeLaye
             const fs::path base = staging / "smartobjects" / std::to_string(n++);
             std::string err;
             if (!writeBytes(fs::path(base).replace_extension(".source"), serializeSmartObjectSource(*source))
-                || (source->image && !writePngImage(fs::path(base).replace_extension(".png").string(), *source->image, 0, &err))) {
+                || (source->image.u8() && !writePngImage(fs::path(base).replace_extension(".png").string(), *source->image.u8(), 0, &err))
+                || (source->image.u16() && !writePngImage16(fs::path(base).replace_extension(".png").string(), *source->image.u16(), 0, &err))) {
                 abandon(); error = ioError("could not write a smart object source"); return false;
             }
         }

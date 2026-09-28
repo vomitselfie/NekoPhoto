@@ -3,13 +3,16 @@
 // Photoshop 27.8, and the calibration facts in Patchy's docs/smart-filters-native.md.
 #include "check.h"
 #include "compositor/smartfilter.h"
+#include "compositor/depth.h"
 #include "compositor/png.h"
 #include "compositor/psd.h"
 #include "compositor/psd_writer.h"
 #include "compositor/render.h"
 #include "compositor/smartobject_edit.h"
 
+#include <algorithm>
 #include <array>
+#include <cstdio>
 #include <cstdlib>
 #include <vector>
 
@@ -384,7 +387,7 @@ Document filteredDocument() {
     auto image = std::make_shared<Image>(20, 10);
     image->fill(0, 200, 0, 255);
     c.image = image;
-    encodePngImage(*c.image, c.bytes);
+    encodePngImage(*image, c.bytes);
     c.fileName = "chip.png";
     auto source = makeSmartObjectSource(std::move(c));
     doc.smartObjects[source->id] = source;
@@ -471,6 +474,208 @@ TEST_CASE(clearing_a_stack_removes_its_filterfx_and_cache_record) {
     // And a filter can go on again.
     REQUIRE(addSmartFilter(doc, doc.layers[0], blur, &error));
     CHECK(smartFilterStackOf(doc, doc.layers[0])->supported);
+}
+
+// ---- 16 bits (smartfilter_render16.cpp) ---------------------------------------------------------------------------
+
+namespace {
+
+/// An 8-bit-sourced test picture: smooth ramps, a hashed texture, hard edges, a half-transparent band and a clear
+/// margin, premultiplied.
+std::shared_ptr<Image> calibrationPicture(int w, int h) {
+    auto image = std::make_shared<Image>(w, h);
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            uint32_t hash = uint32_t(x) * 374761393u ^ uint32_t(y) * 668265263u;
+            hash = (hash ^ (hash >> 13)) * 1274126177u;
+            const int noise = int(hash >> 27);   // 0..31
+            uint8_t a = 255;
+            if (x < 3 || y < 2 || x >= w - 3 || y >= h - 2) a = 0;
+            else if (y > h * 3 / 4) a = uint8_t(40 + 4 * x % 200);
+            const int r = std::clamp(x * 255 / w + noise - 16, 0, 255);
+            const int g = (x / 7 + y / 5) % 2 ? 220 : 30;
+            const int b = std::clamp(y * 255 / h, 0, 255);
+            uint8_t* p = image->pixel(x, y);
+            p[0] = uint8_t((r * a + 127) / 255); p[1] = uint8_t((g * a + 127) / 255); p[2] = uint8_t((b * a + 127) / 255); p[3] = a;
+        }
+    return image;
+}
+
+struct DepthAgreement { int maxDiff = 0; long long over1 = 0, samples = 0; };
+
+/// The 16-bit stack's result narrowed to 8 bits against the 8-bit stack's, sample by sample over both results' bounds.
+DepthAgreement agreement(const PlacedRaster& eight, const PlacedRaster16& deep) {
+    DepthAgreement a;
+    auto narrowed = narrowImage(*deep.image);
+    const PlacedRaster n{narrowed, deep.x, deep.y};
+    const int x0 = std::min(eight.x, deep.x), y0 = std::min(eight.y, deep.y);
+    const int x1 = std::max(eight.x + eight.image->width(), deep.x + deep.image->width());
+    const int y1 = std::max(eight.y + eight.image->height(), deep.y + deep.image->height());
+    for (int y = y0; y < y1; y++)
+        for (int x = x0; x < x1; x++) {
+            const uint8_t* p = at(eight, x, y);
+            const uint8_t* q = at(n, x, y);
+            for (int c = 0; c < 4; c++) {
+                const int d = std::abs(int(p[c]) - int(q[c]));
+                if (d > 1 && std::getenv("SMARTFILTER16_DEBUG"))
+                    std::fprintf(stderr, "    (%d,%d)[%d]: 8-bit %d,%d,%d,%d  16-bit %d,%d,%d,%d\n", x, y, c, p[0], p[1], p[2], p[3], q[0], q[1], q[2], q[3]);
+                a.maxDiff = std::max(a.maxDiff, d);
+                a.over1 += d > 1;
+                a.samples++;
+            }
+        }
+    return a;
+}
+
+} // namespace
+
+TEST_CASE(sixteen_bit_kernels_agree_with_eight_bit_on_eight_bit_input) {
+    auto picture = calibrationPicture(48, 40);
+    const PixelRect canvas{0, 0, 64, 56};
+    const PlacedRaster eight{picture, 8, 8};
+    // The same straight colours at 16 bits: the kernels run on straight colour, and the 8-bit pipeline's own
+    // unpremultiply is what its kernels see (widening the premultiplied bytes instead would hand the 16-bit kernels
+    // straight colour the 8-bit ones never had, up to 255 / 2a levels away at alpha a).
+    Image straight = *picture;
+    unpremultiply(straight);
+    auto deepPixels = widenImage(straight);
+    premultiply(*deepPixels);
+    const PlacedRaster16 deep{deepPixels, 8, 8};
+    struct Case { const char* name; SmartFilterParameters parameters; double opacity = 1; BlendMode blend = BlendMode::Normal; };
+    // Each kernel within one level of its 8-bit twin. Between entries the 8-bit stack goes back to straight bytes and
+    // blends through the 8-bit engine, so a blended or masked stack may add a level of its own on isolated samples.
+    const std::vector<Case> cases{
+        {"Gaussian Blur 0.5", smartfilter::GaussianBlur{0.5}},
+        {"Gaussian Blur 2.5", smartfilter::GaussianBlur{2.5}},
+        {"Gaussian Blur 12", smartfilter::GaussianBlur{12}},
+        {"High Pass 3", smartfilter::HighPass{3}},
+        {"High Pass 10", smartfilter::HighPass{10}},
+        {"Median 1", smartfilter::Median{1}},
+        {"Median 4", smartfilter::Median{4}},
+        {"Dust & Scratches 2/0", smartfilter::DustAndScratches{2, 0}},
+        {"Dust & Scratches 3/20", smartfilter::DustAndScratches{3, 20}},
+        {"Surface Blur 5/15", smartfilter::SurfaceBlur{5, 15}},
+        {"Surface Blur 12/40", smartfilter::SurfaceBlur{12, 40}},
+        {"Motion Blur 0/12", smartfilter::MotionBlur{0, 12}},
+        {"Motion Blur 33/25", smartfilter::MotionBlur{33, 25}},
+        {"Plastic Wrap 9/7/5", smartfilter::PlasticWrap{9, 7, 5}},
+        {"Plastic Wrap 20/15/1", smartfilter::PlasticWrap{20, 15, 1}},
+        {"Mosaic 8", smartfilter::Mosaic{8}},
+        {"Emboss 135/2/100", smartfilter::Emboss{135, 2, 100}},
+        {"Emboss 45/3/150", smartfilter::Emboss{45, 3, 150}},
+        {"Box Blur 3", smartfilter::BoxBlur{3}},
+        {"Box Blur 20", smartfilter::BoxBlur{20}},
+        {"Radial Blur 10/16", smartfilter::RadialBlur{10, 16}},
+        {"Add Noise 12.5 uniform", smartfilter::AddNoise{12.5, false, false, 7}},
+        {"Add Noise 40 gaussian mono", smartfilter::AddNoise{40, true, true, 3}},
+        {"Gaussian Blur 3 at 60% Multiply", smartfilter::GaussianBlur{3}, 0.6, BlendMode::Multiply},
+        {"Mosaic 6 at 50% Screen", smartfilter::Mosaic{6}, 0.5, BlendMode::Screen},
+    };
+    bool kernelsWithinOne = true, plumbingWithinTwo = true;
+    for (const Case& c : cases) {
+        const auto stack = stackOf(c.parameters, c.opacity, c.blend);
+        auto a = renderSmartFilterStack(eight, canvas, stack);
+        auto b = renderSmartFilterStack(deep, canvas, stack);
+        REQUIRE(a && b && a->image && b->image);
+        const DepthAgreement d = agreement(*a, *b);
+        std::fprintf(stderr, "  %-34s max %d level%s, over 1: %lld of %lld samples (%.4f%%)\n", c.name, d.maxDiff, d.maxDiff == 1 ? "" : "s",
+                     d.over1, d.samples, 100.0 * double(d.over1) / double(std::max(1LL, d.samples)));
+        if (c.opacity < 1 || c.blend != BlendMode::Normal) plumbingWithinTwo &= d.maxDiff <= 2 && d.over1 * 2000 < d.samples;
+        else kernelsWithinOne &= d.maxDiff <= 1;
+    }
+    // A shared mask between the unfiltered and filtered pixels, at a gray level and past its bounds.
+    {
+        auto stack = stackOf(smartfilter::GaussianBlur{2});
+        auto mask = std::make_shared<GrayImage>(30, 30);
+        for (int y = 0; y < 30; y++) for (int x = 0; x < 30; x++) mask->at(x, y) = uint8_t((x * 9 + y * 3) % 256);
+        stack.mask = mask;
+        stack.maskBounds = PixelRect{10, 10, 30, 30};
+        stack.maskDefault = 128;
+        auto a = renderSmartFilterStack(eight, canvas, stack);
+        auto b = renderSmartFilterStack(deep, canvas, stack);
+        REQUIRE(a && b);
+        const DepthAgreement d = agreement(*a, *b);
+        std::fprintf(stderr, "  %-34s max %d level%s, over 1: %lld of %lld samples\n", "Gaussian Blur 2 through a mask", d.maxDiff, d.maxDiff == 1 ? "" : "s", d.over1, d.samples);
+        plumbingWithinTwo &= d.maxDiff <= 2 && d.over1 * 2000 < d.samples;
+    }
+    CHECK(kernelsWithinOne);
+    CHECK(plumbingWithinTwo);
+    // Unsharp Mask is not drawn at 16 bits (smartFilterDrawsAt16): the stack refuses it.
+    CHECK(!smartFilterDrawsAt16(smartfilter::UnsharpMask{}));
+    CHECK(!renderSmartFilterStack(deep, canvas, stackOf(smartfilter::UnsharpMask{150, 2, 8})));
+    CHECK(renderSmartFilterStack(eight, canvas, stackOf(smartfilter::UnsharpMask{150, 2, 8})).has_value());
+}
+
+TEST_CASE(sixteen_bit_kernels_keep_sixteen_bit_precision) {
+    // A ramp finer than 8 bits: the 16-bit blur keeps it (more distinct values than 256), the 8-bit one cannot.
+    auto ramp = std::make_shared<Image16>(1024, 4);
+    for (int y = 0; y < 4; y++)
+        for (int x = 0; x < 1024; x++) { uint16_t* p = ramp->pixel(x, y); p[0] = p[1] = p[2] = uint16_t(8192 + x * 8); p[3] = 32768; }
+    auto out = renderSmartFilterStack(PlacedRaster16{ramp, 0, 0}, PixelRect{0, 0, 1024, 4}, stackOf(smartfilter::GaussianBlur{2}));
+    REQUIRE(out && out->image);
+    std::vector<bool> seen(32769);
+    int distinct = 0;
+    for (int x = 0; x < out->image->width(); x++) { const uint16_t v = out->image->pixel(x, 2)[0]; if (!seen[v]) { seen[v] = true; distinct++; } }
+    CHECK(distinct > 900);
+    // Median of a 16-bit field: the window's middle value exactly.
+    auto field = std::make_shared<Image16>(3, 3);
+    const uint16_t values[9] = {100, 200, 300, 400, 500, 600, 700, 800, 30000};
+    for (int i = 0; i < 9; i++) { uint16_t* p = field->pixel(i % 3, i / 3); p[0] = p[1] = p[2] = values[i]; p[3] = 32768; }
+    auto median = renderSmartFilterStack(PlacedRaster16{field, 0, 0}, PixelRect{0, 0, 3, 3}, stackOf(smartfilter::Median{1}));
+    REQUIRE(median && median->image);
+    CHECK_EQ(int(median->image->pixel(1, 1)[0]), 500);
+}
+
+TEST_CASE(sixteen_bit_documents_take_smart_filters) {
+    Document doc(60, 40);
+    doc.sampleType = SampleType::U16;
+    SmartObjectContents c;
+    auto image = std::make_shared<Image16>(20, 10);
+    const uint16_t green[4] = {0, 25700, 0, 32768};
+    image->fill(green);
+    c.image = Image16Ptr(image);
+    encodePngImage16(*image, c.bytes);
+    c.fileName = "chip.png";
+    auto source = makeSmartObjectSource(std::move(c));
+    REQUIRE(source && source->image.u16());
+    doc.smartObjects[source->id] = source;
+    doc.layers.push_back(smartObjectLayer(source, {20, 15, 40, 15, 40, 25, 20, 25}, "Chip", doc.sampleType));
+    REQUIRE(doc.layers[0].asset->image.u16() != nullptr);
+    SmartFilterEntry blur;
+    blur.parameters = smartfilter::GaussianBlur{2};
+    std::string error;
+    REQUIRE(addSmartFilter(doc, doc.layers[0], blur, &error));
+    const Layer& layer = doc.layers[0];
+    REQUIRE(layer.isLiveSmartObject());
+    REQUIRE(layer.asset->image.u16() != nullptr);
+    CHECK(layer.asset->image.width() > 20);   // the blur grew it
+    // The same in an 8-bit document from the same (16-bit) source: the narrowed result agrees within a level.
+    Document eight = doc;
+    REQUIRE(convertSampleType(eight, SampleType::U8, &error));
+    eight.layers[0] = smartObjectLayer(source, {20, 15, 40, 15, 40, 25, 20, 25}, "Chip", SampleType::U8);
+    eight.psdCarry.reset();
+    REQUIRE(addSmartFilter(eight, eight.layers[0], blur, &error));
+    REQUIRE(eight.layers[0].asset->image.u8() != nullptr);
+    const Image& a = *eight.layers[0].asset->image.u8();
+    auto b = narrowImage(*layer.asset->image.u16());
+    REQUIRE(a.width() == b->width() && a.height() == b->height());
+    int worst = 0;
+    for (int y = 0; y < a.height(); y++)
+        for (int x = 0; x < a.width(); x++)
+            for (int k = 0; k < 4; k++) worst = std::max(worst, std::abs(int(a.pixel(x, y)[k]) - int(b->pixel(x, y)[k])));
+    CHECK(worst <= 1);
+    // Moved: drawn again at 16 bits.
+    doc.layers[0].transform.origin.x += 5;
+    CHECK_EQ(refreshSmartObjectRasters(doc), 1);
+    CHECK(doc.layers[0].asset->image.u16() != nullptr);
+    CHECK(doc.layers[0].isLiveSmartObject());
+    // Unsharp Mask is refused at 16 bits, with its name, and the layer is left as it was.
+    const Layer kept = doc.layers[0];
+    SmartFilterEntry sharpen;
+    sharpen.parameters = smartfilter::UnsharpMask{};
+    CHECK(!addSmartFilter(doc, doc.layers[0], sharpen, &error));
+    CHECK(error == "Unsharp Mask is not available as a Smart Filter in 16-bit documents yet.");
+    CHECK(doc.layers[0] == kept);
 }
 
 TEST_MAIN()

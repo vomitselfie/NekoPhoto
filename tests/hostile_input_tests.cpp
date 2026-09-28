@@ -344,9 +344,12 @@ TEST_CASE(project_smart_objects_have_aggregate_limits) {
     CHECK_EQ(int(loaded->smartObjects.size()), 3);
     // Each is fine alone; together they pass a limit.
     ProjectLoadLimits pixels;
-    pixels.smartObjectPixels = 2 * 64 * 64;
+    pixels.smartObjectBytes = 2 * 64 * 64 * 4;
     CHECK(!loadProject(path, error, pixels));
     CHECK(error.kind == ProjectError::TooLarge);
+    ProjectLoadLimits enough;
+    enough.smartObjectBytes = 3 * 64 * 64 * 4;
+    CHECK(loadProject(path, error, enough).has_value());
     ProjectLoadLimits count;
     count.smartObjects = 2;
     CHECK(!loadProject(path, error, count));
@@ -365,6 +368,47 @@ TEST_CASE(project_smart_objects_have_aggregate_limits) {
     CHECK(!loadProject(path, error));
     CHECK(error.kind == ProjectError::TooLarge);
     CHECK(timer.seconds() < 10);
+    fs::remove_all(dir);
+}
+
+// A 16-bit source is counted at its depth: twice the bytes of an 8-bit one of the same size.
+TEST_CASE(project_smart_object_budget_counts_bytes_at_depth) {
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() / ("nekophoto-hostile16-" + std::to_string(std::rand()));
+    fs::create_directories(dir);
+    Document doc(10, 10);
+    doc.layers.emplace_back(Asset::make(ImagePtr(std::make_shared<Image>(10, 10)), "Pixels"), Point{0, 0});
+    for (int i = 0; i < 2; i++) {
+        auto source = std::make_shared<SmartObjectSource>();
+        source->id = "deep-" + std::to_string(i);
+        source->fileName = "Art.png";
+        source->fileType = "png ";
+        source->bytes = std::make_shared<const std::vector<uint8_t>>(100, uint8_t(i));
+        auto image = std::make_shared<Image16>(64, 64);
+        const uint16_t grey[4] = {16384, 16384, 16384, 32768};
+        image->fill(grey);
+        source->image = Image16Ptr(image);
+        source->width = source->height = 64;
+        doc.smartObjects[source->id] = source;
+    }
+    const std::string path = (dir / "Deep.comp").string();
+    ProjectError error;
+    REQUIRE(saveProject(doc, std::nullopt, path, error));
+    auto loaded = loadProject(path, error);
+    REQUIRE(loaded.has_value());
+    REQUIRE(loaded->smartObjects.size() == 2);
+    for (auto& [id, s] : loaded->smartObjects) {
+        REQUIRE(s->image.u16() != nullptr);
+        CHECK_EQ(int(s->image.u16()->pixel(5, 5)[0]), 16384);
+    }
+    // What two 8-bit sources would fit in does not hold two 16-bit ones.
+    ProjectLoadLimits eightBitSized;
+    eightBitSized.smartObjectBytes = 2 * 64 * 64 * 4;
+    CHECK(!loadProject(path, error, eightBitSized));
+    CHECK(error.kind == ProjectError::TooLarge);
+    ProjectLoadLimits atDepth;
+    atDepth.smartObjectBytes = 2 * 64 * 64 * 8;
+    CHECK(loadProject(path, error, atDepth).has_value());
     fs::remove_all(dir);
 }
 

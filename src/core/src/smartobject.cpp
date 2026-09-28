@@ -6,6 +6,8 @@
 // version-16 descriptor ('Idnt', 'placed', 'Trnf', 'nonAffineTransform', 'Sz  ', 'Rslt', 'warp', 'filterFX');
 // 'PlLd' is 'plcL', version 3, the Pascal uuid, page, pages, antialias, type and the eight quad doubles.
 #include "compositor/smartobject.h"
+#include "compositor/depth.h"
+#include "compositor/png.h"
 #include "compositor/uuid.h"
 #include "psd/psd_descriptor.hpp"
 #include <cmath>
@@ -25,6 +27,29 @@ const char* smartObjectLockDescription(SmartObjectInstance::Lock lock) {
     case SmartObjectInstance::Lock::Legacy: return "stored in Photoshop's old placed-layer form only";
     default: return "editable";
     }
+}
+
+AnyImage smartObjectSourceImage(const SmartObjectSource& source, SampleType type) {
+    if (!source.image || source.image.sampleType() == type) return source.image;
+    if (!source.depthCache) return imageAtDepth(source.image, type);
+    std::lock_guard<std::mutex> lock(source.depthCache->mutex);
+    SmartObjectDepthCache& cache = *source.depthCache;
+    if (cache.from != source.image.identity() || !cache.converted || cache.converted.sampleType() != type) {
+        cache.converted = imageAtDepth(source.image, type);
+        cache.from = source.image.identity();
+    }
+    return cache.converted;
+}
+
+AnyImage decodeSmartObjectPng(const std::vector<uint8_t>& bytes) {
+    // IHDR is the first chunk: signature (8), length (4), type (4), width, height (8), then the bit depth.
+    if (bytes.size() < 29 || std::memcmp(bytes.data(), "\x89PNG", 4) != 0 || std::memcmp(bytes.data() + 12, "IHDR", 4) != 0) return nullptr;
+    if (bytes[24] == 16) {
+        if (auto deep = decodePngImage16(bytes.data(), bytes.size())) return Image16Ptr(std::move(deep));
+        return nullptr;
+    }
+    if (auto image = decodePngImage(bytes.data(), bytes.size())) return ImagePtr(std::move(image));
+    return nullptr;
 }
 
 // ---- Geometry ----------------------------------------------------------------------------------------------
@@ -241,6 +266,11 @@ bool smartObjectPixelsArePlacement(const SmartObjectInstance& instance) {
 }
 
 std::optional<WarpedRaster> warpedSmartObjectRaster(const SmartObjectInstance& instance, const Image& source, const std::array<double, 8>& quad) {
+    auto mesh = smartObjectWarp(instance);
+    return mesh ? renderWarpedImage(source, *mesh, quad) : std::nullopt;
+}
+
+std::optional<WarpedRaster16> warpedSmartObjectRaster(const SmartObjectInstance& instance, const Image16& source, const std::array<double, 8>& quad) {
     auto mesh = smartObjectWarp(instance);
     return mesh ? renderWarpedImage(source, *mesh, quad) : std::nullopt;
 }

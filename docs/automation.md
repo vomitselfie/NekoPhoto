@@ -217,7 +217,8 @@ layers and folders, `layers.set`, `layers.delete`, `layers.duplicate`, `layers.m
 `pixels.contentAwareMove`, `pixels.contentAwareScale`, `adjustments.set`, `layers.add` of adjustment layers,
 `image.resize`, `image.trim`, `canvas.crop`, `layers.warp` and `layers.setCage` too, and since P3b `brush.stroke`
 (every tool it takes, presets included), `gradient.draw`, `pixels.bucket`, `pixels.patch`, `layers.merge` and
-`layers.mask` apply; anything else answers "<method> is not available for 16-bit documents yet" until it is ported. `document.export` writes a 16-bit PNG (and TIFF, when the Qt TIFF plugin writes
+`layers.mask` apply, and every `smartObject.*` method (`smartObject.addFilter` and `smartObject.setFilter` refuse
+Unsharp Mask there: "Unsharp Mask is not available as a Smart Filter in 16-bit documents yet"); anything else answers "<method> is not available for 16-bit documents yet" until it is ported. `document.export` writes a 16-bit PNG (and TIFF, when the Qt TIFF plugin writes
 16 bits) from a 16-bit document; the 8-bit formats get it dithered down, and the reply says so in `note`.
 
 Batches: `rpc.batch` (`calls`: a list of `{"method", "params"}`; `name`) runs the calls in order in one
