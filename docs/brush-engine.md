@@ -1,12 +1,12 @@
 # The brush engine
 
 How a stroke gets from the pen to the pixels, what the brush dynamics are, how imported brushes land in them, and the
-harness that measures all of it. The code: `src/core/include/compositor/brushsample.h`, `brushdynamics.h`,
+harness that measures all of it. The code: `src/core/include/compositor/brushsample.h`, `brushsmoothing.h`, `brushdynamics.h`,
 `tipbrush.h`, `brush.h` (the round tip and the stroke's grid), `mypaint.h`, the importers in `src/core/src/abr.cpp`,
 `procreate.cpp` and `sut.cpp`, and the harness in `tests/brush_harness.*`.
 
 ```
-pointer events ──> BrushSample (raw) ──> BrushSampleTrack (derived) ──> engine
+pointer events ──> BrushSample (raw) ──> smoothing (optional) ──> BrushSampleTrack (derived) ──> engine
                                                                         ├─ round tip: the position
                                                                         ├─ tip brushes: dynamics ──> dabs ──> coverage
                                                                         └─ MyPaint: pressure, tilt, time (stroke_to)
@@ -73,6 +73,80 @@ A recorded stroke is JSON (`recordedStrokeFromJson`, `recordedStrokeToJson`):
 A bare array of samples also reads; missing fields take their defaults, and a stroke with `"stylus": false` reads with a
 mouse's neutral values whatever it holds.
 
+## Smoothing
+
+`BrushStabilizer` (`brushsmoothing.h`) is its own stage between the pen's raw samples and the stroke. Raw samples go in;
+the samples the stroke follows come out, none or several per report, and only then does `BrushSampleTrack` derive speed,
+direction and the rest from them, so every engine and every dynamic reads the smoothed motion:
+
+```
+raw sample ──> input smoothing ──> pressure smoothing ──> stroke stabiliser ──> BrushSampleTrack ──> dynamics ──> dabs
+```
+
+Three controls, each with its own filter and constants, since position, pressure and angles are different signals
+(`BrushSmoothing`; every amount 0..100, all 0 by default):
+
+- **Input smoothing** (`input`): a One Euro filter on the position. Its cutoff at rest falls from 25 Hz at 1% to 1 Hz
+  at 100% and rises by 0.05 Hz per screen point a second of the pen's speed (smoothed at 1 Hz), so a resting pen is
+  held still and a moving one is followed closely. The tilt and the twist are filtered here too, with a slower cutoff
+  of their own (12 Hz down to 0.6 Hz, no speed term) and with circular maths: the tilt as a vector, so its azimuth
+  turns the short way round, and the twist on its unwrapped angle, so 359 and 1 degrees average to 0, not 180.
+- **Pressure smoothing** (`pressure`): a one-pole low pass on the pressure and the airbrush wheel, with a time
+  constant of up to 120 ms. It leaves the position alone, and the position filters leave the pressure alone.
+- **The stroke stabiliser** (`stabilizer`, Photoshop's Smoothing): the brush trails the pen. Its reach is the amount in
+  screen points (100 at 100%). Stepped every 2 document pixels of the pen's travel, so its curve does not depend on the
+  report rate (60 and 240 reports a second of the same S curve stay within 0.26 pixels).
+
+The stabiliser's options follow Photoshop's Smoothing options. The names and what each does are Adobe's; the
+mechanics behind them are not documented, so each is marked with how it was read:
+
+| Option | What it does here | Confidence |
+|---|---|---|
+| Smoothing 0..100 | With Stroke Catch-Up, the brush closes on the pen with a time constant of `0.25 s × (amount/100)²`, so it lags further the faster the pen moves | weakly inferred: Photoshop's curve is unknown; the constants are synthetic-only |
+| Pulled String Mode (off) | The brush stays put while the pen moves within the reach and is dragged behind it, the string taut, once the pen goes further; a pen wandering inside the string leaves no mark | strongly inferred from Adobe's description ("paints only when the string is taut") |
+| Stroke Catch-Up (on) | The brush keeps closing on a paused pen (the canvas ticks the stabiliser at 60 a second while the pen is still). Off, the brush moves only as the pen does, by `1 − e^(−step/reach)` of the gap per step, so a steady pen is trailed by the reach and a paused one leaves the brush where it is | strongly inferred for the behaviour; the distance rule is weakly inferred |
+| Catch-Up On Stroke End (off) | The release paints on in a straight line from the brush to where the pen lifted, at the pace the brush had | strongly inferred |
+| Adjust For Zoom (on) | The reach is in screen points, so it is shorter in the document when zoomed in and longer zoomed out; off, it is in document pixels | strongly inferred: Adobe says it decreases smoothing zoomed in and increases it zoomed out |
+
+Defaults are Photoshop's as far as they are known (Stroke Catch-Up and Adjust For Zoom on, the other two off), except
+the amount, which starts at 0 so a stroke paints as it did before smoothing existed. With every amount at 0 the stage
+is skipped and the pen's samples reach the stroke as they came, which is why every parity scene is unchanged.
+
+In the app the options bar's Smoothing field is the stabiliser's amount; Dynamics… (now open for every brush) holds its
+four options and the two other filters. It applies to the Brush tool and the Eraser; a Shift-click straight line is
+not smoothed. MyPaint's own slow tracking still applies on top, and a MyPaint stroke settling while the pen rests
+repeats the last smoothed sample, not the pen's point. An action records the pen's raw points with the smoothing that
+was on, so a replay smooths them the same way.
+
+**Measured** (`brush_smoothing_tests` prints the table): 1.5 pixels of noise on each axis, 0.05 on the pressure and 3
+degrees on the twist, added to clean paths reported 120 times a second; `dev` is the mean distance of the stroke's
+samples from the clean path, `lag` the mean distance from the brush to where the clean pen was after each report
+(which includes the noise, so it is 1.8 with smoothing off), `end` the distance from the stroke's end to the clean end.
+
+| Setting | Line (520 px/s) dev / lag / end | S curve dev / lag | Circle dev / lag | Fast line (2000 px/s) lag |
+|---|---|---|---|---|
+| off | 1.16 / 1.79 / 0.71 | 1.15 / 1.75 | 1.38 / 2.04 | 1.90 |
+| input 25 | 0.80 / 2.12 / 2.08 | 0.90 / 2.70 | 0.93 / 2.36 | 5.92 |
+| input 100 | 0.79 / 2.68 / 2.39 | 0.88 / 3.26 | 0.88 / 2.92 | 7.25 |
+| stabiliser 10 | 0.86 / 1.52 / 1.03 | 0.96 / 1.73 | 1.05 / 1.76 | 3.88 |
+| stabiliser 25 | 0.60 / 6.75 / 7.12 | 0.63 / 6.63 | 0.72 / 6.12 | 25.1 |
+| stabiliser 50 | 0.46 / 27.0 / 31.4 | 2.98 / 24.3 | 4.42 / 23.5 | 69.3 |
+| stabiliser 50, no Stroke Catch-Up | 0.40 / 36.0 / 43.2 | 6.03 / 35.1 | 7.68 / 31.4 | 38.3 |
+| stabiliser 50, Pulled String | 0.44 / 44.3 / 50.4 | 9.90 / 47.0 | 18.0 / 46.8 | 43.7 |
+| stabiliser 50, Catch-Up On Stroke End | 0.46 / 27.0 / 0.71 | 2.97 / 24.3 | 4.40 / 23.5 | 69.3 |
+| pressure 50 | positions unchanged; pressure noise 0.044 → 0.015 on the line | | | |
+
+On curves a heavy stabiliser cuts inside the bend (the circle's deviation at 50), as a trailing brush does; on a line
+it only steadies. The tests hold: at 0 every sample passes through unchanged; input smoothing at 25 cuts the
+deviation by more than a fifth with a lag under 4 pixels at 500 pixels a second and under 8 at 2000; the stabiliser
+lags more as it rises; Pulled String trails a taut line by exactly the reach; Catch-Up On Stroke End ends within the
+noise of the pen; Stroke Catch-Up closes on a paused pen only when on; pressure smoothing leaves the positions
+bit-identical; a twist jittering across 0 stays within 6 degrees of 0.
+
+**Latency.** Each filter costs under half a microsecond per report (input smoothing 0.1 µs, all of them 0.4 µs,
+`each_filter_costs_microseconds_per_report`). Through the canvas (`--bench-brush <preset> --bench-smoothing
+input|stabilizer|pulled|pressure|all`), every mode's move median stays within the run-to-run noise of smoothing off.
+
 ## The engines
 
 - **Round tip** (`BrushStroke`): takes the sample's position. Size, hardness and opacity are the options bar's; it has
@@ -89,6 +163,15 @@ mouse's neutral values whatever it holds.
 
 A tip brush reads pressure only from a stylus: a mouse is full pressure, as in Photoshop, unless the brush turns on
 Mouse speed as pressure.
+
+**The first dab waits for the direction** when anything about it turns with the stroke: Stroke grain, a tip that
+follows the stroke (`followStroke`), or a Roll mapping on a pen that does not report its twist. The press has no
+direction of its own (the track gives the first sample 0, along +x), so its dab is placed when the next sample that
+moves arrives, at the press's point, with the pen as it was at the press and the direction of that first step; a click
+that never moves is stamped by `TipStroke::finish`, facing +x. Up to 1.8.2 only Stroke grain waited, so a tip following
+the stroke, or rolling with it, stamped its first dab facing +x: a stroke started in any other direction began with a
+dab turned the wrong way (a square tip showed a crooked corner at the start). A tip that turns with nothing, or Roll on
+a pen reporting its barrel, does not wait. `the_first_dab_points_the_way_the_stroke_goes` holds it.
 
 ## Dynamics
 
@@ -400,13 +483,23 @@ records every dab's centre, size, the path's direction, the grain's tangent and 
 `render_hash_tests` keeps its own brush scenes, and `brush_dynamics_tests` covers curves, the combination rule, circular
 targets, the inputs and the migration of old presets.
 
+**Baseline changes after 1.8.2** (the first dab's direction, above). 17 scenes changed at 8 bits and the same 17 at 16:
+`tip_square` and `procreate_soft_ink` (both follow the stroke: Soft Ink has `shapeRotation`) on `straight_line`,
+`circle`, `s_curve`, `corners`, `fast_flick`, `long_slow`, `pen_hook` and `mouse_scribble`, the fixtures whose first
+step is not along +x; and `syn_12_roll` on `circle`, the one Roll scene without a reported twist (its `twist_sweep` and
+`twist_wrap` report the barrel). Only the start moves: the bounding box and total alpha of the first dab, not the
+stations along the stroke. The fixtures drawn along +x (the pressure, speed, tilt and twist sweeps) are unchanged. In
+`render_hash_tests` the one scene with such a tip, `brush/tip_square`, changed for the same reason.
+
 ## Automation
 
 `brush.stroke` takes, besides `points`, `pressure` and `pressures`: `tilts` (`[tiltX, tiltY]` degrees per point),
 `twists` (degrees per point; with them the pen reports its twist, which Roll reads), `times` (seconds per point; 8 ms apart by default), `seed` (the tip brushes' jitter) and
 `viewScale` (the zoom the stroke is taken as drawn at, 1 by default: 2 for 200%), which ScreenSpeed reads.
 Any pen field makes the stroke a stylus's. A recorded action keeps them (for a preset, the times and the seed; the view
-scale when it is not 1), so a stroke replays exactly.
+scale when it is not 1), so a stroke replays exactly. Smoothing is off unless asked for: `smoothing` (the stabiliser,
+0..100), `pulledString`, `strokeCatchUp`, `catchUpOnEnd`, `adjustForZoom`, `inputSmoothing` and `pressureSmoothing`; a
+stroke recorded with smoothing on carries them, with its times and view scale.
 
 ## 16 bits
 
@@ -443,7 +536,8 @@ baseline's `u16/` section, with each scene's distance from its 8-bit render (`vs
 
 ## Not yet
 
-- Clip Studio's effector curves, stabilisation, a continuous swept round brush, and MyPaint's newer inputs.
+- Clip Studio's effector curves, a continuous swept round brush, and MyPaint's newer inputs. Clip Studio's own
+  stabilisation and Procreate's StreamLine are not read from imported brushes; the stabiliser is the tool's setting.
 - Colour by tilt or pressure (Procreate's `dynamicsTilt/PressureHue`, `Saturation`, `Brightness`, `SecondaryColor` and the
   colour jitters): a stroke's colour is one value for the whole stroke, laid down through its coverage, so a colour per dab
   does not fit the dynamics layer as a target; it would need the stroke to carry colour per pixel. Listed as not carried

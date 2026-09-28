@@ -132,16 +132,12 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
         if (!myPaint_->isValid()) { emit error(QString::fromStdString(myPaint_->error())); myPaint_.reset(); stroke_.reset(); return false; }
     }
     sampleTrack_.reset();
-    if (tipStroke_) {
-        if (straightFromLast && lastBrushPoint_) tipTo(*lastBrushPoint_);
-        tipTo(documentPoint);
-    } else if (myPaint_) {
-        if (straightFromLast && lastBrushPoint_) myPaintTo(*lastBrushPoint_);
-        myPaintTo(documentPoint);
-    } else {
-        if (straightFromLast && lastBrushPoint_) stroke_->append(nextSample(*lastBrushPoint_));
-        stroke_->append(nextSample(documentPoint));
-    }
+    // Smoothing is the Brush tool's (and the Eraser's): a straight line from the last point is not smoothed.
+    stabilizing_ = tool_ == Tool::Brush && brushSmoothing.active();
+    stabilizer_ = BrushStabilizer(brushSmoothing);
+    lastGiven_.reset();
+    if (straightFromLast && lastBrushPoint_) brushTo(*lastBrushPoint_, true);
+    brushTo(documentPoint);
     lastBrushPoint_ = documentPoint;
     strokePoints_ = {documentPoint};
     strokeSamples_ = {pen};
@@ -154,30 +150,44 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
     return true;
 }
 
-BrushSample EditorSession::nextSample(QPointF documentPoint) {
-    // The pen as it came, at this point; the track adds speed, direction and the rest (events without a later
-    // timestamp than the last count as 120 a second).
-    BrushSample sample = pen;
-    sample.position = toPoint(documentPoint);
-    return sampleTrack_.add(sample);
+void EditorSession::strokeSample(const BrushSample& raw) {
+    // The track adds speed, direction and the rest (events without a later timestamp than the last count as 120 a
+    // second); the engine painting the stroke takes it.
+    const BrushSample sample = sampleTrack_.add(raw);
+    if (tipStroke_) tipStroke_->strokeTo(sample);
+    else if (myPaint_) myPaint_->strokeTo(sample);
+    else stroke_->append(sample);
+    lastGiven_ = raw;
 }
 
-void EditorSession::myPaintTo(QPointF documentPoint) { myPaint_->strokeTo(nextSample(documentPoint)); }
+void EditorSession::brushTo(QPointF documentPoint, bool direct) {
+    // The pen as it came, at this point.
+    BrushSample raw = pen;
+    raw.position = toPoint(documentPoint);
+    if (direct || !stabilizing_) { strokeSample(raw); return; }
+    stabilized_.clear();
+    stabilizer_.add(raw, stabilized_);
+    for (const BrushSample& s : stabilized_) strokeSample(s);
+    sincePen_.start();
+    const BrushSmoothing& smoothing = stabilizer_.settings();
+    if (smoothing.stabilizer > 0 && smoothing.strokeCatchUp && !smoothing.pulledString && !stabilizerTick_.isActive()) stabilizerTick_.start();
+}
 
-void EditorSession::tipTo(QPointF documentPoint) { tipStroke_->strokeTo(nextSample(documentPoint)); }
-
-void EditorSession::continueBrush(QPointF documentPoint) {
-    if (!stroke_) return;
-    if (tipStroke_) tipTo(documentPoint);
-    else if (myPaint_) { myPaintTo(documentPoint); myPaintSettle_.start(); }   // restarts: ticks only once input pauses
-    else stroke_->append(nextSample(documentPoint));
-    lastBrushPoint_ = documentPoint;
-    if (strokePoints_.size() < 20000) { strokePoints_.push_back(documentPoint); strokeSamples_.push_back(pen); }
+void EditorSession::takeBrushDirty() {
     Rect dirty = stroke_->takeDirtyRect();
     if (!dirty.isEmpty()) {
         strokeRegion_ = strokeRegion_.isEmpty() ? toQRect(dirty) : strokeRegion_.united(toQRect(dirty));
         emit documentChanged(toQRect(dirty));
     }
+}
+
+void EditorSession::continueBrush(QPointF documentPoint) {
+    if (!stroke_) return;
+    brushTo(documentPoint);
+    if (myPaint_) myPaintSettle_.start();   // restarts: ticks only once input pauses
+    lastBrushPoint_ = documentPoint;
+    if (strokePoints_.size() < 20000) { strokePoints_.push_back(documentPoint); strokeSamples_.push_back(pen); }
+    takeBrushDirty();
     if (healPreview_.isActive() || tool_ == Tool::SpotHealing) healPreview_.start();
 }
 
@@ -227,6 +237,14 @@ void EditorSession::endBrush() {
     if (!stroke_) return;
     healPreview_.stop();
     myPaintSettle_.stop();
+    stabilizerTick_.stop();
+    if (stabilizing_) {
+        // Catch-Up On Stroke End paints on to where the pen lifted.
+        stabilized_.clear();
+        stabilizer_.finish(stabilized_);
+        for (const BrushSample& s : stabilized_) strokeSample(s);
+        stabilizing_ = false;
+    }
     if (myPaint_) { myPaint_->finish(); myPaint_.reset(); }
     if (tipStroke_) tipStroke_->finish();   // a click with Stroke grain stamps its one dab now
     tipStroke_.reset();
@@ -263,6 +281,21 @@ void EditorSession::endBrush() {
         if (!brushPreset.isEmpty()) { step["preset"] = brushPreset; step["times"] = times; step["seed"] = double(strokeSeed_); }
         // The zoom it was painted at, which screen-speed dynamics read; 100% is the default.
         if (!strokeSamples_.empty() && strokeSamples_.front().viewScale != 1) step["viewScale"] = std::round(strokeSamples_.front().viewScale * 1e6) / 1e6;
+        // Smoothing works on the pen's points, which is what is recorded: the replay smooths them the same way.
+        if (brushSmoothing.active()) {
+            const BrushSmoothing& m = brushSmoothing;
+            if (m.input > 0) step["inputSmoothing"] = m.input;
+            if (m.pressure > 0) step["pressureSmoothing"] = m.pressure;
+            if (m.stabilizer > 0) {
+                step["smoothing"] = m.stabilizer;
+                step["pulledString"] = m.pulledString;
+                step["strokeCatchUp"] = m.strokeCatchUp;
+                step["catchUpOnEnd"] = m.catchUpOnEnd;
+                step["adjustForZoom"] = m.adjustForZoom;
+            }
+            if (!step.contains("times")) step["times"] = times;
+            if (!step.contains("viewScale") && !strokeSamples_.empty()) step["viewScale"] = std::round(strokeSamples_.front().viewScale * 1e6) / 1e6;
+        }
         if (pen.stylus) {
             step["pressures"] = pressures;
             if (tilted) step["tilts"] = tilts;
@@ -278,6 +311,8 @@ void EditorSession::cancelBrush() {
     if (!stroke_) return;
     healPreview_.stop();
     myPaintSettle_.stop();
+    stabilizerTick_.stop();
+    stabilizing_ = false;
     myPaint_.reset();
     tipStroke_.reset();
     stroke_.reset();

@@ -92,8 +92,8 @@ public:
     bool isValid() const { return valid_; }
     /// The next sample of the stroke (derived by a BrushSampleTrack). A mouse's pressure counts as full, as in
     /// Photoshop (or follows its speed, with mousePressureFromSpeed): tip brushes read pressure only from a stylus.
-    /// With Stroke grain the first dab waits for the stroke's direction (the next sample that moves), so the grain
-    /// starts turned the way the stroke goes.
+    /// With Stroke grain, a tip that follows the stroke, or Roll on a pen that does not report its twist, the first dab
+    /// waits for the stroke's direction (the next sample that moves), so it starts turned the way the stroke goes.
     void strokeTo(const BrushSample& input);
     /// The end of the stroke: a first dab still waiting (a click that never moved) is stamped.
     void finish();
@@ -140,7 +140,8 @@ private:
     double grainDirection_ = 0, grainTangent_ = 0, grainTangentAt_ = 0;
     Point grainCenter_, grainOffset_;
     bool grainTangentSet_ = false;
-    bool firstPending_ = false;   // Stroke grain: the first sample is in, its dab waits for the direction
+    bool firstPending_ = false;   // the first sample is in, its dab waits for the direction
+    bool rollOn_ = false;         // a mapping reads Roll, which is the stroke's direction on a pen without twist
     std::array<bool, dynamicsTargetCount> randomOn_{};   // targets a Random mapping drives
     bool valid_ = false;
     /// Density by spacing: an entry per level of the grid's depth, for the spacing ratio `densityK_`; tables replaced

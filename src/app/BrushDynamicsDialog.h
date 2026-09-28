@@ -1,7 +1,9 @@
 // Brush Dynamics: the few dynamics a tip brush exposes for editing (docs/brush-engine.md). Pen pressure on size and on
 // flow, each through a curve with a minimum; density by spacing; and a mouse's speed as simulated pressure. The
-// brush's other mappings (jitter, tilt, fade...) are kept as they are.
+// brush's other mappings (jitter, tilt, fade...) are kept as they are. Above them, for every brush, the Brush tool's
+// smoothing: the stabiliser's modes (its amount is the options bar's Smoothing), input smoothing and pressure smoothing.
 #pragma once
+#include "compositor/brushsmoothing.h"
 #include "compositor/tipbrush.h"
 #include <QDialog>
 #include <QWidget>
@@ -44,8 +46,9 @@ private:
 class BrushDynamicsDialog : public QDialog {
     Q_OBJECT
 public:
-    /// Edits the tip brush `presetId` and saves it when accepted. False when it is not a tip brush.
-    static bool edit(QWidget* parent, const QString& presetId);
+    /// Edits the tip brush `presetId` and saves it when accepted, and `smoothing` (the Brush tool's) when given. False
+    /// when there is nothing to edit: not a tip brush, and no smoothing.
+    static bool edit(QWidget* parent, const QString& presetId, compositor::BrushSmoothing* smoothing = nullptr);
     /// The Brush tool's button that opens this, and its tooltip when the brush is not a tip brush.
     static QString buttonText();
     static QString unavailableText();
@@ -55,7 +58,8 @@ public:
     static QString targetLabel(compositor::DynamicsTarget target);
 
 private:
-    BrushDynamicsDialog(const compositor::BrushTip& tip, const QString& name, QWidget* parent);
+    BrushDynamicsDialog(const compositor::BrushTip* tip, const QString& name, const compositor::BrushSmoothing* smoothing, QWidget* parent);
+    void applySmoothing(compositor::BrushSmoothing& smoothing) const;
     struct Row {
         QGroupBox* box = nullptr;
         CurveEditor* curve = nullptr;
@@ -70,6 +74,13 @@ private:
     QCheckBox* mouseSpeed_ = nullptr;
     QCheckBox* tiltShape_ = nullptr;
     QDoubleSpinBox* flattest_ = nullptr;
+    QDoubleSpinBox* stabilizer_ = nullptr;
+    QCheckBox* pulledString_ = nullptr;
+    QCheckBox* strokeCatchUp_ = nullptr;
+    QCheckBox* catchUpOnEnd_ = nullptr;
+    QCheckBox* adjustForZoom_ = nullptr;
+    QDoubleSpinBox* inputSmoothing_ = nullptr;
+    QDoubleSpinBox* pressureSmoothing_ = nullptr;
 };
 
 } // namespace app

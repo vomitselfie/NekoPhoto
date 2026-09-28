@@ -257,6 +257,7 @@ int run(int argc, char** argv) {
     QCommandLineOption benchZoom("bench-zoom", "With --bench-brush, the view zoom (1 = 100%; default: fit).", "zoom");
     QCommandLineOption benchBurst("bench-burst", "With --bench-brush, pointer moves per repaint (default 1; a 1000 Hz mouse gives ~16 per frame).", "count");
     QCommandLineOption benchHardness("bench-hardness", "With --bench-brush, the brush hardness 0..1.", "hardness");
+    QCommandLineOption benchSmoothing("bench-smoothing", "With --bench-brush, smoothing at 50%: input, stabilizer, pulled, pressure or all.", "mode");
     QCommandLineOption benchReach("bench-reach", "With --bench-brush, the stroke's half-width as a fraction of the view (default 0.35).", "fraction");
     QCommandLineOption saveAs("save-as", "Save the document as the .comp package <path> before quitting (with --screenshot).", "path");
     QCommandLineOption prefs("preferences", "Open the Preferences dialog too (with --screenshot, grab it instead of the window).");
@@ -270,6 +271,7 @@ int run(int argc, char** argv) {
     parser.addOption(benchEraser);
     parser.addOption(benchMoves);
     parser.addOption(benchReach);
+    parser.addOption(benchSmoothing);
     parser.addOption(benchZoom);
     parser.addOption(benchBurst);
     parser.addOption(benchHardness);
@@ -500,7 +502,7 @@ int run(int argc, char** argv) {
                         s->selectTool(app::Tool::Brush);
                         s->brushPreset = preset.id;
                         emit s->toolChanged();
-                        QTimer::singleShot(100, &window, [&window, id = preset.id] { app::BrushDynamicsDialog::edit(&window, id); });
+                        QTimer::singleShot(100, &window, [&window, s, id = preset.id] { app::BrushDynamicsDialog::edit(&window, id, &s->brushSmoothing); });
                         break;
                     }
             }
@@ -544,6 +546,7 @@ int run(int argc, char** argv) {
         if (parser.value(benchZoom).toDouble() > 0) options.zoom = parser.value(benchZoom).toDouble();
         if (parser.value(benchBurst).toInt() > 0) options.burst = parser.value(benchBurst).toInt();
         if (parser.isSet(benchHardness)) options.hardness = parser.value(benchHardness).toDouble();
+        options.smoothing = parser.value(benchSmoothing);
         return app::runBrushBench(window, options);
     }
     if (parser.isSet(screenshot)) {

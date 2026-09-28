@@ -127,7 +127,7 @@ void CurveEditor::mouseDoubleClickEvent(QMouseEvent* e) {
 QString BrushDynamicsDialog::buttonText() { return tr("Dynamics…"); }
 
 QString BrushDynamicsDialog::unavailableText() {
-    return tr("Brush dynamics: pen pressure curves and spacing for imported tip brushes. The round tip and the MyPaint presets keep their own.");
+    return tr("Smoothing for every brush; pen pressure curves and spacing for imported tip brushes (the round tip and the MyPaint presets keep their own).");
 }
 
 QString BrushDynamicsDialog::inputLabel(DynamicsInput input) {
@@ -160,9 +160,64 @@ QString BrushDynamicsDialog::targetLabel(DynamicsTarget target) {
     return {};
 }
 
-BrushDynamicsDialog::BrushDynamicsDialog(const BrushTip& tip, const QString& name, QWidget* parent) : QDialog(parent) {
-    setWindowTitle(tr("Brush Dynamics: %1").arg(name));
+BrushDynamicsDialog::BrushDynamicsDialog(const BrushTip* tipOrNull, const QString& name, const BrushSmoothing* smoothing, QWidget* parent)
+    : QDialog(parent) {
+    setWindowTitle(name.isEmpty() ? tr("Brush Dynamics") : tr("Brush Dynamics: %1").arg(name));
     auto* layout = new QVBoxLayout(this);
+    if (smoothing) {
+        // Photoshop's Smoothing options, and the two filters before it.
+        auto* box = new QGroupBox(tr("Smoothing"));
+        auto* grid = new QVBoxLayout(box);
+        auto percent = [](double value, const QString& tip) {
+            auto* f = new QDoubleSpinBox;
+            f->setRange(0, 100);
+            f->setDecimals(0);
+            f->setSuffix("%");
+            f->setValue(value);
+            f->setToolTip(tip);
+            return f;
+        };
+        auto* amountRow = new QHBoxLayout;
+        amountRow->addWidget(new QLabel(tr("Smoothing")));
+        stabilizer_ = percent(smoothing->stabilizer, tr("The line trails the pen and evens out its wobble: the higher, the steadier and the further behind"));
+        amountRow->addWidget(stabilizer_);
+        amountRow->addStretch();
+        grid->addLayout(amountRow);
+        pulledString_ = new QCheckBox(tr("Pulled String Mode"));
+        pulledString_->setToolTip(tr("Paints only when the string is taut: moving the pen within the smoothing radius leaves no mark"));
+        pulledString_->setChecked(smoothing->pulledString);
+        strokeCatchUp_ = new QCheckBox(tr("Stroke Catch-Up"));
+        strokeCatchUp_->setToolTip(tr("The paint keeps catching up with the pen while you pause; off, it stops as soon as the pen stops"));
+        strokeCatchUp_->setChecked(smoothing->strokeCatchUp);
+        catchUpOnEnd_ = new QCheckBox(tr("Catch-Up On Stroke End"));
+        catchUpOnEnd_->setToolTip(tr("Completes the stroke from the last paint position to where you released the pen"));
+        catchUpOnEnd_->setChecked(smoothing->catchUpOnEnd);
+        adjustForZoom_ = new QCheckBox(tr("Adjust For Zoom"));
+        adjustForZoom_->setToolTip(tr("Less smoothing when zoomed in, more when zoomed out, so it feels the same on screen"));
+        adjustForZoom_->setChecked(smoothing->adjustForZoom);
+        for (QCheckBox* c : {pulledString_, strokeCatchUp_, catchUpOnEnd_, adjustForZoom_}) grid->addWidget(c);
+        auto sync = [this] { strokeCatchUp_->setEnabled(!pulledString_->isChecked()); };
+        connect(pulledString_, &QCheckBox::toggled, this, sync);
+        sync();
+        auto* filters = new QHBoxLayout;
+        filters->addWidget(new QLabel(tr("Input smoothing")));
+        inputSmoothing_ = percent(smoothing->input, tr("Steadies a jittery tablet with little lag: a slow pen is held still, a fast one followed closely"));
+        filters->addWidget(inputSmoothing_);
+        filters->addWidget(new QLabel(tr("Pressure smoothing")));
+        pressureSmoothing_ = percent(smoothing->pressure, tr("Evens out uneven pressure without slowing the line"));
+        filters->addWidget(pressureSmoothing_);
+        filters->addStretch();
+        grid->addLayout(filters);
+        layout->addWidget(box);
+    }
+    if (!tipOrNull) {
+        auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+        connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+        connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+        layout->addWidget(buttons);
+        return;
+    }
+    const BrushTip& tip = *tipOrNull;
     auto* rows = new QHBoxLayout;
     size_ = addRow(DynamicsTarget::Size, tr("Size follows pen pressure"), tip);
     flow_ = addRow(DynamicsTarget::Flow, tr("Flow follows pen pressure"), tip);
@@ -288,13 +343,26 @@ void BrushDynamicsDialog::apply(BrushTip& tip) const {
         for (const DynamicsMapping& m : tiltShapesTip(flattest_->value() / 100)) tip.dynamics.push_back(m);
 }
 
-bool BrushDynamicsDialog::edit(QWidget* parent, const QString& presetId) {
-    const BrushPreset* preset = BrushLibrary::find(presetId);
-    if (!preset || preset->engine != BrushPreset::Engine::Tip) return false;
-    auto tip = preset->tip();
-    if (!tip) return false;
-    BrushDynamicsDialog dialog(tip->tip, preset->name, parent);
+void BrushDynamicsDialog::applySmoothing(BrushSmoothing& smoothing) const {
+    if (!stabilizer_) return;
+    smoothing.stabilizer = stabilizer_->value();
+    smoothing.pulledString = pulledString_->isChecked();
+    smoothing.strokeCatchUp = strokeCatchUp_->isChecked();
+    smoothing.catchUpOnEnd = catchUpOnEnd_->isChecked();
+    smoothing.adjustForZoom = adjustForZoom_->isChecked();
+    smoothing.input = inputSmoothing_->value();
+    smoothing.pressure = pressureSmoothing_->value();
+}
+
+bool BrushDynamicsDialog::edit(QWidget* parent, const QString& presetId, BrushSmoothing* smoothing) {
+    const BrushPreset* preset = presetId.isEmpty() ? nullptr : BrushLibrary::find(presetId);
+    std::shared_ptr<const TipPreset> tip;
+    if (preset && preset->engine == BrushPreset::Engine::Tip) tip = preset->tip();
+    if (!tip && !smoothing) return false;
+    BrushDynamicsDialog dialog(tip ? &tip->tip : nullptr, tip ? preset->name : QString(), smoothing, parent);
     if (dialog.exec() != QDialog::Accepted) return true;
+    if (smoothing) dialog.applySmoothing(*smoothing);
+    if (!tip) return true;
     TipPreset changed = *tip;
     dialog.apply(changed.tip);
     QString error;

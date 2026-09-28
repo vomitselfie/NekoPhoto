@@ -51,6 +51,14 @@ int runBrushBench(MainWindow& window, const BrushBenchOptions& o) {
     if (o.brushSize > 0) session->brushSettings.diameter = o.brushSize;
     session->brushErase = o.eraser;
     if (o.hardness >= 0) session->brushSettings.hardness = o.hardness;
+    compositor::BrushSmoothing smoothing;
+    const QString mode = o.smoothing.toLower();
+    if (mode == "input" || mode == "all") smoothing.input = 50;
+    if (mode == "stabilizer" || mode == "pulled" || mode == "all") smoothing.stabilizer = 50;
+    if (mode == "pulled") smoothing.pulledString = true;
+    if (mode == "all") smoothing.catchUpOnEnd = true;
+    if (mode == "pressure" || mode == "all") smoothing.pressure = 50;
+    session->brushSmoothing = smoothing;
     session->fitView();
     if (o.zoom > 0) session->zoomTo(o.zoom, QPointF(canvas->width() / 2.0, canvas->height() / 2.0));
     warmBrushEngines();   // as a normal launch does shortly after the window appears
@@ -77,6 +85,7 @@ int runBrushBench(MainWindow& window, const BrushBenchOptions& o) {
         return s;
     };
 
+    if (smoothing.active()) std::printf("smoothing: %s\n", qPrintable(mode));
     std::printf("brush bench: preset %s%s, size %.0f, hardness %.2f, %dx%d document, painting on %s, canvas %dx%d at zoom %.3f, %d moves\n",
                 qPrintable(o.preset), o.eraser ? " (erasing)" : "", session->brushSettings.diameter, session->brushSettings.hardness, o.document.width(), o.document.height(),
                 o.paintOnOpaque ? "the opaque layer" : "a blank layer", canvas->width(), canvas->height(), session->viewport.zoom, o.moves);

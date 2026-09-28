@@ -93,7 +93,7 @@ brush/round_hard 2ffdb24906dbb2a2
 brush/round_soft_half 4db27ef56abf0571
 brush/round_unstamped 704cbf86272cf505
 brush/tip_jitter_grain 2bd36b973b49cd1a
-brush/tip_square 2ee92ce213f8c4fe
+brush/tip_square 52c291b922c60133
 filter/add_noise_gaussian_mono 601eaeff6acebbb9
 filter/add_noise_uniform f4d8aef7f7b73068
 filter/gaussian_blur_20 4970930d57e99976

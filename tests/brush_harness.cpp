@@ -10,7 +10,9 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <map>
+#include <random>
 #include <set>
 #include <sstream>
 
@@ -850,6 +852,101 @@ bool checkExpectation(const Expectation& e, const std::vector<StrokeFixture>& fi
     }
     if (why) *why = detail;
     return ok;
+}
+
+// ---- Smoothing ------------------------------------------------------------------------------------------------------
+
+namespace {
+
+/// Normal draws from a Mersenne Twister by Box-Muller, the same on every standard library.
+struct Gauss {
+    std::mt19937 rng;
+    explicit Gauss(uint32_t seed) : rng(seed) {}
+    double operator()() {
+        const double u = (double(rng()) + 1) / 4294967297.0, v = double(rng()) / 4294967296.0;
+        return std::sqrt(-2 * std::log(u)) * std::cos(2 * 3.14159265358979323846 * v);
+    }
+};
+
+double distanceToPath(Point p, const std::vector<BrushSample>& path) {
+    double best = std::numeric_limits<double>::infinity();
+    for (size_t i = 1; i < path.size(); i++) {
+        const Point a = path[i - 1].position, b = path[i].position;
+        const double dx = b.x - a.x, dy = b.y - a.y, length = dx * dx + dy * dy;
+        const double t = length > 0 ? std::clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / length, 0.0, 1.0) : 0;
+        best = std::min(best, std::hypot(p.x - (a.x + dx * t), p.y - (a.y + dy * t)));
+    }
+    return path.size() == 1 ? std::hypot(p.x - path[0].position.x, p.y - path[0].position.y) : best;
+}
+
+} // namespace
+
+std::vector<JitterFixture> jitterFixtures() {
+    constexpr double pi = 3.14159265358979323846;
+    auto make = [](const std::string& name, int reports, uint32_t seed, const std::function<Point(double)>& path) {
+        JitterFixture f;
+        f.name = name;
+        f.clean.name = name + "_clean";
+        f.noisy.name = name + "_noisy";
+        Gauss noise(seed);
+        for (int i = 0; i <= reports; i++) {
+            BrushSample s;
+            s.time = i / 120.0;
+            s.position = path(double(i) / reports);
+            s.pressure = 0.6;
+            s.twist = 0;
+            s.twistReported = true;
+            s.stylus = true;
+            f.clean.samples.push_back(s);
+            s.position = {s.position.x + 1.5 * noise(), s.position.y + 1.5 * noise()};
+            s.pressure = std::clamp(0.6 + 0.05 * noise(), 0.0, 1.0);
+            s.twist = std::remainder(3 * noise(), 360.0);
+            f.noisy.samples.push_back(s);
+        }
+        return f;
+    };
+    return {
+        make("line", 60, 11, [](double u) { return Point{30 + 260 * u, 100}; }),
+        make("s_curve", 90, 12, [&](double u) { return Point{30 + 260 * u, 100 + 50 * std::sin(2 * pi * u)}; }),
+        make("circle", 120, 13, [&](double u) { return Point{160 + 70 * std::cos(2 * pi * u), 100 + 70 * std::sin(2 * pi * u)}; }),
+        make("fast_line", 16, 14, [](double u) { return Point{30 + 260 * u, 100}; }),
+    };
+}
+
+SmoothingMetrics measureSmoothing(const JitterFixture& fixture, const BrushSmoothing& smoothing, std::vector<BrushSample>* out) {
+    BrushStabilizer stabilizer(smoothing);
+    std::vector<BrushSample> given;
+    SmoothingMetrics m;
+    size_t reports = 0;
+    for (size_t i = 0; i < fixture.noisy.samples.size(); i++) {
+        stabilizer.add(fixture.noisy.samples[i], given);
+        const Point b = stabilizer.brush(), clean = fixture.clean.samples[i].position;
+        const double lag = std::hypot(b.x - clean.x, b.y - clean.y);
+        m.lag += lag;
+        m.lagMax = std::max(m.lagMax, lag);
+        reports++;
+    }
+    stabilizer.finish(given);
+    m.lag /= double(std::max<size_t>(1, reports));
+    std::vector<double> deviations;
+    double pressure = 0;
+    for (const BrushSample& s : given) {
+        deviations.push_back(distanceToPath(s.position, fixture.clean.samples));
+        pressure += (s.pressure - 0.6) * (s.pressure - 0.6);
+    }
+    m.samples = given.size();
+    if (!deviations.empty()) {
+        double sum = 0;
+        for (double d : deviations) sum += d;
+        m.deviation = sum / double(deviations.size());
+        std::sort(deviations.begin(), deviations.end());
+        m.deviationP95 = deviations[std::min(deviations.size() - 1, size_t(0.95 * double(deviations.size())))];
+        m.pressureNoise = std::sqrt(pressure / double(given.size()));
+        const Point end = fixture.clean.samples.back().position, last = given.back().position;
+        m.endGap = std::hypot(end.x - last.x, end.y - last.y);
+    }
+    if (out) *out = std::move(given);
+    return m;
 }
 
 } // namespace brushharness

@@ -133,6 +133,7 @@ void ToolOptionsBar::syncTool() {
         if (role == "size") spin->setValue(session_->brushSettings.diameter);
         else if (role == "hardness") spin->setValue(session_->brushSettings.hardness * 100);
         else if (role == "opacity") spin->setValue(session_->brushSettings.opacity * 100);
+        else if (role == "smoothing") spin->setValue(session_->brushSmoothing.stabilizer);
     }
     // A MyPaint preset brings its own hardness.
     for (auto* spin : stack_->widget(1)->findChildren<QDoubleSpinBox*>())
@@ -319,16 +320,16 @@ QWidget* ToolOptionsBar::buildBrushOptions() {
     spin(tr("Size"), "size", 1, 2000, session_->brushSettings.diameter, " px", [this](double v) { session_->brushSettings.diameter = v; });
     spin(tr("Hardness"), "hardness", 0, 100, session_->brushSettings.hardness * 100, "%", [this](double v) { session_->brushSettings.hardness = v / 100; });
     spin(tr("Opacity"), "opacity", 1, 100, session_->brushSettings.opacity * 100, "%", [this](double v) { session_->brushSettings.opacity = v / 100; });
-    // A tip brush's pressure curves, density and mouse options.
+    // Photoshop's Smoothing: the stabiliser's amount; its modes and the other two filters are in Dynamics.
+    spin(tr("Smoothing"), "smoothing", 0, 100, session_->brushSmoothing.stabilizer, "%", [this](double v) { session_->brushSmoothing.stabilizer = v; });
+    // The smoothing options, and a tip brush's pressure curves, density and mouse options.
     auto* dynamics = new QToolButton;
     dynamics->setText(BrushDynamicsDialog::buttonText());
     dynamics->setAutoRaise(true);
-    connect(dynamics, &QToolButton::clicked, this, [this] { BrushDynamicsDialog::edit(window(), session_->brushPreset); });
-    syncers_.push_back([this, dynamics] {
-        const BrushPreset* preset = session_->brushPreset.isEmpty() ? nullptr : BrushLibrary::find(session_->brushPreset);
-        const bool tip = preset && preset->engine == BrushPreset::Engine::Tip;
-        dynamics->setEnabled(tip);
-        dynamics->setToolTip(BrushDynamicsDialog::unavailableText());
+    dynamics->setToolTip(BrushDynamicsDialog::unavailableText());
+    connect(dynamics, &QToolButton::clicked, this, [this] {
+        BrushDynamicsDialog::edit(window(), session_->brushPreset, &session_->brushSmoothing);
+        emit session_->toolChanged();
     });
     h->addWidget(dynamics);
     h->addStretch();

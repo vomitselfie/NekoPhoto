@@ -21,6 +21,7 @@ struct BrushBenchOptions {
     double hardness = -1;      // 0..1; negative keeps the current setting
     double reach = 0.35;
     double zoom = 0;
+    QString smoothing;          // off (empty), input, stabilizer, pulled, pressure or all: that smoothing at 50%
     int burst = 1;             // moves delivered between two repaints: a 1000 Hz mouse gives ~16 per 60 Hz frame           // view zoom (1 = 100%); 0 fits the document in the window       // the stroke's half-width as a fraction of the visible document's short side
 };
 
