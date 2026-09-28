@@ -357,7 +357,7 @@ void MainWindow::buildMenus() {
     needsDocument(layer->addAction(tr("&Duplicate Layer"), this, [this] { session_->duplicateActiveLayer(); recordAction("layers.duplicate"); }), "layers.structure");
     needsDocument(layer->addAction(tr("De&lete Layer"), this, [this] { deleteSelectedLayers(); recordAction("layers.delete"); }), "layers.structure");
     mergeAction_ = needsDocument(layer->addAction(tr("Merge Do&wn"), QKeySequence("Ctrl+E"), this, [this] { session_->mergeLayers(); recordAction("layers.merge"); }), "layers.merge");
-    editTextAction_ = needsDocument(layer->addAction(tr("Edit &Text…"), this, [this] { const Layer* l = session_->activeLayer(); if (l && l->isLiveText()) session_->requestTextEdit(l->id); }));
+    editTextAction_ = needsDocument(layer->addAction(tr("Edit &Text…"), this, [this] { const Layer* l = session_->activeLayer(); if (l && l->isLiveText()) session_->requestTextEdit(l->id); }), "edit.text");
     needsDocument(layer->addAction(tr("&Rename Layer…"), this, [this] {
         const Layer* active = session_->activeLayer();
         if (!active) return;
@@ -378,17 +378,17 @@ void MainWindow::buildMenus() {
     for (int page = 0; page < int(std::size(stylePages)); page++) {
         needsDocument(styles->addAction(tr(stylePages[page]), this, [this, page] {
             if (session_->activeLayerId()) LayerStyleDialog(session_, *session_->activeLayerId(), this, page).exec();
-        }));
+        }), "edit.style");
         if (page == 0) styles->addSeparator();
     }
     styles->addSeparator();
-    needsDocument(styles->addAction(tr("&Copy Layer Style"), this, [this] { session_->copyLayerStyle(); }));
-    needsDocument(styles->addAction(tr("&Paste Layer Style"), this, [this] { session_->pasteLayerStyle(); }));
-    needsDocument(styles->addAction(tr("C&lear Layer Style"), this, [this] { session_->clearLayerStyle(); }));
+    needsDocument(styles->addAction(tr("&Copy Layer Style"), this, [this] { session_->copyLayerStyle(); }), "edit.style");
+    needsDocument(styles->addAction(tr("&Paste Layer Style"), this, [this] { session_->pasteLayerStyle(); }), "edit.style");
+    needsDocument(styles->addAction(tr("C&lear Layer Style"), this, [this] { session_->clearLayerStyle(); }), "edit.style");
     styles->addSeparator();
     // Imported style presets (.asl): the submenu lists the library as it is when it opens.
     QMenu* applyStyle = styles->addMenu(tr("&Apply Style"));
-    needsDocument(applyStyle->menuAction());
+    needsDocument(applyStyle->menuAction(), "edit.style");
     connect(applyStyle, &QMenu::aboutToShow, this, [this, applyStyle] {
         applyStyle->clear();
         const auto& presets = PresetLibrary::instance().styles();
@@ -436,12 +436,12 @@ void MainWindow::buildMenus() {
         QString error;
         if (!session_->addVectorMask(kind, &error) && !error.isEmpty()) QMessageBox::information(this, tr("Vector Mask"), error);
     };
-    needsDocument(vectorMask->addAction(tr("Reveal All"), this, [addVector] { addVector(EditorSession::VectorMaskKind::RevealAll); }));
-    needsDocument(vectorMask->addAction(tr("Hide All"), this, [addVector] { addVector(EditorSession::VectorMaskKind::HideAll); }));
-    needsDocument(vectorMask->addAction(tr("Current Path"), this, [addVector] { addVector(EditorSession::VectorMaskKind::CurrentPath); }));
+    needsDocument(vectorMask->addAction(tr("Reveal All"), this, [addVector] { addVector(EditorSession::VectorMaskKind::RevealAll); }), "edit.vector");
+    needsDocument(vectorMask->addAction(tr("Hide All"), this, [addVector] { addVector(EditorSession::VectorMaskKind::HideAll); }), "edit.vector");
+    needsDocument(vectorMask->addAction(tr("Current Path"), this, [addVector] { addVector(EditorSession::VectorMaskKind::CurrentPath); }), "edit.vector");
     vectorMask->addSeparator();
-    needsDocument(vectorMask->addAction(tr("Edit"), this, [this] { if (session_->activeLayerId()) session_->targetVectorMask(*session_->activeLayerId()); }));
-    needsDocument(vectorMask->addAction(tr("Delete"), this, [this] { session_->deleteVectorMask(); }));
+    needsDocument(vectorMask->addAction(tr("Edit"), this, [this] { if (session_->activeLayerId()) session_->targetVectorMask(*session_->activeLayerId()); }), "edit.vector");
+    needsDocument(vectorMask->addAction(tr("Delete"), this, [this] { session_->deleteVectorMask(); }), "edit.vector");
     needsDocument(layer->addAction(tr("Create / Release Cl&ipping Mask"), QKeySequence("Ctrl+Alt+G"), this, [this] { if (session_->activeLayerId()) session_->toggleClippingMask(*session_->activeLayerId()); }), "layers.structure");
     layer->addSeparator();
     needsDocument(layer->addAction(tr("Bring Forward"), QKeySequence("Ctrl+]"), this, [this] { session_->moveActiveLayer(1); }), "layers.structure");
@@ -462,8 +462,8 @@ void MainWindow::buildMenus() {
         const bool ok = id && (shape ? session_->textToShape(*id, &error) : session_->textToWorkPath(*id, &error));
         if (!ok) QMessageBox::information(this, shape ? tr("Convert to Shape") : tr("Create Work Path"), error.isEmpty() ? tr("Choose a text layer first.") : error);
     };
-    needsDocument(type->addAction(tr("Create &Work Path"), this, [fromText] { fromText(false); }));
-    needsDocument(type->addAction(tr("Convert to &Shape"), this, [fromText] { fromText(true); }));
+    needsDocument(type->addAction(tr("Create &Work Path"), this, [fromText] { fromText(false); }), "edit.text");
+    needsDocument(type->addAction(tr("Convert to &Shape"), this, [fromText] { fromText(true); }), "edit.paint");
 
     // Everything about the selection in one place, as Photoshop's Select menu: the whole-canvas commands,
     // then Modify, then loading a layer's pixels or mask as the selection.

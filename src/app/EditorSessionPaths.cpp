@@ -4,6 +4,7 @@
 #include "EditorSession.h"
 #include "QtGeometry.h"
 #include "TextLayer.h"
+#include "compositor/depth.h"
 #include "compositor/selection.h"
 
 using namespace compositor;
@@ -11,6 +12,20 @@ using namespace compositor;
 namespace app {
 
 // (The outline simplification is core's simplifyLoop, vectorlayer.h.)
+
+namespace {
+
+/// 16-bit coverage scaled by an opacity (Fill Path and Stroke Path paint at the brush's opacity).
+std::shared_ptr<Gray16> faded(const Gray16& coverage, double opacity) {
+    auto out = std::make_shared<Gray16>(coverage);
+    const uint32_t scale = uint32_t(std::lround(std::clamp(opacity, 0.0, 1.0) * 32768));
+    if (scale >= 32768) return out;
+    const size_t n = size_t(out->width()) * size_t(out->height());
+    for (size_t i = 0; i < n; i++) out->data()[i] = uint16_t(mul15(out->data()[i], scale));
+    return out;
+}
+
+} // namespace
 
 // ---- Pen --------------------------------------------------------------------------------------------------------
 
@@ -419,6 +434,10 @@ bool EditorSession::fillPath(uint16_t id) {
     if (!canEditLayers()) return false;
     auto p = documentPath(*document_, id);
     if (!p || p->path.subpaths.empty()) return false;
+    if (document_->sampleType == SampleType::U16) {
+        auto coverage = rasterizeVectorMask16(p->path, document_->rect(), 1, document_->width, document_->height);
+        return fillThrough16(foregroundColor, faded(*coverage, brushSettings.opacity).get(), QT_TRANSLATE_NOOP("History", "Fill Path"));
+    }
     auto coverage = rasterizeVectorMask(p->path, document_->rect(), 1, document_->width, document_->height);
     return fillThrough(foregroundColor, coverage.get(), brushSettings.opacity, QT_TRANSLATE_NOOP("History", "Fill Path"));
 }
@@ -434,6 +453,10 @@ bool EditorSession::strokePath(uint16_t id) {
     stroke.width = std::max(1.0, brushSettings.diameter);
     stroke.cap = VectorStroke::Cap::Round;
     stroke.join = VectorStroke::Join::Round;
+    if (document_->sampleType == SampleType::U16) {
+        auto band = rasterizeVectorStroke16(p->path, stroke, document_->rect(), 1, document_->width, document_->height);
+        return fillThrough16(foregroundColor, faded(*band, brushSettings.opacity).get(), QT_TRANSLATE_NOOP("History", "Stroke Path"));
+    }
     auto band = rasterizeVectorStroke(p->path, stroke, document_->rect(), 1, document_->width, document_->height);
     return fillThrough(foregroundColor, band.get(), brushSettings.opacity, QT_TRANSLATE_NOOP("History", "Stroke Path"));
 }
@@ -457,7 +480,10 @@ bool EditorSession::selectionToWorkPath(double tolerance) {
     if (refusedAtDepth("edit.vector", tr("Vector masks and paths"))) return false;
     if (!canEditLayers() || !document_->selection || !document_->selection->coverage) return false;
     bool tooDetailed = false;
-    const auto loops = selectionOutline(*document_->selection->coverage.u8(), &tooDetailed);
+    // The outline is traced at half coverage, on the selection rounded to 8 bits at either depth.
+    const auto coverage = coverage8(*document_->selection);
+    if (!coverage) return false;
+    const auto loops = selectionOutline(*coverage, &tooDetailed);
     if (tooDetailed || loops.empty()) { if (tooDetailed) emit error(tr("The selection's outline is too detailed to make a path from.")); return false; }
     VectorPath path;
     for (const auto& loop : loops) {

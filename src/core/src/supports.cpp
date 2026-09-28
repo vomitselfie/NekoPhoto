@@ -10,7 +10,7 @@ constexpr SampleTypes eightAndSixteen = onlyEightBit | sampleTypeBit(SampleType:
 // automation method refused on a deeper document ("Not available in 16-bit yet").
 //
 // P2, the 16-bit core: the renderer, the layer structure and the files. P3a: adjustments, filters, selections and
-// pixel edits. P3b: painting and retouching. Layer styles, smart objects, text and vector editing follow
+// pixel edits. P3b: painting and retouching. Then text, vectors and layer styles; smart objects follow
 // (docs/bit-depth.md).
 constexpr FeatureSupport table[] = {
     {"render.document", eightAndSixteen},
@@ -111,6 +111,24 @@ constexpr FeatureSupport table[] = {
     // Merge Down, Merge Layers and Merge Group (rendered at 16 bits), and Layer > Layer Mask > Apply.
     {"layers.merge", eightAndSixteen},
     {"layers.applyMask", eightAndSixteen},
+    // Deleting a clipping base, its clipped layers keeping their look (baked at 16 bits).
+    {"edit.pixels", eightAndSixteen},
+
+    // Text at 16 bits: the Type tool, rich text, Edit Text, the text painted at 16 bits per channel (Qt's 16-bit raster,
+    // its glyph coverage 8-bit), Create Work Path.
+    {"tool.text", eightAndSixteen},
+    {"edit.text", eightAndSixteen},
+    // Shapes and paths: the Shape, Pen and Direct Selection tools, live shapes, shape fills (solid, gradient from the
+    // ramp's exact colours, pattern) and strokes, vector masks on any layer, path operations, Fill Path and Stroke
+    // Path, Convert to Shape; vector coverage rasterised at 15 bits.
+    {"tool.shape", eightAndSixteen},
+    {"tool.pen", eightAndSixteen},
+    {"tool.directSelect", eightAndSixteen},
+    {"edit.vector", eightAndSixteen},
+    {"edit.paint", eightAndSixteen},
+    // Layer styles: all ten effects and folder styles drawn at 16 bits (layerstyle_render.cpp), the Layer Style
+    // dialog, copy, paste, clear and style presets.
+    {"edit.style", eightAndSixteen},
 };
 }   // namespace
 

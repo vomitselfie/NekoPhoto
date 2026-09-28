@@ -3604,10 +3604,6 @@ File &gt; New creates a blank canvas.</source>
         <translation>ドキュメントにスライスがありません。</translation>
     </message>
     <message>
-        <source>Baking a clipping mask into pixels</source>
-        <translation>クリッピングマスクのピクセルへの焼き付け</translation>
-    </message>
-    <message>
         <source>Editing pixels</source>
         <translation>ピクセルの編集</translation>
     </message>

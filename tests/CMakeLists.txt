@@ -83,6 +83,11 @@ if(TARGET Qt6::Gui)
     target_include_directories(rich_text_tests PRIVATE ${CMAKE_SOURCE_DIR}/src/app)
     target_link_libraries(rich_text_tests PRIVATE Qt6::Gui compositor::core compositor_warnings)
     add_test(NAME rich_text_tests COMMAND rich_text_tests)
+    # Text painted at 16 bits against 8, and a 16-bit type layer through PSD (app code; Qt Gui, offscreen).
+    add_executable(depth_text_tests depth_text_tests.cpp ${CMAKE_SOURCE_DIR}/src/app/TextLayer.cpp)
+    target_include_directories(depth_text_tests PRIVATE ${CMAKE_SOURCE_DIR}/src/app)
+    target_link_libraries(depth_text_tests PRIVATE Qt6::Gui compositor::core compositor_warnings)
+    add_test(NAME depth_text_tests COMMAND depth_text_tests)
 endif()
 
 add_executable(psd_tests psd_tests.cpp)
@@ -99,6 +104,11 @@ add_test(NAME depth_format_tests COMMAND depth_format_tests)
 add_executable(depth_edit_tests depth_edit_tests.cpp)
 target_link_libraries(depth_edit_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME depth_edit_tests COMMAND depth_edit_tests)
+
+# Shapes, vector masks and layer styles at 16 bits against their 8-bit paths.
+add_executable(depth_vector_tests depth_vector_tests.cpp)
+target_link_libraries(depth_vector_tests PRIVATE compositor::core compositor_warnings)
+add_test(NAME depth_vector_tests COMMAND depth_vector_tests)
 
 add_executable(depth_paint_tests depth_paint_tests.cpp)
 target_link_libraries(depth_paint_tests PRIVATE compositor::core compositor_warnings)

@@ -203,7 +203,13 @@ bool worksAtDepth(const QString& method, const EditorSession& session) {
         {"layers.warp", "edit.distort"}, {"layers.setCage", "edit.distort"},
         {"pixels.contentAwareFill", "edit.contentAware"}, {"pixels.contentAwareMove", "edit.contentAware"}, {"pixels.contentAwareScale", "edit.contentAware"},
         {"brush.stroke", "tool.brush"}, {"pixels.bucket", "tool.paintBucket"}, {"pixels.patch", "tool.spotHealing"}, {"gradient.draw", "tool.gradient"},
-        {"layers.merge", "layers.merge"}};
+        {"layers.merge", "layers.merge"},
+        {"text.set", "edit.text"}, {"text.styleRange", "edit.text"}, {"text.toPath", "edit.text"}, {"text.toShape", "edit.paint"},
+        {"shape.draw", "edit.paint"}, {"shape.set", "edit.paint"}, {"paths.fill", "edit.paint"}, {"paths.stroke", "edit.paint"}, {"paths.toShape", "edit.paint"},
+        {"paths.set", "edit.vector"}, {"paths.select", "edit.vector"}, {"paths.delete", "edit.vector"}, {"paths.addAnchor", "edit.vector"},
+        {"paths.deleteAnchor", "edit.vector"}, {"paths.fromSelection", "edit.vector"}, {"paths.mergeComponents", "edit.vector"},
+        {"paths.setOperation", "edit.vector"}, {"vectorMask.set", "edit.vector"}, {"vectorMask.delete", "edit.vector"}, {"vectorMask.target", "edit.vector"},
+        {"layers.setStyle", "edit.style"}, {"layers.applyStyle", "edit.style"}};
     if (always.contains(method)) return true;
     auto it = features.find(method);
     return it != features.end() && session.supportsFeature(it.value());
