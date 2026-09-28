@@ -332,4 +332,141 @@ TEST_CASE(a_recorded_stroke_keeps_its_view_scale) {
     CHECK_EQ(negative->samples[0].viewScale, 1.0);
 }
 
+namespace {
+
+/// Degrees apart on the circle, -180..180.
+double turnDegrees(double from, double to) { return std::remainder(to - from, 360.0); }
+
+/// A stroke of five reports a pixel apart, the pen's barrel, lean or travel at `degrees[i]`.
+enum class Turning { Twist, Azimuth, Travel };
+std::vector<BrushSample> turningStroke(const std::vector<double>& degrees, Turning what) {
+    std::vector<BrushSample> out;
+    Point at{100, 50};
+    for (size_t i = 0; i < degrees.size(); i++) {
+        const double a = degrees[i] * pi / 180;
+        BrushSample s;
+        s.stylus = true;
+        s.pressure = 1;
+        s.time = double(i) / 120;
+        if (what == Turning::Travel) {
+            // Each step heads the way given: the stroke's direction turns through the angles.
+            if (i) at = {at.x + 6 * std::cos(a), at.y + 6 * std::sin(a)};
+            s.position = at;
+        } else s.position = {100 + 6.0 * double(i), 50};
+        if (what == Turning::Twist) { s.twist = degrees[i]; s.twistReported = true; }
+        if (what == Turning::Azimuth) { s.tiltX = 45 * std::cos(a); s.tiltY = 45 * std::sin(a); }
+        out.push_back(s);
+    }
+    return out;
+}
+
+struct Painted {
+    std::vector<TipDab> dabs;
+    std::shared_ptr<Image> image;
+};
+
+/// Paints `samples` with a flat tip whose angle follows `dynamics` (and the stroke, with `follow`), dabs every pixel.
+Painted paintTurning(const std::vector<BrushSample>& samples, const BrushDynamics& dynamics, bool follow) {
+    BrushTip tip;
+    tip.shape = std::make_shared<GrayImage>(40, 10, 255);
+    tip.spacing = 0.05;
+    tip.followStroke = follow;
+    tip.dynamics = dynamics;
+    auto image = std::make_shared<Image>(200, 100);
+    Layer layer(Asset::make(image, "Paper"), Point(0, 0));
+    BrushSettings settings;
+    settings.diameter = 20;
+    BrushStroke grid(layer, false, settings, Size(200, 100));
+    TipStroke stroke(grid, tip, 20, 11);
+    Painted out;
+    stroke.trace(&out.dabs);
+    BrushSampleTrack track;
+    for (const BrushSample& s : samples) stroke.strokeTo(track.add(s));
+    stroke.finish();
+    grid.flush();
+    out.image = std::make_shared<Image>(*grid.previewImage());
+    return out;
+}
+
+} // namespace
+
+TEST_CASE(twist_roll_azimuth_and_the_tip_angle_pass_358_359_0_1_2_without_a_jump) {
+    // The pen through 358, 359, 0, 1 and 2 degrees, as a pen reporting 0..360 gives them, as Qt's -180..180 gives them
+    // (-2, -1, 0, 1, 2), and back the other way: every derived angle moves a degree a report, and so does every angle
+    // the dynamics resolve from it, and the tip's own angle between the dabs in between.
+    const std::vector<std::vector<double>> sequences = {{358, 359, 0, 1, 2}, {-2, -1, 0, 1, 2}, {2, 1, 0, 359, 358}};
+    for (const std::vector<double>& degrees : sequences) {
+        const double sense = turnDegrees(degrees[0], degrees[1]);   // +1 or -1 a report
+        for (Turning what : {Turning::Twist, Turning::Azimuth, Turning::Travel}) {
+            std::vector<BrushSample> samples = turningStroke(degrees, what);
+            BrushSampleTrack track;
+            for (BrushSample& s : samples) s = track.add(s);
+            // The derived angle, unwrapped: exactly a degree a report, never 359.
+            for (size_t i = 1; i < samples.size(); i++) {
+                const double step = what == Turning::Twist ? samples[i].twistAngle - samples[i - 1].twistAngle
+                                  : what == Turning::Azimuth ? samples[i].tiltAzimuth - samples[i - 1].tiltAzimuth
+                                                             : samples[i].direction - samples[i - 1].direction;
+                // The travel's first step has no direction before it to turn from.
+                if (what == Turning::Travel && i == 1) continue;
+                CHECK_NEAR(step * 180 / pi, sense, 1e-9);
+            }
+            // What a mapping resolves from it, on the angle (a sum, so continuous across the turn).
+            const DynamicsInput input = what == Turning::Twist ? DynamicsInput::Twist : what == Turning::Azimuth ? DynamicsInput::TiltDirection : DynamicsInput::Roll;
+            BrushDynamics dynamics = {dynamicsMapping(input, DynamicsTarget::Angle, 0, input == DynamicsInput::Twist ? 360 : -360)};
+            for (size_t i = (what == Turning::Travel ? 2 : 1); i < samples.size(); i++) {
+                const double a = applyDynamics(dynamics, DynamicsTarget::Angle, 0, samples[i - 1], 20);
+                const double b = applyDynamics(dynamics, DynamicsTarget::Angle, 0, samples[i], 20);
+                CHECK_NEAR(std::fabs(turnDegrees(a, b)), 1.0, 1e-9);
+            }
+            // Roll reads the barrel when the pen reports one.
+            if (what == Turning::Twist) {
+                const BrushDynamics roll = {dynamicsMapping(DynamicsInput::Roll, DynamicsTarget::Angle, 0, -360)};
+                for (size_t i = 1; i < samples.size(); i++)
+                    CHECK_NEAR(turnDegrees(applyDynamics(roll, DynamicsTarget::Angle, 0, samples[i - 1], 20), applyDynamics(roll, DynamicsTarget::Angle, 0, samples[i], 20)), -sense, 1e-9);
+            }
+            // The tip's resolved angle, dab by dab (twenty between reports): never more than a report's degree apart,
+            // and a stroke's worth of them adds up to the pen's four degrees, not a turn. (Following the travel, the
+            // first dab has no direction yet and faces the x axis, as a tip following the stroke always has: from the
+            // second on.)
+            const Painted painted = paintTurning(turningStroke(degrees, what), dynamics, false);
+            REQUIRE(painted.dabs.size() > 10);
+            double largest = 0, total = 0;
+            for (size_t k = (what == Turning::Travel ? 2 : 1); k < painted.dabs.size(); k++) {
+                const double step = std::remainder(painted.dabs[k].rotation - painted.dabs[k - 1].rotation, 2 * pi) * 180 / pi;
+                largest = std::max(largest, std::fabs(step));
+                total += step;
+            }
+            CHECK(largest <= 1.0 + 1e-9);
+            CHECK(std::fabs(total) <= 4.0 + 1e-9);
+        }
+    }
+    // A tip that follows the stroke passes 359 -> 0 the same way.
+    const Painted follow = paintTurning(turningStroke({358, 359, 0, 1, 2}, Turning::Travel), {}, true);
+    double largest = 0;
+    for (size_t k = 2; k < follow.dabs.size(); k++)
+        largest = std::max(largest, std::fabs(std::remainder(follow.dabs[k].rotation - follow.dabs[k - 1].rotation, 2 * pi)) * 180 / pi);
+    CHECK(largest <= 1.0 + 1e-9);
+}
+
+TEST_CASE(a_stroke_across_the_wrap_replays_the_same) {
+    // The same recorded stroke across 359 -> 0 painted twice (and once from its JSON): the same dabs and pixels.
+    std::vector<BrushSample> samples = turningStroke({356, 357, 358, 359, 0, 1, 2, 3, 4}, Turning::Twist);
+    for (size_t i = 0; i < samples.size(); i++) { samples[i].tiltX = 45 * std::cos((350 + 2.0 * i) * pi / 180); samples[i].tiltY = 45 * std::sin((350 + 2.0 * i) * pi / 180); }
+    const BrushDynamics dynamics = {dynamicsMapping(DynamicsInput::Roll, DynamicsTarget::Angle, 0, -360),
+                                    dynamicsMapping(DynamicsInput::TiltDirection, DynamicsTarget::Angle, 0, -360),
+                                    dynamicsMapping(DynamicsInput::Random, DynamicsTarget::Angle, 0, 15)};
+    RecordedStroke recorded;
+    recorded.samples = samples;
+    const auto replayed = recordedStrokeFromJson(recordedStrokeToJson(recorded));
+    REQUIRE(replayed.has_value());
+    const Painted a = paintTurning(samples, dynamics, false), b = paintTurning(samples, dynamics, false), c = paintTurning(replayed->samples, dynamics, false);
+    REQUIRE(a.dabs.size() == b.dabs.size() && a.dabs.size() == c.dabs.size());
+    for (size_t k = 0; k < a.dabs.size(); k++) {
+        CHECK(a.dabs[k].rotation == b.dabs[k].rotation && a.dabs[k].center.x == b.dabs[k].center.x);
+        CHECK_NEAR(a.dabs[k].rotation, c.dabs[k].rotation, 1e-9);
+    }
+    CHECK(*a.image == *b.image);
+    CHECK(*a.image == *c.image);
+}
+
 TEST_MAIN()

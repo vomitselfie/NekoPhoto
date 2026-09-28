@@ -255,7 +255,9 @@ confirm.
 The tip's angle turns counterclockwise on screen, while the azimuth, the twist and the stroke's direction turn
 clockwise in the document's y-down frame, hence the depth of −360. The sum on an angle is continuous across a turn: the
 harness's twist wrap (340 through 359, 0 and 1 to 20 degrees) paints without a jump, and `brush_dynamics_tests` holds
-the tip's angle to the barrel's quarter-degree steps across 359 → 0 → 1. A brush with both `shapeRoll` and a rotation
+the tip's angle to the barrel's quarter-degree steps across 359 → 0 → 1, and the twist, the roll, the azimuth, the
+stroke's direction and the tip's resolved angle, dab by dab, to a degree a report through 358, 359, 0, 1 and 2 (and
+−2..2, and back), with a replay across the wrap painting the same pixels. A brush with both `shapeRoll` and a rotation
 that follows the stroke stops following the stroke on its own, since Roll follows it where the pen has no twist.
 `shapeRollMode` (not in any brush seen so far) is listed as not carried over.
 
