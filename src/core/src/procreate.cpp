@@ -68,48 +68,54 @@ struct Notes {
 // ---- Procreate's dynamics, scaled in one place ---------------------------------------------------------------------
 //
 // Every Procreate setting this reader turns into a dynamics mapping (brushdynamics.h) is scaled here and nowhere
-// else, so the one-setting reference brushes made in Procreate can tune each in one spot. The mapping table in
-// docs/brush-engine.md lists the same; the assumptions it marks as pending are the ones those files will settle.
+// else, so the one-setting reference brushes made in Procreate can tune each in one spot. Each carries the confidence
+// the mapping table in docs/brush-engine.md gives it: confirmed (checked against Procreate's own output; nothing yet),
+// strongly inferred (plain from the setting and real brushes agree), weakly inferred (a direction, sign or ramp real
+// brushes do not settle) or synthetic-only (a number only the synthetic fixtures exercise). The reference brushes
+// settle the weak and synthetic ones.
 namespace scaling {
 
 /// The speed, in screen points per second, at which a speed setting has its full effect. Procreate measures speed on
-/// the screen, so the speed settings read ScreenSpeed: the same hand motion gives the same response at any zoom. The
-/// 1500 is synthetic-only: it was 1500 document pixels per second before (the same at 100%), and no brush made in
-/// Procreate has checked it yet.
+/// the screen (strongly inferred), so the speed settings read ScreenSpeed: the same hand motion gives the same response
+/// at any zoom. The 1500 is synthetic-only: it was 1500 document pixels per second before (the same at 100%), and no
+/// brush made in Procreate has checked it yet.
 constexpr double fullSpeed = 1500;
 
 /// dynamicsSpeedSize, -1..1: positive grows the size with speed, to 1 + amount at full speed; negative shrinks it.
+/// The sign weakly inferred; the scale synthetic-only.
 DynamicsMapping speedSize(double amount) {
     return dynamicsMapping(DynamicsInput::ScreenSpeed, DynamicsTarget::Size, 1, std::clamp(amount, -0.95, 1.0), fullSpeed);
 }
 
 /// dynamicsSpeedOpacity, -1..1: positive makes slow strokes lighter (from 1 - amount at rest to full at full speed);
 /// negative makes fast strokes lighter (to 1 + amount at full speed). Opacity is the most a stroke builds up to.
+/// The sign weakly inferred; the scale synthetic-only.
 DynamicsMapping speedOpacity(double amount) {
     const double a = std::clamp(amount, -1.0, 1.0);
     return a > 0 ? dynamicsMapping(DynamicsInput::ScreenSpeed, DynamicsTarget::Opacity, 1 - a, a, fullSpeed)
                  : dynamicsMapping(DynamicsInput::ScreenSpeed, DynamicsTarget::Opacity, 1, a, fullSpeed);
 }
 
-/// plotSpacingSpeed, 0 and up: the spacing widens with speed, to 1 + amount times at full speed.
+/// plotSpacingSpeed, 0 and up: the spacing widens with speed, to 1 + amount times at full speed. The direction
+/// strongly inferred from real brush data; the scale synthetic-only.
 DynamicsMapping speedSpacing(double amount) {
     return dynamicsMapping(DynamicsInput::ScreenSpeed, DynamicsTarget::Spacing, 1, std::clamp(amount, 0.0, 10.0), fullSpeed);
 }
 
-// Tilt, as this reader takes Procreate's (assumed): the pen's angle from upright, which is what the Tilt input reads
+// Tilt, as this reader takes Procreate's (weakly inferred; it needs a source reference): the pen's angle from upright, which is what the Tilt input reads
 // (BrushSample::tiltMagnitude, 0 upright to 1 at `tiltFullAt` degrees). A setting's tilt angle (sizeTiltAngle and the
 // like, else dynamicsTiltAngle) is stored as a fraction of Procreate's 0..90 degree tilt graph and read as the lean
 // from upright at which the tilt starts to count: below it the setting does nothing, beyond it the effect ramps up to
 // full at `tiltFullAt`. If Procreate measures the angle from the screen instead, only tiltCurve changes.
 
-/// Degrees a stored tilt angle of 1 stands for.
+/// Degrees a stored tilt angle of 1 stands for (strongly inferred: Procreate's tilt graph runs 0..90).
 constexpr double tiltAngleRange = 90;
-/// Degrees from upright at which the Tilt input is full (brushsample.cpp).
+/// Degrees from upright at which the Tilt input is full (brushsample.cpp): the engine's own, not a reading of Procreate.
 constexpr double tiltFullAt = 60;
-/// The share of the flow that a full dynamicsTiltBleed takes away at full tilt (assumed).
+/// The share of the flow that a full dynamicsTiltBleed takes away at full tilt (synthetic-only).
 constexpr double tiltBleedFlow = 0.5;
 
-/// The Tilt input's curve for a stored tilt angle: zero up to the angle, then straight up to full.
+/// The Tilt input's curve for a stored tilt angle: zero up to the angle, then straight up to full (weakly inferred).
 DynamicsCurve tiltCurve(double storedAngle) {
     DynamicsCurve curve;
     const double start = std::clamp(storedAngle * tiltAngleRange / tiltFullAt, 0.0, 0.95);
@@ -119,23 +125,26 @@ DynamicsCurve tiltCurve(double storedAngle) {
 
 DynamicsMapping withCurve(DynamicsMapping m, const DynamicsCurve& curve) { m.curve = curve; return m; }
 
-/// dynamicsTiltSize, -1..1: the size grows as the pen leans, to 1 + amount at full tilt (negative: shrinks).
+/// dynamicsTiltSize, -1..1: the size grows as the pen leans, to 1 + amount at full tilt (negative: shrinks). The sign
+/// weakly inferred.
 DynamicsMapping tiltSize(double amount, double storedAngle) {
     return withCurve(dynamicsMapping(DynamicsInput::Tilt, DynamicsTarget::Size, 1, std::clamp(amount, -0.95, 1.0)), tiltCurve(storedAngle));
 }
 
-/// dynamicsTiltOpacity, 0..1: the stroke gets lighter as the pen leans, to 1 - amount at full tilt.
+/// dynamicsTiltOpacity, 0..1: the stroke gets lighter as the pen leans, to 1 - amount at full tilt. The direction
+/// weakly inferred.
 DynamicsMapping tiltOpacity(double amount, double storedAngle) {
     return withCurve(dynamicsMapping(DynamicsInput::Tilt, DynamicsTarget::Opacity, 1, -std::clamp(amount, 0.0, 1.0)), tiltCurve(storedAngle));
 }
 
 /// dynamicsTiltBleed, 0..1: each dab thins as the pen leans, its flow down by `tiltBleedFlow` x amount at full tilt.
+/// The meaning weakly inferred.
 DynamicsMapping tiltBleed(double amount, double storedAngle) {
     return withCurve(dynamicsMapping(DynamicsInput::Tilt, DynamicsTarget::Flow, 1, -tiltBleedFlow * std::clamp(amount, 0.0, 1.0)), tiltCurve(storedAngle));
 }
 
 /// dynamicsTiltShapeRoundness and its Minimum: the tip flattens as the pen leans, to the minimum at full tilt (with a
-/// full amount); nothing while the minimum is 1, as in most brushes.
+/// full amount); nothing while the minimum is 1, as in most brushes. Strongly inferred.
 DynamicsMapping tiltRoundness(double amount, double minimum, double storedAngle) {
     const double depth = std::clamp(amount, 0.0, 1.0) * (1 - std::clamp(minimum, 0.0, 1.0));
     return withCurve(dynamicsMapping(DynamicsInput::Tilt, DynamicsTarget::Roundness, 1, -depth), tiltCurve(storedAngle));
@@ -145,10 +154,11 @@ DynamicsMapping tiltRoundness(double amount, double minimum, double storedAngle)
 // turn clockwise in the document's y-down frame, so a tip that follows one of them takes a depth of -360: its x axis
 // then points the way the pen leans, or turns with the barrel. The sum of angles stays continuous across a turn.
 
-/// shapeAzimuth: the tip turns to the way the pen leans.
+/// shapeAzimuth: the tip turns to the way the pen leans. Weakly inferred: which axis, and the sign.
 DynamicsMapping azimuthAngle() { return dynamicsMapping(DynamicsInput::TiltDirection, DynamicsTarget::Angle, 0, -360); }
 
 /// shapeRoll: the tip turns with the barrel on a pen that reports its twist, and with the stroke on one that does not.
+/// Weakly inferred: the sign, and how it combines with shapeAzimuth.
 DynamicsMapping rollAngle() { return dynamicsMapping(DynamicsInput::Roll, DynamicsTarget::Angle, 0, -360); }
 
 } // namespace scaling
@@ -205,7 +215,7 @@ std::optional<TipPreset> readBrush(const ZipArchive& zip, const std::string& fol
             tip.grainDepth = std::clamp(number(s, "grainDepth", 1), 0.0, 1.0);
             tip.grainScale = 1 / std::clamp(number(s, "textureScale", 1), 0.05, 16.0);
             // Moving grain (textureApplication 0) rolls with the stroke, as far as its Movement says; texturized grain
-            // stays on the canvas.
+            // stays on the canvas. Which value is moving: weakly inferred; Movement's scale: synthetic-only.
             if (number(s, "textureApplication", 1) == 0) {
                 tip.grainMode = BrushTip::GrainMode::Stroke;
                 tip.grainMovement = std::clamp(number(s, "textureMovement", 1), 0.0, 1.0);
@@ -227,8 +237,9 @@ std::optional<TipPreset> readBrush(const ZipArchive& zip, const std::string& fol
     tip.roundness = number(s, "shapeRoundness", 1);
     tip.randomFlipX = number(s, "shapeFlipXJitter", 0) != 0;
     tip.randomFlipY = number(s, "shapeFlipYJitter", 0) != 0;
-    // Dynamics and the pencil, as mappings (brushdynamics.h). Procreate's opacity is per dab, so it maps to flow;
-    // its size pressure is how much of the size pressure takes away at its lightest.
+    // Dynamics and the pencil, as mappings (brushdynamics.h), strongly inferred unless the scaling block says otherwise.
+    // Procreate's opacity is per dab, so it maps to flow (that target weakly inferred); its size pressure is how much
+    // of the size pressure takes away at its lightest.
     auto add = [&](DynamicsInput input, DynamicsTarget target, double offset, double depth) { tip.dynamics.push_back(dynamicsMapping(input, target, offset, depth)); };
     const double pressureSize = number(s, "dynamicsPressureSize", 0);
     if (pressureSize > 0) { const double minimum = 1 - std::min(1.0, pressureSize); add(DynamicsInput::Pressure, DynamicsTarget::Size, minimum, 1 - minimum); }
@@ -263,7 +274,7 @@ std::optional<TipPreset> readBrush(const ZipArchive& zip, const std::string& fol
         if (inUse(s, key)) notes.notCarried[key]++;
     tip.flow = number(s, "maxOpacity", 1);
     // Size: Procreate's are relative, with no pixel size in the file. 200 pixels for a maximum of 1 matches the
-    // proportions of Procreate's own thumbnails (a 0.04 ink is a fine line, a 0.4 velvet a broad stroke).
+    // proportions of Procreate's own thumbnails (a 0.04 ink is a fine line, a 0.4 velvet a broad stroke): weakly inferred.
     preset.diameter = std::clamp(number(s, "maxSize", 0.1) * 200, 2.0, 500.0);
     if (!tip.normalize()) return std::nullopt;
     return preset;

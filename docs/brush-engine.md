@@ -214,43 +214,67 @@ pen leans and its long side points the way it leans, like the side of a pencil. 
 
 What each format's settings become. What a format holds that has no mapping yet is listed in the import's notes.
 
+**Confidence.** Every mapping below is tagged with how far its meaning is known, so a guess does not quietly become the
+truth:
+
+- **confirmed**: checked against the source application's own output (a brush painted there and measured). No dynamics
+  mapping is confirmed yet: there is no Photoshop, Procreate or Clip Studio here to paint the reference brushes. What is
+  confirmed is the reading of the files (field names, types and ranges from real brushes), which each row takes for
+  granted.
+- **strongly inferred**: the meaning is plain from the setting's name and the application's documented interface, and
+  the values real brushes store agree with it.
+- **weakly inferred**: a reading of a direction, sign, target or ramp that real brushes do not settle.
+- **synthetic-only**: a number chosen here (a scale or a constant) that only the synthetic fixtures exercise. Those prove
+  the reader and the engine, not the application.
+
 **Photoshop (`.abr` 6–10).** A control (`bVTy`) drives its target from the minimum up, and a jitter follows it:
 
-| Photoshop | Mappings |
-|---|---|
-| Size jitter, control Pen Pressure / Pen Tilt / Fade, Minimum Diameter | Pressure → Size (`offset` minimum, `depth` 1 − minimum); Tilt → Size (full upright, the minimum lying flat); StrokeProgress → Size over the fade's steps × spacing; Random → Size |
-| Angle jitter, control Pen Tilt, Direction | Random → Angle (jitter × 180 degrees); TiltDirection → Angle (depth 360); Direction sets `followStroke` |
-| Roundness jitter and control, Minimum Roundness | the same shapes on Roundness |
-| Scatter, control Pen Pressure | `scatter`; Pressure → Scatter |
-| Transfer: Flow jitter and control | on Flow |
-| Transfer: Opacity jitter and control | on Opacity (the most a dab builds up to) |
+| Photoshop | Mappings | Confidence |
+|---|---|---|
+| Size control Pen Pressure, Minimum Diameter | Pressure → Size (`offset` minimum, `depth` 1 − minimum) | strongly inferred |
+| Size control Pen Tilt | Tilt → Size (full upright, the minimum lying flat) | weakly inferred: which end of the lean is full |
+| Size control Fade | StrokeProgress → Size over the fade's steps × spacing | strongly inferred |
+| Size jitter | Random → Size | strongly inferred |
+| Angle jitter | Random → Angle (jitter × 180 degrees) | strongly inferred |
+| Angle control Pen Tilt | TiltDirection → Angle (depth 360) | weakly inferred: the sign is the opposite of Procreate's `shapeAzimuth` (−360) and neither is checked |
+| Angle control Direction | `followStroke` | strongly inferred |
+| Roundness jitter, control and Minimum Roundness | the same shapes on Roundness | as for size: pressure, fade and jitter strongly inferred, tilt weakly |
+| Scatter, control Pen Pressure | `scatter`; Pressure → Scatter | strongly inferred |
+| Transfer: Flow jitter and control | on Flow | strongly inferred |
+| Transfer: Opacity jitter and control | on Opacity (the most a dab builds up to) | strongly inferred: Photoshop's opacity caps the stroke, its flow is per dab |
 
 Texture, dual brush, colour dynamics, wet edges, noise and build-up are noted as left out. Versions 1 and 2 hold no
 dynamics.
 
 **Procreate (`.brushset`, `.brush`).** Each setting below becomes a mapping; every scaling lives in one block at the top
-of `procreate.cpp` (`namespace scaling`), so the reference brushes made in Procreate can tune each in one place. Curves
-are the identity unless the row says otherwise. Confidence: *high* where the meaning is plain from the setting and real
-brushes agree, *assumed* where the direction or scale is a reading that the reference brushes (below) still have to
-confirm.
+of `procreate.cpp` (`namespace scaling`), whose comments carry the same tags, so the reference brushes made in
+Procreate can tune each in one place. Curves are the identity unless the row says otherwise.
 
 | Procreate | Input → target | Offset, depth | Confidence |
 |---|---|---|---|
-| `dynamicsPressureSize` p | Pressure → Size | 1 − p, p | high |
-| `dynamicsJitterSize` j | Random → Size | 1, −j | high |
-| `dynamicsPressureOpacity` p | Pressure → Flow (Procreate's opacity is per dab) | 1 − p, p | high |
-| `dynamicsJitterOpacity` j | Random → Flow | 1, −j | high |
-| `shapeScatter` s | Random → Angle | 0, s × 180 degrees | high |
-| `dynamicsSpeedSize` a, −1..1 | ScreenSpeed → Size, full at `fullSpeed` | 1, a: grows with speed when positive, shrinks when negative | sign and scale assumed |
-| `dynamicsSpeedOpacity` a, −1..1 | ScreenSpeed → Opacity, full at `fullSpeed` | positive: 1 − a, a (slow strokes lighter); negative: 1, a (fast strokes lighter) | sign and scale assumed |
-| `plotSpacingSpeed` a, 0.. | ScreenSpeed → Spacing, full at `fullSpeed` | 1, a: the spacing widens with speed | direction high, scale assumed |
-| `dynamicsTiltSize` a, −1..1 | Tilt → Size, tilt curve | 1, a: grows as the pen leans | sign assumed |
-| `dynamicsTiltOpacity` a | Tilt → Opacity, tilt curve | 1, −a: lighter as the pen leans | direction assumed |
-| `dynamicsTiltBleed` a | Tilt → Flow, tilt curve | 1, −`tiltBleedFlow` × a (0.5 × a): each dab thins | meaning and scale assumed |
-| `dynamicsTiltShapeRoundness` a, `…Minimum` m | Tilt → Roundness, tilt curve | 1, −a × (1 − m); nothing while m is 1, as in nearly every brush | high |
-| `shapeAzimuth` | TiltDirection → Angle | 0, −360: the tip's x axis points the way the pen leans | meaning high, which axis assumed |
-| `textureApplication` 0 (moving grain), `textureMovement` m | grain mode Stroke, `grainMovement` m (texturized grain, 1: Canvas) | not a mapping | which value is moving from the earlier reader; Movement's scale assumed |
-| `shapeRoll` | Roll → Angle (the barrel's twist, else the stroke's direction); `followStroke` off | 0, −360: the tip turns with the barrel | meaning high, sign assumed |
+| `dynamicsPressureSize` p | Pressure → Size | 1 − p, p | strongly inferred |
+| `dynamicsJitterSize` j | Random → Size | 1, −j | strongly inferred |
+| `dynamicsPressureOpacity` p | Pressure → Flow (Procreate's opacity is per dab) | 1 − p, p | strongly inferred; the target (flow, not the stroke's ceiling) weakly |
+| `dynamicsJitterOpacity` j | Random → Flow | 1, −j | strongly inferred |
+| `shapeScatter` s | Random → Angle | 0, s × 180 degrees | strongly inferred |
+| `dynamicsSpeedSize` a, −1..1 | ScreenSpeed → Size, full at `fullSpeed` | 1, a: grows with speed when positive, shrinks when negative | sign weakly inferred; scale synthetic-only |
+| `dynamicsSpeedOpacity` a, −1..1 | ScreenSpeed → Opacity, full at `fullSpeed` | positive: 1 − a, a (slow strokes lighter); negative: 1, a (fast strokes lighter) | sign weakly inferred; scale synthetic-only |
+| `plotSpacingSpeed` a, 0.. | ScreenSpeed → Spacing, full at `fullSpeed` | 1, a: the spacing widens with speed | direction strongly inferred from real brush data; scale synthetic-only |
+| `dynamicsTiltSize` a, −1..1 | Tilt → Size, tilt curve | 1, a: grows as the pen leans | weakly inferred: the sign |
+| `dynamicsTiltOpacity` a | Tilt → Opacity, tilt curve | 1, −a: lighter as the pen leans | weakly inferred: the direction |
+| `dynamicsTiltBleed` a | Tilt → Flow, tilt curve | 1, −`tiltBleedFlow` × a (0.5 × a): each dab thins | weakly inferred: the meaning; the 0.5 synthetic-only |
+| `dynamicsTiltShapeRoundness` a, `…Minimum` m | Tilt → Roundness, tilt curve | 1, −a × (1 − m); nothing while m is 1, as in nearly every brush | strongly inferred |
+| the tilt angles (`sizeTiltAngle` and the rest) | the Tilt input's curve (`tiltCurve`) | zero up to the angle, then straight up to full at 60 degrees | weakly inferred: needs a source reference |
+| `shapeAzimuth` | TiltDirection → Angle | 0, −360: the tip's x axis points the way the pen leans | weakly inferred: the field and its meaning are plain, which axis and the sign are not |
+| `shapeRoll` | Roll → Angle (the barrel's twist, else the stroke's direction); `followStroke` off | 0, −360: the tip turns with the barrel | weakly inferred: the sign, and how it combines with `shapeAzimuth` |
+| `textureApplication` 0 (moving grain) | grain mode Stroke (texturized grain, 1: Canvas) | not a mapping | weakly inferred: which value is moving comes from the earlier reader |
+| `textureMovement` m | `grainMovement` m | not a mapping | synthetic-only: the scale |
+| speed measured on the screen | ScreenSpeed, not Speed | | strongly inferred: Procreate works in screen space; its zoom reference is still to make |
+| `maxSize` | 200 pixels at 1 | | weakly inferred: from Procreate's own thumbnails |
+
+The constants in `scaling` are tagged the same: `fullSpeed` (1500 screen points per second) and `tiltBleedFlow` (0.5)
+are synthetic-only; `tiltAngleRange` (a stored tilt angle of 1 is 90 degrees) is strongly inferred from Procreate's
+0–90 degree tilt graph; `tiltFullAt` (60 degrees) is the engine's own Tilt input, not a reading of Procreate.
 
 The tip's angle turns counterclockwise on screen, while the azimuth, the twist and the stroke's direction turn
 clockwise in the document's y-down frame, hence the depth of −360. The sum on an angle is continuous across a turn: the
@@ -285,10 +309,13 @@ What a brush uses that has no mapping is listed in the import's notes, one line 
 brushes using it (`notCarriedSettings` in `procreate.cpp`; a setting counts when it is off its neutral value, and a
 roundness setting only while its minimum is below full).
 
-**Clip Studio (`.sut`).** `BrushSizeEffector` with pressure → Pressure → Size from the effector's minimum;
-`BrushOpacityEffector` or `BrushFlowEffector` with pressure → Pressure → Flow from 0. The effector's own curve is not
-decoded yet (it needs Clip Studio to make reference files), so the response is linear; when it is, it goes into the
-mapping's curve with no change to the engine.
+**Clip Studio (`.sut`).** The effector's own curve is not decoded yet (it needs Clip Studio to make reference files), so
+the response is linear; when it is, it goes into the mapping's curve with no change to the engine.
+
+| Clip Studio | Mapping | Confidence |
+|---|---|---|
+| `BrushSizeEffector` with pressure, its minimum | Pressure → Size from the minimum | strongly inferred for the minimum; the linear response weakly (the curve is not decoded) |
+| `BrushOpacityEffector` or `BrushFlowEffector` with pressure | Pressure → Flow from 0 | weakly inferred: from nothing up, linear, and opacity read as flow |
 
 ## The parity harness
 
