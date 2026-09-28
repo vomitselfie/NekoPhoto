@@ -57,7 +57,7 @@ double sample(const GrayImage& image, double x, double y) {
 /// std::lround for 0 <= v < 2^31, inline: the whole part plus one when the rest is a half or more (v - whole is exact).
 inline unsigned roundHalfUp(double v) {
     const unsigned whole = unsigned(v);
-    return whole + (v - whole >= 0.5 ? 1u : 0u);
+    return whole + unsigned(v - whole >= 0.5);
 }
 
 } // namespace
