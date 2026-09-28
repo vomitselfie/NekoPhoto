@@ -9,6 +9,8 @@
 #include "compositor/document.h"
 #include "compositor/filters.h"
 #include "compositor/history.h"
+#include "compositor/layerstyle.h"
+#include "compositor/vectorlayer.h"
 #include "compositor/mosh.h"
 #include "compositor/parallel.h"
 #include "compositor/render.h"
@@ -193,6 +195,33 @@ int main(int argc, char** argv) {
     bench("render16 4000x3000 to display", none, [&] { RenderOptions o; render(deep, o, out); });
     bench("render16 4000x3000 at 0.25", none, [&] { RenderOptions o; o.scale = 0.25; render16(deep, o, out16); });
     bench("render16 1024x768 region at 1", none, [&] { RenderOptions o; o.region = {1500, 1100, 1024, 768}; render16(deep, o, out16); });
+
+    // A 1200x900 layer with a drop shadow, stroke and bevel, and a gradient shape layer, at 8 and at 16 bits.
+    {
+        Document styledDoc(1600, 1200);
+        styledDoc.layers.push_back(Layer(Asset::make(busy(1600, 1200, 3, false), "base"), Point(0, 0)));
+        Layer top(Asset::make(busy(1200, 900, 4, true), "styled"), Point(200, 150));
+        LayerStyle style;
+        DropShadow shadow; shadow.distance = 10; shadow.size = 12; style.dropShadows.push_back(shadow);
+        Stroke stroke; stroke.size = 4; style.strokes.push_back(stroke);
+        Bevel bevel; bevel.size = 8; style.bevels.push_back(bevel);
+        setLayerStyle(top, style);
+        styledDoc.layers.push_back(top);
+        VectorShape shape;
+        shape.path = ellipsePath(Rect(300, 200, 900, 700));
+        shape.fillPaint.kind = VectorPaint::Kind::Gradient;
+        shape.fillPaint.gradient.colors = {{0, {255, 0, 0}, 0.5f}, {1, {0, 0, 255}, 0.5f}};
+        shape.fillPaint.gradient.alphas = {{0, 1, 0.5f}, {1, 1, 0.5f}};
+        shape.stroke.enabled = true;
+        Layer shapeLayer(Asset::make(std::make_shared<Image>(1, 1), "shape"), Point(0, 0));
+        setVectorShape(shapeLayer, styledDoc, shape);
+        styledDoc.layers.push_back(shapeLayer);
+        Document styledDeep = styledDoc;
+        if (!convertSampleType(styledDeep, SampleType::U16)) { std::printf("16-bit conversion failed\n"); return 1; }
+        Image styledOut;
+        bench("styles+shape 1600x1200", none, [&] { RenderOptions o; render(styledDoc, o, styledOut); });
+        bench("u16 styles+shape 1600x1200", none, [&] { RenderOptions o; render16(styledDeep, o, out16); });
+    }
 
     // Colour management (P4): Convert to Profile's pixel pass at 8 and 16 bits, and the canvas's display transform.
     {

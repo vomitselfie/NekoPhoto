@@ -433,8 +433,45 @@ def sixteen_bit(rpc):
     rpc.call("layers.merge")
     assert len(rpc.call("layers.list")) == count - 1
     assert rpc.call("document.info")["bits"] == 16
+    # Text at 16 bits: the tool, rich text ranges, editing, and its outlines as a path and a shape.
+    assert rpc.call("tool.select", name="text")["tool"] == "text"
+    words = rpc.call("layers.add", kind="text", text="Deep", x=10, y=10, size=30, color="#2266cc")
+    assert words["kind"] == "text" and words["pixelSize"]["width"] > 20, words
+    assert rpc.call("text.set", id=words["id"], text="Deep text", italic=True)["text"]["text"] == "Deep text"
+    ranged = rpc.call("text.styleRange", id=words["id"], start=5, length=4, color="#ff0000", size=36)
+    assert [r["length"] for r in ranged["text"]["runs"]] == [5, 4], ranged
+    assert rpc.call("text.toPath", id=words["id"])["subpaths"] >= 4
+    assert rpc.call("text.toShape", id=words["id"])["kind"] == "shape"
+    # Shapes, paths and vector masks at 16 bits: a gradient shape with a stroke, a path operation, Fill and Stroke Path.
+    assert rpc.call("tool.select", name="shape")["tool"] == "shape"
+    box = rpc.call("shape.draw", kind="rectangle", x=15, y=15, width=70, height=40, cornerRadius=5, color="#224488", fillType="gradient",
+                   strokeWidth=2, strokeColor="#000000")
+    assert box["kind"] == "shape", box
+    rpc.call("layers.select", id=box["id"])
+    rpc.call("shape.draw", kind="ellipse", x=30, y=20, width=20, height=20, op="subtract")
+    assert len(rpc.call("shape.get", id=box["id"])["path"]) == 2
+    path = rpc.call("paths.set", name="Deep path", path=[{"knots": [[5, 5], [45, 5], [25, 35]]}])
+    pixels = rpc.call("layers.add", kind="pixels", name="Deep paths")
+    rpc.call("paths.fill", id=path["id"])
+    assert rpc.call("history.info")["undo"] == "Fill Path"
+    rpc.call("paths.stroke", id=path["id"])
+    assert rpc.call("history.info")["undo"] == "Stroke Path"
+    square = rpc.call("vectorMask.set", id=pixels["id"], path=[{"knots": [[10, 10], [60, 10], [60, 60], [10, 60]]}])
+    assert len(square["path"]) == 1, square
+    # Layer styles at 16 bits: every effect on the shape layer, a folder style, and back to none.
+    styled = rpc.call("layers.setStyle", id=box["id"], style={"dropShadows": [{"distance": 4, "size": 3}], "strokes": [{"size": 2, "color": "#ff0000"}],
+                                                             "outerGlows": [{"size": 5}], "innerShadows": [{"size": 3}], "innerGlows": [{"size": 4}],
+                                                             "bevels": [{"size": 5}], "satins": [{"size": 6}], "colorOverlays": [{"color": "#00ff00", "opacity": 0.3}],
+                                                             "gradientOverlays": [{"opacity": 0.5}]})
+    assert "strokes" in styled and "bevels" in styled, styled
+    folder = rpc.call("layers.add", kind="group")
+    assert "outerGlows" in rpc.call("layers.setStyle", id=folder["id"], style={"outerGlows": [{"size": 6}]})
+    shot = rpc.call("render", maxSize=64)
+    assert base64.b64decode(shot["png"])[:8] == b"\x89PNG\r\n\x1a\n"
+    assert "strokes" not in rpc.call("layers.setStyle", id=box["id"], style={})
+    assert rpc.call("document.info")["bits"] == 16
     # What is not ported yet is refused, saying so.
-    for method, params in (("pixels.cameraRaw", {"settings": {"exposure": 0.5}}), ("tool.select", {"name": "shape"})):
+    for method, params in (("pixels.cameraRaw", {"settings": {"exposure": 0.5}}), ("tool.select", {"name": "artboard"})):
         try:
             rpc.call(method, **params)
             raise AssertionError(method + " should be refused on a 16-bit document")

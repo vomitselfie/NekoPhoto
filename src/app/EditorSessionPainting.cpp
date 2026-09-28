@@ -722,7 +722,8 @@ bool EditorSession::redrawText(Layer& layer) {
     // Warped text: where the bent raster sits from the upright one, now and at the last redraw (so the upright text
     // stays where it was and only the bend moves the pixels).
     QPointF warpOffset;
-    auto image = renderTextLayer(*layer.text, &warpOffset);
+    // At the document's depth: a 16-bit document's text is painted at 16 bits.
+    const AnyImage image = renderTextLayerAt(*layer.text, sampleType(), &warpOffset);
     QPointF oldWarpOffset;
     if (layer.extraJson.find("textWarpOffset") != std::string::npos) {
         const QJsonArray o = QJsonDocument::fromJson(QByteArray::fromStdString(layer.extraJson)).object().value("textWarpOffset").toArray();
@@ -740,9 +741,9 @@ bool EditorSession::redrawText(Layer& layer) {
     std::optional<Point> corner;
     if (layer.transform.rotation != 0 && !layer.transform.flipX && !layer.transform.flipY && layer.asset && layer.asset->image)
         corner = mapThroughTransform(layer.transform, layer.asset->image.width(), layer.asset->image.height(), 0, 0);
-    layer.asset = Asset::make(image, layer.name);
+    layer.asset = Asset::makeAny(image, layer.name);
     layer.textImage = image;
-    layer.transform.size = Size(image->width() * scaleX, image->height() * scaleY);
+    layer.transform.size = Size(image.width() * scaleX, image.height() * scaleY);
     if (corner) {
         const double a = layer.transform.radians(), c = std::cos(a), sn = std::sin(a);
         const double hw = layer.transform.size.width / 2, hh = layer.transform.size.height / 2;
@@ -772,12 +773,12 @@ bool EditorSession::redrawText(Layer& layer) {
                 if (turned == 0) layer.transform.origin = Point(anchor[0].toDouble() - x * scaleX, anchor[1].toDouble() - y * scaleY);
                 else {
                     // The layer turns about its centre: put the centre where the turned anchor offset says.
-                    layer.transform.size = Size(image->width(), image->height());
+                    layer.transform.size = Size(image.width(), image.height());
                     layer.transform.rotation = turned;
                     const double a = turned * M_PI / 180, c = std::cos(a), sn = std::sin(a);
-                    const double dx = x - image->width() / 2.0, dy = y - image->height() / 2.0;
+                    const double dx = x - image.width() / 2.0, dy = y - image.height() / 2.0;
                     const Point centre(anchor[0].toDouble() - (dx * c - dy * sn), anchor[1].toDouble() - (dx * sn + dy * c));
-                    layer.transform.origin = Point(centre.x - image->width() / 2.0, centre.y - image->height() / 2.0);
+                    layer.transform.origin = Point(centre.x - image.width() / 2.0, centre.y - image.height() / 2.0);
                 }
             }
         }
@@ -798,9 +799,9 @@ bool EditorSession::redrawText(Layer& layer) {
 std::optional<Uuid> EditorSession::addTextLayer(QPointF documentPoint, const LayerText& text, bool openEditor) {
     if (refusedAtDepth("edit.text", tr("Text"))) return std::nullopt;
     if (!canEditLayers()) return std::nullopt;
-    auto image = renderTextLayer(text);
+    const AnyImage image = renderTextLayerAt(text, sampleType());
     if (!image) { emit error(tr("That text is too large to render. Text can cover up to 100 megapixels.")); return std::nullopt; }
-    Layer layer(Asset::make(image, nextLayerName(document_->layers, QCoreApplication::translate("Names", "Text").toStdString())), Point(documentPoint.x() - textPadding, documentPoint.y() - textPadding));
+    Layer layer(Asset::makeAny(image, nextLayerName(document_->layers, QCoreApplication::translate("Names", "Text").toStdString())), Point(documentPoint.x() - textPadding, documentPoint.y() - textPadding));
     layer.name = layer.asset->name;
     layer.text = text;
     layer.textImage = image;

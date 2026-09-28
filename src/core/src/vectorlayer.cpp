@@ -1,4 +1,5 @@
 #include "compositor/vectorlayer.h"
+#include "compositor/depth.h"
 #include "compositor/psd_carry.h"
 #include "compositor/selection.h"
 #include "psd/psd_descriptor.hpp"
@@ -322,14 +323,34 @@ void setVectorShape(Layer& layer, const Document& document, const VectorShape& s
     hx = std::min(hx, lx + 30000); hy = std::min(hy, ly + 30000);
     const int x0 = int(lx), y0 = int(ly);
     const int w = std::max(1, int(hx - lx)), h = std::max(1, int(hy - ly));
-    ImagePtr painted;
-    if (shape.fillPaint.kind != VectorPaint::Kind::Solid)
-        painted = renderVectorPaint(shape.fillPaint, document, pathBounds(shape.path), Rect(x0, y0, w, h), 1, w, h);
-    // A pattern not among the document's: its fallback colour until it is there.
-    const bool paintedFill = painted != nullptr;
-    auto image = painted ? std::const_pointer_cast<Image>(painted) : std::make_shared<Image>(w, h);
-    if (!painted) image->fill(shape.r, shape.g, shape.b, 255);
-    layer.asset = Asset::make(image, layer.name);
+    // At the document's depth: a 16-bit document's gradient fill is drawn from the ramp's exact colours.
+    AnyImage image;
+    bool paintedFill = false;
+    if (document.sampleType == SampleType::U16) {
+        Image16Ptr painted;
+        if (shape.fillPaint.kind != VectorPaint::Kind::Solid)
+            painted = renderVectorPaint16(shape.fillPaint, document, pathBounds(shape.path), Rect(x0, y0, w, h), 1, w, h);
+        paintedFill = painted != nullptr;
+        if (!painted) {
+            auto plain = std::make_shared<Image16>(w, h);
+            const uint16_t colour[4] = {widen8(shape.r), widen8(shape.g), widen8(shape.b), uint16_t(one16)};
+            const size_t n = size_t(w) * size_t(h);
+            for (size_t i = 0; i < n; i++) std::memcpy(plain->data() + i * 4, colour, sizeof(colour));
+            painted = plain;
+        }
+        image = AnyImage(painted);
+        layer.asset = Asset::make(painted, layer.name);
+    } else {
+        ImagePtr painted;
+        if (shape.fillPaint.kind != VectorPaint::Kind::Solid)
+            painted = renderVectorPaint(shape.fillPaint, document, pathBounds(shape.path), Rect(x0, y0, w, h), 1, w, h);
+        // A pattern not among the document's: its fallback colour until it is there.
+        paintedFill = painted != nullptr;
+        auto eight = painted ? std::const_pointer_cast<Image>(painted) : std::make_shared<Image>(w, h);
+        if (!painted) eight->fill(shape.r, shape.g, shape.b, 255);
+        image = AnyImage(ImagePtr(eight));
+        layer.asset = Asset::make(eight, layer.name);
+    }
     layer.transform = LayerTransform(Point(x0, y0), Size(w, h));
     layer.shape.reset();
     layer.shapeImage.reset();
@@ -357,7 +378,7 @@ void setVectorShape(Layer& layer, const Document& document, const VectorShape& s
     if (!live.empty()) blocks.push_back({"vogk", authorVectorOrigination(live)});
     // The blocks describe these pixels where they now are, so they are kept (and not moved) until they change.
     carry->placement = layer.transform;
-    carry->contentHash = psdContentHash(image.get());
+    carry->contentHash = psdContentHash(image);
     layer.psdCarry = std::move(carry);
 }
 

@@ -86,8 +86,11 @@ TEST_CASE(support_registry_lists_what_p2_and_p3a_port) {
     // P3b: painting and retouching.
     for (const char* painting : {"tool.brush", "tool.spotHealing", "tool.cloneStamp", "tool.smudge", "tool.dodge", "tool.gradient", "tool.paintBucket", "edit.movePixels", "layers.merge", "layers.applyMask"})
         CHECK(supports(painting, SampleType::U16));
-    // Shapes, paths, merges, layer styles and the rest wait.
-    for (const char* later : {"edit.paint", "edit.pixels", "tool.shape", "tool.text", "edit.style", "edit.smartObject", "edit.transformSelection"}) {
+    // Text, shapes, paths, vector masks, layer styles and baking a clipping mask.
+    for (const char* ported : {"edit.paint", "edit.pixels", "tool.shape", "tool.text", "tool.pen", "tool.directSelect", "edit.text", "edit.vector", "edit.style"})
+        CHECK(supports(ported, SampleType::U16));
+    // Smart objects and the rest wait.
+    for (const char* later : {"edit.smartObject", "edit.transformSelection", "edit.artboard", "edit.timeline"}) {
         CHECK(supports(later, SampleType::U8));
         CHECK(!supports(later, SampleType::U16));
     }

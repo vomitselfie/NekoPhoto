@@ -24,9 +24,9 @@ Files store 0 to 65535; the values are mapped when a file is read and written.
 ## What works at 16 bits now
 
 - **Rendering**: every blend mode, opacity, layer and folder masks (at 16 bits), vector masks, clipping masks,
-  folders (Pass Through and isolated, faded by their opacity), artboards, shape layers, Dissolve and adjustment
-  layers. Layer styles are shown too; they are worked out at 8 bits for now (the pixels they do not touch keep
-  their 16 bits).
+  folders (Pass Through and isolated, faded by their opacity), artboards, shape layers and fill layers, Dissolve,
+  adjustment layers and layer styles. Vector masks and shapes are rasterised with 32,768 steps of edge coverage, and
+  gradient fills are drawn from the gradient's exact colours, so a long ramp has no 8-bit steps.
 - **Adjustments**, on pixels (Image ▸ Adjustments, Invert) and as adjustment layers: Levels, Curves, Hue/Saturation,
   Exposure, Gradient Map, Grain, Brightness/Contrast, Vibrance, Color Balance, Black & White, Photo Filter, Channel
   Mixer, Selective Color, Posterize, Threshold, Color Lookup and Invert. Each works on the exact colour, so a smooth
@@ -54,7 +54,17 @@ Files store 0 to 65535; the values are mapped when a file is read and written.
 - **Image Size** (each resampling method), **Crop**, the Crop tool, Crop to Selection and **Trim**; **Canvas Size**
   and Flip Canvas.
 - **Layers**: new layers and folders, delete, duplicate, group, rename, reorder, move in and out of folders,
-  visibility, opacity, blend mode, clipping, the resampling mode, and Merge Down (merged at 16 bits).
+  visibility, opacity, blend mode, clipping, the resampling mode, and Merge Down (merged at 16 bits). Deleting a
+  clipping base keeps the clipped layers' look, baked into their pixels at 16 bits.
+- **Text**: the Type tool, Edit Text, text in several styles, Warp Text, Create Work Path and Convert to Shape. The
+  text is painted at 16 bits per channel (Qt's 16-bit raster; its glyph antialiasing has 256 steps, as at 8 bits).
+  A 16-bit PSD's type layers open as text and export as Photoshop type layers.
+- **Shapes and paths**: the Shape tools (live rectangles and ellipses, polygons, lines, custom shapes) with solid,
+  gradient and pattern fills and strokes, path operations, the Pen and Direct Selection tools, the Paths panel, vector
+  masks on any layer, Fill Path and Stroke Path (at 16 bits), and Make Work Path from a selection.
+- **Layer styles**: the Layer Style dialog and all ten effects (Drop Shadow, Inner Shadow, Outer and Inner Glow,
+  Bevel & Emboss, Satin, Color, Gradient and Pattern Overlay, Stroke), on layers and folders, drawn at 16 bits;
+  Copy, Paste and Clear Layer Style and style presets. At 1:1 they are within a level of their 8-bit render.
 - **Transforming layers**: the Move tool, Free Transform (move, scale, rotate), Distort and Perspective, Edit ▸ Warp,
   Warp Cage, and Flip Layer. A warp bends the 16-bit pixels; the cage previews from an 8-bit copy while you drag.
 - **Layer masks**: Reveal All, Hide All, enable and disable, link, invert, apply and delete, and painting them.
@@ -65,7 +75,8 @@ Files store 0 to 65535; the values are mapped when a file is read and written.
 - **Automation**: `image.mode` converts; `document.info` reports `bits`; the selection, `pixels.adjust`,
   `pixels.filter`, `pixels.fill`, `pixels.clear`, the content-aware methods, `image.resize`, `image.trim`,
   `canvas.crop`, `layers.warp`, `layers.setCage`, `brush.stroke` (every tool it takes), `gradient.draw`,
-  `pixels.bucket`, `pixels.patch` and `layers.merge` work on a 16-bit document ([automation.md](automation.md)).
+  `pixels.bucket`, `pixels.patch`, `layers.merge`, `text.*`, `shape.draw`, `shape.set`, `paths.*`, `vectorMask.*`,
+  `layers.setStyle` and `layers.applyStyle` work on a 16-bit document ([automation.md](automation.md)).
 
 A 16-bit PSD that NekoPhoto opened and exports again as PSD keeps each unedited layer's channel data byte for byte,
 so a round trip does not lose Photoshop's full 16 bits; a layer you edit (and a PSB) is written from its 0..32768
@@ -76,11 +87,9 @@ values, which drops the lowest of the file's 16 bits. PNG and TIFF are always wr
 What has not been ported is greyed out, with the tooltip "Not available in 16-bit yet", and automation answers
 "<method> is not available for 16-bit documents yet". For now, convert to 8 bits for these:
 
-- the shape and text tools, and Fill Path and Stroke Path;
 - Camera Raw Filter, G'MIC and Remove Background;
-- baking a clipping mask into pixels when its base layer is deleted;
-- editing layer styles (they are shown, worked out at 8 bits), smart objects and Smart Filters, vector masks and
-  paths, artboards, and the timeline;
+- smart objects and Smart Filters (a 16-bit PSD's smart objects are shown, and move and scale with their layer),
+  artboards, and the timeline;
 - SVG export, and exporting artboards and slices.
 
 Colour management works at both depths: a 16-bit document keeps its profile, converts with Convert to Profile at
@@ -123,8 +132,9 @@ Photoshop と同じく 16 bit の値は 0〜32768 で保持し、合成は正確
 ### 16 bit で使えるもの
 
 - **表示**:すべての描画モード、不透明度、レイヤーマスクとグループのマスク(16 bit)、ベクトルマスク、クリッピング
-  マスク、グループ(通過と分離、不透明度)、アートボード、シェイプレイヤー、ディザ合成、調整レイヤー。レイヤー
-  スタイルも表示されます(当面は 8 bit で計算し、影響しないピクセルは 16 bit のまま)。
+  マスク、グループ(通過と分離、不透明度)、アートボード、シェイプレイヤーと塗りつぶしレイヤー、ディザ合成、調整
+  レイヤー、レイヤースタイル。ベクトルマスクとシェイプの縁は 32,768 段階で描き、グラデーションの塗りは正確な色から
+  描くので、長いグラデーションにも 8 bit の段差が出ません。
 - **色調補正**(ピクセルへの適用:イメージ ▸ 色調補正と階調の反転、および調整レイヤー):レベル補正、トーンカーブ、
   色相・彩度、露光量、グラデーションマップ、粒子、明るさ・コントラスト、自然な彩度、カラーバランス、白黒、
   レンズフィルター、チャンネルミキサー、特定色域の選択、ポスタリゼーション、2 階調化、カラールックアップ、
@@ -153,7 +163,18 @@ Photoshop と同じく 16 bit の値は 0〜32768 で保持し、合成は正確
 - **画像解像度**(各補間方法)、**切り抜き**、切り抜きツール、選択範囲で切り抜き、**トリミング**。**カンバス
   サイズ**、カンバスの反転。
 - **レイヤー**:新規レイヤー・グループ、削除、複製、グループ化、名前の変更、重ね順、グループへの出し入れ、
-  表示/非表示、不透明度、描画モード、クリッピング、補間方法、下のレイヤーと結合(16 bit で結合)。
+  表示/非表示、不透明度、描画モード、クリッピング、補間方法、下のレイヤーと結合(16 bit で結合)。クリッピングの
+  ベースを削除するときは、クリップされたレイヤーの見た目を 16 bit でピクセルに焼き込みます。
+- **テキスト**:文字ツール、テキストを編集、スタイルの混在したテキスト、ワープテキスト、作業用パスを作成、シェイプに
+  変換。テキストは 16 bit/チャンネルで描画します(Qt の 16 bit 描画。文字のアンチエイリアスは 8 bit と同じ 256 段階)。
+  16 bit の PSD のテキストレイヤーはテキストとして開き、Photoshop のテキストレイヤーとして書き出します。
+- **シェイプとパス**:シェイプツール(ライブの長方形・楕円、多角形、ライン、カスタムシェイプ)、単色・グラデーション・
+  パターンの塗りと線、パスの演算、ペンツールとパス選択ツール、パスパネル、あらゆるレイヤーのベクトルマスク、パスの
+  塗りつぶしと境界線(16 bit)、選択範囲から作業用パス。
+- **レイヤースタイル**:レイヤースタイルダイアログと 10 種類の効果(ドロップシャドウ、シャドウ(内側)、光彩(外側・
+  内側)、ベベルとエンボス、サテン、カラー・グラデーション・パターンオーバーレイ、境界線)をレイヤーとグループに
+  16 bit で描画。レイヤースタイルのコピー・ペースト・消去とスタイルのプリセット。100% 表示では 8 bit の描画と
+  1 段階以内です。
 - **レイヤーの変形**:移動ツール、自由変形(移動・拡大縮小・回転)、自由な形に・遠近法、編集 ▸ ワープ、ワープ
   ケージ、レイヤーの反転。ワープは 16 bit のピクセルを変形します(ケージのドラッグ中は 8 bit のコピーで
   プレビュー)。
@@ -175,11 +196,9 @@ NekoPhoto で開いた 16 bit の PSD を PSD に書き出すと、編集して�
 移植していない機能はグレー表示になり、ツールチップに「16 bit/チャンネルではまだ使用できません」と表示されます。
 自動化では「<メソッド> is not available for 16-bit documents yet」が返ります。当面は 8 bit に変換して使ってください。
 
-- シェイプとテキストのツール、パスの塗りつぶしとパスの境界線を描く
 - Camera Raw フィルター、G'MIC、背景を削除
-- ベースのレイヤーを削除するときのクリッピングマスクのピクセルへの焼き込み
-- レイヤースタイルの編集(表示はされ、8 bit で計算します)、スマートオブジェクトとスマートフィルター、ベクトル
-  マスクとパス、アートボード、タイムライン
+- スマートオブジェクトとスマートフィルター(16 bit の PSD のスマートオブジェクトは表示され、レイヤーとともに移動・
+  拡大縮小できます)、アートボード、タイムライン
 - SVG の書き出し、アートボードとスライスの書き出し
 
 カラーマネジメントはどちらのビット数でも使えます。16 bit のドキュメントもプロファイルを持ち、プロファイル変換は 16 bit の

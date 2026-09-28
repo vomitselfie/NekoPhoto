@@ -683,29 +683,39 @@ float gradientOpacity(const StyleGradient& g, float t) {
     return s.back().opacity;
 }
 
-StyleColor gradientColor(const StyleGradient& g, float t) {
+void gradientColorExact(const StyleGradient& g, float t, double out[3]) {
     const auto& s = g.colors;
-    if (s.empty()) { const uint8_t v = uint8_t(std::lround(unit(t) * 255)); return {v, v, v}; }
-    if (t <= s.front().location) return s.front().color;
-    if (t >= s.back().location) return s.back().color;
-    auto byte = [](double v) { return uint8_t(std::clamp(std::lround(v), 0L, 255L)); };
+    auto put = [&](double r, double gr, double b) { out[0] = r; out[1] = gr; out[2] = b; };
+    auto stop = [&](const StyleColor& c) { put(c.r, c.g, c.b); };
+    if (s.empty()) { const double v = double(unit(t) * 255); put(v, v, v); return; }
+    if (t <= s.front().location) { stop(s.front().color); return; }
+    if (t >= s.back().location) { stop(s.back().color); return; }
     for (size_t i = 1; i < s.size(); i++) {
         if (t > s[i].location) continue;
         const auto &l = s[i - 1], &r = s[i];
         double u = midpointRemap((t - l.location) / std::max(0.0001f, r.location - l.location), r.midpoint);
         if (g.interpolation == StyleGradient::Interpolation::Linear) {
-            auto c = [&](uint8_t a, uint8_t b) { return byte(toSrgb(toLinear(a / 255.0) + (toLinear(b / 255.0) - toLinear(a / 255.0)) * u) * 255); };
-            return {c(l.color.r, r.color.r), c(l.color.g, r.color.g), c(l.color.b, r.color.b)};
+            auto c = [&](uint8_t a, uint8_t b) { return toSrgb(toLinear(a / 255.0) + (toLinear(b / 255.0) - toLinear(a / 255.0)) * u) * 255; };
+            put(c(l.color.r, r.color.r), c(l.color.g, r.color.g), c(l.color.b, r.color.b));
+            return;
         }
         // Classic: linear blended toward a Catmull-Rom through the neighbours by the smoothness (when there are
         // more than two stops). Perceptual renders as Classic here.
         const auto& p = i > 1 ? s[i - 2].color : l.color;
         const auto& n = i + 1 < s.size() ? s[i + 1].color : r.color;
         const double smooth = s.size() > 2 || g.fillLayer ? g.smoothness : 0.0;
-        auto c = [&](uint8_t p0, uint8_t p1, uint8_t p2, uint8_t p3) { const double lin = p1 + (p2 - p1) * u; return byte(lin + (catmullRom(p0, p1, p2, p3, u) - lin) * smooth); };
-        return {c(p.r, l.color.r, r.color.r, n.r), c(p.g, l.color.g, r.color.g, n.g), c(p.b, l.color.b, r.color.b, n.b)};
+        auto c = [&](uint8_t p0, uint8_t p1, uint8_t p2, uint8_t p3) { const double lin = p1 + (p2 - p1) * u; return lin + (catmullRom(p0, p1, p2, p3, u) - lin) * smooth; };
+        put(c(p.r, l.color.r, r.color.r, n.r), c(p.g, l.color.g, r.color.g, n.g), c(p.b, l.color.b, r.color.b, n.b));
+        return;
     }
-    return s.back().color;
+    stop(s.back().color);
+}
+
+StyleColor gradientColor(const StyleGradient& g, float t) {
+    double c[3];
+    gradientColorExact(g, t, c);
+    auto byte = [](double v) { return uint8_t(std::clamp(std::lround(v), 0L, 255L)); };
+    return {byte(c[0]), byte(c[1]), byte(c[2])};
 }
 
 } // namespace compositor
