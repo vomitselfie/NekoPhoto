@@ -89,8 +89,10 @@ TEST_CASE(support_registry_lists_what_p2_and_p3a_port) {
     // Text, shapes, paths, vector masks, layer styles and baking a clipping mask.
     for (const char* ported : {"edit.paint", "edit.pixels", "tool.shape", "tool.text", "tool.pen", "tool.directSelect", "edit.text", "edit.vector", "edit.style"})
         CHECK(supports(ported, SampleType::U16));
-    // Smart objects and the rest wait.
-    for (const char* later : {"edit.smartObject", "edit.transformSelection", "edit.artboard", "edit.timeline"}) {
+    // Smart objects and Smart Filters.
+    CHECK(supports("edit.smartObject", SampleType::U16));
+    // The rest wait.
+    for (const char* later : {"edit.transformSelection", "edit.artboard", "edit.timeline"}) {
         CHECK(supports(later, SampleType::U8));
         CHECK(!supports(later, SampleType::U16));
     }

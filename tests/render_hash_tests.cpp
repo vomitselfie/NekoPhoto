@@ -29,7 +29,10 @@
 #include "compositor/toning.h"
 #include "compositor/layerstyle.h"
 #include "compositor/presets.h"
+#include "compositor/png.h"
 #include "compositor/psd_carry.h"
+#include "compositor/smartfilter.h"
+#include "compositor/smartobject_edit.h"
 #include "compositor/vectorlayer.h"
 #include "compositor/vectormask.h"
 
@@ -677,6 +680,96 @@ void add16BitEditScenes() {
     scene("u16/filter/invert", [] { auto image = widenImage(*filterInput()); applyInvert(*image); return hashImage16(*image); });
 }
 
+// ---- smart objects at 16 bits ------------------------------------------------------------------------------------
+
+/// A 16-bit document over a busy base placing `source` on a turned, scaled quad-free transform.
+Document smartObjectScene(const std::shared_ptr<const SmartObjectSource>& source) {
+    Document doc = sixteen([] {
+        Document d(200, 150);
+        d.id = "00000000-0000-4000-8000-000000000016";
+        d.layers.push_back(layerOf("base", noisyBase(200, 150), {0, 0}));
+        return d;
+    }());
+    doc.smartObjects[source->id] = source;
+    doc.layers.push_back(smartObjectLayer(source, {40, 30, 150, 30, 150, 110, 40, 110}, "Contents", doc.sampleType));
+    return doc;
+}
+
+std::shared_ptr<const SmartObjectSource> smartSource8() {
+    SmartObjectContents c;
+    c.image = ImagePtr(paint(110, 80, 5));
+    encodePngImage(*c.image.u8(), c.bytes);
+    c.fileName = "paint.png";
+    return makeSmartObjectSource(std::move(c));
+}
+
+std::shared_ptr<const SmartObjectSource> smartSource16() {
+    auto ramp = std::make_shared<Image16>(110, 80);
+    for (int y = 0; y < 80; y++)
+        for (int x = 0; x < 110; x++) {
+            uint16_t* p = ramp->pixel(x, y);
+            const uint16_t a = uint16_t(x < 8 ? x * 4096 : 32768);
+            p[0] = uint16_t(uint32_t(x * 297) * a >> 15); p[1] = uint16_t(uint32_t(y * 409) * a >> 15); p[2] = uint16_t(uint32_t(12345) * a >> 15); p[3] = a;
+        }
+    SmartObjectContents c;
+    c.image = Image16Ptr(ramp);
+    encodePngImage16(*ramp, c.bytes);
+    c.fileName = "ramp.png";
+    return makeSmartObjectSource(std::move(c));
+}
+
+void add16BitSmartObjectScenes() {
+    scene("u16/smart_object/placed_8bit_source", [] { return hash16(smartObjectScene(smartSource8())); });
+    scene("u16/smart_object/placed_16bit_source", [] { return hash16(smartObjectScene(smartSource16())); });
+    scene("u16/smart_object/turned@0.5", [] {
+        Document doc = smartObjectScene(smartSource16());
+        doc.layers[1].transform.rotation = 20;
+        return hash16(doc, reducedRegion());
+    });
+    scene("u16/smart_object/warped", [] {
+        Document doc = smartObjectScene(smartSource8());
+        std::string error;
+        if (!warpLayer(doc, doc.layers[1], TextWarp{"warpArc", 40, 0, 0, false}, &error)) check::fail(__FILE__, __LINE__, "warp: " + error);
+        return hash16(doc);
+    });
+    // Every Smart Filter drawn at 16 bits, over an 8-bit source placed in a 16-bit document.
+    const std::vector<std::pair<std::string, SmartFilterParameters>> filters{
+        {"gaussian_blur", smartfilter::GaussianBlur{3}}, {"high_pass", smartfilter::HighPass{4}}, {"median", smartfilter::Median{2}},
+        {"dust_and_scratches", smartfilter::DustAndScratches{2, 10}}, {"surface_blur", smartfilter::SurfaceBlur{5, 15}},
+        {"surface_blur_wide", smartfilter::SurfaceBlur{12, 30}}, {"motion_blur", smartfilter::MotionBlur{30, 14}},
+        {"plastic_wrap", smartfilter::PlasticWrap{9, 7, 5}}, {"mosaic", smartfilter::Mosaic{8}}, {"emboss", smartfilter::Emboss{135, 3, 100}},
+        {"box_blur", smartfilter::BoxBlur{4}}, {"radial_blur", smartfilter::RadialBlur{10, 16}}, {"add_noise", smartfilter::AddNoise{20, true, false, 5}},
+    };
+    for (const auto& [name, parameters] : filters)
+        scene("u16/smart_filter/" + name, [parameters] {
+            Document doc = smartObjectScene(smartSource8());
+            SmartFilterEntry entry;
+            entry.parameters = parameters;
+            std::string error;
+            if (!addSmartFilter(doc, doc.layers[1], entry, &error)) check::fail(__FILE__, __LINE__, "addSmartFilter: " + error);
+            return hash16(doc);
+        });
+    // A stack: a blend and opacity per entry and a shared mask, over the 16-bit source.
+    scene("u16/smart_filter/stack_blend_mask", [] {
+        Document doc = smartObjectScene(smartSource16());
+        SmartFilterStack stack;
+        stack.supported = true;
+        SmartFilterEntry blur, mosaic;
+        blur.parameters = smartfilter::GaussianBlur{2.5};
+        mosaic.parameters = smartfilter::Mosaic{6};
+        mosaic.opacity = 0.6;
+        mosaic.blend = BlendMode::Screen;
+        stack.entries = {blur, mosaic};
+        auto mask = std::make_shared<GrayImage>(200, 150);
+        for (int y = 0; y < 150; y++) for (int x = 0; x < 200; x++) mask->at(x, y) = uint8_t(std::min(255, x + y));
+        stack.mask = mask;
+        stack.maskBounds = PixelRect{0, 0, 200, 150};
+        std::string error;
+        if (!setSmartFilters(doc, doc.layers[1], stack, &error)) check::fail(__FILE__, __LINE__, "setSmartFilters: " + error);
+        return hash16(doc);
+    });
+}
+
 // ---- brushes -----------------------------------------------------------------------------------------------------
 
 Layer paper(int w, int h) {
@@ -851,6 +944,7 @@ TEST_CASE(render_hashes_match_the_baseline_on_the_pool_and_serially) {
     add16BitScenes();
     add16BitEditScenes();
     add16BitVectorScenes();
+    add16BitSmartObjectScenes();
 
     std::map<std::string, std::string> actual;
     int threadMismatch = 0;

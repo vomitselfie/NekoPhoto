@@ -162,7 +162,7 @@ TEST_CASE(an_instance_draws_its_source_and_survives_a_project) {
     const auto& source = *loaded->smartObjects.begin()->second;
     CHECK(source.fileName == "small.png");
     CHECK(*source.bytes == *doc.smartObjects.begin()->second->bytes);
-    CHECK(source.image && source.image->width() == 4);
+    CHECK(source.image && source.image.width() == 4);
     std::filesystem::remove_all(package);
 }
 
@@ -200,7 +200,7 @@ std::shared_ptr<Image> filled(int w, int h, uint8_t r, uint8_t g, uint8_t b) { a
 SmartObjectContents pngContents(int w, int h, uint8_t g, const char* name) {
     SmartObjectContents c;
     c.image = filled(w, h, 0, g, 0);
-    encodePngImage(*c.image, c.bytes);
+    encodePngImage(*c.image.u8(), c.bytes);
     c.fileName = name;
     return c;
 }
@@ -448,7 +448,7 @@ TEST_CASE(smart_filters_draw_from_the_contents_and_their_cache_follows) {
     layer.smartObject->psdBlocks[0].data = withGaussianBlur(layer.smartObject->psdBlocks[0].data, 2);
     auto carry = std::make_shared<PsdDocumentCarry>();
     carry->width = 30; carry->height = 30;
-    PlacedRaster unfiltered{std::make_shared<Image>(*source->image), 10, 10};
+    PlacedRaster unfiltered{std::make_shared<Image>(*source->image.u8()), 10, 10};
     std::vector<uint8_t> feid{0, 0, 0, 3};
     const auto record = authorSmartFilterRecord(layer.smartObject->placedId, PixelRect{0, 0, 30, 30}, unfiltered, nullptr, {}, 255);
     for (int i = 7; i >= 0; i--) feid.push_back(uint8_t(uint64_t(record.size()) >> (8 * i)));
@@ -458,7 +458,7 @@ TEST_CASE(smart_filters_draw_from_the_contents_and_their_cache_follows) {
     doc.psdCarry = carry;
     // The layer's pixels are the filtered raster, as Photoshop saves them (import keeps them rather than drawing the stack).
     {
-        auto f = filteredSmartObjectRaster(carry->globals, *layer.smartObject, *source->image, quad);
+        auto f = filteredSmartObjectRaster(carry->globals, *layer.smartObject, *source->image.u8(), quad);
         REQUIRE(f.has_value());
         layer.asset = Asset::make(f->image, layer.name);
         layer.transform = LayerTransform(Point(f->x, f->y), Size(f->image->width(), f->image->height()));
@@ -633,6 +633,186 @@ TEST_CASE(the_warp_cage_bends_and_stays_editable) {
     flat->ys[0] -= 20;   // the top-left corner up
     REQUIRE(warpLayerToCage(doc, doc.layers[1], *flat, &error));
     CHECK(doc.layers[1].transform.origin.y < 35);
+}
+
+// ---- 16 bits -------------------------------------------------------------------------------------------------
+
+namespace {
+/// A 16-bit PNG source: a horizontal ramp finer than 8 bits (so a trip through 8 bits would show).
+SmartObjectContents deepPngContents(int w, int h, const char* name) {
+    auto image = std::make_shared<Image16>(w, h);
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) { uint16_t* p = image->pixel(x, y); p[0] = uint16_t(1000 + x * 37); p[1] = 20000; p[2] = uint16_t(3 + y); p[3] = 32768; }
+    SmartObjectContents c;
+    c.image = Image16Ptr(image);
+    encodePngImage16(*image, c.bytes);
+    c.fileName = name;
+    return c;
+}
+int pngDepth(const std::vector<uint8_t>& bytes) { return bytes.size() > 24 ? bytes[24] : 0; }
+int psdDepth(const std::vector<uint8_t>& bytes) { return bytes.size() > 23 ? (bytes[22] << 8 | bytes[23]) : 0; }
+} // namespace
+
+TEST_CASE(sources_keep_their_depth_and_instances_take_the_documents) {
+    auto deep = makeSmartObjectSource(deepPngContents(40, 10, "ramp.png"));
+    auto eight = makeSmartObjectSource(pngContents(10, 10, 200, "logo.png"));
+    REQUIRE(deep && eight);
+    CHECK(deep->image.u16() && eight->image.u8());
+    CHECK(decodeSmartObjectPng(*deep->bytes).u16() != nullptr);
+    // A 16-bit document: both placed at 16 bits; the 8-bit source is not changed.
+    Document doc(60, 30);
+    doc.sampleType = SampleType::U16;
+    placeSmartObject(doc, deep, 0, std::nullopt);
+    placeSmartObject(doc, eight, 1, std::nullopt);
+    REQUIRE(doc.layers.size() == 2);
+    for (const Layer& l : doc.layers) CHECK(l.isLiveSmartObject() && l.asset->image.u16() != nullptr);
+    CHECK(doc.layers[0].asset->image == deep->image);   // its own depth: shared, not copied
+    CHECK(eight->image.u8() != nullptr);
+    CHECK_EQ(int(doc.layers[0].asset->image.u16()->pixel(3, 0)[0]), 1000 + 3 * 37);
+    // Two instances of one source at another depth share the converted pixels.
+    placeSmartObject(doc, eight, 2, std::nullopt);
+    CHECK(doc.layers[2].asset->image == doc.layers[1].asset->image);
+    // An 8-bit document: the 16-bit source placed at 8 bits, the source still 16-bit.
+    Document flat(60, 30);
+    placeSmartObject(flat, deep, 0, std::nullopt);
+    CHECK(flat.layers[0].isLiveSmartObject() && flat.layers[0].asset->image.u8() != nullptr);
+    CHECK(deep->image.u16() != nullptr);
+    // Image > Mode keeps the instances live and the sources as they are.
+    std::string error;
+    REQUIRE(convertSampleType(flat, SampleType::U16, &error));
+    CHECK(flat.layers[0].isLiveSmartObject() && flat.layers[0].asset->image.u16() != nullptr);
+    CHECK(flat.smartObjects.at(deep->id)->image.u16() != nullptr);
+    // Replace at 16 bits: the new contents at the document's depth, the instance live.
+    CHECK_EQ(replaceSmartObjectSource(doc, eight->id, makeSmartObjectSource(deepPngContents(20, 10, "badge.png"))), 2);
+    CHECK(doc.layers[1].isLiveSmartObject() && doc.layers[1].asset->image.u16() != nullptr && doc.layers[1].name == "badge");
+    // Rasterize keeps the 16-bit pixels.
+    const AnyImage kept = doc.layers[0].asset->image;
+    rasterizeSmartObject(doc.layers[0]);
+    CHECK(!doc.layers[0].smartObject && doc.layers[0].asset->image == kept);
+}
+
+TEST_CASE(convert_and_edit_contents_at_sixteen_bits) {
+    Document doc(30, 20);
+    doc.sampleType = SampleType::U16;
+    auto layerOf = [](int w, int h, uint16_t r, const char* name, Point at) {
+        auto image = std::make_shared<Image16>(w, h);
+        const uint16_t value[4] = {r, 12345, 777, 32768};
+        image->fill(value);
+        return Layer(Asset::make(Image16Ptr(image), name), at);
+    };
+    doc.layers.push_back(layerOf(30, 20, 32768, "Back", Point(0, 0)));
+    doc.layers.push_back(layerOf(6, 4, 20001, "A", Point(5, 5)));
+    doc.layers.push_back(layerOf(4, 4, 9999, "B", Point(12, 8)));
+    auto before = renderFlattened16(doc);
+    std::string error;
+    auto id = convertToSmartObject(doc, {doc.layers[1].id, doc.layers[2].id}, &error);
+    REQUIRE(id.has_value());
+    const Layer& so = doc.layers[1];
+    REQUIRE(so.isLiveSmartObject() && so.asset->image.u16() != nullptr);
+    const SmartObjectSource& source = *doc.smartObjects.at(so.smartObject->sourceId);
+    CHECK(source.fileType == "8BPB" && source.image.u16() != nullptr);
+    CHECK_EQ(psdDepth(*source.bytes), 16);   // a 16-bit PSB
+    // It looks the same, at 16 bits (values off the 8-bit grid survive).
+    auto after = renderFlattened16(doc);
+    int diff = 0;
+    for (int y = 0; y < 20; y++) for (int x = 0; x < 30; x++) for (int k = 0; k < 4; k++) diff = std::max(diff, std::abs(int(before->pixel(x, y)[k]) - int(after->pixel(x, y)[k])));
+    CHECK(diff <= 1);
+    CHECK_EQ(int(after->pixel(6, 6)[0]), 20001);
+    // Its contents open as a 16-bit document with both layers.
+    auto contents = smartObjectContentsDocument(doc, so.smartObject->sourceId);
+    REQUIRE(contents.has_value());
+    CHECK(contents->sampleType == SampleType::U16);
+    CHECK_EQ(int(contents->layers.size()), 2);
+    // A PNG source's contents open at its depth, and are written back as a 16-bit PNG.
+    Document eightBit(40, 20);
+    auto png = makeSmartObjectSource(deepPngContents(40, 10, "ramp.png"));
+    placeSmartObject(eightBit, png, 0, std::nullopt);
+    auto pngDoc = smartObjectContentsDocument(eightBit, png->id);
+    REQUIRE(pngDoc.has_value());
+    CHECK(pngDoc->sampleType == SampleType::U16 && pngDoc->layers[0].asset->image.u16() != nullptr);
+    const std::vector<uint8_t> written = encodeSmartObjectContents(*pngDoc, *png);
+    CHECK_EQ(pngDepth(written), 16);
+    CHECK(decodeSmartObjectPng(written).u16() && decodeSmartObjectPng(written).u16()->pixel(5, 5)[0] == 1000 + 5 * 37);
+}
+
+TEST_CASE(sixteen_bit_instances_warp_and_take_the_cage) {
+    Document doc(120, 80);
+    doc.sampleType = SampleType::U16;
+    auto source = makeSmartObjectSource(pngContents(40, 20, 200, "banner.png"));
+    doc.smartObjects[source->id] = source;
+    doc.layers.push_back(smartObjectLayer(source, {20, 20, 60, 20, 60, 40, 20, 40}, "Banner", doc.sampleType));
+    std::string error;
+    REQUIRE(warpLayer(doc, doc.layers[0], TextWarp{"warpArc", 50, 0, 0, false}, &error));
+    REQUIRE(doc.layers[0].isLiveSmartObject());
+    CHECK(doc.layers[0].asset->image.u16() != nullptr && doc.layers[0].asset->image.height() > 20);
+    // Moved: drawn again from the contents at 16 bits.
+    doc.layers[0].transform.origin.x += 7;
+    CHECK_EQ(refreshSmartObjectRasters(doc), 1);
+    CHECK(doc.layers[0].isLiveSmartObject() && doc.layers[0].asset->image.u16() != nullptr);
+    // The cage on another instance.
+    doc.layers.push_back(smartObjectLayer(source, {20, 50, 60, 50, 60, 70, 20, 70}, "Banner 2", doc.sampleType));
+    auto cage = layerWarpCage(doc, doc.layers[1], &error);
+    REQUIRE(cage.has_value());
+    CHECK(previewWarpCage(doc, doc.layers[1], *cage, 32).has_value());
+    cage->xs[15] = 80; cage->ys[15] = 78;
+    REQUIRE(warpLayerToCage(doc, doc.layers[1], *cage, &error));
+    CHECK(doc.layers[1].isLiveSmartObject() && doc.layers[1].asset->image.u16() != nullptr);
+    CHECK(smartObjectWarp(*doc.layers[1].smartObject).has_value());
+}
+
+TEST_CASE(sixteen_bit_smart_objects_survive_projects_and_psd) {
+    Document doc(60, 30);
+    doc.sampleType = SampleType::U16;
+    auto deep = makeSmartObjectSource(deepPngContents(40, 10, "ramp.png"));
+    auto eight = makeSmartObjectSource(pngContents(10, 10, 200, "logo.png"));
+    placeSmartObject(doc, deep, 0, std::nullopt);
+    placeSmartObject(doc, eight, 1, std::nullopt);
+    // The project package: each source's PNG at its own depth.
+    const auto package = std::filesystem::temp_directory_path() / ("nekophoto-so16-" + std::to_string(std::rand()) + ".comp");
+    ProjectError error;
+    REQUIRE(saveProject(doc, std::nullopt, package.string(), error));
+    auto loaded = loadProject(package.string(), error);
+    REQUIRE(loaded.has_value());
+    CHECK(loaded->sampleType == SampleType::U16);
+    REQUIRE(loaded->smartObjects.size() == 2);
+    CHECK(loaded->smartObjects.at(deep->id)->image.u16() != nullptr);
+    CHECK(loaded->smartObjects.at(eight->id)->image.u8() != nullptr);
+    CHECK_EQ(int(loaded->smartObjects.at(deep->id)->image.u16()->pixel(7, 3)[0]), 1000 + 7 * 37);
+    for (const Layer& l : loaded->layers) CHECK(l.isLiveSmartObject() && l.asset->image.u16() != nullptr);
+    std::filesystem::remove_all(package);
+    // A 16-bit PSD: both instances come back live, the 16-bit source at 16 bits.
+    auto back = throughPsd(doc);
+    REQUIRE(back.has_value());
+    CHECK(back->document.sampleType == SampleType::U16);
+    REQUIRE(back->document.layers.size() == 2);
+    for (const Layer& l : back->document.layers) CHECK(l.isLiveSmartObject() && !l.smartObject->locked() && l.asset->image.u16() != nullptr);
+    CHECK(back->document.smartObjects.at(deep->id)->image.u16() != nullptr);
+    CHECK(back->document.smartObjects.at(eight->id)->image.u8() != nullptr);
+    // And back out again unchanged: the same source bytes, the same placements.
+    auto twice = throughPsd(back->document);
+    REQUIRE(twice.has_value());
+    CHECK(*twice->document.smartObjects.at(deep->id)->bytes == *deep->bytes);
+    CHECK(near(twice->document.layers[0].smartObject->quad, doc.layers[0].smartObject->quad));
+    // Smart Filters: a 16-bit PSD carries no cache NekoPhoto reads, so the stack comes back drawn on the document's
+    // canvas and still editable, its blocks as they were.
+    SmartFilterEntry blur;
+    blur.parameters = smartfilter::GaussianBlur{2};
+    std::string why;
+    REQUIRE(addSmartFilter(doc, doc.layers[1], blur, &why));
+    auto filtered = throughPsd(doc);
+    REQUIRE(filtered.has_value());
+    const Layer& f = filtered->document.layers[1];
+    REQUIRE(f.isLiveSmartObject());
+    CHECK(!f.smartObject->locked() && smartObjectFiltered(*f.smartObject));
+    auto stack = smartFilterStackOf(filtered->document, f);
+    REQUIRE(stack.has_value());
+    CHECK(stack->supported && stack->entries.size() == 1);
+    CHECK(f.smartObject->psdBlocks == doc.layers[1].smartObject->psdBlocks);
+    // Moved, it is drawn again at 16 bits.
+    Document moved = filtered->document;
+    moved.layers[1].transform.origin.x += 4;
+    CHECK_EQ(refreshSmartObjectRasters(moved), 1);
+    CHECK(moved.layers[1].isLiveSmartObject() && moved.layers[1].asset->image.u16() != nullptr);
 }
 
 TEST_MAIN()
