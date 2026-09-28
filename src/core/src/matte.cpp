@@ -649,20 +649,28 @@ AlphaPlane matteBand(const AlphaPlane& matte, const Image& guide, double bandFul
     for (size_t i = 0; i < region.size(); i++) if (region[i] == Unknown) slot[i] = unknowns++;
     const int nF = int(fs.size()), nB = int(bs.size());
     std::vector<Pair> pairs(static_cast<size_t>(unknowns));
+    std::vector<int32_t> chosenF, chosenB;
+    std::vector<float> toF, toB;
+    // A pair's fit to pixel p at (x, y), as the search scores it.
+    auto trial = [&](int x, int y, size_t p, int iF, int iB, Pair& best) {
+        const Candidate &f = fs[size_t(iF)], &b = bs[size_t(iB)];
+        float c[3];
+        solveColourAt(p, c);
+        const float dfx = float(f.x - x), dfy = float(f.y - y), dbx = float(b.x - x), dby = float(b.y - y);
+        const float spatial = 0.02f * (std::sqrt(dfx * dfx + dfy * dfy) / std::max(1.0f, std::sqrt(toF[p])) + std::sqrt(dbx * dbx + dby * dby) / std::max(1.0f, std::sqrt(toB[p])));
+        score(c, f.lr, f.lg, f.lb, b.lr, b.lg, b.lb, spatial, shape[p], best);
+    };
     if (unknowns && nF && nB) {
         // Each pixel's distance to the sure regions normalises the spatial cost: the nearest candidates are free.
-        const std::vector<float> toF = squaredDistanceTransform(eroded, true), toB = squaredDistanceTransform(dilated, false);
-        std::vector<int32_t> chosenF(static_cast<size_t>(unknowns), 0), chosenB(static_cast<size_t>(unknowns), 0);
+        toF = squaredDistanceTransform(eroded, true);
+        toB = squaredDistanceTransform(dilated, false);
+        chosenF.assign(static_cast<size_t>(unknowns), 0);
+        chosenB.assign(static_cast<size_t>(unknowns), 0);
         auto evaluate = [&](int x, int y, size_t p, int iF, int iB) {
             const size_t s = size_t(slot[p]);
-            const Candidate &f = fs[size_t(iF)], &b = bs[size_t(iB)];
-            float c[3];
-            solveColourAt(p, c);
-            const float dfx = float(f.x - x), dfy = float(f.y - y), dbx = float(b.x - x), dby = float(b.y - y);
-            const float spatial = 0.02f * (std::sqrt(dfx * dfx + dfy * dfy) / std::max(1.0f, std::sqrt(toF[p])) + std::sqrt(dbx * dbx + dby * dby) / std::max(1.0f, std::sqrt(toB[p])));
             Pair& best = pairs[s];
             const float before = best.cost;
-            score(c, f.lr, f.lg, f.lb, b.lr, b.lg, b.lb, spatial, shape[p], best);
+            trial(x, y, p, iF, iB, best);
             if (best.cost < before) { chosenF[s] = iF; chosenB[s] = iB; }
         };
         auto hash = [](uint32_t a, uint32_t b, uint32_t c) {
@@ -794,6 +802,38 @@ AlphaPlane matteBand(const AlphaPlane& matte, const Image& guide, double bandFul
             }
         debug->uncertainty.width = fullW; debug->uncertainty.height = fullH;
         debug->uncertainty.values = resizeLevels(uncertainty, width, height, fullW, fullH);
+        // Candidate instability: the pairs chosen around a band pixel (a 5 x 5 neighbourhood, every other pixel)
+        // scored on its own colour; the spread of the opacities of the best four.
+        Map instability(size_t(width) * height, 0.0f);
+        if (!chosenF.empty())
+            parallelRows(0, height, [&](int y0, int y1) {
+                for (int y = y0; y < y1; y++)
+                    for (int x = 0; x < width; x++) {
+                        const size_t p = at(x, y);
+                        if (region[p] != Unknown || pairs[size_t(slot[p])].cost >= 1e9f) continue;
+                        std::array<Pair, 9> tried;
+                        int n = 0;
+                        for (int j = -2; j <= 2; j += 2)
+                            for (int i = -2; i <= 2; i += 2) {
+                                const int sx = x + i, sy = y + j;
+                                if (sx < 0 || sy < 0 || sx >= width || sy >= height) continue;
+                                const int32_t q = slot[at(sx, sy)];
+                                if (q < 0) continue;
+                                trial(x, y, p, chosenF[size_t(q)], chosenB[size_t(q)], tried[size_t(n++)]);
+                            }
+                        for (int i = 1; i < n; i++)   // cheapest first (at most nine)
+                            for (int j = i; j > 0 && tried[size_t(j)].cost < tried[size_t(j - 1)].cost; j--) std::swap(tried[size_t(j)], tried[size_t(j - 1)]);
+                        const int k = std::min(n, 4);
+                        if (k < 2) continue;
+                        float mean = 0, spread = 0;
+                        for (int i = 0; i < k; i++) mean += tried[size_t(i)].alpha;
+                        mean /= float(k);
+                        for (int i = 0; i < k; i++) spread += (tried[size_t(i)].alpha - mean) * (tried[size_t(i)].alpha - mean);
+                        instability[p] = std::sqrt(spread / float(k));
+                    }
+            });
+        debug->instability.width = fullW; debug->instability.height = fullH;
+        debug->instability.values = resizeLevels(instability, width, height, fullW, fullH);
     }
     return fromLevels(result, width, height, fullW, fullH);
 }
