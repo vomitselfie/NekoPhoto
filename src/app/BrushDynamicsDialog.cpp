@@ -147,7 +147,25 @@ BrushDynamicsDialog::BrushDynamicsDialog(const BrushTip& tip, const QString& nam
     mouseSpeed_->setToolTip(tr("For a mouse only: moving slowly presses harder and a quick flick lifts, with a short ramp in at the start. A pen always uses its own pressure."));
     mouseSpeed_->setChecked(tip.mousePressureFromSpeed);
     layout->addWidget(mouseSpeed_);
-    int others = 0;
+    const std::optional<double> tiltShape = tiltShapeOf(tip.dynamics);
+    auto* tiltRow = new QHBoxLayout;
+    tiltShape_ = new QCheckBox(tr("Pen tilt shapes the tip"));
+    tiltShape_->setToolTip(tr("Like the side of a pencil: the tip flattens as the pen leans and turns the way it leans."));
+    tiltShape_->setChecked(tiltShape.has_value());
+    tiltRow->addWidget(tiltShape_);
+    tiltRow->addWidget(new QLabel(tr("Flattest")));
+    flattest_ = new QDoubleSpinBox;
+    flattest_->setRange(1, 100);
+    flattest_->setDecimals(0);
+    flattest_->setSuffix("%");
+    flattest_->setToolTip(tr("The tip's roundness with the pen fully tilted"));
+    flattest_->setValue(std::round(tiltShape.value_or(0.3) * 100));
+    flattest_->setEnabled(tiltShape_->isChecked());
+    connect(tiltShape_, &QCheckBox::toggled, flattest_, &QWidget::setEnabled);
+    tiltRow->addWidget(flattest_);
+    tiltRow->addStretch();
+    layout->addLayout(tiltRow);
+    int others = tiltShape ? -2 : 0;
     for (const DynamicsMapping& m : tip.dynamics)
         if (m.input != DynamicsInput::Pressure || (m.target != DynamicsTarget::Size && m.target != DynamicsTarget::Flow)) others++;
     if (others) {
@@ -223,6 +241,9 @@ void BrushDynamicsDialog::apply(BrushTip& tip) const {
     applyRow(size_, DynamicsTarget::Size, tip);
     tip.densityBySpacing = density_->isChecked();
     tip.mousePressureFromSpeed = mouseSpeed_->isChecked();
+    removeTiltShape(tip.dynamics);
+    if (tiltShape_->isChecked())
+        for (const DynamicsMapping& m : tiltShapesTip(flattest_->value() / 100)) tip.dynamics.push_back(m);
 }
 
 bool BrushDynamicsDialog::edit(QWidget* parent, const QString& presetId) {

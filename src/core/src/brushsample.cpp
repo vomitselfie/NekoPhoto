@@ -112,6 +112,7 @@ std::optional<RecordedStroke> recordedStrokeFromJson(const std::string& text, st
             s.tiltX = std::clamp(number("tiltX", 0), -90.0, 90.0);
             s.tiltY = std::clamp(number("tiltY", 0), -90.0, 90.0);
             s.twist = number("twist", 0);
+            s.twistReported = item.contains("twist");
             s.tangentialPressure = std::clamp(number("tangentialPressure", 0), -1.0, 1.0);
         }
         s.eraser = item.contains("eraser") && item["eraser"].is_boolean() && item["eraser"].get<bool>();
@@ -129,7 +130,7 @@ std::string recordedStrokeToJson(const RecordedStroke& stroke) {
             o["pressure"] = s.pressure;
             o["tiltX"] = s.tiltX;
             o["tiltY"] = s.tiltY;
-            o["twist"] = s.twist;
+            if (s.twistReported) o["twist"] = s.twist;
             o["tangentialPressure"] = s.tangentialPressure;
         }
         if (s.eraser) o["eraser"] = true;

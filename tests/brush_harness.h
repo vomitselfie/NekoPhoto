@@ -98,4 +98,43 @@ struct Scene {
 };
 std::vector<Scene> scenes(const std::vector<StrokeFixture>& fixtures, const std::vector<Preset>& presets);
 
+// ---- Brushes checked against expectations ---------------------------------------------------------------------------
+
+/// What a brush is expected to do on one stroke against another brush (docs/brush-engine.md, "Fixture brushes"):
+/// `measure` is width or peak at the stations where the stroke's input is high (4 and 5 of 10) over those where it is
+/// low (0 and 9), or the render; `expect` is up, down, turns (the width swings more), continuous (no jump between
+/// neighbouring stations) or differs (another render).
+struct Expectation {
+    std::string brush;        // a preset name
+    std::string stroke;       // a fixture name
+    std::string measure;
+    std::string expect;
+    std::string against;      // the preset it is compared with
+    std::string weakerThan;   // optional: a preset that changes more where the input is low (a tilt threshold holds it back)
+    std::string setting;      // what the brush sets, for messages
+};
+
+/// Brushes read from files, with their expectations.
+struct FixtureBrushes {
+    std::vector<Preset> presets;
+    std::vector<Expectation> expectations;
+    std::vector<std::string> notes;   // what the importer said about each file
+};
+
+/// The synthetic Procreate brushes in `folder` (tests/fixtures/brushes/procreate): every .brush its manifest.json
+/// lists, compared with the manifest's baseline brush. Empty when the folder or manifest is missing.
+FixtureBrushes syntheticProcreate(const std::string& folder);
+
+/// Third-party brush sets kept locally under `folder` (tests/local-fixtures, git-ignored), when its manifest.json
+/// exists: each listed brush is compared with itself without its mappings from the listed input. Nothing from these
+/// goes into the baseline. Nullopt when there is no manifest.
+std::optional<FixtureBrushes> localFixtures(const std::string& folder);
+
+/// The scenes the expectations paint (each brush and what it is compared with, on its stroke), without repeats.
+std::vector<Scene> expectationScenes(const std::vector<StrokeFixture>& fixtures, const FixtureBrushes& brushes);
+
+/// Paints and checks one expectation; `why` says what was measured.
+bool checkExpectation(const Expectation& expectation, const std::vector<StrokeFixture>& fixtures, const FixtureBrushes& brushes,
+                      std::string* why);
+
 } // namespace brushharness

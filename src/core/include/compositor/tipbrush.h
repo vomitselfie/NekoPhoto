@@ -35,6 +35,13 @@ struct BrushTip {
     bool randomFlipX = false, randomFlipY = false;
     double grainScale = 1;       // grain pixels per document pixel
     double grainDepth = 1;       // how strongly the grain modulates the dab, 0..1
+    /// Where the grain is fixed. Canvas: to the document, so the stroke reveals it (Photoshop's texture, Procreate's
+    /// texturized grain). Stroke: to the stroke, travelling `grainMovement` of each pixel walked along a smoothly turning
+    /// tangent, so it rolls with the stroke round curves (Procreate's moving grain) and a dab's jitter does not spin it.
+    /// Dab: to each dab, turning and flipping with it, the same in every dab.
+    enum class GrainMode { Canvas, Stroke, Dab };
+    GrainMode grainMode = GrainMode::Canvas;
+    double grainMovement = 1;    // Stroke: 0..1; at 0 the grain stays with the dab and only turns with the stroke
     /// How size, flow, opacity, angle, roundness, spacing, scatter and the grain follow the pen and chance
     /// (brushdynamics.h). Pressure on size, the jitters and the rest are all mappings here.
     BrushDynamics dynamics;
@@ -86,6 +93,10 @@ private:
     std::mt19937 rng_;
     std::optional<BrushSample> last_;
     double carried_ = 0;   // distance walked since the last dab
+    /// Stroke grain: the stroke's tangent, radians unwrapped, smoothed over about two diameters of travel, and the
+    /// distance at the dab it was last moved to.
+    double grainTangent_ = 0, grainTangentAt_ = 0;
+    bool grainTangentSet_ = false;
     std::array<bool, dynamicsTargetCount> randomOn_{};   // targets a Random mapping drives
     bool valid_ = false;
     /// Density by spacing on a 16-bit grid: an entry per 15-bit level, for the spacing ratio `density16K_`.

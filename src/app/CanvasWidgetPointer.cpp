@@ -56,6 +56,7 @@ void CanvasWidget::tabletEvent(QTabletEvent* e) {
     pen.tiltX = std::clamp(double(e->xTilt()), -90.0, 90.0);
     pen.tiltY = std::clamp(double(e->yTilt()), -90.0, 90.0);
     pen.twist = std::isfinite(e->rotation()) ? double(e->rotation()) : 0;
+    pen.twistReported = e->pointingDevice() && e->pointingDevice()->capabilities().testFlag(QInputDevice::Capability::Rotation);
     pen.tangentialPressure = std::clamp(double(e->tangentialPressure()), -1.0, 1.0);
     pen.stylus = true;
     pen.eraser = e->pointerType() == QPointingDevice::PointerType::Eraser;

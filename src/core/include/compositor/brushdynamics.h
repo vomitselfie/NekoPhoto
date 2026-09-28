@@ -22,7 +22,10 @@
 
 namespace compositor {
 
-enum class DynamicsInput { Pressure, Speed, Tilt, TiltDirection, Twist, Random, StrokeProgress };
+/// Roll is the barrel's twist when the pen reports one (BrushSample::twistReported) and the stroke's direction when it does
+/// not, so a tip that turns with the barrel on a pen that has one follows the stroke on a pen that has not.
+enum class DynamicsInput { Pressure, Speed, Tilt, TiltDirection, Twist, Random, StrokeProgress, Roll };
+constexpr int dynamicsInputCount = 8;
 enum class DynamicsTarget { Size, Flow, Opacity, Angle, Roundness, Spacing, Scatter, GrainDepth, GrainRotation };
 constexpr int dynamicsTargetCount = 9;
 
@@ -83,6 +86,14 @@ struct LegacyTipDynamics {
     double pressureSize = 0, minimumSize = 0, pressureFlow = 0;
 };
 BrushDynamics legacyDynamics(const LegacyTipDynamics& legacy);
+
+/// A tilted pencil's tip, for any tip brush: it flattens as the pen leans (Tilt on roundness, down to `flattest` at
+/// full tilt) and turns so its long side points the way the pen leans (TiltDirection on the angle, a depth of -360).
+BrushDynamics tiltShapesTip(double flattest);
+/// Whether `dynamics` has tiltShapesTip's mappings, and if so its `flattest`.
+std::optional<double> tiltShapeOf(const BrushDynamics& dynamics);
+/// `dynamics` without them.
+void removeTiltShape(BrushDynamics& dynamics);
 
 /// Names as brush.json stores them: "pressure", "tiltDirection", "size", "grainRotation"...
 const char* dynamicsInputName(DynamicsInput input);

@@ -28,6 +28,7 @@ Raw, as the device reported it (`CanvasWidget::tabletEvent`, or `mouseSample` fo
 | `tangentialPressure` | the airbrush wheel, -1..1 |
 | `stylus` | the pressure, tilt and twist are a pen's; false for a mouse |
 | `eraser` | the pen's eraser end |
+| `twistReported` | the pen reports its barrel's twist (Qt's Rotation capability; in a recorded stroke, a sample with `twist`) |
 
 Nothing is folded in at capture: pressure is not turned into size there, and tilt stays in degrees. Each engine reads
 what it uses.
@@ -96,6 +97,7 @@ output = offset + depth × curve(input)        (the range runs from offset to of
 | Twist | `twistAngle` as a fraction of a turn |
 | Random | a draw from the stroke's seeded generator; on angles, -1..1 |
 | StrokeProgress | `distance / (scale × diameter)` with a `scale`; else `progress` when the stroke's length is known; else 25 diameters, Photoshop's default Fade |
+| Roll | `twistAngle` as a fraction of a turn when the pen reports its twist, else the stroke's `direction`: a tip that turns with the barrel follows the stroke on a pen without one |
 
 ### Targets and the combination rule
 
@@ -110,6 +112,12 @@ output = offset + depth × curve(input)        (the range runs from offset to of
 | Scatter | the brush's scatter | 0..10 |
 | GrainDepth | the grain's depth | 0..1 |
 | GrainRotation | 0 degrees (the grain turned about the document's origin) | circular |
+
+**Grain modes** (`grainMode`): Canvas (the default) fixes the grain to the document, so a stroke reveals it; Stroke
+fixes it to the stroke, the grain travelling `grainMovement` (0..1) of each pixel walked along the stroke's tangent,
+smoothed over about two diameters so a corner or a jittered dab does not spin it; Dab fixes it to each dab, turning and
+flipping with it. GrainRotation turns it within whichever frame. `brush.json` keeps `grainMode` ("canvas", "stroke",
+"dab") and `grainMovement`.
 
 One rule for every brush and every importer:
 
@@ -170,8 +178,12 @@ it did; saving writes version 2.
 ### Editing
 
 The Dynamics… button in the Brush tool's options bar (for a tip brush) edits pressure on size and on flow, each as a
-curve with a minimum, and the two options. The brush's other mappings stay as they are. The changes are saved to the
-brush's folder with a new preview.
+curve with a minimum, the two options, and Pen tilt shapes the tip with its flattest roundness. The brush's other
+mappings stay as they are. The changes are saved to the brush's folder with a new preview.
+
+**A tilted pencil** (`tiltShapesTip(flattest)`, for any tip brush, which Pen tilt shapes the tip adds): Tilt on roundness
+from 1 upright to `flattest` at full tilt, and TiltDirection on the angle with a depth of −360, so the tip flattens as the
+pen leans and its long side points the way it leans, like the side of a pencil. The harness paints it as `tip_tilt_shape`.
 
 ## Importers
 
@@ -191,10 +203,56 @@ What each format's settings become. What a format holds that has no mapping yet 
 Texture, dual brush, colour dynamics, wet edges, noise and build-up are noted as left out. Versions 1 and 2 hold no
 dynamics.
 
-**Procreate (`.brushset`, `.brush`).** `dynamicsPressureSize` → Pressure → Size from 1 − that amount; `dynamicsJitterSize`
-→ Random → Size; `dynamicsPressureOpacity` → Pressure → Flow from 1 − that amount (Procreate's opacity is per dab);
-`dynamicsJitterOpacity` → Random → Flow; `shapeScatter` → Random → Angle (× 180 degrees). Speed and tilt settings are not
-decoded yet.
+**Procreate (`.brushset`, `.brush`).** Each setting below becomes a mapping; every scaling lives in one block at the top
+of `procreate.cpp` (`namespace scaling`), so the reference brushes made in Procreate can tune each in one place. Curves
+are the identity unless the row says otherwise. Confidence: *high* where the meaning is plain from the setting and real
+brushes agree, *assumed* where the direction or scale is a reading that the reference brushes (below) still have to
+confirm.
+
+| Procreate | Input → target | Offset, depth | Confidence |
+|---|---|---|---|
+| `dynamicsPressureSize` p | Pressure → Size | 1 − p, p | high |
+| `dynamicsJitterSize` j | Random → Size | 1, −j | high |
+| `dynamicsPressureOpacity` p | Pressure → Flow (Procreate's opacity is per dab) | 1 − p, p | high |
+| `dynamicsJitterOpacity` j | Random → Flow | 1, −j | high |
+| `shapeScatter` s | Random → Angle | 0, s × 180 degrees | high |
+| `dynamicsSpeedSize` a, −1..1 | Speed → Size, full at `fullSpeed` | 1, a: grows with speed when positive, shrinks when negative | sign and scale assumed |
+| `dynamicsSpeedOpacity` a, −1..1 | Speed → Opacity, full at `fullSpeed` | positive: 1 − a, a (slow strokes lighter); negative: 1, a (fast strokes lighter) | sign and scale assumed |
+| `plotSpacingSpeed` a, 0.. | Speed → Spacing, full at `fullSpeed` | 1, a: the spacing widens with speed | direction high, scale assumed |
+| `dynamicsTiltSize` a, −1..1 | Tilt → Size, tilt curve | 1, a: grows as the pen leans | sign assumed |
+| `dynamicsTiltOpacity` a | Tilt → Opacity, tilt curve | 1, −a: lighter as the pen leans | direction assumed |
+| `dynamicsTiltBleed` a | Tilt → Flow, tilt curve | 1, −`tiltBleedFlow` × a (0.5 × a): each dab thins | meaning and scale assumed |
+| `dynamicsTiltShapeRoundness` a, `…Minimum` m | Tilt → Roundness, tilt curve | 1, −a × (1 − m); nothing while m is 1, as in nearly every brush | high |
+| `shapeAzimuth` | TiltDirection → Angle | 0, −360: the tip's x axis points the way the pen leans | meaning high, which axis assumed |
+| `textureApplication` 0 (moving grain), `textureMovement` m | grain mode Stroke, `grainMovement` m (texturized grain, 1: Canvas) | not a mapping | which value is moving from the earlier reader; Movement's scale assumed |
+| `shapeRoll` | Roll → Angle (the barrel's twist, else the stroke's direction); `followStroke` off | 0, −360: the tip turns with the barrel | meaning high, sign assumed |
+
+The tip's angle turns counterclockwise on screen, while the azimuth, the twist and the stroke's direction turn
+clockwise in the document's y-down frame, hence the depth of −360. The sum on an angle is continuous across a turn: the
+harness's twist wrap (340 through 359, 0 and 1 to 20 degrees) paints without a jump, and `brush_dynamics_tests` holds
+the tip's angle to the barrel's quarter-degree steps across 359 → 0 → 1. A brush with both `shapeRoll` and a rotation
+that follows the stroke stops following the stroke on its own, since Roll follows it where the pen has no twist.
+`shapeRollMode` (not in any brush seen so far) is listed as not carried over.
+
+`fullSpeed` is 1500 document pixels per second: the speed at which a speed setting has its whole effect. Procreate
+measures speed on the screen, not in the document, so this is a guess to tune.
+
+**Tilt, as this reader takes it** (`scaling::tiltCurve`, the one place to change): Procreate's tilt is the pen's angle
+from upright, the same as the Tilt input (`tiltMagnitude`, 0 upright to 1 at 60 degrees). Each tilt setting has a tilt
+angle (`sizeTiltAngle`, `opacityTiltAngle`, `bleedTiltAngle`, `shapeRoundnessTiltAngle`; else `dynamicsTiltAngle`),
+stored as a fraction of Procreate's 0–90 degree tilt graph and read as the lean from upright at which the setting starts
+to count: the Tilt input's curve is zero up to it and rises straight to full at 60 degrees. Real brushes store 0.1 (9
+degrees) for most, so a slight lean starts it. If the reference brushes show the angle is measured from the screen, or
+the effect ramps differently, only `tiltCurve` changes. `dynamicsTiltCompression` (whether the grain scales with a tilted
+size) and `dynamicsTiltGradation` are not carried over.
+
+`dynamicsPressureSizeSpeed`, `dynamicsPressureOpacitySpeed` and `dynamicsPressureBleedSpeed` are not speed dynamics:
+their values follow `dynamicsPressureResponse` (0.3, 0.6 and so on together in real brushes), so they read as how quickly
+size, opacity and bleed catch up with a change of pressure. The engine has no such lag; they are left out and listed.
+
+What a brush uses that has no mapping is listed in the import's notes, one line naming each setting with the number of
+brushes using it (`notCarriedSettings` in `procreate.cpp`; a setting counts when it is off its neutral value, and a
+roundness setting only while its minimum is below full).
 
 **Clip Studio (`.sut`).** `BrushSizeEffector` with pressure → Pressure → Size from the effector's minimum;
 `BrushOpacityEffector` or `BrushFlowEffector` with pressure → Pressure → Flow from 0. The effector's own curve is not
@@ -207,13 +265,14 @@ mapping's curve with no change to the engine.
 
 **Fixtures.** Made in code (`standardFixtures`): a pressure ramp (0 → 1 → 0), a pressure sine, a speed sweep (slow,
 fast, slow at even timing), a tilt sweep, a twist sweep (a full turn, wrapping from 180 to -180 halfway), a straight
-line, a circle, an S curve, corners, a fast flick (ten reports over 240 pixels) and a long slow stroke (720 reports);
-and the JSON files under `tests/brush_fixtures/` (a recorded pen hook with tilt, twist and tangential pressure, and a
+line, a circle, an S curve, corners, a fast flick (ten reports over 240 pixels), a long slow stroke (720 reports), an
+azimuth sweep (the pen at 45 degrees from upright, leaning once round) and a twist wrap (the barrel from 340 through
+359, 0 and 1 to 20 degrees); and the JSON files under `tests/brush_fixtures/` (a recorded pen hook with tilt, twist and tangential pressure, and a
 mouse scribble with uneven timing). Every input a mapping can read has a fixture that moves it.
 
 **Presets.** The round tip hard and soft, the eraser (on an opaque grey layer), tip brushes made in code (a square tip
 following the stroke; a textured tip with jitters, scatter, count and pressure; a flat tip with a mapping on every pen
-input; a tight light-flow tip with density by spacing and mouse speed as pressure), the tips the importers make of their
+input; a tight light-flow tip with density by spacing and mouse speed as pressure; a tilted pencil), the tips the importers make of their
 own tests' files (the Photoshop `.abr` "Leaf", Procreate's "Soft Ink", Clip Studio's "Soft Pencil" and "Spray" when the
 build has SQLite; `tests/brush_import_fixtures.h` writes those files for both), and four MyPaint presets (pencil,
 charcoal, dry brush, calligraphy) when the build has libmypaint. Tip brushes use a fixed seed.
@@ -231,6 +290,28 @@ builds produce the same file. The test
 also checks sample derivation (unwrapping, speed, progress), the density option across 2–50% spacing, and the mouse
 speed option.
 
+**Fixture brushes.** `tests/fixtures/brushes/procreate/` holds synthetic Procreate brushes (`syn_00_baseline.brush` and
+copies with one setting changed, written by `make_fixtures.py` there) and a `manifest.json` that names, for each, the
+stroke it is checked on, what is measured and the direction expected against the baseline: `up` or `down` (the width or
+peak at the stations where the stroke's input is high, 4 and 5 of 10, over those where it is low, 0 and 9, against the
+same for the baseline), `turns` (the width swings as the tip turns), `continuous` (no jump between neighbouring
+stations) or `differs`. `synthetic_procreate_brushes_change_the_way_their_setting_says` checks every entry, and the
+brushes' scenes on their strokes join the baseline (8 and 16 bits). They test this reader and the engine, not
+Procreate's meaning: that is for brushes made in Procreate on an iPad with one setting each, which will replace the
+assumptions in the table above.
+
+`tests/local-fixtures/` (git-ignored) is for brush sets that may not be shared. With a `manifest.json` there:
+
+```json
+{"brushes": [{"set": "Some Set.brushset", "name": "Brush name", "input": "speed", "stroke": "speed_sweep",
+              "measure": "peak", "expect": "down", "diameter": 120}]}
+```
+
+`local_third_party_brushes_when_present` imports each set, prints the importer's notes (what was not carried over), and
+checks each brush against itself without its mappings from `input` (`diameter` paints it larger than the default 28
+pixels, for spacings too fine to step at that size). Nothing from them enters the baseline; without the manifest the
+test is skipped.
+
 **By hand.** `build/tests/brush_parity_tool list` names the fixtures and presets; `dump <folder> [filter]` writes every
 render as a PNG with `metrics.txt` and the fixtures as JSON; `render <stroke.json> <preset> <out.png>` paints one
 recorded stroke.
@@ -241,7 +322,7 @@ targets, the inputs and the migration of old presets.
 ## Automation
 
 `brush.stroke` takes, besides `points`, `pressure` and `pressures`: `tilts` (`[tiltX, tiltY]` degrees per point),
-`twists` (degrees per point), `times` (seconds per point; 8 ms apart by default) and `seed` (the tip brushes' jitter).
+`twists` (degrees per point; with them the pen reports its twist, which Roll reads), `times` (seconds per point; 8 ms apart by default) and `seed` (the tip brushes' jitter).
 Any pen field makes the stroke a stylus's. A recorded action keeps them (and, for a preset, the times and the seed), so
 a stroke replays exactly.
 
@@ -280,5 +361,8 @@ baseline's `u16/` section, with each scene's distance from its 8-bit render (`vs
 
 ## Not yet
 
-- Clip Studio's effector curves, texture coordinate modes (canvas, stroke, dab), tilt and twist shaping the tip's
-  geometry, stabilisation, a continuous swept round brush, and MyPaint's newer inputs.
+- Clip Studio's effector curves, stabilisation, a continuous swept round brush, and MyPaint's newer inputs.
+- Colour by tilt or pressure (Procreate's `dynamicsTilt/PressureHue`, `Saturation`, `Brightness`, `SecondaryColor` and the
+  colour jitters): a stroke's colour is one value for the whole stroke, laid down through its coverage, so a colour per dab
+  does not fit the dynamics layer as a target; it would need the stroke to carry colour per pixel. Listed as not carried
+  over.

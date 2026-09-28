@@ -10,6 +10,7 @@
 #include "zip.h"
 #include <algorithm>
 #include <cmath>
+#include <map>
 
 namespace compositor {
 
@@ -59,7 +60,115 @@ std::string text(const std::map<std::string, plist::Value>& s, const char* key) 
     return it != s.end() && it->second.kind == plist::Value::Kind::String && it->second.text != "$null" ? it->second.text : std::string();
 }
 
-struct Notes { int bundledShapes = 0, bundledGrains = 0, movingGrain = 0; };
+struct Notes {
+    int bundledShapes = 0, bundledGrains = 0;
+    std::map<std::string, int> notCarried;   // setting -> brushes using it
+};
+
+// ---- Procreate's dynamics, scaled in one place ---------------------------------------------------------------------
+//
+// Every Procreate setting this reader turns into a dynamics mapping (brushdynamics.h) is scaled here and nowhere
+// else, so the one-setting reference brushes made in Procreate can tune each in one spot. The mapping table in
+// docs/brush-engine.md lists the same; the assumptions it marks as pending are the ones those files will settle.
+namespace scaling {
+
+/// The speed, in document pixels per second, at which a speed setting has its full effect (assumed).
+constexpr double fullSpeed = 1500;
+
+/// dynamicsSpeedSize, -1..1: positive grows the size with speed, to 1 + amount at full speed; negative shrinks it.
+DynamicsMapping speedSize(double amount) {
+    return dynamicsMapping(DynamicsInput::Speed, DynamicsTarget::Size, 1, std::clamp(amount, -0.95, 1.0), fullSpeed);
+}
+
+/// dynamicsSpeedOpacity, -1..1: positive makes slow strokes lighter (from 1 - amount at rest to full at full speed);
+/// negative makes fast strokes lighter (to 1 + amount at full speed). Opacity is the most a stroke builds up to.
+DynamicsMapping speedOpacity(double amount) {
+    const double a = std::clamp(amount, -1.0, 1.0);
+    return a > 0 ? dynamicsMapping(DynamicsInput::Speed, DynamicsTarget::Opacity, 1 - a, a, fullSpeed)
+                 : dynamicsMapping(DynamicsInput::Speed, DynamicsTarget::Opacity, 1, a, fullSpeed);
+}
+
+/// plotSpacingSpeed, 0 and up: the spacing widens with speed, to 1 + amount times at full speed.
+DynamicsMapping speedSpacing(double amount) {
+    return dynamicsMapping(DynamicsInput::Speed, DynamicsTarget::Spacing, 1, std::clamp(amount, 0.0, 10.0), fullSpeed);
+}
+
+// Tilt, as this reader takes Procreate's (assumed): the pen's angle from upright, which is what the Tilt input reads
+// (BrushSample::tiltMagnitude, 0 upright to 1 at `tiltFullAt` degrees). A setting's tilt angle (sizeTiltAngle and the
+// like, else dynamicsTiltAngle) is stored as a fraction of Procreate's 0..90 degree tilt graph and read as the lean
+// from upright at which the tilt starts to count: below it the setting does nothing, beyond it the effect ramps up to
+// full at `tiltFullAt`. If Procreate measures the angle from the screen instead, only tiltCurve changes.
+
+/// Degrees a stored tilt angle of 1 stands for.
+constexpr double tiltAngleRange = 90;
+/// Degrees from upright at which the Tilt input is full (brushsample.cpp).
+constexpr double tiltFullAt = 60;
+/// The share of the flow that a full dynamicsTiltBleed takes away at full tilt (assumed).
+constexpr double tiltBleedFlow = 0.5;
+
+/// The Tilt input's curve for a stored tilt angle: zero up to the angle, then straight up to full.
+DynamicsCurve tiltCurve(double storedAngle) {
+    DynamicsCurve curve;
+    const double start = std::clamp(storedAngle * tiltAngleRange / tiltFullAt, 0.0, 0.95);
+    if (start > 0) curve.points = {{start, 0}, {1, 1}};
+    return curve;
+}
+
+DynamicsMapping withCurve(DynamicsMapping m, const DynamicsCurve& curve) { m.curve = curve; return m; }
+
+/// dynamicsTiltSize, -1..1: the size grows as the pen leans, to 1 + amount at full tilt (negative: shrinks).
+DynamicsMapping tiltSize(double amount, double storedAngle) {
+    return withCurve(dynamicsMapping(DynamicsInput::Tilt, DynamicsTarget::Size, 1, std::clamp(amount, -0.95, 1.0)), tiltCurve(storedAngle));
+}
+
+/// dynamicsTiltOpacity, 0..1: the stroke gets lighter as the pen leans, to 1 - amount at full tilt.
+DynamicsMapping tiltOpacity(double amount, double storedAngle) {
+    return withCurve(dynamicsMapping(DynamicsInput::Tilt, DynamicsTarget::Opacity, 1, -std::clamp(amount, 0.0, 1.0)), tiltCurve(storedAngle));
+}
+
+/// dynamicsTiltBleed, 0..1: each dab thins as the pen leans, its flow down by `tiltBleedFlow` x amount at full tilt.
+DynamicsMapping tiltBleed(double amount, double storedAngle) {
+    return withCurve(dynamicsMapping(DynamicsInput::Tilt, DynamicsTarget::Flow, 1, -tiltBleedFlow * std::clamp(amount, 0.0, 1.0)), tiltCurve(storedAngle));
+}
+
+/// dynamicsTiltShapeRoundness and its Minimum: the tip flattens as the pen leans, to the minimum at full tilt (with a
+/// full amount); nothing while the minimum is 1, as in most brushes.
+DynamicsMapping tiltRoundness(double amount, double minimum, double storedAngle) {
+    const double depth = std::clamp(amount, 0.0, 1.0) * (1 - std::clamp(minimum, 0.0, 1.0));
+    return withCurve(dynamicsMapping(DynamicsInput::Tilt, DynamicsTarget::Roundness, 1, -depth), tiltCurve(storedAngle));
+}
+
+// Orientation. The tip's angle is counterclockwise on screen while the pen's azimuth, twist and the stroke's direction
+// turn clockwise in the document's y-down frame, so a tip that follows one of them takes a depth of -360: its x axis
+// then points the way the pen leans, or turns with the barrel. The sum of angles stays continuous across a turn.
+
+/// shapeAzimuth: the tip turns to the way the pen leans.
+DynamicsMapping azimuthAngle() { return dynamicsMapping(DynamicsInput::TiltDirection, DynamicsTarget::Angle, 0, -360); }
+
+/// shapeRoll: the tip turns with the barrel on a pen that reports its twist, and with the stroke on one that does not.
+DynamicsMapping rollAngle() { return dynamicsMapping(DynamicsInput::Roll, DynamicsTarget::Angle, 0, -360); }
+
+} // namespace scaling
+
+/// Settings that change how a brush paints and have no mapping here yet. A setting counts when it is off its
+/// neutral value; the import's notes list how many brushes use each. As a setting gets a mapping it leaves this list.
+/// dynamicsPressure*Speed are not speed dynamics: they follow dynamicsPressureResponse (how quickly the size,
+/// opacity and bleed catch up with the pressure), which has no counterpart in the engine.
+const char* const notCarriedSettings[] = {
+    "dynamicsPressureSizeSpeed", "dynamicsPressureOpacitySpeed", "dynamicsPressureBleedSpeed",
+    "dynamicsTiltCompression", "dynamicsTiltGradation", "shapeRollMode",
+    "dynamicsTiltHue", "dynamicsTiltSaturation", "dynamicsTiltBrightness", "dynamicsTiltSecondaryColor",
+    "dynamicsPressureHue", "dynamicsPressureSaturation", "dynamicsPressureBrightness", "dynamicsPressureSecondaryColor",
+    "dynamicsPressureBleed", "dynamicsPressureShapeRoundness"};
+
+bool inUse(const std::map<std::string, plist::Value>& s, const std::string& key) {
+    if (std::fabs(number(s, key.c_str(), 0)) < 1e-6) return false;
+    // Roundness by pressure or tilt does nothing while its minimum is the full roundness.
+    if (key.size() > 14 && key.compare(key.size() - 14, 14, "ShapeRoundness") == 0) return number(s, (key + "Minimum").c_str(), 1) < 1;
+    // Compression only qualifies a tilt on the size.
+    if (key == "dynamicsTiltCompression") return std::fabs(number(s, "dynamicsTiltSize", 0)) >= 1e-6;
+    return true;
+}
 
 std::optional<TipPreset> readBrush(const ZipArchive& zip, const std::string& folder, Notes& notes) {
     auto archive = zip.read(folder + "Brush.archive", 16u << 20);
@@ -92,7 +201,12 @@ std::optional<TipPreset> readBrush(const ZipArchive& zip, const std::string& fol
             tip.grain = procreateTip(*image, number(s, "textureInverted", 0) != 0, false);
             tip.grainDepth = std::clamp(number(s, "grainDepth", 1), 0.0, 1.0);
             tip.grainScale = 1 / std::clamp(number(s, "textureScale", 1), 0.05, 16.0);
-            if (number(s, "textureApplication", 1) == 0) notes.movingGrain++;
+            // Moving grain (textureApplication 0) rolls with the stroke, as far as its Movement says; texturized grain
+            // stays on the canvas.
+            if (number(s, "textureApplication", 1) == 0) {
+                tip.grainMode = BrushTip::GrainMode::Stroke;
+                tip.grainMovement = std::clamp(number(s, "textureMovement", 1), 0.0, 1.0);
+            }
         }
     } else if (!text(s, "bundledGrainPath").empty()) notes.bundledGrains++;
 
@@ -122,6 +236,28 @@ std::optional<TipPreset> readBrush(const ZipArchive& zip, const std::string& fol
     const double opacityJitter = std::clamp(number(s, "dynamicsJitterOpacity", 0), 0.0, 1.0);
     if (opacityJitter > 0) add(DynamicsInput::Random, DynamicsTarget::Flow, 1, -opacityJitter);
     if (angleJitter > 0) add(DynamicsInput::Random, DynamicsTarget::Angle, 0, angleJitter);
+    // Speed (scaling above).
+    if (const double v = number(s, "dynamicsSpeedSize", 0); std::fabs(v) >= 1e-6) tip.dynamics.push_back(scaling::speedSize(v));
+    if (const double v = number(s, "dynamicsSpeedOpacity", 0); std::fabs(v) >= 1e-6) tip.dynamics.push_back(scaling::speedOpacity(v));
+    if (const double v = number(s, "plotSpacingSpeed", 0); v >= 1e-6) tip.dynamics.push_back(scaling::speedSpacing(v));
+    // Tilt (scaling above), each from its own tilt angle when the brush has one.
+    const double tiltAngle = number(s, "dynamicsTiltAngle", 0);
+    auto angleFor = [&](const char* key) { return number(s, key, tiltAngle); };
+    if (const double v = number(s, "dynamicsTiltSize", 0); std::fabs(v) >= 1e-6) tip.dynamics.push_back(scaling::tiltSize(v, angleFor("sizeTiltAngle")));
+    if (const double v = number(s, "dynamicsTiltOpacity", 0); v >= 1e-6) tip.dynamics.push_back(scaling::tiltOpacity(v, angleFor("opacityTiltAngle")));
+    if (const double v = number(s, "dynamicsTiltBleed", 0); v >= 1e-6) tip.dynamics.push_back(scaling::tiltBleed(v, angleFor("bleedTiltAngle")));
+    if (inUse(s, "dynamicsTiltShapeRoundness"))
+        tip.dynamics.push_back(scaling::tiltRoundness(number(s, "dynamicsTiltShapeRoundness", 0), number(s, "dynamicsTiltShapeRoundnessMinimum", 1),
+                                                      angleFor("shapeRoundnessTiltAngle")));
+    // Orientation (scaling above). Roll already follows the stroke where the pen has no twist, so a brush with both
+    // stops following the stroke on its own rather than turning twice.
+    if (number(s, "shapeAzimuth", 0) != 0) tip.dynamics.push_back(scaling::azimuthAngle());
+    if (number(s, "shapeRoll", 0) != 0) {
+        tip.dynamics.push_back(scaling::rollAngle());
+        tip.followStroke = false;
+    }
+    for (const char* key : notCarriedSettings)
+        if (inUse(s, key)) notes.notCarried[key]++;
     tip.flow = number(s, "maxOpacity", 1);
     // Size: Procreate's are relative, with no pixel size in the file. 200 pixels for a maximum of 1 matches the
     // proportions of Procreate's own thumbnails (a 0.04 ink is a fine line, a 0.4 velvet a broad stroke).
@@ -162,7 +298,11 @@ std::optional<BrushImport> readProcreate(const uint8_t* data, size_t size, const
     auto note = [&](int count, const char* what) { if (count) import.notes.push_back(what + std::string(": ") + std::to_string(count)); };
     note(notes.bundledShapes, "brushes whose shape is from Procreate's own library, not in the file (a soft round tip stands in)");
     note(notes.bundledGrains, "brushes whose grain is from Procreate's own library, not in the file (they paint without grain)");
-    note(notes.movingGrain, "brushes whose grain moves with the stroke (here it stays put on the canvas)");
+    if (!notes.notCarried.empty()) {
+        std::string list;
+        for (const auto& [key, count] : notes.notCarried) list += (list.empty() ? "" : ", ") + key + " " + std::to_string(count);
+        import.notes.push_back("settings not carried over, with the brushes using each: " + list);
+    }
     if (import.brushes.empty()) { if (error) *error = "the file holds no Procreate brush this reader can use"; return std::nullopt; }
     return import;
 }
