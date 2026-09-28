@@ -961,7 +961,7 @@ private:
     bool pathEditing_ = false;
     std::optional<compositor::Uuid> quickMaskLayer_, quickMaskReturnLayer_;
     std::optional<compositor::Uuid> filterMaskLayer_, filterMaskOwner_;
-    compositor::GrayPtr filterMaskSynced_;    // the proxy's mask as last written into the stack
+    compositor::AnyGray filterMaskSynced_;    // the proxy's mask as last written into the stack
     bool filterMaskShown_ = false;
     mutable std::pair<compositor::GrayPtr, compositor::ImagePtr> filterMaskView_;   // the mask as gray pixels, cached
     mutable compositor::GrayPtr filterMaskWhite_;

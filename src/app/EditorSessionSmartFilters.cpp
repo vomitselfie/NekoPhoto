@@ -7,6 +7,7 @@
 // with the mask selected, so every mask tool (brushes, fills, gradients, filters, Invert) works on it; endEdit writes
 // the mask into the stack inside the same step. Selecting another layer, saving or exporting takes the layer away.
 #include "EditorSession.h"
+#include "compositor/depth.h"
 #include "compositor/render.h"
 #include <algorithm>
 
@@ -178,13 +179,16 @@ bool EditorSession::beginFilterMaskEdit(const Uuid& id, bool show, QString* erro
     const int w = document_->width, h = document_->height;
     auto mask = documentMask(*stack, w, h);
     beginEdit(QT_TRANSLATE_NOOP("History", "Edit Filter Mask"));
-    Layer layer(Asset::make(std::make_shared<Image>(w, h), QCoreApplication::translate("Names", "Smart Filter Mask").toStdString()), Point(0, 0));
+    // The proxy is at the document's depth (painted with its brushes); the stack's mask stays Photoshop's 8-bit plane.
+    const std::string name = QCoreApplication::translate("Names", "Smart Filter Mask").toStdString();
+    const bool deep = document_->sampleType == SampleType::U16;
+    Layer layer(deep ? Asset::make(Image16Ptr(std::make_shared<Image16>(w, h)), name) : Asset::make(std::make_shared<Image>(w, h), name), Point(0, 0));
     LayerMask m;
-    m.asset = MaskAsset::make(mask);
+    m.asset = deep ? MaskAsset::make(Gray16Ptr(widenGray(*mask))) : MaskAsset::make(mask);
     layer.mask = m;
     filterMaskLayer_ = layer.id;
     filterMaskOwner_ = id;
-    filterMaskSynced_ = layer.mask->asset.image.u8();
+    filterMaskSynced_ = layer.mask->asset.image;
     filterMaskShown_ = show;
     document_->layers.push_back(layer);
     setActiveLayer(layer.id);
@@ -234,14 +238,21 @@ void EditorSession::syncFilterMask() {
     if (!owner) return;
     Layer* proxy = document_->find(*filterMaskLayer_);
     Layer* layer = document_->find(*owner);
-    if (!proxy->mask || !proxy->mask->asset.image.u8() || proxy->mask->asset.image.u8() == filterMaskSynced_) return;
+    if (!proxy->mask || !proxy->mask->asset.image || proxy->mask->asset.image == filterMaskSynced_) return;
     auto stack = smartFilterStackOf(*document_, *layer);
     if (!stack || !stack->supported) return;
     // The mask as it sits on the canvas (it may have been moved).
     const int w = document_->width, h = document_->height;
     const uint8_t background = proxy->mask->placement ? LayerMask::background(*proxy->mask->asset.thumbnail) : stack->maskDefault;
     auto mask = std::make_shared<GrayImage>(w, h, background);
-    sampleMaskCoverage(*proxy->mask->asset.image.u8(), proxy->maskTransform(), document_->rect(), 1, background, *mask, false);
+    if (const Gray16Ptr& deep = proxy->mask->asset.image.u16()) {
+        // Painted at 16 bits, kept in the stack at 8.
+        Gray16 sampled(w, h, widen8(background));
+        sampleMaskCoverage(*deep, proxy->maskTransform(), document_->rect(), 1, widen8(background), sampled, false);
+        mask = narrowGray(sampled);
+    } else if (const GrayPtr& eight = proxy->mask->asset.image.u8()) {
+        sampleMaskCoverage(*eight, proxy->maskTransform(), document_->rect(), 1, background, *mask, false);
+    }
     stack->mask = mask;
     stack->maskBounds = {0, 0, w, h};
     stack->maskDefault = background;
@@ -253,7 +264,7 @@ void EditorSession::syncFilterMask() {
         document_->psdCarry = carry;
         emit error(QString::fromStdString(why));
     }
-    filterMaskSynced_ = proxy->mask->asset.image.u8();
+    filterMaskSynced_ = proxy->mask->asset.image;
 }
 
 } // namespace app

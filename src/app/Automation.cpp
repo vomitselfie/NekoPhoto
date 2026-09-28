@@ -209,7 +209,11 @@ bool worksAtDepth(const QString& method, const EditorSession& session) {
         {"paths.set", "edit.vector"}, {"paths.select", "edit.vector"}, {"paths.delete", "edit.vector"}, {"paths.addAnchor", "edit.vector"},
         {"paths.deleteAnchor", "edit.vector"}, {"paths.fromSelection", "edit.vector"}, {"paths.mergeComponents", "edit.vector"},
         {"paths.setOperation", "edit.vector"}, {"vectorMask.set", "edit.vector"}, {"vectorMask.delete", "edit.vector"}, {"vectorMask.target", "edit.vector"},
-        {"layers.setStyle", "edit.style"}, {"layers.applyStyle", "edit.style"}};
+        {"layers.setStyle", "edit.style"}, {"layers.applyStyle", "edit.style"},
+        {"smartObject.convert", "edit.smartObject"}, {"smartObject.place", "edit.smartObject"}, {"smartObject.replace", "edit.smartObject"},
+        {"smartObject.rasterize", "edit.smartObject"}, {"smartObject.addFilter", "edit.smartObject"}, {"smartObject.setFilter", "edit.smartObject"},
+        {"smartObject.removeFilter", "edit.smartObject"}, {"smartObject.moveFilter", "edit.smartObject"}, {"smartObject.filterMask", "edit.smartObject"},
+        {"smartObject.editContents", "edit.smartObject"}, {"smartObject.commit", "edit.smartObject"}};
     if (always.contains(method)) return true;
     auto it = features.find(method);
     return it != features.end() && session.supportsFeature(it.value());
