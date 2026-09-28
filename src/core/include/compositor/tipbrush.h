@@ -115,6 +115,7 @@ private:
         double tc = 1, ts = 0, gc = 1, gs = 0, grainTurn = 0, grainStrength = 0;
         const Level* level = nullptr;
         const uint16_t* density = nullptr;   // density by spacing, indexed by the dab's value; null without
+        const double* grainFactor = nullptr; // what each grain level multiplies the value by; null: computed per pixel
         unsigned ceiling = 0;
         int x0 = 0, x1 = 0, y0 = 0, y1 = 0;
         bool flipX = false, flipY = false;
@@ -146,6 +147,10 @@ private:
     std::shared_ptr<std::vector<uint16_t>> densityTable_;
     std::vector<std::shared_ptr<std::vector<uint16_t>>> retiredDensity_;
     double densityK_ = -1;
+    /// The grain's factor per level for grain depth `grainFactorDepth_`, kept the same way.
+    std::shared_ptr<std::array<double, 256>> grainFactor_;
+    std::vector<std::shared_ptr<std::array<double, 256>>> retiredGrain_;
+    double grainFactorDepth_ = -1;
     std::vector<Stamp> pending_;   // placed, not yet drawn
     std::vector<TipDab>* trace_ = nullptr;
     size_t dabCount_ = 0;

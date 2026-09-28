@@ -38,12 +38,26 @@ double sample(const GrayImage& image, double x, double y) {
     x -= 0.5; y -= 0.5;
     const int ix = int(std::floor(x)), iy = int(std::floor(y));
     const double fx = x - ix, fy = y - iy;
+    if (ix >= 0 && iy >= 0 && ix + 1 < image.width() && iy + 1 < image.height()) {
+        // All four inside (most of a dab): the same sums without the edge tests.
+        const uint8_t* r0 = image.row(iy) + ix;
+        const uint8_t* r1 = r0 + image.width();
+        const double top = double(r0[0]) * (1 - fx) + double(r0[1]) * fx;
+        const double bottom = double(r1[0]) * (1 - fx) + double(r1[1]) * fx;
+        return top * (1 - fy) + bottom * fy;
+    }
     auto at = [&](int px, int py) -> double {
         return (px < 0 || py < 0 || px >= image.width() || py >= image.height()) ? 0.0 : image.at(px, py);
     };
     const double top = at(ix, iy) * (1 - fx) + at(ix + 1, iy) * fx;
     const double bottom = at(ix, iy + 1) * (1 - fx) + at(ix + 1, iy + 1) * fx;
     return top * (1 - fy) + bottom * fy;
+}
+
+/// std::lround for 0 <= v < 2^31, inline: the whole part plus one when the rest is a half or more (v - whole is exact).
+inline unsigned roundHalfUp(double v) {
+    const unsigned whole = unsigned(v);
+    return whole + (v - whole >= 0.5 ? 1u : 0u);
 }
 
 } // namespace
@@ -339,6 +353,19 @@ void TipStroke::dab(Point center, const BrushSample& pen, double direction, doub
         // The grain turned about the document's origin, when a mapping turns it.
         st.grainTurn = grain ? applyDynamics(dynamics, DynamicsTarget::GrainRotation, 0, pen, diameter_, grainRotationRandom) * pi / 180 : 0;
         st.gc = std::cos(st.grainTurn); st.gs = std::sin(st.grainTurn);
+        if (grain) {
+            // What each grain level multiplies the dab by, as a table when it pays: the depth held from the last dab
+            // (no mapping moves it) or a dab large enough to outnumber the table's 256 entries.
+            const bool held = grainFactor_ && grainFactorDepth_ == st.grainStrength;
+            if (!held && double(box.width) * box.height >= 1024) {
+                if (grainFactor_) retiredGrain_.push_back(std::move(grainFactor_));
+                auto table = std::make_shared<std::array<double, 256>>();
+                for (int g = 0; g < 256; g++) (*table)[size_t(g)] = 1 - st.grainStrength + st.grainStrength * uint8_t(g) / 255.0;
+                grainFactor_ = std::move(table);
+                grainFactorDepth_ = st.grainStrength;
+            }
+            if (grainFactor_ && grainFactorDepth_ == st.grainStrength) st.grainFactor = grainFactor_->data();
+        }
         st.tc = tc; st.ts = ts;
         st.grainOffset = grainOffset;
         st.density = static_cast<const uint16_t*>(density);
@@ -364,10 +391,39 @@ void TipStroke::stampRows(const Stamp& st, Coverage& coverage, int ya, int yb) c
     const unsigned ceiling = st.ceiling;
     const uint16_t* density = st.density;
     const int x0 = st.x0, x1 = st.x1;
+    const double* grainFactor = st.grainFactor;
+    const int grainMaskX = grain && (grain->width() & (grain->width() - 1)) == 0 ? grain->width() - 1 : -1;
+    const int grainMaskY = grain && (grain->height() & (grain->height() - 1)) == 0 ? grain->height() - 1 : -1;
+    // Along a row the tip's u and v are linear in x, so the span where the tip's image can land is an interval: the
+    // pixels outside it (a turned or flattened dab's box is mostly outside) are passed over, with a margin of two
+    // pixels, and the test below still decides each one inside, so the same pixels are drawn.
+    const double uStep = (c * step.x + s * step.y) / sx, vStep = (-s * step.x + c * step.y) / sy;
+    const double uLow = -1 / lx - shape.width() / 2.0, uHigh = (levelImage.width() + 1) / lx - shape.width() / 2.0;
+    const double vLow = -1 / ly - shape.height() / 2.0, vHigh = (levelImage.height() + 1) / ly - shape.height() / 2.0;
+    const int n = x1 - x0;
+    // The steps k in [0, n) where lo <= start + k * delta <= hi (the flips mirror the range), widened by two.
+    auto span = [n](double start, double delta, double lo, double hi, bool flip, int& k0, int& k1) {
+        if (flip) { const double t = lo; lo = -hi; hi = -t; }
+        if (delta == 0 || !std::isfinite(delta)) {
+            if (!(start >= lo - 1e-6 * (1 + std::fabs(lo)) && start <= hi + 1e-6 * (1 + std::fabs(hi)))) { k0 = n; k1 = n; }
+            return;
+        }
+        double a = (lo - start) / delta, b = (hi - start) / delta;
+        if (a > b) std::swap(a, b);
+        a = std::floor(a) - 2;
+        b = std::ceil(b) + 2;
+        k0 = std::max(k0, a <= 0 ? 0 : a >= n ? n : int(a));
+        k1 = std::min(k1, b < 0 ? 0 : b >= n ? n : int(b) + 1);
+    };
     for (int y = ya; y < yb; y++) {
         auto* row = coverage.row(y);
         Point d = toDocument.apply({x0 + 0.5, y + 0.5});
-        for (int x = x0; x < x1; x++, d = d + step) {
+        int k0 = 0, k1 = n;
+        span((c * (d.x - at.x) + s * (d.y - at.y)) / sx, uStep, uLow, uHigh, flipX, k0, k1);
+        span((-s * (d.x - at.x) + c * (d.y - at.y)) / sy, vStep, vLow, vHigh, flipY, k0, k1);
+        if (k0 >= k1) continue;
+        for (int k = 0; k < k0; k++) d = d + step;   // the same sums the loop would have made
+        for (int x = x0 + k0; x < x0 + k1; x++, d = d + step) {
             // Into the tip's frame: undo the rotation, then the scale, then the flips.
             const double vx = d.x - at.x, vy = d.y - at.y;
             double u = (c * vx + s * vy) / sx, v = (-s * vx + c * vy) / sy;
@@ -389,20 +445,24 @@ void TipStroke::stampRows(const Stamp& st, Coverage& coverage, int ya, int yb) c
                     py = (flipY ? -1 : 1) * (-s * vx + c * vy);
                 }
                 const double gxd = grainTurn != 0 ? gc * px + gs * py : px, gyd = grainTurn != 0 ? -gs * px + gc * py : py;
-                int gx = int(std::floor(gxd * tip_.grainScale)) % grain->width(), gy = int(std::floor(gyd * tip_.grainScale)) % grain->height();
-                if (gx < 0) gx += grain->width();
-                if (gy < 0) gy += grain->height();
-                value *= 1 - grainStrength + grainStrength * grain->at(gx, gy) / 255.0;
+                const int fx = int(std::floor(gxd * tip_.grainScale)), fy = int(std::floor(gyd * tip_.grainScale));
+                int gx, gy;
+                if (grainMaskX >= 0) gx = fx & grainMaskX;   // a power-of-two width wraps as the remainder would
+                else if ((gx = fx % grain->width()) < 0) gx += grain->width();
+                if (grainMaskY >= 0) gy = fy & grainMaskY;
+                else if ((gy = fy % grain->height()) < 0) gy += grain->height();
+                const uint8_t g = grain->at(gx, gy);
+                value *= grainFactor ? grainFactor[g] : 1 - grainStrength + grainStrength * g / 255.0;
             }
             if constexpr (deep) {
-                uint32_t add = uint32_t(std::lround(std::clamp(value, 0.0, 255.0) * (one16 / 255.0)));
+                uint32_t add = roundHalfUp(std::clamp(value, 0.0, 255.0) * (one16 / 255.0));
                 if (density) add = density[add];
                 if (!add) continue;
                 const uint32_t old = row[x];
                 if (old >= ceiling) continue;
                 row[x] = uint16_t(old + ((add * (ceiling - old) + one16 / 2) >> 15));
             } else {
-                unsigned add = unsigned(std::lround(std::clamp(value, 0.0, 255.0)));
+                unsigned add = roundHalfUp(std::clamp(value, 0.0, 255.0));
                 if (density) add = density[add];
                 if (!add) continue;
                 // Build up towards the dab's opacity (all the way, without an Opacity mapping).
@@ -441,6 +501,7 @@ void TipStroke::drawPending() {
     else drawOn(*grid_.gridCoverage());
     pending_.clear();
     retiredDensity_.clear();
+    retiredGrain_.clear();
 }
 
 namespace {
