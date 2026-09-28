@@ -117,6 +117,10 @@ editor, which opens them as tabs and raises its window, and quits (with
 (or canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map,
 grain, blur, motion-blur, noise, lens, gmic, background, text, fonts, brushes) opens that
 dialog; with `--screenshot` the dialog is what gets grabbed.
+`NEKOPHOTO_CPU=all|high|medium|low` sets the CPU power for one run, over Edit > Preferences > Performance: the worker
+pool gets all, three quarters, half or a quarter of the machine's threads, and medium and low also lower the process
+priority (nice 5 and 10; below normal on Windows).
+
 `--lang ja` (or `en`, `system`) sets the interface language for one run, over the
 Preferences choice; headless and scripted runs are English unless it is given, and
 the automation socket answers in English either way ([translating.md](translating.md)).

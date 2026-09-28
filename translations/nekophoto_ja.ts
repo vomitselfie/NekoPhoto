@@ -2,6 +2,33 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="ja_JP">
 <context>
+    <name>CpuPower</name>
+    <message>
+        <source>High</source>
+        <translation>高</translation>
+    </message>
+    <message>
+        <source>Medium</source>
+        <translation>中</translation>
+    </message>
+    <message>
+        <source>Low</source>
+        <translation>低</translation>
+    </message>
+    <message>
+        <source>All</source>
+        <translation>すべて</translation>
+    </message>
+    <message>
+        <source>%1: %2 of %3 cores</source>
+        <translation>%1:%3 コア中 %2 コア</translation>
+    </message>
+    <message>
+        <source>%1, gives way to other programs</source>
+        <translation>%1、ほかのプログラムを優先</translation>
+    </message>
+</context>
+<context>
     <name>History</name>
     <message>
         <source>Camera Raw Filter</source>
@@ -7072,6 +7099,14 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Takes effect the next time NekoPhoto starts.</source>
         <translation>NekoPhoto の次回起動時に反映されます。</translation>
+    </message>
+    <message>
+        <source>Performance</source>
+        <translation>パフォーマンス</translation>
+    </message>
+    <message>
+        <source>CPU power</source>
+        <translation>CPU パワー</translation>
     </message>
     <message>
         <source>AI background removal</source>

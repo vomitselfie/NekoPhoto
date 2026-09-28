@@ -12,6 +12,7 @@
 #elif defined(__linux__)
 #include <QtGui/qguiapplication_platform.h>
 #include <dlfcn.h>
+#include <sys/resource.h>
 #include <cstdint>
 #include <cstdlib>
 #endif
@@ -82,7 +83,17 @@ QString localServerName(const QString& socket) {
     return name;
 }
 
+void lowerProcessPriority(int level) {
+    if (level > 0) SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS);
+}
+
 #else
+
+void lowerProcessPriority(int level) {
+    // On Linux this sets the calling (main) thread; the worker pool, made after it, inherits the value, and the
+    // few threads Qt started earlier keep theirs. An unprivileged process can only lower its priority, never raise it.
+    if (level > 0) (void)setpriority(PRIO_PROCESS, 0, level >= 2 ? 10 : 5);
+}
 
 void attachParentConsole() {}
 

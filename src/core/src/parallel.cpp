@@ -93,8 +93,21 @@ private:
 
 } // namespace
 
+namespace {
+std::atomic<int> workerLimit{0};
+}
+
+int hardwareThreads() { return int(std::max(1u, std::thread::hardware_concurrency())); }
+
+void setWorkerLimit(int threads) { workerLimit.store(std::max(0, threads)); }
+
 int workerCount() {
-    static int n = std::max(1u, std::min(64u, std::thread::hardware_concurrency()));
+    // Settled once, with the pool: a limit set after the first loop has no effect.
+    static const int n = [] {
+        const int machine = std::min(64, hardwareThreads());
+        const int limit = workerLimit.load();
+        return limit > 0 ? std::min(limit, machine) : machine;
+    }();
     return n;
 }
 

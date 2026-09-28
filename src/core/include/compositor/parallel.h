@@ -7,8 +7,13 @@
 
 namespace compositor {
 
-/// Threads the pool uses (the machine's hardware concurrency, capped).
+/// Threads the pool uses (the machine's hardware concurrency, capped, or the limit set below).
 int workerCount();
+/// The machine's hardware concurrency (at least 1).
+int hardwareThreads();
+/// Caps the pool at `threads` (0: no cap). Only takes effect before the first parallel loop, when the pool is made;
+/// the app calls it at start-up from its CPU power setting.
+void setWorkerLimit(int threads);
 
 /// Runs `body(y0, y1)` over [begin, end) in chunks of at least `minRows` rows; returns when every chunk is done.
 void parallelFor(int begin, int end, int minRows, const std::function<void(int, int)>& body);

@@ -163,6 +163,7 @@ qt_add_executable(nekophoto
     VectorFiles.h
     VectorFiles.cpp
     Language.h
+    CpuPower.cpp
     Language.cpp
     Names.h
     Names.cpp

@@ -23,6 +23,7 @@
 #include "FontPicker.h"
 #include "SingleInstance.h"
 #include "Platform.h"
+#include "CpuPower.h"
 #include "Language.h"
 #include "ImageConvert.h"
 #include <QDialog>
@@ -223,6 +224,7 @@ int run(int argc, char** argv) {
     QApplication::setApplicationName("nekophoto");
     QApplication::setApplicationDisplayName("NekoPhoto");
     migrateFromOldName();
+    app::cpupower::apply();   // the pool's size and the priority, before anything runs a parallel loop
     QApplication::setApplicationVersion(QStringLiteral(COMPOSITOR_VERSION));
     // The desktop entry gives Wayland the app id and icon; naming it when it isn't installed only makes the portal complain.
     if (!QStandardPaths::locate(QStandardPaths::ApplicationsLocation, "nekophoto.desktop").isEmpty()) QApplication::setDesktopFileName("nekophoto");

@@ -35,4 +35,9 @@ QString localServerName(const QString& socket);
 /// profile on Windows (GetICMProfile). Wayland has no such property: Preferences takes a file there.
 QByteArray systemMonitorProfile();
 
+/// Lowers the whole process's scheduling priority so other programs get the CPU first: `level` 1 a little
+/// (nice 5; Windows below normal), 2 more (nice 10; Windows below normal too, as idle priority would starve the
+/// interface). 0 leaves it. The process can only lower itself.
+void lowerProcessPriority(int level);
+
 } // namespace app::platform

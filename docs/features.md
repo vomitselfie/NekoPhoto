@@ -90,6 +90,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Slices: the Slice tool (Shift+C) draws named rectangles, File > Export Slices writes each as PNG or JPEG; a PSD's slices (resource 1050) open as editable slices and go back out with the export ([artboards-slices.md](artboards-slices.md))
 - An open project follows its package on disk: when another app or an agent writes the `.comp`, the tab reloads in place (a package merely touched, or caught half written, is left alone, and unsaved work is never replaced without asking)
 
+- CPU power (Edit > Preferences > Performance): All, High, Medium or Low. Fewer cores for NekoPhoto's work, and at Medium and Low a lower priority, so a render or another heavy program running beside it gets the CPU first; `NEKOPHOTO_CPU=low` for one run
 - The interface in English or Japanese (Photoshop's Japanese terms): it follows the desktop's language, or Edit > Preferences > Language picks one; `--lang ja` for one run ([translating.md](translating.md) explains adding a language)
 
 ## Automation
@@ -173,6 +174,7 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 - 切り抜き、カンバスサイズ、画像解像度。イメージ > トリミングで内容に合わせてカンバスを切り詰め(透明部分または角の色で、選んだ辺のみ)。定規とピクセルグリッド
 - 開いているプロジェクトはディスク上の変更に追従します:他のアプリやエージェントが `.comp` を書き換えると、タブがその場で読み込み直します(触れただけの変更や書き込み途中は無視し、未保存の作業は確認なしに置き換えません)
 
+- CPU パワー(編集 > 環境設定 > パフォーマンス):すべて・高・中・低。NekoPhoto が使うコア数を減らし、中と低では優先度も下げるので、横で動かしているレンダリングなどの重い処理に CPU を譲ります。その回だけなら `NEKOPHOTO_CPU=low`
 - 画面表示は日本語と英語(用語は Photoshop 日本語版に準拠)。デスクトップの言語に合わせるか、編集 > 環境設定 > 言語 で選べます。`--lang ja` でその回だけ切り替えることもできます
 
 ### 自動化

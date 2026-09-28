@@ -3,6 +3,7 @@
 #include "ColorManagement.h"
 #include "Automation.h"
 #include "Theme.h"
+#include "CpuPower.h"
 #include "Language.h"
 #include <QSettings>
 #include <QSpinBox>
@@ -12,6 +13,7 @@
 #include <QDesktopServices>
 #include <QDialogButtonBox>
 #include <QDir>
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -67,6 +69,29 @@ PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent) {
     languageHint->setStyleSheet(hintStyle());
     languageRow->addWidget(languageHint, 2);
     layout->addWidget(languageBox);
+
+    // CPU power: how much of the machine NekoPhoto takes, for when something else (a render) should come first.
+    auto* performanceBox = new QGroupBox(tr("Performance"));
+    auto* performanceGrid = new QGridLayout(performanceBox);
+    performanceGrid->addWidget(new QLabel(tr("CPU power")), 0, 0);
+    auto* cpu = new QComboBox;
+    for (const QString& level : cpupower::levels()) cpu->addItem(cpupower::label(level), level);
+    cpu->setCurrentIndex(std::max(0, cpu->findData(cpupower::setting())));
+    performanceGrid->addWidget(cpu, 0, 1);
+    auto* cpuHint = new QLabel;
+    cpuHint->setWordWrap(true);
+    cpuHint->setStyleSheet(hintStyle());
+    performanceGrid->addWidget(cpuHint, 1, 0, 1, 2);
+    auto showCpu = [cpu, cpuHint] {
+        const QString level = cpu->currentData().toString();
+        QString text = cpupower::describe(level);
+        if (level != cpupower::current()) text += QStringLiteral(" ") + tr("Takes effect the next time NekoPhoto starts.");
+        cpuHint->setText(text);
+    };
+    connect(cpu, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [cpu, showCpu](int) { cpupower::setSetting(cpu->currentData().toString()); showCpu(); });
+    showCpu();
+    performanceGrid->setColumnStretch(1, 1);
+    layout->addWidget(performanceBox);
 
     auto* group = new QGroupBox(tr("AI background removal"));
     auto* v = new QVBoxLayout(group);
