@@ -28,6 +28,10 @@
 //       correlation with |alpha - truth| in the band, the AUC of finding errors over 0.1, and per tile of N pixels
 //       (default 128) the correlation of the tile's summed uncertainty with its refined and raw SAD, beside the
 //       count of the coarse mask's soft pixels (what ranks the detail pass's windows today).
+//   matte_tool signals <dir> <model.onnx|none> --out <prefix> [the eval options] [--tile N]
+//       writes <prefix>-tiles.csv (per tile: band and soft-pixel counts, summed residual, candidate instability,
+//       local alpha variance and colour-normalised residual, refined and raw SAD) and <prefix>-pixels.csv (a band
+//       sample with each signal and the error), for ranking regions of a second refinement pass.
 #include "compositor/blur.h"
 #include "compositor/png.h"
 #include "compositor/matte.h"
@@ -66,7 +70,8 @@ struct Options {
     std::vector<PointPrompt> prompts;   // run: click prompts for a prompt model instead of the whole-image pass
     std::string maskCache;   // eval: the model's masks are kept here and read back
     int jobs = 1;            // eval: images scored side by side
-    int tile = 128;          // residual: the tile size
+    int tile = 128;          // residual, signals: the tile size
+    std::string out;         // signals: the CSV prefix
     int size = 480;          // synth: the scenes' size
     int foregroundSpace = 0; // eval: -1 foreground estimation on stored values, 1 in linear light, 0 as the matting
 };
@@ -100,6 +105,7 @@ Options parse(int argc, char** argv, int from) {
         else if (a == "--fg-gamma") o.foregroundSpace = -1;
         else if (a == "--fg-linear") o.foregroundSpace = 1;
         else if (a == "--jobs") o.jobs = std::max(1, std::stoi(next()));
+        else if (a == "--out") o.out = next();
         else if (a == "--tile") o.tile = std::max(8, std::stoi(next()));
         else if (a == "--size") o.size = std::max(64, std::stoi(next()));
         else if (a == "--prompt") {
@@ -140,7 +146,12 @@ std::shared_ptr<GrayImage> maskFor(const Image& image, const std::string& model,
             if (coarse && !cachePath.empty()) writePngGray(cachePath, *coarse);
         }
         if (!coarse || detail <= 0) return coarse;
-        return subjectMaskDetailed(image, model, coarse.get(), detail, error);
+        const std::string detailPath = cachePath.empty() ? std::string() : cachePath.substr(0, cachePath.size() - 4) + ".detail" + std::to_string(detail) + ".png";
+        if (!detailPath.empty() && fs::exists(detailPath))
+            if (auto cached = readPngGray(detailPath, nullptr); cached && cached->width() == image.width() && cached->height() == image.height()) return cached;
+        auto detailed = subjectMaskDetailed(image, model, coarse.get(), detail, error);
+        if (detailed && !detailPath.empty()) writePngGray(detailPath, *detailed);
+        return detailed;
     }
     if (maskPath.empty()) { *error = "no model and no --mask"; return nullptr; }
     auto mask = readAlpha(maskPath, error);
@@ -751,6 +762,91 @@ int residualMode(int argc, char** argv) {
     return 0;
 }
 
+/// Per-tile and per-pixel candidate signals for a second refinement pass, written as CSV for offline analysis:
+/// <out>-tiles.csv has, per tile of the final matte, the pixel sums of each signal and the refined and raw SAD;
+/// <out>-pixels.csv one band pixel in 16 with each signal and |alpha - truth|.
+int signalsMode(int argc, char** argv) {
+    if (argc < 4) { std::fprintf(stderr, "usage: matte_tool signals <dir> <model.onnx|none> --out <prefix> [options]\n"); return 2; }
+    const std::string dir = argv[2], model = argv[3];
+    Options o = parse(argc, argv, 4);
+    if (!o.maskCache.empty()) fs::create_directories(o.maskCache);
+    if (o.settings.matting <= 0 || o.out.empty()) { std::fprintf(stderr, "signals needs --band and --out\n"); return 2; }
+    const std::vector<fs::path> files = pairFiles(dir, o);
+    std::FILE* tilesOut = std::fopen((o.out + "-tiles.csv").c_str(), "w");
+    std::FILE* pixelsOut = std::fopen((o.out + "-pixels.csv").c_str(), "w");
+    if (!tilesOut || !pixelsOut) { std::fprintf(stderr, "cannot write %s\n", o.out.c_str()); return 1; }
+    std::fprintf(tilesOut, "image,tx,ty,band,coarseSoft,finalSoft,u,inst,var,unorm,sad,rawSad\n");
+    std::fprintf(pixelsOut, "image,u,inst,var,unorm,soft,err\n");
+    std::mutex lock;
+    std::atomic<int> done{0};
+    forEachJob(files.size(), o.jobs, [&](size_t k) {
+        Loaded in;
+        if (!loadPair(files[k], model, o, in)) return;
+        MatteDebug debug;
+        const AlphaPlane plane = refineMatte(AlphaPlane(*in.mask), *in.image, o.settings, 0, &debug);
+        if (!debug.trimap || debug.trimap->width() != plane.width) return;
+        const int w = plane.width, h = plane.height, T = o.tile, r = 2;
+        // Local statistics over 5 x 5 boxes: the final alpha's variance and the image's colour spread.
+        std::vector<double> sa(size_t(w + 1) * size_t(h + 1), 0), saa = sa, sc = sa, scc = sa;
+        auto I = [&](int x, int y) { return size_t(y) * size_t(w + 1) + size_t(x); };
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++) {
+                const double a = plane.at(x, y);
+                const uint8_t* px = in.image->pixel(x, y);
+                const double luma = (0.299 * px[0] + 0.587 * px[1] + 0.114 * px[2]) / 255.0;
+                sa[I(x + 1, y + 1)] = a + sa[I(x, y + 1)] + sa[I(x + 1, y)] - sa[I(x, y)];
+                saa[I(x + 1, y + 1)] = a * a + saa[I(x, y + 1)] + saa[I(x + 1, y)] - saa[I(x, y)];
+                sc[I(x + 1, y + 1)] = luma + sc[I(x, y + 1)] + sc[I(x + 1, y)] - sc[I(x, y)];
+                scc[I(x + 1, y + 1)] = luma * luma + scc[I(x, y + 1)] + scc[I(x + 1, y)] - scc[I(x, y)];
+            }
+        auto boxVar = [&](const std::vector<double>& s1, const std::vector<double>& s2, int x, int y) {
+            const int x0 = std::max(0, x - r), y0 = std::max(0, y - r), x1 = std::min(w, x + r + 1), y1 = std::min(h, y + r + 1);
+            const double n = double(x1 - x0) * double(y1 - y0);
+            const double m = (s1[I(x1, y1)] - s1[I(x0, y1)] - s1[I(x1, y0)] + s1[I(x0, y0)]) / n;
+            const double mm = (s2[I(x1, y1)] - s2[I(x0, y1)] - s2[I(x1, y0)] + s2[I(x0, y0)]) / n;
+            return std::max(0.0, mm - m * m);
+        };
+        const int tw = (w + T - 1) / T, th = (h + T - 1) / T;
+        struct Tile { double band = 0, coarseSoft = 0, finalSoft = 0, u = 0, inst = 0, var = 0, unorm = 0, sad = 0, rawSad = 0; };
+        std::vector<Tile> tiles(size_t(tw) * size_t(th));
+        std::string pixels;
+        char line[160];
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++) {
+                const float a = plane.at(x, y), t = in.truth->at(x, y) / 255.0f;
+                Tile& tile = tiles[size_t(y / T) * size_t(tw) + size_t(x / T)];
+                tile.sad += std::fabs(a - t);
+                tile.rawSad += std::fabs(in.mask->at(x, y) / 255.0f - t);
+                if (in.mask->at(x, y) > 25 && in.mask->at(x, y) < 230) tile.coarseSoft += 1;
+                if (a > 0.02f && a < 0.98f) tile.finalSoft += 1;
+                const double var = boxVar(sa, saa, x, y);
+                tile.var += var;
+                if (debug.trimap->at(x, y) != 128) continue;
+                const float u = debug.uncertainty.at(x, y), inst = debug.instability.at(x, y);
+                const double unorm = u / (std::sqrt(boxVar(sc, scc, x, y)) + 0.05);
+                tile.band += 1; tile.u += u; tile.inst += inst; tile.unorm += unorm;
+                if ((x + y * 5) % 16) continue;
+                std::snprintf(line, sizeof line, "%s,%.4f,%.4f,%.5f,%.4f,%.4f,%.4f\n", in.stem.c_str(), u, inst, var, unorm, 1 - std::fabs(2 * a - 1), std::fabs(a - t));
+                pixels += line;
+            }
+        std::string rows;
+        for (int ty = 0; ty < th; ty++)
+            for (int tx = 0; tx < tw; tx++) {
+                const Tile& t = tiles[size_t(ty) * size_t(tw) + size_t(tx)];
+                std::snprintf(line, sizeof line, "%s,%d,%d,%.0f,%.0f,%.0f,%.3f,%.3f,%.4f,%.3f,%.3f,%.3f\n", in.stem.c_str(), tx, ty, t.band, t.coarseSoft, t.finalSoft, t.u, t.inst, t.var, t.unorm, t.sad, t.rawSad);
+                rows += line;
+            }
+        std::lock_guard<std::mutex> guard(lock);
+        std::fputs(rows.c_str(), tilesOut);
+        std::fputs(pixels.c_str(), pixelsOut);
+        std::fprintf(stderr, "\r%d / %zu", ++done, files.size());
+    });
+    std::fprintf(stderr, "\n");
+    std::fclose(tilesOut);
+    std::fclose(pixelsOut);
+    return 0;
+}
+
 /// Synthetic strokes from a ground-truth alpha: 1 on a cross through the solid core of the subject (pixels
 /// whose whole 31-pixel box is opaque), 2 on a 10-pixel border band where the truth is transparent.
 /// Empty when the subject has no solid core.
@@ -876,7 +972,8 @@ int main(int argc, char** argv) {
     if (argc >= 2 && std::strcmp(argv[1], "eval") == 0) return evalMode(argc, argv);
     if (argc >= 2 && std::strcmp(argv[1], "synth") == 0) return synthMode(argc, argv);
     if (argc >= 2 && std::strcmp(argv[1], "residual") == 0) return residualMode(argc, argv);
+    if (argc >= 2 && std::strcmp(argv[1], "signals") == 0) return signalsMode(argc, argv);
     std::fprintf(stderr, "usage: matte_tool run <image.png> <model.onnx|none> <outdir> [options]\n       matte_tool eval <dir> <model.onnx|none> [options]\n"
-                         "       matte_tool synth <outdir> [--size N]\n       matte_tool residual <dir> <model.onnx|none> [options]\n       matte_tool scribble <dir> [options]\n");
+                         "       matte_tool synth <outdir> [--size N]\n       matte_tool residual <dir> <model.onnx|none> [options]\n       matte_tool signals <dir> <model.onnx|none> --out <prefix> [options]\n       matte_tool scribble <dir> [options]\n");
     return 2;
 }

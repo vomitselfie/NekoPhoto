@@ -111,6 +111,9 @@ struct MatteDebug {
     std::shared_ptr<GrayImage> trimap, pairAlpha;
     std::shared_ptr<Image> chosenF, chosenB;
     AlphaPlane uncertainty;
+    /// How much the pairs chosen for a band pixel's neighbours disagree about its opacity (the spread of the
+    /// best four, 0..0.5; full size, 0 outside the band).
+    AlphaPlane instability;
 };
 /// The epsilon of the uncertainty's normalisation (linear-light units).
 constexpr float uncertaintyEpsilon = 0.05f;
