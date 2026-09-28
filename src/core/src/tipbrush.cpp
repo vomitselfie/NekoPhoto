@@ -225,6 +225,10 @@ TipStroke::TipStroke(BrushStroke& grid, BrushTip tip, double diameter, uint32_t 
         const double scale = double(next.width()) / tip_.shape->width();
         levels_.push_back({std::move(next), scale});
     }
+    for (Level& level : levels_) {
+        const uint8_t* p = level.image.row(0);
+        level.peak = *std::max_element(p, p + size_t(level.image.width()) * level.image.height());
+    }
     for (int i = 0; i < dynamicsTargetCount; i++) randomOn_[size_t(i)] = hasMapping(tip_.dynamics, DynamicsTarget(i), DynamicsInput::Random);
     valid_ = true;
 }
@@ -369,6 +373,15 @@ void TipStroke::dab(Point center, const BrushSample& pen, double direction, doub
         st.tc = tc; st.ts = ts;
         st.grainOffset = grainOffset;
         st.density = static_cast<const uint16_t*>(density);
+        {
+            // The largest step a pixel of this dab can take: the tip's brightest level at the flow, under the
+            // grain's largest factor, rounded as a pixel's value is (plus one against the last bit of rounding).
+            const double grainMost = grain ? std::max(1.0, 1 - st.grainStrength) : 1.0;
+            const double value = std::clamp(level.peak * std::fabs(flow) * grainMost, 0.0, 255.0);
+            unsigned most = std::min(coverage16 ? one16 : 255u, (coverage16 ? roundHalfUp(value * (one16 / 255.0)) : roundHalfUp(value)) + 1);
+            if (density) most = st.density[most];
+            st.most = most;
+        }
         st.x0 = int(box.minX()); st.x1 = int(box.maxX()); st.y0 = int(box.minY()); st.y1 = int(box.maxY());
         pending_.push_back(st);
         changed = changed.unionWith(box);
@@ -390,6 +403,12 @@ void TipStroke::stampRows(const Stamp& st, Coverage& coverage, int ya, int yb) c
     const bool flipX = st.flipX, flipY = st.flipY;
     const unsigned ceiling = st.ceiling;
     const uint16_t* density = st.density;
+    const unsigned most = st.most;
+    auto canRaise = [&](unsigned old) {
+        if (old >= ceiling) return false;
+        if constexpr (deep) return ((most * (ceiling - old) + one16 / 2) >> 15) != 0;
+        else return (most * (ceiling - old) + 127) / 255 != 0;
+    };
     const int x0 = st.x0, x1 = st.x1;
     const double* grainFactor = st.grainFactor;
     const int grainMaskX = grain && (grain->width() & (grain->width() - 1)) == 0 ? grain->width() - 1 : -1;
@@ -424,6 +443,9 @@ void TipStroke::stampRows(const Stamp& st, Coverage& coverage, int ya, int yb) c
         if (k0 >= k1) continue;
         for (int k = 0; k < k0; k++) d = d + step;   // the same sums the loop would have made
         for (int x = x0 + k0; x < x0 + k1; x++, d = d + step) {
+            // A pixel no value of this dab can raise (at its ceiling, or so near that the largest step rounds to
+            // nothing) is left as the full computation would leave it.
+            if (!canRaise(row[x])) continue;
             // Into the tip's frame: undo the rotation, then the scale, then the flips.
             const double vx = d.x - at.x, vy = d.y - at.y;
             double u = (c * vx + s * vy) / sx, v = (-s * vx + c * vy) / sy;

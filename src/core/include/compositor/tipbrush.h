@@ -103,7 +103,7 @@ public:
     size_t dabCount() const { return dabCount_; }
 
 private:
-    struct Level { GrayImage image; double scale; };   // the tip, halved, and its size relative to the original
+    struct Level { GrayImage image; double scale; int peak = 255; };   // the tip, halved, its size relative to the original, its brightest pixel
     /// The dab size at `sample` before its random part: what the spacing is measured in.
     double steadySize(const BrushSample& sample) const;
     /// Places the dabs of one spacing step (resolving their dynamics, in the random draws' order); drawPending draws them.
@@ -117,6 +117,7 @@ private:
         const uint16_t* density = nullptr;   // density by spacing, indexed by the dab's value; null without
         const double* grainFactor = nullptr; // what each grain level multiplies the value by; null: computed per pixel
         unsigned ceiling = 0;
+        unsigned most = 0;   // the largest value (after density) any pixel of the dab can add
         int x0 = 0, x1 = 0, y0 = 0, y1 = 0;
         bool flipX = false, flipY = false;
     };
