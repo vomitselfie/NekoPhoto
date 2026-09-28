@@ -32,7 +32,7 @@ BrushSample BrushSampleTrack::add(BrushSample s) {
     const double twist = std::isfinite(s.twist) ? s.twist * pi / 180 : 0;
     if (!last_) {
         s.dt = fallbackDt;
-        s.speed = s.acceleration = s.distance = 0;
+        s.speed = s.screenSpeed = s.acceleration = s.distance = 0;
         s.direction = 0;
         s.tiltAzimuth = azimuth;
         s.twistAngle = twist;
@@ -45,7 +45,12 @@ BrushSample BrushSampleTrack::add(BrushSample s) {
         s.distance = p.distance + step;
         s.direction = step > 1e-9 ? unwrapAngle(p.direction, std::atan2(dy, dx)) : p.direction;
         const double raw = step / s.dt;
-        s.speed = p.speed + (raw - p.speed) * (1 - std::exp(-s.dt / speedSmoothing));
+        const double smoothing = 1 - std::exp(-s.dt / speedSmoothing);
+        s.speed = p.speed + (raw - p.speed) * smoothing;
+        // On the screen: the same step at the zoom it was drawn at, smoothed the same way, so the same hand motion reads
+        // the same at any zoom. A rotated or flipped view keeps lengths, so only the scale matters.
+        const double scale = std::isfinite(s.viewScale) && s.viewScale > 0 ? s.viewScale : 1;
+        s.screenSpeed = p.screenSpeed + (raw * scale - p.screenSpeed) * smoothing;
         s.acceleration = (s.speed - p.speed) / s.dt;
         // With no tilt the azimuth means nothing: it keeps the last one rather than snapping to zero.
         s.tiltAzimuth = (tiltX == 0 && tiltY == 0) ? p.tiltAzimuth : unwrapAngle(p.tiltAzimuth, azimuth);
@@ -73,6 +78,8 @@ BrushSample interpolate(const BrushSample& a, const BrushSample& b, double t) {
     s.tiltY = mix(a.tiltY, b.tiltY);
     s.tangentialPressure = mix(a.tangentialPressure, b.tangentialPressure);
     s.speed = mix(a.speed, b.speed);
+    s.screenSpeed = mix(a.screenSpeed, b.screenSpeed);
+    s.viewScale = mix(a.viewScale, b.viewScale);
     s.acceleration = mix(a.acceleration, b.acceleration);
     s.tiltMagnitude = mix(a.tiltMagnitude, b.tiltMagnitude);
     s.tiltAzimuth = mix(a.tiltAzimuth, b.tiltAzimuth);
@@ -116,6 +123,8 @@ std::optional<RecordedStroke> recordedStrokeFromJson(const std::string& text, st
             s.tangentialPressure = std::clamp(number("tangentialPressure", 0), -1.0, 1.0);
         }
         s.eraser = item.contains("eraser") && item["eraser"].is_boolean() && item["eraser"].get<bool>();
+        const double scale = number("viewScale", 1);
+        s.viewScale = scale > 0 ? scale : 1;
         out.samples.push_back(s);
     }
     if (out.samples.empty()) { if (error) *error = "no samples"; return std::nullopt; }
@@ -134,6 +143,7 @@ std::string recordedStrokeToJson(const RecordedStroke& stroke) {
             o["tangentialPressure"] = s.tangentialPressure;
         }
         if (s.eraser) o["eraser"] = true;
+        if (s.viewScale != 1) o["viewScale"] = s.viewScale;
         samples.push_back(std::move(o));
     }
     nlohmann::json j = {{"format", "nekophoto-stroke"}, {"version", 1}, {"name", stroke.name}, {"stylus", stroke.stylus}, {"samples", samples}};

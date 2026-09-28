@@ -130,6 +130,36 @@ QString BrushDynamicsDialog::unavailableText() {
     return tr("Brush dynamics: pen pressure curves and spacing for imported tip brushes. The round tip and the MyPaint presets keep their own.");
 }
 
+QString BrushDynamicsDialog::inputLabel(DynamicsInput input) {
+    switch (input) {
+    case DynamicsInput::Pressure: return tr("Pressure");
+    case DynamicsInput::Speed: return tr("Speed (in the document)");
+    case DynamicsInput::ScreenSpeed: return tr("Speed (on screen)");
+    case DynamicsInput::Tilt: return tr("Tilt");
+    case DynamicsInput::TiltDirection: return tr("Tilt direction");
+    case DynamicsInput::Twist: return tr("Barrel rotation");
+    case DynamicsInput::Random: return tr("Random");
+    case DynamicsInput::StrokeProgress: return tr("Fade");
+    case DynamicsInput::Roll: return tr("Roll");
+    }
+    return {};
+}
+
+QString BrushDynamicsDialog::targetLabel(DynamicsTarget target) {
+    switch (target) {
+    case DynamicsTarget::Size: return tr("Size");
+    case DynamicsTarget::Flow: return tr("Flow");
+    case DynamicsTarget::Opacity: return tr("Opacity");
+    case DynamicsTarget::Angle: return tr("Angle");
+    case DynamicsTarget::Roundness: return tr("Roundness");
+    case DynamicsTarget::Spacing: return tr("Spacing");
+    case DynamicsTarget::Scatter: return tr("Scatter");
+    case DynamicsTarget::GrainDepth: return tr("Grain depth");
+    case DynamicsTarget::GrainRotation: return tr("Grain rotation");
+    }
+    return {};
+}
+
 BrushDynamicsDialog::BrushDynamicsDialog(const BrushTip& tip, const QString& name, QWidget* parent) : QDialog(parent) {
     setWindowTitle(tr("Brush Dynamics: %1").arg(name));
     auto* layout = new QVBoxLayout(this);
@@ -165,13 +195,25 @@ BrushDynamicsDialog::BrushDynamicsDialog(const BrushTip& tip, const QString& nam
     tiltRow->addWidget(flattest_);
     tiltRow->addStretch();
     layout->addLayout(tiltRow);
-    int others = tiltShape ? -2 : 0;
-    for (const DynamicsMapping& m : tip.dynamics)
-        if (m.input != DynamicsInput::Pressure || (m.target != DynamicsTarget::Size && m.target != DynamicsTarget::Flow)) others++;
+    int others = 0;
+    QStringList listed;
+    BrushDynamics rest = tip.dynamics;   // without the pencil's pair, which the checkbox above shows
+    removeTiltShape(rest);
+    for (const DynamicsMapping& m : rest)
+        if (m.input != DynamicsInput::Pressure || (m.target != DynamicsTarget::Size && m.target != DynamicsTarget::Flow)) {
+            others++;
+            const QString line = tr("%1 → %2").arg(inputLabel(m.input), targetLabel(m.target));
+            if (!listed.contains(line)) listed.push_back(line);
+        }
     if (others) {
         auto* note = new QLabel(tr("Other dynamics of this brush (%n: jitter, tilt, fade and the like) stay as they are.", nullptr, others));
         note->setWordWrap(true);
         layout->addWidget(note);
+        // Each by name, so a brush that follows the speed says which: on the screen or in the document.
+        auto* list = new QLabel(listed.join(QStringLiteral(", ")));
+        list->setWordWrap(true);
+        list->setEnabled(false);
+        layout->addWidget(list);
     }
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);

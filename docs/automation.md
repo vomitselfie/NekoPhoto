@@ -261,7 +261,8 @@ mask; with brush or eraser, `preset` paints with a MyPaint brush from
 `brush.presets`, or `"round"` for the plain tip, or an imported tip brush, at its own size unless `size`
 is given, and `pressure` 0..1 or `pressures`, one per point, drive it the way
 a pen would, as do `tilts` (`[tiltX, tiltY]` degrees per point), `twists` (degrees per point) and
-`times` (seconds per point, 8 ms apart by default); `seed` repeats a tip brush's jitter, so a recorded stroke
+`times` (seconds per point, 8 ms apart by default); `seed` repeats a tip brush's jitter, and `viewScale` (default 1)
+is the zoom the stroke is taken as drawn at, 2 for 200%, which speed-on-screen dynamics read, so a recorded stroke
 replays exactly), `brush.presets` (the MyPaint presets: `id`, `name`, `group`,
 `size`, `eraser`; `group` filters), `brush.import` (`path` or `paths`: Photoshop
 `.abr`, Procreate `.brushset`/`.brush`, Clip Studio `.sut` or images as tips;

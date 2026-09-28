@@ -102,6 +102,11 @@ TEST_CASE(inputs_read_speed_tilt_and_progress) {
     s.distance = 100;
     CHECK_NEAR(dynamicsInput(dynamicsMapping(DynamicsInput::Speed, DynamicsTarget::Size, 0, 1), s, 20, 0), 0.5, 1e-12);
     CHECK_NEAR(dynamicsInput(dynamicsMapping(DynamicsInput::Speed, DynamicsTarget::Size, 0, 1, 4000), s, 20, 0), 0.25, 1e-12);
+    // The screen's speed is its own field: the document's does not stand in for it.
+    CHECK_NEAR(dynamicsInput(dynamicsMapping(DynamicsInput::ScreenSpeed, DynamicsTarget::Size, 0, 1), s, 20, 0), 0.0, 1e-12);
+    s.screenSpeed = 500;
+    CHECK_NEAR(dynamicsInput(dynamicsMapping(DynamicsInput::ScreenSpeed, DynamicsTarget::Size, 0, 1), s, 20, 0), 0.25, 1e-12);
+    CHECK_NEAR(dynamicsInput(dynamicsMapping(DynamicsInput::ScreenSpeed, DynamicsTarget::Size, 0, 1, 1000), s, 20, 0), 0.5, 1e-12);
     CHECK_NEAR(dynamicsInput(dynamicsMapping(DynamicsInput::Tilt, DynamicsTarget::Size, 0, 1), s, 20, 0), 0.5, 1e-12);
     // Progress over 10 diameters of 20 pixels: 100 pixels is halfway; without a scale, the whole stroke's progress.
     CHECK_NEAR(dynamicsInput(dynamicsMapping(DynamicsInput::StrokeProgress, DynamicsTarget::Size, 0, 1, 10), s, 20, 0), 0.5, 1e-12);
@@ -151,6 +156,9 @@ TEST_CASE(roll_follows_the_barrel_or_the_stroke_without_a_jump_at_359_to_0) {
     pen.add(a);
     CHECK_NEAR(std::remainder(applyDynamics(roll, DynamicsTarget::Angle, 0, pen.add(b), 20), 360.0), -30.0, 1e-9);
     CHECK(dynamicsInputFromName("roll") == DynamicsInput::Roll);
+    CHECK(dynamicsInputFromName("screenSpeed") == DynamicsInput::ScreenSpeed);
+    CHECK(std::string(dynamicsInputName(DynamicsInput::ScreenSpeed)) == "screenSpeed");
+    CHECK(std::string(dynamicsInputName(DynamicsInput::Speed)) == "speed");
     CHECK(std::string(dynamicsInputName(DynamicsInput::Roll)) == "roll");
 }
 
@@ -273,6 +281,55 @@ TEST_CASE(the_old_settings_are_mappings_that_paint_the_same) {
     REQUIRE(again.has_value());
     CHECK_EQ(again->tip.dynamics.size(), d.size());
     fs::remove_all(dir);
+}
+
+TEST_CASE(screen_speed_is_the_document_step_at_the_view_scale_smoothed_the_same) {
+    // Two strokes a report every 8 ms: one 4 pixels a step at 100%, one 1 pixel a step at 400%. The same hand motion:
+    // the screen speed agrees at every sample, the document speed is four times apart.
+    BrushSampleTrack atFull, atFour;
+    for (int i = 0; i < 40; i++) {
+        BrushSample a, b;
+        a.time = b.time = i * 0.008;
+        a.position = {4.0 * i * (1 + 0.01 * i), 0};
+        b.position = {a.position.x / 4, 0};
+        b.viewScale = 4;
+        a = atFull.add(a);
+        b = atFour.add(b);
+        CHECK_NEAR(a.screenSpeed, b.screenSpeed, 1e-9 * std::max(1.0, a.screenSpeed));
+        CHECK_NEAR(a.speed, 4 * b.speed, 1e-9 * std::max(1.0, a.speed));
+        CHECK_NEAR(a.screenSpeed, a.speed, 1e-9 * std::max(1.0, a.speed));   // at 100% the two are one
+    }
+    // A missing or broken scale reads as 100%.
+    BrushSampleTrack broken;
+    BrushSample p, q;
+    q.position = {10, 0};
+    q.time = 0.01;
+    q.viewScale = 0;
+    broken.add(p);
+    const BrushSample r = broken.add(q);
+    CHECK_NEAR(r.screenSpeed, r.speed, 1e-12);
+    // Between two samples the screen speed and scale are mixed like the rest.
+    BrushSample x, y;
+    x.screenSpeed = 100; y.screenSpeed = 300; x.viewScale = 1; y.viewScale = 3;
+    CHECK_NEAR(interpolate(x, y, 0.5).screenSpeed, 200, 1e-12);
+    CHECK_NEAR(interpolate(x, y, 0.5).viewScale, 2, 1e-12);
+}
+
+TEST_CASE(a_recorded_stroke_keeps_its_view_scale) {
+    RecordedStroke stroke;
+    stroke.stylus = true;
+    BrushSample a, b;
+    a.viewScale = 2.5;
+    b.position = {5, 5};
+    b.time = 0.01;
+    stroke.samples = {a, b};
+    auto back = recordedStrokeFromJson(recordedStrokeToJson(stroke));
+    REQUIRE(back.has_value());
+    CHECK_NEAR(back->samples[0].viewScale, 2.5, 1e-12);
+    CHECK_NEAR(back->samples[1].viewScale, 1.0, 1e-12);   // not written at 100%, and read back as 100%
+    auto negative = recordedStrokeFromJson("[{\"x\": 1, \"y\": 2, \"viewScale\": -3}]");
+    REQUIRE(negative.has_value());
+    CHECK_EQ(negative->samples[0].viewScale, 1.0);
 }
 
 TEST_MAIN()

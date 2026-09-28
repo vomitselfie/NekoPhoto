@@ -29,6 +29,7 @@ Raw, as the device reported it (`CanvasWidget::tabletEvent`, or `mouseSample` fo
 | `stylus` | the pressure, tilt and twist are a pen's; false for a mouse |
 | `eraser` | the pen's eraser end |
 | `twistReported` | the pen reports its barrel's twist (Qt's Rotation capability; in a recorded stroke, a sample with `twist`) |
+| `viewScale` | screen points per document pixel where the stroke was drawn: the canvas's zoom (`Viewport::pointsPerPixel`), 1 at 100% and in a replay that does not say |
 
 Nothing is folded in at capture: pressure is not turned into size there, and tilt stays in degrees. Each engine reads
 what it uses.
@@ -39,6 +40,7 @@ what it uses.
 |---|---|
 | `dt` | seconds since the previous sample; 1/120 when the times do not say (the first sample, equal or missing times) |
 | `speed` | document pixels per second, smoothed with a 20 ms time constant |
+| `screenSpeed` | screen points per second: each step times its `viewScale`, smoothed the same way; equal to `speed` at 100% |
 | `acceleration` | of that speed |
 | `direction` | radians of travel, unwrapped |
 | `tiltMagnitude` | 0 upright to 1 at 60 degrees or more |
@@ -46,6 +48,12 @@ what it uses.
 | `twistAngle` | the twist in radians, unwrapped |
 | `distance` | document pixels since the stroke began |
 | `progress` | 0..1 along the stroke when its whole length is known (`deriveStroke`, a replay); -1 while painting |
+
+**Two speeds.** `speed` is measured in the document, so the same hand motion reads four times as fast at 400% as at
+100%; `screenSpeed` is measured on the screen and reads the same at any zoom. Native brushes keep the document's
+(Speed, and Mouse speed as pressure); Procreate's speed settings read the screen's (ScreenSpeed), as Procreate measures
+them. The view has no rotation, and a rotated or flipped view would not change either speed, since it keeps lengths:
+only the scale enters.
 
 Angles are unwrapped (`unwrapAngle`) so a twist going from 179 to -179 degrees reads as two degrees of turn, not 358.
 `interpolate` blends two samples along the unwrapped values, which is what a tip brush uses between events.
@@ -57,8 +65,10 @@ A recorded stroke is JSON (`recordedStrokeFromJson`, `recordedStrokeToJson`):
 
 ```json
 {"format": "nekophoto-stroke", "version": 1, "stylus": true,
- "samples": [{"t": 0, "x": 100, "y": 100, "pressure": 0.1, "tiltX": 0, "tiltY": 0, "twist": 0, "tangentialPressure": 0}]}
+ "samples": [{"t": 0, "x": 100, "y": 100, "pressure": 0.1, "tiltX": 0, "tiltY": 0, "twist": 0, "tangentialPressure": 0, "viewScale": 2}]}
 ```
+
+(`viewScale` is written only when it is not 1.)
 
 A bare array of samples also reads; missing fields take their defaults, and a stroke with `"stylus": false` reads with a
 mouse's neutral values whatever it holds.
@@ -91,7 +101,8 @@ output = offset + depth × curve(input)        (the range runs from offset to of
 | Input | Value, 0..1 |
 |---|---|
 | Pressure | the pen's pressure (a mouse: 1, or its speed when simulated) |
-| Speed | `speed / scale`, `scale` in document pixels per second (default 2000) |
+| Speed | `speed / scale`, `scale` in document pixels per second (default 2000); shown as "Speed (in the document)" |
+| ScreenSpeed | `screenSpeed / scale`, `scale` in screen points per second (default 2000); shown as "Speed (on screen)" |
 | Tilt | `tiltMagnitude` |
 | TiltDirection | `tiltAzimuth` as a fraction of a turn |
 | Twist | `twistAngle` as a fraction of a turn |
@@ -216,9 +227,9 @@ confirm.
 | `dynamicsPressureOpacity` p | Pressure → Flow (Procreate's opacity is per dab) | 1 − p, p | high |
 | `dynamicsJitterOpacity` j | Random → Flow | 1, −j | high |
 | `shapeScatter` s | Random → Angle | 0, s × 180 degrees | high |
-| `dynamicsSpeedSize` a, −1..1 | Speed → Size, full at `fullSpeed` | 1, a: grows with speed when positive, shrinks when negative | sign and scale assumed |
-| `dynamicsSpeedOpacity` a, −1..1 | Speed → Opacity, full at `fullSpeed` | positive: 1 − a, a (slow strokes lighter); negative: 1, a (fast strokes lighter) | sign and scale assumed |
-| `plotSpacingSpeed` a, 0.. | Speed → Spacing, full at `fullSpeed` | 1, a: the spacing widens with speed | direction high, scale assumed |
+| `dynamicsSpeedSize` a, −1..1 | ScreenSpeed → Size, full at `fullSpeed` | 1, a: grows with speed when positive, shrinks when negative | sign and scale assumed |
+| `dynamicsSpeedOpacity` a, −1..1 | ScreenSpeed → Opacity, full at `fullSpeed` | positive: 1 − a, a (slow strokes lighter); negative: 1, a (fast strokes lighter) | sign and scale assumed |
+| `plotSpacingSpeed` a, 0.. | ScreenSpeed → Spacing, full at `fullSpeed` | 1, a: the spacing widens with speed | direction high, scale assumed |
 | `dynamicsTiltSize` a, −1..1 | Tilt → Size, tilt curve | 1, a: grows as the pen leans | sign assumed |
 | `dynamicsTiltOpacity` a | Tilt → Opacity, tilt curve | 1, −a: lighter as the pen leans | direction assumed |
 | `dynamicsTiltBleed` a | Tilt → Flow, tilt curve | 1, −`tiltBleedFlow` × a (0.5 × a): each dab thins | meaning and scale assumed |
@@ -234,8 +245,12 @@ the tip's angle to the barrel's quarter-degree steps across 359 → 0 → 1. A b
 that follows the stroke stops following the stroke on its own, since Roll follows it where the pen has no twist.
 `shapeRollMode` (not in any brush seen so far) is listed as not carried over.
 
-`fullSpeed` is 1500 document pixels per second: the speed at which a speed setting has its whole effect. Procreate
-measures speed on the screen, not in the document, so this is a guess to tune.
+`fullSpeed` is 1500 screen points per second: the speed at which a speed setting has its whole effect. Procreate
+measures speed on the screen, so the three speed settings read ScreenSpeed and respond the same to the same hand motion
+at any zoom (`procreate_speed_responds_the_same_at_any_zoom` replays one screen stroke at 50, 100, 200 and 400% and
+holds the resolved size, opacity and spacing equal at every sample). Before 1.8.1 they read the document's speed with
+the same 1500, so at 100% nothing changed; the value itself is still a guess to tune. A Procreate brush imported
+before 1.8.1 and saved in the library keeps its document-speed mappings until it is imported again.
 
 **Tilt, as this reader takes it** (`scaling::tiltCurve`, the one place to change): Procreate's tilt is the pen's angle
 from upright, the same as the Tilt input (`tiltMagnitude`, 0 upright to 1 at 60 degrees). Each tilt setting has a tilt
@@ -322,9 +337,10 @@ targets, the inputs and the migration of old presets.
 ## Automation
 
 `brush.stroke` takes, besides `points`, `pressure` and `pressures`: `tilts` (`[tiltX, tiltY]` degrees per point),
-`twists` (degrees per point; with them the pen reports its twist, which Roll reads), `times` (seconds per point; 8 ms apart by default) and `seed` (the tip brushes' jitter).
-Any pen field makes the stroke a stylus's. A recorded action keeps them (and, for a preset, the times and the seed), so
-a stroke replays exactly.
+`twists` (degrees per point; with them the pen reports its twist, which Roll reads), `times` (seconds per point; 8 ms apart by default), `seed` (the tip brushes' jitter) and
+`viewScale` (the zoom the stroke is taken as drawn at, 1 by default: 2 for 200%), which ScreenSpeed reads.
+Any pen field makes the stroke a stylus's. A recorded action keeps them (for a preset, the times and the seed; the view
+scale when it is not 1), so a stroke replays exactly.
 
 ## 16 bits
 

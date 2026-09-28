@@ -72,25 +72,28 @@ struct Notes {
 // docs/brush-engine.md lists the same; the assumptions it marks as pending are the ones those files will settle.
 namespace scaling {
 
-/// The speed, in document pixels per second, at which a speed setting has its full effect (assumed).
+/// The speed, in screen points per second, at which a speed setting has its full effect. Procreate measures speed on
+/// the screen, so the speed settings read ScreenSpeed: the same hand motion gives the same response at any zoom. The
+/// 1500 is synthetic-only: it was 1500 document pixels per second before (the same at 100%), and no brush made in
+/// Procreate has checked it yet.
 constexpr double fullSpeed = 1500;
 
 /// dynamicsSpeedSize, -1..1: positive grows the size with speed, to 1 + amount at full speed; negative shrinks it.
 DynamicsMapping speedSize(double amount) {
-    return dynamicsMapping(DynamicsInput::Speed, DynamicsTarget::Size, 1, std::clamp(amount, -0.95, 1.0), fullSpeed);
+    return dynamicsMapping(DynamicsInput::ScreenSpeed, DynamicsTarget::Size, 1, std::clamp(amount, -0.95, 1.0), fullSpeed);
 }
 
 /// dynamicsSpeedOpacity, -1..1: positive makes slow strokes lighter (from 1 - amount at rest to full at full speed);
 /// negative makes fast strokes lighter (to 1 + amount at full speed). Opacity is the most a stroke builds up to.
 DynamicsMapping speedOpacity(double amount) {
     const double a = std::clamp(amount, -1.0, 1.0);
-    return a > 0 ? dynamicsMapping(DynamicsInput::Speed, DynamicsTarget::Opacity, 1 - a, a, fullSpeed)
-                 : dynamicsMapping(DynamicsInput::Speed, DynamicsTarget::Opacity, 1, a, fullSpeed);
+    return a > 0 ? dynamicsMapping(DynamicsInput::ScreenSpeed, DynamicsTarget::Opacity, 1 - a, a, fullSpeed)
+                 : dynamicsMapping(DynamicsInput::ScreenSpeed, DynamicsTarget::Opacity, 1, a, fullSpeed);
 }
 
 /// plotSpacingSpeed, 0 and up: the spacing widens with speed, to 1 + amount times at full speed.
 DynamicsMapping speedSpacing(double amount) {
-    return dynamicsMapping(DynamicsInput::Speed, DynamicsTarget::Spacing, 1, std::clamp(amount, 0.0, 10.0), fullSpeed);
+    return dynamicsMapping(DynamicsInput::ScreenSpeed, DynamicsTarget::Spacing, 1, std::clamp(amount, 0.0, 10.0), fullSpeed);
 }
 
 // Tilt, as this reader takes Procreate's (assumed): the pen's angle from upright, which is what the Tilt input reads

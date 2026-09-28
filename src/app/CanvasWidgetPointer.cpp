@@ -17,9 +17,11 @@ namespace app {
 // ---- Input ----------------------------------------------------------------------------
 
 // A mouse is a pen at half pressure without tilt or twist (compositor::mouseSample); the brushes read the pen raw.
-void CanvasWidget::mousePressEvent(QMouseEvent* e) { session_->pen = mouseSample({}, e->timestamp() / 1000.0); setFocus(); press(e->position(), e->button(), e->modifiers()); }
-void CanvasWidget::mouseMoveEvent(QMouseEvent* e) { session_->pen = mouseSample({}, e->timestamp() / 1000.0); move(e->position(), e->buttons(), e->modifiers()); }
-void CanvasWidget::mouseReleaseEvent(QMouseEvent* e) { session_->pen = mouseSample({}, e->timestamp() / 1000.0); release(e->position(), e->button(), e->modifiers()); }
+// Every sample carries the view's scale (screen points per document pixel), from which the brushes' screen speed comes;
+// the view has no rotation, and one would not change the scale.
+void CanvasWidget::mousePressEvent(QMouseEvent* e) { session_->pen = mouseSample({}, e->timestamp() / 1000.0); session_->pen.viewScale = session_->viewport.pointsPerPixel(); setFocus(); press(e->position(), e->button(), e->modifiers()); }
+void CanvasWidget::mouseMoveEvent(QMouseEvent* e) { session_->pen = mouseSample({}, e->timestamp() / 1000.0); session_->pen.viewScale = session_->viewport.pointsPerPixel(); move(e->position(), e->buttons(), e->modifiers()); }
+void CanvasWidget::mouseReleaseEvent(QMouseEvent* e) { session_->pen = mouseSample({}, e->timestamp() / 1000.0); session_->pen.viewScale = session_->viewport.pointsPerPixel(); release(e->position(), e->button(), e->modifiers()); }
 
 void CanvasWidget::mouseDoubleClickEvent(QMouseEvent* e) {
     // Double-clicking text with any tool opens its editor (the Text tool needs only a click).
@@ -60,6 +62,7 @@ void CanvasWidget::tabletEvent(QTabletEvent* e) {
     pen.tangentialPressure = std::clamp(double(e->tangentialPressure()), -1.0, 1.0);
     pen.stylus = true;
     pen.eraser = e->pointerType() == QPointingDevice::PointerType::Eraser;
+    pen.viewScale = session_->viewport.pointsPerPixel();
     session_->pen = pen;
     switch (e->type()) {
     case QEvent::TabletPress: setFocus(); press(e->position(), e->button(), e->modifiers()); break;

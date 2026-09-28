@@ -3140,6 +3140,78 @@ Add one from the Layers panel or Layer &gt; New Adjustment Layer.</source>
         <translation>ブラシのダイナミクス: 読み込んだ先端ブラシの筆圧カーブと間隔の設定です。円形の先端と MyPaint プリセットは独自の設定を使います。</translation>
     </message>
     <message>
+        <source>Pressure</source>
+        <translation>筆圧</translation>
+    </message>
+    <message>
+        <source>Speed (in the document)</source>
+        <translation>速度 (ドキュメント上)</translation>
+    </message>
+    <message>
+        <source>Speed (on screen)</source>
+        <translation>速度 (画面上)</translation>
+    </message>
+    <message>
+        <source>Tilt</source>
+        <translation>傾き</translation>
+    </message>
+    <message>
+        <source>Tilt direction</source>
+        <translation>傾きの方向</translation>
+    </message>
+    <message>
+        <source>Barrel rotation</source>
+        <translation>ペンの回転</translation>
+    </message>
+    <message>
+        <source>Random</source>
+        <translation>ランダム</translation>
+    </message>
+    <message>
+        <source>Fade</source>
+        <translation>フェード</translation>
+    </message>
+    <message>
+        <source>Roll</source>
+        <translation>ロール</translation>
+    </message>
+    <message>
+        <source>Size</source>
+        <translation>サイズ</translation>
+    </message>
+    <message>
+        <source>Flow</source>
+        <translation>流量</translation>
+    </message>
+    <message>
+        <source>Opacity</source>
+        <translation>不透明度</translation>
+    </message>
+    <message>
+        <source>Angle</source>
+        <translation>角度</translation>
+    </message>
+    <message>
+        <source>Roundness</source>
+        <translation>真円率</translation>
+    </message>
+    <message>
+        <source>Spacing</source>
+        <translation>間隔</translation>
+    </message>
+    <message>
+        <source>Scatter</source>
+        <translation>散布</translation>
+    </message>
+    <message>
+        <source>Grain depth</source>
+        <translation>テクスチャの深さ</translation>
+    </message>
+    <message>
+        <source>Grain rotation</source>
+        <translation>テクスチャの回転</translation>
+    </message>
+    <message>
         <source>Brush Dynamics: %1</source>
         <translation>ブラシのダイナミクス: %1</translation>
     </message>
@@ -3182,6 +3254,10 @@ Add one from the Layers panel or Layer &gt; New Adjustment Layer.</source>
     <message>
         <source>The tip&apos;s roundness with the pen fully tilted</source>
         <translation>ペンをいっぱいに傾けたときの先端の真円率</translation>
+    </message>
+    <message>
+        <source>%1 → %2</source>
+        <translation>%1 → %2</translation>
     </message>
     <message numerus="yes">
         <source>Other dynamics of this brush (%n: jitter, tilt, fade and the like) stay as they are.</source>

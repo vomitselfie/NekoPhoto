@@ -239,8 +239,8 @@ void EditorSession::endBrush() {
     commitRasterEdit(*stroke, strokeLayerId_, strokeMask_, name, strokeRegion_, tool_ != Tool::SpotHealing);
     strokeRegion_ = {};
     // An action recording gets the stroke as brush.stroke (the Brush and Eraser, on pixels or a mask): the points, the
-    // pen at each (pressure, tilt and twist from a stylus), and for a preset the times and the seed, so a replay
-    // paints the same.
+    // pen at each (pressure, tilt and twist from a stylus), for a preset the times and the seed, and the view's scale,
+    // so a replay paints the same.
     if (tool_ == Tool::Brush && ActionLibrary::instance().recording() && !strokePoints_.empty()) {
         QJsonArray points, pressures, tilts, twists, times;
         bool tilted = false, twisted = false;
@@ -260,6 +260,8 @@ void EditorSession::endBrush() {
         else step["color"] = foregroundColor.name();
         if (brushErase) step["erase"] = true;
         if (!brushPreset.isEmpty()) { step["preset"] = brushPreset; step["times"] = times; step["seed"] = double(strokeSeed_); }
+        // The zoom it was painted at, which screen-speed dynamics read; 100% is the default.
+        if (!strokeSamples_.empty() && strokeSamples_.front().viewScale != 1) step["viewScale"] = std::round(strokeSamples_.front().viewScale * 1e6) / 1e6;
         if (pen.stylus) {
             step["pressures"] = pressures;
             if (tilted) step["tilts"] = tilts;

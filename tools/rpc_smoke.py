@@ -852,6 +852,13 @@ def main():
     # A pen's stroke replayed: pressure, tilt, twist and times per point, and a seed for tip-brush jitter.
     rpc.call("brush.stroke", points=[[20, 40], [120, 70], [220, 40]], size=10, pressures=[0.2, 0.9, 0.4], tilts=[[0, 0], [30, -10], [45, 20]],
              twists=[170, -175, -160], times=[0, 0.01, 0.02], seed=7)
+    # The same drawn at 200%: the zoom speed-on-screen dynamics read; a zoom of nothing is refused.
+    assert rpc.call("brush.stroke", points=[[20, 50], [120, 80]], size=10, pressures=[0.5, 0.6], times=[0, 0.01], viewScale=2)["points"] == 2
+    try:
+        rpc.call("brush.stroke", points=[[20, 50], [120, 80]], size=10, viewScale=0)
+        raise AssertionError("a view scale of 0 should be refused")
+    except RuntimeError as e:
+        assert "viewScale" in str(e), e
     for toning in ({"tool": "dodge", "range": "highlights"}, {"tool": "burn", "protectTones": False}, {"tool": "sponge", "saturate": True}, {"tool": "sharpen"}):
         assert rpc.call("brush.stroke", points=[[20, 30], [200, 30]], size=20, opacity=0.5, **toning)["tool"] == toning["tool"]
     assert rpc.call("pixels.bucket", x=5, y=5, color="#336699", tolerance=10)["filled"]

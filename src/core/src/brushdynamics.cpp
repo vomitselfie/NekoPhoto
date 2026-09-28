@@ -7,7 +7,7 @@ namespace compositor {
 namespace {
 
 constexpr double pi = 3.14159265358979323846;
-constexpr double defaultSpeedScale = 2000;   // document pixels per second read as full speed
+constexpr double defaultSpeedScale = 2000;   // document pixels (Speed) or screen points (ScreenSpeed) per second read as full speed
 constexpr double defaultFadeDiameters = 25;  // Photoshop's default Fade: 25 steps
 
 /// The fraction of a turn `angle` (radians) is past zero, 0..1.
@@ -91,6 +91,7 @@ double dynamicsInput(const DynamicsMapping& m, const BrushSample& s, double diam
     switch (m.input) {
     case DynamicsInput::Pressure: return std::clamp(s.pressure, 0.0, 1.0);
     case DynamicsInput::Speed: return std::clamp(s.speed / (m.scale > 0 ? m.scale : defaultSpeedScale), 0.0, 1.0);
+    case DynamicsInput::ScreenSpeed: return std::clamp(s.screenSpeed / (m.scale > 0 ? m.scale : defaultSpeedScale), 0.0, 1.0);
     case DynamicsInput::Tilt: return std::clamp(s.tiltMagnitude, 0.0, 1.0);
     case DynamicsInput::TiltDirection: return turn(s.tiltAzimuth);
     case DynamicsInput::Twist: return turn(s.twistAngle);
@@ -204,7 +205,7 @@ void removeTiltShape(BrushDynamics& dynamics) {
 // ---- Names -------------------------------------------------------------------------------------------------------
 
 namespace {
-const char* const inputNames[] = {"pressure", "speed", "tilt", "tiltDirection", "twist", "random", "strokeProgress", "roll"};
+const char* const inputNames[] = {"pressure", "speed", "tilt", "tiltDirection", "twist", "random", "strokeProgress", "roll", "screenSpeed"};
 const char* const targetNames[] = {"size", "flow", "opacity", "angle", "roundness", "spacing", "scatter", "grainDepth", "grainRotation"};
 } // namespace
 

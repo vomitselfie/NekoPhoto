@@ -354,6 +354,75 @@ TEST_CASE(synthetic_procreate_brushes_change_the_way_their_setting_says) {
     CHECK_EQ(failed, 0);
 }
 
+TEST_CASE(procreate_speed_responds_the_same_at_any_zoom) {
+    // The same hand motion on the screen (slow, fast, slow round a bend, a report every 1/120 s) drawn at 50, 100, 200
+    // and 400%: in the document the stroke is 2, 1, 1/2 and 1/4 the size, so its document speed differs by those
+    // factors, but Procreate's speed settings read the screen's speed and resolve to the same size, opacity and
+    // spacing at every sample. Checked on the resolved values, not the pixels, since the dabs land on different
+    // document pixels at each zoom.
+    const FixtureBrushes synthetic = syntheticProcreate(PROCREATE_FIXTURES_DIR);
+    std::vector<const Preset*> speedBrushes;
+    for (const Preset& p : synthetic.presets)
+        if (p.name.find("speed") != std::string::npos) speedBrushes.push_back(&p);
+    REQUIRE(speedBrushes.size() == 5);
+    std::vector<Point> screen;
+    for (int i = 0; i <= 120; i++) {
+        const double u = i / 120.0, eased = u - std::sin(2 * 3.14159265358979323846 * u) / (2 * 3.14159265358979323846);
+        screen.push_back({100 + 600 * eased, 300 + 120 * std::sin(3 * eased)});
+    }
+    auto strokeAt = [&](double zoom) {
+        std::vector<BrushSample> out;
+        for (size_t i = 0; i < screen.size(); i++) {
+            BrushSample s;
+            s.time = double(i) / 120;
+            s.position = {screen[i].x / zoom, screen[i].y / zoom};
+            s.pressure = 0.7;
+            s.stylus = true;
+            s.viewScale = zoom;
+            out.push_back(s);
+        }
+        deriveStroke(out);
+        return out;
+    };
+    const DynamicsTarget targets[] = {DynamicsTarget::Size, DynamicsTarget::Opacity, DynamicsTarget::Spacing};
+    for (const Preset* brush : speedBrushes) {
+        const BrushTip& tip = brush->tip->tip;
+        // Every speed setting reads the screen's speed, never the document's.
+        int onScreen = 0;
+        for (const DynamicsMapping& m : tip.dynamics) {
+            CHECK(m.input != DynamicsInput::Speed);
+            onScreen += m.input == DynamicsInput::ScreenSpeed;
+        }
+        CHECK_EQ(onScreen, 1);
+        auto resolve = [&](const BrushSample& s, DynamicsTarget t) {
+            const double base = t == DynamicsTarget::Size ? brush->settings.diameter : t == DynamicsTarget::Spacing ? tip.spacing : 1.0;
+            return applyDynamics(tip.dynamics, t, base, s, brush->settings.diameter, 0, false);
+        };
+        const std::vector<BrushSample> reference = strokeAt(1);
+        double spread = 0, worst = 0;
+        for (double zoom : {0.5, 2.0, 4.0}) {
+            const std::vector<BrushSample> zoomed = strokeAt(zoom);
+            REQUIRE(zoomed.size() == reference.size());
+            for (size_t i = 0; i < reference.size(); i++)
+                for (DynamicsTarget t : targets) {
+                    const double a = resolve(reference[i], t), b = resolve(zoomed[i], t);
+                    worst = std::max(worst, std::fabs(a - b) / std::max(1e-9, std::fabs(a)));
+                }
+        }
+        // The response does move along the stroke (the test has something to hold still).
+        for (size_t i = 0; i < reference.size(); i++)
+            for (DynamicsTarget t : targets) spread = std::max(spread, std::fabs(resolve(reference[i], t) / resolve(reference[0], t) - 1));
+        std::fprintf(stderr, "  %-26s resolved values across 50-400%%: largest relative difference %.2g (response spans %.0f%%)\n", brush->name.c_str(), worst, spread * 100);
+        CHECK(worst < 1e-9);
+        CHECK(spread > 0.1);
+    }
+    // The document's speed, which native brushes keep, does change with the zoom: 400% reads four times the 100% speed.
+    const BrushDynamics documentSpeed = {dynamicsMapping(DynamicsInput::Speed, DynamicsTarget::Size, 1, 0.8, 1500)};
+    const std::vector<BrushSample> full = strokeAt(1), quarter = strokeAt(4);
+    CHECK_NEAR(full[60].speed, 4 * quarter[60].speed, 1e-9 * full[60].speed);
+    CHECK(std::fabs(applyDynamics(documentSpeed, DynamicsTarget::Size, 30, full[60], 30) - applyDynamics(documentSpeed, DynamicsTarget::Size, 30, quarter[60], 30)) > 3);
+}
+
 TEST_CASE(local_third_party_brushes_when_present) {
     // tests/local-fixtures/ (git-ignored) holds brush sets that may not be shared; with its manifest.json this checks
     // them the same way against themselves without the input's mappings, and prints what the importer left out.

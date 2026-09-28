@@ -666,7 +666,9 @@ std::optional<FixtureBrushes> localFixtures(const std::string& folder) {
             Preset control = *presetNamed(out, e.brush);
             control.name = e.against;
             auto& d = control.tip->tip.dynamics;
-            if (input) d.erase(std::remove_if(d.begin(), d.end(), [&](const DynamicsMapping& m) { return m.input == *input; }), d.end());
+            // "speed" names both speeds: the document's, and the screen's that Procreate's speed settings read.
+            auto from = [&](DynamicsInput i) { return i == *input || (*input == DynamicsInput::Speed && i == DynamicsInput::ScreenSpeed); };
+            if (input) d.erase(std::remove_if(d.begin(), d.end(), [&](const DynamicsMapping& m) { return from(m.input); }), d.end());
             out.presets.push_back(control);
         }
         out.expectations.push_back(e);

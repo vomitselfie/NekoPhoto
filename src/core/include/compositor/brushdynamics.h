@@ -24,8 +24,10 @@ namespace compositor {
 
 /// Roll is the barrel's twist when the pen reports one (BrushSample::twistReported) and the stroke's direction when it does
 /// not, so a tip that turns with the barrel on a pen that has one follows the stroke on a pen that has not.
-enum class DynamicsInput { Pressure, Speed, Tilt, TiltDirection, Twist, Random, StrokeProgress, Roll };
-constexpr int dynamicsInputCount = 8;
+/// Speed is measured in the document (pixels per second, so zooming in makes the same hand motion faster); ScreenSpeed
+/// on the screen (points per second, the same at any zoom), as Procreate measures it.
+enum class DynamicsInput { Pressure, Speed, Tilt, TiltDirection, Twist, Random, StrokeProgress, Roll, ScreenSpeed };
+constexpr int dynamicsInputCount = 9;
 enum class DynamicsTarget { Size, Flow, Opacity, Angle, Roundness, Spacing, Scatter, GrainDepth, GrainRotation };
 constexpr int dynamicsTargetCount = 9;
 
@@ -49,7 +51,8 @@ struct DynamicsMapping {
     DynamicsCurve curve;
     double offset = 0;   // the output where the curve gives 0
     double depth = 1;    // added where the curve gives 1 (negative to fall)
-    /// The input's full scale where it has one: Speed, document pixels per second (0: 2000); StrokeProgress, brush
+    /// The input's full scale where it has one: Speed, document pixels per second (0: 2000); ScreenSpeed, screen points
+    /// per second (0: 2000); StrokeProgress, brush
     /// diameters of travel (0: the whole stroke when its length is known, else 25 diameters, Photoshop's Fade).
     double scale = 0;
 

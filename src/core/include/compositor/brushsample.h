@@ -21,10 +21,14 @@ struct BrushSample {
     bool stylus = false;            // a pen: its pressure, tilt and twist are real; false for a mouse
     bool eraser = false;            // the pen's eraser end
     bool twistReported = false;     // the pen reports its barrel's twist (not every pen can): the Roll input reads it
+    /// Screen points per document pixel where the stroke was drawn: the canvas's zoom (1 at 100%, 2 at 200%). The
+    /// view's rotation or flip would not change it, since they keep lengths. 1 in a replay that does not say.
+    double viewScale = 1;
 
     // ---- Derived by BrushSampleTrack ----
     double dt = 0;                  // seconds since the previous sample (1/120 when the times do not say)
     double speed = 0;               // document pixels per second, lightly smoothed
+    double screenSpeed = 0;         // screen points per second (the document step times viewScale), smoothed the same
     double acceleration = 0;        // of that speed, per second
     double direction = 0;           // radians of travel, unwrapped: continuous across a turn
     double tiltMagnitude = 0;       // 0 upright .. 1 at 60 degrees or more
@@ -60,7 +64,7 @@ void deriveStroke(std::vector<BrushSample>& samples);
 BrushSample interpolate(const BrushSample& a, const BrushSample& b, double t);
 
 /// A recorded stroke, as brush fixtures and replays store it: {"samples": [{t, x, y, pressure, tiltX, tiltY, twist,
-/// tangentialPressure}...], "stylus": bool} or a bare array of samples. Missing fields take their defaults; a stroke
+/// tangentialPressure, viewScale}...], "stylus": bool} or a bare array of samples. Missing fields take their defaults; a stroke
 /// that is not a stylus's reads with a mouse's neutral values whatever it holds.
 struct RecordedStroke {
     std::string name;

@@ -49,6 +49,10 @@ public:
     /// The Brush tool's button that opens this, and its tooltip when the brush is not a tip brush.
     static QString buttonText();
     static QString unavailableText();
+    /// An input's and a target's name as shown: the two speeds say where they are measured, "Speed (on screen)" and
+    /// "Speed (in the document)".
+    static QString inputLabel(compositor::DynamicsInput input);
+    static QString targetLabel(compositor::DynamicsTarget target);
 
 private:
     BrushDynamicsDialog(const compositor::BrushTip& tip, const QString& name, QWidget* parent);

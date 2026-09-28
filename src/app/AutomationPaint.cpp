@@ -6,6 +6,7 @@
 #include "PresetLibrary.h"
 #include <QFileInfo>
 #include <algorithm>
+#include <cmath>
 
 using namespace compositor;
 using namespace app::rpc;
@@ -234,6 +235,9 @@ void AutomationServer::registerPaintHandlers() {
         const QJsonArray pressures = p.value("pressures").toArray(), tilts = p.value("tilts").toArray(),
                          twists = p.value("twists").toArray(), times = p.value("times").toArray();
         const double pressure = std::clamp(num(p, "pressure", 0.5), 0.0, 1.0);
+        // The zoom the stroke is taken as drawn at (screen points per document pixel): screen-speed dynamics read it.
+        const double viewScale = num(p, "viewScale", 1);
+        if (!(viewScale > 0) || !std::isfinite(viewScale)) { restore(); fail("viewScale must be a positive number (1 is 100%)", invalidParams); }
         const bool stylus = has(p, "pressure") || !pressures.isEmpty() || !tilts.isEmpty() || !twists.isEmpty();
         auto penAt = [&](size_t i) {
             const int k = int(i);
@@ -247,6 +251,7 @@ void AutomationServer::registerPaintHandlers() {
             if (k < twists.size()) { pen.twist = twists[k].toDouble(); pen.twistReported = true; }
             pen.time = k < times.size() ? times[k].toDouble(i * 0.008) : i * 0.008;
             pen.stylus = stylus;
+            pen.viewScale = viewScale;
             s->pen = pen;
         };
         if (has(p, "seed")) s->brushSeed = uint32_t(std::clamp(num(p, "seed"), 0.0, 4294967295.0));
