@@ -4,6 +4,7 @@
 #include "compositor/document.h"
 #include "compositor/smartobject.h"
 #include "compositor/blur.h"
+#include "compositor/depth.h"
 #include "compositor/layerstyle.h"
 #include "compositor/parallel.h"
 #include "psd/psd_descriptor.hpp"
@@ -177,9 +178,14 @@ Coverage fill(const std::vector<Edge>& edges, int w, int h) {
     return c;
 }
 
-} // namespace
+/// Coverage 0..1 as a sample of either depth (0..255, or 0..32768), rounded to nearest.
+template <class Gray> auto coverageSample(float v) {
+    if constexpr (std::is_same_v<Gray, GrayImage>) return uint8_t(std::lround(v * 255));
+    else return uint16_t(std::lround(v * 32768));
+}
 
-std::shared_ptr<GrayImage> rasterizeVectorMask(const VectorPath& path, const Rect& region, double scale, int w, int h) {
+template <class Gray>
+std::shared_ptr<Gray> rasterizeMask(const VectorPath& path, const Rect& region, double scale, int w, int h) {
     // Each shape group: consecutive subpaths sharing its index, filled together even-odd, over its own box.
     std::vector<Coverage> groups;
     std::vector<VectorPath::Op> ops;
@@ -205,24 +211,24 @@ std::shared_ptr<GrayImage> rasterizeVectorMask(const VectorPath& path, const Rec
     auto byte = [&](float v) {
         v = std::clamp(v, 0.0f, 1.0f);
         if (path.inverted) v = 1 - v;
-        return uint8_t(std::lround(v * 255));
+        return coverageSample<Gray>(v);
     };
     // No subpaths: everything (Photoshop's Reveal All vector mask; inverted, Hide All).
-    if (groups.empty()) return std::make_shared<GrayImage>(w, h, byte(1));
+    if (groups.empty()) return std::make_shared<Gray>(w, h, byte(1));
     // Outside every group's box each coverage is zero, so the result there is one value.
     float outside = 0;
     if (!groups.empty()) {
         outside = start(0, ops[0]);
         for (size_t k = 1; k < groups.size(); k++) outside = combine(outside, 0, ops[k]);
     }
-    auto mask = std::make_shared<GrayImage>(w, h, byte(outside));
+    auto mask = std::make_shared<Gray>(w, h, byte(outside));
     int x0 = w, y0 = h, x1 = 0, y1 = 0;
     for (const Coverage& g : groups)
         if (!g.empty()) { x0 = std::min(x0, g.x0); y0 = std::min(y0, g.y0); x1 = std::max(x1, g.x1); y1 = std::max(y1, g.y1); }
     if (x1 <= x0 || y1 <= y0) return mask;
     parallelRows(y0, y1, [&](int ya, int yb) {
         for (int y = ya; y < yb; y++) {
-            uint8_t* r = mask->row(y);
+            auto* r = mask->row(y);
             for (int x = x0; x < x1; x++) {
                 float a = start(groups[0].at(x, y), ops[0]);
                 for (size_t k = 1; k < groups.size(); k++) a = combine(a, groups[k].at(x, y), ops[k]);
@@ -231,6 +237,16 @@ std::shared_ptr<GrayImage> rasterizeVectorMask(const VectorPath& path, const Rec
         }
     });
     return mask;
+}
+
+} // namespace
+
+std::shared_ptr<GrayImage> rasterizeVectorMask(const VectorPath& path, const Rect& region, double scale, int w, int h) {
+    return rasterizeMask<GrayImage>(path, region, scale, w, h);
+}
+
+std::shared_ptr<Gray16> rasterizeVectorMask16(const VectorPath& path, const Rect& region, double scale, int w, int h) {
+    return rasterizeMask<Gray16>(path, region, scale, w, h);
 }
 
 // ---- Mask parameters -------------------------------------------------------------------------------------------
@@ -283,6 +299,29 @@ void applyMaskParameters(GrayImage& coverage, std::optional<int> density, std::o
         // Density: what the mask hides shows at (255 - density) / 255.
         const int floor = 255 - std::clamp(*density, 0, 255);
         for (size_t i = 0; i < coverage.byteCount(); i++) coverage.data()[i] = uint8_t(floor + (coverage.data()[i] * (255 - floor) + 127) / 255);
+    }
+}
+
+void applyMaskParameters(Gray16& coverage, std::optional<int> density, std::optional<double> feather, double scale, bool clampEdges) {
+    if (feather && *feather > 0) {
+        if (!clampEdges) gaussianBlur(coverage, *feather * scale);
+        else {
+            const int pad = int(std::ceil(*feather * scale * 3)) + 1, w = coverage.width(), h = coverage.height();
+            Gray16 padded(w + 2 * pad, h + 2 * pad, 0);
+            for (int y = 0; y < h + 2 * pad; y++) {
+                const uint16_t* src = coverage.row(std::clamp(y - pad, 0, h - 1));
+                uint16_t* dst = padded.row(y);
+                for (int x = 0; x < w + 2 * pad; x++) dst[x] = src[std::clamp(x - pad, 0, w - 1)];
+            }
+            gaussianBlur(padded, *feather * scale);
+            for (int y = 0; y < h; y++) std::memcpy(coverage.row(y), padded.row(y + pad) + pad, size_t(w) * sizeof(uint16_t));
+        }
+    }
+    if (density && *density < 255) {
+        // The density's floor, (255 - density) / 255, at 15 bits.
+        const uint32_t floor = uint32_t(((255 - std::clamp(*density, 0, 255)) * 32768 + 127) / 255);
+        const size_t n = size_t(coverage.width()) * size_t(coverage.height());
+        for (size_t i = 0; i < n; i++) coverage.data()[i] = uint16_t(floor + ((coverage.data()[i] * (32768 - floor) + 16384) >> 15));
     }
 }
 
@@ -511,8 +550,12 @@ std::vector<std::vector<Point>> dash(const std::vector<Point>& pts, const std::v
 
 } // namespace
 
-std::shared_ptr<GrayImage> rasterizeVectorStroke(const VectorPath& path, const VectorStroke& stroke, const Rect& region, double scale, int w, int h) {
-    auto out = std::make_shared<GrayImage>(w, h, 0);
+namespace {
+
+template <class Gray>
+std::shared_ptr<Gray> rasterizeStroke(const VectorPath& path, const VectorStroke& stroke, const Rect& region, double scale, int w, int h) {
+    constexpr double one = std::is_same_v<Gray, GrayImage> ? 255.0 : 32768.0;
+    auto out = std::make_shared<Gray>(w, h, 0);
     // Inside and outside strokes are a centred band twice as wide, kept to one side of the path (Photoshop's way).
     const double width = stroke.width * scale;
     const double half = stroke.align == VectorStroke::Align::Center ? width / 2 : width;
@@ -531,44 +574,66 @@ std::shared_ptr<GrayImage> rasterizeVectorStroke(const VectorPath& path, const V
     }
     const Coverage band = fillNonZero(pieces, w, h);
     if (band.empty()) return out;
-    std::shared_ptr<GrayImage> inside;
+    std::shared_ptr<Gray> inside;
     if (stroke.align != VectorStroke::Align::Center) {
         VectorPath plain = path;
         plain.inverted = false;
-        inside = rasterizeVectorMask(plain, region, scale, w, h);
+        inside = rasterizeMask<Gray>(plain, region, scale, w, h);
     }
     parallelRows(band.y0, band.y1, [&](int ya, int yb) {
         for (int y = ya; y < yb; y++) {
-            uint8_t* row = out->row(y);
+            auto* row = out->row(y);
             for (int x = band.x0; x < band.x1; x++) {
                 double v = band.at(x, y);
-                if (inside) { const double in = inside->row(y)[x] / 255.0; v *= stroke.align == VectorStroke::Align::Inside ? in : 1 - in; }
-                row[x] = uint8_t(std::lround(std::clamp(v, 0.0, 1.0) * 255));
+                if (inside) { const double in = inside->row(y)[x] / one; v *= stroke.align == VectorStroke::Align::Inside ? in : 1 - in; }
+                row[x] = std::remove_reference_t<decltype(row[x])>(std::lround(std::clamp(v, 0.0, 1.0) * one));
             }
         }
     });
     return out;
 }
 
+} // namespace
+
+std::shared_ptr<GrayImage> rasterizeVectorStroke(const VectorPath& path, const VectorStroke& stroke, const Rect& region, double scale, int w, int h) {
+    return rasterizeStroke<GrayImage>(path, stroke, region, scale, w, h);
+}
+
+std::shared_ptr<Gray16> rasterizeVectorStroke16(const VectorPath& path, const VectorStroke& stroke, const Rect& region, double scale, int w, int h) {
+    return rasterizeStroke<Gray16>(path, stroke, region, scale, w, h);
+}
+
 // ---- Fill layers --------------------------------------------------------------------------------------------------
 
-ImagePtr renderVectorPaint(const VectorPaint& paint, const Document& document, const Rect& bounds, const Rect& area, double scale, int w, int h) {
+namespace {
+
+template <class Img>
+std::shared_ptr<const Img> paintAt(const VectorPaint& paint, const Document& document, const Rect& bounds, const Rect& area, double scale, int w, int h) {
+    constexpr bool eight = std::is_same_v<Img, Image>;
     if (w <= 0 || h <= 0 || scale <= 0) return nullptr;
     // Output pixel (px, py) is document (area.x + px / scale, area.y + py / scale): at scale 1 over the canvas, a
     // gradient is sampled at the pixel's corner and a pattern at its centre, as fill layers have always been drawn.
     if (paint.kind == VectorPaint::Kind::Gradient) {
-        auto image = std::make_shared<Image>(w, h);
+        auto image = std::make_shared<Img>(w, h);
         const StyleGradient& g = paint.gradient;
         double bx = 0, by = 0, bw = document.width, bh = document.height;
         if (g.alignWithLayer && bounds.width > 0 && bounds.height > 0) { bx = bounds.x; by = bounds.y; bw = bounds.width; bh = bounds.height; }
         parallelRows(0, h, [&](int ya, int yb) {
             for (int y = ya; y < yb; y++) {
-                uint8_t* row = image->row(y);
+                auto* row = image->row(y);
                 for (int x = 0; x < w; x++, row += 4) {
                     const float t = gradientPosition(g, bx, by, bw, bh, area.x + x / scale, area.y + y / scale);
-                    const StyleColor c = gradientColor(g, t);
                     const float a = gradientOpacity(g, t);
-                    row[0] = uint8_t(std::lround(c.r * a)); row[1] = uint8_t(std::lround(c.g * a)); row[2] = uint8_t(std::lround(c.b * a)); row[3] = uint8_t(std::lround(255 * a));
+                    if constexpr (eight) {
+                        const StyleColor c = gradientColor(g, t);
+                        row[0] = uint8_t(std::lround(c.r * a)); row[1] = uint8_t(std::lround(c.g * a)); row[2] = uint8_t(std::lround(c.b * a)); row[3] = uint8_t(std::lround(255 * a));
+                    } else {
+                        // The ramp's exact colour at 15 bits: no 8-bit steps in a long gradient.
+                        double c[3];
+                        gradientColorExact(g, t, c);
+                        for (int k = 0; k < 3; k++) row[k] = uint16_t(std::lround(std::clamp(c[k], 0.0, 255.0) / 255.0 * a * 32768));
+                        row[3] = uint16_t(std::lround(32768.0 * a));
+                    }
                 }
             }
         });
@@ -581,11 +646,11 @@ ImagePtr renderVectorPaint(const VectorPaint& paint, const Document& document, c
     auto tile = patterns->find(p.id);
     if (tile == patterns->end() || tile->second.width <= 0 || tile->second.height <= 0) return nullptr;
     const PatternTile& t = tile->second;
-    auto image = std::make_shared<Image>(w, h);
+    auto image = std::make_shared<Img>(w, h);
     const double inv = 1.0 / std::max(0.01f, p.scale), a = p.angle * M_PI / 180, cs = std::cos(a), sn = std::sin(a);
     parallelRows(0, h, [&](int ya, int yb) {
         for (int y = ya; y < yb; y++) {
-            uint8_t* row = image->row(y);
+            auto* row = image->row(y);
             for (int x = 0; x < w; x++, row += 4) {
                 const double u0 = area.x + (x + 0.5) / scale - p.phaseX, v0 = area.y + (y + 0.5) / scale - p.phaseY;
                 const double u = (u0 * cs - v0 * sn) * inv, v = (u0 * sn + v0 * cs) * inv;
@@ -593,25 +658,45 @@ ImagePtr renderVectorPaint(const VectorPaint& paint, const Document& document, c
                 if (tx < 0) tx += t.width;
                 if (ty < 0) ty += t.height;
                 const uint8_t* src = t.rgba.data() + (size_t(ty) * size_t(t.width) + size_t(tx)) * 4;
-                for (int k = 0; k < 3; k++) row[k] = uint8_t((src[k] * src[3] + 127) / 255);
-                row[3] = src[3];
+                if constexpr (eight) {
+                    for (int k = 0; k < 3; k++) row[k] = uint8_t((src[k] * src[3] + 127) / 255);
+                    row[3] = src[3];
+                } else {
+                    // Patterns are 8-bit tiles: premultiplied at 15 bits from the straight texel.
+                    const uint32_t a = widen8(src[3]);
+                    for (int k = 0; k < 3; k++) row[k] = uint16_t(mul15(widen8(src[k]), a));
+                    row[3] = uint16_t(a);
+                }
             }
         }
     });
     return image;
 }
 
-ImagePtr renderFillLayer(const Layer& layer, const Document& document) {
-    if (!layer.psdCarry) return nullptr;
+} // namespace
+
+ImagePtr renderVectorPaint(const VectorPaint& paint, const Document& document, const Rect& bounds, const Rect& area, double scale, int w, int h) {
+    return paintAt<Image>(paint, document, bounds, area, scale, w, h);
+}
+
+Image16Ptr renderVectorPaint16(const VectorPaint& paint, const Document& document, const Rect& bounds, const Rect& area, double scale, int w, int h) {
+    return paintAt<Image16>(paint, document, bounds, area, scale, w, h);
+}
+
+namespace {
+
+/// A fill layer's paint and the bounds its gradient spans; none when it has no fill block (or it cannot be read).
+std::optional<std::pair<VectorPaint, Rect>> fillLayerPaint(const Layer& layer, const Document& document) {
+    if (!layer.psdCarry) return std::nullopt;
     const std::vector<uint8_t>* gradientBlock = nullptr;
     const std::vector<uint8_t>* patternBlock = nullptr;
     for (auto& b : layer.psdCarry->blocks) { if (b.key == "GdFl") gradientBlock = &b.data; if (b.key == "PtFl") patternBlock = &b.data; }
-    if (!gradientBlock && !patternBlock) return nullptr;
+    if (!gradientBlock && !patternBlock) return std::nullopt;
     VectorPaint paint;
     Rect bounds;
     if (gradientBlock) {
         auto g = parseFillGradient(*gradientBlock);
-        if (!g) return nullptr;
+        if (!g) return std::nullopt;
         paint.kind = VectorPaint::Kind::Gradient;
         paint.gradient = *g;
         // Aligned with the layer: over its shape's bounds (the vector mask's hull), else the canvas.
@@ -625,11 +710,25 @@ ImagePtr renderFillLayer(const Layer& layer, const Document& document) {
             }
     } else {
         auto p = parseFillPattern(*patternBlock);
-        if (!p) return nullptr;
+        if (!p) return std::nullopt;
         paint.kind = VectorPaint::Kind::Pattern;
         paint.pattern = *p;
     }
-    return renderVectorPaint(paint, document, bounds, Rect(0, 0, document.width, document.height), 1, document.width, document.height);
+    return std::pair{paint, bounds};
+}
+
+} // namespace
+
+ImagePtr renderFillLayer(const Layer& layer, const Document& document) {
+    auto fill = fillLayerPaint(layer, document);
+    if (!fill) return nullptr;
+    return renderVectorPaint(fill->first, document, fill->second, Rect(0, 0, document.width, document.height), 1, document.width, document.height);
+}
+
+Image16Ptr renderFillLayer16(const Layer& layer, const Document& document) {
+    auto fill = fillLayerPaint(layer, document);
+    if (!fill) return nullptr;
+    return renderVectorPaint16(fill->first, document, fill->second, Rect(0, 0, document.width, document.height), 1, document.width, document.height);
 }
 Point mapLayerPoint(Point p, const LayerTransform& before, int w0, int h0, const LayerTransform& after, int w1, int h1) {
     // One corner of a degenerate quad: moveQuad already inverts one transform and applies the other.

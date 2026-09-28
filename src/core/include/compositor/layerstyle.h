@@ -179,6 +179,8 @@ void effectBlend(EffectBlend mode, const float backdrop[3], const float source[3
 /// A gradient's position (0..1) at document pixel (x, y) over `bounds` (document pixels).
 float gradientPosition(const StyleGradient& g, double boundsX, double boundsY, double boundsW, double boundsH, double x, double y);
 StyleColor gradientColor(const StyleGradient& g, float position);
+/// The same unrounded (0..255, not clamped), for drawing at 16 bits.
+void gradientColorExact(const StyleGradient& g, float position, double out[3]);
 float gradientOpacity(const StyleGradient& g, float position);
 
 } // namespace compositor

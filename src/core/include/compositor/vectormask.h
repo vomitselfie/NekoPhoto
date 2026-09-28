@@ -5,6 +5,7 @@
 // order by their operation (add, subtract, intersect, exclude). The path follows its layer when the layer moves.
 #pragma once
 #include "image.h"
+#include "imaget.h"
 #include "layerstyle.h"
 #include "transform.h"
 #include <array>
@@ -36,6 +37,8 @@ std::optional<std::vector<uint8_t>> mapVectorMask(const std::vector<uint8_t>& pa
 /// Coverage (0..255) of `path` over `region` (document pixels) at `scale`, `w` x `h` output pixels, antialiased. A path
 /// with no subpaths covers everything (Photoshop's empty vector mask reveals all; inverted, it hides all).
 std::shared_ptr<GrayImage> rasterizeVectorMask(const VectorPath& path, const Rect& region, double scale, int w, int h);
+/// The same at 16 bits (0..32768), from the same coverage.
+std::shared_ptr<Gray16> rasterizeVectorMask16(const VectorPath& path, const Rect& region, double scale, int w, int h);
 
 /// The layer's vector mask as it now stands: its carried path, moved along with the layer since it was read.
 /// None when it has none (or it is switched off).
@@ -47,6 +50,7 @@ struct MaskParameters { std::optional<int> userDensity, vectorDensity; std::opti
 std::optional<MaskParameters> parseMaskParameters(const std::vector<uint8_t>& section);
 /// Density and feather applied to coverage drawn at `scale` (feather is a gaussian of sigma = feather pixels).
 void applyMaskParameters(GrayImage& coverage, std::optional<int> density, std::optional<double> feather, double scale, bool clampEdges = false);
+void applyMaskParameters(Gray16& coverage, std::optional<int> density, std::optional<double> feather, double scale, bool clampEdges = false);
 
 /// What a shape's fill or stroke paints with: a colour (kept beside it), a gradient or a pattern, as Photoshop's
 /// solidColorLayer, gradientLayer and patternLayer contents ('SoCo', 'GdFl', 'PtFl'; a stroke's strokeStyleContent).
@@ -58,6 +62,8 @@ struct VectorPaint {
 /// `paint` (not Solid) over `area` (document pixels) at `scale`, `w` x `h` premultiplied pixels; a gradient aligned
 /// with the layer spans `bounds` (the shape's), else the canvas. None when a pattern is not among the document's.
 ImagePtr renderVectorPaint(const VectorPaint& paint, const Document& document, const Rect& bounds, const Rect& area, double scale, int w, int h);
+/// The same at 16 bits: a gradient from its exact (unrounded) colours; a pattern's 8-bit tile widened.
+Image16Ptr renderVectorPaint16(const VectorPaint& paint, const Document& document, const Rect& bounds, const Rect& area, double scale, int w, int h);
 
 /// A shape's stroke ('vstk'): drawn along its path in its own colour and opacity over the fill.
 struct VectorStroke {
@@ -76,10 +82,12 @@ struct VectorStroke {
 std::optional<VectorStroke> layerVectorStroke(const Layer& layer);
 /// Coverage (0..255) of the stroke band over `region` at `scale`.
 std::shared_ptr<GrayImage> rasterizeVectorStroke(const VectorPath& path, const VectorStroke& stroke, const Rect& region, double scale, int w, int h);
+std::shared_ptr<Gray16> rasterizeVectorStroke16(const VectorPath& path, const VectorStroke& stroke, const Rect& region, double scale, int w, int h);
 
 /// A fill layer's contents ('GdFl' gradient or 'PtFl' pattern) over the canvas, as Photoshop draws them; none when
 /// the layer has neither (or they cannot be read).
 ImagePtr renderFillLayer(const Layer& layer, const Document& document);
+Image16Ptr renderFillLayer16(const Layer& layer, const Document& document);
 
 /// How a point moves when a layer goes from `before` (a `w0` x `h0` raster) to `after` (`w1` x `h1`).
 Point mapLayerPoint(Point p, const LayerTransform& before, int w0, int h0, const LayerTransform& after, int w1, int h1);

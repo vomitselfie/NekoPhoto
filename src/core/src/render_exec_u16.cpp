@@ -1,10 +1,9 @@
 // The renderer's pixels at 16 bits (render_plan.h): the 8-bit executor's structure at Photoshop's 0..32768, with
 // coverage (masks, folder masks, clipping) at the same depth.
 //
-// What is drawn natively: pixel layers in every blend mode with opacity, pixel and vector masks, clipping stacks,
-// folders (Pass Through, faded and isolated), artboards, shape strokes and adjustment layers. What has no 16-bit
-// path yet is drawn at 8 bits and applied as a difference, so the pixels it does not touch keep their full
-// precision: layer styles (P8 ports them; docs/bit-depth.md).
+// Everything is drawn at 16 bits: pixel layers in every blend mode with opacity, pixel and vector masks (their
+// coverage rasterised at 15 bits), clipping stacks, folders (Pass Through, faded and isolated), artboards, shape
+// fills and strokes, gradient and pattern fill layers, adjustment layers, and layer styles on layers and folders.
 #include "render_plan.h"
 #include "compositor/fill_cache.h"
 #include "compositor/layerstyle.h"
@@ -67,29 +66,6 @@ Image16Ptr wideImage(const AnyImage& image) {
 Gray16Ptr wideGray(const AnyGray& image) {
     if (image.u16()) return image.u16();
     return widenedOnce<Gray16>(image.u8());
-}
-
-/// Draws with 8-bit code onto a 16-bit target: `draw` gets the target reduced to 8 bits, and what it changed is
-/// added back at 16 bits. Pixels it leaves alone keep every bit.
-void via8(Image16& target, const std::function<void(Image&)>& draw) {
-    Image before(target.width(), target.height());
-    narrowInto(target, before);
-    Image after = before;
-    draw(after);
-    parallelRows(0, target.height(), [&](int ya, int yb) {
-        for (int y = ya; y < yb; y++) {
-            const uint8_t* b = before.row(y);
-            const uint8_t* a = after.row(y);
-            uint16_t* d = target.row(y);
-            for (int x = 0; x < target.width(); x++, a += 4, b += 4, d += 4) {
-                if (std::memcmp(a, b, 4) == 0) continue;
-                int32_t v[4];
-                for (int c = 0; c < 4; c++) v[c] = std::clamp(int32_t(d[c]) + int32_t(widen8(a[c])) - int32_t(widen8(b[c])), 0, int32_t(one16));
-                for (int c = 0; c < 3; c++) d[c] = uint16_t(std::min(v[c], v[3]));
-                d[3] = uint16_t(v[3]);
-            }
-        }
-    });
 }
 
 } // namespace
@@ -193,20 +169,17 @@ struct RenderExec<SampleType::U16> {
         draw.fill = 1;
         if (isolates(group) || fades(group)) draw.master = 1;
         auto folders = foldersCoverage(group.parentId);
-        std::shared_ptr<GrayImage> folders8 = folders ? narrowGray(*folders) : nullptr;
-        draw.coverage = folders8.get();
+        draw.coverage16 = folders.get();
         draw.patterns = documentPatterns(document);
         draw.documentWidth = document.width;
         draw.documentHeight = document.height;
-        draw.drawSource = [&](Image& into, const Rect& area) {
+        draw.drawSource16 = [&](Image16& into, const Rect& area) {
             RenderPlan subPlan(document, overrides);
             subPlan.buildWithin(plan, group.id);
             RenderExec sub(subPlan, area, scale, into.width(), into.height());
-            Image16 deep(into.width(), into.height());
-            sub.drawRange(deep, 0, sub.order.size());
-            narrowInto(deep, into);
+            sub.drawRange(into, 0, sub.order.size());
         };
-        via8(out, [&](Image& eight) { drawStyledLayer(draw, eight); });
+        drawStyledLayer(draw, out);
     }
 
     Cover folderMask(const Layer& group) {
@@ -293,15 +266,21 @@ struct RenderExec<SampleType::U16> {
         return params;
     }
 
-    /// A gradient or pattern fill layer's contents, drawn at 8 bits (vectormask.h) and widened, kept while its carry lives.
+    /// A gradient or pattern fill layer's contents at 16 bits (vectormask.h), kept while its carry lives.
     Image16Ptr fillImage(const Layer& layer) {
         static FillLayerCache<Image16Ptr> cache;
         if (!layer.psdCarry) return nullptr;
         if (auto cached = cache.find(layer.psdCarry, document.width, document.height)) return *cached;
-        ImagePtr eight = renderFillLayer(layer, document);
-        Image16Ptr image = eight ? Image16Ptr(widenImage(*eight)) : nullptr;
+        Image16Ptr image = renderFillLayer16(layer, document);
         cache.insert(layer.psdCarry, document.width, document.height, image);
         return image;
+    }
+
+    /// A vector mask's coverage over `area`, at 15 bits, with the mask's density and feather when it has them.
+    Cover vectorCut(const VectorPath& path, const std::optional<MaskParameters>& parameters, const Rect& area, int w, int h) const {
+        auto cut = rasterizeVectorMask16(path, area, scale, w, h);
+        if (parameters) applyMaskParameters(*cut, parameters->vectorDensity, parameters->vectorFeather, scale);
+        return cut;
     }
 
     void drawOwn(const Layer& layer, Image16& target, const Gray16* coverage) {
@@ -315,23 +294,19 @@ struct RenderExec<SampleType::U16> {
         std::optional<VectorPath> vector = layerVectorMask(layer, document);
         Cover cut;
         if (vector) {
-            auto cut8 = rasterizeVectorMask(*vector, region, scale, outWidth, outHeight);
-            if (maskParameters) applyMaskParameters(*cut8, maskParameters->vectorDensity, maskParameters->vectorFeather, scale);
-            cut = widenGray(*cut8);
+            cut = vectorCut(*vector, maskParameters, region, outWidth, outHeight);
             if (coverage) {
                 const size_t n = size_t(outWidth) * size_t(outHeight);
                 for (size_t i = 0; i < n; i++) cut->data()[i] = uint16_t(mul15(cut->data()[i], coverage->data()[i]));
             }
             coverage = cut.get();
         }
-        // A pixel mask with Photoshop's density or feather: those are worked out at 8 bits.
+        // A pixel mask with Photoshop's density or feather.
         Cover userCut;
         if (maskParameters && (maskParameters->userDensity || maskParameters->userFeather) && layer.mask && layer.mask->enabled && layer.mask->asset.image) {
-            Gray16 sampled(outWidth, outHeight, 0);
-            sampleMaskCoverage(maskOf(layer), layer.maskTransform(), region, scale, 0, sampled, false);
-            auto eight = narrowGray(sampled);
-            applyMaskParameters(*eight, maskParameters->userDensity, maskParameters->userFeather, scale, true);
-            userCut = widenGray(*eight);
+            userCut = std::make_shared<Gray16>(outWidth, outHeight, 0);
+            sampleMaskCoverage(maskOf(layer), layer.maskTransform(), region, scale, 0, *userCut, false);
+            applyMaskParameters(*userCut, maskParameters->userDensity, maskParameters->userFeather, scale, true);
             if (coverage) {
                 const size_t n = size_t(outWidth) * size_t(outHeight);
                 for (size_t i = 0; i < n; i++) userCut->data()[i] = uint16_t(mul15(userCut->data()[i], coverage->data()[i]));
@@ -345,66 +320,62 @@ struct RenderExec<SampleType::U16> {
             if (!stroke || !stroke->enabled || stroke->opacity <= 0) return;
             VectorPath path = *vector;
             path.inverted = false;
-            auto band = rasterizeVectorStroke(path, *stroke, region, scale, outWidth, outHeight);
+            auto band = rasterizeVectorStroke16(path, *stroke, region, scale, outWidth, outHeight);
             if (maskParameters && maskParameters->vectorFeather) applyMaskParameters(*band, std::nullopt, maskParameters->vectorFeather, scale);
             const float opacity = float(clamp(layer.opacity, 0.0, 1.0)) * stroke->opacity;
             const BlendMode mode = blendOf(layer);
-            ImagePtr paint;
+            Image16Ptr paint;
             if (stroke->paint.kind != VectorPaint::Kind::Solid) {
                 double x0 = 1e300, y0 = 1e300, x1 = -1e300, y1 = -1e300;
                 for (auto& s : path.subpaths) for (auto& k : s.knots) for (auto [px, py] : {std::pair{k.x, k.y}, {k.inX, k.inY}, {k.outX, k.outY}}) {
                     x0 = std::min(x0, px); x1 = std::max(x1, px); y0 = std::min(y0, py); y1 = std::max(y1, py);
                 }
-                paint = renderVectorPaint(stroke->paint, document, x1 > x0 ? Rect(x0, y0, x1 - x0, y1 - y0) : Rect(), region, scale, outWidth, outHeight);
+                paint = renderVectorPaint16(stroke->paint, document, x1 > x0 ? Rect(x0, y0, x1 - x0, y1 - y0) : Rect(), region, scale, outWidth, outHeight);
             }
             parallelRows(0, outHeight, [&](int ya, int yb) {
                 for (int y = ya; y < yb; y++) {
-                    const uint8_t* b = band->row(y);
+                    const uint16_t* b = band->row(y);
                     const uint16_t* c = coverageWithoutVector ? coverageWithoutVector->row(y) : nullptr;
-                    const uint8_t* p = paint ? paint->row(y) : nullptr;
+                    const uint16_t* p = paint ? paint->row(y) : nullptr;
                     uint16_t* d = target.row(y);
                     for (int x = 0; x < outWidth; x++) {
                         if (!b[x]) continue;
                         uint16_t colour[4] = {widen8(stroke->r), widen8(stroke->g), widen8(stroke->b), uint16_t(one16)};
                         float alpha = 1;
                         if (p) {
-                            const uint8_t* q = p + x * 4;
+                            const uint16_t* q = p + x * 4;
                             if (!q[3]) continue;
                             for (int k = 0; k < 3; k++) colour[k] = uint16_t(std::min<uint32_t>(one16, (uint32_t(q[k]) * one16 + q[3] / 2) / q[3]));
-                            alpha = q[3] / 255.0f;
+                            alpha = q[3] / 32768.0f;
                         }
-                        compositePixelAt16(mode, colour, b[x] / 255.0f * opacity * alpha * (c ? c[x] / 32768.0f : 1.0f), d + x * 4, docX(region, scale, x), docY(region, scale, y));
+                        compositePixelAt16(mode, colour, b[x] / 32768.0f * opacity * alpha * (c ? c[x] / 32768.0f : 1.0f), d + x * 4, docX(region, scale, x), docY(region, scale, y));
                     }
                 }
             });
         };
         if (stroke && stroke->enabled && !stroke->fillEnabled) { drawStroke(); return; }
         if (!plainOnly) if (auto style = layerStyleOf(layer, document)) {
-            // Layer styles are drawn at 8 bits (layerstyle_render.h) and applied as a difference.
+            // Layer styles at 16 bits (layerstyle_render.h).
             StyledDraw draw;
             draw.style = style;
             draw.region = region;
             draw.scale = scale;
             draw.mode = params.mode;
             layerOpacities(layer, draw.master, draw.fill);
-            const Gray16* styleCoverage = vector ? coverageWithoutVector : coverage;
-            std::shared_ptr<GrayImage> coverage8 = styleCoverage ? narrowGray(*styleCoverage) : nullptr;
-            draw.coverage = coverage8.get();
+            draw.coverage16 = vector ? coverageWithoutVector : coverage;
             draw.patterns = documentPatterns(document);
             draw.documentWidth = document.width;
             draw.documentHeight = document.height;
             draw.bounds = params.transform.bounds();
-            draw.drawSource = [&](Image& into, const Rect& area) {
+            draw.drawSource16 = [&](Image16& into, const Rect& area) {
                 DrawParams16 plain = params;
                 plain.opacity = 1;
                 plain.mode = BlendMode::Normal;
-                std::shared_ptr<GrayImage> shape = vector ? rasterizeVectorMask(*vector, area, scale, into.width(), into.height()) : nullptr;
-                Cover shape16 = shape ? widenGray(*shape) : nullptr;
-                Image16 deep(into.width(), into.height());
-                drawLayer(plain, area, scale, shape16.get(), deep);
-                narrowInto(deep, into);
+                // The vector mask shapes what the effects are drawn around, as the pixel mask does.
+                Cover shape = vector ? Cover(rasterizeVectorMask16(*vector, area, scale, into.width(), into.height())) : nullptr;
+                drawLayer(plain, area, scale, shape.get(), into);
             };
-            via8(target, [&](Image& eight) { drawStyledLayer(draw, eight); });
+            drawStyledLayer(draw, target);
             drawStroke();
             return;
         }

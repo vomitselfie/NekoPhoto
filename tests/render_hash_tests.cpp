@@ -27,6 +27,11 @@
 #include "compositor/render.h"
 #include "compositor/tipbrush.h"
 #include "compositor/toning.h"
+#include "compositor/layerstyle.h"
+#include "compositor/presets.h"
+#include "compositor/psd_carry.h"
+#include "compositor/vectorlayer.h"
+#include "compositor/vectormask.h"
 
 #include <algorithm>
 #include <cctype>
@@ -394,6 +399,131 @@ void add16BitScenes() {
     });
 }
 
+// ---- 16-bit shapes, vector masks and layer styles -----------------------------------------------------------------
+
+/// A shape layer made in a 16-bit document (its pixels at 16 bits), over the golden base.
+uint64_t shapeScene16(const VectorShape& shape) {
+    Document doc = sixteen(goldenBase());
+    Layer layer = layerOf("shape", std::make_shared<Image>(1, 1), {0, 0});
+    setVectorShape(layer, doc, shape);
+    doc.layers.push_back(layer);
+    return hash16(doc);
+}
+
+StyleGradient twoStops(StyleColor from, StyleColor to, float angle) {
+    StyleGradient g;
+    g.colors = {{0, from, 0.5f}, {1, to, 0.5f}};
+    g.alphas = {{0, 1, 0.5f}, {1, 1, 0.5f}};
+    g.angle = angle;
+    return g;
+}
+
+/// Soft paint carrying `style` over the golden base, converted to 16 bits.
+Document styledScene(const LayerStyle& style) {
+    Document doc = goldenBase();
+    std::vector<uint8_t> rgba;
+    for (int i = 0; i < 16; i++) { rgba.push_back(uint8_t(60 * (i % 4))); rgba.push_back(uint8_t(60 * (i / 4))); rgba.push_back(200); rgba.push_back(255); }
+    addDocumentPatterns(doc, {makePattern("tile", "Tile", 4, 4, rgba)});
+    Layer top = layerOf("paint", paint(56, 40, 5), {20, 12});
+    setLayerStyle(top, style);
+    doc.layers.push_back(top);
+    return sixteen(doc);
+}
+
+void add16BitVectorScenes() {
+    VectorShape ellipse;
+    ellipse.path = ellipsePath(Rect(12.5, 8.25, 60, 44));
+    ellipse.r = 200; ellipse.g = 60; ellipse.b = 30;
+    ellipse.stroke.enabled = false;
+    scene("u16/shape/solid_ellipse", [ellipse] { return shapeScene16(ellipse); });
+    VectorShape stroked = ellipse;
+    stroked.path = rectanglePath(Rect(16, 10, 60, 40), 8);
+    stroked.stroke.enabled = true;
+    stroked.stroke.width = 4;
+    stroked.stroke.dashes = {2, 1};
+    scene("u16/shape/dashed_stroke", [stroked] { return shapeScene16(stroked); });
+    VectorShape gradient = stroked;
+    gradient.stroke.dashes.clear();
+    gradient.fillPaint.kind = VectorPaint::Kind::Gradient;
+    gradient.fillPaint.gradient = twoStops({255, 0, 0}, {0, 0, 255}, 30);
+    gradient.stroke.paint.kind = VectorPaint::Kind::Gradient;
+    gradient.stroke.paint.gradient = twoStops({255, 255, 0}, {0, 128, 0}, 90);
+    scene("u16/shape/gradient_fill_and_stroke", [gradient] { return shapeScene16(gradient); });
+    VectorShape combined = ellipse;
+    addShapeComponent(combined.path, polygonPath(Rect(30, 14, 30, 30), 5, 0.5), VectorPath::Op::Subtract);
+    scene("u16/shape/subtracted_star", [combined] { return shapeScene16(combined); });
+    scene("u16/vector_mask/pixel_layer", [] {
+        Document doc = goldenBase();
+        Layer top = layerOf("paint", paint(64, 48), {16, 8});
+        setLayerVectorMask(top, doc, ellipsePath(Rect(20.5, 10.5, 50, 36)));
+        doc.layers.push_back(top);
+        return hash16(sixteen(doc));
+    });
+    scene("u16/vector_mask/pixel_layer@0.5", [] {
+        Document doc = goldenBase();
+        Layer top = layerOf("paint", paint(64, 48), {16, 8});
+        setLayerVectorMask(top, doc, ellipsePath(Rect(20.5, 10.5, 50, 36)));
+        doc.layers.push_back(top);
+        return hash16(sixteen(doc), reducedRegion());
+    });
+    scene("u16/fill_layer/gradient", [] {
+        Document doc = goldenBase();
+        Layer fill("Gradient Fill", doc.size());
+        auto carry = std::make_shared<PsdLayerCarry>();
+        carry->blocks.push_back({"GdFl", authorGradientFill(twoStops({250, 200, 10}, {10, 40, 220}, 60))});
+        fill.psdCarry = carry;
+        fill.opacity = 0.7;
+        doc.layers.push_back(fill);
+        return hash16(sixteen(doc));
+    });
+    // Each effect alone, then all ten together, then a folder's style.
+    std::vector<std::pair<std::string, LayerStyle>> styles;
+    auto effect = [&](const std::string& name, const std::function<void(LayerStyle&)>& make) { LayerStyle s; make(s); styles.push_back({name, s}); };
+    effect("drop_shadow", [](LayerStyle& s) { DropShadow d; d.distance = 4; d.size = 5; s.dropShadows.push_back(d); });
+    effect("inner_shadow", [](LayerStyle& s) { InnerShadow d; d.size = 4; s.innerShadows.push_back(d); });
+    effect("outer_glow", [](LayerStyle& s) { OuterGlow g; g.size = 6; s.outerGlows.push_back(g); });
+    effect("inner_glow", [](LayerStyle& s) { InnerGlow g; g.size = 5; s.innerGlows.push_back(g); });
+    effect("satin", [](LayerStyle& s) { Satin t; t.size = 8; s.satins.push_back(t); });
+    effect("color_overlay", [](LayerStyle& s) { ColorOverlay c; c.color = {20, 180, 90}; c.opacity = 0.6f; s.colorOverlays.push_back(c); });
+    effect("gradient_overlay", [](LayerStyle& s) { GradientOverlay g; g.gradient = twoStops({255, 0, 0}, {0, 0, 255}, 90); s.gradientOverlays.push_back(g); });
+    effect("pattern_overlay", [](LayerStyle& s) { PatternOverlay p; p.patternId = "tile"; p.opacity = 0.7f; s.patternOverlays.push_back(p); });
+    effect("stroke", [](LayerStyle& s) { Stroke k; k.size = 3; s.strokes.push_back(k); });
+    effect("bevel", [](LayerStyle& s) { Bevel b; b.size = 5; s.bevels.push_back(b); });
+    LayerStyle all;
+    for (auto& [name, style] : styles) {
+        for (auto& v : style.dropShadows) all.dropShadows.push_back(v);
+        for (auto& v : style.innerShadows) all.innerShadows.push_back(v);
+        for (auto& v : style.outerGlows) all.outerGlows.push_back(v);
+        for (auto& v : style.innerGlows) all.innerGlows.push_back(v);
+        for (auto& v : style.satins) all.satins.push_back(v);
+        for (auto& v : style.colorOverlays) all.colorOverlays.push_back(v);
+        for (auto& v : style.gradientOverlays) all.gradientOverlays.push_back(v);
+        for (auto& v : style.patternOverlays) all.patternOverlays.push_back(v);
+        for (auto& v : style.strokes) all.strokes.push_back(v);
+        for (auto& v : style.bevels) all.bevels.push_back(v);
+    }
+    styles.push_back({"all_ten", all});
+    for (auto& [name, style] : styles) {
+        const LayerStyle copy = style;
+        scene("u16/style/" + name, [copy] { return hash16(styledScene(copy)); });
+    }
+    scene("u16/style/all_ten@0.5", [all] { return hash16(styledScene(all), reducedRegion()); });
+    scene("u16/style/folder", [] {
+        Document doc = goldenBase();
+        Layer folder("Folder", doc.size());
+        folder.isGroup = true;
+        LayerStyle style;
+        OuterGlow glow; glow.size = 6; style.outerGlows.push_back(glow);
+        Stroke stroke; stroke.size = 2; stroke.color = {255, 255, 255}; style.strokes.push_back(stroke);
+        setLayerStyle(folder, style);
+        Layer a = layerOf("a", paint(48, 36, 3), {10, 10});
+        a.parentId = folder.id;
+        doc.layers.push_back(folder);
+        doc.layers.push_back(a);
+        return hash16(sixteen(doc));
+    });
+}
+
 // ---- adjustment layers in a document -----------------------------------------------------------------------------
 
 AdjustmentSettings exampleAdjustment(AdjustmentKind kind) {
@@ -720,6 +850,7 @@ TEST_CASE(render_hashes_match_the_baseline_on_the_pool_and_serially) {
     addBrushScenes();
     add16BitScenes();
     add16BitEditScenes();
+    add16BitVectorScenes();
 
     std::map<std::string, std::string> actual;
     int threadMismatch = 0;

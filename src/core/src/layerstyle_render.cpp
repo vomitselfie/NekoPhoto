@@ -5,6 +5,8 @@
 // which calibrated them against Photoshop 2026 COM renders; the comments there carry the probe details.
 #include "layerstyle_render.h"
 #include "compositor/blend.h"
+#include "compositor/imaget.h"
+#include "compositor/depth.h"
 #include "compositor/parallel.h"
 #include <algorithm>
 #include <cmath>
@@ -383,13 +385,16 @@ float sampleContour(const std::array<uint8_t, 256>& lut, float t, bool antialias
 
 /// An effect colour onto a premultiplied pixel. The burn modes fold the effect's alpha into the colour toward
 /// white, Color Dodge toward black, then blend fully (Photoshop's effect compositing); the rest lerp.
-void compositeEffect(uint8_t* d, const float color[3], float alpha, EffectBlend mode) {
+/// At either depth: `T` is the sample (uint8_t 0..255 or uint16_t 0..32768).
+template <class T>
+void compositeEffect(T* d, const float color[3], float alpha, EffectBlend mode) {
+    constexpr float one = std::is_same_v<T, uint8_t> ? 255.0f : 32768.0f;
     if (alpha <= 0) return;
     alpha = unit(alpha);
     if (mode == EffectBlend::Dissolve) mode = EffectBlend::Normal;
-    const float da = d[3] / 255.0f;
+    const float da = d[3] / one;
     float b[3] = {0, 0, 0};
-    if (da > 0) for (int k = 0; k < 3; k++) b[k] = d[k] / 255.0f / da;
+    if (da > 0) for (int k = 0; k < 3; k++) b[k] = d[k] / one / da;
     float c[3] = {color[0], color[1], color[2]};
     float a = alpha;
     if (da >= 0.999f && (mode == EffectBlend::LinearBurn || mode == EffectBlend::ColorBurn)) { for (auto& v : c) v = 1 - (1 - v) * alpha; a = 1; }
@@ -399,9 +404,9 @@ void compositeEffect(uint8_t* d, const float color[3], float alpha, EffectBlend 
     const float outA = a + da * (1 - a);
     for (int k = 0; k < 3; k++) {
         const float premul = a * (1 - da) * c[k] + a * da * blended[k] + (1 - a) * da * b[k];
-        d[k] = uint8_t(std::clamp(premul * 255 + 0.5f, 0.0f, 255.0f));
+        d[k] = T(std::clamp(premul * one + 0.5f, 0.0f, one));
     }
-    d[3] = uint8_t(std::clamp(outA * 255 + 0.5f, 0.0f, 255.0f));
+    d[3] = T(std::clamp(outA * one + 0.5f, 0.0f, one));
     for (int k = 0; k < 3; k++) d[k] = std::min(d[k], d[3]);
 }
 
@@ -518,9 +523,13 @@ Pattern patternFor(const PatternTile* tile, const LayerStyle& style, float scale
     return p;
 }
 
-} // namespace
-
-void drawStyledLayer(const StyledDraw& in, Image& target) {
+/// The layer and its effects at the target's depth: the effects are worked out on float masks either way, and only
+/// reading the source and backdrop and writing the result know the sample type.
+template <SampleType S>
+void drawStyled(const StyledDraw& in, ImageOf<S>& target) {
+    using T = SampleOf<S>;
+    using Img = ImageOf<S>;
+    constexpr float one = float(SampleTraits<S>::one);
     const LayerStyle& style = *in.style;
     const int outW = target.width(), outH = target.height();
     const double s = in.scale;
@@ -537,16 +546,37 @@ void drawStyledLayer(const StyledDraw& in, Image& target) {
     const int w = wx1 - wx0, h = wy1 - wy0;
     if ((long long)w * h > 400LL * 1000 * 1000) return;
     const Rect padded(in.region.x + wx0 / s, in.region.y + wy0 / s, w / s, h / s);
-    Image source(w, h);
-    in.drawSource(source, padded);
+    Img source(w, h);
+    if constexpr (S == SampleType::U8) in.drawSource(source, padded);
+    else in.drawSource16(source, padded);
     Mask alpha(size_t(w) * h);
     bool any = false;
-    for (int y = 0; y < h; y++) { const uint8_t* p = source.row(y); for (int x = 0; x < w; x++) { alpha[size_t(y) * w + x] = p[x * 4 + 3] / 255.0f; any |= p[x * 4 + 3] != 0; } }
+    for (int y = 0; y < h; y++) {
+        const T* p = source.row(y);
+        for (int x = 0; x < w; x++) {
+            float a = p[x * 4 + 3] / one;
+            // Coverage under half an 8-bit level is clear to the effects (as the healers treat it): the mattes' painted and
+            // contour tests then see the pixels an 8-bit layer would.
+            if constexpr (S == SampleType::U16) if (narrow16(p[x * 4 + 3]) == 0) a = 0;
+            alpha[size_t(y) * w + x] = a;
+            any |= p[x * 4 + 3] != 0;
+        }
+    }
     if (!any) return;
     const float master = in.master, fill = in.fill;
-    const GrayImage* cover = in.coverage;
-    auto coverAt = [&](int ox, int oy) { return cover ? cover->row(oy)[ox] / 255.0f : 1.0f; };
+    const GrayOf<S>* cover = nullptr;
+    if constexpr (S == SampleType::U8) cover = in.coverage; else cover = in.coverage16;
+    auto coverAt = [&](int ox, int oy) { return cover ? cover->row(oy)[ox] / one : 1.0f; };
     auto rgb = [](StyleColor c, float out[3]) { out[0] = c.r / 255.0f; out[1] = c.g / 255.0f; out[2] = c.b / 255.0f; };
+    // A gradient's colour: at 8 bits rounded to a byte as before; at 16 the ramp's exact colour, without 8-bit steps.
+    auto gradRgb = [&](const StyleGradient& g, float t, float out[3]) {
+        if constexpr (S == SampleType::U8) rgb(gradientColor(g, t), out);
+        else {
+            double c[3];
+            gradientColorExact(g, t, c);
+            for (int k = 0; k < 3; k++) out[k] = float(std::clamp(c[k], 0.0, 255.0) / 255.0);
+        }
+    };
     // Document pixel under output pixel (ox, oy), for gradients and patterns.
     auto docX = [&](int ox) { return std::floor(in.region.x + (ox + 0.5) / s); };
     auto docY = [&](int oy) { return std::floor(in.region.y + (oy + 0.5) / s); };
@@ -575,17 +605,17 @@ void drawStyledLayer(const StyledDraw& in, Image& target) {
         return m;
     };
     const int ox0 = std::max(0, wx0), ox1 = std::min(outW, wx1), oy0 = std::max(0, wy0), oy1 = std::min(outH, wy1);
-    auto paintOut = [&](const std::function<void(int ox, int oy, uint8_t* d, size_t i)>& f) {
+    auto paintOut = [&](const std::function<void(int ox, int oy, T* d, size_t i)>& f) {
         parallelRows(oy0, oy1, [&](int a, int b) {
             for (int oy = a; oy < b; oy++) {
-                uint8_t* row = target.row(oy);
+                T* row = target.row(oy);
                 for (int ox = ox0; ox < ox1; ox++) f(ox, oy, row + ox * 4, size_t(oy - wy0) * w + size_t(ox - wx0));
             }
         }, 32);
     };
 
     // What the exterior effects paint under: the layer's own blend reads the backdrop from before them.
-    std::optional<Image> backdrop;
+    std::optional<Img> backdrop;
     const bool exterior = !style.dropShadows.empty() || !style.outerGlows.empty();
     if (exterior && in.mode != BlendMode::Normal) backdrop = target;
 
@@ -600,7 +630,7 @@ void drawStyledLayer(const StyledDraw& in, Image& target) {
         Mask m = shifted(dx, dy);
         softExterior(m, w, h, shadow.size * float(s), shadow.spread);
         float color[3]; rgb(shadow.color, color);
-        paintOut([&](int ox, int oy, uint8_t* d, size_t i) {
+        paintOut([&](int ox, int oy, T* d, size_t i) {
             float a = m[i] * shadow.opacity * master * coverAt(ox, oy);
             if (shadow.layerConceals) a *= exteriorKnockout(alpha[i], alpha[i] * fill * master);
             compositeEffect(d, color, a, shadow.mode);
@@ -616,7 +646,7 @@ void drawStyledLayer(const StyledDraw& in, Image& target) {
             if (gain > 1) for (auto& v : m) v = std::min(1.0f, v * gain);
         }
         float color[3]; rgb(glow.color, color);
-        paintOut([&](int ox, int oy, uint8_t* d, size_t i) {
+        paintOut([&](int ox, int oy, T* d, size_t i) {
             compositeEffect(d, color, m[i] * exteriorKnockout(alpha[i], alpha[i] * fill * master) * glow.opacity * master * coverAt(ox, oy), glow.mode);
         });
     }
@@ -673,7 +703,7 @@ void drawStyledLayer(const StyledDraw& in, Image& target) {
             double gx, gy, gw, gh;
             gradientBounds(g.gradient, gx, gy, gw, gh);
             const float t = gradientPosition(g.gradient, gx, gy, gw, gh, x, y);
-            float gc[3]; rgb(gradientColor(g.gradient, t), gc);
+            float gc[3]; gradRgb(g.gradient, t, gc);
             foldEffect(c, gc, g.opacity * gradientOpacity(g.gradient, t), g.mode);
         }
         for (const ColorOverlay& o : style.colorOverlays) { float oc[3]; rgb(o.color, oc); foldEffect(c, oc, o.opacity, o.mode); }
@@ -692,22 +722,22 @@ void drawStyledLayer(const StyledDraw& in, Image& target) {
     // carries them; without (Photoshop's default) its mode blends its own pixels and the interiors land on that.
     const bool interiorsFirst = style.blendInteriorAsGroup;
     const EffectBlend layerMode = asEffect(in.mode);
-    if (ownContent) paintOut([&](int ox, int oy, uint8_t* d, size_t i) {
-        const uint8_t* p = source.row(oy - wy0) + (ox - wx0) * 4;
+    if (ownContent) paintOut([&](int ox, int oy, T* d, size_t i) {
+        const T* p = source.row(oy - wy0) + (ox - wx0) * 4;
         if (p[3] == 0) return;
-        const float a = p[3] / 255.0f;
+        const float a = p[3] / one;
         float c[3];
-        for (int k = 0; k < 3; k++) c[k] = std::min(1.0f, p[k] / 255.0f / a);
+        for (int k = 0; k < 3; k++) c[k] = std::min(1.0f, p[k] / one / a);
         const float paint = a * master * fill * knock(i) * coverAt(ox, oy);
         if (paint <= 0) return;
         if (foldInteriors && interiorsFirst) foldInto(c, ox, oy, i);
         if (in.mode != BlendMode::Normal && foldInteriors && !interiorsFirst) {
             // Blend against the backdrop first, then the interiors over that, then a plain source-over.
-            const uint8_t* bd = backdrop ? backdrop->row(oy) + ox * 4 : d;
-            const float ba = bd[3] / 255.0f;
+            const T* bd = backdrop ? backdrop->row(oy) + ox * 4 : d;
+            const float ba = bd[3] / one;
             if (ba > 0) {
                 float b[3], blended[3];
-                for (int k = 0; k < 3; k++) b[k] = bd[k] / 255.0f / ba;
+                for (int k = 0; k < 3; k++) b[k] = bd[k] / one / ba;
                 effectBlend(layerMode, b, c, blended);
                 for (int k = 0; k < 3; k++) c[k] = c[k] + (blended[k] - c[k]) * ba;
             }
@@ -718,11 +748,11 @@ void drawStyledLayer(const StyledDraw& in, Image& target) {
         if (foldInteriors && !interiorsFirst) foldInto(c, ox, oy, i);
         if (backdrop && in.mode != BlendMode::Normal) {
             // Exterior effects under a blended layer: blend against the backdrop from before them.
-            const uint8_t* bd = backdrop->row(oy) + ox * 4;
-            const float ba = bd[3] / 255.0f;
+            const T* bd = backdrop->row(oy) + ox * 4;
+            const float ba = bd[3] / one;
             if (ba > 0) {
                 float b[3], blended[3];
-                for (int k = 0; k < 3; k++) b[k] = bd[k] / 255.0f / ba;
+                for (int k = 0; k < 3; k++) b[k] = bd[k] / one / ba;
                 effectBlend(layerMode, b, c, blended);
                 for (int k = 0; k < 3; k++) c[k] = c[k] + (blended[k] - c[k]) * ba;
             }
@@ -734,7 +764,7 @@ void drawStyledLayer(const StyledDraw& in, Image& target) {
 
     // With Fill below 100% the overlays and satins are their own passes (Fill fades the pixels, not the effects).
     if (!foldInteriors) {
-        paintOut([&](int ox, int oy, uint8_t* d, size_t i) {
+        paintOut([&](int ox, int oy, T* d, size_t i) {
             const float shape = alpha[i] * master * knock(i) * coverAt(ox, oy);
             if (shape <= 0) return;
             const double x = docX(ox), y = docY(oy);
@@ -749,7 +779,7 @@ void drawStyledLayer(const StyledDraw& in, Image& target) {
                 double gx, gy, gw, gh;
                 gradientBounds(g.gradient, gx, gy, gw, gh);
                 const float t = gradientPosition(g.gradient, gx, gy, gw, gh, x, y);
-                float gc[3]; rgb(gradientColor(g.gradient, t), gc);
+                float gc[3]; gradRgb(g.gradient, t, gc);
                 compositeEffect(d, gc, shape * g.opacity * gradientOpacity(g.gradient, t), g.mode);
             }
             for (const ColorOverlay& o : style.colorOverlays) { float oc[3]; rgb(o.color, oc); compositeEffect(d, oc, shape * o.opacity, o.mode); }
@@ -773,7 +803,7 @@ void drawStyledLayer(const StyledDraw& in, Image& target) {
             for (auto& v : m) v = glow.center ? 1 - std::min(1.0f, v * gain) : std::min(1.0f, v * gain);
         }
         float color[3]; rgb(glow.color, color);
-        paintOut([&](int ox, int oy, uint8_t* d, size_t i) {
+        paintOut([&](int ox, int oy, T* d, size_t i) {
             if (alpha[i] <= 0) return;
             compositeEffect(d, color, alpha[i] * m[i] * glow.opacity * master * knock(i) * coverAt(ox, oy), glow.mode);
         });
@@ -785,7 +815,7 @@ void drawStyledLayer(const StyledDraw& in, Image& target) {
         Mask m = shifted(dx, dy);
         softInterior(m, w, h, shadow.size * float(s), shadow.choke);
         float color[3]; rgb(shadow.color, color);
-        paintOut([&](int ox, int oy, uint8_t* d, size_t i) {
+        paintOut([&](int ox, int oy, T* d, size_t i) {
             if (alpha[i] <= 0) return;
             compositeEffect(d, color, alpha[i] * m[i] * shadow.opacity * master * knock(i) * coverAt(ox, oy), shadow.mode);
         });
@@ -797,7 +827,7 @@ void drawStyledLayer(const StyledDraw& in, Image& target) {
         if (stroke.opacity <= 0) continue;
         const Mask& band = bands[k];
         float color[3]; rgb(stroke.color, color);
-        paintOut([&](int ox, int oy, uint8_t* d, size_t i) {
+        paintOut([&](int ox, int oy, T* d, size_t i) {
             float a = band[i] * stroke.opacity * master * coverAt(ox, oy);
             if (a <= 0) return;
             float c[3] = {color[0], color[1], color[2]};
@@ -808,7 +838,7 @@ void drawStyledLayer(const StyledDraw& in, Image& target) {
                 if (stroke.gradient.reverse) t = 1 - t;
                 float acc[3] = {0, 0, 0};
                 for (int j = -1; j <= 1; j++) {
-                    float cc[3]; rgb(gradientColor(stroke.gradient, unit(t + j * step)), cc);
+                    float cc[3]; gradRgb(stroke.gradient, unit(t + j * step), cc);
                     const float wgt = j == 0 ? 0.5f : 0.25f;
                     for (int q = 0; q < 3; q++) acc[q] += cc[q] * wgt;
                 }
@@ -818,7 +848,7 @@ void drawStyledLayer(const StyledDraw& in, Image& target) {
                 double gx, gy, gw, gh;
                 gradientBounds(stroke.gradient, gx, gy, gw, gh);
                 const float t = gradientPosition(stroke.gradient, gx, gy, gw, gh, docX(ox), docY(oy));
-                rgb(gradientColor(stroke.gradient, t), c);
+                gradRgb(stroke.gradient, t, c);
                 a *= gradientOpacity(stroke.gradient, t);
             }
             compositeEffect(d, c, a, stroke.mode);
@@ -872,7 +902,7 @@ void drawStyledLayer(const StyledDraw& in, Image& target) {
         const auto glossLut = glossLinear ? std::array<uint8_t, 256>{} : bevel.gloss.lut();
         float hi[3], sh[3]; rgb(bevel.highlight, hi); rgb(bevel.shadow, sh);
         auto sample = [&](int x, int y) { return x < 0 || y < 0 || x >= w || y >= h ? 0.0f : height[size_t(y) * w + x]; };
-        paintOut([&](int ox, int oy, uint8_t* d, size_t i) {
+        paintOut([&](int ox, int oy, T* d, size_t i) {
             const float m = unit(matte[i]);
             float effect = 0;
             switch (bevel.kind) {
@@ -913,5 +943,11 @@ void drawStyledLayer(const StyledDraw& in, Image& target) {
         });
     }
 }
+
+
+} // namespace
+
+void drawStyledLayer(const StyledDraw& in, Image& target) { drawStyled<SampleType::U8>(in, target); }
+void drawStyledLayer(const StyledDraw& in, Image16& target) { drawStyled<SampleType::U16>(in, target); }
 
 } // namespace compositor
