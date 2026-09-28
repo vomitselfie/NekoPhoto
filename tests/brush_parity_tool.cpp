@@ -4,6 +4,8 @@
 //   brush_parity_tool list                            the fixtures and presets
 //   brush_parity_tool dump <folder> [filter]          <fixture>__<preset>.png, metrics.txt and fixtures/*.json
 //   brush_parity_tool render <stroke.json> <preset> <out.png>   one recorded stroke with one preset
+//   brush_parity_tool grain <folder>                  the moving-grain torture scenes (brush_grain_tests), the grain
+//                                                     itself, and each scene's dabs (centre, tangent, grain offset)
 #include "brush_harness.h"
 #include "compositor/png.h"
 #include <cstdio>
@@ -17,7 +19,7 @@ namespace fs = std::filesystem;
 namespace {
 
 int usage() {
-    std::fprintf(stderr, "usage: brush_parity_tool list | dump <folder> [filter] | render <stroke.json> <preset> <out.png>\n");
+    std::fprintf(stderr, "usage: brush_parity_tool list | dump <folder> [filter] | render <stroke.json> <preset> <out.png> | grain <folder>\n");
     return 2;
 }
 
@@ -60,6 +62,36 @@ int main(int argc, char** argv) {
             written++;
         }
         std::printf("%d renders in %s\n", written, folder.string().c_str());
+        return 0;
+    }
+    if (command == "grain" && argc >= 3) {
+        const fs::path folder = argv[2];
+        fs::create_directories(folder);
+        // The grain eight times over, so its asymmetry can be seen.
+        const auto grain = tortureGrain();
+        Image big(grain->width() * 8, grain->height() * 8);
+        for (int y = 0; y < big.height(); y++)
+            for (int x = 0; x < big.width(); x++) {
+                uint8_t* p = big.pixel(x, y);
+                p[0] = p[1] = p[2] = grain->at(x / 8, y / 8);
+                p[3] = 255;
+            }
+        writePngImage((folder / "grain.png").string(), big);
+        int written = 0;
+        for (const Preset& preset : grainTorturePresets())
+            for (const GrainStroke& g : grainTortureStrokes()) {
+                std::vector<TipDab> dabs;
+                const Render r = render(g.stroke, preset, &dabs);
+                if (!r.image) continue;
+                const std::string name = g.stroke.name + "__" + preset.name;
+                writePngImage((folder / (name + ".png")).string(), *r.image);
+                std::ofstream trace(folder / (name + ".txt"));
+                for (const TipDab& d : dabs)
+                    trace << d.distance << ' ' << d.center.x << ' ' << d.center.y << ' ' << d.size << ' ' << d.grainDirection << ' ' << d.grainTangent << ' '
+                          << d.grainOffset.x << ' ' << d.grainOffset.y << '\n';
+                written++;
+            }
+        std::printf("%d renders in %s (each with its dabs: distance, x, y, size, direction, tangent, grain offset x, y)\n", written, folder.string().c_str());
         return 0;
     }
     if (command == "render" && argc >= 5) {

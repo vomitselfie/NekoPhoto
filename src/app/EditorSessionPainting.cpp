@@ -228,6 +228,7 @@ void EditorSession::endBrush() {
     healPreview_.stop();
     myPaintSettle_.stop();
     if (myPaint_) { myPaint_->finish(); myPaint_.reset(); }
+    if (tipStroke_) tipStroke_->finish();   // a click with Stroke grain stamps its one dab now
     tipStroke_.reset();
     std::unique_ptr<BrushStroke> stroke = std::move(stroke_);
     stroke->flush();

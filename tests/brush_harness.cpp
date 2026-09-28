@@ -333,7 +333,7 @@ std::shared_ptr<Image> paper(const Preset& preset) {
 }
 
 /// Paints the fixture into `grid` with the preset's engine; false when the engine could not start.
-bool paint(BrushStroke& grid, const StrokeFixture& fixture, const Preset& preset) {
+bool paint(BrushStroke& grid, const StrokeFixture& fixture, const Preset& preset, std::vector<TipDab>* trace = nullptr) {
     if (!grid.isValid() || fixture.samples.empty()) return false;
     // Every engine takes the same samples, derived as they arrive, as the canvas feeds them.
     BrushSampleTrack track;
@@ -344,7 +344,9 @@ bool paint(BrushStroke& grid, const StrokeFixture& fixture, const Preset& preset
     case Preset::Engine::Tip: {
         TipStroke stroke(grid, preset.tip->tip, preset.settings.diameter, preset.seed);
         if (!stroke.isValid()) return false;
+        stroke.trace(trace);
         for (const BrushSample& s : fixture.samples) stroke.strokeTo(track.add(s));
+        stroke.finish();
         break;
     }
     case Preset::Engine::MyPaint: {
@@ -372,11 +374,13 @@ std::vector<uint8_t> paintOf(const Image& image, bool erasing) {
 
 } // namespace
 
-Render16 render16(const StrokeFixture& fixture, const Preset& preset) {
+Render16 render16(const StrokeFixture& fixture, const Preset& preset) { return render16(fixture, preset, nullptr); }
+
+Render16 render16(const StrokeFixture& fixture, const Preset& preset, std::vector<TipDab>* trace) {
     Render16 out;
     Layer layer(Asset::make(Image16Ptr(widenImage(*paper(preset))), "Paper"), Point(0, 0));
     BrushStroke grid(layer, false, preset.settings, Size(canvasWidth, canvasHeight), SampleType::U16, nullptr);
-    if (!paint(grid, fixture, preset)) return out;
+    if (!paint(grid, fixture, preset, trace)) return out;
     const Image16Ptr preview = grid.previewImage16();
     if (!preview || preview->width() != canvasWidth || preview->height() != canvasHeight) return out;
     out.image = std::make_shared<Image16>(*preview);
@@ -400,11 +404,13 @@ Calibration compare(const Render& eight, const Render16& deep) {
     return out;
 }
 
-Render render(const StrokeFixture& fixture, const Preset& preset) {
+Render render(const StrokeFixture& fixture, const Preset& preset) { return render(fixture, preset, nullptr); }
+
+Render render(const StrokeFixture& fixture, const Preset& preset, std::vector<TipDab>* trace) {
     Render out;
     Layer layer(Asset::make(paper(preset), "Paper"), Point(0, 0));
     BrushStroke grid(layer, false, preset.settings, Size(canvasWidth, canvasHeight));
-    if (!paint(grid, fixture, preset)) return out;
+    if (!paint(grid, fixture, preset, trace)) return out;
     const ImagePtr preview = grid.previewImage();
     if (!preview || preview->width() != canvasWidth || preview->height() != canvasHeight) return out;
     out.image = std::make_shared<Image>(*preview);
@@ -538,6 +544,110 @@ std::vector<Scene> scenes(const std::vector<StrokeFixture>& fixtures, const std:
     std::vector<Scene> out;
     for (const StrokeFixture& f : fixtures)
         for (const Preset& p : presets) out.push_back({f.name + "/" + p.name, &f, &p});
+    return out;
+}
+
+// ---- Moving grain under torture ------------------------------------------------------------------------------------
+
+std::shared_ptr<GrayImage> tortureGrain() {
+    auto grain = std::make_shared<GrayImage>(32, 32, 0);
+    for (int y = 0; y < 32; y++)
+        for (int x = 0; x < 32; x++) {
+            const bool light = ((x / 8) + (y / 8)) % 2 == 0;
+            double v = light ? 150 : 60;
+            v += 90.0 * (x % 16) / 15;   // one-way stripes: each brightens left to right
+            grain->at(x, y) = uint8_t(std::clamp(v, 0.0, 255.0));
+        }
+    // An L in the top-left corner: its long stroke down, its foot to the right.
+    for (int y = 1; y <= 7; y++) grain->at(1, y) = 255;
+    for (int x = 1; x <= 5; x++) grain->at(x, 7) = 255;
+    for (int y = 1; y <= 7; y++) for (int x = 2; x <= 6; x++) if (y < 7) grain->at(x, y) = 0;
+    return grain;
+}
+
+std::vector<Preset> grainTorturePresets() {
+    TipPreset moving;
+    moving.tip.shape = radialTip(64);
+    moving.tip.grain = tortureGrain();
+    moving.tip.grainMode = BrushTip::GrainMode::Stroke;
+    moving.tip.grainMovement = 1;
+    moving.tip.grainDepth = 1;
+    moving.tip.grainScale = 1;
+    moving.tip.spacing = 0.1;
+    moving.diameter = 28;
+    std::vector<Preset> out = {tipPreset("grain_moving", moving, 40)};
+    TipPreset speed = moving;
+    // Procreate's dynamicsSpeedSize at -0.5 (procreate.cpp's scaling::speedSize): thinner when drawn fast.
+    speed.tip.dynamics = {dynamicsMapping(DynamicsInput::ScreenSpeed, DynamicsTarget::Size, 1, -0.5, 1500)};
+    out.push_back(tipPreset("grain_moving_speed", speed, 40));
+    return out;
+}
+
+const std::vector<std::string>& grainTorturePaths() {
+    static const std::vector<std::string> paths = {"straight", "corner", "s_curve", "circle", "spiral", "reversed"};
+    return paths;
+}
+
+GrainStroke grainTortureStroke(const std::string& path, bool fast, double zoom, double rotation) {
+    GrainStroke g;
+    g.path = path;
+    g.fast = fast;
+    g.zoom = zoom;
+    g.rotation = rotation;
+    // The path on the screen, densely, then resampled at an even step along its length.
+    const Point centre{canvasWidth / 2.0, canvasHeight / 2.0};
+    std::vector<Point> dense;
+    const int n = 4000;
+    for (int i = 0; i <= n; i++) {
+        const double u = double(i) / n;
+        Point p;
+        if (path == "straight") p = {40 + 240 * u, 100};
+        else if (path == "corner") p = u < 0.5 ? Point{60 + 282 * u, 160} : Point{201, 160 - 240 * (u - 0.5)};   // the corner off the dabs' grid
+        else if (path == "s_curve") p = {40 + 240 * u, 100 - 55 * std::sin(2 * pi * u)};
+        else if (path == "circle") { const double a = 2.5 * pi * u; p = {centre.x + 65 * std::cos(a), centre.y + 65 * std::sin(a)}; }
+        else if (path == "spiral") { const double a = 6 * pi * u, r = 75 - 63 * u; p = {centre.x + r * std::cos(a), centre.y + r * std::sin(a)}; }
+        else p = {280 - 240 * u, 100};   // reversed: right to left
+        dense.push_back(p);
+    }
+    // Reports every 1.93 or 15.7 points: steps that never land exactly on a dab of the 2.8-pixel spacing, where the
+    // dab's direction would be a coin toss between two segments.
+    const double step = fast ? 15.7 : 1.93;
+    std::vector<Point> screen = {dense.front()};
+    double carried = 0;
+    for (size_t i = 1; i < dense.size(); i++) {
+        const Point a = dense[i - 1], b = dense[i];
+        double length = std::hypot(b.x - a.x, b.y - a.y), walked = 0;
+        while (carried + (length - walked) >= step) {
+            walked += step - carried;
+            carried = 0;
+            const double t = walked / length;
+            screen.push_back({a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t});
+        }
+        carried += length - walked;
+    }
+    if (std::hypot(screen.back().x - dense.back().x, screen.back().y - dense.back().y) > 0.5) screen.push_back(dense.back());
+    const double c = std::cos(rotation * pi / 180), s = std::sin(rotation * pi / 180);
+    g.stroke.name = "grain_" + path + (fast ? "_fast" : "_slow") + (zoom != 1 ? "_zoom" + std::to_string(int(std::lround(zoom * 100))) : "")
+                    + (rotation != 0 ? "_turned" + std::to_string(int(std::lround(rotation))) : "");
+    for (size_t i = 0; i < screen.size(); i++) {
+        // The reversed stroke wobbles by a hundredth of a report either side, so its direction flips between just
+        // under +180 and just over -180 degrees at every report.
+        const double wobble = path == "reversed" ? (i % 2 ? 0.01 : -0.01) * step : 0;
+        const double sx = screen[i].x - centre.x, sy = screen[i].y + wobble - centre.y;
+        BrushSample sample = at(i * tick, centre.x + (c * sx - s * sy) / zoom, centre.y + (s * sx + c * sy) / zoom, 0.8);
+        sample.viewScale = zoom;
+        g.stroke.samples.push_back(sample);
+    }
+    return g;
+}
+
+std::vector<GrainStroke> grainTortureStrokes() {
+    std::vector<GrainStroke> out;
+    for (const std::string& path : grainTorturePaths())
+        for (bool fast : {false, true}) out.push_back(grainTortureStroke(path, fast, 1, 0));
+    for (const std::string& path : grainTorturePaths()) out.push_back(grainTortureStroke(path, false, 1, 30));
+    for (const std::string& path : grainTorturePaths())
+        for (bool fast : {false, true}) out.push_back(grainTortureStroke(path, fast, 2, 0));
     return out;
 }
 

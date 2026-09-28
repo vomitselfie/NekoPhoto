@@ -247,16 +247,28 @@ void TipStroke::dab(Point center, const BrushSample& pen, double direction, doub
         for (int v = 0; v < 256; v++) density[size_t(v)] = uint8_t(std::lround(255 * (1 - std::pow(1 - v / 255.0, k))));
     }
     // Stroke grain turns with the stroke's tangent smoothed over about two diameters, so a corner or a jittered dab
-    // does not spin it.
+    // does not spin it. The direction is unwrapped against the last dab's direction, not the lagging tangent, so a
+    // path that turns more than half a turn within the window (a tight spiral) keeps turning the grain forwards. The
+    // grain travels with each step between dabs in its own frame, so as the frame catches up with a bend the grain
+    // under the paper turns about the dab a little and never slides across the stroke.
     if (tip_.grain && tip_.grainMode == BrushTip::GrainMode::Stroke) {
-        if (!grainTangentSet_) { grainTangent_ = direction; grainTangentSet_ = true; }
-        else {
+        if (!grainTangentSet_) {
+            grainDirection_ = grainTangent_ = direction;
+            grainOffset_ = {tip_.grainMovement * pen.distance, 0};
+            grainTangentSet_ = true;
+        } else {
+            grainDirection_ = unwrapAngle(grainDirection_, direction);
             const double walked = std::max(0.0, pen.distance - grainTangentAt_);
-            grainTangent_ += (unwrapAngle(grainTangent_, direction) - grainTangent_) * (1 - std::exp(-walked / std::max(1.0, 2 * diameter_)));
+            grainTangent_ += (grainDirection_ - grainTangent_) * (1 - std::exp(-walked / std::max(1.0, 2 * diameter_)));
+            const double c = std::cos(grainTangent_), s = std::sin(grainTangent_);
+            const double dx = center.x - grainCenter_.x, dy = center.y - grainCenter_.y;
+            grainOffset_ = {grainOffset_.x + tip_.grainMovement * (c * dx + s * dy), grainOffset_.y + tip_.grainMovement * (-s * dx + c * dy)};
         }
         grainTangentAt_ = pen.distance;
+        grainCenter_ = center;
     }
     const double tc = std::cos(grainTangent_), ts = std::sin(grainTangent_);
+    const Point grainOffset = grainOffset_;
     for (int n = 0; n < tip_.count; n++) {
         // The draws every dab makes, in the order brushes were first painted with, so a seed paints the same.
         const double sizeRandom = unit(rng_), flowRandom = unit(rng_), angleRandom = signedUnit(rng_);
@@ -289,6 +301,8 @@ void TipStroke::dab(Point center, const BrushSample& pen, double direction, doub
         if (!ceiling) continue;
         const double roundness = applyDynamics(dynamics, DynamicsTarget::Roundness, tip_.roundness, pen, diameter_, roundnessRandom);
 
+        dabCount_++;
+        if (trace_) trace_->push_back({center, at, pen.time, pen.distance, size, flow, opacity, roundness, spacing, rotation, grainTangent_, grainOffset, grainDirection_});
         const GrayImage& shape = *tip_.shape;
         const double scale = size / std::max(shape.width(), shape.height());   // document pixels per tip pixel
         const double sx = scale, sy = scale * roundness;
@@ -334,8 +348,8 @@ void TipStroke::dab(Point center, const BrushSample& pen, double direction, doub
                         double px = d.x, py = d.y;
                         if (tip_.grainMode == BrushTip::GrainMode::Stroke) {
                             const double ox = d.x - center.x, oy = d.y - center.y;
-                            px = tc * ox + ts * oy + tip_.grainMovement * pen.distance;
-                            py = -ts * ox + tc * oy;
+                            px = tc * ox + ts * oy + grainOffset.x;
+                            py = -ts * ox + tc * oy + grainOffset.y;
                         } else if (tip_.grainMode == BrushTip::GrainMode::Dab) {
                             px = (flipX ? -1 : 1) * (c * vx + s * vy);
                             py = (flipY ? -1 : 1) * (-s * vx + c * vy);
@@ -398,14 +412,20 @@ void TipStroke::strokeTo(const BrushSample& sample) {
     std::uniform_real_distribution<double> unit(0.0, 1.0);
     const bool randomSpacing = randomOn_[size_t(DynamicsTarget::Spacing)];
     if (!last_) {
-        dab(input.position, input, 0, tip_.spacing, changed);
         last_ = input;
         carried_ = 0;
+        // Stroke grain turns with the stroke from its first dab: that dab waits until the stroke has a direction.
+        if (tip_.grain && tip_.grainMode == BrushTip::GrainMode::Stroke) { firstPending_ = true; return; }
+        dab(input.position, input, 0, tip_.spacing, changed);
     } else {
         const Point from = last_->position, to = input.position;
         const double dx = to.x - from.x, dy = to.y - from.y, length = std::hypot(dx, dy);
         if (length <= 0) return;
         const double direction = std::atan2(dy, dx);
+        if (firstPending_) {
+            dab(from, *last_, direction, tip_.spacing, changed);
+            firstPending_ = false;
+        }
         // Dabs every `spacing` of the dab's size, the size read at the point reached so far.
         double walked = 0;
         while (true) {
@@ -422,6 +442,14 @@ void TipStroke::strokeTo(const BrushSample& sample) {
         }
         last_ = input;
     }
+    if (!changed.isEmpty()) grid_.recomposeCovered(changed);
+}
+
+void TipStroke::finish() {
+    if (!valid_ || !firstPending_ || !last_) return;
+    firstPending_ = false;
+    Rect changed;
+    dab(last_->position, *last_, 0, tip_.spacing, changed);
     if (!changed.isEmpty()) grid_.recomposeCovered(changed);
 }
 
@@ -446,6 +474,7 @@ std::shared_ptr<Image> renderTipPreview(const TipPreset& preset, int width, int 
         s.stylus = true;
         stroke.strokeTo(track.add(s));
     }
+    stroke.finish();
     grid.flush();
     return std::make_shared<Image>(*grid.previewImage());
 }

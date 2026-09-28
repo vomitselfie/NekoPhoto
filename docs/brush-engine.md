@@ -125,10 +125,24 @@ output = offset + depth × curve(input)        (the range runs from offset to of
 | GrainRotation | 0 degrees (the grain turned about the document's origin) | circular |
 
 **Grain modes** (`grainMode`): Canvas (the default) fixes the grain to the document, so a stroke reveals it; Stroke
-fixes it to the stroke, the grain travelling `grainMovement` (0..1) of each pixel walked along the stroke's tangent,
-smoothed over about two diameters so a corner or a jittered dab does not spin it; Dab fixes it to each dab, turning and
-flipping with it. GrainRotation turns it within whichever frame. `brush.json` keeps `grainMode` ("canvas", "stroke",
-"dab") and `grainMovement`.
+fixes it to the stroke; Dab fixes it to each dab, turning and flipping with it. GrainRotation turns it within whichever
+frame. `brush.json` keeps `grainMode` ("canvas", "stroke", "dab") and `grainMovement`.
+
+Stroke grain, in detail (`TipStroke::dab`):
+
+- Its frame turns with the stroke's tangent smoothed over about two diameters of travel, so a corner or a jittered dab
+  does not spin it. The path's direction is unwrapped from dab to dab, and the tangent follows that, so a path that turns
+  more than half a turn within the window (a spiral tighter than the brush) keeps turning the grain forwards.
+- The grain travels with each step between dabs, `grainMovement` (0..1) of it, turned into the frame of the moment. At
+  1 the grain under the paper stays put and only turns about the dab as the frame catches up with a bend; at 0 it moves
+  with the dab.
+- The first dab waits for the stroke's direction (the next sample that moves), so the grain starts turned the way the
+  stroke goes; `TipStroke::finish` stamps it for a click that never moves.
+
+Before 1.8.1 the first dab was stamped facing +x, so a stroke going any other way spun its grain round over its first
+diameters (half a turn for one drawn right to left); the grain advanced by the distance along the lagging tangent, so after
+a corner it slid across the stroke by up to a step per dab; and the direction was unwrapped against the lagging tangent,
+so a spiral tighter than the window turned the grain backwards. The torture fixture below found all three.
 
 One rule for every brush and every importer:
 
@@ -330,6 +344,26 @@ test is skipped.
 **By hand.** `build/tests/brush_parity_tool list` names the fixtures and presets; `dump <folder> [filter]` writes every
 render as a PNG with `metrics.txt` and the fixtures as JSON; `render <stroke.json> <preset> <out.png>` paints one
 recorded stroke.
+
+**Moving grain under torture** (`brush_grain_tests`). An asymmetric grain made in code (`tortureGrain`: a checkerboard,
+stripes that brighten one way only, an L in one corner) in Stroke mode, on a plain tip and on one whose size follows
+ScreenSpeed; painted along a straight line, a right-angled corner, an S curve, a circle of a turn and a quarter, a spiral
+that ends tighter than the brush and a stroke drawn right to left that wobbles across ±180 degrees at every report; each
+reported slowly (about every 2 points) and fast (about every 16), at 100% and 200%, and the slow ones again under a view
+turned 30 degrees (the document path turned back, as a rotated view maps the same hand motion). `TipStroke::trace`
+records every dab's centre, size, the path's direction, the grain's tangent and its offset, and the test holds:
+
+- the grain under any point near a dab only turns about the dab before, never slides; under a tenth of a pixel on the
+  straight strokes, under 2 pixels round the corner, the S and the circle, and on the spiral no faster than the path;
+- the tangent never leaves the directions the path has taken (no spin at a corner or at the start), settles within 3
+  degrees where the path holds a direction for three windows, and never steps back round the circle and the spiral;
+- slow and fast reports: the grain's tangent within 8 degrees and its phase within a pixel plus 0.5% of the stroke's
+  length, plus what the fast first chord's different start direction gives over the window;
+- a turned view turns the grain's frame by exactly the turn and changes no distance;
+- ScreenSpeed resolves each dab's size at 200% to the 100% stroke's at the same moment, to rounding;
+- 8 and 16 bits within 4 levels (0.05% of samples beyond a level), and the worker pool and a serial run the same.
+
+`brush_parity_tool grain <folder>` writes every torture scene as a PNG, the grain enlarged, and each scene's dabs as text.
 
 `render_hash_tests` keeps its own brush scenes, and `brush_dynamics_tests` covers curves, the combination rule, circular
 targets, the inputs and the migration of old presets.

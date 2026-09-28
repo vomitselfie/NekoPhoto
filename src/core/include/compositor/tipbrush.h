@@ -69,6 +69,21 @@ std::optional<TipPreset> loadTipPreset(const std::string& folder, std::string* e
 /// Writes brush.json, tip.png and grain.png (when there is one) into `folder`, creating it.
 bool saveTipPreset(const std::string& folder, const TipPreset& preset, std::string* error = nullptr);
 
+/// One stamped dab as the stroke resolved it, for tests and benches (TipStroke::trace).
+struct TipDab {
+    Point center;           // on the path
+    Point at;               // after scatter
+    double time = 0;        // the pen's time there, seconds
+    double distance = 0;    // document pixels along the stroke
+    double size = 0;        // document pixels
+    double flow = 0, opacity = 0, roundness = 0;
+    double spacing = 0;     // the step to this dab over its size
+    double rotation = 0;    // radians in the document's y-down frame (the tip's angle and the stroke's direction)
+    double grainTangent = 0;// Stroke grain: the smoothed tangent the grain turns with, radians, unwrapped
+    Point grainOffset;      // Stroke grain: where the dab's centre lies in the grain's frame (document pixels)
+    double grainDirection = 0;  // Stroke grain: the path's direction the tangent follows, radians, unwrapped
+};
+
 class TipStroke {
 public:
     /// Stamps `tip` into `grid`'s coverage at `diameter` document pixels (the size before pressure and
@@ -77,7 +92,15 @@ public:
     bool isValid() const { return valid_; }
     /// The next sample of the stroke (derived by a BrushSampleTrack). A mouse's pressure counts as full, as in
     /// Photoshop (or follows its speed, with mousePressureFromSpeed): tip brushes read pressure only from a stylus.
+    /// With Stroke grain the first dab waits for the stroke's direction (the next sample that moves), so the grain
+    /// starts turned the way the stroke goes.
     void strokeTo(const BrushSample& input);
+    /// The end of the stroke: a first dab still waiting (a click that never moved) is stamped.
+    void finish();
+    /// Every dab stamped from now on is appended to `out` (null stops). Costs nothing while off.
+    void trace(std::vector<TipDab>* out) { trace_ = out; }
+    /// Dabs stamped so far.
+    size_t dabCount() const { return dabCount_; }
 
 private:
     struct Level { GrayImage image; double scale; };   // the tip, halved, and its size relative to the original
@@ -93,15 +116,21 @@ private:
     std::mt19937 rng_;
     std::optional<BrushSample> last_;
     double carried_ = 0;   // distance walked since the last dab
-    /// Stroke grain: the stroke's tangent, radians unwrapped, smoothed over about two diameters of travel, and the
-    /// distance at the dab it was last moved to.
-    double grainTangent_ = 0, grainTangentAt_ = 0;
+    /// Stroke grain: the path's direction unwrapped from dab to dab; the tangent the grain turns with, that direction
+    /// smoothed over about two diameters of travel; the distance and the centre of the last dab; and the grain's offset,
+    /// the steps between dabs (`grainMovement` of each) turned into the grain's frame as it was then, so the grain under
+    /// the paper only turns, and never slides, while the frame catches up with a bend.
+    double grainDirection_ = 0, grainTangent_ = 0, grainTangentAt_ = 0;
+    Point grainCenter_, grainOffset_;
     bool grainTangentSet_ = false;
+    bool firstPending_ = false;   // Stroke grain: the first sample is in, its dab waits for the direction
     std::array<bool, dynamicsTargetCount> randomOn_{};   // targets a Random mapping drives
     bool valid_ = false;
     /// Density by spacing on a 16-bit grid: an entry per 15-bit level, for the spacing ratio `density16K_`.
     std::vector<uint16_t> density16_;
     double density16K_ = -1;
+    std::vector<TipDab>* trace_ = nullptr;
+    size_t dabCount_ = 0;
 };
 
 /// A preview stroke of `preset` (an S curve in black on transparent), for pickers.

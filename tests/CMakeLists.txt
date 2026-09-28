@@ -179,6 +179,10 @@ add_test(NAME brush_parity COMMAND brush_parity)
 add_executable(brush_dynamics_tests brush_dynamics_tests.cpp)
 target_link_libraries(brush_dynamics_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME brush_dynamics_tests COMMAND brush_dynamics_tests)
+# Moving grain under torture: phase, spin, wrap, sampling, rotation, zoom, depth and threads, from each dab's trace.
+add_executable(brush_grain_tests brush_grain_tests.cpp)
+target_link_libraries(brush_grain_tests PRIVATE brush_harness)
+add_test(NAME brush_grain_tests COMMAND brush_grain_tests)
 add_executable(brush_parity_tool brush_parity_tool.cpp)
 target_link_libraries(brush_parity_tool PRIVATE brush_harness)
 

@@ -56,6 +56,8 @@ struct Render {
     std::vector<uint8_t> paint;   // canvasWidth x canvasHeight
 };
 Render render(const StrokeFixture& fixture, const Preset& preset);
+/// The same, appending every dab a tip brush stamps to `trace` (TipStroke::trace).
+Render render(const StrokeFixture& fixture, const Preset& preset, std::vector<TipDab>* trace);
 
 /// The same fixture painted on a 16-bit layer (the same paper, widened to 0..32768) by the 16-bit stroke. `image` is the
 /// layer at 16 bits; `eight` is it reduced to 8 bits, with its paint, for the measurements and the comparison with the
@@ -65,6 +67,7 @@ struct Render16 {
     Render eight;
 };
 Render16 render16(const StrokeFixture& fixture, const Preset& preset);
+Render16 render16(const StrokeFixture& fixture, const Preset& preset, std::vector<TipDab>* trace);
 
 /// How far a 16-bit render reduced to 8 bits is from the 8-bit render: the largest difference in any sample, and the
 /// share of samples more than a level apart.
@@ -97,6 +100,31 @@ struct Scene {
     const Preset* preset;
 };
 std::vector<Scene> scenes(const std::vector<StrokeFixture>& fixtures, const std::vector<Preset>& presets);
+
+// ---- Moving grain under torture (brush_grain_tests) --------------------------------------------------------------
+
+/// A 32 x 32 grain that shows every mistake of phase and orientation: a checkerboard of 8-pixel squares, stripes that
+/// brighten one way only (left to right in each 16-pixel period) and an L in one corner that is never symmetric.
+std::shared_ptr<GrayImage> tortureGrain();
+
+/// Round tips with that grain in Stroke mode (Procreate's moving grain), full movement: "grain_moving" plain, and
+/// "grain_moving_speed" with its size following the speed on the screen as a Procreate brush's does.
+std::vector<Preset> grainTorturePresets();
+
+/// One torture stroke: a path drawn on the screen, slow (a report about every 2 screen points) or fast (about 16), at a zoom
+/// and with the view turned by `rotation` degrees about the canvas's centre (the document path is the screen path
+/// turned back and scaled by 1 / zoom, as a rotated, zoomed view would map the same hand motion).
+struct GrainStroke {
+    std::string path;     // straight, corner, s_curve, circle, spiral, reversed
+    bool fast = false;
+    double zoom = 1;
+    double rotation = 0;
+    StrokeFixture stroke;
+};
+/// Every path slow and fast at 100%; each slow path also turned 30 degrees; and each path slow and fast at 200%.
+std::vector<GrainStroke> grainTortureStrokes();
+GrainStroke grainTortureStroke(const std::string& path, bool fast, double zoom, double rotation);
+const std::vector<std::string>& grainTorturePaths();
 
 // ---- Brushes checked against expectations ---------------------------------------------------------------------------
 
