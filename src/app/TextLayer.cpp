@@ -145,12 +145,16 @@ RunLayout layoutRuns(const compositor::LayerText& text) {
     return out;
 }
 
-std::shared_ptr<compositor::Image> renderRuns(const compositor::LayerText& text) {
+/// What text is painted into: 8 bits per channel, or Qt's 16 bits per channel for a 16-bit document (Qt composites
+/// the glyphs and colours at 16 bits there; its glyph coverage is 8-bit either way).
+QImage::Format textFormat(bool deep) { return deep ? QImage::Format_RGBA64_Premultiplied : QImage::Format_ARGB32_Premultiplied; }
+
+QImage renderRuns(const compositor::LayerText& text, bool deep) {
     RunLayout laid = layoutRuns(text);
     const int w = std::max(1, int(std::ceil(laid.width)) + 2 * textPadding);
     const int h = std::max(1, int(std::ceil(laid.bottom)) + 2 * textPadding);
-    if ((long long)w * h > compositor::Document::pixelBudget) return nullptr;
-    QImage image(w, h, QImage::Format_ARGB32_Premultiplied);
+    if ((long long)w * h > compositor::Document::pixelBudget) return {};
+    QImage image(w, h, textFormat(deep));
     image.fill(Qt::transparent);
     QPainter painter(&image);
     painter.setRenderHint(QPainter::Antialiasing);
@@ -163,16 +167,14 @@ std::shared_ptr<compositor::Image> renderRuns(const compositor::LayerText& text)
     }
     for (auto& paragraph : laid.paragraphs) paragraph->draw(&painter, QPointF(textPadding, textPadding));
     painter.end();
-    return fromQImage(image);
+    return image;
 }
 
-} // namespace
+QImage renderUpright(const compositor::LayerText& text, bool deep);
 
-std::shared_ptr<compositor::Image> renderUpright(const compositor::LayerText& text);
-
-std::shared_ptr<compositor::Image> renderTextLayer(const compositor::LayerText& text, QPointF* warpOffset) {
-    if (warpOffset) *warpOffset = QPointF(0, 0);
-    auto upright = renderUpright(text);
+/// Warp Text over the upright raster, at either depth.
+template <class Img>
+std::shared_ptr<Img> bendText(const compositor::LayerText& text, std::shared_ptr<Img> upright, QPointF* warpOffset) {
     if (!upright || !text.warp.active()) return upright;
     // Warp Text: the preset bent over the layout box (the block's lines, or the frame), as Photoshop re-derives it
     // from its own layout; ink past the box follows the patch's extension.
@@ -186,11 +188,36 @@ std::shared_ptr<compositor::Image> renderTextLayer(const compositor::LayerText& 
     auto bent = compositor::renderWarpedOverBox(*upright, *mesh, box);
     if (!bent) return upright;
     if (warpOffset) *warpOffset = QPointF(bent->transform.origin.x, bent->transform.origin.y);
-    return bent->image;
+    return std::const_pointer_cast<Img>(std::shared_ptr<const Img>(bent->image));
 }
 
-std::shared_ptr<compositor::Image> renderUpright(const compositor::LayerText& text) {
-    if (!text.runs.empty() || (text.boxWidth > 0 && text.boxHeight > 0)) return renderRuns(text);
+} // namespace
+
+std::shared_ptr<compositor::Image> renderTextLayer(const compositor::LayerText& text, QPointF* warpOffset) {
+    if (warpOffset) *warpOffset = QPointF(0, 0);
+    const QImage upright = renderUpright(text, false);
+    return bendText(text, upright.isNull() ? nullptr : fromQImage(upright), warpOffset);
+}
+
+std::shared_ptr<compositor::Image16> renderTextLayer16(const compositor::LayerText& text, QPointF* warpOffset) {
+    if (warpOffset) *warpOffset = QPointF(0, 0);
+    const QImage upright = renderUpright(text, true);
+    return bendText(text, upright.isNull() ? nullptr : fromQImage16(upright), warpOffset);
+}
+
+compositor::AnyImage renderTextLayerAt(const compositor::LayerText& text, compositor::SampleType type, QPointF* warpOffset) {
+    if (type == compositor::SampleType::U16) {
+        auto image = renderTextLayer16(text, warpOffset);
+        return image ? compositor::AnyImage(compositor::Image16Ptr(image)) : compositor::AnyImage();
+    }
+    auto image = renderTextLayer(text, warpOffset);
+    return image ? compositor::AnyImage(compositor::ImagePtr(image)) : compositor::AnyImage();
+}
+
+namespace {
+
+QImage renderUpright(const compositor::LayerText& text, bool deep) {
+    if (!text.runs.empty() || (text.boxWidth > 0 && text.boxHeight > 0)) return renderRuns(text, deep);
     const QFont font = fontFor(text);
     const QFontMetricsF metrics(font);
     QString content = QString::fromStdString(text.text);
@@ -201,8 +228,8 @@ std::shared_ptr<compositor::Image> renderUpright(const compositor::LayerText& te
     for (const QString& line : lines) width = std::max(width, metrics.horizontalAdvance(line));
     const int w = std::max(1, int(std::ceil(width)) + 2 * textPadding);
     const int h = std::max(1, int(std::ceil(lineHeight * lines.size())) + 2 * textPadding);
-    if ((long long)w * h > compositor::Document::pixelBudget) return nullptr;
-    QImage image(w, h, QImage::Format_ARGB32_Premultiplied);
+    if ((long long)w * h > compositor::Document::pixelBudget) return {};
+    QImage image(w, h, textFormat(deep));
     image.fill(Qt::transparent);
     QPainter painter(&image);
     painter.setRenderHint(QPainter::Antialiasing);
@@ -216,8 +243,10 @@ std::shared_ptr<compositor::Image> renderUpright(const compositor::LayerText& te
         painter.drawText(QPointF(x, baseline), lines[i]);
     }
     painter.end();
-    return fromQImage(image);
+    return image;
 }
+
+} // namespace
 
 namespace {
 
@@ -252,7 +281,7 @@ void appendOutline(const QPainterPath& outline, int32_t group, compositor::Vecto
 
 std::optional<compositor::VectorPath> textLayerOutline(const compositor::Layer& layer, QString* error) {
     auto fail = [&](const QString& why) { if (error) *error = why; return std::nullopt; };
-    if (!layer.isLiveText() || !layer.asset || !layer.asset->image.u8()) return fail(QObject::tr("The layer is not a text layer."));
+    if (!layer.isLiveText() || !layer.asset || !layer.asset->image) return fail(QObject::tr("The layer is not a text layer."));
     const compositor::LayerText& text = *layer.text;
     if (text.warp.active()) return fail(QObject::tr("Warped text cannot be made a path here; set its warp to None first."));
     // The glyphs where renderUpright puts them in the layer's raster, one shape group each (overlapping letters
@@ -307,7 +336,7 @@ std::optional<compositor::VectorPath> textLayerOutline(const compositor::Layer& 
     for (size_t i = 0; i < glyphs.size(); i++) appendOutline(glyphs[i], int32_t(i), path);
     if (path.subpaths.empty()) return fail(QObject::tr("The text has no outlines (only spaces?)."));
     // From the raster to the document, through the layer's placement (moved, scaled or turned).
-    const int w = layer.asset->image.u8()->width(), h = layer.asset->image.u8()->height();
+    const int w = layer.asset->image.width(), h = layer.asset->image.height();
     for (auto& s : path.subpaths)
         for (auto& k : s.knots) {
             auto map = [&](double& x, double& y) { const compositor::Point p = compositor::mapThroughTransform(layer.transform, w, h, x, y); x = p.x; y = p.y; };
@@ -473,19 +502,19 @@ void finishPendingText(compositor::PsdImport& imported) {
         for (const std::string& family : missing)
             imported.notes.push_back(QCoreApplication::translate("app::TextLayer", "Layer \"%1\": the font %2 is not installed; the closest match, %3, draws it until you install it.")
                                          .arg(QString::fromStdString(layer->name), QString::fromStdString(family), QFontInfo(QFont(QString::fromStdString(family))).family()).toStdString());
-        auto image = renderTextLayer(text);
+        const compositor::AnyImage image = renderTextLayerAt(text, imported.document.sampleType);
         if (!image) continue;
         const auto m = psdTextMetrics(text);
         const double blockTop = m ? m->blockTop : textPadding, ascent = m ? m->ascent : 0;
         double left = p.left - textPadding, top = p.top - blockTop;
         if (!p.boxed && p.baseline > 0) top = p.baseline - ascent - blockTop;
         if (!p.boxed && p.align > 0 && p.width > 0) {
-            const double slack = p.width - (image->width() - 2 * textPadding);
+            const double slack = p.width - (image.width() - 2 * textPadding);
             left += p.align == 1 ? slack / 2 : slack;
         }
-        layer->asset = compositor::Asset::make(image, layer->name);
+        layer->asset = compositor::Asset::makeAny(image, layer->name);
         layer->textImage = image;
-        const double w = image->width(), h = image->height();
+        const double w = image.width(), h = image.height();
         if (p.rotation == 0) {
             layer->transform = compositor::LayerTransform(compositor::Point(std::round(left), std::round(top)), compositor::Size(w, h));
         } else {

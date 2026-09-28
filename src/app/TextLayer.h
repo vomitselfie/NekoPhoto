@@ -21,6 +21,11 @@ constexpr int textPadding = 4;
 /// would exceed the document's pixel budget. Warped text (Warp Text) is bent over its layout box; `warpOffset`
 /// then gives where the bent raster's top-left sits from the upright one's.
 std::shared_ptr<compositor::Image> renderTextLayer(const compositor::LayerText& text, QPointF* warpOffset = nullptr);
+/// The same painted at 16 bits per channel (Qt's 16-bit raster; the glyphs' antialiasing is Qt's 8-bit coverage), for
+/// a 16-bit document.
+std::shared_ptr<compositor::Image16> renderTextLayer16(const compositor::LayerText& text, QPointF* warpOffset = nullptr);
+/// The text at a document's depth; empty when it would exceed the pixel budget.
+compositor::AnyImage renderTextLayerAt(const compositor::LayerText& text, compositor::SampleType type, QPointF* warpOffset = nullptr);
 /// Type > Create Work Path: the text layer's glyph outlines as it is laid out upright, in document pixels (each glyph
 /// a shape group); none (with `error`) for warped text or text with no outlines.
 std::optional<compositor::VectorPath> textLayerOutline(const compositor::Layer& layer, QString* error = nullptr);
