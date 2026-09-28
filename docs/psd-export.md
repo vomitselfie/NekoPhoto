@@ -16,8 +16,11 @@ over automation. The writer is `src/core/src/psd_writer.cpp`, the reader it is t
   ([psd-roundtrip.md](psd-roundtrip.md)).
 - Layer masks and folder masks, including disabled ones.
 - Clipping, where the clipped layers sit directly above their base, as PSD requires.
-- Levels, Curves and Exposure adjustment layers, and Hue/Saturation when it uses Photoshop's saturation
-  curve (the default for Hue/Saturation layers opened from a PSD).
+- Levels, Curves and Exposure adjustment layers, and Hue/Saturation: master and the six colour ranges (reds,
+  yellows, greens, cyans, blues, magentas), each with its four range points (the begin and end falloffs, linear as in
+  Photoshop; untouched ranges keep Photoshop's defaults), and Colorize. Saturation is exact on Photoshop's
+  saturation curve (the default for Hue/Saturation layers opened from a PSD); a layer on the plain scale is written
+  live as long as no range moves its saturation, since hue and lightness draw the same on either.
 - Empty layers and empty folders, so the structure survives.
 - The merged image, from NekoPhoto's own renderer, matted against white where transparent as Photoshop
   stores it; the resolution.
@@ -33,7 +36,7 @@ Each is listed before you export (the export dialog) or in the reply (`warnings`
   written as Photoshop type layers over the same pixels (see [psd-roundtrip.md](psd-roundtrip.md#text)); flipped text
   is written as pixels (a note).
 - **Adjustments Photoshop has no equivalent for** (Grain; Gradient Map, whose ramp between its ends is
-  NekoPhoto's own; Hue/Saturation with the plain scale) become a pixel layer holding the adjusted look of
+  NekoPhoto's own; Hue/Saturation that moves saturation on the plain scale, or with Invert Range on) become a pixel layer holding the adjusted look of
   everything beneath, in the adjustment's place. The layers beneath stay in the file (a warning).
 - **A layer clipped to one that is not right beneath it** is written unclipped, as it shows (a warning).
 - **Folder opacity and folder blend modes** are written as set, but NekoPhoto does not apply them while
@@ -53,7 +56,7 @@ Each is listed before you export (the export dialog) or in the reply (`warnings`
 
 - `tests/psd_writer_tests.cpp` builds documents (single layer, offsets and every blend mode, Unicode names,
   masks and clipping, nested folders with a folder mask and an empty folder, soft transparent edges,
-  adjustment layers, the baked cases, the size limit), exports them, reads them back and compares the
+  adjustment layers, Hue/Saturation by range (also from a 16-bit document), the baked cases, the size limit), exports them, reads them back and compares the
   structure and the render, which must agree to within one level (two where Levels' gamma is rounded to
   hundredths). Writing premultiplied colour fails four of its checks.
 - Every layered PSD at hand, 13 files from Photoshop and Clip Studio (up to 54 layers in 16 folders at

@@ -833,3 +833,139 @@ TEST_CASE(retyped_text_from_a_psd_is_written_as_text_without_a_pixels_note) {
     REQUIRE(back->document.layers[0].text.has_value());
     CHECK(back->document.layers[0].text->text == "Blue Hour");
 }
+
+namespace {
+
+/// Every hue at several lightnesses and saturations, so each of Photoshop's six ranges and their falloffs is drawn.
+std::shared_ptr<Image> hueChart() {
+    auto image = std::make_shared<Image>(72, 24);
+    for (int y = 0; y < 24; y++)
+        for (int x = 0; x < 72; x++) {
+            const double h = x * 5.0, s = 1 - (y % 6) * 0.15, l = 0.3 + (y / 6) * 0.13;
+            const double c = (1 - std::fabs(2 * l - 1)) * s, second = c * (1 - std::fabs(std::fmod(h / 60, 2.0) - 1));
+            double rgb[3] = {0, 0, 0};
+            const int i = int(h / 60) % 6;
+            const int big[6] = {0, 1, 1, 2, 2, 0}, small[6] = {1, 0, 2, 1, 0, 2};
+            rgb[big[i]] = c; rgb[small[i]] = second;
+            uint8_t* p = image->pixel(x, y);
+            for (int k = 0; k < 3; k++) p[k] = uint8_t(std::lround(std::clamp(rgb[k] + l - c / 2, 0.0, 1.0) * 255));
+            p[3] = 255;
+        }
+    return image;
+}
+
+/// The chart under one Hue/Saturation layer.
+Document hueDocument(const HueSaturationSettings& hsv) {
+    Document doc(72, 24);
+    doc.layers.push_back(pixels("Chart", hueChart(), {0, 0}));
+    AdjustmentSettings s = AdjustmentSettings::defaults(AdjustmentKind::HueSaturation);
+    s.hsv = hsv;
+    Layer layer("Hue/Saturation", doc.size());
+    layer.adjustment = s.toLayerAdjustment();
+    doc.layers.push_back(layer);
+    return doc;
+}
+
+/// The layer came back as a live hue2 layer with the same colorize, per-range values and range bands.
+void checkSameHueSaturation(const HueSaturationSettings& sent, const Document& back) {
+    REQUIRE(back.layers.size() == 2u);
+    REQUIRE(back.layers[1].adjustment.has_value());
+    AdjustmentSettings read;
+    REQUIRE(AdjustmentSettings::parse(back.layers[1].adjustment->json, read));
+    REQUIRE(read.kind == AdjustmentKind::HueSaturation);
+    CHECK(read.hsv.colorize == sent.colorize);
+    auto nonZero = [](const HueSaturationSettings& h) {
+        std::map<int, RangeAdjustment> out;
+        for (const auto& [range, a] : h.adjustments) if (!(a == RangeAdjustment{}) && (!h.colorize || range == 0)) out[range] = a;
+        return out;
+    };
+    CHECK(nonZero(read.hsv) == nonZero(sent));
+    for (int range = 1; range <= 6; range++) CHECK(read.hsv.bands.at(range) == sent.bands.at(range));
+}
+
+} // namespace
+
+TEST_CASE(hue_saturation_limited_to_one_range_exports_live) {
+    // Blues only, hue 0 to 120, on the default (plain scale) saturation: no saturation moves, so it is exact.
+    HueSaturationSettings hsv;
+    hsv.range = 5;
+    hsv.adjustments[5] = {120, 0, 0};
+    const Document doc = hueDocument(hsv);
+    auto rt = roundTrip(doc, "40_hue_blues.psd");
+    REQUIRE(rt.imported.has_value());
+    CHECK(rt.summary.warnings.empty());
+    CHECK_EQ(rt.summary.adjustments, 1);
+    checkSameHueSaturation(hsv, rt.imported->document);
+    checkLooksTheSame(doc, *rt.imported);
+}
+
+TEST_CASE(hue_saturation_master_and_ranges_export_live) {
+    // Master plus several ranges, one with its band moved, on Photoshop's saturation curve.
+    HueSaturationSettings hsv;
+    hsv.photoshopSaturation = true;
+    hsv.adjustments[0] = {15, -20, 5};
+    hsv.adjustments[1] = {-25, 30, -10};
+    hsv.adjustments[3] = {40, 0, 15};
+    hsv.adjustments[6] = {0, -60, 0};
+    hsv.bands[3] = HueBand{60, 95, 140, 180};
+    const Document doc = hueDocument(hsv);
+    auto rt = roundTrip(doc, "41_hue_ranges.psd");
+    REQUIRE(rt.imported.has_value());
+    CHECK(rt.summary.warnings.empty());
+    checkSameHueSaturation(hsv, rt.imported->document);
+    checkLooksTheSame(doc, *rt.imported);
+
+    // Hue and lightness in ranges on the plain scale draw as in Photoshop too; colorize ignores the curve.
+    HueSaturationSettings plain = hsv;
+    plain.photoshopSaturation = false;
+    for (auto& [range, a] : plain.adjustments) a.saturation = 0;
+    auto plainRt = roundTrip(hueDocument(plain), "42_hue_plain.psd");
+    REQUIRE(plainRt.imported.has_value());
+    CHECK(plainRt.summary.warnings.empty());
+    checkSameHueSaturation(plain, plainRt.imported->document);
+    checkLooksTheSame(hueDocument(plain), *plainRt.imported);
+    HueSaturationSettings colorize = HueSaturationSettings::colorizeStart();
+    colorize.adjustments[0] = {200, 40, -10};
+    auto colorRt = roundTrip(hueDocument(colorize), "43_hue_colorize.psd");
+    REQUIRE(colorRt.imported.has_value());
+    CHECK(colorRt.summary.warnings.empty());
+    checkLooksTheSame(hueDocument(colorize), *colorRt.imported);
+
+    // Saturation on the plain scale, or an inverted range, has no hue2 counterpart: baked, with a warning.
+    HueSaturationSettings scaled = plain;
+    scaled.adjustments[5] = {0, 40, 0};
+    auto scaledRt = roundTrip(hueDocument(scaled), "44_hue_scaled.psd");
+    REQUIRE(scaledRt.imported.has_value());
+    CHECK_EQ(int(scaledRt.summary.warnings.size()), 1);
+    CHECK(!scaledRt.imported->document.layers[1].adjustment.has_value());
+    HueSaturationSettings inverted = plain;
+    inverted.range = 3;
+    inverted.invertRange = true;
+    auto invertedRt = roundTrip(hueDocument(inverted), "45_hue_inverted.psd");
+    REQUIRE(invertedRt.imported.has_value());
+    CHECK_EQ(int(invertedRt.summary.warnings.size()), 1);
+}
+
+TEST_CASE(hue_saturation_ranges_export_live_from_a_sixteen_bit_document) {
+    HueSaturationSettings hsv;
+    hsv.adjustments[0] = {-10, 0, 0};
+    hsv.adjustments[2] = {0, 0, 20};
+    hsv.adjustments[5] = {120, 0, 0};
+    Document doc = hueDocument(hsv);
+    REQUIRE(convertSampleType(doc, SampleType::U16));
+    std::string error;
+    PsdExportSummary summary;
+    auto back = importPsdBytes(encodePsd(doc, {}, &summary, &error), &error);
+    REQUIRE(back.has_value());
+    CHECK(back->document.sampleType == SampleType::U16);
+    CHECK(summary.warnings.empty());
+    checkSameHueSaturation(hsv, back->document);
+    auto before = renderFlattened16(doc), after = renderFlattened16(back->document);
+    REQUIRE(before && after);
+    int worst = 0;
+    for (int y = 0; y < before->height(); y++)
+        for (int x = 0; x < before->width(); x++)
+            for (int c = 0; c < 4; c++) worst = std::max(worst, std::abs(int(before->pixel(x, y)[c]) - int(after->pixel(x, y)[c])));
+    if (worst > 128) std::fprintf(stderr, "  16-bit renders differ by %d\n", worst);
+    CHECK(worst <= 128);   // one 8-bit level on the 0..32768 scale
+}

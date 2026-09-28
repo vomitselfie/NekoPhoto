@@ -640,8 +640,12 @@ private:
             r.adjustmentKey = "expA";
             break;
         case AdjustmentKind::HueSaturation: {
-            // Only Photoshop's own saturation curve means the same there; the Mac's plain scale does not.
-            if (!s.hsv.photoshopSaturation || s.hsv.invertRange) return false;
+            // Hue, lightness, colorize and the six ranges (their bands, linear falloffs and all) draw as in
+            // Photoshop. Saturation does only on Photoshop's own curve: the plain scale differs once any range
+            // moves it. An inverted range has no hue2 counterpart.
+            bool scaledSaturation = false;
+            if (!s.hsv.colorize) for (const auto& [range, a] : s.hsv.adjustments) if (a.saturation != 0) scaledSaturation = true;
+            if ((scaledSaturation && !s.hsv.photoshopSaturation) || s.hsv.invertRange) return false;
             auto value = [&](int range) { auto it = s.hsv.adjustments.find(range); return it == s.hsv.adjustments.end() ? RangeAdjustment{} : it->second; };
             o.u16(2);
             o.u8(s.hsv.colorize ? 1 : 0); o.u8(0);
