@@ -213,6 +213,30 @@ BrushTip worstCaseTip() {
     return tip;
 }
 
+/// An everyday textured tip: a 64-pixel soft tip at 10% spacing, two dabs a step scattered a quarter of a size, a
+/// canvas grain, pressure on size and a size jitter.
+BrushTip texturedTip() {
+    BrushTip tip;
+    auto shape = std::make_shared<GrayImage>(64, 64, 0);
+    for (int y = 0; y < 64; y++)
+        for (int x = 0; x < 64; x++) {
+            const double d = std::hypot(x + 0.5 - 32, y + 0.5 - 32) / 32;
+            shape->at(x, y) = uint8_t(std::lround(255 * std::clamp(1.2 - 1.2 * d * d, 0.0, 1.0)));
+        }
+    tip.shape = shape;
+    auto grain = std::make_shared<GrayImage>(128, 128, 0);
+    for (int y = 0; y < 128; y++) for (int x = 0; x < 128; x++) grain->at(x, y) = uint8_t(mix(uint32_t(y * 128 + x) * 2246822519u) & 255);
+    tip.grain = grain;
+    tip.grainDepth = 0.6;
+    tip.spacing = 0.1;
+    tip.scatter = 0.25;
+    tip.count = 2;
+    tip.flow = 0.5;
+    tip.dynamics = {dynamicsMapping(DynamicsInput::Pressure, DynamicsTarget::Size, 0.3, 0.7),
+                    dynamicsMapping(DynamicsInput::Random, DynamicsTarget::Size, 1, -0.2)};
+    return tip;
+}
+
 /// Ten seconds of a pen at 120 reports a second: a looping path over the canvas whose speed swings between about 150
 /// and 1100 points a second, the pen leaning and turning its barrel as it goes. The same every run.
 std::vector<BrushSample> worstCaseStroke() {
@@ -317,6 +341,44 @@ int main(int argc, char** argv) {
             auto commit = stroke.commit();
         });
     }
+    // A large soft round brush, and a textured tip brush pressed along the same path by a pen at 120 reports a second.
+    std::vector<BrushSample> penPath;
+    for (size_t i = 0; i < path.size(); i++) {
+        BrushSample s;
+        s.position = path[i];
+        s.time = double(i) / 120;
+        s.pressure = 0.5 + 0.4 * std::sin(double(i) / 60);
+        s.stylus = true;
+        penPath.push_back(s);
+    }
+    const BrushTip textured = texturedTip();
+    auto roundLarge = [&](Layer& layer, SampleType depth) {
+        BrushSettings s;
+        s.diameter = 400;
+        s.hardness = 0;
+        s.opacity = 0.8;
+        s.red = 0.9;
+        auto stroke = depth == SampleType::U16 ? std::make_unique<BrushStroke>(layer, false, s, Size(4000, 3000), depth, nullptr)
+                                               : std::make_unique<BrushStroke>(layer, false, s, Size(4000, 3000));
+        stroke->appendAll(path);
+        stroke->flush();
+        auto commit = stroke->commit();
+    };
+    auto tipStroke = [&](Layer& layer, SampleType depth) {
+        BrushSettings s;
+        s.diameter = 60;
+        s.red = 0.9;
+        auto stroke = depth == SampleType::U16 ? std::make_unique<BrushStroke>(layer, false, s, Size(4000, 3000), depth, nullptr)
+                                               : std::make_unique<BrushStroke>(layer, false, s, Size(4000, 3000));
+        TipStroke tip(*stroke, textured, s.diameter, 99);
+        BrushSampleTrack track;
+        for (const BrushSample& p : penPath) tip.strokeTo(track.add(p));
+        tip.finish();
+        stroke->flush();
+        auto commit = stroke->commit();
+    };
+    bench("brush stroke d400 hardness 0", none, [&] { roundLarge(canvas, SampleType::U8); });
+    bench("tip brush textured d60", none, [&] { tipStroke(canvas, SampleType::U8); });
 
     auto photo = busy(4000, 3000, 7, false);
     Image work;
@@ -457,5 +519,7 @@ int main(int argc, char** argv) {
             auto commit = stroke.commit();
         });
     }
+    bench("u16 brush stroke d400 hardness 0", none, [&] { roundLarge(canvas16, SampleType::U16); });
+    bench("u16 tip brush textured d60", none, [&] { tipStroke(canvas16, SampleType::U16); });
     return 0;
 }
