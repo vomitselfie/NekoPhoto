@@ -162,6 +162,26 @@ The multi-pass effects keep their frames between passes at 16 bits a channel.
 The fingerprints of every effect (defaults, seeded settings, a translucent layer) are in `tests/mosh_hashes.txt`,
 checked by `mosh_tests`; `COMPOSITOR_UPDATE_MOSH_HASHES=1 build/tests/mosh_tests fingerprints` rewrites them.
 
+## Worst-case brush
+
+Report only, no threshold: `bench_core 3 worst` (it runs only when the filter names it, about half a minute a run). A
+10-second recorded pen stroke (1201 reports at 120 a second, deterministic) with a tip brush that uses every per-dab
+feature at once: a 200-pixel soft tip at 2% spacing, 16 dabs a step scattered half a size both ways, moving (Stroke)
+grain, ScreenSpeed on size and opacity, tilt on roundness, the lean's direction and the barrel's roll on the angle and a
+size jitter, on a 4096 x 4096 layer. Memory is the most the stroke held beyond what was held before it, sampled every
+millisecond: malloc's bytes (glibc `mallinfo2`, which covers the pixel buffers' calloc) and the resident set.
+
+2026-09-27, NekoPhoto 1.8.0 with the 1.8.1 brush work; AMD Ryzen AI 9 HX 370 (24 worker threads), GCC 16, Release,
+median of 3 runs:
+
+| Depth | Wall time (ms) | Samples/s | Dabs | Dabs/s | Peak temporary memory |
+|---|---:|---:|---:|---:|---|
+| 8 bits | 29 366 | 41 | 287 472 | 9 789 | 80 MiB allocated, 76 MiB resident |
+| 16 bits | 29 438 | 41 | 287 472 | 9 765 | 160 MiB allocated, 150 MiB resident |
+
+The stroke paints about three times slower than it was drawn: at these settings (16 dabs of 200 pixels every 4 pixels)
+the engine cannot keep up with the pen. Both depths cost the same; the dab count, not the sample depth, sets the time.
+
 ## Render hashes
 
 The matching correctness gate is `render_hash_tests` (in ctest): 235 scenes (133 at 8 bits, 102 at 16 bits) hashed with FNV-1a 64 against
