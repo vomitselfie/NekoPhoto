@@ -270,7 +270,7 @@ bool BrushStroke::stampDab16(Point center, double radius, const Rect& affected) 
             else for (int i = 0; i < n; i++) row[i] = uint16_t(row[i] + scale15(t[i], one - row[i]));
         }
     };
-    if (areaOf(n, y1 - y0) >= 65536) parallelRows(y0, y1, merge, 32); else merge(y0, y1);
+    if (areaOf(n, y1 - y0) >= 1 << 20) parallelRows(y0, y1, merge, 32); else merge(y0, y1);
     return true;
 }
 

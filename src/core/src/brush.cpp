@@ -352,7 +352,7 @@ bool BrushStroke::stampDab(Point center, double radius, const Rect& affected) {
         }
     };
     // A large dab is merged on every core; a small one is quicker than handing it out.
-    if (areaOf(n, y1 - y0) >= 65536) parallelRows(y0, y1, merge, 32); else merge(y0, y1);
+    if (areaOf(n, y1 - y0) >= 1 << 20) parallelRows(y0, y1, merge, 32); else merge(y0, y1);
     return true;
 }
 
