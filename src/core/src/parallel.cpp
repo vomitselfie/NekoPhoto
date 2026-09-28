@@ -37,16 +37,21 @@ public:
         // One top-level loop at a time: current_ is shared, so a second caller on another thread (Quick Select's
         // worker and the UI thread, say) waits here for the first loop to finish rather than replacing its job.
         std::lock_guard<std::mutex> serial(runMutex_);
+        // Only as many workers as there are chunks beyond the caller's first are woken: a loop of a few chunks (a
+        // small dab) would otherwise wake every worker to find nothing left.
+        const int wanted = std::min(job.chunks - 1, int(workers_.size()));
         {
             std::lock_guard<std::mutex> lock(mutex_);
             current_ = &job;
-            generation_++;
+            tickets_ = wanted;
         }
-        wake_.notify_all();
+        if (wanted >= int(workers_.size())) wake_.notify_all();
+        else for (int i = 0; i < wanted; i++) wake_.notify_one();
         job.work();
         // No worker can pick the job up once it is no longer current; wait for the ones that did to leave it.
         std::unique_lock<std::mutex> lock(mutex_);
         current_ = nullptr;
+        tickets_ = 0;
         finished_.wait(lock, [&] { return job.busy == 0; });
     }
 
@@ -63,14 +68,12 @@ private:
 
     void serve() {
         insideParallel = true;
-        unsigned long long seen = 0;
         while (true) {
             std::unique_lock<std::mutex> lock(mutex_);
-            wake_.wait(lock, [&] { return stop_ || generation_ != seen; });
+            wake_.wait(lock, [&] { return stop_ || (current_ && tickets_ > 0); });
             if (stop_) return;
-            seen = generation_;
+            tickets_--;
             Job* job = current_;
-            if (!job) continue;
             job->busy++;
             lock.unlock();
             job->work();
@@ -84,7 +87,7 @@ private:
     std::mutex mutex_;
     std::condition_variable wake_, finished_;
     Job* current_ = nullptr;
-    unsigned long long generation_ = 0;
+    int tickets_ = 0;   // workers still to join the current loop
     bool stop_ = false;
 };
 
