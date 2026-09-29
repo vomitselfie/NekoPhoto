@@ -1640,6 +1640,16 @@
         <source>Import Brushes</source>
         <translation>ブラシを読み込み</translation>
     </message>
+    <message>
+        <source>Not imported: %1</source>
+        <translation>読み込めませんでした:%1</translation>
+    </message>
+    <message numerus="yes">
+        <source>Imported %n brush(es) with changes: %1</source>
+        <translation>
+            <numerusform>%n 個のブラシを変更を加えて読み込みました:%1</numerusform>
+        </translation>
+    </message>
     <message numerus="yes">
         <source>Imported %n brush(es). They are in the Brush tool&apos;s picker.</source>
         <translation>
@@ -4799,6 +4809,41 @@ File &gt; New creates a blank canvas.</source>
     </message>
 </context>
 <context>
+    <name>app::ImportBanner</name>
+    <message>
+        <source>Import notes</source>
+        <translation>読み込みに関する注意</translation>
+    </message>
+    <message>
+        <source>Details…</source>
+        <translation>詳細…</translation>
+    </message>
+    <message>
+        <source>Every change the file went through</source>
+        <translation>ファイルに加えられたすべての変更</translation>
+    </message>
+    <message>
+        <source>Undo Open</source>
+        <translation>開くの取り消し</translation>
+    </message>
+    <message>
+        <source>Close the document again</source>
+        <translation>ドキュメントを閉じて開く前に戻します</translation>
+    </message>
+    <message>
+        <source>Hide this bar</source>
+        <translation>このバーを隠す</translation>
+    </message>
+    <message numerus="yes">
+        <source>
+… and %n more (see Details).</source>
+        <translation>
+            <numerusform>
+… ほか %n 件(詳細を参照)。</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>app::LayerStyleDialog</name>
     <message>
         <source>Bevel &amp; Emboss</source>
@@ -5844,11 +5889,9 @@ File &gt; New creates a blank canvas.</source>
         </translation>
     </message>
     <message numerus="yes">
-        <source>
-… and %n more (see Details).</source>
+        <source>Opened with %n change(s): %1</source>
         <translation>
-            <numerusform>
-... ほか %n 件 (詳細を参照)。</numerusform>
+            <numerusform>%n 件の変更を加えて開きました:%1</numerusform>
         </translation>
     </message>
     <message>

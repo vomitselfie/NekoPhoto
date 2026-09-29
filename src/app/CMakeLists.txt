@@ -155,6 +155,8 @@ qt_add_executable(nekophoto
     ToolOptionsBar.cpp
     Scrub.h
     Scrub.cpp
+    ImportBanner.h
+    ImportBanner.cpp
     WelcomeDialog.h
     WelcomeDialog.cpp
     Dialogs.h

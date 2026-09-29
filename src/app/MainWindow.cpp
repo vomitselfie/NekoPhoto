@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 #include "Scrub.h"
+#include "ImportBanner.h"
 #include "Names.h"
 #include "BrushImporter.h"
 #include "CanvasFrame.h"
@@ -93,7 +94,15 @@ MainWindow::MainWindow() {
     centralLayout->setContentsMargins(0, 0, 0, 0);
     centralLayout->setSpacing(0);
     centralLayout->addWidget(tabBar_);
+    importBanner_ = new ImportBanner;
+    centralLayout->addWidget(importBanner_);
     centralLayout->addWidget(canvasStack_, 1);
+    connect(importBanner_, &ImportBanner::dismissed, this, [this] { bannerSession_.clear(); });
+    connect(importBanner_, &ImportBanner::undoRequested, this, [this] {
+        // Undo Open: the document's tab closes (asking first if it was changed since).
+        for (size_t i = 0; i < tabs_.size(); i++)
+            if (tabs_[i].session == bannerSession_) { bannerSession_.clear(); closeTab(int(i)); break; }
+    });
     setCentralWidget(central);
     connect(tabBar_, &QTabBar::currentChanged, this, [this](int index) { if (index >= 0 && index != current_) switchTo(index); });
     connect(tabBar_, &QTabBar::tabCloseRequested, this, [this](int index) { closeTab(index); });
@@ -356,6 +365,8 @@ void MainWindow::switchTo(int index) {
     adjustStack_->setCurrentWidget(tab.adjustments);
     if (timeline_) timeline_->setSession(session_);
     tab.options->setVisible(true);
+    // The import bar shows over its own document only.
+    if (importBanner_) importBanner_->setVisible(bannerSession_ && bannerSession_ == session_ && !importBanner_->notes().isEmpty());
     { QSignalBlocker b(tabBar_); tabBar_->setCurrentIndex(index); }
     connectSession();
     refreshTitle();
@@ -365,6 +376,13 @@ void MainWindow::switchTo(int index) {
     refreshZoom();
     refreshHint();
     canvas_->setFocus();
+}
+
+void MainWindow::showImportNotes(const QString& summary, const QString& title, const QString& heading, const QStringList& notes, EditorSession* session) {
+    if (notes.isEmpty()) return;
+    bannerSession_ = session ? session : session_;
+    importBanner_->present(summary, title, heading, notes, session != nullptr);
+    importBanner_->setVisible(bannerSession_ == session_);
 }
 
 void MainWindow::refreshHint() { hintLabel_->setText(toolHint(session_->tool(), session_->brushErase)); }

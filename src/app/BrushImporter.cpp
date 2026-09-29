@@ -2,6 +2,7 @@
 #include "BrushLibrary.h"
 #include "EditorSession.h"
 #include "ImageConvert.h"
+#include "MainWindow.h"
 #include "compositor/brushimport.h"
 #include <QDir>
 #include <QFileDialog>
@@ -53,6 +54,23 @@ void importBrushesInteractively(QWidget* parent, EditorSession* session) {
     if (paths.isEmpty()) return;
     settings.setValue("brushes/importDir", QFileInfo(paths.first()).absolutePath());
     const BrushImportResult result = importBrushFiles(paths);
+    if (!result.ids.isEmpty()) {
+        if (auto* window = qobject_cast<MainWindow*>(parent ? parent->window() : nullptr)) {
+            // Imported: the Brush tool picks the first one. What was approximated or left out goes to the bar
+            // over the canvas (only when there is something to say); a dialog would only be in the way.
+            QStringList notes = result.notes;
+            for (const QString& e : result.errors) notes << QObject::tr("Not imported: %1").arg(e);
+            window->showImportNotes(QObject::tr("Imported %n brush(es) with changes: %1", nullptr, int(result.ids.size())), QObject::tr("Import Brushes"),
+                                    QObject::tr("Imported %n brush(es). They are in the Brush tool's picker.", nullptr, int(result.ids.size())), notes, nullptr);
+            if (session) {
+                session->brushPreset = result.ids.first();
+                if (const BrushPreset* preset = BrushLibrary::find(result.ids.first())) session->brushSettings.diameter = preset->diameter;
+                session->selectTool(Tool::Brush);
+                emit session->toolChanged();
+            }
+            return;
+        }
+    }
     QString text;
     if (!result.ids.isEmpty()) text = QObject::tr("Imported %n brush(es). They are in the Brush tool's picker.", nullptr, int(result.ids.size()));
     if (!result.notes.isEmpty()) text += "\n\n" + QObject::tr("Approximated:") + "\n" + result.notes.join('\n');

@@ -65,6 +65,9 @@ public:
     /// tab, with a note of what did not carry over.
     void openLayeredFile(const QString& path);
     const QStringList& lastImportNotes() const { return lastImportNotes_; }
+    /// Shows the import bar over the canvas: `summary` holds %1 for the first note. With `session`, the bar
+    /// belongs to that document's tab and offers Undo Open.
+    void showImportNotes(const QString& summary, const QString& title, const QString& heading, const QStringList& notes, EditorSession* session);
     EditorSession* session() const { return session_; }
 
     // For the automation socket (Automation.cpp).
@@ -189,7 +192,10 @@ private:
     int current_ = -1;
     int nextNumber_ = 2;
     EditorSession* session_ = nullptr;
-    QPointer<EditorSession> scrubSession_;   // the session a scrubby-label drag opened its undo group on
+    QPointer<EditorSession> scrubSession_;
+    /// The bar over the canvas after a file opened with notes, and the document it belongs to (shown on its tab).
+    class ImportBanner* importBanner_ = nullptr;
+    QPointer<EditorSession> bannerSession_;   // the session a scrubby-label drag opened its undo group on
     CanvasWidget* canvas_ = nullptr;
     LayersPanel* layers_ = nullptr;
     ToolOptionsBar* options_ = nullptr;
