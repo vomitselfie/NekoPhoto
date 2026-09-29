@@ -7382,48 +7382,24 @@ File &gt; New creates a blank canvas.</source>
 <context>
     <name>app::PathsPanel</name>
     <message>
-        <source>Fill</source>
-        <translation>塗りつぶし</translation>
-    </message>
-    <message>
         <source>Fill the path with the foreground colour</source>
         <translation>パスを描画色で塗りつぶします</translation>
-    </message>
-    <message>
-        <source>Stroke</source>
-        <translation>境界線</translation>
     </message>
     <message>
         <source>Stroke the path with the brush&apos;s size in the foreground colour</source>
         <translation>ブラシの直径と描画色でパスの境界線を描きます</translation>
     </message>
     <message>
-        <source>Select</source>
-        <translation>選択</translation>
-    </message>
-    <message>
         <source>Load the path as a selection</source>
         <translation>パスを選択範囲として読み込みます</translation>
-    </message>
-    <message>
-        <source>From Sel.</source>
-        <translation>選択範囲から</translation>
     </message>
     <message>
         <source>Make a work path from the selection</source>
         <translation>選択範囲から作業用パスを作成します</translation>
     </message>
     <message>
-        <source>Shape</source>
-        <translation>シェイプ</translation>
-    </message>
-    <message>
         <source>Make a shape layer from the path</source>
         <translation>パスからシェイプレイヤーを作成します</translation>
-    </message>
-    <message>
-        <source>New</source>
-        <translation>新規</translation>
     </message>
     <message>
         <source>Create a new path</source>
@@ -7432,10 +7408,6 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Path %1</source>
         <translation>パス %1</translation>
-    </message>
-    <message>
-        <source>Delete</source>
-        <translation>削除</translation>
     </message>
     <message>
         <source>Delete the path</source>
