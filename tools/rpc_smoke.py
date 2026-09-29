@@ -746,7 +746,8 @@ def thirty_two_bit_editing(rpc):
     rpc.call("selection.wand", x=30, y=25, tolerance=8, contiguous=True, sampleAll=True, edgeAware=False, mode="replace")
     assert rpc.call("selection.info")["bounds"] == area, "the wand does not follow the view's exposure"
     assert area["width"] == 40 and area["height"] == 30, (wand, area)
-    rpc.call("selection.scribble", foreground=[[[20, 20], [40, 30]]], background=[[[80, 55], [90, 60]]], clear=True)
+    if rpc.call("app.info").get("scribble"):   # needs OpenCV
+        rpc.call("selection.scribble", foreground=[[[20, 20], [40, 30]]], background=[[[80, 55], [90, 60]]], clear=True)
     # Quick Mask and channels hold float coverage too.
     rpc.call("selection.rect", x=10, y=10, width=40, height=30)
     rpc.call("selection.quickMask", on=True)
@@ -1158,8 +1159,9 @@ def colour_mode_selection(rpc):
         assert rpc.call("color.sample", x=20, y=15)["values"] == before, "deciding does not write the pixels"
         rpc.call("selection.wand", x=2, y=2, tolerance=16, contiguous=False, edgeAware=True, mode="replace")
         assert rpc.call("selection.info")["active"]
-        rpc.call("selection.scribble", foreground=[[[15, 12], [35, 22]]], background=[[[50, 40], [60, 44]]], clear=True)
-        assert rpc.call("selection.info")["active"]
+        if rpc.call("app.info").get("scribble"):   # needs OpenCV
+            rpc.call("selection.scribble", foreground=[[[15, 12], [35, 22]]], background=[[[50, 40], [60, 44]]], clear=True)
+            assert rpc.call("selection.info")["active"]
         # A layer's pixels as a selection: only its opaque part.
         rpc.call("selection.none")
         rpc.call("layers.add")
