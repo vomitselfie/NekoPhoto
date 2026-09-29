@@ -5,49 +5,52 @@ namespace compositor {
 
 namespace {
 constexpr SampleTypes eightAndSixteen = onlyEightBit | sampleTypeBit(SampleType::U16);
+/// P5a, the 32-bit core (docs/bit-depth.md, "32 bits"): what works in a 32-bit document too.
+constexpr SampleTypes allDepths = eightAndSixteen | sampleTypeBit(SampleType::F32);
 
 // One line per feature ported beyond 8-bit. What is not listed here stays 8-bit only: its menu entry is greyed and its
-// automation method refused on a deeper document ("Not available in 16-bit yet").
+// automation method refused on a deeper document ("Not available in 16-bit yet"; at 32 bits "Not available in 32-bit
+// yet", or "... in 32-bit mode" for what Photoshop itself lacks there, photoshopLacksAt32).
 //
 // P2, the 16-bit core: the renderer, the layer structure and the files. P3a: adjustments, filters, selections and
 // pixel edits. P3b: painting and retouching. Then text, vectors and layer styles, and smart objects with their
 // Smart Filters (docs/bit-depth.md).
 constexpr FeatureSupport table[] = {
-    {"render.document", eightAndSixteen},
+    {"render.document", allDepths},
     // Image > Mode > 8 Bits/Channel, 16 Bits/Channel.
-    {"document.mode", eightAndSixteen},
+    {"document.mode", allDepths},
     // Edit > Assign Profile and Convert to Profile (P4, colormgmt.h).
     {"document.profile", eightAndSixteen},
     // Saving, and exporting what the renderer draws (PSD and PNG at 16 bits; the 8-bit formats dithered down).
-    {"document.save", eightAndSixteen},
-    {"export.psd", eightAndSixteen},
-    {"export.png", eightAndSixteen},
-    {"export.jpeg", eightAndSixteen},
-    {"export.webp", eightAndSixteen},
-    {"export.tiff", eightAndSixteen},
-    {"export.tga", eightAndSixteen},
-    {"export.ico", eightAndSixteen},
-    {"export.gif", eightAndSixteen},
+    {"document.save", allDepths},
+    {"export.psd", allDepths},
+    {"export.png", allDepths},
+    {"export.jpeg", allDepths},
+    {"export.webp", allDepths},
+    {"export.tiff", allDepths},
+    {"export.tga", allDepths},
+    {"export.ico", allDepths},
+    {"export.gif", allDepths},
     // Layers: adding blank layers and folders, deleting, duplicating, ordering, grouping, renaming, visibility,
     // opacity, blend mode, clipping, resampling mode.
-    {"layers.structure", eightAndSixteen},
+    {"layers.structure", allDepths},
     // Moving, scaling, rotating and flipping whole layers (their transform; no pixels are resampled).
-    {"layers.transform", eightAndSixteen},
+    {"layers.transform", allDepths},
     // Layer masks: add (reveal or hide all), enable, link, invert, delete; drawn at the document's depth.
-    {"layers.mask", eightAndSixteen},
+    {"layers.mask", allDepths},
     // Canvas Size and Flip Canvas (they move layers, not pixels).
-    {"canvas.size", eightAndSixteen},
-    {"canvas.flip", eightAndSixteen},
+    {"canvas.size", allDepths},
+    {"canvas.flip", allDepths},
     // Importing an image as a layer (converted to the document's depth).
-    {"document.import", eightAndSixteen},
+    {"document.import", allDepths},
     // Tools that do not touch pixels.
-    {"tool.move", eightAndSixteen},
-    {"tool.hand", eightAndSixteen},
-    {"tool.zoom", eightAndSixteen},
+    {"tool.move", allDepths},
+    {"tool.hand", allDepths},
+    {"tool.zoom", allDepths},
     {"tool.slice", eightAndSixteen},
     // The Eyedropper samples the 16-bit composite.
     {"tool.eyedropper", eightAndSixteen},
-    {"view", eightAndSixteen},
+    {"view", allDepths},
 
     // P3a: adjustments, on pixels (Image > Adjustments, pixels.adjust) and as adjustment layers, every kind.
     {"adjustment.pixels", eightAndSixteen},
@@ -194,6 +197,29 @@ ColorModes supportedColorModes(std::string_view feature) {
 
 bool supports(AdjustmentKind kind, SampleType type, ColorMode mode) {
     return supports(std::string("adjustment.") + adjustmentKindName(kind), type, mode);
+}
+
+namespace {
+// What Photoshop itself greys in a 32-bit document (docs/high-bit-depth-plan.md, "P5 plan"): refused here with "Not
+// available in 32-bit mode", for good, where features not ported yet say "yet".
+constexpr std::string_view lackedAt32[] = {
+    "tool.dodge", "tool.paintBucket", "edit.contentAware",
+    "adjustment.Brightness/Contrast", "adjustment.Posterize", "adjustment.Threshold", "adjustment.Selective Color", "adjustment.Grain",
+    "filter.Mosh", "filter.G'MIC",
+    // The blend modes outside Photoshop's 32-bit set (blendModeAt32): greyed in the picker, refused by automation.
+    "blend.outside32",
+};
+} // namespace
+
+bool photoshopLacksAt32(std::string_view feature) {
+    for (std::string_view f : lackedAt32) if (f == feature) return true;
+    return false;
+}
+
+std::string notAvailableAtDepth(std::string_view feature, SampleType type) {
+    if (supports(feature, type)) return {};
+    if (type == SampleType::F32) return photoshopLacksAt32(feature) ? "Not available in 32-bit mode" : "Not available in 32-bit yet";
+    return std::string("Not available in ") + sampleTypeName(type) + "-bit yet";
 }
 
 std::string notAvailableInMode(ColorMode mode) {

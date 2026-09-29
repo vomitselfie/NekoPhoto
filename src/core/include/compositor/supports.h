@@ -43,6 +43,13 @@ inline bool supports(std::string_view feature, SampleType type, ColorMode mode) 
 bool supports(AdjustmentKind kind, SampleType type, ColorMode mode);
 /// "Not available in CMYK mode", "Not available in Lab mode": the refusal for a feature the mode lacks (empty for RGB).
 std::string notAvailableInMode(ColorMode mode);
+/// Whether Photoshop itself has no `feature` in a 32-bit document (Dodge and Burn, the Paint Bucket, the content-aware
+/// tools, Brightness/Contrast, Posterize, Threshold, Selective Color, Grain; Mosh and G'MIC here): such a feature is
+/// greyed for good, not waiting for a port.
+bool photoshopLacksAt32(std::string_view feature);
+/// Why `feature` is greyed at `type`: "Not available in 16-bit yet", "Not available in 32-bit yet", or "Not available
+/// in 32-bit mode" for what Photoshop lacks there; empty when it works.
+std::string notAvailableAtDepth(std::string_view feature, SampleType type);
 
 struct FeatureModes { std::string_view feature; ColorModes modes; };
 /// The features the mode table lists beyond RGB.
