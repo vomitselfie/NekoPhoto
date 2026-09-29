@@ -64,6 +64,7 @@ namespace {
 
 constexpr uint32_t layerMagic = 0x4e50434c;   // NPCL
 constexpr uint32_t documentMagic = 0x4e504344; // NPCD
+constexpr uint32_t channelMagic = 0x4e504348;  // NPCH
 constexpr uint32_t carryVersion = 1;
 /// A layer carry from a 16-bit file: version 1 and then its mask depth and carried planes.
 constexpr uint32_t carryVersionDeep = 2;
@@ -210,6 +211,28 @@ std::shared_ptr<const PsdDocumentCarry> parsePsdDocumentCarry(const std::vector<
     if (!readBlocks(r, c->globals)) return nullptr;
     c->width = int(r.u32()); c->height = int(r.u32());
     if (!r.ok || r.at != bytes.size()) return nullptr;
+    return c;
+}
+
+std::vector<uint8_t> serializePsdCarry(const PsdChannelCarry& c) {
+    Writer w;
+    w.u32(channelMagic); w.u32(carryVersion);
+    w.bytes(c.displayInfo);
+    w.u32(c.identifier);
+    w.bytes(c.plane16);
+    w.u64(c.planeHash);
+    return std::move(w.b);
+}
+
+std::shared_ptr<const PsdChannelCarry> parsePsdChannelCarry(const std::vector<uint8_t>& bytes) {
+    Reader r{bytes};
+    if (r.u32() != channelMagic || r.u32() != carryVersion) return nullptr;
+    auto c = std::make_shared<PsdChannelCarry>();
+    c->displayInfo = r.bytes();
+    c->identifier = r.u32();
+    c->plane16 = r.bytes();
+    c->planeHash = r.u64();
+    if (!r.ok || r.at != bytes.size() || c->displayInfo.size() > 64) return nullptr;
     return c;
 }
 

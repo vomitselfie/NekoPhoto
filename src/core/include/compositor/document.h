@@ -253,6 +253,30 @@ private:
     mutable PixelBounds bounds_;
 };
 
+/// Alpha channels are saved selections; spot channels hold a spot colour's ink (carried from a PSD, shown, not edited
+/// yet). See docs/channels.md.
+enum class ChannelKind { Alpha, Spot };
+
+/// An alpha or spot channel (Photoshop's Channels panel below the colour channels): a document-sized gray at the
+/// document's depth, as Photoshop shows it in gray. For an alpha channel whose colour indicates masked areas (the
+/// default), white is selected; with `selectedAreas`, black is. The overlay tints the channel's dark areas with
+/// `color` at `opacity` (for a spot channel: the ink and its solidity).
+struct Channel {
+    Uuid id;
+    std::string name;
+    AnyGray image;
+    ChannelKind kind = ChannelKind::Alpha;
+    std::array<double, 3> color{1, 0, 0};   // 0..1 sRGB
+    double opacity = 0.5;
+    bool selectedAreas = false;
+    /// What the PSD it came from said about it beyond the model (psd_carry.h).
+    std::shared_ptr<const PsdChannelCarry> psdCarry;
+    bool operator==(const Channel& o) const {
+        return id == o.id && name == o.name && image == o.image && kind == o.kind && color == o.color && opacity == o.opacity
+            && selectedAreas == o.selectedAreas && psdCarry == o.psdCarry;
+    }
+};
+
 /// The outcome of a budget check (Document::canCreate and the rest): which rule a size or an addition breaks,
 /// and that rule's limit, so the app can say it in the reader's language.
 struct BudgetCheck {
@@ -287,6 +311,10 @@ struct Document {
     std::vector<Slice> slices;
     /// Frame animation (animation.h); empty for a still document.
     Animation animation;
+    /// Alpha and spot channels, in the Channels panel's order (channels.h). They do not render.
+    std::vector<Channel> channels;
+    /// Photoshop's limit: 56 channels in all, the colour channels included.
+    static constexpr int maxChannels = 53;
 
     Document() = default;
     Document(int width, int height);
@@ -306,7 +334,7 @@ struct Document {
     /// of full-size game textures fits. Compositor for macOS stops at pixelBudget in total and cannot open a
     /// larger project (see fitsMacBudget).
     static constexpr long long projectPixelBudget = 1000000000;
-    /// The pixels held by every layer's image, and by every mask.
+    /// The pixels held by every layer's image, and by every mask (alpha and spot channels count as masks).
     long long layerPixels() const;
     long long maskPixels() const;
 

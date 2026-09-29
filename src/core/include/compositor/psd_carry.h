@@ -82,6 +82,18 @@ struct PsdDocumentCarry {
     int width = 0, height = 0;
 };
 
+/// An alpha or spot channel read from a PSD: what is written back while the channel still says it.
+struct PsdChannelCarry {
+    /// The channel's DisplayInfo record (resource 1077: colour space, four colour words, opacity, kind), as stored.
+    std::vector<uint8_t> displayInfo;
+    /// Its alpha identifier (resource 1053); 0 when the file had none.
+    uint32_t identifier = 0;
+    /// A 16-bit file's samples as stored (big-endian, 0..65535): written back while the channel's gray is the one
+    /// read from them (`planeHash`, psdMaskHash), since 0..65535 does not survive the trip through 0..32768.
+    std::vector<uint8_t> plane16;
+    uint64_t planeHash = 0;
+};
+
 /// A fingerprint of a layer's pixels (null: no pixels), stable across saving and reopening a project.
 uint64_t psdContentHash(const Image* image);
 /// The same for a layer mask (null: none), its pixels and whether it is on.
@@ -95,5 +107,7 @@ std::vector<uint8_t> serializePsdCarry(const PsdLayerCarry& carry);
 std::shared_ptr<const PsdLayerCarry> parsePsdLayerCarry(const std::vector<uint8_t>& bytes);
 std::vector<uint8_t> serializePsdCarry(const PsdDocumentCarry& carry);
 std::shared_ptr<const PsdDocumentCarry> parsePsdDocumentCarry(const std::vector<uint8_t>& bytes);
+std::vector<uint8_t> serializePsdCarry(const PsdChannelCarry& carry);
+std::shared_ptr<const PsdChannelCarry> parsePsdChannelCarry(const std::vector<uint8_t>& bytes);
 
 } // namespace compositor

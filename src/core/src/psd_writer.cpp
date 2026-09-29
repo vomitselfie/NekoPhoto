@@ -1,4 +1,5 @@
 #include "compositor/psd_writer.h"
+#include "psd_channels.h"
 #include "compositor/smartfilter.h"
 #include "psd/psd_descriptor.hpp"
 #include "compositor/adjustments.h"
@@ -992,7 +993,7 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
 
     Out f;
     f.str("8BPS"); f.u16(large ? 2 : 1); for (int i = 0; i < 6; i++) f.u8(0);
-    f.u16(4);   // RGB and the merged image's transparency
+    f.u16(4 + unsigned(document.channels.size()));   // RGB, the merged image's transparency, then the alpha and spot channels
     f.u32(uint32_t(document.height)); f.u32(uint32_t(document.width));
     const bool deep = document.sampleType == SampleType::U16;
     if (document.sampleType == SampleType::F32) { if (error) *error = "32-bit documents cannot be written as PSD yet."; return {}; }
@@ -1045,6 +1046,12 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
             }
         }
         if (!profileWritten && !document.profile.empty()) writeProfile("");
+        // The alpha and spot channels' names, display and identifiers (psd_channels.h).
+        for (const auto& [id, data] : psdChannelResourceBlocks(document)) {
+            res.str("8BIM"); res.u16(id); res.u8(0); res.u8(0);
+            res.u32(uint32_t(data.size())); res.bytes(data);
+            if (data.size() & 1) res.u8(0);
+        }
         if (!slicesWritten && !document.slices.empty()) {
             const std::vector<uint8_t> data = slicesResource(document.slices, document.width, document.height);
             res.str("8BIM"); res.u16(1050); res.u8(0); res.u8(0);
@@ -1111,12 +1118,15 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
     {
         // The merged image from our own renderer, the look the layers should have. Its colour is matted
         // against white where it is transparent, as Photoshop stores it: premultiplied plus the white behind.
+        // The alpha and spot channels follow, one plane each at the document's depth.
+        const size_t extra = document.channels.size();
         if (deep) {
             auto flat = renderFlattened16(document);
             const int w = document.width, h = document.height;
-            std::vector<std::vector<uint8_t>> rows(size_t(h) * 4);
-            std::array<std::vector<uint8_t>, 4> raw;
+            std::vector<std::vector<uint8_t>> rows(size_t(h) * (4 + extra));
+            std::vector<std::vector<uint8_t>> raw(4);
             for (auto& p : raw) p.resize(size_t(w) * h * 2);
+            for (const Channel& channel : document.channels) raw.push_back(psdChannelPlane(channel, true, w, h));
             parallelRows(0, h, [&](int ya, int yb) {
                 for (int y = ya; y < yb; y++) {
                     const uint16_t* s = flat->row(y);
@@ -1131,7 +1141,7 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
             }, 64);
             if (options.compress) {
                 parallelRows(0, h, [&](int ya, int yb) {
-                    for (int c = 0; c < 4; c++) for (int y = ya; y < yb; y++) {
+                    for (size_t c = 0; c < raw.size(); c++) for (int y = ya; y < yb; y++) {
                         const uint8_t* row = raw[size_t(c)].data() + size_t(y) * w * 2;
                         packBits(row, w * 2, rows[size_t(c) * h + size_t(y)]);
                         makeRowEven(rows[size_t(c) * h + size_t(y)], row, w * 2);
@@ -1165,13 +1175,21 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
         rows.reserve(size_t(h) * 4);
         const int order[4] = {0, 1, 2, 3};
         bool rle = options.compress;
+        std::vector<std::vector<uint8_t>> channelPlanes;
+        for (const Channel& channel : document.channels) channelPlanes.push_back(psdChannelPlane(channel, false, w, h));
         if (rle) {
-            rows.resize(size_t(h) * 4);
+            rows.resize(size_t(h) * (4 + extra));
             parallelRows(0, h, [&](int ya, int yb) {
                 for (int c : order) for (int y = ya; y < yb; y++) {
                     const uint8_t* raw = planes[size_t(c)].data() + size_t(y) * w;
                     packBits(raw, w, rows[size_t(c) * h + size_t(y)]);
                     makeRowEven(rows[size_t(c) * h + size_t(y)], raw, w);
+                }
+                for (size_t k = 0; k < extra; k++) for (int y = ya; y < yb; y++) {
+                    const uint8_t* raw = channelPlanes[k].data() + size_t(y) * w;
+                    std::vector<uint8_t>& row = rows[(4 + k) * size_t(h) + size_t(y)];
+                    packBits(raw, w, row);
+                    makeRowEven(row, raw, w);
                 }
             }, 64);
         }
@@ -1182,6 +1200,7 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
         } else {
             f.u16(0);
             for (int c : order) f.bytes(planes[size_t(c)]);
+            for (const auto& p : channelPlanes) f.bytes(p);
         }
     }
     if (summaryOut) *summaryOut = summary;

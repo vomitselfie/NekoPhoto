@@ -5,6 +5,7 @@
 // A 16-bit file must also come back with every layer's channel data byte for byte (the carried planes, psd_carry.h).
 #include "compositor/psd.h"
 #include "compositor/psd_writer.h"
+#include "compositor/psd_carry.h"
 #include "psd/psd_binary.hpp"
 #include <algorithm>
 #include <cstdio>
@@ -132,7 +133,7 @@ Bytes readFile(const fs::path& p) {
 }
 
 /// Checks one file; prints what was lost. Returns false when anything carried did not come back.
-bool check(const fs::path& path, int& carriedBlocks) {
+bool check(const fs::path& path, int& carriedBlocks, int& channelsBack) {
     std::string error;
     auto imported = compositor::importPsd(path.string(), &error);
     if (!imported) { std::printf("SKIP %s: %s\n", path.filename().string().c_str(), error.c_str()); return true; }
@@ -193,6 +194,26 @@ bool check(const fs::path& path, int& carriedBlocks) {
     auto reopened = compositor::importPsd(again.string(), &error);
     if (!reopened) problems.push_back("our file does not reopen: " + error);
     else if (sixteen && reopened->document.sampleType != compositor::SampleType::U16) problems.push_back("our file does not reopen at 16 bits");
+    // Alpha and spot channels: the same names, kinds, display and pixels (a 16-bit file's samples as stored), and
+    // the resources that describe them byte for byte.
+    if (reopened) {
+        const auto& was = imported->document.channels;
+        const auto& now = reopened->document.channels;
+        if (was.size() != now.size()) problems.push_back("channel count " + std::to_string(was.size()) + " -> " + std::to_string(now.size()));
+        else for (size_t i = 0; i < was.size(); i++) {
+            const compositor::Channel &x = was[i], &y = now[i];
+            const std::string label = "channel \"" + x.name + "\": ";
+            if (x.name != y.name) problems.push_back(label + "renamed \"" + y.name + "\"");
+            if (x.kind != y.kind || x.selectedAreas != y.selectedAreas || x.color != y.color || x.opacity != y.opacity) problems.push_back(label + "display changed");
+            if (compositor::psdMaskHash(x.image, true) != compositor::psdMaskHash(y.image, true)) problems.push_back(label + "pixels changed");
+            if (x.psdCarry && y.psdCarry && (x.psdCarry->displayInfo != y.psdCarry->displayInfo || x.psdCarry->identifier != y.psdCarry->identifier || (!x.psdCarry->plane16.empty() && x.psdCarry->plane16 != y.psdCarry->plane16)))
+                problems.push_back(label + "stored record or samples changed");
+            else if (problems.empty()) channelsBack++;
+        }
+        if (!was.empty())
+            for (int id : {1006, 1045, 1077, 1053})
+                if (a.resources.count(id) && (!b.resources.count(id) || a.resources.at(id) != b.resources.at(id))) problems.push_back("channel resource " + std::to_string(id) + " changed");
+    }
     fs::remove(again);
     std::printf("%s %s", problems.empty() ? "ok  " : "FAIL", path.filename().string().c_str());
     if (!imported->texts.empty()) std::printf("  [%zu text layer(s) opened as text]", imported->texts.size());
@@ -211,8 +232,9 @@ int main(int argc, char** argv) {
         else files.push_back(argv[i]);
     }
     std::sort(files.begin(), files.end());
-    int failed = 0, carried = 0;
-    for (auto& f : files) if (!check(f, carried)) failed++;
+    int failed = 0, carried = 0, channels = 0;
+    for (auto& f : files) if (!check(f, carried, channels)) failed++;
     std::printf("%zu files, %d failed, %d carried blocks came back\n", files.size(), failed, carried);
+    std::printf("%d alpha and spot channels came back\n", channels);
     return failed ? 1 : 0;
 }

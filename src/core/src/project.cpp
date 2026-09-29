@@ -128,7 +128,7 @@ json transformJson(const LayerTransform& t) {
 
 const std::set<std::string> knownLayerKeys = {"id", "name", "isVisible", "transform", "imageFile", "parentID", "isGroup", "opacity", "blendMode",
     "maskFile", "maskEnabled", "maskSourceID", "adjustment", "maskPlacement", "maskLinked", "shape", "text", "passThrough", "artboard"};
-const std::set<std::string> knownManifestKeys = {"format", "version", "colorSpace", "resolution", "documentID", "width", "height", "activeLayerID", "layers", "slices", "animation", "sampleType", "profile"};
+const std::set<std::string> knownManifestKeys = {"format", "version", "colorSpace", "resolution", "documentID", "width", "height", "activeLayerID", "layers", "slices", "animation", "sampleType", "profile", "channels"};
 
 struct Record {
     Layer layer;
@@ -327,7 +327,39 @@ struct Manifest {
     SampleType sampleType = SampleType::U8;
     /// Version 8: the document's colour profile is the package's profile.icc ("colorSpace": "icc").
     bool tagged = false;
+    /// Version 8: alpha and spot channels, their grays in channels/<id>.png (left empty here).
+    std::vector<Channel> channels;
 };
+
+/// A channel's manifest entry; its gray is the package's channels/<id>.png at the document's depth.
+json channelJson(const Channel& c) {
+    return {{"id", c.id}, {"name", c.name}, {"kind", c.kind == ChannelKind::Spot ? "spot" : "alpha"},
+            {"color", {number(c.color[0]), number(c.color[1]), number(c.color[2])}}, {"opacity", number(c.opacity)},
+            {"colorIndicates", c.selectedAreas ? "selected" : "masked"}, {"file", "channels/" + c.id + ".png"}};
+}
+
+bool parseChannel(const json& j, Channel& c) {
+    if (!j.is_object()) return false;
+    std::optional<Uuid> id;
+    if (!getUuid(j, "id", id, true) || !getString(j, "name", c.name, false) || c.name.size() > 1024) return false;
+    c.id = *id;
+    std::string kind = "alpha", indicates = "masked", file = "channels/" + c.id + ".png";
+    if (!getString(j, "kind", kind, false) || (kind != "alpha" && kind != "spot")) return false;
+    if (!getString(j, "colorIndicates", indicates, false) || (indicates != "masked" && indicates != "selected")) return false;
+    if (!getString(j, "file", file, false) || file != "channels/" + c.id + ".png") return false;
+    c.kind = kind == "spot" ? ChannelKind::Spot : ChannelKind::Alpha;
+    c.selectedAreas = indicates == "selected";
+    if (!getDouble(j, "opacity", c.opacity, false) || c.opacity < 0 || c.opacity > 1) return false;
+    if (auto color = j.find("color"); color != j.end() && !color->is_null()) {
+        if (!color->is_array() || color->size() != 3) return false;
+        for (size_t i = 0; i < 3; i++) {
+            if (!(*color)[i].is_number()) return false;
+            c.color[i] = (*color)[i].get<double>();
+            if (!(c.color[i] >= 0 && c.color[i] <= 1)) return false;
+        }
+    }
+    return true;
+}
 
 bool parseManifestJson(const json& j, Manifest& m, ProjectError& error) {
     if (!j.is_object()) { error = invalid(); return false; }
@@ -378,6 +410,15 @@ bool parseManifestJson(const json& j, Manifest& m, ProjectError& error) {
                 || !getString(e, "message", s.message, false) || !getString(e, "altTag", s.altTag, false) || s.width < 1 || s.height < 1) { error = invalid(); return false; }
             s.id = uint32_t(id);
             m.slices.push_back(std::move(s));
+        }
+    }
+    if (auto ch = j.find("channels"); ch != j.end() && !ch->is_null()) {
+        if (!ch->is_array() || m.version < 8 || ch->size() > size_t(Document::maxChannels)) { error = invalid(); return false; }
+        std::set<Uuid> ids;
+        for (auto& e : *ch) {
+            Channel c;
+            if (!parseChannel(e, c) || !ids.insert(c.id).second) { error = invalid(); return false; }
+            m.channels.push_back(std::move(c));
         }
     }
     // Frame animation (NekoPhoto's own key, which other readers skip): a damaged one is dropped, not fatal.
@@ -461,6 +502,7 @@ Document documentFrom(const Manifest& m) {
     d.sampleType = m.sampleType;
     d.slices = m.slices;
     for (auto& r : m.records) d.layers.push_back(r.layer);
+    d.channels = m.channels;
     d.animation = m.animation;
     pruneAnimation(d);
     return d;
@@ -557,6 +599,17 @@ std::optional<Document> loadProject(const std::string& pathText, ProjectError& e
             if (layer.text) layer.textImage = layer.asset->image;
         }
     }
+    // Alpha and spot channels (version 8): each gray is channels/<id>.png, at the document's depth and size.
+    for (Channel& c : d.channels) {
+        const fs::path file = path / "channels" / (c.id + ".png");
+        PngInfo info;
+        if (!checkFile(file, path, assetLimit) || !readPngInfo(file.string(), info) || info.bitDepth > (deep ? 16 : 8)) { error = missingImage(); return std::nullopt; }
+        if (info.width != d.width || info.height != d.height) { error = invalid(); return std::nullopt; }
+        if (!checkSize(info.width, info.height, maskPixels, d.sampleType)) { error = tooLarge(); return std::nullopt; }
+        if (deep) c.image = Gray16Ptr(readPngGray16(file.string()));
+        else c.image = GrayPtr(readPngGray(file.string()));
+        if (!c.image || c.image.width() != d.width || c.image.height() != d.height) { error = missingImage(); return std::nullopt; }
+    }
     // What a PSD held that we do not model (psd_carry.h), beside the images; optional, and dropped if unreadable.
     // Every sidecar counts toward one total (limits.sidecarBytes); past it the package is refused.
     unsigned long long sidecarBytes = 0;
@@ -576,6 +629,8 @@ std::optional<Document> loadProject(const std::string& pathText, ProjectError& e
     for (Layer& layer : d.layers)
         if (auto bytes = readCarry(path / "images" / (layer.id + ".psdcarry"))) layer.psdCarry = parsePsdLayerCarry(*bytes);
     if (auto bytes = readCarry(path / "images" / "document.psdcarry")) d.psdCarry = parsePsdDocumentCarry(*bytes);
+    for (Channel& c : d.channels)
+        if (auto bytes = readCarry(path / "channels" / (c.id + ".psdcarry"))) c.psdCarry = parsePsdChannelCarry(*bytes);
     // The colour profile, kept byte for byte (colorprofile.h); an unreadable one leaves the document untagged.
     if (m.tagged)
         if (auto bytes = readCarry(path / "profile.icc"))
@@ -644,6 +699,7 @@ std::string manifestJson(const Document& document, const std::optional<Uuid>& ac
     folders |= !document.slices.empty();   // artboards and slices are version 8 too: the Mac app has neither
     folders |= document.sampleType != SampleType::U8;   // so is a 16-bit document
     folders |= !document.profile.empty();               // and one with a colour profile
+    folders |= !document.channels.empty();              // or with alpha channels
     j["version"] = folders ? projectFormatVersion : projectMacFormatVersion;
     j["colorSpace"] = document.profile.empty() ? "sRGB" : "icc";
     if (!document.profile.empty()) j["profile"] = "profile.icc";
@@ -665,6 +721,10 @@ std::string manifestJson(const Document& document, const std::optional<Uuid>& ac
     }
     if (!document.animation.empty()) j["animation"] = json::parse(animationJson(document.animation));
     else j.erase("animation");
+    if (!document.channels.empty()) {
+        j["channels"] = json::array();
+        for (const Channel& c : document.channels) j["channels"].push_back(channelJson(c));
+    } else j.erase("channels");
     return j.dump(2);
 }
 
@@ -683,6 +743,9 @@ bool saveProject(const Document& document, const std::optional<Uuid>& activeLaye
         if (l.asset && l.asset->image && (l.asset->image.sampleType() != document.sampleType || !checkSize(l.asset->image.width(), l.asset->image.height(), pixels, document.sampleType))) { error = tooLarge(); return false; }
         if (l.mask && l.mask->asset.image && (l.mask->asset.image.sampleType() != document.sampleType || !checkSize(l.mask->asset.image.width(), l.mask->asset.image.height(), maskPixels, document.sampleType))) { error = tooLarge(); return false; }
     }
+    for (const Channel& c : document.channels)
+        if (!c.image || c.image.sampleType() != document.sampleType || c.image.width() != document.width || c.image.height() != document.height
+            || !checkSize(c.image.width(), c.image.height(), maskPixels, document.sampleType)) { error = tooLarge(); return false; }
     fs::path path(pathText);
     fs::path parent = path.parent_path().empty() ? fs::path(".") : path.parent_path();
     std::error_code ec;
@@ -707,6 +770,15 @@ bool saveProject(const Document& document, const std::optional<Uuid>& activeLaye
         if (l.psdCarry && !writeBytes(staging / "images" / (l.id + ".psdcarry"), serializePsdCarry(*l.psdCarry))) { abandon(); error = ioError("could not write the PSD data of " + l.name); return false; }
     }
     if (document.psdCarry && !writeBytes(staging / "images" / "document.psdcarry", serializePsdCarry(*document.psdCarry))) { abandon(); error = ioError("could not write the PSD data"); return false; }
+    if (!document.channels.empty()) {
+        if (!fs::create_directories(staging / "channels", ec)) { abandon(); error = ioError("could not create the channels folder"); return false; }
+        for (const Channel& c : document.channels) {
+            std::string err;
+            const std::string file = (staging / "channels" / (c.id + ".png")).string();
+            if ((c.image.u8() && !writePngGray(file, *c.image.u8(), &err)) || (c.image.u16() && !writePngGray16(file, *c.image.u16(), &err))) { abandon(); error = encodeError(); return false; }
+            if (c.psdCarry && !writeBytes(staging / "channels" / (c.id + ".psdcarry"), serializePsdCarry(*c.psdCarry))) { abandon(); error = ioError("could not write the PSD data of " + c.name); return false; }
+        }
+    }
     if (!document.profile.empty() && !writeBytes(staging / "profile.icc", document.profile.icc)) { abandon(); error = ioError("could not write the colour profile"); return false; }
     // Smart objects (see the loader): a live instance's record beside its layer; every source in smartobjects/.
     for (auto& l : document.layers)

@@ -203,7 +203,7 @@ Rect Selection::bounds() const {
 Document::Document(int width_, int height_) : id(makeUuid()), width(width_), height(height_) {}
 
 bool Document::operator==(const Document& o) const {
-    return id == o.id && width == o.width && height == o.height && resolution == o.resolution && sampleType == o.sampleType && profile == o.profile && layers == o.layers && selection == o.selection && psdCarry == o.psdCarry && smartObjects == o.smartObjects && slices == o.slices && animation == o.animation;
+    return id == o.id && width == o.width && height == o.height && resolution == o.resolution && sampleType == o.sampleType && profile == o.profile && layers == o.layers && selection == o.selection && psdCarry == o.psdCarry && smartObjects == o.smartObjects && slices == o.slices && animation == o.animation && channels == o.channels;
 }
 
 long long Document::layerPixels() const {
@@ -215,6 +215,7 @@ long long Document::layerPixels() const {
 long long Document::maskPixels() const {
     long long total = 0;
     for (const Layer& l : layers) if (l.mask && l.mask->asset.image) total += (long long)l.mask->asset.image.width() * l.mask->asset.image.height();
+    for (const Channel& c : channels) total += (long long)c.image.width() * c.image.height();
     return total;
 }
 
@@ -332,6 +333,7 @@ bool conformToSampleType(Document& document) {
         }
     }
     if (document.selection) document.selection->coverage = gray(document.selection->coverage);
+    for (Channel& c : document.channels) c.image = gray(c.image);
     return changed;
 }
 
