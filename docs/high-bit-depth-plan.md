@@ -451,3 +451,111 @@ Follow Photoshop's choices throughout:
 - Channels come early (P6 can move up to follow P2, as noted there).
 - Budgets become byte budgets (section 8).
 - macOS is no longer a target, so the version-7 writer for 8-bit sRGB is optional.
+
+## P5 plan: 32-bit float (decided 2026-09-28)
+
+**Semantics.**
+- A 32-bit document holds premultiplied linear light in its profile's primaries. The profile is the linear version of the gamma profile: `linearProfile()` keeps the primaries and white point, uses a gamma 1.0 curve, and gets a fixed header date. `gammaCounterpart()` goes back, and `Document::encodedProfile` remembers the curve. Untagged documents become linear sRGB.
+- Colour samples may exceed 1.0. NaN and Inf are cleaned at every entry point.
+- Alpha, masks and selections are coverage: clamped to 0..1 and never linearised.
+
+**Storage and budgets.**
+- 16 bytes per pixel, so a quarter of the 8-bit pixel budget.
+- **Masks, selections and channels are `GrayF`** (one depth per document).
+- **Region undo (`RegionPatch`) lands first:** a stroke keeps only the changed region's before-copy, at every depth.
+
+**Rendering.**
+- **One deep executor:** `render_exec_u16.cpp` becomes a template shared by U16 and F32, `RenderExecDeep<S>` with a `DeepOps<S>` policy. The 16-bit hashes must stay identical after the move. The 8-bit executor is untouched.
+- **The brush stroke raster becomes `StrokeRaster<S>`.**
+- **`blend_f32`** uses the W3C/PDF formulas on premultiplied float spans.
+  - The UI offers Photoshop's 32-bit subset: Normal, Dissolve, Darken, Multiply, Lighten, Linear Dodge, Difference, Subtract, Divide, Hue, Saturation, Color, Luminosity, Darker/Lighter Color (verify).
+  - The other modes render with their inputs clamped, so imported and converted files still draw, but they are greyed in the picker.
+  - Non-separable modes use the profile's linear Y.
+- **Layer styles:** an F32 instance of the existing template, with effect colours linearised at draw time.
+
+**Display.**
+- A per-view `View32 { exposure, gamma, method }`: an exposure slider in the status bar, View ▸ 32-bit Preview Options, and `view.exposure`.
+- The display runs exposure, then gamma (or highlight compression), then Little CMS float to the monitor. That needs `PixelFormat::RGBAFloat` and `toDisplayF`.
+
+**Mode conversion.**
+- **8/16 → 32:** linearise through the document's transfer curve. One undo step.
+- **32 → 16/8:** a dialog with Exposure and Gamma or Highlight Compression, and a live preview. Layers are kept. At the defaults it is an exact round trip for 8/16-sourced documents.
+- Local Adaptation and Equalize come later (P5f).
+
+**Features at 32 bits follow Photoshop.** What Photoshop greys at 32 bits is greyed here with "Not available in 32-bit mode" (no "yet"): Dodge/Burn/Sponge, the Paint Bucket, Patch, the content-aware tools, Brightness/Contrast, Posterize, Threshold, Selective Color, Grain, Mosh and G'MIC (at first). Remove Background is greyed at first.
+
+**Hard problems.**
+- **MyPaint:** a documented 15-bit round trip. Only samples a dab changes are rewritten; untouched pixels keep their exact floats.
+- **Dodge/Burn:** greyed, as in Photoshop.
+- **Decisions on the display:** the wand, Quick Select and healing decide on a fixed exposure-0, 8-bit `decisionImage()`, so results don't change with the view.
+- **Tests** run against a double-precision `float_reference`, not an 8-bit one.
+
+**Formats.**
+- **PSD/PSB 32:** read `Lr32` planes as float; write `Lr32` with zip and prediction.
+- **OpenEXR:** an optional system library (BSD-3) through `find_package`, with a vendored static build only if the Windows packages are missing.
+- **Radiance .hdr:** our own reader and writer.
+- **32-bit TIFF:** through libtiff directly.
+- **RAW to linear float:** linear sRGB by default.
+- **Projects:** `.f32z` sidecars (zlib over byte-planar delta rows, the PSD predictor), so no extra dependency.
+
+**Phasing.** Each step keeps the 8/16-bit hashes, brush parity and PSD corpus identical, builds clean with -Werror, passes smoke, and holds benches within ±2%.
+
+| Step | Content |
+|---|---|
+| P5.0a | The deep executor template, 16-bit hashes identical |
+| P5.0b | `StrokeRaster<S>` |
+| P5.0c | `RegionPatch` undo |
+| P5a | Float primitives, `blend_f32`, `RenderExec<F32>`, display and View32, mode conversion, supports wording, project and PSD 32 |
+| P5b | The adjustments and filters subset, selections, pixel edits |
+| P5c | Painting on `StrokeRaster<F32>`, MyPaint round trip, `decisionImage` |
+| P5d | EXR, HDR, TIFF float, RAW float |
+| P5e | Text, shapes, styles, smart objects at F32 |
+| P5f | HDR Toning Local Adaptation, and the HDR colour picker (optional) |
+
+## P7 plan: CMYK and Lab (decided 2026-09-28)
+
+**Storage.**
+- **CMYK:** 5 samples (C, M, Y, K, alpha) on **inverted ink** (PSD's convention), premultiplied. The RGB separable kernels then apply per ink, and PSD planes carry over untransformed.
+- **Lab:** 4 samples with offset a/b (128 at 8 bits, 16384 at 16), premultiplied. Modes that read the a/b sign unpremultiply first. The offset is hidden behind accessors in `colormodes.h`.
+- **8 and 16 bits only.** Photoshop has no 32-bit CMYK or Lab, so P5 and P7 are independent.
+- **8-bit CMYK is a new `ImageC8` (`ImageT<U8>`, 5 channels), a fourth `AnyOf` alternative** with `.c8()`. `.u8()` stays null, so RGB-only paths gate themselves.
+- 8-bit Lab uses `Image`; 16-bit uses `Image16` with 4 or 5 channels. `Document::colorMode` is a document property.
+- Budgets are bytes: sample size × channels.
+
+**Rendering.**
+- New `render_exec_c8.cpp` and `blend_c8.cpp`. The 16-bit executor gets a channel-count parameter, with the RGB16 instance unchanged. The display transform to the monitor is fused into the reduction and is never null for CMYK/Lab.
+- **CMYK:** all 27 modes. The non-separable ones (Hue, Saturation, Color, Luminosity, Darker/Lighter Color) ship only if they can be calibrated against Photoshop renders; otherwise they render as Normal with a notice.
+- **Lab:** the modes Photoshop shows (verify; Adobe lists Color Dodge/Burn, Darken/Lighten, Difference, Exclusion, Subtract and Divide as unavailable).
+- **Soft proof:** a CMYK target for RGB documents, using the bundled working CMYK.
+
+**Default CMYK profile.** Bundle **basICColor `ISOcoated_v2_300_bas.ICC` (FOGRA39, zlib/libpng licence)**; check the licence text in the source archive before shipping. Adobe's SWOP and the ECI profiles can't be bundled, but Color Settings ▸ Working CMYK accepts any installed ICC file. Lab uses the built-in D50.
+
+**Mode conversion.**
+- Image ▸ Mode ▸ RGB/CMYK/Lab (`convertDocumentMode`) uses Color Settings' intent and black-point compensation; black generation comes from the profile. One undo step.
+- It converts every raster, fill, style and adjustment colour, and the foreground/background.
+- **Adjustment layers with no counterpart in the new mode are kept, inactive and marked**, so converting back restores them. Per-channel curves reset.
+
+**Channels.** `colorChannelsAll(mode)`: C, M, Y, K or L, a, b in the panel, with single-channel editing generalised to N channels. Loading a CMYK channel selects its ink.
+
+**Features follow Photoshop per mode.** `supports()` gains a mode axis: "Not available in CMYK mode" / "Lab mode". **MyPaint brushes are greyed in CMYK and Lab.** Camera Raw and G'MIC are off in both.
+
+**Formats.**
+- **PSD modes 4 and 9 open natively** at 8 and 16 bits, replacing today's conversion to RGB; untouched layers carry byte for byte.
+- **CMYK JPEG** (APP14, inverted) through libjpeg-turbo directly. CMYK TIFF comes later, through libtiff.
+- **Projects:** a `colorMode` key, with CMYK layers as raw compressed planes.
+- **RGB exports convert with a note.**
+- **Fixtures:** the owner is looking for Photoshop-saved CMYK and Lab PSDs. Until they arrive, format tests use constructed files, marked as weaker.
+
+**Phasing.**
+
+| Step | Content |
+|---|---|
+| A | Types, model, budgets, the mode axis in `supports()`, the manifest |
+| B | colormgmt CMYK/Lab formats, the bundled profile, Working CMYK, the CMYK soft proof for RGB documents |
+| C | Executors and blends, display, channel view |
+| D | Native PSD 4/9 and Image ▸ Mode |
+| E | Editing ports (fill, adjustments, blurs, transforms, then the brush) |
+| F | Channels panel and pickers per mode |
+| G | CMYK JPEG, and non-separable calibration if fixtures allow |
+
+Minimum shippable subset: A–D and F plus the cheap part of E.
