@@ -32,6 +32,8 @@ bool EditorSession::beginTypeEdit(const Uuid& id) {
     if (!layer || !layer->isLiveText() || layer->text->warp.active()) return false;
     typeEdit_ = TypeEdit{id, false, *document_, activeLayerId_};
     beginEdit(QT_TRANSLATE_NOOP("History", "Edit Type Layer"));
+    // The layer being typed in becomes the active one, as in Photoshop (choosing another then commits).
+    if (activeLayerId_ != id) { setActiveLayer(id); emit layersChanged(); }
     return true;
 }
 

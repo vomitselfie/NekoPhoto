@@ -55,7 +55,11 @@ CanvasWidget::CanvasWidget(EditorSession* session, QWidget* parent) : QWidget(pa
     });
     // The layers draw through documentChanged; of the overlays only the transform box follows them, so a layer
     // change repaints the whole view only while a box is (or was) shown. At 2.25x a full repaint is ~5 ms.
-    connect(session_, &EditorSession::layersChanged, this, [this] { if (boxShown() || boxPainted_) update(); });
+    connect(session_, &EditorSession::layersChanged, this, [this] {
+        // Choosing another layer (the Layers panel, a shortcut) commits the type, as in Photoshop.
+        if (typeEdit_ && session_->typeEditLayer() && session_->activeLayerId() != session_->typeEditLayer()) commitType();
+        if (boxShown() || boxPainted_) update();
+    });
     connect(session_, &EditorSession::selectionChanged, this, [this] { refreshSelectionOutline(); update(); });
     connect(session_, &EditorSession::scribblesChanged, this, [this] { update(); });
     // A viewport change leaves the cache valid: ensureCache compares zoom and origin, and a pan scrolls it.
