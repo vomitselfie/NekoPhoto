@@ -519,7 +519,7 @@ std::optional<Uuid> EditorSession::layerAt(QPointF documentPoint) const {
         int x = int(std::floor(p.x)), y = int(std::floor(p.y));
         if (x < 0 || y < 0 || x >= image.width() || y >= image.height()) continue;
         // Any alpha at all, at whatever depth the pixels are.
-        if (image.u8() ? image.u8()->pixel(x, y)[3] > 0 : image.u16() && image.u16()->pixel(x, y)[3] > 0) return layer->id;
+        if (image.u8() ? image.u8()->pixel(x, y)[3] > 0 : image.u16() ? image.u16()->pixel(x, y)[3] > 0 : image.f32() && image.f32()->pixel(x, y)[3] > 0) return layer->id;
     }
     return std::nullopt;
 }

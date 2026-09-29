@@ -581,5 +581,24 @@ int main(int argc, char** argv) {
     }
     bench("u16 brush stroke d400 hardness 0", none, [&] { roundLarge(canvas16, SampleType::U16); });
     bench("u16 tip brush textured d60", none, [&] { tipStroke(canvas16, SampleType::U16); });
+
+    // 32 bits (P5b): the 12-layer render with its Levels and Curves layers drawn in float, the adjustments and a blur
+    // on the photo linearised. Last, so the lines above run as they did; their setup only runs for them (no filter, or
+    // one starting "f32"), so a filtered A/B of the other lines does the same work before and after.
+    if (bench.filter.empty() || bench.filter.rfind("f32", 0) == 0) {
+        Document deepF = doc;
+        if (!convertSampleType(deepF, SampleType::F32)) { std::printf("32-bit conversion failed\n"); return 1; }
+        ImageF outF;
+        bench("f32 render 4000x3000, 12 layers", none, [&] { RenderOptions o; renderF(deepF, o, outF); });
+        const TransferCurve srgb = TransferCurve::srgb();
+        const auto photoF = lineariseImage(*photo, srgb);
+        ImageF workF;
+        auto freshF = [&] { workF = *photoF; };
+        bench("f32 gaussian blur r20", freshF, [&] { FilterSettings s; s.radius = 20; applyFilter(FilterKind::GaussianBlur, workF, s, srgb); });
+        auto adjustF = [&](const char* name, AdjustmentSettings s) { bench(name, freshF, [&] { applyAdjustment(s, workF, all, 1, srgb); }); };
+        adjustF("f32 levels", levels);
+        adjustF("f32 curves", curves);
+        adjustF("f32 hue/saturation", hsv);
+    }
     return 0;
 }

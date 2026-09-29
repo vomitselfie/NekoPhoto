@@ -52,7 +52,7 @@ struct LevelsCurve {
     }
     double operator()(double x) const {
         const double input = std::max(0.0, (x - black) / span);
-        return outBlack + (linear ? input : std::pow(input, inverseGamma)) * outSpan;
+        return outBlack + (linear ? input : double(std::pow(float(input), float(inverseGamma)))) * outSpan;
     }
 };
 
@@ -94,18 +94,59 @@ struct CurveSpline {
 
 // ---- the per-pixel frame -------------------------------------------------------------------------------------------
 
+/// sRGB's curve both ways over 0..1 in 65536 steps, from its formulas in double. Its linear toe keeps linear
+/// interpolation between the steps within 1e-7 of the formula everywhere (a pure power law would not be, near 0).
+struct SrgbTables {
+    static constexpr int steps = 65536;
+    std::vector<float> encode, decode;
+    SrgbTables() : encode(steps + 1), decode(steps + 1) {
+        for (int i = 0; i <= steps; i++) {
+            const double v = double(i) / steps;
+            encode[size_t(i)] = float(v <= 0.0031308 ? v * 12.92 : 1.055 * std::pow(v, 1 / 2.4) - 0.055);
+            decode[size_t(i)] = float(v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4));
+        }
+    }
+    static float lookup(const std::vector<float>& table, float x) {
+        const float s = x * float(steps);
+        const int i = std::min(int(s), steps - 1);
+        return table[size_t(i)] + (table[size_t(i) + 1] - table[size_t(i)]) * (s - float(i));
+    }
+};
+
+const SrgbTables& srgbTables() {
+    static const SrgbTables tables;
+    return tables;
+}
+
+/// encodeExtended / decodeExtended, sRGB's through the tables within 0..1 (the common case: no power per sample).
+struct Encoding {
+    const TransferCurve& curve;
+    const SrgbTables* srgb;
+    explicit Encoding(const TransferCurve& c) : curve(c), srgb(c.kind() == TransferCurve::Kind::SRGB ? &srgbTables() : nullptr) {}
+    float encode(float v) const {
+        if (!srgb || !(v <= 1.0f)) return encodeExtended(curve, v);
+        return v > 0 ? SrgbTables::lookup(srgb->encode, v) : 0.0f;
+    }
+    float decode(float e) const {
+        if (!srgb || !(e <= 1.0f)) return decodeExtended(curve, e);
+        return e > 0 ? SrgbTables::lookup(srgb->decode, e) : 0.0f;
+    }
+};
+
 /// Each pixel's straight linear colour, per channel through `f` (encoded in, encoded out), premultiplied again.
 template <class F>
 void perChannel(ImageF& image, const TransferCurve& curve, F&& f) {
+    const Encoding encoding(curve);
     parallelRows(0, image.height(), [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) {
             float* p = image.row(y);
             for (int x = 0; x < image.width(); x++, p += 4) {
                 const float a = p[3];
                 if (!(a > 0)) continue;
+                const float inverse = 1.0f / a;
                 for (int c = 0; c < 3; c++) {
-                    const double e = encodeExtended(curve, p[c] / a);
-                    p[c] = cleanColour(decodeExtended(curve, float(f(c, e))) * a);
+                    const double e = encoding.encode(p[c] * inverse);
+                    p[c] = cleanColour(encoding.decode(float(f(c, e))) * a);
                 }
             }
         }
@@ -117,6 +158,7 @@ void perChannel(ImageF& image, const TransferCurve& curve, F&& f) {
 // Each pixel's straight colour, encoded and scaled into 0..1, through `f` (0..1 in, clamped to 0..1 out), and back: the
 // colour kinds' frame at 32 bits (adjustments_more.cpp and colorlookup.cpp use it through their perPixel templates).
 void forEachEncodedColour(ImageF& image, const TransferCurve& curve, const std::function<void(double&, double&, double&)>& f) {
+    const Encoding encoding(curve);
     parallelRows(0, image.height(), [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) {
             float* p = image.row(y);
@@ -127,9 +169,9 @@ void forEachEncodedColour(ImageF& image, const TransferCurve& curve, const std::
                 for (int c = 0; c < 3; c++) lin[c] = p[c] / a;
                 const float bright = std::max({lin[0], lin[1], lin[2], 1.0f});
                 double e[3];
-                for (int c = 0; c < 3; c++) e[c] = encodeExtended(curve, lin[c] / bright);
+                for (int c = 0; c < 3; c++) e[c] = encoding.encode(lin[c] / bright);
                 f(e[0], e[1], e[2]);
-                for (int c = 0; c < 3; c++) p[c] = cleanColour(decodeExtended(curve, float(std::clamp(e[c], 0.0, 1.0))) * bright * a);
+                for (int c = 0; c < 3; c++) p[c] = cleanColour(encoding.decode(float(std::clamp(e[c], 0.0, 1.0))) * bright * a);
             }
         }
     });
@@ -195,6 +237,7 @@ void applyGradientMapF(ImageF& image, const GradientMapSettings& settings, const
     const AdjustmentColor dark = (settings.reversed ? settings.highlights : settings.shadows).clamped();
     const AdjustmentColor light = (settings.reversed ? settings.shadows : settings.highlights).clamped();
     const double from[3] = {dark.red, dark.green, dark.blue}, span[3] = {light.red - dark.red, light.green - dark.green, light.blue - dark.blue};
+    const Encoding encoding(curve);
     parallelRows(0, image.height(), [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) {
             float* p = image.row(y);
@@ -202,9 +245,9 @@ void applyGradientMapF(ImageF& image, const GradientMapSettings& settings, const
                 const float a = p[3];
                 if (!(a > 0)) continue;
                 double e[3];
-                for (int c = 0; c < 3; c++) e[c] = encodeExtended(curve, p[c] / a);
+                for (int c = 0; c < 3; c++) e[c] = encoding.encode(p[c] / a);
                 const double t = std::min(1.0, 0.2126 * e[0] + 0.7152 * e[1] + 0.0722 * e[2]);
-                for (int c = 0; c < 3; c++) p[c] = cleanColour(decodeExtended(curve, float(from[c] + span[c] * t)) * a);
+                for (int c = 0; c < 3; c++) p[c] = cleanColour(encoding.decode(float(from[c] + span[c] * t)) * a);
             }
         }
     });

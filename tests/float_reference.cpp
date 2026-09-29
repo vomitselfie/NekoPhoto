@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 
 using namespace compositor;
 
@@ -456,6 +457,52 @@ void gaussianBlur(Canvas& canvas, double sigma) {
                 for (int c = 0; c < 4; c++) p[c] += rows.at(x, y + i)[c] * kernel[size_t(i + radius)];
             storePixel(p);
         }
+}
+
+void gaussianBlurRecursive(Canvas& canvas, double sigma) {
+    // Deriche's fourth-order fit h(n) = sum_k e^{-l_k n / s} (alpha_k cos(w_k n / s) + beta_k sin(w_k n / s)) (Deriche
+    // 1993; Getreuer, IPOL 2013), as a causal and an anticausal recursion normalised to sum to one, zero outside.
+    const double alpha[2] = {1.6800, -0.6803}, beta[2] = {3.7350, -0.2598}, omega[2] = {0.6318, 1.9970}, lambda[2] = {1.7830, 1.7230};
+    double n[2][2], d[2][3];
+    for (int k = 0; k < 2; k++) {
+        const double e = std::exp(-lambda[k] / sigma), c = std::cos(omega[k] / sigma), s = std::sin(omega[k] / sigma);
+        n[k][0] = alpha[k];
+        n[k][1] = -alpha[k] * e * c + beta[k] * e * s;
+        d[k][0] = 1; d[k][1] = -2 * e * c; d[k][2] = e * e;
+    }
+    double num[4] = {0, 0, 0, 0}, den[5] = {0, 0, 0, 0, 0};
+    for (int i = 0; i < 2; i++) for (int j = 0; j < 3; j++) num[i + j] += n[0][i] * d[1][j] + n[1][i] * d[0][j];
+    for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++) den[i + j] += d[0][i] * d[1][j];
+    double b[4], a[4], anti[4];
+    for (int k = 0; k < 4; k++) { b[k] = num[k]; a[k] = den[k + 1]; }
+    for (int k = 0; k < 4; k++) anti[k] = (k < 3 ? b[k + 1] : 0) - a[k] * b[0];
+    double sumB = 0, sumA = 1, sumAnti = 0;
+    for (int k = 0; k < 4; k++) { sumB += b[k]; sumA += a[k]; sumAnti += anti[k]; }
+    const double gain = (sumB + sumAnti) / sumA;
+    for (int k = 0; k < 4; k++) { b[k] /= gain; anti[k] /= gain; }
+    // One line of samples (x[i] at `at(i)`), both passes summed.
+    auto line = [&](int count, const std::function<double&(int)>& at) {
+        std::vector<double> x(static_cast<size_t>(count));
+        for (int i = 0; i < count; i++) x[size_t(i)] = at(i);
+        auto xs = [&](int i) { return i >= 0 && i < count ? x[size_t(i)] : 0.0; };
+        std::vector<double> causal(static_cast<size_t>(count)), anticausal(static_cast<size_t>(count));
+        for (int i = 0; i < count; i++) {
+            double v = b[0] * xs(i) + b[1] * xs(i - 1) + b[2] * xs(i - 2) + b[3] * xs(i - 3);
+            for (int k = 0; k < 4; k++) v -= a[k] * (i - 1 - k >= 0 ? causal[size_t(i - 1 - k)] : 0.0);
+            causal[size_t(i)] = v;
+        }
+        for (int i = count - 1; i >= 0; i--) {
+            double v = anti[0] * xs(i + 1) + anti[1] * xs(i + 2) + anti[2] * xs(i + 3) + anti[3] * xs(i + 4);
+            for (int k = 0; k < 4; k++) v -= a[k] * (i + 1 + k < count ? anticausal[size_t(i + 1 + k)] : 0.0);
+            anticausal[size_t(i)] = v;
+        }
+        for (int i = 0; i < count; i++) at(i) = causal[size_t(i)] + anticausal[size_t(i)];
+    };
+    for (int c = 0; c < 4; c++) {
+        for (int y = 0; y < canvas.height; y++) line(canvas.width, [&](int i) -> double& { return canvas.at(i, y)[c]; });
+        for (int x = 0; x < canvas.width; x++) line(canvas.height, [&](int i) -> double& { return canvas.at(x, i)[c]; });
+    }
+    for (int y = 0; y < canvas.height; y++) for (int x = 0; x < canvas.width; x++) storePixel(canvas.at(x, y));
 }
 
 namespace {

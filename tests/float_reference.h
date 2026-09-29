@@ -45,6 +45,8 @@ Canvas canvasOf(const compositor::ImageF& image);
 bool adjust(Canvas& canvas, const compositor::AdjustmentSettings& settings, const Encoding& encoding);
 /// Gaussian blur with the kernel's taps (radius ceil(3 sigma), weights normalised), zero outside.
 void gaussianBlur(Canvas& canvas, double sigma);
+/// The recursive Gaussian the kernel uses above sigma 6: Deriche's fourth-order fit, causal and anticausal, zero outside.
+void gaussianBlurRecursive(Canvas& canvas, double sigma);
 /// Motion blur: shear, box, shear back, with the kernel's geometry and linear interpolation.
 void motionBlur(Canvas& canvas, double distance, double angleDegrees);
 /// Add Noise with the kernel's pattern for `seed`, on the encoded colour.

@@ -127,7 +127,7 @@ TEST_CASE(adjustments_match_the_double_reference) {
             ref::Canvas expected = ref::canvasOf(*source);
             REQUIRE(ref::adjust(expected, settings, encodingOf(curve)));
             const double error = ref::worstError(image, expected);
-            if (!(error <= 1)) std::fprintf(stderr, "  %s (%s): %g\n", adjustmentKindName(settings.kind), curve.kind() == TransferCurve::Kind::SRGB ? "sRGB" : "gamma", error);
+            std::fprintf(stderr, "  %s (%s): %.3g\n", adjustmentKindName(settings.kind), curve.kind() == TransferCurve::Kind::SRGB ? "sRGB" : "gamma", error);
             CHECK(error <= 1);
         }
     }
@@ -257,7 +257,7 @@ TEST_CASE(adjustment_layers_render_as_the_reference) {
     const auto reference = ref::render(doc, {luma[0], luma[1], luma[2]});
     REQUIRE(!reference.pixels.empty());
     const double error = ref::worstError(*renderFlattenedF(doc), reference);
-    if (!(error <= 1)) std::fprintf(stderr, "  adjustment layers: %g\n", error);
+    std::fprintf(stderr, "  adjustment layers: %.3g\n", error);
     CHECK(error <= 1);
 }
 
@@ -266,7 +266,7 @@ TEST_CASE(filters_match_the_double_reference) {
     const auto source = randomFloat(rng, 45, 33, 4.0f);
     auto check = [&](const char* name, ImageF& image, const ref::Canvas& expected, double limit = 1) {
         const double error = ref::worstError(image, expected);
-        if (!(error <= limit)) std::fprintf(stderr, "  %s: %g\n", name, error);
+        std::fprintf(stderr, "  %s: %.3g\n", name, error);
         CHECK(error <= limit);
     };
     for (double sigma : {0.6, 1.5, 4.0}) {
@@ -276,14 +276,18 @@ TEST_CASE(filters_match_the_double_reference) {
         ref::gaussianBlur(expected, sigma);
         check("gaussian", image, expected);
     }
-    {
-        // Above sigma 6 the blur is Deriche's recursive fit, within 0.05% of the true kernel: against the exact FIR
-        // within 2e-3 of the range (a scaled bound, 200 here in units of 1e-5).
+    for (double sigma : {6.5, 9.0, 25.0}) {
+        // Above sigma 6 the blur is Deriche's recursive fit: against the same recursion in double.
         ImageF image = *source;
-        gaussianBlur(image, 9.0);
+        gaussianBlur(image, sigma);
         ref::Canvas expected = ref::canvasOf(*source);
-        ref::gaussianBlur(expected, 9.0);
-        check("gaussian deriche", image, expected, 200);
+        ref::gaussianBlurRecursive(expected, sigma);
+        check("gaussian recursive", image, expected);
+        // And how far the fit is from the exact Gaussian (reported, bounded loosely: the fit's own error, largest
+        // where the zero outside cuts the kernel).
+        ref::Canvas exact = ref::canvasOf(*source);
+        ref::gaussianBlur(exact, sigma);
+        std::fprintf(stderr, "  recursive against the exact Gaussian, sigma %.1f: %.3g\n", sigma, ref::worstError(image, exact));
     }
     for (double angle : {0.0, 30.0, 75.0, -60.0, 90.0}) {
         ImageF image = *source;
@@ -329,7 +333,7 @@ TEST_CASE(resampling_matches_the_double_reference) {
             auto out = resampleAxisAligned(*source, c.w, c.h, c.ox, c.sx, c.oy, c.sy, filter);
             const auto expected = ref::resample(ref::canvasOf(*source), c.w, c.h, c.ox, c.sx, c.oy, c.sy, filter);
             const double error = ref::worstError(*out, expected);
-            if (!(error <= 1)) std::fprintf(stderr, "  resample %d (%dx%d): %g\n", int(filter), c.w, c.h, error);
+            std::fprintf(stderr, "  resample %d (%dx%d): %.3g\n", int(filter), c.w, c.h, error);
             CHECK(error <= 1);
         }
     }
@@ -468,7 +472,7 @@ TEST_CASE(image_size_resamples_in_float) {
         REQUIRE(out && out->width() == 73 && out->height() == 51);
         const auto expected = ref::resample(ref::canvasOf(*pixels), 73, 51, 40.0 / 73 / 2, 40.0 / 73, 30.0 / 51 / 2, 30.0 / 51, filter);
         const double error = ref::worstError(*out, expected);
-        if (!(error <= 1)) std::fprintf(stderr, "  image size %d: %g\n", int(filter), error);
+        std::fprintf(stderr, "  image size %d: %.3g\n", int(filter), error);
         CHECK(error <= 1);
     }
 }

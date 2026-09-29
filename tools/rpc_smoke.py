@@ -753,6 +753,7 @@ def thirty_two_bit_editing(rpc):
     rpc.call("layers.add", kind="adjustment", adjustmentKind="Exposure")
     expect_refused(rpc, "32-bit mode", "layers.add", kind="adjustment", adjustmentKind="Brightness/Contrast")
     rpc.call("render", maxSize=64)
+    rpc.call("layers.render", id=pixel["id"], masked=False, maxSize=32)
     rpc.call("layers.select", id=pixel["id"])
     # The filters.
     for kind, extra in (("Gaussian Blur", {"radius": 2}), ("Motion Blur", {"angle": 30, "distance": 8}), ("Add Noise", {"amount": 10, "seed": 7}),
