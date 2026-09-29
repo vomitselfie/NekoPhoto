@@ -26,6 +26,7 @@
 #include "Platform.h"
 #include "CpuPower.h"
 #include "Language.h"
+#include "Scrub.h"
 #include "ImageConvert.h"
 #include <QDialog>
 #include <cstdio>
@@ -231,6 +232,7 @@ int run(int argc, char** argv) {
     if (!QStandardPaths::locate(QStandardPaths::ApplicationsLocation, "nekophoto.desktop").isEmpty()) QApplication::setDesktopFileName("nekophoto");
     app.setWindowIcon(QIcon(QStringLiteral(":/app/icon.svg")));
     app::applyTheme();
+    app::scrub::install(app);
     {
         // The interface language, before any window: --lang for one run, else Edit > Preferences. A headless or
         // scripted run stays English unless --lang asks (the automation API is English either way).

@@ -940,6 +940,7 @@ QWidget* ToolOptionsBar::buildTextOptions() {
     auto* size = numberField(1, 2000, 0, " px", tr("Size, in document pixels"));
     connect(size, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [applyStyle](double v) { applyStyle([v](LayerText& t) { t.fontSize = v; }); });
     syncers_.push_back([this, size] { QSignalBlocker b(size); size->setValue(session_->textStyle.fontSize); });
+    h->addWidget(new QLabel(tr("Size")));
     h->addWidget(size);
     auto* bold = new QToolButton;
     bold->setText(tr("B")); bold->setCheckable(true); bold->setToolTip(tr("Bold"));

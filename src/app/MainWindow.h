@@ -4,6 +4,7 @@
 #pragma once
 #include "EditorSession.h"
 #include <QMainWindow>
+#include <QPointer>
 #include <QStringList>
 #include <QTabBar>
 #include <vector>
@@ -188,6 +189,7 @@ private:
     int current_ = -1;
     int nextNumber_ = 2;
     EditorSession* session_ = nullptr;
+    QPointer<EditorSession> scrubSession_;   // the session a scrubby-label drag opened its undo group on
     CanvasWidget* canvas_ = nullptr;
     LayersPanel* layers_ = nullptr;
     ToolOptionsBar* options_ = nullptr;

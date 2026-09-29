@@ -95,6 +95,9 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - CPU power (Edit > Preferences > Performance): All, High, Medium or Low. Fewer cores for NekoPhoto's work, and at Medium and Low a lower priority, so a render or another heavy program running beside it gets the CPU first; `NEKOPHOTO_CPU=low` for one run
 - The interface in English or Japanese (Photoshop's Japanese terms): it follows the desktop's language, or Edit > Preferences > Language picks one; `--lang ja` for one run ([translating.md](translating.md) explains adding a language)
 
+## Working faster
+- Scrubby labels, as in Photoshop: drag the label beside a number (Size, Opacity, a filter's Radius, a Layer Style's Distance, the transform fields, Camera Raw's sliders) left or right to change it, with Shift for fine steps and Alt or Ctrl for coarse ones; a click on the label still types in the field, and one drag is one undo step
+
 ## Automation
 - Scripts and AI agents can drive the editor through a socket or MCP; see [automation.md](automation.md)
 
@@ -180,6 +183,9 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 
 - CPU パワー(編集 > 環境設定 > パフォーマンス):すべて・高・中・低。NekoPhoto が使うコア数を減らし、中と低では優先度も下げるので、横で動かしているレンダリングなどの重い処理に CPU を譲ります。その回だけなら `NEKOPHOTO_CPU=low`
 - 画面表示は日本語と英語(用語は Photoshop 日本語版に準拠)。デスクトップの言語に合わせるか、編集 > 環境設定 > 言語 で選べます。`--lang ja` でその回だけ切り替えることもできます
+
+### 操作
+- スクラブ(Photoshop と同じ):数値の横のラベル(直径、不透明度、フィルターの半径、レイヤースタイルの距離、変形の数値欄、Camera Raw のスライダー)を左右にドラッグして値を変えられます。Shift で細かく、Alt または Ctrl で大きく動きます。ラベルのクリックでは従来どおり数値を入力でき、1 回のドラッグは 1 つの取り消し単位です
 
 ### 自動化
 - スクリプトや AI エージェントからソケットまたは MCP 経由で操作できます。詳しくは [automation.md](automation.md)(英語)

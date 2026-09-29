@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "Scrub.h"
 #include "Names.h"
 #include "BrushImporter.h"
 #include "CanvasFrame.h"
@@ -68,6 +69,21 @@ void ProjectTabBar::dropEvent(QDropEvent* e) {
 
 MainWindow::MainWindow() {
     setAcceptDrops(true);
+    // A drag on a scrubby label is one undo step, whatever the field it moves records.
+    scrub::setUndoGroupHooks(
+        [this](const QString& name) {
+            if (!session_ || !session_->canEditLayers()) return false;
+            scrubSession_ = session_;
+            session_->beginEdit(name);
+            return true;
+        },
+        [this] {
+            if (!scrubSession_) return;
+            scrubSession_->endEdit();
+            emit scrubSession_->historyChanged();
+            emit scrubSession_->titleChanged();
+            scrubSession_.clear();
+        });
     resize(1400, 900);
 
     tabBar_ = new ProjectTabBar;
