@@ -43,6 +43,20 @@ inline bool supports(std::string_view feature, SampleType type, ColorMode mode) 
 bool supports(AdjustmentKind kind, SampleType type, ColorMode mode);
 /// "Not available in CMYK mode", "Not available in Lab mode": the refusal for a feature the mode lacks (empty for RGB).
 std::string notAvailableInMode(ColorMode mode);
+/// Whether `feature` stays RGB for good in `mode` (Camera Raw, G'MIC, the MyPaint presets), rather than waiting for a
+/// port: its refusal is "Not available in CMYK mode"; a feature not ported yet says "Not available in CMYK mode yet".
+bool photoshopLacksInMode(std::string_view feature, ColorMode mode);
+/// Why `feature` is greyed in a document of `type` and `mode`, empty when it works: the depth's reason first
+/// (notAvailableAtDepth), then the mode's ("... in CMYK mode" for good, "... in CMYK mode yet" for a port to come).
+std::string unavailableReason(std::string_view feature, SampleType type, ColorMode mode);
+
+/// A row of the capability matrix (docs/mode-matrix.md, tools/mode_matrix): a feature and what the menus call it.
+struct FeatureRow { std::string_view feature; std::string_view label; };
+/// Every feature the tables name, in the matrix's order.
+const FeatureRow* featureRows(size_t& count);
+/// Where an enabled feature still makes some of its pixels in RGB and converts them into the document's mode, what
+/// does (empty when it works on the native samples throughout); the matrix marks such a cell.
+std::string_view throughRgbNote(std::string_view feature, SampleType type, ColorMode mode);
 /// Whether Photoshop itself has no `feature` in a 32-bit document (Dodge and Burn, the Paint Bucket, the content-aware
 /// tools, Brightness/Contrast, Posterize, Threshold, Selective Color, Grain; Mosh and G'MIC here): such a feature is
 /// greyed for good, not waiting for a port.

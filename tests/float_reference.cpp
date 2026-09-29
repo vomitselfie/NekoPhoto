@@ -180,6 +180,32 @@ Canvas render(const Document& document, const std::array<double, 3>& luma, const
     return out;
 }
 
+void brushDab(Canvas& canvas, double cx, double cy, double diameter, double hardness, double opacity, const double colour[3], bool erase,
+              const std::vector<double>* selection) {
+    const double radius = diameter / 2, inner = radius * hardness;
+    auto falloff = [](double u) {
+        const double k = 2.5;
+        return std::max(0.0, (std::exp(-k * u * u) - std::exp(-k)) / (1 - std::exp(-k)));
+    };
+    for (int y = 0; y < canvas.height; y++)
+        for (int x = 0; x < canvas.width; x++) {
+            const double dist = std::hypot(x + 0.5 - cx, y + 0.5 - cy);
+            if (dist >= radius + 1) continue;
+            double value;
+            if (hardness >= 1) value = std::clamp(radius - dist + 0.5, 0.0, 1.0);
+            else if (dist <= inner) value = 1;
+            else if (dist >= radius) value = 0;
+            else value = falloff((dist - inner) / std::max(1e-9, radius - inner));
+            const double k = value * opacity * (selection ? (*selection)[size_t(y) * size_t(canvas.width) + size_t(x)] : 1.0);
+            if (k <= 0) continue;
+            double* p = canvas.at(x, y);
+            for (int c = 0; c < 4; c++) {
+                if (erase) p[c] = p[c] * (1 - k);
+                else p[c] = p[c] + ((c < 3 ? colour[c] : 1.0) - p[c]) * k;
+            }
+        }
+}
+
 double worstError(const ImageF& image, const Canvas& reference) {
     if (image.width() != reference.width || image.height() != reference.height) return 1e30;
     double worst = 0;

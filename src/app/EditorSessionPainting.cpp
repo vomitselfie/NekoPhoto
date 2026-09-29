@@ -10,6 +10,8 @@
 #include "PresetLibrary.h"
 #include "QtGeometry.h"
 #include "TextLayer.h"
+#include "ColorManagement.h"
+#include "compositor/toning.h"
 #include "compositor/blur.h"
 #include "compositor/depth.h"
 #include <algorithm>
@@ -25,6 +27,11 @@ namespace {
 /// empty selection, where nothing may be touched. The caller checks isValid().
 std::unique_ptr<BrushStroke> strokeAtDepth(const Document& document, const Layer& layer, bool mask, const BrushSettings& settings) {
     const AnyGray* coverage = document.selection ? &document.selection->coverage : nullptr;
+    if (document.sampleType == SampleType::F32 || document.colorMode != ColorMode::RGB) {
+        // A 32-bit, CMYK or Lab document paints in its own samples: the colour goes into its model first (brush.h).
+        if (document.selection && !*coverage) return nullptr;
+        return std::make_unique<BrushStroke>(layer, mask, settings, document, color::conversionOptions());
+    }
     if (document.sampleType == SampleType::U16) {
         const Gray16* selection = coverage ? coverage->u16().get() : nullptr;
         if (document.selection && !selection) return nullptr;
@@ -40,11 +47,23 @@ std::unique_ptr<BrushStroke> strokeAtDepth(const Document& document, const Layer
 Document layerAlone(const Document& document, const Layer& layer, std::optional<LayerTransform> transform = std::nullopt) {
     Document single(document.width, document.height);
     single.sampleType = document.sampleType;
+    single.colorMode = document.colorMode;
+    single.profile = document.profile;
+    single.encodedProfile = document.encodedProfile;
     Layer copy = layer;
     copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
     if (transform) copy.transform = *transform;
     single.layers = {copy};
     return single;
+}
+
+/// Whether `document` paints through the native path (a 32-bit, CMYK or Lab document) rather than the RGB 8/16 one.
+bool paintsNative(const Document& document) { return document.sampleType == SampleType::F32 || document.colorMode != ColorMode::RGB; }
+
+/// `document` (or `layer` alone in it) flattened at its own layout: linear float at 32 bits, inks in CMYK, L a b in Lab.
+AnyImage flattenedNative(const Document& document) {
+    if (document.sampleType == SampleType::F32) return ImageFPtr(renderFlattenedF(document));
+    return renderNative(document);
 }
 
 } // namespace
@@ -75,15 +94,34 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
         QPointF offset = cloneAligned && cloneOffset ? *cloneOffset : QPointF(std::round(cloneSource->x() - documentPoint.x()), std::round(cloneSource->y() - documentPoint.y()));
         // The sample is the document (or the layer alone) at document size; keep it between strokes until
         // something changes, since a stroke start is where latency shows.
-        bool cached = (deep ? bool(cloneSample16_) : bool(cloneSample_)) && cloneSampleAll_ == cloneSampleAll && cloneSampleLayer_ == layer->id && cloneSampleRevision_ == documentRevision_;
-        if (deep) {
+        const bool native = paintsNative(*document_);
+        bool cached = (native ? bool(cloneSampleAny_) : deep ? bool(cloneSample16_) : bool(cloneSample_)) && cloneSampleAll_ == cloneSampleAll && cloneSampleLayer_ == layer->id && cloneSampleRevision_ == documentRevision_;
+        if (native) {
+            // A 32-bit, CMYK or Lab document copies its own samples.
+            AnyImage sample;
+            if (cached) sample = cloneSampleAny_;
+            else if (cloneSampleAll) sample = flattenedNative(*document_);
+            else if (layer->asset && layer->asset->image) sample = flattenedNative(layerAlone(*document_, *layer, layer->transform));
+            else {
+                // A blank layer: nothing to copy, at the document's layout.
+                const int w = document_->width, h = document_->height;
+                if (document_->sampleType == SampleType::F32) sample = ImageFPtr(std::make_shared<ImageF>(w, h));
+                else if (document_->sampleType == SampleType::U16) sample = Image16Ptr(std::make_shared<Image16>(w, h, colorModeChannels(document_->colorMode)));
+                else if (document_->colorMode == ColorMode::CMYK) sample = ImageC8Ptr(std::make_shared<ImageC8>(w, h, 5));
+                else sample = ImagePtr(std::make_shared<Image>(w, h));
+            }
+            cloneSampleAny_ = sample; cloneSample_.reset(); cloneSample16_.reset();
+            clone = CloneSource{};
+            clone->setImage(sample);
+            clone->offset = {offset.x(), offset.y()};
+        } else if (deep) {
             // A 16-bit document copies 16-bit pixels.
             std::shared_ptr<const Image16> sample;
             if (cached) sample = cloneSample16_;
             else if (cloneSampleAll) sample = renderFlattened16(*document_);
             else if (layer->asset && layer->asset->image) sample = renderFlattened16(layerAlone(*document_, *layer, layer->transform));
             else sample = std::make_shared<Image16>(document_->width, document_->height);
-            cloneSample16_ = sample; cloneSample_.reset();
+            cloneSample16_ = sample; cloneSample_.reset(); cloneSampleAny_ = {};
             clone = CloneSource{};
             clone->image16 = sample;
             clone->offset = {offset.x(), offset.y()};
@@ -98,7 +136,7 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
                 single.layers = {copy};
                 sample = renderFlattened(single);
             } else sample = std::make_shared<Image>(document_->width, document_->height);
-            cloneSample_ = sample; cloneSample16_.reset();
+            cloneSample_ = sample; cloneSample16_.reset(); cloneSampleAny_ = {};
             clone = CloneSource{sample, {offset.x(), offset.y()}, nullptr};
         }
         cloneSampleAll_ = cloneSampleAll; cloneSampleLayer_ = layer->id; cloneSampleRevision_ = documentRevision_;
@@ -128,6 +166,7 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
         tipStroke_ = std::make_unique<TipStroke>(*stroke_, tip->tip, settings.diameter, strokeSeed_);
         if (!tipStroke_->isValid()) { emit error(tr("The brush %1 has no usable tip.").arg(preset->name)); tipStroke_.reset(); stroke_.reset(); return false; }
     } else if (preset && !mask) {
+        if (refusedAtDepth("brush.mypaint", tr("MyPaint brushes"))) { stroke_.reset(); return false; }
         myPaint_ = std::make_unique<MyPaintStroke>(*stroke_, preset->json, settings);
         if (!myPaint_->isValid()) { emit error(QString::fromStdString(myPaint_->error())); myPaint_.reset(); stroke_.reset(); return false; }
     }
@@ -218,6 +257,8 @@ void EditorSession::commitRasterEdit(BrushStroke& stroke, const Uuid& layerId, b
     } else if (commit.asset) {
         if (layer->mask && layer->mask->linked && !layer->mask->placement && layer->asset && !commit.transform.samePlacement(layer->transform)) layer->mask->placement = layer->transform;
         layer->asset = commit.asset;
+        // A CMYK or Lab layer's thumbnail is drawn through the document's profile.
+        if (document_->colorMode != ColorMode::RGB) layer->asset->thumbnail = modeThumbnail(layer->asset->image, document_->colorMode, document_->profile);
         layer->transform = commit.transform;
         layer->shapeImage.reset();
     }
@@ -372,6 +413,21 @@ bool EditorSession::beginWarp(QPointF documentPoint) {
     if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image) return false;
     if (smartObjectBlocksPixels(true)) return false;
     const bool deep = document_->sampleType == SampleType::U16;
+    if (isMaskSelected_ && blurMode == BlurToolMode::Blur && layer->mask && layer->mask->asset.image.f32()) {
+        // Blur on a 32-bit mask: the mask as it sits on the document, softened in float.
+        const float background = LayerMask::background(*layer->mask->asset.thumbnail) / 255.0f;
+        auto sample = std::make_shared<GrayF>(document_->width, document_->height, background);
+        sampleMaskCoverage(*layer->mask->asset.image.f32(), layer->maskTransform(), document_->rect(), 1, background, *sample, false);
+        gaussianBlur(*sample, std::min(30.0, std::max(1.5, brushSettings.diameter / 10)));
+        stroke_ = makeRasterEdit(*layer, true, brushSettings);
+        if (!stroke_) return false;
+        stroke_->setMaskClone(std::shared_ptr<const GrayF>(sample));
+        strokeLayerId_ = layer->id;
+        strokeMask_ = true;
+        stroke_->append(toPoint(documentPoint));
+        emit documentChanged({});
+        return true;
+    }
     if (deep && isMaskSelected_ && blurMode == BlurToolMode::Blur && layer->mask && layer->mask->asset.image.u16()) {
         // Blur on a 16-bit mask: the mask as it sits on the document, softened at 16 bits.
         const uint16_t background = widen8(LayerMask::background(*layer->mask->asset.thumbnail));
@@ -412,13 +468,31 @@ bool EditorSession::beginWarp(QPointF documentPoint) {
         // Each needs its kernel's reach around a tile: Sharpen's blur is sigma 1 (radius 3), Blur's up to 3 sigma (a
         // wider recursive blur past sigma 6 is within a level at 4 sigma).
         if (blurMode == BlurToolMode::Sharpen)
-            return beginProcessedStroke(documentPoint, [](Image& image) { sharpenImage(image); }, 3, [](Image16& image) { sharpenImage(image); });
+            return beginProcessedStroke(documentPoint, [](Image& image) { sharpenImage(image); }, 3, [](Image16& image) { sharpenImage(image); },
+                                        [](ImageF& image) { sharpenImage(image); });
         const double sigma = std::min(30.0, std::max(1.5, diameter / 10));
         return beginProcessedStroke(documentPoint, [sigma](Image& image) { gaussianBlur(image, sigma); }, int(std::ceil(sigma * (sigma <= 6 ? 3 : 4))),
-                                    [sigma](Image16& image) { gaussianBlur(image, sigma); });
+                                    [sigma](Image16& image) { gaussianBlur(image, sigma); }, [sigma](ImageF& image) { gaussianBlur(image, sigma); });
     }
     if (isMaskSelected_) { emit error(tr("Smudge and Liquify work on a layer's pixels, not its mask.")); return false; }
     if (!effectiveVisibleIds(document_->layers).count(layer->id)) return false;
+    if (paintsNative(*document_)) {
+        // The layer as the canvas shows it, at document size and the document's own layout (linear float at 32 bits,
+        // L a b in Lab); smudged or pushed in those samples.
+        const LayerTransform shown = displayedTransform(*layer);
+        const AnyImage rendered = flattenedNative(layerAlone(*document_, *layer, shown));
+        const WarpMode mode = blurMode == BlurToolMode::Smudge ? WarpMode::Smudge : WarpMode::Liquify;
+        if (rendered.f32()) warp_ = std::make_unique<WarpStroke>(std::make_shared<ImageF>(*rendered.f32()), mode, brushSettings.diameter, brushSettings.hardness, brushSettings.opacity);
+        else if (rendered.u16() && rendered.channels() == 4) warp_ = std::make_unique<WarpStroke>(std::make_shared<Image16>(*rendered.u16()), mode, brushSettings.diameter, brushSettings.hardness, brushSettings.opacity);
+        else if (rendered.u8()) warp_ = std::make_unique<WarpStroke>(std::make_shared<Image>(*rendered.u8()), mode, brushSettings.diameter, brushSettings.hardness, brushSettings.opacity);
+        else { emit error(tr("Smudge is not available in this document yet.")); return false; }
+        warpLayerId_ = layer->id;
+        warpTransform_ = shown;
+        warp_->append(toPoint(documentPoint));
+        lastBrushPoint_ = documentPoint;
+        emit documentChanged({});
+        return true;
+    }
     if (deep) {
         // The layer as the canvas shows it, at document size and 16 bits.
         const LayerTransform shown = displayedTransform(*layer);
@@ -447,7 +521,8 @@ bool EditorSession::beginWarp(QPointF documentPoint) {
     return true;
 }
 
-bool EditorSession::beginProcessedStroke(QPointF documentPoint, const std::function<void(Image&)>& process, int margin, const std::function<void(Image16&)>& process16) {
+bool EditorSession::beginProcessedStroke(QPointF documentPoint, const std::function<void(Image&)>& process, int margin, const std::function<void(Image16&)>& process16,
+                                         const std::function<void(ImageF&)>& processF) {
     if (refusedAtDepth(toolFeature(tool_), tr("Painting"))) return false;
     const Layer* layer = activeLayer();
     if (!document_ || !layer || stroke_ || warp_) return false;
@@ -455,6 +530,30 @@ bool EditorSession::beginProcessedStroke(QPointF documentPoint, const std::funct
     if (!effectiveVisibleIds(document_->layers).count(layer->id)) return false;
     // The layer as the canvas shows it, at document size, processed, then painted back through the tip. Processed a
     // tile at a time as the tip reaches it, so pressing costs the same on any canvas.
+    if (paintsNative(*document_)) {
+        // A 32-bit document processes linear float; a Lab one its L, a, b (four samples, the RGB kernels per channel).
+        CloneSource source;
+        const Document single = layerAlone(*document_, *layer, displayedTransform(*layer));
+        if (document_->sampleType == SampleType::F32) {
+            if (!processF) { emit error(tr("This tool is not available in 32-bit mode.")); return false; }
+            source.tiledF = tiledProcessedNative<ImageF>(single, processF, margin);
+        } else if (document_->colorMode == ColorMode::Lab && document_->sampleType == SampleType::U16) {
+            source.tiled16 = tiledProcessedNative<Image16>(single, process16, margin);
+        } else if (document_->colorMode == ColorMode::Lab) {
+            source.tiled = tiledProcessedNative<Image>(single, process, margin);
+        } else {
+            refusedAtDepth("tool.smudge", tr("Painting"));
+            return false;
+        }
+        stroke_ = makeRasterEdit(*layer, false, brushSettings);
+        if (!stroke_) return false;
+        stroke_->setClone(source, false);
+        strokeLayerId_ = layer->id;
+        strokeMask_ = false;
+        stroke_->append(toPoint(documentPoint));
+        emit documentChanged({});
+        return true;
+    }
     if (document_->sampleType == SampleType::U16) {
         stroke_ = makeRasterEdit(*layer, false, brushSettings);
         if (!stroke_) return false;
@@ -518,6 +617,7 @@ void EditorSession::endWarp() {
     if (!stroke) { emit documentChanged({}); return; }
     CloneSource result{warp->image(), {0, 0}, nullptr};
     result.image16 = warp->image16();
+    result.imageF = warp->imageF();
     stroke->setClone(result, true);
     stroke->appendAll(warp->points());
     stroke->flush();

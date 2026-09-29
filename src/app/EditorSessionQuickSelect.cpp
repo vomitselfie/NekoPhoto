@@ -60,7 +60,7 @@ std::shared_ptr<const Image> EditorSession::flattenedForSampling() {
 }
 
 void EditorSession::addScribble(const std::vector<QPointF>& points, bool background, bool run) {
-    if (refusedAtDepth("edit.selection", tr("Selections"))) return;
+    if (refusedAtDepth("tool.quickSelect", tr("Selections"))) return;
     if (!document_ || points.empty()) return;
     scribbles_.push_back({points, double(std::max(1, scribbleSize)), background});
     emit scribblesChanged();
@@ -124,7 +124,7 @@ std::vector<PointPrompt> promptsOf(const std::vector<EditorSession::ClickPrompt>
 } // namespace
 
 bool EditorSession::runClickSelection(SelectionMode mode, QString* error) {
-    if (refusedAtDepth("edit.selection", tr("Selections"), error)) return false;
+    if (refusedAtDepth("tool.quickSelect", tr("Selections"), error)) return false;
     if (!document_) return false;
     if (!ModelStore::promptReady()) { if (error) *error = tr("The click-to-select model is not downloaded: choose the Click engine in the Quick Select options and download it, or scribble instead."); return false; }
     std::shared_ptr<const Image> composite = flattenedForSampling();
@@ -199,7 +199,7 @@ void EditorSession::clearScribbles() {
 }
 
 bool EditorSession::runScribbleSelection(SelectionMode mode, QString* error) {
-    if (refusedAtDepth("edit.selection", tr("Selections"), error)) return false;
+    if (refusedAtDepth("tool.quickSelect", tr("Selections"), error)) return false;
     if (!document_) return false;
     GrayImage labels(document_->width, document_->height, 0);
     for (const Scribble& stroke : scribbles_) stampScribble(labels, stroke, stroke.background ? 2 : 1);

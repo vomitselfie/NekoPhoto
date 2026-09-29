@@ -157,4 +157,23 @@ void sharpenImage(Image16& image, double radius) {
     });
 }
 
+void sharpenImage(ImageF& image, double radius) {
+    ImageF blurred = image;
+    gaussianBlur(blurred, std::max(0.3, radius));
+    parallelRows(0, image.height(), [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++)
+            for (int x = 0; x < image.width(); x++) {
+                float* p = image.pixel(x, y);
+                const float* b = blurred.pixel(x, y);
+                const float a = std::min(p[3], 1.0f);
+                if (!(a > 0)) continue;
+                const float ba = std::max(b[3], 1.0f / 65536);
+                for (int i = 0; i < 3; i++) {
+                    const float c = p[i] / a, blur = b[i] / ba;
+                    p[i] = std::max(0.0f, c + (c - blur)) * a;
+                }
+            }
+    });
+}
+
 } // namespace compositor

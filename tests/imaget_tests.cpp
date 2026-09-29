@@ -76,7 +76,9 @@ TEST_CASE(support_registry_lists_what_p2_and_p3a_port) {
     // At 32 bits: Photoshop's own gaps say "mode", what is not ported yet says "yet".
     CHECK(notAvailableAtDepth("tool.dodge", SampleType::F32) == "Not available in 32-bit mode");
     CHECK(notAvailableAtDepth("adjustment.Posterize", SampleType::F32) == "Not available in 32-bit mode");
-    CHECK(notAvailableAtDepth("tool.brush", SampleType::F32) == "Not available in 32-bit yet");
+    CHECK(notAvailableAtDepth("edit.style", SampleType::F32) == "Not available in 32-bit yet");
+    CHECK(notAvailableAtDepth("tool.brush", SampleType::F32).empty());   // P5c
+    CHECK(notAvailableAtDepth("tool.patch", SampleType::F32) == "Not available in 32-bit mode");
     CHECK(notAvailableAtDepth("layers.structure", SampleType::F32).empty());
     CHECK(notAvailableAtDepth("filter.never-heard-of-it", SampleType::U16) == "Not available in 16-bit yet");
     for (const char* ported : {"document.mode", "layers.structure", "layers.transform", "layers.mask", "export.psd", "export.png", "tool.move"})

@@ -189,7 +189,7 @@ const QHash<QString, const char*>& depthFeatures() {
         {"slices.export", "export.slices"}, {"timeline.frame", "edit.timeline"}, {"timeline.set", "edit.timeline"}, {"debug.eye", "layers.structure"}, {"debug.dragSmartFilter", "edit.smartObject"},
         {"selection.all", "edit.selection"}, {"selection.none", "edit.selection"}, {"selection.invert", "edit.selection"},
         {"selection.quickMask", "edit.selection"}, {"selection.rect", "edit.selection"}, {"selection.polygon", "edit.selection"},
-        {"selection.wand", "edit.selection"}, {"selection.scribble", "edit.selection"}, {"selection.subject", "edit.selection"},
+        {"selection.wand", "tool.wand"}, {"selection.scribble", "tool.quickSelect"}, {"selection.subject", "tool.quickSelect"},
         {"selection.fromLayer", "edit.selection"}, {"selection.feather", "edit.selection"}, {"selection.smooth", "edit.selection"},
         {"selection.border", "edit.selection"}, {"selection.grow", "edit.selection"}, {"paths.toSelection", "edit.selection"},
         {"channels.new", "edit.channels"}, {"channels.duplicate", "edit.channels"}, {"channels.delete", "edit.channels"}, {"channels.select", "edit.channels"},
@@ -198,7 +198,7 @@ const QHash<QString, const char*>& depthFeatures() {
         {"image.resize", "edit.imageSize"}, {"image.trim", "edit.crop"}, {"canvas.crop", "edit.crop"},
         {"layers.warp", "edit.distort"}, {"layers.setCage", "edit.distort"},
         {"pixels.contentAwareFill", "edit.contentAware"}, {"pixels.contentAwareMove", "edit.contentAware"}, {"pixels.contentAwareScale", "edit.contentAware"},
-        {"brush.stroke", "tool.brush"}, {"pixels.bucket", "tool.paintBucket"}, {"pixels.patch", "tool.spotHealing"}, {"gradient.draw", "tool.gradient"},
+        {"brush.stroke", "tool.brush"}, {"pixels.bucket", "tool.paintBucket"}, {"pixels.patch", "tool.patch"}, {"color.sample", "tool.eyedropper"}, {"gradient.draw", "tool.gradient"},
         {"layers.merge", "layers.merge"},
         {"layers.copy", "edit.clipboard"}, {"layers.paste", "edit.clipboard"},
         {"text.set", "edit.text"}, {"text.styleRange", "edit.text"}, {"text.toPath", "edit.text"}, {"text.toShape", "edit.paint"},
@@ -260,7 +260,7 @@ QJsonObject AutomationServer::handle(const QJsonObject& request) {
     if (EditorSession* s = window_->session(); s && !worksAtDepth(method, *s)) {
         const char* feature = depthFeature(method);
         const QString why = s->colorMode() != ColorMode::RGB
-            ? method + ": " + QString::fromStdString(notAvailableInMode(s->colorMode()))
+            ? method + ": " + QString::fromStdString(feature ? unavailableReason(feature, s->sampleType(), s->colorMode()) : notAvailableInMode(s->colorMode()))
             : s->sampleType() == SampleType::F32 && feature && photoshopLacksAt32(feature) ? method + " is not available in 32-bit mode"
             : method + " is not available for " + QString::fromLatin1(sampleTypeName(s->sampleType())) + "-bit documents yet";
         response["error"] = QJsonObject{{"code", appError}, {"message", why}};
@@ -476,6 +476,32 @@ void AutomationServer::registerAppHandlers() {
         if (has(p, "background")) { QColor c(str(p, "background")); if (!c.isValid()) fail("background must be a CSS colour", invalidParams); s->backgroundColor = c; }
         emit s->toolChanged();
         return QJsonObject{{"foreground", s->foregroundColor.name()}, {"background", s->backgroundColor.name()}};
+    });
+    add("color.sample", [session](const QJsonObject& p) {
+        // The Eyedropper: the composite at a pixel as the document holds it, made the foreground (or background) colour.
+        EditorSession* s = session();
+        const QPointF at(num(p, "x") + 0.5, num(p, "y") + 0.5);
+        QJsonObject result;
+        QColor color;
+        if (s->sampleType() == SampleType::F32 || s->colorMode() != ColorMode::RGB) {
+            const auto sample = s->nativeColorAt(at);
+            if (!sample) fail("nothing to sample there (outside the canvas, or transparent)");
+            color = sample->color;
+            QJsonArray values;
+            for (double v : sample->values) values.append(std::round(v * 1e5) / 1e5);
+            result["values"] = values;
+            result["model"] = s->sampleType() == SampleType::F32 ? "linear-rgb" : s->colorMode() == ColorMode::CMYK ? "cmyk" : "lab";
+        } else {
+            const auto sampled = s->compositeColorAt(at);
+            if (!sampled) fail("nothing to sample there (outside the canvas, or transparent)");
+            color = *sampled;
+            result["model"] = "rgb";
+            result["values"] = QJsonArray{color.redF(), color.greenF(), color.blueF()};
+        }
+        if (flag(p, "background", false)) s->backgroundColor = color; else s->foregroundColor = color;
+        emit s->toolChanged();
+        result["color"] = color.name();
+        return result;
     });
     add("color.settings", [](const QJsonObject& p) {
         // Edit > Color Settings, the monitor profile (Preferences) and View > Proof Setup / Proof Colors (docs/color-management.md).

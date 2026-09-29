@@ -659,7 +659,7 @@ def thirty_two_bit(rpc):
     # Not ported yet: "... not available for 32-bit documents yet"; what Photoshop lacks at 32 bits: "in 32-bit mode".
     # (Adjustments, filters, selections and pixel edits: thirty_two_bit_editing.)
     rpc.call("layers.select", id=layer["id"])
-    expect_refused(rpc, "32-bit documents yet", "brush.stroke", points=[[10, 10], [40, 30]])
+    expect_refused(rpc, "32-bit documents yet", "shape.draw", kind="rectangle", x=2, y=2, width=10, height=10, color="#ff0000")
     expect_refused(rpc, "32-bit documents yet", "pixels.cameraRaw", settings={"exposure": 0.5})
     expect_refused(rpc, "in 32-bit mode", "pixels.bucket", x=10, y=10, color="#ffffff")
     expect_refused(rpc, "in 32-bit mode", "pixels.mosh", effect="vhs")
@@ -789,9 +789,9 @@ def thirty_two_bit_editing(rpc):
     assert rpc.call("document.info")["bits"] == 32
     for _ in range(4):
         rpc.call("history.undo")
-    # Still greyed: G'MIC, Mosh (in 32-bit mode), Camera Raw and the brush (not yet).
+    # Still greyed: G'MIC, Mosh (in 32-bit mode), Camera Raw and shapes (not yet).
     expect_refused(rpc, "in 32-bit mode", "pixels.gmic", command="blur 2")
-    expect_refused(rpc, "32-bit documents yet", "brush.stroke", points=[[10, 10], [40, 30]])
+    expect_refused(rpc, "32-bit documents yet", "shape.draw", kind="ellipse", x=2, y=2, width=10, height=10, color="#ff0000")
     rpc.call("document.close", discard=True)
     rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
     rpc.call("tabs.close", index=tab["index"], discard=True)
@@ -931,6 +931,126 @@ def channels(rpc):
             del reopened
         del tab
     rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
+
+
+def tip_brush(rpc):
+    """A 24x24 disc imported as a tip brush (once per run), its preset id."""
+    tip_path = os.path.join(tempfile.mkdtemp(), "Disc.png")
+    rows = b"".join(b"\x00" + b"".join(bytes([0 if (x - 12) ** 2 + (y - 12) ** 2 < 100 else 255] * 3) for x in range(24)) for y in range(24))
+    chunk = lambda kind, data: struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+    with open(tip_path, "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 24, 24, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
+    return rpc.call("brush.import", path=tip_path)["presets"][0]
+
+
+def thirty_two_bit_painting(rpc):
+    """P5c (docs/bit-depth.md, "32 bits"): the brush, eraser and tip brushes, MyPaint through its 15-bit round trip,
+    Clone Stamp, the healers, Blur, Sharpen, Smudge and Liquify, the Gradient tool, the Eyedropper reading linear values,
+    merging and Apply Layer Mask in a 32-bit document, each one undo step; what Photoshop lacks at 32 bits stays greyed
+    ("in 32-bit mode")."""
+    first = rpc.call("tabs.list")
+    tab = rpc.call("tabs.new")
+    rpc.call("document.new", width=80, height=60)
+    rpc.call("pixels.fill", color="#808080")
+    assert rpc.call("image.mode", bits=32)["bits"] == 32
+    grey = rpc.call("color.sample", x=40, y=50)
+    assert grey["model"] == "linear-rgb" and abs(grey["values"][0] - 0.21586) < 1e-4 and grey["color"] == "#808080", grey
+    steps = len(rpc.call("history.list")["undo"])
+    rpc.call("brush.stroke", points=[[8, 10], [72, 10]], size=10, color="#ff0000")
+    red = rpc.call("color.sample", x=40, y=10)
+    assert red["values"] == [1, 0, 0] and red["color"] == "#ff0000", red
+    assert rpc.call("color.sample", x=40, y=10, background=True)["color"] == "#ff0000"
+    rpc.call("brush.stroke", tool="eraser", points=[[8, 20], [72, 20]], size=6)
+    rpc.call("brush.stroke", points=[[8, 30], [72, 30]], preset=tip_brush(rpc), size=12, color="#0000ff")
+    presets = rpc.call("brush.presets")
+    if presets.get("supported"):
+        rpc.call("brush.stroke", points=[[8, 40], [72, 40]], preset="classic/pencil", color="#00ff00", pressure=1)
+    rpc.call("brush.stroke", tool="clone", source={"x": 40, "y": 10}, points=[[10, 50], [30, 50]], size=8)
+    assert rpc.call("color.sample", x=20, y=50)["values"][0] > 0.9, "cloned red"
+    rpc.call("brush.stroke", tool="healing", points=[[50, 50], [54, 52]], size=8)
+    rpc.call("brush.stroke", tool="healingbrush", source={"x": 60, "y": 55}, points=[[60, 45], [64, 45]], size=8)
+    for tool in ("blur", "sharpen", "smudge", "liquify"):
+        assert rpc.call("brush.stroke", tool=tool, points=[[10, 25], [70, 35]], size=10)["tool"] == tool
+    rpc.call("gradient.draw", x0=0, y0=0, x1=80, y1=0, foreground="#000000", background="#ffffff", style="foreground-to-background", opacity=0.5)
+    undo = rpc.call("history.list")["undo"]
+    assert len(undo) - steps == 12 or len(undo) - steps == 11, undo[steps:]
+    assert undo[-1] == "Gradient", undo[-3:]
+    # A layer merged down, a mask applied, at 32 bits.
+    layer = rpc.call("layers.add")
+    rpc.call("brush.stroke", points=[[20, 20], [60, 20]], size=6, color="#ffff00")
+    assert rpc.call("layers.merge")["merged"]
+    merged = rpc.call("layers.list")[0]
+    rpc.call("layers.mask", id=merged["id"], action="add")
+    rpc.call("brush.stroke", mask=True, points=[[0, 55], [80, 55]], size=10, color="#000000")
+    rpc.call("layers.mask", id=merged["id"], action="apply")
+    assert rpc.call("history.list")["undo"][-3:] == ["Add Reveal-All Mask", "Paint Mask", "Apply Layer Mask"]
+    assert rpc.call("document.info")["bits"] == 32
+    # Photoshop has no Dodge, Burn, Sponge, Paint Bucket or Patch at 32 bits.
+    expect_refused(rpc, "Not available in 32-bit mode", "brush.stroke", tool="dodge", points=[[10, 10], [20, 10]])
+    expect_refused(rpc, "in 32-bit mode", "pixels.bucket", x=5, y=5, color="#00ff00")
+    rpc.call("selection.rect", x=10, y=10, width=10, height=10)
+    expect_refused(rpc, "in 32-bit mode", "pixels.patch", dx=20, dy=20)
+    rpc.call("document.close", discard=True)
+    rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
+    rpc.call("tabs.close", index=tab["index"], discard=True)
+
+
+def colour_mode_painting(rpc):
+    """P7 E (docs/color-modes.md): painting in CMYK and Lab documents at 8 and 16 bits in the document's own samples.
+    Black in CMYK lays the Working CMYK's rich black (K and C, M, Y); a Lab stroke's L is the colour's; the Eyedropper
+    reads inks and L, a, b; the eraser, tip brushes, Clone Stamp, the Gradient tool, merging and Apply Layer Mask work;
+    Lab heals, blurs and smudges; what waits says "... mode yet", and MyPaint stays RGB ("... mode")."""
+    first = rpc.call("tabs.list")
+    tab = rpc.call("tabs.new")
+    tip = tip_brush(rpc)
+    for mode, bits in (("cmyk", 8), ("cmyk", 16), ("lab", 8), ("lab", 16)):
+        rpc.call("document.new", width=64, height=48)
+        rpc.call("pixels.fill", color="#ffffff")
+        assert rpc.call("image.mode", colorMode=mode, bits=bits)["colorMode"] == mode
+        white = rpc.call("color.sample", x=32, y=44)
+        assert white["model"] == mode and white["color"] == "#ffffff", white
+        steps = len(rpc.call("history.list")["undo"])
+        rpc.call("brush.stroke", points=[[8, 8], [56, 8]], size=10, color="#000000")
+        black = rpc.call("color.sample", x=32, y=8)
+        if mode == "cmyk":
+            c, m, y, k = black["values"]
+            assert k > 50 and c > 20 and m > 20 and y > 20, ("rich black from the profile", black)
+        else:
+            assert black["values"][0] < 0.5, black
+        rpc.call("brush.stroke", points=[[8, 20], [56, 20]], size=10, color="#3080c0")
+        blue = rpc.call("color.sample", x=32, y=20)
+        if mode == "lab":
+            assert abs(blue["values"][0] - 51.0) < 1.5, ("L of #3080c0", blue)
+        rpc.call("brush.stroke", tool="eraser", points=[[8, 30], [56, 30]], size=6, opacity=0.5)
+        rpc.call("brush.stroke", points=[[8, 36], [56, 36]], preset=tip, size=8, color="#cc2200")
+        rpc.call("brush.stroke", tool="clone", source={"x": 32, "y": 8}, points=[[10, 42], [20, 42]], size=6)
+        assert rpc.call("color.sample", x=15, y=42)["values"] == black["values"], "cloned the black"
+        rpc.call("gradient.draw", x0=0, y0=0, x1=64, y1=0, foreground="#00ff00", background="#0000ff", style="foreground-to-background", opacity=0.3)
+        if rpc.call("brush.presets").get("supported"):
+            expect_refused(rpc, "mode", "brush.stroke", points=[[4, 4], [8, 8]], preset="classic/pencil")
+        if mode == "lab":
+            for tool in ("healing", "blur", "sharpen", "smudge", "liquify"):
+                rpc.call("brush.stroke", tool=tool, points=[[20, 20], [30, 22]], size=8)
+        else:
+            expect_refused(rpc, "CMYK mode yet", "brush.stroke", tool="healing", points=[[20, 20], [30, 22]])
+            expect_refused(rpc, "CMYK mode yet", "brush.stroke", tool="smudge", points=[[20, 20], [30, 22]])
+        expect_refused(rpc, "mode yet", "brush.stroke", tool="dodge", points=[[20, 20], [30, 22]])
+        expect_refused(rpc, "mode yet", "pixels.bucket", x=5, y=5, color="#00ff00")
+        undo = rpc.call("history.list")["undo"]
+        assert undo[-1] == ("Liquify" if mode == "lab" else "Gradient"), undo[steps:]
+        rpc.call("layers.add")
+        rpc.call("brush.stroke", points=[[20, 24], [44, 24]], size=4, color="#ff00ff")
+        assert rpc.call("layers.merge")["merged"]
+        merged = rpc.call("layers.list")[0]
+        rpc.call("layers.mask", id=merged["id"], action="add")
+        rpc.call("brush.stroke", mask=True, points=[[0, 46], [64, 46]], size=6, color="#000000")
+        rpc.call("layers.mask", id=merged["id"], action="apply")
+        # A PSD in the document's mode keeps what was painted.
+        info = rpc.call("document.info")
+        assert info["colorMode"] == mode and info["bits"] == bits, info
+        rpc.call("document.close", discard=True)
+    rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
+    rpc.call("tabs.close", index=tab["index"], discard=True)
 
 
 def colour_modes(rpc):
@@ -1555,9 +1675,11 @@ def main():
     sixteen_bit(rpc)
     thirty_two_bit(rpc)
     thirty_two_bit_editing(rpc)
+    thirty_two_bit_painting(rpc)
     channels(rpc)
     colour_management(rpc)
     colour_modes(rpc)
+    colour_mode_painting(rpc)
 
     # Errors come back as errors, not crashes.
     try:

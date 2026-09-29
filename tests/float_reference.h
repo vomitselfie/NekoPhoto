@@ -56,6 +56,14 @@ void lensCorrection(Canvas& canvas, double distortion, bool bicubic);
 /// The separable resampler (resample.h) with exact weights.
 Canvas resample(const Canvas& canvas, int width, int height, double originX, double stepX, double originY, double stepY, compositor::ResampleFilter filter);
 
+/// One round brush dab on a layer at 1:1 at the origin (P5c, the 32-bit brush), in double with the profile written out:
+/// a hard tip's rim antialiased over one pixel, a soft tip's falloff between the hardness radius and the rim (the
+/// exp(-2.5 u^2) curve brush.cpp names), the coverage times `opacity` and the selection (`selection` per pixel, 0..1,
+/// or none), and each premultiplied sample moved towards `colour` (linear, alpha 1) by it, or scaled down when
+/// erasing. Pixel centres outside the canvas (the canvas is the layer) are not touched.
+void brushDab(Canvas& canvas, double cx, double cy, double diameter, double hardness, double opacity, const double colour[3], bool erase,
+              const std::vector<double>* selection);
+
 /// The largest difference between the renderer's output and the reference, scaled as |a - b| / (1e-5 + 1e-5 |b|): at
 /// most 1 means within 1e-5 absolute plus 1e-5 relative everywhere.
 double worstError(const compositor::ImageF& image, const Canvas& reference);

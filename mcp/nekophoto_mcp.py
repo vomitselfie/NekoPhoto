@@ -1244,6 +1244,12 @@ def colors_set(foreground: Optional[str] = None, background: Optional[str] = Non
     return text(call("colors.set", foreground=foreground, background=background))
 
 
+@edit("Sample a colour")
+def color_sample(x: float, y: float, background: bool = False) -> str:
+    """The Eyedropper: sample the composite at a document pixel and make it the foreground (or background) colour. Returns the colour and the document's own values (linear RGB at 32 bits, CMYK ink percentages, or L, a, b)."""
+    return text(call("color.sample", x=x, y=y, background=background))
+
+
 @outside("Colour settings")
 def color_settings(working_space: Optional[str] = None, policy: Optional[str] = None, ask_missing: Optional[bool] = None,
                    ask_mismatch: Optional[bool] = None, monitor_profile: Optional[str] = None, use_system_monitor: Optional[bool] = None,

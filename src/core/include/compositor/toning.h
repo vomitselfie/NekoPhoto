@@ -33,5 +33,8 @@ void sharpenImage(Image& image, double radius = 1.0);
 /// Both on a 16-bit image (0..32768): the same curves on the exact straight colour, stored at 15 bits.
 void toneImage(ImageT<SampleType::U16>& image, const ToningSettings& settings);
 void sharpenImage(ImageT<SampleType::U16>& image, double radius = 1.0);
+/// The Sharpen tool's source at 32 bits: the same unsharp step on straight linear colour, not clamped above 1 (light
+/// stays light), only below 0.
+void sharpenImage(ImageT<SampleType::F32>& image, double radius = 1.0);
 
 } // namespace compositor

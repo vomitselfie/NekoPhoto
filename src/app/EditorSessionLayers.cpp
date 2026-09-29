@@ -1,6 +1,7 @@
 // EditorSession: Layers: adding, grouping, clipping, masks, merging, ordering and their properties.
 #include "EditorSession.h"
 #include "compositor/depth.h"
+#include "compositor/colormgmt.h"
 #include "compositor/filters.h"
 #include <algorithm>
 #include <map>
@@ -362,7 +363,19 @@ void EditorSession::mergeLayers() {
     LayerTransform canvas(Point(0, 0), document_->size());
     LayerTransform placed;
     Asset result;
-    if (document_->sampleType == SampleType::U16) {
+    if (document_->sampleType == SampleType::F32 || document_->colorMode != ColorMode::RGB) {
+        // A 32-bit, CMYK or Lab document merges at its own layout, in its profile.
+        flat.sampleType = document_->sampleType;
+        flat.colorMode = document_->colorMode;
+        flat.profile = document_->profile;
+        flat.encodedProfile = document_->encodedProfile;
+        const AnyImage full = flat.sampleType == SampleType::F32 ? AnyImage(ImageFPtr(renderFlattenedF(flat))) : renderNative(flat);
+        bool empty = true;
+        const AnyImage trimmed = trimToPixelsAny(full, canvas, placed, &empty);
+        if (empty || !trimmed) { emit error(tr("Nothing to merge: the layers have no visible pixels.")); return; }
+        result = Asset::makeAny(trimmed, plan->name);
+        if (flat.colorMode != ColorMode::RGB) result.thumbnail = modeThumbnail(trimmed, flat.colorMode, flat.profile);
+    } else if (document_->sampleType == SampleType::U16) {
         // A 16-bit document merges at its depth.
         flat.sampleType = SampleType::U16;
         auto trimmed = trimToPixels(*renderFlattened16(flat), canvas, placed);
@@ -743,6 +756,29 @@ void EditorSession::applyMask() {
     if (refusedAtDepth("layers.applyMask", tr("Editing pixels"))) return;
     if (!canEditLayers()) return;
     Layer* layer = activeLayerMutable();
+    if (layer && layer->mask && !layer->isGroup && layer->asset && layer->asset->image && (document_->sampleType == SampleType::F32 || layer->asset->image.channels() != 4 || layer->asset->image.c8())) {
+        // 32 bits, and CMYK's five samples: the pixels times the mask at the document's depth (applyMaskAny).
+        const AnyImage& src = layer->asset->image;
+        const int w = src.width(), h = src.height();
+        AnyGray mask = layer->mask->asset.image;
+        const uint8_t background = LayerMask::background(*layer->mask->asset.thumbnail);
+        if (layer->mask->placement) {
+            if (mask.f32()) mask = GrayFPtr(resampleMask(*mask.f32(), *layer->mask->placement, layer->transform, w, h, background / 255.0f));
+            else if (mask.u16()) mask = Gray16Ptr(resampleMask(*mask.u16(), *layer->mask->placement, layer->transform, w, h, widen8(background)));
+            else if (mask.u8()) mask = GrayPtr(resampleMask(*mask.u8(), *layer->mask->placement, layer->transform, w, h, background));
+        }
+        const AnyImage out = applyMaskAny(src, mask);
+        if (!out) return;
+        beginEdit(QT_TRANSLATE_NOOP("History", "Apply Layer Mask"));
+        layer->asset = Asset::makeAny(out, layer->name);
+        if (document_->colorMode != ColorMode::RGB) layer->asset->thumbnail = modeThumbnail(out, document_->colorMode, document_->profile);
+        layer->mask.reset();
+        layer->shapeImage.reset();
+        isMaskSelected_ = false;
+        endEdit();
+        notifyDocument();
+        return;
+    }
     if (layer && layer->mask && !layer->isGroup && layer->asset && layer->asset->image.u16() && layer->mask->asset.image.u16()) {
         // At 16 bits: the pixels times the mask, as below.
         const Image16& src = *layer->asset->image.u16();

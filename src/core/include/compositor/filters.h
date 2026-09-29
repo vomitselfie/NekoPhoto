@@ -66,6 +66,11 @@ void blendThroughCoverage(Gray16& adjusted, const Gray16& original, const Gray16
 // resamples with exact weights. Coverage blends in float.
 std::shared_ptr<ImageF> growImage(const ImageF& image, const LayerTransform& transform, int margin, LayerTransform& grownTransform);
 std::shared_ptr<ImageF> trimToPixels(const ImageF& image, const LayerTransform& transform, LayerTransform& trimmedTransform);
+/// The same over any depth and layout (4 or 5 samples; pixels_any.cpp); `empty` set when no pixel has alpha.
+AnyImage trimToPixelsAny(const AnyImage& image, const LayerTransform& transform, LayerTransform& trimmedTransform, bool* empty = nullptr);
+/// Layer Mask > Apply over any depth and layout: every sample times the mask (`mask` at the image's size, or 1 x 1) at
+/// the depth's own rounding; null when the mask is not at the image's depth.
+AnyImage applyMaskAny(const AnyImage& image, const AnyGray& mask);
 void applyFilter(FilterKind kind, ImageF& image, const FilterSettings& settings, const TransferCurve& curve, double scale = 1, uint32_t seed = 0);
 std::shared_ptr<GrayF> selectionInGrid(const GrayF& selection, const Affine& pixelToDocument, int width, int height);
 void blendThroughCoverage(ImageF& adjusted, const ImageF& original, const GrayF& coverage);

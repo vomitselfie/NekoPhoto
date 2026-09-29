@@ -49,6 +49,8 @@ const MethodDoc methodDocs[] = {
     // tools and view
     {"tool.select", "Pick the tool the person sees.", "name:<tool>! The tool"},
     {"colors.set", "Set the foreground and background colours.", "foreground:color Foreground; background:color Background"},
+    {"color.sample", "The Eyedropper: sample the composite at a pixel and make it the foreground (or background) colour. Answers the colour and the document's own values: linear R, G, B at 32 bits, C, M, Y, K ink percentages in CMYK, L, a, b in Lab.",
+     "x:number! Document pixel column; y:number! Document pixel row; background:bool=false Set the background colour instead"},
     {"color.settings", "Edit > Color Settings, the monitor profile and View > Proof Setup: read them, or change the keys given (docs/color-management.md). Untagged images are always treated as sRGB; new documents take the working space.",
      "workingSpace:(srgb|adobe-rgb|display-p3|prophoto) The RGB working space; workingCmyk:string The Working CMYK: default (ISO Coated v2 300%, FOGRA39, bundled) or a CMYK ICC file; "
      "intent:(perceptual|relative|saturation|absolute) Conversion Options: the intent Image > Mode converts between RGB, CMYK and Lab with; blackPointCompensation:bool Conversion Options: black point compensation; "

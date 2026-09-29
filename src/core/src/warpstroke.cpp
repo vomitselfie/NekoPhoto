@@ -19,6 +19,12 @@ WarpStroke::WarpStroke(std::shared_ptr<Image16> image, WarpMode mode, double dia
     if (mode_ == WarpMode::Liquify) original16_ = std::make_shared<Image16>(*image16_);
 }
 
+WarpStroke::WarpStroke(std::shared_ptr<ImageF> image, WarpMode mode, double diameter, double hardness, double strength)
+    : mode_(mode), diameter_(std::max(2.0, diameter)), hardness_(std::min(0.98, std::max(0.0, hardness))),
+      strength_(std::min(1.0, std::max(0.01, strength))), width_(image->width()), height_(image->height()), imageF_(std::move(image)) {
+    if (mode_ == WarpMode::Liquify) originalF_ = std::make_shared<ImageF>(*imageF_);
+}
+
 float WarpStroke::weight(float u) const {
     if (u >= 1) return 0;
     float h = float(hardness_);
@@ -59,7 +65,8 @@ void WarpStroke::markDirty(int x0, int y0, int x1, int y1) {
 Rect WarpStroke::takeDirtyRect() {
     if (dirtyX0_ >= dirtyX1_) return {};
     // The renderer draws zoomed-out layers from reduced copies cached by image; this image changes in place.
-    if (image16_) MipCache::shared().refresh(image16_.get(), dirtyX0_, dirtyY0_, dirtyX1_, dirtyY1_);
+    if (imageF_) MipCache::shared().refresh(imageF_.get(), dirtyX0_, dirtyY0_, dirtyX1_, dirtyY1_);
+    else if (image16_) MipCache::shared().refresh(image16_.get(), dirtyX0_, dirtyY0_, dirtyX1_, dirtyY1_);
     else MipCache::shared().refresh(image_.get(), dirtyX0_, dirtyY0_, dirtyX1_, dirtyY1_);
     Rect r(dirtyX0_, dirtyY0_, dirtyX1_ - dirtyX0_, dirtyY1_ - dirtyY0_);
     dirtyX0_ = dirtyX1_ = 0;
@@ -77,6 +84,11 @@ void WarpStroke::pickUp(Point center) {
             int x = cx + dx;
             if (x < 0 || x >= width_) continue;
             size_t c = (size_t(dy + r) * side + size_t(dx + r)) * 4;
+            if (imageF_) {
+                const float* p = imageF_->pixel(x, y);
+                for (int k = 0; k < 4; k++) carried_[c + k] = p[k];
+                continue;
+            }
             if (image16_) {
                 const uint16_t* p = image16_->pixel(x, y);
                 for (int k = 0; k < 4; k++) carried_[c + k] = p[k];
@@ -102,6 +114,16 @@ void WarpStroke::smudge(Point center) {
             float w = weight(std::sqrt(float(dx * dx + dy * dy)) * invR);
             if (w <= 0) continue;
             size_t c = (size_t(dy + r) * side + size_t(dx + r)) * 4;
+            if (imageF_) {
+                float* p = imageF_->pixel(x, y);
+                for (int k = 0; k < 4; k++) {
+                    const float under = p[k];
+                    const float painted = under + (carried_[c + k] - under) * w;
+                    p[k] = std::max(0.0f, painted);
+                    carried_[c + k] = painted + (carried_[c + k] - painted) * keep;
+                }
+                continue;
+            }
             if (image16_) {
                 uint16_t* p = image16_->pixel(x, y);
                 for (int k = 0; k < 4; k++) {
@@ -191,7 +213,12 @@ void WarpStroke::push(Point a, Point b) {
     for (int y = ya; y < yb; y++)
         for (int x = x0; x <= x1; x++) {
             const float* d = &field_.offsets[(size_t(y - field_.y0) * field_.width + size_t(x - field_.x0)) * 2];
-            if (image16_) sampleBicubic(*original16_, x + 0.5 + d[0], y + 0.5 + d[1], image16_->pixel(x, y));
+            if (imageF_) {
+                float* out = imageF_->pixel(x, y);
+                sampleBicubic(*originalF_, x + 0.5 + d[0], y + 0.5 + d[1], out);
+                for (int k = 0; k < 4; k++) out[k] = std::max(0.0f, out[k]);   // Catmull-Rom rings below zero
+                out[3] = std::min(1.0f, out[3]);
+            } else if (image16_) sampleBicubic(*original16_, x + 0.5 + d[0], y + 0.5 + d[1], image16_->pixel(x, y));
             else sampleBicubic(*original_, x + 0.5 + d[0], y + 0.5 + d[1], image_->pixel(x, y));
         }
     }, 16);

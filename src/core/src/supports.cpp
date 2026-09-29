@@ -48,8 +48,9 @@ constexpr FeatureSupport table[] = {
     {"tool.hand", allDepths},
     {"tool.zoom", allDepths},
     {"tool.slice", eightAndSixteen},
-    // The Eyedropper samples the 16-bit composite.
-    {"tool.eyedropper", eightAndSixteen},
+    // The Eyedropper samples the composite at the document's depth (at 32 bits the linear value encoded through the
+    // document's curve, in CMYK and Lab the native values through the profile).
+    {"tool.eyedropper", allDepths},
     {"view", allDepths},
 
     // P3a: adjustments, on pixels (Image > Adjustments, pixels.adjust) and as adjustment layers, every kind. P5b:
@@ -110,24 +111,29 @@ constexpr FeatureSupport table[] = {
     // Content-Aware Fill, Move, Extend and Scale: decided on the pixels rounded to 8 bits, the 16-bit pixels copied.
     {"edit.contentAware", eightAndSixteen},
 
-    // P3b: painting and retouching. The brush in every engine (round tip, tip brushes, MyPaint) and the eraser, on
-    // pixels, layer masks and the Quick Mask; brush.stroke.
-    {"tool.brush", eightAndSixteen},
-    // Spot Healing, the Healing Brush and Patch (the patch search and synthesis decide on the 8-bit rounding).
-    {"tool.spotHealing", eightAndSixteen},
-    {"tool.cloneStamp", eightAndSixteen},
+    // P3b: painting and retouching. The brush (round tip, imported tip brushes) and the eraser, on pixels, layer masks
+    // and the Quick Mask; brush.stroke. P5c: at 32 bits on linear float (StrokeOps<F32>).
+    {"tool.brush", allDepths},
+    // The MyPaint presets: at 32 bits through libmypaint's 15 bits (only the samples a dab changes are rewritten).
+    {"brush.mypaint", allDepths},
+    // Spot Healing and the Healing Brush (the patch search and synthesis decide on the 8-bit rounding; at 32 bits on
+    // the area encoded at 15 bits under its brightest value).
+    {"tool.spotHealing", allDepths},
+    // The Patch tool (pixels.patch): Photoshop has none at 32 bits.
+    {"tool.patch", eightAndSixteen},
+    {"tool.cloneStamp", allDepths},
     // Blur, Sharpen, Smudge and Liquify.
-    {"tool.smudge", eightAndSixteen},
-    // Dodge, Burn and Sponge.
+    {"tool.smudge", allDepths},
+    // Dodge, Burn and Sponge (Photoshop has none at 32 bits).
     {"tool.dodge", eightAndSixteen},
-    {"tool.gradient", eightAndSixteen},
+    {"tool.gradient", allDepths},
     // The Paint Bucket: what it fills is chosen on the canvas as shown, in 8-bit levels, as the Magic Wand chooses.
     {"tool.paintBucket", eightAndSixteen},
     // Moving, duplicating and nudging selected pixels with the Move tool.
-    {"edit.movePixels", eightAndSixteen},
-    // Merge Down, Merge Layers and Merge Group (rendered at 16 bits), and Layer > Layer Mask > Apply.
-    {"layers.merge", eightAndSixteen},
-    {"layers.applyMask", eightAndSixteen},
+    {"edit.movePixels", allDepths},
+    // Merge Down, Merge Layers and Merge Group (rendered at the document's depth), and Layer > Layer Mask > Apply.
+    {"layers.merge", allDepths},
+    {"layers.applyMask", allDepths},
     // Deleting a clipping base, its clipped layers keeping their look (baked at 16 bits).
     {"edit.pixels", eightAndSixteen},
 
@@ -183,6 +189,9 @@ constexpr FeatureModes modeTable[] = {
     {"tool.zoom", allModes},
     {"tool.marquee", allModes},
     {"tool.lasso", allModes},
+    // Selections are coverage, not colour: the Select menu, Quick Mask, loading a mask or channel, transforming the
+    // outline (step E, for moving selected pixels). The Magic Wand and Quick Select read colour and wait.
+    {"edit.selection", allModes},
     {"edit.timeline", allModes},
     {"view", allModes},
     // Steps C and D (P7): the renderer, Image > Mode, the Channels panel with single-channel fill, PSD (modes 4 and 9).
@@ -191,7 +200,25 @@ constexpr FeatureModes modeTable[] = {
     {"edit.channels", allModes},
     {"edit.fill", allModes},
     {"export.psd", allModes},
+    // Step E, painting (P7): the brush, eraser and imported tip brushes, the Gradient tool, moving selected pixels,
+    // Clone Stamp, the Eyedropper, merging and Apply Layer Mask, in the document's own samples. Spot Healing, the
+    // Healing Brush and Blur, Sharpen, Smudge and Liquify in Lab (four samples, as RGB); CMYK's five wait.
+    {"tool.brush", allModes},
+    {"tool.gradient", allModes},
+    {"edit.movePixels", allModes},
+    {"tool.cloneStamp", allModes},
+    {"tool.eyedropper", allModes},
+    {"layers.merge", allModes},
+    {"layers.applyMask", allModes},
+    {"tool.spotHealing", colorModeBit(ColorMode::RGB) | colorModeBit(ColorMode::Lab)},
+    {"tool.smudge", colorModeBit(ColorMode::RGB) | colorModeBit(ColorMode::Lab)},
 };
+
+// What stays RGB for good (not waiting for a port): refused in CMYK and Lab with "Not available in CMYK mode", where a
+// feature not ported yet says "... mode yet". Camera Raw and G'MIC work on RGB, as in Photoshop (Camera Raw Filter
+// needs RGB there); the MyPaint engine mixes RGB and has no ink or Lab model, so its presets would only paint through
+// RGB and back, which this app does not do.
+constexpr std::string_view rgbOnly[] = {"filter.Camera Raw", "filter.G'MIC", "brush.mypaint"};
 }   // namespace
 
 const FeatureModes* featureModeTable(size_t& count) {
@@ -212,7 +239,7 @@ namespace {
 // What Photoshop itself greys in a 32-bit document (docs/high-bit-depth-plan.md, "P5 plan"): refused here with "Not
 // available in 32-bit mode", for good, where features not ported yet say "yet".
 constexpr std::string_view lackedAt32[] = {
-    "tool.dodge", "tool.paintBucket", "edit.contentAware",
+    "tool.dodge", "tool.paintBucket", "tool.patch", "edit.contentAware",
     "adjustment.Brightness/Contrast", "adjustment.Posterize", "adjustment.Threshold", "adjustment.Selective Color", "adjustment.Grain",
     "filter.Mosh", "filter.G'MIC",
     // The blend modes outside Photoshop's 32-bit set (blendModeAt32): greyed in the picker, refused by automation.
@@ -236,6 +263,129 @@ std::string notAvailableAtDepth(std::string_view feature, SampleType type) {
 std::string notAvailableInMode(ColorMode mode) {
     if (mode == ColorMode::RGB) return {};
     return std::string("Not available in ") + colorModeName(mode) + " mode";
+}
+
+bool photoshopLacksInMode(std::string_view feature, ColorMode mode) {
+    if (mode == ColorMode::RGB) return false;
+    for (std::string_view f : rgbOnly) if (f == feature) return true;
+    return false;
+}
+
+std::string unavailableReason(std::string_view feature, SampleType type, ColorMode mode) {
+    if (supports(feature, type, mode)) return {};
+    if (!supports(feature, type)) return notAvailableAtDepth(feature, type);
+    return photoshopLacksInMode(feature, mode) ? notAvailableInMode(mode) : notAvailableInMode(mode) + " yet";
+}
+
+namespace {
+// The rows of docs/mode-matrix.md, in order: every feature the tables name, grouped as the menus are.
+constexpr FeatureRow rows[] = {
+    {"render.document", "Drawing the document (canvas, export render)"},
+    {"view", "View, zoom, navigation"},
+    {"document.save", "Save (project, PSD)"},
+    {"document.mode", "Image > Mode"},
+    {"document.profile", "Assign / Convert to Profile"},
+    {"document.import", "Import / Place as layer"},
+    {"export.psd", "Export PSD"},
+    {"export.png", "Export PNG"},
+    {"export.jpeg", "Export JPEG"},
+    {"export.webp", "Export WebP"},
+    {"export.tiff", "Export TIFF"},
+    {"export.tga", "Export TGA"},
+    {"export.ico", "Export ICO"},
+    {"export.gif", "Export GIF"},
+    {"export.svg", "Export SVG"},
+    {"export.artboards", "Export Artboards"},
+    {"export.slices", "Export Slices"},
+    {"layers.structure", "Layers: add, delete, order, group, opacity, blend mode"},
+    {"layers.transform", "Layers: move, scale, rotate, flip (whole layer)"},
+    {"layers.mask", "Layer masks"},
+    {"layers.merge", "Merge Down, Merge Layers, Merge Group"},
+    {"layers.applyMask", "Layer Mask > Apply"},
+    {"canvas.size", "Canvas Size"},
+    {"canvas.flip", "Flip Canvas"},
+    {"edit.imageSize", "Image Size"},
+    {"edit.crop", "Crop, Trim, Crop to Selection"},
+    {"tool.crop", "Crop tool"},
+    {"edit.distort", "Distort, Warp, Warp Cage"},
+    {"tool.move", "Move tool"},
+    {"edit.movePixels", "Moving selected pixels (Move tool)"},
+    {"tool.hand", "Hand tool"},
+    {"tool.zoom", "Zoom tool"},
+    {"tool.marquee", "Marquee tools"},
+    {"tool.lasso", "Lasso tools"},
+    {"tool.wand", "Magic Wand"},
+    {"tool.quickSelect", "Quick Selection"},
+    {"edit.selection", "Selections: Select menu, Quick Mask, load"},
+    {"edit.channels", "Channels panel, alpha channels"},
+    {"edit.fill", "Fill, Clear"},
+    {"edit.clipboard", "Cut, Copy, Paste"},
+    {"tool.brush", "Brush, Pencil, Eraser (round tip, tip brushes)"},
+    {"brush.mypaint", "MyPaint brush presets"},
+    {"tool.gradient", "Gradient tool"},
+    {"tool.paintBucket", "Paint Bucket"},
+    {"tool.cloneStamp", "Clone Stamp"},
+    {"tool.spotHealing", "Spot Healing, Healing Brush"},
+    {"tool.patch", "Patch tool"},
+    {"tool.smudge", "Blur, Sharpen, Smudge, Liquify tools"},
+    {"tool.dodge", "Dodge, Burn, Sponge"},
+    {"tool.eyedropper", "Eyedropper"},
+    {"adjustment.pixels", "Image > Adjustments (menu)"},
+    {"adjustment.Levels", "Levels"},
+    {"adjustment.Curves", "Curves"},
+    {"adjustment.Hue/Saturation", "Hue/Saturation"},
+    {"adjustment.Exposure", "Exposure"},
+    {"adjustment.Gradient Map", "Gradient Map"},
+    {"adjustment.Grain", "Grain"},
+    {"adjustment.Invert", "Invert"},
+    {"adjustment.Brightness/Contrast", "Brightness/Contrast"},
+    {"adjustment.Posterize", "Posterize"},
+    {"adjustment.Threshold", "Threshold"},
+    {"adjustment.Black & White", "Black & White"},
+    {"adjustment.Color Balance", "Color Balance"},
+    {"adjustment.Vibrance", "Vibrance"},
+    {"adjustment.Photo Filter", "Photo Filter"},
+    {"adjustment.Channel Mixer", "Channel Mixer"},
+    {"adjustment.Selective Color", "Selective Color"},
+    {"adjustment.Color Lookup", "Color Lookup"},
+    {"filter.pixels", "Filter menu"},
+    {"filter.Gaussian Blur", "Gaussian Blur"},
+    {"filter.Motion Blur", "Motion Blur"},
+    {"filter.Add Noise", "Add Noise"},
+    {"filter.Lens Correction", "Lens Correction"},
+    {"filter.Camera Raw", "Camera Raw Filter"},
+    {"filter.G'MIC", "G'MIC"},
+    {"filter.Mosh", "Mosh"},
+    {"edit.removeBackground", "Remove Background"},
+    {"edit.contentAware", "Content-Aware Fill / Move / Scale"},
+    {"tool.text", "Type tool"},
+    {"edit.text", "Text editing"},
+    {"tool.shape", "Shape tool"},
+    {"tool.pen", "Pen tool"},
+    {"tool.directSelect", "Direct Selection tool"},
+    {"edit.vector", "Paths, vector masks"},
+    {"edit.paint", "Shape and path fills and strokes (text/shape colour)"},
+    {"edit.style", "Layer styles"},
+    {"edit.smartObject", "Smart objects, Smart Filters"},
+    {"edit.artboard", "Artboards"},
+    {"tool.artboard", "Artboard tool"},
+    {"tool.slice", "Slice tool"},
+    {"edit.timeline", "Timeline"},
+    {"edit.pixels", "Delete clipping base (baked pixels)"},
+};
+} // namespace
+
+std::string_view throughRgbNote(std::string_view feature, SampleType type, ColorMode mode) {
+    if (mode == ColorMode::RGB || !supports(feature, type, mode)) return {};
+    // The renderer draws fill layers (solid, gradient, pattern) and vector shapes' paint in sRGB and converts them
+    // (render_modes.cpp); merging renders the same way.
+    if (feature == "render.document" || feature == "layers.merge") return "fill layers and shape paint are drawn in sRGB, then converted";
+    return {};
+}
+
+const FeatureRow* featureRows(size_t& count) {
+    count = sizeof(rows) / sizeof(rows[0]);
+    return rows;
 }
 
 const FeatureSupport* featureSupportTable(size_t& count) {

@@ -1260,6 +1260,126 @@ std::map<std::string, std::string> readBaseline(const std::string& path) {
     return out;
 }
 
+// ---- Painting at 32 bits and in CMYK and Lab (P5c, P7 E) -------------------------------------------------------------
+//
+// Strokes committed into the blend scene's top pixel layer, then the document rendered at its own layout: "paint/f32/"
+// (brush, soft brush over light above white, eraser, clone, gradient, healing, a moved selection) and "paint/cmyk/",
+// "paint/cmyk16/", "paint/lab/", "paint/lab16/" (eraser, clone, a moved selection). The CMYK and
+// Lab scenes take no colour through Little CMS's float transform, whose last bit follows the system's libm (the colour
+// conversion is checked against Little CMS in paint_modes_tests instead).
+
+/// The index of the blend scene's top pixel layer (what the strokes paint).
+size_t paintTarget(const Document& doc) {
+    for (size_t i = doc.layers.size(); i-- > 0;)
+        if (doc.layers[i].asset && doc.layers[i].asset->image && !doc.layers[i].isGroup) return i;
+    return 0;
+}
+
+/// Runs `stroke` on the target layer and commits it, as the app's commitRasterEdit does.
+void paintInto(Document& doc, const BrushSettings& settings, const std::function<void(BrushStroke&)>& stroke) {
+    Layer& layer = doc.layers[paintTarget(doc)];
+    BrushStroke raster(layer, false, settings, doc);
+    if (!raster.isValid()) { check::fail(__FILE__, __LINE__, "stroke: " + raster.error()); return; }
+    stroke(raster);
+    BrushStroke::Commit commit = raster.commit();
+    if (commit.asset) { layer.asset = commit.asset; layer.transform = commit.transform; }
+}
+
+BrushSettings strokeSettings(double diameter, double hardness, double opacity) {
+    BrushSettings s;
+    s.diameter = diameter; s.hardness = hardness; s.opacity = opacity;
+    s.red = 0.9; s.green = 0.35; s.blue = 0.1;
+    return s;
+}
+
+uint64_t hashPainted(const Document& doc) {
+    if (doc.sampleType == SampleType::F32) return hashF(doc);
+    return hashNative(renderNative(doc));
+}
+
+void addPaintScenes() {
+    const std::vector<Point> path = {{20, 30}, {90, 60}, {160, 40}, {230, 110}};
+    auto strokeAlong = [path](BrushStroke& s) { for (const Point& p : path) s.append(p); };
+    auto moved = [](Document& doc) {
+        auto selection = std::make_shared<GrayImage>(doc.width, doc.height);
+        for (int y = 40; y < 120; y++) for (int x = 60; x < 150; x++) selection->at(x, y) = uint8_t(std::min(255, (x - 60) * 6));
+        Selection s;
+        s.coverage = GrayPtr(selection);
+        if (doc.sampleType == SampleType::U16) s.coverage = Gray16Ptr(widenGray(*selection));
+        if (doc.sampleType == SampleType::F32) {
+            auto f = std::make_shared<GrayF>(doc.width, doc.height);
+            for (int y = 0; y < doc.height; y++) for (int x = 0; x < doc.width; x++) f->at(x, y) = selection->at(x, y) / 255.0f;
+            s.coverage = GrayFPtr(f);
+        }
+        doc.selection = s;
+        paintInto(doc, BrushSettings(), [](BrushStroke& r) { if (r.liftSelection()) r.moveLifted({37, -11}, false); });
+        doc.selection.reset();
+    };
+    auto cloned = [strokeAlong](Document& doc) {
+        CloneSource source;
+        source.setImage(doc.sampleType == SampleType::F32 ? AnyImage(ImageFPtr(renderFlattenedF(doc))) : renderNative(doc));
+        source.offset = {-15, 25};
+        Layer& layer = doc.layers[paintTarget(doc)];
+        BrushStroke raster(layer, false, strokeSettings(24, 0.5, 0.8), doc);
+        raster.setClone(source);
+        strokeAlong(raster);
+        BrushStroke::Commit commit = raster.commit();
+        if (commit.asset) { layer.asset = commit.asset; layer.transform = commit.transform; }
+    };
+
+    // 32 bits: the colour linearised, light above white under a soft brush, the healers on the 15-bit encoding.
+    scene("paint/f32/brush_hard", [strokeAlong] {
+        Document doc = thirtyTwo(blendDocument(BlendMode::Normal));
+        paintInto(doc, strokeSettings(18, 1, 1), strokeAlong);
+        return hashPainted(doc);
+    });
+    scene("paint/f32/brush_soft_over_hdr", [strokeAlong] {
+        Document doc = hdrScene();
+        paintInto(doc, strokeSettings(40, 0, 0.6), strokeAlong);
+        return hashPainted(doc);
+    });
+    scene("paint/f32/eraser", [strokeAlong] {
+        Document doc = thirtyTwo(blendDocument(BlendMode::Normal));
+        BrushSettings s = strokeSettings(30, 0.3, 0.7);
+        s.erasing = true;
+        paintInto(doc, s, strokeAlong);
+        return hashPainted(doc);
+    });
+    scene("paint/f32/clone", [cloned] { Document doc = thirtyTwo(blendDocument(BlendMode::Normal)); cloned(doc); return hashPainted(doc); });
+    scene("paint/f32/gradient", [] {
+        Document doc = thirtyTwo(blendDocument(BlendMode::Normal));
+        GradientStops stops;
+        stops.colors = {GradientColorStop{0, {0.9f, 0.2f, 0.1f}, 0.5f}, GradientColorStop{0.6f, {0.1f, 0.3f, 0.9f}, 0.3f}, GradientColorStop{1, {1, 1, 1}, 0.5f}};
+        stops.alphas = {GradientAlphaStop{0, 1, 0.5f}, GradientAlphaStop{1, 0.2f, 0.5f}};
+        paintInto(doc, BrushSettings(), [&](BrushStroke& r) { r.fillGradientOver(1, {120, 90}, {220, 90}, stops, 0.8); });
+        return hashPainted(doc);
+    });
+    scene("paint/f32/spot_healing", [] {
+        Document doc = thirtyTwo(blendDocument(BlendMode::Normal));
+        BrushSettings s = strokeSettings(16, 1, 1);
+        s.healing = true;
+        s.healingMode = 2;   // Proximity Match: deterministic without a seed
+        s.healingSeed = 3;
+        paintInto(doc, s, [](BrushStroke& r) { r.append({100, 70}); r.append({110, 74}); });
+        return hashPainted(doc);
+    });
+    scene("paint/f32/moved_selection", [moved] { Document doc = thirtyTwo(blendDocument(BlendMode::Normal)); moved(doc); return hashPainted(doc); });
+
+    for (ColorMode colorMode : {ColorMode::CMYK, ColorMode::Lab})
+        for (SampleType type : {SampleType::U8, SampleType::U16}) {
+            const std::string prefix = std::string("paint/") + (colorMode == ColorMode::CMYK ? "cmyk" : "lab") + (type == SampleType::U16 ? "16" : "") + "/";
+            scene(prefix + "eraser", [=] {
+                Document doc = inColorMode(blendDocument(BlendMode::Normal), colorMode, type);
+                BrushSettings s = strokeSettings(30, 0.3, 0.7);
+                s.erasing = true;
+                paintInto(doc, s, strokeAlong);
+                return hashPainted(doc);
+            });
+            scene(prefix + "clone", [=] { Document doc = inColorMode(blendDocument(BlendMode::Normal), colorMode, type); cloned(doc); return hashPainted(doc); });
+            scene(prefix + "moved_selection", [=] { Document doc = inColorMode(blendDocument(BlendMode::Normal), colorMode, type); moved(doc); return hashPainted(doc); });
+        }
+}
+
 } // namespace
 
 // ---- 16 bits: Camera Raw, Remove Background's matte, artboards and the timeline ------------------------------------
@@ -1372,6 +1492,7 @@ TEST_CASE(render_hashes_match_the_baseline_on_the_pool_and_serially) {
     add16BitLateScenes();
     add32BitScenes();
     add32BitEditScenes();
+    addPaintScenes();
 
     std::map<std::string, std::string> actual;
     int threadMismatch = 0;

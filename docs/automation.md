@@ -286,7 +286,9 @@ or ellipse, `x, y, width, height`, `cornerRadius`, `color`). The person's tool,
 brush settings and colours are restored afterwards.
 
 View: `tool.select` (`name`: move, marquee, lasso, wand, quickselect, crop, brush, healing, clone,
-smudge, gradient, shape, text, eyedropper, hand or zoom), `colors.set`, `view.zoom`, `view.exposure` (a 32-bit
+smudge, gradient, shape, text, eyedropper, hand or zoom), `colors.set`, `color.sample` (the Eyedropper at `x`, `y`,
+`background` to set the background colour: answers `color` and the document's own `values`, linear R, G, B at 32 bits,
+C, M, Y, K ink percentages in CMYK, L, a, b in Lab, with `model`), `view.zoom`, `view.exposure` (a 32-bit
 document's view, not the pixels and not an undo step: `exposure` in stops, `gamma`, `method` exposure-gamma or
 highlight-compression; with no keys it reads it), `color.settings` (Edit > Color
 Settings: `workingSpace`, `workingCmyk` (default, the bundled ISO Coated v2 300%, or a CMYK ICC file), the Conversion Options

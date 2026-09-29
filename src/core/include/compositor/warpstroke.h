@@ -24,10 +24,13 @@ public:
     WarpStroke(std::shared_ptr<Image> image, WarpMode mode, double diameter, double hardness, double strength);
     /// The same on a 16-bit document's layer (0..32768): the smudge carries and the warp resamples 16-bit pixels.
     WarpStroke(std::shared_ptr<ImageT<SampleType::U16>> image, WarpMode mode, double diameter, double hardness, double strength);
+    /// And on a 32-bit document's (premultiplied linear float): nothing is rounded, colour above 1 is carried as it is.
+    WarpStroke(std::shared_ptr<ImageT<SampleType::F32>> image, WarpMode mode, double diameter, double hardness, double strength);
     void append(Point point);
     /// The image being worked: 8-bit, or `image16` for a 16-bit stroke (the other is null).
     std::shared_ptr<const Image> image() const { return image_; }
     std::shared_ptr<const ImageT<SampleType::U16>> image16() const { return image16_; }
+    std::shared_ptr<const ImageT<SampleType::F32>> imageF() const { return imageF_; }
     /// The pixels changed since the last call (document pixels: the image is at document size). Also brings
     /// the renderer's reduced copies of the image up to date there.
     Rect takeDirtyRect();
@@ -64,6 +67,8 @@ private:
     Field field_;
     std::shared_ptr<ImageT<SampleType::U16>> image16_;
     std::shared_ptr<const ImageT<SampleType::U16>> original16_;
+    std::shared_ptr<ImageT<SampleType::F32>> imageF_;
+    std::shared_ptr<const ImageT<SampleType::F32>> originalF_;
 };
 
 } // namespace compositor

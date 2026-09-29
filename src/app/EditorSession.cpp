@@ -300,13 +300,18 @@ QString EditorSession::unavailableTip() const {
 
 QString EditorSession::unavailableTip(std::string_view feature) const {
     if (sampleType() == SampleType::F32 && colorMode() == ColorMode::RGB && photoshopLacksAt32(feature)) return tr("Not available in 32-bit mode");
+    // In CMYK and Lab: "... mode" for what stays RGB for good, "... mode yet" for a port to come.
+    if (colorMode() != ColorMode::RGB && supports(feature, sampleType()) && !feature.empty() && !photoshopLacksInMode(feature, colorMode()))
+        return colorMode() == ColorMode::CMYK ? tr("Not available in CMYK mode yet") : tr("Not available in Lab mode yet");
     return unavailableTip();
 }
 
 bool EditorSession::refusedAtDepth(std::string_view feature, const QString& what, QString* errorText) {
     if (supportsFeature(feature)) return false;
     const QString message = supports(feature, sampleType())
-        ? (colorMode() == ColorMode::CMYK ? tr("%1 is not available in CMYK mode.").arg(what) : tr("%1 is not available in Lab mode.").arg(what))
+        ? (photoshopLacksInMode(feature, colorMode())
+               ? (colorMode() == ColorMode::CMYK ? tr("%1 is not available in CMYK mode.").arg(what) : tr("%1 is not available in Lab mode.").arg(what))
+               : (colorMode() == ColorMode::CMYK ? tr("%1 is not available in CMYK mode yet.").arg(what) : tr("%1 is not available in Lab mode yet.").arg(what)))
         : sampleType() == SampleType::F32 && photoshopLacksAt32(feature) ? tr("%1 is not available in 32-bit mode.").arg(what)
         : tr("%1 is not available for %2-bit documents yet.").arg(what, QString::fromLatin1(sampleTypeName(sampleType())));
     if (errorText) *errorText = message;
@@ -709,27 +714,33 @@ Overrides EditorSession::renderOverrides() const {
             }
         }
     }
+    // The working pixels at any depth and layout, in the override field its renderer reads.
+    auto setImage = [](LayerOverride& o, const AnyImage& image) {
+        if (image.f32()) o.imageF = image.f32();
+        else if (image.c8()) o.imageC8 = image.c8();
+        else if (image.u16()) o.image16 = image.u16();
+        else o.image = image.u8();
+    };
     auto strokeOverride = [&](const BrushStroke& stroke, const Uuid& layerId, bool mask) {
         LayerOverride& o = overrides[layerId];
         const Layer* layer = document_ ? document_->find(layerId) : nullptr;
         const bool deep = stroke.sampleType() == SampleType::U16;
         if (mask) {
-            if (deep) o.maskImage16 = stroke.previewMask16();
+            const AnyGray preview = stroke.previewMaskAny();
+            if (preview.f32()) o.maskImageF = preview.f32();
+            else if (deep) o.maskImage16 = stroke.previewMask16();
             else o.maskImage = stroke.previewMask();
             if (layer && layer->mask && layer->mask->placement) o.maskPlacement = std::optional<LayerTransform>(stroke.paintTransform());
         } else {
-            if (deep) o.image16 = stroke.previewImage16();
-            else o.image = stroke.previewImage();
+            setImage(o, stroke.preview());
             o.transform = stroke.paintTransform();
             // A mask covering the old grid stays where it was while the layer grows under the edit.
             if (layer && layer->mask && !layer->mask->placement && layer->asset) o.maskPlacement = std::optional<LayerTransform>(layer->transform);
             // Only some colour channels active: the stroke shows as it will land (EditorSessionChannels.cpp).
             if (activeColors_ != allColors() && layer && layer->asset) {
-                const AnyImage kept = keepColorChannels(layer->asset->image, layer->transform, deep ? AnyImage(stroke.previewImage16()) : AnyImage(stroke.previewImage()),
-                                                        stroke.paintTransform(), activeColors_);
+                const AnyImage kept = keepColorChannels(layer->asset->image, layer->transform, stroke.preview(), stroke.paintTransform(), activeColors_);
                 if (kept) {
-                    if (deep) o.image16 = kept.u16();
-                    else o.image = kept.u8();
+                    setImage(o, kept);
                     o.transform = layer->transform;
                     o.maskPlacement.reset();
                 }
@@ -741,7 +752,8 @@ Overrides EditorSession::renderOverrides() const {
     if (pixelMove_) strokeOverride(*pixelMove_->raster, pixelMove_->layerId, false);
     if (warp_ && document_) {
         LayerOverride& o = overrides[warpLayerId_];
-        if (warp_->image16()) o.image16 = warp_->image16();
+        if (warp_->imageF()) o.imageF = warp_->imageF();
+        else if (warp_->image16()) o.image16 = warp_->image16();
         else o.image = warp_->image();
         o.transform = LayerTransform(Point(0, 0), document_->size());
         const Layer* layer = document_->find(warpLayerId_);

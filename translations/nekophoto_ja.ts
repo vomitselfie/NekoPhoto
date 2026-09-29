@@ -4419,12 +4419,28 @@ File &gt; New creates a blank canvas.</source>
         <translation>32 bit/チャンネルモードでは使用できません</translation>
     </message>
     <message>
+        <source>Not available in CMYK mode yet</source>
+        <translation>CMYK モードではまだ使用できません</translation>
+    </message>
+    <message>
+        <source>Not available in Lab mode yet</source>
+        <translation>Lab モードではまだ使用できません</translation>
+    </message>
+    <message>
         <source>%1 is not available in CMYK mode.</source>
         <translation>CMYK モードのドキュメントでは、%1 は使用できません。</translation>
     </message>
     <message>
         <source>%1 is not available in Lab mode.</source>
         <translation>Lab モードのドキュメントでは、%1 は使用できません。</translation>
+    </message>
+    <message>
+        <source>%1 is not available in CMYK mode yet.</source>
+        <translation>CMYK モードのドキュメントでは、%1 はまだ使用できません。</translation>
+    </message>
+    <message>
+        <source>%1 is not available in Lab mode yet.</source>
+        <translation>Lab モードのドキュメントでは、%1 はまだ使用できません。</translation>
     </message>
     <message>
         <source>%1 is not available in 32-bit mode.</source>
@@ -4511,12 +4527,24 @@ File &gt; New creates a blank canvas.</source>
         <translation>ブラシ %1 には使用できるブラシ先端がありません。</translation>
     </message>
     <message>
+        <source>MyPaint brushes</source>
+        <translation>MyPaint ブラシ</translation>
+    </message>
+    <message>
         <source>Smudge and Liquify work on a layer&apos;s pixels, not its mask.</source>
         <translation>指先ツールとゆがみはマスクではなく、レイヤーのピクセルに対して機能します。</translation>
     </message>
     <message>
+        <source>Smudge is not available in this document yet.</source>
+        <translation>このドキュメントでは、指先ツールはまだ使用できません。</translation>
+    </message>
+    <message>
         <source>This tool works on a layer&apos;s pixels, not its mask.</source>
         <translation>このツールはマスクではなく、レイヤーのピクセルに対して機能します。</translation>
+    </message>
+    <message>
+        <source>This tool is not available in 32-bit mode.</source>
+        <translation>このツールは 32 bit/チャンネルモードでは使用できません。</translation>
     </message>
     <message>
         <source>That shape is too large. A shape can cover up to 100 megapixels.</source>
@@ -4667,8 +4695,16 @@ File &gt; New creates a blank canvas.</source>
         <translation>塗りつぶし</translation>
     </message>
     <message>
+        <source>Patch</source>
+        <translation>パッチ</translation>
+    </message>
+    <message>
         <source>Patch works on a layer&apos;s pixels, not its mask.</source>
         <translation>パッチツールはマスクではなく、レイヤーのピクセルに対して機能します。</translation>
+    </message>
+    <message>
+        <source>Loading a layer&apos;s pixels as a selection is not available in CMYK mode yet.</source>
+        <translation>CMYK モードでは、レイヤーのピクセルを選択範囲として読み込むことはまだできません。</translation>
     </message>
     <message>
         <source>The filled layer would exceed the size limits.</source>

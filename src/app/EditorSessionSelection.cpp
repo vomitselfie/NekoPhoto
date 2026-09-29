@@ -73,7 +73,7 @@ void EditorSession::invertSelection() {
 }
 
 void EditorSession::magicWand(QPointF documentPoint, int tolerance, bool contiguous, bool sampleAllLayers, SelectionMode mode, int sampleRadius, bool edgeAware, std::optional<bool> refineEdge) {
-    if (refusedAtDepth("edit.selection", tr("Selections"))) return;
+    if (refusedAtDepth("tool.wand", tr("Selections"))) return;
     if (refineEdge) wandRefineEdge = *refineEdge;
     if (!document_ || !canEditLayers()) return;
     int x = int(std::floor(documentPoint.x())), y = int(std::floor(documentPoint.y()));
@@ -146,7 +146,7 @@ bool EditorSession::wandSessionLive() const {
 }
 
 void EditorSession::applyWandSession(int tolerance, bool retune) {
-    if (refusedAtDepth("edit.selection", tr("Selections"))) return;
+    if (refusedAtDepth("tool.wand", tr("Selections"))) return;
     WandSession& session = *wandSession_;
     WandClick& latest = session.clicks.back();
     if (retune) latest.tolerance = tolerance;
@@ -278,7 +278,7 @@ bool EditorSession::paintBucket(QPointF documentPoint) {
 }
 
 bool EditorSession::patchSelection(int dx, int dy) {
-    if (refusedAtDepth("tool.spotHealing", tr("Editing pixels"))) return false;
+    if (refusedAtDepth("tool.patch", tr("Patch"))) return false;
     if (!canEditLayers() || !document_->selection || !document_->selection->coverage || (dx == 0 && dy == 0)) return false;
     const Layer* layer = activeLayer();
     if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image) return false;
@@ -599,6 +599,7 @@ void EditorSession::loadLayerAsSelection(const Uuid& id, bool mask, SelectionMod
     const Layer* layer = document_->find(id);
     if (!layer) return;
     const QString name = mask ? QT_TRANSLATE_NOOP("History", "Load Mask as Selection") : QT_TRANSLATE_NOOP("History", "Load Layer as Selection");
+    if (!mask && document_->colorMode == ColorMode::CMYK) { emit error(tr("Loading a layer's pixels as a selection is not available in CMYK mode yet.")); return; }
     if (document_->sampleType == SampleType::F32) {
         std::shared_ptr<GrayF> deep;
         if (mask) {

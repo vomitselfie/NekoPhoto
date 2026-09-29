@@ -1,6 +1,7 @@
 #include "compositor/seamcarve.h"
 #include "EditorSession.h"
 #include "compositor/depth.h"
+#include "ColorManagement.h"
 #include "ImageConvert.h"
 #include "QtGeometry.h"
 #include "compositor/filters.h"
@@ -123,6 +124,7 @@ void EditorSession::finishPixelMove() {
     if (commit.asset) {
         if (layer->mask && layer->mask->linked && !layer->mask->placement && !commit.transform.samePlacement(layer->transform)) layer->mask->placement = layer->transform;
         layer->asset = commit.asset;
+        if (document_->colorMode != ColorMode::RGB) layer->asset->thumbnail = modeThumbnail(layer->asset->image, document_->colorMode, document_->profile);
         layer->transform = commit.transform;
         layer->shapeImage.reset();
     }
@@ -147,6 +149,11 @@ void EditorSession::nudgePixels(double dx, double dy) {
 }
 
 std::optional<QColor> EditorSession::compositeColorAt(QPointF documentPoint) const {
+    if (document_ && (document_->sampleType == SampleType::F32 || document_->colorMode != ColorMode::RGB)) {
+        const std::optional<NativeSample> sample = nativeColorAt(documentPoint);
+        if (!sample) return std::nullopt;
+        return sample->color;
+    }
     if (document_ && document_->sampleType == SampleType::U16) {
         // The 16-bit composite, not the dithered one, so a flat area samples one colour.
         auto deep = flattened16();
@@ -165,6 +172,67 @@ std::optional<QColor> EditorSession::compositeColorAt(QPointF documentPoint) con
     const uint8_t* p = flat->pixel(x, y);
     if (!p[3]) return std::nullopt;
     return QColor(p[0] * 255 / p[3], p[1] * 255 / p[3], p[2] * 255 / p[3]);
+}
+
+std::optional<EditorSession::NativeSample> EditorSession::nativeColorAt(QPointF documentPoint) const {
+    if (!document_) return std::nullopt;
+    const int x = int(std::floor(documentPoint.x())), y = int(std::floor(documentPoint.y()));
+    if (x < 0 || y < 0 || x >= document_->width || y >= document_->height) return std::nullopt;
+    RenderOptions options;
+    options.region = Rect(x, y, 1, 1);
+    NativeSample sample;
+    const Document& doc = *document_;
+    if (doc.sampleType == SampleType::F32) {
+        // The composite's linear value, as the pixel holds it; the colour pickers take it encoded through the document's
+        // curve (light above white shows as white there; `values` keep it).
+        ImageF out;
+        renderF(doc, options, out);
+        if (out.width() < 1 || out.height() < 1) return std::nullopt;
+        const float* p = out.pixel(0, 0);
+        if (!(p[3] > 0)) return std::nullopt;
+        const TransferCurve curve = documentCurve();
+        float encoded[3];
+        for (int c = 0; c < 3; c++) {
+            sample.values.push_back(p[c] / p[3]);
+            encoded[c] = curve.fromLinearExact(std::clamp(p[c] / p[3], 0.0f, 1.0f));
+        }
+        sample.color = QColor::fromRgbF(encoded[0], encoded[1], encoded[2]);
+        return sample;
+    }
+    // CMYK and Lab: the stored samples made straight, read as inks (0..100) or L, a, b, then through the document's
+    // profile to the sRGB the colour pickers hold in these modes.
+    const AnyImage native = renderNative(doc, options);
+    if (!native || native.width() < 1) return std::nullopt;
+    const int n = colorModeChannels(doc.colorMode);
+    const bool deep = doc.sampleType == SampleType::U16;
+    const double one = deep ? double(one16) : 255.0;
+    double straight[5] = {0, 0, 0, 0, 0};
+    double alpha = 0;
+    {
+        double raw[5] = {0, 0, 0, 0, 0};
+        for (int c = 0; c < n; c++) raw[c] = native.u16() ? native.u16()->pixel(0, 0)[c] : native.c8() ? native.c8()->pixel(0, 0)[c] : native.u8()->pixel(0, 0)[c];
+        alpha = raw[n - 1] / one;
+        if (!(alpha > 0)) return std::nullopt;
+        for (int c = 0; c < n - 1; c++) straight[c] = std::clamp(raw[c] / alpha / one, 0.0, 1.0);
+    }
+    float in[4] = {0, 0, 0, 0};
+    if (doc.colorMode == ColorMode::CMYK) {
+        for (int c = 0; c < 4; c++) { in[c] = float((1 - straight[c]) * 100); sample.values.push_back(in[c]); }
+    } else {
+        const double offset = deep ? labOffset<SampleType::U16>() : labOffset<SampleType::U8>();
+        const double scale = deep ? labScale<SampleType::U16>() : labScale<SampleType::U8>();
+        in[0] = float(straight[0] * 100);
+        in[1] = float((straight[1] * one - offset) / scale);
+        in[2] = float((straight[2] * one - offset) / scale);
+        for (int c = 0; c < 3; c++) sample.values.push_back(in[c]);
+    }
+    const ColorTransformPtr t = transformBetween(doc.profile, ColorProfile(), color::conversionOptions(),
+                                                 doc.colorMode == ColorMode::CMYK ? PixelFormat::CMYKFloat : PixelFormat::LabFloat, PixelFormat::RGBFloat);
+    if (!t) return std::nullopt;
+    float rgb[3] = {0, 0, 0};
+    t->apply(in, rgb, 1);
+    sample.color = QColor::fromRgbF(std::clamp(rgb[0], 0.0f, 1.0f), std::clamp(rgb[1], 0.0f, 1.0f), std::clamp(rgb[2], 0.0f, 1.0f));
+    return sample;
 }
 
 // ---- Clipboard and Content-Aware Fill ------------------------------------------------

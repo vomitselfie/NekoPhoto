@@ -17,6 +17,10 @@ add_test(NAME imaget_tests COMMAND imaget_tests)
 add_executable(colormodes_tests colormodes_tests.cpp)
 target_link_libraries(colormodes_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME colormodes_tests COMMAND colormodes_tests)
+# docs/mode-matrix.md is generated from supports(); the check fails when it is stale.
+add_executable(mode_matrix mode_matrix.cpp)
+target_link_libraries(mode_matrix PRIVATE compositor::core compositor_warnings)
+add_test(NAME mode_matrix_check COMMAND mode_matrix --check ${PROJECT_SOURCE_DIR}/docs/mode-matrix.md)
 add_executable(colormodes_render_tests colormodes_render_tests.cpp)
 target_link_libraries(colormodes_render_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME colormodes_render_tests COMMAND colormodes_render_tests)
@@ -131,6 +135,12 @@ add_test(NAME depth_float_tests COMMAND depth_float_tests)
 add_executable(depth_float_edit_tests depth_float_edit_tests.cpp float_reference.cpp)
 target_link_libraries(depth_float_edit_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME depth_float_edit_tests COMMAND depth_float_edit_tests)
+
+# Painting at 32 bits and in CMYK and Lab (P5c, P7 E), against the double reference and Little CMS.
+add_executable(paint_modes_tests paint_modes_tests.cpp float_reference.cpp)
+target_link_libraries(paint_modes_tests PRIVATE compositor::core compositor_warnings)
+target_compile_definitions(paint_modes_tests PRIVATE BRUSHES_DIR="${CMAKE_SOURCE_DIR}/src/app/brushes/mypaint")
+add_test(NAME paint_modes_tests COMMAND paint_modes_tests)
 
 add_executable(depth_float_format_tests depth_float_format_tests.cpp)
 target_link_libraries(depth_float_format_tests PRIVATE compositor::core compositor_warnings z)

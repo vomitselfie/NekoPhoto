@@ -705,6 +705,12 @@ public:
     std::shared_ptr<const compositor::ImageF> adjustmentSourceF(int margin, compositor::LayerTransform& transform, std::optional<compositor::Uuid> layerId = std::nullopt) const;
     std::shared_ptr<compositor::GrayF> selectionOnGridF(const compositor::LayerTransform& transform, int width, int height) const;
     compositor::TransferCurve documentCurve() const;
+    /// The composite at a document pixel as the document holds it (the Eyedropper in a 32-bit, CMYK or Lab document):
+    /// `values` the straight native values (linear R, G, B at 32 bits; C, M, Y, K ink percentages; L, a, b), `color` the
+    /// colour the pickers take (encoded through the document's curve at 32 bits, through the profile to sRGB in CMYK
+    /// and Lab). None outside the canvas or on a transparent pixel.
+    struct NativeSample { QColor color; std::vector<double> values; };
+    std::optional<NativeSample> nativeColorAt(QPointF documentPoint) const;
     /// Replaces a layer's pixels as one undo step: `layerId`'s, or the active layer's. A dialog that opened on
     /// one layer passes that layer, so its result never lands on whatever was selected since.
     void commitPixels(compositor::AnyImage image, const compositor::LayerTransform& transform, const QString& name, std::optional<compositor::Uuid> layerId = std::nullopt);
@@ -1016,6 +1022,7 @@ private:
     QString importedName_;   // the title of a document that came from an import and has no project path
     std::shared_ptr<const compositor::Image> cloneSample_;
     std::shared_ptr<const compositor::Image16> cloneSample16_;   // a 16-bit document's
+    compositor::AnyImage cloneSampleAny_;                        // a 32-bit, CMYK or Lab document's, at its layout
     bool cloneSampleAll_ = false;
     compositor::Uuid cloneSampleLayer_;
     uint64_t cloneSampleRevision_ = 0;
@@ -1110,9 +1117,11 @@ private:
     void syncFilterMask();
     /// Starts a stroke that paints `process`'s version of the active layer (as the canvas shows it) through the tip.
     /// `margin`: how far around a pixel `process` reads (it is run a tile at a time with that much around it).
-    /// `process16` is the same for a 16-bit document.
+    /// `process16` is the same for a 16-bit document, `processF` for a 32-bit one (none: refused); a Lab document runs
+    /// `process` or `process16` on its L, a and b.
     bool beginProcessedStroke(QPointF documentPoint, const std::function<void(compositor::Image&)>& process, int margin,
-                              const std::function<void(compositor::Image16&)>& process16);
+                              const std::function<void(compositor::Image16&)>& process16,
+                              const std::function<void(compositor::ImageF&)>& processF = {});
     /// Fills the active layer (or its mask) with `color` through `coverage` (document size; null: everywhere) at
     /// `opacity`, as one undo step named `name`.
     /// With `from` (document size, premultiplied), each pixel takes `from`'s there instead of `color`.

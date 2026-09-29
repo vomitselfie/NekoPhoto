@@ -2,6 +2,7 @@
 #include "Automation.h"
 #include "AutomationHandlers.h"
 #include "BrushImporter.h"
+#include "compositor/supports.h"
 #include "BrushLibrary.h"
 #include "PresetLibrary.h"
 #include <QFileInfo>
@@ -293,6 +294,17 @@ void AutomationServer::registerPaintHandlers() {
             s->toning.saturate = flag(p, "saturate", false);
             warp = true;
         } else { restore(); fail("tool must be brush, eraser, healing, healingbrush, clone, smudge, blur, sharpen, liquify, dodge, burn or sponge", invalidParams); }
+        // What the tool is in supports(): refused with the reason ("... in 32-bit mode", "... in CMYK mode yet").
+        {
+            const char* feature = tool == "healing" || tool == "healingbrush" ? "tool.spotHealing" : tool == "clone" ? "tool.cloneStamp"
+                : tool == "dodge" || tool == "burn" || tool == "sponge" ? "tool.dodge" : warp ? "tool.smudge"
+                : !s->brushPreset.isEmpty() && BrushLibrary::find(s->brushPreset) && BrushLibrary::find(s->brushPreset)->engine != BrushPreset::Engine::Tip ? "brush.mypaint"
+                : "tool.brush";
+            if (!s->supportsFeature(feature)) {
+                restore();
+                fail("brush.stroke (" + (std::string_view(feature) == "brush.mypaint" ? QStringLiteral("MyPaint preset") : tool) + "): " + QString::fromStdString(unavailableReason(feature, s->sampleType(), s->colorMode())));
+            }
+        }
         penAt(0);
         bool started = warp ? (tool == "dodge" || tool == "burn" || tool == "sponge" ? s->beginToning(pts[0]) : s->beginWarp(pts[0])) : s->beginBrush(pts[0], false);
         if (!started) { restore(); fail("couldn't start the stroke: the active layer must have pixels (clone needs a source; healing and clone can't paint a mask)"); }
