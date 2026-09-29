@@ -38,6 +38,50 @@ matches the full-size result.
 
 The grade from the last OK comes back on the next open. Reset All returns every panel to its defaults.
 
+## Opening camera RAW files
+
+File ▸ Open (or a drop, or a double-click in the file manager) of a camera RAW file (CR2, CR3, NEF, ARW, RAF, ORF,
+RW2, DNG and the rest LibRaw reads) opens it in the Camera Raw dialog, as Photoshop does, never as a layer of the
+open document.
+
+- The dialog appears at once: a half-size decode (one pixel per Bayer quad) runs off the UI thread and fills the
+  preview when it is ready, reduced to 1,600 pixels on the long side. The panels are the filter's, with White
+  Balance **As Shot** (the camera's balance, Temperature and Tint at 0), **Auto** (the gray-world balance of the
+  as-shot decode) or **Custom**. Temperature and Tint stay relative to the as-shot balance, not kelvin: the engine
+  has no kelvin model, so the dialog does not pretend to one.
+- **Depth** is Camera Raw's workflow option: 16 Bits/Channel (the default) or 8. The choice is remembered for the next
+  file, as Photoshop remembers its workflow options. The colour space is sRGB, which is what LibRaw develops into.
+- **Open** develops the whole file (off the UI thread) and opens it as a new document with one layer.
+- **Open Object** (Photoshop's Shift+Open) opens a new document whose one layer is a smart object. Its source is the
+  RAW file itself, byte for byte, with the settings; the contents are the developed image at 16 bits.
+  Double-clicking the smart object's badge (Layer ▸ Smart Objects ▸ Edit Contents) reopens the RAW file in Camera
+  Raw with those settings; OK develops it again and every layer placing it updates, as one undo step.
+- **Cancel** (or Escape) stops a decode that is running and opens nothing.
+
+The develop is `compositor/raw.h`: LibRaw demosaics with the camera's white balance into sRGB at 16 bits, then
+`applyCameraRaw` grades it with the settings, the same code as the filter (so the dialog's result equals Open with
+no settings followed by Filter ▸ Camera Raw Filter with them, which `raw_tests` checks).
+
+Where it is kept:
+
+- In a project, the smart object's source record (`smartobjects/<n>.source`, record version 3) holds the RAW file's
+  bytes and the settings as JSON (`CameraRawSettings::toJson`); `<n>.png` holds the developed contents at 16 bits.
+  A project without RAW sources still writes version 2.
+- In a PSD, the RAW file goes into the document's linked-file block as the smart object's embedded file (`liFD`),
+  and the layer's pixels are the developed image, so the PSD looks right everywhere. NekoPhoto's develop settings
+  are not written in Photoshop's form (Photoshop keeps its own Camera Raw settings, which this engine does not
+  reproduce), so Photoshop develops the embedded file with its own defaults when its contents are edited there.
+  Opened in NekoPhoto again, such a source shows the pixels the file carries and cannot be developed again: use the
+  project to keep the settings.
+
+Automation opens a RAW file without the dialog: `document.open` develops it as shot, or with `settings` (the same
+object as `pixels.cameraRaw`), at `bitsPerChannel` 16 or 8, and `asSmartObject: true` makes the Open Object smart
+object. `smartObject.editContents` on such a smart object develops it again with `settings` (or its own). A run
+without a window on screen (`--headless`) does the same.
+
+`tools/make_test_dng.py` writes the synthetic DNG in `tests/fixtures/raw` (a grey ramp and six patches shot under a
+warm light, with the as-shot neutral that corrects it) that the tests and `rpc_smoke` open.
+
 ## Automation
 
 `pixels.cameraRaw` takes `settings`, an object with the model's keys. Nested objects hold `curve`, `mixer`,
@@ -54,7 +98,6 @@ applied. `rpc.describe {"method": "pixels.cameraRaw"}` lists every key and range
 
 ## Left out, and why
 
-- **Camera RAW file decoding** (`RawImporter.swift`) is out of scope. The filter works on rendered pixels.
 - **Geometry's warp** is Core Image's `CIPerspectiveTransform` upstream. Here the same corner maths drives a
   homography with bilinear resampling, so edge pixels can differ by a level from the Mac's. Constrain Crop
   follows upstream: it scales the covered bounding box back up, so a rotation (whose box still spans the frame)

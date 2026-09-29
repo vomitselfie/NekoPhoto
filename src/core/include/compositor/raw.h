@@ -9,6 +9,8 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <optional>
+#include <array>
 #include <string>
 #include <vector>
 
@@ -43,6 +45,10 @@ std::shared_ptr<Image16> decodeRaw16(const std::vector<uint8_t>& bytes, const Ra
 /// `seed` fixes the grain. Null with `error` when the file cannot be read or the decode was cancelled.
 std::shared_ptr<Image16> developRaw(const std::vector<uint8_t>& bytes, const CameraRawSettings& settings, const RawDecodeOptions& options,
                                     std::string* error, uint32_t seed = 0);
+
+/// White Balance > Auto for a RAW file: the gray-world balance of its quick as-shot decode, as Temperature and Tint
+/// relative to the as-shot balance. Empty when the file cannot be read.
+std::optional<std::array<double, 2>> rawAutoBalance(const std::vector<uint8_t>& bytes);
 
 /// A file's bytes; empty with `error` when it cannot be read or is larger than `limit`.
 std::vector<uint8_t> readRawFileBytes(const std::string& path, std::string* error, size_t limit = size_t(2) << 30);

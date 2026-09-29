@@ -302,14 +302,19 @@ def document_new(width: int = 1920, height: int = 1080, resolution: float = 72) 
 
 
 @edit("Open a file")
-def document_open(path: str, page: Optional[int] = None, resolution: Optional[float] = None) -> str:
+def document_open(path: str, page: Optional[int] = None, resolution: Optional[float] = None, settings: Optional[dict] = None,
+                  asSmartObject: Optional[bool] = None, bitsPerChannel: Optional[int] = None) -> str:
     """Open a .comp project (in its own tab); a layered file in its own tab, the reply listing its layers and what could
     not be carried: Photoshop .psd/.psb, Clip Studio .clip, Affinity .afphoto/.afdesign/.afpub/.af, Aseprite .ase/.aseprite (first frame), SVG .svg/.svgz (shapes as editable vector shape layers, the rest as pixels),
     a PDF page (page, 1-based; resolution in ppi, default 150; when app_info reports pdf), an icon .ico/.cur (a
-    layer per size) or an animated GIF (a layer per frame, frame 1 visible); or an image file, .tga and camera RAW files included (CR2, NEF, ARW, DNG, ...; developed with the
-    camera white balance), as a layer (a first image creates the canvas)."""
-    return text(call("document.open", path=os.path.abspath(path)))
-    return text(call("document.open", path=os.path.abspath(path), page=page, resolution=resolution))
+    layer per size) or an animated GIF (a layer per frame, frame 1 visible); or an image file, .tga included, as a
+    layer (a first image creates the canvas).
+    A camera RAW file (CR2, NEF, ARW, DNG, ...; when app_info reports raw) always opens in a new tab, developed from the
+    camera's white balance with settings (pixels_camera_raw's keys; temperature and tint are relative to as shot),
+    at bitsPerChannel 16 (or 8); asSmartObject=True makes a smart object that keeps the RAW file and the settings, which
+    smart_object_edit_contents develops again."""
+    return text(call("document.open", path=os.path.abspath(path), page=page, resolution=resolution, settings=settings,
+                     asSmartObject=asSmartObject, bitsPerChannel=bitsPerChannel))
 
 
 @edit("Import an image as a layer")
@@ -698,10 +703,11 @@ def layers_warp(style: str, id: Optional[str] = None, bend: float = 50, horizont
 
 
 @outside("Open smart object contents")
-def smart_object_edit_contents(id: Optional[str] = None) -> str:
+def smart_object_edit_contents(id: Optional[str] = None, settings: Optional[dict] = None) -> str:
     """Open a smart object's contents in a new tab. Edit them there with the usual tools, then smart_object_commit
-    puts them back into every layer placing them (and tabs_select returns to the document)."""
-    return text(call("smartObject.editContents", id=id))
+    puts them back into every layer placing them (and tabs_select returns to the document). A smart object made from
+    a camera RAW file is developed again instead, with settings (pixels_camera_raw's keys) or its own, as one undo step."""
+    return text(call("smartObject.editContents", id=id, settings=settings))
 
 
 @edit("Put smart object contents back")

@@ -1835,6 +1835,41 @@ def main():
     except RuntimeError as e:
         assert "PDF" in str(e), e
 
+    # Camera RAW (when this build has LibRaw): the synthetic DNG opens in a tab of its own without the dialog, as shot or
+    # graded, at 16 or 8 bits; as a smart object it keeps the file and the settings and develops again as one undo step.
+    if rpc.call("app.info")["raw"]:
+        dng = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests", "fixtures", "raw", "synthetic.dng")
+        tabs_before = len(rpc.call("tabs.list"))
+        shot = rpc.call("document.open", path=dng)
+        assert shot["width"] == 128 and shot["height"] == 96 and shot["bitsPerChannel"] == 16 and not shot["smartObject"], shot
+        assert len(rpc.call("tabs.list")) == tabs_before + 1, "a RAW file opens in a tab of its own"
+        assert rpc.call("document.info")["bits"] == 16
+        plain = rpc.call("render", maxSize=32)
+        rpc.call("tabs.close", index=shot["tab"], discard=True)
+        eight = rpc.call("document.open", path=dng, bitsPerChannel=8, settings={"exposure": 1, "whiteBalance": "Auto"})
+        assert rpc.call("document.info")["bits"] == 8 and eight["settings"]["exposure"] == 1, eight
+        assert rpc.call("render", maxSize=32) != plain, "the settings change the develop"
+        rpc.call("tabs.close", index=eight["tab"], discard=True)
+        obj = rpc.call("document.open", path=dng, asSmartObject=True, settings={"exposure": 0.5})
+        assert obj["smartObject"] and obj["layers"] == 1, obj
+        layer = rpc.call("layers.list")[0]
+        assert layer["kind"] == "smartObject" and layer["smartObject"]["state"] == "editable", layer
+        before = rpc.call("render", maxSize=32)
+        again = rpc.call("smartObject.editContents", id=layer["id"], settings={"exposure": -1})
+        assert again["developed"] and again["settings"]["exposure"] == -1 and again["tab"] == obj["tab"], again
+        assert rpc.call("history.info")["undo"] == "Camera Raw"
+        assert rpc.call("render", maxSize=32) != before
+        rpc.call("history.undo")
+        assert rpc.call("render", maxSize=32) == before, "one undo takes the develop back"
+        rpc.call("tabs.close", index=obj["tab"], discard=True)
+        for bad in ({"bitsPerChannel": 12}, {"settings": {"sparkle": 1}}):
+            try:
+                rpc.call("document.open", path=dng, **bad)
+                raise AssertionError("document.open took %r" % bad)
+            except RuntimeError as e:
+                print("expected error:", e)
+        expect_refused(rpc, "camera RAW", "document.open", path=svg_path, asSmartObject=True)
+
     # PDF (when this build has Qt PDF): a hand-written two-page file, its second page at 144 ppi.
     if rpc.call("app.info")["pdf"]:
         objects = [b"<< /Type /Catalog /Pages 2 0 R >>", b"<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>"]

@@ -85,6 +85,11 @@ In the Layer ▸ Smart Objects menu and over automation (`smartObject.*`, the MC
 - **Painting or filtering** a smart object asks first, as Photoshop does: Edit Contents (when it can be edited),
   Rasterize, or Cancel. Automation refuses with the same two ways forward.
 
+A camera RAW file opened with **Open Object** in the Camera Raw dialog is a smart object whose source is the RAW file
+and its develop settings; Edit Contents reopens it in Camera Raw, and OK develops it again into every layer placing
+it (one undo step). A project keeps the file and the settings; a PSD keeps the file and the developed pixels
+([camera-raw.md](camera-raw.md#opening-camera-raw-files)).
+
 Converted contents are a PSB, as Photoshop stores them (`8BPB`, "<name>.psb"); PSB contents edited go back as PSB.
 
 Contents that NekoPhoto cannot redraw in some instance (a preview-locked one) cannot be edited or replaced; the

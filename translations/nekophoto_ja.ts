@@ -619,6 +619,10 @@
         <translation>内容を置き換え</translation>
     </message>
     <message>
+        <source>Camera Raw</source>
+        <translation>Camera Raw</translation>
+    </message>
+    <message>
         <source>Warp</source>
         <translation>ワープ</translation>
     </message>
@@ -3579,9 +3583,12 @@ Add one from the Layers panel or Layer &gt; New Adjustment Layer.</source>
         <source>Camera Raw Filter</source>
         <translation>Camera Raw フィルター</translation>
     </message>
+</context>
+<context>
+    <name>app::CameraRawPanels</name>
     <message>
         <source>Basic</source>
-        <translation>基本補正</translation>
+        <translation>基本</translation>
     </message>
     <message>
         <source>Curve</source>
@@ -3632,12 +3639,16 @@ Add one from the Layers panel or Layer &gt; New Adjustment Layer.</source>
         <translation>モード</translation>
     </message>
     <message>
-        <source>Custom</source>
-        <translation>カスタム</translation>
+        <source>As Shot</source>
+        <translation>撮影時の設定</translation>
     </message>
     <message>
         <source>Auto</source>
         <translation>自動</translation>
+    </message>
+    <message>
+        <source>Custom</source>
+        <translation>カスタム</translation>
     </message>
     <message>
         <source>Temperature</source>
@@ -3645,7 +3656,7 @@ Add one from the Layers panel or Layer &gt; New Adjustment Layer.</source>
     </message>
     <message>
         <source>Tint</source>
-        <translation>色かぶり補正</translation>
+        <translation>着色</translation>
     </message>
     <message>
         <source>Light</source>
@@ -3669,11 +3680,11 @@ Add one from the Layers panel or Layer &gt; New Adjustment Layer.</source>
     </message>
     <message>
         <source>Whites</source>
-        <translation>白レベル</translation>
+        <translation>ホワイト系</translation>
     </message>
     <message>
         <source>Blacks</source>
-        <translation>黒レベル</translation>
+        <translation>ブラック系</translation>
     </message>
     <message>
         <source>Show shadow clipping (blue)</source>
@@ -3801,7 +3812,7 @@ Add one from the Layers panel or Layer &gt; New Adjustment Layer.</source>
     </message>
     <message>
         <source>Adjust</source>
-        <translation>調整</translation>
+        <translation>色調補正</translation>
     </message>
     <message>
         <source>Hue</source>
@@ -3853,7 +3864,7 @@ Add one from the Layers panel or Layer &gt; New Adjustment Layer.</source>
     </message>
     <message>
         <source>Distortion</source>
-        <translation>ゆがみ</translation>
+        <translation>歪み</translation>
     </message>
     <message>
         <source>Vignetting</source>
@@ -3925,15 +3936,15 @@ Add one from the Layers panel or Layer &gt; New Adjustment Layer.</source>
     </message>
     <message>
         <source>Scale</source>
-        <translation>拡大・縮小</translation>
+        <translation>スケール</translation>
     </message>
     <message>
         <source>Offset X</source>
-        <translation>X オフセット</translation>
+        <translation>オフセット X</translation>
     </message>
     <message>
         <source>Offset Y</source>
-        <translation>Y オフセット</translation>
+        <translation>オフセット Y</translation>
     </message>
     <message>
         <source>Constrain crop</source>
@@ -3977,7 +3988,7 @@ Add one from the Layers panel or Layer &gt; New Adjustment Layer.</source>
     </message>
     <message>
         <source>Vignette</source>
-        <translation>周辺光量補正</translation>
+        <translation>ビネット</translation>
     </message>
     <message>
         <source>Highlight Priority</source>
@@ -3993,11 +4004,11 @@ Add one from the Layers panel or Layer &gt; New Adjustment Layer.</source>
     </message>
     <message>
         <source>Roundness</source>
-        <translation>丸み</translation>
+        <translation>真円率</translation>
     </message>
     <message>
         <source>Feather</source>
-        <translation>ぼかし</translation>
+        <translation>境界をぼかす</translation>
     </message>
     <message>
         <source>Grain</source>
@@ -4757,6 +4768,14 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>That file has no image.</source>
         <translation>このファイルには画像がありません。</translation>
+    </message>
+    <message>
+        <source>Select a smart object made from a camera RAW file.</source>
+        <translation>カメラ RAW ファイルから作ったスマートオブジェクトを選択してください。</translation>
+    </message>
+    <message>
+        <source>The smart object could not be developed again.</source>
+        <translation>スマートオブジェクトを現像し直せませんでした。</translation>
     </message>
     <message>
         <source>Warping a layer</source>
@@ -6125,6 +6144,18 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Import File</source>
         <translation>ファイルを読み込み</translation>
+    </message>
+    <message>
+        <source>The RAW file could not be developed.</source>
+        <translation>RAW ファイルを現像できませんでした。</translation>
+    </message>
+    <message>
+        <source>Couldn’t develop the RAW file</source>
+        <translation>RAW ファイルを現像できませんでした</translation>
+    </message>
+    <message>
+        <source>Developed %1 again.</source>
+        <translation>%1 を現像し直しました。</translation>
     </message>
     <message>
         <source>Couldn’t open the contents</source>
@@ -7868,6 +7899,65 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>%1: not a Photoshop styles (.asl), patterns (.pat) or gradients (.grd) file</source>
         <translation>%1: Photoshop のスタイル(.asl)、パターン(.pat)、グラデーション(.grd)ファイルではありません</translation>
+    </message>
+</context>
+<context>
+    <name>app::RawDevelopDialog</name>
+    <message>
+        <source>Camera Raw – %1</source>
+        <translation>Camera Raw – %1</translation>
+    </message>
+    <message>
+        <source>Camera Raw – %1 (%2)</source>
+        <translation>Camera Raw – %1(%2)</translation>
+    </message>
+    <message>
+        <source>Reading the RAW file…</source>
+        <translation>RAW ファイルを読み込んでいます…</translation>
+    </message>
+    <message>
+        <source>%1 × %2 pixels</source>
+        <translation>%1 × %2 ピクセル</translation>
+    </message>
+    <message>
+        <source>Depth:</source>
+        <translation>ビット数:</translation>
+    </message>
+    <message>
+        <source>8 Bits/Channel</source>
+        <translation>8 bit/チャンネル</translation>
+    </message>
+    <message>
+        <source>16 Bits/Channel</source>
+        <translation>16 bit/チャンネル</translation>
+    </message>
+    <message>
+        <source>Camera Raw&apos;s workflow depth; the colour space is sRGB</source>
+        <translation>Camera Raw のワークフローのビット数(カラースペースは sRGB)</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>キャンセル</translation>
+    </message>
+    <message>
+        <source>Open Object</source>
+        <translation>オブジェクトを開く</translation>
+    </message>
+    <message>
+        <source>Open as a smart object that keeps the RAW file and these settings: Edit Contents develops it again</source>
+        <translation>RAW ファイルとこの設定を保持するスマートオブジェクトとして開きます。コンテンツを編集で現像し直せます</translation>
+    </message>
+    <message>
+        <source>Open</source>
+        <translation>開く</translation>
+    </message>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Developing the full image…</source>
+        <translation>画像全体を現像しています…</translation>
     </message>
 </context>
 <context>

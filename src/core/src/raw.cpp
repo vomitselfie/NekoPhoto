@@ -185,4 +185,14 @@ std::shared_ptr<Image16> developRaw(const std::vector<uint8_t>& bytes, const Cam
     return image;
 }
 
+std::optional<std::array<double, 2>> rawAutoBalance(const std::vector<uint8_t>& bytes) {
+    RawDecodeOptions options;
+    options.halfSize = true;
+    auto image = decodeRaw16(bytes, options, nullptr);
+    if (!image) return std::nullopt;
+    auto solved = CameraRawSettings::autoBalance(*image);
+    if (solved) for (double& v : *solved) v = std::clamp(v, -100.0, 100.0);
+    return solved;
+}
+
 } // namespace compositor

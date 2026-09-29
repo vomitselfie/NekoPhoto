@@ -8,6 +8,8 @@
 #include "compositor/warpmesh.h"
 #include "ImageConvert.h"
 #include "compositor/render.h"
+#include "compositor/raw.h"
+#include "MainWindow.h"
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <set>
@@ -196,6 +198,25 @@ void AutomationServer::registerLayersHandlers() {
         const Uuid id = layerOrActive(p).id;
         session()->selectLayer(id);
         QString error;
+        CameraRawSettings current;
+        if (session()->activeRawSmartObject(&current)) {
+            // A camera RAW smart object: developed again (with `settings`, or its own), in this tab.
+            CameraRawSettings settings = current;
+            if (has(p, "settings")) {
+                settings = CameraRawSettings();
+                std::string why;
+                const QJsonObject given = obj(p, "settings");
+                if (!CameraRawSettings::parse(QJsonDocument(given).toJson(QJsonDocument::Compact).toStdString(), settings, &why)) fail("settings." + QString::fromStdString(why), invalidParams);
+                if (settings.whiteBalance == CameraRawWhiteBalance::Auto && !given.contains("temperature") && !given.contains("tint"))
+                    if (auto solved = compositor::rawAutoBalance(*session()->activeRawSmartObject()->bytes)) { settings.temperature = (*solved)[0]; settings.tint = (*solved)[1]; }
+            }
+            if (!w->editSmartObjectContents(&error, &settings)) fail(error);
+            CameraRawSettings now;
+            session()->activeRawSmartObject(&now);
+            return QJsonObject{{"tab", w->currentTabIndex()}, {"title", session()->title()}, {"developed", true},
+                               {"settings", QJsonDocument::fromJson(QByteArray::fromStdString(now.toJson())).object()}};
+        }
+        if (has(p, "settings")) fail("settings apply to smart objects made from a camera RAW file", invalidParams);
         if (!w->editSmartObjectContents(&error)) fail(error);
         return QJsonObject{{"tab", w->currentTabIndex()}, {"title", session()->title()}};
     });

@@ -10,11 +10,13 @@
 #include "MainWindow.h"
 #include "compositor/ico.h"
 #include "compositor/png.h"
+#include "compositor/raw.h"
 #include "compositor/psd_writer.h"
 #include "compositor/tga.h"
 #include "compositor/svg.h"
 #include "VectorFiles.h"
 #include <QFileInfo>
+#include <QJsonDocument>
 #include <QRegularExpression>
 #include <QPainter>
 #include <algorithm>
@@ -109,6 +111,34 @@ void AutomationServer::registerDocumentHandlers() {
             if (options.page < 1) { app::pdfOpenOptions() = {}; fail("page must be 1 or more", invalidParams); }
             if (options.resolution < 18 || options.resolution > 1200) { app::pdfOpenOptions() = {}; fail("resolution must be 18..1200", invalidParams); }
         } else if (has(p, "page") || has(p, "resolution")) fail("page and resolution apply to PDF files", invalidParams);
+        if (compositor::isRawPath(path.toStdString())) {
+            // Camera RAW: developed without the dialog (as shot, or with `settings`), into a new tab.
+            if (!compositor::rawSupported()) fail("this build cannot open camera RAW files (LibRaw was not found)");
+            MainWindow::RawOpenRequest request;
+            if (has(p, "settings")) {
+                std::string why;
+                const QJsonObject given = obj(p, "settings");
+                if (!CameraRawSettings::parse(QJsonDocument(given).toJson(QJsonDocument::Compact).toStdString(), request.settings, &why)) fail("settings." + QString::fromStdString(why), invalidParams);
+                if (request.settings.whiteBalance == CameraRawWhiteBalance::Auto && !given.contains("temperature") && !given.contains("tint")) {
+                    std::string ignored;
+                    if (auto solved = compositor::rawAutoBalance(compositor::readRawFileBytes(path.toStdString(), &ignored))) {
+                        request.settings.temperature = (*solved)[0];
+                        request.settings.tint = (*solved)[1];
+                    }
+                }
+            }
+            request.asSmartObject = flag(p, "asSmartObject", false);
+            request.bitsPerChannel = integer(p, "bitsPerChannel", 16);
+            if (request.bitsPerChannel != 8 && request.bitsPerChannel != 16) fail("bitsPerChannel must be 8 or 16", invalidParams);
+            QString error;
+            if (!w->openRawFile(path, &error, &request)) fail(error.isEmpty() ? QStringLiteral("the RAW file could not be opened") : error);
+            EditorSession* s = session();
+            const QJsonObject applied = QJsonDocument::fromJson(QByteArray::fromStdString(request.settings.normalized().toJson())).object();
+            return QJsonObject{{"tab", w->currentTabIndex()}, {"title", s->title()}, {"width", s->document()->width}, {"height", s->document()->height},
+                               {"layers", int(s->document()->layers.size())}, {"bitsPerChannel", request.bitsPerChannel}, {"smartObject", request.asSmartObject},
+                               {"settings", applied}};
+        }
+        if (has(p, "settings") || has(p, "asSmartObject") || has(p, "bitsPerChannel")) fail("settings, asSmartObject and bitsPerChannel apply to camera RAW files", invalidParams);
         const EditorSession* before = session();
         const std::string beforeDocument = before->hasDocument() ? before->document()->id : std::string();
         w->openPath(path);

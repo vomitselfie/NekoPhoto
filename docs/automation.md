@@ -115,7 +115,9 @@ icon .ico/.cur (a layer per size, the largest visible), an SVG (.svg/.svgz: shap
 shape layers), a PDF page (`page`, 1-based, and `resolution` in pixels per inch, default 150; when `app.info` reports
 `pdf`) or an animated GIF (a layer per frame, "Frame N (D ms)", frame 1
 at the bottom and the only one visible, with the frames, delays and loop count on the timeline), which open in a tab of their own and answer with `layers` and the import
-`notes`; or an image, .tga included), `document.import` (an image as a layer),
+`notes`; or an image, .tga included; a camera RAW file always opens in a new tab, developed without the Camera Raw
+dialog, as shot or with `settings` (the object `pixels.cameraRaw` takes), at `bitsPerChannel` 16 or 8, and with
+`asSmartObject: true` as a smart object keeping the RAW file and the settings), `document.import` (an image as a layer),
 `document.save` (answers `macCompatible`: false past the 100 megapixels of layers Compositor for
 macOS opens; projects here hold up to a gigapixel), `document.export` (.psd, layered, text layers as Photoshop text (`texts` counts them), answering with the counts and any `warnings` and `notes` about what Photoshop cannot carry; or .svg, answering with the `shapes`, `images` and `groups` written and `notes` on what became images (docs/svg-pdf.md); an animated .gif of the timeline's frames (the composite when there are none; `frames` counts them); or the composite as .png, .jpg, .webp or .tif; `quality` for JPEG and WebP, where 100 is lossless; `background` behind a JPEG; PNG, JPEG, WebP, TIFF and PSD carry the
 document's colour profile, `embedProfile: false` leaves it out, and `convertToSrgb` converts to sRGB first, the default
@@ -130,7 +132,8 @@ writes 16-bit PNGs, and JPEGs dithered down to 8 bits with a `note`); `slices.li
 shows a folder's `artboard`; `tool.select` takes `artboard` and `slice`.
 
 Smart objects: `smartObject.convert` (the selection or `ids`), `smartObject.place` (`path`), `smartObject.replace`
-(`path`), `smartObject.rasterize`, `smartObject.editContents` (opens a tab) and `smartObject.commit` (in that tab).
+(`path`), `smartObject.rasterize`, `smartObject.editContents` (opens a tab; a smart object made from a camera RAW file is developed again instead, with
+`settings` or its own, one undo step) and `smartObject.commit` (in that tab).
 `smartObject.addFilter` adds a Smart Filter (any of the thirteen drawn here, with its settings, opacity and blend) on
 top of a smart object's stack. `smartObject.filters` lists the stack (entries by `index` in running order, 0 applied
 first; each with its `kind`, `settings`, `enabled`, `opacity`, `blend`, and `drawn` false for one NekoPhoto does not draw,
