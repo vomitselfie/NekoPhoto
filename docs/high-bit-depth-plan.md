@@ -505,9 +505,12 @@ U16-vs-U8 calibration tests and U16 render-hash scenes; existing hashes unchange
   Patchy's fixtures: opens as float, channels and 1039 byte for byte through PSD and projects; PSD, raw PSD and PSB of a
   converted document back to its 8-bit pixels exactly; `.f32z` projects), 72 `f32/` render-hash scenes with every 8- and
   16-bit hash unchanged, brush parity and the depth tests unchanged, the PSD corpus plus K.psd 118 files / 0 failed /
-  3,975 carried blocks at 8, 16 and (new, `PSD_ROUNDTRIP_32`) 32 bits, full ctest, GCC and Clang `-Werror`, rpc smoke,
+  3,975 carried blocks at 8 and 16 bits and (new, `PSD_ROUNDTRIP_32`) 3,950 at 32 bits, where the one CMYK fixture,
+  which P7 opens as CMYK, is skipped (Photoshop has no 32-bit CMYK); full ctest, GCC and Clang `-Werror`, rpc smoke,
   translations. `bench_core`: instruction counts (`perf stat -e instructions:u`, core 0) of the 8/16-bit lines against
-  the start within ±1%.
+  the start within ±1% (at most 0.25%, inside the baseline's own run-to-run spread).
+- With P7: 32 bits is RGB only, as in Photoshop. Image ▸ Mode greys 32 Bits/Channel in a CMYK or Lab document and CMYK
+  and Lab Color in a 32-bit one; `image.mode` with both leaves 32 bits before changing the colour mode.
 - For P5b (adjustments and filters, selections, pixel edits): adjustment layers need `DeepOps<F32>::adjust`; the float
   kernels follow `adjustments_u16.cpp`, in linear light (Photoshop's 32-bit Levels, Curves, Exposure, Hue/Saturation,
   Photo Filter, Channel Mixer, Vibrance...); blur in float; selections as `GrayF` with the wand deciding on a fixed

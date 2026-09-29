@@ -158,7 +158,8 @@ Painting, adjustments, filters and selections at 32 bits follow in the next step
 - **Image ▸ Mode ▸ 32 Bits/Channel** converts the open document, as one undo step (refused, with the reason, when it
   would not fit: see Memory below). Each layer's colour is linearised through its profile's tone curve (sRGB's curve for
   an untagged document); the profile becomes its linear version (same primaries and white point, a gamma 1.0 curve,
-  "sRGB IEC61966-2.1 (Linear)"), and the profile it came from is remembered.
+  "sRGB IEC61966-2.1 (Linear)"), and the profile it came from is remembered. As in Photoshop, 32 bits is RGB only:
+  the entry is greyed in a CMYK or Lab document, and CMYK Color and Lab Color are greyed in a 32-bit one.
 - **Opening a 32-bit file**: a 32-bit RGB or grayscale Photoshop file (PSD, PSB) opens as a 32-bit document, layers,
   masks, the merged image and alpha channels in float. Its colour profile (resource 1039) is taken as the space its
   linear values are in, as Photoshop does; an untagged file is linear sRGB.
@@ -394,7 +395,8 @@ PSD には残りません(プロジェクトと 8 bit の PSD には残ります
 
 - **イメージ ▸ モード ▸ 32 bit/チャンネル** で変換します(取り消しは 1 回。メモリに収まらないときは理由を添えて中止)。各レイヤーの
   色はプロファイルのトーンカーブでリニアにし(プロファイルなしは sRGB のカーブ)、プロファイルは同じ原色と白色点でガンマ 1.0 の
-  リニア版に替わります。元のプロファイルは記憶しておきます。
+  リニア版に替わります。元のプロファイルは記憶しておきます。Photoshop と同じく 32 bit は RGB だけで、CMYK・Lab の
+  ドキュメントではグレー表示、32 bit のドキュメントでは CMYK カラーと Lab カラーがグレー表示になります。
 - 32 bit の RGB/グレースケールの **Photoshop ファイル(PSD、PSB)** は 32 bit で開きます。プロファイル(リソース 1039)は、
   Photoshop と同じくリニアな値の色空間として扱います。
 - **プロジェクト**は 32 bit のまま保存します(浮動小数点のファイル `.f32z`)。
