@@ -24,21 +24,23 @@ namespace compositor {
 
 namespace {
 
-template <SampleType S>
-std::shared_ptr<GrayOf<S>> multipliedDeep(const std::shared_ptr<GrayOf<S>>& a, const std::shared_ptr<GrayOf<S>>& b) {
+template <class O>
+std::shared_ptr<typename O::Gray> multipliedDeep(const std::shared_ptr<typename O::Gray>& a, const std::shared_ptr<typename O::Gray>& b) {
     if (!a) return b;
     if (!b) return a;
-    auto r = std::make_shared<GrayOf<S>>(*a);
+    auto r = std::make_shared<typename O::Gray>(*a);
     const size_t n = size_t(r->width()) * size_t(r->height());
-    for (size_t i = 0; i < n; i++) r->data()[i] = DeepOps<S>::mul(r->data()[i], b->data()[i]);
+    for (size_t i = 0; i < n; i++) r->data()[i] = O::mul(r->data()[i], b->data()[i]);
     return r;
 }
 
 } // namespace
 
-template <SampleType S>
+template <SampleType S, class Ops = DeepOps<S>>
 struct RenderExecDeep {
-    using O = DeepOps<S>;
+    using O = Ops;
+    /// Samples per pixel and colour samples (alpha is the last sample): 4 and 3 for RGB and Lab, 5 and 4 for CMYK.
+    static constexpr int N = O::channels, C = N - 1;
     using Sample = typename O::Sample;
     using Img = typename O::Image;
     using Gray = typename O::Gray;
@@ -81,7 +83,22 @@ struct RenderExecDeep {
     ImagePtr imageOf(const Layer& l) const {
         auto* o = over(l.id);
         if (o) if (auto image = O::overrideImage(*o)) return *image;
-        return l.asset ? O::image(l.asset->image) : nullptr;
+        return l.asset ? imageFrom(l.asset->image) : nullptr;
+    }
+    /// A layer's buffer at this layout: a policy that converts between colour modes takes the document.
+    ImagePtr imageFrom(const AnyImage& any) const {
+        if constexpr (requires { O::image(document, any); }) return O::image(document, any);
+        else return O::image(any);
+    }
+    /// An RGB colour (straight bytes, alpha last) as a premultiplied pixel of this layout.
+    void solid(const uint8_t rgba[4], Sample* out) const {
+        if constexpr (requires { O::solid(document, rgba, out); }) O::solid(document, rgba, out);
+        else for (int k = 0; k < 4; k++) out[k] = O::from8(rgba[k]);
+    }
+    /// A blank (transparent) buffer of this layout.
+    static Img blank(int w, int h) {
+        if constexpr (requires { Img(w, h, N); }) return Img(w, h, N);
+        else return Img(w, h);
     }
     static GrayPtr maskOf(const Layer& l) { return l.mask ? O::gray(l.mask->asset.image) : nullptr; }
 
@@ -94,19 +111,19 @@ struct RenderExecDeep {
                 const Sample* c = coverage ? coverage->row(y) : nullptr;
                 if (mode == BlendMode::Dissolve) {
                     for (int x = 0; x < outWidth; x++)
-                        if (s[x * 4 + 3]) O::pixelAt(mode, s + x * 4, opacity * (c ? O::unit(c[x]) : 1.0f), d + x * 4, docX(region, scale, x), docY(region, scale, y));
+                        if (s[x * N + C]) O::pixelAt(mode, s + x * N, opacity * (c ? O::unit(c[x]) : 1.0f), d + x * N, docX(region, scale, x), docY(region, scale, y));
                     continue;
                 }
-                for (int x = 0; x < outWidth; x++) steps[size_t(x)] = s[x * 4 + 3] ? O::steps(opacity * (c ? O::unit(c[x]) : 1.0f)) : 0;
+                for (int x = 0; x < outWidth; x++) steps[size_t(x)] = s[x * N + C] ? O::steps(opacity * (c ? O::unit(c[x]) : 1.0f)) : 0;
                 O::span(mode, s, steps.data(), d, outWidth);
             }
         });
     }
 
     void openGroup(const Layer& g, Img*& cur) {
-        if (layerStyleOf(g, document)) drawGroupStyle(g, *cur, StyledDraw::Phase::Exterior);
+        if (O::styles && layerStyleOf(g, document)) drawGroupStyle(g, *cur, StyledDraw::Phase::Exterior);
         Frame f{&g, nullptr, nullptr, cur};
-        if (isolates(g)) { f.buffer = std::make_unique<Img>(outWidth, outHeight); cur = f.buffer.get(); }
+        if (isolates(g)) { f.buffer = std::make_unique<Img>(blank(outWidth, outHeight)); cur = f.buffer.get(); }
         else if (fades(g)) f.before = std::make_unique<Img>(*cur);
         frames.push_back(std::move(f));
     }
@@ -125,14 +142,18 @@ struct RenderExecDeep {
                 for (int y = ya; y < yb; y++) {
                     const Sample* b = f.before->row(y);
                     Sample* d = cur->row(y);
-                    for (int i = 0; i < outWidth * 4; i++) d[i] = O::fade(b[i], d[i], opacity);
+                    for (int i = 0; i < outWidth * N; i++) d[i] = O::fade(b[i], d[i], opacity);
                 }
             });
         }
-        if (layerStyleOf(g, document)) drawGroupStyle(g, *cur, StyledDraw::Phase::Interior);
+        if (O::styles && layerStyleOf(g, document)) drawGroupStyle(g, *cur, StyledDraw::Phase::Interior);
     }
 
     void drawGroupStyle(const Layer& group, Img& out, StyledDraw::Phase phase) {
+        if constexpr (O::styles) drawGroupStyleWith(group, out, phase);
+    }
+
+    void drawGroupStyleWith(const Layer& group, Img& out, StyledDraw::Phase phase) requires O::styles {
         auto style = layerStyleOf(group, document);
         if (!style) return;
         StyledDraw draw;
@@ -165,7 +186,7 @@ struct RenderExecDeep {
             result = std::make_shared<Gray>(outWidth, outHeight, 0);
             O::sampleMask(maskOf(group), transformOf(group), region, scale, *result);
         }
-        if (group.artboard) result = multipliedDeep<S>(result, artboardCoverage(*group.artboard));
+        if (group.artboard) result = multipliedDeep<O>(result, artboardCoverage(*group.artboard));
         folderCoverage[group.id] = result;
         return result;
     }
@@ -180,7 +201,7 @@ struct RenderExecDeep {
             auto lit = byId.find(*current);
             if (lit == byId.end()) break;
             auto mask = folderMask(*lit->second);
-            if (mask) result = result ? multipliedDeep<S>(result, mask) : std::make_shared<Gray>(*mask);
+            if (mask) result = result ? multipliedDeep<O>(result, mask) : std::make_shared<Gray>(*mask);
             current = lit->second->parentId;
             depth++;
         }
@@ -212,13 +233,14 @@ struct RenderExecDeep {
         uint8_t colour8[4];
         group.artboard->fill(colour8);
         if (!colour8[3]) return;
-        const Sample colour[4] = {O::from8(colour8[0]), O::from8(colour8[1]), O::from8(colour8[2]), O::from8(colour8[3])};
-        auto clip = multipliedDeep<S>(foldersCoverage(group.parentId), artboardCoverage(*group.artboard));
+        Sample colour[N];
+        solid(colour8, colour);
+        auto clip = multipliedDeep<O>(foldersCoverage(group.parentId), artboardCoverage(*group.artboard));
         parallelRows(0, outHeight, [&](int ya, int yb) {
             for (int y = ya; y < yb; y++) {
                 const Sample* c = clip->row(y);
                 Sample* d = out.row(y);
-                for (int x = 0; x < outWidth; x++) if (c[x]) O::pixelCovered(BlendMode::Normal, colour, c[x], d + x * 4);
+                for (int x = 0; x < outWidth; x++) if (c[x]) O::pixelCovered(BlendMode::Normal, colour, c[x], d + x * N);
             }
         });
     }
@@ -306,6 +328,9 @@ struct RenderExecDeep {
                 }
                 paint = O::vectorPaint(stroke->paint, document, x1 > x0 ? Rect(x0, y0, x1 - x0, y1 - y0) : Rect(), region, scale, outWidth, outHeight);
             }
+            const uint8_t stroke8[4] = {stroke->r, stroke->g, stroke->b, 255};
+            Sample strokeColour[N];
+            solid(stroke8, strokeColour);
             parallelRows(0, outHeight, [&](int ya, int yb) {
                 for (int y = ya; y < yb; y++) {
                     const Sample* b = band->row(y);
@@ -314,21 +339,22 @@ struct RenderExecDeep {
                     Sample* d = target.row(y);
                     for (int x = 0; x < outWidth; x++) {
                         if (!b[x]) continue;
-                        Sample colour[4] = {O::from8(stroke->r), O::from8(stroke->g), O::from8(stroke->b), O::one};
+                        Sample colour[N];
+                        std::memcpy(colour, strokeColour, sizeof colour);
                         float alpha = 1;
                         if (p) {
-                            const Sample* q = p + x * 4;
-                            if (!q[3]) continue;
-                            for (int k = 0; k < 3; k++) colour[k] = O::unpremultiply(q[k], q[3]);
-                            alpha = O::unit(q[3]);
+                            const Sample* q = p + x * N;
+                            if (!q[C]) continue;
+                            for (int k = 0; k < C; k++) colour[k] = O::unpremultiply(q[k], q[C]);
+                            alpha = O::unit(q[C]);
                         }
-                        O::pixelAt(mode, colour, O::unit(b[x]) * opacity * alpha * (c ? O::unit(c[x]) : 1.0f), d + x * 4, docX(region, scale, x), docY(region, scale, y));
+                        O::pixelAt(mode, colour, O::unit(b[x]) * opacity * alpha * (c ? O::unit(c[x]) : 1.0f), d + x * N, docX(region, scale, x), docY(region, scale, y));
                     }
                 }
             });
         };
         if (stroke && stroke->enabled && !stroke->fillEnabled) { drawStroke(); return; }
-        if (!plainOnly) if (auto style = layerStyleOf(layer, document)) {
+        if constexpr (O::styles) if (!plainOnly) if (auto style = layerStyleOf(layer, document)) {
             // Layer styles at the document's depth (layerstyle_render.h).
             StyledDraw draw;
             draw.style = style;
@@ -364,7 +390,7 @@ struct RenderExecDeep {
         auto lit = byId.find(id);
         if (lit == byId.end()) return nullptr;
         visiting.insert(id);
-        Img pixels(outWidth, outHeight);
+        Img pixels = blank(outWidth, outHeight);
         const bool wasPlain = plainOnly;
         plainOnly = true;
         drawClipped(*lit->second, pixels, nullptr);
@@ -372,7 +398,7 @@ struct RenderExecDeep {
         visiting.erase(id);
         auto gray = std::make_shared<Gray>(outWidth, outHeight);
         const size_t n = size_t(outWidth) * size_t(outHeight);
-        for (size_t i = 0; i < n; i++) gray->data()[i] = pixels.data()[i * 4 + 3];
+        for (size_t i = 0; i < n; i++) gray->data()[i] = pixels.data()[i * N + C];
         liveCoverage[id] = gray;
         return gray;
     }
@@ -381,7 +407,7 @@ struct RenderExecDeep {
         if (layer.maskSourceId) {
             auto source = coverageOf(*layer.maskSourceId);
             if (!source) return;
-            coverage = multipliedDeep<S>(coverage, source);
+            coverage = multipliedDeep<O>(coverage, source);
         }
         drawOwn(layer, target, coverage.get());
     }
@@ -397,26 +423,23 @@ struct RenderExecDeep {
         if (layer.mask && layer.mask->enabled && layer.mask->asset.image) {
             auto own = std::make_shared<Gray>(outWidth, outHeight, 0);
             O::sampleMask(maskOf(layer), transformOf(layer), region, scale, *own);
-            clip = multipliedDeep<S>(clip, own);
+            clip = multipliedDeep<O>(clip, own);
         }
         parallelRows(0, outHeight, [&](int ya, int yb) {
             for (int y = ya; y < yb; y++) {
                 Sample* d = target.row(y);
                 const Sample* a = adjusted.row(y);
                 const Sample* c = clip ? clip->row(y) : nullptr;
-                for (int x = 0; x < outWidth; x++, d += 4, a += 4) {
+                for (int x = 0; x < outWidth; x++, d += N, a += N) {
                     const float mix = opacity * (c ? O::unit(c[x]) : 1.0f);
-                    if (mix <= 0 || d[3] == 0) continue;
-                    const float ab = O::unit(d[3]);
-                    float cb[3], cs[3];
-                    for (int k = 0; k < 3; k++) { cb[k] = O::unit(d[k]) / ab; cs[k] = O::unit(a[k]) / ab; }
-                    if (mode != BlendMode::Normal) {
-                        const Rgb m = blendColor(mode, {cb[0], cb[1], cb[2]}, {cs[0], cs[1], cs[2]});
-                        cs[0] = m.r; cs[1] = m.g; cs[2] = m.b;
-                    }
-                    for (int k = 0; k < 3; k++) {
+                    if (mix <= 0 || d[C] == 0) continue;
+                    const float ab = O::unit(d[C]);
+                    float cb[C], cs[C];
+                    for (int k = 0; k < C; k++) { cb[k] = O::unit(d[k]) / ab; cs[k] = O::unit(a[k]) / ab; }
+                    O::blendStraight(mode, cb, cs);
+                    for (int k = 0; k < C; k++) {
                         const float v = (cb[k] + (cs[k] - cb[k]) * mix) * ab;
-                        d[k] = O::store(v, d[3]);
+                        d[k] = O::store(v, d[C]);
                     }
                 }
             }
@@ -433,9 +456,9 @@ struct RenderExecDeep {
         }
         auto stack = stacks.find(layer.id);
         if (stack == stacks.end()) { drawClipped(layer, out, folders); return; }
-        if (!plainOnly && layerStyleOf(layer, document)) {
+        if (O::styles && !plainOnly && layerStyleOf(layer, document)) {
             drawOwn(layer, out, folders.get());
-            auto clip = multipliedDeep<S>(folders, coverageOf(layer.id));
+            auto clip = multipliedDeep<O>(folders, coverageOf(layer.id));
             for (auto& childId : stack->second) {
                 auto it = byId.find(childId);
                 if (it == byId.end()) continue;
@@ -445,16 +468,16 @@ struct RenderExecDeep {
             return;
         }
         // A clipping stack: the base's alpha is shared by the layers clipped to it.
-        Img group(outWidth, outHeight);
+        Img group = blank(outWidth, outHeight);
         drawOwn(layer, group, nullptr);
         const size_t n = size_t(outWidth) * size_t(outHeight);
         std::vector<Sample> alpha(n);
         for (size_t i = 0; i < n; i++) {
-            Sample* p = group.data() + i * 4;
-            alpha[i] = p[3];
-            const Sample a = p[3];
-            for (int c = 0; c < 3; c++) p[c] = a ? O::unpremultiply(p[c], a) : Sample(0);
-            p[3] = O::one;
+            Sample* p = group.data() + i * N;
+            alpha[i] = p[C];
+            const Sample a = p[C];
+            for (int c = 0; c < C; c++) p[c] = a ? O::unpremultiply(p[c], a) : Sample(0);
+            p[C] = O::one;
         }
         for (auto& childId : stack->second) {
             auto it = byId.find(childId);
@@ -463,10 +486,10 @@ struct RenderExecDeep {
             else drawOwn(*it->second, group, nullptr);
         }
         for (size_t i = 0; i < n; i++) {
-            Sample* p = group.data() + i * 4;
+            Sample* p = group.data() + i * N;
             const Sample a = alpha[i];
-            for (int c = 0; c < 3; c++) p[c] = O::mul(p[c], a);
-            p[3] = a;
+            for (int c = 0; c < C; c++) p[c] = O::mul(p[c], a);
+            p[C] = a;
         }
         compositeRows(group, blendOf(layer), 1.0f, folders.get(), out);
     }
@@ -491,13 +514,13 @@ struct RenderExecDeep {
         if (!valid) {
             cache.version = version; cache.layer = layer.id; cache.width = outWidth; cache.height = outHeight; cache.region = region; cache.scale = scale;
             O::resetOtherDepths(cache);
-            backdrop = std::make_shared<Img>(outWidth, outHeight);
+            backdrop = std::make_shared<Img>(blank(outWidth, outHeight));
             drawRange(*backdrop, 0, edited);
             above.reset();
             cache.aboveFlat = true;
             for (size_t i = edited + 1; i < order.size(); i++) if (!plan.plainAbove(*order[i])) { cache.aboveFlat = false; break; }
             if (cache.aboveFlat && edited + 1 < order.size()) {
-                above = std::make_shared<Img>(outWidth, outHeight);
+                above = std::make_shared<Img>(blank(outWidth, outHeight));
                 drawRange(*above, edited + 1, order.size());
             }
         }

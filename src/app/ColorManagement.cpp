@@ -204,6 +204,11 @@ ColorTransformPtr displayTransform(const Document& document) {
         if (auto t = proofTransform(document.profile, monitorProfile(), proof, input, PixelFormat::RGBA8)) return t;
     }
     const ColorProfile monitor = monitorProfile();
+    if (document.colorMode != ColorMode::RGB) {
+        // A CMYK or Lab document always goes through a transform: to the monitor, or to sRGB without one.
+        return transformBetween(document.profile, monitor.empty() ? srgbProfile() : monitor, {RenderingIntent::RelativeColorimetric, true},
+                                pixelFormatFor(document.sampleType, document.colorMode), PixelFormat::RGBA8);
+    }
     if (monitor.empty() || equivalentProfiles(document.profile, monitor)) return nullptr;
     return transformBetween(document.profile, monitor, {RenderingIntent::RelativeColorimetric, true}, input, PixelFormat::RGBA8);
 }

@@ -618,6 +618,8 @@ public:
     // Channels (Window ▸ Channels; EditorSessionChannels.cpp, docs/channels.md). The colour channels are views: the
     // ones edits write to (bits: red 1, green 2, blue 4; all three is the composite and the usual path) and the ones
     // the canvas shows. An alpha channel made the target is painted through a temporary layer, as Quick Mask is.
+    /// Every colour channel of the document's mode as bits (RGB and Lab 7, CMYK 15): the composite.
+    unsigned allColors() const { return document_ ? compositor::colorChannelsAllFor(document_->colorMode) : compositor::colorChannelsAll; }
     unsigned activeColorChannels() const { return activeColors_; }
     unsigned visibleColorChannels() const { return visibleColors_; }
     const std::set<compositor::Uuid>& visibleAlphaChannels() const { return visibleAlpha_; }
@@ -1021,6 +1023,7 @@ private:
     std::optional<compositor::Uuid> quickMaskLayer_, quickMaskReturnLayer_;
     // Channels (EditorSessionChannels.cpp).
     unsigned activeColors_ = compositor::colorChannelsAll, visibleColors_ = compositor::colorChannelsAll;
+    std::optional<compositor::ColorMode> channelsModeFor_;
     std::set<compositor::Uuid> visibleAlpha_;
     std::optional<compositor::Uuid> channelTarget_, channelProxy_, channelReturnLayer_;
     compositor::AnyGray channelSynced_;   // the proxy's mask as last written into the channel

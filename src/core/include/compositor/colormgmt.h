@@ -24,6 +24,8 @@
 namespace compositor {
 
 struct Document;
+struct Layer;
+enum class AdjustmentKind;
 
 // ---- Profiles ------------------------------------------------------------------------------------------------------
 
@@ -170,6 +172,31 @@ void convertColor(const ColorProfile& from, const ColorProfile& to, uint8_t rgb[
 /// source; their placed pixels are converted. The document then carries `to`. False, with `why`, when a profile
 /// cannot be used (nothing is changed).
 bool convertDocumentProfile(Document& document, const ColorProfile& to, const ConvertOptions& options, std::string* why = nullptr);
+
+// ---- Colour modes (colormode_convert.cpp) -------------------------------------------------------------------------
+
+/// Image > Mode > RGB Color, CMYK Color or Lab Color over a whole document (one undo step for the caller): every raster
+/// layer's pixels from the document's mode and profile to `to` in `target` (empty: the bundled Working CMYK for CMYK,
+/// untagged Lab D50 for Lab, untagged sRGB for RGB), with `options`' intent and black-point compensation (black
+/// generation is the CMYK profile's). The colours stored as values (text, shapes, artboards, layer styles, Photo Filter
+/// and Gradient Map) are converted too: they stay RGB values, in the document's profile for RGB and in sRGB for CMYK and
+/// Lab, taken through the CMYK gamut when converting to CMYK. Levels and Curves lose their per-channel settings;
+/// an adjustment layer the target mode does not offer is kept, hidden and marked dormant, and wakes (visible as it
+/// was) when the document converts back to a mode that offers it. Masks, alpha channels and the selection are not
+/// colour and stay. False, with `why`, when the document would not fit the target's byte budget, the depth is 32-bit,
+/// or a profile cannot be used; the document is then unchanged.
+bool convertDocumentMode(Document& document, ColorMode to, const ColorProfile& target, const ConvertOptions& options, std::string* why = nullptr);
+/// A stored colour (straight RGB, 0..1) as convertDocumentMode converts it: the foreground and background colours.
+void convertModeColor(ColorMode from, const ColorProfile& fromProfile, ColorMode to, const ColorProfile& toProfile, const ConvertOptions& options,
+                      double rgb[3]);
+/// Whether Photoshop offers the adjustment kind in `mode` (docs/color-modes.md; every kind in RGB).
+bool adjustmentOfferedInMode(AdjustmentKind kind, ColorMode mode);
+/// An adjustment layer kept dormant by a mode conversion (hidden until the document returns to a mode offering it).
+bool isDormantAdjustment(const Layer& layer);
+/// An 8-bit sRGB thumbnail of a buffer in `mode` and `profile`, at most `maxSide` a side (the Layers panel's).
+ImagePtr modeThumbnail(const AnyImage& image, ColorMode mode, const ColorProfile& profile, int maxSide = 96);
+/// Every layer's thumbnail drawn again from its pixels in the document's mode and profile (CMYK and Lab documents).
+void refreshModeThumbnails(Document& document);
 
 // ---- Transfer curves (for code that works in linear light) -------------------------------------------------------
 

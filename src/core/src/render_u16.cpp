@@ -293,6 +293,8 @@ void renderForDisplay16(const RenderPlan& plan, const Rect& region, double scale
 }
 
 void render16(const Document& document, const RenderOptions& options, Image16& out, const Overrides* overrides, RenderCache* cache) {
+    // A CMYK or Lab document renders at its own layout, then converts to sRGB (render_modes.h).
+    if (document.colorMode != ColorMode::RGB) { renderModeAsRgb16(document, options, out, overrides, cache); return; }
     renderDeep<SampleType::U16>(document, options, out, overrides, cache);
 }
 

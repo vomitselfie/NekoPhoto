@@ -494,19 +494,22 @@ void MainWindow::buildMenus() {
         if (!session_->document()->selection) { showError(tr("Save Selection"), tr("Make a selection first.")); return; }
         (new SaveSelectionDialog(session_, this))->open();
     }), "edit.channels");
-    // Photoshop's channel keys: Ctrl+2 the composite, Ctrl+3, 4, 5 red, green and blue, Ctrl+6 to 9 the first four alpha
-    // channels; with Alt, the channel is loaded as a selection instead.
+    // Photoshop's channel keys: Ctrl+2 the composite, then one key per colour channel (Ctrl+3, 4, 5 red, green and
+    // blue; Ctrl+3 to 6 cyan to black in CMYK), then the first alpha channels up to Ctrl+9; with Alt, the channel is
+    // loaded as a selection instead.
     auto channelKey = [this](int n, bool load) {
         if (!session_->hasDocument()) return;
         const auto& channels = session_->document()->channels;
-        if (n >= 6 && size_t(n - 6) >= channels.size()) return;
+        const int firstAlpha = 3 + colorModeColorChannels(session_->document()->colorMode);
+        if (n >= firstAlpha && size_t(n - firstAlpha) >= channels.size()) return;
         if (load) {
             SelectionSource source;
-            source.kind = n == 2 ? SelectionSource::Composite : n == 3 ? SelectionSource::Red : n == 4 ? SelectionSource::Green : n == 5 ? SelectionSource::Blue : SelectionSource::AlphaChannel;
-            if (n >= 6) source.id = channels[size_t(n - 6)].id;
+            source.kind = n == 2 ? SelectionSource::Composite : n == 3 ? SelectionSource::Red : n == 4 ? SelectionSource::Green : n == 5 ? SelectionSource::Blue
+                          : n < firstAlpha ? SelectionSource::Black : SelectionSource::AlphaChannel;
+            if (n >= firstAlpha) source.id = channels[size_t(n - firstAlpha)].id;
             session_->loadSelectionFromSource(source, false, SelectionMode::Replace);
-        } else if (n <= 5) session_->selectColorChannels(n == 2 ? colorChannelsAll : 1u << (n - 3));
-        else session_->selectAlphaChannel(channels[size_t(n - 6)].id);
+        } else if (n < firstAlpha) session_->selectColorChannels(n == 2 ? session_->allColors() : 1u << (n - 3));
+        else session_->selectAlphaChannel(channels[size_t(n - firstAlpha)].id);
     };
     for (int n = 2; n <= 9; n++)
         for (bool load : {false, true}) {

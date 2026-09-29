@@ -376,6 +376,7 @@ std::shared_ptr<const Img> MipCache::levelOf(std::vector<Entry<Img>>& entries, c
         if constexpr (std::is_same_v<Img, Image>) next = halveImage(last);
         else if constexpr (std::is_same_v<Img, GrayImage>) next = halveGray(last);
         else if constexpr (std::is_same_v<Img, Image16>) next = halveImage(last);
+        else if constexpr (std::is_same_v<Img, ImageC8>) next = halveImage(last);
         else next = halveGray(last);
         entry->bytes += next->byteCount();
         used_ += next->byteCount();
@@ -477,6 +478,11 @@ Image16Ptr MipCache::level(const Image16Ptr& image, int level) {
     return levelOf(entries16_, image, level);
 }
 
+ImageC8Ptr MipCache::level(const ImageC8Ptr& image, int level) {
+    if (!image || level <= 0) return image;
+    return levelOf(entriesC8_, image, level);
+}
+
 Gray16Ptr MipCache::level(const Gray16Ptr& image, int level) {
     if (!image || level <= 0) return image;
     return levelOf(grayEntries16_, image, level);
@@ -491,11 +497,13 @@ void MipCache::enforceBudget(uint64_t keep) {
         for (size_t i = 0; i < grayEntries_.size(); i++) if (grayEntries_[i].lastUse < oldest) { oldest = grayEntries_[i].lastUse; which = 1; index = i; }
         for (size_t i = 0; i < entries16_.size(); i++) if (entries16_[i].lastUse < oldest) { oldest = entries16_[i].lastUse; which = 2; index = i; }
         for (size_t i = 0; i < grayEntries16_.size(); i++) if (grayEntries16_[i].lastUse < oldest) { oldest = grayEntries16_[i].lastUse; which = 3; index = i; }
+        for (size_t i = 0; i < entriesC8_.size(); i++) if (entriesC8_[i].lastUse < oldest) { oldest = entriesC8_[i].lastUse; which = 4; index = i; }
         if (which < 0) return;
         if (which == 0) { used_ -= entries_[index].bytes; entries_.erase(entries_.begin() + long(index)); }
         else if (which == 1) { used_ -= grayEntries_[index].bytes; grayEntries_.erase(grayEntries_.begin() + long(index)); }
         else if (which == 2) { used_ -= entries16_[index].bytes; entries16_.erase(entries16_.begin() + long(index)); }
-        else { used_ -= grayEntries16_[index].bytes; grayEntries16_.erase(grayEntries16_.begin() + long(index)); }
+        else if (which == 3) { used_ -= grayEntries16_[index].bytes; grayEntries16_.erase(grayEntries16_.begin() + long(index)); }
+        else { used_ -= entriesC8_[index].bytes; entriesC8_.erase(entriesC8_.begin() + long(index)); }
     }
 }
 
@@ -505,6 +513,6 @@ void MipCache::setBudget(size_t bytes) {
     enforceBudget(clock_ + 1);
 }
 
-void MipCache::clear() { std::lock_guard<std::mutex> lock(mutex_); entries_.clear(); grayEntries_.clear(); entries16_.clear(); grayEntries16_.clear(); used_ = 0; }
+void MipCache::clear() { std::lock_guard<std::mutex> lock(mutex_); entries_.clear(); grayEntries_.clear(); entries16_.clear(); grayEntries16_.clear(); entriesC8_.clear(); used_ = 0; }
 
 } // namespace compositor

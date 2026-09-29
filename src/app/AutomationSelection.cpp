@@ -136,15 +136,21 @@ void AutomationServer::registerSelectionHandlers() {
         return QJsonObject{{"bounds", rectJson(doc.selection ? doc.selection->bounds() : Rect())}};
     });
 
-    // ---- channels (the Channels panel; docs/channels.md). A channel is "rgb", "red", "green", "blue" or an alpha or
-    // spot channel's id.
-    auto colorBits = [](const QString& name) -> unsigned {
+    // ---- channels (the Channels panel; docs/channels.md). A channel is the composite ("rgb", "cmyk" or "lab", as the
+    // document's mode is), a colour channel ("red", "green", "blue"; "cyan", "magenta", "yellow", "black"; "lightness",
+    // "a", "b") or an alpha or spot channel's id.
+    auto colorBits = [session](const QString& name) -> unsigned {
         const QString n = name.toLower();
-        return n == "rgb" ? colorChannelsAll : n == "red" ? 1u : n == "green" ? 2u : n == "blue" ? 4u : 0u;
+        const ColorMode mode = session()->hasDocument() ? session()->document()->colorMode : ColorMode::RGB;
+        if (n == QLatin1String(colorModeKey(mode))) return colorChannelsAllFor(mode);
+        for (int c = 0; c < colorModeColorChannels(mode); c++)
+            if (n == QString::fromLatin1(colorChannelName(mode, c)).toLower()) return 1u << c;
+        return 0u;
     };
-    auto colorNames = [](unsigned bits) {
+    auto colorNames = [session](unsigned bits) {
         QJsonArray names;
-        for (int c = 0; c < 3; c++) if (bits >> c & 1) names.append(QStringList{"red", "green", "blue"}[c]);
+        const ColorMode mode = session()->hasDocument() ? session()->document()->colorMode : ColorMode::RGB;
+        for (int c = 0; c < colorModeColorChannels(mode); c++) if (bits >> c & 1) names.append(QString::fromLatin1(colorChannelName(mode, c)).toLower());
         return names;
     };
     auto channelOf = [document](const QString& id) -> const Channel& {
@@ -245,8 +251,8 @@ void AutomationServer::registerSelectionHandlers() {
         } else {
             const QString channel = str(p, "channel");
             const unsigned bits = colorBits(channel);
-            if (bits == colorChannelsAll) source.kind = SelectionSource::Composite;
-            else if (bits) source.kind = bits == 1 ? SelectionSource::Red : bits == 2 ? SelectionSource::Green : SelectionSource::Blue;
+            if (bits == session()->allColors()) source.kind = SelectionSource::Composite;
+            else if (bits) source.kind = bits == 1 ? SelectionSource::Red : bits == 2 ? SelectionSource::Green : bits == 4 ? SelectionSource::Blue : SelectionSource::Black;
             else { source.kind = SelectionSource::AlphaChannel; source.id = channelOf(channel).id; }
         }
         // A thumbnail's Ctrl-click: shift and alt pick the mode as Photoshop does.

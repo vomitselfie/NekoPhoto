@@ -22,7 +22,10 @@ public:
     explicit ChannelsPanel(EditorSession* session, QWidget* parent = nullptr);
 
     /// Rows: the composite, red, green, blue, an alpha or spot channel, Quick Mask.
-    enum Row { Composite, Red, Green, Blue, Alpha, QuickMask };
+    /// Red, Green and Blue are the first three colour channels of any mode (C, M, Y; L, a, b); Fourth is CMYK's Black.
+    enum Row { Composite, Red, Green, Blue, Alpha, QuickMask, Fourth };
+    /// The colour channel bits a colour row stands for (the composite: every channel of the document's mode).
+    unsigned colorBits(int row) const;
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;

@@ -373,7 +373,7 @@ void EditorSession::beginEdit(const QString& name) {
     endFramePreview();
     followChannelDocument();
     // With only some colour channels active, the edit is limited to them when it ends (EditorSessionChannels.cpp).
-    if (editDepth_++ == 0 && document_ && activeColors_ != colorChannelsAll) channelEditBase_ = *document_;
+    if (editDepth_++ == 0 && document_ && activeColors_ != allColors()) channelEditBase_ = *document_;
     history_.begin(name.toStdString(), document_, activeLayerId_);
 }
 void EditorSession::endEdit() {
@@ -601,7 +601,7 @@ Overrides EditorSession::renderOverrides() const {
         const Layer* layer = document_->find(*previewLayerId_);
         if (layer && layer->mask && !layer->mask->placement && previewTransform_ && !previewTransform_->samePlacement(layer->transform)) o.maskPlacement = std::optional<LayerTransform>(layer->transform);
         // An adjustment or filter previewed in some colour channels only: shown as it will land.
-        if (activeColors_ != colorChannelsAll && layer && layer->asset) {
+        if (activeColors_ != allColors() && layer && layer->asset) {
             const AnyImage kept = keepColorChannels(layer->asset->image, layer->transform, previewImage_, previewTransform_.value_or(layer->transform), activeColors_);
             if (kept) {
                 if (kept.u16()) o.image16 = kept.u16();
@@ -626,7 +626,7 @@ Overrides EditorSession::renderOverrides() const {
             // A mask covering the old grid stays where it was while the layer grows under the edit.
             if (layer && layer->mask && !layer->mask->placement && layer->asset) o.maskPlacement = std::optional<LayerTransform>(layer->transform);
             // Only some colour channels active: the stroke shows as it will land (EditorSessionChannels.cpp).
-            if (activeColors_ != colorChannelsAll && layer && layer->asset) {
+            if (activeColors_ != allColors() && layer && layer->asset) {
                 const AnyImage kept = keepColorChannels(layer->asset->image, layer->transform, deep ? AnyImage(stroke.previewImage16()) : AnyImage(stroke.previewImage()),
                                                         stroke.paintTransform(), activeColors_);
                 if (kept) {

@@ -119,7 +119,15 @@ void CanvasWidget::renderInto(QImage& target, QRect deviceRect, QPointF document
     Overrides overrides = session_->renderOverrides();
     compositor::render(*session_->document(), options, out, overrides.empty() ? nullptr : &overrides, &renderCache_);
     // The Channels panel's view: one colour channel in gray, some of them, alpha channels over the image.
-    if (const compositor::ChannelView view = session_->channelView(); !view.isDefault()) compositor::applyChannelView(out, options.region, zoom, view);
+    if (compositor::ChannelView view = session_->channelView(); !view.isDefault()) {
+        // In CMYK and Lab the colour channels are read from the frame at the document's layout.
+        if (view.mode != compositor::ColorMode::RGB && view.color != 0 && view.color != compositor::colorChannelsAllFor(view.mode)) {
+            RenderOptions native = options;
+            native.display = nullptr;
+            view.native = compositor::renderNative(*session_->document(), native, overrides.empty() ? nullptr : &overrides);
+        }
+        compositor::applyChannelView(out, options.region, zoom, view);
+    }
     target = toQImage(out);
 }
 
