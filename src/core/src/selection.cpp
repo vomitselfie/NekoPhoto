@@ -215,6 +215,32 @@ std::optional<Selection> combine16(const std::optional<Selection>& current, cons
     }
     return current;
 }
+/// combine16 at 32 bits: coverage 0..1 in float; an 8- or 16-bit selection or shape widened by scale.
+std::optional<Selection> combineF(const std::optional<Selection>& current, const GrayF& shape, SelectionMode mode, bool antialiased) {
+    Selection result;
+    result.antialiased = antialiased;
+    GrayFPtr before = current && current->coverage ? current->coverage.f32() : nullptr;
+    if (current && current->coverage.u8()) before = widenGrayF(*current->coverage.u8());
+    else if (current && current->coverage.u16()) before = widenGrayF(*current->coverage.u16());
+    switch (mode) {
+    case SelectionMode::Replace:
+        result.coverage = GrayFPtr(std::make_shared<GrayF>(shape));
+        return result;
+    case SelectionMode::Add:
+        if (!before) { result.coverage = GrayFPtr(std::make_shared<GrayF>(shape)); return result; }
+        result.coverage = GrayFPtr(combineRows(*before, shape, [](float a, float b) { return std::max(a, b); }));
+        return result;
+    case SelectionMode::Subtract:
+        if (!before) return current;
+        result.coverage = GrayFPtr(combineRows(*before, shape, [](float a, float b) { return std::max(0.0f, a - b); }));
+        return result;
+    case SelectionMode::Intersect:
+        if (!before) return current;
+        result.coverage = GrayFPtr(combineRows(*before, shape, [](float a, float b) { return std::min(a, b); }));
+        return result;
+    }
+    return current;
+}
 } // namespace
 
 std::optional<Selection> combineSelection(const std::optional<Selection>& current, const GrayImage& shape, SelectionMode mode, bool antialiased) {
@@ -244,6 +270,12 @@ std::optional<Selection> combineSelection(const std::optional<Selection>& curren
 }
 
 std::optional<Selection> combineSelection(const std::optional<Selection>& current, const AnyGray& shape, SelectionMode mode, bool antialiased, SampleType depth) {
+    if (depth == SampleType::F32) {
+        if (shape.f32()) return combineF(current, *shape.f32(), mode, antialiased);
+        if (shape.u16()) return combineF(current, *widenGrayF(*shape.u16()), mode, antialiased);
+        if (shape.u8()) return combineF(current, *widenGrayF(*shape.u8()), mode, antialiased);
+        return current;
+    }
     if (depth == SampleType::U16) {
         if (shape.u16()) return combine16(current, *shape.u16(), mode, antialiased);
         if (shape.u8()) return combine16(current, *widenGray(*shape.u8()), mode, antialiased);
@@ -256,6 +288,14 @@ std::optional<Selection> combineSelection(const std::optional<Selection>& curren
 
 Selection invertSelection(const Selection& selection, int width, int height) {
     Selection result = selection;
+    if (selection.coverage.f32()) {
+        auto out = std::make_shared<GrayF>(width, height, 1.0f);
+        const GrayF& in = *selection.coverage.f32();
+        for (int y = 0; y < std::min(height, in.height()); y++)
+            for (int x = 0; x < std::min(width, in.width()); x++) out->at(x, y) = 1.0f - cleanCoverage(in.at(x, y));
+        result.coverage = GrayFPtr(out);
+        return result;
+    }
     if (selection.coverage.u16()) {
         auto out = std::make_shared<Gray16>(width, height, uint16_t(one16));
         const Gray16& in = *selection.coverage.u16();
@@ -287,7 +327,8 @@ Selection offsetSelection(const Selection& selection, int dx, int dy) {
         }
         return std::shared_ptr<const G>(moved);
     };
-    if (selection.coverage.u16()) result.coverage = shift(*selection.coverage.u16());
+    if (selection.coverage.f32()) result.coverage = shift(*selection.coverage.f32());
+    else if (selection.coverage.u16()) result.coverage = shift(*selection.coverage.u16());
     else if (selection.coverage.u8()) result.coverage = shift(*selection.coverage.u8());
     return result;
 }
@@ -295,7 +336,8 @@ Selection offsetSelection(const Selection& selection, int dx, int dy) {
 Selection resizeSelection(const Selection& selection, int amount) {
     Selection result = selection;
     if (!selection.coverage || amount == 0) return result;
-    if (selection.coverage.u16()) result.coverage = Gray16Ptr(growSelection(*selection.coverage.u16(), amount));
+    if (selection.coverage.f32()) result.coverage = GrayFPtr(growSelection(*selection.coverage.f32(), amount));
+    else if (selection.coverage.u16()) result.coverage = Gray16Ptr(growSelection(*selection.coverage.u16(), amount));
     else result.coverage = growSelection(*selection.coverage.u8(), amount);
     return result;
 }
@@ -373,6 +415,31 @@ std::shared_ptr<Gray16> coverageFromLayer16(const Document& document, const Laye
     drawLayer(params, document.rect(), 1, nullptr, pixels);
     for (int y = 0; y < document.height; y++)
         for (int x = 0; x < document.width; x++) out->at(x, y) = pixels.pixel(x, y)[3];
+    return out;
+}
+
+std::shared_ptr<GrayF> coverageFromLayerF(const Document& document, const Layer& layer) {
+    auto out = std::make_shared<GrayF>(document.width, document.height);
+    if (!layer.asset || !layer.asset->image.f32()) return out;
+    const ImageF& image = *layer.asset->image.f32();
+    const LayerTransform& t = layer.transform;
+    const bool onGrid = t.rotation == 0 && !t.flipX && !t.flipY && t.size.width == image.width() && t.size.height == image.height()
+        && t.origin.x == std::floor(t.origin.x) && t.origin.y == std::floor(t.origin.y);
+    if (onGrid) {
+        const int ox = int(t.origin.x), oy = int(t.origin.y);
+        const int x0 = std::max(0, ox), y0 = std::max(0, oy), x1 = std::min(document.width, ox + image.width()), y1 = std::min(document.height, oy + image.height());
+        for (int y = y0; y < y1; y++)
+            for (int x = x0; x < x1; x++) out->at(x, y) = cleanCoverage(image.pixel(x - ox, y - oy)[3]);
+        return out;
+    }
+    ImageF pixels(document.width, document.height);
+    DrawParamsF params;
+    params.image = layer.asset->image.f32();
+    params.transform = layer.transform;
+    params.layerTransformForMask = layer.transform;
+    drawLayer(params, document.rect(), 1, nullptr, pixels);
+    for (int y = 0; y < document.height; y++)
+        for (int x = 0; x < document.width; x++) out->at(x, y) = cleanCoverage(pixels.pixel(x, y)[3]);
     return out;
 }
 

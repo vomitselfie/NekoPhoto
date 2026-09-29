@@ -89,23 +89,24 @@ constexpr FeatureSupport table[] = {
     // Filter > Mosh (compositor/mosh.h, pixels.mosh): straight float colour at either depth.
     {"filter.Mosh", eightAndSixteen},
     // Selections at the document's depth: the marquee, lasso, Magic Wand and Quick Select tools (they read the
-    // canvas as shown, in 8-bit levels, and make 16-bit coverage), the Select menu, Load as Selection, Quick Mask.
-    {"edit.selection", eightAndSixteen},
+    // canvas as shown, in 8-bit levels, and make 16-bit coverage; at 32 bits they read decisionImage(), exposure 0,
+    // and make float coverage), the Select menu, Load as Selection, Quick Mask.
+    {"edit.selection", allDepths},
     // Channels (docs/channels.md): alpha channels at the document's depth, Save and Load Selection, single-channel editing.
-    {"edit.channels", eightAndSixteen},
-    {"tool.marquee", eightAndSixteen},
-    {"tool.lasso", eightAndSixteen},
-    {"tool.wand", eightAndSixteen},
-    {"tool.quickSelect", eightAndSixteen},
+    {"edit.channels", allDepths},
+    {"tool.marquee", allDepths},
+    {"tool.lasso", allDepths},
+    {"tool.wand", allDepths},
+    {"tool.quickSelect", allDepths},
     // Fill and Clear through the selection; Cut, Copy, Copy Merged, Paste and Layer via Copy.
-    {"edit.fill", eightAndSixteen},
-    {"edit.clipboard", eightAndSixteen},
+    {"edit.fill", allDepths},
+    {"edit.clipboard", allDepths},
     // Image Size (16-bit resampling), Crop, the Crop tool, Crop to Selection and Trim.
-    {"edit.imageSize", eightAndSixteen},
-    {"edit.crop", eightAndSixteen},
-    {"tool.crop", eightAndSixteen},
+    {"edit.imageSize", allDepths},
+    {"edit.crop", allDepths},
+    {"tool.crop", allDepths},
     // Distort and Perspective in Free Transform, Edit > Warp and Warp Cage on whole pixel layers.
-    {"edit.distort", eightAndSixteen},
+    {"edit.distort", allDepths},
     // Content-Aware Fill, Move, Extend and Scale: decided on the pixels rounded to 8 bits, the 16-bit pixels copied.
     {"edit.contentAware", eightAndSixteen},
 

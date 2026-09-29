@@ -34,5 +34,7 @@ std::vector<std::vector<Point>> selectionOutline(const GrayImage& coverage, bool
 std::shared_ptr<GrayImage> coverageFromLayer(const Document& document, const Layer& layer);
 /// The same for a 16-bit layer, at 16 bits.
 std::shared_ptr<Gray16> coverageFromLayer16(const Document& document, const Layer& layer);
+/// And for a 32-bit layer, as float coverage.
+std::shared_ptr<GrayF> coverageFromLayerF(const Document& document, const Layer& layer);
 
 } // namespace compositor

@@ -53,7 +53,7 @@ std::shared_ptr<GrayImage> refinedQuickSelect(const GrayImage& coverage, const I
 
 std::shared_ptr<const Image> EditorSession::flattenedForSampling() {
     if (!(wandSample_ && wandSampleAll_ && wandSampleRevision_ == documentRevision_)) {
-        wandSample_ = renderFlattened(*document_);
+        wandSample_ = decisionImage(*document_);   // at 32 bits exposure 0, whatever the view shows
         wandSampleAll_ = true; wandSampleLayer_ = Uuid{}; wandSampleRevision_ = documentRevision_;
     }
     return wandSample_;

@@ -37,7 +37,18 @@ bool EditorSession::beginQuickMask() {
     // feathered 16-bit selection comes back with all its steps.
     Asset red;
     LayerMask m;
-    if (document_->sampleType == SampleType::U16) {
+    if (document_->sampleType == SampleType::F32) {
+        auto pixels = std::make_shared<ImageF>(w, h);
+        const float colour[4] = {1.0f, 0.0f, 0.0f, 1.0f};
+        pixels->fill(colour);
+        auto mask = std::make_shared<GrayF>(w, h, 0.0f);
+        if (document_->selection && document_->selection->coverage.f32()) {
+            const GrayF& selected = *document_->selection->coverage.f32();
+            for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) mask->at(x, y) = 1.0f - cleanCoverage(selected.at(x, y));
+        }
+        red = Asset::make(ImageFPtr(pixels), name);
+        m.asset = MaskAsset::make(GrayFPtr(mask));
+    } else if (document_->sampleType == SampleType::U16) {
         auto pixels = std::make_shared<Image16>(w, h);
         const uint16_t colour[4] = {uint16_t(one16), 0, 0, uint16_t(one16)};
         pixels->fill(colour);
@@ -81,7 +92,20 @@ bool EditorSession::endQuickMask() {
     const Layer* layer = document_->find(*quickMaskLayer_);
     const int w = document_->width, h = document_->height;
     std::optional<Selection> selection;
-    if (layer->mask && layer->mask->asset.image.u16()) {
+    if (layer->mask && layer->mask->asset.image.f32()) {
+        const float background = LayerMask::background(*layer->mask->asset.thumbnail) / 255.0f;
+        auto masked = std::make_shared<GrayF>(w, h, background);
+        sampleMaskCoverage(*layer->mask->asset.image.f32(), layer->maskTransform(), document_->rect(), 1, background, *masked, false);
+        bool all = true, none = true;
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++) {
+                float& v = masked->at(x, y);
+                v = 1.0f - cleanCoverage(v);
+                all = all && v == 1.0f;
+                none = none && v == 0.0f;
+            }
+        if (!all && !none) { Selection s; s.coverage = GrayFPtr(masked); s.antialiased = true; selection = s; }
+    } else if (layer->mask && layer->mask->asset.image.u16()) {
         const uint16_t background = widen8(LayerMask::background(*layer->mask->asset.thumbnail));
         auto masked = std::make_shared<Gray16>(w, h, background);
         sampleMaskCoverage(*layer->mask->asset.image.u16(), layer->maskTransform(), document_->rect(), 1, background, *masked, false);

@@ -66,6 +66,11 @@ std::optional<Selection> EditorSession::displayedSelection() const {
         if (dx == 0 && dy == 0) return pixelMove_->origin;
         return offsetSelection(pixelMove_->origin, dx, dy);
     }
+    if (transformEdit_ && transformEdit_->floating && document_->selection->coverage.f32()) {
+        Selection s = *document_->selection;
+        if (auto moved = floatingSelectionF(*transformEdit_)) s.coverage = GrayFPtr(moved);
+        return s;
+    }
     if (transformEdit_ && transformEdit_->floating && document_->selection->coverage.u16()) {
         const FloatingTransform& f = *transformEdit_->floating;
         const Gray16& cov = *document_->selection->coverage.u16();
@@ -184,6 +189,7 @@ std::optional<EditorSession::PixelClipboard> EditorSession::renderSelectedPixels
     options.region = region;
     const Layer* layer = activeLayer();
     if (!merged && !layer) return std::nullopt;
+    if (document_->sampleType == SampleType::F32) return renderSelectedPixelsF(merged, region);
     const bool deep = document_->sampleType == SampleType::U16;
     // The pixels at the document's depth, then multiplied by the selection's coverage.
     auto take = [&](auto& out, const auto* coverage) -> bool {
@@ -238,8 +244,10 @@ std::optional<EditorSession::PixelClipboard> EditorSession::renderSelectedPixels
 
 namespace {
 
-/// What the system clipboard gets: 8 bits whatever the document's depth.
-QImage clipboardImage(const AnyImage& image) {
+/// What the system clipboard gets: 8 bits whatever the document's depth (32 bits tone-mapped at exposure 0 through
+/// the document's curve).
+QImage clipboardImage(const AnyImage& image, const TransferCurve& curve) {
+    if (image.f32()) return toQImage(*encodeImage8(*image.f32(), curve)).convertToFormat(QImage::Format_ARGB32);
     if (image.u16()) return toQImage(*narrowImage(*image.u16())).convertToFormat(QImage::Format_ARGB32);
     return image.u8() ? toQImage(*image.u8()).convertToFormat(QImage::Format_ARGB32) : QImage();
 }
@@ -252,7 +260,7 @@ void EditorSession::copySelection() {
     auto copied = renderSelectedPixels(false);
     if (!copied) return;
     pixelClipboard_ = copied;
-    QApplication::clipboard()->setImage(clipboardImage(copied->image));
+    QApplication::clipboard()->setImage(clipboardImage(copied->image, documentCurve()));
 }
 
 void EditorSession::copyMerged() {
@@ -261,7 +269,7 @@ void EditorSession::copyMerged() {
     auto copied = renderSelectedPixels(true);
     if (!copied) return;
     pixelClipboard_ = copied;
-    QApplication::clipboard()->setImage(clipboardImage(copied->image));
+    QApplication::clipboard()->setImage(clipboardImage(copied->image, documentCurve()));
 }
 
 void EditorSession::cutSelection() {

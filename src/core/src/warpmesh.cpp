@@ -429,6 +429,17 @@ std::optional<WarpedRasterF> renderWarpedImage(const ImageF& image, const WarpMe
     return resampleThrough(image, [&](double u, double v) { return apply(*h, evaluateWarpMesh(mesh, u, v)); }, clip);
 }
 
+std::optional<WarpedRasterF> renderWarpedOverBox(const ImageF& image, const WarpMesh& mesh, const Rect& box) {
+    if (image.isEmpty() || !(box.width > 0) || !(box.height > 0) || mesh.xs.size() != size_t(mesh.uOrder * mesh.vOrder) || mesh.ys.size() != mesh.xs.size())
+        return std::nullopt;
+    const double u0 = -box.x / box.width, u1 = (image.width() - box.x) / box.width;
+    const double v0 = -box.y / box.height, v1 = (image.height() - box.y) / box.height;
+    return resampleThrough(image, [&](double u, double v) {
+        const Point p = evaluateWarpMesh(mesh, u0 + (u1 - u0) * u, v0 + (v1 - v0) * v);
+        return Point(box.x + p.x, box.y + p.y);
+    });
+}
+
 std::optional<WarpedRaster16> renderWarpedOverBox(const Image16& image, const WarpMesh& mesh, const Rect& box) {
     if (image.isEmpty() || !(box.width > 0) || !(box.height > 0) || mesh.xs.size() != size_t(mesh.uOrder * mesh.vOrder) || mesh.ys.size() != mesh.xs.size())
         return std::nullopt;

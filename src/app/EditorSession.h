@@ -1110,6 +1110,21 @@ private:
     std::optional<std::pair<int, qint64>> pendingOpacityDigit_;
     std::optional<compositor::BlendMode> blendPreview_;
     QElapsedTimer opacityTimer_;
+
+    // ---- 32 bits (EditorSessionFloat.cpp): the float counterparts of the 16-bit pixel edits.
+    bool fillThroughF(const QColor& color, const compositor::GrayF* coverage, const char* name);
+    void clearSelectedPixelsF(compositor::Layer& layer);
+    std::optional<PixelClipboard> renderSelectedPixelsF(bool merged, const compositor::Rect& region) const;
+    void distortLayerF(compositor::Layer& layer, const TransformEdit& edit);
+    void mergeFloatingTransformF(const TransformEdit& edit);
+    std::shared_ptr<compositor::GrayF> floatingSelectionF(const TransformEdit& edit) const;
+    /// Fills `o` with a 32-bit layer's pending distortion; false when the layer is not one.
+    bool distortOverrideF(const compositor::Layer& layer, const TransformEdit& edit, compositor::LayerOverride& o) const;
+    struct DistortCacheF {
+        compositor::Corners corners; compositor::LayerTransform transform; compositor::ImageFPtr source; compositor::GrayFPtr mask;
+        std::optional<compositor::WarpedImageF> image; std::shared_ptr<compositor::GrayF> warpedMask;
+    };
+    mutable std::map<compositor::Uuid, DistortCacheF> distortCacheF_;
 };
 
 } // namespace app

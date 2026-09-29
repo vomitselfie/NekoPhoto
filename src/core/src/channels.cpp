@@ -5,6 +5,7 @@
 #include "compositor/parallel.h"
 #include "compositor/render.h"
 #include "compositor/resample.h"
+#include "compositor/selection.h"
 #include <algorithm>
 #include <bit>
 #include <cmath>
@@ -15,12 +16,19 @@ namespace {
 
 /// A document-sized gray at `depth` holding `value` (0..1).
 AnyGray solidGray(int width, int height, SampleType depth, bool white) {
+    if (depth == SampleType::F32) return GrayFPtr(std::make_shared<GrayF>(width, height, white ? 1.0f : 0.0f));
     if (depth == SampleType::U16) return Gray16Ptr(std::make_shared<Gray16>(width, height, white ? uint16_t(one16) : uint16_t(0)));
     return GrayPtr(std::make_shared<GrayImage>(width, height, white ? uint8_t(255) : uint8_t(0)));
 }
 
 /// `gray` inverted, at its depth.
 AnyGray invertedGray(const AnyGray& gray) {
+    if (const GrayFPtr& g = gray.f32()) {
+        auto out = std::make_shared<GrayF>(g->width(), g->height());
+        const size_t n = size_t(g->width()) * g->height();
+        for (size_t i = 0; i < n; i++) out->data()[i] = 1.0f - cleanCoverage(g->data()[i]);
+        return GrayFPtr(out);
+    }
     if (const Gray16Ptr& g = gray.u16()) {
         auto out = std::make_shared<Gray16>(g->width(), g->height());
         const size_t n = size_t(g->width()) * g->height();
@@ -63,8 +71,9 @@ AnyGray compositeGray(const Document& document, int channel) {
         // Photoshop's luminosity (Ctrl+Alt+2): 0.30, 0.59, 0.11.
         return std::min<uint32_t>(one, uint32_t((30 * r + 59 * g + 11 * b + 50) / 100));
     };
-    if (document.sampleType == SampleType::U16) {
-        auto flat = renderFlattened16(document);
+    if (document.sampleType == SampleType::U16 || document.sampleType == SampleType::F32) {
+        // 32 bits: the composite encoded at exposure 0 (the decision image's tones, docs/bit-depth.md), then as at 16.
+        auto flat = document.sampleType == SampleType::F32 ? encodeImage16(*renderFlattenedF(document), encodedTransfer(document)) : renderFlattened16(document);
         auto out = std::make_shared<Gray16>(document.width, document.height);
         for (int y = 0; y < document.height; y++) {
             const uint16_t* s = flat->row(y);
@@ -74,6 +83,7 @@ AnyGray compositeGray(const Document& document, int channel) {
                 d[x] = uint16_t(pick(std::min(one16, s[0] + white), std::min(one16, s[1] + white), std::min(one16, s[2] + white), one16));
             }
         }
+        if (document.sampleType == SampleType::F32) return GrayFPtr(widenGrayF(*out));
         return Gray16Ptr(out);
     }
     auto flat = renderFlattened(document);
@@ -176,6 +186,30 @@ std::shared_ptr<Img> keepChannels(const Img& before, const Img* after, int dx, i
             }
         }
     }
+    }, 32);
+    return out;
+}
+
+/// keepChannels at 32 bits: float colour, unbounded; the edit's straight colour at the old alpha where it changed alpha.
+std::shared_ptr<ImageF> keepChannelsF(const ImageF& before, const ImageF* after, int dx, int dy, unsigned channels) {
+    auto out = std::make_shared<ImageF>(before);
+    parallelRows(0, before.height(), [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++) {
+            const int ay = y - dy;
+            if (!after || ay < 0 || ay >= after->height()) continue;
+            float* o = out->row(y);
+            for (int x = 0; x < before.width(); x++, o += 4) {
+                const int ax = x - dx;
+                const float A = o[3];
+                if (ax < 0 || ax >= after->width() || !(A > 0)) continue;
+                const float* a = after->pixel(ax, ay);
+                for (int c = 0; c < 3; c++) {
+                    if (!(channels >> c & 1)) continue;
+                    if (a[3] == A) o[c] = a[c];
+                    else if (a[3] > 0) o[c] = a[c] / a[3] * A;
+                }
+            }
+        }
     }, 32);
     return out;
 }
@@ -284,6 +318,7 @@ AnyGray selectionSourceCoverage(const Document& document, const SelectionSource&
     case SelectionSource::Transparency: {
         const Layer* layer = document.find(source.id);
         if (!layer || layer->isGroup) return fail("There is no pixel layer with that id.");
+        if (document.sampleType == SampleType::F32) return GrayFPtr(coverageFromLayerF(document, *layer));
         if (document.sampleType == SampleType::U16) return Gray16Ptr(coverageFromLayer16(document, *layer));
         return GrayPtr(coverageFromLayer(document, *layer));
     }
@@ -292,6 +327,11 @@ AnyGray selectionSourceCoverage(const Document& document, const SelectionSource&
         if (!layer || !layer->mask || !layer->mask->asset.image) return fail("That layer has no mask.");
         // The mask as it sits on the canvas; beyond a placed mask, the colour most of its edge is.
         const uint8_t background = layer->mask->placement && layer->mask->asset.thumbnail ? LayerMask::background(*layer->mask->asset.thumbnail) : 0;
+        if (const GrayFPtr& m = layer->mask->asset.image.f32()) {
+            auto out = std::make_shared<GrayF>(document.width, document.height, background / 255.0f);
+            sampleMaskCoverage(*m, layer->maskTransform(), document.rect(), 1, background / 255.0f, *out, false);
+            return grayAtDepth(GrayFPtr(out), document.sampleType);
+        }
         if (const Gray16Ptr& m = layer->mask->asset.image.u16()) {
             auto out = std::make_shared<Gray16>(document.width, document.height, widen8(background));
             sampleMaskCoverage(*m, layer->maskTransform(), document.rect(), 1, widen8(background), *out, false);
@@ -350,7 +390,13 @@ void resampleChannels(Document& document, int fromWidth, int fromHeight, Samplin
     const ResampleFilter filter = filterFor(sampling);
     for (Channel& c : document.channels) {
         if (c.image.width() == w && c.image.height() == h) continue;
-        if (const Gray16Ptr& g = c.image.u16()) {
+        if (const GrayFPtr& g = c.image.f32()) {
+            if (sampling == Sampling::Nearest) {
+                auto out = std::make_shared<GrayF>(w, h);
+                for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) out->at(x, y) = g->at(std::min(g->width() - 1, int((x + 0.5) * sx)), std::min(g->height() - 1, int((y + 0.5) * sy)));
+                c.image = GrayFPtr(out);
+            } else c.image = GrayFPtr(resampleAxisAligned(*g, w, h, 0.5 * sx, sx, 0.5 * sy, sy, filter, 0.0f));
+        } else if (const Gray16Ptr& g = c.image.u16()) {
             if (sampling == Sampling::Nearest) {
                 auto out = std::make_shared<Gray16>(w, h);
                 for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) out->at(x, y) = g->at(std::min(g->width() - 1, int((x + 0.5) * sx)), std::min(g->height() - 1, int((y + 0.5) * sy)));
@@ -371,6 +417,10 @@ void resampleChannels(Document& document, int fromWidth, int fromHeight, Samplin
 
 AnyImage keepColorChannels(const AnyImage& before, const AnyImage& after, int dx, int dy, unsigned channels) {
     if (!before) return {};
+    if (const ImageFPtr& b = before.f32()) {
+        const ImageFPtr a = after ? after.f32() : nullptr;
+        return ImageFPtr(keepChannelsF(*b, a.get(), dx, dy, channels));
+    }
     if (const Image16Ptr& b = before.u16()) {
         const Image16Ptr a = after ? imageAtDepth(after, SampleType::U16).u16() : nullptr;
         return Image16Ptr(keepChannels(*b, a.get(), dx, dy, channels, one16));
@@ -521,6 +571,7 @@ void applyChannelView(Image& out, const Rect& region, double scale, const Channe
     auto sample = [](const AnyGray& g, int x, int y) -> float {
         if (x < 0 || y < 0 || x >= g.width() || y >= g.height()) return 0.f;
         if (const Gray16Ptr& p = g.u16()) return float(std::min<uint32_t>(p->at(x, y), one16)) / float(one16);
+        if (const GrayFPtr& p = g.f32()) return cleanCoverage(p->at(x, y));
         return float(g.u8()->at(x, y)) / 255.f;
     };
     const unsigned color = view.color & colorChannelsAll;
@@ -551,6 +602,7 @@ void applyChannelView(Image& out, const Rect& region, double scale, const Channe
 }
 
 std::shared_ptr<GrayImage> channelThumbnail(const AnyGray& image, int maxSide) {
+    if (const GrayFPtr& g = image.f32()) return makeGrayThumbnail(*g, maxSide);
     if (const Gray16Ptr& g = image.u16()) return makeGrayThumbnail(*g, maxSide);
     if (const GrayPtr& g = image.u8()) return makeGrayThumbnail(*g, maxSide);
     return nullptr;

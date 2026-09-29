@@ -30,7 +30,8 @@ void EditorSession::setSelection(const std::optional<Selection>& selection, cons
 void EditorSession::applySelectionShape(const GrayImage& shape, SelectionMode mode, const QString& name) {
     if (refusedAtDepth("edit.selection", tr("Selections"))) return;
     if (!document_) return;
-    // A 16-bit document's selection stays at 16 bits: the shape is widened and combined there.
+    // A 16- or 32-bit document's selection stays at its depth: the shape is widened and combined there.
+    if (document_->sampleType == SampleType::F32) { setSelection(combineSelection(document_->selection, AnyGray(GrayFPtr(widenGrayF(shape))), mode, selectionAntialiased, SampleType::F32), name); return; }
     if (document_->sampleType == SampleType::U16) { setSelection(combineSelection(document_->selection, AnyGray(widenGray(shape)), mode, selectionAntialiased, SampleType::U16), name); return; }
     setSelection(combineSelection(document_->selection, shape, mode, selectionAntialiased), name);
 }
@@ -45,7 +46,8 @@ void EditorSession::selectAll() {
     if (refusedAtDepth("edit.selection", tr("Selections"))) return;
     if (!document_) return;
     Selection s;
-    if (document_->sampleType == SampleType::U16) s.coverage = Gray16Ptr(std::make_shared<Gray16>(document_->width, document_->height, uint16_t(one16)));
+    if (document_->sampleType == SampleType::F32) s.coverage = GrayFPtr(std::make_shared<GrayF>(document_->width, document_->height, 1.0f));
+    else if (document_->sampleType == SampleType::U16) s.coverage = Gray16Ptr(std::make_shared<Gray16>(document_->width, document_->height, uint16_t(one16)));
     else {
         // Already all selected by an earlier Select All: the same buffer again, so nothing changes and no step is added.
         GrayPtr full = selectAllCoverage_.lock();
@@ -85,12 +87,15 @@ void EditorSession::magicWand(QPointF documentPoint, int tolerance, bool contigu
     Uuid layerId = layer ? layer->id : Uuid{};
     bool cached = wandSample_ && wandSampleAll_ == sampleAllLayers && wandSampleLayer_ == layerId && wandSampleRevision_ == documentRevision_;
     if (!cached) {
-        if (sampleAllLayers) wandSample_ = renderFlattened(*document_);
+        // At 32 bits the wand decides on decisionImage(): exposure 0, whatever the view shows.
+        if (sampleAllLayers) wandSample_ = decisionImage(*document_);
         else {
             // The active layer's own pixels as placed, without its mask, opacity, blend or clipping (as on the Mac).
             // A 16-bit layer is read as the canvas shows it, reduced to 8 bits: Tolerance counts 8-bit levels.
             Document single(document_->width, document_->height);
             single.sampleType = document_->sampleType;
+            single.profile = document_->profile;
+            single.encodedProfile = document_->encodedProfile;
             Layer copy = *layer;
             copy.parentId.reset();
             copy.visible = true;
@@ -100,7 +105,7 @@ void EditorSession::magicWand(QPointF documentPoint, int tolerance, bool contigu
             copy.maskSourceId.reset();
             copy.transform = displayedTransform(*layer);
             single.layers = {copy};
-            wandSample_ = renderFlattened(single);
+            wandSample_ = decisionImage(single);
         }
         wandSampleAll_ = sampleAllLayers; wandSampleLayer_ = layerId; wandSampleRevision_ = documentRevision_;
         wandSmart_.reset();
@@ -155,7 +160,9 @@ void EditorSession::applyWandSession(int tolerance, bool replaceStep) {
     if (wandRefineEdge) refineWandEdge(*wandSample_, mask, 3, &lineColours);
     if (replaceStep && session.hasStep) undo();
     const size_t steps = undoNames().size();
-    if (document_->sampleType == SampleType::U16)
+    if (document_->sampleType == SampleType::F32)
+        setSelection(combineSelection(session.before, AnyGray(GrayFPtr(widenGrayF(mask))), session.mode, selectionAntialiased, SampleType::F32), QT_TRANSLATE_NOOP("History", "Magic Wand"));
+    else if (document_->sampleType == SampleType::U16)
         setSelection(combineSelection(session.before, AnyGray(widenGray(mask)), session.mode, selectionAntialiased, SampleType::U16), QT_TRANSLATE_NOOP("History", "Magic Wand"));
     else setSelection(combineSelection(session.before, mask, session.mode, selectionAntialiased), QT_TRANSLATE_NOOP("History", "Magic Wand"));
     // A selection equal to the one before records no step; the next change then has nothing to take back.
@@ -181,6 +188,12 @@ void EditorSession::fillSelection(const QColor& color) {
     if (!canEditLayers()) return;
     if (document_->colorMode != ColorMode::RGB && !(isMaskSelected_ && activeLayer() && activeLayer()->mask)) {
         fillThroughMode(color, QT_TRANSLATE_NOOP("History", "Fill"));
+        return;
+    }
+    if (document_->sampleType == SampleType::F32) {
+        const GrayF* selection = document_->selection ? document_->selection->coverage.f32().get() : nullptr;
+        if (document_->selection && !selection) return;
+        fillThroughF(color, selection, QT_TRANSLATE_NOOP("History", "Fill"));
         return;
     }
     if (document_->sampleType == SampleType::U16) {
@@ -500,6 +513,7 @@ bool EditorSession::fillThroughMode(const QColor& color, const char* name) {
 }
 
 void EditorSession::clearSelectedPixelsNow(Layer& layer) {
+    if (layer.asset && layer.asset->image.f32()) { clearSelectedPixelsF(layer); return; }
     if (layer.asset && layer.asset->image.u16()) {
         const Gray16* selection = document_->selection ? document_->selection->coverage.u16().get() : nullptr;
         if (!selection) return;
@@ -574,6 +588,19 @@ void EditorSession::loadLayerAsSelection(const Uuid& id, bool mask, SelectionMod
     const Layer* layer = document_->find(id);
     if (!layer) return;
     const QString name = mask ? QT_TRANSLATE_NOOP("History", "Load Mask as Selection") : QT_TRANSLATE_NOOP("History", "Load Layer as Selection");
+    if (document_->sampleType == SampleType::F32) {
+        std::shared_ptr<GrayF> deep;
+        if (mask) {
+            if (!layer->mask || !layer->mask->asset.image.f32()) return;
+            deep = std::make_shared<GrayF>(document_->width, document_->height, 0.0f);
+            sampleMaskCoverage(*layer->mask->asset.image.f32(), layer->maskTransform(), document_->rect(), 1, 0.0f, *deep, false);
+        } else {
+            if (!layer->asset || !layer->asset->image.f32()) return;
+            deep = coverageFromLayerF(*document_, *layer);
+        }
+        setSelection(combineSelection(document_->selection, AnyGray(GrayFPtr(deep)), mode, selectionAntialiased, SampleType::F32), name);
+        return;
+    }
     if (document_->sampleType == SampleType::U16) {
         std::shared_ptr<Gray16> deep;
         if (mask) {
@@ -609,7 +636,8 @@ void EditorSession::selectionFeather(double radius) {
     if (refusedAtDepth("edit.selection", tr("Selections"))) return;
     if (!document_ || !document_->selection || !document_->selection->coverage || !(radius > 0) || radius > 250) return;
     Selection s = *document_->selection;
-    if (s.coverage.u16()) s.coverage = Gray16Ptr(featherSelection(*s.coverage.u16(), radius));
+    if (s.coverage.f32()) s.coverage = GrayFPtr(featherSelection(*s.coverage.f32(), radius));
+    else if (s.coverage.u16()) s.coverage = Gray16Ptr(featherSelection(*s.coverage.u16(), radius));
     else s.coverage = featherSelection(*s.coverage.u8(), radius);
     setSelection(s, QT_TRANSLATE_NOOP("History", "Feather Selection"));
 }
@@ -618,7 +646,8 @@ void EditorSession::selectionSmooth(int radius) {
     if (refusedAtDepth("edit.selection", tr("Selections"))) return;
     if (!document_ || !document_->selection || !document_->selection->coverage || radius <= 0 || radius > 100) return;
     Selection s = *document_->selection;
-    if (s.coverage.u16()) s.coverage = Gray16Ptr(smoothSelection(*s.coverage.u16(), radius));
+    if (s.coverage.f32()) s.coverage = GrayFPtr(smoothSelection(*s.coverage.f32(), radius));
+    else if (s.coverage.u16()) s.coverage = Gray16Ptr(smoothSelection(*s.coverage.u16(), radius));
     else s.coverage = smoothSelection(*s.coverage.u8(), radius);
     setSelection(s, QT_TRANSLATE_NOOP("History", "Smooth Selection"));
 }
@@ -627,7 +656,8 @@ void EditorSession::selectionBorder(int width) {
     if (refusedAtDepth("edit.selection", tr("Selections"))) return;
     if (!document_ || !document_->selection || !document_->selection->coverage || width <= 0 || width > 200) return;
     Selection s = *document_->selection;
-    if (s.coverage.u16()) s.coverage = Gray16Ptr(borderSelection(*s.coverage.u16(), width));
+    if (s.coverage.f32()) s.coverage = GrayFPtr(borderSelection(*s.coverage.f32(), width));
+    else if (s.coverage.u16()) s.coverage = Gray16Ptr(borderSelection(*s.coverage.u16(), width));
     else s.coverage = borderSelection(*s.coverage.u8(), width);
     setSelection(s, QT_TRANSLATE_NOOP("History", "Border Selection"));
 }

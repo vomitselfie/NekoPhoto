@@ -10,6 +10,7 @@
 #include "compositor/colormgmt.h"
 #include "compositor/depth.h"
 #include "compositor/parallel.h"
+#include "compositor/warp.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -292,6 +293,73 @@ std::shared_ptr<ImageF> renderFlattenedF(const Document& document) {
     auto out = std::make_shared<ImageF>(document.width, document.height);
     renderF(document, RenderOptions(), *out);
     return out;
+}
+
+std::shared_ptr<Image> decisionImage(const Document& document) {
+    if (document.sampleType != SampleType::F32) return renderFlattened(document);
+    return encodeImage8(*renderFlattenedF(document), encodedTransfer(document));
+}
+
+bool resizeDocumentF(Document& document, int width, int height, double resolution, Sampling sampling) {
+    // resizeDocument16's steps at 32 bits: each layer through its scaled corners with the float warp and resampler,
+    // light above 1 kept; masks and budgets as at 16 bits.
+    if (!Document::canCreate(width, height, document.sampleType)) return false;
+    const double sx = double(width) / document.width, sy = double(height) / document.height;
+    if (document.width == width && document.height == height) { document.resolution = resolution; return true; }
+    Document out = document;
+    out.width = width; out.height = height; out.resolution = resolution;
+    out.selection.reset();
+    long long used = 0, usedMask = 0;
+    const Affine scale = Affine::scaling(sx, sy);
+    for (auto& layer : out.layers) {
+        if (layer.isLiveSmartObject() && (layer.transform.rotation == 0 || std::abs(sx - sy) < 1e-9)) {
+            const LayerTransform old = layer.transform;
+            layer.transform = old.placing(old.unitToDocument().concatenating(scale));
+            layer.transform.sampling = old.sampling;
+            if (layer.mask && layer.mask->asset.image) {
+                const LayerTransform placement = layer.mask->placement.value_or(old);
+                layer.mask->placement = placement.placing(placement.unitToDocument().concatenating(scale));
+            }
+            continue;
+        }
+        const auto c = layer.transform.corners();
+        double minX = 1e300, minY = 1e300, maxX = -1e300, maxY = -1e300;
+        for (auto& p : c) { minX = std::min(minX, p.x * sx); minY = std::min(minY, p.y * sy); maxX = std::max(maxX, p.x * sx); maxY = std::max(maxY, p.y * sy); }
+        const double left = std::floor(minX), top = std::floor(minY);
+        const int w = std::max(1, int(std::ceil(maxX) - left)), h = std::max(1, int(std::ceil(maxY) - top));
+        LayerTransform box(Point(left, top), Size(w, h));
+        box.sampling = sampling;
+        if (!box.isValid()) return false;
+        Corners corners;
+        for (size_t i = 0; i < 4; i++) corners[i] = {c[i].x * sx, c[i].y * sy};
+        LayerTransform sampled = layer.transform;
+        sampled.sampling = sampling;   // the dialog's choice, not the layer's own
+        if (layer.asset && layer.asset->image.f32()) {
+            if (w > 30000 || h > 30000 || (long long)w * h > document.imagePixelBudget() || (long long)w * h > document.projectPixelBudgetAt() - used) return false;
+            used += (long long)w * h;
+            auto warped = warpImage(layer.asset->image.f32(), sampled, corners, 0);
+            if (!warped) return false;
+            layer.asset = Asset::make(ImageFPtr(warped->image), layer.name);
+            layer.shapeImage.reset();
+            box = warped->transform;
+            box.sampling = sampling;
+        }
+        if (layer.mask && layer.mask->asset.image.f32()) {
+            const GrayF& mask = *layer.mask->asset.image.f32();
+            if (layer.mask->placement) layer.mask->placement = layer.mask->placement->placing(layer.mask->placement->unitToDocument().concatenating(scale));
+            else if (mask.width() > 1 || mask.height() > 1) {
+                if ((long long)w * h > document.imagePixelBudget() || (long long)w * h > document.projectPixelBudgetAt() - usedMask) return false;
+                usedMask += (long long)w * h;
+                auto warped = warpMask(mask, sampled, corners, 0.0f, 0);
+                if (!warped) return false;
+                layer.mask->asset = MaskAsset::make(GrayFPtr(warped->image));
+                if (!layer.asset) box = warped->transform;
+            }
+        }
+        layer.transform = box;
+    }
+    document = out;
+    return true;
 }
 
 } // namespace compositor

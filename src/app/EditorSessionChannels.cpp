@@ -28,6 +28,12 @@ namespace {
 AnyGray canvasGray(const Document& document, const LayerMask& mask, const LayerTransform& transform) {
     const int w = document.width, h = document.height;
     const uint8_t background = mask.placement && mask.asset.thumbnail ? LayerMask::background(*mask.asset.thumbnail) : 0;
+    if (const GrayFPtr& floating = mask.asset.image.f32()) {
+        if (!mask.placement && floating->width() == w && floating->height() == h && transform.samePlacement(LayerTransform(Point(0, 0), document.size()))) return floating;
+        auto out = std::make_shared<GrayF>(w, h, background / 255.0f);
+        sampleMaskCoverage(*floating, transform, document.rect(), 1, background / 255.0f, *out, false);
+        return GrayFPtr(out);
+    }
     if (const Gray16Ptr& deep = mask.asset.image.u16()) {
         // Unplaced and already canvas-sized: the mask as it is.
         if (!mask.placement && deep->width() == w && deep->height() == h && transform.samePlacement(LayerTransform(Point(0, 0), document.size()))) return deep;
@@ -45,6 +51,11 @@ AnyGray canvasGray(const Document& document, const LayerMask& mask, const LayerT
 }
 
 AnyGray inverted(const AnyGray& gray) {
+    if (const GrayFPtr& g = gray.f32()) {
+        auto out = std::make_shared<GrayF>(g->width(), g->height());
+        for (int y = 0; y < g->height(); y++) for (int x = 0; x < g->width(); x++) out->at(x, y) = 1.0f - cleanCoverage(g->at(x, y));
+        return GrayFPtr(out);
+    }
     if (const Gray16Ptr& g = gray.u16()) {
         auto out = std::make_shared<Gray16>(g->width(), g->height());
         for (int y = 0; y < g->height(); y++) for (int x = 0; x < g->width(); x++) out->at(x, y) = uint16_t(one16 - std::min<uint32_t>(g->at(x, y), one16));
@@ -71,6 +82,14 @@ AnyImage solidColor(const Document& document, const std::array<double, 3>& color
 
 AnyImage solidColorRgb(const Document& document, const std::array<double, 3>& color) {
     const int w = document.width, h = document.height;
+    if (document.sampleType == SampleType::F32) {
+        // The overlay colour (encoded sRGB, as it is stored) linearised through the document's curve.
+        const TransferCurve curve = encodedTransfer(document);
+        auto pixels = std::make_shared<ImageF>(w, h);
+        const float c[4] = {curve.toLinear(float(color[0])), curve.toLinear(float(color[1])), curve.toLinear(float(color[2])), 1.0f};
+        pixels->fill(c);
+        return ImageFPtr(pixels);
+    }
     if (document.sampleType == SampleType::U16) {
         auto pixels = std::make_shared<Image16>(w, h);
         const uint16_t c[4] = {uint16_t(std::lround(color[0] * one16)), uint16_t(std::lround(color[1] * one16)), uint16_t(std::lround(color[2] * one16)), uint16_t(one16)};
@@ -467,7 +486,8 @@ bool EditorSession::pasteIntoChannels(const AnyImage& image, QPointF origin) {
     const bool intoAlpha = targetChannel() && findChannel(*document_, *targetChannel())->kind == ChannelKind::Alpha;
     if (!intoAlpha && activeColors_ == allColors()) return false;
     // The clipboard's gray (luminosity) and coverage, at 8 bits: what a paste into a channel writes.
-    const ImagePtr eight = imageAtDepth(image, SampleType::U8).u8();
+    const TransferCurve curve = documentCurve();
+    const ImagePtr eight = imageAtDepth(image, SampleType::U8, &curve).u8();
     if (!eight) return false;
     const int ox = int(std::lround(origin.x())), oy = int(std::lround(origin.y()));
     auto grayAt = [&](int x, int y, double& value, double& cover) {
@@ -483,7 +503,15 @@ bool EditorSession::pasteIntoChannels(const AnyImage& image, QPointF origin) {
         Channel* channel = findChannel(*document_, *targetChannel());
         const AnyGray before = grayAtDepth(channel->image, document_->sampleType);
         AnyGray after;
-        if (const Gray16Ptr& g = before.u16()) {
+        if (const GrayFPtr& g = before.f32()) {
+            auto out = std::make_shared<GrayF>(*g);
+            for (int y = 0; y < out->height(); y++) for (int x = 0; x < out->width(); x++) {
+                double v = 0, a = 0;
+                grayAt(x, y, v, a);
+                if (a > 0) out->at(x, y) = float(out->at(x, y) * (1 - a) + v * a);
+            }
+            after = GrayFPtr(out);
+        } else if (const Gray16Ptr& g = before.u16()) {
             auto out = std::make_shared<Gray16>(*g);
             for (int y = 0; y < out->height(); y++) for (int x = 0; x < out->width(); x++) {
                 double v = 0, a = 0;
@@ -519,7 +547,19 @@ bool EditorSession::pasteIntoChannels(const AnyImage& image, QPointF origin) {
         || t.origin.x != std::floor(t.origin.x) || t.origin.y != std::floor(t.origin.y)) return false;
     const int lx = int(t.origin.x), ly = int(t.origin.y);
     AnyImage result;
-    if (const Image16Ptr& src = layer->asset->image.u16()) {
+    if (const ImageFPtr& src = layer->asset->image.f32()) {
+        // The clipboard's gray is an encoded level: linearised, then mixed in as light.
+        auto out = std::make_shared<ImageF>(*src);
+        for (int y = 0; y < out->height(); y++) for (int x = 0; x < out->width(); x++) {
+            double v = 0, a = 0;
+            grayAt(x + lx, y + ly, v, a);
+            float* p = out->pixel(x, y);
+            if (a <= 0 || !(p[3] > 0)) continue;
+            const double light = curve.toLinear(float(std::min(1.0, v)));
+            for (int c = 0; c < 3; c++) p[c] = float((double(p[c]) / p[3] * (1 - a) + light * a) * p[3]);
+        }
+        result = ImageFPtr(out);
+    } else if (const Image16Ptr& src = layer->asset->image.u16()) {
         auto out = std::make_shared<Image16>(*src);
         for (int y = 0; y < out->height(); y++) for (int x = 0; x < out->width(); x++) {
             double v = 0, a = 0;

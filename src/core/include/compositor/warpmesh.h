@@ -50,5 +50,6 @@ std::optional<WarpedRaster16> renderWarpedOverBox(const Image16& image, const Wa
 /// The same at 32 bits (float means and bilinear taps, nothing rounded).
 struct WarpedRasterF { std::shared_ptr<ImageF> image; LayerTransform transform; };
 std::optional<WarpedRasterF> renderWarpedImage(const ImageF& image, const WarpMesh& mesh, const std::array<double, 8>& quad, const Rect* clip = nullptr);
+std::optional<WarpedRasterF> renderWarpedOverBox(const ImageF& image, const WarpMesh& mesh, const Rect& box);
 
 } // namespace compositor

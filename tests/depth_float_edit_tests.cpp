@@ -6,11 +6,14 @@
 #include "float_reference.h"
 #include "compositor/adjustments.h"
 #include "compositor/blur.h"
+#include "compositor/channels.h"
 #include "compositor/colormgmt.h"
 #include "compositor/depth.h"
 #include "compositor/filters.h"
+#include "compositor/morphology.h"
 #include "compositor/render.h"
 #include "compositor/resample.h"
+#include "compositor/selection.h"
 #include "compositor/warp.h"
 #include <cmath>
 #include <cstdio>
@@ -357,6 +360,117 @@ TEST_CASE(warps_at_32_bits_encode_back_to_the_8_bit_warp) {
             }
     CHECK(interior > 400);
     (void)rng;
+}
+
+
+TEST_CASE(selections_are_float_coverage) {
+    // Shapes combine in float at 32 bits; an 8-bit shape widens by scale.
+    auto rect = rasterizeRect(Rect(4, 4, 20, 10), 40, 30, true);
+    auto ellipse = rasterizeEllipse(Rect(10, 2, 24, 20), 40, 30, true);
+    std::optional<Selection> s = combineSelection(std::nullopt, AnyGray(GrayPtr(rect)), SelectionMode::Replace, true, SampleType::F32);
+    REQUIRE(s && s->coverage.f32());
+    s = combineSelection(s, AnyGray(GrayPtr(ellipse)), SelectionMode::Add, true, SampleType::F32);
+    REQUIRE(s && s->coverage.f32());
+    for (int y = 0; y < 30; y++)
+        for (int x = 0; x < 40; x++) CHECK_NEAR(s->coverage.f32()->at(x, y), std::max(rect->at(x, y), ellipse->at(x, y)) / 255.0f, 1e-6);
+    const Selection inverse = invertSelection(*s, 40, 30);
+    REQUIRE(inverse.coverage.f32());
+    CHECK_NEAR(inverse.coverage.f32()->at(0, 0), 1.0f, 1e-6);
+    const Selection moved = offsetSelection(*s, 3, -2);
+    REQUIRE(moved.coverage.f32());
+    CHECK_NEAR(moved.coverage.f32()->at(8, 3), s->coverage.f32()->at(5, 5), 1e-6);
+    // Select > Modify on float coverage matches the 8-bit operations on the same shape within a level.
+    auto eight = std::make_shared<GrayImage>(*rect);
+    for (int amount : {3, -2}) {
+        auto f = growSelection(*widenGrayF(*eight), amount);
+        auto e = growSelection(*eight, amount);
+        for (int i = 0; i < 40 * 30; i++) CHECK(std::abs(f->data()[i] * 255.0f - e->data()[i]) <= 1.0f);
+    }
+    auto borderF = borderSelection(*widenGrayF(*eight), 4);
+    auto border8 = borderSelection(*eight, 4);
+    for (int i = 0; i < 40 * 30; i++) CHECK(std::abs(borderF->data()[i] * 255.0f - border8->data()[i]) <= 1.0f);
+    // Feather is the float Gaussian: against the reference blur.
+    auto coverage = widenGrayF(*ellipse);
+    auto feathered = featherSelection(*coverage, 2.5);
+    ImageF asImage(40, 30);
+    for (int y = 0; y < 30; y++) for (int x = 0; x < 40; x++) { float* p = asImage.pixel(x, y); p[0] = p[1] = p[2] = p[3] = coverage->at(x, y); }
+    ref::Canvas expected = ref::canvasOf(asImage);
+    ref::gaussianBlur(expected, 2.5);
+    double worst = 0;
+    for (int y = 0; y < 30; y++) for (int x = 0; x < 40; x++) worst = std::max(worst, std::fabs(feathered->at(x, y) - expected.at(x, y)[3]) / (1e-5 + 1e-5 * expected.at(x, y)[3]));
+    CHECK(worst <= 1);
+}
+
+TEST_CASE(channels_and_layer_transparency_at_32_bits) {
+    std::mt19937 rng(9);
+    Document doc(40, 30);
+    doc.sampleType = SampleType::F32;
+    doc.profile = linearProfile(srgbProfile());
+    auto pixels = randomFloat(rng, 20, 16, 2.0f);
+    Layer layer(Asset::make(ImageFPtr(pixels), "layer"), Point(5, 6));
+    doc.layers.push_back(layer);
+    // A layer's transparency as a selection: its alpha, exactly, where it lies.
+    auto cover = coverageFromLayerF(doc, doc.layers[0]);
+    CHECK_NEAR(cover->at(5 + 3, 6 + 4), pixels->pixel(3, 4)[3], 1e-7);
+    CHECK_NEAR(cover->at(0, 0), 0.0f, 1e-7);
+    // Save Selection into an alpha channel and load it back, in float.
+    Selection s;
+    s.coverage = GrayFPtr(cover);
+    doc.selection = s;
+    Channel channel = makeAlphaChannel(doc, "Alpha 1");
+    REQUIRE(channel.image.f32());
+    saveSelectionInto(channel, doc.selection, SelectionMode::Replace, doc.sampleType, doc.width, doc.height);
+    REQUIRE(channel.image.f32());
+    doc.channels.push_back(channel);
+    doc.selection.reset();
+    SelectionSource source;
+    source.kind = SelectionSource::AlphaChannel;
+    source.id = channel.id;
+    auto loaded = loadSelectionFrom(doc, source, false, SelectionMode::Replace, true);
+    REQUIRE(loaded && loaded->coverage.f32());
+    CHECK(*loaded->coverage.f32() == *cover);
+    // Color Indicates Selected Areas inverts the stored gray and keeps the selection.
+    setSelectedAreas(doc.channels[0], true);
+    auto again = loadSelectionFrom(doc, source, false, SelectionMode::Replace, true);
+    REQUIRE(again && again->coverage.f32());
+    for (int i = 0; i < 40 * 30; i++) CHECK_NEAR(again->coverage.f32()->data()[i], cover->data()[i], 1e-6);
+    // The composite as a selection decides on the encoded colour.
+    source.kind = SelectionSource::Composite;
+    auto composite = selectionSourceCoverage(doc, source);
+    CHECK(bool(composite.f32()));
+}
+
+TEST_CASE(decision_image_is_the_exposure_0_encoding) {
+    // The wand, Quick Select and Trim decide on decisionImage(): an 8-bit document converted to 32 bits gives its own
+    // 8-bit composite back, whatever view the canvas has.
+    std::mt19937 rng(21);
+    Document doc(48, 32);
+    doc.layers.push_back(Layer(Asset::make(randomImage(rng, 48, 32, true), "a"), Point(0, 0)));
+    doc.layers.push_back(Layer(Asset::make(randomImage(rng, 20, 12, true), "b"), Point(3, 4)));
+    const auto eight = renderFlattened(doc);
+    Document f = doc;
+    REQUIRE(convertSampleType(f, SampleType::F32));
+    CHECK(*decisionImage(f) == *eight);
+    CHECK(*decisionImage(doc) == *eight);
+}
+
+TEST_CASE(image_size_resamples_in_float) {
+    // Image Size of an axis-aligned layer covering the canvas: the float separable resampler, against the reference.
+    std::mt19937 rng(17);
+    auto pixels = randomFloat(rng, 40, 30, 3.0f);
+    for (auto [filter, sampling] : {std::pair{ResampleFilter::Lanczos3, Sampling::High}, std::pair{ResampleFilter::Triangle, Sampling::Smooth}}) {
+        Document doc(40, 30);
+        doc.sampleType = SampleType::F32;
+        doc.profile = linearProfile(srgbProfile());
+        doc.layers.push_back(Layer(Asset::make(ImageFPtr(pixels), "layer"), Point(0, 0)));
+        REQUIRE(resizeDocument(doc, 73, 51, 144, sampling));
+        const ImageFPtr out = doc.layers[0].asset->image.f32();
+        REQUIRE(out && out->width() == 73 && out->height() == 51);
+        const auto expected = ref::resample(ref::canvasOf(*pixels), 73, 51, 40.0 / 73 / 2, 40.0 / 73, 30.0 / 51 / 2, 30.0 / 51, filter);
+        const double error = ref::worstError(*out, expected);
+        if (!(error <= 1)) std::fprintf(stderr, "  image size %d: %g\n", int(filter), error);
+        CHECK(error <= 1);
+    }
 }
 
 TEST_MAIN()

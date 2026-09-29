@@ -60,6 +60,7 @@ qt_add_executable(nekophoto
     ChannelDialogs.h
     EditorSessionPainting.cpp
     EditorSessionPixels.cpp
+    EditorSessionFloat.cpp
     EditorSessionQuickSelect.cpp
     EditorSessionSelection.cpp
     EditorSessionSmartObjects.cpp

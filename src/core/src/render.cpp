@@ -328,7 +328,7 @@ std::shared_ptr<GrayImage> resampleMask(const GrayImage& mask, const LayerTransf
 
 bool resizeDocument(Document& document, int width, int height, double resolution, Sampling sampling) {
     if (document.sampleType == SampleType::U16) return resizeDocument16(document, width, height, resolution, sampling);
-    if (document.sampleType == SampleType::F32) return false;   // Image Size at 32 bits is not ported yet (P5b)
+    if (document.sampleType == SampleType::F32) return resizeDocumentF(document, width, height, resolution, sampling);
     if (!Document::canCreate(width, height, document.sampleType)) return false;
     const long long project = Document::projectPixelBudgetAt(document.sampleType);
     double sx = double(width) / document.width, sy = double(height) / document.height;

@@ -30,5 +30,10 @@ std::shared_ptr<Gray16> growSelection(const Gray16& coverage, int amount);
 std::shared_ptr<Gray16> smoothSelection(const Gray16& coverage, int radius);
 std::shared_ptr<Gray16> borderSelection(const Gray16& coverage, int width);
 std::shared_ptr<Gray16> featherSelection(const Gray16& coverage, double radius);
+/// The same on 32-bit coverage (0..1, selected from 0.5), unrounded.
+std::shared_ptr<GrayF> growSelection(const GrayF& coverage, int amount);
+std::shared_ptr<GrayF> smoothSelection(const GrayF& coverage, int radius);
+std::shared_ptr<GrayF> borderSelection(const GrayF& coverage, int width);
+std::shared_ptr<GrayF> featherSelection(const GrayF& coverage, double radius);
 
 } // namespace compositor
