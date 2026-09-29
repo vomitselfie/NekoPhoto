@@ -146,6 +146,37 @@ void ModeOps<S, M>::drawLayer(const Params& params, const Rect& region, double s
     const BlendMode mode = params.mode;
     const bool dissolve = blendModeFor(mode, M) == BlendMode::Dissolve;
 
+    // On the output grid at whole pixels: rows of the layer straight over the destination, one span per row (as the
+    // RGB executors do).
+    const Affine& o2p = m.outputToPixel;
+    const bool onGrid = !dissolve && factor == 1 && std::fabs(o2p.a - 1) < 1e-9 && std::fabs(o2p.b) < 1e-9 && std::fabs(o2p.c) < 1e-9
+        && std::fabs(o2p.d - 1) < 1e-9 && std::fabs(o2p.tx - std::round(o2p.tx)) < 1e-9 && std::fabs(o2p.ty - std::round(o2p.ty)) < 1e-9
+        && (!mask || placedMask || (maskScaleX == 1 && maskScaleY == 1));
+    if (onGrid) {
+        const int offsetX = int(std::round(o2p.tx)), offsetY = int(std::round(o2p.ty));
+        const int spanBegin = std::max(xBegin, -offsetX), spanEnd = std::min(xEnd, pw - offsetX);
+        if (spanEnd <= spanBegin) return;
+        parallelRows(int(m.outputRect.minY()), int(m.outputRect.maxY()), [&](int ya, int yb) {
+            std::vector<Step> steps(size_t(spanEnd - spanBegin));
+            for (int y = ya; y < yb; y++) {
+                const int py = y + offsetY;
+                if (py < 0 || py >= ph) continue;
+                const Sample* covRow = coverage ? coverage->row(y) : nullptr;
+                const Sample* placedRow = placedMask ? placedMask->row(y) : nullptr;
+                const Sample* maskRow = mask && !placedMask ? mask->row(py) : nullptr;
+                for (int x = spanBegin; x < spanEnd; x++) {
+                    float cov = opacity;
+                    if (covRow) cov *= covRow[x] * inv;
+                    if (placedRow) cov *= placedRow[x] * inv;
+                    else if (maskRow) cov *= maskRow[x + offsetX] * inv;
+                    steps[size_t(x - spanBegin)] = ModeOps::steps(cov);
+                }
+                span(mode, source->pixel(spanBegin + offsetX, py), steps.data(), out.pixel(spanBegin, y), spanEnd - spanBegin);
+            }
+        });
+        return;
+    }
+
     parallelRows(int(m.outputRect.minY()), int(m.outputRect.maxY()), [&](int ya, int yb) {
         std::vector<Sample> samples(size_t(xEnd - xBegin) * N);
         std::vector<Step> steps(size_t(xEnd - xBegin));
