@@ -791,6 +791,12 @@ void EditorSession::invertMask() {
         const size_t n = size_t(out->width()) * size_t(out->height());
         for (size_t i = 0; i < n; i++) out->data()[i] = uint16_t(one16 - out->data()[i]);
         inverted = MaskAsset::make(Gray16Ptr(out));
+    } else if (auto floating = layer->mask->asset.image.f32()) {
+        // At 32 bits: 1 - v (coverage, not light).
+        auto out = std::make_shared<GrayF>(*floating);
+        const size_t n = size_t(out->width()) * size_t(out->height());
+        for (size_t i = 0; i < n; i++) out->data()[i] = cleanCoverage(1 - out->data()[i]);
+        inverted = MaskAsset::make(GrayFPtr(out));
     } else {
         auto out = std::make_shared<GrayImage>(*layer->mask->asset.image.u8());
         for (size_t i = 0; i < out->byteCount(); i++) out->data()[i] = uint8_t(255 - out->data()[i]);

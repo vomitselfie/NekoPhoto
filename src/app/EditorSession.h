@@ -158,8 +158,11 @@ public:
     static QString budgetText(const compositor::BudgetCheck& check);
     /// The composite at 8 bits: a 16-bit document's is dithered down (for the 8-bit formats and the clipboard).
     std::shared_ptr<compositor::Image> flattened() const;
-    /// The composite at the document's depth (16-bit exports); an 8-bit document's widened.
+    /// The composite at the document's depth (16-bit exports); an 8-bit document's widened. A 32-bit document's is
+    /// tone-mapped at exposure 0 and encoded through its curve, as 32-bit exports to 8 and 16 bits are.
     std::shared_ptr<compositor::Image16> flattened16() const;
+    /// A 32-bit document's composite in linear float (32-bit files); an 8- or 16-bit one's linearised.
+    std::shared_ptr<compositor::ImageF> flattenedF() const;
 
     // Bit depth (docs/bit-depth.md)
     compositor::SampleType sampleType() const { return document_ ? document_->sampleType : compositor::SampleType::U8; }
@@ -169,9 +172,19 @@ public:
     bool featuresGated() const { return sampleType() != compositor::SampleType::U8 || colorMode() != compositor::ColorMode::RGB; }
     /// The tooltip of an item greyed for the document: "Not available in CMYK mode", or "Not available in 16-bit yet".
     QString unavailableTip() const;
-    /// Image > Mode > 8 Bits/Channel or 16 Bits/Channel: every layer, mask and the selection converted, one undo step.
-    /// False, with `error` saying why (a 16-bit document holds half the pixels within the same memory), when it cannot.
-    bool convertMode(compositor::SampleType type, QString* error = nullptr);
+    /// The same for one feature: at 32 bits "Not available in 32-bit mode" for what Photoshop lacks there, "Not
+    /// available in 32-bit yet" for what is not ported.
+    QString unavailableTip(std::string_view feature) const;
+    /// Image > Mode > 8, 16 or 32 Bits/Channel: every layer, mask and the selection converted, one undo step. From 32
+    /// bits `toning` is HDR Toning's settings (none: the values as they are). False, with `error` saying why (a 16-bit
+    /// document holds half the pixels within the same memory, a 32-bit one a quarter), when it cannot.
+    bool convertMode(compositor::SampleType type, QString* error = nullptr, const compositor::View32* toning = nullptr);
+    /// A 32-bit document's view (View ▸ 32-bit Preview Options, the status bar's exposure): what the canvas shows, not
+    /// the pixels; not an undo step. Each tab keeps its own.
+    const compositor::View32& view32() const { return view32_; }
+    void setView32(const compositor::View32& view);
+    /// The document's brightest luminance, for Highlight Compression's white (cached per document revision).
+    float documentPeak();
     // Colour management (EditorSessionColor.cpp, docs/color-management.md).
     /// Edit > Assign Profile: the document's profile only, no pixel changes; one undo step. Empty: untagged (sRGB).
     bool assignProfile(const compositor::ColorProfile& profile);
@@ -862,6 +875,8 @@ signals:
     void notice(const QString& text);
     void toolChanged();
     void viewportChanged();
+    /// The 32-bit view changed (the canvas renders again).
+    void view32Changed();
     void transformChanged();
     void historyChanged();
     void titleChanged();
@@ -954,6 +969,9 @@ private:
     bool visibilitySwipe_ = false;
     /// Bumped on every document notification; cheap change detection for caches.
     uint64_t documentRevision_ = 0;
+    compositor::View32 view32_;
+    uint64_t peakRevision_ = ~uint64_t(0);
+    float peak_ = 0;
     std::optional<compositor::AnimationFrame> previewBase_;   // the layer states playback began from
     std::vector<QPointF> strokePoints_;   // the stroke so far, for an action recording it
     std::vector<compositor::BrushSample> strokeSamples_;   // the pen at each of those points

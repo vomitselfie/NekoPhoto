@@ -378,10 +378,12 @@ void MainWindow::exportPng() {
     if (!convert) return;
     const color::ExportPlan plan = color::exportPlan(doc, *convert);
     const std::vector<uint8_t>* icc = plan.icc.empty() ? nullptr : &plan.icc;
-    // A 16-bit document as a 16-bit PNG.
-    if (session_->sampleType() == SampleType::U16) {
+    // A 16-bit document as a 16-bit PNG; a 32-bit one too, tone-mapped at exposure 0.
+    if (session_->sampleType() != SampleType::U8) {
         auto deep = color::flatten16(doc, plan);
         if (!deep || !writePngImage16(path.toStdString(), *deep, doc.resolution, &error, icc)) showError(tr("Couldn’t export PNG"), QString::fromStdString(error));
+        else if (session_->sampleType() == SampleType::F32)
+            statusBar()->showMessage(tr("Exported %1 at 16 bits per channel, tone-mapped from 32 bits at exposure 0 (values above white are clipped).").arg(QFileInfo(path).fileName()), 8000);
         return;
     }
     auto image = color::flatten8(doc, plan);
@@ -389,8 +391,11 @@ void MainWindow::exportPng() {
 }
 
 void MainWindow::noteDitheredExport(const QString& path) {
-    // The 8-bit formats take a 16-bit document dithered down to 8 bits per channel (EditorSession::flattened).
-    if (session_->sampleType() != SampleType::U8)
+    // The 8-bit formats take a 16-bit document dithered down to 8 bits per channel (EditorSession::flattened), a
+    // 32-bit one tone-mapped at exposure 0.
+    if (session_->sampleType() == SampleType::F32)
+        statusBar()->showMessage(tr("Exported %1 at 8 bits per channel, tone-mapped from 32 bits at exposure 0 (values above white are clipped).").arg(QFileInfo(path).fileName()), 8000);
+    else if (session_->sampleType() != SampleType::U8)
         statusBar()->showMessage(tr("Exported %1, reduced from 16 to 8 bits per channel with dithering.").arg(QFileInfo(path).fileName()), 8000);
 }
 
@@ -513,10 +518,12 @@ void MainWindow::exportTiff() {
     if (path.isEmpty()) return;
     QString error;
     // A 16-bit document as a 16-bit TIFF, when Qt's TIFF plugin writes one.
-    const bool deep = session_->sampleType() == SampleType::U16 && canWriteDeepTiff();
+    const bool deep = session_->sampleType() != SampleType::U8 && canWriteDeepTiff();
     // The document's profile embedded.
     const QByteArray icc = color::exportPlan(*session_->document(), false).iccBytes();
     if (!writeQtImage(path, "tiff", deep ? toQImage16(*session_->flattened16()) : toQImage(*flattened), 100, session_->document()->resolution, &error, icc)) showError(tr("Couldn’t export TIFF"), error);
+    else if (deep && session_->sampleType() == SampleType::F32)
+        statusBar()->showMessage(tr("Exported %1 at 16 bits per channel, tone-mapped from 32 bits at exposure 0 (values above white are clipped).").arg(QFileInfo(path).fileName()), 8000);
     else if (!deep) noteDitheredExport(path);
 }
 

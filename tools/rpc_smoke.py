@@ -584,11 +584,103 @@ def sixteen_bit(rpc):
     assert rpc.call("image.mode", bits=8)["bits"] == 8
     rpc.call("history.undo")
     assert rpc.call("document.info")["bits"] == 16
+    # 16 bits to 32 and back is one undo step each way (the 32-bit section has the rest).
+    assert rpc.call("image.mode", bits=32)["bits"] == 32
+    rpc.call("history.undo")
+    assert rpc.call("document.info")["bits"] == 16
+    rpc.call("document.close", discard=True)
+    rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
+    rpc.call("tabs.close", index=tab["index"], discard=True)
+
+
+def expect_refused(rpc, words, method, **params):
+    """Calls a method that must be refused, and checks the reason names `words`."""
     try:
-        rpc.call("image.mode", bits=32)
-        raise AssertionError("32-bit documents are not available yet")
+        rpc.call(method, **params)
     except RuntimeError as e:
-        print("expected error:", e)
+        assert words in str(e), (method, str(e))
+        return
+    raise AssertionError(method + " should have been refused")
+
+
+def thirty_two_bit(rpc):
+    """Image > Mode > 32 Bits/Channel (docs/bit-depth.md, "32 bits"): the conversion and HDR Toning, what works on a
+    32-bit document (the layer structure, masks, transforms, the view), what is refused and how it says so, and the
+    files it writes; in a tab of its own that is closed afterwards."""
+    work = tempfile.mkdtemp()
+    first = rpc.call("tabs.list")
+    tab = rpc.call("tabs.new")
+    rpc.call("document.new", width=96, height=64)
+    rpc.call("shape.draw", kind="ellipse", x=8, y=8, width=80, height=48, color="#cc6633")
+    before = rpc.call("render", maxSize=0)
+    converted = rpc.call("image.mode", bits=32)
+    assert converted["bits"] == 32 and converted["layerPixelBudget"] == 250000000, converted
+    assert rpc.call("document.info")["bits"] == 32
+    assert rpc.call("history.info")["undo"] == "Convert Mode"
+    # The same size (edges over the background now blend in linear light, as in Photoshop's 32-bit mode).
+    after = rpc.call("render", maxSize=0)
+    assert (after["width"], after["height"]) == (before["width"], before["height"]), after
+    # The layer structure, masks, transforms and Photoshop's 32-bit blend modes work.
+    layer = rpc.call("layers.list")[0]
+    rpc.call("layers.set", id=layer["id"], opacity=0.75, blend="Multiply")
+    rpc.call("layers.set", id=layer["id"], blend="Linear Dodge")
+    expect_refused(rpc, "32-bit mode", "layers.set", id=layer["id"], blend="Overlay")
+    rpc.call("layers.duplicate", id=layer["id"])
+    rpc.call("layers.mask", id=layer["id"], action="add", revealing=False)
+    rpc.call("layers.mask", id=layer["id"], action="invert")
+    rpc.call("layers.mask", id=layer["id"], action="toggle")
+    rpc.call("layers.setTransform", id=layer["id"], x=4, y=2)
+    rpc.call("canvas.flip", vertical=True)
+    rpc.call("layers.add", kind="group")
+    # The view: exposure, gamma, Highlight Compression; not an undo step.
+    undo = rpc.call("history.info")["undo"]
+    view = rpc.call("view.exposure", exposure=1.5)
+    assert view["exposure"] == 1.5 and view["method"] == "exposure-gamma", view
+    rpc.call("screenshot")
+    assert rpc.request("view.exposure", {"method": "highlight-compression", "exposure": 0})["method"] == "highlight-compression"
+    rpc.call("screenshot")
+    rpc.request("view.exposure", {"method": "exposure-gamma", "exposure": 0, "gamma": 1})
+    assert rpc.call("history.info")["undo"] == undo, "the view is not an undo step"
+    expect_refused(rpc, "-20..20", "view.exposure", exposure=40)
+    # Not ported yet: "... not available for 32-bit documents yet"; what Photoshop lacks at 32 bits: "in 32-bit mode".
+    rpc.call("layers.select", id=layer["id"])
+    expect_refused(rpc, "32-bit documents yet", "brush.stroke", points=[[10, 10], [40, 30]])
+    expect_refused(rpc, "32-bit documents yet", "pixels.filter", kind="Gaussian Blur", radius=2)
+    expect_refused(rpc, "32-bit documents yet", "selection.rect", x=4, y=4, width=20, height=20)
+    expect_refused(rpc, "in 32-bit mode", "pixels.bucket", x=10, y=10, color="#ffffff")
+    expect_refused(rpc, "in 32-bit mode", "pixels.mosh", effect="vhs")
+    expect_refused(rpc, "in 32-bit mode", "pixels.contentAwareFill")
+    # Files: PNG and TIFF at 16 bits and the 8-bit formats tone-mapped at exposure 0, saying so; a 32-bit PSD; a
+    # 32-bit project.
+    png = os.path.join(work, "hdr.png")
+    exported = rpc.call("document.export", path=png)
+    assert exported["bits"] == 16 and "tone-mapped" in exported["note"], exported
+    jpeg = rpc.call("document.export", path=os.path.join(work, "hdr.jpg"))
+    assert jpeg["bits"] == 8 and "tone-mapped" in jpeg["note"], jpeg
+    gif = rpc.call("document.export", path=os.path.join(work, "hdr.gif"))
+    assert "tone-mapped" in gif["note"], gif
+    expect_refused(rpc, "32-bit", "document.export", path=os.path.join(work, "hdr.svg"))
+    psd = os.path.join(work, "hdr.psd")
+    rpc.call("document.export", path=psd)
+    with open(psd, "rb") as f:
+        assert f.read(24)[22:24] == b"\x00\x20", "a 32-bit PSD"
+    project = os.path.join(work, "Hdr.comp")
+    rpc.call("document.save", path=project)
+    assert os.path.exists(os.path.join(project, "images", layer["id"] + ".f32z")), os.listdir(os.path.join(project, "images"))
+    rpc.call("document.close", discard=True)
+    rpc.call("document.open", path=project)
+    assert rpc.call("document.info")["bits"] == 32
+    rpc.call("document.close", discard=True)
+    rpc.call("document.open", path=psd)
+    assert rpc.call("document.info")["bits"] == 32, "a 32-bit PSD opens as a 32-bit document"
+    # Down again through HDR Toning; its settings apply from 32 bits only.
+    down = rpc.request("image.mode", {"bits": 8, "method": "exposure-gamma", "exposure": -1, "gamma": 1.2})
+    assert down["bits"] == 8, down
+    rpc.call("history.undo")
+    assert rpc.call("document.info")["bits"] == 32
+    assert rpc.request("image.mode", {"bits": 16, "method": "highlight-compression"})["bits"] == 16
+    expect_refused(rpc, "HDR Toning", "image.mode", bits=8, exposure=1)
+    expect_refused(rpc, "32-bit document", "view.exposure", exposure=1)
     rpc.call("document.close", discard=True)
     rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
     rpc.call("tabs.close", index=tab["index"], discard=True)
@@ -1299,6 +1391,7 @@ def main():
 
     remaining_methods(rpc)
     sixteen_bit(rpc)
+    thirty_two_bit(rpc)
     channels(rpc)
     colour_management(rpc)
 

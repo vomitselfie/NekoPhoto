@@ -2422,6 +2422,46 @@ Working: %2</source>
         <source>View ▸ Proof Colors shows the document as it would look on this device; View ▸ Gamut Warning marks the colours it cannot show.</source>
         <translation>表示 ▸ 色の校正でこのデバイスでの見え方を表示し、表示 ▸ 色域外警告で表現できないカラーを示します。</translation>
     </message>
+    <message>
+        <source>Exposure and Gamma</source>
+        <translation>露光量とガンマ</translation>
+    </message>
+    <message>
+        <source>Highlight Compression</source>
+        <translation>ハイライト圧縮</translation>
+    </message>
+    <message>
+        <source>Method</source>
+        <translation>方法</translation>
+    </message>
+    <message>
+        <source>Exposure</source>
+        <translation>露光量</translation>
+    </message>
+    <message>
+        <source>Gamma</source>
+        <translation>ガンマ</translation>
+    </message>
+    <message>
+        <source>Reset</source>
+        <translation>初期化</translation>
+    </message>
+    <message>
+        <source>32-bit Preview Options</source>
+        <translation>32 bit プレビューオプション</translation>
+    </message>
+    <message>
+        <source>How the canvas shows a 32-bit document&apos;s values; the pixels are not changed.</source>
+        <translation>32 bit/チャンネルのドキュメントの値をカンバスにどう表示するかを設定します。ピクセルは変更されません。</translation>
+    </message>
+    <message>
+        <source>HDR Toning</source>
+        <translation>HDR トーン</translation>
+    </message>
+    <message>
+        <source>Converting to %1 bits per channel: the canvas shows the result. Layers are kept; values above white are clipped.</source>
+        <translation>%1 bit/チャンネルに変換します。カンバスに結果が表示されます。レイヤーは保持され、白を超える値はクリップされます。</translation>
+    </message>
 </context>
 <context>
     <name>app::ActionLibrary</name>
@@ -4301,8 +4341,16 @@ File &gt; New creates a blank canvas.</source>
         <translation>Lab モードでは使用できません</translation>
     </message>
     <message>
+        <source>Not available in 32-bit yet</source>
+        <translation>32 bit/チャンネルではまだ使用できません</translation>
+    </message>
+    <message>
         <source>Not available in 16-bit yet</source>
         <translation>16 bit/チャンネルではまだ使用できません</translation>
+    </message>
+    <message>
+        <source>Not available in 32-bit mode</source>
+        <translation>32 bit/チャンネルモードでは使用できません</translation>
     </message>
     <message>
         <source>%1 is not available in CMYK mode.</source>
@@ -4313,16 +4361,20 @@ File &gt; New creates a blank canvas.</source>
         <translation>Lab モードのドキュメントでは、%1 は使用できません。</translation>
     </message>
     <message>
+        <source>%1 is not available in 32-bit mode.</source>
+        <translation>32 bit/チャンネルモードでは、%1 は使用できません。</translation>
+    </message>
+    <message>
         <source>%1 is not available for %2-bit documents yet.</source>
         <translation>%2 bit/チャンネルのドキュメントでは、%1 はまだ使用できません。</translation>
     </message>
     <message>
-        <source>32-bit documents are not available yet.</source>
-        <translation>32 bit/チャンネルのドキュメントはまだ使用できません。</translation>
-    </message>
-    <message>
         <source>This document is too large for %1 bits per channel: %2</source>
         <translation>このドキュメントは %1 bit/チャンネルには大きすぎます：%2</translation>
+    </message>
+    <message>
+        <source>Adjustment layers are kept but not drawn in a 32-bit document yet; at 8 or 16 bits they draw again.</source>
+        <translation>調整レイヤーは保持されますが、32 bit/チャンネルのドキュメントではまだ描画されません。8 または 16 bit/チャンネルに戻すと再び描画されます。</translation>
     </message>
     <message>
         <source>Cropping</source>
@@ -4335,6 +4387,10 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Image Size</source>
         <translation>画像解像度</translation>
+    </message>
+    <message>
+        <source>32 bits per channel needs an RGB document.</source>
+        <translation>32 bit/チャンネルには RGB ドキュメントが必要です。</translation>
     </message>
     <message>
         <source>This tool</source>
@@ -5546,6 +5602,14 @@ File &gt; New creates a blank canvas.</source>
         <translation>全体</translation>
     </message>
     <message>
+        <source>Exposure of the 32-bit preview, in stops (the pixels are not changed)</source>
+        <translation>32 bit プレビューの露光量（段数。ピクセルは変更されません）</translation>
+    </message>
+    <message>
+        <source>Exposure</source>
+        <translation>露光量</translation>
+    </message>
+    <message>
         <source>Untitled</source>
         <translation>名称未設定</translation>
     </message>
@@ -5966,6 +6030,14 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Couldn’t export PNG</source>
         <translation>PNG を書き出せませんでした</translation>
+    </message>
+    <message>
+        <source>Exported %1 at 16 bits per channel, tone-mapped from 32 bits at exposure 0 (values above white are clipped).</source>
+        <translation>%1 を 16 bit/チャンネルで書き出しました。32 bit/チャンネルから露光量 0 でトーンマッピングしています（白を超える値はクリップされます）。</translation>
+    </message>
+    <message>
+        <source>Exported %1 at 8 bits per channel, tone-mapped from 32 bits at exposure 0 (values above white are clipped).</source>
+        <translation>%1 を 8 bit/チャンネルで書き出しました。32 bit/チャンネルから露光量 0 でトーンマッピングしています（白を超える値はクリップされます）。</translation>
     </message>
     <message>
         <source>Exported %1, reduced from 16 to 8 bits per channel with dithering.</source>
@@ -6598,6 +6670,10 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>&amp;16 Bits/Channel</source>
         <translation>16 bit/チャンネル(&amp;1)</translation>
+    </message>
+    <message>
+        <source>&amp;32 Bits/Channel</source>
+        <translation>32 bit/チャンネル(&amp;3)</translation>
     </message>
     <message>
         <source>&amp;Canvas Size…</source>
@@ -7266,6 +7342,10 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>&amp;Paths Panel</source>
         <translation>パスパネル(&amp;P)</translation>
+    </message>
+    <message>
+        <source>32-bit Pre&amp;view Options…</source>
+        <translation>32 bit プレビューオプション(&amp;V)…</translation>
     </message>
     <message>
         <source>Proof Set&amp;up</source>

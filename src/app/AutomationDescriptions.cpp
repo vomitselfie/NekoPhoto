@@ -56,6 +56,8 @@ const MethodDoc methodDocs[] = {
      "proofProfile:string What to simulate: working-cmyk (the default, Photoshop's), a working space, or an RGB or CMYK ICC file; proofIntent:(perceptual|relative) How colours go to it; proofBlackPoint:bool Black point compensation; "
      "proofColors:bool View > Proof Colors; gamutWarning:bool View > Gamut Warning; gamutColor:color The warning's colour"},
     {"view.zoom", "Zoom the view (not the document).", "zoom:number Zoom factor, 1 = 100%; fit:bool=false Fit the document in the window"},
+    {"view.exposure", "A 32-bit document's view (View > 32-bit Preview Options, the status bar's exposure): how the canvas shows its linear values, not the pixels; not an undo step. Returns the view; with no parameters, only reads it.",
+     "exposure:number Stops, -20..20; gamma:number 0.1..9.99; method:(exposure-gamma|highlight-compression) Exposure and Gamma, or Highlight Compression"},
     {"debug.eye", "Test hook: a pointer event on a layer's eye button in the Layers panel.",
      "id:layer! The layer whose eye is pressed; to:layer The eye the pointer is over; action:(press|move|release)! The event"},
     {"debug.dragSmartFilter", "Test hook: drag a Smart Filter row in the Layers panel and release it above or below another entry row (refused unless in the same stack).",
@@ -104,8 +106,8 @@ const MethodDoc methodDocs[] = {
     {"document.profile", "The document's colour profile: get it, assign one (Edit > Assign Profile: the tag only, the pixel values stay) or convert to one (Edit > Convert to Profile: every layer's pixels and the colours of text, shapes, styles and adjustments, and the foreground and background colours, so the document looks the same). One undo step.",
      "action:(get|assign|convert)=get What to do; profile:string srgb, adobe-rgb, display-p3, prophoto, working (Color Settings' working space: the Working CMYK in a CMYK document), working-cmyk (CMYK documents), none (assign only: untagged, treated as sRGB, or as the Working CMYK in a CMYK document) or an ICC file's path (of the document's mode); "
      "intent:(perceptual|relative)=relative Convert only: the rendering intent; blackPointCompensation:bool=true Convert only"},
-    {"image.mode", "Image > Mode: convert the document to 8 or 16 bits per channel, every layer, mask and the selection, as one undo step. A 16-bit document holds half the pixels of an 8-bit one within the same memory; what has not been ported to 16 bits yet is refused on it (docs/bit-depth.md).",
-     "bits:integer! 8 or 16"},
+    {"image.mode", "Image > Mode: convert the document to 8, 16 or 32 bits per channel, every layer, mask and the selection, as one undo step. A 16-bit document holds half the pixels of an 8-bit one within the same memory, a 32-bit one a quarter; what has not been ported to the depth yet is refused on it (docs/bit-depth.md). 8 or 16 bits to 32 linearise through the profile's curve; from 32 bits HDR Toning applies (method, exposure, gamma; the defaults give an 8- or 16-bit-sourced document back exactly).",
+     "bits:integer! 8, 16 or 32; method:(exposure-gamma|highlight-compression)=exposure-gamma From 32 bits: HDR Toning's method; exposure:number=0 From 32 bits, Exposure and Gamma: stops, -20..20; gamma:number=1 From 32 bits, Exposure and Gamma: 0.1..9.99"},
     {"image.resize", "Resample the whole image (every layer).",
      "width:integer New width (0 keeps the aspect from height); height:integer New height; scale:number Instead of a size: a factor; sampling:(nearest|smooth|high)=high Resampling; resolution:number Pixels per inch to record"},
     // seeing the result

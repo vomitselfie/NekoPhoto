@@ -4,6 +4,7 @@
 #include "LayerStyleDialog.h"
 #include "SmartFilterDialog.h"
 #include "ImageConvert.h"
+#include "compositor/blend.h"
 #include "compositor/vectorlayer.h"
 #include <QStandardItemModel>
 #include <QApplication>
@@ -647,8 +648,20 @@ void LayersPanel::syncAppearance() {
     opacitySpin_->setEnabled(active != nullptr);
     QSignalBlocker b1(blendCombo_), b2(opacitySlider_), b3(opacitySpin_);
     // Pass Through is a folder's alone.
-    if (auto* model = qobject_cast<QStandardItemModel*>(blendCombo_->model()))
+    if (auto* model = qobject_cast<QStandardItemModel*>(blendCombo_->model())) {
         if (auto* item = model->item(0)) item->setEnabled(active && active->isGroup);
+        // A 32-bit document offers Photoshop's 32-bit modes; the others (which still draw, with their inputs clamped)
+        // are greyed, as Photoshop greys them.
+        const bool floatDocument = session_->sampleType() == SampleType::F32;
+        for (int row = 1; row < model->rowCount(); row++) {
+            QStandardItem* item = model->item(row);
+            const QVariant data = item ? item->data(Qt::UserRole) : QVariant();
+            if (!data.isValid() || data.toInt() < 0) continue;
+            const bool offered = !floatDocument || blendModeAt32(BlendMode(data.toInt()));
+            item->setEnabled(offered);
+            item->setToolTip(offered ? QString() : session_->unavailableTip("blend.outside32"));
+        }
+    }
     const int shown = !active ? int(BlendMode::Normal) : active->isGroup && active->passThrough ? -1 : int(active->blendMode);
     blendCombo_->setCurrentIndex(std::max(0, blendCombo_->findData(shown)));
     int opacity = active ? int(std::round(active->opacity * 100)) : 100;

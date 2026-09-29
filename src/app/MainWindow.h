@@ -11,6 +11,7 @@
 class QComboBox;
 class QDockWidget;
 class QLabel;
+class QSlider;
 class QMenu;
 class QToolButton;
 class QStackedWidget;
@@ -216,6 +217,14 @@ private:
     QMap<QAction*, QString> actionFeatures_;
     QAction* mode8Action_ = nullptr;
     QAction* mode16Action_ = nullptr;
+    QAction* mode32Action_ = nullptr;
+    QAction* previewOptionsAction_ = nullptr;
+    /// The status bar's exposure for a 32-bit document's view (hidden otherwise).
+    QWidget* exposureBox_ = nullptr;
+    QSlider* exposureSlider_ = nullptr;
+    QLabel* exposureLabel_ = nullptr;
+    /// Shows the active tab's 32-bit view in the status bar (and hides it for 8- and 16-bit documents).
+    void refreshExposure();
     /// Image > Mode: converts the document, or says why it cannot.
     void convertMode(compositor::SampleType type);
     /// Greys out what the document's depth does not support, with a tooltip saying so.

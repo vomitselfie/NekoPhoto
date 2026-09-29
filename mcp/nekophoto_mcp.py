@@ -1152,11 +1152,14 @@ def document_profile(action: str = "get", profile: Optional[str] = None, intent:
 
 
 @edit("Change the bit depth")
-def image_mode(bits: int) -> str:
-    """Image > Mode: convert the document to 8 or 16 bits per channel (every layer, mask and the selection, one undo
-    step). A 16-bit document holds half the pixels of an 8-bit one in the same memory; methods not yet ported to 16 bits
-    are refused on it with "<method> is not available for 16-bit documents yet" (docs/bit-depth.md)."""
-    return text(call("image.mode", bits=bits))
+def image_mode(bits: int, method: Optional[str] = None, exposure: Optional[float] = None, gamma: Optional[float] = None) -> str:
+    """Image > Mode: convert the document to 8, 16 or 32 bits per channel (every layer, mask and the selection, one undo
+    step). A 16-bit document holds half the pixels of an 8-bit one in the same memory, a 32-bit one a quarter; methods not
+    yet ported to a depth are refused on it with "<method> is not available for 16-bit documents yet" (or 32-bit), and
+    what Photoshop itself lacks at 32 bits with "<method> is not available in 32-bit mode" (docs/bit-depth.md). 8 or 16
+    bits to 32 linearise the colour; from 32 bits, HDR Toning: method exposure-gamma (with exposure in stops and gamma)
+    or highlight-compression; the defaults give an 8- or 16-bit-sourced document back exactly."""
+    return text(call("image.mode", bits=bits, method=method, exposure=exposure, gamma=gamma))
 
 
 @edit("Resize the image")
@@ -1247,6 +1250,14 @@ def color_settings(working_space: Optional[str] = None, policy: Optional[str] = 
 def view_zoom(zoom: Optional[float] = None, fit: bool = False) -> str:
     """Zoom the person's view (1 = 100%) or fit the document in the window; the document is not changed."""
     return text(call("view.zoom", zoom=zoom, fit=fit))
+
+
+@edit("Set the 32-bit view")
+def view_exposure(exposure: Optional[float] = None, gamma: Optional[float] = None, method: Optional[str] = None) -> str:
+    """A 32-bit document's view (View > 32-bit Preview Options, the status bar's exposure): exposure in stops (-20..20),
+    gamma (0.1..9.99), method exposure-gamma or highlight-compression. Changes what the canvas and screenshots show, not
+    the pixels, and is not an undo step; with no arguments it reads the view."""
+    return text(call("view.exposure", exposure=exposure, gamma=gamma, method=method))
 
 
 # ---- prompts ------------------------------------------------------------------------------------

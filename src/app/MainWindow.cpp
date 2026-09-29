@@ -25,6 +25,8 @@
 #include <QFileInfo>
 #include <QLineEdit>
 #include <QLabel>
+#include <QHBoxLayout>
+#include <QSlider>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QMimeData>
@@ -167,6 +169,28 @@ MainWindow::MainWindow() {
     hintLabel_ = new QLabel;
     hintLabel_->setStyleSheet(hintStyle());
     statusBar()->addWidget(zoomBox_);
+    // A 32-bit document's exposure (docs/bit-depth.md, "32 bits"), Photoshop's status-bar slider: the view, not the
+    // pixels. Hidden for 8- and 16-bit documents.
+    exposureBox_ = new QWidget;
+    auto* exposureLayout = new QHBoxLayout(exposureBox_);
+    exposureLayout->setContentsMargins(0, 0, 0, 0);
+    exposureSlider_ = new QSlider(Qt::Horizontal);
+    exposureSlider_->setRange(int(View32::minExposure * 100), int(View32::maxExposure * 100));
+    exposureSlider_->setFixedWidth(120);
+    exposureSlider_->setToolTip(tr("Exposure of the 32-bit preview, in stops (the pixels are not changed)"));
+    exposureLabel_ = new QLabel;
+    exposureLabel_->setMinimumWidth(QFontMetrics(exposureLabel_->font()).horizontalAdvance(QStringLiteral("-20.00")) + 4);
+    exposureLayout->addWidget(new QLabel(tr("Exposure")));
+    exposureLayout->addWidget(exposureSlider_);
+    exposureLayout->addWidget(exposureLabel_);
+    connect(exposureSlider_, &QSlider::valueChanged, this, [this](int value) {
+        View32 v = session_->view32();
+        if (std::lround(v.exposure * 100) == value) return;
+        v.exposure = value / 100.0;
+        session_->setView32(v);
+    });
+    exposureBox_->hide();
+    statusBar()->addWidget(exposureBox_);
     statusBar()->addWidget(sizeLabel_);
     statusBar()->addWidget(hintLabel_, 1);
     statusBar()->addPermanentWidget(positionLabel_);
@@ -382,6 +406,17 @@ QString MainWindow::toolHint(Tool tool, bool erase) {
     return {};
 }
 
+void MainWindow::refreshExposure() {
+    if (!exposureBox_) return;
+    const bool shown = session_ && session_->hasDocument() && session_->sampleType() == SampleType::F32;
+    exposureBox_->setVisible(shown);
+    if (!shown) return;
+    const double exposure = session_->view32().exposure;
+    const QSignalBlocker block(exposureSlider_);
+    exposureSlider_->setValue(int(std::lround(exposure * 100)));
+    exposureLabel_->setText(QStringLiteral("%1%2").arg(exposure > 0 ? QStringLiteral("+") : QString()).arg(exposure, 0, 'f', 2));
+}
+
 void MainWindow::refreshZoom() {
     zoomBox_->lineEdit()->setText(QStringLiteral("%1%").arg(session_->viewport.zoom * 100, 0, 'f', session_->viewport.zoom < 0.1 ? 1 : 0));
 }
@@ -390,6 +425,7 @@ void MainWindow::connectSession() {
     for (auto& c : sessionConnections_) disconnect(c);
     sessionConnections_.clear();
     sessionConnections_.push_back(connect(session_, &EditorSession::viewportChanged, this, &MainWindow::refreshZoom));
+    sessionConnections_.push_back(connect(session_, &EditorSession::view32Changed, this, &MainWindow::refreshExposure));
     sessionConnections_.push_back(connect(session_, &EditorSession::textEditRequested, this, [this](Uuid id) { (new TextDialog(session_, id, this))->show(); }));
     sessionConnections_.push_back(connect(session_, &EditorSession::titleChanged, this, &MainWindow::refreshTitle));
     sessionConnections_.push_back(connect(session_, &EditorSession::quickSelectBusyChanged, this, [this](bool busy) { if (busy) statusBar()->showMessage(tr("Finding the subject…")); else statusBar()->clearMessage(); }));

@@ -1,6 +1,7 @@
 // Automation methods: layers. Registered from AutomationServer::registerHandlers (Automation.cpp).
 #include "compositor/smartobject_edit.h"
 #include "Automation.h"
+#include "compositor/blend.h"
 #include "compositor/depth.h"
 #include "AutomationHandlers.h"
 #include "PresetLibrary.h"
@@ -292,6 +293,9 @@ void AutomationServer::registerLayersHandlers() {
                 if (passThrough && !l.isGroup) fail("Pass Through is a folder's blend mode", invalidParams);
                 blend = passThrough ? std::optional<BlendMode>(BlendMode::Normal) : blendModeNamed(str(p, "blend"));
                 if (!blend) fail("unknown blend mode '" + str(p, "blend") + "'; one of " + blendModeNames().join(", ") + ", or Pass Through for a folder", invalidParams);
+                // A 32-bit document offers Photoshop's 32-bit modes only (the picker greys the others).
+                if (!passThrough && s->sampleType() == SampleType::F32 && !blendModeAt32(*blend))
+                    fail("blend mode " + str(p, "blend") + " is not available in 32-bit mode", invalidParams);
             }
             if (has(p, "sampling")) {
                 sampling = samplingNamed(str(p, "sampling"));

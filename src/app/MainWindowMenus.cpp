@@ -18,6 +18,7 @@
 #include "WarpDialog.h"
 #include "CanvasFrame.h"
 #include "Dialogs.h"
+#include "HdrDialogs.h"
 #include "ImageConvert.h"
 #include "CameraRawDialog.h"
 #include "FilterDialog.h"
@@ -254,7 +255,8 @@ void MainWindow::buildMenus() {
     auto* depths = new QActionGroup(this);
     mode8Action_ = needsDocument(mode->addAction(tr("&8 Bits/Channel"), this, [this] { convertMode(SampleType::U8); }), "document.mode");
     mode16Action_ = needsDocument(mode->addAction(tr("&16 Bits/Channel"), this, [this] { convertMode(SampleType::U16); }), "document.mode");
-    for (QAction* a : {mode8Action_, mode16Action_}) { a->setCheckable(true); depths->addAction(a); }
+    mode32Action_ = needsDocument(mode->addAction(tr("&32 Bits/Channel"), this, [this] { convertMode(SampleType::F32); }), "document.mode");
+    for (QAction* a : {mode8Action_, mode16Action_, mode32Action_}) { a->setCheckable(true); depths->addAction(a); }
     mode8Action_->setChecked(true);
     image->addSeparator();
     needsDocument(image->addAction(tr("&Canvas Size…"), QKeySequence("Ctrl+Alt+C"), this, [this] {
@@ -598,6 +600,12 @@ void MainWindow::buildMenus() {
     view->addAction(pathsDock_->toggleViewAction());
     view->addAction(adjustDock_->toggleViewAction());
     view->addSeparator();
+    // A 32-bit document's view (docs/bit-depth.md, "32 bits"): not an undo step; the canvas shows it as it changes.
+    previewOptionsAction_ = view->addAction(tr("32-bit Pre&view Options…"), this, [this] {
+        const View32 before = session_->view32();
+        auto chosen = askPreviewOptions(this, before, [this](const View32& v) { session_->setView32(v); });
+        session_->setView32(chosen ? *chosen : before);
+    });
     // Soft proofing (docs/color-management.md): Photoshop's Proof Setup, Proof Colors and Gamut Warning.
     QMenu* proofSetup = view->addMenu(tr("Proof Set&up"));
     proofSetup->addAction(tr("Custom…"), this, [this] { color::showProofSetup(this); });
@@ -651,22 +659,38 @@ void MainWindow::buildMenus() {
 
 void MainWindow::convertMode(SampleType type) {
     if (!session_->hasDocument() || session_->sampleType() == type) { refreshDepthGating(); return; }
+    // From 32 bits: HDR Toning, previewed on the canvas through the view (docs/bit-depth.md, "32 bits").
+    std::optional<View32> toning;
+    if (session_->sampleType() == SampleType::F32) {
+        const View32 before = session_->view32();
+        toning = askHdrToning(this, type == SampleType::U16 ? 16 : 8, View32(), [this](const View32& v) { session_->setView32(v); });
+        session_->setView32(before);
+        if (!toning) { refreshDepthGating(); return; }
+    }
     QString error;
-    if (!session_->convertMode(type, &error)) showError(tr("Mode"), error.isEmpty() ? tr("The document could not be converted.") : error);
-    else recordAction("image.mode", {{"bits", type == SampleType::U16 ? 16 : 8}});
+    if (!session_->convertMode(type, &error, toning ? &*toning : nullptr)) showError(tr("Mode"), error.isEmpty() ? tr("The document could not be converted.") : error);
+    else {
+        QJsonObject params{{"bits", type == SampleType::F32 ? 32 : type == SampleType::U16 ? 16 : 8}};
+        if (toning && !toning->isDefault()) {
+            params["method"] = QString::fromLatin1(toneMethodKey(toning->method));
+            params["exposure"] = toning->exposure;
+            params["gamma"] = toning->gamma;
+        }
+        recordAction("image.mode", params);
+    }
     refreshActions();
 }
 
 void MainWindow::refreshDepthGating() {
     const bool has = session_ && session_->hasDocument();
     const bool deep = has && session_->featuresGated();
-    const QString notYet = has ? session_->unavailableTip() : QString();
-    // An action greyed for the depth says why; its own tooltip comes back at 8 bits.
-    auto gate = [&](QAction* a, bool allowed, bool enabled) {
+    // An action greyed for the depth says why ("... in 32-bit mode" for what Photoshop lacks there, else "... yet");
+    // its own tooltip comes back at 8 bits.
+    auto gate = [&](QAction* a, bool allowed, bool enabled, const std::string& feature = {}) {
         a->setEnabled(enabled && allowed);
         if (!allowed) {
             if (!a->property("depthTip").isValid()) a->setProperty("depthTip", a->toolTip());
-            a->setToolTip(notYet);
+            a->setToolTip(has ? session_->unavailableTip(feature) : QString());
         } else if (a->property("depthTip").isValid()) {
             a->setToolTip(a->property("depthTip").toString());
             a->setProperty("depthTip", QVariant());
@@ -674,14 +698,20 @@ void MainWindow::refreshDepthGating() {
     };
     for (QAction* a : documentActions_) {
         const QString feature = actionFeatures_.value(a);
-        gate(a, !deep || (!feature.isEmpty() && session_->supportsFeature(feature.toStdString())), has);
+        gate(a, !deep || (!feature.isEmpty() && session_->supportsFeature(feature.toStdString())), has, feature.toStdString());
     }
-    for (auto it = toolActions_.begin(); it != toolActions_.end(); ++it) gate(it.value(), !deep || session_->toolSupportedAtDepth(it.key()), true);
-    gate(eraserAction_, !deep || session_->toolSupportedAtDepth(Tool::Brush), true);
+    for (auto it = toolActions_.begin(); it != toolActions_.end(); ++it) gate(it.value(), !deep || session_->toolSupportedAtDepth(it.key()), true, EditorSession::toolFeature(it.key()));
+    gate(eraserAction_, !deep || session_->toolSupportedAtDepth(Tool::Brush), true, "tool.brush");
     // Menus show their items' tooltips while something in them is greyed for the depth.
     for (QMenu* menu : menuBar()->findChildren<QMenu*>()) menu->setToolTipsVisible(deep);
-    const bool sixteen = has && session_->sampleType() != SampleType::U8;
-    if (mode8Action_) { mode8Action_->setChecked(!sixteen); mode16Action_->setChecked(sixteen); }
+    const SampleType depth = has ? session_->sampleType() : SampleType::U8;
+    if (mode8Action_) {
+        mode8Action_->setChecked(depth == SampleType::U8);
+        mode16Action_->setChecked(depth == SampleType::U16);
+        mode32Action_->setChecked(depth == SampleType::F32);
+    }
+    if (previewOptionsAction_) previewOptionsAction_->setEnabled(depth == SampleType::F32);
+    refreshExposure();
 }
 
 

@@ -431,6 +431,13 @@ int run(int argc, char** argv) {
                 (new app::ContentAwareScaleDialog(s, &window))->show();
             }
             else if (name == "gmic") (new app::GmicDialog(s, &window))->show();
+            else if (name == "32bit") {
+                // The document at 32 bits, its view a stop brighter: the status bar's exposure and the greyed tools.
+                s->convertMode(compositor::SampleType::F32);
+                compositor::View32 view;
+                view.exposure = 1;
+                s->setView32(view);
+            }
             else if (name == "mosh" || name.startsWith("mosh:")) {
                 // mosh, or mosh:<effect id> (pixel-sort, vhs, ...): the Mosh dialog on the demo's background
                 const QString id = name.section(':', 1).isEmpty() ? QStringLiteral("vhs") : name.section(':', 1);

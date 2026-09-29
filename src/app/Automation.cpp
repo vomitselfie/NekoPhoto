@@ -171,20 +171,11 @@ QJsonObject AutomationServer::endGroup(QLocalSocket* owner) {
 
 namespace {
 
-/// Whether `method` works on a document of `session`'s depth (docs/bit-depth.md). Every method works on an 8-bit
-/// document; on a 16-bit one, those that read, those outside the document, and those whose feature supports() lists
-/// at 16 bits. The rest are refused, "<method> is not available for 16-bit documents yet", until they are ported.
-bool worksAtDepth(const QString& method, const EditorSession& session) {
-    if (!session.hasDocument() || !session.featuresGated()) return true;
-    static const QSet<QString> always = {
-        "app.info", "tabs.list", "tabs.new", "tabs.select", "tabs.close", "history.undo", "history.redo", "history.list", "history.info",
-        "history.beginGroup", "history.endGroup", "rpc.methods", "rpc.describe", "rpc.batch", "events.subscribe", "events.unsubscribe",
-        "view.zoom", "screenshot", "render", "colors.set", "color.settings", "presets.list", "brush.presets", "gmic.filters", "tool.select",
-        "actions.list", "actions.record", "actions.save", "actions.delete", "actions.export", "actions.import", "actions.play", "actions.batch",
-        "document.new", "document.open", "document.close", "document.info", "document.overview",
-        "layers.list", "layers.get", "layers.select", "layers.style", "layers.cage", "selection.info", "selection.render",
-        "adjustments.get", "adjustments.defaults", "paths.list", "vectorMask.get", "shape.get", "smartObject.filters", "timeline.info",
-        "artboards.list", "slices.list", "brush.import", "presets.import", "presets.remove", "channels.list"};
+/// Whether a method works on a document's depth (docs/bit-depth.md): every method works on an 8-bit document; on a
+/// deeper one, those that read, those outside the document, and those whose feature (below) supports() lists at that
+/// depth. The rest are refused, "<method> is not available for 16-bit documents yet" (or 32-bit), until they are
+/// ported, or "<method> is not available in 32-bit mode" for what Photoshop itself lacks at 32 bits.
+const QHash<QString, const char*>& depthFeatures() {
     static const QHash<QString, const char*> features = {
         {"document.save", "document.save"}, {"document.export", "render.document"}, {"document.import", "document.import"}, {"image.mode", "document.mode"}, {"document.profile", "document.profile"},
         {"layers.set", "layers.structure"}, {"layers.add", "layers.structure"}, {"layers.delete", "layers.structure"}, {"layers.duplicate", "layers.structure"},
@@ -219,9 +210,30 @@ bool worksAtDepth(const QString& method, const EditorSession& session) {
         {"smartObject.rasterize", "edit.smartObject"}, {"smartObject.addFilter", "edit.smartObject"}, {"smartObject.setFilter", "edit.smartObject"},
         {"smartObject.removeFilter", "edit.smartObject"}, {"smartObject.moveFilter", "edit.smartObject"}, {"smartObject.filterMask", "edit.smartObject"},
         {"smartObject.editContents", "edit.smartObject"}, {"smartObject.commit", "edit.smartObject"}};
-    if (always.contains(method)) return true;
+    return features;
+}
+
+/// The supports() feature a method is, or null (8-bit only).
+const char* depthFeature(const QString& method) {
+    const QHash<QString, const char*>& features = depthFeatures();
     auto it = features.find(method);
-    return it != features.end() && session.supportsFeature(it.value());
+    return it == features.end() ? nullptr : it.value();
+}
+
+bool worksAtDepth(const QString& method, const EditorSession& session) {
+    if (!session.hasDocument() || !session.featuresGated()) return true;
+    static const QSet<QString> always = {
+        "app.info", "tabs.list", "tabs.new", "tabs.select", "tabs.close", "history.undo", "history.redo", "history.list", "history.info",
+        "history.beginGroup", "history.endGroup", "rpc.methods", "rpc.describe", "rpc.batch", "events.subscribe", "events.unsubscribe",
+        "view.zoom", "view.exposure", "screenshot", "render", "colors.set", "color.settings", "presets.list", "brush.presets", "gmic.filters", "tool.select",
+        "actions.list", "actions.record", "actions.save", "actions.delete", "actions.export", "actions.import", "actions.play", "actions.batch",
+        "document.new", "document.open", "document.close", "document.info", "document.overview",
+        "layers.list", "layers.get", "layers.select", "layers.style", "layers.cage", "selection.info", "selection.render",
+        "adjustments.get", "adjustments.defaults", "paths.list", "vectorMask.get", "shape.get", "smartObject.filters", "timeline.info",
+        "artboards.list", "slices.list", "brush.import", "presets.import", "presets.remove", "channels.list"};
+    if (always.contains(method)) return true;
+    const char* feature = depthFeature(method);
+    return feature && session.supportsFeature(feature);
 }
 
 } // namespace
@@ -245,8 +257,10 @@ QJsonObject AutomationServer::handle(const QJsonObject& request) {
     }
     // A 16-bit document takes only what has been ported to it (compositor/supports.h).
     if (EditorSession* s = window_->session(); s && !worksAtDepth(method, *s)) {
+        const char* feature = depthFeature(method);
         const QString why = s->colorMode() != ColorMode::RGB
             ? method + ": " + QString::fromStdString(notAvailableInMode(s->colorMode()))
+            : s->sampleType() == SampleType::F32 && feature && photoshopLacksAt32(feature) ? method + " is not available in 32-bit mode"
             : method + " is not available for " + QString::fromLatin1(sampleTypeName(s->sampleType())) + "-bit documents yet";
         response["error"] = QJsonObject{{"code", appError}, {"message", why}};
         return response;
@@ -521,6 +535,23 @@ void AutomationServer::registerAppHandlers() {
         document();
         if (flag(p, "fit", false)) session()->fitView(); else session()->zoomTo(num(p, "zoom"));
         return QJsonObject{{"zoom", session()->viewport.zoom}};
+    });
+    add("view.exposure", [session, document](const QJsonObject& p) {
+        // A 32-bit document's view: what the canvas shows, not the pixels (docs/bit-depth.md, "32 bits").
+        if (document().sampleType != SampleType::F32) fail("view.exposure needs a 32-bit document (Image > Mode > 32 Bits/Channel)");
+        View32 v = session()->view32();
+        if (has(p, "exposure")) v.exposure = num(p, "exposure");
+        if (has(p, "gamma")) v.gamma = num(p, "gamma");
+        if (has(p, "method")) {
+            auto method = toneMethodFromKey(str(p, "method").toStdString());
+            if (!method) fail("method must be exposure-gamma or highlight-compression", invalidParams);
+            v.method = *method;
+        }
+        if (!(v.exposure >= View32::minExposure && v.exposure <= View32::maxExposure)) fail("exposure must be -20..20", invalidParams);
+        if (!(v.gamma >= View32::minGamma && v.gamma <= View32::maxGamma)) fail("gamma must be 0.1..9.99", invalidParams);
+        session()->setView32(v);
+        const View32& now = session()->view32();
+        return QJsonObject{{"exposure", now.exposure}, {"gamma", now.gamma}, {"method", QString::fromLatin1(toneMethodKey(now.method))}};
     });
 }
 

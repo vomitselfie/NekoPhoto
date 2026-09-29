@@ -247,12 +247,40 @@ bool EditorSession::insertImage(const AnyImage& image, const QString& name, std:
 std::shared_ptr<Image> EditorSession::flattened() const {
     if (!document_) return nullptr;
     if (document_->sampleType == SampleType::U16) return ditherToEightBit(*renderFlattened16(*document_));
+    // 32 bits: tone-mapped at exposure 0 (values above 1 clip) and encoded through the document's curve.
+    if (document_->sampleType == SampleType::F32) return encodeImage8(*renderFlattenedF(*document_), encodedTransfer(*document_));
     return renderFlattened(*document_);
 }
 
 std::shared_ptr<Image16> EditorSession::flattened16() const {
     if (!document_) return nullptr;
+    if (document_->sampleType == SampleType::F32) return encodeImage16(*renderFlattenedF(*document_), encodedTransfer(*document_));
     return renderFlattened16(*document_);
+}
+
+std::shared_ptr<ImageF> EditorSession::flattenedF() const {
+    if (!document_) return nullptr;
+    return renderFlattenedF(*document_);
+}
+
+void EditorSession::setView32(const View32& view) {
+    const View32 v = view.clamped();
+    if (v == view32_) return;
+    view32_ = v;
+    emit view32Changed();
+}
+
+float EditorSession::documentPeak() {
+    if (!document_ || document_->sampleType != SampleType::F32) return 0;
+    if (peakRevision_ == documentRevision_) return peak_;
+    // A reduced render is enough to find the brightest area; the white point is not a pixel-exact figure.
+    RenderOptions o;
+    o.scale = std::min(1.0, 1024.0 / std::max(document_->width, document_->height));
+    ImageF out;
+    renderF(*document_, o, out);
+    peak_ = peakLuminance(out, luminanceWeights(document_->profile));
+    peakRevision_ = documentRevision_;
+    return peak_;
 }
 
 // ---- Bit depth ---------------------------------------------------------------
@@ -265,13 +293,20 @@ QString EditorSession::unavailableTip() const {
     case ColorMode::Lab: return tr("Not available in Lab mode");
     case ColorMode::RGB: break;
     }
+    if (sampleType() == SampleType::F32) return tr("Not available in 32-bit yet");
     return tr("Not available in 16-bit yet");
+}
+
+QString EditorSession::unavailableTip(std::string_view feature) const {
+    if (sampleType() == SampleType::F32 && colorMode() == ColorMode::RGB && photoshopLacksAt32(feature)) return tr("Not available in 32-bit mode");
+    return unavailableTip();
 }
 
 bool EditorSession::refusedAtDepth(std::string_view feature, const QString& what, QString* errorText) {
     if (supportsFeature(feature)) return false;
     const QString message = supports(feature, sampleType())
         ? (colorMode() == ColorMode::CMYK ? tr("%1 is not available in CMYK mode.").arg(what) : tr("%1 is not available in Lab mode.").arg(what))
+        : sampleType() == SampleType::F32 && photoshopLacksAt32(feature) ? tr("%1 is not available in 32-bit mode.").arg(what)
         : tr("%1 is not available for %2-bit documents yet.").arg(what, QString::fromLatin1(sampleTypeName(sampleType())));
     if (errorText) *errorText = message;
     else emit error(message);
@@ -286,6 +321,12 @@ std::shared_ptr<const GrayImage> EditorSession::selectionCoverage8() const {
 std::shared_ptr<const GrayImage> EditorSession::coverage8(const Selection& selection) {
     const AnyGray& coverage = selection.coverage;
     if (!coverage || coverage.u8()) return coverage.u8();
+    if (coverage.f32()) {
+        static std::weak_ptr<const GrayF> heldF;
+        static std::shared_ptr<const GrayImage> reducedF;
+        if (heldF.lock() != coverage.f32()) { heldF = coverage.f32(); reducedF = narrowGrayF(*coverage.f32()); }
+        return reducedF;
+    }
     // One reduction kept, for the selection on screen (the canvas asks on every tick of its outline).
     static std::weak_ptr<const Gray16> held;
     static std::shared_ptr<const GrayImage> reduced;
@@ -293,9 +334,9 @@ std::shared_ptr<const GrayImage> EditorSession::coverage8(const Selection& selec
     return reduced;
 }
 
-bool EditorSession::convertMode(SampleType type, QString* errorText) {
+bool EditorSession::convertMode(SampleType type, QString* errorText, const View32* toning) {
     if (!document_ || type == document_->sampleType) return document_.has_value();
-    if (type == SampleType::F32) { if (errorText) *errorText = tr("32-bit documents are not available yet."); return false; }
+    if (type == SampleType::F32 && document_->colorMode != ColorMode::RGB) { if (errorText) *errorText = tr("32 bits per channel needs an RGB document."); return false; }
     commitTransform();
     const std::string problem = sampleTypeBudgetProblem(*document_, type);
     if (!problem.empty()) {
@@ -306,11 +347,14 @@ bool EditorSession::convertMode(SampleType type, QString* errorText) {
     cancelBrush();
     beginEdit(QT_TRANSLATE_NOOP("History", "Convert Mode"));
     std::string why;
-    const bool ok = convertSampleType(*document_, type, &why);
+    const bool ok = convertSampleType(*document_, type, &why, toning);
     endEdit();
     if (!ok) { if (errorText) *errorText = QString::fromStdString(why); return false; }
     // A tool that does not work at the new depth gives way to the Move tool.
     if (!toolSupportedAtDepth(tool_)) selectTool(Tool::Move);
+    // Adjustment layers are kept at 32 bits but not drawn until they are ported (P5b).
+    if (type == SampleType::F32 && std::any_of(document_->layers.begin(), document_->layers.end(), [](const Layer& l) { return l.adjustment.has_value(); }))
+        emit notice(tr("Adjustment layers are kept but not drawn in a 32-bit document yet; at 8 or 16 bits they draw again."));
     notifyDocument();
     emit selectionChanged();
     emit toolChanged();

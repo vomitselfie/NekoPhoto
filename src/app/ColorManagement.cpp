@@ -193,7 +193,8 @@ QString monitorProfileSource() {
 
 ColorTransformPtr displayTransform(const Document& document) {
     const Settings& s = settings();
-    const PixelFormat input = document.sampleType == SampleType::U16 ? PixelFormat::RGBA16 : PixelFormat::RGBA8;
+    const PixelFormat input = document.sampleType == SampleType::F32 ? PixelFormat::RGBAFloat
+                            : document.sampleType == SampleType::U16 ? PixelFormat::RGBA16 : PixelFormat::RGBA8;
     if (s.proofColors || s.gamutWarning) {
         ProofSettings proof;
         if (auto p = profileForKey(s.proofProfile, nullptr, ProfileKinds::RGBOrCMYK)) proof.profile = *p;
@@ -296,12 +297,17 @@ AnyImage convertForDocument(const AnyImage& image, const std::optional<ColorProf
 
 // ---- Exports -------------------------------------------------------------------------------------------------------
 
-bool hasNonSrgbProfile(const Document& document) { return !document.profile.empty() && !equivalentProfiles(document.profile, {}); }
+bool hasNonSrgbProfile(const Document& document) {
+    // A 32-bit document is exported in the profile its values encode to (its gamma counterpart).
+    const ColorProfile profile = encodedProfileOf(document);
+    return !profile.empty() && !equivalentProfiles(profile, {});
+}
 
 ExportPlan exportPlan(const Document& document, bool convertToSrgb, bool embed) {
     ExportPlan plan;
-    if (convertToSrgb && hasNonSrgbProfile(document)) { plan.convert = true; plan.from = document.profile; return plan; }
-    if (embed) plan.icc = document.profile.icc;
+    const ColorProfile profile = encodedProfileOf(document);
+    if (convertToSrgb && hasNonSrgbProfile(document)) { plan.convert = true; plan.from = profile; return plan; }
+    if (embed) plan.icc = profile.icc;
     return plan;
 }
 
@@ -309,6 +315,12 @@ void ExportPlan::apply(Image& image) const { if (convert) convertImage(image, fr
 void ExportPlan::apply(Image16& image) const { if (convert) convertImage(image, from, {}); }
 
 std::shared_ptr<Image> flatten8(const Document& document, const ExportPlan& plan) {
+    if (document.sampleType == SampleType::F32) {
+        // Tone-mapped at exposure 0: values above 1 clip, then the document's curve encodes.
+        auto flat = encodeImage8(*renderFlattenedF(document), encodedTransfer(document));
+        plan.apply(*flat);
+        return flat;
+    }
     if (document.sampleType == SampleType::U16) {
         auto deep = renderFlattened16(document);
         plan.apply(*deep);
@@ -320,7 +332,7 @@ std::shared_ptr<Image> flatten8(const Document& document, const ExportPlan& plan
 }
 
 std::shared_ptr<Image16> flatten16(const Document& document, const ExportPlan& plan) {
-    auto deep = renderFlattened16(document);
+    auto deep = document.sampleType == SampleType::F32 ? encodeImage16(*renderFlattenedF(document), encodedTransfer(document)) : renderFlattened16(document);
     plan.apply(*deep);
     return deep;
 }

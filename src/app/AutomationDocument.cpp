@@ -164,10 +164,14 @@ void AutomationServer::registerDocumentHandlers() {
                                {"masks", summary.masks}, {"clipped", summary.clipped}, {"adjustments", summary.adjustments}, {"texts", summary.texts}, {"smartObjects", summary.smartObjects}, {"warnings", warnings}, {"notes", notes}};
         }
         const bool deep = doc.sampleType == SampleType::U16;
+        // A 32-bit document goes to 16 bits (PNG, TIFF) or 8 tone-mapped at exposure 0: values above white clip.
+        const bool floatDocument = doc.sampleType == SampleType::F32;
+        const QString toneNote = QStringLiteral("tone-mapped from 32 bits per channel at exposure 0 (values above white are clipped)");
         // The document's profile is embedded (PNG, JPEG, WebP, TIFF); convertToSrgb converts instead, as the web formats
         // want (the default for GIF, which has no profile).
         const bool gif = suffix == "gif";
         const color::ExportPlan plan = color::exportPlan(doc, flag(p, "convertToSrgb", gif), flag(p, "embedProfile", true));
+        if (suffix == "svg" && floatDocument) fail("SVG export is not available for 32-bit documents yet");
         if (suffix == "svg") {
             // Shape layers as paths, folders as groups, the rest as embedded PNGs (compositor/svg.h).
             SvgExportSummary summary;
@@ -188,16 +192,19 @@ void AutomationServer::registerDocumentHandlers() {
             const Document& shown = document();
             QJsonObject out{{"path", path}, {"width", shown.width}, {"height", shown.height}, {"frames", std::max(1, int(shown.animation.frames.size()))}, {"bits", 8}};
             if (deep) out["note"] = "reduced from 16 to 8 bits per channel with dithering";
+            if (floatDocument) out["note"] = toneNote;
             return out;
         }
         // A 16-bit document as a 16-bit PNG (and TIFF, when Qt writes one); the 8-bit formats get it dithered down.
-        if (deep && (suffix == "png" || ((suffix == "tif" || suffix == "tiff") && canWriteDeepTiff()))) {
+        if ((deep || floatDocument) && (suffix == "png" || ((suffix == "tif" || suffix == "tiff") && canWriteDeepTiff()))) {
             auto image = color::flatten16(doc, plan);
             if (!image) fail("nothing to export");
             std::string error;
             if (suffix == "png") { if (!writePngImage16(path.toStdString(), *image, doc.resolution, &error, plan.icc.empty() ? nullptr : &plan.icc)) fail("couldn't write " + path + ": " + qs(error)); }
             else { QString qerror; if (!writeQtImage(path, "tiff", toQImage16(*image), 100, doc.resolution, &qerror, plan.iccBytes())) fail("couldn't write " + path + ": " + qerror); }
-            return QJsonObject{{"path", path}, {"width", image->width()}, {"height", image->height()}, {"bits", 16}};
+            QJsonObject out{{"path", path}, {"width", image->width()}, {"height", image->height()}, {"bits", 16}};
+            if (floatDocument) out["note"] = toneNote;
+            return out;
         }
         auto flat = color::flatten8(doc, plan);
         if (!flat) fail("nothing to export");
@@ -224,8 +231,9 @@ void AutomationServer::registerDocumentHandlers() {
             std::string error;
             if (!writeIco(path.toStdString(), *flat, defaultIcoSizes, &error, &doc)) fail("couldn't write " + path + ": " + qs(error));
         } else fail("path must end in .psd, .psb, .svg, .png, .jpg, .jpeg, .webp, .tif, .tiff, .gif, .tga or .ico", invalidParams);
-        QJsonObject out{{"path", path}, {"width", flat->width()}, {"height", flat->height()}, {"bits", 8}, {"profile", plan.icc.empty() ? QJsonValue::Null : QJsonValue(QString::fromStdString(doc.profile.description))}, {"convertedToSrgb", plan.convert}};
+        QJsonObject out{{"path", path}, {"width", flat->width()}, {"height", flat->height()}, {"bits", 8}, {"profile", plan.icc.empty() ? QJsonValue::Null : QJsonValue(QString::fromStdString(encodedProfileOf(doc).description))}, {"convertedToSrgb", plan.convert}};
         if (deep) out["note"] = "reduced from 16 to 8 bits per channel with dithering";
+        if (floatDocument) out["note"] = toneNote;
         return out;
     });
     add("document.profile", [session, document](const QJsonObject& p) {
@@ -283,12 +291,25 @@ void AutomationServer::registerDocumentHandlers() {
     });
     add("canvas.flip", [session, document](const QJsonObject& p) { document(); session()->flipCanvas(!flag(p, "vertical", false)); return QJsonObject{}; });
     add("image.mode", [session, document](const QJsonObject& p) {
-        // Image > Mode > 8 or 16 Bits/Channel: every layer, mask and the selection converted, one undo step.
+        // Image > Mode > 8, 16 or 32 Bits/Channel: every layer, mask and the selection converted, one undo step. From 32
+        // bits, HDR Toning's settings (the defaults: the values as they are).
         document();
         const int bits = integer(p, "bits");
-        if (bits != 8 && bits != 16) fail("bits must be 8 or 16 (32-bit documents are not available yet)", invalidParams);
+        if (bits != 8 && bits != 16 && bits != 32) fail("bits must be 8, 16 or 32", invalidParams);
+        const SampleType target = bits == 32 ? SampleType::F32 : bits == 16 ? SampleType::U16 : SampleType::U8;
+        View32 toning;
+        if (has(p, "method")) {
+            auto method = toneMethodFromKey(str(p, "method").toStdString());
+            if (!method) fail("method must be exposure-gamma or highlight-compression", invalidParams);
+            toning.method = *method;
+        }
+        if (has(p, "exposure")) toning.exposure = num(p, "exposure");
+        if (has(p, "gamma")) toning.gamma = num(p, "gamma");
+        if (!(toning.exposure >= View32::minExposure && toning.exposure <= View32::maxExposure)) fail("exposure must be -20..20", invalidParams);
+        if (!(toning.gamma >= View32::minGamma && toning.gamma <= View32::maxGamma)) fail("gamma must be 0.1..9.99", invalidParams);
+        if (!toning.isDefault() && document().sampleType != SampleType::F32) fail("method, exposure and gamma are HDR Toning's: they apply from 32 bits", invalidParams);
         QString error;
-        if (!session()->convertMode(bits == 16 ? SampleType::U16 : SampleType::U8, &error)) fail(error.isEmpty() ? QStringLiteral("the document could not be converted") : error);
+        if (!session()->convertMode(target, &error, toning.isDefault() ? nullptr : &toning)) fail(error.isEmpty() ? QStringLiteral("the document could not be converted") : error);
         const Document& now = document();
         return QJsonObject{{"bits", bits}, {"width", now.width}, {"height", now.height}, {"layerBytes", double(now.layerBytes())},
                            {"layerBudgetBytes", double(Document::projectPixelBudgetAt(now.sampleType) * 4 * (long long)sampleBytes(now.sampleType))},

@@ -157,6 +157,7 @@ qt_add_executable(nekophoto
     WelcomeDialog.cpp
     Dialogs.h
     Dialogs.cpp
+    HdrDialogs.cpp
     MainWindow.h
     MainWindow.cpp
     MainWindowFiles.cpp

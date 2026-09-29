@@ -309,7 +309,11 @@ void EditorSession::addPixelLayer(AnyImage image, QPointF origin, const QString&
     if (!document_ || !image) return;
     if (const BudgetCheck check = document_->canInsertImage(image.width(), image.height()); !check) { emit error(budgetText(check)); return; }
     // Pixels copied from a document of the other depth (or another app, at 8 bits) take this one's.
-    image = imageAtDepth(image, document_->sampleType);
+    if (document_->sampleType == SampleType::F32) {
+        // Into a 32-bit document: linearised through the document's own encoding.
+        const TransferCurve curve = encodedTransfer(*document_);
+        image = imageAtDepth(image, SampleType::F32, &curve);
+    } else image = imageAtDepth(image, document_->sampleType);
     Layer layer(Asset::makeAny(image, nextLayerName(document_->layers, QCoreApplication::translate("Names", "Layer").toStdString())), toPoint(origin));
     const Layer* active = activeLayer();
     layer.parentId = active && active->isGroup ? activeLayerId_ : (active ? active->parentId : std::nullopt);
