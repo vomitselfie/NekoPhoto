@@ -124,7 +124,7 @@ struct RenderExecDeep {
         if (O::styles && layerStyleOf(g, document)) drawGroupStyle(g, *cur, StyledDraw::Phase::Exterior);
         Frame f{&g, nullptr, nullptr, cur};
         if (isolates(g)) { f.buffer = std::make_unique<Img>(blank(outWidth, outHeight)); cur = f.buffer.get(); }
-        else if (fades(g)) f.before = std::make_unique<Img>(*cur);
+        else if (fades(g) || folderContentFill(g) < 1) f.before = std::make_unique<Img>(*cur);
         frames.push_back(std::move(f));
     }
 
@@ -132,7 +132,8 @@ struct RenderExecDeep {
         if (frames.empty() || frames.back().group != &g) return;
         Frame f = std::move(frames.back());
         frames.pop_back();
-        const float opacity = float(clamp(g.opacity, 0.0, 1.0));
+        // The contents at the folder's opacity and, when it has a style, its Fill (the effects are drawn after).
+        const float opacity = float(clamp(g.opacity, 0.0, 1.0)) * folderContentFill(g);
         if (f.buffer) {
             cur = f.parent;
             compositeRows(*f.buffer, blendOf(g), opacity, nullptr, *cur);

@@ -424,6 +424,12 @@ void layerOpacities(const Layer& layer, float& master, float& fill) {
     }
 }
 
+float folderContentFill(const Layer& layer) {
+    if (!layer.isGroup || !layer.psdCarry || !effectsBlock(layer)) return 1;
+    const auto& c = *layer.psdCarry;
+    return std::abs(layer.opacity - c.opacity / 255.0) < 0.5 / 255 ? c.fill / 255.0f : 1.0f;
+}
+
 std::shared_ptr<const LayerStyle> layerStyleOf(const Layer& layer, const Document& document) {
     const std::vector<uint8_t>* block = effectsBlock(layer);
     if (!block) return nullptr;

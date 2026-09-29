@@ -1,5 +1,8 @@
 // The renderer's pixels at 8 bits (render_plan.h): the former body of render.cpp's Renderer, moved as it was.
 // It draws a RenderPlan into premultiplied RGBA8.
+#include <cstdlib>
+#include <cctype>
+#include "compositor/png.h"
 #include "render_plan.h"
 #include "compositor/fill_cache.h"
 #include "compositor/layerstyle.h"
@@ -53,11 +56,24 @@ struct RenderExec<SampleType::U8> {
     struct Frame { const Layer* group; std::unique_ptr<Image> buffer; std::unique_ptr<Image> before; Image* parent; };
     std::vector<Frame> frames;
 
+    /// NEKOPHOTO_DUMP_FOLDERS=<dir>: every styled folder's stages as PNGs (a developer's aid for comparing with
+    /// Photoshop): the backdrop, after its exterior effects, its children drawn, after its opacity, after its interior
+    /// effects, and the shape its effects are made from.
+    void dumpStage(const Layer& g, const char* stage, const Image& image) const {
+        static const char* dir = std::getenv("NEKOPHOTO_DUMP_FOLDERS");
+        if (!dir || !layerStyleOf(g, document)) return;
+        std::string name = g.name;
+        for (char& c : name) if (!std::isalnum(static_cast<unsigned char>(c))) c = '_';
+        writePngImage(std::string(dir) + "/" + name + "_" + g.id.substr(0, 4) + "_" + stage + ".png", image);
+    }
+
     void openGroup(const Layer& g, Image*& cur) {
+        dumpStage(g, "1-backdrop", *cur);
         if (layerStyleOf(g, document)) drawGroupStyle(g, *cur, StyledDraw::Phase::Exterior);
+        dumpStage(g, "2-exterior", *cur);
         Frame f{&g, nullptr, nullptr, cur};
         if (isolates(g)) { f.buffer = std::make_unique<Image>(outWidth, outHeight); cur = f.buffer.get(); }
-        else if (fades(g)) f.before = std::make_unique<Image>(*cur);
+        else if (fades(g) || folderContentFill(g) < 1) f.before = std::make_unique<Image>(*cur);
         frames.push_back(std::move(f));
     }
 
@@ -65,7 +81,9 @@ struct RenderExec<SampleType::U8> {
         if (frames.empty() || frames.back().group != &g) return;
         Frame f = std::move(frames.back());
         frames.pop_back();
-        const float opacity = float(clamp(g.opacity, 0.0, 1.0));
+        dumpStage(g, "3-children", *cur);
+        // The contents at the folder's opacity and, when it has a style, its Fill (the effects are drawn after).
+        const float opacity = float(clamp(g.opacity, 0.0, 1.0)) * folderContentFill(g);
         if (f.buffer) {
             // The folder's result, in its own mode and opacity, over what is below it.
             cur = f.parent;
@@ -88,7 +106,9 @@ struct RenderExec<SampleType::U8> {
                 }
             });
         }
+        dumpStage(g, "4-opacity", *cur);
         if (layerStyleOf(g, document)) drawGroupStyle(g, *cur, StyledDraw::Phase::Interior);
+        dumpStage(g, "5-interior", *cur);
     }
 
     void drawGroupStyle(const Layer& group, Image& out, StyledDraw::Phase phase) {
@@ -113,6 +133,7 @@ struct RenderExec<SampleType::U8> {
             subPlan.buildWithin(plan, group.id);
             RenderExec sub(subPlan, area, scale, into.width(), into.height());
             sub.drawRange(into, 0, sub.order.size());
+            dumpStage(group, phase == StyledDraw::Phase::Exterior ? "0-shape-exterior" : "0-shape-interior", into);
         };
         drawStyledLayer(draw, out);
     }

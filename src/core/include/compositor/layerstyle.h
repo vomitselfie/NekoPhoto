@@ -172,6 +172,9 @@ std::vector<uint8_t> authorPatternFill(const FillPattern& pattern, const std::st
 
 /// Master opacity and Fill as Photoshop splits them (NekoPhoto keeps one opacity: their product).
 void layerOpacities(const Layer& layer, float& master, float& fill);
+/// A styled folder's Fill (its opacity holds only the master opacity): it fades the folder's contents but not its
+/// effects, which are made from the contents' unfaded shape. 1 for any other layer (their Fill is in their opacity).
+float folderContentFill(const Layer& layer);
 
 // ---- Pieces the renderer uses (layerstyle_render.cpp) --------------------------------------------------------
 
