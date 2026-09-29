@@ -4,6 +4,7 @@
 #include "LayerStyleDialog.h"
 #include "SmartFilterDialog.h"
 #include "ImageConvert.h"
+#include "compositor/blend.h"
 #include "compositor/vectorlayer.h"
 #include <QStandardItemModel>
 #include <QApplication>
@@ -647,8 +648,22 @@ void LayersPanel::syncAppearance() {
     opacitySpin_->setEnabled(active != nullptr);
     QSignalBlocker b1(blendCombo_), b2(opacitySlider_), b3(opacitySpin_);
     // Pass Through is a folder's alone.
-    if (auto* model = qobject_cast<QStandardItemModel*>(blendCombo_->model()))
+    if (auto* model = qobject_cast<QStandardItemModel*>(blendCombo_->model())) {
         if (auto* item = model->item(0)) item->setEnabled(active && active->isGroup);
+        // The modes the document's colour mode offers (Lab lacks eight, as in Photoshop); CMYK's Hue, Saturation,
+        // Color, Luminosity, Darker and Lighter Color are offered but draw as Normal until they are calibrated.
+        const ColorMode colorMode = session_->hasDocument() ? session_->document()->colorMode : ColorMode::RGB;
+        for (int i = 1; i < model->rowCount(); i++) {
+            QStandardItem* item = model->item(i);
+            const QVariant data = blendCombo_->itemData(i);
+            if (!item || !data.isValid()) continue;
+            const BlendMode mode = BlendMode(data.toInt());
+            item->setEnabled(blendModeAvailable(mode, colorMode));
+            item->setToolTip(!blendModeAvailable(mode, colorMode) ? tr("Not available in Lab mode")
+                             : blendModeApproximated(mode, colorMode) ? tr("Drawn as Normal in CMYK documents for now")
+                             : QString());
+        }
+    }
     const int shown = !active ? int(BlendMode::Normal) : active->isGroup && active->passThrough ? -1 : int(active->blendMode);
     blendCombo_->setCurrentIndex(std::max(0, blendCombo_->findData(shown)));
     int opacity = active ? int(std::round(active->opacity * 100)) : 100;

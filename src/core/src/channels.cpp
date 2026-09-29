@@ -1,5 +1,6 @@
 // Alpha and spot channels, and the colour channels as views (channels.h, docs/channels.md).
 #include "compositor/channels.h"
+#include "compositor/colormgmt.h"
 #include "compositor/depth.h"
 #include "compositor/parallel.h"
 #include "compositor/render.h"
@@ -88,6 +89,41 @@ AnyGray compositeGray(const Document& document, int channel) {
     return GrayPtr(out);
 }
 
+/// One colour channel of a CMYK or Lab document's composite as a selection: a CMYK channel's ink (transparency is
+/// paper, no ink), a Lab channel's value over white (L 100, a and b neutral).
+AnyGray modeChannelGray(const Document& document, int channel) {
+    const AnyImage flat = renderNative(document);
+    const int n = flat.channels(), alpha = n - 1;
+    const bool cmyk = document.colorMode == ColorMode::CMYK;
+    auto value = [&](uint32_t stored, uint32_t a, uint32_t one) -> uint32_t {
+        // Over white: stored + (one - a) for L and for CMYK's inverted ink (paper), the neutral point for a and b.
+        const uint32_t paper = cmyk || channel == 0 ? one : (one == 255 ? 128u : 16384u);
+        const uint32_t over = std::min<uint32_t>(one, stored + uint32_t((uint64_t(paper) * (one - std::min(a, one)) + one / 2) / one));
+        return cmyk ? one - over : over;
+    };
+    if (flat.u16()) {
+        const Image16& img = *flat.u16();
+        auto out = std::make_shared<Gray16>(document.width, document.height);
+        for (int y = 0; y < document.height; y++) {
+            const uint16_t* s = img.row(y);
+            uint16_t* d = out->row(y);
+            for (int x = 0; x < document.width; x++, s += n) d[x] = uint16_t(value(s[channel], s[alpha], one16));
+        }
+        return Gray16Ptr(out);
+    }
+    auto out = std::make_shared<GrayImage>(document.width, document.height);
+    auto fill = [&](const auto& img) {
+        for (int y = 0; y < document.height; y++) {
+            const uint8_t* s = img.row(y);
+            uint8_t* d = out->row(y);
+            for (int x = 0; x < document.width; x++, s += n) d[x] = uint8_t(value(s[channel], s[alpha], 255));
+        }
+    };
+    if (flat.c8()) fill(*flat.c8());
+    else if (flat.u8()) fill(*flat.u8());
+    return GrayPtr(out);
+}
+
 /// Where `after`'s grid sits on `before`'s, in whole pixels, when the two are the same scale and turn.
 bool gridOffset(const LayerTransform& before, int beforeWidth, int beforeHeight, const LayerTransform& after, int afterWidth, int afterHeight, int& dx, int& dy) {
     if (before.rotation != after.rotation || before.flipX != after.flipX || before.flipY != after.flipY) return false;
@@ -109,23 +145,29 @@ bool gridOffset(const LayerTransform& before, int beforeWidth, int beforeHeight,
 
 template <class Img>
 std::shared_ptr<Img> keepChannels(const Img& before, const Img* after, int dx, int dy, unsigned channels, uint32_t one) {
-    auto out = std::make_shared<Img>(before.width(), before.height());
+    // 4 samples a pixel (RGB, Lab) or 5 (CMYK); alpha last.
+    int n = 4;
+    std::shared_ptr<Img> out;
+    if constexpr (requires { before.channels(); }) { n = before.channels(); out = std::make_shared<Img>(before.width(), before.height(), n); }
+    else out = std::make_shared<Img>(before.width(), before.height());
+    if (after) { if constexpr (requires { after->channels(); }) if (after->channels() != n) after = nullptr; }
+    const int alpha = n - 1;
     parallelRows(0, before.height(), [&](int y0, int y1) {
     for (int y = y0; y < y1; y++) {
         const auto* b = before.row(y);
         auto* o = out->row(y);
         const int ay = y - dy;
         const bool rowIn = after && ay >= 0 && ay < after->height();
-        for (int x = 0; x < before.width(); x++, b += 4, o += 4) {
-            const uint32_t A = b[3];
-            o[3] = b[3];
+        for (int x = 0; x < before.width(); x++, b += n, o += n) {
+            const uint32_t A = b[alpha];
+            o[alpha] = b[alpha];
             const int ax = x - dx;
             const bool in = rowIn && ax >= 0 && ax < after->width();
-            for (int c = 0; c < 3; c++) {
+            for (int c = 0; c < alpha; c++) {
                 o[c] = b[c];
                 if (!(channels >> c & 1) || A == 0 || !in) continue;
                 const auto* a = after->pixel(ax, ay);
-                const uint32_t aa = a[3];
+                const uint32_t aa = a[alpha];
                 if (aa == A) { o[c] = a[c]; continue; }   // the usual case: the edit kept the alpha, its colour is exact
                 if (aa == 0) continue;
                 // The edit's straight colour at the old alpha.
@@ -233,9 +275,12 @@ AnyGray selectionSourceCoverage(const Document& document, const SelectionSource&
         return fitGray(channelCoverage(*channel, document.sampleType), document.sampleType, document.width, document.height);
     }
     case SelectionSource::Composite: return compositeGray(document, 3);
-    case SelectionSource::Red: return compositeGray(document, 0);
-    case SelectionSource::Green: return compositeGray(document, 1);
-    case SelectionSource::Blue: return compositeGray(document, 2);
+    case SelectionSource::Red: return document.colorMode == ColorMode::RGB ? compositeGray(document, 0) : modeChannelGray(document, 0);
+    case SelectionSource::Green: return document.colorMode == ColorMode::RGB ? compositeGray(document, 1) : modeChannelGray(document, 1);
+    case SelectionSource::Blue: return document.colorMode == ColorMode::RGB ? compositeGray(document, 2) : modeChannelGray(document, 2);
+    case SelectionSource::Black:
+        if (document.colorMode != ColorMode::CMYK) return fail("Only CMYK documents have a Black channel.");
+        return modeChannelGray(document, 3);
     case SelectionSource::Transparency: {
         const Layer* layer = document.find(source.id);
         if (!layer || layer->isGroup) return fail("There is no pixel layer with that id.");
@@ -334,6 +379,10 @@ AnyImage keepColorChannels(const AnyImage& before, const AnyImage& after, int dx
         const ImagePtr a = after ? imageAtDepth(after, SampleType::U8).u8() : nullptr;
         return ImagePtr(keepChannels(*b, a.get(), dx, dy, channels, 255u));
     }
+    if (const ImageC8Ptr& b = before.c8()) {
+        const AnyImage a = after ? imageAtFormat(after, SampleType::U8, ColorMode::CMYK) : AnyImage();
+        return ImageC8Ptr(keepChannels(*b, a.c8().get(), dx, dy, channels, 255u));
+    }
     return before;
 }
 
@@ -345,7 +394,8 @@ AnyImage keepColorChannels(const AnyImage& before, const LayerTransform& beforeT
 }
 
 bool restrictToColorChannels(const Document& before, Document& after, unsigned channels) {
-    if ((channels & colorChannelsAll) == colorChannelsAll) return false;
+    const unsigned all = colorChannelsAllFor(after.colorMode);
+    if ((channels & all) == all) return false;
     // Edits of the canvas or of the layer structure (Image Size, Crop, merges) work on whole layers, as in Photoshop.
     if (before.width != after.width || before.height != after.height || before.layers.size() != after.layers.size()) return false;
     for (size_t i = 0; i < after.layers.size(); i++) if (before.layers[i].id != after.layers[i].id) return false;
@@ -381,10 +431,87 @@ bool restrictToColorChannels(const Document& before, Document& after, unsigned c
     return changed;
 }
 
+const char* colorChannelName(ColorMode mode, int channel) {
+    static const char* rgb[] = {"Red", "Green", "Blue"};
+    static const char* cmyk[] = {"Cyan", "Magenta", "Yellow", "Black"};
+    static const char* lab[] = {"Lightness", "a", "b"};
+    if (channel < 0 || channel >= colorModeColorChannels(mode)) return "";
+    return mode == ColorMode::CMYK ? cmyk[channel] : mode == ColorMode::Lab ? lab[channel] : rgb[channel];
+}
+
 // ---- The view ---------------------------------------------------------------------------------------------------
+
+namespace {
+
+/// The colour channels of a CMYK or Lab frame (`view.native`, the same size as `out`) as the Channels panel shows them.
+void applyModeChannels(Image& out, const ChannelView& view) {
+    const AnyImage& native = view.native;
+    const int n = native.channels(), alpha = n - 1;
+    const unsigned color = view.color & colorChannelsAllFor(view.mode);
+    const int single = std::popcount(color) == 1 ? std::countr_zero(color) : -1;
+    const bool deep = bool(native.u16());
+    const float one = deep ? float(one16) : 255.f;
+    auto row = [&](int y) -> const void* {
+        if (native.u16()) return native.u16()->row(y);
+        if (native.c8()) return native.c8()->row(y);
+        return native.u8()->row(y);
+    };
+    // Straight 0..1 samples of one pixel.
+    auto straight = [&](const void* r, int x, float* v) -> float {
+        float s[5];
+        for (int c = 0; c < n; c++) s[c] = deep ? float(static_cast<const uint16_t*>(r)[x * n + c]) : float(static_cast<const uint8_t*>(r)[x * n + c]);
+        const float a = s[alpha];
+        for (int c = 0; c < alpha; c++) v[c] = a > 0 ? std::min(1.f, s[c] / a) : (view.mode == ColorMode::CMYK || c == 0 ? 1.f : 0.5f);
+        return a / one;
+    };
+    // Several Lab channels: the colour with the hidden ones neutral, through Lab D50 to sRGB.
+    ColorTransformPtr lab;
+    if (view.mode == ColorMode::Lab && single < 0) lab = transformBetween(ColorProfile(), srgbProfile(), ConvertOptions(), PixelFormat::LabFloat, PixelFormat::RGBFloat);
+    static const float tints[4][3] = {{0, 1, 1}, {1, 0, 1}, {1, 1, 0}, {0, 0, 0}};   // cyan, magenta, yellow, black ink
+    const int w = std::min(out.width(), native.width()), h = std::min(out.height(), native.height());
+    for (int y = 0; y < h; y++) {
+        const void* r = row(y);
+        uint8_t* p = out.row(y);
+        for (int x = 0; x < w; x++, p += 4) {
+            float v[4];
+            const float a = straight(r, x, v);
+            float rgb[3] = {1, 1, 1};
+            if (single >= 0) rgb[0] = rgb[1] = rgb[2] = v[single];
+            else if (view.mode == ColorMode::CMYK) {
+                for (int c = 0; c < 4; c++) {
+                    if (!(color >> c & 1)) continue;
+                    const float ink = 1.f - v[c];
+                    for (int k = 0; k < 3; k++) rgb[k] *= 1.f - ink * (1.f - tints[c][k]);
+                }
+            } else if (lab) {
+                const float l = color & 1 ? v[0] * 100.f : 50.f;
+                const float scaleAB = deep ? 32768.f / 128.f : 255.f;
+                const float offset = deep ? 16384.f / 32768.f : 128.f / 255.f;
+                const float in[3] = {l, color & 2 ? (v[1] - offset) * scaleAB : 0.f, color & 4 ? (v[2] - offset) * scaleAB : 0.f};
+                lab->apply(in, rgb, 1);
+            }
+            for (int k = 0; k < 3; k++) p[k] = uint8_t(std::lround(std::clamp(rgb[k], 0.f, 1.f) * a * 255.f));
+            p[3] = uint8_t(std::lround(a * 255.f));
+        }
+    }
+}
+
+} // namespace
 
 void applyChannelView(Image& out, const Rect& region, double scale, const ChannelView& view) {
     if (view.isDefault() || out.isEmpty() || scale <= 0) return;
+    if (view.mode != ColorMode::RGB) {
+        // CMYK and Lab: the colour channels come from the frame at the document's layout; the gray and the overlays
+        // are as in RGB, below.
+        const unsigned all = colorChannelsAllFor(view.mode);
+        if (view.color != 0 && (view.color & all) != all && view.native) applyModeChannels(out, view);
+        ChannelView rest = view;
+        rest.mode = ColorMode::RGB;
+        rest.native = AnyImage();
+        if (view.color != 0) rest.color = colorChannelsAll;
+        if (!rest.isDefault()) applyChannelView(out, region, scale, rest);
+        return;
+    }
     const int w = out.width(), h = out.height();
     // The document pixel under each output column and row.
     std::vector<int> xs(static_cast<size_t>(w)), ys(static_cast<size_t>(h));

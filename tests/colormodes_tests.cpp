@@ -213,12 +213,14 @@ TEST_CASE(history_counts_cmyk_channels) {
     for (int y = 0; y < 16; y++) for (int x = 0; x < 32; x++) changed->pixel(x, y)[4] ^= 1;
     doc.layers[0].asset = Asset::makeAny(ImageC8Ptr(changed), "ink");
     history.end(doc, doc.layers[0].id);
-    CHECK_EQ(history.retainedBytes(doc), size_t(32 * 16 * 5));   // five samples a pixel, no thumbnail yet
+    // Five samples a pixel, and the layer thumbnail drawn through the Working CMYK (32 x 16 RGBA, P7 step C).
+    constexpr size_t thumbnail = 32 * 16 * 4;
+    CHECK_EQ(history.retainedBytes(doc), size_t(32 * 16 * 5) + thumbnail);
     doc.sampleType = SampleType::U16;
     history.begin("Deep", doc, doc.layers[0].id);
     doc.layers[0].asset = Asset::makeAny(Image16Ptr(cmykPattern<Image16>(32, 16)), "ink");
     history.end(doc, doc.layers[0].id);
-    CHECK_EQ(history.retainedBytes(doc), size_t(32 * 16 * 5) * 2);   // both 8-bit rasters are now history's alone
+    CHECK_EQ(history.retainedBytes(doc), (size_t(32 * 16 * 5) + thumbnail) * 2);   // both 8-bit rasters are now history's alone
 }
 
 namespace {

@@ -98,15 +98,18 @@ template <int Channels, typename Img>
 std::shared_ptr<Img> halve16(const Img& image) {
     const int sw = image.width(), sh = image.height();
     const int w = std::max(1, (sw + 1) / 2), h = std::max(1, (sh + 1) / 2);
-    auto out = std::make_shared<Img>(w, h);
+    using T = std::remove_cv_t<std::remove_reference_t<decltype(*image.data())>>;
+    std::shared_ptr<Img> out;
+    if constexpr (Channels > 1) out = std::make_shared<Img>(w, h, Channels);
+    else out = std::make_shared<Img>(w, h);
     parallelRows(0, h, [&](int ya, int yb) {
         for (int y = ya; y < yb; y++) {
-            const uint16_t* r0 = image.row(std::min(2 * y, sh - 1));
-            const uint16_t* r1 = image.row(std::min(2 * y + 1, sh - 1));
-            uint16_t* o = out->row(y);
+            const T* r0 = image.row(std::min(2 * y, sh - 1));
+            const T* r1 = image.row(std::min(2 * y + 1, sh - 1));
+            T* o = out->row(y);
             for (int x = 0; x < w; x++) {
                 const int a = std::min(2 * x, sw - 1) * Channels, b = std::min(2 * x + 1, sw - 1) * Channels;
-                for (int c = 0; c < Channels; c++) o[x * Channels + c] = uint16_t((uint32_t(r0[a + c]) + r0[b + c] + r1[a + c] + r1[b + c] + 2) / 4);
+                for (int c = 0; c < Channels; c++) o[x * Channels + c] = T((uint32_t(r0[a + c]) + r0[b + c] + r1[a + c] + r1[b + c] + 2) / 4);
             }
         }
     }, 64);
@@ -115,7 +118,10 @@ std::shared_ptr<Img> halve16(const Img& image) {
 
 template <int Channels, typename Img>
 std::shared_ptr<Img> boxResize16(const Img& image, int w, int h) {
-    auto out = std::make_shared<Img>(w, h);
+    using T = std::remove_cv_t<std::remove_reference_t<decltype(*image.data())>>;
+    std::shared_ptr<Img> out;
+    if constexpr (Channels > 1) out = std::make_shared<Img>(w, h, Channels);
+    else out = std::make_shared<Img>(w, h);
     const double sx = double(image.width()) / w, sy = double(image.height()) / h;
     const int stepX = std::max(1, int(sx / 8)), stepY = std::max(1, int(sy / 8));
     for (int y = 0; y < h; y++) {
@@ -126,12 +132,12 @@ std::shared_ptr<Img> boxResize16(const Img& image, int w, int h) {
             uint64_t count = 0;
             for (int j = y0 + stepY / 2; j < y1; j += stepY)
                 for (int i = x0 + stepX / 2; i < x1; i += stepX) {
-                    const uint16_t* p = image.row(j) + size_t(i) * Channels;
+                    const T* p = image.row(j) + size_t(i) * Channels;
                     for (int c = 0; c < Channels; c++) sum[c] += p[c];
                     count++;
                 }
-            uint16_t* o = out->row(y) + size_t(x) * Channels;
-            for (int c = 0; c < Channels; c++) o[c] = count ? uint16_t((sum[c] + count / 2) / count) : 0;
+            T* o = out->row(y) + size_t(x) * Channels;
+            for (int c = 0; c < Channels; c++) o[c] = count ? T((sum[c] + count / 2) / count) : 0;
         }
     }
     return out;
@@ -156,7 +162,14 @@ uint64_t hashSamples(const Img* image, int channels) {
 
 } // namespace
 
-std::shared_ptr<Image16> halveImage(const Image16& image) { return halve16<4>(image); }
+std::shared_ptr<Image16> halveImage(const Image16& image) { return image.channels() == 5 ? halve16<5>(image) : halve16<4>(image); }
+std::shared_ptr<ImageC8> halveImage(const ImageC8& image) { return image.channels() == 5 ? halve16<5>(image) : halve16<4>(image); }
+std::shared_ptr<ImageC8> boxResizeImage(const ImageC8& image, int width, int height) {
+    return image.channels() == 5 ? boxResize16<5>(image, width, height) : boxResize16<4>(image, width, height);
+}
+std::shared_ptr<Image16> boxResizeImage(const Image16& image, int width, int height) {
+    return image.channels() == 5 ? boxResize16<5>(image, width, height) : boxResize16<4>(image, width, height);
+}
 std::shared_ptr<Gray16> halveGray(const Gray16& image) { return halve16<1>(image); }
 
 std::shared_ptr<Image16> reduceImage(const Image16& image, int level) {

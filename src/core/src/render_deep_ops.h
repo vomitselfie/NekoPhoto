@@ -20,7 +20,13 @@
 //   (`setStyleSource`, `setStyleCoverage`);
 // - where a document's buffers come from: `image(AnyImage)`, `gray(AnyGray)`, the edit overrides
 //   (`overrideImage`, `overrideMask`), and the frame cache's slots (`backdrop`, `above`, `resetOtherDepths`);
-// - the entry points' conversions: `widenFrom8`, `narrowTo8`, `toDisplay`.
+// - the entry points' conversions: `widenFrom8`, `narrowTo8`, `toDisplay`;
+// - the layout: `channels` (samples per pixel, alpha last: 4, or 5 for CMYK), `styles` (whether layer styles are
+//   drawn at this layout), and `blendStraight` (an adjustment layer's blend of straight colour, in place of `cs`).
+//
+// A colour mode other than RGB (CMYK, Lab) supplies its own policy (render_modes.h) and instantiates the executor
+// with it as the template's second argument; such a policy may also take the document for its conversions
+// (`image(document, any)`, `solid(document, rgba8, out)`), which the executor prefers when present.
 #pragma once
 #include "render_plan.h"
 #include "layerstyle_render.h"
@@ -50,6 +56,14 @@ struct DeepOps<SampleType::U16> {
     using Step = uint32_t;
 
     static constexpr Sample one = Sample(one16);
+    static constexpr int channels = 4;
+    static constexpr bool styles = true;
+
+    static void blendStraight(BlendMode mode, const float* cb, float* cs) {
+        if (mode == BlendMode::Normal) return;
+        const Rgb m = blendColor(mode, {cb[0], cb[1], cb[2]}, {cs[0], cs[1], cs[2]});
+        cs[0] = m.r; cs[1] = m.g; cs[2] = m.b;
+    }
 
     static float unit(Sample s) { return s / 32768.0f; }
     static Sample mul(Sample a, Sample b) { return Sample(mul15(a, b)); }

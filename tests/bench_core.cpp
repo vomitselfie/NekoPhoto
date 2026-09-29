@@ -464,6 +464,31 @@ int main(int argc, char** argv) {
         bench("render16 4000x3000 through display", none, [&] { RenderOptions o; o.display = display16.get(); render(deep, o, out); });
     }
 
+    // CMYK and Lab (P7 step C): the 12 layers converted with Image > Mode, rendered for the canvas (the executor at the
+    // document's layout, then through the profile to sRGB in the same pass), at 8 and 16 bits, and the native frame
+    // alone. The documents are converted only when one of these lines runs, so filtered runs of the others are as before.
+    {
+        static const char* names[] = {"cmyk 4000x3000 to display", "cmyk 4000x3000 native", "cmyk 4000x3000 at 0.25 to display",
+                                      "cmyk16 4000x3000 to display", "lab 4000x3000 to display", "lab16 4000x3000 to display"};
+        bool wanted = bench.filter.empty();
+        for (const char* n : names) wanted = wanted || std::string(n).find(bench.filter) != std::string::npos;
+        if (wanted) {
+            Document cmyk = doc, lab = doc;
+            if (!convertDocumentMode(cmyk, ColorMode::CMYK, ColorProfile(), ConvertOptions()) || !convertDocumentMode(lab, ColorMode::Lab, ColorProfile(), ConvertOptions())) {
+                std::printf("mode conversion failed\n");
+                return 1;
+            }
+            Document cmyk16 = cmyk, lab16 = lab;
+            if (!convertSampleType(cmyk16, SampleType::U16) || !convertSampleType(lab16, SampleType::U16)) { std::printf("16-bit conversion failed\n"); return 1; }
+            bench(names[0], none, [&] { RenderOptions o; render(cmyk, o, out); });
+            bench(names[1], none, [&] { (void)renderNative(cmyk); });
+            bench(names[2], none, [&] { RenderOptions o; o.scale = 0.25; render(cmyk, o, out); });
+            bench(names[3], none, [&] { RenderOptions o; render(cmyk16, o, out); });
+            bench(names[4], none, [&] { RenderOptions o; render(lab, o, out); });
+            bench(names[5], none, [&] { RenderOptions o; render(lab16, o, out); });
+        }
+    }
+
     // Layer counts: each edit as the app makes it, one history step around the change (EditorSession's
     // beginEdit/endEdit), with a history already full of steps as after a while of work.
     for (int count : {1000, 5000, 10000}) {

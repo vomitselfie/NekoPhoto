@@ -410,6 +410,11 @@ void render(const Document& document, const RenderOptions& options, Image& out, 
     plan.build();
     // The cache replaces the whole frame, so it only applies when the frame is being cleared anyway.
     RenderCache* frameCache = options.clear ? cache : nullptr;
+    // CMYK and Lab (P7): their own executors, and always a colour transform to the display (render_modes.h).
+    if (document.colorMode != ColorMode::RGB) {
+        renderForDisplayMode(document, plan, region, scale, out, frameCache, options.version, options.clear, options.display);
+        return;
+    }
     // One switch per render on the document's depth; each executor is a separate instantiation.
     switch (document.sampleType) {
     case SampleType::U8:

@@ -144,6 +144,8 @@ public:
     /// The same at 16 bits: a 16-bit document's reductions keep its depth.
     std::shared_ptr<const ImageT<SampleType::U16>> level(const std::shared_ptr<const ImageT<SampleType::U16>>& image, int level);
     std::shared_ptr<const GrayImageT<SampleType::U16>> level(const std::shared_ptr<const GrayImageT<SampleType::U16>>& image, int level);
+    /// 8-bit CMYK (ImageC8, 5 samples a pixel); a 16-bit CMYK buffer takes the Image16 form.
+    std::shared_ptr<const ImageT<SampleType::U8>> level(const std::shared_ptr<const ImageT<SampleType::U8>>& image, int level);
     /// The level for drawing an image at `factor` destination pixels per source pixel: halvings until the
     /// final resample is at most 2x reduction, or, `rounded`, until it is nearest to 1x (between 0.7x
     /// and 1.4x), which suits a bicubic final step.
@@ -184,6 +186,7 @@ private:
     // A 16-bit document's reductions (after the 8-bit members, which keep their places).
     std::vector<Entry<ImageT<SampleType::U16>>> entries16_;
     std::vector<Entry<GrayImageT<SampleType::U16>>> grayEntries16_;
+    std::vector<Entry<ImageT<SampleType::U8>>> entriesC8_;
 };
 
 } // namespace compositor

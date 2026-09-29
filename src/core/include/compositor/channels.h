@@ -13,6 +13,11 @@ namespace compositor {
 
 /// The colour channels as bits: red 1, green 2, blue 4. All three are the composite.
 constexpr unsigned colorChannelsAll = 7;
+/// The same in a document of `mode`: C 1, M 2, Y 4, K 8 in CMYK (15 is the composite); L 1, a 2, b 4 in Lab.
+constexpr unsigned colorChannelsAllFor(ColorMode mode) { return (1u << colorModeColorChannels(mode)) - 1; }
+/// The colour channels' names in the Channels panel: "Red", "Green", "Blue"; "Cyan", "Magenta", "Yellow", "Black";
+/// "Lightness", "a", "b".
+const char* colorChannelName(ColorMode mode, int channel);
 
 // ---- The document's channels ---------------------------------------------------------------------------
 
@@ -38,7 +43,9 @@ void setSelectedAreas(Channel& channel, bool selectedAreas);
 
 /// Where Load Selection (and a Ctrl-click on a thumbnail) takes a selection from.
 struct SelectionSource {
-    enum Kind { AlphaChannel, Composite, Red, Green, Blue, Transparency, LayerMask };
+    /// Red, Green and Blue are the first three colour channels of any mode (Cyan, Magenta, Yellow; L, a, b), and
+    /// Black the fourth (CMYK's K). A CMYK channel selects its ink; a Lab one its value.
+    enum Kind { AlphaChannel, Composite, Red, Green, Blue, Transparency, LayerMask, Black };
     Kind kind = AlphaChannel;
     /// The channel (AlphaChannel) or the layer (Transparency, LayerMask).
     Uuid id;
@@ -92,12 +99,18 @@ struct ChannelOverlay {
 /// colours), or with none visible a channel in gray; then the overlays.
 struct ChannelView {
     unsigned color = colorChannelsAll;
+    /// The document's colour mode. In CMYK and Lab, `native` is the frame at the document's layout (renderNative of
+    /// the same region and scale) the colour channels are read from: one channel in gray (ink dark, as Photoshop shows
+    /// a CMYK plate), several CMYK inks as an ink-tinted overlay on white, several Lab channels as colour with the
+    /// hidden ones neutral.
+    ColorMode mode = ColorMode::RGB;
+    AnyImage native;
     /// With no colour channel visible: the channel shown in gray (none: black).
     AnyGray gray;
     /// `gray` holds the inverse of the channel (the editing layer's mask).
     bool grayInverted = false;
     std::vector<ChannelOverlay> overlays;
-    bool isDefault() const { return color == colorChannelsAll && overlays.empty(); }
+    bool isDefault() const { return color == colorChannelsAllFor(mode) && overlays.empty(); }
 };
 /// The view applied to a frame `render()` drew: `out` shows `region` at `scale`.
 void applyChannelView(Image& out, const Rect& region, double scale, const ChannelView& view);

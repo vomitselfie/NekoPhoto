@@ -146,6 +146,17 @@ bool showColorSettings(QWidget* parent) {
     policy->addItem(QObject::tr("Off"), int(EmbeddedPolicy::Off));
     policy->setCurrentIndex(policy->findData(int(settings().policy)));
     form->addRow(QObject::tr("Color management policy (RGB):"), policy);
+    // Conversion Options: what Image > Mode uses between RGB, CMYK and Lab.
+    auto* intent = new QComboBox;
+    intent->addItem(QObject::tr("Perceptual"), int(RenderingIntent::Perceptual));
+    intent->addItem(QObject::tr("Relative Colorimetric"), int(RenderingIntent::RelativeColorimetric));
+    intent->addItem(QObject::tr("Saturation"), int(RenderingIntent::Saturation));
+    intent->addItem(QObject::tr("Absolute Colorimetric"), int(RenderingIntent::AbsoluteColorimetric));
+    intent->setCurrentIndex(std::max(0, intent->findData(int(settings().conversionIntent))));
+    form->addRow(QObject::tr("Conversion intent:"), intent);
+    auto* conversionBpc = new QCheckBox(QObject::tr("Use Black Point Compensation"));
+    conversionBpc->setChecked(settings().conversionBlackPoint);
+    form->addRow(QString(), conversionBpc);
     layout->addLayout(form);
     layout->addWidget(hint(QObject::tr("Images without a profile are treated as sRGB. New documents take the working space.")));
     auto* missing = new QCheckBox(QObject::tr("Ask when opening a file without a profile"));
@@ -160,6 +171,8 @@ bool showColorSettings(QWidget* parent) {
     s.workingSpace = WorkingSpace(working->currentData().toInt());
     s.workingCmyk = cmyk->currentData().toString();
     s.policy = EmbeddedPolicy(policy->currentData().toInt());
+    s.conversionIntent = RenderingIntent(intent->currentData().toInt());
+    s.conversionBlackPoint = conversionBpc->isChecked();
     s.askMissing = missing->isChecked();
     s.askMismatch = mismatch->isChecked();
     setSettings(s);

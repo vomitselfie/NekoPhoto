@@ -2335,6 +2335,18 @@ Working: %2</source>
         <translation>カラーマネジメントポリシー(RGB):</translation>
     </message>
     <message>
+        <source>Saturation</source>
+        <translation>彩度</translation>
+    </message>
+    <message>
+        <source>Absolute Colorimetric</source>
+        <translation>絶対的な色域を維持</translation>
+    </message>
+    <message>
+        <source>Conversion intent:</source>
+        <translation>マッチング方法:</translation>
+    </message>
+    <message>
         <source>Images without a profile are treated as sRGB. New documents take the working space.</source>
         <translation>プロファイルのない画像は sRGB として扱います。新規ドキュメントには作業用スペースを指定します。</translation>
     </message>
@@ -4089,6 +4101,14 @@ File &gt; New creates a blank canvas.</source>
         <translation>RGB</translation>
     </message>
     <message>
+        <source>CMYK</source>
+        <translation>CMYK</translation>
+    </message>
+    <message>
+        <source>Lab</source>
+        <translation>Lab</translation>
+    </message>
+    <message>
         <source>Red</source>
         <translation>レッド</translation>
     </message>
@@ -4099,6 +4119,34 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Blue</source>
         <translation>ブルー</translation>
+    </message>
+    <message>
+        <source>Cyan</source>
+        <translation>シアン</translation>
+    </message>
+    <message>
+        <source>Magenta</source>
+        <translation>マゼンタ</translation>
+    </message>
+    <message>
+        <source>Yellow</source>
+        <translation>イエロー</translation>
+    </message>
+    <message>
+        <source>Black</source>
+        <translation>ブラック</translation>
+    </message>
+    <message>
+        <source>Lightness</source>
+        <translation>明度</translation>
+    </message>
+    <message>
+        <source>a</source>
+        <translation>a</translation>
+    </message>
+    <message>
+        <source>b</source>
+        <translation>b</translation>
     </message>
     <message>
         <source>Quick Mask</source>
@@ -5258,6 +5306,14 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Smart object (%1): click to edit its contents.</source>
         <translation>スマートオブジェクト (%1): クリックして内容を編集します。</translation>
+    </message>
+    <message>
+        <source>Not available in Lab mode</source>
+        <translation>Lab モードでは使用できません</translation>
+    </message>
+    <message>
+        <source>Drawn as Normal in CMYK documents for now</source>
+        <translation>CMYK ドキュメントでは現在「通常」として描画されます</translation>
     </message>
     <message>
         <source>Edit Text…</source>
@@ -6590,6 +6646,18 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>&amp;Mode</source>
         <translation>モード(&amp;M)</translation>
+    </message>
+    <message>
+        <source>&amp;RGB Color</source>
+        <translation>RGB カラー(&amp;R)</translation>
+    </message>
+    <message>
+        <source>&amp;CMYK Color</source>
+        <translation>CMYK カラー(&amp;C)</translation>
+    </message>
+    <message>
+        <source>&amp;Lab Color</source>
+        <translation>Lab カラー(&amp;L)</translation>
     </message>
     <message>
         <source>&amp;8 Bits/Channel</source>

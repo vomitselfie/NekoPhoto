@@ -29,6 +29,9 @@ struct PsdImport {
     ImagePtr composite;
     /// The same at 16 bits, from a 16-bit file.
     Image16Ptr composite16;
+    /// A CMYK or Lab file's merged image at the document's layout (an ImageC8 or 5-channel Image16 for CMYK, an
+    /// Image or Image16 for Lab); `composite` is then that image in sRGB, through the file's profile.
+    AnyImage compositeNative;
     /// What the import left behind, one line each (effects, unknown adjustments, rasterised text, ...).
     std::vector<std::string> notes;
     /// Type layers opened as text (see PsdImportedText).

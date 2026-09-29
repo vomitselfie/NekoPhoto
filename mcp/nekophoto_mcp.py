@@ -1152,11 +1152,13 @@ def document_profile(action: str = "get", profile: Optional[str] = None, intent:
 
 
 @edit("Change the bit depth")
-def image_mode(bits: int) -> str:
+def image_mode(bits: Optional[int] = None, color_mode: Optional[str] = None) -> str:
     """Image > Mode: convert the document to 8 or 16 bits per channel (every layer, mask and the selection, one undo
-    step). A 16-bit document holds half the pixels of an 8-bit one in the same memory; methods not yet ported to 16 bits
-    are refused on it with "<method> is not available for 16-bit documents yet" (docs/bit-depth.md)."""
-    return text(call("image.mode", bits=bits))
+    step), and/or to color_mode rgb, cmyk or lab (RGB Color, CMYK Color, Lab Color: every layer and stored colour, with
+    Color Settings' Working CMYK, intent and black point compensation; one undo step; docs/color-modes.md). A 16-bit
+    document holds half the pixels of an 8-bit one in the same memory; methods not yet ported are refused with
+    "<method> is not available for 16-bit documents yet" or "... in CMYK mode" (docs/bit-depth.md)."""
+    return text(call("image.mode", bits=bits, colorMode=color_mode))
 
 
 @edit("Resize the image")
@@ -1229,15 +1231,18 @@ def color_settings(working_space: Optional[str] = None, policy: Optional[str] = 
                    ask_mismatch: Optional[bool] = None, monitor_profile: Optional[str] = None, use_system_monitor: Optional[bool] = None,
                    proof_profile: Optional[str] = None, proof_intent: Optional[str] = None, proof_black_point: Optional[bool] = None,
                    proof_colors: Optional[bool] = None, gamut_warning: Optional[bool] = None, gamut_color: Optional[str] = None,
-                   working_cmyk: Optional[str] = None) -> str:
+                   working_cmyk: Optional[str] = None, intent: Optional[str] = None, black_point_compensation: Optional[bool] = None) -> str:
     """Edit > Color Settings (working_space srgb, adobe-rgb, display-p3 or prophoto; working_cmyk "default" for the
-    bundled ISO Coated v2 300% or a CMYK ICC path; policy preserve, convert or off for embedded profiles; ask_missing,
+    bundled ISO Coated v2 300% or a CMYK ICC path; intent perceptual, relative, saturation or absolute and
+    black_point_compensation, the Conversion Options Image > Mode uses between RGB, CMYK and Lab; policy preserve,
+    convert or off for embedded profiles; ask_missing,
     ask_mismatch), the monitor profile (an ICC path, "" for the system's) and View > Proof Setup (proof_profile
     working-cmyk, the default, a working space or an RGB or CMYK ICC path) / Proof Colors / Gamut Warning. With no
     arguments it only reads them. Untagged images count as sRGB."""
     if working_cmyk is not None and os.path.exists(working_cmyk):
         working_cmyk = os.path.abspath(working_cmyk)
-    return text(call("color.settings", workingSpace=working_space, workingCmyk=working_cmyk, policy=policy, askMissing=ask_missing, askMismatch=ask_mismatch,
+    return text(call("color.settings", workingSpace=working_space, workingCmyk=working_cmyk, intent=intent, blackPointCompensation=black_point_compensation,
+                     policy=policy, askMissing=ask_missing, askMismatch=ask_mismatch,
                      monitorProfile=monitor_profile, useSystemMonitor=use_system_monitor, proofProfile=proof_profile,
                      proofIntent=proof_intent, proofBlackPoint=proof_black_point, proofColors=proof_colors,
                      gamutWarning=gamut_warning, gamutColor=gamut_color))

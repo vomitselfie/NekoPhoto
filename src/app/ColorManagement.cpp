@@ -47,6 +47,8 @@ Settings loadSettings() {
     q.beginGroup(QStringLiteral("color"));
     if (auto w = workingSpaceFromKey(q.value("workingSpace", "srgb").toString().toStdString())) s.workingSpace = *w;
     s.workingCmyk = q.value("workingCmyk").toString();
+    if (auto intent = renderingIntentFromKey(q.value("conversionIntent", "relative").toString().toStdString())) s.conversionIntent = *intent;
+    s.conversionBlackPoint = q.value("conversionBlackPoint", true).toBool();
     if (auto p = policyFromKey(q.value("policy", "preserve").toString())) s.policy = *p;
     s.askMissing = q.value("askMissing", false).toBool();
     s.askMismatch = q.value("askMismatch", false).toBool();
@@ -81,6 +83,8 @@ void setSettings(const Settings& s) {
     q.beginGroup(QStringLiteral("color"));
     q.setValue("workingSpace", QString::fromLatin1(workingSpaceKey(s.workingSpace)));
     q.setValue("workingCmyk", s.workingCmyk);
+    q.setValue("conversionIntent", QString::fromLatin1(renderingIntentKey(s.conversionIntent)));
+    q.setValue("conversionBlackPoint", s.conversionBlackPoint);
     q.setValue("policy", QString::fromLatin1(policyKey(s.policy)));
     q.setValue("askMissing", s.askMissing);
     q.setValue("askMismatch", s.askMismatch);
@@ -119,6 +123,13 @@ ColorProfile workingCmykProfile() {
         read = p ? *p : defaultCmykProfile();
     }
     return read;
+}
+
+ConvertOptions conversionOptions() {
+    ConvertOptions options;
+    options.intent = settings().conversionIntent;
+    options.blackPointCompensation = settings().conversionBlackPoint;
+    return options;
 }
 
 QString workingCmykLabel() { return QString::fromStdString(workingCmykProfile().description); }
@@ -204,6 +215,11 @@ ColorTransformPtr displayTransform(const Document& document) {
         if (auto t = proofTransform(document.profile, monitorProfile(), proof, input, PixelFormat::RGBA8)) return t;
     }
     const ColorProfile monitor = monitorProfile();
+    if (document.colorMode != ColorMode::RGB) {
+        // A CMYK or Lab document always goes through a transform: to the monitor, or to sRGB without one.
+        return transformBetween(document.profile, monitor.empty() ? srgbProfile() : monitor, {RenderingIntent::RelativeColorimetric, true},
+                                pixelFormatFor(document.sampleType, document.colorMode), PixelFormat::RGBA8);
+    }
     if (monitor.empty() || equivalentProfiles(document.profile, monitor)) return nullptr;
     return transformBetween(document.profile, monitor, {RenderingIntent::RelativeColorimetric, true}, input, PixelFormat::RGBA8);
 }

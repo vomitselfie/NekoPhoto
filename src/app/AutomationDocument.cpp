@@ -34,7 +34,7 @@ void AutomationServer::registerDocumentHandlers() {
         const Document& doc = document();
         EditorSession* s = session();
         QJsonObject o{{"width", doc.width}, {"height", doc.height}, {"resolution", doc.resolution}, {"layers", int(doc.layers.size())},
-                      {"bits", QString::fromLatin1(sampleTypeName(doc.sampleType)).toInt()},
+                      {"bits", QString::fromLatin1(sampleTypeName(doc.sampleType)).toInt()}, {"colorMode", QString::fromLatin1(colorModeKey(doc.colorMode))},
                       {"modified", s->isModified()}, {"title", s->title()}, {"tab", w->currentTabIndex()},
                       {"profile", color::profileLabel(doc.profile)}};
         if (!s->projectPath().isEmpty()) o["path"] = s->projectPath();
@@ -283,14 +283,26 @@ void AutomationServer::registerDocumentHandlers() {
     });
     add("canvas.flip", [session, document](const QJsonObject& p) { document(); session()->flipCanvas(!flag(p, "vertical", false)); return QJsonObject{}; });
     add("image.mode", [session, document](const QJsonObject& p) {
-        // Image > Mode > 8 or 16 Bits/Channel: every layer, mask and the selection converted, one undo step.
+        // Image > Mode > 8 or 16 Bits/Channel: every layer, mask and the selection converted, one undo step; and
+        // RGB Color, CMYK Color or Lab Color (docs/color-modes.md), its own undo step, before the depth.
         document();
-        const int bits = integer(p, "bits");
-        if (bits != 8 && bits != 16) fail("bits must be 8 or 16 (32-bit documents are not available yet)", invalidParams);
+        if (!has(p, "bits") && !has(p, "colorMode")) fail("give bits (8 or 16) and/or colorMode (rgb, cmyk or lab)", invalidParams);
         QString error;
-        if (!session()->convertMode(bits == 16 ? SampleType::U16 : SampleType::U8, &error)) fail(error.isEmpty() ? QStringLiteral("the document could not be converted") : error);
+        if (has(p, "colorMode")) {
+            const QString key = str(p, "colorMode").toLower();
+            const std::optional<ColorMode> mode = key == "rgb" ? std::optional(ColorMode::RGB) : key == "cmyk" ? std::optional(ColorMode::CMYK)
+                                                  : key == "lab" ? std::optional(ColorMode::Lab) : std::nullopt;
+            if (!mode) fail("colorMode must be rgb, cmyk or lab", invalidParams);
+            if (!session()->convertColorMode(*mode, &error)) fail(error.isEmpty() ? QStringLiteral("the document could not be converted") : error);
+        }
+        if (has(p, "bits")) {
+            const int bits = integer(p, "bits");
+            if (bits != 8 && bits != 16) fail("bits must be 8 or 16 (32-bit documents are not available yet)", invalidParams);
+            if (!session()->convertMode(bits == 16 ? SampleType::U16 : SampleType::U8, &error)) fail(error.isEmpty() ? QStringLiteral("the document could not be converted") : error);
+        }
         const Document& now = document();
-        return QJsonObject{{"bits", bits}, {"width", now.width}, {"height", now.height}, {"layerBytes", double(now.layerBytes())},
+        const int bits = now.sampleType == SampleType::U16 ? 16 : now.sampleType == SampleType::F32 ? 32 : 8;
+        return QJsonObject{{"bits", bits}, {"colorMode", QString::fromLatin1(colorModeKey(now.colorMode))}, {"width", now.width}, {"height", now.height}, {"layerBytes", double(now.layerBytes())},
                            {"layerBudgetBytes", double(Document::projectPixelBudgetAt(now.sampleType) * 4 * (long long)sampleBytes(now.sampleType))},
                            {"layerPixelBudget", double(Document::projectPixelBudgetAt(now.sampleType))}};
     });

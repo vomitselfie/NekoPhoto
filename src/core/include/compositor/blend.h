@@ -1,6 +1,7 @@
 // Blend modes with the PDF / Photoshop definitions, on straight (unpremultiplied)
 // colour in 0..1. Used by every compositing path: canvas, export, thumbnails.
 #pragma once
+#include "colormodes.h"
 #include "document.h"
 #include <cstdint>
 
@@ -48,5 +49,35 @@ void compositePixelAt16(BlendMode mode, const uint16_t* src, float coverage, uin
 void compositeSpan16(BlendMode mode, const uint16_t* src, const uint32_t* steps, uint16_t* dst, int count);
 /// B(cb, cs) as the 16-bit kernels compute it, for tests: straight colour in 0..1.
 float blendChannel16(BlendMode mode, float cb, float cs);
+
+// ---- CMYK and Lab (blend_c8.cpp at 8 bits, blend_modes16.cpp at 16) -----------------------------------------------
+//
+// A CMYK pixel is 5 samples (inverted ink, then alpha) and a Lab one 4 (L, offset a and b, alpha), premultiplied
+// (colormodes.h). The separable modes are the RGB kernels applied per channel on the stored values, which for CMYK
+// is Photoshop's own model (inverted ink behaves like light); Normal and Dissolve use the RGB kernels unchanged.
+// Lab's Hue, Saturation, Color, Luminosity, Darker Color and Lighter Color work in L and a/b (LCh) directly.
+// CMYK's non-separable modes have no calibration against Photoshop yet, and draw as Normal (blendModeFor).
+
+/// Whether Photoshop offers `mode` for layers in documents of `colorMode` (the picker greys the others). RGB: every
+/// mode. CMYK: every mode. Lab: all but Color Dodge, Color Burn, Darken, Lighten, Difference, Exclusion, Subtract and
+/// Divide (Adobe's "Layer opacity and blending modes" help page).
+bool blendModeAvailable(BlendMode mode, ColorMode colorMode);
+/// The mode a layer in `mode` is drawn with in a `colorMode` document: itself, or Normal for a mode that is not
+/// offered there or (CMYK's non-separable modes) not calibrated yet.
+BlendMode blendModeFor(BlendMode mode, ColorMode colorMode);
+/// Whether blendModeFor draws `mode` as Normal in `colorMode` although Photoshop offers it: the canvas's notice.
+bool blendModeApproximated(BlendMode mode, ColorMode colorMode);
+
+/// 8 bits: `count` pixels of `colorMode` (5 samples for CMYK, 4 for Lab), coverage steps 0..256 as the RGB kernels
+/// take them (0 skips a pixel). `mode` is what blendModeFor gives (Dissolve takes compositePixelAtMode8).
+void compositeSpanMode8(BlendMode mode, ColorMode colorMode, const uint8_t* src, const uint16_t* steps, uint8_t* dst, int count);
+/// One pixel with coverage 0..1 at a document position (Dissolve's pattern is the RGB one).
+void compositePixelAtMode8(BlendMode mode, ColorMode colorMode, const uint8_t* src, float coverage, uint8_t* dst, int x, int y);
+/// 16 bits: the same with samples and steps in 0..32768.
+void compositeSpanMode16(BlendMode mode, ColorMode colorMode, const uint16_t* src, const uint32_t* steps, uint16_t* dst, int count);
+void compositePixelAtMode16(BlendMode mode, ColorMode colorMode, const uint16_t* src, float coverage, uint16_t* dst, int x, int y);
+/// An adjustment layer's blend of straight colour (0..1 per stored channel) in `colorMode`: `cs` becomes B(cb, cs)
+/// for the `colorMode` document's layout (C colour channels).
+void blendStraightMode(BlendMode mode, ColorMode colorMode, const float* cb, float* cs);
 
 } // namespace compositor

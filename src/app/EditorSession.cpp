@@ -1,6 +1,7 @@
 // EditorSession: The session: construction, the document, history, crop and canvas, tools and the view.
 #include "compositor/vectorlayer.h"
 #include "EditorSession.h"
+#include "ColorManagement.h"
 #include "compositor/depth.h"
 #include "compositor/supports.h"
 #include "compositor/smartfilter.h"
@@ -293,6 +294,40 @@ std::shared_ptr<const GrayImage> EditorSession::coverage8(const Selection& selec
     return reduced;
 }
 
+bool EditorSession::convertColorMode(ColorMode mode, QString* errorText) {
+    if (!document_ || mode == document_->colorMode) return document_.has_value();
+    commitTransform();
+    cancelBrush();
+    endChannelEdit();
+    if (quickMaskActive()) endQuickMask();
+    // The target's profile: the Working CMYK for CMYK, the working space for RGB, Lab D50 for Lab.
+    const ColorProfile target = mode == ColorMode::CMYK ? color::workingCmykProfile() : mode == ColorMode::RGB ? color::workingProfile() : ColorProfile();
+    const ColorMode from = document_->colorMode;
+    const ColorProfile fromProfile = document_->profile;
+    const ConvertOptions options = color::conversionOptions();
+    Document converted = *document_;
+    std::string why;
+    if (!convertDocumentMode(converted, mode, target, options, &why)) {
+        if (errorText) *errorText = QString::fromStdString(why);
+        return false;
+    }
+    beginEdit(QT_TRANSLATE_NOOP("History", "Convert Mode"));
+    *document_ = std::move(converted);
+    endEdit();
+    // The foreground and background colours, as the document's other stored colours.
+    for (QColor* c : {&foregroundColor, &backgroundColor}) {
+        double rgb[3] = {c->redF(), c->greenF(), c->blueF()};
+        convertModeColor(from, fromProfile, mode, document_->profile, options, rgb);
+        *c = QColor::fromRgbF(float(rgb[0]), float(rgb[1]), float(rgb[2]), c->alphaF());
+    }
+    followChannelDocument();
+    if (!toolSupportedAtDepth(tool_)) selectTool(Tool::Move);
+    notifyDocument();
+    emit channelsChanged();
+    emit toolChanged();
+    return true;
+}
+
 bool EditorSession::convertMode(SampleType type, QString* errorText) {
     if (!document_ || type == document_->sampleType) return document_.has_value();
     if (type == SampleType::F32) { if (errorText) *errorText = tr("32-bit documents are not available yet."); return false; }
@@ -373,7 +408,7 @@ void EditorSession::beginEdit(const QString& name) {
     endFramePreview();
     followChannelDocument();
     // With only some colour channels active, the edit is limited to them when it ends (EditorSessionChannels.cpp).
-    if (editDepth_++ == 0 && document_ && activeColors_ != colorChannelsAll) channelEditBase_ = *document_;
+    if (editDepth_++ == 0 && document_ && activeColors_ != allColors()) channelEditBase_ = *document_;
     history_.begin(name.toStdString(), document_, activeLayerId_);
 }
 void EditorSession::endEdit() {
@@ -601,7 +636,7 @@ Overrides EditorSession::renderOverrides() const {
         const Layer* layer = document_->find(*previewLayerId_);
         if (layer && layer->mask && !layer->mask->placement && previewTransform_ && !previewTransform_->samePlacement(layer->transform)) o.maskPlacement = std::optional<LayerTransform>(layer->transform);
         // An adjustment or filter previewed in some colour channels only: shown as it will land.
-        if (activeColors_ != colorChannelsAll && layer && layer->asset) {
+        if (activeColors_ != allColors() && layer && layer->asset) {
             const AnyImage kept = keepColorChannels(layer->asset->image, layer->transform, previewImage_, previewTransform_.value_or(layer->transform), activeColors_);
             if (kept) {
                 if (kept.u16()) o.image16 = kept.u16();
@@ -626,7 +661,7 @@ Overrides EditorSession::renderOverrides() const {
             // A mask covering the old grid stays where it was while the layer grows under the edit.
             if (layer && layer->mask && !layer->mask->placement && layer->asset) o.maskPlacement = std::optional<LayerTransform>(layer->transform);
             // Only some colour channels active: the stroke shows as it will land (EditorSessionChannels.cpp).
-            if (activeColors_ != colorChannelsAll && layer && layer->asset) {
+            if (activeColors_ != allColors() && layer && layer->asset) {
                 const AnyImage kept = keepColorChannels(layer->asset->image, layer->transform, deep ? AnyImage(stroke.previewImage16()) : AnyImage(stroke.previewImage()),
                                                         stroke.paintTransform(), activeColors_);
                 if (kept) {

@@ -141,7 +141,7 @@ QWidget* ChannelsPanel::makeRow(int row, const QString& id, const QString& name,
     connect(eye, &QToolButton::clicked, this, [this, row, id, visible] {
         if (!session_) return;
         if (row == Alpha) session_->setAlphaChannelVisible(id.toStdString(), !visible);
-        else if (row != QuickMask) session_->setColorChannelVisible(row == Composite ? colorChannelsAll : 1u << (row - Red), !visible);
+        else if (row != QuickMask) session_->setColorChannelVisible(colorBits(row), !visible);
     });
     h->addWidget(eye);
     auto* thumb = new QLabel(w);
@@ -186,13 +186,21 @@ void ChannelsPanel::rebuild() {
             item->setSelected(selected);
             if (selected && !list_->currentItem()) list_->setCurrentItem(item, QItemSelectionModel::NoUpdate);
         };
-        add(Composite, {}, tr("RGB"), shortcutText(2), visible == colorChannelsAll, colorTarget && active == colorChannelsAll);
-        const QString names[3] = {tr("Red"), tr("Green"), tr("Blue")};
-        for (int c = 0; c < 3; c++) add(Red + c, {}, names[c], shortcutText(3 + c), visible >> c & 1, colorTarget && (active >> c & 1));
+        // The colour channels of the document's mode, as Photoshop names them (Ctrl+2 the composite, then one each).
+        const ColorMode mode = doc->colorMode;
+        const unsigned all = session_->allColors();
+        const int colours = colorModeColorChannels(mode);
+        const QString composite = mode == ColorMode::CMYK ? tr("CMYK") : mode == ColorMode::Lab ? tr("Lab") : tr("RGB");
+        const QString names[3][4] = {{tr("Red"), tr("Green"), tr("Blue"), QString()},
+                                     {tr("Cyan"), tr("Magenta"), tr("Yellow"), tr("Black")},
+                                     {tr("Lightness"), tr("a"), tr("b"), QString()}};
+        const int set = mode == ColorMode::CMYK ? 1 : mode == ColorMode::Lab ? 2 : 0;
+        add(Composite, {}, composite, shortcutText(2), visible == all, colorTarget && active == all);
+        for (int c = 0; c < colours; c++) add(c < 3 ? Red + c : Fourth, {}, names[set][c], shortcutText(3 + c), visible >> c & 1, colorTarget && (active >> c & 1));
         int n = 0;
         for (const Channel& c : doc->channels) {
             const QString id = QString::fromStdString(c.id);
-            add(Alpha, id, QString::fromStdString(c.name), n < 4 ? shortcutText(6 + n) : QString(), session_->visibleAlphaChannels().count(c.id) > 0, target == c.id);
+            add(Alpha, id, QString::fromStdString(c.name), n < 4 ? shortcutText(3 + colours + n) : QString(), session_->visibleAlphaChannels().count(c.id) > 0, target == c.id);
             n++;
         }
         // Quick Mask, while it is on: the selection being painted, as Photoshop lists it.
@@ -216,6 +224,25 @@ void ChannelsPanel::refreshThumbnails() {
     options.scale = scale;
     Image composite;
     compositor::render(shown, options, composite);
+    // CMYK and Lab: the colour channels come from the composite at the document's layout (a plate's ink dark over
+    // white paper; L, a and b as values, a and b gray where neutral).
+    const AnyImage native = doc.colorMode == ColorMode::RGB ? AnyImage() : compositor::renderNative(shown, options);
+    auto modeChannelImage = [&](int c) {
+        QImage g(native.width(), native.height(), QImage::Format_Grayscale8);
+        const int n = native.channels(), alpha = n - 1;
+        for (int y = 0; y < native.height(); y++) {
+            uchar* d = g.scanLine(y);
+            for (int x = 0; x < native.width(); x++) {
+                double v, a;
+                if (native.u16()) { const uint16_t* p = native.u16()->pixel(x, y); v = p[c] / 32768.0; a = p[alpha] / 32768.0; }
+                else if (native.c8()) { const uint8_t* p = native.c8()->pixel(x, y); v = p[c] / 255.0; a = p[alpha] / 255.0; }
+                else { const uint8_t* p = native.u8()->pixel(x, y); v = p[c] / 255.0; a = p[alpha] / 255.0; }
+                const double paper = doc.colorMode == ColorMode::Lab && c > 0 ? 0.5 : 1.0;
+                d[x] = uchar(std::lround(std::clamp(v + paper * (1 - a), 0.0, 1.0) * 255));
+            }
+        }
+        return g;
+    };
     // Over white, as Photoshop's channel thumbnails show transparency.
     QImage rgb(composite.width(), composite.height(), QImage::Format_RGB32);
     for (int y = 0; y < composite.height(); y++) {
@@ -243,7 +270,10 @@ void ChannelsPanel::refreshThumbnails() {
         const int kind = item->data(rowRole).toInt();
         QImage image;
         if (kind == Composite) image = rgb;
-        else if (kind >= Red && kind <= Blue) image = channelImage(kind - Red);
+        else if ((kind >= Red && kind <= Blue) || kind == Fourth) {
+            const int c = kind == Fourth ? 3 : kind - Red;
+            image = native ? modeChannelImage(c) : channelImage(c);
+        }
         else if (kind == Alpha) {
             if (const Channel* c = findChannel(doc, item->data(idRole).toString().toStdString()))
                 if (auto small = channelThumbnail(c->image, thumbSize * 2)) image = toQImage(*small);
@@ -275,7 +305,7 @@ void ChannelsPanel::loadAsSelection(int row, const QString& id, Qt::KeyboardModi
     if (!session_ || row == QuickMask) return;
     SelectionSource source;
     source.kind = row == Composite ? SelectionSource::Composite : row == Red ? SelectionSource::Red : row == Green ? SelectionSource::Green
-                  : row == Blue ? SelectionSource::Blue : SelectionSource::AlphaChannel;
+                  : row == Blue ? SelectionSource::Blue : row == Fourth ? SelectionSource::Black : SelectionSource::AlphaChannel;
     source.id = id.toStdString();
     QString error;
     const SelectionMode mode = thumbnailClickMode(modifiers & Qt::ShiftModifier, modifiers & Qt::AltModifier);
@@ -288,8 +318,14 @@ void ChannelsPanel::clicked(QListWidgetItem* item) {
     const bool shift = QApplication::keyboardModifiers() & Qt::ShiftModifier;
     if (row == Alpha) session_->selectAlphaChannel(item->data(idRole).toString().toStdString(), shift);
     else if (row == QuickMask) { if (auto id = session_->quickMaskLayerId()) session_->selectLayer(*id, true); }
-    else session_->selectColorChannels(row == Composite ? colorChannelsAll : 1u << (row - Red), shift);
+    else session_->selectColorChannels(colorBits(row), shift);
     rebuild();
+}
+
+unsigned ChannelsPanel::colorBits(int row) const {
+    if (row == Composite) return session_ ? session_->allColors() : colorChannelsAll;
+    if (row == Fourth) return 8u;
+    return 1u << (row - Red);
 }
 
 void ChannelsPanel::showOptions(const QString& id) {
