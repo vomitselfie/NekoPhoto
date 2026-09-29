@@ -17,15 +17,15 @@ What works in a document of each depth and colour mode, as the menus, tools and 
 | Save (project, PSD) | `document.save` | native | native | native | native | native | native | native |  |
 | Image > Mode | `document.mode` | native | native | native | native | native | native | native |  |
 | Assign / Convert to Profile | `document.profile` | native | native | greyed (not yet) | native | native | native | native |  |
-| Import / Place as layer | `document.import` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
+| Import / Place as layer | `document.import` | native | native | native | native | native | native | native |  |
 | Export PSD | `export.psd` | native | native | native | native | native | native | native |  |
-| Export PNG | `export.png` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Export JPEG | `export.jpeg` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Export WebP | `export.webp` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Export TIFF | `export.tiff` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Export TGA | `export.tga` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Export ICO | `export.ico` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Export GIF | `export.gif` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
+| Export PNG | `export.png` | native | native | native | native\* | native\* | native\* | native\* | CMYK8, CMYK16, Lab8, Lab16: written as sRGB, converted through the document's profile |
+| Export JPEG | `export.jpeg` | native | native | native | native\* | native\* | native\* | native\* | CMYK8, CMYK16, Lab8, Lab16: written as sRGB, converted through the document's profile |
+| Export WebP | `export.webp` | native | native | native | native\* | native\* | native\* | native\* | CMYK8, CMYK16, Lab8, Lab16: written as sRGB, converted through the document's profile |
+| Export TIFF | `export.tiff` | native | native | native | native\* | native\* | native\* | native\* | CMYK8, CMYK16, Lab8, Lab16: written as sRGB, converted through the document's profile |
+| Export TGA | `export.tga` | native | native | native | native\* | native\* | native\* | native\* | CMYK8, CMYK16, Lab8, Lab16: written as sRGB, converted through the document's profile |
+| Export ICO | `export.ico` | native | native | native | native\* | native\* | native\* | native\* | CMYK8, CMYK16, Lab8, Lab16: written as sRGB, converted through the document's profile |
+| Export GIF | `export.gif` | native | native | native | native\* | native\* | native\* | native\* | CMYK8, CMYK16, Lab8, Lab16: written as sRGB, converted through the document's profile |
 | Export SVG | `export.svg` | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
 | Export Artboards | `export.artboards` | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
 | Export Slices | `export.slices` | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
@@ -36,10 +36,10 @@ What works in a document of each depth and colour mode, as the menus, tools and 
 | Layer Mask > Apply | `layers.applyMask` | native | native | native | native | native | native | native |  |
 | Canvas Size | `canvas.size` | native | native | native | native | native | native | native |  |
 | Flip Canvas | `canvas.flip` | native | native | native | native | native | native | native |  |
-| Image Size | `edit.imageSize` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Crop, Trim, Crop to Selection | `edit.crop` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Crop tool | `tool.crop` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Distort, Warp, Warp Cage | `edit.distort` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
+| Image Size | `edit.imageSize` | native | native | native | native | native | native | native |  |
+| Crop, Trim, Crop to Selection | `edit.crop` | native | native | native | native | native | native | native |  |
+| Crop tool | `tool.crop` | native | native | native | native | native | native | native |  |
+| Distort, Warp, Warp Cage | `edit.distort` | native | native | native | native | native | native | native |  |
 | Move tool | `tool.move` | native | native | native | native | native | native | native |  |
 | Moving selected pixels (Move tool) | `edit.movePixels` | native | native | native | native | native | native | native |  |
 | Hand tool | `tool.hand` | native | native | native | native | native | native | native |  |
@@ -51,7 +51,7 @@ What works in a document of each depth and colour mode, as the menus, tools and 
 | Selections: Select menu, Quick Mask, load | `edit.selection` | native | native | native | native | native | native | native |  |
 | Channels panel, alpha channels | `edit.channels` | native | native | native | native | native | native | native |  |
 | Fill, Clear | `edit.fill` | native | native | native | native | native | native | native |  |
-| Cut, Copy, Paste | `edit.clipboard` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
+| Cut, Copy, Paste | `edit.clipboard` | native | native | native | native | native | native | native |  |
 | Brush and Eraser (round tip, tip brushes) | `tool.brush` | native | native | native | native | native | native | native |  |
 | MyPaint brush presets | `brush.mypaint` | native | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | CMYK8, CMYK16, Lab8, Lab16: libmypaint mixes RGB only; greyed rather than painting through RGB and back |
 | Gradient tool | `tool.gradient` | native | native | native | native | native | native | native |  |

@@ -183,12 +183,43 @@ mask in each mode.
   layer, a spot channel; `tests/psd_modes_tests.cpp`) are read back by an independent decoder. Constructed files are a
   weaker check than Photoshop's own; Photoshop-saved CMYK and Lab files are welcome.
 
+## Transforms, the clipboard and Place
+
+- **Image Size, Crop, Trim, the Crop tool, Crop to Selection, Canvas Size and Flip Canvas** work at 8 and 16 bits in
+  both modes. Resampling (Image Size, Distort, Perspective, **Edit ▸ Warp** and the **warp cage**, and **Free Transform
+  of selected pixels**) weighs every sample as the RGB samplers weigh a channel: all five in CMYK (alpha included), L,
+  a and b in Lab (a and b come out as the mean of their neighbours', never pulled toward neutral). Nothing is resampled
+  in RGB. A flat ink stays exactly that ink.
+- **Cut, Copy, Copy Merged, Paste and Layer via Copy** keep the document's own samples within a document and between
+  documents of the same mode and profile. Between modes the pixels are converted through the profiles, with Color
+  Settings' Conversion Options, as Photoshop converts a paste: RGB into CMYK (into the press gamut), CMYK or Lab into
+  RGB, Lab and CMYK into each other; copied layers (Edit ▸ Copy with no selection) are converted as Image ▸ Mode
+  converts a document. Other apps get an 8-bit sRGB copy; their pixels come in as sRGB. Pasting into one colour channel
+  writes the pixels' gray (read in sRGB) into it.
+- **File ▸ Import** converts the file once, from its embedded profile (sRGB when it has none) through the document's.
+- Place Embedded and smart objects, text and shapes stay greyed, as do Paste Into and Layer via Cut, which NekoPhoto
+  has in no mode yet.
+
+## Exports
+
+PNG, JPEG, WebP, TIFF, TGA, ICO and GIF exports of a CMYK or Lab document are the composite converted through the
+document's profile to sRGB, as Photoshop's Export As does: the same conversion the canvas makes without a monitor
+profile, written untagged (sRGB). A 16-bit document exports 16-bit PNG and TIFF, and is dithered to 8 bits for the
+other formats. PSD keeps the document's own mode. SVG, artboard and slice exports stay greyed with the artboards and
+vectors they come from.
+
+Checked by `transform_modes_tests` (Image Size keeps the inks at 8 and 16 bits with each sampling mode, Lab keeps a and
+b, the CMYK warp equals the RGB warp channel by channel, Warp and the warp cage on five samples, the flat export equals
+the native composite through the profile within a level, sRGB red into CMYK through the profile) and `rpc_smoke.py`
+(Image Size, Crop, Warp, the cage, Trim, Import, every flat export and layers copied into and out of RGB, in each mode
+and depth).
+
 ## Not yet
 
-Color Lookup, Mosh, transforms of pixels, text and shapes as editable objects, and layer styles in CMYK and
-Lab (greyed out with "Not available in CMYK mode yet"); exporting CMYK or Lab to PNG, JPEG, TIFF and the other formats
-(projects and PSD save them); CMYK JPEG and TIFF. Camera Raw, G'MIC and the MyPaint brushes stay RGB only ("Not
-available in CMYK mode", for good).
+Color Lookup, Mosh, text and shapes as editable objects, and layer styles in CMYK and Lab (greyed out with "Not
+available in CMYK mode yet"); CMYK JPEG and TIFF (a CMYK document exports them in sRGB). Whether Photoshop offers Color
+Lookup in CMYK and Lab has not been checked against Photoshop itself. Camera Raw, G'MIC and the MyPaint brushes stay
+RGB only ("Not available in CMYK mode", for good).
 
 ## Automation
 
@@ -214,7 +245,11 @@ colour channels `cyan` ... `black` and `lightness`, `a`, `b`, and the composite 
   depth; `BrushStroke(layer, mask, settings, document, options)` converts the colour through the profile
   (`RGBFloat` to `CMYKFloat` / `LabFloat`); `tiledProcessedNative` renders a layer at its layout for Blur and Sharpen;
   `trimToPixelsAny` and `applyMaskAny` (`pixels_any.cpp`) merge and apply masks at any layout.
-- Tests: `colormodes_render_tests`, `psd_modes_tests`, `paint_modes_tests`, `select_modes_tests` (the wand, Quick Select and loading a CMYK layer as a selection), CMYK and Lab scenes in `render_hash_tests`, and
+- Transforms: `modetransform.h` (`transform_modes.cpp`) runs `warpImage`, `warpImageTrimmed`, `resampleLayer`,
+  `renderWarpedImage` and `renderWarpedOverBox` over any layout: CMYK as (C, M, Y, alpha) and (K, K, K, alpha),
+  joined back. The session's CMYK and Lab paths (clipboard, Distort, merging a floating selection, conversions between
+  modes) are in `EditorSessionModes.cpp`.
+- Tests: `colormodes_render_tests`, `psd_modes_tests`, `paint_modes_tests`, `transform_modes_tests`, `select_modes_tests` (the wand, Quick Select and loading a CMYK layer as a selection), CMYK and Lab scenes in `render_hash_tests`, and
   `psd_roundtrip` (CMYK and Lab files must reopen in their mode with every layer channel byte for byte).
 
 ## 日本語
@@ -334,8 +369,31 @@ CMYK(モード 4)と Lab(モード 9)の PSD は 8/16 bit のまま**そのモ�
 そのまま**戻ります。ダブルトーン、マルチチャンネル、インデックスカラー、モノクロ 2 階調、グレースケールは従来どおり
 RGB に変換します。
 
+### 変形、クリップボード、読み込み
+
+- **画像解像度、切り抜き、トリミング、切り抜きツール、選択範囲で切り抜き、カンバスサイズ、カンバスの反転**は両方の
+  モードの 8/16 bit で使えます。再サンプル(画像解像度、自由な形に、遠近法、**編集 ▸ ワープ**と**ワープケージ**、
+  **選択ピクセルの自由変形**)は RGB のサンプラーがチャンネルを扱うのと同じようにすべての値を扱います。CMYK では
+  アルファを含む 5 つ、Lab では L・a・b(a と b は近傍の平均になり、中間に寄りません)。RGB で再サンプルすることは
+  ありません。単色のインキはそのままのインキです。
+- **カット、コピー、結合部分をコピー、ペースト、コピーしたレイヤー**は、同じドキュメントや同じモード・プロファイルの
+  ドキュメントの間ではドキュメント自身の値のままです。モードが違うときは Photoshop のペーストと同じく、カラー設定の
+  変換オプションでプロファイルを通して変換します(RGB から CMYK は印刷の色域へ、CMYK や Lab から RGB、Lab と CMYK の
+  相互)。コピーしたレイヤー(選択範囲なしのコピー)はイメージ ▸ モードと同じように変換します。ほかのアプリには
+  8 bit の sRGB を渡し、ほかのアプリからのピクセルは sRGB として受け取ります。
+- **ファイル ▸ 読み込み**は埋め込みプロファイル(なければ sRGB)からドキュメントのプロファイルへ一度だけ変換します。
+- 埋め込みで配置、スマートオブジェクト、テキスト、シェイプは使えないままです。「ペースト(選択範囲内)」と「カットした
+  レイヤー」はどのモードにもまだありません。
+
+### 書き出し
+
+CMYK・Lab ドキュメントの PNG、JPEG、WebP、TIFF、TGA、ICO、GIF への書き出しは、Photoshop の「書き出し形式」と同じく
+合成画像をドキュメントのプロファイルで sRGB に変換したもの(モニタープロファイルなしのカンバス表示と同じ変換)で、
+プロファイルなし(sRGB)で書き出します。16 bit のドキュメントは PNG と TIFF を 16 bit で、ほかの形式はディザーで
+8 bit にして書き出します。PSD はドキュメントのモードのままです。
+
 ### 未対応
 
-カラールックアップ、Mosh、変形、編集可能なテキストとシェイプ、レイヤースタイルの描画(「CMYK モードではまだ使用
-できません」と表示)、PNG・JPEG・TIFF などへの書き出し、CMYK の JPEG と TIFF、CMYK の
-分離不可能な描画モード。
+カラールックアップ、Mosh、編集可能なテキストとシェイプ、レイヤースタイルの描画(「CMYK モードではまだ使用
+できません」と表示)、CMYK の JPEG と TIFF(CMYK ドキュメントは sRGB で書き出します)、CMYK の分離不可能な描画モード。
+カラールックアップが Photoshop の CMYK・Lab にあるかは Photoshop で確認していません。
