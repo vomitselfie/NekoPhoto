@@ -1179,7 +1179,7 @@ QWidget* ToolOptionsBar::buildCropOptions() {
     auto* clearRatio = new QPushButton(tr("Clear"));
     clearRatio->setToolTip(tr("Clear the ratio"));
     auto applyFields = [this, ratioW, ratioH] { canvas_->setCropRatio(ratioW->value(), ratioH->value()); };
-    connect(ratio, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, ratioW, ratioH](int i) {
+    connect(ratio, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) {
         if (i < 0 || i >= int(std::size(presets))) return;
         double w = presets[i].w, h = presets[i].h;
         if (w < 0) { w = session_->hasDocument() ? session_->document()->width : 0; h = session_->hasDocument() ? session_->document()->height : 0; }
