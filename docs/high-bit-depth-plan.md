@@ -193,7 +193,7 @@ and a Channels panel, with 8-bit documents untouched throughout.
   size and flip, import, save and export, the tools that do not touch pixels). The app greys every other menu entry
   and tool in a 16-bit document ("Not available in 16-bit yet"), automation refuses the other methods ("<method> is
   not available for 16-bit documents yet"), and the session's 8-bit-only entry points refuse with the same wording.
-  Every edit brings buffers held at another depth to the document's (`conformToSampleType`), so a document keeps one
+  Every edit brings buffers held at another depth to the document's (`conformToFormat`), so a document keeps one
   depth even when an 8-bit path (a shape or text raster, an imported file) adds pixels.
 - Gates: 8-bit render hashes identical (133 scenes) plus 58 16-bit scenes; full ctest; GCC and Clang `-Werror`; rpc
   smoke with a 16-bit section; PSD corpus plus K.psd identical (118 files, 3,975 carried blocks); a constructed
@@ -584,3 +584,25 @@ Follow Photoshop's choices throughout:
 | G | CMYK JPEG, and non-separable calibration if fixtures allow |
 
 Minimum shippable subset: A–D and F plus the cheap part of E.
+
+**Status (2026-09-28): steps A and B landed.**
+
+- A: `ColorMode` on `Document` (manifest `colorMode`, project version 9; RGB writes nothing new), `colormodes.h`
+  (inverted-ink and Lab offset accessors), `ImageC8` as the fourth `AnyImage` alternative (`.c8()`; `.u8()` null),
+  `conformToFormat`, byte budgets by channel count (`imagePixelBudget(type, mode)`, `formatBudgetProblem`), the mode
+  axis in `supports()` ("Not available in CMYK mode"), CMYK layers as `images/<id>.cmyk` planes (zlib, zstd read),
+  Lab as 4-sample PNGs, `ProjectLoadLimits::layerBytes`. Tests: `colormodes_tests`.
+- B: `PixelFormat` CMYKA8/16 and LabA8/16 (staged, straight around Little CMS), `labProfile()` (Lab D50, fixed
+  bytes), the bundled Working CMYK (basICColor ISO Coated v2 300%, zlib licence verified in Debian's
+  `icc-profiles-free` 2.4 source), Color Settings > Working CMYK, `convertImage` between any layouts, fused
+  `convertImageTo8`, Proof Setup > Working CMYK (the default proof) with the gamut warning, `color.settings
+  workingCmyk`, `document.profile working-cmyk`. Tests: `colormgmt_cmyk_tests` against Little CMS.
+- Gates: full ctest (53), render hashes and brush parity unchanged, PSD corpus plus K.psd 118 files / 0 failed / 3,975
+  blocks at 8 and 16 bits, GCC and Clang `-Werror`, headless rpc smoke, translations_check. bench_core A/B was not
+  conclusive: other lanes loaded the machine (lines moved from -46% to +460% in both directions, including layer
+  bookkeeping this work does not touch); the only change on benchmarked paths is one branch in `ColorTransform::apply`.
+- For step C: thumbnails for CMYK layers (`Asset::make(ImageC8Ptr)` has none, 5-channel `Image16` none either), Lab
+  thumbnails read as RGB; the display path is `transformBetween(document profile, monitor, pixelFormatFor(depth, mode),
+  RGBA8)` plus `convertImageTo8`, never null for CMYK/Lab; `conformToFormat` leaves buffers of another channel count
+  alone, so paste/place into CMYK needs `convertImage(..., RGB, from, CMYK, to)`; stored colours (text, shapes, styles)
+  are still RGB values in every mode.

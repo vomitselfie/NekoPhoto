@@ -216,6 +216,19 @@ add_library(compositor_core STATIC
 )
 add_library(compositor::core ALIAS compositor_core)
 
+# The default Working CMYK profile, ISO Coated v2 300% (basICColor, zlib licence; src/third_party/icc/README.md),
+# compiled in as bytes so the core has a CMYK profile without files beside the program.
+set(NEKOPHOTO_CMYK_PROFILE ${CMAKE_SOURCE_DIR}/src/third_party/icc/ISOcoated_v2_300_bas.ICC)
+set(NEKOPHOTO_CMYK_BLOB ${CMAKE_CURRENT_BINARY_DIR}/generated/cmyk_profile_blob.cpp)
+add_custom_command(
+    OUTPUT ${NEKOPHOTO_CMYK_BLOB}
+    COMMAND ${CMAKE_COMMAND} -DINPUT=${NEKOPHOTO_CMYK_PROFILE} -DOUTPUT=${NEKOPHOTO_CMYK_BLOB} -DSYMBOL=defaultCmykProfile
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/embed_blob.cmake
+    DEPENDS ${NEKOPHOTO_CMYK_PROFILE} ${CMAKE_CURRENT_SOURCE_DIR}/embed_blob.cmake
+    COMMENT "Embedding the default CMYK profile"
+    VERBATIM)
+target_sources(compositor_core PRIVATE ${NEKOPHOTO_CMYK_BLOB})
+
 target_include_directories(compositor_core
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
     PUBLIC ${CMAKE_SOURCE_DIR}/src/third_party

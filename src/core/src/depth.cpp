@@ -246,4 +246,87 @@ AnyGray grayAtDepth(const AnyGray& image, SampleType type) {
     return nullptr;
 }
 
+std::shared_ptr<Image16> widenImageC8(const ImageC8& image) {
+    auto out = std::make_shared<Image16>(image.width(), image.height(), 5);
+    parallelRows(0, image.height(), [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++) {
+            const uint8_t* s = image.row(y);
+            uint16_t* d = out->row(y);
+            for (int i = 0; i < image.width() * 5; i++) d[i] = widen8(s[i]);
+        }
+    }, 64);
+    return out;
+}
+
+std::shared_ptr<ImageC8> narrowImageC8(const Image16& image) {
+    auto out = std::make_shared<ImageC8>(image.width(), image.height(), 5);
+    if (image.channels() != 5) return out;
+    parallelRows(0, image.height(), [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++) {
+            const uint16_t* s = image.row(y);
+            uint8_t* d = out->row(y);
+            for (int i = 0; i < image.width() * 5; i++) d[i] = narrow16(s[i]);
+        }
+    }, 64);
+    return out;
+}
+
+namespace {
+// Lab across depths: L and alpha scale as any sample; a and b keep their neutral point, so they are made straight,
+// moved by the offset and scale, and premultiplied again.
+std::shared_ptr<Image16> widenLab(const Image& image) {
+    auto out = std::make_shared<Image16>(image.width(), image.height());
+    parallelRows(0, image.height(), [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++) {
+            const uint8_t* s = image.row(y);
+            uint16_t* d = out->row(y);
+            for (int x = 0; x < image.width(); x++, s += 4, d += 4) {
+                const uint8_t a8 = s[3];
+                const uint16_t a16 = widen8(a8);
+                d[0] = widen8(s[0]);
+                d[3] = a16;
+                for (int c = 1; c < 3; c++) {
+                    const double v = labA<SampleType::U8>(s[c], a8);
+                    d[c] = a8 == 0 ? 0 : storedLabAB<SampleType::U16>(v, a16);
+                }
+            }
+        }
+    }, 64);
+    return out;
+}
+
+std::shared_ptr<Image> narrowLab(const Image16& image) {
+    auto out = std::make_shared<Image>(image.width(), image.height());
+    parallelRows(0, image.height(), [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++) {
+            const uint16_t* s = image.row(y);
+            uint8_t* d = out->row(y);
+            for (int x = 0; x < image.width(); x++, s += 4, d += 4) {
+                const uint16_t a16 = s[3];
+                const uint8_t a8 = narrow16(a16);
+                d[0] = narrow16(s[0]);
+                d[3] = a8;
+                for (int c = 1; c < 3; c++) {
+                    // Rounded to the nearest 8-bit step of a or b.
+                    const double v = std::round(labA<SampleType::U16>(s[c], a16));
+                    d[c] = a8 == 0 ? 0 : storedLabAB<SampleType::U8>(v, a8);
+                }
+            }
+        }
+    }, 64);
+    return out;
+}
+} // namespace
+
+AnyImage imageAtFormat(const AnyImage& image, SampleType type, ColorMode mode) {
+    if (!image || image.channels() != colorModeChannels(mode) || type == SampleType::F32) return nullptr;
+    if (mode == ColorMode::RGB) return imageAtDepth(image, type);
+    if (mode == ColorMode::CMYK) {
+        if (type == SampleType::U8) return image.c8() ? image : image.u16() ? AnyImage(ImageC8Ptr(narrowImageC8(*image.u16()))) : nullptr;
+        return image.u16() ? image : image.c8() ? AnyImage(Image16Ptr(widenImageC8(*image.c8()))) : nullptr;
+    }
+    if (type == SampleType::U8) return image.u8() ? image : image.u16() ? AnyImage(ImagePtr(narrowLab(*image.u16()))) : nullptr;
+    return image.u16() ? image : image.u8() ? AnyImage(Image16Ptr(widenLab(*image.u8()))) : nullptr;
+}
+
 } // namespace compositor

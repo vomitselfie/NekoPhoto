@@ -257,11 +257,22 @@ std::shared_ptr<Image16> EditorSession::flattened16() const {
 
 // ---- Bit depth ---------------------------------------------------------------
 
-bool EditorSession::supportsFeature(std::string_view feature) const { return supports(feature, sampleType()); }
+bool EditorSession::supportsFeature(std::string_view feature) const { return supports(feature, sampleType(), colorMode()); }
+
+QString EditorSession::unavailableTip() const {
+    switch (colorMode()) {
+    case ColorMode::CMYK: return tr("Not available in CMYK mode");
+    case ColorMode::Lab: return tr("Not available in Lab mode");
+    case ColorMode::RGB: break;
+    }
+    return tr("Not available in 16-bit yet");
+}
 
 bool EditorSession::refusedAtDepth(std::string_view feature, const QString& what, QString* errorText) {
     if (supportsFeature(feature)) return false;
-    const QString message = tr("%1 is not available for %2-bit documents yet.").arg(what, QString::fromLatin1(sampleTypeName(sampleType())));
+    const QString message = supports(feature, sampleType())
+        ? (colorMode() == ColorMode::CMYK ? tr("%1 is not available in CMYK mode.").arg(what) : tr("%1 is not available in Lab mode.").arg(what))
+        : tr("%1 is not available for %2-bit documents yet.").arg(what, QString::fromLatin1(sampleTypeName(sampleType())));
     if (errorText) *errorText = message;
     else emit error(message);
     return true;
@@ -378,7 +389,7 @@ void EditorSession::endEdit() {
     if (document_) { pruneAnimation(*document_); syncCurrentFrame(*document_); }
     // One depth per document: pixels this edit brought in at another depth (an 8-bit file imported into a 16-bit
     // document, a raster an 8-bit path drew) are converted to the document's.
-    if (document_) conformToSampleType(*document_);
+    if (document_) conformToFormat(*document_);
     history_.end(document_, activeLayerId_);
 }
 

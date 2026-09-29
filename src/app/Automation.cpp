@@ -7,6 +7,7 @@
 #include "LayersPanel.h"
 #include "ModelStore.h"
 #include "compositor/scribble.h"
+#include "compositor/supports.h"
 #include <QApplication>
 #include <QDir>
 #include "Platform.h"
@@ -174,7 +175,7 @@ namespace {
 /// document; on a 16-bit one, those that read, those outside the document, and those whose feature supports() lists
 /// at 16 bits. The rest are refused, "<method> is not available for 16-bit documents yet", until they are ported.
 bool worksAtDepth(const QString& method, const EditorSession& session) {
-    if (!session.hasDocument() || session.sampleType() == SampleType::U8) return true;
+    if (!session.hasDocument() || !session.featuresGated()) return true;
     static const QSet<QString> always = {
         "app.info", "tabs.list", "tabs.new", "tabs.select", "tabs.close", "history.undo", "history.redo", "history.list", "history.info",
         "history.beginGroup", "history.endGroup", "rpc.methods", "rpc.describe", "rpc.batch", "events.subscribe", "events.unsubscribe",
@@ -244,7 +245,10 @@ QJsonObject AutomationServer::handle(const QJsonObject& request) {
     }
     // A 16-bit document takes only what has been ported to it (compositor/supports.h).
     if (EditorSession* s = window_->session(); s && !worksAtDepth(method, *s)) {
-        response["error"] = QJsonObject{{"code", appError}, {"message", method + " is not available for " + QString::fromLatin1(sampleTypeName(s->sampleType())) + "-bit documents yet"}};
+        const QString why = s->colorMode() != ColorMode::RGB
+            ? method + ": " + QString::fromStdString(notAvailableInMode(s->colorMode()))
+            : method + " is not available for " + QString::fromLatin1(sampleTypeName(s->sampleType())) + "-bit documents yet";
+        response["error"] = QJsonObject{{"code", appError}, {"message", why}};
         return response;
     }
     // An editing request made while an action records becomes a step of it; the requests it makes itself (a
@@ -466,6 +470,13 @@ void AutomationServer::registerAppHandlers() {
             if (!space) fail("workingSpace must be srgb, adobe-rgb, display-p3 or prophoto", invalidParams);
             s.workingSpace = *space;
         }
+        if (has(p, "workingCmyk")) {
+            // "default" (the bundled ISO Coated v2 300%) or a CMYK ICC file.
+            QString path = str(p, "workingCmyk"), error;
+            if (path == "default") path.clear();
+            if (!path.isEmpty() && !color::readProfileFile(path, &error, color::ProfileKinds::CMYK)) fail(error, invalidParams);
+            s.workingCmyk = path;
+        }
         if (has(p, "policy")) {
             auto policy = color::policyFromKey(str(p, "policy"));
             if (!policy) fail("policy must be preserve, convert or off", invalidParams);
@@ -483,7 +494,8 @@ void AutomationServer::registerAppHandlers() {
         if (has(p, "proofProfile")) {
             const QString key = str(p, "proofProfile");
             QString error;
-            if (key == "none" || !color::profileForKey(key, &error)) fail(error.isEmpty() ? QStringLiteral("proofProfile must be a working space or an ICC file") : error, invalidParams);
+            if (key == "none" || !color::profileForKey(key, &error, color::ProfileKinds::RGBOrCMYK))
+                fail(error.isEmpty() ? QStringLiteral("proofProfile must be working-cmyk, a working space or an ICC file") : error, invalidParams);
             s.proofProfile = key;
         }
         if (has(p, "proofIntent")) {
@@ -498,6 +510,7 @@ void AutomationServer::registerAppHandlers() {
         if (p.size() > 0) color::setSettings(s);
         const ColorProfile monitor = color::monitorProfile();
         return QJsonObject{{"workingSpace", QString::fromLatin1(workingSpaceKey(s.workingSpace))}, {"workingSpaceName", QString::fromLatin1(workingSpaceName(s.workingSpace))},
+                           {"workingCmyk", s.workingCmyk.isEmpty() ? QStringLiteral("default") : s.workingCmyk}, {"workingCmykName", color::workingCmykLabel()},
                            {"policy", QString::fromLatin1(color::policyKey(s.policy))}, {"untagged", "srgb"}, {"askMissing", s.askMissing}, {"askMismatch", s.askMismatch},
                            {"useSystemMonitor", s.useSystemMonitor}, {"monitorProfile", s.monitorFile},
                            {"monitor", monitor.empty() ? QJsonValue::Null : QJsonValue(QString::fromStdString(monitor.description))},

@@ -1877,6 +1877,22 @@
         <translation>%1 は RGB プロファイルではありません。</translation>
     </message>
     <message>
+        <source>%1 is not a CMYK profile.</source>
+        <translation>%1 は CMYK プロファイルではありません。</translation>
+    </message>
+    <message>
+        <source>%1 is not an RGB or CMYK profile.</source>
+        <translation>%1 は RGB プロファイルでも CMYK プロファイルでもありません。</translation>
+    </message>
+    <message>
+        <source>The Working CMYK is a CMYK profile; an RGB document takes RGB profiles.</source>
+        <translation>作業用 CMYK は CMYK プロファイルです。RGB ドキュメントには RGB プロファイルを指定します。</translation>
+    </message>
+    <message>
+        <source>%1 is an RGB profile; a CMYK profile is needed here.</source>
+        <translation>%1 は RGB プロファイルです。ここでは CMYK プロファイルが必要です。</translation>
+    </message>
+    <message>
         <source>No profile given.</source>
         <translation>プロファイルが指定されていません。</translation>
     </message>
@@ -2279,6 +2295,10 @@ Working: %2</source>
         <translation>ICC プロファイル (*.icc *.icm)</translation>
     </message>
     <message>
+        <source>Working CMYK: %1</source>
+        <translation>作業用 CMYK:%1</translation>
+    </message>
+    <message>
         <source>Perceptual</source>
         <translation>知覚的</translation>
     </message>
@@ -2293,6 +2313,10 @@ Working: %2</source>
     <message>
         <source>Working space (RGB):</source>
         <translation>作業用スペース(RGB):</translation>
+    </message>
+    <message>
+        <source>Working CMYK:</source>
+        <translation>作業用スペース(CMYK):</translation>
     </message>
     <message>
         <source>Preserve Embedded Profiles</source>
@@ -4269,6 +4293,26 @@ File &gt; New creates a blank canvas.</source>
         <translation>1 つのドキュメントに置けるレイヤーは最大 %1 個です。</translation>
     </message>
     <message>
+        <source>Not available in CMYK mode</source>
+        <translation>CMYK モードでは使用できません</translation>
+    </message>
+    <message>
+        <source>Not available in Lab mode</source>
+        <translation>Lab モードでは使用できません</translation>
+    </message>
+    <message>
+        <source>Not available in 16-bit yet</source>
+        <translation>16 bit/チャンネルではまだ使用できません</translation>
+    </message>
+    <message>
+        <source>%1 is not available in CMYK mode.</source>
+        <translation>CMYK モードのドキュメントでは、%1 は使用できません。</translation>
+    </message>
+    <message>
+        <source>%1 is not available in Lab mode.</source>
+        <translation>Lab モードのドキュメントでは、%1 は使用できません。</translation>
+    </message>
+    <message>
         <source>%1 is not available for %2-bit documents yet.</source>
         <translation>%2 bit/チャンネルのドキュメントでは、%1 はまだ使用できません。</translation>
     </message>
@@ -5214,10 +5258,6 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Smart object (%1): click to edit its contents.</source>
         <translation>スマートオブジェクト (%1): クリックして内容を編集します。</translation>
-    </message>
-    <message>
-        <source>Not available in 16-bit yet</source>
-        <translation>16 bit/チャンネルではまだ使用できません</translation>
     </message>
     <message>
         <source>Edit Text…</source>
@@ -7236,6 +7276,10 @@ File &gt; New creates a blank canvas.</source>
         <translation>カスタム…</translation>
     </message>
     <message>
+        <source>Working CMYK</source>
+        <translation>作業用 CMYK</translation>
+    </message>
+    <message>
         <source>Proof Colo&amp;rs</source>
         <translation>色の校正(&amp;R)</translation>
     </message>
@@ -7294,10 +7338,6 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>The document could not be converted.</source>
         <translation>ドキュメントを変換できませんでした。</translation>
-    </message>
-    <message>
-        <source>Not available in 16-bit yet</source>
-        <translation>16 bit/チャンネルではまだ使用できません</translation>
     </message>
 </context>
 <context>

@@ -50,12 +50,39 @@ bool convertStyle(LayerStyle& s, const ColourConverter& convert) {
 
 bool convertDocumentProfile(Document& document, const ColorProfile& target, const ConvertOptions& options, std::string* why) {
     const ColorProfile from = document.profile;
-    const ColorProfile& a = effectiveProfile(from);
-    const ColorProfile& b = effectiveProfile(target);
-    if (a.model != ColorModel::RGB || b.model != ColorModel::RGB) { if (why) *why = "Only RGB profiles can be converted between."; return false; }
-    if (equivalentProfiles(from, target)) { document.profile = target; return true; }
+    const ColorModel model = colorModelOf(document.colorMode);
+    const ColorProfile& a = effectiveProfile(from, model);
+    const ColorProfile& b = effectiveProfile(target, model);
+    if (a.model != model || b.model != model) {
+        if (why) *why = std::string("Only ") + colorModeName(document.colorMode) + " profiles can be converted between here; Image > Mode changes the colour mode.";
+        return false;
+    }
+    if (equivalentProfiles(a, b)) { document.profile = target; return true; }
     const bool deep = document.sampleType == SampleType::U16;
     if (document.sampleType == SampleType::F32) { if (why) *why = "32-bit documents cannot be converted yet."; return false; }
+    if (document.colorMode != ColorMode::RGB) {
+        // A CMYK or Lab document between two profiles of its mode: every raster layer's pixels. Its stored colours are
+        // still RGB values until Image > Mode converts them (P7 step D), so they are left as they are.
+        ColorTransformPtr pixels = transformBetween(from, target, options, pixelFormatFor(document.sampleType, document.colorMode),
+                                                    pixelFormatFor(document.sampleType, document.colorMode));
+        if (!pixels) { if (why) *why = "The profiles could not be read."; return false; }
+        for (Layer& layer : document.layers) {
+            if (!layer.asset || !layer.asset->image) continue;
+            const AnyImage before = layer.asset->image;
+            AnyImage after;
+            if (auto p = before.c8()) { auto copy = std::make_shared<ImageC8>(*p); convertImage(*copy, pixels.get()); after = ImageC8Ptr(copy); }
+            else if (auto p16 = before.u16()) { auto copy = std::make_shared<Image16>(*p16); convertImage(*copy, pixels.get()); after = Image16Ptr(copy); }
+            else if (auto p8 = before.u8()) { auto copy = std::make_shared<Image>(*p8); convertImage(*copy, pixels.get()); after = ImagePtr(copy); }
+            if (!after) continue;
+            const bool liveShape = layer.isLiveShape(), liveText = layer.isLiveText(), liveSmart = layer.isLiveSmartObject();
+            layer.asset = Asset::makeAny(after, layer.asset->name);
+            if (liveShape) layer.shapeImage = after;
+            if (liveText) layer.textImage = after;
+            if (liveSmart) layer.smartImage = after;
+        }
+        document.profile = target;
+        return true;
+    }
     ColorTransformPtr pixels = transformBetween(from, target, options, deep ? PixelFormat::RGBA16 : PixelFormat::RGBA8, deep ? PixelFormat::RGBA16 : PixelFormat::RGBA8);
     ColorTransformPtr colours = transformBetween(from, target, options, PixelFormat::RGBFloat, PixelFormat::RGBFloat);
     if (!pixels || !colours) { if (why) *why = "The profiles could not be read."; return false; }

@@ -25,19 +25,22 @@ constexpr WorkingSpace spaces[] = {WorkingSpace::SRGB, WorkingSpace::AdobeRGB, W
 
 QString spaceLabel(WorkingSpace s) { return QString::fromLatin1(workingSpaceName(s)); }
 
-/// A profile chooser: the four working spaces, `extra` (the document's own profile when it is none of them), and
-/// "Load…", which reads an ICC file and adds it. Each item's data is a key for profileForKey, or the profile itself.
+/// A profile chooser: the Working CMYK (when `kinds` takes CMYK), the four working spaces, `extra` (the document's own
+/// profile when it is none of them), and "Load…", which reads an ICC file and adds it. Each item's data is a key for
+/// profileForKey, or the profile itself.
 class ProfileCombo : public QComboBox {
 public:
-    explicit ProfileCombo(QWidget* parent) : QComboBox(parent) {
-        for (WorkingSpace s : spaces) addItem(spaceLabel(s), QString::fromLatin1(workingSpaceKey(s)));
+    explicit ProfileCombo(QWidget* parent, ProfileKinds kinds = ProfileKinds::RGB) : QComboBox(parent), kinds_(kinds) {
+        if (kinds != ProfileKinds::RGB) addItem(QObject::tr("Working CMYK: %1").arg(workingCmykLabel()), QStringLiteral("working-cmyk"));
+        if (kinds != ProfileKinds::CMYK)
+            for (WorkingSpace s : spaces) addItem(spaceLabel(s), QString::fromLatin1(workingSpaceKey(s)));
         insertSeparator(count());
         addItem(QObject::tr("Load…"), QStringLiteral("__load__"));
         connect(this, QOverload<int>::of(&QComboBox::activated), this, [this](int index) {
             if (itemData(index).toString() != QLatin1String("__load__")) { last_ = index; return; }
             const QString path = QFileDialog::getOpenFileName(this, QObject::tr("Load Profile"), QString(), QObject::tr("ICC profiles (*.icc *.icm)"));
             QString error;
-            auto profile = path.isEmpty() ? std::nullopt : readProfileFile(path, &error);
+            auto profile = path.isEmpty() ? std::nullopt : readProfileFile(path, &error, kinds_);
             if (!profile) {
                 if (!path.isEmpty()) QMessageBox::warning(this, QObject::tr("Load Profile"), error);
                 setCurrentIndex(last_);
@@ -62,7 +65,7 @@ public:
     void selectKey(const QString& key) {
         int index = findData(key);
         if (index < 0 && !key.isEmpty()) {
-            if (auto p = readProfileFile(key)) { insertItem(0, QString::fromStdString(p->description), key); index = 0; }
+            if (auto p = readProfileFile(key, nullptr, kinds_)) { insertItem(0, QString::fromStdString(p->description), key); index = 0; }
         }
         setCurrentIndex(std::max(0, index));
         last_ = currentIndex();
@@ -70,10 +73,11 @@ public:
     QString key() const { return currentData().toString(); }
     std::optional<ColorProfile> profile() const {
         if (key() == QLatin1String("__own__")) return own_;
-        return profileForKey(key());
+        return profileForKey(key(), nullptr, kinds_);
     }
 
 private:
+    ProfileKinds kinds_ = ProfileKinds::RGB;
     int last_ = 0;
     ColorProfile own_;
 };
@@ -111,6 +115,31 @@ bool showColorSettings(QWidget* parent) {
     for (WorkingSpace s : spaces) working->addItem(spaceLabel(s), int(s));
     working->setCurrentIndex(working->findData(int(settings().workingSpace)));
     form->addRow(QObject::tr("Working space (RGB):"), working);
+    // Working CMYK: the bundled ISO Coated v2 300% (FOGRA39), or any CMYK ICC file.
+    auto* cmyk = new QComboBox;
+    cmyk->addItem(QString::fromStdString(defaultCmykProfile().description), QString());
+    if (!settings().workingCmyk.isEmpty()) {
+        if (auto p = readProfileFile(settings().workingCmyk, nullptr, ProfileKinds::CMYK)) cmyk->addItem(QString::fromStdString(p->description), settings().workingCmyk);
+    }
+    cmyk->insertSeparator(cmyk->count());
+    cmyk->addItem(QObject::tr("Load…"), QStringLiteral("__load__"));
+    cmyk->setCurrentIndex(std::max(0, cmyk->findData(settings().workingCmyk)));
+    int lastCmyk = cmyk->currentIndex();
+    QObject::connect(cmyk, QOverload<int>::of(&QComboBox::activated), &dialog, [cmyk, &dialog, &lastCmyk](int index) {
+        if (cmyk->itemData(index).toString() != QLatin1String("__load__")) { lastCmyk = index; return; }
+        const QString path = QFileDialog::getOpenFileName(&dialog, QObject::tr("Load Profile"), QString(), QObject::tr("ICC profiles (*.icc *.icm)"));
+        QString error;
+        auto profile = path.isEmpty() ? std::nullopt : readProfileFile(path, &error, ProfileKinds::CMYK);
+        if (!profile) {
+            if (!path.isEmpty()) QMessageBox::warning(&dialog, QObject::tr("Load Profile"), error);
+            cmyk->setCurrentIndex(lastCmyk);
+            return;
+        }
+        cmyk->insertItem(1, QString::fromStdString(profile->description), path);
+        cmyk->setCurrentIndex(1);
+        lastCmyk = 1;
+    });
+    form->addRow(QObject::tr("Working CMYK:"), cmyk);
     auto* policy = new QComboBox;
     policy->addItem(QObject::tr("Preserve Embedded Profiles"), int(EmbeddedPolicy::Preserve));
     policy->addItem(QObject::tr("Convert to Working RGB"), int(EmbeddedPolicy::ConvertToWorking));
@@ -129,6 +158,7 @@ bool showColorSettings(QWidget* parent) {
     if (dialog.exec() != QDialog::Accepted) return false;
     Settings s = settings();
     s.workingSpace = WorkingSpace(working->currentData().toInt());
+    s.workingCmyk = cmyk->currentData().toString();
     s.policy = EmbeddedPolicy(policy->currentData().toInt());
     s.askMissing = missing->isChecked();
     s.askMismatch = mismatch->isChecked();
@@ -191,7 +221,7 @@ bool showProofSetup(QWidget* parent) {
     dialog.setWindowTitle(QObject::tr("Customize Proof Condition"));
     auto* layout = new QVBoxLayout(&dialog);
     auto* form = new QFormLayout;
-    auto* combo = new ProfileCombo(&dialog);
+    auto* combo = new ProfileCombo(&dialog, ProfileKinds::RGBOrCMYK);
     combo->selectKey(settings().proofProfile);
     form->addRow(QObject::tr("Device to Simulate:"), combo);
     auto* intent = intentCombo(&dialog, settings().proofIntent);
@@ -213,7 +243,7 @@ bool showProofSetup(QWidget* parent) {
     layout->addWidget(okCancel(&dialog));
     if (dialog.exec() != QDialog::Accepted) return false;
     Settings s = settings();
-    s.proofProfile = combo->key() == QLatin1String("__own__") ? QStringLiteral("srgb") : combo->key();
+    s.proofProfile = combo->key() == QLatin1String("__own__") ? QStringLiteral("working-cmyk") : combo->key();
     s.proofIntent = RenderingIntent(intent->currentData().toInt());
     s.proofBlackPoint = bpc->isChecked();
     s.gamutColor = gamut;

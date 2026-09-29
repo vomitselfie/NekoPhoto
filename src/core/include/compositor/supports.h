@@ -5,7 +5,12 @@
 // Features are named by a stable id, "<area>.<name>": "adjustment.Levels" (adjustmentKindName), "filter.<id>",
 // "tool.<name>", "export.<format>" and so on. An id the registry does not list is 8-bit only, so a new feature is
 // safe by default and a port declares itself by adding a line to the table in supports.cpp.
+//
+// A second axis is the colour mode (colormodes.h): every feature works in RGB; in CMYK and Lab only the features the
+// mode table lists do, as Photoshop greys out what a mode cannot do ("Not available in CMYK mode"). A feature must
+// then also support the document's depth.
 #pragma once
+#include "colormodes.h"
 #include "document.h"
 #include "sampletype.h"
 #include <cstdint>
@@ -25,6 +30,23 @@ inline bool supports(std::string_view feature, SampleType type) {
 }
 /// An adjustment (layer or destructive), by its kind: "adjustment.<name>".
 bool supports(AdjustmentKind kind, SampleType type);
+
+/// A set of colour modes, one bit each.
+using ColorModes = uint8_t;
+constexpr ColorModes colorModeBit(ColorMode mode) { return ColorModes(1u << unsigned(mode)); }
+/// The colour modes `feature` works in; RGB alone for a feature the mode table does not list.
+ColorModes supportedColorModes(std::string_view feature);
+/// Whether `feature` works in a document of `type` and `mode`.
+inline bool supports(std::string_view feature, SampleType type, ColorMode mode) {
+    return supports(feature, type) && (mode == ColorMode::RGB || (supportedColorModes(feature) & colorModeBit(mode)) != 0);
+}
+bool supports(AdjustmentKind kind, SampleType type, ColorMode mode);
+/// "Not available in CMYK mode", "Not available in Lab mode": the refusal for a feature the mode lacks (empty for RGB).
+std::string notAvailableInMode(ColorMode mode);
+
+struct FeatureModes { std::string_view feature; ColorModes modes; };
+/// The features the mode table lists beyond RGB.
+const FeatureModes* featureModeTable(size_t& count);
 
 struct FeatureSupport { std::string_view feature; SampleTypes types; };
 /// The features the registry lists (P2: the renderer, the layer structure, masks and the files at 16 bits).

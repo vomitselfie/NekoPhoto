@@ -31,6 +31,9 @@ A simplified form of Photoshop's dialog (Ctrl+Shift+K):
 
 - **Working space (RGB)**: sRGB IEC61966-2.1 (the default), Adobe RGB (1998), Display P3 or ProPhoto RGB. New
   documents take it (they stay untagged while it is sRGB).
+- **Working CMYK**: the press profile CMYK colours are for: **ISO Coated v2 300% (basICColor)**, a FOGRA39 profile
+  that ships with NekoPhoto (the default), or any CMYK ICC file (Load…). Photoshop's default proof simulates it, and an
+  untagged CMYK document is treated as it.
 - **Color management policy (RGB)**, for a file's embedded profile as it opens:
   - **Preserve Embedded Profiles** (the default): the document keeps the file's profile.
   - **Convert to Working RGB**: the pixels are converted to the working space, which the document then carries.
@@ -39,8 +42,10 @@ A simplified form of Photoshop's dialog (Ctrl+Shift+K):
 - **Ask when opening** a file without a profile (leave it, or assign the working space) or with one other than the
   working space (use it, convert, or discard it). Both are off by default.
 
-The four working spaces are made by Little CMS from their published primaries, white points and tone curves (sRGB's
-curve, Adobe RGB's gamma of 563/256, ProPhoto's 1.8, Display P3 with sRGB's curve); no ICC file is bundled.
+The four RGB working spaces are made by Little CMS from their published primaries, white points and tone curves (sRGB's
+curve, Adobe RGB's gamma of 563/256, ProPhoto's 1.8, Display P3 with sRGB's curve), and so is Lab D50. The one ICC file
+bundled is the default Working CMYK, basICColor's ISO Coated v2 300% (zlib licence, `LICENSES/basICColor-zlib.txt`;
+Adobe's SWOP and the ECI profiles cannot be redistributed, but Color Settings takes them as files).
 
 ## Edit ▸ Assign Profile and Convert to Profile
 
@@ -75,10 +80,27 @@ transform; the values you pick and see in the colour dialogs are the document's.
 
 ## View ▸ Proof Setup, Proof Colors and Gamut Warning
 
-**Proof Setup ▸ Custom…** chooses a device to simulate (a working space or an ICC file), its rendering intent,
-black point compensation, and the gamut warning's colour. **Proof Colors** (Ctrl+Y) then shows the document as it
-would look on that device, and **Gamut Warning** (Ctrl+Shift+Y) paints the colours that device cannot show in the
-warning colour. Both apply to every window and last until you turn them off; they change only the view.
+**Proof Setup ▸ Working CMYK** (the default, as in Photoshop) simulates the press the Working CMYK describes, so an RGB
+document shows how it would print. **Proof Setup ▸ Custom…** chooses another device to simulate (the Working CMYK, a
+working space, or an RGB or CMYK ICC file), its rendering intent, black point compensation, and the gamut warning's
+colour. **Proof Colors** (Ctrl+Y) then shows the document as it would look on that device, and **Gamut Warning**
+(Ctrl+Shift+Y) paints the colours that device cannot show in the warning colour (with the Working CMYK: sRGB's pure
+blues, greens and oranges). Both apply to every window and last until you turn them off; they change only the view.
+
+## CMYK and Lab documents
+
+Image ▸ Mode ▸ CMYK Color and Lab Color are being built (the plan is in [high-bit-depth-plan.md](high-bit-depth-plan.md),
+"P7 plan: CMYK and Lab"); until then no document is CMYK or Lab. What is in place:
+
+- **The document model.** A CMYK document holds five samples a pixel (cyan, magenta, yellow and black as inverted ink,
+  0 being full ink as in PSD, then alpha), a Lab document four (L, a and b offset by 128 at 8 bits and 16384 at 16),
+  premultiplied, at 8 or 16 bits. Its byte budget counts the channels: a CMYK layer holds four fifths the pixels of an
+  RGB one.
+- **Colour.** Every conversion between RGB, CMYK and Lab pixels at either depth, through the document's profiles (an
+  untagged CMYK document is in the Working CMYK, a Lab document in Lab D50).
+- **Features by mode.** What does not work in a mode is greyed out with "Not available in CMYK mode" (or Lab mode), as
+  in Photoshop; Camera Raw, G'MIC and the MyPaint brushes stay RGB only.
+- **Projects** save and open CMYK and Lab documents ([project-format.md](project-format.md), version 9).
 
 ## The eyedropper
 
@@ -103,8 +125,12 @@ sRGB** first (off by default, on for GIF); converted files carry no profile, whi
 - `document.profile`: `action` get (the default), `assign` or `convert`; `profile` `srgb`, `adobe-rgb`,
   `display-p3`, `prophoto`, `working`, `none` (assign only) or an ICC file's path; `intent` `perceptual` or
   `relative`; `blackPointCompensation`.
-- `color.settings`: reads and sets the working space, the policy, the two prompts, the monitor profile, and the
-  proof (`proofProfile`, `proofIntent`, `proofBlackPoint`, `proofColors`, `gamutWarning`, `gamutColor`).
+- `color.settings`: reads and sets the working space, `workingCmyk` (`default` for the bundled profile, or a CMYK ICC
+  file), the policy, the two prompts, the monitor profile, and the proof (`proofProfile`: `working-cmyk`, the default,
+  a working space or an RGB or CMYK ICC file; `proofIntent`, `proofBlackPoint`, `proofColors`, `gamutWarning`,
+  `gamutColor`).
+- `document.profile` takes profiles of the document's mode: `working-cmyk` or a CMYK ICC file for a CMYK document (and
+  `working` means the Working CMYK there); an RGB document refuses a CMYK profile.
 - `document.export` takes `embedProfile` (true) and `convertToSrgb` (true for GIF, false otherwise).
 
 The MCP tools are `document_profile` and `color_settings` ([automation.md](automation.md)).
@@ -119,10 +145,26 @@ transforms, and `TransferCurve`, a profile's tone curve both ways (`documentTran
 in linear light. `RenderOptions::display` carries the canvas's transform into the renderer. The app side is
 `src/app/ColorManagement.{h,cpp}` (settings, monitor profile, policies, export) and `ColorDialogs.cpp`.
 
+The pixel layouts (`PixelFormat`) are RGBA8 and RGBA16, CMYKA8 and CMYKA16 (inverted ink, which is Little CMS's
+reversed `_REV` CMYK, then alpha) and LabA8 and LabA16, with `pixelFormatFor(depth, mode)`. RGBA to RGBA keeps Little
+CMS's alpha-carrying layouts exactly as before; a transform with a CMYK or Lab layout on either side stages its pixels
+itself (`ColorTransform::applyStaged`): straight colours only, bytes at 8 bits (reversed CMYK, Little CMS's 8-bit Lab,
+whose offset is the same 128) and floats at 16 (CMYK ink 0..100, Lab L 0..100 and signed a and b, 16384 being a = 0),
+then premultiplied again with the input's alpha. `convertImage(AnyImage, fromMode, from, toMode, to)` converts a
+buffer between any two modes at its depth, and `convertImageTo8` reduces any layout to 8-bit RGBA through a display
+transform in one pass. `labProfile()` is Little CMS's Lab D50 with fixed bytes; `defaultCmykProfile()` is the bundled
+file, compiled into the core (`src/third_party/icc`, embedded by `src/core/embed_blob.cmake`);
+`effectiveProfile(profile, model)` is what an untagged document of each model stands for.
+
 Tests: `colormgmt_tests` checks the transforms against Little CMS itself and against the published sRGB and Adobe RGB
 matrices (sRGB red is 219, 0, 0 in Adobe RGB, green 144, 255, 60), round trips through Adobe RGB, Display P3 and
 ProPhoto at 8 and 16 bits, premultiplied pixels, the fused 16-to-8 display path, proofing and the gamut warning,
-Convert to Profile over a document, and the profile round trips through PSD, projects and PNG.
+Convert to Profile over a document, and the profile round trips through PSD, projects and PNG. `colormgmt_cmyk_tests`
+checks the CMYK and Lab layouts against Little CMS itself: 8-bit CMYK and 8-bit Lab give its bytes exactly, 16-bit CMYK
+its float inks within a 15-bit step and back within a step of its result for the inks held, 16-bit Lab its float Lab
+within half a stored step (sRGB red is Lab 54.29, 80.80, 69.89), premultiplied pixels, the fused reduction to 8 bits,
+the Working CMYK proof and gamut warning of an RGB document, and Convert to Profile on a CMYK document;
+`colormodes_tests` the CMYK and Lab document model and its projects.
 
 ---
 
@@ -148,6 +190,9 @@ NekoPhoto のカラーマネジメントは Photoshop と同じ考え方です�
 
 - **作業用スペース(RGB)**:sRGB IEC61966-2.1(既定)、Adobe RGB (1998)、Display P3、ProPhoto RGB。新規ドキュメントに
   指定します(sRGB のときはタグなし)。
+- **作業用 CMYK**:NekoPhoto に同梱の **ISO Coated v2 300% (basICColor)**(FOGRA39、既定)、または任意の CMYK ICC
+  ファイル(読み込み…)。既定の色の校正はこのプロファイルをシミュレートし、タグなしの CMYK ドキュメントはこのプロファイル
+  として扱います。同梱のプロファイルは zlib ライセンスです(`LICENSES/basICColor-zlib.txt`)。
 - **カラーマネジメントポリシー(RGB)**:埋め込まれたプロファイルを保持(既定)、作業用 RGB に変換、オフ。
 - **プロファイルのない画像は sRGB として扱います。**
 - プロファイルがないとき・作業用スペースと異なるときに確認する(どちらも既定はオフ)。
@@ -168,9 +213,17 @@ NekoPhoto のカラーマネジメントは Photoshop と同じ考え方です�
 
 ### 表示 ▸ 校正設定、色の校正、色域外警告
 
-**校正設定 ▸ カスタム…** でシミュレートするデバイス、マッチング方法、黒点の補正、警告色を選びます。**色の校正**
-(Ctrl+Y)でそのデバイスでの見え方を、**色域外警告**(Ctrl+Shift+Y)で表現できないカラーを警告色で示します。表示だけ
-が変わります。
+**校正設定 ▸ 作業用 CMYK**(Photoshop と同じく既定)は作業用 CMYK の印刷条件をシミュレートし、RGB ドキュメントの印刷
+結果を確認できます。**校正設定 ▸ カスタム…** でシミュレートするデバイス(作業用 CMYK、作業用スペース、RGB または CMYK
+の ICC ファイル)、マッチング方法、黒点の補正、警告色を選びます。**色の校正**(Ctrl+Y)でそのデバイスでの見え方を、
+**色域外警告**(Ctrl+Shift+Y)で表現できないカラーを警告色で示します。表示だけが変わります。
+
+### CMYK と Lab のドキュメント
+
+イメージ ▸ モード ▸ CMYK カラーと Lab カラーは準備中です([high-bit-depth-plan.md](high-bit-depth-plan.md) の
+「P7 plan」)。現在はドキュメントのモデル(CMYK は反転したインキ量とアルファの 5 チャンネル、Lab は a・b をオフセット
+した 4 チャンネル、8/16 bit)、RGB・CMYK・Lab 間のすべての変換、モードごとの機能の制限(「CMYK モードでは使用できません」)、
+プロジェクトへの保存(形式バージョン 9)ができています。
 
 ### スポイト
 
@@ -184,5 +237,6 @@ Web 向けの形式(PNG・JPEG・WebP・GIF)では、sRGB 以外のプロファ�
 
 ### 自動化
 
-`document.profile`(取得・指定・変換)、`color.settings`、`document.export` の `embedProfile` と `convertToSrgb`。
-MCP ツールは `document_profile` と `color_settings` です。
+`document.profile`(取得・指定・変換。CMYK ドキュメントには `working-cmyk` または CMYK の ICC ファイル)、
+`color.settings`(`workingCmyk`、`proofProfile` の `working-cmyk` を含む)、`document.export` の `embedProfile` と
+`convertToSrgb`。MCP ツールは `document_profile` と `color_settings` です。

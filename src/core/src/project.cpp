@@ -3,6 +3,10 @@
 #include "compositor/parallel.h"
 #include "compositor/png.h"
 #include <nlohmann/json.hpp>
+#include <zlib.h>
+#ifdef COMPOSITOR_HAVE_ZSTD
+#include <zstd.h>
+#endif
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -128,7 +132,7 @@ json transformJson(const LayerTransform& t) {
 
 const std::set<std::string> knownLayerKeys = {"id", "name", "isVisible", "transform", "imageFile", "parentID", "isGroup", "opacity", "blendMode",
     "maskFile", "maskEnabled", "maskSourceID", "adjustment", "maskPlacement", "maskLinked", "shape", "text", "passThrough", "artboard"};
-const std::set<std::string> knownManifestKeys = {"format", "version", "colorSpace", "resolution", "documentID", "width", "height", "activeLayerID", "layers", "slices", "animation", "sampleType", "profile", "channels"};
+const std::set<std::string> knownManifestKeys = {"format", "version", "colorSpace", "resolution", "documentID", "width", "height", "activeLayerID", "layers", "slices", "animation", "sampleType", "profile", "channels", "colorMode"};
 
 struct Record {
     Layer layer;
@@ -325,6 +329,8 @@ struct Manifest {
     std::string extraJson;
     Animation animation;
     SampleType sampleType = SampleType::U8;
+    /// Version 9: a CMYK or Lab document ("colorMode"); RGB when absent.
+    ColorMode colorMode = ColorMode::RGB;
     /// Version 8: the document's colour profile is the package's profile.icc ("colorSpace": "icc").
     bool tagged = false;
     /// Version 8: alpha and spot channels, their grays in channels/<id>.png (left empty here).
@@ -380,6 +386,14 @@ bool parseManifestJson(const json& j, Manifest& m, ProjectError& error) {
         if (type == "u16") m.sampleType = SampleType::U16;
         else if (type != "u8") { error = invalid(); return false; }
     }
+    // Version 9: the colour mode ("cmyk" or "lab"; RGB when absent, as every older project is).
+    if (auto c = j.find("colorMode"); c != j.end()) {
+        if (!c->is_string() || m.version < 9) { error = invalid(); return false; }
+        const std::string mode = c->get<std::string>();
+        if (mode == "cmyk") m.colorMode = ColorMode::CMYK;
+        else if (mode == "lab") m.colorMode = ColorMode::Lab;
+        else if (mode != "rgb") { error = invalid(); return false; }
+    }
     double resolution = 0;
     if (j.contains("resolution") && !j["resolution"].is_null()) {
         if (!getDouble(j, "resolution", resolution, true) || resolution < 1 || resolution > 9600) { error = invalid(); return false; }
@@ -430,6 +444,9 @@ bool parseManifestJson(const json& j, Manifest& m, ProjectError& error) {
     return true;
 }
 
+/// A layer's pixels in the package: images/<id>.png, or images/<id>.cmyk for a CMYK document's planes.
+std::string layerImageFile(const std::string& id, ColorMode mode) { return id + (mode == ColorMode::CMYK ? ".cmyk" : ".png"); }
+
 bool validateManifest(const Manifest& m, ProjectError& error) {
     if (!Document::validDimension(m.width) || !Document::validDimension(m.height) || m.records.size() > size_t(Document::maxLayers)) { error = tooLarge(); return false; }
     std::vector<Layer> layers;
@@ -453,7 +470,7 @@ bool validateManifest(const Manifest& m, ProjectError& error) {
         std::string trimmed = l.name;
         trimmed.erase(0, trimmed.find_first_not_of(" \t\n\r"));
         if (trimmed.empty() || l.name.size() > 16384) { error = invalid(); return false; }
-        if (r.imageFile && *r.imageFile != l.id + ".png") { error = invalid(); return false; }
+        if (r.imageFile && *r.imageFile != layerImageFile(l.id, m.colorMode)) { error = invalid(); return false; }
         Layer copy = l;
         if (r.imageFile) copy.asset = Asset{}; // stands in for "has an image" during hierarchy validation
         layers.push_back(copy);
@@ -466,9 +483,10 @@ bool validateManifest(const Manifest& m, ProjectError& error) {
     return true;
 }
 
-bool checkSize(int width, int height, long long& used, SampleType type = SampleType::U8) {
-    // The document's budget rules (Document::canCreate), in bytes: a 16-bit document holds half the pixels of an 8-bit one.
-    if (!Document::canCreate(width, height, type) || (long long)width * height > Document::projectPixelBudgetAt(type) - used) return false;
+bool checkSize(int width, int height, long long& used, SampleType type = SampleType::U8, ColorMode mode = ColorMode::RGB) {
+    // The document's budget rules (Document::canCreate), in bytes: a 16-bit document holds half the pixels of an 8-bit
+    // one, a CMYK document four fifths. Masks and channels are checked as RGB is: their budget follows the depth alone.
+    if (!Document::canCreate(width, height, type, mode) || (long long)width * height > Document::projectPixelBudgetAt(type, mode) - used) return false;
     used += (long long)width * height;
     return true;
 }
@@ -477,6 +495,126 @@ bool writeBytes(const fs::path& file, const std::vector<uint8_t>& bytes) {
     std::ofstream out(file, std::ios::binary);
     out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
     return bool(out);
+}
+
+// ---- CMYK planes (images/<id>.cmyk) ---------------------------------------------------------------------------------
+//
+// A CMYK layer's pixels have no PNG form, so they are kept raw: a 24-byte header, then the planes compressed.
+//
+//   0  "NPCMYK" 0 1    magic and version 1
+//   8  u32 width, u32 height (little-endian)
+//  16  u8 channels (5), u8 bits (8 or 16), u8 compression (1 zlib, 2 zstd), u8 0
+//  20  u32 0
+//  24  the compressed stream of the planes C, M, Y, K, alpha, one after the other, rows top-down; 16-bit samples
+//      little-endian in 0..32768. Samples are as held: premultiplied, the inks inverted (colormodes.h).
+//
+// Saves write zlib; zstd is read when the build has it.
+constexpr uint8_t planeMagic[8] = {'N', 'P', 'C', 'M', 'Y', 'K', 0, 1};
+constexpr size_t planeHeader = 24;
+
+void putU32(std::vector<uint8_t>& out, size_t at, uint32_t v) { for (int i = 0; i < 4; i++) out[at + size_t(i)] = uint8_t(v >> (8 * i)); }
+uint32_t getU32(const uint8_t* p) { return uint32_t(p[0]) | uint32_t(p[1]) << 8 | uint32_t(p[2]) << 16 | uint32_t(p[3]) << 24; }
+
+template <class Buffer>
+std::vector<uint8_t> planarBytes(const Buffer& image) {
+    using Sample = typename Buffer::Sample;
+    const size_t w = size_t(image.width()), h = size_t(image.height()), plane = w * h * sizeof(Sample);
+    std::vector<uint8_t> raw(plane * 5);
+    parallelFor(0, image.height(), 16, [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++) {
+            const Sample* row = image.row(y);
+            for (size_t c = 0; c < 5; c++) {
+                uint8_t* out = raw.data() + c * plane + size_t(y) * w * sizeof(Sample);
+                for (size_t x = 0; x < w; x++) {
+                    const Sample v = row[x * 5 + c];
+                    if constexpr (sizeof(Sample) == 1) out[x] = v;
+                    else { out[x * 2] = uint8_t(v); out[x * 2 + 1] = uint8_t(v >> 8); }
+                }
+            }
+        }
+    });
+    return raw;
+}
+
+bool writeCmykPlanes(const fs::path& file, const AnyImage& image) {
+    const bool deep = bool(image.u16());
+    if (!deep && !image.c8()) return false;
+    std::vector<uint8_t> raw = deep ? planarBytes(*image.u16()) : planarBytes(*image.c8());
+    uLongf size = compressBound(uLong(raw.size()));
+    std::vector<uint8_t> out(planeHeader + size_t(size));
+    if (compress2(out.data() + planeHeader, &size, raw.data(), uLong(raw.size()), 3) != Z_OK) return false;
+    out.resize(planeHeader + size_t(size));
+    std::copy(std::begin(planeMagic), std::end(planeMagic), out.begin());
+    putU32(out, 8, uint32_t(image.width()));
+    putU32(out, 12, uint32_t(image.height()));
+    out[16] = 5; out[17] = deep ? 16 : 8; out[18] = 1; out[19] = 0;
+    putU32(out, 20, 0);
+    return writeBytes(file, out);
+}
+
+struct PlaneInfo { int width = 0, height = 0, bits = 8, compression = 1; };
+
+/// Reads the header only, for the budget checks before anything is decoded.
+bool readCmykPlaneInfo(const fs::path& file, PlaneInfo& info) {
+    std::ifstream in(file, std::ios::binary);
+    uint8_t h[planeHeader] = {};
+    if (!in.read(reinterpret_cast<char*>(h), planeHeader)) return false;
+    if (!std::equal(std::begin(planeMagic), std::end(planeMagic), h) || h[16] != 5 || (h[17] != 8 && h[17] != 16) || (h[18] != 1 && h[18] != 2)) return false;
+    const uint32_t w = getU32(h + 8), height = getU32(h + 12);
+    if (w < 1 || height < 1 || w > uint32_t(maxImageSide) || height > uint32_t(maxImageSide)) return false;
+    info = {int(w), int(height), h[17], h[18]};
+    return true;
+}
+
+/// The planes as the document's buffer (ImageC8, or a 5-channel Image16); null when damaged. Every colour sample is
+/// kept within its alpha, as premultiplied samples must be.
+AnyImage readCmykPlanes(const fs::path& file, SampleType type) {
+    PlaneInfo info;
+    if (!readCmykPlaneInfo(file, info) || (info.bits == 16) != (type == SampleType::U16)) return nullptr;
+    std::ifstream in(file, std::ios::binary);
+    std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    if (bytes.size() < planeHeader) return nullptr;
+    const size_t sample = info.bits == 16 ? 2 : 1, plane = size_t(info.width) * size_t(info.height) * sample;
+    std::vector<uint8_t> raw(plane * 5);
+    if (info.compression == 1) {
+        uLongf size = uLongf(raw.size());
+        if (uncompress(raw.data(), &size, bytes.data() + planeHeader, uLong(bytes.size() - planeHeader)) != Z_OK || size != raw.size()) return nullptr;
+    } else {
+#ifdef COMPOSITOR_HAVE_ZSTD
+        const size_t size = ZSTD_decompress(raw.data(), raw.size(), bytes.data() + planeHeader, bytes.size() - planeHeader);
+        if (ZSTD_isError(size) || size != raw.size()) return nullptr;
+#else
+        return nullptr;
+#endif
+    }
+    auto fill = [&](auto& out) {
+        using Sample = typename std::remove_reference_t<decltype(out)>::Sample;
+        constexpr uint32_t one = sizeof(Sample) == 1 ? 255u : 32768u;
+        const size_t w = size_t(info.width);
+        parallelFor(0, info.height, 16, [&](int y0, int y1) {
+            for (int y = y0; y < y1; y++) {
+                Sample* row = out.row(y);
+                for (size_t x = 0; x < w; x++) {
+                    auto at = [&](size_t c) -> uint32_t {
+                        const uint8_t* p = raw.data() + c * plane + (size_t(y) * w + x) * sizeof(Sample);
+                        if constexpr (sizeof(Sample) == 1) return p[0];
+                        else return uint32_t(p[0]) | uint32_t(p[1]) << 8;
+                    };
+                    const uint32_t alpha = std::min(at(4), one);
+                    for (size_t c = 0; c < 4; c++) row[x * 5 + c] = Sample(std::min(at(c), alpha));
+                    row[x * 5 + 4] = Sample(alpha);
+                }
+            }
+        });
+    };
+    if (type == SampleType::U16) {
+        auto out = std::make_shared<Image16>(info.width, info.height, 5);
+        fill(*out);
+        return Image16Ptr(out);
+    }
+    auto out = std::make_shared<ImageC8>(info.width, info.height, 5);
+    fill(*out);
+    return ImageC8Ptr(out);
 }
 
 bool checkFile(const fs::path& file, const fs::path& package, uintmax_t maximumBytes) {
@@ -500,6 +638,7 @@ Document documentFrom(const Manifest& m) {
     d.resolution = m.resolution.value_or(72);
     d.extraJson = m.extraJson;
     d.sampleType = m.sampleType;
+    d.colorMode = m.colorMode;
     d.slices = m.slices;
     for (auto& r : m.records) d.layers.push_back(r.layer);
     d.channels = m.channels;
@@ -551,7 +690,10 @@ std::optional<Document> loadProject(const std::string& pathText, ProjectError& e
     if (!parseManifestJson(j, m, error) || !validateManifest(m, error)) return std::nullopt;
 
     Document d = documentFrom(m);
-    if (!Document::canCreate(d.width, d.height, d.sampleType)) { error = tooLarge(); return std::nullopt; }
+    if (!colorModeSupportsDepth(d.colorMode, d.sampleType) || !Document::canCreate(d.width, d.height, d.sampleType, d.colorMode)) { error = tooLarge(); return std::nullopt; }
+    const bool cmyk = d.colorMode == ColorMode::CMYK;
+    long long layerBytes = 0;
+    const long long pixelBytes = colorModeChannels(d.colorMode) * (long long)sampleBytes(d.sampleType);
     // Every file is checked against the budgets from its header first; then the images decode side by side.
     struct Load { size_t layer; bool isMask; fs::path file; AnyImage image; AnyGray gray; };
     const bool deep = d.sampleType == SampleType::U16;
@@ -565,15 +707,26 @@ std::optional<Document> loadProject(const std::string& pathText, ProjectError& e
             fs::path file = path / "images" / *filename;
             if (!checkFile(file, path, assetLimit)) { error = tooLarge(); return std::nullopt; }
             PngInfo info;
-            if (!readPngInfo(file.string(), info) || info.bitDepth > (deep ? 16 : 8)) { error = missingImage(); return std::nullopt; }
-            if (!checkSize(info.width, info.height, isMask ? maskPixels : pixels, d.sampleType)) { error = tooLarge(); return std::nullopt; }
+            if (cmyk && !isMask) {
+                PlaneInfo planes;
+                if (!readCmykPlaneInfo(file, planes) || planes.bits != (deep ? 16 : 8)) { error = missingImage(); return std::nullopt; }
+                info.width = planes.width;
+                info.height = planes.height;
+            } else if (!readPngInfo(file.string(), info) || info.bitDepth > (deep ? 16 : 8)) { error = missingImage(); return std::nullopt; }
+            if (isMask ? !checkSize(info.width, info.height, maskPixels, d.sampleType) : !checkSize(info.width, info.height, pixels, d.sampleType, d.colorMode)) { error = tooLarge(); return std::nullopt; }
+            if (!isMask) {
+                const long long bytes = (long long)info.width * info.height * pixelBytes;
+                if (bytes > limits.layerBytes - layerBytes) { error = tooLarge(); return std::nullopt; }
+                layerBytes += bytes;
+            }
             loads.push_back({i, isMask, file, nullptr, nullptr});
         }
     }
     parallelFor(0, int(loads.size()), 1, [&](int a, int b) {
         for (int k = a; k < b; k++) {
             Load& load = loads[size_t(k)];
-            if (deep) {
+            if (cmyk && !load.isMask) load.image = readCmykPlanes(load.file, d.sampleType);
+            else if (deep) {
                 // A 16-bit document's layers and masks are 16-bit PNGs.
                 if (load.isMask) load.gray = Gray16Ptr(readPngGray16(load.file.string()));
                 else load.image = Image16Ptr(readPngImage16(load.file.string()));
@@ -634,7 +787,7 @@ std::optional<Document> loadProject(const std::string& pathText, ProjectError& e
     // The colour profile, kept byte for byte (colorprofile.h); an unreadable one leaves the document untagged.
     if (m.tagged)
         if (auto bytes = readCarry(path / "profile.icc"))
-            if (auto profile = profileFromIcc(*bytes); profile && profile->model == ColorModel::RGB) d.profile = std::move(*profile);
+            if (auto profile = profileFromIcc(*bytes); profile && profile->model == colorModelOf(d.colorMode)) d.profile = std::move(*profile);
     // Smart objects: the sources in smartobjects/ (each with its image as PNG, 16-bit for a 16-bit source), the
     // instances beside their layers. Their count, their files and their decoded bytes are limited in total, each image
     // by the budget rules at its depth too.
@@ -655,7 +808,8 @@ std::optional<Document> loadProject(const std::string& pathText, ProjectError& e
                 PngInfo info;
                 if (fs::is_regular_file(png, ec) && checkFile(png, path, assetLimit) && readPngInfo(png.string(), info)) {
                     const SampleType depth = info.bitDepth == 16 ? SampleType::U16 : SampleType::U8;
-                    const long long bytesNeeded = (long long)info.width * info.height * 4 * (long long)sampleBytes(depth);
+                    // Sources are RGBA PNGs: four samples a pixel at their own depth.
+                    const long long bytesNeeded = (long long)info.width * info.height * colorModeChannels(ColorMode::RGB) * (long long)sampleBytes(depth);
                     if (!Document::canCreate(info.width, info.height, depth) || bytesNeeded > limits.smartObjectBytes - sourceBytes) {
                         error = tooLarge();
                         return std::nullopt;
@@ -700,19 +854,25 @@ std::string manifestJson(const Document& document, const std::optional<Uuid>& ac
     folders |= document.sampleType != SampleType::U8;   // so is a 16-bit document
     folders |= !document.profile.empty();               // and one with a colour profile
     folders |= !document.channels.empty();              // or with alpha channels
-    j["version"] = folders ? projectFormatVersion : projectMacFormatVersion;
+    j["version"] = document.colorMode != ColorMode::RGB ? projectFormatVersion : folders ? projectRgbFormatVersion : projectMacFormatVersion;
     j["colorSpace"] = document.profile.empty() ? "sRGB" : "icc";
     if (!document.profile.empty()) j["profile"] = "profile.icc";
     else j.erase("profile");
     if (document.sampleType == SampleType::U16) j["sampleType"] = "u16";
     else j.erase("sampleType");
+    if (document.colorMode != ColorMode::RGB) j["colorMode"] = colorModeKey(document.colorMode);
+    else j.erase("colorMode");
     j["resolution"] = number(document.resolution);
     j["documentID"] = document.id;
     j["width"] = document.width;
     j["height"] = document.height;
     if (activeLayerId) j["activeLayerID"] = *activeLayerId; else j["activeLayerID"] = nullptr;
     j["layers"] = json::array();
-    for (auto& l : document.layers) j["layers"].push_back(recordJson(l));
+    for (auto& l : document.layers) {
+        json record = recordJson(l);
+        if (record.contains("imageFile")) record["imageFile"] = layerImageFile(l.id, document.colorMode);
+        j["layers"].push_back(std::move(record));
+    }
     if (!document.slices.empty()) {
         j["slices"] = json::array();
         for (const Slice& s : document.slices)
@@ -736,11 +896,13 @@ bool saveProject(const Document& document, const std::optional<Uuid>& activeLaye
         ProjectError parseError;
         if (!parseManifest(manifest, parseError)) { error = parseError; return false; }
     }
-    if (document.sampleType == SampleType::F32) { error = encodeError(); return false; }
+    if (!colorModeSupportsDepth(document.colorMode, document.sampleType) || document.sampleType == SampleType::F32) { error = encodeError(); return false; }
+    const int channels = colorModeChannels(document.colorMode);
     long long pixels = 0, maskPixels = 0;
     for (auto& l : document.layers) {
         // Every buffer must be at the document's depth: the package says one depth for all.
-        if (l.asset && l.asset->image && (l.asset->image.sampleType() != document.sampleType || !checkSize(l.asset->image.width(), l.asset->image.height(), pixels, document.sampleType))) { error = tooLarge(); return false; }
+        if (l.asset && l.asset->image && (l.asset->image.sampleType() != document.sampleType || l.asset->image.channels() != channels
+                                          || !checkSize(l.asset->image.width(), l.asset->image.height(), pixels, document.sampleType, document.colorMode))) { error = tooLarge(); return false; }
         if (l.mask && l.mask->asset.image && (l.mask->asset.image.sampleType() != document.sampleType || !checkSize(l.mask->asset.image.width(), l.mask->asset.image.height(), maskPixels, document.sampleType))) { error = tooLarge(); return false; }
     }
     for (const Channel& c : document.channels)
@@ -763,8 +925,13 @@ bool saveProject(const Document& document, const std::optional<Uuid>& activeLaye
     for (auto& l : document.layers) {
         std::string err;
         const std::string imageFile = (staging / "images" / (l.id + ".png")).string(), maskFile = (staging / "images" / (l.id + ".mask.png")).string();
-        if (l.asset && l.asset->image.u8() && !writePngImage(imageFile, *l.asset->image.u8(), 0, &err)) { abandon(); error = encodeError(); return false; }
-        if (l.asset && l.asset->image.u16() && !writePngImage16(imageFile, *l.asset->image.u16(), 0, &err)) { abandon(); error = encodeError(); return false; }
+        if (document.colorMode == ColorMode::CMYK) {
+            if (l.asset && l.asset->image && !writeCmykPlanes(staging / "images" / layerImageFile(l.id, ColorMode::CMYK), l.asset->image)) { abandon(); error = encodeError(); return false; }
+        } else {
+            // RGB, and Lab: L, a, b and alpha go in the PNG's four samples as they are (the manifest says they are Lab).
+            if (l.asset && l.asset->image.u8() && !writePngImage(imageFile, *l.asset->image.u8(), 0, &err)) { abandon(); error = encodeError(); return false; }
+            if (l.asset && l.asset->image.u16() && !writePngImage16(imageFile, *l.asset->image.u16(), 0, &err)) { abandon(); error = encodeError(); return false; }
+        }
         if (l.mask && l.mask->asset.image.u8() && !writePngGray(maskFile, *l.mask->asset.image.u8(), &err)) { abandon(); error = encodeError(); return false; }
         if (l.mask && l.mask->asset.image.u16() && !writePngGray16(maskFile, *l.mask->asset.image.u16(), &err)) { abandon(); error = encodeError(); return false; }
         if (l.psdCarry && !writeBytes(staging / "images" / (l.id + ".psdcarry"), serializePsdCarry(*l.psdCarry))) { abandon(); error = ioError("could not write the PSD data of " + l.name); return false; }

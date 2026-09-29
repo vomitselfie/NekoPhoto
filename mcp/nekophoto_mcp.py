@@ -1143,8 +1143,9 @@ def document_profile(action: str = "get", profile: Optional[str] = None, intent:
                      black_point_compensation: Optional[bool] = None) -> str:
     """The document's colour profile. action=get reads it; assign (Edit > Assign Profile) changes only the tag, so the
     same values look different; convert (Edit > Convert to Profile) converts every layer's pixels and the stored colours
-    so the document looks the same. profile: srgb, adobe-rgb, display-p3, prophoto, working, none (assign: untagged,
-    treated as sRGB) or an ICC file's path; intent perceptual or relative (default). One undo step."""
+    so the document looks the same. profile: srgb, adobe-rgb, display-p3, prophoto, working, working-cmyk (CMYK
+    documents), none (assign: untagged, treated as sRGB) or an ICC file's path of the document's mode; intent
+    perceptual or relative (default). One undo step."""
     if profile is not None and os.path.exists(profile):
         profile = os.path.abspath(profile)
     return text(call("document.profile", action=action, profile=profile, intent=intent, blackPointCompensation=black_point_compensation))
@@ -1227,11 +1228,16 @@ def colors_set(foreground: Optional[str] = None, background: Optional[str] = Non
 def color_settings(working_space: Optional[str] = None, policy: Optional[str] = None, ask_missing: Optional[bool] = None,
                    ask_mismatch: Optional[bool] = None, monitor_profile: Optional[str] = None, use_system_monitor: Optional[bool] = None,
                    proof_profile: Optional[str] = None, proof_intent: Optional[str] = None, proof_black_point: Optional[bool] = None,
-                   proof_colors: Optional[bool] = None, gamut_warning: Optional[bool] = None, gamut_color: Optional[str] = None) -> str:
-    """Edit > Color Settings (working_space srgb, adobe-rgb, display-p3 or prophoto; policy preserve, convert or off for
-    embedded profiles; ask_missing, ask_mismatch), the monitor profile (an ICC path, "" for the system's) and View >
-    Proof Setup / Proof Colors / Gamut Warning. With no arguments it only reads them. Untagged images count as sRGB."""
-    return text(call("color.settings", workingSpace=working_space, policy=policy, askMissing=ask_missing, askMismatch=ask_mismatch,
+                   proof_colors: Optional[bool] = None, gamut_warning: Optional[bool] = None, gamut_color: Optional[str] = None,
+                   working_cmyk: Optional[str] = None) -> str:
+    """Edit > Color Settings (working_space srgb, adobe-rgb, display-p3 or prophoto; working_cmyk "default" for the
+    bundled ISO Coated v2 300% or a CMYK ICC path; policy preserve, convert or off for embedded profiles; ask_missing,
+    ask_mismatch), the monitor profile (an ICC path, "" for the system's) and View > Proof Setup (proof_profile
+    working-cmyk, the default, a working space or an RGB or CMYK ICC path) / Proof Colors / Gamut Warning. With no
+    arguments it only reads them. Untagged images count as sRGB."""
+    if working_cmyk is not None and os.path.exists(working_cmyk):
+        working_cmyk = os.path.abspath(working_cmyk)
+    return text(call("color.settings", workingSpace=working_space, workingCmyk=working_cmyk, policy=policy, askMissing=ask_missing, askMismatch=ask_mismatch,
                      monitorProfile=monitor_profile, useSystemMonitor=use_system_monitor, proofProfile=proof_profile,
                      proofIntent=proof_intent, proofBlackPoint=proof_black_point, proofColors=proof_colors,
                      gamutWarning=gamut_warning, gamutColor=gamut_color))

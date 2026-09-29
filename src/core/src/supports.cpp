@@ -156,7 +156,50 @@ constexpr FeatureSupport table[] = {
     // (smartfilter_render16.cpp).
     {"edit.smartObject", eightAndSixteen},
 };
+
+constexpr ColorModes allModes = colorModeBit(ColorMode::RGB) | colorModeBit(ColorMode::CMYK) | colorModeBit(ColorMode::Lab);
+
+// The colour-mode axis (docs/high-bit-depth-plan.md, "P7 plan"): what works in CMYK and Lab documents, which exist at
+// 8 and 16 bits. What is not listed works in RGB only, and is refused in CMYK and Lab with "Not available in CMYK mode".
+// Step A lists what never reads colour values: the layer structure, masks, the canvas, navigation and saving projects.
+// Rendering, the channels, Image > Mode, PSD and the editing tools join as steps C to F port them. Photoshop's own
+// exclusions stay out for good: Camera Raw, G'MIC and the MyPaint brushes are RGB only.
+constexpr FeatureModes modeTable[] = {
+    {"document.save", allModes},
+    {"document.profile", allModes},
+    {"layers.structure", allModes},
+    {"layers.transform", allModes},
+    {"layers.mask", allModes},
+    {"canvas.size", allModes},
+    {"canvas.flip", allModes},
+    {"tool.move", allModes},
+    {"tool.hand", allModes},
+    {"tool.zoom", allModes},
+    {"tool.marquee", allModes},
+    {"tool.lasso", allModes},
+    {"edit.timeline", allModes},
+    {"view", allModes},
+};
 }   // namespace
+
+const FeatureModes* featureModeTable(size_t& count) {
+    count = sizeof(modeTable) / sizeof(modeTable[0]);
+    return modeTable;
+}
+
+ColorModes supportedColorModes(std::string_view feature) {
+    for (const FeatureModes& f : modeTable) if (f.feature == feature) return ColorModes(f.modes | colorModeBit(ColorMode::RGB));
+    return colorModeBit(ColorMode::RGB);
+}
+
+bool supports(AdjustmentKind kind, SampleType type, ColorMode mode) {
+    return supports(std::string("adjustment.") + adjustmentKindName(kind), type, mode);
+}
+
+std::string notAvailableInMode(ColorMode mode) {
+    if (mode == ColorMode::RGB) return {};
+    return std::string("Not available in ") + colorModeName(mode) + " mode";
+}
 
 const FeatureSupport* featureSupportTable(size_t& count) {
     count = sizeof(table) / sizeof(table[0]);

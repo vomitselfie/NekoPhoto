@@ -50,10 +50,10 @@ const MethodDoc methodDocs[] = {
     {"tool.select", "Pick the tool the person sees.", "name:<tool>! The tool"},
     {"colors.set", "Set the foreground and background colours.", "foreground:color Foreground; background:color Background"},
     {"color.settings", "Edit > Color Settings, the monitor profile and View > Proof Setup: read them, or change the keys given (docs/color-management.md). Untagged images are always treated as sRGB; new documents take the working space.",
-     "workingSpace:(srgb|adobe-rgb|display-p3|prophoto) The RGB working space; policy:(preserve|convert|off) What happens to a file's embedded profile when it opens; "
+     "workingSpace:(srgb|adobe-rgb|display-p3|prophoto) The RGB working space; workingCmyk:string The Working CMYK: default (ISO Coated v2 300%, FOGRA39, bundled) or a CMYK ICC file; policy:(preserve|convert|off) What happens to a file's embedded profile when it opens; "
      "askMissing:bool Ask when a file has no profile; askMismatch:bool Ask when its profile is not the working space; "
      "monitorProfile:string An ICC file for the monitor (\"\" to use the system's); useSystemMonitor:bool Read the system's monitor profile (X11, Windows); "
-     "proofProfile:string A working space or an ICC file to simulate; proofIntent:(perceptual|relative) How colours go to it; proofBlackPoint:bool Black point compensation; "
+     "proofProfile:string What to simulate: working-cmyk (the default, Photoshop's), a working space, or an RGB or CMYK ICC file; proofIntent:(perceptual|relative) How colours go to it; proofBlackPoint:bool Black point compensation; "
      "proofColors:bool View > Proof Colors; gamutWarning:bool View > Gamut Warning; gamutColor:color The warning's colour"},
     {"view.zoom", "Zoom the view (not the document).", "zoom:number Zoom factor, 1 = 100%; fit:bool=false Fit the document in the window"},
     {"debug.eye", "Test hook: a pointer event on a layer's eye button in the Layers panel.",
@@ -102,7 +102,7 @@ const MethodDoc methodDocs[] = {
      "basedOn:(transparent|topLeft|bottomRight)=transparent What is trimmed away: transparent pixels, or the colour of that corner; top:bool=true Trim the top; bottom:bool=true; left:bool=true; right:bool=true; "
      "tolerance:integer=0 For the colour modes: how far a channel may be from the corner's (0..255)"},
     {"document.profile", "The document's colour profile: get it, assign one (Edit > Assign Profile: the tag only, the pixel values stay) or convert to one (Edit > Convert to Profile: every layer's pixels and the colours of text, shapes, styles and adjustments, and the foreground and background colours, so the document looks the same). One undo step.",
-     "action:(get|assign|convert)=get What to do; profile:string srgb, adobe-rgb, display-p3, prophoto, working (Color Settings' working space), none (assign only: untagged, treated as sRGB) or an ICC file's path; "
+     "action:(get|assign|convert)=get What to do; profile:string srgb, adobe-rgb, display-p3, prophoto, working (Color Settings' working space: the Working CMYK in a CMYK document), working-cmyk (CMYK documents), none (assign only: untagged, treated as sRGB, or as the Working CMYK in a CMYK document) or an ICC file's path (of the document's mode); "
      "intent:(perceptual|relative)=relative Convert only: the rendering intent; blackPointCompensation:bool=true Convert only"},
     {"image.mode", "Image > Mode: convert the document to 8 or 16 bits per channel, every layer, mask and the selection, as one undo step. A 16-bit document holds half the pixels of an 8-bit one within the same memory; what has not been ported to 16 bits yet is refused on it (docs/bit-depth.md).",
      "bits:integer! 8 or 16"},
