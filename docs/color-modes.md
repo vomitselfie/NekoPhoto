@@ -45,7 +45,9 @@ a few levels.
   but Color Dodge, Color Burn, Darken, Lighten, Difference, Exclusion, Subtract and Divide (Adobe's list; they are greyed
   out, and a file that has one draws it as Normal). Normal and Dissolve are RGB's; Luminosity takes L from the layer
   and a and b from below, Color the other way round, Hue and Saturation work in L, chroma and hue; the separable modes
-  apply to L, a and b as stored.
+  apply to L, a and b as stored. Checked against Photoshop: two Photoshop-saved Lab PSDs render exactly as the composite
+  Photoshop stored in them, one with a Color Fill layer in **Color** mode (no level off anywhere) and a monitor test
+  chart with 1-level lightness step wedges (at most 1 level off). The other Lab modes have no Photoshop reference yet.
 - **Adjustment layers**: Invert, Levels, Curves (their composite settings), Brightness/Contrast and Posterize draw, on
   every ink in CMYK and on L in Lab (Invert and Posterize on every channel). The other kinds are kept and written back
   to PSD but are not drawn yet.
