@@ -501,6 +501,30 @@ int main(int argc, char** argv) {
         bench(name.c_str(), none, [&] { for (const Layer& l : layered.layers) found += layered.indexOf(l.id) >= 0; });
         if (found == 0) std::printf("(no layers found)\n");
     }
+    // Undo memory: 100 small strokes (48 x 48 dabs) on a 20 MP layer, each one step as the app records it, with the
+    // app's history limits (100 steps, 256 MB). Reports the history's memory and the steps it keeps; the median
+    // is of the step's begin/end alone (the stroke's pixel copy is not timed).
+    if (bench.filter.empty() || std::string("history 20 MP: 100 strokes").find(bench.filter) != std::string::npos) {
+        Document big(5000, 4000);
+        big.layers.push_back(Layer(Asset::make(busy(5000, 4000, 5, false), "photo"), Point(0, 0)));
+        const Uuid id = big.layers[0].id;
+        DocumentHistory history;
+        std::vector<double> ms;
+        for (int i = 0; i < 100; i++) {
+            auto dab = std::make_shared<Image>(*big.layers[0].asset->image.u8());
+            const int x = int(mix(uint32_t(i) * 2u + 1u) % 4950u), y = int(mix(uint32_t(i) * 2u + 2u) % 3950u);
+            for (int j = 0; j < 48; j++) std::memset(dab->row(y + j) + size_t(x) * 4, i & 255, 48 * 4);
+            auto t0 = std::chrono::steady_clock::now();
+            history.begin("Brush", big, id);
+            big.layers[0].asset->image = ImagePtr(dab);
+            history.end(big, id);
+            ms.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
+        }
+        std::sort(ms.begin(), ms.end());
+        std::printf("%-36s median %9.2f ms   retained %.1f MB over %d steps\n", "history 20 MP: 100 strokes", ms[ms.size() / 2],
+                    double(history.retainedBytes(big)) / (1024.0 * 1024.0), history.undoCount());
+        std::fflush(stdout);
+    }
     // Editing at 16 bits (P3a): the same photo converted, blurred and adjusted there.
     auto photo16 = widenImage(*photo);
     Image16 work16;

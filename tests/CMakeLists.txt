@@ -6,6 +6,10 @@ add_executable(core_tests core_tests.cpp)
 target_link_libraries(core_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME core_tests COMMAND core_tests)
 
+add_executable(history_tests history_tests.cpp)
+target_link_libraries(history_tests PRIVATE compositor::core compositor_warnings)
+add_test(NAME history_tests COMMAND history_tests)
+
 add_executable(imaget_tests imaget_tests.cpp)
 target_link_libraries(imaget_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME imaget_tests COMMAND imaget_tests)
