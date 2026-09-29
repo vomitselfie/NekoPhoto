@@ -578,6 +578,7 @@ void LayersPanel::rebuild() {
         const auto proxy = session_->filterMaskLayer();
         for (auto& e : entries) {
             if (proxy && e.layer->id == *proxy) continue;   // the filter mask being painted shows on its smart object
+            if (session_->isChannelProxy(e.layer->id)) continue;   // an alpha channel being painted shows in the Channels panel
             QTreeWidgetItem* item = new QTreeWidgetItem;
             item->setData(0, Qt::UserRole, QString::fromStdString(e.layer->id));
             item->setData(0, Qt::UserRole + 1, e.layer->isGroup);

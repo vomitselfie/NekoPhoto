@@ -71,6 +71,10 @@ void resampleChannels(Document& document, int fromWidth, int fromHeight, Samplin
 /// channels and the alpha stay `before`'s, so transparency never changes. After's pixel (0, 0) lies at (dx, dy) on
 /// before's grid, and the result is on before's grid. A null `before` (a blank layer) gives null.
 AnyImage keepColorChannels(const AnyImage& before, const AnyImage& after, int dx, int dy, unsigned channels);
+/// The same with each raster placed by its transform (a stroke's grown grid over the layer's): null when the two grids
+/// do not line up in whole pixels at one scale.
+AnyImage keepColorChannels(const AnyImage& before, const LayerTransform& beforeTransform, const AnyImage& after, const LayerTransform& afterTransform,
+                           unsigned channels);
 /// Every layer whose pixels the edit from `before` to `after` changed, limited to `channels` (keepColorChannels)
 /// and put back on its old grid. Layers added, removed, resampled or turned by the edit are left as it made them.
 /// True when anything changed.

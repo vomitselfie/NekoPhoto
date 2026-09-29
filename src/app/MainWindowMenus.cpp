@@ -1,5 +1,6 @@
 // The main window's menus, tool rail and colour swatches.
 #include "ContentFillDialog.h"
+#include "ChannelDialogs.h"
 #include "Names.h"
 #include "ContentAwareScaleDialog.h"
 #include "MainWindow.h"
@@ -487,6 +488,33 @@ void MainWindow::buildMenus() {
     needsDocument(load->addAction(tr("Add Layer Pixels"), this, [this] { if (session_->activeLayerId()) session_->loadLayerAsSelection(*session_->activeLayerId(), false, SelectionMode::Add); }), "edit.selection");
     needsDocument(load->addAction(tr("Subtract Layer Pixels"), this, [this] { if (session_->activeLayerId()) session_->loadLayerAsSelection(*session_->activeLayerId(), false, SelectionMode::Subtract); }), "edit.selection");
     needsDocument(load->addAction(tr("Intersect with Layer Pixels"), this, [this] { if (session_->activeLayerId()) session_->loadLayerAsSelection(*session_->activeLayerId(), false, SelectionMode::Intersect); }), "edit.selection");
+    // Selections kept as alpha channels (the Channels panel; docs/channels.md).
+    needsDocument(select->addAction(tr("Load Selection…"), this, [this] { (new LoadSelectionDialog(session_, this))->open(); }), "edit.channels");
+    needsDocument(select->addAction(tr("Save Selection…"), this, [this] {
+        if (!session_->document()->selection) { showError(tr("Save Selection"), tr("Make a selection first.")); return; }
+        (new SaveSelectionDialog(session_, this))->open();
+    }), "edit.channels");
+    // Photoshop's channel keys: Ctrl+2 the composite, Ctrl+3, 4, 5 red, green and blue, Ctrl+6 to 9 the first four alpha
+    // channels; with Alt, the channel is loaded as a selection instead.
+    auto channelKey = [this](int n, bool load) {
+        if (!session_->hasDocument()) return;
+        const auto& channels = session_->document()->channels;
+        if (n >= 6 && size_t(n - 6) >= channels.size()) return;
+        if (load) {
+            SelectionSource source;
+            source.kind = n == 2 ? SelectionSource::Composite : n == 3 ? SelectionSource::Red : n == 4 ? SelectionSource::Green : n == 5 ? SelectionSource::Blue : SelectionSource::AlphaChannel;
+            if (n >= 6) source.id = channels[size_t(n - 6)].id;
+            session_->loadSelectionFromSource(source, false, SelectionMode::Replace);
+        } else if (n <= 5) session_->selectColorChannels(n == 2 ? colorChannelsAll : 1u << (n - 3));
+        else session_->selectAlphaChannel(channels[size_t(n - 6)].id);
+    };
+    for (int n = 2; n <= 9; n++)
+        for (bool load : {false, true}) {
+            auto* key = needsDocument(new QAction(load ? tr("Load Channel %1 as Selection").arg(n - 1) : tr("Select Channel %1").arg(n - 1), this), "edit.channels");
+            key->setShortcut(QKeySequence(QString::fromLatin1(load ? "Ctrl+Alt+%1" : "Ctrl+%1").arg(n)));
+            connect(key, &QAction::triggered, this, [channelKey, n, load] { channelKey(n, load); });
+            addAction(key);
+        }
 
     QMenu* filter = menuBar()->addMenu(tr("Filte&r"));
     auto filterAction = [this, filter, &needsDocument](const QString& label, FilterKind kind) {
@@ -596,6 +624,8 @@ void MainWindow::buildMenus() {
     window->addAction(actionsDock_->toggleViewAction());
     window->addAction(adjustDock_->toggleViewAction());
     window->addAction(layersDock_->toggleViewAction());
+    channelsDock_->toggleViewAction()->setText(tr("&Channels"));
+    window->addAction(channelsDock_->toggleViewAction());
     window->addAction(pathsDock_->toggleViewAction());
     timelineDock_->toggleViewAction()->setText(tr("&Timeline"));
     window->addAction(timelineDock_->toggleViewAction());

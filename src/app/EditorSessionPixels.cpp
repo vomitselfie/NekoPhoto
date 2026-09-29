@@ -272,11 +272,14 @@ void EditorSession::paste() {
     QImage external = mime->hasImage() ? qvariant_cast<QImage>(mime->imageData()) : QImage();
     // Pixels copied here go back exactly where they came from unless another app copied since.
     if (pixelClipboard_ && (!mime->hasImage() || (external.width() == pixelClipboard_->image.width() && external.height() == pixelClipboard_->image.height()))) {
+        // With a single channel as the target, the pixels' gray goes into it (EditorSessionChannels.cpp).
+        if (pasteIntoChannels(pixelClipboard_->image, pixelClipboard_->origin)) return;
         addPixelLayer(pixelClipboard_->image, pixelClipboard_->origin, QT_TRANSLATE_NOOP("History", "Paste"), true);
         return;
     }
     if (external.isNull()) return;
     QPointF origin(std::floor((document_->width - external.width()) / 2.0), std::floor((document_->height - external.height()) / 2.0));
+    if (pasteIntoChannels(fromQImage(external), origin)) return;
     addPixelLayer(fromQImage(external), origin, QT_TRANSLATE_NOOP("History", "Paste"), true);
 }
 

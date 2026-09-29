@@ -337,6 +337,7 @@ void EditorSession::restore(const DocumentHistory::Snapshot& snapshot) {
     const Layer* active = activeLayer();
     isMaskSelected_ = keepMask && active && active->mask;
     if (active && active->mask && filterMaskLayer_ == activeLayerId_) isMaskSelected_ = true;   // the filter mask's layer paints its mask alone
+    if (active && active->mask && isChannelProxy(active->id)) isMaskSelected_ = true;   // likewise the layer an alpha channel is painted through
     if (changedCanvas && document_) { viewport.fit({double(document_->width), double(document_->height)}); emit viewportChanged(); }
     if (changedCanvas) notifyDocument();
     else if (changed.isEmpty()) {
@@ -356,10 +357,20 @@ int EditorSession::squashHistory(uint64_t since, const QString& name) {
     return merged;
 }
 
-void EditorSession::beginEdit(const QString& name) { endFramePreview(); history_.begin(name.toStdString(), document_, activeLayerId_); }
+void EditorSession::beginEdit(const QString& name) {
+    endFramePreview();
+    // With only some colour channels active, the edit is limited to them when it ends (EditorSessionChannels.cpp).
+    if (editDepth_++ == 0 && document_ && activeColors_ != colorChannelsAll) channelEditBase_ = *document_;
+    history_.begin(name.toStdString(), document_, activeLayerId_);
+}
 void EditorSession::endEdit() {
     // Warped and filtered smart objects moved or scaled in this edit are drawn again from their contents.
     syncFilterMask();   // a painted filter mask goes into its Smart Filters in the same step
+    syncChannelProxy();   // likewise a painted alpha channel into its channel
+    if (editDepth_ > 0 && --editDepth_ == 0 && channelEditBase_) {
+        if (document_) restrictToColorChannels(*channelEditBase_, *document_, activeColors_);
+        channelEditBase_.reset();
+    }
     if (document_) { refreshSmartObjectRasters(*document_); refreshVectorShapes(*document_); }
     // The frame the layers show keeps what this edit did to their visibility, position and opacity.
     if (document_) { pruneAnimation(*document_); syncCurrentFrame(*document_); }
@@ -397,6 +408,7 @@ void EditorSession::cropTo(const QRectF& rectF, const char* action) {
         if (l.mask && l.mask->placement) { l.mask->placement->origin.x -= rect.x; l.mask->placement->origin.y -= rect.y; }
     }
     offsetAnimation(doc, -rect.x, -rect.y);
+    cropChannels(doc, int(rect.x), int(rect.y), doc.width, doc.height);
     if (doc.selection && doc.selection->coverage.u8()) doc.selection->coverage = cropGray(*doc.selection->coverage.u8(), int(rect.x), int(rect.y), doc.width, doc.height);
     else if (doc.selection && doc.selection->coverage.u16()) doc.selection->coverage = Gray16Ptr(cropGray(*doc.selection->coverage.u16(), int(rect.x), int(rect.y), doc.width, doc.height));
     document_ = doc;
@@ -423,6 +435,7 @@ void EditorSession::resizeCanvas(int width, int height, double anchorX, double a
         if (l.mask && l.mask->placement) { l.mask->placement->origin.x += dx; l.mask->placement->origin.y += dy; }
     }
     offsetAnimation(doc, dx, dy);
+    cropChannels(doc, int(-dx), int(-dy), width, height);
     doc.selection.reset();
     document_ = doc;
     endEdit();
@@ -441,6 +454,7 @@ void EditorSession::resizeImage(int width, int height, double resolution, int sa
     const double sx = double(width) / doc.width, sy = double(height) / doc.height;
     if (!resizeDocument(doc, width, height, resolution, mode)) { emit error(tr("The resized layers would not fit the document's budgets.")); return; }
     scaleAnimation(doc, sx, sy);
+    resampleChannels(doc, document_->width, document_->height, mode);
     beginEdit(QT_TRANSLATE_NOOP("History", "Image Size"));
     document_ = doc;
     endEdit();
@@ -573,6 +587,16 @@ Overrides EditorSession::renderOverrides() const {
         if (previewTransform_) o.transform = *previewTransform_;
         const Layer* layer = document_->find(*previewLayerId_);
         if (layer && layer->mask && !layer->mask->placement && previewTransform_ && !previewTransform_->samePlacement(layer->transform)) o.maskPlacement = std::optional<LayerTransform>(layer->transform);
+        // An adjustment or filter previewed in some colour channels only: shown as it will land.
+        if (activeColors_ != colorChannelsAll && layer && layer->asset) {
+            const AnyImage kept = keepColorChannels(layer->asset->image, layer->transform, previewImage_, previewTransform_.value_or(layer->transform), activeColors_);
+            if (kept) {
+                if (kept.u16()) o.image16 = kept.u16();
+                else o.image = kept.u8();
+                o.transform = layer->transform;
+                o.maskPlacement.reset();
+            }
+        }
     }
     auto strokeOverride = [&](const BrushStroke& stroke, const Uuid& layerId, bool mask) {
         LayerOverride& o = overrides[layerId];
@@ -588,6 +612,17 @@ Overrides EditorSession::renderOverrides() const {
             o.transform = stroke.paintTransform();
             // A mask covering the old grid stays where it was while the layer grows under the edit.
             if (layer && layer->mask && !layer->mask->placement && layer->asset) o.maskPlacement = std::optional<LayerTransform>(layer->transform);
+            // Only some colour channels active: the stroke shows as it will land (EditorSessionChannels.cpp).
+            if (activeColors_ != colorChannelsAll && layer && layer->asset) {
+                const AnyImage kept = keepColorChannels(layer->asset->image, layer->transform, deep ? AnyImage(stroke.previewImage16()) : AnyImage(stroke.previewImage()),
+                                                        stroke.paintTransform(), activeColors_);
+                if (kept) {
+                    if (deep) o.image16 = kept.u16();
+                    else o.image = kept.u8();
+                    o.transform = layer->transform;
+                    o.maskPlacement.reset();
+                }
+            }
         }
     };
     if (stroke_) strokeOverride(*stroke_, strokeLayerId_, strokeMask_);

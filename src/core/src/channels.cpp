@@ -1,6 +1,7 @@
 // Alpha and spot channels, and the colour channels as views (channels.h, docs/channels.md).
 #include "compositor/channels.h"
 #include "compositor/depth.h"
+#include "compositor/parallel.h"
 #include "compositor/render.h"
 #include "compositor/resample.h"
 #include <algorithm>
@@ -109,7 +110,8 @@ bool gridOffset(const LayerTransform& before, int beforeWidth, int beforeHeight,
 template <class Img>
 std::shared_ptr<Img> keepChannels(const Img& before, const Img* after, int dx, int dy, unsigned channels, uint32_t one) {
     auto out = std::make_shared<Img>(before.width(), before.height());
-    for (int y = 0; y < before.height(); y++) {
+    parallelRows(0, before.height(), [&](int y0, int y1) {
+    for (int y = y0; y < y1; y++) {
         const auto* b = before.row(y);
         auto* o = out->row(y);
         const int ay = y - dy;
@@ -132,6 +134,7 @@ std::shared_ptr<Img> keepChannels(const Img& before, const Img* after, int dx, i
             }
         }
     }
+    }, 32);
     return out;
 }
 
@@ -334,12 +337,24 @@ AnyImage keepColorChannels(const AnyImage& before, const AnyImage& after, int dx
     return before;
 }
 
+AnyImage keepColorChannels(const AnyImage& before, const LayerTransform& beforeTransform, const AnyImage& after, const LayerTransform& afterTransform,
+                           unsigned channels) {
+    int dx = 0, dy = 0;
+    if (!before || !after || !gridOffset(beforeTransform, before.width(), before.height(), afterTransform, after.width(), after.height(), dx, dy)) return {};
+    return keepColorChannels(before, after, dx, dy, channels);
+}
+
 bool restrictToColorChannels(const Document& before, Document& after, unsigned channels) {
     if ((channels & colorChannelsAll) == colorChannelsAll) return false;
+    // Edits of the canvas or of the layer structure (Image Size, Crop, merges) work on whole layers, as in Photoshop.
+    if (before.width != after.width || before.height != after.height || before.layers.size() != after.layers.size()) return false;
+    for (size_t i = 0; i < after.layers.size(); i++) if (before.layers[i].id != after.layers[i].id) return false;
     bool changed = false;
     for (Layer& layer : after.layers) {
         const Layer* old = before.find(layer.id);
         if (!old || old->isGroup || layer.isGroup) continue;
+        // Applying or adding a mask, rasterizing: not a pixel edit of the layer's colour.
+        if (bool(old->mask) != bool(layer.mask)) continue;
         const AnyImage was = old->asset ? old->asset->image : AnyImage();
         const AnyImage now = layer.asset ? layer.asset->image : AnyImage();
         if (was == now) continue;

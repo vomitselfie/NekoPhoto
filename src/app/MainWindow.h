@@ -117,6 +117,7 @@ private:
         CanvasWidget* canvas = nullptr;
         LayersPanel* layers = nullptr;
         class PathsPanel* paths = nullptr;
+        class ChannelsPanel* channels = nullptr;
         AdjustmentsPanel* adjustments = nullptr;
         ToolOptionsBar* options = nullptr;
         QString defaultName;
@@ -195,6 +196,8 @@ private:
     QStackedWidget* layersStack_;
     QStackedWidget* pathsStack_ = nullptr;
     QDockWidget* pathsDock_ = nullptr;
+    QStackedWidget* channelsStack_ = nullptr;
+    QDockWidget* channelsDock_ = nullptr;
     QStackedWidget* adjustStack_;
     std::vector<QMetaObject::Connection> sessionConnections_;
     QMenu* recentMenu_;

@@ -77,6 +77,8 @@ constexpr FeatureSupport table[] = {
     // Selections at the document's depth: the marquee, lasso, Magic Wand and Quick Select tools (they read the
     // canvas as shown, in 8-bit levels, and make 16-bit coverage), the Select menu, Load as Selection, Quick Mask.
     {"edit.selection", eightAndSixteen},
+    // Channels (docs/channels.md): alpha channels at the document's depth, Save and Load Selection, single-channel editing.
+    {"edit.channels", eightAndSixteen},
     {"tool.marquee", eightAndSixteen},
     {"tool.lasso", eightAndSixteen},
     {"tool.wand", eightAndSixteen},

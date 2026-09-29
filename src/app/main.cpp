@@ -3,6 +3,7 @@
 #include <QAbstractButton>
 #include "ContentAwareScaleDialog.h"
 #include "MainWindow.h"
+#include "ChannelDialogs.h"
 #include "LayersPanel.h"
 #include "WelcomeDialog.h"
 #include "Bench.h"
@@ -517,6 +518,22 @@ int run(int argc, char** argv) {
                 }
             }
             else if (name == "actions" || name == "timeline" || name == "batch") window.showPanel(name);
+            else if (name == "channels" || name == "save-selection" || name == "load-selection" || name == "channel-options") {
+                // The Channels panel with two alpha channels saved from selections, the second being painted; or one of
+                // its dialogs over it.
+                window.showPanel("channels");
+                if (s->hasDocument()) {
+                    const int w = s->document()->width, h = s->document()->height;
+                    s->applySelectionShape(*compositor::rasterizeEllipse(compositor::Rect(w * 0.2, h * 0.2, w * 0.45, h * 0.55), w, h, true), compositor::SelectionMode::Replace, "Select");
+                    s->saveSelectionToChannel(std::nullopt, QString(), compositor::SelectionMode::Replace);
+                    s->applySelectionShape(*compositor::rasterizeRect(compositor::Rect(w * 0.5, h * 0.1, w * 0.4, h * 0.4), w, h, true), compositor::SelectionMode::Replace, "Select");
+                    const auto second = s->saveSelectionToChannel(std::nullopt, QString(), compositor::SelectionMode::Replace);
+                    if (name == "channels" && second) s->selectAlphaChannel(*second);
+                    if (name == "save-selection") (new app::SaveSelectionDialog(s, &window))->show();
+                    else if (name == "load-selection") (new app::LoadSelectionDialog(s, &window))->show();
+                    else if (name == "channel-options" && second) (new app::ChannelOptionsDialog(s, *second, &window))->show();
+                }
+            }
             else if (name == "layers-menu") { if (auto* panel = window.findChild<app::LayersPanel*>()) panel->showActiveLayerMenu(); }
             else if (name == "new") app::askNewDocument(&window, {});
             else if (name == "canvas-size") app::askCanvasSize(&window, s->hasDocument() ? s->document()->width : 1920, s->hasDocument() ? s->document()->height : 1080);

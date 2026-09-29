@@ -118,6 +118,8 @@ void CanvasWidget::renderInto(QImage& target, QRect deviceRect, QPointF document
     Image out;
     Overrides overrides = session_->renderOverrides();
     compositor::render(*session_->document(), options, out, overrides.empty() ? nullptr : &overrides, &renderCache_);
+    // The Channels panel's view: one colour channel in gray, some of them, alpha channels over the image.
+    if (const compositor::ChannelView view = session_->channelView(); !view.isDefault()) compositor::applyChannelView(out, options.region, zoom, view);
     target = toQImage(out);
 }
 
