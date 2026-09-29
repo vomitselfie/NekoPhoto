@@ -6,6 +6,7 @@
 // between the two with rounding: a 15-bit value survives the trip out and back, a 16-bit file's odd values do
 // not (PSD keeps them in a carried plane, psd_carry.h).
 #pragma once
+#include "colormodes.h"
 #include "imaget.h"
 #include "sampletype.h"
 #include <algorithm>
@@ -72,5 +73,12 @@ uint64_t contentHash(const Gray16* image);
 /// Any buffer at `type` (U8 or U16): converted when its depth differs, shared otherwise.
 AnyImage imageAtDepth(const AnyImage& image, SampleType type);
 AnyGray grayAtDepth(const AnyGray& image, SampleType type);
+/// A colour buffer of `mode` at `type` (U8 or U16): 8-bit CMYK is `ImageC8`, 16-bit CMYK a 5-channel `Image16`; Lab
+/// keeps a and b neutral across depths (128 at 8 bits is 16384 at 16; one 8-bit step of a or b is 128 16-bit steps).
+/// Shared when it is already there; null when the buffer's channel count is not the mode's.
+AnyImage imageAtFormat(const AnyImage& image, SampleType type, ColorMode mode);
+/// 8-bit CMYK widened to a 5-channel 16-bit buffer, and back (each sample as widen8 / narrow16).
+std::shared_ptr<Image16> widenImageC8(const ImageC8& image);
+std::shared_ptr<ImageC8> narrowImageC8(const Image16& image);
 
 } // namespace compositor

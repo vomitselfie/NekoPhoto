@@ -7,6 +7,7 @@
 #include "LayersPanel.h"
 #include "ModelStore.h"
 #include "compositor/scribble.h"
+#include "compositor/supports.h"
 #include <QApplication>
 #include <QDir>
 #include "Platform.h"
@@ -174,7 +175,7 @@ namespace {
 /// document; on a 16-bit one, those that read, those outside the document, and those whose feature supports() lists
 /// at 16 bits. The rest are refused, "<method> is not available for 16-bit documents yet", until they are ported.
 bool worksAtDepth(const QString& method, const EditorSession& session) {
-    if (!session.hasDocument() || session.sampleType() == SampleType::U8) return true;
+    if (!session.hasDocument() || !session.featuresGated()) return true;
     static const QSet<QString> always = {
         "app.info", "tabs.list", "tabs.new", "tabs.select", "tabs.close", "history.undo", "history.redo", "history.list", "history.info",
         "history.beginGroup", "history.endGroup", "rpc.methods", "rpc.describe", "rpc.batch", "events.subscribe", "events.unsubscribe",
@@ -244,7 +245,10 @@ QJsonObject AutomationServer::handle(const QJsonObject& request) {
     }
     // A 16-bit document takes only what has been ported to it (compositor/supports.h).
     if (EditorSession* s = window_->session(); s && !worksAtDepth(method, *s)) {
-        response["error"] = QJsonObject{{"code", appError}, {"message", method + " is not available for " + QString::fromLatin1(sampleTypeName(s->sampleType())) + "-bit documents yet"}};
+        const QString why = s->colorMode() != ColorMode::RGB
+            ? method + ": " + QString::fromStdString(notAvailableInMode(s->colorMode()))
+            : method + " is not available for " + QString::fromLatin1(sampleTypeName(s->sampleType())) + "-bit documents yet";
+        response["error"] = QJsonObject{{"code", appError}, {"message", why}};
         return response;
     }
     // An editing request made while an action records becomes a step of it; the requests it makes itself (a

@@ -163,6 +163,12 @@ public:
 
     // Bit depth (docs/bit-depth.md)
     compositor::SampleType sampleType() const { return document_ ? document_->sampleType : compositor::SampleType::U8; }
+    /// Image > Mode: RGB, CMYK or Lab (RGB with no document).
+    compositor::ColorMode colorMode() const { return document_ ? document_->colorMode : compositor::ColorMode::RGB; }
+    /// Whether the document's depth or mode can refuse features (anything but 8-bit RGB).
+    bool featuresGated() const { return sampleType() != compositor::SampleType::U8 || colorMode() != compositor::ColorMode::RGB; }
+    /// The tooltip of an item greyed for the document: "Not available in CMYK mode", or "Not available in 16-bit yet".
+    QString unavailableTip() const;
     /// Image > Mode > 8 Bits/Channel or 16 Bits/Channel: every layer, mask and the selection converted, one undo step.
     /// False, with `error` saying why (a 16-bit document holds half the pixels within the same memory), when it cannot.
     bool convertMode(compositor::SampleType type, QString* error = nullptr);

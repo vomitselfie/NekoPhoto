@@ -4269,6 +4269,26 @@ File &gt; New creates a blank canvas.</source>
         <translation>1 つのドキュメントに置けるレイヤーは最大 %1 個です。</translation>
     </message>
     <message>
+        <source>Not available in CMYK mode</source>
+        <translation>CMYK モードでは使用できません</translation>
+    </message>
+    <message>
+        <source>Not available in Lab mode</source>
+        <translation>Lab モードでは使用できません</translation>
+    </message>
+    <message>
+        <source>Not available in 16-bit yet</source>
+        <translation>16 bit/チャンネルではまだ使用できません</translation>
+    </message>
+    <message>
+        <source>%1 is not available in CMYK mode.</source>
+        <translation>CMYK モードのドキュメントでは、%1 は使用できません。</translation>
+    </message>
+    <message>
+        <source>%1 is not available in Lab mode.</source>
+        <translation>Lab モードのドキュメントでは、%1 は使用できません。</translation>
+    </message>
+    <message>
         <source>%1 is not available for %2-bit documents yet.</source>
         <translation>%2 bit/チャンネルのドキュメントでは、%1 はまだ使用できません。</translation>
     </message>
@@ -5214,10 +5234,6 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Smart object (%1): click to edit its contents.</source>
         <translation>スマートオブジェクト (%1): クリックして内容を編集します。</translation>
-    </message>
-    <message>
-        <source>Not available in 16-bit yet</source>
-        <translation>16 bit/チャンネルではまだ使用できません</translation>
     </message>
     <message>
         <source>Edit Text…</source>
@@ -7294,10 +7310,6 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>The document could not be converted.</source>
         <translation>ドキュメントを変換できませんでした。</translation>
-    </message>
-    <message>
-        <source>Not available in 16-bit yet</source>
-        <translation>16 bit/チャンネルではまだ使用できません</translation>
     </message>
 </context>
 <context>

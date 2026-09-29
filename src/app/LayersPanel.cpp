@@ -755,10 +755,10 @@ void LayersPanel::showContextMenu(const QPoint& pos) {
     auto* menu = new QMenu(this);
     menu->setAttribute(Qt::WA_DeleteOnClose);
     // What has not been ported to a 16-bit document's depth is greyed, saying so (compositor/supports.h).
-    const bool deep = session_->sampleType() != SampleType::U8;
+    const bool deep = session_->featuresGated();
     menu->setToolTipsVisible(deep);
     auto gatedAtDepth = [&](QAction* a, const char* feature) {
-        if (deep && !session_->supportsFeature(feature)) { a->setEnabled(false); a->setToolTip(tr("Not available in 16-bit yet")); }
+        if (deep && !session_->supportsFeature(feature)) { a->setEnabled(false); a->setToolTip(session_->unavailableTip()); }
         return a;
     };
     if (layer->isLiveText()) gatedAtDepth(menu->addAction(tr("Edit Text…"), this, [this, id] { session_->requestTextEdit(id); }), "edit.text");

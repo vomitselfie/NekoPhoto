@@ -17,10 +17,10 @@
 namespace compositor {
 
 /// A premultiplied colour buffer of `channels` interleaved samples per pixel (4 for RGB and Lab, 5 for CMYK),
-/// rows top-down, explicit byte stride. Zeroed (transparent) when created.
+/// rows top-down, explicit byte stride. Zeroed (transparent) when created. `Image` stays the 8-bit RGBA and Lab
+/// buffer; `ImageT<U8>` is `ImageC8`, the 8-bit CMYK one (colormodes.h).
 template <SampleType S>
 class ImageT {
-    static_assert(S != SampleType::U8, "Image is the 8-bit buffer; use ImageOf<S>");
 public:
     using Sample = SampleOf<S>;
     static constexpr SampleType sampleType = S;
@@ -99,6 +99,10 @@ template <SampleType S> using ImageOf = typename ImageTypes<S>::Color;
 template <SampleType S> using GrayOf = typename ImageTypes<S>::Gray;
 
 using Image16 = ImageT<SampleType::U16>;
+/// 8-bit CMYK: 5 samples a pixel (C, M, Y, K as inverted ink, alpha; colormodes.h). A distinct type from `Image`, so
+/// code written for 8-bit RGBA never meets it: `AnyImage::u8()` is null for it and `.c8()` returns it.
+using ImageC8 = ImageT<SampleType::U8>;
+using ImageC8Ptr = std::shared_ptr<const ImageC8>;
 using ImageF = ImageT<SampleType::F32>;
 using Gray16 = GrayImageT<SampleType::U16>;
 using GrayF = GrayImageT<SampleType::F32>;
@@ -107,28 +111,50 @@ using ImageFPtr = std::shared_ptr<const ImageF>;
 using Gray16Ptr = std::shared_ptr<const Gray16>;
 using GrayFPtr = std::shared_ptr<const GrayF>;
 
-/// A shared, immutable buffer of any depth, or none: `P8`, `P16`, `PF` are the shared pointers for U8, U16, F32.
-/// A pointer of any of the three converts to it implicitly, so code that assigns an `ImagePtr` keeps compiling.
-template <class P8, class P16, class PF>
+/// A shared, immutable buffer of any depth, or none: `P8`, `P16`, `PF` are the shared pointers for U8, U16, F32, and
+/// `PC` (when not void) the 8-bit CMYK buffer, a fourth alternative that reads as U8 but is not `u8()`. A pointer of
+/// any of them converts to it implicitly, so code that assigns an `ImagePtr` keeps compiling.
+template <class P8, class P16, class PF, class PC = void>
 class AnyOf {
+    static constexpr bool hasC8 = !std::is_void_v<PC>;
+    using Variant = std::conditional_t<hasC8, std::variant<P8, P16, PF, std::conditional_t<hasC8, PC, P8>>, std::variant<P8, P16, PF>>;
+    template <class P, class Q> static constexpr bool to = std::is_convertible_v<P&&, Q> && !std::is_same_v<std::remove_cvref_t<P>, std::nullptr_t>;
+
 public:
     AnyOf() = default;
     AnyOf(std::nullptr_t) {}
-    template <class P> requires std::is_convertible_v<P&&, P8> && (!std::is_same_v<std::remove_cvref_t<P>, std::nullptr_t>)
+    template <class P> requires to<P, P8>
     AnyOf(P&& p) : v_(std::in_place_index<0>, std::forward<P>(p)) {}
-    template <class P> requires std::is_convertible_v<P&&, P16> && (!std::is_convertible_v<P&&, P8>) && (!std::is_same_v<std::remove_cvref_t<P>, std::nullptr_t>)
+    template <class P> requires to<P, P16> && (!std::is_convertible_v<P&&, P8>)
     AnyOf(P&& p) : v_(std::in_place_index<1>, std::forward<P>(p)) {}
-    template <class P> requires std::is_convertible_v<P&&, PF> && (!std::is_convertible_v<P&&, P8>) && (!std::is_convertible_v<P&&, P16>) && (!std::is_same_v<std::remove_cvref_t<P>, std::nullptr_t>)
+    template <class P> requires to<P, PF> && (!std::is_convertible_v<P&&, P8>) && (!std::is_convertible_v<P&&, P16>)
     AnyOf(P&& p) : v_(std::in_place_index<2>, std::forward<P>(p)) {}
+    template <class P> requires hasC8 && to<P, std::conditional_t<hasC8, PC, void>> && (!std::is_convertible_v<P&&, P8>) && (!std::is_convertible_v<P&&, P16>) && (!std::is_convertible_v<P&&, PF>)
+    AnyOf(P&& p) : v_(std::in_place_index<3>, std::forward<P>(p)) {}
 
-    /// The depth of the buffer held (U8 when none is).
-    SampleType sampleType() const { return SampleType(v_.index()); }
+    /// The depth of the buffer held (U8 when none is, and for 8-bit CMYK).
+    SampleType sampleType() const { return v_.index() >= 3 ? SampleType::U8 : SampleType(v_.index()); }
+    /// Samples per pixel: 5 for a CMYK buffer (8-bit, or 16-bit with 5 channels), else 4 (1 for grays).
+    int channels() const {
+        return std::visit([](const auto& p) -> int {
+            if constexpr (requires { p->channels(); }) return p ? p->channels() : 4;
+            else if constexpr (requires { p->stride(); p->at(0, 0); }) return 1;
+            else return 4;
+        }, v_);
+    }
     explicit operator bool() const { return std::visit([](const auto& p) { return bool(p); }, v_); }
     void reset() { v_ = P8(); }
-    /// The 8-bit buffer: null when there is none or it is deeper.
+    /// The 8-bit buffer: null when there is none or it is deeper, or 8-bit CMYK.
     const P8& u8() const { if (auto* p = std::get_if<0>(&v_)) return *p; return none8(); }
     const P16& u16() const { if (auto* p = std::get_if<1>(&v_)) return *p; return none16(); }
     const PF& f32() const { if (auto* p = std::get_if<2>(&v_)) return *p; return noneF(); }
+    /// The 8-bit CMYK buffer: null unless that is what is held.
+    template <class Q = PC> requires (!std::is_void_v<Q>)
+    const Q& c8() const {
+        if (v_.index() == 3) return std::get<3>(v_);
+        static const Q none;
+        return none;
+    }
     /// The buffer's size whatever its depth (0 when there is none): geometry, not pixels.
     int width() const { return std::visit([](const auto& p) { return p ? p->width() : 0; }, v_); }
     int height() const { return std::visit([](const auto& p) { return p ? p->height() : 0; }, v_); }
@@ -145,14 +171,14 @@ private:
     static const P8& none8() { static const P8 p; return p; }
     static const P16& none16() { static const P16 p; return p; }
     static const PF& noneF() { static const PF p; return p; }
-    std::variant<P8, P16, PF> v_;
+    Variant v_;
 };
 
-using AnyImage = AnyOf<ImagePtr, Image16Ptr, ImageFPtr>;
+using AnyImage = AnyOf<ImagePtr, Image16Ptr, ImageFPtr, ImageC8Ptr>;
 using AnyGray = AnyOf<GrayPtr, Gray16Ptr, GrayFPtr>;
 
 /// Calls `f` with the typed shared pointer an `AnyImage` or `AnyGray` holds.
-template <class F, class P8, class P16, class PF>
-decltype(auto) visit(F&& f, const AnyOf<P8, P16, PF>& any) { return any.visit(std::forward<F>(f)); }
+template <class F, class P8, class P16, class PF, class PC>
+decltype(auto) visit(F&& f, const AnyOf<P8, P16, PF, PC>& any) { return any.visit(std::forward<F>(f)); }
 
 } // namespace compositor

@@ -31,7 +31,7 @@ bool EditorSession::convertToProfile(const ColorProfile& profile, const ConvertO
     }
     beginEdit(QT_TRANSLATE_NOOP("History", "Convert to Profile"));
     *document_ = std::move(converted);
-    conformToSampleType(*document_);
+    conformToFormat(*document_);
     endEdit();
     // The foreground and background colours are values in the document's space too.
     for (QColor* c : {&foregroundColor, &backgroundColor}) {

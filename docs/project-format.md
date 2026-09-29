@@ -49,6 +49,22 @@ where `file` is `channels/<id>.png`, a gray PNG of the canvas's size at the docu
 `channels/<id>.psdcarry` keeps what a PSD said about the channel. A missing or wrongly sized channel PNG is damage;
 `channels` below version 8 is refused; a document without channels writes no key.
 
+Version 9 is a CMYK or Lab document ([color-management.md](color-management.md)): `"colorMode": "cmyk"` or `"lab"`.
+An RGB document writes no `colorMode` and stays at version 8 or below, so older releases keep opening it; the key below
+version 9, or another value, is refused as damage. Masks and channels are gray PNGs in every mode.
+
+- **Lab** layers are 4-sample PNGs at the document's depth holding L, a, b and alpha as they are (a and b offset by 128
+  at 8 bits and 16384 at 16); the manifest's `colorMode` is what says they are Lab.
+- **CMYK** layers have no PNG form: `imageFile` is `<id>.cmyk`, a 24-byte header then the five planes compressed.
+  The header is `"NPCMYK"`, 0, 1 (magic and version), the width and height as little-endian u32, then u8 channels
+  (5), u8 bits (8 or 16), u8 compression (1 zlib, 2 zstd), a zero byte and a zero u32. The planes are C, M, Y, K and
+  alpha one after the other, rows top-down, 16-bit samples little-endian in 0..32768; the samples are as the document
+  holds them: premultiplied, the inks inverted (0 is full ink, as in PSD). NekoPhoto writes zlib and reads zstd too
+  when built with it. A colour sample above its alpha is clamped to it on load.
+- `profile.icc`, when present, must be a profile of the document's mode (a CMYK profile for CMYK); another is dropped.
+- The loader counts each layer's decoded bytes (samples times channels) against `ProjectLoadLimits::layerBytes` and
+  the document's own budget, which is bytes: a CMYK layer holds four fifths the pixels of an RGB one.
+
 ## Frame animation (NekoPhoto)
 
 A document with frames (Window > Timeline) adds an `animation` object to the manifest; readers that do not know it

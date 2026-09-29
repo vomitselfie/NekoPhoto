@@ -106,7 +106,15 @@ Asset Asset::make(ImagePtr image, std::string name) {
 
 Asset Asset::make(Image16Ptr image, std::string name) {
     Asset asset;
-    asset.thumbnail = image ? makeThumbnail(*image) : nullptr;
+    // A 5-channel (CMYK) raster has no thumbnail yet: drawing one needs the document's profile.
+    asset.thumbnail = image && image->channels() == 4 ? makeThumbnail(*image) : nullptr;
+    asset.image = std::move(image);
+    asset.name = std::move(name);
+    return asset;
+}
+
+Asset Asset::make(ImageC8Ptr image, std::string name) {
+    Asset asset;
     asset.image = std::move(image);
     asset.name = std::move(name);
     return asset;
@@ -114,6 +122,7 @@ Asset Asset::make(Image16Ptr image, std::string name) {
 
 Asset Asset::makeAny(const AnyImage& image, std::string name) {
     if (image.u16()) return make(image.u16(), std::move(name));
+    if (image.c8()) return make(image.c8(), std::move(name));
     return make(image.u8(), std::move(name));
 }
 
@@ -203,7 +212,7 @@ Rect Selection::bounds() const {
 Document::Document(int width_, int height_) : id(makeUuid()), width(width_), height(height_) {}
 
 bool Document::operator==(const Document& o) const {
-    return id == o.id && width == o.width && height == o.height && resolution == o.resolution && sampleType == o.sampleType && profile == o.profile && layers == o.layers && selection == o.selection && psdCarry == o.psdCarry && smartObjects == o.smartObjects && slices == o.slices && animation == o.animation && channels == o.channels;
+    return id == o.id && width == o.width && height == o.height && resolution == o.resolution && sampleType == o.sampleType && colorMode == o.colorMode && profile == o.profile && layers == o.layers && selection == o.selection && psdCarry == o.psdCarry && smartObjects == o.smartObjects && slices == o.slices && animation == o.animation && channels == o.channels;
 }
 
 long long Document::layerPixels() const {
@@ -219,7 +228,7 @@ long long Document::maskPixels() const {
     return total;
 }
 
-long long Document::layerBytes() const { return layerPixels() * 4 * (long long)sampleBytes(sampleType); }
+long long Document::layerBytes() const { return layerPixels() * colorModeChannels(colorMode) * (long long)sampleBytes(sampleType); }
 long long Document::maskBytes() const { return maskPixels() * (long long)sampleBytes(sampleType); }
 
 namespace {
@@ -231,11 +240,12 @@ std::string megapixels(long long pixels) {
 } // namespace
 
 std::string BudgetCheck::message() const {
-    const std::string depth = std::string(sampleTypeName(type)) + "-bit";
+    const std::string depth = std::string(sampleTypeName(type)) + "-bit" + (mode == ColorMode::RGB ? "" : std::string(" ") + colorModeName(mode));
     switch (kind) {
     case Ok: return {};
     case Side: return "an image, layer or canvas can be at most " + std::to_string(limit) + " pixels a side";
-    case Image: return "an image, layer or canvas holds up to " + megapixels(limit) + " megapixels at " + sampleTypeName(type) + " bits per channel";
+    case Image: return "an image, layer or canvas holds up to " + megapixels(limit) + " megapixels at " + sampleTypeName(type) + " bits per channel"
+                       + (mode == ColorMode::RGB ? "" : std::string(" in ") + colorModeName(mode));
     case Project: return "the layers would take this " + depth + " document past its " + megapixels(limit) + " megapixels for all layers together";
     case Masks: return "the masks would take this " + depth + " document past its " + megapixels(limit) + " megapixels for all masks together";
     case Layers: return "a document holds up to " + std::to_string(limit) + " layers";
@@ -243,59 +253,63 @@ std::string BudgetCheck::message() const {
     return {};
 }
 
-BudgetCheck Document::canCreate(int width, int height, SampleType type) {
-    if (!validDimension(width) || !validDimension(height)) return {BudgetCheck::Side, type, maxImageSide};
-    if ((long long)width * height > imagePixelBudget(type)) return {BudgetCheck::Image, type, imagePixelBudget(type)};
-    return {BudgetCheck::Ok, type, 0};
+BudgetCheck Document::canCreate(int width, int height, SampleType type, ColorMode mode) {
+    if (!validDimension(width) || !validDimension(height)) return {BudgetCheck::Side, type, maxImageSide, mode};
+    if ((long long)width * height > imagePixelBudget(type, mode)) return {BudgetCheck::Image, type, imagePixelBudget(type, mode), mode};
+    return {BudgetCheck::Ok, type, 0, mode};
 }
 
 BudgetCheck Document::canAddLayers(long long count, long long pixels, long long masks) const {
-    if (count < 0 || (long long)layers.size() + count > maxLayers) return {BudgetCheck::Layers, sampleType, maxLayers};
-    const long long project = projectPixelBudgetAt(sampleType);
-    if (pixels > 0 && (pixels > project || layerPixels() > project - pixels)) return {BudgetCheck::Project, sampleType, project};
-    if (masks > 0 && (masks > project || maskPixels() > project - masks)) return {BudgetCheck::Masks, sampleType, project};
-    return {BudgetCheck::Ok, sampleType, 0};
+    const ColorMode mode = colorMode;
+    if (count < 0 || (long long)layers.size() + count > maxLayers) return {BudgetCheck::Layers, sampleType, maxLayers, mode};
+    const long long project = projectPixelBudgetAt(sampleType, mode), maskBudget = maskPixelBudgetAt(sampleType);
+    if (pixels > 0 && (pixels > project || layerPixels() > project - pixels)) return {BudgetCheck::Project, sampleType, project, mode};
+    if (masks > 0 && (masks > maskBudget || maskPixels() > maskBudget - masks)) return {BudgetCheck::Masks, sampleType, maskBudget, mode};
+    return {BudgetCheck::Ok, sampleType, 0, mode};
 }
 
 BudgetCheck Document::canInsertImage(int width, int height) const {
-    if (BudgetCheck check = canCreate(width, height, sampleType); !check) return check;
+    if (BudgetCheck check = canCreate(width, height, sampleType, colorMode); !check) return check;
     return canAddLayers(1, (long long)width * height);
 }
 
 BudgetCheck Document::withinBudget(const Document& document) {
     const SampleType type = document.sampleType;
-    if (BudgetCheck check = canCreate(document.width, document.height, type); !check) return check;
-    if (document.layers.size() > size_t(maxLayers)) return {BudgetCheck::Layers, type, maxLayers};
-    const long long project = projectPixelBudgetAt(type);
+    const ColorMode mode = document.colorMode;
+    if (BudgetCheck check = canCreate(document.width, document.height, type, mode); !check) return check;
+    if (document.layers.size() > size_t(maxLayers)) return {BudgetCheck::Layers, type, maxLayers, mode};
+    const long long project = projectPixelBudgetAt(type, mode), maskBudget = maskPixelBudgetAt(type);
     for (const Layer& l : document.layers) {
-        if (l.asset && l.asset->image) if (BudgetCheck check = canCreate(l.asset->image.width(), l.asset->image.height(), type); !check) return check;
+        if (l.asset && l.asset->image) if (BudgetCheck check = canCreate(l.asset->image.width(), l.asset->image.height(), type, mode); !check) return check;
         if (l.mask && l.mask->asset.image) if (BudgetCheck check = canCreate(l.mask->asset.image.width(), l.mask->asset.image.height(), type); !check) return check;
     }
-    if (document.layerPixels() > project) return {BudgetCheck::Project, type, project};
-    if (document.maskPixels() > project) return {BudgetCheck::Masks, type, project};
-    return {BudgetCheck::Ok, type, 0};
+    if (document.layerPixels() > project) return {BudgetCheck::Project, type, project, mode};
+    if (document.maskPixels() > maskBudget) return {BudgetCheck::Masks, type, maskBudget, mode};
+    return {BudgetCheck::Ok, type, 0, mode};
 }
 
-std::string sampleTypeBudgetProblem(const Document& document, SampleType type) {
-    const long long image = Document::imagePixelBudget(type), project = Document::projectPixelBudgetAt(type);
-    const std::string depth = std::string(sampleTypeName(type)) + "-bit";
+std::string formatBudgetProblem(const Document& document, SampleType type, ColorMode mode) {
+    const long long image = Document::imagePixelBudget(type, mode), project = Document::projectPixelBudgetAt(type, mode);
+    const long long maskImage = Document::imagePixelBudget(type), masks = Document::maskPixelBudgetAt(type);
+    const std::string depth = std::string(sampleTypeName(type)) + "-bit" + (mode == ColorMode::RGB ? "" : std::string(" ") + colorModeName(mode));
     if ((long long)document.width * document.height > image)
         return "A " + depth + " canvas holds up to " + megapixels(image) + " megapixels; this one has " + megapixels((long long)document.width * document.height) + ".";
     for (const Layer& l : document.layers) {
         if (l.asset && l.asset->image && (long long)l.asset->image.width() * l.asset->image.height() > image)
             return "Layer \"" + l.name + "\" has " + megapixels((long long)l.asset->image.width() * l.asset->image.height()) + " megapixels; a " + depth + " layer holds up to " + megapixels(image) + ".";
-        if (l.mask && l.mask->asset.image && (long long)l.mask->asset.image.width() * l.mask->asset.image.height() > image)
-            return "The mask of \"" + l.name + "\" is larger than a " + depth + " mask can be (" + megapixels(image) + " megapixels).";
+        if (l.mask && l.mask->asset.image && (long long)l.mask->asset.image.width() * l.mask->asset.image.height() > maskImage)
+            return "The mask of \"" + l.name + "\" is larger than a " + depth + " mask can be (" + megapixels(maskImage) + " megapixels).";
     }
     if (document.layerPixels() > project)
         return "The layers total " + megapixels(document.layerPixels()) + " megapixels; a " + depth + " document holds up to " + megapixels(project) + " within the same memory.";
-    if (document.maskPixels() > project)
-        return "The masks total " + megapixels(document.maskPixels()) + " megapixels; a " + depth + " document holds up to " + megapixels(project) + " within the same memory.";
+    if (document.maskPixels() > masks)
+        return "The masks total " + megapixels(document.maskPixels()) + " megapixels; a " + depth + " document holds up to " + megapixels(masks) + " within the same memory.";
     return {};
 }
 
-bool conformToSampleType(Document& document) {
+bool conformToFormat(Document& document) {
     const SampleType type = document.sampleType;
+    const ColorMode mode = document.colorMode;
     if (type == SampleType::F32) return false;
     bool changed = false;
     // Each buffer converted once: a live shape, text or smart object shares its raster with the layer's asset, and
@@ -303,11 +317,13 @@ bool conformToSampleType(Document& document) {
     std::map<const void*, AnyImage> images;
     std::map<const void*, AnyGray> grays;
     auto image = [&](const AnyImage& in) -> AnyImage {
-        if (!in || in.sampleType() == type) return in;
-        changed = true;
+        if (!in || (in.sampleType() == type && in.channels() == colorModeChannels(mode))) return in;
         auto it = images.find(in.identity());
-        if (it != images.end()) return it->second;
-        return images[in.identity()] = imageAtDepth(in, type);
+        if (it != images.end()) { changed = true; return it->second; }
+        AnyImage out = imageAtFormat(in, type, mode);
+        if (!out) return in;   // another mode's colours: left for Image > Mode
+        changed = true;
+        return images[in.identity()] = out;
     };
     auto gray = [&](const AnyGray& in) -> AnyGray {
         if (!in || in.sampleType() == type) return in;
@@ -344,7 +360,7 @@ bool convertSampleType(Document& document, SampleType type, std::string* error) 
     if (std::string problem = sampleTypeBudgetProblem(document, type); !problem.empty()) { if (error) *error = problem; return false; }
     Document out = document;
     out.sampleType = type;
-    conformToSampleType(out);
+    conformToFormat(out);
     document = std::move(out);
     return true;
 }

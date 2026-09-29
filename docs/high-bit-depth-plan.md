@@ -193,7 +193,7 @@ and a Channels panel, with 8-bit documents untouched throughout.
   size and flip, import, save and export, the tools that do not touch pixels). The app greys every other menu entry
   and tool in a 16-bit document ("Not available in 16-bit yet"), automation refuses the other methods ("<method> is
   not available for 16-bit documents yet"), and the session's 8-bit-only entry points refuse with the same wording.
-  Every edit brings buffers held at another depth to the document's (`conformToSampleType`), so a document keeps one
+  Every edit brings buffers held at another depth to the document's (`conformToFormat`), so a document keeps one
   depth even when an 8-bit path (a shape or text raster, an imported file) adds pixels.
 - Gates: 8-bit render hashes identical (133 scenes) plus 58 16-bit scenes; full ctest; GCC and Clang `-Werror`; rpc
   smoke with a 16-bit section; PSD corpus plus K.psd identical (118 files, 3,975 carried blocks); a constructed

@@ -5,6 +5,7 @@
 #pragma once
 #include "artboard.h"
 #include "animation.h"
+#include "colormodes.h"
 #include "colorprofile.h"
 #include "geometry.h"
 #include "psd_carry.h"
@@ -40,6 +41,8 @@ struct Asset {
     static Asset make(ImagePtr image, std::string name);
     /// A 16-bit raster; its thumbnail is reduced to 8 bits.
     static Asset make(Image16Ptr image, std::string name);
+    /// An 8-bit CMYK raster. It has no thumbnail yet: drawing one needs the document's profile (P7 step C).
+    static Asset make(ImageC8Ptr image, std::string name);
     /// Whichever depth `image` holds.
     static Asset makeAny(const AnyImage& image, std::string name);
 };
@@ -285,6 +288,8 @@ struct BudgetCheck {
     SampleType type = SampleType::U8;
     /// The side in pixels (Side), the pixel budget (Image, Project, Masks) or the layer count (Layers).
     long long limit = 0;
+    /// The colour mode the limit is for (a CMYK image holds fewer pixels than an RGB one in the same bytes).
+    ColorMode mode = ColorMode::RGB;
     explicit operator bool() const { return kind == Ok; }
     /// In English, for automation and logs.
     std::string message() const;
@@ -298,6 +303,9 @@ struct Document {
     /// The depth of every layer, mask and selection (one per document, as in Photoshop). Always U8 until
     /// deeper documents land (docs/high-bit-depth-plan.md, P2).
     SampleType sampleType = SampleType::U8;
+    /// Image > Mode: RGB, CMYK or Lab (colormodes.h). Every layer's pixels hold colorModeChannels(colorMode)
+    /// samples; masks, the selection and alpha channels are grays in every mode.
+    ColorMode colorMode = ColorMode::RGB;
     /// The colour profile the pixels are in (colorprofile.h, colormgmt.h); empty: untagged, treated as sRGB.
     ColorProfile profile;
     std::vector<Layer> layers; // bottom to top
@@ -338,13 +346,19 @@ struct Document {
     long long layerPixels() const;
     long long maskPixels() const;
 
-    /// The budgets are bytes (docs/high-bit-depth-plan.md, section 8): the pixel budgets above are an 8-bit
-    /// document's, and a 16-bit one holds half as many pixels in the same memory (400 MB per image, 4 GB of
-    /// layers and as much of masks at 8 bits' 1 byte a mask sample).
-    static constexpr long long imagePixelBudget(SampleType type) { return pixelBudget / (long long)sampleBytes(type); }
-    static constexpr long long projectPixelBudgetAt(SampleType type) { return projectPixelBudget / (long long)sampleBytes(type); }
-    long long imagePixelBudget() const { return imagePixelBudget(sampleType); }
-    long long projectPixelBudgetAt() const { return projectPixelBudgetAt(sampleType); }
+    /// The budgets are bytes (docs/high-bit-depth-plan.md, section 8): the pixel budgets above are an 8-bit RGBA
+    /// document's, and a document of another depth or mode holds as many pixels as fit the same memory: sample size
+    /// times channels (a 16-bit RGB image holds half as many, an 8-bit CMYK one four fifths). Masks are one channel
+    /// in every mode, so their budget follows the depth alone.
+    static constexpr long long imagePixelBudget(SampleType type, ColorMode mode = ColorMode::RGB) {
+        return pixelBudget * 4 / ((long long)sampleBytes(type) * colorModeChannels(mode));
+    }
+    static constexpr long long projectPixelBudgetAt(SampleType type, ColorMode mode = ColorMode::RGB) {
+        return projectPixelBudget * 4 / ((long long)sampleBytes(type) * colorModeChannels(mode));
+    }
+    static constexpr long long maskPixelBudgetAt(SampleType type) { return projectPixelBudgetAt(type); }
+    long long imagePixelBudget() const { return imagePixelBudget(sampleType, colorMode); }
+    long long projectPixelBudgetAt() const { return projectPixelBudgetAt(sampleType, colorMode); }
     /// The bytes every layer's pixels and every mask take at the document's depth.
     long long layerBytes() const;
     long long maskBytes() const;
@@ -353,7 +367,7 @@ struct Document {
     /// a side of at most maxImageSide, one image within imagePixelBudget(type), all the layers' pixels (and
     /// separately all the masks') within projectPixelBudgetAt(type), and at most maxLayers layers.
     /// A canvas, or one image, `width` x `height` at `type`.
-    static BudgetCheck canCreate(int width, int height, SampleType type);
+    static BudgetCheck canCreate(int width, int height, SampleType type, ColorMode mode = ColorMode::RGB);
     /// One more `width` x `height` image as a new layer of this document, at its depth.
     BudgetCheck canInsertImage(int width, int height) const;
     /// `count` more layers holding `pixels` of layer pixels and `maskPixels` of mask pixels in all.
@@ -362,8 +376,8 @@ struct Document {
     static BudgetCheck withinBudget(const Document& document);
     /// Whether Compositor for macOS can open this project: its loader allows pixelBudget in total.
     bool fitsMacBudget() const {
-        // The Mac app is 8-bit only.
-        if (sampleType != SampleType::U8) return false;
+        // The Mac app is 8-bit RGB only.
+        if (sampleType != SampleType::U8 || colorMode != ColorMode::RGB) return false;
         // The Mac app reads projects up to version 7: folders with their own opacity, mode or isolation need 8.
         for (const Layer& l : layers) if (l.isGroup && (l.opacity != 1 || l.blendMode != BlendMode::Normal || !l.passThrough || l.artboard)) return false;
         if (!slices.empty()) return false;
@@ -397,11 +411,16 @@ Rect changedArea(const Document& before, const Document& after);
 /// saying why, when the result would not fit (a 16-bit document holds half the pixels of an 8-bit one) or the
 /// depth is not supported; the document is then unchanged.
 bool convertSampleType(Document& document, SampleType type, std::string* error = nullptr);
-/// Brings every buffer held at another depth to the document's own (a layer imported from an 8-bit file into a 16-bit
-/// document, say), sharing converted buffers as the originals were. No budget check. True when anything changed.
-bool conformToSampleType(Document& document);
-/// Why `document` would not fit its budgets at `type`, or empty when it would.
-std::string sampleTypeBudgetProblem(const Document& document, SampleType type);
+/// Brings every buffer held at another depth to the document's own depth and mode (a layer imported from an 8-bit file
+/// into a 16-bit document, say; an 8-bit CMYK layer into a 16-bit CMYK document), sharing converted buffers as the
+/// originals were. Lab's a and b keep their neutral point across depths (128 at 8 bits, 16384 at 16). A colour buffer
+/// whose channel count is not the mode's is left as it is: changing mode converts colours, which is Image > Mode's
+/// work (colormgmt.h). No budget check. True when anything changed.
+bool conformToFormat(Document& document);
+/// Why `document` would not fit its budgets at `type` in `mode`, or empty when it would.
+std::string formatBudgetProblem(const Document& document, SampleType type, ColorMode mode);
+/// The same in the document's own mode.
+inline std::string sampleTypeBudgetProblem(const Document& document, SampleType type) { return formatBudgetProblem(document, type, document.colorMode); }
 
 /// The name "Layer N" / "Folder N" not yet used.
 std::string nextLayerName(const std::vector<Layer>& layers, const std::string& prefix);
