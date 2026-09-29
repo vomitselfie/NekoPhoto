@@ -418,6 +418,27 @@ std::shared_ptr<Gray16> coverageFromLayer16(const Document& document, const Laye
     return out;
 }
 
+AnyGray coverageFromLayerAlpha(const Document& document, const Layer& layer) {
+    if (!layer.asset) return {};
+    const AnyImage& any = layer.asset->image;
+    auto place = [&](const auto& image, auto zero) {
+        using Sample = std::remove_cv_t<std::remove_reference_t<decltype(*image.row(0))>>;
+        using G = std::conditional_t<sizeof(Sample) == 1, GrayImage, Gray16>;
+        const int n = image.channels();
+        auto alpha = std::make_shared<G>(image.width(), image.height());
+        for (int y = 0; y < image.height(); y++) {
+            const Sample* p = image.row(y);
+            for (int x = 0; x < image.width(); x++) alpha->at(x, y) = p[size_t(x) * size_t(n) + size_t(n - 1)];
+        }
+        auto out = std::make_shared<G>(document.width, document.height, zero);
+        sampleMaskCoverage(*alpha, layer.transform, document.rect(), 1, zero, *out, false);
+        return out;
+    };
+    if (any.c8()) return AnyGray(GrayPtr(place(*any.c8(), uint8_t(0))));
+    if (any.u16() && any.u16()->channels() == 5) return AnyGray(Gray16Ptr(place(*any.u16(), uint16_t(0))));
+    return {};
+}
+
 std::shared_ptr<GrayF> coverageFromLayerF(const Document& document, const Layer& layer) {
     auto out = std::make_shared<GrayF>(document.width, document.height);
     if (!layer.asset || !layer.asset->image.f32()) return out;

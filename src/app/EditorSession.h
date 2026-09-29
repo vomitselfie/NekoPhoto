@@ -1038,6 +1038,9 @@ private:
     bool quickSelectBusy_ = false, quickSelectAgain_ = false;
     /// The flattened document as the wand samples it with Sample All Layers, cached per document revision.
     std::shared_ptr<const compositor::Image> flattenedForSampling();
+    /// What the click-to-select model sees: flattenedForSampling() in RGB; in CMYK and Lab the composite through the
+    /// document's profile to sRGB (the model was trained on sRGB), for deciding only.
+    std::shared_ptr<const compositor::Image> flattenedForModel();
     bool wandSampleAll_ = false;
     compositor::Uuid wandSampleLayer_;
     uint64_t wandSampleRevision_ = 0;

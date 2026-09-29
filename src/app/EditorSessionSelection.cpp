@@ -94,6 +94,7 @@ void EditorSession::magicWand(QPointF documentPoint, int tolerance, bool contigu
             // A 16-bit layer is read as the canvas shows it, reduced to 8 bits: Tolerance counts 8-bit levels.
             Document single(document_->width, document_->height);
             single.sampleType = document_->sampleType;
+            single.colorMode = document_->colorMode;
             single.profile = document_->profile;
             single.encodedProfile = document_->encodedProfile;
             Layer copy = *layer;
@@ -180,7 +181,9 @@ void EditorSession::applyWandSession(int tolerance, bool retune) {
     latest.hasStep = undoNames().size() > steps;
     session.revisionAfter = documentRevision_;
     // The unmixed colours belong to this wand selection only when it replaced the selection outright.
-    wandLineColours_ = std::move(lineColours);
+    // They are the decision image's colours, which are L*a*b* in a CMYK or Lab document: kept for RGB only.
+    if (document_->colorMode == ColorMode::RGB) wandLineColours_ = std::move(lineColours);
+    else wandLineColours_.clear();
     wandLineSelection_ = session.mode == SelectionMode::Replace && document_->selection ? document_->selection->coverage.u8() : nullptr;
     const int next = wandNextTolerance(positive, negative, tolerance);
     emit notice(next < 0 ? tr("Tolerance %1: %L2 pixels").arg(tolerance).arg(count)
@@ -599,7 +602,13 @@ void EditorSession::loadLayerAsSelection(const Uuid& id, bool mask, SelectionMod
     const Layer* layer = document_->find(id);
     if (!layer) return;
     const QString name = mask ? QT_TRANSLATE_NOOP("History", "Load Mask as Selection") : QT_TRANSLATE_NOOP("History", "Load Layer as Selection");
-    if (!mask && document_->colorMode == ColorMode::CMYK) { emit error(tr("Loading a layer's pixels as a selection is not available in CMYK mode yet.")); return; }
+    if (!mask && document_->colorMode == ColorMode::CMYK) {
+        // A CMYK layer's alpha (its fifth sample), placed as the layer is, at the document's depth.
+        const AnyGray coverage = coverageFromLayerAlpha(*document_, *layer);
+        if (!coverage) return;
+        setSelection(combineSelection(document_->selection, coverage, mode, selectionAntialiased, document_->sampleType), name);
+        return;
+    }
     if (document_->sampleType == SampleType::F32) {
         std::shared_ptr<GrayF> deep;
         if (mask) {

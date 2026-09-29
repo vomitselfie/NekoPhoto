@@ -46,8 +46,8 @@ What works in a document of each depth and colour mode, as the menus, tools and 
 | Zoom tool | `tool.zoom` | native | native | native | native | native | native | native |  |
 | Marquee tools | `tool.marquee` | native | native | native | native | native | native | native |  |
 | Lasso tools | `tool.lasso` | native | native | native | native | native | native | native |  |
-| Magic Wand | `tool.wand` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Quick Selection | `tool.quickSelect` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
+| Magic Wand | `tool.wand` | native | native | native | native | native | native | native |  |
+| Quick Selection | `tool.quickSelect` | native | native | native | native | native | native | native |  |
 | Selections: Select menu, Quick Mask, load | `edit.selection` | native | native | native | native | native | native | native |  |
 | Channels panel, alpha channels | `edit.channels` | native | native | native | native | native | native | native |  |
 | Fill, Clear | `edit.fill` | native | native | native | native | native | native | native |  |

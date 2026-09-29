@@ -1059,6 +1059,46 @@ def colour_mode_painting(rpc):
     rpc.call("tabs.close", index=tab["index"], discard=True)
 
 
+def colour_mode_selection(rpc):
+    """P7 E (docs/color-modes.md, "Selections"): the Magic Wand and Quick Select in CMYK and Lab documents at 8 and 16
+    bits decide in L*a*b* without touching the pixels, and a layer's pixels load as a selection (a CMYK layer's alpha
+    is its fifth sample)."""
+    first = rpc.call("tabs.list")
+    tab = rpc.call("tabs.new")
+    for mode, bits in (("cmyk", 8), ("cmyk", 16), ("lab", 8), ("lab", 16)):
+        rpc.call("document.new", width=64, height=48)
+        rpc.call("pixels.fill", color="#ffffff")
+        rpc.call("selection.rect", x=10, y=8, width=30, height=20)
+        rpc.call("pixels.fill", color="#2060c0")
+        rpc.call("selection.none")
+        assert rpc.call("image.mode", colorMode=mode, bits=bits)["colorMode"] == mode
+        before = rpc.call("color.sample", x=20, y=15)["values"]
+        steps = len(rpc.call("history.list")["undo"])
+        for sample_all in (True, False):
+            rpc.call("selection.wand", x=20, y=15, tolerance=16, contiguous=True, sampleAll=sample_all, edgeAware=False, mode="replace")
+            bounds = rpc.call("selection.info")["bounds"]
+            assert (bounds["x"], bounds["y"], bounds["width"], bounds["height"]) == (10, 8, 30, 20), (mode, bits, bounds)
+        undo = rpc.call("history.list")["undo"]
+        assert undo[-1] == "Magic Wand" and len(undo) == steps + 2, undo[steps:]
+        assert rpc.call("color.sample", x=20, y=15)["values"] == before, "deciding does not write the pixels"
+        rpc.call("selection.wand", x=2, y=2, tolerance=16, contiguous=False, edgeAware=True, mode="replace")
+        assert rpc.call("selection.info")["active"]
+        rpc.call("selection.scribble", foreground=[[[15, 12], [35, 22]]], background=[[[50, 40], [60, 44]]], clear=True)
+        assert rpc.call("selection.info")["active"]
+        # A layer's pixels as a selection: only its opaque part.
+        rpc.call("selection.none")
+        rpc.call("layers.add")
+        rpc.call("selection.rect", x=4, y=30, width=12, height=10)
+        rpc.call("pixels.fill", color="#c02020")
+        rpc.call("selection.none")
+        rpc.call("selection.fromLayer")
+        bounds = rpc.call("selection.info")["bounds"]
+        assert (bounds["x"], bounds["y"], bounds["width"], bounds["height"]) == (4, 30, 12, 10), (mode, bits, bounds)
+        rpc.call("document.close", discard=True)
+    rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
+    rpc.call("tabs.close", index=tab["index"], discard=True)
+
+
 def colour_modes(rpc):
     """Image > Mode > CMYK Color and Lab Color (docs/color-modes.md): the conversion (one undo step), the colour
     channels, a fill in one channel, PSD in the document's own mode, and back; at 8 and 16 bits, in a tab of its own."""
@@ -1686,6 +1726,7 @@ def main():
     colour_management(rpc)
     colour_modes(rpc)
     colour_mode_painting(rpc)
+    colour_mode_selection(rpc)
 
     # Errors come back as errors, not crashes.
     try:
