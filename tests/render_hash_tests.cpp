@@ -38,6 +38,7 @@
 #include "compositor/toning.h"
 #include "compositor/layerstyle.h"
 #include "compositor/matte.h"
+#include "compositor/modeedit.h"
 #include "compositor/morphology.h"
 #include "compositor/presets.h"
 #include "compositor/png.h"
@@ -396,6 +397,75 @@ void addColorModeScenes() {
                 options.scale = 0.5;
                 return hashNative(renderNative(inColorMode(blendDocument(BlendMode::Multiply), colorMode, type), options));
             });
+            // P7 E: adjustment layers on the document's own samples (modeedit.h), the kinds that take no colour
+            // through Little CMS's float transform; and the filters on a converted layer's pixels.
+            const bool cmyk = colorMode == ColorMode::CMYK;
+            auto adjusted = [=](std::vector<AdjustmentSettings> kinds) {
+                Document doc = inColorMode(blendDocument(BlendMode::Normal), colorMode, type);
+                for (const AdjustmentSettings& s : kinds) {
+                    Layer layer(adjustmentKindName(s.kind), doc.size());
+                    layer.adjustment = s.toLayerAdjustment();
+                    doc.layers.push_back(layer);
+                }
+                return hashNative(renderNative(doc));
+            };
+            scene(prefix + "adjust/levels_curves", [=] {
+                AdjustmentSettings levels = AdjustmentSettings::defaults(AdjustmentKind::Levels);
+                levels.levels.ranges[0] = {12, 1.2, 240, 0, 255};
+                levels.levels.ranges[cmyk ? 4 : 2] = {0, 0.8, 200, 20, 255};
+                AdjustmentSettings curves = AdjustmentSettings::defaults(AdjustmentKind::Curves);
+                curves.curves.channels[1] = {{0, 0}, {90, 140}, {255, 255}};
+                curves.curves.channels[3] = {{0, 30}, {255, 220}};
+                return adjusted({levels, curves});
+            });
+            scene(prefix + "adjust/tones", [=] {
+                AdjustmentSettings bc = AdjustmentSettings::defaults(AdjustmentKind::BrightnessContrast);
+                bc.brightnessContrast = {20, 30, false};
+                AdjustmentSettings posterize = AdjustmentSettings::defaults(AdjustmentKind::Posterize);
+                posterize.posterize.levels = 6;
+                AdjustmentSettings invert = AdjustmentSettings::defaults(AdjustmentKind::Invert);
+                if (cmyk) return adjusted({bc, posterize, invert});
+                AdjustmentSettings exposure = AdjustmentSettings::defaults(AdjustmentKind::Exposure);
+                exposure.exposure = {0.7, 0.01, 1.1};
+                return adjusted({bc, exposure, posterize, invert});
+            });
+            if (cmyk)
+                scene(prefix + "adjust/colour", [=] {
+                    AdjustmentSettings selective = AdjustmentSettings::defaults(AdjustmentKind::SelectiveColor);
+                    selective.selectiveColor.ranges[0] = {-20, 10, 0, 30};
+                    selective.selectiveColor.ranges[7] = {10, -5, 20, -10};
+                    AdjustmentSettings mixer = AdjustmentSettings::defaults(AdjustmentKind::ChannelMixer);
+                    mixer.channelMixer.inks[0] = {80, 20, 0, 0, 5};
+                    mixer.channelMixer.inks[3] = {10, 10, 10, 90, 0};
+                    AdjustmentSettings hsv = AdjustmentSettings::defaults(AdjustmentKind::HueSaturation);
+                    hsv.hsv.adjustments[0] = {25, -30, 5};
+                    AdjustmentSettings balance = AdjustmentSettings::defaults(AdjustmentKind::ColorBalance);
+                    balance.colorBalance.ranges[1] = {30, -20, 10};
+                    return adjusted({selective, mixer, hsv, balance});
+                });
+            auto filtered = [=](FilterKind kind, FilterSettings settings) {
+                const Document doc = inColorMode(blendDocument(BlendMode::Normal), colorMode, type);
+                for (const Layer& l : doc.layers)
+                    if (l.asset && l.asset->image) return hashNative(filteredInMode(kind, l.asset->image, colorMode, settings, 1, 5));
+                return uint64_t(0);
+            };
+            FilterSettings blur;
+            blur.radius = 3;
+            scene(prefix + "filter/gaussian_blur", [=] { return filtered(FilterKind::GaussianBlur, blur); });
+            FilterSettings motion;
+            motion.angle = 30;
+            motion.distance = 12;
+            scene(prefix + "filter/motion_blur", [=] { return filtered(FilterKind::MotionBlur, motion); });
+            FilterSettings noise;
+            noise.amount = 20;
+            noise.gaussian = true;
+            scene(prefix + "filter/add_noise", [=] { return filtered(FilterKind::AddNoise, noise); });
+            noise.monochromatic = true;
+            scene(prefix + "filter/add_noise_mono", [=] { return filtered(FilterKind::AddNoise, noise); });
+            FilterSettings lens;
+            lens.distortion = 40;
+            lens.bicubic = true;
+            scene(prefix + "filter/lens_correction", [=] { return filtered(FilterKind::LensCorrection, lens); });
         }
     }
 }
