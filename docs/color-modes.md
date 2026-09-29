@@ -24,8 +24,8 @@ Profiles and the display are in [color-management.md](color-management.md); the 
 - **Levels and Curves lose their per-channel settings** (red, green and blue mean something else in CMYK and Lab);
   the composite settings stay.
 - An **adjustment layer the new mode does not offer** (Vibrance and Black & White in CMYK and Lab; Hue/Saturation,
-  Color Balance and Selective Color in Lab; Exposure in CMYK) is **kept, hidden and marked**; converting back to a mode
-  that offers it shows it again as it was.
+  Color Balance, Selective Color and Channel Mixer in Lab; Exposure in CMYK) is **kept, hidden and marked**; converting
+  back to a mode that offers it shows it again as it was.
 - Masks, alpha and spot channels and the selection are not colour and stay as they are.
 - A document that would not fit the byte budget in the new mode (a CMYK layer holds four fifths the pixels of an RGB
   one) is refused with the reason; a 32-bit document converts to 8 or 16 bits first.
@@ -59,12 +59,55 @@ a few levels.
   apply to L, a and b as stored. Checked against Photoshop: two Photoshop-saved Lab PSDs render exactly as the composite
   Photoshop stored in them, one with a Color Fill layer in **Color** mode (no level off anywhere) and a monitor test
   chart with 1-level lightness step wedges (at most 1 level off). The other Lab modes have no Photoshop reference yet.
-- **Adjustment layers**: Invert, Levels, Curves (their composite settings), Brightness/Contrast and Posterize draw, on
-  every ink in CMYK and on L in Lab (Invert and Posterize on every channel). The other kinds are kept and written back
-  to PSD but are not drawn yet.
+- **Adjustment layers**: every kind Photoshop offers in the mode draws on the document's own samples (see
+  [Adjustments and filters](#adjustments-and-filters)); Color Lookup is kept and written back to PSD but not drawn yet.
 - **Layer styles** are kept and written back but not drawn in CMYK and Lab yet.
 - The canvas always goes through a colour transform: the document's profile to the monitor profile, or to sRGB when
   none is known, in the same pass that reduces the frame to 8 bits. Layer thumbnails are drawn the same way.
+
+## Adjustments and filters
+
+**Image ▸ Adjustments**, **adjustment layers** and the **Filter** menu work in CMYK and Lab at 8 and 16 bits, on the
+inks or on L, a and b as stored: nothing is converted to RGB and back. Each kind is offered where Photoshop offers it;
+what Photoshop greys in a mode stays greyed for good ("Not available in CMYK mode").
+
+| Kind | CMYK | Lab |
+|---|---|---|
+| Levels, Curves | composite and each ink (Cyan, Magenta, Yellow, Black) | Lightness, a, b (no composite; Lightness first) |
+| Brightness/Contrast | every ink | Lightness |
+| Invert, Posterize | every ink | L, a and b |
+| Threshold, Gradient Map | on the colour's lightness | on L |
+| Photo Filter | yes | yes |
+| Exposure | greyed (Photoshop lacks) | on L |
+| Hue/Saturation, Color Balance, Selective Color, Channel Mixer | yes | greyed (Photoshop lacks) |
+| Vibrance, Black & White | greyed (Photoshop lacks) | greyed (Photoshop lacks) |
+| Color Lookup | not yet | not yet |
+
+- **Levels and Curves** work on each channel as its histogram shows it: a CMYK plate is dark where the ink is, so
+  moving Levels' black input point up adds ink, as in Photoshop. CMYK's composite applies to every ink after the ink's
+  own setting. Lab has no composite channel: the channel menu starts at Lightness, and a and b take their own curves.
+  The Levels histogram shows the layer's channels. Auto and the black, gray and white samplers are RGB only for now.
+- **Invert** (Ctrl+I) inverts every ink, or L, a and b.
+- **Threshold and Gradient Map** decide on lightness: L in Lab, and in CMYK the colour's L* read through the profile
+  (for deciding only; the pixels are not converted). Threshold's black is the profile's black, as the brush paints it;
+  a Gradient Map's colours are converted through the profile once and the map runs between them in the document's
+  mode.
+- **Hue/Saturation and Color Balance** in CMYK work on the stored cyan, magenta and yellow as the RGB kernels work on
+  red, green and blue; the black plate is kept. **Selective Color** moves each ink by colour range, its Black slider
+  the black plate. **Channel Mixer** in CMYK has four ink rows (cyan, magenta, yellow and black from the four inks and
+  a constant); Monochrome makes the black plate alone.
+- **Photo Filter** converts its colour through the profile: in CMYK it is laid over each ink, in Lab it moves a and b
+  (and L too without Preserve Luminosity). **Exposure** in Lab changes L through relative luminance.
+- **Filters**: Gaussian Blur, Motion Blur and Lens Correction treat every sample alike, as in RGB. Add Noise puts its
+  own noise on each ink, or on L, a and b; Monochromatic puts the same noise on every ink, or on L alone in Lab.
+- These are the RGB kernels' formulas adapted to each mode and are not yet checked against Photoshop's own output.
+  PSD Levels and Curves records map to the same channels (CMYK's black is the fifth), and a CMYK file's Channel Mixer
+  reads its four ink rows.
+
+Checked by `adjust_modes_tests` (Levels on CMYK moves ink, the black slot moves the black plate alone, Lab Curves on
+Lightness leaves a and b, Invert inverts the inks, Selective Color, Threshold to the profile's black, a black-to-white
+Gradient Map keeping L, the colour kinds, the filters over five samples, an adjustment layer drawing what the pixel
+edit makes), CMYK and Lab adjustment and filter scenes in `render_hash_tests`, and `rpc_smoke.py`.
 
 ## Channels
 
@@ -121,7 +164,7 @@ samples. `rpc_smoke.py` paints, erases, clones, heals (Lab), blurs (Lab), merges
 ## Not yet
 
 Dodge, Burn and Sponge, the Paint Bucket, Patch, the Magic Wand and Quick Select, CMYK's healing and Blur/Smudge tools,
-most adjustments and filters, transforms of pixels, text and shapes as editable objects, and layer styles in CMYK and
+Color Lookup, Mosh, transforms of pixels, text and shapes as editable objects, and layer styles in CMYK and
 Lab (greyed out with "Not available in CMYK mode yet"); exporting CMYK or Lab to PNG, JPEG, TIFF and the other formats
 (projects and PSD save them); CMYK JPEG and TIFF. Camera Raw, G'MIC and the MyPaint brushes stay RGB only ("Not
 available in CMYK mode", for good).
@@ -169,7 +212,7 @@ colour channels `cyan` ... `black` and `lightness`, `a`, `b`, and the composite 
   フィルターとグラデーションマップの色、**描画色と背景色**)も変換します。CMYK への変換では印刷の色域に収まります。
 - **レベル補正とトーンカーブはチャンネルごとの設定がリセット**されます(複合チャンネルの設定は残ります)。
 - **新しいモードにない調整レイヤー**(CMYK と Lab の自然な彩度・白黒、Lab の色相・彩度・カラーバランス・特定色域の
-  選択、CMYK の露光量)は**非表示にして印を付けて残し**、そのレイヤーがあるモードに戻すと元どおり表示されます。
+  選択・チャンネルミキサー、CMYK の露光量)は**非表示にして印を付けて残し**、そのレイヤーがあるモードに戻すと元どおり表示されます。
 - マスク、アルファチャンネル、スポットカラーチャンネル、選択範囲は変わりません。
 
 ### CMYK・Lab ドキュメントの表示
@@ -180,9 +223,45 @@ colour channels `cyan` ... `black` and `lightness`, `a`, `b`, and the composite 
   色相・彩度・カラー・輝度・カラー比較(暗)・カラー比較(明)は Photoshop の CMYK の結果と照合できるまで**通常として
   描画**し、レイヤーパネルにその旨を表示します。Lab では覆い焼きカラー・焼き込みカラー・比較(暗)・比較(明)・
   差の絶対値・除外・減算・除算は使えません(Adobe の説明のとおり)。
-- 調整レイヤーは階調の反転、レベル補正、トーンカーブ(複合チャンネル)、明るさ・コントラスト、ポスタリゼーションを
-  描画します。そのほかの調整レイヤーとレイヤースタイルは保持して PSD に書き戻しますが、まだ描画しません。
+- 調整レイヤーは、そのモードで Photoshop にある種類をすべてドキュメント自身の値で描画します(下の「色調補正と
+  フィルター」)。カラールックアップとレイヤースタイルは保持して PSD に書き戻しますが、まだ描画しません。
 - カンバスは常にドキュメントのプロファイルからモニタープロファイル(不明なら sRGB)へ変換して表示します。
+
+### 色調補正とフィルター
+
+**イメージ ▸ 色調補正**、**調整レイヤー**、**フィルター**メニューは CMYK と Lab(8/16 bit)でも使え、インキまたは
+L・a・b をそのまま変更します。RGB に変換して戻すことはありません。各種類は Photoshop がそのモードで提供するものだけで、
+Photoshop にないものは今後も使えません(「CMYK モードでは使用できません」)。
+
+| 種類 | CMYK | Lab |
+|---|---|---|
+| レベル補正、トーンカーブ | 複合チャンネルと各インキ(シアン・マゼンタ・イエロー・ブラック) | 明度・a・b(複合チャンネルなし) |
+| 明るさ・コントラスト | 各インキ | 明度 |
+| 階調の反転、ポスタリゼーション | 各インキ | L・a・b |
+| 2 階調化、グラデーションマップ | 色の明度で判定 | L で判定 |
+| レンズフィルター | 可 | 可 |
+| 露光量 | 使用不可(Photoshop にない) | L に適用 |
+| 色相・彩度、カラーバランス、特定色域の選択、チャンネルミキサー | 可 | 使用不可(Photoshop にない) |
+| 自然な彩度、白黒 | 使用不可(Photoshop にない) | 使用不可(Photoshop にない) |
+| カラールックアップ | まだ | まだ |
+
+- **レベル補正とトーンカーブ**はヒストグラムに表示されるとおりの各チャンネルに適用します。CMYK の版はインキのある所が
+  暗いので、Photoshop と同じくレベル補正の入力の黒を上げるとインキが増えます。CMYK の複合チャンネルは各インキの設定の
+  後にすべてのインキに適用します。Lab には複合チャンネルがなく、チャンネルは明度から始まり、a と b にはそれぞれの
+  カーブがあります。自動補正とスポイトは今のところ RGB のみです。
+- **階調の反転**(Ctrl+I)はすべてのインキ、または L・a・b を反転します。
+- **2 階調化とグラデーションマップ**は明度で判定します(Lab は L、CMYK はプロファイルを通して読んだ L*。判定のみで、
+  ピクセルは変換しません)。2 階調化の黒はブラシと同じプロファイルの黒です。グラデーションマップの色はプロファイルで
+  一度変換し、ドキュメントのモードで補間します。
+- CMYK の**色相・彩度とカラーバランス**は、保存されたシアン・マゼンタ・イエローを RGB の赤・緑・青と同じように扱い、
+  ブラックの版はそのままです。**特定色域の選択**は色域ごとに各インキを動かし、ブラックはブラックの版を動かします。
+  CMYK の**チャンネルミキサー**は 4 つのインキの出力(4 インキと定数から)を持ち、モノクロはブラックの版だけを作ります。
+- **レンズフィルター**の色はプロファイルで変換し、CMYK では各インキに重ね、Lab では a と b(輝度を保持しないときは L も)
+  を動かします。Lab の**露光量**は相対輝度を通して L を変えます。
+- **フィルター**:ぼかし(ガウス)、ぼかし(移動)、レンズ補正はすべての値を RGB と同じように扱います。ノイズを加えるは
+  各インキ、または L・a・b にノイズを加え、グレースケールノイズはすべてのインキに同じノイズ(Lab では L のみ)を加えます。
+- 各モードに合わせた RGB の計算式で、Photoshop の出力との照合はまだです。PSD のレベル補正とトーンカーブは同じ
+  チャンネルに対応し(CMYK のブラックは 5 番目)、CMYK ファイルのチャンネルミキサーは 4 つのインキの行を読み込みます。
 
 ### チャンネル
 
@@ -222,6 +301,6 @@ RGB に変換します。
 ### 未対応
 
 覆い焼き・焼き込み・スポンジ、塗りつぶしツール、パッチ、自動選択ツールとクイック選択ツール、CMYK の修復とぼかし・指先、
-多くの色調補正とフィルター、変形、編集可能なテキストとシェイプ、レイヤースタイルの描画(「CMYK モードではまだ使用
+カラールックアップ、Mosh、変形、編集可能なテキストとシェイプ、レイヤースタイルの描画(「CMYK モードではまだ使用
 できません」と表示)、PNG・JPEG・TIFF などへの書き出し、CMYK の JPEG と TIFF、CMYK の
 分離不可能な描画モード。
