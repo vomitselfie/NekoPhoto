@@ -2,6 +2,7 @@
 // and the repaint that follows, not the display server's frame pacing (docs/brush-latency.md).
 //   --bench-brush <preset>: how long a press takes to show its first paint, each move, and a release.
 //   --bench-view: zoom steps, pan steps, and undo/redo, on a large multi-layer document.
+//   --bench-type: typing on the canvas, keystroke by keystroke, on a three-paragraph text layer.
 #pragma once
 #include <QSize>
 #include <QString>
@@ -33,5 +34,10 @@ struct ViewBenchOptions {
     int layers = 5;
 };
 int runViewBench(MainWindow& window, const ViewBenchOptions& options);
+
+/// --bench-type: types three paragraphs on the canvas with the Type tool through key events, prints how long each
+/// keystroke takes to reach the screen (the text's layout and raster, and the repaint), styles a selection, and
+/// commits. With `screenshot`, grabs the window while the caret and selection show, before committing.
+int runTypeBench(MainWindow& window, const QString& screenshot);
 
 } // namespace app

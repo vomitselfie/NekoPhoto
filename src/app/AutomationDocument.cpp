@@ -15,6 +15,7 @@
 #include "compositor/svg.h"
 #include "VectorFiles.h"
 #include <QFileInfo>
+#include <QRegularExpression>
 #include <QPainter>
 #include <algorithm>
 #include <cmath>
@@ -286,7 +287,22 @@ void AutomationServer::registerDocumentHandlers() {
     });
     add("canvas.crop", [session, document](const QJsonObject& p) {
         document();
-        session()->cropTo(QRectF(num(p, "x"), num(p, "y"), num(p, "width"), num(p, "height")));
+        QRectF rect(num(p, "x"), num(p, "y"), num(p, "width"), num(p, "height"));
+        if (has(p, "ratio")) {
+            // The Crop tool's ratio: "16:9", "16x9" or a number (width / height); the largest box of that shape
+            // centred in the rectangle.
+            const QJsonValue v = p.value("ratio");
+            double ratio = v.toDouble(0);
+            if (v.isString()) {
+                const QStringList parts = v.toString().split(QRegularExpression(QStringLiteral("\\s*[:x×/]\\s*")));
+                bool ok1 = false, ok2 = false;
+                ratio = parts.size() == 2 ? parts[0].toDouble(&ok1) / parts[1].toDouble(&ok2) : v.toString().toDouble(&ok1);
+                if (!ok1 || (parts.size() == 2 && !ok2)) ratio = 0;
+            }
+            if (!(ratio > 0) || !std::isfinite(ratio)) fail("ratio must be W:H (such as 16:9) or a positive number", invalidParams);
+            rect = CanvasWidget::fitCropRatio(rect, ratio);
+        }
+        session()->cropTo(rect);
         return QJsonObject{{"width", session()->document()->width}, {"height", session()->document()->height}};
     });
     add("canvas.flip", [session, document](const QJsonObject& p) { document(); session()->flipCanvas(!flag(p, "vertical", false)); return QJsonObject{}; });

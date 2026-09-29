@@ -6,6 +6,9 @@
 #include "compositor/vectormask.h"
 #include <QFont>
 #include <QPointF>
+#include <QRectF>
+#include <utility>
+#include <vector>
 #include <QString>
 #include <memory>
 
@@ -26,6 +29,23 @@ std::shared_ptr<compositor::Image> renderTextLayer(const compositor::LayerText& 
 std::shared_ptr<compositor::Image16> renderTextLayer16(const compositor::LayerText& text, QPointF* warpOffset = nullptr);
 /// The text at a document's depth; empty when it would exceed the pixel budget.
 compositor::AnyImage renderTextLayerAt(const compositor::LayerText& text, compositor::SampleType type, QPointF* warpOffset = nullptr);
+/// Where the caret and the selection go on a text layer's upright raster (renderTextLayer's pixels, the padding
+/// included), for typing on the canvas. Positions are UTF-16 units of the text, 0 to its length.
+struct TextCaretGeometry {
+    struct Line { int start = 0, end = 0; double top = 0, baseline = 0, bottom = 0, left = 0, right = 0; bool shown = true; };
+    std::vector<Line> lines;       // in order; `end` is where the line's text ends (before a line break)
+    std::vector<double> caretX;    // for each position, on the line lineOf says
+    std::vector<int> lineOf;
+    /// The position nearest a point on the raster.
+    int positionAt(QPointF raster) const;
+    /// The caret at `position`: a vertical segment, top to bottom of its line.
+    std::pair<QPointF, QPointF> caret(int position) const;
+    /// The rectangles covering positions [from, to), one per line touched.
+    std::vector<QRectF> selection(int from, int to) const;
+    /// The position one line up (-1) or down (+1) from `position`, near `x` on the raster.
+    int verticalMove(int position, int lines, double x) const;
+};
+TextCaretGeometry textCaretGeometry(const compositor::LayerText& text);
 /// Type > Create Work Path: the text layer's glyph outlines as it is laid out upright, in document pixels (each glyph
 /// a shape group); none (with `error`) for warped text or text with no outlines.
 std::optional<compositor::VectorPath> textLayerOutline(const compositor::Layer& layer, QString* error = nullptr);

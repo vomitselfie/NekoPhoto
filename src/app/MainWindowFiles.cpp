@@ -168,19 +168,17 @@ void MainWindow::openLayeredFile(const QString& path) {
     addRecent(path);
     lastImportNotes_.clear();
     for (const std::string& note : imported->notes) lastImportNotes_ << QString::fromStdString(note);
-    if (!lastImportNotes_.isEmpty() && isVisible()) {
-        auto* box = new QMessageBox(QMessageBox::Information, tr("Imported %1").arg(QFileInfo(path).fileName()),
-            (vector ? tr("%n layer(s) imported. Some things in the file were approximated or drawn as pixels:", nullptr, int(imported->document.layers.size()))
-             : clip ? tr("%n layer(s) imported. Some things Clip Studio keeps have no counterpart here:", nullptr, int(imported->document.layers.size()))
-             : ase ? tr("%n layer(s) imported. Some things Aseprite keeps have no counterpart here:", nullptr, int(imported->document.layers.size()))
-             : affinity ? tr("%n layer(s) imported. Some things Affinity keeps have no counterpart here:", nullptr, int(imported->document.layers.size()))
-             : psd ? tr("%n layer(s) imported. Some things Photoshop keeps have no counterpart here:", nullptr, int(imported->document.layers.size()))
-                   : tr("%n layer(s) imported, with notes:", nullptr, int(imported->document.layers.size()))), QMessageBox::Ok, this);
-        box->setDetailedText(lastImportNotes_.join('\n'));
-        box->setInformativeText(lastImportNotes_.mid(0, 6).join('\n') + (lastImportNotes_.size() > 6 ? tr("\n… and %n more (see Details).", nullptr, lastImportNotes_.size() - 6) : QString()));
-        box->setAttribute(Qt::WA_DeleteOnClose);
-        box->setModal(false);
-        box->show();
+    if (!lastImportNotes_.isEmpty()) {
+        // A bar over the canvas, not a dialog: the document is usable at once, Details lists every note.
+        const int layers = int(imported->document.layers.size());
+        const QString heading = vector ? tr("%n layer(s) imported. Some things in the file were approximated or drawn as pixels:", nullptr, layers)
+            : clip ? tr("%n layer(s) imported. Some things Clip Studio keeps have no counterpart here:", nullptr, layers)
+            : ase ? tr("%n layer(s) imported. Some things Aseprite keeps have no counterpart here:", nullptr, layers)
+            : affinity ? tr("%n layer(s) imported. Some things Affinity keeps have no counterpart here:", nullptr, layers)
+            : psd ? tr("%n layer(s) imported. Some things Photoshop keeps have no counterpart here:", nullptr, layers)
+                  : tr("%n layer(s) imported, with notes:", nullptr, layers);
+        showImportNotes(tr("Opened with %n change(s): %1", nullptr, int(lastImportNotes_.size())), tr("Imported %1").arg(QFileInfo(path).fileName()),
+                        heading, lastImportNotes_, tab.session);
     }
 }
 

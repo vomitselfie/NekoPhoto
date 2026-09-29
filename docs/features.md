@@ -12,6 +12,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Adjustment layers: Hue/Saturation, Levels, Curves, Exposure, Gradient Map, Grain
 - Merge Down, Merge Layers and Merge Group (Ctrl+E)
 - Duplicate, rename, reorder and nest by drag and drop; drag layers between open projects
+- Copy and paste whole layers between documents, as Photoshop: Edit ▸ Copy with layers selected and no selection copies them and the folders' contents with their masks, vector masks, styles, text, shapes, smart objects (and their sources), adjustments, blending and clipping; Paste in any open document puts them above the active layer as one undo step, converted to its colour profile and depth (other apps get the layers flattened)
 
 ## Transform
 - Move, scale, rotate and flip without losing resolution
@@ -47,6 +48,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Quick Mask (Q, or Select ▸ Edit in Quick Mask Mode): the selection as a red overlay to paint with every mask tool, white selecting; saving or exporting leaves it first
 - Gradients and shapes (rectangles, rounded rectangles, ellipses); the Gradient tool draws Foreground to Background, Foreground to Transparent or any multi-stop gradient imported from a Photoshop `.grd` file (docs/presets.md)
 - Text in any installed font, editable until you paint on the layer
+- Type on the canvas, as with Photoshop's Type tool: click to type point text (or click text to edit it), drag a box for paragraph text and resize it by its handles; the arrows, Home and End, Shift or a drag to select, a double-click for a word, Ctrl+A, copy, cut and paste, Enter for a new line, Ctrl+Z inside the edit; the options bar's font, size, bold, italic, colour and alignment apply to the selected letters (or to the letters typed next); Ctrl+Enter, Enter on the keypad or a click outside commits and Esc cancels, one undo step for the edit. Layer ▸ Edit Text… still opens the text dialog
 - Style text letter by letter, as with Photoshop's Type tool: select letters in the text editor and change their font, size, weight, bold and italic, colour, tracking, baseline shift, leading, caps, underline and strikethrough; the Character section shows the style at the cursor or over the selection (blank where it is mixed), with nothing selected a change applies to all the text, and the styles go out to PSD as Photoshop's own style runs
 - Eyedropper and colour picker
 
@@ -89,6 +91,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Export PNG, TIFF, TGA, a multi-size Windows icon (16, 32, 48 and 256 px), or JPEG and WebP with a live preview (WebP keeps transparency, and is lossless at quality 100)
 - Crash recovery: unsaved changes are autosaved in the background every few minutes (Preferences sets how often, or turns it off) and offered back after a crash; your own files are never touched
 - Several projects in tabs; opening a file from the file manager adds a tab to the running window
+- The Crop tool as Photoshop's: ratio presets (Original Ratio, 1:1, 4:5, 5:7, 2:3, 3:2, 4:3, 16:9, 9:16) or a typed W and H, Swap (X), the rule-of-thirds grid while dragging, Alt to drag from the centre, Shift to keep the box's shape, snapping to the canvas edges and centre and to layers, and the box starts on the selection when there is one
 - Crop, Canvas Size and Image Size; Image > Trim cuts the canvas to its content (by transparency or a corner's colour, on the sides you choose); rulers and a pixel grid
 - Artboards, as in Photoshop: the Artboard tool (Shift+V) drags out a named rectangle with a white, black, transparent or custom background whose layers are clipped to it; drag inside one to move it with its contents, an edge or corner to resize it; File > Export Artboards to Files writes each as PNG or JPEG; PSD artboards open and export as Photoshop's own, and projects keep them ([artboards-slices.md](artboards-slices.md))
 - Slices: the Slice tool (Shift+C) draws named rectangles, File > Export Slices writes each as PNG or JPEG; a PSD's slices (resource 1050) open as editable slices and go back out with the export ([artboards-slices.md](artboards-slices.md))
@@ -96,6 +99,11 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 
 - CPU power (Edit > Preferences > Performance): All, High, Medium or Low. Fewer cores for NekoPhoto's work, and at Medium and Low a lower priority, so a render or another heavy program running beside it gets the CPU first; `NEKOPHOTO_CPU=low` for one run
 - The interface in English or Japanese (Photoshop's Japanese terms): it follows the desktop's language, or Edit > Preferences > Language picks one; `--lang ja` for one run ([translating.md](translating.md) explains adding a language)
+
+## Working faster
+- Scrubby labels, as in Photoshop: drag the label beside a number (Size, Opacity, a filter's Radius, a Layer Style's Distance, the transform fields, Camera Raw's sliders) left or right to change it, with Shift for fine steps and Alt or Ctrl for coarse ones; a click on the label still types in the field, and one drag is one undo step
+- Opening a file that could not be carried over whole (PSD, PSB, Clip Studio, Affinity, SVG, PDF, imported brushes) shows a bar over the canvas instead of a dialog: how many things changed and the first of them, Details for the full list, Undo Open to close the document again
+- Shift + a tool's letter steps through its group, as in Photoshop (Shift+J: Spot Healing, Healing Brush, Patch, Content-Aware Move; Shift+O: Dodge, Burn, Sponge; and the others in [linux-port.md](linux-port.md#keyboard-shortcuts))
 
 ## Automation
 - Scripts and AI agents can drive the editor through a socket or MCP; see [automation.md](automation.md)
@@ -116,6 +124,7 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 - 調整レイヤー:色相・彩度、レベル補正、トーンカーブ、露光量、グラデーションマップ、粒子
 - 下のレイヤーと結合、レイヤーを結合、グループを結合(Ctrl+E)
 - ドラッグ&ドロップで複製・名前変更・並べ替え・入れ子。開いているプロジェクト間でもレイヤーを移動可能
+- ドキュメント間でレイヤーごとコピー&ペースト(Photoshop と同じ):選択範囲がなくレイヤーを選択しているときの 編集 ▸ コピー で、レイヤーとグループの中身をマスク・ベクトルマスク・スタイル・テキスト・シェイプ・スマートオブジェクト(ソースごと)・調整レイヤー・描画モード・クリッピングを保ったままコピーし、開いているどのドキュメントでもペーストで作業中のレイヤーの上に 1 回の取り消し単位で追加します。カラープロファイルとビット数はペースト先に合わせて変換します(他のアプリには統合した画像を渡します)
 
 ### 変形
 - 解像度を落とさずに移動・拡大縮小・回転・反転
@@ -142,6 +151,7 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 - 指先ツール、ゆがみ、ぼかしツール(ピクセルにもマスクにも使えます)
 - グラデーションとシェイプ(長方形、角丸長方形、楕円)
 - インストール済みの任意のフォントでテキスト。レイヤーに描画するまでは再編集可能
+- カンバス上で直接入力(Photoshop の文字ツールと同じ):クリックしてポイントテキストを入力(テキストをクリックすると編集)、ドラッグで段落テキストのボックスを作り、ハンドルでサイズを変更。矢印キー、Home と End、Shift またはドラッグで選択、ダブルクリックで単語を選択、Ctrl+A、コピー・カット・ペースト、Enter で改行、編集中の Ctrl+Z。オプションバーのフォント・サイズ・太字・斜体・カラー・行揃えは選択した文字(選択がなければ次に入力する文字)に適用されます。Ctrl+Enter・テンキーの Enter・ボックスの外のクリックで確定、Esc で取り消し。編集全体が 1 つの取り消し単位です。レイヤー ▸ テキストを編集… からは従来のテキストダイアログも開けます
 - スポイトとカラーピッカー
 
 ### 色調補正とフィルター
@@ -179,11 +189,17 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 - スライス:スライスツール(Shift+C)で名前付きの矩形を作り、ファイル > スライスを書き出しで PNG/JPEG に書き出します。PSD のスライス(リソース 1050)も編集できる形で読み書きします
 - クラッシュからの復元:未保存の変更を数分ごとにバックグラウンドで自動保存し、異常終了の後に復元を提案します(間隔の変更やオフは環境設定で)。元のファイルには触れません
 - タブで複数のプロジェクト。ファイルマネージャーから開いたファイルは起動中のウィンドウにタブとして追加
+- 切り抜きツール(Photoshop と同じ):比率のプリセット(元の縦横比、1:1、4:5、5:7、2:3、3:2、4:3、16:9、9:16)または幅と高さの入力、高さと幅を入れ替え(X)、ドラッグ中の三分割グリッド、Alt で中心から、Shift で縦横比を保持、カンバスの端と中心やレイヤーへのスナップ。選択範囲があればその範囲から始まります
 - 切り抜き、カンバスサイズ、画像解像度。イメージ > トリミングで内容に合わせてカンバスを切り詰め(透明部分または角の色で、選んだ辺のみ)。定規とピクセルグリッド
 - 開いているプロジェクトはディスク上の変更に追従します:他のアプリやエージェントが `.comp` を書き換えると、タブがその場で読み込み直します(触れただけの変更や書き込み途中は無視し、未保存の作業は確認なしに置き換えません)
 
 - CPU パワー(編集 > 環境設定 > パフォーマンス):すべて・高・中・低。NekoPhoto が使うコア数を減らし、中と低では優先度も下げるので、横で動かしているレンダリングなどの重い処理に CPU を譲ります。その回だけなら `NEKOPHOTO_CPU=low`
 - 画面表示は日本語と英語(用語は Photoshop 日本語版に準拠)。デスクトップの言語に合わせるか、編集 > 環境設定 > 言語 で選べます。`--lang ja` でその回だけ切り替えることもできます
+
+### 操作
+- スクラブ(Photoshop と同じ):数値の横のラベル(直径、不透明度、フィルターの半径、レイヤースタイルの距離、変形の数値欄、Camera Raw のスライダー)を左右にドラッグして値を変えられます。Shift で細かく、Alt または Ctrl で大きく動きます。ラベルのクリックでは従来どおり数値を入力でき、1 回のドラッグは 1 つの取り消し単位です
+- そのままでは引き継げない要素のあるファイル(PSD、PSB、クリップスタジオ、Affinity、SVG、PDF、読み込んだブラシ)を開くと、ダイアログではなくカンバス上部のバーで知らせます:変更の件数と最初の 1 件、詳細で全件の一覧、開くの取り消しでドキュメントを閉じます
+- Shift + ツールのキーで同じグループのツールを順に切り替えます(Photoshop と同じ。Shift+J:スポット修復ブラシ・修復ブラシ・パッチ・コンテンツに応じた移動、Shift+O:覆い焼き・焼き込み・スポンジ。ほかは [linux-port.md](linux-port.md#keyboard-shortcuts))
 
 ### 自動化
 - スクリプトや AI エージェントからソケットまたは MCP 経由で操作できます。詳しくは [automation.md](automation.md)(英語)

@@ -100,7 +100,8 @@ const MethodDoc methodDocs[] = {
     {"document.close", "Close the document in the current tab.", "discard:bool=false Close even with unsaved changes"},
     {"canvas.resize", "Change the canvas size, keeping the layers' pixels.",
      "width:integer! Pixels; height:integer! Pixels; anchorX:number=0.5 0 keeps the left edge, 1 the right; anchorY:number=0.5 0 keeps the top, 1 the bottom"},
-    {"canvas.crop", "Crop the canvas to a rectangle.", "x:number! Left; y:number! Top; width:number! Width; height:number! Height"},
+    {"canvas.crop", "Crop the canvas to a rectangle.", "x:number! Left; y:number! Top; width:number! Width; height:number! Height; "
+     "ratio:string The Crop tool's ratio, W:H such as 16:9 (or a number, width / height): the largest box of that shape centred in the rectangle"},
     {"canvas.flip", "Flip the whole canvas.", "vertical:bool=false Flip top to bottom instead of left to right"},
     {"image.trim", "Cut the canvas down to its content, as Photoshop's Image > Trim (one undo step); trimmed is false when nothing would change or nothing would remain.",
      "basedOn:(transparent|topLeft|bottomRight)=transparent What is trimmed away: transparent pixels, or the colour of that corner; top:bool=true Trim the top; bottom:bool=true; left:bool=true; right:bool=true; "
@@ -151,6 +152,9 @@ const MethodDoc methodDocs[] = {
      "caps:(normal|small|all) Capitals; underline:bool Underline; strikethrough:bool Strikethrough"},
     {"layers.delete", "Delete layers.", "id:layer One layer (default the active one); ids:array Several layer ids; bakeClipping:bool=true Keep the look of layers clipped to a deleted one by baking them"},
     {"layers.duplicate", "Duplicate a layer above itself.", "id:layer The layer (default the active one)"},
+    {"layers.copy", "Copy whole layers, as Edit > Copy with layers selected and no selection: the layers and folders with their masks, styles, text, shapes, smart objects and adjustments go to the layer clipboard every tab shares (other apps get them flattened).",
+     "ids:array The layers to copy (default the selected ones)"},
+    {"layers.paste", "Paste copied layers into the current document above the active layer, converted to its profile and depth; one undo step. Answers the new layers' ids.", ""},
     {"layers.move", "Move a layer in the tree: into a folder, directly above another layer, or to the bottom.",
      "id:layer! The layer; parent:layer The folder to move into (default the top level); above:layer Place directly above this layer; atBottom:bool=false Place at the bottom of the parent"},
     {"layers.reorder", "Move a layer up or down among its siblings.", "id:layer The layer (default the active one); offset:integer! Positive moves up, negative down"},

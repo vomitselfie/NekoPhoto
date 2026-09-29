@@ -722,6 +722,18 @@
         <source>Convert to Profile</source>
         <translation>プロファイル変換</translation>
     </message>
+    <message>
+        <source>Paste Layers</source>
+        <translation>レイヤーをペースト</translation>
+    </message>
+    <message>
+        <source>Edit Type Layer</source>
+        <translation>テキストレイヤーを編集</translation>
+    </message>
+    <message>
+        <source>Type Tool</source>
+        <translation>横書き文字ツール</translation>
+    </message>
 </context>
 <context>
     <name>Names</name>
@@ -1639,6 +1651,16 @@
     <message>
         <source>Import Brushes</source>
         <translation>ブラシを読み込み</translation>
+    </message>
+    <message>
+        <source>Not imported: %1</source>
+        <translation>読み込めませんでした:%1</translation>
+    </message>
+    <message numerus="yes">
+        <source>Imported %n brush(es) with changes: %1</source>
+        <translation>
+            <numerusform>%n 個のブラシを変更を加えて読み込みました:%1</numerusform>
+        </translation>
     </message>
     <message numerus="yes">
         <source>Imported %n brush(es). They are in the Brush tool&apos;s picker.</source>
@@ -4050,10 +4072,6 @@ File &gt; New creates a blank canvas.</source>
         <source>Edit Path</source>
         <translation>パスを編集</translation>
     </message>
-    <message>
-        <source>Text</source>
-        <translation>テキスト</translation>
-    </message>
 </context>
 <context>
     <name>app::ChannelOptionsDialog</name>
@@ -4955,6 +4973,41 @@ File &gt; New creates a blank canvas.</source>
     </message>
 </context>
 <context>
+    <name>app::ImportBanner</name>
+    <message>
+        <source>Import notes</source>
+        <translation>読み込みに関する注意</translation>
+    </message>
+    <message>
+        <source>Details…</source>
+        <translation>詳細…</translation>
+    </message>
+    <message>
+        <source>Every change the file went through</source>
+        <translation>ファイルに加えられたすべての変更</translation>
+    </message>
+    <message>
+        <source>Undo Open</source>
+        <translation>開くの取り消し</translation>
+    </message>
+    <message>
+        <source>Close the document again</source>
+        <translation>ドキュメントを閉じて開く前に戻します</translation>
+    </message>
+    <message>
+        <source>Hide this bar</source>
+        <translation>このバーを隠す</translation>
+    </message>
+    <message numerus="yes">
+        <source>
+… and %n more (see Details).</source>
+        <translation>
+            <numerusform>
+… ほか %n 件(詳細を参照)。</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>app::LayerStyleDialog</name>
     <message>
         <source>Bevel &amp; Emboss</source>
@@ -5808,8 +5861,8 @@ File &gt; New creates a blank canvas.</source>
         <translation>描画色でシェイプをドラッグ。Shift で正方形、Alt で中心から拡大。Shift+U で種類を切り替え</translation>
     </message>
     <message>
-        <source>Click to add text in the foreground colour, or click a text layer to edit it; the options bar sets the font</source>
-        <translation>クリックして描画色でテキストを追加、またはテキストレイヤーをクリックして編集。フォントはオプションバーで設定</translation>
+        <source>Click to type, or drag a box for paragraph text; click text to edit it. Ctrl+Enter commits, Esc cancels; the options bar styles the selected letters</source>
+        <translation>クリックして入力、ドラッグで段落テキストのボックス。テキストをクリックすると編集できます。Ctrl+Enter で確定、Esc で取り消し。オプションバーで選択した文字のスタイルを変更</translation>
     </message>
     <message>
         <source>Click sets the foreground colour, Alt-click the background</source>
@@ -6008,11 +6061,9 @@ File &gt; New creates a blank canvas.</source>
         </translation>
     </message>
     <message numerus="yes">
-        <source>
-… and %n more (see Details).</source>
+        <source>Opened with %n change(s): %1</source>
         <translation>
-            <numerusform>
-... ほか %n 件 (詳細を参照)。</numerusform>
+            <numerusform>%n 件の変更を加えて開きました:%1</numerusform>
         </translation>
     </message>
     <message>
@@ -8855,6 +8906,11 @@ File &gt; New creates a blank canvas.</source>
         <translation>サイズ (ドキュメントのピクセル単位)</translation>
     </message>
     <message>
+        <source>Size</source>
+        <comment>font size</comment>
+        <translation>サイズ</translation>
+    </message>
+    <message>
         <source>B</source>
         <translation>B</translation>
     </message>
@@ -8881,6 +8937,22 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Alignment of the lines</source>
         <translation>行の揃え方です。</translation>
+    </message>
+    <message>
+        <source>Set the text colour</source>
+        <translation>テキストカラーを設定</translation>
+    </message>
+    <message>
+        <source>Text Colour</source>
+        <translation>テキストカラー</translation>
+    </message>
+    <message>
+        <source>Commit the text (Ctrl+Enter)</source>
+        <translation>現在の編集をすべて確定 (Ctrl+Enter)</translation>
+    </message>
+    <message>
+        <source>Cancel the text edit (Esc)</source>
+        <translation>現在の編集をすべてキャンセル (Esc)</translation>
     </message>
     <message>
         <source>Edit Text…</source>
@@ -8971,12 +9043,28 @@ File &gt; New creates a blank canvas.</source>
         <translation>5 ピクセル四方の平均</translation>
     </message>
     <message>
-        <source>Free</source>
-        <translation>自由</translation>
+        <source>The shape the crop box keeps</source>
+        <translation>切り抜きボックスの縦横比</translation>
     </message>
     <message>
-        <source>Original</source>
+        <source>Original Ratio</source>
         <translation>元の縦横比</translation>
+    </message>
+    <message>
+        <source>Width of the ratio (empty for a free crop)</source>
+        <translation>比率の幅(空欄で自由な縦横比)</translation>
+    </message>
+    <message>
+        <source>Height of the ratio (empty for a free crop)</source>
+        <translation>比率の高さ(空欄で自由な縦横比)</translation>
+    </message>
+    <message>
+        <source>Swap height and width (X)</source>
+        <translation>高さと幅を入れ替え (X)</translation>
+    </message>
+    <message>
+        <source>Clear the ratio</source>
+        <translation>比率を消去</translation>
     </message>
     <message>
         <source>Crop</source>

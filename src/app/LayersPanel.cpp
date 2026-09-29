@@ -352,6 +352,8 @@ LayersPanel::LayersPanel(EditorSession* session, QWidget* parent) : QWidget(pare
     opacitySlider_ = new QSlider(Qt::Horizontal);
     opacitySlider_->setRange(0, 100);
     opacitySlider_->setToolTip(tr("Opacity"));
+    auto* opacityLabel = new QLabel(tr("Opacity"));
+    appearance->addWidget(opacityLabel);
     appearance->addWidget(opacitySlider_, 1);
     opacitySpin_ = new QSpinBox;
     opacitySpin_->setRange(0, 100);

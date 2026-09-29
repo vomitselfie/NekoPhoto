@@ -40,6 +40,7 @@ class QTimer;
 #include <QObject>
 #include <QTimer>
 #include <QRectF>
+#include <QSizeF>
 #include <QString>
 #include <memory>
 #include <optional>
@@ -367,6 +368,16 @@ public:
     void setLayerText(const compositor::Uuid& id, const compositor::LayerText& text);
     void endTextEdit(bool keep);
     bool textEditing() const { return textEditing_; }
+    /// Typing on the canvas (EditorSessionTextEdit.cpp): a session on a live text layer, or on a new one at `point`
+    /// (the first baseline's start; with `box`, paragraph text in a box from `point`), held open as one undo step
+    /// until endTypeEdit. The text is set exactly (its runs as given) and stays anchored: point text on its first
+    /// baseline at its alignment's side, box text at the box's corner, moved by `rasterShift` (raster pixels) when a
+    /// box edge was dragged. Other edits wait meanwhile (canEditLayers is false).
+    bool beginTypeEdit(const compositor::Uuid& id);
+    std::optional<compositor::Uuid> beginNewTypeEdit(QPointF point, const compositor::LayerText& style, std::optional<QSizeF> box);
+    bool setTypeEditText(const compositor::LayerText& text, QPointF rasterShift = {});
+    void endTypeEdit(bool keep);
+    std::optional<compositor::Uuid> typeEditLayer() const { return typeEdit_ ? std::optional(typeEdit_->layer) : std::nullopt; }
     void requestTextEdit(const compositor::Uuid& id) { emit textEditRequested(id); }
 
     // Paths: the Pen (P) and Direct Selection (A) tools work on the target path: the path chosen in the Paths panel,
@@ -504,6 +515,13 @@ public:
     void cutSelection();
     bool canPaste() const;
     void paste();
+    /// Edit > Copy with layers selected and no selection (EditorSessionClipboard.cpp): the selected layers and
+    /// folders, with everything they hold, go to the layer clipboard every tab shares; other apps get them
+    /// flattened. Paste in any document inserts them above the active layer, one undo step, converted to its
+    /// profile and depth; the new layers' ids come back.
+    bool copyLayers();
+    static bool hasLayerClipboard();
+    std::vector<compositor::Uuid> pasteLayers(QString* error = nullptr);
     void layerViaCopy();
     /// Content-Aware Fill of the selection on the active layer; the layer grows over any selection past its edge.
     /// The request chooses where it copies from and whether the result goes on a new layer.
@@ -915,6 +933,13 @@ private:
     void redrawShape(compositor::Layer& layer);
     bool redrawText(compositor::Layer& layer);
     bool textEditing_ = false;
+    struct TypeEdit {
+        compositor::Uuid layer;
+        bool created = false;
+        compositor::Document before;
+        std::optional<compositor::Uuid> previousActive;
+    };
+    std::optional<TypeEdit> typeEdit_;
     std::optional<compositor::Layer> textEditOriginal_;
     QPointer<EditorSession> smartObjectParent_;
     std::string smartObjectSource_;

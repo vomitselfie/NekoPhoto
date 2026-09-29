@@ -4,6 +4,7 @@
 #include "Names.h"
 #include "ContentAwareScaleDialog.h"
 #include "MainWindow.h"
+#include <algorithm>
 #include <QDialog>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
@@ -67,7 +68,7 @@ void MainWindow::buildToolRail() {
         a->setShortcut(key);
         a->setShortcutContext(Qt::WindowShortcut);
         group->addAction(a);
-        connect(a, &QAction::triggered, this, [this, t] { session_->selectTool(t); if (t == Tool::Brush) { session_->brushErase = false; emit session_->toolChanged(); } canvas_->setFocus(); });
+        connect(a, &QAction::triggered, this, [this, t] { session_->selectTool(t); if (t == Tool::Brush) { session_->brushErase = false; emit session_->toolChanged(); } canvas_->setFocus(); groupLast_[toolGroupKey(t)] = t; });
         toolActions_[t] = a;
         return a;
     };
@@ -75,7 +76,7 @@ void MainWindow::buildToolRail() {
     tool(Tool::Marquee, tr("Marquee"), "square-dashed", QKeySequence("M"));
     tool(Tool::Lasso, tr("Lasso"), "lasso", QKeySequence("L"));
     tool(Tool::Wand, tr("Magic Wand"), "wand-sparkles", QKeySequence("W"));
-    tool(Tool::Scribble, tr("Quick Select"), "scribble", QKeySequence("Shift+W"));   // Photoshop's W group
+    tool(Tool::Scribble, tr("Quick Select"), "scribble", QKeySequence("Shift+W"));   // Photoshop's W group (Shift+W steps through it)
     tool(Tool::Crop, tr("Crop"), "crop", QKeySequence("C"));
     tool(Tool::Slice, tr("Slice (drag a slice; drag inside to move it, an edge to resize)"), "slice", QKeySequence("Shift+C"));   // Photoshop's C group
     tool(Tool::Artboard, tr("Artboard (drag a new artboard; drag inside to move it with its contents, an edge to resize)"), "frame", QKeySequence("Shift+V"));   // Photoshop's V group
@@ -108,6 +109,8 @@ void MainWindow::buildToolRail() {
     auto* swap = new QAction(tr("Swap colours"), this);
     swap->setShortcut(QKeySequence("X"));
     connect(swap, &QAction::triggered, this, [this] {
+        // With the Crop tool, X turns the crop box (Photoshop's Swap Height and Width).
+        if (session_->tool() == Tool::Crop && canvas_->cropRect()) { canvas_->swapCropOrientation(); return; }
         std::swap(session_->foregroundColor, session_->backgroundColor);
         updateColorSwatches();
         recordAction("colors.set", {{"foreground", session_->foregroundColor.name()}, {"background", session_->backgroundColor.name()}});
@@ -129,6 +132,45 @@ void MainWindow::buildToolRail() {
     kindKey("Shift+M", [this] { session_->marqueeKind = session_->marqueeKind == MarqueeKind::Rectangle ? MarqueeKind::Ellipse : MarqueeKind::Rectangle; session_->selectTool(Tool::Marquee); emit session_->toolChanged(); });
     kindKey("Shift+L", [this] { session_->lassoKind = session_->lassoKind == LassoKind::Freehand ? LassoKind::Polygonal : LassoKind::Freehand; canvas_->cancelLasso(); session_->selectTool(Tool::Lasso); emit session_->toolChanged(); });
     kindKey("Shift+U", [this] { session_->selectTool(Tool::Shape); session_->toggleShapeKind(); });
+    // Photoshop's Shift+letter tool switch: the next tool of the letter's group (from another tool, the one after
+    // the group's last used). Groups of one tool select it; tools that hold a group as kinds step the kind, as
+    // Shift+M, Shift+L and Shift+U above do.
+    for (Tool t : {Tool::Scribble, Tool::Slice, Tool::Artboard, Tool::PaintBucket}) toolActions_[t]->setShortcut(QKeySequence());
+    auto cycleTools = [this](std::vector<Tool> tools) {
+        const Tool current = session_->tool();
+        auto at = std::find(tools.begin(), tools.end(), current);
+        if (at == tools.end()) at = std::find(tools.begin(), tools.end(), groupLast_.value(toolGroupKey(tools.front()), tools.front()));
+        const Tool next = at == tools.end() ? tools.front() : *(++at == tools.end() ? tools.begin() : at);
+        toolActions_[next]->trigger();
+    };
+    kindKey("Shift+V", [cycleTools] { cycleTools({Tool::Move, Tool::Artboard}); });
+    kindKey("Shift+W", [cycleTools] { cycleTools({Tool::Wand, Tool::Scribble}); });
+    kindKey("Shift+C", [cycleTools] { cycleTools({Tool::Crop, Tool::Slice}); });
+    kindKey("Shift+G", [cycleTools] { cycleTools({Tool::Gradient, Tool::PaintBucket}); });
+    kindKey("Shift+P", [this] { toolActions_[Tool::Pen]->trigger(); });
+    kindKey("Shift+T", [this] { toolActions_[Tool::Text]->trigger(); });
+    // The J group: Spot Healing (its three types), Healing Brush, Patch, Content-Aware Move.
+    kindKey("Shift+J", [this] {
+        int& mode = session_->spotHealingMode;
+        if (mode <= 2) { spotHealingType_ = mode; mode = 3; }
+        else mode = mode >= 5 ? spotHealingType_ : mode + 1;
+        toolActions_[Tool::SpotHealing]->trigger();
+        emit session_->toolChanged();
+    });
+    // The O group: Dodge, Burn, Sponge.
+    kindKey("Shift+O", [this] {
+        session_->toning.kind = compositor::ToningKind((int(session_->toning.kind) + 1) % 3);
+        toolActions_[Tool::Dodge]->trigger();
+        emit session_->toolChanged();
+    });
+    // The R tool's modes in the order of Photoshop's Blur, Sharpen, Smudge group, then Liquify.
+    kindKey("Shift+R", [this] {
+        static const BlurToolMode order[] = {BlurToolMode::Blur, BlurToolMode::Sharpen, BlurToolMode::Smudge, BlurToolMode::Liquify};
+        const auto at = std::find(std::begin(order), std::end(order), session_->blurMode);
+        session_->blurMode = at == std::end(order) || at + 1 == std::end(order) ? order[0] : *(at + 1);
+        toolActions_[Tool::Smudge]->trigger();
+        emit session_->toolChanged();
+    });
 }
 
 void MainWindow::updateColorSwatches() {
@@ -195,7 +237,11 @@ void MainWindow::buildMenus() {
     redoAction_ = edit->addAction(tr("&Redo"), QKeySequence("Ctrl+Shift+Z"), this, [this] { session_->redo(); });
     edit->addSeparator();
     needsDocument(edit->addAction(tr("Cu&t"), QKeySequence::Cut, this, [this] { session_->cutSelection(); }), "edit.clipboard");
-    needsDocument(edit->addAction(tr("&Copy"), QKeySequence::Copy, this, [this] { session_->copySelection(); }), "edit.clipboard");
+    needsDocument(edit->addAction(tr("&Copy"), QKeySequence::Copy, this, [this] {
+        // As Photoshop: with no selection, the selected layers themselves (pasted whole in any document).
+        if (!session_->document()->selection && !session_->selectedLayerIds().empty() && session_->copyLayers()) return;
+        session_->copySelection();
+    }), "edit.clipboard");
     needsDocument(edit->addAction(tr("Copy &Merged"), QKeySequence("Ctrl+Shift+C"), this, [this] { session_->copyMerged(); }), "edit.clipboard");
     needsDocument(edit->addAction(tr("&Paste"), QKeySequence::Paste, this, [this] { session_->paste(); }), "edit.clipboard");
     edit->addSeparator();

@@ -475,6 +475,19 @@ def layers_duplicate(id: str) -> str:
     return text(call("layers.duplicate", id=id))
 
 
+@outside("Copy layers")
+def layers_copy(ids: Optional[list[str]] = None) -> str:
+    """Copy whole layers (default the selected ones) to the layer clipboard, as Edit > Copy with no selection:
+    masks, styles, text, shapes, smart objects and adjustments come along. layers_paste puts them in any open document."""
+    return text(call("layers.copy", **({"ids": ids} if ids else {})))
+
+
+@edit("Paste layers")
+def layers_paste() -> str:
+    """Paste the copied layers into the current document above the active layer (one undo step); answers their ids."""
+    return text(call("layers.paste"))
+
+
 @edit("Move a layer in the tree")
 def layers_move(id: str, parent: Optional[str] = None, above: Optional[str] = None, at_bottom: bool = False) -> str:
     """Re-parent and reorder: into group parent (or the top level), directly above layer above, or at the bottom / top of that level."""
@@ -1119,9 +1132,10 @@ def canvas_resize(width: int, height: int, anchor_x: float = 0.5, anchor_y: floa
 
 
 @edit("Crop")
-def canvas_crop(x: float, y: float, width: float, height: float) -> str:
-    """Crop the document to a rectangle."""
-    return text(call("canvas.crop", x=x, y=y, width=width, height=height))
+def canvas_crop(x: float, y: float, width: float, height: float, ratio: str | None = None) -> str:
+    """Crop the document to a rectangle. ratio (W:H such as "16:9") crops to the largest box of that shape
+    centred in the rectangle, as the Crop tool's ratio presets do."""
+    return text(call("canvas.crop", x=x, y=y, width=width, height=height, **({"ratio": ratio} if ratio else {})))
 
 
 @edit("Flip the canvas")

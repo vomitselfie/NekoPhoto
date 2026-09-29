@@ -138,3 +138,12 @@ out, and the undo and redo of a brush stroke. At a 2.25 display scale on the sam
 - **Undo and redo render only what they change.** A raster edit notes its area in its history entry
   (`DocumentHistory::noteRegion`); other steps compare the two documents (`changedArea`), which falls back
   to the whole canvas for a new canvas size, a new stacking order, a folder or an adjustment layer.
+
+## Typing: `--bench-type`
+
+`nekophoto --bench-type` types three paragraphs of 44 px text on the canvas with the Type tool, through key
+events, then a paragraph box of 30 px text that wraps, and prints how long each keystroke takes to reach the
+screen: the text's layout and raster (the layer is redrawn in full on every keystroke), the canvas render of the
+changed area and the repaint. With `--screenshot out.png` it grabs the window while a selection shows (and
+`out-box.png` for the paragraph box). Offscreen at 1400 × 900 on the desktop, the third paragraph's keystrokes took
+4.6 to 6.6 ms each (median; about a third of it the layer's layout and raster), a wrapping box 6.6 ms.

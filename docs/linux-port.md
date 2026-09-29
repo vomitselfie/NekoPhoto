@@ -417,10 +417,10 @@ uses a different model than Apple's Vision, so its cutouts differ in detail.
 | Keys | Action |
 |---|---|
 | V M L W C B E J S R G U T I H Z | Tools: Move, Marquee, Lasso, Wand, Crop, Brush, Eraser, Spot Healing, Clone Stamp, Smudge, Gradient, Shape, Text, Eyedropper, Hand, Zoom |
-| Shift M / L / U | Switch the Marquee, Lasso or Shape kind |
+| Shift + tool letter | Next tool of the letter's group, as Photoshop: Shift M rectangle / ellipse marquee, Shift L freehand / polygonal lasso, Shift W Magic Wand / Quick Select, Shift C Crop / Slice, Shift V Move / Artboard, Shift G Gradient / Paint Bucket, Shift J Spot Healing / Healing Brush / Patch / Content-Aware Move, Shift O Dodge / Burn / Sponge, Shift R Blur / Sharpen / Smudge / Liquify, Shift U the shape kinds; Shift P and Shift T pick the Pen and Type tools |
 | 1…9, 0 | Opacity 10%…90%, 100% (two digits quickly for an exact value) |
 | [ ], Shift [ ] | Brush size, hardness |
-| X, D | Swap / reset colours |
+| X, D | Swap / reset colours (with the Crop tool, X swaps the crop's height and width) |
 | Space + drag, middle drag, wheel | Pan |
 | Ctrl + wheel, Ctrl +/−, Ctrl 0, Ctrl 1 | Zoom, fit, 100% |
 | Ctrl T, Enter, Esc | Free transform (of the selection when there is one), apply, cancel |
@@ -440,3 +440,4 @@ uses a different model than Apple's Vision, so its cutouts differ in detail.
 | Ctrl Shift E, Ctrl Alt Shift S | Export PNG, export JPEG |
 | Ctrl Shift K, Ctrl Y, Ctrl Shift Y | Color Settings, Proof Colors, Gamut Warning |
 | Ctrl , | Preferences |
+| Type tool: Ctrl Enter or keypad Enter, Esc | Commit or cancel the text being typed on the canvas (Enter alone starts a new line) |

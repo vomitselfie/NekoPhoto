@@ -60,6 +60,9 @@ qt_add_executable(nekophoto
     ChannelDialogs.h
     EditorSessionPainting.cpp
     EditorSessionPixels.cpp
+    EditorSessionClipboard.cpp
+    EditorSessionTextEdit.cpp
+    CanvasWidgetText.cpp
     EditorSessionQuickSelect.cpp
     EditorSessionSelection.cpp
     EditorSessionSmartObjects.cpp
@@ -153,6 +156,10 @@ qt_add_executable(nekophoto
     PreferencesDialog.cpp
     ToolOptionsBar.h
     ToolOptionsBar.cpp
+    Scrub.h
+    Scrub.cpp
+    ImportBanner.h
+    ImportBanner.cpp
     WelcomeDialog.h
     WelcomeDialog.cpp
     Dialogs.h

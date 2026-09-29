@@ -367,6 +367,7 @@ QWidget* ToolOptionsBar::buildHealingOptions() {
     h->addWidget(moveOptions);
     moveOptions->setVisible(session_->spotHealingMode == 5);
     connect(mode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, moveOptions](int i) { session_->spotHealingMode = i; moveOptions->setVisible(i == 5); });
+    syncers_.push_back([this, mode] { if (mode->currentIndex() != session_->spotHealingMode) mode->setCurrentIndex(std::clamp(session_->spotHealingMode, 0, 5)); });
     addBrushTipFields(h);
     h->addStretch();
     return w;
@@ -420,7 +421,9 @@ QWidget* ToolOptionsBar::buildSmudgeOptions() {
     auto* h = layoutOf(w);
     auto* mode = new QComboBox;
     mode->addItems({tr("Liquify"), tr("Blur"), tr("Smudge"), tr("Sharpen")});
+    mode->setCurrentIndex(int(session_->blurMode));
     connect(mode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->blurMode = BlurToolMode(i); });
+    syncers_.push_back([this, mode] { QSignalBlocker b(mode); mode->setCurrentIndex(int(session_->blurMode)); });
     h->addWidget(new QLabel(tr("Mode")));
     h->addWidget(mode);
     addBrushTipFields(h);
@@ -450,6 +453,7 @@ QWidget* ToolOptionsBar::buildToningOptions() {
         spongeLabel->setVisible(isSponge); sponge->setVisible(isSponge);
     };
     connect(kind, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, show](int i) { session_->toning.kind = compositor::ToningKind(i); show(); });
+    syncers_.push_back([this, kind, show] { { QSignalBlocker b(kind); kind->setCurrentIndex(int(session_->toning.kind)); } show(); });
     connect(range, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->toning.range = compositor::ToneRange(i); });
     connect(protect, &QCheckBox::toggled, this, [this](bool on) { session_->toning.protectTones = on; });
     connect(sponge, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->toning.saturate = i == 1; });
@@ -923,7 +927,14 @@ QWidget* ToolOptionsBar::buildTextOptions() {
     QWidget* w = row();
     auto* h = layoutOf(w);
     auto applyStyle = [this](std::function<void(LayerText&)> change) {
+        const LayerText before = session_->textStyle;
         change(session_->textStyle);
+        if (canvas_->typeEditing()) {
+            // Typing on the canvas: the selected letters (or the ones typed next) take the change.
+            const LayerText& after = session_->textStyle;
+            canvas_->applyTypeStyle(CanvasWidget::typePatch(before, after), after.alignment != before.alignment ? std::optional(after.alignment) : std::nullopt);
+            return;
+        }
         const Layer* layer = session_->activeLayer();
         if (layer && layer->isLiveText() && !session_->textEditing()) {
             LayerText text = *layer->text;
@@ -940,6 +951,7 @@ QWidget* ToolOptionsBar::buildTextOptions() {
     auto* size = numberField(1, 2000, 0, " px", tr("Size, in document pixels"));
     connect(size, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [applyStyle](double v) { applyStyle([v](LayerText& t) { t.fontSize = v; }); });
     syncers_.push_back([this, size] { QSignalBlocker b(size); size->setValue(session_->textStyle.fontSize); });
+    h->addWidget(new QLabel(tr("Size", "font size")));
     h->addWidget(size);
     auto* bold = new QToolButton;
     bold->setText(tr("B")); bold->setCheckable(true); bold->setToolTip(tr("Bold"));
@@ -959,11 +971,56 @@ QWidget* ToolOptionsBar::buildTextOptions() {
     connect(align, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [applyStyle](int i) { applyStyle([i](LayerText& t) { t.alignment = i; }); });
     syncers_.push_back([this, align] { QSignalBlocker b(align); align->setCurrentIndex(std::clamp(session_->textStyle.alignment, 0, 2)); });
     h->addWidget(align);
+    // The text colour, as Photoshop's swatch in this bar; with no text to change it sets the foreground colour,
+    // which new type takes.
+    auto* colour = new QToolButton;
+    colour->setToolTip(tr("Set the text colour"));
+    colour->setFixedSize(28, 22);
+    auto showColour = [colour](const QColor& c) { colour->setStyleSheet(QStringLiteral("QToolButton { background: %1; border: 1px solid palette(mid); }").arg(c.name())); };
+    connect(colour, &QToolButton::clicked, this, [this, applyStyle, showColour] {
+        const LayerText& s = session_->textStyle;
+        const QColor current = canvas_->typeEditing() || (session_->activeLayer() && session_->activeLayer()->isLiveText())
+            ? QColor::fromRgbF(float(s.red), float(s.green), float(s.blue)) : session_->foregroundColor;
+        const QColor chosen = QColorDialog::getColor(current, window(), tr("Text Colour"));
+        if (!chosen.isValid()) return;
+        const bool onText = canvas_->typeEditing() || (session_->activeLayer() && session_->activeLayer()->isLiveText());
+        applyStyle([chosen](LayerText& t) { t.red = chosen.redF(); t.green = chosen.greenF(); t.blue = chosen.blueF(); });
+        if (!onText) { session_->foregroundColor = chosen; emit session_->toolChanged(); }
+        showColour(chosen);
+    });
+    syncers_.push_back([this, showColour] {
+        const LayerText& s = session_->textStyle;
+        const bool onText = canvas_->typeEditing() || (session_->activeLayer() && session_->activeLayer()->isLiveText());
+        showColour(onText ? QColor::fromRgbF(float(s.red), float(s.green), float(s.blue)) : session_->foregroundColor);
+    });
+    h->addWidget(colour);
+    // While typing: commit (Ctrl+Enter) and cancel (Esc), as the check and cross at the end of Photoshop's bar.
+    auto* commit = new QToolButton;
+    commit->setText(QStringLiteral("\u2713"));
+    commit->setToolTip(tr("Commit the text (Ctrl+Enter)"));
+    auto* cancel = new QToolButton;
+    cancel->setText(QStringLiteral("\u2715"));
+    cancel->setToolTip(tr("Cancel the text edit (Esc)"));
+    connect(commit, &QToolButton::clicked, this, [this] { canvas_->commitType(); canvas_->setFocus(); });
+    connect(cancel, &QToolButton::clicked, this, [this] { canvas_->cancelType(); canvas_->setFocus(); });
+    syncers_.push_back([this, commit, cancel] { commit->setVisible(canvas_->typeEditing()); cancel->setVisible(canvas_->typeEditing()); });
+    // The bar shows the style at the caret.
+    connect(canvas_, &CanvasWidget::typeEditChanged, this, [this] {
+        if (auto run = canvas_->typeStyleAtCaret()) {
+            LayerText& s = session_->textStyle;
+            s.fontFamily = run->fontFamily; s.fontSize = run->fontSize; s.bold = run->bold; s.italic = run->italic;
+            s.red = run->red; s.green = run->green; s.blue = run->blue;
+        }
+        if (auto a = canvas_->typeAlignment()) session_->textStyle.alignment = *a;
+        for (auto& sync : syncers_) sync();
+    });
     auto* edit = new QPushButton(tr("Edit Text…"));
     edit->setToolTip(tr("Open the editor for the active text layer"));
     connect(edit, &QPushButton::clicked, this, [this] { const Layer* l = session_->activeLayer(); if (l && l->isLiveText()) session_->requestTextEdit(l->id); });
-    syncers_.push_back([this, edit] { const Layer* l = session_->activeLayer(); edit->setEnabled(l && l->isLiveText()); });
+    syncers_.push_back([this, edit] { const Layer* l = session_->activeLayer(); edit->setEnabled(l && l->isLiveText() && !canvas_->typeEditing()); });
     h->addWidget(edit);
+    h->addWidget(commit);
+    h->addWidget(cancel);
     h->addStretch();
     return w;
 }
@@ -1101,16 +1158,52 @@ QWidget* ToolOptionsBar::buildWandOptions() {
 QWidget* ToolOptionsBar::buildCropOptions() {
     QWidget* w = row();
     auto* h = layoutOf(w);
-    h->addWidget(new QLabel(tr("Ratio")));
+    // Photoshop's crop presets: Ratio (free unless W and H are typed), Original Ratio, then the common ones.
     auto* ratio = new QComboBox;
-    ratio->addItems({tr("Free"), tr("Original"), "1:1", "4:3", "3:2", "16:9", "4:5", "2:3"});
+    ratio->setToolTip(tr("The shape the crop box keeps"));
+    struct Preset { const char* name; double w, h; };
+    static const Preset presets[] = {{QT_TR_NOOP("Ratio"), 0, 0}, {QT_TR_NOOP("Original Ratio"), -1, -1}, {"1 : 1", 1, 1}, {"4 : 5 (8 : 10)", 4, 5},
+                                     {"5 : 7", 5, 7}, {"2 : 3 (4 : 6)", 2, 3}, {"3 : 2", 3, 2}, {"4 : 3", 4, 3}, {"16 : 9", 16, 9}, {"9 : 16", 9, 16}};
+    for (const Preset& p : presets) ratio->addItem(p.w == 0 || p.w < 0 ? tr(p.name) : QString::fromLatin1(p.name));
+    auto ratioField = [](const QString& tip) {
+        auto* f = numberField(0, 100000, 3, QString(), tip);
+        f->setSpecialValueText(QStringLiteral(" "));   // 0 shows empty: no ratio
+        f->setFixedWidth(64);
+        return f;
+    };
+    auto* ratioW = ratioField(tr("Width of the ratio (empty for a free crop)"));
+    auto* ratioH = ratioField(tr("Height of the ratio (empty for a free crop)"));
+    auto* swapRatio = new QToolButton;
+    swapRatio->setText(QStringLiteral("\u21c4"));
+    swapRatio->setToolTip(tr("Swap height and width (X)"));
+    auto* clearRatio = new QPushButton(tr("Clear"));
+    clearRatio->setToolTip(tr("Clear the ratio"));
+    auto applyFields = [this, ratioW, ratioH] { canvas_->setCropRatio(ratioW->value(), ratioH->value()); };
     connect(ratio, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) {
-        static const double values[] = {0, -1, 1, 4.0 / 3, 3.0 / 2, 16.0 / 9, 4.0 / 5, 2.0 / 3};
-        double r = values[i];
-        if (r < 0 && session_->hasDocument()) r = double(session_->document()->width) / session_->document()->height;
-        canvas_->setCropRatio(std::max(0.0, r));
+        if (i < 0 || i >= int(std::size(presets))) return;
+        double w = presets[i].w, h = presets[i].h;
+        if (w < 0) { w = session_->hasDocument() ? session_->document()->width : 0; h = session_->hasDocument() ? session_->document()->height : 0; }
+        canvas_->setCropRatio(w, h);
+    });
+    connect(ratioW, &QDoubleSpinBox::editingFinished, this, applyFields);
+    connect(ratioH, &QDoubleSpinBox::editingFinished, this, applyFields);
+    connect(swapRatio, &QToolButton::clicked, this, [this] { canvas_->swapCropOrientation(); });
+    connect(clearRatio, &QPushButton::clicked, this, [this, ratio] { if (ratio->currentIndex() == 0) canvas_->setCropRatio(0, 0); else ratio->setCurrentIndex(0); });
+    // The fields and the preset follow the canvas (a preset, typed values, X).
+    connect(canvas_, &CanvasWidget::cropRatioChanged, this, [this, ratio, ratioW, ratioH] {
+        const double w = canvas_->cropRatioWidth(), h = canvas_->cropRatioHeight();
+        { QSignalBlocker b1(ratioW), b2(ratioH); ratioW->setValue(w); ratioH->setValue(h); }
+        int match = 0;
+        for (int i = 2; i < int(std::size(presets)); i++) if (presets[i].w == w && presets[i].h == h) match = i;
+        if (match == 0 && w > 0 && session_->hasDocument() && w == session_->document()->width && h == session_->document()->height) match = 1;
+        QSignalBlocker b(ratio);
+        ratio->setCurrentIndex(match);
     });
     h->addWidget(ratio);
+    h->addWidget(ratioW);
+    h->addWidget(swapRatio);
+    h->addWidget(ratioH);
+    h->addWidget(clearRatio);
     auto* apply = new QPushButton(tr("Crop"));
     connect(apply, &QPushButton::clicked, this, [this] { canvas_->applyCrop(); });
     auto* cancel = new QPushButton(tr("Cancel"));

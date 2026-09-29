@@ -103,6 +103,8 @@ void CanvasWidget::wheelEvent(QWheelEvent* e) {
 }
 
 bool CanvasWidget::event(QEvent* e) {
+    // While typing, letters and the editing keys go to the text rather than to the tool and menu shortcuts.
+    if (e->type() == QEvent::ShortcutOverride && typeEdit_ && typeShortcut(static_cast<QKeyEvent*>(e))) { e->accept(); return true; }
     if (e->type() == QEvent::NativeGesture) {
         auto* g = static_cast<QNativeGestureEvent*>(e);
         if (g->gestureType() == Qt::ZoomNativeGesture && session_->hasDocument()) {
@@ -114,6 +116,7 @@ bool CanvasWidget::event(QEvent* e) {
 }
 
 void CanvasWidget::keyPressEvent(QKeyEvent* e) {
+    if (typeEdit_ && typeKey(e)) return;   // typing on the canvas takes the keys first
     if (e->key() == Qt::Key_Space && !e->isAutoRepeat()) { spaceHeld_ = true; if (hover_) updateCursor(*hover_, e->modifiers()); return; }
     if (!session_->hasDocument()) { QWidget::keyPressEvent(e); return; }
     if (e->key() == Qt::Key_Alt || e->key() == Qt::Key_Control) { if (hover_) updateCursor(*hover_, e->modifiers()); }

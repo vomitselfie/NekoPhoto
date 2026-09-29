@@ -149,7 +149,9 @@ content and style, same keys plus `lineSpacing` and `letterSpacing`; on text in 
 Photoshop's Character panel on a selection: `start` and `length` in UTF-16 units of the text, default all of it, and
 any of `font`, `size`, `bold`, `weight`, `italic`, `color`, `letterSpacing`, `baselineShift`, `leading`, `caps`
 (normal, small, all), `underline`, `strikethrough`; the runs split and merge as needed), `layers.delete`,
-`layers.duplicate`, `layers.move`, `layers.reorder`, `layers.setTransform`,
+`layers.duplicate`, `layers.copy` and `layers.paste` (whole layers between documents, as Edit > Copy with layers
+selected and no selection, then Paste: `ids` to copy, default the selected ones; the paste answers the new ids),
+`layers.move`, `layers.reorder`, `layers.setTransform`,
 `layers.flip`, `layers.mask` (add, addFromSelection, delete, toggle, invert,
 apply, link), `layers.merge`, `layers.group`, `adjustments.set`.
 `layers.style` gives a layer's effects (Photoshop's layer style) as JSON, every kind a list with switched-off
@@ -206,7 +208,8 @@ painted with `brush.stroke` and `mask: true`), `channels.set` (Channel Options: 
 channel, or `id` with `mode`), `channels.loadSelection` (Select > Load Selection: `channel`, or `layer` with `mask`;
 `invert`, `mode`, or a thumbnail Ctrl-click's `shift` and `alt`).
 
-Canvas and history: `canvas.resize`, `canvas.crop`, `canvas.flip`,
+Canvas and history: `canvas.resize`, `canvas.crop` (`ratio` W:H such as 16:9: the largest box of that shape centred in
+the rectangle, as the Crop tool's presets), `canvas.flip`,
 `image.resize`, `image.trim` (Photoshop's Trim: `basedOn` transparent, topLeft or bottomRight, the sides, `tolerance`),
 `image.mode` (Image > Mode: `bits` 8, 16 or 32, one undo step, refused with the reason when the document would not fit
 its byte budget, half the pixels of an 8-bit one at 16 bits, a quarter at 32; from 32 bits HDR Toning's `method`

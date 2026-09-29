@@ -172,6 +172,108 @@ QImage renderRuns(const compositor::LayerText& text, bool deep) {
 
 QImage renderUpright(const compositor::LayerText& text, bool deep);
 
+} // namespace
+
+TextCaretGeometry textCaretGeometry(const compositor::LayerText& text) {
+    // The runs' layout, as renderRuns places it: plain text draws the same lines (one font, no wrap), so its caret
+    // comes from the same layout.
+    TextCaretGeometry out;
+    const RunLayout laid = layoutRuns(text);
+    const QString content = QString::fromStdString(text.text);
+    const int length = int(content.size());
+    out.caretX.assign(size_t(length) + 1, textPadding);
+    out.lineOf.assign(size_t(length) + 1, 0);
+    // Where each paragraph starts in the whole text.
+    std::vector<int> paragraphStart;
+    int start = 0;
+    for (const QString& para : content.split('\n')) { paragraphStart.push_back(start); start += int(para.size()) + 1; }
+    for (size_t i = 0; i < laid.lines.size(); i++) {
+        const RunLayout::Line& line = laid.lines[i];
+        const QTextLine l = laid.paragraphs[line.paragraph]->lineAt(line.index);
+        const double x = textPadding + (text.alignment == 1 ? (laid.width - line.width) / 2 : text.alignment == 2 ? laid.width - line.width : 0);
+        const int base = paragraphStart[line.paragraph];
+        TextCaretGeometry::Line g;
+        g.start = base + l.textStart();
+        g.end = base + l.textStart() + l.textLength();
+        // A wrapped line's trailing space stays on it; the next line starts after it.
+        g.baseline = textPadding + line.baseline;
+        g.top = g.baseline - l.ascent();
+        g.bottom = g.baseline + l.descent();
+        g.left = x;
+        g.right = x + line.width;
+        g.shown = line.shown;
+        const int lineIndex = int(out.lines.size());
+        out.lines.push_back(g);
+        const bool lastOfParagraph = line.index == laid.paragraphs[line.paragraph]->lineCount() - 1;
+        for (int p = g.start; p <= g.end && p <= length; p++) {
+            // A soft wrap's end position belongs to the next line.
+            if (p == g.end && !lastOfParagraph) break;
+            out.caretX[size_t(p)] = x + l.cursorToX(p - base);
+            out.lineOf[size_t(p)] = lineIndex;
+        }
+    }
+    if (out.lines.empty()) out.lines.push_back({0, 0, double(textPadding), textPadding + text.fontSize * 0.8, textPadding + text.fontSize, double(textPadding), double(textPadding), true});
+    return out;
+}
+
+int TextCaretGeometry::positionAt(QPointF raster) const {
+    if (lines.empty()) return 0;
+    // The line under the point (or the nearest shown one), then the nearest caret on it.
+    int best = 0;
+    double bestDistance = 1e300;
+    for (int i = 0; i < int(lines.size()); i++) {
+        if (!lines[size_t(i)].shown) continue;
+        const Line& l = lines[size_t(i)];
+        const double d = raster.y() < l.top ? l.top - raster.y() : raster.y() > l.bottom ? raster.y() - l.bottom : 0;
+        if (d < bestDistance) { bestDistance = d; best = i; }
+    }
+    int position = lines[size_t(best)].start;
+    double nearest = 1e300;
+    for (int p = 0; p < int(caretX.size()); p++) {
+        if (lineOf[size_t(p)] != best) continue;
+        const double d = std::abs(caretX[size_t(p)] - raster.x());
+        if (d < nearest) { nearest = d; position = p; }
+    }
+    return position;
+}
+
+std::pair<QPointF, QPointF> TextCaretGeometry::caret(int position) const {
+    position = std::clamp(position, 0, int(caretX.size()) - 1);
+    const Line& l = lines[size_t(std::clamp(lineOf[size_t(position)], 0, int(lines.size()) - 1))];
+    const double x = caretX[size_t(position)];
+    return {QPointF(x, l.top), QPointF(x, l.bottom)};
+}
+
+std::vector<QRectF> TextCaretGeometry::selection(int from, int to) const {
+    std::vector<QRectF> rects;
+    if (from > to) std::swap(from, to);
+    from = std::clamp(from, 0, int(caretX.size()) - 1);
+    to = std::clamp(to, 0, int(caretX.size()) - 1);
+    if (from == to) return rects;
+    for (int i = 0; i < int(lines.size()); i++) {
+        const Line& l = lines[size_t(i)];
+        if (!l.shown || to < l.start || from > l.end) continue;
+        const int a = std::max(from, l.start), b = std::min(to, l.end);
+        const double x0 = lineOf[size_t(a)] == i ? caretX[size_t(a)] : l.left;
+        // A selection that runs on past the line's end covers a little of its break, as text editors show it.
+        double x1 = lineOf[size_t(b)] == i ? caretX[size_t(b)] : l.right;
+        if (to > l.end) x1 = std::max(x1, l.right + (l.bottom - l.top) * 0.25);
+        if (x1 > x0) rects.emplace_back(QPointF(x0, l.top), QPointF(x1, l.bottom));
+    }
+    return rects;
+}
+
+int TextCaretGeometry::verticalMove(int position, int step, double x) const {
+    position = std::clamp(position, 0, int(caretX.size()) - 1);
+    const int line = lineOf[size_t(position)] + step;
+    if (line < 0) return 0;
+    if (line >= int(lines.size())) return int(caretX.size()) - 1;
+    const Line& l = lines[size_t(line)];
+    return positionAt(QPointF(x, (l.top + l.bottom) / 2));
+}
+
+namespace {
+
 /// Warp Text over the upright raster, at either depth.
 template <class Img>
 std::shared_ptr<Img> bendText(const compositor::LayerText& text, std::shared_ptr<Img> upright, QPointF* warpOffset) {

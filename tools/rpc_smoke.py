@@ -220,6 +220,16 @@ def remaining_methods(rpc):
     rpc.call("tabs.close", index=icon["tab"], discard=True)
     rpc.call("tabs.select", index=next(t["index"] for t in here if t["current"]))
     placed = rpc.call("document.import", path=image, x=100, y=60)
+    # Whole layers between documents: layers.copy here, layers.paste in the first tab, one undo step.
+    assert rpc.call("layers.copy", ids=[placed["id"]])["copied"] == 1
+    rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
+    before = len(rpc.call("layers.list"))
+    pasted = rpc.call("layers.paste")["ids"]
+    assert len(pasted) == 1 and len(rpc.call("layers.list")) == before + 1, pasted
+    assert rpc.call("history.list")["undo"][-1] == "Paste Layers"
+    rpc.call("history.undo")
+    assert len(rpc.call("layers.list")) == before
+    rpc.call("tabs.select", index=next(t["index"] for t in here if t["current"]))
     rpc.call("layers.duplicate")
     copy = rpc.call("layers.list")[0]
     rpc.call("layers.flip", vertical=True)
@@ -406,6 +416,10 @@ def sixteen_bit(rpc):
     rpc.call("layers.add", kind="adjustment", adjustmentKind="Hue/Saturation")
     assert rpc.call("image.resize", width=150, height=100)["width"] == 150
     assert rpc.call("canvas.crop", x=5, y=5, width=130, height=90)["width"] == 130
+    # A ratio crops to the largest box of that shape centred in the rectangle.
+    ratio_crop = rpc.call("canvas.crop", x=0, y=0, width=130, height=90, ratio="1:1")
+    assert (ratio_crop["width"], ratio_crop["height"]) == (90, 90), ratio_crop
+    rpc.call("history.undo")
     assert rpc.call("document.info")["bits"] == 16
     # Painting and retouching work at 16 bits (P3b): the brush (round and MyPaint), the eraser, a mask, clone, the
     # healers, smudge, blur, dodge, gradients, the bucket and Patch, each one undo step.

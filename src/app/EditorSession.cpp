@@ -83,7 +83,7 @@ void EditorSession::setActiveLayer(const std::optional<Uuid>& id) {
 
 bool EditorSession::canEditLayers() const {
     // An open warp cage, a live Layer Style edit or a path drag holds an undo step open: nothing else may land in it.
-    return document_ && !stroke_ && !warp_ && !transformEdit_ && !pixelMove_ && !warpCage_ && !styleEditLayer_ && !pathEditing_;
+    return document_ && !stroke_ && !warp_ && !transformEdit_ && !pixelMove_ && !warpCage_ && !styleEditLayer_ && !pathEditing_ && !typeEdit_;
 }
 
 // ---- Document ----------------------------------------------------------------

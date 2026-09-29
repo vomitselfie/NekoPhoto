@@ -1,4 +1,6 @@
 #include "MainWindow.h"
+#include "Scrub.h"
+#include "ImportBanner.h"
 #include "Names.h"
 #include "BrushImporter.h"
 #include "CanvasFrame.h"
@@ -70,6 +72,21 @@ void ProjectTabBar::dropEvent(QDropEvent* e) {
 
 MainWindow::MainWindow() {
     setAcceptDrops(true);
+    // A drag on a scrubby label is one undo step, whatever the field it moves records.
+    scrub::setUndoGroupHooks(
+        [this](const QString& name) {
+            if (!session_ || !session_->canEditLayers()) return false;
+            scrubSession_ = session_;
+            session_->beginEdit(name);
+            return true;
+        },
+        [this] {
+            if (!scrubSession_) return;
+            scrubSession_->endEdit();
+            emit scrubSession_->historyChanged();
+            emit scrubSession_->titleChanged();
+            scrubSession_.clear();
+        });
     resize(1400, 900);
 
     tabBar_ = new ProjectTabBar;
@@ -79,7 +96,15 @@ MainWindow::MainWindow() {
     centralLayout->setContentsMargins(0, 0, 0, 0);
     centralLayout->setSpacing(0);
     centralLayout->addWidget(tabBar_);
+    importBanner_ = new ImportBanner;
+    centralLayout->addWidget(importBanner_);
     centralLayout->addWidget(canvasStack_, 1);
+    connect(importBanner_, &ImportBanner::dismissed, this, [this] { bannerSession_.clear(); });
+    connect(importBanner_, &ImportBanner::undoRequested, this, [this] {
+        // Undo Open: the document's tab closes (asking first if it was changed since).
+        for (size_t i = 0; i < tabs_.size(); i++)
+            if (tabs_[i].session == bannerSession_) { bannerSession_.clear(); closeTab(int(i)); break; }
+    });
     setCentralWidget(central);
     connect(tabBar_, &QTabBar::currentChanged, this, [this](int index) { if (index >= 0 && index != current_) switchTo(index); });
     connect(tabBar_, &QTabBar::tabCloseRequested, this, [this](int index) { closeTab(index); });
@@ -347,6 +372,7 @@ void MainWindow::offerRecovery() {
 void MainWindow::switchTo(int index) {
     if (index < 0 || index >= int(tabs_.size())) return;
     if (current_ >= 0 && current_ < int(tabs_.size()) && current_ != index) {
+        currentTab().canvas->commitType();
         currentTab().session->commitTransform();
         currentTab().session->resolveGradient();
         currentTab().options->setVisible(false);
@@ -364,6 +390,8 @@ void MainWindow::switchTo(int index) {
     adjustStack_->setCurrentWidget(tab.adjustments);
     if (timeline_) timeline_->setSession(session_);
     tab.options->setVisible(true);
+    // The import bar shows over its own document only.
+    if (importBanner_) importBanner_->setVisible(bannerSession_ && bannerSession_ == session_ && !importBanner_->notes().isEmpty());
     { QSignalBlocker b(tabBar_); tabBar_->setCurrentIndex(index); }
     connectSession();
     refreshTitle();
@@ -373,6 +401,13 @@ void MainWindow::switchTo(int index) {
     refreshZoom();
     refreshHint();
     canvas_->setFocus();
+}
+
+void MainWindow::showImportNotes(const QString& summary, const QString& title, const QString& heading, const QStringList& notes, EditorSession* session) {
+    if (notes.isEmpty()) return;
+    bannerSession_ = session ? session : session_;
+    importBanner_->present(summary, title, heading, notes, session != nullptr);
+    importBanner_->setVisible(bannerSession_ == session_);
 }
 
 void MainWindow::refreshHint() { hintLabel_->setText(toolHint(session_->tool(), session_->brushErase)); }
@@ -396,7 +431,7 @@ QString MainWindow::toolHint(Tool tool, bool erase) {
     case Tool::Dodge: return tr("Opacity is the Exposure (Dodge, Burn) or Flow (Sponge); a stroke never goes past one full pass");
     case Tool::PaintBucket: return tr("Click to fill pixels like the one clicked with the foreground colour, inside the selection");
     case Tool::Shape: return tr("Drag a shape in the foreground colour; Shift squares, Alt grows from the centre; Shift-U switches kind");
-    case Tool::Text: return tr("Click to add text in the foreground colour, or click a text layer to edit it; the options bar sets the font");
+    case Tool::Text: return tr("Click to type, or drag a box for paragraph text; click text to edit it. Ctrl+Enter commits, Esc cancels; the options bar styles the selected letters");
     case Tool::Eyedropper: return tr("Click sets the foreground colour, Alt-click the background");
     case Tool::Hand: return tr("Drag to pan; hold Space to pan from any tool");
     case Tool::Zoom: return tr("Click zooms in, Alt-click out, drag a box to zoom to it; Ctrl-wheel zooms anywhere");
@@ -426,7 +461,7 @@ void MainWindow::connectSession() {
     sessionConnections_.clear();
     sessionConnections_.push_back(connect(session_, &EditorSession::viewportChanged, this, &MainWindow::refreshZoom));
     sessionConnections_.push_back(connect(session_, &EditorSession::view32Changed, this, &MainWindow::refreshExposure));
-    sessionConnections_.push_back(connect(session_, &EditorSession::textEditRequested, this, [this](Uuid id) { (new TextDialog(session_, id, this))->show(); }));
+    sessionConnections_.push_back(connect(session_, &EditorSession::textEditRequested, this, [this](Uuid id) { canvas_->commitType(); (new TextDialog(session_, id, this))->show(); }));
     sessionConnections_.push_back(connect(session_, &EditorSession::titleChanged, this, &MainWindow::refreshTitle));
     sessionConnections_.push_back(connect(session_, &EditorSession::quickSelectBusyChanged, this, [this](bool busy) { if (busy) statusBar()->showMessage(tr("Finding the subject…")); else statusBar()->clearMessage(); }));
     sessionConnections_.push_back(connect(session_, &EditorSession::quickSelectFailed, this, [this](const QString& error) { statusBar()->showMessage(error, 6000); }));
