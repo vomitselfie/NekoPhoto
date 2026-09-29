@@ -314,6 +314,9 @@ AnyImage convertForDocument(const AnyImage& image, const std::optional<ColorProf
 // ---- Exports -------------------------------------------------------------------------------------------------------
 
 bool hasNonSrgbProfile(const Document& document) {
+    // CMYK and Lab: every export but PSD is drawn through the document's profile to sRGB (Photoshop's Export As),
+    // so there is nothing left to ask.
+    if (document.colorMode != ColorMode::RGB) return false;
     // A 32-bit document is exported in the profile its values encode to (its gamma counterpart).
     const ColorProfile profile = encodedProfileOf(document);
     return !profile.empty() && !equivalentProfiles(profile, {});
@@ -321,6 +324,8 @@ bool hasNonSrgbProfile(const Document& document) {
 
 ExportPlan exportPlan(const Document& document, bool convertToSrgb, bool embed) {
     ExportPlan plan;
+    // CMYK and Lab render to sRGB for the flat formats (render(), render16()): written untagged, as sRGB is.
+    if (document.colorMode != ColorMode::RGB) return plan;
     const ColorProfile profile = encodedProfileOf(document);
     if (convertToSrgb && hasNonSrgbProfile(document)) { plan.convert = true; plan.from = profile; return plan; }
     if (embed) plan.icc = profile.icc;

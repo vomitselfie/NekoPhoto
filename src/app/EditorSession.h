@@ -155,6 +155,10 @@ public:
     /// Adds imported pixels as a new layer, centred on `at` (or the canvas); a first import creates the canvas, at the
     /// image's depth (a 16-bit PNG opens as a 16-bit document). Into an existing document they take its depth.
     /// False, saying why (in `errorText` when given, else through `error`), when the image would break a budget rule.
+    /// Pixels from elsewhere (the clipboard, another document, a file in `profile`) in this document's mode: converted
+    /// through the profiles when the mode differs, as Photoshop converts a paste or a placed file; into CMYK and Lab also
+    /// at this document's depth. RGB into RGB is returned as it is (the callers convert profile and depth as before).
+    compositor::AnyImage pixelsForDocument(const compositor::AnyImage& image, compositor::ColorMode mode, const compositor::ColorProfile& profile) const;
     bool insertImage(const compositor::AnyImage& image, const QString& name, std::optional<QPointF> at = std::nullopt, QString* errorText = nullptr);
     /// A refused budget check (Document::canCreate and the rest) in the reader's language.
     static QString budgetText(const compositor::BudgetCheck& check);
@@ -1019,7 +1023,9 @@ private:
     bool strokeMask_ = false;
     std::optional<QPointF> lastBrushPoint_;
     /// Copied pixels at the depth of the document they came from.
-    struct PixelClipboard { compositor::AnyImage image; QPointF origin; };
+    /// Pixels copied here: at the source document's depth and layout, with its colour mode and profile, so a paste into a
+    /// document of another mode converts them through the profiles (EditorSessionModes.cpp).
+    struct PixelClipboard { compositor::AnyImage image; QPointF origin; compositor::ColorMode mode = compositor::ColorMode::RGB; compositor::ColorProfile profile; };
     std::optional<PixelClipboard> pixelClipboard_;
     /// The active layer's pixels (or the composite) as they sit on the canvas, inside the selection's whole-pixel bounds.
     std::optional<PixelClipboard> renderSelectedPixels(bool merged) const;
@@ -1186,6 +1192,22 @@ private:
         std::optional<compositor::WarpedImageF> image; std::shared_ptr<compositor::GrayF> warpedMask;
     };
     mutable std::map<compositor::Uuid, DistortCacheF> distortCacheF_;
+
+    // ---- CMYK and Lab (EditorSessionModes.cpp): pixels at the document's own layout for the clipboard, Free Transform
+    // and Distort; conversions through the profiles between documents of different modes.
+    std::optional<PixelClipboard> renderSelectedPixelsNative(bool merged, const compositor::Rect& region) const;
+    /// What the system clipboard gets from pixels in this document: 8-bit sRGB for CMYK and Lab.
+    QImage clipboardImageFor(const compositor::AnyImage& image) const;
+    /// An asset for pixels at the document's layout, its thumbnail drawn through the document's profile.
+    compositor::Asset modeAsset(const compositor::AnyImage& image, const std::string& name) const;
+    void distortLayerAny(compositor::Layer& layer, const TransformEdit& edit);
+    void mergeFloatingTransformAny(const TransformEdit& edit);
+    bool distortOverrideAny(const compositor::Layer& layer, const TransformEdit& edit, compositor::LayerOverride& o) const;
+    struct DistortCacheAny {
+        compositor::Corners corners; compositor::LayerTransform transform; compositor::AnyImage source; compositor::AnyGray mask;
+        std::optional<compositor::WarpedAny> image; compositor::AnyGray warpedMask;
+    };
+    mutable std::map<compositor::Uuid, DistortCacheAny> distortCacheAny_;
 };
 
 } // namespace app

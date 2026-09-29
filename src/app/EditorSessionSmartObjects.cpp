@@ -225,7 +225,7 @@ void EditorSession::previewWarpCage() {
     const Layer* layer = document_ ? document_->find(warpCageLayer_) : nullptr;
     if (!warpCage_ || !layer) return;
     // A reduced draw while dragging; Apply draws at full size.
-    auto preview = compositor::previewWarpCage(*document_, *layer, *warpCage_, 1024);
+    auto preview = compositor::previewWarpCageAny(*document_, *layer, *warpCage_, 1024);
     if (preview) setPixelPreview(preview->image, preview->transform, warpCageLayer_);
     emit transformChanged();
 }

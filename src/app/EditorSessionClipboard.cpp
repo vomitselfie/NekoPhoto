@@ -4,6 +4,7 @@
 // inserts them above the active layer. Other apps get the layers flattened as an image.
 #include "EditorSession.h"
 #include "ImageConvert.h"
+#include "ColorManagement.h"
 #include "compositor/colormgmt.h"
 #include "compositor/depth.h"
 #include "compositor/render.h"
@@ -74,6 +75,7 @@ bool EditorSession::copyLayers() {
     out = Document(from.width, from.height);
     out.resolution = from.resolution;
     out.sampleType = from.sampleType;
+    out.colorMode = from.colorMode;
     out.profile = from.profile;
     for (const Layer& l : from.layers) {
         if (!included.count(l.id)) continue;
@@ -115,6 +117,17 @@ std::vector<Uuid> EditorSession::pasteLayers(QString* errorText) {
     const auto clipboard = currentLayerClipboard();
     if (!clipboard || !document_ || !canEditLayers()) return {};
     Document copied = clipboard->layers;
+    // Another colour mode: the layers are converted through the profiles into this document's mode (Image > Mode's
+    // conversion, colours kept as values included), as Photoshop converts layers dragged between modes. A 32-bit RGB
+    // source is brought to 16 bits first (there is no 32-bit CMYK or Lab); a 32-bit target is converted at 16 bits in
+    // its encoded profile, and the edit then linearises the pixels.
+    if (copied.colorMode != document_->colorMode) {
+        std::string why;
+        if (copied.sampleType == SampleType::F32 && !convertSampleType(copied, SampleType::U16, &why)) { if (errorText) *errorText = QString::fromStdString(why); return {}; }
+        const ColorProfile target = document_->sampleType == SampleType::F32 ? encodedProfileOf(*document_) : document_->profile;
+        if (!convertDocumentMode(copied, document_->colorMode, target, color::conversionOptions(), &why)) { if (errorText) *errorText = QString::fromStdString(why); return {}; }
+        copied.profile = document_->profile;
+    }
     // Another profile: the layers are converted to this document's, as Photoshop's paste does.
     if (!(copied.profile == document_->profile)) {
         std::string why;

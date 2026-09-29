@@ -258,6 +258,7 @@ std::optional<EditorSession::PixelClipboard> EditorSession::renderSelectedPixels
     const Layer* layer = activeLayer();
     if (!merged && !layer) return std::nullopt;
     if (document_->sampleType == SampleType::F32) return renderSelectedPixelsF(merged, region);
+    if (document_->colorMode != ColorMode::RGB) return renderSelectedPixelsNative(merged, region);   // EditorSessionModes.cpp
     const bool deep = document_->sampleType == SampleType::U16;
     // The pixels at the document's depth, then multiplied by the selection's coverage.
     auto take = [&](auto& out, const auto* coverage) -> bool {
@@ -327,8 +328,10 @@ void EditorSession::copySelection() {
     if (!canCopyPixels()) return;
     auto copied = renderSelectedPixels(false);
     if (!copied) return;
+    copied->mode = document_->colorMode;
+    copied->profile = document_->profile;
     pixelClipboard_ = copied;
-    QApplication::clipboard()->setImage(clipboardImage(copied->image, documentCurve()));
+    QApplication::clipboard()->setImage(document_->colorMode != ColorMode::RGB ? clipboardImageFor(copied->image) : clipboardImage(copied->image, documentCurve()));
 }
 
 void EditorSession::copyMerged() {
@@ -336,8 +339,10 @@ void EditorSession::copyMerged() {
     if (!canEditLayers() || (document_->selection && document_->selection->isEmpty())) return;
     auto copied = renderSelectedPixels(true);
     if (!copied) return;
+    copied->mode = document_->colorMode;
+    copied->profile = document_->profile;
     pixelClipboard_ = copied;
-    QApplication::clipboard()->setImage(clipboardImage(copied->image, documentCurve()));
+    QApplication::clipboard()->setImage(document_->colorMode != ColorMode::RGB ? clipboardImageFor(copied->image) : clipboardImage(copied->image, documentCurve()));
 }
 
 void EditorSession::cutSelection() {
@@ -360,15 +365,24 @@ void EditorSession::paste() {
     QImage external = mime->hasImage() ? qvariant_cast<QImage>(mime->imageData()) : QImage();
     // Pixels copied here go back exactly where they came from unless another app copied since.
     if (pixelClipboard_ && (!mime->hasImage() || (external.width() == pixelClipboard_->image.width() && external.height() == pixelClipboard_->image.height()))) {
-        // With a single channel as the target, the pixels' gray goes into it (EditorSessionChannels.cpp).
-        if (pasteIntoChannels(pixelClipboard_->image, pixelClipboard_->origin)) return;
-        addPixelLayer(pixelClipboard_->image, pixelClipboard_->origin, QT_TRANSLATE_NOOP("History", "Paste"), true);
+        // With a single channel as the target, the pixels' gray goes into it (EditorSessionChannels.cpp); the gray is
+        // read from sRGB when they came from a CMYK or Lab document.
+        const PixelClipboard clip = *pixelClipboard_;
+        const AnyImage gray = clip.mode == ColorMode::RGB ? clip.image : convertImage(clip.image, clip.mode, clip.profile, ColorMode::RGB, ColorProfile());
+        if (pasteIntoChannels(gray, clip.origin)) return;
+        // Pixels from a document of another mode are converted through the profiles (EditorSessionModes.cpp).
+        const AnyImage pixels = pixelsForDocument(clip.image, clip.mode, clip.profile);
+        if (!pixels) { emit error(tr("The pixels could not be converted to this document's colour mode.")); return; }
+        addPixelLayer(pixels, clip.origin, QT_TRANSLATE_NOOP("History", "Paste"), true);
         return;
     }
     if (external.isNull()) return;
     QPointF origin(std::floor((document_->width - external.width()) / 2.0), std::floor((document_->height - external.height()) / 2.0));
     if (pasteIntoChannels(fromQImage(external), origin)) return;
-    addPixelLayer(fromQImage(external), origin, QT_TRANSLATE_NOOP("History", "Paste"), true);
+    // Another app's pixels are sRGB: into a CMYK or Lab document through the profiles.
+    const AnyImage pixels = pixelsForDocument(fromQImage(external), ColorMode::RGB, ColorProfile());
+    if (!pixels) { emit error(tr("The pixels could not be converted to this document's colour mode.")); return; }
+    addPixelLayer(pixels, origin, QT_TRANSLATE_NOOP("History", "Paste"), true);
 }
 
 void EditorSession::layerViaCopy() {
@@ -390,8 +404,12 @@ void EditorSession::addPixelLayer(AnyImage image, QPointF origin, const QString&
         // Into a 32-bit document: linearised through the document's own encoding.
         const TransferCurve curve = encodedTransfer(*document_);
         image = imageAtDepth(image, SampleType::F32, &curve);
+    } else if (document_->colorMode != ColorMode::RGB) {
+        // CMYK and Lab: already in the mode (pixelsForDocument); the depth changed keeping Lab's neutral a and b.
+        image = imageAtFormat(image, document_->sampleType, document_->colorMode);
+        if (!image) { emit error(tr("The pixels could not be converted to this document's colour mode.")); return; }
     } else image = imageAtDepth(image, document_->sampleType);
-    Layer layer(Asset::makeAny(image, nextLayerName(document_->layers, QCoreApplication::translate("Names", "Layer").toStdString())), toPoint(origin));
+    Layer layer(modeAsset(image, nextLayerName(document_->layers, QCoreApplication::translate("Names", "Layer").toStdString())), toPoint(origin));
     const Layer* active = activeLayer();
     layer.parentId = active && active->isGroup ? activeLayerId_ : (active ? active->parentId : std::nullopt);
     int index = activeLayerId_ ? document_->indexOf(*activeLayerId_) + 1 : int(document_->layers.size());

@@ -206,6 +206,7 @@ void AutomationServer::registerDocumentHandlers() {
         const bool gif = suffix == "gif";
         const color::ExportPlan plan = color::exportPlan(doc, flag(p, "convertToSrgb", gif), flag(p, "embedProfile", true));
         if (suffix == "svg" && floatDocument) fail("SVG export is not available for 32-bit documents yet");
+        if (suffix == "svg" && doc.colorMode != ColorMode::RGB) fail(QStringLiteral("SVG export is not available in %1 mode yet").arg(QString::fromLatin1(colorModeName(doc.colorMode))));
         if (suffix == "svg") {
             // Shape layers as paths, folders as groups, the rest as embedded PNGs (compositor/svg.h).
             SvgExportSummary summary;
@@ -238,6 +239,7 @@ void AutomationServer::registerDocumentHandlers() {
             else { QString qerror; if (!writeQtImage(path, "tiff", toQImage16(*image), 100, doc.resolution, &qerror, plan.iccBytes())) fail("couldn't write " + path + ": " + qerror); }
             QJsonObject out{{"path", path}, {"width", image->width()}, {"height", image->height()}, {"bits", 16}};
             if (floatDocument) out["note"] = toneNote;
+            if (doc.colorMode != ColorMode::RGB) { out["convertedToSrgb"] = true; out["note"] = QStringLiteral("converted from %1 to sRGB").arg(QString::fromLatin1(colorModeName(doc.colorMode))); }
             return out;
         }
         auto flat = color::flatten8(doc, plan);
@@ -268,6 +270,10 @@ void AutomationServer::registerDocumentHandlers() {
         QJsonObject out{{"path", path}, {"width", flat->width()}, {"height", flat->height()}, {"bits", 8}, {"profile", plan.icc.empty() ? QJsonValue::Null : QJsonValue(QString::fromStdString(encodedProfileOf(doc).description))}, {"convertedToSrgb", plan.convert}};
         if (deep) out["note"] = "reduced from 16 to 8 bits per channel with dithering";
         if (floatDocument) out["note"] = toneNote;
+        if (doc.colorMode != ColorMode::RGB) {
+            out["convertedToSrgb"] = true;
+            out["note"] = QStringLiteral("converted from %1 to sRGB%2").arg(QString::fromLatin1(colorModeName(doc.colorMode)), deep ? QStringLiteral(", reduced from 16 to 8 bits per channel with dithering") : QString());
+        }
         return out;
     });
     add("document.profile", [session, document](const QJsonObject& p) {

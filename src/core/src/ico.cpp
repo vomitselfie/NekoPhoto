@@ -282,7 +282,7 @@ bool encodeIco(const Image& flattened, const std::vector<int>& requested, std::v
 
     std::optional<Rgba> flat;
     auto sourceFor = [&](int size) -> Rgba {
-        if (document) {
+        if (document && document->colorMode == ColorMode::RGB) {   // a CMYK or Lab layer's samples are not RGB
             const std::string name = std::to_string(size) + "x" + std::to_string(size);
             for (const Layer& l : document->layers)
                 if (!l.isGroup && l.name == name && l.asset && l.asset->image.u8() && l.asset->image.u8()->width() == size && l.asset->image.u8()->height() == size)
