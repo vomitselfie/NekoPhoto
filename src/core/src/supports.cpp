@@ -45,6 +45,8 @@ constexpr FeatureSupport table[] = {
     {"tool.hand", eightAndSixteen},
     {"tool.zoom", eightAndSixteen},
     {"tool.slice", eightAndSixteen},
+    // The Eyedropper samples the 16-bit composite.
+    {"tool.eyedropper", eightAndSixteen},
     {"view", eightAndSixteen},
 
     // P3a: adjustments, on pixels (Image > Adjustments, pixels.adjust) and as adjustment layers, every kind.

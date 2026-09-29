@@ -167,7 +167,32 @@ Result16 renderGaussian(const Result16& input, double radius) {
     return Result16{std::move(output), bounds};
 }
 
-Result16 renderStraightGaussian(const Result16& input, double radius, bool unsharpKernel = false) {
+/// Whether `image` is 8-bit colour widened (as when an 8-bit document is converted): every colour sample on the 8-bit
+/// grid, give or take what unpremultiplying at 16 bits moved it (half a 15-bit step over the alpha, so more where the
+/// pixel is nearly transparent). Then Unsharp Mask's low-pass takes the 8-bit kernel's byte arithmetic (below).
+bool colourOnEightBitGrid(const Image16& image) {
+    for (int32_t y = 0; y < image.height(); ++y) {
+        const uint16_t* row = image.row(y);
+        for (int32_t x = 0; x < image.width(); ++x) {
+            const uint16_t* p = row + size_t(x) * 4U;
+            if (p[3] == 0) continue;
+            const int tolerance = int(std::ceil(16384.0 / double(p[3]))) + 1;
+            for (size_t c = 0; c < 3U; ++c)
+                if (std::abs(int(widen8(narrow16(p[c]))) - int(p[c])) > tolerance) return false;
+        }
+    }
+    return true;
+}
+
+uint8_t roundedByte(double value) {
+    if (!(value > 0.0)) return 0;
+    if (value >= 255.0) return 255;
+    return uint8_t(std::floor(value + 0.5));
+}
+
+/// `byteGrid`: the input is on the 8-bit grid and both passes run in 8-bit levels, rounding to whole levels as the 8-bit
+/// kernel does, so the low-pass is the 8-bit one exactly (widened).
+Result16 renderStraightGaussian(const Result16& input, double radius, bool unsharpKernel = false, bool byteGrid = false) {
     const auto margin = int(std::ceil(gaussianMarginScale * radius));
     const auto plan = unsharpKernel ? makeUnsharpLinePlan(radius, margin) : makeHighPassLinePlan(radius, margin);
     Image16 output = input.pixels;
@@ -178,17 +203,22 @@ Result16 renderStraightGaussian(const Result16& input, double radius, bool unsha
         values.resize(size_t(width));
         scratch.resize(size_t(width));
         for (int32_t y = 0; y < height; ++y) {
-            for (int32_t x = 0; x < width; ++x) values[size_t(x)] = input.pixels.pixel(x, y)[channel];
+            for (int32_t x = 0; x < width; ++x) {
+                const uint16_t v = input.pixels.pixel(x, y)[channel];
+                values[size_t(x)] = byteGrid ? double(narrow16(v)) : double(v);
+            }
             filterGaussianLine(values, scratch, plan);
             const auto rowOffset = size_t(y) * size_t(width);
-            for (int32_t x = 0; x < width; ++x) horizontal[rowOffset + size_t(x)] = q16(values[size_t(x)]);
+            for (int32_t x = 0; x < width; ++x)
+                horizontal[rowOffset + size_t(x)] = byteGrid ? float(roundedByte(values[size_t(x)])) : float(q16(values[size_t(x)]));
         }
         values.resize(size_t(height));
         scratch.resize(size_t(height));
         for (int32_t x = 0; x < width; ++x) {
             for (int32_t y = 0; y < height; ++y) values[size_t(y)] = horizontal[size_t(y) * size_t(width) + size_t(x)];
             filterGaussianLine(values, scratch, plan);
-            for (int32_t y = 0; y < height; ++y) output.pixel(x, y)[channel] = q16(values[size_t(y)]);
+            for (int32_t y = 0; y < height; ++y)
+                output.pixel(x, y)[channel] = byteGrid ? widen8(roundedByte(values[size_t(y)])) : q16(values[size_t(y)]);
         }
     }
     return Result16{std::move(output), input.bounds};
@@ -319,8 +349,14 @@ Result16 renderHighPass(const Result16& input, double radius) {
     return Result16{std::move(output), input.bounds};
 }
 
+// The 8-bit kernel rounds its low-pass to whole levels (after each pass), and the amount multiplies that rounding: at
+// 150% half a level of it is most of a level in the result, and at 400% two. So a 16-bit low-pass, however exact, lands
+// two to four levels from the 8-bit look on 8-bit-sourced pixels. On colour that lies on the 8-bit grid the low-pass
+// therefore runs in 8-bit levels, as the 8-bit kernel's does, and only the detail's scaling and threshold stay
+// continuous; off the grid (16-bit pixels proper) it is exact at 15 bits, with no byte steps for the amount to magnify.
 Result16 renderUnsharpMask(const Result16& input, double amountPercent, double radius, int32_t threshold) {
-    const auto blurred = renderStraightGaussian(withHiddenColoursExtended(input), radius, true);
+    const Result16 extended = withHiddenColoursExtended(input);
+    const auto blurred = renderStraightGaussian(extended, radius, true, colourOnEightBitGrid(extended.pixels));
     Image16 output(input.bounds.width, input.bounds.height);
     // The 8-bit kernel keeps a scaled detail of more than `threshold` whole levels (it truncates, so from threshold + 1
     // up) and removes the threshold from it; here the cut sits halfway, at threshold + 0.5, and the adjustment starts
@@ -1132,12 +1168,9 @@ struct RunEntry {
 
 } // namespace
 
-// Unsharp Mask is ported but not offered: its detail term multiplies the 8-bit kernel's byte-rounded low-pass by the
-// amount, so the 8-bit look it is calibrated against is itself up to amount / 100 levels from the unrounded result,
-// and the 16-bit kernel lands 2 levels from it at 50% and 4 at 400% (docs/smart-objects.md). It stays gated at
-// 16 bits until it is calibrated against Photoshop's 16-bit output rather than the 8-bit one.
+// Every filter NekoPhoto draws as a Smart Filter is drawn at 16 bits.
 bool smartFilterDrawsAt16(const SmartFilterParameters& parameters) {
-    return !std::holds_alternative<std::monostate>(parameters) && !std::holds_alternative<smartfilter::UnsharpMask>(parameters);
+    return !std::holds_alternative<std::monostate>(parameters);
 }
 
 std::optional<PlacedRaster16> renderSmartFilterStack(const PlacedRaster16& placed, const PixelRect& canvas, const SmartFilterStack& stack) {

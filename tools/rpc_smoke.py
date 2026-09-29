@@ -508,11 +508,9 @@ def sixteen_bit(rpc):
     assert rpc.call("smartObject.filters", id=converted16["id"])["mask"]["maskedPixels"] > 0
     rpc.call("layers.setTransform", id=converted16["id"], x=12, y=9)
     assert rpc.call("layers.get", id=converted16["id"])["kind"] == "smartObject"
-    try:
-        rpc.call("smartObject.addFilter", id=converted16["id"], kind="unsharp mask")
-        raise AssertionError("Unsharp Mask should be refused as a 16-bit Smart Filter")
-    except RuntimeError as e:
-        assert "not available as a Smart Filter in 16-bit documents" in str(e), e
+    # Unsharp Mask as a 16-bit Smart Filter.
+    usm = rpc.call("smartObject.addFilter", id=converted16["id"], kind="unsharp mask")
+    assert any("Unsharp" in f["name"] for f in usm["filters"]), usm
     warped = rpc.call("layers.warp", id=placed16["id"], style="arc", bend=30)
     assert warped["kind"] == "smartObject", warped
     rpc.call("smartObject.replace", id=placed16["id"], path=tile)

@@ -226,11 +226,12 @@ Smart objects and Smart Filters work in 16-bit documents (docs/bit-depth.md).
   per 8-bit level as the centre and interpolate each pixel between the two levels about its value. Blending between
   entries uses the 16-bit blend engine; the shared filter mask stays Photoshop's 8-bit plane, and the `FEid` record
   stays 8-bit (it is Photoshop's 8-bit cache, made from the source at 8 bits).
-- **Unsharp Mask is not drawn at 16 bits**: it is refused as a Smart Filter in a 16-bit document ("Unsharp Mask is not
-  available as a Smart Filter in 16-bit documents yet"), and an instance that has it keeps the pixels it was saved
-  with (preview-locked when it must be drawn again). Its detail term multiplies the 8-bit kernel's byte-rounded
-  low-pass by the amount, so the 8-bit result it would be calibrated against is itself amount / 100 levels from the
-  unrounded one; the 16-bit kernel (in the file, not offered) is 2 levels from it at 50% to 4 at 400%.
+- **Unsharp Mask** at 16 bits: the 8-bit kernel rounds its low-pass to whole levels after each pass, and the amount
+  multiplies that rounding (half a level of it is most of a level at 150%, two at 400%), so an exact 16-bit low-pass
+  lands two to four levels from the 8-bit look. On colour that lies on the 8-bit grid (an 8-bit image widened, give or
+  take what unpremultiplying at 16 bits moved it) the low-pass therefore runs in 8-bit levels as the 8-bit one does,
+  and only the detail's scaling and the threshold stay continuous; on 16-bit colour proper it is exact at 15 bits, so a
+  ramp finer than 8 bits is not stepped by the amount.
 - **PSD**: a 16-bit document's smart objects go out and come back as smart objects (their `SoLd`, the sources in
   `lnk2`, a 16-bit PSB or PNG embedded as it is), and untouched instances go back byte for byte. A 16-bit PSD gets no
   `FEid` (Photoshop's cache is 8-bit data; it rebuilds it), as before; opening a 16-bit PSD with no `FEid` or `FXid` at
@@ -261,7 +262,7 @@ reduced to 8 bits against the 8-bit one, every sample of both results' bounds:
 | Gaussian Blur 3 at 60% Multiply | 2 | 2 of 12,064 (0.017%) |
 | Mosaic 6 at 50% Screen | 1 | none |
 | Gaussian Blur 2 through a gray mask | 2 | 1 of 9,568 |
-| Unsharp Mask 50/1/0, 150/2/8, 175/2.5/7, 400/3/2 (not offered) | 2, 2, 2, 4 | 0.02%, 0.08%, 0.13%, 7.7% |
+| Unsharp Mask 50/1/0, 150/2/8, 175/2.5/7, 400/3/2 | 1 | none |
 
 Every kernel is within a level. The two stacked cases pass through the 8-bit engine between entries (straight
 bytes, the 8-bit blend), which adds its own rounding on an isolated sample. The straight colours matter: widening

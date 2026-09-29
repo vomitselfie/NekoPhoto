@@ -142,6 +142,17 @@ void EditorSession::nudgePixels(double dx, double dy) {
 }
 
 std::optional<QColor> EditorSession::compositeColorAt(QPointF documentPoint) const {
+    if (document_ && document_->sampleType == SampleType::U16) {
+        // The 16-bit composite, not the dithered one, so a flat area samples one colour.
+        auto deep = flattened16();
+        if (!deep) return std::nullopt;
+        int x = int(std::floor(documentPoint.x())), y = int(std::floor(documentPoint.y()));
+        if (x < 0 || y < 0 || x >= deep->width() || y >= deep->height()) return std::nullopt;
+        const uint16_t* p = deep->pixel(x, y);
+        if (!p[3]) return std::nullopt;
+        auto channel = [&](int c) { return int((uint64_t(p[c]) * 255 + p[3] / 2) / p[3]); };
+        return QColor(std::min(channel(0), 255), std::min(channel(1), 255), std::min(channel(2), 255));
+    }
     auto flat = flattened();
     if (!flat) return std::nullopt;
     int x = int(std::floor(documentPoint.x())), y = int(std::floor(documentPoint.y()));

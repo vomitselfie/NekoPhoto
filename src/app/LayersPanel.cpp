@@ -756,25 +756,25 @@ void LayersPanel::showContextMenu(const QPoint& pos) {
     // What has not been ported to a 16-bit document's depth is greyed, saying so (compositor/supports.h).
     const bool deep = session_->sampleType() != SampleType::U8;
     menu->setToolTipsVisible(deep);
-    auto eightBitOnly = [&](QAction* a) {
-        if (deep) { a->setEnabled(false); a->setToolTip(tr("Not available in 16-bit yet")); }
+    auto gatedAtDepth = [&](QAction* a, const char* feature) {
+        if (deep && !session_->supportsFeature(feature)) { a->setEnabled(false); a->setToolTip(tr("Not available in 16-bit yet")); }
         return a;
     };
-    if (layer->isLiveText()) eightBitOnly(menu->addAction(tr("Edit Text…"), this, [this, id] { session_->requestTextEdit(id); }));
+    if (layer->isLiveText()) gatedAtDepth(menu->addAction(tr("Edit Text…"), this, [this, id] { session_->requestTextEdit(id); }), "edit.text");
     menu->addAction(tr("Rename…"), this, [this, id] { startRename(id); });
     if (session_->canStyleLayer(id)) {
-        eightBitOnly(menu->addAction(tr("Layer Style…"), this, [this, id] { LayerStyleDialog(session_, id, this).exec(); }));
+        gatedAtDepth(menu->addAction(tr("Layer Style…"), this, [this, id] { LayerStyleDialog(session_, id, this).exec(); }), "edit.style");
         if (session_->activeLayerHasStyle()) {
-            eightBitOnly(menu->addAction(tr("Copy Layer Style"), this, [this] { session_->copyLayerStyle(); }));
-            eightBitOnly(menu->addAction(tr("Clear Layer Style"), this, [this] { session_->clearLayerStyle(); }));
+            gatedAtDepth(menu->addAction(tr("Copy Layer Style"), this, [this] { session_->copyLayerStyle(); }), "edit.style");
+            gatedAtDepth(menu->addAction(tr("Clear Layer Style"), this, [this] { session_->clearLayerStyle(); }), "edit.style");
         }
-        if (session_->canPasteLayerStyle()) eightBitOnly(menu->addAction(tr("Paste Layer Style"), this, [this] { session_->pasteLayerStyle(); }));
+        if (session_->canPasteLayerStyle()) gatedAtDepth(menu->addAction(tr("Paste Layer Style"), this, [this] { session_->pasteLayerStyle(); }), "edit.style");
     }
 
     if (session_->smartFilters(id)) {
         QAction* clear = menu->addAction(tr("Clear Smart Filters"), this, [this, id] { QString e; if (!session_->clearSmartFilters(id, &e)) QMessageBox::warning(this, tr("Smart Filters"), e); });
         clear->setEnabled(session_->canEditSmartFilters(id));
-        if (deep) eightBitOnly(clear);
+        gatedAtDepth(clear, "edit.smartObject");
         menu->addSeparator();
     }
     menu->addAction(tr("Duplicate Layer"), this, [this] { session_->duplicateActiveLayer(); });
@@ -796,10 +796,10 @@ void LayersPanel::showContextMenu(const QPoint& pos) {
         menu->addAction(tr("Add Reveal-All Mask"), this, [this] { session_->addMaskFromSelection(true); });
         menu->addAction(tr("Add Hide-All Mask"), this, [this] { session_->addMaskFromSelection(false); });
     }
-    if (hasLayerVectorMask(*layer)) eightBitOnly(menu->addAction(tr("Delete Vector Mask"), this, [this] { session_->deleteVectorMask(); }));
+    if (hasLayerVectorMask(*layer)) gatedAtDepth(menu->addAction(tr("Delete Vector Mask"), this, [this] { session_->deleteVectorMask(); }), "edit.vector");
     else if (!isVectorShapeLayer(*layer)) {
-        eightBitOnly(menu->addAction(tr("Add Reveal-All Vector Mask"), this, [this] { session_->addVectorMask(EditorSession::VectorMaskKind::RevealAll); }));
-        eightBitOnly(menu->addAction(tr("Add Hide-All Vector Mask"), this, [this] { session_->addVectorMask(EditorSession::VectorMaskKind::HideAll); }));
+        gatedAtDepth(menu->addAction(tr("Add Reveal-All Vector Mask"), this, [this] { session_->addVectorMask(EditorSession::VectorMaskKind::RevealAll); }), "edit.vector");
+        gatedAtDepth(menu->addAction(tr("Add Hide-All Vector Mask"), this, [this] { session_->addVectorMask(EditorSession::VectorMaskKind::HideAll); }), "edit.vector");
     }
     menu->popup(tree_->viewport()->mapToGlobal(pos));
 }

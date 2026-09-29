@@ -566,6 +566,10 @@ TEST_CASE(sixteen_bit_kernels_agree_with_eight_bit_on_eight_bit_input) {
         {"Box Blur 3", smartfilter::BoxBlur{3}},
         {"Box Blur 20", smartfilter::BoxBlur{20}},
         {"Radial Blur 10/16", smartfilter::RadialBlur{10, 16}},
+        {"Unsharp Mask 50/1/0", smartfilter::UnsharpMask{50, 1, 0}},
+        {"Unsharp Mask 150/2/8", smartfilter::UnsharpMask{150, 2, 8}},
+        {"Unsharp Mask 175/2.5/7", smartfilter::UnsharpMask{175, 2.5, 7}},
+        {"Unsharp Mask 400/3/2", smartfilter::UnsharpMask{400, 3, 2}},
         {"Add Noise 12.5 uniform", smartfilter::AddNoise{12.5, false, false, 7}},
         {"Add Noise 40 gaussian mono", smartfilter::AddNoise{40, true, true, 3}},
         {"Gaussian Blur 3 at 60% Multiply", smartfilter::GaussianBlur{3}, 0.6, BlendMode::Multiply},
@@ -600,10 +604,20 @@ TEST_CASE(sixteen_bit_kernels_agree_with_eight_bit_on_eight_bit_input) {
     }
     CHECK(kernelsWithinOne);
     CHECK(plumbingWithinTwo);
-    // Unsharp Mask is not drawn at 16 bits (smartFilterDrawsAt16): the stack refuses it.
-    CHECK(!smartFilterDrawsAt16(smartfilter::UnsharpMask{}));
-    CHECK(!renderSmartFilterStack(deep, canvas, stackOf(smartfilter::UnsharpMask{150, 2, 8})));
-    CHECK(renderSmartFilterStack(eight, canvas, stackOf(smartfilter::UnsharpMask{150, 2, 8})).has_value());
+    CHECK(smartFilterDrawsAt16(smartfilter::UnsharpMask{}));
+}
+
+TEST_CASE(sixteen_bit_unsharp_mask_keeps_sixteen_bit_precision) {
+    // Off the 8-bit grid the low-pass is exact: a fine ramp sharpened stays finer than 8 bits, with no byte steps
+    // multiplied by the amount (a smooth ramp has no detail, so it comes back within a sample or two of itself).
+    auto ramp = std::make_shared<Image16>(1024, 8);
+    for (int y = 0; y < 8; y++)
+        for (int x = 0; x < 1024; x++) { uint16_t* p = ramp->pixel(x, y); p[0] = p[1] = p[2] = uint16_t(8193 + x * 8); p[3] = 32768; }
+    auto out = renderSmartFilterStack(PlacedRaster16{ramp, 0, 0}, PixelRect{0, 0, 1024, 8}, stackOf(smartfilter::UnsharpMask{300, 2, 0}));
+    REQUIRE(out && out->image);
+    int worst = 0;
+    for (int x = 16; x < 1008; x++) worst = std::max(worst, std::abs(int(out->image->pixel(x - out->x, 4 - out->y)[0]) - (8193 + x * 8)));
+    CHECK(worst <= 2);
 }
 
 TEST_CASE(sixteen_bit_kernels_keep_sixteen_bit_precision) {
@@ -669,13 +683,12 @@ TEST_CASE(sixteen_bit_documents_take_smart_filters) {
     CHECK_EQ(refreshSmartObjectRasters(doc), 1);
     CHECK(doc.layers[0].asset->image.u16() != nullptr);
     CHECK(doc.layers[0].isLiveSmartObject());
-    // Unsharp Mask is refused at 16 bits, with its name, and the layer is left as it was.
-    const Layer kept = doc.layers[0];
+    // Unsharp Mask is drawn at 16 bits too.
     SmartFilterEntry sharpen;
     sharpen.parameters = smartfilter::UnsharpMask{};
-    CHECK(!addSmartFilter(doc, doc.layers[0], sharpen, &error));
-    CHECK(error == "Unsharp Mask is not available as a Smart Filter in 16-bit documents yet.");
-    CHECK(doc.layers[0] == kept);
+    CHECK(addSmartFilter(doc, doc.layers[0], sharpen, &error));
+    CHECK(doc.layers[0].isLiveSmartObject());
+    CHECK(doc.layers[0].asset->image.u16() != nullptr);
 }
 
 TEST_MAIN()
