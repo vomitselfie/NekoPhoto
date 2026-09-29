@@ -571,6 +571,24 @@ U16-vs-U8 calibration tests and U16 render-hash scenes; existing hashes unchange
   one table per channel where the function is smooth (the black point's corner and a gamma's infinite slope at 0 keep
   them exact today).
 
+**P7 E's transforms, clipboard, Place and exports landed (2026-09-29).** User-facing summary:
+[color-modes.md](color-modes.md#transforms-the-clipboard-and-place).
+
+- `modetransform.h`: the RGB resamplers over any layout; CMYK as two 4-sample passes, (C, M, Y, alpha) and (K, K, K,
+  alpha), which weigh the same alpha at the same positions (the join takes alpha from the first and holds K within it).
+  Lab needs nothing: premultiplied offset samples interpolate to the offset of the mean. `resizeDocument` (8 and 16
+  bits), `warpLayer`, `warpLayerToCage` and `previewWarpCageAny` branch once on five samples; the RGB paths are untouched.
+- Session (`EditorSessionModes.cpp`): the pixels under the selection rendered at the layout (`renderNative`), the
+  clipboard carrying its mode and profile, `pixelsForDocument` (through the profiles between modes, at the target depth,
+  RGB into RGB unchanged), Distort and its preview and the floating-selection merge for CMYK, the layer clipboard
+  through `convertDocumentMode`, Import through the profiles, the system clipboard in sRGB.
+- Exports: CMYK and Lab write render()'s sRGB, untagged (`exportPlan`); the ICO writer reads same-size layers in RGB only.
+- `supports()`: `edit.imageSize`, `edit.crop`, `tool.crop`, `edit.distort`, `edit.clipboard`, `document.import` and the
+  flat exports join the mode table; the exports carry the note "written as sRGB". Color Lookup stays "yet" (Photoshop's
+  own availability in CMYK and Lab was not verified).
+- Still waiting in CMYK and Lab: Color Lookup, Mosh, text, shapes, paths, layer styles, smart objects, artboards and
+  their exports, SVG, native CMYK JPEG and TIFF.
+
 **P7 E's editing half landed (2026-09-29): adjustments, filters, retouching and colour selections in CMYK and Lab.**
 User-facing summary: [color-modes.md](color-modes.md#adjustments-and-filters) and the [capability matrix](mode-matrix.md).
 

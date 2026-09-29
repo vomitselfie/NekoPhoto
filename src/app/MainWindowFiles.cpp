@@ -309,7 +309,11 @@ bool MainWindow::importImageFile(const QString& path, std::optional<QPointF> at,
     const bool first = !session_->hasDocument();
     color::OpenDecision decision;
     if (first) { decision = color::decideOnOpen(embedded, this); image = color::applyToImage(image, decision); }
-    else image = color::convertForDocument(image, embedded, session_->document()->profile);
+    else if (session_->document()->colorMode != compositor::ColorMode::RGB) {
+        // Into CMYK or Lab: converted once, from the file's profile (sRGB when untagged) through the document's.
+        image = session_->pixelsForDocument(image, compositor::ColorMode::RGB, embedded.value_or(compositor::ColorProfile{}));
+        if (!image) { if (error) *error = tr("The image could not be converted to the document's colour mode."); return false; }
+    } else image = color::convertForDocument(image, embedded, session_->document()->profile);
     if (!session_->insertImage(image, QFileInfo(path).completeBaseName(), at, error)) return false;   // at the document's depth
     if (first) session_->adoptProfile(decision.profile);
     addRecent(path);

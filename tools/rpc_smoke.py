@@ -1174,6 +1174,83 @@ def colour_mode_selection(rpc):
     rpc.call("tabs.close", index=tab["index"], discard=True)
 
 
+def colour_mode_transforms(rpc):
+    """P7 E (docs/color-modes.md): Image Size, Crop, Trim, Warp and the warp cage in CMYK and Lab at 8 and 16 bits keep
+    the document's own samples (a flat ink stays that ink); layers copied between documents of different modes are
+    converted through the profiles; Import converts a file once; PNG, JPEG, TIFF and the other flat exports are the
+    composite in sRGB. Each edit is one undo step."""
+    work = tempfile.mkdtemp()
+    first = rpc.call("tabs.list")
+    tab = rpc.call("tabs.new")
+    src = os.path.join(work, "red.png")
+    rpc.call("document.new", width=16, height=16)
+    rpc.call("pixels.fill", color="#ff0000")
+    rpc.call("document.export", path=src)
+    rpc.call("document.close", discard=True)
+    for mode, bits in (("cmyk", 8), ("cmyk", 16), ("lab", 8), ("lab", 16)):
+        rpc.call("document.new", width=64, height=48)
+        rpc.call("pixels.fill", color="#3080c0")
+        rpc.call("image.mode", colorMode=mode, bits=bits)
+        ink = rpc.call("color.sample", x=32, y=24)["values"]
+        same = lambda got: all(abs(a - b) < 0.6 for a, b in zip(got, ink))
+        assert rpc.call("image.resize", width=96, height=72, sampling="high")
+        assert rpc.call("history.info")["undo"] == "Image Size"
+        info = rpc.call("document.info")
+        assert info["width"] == 96 and info["colorMode"] == mode and info["bits"] == bits, info
+        assert same(rpc.call("color.sample", x=48, y=36)["values"]), ("Image Size kept the samples", mode, bits)
+        rpc.call("canvas.crop", x=8, y=8, width=64, height=40)
+        assert rpc.call("document.info")["width"] == 64
+        rpc.call("layers.add")
+        rpc.call("brush.stroke", points=[[10, 20], [30, 20]], size=6, color="#000000")
+        layer = rpc.call("layers.list")[0]
+        rpc.call("layers.warp", id=layer["id"], style="arc", bend=20)
+        assert rpc.call("history.info")["undo"] == "Warp"
+        cage = rpc.call("layers.cage", id=layer["id"])["points"]
+        rpc.call("layers.setCage", id=layer["id"], points=[[x + 2, y] for x, y in cage])
+        assert rpc.call("history.info")["undo"] == "Warp"
+        rpc.call("layers.delete", id=layer["id"])
+        assert same(rpc.call("color.sample", x=40, y=30)["values"])
+        # Trim on transparent pixels: a layer over part of the canvas only.
+        rpc.call("layers.add")
+        rpc.call("brush.stroke", points=[[20, 20], [24, 20]], size=4, color="#000000")
+        for l in rpc.call("layers.list")[1:]:
+            rpc.call("layers.set", id=l["id"], visible=False)
+        rpc.call("layers.select", id=rpc.call("layers.list")[0]["id"])
+        # Import: an sRGB file converted once into the mode (red's inks, or its L a b).
+        placed = rpc.call("document.import", path=src, x=0, y=0)
+        assert placed["id"], placed
+        red = rpc.call("color.sample", x=4, y=4)
+        reddish = lambda hexa: int(hexa[1:3], 16) > 200 and int(hexa[3:5], 16) < 70 and int(hexa[5:7], 16) < 70
+        assert red["model"] == mode and reddish(red["color"]), red
+        if mode == "cmyk":
+            assert red["values"][0] < 10 and red["values"][1] > 80 and red["values"][2] > 80, ("red's inks, into the press gamut", red)
+        for l in rpc.call("layers.list")[1:]:
+            rpc.call("layers.set", id=l["id"], visible=True)
+        # Flat exports in sRGB.
+        for ext in ("png", "jpg", "tif", "webp", "tga", "gif", "ico"):
+            out = rpc.call("document.export", path=os.path.join(work, "%s%d.%s" % (mode, bits, ext)))
+            assert out.get("convertedToSrgb") is True or ext == "gif", out
+        # Layers copied into an RGB document come through the profile.
+        rpc.call("layers.select", id=placed["id"])
+        rpc.call("layers.copy")
+        here = [t for t in rpc.call("tabs.list") if t["current"]][0]
+        other = rpc.call("tabs.new")
+        rpc.call("document.new", width=64, height=40)
+        ids = rpc.call("layers.paste")["ids"]
+        assert ids and rpc.call("document.info")["colorMode"] == "rgb"
+        assert reddish(rpc.call("color.sample", x=4, y=4)["color"]), "red through the profiles"
+        rpc.call("layers.copy")
+        rpc.call("tabs.select", index=here["index"])
+        pasted = rpc.call("layers.paste")["ids"]
+        assert pasted and rpc.call("history.info")["undo"] == "Paste Layers"
+        rpc.call("tabs.close", index=other["index"], discard=True)
+        trimmed = rpc.call("image.trim", basedOn="transparent")
+        assert "trimmed" in trimmed
+        rpc.call("document.close", discard=True)
+    rpc.call("tabs.close", index=tab["index"], discard=True)
+    rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
+
+
 def colour_modes(rpc):
     """Image > Mode > CMYK Color and Lab Color (docs/color-modes.md): the conversion (one undo step), the colour
     channels, a fill in one channel, PSD in the document's own mode, and back; at 8 and 16 bits, in a tab of its own."""
@@ -1803,6 +1880,7 @@ def main():
     colour_mode_painting(rpc)
     colour_mode_adjustments(rpc)
     colour_mode_selection(rpc)
+    colour_mode_transforms(rpc)
 
     # Errors come back as errors, not crashes.
     try:

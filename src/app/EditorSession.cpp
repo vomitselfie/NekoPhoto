@@ -228,7 +228,7 @@ bool EditorSession::insertImage(const AnyImage& image, const QString& name, std:
         at.reset();
     }
     Point center = at ? toPoint(*at) : Point(document_->width / 2.0, document_->height / 2.0);
-    Layer layer(Asset::makeAny(image, name.toStdString()), Point(std::floor(center.x - image.width() / 2.0), std::floor(center.y - image.height() / 2.0)));
+    Layer layer(modeAsset(image, name.toStdString()), Point(std::floor(center.x - image.width() / 2.0), std::floor(center.y - image.height() / 2.0)));
     const Layer* active = activeLayer();
     layer.parentId = active && active->isGroup ? activeLayerId_ : (active ? active->parentId : std::nullopt);
     if (layer.parentId) collapsedGroupIds.erase(*layer.parentId);
@@ -641,6 +641,7 @@ Overrides EditorSession::renderOverrides() const {
             o.transform = shown;
             if (layer->mask) o.maskPlacement = displayedMaskPlacement(*layer);
             if (distortOverrideF(*layer, edit, o)) continue;   // 32 bits (EditorSessionFloat.cpp)
+            if (distortOverrideAny(*layer, edit, o)) continue;   // CMYK (EditorSessionModes.cpp)
             if (edit.corners && layer->asset && layer->asset->image.u16()) {
                 // The same at 16 bits.
                 auto target = distortTarget(*layer, edit);
@@ -697,6 +698,7 @@ Overrides EditorSession::renderOverrides() const {
     if (previewImage_ && previewLayerId_ && document_ && document_->find(*previewLayerId_)) {
         LayerOverride& o = overrides[*previewLayerId_];
         if (previewImage_.f32()) o.imageF = previewImage_.f32();
+        else if (previewImage_.c8()) o.imageC8 = previewImage_.c8();
         else if (previewImage_.u16()) o.image16 = previewImage_.u16();
         else o.image = previewImage_.u8();
         if (previewTransform_) o.transform = *previewTransform_;
@@ -707,6 +709,7 @@ Overrides EditorSession::renderOverrides() const {
             const AnyImage kept = keepColorChannels(layer->asset->image, layer->transform, previewImage_, previewTransform_.value_or(layer->transform), activeColors_);
             if (kept) {
                 if (kept.f32()) o.imageF = kept.f32();
+                else if (kept.c8()) o.imageC8 = kept.c8();
                 else if (kept.u16()) o.image16 = kept.u16();
                 else o.image = kept.u8();
                 o.transform = layer->transform;

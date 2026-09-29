@@ -3,6 +3,7 @@
 #include "compositor/depth.h"
 #include "QtGeometry.h"
 #include "compositor/blend.h"
+#include "compositor/modetransform.h"
 #include <algorithm>
 #include <cstring>
 
@@ -105,7 +106,7 @@ void EditorSession::beginSelectionTransform() {
     beginEdit(QT_TRANSLATE_NOOP("History", "Transform Selection"));
     Layer* src = document_->find(source->id);
     clearSelectedPixelsNow(*src);
-    Layer floating(Asset::makeAny(lifted->image, QCoreApplication::translate("Names", "Floating Selection").toStdString()), toPoint(lifted->origin));
+    Layer floating(modeAsset(lifted->image, QCoreApplication::translate("Names", "Floating Selection").toStdString()), toPoint(lifted->origin));
     floating.name = QCoreApplication::translate("Names", "Floating Selection").toStdString();
     floating.parentId = src->parentId;
     floating.opacity = src->opacity;
@@ -186,11 +187,13 @@ void EditorSession::commitMaskTransform(const TransformEdit& edit) {
 void EditorSession::commitDistort(const TransformEdit& edit) {
     distortCache_.clear();
     distortCacheF_.clear();
+    distortCacheAny_.clear();
     std::vector<Uuid> ids;
     if (edit.group) for (auto& [id, t] : edit.group->originals) ids.push_back(id); else ids.push_back(edit.layerId);
     beginEdit(edit.group ? QT_TRANSLATE_NOOP("History", "Distort Layers") : QT_TRANSLATE_NOOP("History", "Distort"));
     for (auto& id : ids) {
         Layer* layer = document_->find(id);
+        if (layer && layer->asset && isFiveSample(layer->asset->image)) { distortLayerAny(*layer, edit); continue; }   // CMYK
         if (layer && layer->asset && layer->asset->image.f32()) { distortLayerF(*layer, edit); continue; }
         if (layer && layer->asset && layer->asset->image.u16()) { distortLayer16(*layer, edit); continue; }
         if (!layer || !layer->asset || !layer->asset->image.u8()) continue;
@@ -261,6 +264,7 @@ void EditorSession::mergeFloatingTransform(const TransformEdit& edit) {
     Layer* moving = document_->find(edit.layerId);
     Layer* source = document_->find(floating.sourceId);
     if (!moving || !source || !moving->asset || !source->asset || !edit.draft.isValid()) { cancelFloatingTransform(floating); return; }
+    if (isFiveSample(moving->asset->image) && isFiveSample(source->asset->image)) { mergeFloatingTransformAny(edit); return; }   // CMYK
     if (moving->asset->image.f32() && source->asset->image.f32()) { mergeFloatingTransformF(edit); return; }
     if (moving->asset->image.u16() && source->asset->image.u16()) { mergeFloatingTransform16(edit); return; }
     std::shared_ptr<const Image> pixels = moving->asset->image.u8();
@@ -401,6 +405,7 @@ void EditorSession::commitTransform() {
     transformEdit_.reset();
     distortCache_.clear();
     distortCacheF_.clear();
+    distortCacheAny_.clear();
     auto finishDuplicate = [&] { if (transformDuplicate_) { transformDuplicate_.reset(); endEdit(); } };
     if (edit.floating) {
         if (edit.draft == edit.floating->original && !edit.corners) cancelFloatingTransform(*edit.floating);
@@ -448,6 +453,7 @@ void EditorSession::cancelTransform() {
     transformEdit_.reset();
     distortCache_.clear();
     distortCacheF_.clear();
+    distortCacheAny_.clear();
     if (transformDuplicate_) {
         auto [copy, source] = *transformDuplicate_;
         document_->layers.erase(std::remove_if(document_->layers.begin(), document_->layers.end(), [&](const Layer& l) { return l.id == copy; }), document_->layers.end());

@@ -244,6 +244,23 @@ constexpr FeatureModes modeTable[] = {
     {"filter.Motion Blur", allModes},
     {"filter.Add Noise", allModes},
     {"filter.Lens Correction", allModes},
+    // Step E, transforms and moving pixels between documents (P7): Image Size, Crop, Trim and the Crop tool, Distort,
+    // Warp and the warp cage, Free Transform of selected pixels, on every sample (CMYK through two 4-sample passes,
+    // modetransform.h); Cut, Copy and Paste native within a mode and through the profiles between modes, Import through
+    // the profiles; the flat exports drawn through the document's profile to sRGB, as Photoshop's Export As.
+    {"edit.imageSize", allModes},
+    {"edit.crop", allModes},
+    {"tool.crop", allModes},
+    {"edit.distort", allModes},
+    {"edit.clipboard", allModes},
+    {"document.import", allModes},
+    {"export.png", allModes},
+    {"export.jpeg", allModes},
+    {"export.webp", allModes},
+    {"export.tiff", allModes},
+    {"export.tga", allModes},
+    {"export.ico", allModes},
+    {"export.gif", allModes},
 };
 
 // What stays RGB for good (not waiting for a port): refused in CMYK and Lab with "Not available in CMYK mode", where a
@@ -419,6 +436,8 @@ std::string_view throughRgbNote(std::string_view feature, SampleType type, Color
     // The renderer draws fill layers (solid, gradient, pattern) and vector shapes' paint in sRGB and converts them
     // (render_modes.cpp); merging renders the same way.
     if (feature == "render.document" || feature == "layers.merge") return "fill layers and shape paint are drawn in sRGB, then converted";
+    // The flat formats hold RGB: the composite is drawn through the document's profile to sRGB (Photoshop's Export As).
+    if (feature.substr(0, 7) == "export." && feature != "export.psd") return "written as sRGB, converted through the document's profile";
     return {};
 }
 

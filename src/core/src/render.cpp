@@ -1,4 +1,5 @@
 #include "compositor/render.h"
+#include "compositor/modetransform.h"
 #include "render_plan.h"
 #include "compositor/blend.h"
 #include "compositor/colormgmt.h"
@@ -372,6 +373,20 @@ bool resizeDocument(Document& document, int width, int height, double resolution
             auto warped = warpImage(layer.asset->image.u8(), sampled, corners, 0);
             if (!warped) return false;
             layer.asset = Asset::make(warped->image, layer.name);
+            layer.shapeImage.reset();
+            box = warped->transform;
+            box.sampling = sampling;
+        } else if (layer.asset && layer.asset->image.c8()) {
+            // 8-bit CMYK: the same warp over all five samples (modetransform.h), and CMYK's byte budget.
+            if (!Document::canCreate(w, h, document.sampleType, document.colorMode) || (long long)w * h > Document::projectPixelBudgetAt(document.sampleType, document.colorMode) - used) return false;
+            used += (long long)w * h;
+            Corners corners;
+            for (size_t i = 0; i < 4; i++) corners[i] = {c[i].x * sx, c[i].y * sy};
+            LayerTransform sampled = layer.transform;
+            sampled.sampling = sampling;
+            auto warped = warpImageAny(layer.asset->image, sampled, corners, 0);
+            if (!warped) return false;
+            layer.asset = Asset::makeAny(warped->image, layer.name);
             layer.shapeImage.reset();
             box = warped->transform;
             box.sampling = sampling;

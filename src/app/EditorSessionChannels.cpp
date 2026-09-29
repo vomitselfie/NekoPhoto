@@ -560,18 +560,34 @@ bool EditorSession::pasteIntoChannels(const AnyImage& image, QPointF origin) {
         }
         result = ImageFPtr(out);
     } else if (const Image16Ptr& src = layer->asset->image.u16()) {
+        // RGB and Lab hold alpha fourth, CMYK fifth: the gray goes into every colour sample as stored (a CMYK plate is
+        // light where there is no ink, as the Channels panel shows it).
         auto out = std::make_shared<Image16>(*src);
+        const int n = out->channels(), alpha = n - 1;
         for (int y = 0; y < out->height(); y++) for (int x = 0; x < out->width(); x++) {
             double v = 0, a = 0;
             grayAt(x + lx, y + ly, v, a);
             uint16_t* p = out->pixel(x, y);
-            if (a <= 0 || !p[3]) continue;
-            for (int c = 0; c < 3; c++) {
-                const double straight = double(p[c]) / p[3];
-                p[c] = uint16_t(std::lround((straight * (1 - a) + v * a) * p[3]));
+            if (a <= 0 || !p[alpha]) continue;
+            for (int c = 0; c < alpha; c++) {
+                const double straight = double(p[c]) / p[alpha];
+                p[c] = uint16_t(std::lround((straight * (1 - a) + v * a) * p[alpha]));
             }
         }
         result = Image16Ptr(out);
+    } else if (const ImageC8Ptr& src = layer->asset->image.c8()) {
+        auto out = std::make_shared<ImageC8>(*src);
+        for (int y = 0; y < out->height(); y++) for (int x = 0; x < out->width(); x++) {
+            double v = 0, a = 0;
+            grayAt(x + lx, y + ly, v, a);
+            uint8_t* p = out->pixel(x, y);
+            if (a <= 0 || !p[4]) continue;
+            for (int c = 0; c < 4; c++) {
+                const double straight = double(p[c]) / p[4];
+                p[c] = uint8_t(std::lround((straight * (1 - a) + v * a) * p[4]));
+            }
+        }
+        result = ImageC8Ptr(out);
     } else if (const ImagePtr& src = layer->asset->image.u8()) {
         auto out = std::make_shared<Image>(*src);
         for (int y = 0; y < out->height(); y++) for (int x = 0; x < out->width(); x++) {

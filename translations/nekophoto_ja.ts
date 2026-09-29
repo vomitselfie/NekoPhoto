@@ -4722,6 +4722,10 @@ File &gt; New creates a blank canvas.</source>
         <translation>ドキュメントのレイヤーが多すぎます。</translation>
     </message>
     <message>
+        <source>The pixels could not be converted to this document&apos;s colour mode.</source>
+        <translation>ピクセルをこのドキュメントのカラーモードに変換できませんでした。</translation>
+    </message>
+    <message>
         <source>Select an area on a visible image layer, then drag it where it should go.</source>
         <translation>表示されている画像レイヤー上で範囲を選択し、移動先へドラッグしてください。</translation>
     </message>
@@ -6332,6 +6336,10 @@ File &gt; New creates a blank canvas.</source>
         <translation>
             <numerusform>%n 個のレイヤー</numerusform>
         </translation>
+    </message>
+    <message>
+        <source>The image could not be converted to the document&apos;s colour mode.</source>
+        <translation>画像をドキュメントのカラーモードに変換できませんでした。</translation>
     </message>
     <message numerus="yes">
         <source>, %n folder(s)</source>
