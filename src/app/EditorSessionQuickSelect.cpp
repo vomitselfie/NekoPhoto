@@ -4,6 +4,9 @@
 #include "compositor/scribble.h"
 #include "compositor/matte.h"
 #include "compositor/subject.h"
+#include "compositor/colormgmt.h"
+#include "compositor/depth.h"
+#include "compositor/render.h"
 #include <algorithm>
 #include <thread>
 
@@ -57,6 +60,14 @@ std::shared_ptr<const Image> EditorSession::flattenedForSampling() {
         wandSampleAll_ = true; wandSampleLayer_ = Uuid{}; wandSampleRevision_ = documentRevision_;
     }
     return wandSample_;
+}
+
+std::shared_ptr<const Image> EditorSession::flattenedForModel() {
+    if (!document_ || document_->colorMode == ColorMode::RGB) return flattenedForSampling();
+    const AnyImage rgb = convertImage(renderNative(*document_), document_->colorMode, document_->profile, ColorMode::RGB, ColorProfile());
+    if (rgb.u16()) return narrowImage(*rgb.u16());
+    if (rgb.u8()) return rgb.u8();
+    return flattenedForSampling();
 }
 
 void EditorSession::addScribble(const std::vector<QPointF>& points, bool background, bool run) {
@@ -127,7 +138,7 @@ bool EditorSession::runClickSelection(SelectionMode mode, QString* error) {
     if (refusedAtDepth("tool.quickSelect", tr("Selections"), error)) return false;
     if (!document_) return false;
     if (!ModelStore::promptReady()) { if (error) *error = tr("The click-to-select model is not downloaded: choose the Click engine in the Quick Select options and download it, or scribble instead."); return false; }
-    std::shared_ptr<const Image> composite = flattenedForSampling();
+    std::shared_ptr<const Image> composite = flattenedForModel();
     std::string why;
     auto coverage = subjectFromPrompts(*composite, ModelStore::pathFor(ModelStore::promptModel()).toStdString(), promptsOf(clickPrompts_), &why);
     if (!coverage) { if (error) *error = QString::fromStdString(why); return false; }
@@ -162,7 +173,7 @@ void EditorSession::startQuickSelectJob() {
         in->labels = GrayImage(document_->width, document_->height, 0);
         for (const Scribble& stroke : scribbles_) stampScribble(in->labels, stroke, stroke.background ? 2 : 1);
     }
-    in->composite = flattenedForSampling();
+    in->composite = quickSelectClicks ? flattenedForModel() : flattenedForSampling();
     in->revision = documentRevision_;
     in->width = document_->width;
     in->height = document_->height;

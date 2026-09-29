@@ -36,5 +36,8 @@ std::shared_ptr<GrayImage> coverageFromLayer(const Document& document, const Lay
 std::shared_ptr<Gray16> coverageFromLayer16(const Document& document, const Layer& layer);
 /// And for a 32-bit layer, as float coverage.
 std::shared_ptr<GrayF> coverageFromLayerF(const Document& document, const Layer& layer);
+/// The alpha of a CMYK layer (5 samples a pixel, 8 or 16 bits: the last sample is alpha) as document-sized coverage at
+/// its depth: the alpha plane placed through the layer's transform as a mask is. Null for another layout.
+AnyGray coverageFromLayerAlpha(const Document& document, const Layer& layer);
 
 } // namespace compositor

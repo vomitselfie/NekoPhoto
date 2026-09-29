@@ -137,8 +137,14 @@ paints L, a and b. Nothing is painted in RGB and converted back.
   and b as the RGB tools do on red, green and blue. In CMYK they are greyed ("Not available in CMYK mode yet").
 - **The Eyedropper** reads the composite's inks or L, a, b (`color.sample` answers them as percentages or values) and
   sets the foreground colour to that colour converted through the document's profile to sRGB.
-- **Selections**: the Select menu, Quick Mask, loading a mask or channel and transforming the outline now work in CMYK
-  and Lab (the selection is coverage, not colour); the Magic Wand and Quick Select, which read colour, wait.
+- **Selections**: the Select menu, Quick Mask, loading a mask or channel and transforming the outline work in CMYK
+  and Lab (the selection is coverage, not colour), and so does loading a layer's pixels as a selection (Ctrl-click the
+  thumbnail; a CMYK layer's alpha is its fifth sample).
+- **The Magic Wand and Quick Select** decide in L\*a\*b\*: a Lab document's own L, a and b, a CMYK document's composite
+  (or the active layer) converted through its profile to Lab for deciding only; the pixels are never converted.
+  Tolerance counts 8-bit levels of L, a and b, each compared on its own as Photoshop's wand compares each channel (L
+  runs 0 to 255 over 0 to 100, a and b a level per unit). Quick Select's scribbles work on the same L, a and b; its
+  click-to-select model, trained on sRGB, sees the composite converted to sRGB.
 - Greyed for good: the **MyPaint** presets ("Not available in CMYK mode"): libmypaint mixes RGB and has no inks or Lab,
   so its strokes could only be painted in RGB and converted, which NekoPhoto does not do. Not yet ("... mode yet"):
   Dodge, Burn and Sponge, the Paint Bucket, Patch, and CMYK's healing and Blur/Smudge tools.
@@ -163,7 +169,7 @@ samples. `rpc_smoke.py` paints, erases, clones, heals (Lab), blurs (Lab), merges
 
 ## Not yet
 
-Dodge, Burn and Sponge, the Paint Bucket, Patch, the Magic Wand and Quick Select, CMYK's healing and Blur/Smudge tools,
+Dodge, Burn and Sponge, the Paint Bucket, Patch, CMYK's healing and Blur/Smudge tools,
 Color Lookup, Mosh, transforms of pixels, text and shapes as editable objects, and layer styles in CMYK and
 Lab (greyed out with "Not available in CMYK mode yet"); exporting CMYK or Lab to PNG, JPEG, TIFF and the other formats
 (projects and PSD save them); CMYK JPEG and TIFF. Camera Raw, G'MIC and the MyPaint brushes stay RGB only ("Not
@@ -193,7 +199,7 @@ colour channels `cyan` ... `black` and `lightness`, `a`, `b`, and the composite 
   depth; `BrushStroke(layer, mask, settings, document, options)` converts the colour through the profile
   (`RGBFloat` to `CMYKFloat` / `LabFloat`); `tiledProcessedNative` renders a layer at its layout for Blur and Sharpen;
   `trimToPixelsAny` and `applyMaskAny` (`pixels_any.cpp`) merge and apply masks at any layout.
-- Tests: `colormodes_render_tests`, `psd_modes_tests`, `paint_modes_tests`, CMYK and Lab scenes in `render_hash_tests`, and
+- Tests: `colormodes_render_tests`, `psd_modes_tests`, `paint_modes_tests`, `select_modes_tests` (the wand, Quick Select and loading a CMYK layer as a selection), CMYK and Lab scenes in `render_hash_tests`, and
   `psd_roundtrip` (CMYK and Lab files must reopen in their mode with every layer channel byte for byte).
 
 ## 日本語
@@ -285,8 +291,13 @@ RGB で塗ってから変換することはありません。
   L・a・b に適用)。CMYK では「CMYK モードではまだ使用できません」とグレー表示になります。
 - **スポイトツール**は合成画像のインキまたは L・a・b を読み(`color.sample` が返します)、描画色にはそれをプロファイルで
   sRGB に変換した色を設定します。
-- **選択範囲**:選択範囲メニュー、クイックマスク、マスクやチャンネルの読み込み、境界線の変形が CMYK と Lab でも使えます
-  (選択範囲は色ではなく範囲です)。色を読む自動選択ツールとクイック選択ツールはまだです。
+- **選択範囲**:選択範囲メニュー、クイックマスク、マスクやチャンネルの読み込み、境界線の変形、レイヤーのピクセルからの
+  選択範囲の読み込み(サムネールを Ctrl+クリック。CMYK レイヤーのアルファは 5 番目の値)が CMYK と Lab でも使えます
+  (選択範囲は色ではなく範囲です)。
+- **自動選択ツールとクイック選択ツール**は L\*a\*b\* で判定します。Lab ドキュメントはその L・a・b を、CMYK ドキュメントは
+  合成画像(または作業中のレイヤー)をプロファイルで Lab に変換したものを判定にだけ使い、ピクセルは変換しません。
+  許容値は L・a・b それぞれの 8 bit の階調で数え、Photoshop の自動選択と同じくチャンネルごとに比べます。クイック選択の
+  ストロークも同じ L・a・b を使い、クリックで選択するモデル(sRGB で学習)には合成画像を sRGB に変換して渡します。
 - **MyPaint** のプリセットは今後も使えません(「CMYK モードでは使用できません」)。libmypaint は RGB で混色し、インキや
   Lab を持たないため、RGB で塗って変換するしかなく、NekoPhoto はそうしないからです。覆い焼き・焼き込み・スポンジ、
   塗りつぶしツール、パッチ、CMYK の修復とぼかし・指先はまだです(「… モードではまだ使用できません」)。
@@ -300,7 +311,7 @@ RGB に変換します。
 
 ### 未対応
 
-覆い焼き・焼き込み・スポンジ、塗りつぶしツール、パッチ、自動選択ツールとクイック選択ツール、CMYK の修復とぼかし・指先、
+覆い焼き・焼き込み・スポンジ、塗りつぶしツール、パッチ、CMYK の修復とぼかし・指先、
 カラールックアップ、Mosh、変形、編集可能なテキストとシェイプ、レイヤースタイルの描画(「CMYK モードではまだ使用
 できません」と表示)、PNG・JPEG・TIFF などへの書き出し、CMYK の JPEG と TIFF、CMYK の
 分離不可能な描画モード。

@@ -191,8 +191,12 @@ constexpr FeatureModes modeTable[] = {
     {"tool.marquee", allModes},
     {"tool.lasso", allModes},
     // Selections are coverage, not colour: the Select menu, Quick Mask, loading a mask or channel, transforming the
-    // outline (step E, for moving selected pixels). The Magic Wand and Quick Select read colour and wait.
+    // outline (step E, for moving selected pixels).
     {"edit.selection", allModes},
+    // The Magic Wand and Quick Select decide in L*a*b* (decisionImage): a Lab document's own values, a CMYK one's
+    // composite through its profile for deciding only; the click-to-select model sees the composite in sRGB.
+    {"tool.wand", allModes},
+    {"tool.quickSelect", allModes},
     {"edit.timeline", allModes},
     {"view", allModes},
     // Steps C and D (P7): the renderer, Image > Mode, the Channels panel with single-channel fill, PSD (modes 4 and 9).

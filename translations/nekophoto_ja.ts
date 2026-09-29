@@ -4762,10 +4762,6 @@ File &gt; New creates a blank canvas.</source>
         <translation>パッチツールはマスクではなく、レイヤーのピクセルに対して機能します。</translation>
     </message>
     <message>
-        <source>Loading a layer&apos;s pixels as a selection is not available in CMYK mode yet.</source>
-        <translation>CMYK モードでは、レイヤーのピクセルを選択範囲として読み込むことはまだできません。</translation>
-    </message>
-    <message>
         <source>The filled layer would exceed the size limits.</source>
         <translation>塗りつぶしたレイヤーがサイズの上限を超えます。</translation>
     </message>
