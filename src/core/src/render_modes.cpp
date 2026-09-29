@@ -255,6 +255,8 @@ void ModeOps<S, M>::solid(const Document& document, const uint8_t rgba[4], Sampl
 
 template <SampleType S, ColorMode M>
 typename ModeOps<S, M>::ImagePtr ModeOps<S, M>::vectorPaint(const VectorPaint& paint, const Document& document, const Rect& bounds, const Rect& area, double scale, int w, int h) {
+    if constexpr (M == ColorMode::CMYK)
+        if (AnyImage inks = renderVectorPaintInks(paint, document, bounds, area, scale, w, h, deep)) return typed<S, M>(inks);
     AnyImage rgb;
     if constexpr (deep) rgb = renderVectorPaint16(paint, document, bounds, area, scale, w, h);
     else rgb = renderVectorPaint(paint, document, bounds, area, scale, w, h);
@@ -263,6 +265,8 @@ typename ModeOps<S, M>::ImagePtr ModeOps<S, M>::vectorPaint(const VectorPaint& p
 
 template <SampleType S, ColorMode M>
 typename ModeOps<S, M>::ImagePtr ModeOps<S, M>::fillLayer(const Layer& layer, const Document& document) {
+    if constexpr (M == ColorMode::CMYK)
+        if (AnyImage inks = renderFillLayerInks(layer, document, deep)) return typed<S, M>(inks);
     AnyImage rgb;
     if constexpr (deep) rgb = renderFillLayer16(layer, document);
     else rgb = renderFillLayer(layer, document);

@@ -15,6 +15,9 @@
 #include <QKeyEvent>
 #include <QPainter>
 #include <QTextBoundaryFinder>
+#include <QTextCharFormat>
+#include <QTextFormat>
+#include <tuple>
 #include <algorithm>
 #include <cmath>
 
@@ -143,6 +146,12 @@ bool CanvasWidget::startNewType(QPointF doc, std::optional<QRectF> box) {
 
 void CanvasWidget::finishTypeSession(bool keep) {
     if (!typeEdit_) return;
+    // A composition in progress: the input method commits it (as Photoshop keeps it), and what it leaves goes.
+    if (typeEdit_->composition) {
+        if (auto* im = QGuiApplication::inputMethod(); im && keep) im->commit();
+        if (!typeEdit_) return;
+        dropComposition();
+    }
     typeEdit_.reset();
     caretBlink_.stop();
     setAttribute(Qt::WA_InputMethodEnabled, false);
@@ -176,7 +185,7 @@ void CanvasWidget::setTypeText(LayerText text, int caret, int anchor, QPointF ra
     emit typeEditChanged();
 }
 
-void CanvasWidget::typeReplace(int from, int to, const QString& insert) {
+void CanvasWidget::typeReplace(int from, int to, const QString& insert, bool record) {
     const Layer* layer = typeLayer();
     if (!layer) return;
     if (from > to) std::swap(from, to);
@@ -192,7 +201,14 @@ void CanvasWidget::typeReplace(int from, int to, const QString& insert) {
     if (!insert.isEmpty() && typeEdit_->pending && !patchEmpty(*typeEdit_->pending)) styleTextRange(text, from, int(insert.size()), *typeEdit_->pending);
     else if (!text.runs.empty()) settleTextRuns(text);
     const int caret = from + int(insert.size());
-    setTypeText(text, caret, caret);
+    setTypeText(text, caret, caret, {}, record);
+}
+
+void CanvasWidget::dropComposition() {
+    if (!typeEdit_ || !typeEdit_->composition) return;
+    const TypeState::Composition c = std::move(*typeEdit_->composition);
+    typeEdit_->composition.reset();
+    setTypeText(c.base, c.start, c.start, {}, false);
 }
 
 void CanvasWidget::applyTypeStyle(const TextRunPatch& patch, std::optional<int> alignment) {
@@ -359,13 +375,37 @@ bool CanvasWidget::typeKey(QKeyEvent* e) {
 
 void CanvasWidget::inputMethodEvent(QInputMethodEvent* e) {
     if (!typeEdit_ || !typeLayer()) { QWidget::inputMethodEvent(e); return; }
-    // An input method's committed text (Japanese and the like) goes in as typed; the preedit shows under the
-    // caret until it is committed.
-    typeEdit_->preedit = e->preeditString();
-    if (!e->commitString().isEmpty()) {
-        const int from = std::min(typeEdit_->caret, typeEdit_->anchor), to = std::max(typeEdit_->caret, typeEdit_->anchor);
-        typeReplace(from, to, e->commitString());
+    // An input method (Japanese and the like): the composition is set inline in the layer's own style, underlined,
+    // and never recorded; what it commits replaces it (and the selection) as one step, as typing does.
+    const QString preedit = e->preeditString();
+    dropComposition();
+    const bool changes = !e->commitString().isEmpty() || e->replacementLength() > 0;
+    if (changes || !preedit.isEmpty()) {
+        int from = std::min(typeEdit_->caret, typeEdit_->anchor), to = std::max(typeEdit_->caret, typeEdit_->anchor);
+        if (from == to && e->replacementLength() > 0) {
+            from = std::max(0, typeEdit_->caret + e->replacementStart());
+            to = from + e->replacementLength();
+        }
+        if (changes || from != to) typeReplace(from, to, e->commitString());
     }
+    if (!preedit.isEmpty()) {
+        TypeState::Composition c;
+        c.base = *typeLayer()->text;
+        c.start = typeEdit_->caret;
+        c.length = int(preedit.size());
+        int cursor = c.length;
+        for (const QInputMethodEvent::Attribute& a : e->attributes()) {
+            if (a.type == QInputMethodEvent::Cursor) cursor = std::clamp(a.start, 0, c.length);
+            else if (a.type == QInputMethodEvent::TextFormat && a.length > 0) {
+                const QTextCharFormat format = qvariant_cast<QTextFormat>(a.value).toCharFormat();
+                c.clauses.emplace_back(a.start, a.length, format.background().style() != Qt::NoBrush);
+            }
+        }
+        typeReplace(c.start, c.start, preedit, false);
+        typeEdit_->caret = typeEdit_->anchor = c.start + cursor;
+        typeEdit_->composition = std::move(c);
+    }
+    if (auto* im = QGuiApplication::inputMethod()) im->update(Qt::ImCursorRectangle);
     update();
     e->accept();
 }
@@ -378,9 +418,10 @@ QVariant CanvasWidget::inputMethodQuery(Qt::InputMethodQuery query) const {
         const auto [top, bottom] = typeEdit_->geometry.caret(typeEdit_->caret);
         return QRectF(typeView(top), typeView(bottom)).normalized().adjusted(-1, 0, 1, 0);
     }
-    case Qt::ImCursorPosition: return typeEdit_->caret;
-    case Qt::ImAnchorPosition: return typeEdit_->anchor;
-    case Qt::ImSurroundingText: return qText(*typeLayer()->text);
+    // Around the caret the input method sees the committed text, not its own composition.
+    case Qt::ImCursorPosition: return typeEdit_->composition ? typeEdit_->composition->start : typeEdit_->caret;
+    case Qt::ImAnchorPosition: return typeEdit_->composition ? typeEdit_->composition->start : typeEdit_->anchor;
+    case Qt::ImSurroundingText: return qText(typeEdit_->composition ? typeEdit_->composition->base : *typeLayer()->text);
     case Qt::ImCurrentSelection: {
         const int from = std::min(typeEdit_->caret, typeEdit_->anchor), to = std::max(typeEdit_->caret, typeEdit_->anchor);
         return qText(*typeLayer()->text).mid(from, to - from);
@@ -558,19 +599,14 @@ void CanvasWidget::drawTypeOverlay(QPainter& painter) {
     painter.setPen(Qt::NoPen);
     painter.setBrush(QColor(0, 120, 215, 110));
     for (const QRectF& r : typeEdit_->geometry.selection(from, to)) painter.drawPolygon(polygon(r));
-    if (!typeEdit_->preedit.isEmpty()) {
-        // The input method's text not yet committed, underlined at the caret.
-        const auto [top, bottom] = typeEdit_->geometry.caret(typeEdit_->caret);
-        const QPointF a = typeView(bottom);
-        QFont font = this->font();
-        font.setPixelSize(std::max(10, int(QLineF(typeView(top), a).length() * 0.8)));
-        painter.setFont(font);
-        const QRectF bounds = QFontMetricsF(font).boundingRect(typeEdit_->preedit);
-        painter.setBrush(QColor(255, 255, 255, 230));
-        painter.drawRect(QRectF(a.x(), a.y() - bounds.height(), bounds.width() + 4, bounds.height()));
-        painter.setPen(Qt::black);
-        painter.drawText(QPointF(a.x() + 2, a.y() - 3), typeEdit_->preedit);
-        painter.drawLine(QPointF(a.x() + 2, a.y() - 1), QPointF(a.x() + 2 + bounds.width(), a.y() - 1));
+    if (const auto& c = typeEdit_->composition) {
+        // The composition, underlined under its own letters; the clause being converted more heavily.
+        auto underline = [&](int s0, int s1, double width) {
+            painter.setPen(QPen(Qt::black, width));
+            for (const QRectF& r : typeEdit_->geometry.selection(c->start + s0, c->start + s1)) painter.drawLine(typeView(r.bottomLeft()), typeView(r.bottomRight()));
+        };
+        underline(0, c->length, 1);
+        for (auto [s0, n, thick] : c->clauses) if (thick) underline(s0, s0 + n, 2.5);
     }
     if (typeEdit_->caretOn && from == to) {
         const auto [top, bottom] = typeEdit_->geometry.caret(typeEdit_->caret);

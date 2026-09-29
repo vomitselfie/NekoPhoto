@@ -89,6 +89,14 @@ StyleColor colorOf(const psd::DescriptorObject& o, const char* key, StyleColor f
     return {byte(psd::descriptor_number(*c, "Rd  ")), byte(psd::descriptor_number(*c, "Grn ")), byte(psd::descriptor_number(*c, "Bl  "))};
 }
 
+/// A 'CMYC' colour's inks (0..1), none for the other colour classes.
+std::optional<std::array<float, 4>> inkOf(const psd::DescriptorObject& o, const char* key) {
+    auto c = psd::descriptor_object(o, key);
+    if (!c || c->class_id != "CMYC") return std::nullopt;
+    auto ink = [&](const char* k) { return std::clamp(float(psd::descriptor_number(*c, k) / 100.0), 0.0f, 1.0f); };
+    return std::array<float, 4>{ink("Cyn "), ink("Mgnt"), ink("Ylw "), ink("Blck")};
+}
+
 StyleContour contourOf(const psd::DescriptorObject& shape) {
     StyleContour contour;
     auto curve = psd::descriptor_value(shape, "Crv ");
@@ -110,7 +118,7 @@ StyleGradient gradientOf(const psd::DescriptorObject& effect) {
                 const auto& s = *item.object_value;
                 const std::string type = enumOf(s, "Type", "UsrS");
                 const StyleColor fallback = type == "BckC" ? StyleColor{255, 255, 255} : StyleColor{};
-                g.colors.push_back({unit(num(s, "Lctn", 0) / 4096.0f), colorOf(s, "Clr ", fallback), unit(num(s, "Mdpn", 50) / 100.0f)});
+                g.colors.push_back({unit(num(s, "Lctn", 0) / 4096.0f), colorOf(s, "Clr ", fallback), unit(num(s, "Mdpn", 50) / 100.0f), inkOf(s, "Clr ")});
             }
         if (auto trns = psd::descriptor_value(*grad, "Trns"); trns && trns->type == psd::DescriptorValue::Type::List)
             for (auto& item : trns->list_value) {

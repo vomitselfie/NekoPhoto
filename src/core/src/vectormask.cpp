@@ -730,6 +730,45 @@ Image16Ptr renderFillLayer16(const Layer& layer, const Document& document) {
     if (!fill) return nullptr;
     return renderVectorPaint16(fill->first, document, fill->second, Rect(0, 0, document.width, document.height), 1, document.width, document.height);
 }
+AnyImage renderVectorPaintInks(const VectorPaint& paint, const Document& document, const Rect& bounds, const Rect& area, double scale, int w, int h, bool deep) {
+    if (paint.kind != VectorPaint::Kind::Gradient || paint.gradient.colors.empty()) return {};
+    for (auto& stop : paint.gradient.colors) if (!stop.ink) return {};
+    // Interpolation is per channel, so the RGB renderer draws the inks: C, M and Y's complements as red, green and
+    // blue, then K's as grey; the two share the alpha stops.
+    VectorPaint cmy = paint, k = paint;
+    auto level = [](float ink) { return uint8_t(std::lround((1 - ink) * 255)); };
+    for (size_t i = 0; i < paint.gradient.colors.size(); i++) {
+        const auto& ink = *paint.gradient.colors[i].ink;
+        cmy.gradient.colors[i].color = {level(ink[0]), level(ink[1]), level(ink[2])};
+        const uint8_t kl = level(ink[3]);
+        k.gradient.colors[i].color = {kl, kl, kl};
+    }
+    if (deep) {
+        auto out = std::make_shared<Image16>(w, h, 5);
+        auto a = renderVectorPaint16(cmy, document, bounds, area, scale, w, h), b = renderVectorPaint16(k, document, bounds, area, scale, w, h);
+        if (!a || !b) return {};
+        for (int y = 0; y < h; y++) {
+            const auto* pa = a->row(y); const auto* pb = b->row(y); auto* po = out->row(y);
+            for (int x = 0; x < w; x++, pa += 4, pb += 4, po += 5) { po[0] = pa[0]; po[1] = pa[1]; po[2] = pa[2]; po[3] = pb[0]; po[4] = pa[3]; }
+        }
+        return Image16Ptr(out);
+    }
+    auto out = std::make_shared<ImageC8>(w, h, 5);
+    auto a = renderVectorPaint(cmy, document, bounds, area, scale, w, h), b = renderVectorPaint(k, document, bounds, area, scale, w, h);
+    if (!a || !b) return {};
+    for (int y = 0; y < h; y++) {
+        const uint8_t* pa = a->row(y); const uint8_t* pb = b->row(y); uint8_t* po = out->row(y);
+        for (int x = 0; x < w; x++, pa += 4, pb += 4, po += 5) { po[0] = pa[0]; po[1] = pa[1]; po[2] = pa[2]; po[3] = pb[0]; po[4] = pa[3]; }
+    }
+    return ImageC8Ptr(out);
+}
+
+AnyImage renderFillLayerInks(const Layer& layer, const Document& document, bool deep) {
+    auto fill = fillLayerPaint(layer, document);
+    if (!fill) return {};
+    return renderVectorPaintInks(fill->first, document, fill->second, Rect(0, 0, document.width, document.height), 1, document.width, document.height, deep);
+}
+
 Point mapLayerPoint(Point p, const LayerTransform& before, int w0, int h0, const LayerTransform& after, int w1, int h1) {
     // One corner of a degenerate quad: moveQuad already inverts one transform and applies the other.
     const auto q = moveQuad({p.x, p.y, p.x, p.y, p.x, p.y, p.x, p.y}, before, w0, h0, after, w1, h1);

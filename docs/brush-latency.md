@@ -146,4 +146,6 @@ events, then a paragraph box of 30 px text that wraps, and prints how long each 
 screen: the text's layout and raster (the layer is redrawn in full on every keystroke), the canvas render of the
 changed area and the repaint. With `--screenshot out.png` it grabs the window while a selection shows (and
 `out-box.png` for the paragraph box). Offscreen at 1400 × 900 on the desktop, the third paragraph's keystrokes took
-4.6 to 6.6 ms each (median; about a third of it the layer's layout and raster), a wrapping box 6.6 ms.
+4.6 to 6.6 ms each (median; about a third of it the layer's layout and raster), a wrapping box 6.6 ms. It ends by
+sending an input method's events (にほんご composed, converted to 日本語, committed, then です) and checks the
+text shows inline while composing, commits once and undoes by the commit; `out-ime.png` grabs the conversion.

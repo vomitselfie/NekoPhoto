@@ -89,6 +89,11 @@ std::shared_ptr<Gray16> rasterizeVectorStroke16(const VectorPath& path, const Ve
 ImagePtr renderFillLayer(const Layer& layer, const Document& document);
 Image16Ptr renderFillLayer16(const Layer& layer, const Document& document);
 
+/// In a CMYK document: a gradient whose stops are all CMYK, interpolated per ink as Photoshop does (5 samples,
+/// premultiplied, inverted ink; 16 bits when `deep`); none for other paints, which go through RGB.
+AnyImage renderVectorPaintInks(const VectorPaint& paint, const Document& document, const Rect& bounds, const Rect& area, double scale, int w, int h, bool deep);
+AnyImage renderFillLayerInks(const Layer& layer, const Document& document, bool deep);
+
 /// How a point moves when a layer goes from `before` (a `w0` x `h0` raster) to `after` (`w1` x `h1`).
 Point mapLayerPoint(Point p, const LayerTransform& before, int w0, int h0, const LayerTransform& after, int w1, int h1);
 

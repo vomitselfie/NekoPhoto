@@ -4,6 +4,8 @@
 #include "EditorSession.h"
 #include "MainWindow.h"
 #include "compositor/image.h"
+#include <QTextCharFormat>
+#include <QInputMethodEvent>
 #include <QApplication>
 #include <QElapsedTimer>
 #include <QKeyEvent>
@@ -212,7 +214,50 @@ int runTypeBench(MainWindow& window, const QString& screenshot) {
     key(Qt::Key_Escape, {});   // cancelled: the new box goes, leaving nothing in the history
     const auto after = session->undoNames();
     std::printf("paragraph cancelled: undo step \"%s\", %d layers\n", after.empty() ? "" : after.back().c_str(), int(session->document()->layers.size()));
-    return 0;
+    // An input method's composition, as fcitx5 or ibus sends it: kana while typing, a converted clause highlighted,
+    // then the commit. The composition shows inline and is never recorded; the commit is one step inside the edit.
+    session->textStyle.fontSize = 44;
+    session->textStyle.alignment = 0;
+    if (!canvas->startNewType(QPointF(80, 700), std::nullopt)) { std::printf("could not start the composition\n"); return 1; }
+    auto compose = [&](const QString& preedit, const QString& commit, bool converting) {
+        QList<QInputMethodEvent::Attribute> attributes;
+        attributes << QInputMethodEvent::Attribute(QInputMethodEvent::Cursor, int(preedit.size()), 1);
+        QTextCharFormat format;
+        format.setFontUnderline(true);
+        if (converting) format.setBackground(QColor(120, 160, 230));
+        if (!preedit.isEmpty()) attributes << QInputMethodEvent::Attribute(QInputMethodEvent::TextFormat, 0, int(preedit.size()), format);
+        QInputMethodEvent event(preedit, attributes);
+        if (!commit.isEmpty()) event.setCommitString(commit);
+        QApplication::sendEvent(canvas, &event);
+        canvas->repaint();
+        pump();
+    };
+    auto layerText = [&] {
+        const auto id = session->activeLayerId();
+        const compositor::Layer* l = id ? session->document()->find(*id) : nullptr;
+        return l && l->text ? QString::fromStdString(l->text->text) : QString();
+    };
+    compose(QStringLiteral("に"), {}, false);
+    compose(QStringLiteral("にほ"), {}, false);
+    compose(QStringLiteral("にほんご"), {}, false);
+    const QString composing = layerText();
+    compose(QStringLiteral("日本語"), {}, true);
+    if (!screenshot.isEmpty()) {
+        QString imeShot = screenshot;
+        imeShot.insert(imeShot.lastIndexOf('.'), QStringLiteral("-ime"));
+        window.grab().save(imeShot);
+    }
+    compose({}, QStringLiteral("日本語"), false);
+    compose(QStringLiteral("で"), {}, false);
+    compose({}, QStringLiteral("です"), false);
+    const QString committed = layerText();
+    key(Qt::Key_Z, {}, Qt::ControlModifier);   // undo inside the edit: the last commit, not a letter of its kana
+    const QString undone = layerText();
+    key(Qt::Key_Return, {}, Qt::ControlModifier);
+    const bool ok = composing == QStringLiteral("にほんご") && committed == QStringLiteral("日本語です") && undone == QStringLiteral("日本語");
+    std::printf("input method: composing \"%s\", committed \"%s\", after one undo \"%s\": %s\n", qPrintable(composing), qPrintable(committed),
+                qPrintable(undone), ok ? "ok" : "WRONG");
+    return ok ? 0 : 1;
 }
 
 int runViewBench(MainWindow& window, const ViewBenchOptions& o) {

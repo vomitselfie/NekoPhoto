@@ -1077,7 +1077,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                         image = std::make_shared<Image>(int(width), int(height));
                         image->fill(uint8_t(std::lround(colour->red * 255)), uint8_t(std::lround(colour->green * 255)), uint8_t(std::lround(colour->blue * 255)), 255);
                     }
-                } else if (block("GdFl") || block("PtFl")) { notes.push_back("Layer \"" + rec.name + "\": a gradient or pattern fill; it shows as an empty layer here and is written back to PSD as it was."); }
+                }
             }
             std::optional<PsdTypeLayer> type;
             if (block("TySh")) {
