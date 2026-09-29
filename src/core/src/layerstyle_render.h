@@ -1,5 +1,6 @@
 // The renderer's entry into layer styles (layerstyle_render.cpp).
 #pragma once
+#include "compositor/colormgmt.h"
 #include "compositor/document.h"
 #include "compositor/imaget.h"
 #include "compositor/layerstyle.h"
@@ -17,11 +18,17 @@ struct StyledDraw {
     std::function<void(Image& into, const Rect& region)> drawSource;
     /// The same at 16 bits, for a 16-bit target.
     std::function<void(Image16& into, const Rect& region)> drawSource16;
+    /// And in float, for a 32-bit target.
+    std::function<void(ImageF& into, const Rect& region)> drawSourceF;
+    /// A 32-bit target's curve: the effects' colours (8-bit values in the document's encoding) are linearised with it
+    /// as they are drawn. Null: sRGB's.
+    const TransferCurve* linear = nullptr;
     BlendMode mode = BlendMode::Normal;
     float master = 1, fill = 1;
     /// Per output pixel, what folder masks and clipping allow; null for all.
     const GrayImage* coverage = nullptr;
     const Gray16* coverage16 = nullptr;   // the same for a 16-bit target
+    const GrayF* coverageF = nullptr;     // and a 32-bit one
     std::shared_ptr<const std::map<std::string, PatternTile>> patterns;
     int documentWidth = 0, documentHeight = 0;
     /// Where the layer's pixels can be (document pixels); the effects are worked out only around it. None: anywhere.
@@ -35,5 +42,6 @@ struct StyledDraw {
 /// `drawSource16` and `coverage16` for 16).
 void drawStyledLayer(const StyledDraw& draw, Image& target);
 void drawStyledLayer(const StyledDraw& draw, Image16& target);
+void drawStyledLayer(const StyledDraw& draw, ImageF& target);
 
 } // namespace compositor

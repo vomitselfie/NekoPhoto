@@ -234,6 +234,8 @@ uint64_t contentHash(const Gray16* image) { return hashSamples(image, 1); }
 
 AnyImage imageAtDepth(const AnyImage& image, SampleType type) {
     if (!image || image.sampleType() == type) return image;
+    // 32 bits: through sRGB's curve (the callers that know the document's pass it, depth_f32.cpp).
+    if (type == SampleType::F32 || image.sampleType() == SampleType::F32) return imageAtDepth(image, type, nullptr);
     if (type == SampleType::U16 && image.u8()) return Image16Ptr(widenImage(*image.u8()));
     if (type == SampleType::U8 && image.u16()) return ImagePtr(narrowImage(*image.u16()));
     return nullptr;
@@ -241,6 +243,9 @@ AnyImage imageAtDepth(const AnyImage& image, SampleType type) {
 
 AnyGray grayAtDepth(const AnyGray& image, SampleType type) {
     if (!image || image.sampleType() == type) return image;
+    // Coverage in float and back: a change of scale.
+    if (type == SampleType::F32) return image.u8() ? AnyGray(GrayFPtr(widenGrayF(*image.u8()))) : image.u16() ? AnyGray(GrayFPtr(widenGrayF(*image.u16()))) : nullptr;
+    if (image.f32()) return type == SampleType::U8 ? AnyGray(GrayPtr(narrowGrayF(*image.f32()))) : AnyGray(Gray16Ptr(narrowGrayF16(*image.f32())));
     if (type == SampleType::U16 && image.u8()) return Gray16Ptr(widenGray(*image.u8()));
     if (type == SampleType::U8 && image.u16()) return GrayPtr(narrowGray(*image.u16()));
     return nullptr;

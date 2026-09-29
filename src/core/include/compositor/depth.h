@@ -81,4 +81,76 @@ AnyImage imageAtFormat(const AnyImage& image, SampleType type, ColorMode mode);
 std::shared_ptr<Image16> widenImageC8(const ImageC8& image);
 std::shared_ptr<ImageC8> narrowImageC8(const Image16& image);
 
+// ---- 32 bits (depth_f32.cpp) ---------------------------------------------------------------------------------------
+//
+// A 32-bit document holds premultiplied linear light as float (docs/bit-depth.md, "32 bits"): colour may exceed 1,
+// alpha is 0..1. Colour is linearised through the document's transfer curve on the way in and encoded through it on
+// the way out; alpha, masks, selections and channels are coverage and only change scale (v / 255, v / 32768).
+//
+// Widening then narrowing at the same depth gives back every sample exactly: an 8- or 16-bit document converted to
+// 32 bits and back is the document it was. The curve's inverse is exact (TransferCurve::fromLinearExact).
+
+class TransferCurve;
+struct ToneMap;
+
+/// Premultiplied 8- or 16-bit colour to premultiplied linear float, through `curve` (the straight colour linearised,
+/// then multiplied by alpha).
+std::shared_ptr<ImageF> lineariseImage(const Image& image, const TransferCurve& curve);
+std::shared_ptr<ImageF> lineariseImage(const Image16& image, const TransferCurve& curve);
+/// Coverage to float: v / 255, v / 32768.
+std::shared_ptr<GrayF> widenGrayF(const GrayImage& image);
+std::shared_ptr<GrayF> widenGrayF(const Gray16& image);
+/// Float back to 8 or 16 bits: the straight colour tone-mapped (`tone`, none for the values as they are), clipped to
+/// 0..1 and encoded through `curve`, then premultiplied by the alpha at the target depth.
+std::shared_ptr<Image> encodeImage8(const ImageF& image, const TransferCurve& curve, const ToneMap* tone = nullptr);
+std::shared_ptr<Image16> encodeImage16(const ImageF& image, const TransferCurve& curve, const ToneMap* tone = nullptr);
+/// Coverage back, rounded and clamped.
+std::shared_ptr<GrayImage> narrowGrayF(const GrayF& image);
+std::shared_ptr<Gray16> narrowGrayF16(const GrayF& image);
+
+/// NaN and infinities out of a float buffer, at every entry point (files, conversions, automation): NaN becomes 0, an
+/// infinity or a colour beyond 65504 (half float's largest) is held there, negative colour is 0, alpha and coverage are
+/// clamped to 0..1. Returns how many samples were changed.
+size_t cleanFloat(ImageF& image);
+size_t cleanFloat(GrayF& image);
+/// One sample as cleanFloat treats colour, and coverage.
+inline float cleanColour(float v) { return v > 0 ? (v < 65504.0f ? v : 65504.0f) : 0.0f; }
+inline float cleanCoverage(float v) { return v > 0 ? (v < 1.0f ? v : 1.0f) : 0.0f; }
+
+/// Straight <-> premultiplied in float (no clamping of colour).
+void premultiply(ImageF& image);
+void unpremultiply(ImageF& image);
+
+/// Box-filtered halvings (means, no rounding), as MipCache keeps them.
+std::shared_ptr<ImageF> halveImage(const ImageF& image);
+std::shared_ptr<GrayF> halveGray(const GrayF& image);
+std::shared_ptr<ImageF> reduceImage(const ImageF& image, int level);
+std::shared_ptr<GrayF> reduceGray(const GrayF& image, int level);
+
+/// Point samplers in float: bilinear and Catmull-Rom with the 8-bit samplers' tap positions (resample.h), exact
+/// weights. Bicubic overshoot is clamped at zero and alpha at one.
+void sampleBilinear(const ImageF& image, double x, double y, float out[4]);
+void sampleBicubic(const ImageF& image, double x, double y, float out[4]);
+float sampleGrayBilinear(const GrayF& image, double x, double y);
+
+std::shared_ptr<ImageF> cropImage(const ImageF& image, int x, int y, int width, int height);
+std::shared_ptr<GrayF> cropGray(const GrayF& image, int x, int y, int width, int height);
+PixelBounds nonzeroBounds(const GrayF& image);
+PixelBounds alphaBounds(const ImageF& image);
+uint64_t contentHash(const ImageF* image);
+uint64_t contentHash(const GrayF* image);
+
+/// An 8-bit thumbnail of float pixels: reduced, then encoded at exposure 0 with sRGB's curve (the panels are not
+/// colour-managed, as at 16 bits).
+std::shared_ptr<Image> makeThumbnail(const ImageF& image, int maxSide = 96);
+std::shared_ptr<GrayImage> makeGrayThumbnail(const GrayF& image, int maxSide = 96);
+
+/// imageAtDepth with the curve a 32-bit document's colour is linearised and encoded through (sRGB's when null).
+AnyImage imageAtDepth(const AnyImage& image, SampleType type, const TransferCurve* curve);
+/// Byte-planar delta rows, PSD's predictor for 32-bit channels: each row's floats as four planes of bytes (most
+/// significant first, big-endian), each byte then the difference from the one before it in the row. In place of
+/// `width` floats; `row` holds width * 4 bytes.
+void predictFloatRow(const float* samples, int width, uint8_t* row);
+void unpredictFloatRow(uint8_t* row, int width, float* samples);
+
 } // namespace compositor

@@ -3,6 +3,7 @@
 #include "compositor/depth.h"
 #include "compositor/document.h"
 #include "compositor/parallel.h"
+#include "compositor/view32.h"
 #include "lcms2.h"
 #include <algorithm>
 #include <array>
@@ -37,7 +38,7 @@ cmsHPROFILE openProfile(cmsContext context, const ColorProfile& profile) {
 /// pixel layout. RGBA to RGBA keeps Little CMS's alpha-carrying layouts, as before CMYK and Lab existed.
 bool stagedLayouts(PixelFormat input, PixelFormat output) {
     if (isColorFormat(input) || isColorFormat(output)) return false;
-    auto rgba = [](PixelFormat f) { return f == PixelFormat::RGBA8 || f == PixelFormat::RGBA16; };
+    auto rgba = [](PixelFormat f) { return f == PixelFormat::RGBA8 || f == PixelFormat::RGBA16 || f == PixelFormat::RGBAFloat; };
     return !(rgba(input) && rgba(output));
 }
 
@@ -51,6 +52,7 @@ cmsUInt32Number lcmsFormat(PixelFormat f, bool staged = false) {
     case PixelFormat::RGBA8: return staged ? TYPE_RGB_8 : TYPE_RGBA_8;
     case PixelFormat::RGBA16: return staged ? TYPE_RGB_FLT : TYPE_RGBA_FLT;   // through the float pipeline: exact for 15-bit levels
     case PixelFormat::RGBFloat: return TYPE_RGB_FLT;
+    case PixelFormat::RGBAFloat: return TYPE_RGBA_FLT;   // made straight a chunk at a time (apply)
     case PixelFormat::CMYKA8: return TYPE_CMYK_8_REV;
     case PixelFormat::CMYKA16: case PixelFormat::CMYKFloat: return TYPE_CMYK_FLT;
     case PixelFormat::LabA8: return TYPE_Lab_8;
@@ -196,6 +198,7 @@ void ColorTransform::apply(const void* in, void* out, size_t count) const {
         const size_t n = std::min(chunk, count - done);
         const uint8_t* src8 = input_ == PixelFormat::RGBA8 ? static_cast<const uint8_t*>(in) + done * 4 : nullptr;
         const uint16_t* src16 = input_ == PixelFormat::RGBA16 ? static_cast<const uint16_t*>(in) + done * 4 : nullptr;
+        const float* srcF = input_ == PixelFormat::RGBAFloat ? static_cast<const float*>(in) + done * 4 : nullptr;
         uint8_t* dst8 = output_ == PixelFormat::RGBA8 ? static_cast<uint8_t*>(out) + done * 4 : nullptr;
         uint16_t* dst16 = output_ == PixelFormat::RGBA16 ? static_cast<uint16_t*>(out) + done * 4 : nullptr;
         bool opaque = true;
@@ -212,6 +215,15 @@ void ColorTransform::apply(const void* in, void* out, size_t count) const {
                 }
                 staged = narrow.data();
             }
+        } else if (srcF) {
+            // Linear float: straight, clipped to what Little CMS's display pipeline takes (the tone mapping is done).
+            for (size_t i = 0; i < n * 4; i += 4) {
+                const float a = std::clamp(srcF[i + 3], 0.0f, 1.0f);
+                opaque &= a >= 1;
+                wide[i + 3] = a;
+                for (size_t c = 0; c < 3; c++) wide[i + c] = a <= 0 ? 0.0f : std::clamp(srcF[i + c] / a, 0.0f, 1.0f);
+            }
+            staged = wide.data();
         } else {
             constexpr float unit = 1.0f / float(one16);
             for (size_t i = 0; i < n * 4; i += 4) {
@@ -442,6 +454,7 @@ const ColorProfile& defaultCmykProfile() {
 }
 
 PixelFormat pixelFormatFor(SampleType type, ColorMode mode) {
+    if (type == SampleType::F32 && mode == ColorMode::RGB) return PixelFormat::RGBAFloat;
     const bool wide = type != SampleType::U8;
     switch (mode) {
     case ColorMode::CMYK: return wide ? PixelFormat::CMYKA16 : PixelFormat::CMYKA8;
@@ -455,7 +468,7 @@ ColorModel pixelFormatModel(PixelFormat format) {
     switch (format) {
     case PixelFormat::CMYKA8: case PixelFormat::CMYKA16: case PixelFormat::CMYKFloat: return ColorModel::CMYK;
     case PixelFormat::LabA8: case PixelFormat::LabA16: case PixelFormat::LabFloat: return ColorModel::Lab;
-    case PixelFormat::RGBA8: case PixelFormat::RGBA16: case PixelFormat::RGBFloat: break;
+    case PixelFormat::RGBA8: case PixelFormat::RGBA16: case PixelFormat::RGBFloat: case PixelFormat::RGBAFloat: break;
     }
     return ColorModel::RGB;
 }
@@ -465,7 +478,7 @@ int pixelFormatChannels(PixelFormat format) {
     case PixelFormat::CMYKA8: case PixelFormat::CMYKA16: return 5;
     case PixelFormat::CMYKFloat: return 4;
     case PixelFormat::RGBFloat: case PixelFormat::LabFloat: return 3;
-    case PixelFormat::RGBA8: case PixelFormat::RGBA16: case PixelFormat::LabA8: case PixelFormat::LabA16: break;
+    case PixelFormat::RGBA8: case PixelFormat::RGBA16: case PixelFormat::LabA8: case PixelFormat::LabA16: case PixelFormat::RGBAFloat: break;
     }
     return 4;
 }
@@ -547,6 +560,8 @@ cmsUInt32Number baseFlags(PixelFormat input, PixelFormat output) {
 
 ColorTransformPtr transformBetween(const ColorProfile& from, const ColorProfile& to, const ConvertOptions& options, PixelFormat input, PixelFormat output) {
     if (isColorFormat(input) != isColorFormat(output)) return nullptr;
+    // Float pixels go to the screen only (toDisplayF): RGBAFloat to RGBA8.
+    if (output == PixelFormat::RGBAFloat || (input == PixelFormat::RGBAFloat && output != PixelFormat::RGBA8)) return nullptr;
     const ColorProfile& a = effectiveProfile(from, pixelFormatModel(input));
     const ColorProfile& b = effectiveProfile(to, pixelFormatModel(output));
     if (a.model != pixelFormatModel(input) || b.model != pixelFormatModel(output)) return nullptr;
@@ -575,6 +590,7 @@ ColorTransformPtr transformBetween(const ColorProfile& from, const ColorProfile&
 
 ColorTransformPtr proofTransform(const ColorProfile& document, const ColorProfile& display, const ProofSettings& proof, PixelFormat input, PixelFormat output) {
     if (isColorFormat(input) != isColorFormat(output)) return nullptr;
+    if (output == PixelFormat::RGBAFloat || (input == PixelFormat::RGBAFloat && output != PixelFormat::RGBA8)) return nullptr;
     const ColorProfile& a = effectiveProfile(document, pixelFormatModel(input));
     const ColorProfile& b = effectiveProfile(display, pixelFormatModel(output));
     const ColorProfile& c = effectiveProfile(proof.profile);   // any model: an RGB device, or a press (Working CMYK)
@@ -771,6 +787,19 @@ float TransferCurve::fromLinear(float v) const {
     return v;
 }
 
+float TransferCurve::fromLinearExact(float v) const {
+    if (kind_ != Kind::Table) return fromLinear(v);
+    // The forward table's interpolation inverted: the segment that holds v, then the fraction along it.
+    const std::vector<float>& f = *forward_;
+    v = std::clamp(v, 0.0f, 1.0f);
+    if (v <= f.front()) return 0;
+    if (v >= f.back()) return 1;
+    const size_t i = size_t(std::upper_bound(f.begin(), f.end(), v) - f.begin()) - 1;
+    const float d = f[i + 1] - f[i];
+    const float fraction = d > 0 ? (v - f[i]) / d : 0;
+    return (float(i) + fraction) / float(curveSamples);
+}
+
 TransferCurve TransferCurve::srgb() { return TransferCurve(); }
 
 TransferCurve TransferCurve::ofProfile(const ColorProfile& profile) {
@@ -810,5 +839,235 @@ TransferCurve TransferCurve::ofProfile(const ColorProfile& profile) {
 }
 
 TransferCurve documentTransfer(const Document& document) { return TransferCurve::ofProfile(document.profile); }
+
+// ---- 32 bits: linear profiles and the display ----------------------------------------------------------------------
+
+namespace {
+
+constexpr cmsTagSignature trcTags[3] = {cmsSigRedTRCTag, cmsSigGreenTRCTag, cmsSigBlueTRCTag};
+constexpr cmsTagSignature colorantTags[3] = {cmsSigRedColorantTag, cmsSigGreenColorantTag, cmsSigBlueColorantTag};
+
+bool matrixShaperRgb(cmsHPROFILE h) { return h && cmsGetColorSpace(h) == cmsSigRgbData && cmsIsMatrixShaper(h); }
+
+bool linearCurves(cmsHPROFILE h) {
+    if (!matrixShaperRgb(h)) return false;
+    for (cmsTagSignature sig : trcTags) {
+        const auto* curve = static_cast<const cmsToneCurve*>(cmsReadTag(h, sig));
+        if (!curve || !cmsIsToneCurveLinear(curve)) return false;
+    }
+    return true;
+}
+
+/// The profile with its three tone curves replaced by `make`'s and a new description; the lookup-table tags, which
+/// Little CMS would prefer to the matrix and curves, are dropped. Empty when it is not an RGB matrix-shaper.
+ColorProfile withCurves(const ColorProfile& profile, cmsToneCurve* (*make)(cmsContext), const std::string& description) {
+    cmsContext context = cmsCreateContext(nullptr, nullptr);
+    std::vector<uint8_t> bytes;
+    if (cmsHPROFILE h = cmsOpenProfileFromMemTHR(context, profile.icc.data(), cmsUInt32Number(profile.icc.size()))) {
+        if (matrixShaperRgb(h)) {
+            bool ok = true;
+            for (cmsTagSignature sig : trcTags) {
+                cmsToneCurve* curve = make(context);
+                ok = ok && curve && cmsWriteTag(h, sig, curve);
+                if (curve) cmsFreeToneCurve(curve);
+            }
+            for (cmsTagSignature sig : {cmsSigAToB0Tag, cmsSigAToB1Tag, cmsSigAToB2Tag, cmsSigBToA0Tag, cmsSigBToA1Tag, cmsSigBToA2Tag,
+                                        cmsSigDToB0Tag, cmsSigDToB1Tag, cmsSigDToB2Tag, cmsSigDToB3Tag, cmsSigBToD0Tag, cmsSigBToD1Tag,
+                                        cmsSigBToD2Tag, cmsSigBToD3Tag, cmsSigProfileDescriptionMLTag})
+                if (cmsIsTag(h, sig)) cmsWriteTag(h, sig, nullptr);
+            cmsMLU* text = cmsMLUalloc(context, 1);
+            cmsMLUsetASCII(text, "en", "US", description.c_str());
+            ok = ok && cmsWriteTag(h, cmsSigProfileDescriptionTag, text);
+            cmsMLUfree(text);
+            if (ok) bytes = saveProfile(h);
+        }
+        cmsCloseProfile(h);
+    }
+    if (!bytes.empty()) stabilise(context, bytes);
+    cmsDeleteContext(context);
+    if (auto made = profileFromIcc(bytes)) return *made;
+    return {};
+}
+
+cmsToneCurve* linearCurve(cmsContext context) { return cmsBuildGamma(context, 1.0); }
+cmsToneCurve* srgbToneCurve(cmsContext context) {
+    const double parameters[5] = {2.4, 1.0 / 1.055, 0.055 / 1.055, 1.0 / 12.92, 0.04045};
+    return cmsBuildParametricToneCurve(context, 4, parameters);
+}
+
+/// The primaries (their colorant XYZ) and white point of an RGB matrix-shaper, for comparing linear profiles.
+std::optional<std::array<double, 12>> primariesOf(const ColorProfile& profile) {
+    cmsContext context = cmsCreateContext(nullptr, nullptr);
+    std::optional<std::array<double, 12>> out;
+    if (cmsHPROFILE h = cmsOpenProfileFromMemTHR(context, profile.icc.data(), cmsUInt32Number(profile.icc.size()))) {
+        if (matrixShaperRgb(h)) {
+            std::array<double, 12> v{};
+            bool ok = true;
+            for (size_t i = 0; i < 3 && ok; i++) {
+                const auto* xyz = static_cast<const cmsCIEXYZ*>(cmsReadTag(h, colorantTags[i]));
+                ok = xyz != nullptr;
+                if (ok) { v[i * 3] = xyz->X; v[i * 3 + 1] = xyz->Y; v[i * 3 + 2] = xyz->Z; }
+            }
+            if (const auto* white = static_cast<const cmsCIEXYZ*>(cmsReadTag(h, cmsSigMediaWhitePointTag))) { v[9] = white->X; v[10] = white->Y; v[11] = white->Z; }
+            if (ok) out = v;
+        }
+        cmsCloseProfile(h);
+    }
+    cmsDeleteContext(context);
+    return out;
+}
+
+std::mutex linearMutex;
+std::map<uint64_t, ColorProfile>& linearCache() { static std::map<uint64_t, ColorProfile> cache; return cache; }
+std::map<uint64_t, bool>& linearityCache() { static std::map<uint64_t, bool> cache; return cache; }
+std::map<uint64_t, std::array<float, 3>>& weightsCache() { static std::map<uint64_t, std::array<float, 3>> cache; return cache; }
+
+std::string withoutSuffix(const std::string& text, const std::string& suffix) {
+    return text.size() > suffix.size() && text.compare(text.size() - suffix.size(), suffix.size(), suffix) == 0 ? text.substr(0, text.size() - suffix.size()) : text;
+}
+
+} // namespace
+
+bool isLinearProfile(const ColorProfile& profile) {
+    const ColorProfile& p = effectiveProfile(profile);
+    if (p.model != ColorModel::RGB) return false;
+    const uint64_t key = fingerprint(p.icc);
+    {
+        std::lock_guard<std::mutex> lock(linearMutex);
+        if (auto it = linearityCache().find(key); it != linearityCache().end()) return it->second;
+    }
+    cmsContext context = cmsCreateContext(nullptr, nullptr);
+    bool linear = false;
+    if (cmsHPROFILE h = cmsOpenProfileFromMemTHR(context, p.icc.data(), cmsUInt32Number(p.icc.size()))) {
+        linear = linearCurves(h);
+        cmsCloseProfile(h);
+    }
+    cmsDeleteContext(context);
+    std::lock_guard<std::mutex> lock(linearMutex);
+    if (linearityCache().size() > 64) linearityCache().clear();
+    linearityCache()[key] = linear;
+    return linear;
+}
+
+ColorProfile linearProfile(const ColorProfile& profile) {
+    const ColorProfile& p = effectiveProfile(profile);
+    if (p.model == ColorModel::RGB && isLinearProfile(p)) return p;
+    const uint64_t key = fingerprint(p.icc);
+    {
+        std::lock_guard<std::mutex> lock(linearMutex);
+        if (auto it = linearCache().find(key); it != linearCache().end()) return it->second;
+    }
+    ColorProfile made = p.model == ColorModel::RGB ? withCurves(p, linearCurve, p.description + " (Linear)") : ColorProfile{};
+    // Not a matrix-shaper (a lookup-table profile, say): linear sRGB.
+    if (made.empty() && &p != &srgbProfile()) made = linearProfile(srgbProfile());
+    std::lock_guard<std::mutex> lock(linearMutex);
+    if (linearCache().size() > 64) linearCache().clear();
+    linearCache()[key] = made;
+    return made;
+}
+
+ColorProfile gammaCounterpart(const ColorProfile& profile) {
+    if (!isLinearProfile(profile)) return profile;
+    for (WorkingSpace s : {WorkingSpace::SRGB, WorkingSpace::AdobeRGB, WorkingSpace::DisplayP3, WorkingSpace::ProPhoto})
+        if (linearProfile(builtinProfile(s)).icc == profile.icc) return builtinProfile(s);
+    // A linear profile made elsewhere (a 32-bit file's): the working space with the same primaries and white.
+    if (auto primaries = primariesOf(profile))
+        for (WorkingSpace s : {WorkingSpace::SRGB, WorkingSpace::AdobeRGB, WorkingSpace::DisplayP3, WorkingSpace::ProPhoto}) {
+            auto other = primariesOf(builtinProfile(s));
+            if (!other) continue;
+            bool same = true;
+            for (size_t i = 0; i < 12 && same; i++) same = std::fabs((*primaries)[i] - (*other)[i]) < 2e-3;
+            if (same) return builtinProfile(s);
+        }
+    ColorProfile made = withCurves(profile, srgbToneCurve, withoutSuffix(profile.description, " (Linear)"));
+    return made.empty() ? srgbProfile() : made;
+}
+
+ColorProfile encodedProfileOf(const Document& document) {
+    if (document.sampleType != SampleType::F32) return document.profile;
+    if (document.encodedProfile) return *document.encodedProfile;
+    return gammaCounterpart(effectiveProfile(document.profile));
+}
+
+TransferCurve encodedTransfer(const Document& document) { return TransferCurve::ofProfile(encodedProfileOf(document)); }
+
+std::array<float, 3> luminanceWeights(const ColorProfile& profile) {
+    const ColorProfile& p = effectiveProfile(profile);
+    const uint64_t key = fingerprint(p.icc);
+    {
+        std::lock_guard<std::mutex> lock(linearMutex);
+        if (auto it = weightsCache().find(key); it != weightsCache().end()) return it->second;
+    }
+    std::array<float, 3> weights{0.2126f, 0.7152f, 0.0722f};
+    if (auto primaries = primariesOf(p)) {
+        const double sum = (*primaries)[1] + (*primaries)[4] + (*primaries)[7];
+        if (sum > 0) for (size_t i = 0; i < 3; i++) weights[i] = float((*primaries)[i * 3 + 1] / sum);
+    }
+    std::lock_guard<std::mutex> lock(linearMutex);
+    if (weightsCache().size() > 64) weightsCache().clear();
+    weightsCache()[key] = weights;
+    return weights;
+}
+
+void toDisplayF(const ImageF& in, Image& out, const ToneMap& tone, const ColorTransform* transform, const TransferCurve& curve) {
+    if (out.width() != in.width() || out.height() != in.height()) out = Image(in.width(), in.height());
+    const int w = in.width();
+    if (transform && transform->input() == PixelFormat::RGBAFloat && transform->output() == PixelFormat::RGBA8) {
+        parallelRows(0, in.height(), [&](int ya, int yb) {
+            std::vector<float> row(size_t(w) * 4);
+            for (int y = ya; y < yb; y++) {
+                const float* s = in.row(y);
+                for (int x = 0; x < w; x++) {
+                    const float a = cleanCoverage(s[x * 4 + 3]);
+                    float c[3] = {0, 0, 0};
+                    if (a > 0) for (int k = 0; k < 3; k++) c[k] = cleanColour(s[x * 4 + k]) / a;
+                    tone.apply(c);
+                    for (int k = 0; k < 3; k++) row[size_t(x) * 4 + size_t(k)] = std::clamp(c[k], 0.0f, 1.0f) * a;
+                    row[size_t(x) * 4 + 3] = a;
+                }
+                transform->apply(row.data(), out.row(y), size_t(w));
+            }
+        }, 16);
+        return;
+    }
+    // Without a transform the curve encodes, from a table over linear 0..1: the display's 8 bits (the mode
+    // conversion uses the curve's exact inverse instead).
+    constexpr int steps = 65535;
+    std::vector<float> encoded(size_t(steps) + 1);
+    for (int i = 0; i <= steps; i++) encoded[size_t(i)] = curve.fromLinearExact(float(i) / float(steps));
+    parallelRows(0, in.height(), [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++) {
+            const float* s = in.row(y);
+            uint8_t* d = out.row(y);
+            for (int x = 0; x < w; x++, s += 4, d += 4) {
+                const float a = cleanCoverage(s[3]);
+                const long A = std::lround(a * 255);
+                d[3] = uint8_t(A);
+                if (A == 0) { d[0] = d[1] = d[2] = 0; continue; }
+                float c[3];
+                for (int k = 0; k < 3; k++) c[k] = cleanColour(s[k]) / a;
+                tone.apply(c);
+                for (int k = 0; k < 3; k++) {
+                    const float e = encoded[size_t(std::lround(std::clamp(c[k], 0.0f, 1.0f) * float(steps)))];
+                    d[k] = uint8_t(std::min(A, std::lround(double(e) * double(A))));
+                }
+            }
+        }
+    }, 16);
+}
+
+float peakLuminance(const ImageF& image, const std::array<float, 3>& weights) {
+    float peak = 0;
+    for (int y = 0; y < image.height(); y++) {
+        const float* p = image.row(y);
+        for (int x = 0; x < image.width(); x++, p += 4) {
+            const float a = cleanCoverage(p[3]);
+            if (a <= 0) continue;
+            const float l = (weights[0] * cleanColour(p[0]) + weights[1] * cleanColour(p[1]) + weights[2] * cleanColour(p[2])) / a;
+            peak = std::max(peak, l);
+        }
+    }
+    return peak;
+}
 
 } // namespace compositor

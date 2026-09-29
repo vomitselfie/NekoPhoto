@@ -1,5 +1,8 @@
 #include "compositor/document.h"
+#include "compositor/colormgmt.h"
 #include "compositor/depth.h"
+#include "compositor/render.h"
+#include "compositor/view32.h"
 #include <cstdio>
 #include <algorithm>
 #include <cmath>
@@ -120,8 +123,17 @@ Asset Asset::make(ImageC8Ptr image, std::string name) {
     return asset;
 }
 
+Asset Asset::make(ImageFPtr image, std::string name) {
+    Asset asset;
+    asset.thumbnail = image ? makeThumbnail(*image) : nullptr;
+    asset.image = std::move(image);
+    asset.name = std::move(name);
+    return asset;
+}
+
 Asset Asset::makeAny(const AnyImage& image, std::string name) {
     if (image.u16()) return make(image.u16(), std::move(name));
+    if (image.f32()) return make(image.f32(), std::move(name));
     if (image.c8()) return make(image.c8(), std::move(name));
     return make(image.u8(), std::move(name));
 }
@@ -140,8 +152,16 @@ MaskAsset MaskAsset::make(Gray16Ptr image) {
     return asset;
 }
 
+MaskAsset MaskAsset::make(GrayFPtr image) {
+    MaskAsset asset;
+    asset.thumbnail = image ? makeGrayThumbnail(*image) : nullptr;
+    asset.image = std::move(image);
+    return asset;
+}
+
 MaskAsset MaskAsset::makeAny(const AnyGray& image) {
     if (image.u16()) return make(image.u16());
+    if (image.f32()) return make(image.f32());
     return make(image.u8());
 }
 
@@ -151,6 +171,7 @@ MaskAsset MaskAsset::solid(bool revealing) {
 
 MaskAsset MaskAsset::solid(bool revealing, SampleType type) {
     if (type == SampleType::U16) return make(Gray16Ptr(std::make_shared<Gray16>(1, 1, uint16_t(revealing ? one16 : 0))));
+    if (type == SampleType::F32) return make(GrayFPtr(std::make_shared<GrayF>(1, 1, revealing ? 1.0f : 0.0f)));
     return solid(revealing);
 }
 
@@ -194,7 +215,7 @@ int Layer::pixelHeight() const { return asset && asset->image ? asset->image.hei
 
 const PixelBounds& Selection::pixelBounds() const {
     if (coverage.identity() != boundsFor_) {
-        bounds_ = coverage.u8() ? nonzeroBounds(*coverage.u8()) : coverage.u16() ? nonzeroBounds(*coverage.u16()) : PixelBounds{};
+        bounds_ = coverage.u8() ? nonzeroBounds(*coverage.u8()) : coverage.u16() ? nonzeroBounds(*coverage.u16()) : coverage.f32() ? nonzeroBounds(*coverage.f32()) : PixelBounds{};
         boundsFor_ = coverage.identity();
     }
     return bounds_;
@@ -212,7 +233,7 @@ Rect Selection::bounds() const {
 Document::Document(int width_, int height_) : id(makeUuid()), width(width_), height(height_) {}
 
 bool Document::operator==(const Document& o) const {
-    return id == o.id && width == o.width && height == o.height && resolution == o.resolution && sampleType == o.sampleType && colorMode == o.colorMode && profile == o.profile && layers == o.layers && selection == o.selection && psdCarry == o.psdCarry && smartObjects == o.smartObjects && slices == o.slices && animation == o.animation && channels == o.channels;
+    return id == o.id && width == o.width && height == o.height && resolution == o.resolution && sampleType == o.sampleType && colorMode == o.colorMode && profile == o.profile && encodedProfile == o.encodedProfile && layers == o.layers && selection == o.selection && psdCarry == o.psdCarry && smartObjects == o.smartObjects && slices == o.slices && animation == o.animation && channels == o.channels;
 }
 
 long long Document::layerPixels() const {
@@ -307,10 +328,13 @@ std::string formatBudgetProblem(const Document& document, SampleType type, Color
     return {};
 }
 
-bool conformToFormat(Document& document) {
+namespace {
+
+/// conformToFormat's work. Colour going to or from 32 bits goes through `curve` (the document's encoding) and, from
+/// 32 bits, `tone` (HDR Toning; none for the values as they are).
+bool conform(Document& document, const TransferCurve& curve, const ToneMap* tone) {
     const SampleType type = document.sampleType;
     const ColorMode mode = document.colorMode;
-    if (type == SampleType::F32) return false;
     bool changed = false;
     // Each buffer converted once: a live shape, text or smart object shares its raster with the layer's asset, and
     // must still do so afterwards.
@@ -320,7 +344,11 @@ bool conformToFormat(Document& document) {
         if (!in || (in.sampleType() == type && in.channels() == colorModeChannels(mode))) return in;
         auto it = images.find(in.identity());
         if (it != images.end()) { changed = true; return it->second; }
-        AnyImage out = imageAtFormat(in, type, mode);
+        AnyImage out;
+        if (in.f32() && mode == ColorMode::RGB && type != SampleType::F32)
+            out = type == SampleType::U8 ? AnyImage(ImagePtr(encodeImage8(*in.f32(), curve, tone))) : AnyImage(Image16Ptr(encodeImage16(*in.f32(), curve, tone)));
+        else if (type == SampleType::F32 || in.f32()) out = mode == ColorMode::RGB ? imageAtDepth(in, type, &curve) : AnyImage();
+        else out = imageAtFormat(in, type, mode);
         if (!out) return in;   // another mode's colours: left for Image > Mode
         changed = true;
         return images[in.identity()] = out;
@@ -350,17 +378,52 @@ bool conformToFormat(Document& document) {
     }
     if (document.selection) document.selection->coverage = gray(document.selection->coverage);
     for (Channel& c : document.channels) c.image = gray(c.image);
+    for (Layer& l : document.layers)
+        if (l.asset && l.asset->image.f32() && !l.asset->thumbnail) l.asset->thumbnail = makeThumbnail(*l.asset->image.f32());
     return changed;
 }
 
-bool convertSampleType(Document& document, SampleType type, std::string* error) {
-    if (type == SampleType::F32) { if (error) *error = "32-bit documents are not available yet."; return false; }
+} // namespace
+
+bool conformToFormat(Document& document) {
+    // A 32-bit document's own buffers need no curve; an 8- or 16-bit one reaching it is linearised through its encoding.
+    const bool floatInvolved = document.sampleType == SampleType::F32;
+    return conform(document, floatInvolved ? encodedTransfer(document) : TransferCurve::srgb(), nullptr);
+}
+
+bool convertSampleType(Document& document, SampleType type, std::string* error, const View32* toning) {
     if (document.sampleType == type) return true;
-    if (document.sampleType == SampleType::F32) { if (error) *error = "32-bit documents are not available yet."; return false; }
+    if (type == SampleType::F32 && document.colorMode != ColorMode::RGB) { if (error) *error = "32 bits per channel needs an RGB document."; return false; }
     if (std::string problem = sampleTypeBudgetProblem(document, type); !problem.empty()) { if (error) *error = problem; return false; }
     Document out = document;
-    out.sampleType = type;
-    conformToFormat(out);
+    if (type == SampleType::F32) {
+        // Linear light in the profile's primaries: the values linearised through the profile's own curve, which is
+        // remembered for the way back (Document::encodedProfile). Untagged becomes linear sRGB.
+        const TransferCurve curve = TransferCurve::ofProfile(document.profile);
+        out.encodedProfile = document.profile;
+        out.profile = linearProfile(document.profile);
+        out.sampleType = type;
+        conform(out, curve, nullptr);
+    } else if (document.sampleType == SampleType::F32) {
+        // HDR Toning: exposure and gamma, or Highlight Compression, then the encoding curve. At its defaults the values
+        // as they are, which is exact for a document that came from 8 or 16 bits.
+        const TransferCurve curve = encodedTransfer(document);
+        std::optional<ToneMap> tone;
+        if (toning && !toning->isDefault()) {
+            const std::array<float, 3> weights = luminanceWeights(document.profile);
+            float peak = 1;
+            if (toning->method == ToneMethod::HighlightCompression) peak = peakLuminance(*renderFlattenedF(document), weights);
+            const float luma[3] = {weights[0], weights[1], weights[2]};
+            tone = ToneMap::of(*toning, luma, peak);
+        }
+        out.profile = encodedProfileOf(document);
+        out.encodedProfile.reset();
+        out.sampleType = type;
+        conform(out, curve, tone ? &*tone : nullptr);
+    } else {
+        out.sampleType = type;
+        conformToFormat(out);
+    }
     document = std::move(out);
     return true;
 }

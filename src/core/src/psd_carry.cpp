@@ -52,11 +52,13 @@ uint64_t psdMaskHash(const GrayImage* mask, bool enabled) {
 
 uint64_t psdContentHash(const AnyImage& image) {
     if (image.u16()) return contentHash(image.u16().get());
+    if (image.f32()) return contentHash(image.f32().get());
     return psdContentHash(image.u8().get());
 }
 
 uint64_t psdMaskHash(const AnyGray& mask, bool enabled) {
     if (mask.u16()) { const uint64_t h = contentHash(mask.u16().get()); return h ? h ^ (enabled ? 0 : 0x5555) : 0; }
+    if (mask.f32()) { const uint64_t h = contentHash(mask.f32().get()); return h ? h ^ (enabled ? 0 : 0x5555) : 0; }
     return psdMaskHash(mask.u8().get(), enabled);
 }
 

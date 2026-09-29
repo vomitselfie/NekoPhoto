@@ -90,6 +90,12 @@ template <>
 void executeRender<SampleType::U16>(const RenderPlan& plan, const Rect& region, double scale, Image16& out, RenderCache* cache, uint64_t version);
 /// A 16-bit document's frame for the canvas (render_u16.cpp): rendered at 16 bits into `out`'s size and reduced to 8.
 void renderForDisplay16(const RenderPlan& plan, const Rect& region, double scale, Image& out, RenderCache* cache, uint64_t version, bool clear, const ColorTransform* display = nullptr);
+template <>
+void executeRender<SampleType::F32>(const RenderPlan& plan, const Rect& region, double scale, ImageF& out, RenderCache* cache, uint64_t version);
+/// A 32-bit document's frame for the canvas (render_f32.cpp): rendered in float into `out`'s size, then through the
+/// view (exposure, gamma or Highlight Compression) and the display transform, or the document's curve, to 8 bits.
+void renderForDisplayF(const RenderPlan& plan, const Rect& region, double scale, Image& out, RenderCache* cache, uint64_t version, bool clear,
+                       const ColorTransform* display, const View32& view, float peak);
 /// resizeDocument for a 16-bit document (render_u16.cpp).
 bool resizeDocument16(Document& document, int width, int height, double resolution, Sampling sampling);
 

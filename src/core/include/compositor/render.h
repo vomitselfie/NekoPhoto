@@ -4,6 +4,7 @@
 // opacity, blend modes and adjustment layers, bottom to top.
 #pragma once
 #include "document.h"
+#include "view32.h"
 #include <functional>
 #include <map>
 
@@ -23,6 +24,10 @@ struct RenderOptions {
     /// The canvas's colour transform to the screen (colormgmt.h): RGBA8 to RGBA8 for an 8-bit document, RGBA16 to
     /// RGBA8 for a 16-bit one, fused with its reduction to 8 bits. Null: none, the pixels as they are.
     const ColorTransform* display = nullptr;
+    /// A 32-bit document's view (view32.h): exposure, gamma or Highlight Compression, applied on the way to the canvas's
+    /// 8 bits. `peak` is the document's brightest luminance for Highlight Compression (0: the frame's own).
+    View32 view32;
+    float peak = 0;
 };
 
 /// What a caller keeps between frames while one layer is being edited (the one layer with an override):
@@ -39,6 +44,8 @@ struct RenderCache {
     bool aboveFlat = false;
     /// The same for a 16-bit document.
     std::shared_ptr<Image16> backdrop16, above16;
+    /// And a 32-bit one.
+    std::shared_ptr<ImageF> backdropF, aboveF;
 };
 
 /// Per-layer overrides while an edit is in progress (a transform being dragged, a brush stroke).
@@ -51,6 +58,9 @@ struct LayerOverride {
     /// The same replacements in a 16-bit document.
     std::optional<Image16Ptr> image16;
     std::optional<Gray16Ptr> maskImage16;
+    /// And in a 32-bit document.
+    std::optional<ImageFPtr> imageF;
+    std::optional<GrayFPtr> maskImageF;
 };
 using Overrides = std::map<Uuid, LayerOverride>;
 
@@ -62,6 +72,10 @@ std::shared_ptr<Image> renderFlattened(const Document& document);
 /// 16-bit file formats take. render() hands the canvas the same pixels reduced to 8 bits.
 void render16(const Document& document, const RenderOptions& options, Image16& out, const Overrides* overrides = nullptr, RenderCache* cache = nullptr);
 std::shared_ptr<Image16> renderFlattened16(const Document& document);
+/// A 32-bit document at its own depth, premultiplied linear float (an 8- or 16-bit one is rendered at its depth and
+/// linearised through its profile's curve): what 32-bit files and the mode conversion take (render_f32.cpp).
+void renderF(const Document& document, const RenderOptions& options, ImageF& out, const Overrides* overrides = nullptr, RenderCache* cache = nullptr);
+std::shared_ptr<ImageF> renderFlattenedF(const Document& document);
 
 /// Draws one raster through a transform into `out`, which represents `region` at `scale`:
 /// resampled (mips + bilinear, or nearest), edges antialiased, then multiplied by
@@ -90,6 +104,18 @@ struct DrawParams16 {
     LayerTransform layerTransformForMask;
 };
 void drawLayer(const DrawParams16& params, const Rect& region, double scale, const Gray16* coverage, Image16& out);
+/// The same in float, for a 32-bit document.
+struct DrawParamsF {
+    ImageFPtr image;
+    LayerTransform transform;
+    double opacity = 1;
+    BlendMode mode = BlendMode::Normal;
+    const LayerMask* mask = nullptr;
+    std::optional<LayerTransform> maskPlacement;
+    GrayFPtr maskImage;
+    LayerTransform layerTransformForMask;
+};
+void drawLayer(const DrawParamsF& params, const Rect& region, double scale, const GrayF* coverage, ImageF& out);
 
 /// Coverage (0..255 per output pixel) of a gray mask placed by `transform` over `region` at `scale`;
 /// `outside` is the value beyond the mask's rectangle.
@@ -99,6 +125,9 @@ void sampleMaskCoverage(const GrayImage& mask, const LayerTransform& transform, 
 /// The same at 16 bits (coverage 0..32768).
 void sampleMaskCoverage(const Gray16Ptr& mask, const LayerTransform& transform, const Rect& region, double scale, uint16_t outside, Gray16& out, bool multiply);
 void sampleMaskCoverage(const Gray16& mask, const LayerTransform& transform, const Rect& region, double scale, uint16_t outside, Gray16& out, bool multiply);
+/// The same in float (coverage 0..1).
+void sampleMaskCoverage(const GrayFPtr& mask, const LayerTransform& transform, const Rect& region, double scale, float outside, GrayF& out, bool multiply);
+void sampleMaskCoverage(const GrayF& mask, const LayerTransform& transform, const Rect& region, double scale, float outside, GrayF& out, bool multiply);
 
 /// Image Size: every layer's pixels and mask resampled for a `width` x `height` canvas (the Mac rasterises each
 /// transformed layer into an axis-aligned box); placed masks and uniform masks keep their pixels. Adjustment and
@@ -114,5 +143,8 @@ std::shared_ptr<GrayImage> resampleMask(const GrayImage& mask, const LayerTransf
 /// The same at 16 bits (mips and the point samplers; no separable pass).
 std::shared_ptr<Image16> resampleLayer(const Image16Ptr& image, const LayerTransform& transform, const LayerTransform& target, int width, int height);
 std::shared_ptr<Gray16> resampleMask(const Gray16& mask, const LayerTransform& transform, const LayerTransform& target, int width, int height, uint16_t outside);
+/// The same in float.
+std::shared_ptr<ImageF> resampleLayer(const ImageFPtr& image, const LayerTransform& transform, const LayerTransform& target, int width, int height);
+std::shared_ptr<GrayF> resampleMask(const GrayF& mask, const LayerTransform& transform, const LayerTransform& target, int width, int height, float outside);
 
 } // namespace compositor

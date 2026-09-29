@@ -161,7 +161,10 @@ TEST_CASE(documents_convert_between_eight_and_sixteen_bits) {
     CHECK(big.sampleType == SampleType::U8);
     CHECK(error.find("16-bit") != std::string::npos);
     CHECK(Document::imagePixelBudget(SampleType::U16) * 2 == Document::pixelBudget);
-    CHECK(!convertSampleType(doc, SampleType::F32, &error));
+    // 32 bits (depth_float_tests): a quarter of the 8-bit pixels; the big canvas is refused there too.
+    CHECK(!convertSampleType(big, SampleType::F32, &error));
+    CHECK(error.find("32-bit") != std::string::npos);
+    CHECK(Document::imagePixelBudget(SampleType::F32) * 4 == Document::pixelBudget);
 }
 
 TEST_CASE(history_counts_sixteen_bit_pixels) {

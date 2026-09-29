@@ -213,6 +213,10 @@ add_library(compositor_core STATIC
     src/blend_u16.cpp
     src/render_exec_u16.cpp
     src/render_u16.cpp
+    src/depth_f32.cpp
+    src/blend_f32.cpp
+    src/render_exec_f32.cpp
+    src/render_f32.cpp
 )
 add_library(compositor::core ALIAS compositor_core)
 

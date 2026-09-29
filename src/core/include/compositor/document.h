@@ -43,6 +43,8 @@ struct Asset {
     static Asset make(Image16Ptr image, std::string name);
     /// An 8-bit CMYK raster. It has no thumbnail yet: drawing one needs the document's profile (P7 step C).
     static Asset make(ImageC8Ptr image, std::string name);
+    /// A 32-bit raster; its thumbnail is tone-mapped at exposure 0 to 8 bits.
+    static Asset make(ImageFPtr image, std::string name);
     /// Whichever depth `image` holds.
     static Asset makeAny(const AnyImage& image, std::string name);
 };
@@ -53,6 +55,7 @@ struct MaskAsset {
     GrayPtr thumbnail;
     static MaskAsset make(GrayPtr image);
     static MaskAsset make(Gray16Ptr image);
+    static MaskAsset make(GrayFPtr image);
     static MaskAsset makeAny(const AnyGray& image);
     static MaskAsset solid(bool revealing);
     /// A one-pixel white or black mask at `type`.
@@ -308,6 +311,10 @@ struct Document {
     ColorMode colorMode = ColorMode::RGB;
     /// The colour profile the pixels are in (colorprofile.h, colormgmt.h); empty: untagged, treated as sRGB.
     ColorProfile profile;
+    /// A 32-bit document's values are linear in `profile` (a linear profile, linearProfile()); this is the profile they
+    /// are encoded in at 8 and 16 bits, kept from the document they were converted from (empty: untagged), so going
+    /// back restores it exactly. None: the gamma counterpart of `profile` (gammaCounterpart()).
+    std::optional<ColorProfile> encodedProfile;
     std::vector<Layer> layers; // bottom to top
     std::optional<Selection> selection;
     std::string extraJson;
@@ -410,7 +417,14 @@ Rect changedArea(const Document& before, const Document& after);
 /// to `type` (a 16-bit document widens exactly; going to 8 bits rounds), within the byte budgets. False, with `error`
 /// saying why, when the result would not fit (a 16-bit document holds half the pixels of an 8-bit one) or the
 /// depth is not supported; the document is then unchanged.
-bool convertSampleType(Document& document, SampleType type, std::string* error = nullptr);
+///
+/// 32 bits (docs/bit-depth.md, "32 bits"): 8 or 16 bits to 32 linearise every layer's colour through the profile's
+/// curve; the profile becomes its linear version and the original is kept in `encodedProfile`. From 32 bits, `toning`
+/// (HDR Toning's Exposure and Gamma or Highlight Compression; none or the defaults for the values as they are) is
+/// applied to each layer's straight colour before it is encoded; at the defaults a document that came from 8 or 16 bits
+/// gets its exact values back. Masks, the selection and channels change scale only. 32 bits needs an RGB document.
+struct View32;
+bool convertSampleType(Document& document, SampleType type, std::string* error = nullptr, const View32* toning = nullptr);
 /// Brings every buffer held at another depth to the document's own depth and mode (a layer imported from an 8-bit file
 /// into a 16-bit document, say; an 8-bit CMYK layer into a 16-bit CMYK document), sharing converted buffers as the
 /// originals were. Lab's a and b keep their neutral point across depths (128 at 8 bits, 16384 at 16). A colour buffer

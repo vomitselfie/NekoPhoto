@@ -15,6 +15,7 @@
 #include "colorprofile.h"
 #include "image.h"
 #include "imaget.h"
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -24,6 +25,7 @@
 namespace compositor {
 
 struct Document;
+struct ToneMap;
 
 // ---- Profiles ------------------------------------------------------------------------------------------------------
 
@@ -82,8 +84,9 @@ enum class PixelFormat {
     LabA16,     // premultiplied 0..32768, a and b offset by 16384 (Image16 in a Lab document)
     CMYKFloat,  // four straight floats, ink 0..100 as Little CMS counts it (single colours)
     LabFloat,   // three floats: L 0..100, a and b signed (single colours)
+    RGBAFloat,  // premultiplied linear float, colour unbounded (ImageF, a 32-bit document); read as input only
 };
-/// The layout of a document's pixels at `type` in `mode` (U8 or U16).
+/// The layout of a document's pixels at `type` in `mode` (U8 or U16; F32 in RGB is RGBAFloat).
 PixelFormat pixelFormatFor(SampleType type, ColorMode mode);
 /// The colour model a layout's values are in, its samples per pixel, and whether it is a single straight colour.
 ColorModel pixelFormatModel(PixelFormat format);
@@ -186,6 +189,10 @@ public:
     /// 0..1 encoded to 0..1 linear light, and back.
     float toLinear(float encoded) const;
     float fromLinear(float linear) const;
+    /// fromLinear as the exact inverse of toLinear, which 32-bit documents encode with so that their 8- and 16-bit
+    /// levels come back exactly: for a table curve, the forward table's own interpolation inverted (the inverse
+    /// table is itself interpolated, a few 16-bit levels off); the formulas are exact as they are.
+    float fromLinearExact(float linear) const;
 
     static TransferCurve srgb();
     static TransferCurve ofProfile(const ColorProfile& profile);
@@ -197,5 +204,32 @@ private:
 };
 /// The document's transfer curve (its profile's, sRGB when untagged).
 TransferCurve documentTransfer(const Document& document);
+
+// ---- 32 bits: linear profiles and the display (docs/bit-depth.md, "32 bits") --------------------------------------
+
+/// The linear version of an RGB matrix-shaper profile: the same primaries, white point and adaptation, a gamma 1.0 tone
+/// curve on each channel, "<description> (Linear)", and a fixed header date (the same bytes every time). Untagged is
+/// sRGB's; a profile that is not a matrix-shaper gives linear sRGB. A linear profile is returned as it is.
+ColorProfile linearProfile(const ColorProfile& profile);
+/// Whether every tone curve of an RGB matrix-shaper profile is the identity.
+bool isLinearProfile(const ColorProfile& profile);
+/// Back from a linear profile: the built-in working space whose linear version it is, else the same primaries with
+/// sRGB's curve. A profile that is not linear is returned as it is.
+ColorProfile gammaCounterpart(const ColorProfile& profile);
+/// The profile a document's values are encoded in at 8 and 16 bits: its own, or for a 32-bit document the one it came
+/// from (Document::encodedProfile), else its gamma counterpart. Empty: untagged.
+ColorProfile encodedProfileOf(const Document& document);
+/// The curve that encodes the document's colour at 8 and 16 bits (encodedProfileOf's curve).
+TransferCurve encodedTransfer(const Document& document);
+/// The linear luminance weights of a profile's primaries (their Y, summing to 1): Rec. 709's for sRGB and untagged.
+std::array<float, 3> luminanceWeights(const ColorProfile& profile);
+
+/// A 32-bit frame for the canvas: each pixel's straight linear colour tone-mapped (`tone`), then to 8 bits through
+/// `transform` (RGBAFloat to RGBA8, the document's linear profile to the monitor) or, without one, encoded with `curve`
+/// (the document's gamma counterpart, which then stands for the monitor as an 8-bit document's profile does), and
+/// premultiplied. `out` is sized to `in`.
+void toDisplayF(const ImageF& in, Image& out, const ToneMap& tone, const ColorTransform* transform, const TransferCurve& curve);
+/// The brightest luminance in a float image (its straight colour), for Highlight Compression's white point.
+float peakLuminance(const ImageF& image, const std::array<float, 3>& weights);
 
 } // namespace compositor

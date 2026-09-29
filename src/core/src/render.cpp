@@ -328,6 +328,7 @@ std::shared_ptr<GrayImage> resampleMask(const GrayImage& mask, const LayerTransf
 
 bool resizeDocument(Document& document, int width, int height, double resolution, Sampling sampling) {
     if (document.sampleType == SampleType::U16) return resizeDocument16(document, width, height, resolution, sampling);
+    if (document.sampleType == SampleType::F32) return false;   // Image Size at 32 bits is not ported yet (P5b)
     if (!Document::canCreate(width, height, document.sampleType)) return false;
     const long long project = Document::projectPixelBudgetAt(document.sampleType);
     double sx = double(width) / document.width, sy = double(height) / document.height;
@@ -417,7 +418,9 @@ void render(const Document& document, const RenderOptions& options, Image& out, 
         if (options.display) convertImage(out, options.display);
         break;
     case SampleType::U16: renderForDisplay16(plan, region, scale, out, frameCache, options.version, options.clear, options.display); break;
-    case SampleType::F32: break;   // 32-bit documents arrive with their executor (P5)
+    case SampleType::F32:   // render_f32.cpp: in float, then the view and the display to 8 bits
+        renderForDisplayF(plan, region, scale, out, frameCache, options.version, options.clear, options.display, options.view32, options.peak);
+        break;
     }
 }
 

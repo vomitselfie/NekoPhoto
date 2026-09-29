@@ -388,7 +388,7 @@ float sampleContour(const std::array<uint8_t, 256>& lut, float t, bool antialias
 /// At either depth: `T` is the sample (uint8_t 0..255 or uint16_t 0..32768).
 template <class T>
 void compositeEffect(T* d, const float color[3], float alpha, EffectBlend mode) {
-    constexpr float one = std::is_same_v<T, uint8_t> ? 255.0f : 32768.0f;
+    constexpr float one = std::is_same_v<T, uint8_t> ? 255.0f : std::is_same_v<T, float> ? 1.0f : 32768.0f;
     if (alpha <= 0) return;
     alpha = unit(alpha);
     if (mode == EffectBlend::Dissolve) mode = EffectBlend::Normal;
@@ -402,12 +402,19 @@ void compositeEffect(T* d, const float color[3], float alpha, EffectBlend mode) 
     float blended[3];
     effectBlend(mode, b, c, blended);
     const float outA = a + da * (1 - a);
-    for (int k = 0; k < 3; k++) {
-        const float premul = a * (1 - da) * c[k] + a * da * blended[k] + (1 - a) * da * b[k];
-        d[k] = T(std::clamp(premul * one + 0.5f, 0.0f, one));
+    if constexpr (std::is_same_v<T, float>) {
+        // Linear float: nothing rounded, colour kept above 1 (a bright backdrop stays bright), alpha within 0..1.
+        for (int k = 0; k < 3; k++) d[k] = std::max(0.0f, a * (1 - da) * c[k] + a * da * blended[k] + (1 - a) * da * b[k]);
+        d[3] = std::clamp(outA, 0.0f, 1.0f);
+        return;
+    } else {
+        for (int k = 0; k < 3; k++) {
+            const float premul = a * (1 - da) * c[k] + a * da * blended[k] + (1 - a) * da * b[k];
+            d[k] = T(std::clamp(premul * one + 0.5f, 0.0f, one));
+        }
+        d[3] = T(std::clamp(outA * one + 0.5f, 0.0f, one));
+        for (int k = 0; k < 3; k++) d[k] = std::min(d[k], d[3]);
     }
-    d[3] = T(std::clamp(outA * one + 0.5f, 0.0f, one));
-    for (int k = 0; k < 3; k++) d[k] = std::min(d[k], d[3]);
 }
 
 /// The same on a straight colour over an opaque backdrop (the interior folds).
@@ -548,7 +555,8 @@ void drawStyled(const StyledDraw& in, ImageOf<S>& target) {
     const Rect padded(in.region.x + wx0 / s, in.region.y + wy0 / s, w / s, h / s);
     Img source(w, h);
     if constexpr (S == SampleType::U8) in.drawSource(source, padded);
-    else in.drawSource16(source, padded);
+    else if constexpr (S == SampleType::U16) in.drawSource16(source, padded);
+    else in.drawSourceF(source, padded);
     Mask alpha(size_t(w) * h);
     bool any = false;
     for (int y = 0; y < h; y++) {
@@ -558,6 +566,7 @@ void drawStyled(const StyledDraw& in, ImageOf<S>& target) {
             // Coverage under half an 8-bit level is clear to the effects (as the healers treat it): the mattes' painted and
             // contour tests then see the pixels an 8-bit layer would.
             if constexpr (S == SampleType::U16) if (narrow16(p[x * 4 + 3]) == 0) a = 0;
+            if constexpr (S == SampleType::F32) if (a < 0.5f / 255) a = 0;
             alpha[size_t(y) * w + x] = a;
             any |= p[x * 4 + 3] != 0;
         }
@@ -565,9 +574,19 @@ void drawStyled(const StyledDraw& in, ImageOf<S>& target) {
     if (!any) return;
     const float master = in.master, fill = in.fill;
     const GrayOf<S>* cover = nullptr;
-    if constexpr (S == SampleType::U8) cover = in.coverage; else cover = in.coverage16;
+    if constexpr (S == SampleType::U8) cover = in.coverage;
+    else if constexpr (S == SampleType::U16) cover = in.coverage16;
+    else cover = in.coverageF;
+    // At 32 bits the effects' colours are 8-bit values in the document's encoding: linearised for the float target.
+    auto linearised = [&](float c[3]) {
+        if constexpr (S == SampleType::F32) {
+            static const TransferCurve srgb = TransferCurve::srgb();
+            const TransferCurve& curve = in.linear ? *in.linear : srgb;
+            for (int k = 0; k < 3; k++) c[k] = curve.toLinear(c[k]);
+        } else (void)c;
+    };
     auto coverAt = [&](int ox, int oy) { return cover ? cover->row(oy)[ox] / one : 1.0f; };
-    auto rgb = [](StyleColor c, float out[3]) { out[0] = c.r / 255.0f; out[1] = c.g / 255.0f; out[2] = c.b / 255.0f; };
+    auto rgb = [&](StyleColor c, float out[3]) { out[0] = c.r / 255.0f; out[1] = c.g / 255.0f; out[2] = c.b / 255.0f; linearised(out); };
     // A gradient's colour: at 8 bits rounded to a byte as before; at 16 the ramp's exact colour, without 8-bit steps.
     auto gradRgb = [&](const StyleGradient& g, float t, float out[3]) {
         if constexpr (S == SampleType::U8) rgb(gradientColor(g, t), out);
@@ -575,6 +594,7 @@ void drawStyled(const StyledDraw& in, ImageOf<S>& target) {
             double c[3];
             gradientColorExact(g, t, c);
             for (int k = 0; k < 3; k++) out[k] = float(std::clamp(c[k], 0.0, 255.0) / 255.0);
+            linearised(out);
         }
     };
     // Document pixel under output pixel (ox, oy), for gradients and patterns.
@@ -696,6 +716,7 @@ void drawStyled(const StyledDraw& in, ImageOf<S>& target) {
             if (!tile || p.opacity <= 0) continue;
             float pc[3], pa;
             patternFor(tile, style, p.scale, p.angle, p.linkWithLayer, p.phaseX, p.phaseY).sample(x, y, pc, pa);
+            linearised(pc);
             foldEffect(c, pc, pa * p.opacity, p.mode);
         }
         for (const GradientOverlay& g : style.gradientOverlays) {
@@ -727,7 +748,10 @@ void drawStyled(const StyledDraw& in, ImageOf<S>& target) {
         if (p[3] == 0) return;
         const float a = p[3] / one;
         float c[3];
-        for (int k = 0; k < 3; k++) c[k] = std::min(1.0f, p[k] / one / a);
+        for (int k = 0; k < 3; k++) {
+            if constexpr (S == SampleType::F32) c[k] = std::max(0.0f, p[k] / a);   // linear, above 1 kept
+            else c[k] = std::min(1.0f, p[k] / one / a);
+        }
         const float paint = a * master * fill * knock(i) * coverAt(ox, oy);
         if (paint <= 0) return;
         if (foldInteriors && interiorsFirst) foldInto(c, ox, oy, i);
@@ -773,6 +797,7 @@ void drawStyled(const StyledDraw& in, ImageOf<S>& target) {
                 if (!tile || p.opacity <= 0) continue;
                 float pc[3], pa;
                 patternFor(tile, style, p.scale, p.angle, p.linkWithLayer, p.phaseX, p.phaseY).sample(x, y, pc, pa);
+                linearised(pc);
                 compositeEffect(d, pc, shape * pa * p.opacity, p.mode);
             }
             for (const GradientOverlay& g : style.gradientOverlays) {
@@ -949,5 +974,6 @@ void drawStyled(const StyledDraw& in, ImageOf<S>& target) {
 
 void drawStyledLayer(const StyledDraw& in, Image& target) { drawStyled<SampleType::U8>(in, target); }
 void drawStyledLayer(const StyledDraw& in, Image16& target) { drawStyled<SampleType::U16>(in, target); }
+void drawStyledLayer(const StyledDraw& in, ImageF& target) { drawStyled<SampleType::F32>(in, target); }
 
 } // namespace compositor
