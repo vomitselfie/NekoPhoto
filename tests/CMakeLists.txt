@@ -294,9 +294,14 @@ add_executable(toning_tests toning_tests.cpp)
 target_link_libraries(toning_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME toning_tests COMMAND toning_tests)
 
+add_executable(whitebalance_tests whitebalance_tests.cpp)
+target_link_libraries(whitebalance_tests PRIVATE compositor::core compositor_warnings)
+add_test(NAME whitebalance_tests COMMAND whitebalance_tests)
+
 add_executable(raw_tests raw_tests.cpp)
 target_link_libraries(raw_tests PRIVATE compositor::core compositor_warnings)
-target_compile_definitions(raw_tests PRIVATE RAW_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/raw/synthetic.dng")
+target_compile_definitions(raw_tests PRIVATE RAW_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/raw/synthetic.dng"
+                                             RAW_DUAL_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/raw/synthetic-dual.dng")
 add_test(NAME raw_tests COMMAND raw_tests)
 
 add_executable(vectorlayer_tests vectorlayer_tests.cpp)

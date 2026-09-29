@@ -6,9 +6,12 @@ grey as red 0.5, green 1, blue 0.7, and the file's AsShotNeutral says so, so a d
 white balance gets the grey back neutral. The camera space is linear sRGB (ColorMatrix1 is the XYZ to linear sRGB
 matrix), so the colours come out as drawn.
 
-    python3 tools/make_test_dng.py out.dng [width height]
+    python3 tools/make_test_dng.py out.dng [width height] [--dual]
 
-Standard library only. The fixture under tests/fixtures/raw/ was made with the defaults.
+--dual also writes ColorMatrix2 under D65 and makes ColorMatrix1 a Standard light A calibration (the D65 matrix with
+its rows scaled), the two-illuminant layout camera profiles use, so the white balance model interpolates between
+them. Standard library only. The fixtures under tests/fixtures/raw/ were made with the defaults: synthetic.dng, and
+synthetic-dual.dng with --dual.
 """
 import struct
 import sys
@@ -41,9 +44,13 @@ def rational(v, signed=False):
     return (round(v * den), den)
 
 
-def write(path, w=128, h=96):
+DUAL_ROW_SCALE = (1.25, 1.0, 0.8)   # ColorMatrix1 (Standard light A) = the D65 matrix with these row scales
+
+
+def write(path, w=128, h=96, dual=False):
     pixels = mosaic(w, h)
     xyz_to_srgb = [3.2406, -1.5372, -0.4986, -0.9689, 1.8758, 0.0415, 0.0557, -0.2040, 1.0570]
+    matrix1 = [v * DUAL_ROW_SCALE[i // 3] for i, v in enumerate(xyz_to_srgb)] if dual else xyz_to_srgb
     # (tag, type, values): types 1 BYTE, 2 ASCII, 3 SHORT, 4 LONG, 5 RATIONAL, 10 SRATIONAL
     tags = [
         (254, 4, [0]),
@@ -56,10 +63,12 @@ def write(path, w=128, h=96):
         (50706, 1, [1, 4, 0, 0]), (50707, 1, [1, 1, 0, 0]),
         (50708, 2, b"NekoPhoto Test Bayer\0"),
         (50714, 4, [BLACK]), (50717, 4, [WHITE]),
-        (50721, 10, [rational(v) for v in xyz_to_srgb]),
+        (50721, 10, [rational(v) for v in matrix1]),
         (50728, 5, [rational(v) for v in NEUTRAL]),
-        (50778, 3, [21]),   # CalibrationIlluminant1: D65
+        (50778, 3, [17 if dual else 21]),   # CalibrationIlluminant1: Standard light A with --dual, else D65
     ]
+    if dual:
+        tags += [(50722, 10, [rational(v) for v in xyz_to_srgb]), (50779, 3, [21])]   # ColorMatrix2, D65
     tags.sort(key=lambda t: t[0])
     sizes = {1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 10: 8}
     ifd_offset = 8
@@ -102,6 +111,7 @@ def write(path, w=128, h=96):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) not in (2, 4):
+    args = [a for a in sys.argv[1:] if a != "--dual"]
+    if len(args) not in (1, 3):
         sys.exit(__doc__)
-    write(sys.argv[1], *(int(v) for v in sys.argv[2:4])) if len(sys.argv) == 4 else write(sys.argv[1])
+    write(args[0], *(int(v) for v in args[1:3]), dual="--dual" in sys.argv[1:])

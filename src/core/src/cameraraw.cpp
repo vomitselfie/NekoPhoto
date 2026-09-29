@@ -4,6 +4,7 @@
 // CameraRawGeometryCalibration.swift. Upstream warps Geometry with Core Image's CIPerspectiveTransform;
 // here the same corners drive a homography resampled bilinearly.
 #include "compositor/cameraraw.h"
+#include "compositor/whitebalance.h"
 #include "compositor/depth.h"
 #include "compositor/parallel.h"
 #include "compositor/resample.h"
@@ -67,7 +68,19 @@ double curveAt(double x, const std::vector<CameraRawCurvePoint>& points) {
 
 // ---- names ------------------------------------------------------------------------------------
 
-const char* cameraRawName(CameraRawWhiteBalance v) { return v == CameraRawWhiteBalance::Auto ? "Auto" : "Custom"; }
+const char* cameraRawName(CameraRawWhiteBalance v) {
+    switch (v) {
+    case CameraRawWhiteBalance::Auto: return "Auto";
+    case CameraRawWhiteBalance::AsShot: return "As Shot";
+    case CameraRawWhiteBalance::Daylight: return "Daylight";
+    case CameraRawWhiteBalance::Cloudy: return "Cloudy";
+    case CameraRawWhiteBalance::Shade: return "Shade";
+    case CameraRawWhiteBalance::Tungsten: return "Tungsten";
+    case CameraRawWhiteBalance::Fluorescent: return "Fluorescent";
+    case CameraRawWhiteBalance::Flash: return "Flash";
+    default: return "Custom";
+    }
+}
 const char* cameraRawName(CameraRawGlowStyle v) {
     switch (v) { case CameraRawGlowStyle::Bloom: return "Bloom"; case CameraRawGlowStyle::Halation: return "Halation"; default: return "Diffusion"; }
 }
@@ -388,6 +401,8 @@ bool CameraRawSettings::isValid() const {
         if (!within(v, -100, 100)) return false;
     for (double v : {glow, vignetteMidpoint, vignetteFeather, vignetteHighlights, grainAmount, grainSize, grainRoughness})
         if (!within(v, 0, 100)) return false;
+    if (rawTemperature != 0 && !within(rawTemperature, kMinRawTemperature, kMaxRawTemperature)) return false;
+    if (!within(rawTint, -kMaxRawTint, kMaxRawTint)) return false;
     return true;
 }
 
@@ -411,6 +426,13 @@ CameraRawSettings CameraRawSettings::normalized() const {
     r.optics = optics.normalized();
     r.geometry = geometry.normalized();
     r.calibration = calibration.normalized();
+    if (std::isfinite(rawTemperature) && rawTemperature > 0) {
+        r.rawTemperature = std::clamp(rawTemperature, kMinRawTemperature, kMaxRawTemperature);
+        r.rawTint = clampTo(rawTint, -kMaxRawTint, kMaxRawTint, 0);
+        r.temperature = r.tint = 0;   // the white point replaces the relative grade
+    } else {
+        r.rawTemperature = r.rawTint = 0;
+    }
     return r;
 }
 
@@ -813,6 +835,10 @@ std::string CameraRawSettings::toJson() const {
                          {"greenSaturation", s.calibration.greenSaturation}, {"blueHue", s.calibration.blueHue},
                          {"blueSaturation", s.calibration.blueSaturation}}},
     };
+    if (s.rawTemperature > 0) {   // only for a RAW file's kelvin balance, so older records and the filter's replies keep their form
+        j["rawTemperature"] = s.rawTemperature;
+        j["rawTint"] = s.rawTint;
+    }
     return j.dump();
 }
 
@@ -829,8 +855,10 @@ bool CameraRawSettings::parse(const std::string& text, CameraRawSettings& out, s
     auto& geo = s.geometry;
     auto& cal = s.calibration;
     r.object(j, "", {
-        {"whiteBalance", [&](const json& v, const std::string& k) { r.choice(v, k, s.whiteBalance, std::array{CameraRawWhiteBalance::Custom, CameraRawWhiteBalance::Auto}); }},
-        NUM(s, temperature), NUM(s, tint), NUM(s, exposure), NUM(s, contrast), NUM(s, highlights), NUM(s, shadows), NUM(s, whites), NUM(s, blacks),
+        {"whiteBalance", [&](const json& v, const std::string& k) { r.choice(v, k, s.whiteBalance, std::array{CameraRawWhiteBalance::Custom, CameraRawWhiteBalance::Auto, CameraRawWhiteBalance::AsShot,
+            CameraRawWhiteBalance::Daylight, CameraRawWhiteBalance::Cloudy, CameraRawWhiteBalance::Shade, CameraRawWhiteBalance::Tungsten,
+            CameraRawWhiteBalance::Fluorescent, CameraRawWhiteBalance::Flash}); }},
+        NUM(s, temperature), NUM(s, tint), NUM(s, rawTemperature), NUM(s, rawTint), NUM(s, exposure), NUM(s, contrast), NUM(s, highlights), NUM(s, shadows), NUM(s, whites), NUM(s, blacks),
         NUM(s, vibrance), NUM(s, saturation), NUM(s, texture), NUM(s, clarity), NUM(s, dehaze), NUM(s, glow),
         {"glowStyle", [&](const json& v, const std::string& k) { r.choice(v, k, s.glowStyle, std::array{CameraRawGlowStyle::Diffusion, CameraRawGlowStyle::Bloom, CameraRawGlowStyle::Halation}); }},
         NUM(s, glowRange), NUM(s, glowSpread), NUM(s, glowWarmth), NUM(s, vignetteAmount),

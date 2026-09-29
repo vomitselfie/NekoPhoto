@@ -15,7 +15,8 @@
 
 namespace compositor {
 
-enum class CameraRawWhiteBalance { Custom, Auto };
+/// Custom and Auto are the filter's. A RAW file also offers As Shot and the presets the file records (Camera Raw's list).
+enum class CameraRawWhiteBalance { Custom, Auto, AsShot, Daylight, Cloudy, Shade, Tungsten, Fluorescent, Flash };
 /// Diffusion and Bloom are tinted cool to warm by Warmth; Halation's fringe stays red.
 enum class CameraRawGlowStyle { Diffusion, Bloom, Halation };
 /// Highlight Priority is the style whose Highlights slider protects bright pixels.
@@ -177,6 +178,11 @@ struct CameraRawSettings {
 
     CameraRawWhiteBalance whiteBalance = CameraRawWhiteBalance::Custom;
     double temperature = 0, tint = 0;   // −100…100, relative (not kelvin); positive is warmer / more magenta
+    /// A RAW file's white balance as Camera Raw shows it: the white point's temperature in kelvin (2000…50000) and its
+    /// tint (−150…150, compositor/whitebalance.h), which the develop turns into the camera's multipliers. 0 kelvin
+    /// means none: the file develops as shot and `temperature` / `tint` grade it relatively, which is how projects
+    /// saved before kelvin white balance keep developing. With a kelvin value set, `temperature` and `tint` are 0.
+    double rawTemperature = 0, rawTint = 0;
     double exposure = 0;                // stops, −5…5
     double contrast = 0, highlights = 0, shadows = 0, whites = 0, blacks = 0;
     double vibrance = 0, saturation = 0;

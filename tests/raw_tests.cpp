@@ -204,4 +204,171 @@ TEST_CASE(a_raw_smart_object_keeps_its_file_and_settings) {
     CHECK(std::abs(int(psdShown->pixel(64, 20)[1]) - int(darkerShown->pixel(64, 20)[1])) <= 2);
 }
 
+TEST_CASE(the_fixture_reads_its_white_balance_in_kelvin) {
+    if (!rawSupported()) return;
+    const auto bytes = fixture();
+    RawWhiteBalance balance;
+    std::string error;
+    REQUIRE(readRawWhiteBalance(bytes, balance, &error));
+    REQUIRE(balance.kelvin);
+    // AsShotNeutral 0.5, 1, 0.7 in an sRGB camera: multipliers 2, 1, 1/0.7. Less red than D65 and a strong green: a cool,
+    // green light, above D65 on the green side of the locus.
+    CHECK_NEAR(balance.asShot[0], 2, 1e-5);
+    CHECK_NEAR(balance.asShot[2], 1 / 0.7, 1e-5);
+    CHECK(balance.asShotValue.temperature > 6600 && balance.asShotValue.temperature < 8000);
+    CHECK(balance.asShotValue.tint > 50);
+    CHECK(balance.presets.empty());   // a DNG records no presets: none are made up
+    // neutral -> xy -> (T, tint) -> xy -> neutral gives the as-shot multipliers back.
+    const auto back = balance.multipliersFor(balance.asShotValue);
+    REQUIRE(back);
+    for (int c = 0; c < 3; c++) CHECK_NEAR((*back)[size_t(c)], balance.asShot[size_t(c)], 1e-9);
+    std::printf("synthetic.dng as shot: %.0f K, tint %+.1f\n", balance.asShotValue.temperature, balance.asShotValue.tint);
+}
+
+TEST_CASE(the_dual_illuminant_fixture_interpolates_its_matrices) {
+    if (!rawSupported()) return;
+    std::string error;
+    const auto bytes = readRawFileBytes(RAW_DUAL_FIXTURE, &error);
+    RawWhiteBalance balance;
+    REQUIRE(readRawWhiteBalance(bytes, balance, &error));
+    REQUIRE(balance.kelvin);
+    REQUIRE(balance.model.isDual());
+    CHECK_EQ(balance.model.temperature1, 2856.0);
+    CHECK_EQ(balance.model.temperature2, 6504.0);
+    const auto back = balance.multipliersFor(balance.asShotValue);
+    REQUIRE(back);
+    for (int c = 0; c < 3; c++) CHECK_NEAR((*back)[size_t(c)], balance.asShot[size_t(c)], 1e-9);
+    // Above D65 only the D65 matrix counts, so both fixtures read the as-shot neutral alike; a warm light's neutral
+    // reads differently, because the Standard light A matrix takes part, and still round-trips.
+    RawWhiteBalance single;
+    REQUIRE(readRawWhiteBalance(fixture(), single, &error));
+    CHECK_NEAR(single.asShotValue.temperature, balance.asShotValue.temperature, 1e-6);
+    const std::array<double, 3> warm{1.1, 1, 2.6};
+    const auto dualWarm = balance.valueOf(warm), singleWarm = single.valueOf(warm);
+    REQUIRE(dualWarm && singleWarm);
+    CHECK(dualWarm->temperature < 5000);
+    CHECK(std::fabs(singleWarm->temperature - dualWarm->temperature) > 20);
+    const auto warmBack = balance.multipliersFor(*dualWarm);
+    REQUIRE(warmBack);
+    for (int c = 0; c < 3; c++) CHECK_NEAR((*warmBack)[size_t(c)], warm[size_t(c)], 1e-9);
+    std::printf("synthetic-dual.dng as shot: %.0f K, tint %+.1f\n", balance.asShotValue.temperature, balance.asShotValue.tint);
+}
+
+TEST_CASE(kelvin_white_balance_develops_through_the_multipliers) {
+    if (!rawSupported()) return;
+    const auto bytes = fixture();
+    std::string error;
+    RawWhiteBalance balance;
+    REQUIRE(readRawWhiteBalance(bytes, balance, &error));
+    auto asShot = developRaw(bytes, {}, {}, &error);
+    REQUIRE(asShot);
+    // As Shot with its kelvin readout develops exactly as the camera's own balance.
+    CameraRawSettings shot;
+    shot.whiteBalance = CameraRawWhiteBalance::AsShot;
+    shot.rawTemperature = balance.asShotValue.temperature;
+    shot.rawTint = balance.asShotValue.tint;
+    CHECK(!balance.multipliersFor(shot.normalized()));
+    auto same = developRaw(bytes, shot, {}, &error);
+    REQUIRE(same);
+    CHECK(*same == *asShot);
+    // Custom at the as-shot readout: the round-tripped multipliers, within a level.
+    shot.whiteBalance = CameraRawWhiteBalance::Custom;
+    auto custom = developRaw(bytes, shot, {}, &error);
+    REQUIRE(custom);
+    for (int x : {20, 64, 100}) CHECK(std::abs(int(custom->pixel(x, 20)[0]) - int(asShot->pixel(x, 20)[0])) <= 1);
+    // A higher temperature setting warms the picture; a positive tint turns it magenta.
+    CameraRawSettings warmer = shot;
+    warmer.rawTemperature = balance.asShotValue.temperature + 1500;
+    auto warm = developRaw(bytes, warmer, {}, &error);
+    REQUIRE(warm);
+    const auto w = at(*warm, 64, 20);
+    CHECK(w[0] > w[2] + 0.03);
+    CameraRawSettings magenta = shot;
+    magenta.rawTint = balance.asShotValue.tint + 40;
+    auto pink = developRaw(bytes, magenta, {}, &error);
+    REQUIRE(pink);
+    const auto m = at(*pink, 64, 20);
+    CHECK(m[0] > m[1] + 0.02 && m[2] > m[1] + 0.02);
+    // The quick preview's rebalance of the as-shot decode lands near the exact decode.
+    Image16 quick = *asShot;
+    rebalanceRawDecode(quick, balance, balance.asShot, *balance.multipliersFor(warmer.normalized()));
+    for (int c = 0; c < 3; c++) CHECK_NEAR(at(quick, 64, 20)[size_t(c)], w[size_t(c)], 0.03);
+}
+
+TEST_CASE(automation_settings_settle_against_the_file) {
+    if (!rawSupported()) return;
+    const auto bytes = fixture();
+    RawWhiteBalance balance;
+    std::string error;
+    REQUIRE(readRawWhiteBalance(bytes, balance, &error));
+    // Nothing about white balance: As Shot, shown in kelvin.
+    CameraRawSettings none;
+    none.exposure = 0.3;
+    CHECK_EQ(resolveRawWhiteBalance(bytes, none, false, false), std::string());
+    CHECK(none.whiteBalance == CameraRawWhiteBalance::AsShot);
+    CHECK_NEAR(none.rawTemperature, balance.asShotValue.temperature, 1e-9);
+    // A temperature above 100 is kelvin; tint then absolute.
+    CameraRawSettings kelvin;
+    kelvin.temperature = 5500;
+    kelvin.tint = 12;
+    CHECK_EQ(resolveRawWhiteBalance(bytes, kelvin, true, true), std::string());
+    CHECK_EQ(kelvin.rawTemperature, 5500.0);
+    CHECK_EQ(kelvin.rawTint, 12.0);
+    CHECK_EQ(kelvin.temperature, 0.0);
+    // Within -100..100 it is the older relative form, left alone.
+    CameraRawSettings relative;
+    relative.temperature = 30;
+    CHECK_EQ(resolveRawWhiteBalance(bytes, relative, true, false), std::string());
+    CHECK_EQ(relative.temperature, 30.0);
+    CHECK_EQ(relative.rawTemperature, 0.0);
+    // A preset the file does not record is refused; out of range too.
+    CameraRawSettings daylight;
+    daylight.whiteBalance = CameraRawWhiteBalance::Daylight;
+    CHECK(!resolveRawWhiteBalance(bytes, daylight, false, false).empty());
+    CameraRawSettings hot;
+    hot.temperature = 60000;
+    CHECK(!resolveRawWhiteBalance(bytes, hot, true, false).empty());
+    // Auto solves a white point: the fixture's grey is neutral as shot, so Auto lands near As Shot.
+    CameraRawSettings automatic;
+    automatic.whiteBalance = CameraRawWhiteBalance::Auto;
+    CHECK_EQ(resolveRawWhiteBalance(bytes, automatic, false, false), std::string());
+    CHECK(automatic.rawTemperature > 0);
+    CHECK_NEAR(automatic.rawTemperature, balance.asShotValue.temperature, 400);
+    // The settings keep the kelvin balance through JSON; older JSON without it stays relative.
+    CameraRawSettings parsed;
+    REQUIRE(CameraRawSettings::parse(kelvin.normalized().toJson(), parsed));
+    CHECK_EQ(parsed.rawTemperature, 5500.0);
+    CHECK_EQ(parsed.rawTint, 12.0);
+    CHECK(CameraRawSettings().toJson().find("rawTemperature") == std::string::npos);
+}
+
+TEST_CASE(real_camera_files_round_trip_their_as_shot_balance) {
+    // Local sample files (not in the repository): NEKOPHOTO_RAW_SAMPLES names the folder holding them.
+    const char* folder = std::getenv("NEKOPHOTO_RAW_SAMPLES");
+    if (!rawSupported() || !folder) return;
+    for (const char* name : {"Canon_EOS_R_RAW_ISO_100.CR3", "DSCF0268.RAF", "_DSC0009.ARW"}) {
+        const auto path = std::filesystem::path(folder) / name;
+        if (!std::filesystem::exists(path)) continue;
+        std::string error;
+        const auto bytes = readRawFileBytes(path.string(), &error);
+        RawWhiteBalance balance;
+        REQUIRE(readRawWhiteBalance(bytes, balance, &error));
+        REQUIRE(balance.kelvin);
+        // camera neutral -> xy -> T/tint -> xy -> neutral: the same multipliers.
+        const auto back = balance.multipliersFor(balance.asShotValue);
+        REQUIRE(back);
+        for (int c = 0; c < 3; c++) CHECK_NEAR((*back)[size_t(c)], balance.asShot[size_t(c)], 1e-9 * balance.asShot[size_t(c)]);
+        // Each preset reads back to its own multipliers too.
+        for (const auto& p : balance.presets) {
+            const auto again = balance.multipliersFor(p.value);
+            REQUIRE(again);
+            for (int c = 0; c < 3; c++) CHECK_NEAR((*again)[size_t(c)], p.multipliers[size_t(c)], 1e-6 * p.multipliers[size_t(c)]);
+        }
+        std::printf("%s as shot: multipliers %.4f %.4f %.4f -> %.0f K, tint %+.1f; presets:", name, balance.asShot[0], balance.asShot[1],
+                    balance.asShot[2], balance.asShotValue.temperature, balance.asShotValue.tint);
+        for (const auto& p : balance.presets) std::printf(" %s %.0f K %+.1f,", cameraRawName(p.mode), p.value.temperature, p.value.tint);
+        std::printf("\n");
+    }
+}
+
 TEST_MAIN()
