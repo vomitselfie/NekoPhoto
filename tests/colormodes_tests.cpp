@@ -207,7 +207,11 @@ TEST_CASE(history_counts_cmyk_channels) {
     doc.layers.push_back(Layer(Asset::makeAny(ImageC8Ptr(cmykPattern<ImageC8>(32, 16)), "ink"), Point(0, 0)));
     DocumentHistory history;
     history.begin("Edit", doc, doc.layers[0].id);
-    doc.layers[0].asset = Asset::makeAny(ImageC8Ptr(cmykPattern<ImageC8>(32, 16)), "ink");
+    // A replacement that differs everywhere: identical pixels would be an empty region patch (history keeps only what
+    // an edit changed), and this test is about whole buffers being counted at five samples a pixel.
+    auto changed = cmykPattern<ImageC8>(32, 16);
+    for (int y = 0; y < 16; y++) for (int x = 0; x < 32; x++) changed->pixel(x, y)[4] ^= 1;
+    doc.layers[0].asset = Asset::makeAny(ImageC8Ptr(changed), "ink");
     history.end(doc, doc.layers[0].id);
     CHECK_EQ(history.retainedBytes(doc), size_t(32 * 16 * 5));   // five samples a pixel, no thumbnail yet
     doc.sampleType = SampleType::U16;
