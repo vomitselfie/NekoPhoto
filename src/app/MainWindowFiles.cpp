@@ -14,6 +14,9 @@
 #include <QLineEdit>
 #include <QProgressDialog>
 #include "compositor/raw.h"
+#include "compositor/smartobject_edit.h"
+#include "compositor/depth.h"
+#include "RawDevelopDialog.h"
 #include "compositor/psd_writer.h"
 #include "CanvasWidget.h"
 #include "Dialogs.h"
@@ -104,13 +107,19 @@ void MainWindow::newDocument() {
 }
 
 void MainWindow::openAsDocument(const QString& path) {
-    if (isLayeredPath(path) || isProjectPath(path)) { openPath(path); return; }
+    if (isLayeredPath(path) || isProjectPath(path) || compositor::isRawPath(path.toStdString())) { openPath(path); return; }
     QString error;
     if (!openImageAsDocument(path, &error)) showError(tr("Couldn’t open the file"), error.isEmpty() ? path : error);
 }
 
 void MainWindow::openPath(const QString& path) {
     if (isLayeredPath(path)) { openLayeredFile(path); return; }
+    if (compositor::isRawPath(path.toStdString()) && QFileInfo(path).isFile()) {
+        // A camera RAW file always opens as a document of its own, through Camera Raw, as in Photoshop.
+        QString error;
+        if (!openRawFile(path, &error) && !error.isEmpty()) showError(tr("Couldn’t open %1").arg(QFileInfo(path).fileName()), error);
+        return;
+    }
     if (isProjectPath(path)) {
         QString canonical = QFileInfo(path).canonicalFilePath();
         for (size_t i = 0; i < tabs_.size(); i++)
@@ -315,7 +324,82 @@ void MainWindow::importFiles() {
     }
 }
 
-bool MainWindow::editSmartObjectContents(QString* errorOut) {
+bool MainWindow::openRawFile(const QString& path, QString* error, const RawOpenRequest* request) {
+    std::string why;
+    auto bytes = std::make_shared<const std::vector<uint8_t>>(compositor::readRawFileBytes(path.toStdString(), &why));
+    if (bytes->empty()) { if (error) *error = QString::fromStdString(why); return false; }
+    const QString fileName = QFileInfo(path).fileName();
+    compositor::CameraRawSettings settings;
+    bool asObject = false;
+    int bits = RawDevelopDialog::workflowBits();
+    std::shared_ptr<compositor::Image16> developed;
+    if (!request && isVisible()) {
+        RawDevelopDialog dialog(bytes, fileName, settings, RawDevelopDialog::Purpose::Open, this);
+        if (dialog.exec() != QDialog::Accepted || dialog.choice() == RawDevelopDialog::Choice::Cancelled || !dialog.developed()) return false;
+        settings = dialog.settings().normalized();
+        asObject = dialog.choice() == RawDevelopDialog::Choice::OpenObject;
+        bits = dialog.bitsPerChannel();
+        developed = dialog.developed();
+    } else {
+        if (request) { settings = request->settings.normalized(); asObject = request->asSmartObject; bits = request->bitsPerChannel; }
+        QApplication::setOverrideCursor(Qt::BusyCursor);
+        developed = compositor::developRaw(*bytes, settings, {}, &why);
+        QApplication::restoreOverrideCursor();
+        if (!developed) { if (error) *error = QString::fromStdString(why); return false; }
+    }
+    const compositor::SampleType type = bits == 8 ? compositor::SampleType::U8 : compositor::SampleType::U16;
+    if (const compositor::BudgetCheck check = compositor::Document::canCreate(developed->width(), developed->height(), type); !check) {
+        if (error) *error = EditorSession::budgetText(check);
+        return false;
+    }
+    // LibRaw develops into sRGB: the document takes it as its profile the way an untagged image does.
+    const color::OpenDecision decision = color::decideOnOpen(std::nullopt, this);
+    const QString stem = QFileInfo(path).completeBaseName();
+    if (asObject) {
+        // Open Object: the RAW file and the settings are the smart object's source; the contents stay at 16 bits.
+        auto source = compositor::makeRawSmartObjectSource(bytes, fileName.toStdString(), settings, compositor::Image16Ptr(developed));
+        if (!source) { if (error) *error = tr("The RAW file could not be developed."); return false; }
+        Tab& tab = addTab(true);
+        tab.session->adoptDocument(compositor::smartObjectDocument(source, type), stem);
+        tab.session->adoptProfile(decision.profile);
+        tab.defaultName = stem;
+    } else {
+        compositor::AnyImage image = bits == 8 ? compositor::AnyImage(compositor::ImagePtr(compositor::narrowImage(*developed))) : compositor::AnyImage(compositor::Image16Ptr(developed));
+        image = color::applyToImage(image, decision);
+        Tab& tab = addTab(true);
+        tab.session->insertImage(image, stem, std::nullopt);   // a first image makes the canvas, at its depth
+        tab.session->adoptProfile(decision.profile);
+        tab.defaultName = stem;
+    }
+    refreshTabTitles();
+    addRecent(path);
+    return true;
+}
+
+bool MainWindow::editSmartObjectContents(QString* errorOut, const compositor::CameraRawSettings* rawSettings) {
+    compositor::CameraRawSettings current;
+    if (auto raw = session_->activeRawSmartObject(&current)) {
+        // Made with Open Object: the RAW file reopens in Camera Raw with its settings, and OK develops it again.
+        QString error;
+        auto fail = [&](const QString& why) { if (errorOut) *errorOut = why; else showError(tr("Couldn’t develop the RAW file"), why); return false; };
+        compositor::CameraRawSettings settings = rawSettings ? rawSettings->normalized() : current;
+        std::shared_ptr<compositor::Image16> developed;
+        if (!rawSettings && isVisible() && !errorOut) {
+            RawDevelopDialog dialog(raw->bytes, QString::fromStdString(raw->fileName), current, RawDevelopDialog::Purpose::Redevelop, this);
+            if (dialog.exec() != QDialog::Accepted || !dialog.developed()) return true;   // Cancel: nothing changes
+            settings = dialog.settings().normalized();
+            developed = dialog.developed();
+        } else {
+            std::string why;
+            QApplication::setOverrideCursor(Qt::BusyCursor);
+            developed = compositor::developRaw(*raw->bytes, settings, {}, &why);
+            QApplication::restoreOverrideCursor();
+            if (!developed) return fail(QString::fromStdString(why));
+        }
+        if (!session_->redevelopRawSmartObject(settings, compositor::Image16Ptr(developed), &error)) return fail(error);
+        statusBar()->showMessage(tr("Developed %1 again.").arg(QString::fromStdString(raw->fileName)), 5000);
+        return true;
+    }
     QString error;
     auto contents = session_->smartObjectContentsForEditing(&error);
     if (!contents) {
@@ -664,7 +748,7 @@ void MainWindow::dropEvent(QDropEvent* e) {
             QString path = url.toLocalFile();
             // Projects and layered files open in their own tab; an image dropped on the tab strip does too,
             // while one dropped on the canvas lands as a layer where it was dropped.
-            if (isProjectPath(path) || isLayeredPath(path)) openPath(path);
+            if (isProjectPath(path) || isLayeredPath(path) || compositor::isRawPath(path.toStdString())) openPath(path);
             else if (asDocument) { QString error; if (!openImageAsDocument(path, &error)) showError(tr("Couldn’t open %1").arg(QFileInfo(path).fileName()), error); }
             else importFile(path, at);
         }

@@ -114,6 +114,10 @@ qt_add_executable(nekophoto
     SmartFilterDialog.cpp
     CameraRawDialog.h
     CameraRawDialog.cpp
+    CameraRawPanels.h
+    CameraRawPanels.cpp
+    RawDevelopDialog.h
+    RawDevelopDialog.cpp
     PixelDialog.h
     PixelDialog.cpp
     ContentFillDialog.cpp

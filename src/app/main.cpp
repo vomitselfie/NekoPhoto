@@ -15,6 +15,8 @@
 #include "Dialogs.h"
 #include "Theme.h"
 #include "CameraRawDialog.h"
+#include "RawDevelopDialog.h"
+#include "compositor/raw.h"
 #include "LayerStyleDialog.h"
 #include "FilterDialog.h"
 #include "GmicDialog.h"
@@ -287,7 +289,7 @@ int run(int argc, char** argv) {
     parser.addOption(langOption);
     QCommandLineOption toolOption("tool", "Select tool <name> after opening (move, marquee, lasso, wand, crop, brush, healing, clone, smudge, gradient, shape, eyedropper, hand, zoom).", "name");
     parser.addOption(toolOption);
-    QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: welcome (or welcome:N for page N), new, canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, cameraraw (or cameraraw:N for panel N), gmic, mosh (or mosh:<effect id>), content-fill, background, text, fonts, brushes, brush-dynamics (the first imported tip brush), actions, timeline (frames made from the layers when there are none), batch, layers-menu (the active layer's context menu).", "name");
+    QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: welcome (or welcome:N for page N), new, canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, cameraraw (or cameraraw:N for panel N), raw:<file> (the Camera Raw dialog a RAW file opens in), gmic, mosh (or mosh:<effect id>), content-fill, background, text, fonts, brushes, brush-dynamics (the first imported tip brush), actions, timeline (frames made from the layers when there are none), batch, layers-menu (the active layer's context menu).", "name");
     parser.addOption(dialogOption);
     QCommandLineOption rpc("rpc", "Listen on the automation socket (JSON-RPC over a local socket, for the MCP bridge). Also on when the automation preference is set.");
     QCommandLineOption rpcSocket("rpc-socket", "Socket path for --rpc (default: $XDG_RUNTIME_DIR/nekophoto.sock, or $COMPOSITOR_RPC_SOCKET; on Windows the named pipe nekophoto-<user>).", "path");
@@ -419,7 +421,7 @@ int run(int argc, char** argv) {
     }
     if (parser.isSet(dialogOption)) {
         QString name = parser.value(dialogOption).toLower();
-        QTimer::singleShot(50, &window, [&window, name] {
+        QTimer::singleShot(50, &window, [&window, name, given = parser.value(dialogOption)] {
             using compositor::AdjustmentKind; using compositor::FilterKind;
             static const QMap<QString, AdjustmentKind> adjustments{{"levels", AdjustmentKind::Levels}, {"curves", AdjustmentKind::Curves}, {"hue", AdjustmentKind::HueSaturation},
                 {"exposure", AdjustmentKind::Exposure}, {"gradient-map", AdjustmentKind::GradientMap}, {"grain", AdjustmentKind::Grain},
@@ -464,6 +466,19 @@ int run(int argc, char** argv) {
                 auto* dialog = new app::CameraRawDialog(s, &window);
                 if (auto* panels = dialog->findChild<QListWidget*>("cameraRawPanels")) panels->setCurrentRow(name.section(':', 1).toInt());
                 dialog->show();
+            }
+            else if (name.startsWith("raw:")) {
+                // raw:<file>: the Camera Raw dialog a RAW file opens in (raw:<file>:N for panel N)
+                QString file = given.section(QLatin1Char(':'), 1), panel;   // the path as given, not lowercased
+                if (const int colon = file.lastIndexOf(':'); colon > 0 && file.mid(colon + 1).toInt() > 0) { panel = file.mid(colon + 1); file.truncate(colon); }
+                std::string why;
+                auto bytes = std::make_shared<const std::vector<uint8_t>>(compositor::readRawFileBytes(file.toStdString(), &why));
+                if (bytes->empty()) qWarning("%s", why.c_str());
+                else {
+                    auto* dialog = new app::RawDevelopDialog(bytes, QFileInfo(file).fileName(), {}, app::RawDevelopDialog::Purpose::Open, &window);
+                    if (auto* panels = dialog->findChild<QListWidget*>("cameraRawPanels")) panels->setCurrentRow(panel.toInt());
+                    dialog->show();
+                }
             }
             else if (name == "warpcage") {
                 // The cage on the demo's ellipse with its bottom-right corner pulled out.

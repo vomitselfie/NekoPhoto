@@ -9,6 +9,7 @@
 #include "compositor/png.h"
 #include "compositor/psd.h"
 #include "compositor/render.h"
+#include "compositor/smartobject_edit.h"
 #include <QBuffer>
 #include <QFile>
 #include <QFileInfo>
@@ -138,6 +139,30 @@ bool EditorSession::replaceSmartObjectContents(const QString& path, QString* err
     replaceSmartObjectSource(*document_, layer->smartObject->sourceId, source);
     endEdit();
     notifyDocument();
+    return true;
+}
+
+std::shared_ptr<const SmartObjectSource> EditorSession::activeRawSmartObject(CameraRawSettings* settings) const {
+    const Layer* layer = activeLayer();
+    if (!document_ || !layer || !layer->isLiveSmartObject()) return nullptr;
+    auto found = document_->smartObjects.find(layer->smartObject->sourceId);
+    if (found == document_->smartObjects.end() || !found->second->isCameraRaw() || !found->second->bytes) return nullptr;
+    if (settings && !CameraRawSettings::parse(found->second->rawSettings, *settings)) return nullptr;
+    return found->second;
+}
+
+bool EditorSession::redevelopRawSmartObject(const CameraRawSettings& settings, const AnyImage& image, QString* error) {
+    if (refusedAtDepth("edit.smartObject", tr("Smart objects"), error)) return false;
+    auto source = activeRawSmartObject();
+    if (!canEditLayers() || !source) { if (error) *error = tr("Select a smart object made from a camera RAW file."); return false; }
+    std::string why;
+    if (!smartObjectContentsEditable(*document_, source->id, &why)) { if (error) *error = QString::fromStdString(why); return false; }
+    endOpacityEdit();
+    beginEdit(QT_TRANSLATE_NOOP("History", "Camera Raw"));
+    const int changed = compositor::redevelopRawSmartObject(*document_, source->id, settings, image);
+    endEdit();
+    notifyDocument();
+    if (!changed) { if (error) *error = tr("The smart object could not be developed again."); return false; }
     return true;
 }
 

@@ -76,7 +76,19 @@ public:
     int currentTabIndex() const { return current_; }
     /// Opens the active smart object's contents in a tab of their own; saving that tab puts them back. With
     /// `error`, reports instead of showing a dialog (automation).
-    bool editSmartObjectContents(QString* error = nullptr);
+    /// A camera RAW smart object (Open Object) reopens in the Camera Raw dialog instead; given `rawSettings`, or with
+    /// no window on screen, it is developed again with them (or its own) without the dialog.
+    bool editSmartObjectContents(QString* error = nullptr, const compositor::CameraRawSettings* rawSettings = nullptr);
+    /// How a camera RAW file opens without the Camera Raw dialog (automation, a headless run).
+    struct RawOpenRequest {
+        compositor::CameraRawSettings settings;
+        bool asSmartObject = false;
+        int bitsPerChannel = 16;
+    };
+    /// A camera RAW file in a new tab, as Photoshop opens one: through the Camera Raw dialog (Open, Open Object or
+    /// Cancel) when the window is on screen, else developed with `request` (as shot when none is given). False with
+    /// `error`; a cancelled dialog returns false with `error` empty.
+    bool openRawFile(const QString& path, QString* error, const RawOpenRequest* request = nullptr);
     EditorSession* sessionAt(int i) const { return tabs_[size_t(i)].session; }
     CanvasWidget* canvasAt(int i) const { return tabs_[size_t(i)].canvas; }
     LayersPanel* layersPanelAt(int i) const { return tabs_[size_t(i)].layers; }

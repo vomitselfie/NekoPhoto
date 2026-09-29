@@ -7,6 +7,7 @@
 #pragma once
 #include "Viewport.h"
 #include "compositor/adjustments.h"
+#include "compositor/cameraraw.h"
 #include "compositor/brush.h"
 #include "compositor/brushsmoothing.h"
 #include "compositor/mypaint.h"
@@ -826,6 +827,10 @@ public:
     bool replaceSmartObjectContents(const QString& path, QString* error);
     /// The active smart object as plain pixels.
     bool rasterizeSmartObject();
+    /// The active layer's camera RAW source (Camera Raw's Open Object) and its settings; null when it is not one.
+    std::shared_ptr<const compositor::SmartObjectSource> activeRawSmartObject(compositor::CameraRawSettings* settings = nullptr) const;
+    /// The active RAW smart object developed again with `settings` into `image`, in every layer placing it (one undo step).
+    bool redevelopRawSmartObject(const compositor::CameraRawSettings& settings, const compositor::AnyImage& image, QString* error);
     /// Warp the active layer with a preset (Edit ▸ Warp): Warp Text on text, a baked mesh on a smart object, bent
     /// pixels otherwise; one undo step. False, with `error`, when the layer cannot take it.
     bool warpActiveLayer(const compositor::TextWarp& warp, QString* error = nullptr);
