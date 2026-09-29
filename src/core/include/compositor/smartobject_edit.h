@@ -2,6 +2,7 @@
 // contents, Rasterize. Each works on a Document (the app wraps it in one undo step); smartobject.h has the model.
 #pragma once
 #include "document.h"
+#include "cameraraw.h"
 #include "psd_writer.h"
 #include <optional>
 #include <string>
@@ -20,6 +21,18 @@ struct SmartObjectContents {
 
 /// A new source (fresh id) from `contents`; null without an image.
 std::shared_ptr<const SmartObjectSource> makeSmartObjectSource(SmartObjectContents contents);
+
+/// A camera RAW file as a source (Camera Raw's Open Object): the file's bytes, the settings it was developed with and
+/// the developed image. Null without an image.
+std::shared_ptr<const SmartObjectSource> makeRawSmartObjectSource(std::shared_ptr<const std::vector<uint8_t>> bytes, const std::string& fileName,
+                                                                  const CameraRawSettings& settings, AnyImage image);
+
+/// A new document the size of `source`, at `type`, whose one layer places it over the whole canvas (Open Object).
+Document smartObjectDocument(const std::shared_ptr<const SmartObjectSource>& source, SampleType type);
+
+/// A camera RAW source developed again (Edit Contents in Camera Raw): every layer placing `sourceId` takes a new source
+/// with the same file, `settings` and `image`. Returns how many layers changed; 0 when it is not a RAW source.
+int redevelopRawSmartObject(Document& document, const std::string& sourceId, const CameraRawSettings& settings, AnyImage image);
 
 /// The Photoshop file type for a file name's extension ("8BPS" for .psd, "png " for .png, ...); empty if unknown.
 std::string smartObjectFileType(const std::string& fileName);

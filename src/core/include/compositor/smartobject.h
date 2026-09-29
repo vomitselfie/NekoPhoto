@@ -51,6 +51,10 @@ struct SmartObjectSource {
     /// byte for byte while the source is unchanged. A new or edited source has neither.
     std::string psdBlock;
     std::shared_ptr<const std::vector<uint8_t>> psdElement;
+    /// A camera RAW source (Camera Raw's Open Object): the develop settings (CameraRawSettings::toJson) its image was
+    /// developed with from `bytes`, the RAW file. Empty for every other source.
+    std::string rawSettings;
+    bool isCameraRaw() const { return !rawSettings.empty(); }
 };
 
 struct SmartObjectInstance {

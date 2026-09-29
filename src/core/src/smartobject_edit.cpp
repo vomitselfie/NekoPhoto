@@ -63,6 +63,37 @@ std::shared_ptr<const SmartObjectSource> makeSmartObjectSource(SmartObjectConten
     return s;
 }
 
+std::shared_ptr<const SmartObjectSource> makeRawSmartObjectSource(std::shared_ptr<const std::vector<uint8_t>> bytes, const std::string& fileName,
+                                                                  const CameraRawSettings& settings, AnyImage image) {
+    if (!image || image.width() <= 0 || image.height() <= 0 || image.f32() || !bytes) return nullptr;
+    auto s = std::make_shared<SmartObjectSource>();
+    s->id = newSmartObjectId();
+    s->fileName = fileName;
+    s->fileType = smartObjectFileType(fileName);
+    s->bytes = std::move(bytes);
+    s->image = std::move(image);
+    s->width = s->image.width();
+    s->height = s->image.height();
+    s->rawSettings = settings.normalized().toJson();
+    return s;
+}
+
+Document smartObjectDocument(const std::shared_ptr<const SmartObjectSource>& source, SampleType type) {
+    Document document(source->width, source->height);
+    document.sampleType = type;
+    document.resolution = source->resolution;
+    placeSmartObject(document, source, 0, std::nullopt);
+    return document;
+}
+
+int redevelopRawSmartObject(Document& document, const std::string& sourceId, const CameraRawSettings& settings, AnyImage image) {
+    auto old = document.smartObjects.find(sourceId);
+    if (old == document.smartObjects.end() || !old->second->isCameraRaw()) return 0;
+    auto next = makeRawSmartObjectSource(old->second->bytes, old->second->fileName, settings, std::move(image));
+    if (!next) return 0;
+    return replaceSmartObjectSource(document, sourceId, next);
+}
+
 Layer smartObjectLayer(const std::shared_ptr<const SmartObjectSource>& source, const std::array<double, 8>& quad, const std::string& name,
                        SampleType type) {
     Layer layer(Asset::makeAny(smartObjectSourceImage(*source, type), name), Point(quad[0], quad[1]));

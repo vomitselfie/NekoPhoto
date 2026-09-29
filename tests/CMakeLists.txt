@@ -287,6 +287,7 @@ add_test(NAME toning_tests COMMAND toning_tests)
 
 add_executable(raw_tests raw_tests.cpp)
 target_link_libraries(raw_tests PRIVATE compositor::core compositor_warnings)
+target_compile_definitions(raw_tests PRIVATE RAW_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/raw/synthetic.dng")
 add_test(NAME raw_tests COMMAND raw_tests)
 
 add_executable(vectorlayer_tests vectorlayer_tests.cpp)

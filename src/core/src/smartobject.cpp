@@ -530,7 +530,8 @@ std::optional<std::vector<uint8_t>> repointPsdPlacement(const std::string& key, 
 std::vector<uint8_t> serializeSmartObjectSource(const SmartObjectSource& s) {
     psd::BigEndianWriter w;
     for (char c : std::string("NPSS")) w.write_u8(uint8_t(c));
-    w.write_u32(2);
+    // Version 3 adds the Camera Raw settings; a source without them is written as version 2, as before.
+    w.write_u32(s.rawSettings.empty() ? 2 : 3);
     auto str = [&](const std::string& v) { w.write_u32(uint32_t(v.size())); w.write_bytes(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(v.data()), v.size())); };
     str(s.id);
     w.write_u32(uint32_t(s.kind));
@@ -542,6 +543,7 @@ std::vector<uint8_t> serializeSmartObjectSource(const SmartObjectSource& s) {
     str(s.psdBlock);
     w.write_u64(s.psdElement ? s.psdElement->size() : 0);
     if (s.psdElement) w.write_bytes(*s.psdElement);
+    if (!s.rawSettings.empty()) str(s.rawSettings);
     return w.bytes();
 }
 
@@ -550,7 +552,7 @@ std::optional<SmartObjectSource> parseSmartObjectSource(const std::vector<uint8_
         psd::BigEndianReader r(bytes);
         if (four(r) != "NPSS") return std::nullopt;
         const uint32_t version = r.read_u32();
-        if (version != 1 && version != 2) return std::nullopt;
+        if (version < 1 || version > 3) return std::nullopt;
         auto str = [&]() { const uint32_t n = r.read_u32(); auto v = r.read_span(n); return std::string(v.begin(), v.end()); };
         SmartObjectSource s;
         s.id = str();
@@ -568,6 +570,10 @@ std::optional<SmartObjectSource> parseSmartObjectSource(const std::vector<uint8_
             const uint64_t e = r.read_u64();
             if (e > r.remaining()) return std::nullopt;
             if (e) { auto v = r.read_span(size_t(e)); s.psdElement = std::make_shared<const std::vector<uint8_t>>(v.begin(), v.end()); }
+        }
+        if (version >= 3) {
+            s.rawSettings = str();
+            if (s.rawSettings.empty()) return std::nullopt;
         }
         if (r.remaining() || s.id.empty()) return std::nullopt;
         return s;
