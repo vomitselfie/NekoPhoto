@@ -32,6 +32,8 @@ namespace {
     QT_TRANSLATE_NOOP("Names", "Lens Correction"),
     // levelsChannelName, colorRangeName, samplingName
     QT_TRANSLATE_NOOP("Names", "RGB"), QT_TRANSLATE_NOOP("Names", "Red"), QT_TRANSLATE_NOOP("Names", "Green"), QT_TRANSLATE_NOOP("Names", "Blue"),
+    QT_TRANSLATE_NOOP("Names", "CMYK"), QT_TRANSLATE_NOOP("Names", "Cyan"), QT_TRANSLATE_NOOP("Names", "Magenta"), QT_TRANSLATE_NOOP("Names", "Yellow"),
+    QT_TRANSLATE_NOOP("Names", "Black"), QT_TRANSLATE_NOOP("Names", "Lightness"), QT_TRANSLATE_NOOP("Names", "a"), QT_TRANSLATE_NOOP("Names", "b"),
     QT_TRANSLATE_NOOP("Names", "Master"), QT_TRANSLATE_NOOP("Names", "Reds"), QT_TRANSLATE_NOOP("Names", "Yellows"),
     QT_TRANSLATE_NOOP("Names", "Greens"), QT_TRANSLATE_NOOP("Names", "Cyans"), QT_TRANSLATE_NOOP("Names", "Blues"),
     QT_TRANSLATE_NOOP("Names", "Magentas"), QT_TRANSLATE_NOOP("Names", "Oranges"), QT_TRANSLATE_NOOP("Names", "Aquas"),
@@ -54,6 +56,7 @@ QString blendMode(compositor::BlendMode mode) { return core(compositor::blendMod
 QString adjustmentKind(compositor::AdjustmentKind kind) { return core(compositor::adjustmentKindName(kind)); }
 QString filterKind(compositor::FilterKind kind) { return core(compositor::filterKindName(kind)); }
 QString levelsChannel(int channel) { return core(compositor::levelsChannelName(channel)); }
+QString levelsChannel(int channel, compositor::ColorMode mode) { return core(compositor::levelsChannelName(channel, mode)); }
 QString colorRange(int range) { return core(compositor::colorRangeName(range)); }
 
 QString history(const QString& english) {

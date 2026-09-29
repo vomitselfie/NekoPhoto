@@ -23,12 +23,24 @@ double clampFinite(double v, double lo, double hi, double fallback) { return std
 // ---- Levels ------------------------------------------------------------------------
 
 const char* levelsChannelName(int channel) {
-    static const char* names[] = {"RGB", "Red", "Green", "Blue"};
-    return names[size_t(clamp(channel, 0, 3))];
+    static const char* names[] = {"RGB", "Red", "Green", "Blue", "Black"};
+    return names[size_t(clamp(channel, 0, levelsChannelCount - 1))];
+}
+
+const char* levelsChannelName(int channel, ColorMode mode) {
+    static const char* cmyk[] = {"CMYK", "Cyan", "Magenta", "Yellow", "Black"};
+    static const char* lab[] = {"", "Lightness", "a", "b", ""};
+    if (channel < 0 || channel >= levelsChannelCount) return "";
+    if (mode == ColorMode::CMYK) return cmyk[channel];
+    if (mode == ColorMode::Lab) return lab[channel];
+    return channel < 4 ? levelsChannelName(channel) : "";
 }
 
 bool parseLevelsChannel(const std::string& name, int& out) {
-    for (int i = 0; i < 4; i++) if (name == levelsChannelName(i)) { out = i; return true; }
+    for (int i = 0; i < levelsChannelCount; i++) if (name == levelsChannelName(i)) { out = i; return true; }
+    for (ColorMode mode : {ColorMode::CMYK, ColorMode::Lab})
+        for (int i = 0; i < levelsChannelCount; i++) if (*levelsChannelName(i, mode) && name == levelsChannelName(i, mode)) { out = i; return true; }
+    if (name == "Lab") { out = 0; return true; }
     return false;
 }
 
@@ -191,7 +203,7 @@ bool CurvesSettings::isIdentity() const {
 }
 
 double CurvesSettings::value(double x, int channel) const {
-    const auto& p = channels[size_t(clamp(channel, 0, 3))];
+    const auto& p = channels[size_t(clamp(channel, 0, levelsChannelCount - 1))];
     size_t i = 0;
     for (size_t j = 0; j < p.size(); j++) if (p[j].x <= x) i = j;
     i = std::min(p.size() - 2, i);
@@ -551,8 +563,10 @@ bool parseLevels(const json& j, LevelsSettings& out) {
     std::string channel = j.value("channel", "RGB");
     if (!parseLevelsChannel(channel, out.channel)) return false;
     auto ranges = j.find("ranges");
-    if (ranges == j.end() || !ranges->is_array() || ranges->size() != 4) return false;
-    for (size_t i = 0; i < 4; i++) {
+    // Four slots (RGB's), or five with CMYK's black.
+    if (ranges == j.end() || !ranges->is_array() || ranges->size() < 4 || ranges->size() > size_t(levelsChannelCount)) return false;
+    out.ranges[4] = LevelsRange();
+    for (size_t i = 0; i < ranges->size(); i++) {
         const json& r = (*ranges)[i];
         if (!r.is_object()) return false;
         out.ranges[i] = {num(r, "black", 0), num(r, "gamma", 1), num(r, "white", 255), num(r, "outputBlack", 0), num(r, "outputWhite", 255)};
@@ -565,7 +579,12 @@ json levelsJson(const LevelsSettings& s) {
     json j;
     j["channel"] = levelsChannelName(s.channel);
     j["ranges"] = json::array();
-    for (auto& r : s.ranges) j["ranges"].push_back({{"black", number(r.black)}, {"gamma", number(r.gamma)}, {"white", number(r.white)}, {"outputBlack", number(r.outputBlack)}, {"outputWhite", number(r.outputWhite)}});
+    // The fifth slot (CMYK's black) only when it is set, so RGB settings read as they always have.
+    const size_t count = s.ranges[4] == LevelsRange() ? 4 : 5;
+    for (size_t i = 0; i < count; i++) {
+        const LevelsRange& r = s.ranges[i];
+        j["ranges"].push_back({{"black", number(r.black)}, {"gamma", number(r.gamma)}, {"white", number(r.white)}, {"outputBlack", number(r.outputBlack)}, {"outputWhite", number(r.outputWhite)}});
+    }
     return j;
 }
 
@@ -573,8 +592,9 @@ bool parseCurves(const json& j, CurvesSettings& out) {
     if (!j.is_object()) return false;
     if (!parseLevelsChannel(j.value("channel", "RGB"), out.channel)) return false;
     auto channels = j.find("channels");
-    if (channels == j.end() || !channels->is_array() || channels->size() != 4) return false;
-    for (size_t c = 0; c < 4; c++) {
+    if (channels == j.end() || !channels->is_array() || channels->size() < 4 || channels->size() > size_t(levelsChannelCount)) return false;
+    out.channels[4] = {{0, 0}, {255, 255}};
+    for (size_t c = 0; c < channels->size(); c++) {
         out.channels[c].clear();
         if (!(*channels)[c].is_array()) return false;
         for (auto& p : (*channels)[c]) { if (!p.is_object()) return false; out.channels[c].push_back({num(p, "x", 0), num(p, "y", 0)}); }
@@ -586,7 +606,12 @@ json curvesJson(const CurvesSettings& s) {
     json j;
     j["channel"] = levelsChannelName(s.channel);
     j["channels"] = json::array();
-    for (auto& points : s.channels) { json arr = json::array(); for (auto& p : points) arr.push_back({{"x", number(p.x)}, {"y", number(p.y)}}); j["channels"].push_back(arr); }
+    const bool black = !(s.channels[4] == std::vector<CurvePoint>{{0, 0}, {255, 255}});
+    for (size_t c = 0; c < (black ? 5u : 4u); c++) {
+        json arr = json::array();
+        for (auto& p : s.channels[c]) arr.push_back({{"x", number(p.x)}, {"y", number(p.y)}});
+        j["channels"].push_back(arr);
+    }
     return j;
 }
 
@@ -709,6 +734,9 @@ bool parseMore(const json& j, AdjustmentSettings& s) {
         const char* names[4] = {"red", "green", "blue", "gray"};
         for (size_t r = 0; r < 4; r++)
             if (auto v = it->find(names[r]); v != it->end() && !numbersFrom(*v, s.channelMixer.rows[r], -200, 200)) return false;
+        const char* inks[4] = {"cyan", "magenta", "yellow", "black"};
+        for (size_t r = 0; r < 4; r++)
+            if (auto v = it->find(inks[r]); v != it->end() && !numbersFrom(*v, s.channelMixer.inks[r], -200, 200)) return false;
     }
     if (auto it = j.find("colorLookupSettings"); it != j.end() && it->is_object()) {
         auto text = [&](const char* k) { auto v = it->find(k); return v != it->end() && v->is_string() ? v->get<std::string>() : std::string(); };
@@ -746,6 +774,11 @@ void moreJson(const AdjustmentSettings& s, json& j) {
     case AdjustmentKind::ChannelMixer:
         j["channelMixerSettings"] = {{"monochrome", s.channelMixer.monochrome}, {"red", numbersJson(s.channelMixer.rows[0])}, {"green", numbersJson(s.channelMixer.rows[1])},
                                      {"blue", numbersJson(s.channelMixer.rows[2])}, {"gray", numbersJson(s.channelMixer.rows[3])}};
+        // CMYK's rows only when set, so RGB settings read as they always have.
+        if (s.channelMixer.inks != ChannelMixerSettings().inks) {
+            const char* inks[4] = {"cyan", "magenta", "yellow", "black"};
+            for (size_t r = 0; r < 4; r++) j["channelMixerSettings"][inks[r]] = numbersJson(s.channelMixer.inks[r]);
+        }
         break;
     case AdjustmentKind::ColorLookup:
         j["colorLookupSettings"] = {{"name", s.colorLookup.name}, {"format", s.colorLookup.format}, {"data", s.colorLookup.data}, {"dither", s.colorLookup.dither}};

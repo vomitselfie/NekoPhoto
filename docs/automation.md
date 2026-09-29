@@ -169,7 +169,10 @@ Hue/Saturation settings accept `"saturationCurve": "photoshop"` (+100 saturates 
 -100 greys out, lightness kept) beside the default `"scale"`.
 
 Pixels of the active layer, inside the selection: `pixels.adjust`,
-`pixels.filter` (`kind` and its settings; Lens Correction takes `bicubic: true` for a sharper resample),
+`pixels.filter` (`kind` and its settings; Lens Correction takes `bicubic: true` for a sharper resample; in a CMYK or
+Lab document both work on the inks or L, a and b, each kind where Photoshop offers it ([color-modes.md](color-modes.md#adjustments-and-filters)):
+Levels and Curves take a fifth slot for CMYK's black, `channel` names such as `"Cyan"`, `"Black"` or `"Lightness"`, and
+Channel Mixer `cyan` ... `black` ink rows),
 `pixels.mosh` (Filter > Mosh: `effect`, an OpenMosh id such as `pixel-sort` or `vhs`, `params` by OpenMosh's keys, `seed`
 0..100 for the seeded effects, `layer` (the id of the layer `overlay` and `mask` read) and `text` (what `caption` stamps);
 replies with the settings applied; [mosh.md](mosh.md) lists every effect and parameter),

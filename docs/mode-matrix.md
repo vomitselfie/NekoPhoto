@@ -46,8 +46,8 @@ What works in a document of each depth and colour mode, as the menus, tools and 
 | Zoom tool | `tool.zoom` | native | native | native | native | native | native | native |  |
 | Marquee tools | `tool.marquee` | native | native | native | native | native | native | native |  |
 | Lasso tools | `tool.lasso` | native | native | native | native | native | native | native |  |
-| Magic Wand | `tool.wand` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Quick Selection | `tool.quickSelect` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
+| Magic Wand | `tool.wand` | native | native | native | native | native | native | native |  |
+| Quick Selection | `tool.quickSelect` | native | native | native | native | native | native | native |  |
 | Selections: Select menu, Quick Mask, load | `edit.selection` | native | native | native | native | native | native | native |  |
 | Channels panel, alpha channels | `edit.channels` | native | native | native | native | native | native | native |  |
 | Fill, Clear | `edit.fill` | native | native | native | native | native | native | native |  |
@@ -55,36 +55,36 @@ What works in a document of each depth and colour mode, as the menus, tools and 
 | Brush and Eraser (round tip, tip brushes) | `tool.brush` | native | native | native | native | native | native | native |  |
 | MyPaint brush presets | `brush.mypaint` | native | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | CMYK8, CMYK16, Lab8, Lab16: libmypaint mixes RGB only; greyed rather than painting through RGB and back |
 | Gradient tool | `tool.gradient` | native | native | native | native | native | native | native |  |
-| Paint Bucket | `tool.paintBucket` | native | native | greyed (Photoshop lacks) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
+| Paint Bucket | `tool.paintBucket` | native | native | greyed (Photoshop lacks) | native | native | native | native |  |
 | Clone Stamp | `tool.cloneStamp` | native | native | native | native | native | native | native |  |
-| Spot Healing, Healing Brush | `tool.spotHealing` | native | native | native | greyed (not yet) | greyed (not yet) | native | native |  |
-| Patch tool | `tool.patch` | native | native | greyed (Photoshop lacks) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Blur, Sharpen, Smudge, Liquify tools | `tool.smudge` | native | native | native | greyed (not yet) | greyed (not yet) | native | native |  |
-| Dodge, Burn, Sponge | `tool.dodge` | native | native | greyed (Photoshop lacks) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
+| Spot Healing, Healing Brush | `tool.spotHealing` | native | native | native | native | native | native | native |  |
+| Patch tool | `tool.patch` | native | native | greyed (Photoshop lacks) | native | native | native | native |  |
+| Blur, Sharpen, Smudge, Liquify tools | `tool.smudge` | native | native | native | native | native | native | native |  |
+| Dodge, Burn, Sponge | `tool.dodge` | native | native | greyed (Photoshop lacks) | native | native | native | native |  |
 | Eyedropper | `tool.eyedropper` | native | native | native | native | native | native | native |  |
-| Image > Adjustments (menu) | `adjustment.pixels` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Levels | `adjustment.Levels` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Curves | `adjustment.Curves` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Hue/Saturation | `adjustment.Hue/Saturation` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Exposure | `adjustment.Exposure` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Gradient Map | `adjustment.Gradient Map` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Grain | `adjustment.Grain` | native | native | greyed (Photoshop lacks) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Invert | `adjustment.Invert` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Brightness/Contrast | `adjustment.Brightness/Contrast` | native | native | greyed (Photoshop lacks) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Posterize | `adjustment.Posterize` | native | native | greyed (Photoshop lacks) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Threshold | `adjustment.Threshold` | native | native | greyed (Photoshop lacks) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Black & White | `adjustment.Black & White` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Color Balance | `adjustment.Color Balance` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Vibrance | `adjustment.Vibrance` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Photo Filter | `adjustment.Photo Filter` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Channel Mixer | `adjustment.Channel Mixer` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Selective Color | `adjustment.Selective Color` | native | native | greyed (Photoshop lacks) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
+| Image > Adjustments (menu) | `adjustment.pixels` | native | native | native | native | native | native | native |  |
+| Levels | `adjustment.Levels` | native | native | native | native | native | native | native |  |
+| Curves | `adjustment.Curves` | native | native | native | native | native | native | native |  |
+| Hue/Saturation | `adjustment.Hue/Saturation` | native | native | native | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |
+| Exposure | `adjustment.Exposure` | native | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) | native | native |  |
+| Gradient Map | `adjustment.Gradient Map` | native | native | native | native | native | native | native |  |
+| Grain | `adjustment.Grain` | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |
+| Invert | `adjustment.Invert` | native | native | native | native | native | native | native |  |
+| Brightness/Contrast | `adjustment.Brightness/Contrast` | native | native | greyed (Photoshop lacks) | native | native | native | native |  |
+| Posterize | `adjustment.Posterize` | native | native | greyed (Photoshop lacks) | native | native | native | native |  |
+| Threshold | `adjustment.Threshold` | native | native | greyed (Photoshop lacks) | native | native | native | native |  |
+| Black & White | `adjustment.Black & White` | native | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |
+| Color Balance | `adjustment.Color Balance` | native | native | native | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |
+| Vibrance | `adjustment.Vibrance` | native | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |
+| Photo Filter | `adjustment.Photo Filter` | native | native | native | native | native | native | native |  |
+| Channel Mixer | `adjustment.Channel Mixer` | native | native | native | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |
+| Selective Color | `adjustment.Selective Color` | native | native | greyed (Photoshop lacks) | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |
 | Color Lookup | `adjustment.Color Lookup` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Filter menu | `filter.pixels` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Gaussian Blur | `filter.Gaussian Blur` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Motion Blur | `filter.Motion Blur` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Add Noise | `filter.Add Noise` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Lens Correction | `filter.Lens Correction` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
+| Filter menu | `filter.pixels` | native | native | native | native | native | native | native |  |
+| Gaussian Blur | `filter.Gaussian Blur` | native | native | native | native | native | native | native |  |
+| Motion Blur | `filter.Motion Blur` | native | native | native | native | native | native | native |  |
+| Add Noise | `filter.Add Noise` | native | native | native | native | native | native | native |  |
+| Lens Correction | `filter.Lens Correction` | native | native | native | native | native | native | native |  |
 | Camera Raw Filter | `filter.Camera Raw` | native | native | greyed (not yet) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |
 | G'MIC | `filter.G'MIC` | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |
 | Mosh | `filter.Mosh` | native | native | greyed (Photoshop lacks) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |

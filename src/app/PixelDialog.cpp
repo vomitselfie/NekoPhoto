@@ -1,5 +1,6 @@
 #include "PixelDialog.h"
 #include "compositor/filters.h"
+#include "compositor/modeedit.h"
 #include "compositor/render.h"
 #include <QCheckBox>
 #include <QDialogButtonBox>
@@ -87,6 +88,17 @@ void PixelDialog::capture(int margin, int previewLimit) {
     previewCoverageF_.reset();
     curve_ = session_->documentCurve();
     previewScale_ = 1;
+    sourceNative_.reset();
+    coverageNative_ = {};
+    mode_ = session_->colorMode();
+    if (mode_ != ColorMode::RGB) {
+        // CMYK and Lab: the layer's own samples only (a Lab layer would otherwise read as RGB).
+        source_.reset(); source16_.reset(); sourceF_.reset();
+        profile_ = session_->document() ? session_->document()->profile : ColorProfile();
+        sourceNative_ = session_->adjustmentSourceAny(margin, transform_, layerId_);
+        if (sourceNative_) coverageNative_ = session_->selectionOnGridAny(transform_, sourceNative_.width(), sourceNative_.height());
+        return;
+    }
     if (sourceF_) {
         previewSourceF_ = previewCopy(sourceF_, previewLimit, previewScale_);
         coverageF_ = session_->selectionOnGridF(transform_, sourceF_->width(), sourceF_->height());
@@ -134,6 +146,16 @@ void PixelDialog::showPreview(std::shared_ptr<ImageF> image, std::optional<Layer
     if (finished_ || !session_ || !image) return;
     if (previewCoverageF_ && previewSourceF_) blendThroughCoverage(*image, *previewSourceF_, *previewCoverageF_);
     session_->setPixelPreview(ImageFPtr(std::move(image)), placement, layerId_);
+}
+
+void PixelDialog::showPreviewNative(AnyImage image, std::optional<LayerTransform> placement) {
+    if (finished_ || !session_ || !image) return;
+    session_->setPixelPreview(throughSelectionNative(image), placement, layerId_);
+}
+
+AnyImage PixelDialog::throughSelectionNative(const AnyImage& result) const {
+    if (!coverageNative_ || !sourceNative_) return result;
+    return blendThroughCoverageAny(result, sourceNative_, coverageNative_);
 }
 
 void PixelDialog::clearPreview() {

@@ -656,7 +656,12 @@ public:
     /// Every colour channel of the document's mode as bits (RGB and Lab 7, CMYK 15): the composite.
     /// Fill in a CMYK or Lab document: `color` (sRGB, as colours are kept) in the document's mode over the active layer's
     /// pixels within the selection (P7 step D: the layer's own grid; a blank layer gets a canvas-sized one).
-    bool fillThroughMode(const QColor& color, const char* name);
+    /// `coverage` (document size) replaces the selection when given, times `opacity`; `from` (document size, the
+    /// document's layout) is copied instead of the colour (Patch).
+    /// The Paint Bucket in a CMYK or Lab document, at document pixel (x, y).
+    bool paintBucketMode(const compositor::Layer& layer, int x, int y);
+    bool fillThroughMode(const QColor& color, const char* name, const compositor::AnyGray* coverage = nullptr, double opacity = 1,
+                         const compositor::AnyImage& from = {});
     unsigned allColors() const { return document_ ? compositor::colorChannelsAllFor(document_->colorMode) : compositor::colorChannelsAll; }
     unsigned activeColorChannels() const { return activeColors_; }
     unsigned visibleColorChannels() const { return visibleColors_; }
@@ -705,6 +710,10 @@ public:
     /// The same in a 32-bit document, and the curve its colour is encoded with (encodedTransfer).
     std::shared_ptr<const compositor::ImageF> adjustmentSourceF(int margin, compositor::LayerTransform& transform, std::optional<compositor::Uuid> layerId = std::nullopt) const;
     std::shared_ptr<compositor::GrayF> selectionOnGridF(const compositor::LayerTransform& transform, int width, int height) const;
+    /// The same at any depth and layout: a CMYK or Lab layer's own samples (modeedit.h), and the selection at the
+    /// document's depth on their grid (null when everything is selected).
+    compositor::AnyImage adjustmentSourceAny(int margin, compositor::LayerTransform& transform, std::optional<compositor::Uuid> layerId = std::nullopt) const;
+    compositor::AnyGray selectionOnGridAny(const compositor::LayerTransform& transform, int width, int height) const;
     compositor::TransferCurve documentCurve() const;
     /// The composite at a document pixel as the document holds it (the Eyedropper in a 32-bit, CMYK or Lab document):
     /// `values` the straight native values (linear R, G, B at 32 bits; C, M, Y, K ink percentages; L, a, b), `color` the
@@ -717,6 +726,9 @@ public:
     void commitPixels(compositor::AnyImage image, const compositor::LayerTransform& transform, const QString& name, std::optional<compositor::Uuid> layerId = std::nullopt);
     void invertActive();
     std::array<std::vector<double>, 4> activeHistogram() const;
+    /// Levels' histograms of the active layer in a CMYK or Lab document: the composite (the inks' mean in CMYK, empty
+    /// in Lab) and each channel as stored (C, M, Y, K; L, a, b), 256 bins.
+    std::array<std::vector<double>, 5> activeHistogramNative() const;
     /// Remove Background: `mask` (white over the subject, on the layer's pixel grid) becomes the layer mask,
     /// multiplied with any mask already there; with a selection only the selected part changes. `pixels`, when
     /// given at the layer's size, replaces the layer's pixels in the same undo step (the edge colours after
@@ -1038,6 +1050,9 @@ private:
     bool quickSelectBusy_ = false, quickSelectAgain_ = false;
     /// The flattened document as the wand samples it with Sample All Layers, cached per document revision.
     std::shared_ptr<const compositor::Image> flattenedForSampling();
+    /// What the click-to-select model sees: flattenedForSampling() in RGB; in CMYK and Lab the composite through the
+    /// document's profile to sRGB (the model was trained on sRGB), for deciding only.
+    std::shared_ptr<const compositor::Image> flattenedForModel();
     bool wandSampleAll_ = false;
     compositor::Uuid wandSampleLayer_;
     uint64_t wandSampleRevision_ = 0;
@@ -1123,10 +1138,12 @@ private:
     /// Starts a stroke that paints `process`'s version of the active layer (as the canvas shows it) through the tip.
     /// `margin`: how far around a pixel `process` reads (it is run a tile at a time with that much around it).
     /// `process16` is the same for a 16-bit document, `processF` for a 32-bit one (none: refused); a Lab document runs
-    /// `process` or `process16` on its L, a and b.
+    /// `process` or `process16` on its L, a and b; a CMYK one `processC8` at 8 bits and `process16` on five samples at 16
+    /// (none: refused).
     bool beginProcessedStroke(QPointF documentPoint, const std::function<void(compositor::Image&)>& process, int margin,
                               const std::function<void(compositor::Image16&)>& process16,
-                              const std::function<void(compositor::ImageF&)>& processF = {});
+                              const std::function<void(compositor::ImageF&)>& processF = {},
+                              const std::function<void(compositor::ImageC8&)>& processC8 = {});
     /// Fills the active layer (or its mask) with `color` through `coverage` (document size; null: everywhere) at
     /// `opacity`, as one undo step named `name`.
     /// With `from` (document size, premultiplied), each pixel takes `from`'s there instead of `color`.

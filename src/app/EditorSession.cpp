@@ -754,6 +754,7 @@ Overrides EditorSession::renderOverrides() const {
         LayerOverride& o = overrides[warpLayerId_];
         if (warp_->imageF()) o.imageF = warp_->imageF();
         else if (warp_->image16()) o.image16 = warp_->image16();
+        else if (warp_->imageC8()) o.imageC8 = warp_->imageC8();
         else o.image = warp_->image();
         o.transform = LayerTransform(Point(0, 0), document_->size());
         const Layer* layer = document_->find(warpLayerId_);

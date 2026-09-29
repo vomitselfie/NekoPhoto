@@ -7,6 +7,7 @@
 #include "compositor/cameraraw.h"
 #include "compositor/depth.h"
 #include "compositor/matte.h"
+#include "compositor/modeedit.h"
 #include "compositor/subject.h"
 #include <QJsonDocument>
 #include <cmath>
@@ -47,6 +48,16 @@ void AutomationServer::registerPixelsHandlers() {
         // Photoshop's 32-bit set only (Brightness/Contrast, Posterize, Threshold, Selective Color and Grain are not in it).
         const std::string feature = std::string("adjustment.") + adjustmentKindName(*kind);
         if (!s->supportsFeature(feature)) fail(QString::fromUtf8(adjustmentKindName(*kind)) + ": " + s->unavailableTip(feature), invalidParams);
+        if (s->colorMode() != ColorMode::RGB) {
+            // CMYK and Lab: the layer's own samples (modeedit.h).
+            const AnyImage source = s->adjustmentSourceAny(0, transform);
+            if (!source) fail("the active layer has no pixels; select a pixel layer with layers.select (document.overview shows each layer's kind)");
+            AnyImage out = adjustedInMode(parsed, source, s->colorMode(), s->document()->profile);
+            if (!out) fail(QString::fromUtf8(adjustmentKindName(*kind)) + ": " + s->unavailableTip(feature), invalidParams);
+            if (AnyGray coverage = s->selectionOnGridAny(transform, out.width(), out.height())) out = blendThroughCoverageAny(out, source, coverage);
+            s->commitPixels(out, transform, QString::fromUtf8(adjustmentKindName(*kind)));
+            return QJsonObject{{"applied", QString::fromUtf8(adjustmentKindName(*kind))}};
+        }
         if (auto deep = s->adjustmentSourceF(0, transform)) {
             auto out = std::make_shared<ImageF>(*deep);
             applyAdjustment(parsed, *out, Rect(0, 0, deep->width(), deep->height()), 1, s->documentCurve());
@@ -88,6 +99,21 @@ void AutomationServer::registerPixelsHandlers() {
         int margin = int(std::ceil(blurMargin(*kind, settings)));
         LayerTransform transform;
         const bool trims = *kind == FilterKind::GaussianBlur || *kind == FilterKind::MotionBlur;
+        if (s->colorMode() != ColorMode::RGB) {
+            // CMYK and Lab: every ink, or L, a and b (modeedit.h).
+            const AnyImage source = s->adjustmentSourceAny(margin, transform);
+            if (!source) fail("the active layer has no pixels, or it is too large to grow for this filter");
+            AnyImage out = filteredInMode(*kind, source, s->colorMode(), settings, 1, uint32_t(integer(p, "seed", 1)));
+            if (!out) fail(QString::fromUtf8(filterKindName(*kind)) + ": the layer's pixels are not at the document's layout", invalidParams);
+            if (AnyGray coverage = s->selectionOnGridAny(transform, out.width(), out.height())) out = blendThroughCoverageAny(out, source, coverage);
+            LayerTransform placed = transform;
+            if (trims) {
+                bool empty = false;
+                if (AnyImage trimmed = trimToPixelsAny(out, transform, placed, &empty)) out = trimmed;
+            }
+            s->commitPixels(out, placed, QString::fromUtf8(filterKindName(*kind)));
+            return QJsonObject{{"applied", QString::fromUtf8(filterKindName(*kind))}};
+        }
         if (auto deep = s->adjustmentSourceF(margin, transform)) {
             auto out = std::make_shared<ImageF>(*deep);
             applyFilter(*kind, *out, settings, s->documentCurve(), 1, uint32_t(integer(p, "seed", 1)));

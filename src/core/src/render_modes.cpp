@@ -4,6 +4,7 @@
 // without a colour transform, since a CMYK or Lab buffer is not RGB), the native render, and RGB for 16-bit exports.
 #include "render_modes.h"
 #include "compositor/adjustments.h"
+#include "compositor/modeedit.h"
 #include "compositor/parallel.h"
 #include "compositor/render.h"
 #include "compositor/resample.h"
@@ -91,17 +92,6 @@ typename ModeOps<S, M>::ImagePtr typed(const AnyImage& any) {
     if constexpr (S == SampleType::U16) return any.u16();
     else if constexpr (M == ColorMode::CMYK) return any.c8();
     else return any.u8();
-}
-
-/// Straight 0..1 per stored level, read at `v` (a straight sample) from a 256-entry table.
-template <SampleType S>
-inline float lookup(const std::array<float, 256>& table, uint32_t v) {
-    if constexpr (S == SampleType::U8) return table[std::min<uint32_t>(v, 255)];
-    else {
-        const float x = float(std::min<uint32_t>(v, one16)) * 255.0f / float(one16);
-        const int i = std::min(254, int(x));
-        return table[size_t(i)] + (table[size_t(i) + 1] - table[size_t(i)]) * (x - float(i));
-    }
 }
 
 } // namespace
@@ -274,47 +264,13 @@ typename ModeOps<S, M>::ImagePtr ModeOps<S, M>::fillLayer(const Layer& layer, co
 }
 
 template <SampleType S, ColorMode M>
-bool ModeOps<S, M>::adjust(const LayerAdjustment& adjustment, Image& image, const Rect&, double) {
-    constexpr int N = channels, C = N - 1;
+bool ModeOps<S, M>::adjust(const Document& document, const LayerAdjustment& adjustment, Image& image, const Rect&, double) {
     AdjustmentSettings settings;
     if (!AdjustmentSettings::parse(adjustment.json, settings)) return false;
-    Transfer transfer;
-    // Which channels the table applies to: every colour channel, or L alone in Lab (Photoshop's Lab Levels and Curves
-    // default to Lightness, and Brightness/Contrast acts on lightness).
-    bool lightnessOnly = M == ColorMode::Lab;
-    switch (settings.kind) {
-    case AdjustmentKind::Levels: case AdjustmentKind::Curves: {
-        // The composite alone: the per-channel slots mean R, G, B in the model, and a CMYK or Lab file's own per-ink
-        // settings are kept for the round trip but not drawn yet (step E).
-        AdjustmentSettings composite = settings;
-        for (size_t c = 1; c < composite.levels.ranges.size(); c++) composite.levels.ranges[c] = LevelsRange();
-        for (size_t c = 1; c < composite.curves.channels.size(); c++) composite.curves.channels[c] = {{0, 0}, {255, 255}};
-        auto t = adjustmentTransfer(composite);
-        if (!t) return false;
-        transfer = *t;
-        break;
-    }
-    case AdjustmentKind::BrightnessContrast: transfer = brightnessContrastTransfer(settings.brightnessContrast); break;
-    case AdjustmentKind::Invert: transfer = invertTransfer(); lightnessOnly = false; break;
-    case AdjustmentKind::Posterize: transfer = posterizeTransfer(settings.posterize); lightnessOnly = false; break;
-    default: return false;   // not drawn in CMYK and Lab yet (P7 step E)
-    }
-    const std::array<float, 256>& table = transfer[0];
-    const int channelsTouched = lightnessOnly ? 1 : C;
-    parallelRows(0, image.height(), [&](int ya, int yb) {
-        for (int y = ya; y < yb; y++) {
-            Sample* p = image.row(y);
-            for (int x = 0; x < image.width(); x++, p += N) {
-                const Sample a = p[C];
-                if (a == 0) continue;
-                for (int k = 0; k < channelsTouched; k++) {
-                    const float v = lookup<S>(table, unpremultiply(p[k], a));
-                    p[k] = store(v * unit(a), a);
-                }
-            }
-        }
-    });
-    return true;
+    // The document's own samples (adjustments_modes.cpp); a kind the mode does not offer is not drawn.
+    if constexpr (deep) return applyAdjustmentMode(settings, image, M, document.profile);
+    else if constexpr (M == ColorMode::CMYK) return applyAdjustmentMode(settings, image, document.profile);
+    else return applyAdjustmentLab(settings, image);
 }
 
 template struct ModeOps<SampleType::U8, ColorMode::CMYK>;

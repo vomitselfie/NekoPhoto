@@ -1005,7 +1005,8 @@ def colour_mode_painting(rpc):
     """P7 E (docs/color-modes.md): painting in CMYK and Lab documents at 8 and 16 bits in the document's own samples.
     Black in CMYK lays the Working CMYK's rich black (K and C, M, Y); a Lab stroke's L is the colour's; the Eyedropper
     reads inks and L, a, b; the eraser, tip brushes, Clone Stamp, the Gradient tool, merging and Apply Layer Mask work;
-    Lab heals, blurs and smudges; what waits says "... mode yet", and MyPaint stays RGB ("... mode")."""
+    the healers, Patch, Blur, Sharpen, Smudge, Liquify, Dodge, Burn, Sponge and the Paint Bucket work in both; MyPaint
+    stays RGB ("... mode")."""
     first = rpc.call("tabs.list")
     tab = rpc.call("tabs.new")
     tip = tip_brush(rpc)
@@ -1034,16 +1035,24 @@ def colour_mode_painting(rpc):
         rpc.call("gradient.draw", x0=0, y0=0, x1=64, y1=0, foreground="#00ff00", background="#0000ff", style="foreground-to-background", opacity=0.3)
         if rpc.call("brush.presets").get("supported"):
             expect_refused(rpc, "mode", "brush.stroke", points=[[4, 4], [8, 8]], preset="classic/pencil")
-        if mode == "lab":
-            for tool in ("healing", "blur", "sharpen", "smudge", "liquify"):
-                rpc.call("brush.stroke", tool=tool, points=[[20, 20], [30, 22]], size=8)
-        else:
-            expect_refused(rpc, "CMYK mode yet", "brush.stroke", tool="healing", points=[[20, 20], [30, 22]])
-            expect_refused(rpc, "CMYK mode yet", "brush.stroke", tool="smudge", points=[[20, 20], [30, 22]])
-        expect_refused(rpc, "mode yet", "brush.stroke", tool="dodge", points=[[20, 20], [30, 22]])
-        expect_refused(rpc, "mode yet", "pixels.bucket", x=5, y=5, color="#00ff00")
+        # Retouching in the document's own samples, each one undo step.
+        for tool, name in (("healing", "Spot Healing"), ("blur", "Blur"), ("sharpen", "Sharpen"), ("smudge", "Smudge"), ("liquify", "Liquify"),
+                           ("dodge", "Dodge"), ("burn", "Burn"), ("sponge", "Sponge")):
+            rpc.call("brush.stroke", tool=tool, points=[[20, 20], [30, 22]], size=8)
+            assert rpc.call("history.info")["undo"] == name, (mode, bits, name, rpc.call("history.info"))
+        rpc.call("brush.stroke", tool="healingbrush", source={"x": 40, "y": 40}, points=[[20, 28], [26, 28]], size=6)
+        assert rpc.call("history.info")["undo"] == "Healing Brush"
+        rpc.call("selection.rect", x=4, y=24, width=8, height=8)
+        assert rpc.call("pixels.patch", dx=40, dy=0)["patched"]
+        assert rpc.call("history.info")["undo"] == "Patch"
+        rpc.call("selection.none")
+        # The bucket fills with the colour through the profile: black's inks, or L a b, as the brush lays them.
+        assert rpc.call("pixels.bucket", x=62, y=46, color="#000000", tolerance=255, antialias=False)["filled"]
+        assert rpc.call("history.info")["undo"] == "Paint Bucket"
+        filled = rpc.call("color.sample", x=40, y=30)["values"]
+        assert all(abs(a - b) < 1.0 for a, b in zip(filled, black["values"])), ("the bucket's black is the brush's", mode, bits, filled, black)
         undo = rpc.call("history.list")["undo"]
-        assert undo[-1] == ("Liquify" if mode == "lab" else "Gradient"), undo[steps:]
+        assert undo[-1] == "Paint Bucket", undo[steps:]
         rpc.call("layers.add")
         rpc.call("brush.stroke", points=[[20, 24], [44, 24]], size=4, color="#ff00ff")
         assert rpc.call("layers.merge")["merged"]
@@ -1054,6 +1063,110 @@ def colour_mode_painting(rpc):
         # A PSD in the document's mode keeps what was painted.
         info = rpc.call("document.info")
         assert info["colorMode"] == mode and info["bits"] == bits, info
+        rpc.call("document.close", discard=True)
+    rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
+    rpc.call("tabs.close", index=tab["index"], discard=True)
+
+
+def colour_mode_adjustments(rpc):
+    """P7 E (docs/color-modes.md): Image > Adjustments, adjustment layers and the Filter menu in CMYK and Lab at 8 and
+    16 bits, on the document's own samples. Each kind Photoshop offers in the mode works (one undo step each); what it
+    greys there is refused for good ("... mode"), Color Lookup waits ("... mode yet"). Invert on CMYK inverts the inks;
+    Levels on CMYK's black slot moves the black plate alone; Curves on Lab's lightness leaves a and b."""
+    first = rpc.call("tabs.list")
+    tab = rpc.call("tabs.new")
+    common = ("Levels", "Curves", "Brightness/Contrast", "Invert", "Posterize", "Threshold", "Gradient Map", "Photo Filter")
+    offered = {"cmyk": common + ("Hue/Saturation", "Color Balance", "Selective Color", "Channel Mixer"), "lab": common + ("Exposure",)}
+    lacking = {"cmyk": ("Exposure", "Vibrance", "Black & White", "Grain"),
+               "lab": ("Hue/Saturation", "Color Balance", "Selective Color", "Channel Mixer", "Vibrance", "Black & White", "Grain")}
+    for mode, bits in (("cmyk", 8), ("cmyk", 16), ("lab", 8), ("lab", 16)):
+        rpc.call("document.new", width=48, height=32)
+        rpc.call("pixels.fill", color="#c05030")
+        assert rpc.call("image.mode", colorMode=mode, bits=bits)["colorMode"] == mode
+        before = rpc.call("color.sample", x=10, y=10)["values"]
+        steps = len(rpc.call("history.list")["undo"])
+        rpc.call("pixels.invert")
+        inverted = rpc.call("color.sample", x=10, y=10)["values"]
+        if mode == "cmyk":
+            assert all(abs((100 - b) - a) < 1.0 for a, b in zip(inverted, before)), ("every ink inverted", before, inverted)
+        rpc.call("history.undo")
+        if mode == "cmyk":
+            # Levels on the black slot alone: the black plate moves, cyan, magenta and yellow stay.
+            levels = rpc.call("adjustments.defaults", kind="Levels")["levels"]
+            levels["ranges"].append({"black": 0, "gamma": 1, "white": 128, "outputBlack": 0, "outputWhite": 255})
+            levels["channel"] = "Black"
+            rpc.call("pixels.adjust", kind="Levels", settings={"levels": levels})
+            after = rpc.call("color.sample", x=10, y=10)["values"]
+            assert all(abs(a - b) < 0.5 for a, b in zip(after[:3], before[:3])) and after[3] < before[3], (before, after)
+            rpc.call("history.undo")
+        else:
+            curves = rpc.call("adjustments.defaults", kind="Curves")["curves"]
+            curves["channels"][1] = [{"x": 0, "y": 0}, {"x": 100, "y": 170}, {"x": 255, "y": 255}]
+            curves["channel"] = "Lightness"
+            rpc.call("pixels.adjust", kind="Curves", settings={"curves": curves})
+            after = rpc.call("color.sample", x=10, y=10)["values"]
+            assert after[0] > before[0] + 3 and abs(after[1] - before[1]) < 0.6 and abs(after[2] - before[2]) < 0.6, (before, after)
+            rpc.call("history.undo")
+        rpc.call("selection.rect", x=4, y=4, width=30, height=20)
+        for kind in offered[mode]:
+            rpc.call("pixels.adjust", kind=kind, settings={"exposure": 0.5} if kind == "Exposure" else {})
+        for kind in lacking[mode]:
+            expect_refused(rpc, "mode", "pixels.adjust", kind=kind)
+        expect_refused(rpc, "mode yet", "pixels.adjust", kind="Color Lookup")
+        for kind, extra in (("Gaussian Blur", {"radius": 2}), ("Motion Blur", {"angle": 30, "distance": 8}), ("Add Noise", {"amount": 10, "seed": 7}),
+                            ("Lens Correction", {"distortion": 20})):
+            rpc.call("pixels.filter", kind=kind, **extra)
+        undo = rpc.call("history.list")["undo"]
+        assert len(undo) - steps == len(offered[mode]) + 4 + 1, ("one undo step each", undo[steps:])
+        rpc.call("selection.none")
+        # Adjustment layers draw in the mode; what Photoshop lacks there cannot be added.
+        for kind in offered[mode]:
+            layer = rpc.call("layers.add", kind="adjustment", adjustmentKind=kind)
+            rpc.call("adjustments.set", id=layer["id"], settings=rpc.call("adjustments.defaults", kind=kind))
+        expect_refused(rpc, "mode", "layers.add", kind="adjustment", adjustmentKind="Vibrance")
+        assert rpc.call("render", maxSize=48)["png"]
+        info = rpc.call("document.info")
+        assert info["colorMode"] == mode and info["bits"] == bits, info
+        rpc.call("document.close", discard=True)
+    rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
+    rpc.call("tabs.close", index=tab["index"], discard=True)
+
+
+def colour_mode_selection(rpc):
+    """P7 E (docs/color-modes.md, "Selections"): the Magic Wand and Quick Select in CMYK and Lab documents at 8 and 16
+    bits decide in L*a*b* without touching the pixels, and a layer's pixels load as a selection (a CMYK layer's alpha
+    is its fifth sample)."""
+    first = rpc.call("tabs.list")
+    tab = rpc.call("tabs.new")
+    for mode, bits in (("cmyk", 8), ("cmyk", 16), ("lab", 8), ("lab", 16)):
+        rpc.call("document.new", width=64, height=48)
+        rpc.call("pixels.fill", color="#ffffff")
+        rpc.call("selection.rect", x=10, y=8, width=30, height=20)
+        rpc.call("pixels.fill", color="#2060c0")
+        rpc.call("selection.none")
+        assert rpc.call("image.mode", colorMode=mode, bits=bits)["colorMode"] == mode
+        before = rpc.call("color.sample", x=20, y=15)["values"]
+        steps = len(rpc.call("history.list")["undo"])
+        for sample_all in (True, False):
+            rpc.call("selection.wand", x=20, y=15, tolerance=16, contiguous=True, sampleAll=sample_all, edgeAware=False, mode="replace")
+            bounds = rpc.call("selection.info")["bounds"]
+            assert (bounds["x"], bounds["y"], bounds["width"], bounds["height"]) == (10, 8, 30, 20), (mode, bits, bounds)
+        undo = rpc.call("history.list")["undo"]
+        assert undo[-1] == "Magic Wand" and len(undo) == steps + 2, undo[steps:]
+        assert rpc.call("color.sample", x=20, y=15)["values"] == before, "deciding does not write the pixels"
+        rpc.call("selection.wand", x=2, y=2, tolerance=16, contiguous=False, edgeAware=True, mode="replace")
+        assert rpc.call("selection.info")["active"]
+        rpc.call("selection.scribble", foreground=[[[15, 12], [35, 22]]], background=[[[50, 40], [60, 44]]], clear=True)
+        assert rpc.call("selection.info")["active"]
+        # A layer's pixels as a selection: only its opaque part.
+        rpc.call("selection.none")
+        rpc.call("layers.add")
+        rpc.call("selection.rect", x=4, y=30, width=12, height=10)
+        rpc.call("pixels.fill", color="#c02020")
+        rpc.call("selection.none")
+        rpc.call("selection.fromLayer")
+        bounds = rpc.call("selection.info")["bounds"]
+        assert (bounds["x"], bounds["y"], bounds["width"], bounds["height"]) == (4, 30, 12, 10), (mode, bits, bounds)
         rpc.call("document.close", discard=True)
     rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
     rpc.call("tabs.close", index=tab["index"], discard=True)
@@ -1686,6 +1799,8 @@ def main():
     colour_management(rpc)
     colour_modes(rpc)
     colour_mode_painting(rpc)
+    colour_mode_adjustments(rpc)
+    colour_mode_selection(rpc)
 
     # Errors come back as errors, not crashes.
     try:

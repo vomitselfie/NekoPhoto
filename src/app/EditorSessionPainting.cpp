@@ -468,22 +468,25 @@ bool EditorSession::beginWarp(QPointF documentPoint) {
         // Each needs its kernel's reach around a tile: Sharpen's blur is sigma 1 (radius 3), Blur's up to 3 sigma (a
         // wider recursive blur past sigma 6 is within a level at 4 sigma).
         if (blurMode == BlurToolMode::Sharpen)
-            return beginProcessedStroke(documentPoint, [](Image& image) { sharpenImage(image); }, 3, [](Image16& image) { sharpenImage(image); },
-                                        [](ImageF& image) { sharpenImage(image); });
+            return beginProcessedStroke(documentPoint, [](Image& image) { sharpenImage(image); }, 3,
+                                        [](Image16& image) { if (image.channels() == 5) sharpenSamples(image); else sharpenImage(image); },
+                                        [](ImageF& image) { sharpenImage(image); }, [](ImageC8& image) { sharpenSamples(image); });
         const double sigma = std::min(30.0, std::max(1.5, diameter / 10));
         return beginProcessedStroke(documentPoint, [sigma](Image& image) { gaussianBlur(image, sigma); }, int(std::ceil(sigma * (sigma <= 6 ? 3 : 4))),
-                                    [sigma](Image16& image) { gaussianBlur(image, sigma); }, [sigma](ImageF& image) { gaussianBlur(image, sigma); });
+                                    [sigma](Image16& image) { if (image.channels() == 5) gaussianBlurSamples(image, sigma); else gaussianBlur(image, sigma); },
+                                    [sigma](ImageF& image) { gaussianBlur(image, sigma); }, [sigma](ImageC8& image) { gaussianBlurSamples(image, sigma); });
     }
     if (isMaskSelected_) { emit error(tr("Smudge and Liquify work on a layer's pixels, not its mask.")); return false; }
     if (!effectiveVisibleIds(document_->layers).count(layer->id)) return false;
     if (paintsNative(*document_)) {
         // The layer as the canvas shows it, at document size and the document's own layout (linear float at 32 bits,
-        // L a b in Lab); smudged or pushed in those samples.
+        // L a b in Lab, the five samples in CMYK); smudged or pushed in those samples.
         const LayerTransform shown = displayedTransform(*layer);
         const AnyImage rendered = flattenedNative(layerAlone(*document_, *layer, shown));
         const WarpMode mode = blurMode == BlurToolMode::Smudge ? WarpMode::Smudge : WarpMode::Liquify;
         if (rendered.f32()) warp_ = std::make_unique<WarpStroke>(std::make_shared<ImageF>(*rendered.f32()), mode, brushSettings.diameter, brushSettings.hardness, brushSettings.opacity);
-        else if (rendered.u16() && rendered.channels() == 4) warp_ = std::make_unique<WarpStroke>(std::make_shared<Image16>(*rendered.u16()), mode, brushSettings.diameter, brushSettings.hardness, brushSettings.opacity);
+        else if (rendered.u16()) warp_ = std::make_unique<WarpStroke>(std::make_shared<Image16>(*rendered.u16()), mode, brushSettings.diameter, brushSettings.hardness, brushSettings.opacity);
+        else if (rendered.c8()) warp_ = std::make_unique<WarpStroke>(std::make_shared<ImageC8>(*rendered.c8()), mode, brushSettings.diameter, brushSettings.hardness, brushSettings.opacity);
         else if (rendered.u8()) warp_ = std::make_unique<WarpStroke>(std::make_shared<Image>(*rendered.u8()), mode, brushSettings.diameter, brushSettings.hardness, brushSettings.opacity);
         else { emit error(tr("Smudge is not available in this document yet.")); return false; }
         warpLayerId_ = layer->id;
@@ -522,7 +525,7 @@ bool EditorSession::beginWarp(QPointF documentPoint) {
 }
 
 bool EditorSession::beginProcessedStroke(QPointF documentPoint, const std::function<void(Image&)>& process, int margin, const std::function<void(Image16&)>& process16,
-                                         const std::function<void(ImageF&)>& processF) {
+                                         const std::function<void(ImageF&)>& processF, const std::function<void(ImageC8&)>& processC8) {
     if (refusedAtDepth(toolFeature(tool_), tr("Painting"))) return false;
     const Layer* layer = activeLayer();
     if (!document_ || !layer || stroke_ || warp_) return false;
@@ -537,10 +540,13 @@ bool EditorSession::beginProcessedStroke(QPointF documentPoint, const std::funct
         if (document_->sampleType == SampleType::F32) {
             if (!processF) { emit error(tr("This tool is not available in 32-bit mode.")); return false; }
             source.tiledF = tiledProcessedNative<ImageF>(single, processF, margin);
-        } else if (document_->colorMode == ColorMode::Lab && document_->sampleType == SampleType::U16) {
+        } else if (document_->sampleType == SampleType::U16) {
+            // Lab's four samples, or CMYK's five (process16 takes either).
             source.tiled16 = tiledProcessedNative<Image16>(single, process16, margin);
         } else if (document_->colorMode == ColorMode::Lab) {
             source.tiled = tiledProcessedNative<Image>(single, process, margin);
+        } else if (processC8) {
+            source.tiledC8 = tiledProcessedNative<ImageC8>(single, processC8, margin);
         } else {
             refusedAtDepth("tool.smudge", tr("Painting"));
             return false;
@@ -588,8 +594,10 @@ bool EditorSession::beginToning(QPointF documentPoint) {
     if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image) return false;
     if (smartObjectBlocksPixels(true)) return false;
     const ToningSettings settings = toning;
-    return beginProcessedStroke(documentPoint, [settings](Image& image) { toneImage(image, settings); }, 0,   // per pixel
-                                [settings](Image16& image) { toneImage(image, settings); });
+    const ColorMode mode = document_->colorMode;
+    return beginProcessedStroke(documentPoint, [settings, mode](Image& image) { toneImage(image, settings, mode); }, 0,   // per pixel
+                                [settings, mode](Image16& image) { toneImage(image, settings, mode); }, {},
+                                [settings](ImageC8& image) { toneImage(image, settings); });
 }
 
 void EditorSession::continueWarp(QPointF documentPoint) {
@@ -618,6 +626,7 @@ void EditorSession::endWarp() {
     CloneSource result{warp->image(), {0, 0}, nullptr};
     result.image16 = warp->image16();
     result.imageF = warp->imageF();
+    result.imageC8 = warp->imageC8();
     stroke->setClone(result, true);
     stroke->appendAll(warp->points());
     stroke->flush();

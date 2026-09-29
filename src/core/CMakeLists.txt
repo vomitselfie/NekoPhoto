@@ -126,6 +126,7 @@ add_library(compositor_core STATIC
     src/affinity.cpp
     src/affinity_tree.cpp
     src/adjustments.cpp
+    src/adjustments_modes.cpp
     src/adjustments_more.cpp
     src/adjustments_u16.cpp
     src/colorlookup.cpp
@@ -145,6 +146,7 @@ add_library(compositor_core STATIC
     src/cameraraw.cpp
     src/document.cpp
     src/filters.cpp
+    src/filters_modes.cpp
     src/filters_u16.cpp
     src/history.cpp
     src/image.cpp
@@ -171,6 +173,7 @@ add_library(compositor_core STATIC
     src/layerstyle_write.cpp
     src/layerstyle_json.cpp
     src/toning.cpp
+    src/bucket_modes.cpp
     src/raw.cpp
     src/vectorlayer.cpp
     src/supports.cpp

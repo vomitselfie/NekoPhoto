@@ -13,9 +13,16 @@
 
 namespace compositor {
 
-// Channel indices: 0 RGB, 1 Red, 2 Green, 3 Blue.
+// Channel indices: 0 RGB, 1 Red, 2 Green, 3 Blue. In CMYK 0 is the composite and 1 to 4 cyan, magenta, yellow and
+// black; in Lab 1 to 3 are lightness, a and b (Photoshop's Lab Levels and Curves have no composite, and 0 goes with
+// lightness). The manifest names the slot as RGB does ("RGB", "Red", "Green", "Blue", "Black"); the mode's own names
+// ("CMYK", "Cyan", ..., "Lightness", "a", "b") are read too.
+constexpr int levelsChannelCount = 5;
 const char* levelsChannelName(int channel);
 bool parseLevelsChannel(const std::string& name, int& out);
+/// The slot's name in a document of `mode` ("Cyan", "Lightness"), as Photoshop's channel menus show it; empty for a
+/// slot the mode has no channel for.
+const char* levelsChannelName(int channel, ColorMode mode);
 
 struct LevelsRange {
     double black = 0, gamma = 1, white = 255, outputBlack = 0, outputWhite = 255;
@@ -27,7 +34,7 @@ struct LevelsRange {
 
 struct LevelsSettings {
     int channel = 0;
-    std::array<LevelsRange, 4> ranges;
+    std::array<LevelsRange, levelsChannelCount> ranges;
     bool operator==(const LevelsSettings&) const = default;
     bool isIdentity() const;
     /// The channel's own range followed by the composite RGB range.
@@ -38,7 +45,7 @@ struct CurvePoint { double x = 0, y = 0; bool operator==(const CurvePoint&) cons
 
 struct CurvesSettings {
     int channel = 0;
-    std::array<std::vector<CurvePoint>, 4> channels{{{{0, 0}, {255, 255}}, {{0, 0}, {255, 255}}, {{0, 0}, {255, 255}}, {{0, 0}, {255, 255}}}};
+    std::array<std::vector<CurvePoint>, levelsChannelCount> channels{{{{0, 0}, {255, 255}}, {{0, 0}, {255, 255}}, {{0, 0}, {255, 255}}, {{0, 0}, {255, 255}}, {{0, 0}, {255, 255}}}};
     bool operator==(const CurvesSettings&) const = default;
     bool isValid() const;
     bool isIdentity() const;
@@ -163,6 +170,9 @@ struct ChannelMixerSettings {
     /// Output red, green, blue, and grey (monochrome): source red, green, blue percent (-200..200) and a constant
     /// (-200..200 percent of white).
     std::array<std::array<double, 4>, 4> rows{{{100, 0, 0, 0}, {0, 100, 0, 0}, {0, 0, 100, 0}, {40, 40, 20, 0}}};
+    /// In a CMYK document: output cyan, magenta, yellow and black from source cyan, magenta, yellow and black ink percent
+    /// (-200..200) and a constant (-200..200 percent of full ink). Monochrome makes black alone, from the black row.
+    std::array<std::array<double, 5>, 4> inks{{{100, 0, 0, 0, 0}, {0, 100, 0, 0, 0}, {0, 0, 100, 0, 0}, {0, 0, 0, 100, 0}}};
     bool operator==(const ChannelMixerSettings&) const = default;
 };
 struct SelectiveColorSettings {

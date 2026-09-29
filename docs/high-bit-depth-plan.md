@@ -1,6 +1,6 @@
 # High bit depth and colour management: design plan
 
-Status: P1–P4 landed in 1.7 (16-bit RGB editing, painting and colour management); see "Status" below for each phase and what is still gated at 16 bits. P6 (channels) has landed too, P7 steps A–D (CMYK and Lab documents, rendering, PSD and Image ▸ Mode) P5a (the 32-bit core) and P5b (32-bit adjustments, filters, selections and pixel edits); the rest of P5 and P7, and P8, are planned. The design sections below are kept as written.
+Status: P1–P4 landed in 1.7 (16-bit RGB editing, painting and colour management); see "Status" below for each phase and what is still gated at 16 bits. P6 (channels) has landed too, P7 steps A–E (CMYK and Lab documents, rendering, PSD, Image ▸ Mode, painting, adjustments, filters, retouching and selections) P5a (the 32-bit core) and P5b (32-bit adjustments, filters, selections and pixel edits); the rest of P5 and P7, and P8, are planned. The design sections below are kept as written.
 
 ## 1. Where we are
 
@@ -570,6 +570,27 @@ U16-vs-U8 calibration tests and U16 render-hash scenes; existing hashes unchange
   and Apply Layer Mask are still gated. Faster Levels and Curves at 32 bits could fold encode, function and decode into
   one table per channel where the function is smooth (the black point's corner and a gamma's infinite slope at 0 keep
   them exact today).
+
+**P7 E's editing half landed (2026-09-29): adjustments, filters, retouching and colour selections in CMYK and Lab.**
+User-facing summary: [color-modes.md](color-modes.md#adjustments-and-filters) and the [capability matrix](mode-matrix.md).
+
+- Adjustments (`modeedit.h`, `adjustments_modes.cpp`): one kernel set for pixel edits and adjustment layers
+  (`ModeOps::adjust` now takes the document for its profile). Levels and Curves gained a fifth slot (CMYK's black,
+  written to JSON only when set); Lab uses slots 1 to 3 (Lightness, a, b). `ChannelMixerSettings::inks` for CMYK.
+  `photoshopLacksInMode` consults `adjustmentOfferedInMode` (Channel Mixer is now CMYK only, as in Photoshop), so
+  Photoshop's per-mode exclusions read "... mode" and Color Lookup "... mode yet".
+- Filters (`filters_modes.cpp`): the RGB blur and lens kernels over Lab as is and over CMYK as two 4-sample halves;
+  Add Noise per sample. `growImageAny`, `selectionInGridAny`, `blendThroughCoverageAny` serve every layout.
+- Retouching: the healers, Patch, Blur/Sharpen/Smudge/Liquify, Dodge/Burn/Sponge and the Paint Bucket on 5 samples;
+  the patch search decides on an 8-bit stand-in (C, M, Y times K); Content-Aware healing copies the best patch in CMYK.
+- Selections: `decisionImage()` is 8-bit L*a*b* in CMYK (through the profile, deciding only) and Lab; the wand compares
+  each channel; Quick Select's model gets the composite in sRGB; `coverageFromLayerAlpha` loads a CMYK layer's alpha.
+- Gates: GCC and Clang `-Werror`, ctest 65/65 on both, rpc smoke, psd_roundtrip 118/0 failed (3,975 blocks) at 8 and
+  16 bits, render hashes and brush parity unchanged for RGB (new CMYK/Lab adjustment and filter scenes). Perf,
+  `instructions:u` on one core, bench_core RGB lines before/after: render 142.997e9/143.004e9, blur 84.723e9/84.725e9,
+  levels 15.445e9/15.447e9, curves 15.583e9/15.585e9 (all within 0.01%).
+- Still waiting in CMYK and Lab: Color Lookup, Mosh, transforms and resampling of pixels, clipboard and Place,
+  exports other than PSD, text, shapes, paths and layer styles.
 
 **P5c and P7 E's painting half landed (2026-09-28): painting and retouching at 32 bits and in CMYK and Lab.**
 User-facing summaries: [bit-depth.md](bit-depth.md#painting-at-32-bits), [color-modes.md](color-modes.md#painting), and the

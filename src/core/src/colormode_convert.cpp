@@ -89,10 +89,11 @@ bool adjustmentOfferedInMode(AdjustmentKind kind, ColorMode mode) {
     // Photoshop's Image > Adjustments in CMYK and Lab (docs/color-modes.md lists the sources and what is unverified).
     case AdjustmentKind::Levels: case AdjustmentKind::Curves: case AdjustmentKind::BrightnessContrast:
     case AdjustmentKind::Invert: case AdjustmentKind::Posterize: case AdjustmentKind::Threshold:
-    case AdjustmentKind::GradientMap: case AdjustmentKind::ChannelMixer: case AdjustmentKind::PhotoFilter:
-    case AdjustmentKind::ColorLookup:
+    case AdjustmentKind::GradientMap: case AdjustmentKind::PhotoFilter: case AdjustmentKind::ColorLookup:
         return true;
+    // Channel Mixer mixes RGB or CMYK channels; Photoshop greys it in Lab.
     case AdjustmentKind::HueSaturation: case AdjustmentKind::ColorBalance: case AdjustmentKind::SelectiveColor:
+    case AdjustmentKind::ChannelMixer:
         return mode == ColorMode::CMYK;
     case AdjustmentKind::Exposure:
         return mode == ColorMode::Lab;

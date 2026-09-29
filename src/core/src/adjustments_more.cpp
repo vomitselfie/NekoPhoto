@@ -5,6 +5,7 @@
 // published formulas, unchecked against Photoshop (docs/adjustment-layers.md).
 #include "compositor/adjustments.h"
 #include "compositor/imaget.h"
+#include "compositor/modeedit.h"
 #include "compositor/parallel.h"
 #include <algorithm>
 #include <cmath>
@@ -56,6 +57,30 @@ void perPixel(Image16& image, F&& f) {
 struct EncodedImageF { ImageF& image; const TransferCurve& curve; };
 template <class F>
 void perPixel(EncodedImageF& target, F&& f) { forEachEncodedColour(target.image, target.curve, f); }
+
+// A CMYK buffer (5 samples) with its stored cyan, magenta and yellow (the complements of the inks, which is how
+// Photoshop's colour adjustments see a CMYK pixel's colour) taken as red, green and blue; black is left as it is.
+template <SampleType S>
+struct StoredCmy { ImageT<S>& image; };
+template <SampleType S, class F>
+void perPixel(StoredCmy<S>& target, F&& f) {
+    ImageT<S>& image = target.image;
+    parallelRows(0, image.height(), [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++) {
+            SampleOf<S>* row = image.row(y);
+            for (int x = 0; x < image.width(); x++) {
+                SampleOf<S>* p = row + x * 5;
+                const int a = p[4];
+                if (!a) continue;
+                const double inverse = 1.0 / a;
+                double c[3];
+                for (int i = 0; i < 3; i++) c[i] = std::min(1.0, p[i] * inverse);
+                f(c[0], c[1], c[2]);
+                for (int i = 0; i < 3; i++) p[i] = SampleOf<S>(std::clamp(std::lround(std::clamp(c[i], 0.0, 1.0) * a), 0L, long(a)));
+            }
+        }
+    });
+}
 
 double luma(double r, double g, double b) { return 0.299 * r + 0.587 * g + 0.114 * b; }
 
@@ -295,6 +320,17 @@ void applySelectiveColorImpl(I& image, const SelectiveColorSettings& s) {
         g = std::clamp(1 - ((1 - g) + delta[1]), 0.0, 1.0);
         b = std::clamp(1 - ((1 - b) + delta[2]), 0.0, 1.0);
     });
+}
+
+void applyColorBalanceStoredCmy(ImageC8& image, const ColorBalanceSettings& s) {
+    if (image.channels() != 5) return;
+    StoredCmy<SampleType::U8> t{image};
+    applyColorBalanceImpl(t, s);
+}
+void applyColorBalanceStoredCmy(Image16& image, const ColorBalanceSettings& s) {
+    if (image.channels() != 5) return;
+    StoredCmy<SampleType::U16> t{image};
+    applyColorBalanceImpl(t, s);
 }
 
 void applyBlackWhite(Image& image, const BlackWhiteSettings& s) { applyBlackWhiteImpl(image, s); }

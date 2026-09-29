@@ -24,8 +24,8 @@ Profiles and the display are in [color-management.md](color-management.md); the 
 - **Levels and Curves lose their per-channel settings** (red, green and blue mean something else in CMYK and Lab);
   the composite settings stay.
 - An **adjustment layer the new mode does not offer** (Vibrance and Black & White in CMYK and Lab; Hue/Saturation,
-  Color Balance and Selective Color in Lab; Exposure in CMYK) is **kept, hidden and marked**; converting back to a mode
-  that offers it shows it again as it was.
+  Color Balance, Selective Color and Channel Mixer in Lab; Exposure in CMYK) is **kept, hidden and marked**; converting
+  back to a mode that offers it shows it again as it was.
 - Masks, alpha and spot channels and the selection are not colour and stay as they are.
 - A document that would not fit the byte budget in the new mode (a CMYK layer holds four fifths the pixels of an RGB
   one) is refused with the reason; a 32-bit document converts to 8 or 16 bits first.
@@ -59,12 +59,55 @@ a few levels.
   apply to L, a and b as stored. Checked against Photoshop: two Photoshop-saved Lab PSDs render exactly as the composite
   Photoshop stored in them, one with a Color Fill layer in **Color** mode (no level off anywhere) and a monitor test
   chart with 1-level lightness step wedges (at most 1 level off). The other Lab modes have no Photoshop reference yet.
-- **Adjustment layers**: Invert, Levels, Curves (their composite settings), Brightness/Contrast and Posterize draw, on
-  every ink in CMYK and on L in Lab (Invert and Posterize on every channel). The other kinds are kept and written back
-  to PSD but are not drawn yet.
+- **Adjustment layers**: every kind Photoshop offers in the mode draws on the document's own samples (see
+  [Adjustments and filters](#adjustments-and-filters)); Color Lookup is kept and written back to PSD but not drawn yet.
 - **Layer styles** are kept and written back but not drawn in CMYK and Lab yet.
 - The canvas always goes through a colour transform: the document's profile to the monitor profile, or to sRGB when
   none is known, in the same pass that reduces the frame to 8 bits. Layer thumbnails are drawn the same way.
+
+## Adjustments and filters
+
+**Image ▸ Adjustments**, **adjustment layers** and the **Filter** menu work in CMYK and Lab at 8 and 16 bits, on the
+inks or on L, a and b as stored: nothing is converted to RGB and back. Each kind is offered where Photoshop offers it;
+what Photoshop greys in a mode stays greyed for good ("Not available in CMYK mode").
+
+| Kind | CMYK | Lab |
+|---|---|---|
+| Levels, Curves | composite and each ink (Cyan, Magenta, Yellow, Black) | Lightness, a, b (no composite; Lightness first) |
+| Brightness/Contrast | every ink | Lightness |
+| Invert, Posterize | every ink | L, a and b |
+| Threshold, Gradient Map | on the colour's lightness | on L |
+| Photo Filter | yes | yes |
+| Exposure | greyed (Photoshop lacks) | on L |
+| Hue/Saturation, Color Balance, Selective Color, Channel Mixer | yes | greyed (Photoshop lacks) |
+| Vibrance, Black & White | greyed (Photoshop lacks) | greyed (Photoshop lacks) |
+| Color Lookup | not yet | not yet |
+
+- **Levels and Curves** work on each channel as its histogram shows it: a CMYK plate is dark where the ink is, so
+  moving Levels' black input point up adds ink, as in Photoshop. CMYK's composite applies to every ink after the ink's
+  own setting. Lab has no composite channel: the channel menu starts at Lightness, and a and b take their own curves.
+  The Levels histogram shows the layer's channels. Auto and the black, gray and white samplers are RGB only for now.
+- **Invert** (Ctrl+I) inverts every ink, or L, a and b.
+- **Threshold and Gradient Map** decide on lightness: L in Lab, and in CMYK the colour's L* read through the profile
+  (for deciding only; the pixels are not converted). Threshold's black is the profile's black, as the brush paints it;
+  a Gradient Map's colours are converted through the profile once and the map runs between them in the document's
+  mode.
+- **Hue/Saturation and Color Balance** in CMYK work on the stored cyan, magenta and yellow as the RGB kernels work on
+  red, green and blue; the black plate is kept. **Selective Color** moves each ink by colour range, its Black slider
+  the black plate. **Channel Mixer** in CMYK has four ink rows (cyan, magenta, yellow and black from the four inks and
+  a constant); Monochrome makes the black plate alone.
+- **Photo Filter** converts its colour through the profile: in CMYK it is laid over each ink, in Lab it moves a and b
+  (and L too without Preserve Luminosity). **Exposure** in Lab changes L through relative luminance.
+- **Filters**: Gaussian Blur, Motion Blur and Lens Correction treat every sample alike, as in RGB. Add Noise puts its
+  own noise on each ink, or on L, a and b; Monochromatic puts the same noise on every ink, or on L alone in Lab.
+- These are the RGB kernels' formulas adapted to each mode and are not yet checked against Photoshop's own output.
+  PSD Levels and Curves records map to the same channels (CMYK's black is the fifth), and a CMYK file's Channel Mixer
+  reads its four ink rows.
+
+Checked by `adjust_modes_tests` (Levels on CMYK moves ink, the black slot moves the black plate alone, Lab Curves on
+Lightness leaves a and b, Invert inverts the inks, Selective Color, Threshold to the profile's black, a black-to-white
+Gradient Map keeping L, the colour kinds, the filters over five samples, an adjustment layer drawing what the pixel
+edit makes), CMYK and Lab adjustment and filter scenes in `render_hash_tests`, and `rpc_smoke.py`.
 
 ## Channels
 
@@ -90,20 +133,42 @@ paints L, a and b. Nothing is painted in RGB and converted back.
 - **Clone Stamp** copies the document's own samples (the composite at its layout, or the layer alone), and **moving or
   duplicating selected pixels** with the Move tool carries every sample. **Merge Down**, **Merge Layers** and **Layer
   Mask ▸ Apply** work at the layout too.
-- **Lab only, for now**: Spot Healing and the Healing Brush, and Blur, Sharpen, Smudge and Liquify, which work on L, a
-  and b as the RGB tools do on red, green and blue. In CMYK they are greyed ("Not available in CMYK mode yet").
+- **Retouching**, on the document's own samples in both modes:
+  - **Spot Healing, the Healing Brush and Patch**. In Lab they heal L, a and b as the RGB tools heal red, green and
+    blue. In CMYK every one of the five samples is healed (the membrane that matches the tone to the edge runs on each
+    ink, K included); where a spot heals from is chosen on the plates' look reduced to 8 bits (each of C, M and Y as
+    stored times K), for deciding only. Content-Aware synthesis works on RGBA, so in CMYK the Content-Aware type copies
+    the best-matching nearby patch, as Proximity Match does with a wider search.
+  - **Blur, Sharpen, Smudge and Liquify** blur, sharpen, carry and resample every sample (five in CMYK).
+  - **Dodge and Burn** move L along their range's curve in Lab, a and b kept (Lab holds colour apart from lightness,
+    so Protect Tones changes nothing there). In CMYK they move each plate's brightness (the ink inverted) along the
+    same curves, so Dodge removes ink and Burn adds it, black included. **Sponge** scales a and b in Lab (Saturate
+    doubles the chroma, Desaturate takes it away) and in CMYK works on cyan, magenta and yellow as the RGB Sponge
+    does on their complements, the black plate left alone.
+  - **The Paint Bucket** chooses what to fill on the native samples (the canvas as shown, or the layer alone): every
+    sample, alpha included, within Tolerance of the clicked pixel's, as Photoshop's bucket compares each channel. The
+    colour goes in through the profile, as the brush's does.
 - **The Eyedropper** reads the composite's inks or L, a, b (`color.sample` answers them as percentages or values) and
   sets the foreground colour to that colour converted through the document's profile to sRGB.
-- **Selections**: the Select menu, Quick Mask, loading a mask or channel and transforming the outline now work in CMYK
-  and Lab (the selection is coverage, not colour); the Magic Wand and Quick Select, which read colour, wait.
+- **Selections**: the Select menu, Quick Mask, loading a mask or channel and transforming the outline work in CMYK
+  and Lab (the selection is coverage, not colour), and so does loading a layer's pixels as a selection (Ctrl-click the
+  thumbnail; a CMYK layer's alpha is its fifth sample).
+- **The Magic Wand and Quick Select** decide in L\*a\*b\*: a Lab document's own L, a and b, a CMYK document's composite
+  (or the active layer) converted through its profile to Lab for deciding only; the pixels are never converted.
+  Tolerance counts 8-bit levels of L, a and b, each compared on its own as Photoshop's wand compares each channel (L
+  runs 0 to 255 over 0 to 100, a and b a level per unit). Quick Select's scribbles work on the same L, a and b; its
+  click-to-select model, trained on sRGB, sees the composite converted to sRGB.
 - Greyed for good: the **MyPaint** presets ("Not available in CMYK mode"): libmypaint mixes RGB and has no inks or Lab,
-  so its strokes could only be painted in RGB and converted, which NekoPhoto does not do. Not yet ("... mode yet"):
-  Dodge, Burn and Sponge, the Paint Bucket, Patch, and CMYK's healing and Blur/Smudge tools.
+  so its strokes could only be painted in RGB and converted, which NekoPhoto does not do.
 
 Checked by `paint_modes_tests`: black painted in CMYK at 8 and 16 bits is the inks Little CMS gives for black through
 the profile, within half a level, K and C, M, Y all laid; a Lab stroke's L, a and b are Little CMS's for the colour
 within a level; a CMYK gradient's ends and middle are the inks between the stops; moving and cloning carry all five
-samples. `rpc_smoke.py` paints, erases, clones, heals (Lab), blurs (Lab), merges and applies a mask in each mode.
+samples. `retouch_modes_tests` heals CMYK at 8 and 16 bits (every sample back to the surrounding inks), blurs a black
+edge in CMYK with the other plates kept, dodges L in Lab with a and b kept, burns ink in, sponges a and b to neutral,
+smudges and pushes black ink, and checks the bucket's choice on K and on Lab's a and b. `rpc_smoke.py` paints, erases,
+clones, heals, patches, blurs, sharpens, smudges, dodges, burns, sponges, fills with the bucket, merges and applies a
+mask in each mode.
 
 ## Photoshop files
 
@@ -120,8 +185,7 @@ samples. `rpc_smoke.py` paints, erases, clones, heals (Lab), blurs (Lab), merges
 
 ## Not yet
 
-Dodge, Burn and Sponge, the Paint Bucket, Patch, the Magic Wand and Quick Select, CMYK's healing and Blur/Smudge tools,
-most adjustments and filters, transforms of pixels, text and shapes as editable objects, and layer styles in CMYK and
+Color Lookup, Mosh, transforms of pixels, text and shapes as editable objects, and layer styles in CMYK and
 Lab (greyed out with "Not available in CMYK mode yet"); exporting CMYK or Lab to PNG, JPEG, TIFF and the other formats
 (projects and PSD save them); CMYK JPEG and TIFF. Camera Raw, G'MIC and the MyPaint brushes stay RGB only ("Not
 available in CMYK mode", for good).
@@ -150,7 +214,7 @@ colour channels `cyan` ... `black` and `lightness`, `a`, `b`, and the composite 
   depth; `BrushStroke(layer, mask, settings, document, options)` converts the colour through the profile
   (`RGBFloat` to `CMYKFloat` / `LabFloat`); `tiledProcessedNative` renders a layer at its layout for Blur and Sharpen;
   `trimToPixelsAny` and `applyMaskAny` (`pixels_any.cpp`) merge and apply masks at any layout.
-- Tests: `colormodes_render_tests`, `psd_modes_tests`, `paint_modes_tests`, CMYK and Lab scenes in `render_hash_tests`, and
+- Tests: `colormodes_render_tests`, `psd_modes_tests`, `paint_modes_tests`, `select_modes_tests` (the wand, Quick Select and loading a CMYK layer as a selection), CMYK and Lab scenes in `render_hash_tests`, and
   `psd_roundtrip` (CMYK and Lab files must reopen in their mode with every layer channel byte for byte).
 
 ## 日本語
@@ -169,7 +233,7 @@ colour channels `cyan` ... `black` and `lightness`, `a`, `b`, and the composite 
   フィルターとグラデーションマップの色、**描画色と背景色**)も変換します。CMYK への変換では印刷の色域に収まります。
 - **レベル補正とトーンカーブはチャンネルごとの設定がリセット**されます(複合チャンネルの設定は残ります)。
 - **新しいモードにない調整レイヤー**(CMYK と Lab の自然な彩度・白黒、Lab の色相・彩度・カラーバランス・特定色域の
-  選択、CMYK の露光量)は**非表示にして印を付けて残し**、そのレイヤーがあるモードに戻すと元どおり表示されます。
+  選択・チャンネルミキサー、CMYK の露光量)は**非表示にして印を付けて残し**、そのレイヤーがあるモードに戻すと元どおり表示されます。
 - マスク、アルファチャンネル、スポットカラーチャンネル、選択範囲は変わりません。
 
 ### CMYK・Lab ドキュメントの表示
@@ -180,9 +244,45 @@ colour channels `cyan` ... `black` and `lightness`, `a`, `b`, and the composite 
   色相・彩度・カラー・輝度・カラー比較(暗)・カラー比較(明)は Photoshop の CMYK の結果と照合できるまで**通常として
   描画**し、レイヤーパネルにその旨を表示します。Lab では覆い焼きカラー・焼き込みカラー・比較(暗)・比較(明)・
   差の絶対値・除外・減算・除算は使えません(Adobe の説明のとおり)。
-- 調整レイヤーは階調の反転、レベル補正、トーンカーブ(複合チャンネル)、明るさ・コントラスト、ポスタリゼーションを
-  描画します。そのほかの調整レイヤーとレイヤースタイルは保持して PSD に書き戻しますが、まだ描画しません。
+- 調整レイヤーは、そのモードで Photoshop にある種類をすべてドキュメント自身の値で描画します(下の「色調補正と
+  フィルター」)。カラールックアップとレイヤースタイルは保持して PSD に書き戻しますが、まだ描画しません。
 - カンバスは常にドキュメントのプロファイルからモニタープロファイル(不明なら sRGB)へ変換して表示します。
+
+### 色調補正とフィルター
+
+**イメージ ▸ 色調補正**、**調整レイヤー**、**フィルター**メニューは CMYK と Lab(8/16 bit)でも使え、インキまたは
+L・a・b をそのまま変更します。RGB に変換して戻すことはありません。各種類は Photoshop がそのモードで提供するものだけで、
+Photoshop にないものは今後も使えません(「CMYK モードでは使用できません」)。
+
+| 種類 | CMYK | Lab |
+|---|---|---|
+| レベル補正、トーンカーブ | 複合チャンネルと各インキ(シアン・マゼンタ・イエロー・ブラック) | 明度・a・b(複合チャンネルなし) |
+| 明るさ・コントラスト | 各インキ | 明度 |
+| 階調の反転、ポスタリゼーション | 各インキ | L・a・b |
+| 2 階調化、グラデーションマップ | 色の明度で判定 | L で判定 |
+| レンズフィルター | 可 | 可 |
+| 露光量 | 使用不可(Photoshop にない) | L に適用 |
+| 色相・彩度、カラーバランス、特定色域の選択、チャンネルミキサー | 可 | 使用不可(Photoshop にない) |
+| 自然な彩度、白黒 | 使用不可(Photoshop にない) | 使用不可(Photoshop にない) |
+| カラールックアップ | まだ | まだ |
+
+- **レベル補正とトーンカーブ**はヒストグラムに表示されるとおりの各チャンネルに適用します。CMYK の版はインキのある所が
+  暗いので、Photoshop と同じくレベル補正の入力の黒を上げるとインキが増えます。CMYK の複合チャンネルは各インキの設定の
+  後にすべてのインキに適用します。Lab には複合チャンネルがなく、チャンネルは明度から始まり、a と b にはそれぞれの
+  カーブがあります。自動補正とスポイトは今のところ RGB のみです。
+- **階調の反転**(Ctrl+I)はすべてのインキ、または L・a・b を反転します。
+- **2 階調化とグラデーションマップ**は明度で判定します(Lab は L、CMYK はプロファイルを通して読んだ L*。判定のみで、
+  ピクセルは変換しません)。2 階調化の黒はブラシと同じプロファイルの黒です。グラデーションマップの色はプロファイルで
+  一度変換し、ドキュメントのモードで補間します。
+- CMYK の**色相・彩度とカラーバランス**は、保存されたシアン・マゼンタ・イエローを RGB の赤・緑・青と同じように扱い、
+  ブラックの版はそのままです。**特定色域の選択**は色域ごとに各インキを動かし、ブラックはブラックの版を動かします。
+  CMYK の**チャンネルミキサー**は 4 つのインキの出力(4 インキと定数から)を持ち、モノクロはブラックの版だけを作ります。
+- **レンズフィルター**の色はプロファイルで変換し、CMYK では各インキに重ね、Lab では a と b(輝度を保持しないときは L も)
+  を動かします。Lab の**露光量**は相対輝度を通して L を変えます。
+- **フィルター**:ぼかし(ガウス)、ぼかし(移動)、レンズ補正はすべての値を RGB と同じように扱います。ノイズを加えるは
+  各インキ、または L・a・b にノイズを加え、グレースケールノイズはすべてのインキに同じノイズ(Lab では L のみ)を加えます。
+- 各モードに合わせた RGB の計算式で、Photoshop の出力との照合はまだです。PSD のレベル補正とトーンカーブは同じ
+  チャンネルに対応し(CMYK のブラックは 5 番目)、CMYK ファイルのチャンネルミキサーは 4 つのインキの行を読み込みます。
 
 ### チャンネル
 
@@ -202,15 +302,30 @@ RGB で塗ってから変換することはありません。
 - **グラデーションツール**:各分岐点を変換し、分岐点の間はドキュメントのモード(インキ、または L・a・b)で補間します。
 - **コピースタンプ**はドキュメント自身の値をコピーし、移動ツールでの**選択ピクセルの移動と複製**もすべての値を運びます。
   **下のレイヤーと結合**、**レイヤーを結合**、**レイヤーマスク ▸ 適用**も同じです。
-- **今のところ Lab のみ**:スポット修復ブラシと修復ブラシ、ぼかし・シャープ・指先・ゆがみ(RGB の赤・緑・青と同じように
-  L・a・b に適用)。CMYK では「CMYK モードではまだ使用できません」とグレー表示になります。
+- **レタッチ**(どちらのモードでもドキュメント自身の値に適用):
+  - **スポット修復ブラシ、修復ブラシ、パッチ**:Lab では RGB の赤・緑・青と同じように L・a・b を修復します。CMYK では
+    5 つの値すべて(K を含む各インキ)を修復します。修復元の選択は、版の見た目を 8 bit にしたもの(C・M・Y それぞれの
+    値に K を掛けたもの)で判断するだけで、ピクセルは変換しません。コンテンツに応じた合成は RGBA で動くため、CMYK の
+    「コンテンツに応じる」は近傍で最もよく合うパッチを(近似色に合わせるより広く探して)コピーします。
+  - **ぼかし・シャープ・指先・ゆがみ**はすべての値(CMYK では 5 つ)をぼかし、シャープにし、運び、再サンプルします。
+  - **覆い焼き・焼き込み**:Lab では範囲のカーブに沿って L を動かし、a・b は変えません(保護トーンは Lab では影響
+    しません)。CMYK では各版の明るさ(インキの反転)を同じカーブで動かすため、覆い焼きはインキを減らし、焼き込みは
+    ブラックを含めてインキを増やします。**スポンジ**は Lab では a・b を拡大縮小し(彩度を上げると 2 倍、下げると 0)、
+    CMYK では RGB のスポンジが補色に行うのと同じようにシアン・マゼンタ・イエローに適用し、ブラックの版は変えません。
+  - **塗りつぶしツール**は塗る範囲をドキュメント自身の値(表示されている画像、またはレイヤーのみ)で決めます。
+    Photoshop と同じく、アルファを含むすべての値がクリックしたピクセルから許容値以内のピクセルを塗ります。色は
+    ブラシと同じくプロファイルを通して変換します。
 - **スポイトツール**は合成画像のインキまたは L・a・b を読み(`color.sample` が返します)、描画色にはそれをプロファイルで
   sRGB に変換した色を設定します。
-- **選択範囲**:選択範囲メニュー、クイックマスク、マスクやチャンネルの読み込み、境界線の変形が CMYK と Lab でも使えます
-  (選択範囲は色ではなく範囲です)。色を読む自動選択ツールとクイック選択ツールはまだです。
+- **選択範囲**:選択範囲メニュー、クイックマスク、マスクやチャンネルの読み込み、境界線の変形、レイヤーのピクセルからの
+  選択範囲の読み込み(サムネールを Ctrl+クリック。CMYK レイヤーのアルファは 5 番目の値)が CMYK と Lab でも使えます
+  (選択範囲は色ではなく範囲です)。
+- **自動選択ツールとクイック選択ツール**は L\*a\*b\* で判定します。Lab ドキュメントはその L・a・b を、CMYK ドキュメントは
+  合成画像(または作業中のレイヤー)をプロファイルで Lab に変換したものを判定にだけ使い、ピクセルは変換しません。
+  許容値は L・a・b それぞれの 8 bit の階調で数え、Photoshop の自動選択と同じくチャンネルごとに比べます。クイック選択の
+  ストロークも同じ L・a・b を使い、クリックで選択するモデル(sRGB で学習)には合成画像を sRGB に変換して渡します。
 - **MyPaint** のプリセットは今後も使えません(「CMYK モードでは使用できません」)。libmypaint は RGB で混色し、インキや
-  Lab を持たないため、RGB で塗って変換するしかなく、NekoPhoto はそうしないからです。覆い焼き・焼き込み・スポンジ、
-  塗りつぶしツール、パッチ、CMYK の修復とぼかし・指先はまだです(「… モードではまだ使用できません」)。
+  Lab を持たないため、RGB で塗って変換するしかなく、NekoPhoto はそうしないからです。
 
 ### Photoshop ファイル
 
@@ -221,7 +336,6 @@ RGB に変換します。
 
 ### 未対応
 
-覆い焼き・焼き込み・スポンジ、塗りつぶしツール、パッチ、自動選択ツールとクイック選択ツール、CMYK の修復とぼかし・指先、
-多くの色調補正とフィルター、変形、編集可能なテキストとシェイプ、レイヤースタイルの描画(「CMYK モードではまだ使用
+カラールックアップ、Mosh、変形、編集可能なテキストとシェイプ、レイヤースタイルの描画(「CMYK モードではまだ使用
 できません」と表示)、PNG・JPEG・TIFF などへの書き出し、CMYK の JPEG と TIFF、CMYK の
 分離不可能な描画モード。

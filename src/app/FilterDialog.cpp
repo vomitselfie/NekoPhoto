@@ -2,6 +2,7 @@
 #include "Names.h"
 #include "FilterDialog.h"
 #include "compositor/depth.h"
+#include "compositor/modeedit.h"
 #include "ActionLibrary.h"
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -52,6 +53,7 @@ PixelAdjustmentDialog::PixelAdjustmentDialog(EditorSession* session, AdjustmentK
     capture(0, kind == AdjustmentKind::Grain ? 0 : (kind == AdjustmentKind::Levels || kind == AdjustmentKind::HueSaturation) ? 8000 : previewLimit);
     if (source() && kind == AdjustmentKind::Levels) editor_->setHistogram(levelsHistogram(*source(), coverage()));
     if ((source16() || sourceF()) && kind == AdjustmentKind::Levels) editor_->setHistogram(session->activeHistogram());
+    if (sourceNative() && kind == AdjustmentKind::Levels) editor_->setHistogram(session->activeHistogramNative());
     connect(editor_, &AdjustmentEditor::settingsChanged, this, [this] { refreshPreview(); });
     connect(preview, &QCheckBox::toggled, this, [this] { refreshPreview(); });
     refreshPreview();
@@ -80,6 +82,7 @@ std::shared_ptr<ImageF> PixelAdjustmentDialog::run(const ImageF& source, double 
 void PixelAdjustmentDialog::refreshPreview() {
     if (!hasPreviewSource()) return;
     if (!previewing() || editor_->settings().isIdentity()) { clearPreview(); return; }
+    if (sourceNative()) { showPreviewNative(adjustedInMode(editor_->settings(), sourceNative(), colorMode(), documentProfile())); return; }
     if (previewSourceF()) showPreview(run(*previewSourceF(), previewScale()));
     else if (previewSource16()) showPreview(run(*previewSource16(), previewScale()));
     else showPreview(run(*previewSource(), previewScale()));
@@ -88,7 +91,11 @@ void PixelAdjustmentDialog::refreshPreview() {
 bool PixelAdjustmentDialog::apply() {
     if (editor_->settings().isIdentity()) return true;
     const QString name = QString::fromUtf8(adjustmentKindName(editor_->settings().kind));
-    if (sourceF()) {
+    if (sourceNative()) {
+        const AnyImage out = adjustedInMode(editor_->settings(), sourceNative(), colorMode(), documentProfile());
+        if (!out) return true;
+        commit(throughSelectionNative(out), placement(), name);
+    } else if (sourceF()) {
         auto out = run(*sourceF(), 1);
         throughSelection(*out);
         commit(ImageFPtr(out), placement(), name);
@@ -196,6 +203,7 @@ void FilterDialog::refreshPreview() {
     prepareSource();
     if (!hasPreviewSource()) return;
     if (!previewing() || identity()) { clearPreview(); return; }
+    if (sourceNative()) { showPreviewNative(filteredInMode(kind_, sourceNative(), colorMode(), settings_, 1, seed_), placement()); return; }
     if (previewSourceF()) showPreview(run(*previewSourceF(), previewScale()), placement());
     else if (previewSource16()) showPreview(run(*previewSource16(), previewScale()), placement());
     else showPreview(run(*previewSource(), previewScale()), placement());
@@ -218,7 +226,13 @@ bool FilterDialog::apply() {
     if (identity()) return true;
     LayerTransform placed = placement();
     const bool trims = kind_ == FilterKind::GaussianBlur || kind_ == FilterKind::MotionBlur;
-    if (sourceF()) {
+    if (sourceNative()) {
+        AnyImage out = filteredInMode(kind_, sourceNative(), colorMode(), settings_, 1, seed_);
+        if (!out) return true;
+        out = throughSelectionNative(out);
+        if (trims) if (AnyImage trimmed = trimToPixelsAny(out, placement(), placed)) out = trimmed;
+        commit(out, placed, QString::fromUtf8(filterKindName(kind_)));
+    } else if (sourceF()) {
         auto out = run(*sourceF(), 1);
         throughSelection(*out);
         ImageFPtr image = out;

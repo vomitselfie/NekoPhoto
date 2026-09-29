@@ -296,6 +296,16 @@ std::shared_ptr<ImageF> renderFlattenedF(const Document& document) {
 }
 
 std::shared_ptr<Image> decisionImage(const Document& document) {
+    if (document.colorMode != ColorMode::RGB) {
+        // CMYK and Lab decide in L*a*b* (docs/color-modes.md, "Selections"): a Lab document's own composite, a CMYK
+        // one's converted through its profile for deciding only; the document's pixels are never written. The result
+        // holds L, a and b (offset by 128) and alpha, premultiplied, at 8 bits.
+        const AnyImage native = renderNative(document);
+        AnyImage lab = document.colorMode == ColorMode::Lab ? native : convertImage(native, document.colorMode, document.profile, ColorMode::Lab, ColorProfile());
+        if (lab.u16() && lab.channels() == 4) return narrowImage(*lab.u16());
+        if (lab.u8()) return std::make_shared<Image>(*lab.u8());
+        return std::make_shared<Image>(document.width, document.height);
+    }
     if (document.sampleType != SampleType::F32) return renderFlattened(document);
     return encodeImage8(*renderFlattenedF(document), encodedTransfer(document));
 }

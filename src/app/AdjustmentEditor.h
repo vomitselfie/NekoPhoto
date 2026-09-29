@@ -28,6 +28,8 @@ public:
     void setSettings(const compositor::AdjustmentSettings& settings);
     const compositor::AdjustmentSettings& settings() const { return settings_; }
     void setHistogram(const std::array<std::vector<double>, 4>& histogram);
+    /// Composite and four channels (CMYK's black in the last).
+    void setHistogram(const std::array<std::vector<double>, 5>& histogram);
     /// Lets the Hue/Saturation eyedroppers and the targeted-adjustment drag sample the canvas.
     void setSession(class EditorSession* session);
     ~AdjustmentEditor() override;
@@ -63,7 +65,12 @@ private:
     std::vector<std::function<void()>> syncers_;
     HistogramWidget* histogram_ = nullptr;
     CurveWidget* curve_ = nullptr;
-    std::array<std::vector<double>, 4> histogramData_;
+    std::array<std::vector<double>, 5> histogramData_;
+    /// The session's document mode (RGB without one): the channel names and what the editors offer.
+    compositor::ColorMode colorMode() const;
+    int shownChannel(int channel) const;
+    compositor::ColorMode builtMode_ = compositor::ColorMode::RGB;   // the mode the editors were built for
+    QComboBox* channelCombo();
     QPointer<EditorSession> session_;   // may go first: its tab can close while a dialog holding this editor is open
     int hueSampleMode_ = 0; // 0 off, 1 sample, 2 add, 3 remove
     bool hueTargeting_ = false;
