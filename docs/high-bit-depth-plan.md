@@ -1,6 +1,6 @@
 # High bit depth and colour management: design plan
 
-Status: P1–P4 landed in 1.7 (16-bit RGB editing, painting and colour management); see "Status" below for each phase and what is still gated at 16 bits. P6 (channels) has landed too, P7 steps A–D (CMYK and Lab documents, rendering, PSD and Image ▸ Mode) and P5a (the 32-bit core); the rest of P5 and P7, and P8, are planned. The design sections below are kept as written.
+Status: P1–P4 landed in 1.7 (16-bit RGB editing, painting and colour management); see "Status" below for each phase and what is still gated at 16 bits. P6 (channels) has landed too, P7 steps A–D (CMYK and Lab documents, rendering, PSD and Image ▸ Mode) P5a (the 32-bit core) and P5b (32-bit adjustments, filters, selections and pixel edits); the rest of P5 and P7, and P8, are planned. The design sections below are kept as written.
 
 ## 1. Where we are
 
@@ -522,6 +522,54 @@ U16-vs-U8 calibration tests and U16 render-hash scenes; existing hashes unchange
   F32 (their sources are converted with sRGB's curve today). For P5f: Local Adaptation, Equalize, the HDR colour picker.
   Also open: Assign and Convert to Profile at 32 bits, 32-bit channels in the Channels panel's editing, and a concurrency
   cost: 32-bit renders serialise on one lock while a scope is active.
+
+**P5b landed (2026-09-28): adjustments, filters, selections and pixel edits at 32 bits.** User-facing summary:
+[bit-depth.md](bit-depth.md#32-bits-per-channel).
+
+- Adjustments (`adjustments_f32.cpp`): Photoshop's 32-bit set, Levels, Curves, Exposure, Hue/Saturation, Color Balance,
+  Black & White, Photo Filter, Channel Mixer, Vibrance, Gradient Map, Invert and Color Lookup, on pixels and as
+  adjustment layers (`DeepOps<F32>::adjust`; the "not drawn" notice now names only the kinds Photoshop lacks). The pixels
+  stay linear; each kind's function runs on the colour encoded through the document's curve, continued above 1
+  (`encodeExtended` / `decodeExtended` in depth.h; sRGB through 65536-step tables in 0..1), then linearised, so settings
+  mean what they mean at 8 bits. Exposure is the exact linear multiply. Stated assumptions, since Photoshop's are not
+  documented: Levels drops its clamp at the white point (the formula goes on), Curves continues along its end tangent
+  above 255 (flat when its last point stops short of 255); the colour kinds adjust light above 1 at white's brightness
+  and scale it back; Invert maps light above 1 to black. Brightness/Contrast, Posterize, Threshold, Selective Color and
+  Grain return false and stay greyed ("Not available in 32-bit mode").
+- Filters: Gaussian and Motion Blur (`blur_f32.cpp`, the templates of blur_impl.h with an unrounded float store), Add
+  Noise (the same seeded pattern, added to the encoded colour) and Lens Correction (exact weights) in `filters_f32.cpp`.
+  Unsharp Mask exists here only as a Smart Filter (P5e), and there is no Offset filter. Camera Raw stays greyed ("yet"):
+  its sliders are display-referred; a port needs a scene-referred pipeline with Local Adaptation (P5f).
+- Selections at 32 bits are `GrayF`: combine, invert, offset, Select ▸ Modify (morphology.cpp's templates at F32),
+  `coverageFromLayerF`, Quick Mask, Layer Mask ▸ From Selection, Flip Canvas and Crop carry them. The wand, Quick Select,
+  Select Subject and Trim decide on `decisionImage()` (render.h: the composite at exposure 0 through the encoding curve,
+  never the view); the wand's result widens to float. Channels: `GrayF` alpha channels in channels.cpp (solid, invert,
+  composite and colour channels from the exposure-0 encoding, transparency, masks, resampling, thumbnails, single
+  colour-channel editing with `keepChannelsF`), the session's canvas gray, overlay colour and paste into channels.
+- Pixel edits (`EditorSessionFloat.cpp`, one branch per entry point in the shared files): Fill and Clear, the clipboard
+  (float inside NekoPhoto, an 8-bit exposure-0 copy for the system), Free Transform of selected pixels and its merge,
+  Distort with its preview cache, Edit ▸ Warp and Warp Cage (`renderWarpedImage` / `renderWarpedOverBox` at F32; a
+  preview encoded to 8 bits), Image Size (`resizeDocumentF` over the float warps and `resampleAxisAligned(ImageF)` with
+  exact weights), Crop, Trim, Canvas Size.
+- Gates: `depth_float_edit_tests` checks every kernel against double versions added to `tests/float_reference` (every
+  adjustment of the set on sRGB and a gamma curve, the FIR and recursive Gaussians, Motion Blur at five angles, Add Noise
+  three ways on two curves, Lens Correction both samplers, the resampler with three filters, Image Size, feathering,
+  adjustment layers in the renderer): worst 0.05 of the 1e-5 absolute-plus-relative bound. Cross-depth: an 8-bit picture
+  adjusted at 32 bits and converted back at exposure 0 is within one level of the 8-bit result for every kind on opaque
+  pixels; on half-transparent ones Hue/Saturation, Color Balance, Photo Filter and Vibrance reach 2 to 5 levels on under
+  0.1% of samples (the 8-bit kernels cut the straight colour to a level first). 47 `f32/` render-hash scenes (every
+  8-bit, 16-bit, CMYK, Lab and earlier 32-bit hash unchanged), brush parity unchanged, PSD corpus plus K.psd 118 files /
+  0 failed / 3,975 carried blocks at 8 and 16 bits and 3,950 at 32, GCC and Clang `-Werror` full builds, full ctest,
+  headless rpc smoke with a 32-bit editing section, translations.
+- bench_core instruction counts (`perf stat -e instructions:u`, core 0, one run per filter group, the start against this
+  branch): every 8- and 16-bit group within −0.04% and +0.20%. New f32 lines (medians of 5, 24 threads): 12-layer
+  render 419 ms (render16 210 ms), Gaussian blur r20 85 ms (u16 85), Levels 74 ms (u16 8.6), Curves 95 ms (u16 9.1),
+  Hue/Saturation 56 ms (u16 46).
+- For P5c: `StrokeOps<F32>` for the brush and every tool built on `BrushStroke` (moving selected pixels, gradients,
+  healing, clone, smudge), MyPaint's 15-bit round trip, the healers deciding on `decisionImage()`; the Eyedropper, merges
+  and Apply Layer Mask are still gated. Faster Levels and Curves at 32 bits could fold encode, function and decode into
+  one table per channel where the function is smooth (the black point's corner and a gamma's infinite slope at 0 keep
+  them exact today).
 
 ## Review notes
 

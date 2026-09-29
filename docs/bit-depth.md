@@ -150,8 +150,8 @@ A 32-bit document holds premultiplied **linear light** in floating point, in its
 linear light is what light does, so soft edges, glows and semi-transparent layers look different from 8 and 16 bits
 (Photoshop's 32-bit mode too).
 
-This is the first step (P5a in [high-bit-depth-plan.md](high-bit-depth-plan.md)): the core, the files and the view.
-Painting, adjustments, filters and selections at 32 bits follow in the next steps.
+The core, the files and the view came first (P5a in [high-bit-depth-plan.md](high-bit-depth-plan.md)); adjustments,
+filters, selections and pixel edits followed (P5b). Painting at 32 bits is the next step.
 
 ### Getting a 32-bit document
 
@@ -198,17 +198,36 @@ with no monitor profile, is encoded with the document's own curve, so at exposur
 ### What works at 32 bits now
 
 - **Rendering**: every blend mode, opacity, layer and folder masks (in float), vector masks, clipping masks, folders
-  (Pass Through and isolated), artboards, shape and fill layers, Dissolve and layer styles (all ten effects, their colours
-  linearised). Vector coverage and gradient and pattern fills come from their 16-bit forms (15 bits of coverage).
+  (Pass Through and isolated), artboards, shape and fill layers, Dissolve, layer styles (all ten effects, their colours
+  linearised) and adjustment layers. Vector coverage and gradient and pattern fills come from their 16-bit forms (15 bits
+  of coverage).
 - **Blend modes**: the picker offers Photoshop's 32-bit set: Normal, Dissolve, Darken, Multiply, Lighten, Linear Dodge
   (Add), Difference, Subtract, Divide, Hue, Saturation, Color, Luminosity, Darker Color and Lighter Color; they work on
   the values as they are, above white included. The other modes are greyed ("Not available in 32-bit mode"); a layer
   that already has one (from a file, or converted) still draws, with its colours held to 0..1 inside the blend. The
   formulas are the W3C Compositing and Blending ones; Hue, Saturation, Color, Luminosity and Darker and Lighter Color
   take luminance from the profile's own primaries.
+- **Adjustments**, on pixels (Image ▸ Adjustments) and as adjustment layers: Photoshop's 32-bit set, Levels, Curves,
+  Exposure, Hue/Saturation, Color Balance, Black & White, Photo Filter, Channel Mixer, Vibrance, Gradient Map, Invert and
+  Color Lookup. How they treat light above white is below.
+- **Filters**: Gaussian Blur and Motion Blur (light averaged as it is, nothing rounded), Add Noise (the same pattern for
+  a seed as at 8 and 16 bits) and Lens Correction (exact bilinear or Catmull-Rom weights).
+- **Selections**: the marquee and lasso tools, the Magic Wand and Quick Select, Select All, Deselect, Inverse, Select ▸
+  Modify (Expand, Contract, Border, Smooth, Feather), Load as Selection, Quick Mask, Select Subject, Layer Mask ▸ From
+  Selection. The selection is float coverage (0 to 1). The Magic Wand, Quick Select and Trim decide on the composite at
+  exposure 0 through the document's curve (8-bit levels, as Tolerance counts them), never on the view: moving the
+  exposure slider does not change what a click selects.
+- **Channels**: alpha channels in float, Save Selection and Load Selection in every mode, a layer's transparency or mask
+  and the composite or a colour channel as a selection (the colour encoded at exposure 0), single colour-channel editing
+  of the float pixels, the Channels panel.
+- **Pixel edits**: Fill and Clear through the selection (the colour picked is linearised through the document's curve),
+  Cut, Copy, Copy Merged, Paste and Layer via Copy (inside NekoPhoto the float pixels, exactly; the system clipboard gets
+  an 8-bit copy tone-mapped at exposure 0), Free Transform of selected pixels, Distort and Perspective, Edit ▸ Warp and
+  Warp Cage on pixel layers, **Image Size** (the float resamplers: bilinear, Catmull-Rom and Lanczos with exact weights,
+  light above 1 kept), **Crop**, the Crop tool, **Trim** and **Canvas Size**.
 - **The layer structure**: new, duplicate, delete, reorder and group layers, names, visibility, opacity, blend mode,
   clipping; **masks** (add, enable, link, invert, delete); moving, scaling, rotating and flipping whole layers;
-  **Canvas Size** and **Flip Canvas**; importing images as layers (linearised through the document's curve).
+  **Flip Canvas**; importing images as layers (linearised through the document's curve).
 - **Saving and exporting**: projects and 32-bit PSD and PSB files; PNG and TIFF at 16 bits and JPEG, WebP, TGA, ICO and
   GIF at 8, each tone-mapped at exposure 0 (values above white clip) and encoded with the document's curve, with a
   note saying so. The embedded profile is the one the values encode to.
@@ -217,13 +236,52 @@ with no monitor profile, is encoded with the document's own curve, so at exposur
 Everything else is greyed in a 32-bit document, and automation refuses it. Two wordings tell the reason apart:
 
 - **"Not available in 32-bit mode"**: Photoshop itself has no such thing at 32 bits, so it stays greyed: Dodge, Burn
-  and Sponge, the Paint Bucket, the content-aware tools, Brightness/Contrast, Posterize, Threshold, Selective Color,
-  Grain, Mosh, G'MIC, and the blend modes outside the 32-bit set.
-- **"Not available in 32-bit yet"**: not ported yet: painting and retouching, adjustments and adjustment layers
-  (kept in the document, but not drawn at 32 bits yet: converting says so), filters and Camera Raw, selections and
-  channels editing, fill and the clipboard, Image Size, crops, distortion, text, shape and path editing, layer style
-  editing, smart objects, Remove Background, artboard, slice and SVG export, the timeline, colour conversion (Assign and
-  Convert to Profile).
+  and Sponge, the Paint Bucket, the content-aware tools, the Brightness/Contrast, Posterize, Threshold, Selective Color
+  and Grain adjustments (as adjustment layers they are kept but not drawn; converting says so), Mosh, G'MIC, and the blend
+  modes outside the 32-bit set.
+- **"Not available in 32-bit yet"**: not ported yet: painting and retouching (the brush in every engine, the eraser,
+  Clone Stamp, the healing tools, Patch, Smudge, Blur and Sharpen, Liquify, gradients, moving selected pixels with the
+  Move tool), the Camera Raw Filter, Remove Background, text, shape and path editing, layer style editing, smart objects
+  and Smart Filters, merges and Apply Layer Mask, the Eyedropper, artboard, slice and SVG export, the timeline, colour
+  conversion (Assign and Convert to Profile).
+
+### Adjustments and filters at 32 bits
+
+The pixels stay linear and nothing is clamped above 1. Each adjustment's settings (its sliders, points and histogram)
+are the 8-bit ones, written for encoded values, so at 32 bits each pixel's straight colour is taken to the document's
+encoding (its profile's curve; above 1 the curve's power law carried on, sRGB's own formula for sRGB), the adjustment's
+function is applied there, and the result is linearised again. An 8- or 16-bit document converted to 32 bits therefore
+adjusts as it did, and light above white goes on through the function:
+
+- **Exposure** is the exception: an exact multiply by 2^exposure in linear light, the offset added there, the gamma a
+  power, nothing clamped above.
+- **Levels** loses its clamp at the white point: input above it goes on rising along the same formula (at 8 bits it is
+  cut at white). The black point still cuts below.
+- **Curves** is exactly the 8-bit curve from 0 to 255; above 255 it continues as a straight line along its end tangent
+  (the last segment's slope when the last point is at 255, flat when the last point stops short of 255, as the curve is
+  already flat there). Photoshop does not document how its 32-bit Curves and Levels carry on above 1; these are
+  NekoPhoto's stated choices.
+- **Hue/Saturation, Color Balance, Black & White, Photo Filter, Channel Mixer, Vibrance and Color Lookup** are defined on
+  0 to 1: a colour brighter than white is adjusted as the same colour at white's brightness (its linear channels divided
+  by the brightest) and scaled back up, so hue and saturation move and the light level stays.
+- **Invert** is 1 minus the encoded value, so light above white inverts to black. **Gradient Map** maps the encoded
+  luma, cut at white.
+- **Add Noise** adds its noise to the encoded colour, so an amount looks as it does at 8 bits; light above white is not
+  cut. The blurs and Lens Correction work on the linear values.
+
+On an 8-bit picture converted to 32 bits, adjusted there and converted back at exposure 0, every kind is within one
+level of the 8-bit adjustment on opaque pixels. On half-transparent pixels Exposure, Levels, Curves, Invert, Black &
+White, Channel Mixer and Gradient Map stay within a level; Hue/Saturation, Color Balance, Photo Filter and Vibrance
+reach 2 to 5 levels on under 0.1% of samples, because the 8-bit kernels round the straight colour to a whole level
+(value × 255 / alpha, cut) before their function, which at a low alpha is off by up to a level divided by the alpha.
+Levels matches wherever the 8-bit Levels does not cut at its white point with an output white below 255: there 32 bits
+carries on by design.
+
+The **Camera Raw Filter** stays greyed ("yet") although Photoshop offers it at 32 bits: its sliders (Whites,
+Highlights, the tone curve, Clarity's masks) are written for display-referred values from 0 to 1, and porting it means
+a scene-referred pipeline with HDR Toning's Local Adaptation (P5f), not the 16-bit float kernels run on clipped values.
+NekoPhoto has no destructive Unsharp Mask or Offset filter; Unsharp Mask as a Smart Filter waits for smart objects at 32
+bits, the Sharpen tool for painting.
 
 ### Memory at 32 bits
 
@@ -239,6 +297,14 @@ lossless, halvings, samplers, `cleanFloat`); `colormgmt.h` has `linearProfile`, 
 deep executor template (`render_exec_deep.inc`) over `DeepOps<F32>` (`render_deep_ops_f32.h`), unchanged from 16 bits;
 `blend_f32.cpp` has the modes. `depth_float_tests` checks the renderer against a double-precision reference
 (`tests/float_reference.cpp`) within 1e-5, absolute and relative.
+
+Editing (P5b): `adjustments_f32.cpp` (the 32-bit set through `encodeExtended` / `decodeExtended`, depth.h), the colour
+kinds' float frame `forEachEncodedColour`, `blur_f32.cpp`, `filters_f32.cpp`, `resample_f32.cpp`, the float warps
+(`warp.h`, `warpmesh.h`), `resizeDocumentF`, `GrayF` selection, morphology and channel operations, and
+`decisionImage()` (render.h) for the tools that decide on pixels. In the app the float counterparts of the 16-bit edit
+paths are in `EditorSessionFloat.cpp`. `depth_float_edit_tests` checks every kernel against double-precision versions
+in the same reference (1e-5 absolute plus relative, the recursive Gaussian above sigma 6 included), the extension
+above 1, adjustment layers in the renderer, and the cross-depth parity above.
 
 ---
 
@@ -388,8 +454,8 @@ PSD には残りません(プロジェクトと 8 bit の PSD には残ります
 (乗算済み)。色は 1 を超えられ(白より明るい)、アルファ・マスク・選択範囲は 0〜1 です。リニアな光で合成するので、
 柔らかい境界・光彩・半透明のレイヤーの見え方は 8 bit や 16 bit と変わります(Photoshop の 32 bit モードも同じです)。
 
-これは最初の段階(計画の P5a)で、中核・ファイル・表示までです。32 bit でのペイント・色調補正・フィルター・選択範囲は
-次の段階で対応します。
+中核・ファイル・表示が最初の段階(計画の P5a)、色調補正・フィルター・選択範囲・ピクセルの編集が次の段階(P5b)です。
+32 bit でのペイントはその次の段階で対応します。
 
 **32 bit のドキュメントを作るには**
 
@@ -418,19 +484,78 @@ PSD には残りません(プロジェクトと 8 bit の PSD には残ります
 **32 bit で使えるもの**
 
 - **合成**:すべての描画モード、不透明度、レイヤーとグループのマスク、ベクトルマスク、クリッピングマスク、グループ、
-  アートボード、シェイプと塗りつぶしレイヤー、ディザ合成、レイヤースタイル(10 種類の効果)。
+  アートボード、シェイプと塗りつぶしレイヤー、ディザ合成、レイヤースタイル(10 種類の効果)、調整レイヤー。
 - **描画モード**:Photoshop の 32 bit で使えるもの(通常、ディザ合成、比較(暗)、乗算、比較(明)、覆い焼き(リニア)- 加算、
   差の絶対値、減算、除算、色相、彩度、カラー、輝度、カラー比較(暗)、カラー比較(明))を選べます。それ以外はグレー表示
   (「32 bit/チャンネルモードでは使用できません」)で、すでに設定されているレイヤーは値を 0〜1 に収めて描画します。
-- **レイヤーの構成**、**マスク**、レイヤー全体の移動・拡大縮小・回転・反転、**カンバスサイズ**と**カンバスの反転**、画像の読み込み。
+- **色調補正**(イメージ ▸ 色調補正と調整レイヤー):Photoshop の 32 bit で使えるもの、レベル補正、トーンカーブ、露光量、
+  色相・彩度、カラーバランス、白黒、フォトフィルター、チャンネルミキサー、自然な彩度、グラデーションマップ、階調の反転、
+  カラールックアップ。白より明るい光の扱いは下の「32 bit での色調補正とフィルター」を参照してください。
+- **フィルター**:ぼかし (ガウス) とぼかし (移動)(光をそのまま平均し、途中で丸めません)、ノイズを加える(シードが同じなら
+  8 bit・16 bit と同じ模様)、レンズ補正(バイリニアまたは Catmull-Rom の正確な重み)。
+- **選択範囲**:長方形・楕円形選択ツールと投げ縄ツール、自動選択ツール、クイック選択ツール、すべてを選択、選択を解除、
+  選択範囲を反転、選択範囲を変更(拡張、縮小、境界線、滑らかに、ぼかし)、レイヤーから選択範囲を読み込む、
+  クイックマスク、被写体を選択、レイヤーマスク ▸ 選択範囲から。選択範囲は浮動小数点の範囲(0〜1)です。自動選択ツール、
+  クイック選択ツール、トリミングは、露光量 0 でドキュメントのカーブを通した合成画像(許容値が数える 8 bit の段階)で判断し、
+  表示の設定は使いません。ステータスバーの露光量を動かしても、クリックで選ばれる範囲は変わりません。
+- **チャンネル**:浮動小数点のアルファチャンネル、すべての方法での選択範囲を保存・読み込む、レイヤーの透明部分やマスク、
+  合成画像やカラーチャンネル(露光量 0 で書き出した値)からの選択範囲、浮動小数点のピクセルでの単独のカラーチャンネルの
+  編集、チャンネルパネル。
+- **ピクセルの編集**:選択範囲の塗りつぶしと消去(選んだ色はドキュメントのカーブでリニアにします)、カット、コピー、
+  結合部分をコピー、ペースト、選択範囲をコピーしたレイヤー(NekoPhoto の中では浮動小数点のピクセルのまま正確に。
+  システムのクリップボードには露光量 0 でトーンマッピングした 8 bit のコピー)、選択したピクセルの自由変形、
+  ゆがみと遠近法、編集 ▸ ワープとワープケージ(ピクセルレイヤー)、**画像解像度**(浮動小数点の再サンプル:
+  バイリニア、Catmull-Rom、Lanczos を正確な重みで。1 を超える光も保持)、**切り抜き**と切り抜きツール、**トリミング**、
+  **カンバスサイズ**。
+- **レイヤーの構成**、**マスク**、レイヤー全体の移動・拡大縮小・回転・反転、**カンバスの反転**、画像の読み込み。
 - **保存と書き出し**:プロジェクト、32 bit の PSD・PSB。PNG と TIFF は 16 bit、JPEG・WebP・TGA・ICO・GIF は 8 bit で、
   露光量 0 でトーンマッピングし、その旨をお知らせします。
 - ピクセルに触れないツール(移動、手のひら、ズーム)。
 
-それ以外はグレー表示になり、自動化でも使えません。Photoshop 自体が 32 bit で持たないもの(覆い焼き・焼き込み・スポンジ、
-塗りつぶしツール、コンテンツに応じた各機能、明るさ・コントラスト、ポスタリゼーション、2 階調化、特定色域の選択、粒子、
-Mosh、G'MIC、32 bit で使えない描画モード)は「32 bit/チャンネルモードでは使用できません」、まだ移植していないもの
-(ペイントとレタッチ、色調補正と調整レイヤー(保持はされますが 32 bit ではまだ描画しません)、フィルター、選択範囲など)は
-「32 bit/チャンネルではまだ使用できません」と表示します。
+それ以外はグレー表示になり、自動化でも使えません。理由は 2 通りの表示で区別します。
+
+- 「**32 bit/チャンネルモードでは使用できません**」:Photoshop 自体が 32 bit で持たないもので、今後もグレー表示のままです。
+  覆い焼き・焼き込み・スポンジ、塗りつぶしツール、コンテンツに応じた各機能、明るさ・コントラスト、ポスタリゼーション、
+  2 階調化、特定色域の選択、粒子の色調補正(調整レイヤーは保持されますが 32 bit では描画しません。変換のときにお知らせします)、
+  Mosh、G'MIC、32 bit で使えない描画モード。
+- 「**32 bit/チャンネルではまだ使用できません**」:まだ移植していないもの。ペイントとレタッチ(すべてのエンジンのブラシ、
+  消しゴム、コピースタンプ、修復系のツール、パッチ、指先、ぼかしとシャープ、ゆがみ、グラデーション、移動ツールでの
+  選択ピクセルの移動)、Camera Raw フィルター、背景を削除、テキスト・シェイプ・パスの編集、レイヤースタイルの編集、
+  スマートオブジェクトとスマートフィルター、結合とレイヤーマスクを適用、スポイトツール、アートボード・スライス・SVG の
+  書き出し、タイムライン、色の変換(プロファイルの指定とプロファイル変換)。
+
+**32 bit での色調補正とフィルター**
+
+ピクセルはリニアのままで、1 を超える値も切り捨てません。色調補正の設定(スライダー、ポイント、ヒストグラム)は 8 bit と
+同じく書き出した値に対するものなので、32 bit では各ピクセルの色をドキュメントのエンコード(プロファイルのカーブ。1 を超える
+部分はカーブのべき乗則をそのまま延長し、sRGB は sRGB 自身の式)に移し、そこで補正を適用してから、再びリニアに戻します。
+そのため 8 bit・16 bit から変換したドキュメントは元と同じように補正され、白より明るい光もそのまま補正を通ります。
+
+- **露光量**だけは例外で、リニアな光に 2^露光量 を正確に掛け、オフセットもそこで加え、ガンマはべき乗です。上限で切りません。
+- **レベル補正**は白色点での切り捨てがなくなり、白色点を超える入力は同じ式のまま上がり続けます(8 bit では白で切れます)。
+  黒色点より下は従来どおり切れます。
+- **トーンカーブ**は 0〜255 では 8 bit のカーブそのもので、255 を超えると終点の接線に沿った直線で延長します(最後のポイントが
+  255 にあればその区間の傾き、255 より手前で終わっていれば水平。カーブはそこですでに水平だからです)。Photoshop は 32 bit の
+  トーンカーブとレベル補正が 1 を超えてどう続くかを公開していないので、これは NekoPhoto の決めごととして明記します。
+- **色相・彩度、カラーバランス、白黒、フォトフィルター、チャンネルミキサー、自然な彩度、カラールックアップ**は 0〜1 で
+  定義されているので、白より明るい色は、同じ色を白の明るさにしたもの(リニアのチャンネルを一番明るいチャンネルで割ったもの)
+  で補正し、元の明るさに戻します。色相と彩度は動き、光の強さは保たれます。
+- **階調の反転**は書き出した値を 1 から引くので、白より明るい光は黒になります。**グラデーションマップ**は書き出した値の
+  輝度(白で切る)を使います。
+- **ノイズを加える**はノイズを書き出した色に加えるので、同じ量なら 8 bit と同じように見えます。白より明るい光は切りません。
+  ぼかしとレンズ補正はリニアな値で計算します。
+
+8 bit の画像を 32 bit に変換して補正し、露光量 0 で戻すと、不透明なピクセルではどの補正も 8 bit での補正と 1 段階以内で
+一致します。半透明のピクセルでは、露光量・レベル補正・トーンカーブ・階調の反転・白黒・チャンネルミキサー・
+グラデーションマップは 1 段階以内、色相・彩度・カラーバランス・フォトフィルター・自然な彩度は 0.1% 未満のサンプルで 2〜5
+段階の差になります。8 bit の処理が補正の前に色を整数の段階に丸める(値 × 255 ÷ アルファ、切り捨て)ためで、アルファが
+小さいと最大で「1 段階 ÷ アルファ」ずれるからです。レベル補正は、8 bit のレベル補正が出力の白を 255 未満にして白色点で
+切っている部分を除いて一致します(そこでは 32 bit は意図して値を延ばします)。
+
+**Camera Raw フィルター**は、Photoshop では 32 bit でも使えますが、ここではグレー表示(「まだ」)のままです。スライダー
+(白レベル、ハイライト、トーンカーブ、明瞭度のマスク)が 0〜1 の表示用の値を前提にしているため、移植には HDR トーンの
+ローカル露光量補正(P5f)と同じシーンを基準にした処理が必要で、16 bit の浮動小数点の処理を切り詰めた値に適用するだけでは
+足りないからです。NekoPhoto には破壊的なアンシャープマスクやスクロールのフィルターはありません。スマートフィルターの
+アンシャープマスクは 32 bit のスマートオブジェクトを、シャープツールはペイントの移植を待ちます。
 
 **メモリ**:32 bit の値は 4 バイトなので、持てるピクセル数は 8 bit の 4 分の 1 です(1 枚 2,500 万画素、レイヤー合計 2 億 5,000 万画素)。
