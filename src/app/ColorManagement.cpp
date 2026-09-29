@@ -47,6 +47,8 @@ Settings loadSettings() {
     q.beginGroup(QStringLiteral("color"));
     if (auto w = workingSpaceFromKey(q.value("workingSpace", "srgb").toString().toStdString())) s.workingSpace = *w;
     s.workingCmyk = q.value("workingCmyk").toString();
+    if (auto intent = renderingIntentFromKey(q.value("conversionIntent", "relative").toString().toStdString())) s.conversionIntent = *intent;
+    s.conversionBlackPoint = q.value("conversionBlackPoint", true).toBool();
     if (auto p = policyFromKey(q.value("policy", "preserve").toString())) s.policy = *p;
     s.askMissing = q.value("askMissing", false).toBool();
     s.askMismatch = q.value("askMismatch", false).toBool();
@@ -81,6 +83,8 @@ void setSettings(const Settings& s) {
     q.beginGroup(QStringLiteral("color"));
     q.setValue("workingSpace", QString::fromLatin1(workingSpaceKey(s.workingSpace)));
     q.setValue("workingCmyk", s.workingCmyk);
+    q.setValue("conversionIntent", QString::fromLatin1(renderingIntentKey(s.conversionIntent)));
+    q.setValue("conversionBlackPoint", s.conversionBlackPoint);
     q.setValue("policy", QString::fromLatin1(policyKey(s.policy)));
     q.setValue("askMissing", s.askMissing);
     q.setValue("askMismatch", s.askMismatch);
@@ -119,6 +123,13 @@ ColorProfile workingCmykProfile() {
         read = p ? *p : defaultCmykProfile();
     }
     return read;
+}
+
+ConvertOptions conversionOptions() {
+    ConvertOptions options;
+    options.intent = settings().conversionIntent;
+    options.blackPointCompensation = settings().conversionBlackPoint;
+    return options;
 }
 
 QString workingCmykLabel() { return QString::fromStdString(workingCmykProfile().description); }

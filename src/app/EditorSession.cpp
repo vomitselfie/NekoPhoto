@@ -1,6 +1,7 @@
 // EditorSession: The session: construction, the document, history, crop and canvas, tools and the view.
 #include "compositor/vectorlayer.h"
 #include "EditorSession.h"
+#include "ColorManagement.h"
 #include "compositor/depth.h"
 #include "compositor/supports.h"
 #include "compositor/smartfilter.h"
@@ -291,6 +292,40 @@ std::shared_ptr<const GrayImage> EditorSession::coverage8(const Selection& selec
     static std::shared_ptr<const GrayImage> reduced;
     if (held.lock() != coverage.u16()) { held = coverage.u16(); reduced = coverage.u16() ? narrowGray(*coverage.u16()) : nullptr; }
     return reduced;
+}
+
+bool EditorSession::convertColorMode(ColorMode mode, QString* errorText) {
+    if (!document_ || mode == document_->colorMode) return document_.has_value();
+    commitTransform();
+    cancelBrush();
+    endChannelEdit();
+    if (quickMaskActive()) endQuickMask();
+    // The target's profile: the Working CMYK for CMYK, the working space for RGB, Lab D50 for Lab.
+    const ColorProfile target = mode == ColorMode::CMYK ? color::workingCmykProfile() : mode == ColorMode::RGB ? color::workingProfile() : ColorProfile();
+    const ColorMode from = document_->colorMode;
+    const ColorProfile fromProfile = document_->profile;
+    const ConvertOptions options = color::conversionOptions();
+    Document converted = *document_;
+    std::string why;
+    if (!convertDocumentMode(converted, mode, target, options, &why)) {
+        if (errorText) *errorText = QString::fromStdString(why);
+        return false;
+    }
+    beginEdit(QT_TRANSLATE_NOOP("History", "Convert Mode"));
+    *document_ = std::move(converted);
+    endEdit();
+    // The foreground and background colours, as the document's other stored colours.
+    for (QColor* c : {&foregroundColor, &backgroundColor}) {
+        double rgb[3] = {c->redF(), c->greenF(), c->blueF()};
+        convertModeColor(from, fromProfile, mode, document_->profile, options, rgb);
+        *c = QColor::fromRgbF(float(rgb[0]), float(rgb[1]), float(rgb[2]), c->alphaF());
+    }
+    followChannelDocument();
+    if (!toolSupportedAtDepth(tool_)) selectTool(Tool::Move);
+    notifyDocument();
+    emit channelsChanged();
+    emit toolChanged();
+    return true;
 }
 
 bool EditorSession::convertMode(SampleType type, QString* errorText) {

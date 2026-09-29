@@ -26,6 +26,10 @@ struct Settings {
     compositor::WorkingSpace workingSpace = compositor::WorkingSpace::SRGB;
     /// Working CMYK: an ICC file's path, or empty for the bundled ISO Coated v2 300% (basICColor, FOGRA39).
     QString workingCmyk;
+    /// Conversion Options: the intent and black point compensation Image > Mode uses between colour modes (Photoshop's
+    /// defaults: Relative Colorimetric with black point compensation).
+    compositor::RenderingIntent conversionIntent = compositor::RenderingIntent::RelativeColorimetric;
+    bool conversionBlackPoint = true;
     EmbeddedPolicy policy = EmbeddedPolicy::Preserve;
     /// Photoshop's "Ask When Opening" for a missing profile and a profile other than the working space.
     bool askMissing = false, askMismatch = false;
@@ -45,6 +49,8 @@ struct Settings {
 };
 
 const Settings& settings();
+/// Color Settings' Conversion Options as the core takes them.
+compositor::ConvertOptions conversionOptions();
 /// Stores the settings (QSettings, except the two View toggles) and tells every canvas.
 void setSettings(const Settings& settings);
 

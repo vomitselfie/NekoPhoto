@@ -477,6 +477,12 @@ void AutomationServer::registerAppHandlers() {
             if (!path.isEmpty() && !color::readProfileFile(path, &error, color::ProfileKinds::CMYK)) fail(error, invalidParams);
             s.workingCmyk = path;
         }
+        if (has(p, "intent")) {
+            auto intent = renderingIntentFromKey(str(p, "intent").toStdString());
+            if (!intent) fail("intent must be perceptual, relative, saturation or absolute", invalidParams);
+            s.conversionIntent = *intent;
+        }
+        s.conversionBlackPoint = flag(p, "blackPointCompensation", s.conversionBlackPoint);
         if (has(p, "policy")) {
             auto policy = color::policyFromKey(str(p, "policy"));
             if (!policy) fail("policy must be preserve, convert or off", invalidParams);
@@ -511,7 +517,8 @@ void AutomationServer::registerAppHandlers() {
         const ColorProfile monitor = color::monitorProfile();
         return QJsonObject{{"workingSpace", QString::fromLatin1(workingSpaceKey(s.workingSpace))}, {"workingSpaceName", QString::fromLatin1(workingSpaceName(s.workingSpace))},
                            {"workingCmyk", s.workingCmyk.isEmpty() ? QStringLiteral("default") : s.workingCmyk}, {"workingCmykName", color::workingCmykLabel()},
-                           {"policy", QString::fromLatin1(color::policyKey(s.policy))}, {"untagged", "srgb"}, {"askMissing", s.askMissing}, {"askMismatch", s.askMismatch},
+                           {"policy", QString::fromLatin1(color::policyKey(s.policy))}, {"untagged", "srgb"},
+                           {"intent", QString::fromLatin1(renderingIntentKey(s.conversionIntent))}, {"blackPointCompensation", s.conversionBlackPoint}, {"askMissing", s.askMissing}, {"askMismatch", s.askMismatch},
                            {"useSystemMonitor", s.useSystemMonitor}, {"monitorProfile", s.monitorFile},
                            {"monitor", monitor.empty() ? QJsonValue::Null : QJsonValue(QString::fromStdString(monitor.description))},
                            {"proofProfile", s.proofProfile}, {"proofIntent", QString::fromLatin1(renderingIntentKey(s.proofIntent))}, {"proofBlackPoint", s.proofBlackPoint},

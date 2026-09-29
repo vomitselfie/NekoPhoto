@@ -249,7 +249,12 @@ bool ModeOps<S, M>::adjust(const LayerAdjustment& adjustment, Image& image, cons
     bool lightnessOnly = M == ColorMode::Lab;
     switch (settings.kind) {
     case AdjustmentKind::Levels: case AdjustmentKind::Curves: {
-        auto t = adjustmentTransfer(settings);
+        // The composite alone: the per-channel slots mean R, G, B in the model, and a CMYK or Lab file's own per-ink
+        // settings are kept for the round trip but not drawn yet (step E).
+        AdjustmentSettings composite = settings;
+        for (size_t c = 1; c < composite.levels.ranges.size(); c++) composite.levels.ranges[c] = LevelsRange();
+        for (size_t c = 1; c < composite.curves.channels.size(); c++) composite.curves.channels[c] = {{0, 0}, {255, 255}};
+        auto t = adjustmentTransfer(composite);
         if (!t) return false;
         transfer = *t;
         break;

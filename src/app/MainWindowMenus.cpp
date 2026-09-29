@@ -251,6 +251,14 @@ void MainWindow::buildMenus() {
     // Photoshop's Image > Mode: the document's bits per channel (docs/bit-depth.md).
     QMenu* mode = image->addMenu(tr("&Mode"));
     needsDocument(mode->menuAction(), "document.mode");
+    // The colour modes (docs/color-modes.md): RGB, CMYK and Lab, as Photoshop lists them above the depths.
+    auto* colorModes = new QActionGroup(this);
+    modeRgbAction_ = needsDocument(mode->addAction(tr("&RGB Color"), this, [this] { convertColorMode(ColorMode::RGB); }), "document.mode");
+    modeCmykAction_ = needsDocument(mode->addAction(tr("&CMYK Color"), this, [this] { convertColorMode(ColorMode::CMYK); }), "document.mode");
+    modeLabAction_ = needsDocument(mode->addAction(tr("&Lab Color"), this, [this] { convertColorMode(ColorMode::Lab); }), "document.mode");
+    for (QAction* a : {modeRgbAction_, modeCmykAction_, modeLabAction_}) { a->setCheckable(true); colorModes->addAction(a); }
+    modeRgbAction_->setChecked(true);
+    mode->addSeparator();
     auto* depths = new QActionGroup(this);
     mode8Action_ = needsDocument(mode->addAction(tr("&8 Bits/Channel"), this, [this] { convertMode(SampleType::U8); }), "document.mode");
     mode16Action_ = needsDocument(mode->addAction(tr("&16 Bits/Channel"), this, [this] { convertMode(SampleType::U16); }), "document.mode");
@@ -652,6 +660,14 @@ void MainWindow::buildMenus() {
     refreshRecent();
 }
 
+void MainWindow::convertColorMode(ColorMode colorMode) {
+    if (!session_->hasDocument() || session_->document()->colorMode == colorMode) { refreshDepthGating(); return; }
+    QString error;
+    if (!session_->convertColorMode(colorMode, &error)) showError(tr("Mode"), error.isEmpty() ? tr("The document could not be converted.") : error);
+    else { recordAction("image.mode", {{"colorMode", QString::fromLatin1(colorModeKey(colorMode))}}); updateColorSwatches(); }
+    refreshActions();
+}
+
 void MainWindow::convertMode(SampleType type) {
     if (!session_->hasDocument() || session_->sampleType() == type) { refreshDepthGating(); return; }
     QString error;
@@ -685,6 +701,12 @@ void MainWindow::refreshDepthGating() {
     for (QMenu* menu : menuBar()->findChildren<QMenu*>()) menu->setToolTipsVisible(deep);
     const bool sixteen = has && session_->sampleType() != SampleType::U8;
     if (mode8Action_) { mode8Action_->setChecked(!sixteen); mode16Action_->setChecked(sixteen); }
+    if (modeRgbAction_) {
+        const ColorMode colorMode = has ? session_->document()->colorMode : ColorMode::RGB;
+        modeRgbAction_->setChecked(colorMode == ColorMode::RGB);
+        modeCmykAction_->setChecked(colorMode == ColorMode::CMYK);
+        modeLabAction_->setChecked(colorMode == ColorMode::Lab);
+    }
 }
 
 

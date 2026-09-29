@@ -179,6 +179,12 @@ constexpr FeatureModes modeTable[] = {
     {"tool.lasso", allModes},
     {"edit.timeline", allModes},
     {"view", allModes},
+    // Steps C and D (P7): the renderer, Image > Mode, the Channels panel with single-channel fill, PSD (modes 4 and 9).
+    {"render.document", allModes},
+    {"document.mode", allModes},
+    {"edit.channels", allModes},
+    {"edit.fill", allModes},
+    {"export.psd", allModes},
 };
 }   // namespace
 

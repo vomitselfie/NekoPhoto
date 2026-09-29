@@ -131,6 +131,11 @@ add_test(NAME depth_paint_tests COMMAND depth_paint_tests)
 add_executable(psd_writer_tests psd_writer_tests.cpp)
 target_link_libraries(psd_writer_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME psd_writer_tests COMMAND psd_writer_tests)
+add_executable(psd_modes_tests psd_modes_tests.cpp)
+target_link_libraries(psd_modes_tests PRIVATE compositor::core compositor_warnings ZLIB::ZLIB)
+# Patchy beside this checkout (CONTRIBUTING.md); PATCHY_FIXTURES in the environment overrides it.
+target_compile_definitions(psd_modes_tests PRIVATE PATCHY_FIXTURES="${CMAKE_SOURCE_DIR}/../Patchy/test-fixtures/psd")
+add_test(NAME psd_modes_tests COMMAND psd_modes_tests)
 
 # Offline background-removal harness: runs the pipeline on a PNG and dumps every stage, or scores a
 # directory of image/alpha pairs (SAD, MSE, MAD, Grad, Conn). Not a test.
