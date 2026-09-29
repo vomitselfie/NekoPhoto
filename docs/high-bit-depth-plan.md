@@ -432,6 +432,31 @@ U16-vs-U8 calibration tests and U16 render-hash scenes; existing hashes unchange
 - Not done: editing spot channels, Apply Image, Calculations, Split and Merge Channels, TIFF extra channels, CMYK and
   Lab colour channels (P7).
 
+**P5.0b landed (2026-09-28): `StrokeRaster<S>`, no behaviour change.**
+
+- `src/core/src/stroke_raster.h`: the brush stroke's pixels as one template, `StrokeRaster<S>`, over a `StrokeOps<S>`
+  policy. The raster owns the working pixels or mask, the coverage, the selection, the visible-mask copy, the dab
+  table, the stamps (`StampOf<T>` moved here) and the tail's coverage backup, and does the dab (stamped and per
+  pixel), the max and screen build-up, the recompose (paint, erase, mask, gray sample, clone and processed sources),
+  lifting and moving pixels, gradients, Spot Healing and the Healing Brush, and the commit. `BrushStroke` keeps what
+  is depth-free: the grid's placement, the curve and spacing, the provisional tail, the dirty and touched areas, and
+  the clone settings. It holds the raster at its depth and hands each step to it; its public API is unchanged.
+- `StrokeOps<U8>` and `StrokeOps<U16>` hold each depth's arithmetic with the exact expressions of the former
+  `brush.cpp` and `brush_u16.cpp` (`mul`, `screen`, `toward`, `mix`, `quantise`, `store`, `nearest`, `solidCore`, the
+  table interpolation), its buffer types, and which `AnyImage`, `CloneSource` and tiled source fields are its own.
+  `brush.cpp` instantiates U8 and `brush_u16.cpp` U16. Two per-depth differences are kept on purpose: the 8-bit
+  stroke paints a layer held at another depth as blank where the 16-bit one refuses it, and the 8-bit move samples
+  with its old `sx - 0.5 + 0.5` centring.
+- Gates: brush_parity (8-bit, u16, synthetic, and the local section against a NEOMAWZ brushset), brush_grain_tests,
+  brush_smoothing_tests, depth_paint_tests and render_hash_tests pass; the layers every depth_paint_tests case
+  compares, plus mask gray samples, clones without a source at their depth, tiled clones, colour fills and a
+  fractional move on a scaled layer (170 buffers), hash the same before and after at both depths. The 8-bit stamp
+  merge still vectorises (GCC's report lists the same loops). GCC and Clang `-Werror`, full ctest, rpc smoke.
+- For P5c, `StrokeOps<F32>`: the comment at the top of `stroke_raster.h` lists what it needs (float samples, a float
+  table lerp, `screen` as `old + t × (1 − old)`, stores without rounding, colour unclamped but coverage clamped, the
+  brush colour linearised first, float overloads of the crop, bounds, gradient, MipCache and Asset calls, and healing
+  on the `decisionImage`).
+
 ## Review notes
 
 - Mac project compatibility: since 2026-09-26 NekoPhoto no longer keeps Mac Compositor project-format parity, so
