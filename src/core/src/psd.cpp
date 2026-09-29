@@ -1137,7 +1137,11 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                 Layer folder(rec.name.empty() ? "Folder" : rec.name, document.size());
                 folder.isGroup = true;
                 folder.visible = !hidden;
-                folder.opacity = rec.opacity / 255.0;
+                // Fill applies to an unstyled folder's contents as its opacity does (a Photoshop folder at Fill 0
+                // hides them): kept as their product, like a layer's, and split again on export. A styled folder keeps
+                // its opacity alone, since its Fill must not fade its effects (its Fill is carried for export).
+                const bool styled = rec.blocks.count("lfx2") || rec.blocks.count("lmfx") || rec.blocks.count("lfxs");
+                folder.opacity = (rec.opacity / 255.0) * (styled ? 1.0 : rec.fillOpacity / 255.0);
                 folder.blendMode = blend;
                 folder.passThrough = rec.blend == "pass";
                 if (auto lm = userMaskFor(int(width), int(height), 0, 0)) folder.mask = lm;   // over the canvas, as our folders are

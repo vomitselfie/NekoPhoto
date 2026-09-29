@@ -600,7 +600,9 @@ private:
         r.flags = uint8_t((c.flags & 0x01) | (contentKept ? c.flags & 0x10 : 0));
         if (r.section == 1 && c.closedFolder) r.section = 2;
         // Opacity and Fill as they were while the combined opacity is unchanged; else ours alone.
-        if (std::abs(l.opacity - c.opacity / 255.0 * (c.fill / 255.0)) < 0.5 / 255) { r.opacity = c.opacity; r.fill = c.fill; }
+        // (A styled folder keeps its opacity alone here, its Fill carried beside it.)
+        const bool styledFolder = l.isGroup && std::any_of(c.blocks.begin(), c.blocks.end(), [](const PsdBlock& b) { return b.key == "lfx2" || b.key == "lmfx" || b.key == "lfxs"; });
+        if (std::abs(l.opacity - c.opacity / 255.0 * (c.fill / 255.0)) < 0.5 / 255 || (styledFolder && std::abs(l.opacity - c.opacity / 255.0) < 0.5 / 255)) { r.opacity = c.opacity; r.fill = c.fill; }
         const uint64_t maskHash = l.mask ? psdMaskHash(l.mask->asset.image, l.mask->enabled) : 0;
         // The stored mask channels are PSD's (16-bit row counts) at the file's depth: as they are into a PSD of that depth only.
         if (!options_.large && !c.maskData.empty() && c.maskDepth == (float_ ? 32 : deep_ ? 16 : 8) && placementKept && maskHash == c.maskHash && !dropped.count("vmsk") && !dropped.count("vsms")) {

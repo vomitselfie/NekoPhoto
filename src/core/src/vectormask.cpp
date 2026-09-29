@@ -711,6 +711,15 @@ std::optional<std::pair<VectorPaint, Rect>> fillLayerPaint(const Layer& layer, c
     } else {
         auto p = parseFillPattern(*patternBlock);
         if (!p) return std::nullopt;
+        // Linked with the layer (Photoshop's default), the tile is anchored at the layer's reference point ('fxrp'),
+        // as a Pattern Overlay's is (a Photoshop-saved fill whose point is (0, -23) starts its 4-row tile a row down).
+        if (p->linked)
+            for (auto& b : layer.psdCarry->blocks)
+                if (b.key == "fxrp" && b.data.size() >= 16) {
+                    patchy::psd::BigEndianReader r(b.data);
+                    p->phaseX += float(patchy::psd::read_f64(r));
+                    p->phaseY += float(patchy::psd::read_f64(r));
+                }
         paint.kind = VectorPaint::Kind::Pattern;
         paint.pattern = *p;
     }
