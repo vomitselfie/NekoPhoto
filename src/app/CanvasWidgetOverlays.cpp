@@ -212,7 +212,9 @@ void CanvasWidget::drawCropOverlay(QPainter& painter) {
     painter.setPen(QPen(Qt::white, 1));
     painter.drawRect(cropView);
     painter.setPen(QPen(QColor(255, 255, 255, 90), 1));
-    for (int i = 1; i < 3; i++) {
+    // The rule-of-thirds grid while the box is drawn, moved or resized (Photoshop's Auto Show overlay).
+    const bool dragging = drag_ == Drag::Crop || drag_ == Drag::CropMove || drag_ == Drag::CropResize;
+    for (int i = 1; i < 3 && dragging; i++) {
         painter.drawLine(QPointF(cropView.left() + cropView.width() * i / 3, cropView.top()), QPointF(cropView.left() + cropView.width() * i / 3, cropView.bottom()));
         painter.drawLine(QPointF(cropView.left(), cropView.top() + cropView.height() * i / 3), QPointF(cropView.right(), cropView.top() + cropView.height() * i / 3));
     }

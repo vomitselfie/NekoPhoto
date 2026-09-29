@@ -22,8 +22,15 @@ public:
     std::optional<QRectF> cropRect() const { return crop_; }
     void applyCrop();
     void cancelCrop();
-    /// Width / height the crop keeps while dragging; 0 is free.
-    void setCropRatio(double ratio);
+    /// The ratio the crop keeps, as the options bar's W and H (0 and 0 is free). A pending crop box is fitted to
+    /// it at once, centred on itself, as Photoshop does when a preset is picked.
+    void setCropRatio(double width, double height);
+    double cropRatioWidth() const { return cropRatioW_; }
+    double cropRatioHeight() const { return cropRatioH_; }
+    /// Photoshop's X with the Crop tool: portrait becomes landscape (the ratio and the pending box).
+    void swapCropOrientation();
+    /// The largest box of `ratio` (width / height) inside `within`, centred on it, in whole pixels.
+    static QRectF fitCropRatio(const QRectF& within, double ratio);
     void finishPolygonalLasso();
     void cancelLasso();
     QPointF documentPoint(QPointF viewPoint) const;
@@ -33,6 +40,7 @@ public:
 signals:
     void cursorMoved(QPointF documentPoint);
     void cropChanged();
+    void cropRatioChanged();
 
 protected:
     void paintEvent(QPaintEvent*) override;
@@ -89,6 +97,7 @@ private:
     void drawScribbles(QPainter& painter);
     void drawCropOverlay(QPainter& painter);
     QRectF dragBox(QPointF anchor, QPointF point, bool square, bool fromCenter, double ratio = 0) const;
+
     void refreshSelectionOutline();
     void guideTargets(std::vector<double>& xs, std::vector<double>& ys) const;
     void snapMove(compositor::LayerTransform& draft);
@@ -137,7 +146,8 @@ private:
     std::optional<QRectF> crop_;
     QRectF cropOrigin_;
     int cropHandle_ = -1;
-    double cropRatio_ = 0;
+    double cropRatio_ = 0;   // width / height, 0 free
+    double cropRatioW_ = 0, cropRatioH_ = 0;
     std::optional<QRectF> zoomRect_;
     std::vector<QPolygonF> selectionOutline_;
     /// Set when the outline is too detailed to trace or draw as vectors: the ants come from a raster pass instead.

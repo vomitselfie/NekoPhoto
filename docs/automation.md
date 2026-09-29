@@ -206,7 +206,8 @@ painted with `brush.stroke` and `mask: true`), `channels.set` (Channel Options: 
 channel, or `id` with `mode`), `channels.loadSelection` (Select > Load Selection: `channel`, or `layer` with `mask`;
 `invert`, `mode`, or a thumbnail Ctrl-click's `shift` and `alt`).
 
-Canvas and history: `canvas.resize`, `canvas.crop`, `canvas.flip`,
+Canvas and history: `canvas.resize`, `canvas.crop` (`ratio` W:H such as 16:9: the largest box of that shape centred in
+the rectangle, as the Crop tool's presets), `canvas.flip`,
 `image.resize`, `image.trim` (Photoshop's Trim: `basedOn` transparent, topLeft or bottomRight, the sides, `tolerance`),
 `image.mode` (`bits` 8 or 16: Image > Mode, one undo step; refused with the reason when a 16-bit document would not fit
 its byte budget, half the pixels of an 8-bit one), `document.profile` (colour management, docs/color-management.md:

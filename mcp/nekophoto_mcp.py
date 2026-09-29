@@ -1119,9 +1119,10 @@ def canvas_resize(width: int, height: int, anchor_x: float = 0.5, anchor_y: floa
 
 
 @edit("Crop")
-def canvas_crop(x: float, y: float, width: float, height: float) -> str:
-    """Crop the document to a rectangle."""
-    return text(call("canvas.crop", x=x, y=y, width=width, height=height))
+def canvas_crop(x: float, y: float, width: float, height: float, ratio: str | None = None) -> str:
+    """Crop the document to a rectangle. ratio (W:H such as "16:9") crops to the largest box of that shape
+    centred in the rectangle, as the Crop tool's ratio presets do."""
+    return text(call("canvas.crop", x=x, y=y, width=width, height=height, **({"ratio": ratio} if ratio else {})))
 
 
 @edit("Flip the canvas")

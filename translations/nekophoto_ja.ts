@@ -8807,12 +8807,28 @@ File &gt; New creates a blank canvas.</source>
         <translation>5 ピクセル四方の平均</translation>
     </message>
     <message>
-        <source>Free</source>
-        <translation>自由</translation>
+        <source>The shape the crop box keeps</source>
+        <translation>切り抜きボックスの縦横比</translation>
     </message>
     <message>
-        <source>Original</source>
+        <source>Original Ratio</source>
         <translation>元の縦横比</translation>
+    </message>
+    <message>
+        <source>Width of the ratio (empty for a free crop)</source>
+        <translation>比率の幅(空欄で自由な縦横比)</translation>
+    </message>
+    <message>
+        <source>Height of the ratio (empty for a free crop)</source>
+        <translation>比率の高さ(空欄で自由な縦横比)</translation>
+    </message>
+    <message>
+        <source>Swap height and width (X)</source>
+        <translation>高さと幅を入れ替え (X)</translation>
+    </message>
+    <message>
+        <source>Clear the ratio</source>
+        <translation>比率を消去</translation>
     </message>
     <message>
         <source>Crop</source>

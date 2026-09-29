@@ -87,6 +87,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Export PNG, TIFF, TGA, a multi-size Windows icon (16, 32, 48 and 256 px), or JPEG and WebP with a live preview (WebP keeps transparency, and is lossless at quality 100)
 - Crash recovery: unsaved changes are autosaved in the background every few minutes (Preferences sets how often, or turns it off) and offered back after a crash; your own files are never touched
 - Several projects in tabs; opening a file from the file manager adds a tab to the running window
+- The Crop tool as Photoshop's: ratio presets (Original Ratio, 1:1, 4:5, 5:7, 2:3, 3:2, 4:3, 16:9, 9:16) or a typed W and H, Swap (X), the rule-of-thirds grid while dragging, Alt to drag from the centre, Shift to keep the box's shape, snapping to the canvas edges and centre and to layers, and the box starts on the selection when there is one
 - Crop, Canvas Size and Image Size; Image > Trim cuts the canvas to its content (by transparency or a corner's colour, on the sides you choose); rulers and a pixel grid
 - Artboards, as in Photoshop: the Artboard tool (Shift+V) drags out a named rectangle with a white, black, transparent or custom background whose layers are clipped to it; drag inside one to move it with its contents, an edge or corner to resize it; File > Export Artboards to Files writes each as PNG or JPEG; PSD artboards open and export as Photoshop's own, and projects keep them ([artboards-slices.md](artboards-slices.md))
 - Slices: the Slice tool (Shift+C) draws named rectangles, File > Export Slices writes each as PNG or JPEG; a PSD's slices (resource 1050) open as editable slices and go back out with the export ([artboards-slices.md](artboards-slices.md))
@@ -179,6 +180,7 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 - スライス:スライスツール(Shift+C)で名前付きの矩形を作り、ファイル > スライスを書き出しで PNG/JPEG に書き出します。PSD のスライス(リソース 1050)も編集できる形で読み書きします
 - クラッシュからの復元:未保存の変更を数分ごとにバックグラウンドで自動保存し、異常終了の後に復元を提案します(間隔の変更やオフは環境設定で)。元のファイルには触れません
 - タブで複数のプロジェクト。ファイルマネージャーから開いたファイルは起動中のウィンドウにタブとして追加
+- 切り抜きツール(Photoshop と同じ):比率のプリセット(元の縦横比、1:1、4:5、5:7、2:3、3:2、4:3、16:9、9:16)または幅と高さの入力、高さと幅を入れ替え(X)、ドラッグ中の三分割グリッド、Alt で中心から、Shift で縦横比を保持、カンバスの端と中心やレイヤーへのスナップ。選択範囲があればその範囲から始まります
 - 切り抜き、カンバスサイズ、画像解像度。イメージ > トリミングで内容に合わせてカンバスを切り詰め(透明部分または角の色で、選んだ辺のみ)。定規とピクセルグリッド
 - 開いているプロジェクトはディスク上の変更に追従します:他のアプリやエージェントが `.comp` を書き換えると、タブがその場で読み込み直します(触れただけの変更や書き込み途中は無視し、未保存の作業は確認なしに置き換えません)
 

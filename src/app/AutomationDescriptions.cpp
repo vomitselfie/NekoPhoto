@@ -96,7 +96,8 @@ const MethodDoc methodDocs[] = {
     {"document.close", "Close the document in the current tab.", "discard:bool=false Close even with unsaved changes"},
     {"canvas.resize", "Change the canvas size, keeping the layers' pixels.",
      "width:integer! Pixels; height:integer! Pixels; anchorX:number=0.5 0 keeps the left edge, 1 the right; anchorY:number=0.5 0 keeps the top, 1 the bottom"},
-    {"canvas.crop", "Crop the canvas to a rectangle.", "x:number! Left; y:number! Top; width:number! Width; height:number! Height"},
+    {"canvas.crop", "Crop the canvas to a rectangle.", "x:number! Left; y:number! Top; width:number! Width; height:number! Height; "
+     "ratio:string The Crop tool's ratio, W:H such as 16:9 (or a number, width / height): the largest box of that shape centred in the rectangle"},
     {"canvas.flip", "Flip the whole canvas.", "vertical:bool=false Flip top to bottom instead of left to right"},
     {"image.trim", "Cut the canvas down to its content, as Photoshop's Image > Trim (one undo step); trimmed is false when nothing would change or nothing would remain.",
      "basedOn:(transparent|topLeft|bottomRight)=transparent What is trimmed away: transparent pixels, or the colour of that corner; top:bool=true Trim the top; bottom:bool=true; left:bool=true; right:bool=true; "

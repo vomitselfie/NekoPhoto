@@ -406,6 +406,10 @@ def sixteen_bit(rpc):
     rpc.call("layers.add", kind="adjustment", adjustmentKind="Hue/Saturation")
     assert rpc.call("image.resize", width=150, height=100)["width"] == 150
     assert rpc.call("canvas.crop", x=5, y=5, width=130, height=90)["width"] == 130
+    # A ratio crops to the largest box of that shape centred in the rectangle.
+    ratio_crop = rpc.call("canvas.crop", x=0, y=0, width=130, height=90, ratio="1:1")
+    assert (ratio_crop["width"], ratio_crop["height"]) == (90, 90), ratio_crop
+    rpc.call("history.undo")
     assert rpc.call("document.info")["bits"] == 16
     # Painting and retouching work at 16 bits (P3b): the brush (round and MyPaint), the eraser, a mask, clone, the
     # healers, smudge, blur, dodge, gradients, the bucket and Patch, each one undo step.

@@ -63,7 +63,18 @@ CanvasWidget::CanvasWidget(EditorSession* session, QWidget* parent) : QWidget(pa
     connect(session_, &EditorSession::toolChanged, this, [this] {
         if (session_->tool() != Tool::Crop) crop_.reset();
         if (session_->tool() != Tool::Lasso && drag_ != Drag::Lasso) { lassoPoints_.clear(); lassoCursor_.reset(); }
-        if (session_->tool() == Tool::Crop && !crop_ && session_->hasDocument()) { crop_ = QRectF(QPointF(0, 0), documentSize()); emit cropChanged(); }
+        if (session_->tool() == Tool::Crop && !crop_ && session_->hasDocument()) {
+            // As Photoshop: the box starts on the selection's bounds when there is a selection, else the canvas.
+            const QRectF canvas(QPointF(0, 0), documentSize());
+            crop_ = canvas;
+            if (const auto& selection = session_->document()->selection) {
+                const compositor::Rect b = selection->bounds();
+                const QRectF bounds = QRectF(b.x, b.y, b.width, b.height).intersected(canvas);
+                if (bounds.width() >= 1 && bounds.height() >= 1) crop_ = bounds;
+            }
+            if (cropRatio_ > 0) crop_ = fitCropRatio(*crop_, cropRatio_);
+            emit cropChanged();
+        }
         if (hover_) updateCursor(*hover_, QApplication::keyboardModifiers());
         update();
     });
@@ -86,7 +97,46 @@ QSizeF CanvasWidget::documentSize() const {
 QRectF CanvasWidget::documentViewRect() const { return session_->viewport.documentRect(documentSize()); }
 QPointF CanvasWidget::documentPoint(QPointF viewPoint) const { return session_->viewport.documentPoint(viewPoint, documentSize()); }
 QPointF CanvasWidget::viewPoint(QPointF documentPoint) const { return session_->viewport.viewPoint(documentPoint, documentSize()); }
-void CanvasWidget::setCropRatio(double ratio) { cropRatio_ = ratio; }
+QRectF CanvasWidget::fitCropRatio(const QRectF& within, double ratio) {
+    if (ratio <= 0 || within.width() <= 0 || within.height() <= 0) return within;
+    double w = within.width(), h = std::round(w / ratio);
+    if (h > within.height()) { h = within.height(); w = std::round(h * ratio); }
+    w = std::max(1.0, w); h = std::max(1.0, h);
+    return {std::round(within.center().x() - w / 2), std::round(within.center().y() - h / 2), w, h};
+}
+
+void CanvasWidget::setCropRatio(double width, double height) {
+    if (!(width > 0 && height > 0)) width = height = 0;
+    cropRatioW_ = width;
+    cropRatioH_ = height;
+    cropRatio_ = width > 0 ? width / height : 0;
+    if (crop_ && cropRatio_ > 0) {
+        crop_ = fitCropRatio(*crop_, cropRatio_);
+        emit cropChanged();
+        update();
+    }
+    emit cropRatioChanged();
+}
+
+void CanvasWidget::swapCropOrientation() {
+    std::swap(cropRatioW_, cropRatioH_);
+    cropRatio_ = cropRatio_ > 0 ? 1 / cropRatio_ : 0;
+    if (crop_) {
+        // The box turns about its centre, shrunk (keeping its new shape) where it would leave the canvas.
+        const QRectF canvas(QPointF(0, 0), documentSize());
+        const QPointF c = crop_->center();
+        double w = crop_->height(), h = crop_->width();
+        const double k = std::min({1.0, canvas.width() / w, canvas.height() / h});
+        w = std::max(1.0, std::round(w * k)); h = std::max(1.0, std::round(h * k));
+        QRectF r(std::round(c.x() - w / 2), std::round(c.y() - h / 2), w, h);
+        r.moveLeft(std::clamp(r.left(), 0.0, canvas.width() - r.width()));
+        r.moveTop(std::clamp(r.top(), 0.0, canvas.height() - r.height()));
+        crop_ = r;
+        emit cropChanged();
+        update();
+    }
+    emit cropRatioChanged();
+}
 
 bool CanvasWidget::isBrushLike() const {
     Tool t = session_->tool();

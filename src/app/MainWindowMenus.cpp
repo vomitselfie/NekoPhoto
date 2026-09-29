@@ -108,6 +108,8 @@ void MainWindow::buildToolRail() {
     auto* swap = new QAction(tr("Swap colours"), this);
     swap->setShortcut(QKeySequence("X"));
     connect(swap, &QAction::triggered, this, [this] {
+        // With the Crop tool, X turns the crop box (Photoshop's Swap Height and Width).
+        if (session_->tool() == Tool::Crop && canvas_->cropRect()) { canvas_->swapCropOrientation(); return; }
         std::swap(session_->foregroundColor, session_->backgroundColor);
         updateColorSwatches();
         recordAction("colors.set", {{"foreground", session_->foregroundColor.name()}, {"background", session_->backgroundColor.name()}});

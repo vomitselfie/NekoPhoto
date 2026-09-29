@@ -554,8 +554,12 @@ void CanvasWidget::move(QPointF view, Qt::MouseButtons buttons, Qt::KeyboardModi
         QRectF r = cropOrigin_;
         QPointF snapped = (modifiers & Qt::ControlModifier) ? doc : snapPoint(doc);
         QPointF p(std::round(snapped.x()), std::round(snapped.y()));
+        // As Photoshop: Alt resizes about the centre, Shift keeps the box's shape (a set ratio always does).
+        const bool fromCenter = modifiers & Qt::AltModifier;
         QPointF opposite = cropHandle_ == 0 ? r.bottomRight() : cropHandle_ == 1 ? r.bottomLeft() : cropHandle_ == 2 ? r.topLeft() : r.topRight();
-        QRectF box = cropRatio_ > 0 || (modifiers & Qt::ShiftModifier) ? dragBox(opposite, p, modifiers & Qt::ShiftModifier, false, cropRatio_) : QRectF(opposite, p).normalized();
+        if (fromCenter) opposite = r.center();
+        const double ratio = cropRatio_ > 0 ? cropRatio_ : (modifiers & Qt::ShiftModifier) && r.height() > 0 ? r.width() / r.height() : 0;
+        QRectF box = ratio > 0 || fromCenter ? dragBox(opposite, p, false, fromCenter, ratio) : QRectF(opposite, p).normalized();
         crop_ = box.intersected(QRectF(QPointF(0, 0), documentSize()));
         emit cropChanged();
         update();
