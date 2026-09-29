@@ -40,4 +40,8 @@ QByteArray systemMonitorProfile();
 /// interface). 0 leaves it. The process can only lower itself.
 void lowerProcessPriority(int level);
 
+/// Memory the system can give this process now without swapping (Linux: MemAvailable; Windows: available
+/// physical memory), in bytes; 0 when it cannot tell.
+unsigned long long availableMemory();
+
 } // namespace app::platform

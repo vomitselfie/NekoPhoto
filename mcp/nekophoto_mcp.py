@@ -303,7 +303,7 @@ def document_new(width: int = 1920, height: int = 1080, resolution: float = 72) 
 
 @edit("Open a file")
 def document_open(path: str, page: Optional[int] = None, resolution: Optional[float] = None, settings: Optional[dict] = None,
-                  asSmartObject: Optional[bool] = None, bitsPerChannel: Optional[int] = None) -> str:
+                  asSmartObject: Optional[bool] = None, bitsPerChannel: Optional[int] = None, mergedOnly: Optional[bool] = None) -> str:
     """Open a .comp project (in its own tab); a layered file in its own tab, the reply listing its layers and what could
     not be carried: Photoshop .psd/.psb, Clip Studio .clip, Affinity .afphoto/.afdesign/.afpub/.af, Aseprite .ase/.aseprite (first frame), SVG .svg/.svgz (shapes as editable vector shape layers, the rest as pixels),
     a PDF page (page, 1-based; resolution in ppi, default 150; when app_info reports pdf), an icon .ico/.cur (a
@@ -312,9 +312,10 @@ def document_open(path: str, page: Optional[int] = None, resolution: Optional[fl
     A camera RAW file (CR2, NEF, ARW, DNG, ...; when app_info reports raw) always opens in a new tab, developed from the
     camera's white balance with settings (pixels_camera_raw's keys; temperature and tint are relative to as shot),
     at bitsPerChannel 16 (or 8); asSmartObject=True makes a smart object that keeps the RAW file and the settings, which
-    smart_object_edit_contents develops again."""
+    smart_object_edit_contents develops again. mergedOnly=True opens a PSD/PSB as the merged image Photoshop stored,
+    one layer, for a file whose layers do not fit (a new, untitled document)."""
     return text(call("document.open", path=os.path.abspath(path), page=page, resolution=resolution, settings=settings,
-                     asSmartObject=asSmartObject, bitsPerChannel=bitsPerChannel))
+                     asSmartObject=asSmartObject, bitsPerChannel=bitsPerChannel, mergedOnly=mergedOnly))
 
 
 @edit("Import an image as a layer")

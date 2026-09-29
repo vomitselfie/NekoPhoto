@@ -59,6 +59,9 @@ struct PsdImportOptions {
     /// How deep inside smart objects this file is (their embedded PSDs are read through here too); sources
     /// past the limit stay unread (preview-locked).
     int depth = 0;
+    /// Only the merged image Photoshop stored ("Maximize Compatibility"), as one Background layer: the way to open a
+    /// file whose layers do not fit (estimatePsd).
+    bool mergedOnly = false;
     /// Decodes an embedded file NekoPhoto's core cannot (JPEG, TIFF, ...) to an image; the app supplies it.
     std::function<ImagePtr(const std::vector<uint8_t>& bytes, const std::string& fileType, const std::string& fileName)> decodeImage;
 };
@@ -79,6 +82,22 @@ struct PsdTypeLayer {
 std::optional<PsdTypeLayer> readPhotoshopType(const uint8_t* data, size_t size, std::string* why = nullptr);
 
 /// Reads `path`; null with `error` set when the file is not a PSD/PSB or is damaged.
+/// What opening a PSD or PSB would take, read from its header and layer records only (the start of the file): the
+/// canvas, the layers' and masks' pixels, and the bytes they come to at the document's depth and mode.
+struct PsdEstimate {
+    int width = 0, height = 0;
+    SampleType sampleType = SampleType::U8;
+    ColorMode colorMode = ColorMode::RGB;
+    int layers = 0;
+    long long layerPixels = 0, maskPixels = 0;
+    bool canvasFits = true;       // within the document's image budget (else nothing opens)
+    bool layersFit = true;        // within the project budget (else only the merged image can)
+    /// The pixels in memory once open: the layers and masks, the merged image and the canvas render.
+    unsigned long long bytes = 0;
+    unsigned long long mergedBytes = 0;   // the same for the merged image alone
+};
+std::optional<PsdEstimate> estimatePsd(const std::string& path, std::string* error);
+
 std::optional<PsdImport> importPsd(const std::string& path, std::string* error, const PsdImportOptions& options = {});
 /// The same from the file's bytes.
 std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::string* error, const PsdImportOptions& options = {});

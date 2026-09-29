@@ -110,7 +110,7 @@ layer alone; a masked layer as it shows, `masked: false` for its raw pixels),
 `screenshot` (the canvas as shown, or the `window`).
 
 Documents: `tabs.select`, `tabs.new`, `tabs.close`, `document.new`,
-`document.open` (.comp, a Photoshop .psd/.psb, a Clip Studio .clip, an Affinity .afphoto, .afdesign, .afpub or .af, an Aseprite .ase/.aseprite (a layer per cel, its frames on the timeline), an
+`document.open` (.comp, a Photoshop .psd/.psb (with `mergedOnly`, only the merged image Photoshop stored, as one layer in a new untitled document: for a file whose layers are past the budget), a Clip Studio .clip, an Affinity .afphoto, .afdesign, .afpub or .af, an Aseprite .ase/.aseprite (a layer per cel, its frames on the timeline), an
 icon .ico/.cur (a layer per size, the largest visible), an SVG (.svg/.svgz: shapes as vector
 shape layers), a PDF page (`page`, 1-based, and `resolution` in pixels per inch, default 150; when `app.info` reports
 `pdf`) or an animated GIF (a layer per frame, "Frame N (D ms)", frame 1

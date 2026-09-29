@@ -1,4 +1,6 @@
 // The main window's file handling: new, open, import, save, export, and files dropped on the window.
+#include <QLocale>
+#include "Platform.h"
 #include "TextLayer.h"
 #include "MainWindow.h"
 #include "ActionLibrary.h"
@@ -144,6 +146,35 @@ void MainWindow::openLayeredFile(const QString& path) {
     const bool clip = hasSuffix(path, {".clip"}), ase = hasSuffix(path, {".ase", ".aseprite"}), psd = hasSuffix(path, {".psd", ".psb"});
     const bool vector = isVectorFilePath(path);
     std::optional<PsdImport> imported;
+    // A PSD or PSB is sized up from its records first: layers past the project budget, or more than the memory
+    // free now, offer Photoshop's merged image instead (a new, untitled document, so Save cannot replace the file).
+    bool mergedOnly = nextPsdMergedOnly.value_or(false);
+    const bool ask = psd && !nextPsdMergedOnly && isVisible();
+    nextPsdMergedOnly.reset();
+    if (ask) {
+        std::string why;
+        if (auto e = compositor::estimatePsd(file, &why); e && e->canvasFits) {
+            const unsigned long long free = platform::availableMemory();
+            const bool tooBig = !e->layersFit, tight = e->layersFit && free > 0 && e->bytes > free * 8 / 10;
+            if (tooBig || tight) {
+                QApplication::restoreOverrideCursor();
+                auto gb = [](unsigned long long b) { return QLocale().toString(double(b) / 1e9, 'f', 1); };
+                QMessageBox box(QMessageBox::Warning, tr("Open %1").arg(QFileInfo(path).fileName()),
+                                tooBig ? tr("Its %n layer(s) hold %1 megapixels, more than a document can.", nullptr, e->layers).arg(QLocale().toString(e->layerPixels / 1000000))
+                                       : tr("It needs about %1 GB of memory, and %2 GB is free now.").arg(gb(e->bytes), gb(free)),
+                                QMessageBox::NoButton, isVisible() ? this : nullptr);
+                box.setInformativeText(tr("The merged image Photoshop stored in the file can open instead, as one layer (%1 GB). It opens as a new document, so saving cannot replace the layered file.").arg(gb(e->mergedBytes)));
+                QPushButton* merged = box.addButton(tr("Open Merged Image"), QMessageBox::AcceptRole);
+                QPushButton* anyway = tight ? box.addButton(tr("Open Anyway"), QMessageBox::DestructiveRole) : nullptr;
+                box.addButton(QMessageBox::Cancel);
+                box.setDefaultButton(merged);
+                box.exec();
+                if (box.clickedButton() == merged) mergedOnly = true;
+                else if (!anyway || box.clickedButton() != anyway) return;
+                QApplication::setOverrideCursor(Qt::BusyCursor);
+            }
+        }
+    }
     if (vector) {
         // SVG as shape layers, PDF as a rendered page (VectorFiles.h).
         QString message;
@@ -154,7 +185,11 @@ void MainWindow::openLayeredFile(const QString& path) {
     else if (ase) imported = compositor::importAseprite(file, &error);
     else if (hasSuffix(path, {".ico", ".cur"})) imported = compositor::importIco(file, &error);
     else if (hasSuffix(path, {".gif"})) imported = compositor::importGif(file, &error);
-    else imported = compositor::importPsd(file, &error, app::psdImportOptions());
+    else {
+        compositor::PsdImportOptions options = app::psdImportOptions();
+        options.mergedOnly = mergedOnly;
+        imported = compositor::importPsd(file, &error, options);
+    }
     QApplication::restoreOverrideCursor();
     if (!imported) {
         if (!error.empty() || !vector) showError(tr("Couldn’t open %1").arg(QFileInfo(path).fileName()), QString::fromStdString(error));   // empty: the page choice was cancelled
@@ -173,8 +208,8 @@ void MainWindow::openLayeredFile(const QString& path) {
     }
     if (affinity) app::finishPendingText(*imported);
     Tab& tab = addTab(true);
-    tab.session->adoptDocument(imported->document, QFileInfo(path).completeBaseName());
-    addRecent(path);
+    tab.session->adoptDocument(imported->document, mergedOnly ? tr("%1 (merged)").arg(QFileInfo(path).completeBaseName()) : QFileInfo(path).completeBaseName());
+    if (!mergedOnly) addRecent(path);
     lastImportNotes_.clear();
     for (const std::string& note : imported->notes) lastImportNotes_ << QString::fromStdString(note);
     if (!lastImportNotes_.isEmpty()) {

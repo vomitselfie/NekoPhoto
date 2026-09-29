@@ -6085,6 +6085,36 @@ File &gt; New creates a blank canvas.</source>
             <numerusform>%n 個のレイヤーを読み込みました。ファイル内の一部の要素は近似されるか、ピクセルとして描画されました:</numerusform>
         </translation>
     </message>
+    <message>
+        <source>Open %1</source>
+        <translation>%1 を開く</translation>
+    </message>
+    <message numerus="yes">
+        <source>Its %n layer(s) hold %1 megapixels, more than a document can.</source>
+        <translation>
+            <numerusform>%n 枚のレイヤーの合計が %1 メガピクセルあり、1 つのドキュメントに収まる量を超えています。</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>It needs about %1 GB of memory, and %2 GB is free now.</source>
+        <translation>約 %1 GB のメモリーが必要ですが、現在の空きは %2 GB です。</translation>
+    </message>
+    <message>
+        <source>The merged image Photoshop stored in the file can open instead, as one layer (%1 GB). It opens as a new document, so saving cannot replace the layered file.</source>
+        <translation>代わりに、Photoshop がファイルに保存した統合画像を 1 枚のレイヤーとして開けます(%1 GB)。新しいドキュメントとして開くため、保存してもレイヤー付きの元のファイルは置き換えられません。</translation>
+    </message>
+    <message>
+        <source>Open Merged Image</source>
+        <translation>統合画像を開く</translation>
+    </message>
+    <message>
+        <source>Open Anyway</source>
+        <translation>そのまま開く</translation>
+    </message>
+    <message>
+        <source>%1 (merged)</source>
+        <translation>%1(統合)</translation>
+    </message>
     <message numerus="yes">
         <source>%n layer(s) imported. Some things Clip Studio keeps have no counterpart here:</source>
         <translation>

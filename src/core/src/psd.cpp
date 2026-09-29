@@ -692,6 +692,94 @@ std::string jsonEscape(const std::string& s) {
 
 // ---- The import ---------------------------------------------------------------------------------------
 
+std::optional<PsdEstimate> estimatePsd(const std::string& path, std::string* error) {
+    // The header and the layer records only, seeking past everything else (a PSB's pixels can run to gigabytes).
+    std::ifstream in(path, std::ios::binary);
+    if (!in) { if (error) *error = "The file could not be opened."; return std::nullopt; }
+    auto read = [&](size_t n) {
+        std::vector<uint8_t> bytes(n);
+        if (n && !in.read(reinterpret_cast<char*>(bytes.data()), std::streamsize(n))) throw Truncated{};
+        return bytes;
+    };
+    auto be = [](const std::vector<uint8_t>& b, size_t at, int n) { uint64_t v = 0; for (int i = 0; i < n; i++) v = v << 8 | b[at + size_t(i)]; return v; };
+    try {
+        const std::vector<uint8_t> header = read(26);
+        if (std::memcmp(header.data(), "8BPS", 4) != 0) { if (error) *error = "Not a Photoshop file (no 8BPS signature)."; return std::nullopt; }
+        const bool psb = be(header, 4, 2) == 2;
+        const int depth = int(be(header, 22, 2)), mode = int(be(header, 24, 2));
+        PsdEstimate e;
+        e.height = int(be(header, 14, 4)); e.width = int(be(header, 18, 4));
+        const bool nativeMode = mode == CMYK || mode == Lab;
+        e.colorMode = mode == CMYK ? ColorMode::CMYK : mode == Lab ? ColorMode::Lab : ColorMode::RGB;
+        const bool deep = depth == 16 && (mode == RGB || mode == Grayscale || nativeMode);
+        const bool float32 = depth == 32 && (mode == RGB || mode == Grayscale);
+        e.sampleType = deep ? SampleType::U16 : float32 ? SampleType::F32 : SampleType::U8;
+        e.canvasFits = e.width >= 1 && e.height >= 1 && e.width <= 30000 && e.height <= 30000 &&
+                       (long long)e.width * e.height <= Document::imagePixelBudget(e.sampleType, e.colorMode);
+        auto skipSection = [&](int bytes) { const uint64_t n = be(read(size_t(bytes)), 0, bytes); in.seekg(std::streamoff(n), std::ios::cur); };
+        skipSection(4);   // colour mode data
+        skipSection(4);   // image resources
+        const int wide = psb ? 8 : 4;
+        const uint64_t layerMaskLen = be(read(size_t(wide)), 0, wide);
+        const uint64_t layerMaskStart = uint64_t(in.tellg());
+        std::vector<Record> records;
+        // The records at `at`, `limit` bytes at most: read a growing window until they parse.
+        auto readRecords = [&](uint64_t at, uint64_t limit) {
+            for (uint64_t window = std::min<uint64_t>(limit, 1 << 22);; window = std::min<uint64_t>(limit, window * 4)) {
+                in.clear();
+                in.seekg(std::streamoff(at));
+                const std::vector<uint8_t> bytes = read(size_t(window));
+                try {
+                    Reader li(bytes.data(), bytes.size());
+                    const int count = std::abs(int(li.i16()));
+                    if (count > Document::maxLayers) throw Truncated{};
+                    records.clear();
+                    for (int i = 0; i < count; i++) records.push_back(readRecord(li, psb));
+                    return;
+                } catch (Truncated&) {
+                    if (window >= limit) throw;
+                }
+            }
+        };
+        if (layerMaskLen > 0) {
+            const uint64_t layerInfoLen = be(read(size_t(wide)), 0, wide);
+            const uint64_t layerInfoStart = uint64_t(in.tellg());
+            if (layerInfoLen >= 2) readRecords(layerInfoStart, layerInfoLen);
+            if (records.empty()) {
+                // 16- and 32-bit files keep their layers in an Lr16 or Lr32 block after the global mask.
+                const uint64_t end = layerMaskStart + layerMaskLen;
+                in.clear();
+                in.seekg(std::streamoff(layerInfoStart + layerInfoLen));
+                skipSection(4);
+                while (uint64_t(in.tellg()) + 12 <= end) {
+                    const std::vector<uint8_t> tag = read(8);
+                    const std::string sig(tag.begin(), tag.begin() + 4), key(tag.begin() + 4, tag.end());
+                    if (sig != "8BIM" && sig != "8B64") break;
+                    const int lengthBytes = psb && psbLongKey(key) ? 8 : 4;
+                    const uint64_t len = be(read(size_t(lengthBytes)), 0, lengthBytes);
+                    const uint64_t data = uint64_t(in.tellg());
+                    if (key == "Lr16" || key == "Lr32") { readRecords(data, len); break; }
+                    in.seekg(std::streamoff(data + len + (len % 4 ? 4 - len % 4 : 0)));
+                }
+            }
+        }
+        e.layers = int(records.size());
+        for (const Record& rec : records) {
+            e.layerPixels += (long long)rec.width() * rec.height();
+            e.maskPixels += (long long)rec.mask.width() * rec.mask.height();
+        }
+        const long long projectBudget = Document::projectPixelBudgetAt(e.sampleType, e.colorMode);
+        e.layersFit = e.layerPixels <= projectBudget && e.maskPixels <= projectBudget;
+        const unsigned long long pixel = (unsigned long long)sampleBytes(e.sampleType) * colorModeChannels(e.colorMode);
+        e.mergedBytes = 3ull * (unsigned long long)e.width * (unsigned long long)e.height * pixel;   // the layer, the render, its display copy
+        e.bytes = (unsigned long long)e.layerPixels * pixel + (unsigned long long)e.maskPixels * sampleBytes(e.sampleType) + e.mergedBytes;
+        return e;
+    } catch (Truncated&) {
+        if (error) *error = "The file ends early or has a structure this reader does not understand.";
+        return std::nullopt;
+    }
+}
+
 std::optional<PsdImport> importPsd(const std::string& path, std::string* error, const PsdImportOptions& options) {
     std::ifstream in(path, std::ios::binary);
     if (!in) { if (error) *error = "The file could not be opened."; return std::nullopt; }
@@ -846,7 +934,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                 if (key == "FEid" || key == "FXid") fileHasFilterCache = true;
                 if (carriedGlobalBlock(key) && !((psb || depth != 8) && (key == "FEid" || key == "FXid"))) docCarry->globals.push_back({key, std::vector<uint8_t>(data.first, data.first + data.second)});
                 // Smart object sources: the linked-file blocks' embedded (and linked) files.
-                if (key == "lnk2" || key == "lnkD" || key == "lnk3" || key == "lnkE")
+                if (!options.mergedOnly && (key == "lnk2" || key == "lnkD" || key == "lnk3" || key == "lnkE"))
                     for (SmartObjectSource& s : parsePsdLinkBlock(std::vector<uint8_t>(data.first, data.first + data.second))) {
                         if (s.id.empty() || document.smartObjects.count(s.id)) continue;
                         s.psdBlock = key;
@@ -866,6 +954,12 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                     break;
                 }
             }
+        }
+        if (options.mergedOnly) {
+            // Photoshop's merged image alone: no layers, nothing of theirs carried.
+            records.clear();
+            docCarry->globals.clear();
+            document.smartObjects.clear();
         }
         r.seek(layerMaskEnd);
         // A project holds a gigapixel of layers (and as much of masks); refuse more before decoding any of it.
@@ -1397,7 +1491,8 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                              : result.composite16 ? Asset::make(result.composite16, "Background") : Asset::make(result.composite, "Background"), Point(0, 0));
             background.name = "Background";
             layers.push_back(background);
-            if (records.empty()) notes.push_back("The file carries no layers (it was saved flattened); the merged image is the only layer.");
+            if (options.mergedOnly) notes.push_back(result.realComposite ? "Opened as the merged image Photoshop stored, without its layers." : "Opened as the merged image, but the file was saved without Maximize Compatibility, so Photoshop stored a blank stand-in.");
+            else if (records.empty()) notes.push_back("The file carries no layers (it was saved flattened); the merged image is the only layer.");
         }
         for (const auto& resource : docCarry->resources)
             if (resource.id == 1050) parseSlicesResource(resource.data, document.slices);

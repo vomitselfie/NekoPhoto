@@ -157,6 +157,13 @@ bool check(const fs::path& path, int& carriedBlocks, int& channelsBack) {
     try { a = dump(readFile(path)); } catch (std::exception& e) { std::printf("SKIP %s: unreadable here (%s)\n", path.filename().string().c_str(), e.what()); return true; }
     try { b = dump(out); } catch (std::exception& e) { std::printf("FAIL %s: our file does not parse: %s\n", path.filename().string().c_str(), e.what()); return false; }
     std::vector<std::string> problems;
+    // The size check before opening (estimatePsd) reads the same records the importer does, seeking past the pixels.
+    if (auto e = compositor::estimatePsd(path.string(), &error)) {
+        if (e->layers != int(a.records.size()) || e->width != imported->document.width || e->height != imported->document.height)
+            problems.push_back("estimatePsd saw " + std::to_string(e->layers) + " records at " + std::to_string(e->width) + "x" + std::to_string(e->height) +
+                               ", the file has " + std::to_string(a.records.size()));
+        if (!e->canvasFits || !e->layersFit || e->bytes < e->mergedBytes) problems.push_back("estimatePsd: a file that opened does not fit");
+    } else problems.push_back("estimatePsd failed: " + error);
     // Records: ours has the same folders and layers in the same order, unless the importer dropped some.
     const bool reduced = a.reduced || sixteen || thirtyTwo;
     static const std::set<std::string> ours{"luni", "lsct", "lsdk", "lyid", "iOpa", "levl", "curv", "hue2", "expA", "grdm"};

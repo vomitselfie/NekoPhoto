@@ -65,6 +65,8 @@ public:
     /// A layered file (Photoshop, Clip Studio, Aseprite, an icon's sizes or an animated GIF's frames) in a new
     /// tab, with a note of what did not carry over.
     void openLayeredFile(const QString& path);
+    /// The next PSD or PSB open without the size prompt: true opens only its merged image, false its layers.
+    std::optional<bool> nextPsdMergedOnly;
     const QStringList& lastImportNotes() const { return lastImportNotes_; }
     /// Shows the import bar over the canvas: `summary` holds %1 for the first note. With `session`, the bar
     /// belongs to that document's tab and offers Undo Open.

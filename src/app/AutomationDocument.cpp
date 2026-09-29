@@ -139,6 +139,9 @@ void AutomationServer::registerDocumentHandlers() {
                                {"settings", applied}};
         }
         if (has(p, "settings") || has(p, "asSmartObject") || has(p, "bitsPerChannel")) fail("settings, asSmartObject and bitsPerChannel apply to camera RAW files", invalidParams);
+        const bool psd = path.endsWith(".psd", Qt::CaseInsensitive) || path.endsWith(".psb", Qt::CaseInsensitive);
+        if (has(p, "mergedOnly") && !psd) fail("mergedOnly applies to .psd and .psb files", invalidParams);
+        if (psd) w->nextPsdMergedOnly = flag(p, "mergedOnly", false);
         const EditorSession* before = session();
         const std::string beforeDocument = before->hasDocument() ? before->document()->id : std::string();
         w->openPath(path);

@@ -331,6 +331,12 @@ def remaining_methods(rpc):
     assert [a["name"] for a in rpc.call("artboards.list")["artboards"]] == ["Hero"]
     assert [s["name"] for s in rpc.call("slices.list")["slices"]] == ["top"]
     rpc.call("tabs.close", index=reopened["tab"], discard=True)
+    # The merged image alone: one layer, untitled (so saving cannot replace the layered file).
+    merged = rpc.call("document.open", path=boards_psd, mergedOnly=True)
+    assert merged["layers"] == 1 and merged["title"].endswith("(merged)"), merged
+    assert any("merged image" in n for n in merged["notes"]), merged["notes"]
+    rpc.call("tabs.close", index=merged["tab"], discard=True)
+    expect_refused(rpc, "mergedOnly applies", "document.open", path=written[0], mergedOnly=True)
     rpc.call("tabs.select", index=next(t["index"] for t in here if t["current"]))
     rpc.call("slices.delete", id=piece["id"])
     rpc.call("artboards.delete", id=board["id"])

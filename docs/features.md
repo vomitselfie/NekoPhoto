@@ -88,6 +88,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Colour management, as in Photoshop: Edit ▸ Color Settings (sRGB, Adobe RGB (1998), Display P3 or ProPhoto RGB as the working space; preserve, convert or drop embedded profiles; untagged images are sRGB), Assign Profile and Convert to Profile (perceptual or relative colorimetric, black point compensation), the canvas shown through your monitor profile (X11, Windows, or a file in Preferences), View ▸ Proof Setup, Proof Colors and Gamut Warning; PSD, PNG, JPEG, WebP and TIFF keep their profiles in and out, and web exports can convert to sRGB ([color-management.md](color-management.md))
 - Open PNG, JPEG, TIFF, TGA, WebP and more; drop an image on the canvas to add it as a layer, or on the tab strip to open it
 - Projects of up to a gigapixel of layers; the Mac app opens projects up to 100 megapixels
+- A Photoshop file too big to open is sized up before anything is read: when its layers are past the budget, or it needs more memory than is free, the merged image Photoshop stored can open instead as one layer, in a new untitled document so saving cannot replace the layered file
 - Export PNG, TIFF, TGA, a multi-size Windows icon (16, 32, 48 and 256 px), or JPEG and WebP with a live preview (WebP keeps transparency, and is lossless at quality 100)
 - Crash recovery: unsaved changes are autosaved in the background every few minutes (Preferences sets how often, or turns it off) and offered back after a crash; your own files are never touched
 - Several projects in tabs; opening a file from the file manager adds a tab to the running window
@@ -185,6 +186,7 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 - カラーマネジメント(Photoshop と同じ):編集 ▸ カラー設定(作業用スペースは sRGB・Adobe RGB (1998)・Display P3・ProPhoto RGB、埋め込みプロファイルの保持・変換・破棄、プロファイルのない画像は sRGB)、プロファイルの指定とプロファイル変換(知覚的・相対的な色域を維持、黒点の補正)、モニタープロファイルを通したカンバス表示(X11、Windows、または環境設定で選んだファイル)、表示 ▸ 校正設定・色の校正・色域外警告。PSD・PNG・JPEG・WebP・TIFF はプロファイルを読み書きし、Web 向けの書き出しでは sRGB に変換できます([color-management.md](color-management.md))
 - PNG、JPEG、TIFF、TGA、WebP などを開けます。カンバスにドロップするとレイヤーとして追加、タブバーにドロップすると新しいドキュメントとして開きます
 - レイヤー合計 1 ギガピクセルまでのプロジェクト(Mac 版で開けるのは 1 億画素まで)
+- 大きすぎる Photoshop ファイルは、読み込む前にサイズを確認します。レイヤーが上限を超える場合や空きメモリーが足りない場合は、Photoshop がファイルに保存した統合画像を 1 枚のレイヤーとして開けます(保存してもレイヤー付きの元のファイルを置き換えないよう、新しい無題のドキュメントとして開きます)
 - PNG・TIFF・TGA・複数サイズの Windows アイコン(16/32/48/256 px)書き出し、プレビュー付きの JPEG・WebP 書き出し(WebP は透明部分を保持し、品質 100 で可逆圧縮)
 - アートボード:アートボードツール(Shift+V)で名前と背景色(白・黒・透明・任意の色)を持つ矩形を作り、中のレイヤーはその範囲で切り抜かれます。ファイル > アートボードを書き出しで PNG/JPEG に書き出し、PSD のアートボードは Photoshop 形式のまま読み書きします
 - スライス:スライスツール(Shift+C)で名前付きの矩形を作り、ファイル > スライスを書き出しで PNG/JPEG に書き出します。PSD のスライス(リソース 1050)も編集できる形で読み書きします

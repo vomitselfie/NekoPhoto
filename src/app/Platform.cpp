@@ -163,4 +163,18 @@ QByteArray systemMonitorProfile() { return {}; }
 
 #endif
 
+unsigned long long availableMemory() {
+#ifdef _WIN32
+    MEMORYSTATUSEX status;
+    status.dwLength = sizeof status;
+    return GlobalMemoryStatusEx(&status) ? (unsigned long long)status.ullAvailPhys : 0;
+#else
+    QFile file(QStringLiteral("/proc/meminfo"));
+    if (!file.open(QIODevice::ReadOnly)) return 0;
+    for (const QByteArray& line : file.readAll().split('\n'))
+        if (line.startsWith("MemAvailable:")) return line.mid(13).trimmed().split(' ').value(0).toULongLong() * 1024ull;
+    return 0;
+#endif
+}
+
 } // namespace app::platform
