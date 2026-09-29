@@ -42,6 +42,21 @@ std::shared_ptr<Gray16> coverageCopy(const std::shared_ptr<Gray16>& coverage, in
     return resampleMask(*coverage, full, full, w, h, 0);
 }
 
+std::shared_ptr<const ImageF> previewCopy(const std::shared_ptr<const ImageF>& source, int limit, double& scale) {
+    int longest = std::max(source->width(), source->height());
+    if (limit <= 0 || longest <= limit) { scale = 1; return source; }
+    scale = double(limit) / longest;
+    int w = std::max(1, int(source->width() * scale)), h = std::max(1, int(source->height() * scale));
+    LayerTransform full(Point(0, 0), Size(source->width(), source->height()));
+    return resampleLayer(source, full, full, w, h);
+}
+
+std::shared_ptr<GrayF> coverageCopy(const std::shared_ptr<GrayF>& coverage, int w, int h) {
+    if (!coverage) return nullptr;
+    LayerTransform full(Point(0, 0), Size(coverage->width(), coverage->height()));
+    return resampleMask(*coverage, full, full, w, h, 0.0f);
+}
+
 } // namespace
 
 PixelDialog::PixelDialog(EditorSession* session, QWidget* parent)
@@ -66,7 +81,18 @@ void PixelDialog::capture(int margin, int previewLimit) {
     previewSource16_.reset();
     coverage16_.reset();
     previewCoverage16_.reset();
+    sourceF_ = session_->adjustmentSourceF(margin, transform_, layerId_);
+    previewSourceF_.reset();
+    coverageF_.reset();
+    previewCoverageF_.reset();
+    curve_ = session_->documentCurve();
     previewScale_ = 1;
+    if (sourceF_) {
+        previewSourceF_ = previewCopy(sourceF_, previewLimit, previewScale_);
+        coverageF_ = session_->selectionOnGridF(transform_, sourceF_->width(), sourceF_->height());
+        previewCoverageF_ = previewSourceF_ == sourceF_ ? coverageF_ : coverageCopy(coverageF_, previewSourceF_->width(), previewSourceF_->height());
+        return;
+    }
     if (source16_) {
         previewSource16_ = previewCopy(source16_, previewLimit, previewScale_);
         coverage16_ = session_->selectionOnGrid16(transform_, source16_->width(), source16_->height());
@@ -104,6 +130,12 @@ void PixelDialog::showPreview(std::shared_ptr<Image16> image, std::optional<Laye
     session_->setPixelPreview(Image16Ptr(std::move(image)), placement, layerId_);
 }
 
+void PixelDialog::showPreview(std::shared_ptr<ImageF> image, std::optional<LayerTransform> placement) {
+    if (finished_ || !session_ || !image) return;
+    if (previewCoverageF_ && previewSourceF_) blendThroughCoverage(*image, *previewSourceF_, *previewCoverageF_);
+    session_->setPixelPreview(ImageFPtr(std::move(image)), placement, layerId_);
+}
+
 void PixelDialog::clearPreview() {
     if (session_) session_->clearPixelPreview();
 }
@@ -114,6 +146,10 @@ void PixelDialog::throughSelection(Image& result) const {
 
 void PixelDialog::throughSelection(Image16& result) const {
     if (coverage16_ && source16_) blendThroughCoverage(result, *source16_, *coverage16_);
+}
+
+void PixelDialog::throughSelection(ImageF& result) const {
+    if (coverageF_ && sourceF_) blendThroughCoverage(result, *sourceF_, *coverageF_);
 }
 
 void PixelDialog::commit(AnyImage image, const LayerTransform& placement, const QString& name) {

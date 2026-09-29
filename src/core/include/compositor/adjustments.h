@@ -5,6 +5,7 @@
 #include "document.h"
 #include "imaget.h"
 #include <array>
+#include <functional>
 #include <map>
 #include <optional>
 #include <string>
@@ -116,6 +117,8 @@ struct HueSaturationSettings {
     double weight(int colorRange, double hue) const;
     /// One straight colour (0..1) adjusted.
     void adjust(double& r, double& g, double& b) const;
+    /// adjust() with the per-hue response worked out once, for adjusting many colours.
+    std::function<void(double&, double&, double&)> adjuster() const;
     /// The hue a spectrum swatch becomes.
     double shiftedHue(double hue) const;
 };
@@ -281,6 +284,35 @@ void applyColorLookup(Image16& image, const ColorLookupSettings& settings);
 double brightnessContrastAt(const BrightnessContrastSettings& settings, double value);
 /// The Levels histograms of a 16-bit image, in the same 256 bins.
 std::array<std::vector<double>, 4> levelsHistogram(const Image16& image, const Gray16* coverage);
+
+// ---- 32 bits (premultiplied linear float) -----------------------------------------------------------------------
+// Photoshop's 32-bit set (adjustments_f32.cpp): Levels, Curves, Exposure, Hue/Saturation, Color Balance, Black & White,
+// Photo Filter, Channel Mixer, Vibrance, Gradient Map, Invert and Color Lookup. The pixels stay linear and unclamped;
+// each kind's function works on the colour encoded through `curve` (the document's, encodedTransfer), continued above 1
+// (encodeExtended), except Exposure, an exact multiply in linear light. Levels and Curves go on above 1 (Levels without
+// its clamp at white, Curves along its end tangent); the colour kinds adjust a colour brighter than white as the same
+// colour at white and scale it back up. docs/bit-depth.md lists the choices.
+
+class TransferCurve;
+/// Whether Photoshop offers `kind` in a 32-bit document (not Brightness/Contrast, Posterize, Threshold, Selective Color
+/// or Grain).
+bool adjustmentAt32(AdjustmentKind kind);
+/// Applies `settings` at 32 bits; false for a kind adjustmentAt32 does not offer (the pixels are left alone).
+bool applyAdjustment(const AdjustmentSettings& settings, ImageF& image, const Rect& region, double scale, const TransferCurve& curve);
+bool applyAdjustment(const LayerAdjustment& adjustment, ImageF& image, const Rect& region, double scale, const TransferCurve& curve);
+void applyInvert(ImageF& image, const TransferCurve& curve);
+void applyInvert(GrayF& mask);
+void applyBlackWhite(ImageF& image, const BlackWhiteSettings& settings, const TransferCurve& curve);
+void applyColorBalance(ImageF& image, const ColorBalanceSettings& settings, const TransferCurve& curve);
+void applyVibrance(ImageF& image, const VibranceSettings& settings, const TransferCurve& curve);
+void applyPhotoFilter(ImageF& image, const PhotoFilterSettings& settings, const TransferCurve& curve);
+void applyChannelMixer(ImageF& image, const ChannelMixerSettings& settings, const TransferCurve& curve);
+void applyColorLookup(ImageF& image, const ColorLookupSettings& settings, const TransferCurve& curve);
+/// The colour kinds' frame: each pixel's straight linear colour divided by its brightest channel when that is above 1,
+/// encoded, through `f` (0..1 in; the result cut to 0..1), linearised and scaled back up.
+void forEachEncodedColour(ImageF& image, const TransferCurve& curve, const std::function<void(double&, double&, double&)>& f);
+/// The Levels histograms of a 32-bit image: its colour encoded at exposure 0 into the same 256 bins.
+std::array<std::vector<double>, 4> levelsHistogram(const ImageF& image, const GrayF* coverage, const TransferCurve& curve);
 
 /// Levels helpers: the four histograms (RGB mean, R, G, B) of an image, optionally weighted by coverage.
 std::array<std::vector<double>, 4> levelsHistogram(const Image& image, const GrayImage* coverage);

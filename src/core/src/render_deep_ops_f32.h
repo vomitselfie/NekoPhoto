@@ -8,8 +8,8 @@
 // in render_f32.cpp and render.cpp). One 32-bit render runs at a time; renders at other depths are not held up.
 //
 // Vector coverage, gradient and pattern fills and mask density and feather come from their 16-bit forms (15 bits of
-// coverage, colour linearised from the 16-bit ramp): exact float versions are P5e's. Adjustment layers are not drawn
-// at 32 bits yet (P5b): adjust() leaves the pixels as they are.
+// coverage, colour linearised from the 16-bit ramp): exact float versions are P5e's. Adjustment layers draw through
+// adjustments_f32.cpp (P5b); the kinds Photoshop lacks at 32 bits are kept but not drawn.
 #pragma once
 #include "render_deep_ops.h"
 #include "compositor/view32.h"
@@ -59,7 +59,7 @@ struct DeepOps<SampleType::F32> {
     static constexpr int channels = 4;   // RGB and alpha: 32 bits is RGB only
     static constexpr bool styles = true;
 
-    /// An adjustment layer's blend (not drawn at 32 bits yet, see adjust): straight colour as the RGB policy blends it.
+    /// An adjustment layer's blend: straight colour as the RGB policy blends it.
     static void blendStraight(BlendMode mode, const float* cb, float* cs) {
         if (mode == BlendMode::Normal) return;
         const Rgb m = blendColor(mode, {cb[0], cb[1], cb[2]}, {cs[0], cs[1], cs[2]});
@@ -111,7 +111,11 @@ struct DeepOps<SampleType::F32> {
         Image16Ptr deep = renderFillLayer16(layer, document);
         return deep ? ImagePtr(lineariseImage(*deep, floatRenderContext().curve)) : nullptr;
     }
-    static bool adjust(const LayerAdjustment&, Image&, const Rect&, double) { return false; }
+    /// Photoshop's 32-bit adjustments (adjustments_f32.cpp) through the document's encoding; a kind it lacks at 32 bits
+    /// (Brightness/Contrast, Posterize, Threshold, Selective Color, Grain) is kept but not drawn.
+    static bool adjust(const LayerAdjustment& adjustment, Image& image, const Rect& region, double scale) {
+        return applyAdjustment(adjustment, image, region, scale, floatRenderContext().curve);
+    }
     static void drawStyled(StyledDraw draw, Image& target) {
         draw.linear = &floatRenderContext().curve;
         drawStyledLayer(draw, target);

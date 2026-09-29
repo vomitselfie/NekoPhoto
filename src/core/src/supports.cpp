@@ -52,31 +52,33 @@ constexpr FeatureSupport table[] = {
     {"tool.eyedropper", eightAndSixteen},
     {"view", allDepths},
 
-    // P3a: adjustments, on pixels (Image > Adjustments, pixels.adjust) and as adjustment layers, every kind.
-    {"adjustment.pixels", eightAndSixteen},
-    {"adjustment.Levels", eightAndSixteen},
-    {"adjustment.Curves", eightAndSixteen},
-    {"adjustment.Hue/Saturation", eightAndSixteen},
-    {"adjustment.Exposure", eightAndSixteen},
-    {"adjustment.Gradient Map", eightAndSixteen},
+    // P3a: adjustments, on pixels (Image > Adjustments, pixels.adjust) and as adjustment layers, every kind. P5b:
+    // Photoshop's 32-bit set (adjustments_f32.cpp); Brightness/Contrast, Posterize, Threshold, Selective Color and Grain
+    // are not in it (photoshopLacksAt32).
+    {"adjustment.pixels", allDepths},
+    {"adjustment.Levels", allDepths},
+    {"adjustment.Curves", allDepths},
+    {"adjustment.Hue/Saturation", allDepths},
+    {"adjustment.Exposure", allDepths},
+    {"adjustment.Gradient Map", allDepths},
     {"adjustment.Grain", eightAndSixteen},
-    {"adjustment.Invert", eightAndSixteen},
+    {"adjustment.Invert", allDepths},
     {"adjustment.Brightness/Contrast", eightAndSixteen},
     {"adjustment.Posterize", eightAndSixteen},
     {"adjustment.Threshold", eightAndSixteen},
-    {"adjustment.Black & White", eightAndSixteen},
-    {"adjustment.Color Balance", eightAndSixteen},
-    {"adjustment.Vibrance", eightAndSixteen},
-    {"adjustment.Photo Filter", eightAndSixteen},
-    {"adjustment.Channel Mixer", eightAndSixteen},
+    {"adjustment.Black & White", allDepths},
+    {"adjustment.Color Balance", allDepths},
+    {"adjustment.Vibrance", allDepths},
+    {"adjustment.Photo Filter", allDepths},
+    {"adjustment.Channel Mixer", allDepths},
     {"adjustment.Selective Color", eightAndSixteen},
-    {"adjustment.Color Lookup", eightAndSixteen},
-    // The Filter menu's built-in filters (pixels.filter).
-    {"filter.pixels", eightAndSixteen},
-    {"filter.Gaussian Blur", eightAndSixteen},
-    {"filter.Motion Blur", eightAndSixteen},
-    {"filter.Add Noise", eightAndSixteen},
-    {"filter.Lens Correction", eightAndSixteen},
+    {"adjustment.Color Lookup", allDepths},
+    // The Filter menu's built-in filters (pixels.filter); at 32 bits on linear float (filters_f32.cpp).
+    {"filter.pixels", allDepths},
+    {"filter.Gaussian Blur", allDepths},
+    {"filter.Motion Blur", allDepths},
+    {"filter.Add Noise", allDepths},
+    {"filter.Lens Correction", allDepths},
     // Filter > Camera Raw Filter: its kernels on float colour, rounded to 16 bits once (cameraraw.h).
     {"filter.Camera Raw", eightAndSixteen},
     // Filter > G'MIC: 16-bit pixels go to G'MIC as float on its 0..255 scale and come back at 16 bits (app/Gmic.h).

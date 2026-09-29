@@ -224,6 +224,11 @@ add_library(compositor_core STATIC
     src/render_exec_lab8.cpp
     src/render_exec_modes16.cpp
     src/colormode_convert.cpp
+    # 32 bits per channel, editing (P5b)
+    src/adjustments_f32.cpp
+    src/blur_f32.cpp
+    src/filters_f32.cpp
+    src/resample_f32.cpp
 )
 add_library(compositor::core ALIAS compositor_core)
 

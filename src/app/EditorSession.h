@@ -683,6 +683,10 @@ public:
     /// The same in a 16-bit document.
     std::shared_ptr<const compositor::Image16> adjustmentSource16(int margin, compositor::LayerTransform& transform, std::optional<compositor::Uuid> layerId = std::nullopt) const;
     std::shared_ptr<compositor::Gray16> selectionOnGrid16(const compositor::LayerTransform& transform, int width, int height) const;
+    /// The same in a 32-bit document, and the curve its colour is encoded with (encodedTransfer).
+    std::shared_ptr<const compositor::ImageF> adjustmentSourceF(int margin, compositor::LayerTransform& transform, std::optional<compositor::Uuid> layerId = std::nullopt) const;
+    std::shared_ptr<compositor::GrayF> selectionOnGridF(const compositor::LayerTransform& transform, int width, int height) const;
+    compositor::TransferCurve documentCurve() const;
     /// Replaces a layer's pixels as one undo step: `layerId`'s, or the active layer's. A dialog that opened on
     /// one layer passes that layer, so its result never lands on whatever was selected since.
     void commitPixels(compositor::AnyImage image, const compositor::LayerTransform& transform, const QString& name, std::optional<compositor::Uuid> layerId = std::nullopt);

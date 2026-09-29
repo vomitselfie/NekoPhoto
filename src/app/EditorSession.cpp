@@ -392,9 +392,10 @@ bool EditorSession::convertMode(SampleType type, QString* errorText, const View3
     if (!ok) { if (errorText) *errorText = QString::fromStdString(why); return false; }
     // A tool that does not work at the new depth gives way to the Move tool.
     if (!toolSupportedAtDepth(tool_)) selectTool(Tool::Move);
-    // Adjustment layers are kept at 32 bits but not drawn until they are ported (P5b).
-    if (type == SampleType::F32 && std::any_of(document_->layers.begin(), document_->layers.end(), [](const Layer& l) { return l.adjustment.has_value(); }))
-        emit notice(tr("Adjustment layers are kept but not drawn in a 32-bit document yet; at 8 or 16 bits they draw again."));
+    // Adjustment layers of the kinds Photoshop lacks at 32 bits (Brightness/Contrast, Posterize, Threshold, Selective
+    // Color, Grain) are kept but not drawn there.
+    if (type == SampleType::F32 && std::any_of(document_->layers.begin(), document_->layers.end(), [](const Layer& l) { return l.adjustment && !adjustmentAt32(l.adjustment->kind); }))
+        emit notice(tr("Brightness/Contrast, Posterize, Threshold, Selective Color and Grain adjustment layers are kept but not drawn in 32-bit mode; at 8 or 16 bits they draw again."));
     notifyDocument();
     emit selectionChanged();
     emit toolChanged();

@@ -44,6 +44,16 @@ void AutomationServer::registerPixelsHandlers() {
         AdjustmentSettings parsed;
         if (!AdjustmentSettings::parse(QJsonDocument(settings).toJson(QJsonDocument::Compact).toStdString(), parsed)) fail("couldn't parse settings; adjustments.defaults shows the shape", invalidParams);
         LayerTransform transform;
+        // Photoshop's 32-bit set only (Brightness/Contrast, Posterize, Threshold, Selective Color and Grain are not in it).
+        const std::string feature = std::string("adjustment.") + adjustmentKindName(*kind);
+        if (!s->supportsFeature(feature)) fail(QString::fromUtf8(adjustmentKindName(*kind)) + ": " + s->unavailableTip(feature), invalidParams);
+        if (auto deep = s->adjustmentSourceF(0, transform)) {
+            auto out = std::make_shared<ImageF>(*deep);
+            applyAdjustment(parsed, *out, Rect(0, 0, deep->width(), deep->height()), 1, s->documentCurve());
+            if (auto coverage = s->selectionOnGridF(transform, deep->width(), deep->height())) blendThroughCoverage(*out, *deep, *coverage);
+            s->commitPixels(ImageFPtr(out), transform, QString::fromUtf8(adjustmentKindName(*kind)));
+            return QJsonObject{{"applied", QString::fromUtf8(adjustmentKindName(*kind))}};
+        }
         if (auto deep = s->adjustmentSource16(0, transform)) {
             auto out = std::make_shared<Image16>(*deep);
             applyAdjustment(parsed, *out, Rect(0, 0, deep->width(), deep->height()), 1);
@@ -78,6 +88,16 @@ void AutomationServer::registerPixelsHandlers() {
         int margin = int(std::ceil(blurMargin(*kind, settings)));
         LayerTransform transform;
         const bool trims = *kind == FilterKind::GaussianBlur || *kind == FilterKind::MotionBlur;
+        if (auto deep = s->adjustmentSourceF(margin, transform)) {
+            auto out = std::make_shared<ImageF>(*deep);
+            applyFilter(*kind, *out, settings, s->documentCurve(), 1, uint32_t(integer(p, "seed", 1)));
+            if (auto coverage = s->selectionOnGridF(transform, deep->width(), deep->height())) blendThroughCoverage(*out, *deep, *coverage);
+            LayerTransform placed = transform;
+            ImageFPtr image = out;
+            if (trims) image = trimToPixels(*out, transform, placed);
+            s->commitPixels(image, placed, QString::fromUtf8(filterKindName(*kind)));
+            return QJsonObject{{"applied", QString::fromUtf8(filterKindName(*kind))}};
+        }
         if (auto deep = s->adjustmentSource16(margin, transform)) {
             auto out = std::make_shared<Image16>(*deep);
             applyFilter(*kind, *out, settings, 1, uint32_t(integer(p, "seed", 1)));

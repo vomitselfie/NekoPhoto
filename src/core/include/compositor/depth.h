@@ -113,6 +113,14 @@ std::shared_ptr<Image16> encodeImage16(const ImageF& image, const TransferCurve&
 std::shared_ptr<GrayImage> narrowGrayF(const GrayF& image);
 std::shared_ptr<Gray16> narrowGrayF16(const GrayF& image);
 
+/// One straight linear sample to the document's encoding and back, continued above 1 so light brighter than white keeps
+/// its place (docs/bit-depth.md, "32 bits"): within 0..1 exactly the curve (fromLinearExact / toLinear), above 1 its
+/// power law carried on (sRGB's own formula, a gamma curve's gamma, a table curve's estimated gamma), so both are
+/// continuous and increasing and each undoes the other. Negative values are 0. What 32-bit adjustments and Add Noise
+/// work through: their settings are written for encoded values, as the 8-bit histogram shows them.
+float encodeExtended(const TransferCurve& curve, float linear);
+float decodeExtended(const TransferCurve& curve, float encoded);
+
 /// NaN and infinities out of a float buffer, at every entry point (files, conversions, automation): NaN becomes 0, an
 /// infinity or a colour beyond 65504 (half float's largest) is held there, negative colour is 0, alpha and coverage are
 /// clamped to 0..1. Returns how many samples were changed.

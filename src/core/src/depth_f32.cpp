@@ -389,4 +389,24 @@ void unpredictFloatRow(uint8_t* row, int width, float* samples) {
     }
 }
 
+float encodeExtended(const TransferCurve& curve, float linear) {
+    if (!(linear > 0)) return 0;
+    if (linear <= 1) return curve.fromLinearExact(linear);
+    switch (curve.kind()) {
+    case TransferCurve::Kind::SRGB: return 1.055f * std::pow(linear, 1.0f / 2.4f) - 0.055f;
+    case TransferCurve::Kind::Gamma: case TransferCurve::Kind::Table: return std::pow(linear, float(1 / curve.gamma()));
+    }
+    return linear;
+}
+
+float decodeExtended(const TransferCurve& curve, float encoded) {
+    if (!(encoded > 0)) return 0;
+    if (encoded <= 1) return curve.toLinear(encoded);
+    switch (curve.kind()) {
+    case TransferCurve::Kind::SRGB: return std::pow((encoded + 0.055f) / 1.055f, 2.4f);
+    case TransferCurve::Kind::Gamma: case TransferCurve::Kind::Table: return std::pow(encoded, float(curve.gamma()));
+    }
+    return encoded;
+}
+
 } // namespace compositor

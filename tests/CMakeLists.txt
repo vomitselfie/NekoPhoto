@@ -119,6 +119,10 @@ add_executable(depth_float_tests depth_float_tests.cpp float_reference.cpp)
 target_link_libraries(depth_float_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME depth_float_tests COMMAND depth_float_tests)
 
+add_executable(depth_float_edit_tests depth_float_edit_tests.cpp float_reference.cpp)
+target_link_libraries(depth_float_edit_tests PRIVATE compositor::core compositor_warnings)
+add_test(NAME depth_float_edit_tests COMMAND depth_float_edit_tests)
+
 add_executable(depth_float_format_tests depth_float_format_tests.cpp)
 target_link_libraries(depth_float_format_tests PRIVATE compositor::core compositor_warnings z)
 add_test(NAME depth_float_format_tests COMMAND depth_float_format_tests)

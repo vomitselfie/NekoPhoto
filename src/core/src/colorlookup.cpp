@@ -252,4 +252,39 @@ void applyColorLookupImpl(I& image, const ColorLookupSettings& s) {
 void applyColorLookup(Image& image, const ColorLookupSettings& s) { applyColorLookupImpl(image, s); }
 void applyColorLookup(Image16& image, const ColorLookupSettings& s) { applyColorLookupImpl(image, s); }
 
+void applyColorLookup(ImageF& image, const ColorLookupSettings& s, const TransferCurve& curve) {
+    // The 8- and 16-bit lookup on the encoded colour (forEachEncodedColour), trilinear or per channel.
+    const auto table = tableFor(s);
+    if (!table) return;
+    const Table& t = *table;
+    const int n = t.size;
+    forEachEncodedColour(image, curve, [&](double& r, double& g, double& b) {
+        const double in[3] = {r, g, b};
+        double out[3];
+        double pos[3];
+        int i0[3];
+        double f[3];
+        for (int c = 0; c < 3; c++) {
+            pos[c] = std::clamp((in[c] - t.domainMin[c]) / (t.domainMax[c] - t.domainMin[c]), 0.0, 1.0) * (n - 1);
+            i0[c] = std::min(n - 2, int(pos[c]));
+            f[c] = pos[c] - i0[c];
+        }
+        if (t.oneD) {
+            for (int c = 0; c < 3; c++) out[c] = t.rgb[size_t(i0[c]) * 3 + size_t(c)] * (1 - f[c]) + t.rgb[size_t(i0[c] + 1) * 3 + size_t(c)] * f[c];
+        } else {
+            auto at = [&](int ri, int gi, int bi, int c) { return double(t.rgb[(size_t(ri) + size_t(n) * (size_t(gi) + size_t(n) * size_t(bi))) * 3 + size_t(c)]); };
+            for (int c = 0; c < 3; c++) {
+                double acc = 0;
+                for (int k = 0; k < 8; k++) {
+                    const int dr = k & 1, dg = (k >> 1) & 1, db = (k >> 2) & 1;
+                    const double w = (dr ? f[0] : 1 - f[0]) * (dg ? f[1] : 1 - f[1]) * (db ? f[2] : 1 - f[2]);
+                    acc += w * at(i0[0] + dr, i0[1] + dg, i0[2] + db, c);
+                }
+                out[c] = acc;
+            }
+        }
+        r = out[0]; g = out[1]; b = out[2];
+    });
+}
+
 } // namespace compositor

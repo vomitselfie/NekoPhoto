@@ -10,6 +10,8 @@
 
 namespace compositor {
 
+class TransferCurve;
+
 enum class FilterKind { GaussianBlur, MotionBlur, AddNoise, LensCorrection };
 const char* filterKindName(FilterKind kind);
 
@@ -58,5 +60,15 @@ void applyFilter(FilterKind kind, Image16& image, const FilterSettings& settings
 std::shared_ptr<Gray16> selectionInGrid(const Gray16& selection, const Affine& pixelToDocument, int width, int height);
 void blendThroughCoverage(Image16& adjusted, const Image16& original, const Gray16& coverage);
 void blendThroughCoverage(Gray16& adjusted, const Gray16& original, const Gray16& coverage);
+
+// The same at 32 bits (filters_f32.cpp), on premultiplied linear float: the blurs average light as it is, Add Noise
+// adds the same pattern to the colour encoded through `curve` (the document's, encodedTransfer), Lens Correction
+// resamples with exact weights. Coverage blends in float.
+std::shared_ptr<ImageF> growImage(const ImageF& image, const LayerTransform& transform, int margin, LayerTransform& grownTransform);
+std::shared_ptr<ImageF> trimToPixels(const ImageF& image, const LayerTransform& transform, LayerTransform& trimmedTransform);
+void applyFilter(FilterKind kind, ImageF& image, const FilterSettings& settings, const TransferCurve& curve, double scale = 1, uint32_t seed = 0);
+std::shared_ptr<GrayF> selectionInGrid(const GrayF& selection, const Affine& pixelToDocument, int width, int height);
+void blendThroughCoverage(ImageF& adjusted, const ImageF& original, const GrayF& coverage);
+void blendThroughCoverage(GrayF& adjusted, const GrayF& original, const GrayF& coverage);
 
 } // namespace compositor
