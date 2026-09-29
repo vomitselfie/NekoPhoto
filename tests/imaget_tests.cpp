@@ -174,8 +174,12 @@ TEST_CASE(history_counts_sixteen_bit_pixels) {
     for (int i = 0; i < 3; i++) {
         history.begin("Edit", doc, doc.layers[0].id);
         const Asset before = *doc.layers[0].asset;
-        doc.layers[0].asset = Asset::make(Image16Ptr(std::make_shared<Image16>(64, 32)), "deep");
-        LayerMask mask; mask.asset = MaskAsset::make(Gray16Ptr(std::make_shared<Gray16>(64, 32, 100)));
+        // Every pixel changes, so history keeps whole buffers rather than region patches.
+        auto next = std::make_shared<Image16>(64, 32);
+        const uint16_t value[4] = {uint16_t(1000 * (i + 1)), 0, 0, 32768};
+        next->fill(value);
+        doc.layers[0].asset = Asset::make(Image16Ptr(next), "deep");
+        LayerMask mask; mask.asset = MaskAsset::make(Gray16Ptr(std::make_shared<Gray16>(64, 32, uint16_t(100 + i))));
         doc.layers[0].mask = mask;
         history.end(doc, doc.layers[0].id);
         // The replaced raster (and its thumbnail) is now only in the history; so is the mask from the edit before.

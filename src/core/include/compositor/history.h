@@ -1,5 +1,7 @@
 // Undo history: whole-document value snapshots that share image buffers, so a
 // layer edit records no pixel copies. A port of Document/DocumentHistory.swift.
+// A pixel edit confined to under half of a layer's, mask's, channel's or the selection's buffer keeps only the
+// region's before and after crops (`RegionPatch`); the full buffer lives once, in the document as it stands.
 #pragma once
 #include "document.h"
 #include <cstdint>
@@ -60,18 +62,62 @@ public:
 
     /// Bytes retained only by history, excluding images in the live document.
     size_t retainedBytes(const std::optional<Document>& current) const;
+    /// How many buffers the recorded entries keep as region patches rather than whole (for tests).
+    int patchCount() const;
+
+    /// The part of one buffer an entry changed, kept as its before and after crops. Both snapshots of the entry
+    /// hold no buffer in that slot: undo pastes `before` into a copy of the buffer in the document as it stands
+    /// (the entry's after state), redo pastes `after` into a copy of the undone one. An `inherited` slot is one
+    /// the entry did not change, whose buffer a later entry patched: both sides take the neighbouring state's.
+    struct RegionPatch {
+        bool inherited = false;
+        const void* source = nullptr;   // the before buffer's identity, while the entry is recorded
+        enum class Slot : uint8_t { LayerPixels, LayerMask, Channel, Selection };
+        Slot slot = Slot::LayerPixels;
+        Uuid id;                  // the layer's or channel's; empty for the selection
+        int x = 0, y = 0, width = 0, height = 0;
+        std::vector<uint8_t> before, after;   // rows of width * bytes per pixel, top-down
+        size_t bytes() const { return before.size() + after.size(); }
+    };
 
 private:
     struct Entry {
         std::string name;
         Snapshot before, after;
         Rect region;
+        /// Buffers the snapshots leave empty, kept as crops of the changed region.
+        std::vector<RegionPatch> patches;
+        size_t patchBytes = 0;
         /// The heavy buffers the two snapshots hold (identity, bytes), each once, listed when the entry is made:
         /// snapshots never change, so counting the history's memory need not walk their layers again.
         std::vector<std::pair<const void*, size_t>> buffers;
     };
-    static Entry makeEntry(std::string name, Snapshot before, Snapshot after, Rect region);
+    /// `previous`: the entry before it, whose after state must be where this one starts for a slot to be patched
+    /// (a change made outside any step breaks that chain).
+    static Entry makeEntry(std::string name, Snapshot before, Snapshot after, Rect region, const Entry* previous);
     void trim(const std::optional<Document>& current);
+    /// Lists the entry's buffers and patch bytes; true when its after side holds a buffer its before side does not.
+    static bool countBuffers(Entry& entry);
+    /// Entries next to `list.back()` holding, unchanged, a buffer it patched (`changed`: the patch and the
+    /// buffer's identity) leave it to the chain.
+    static void inheritPatched(std::vector<Entry>& list, const std::vector<std::pair<const RegionPatch*, const void*>>& changed);
+    /// After an undo or redo moved `list.back()`: the same for the buffers it stepped away from.
+    void shareStepped(std::vector<Entry>& list);
+    /// A patched slot's buffer: `image` for layer pixels, `gray` for the others.
+    struct SlotBuffer { AnyImage image; AnyGray gray; const void* identity() const { return image ? image.identity() : gray.identity(); } };
+    /// The buffers of the document as the last recorded, undone or redone step left it, for the slots the
+    /// neighbouring entries patch: what their crops are pasted into.
+    struct TipBuffer { RegionPatch::Slot slot; Uuid id; SlotBuffer buffer; };
+    const SlotBuffer* tipBuffer(const RegionPatch& patch) const;
+    std::optional<SlotBuffer> tipSlot(const RegionPatch& patch) const { auto* b = tipBuffer(patch); return b ? std::optional<SlotBuffer>(*b) : std::nullopt; }
+    static SlotBuffer readSlot(const Document& document, RegionPatch::Slot slot, const Uuid& id);
+    void setTip(const Document* document);
+    /// `snapshot` with its patched slots filled from `base` (the buffers at the entry's other side), pasting the
+    /// before or after crops; with `same`, `base` already is that side and its buffers are taken as they are.
+    template <class Base>
+    static Snapshot materialize(const Snapshot& snapshot, const std::vector<RegionPatch>& patches, Base&& base, bool before, bool same = false);
+    /// Makes `entry` whole again (no patches) from the tip buffers, its after state.
+    void seal(Entry& entry) const;
     uint64_t nextRevision() { return ++counter_; }
 
     std::vector<Entry> past_, future_;
@@ -79,6 +125,7 @@ private:
     uint64_t revision_ = 1;
     uint64_t savedRevision_ = 1;
     std::optional<Snapshot> pending_;
+    std::vector<TipBuffer> tip_;
     std::string pendingName_ = "Edit";
     Rect pendingRegion_, stepRegion_;
     int depth_ = 0;
