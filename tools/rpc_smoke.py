@@ -395,6 +395,7 @@ def sixteen_bit(rpc):
         assert rpc.call("history.info")["undo"] == "Remove Background"
         assert rpc.call("layers.get", id=layer["id"])["mask"], "a 16-bit mask"
         rpc.call("history.undo")
+        rpc.call("layers.select", id=layer["id"])   # the pixels again, not the mask it selected
     except RuntimeError as e:
         assert "16-bit" not in str(e), e
         print("removeBackground at 16 bits:", e)
