@@ -243,7 +243,7 @@ bool EditorSession::paintBucket(QPointF documentPoint) {
     if (x < 0 || y < 0 || x >= document_->width || y >= document_->height) return false;
     const Layer* layer = activeLayer();
     if (!layer || layer->isGroup || layer->adjustment) return false;
-    if (document_->colorMode != ColorMode::RGB) return paintBucketMode(*layer, x, y);
+    if (document_->colorMode != ColorMode::RGB && !(isMaskSelected_ && layer->mask)) return paintBucketMode(*layer, x, y);
     if (document_->sampleType == SampleType::U16) {
         // What to fill is chosen on the pixels as the canvas shows them (Tolerance counts 8-bit levels, as the Magic
         // Wand's does); the fill itself, its antialiased edge and the selection are 16-bit.

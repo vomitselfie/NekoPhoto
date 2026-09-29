@@ -90,20 +90,36 @@ paints L, a and b. Nothing is painted in RGB and converted back.
 - **Clone Stamp** copies the document's own samples (the composite at its layout, or the layer alone), and **moving or
   duplicating selected pixels** with the Move tool carries every sample. **Merge Down**, **Merge Layers** and **Layer
   Mask ▸ Apply** work at the layout too.
-- **Lab only, for now**: Spot Healing and the Healing Brush, and Blur, Sharpen, Smudge and Liquify, which work on L, a
-  and b as the RGB tools do on red, green and blue. In CMYK they are greyed ("Not available in CMYK mode yet").
+- **Retouching**, on the document's own samples in both modes:
+  - **Spot Healing, the Healing Brush and Patch**. In Lab they heal L, a and b as the RGB tools heal red, green and
+    blue. In CMYK every one of the five samples is healed (the membrane that matches the tone to the edge runs on each
+    ink, K included); where a spot heals from is chosen on the plates' look reduced to 8 bits (each of C, M and Y as
+    stored times K), for deciding only. Content-Aware synthesis works on RGBA, so in CMYK the Content-Aware type copies
+    the best-matching nearby patch, as Proximity Match does with a wider search.
+  - **Blur, Sharpen, Smudge and Liquify** blur, sharpen, carry and resample every sample (five in CMYK).
+  - **Dodge and Burn** move L along their range's curve in Lab, a and b kept (Lab holds colour apart from lightness,
+    so Protect Tones changes nothing there). In CMYK they move each plate's brightness (the ink inverted) along the
+    same curves, so Dodge removes ink and Burn adds it, black included. **Sponge** scales a and b in Lab (Saturate
+    doubles the chroma, Desaturate takes it away) and in CMYK works on cyan, magenta and yellow as the RGB Sponge
+    does on their complements, the black plate left alone.
+  - **The Paint Bucket** chooses what to fill on the native samples (the canvas as shown, or the layer alone): every
+    sample, alpha included, within Tolerance of the clicked pixel's, as Photoshop's bucket compares each channel. The
+    colour goes in through the profile, as the brush's does.
 - **The Eyedropper** reads the composite's inks or L, a, b (`color.sample` answers them as percentages or values) and
   sets the foreground colour to that colour converted through the document's profile to sRGB.
 - **Selections**: the Select menu, Quick Mask, loading a mask or channel and transforming the outline now work in CMYK
   and Lab (the selection is coverage, not colour); the Magic Wand and Quick Select, which read colour, wait.
 - Greyed for good: the **MyPaint** presets ("Not available in CMYK mode"): libmypaint mixes RGB and has no inks or Lab,
-  so its strokes could only be painted in RGB and converted, which NekoPhoto does not do. Not yet ("... mode yet"):
-  Dodge, Burn and Sponge, the Paint Bucket, Patch, and CMYK's healing and Blur/Smudge tools.
+  so its strokes could only be painted in RGB and converted, which NekoPhoto does not do.
 
 Checked by `paint_modes_tests`: black painted in CMYK at 8 and 16 bits is the inks Little CMS gives for black through
 the profile, within half a level, K and C, M, Y all laid; a Lab stroke's L, a and b are Little CMS's for the colour
 within a level; a CMYK gradient's ends and middle are the inks between the stops; moving and cloning carry all five
-samples. `rpc_smoke.py` paints, erases, clones, heals (Lab), blurs (Lab), merges and applies a mask in each mode.
+samples. `retouch_modes_tests` heals CMYK at 8 and 16 bits (every sample back to the surrounding inks), blurs a black
+edge in CMYK with the other plates kept, dodges L in Lab with a and b kept, burns ink in, sponges a and b to neutral,
+smudges and pushes black ink, and checks the bucket's choice on K and on Lab's a and b. `rpc_smoke.py` paints, erases,
+clones, heals, patches, blurs, sharpens, smudges, dodges, burns, sponges, fills with the bucket, merges and applies a
+mask in each mode.
 
 ## Photoshop files
 
@@ -120,8 +136,7 @@ samples. `rpc_smoke.py` paints, erases, clones, heals (Lab), blurs (Lab), merges
 
 ## Not yet
 
-Dodge, Burn and Sponge, the Paint Bucket, Patch, the Magic Wand and Quick Select, CMYK's healing and Blur/Smudge tools,
-most adjustments and filters, transforms of pixels, text and shapes as editable objects, and layer styles in CMYK and
+The Magic Wand and Quick Select, most adjustments and filters, transforms of pixels, text and shapes as editable objects, and layer styles in CMYK and
 Lab (greyed out with "Not available in CMYK mode yet"); exporting CMYK or Lab to PNG, JPEG, TIFF and the other formats
 (projects and PSD save them); CMYK JPEG and TIFF. Camera Raw, G'MIC and the MyPaint brushes stay RGB only ("Not
 available in CMYK mode", for good).
@@ -202,15 +217,25 @@ RGB で塗ってから変換することはありません。
 - **グラデーションツール**:各分岐点を変換し、分岐点の間はドキュメントのモード(インキ、または L・a・b)で補間します。
 - **コピースタンプ**はドキュメント自身の値をコピーし、移動ツールでの**選択ピクセルの移動と複製**もすべての値を運びます。
   **下のレイヤーと結合**、**レイヤーを結合**、**レイヤーマスク ▸ 適用**も同じです。
-- **今のところ Lab のみ**:スポット修復ブラシと修復ブラシ、ぼかし・シャープ・指先・ゆがみ(RGB の赤・緑・青と同じように
-  L・a・b に適用)。CMYK では「CMYK モードではまだ使用できません」とグレー表示になります。
+- **レタッチ**(どちらのモードでもドキュメント自身の値に適用):
+  - **スポット修復ブラシ、修復ブラシ、パッチ**:Lab では RGB の赤・緑・青と同じように L・a・b を修復します。CMYK では
+    5 つの値すべて(K を含む各インキ)を修復します。修復元の選択は、版の見た目を 8 bit にしたもの(C・M・Y それぞれの
+    値に K を掛けたもの)で判断するだけで、ピクセルは変換しません。コンテンツに応じた合成は RGBA で動くため、CMYK の
+    「コンテンツに応じる」は近傍で最もよく合うパッチを(近似色に合わせるより広く探して)コピーします。
+  - **ぼかし・シャープ・指先・ゆがみ**はすべての値(CMYK では 5 つ)をぼかし、シャープにし、運び、再サンプルします。
+  - **覆い焼き・焼き込み**:Lab では範囲のカーブに沿って L を動かし、a・b は変えません(保護トーンは Lab では影響
+    しません)。CMYK では各版の明るさ(インキの反転)を同じカーブで動かすため、覆い焼きはインキを減らし、焼き込みは
+    ブラックを含めてインキを増やします。**スポンジ**は Lab では a・b を拡大縮小し(彩度を上げると 2 倍、下げると 0)、
+    CMYK では RGB のスポンジが補色に行うのと同じようにシアン・マゼンタ・イエローに適用し、ブラックの版は変えません。
+  - **塗りつぶしツール**は塗る範囲をドキュメント自身の値(表示されている画像、またはレイヤーのみ)で決めます。
+    Photoshop と同じく、アルファを含むすべての値がクリックしたピクセルから許容値以内のピクセルを塗ります。色は
+    ブラシと同じくプロファイルを通して変換します。
 - **スポイトツール**は合成画像のインキまたは L・a・b を読み(`color.sample` が返します)、描画色にはそれをプロファイルで
   sRGB に変換した色を設定します。
 - **選択範囲**:選択範囲メニュー、クイックマスク、マスクやチャンネルの読み込み、境界線の変形が CMYK と Lab でも使えます
   (選択範囲は色ではなく範囲です)。色を読む自動選択ツールとクイック選択ツールはまだです。
 - **MyPaint** のプリセットは今後も使えません(「CMYK モードでは使用できません」)。libmypaint は RGB で混色し、インキや
-  Lab を持たないため、RGB で塗って変換するしかなく、NekoPhoto はそうしないからです。覆い焼き・焼き込み・スポンジ、
-  塗りつぶしツール、パッチ、CMYK の修復とぼかし・指先はまだです(「… モードではまだ使用できません」)。
+  Lab を持たないため、RGB で塗って変換するしかなく、NekoPhoto はそうしないからです。
 
 ### Photoshop ファイル
 
@@ -221,7 +246,6 @@ RGB に変換します。
 
 ### 未対応
 
-覆い焼き・焼き込み・スポンジ、塗りつぶしツール、パッチ、自動選択ツールとクイック選択ツール、CMYK の修復とぼかし・指先、
-多くの色調補正とフィルター、変形、編集可能なテキストとシェイプ、レイヤースタイルの描画(「CMYK モードではまだ使用
+自動選択ツールとクイック選択ツール、多くの色調補正とフィルター、変形、編集可能なテキストとシェイプ、レイヤースタイルの描画(「CMYK モードではまだ使用
 できません」と表示)、PNG・JPEG・TIFF などへの書き出し、CMYK の JPEG と TIFF、CMYK の
 分離不可能な描画モード。
