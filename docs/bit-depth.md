@@ -6,8 +6,8 @@ A document is 8 or 16 bits per channel, as in Photoshop: every layer, mask and t
 16 bits keep smooth gradients smooth through blending and masking, where 8 bits can band. Image ▸ Mode ▸
 8 Bits/Channel and 16 Bits/Channel switch a document between the two, as one undo step.
 
-This page says what works in a 16-bit document today and what is still to come. The design is in
-[high-bit-depth-plan.md](high-bit-depth-plan.md).
+This page says what works in a 16-bit document (everything NekoPhoto does) and how each part keeps its 16 bits. The
+design is in [high-bit-depth-plan.md](high-bit-depth-plan.md).
 
 ## Getting a 16-bit document
 
@@ -32,7 +32,24 @@ Files store 0 to 65535; the values are mapped when a file is read and written.
   Mixer, Selective Color, Posterize, Threshold, Color Lookup and Invert. Each works on the exact colour, so a smooth
   16-bit gradient stays smooth through a strong Levels or Curves. Posterize and Threshold choose their steps as the
   8-bit ones do; the Levels histogram has 256 bins at either depth.
-- **Filters**: Gaussian Blur, Motion Blur, Add Noise (the same pattern for the same seed) and Lens Correction.
+- **Filters**: Gaussian Blur, Motion Blur, Add Noise (the same pattern for the same seed), Lens Correction and Mosh.
+- **Camera Raw Filter**: every panel. Its kernels run on float colour with no rounding between the steps (the 8-bit
+  filter rounds to a byte after each), and the result is rounded to 16 bits once, so a smooth 16-bit gradient keeps its
+  steps through Exposure and the curves. Defringe decides which pixels are fringe on their colour rounded to 8 bits, so
+  a colour at the edge of a hue window is treated as at 8 bits. On an 8-bit image converted to 16 bits, each panel lands
+  within a level of the 8-bit filter; every panel at once lands two levels off on 0.19% of samples, the 8-bit
+  filter's own rounding after each of its steps.
+- **G'MIC**: G'MIC works in float on a 0..255 scale, so a 16-bit layer goes to it as float colour on that scale and
+  comes back at 16 bits, in-process through libgmic or through a float file for the `gmic` program; nothing is
+  reduced to 8 bits on the way. On an 8-bit image converted to 16 bits, blur, unsharp, sepia and sharpen land within
+  a level of the 8-bit result; Solarize over half-transparent pixels lands six levels off on 0.9% of samples, because
+  the 8-bit run hands G'MIC their colour rounded to whole levels and Solarize scales by the range of the whole image
+  (none on an opaque image).
+- **Remove Background**: the segmentation model takes 8-bit input, so the model and the refinement's guide see the
+  layer reduced to 8 bits; the mask stays float through the refinement (Refine Edges, matting, cleanup, Shift Edge,
+  Contrast) and is laid down as a 16-bit mask, and Clean edge colours works on the 16-bit pixels. On an 8-bit image the
+  16-bit mask is within a level of the 8-bit one, with several times as many distinct soft values, and the cleaned
+  colours are within a level.
 - **Selections**: the Rectangular and Elliptical Marquee, Lasso and Polygonal Lasso, Magic Wand (with Refine Edge and
   the smart wand) and Quick Select tools; Select All, Deselect, Inverse, Expand, Contract, Feather, Smooth and Border;
   Load as Selection from a layer or its mask; Edit in Quick Mask Mode; moving the selection outline; Add Mask from
@@ -73,21 +90,29 @@ Files store 0 to 65535; the values are mapped when a file is read and written.
   in a 16-bit document stays an 8-bit source (its instances are drawn at 16 bits), and a 16-bit PNG, TIFF or PSB placed
   in an 8-bit document stays 16-bit, so converting the document back to 16 bits later loses nothing. Convert to Smart
   Object in a 16-bit document makes a 16-bit PSB; Edit Contents opens the contents at their own depth.
-- **Smart Filters**: every Smart Filter NekoPhoto draws, except Unsharp Mask (below), is drawn at 16 bits on the
-  instance: Gaussian, Motion, Box, Surface and Radial Blur, High Pass, Median, Dust & Scratches, Add Noise, Mosaic,
-  Emboss and Plastic Wrap, with their opacity, blend mode and the shared filter mask. On an 8-bit image each is
-  within a level of its 8-bit result ([smart-objects.md](smart-objects.md) has the figures).
+- **Smart Filters**: every Smart Filter NekoPhoto draws is drawn at 16 bits on the instance: Gaussian, Motion, Box,
+  Surface and Radial Blur, High Pass, Median, Dust & Scratches, Unsharp Mask, Add Noise, Mosaic, Emboss and Plastic
+  Wrap, with their opacity, blend mode and the shared filter mask. On an 8-bit image each is within a level of its
+  8-bit result ([smart-objects.md](smart-objects.md) has the figures). Unsharp Mask needed its own calibration: the
+  8-bit filter rounds its blurred copy to whole levels and the amount multiplies that rounding (two to four levels at
+  usual amounts), so on colour that is 8-bit colour converted, the blurred copy is taken in 8-bit levels as the 8-bit
+  filter takes it; on 16-bit colour proper it is exact, with no 8-bit steps for the amount to magnify.
+- **Artboards and the timeline**: artboards with their backgrounds and clipping, the Artboard tool, and the
+  timeline's frames, delays, looping and playback.
 - **Importing** an image as a layer (it takes the document's depth).
 - **Saving and exporting**: projects at 16 bits (a 16-bit smart object source is kept as a 16-bit PNG beside the
   project); Photoshop PSD at 16 bits, smart objects included; PNG at 16 bits; TIFF at 16 bits (through
   Qt's TIFF plugin, which writes 16 bits); JPEG, WebP, TGA, ICO and GIF are 8-bit formats, so they get the document
-  dithered down to 8 bits, and the status bar says so.
+  dithered down to 8 bits, and the status bar says so. An animated GIF's frames are rendered at 16 bits and dithered
+  down the same way. Export Artboards and Export Slices write 16-bit PNGs, or JPEGs dithered down (saying so). SVG
+  export embeds the images it needs (pixels, text, styled layers, folder masks) as 16-bit PNGs, so it keeps the 16 bits.
 - **Automation**: `image.mode` converts; `document.info` reports `bits`; the selection, `pixels.adjust`,
   `pixels.filter`, `pixels.fill`, `pixels.clear`, the content-aware methods, `image.resize`, `image.trim`,
   `canvas.crop`, `layers.warp`, `layers.setCage`, `brush.stroke` (every tool it takes), `gradient.draw`,
   `pixels.bucket`, `pixels.patch`, `layers.merge`, `text.*`, `shape.draw`, `shape.set`, `paths.*`, `vectorMask.*`,
-  `layers.setStyle`, `layers.applyStyle` and every `smartObject.*` method work on a 16-bit document
-  ([automation.md](automation.md)).
+  `layers.setStyle`, `layers.applyStyle`, every `smartObject.*` method, `pixels.cameraRaw`, `pixels.gmic`,
+  `pixels.removeBackground`, `artboards.*`, `slices.*` and `timeline.*` work on a 16-bit document; the exports say
+  in `bits` what depth they wrote and, when they dithered down to 8, `note` says so ([automation.md](automation.md)).
 
 A 16-bit PSD that NekoPhoto opened and exports again as PSD keeps each unedited layer's channel data byte for byte,
 so a round trip does not lose Photoshop's full 16 bits; a layer you edit (and a PSB) is written from its 0..32768
@@ -98,17 +123,11 @@ PSD that has none, NekoPhoto draws each Smart Filter stack over the whole canvas
 filters stay editable; a filter mask painted in NekoPhoto is not kept in a 16-bit PSD (it is in a project and an 8-bit
 PSD).
 
-## Not yet: greyed out in a 16-bit document
+## Nothing greyed out
 
-What has not been ported is greyed out, with the tooltip "Not available in 16-bit yet", and automation answers
-"<method> is not available for 16-bit documents yet". For now, convert to 8 bits for these:
-
-- Camera Raw Filter, G'MIC and Remove Background;
-- Unsharp Mask as a Smart Filter ("Unsharp Mask is not available as a Smart Filter in 16-bit documents yet"): its
-  16-bit version is two to four levels from the 8-bit one at usual amounts, more than the one level the others keep,
-  so it waits for a calibration of its own. An instance that already has it shows the pixels it was saved with;
-- artboards, and the timeline;
-- SVG export, and exporting artboards and slices.
+Every menu item, tool and automation method works in a 16-bit document. What still reduces to 8 bits does so because
+the format or the model takes 8 bits, and says so: the 8-bit export formats (dithered down), the clipboard for other
+apps, and the input of the segmentation models (the masks they make are refined and kept at 16 bits).
 
 Colour management works at both depths: a 16-bit document keeps its profile, converts with Convert to Profile at
 16 bits, and is shown through the monitor profile in the same pass that reduces it to the screen's 8 bits
@@ -159,7 +178,21 @@ Photoshop と同じく 16 bit の値は 0〜32768 で保持し、合成は正確
   階調の反転。どれも正確な色で計算するので、滑らかな 16 bit のグラデーションは強いレベル補正やトーンカーブでも
   滑らかなままです。ポスタリゼーションと 2 階調化は 8 bit と同じ段階を選びます。レベル補正のヒストグラムは
   どちらのビット数でも 256 段階です。
-- **フィルター**:ぼかし(ガウス)、ぼかし(移動)、ノイズを加える(同じシードで同じパターン)、レンズ補正。
+- **フィルター**:ぼかし(ガウス)、ぼかし(移動)、ノイズを加える(同じシードで同じパターン)、レンズ補正、Mosh。
+- **Camera Raw フィルター**:すべてのパネル。処理は浮動小数点の色で行い、途中で丸めず(8 bit 版は各段階で 8 bit に
+  丸めます)、最後に 1 回だけ 16 bit に丸めるので、滑らかな 16 bit のグラデーションは露光量やカーブを通しても滑らかな
+  ままです。フリンジ除去はどのピクセルがフリンジかを 8 bit に丸めた色で決めるため、色相の範囲の境目にある色は 8 bit と
+  同じ扱いになります。8 bit から変換した画像では各パネルとも 8 bit 版と 1 段階以内、すべてのパネルを同時に使うと
+  0.19% のサンプルで 2 段階ずれます(8 bit 版が段階ごとに丸めるため)。
+- **G'MIC**:G'MIC は 0〜255 の尺度の浮動小数点で処理するので、16 bit のレイヤーはその尺度の浮動小数点の色として渡し、
+  16 bit で受け取ります(libgmic によるプロセス内の実行でも、`gmic` プログラムへの浮動小数点ファイル経由でも)。途中で
+  8 bit には落としません。8 bit から変換した画像では、blur・unsharp・sepia・sharpen は 8 bit の結果と 1 段階以内です。
+  半透明のピクセルにかけた Solarize は 0.9% のサンプルで 6 段階ずれます:8 bit では半透明のピクセルの色を 8 bit に
+  丸めて渡し、Solarize は画像全体の範囲で尺度を決めるためです(不透明な画像ではずれません)。
+- **背景を削除**:セグメンテーションのモデルは 8 bit の入力を取るため、モデルと調整のガイドは 8 bit に落とした
+  レイヤーを見ます。マスクは調整(エッジを調整、マッティング、クリーンアップ、エッジをシフト、コントラスト)の間
+  浮動小数点のまま保ち、16 bit のマスクとして作ります。エッジの色の除去は 16 bit のピクセルで行います。8 bit の画像
+  では 16 bit のマスクは 8 bit のマスクと 1 段階以内(中間の値は何倍も細かく)、除去後の色も 1 段階以内です。
 - **選択範囲**:長方形選択・楕円形選択、なげなわ・多角形選択、自動選択(エッジの調整とスマート自動選択を含む)、
   クイック選択の各ツール。すべてを選択、選択を解除、選択範囲を反転、拡張、縮小、境界をぼかす、滑らかに、
   境界線。レイヤーやマスクから選択範囲を読み込む、クイックマスクモードで編集、選択範囲の枠の移動、選択範囲から
@@ -202,20 +235,28 @@ Photoshop と同じく 16 bit の値は 0〜32768 で保持し、合成は正確
   ドキュメントに配置した 8 bit の PNG は 8 bit のソースのまま(インスタンスは 16 bit で描画)、8 bit のドキュメントに
   配置した 16 bit の PNG・TIFF・PSB は 16 bit のままなので、後でドキュメントを 16 bit に戻しても失われません。16 bit
   のドキュメントでスマートオブジェクトに変換すると 16 bit の PSB になり、コンテンツを編集は内容をそのビット数で開きます。
-- **スマートフィルター**:NekoPhoto が描画するスマートフィルターは、アンシャープマスク(後述)を除いてすべて
-  インスタンス上で 16 bit で描画します:ぼかし(ガウス)、ぼかし(移動)、ぼかし(ボックス)、ぼかし(表面)、ぼかし
-  (放射状)、ハイパス、中間値、ダスト&スクラッチ、ノイズを加える、モザイク、エンボス、ラップ。不透明度、描画モード、
-  共有のフィルターマスクも含みます。8 bit の画像ではそれぞれ 8 bit の結果と 1 段階以内です(数値は
-  [smart-objects.md](smart-objects.md))。
+- **スマートフィルター**:NekoPhoto が描画するスマートフィルターはすべてインスタンス上で 16 bit で描画します:ぼかし
+  (ガウス)、ぼかし(移動)、ぼかし(ボックス)、ぼかし(表面)、ぼかし(放射状)、ハイパス、中間値、ダスト&スクラッチ、
+  アンシャープマスク、ノイズを加える、モザイク、エンボス、ラップ。不透明度、描画モード、共有のフィルターマスクも
+  含みます。8 bit の画像ではそれぞれ 8 bit の結果と 1 段階以内です(数値は [smart-objects.md](smart-objects.md))。
+  アンシャープマスクには専用の調整が必要でした:8 bit 版はぼかしたコピーを 8 bit に丸め、量がその丸めを拡大する
+  (通常の量で 2〜4 段階)ため、8 bit から変換した色ではぼかしたコピーを 8 bit 版と同じく 8 bit の段階で求めます。
+  本来の 16 bit の色では正確に求めるので、量が拡大する 8 bit の段差はありません。
+- **アートボードとタイムライン**:背景とクリッピングを含むアートボード、アートボードツール、タイムラインの
+  フレーム・遅延時間・ループ・再生。
 - **画像の読み込み**(ドキュメントのビット数に合わせます)。
 - **保存と書き出し**:16 bit のプロジェクト(16 bit のスマートオブジェクトのソースは 16 bit の PNG として保存)、
   スマートオブジェクトを含む 16 bit の PSD、16 bit の PNG、16 bit の TIFF(Qt の TIFF プラグイン経由)。
   JPEG・WebP・TGA・ICO・GIF は 8 bit の形式なので、ディザをかけて 8 bit に変換し、ステータスバーでお知らせします。
+  アニメーション GIF の各フレームも 16 bit で描画してから同じようにディザで 8 bit にします。アートボードとスライスの
+  書き出しは 16 bit の PNG、または(お知らせのうえ)ディザで 8 bit にした JPEG です。SVG の書き出しは必要な画像
+  (ピクセル、テキスト、スタイル付きのレイヤー、グループのマスク)を 16 bit の PNG として埋め込むので、16 bit のままです。
 - **自動化**:`image.mode` で変換、`document.info` の `bits` でビット数がわかります。選択範囲、`pixels.adjust`、
   `pixels.filter`、`pixels.fill`、`pixels.clear`、コンテンツに応じた各メソッド、`image.resize`、`image.trim`、
   `canvas.crop`、`layers.warp`、`layers.setCage`、`brush.stroke`(指定できるすべてのツール)、`gradient.draw`、
-  `pixels.bucket`、`pixels.patch`、`layers.merge`、すべての `smartObject.*` メソッドも 16 bit のドキュメントで
-  使えます。
+  `pixels.bucket`、`pixels.patch`、`layers.merge`、すべての `smartObject.*` メソッド、`pixels.cameraRaw`、
+  `pixels.gmic`、`pixels.removeBackground`、`artboards.*`、`slices.*`、`timeline.*` も 16 bit のドキュメントで
+  使えます。書き出しは書いたビット数を `bits` で返し、ディザで 8 bit にしたときは `note` でお知らせします。
 
 NekoPhoto で開いた 16 bit の PSD を PSD に書き出すと、編集していないレイヤーのチャンネルデータはバイト単位でそのまま
 戻るので、Photoshop の 16 bit の値は失われません。編集したレイヤー(と PSB)は 0〜32768 の値から書き出すため、
@@ -226,17 +267,11 @@ NekoPhoto で開いた 16 bit の PSD を PSD に書き出すと、編集して�
 マスクをすべて白として描画するので、フィルターは編集できるままです。NekoPhoto で描いたフィルターマスクは 16 bit の
 PSD には残りません(プロジェクトと 8 bit の PSD には残ります)。
 
-### まだ使えないもの(16 bit のドキュメントではグレー表示)
+### グレー表示になるものはありません
 
-移植していない機能はグレー表示になり、ツールチップに「16 bit/チャンネルではまだ使用できません」と表示されます。
-自動化では「<メソッド> is not available for 16-bit documents yet」が返ります。当面は 8 bit に変換して使ってください。
-
-- Camera Raw フィルター、G'MIC、背景を削除
-- スマートフィルターとしてのアンシャープマスク(「Unsharp Mask is not available as a Smart Filter in 16-bit
-  documents yet」):16 bit 版は通常の量で 8 bit 版と 2〜4 段階ずれ、ほかのフィルターが保つ 1 段階を超えるため、専用の
-  調整を待ちます。すでに適用されているインスタンスは保存されたときのピクセルを表示します
-- アートボード、タイムライン
-- SVG の書き出し、アートボードとスライスの書き出し
+すべてのメニュー項目、ツール、自動化のメソッドが 16 bit のドキュメントで使えます。8 bit に落とすのは形式やモデルが
+8 bit しか受け取らない場合だけで、そのときはお知らせします:8 bit の書き出し形式(ディザで変換)、他のアプリへの
+クリップボード、セグメンテーションのモデルへの入力(モデルが作るマスクは 16 bit で調整・保持します)。
 
 カラーマネジメントはどちらのビット数でも使えます。16 bit のドキュメントもプロファイルを持ち、プロファイル変換は 16 bit の
 まま行い、画面の 8 bit への変換と同じ処理でモニタープロファイルを通して表示します([color-management.md](color-management.md))。

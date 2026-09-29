@@ -357,8 +357,44 @@ details and the calibration table: [smart-objects.md](smart-objects.md#at-16-bit
   plus K.psd 118 files / 3,975 blocks at 8 and 16 bits; K.psd at 16 bits keeps its three editable and three linked
   smart objects, redraws the editable ones at 16 bits and keeps them editable through a 16-bit PSD; rpc smoke's
   16-bit section places, converts, edits contents, filters, paints the filter mask, warps, replaces and rasterizes.
-- Still gated at 16 bits: Unsharp Mask as a Smart Filter, Camera Raw, G'MIC, Remove Background, artboards, the
-  timeline, SVG and slice export.
+- Still gated at 16 bits then: Unsharp Mask as a Smart Filter, Camera Raw, G'MIC, Remove Background, artboards, the
+  timeline, SVG and slice export (all ported since: the next note).
+
+**The last 16-bit gates (2026-09-28).** Nothing is greyed out in a 16-bit document any more. User-facing summary:
+[bit-depth.md](bit-depth.md). Each item removed its gate (supports.cpp, the menu feature, the automation map) and has
+U16-vs-U8 calibration tests and U16 render-hash scenes; existing hashes unchanged, 16 new scenes.
+
+- Unsharp Mask as a Smart Filter (`smartfilter_render16.cpp`): the 8-bit kernel rounds its low-pass to whole levels
+  after each pass and the amount multiplies that rounding, which was the 2 to 4 levels. On colour on the 8-bit grid
+  (within half a 15-bit step over the alpha, so an unpremultiplied edge counts) the low-pass runs in 8-bit levels
+  exactly as the 8-bit kernel's; off the grid it is exact. Threshold handling was not the cause. Within one level at
+  50/1/0, 150/2/8, 175/2.5/7 and 400/3/2 (`smartfilter_tests`); a fine ramp stays within two 15-bit steps of itself at
+  300%.
+- Camera Raw (`src/pixels/CameraRawPixelsBody.inc`): the kernels compiled twice, over bytes (unchanged) and over
+  premultiplied float on the 0..255 scale with no rounding between the steps; `applyCameraRaw(Image16&)` rounds once.
+  Defringe decides its hue windows on the colour rounded to 8 bits (`CR_DECISION`), else a colour at a window's edge
+  flipped (56 levels on 9 samples). Grain uses the Grain adjustment's 16-bit kernel. Every panel within one level on an
+  8-bit picture with a half-transparent corner; all panels at once two levels on 0.19% of samples (`cameraraw_tests`).
+- G'MIC (`app/Gmic.cpp`): 16-bit layers go in as straight float on G'MIC's 0..255 scale, in-process or through a float
+  `.cimg` for the executable (G'MIC writes the narrowest exact type back; the reader takes them all), and come back at
+  16 bits; a sample that is an 8-bit level widened goes in as that level. The executable's 8-bit PNG path now cuts to
+  0..255 and rounds (an overshoot wrote a 16-bit PNG of raw values, read back scaled down; CImg truncates) and keeps the
+  alpha of a gray or RGB result, as the in-process path does. blur, unsharp, sepia, sharpen within one level; Solarize
+  over half-transparent pixels six levels on 0.9% (the 8-bit run's rounded straight colour through a range-wide
+  scale; zero when opaque) (`gmic_catalogue_tests`, runs when `gmic` is installed).
+- Remove Background: model and guide on the layer narrowed to 8 bits; `AlphaPlane` through refinement, committed as a
+  16-bit mask (`applySubjectMask(Gray16, Image16)`); `estimateForeground(Image16, AlphaPlane)`. Mask within one level
+  of the 8-bit mask with 687 distinct values on the test ramp; decontaminated colours within one level (`core_tests`).
+- Artboards and the timeline: the 16-bit renderer already drew artboards; gates removed. GIF frames of a 16-bit
+  document are rendered at 16 bits and dithered to 8 before the palette (`encodeDocumentGif`), with a note.
+- Exports: artboards and slices as 16-bit PNG or dithered JPEG (`renderRect16`, replies carry `bits` and `note`); SVG
+  renders a 16-bit document's images and folder masks at 16 bits and embeds 16-bit PNGs.
+- Found on the way: Layer > Layer Mask > From Selection, the Layers panel's Edit Text, style and vector-mask items, the
+  Eyedropper, and `brush.import`, `presets.import`, `presets.remove` were greyed or refused at 16 bits for want of a
+  feature entry although they work; they have one now.
+- Gates: GCC and Clang `-Werror` full builds, ctest 50/50, PSD corpus plus K.psd 118 files, 0 failed, 3,975 carried
+  blocks at 8 and 16 bits, rpc smoke (with and without the background model), translations, `bench_core 9` 8-bit lines
+  A/B against main within ±2%.
 
 ## Review notes
 

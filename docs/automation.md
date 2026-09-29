@@ -124,7 +124,8 @@ for GIF), `document.close`. `document.info` reports the document's `profile`.
 Artboards and slices (docs/artboards-slices.md): `artboards.list`, `artboards.add` (`x`, `y`, `width`, `height`, `name`,
 `background`: white, black, transparent or a CSS colour), `artboards.set` (the same by `id`; a move takes its layers along
 unless `moveContents` is false), `artboards.delete` (a plain folder again, or with `contents` everything in it), `artboards.export`
-(`directory`, `format` png or jpeg, `prefix`, `quality`; answers the `files` written); `slices.list`, `slices.add`, `slices.set`
+(`directory`, `format` png or jpeg, `prefix`, `quality`; answers the `files` written and their `bits`: a 16-bit document
+writes 16-bit PNGs, and JPEGs dithered down to 8 bits with a `note`); `slices.list`, `slices.add`, `slices.set`
 (by numeric `id`; `name`, `url`, `target`, `altTag`), `slices.delete` and `slices.export` (as `artboards.export`). `layers.get`
 shows a folder's `artboard`; `tool.select` takes `artboard` and `slice`.
 
@@ -208,18 +209,10 @@ Each call still records its own step while the group is open, so the person's Un
 merge happens at the end, and only when no one else recorded a step in between (the reply says why
 not). A connection that closes with a group open has it closed.
 
-16-bit documents (docs/bit-depth.md): `document.info` reports `bits` (8 or 16). On a 16-bit document the methods
-that read, those outside the document, saving, exporting, `image.mode`, and the layer structure (`layers.add` of pixel
-layers and folders, `layers.set`, `layers.delete`, `layers.duplicate`, `layers.move`, `layers.reorder`, `layers.group`,
-`layers.setTransform`, `layers.flip`, `layers.mask` add, toggle, invert, link and delete, `canvas.resize`,
-`canvas.flip`, `document.import`, the slices) work, and since P3a the selection methods, `paths.toSelection`,
-`pixels.adjust`, `pixels.invert`, `pixels.filter`, `pixels.mosh`, `pixels.fill`, `pixels.clear`, `pixels.contentAwareFill`,
-`pixels.contentAwareMove`, `pixels.contentAwareScale`, `adjustments.set`, `layers.add` of adjustment layers,
-`image.resize`, `image.trim`, `canvas.crop`, `layers.warp` and `layers.setCage` too, and since P3b `brush.stroke`
-(every tool it takes, presets included), `gradient.draw`, `pixels.bucket`, `pixels.patch`, `layers.merge` and
-`layers.mask` apply, and every `smartObject.*` method (`smartObject.addFilter` and `smartObject.setFilter` refuse
-Unsharp Mask there: "Unsharp Mask is not available as a Smart Filter in 16-bit documents yet"); anything else answers "<method> is not available for 16-bit documents yet" until it is ported. `document.export` writes a 16-bit PNG (and TIFF, when the Qt TIFF plugin writes
-16 bits) from a 16-bit document; the 8-bit formats get it dithered down, and the reply says so in `note`.
+16-bit documents (docs/bit-depth.md): `document.info` reports `bits` (8 or 16). Every method works on a 16-bit
+document, as on an 8-bit one. `document.export` writes a 16-bit PNG (and TIFF, when the Qt TIFF plugin writes
+16 bits) from a 16-bit document; the 8-bit formats (an animated GIF's frames too) get it dithered down, and the reply
+says so in `note`; SVG embeds its images as 16-bit PNGs (`bits` 16).
 
 Batches: `rpc.batch` (`calls`: a list of `{"method", "params"}`; `name`) runs the calls in order in one
 request and stops at the first error, answering the results so far and the error's index. With a

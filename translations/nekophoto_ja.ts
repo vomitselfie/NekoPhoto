@@ -1971,6 +1971,26 @@ Working: %2</source>
         <translation>フィルターによって画像サイズが変更されました(%1 x %2 から %3 x %4)。ここではサイズを保つフィルターのみ使用できます。</translation>
     </message>
     <message>
+        <source>G&apos;MIC wrote a compressed image.</source>
+        <translation>G&apos;MIC が圧縮された画像を書き出しました。</translation>
+    </message>
+    <message>
+        <source>G&apos;MIC produced an image this editor cannot take (%1 x %2 x %3, %4 channels).</source>
+        <translation>G&apos;MIC の出力はこのエディターで扱えない画像です（%1 x %2 x %3、%4 チャンネル）。</translation>
+    </message>
+    <message>
+        <source>G&apos;MIC wrote samples of a type this editor does not read (%1).</source>
+        <translation>G&apos;MIC がこのエディターで読めない型の値を書き出しました（%1）。</translation>
+    </message>
+    <message>
+        <source>G&apos;MIC&apos;s image was cut short.</source>
+        <translation>G&apos;MIC の画像が途中で切れています。</translation>
+    </message>
+    <message>
+        <source>G&apos;MIC produced an image this editor cannot take (%1 channels).</source>
+        <translation>G&apos;MIC の出力はこのエディターで扱えない画像です（%1 チャンネル）。</translation>
+    </message>
+    <message>
         <source>G&apos;MIC is not installed (no gmic executable on PATH).</source>
         <translation>G&apos;MIC がインストールされていません(PATH に gmic 実行ファイルがありません)。</translation>
     </message>
@@ -1985,6 +2005,10 @@ Working: %2</source>
     <message>
         <source>G&apos;MIC failed.</source>
         <translation>G&apos;MIC の処理に失敗しました。</translation>
+    </message>
+    <message>
+        <source>Couldn&apos;t write G&apos;MIC&apos;s input.</source>
+        <translation>G&apos;MIC への入力を書き込めませんでした。</translation>
     </message>
     <message>
         <source>Essentials</source>
@@ -5897,6 +5921,12 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Couldn’t export</source>
         <translation>書き出せませんでした</translation>
+    </message>
+    <message numerus="yes">
+        <source>Wrote %n file(s) to %1, reduced from 16 to 8 bits per channel with dithering.</source>
+        <translation>
+            <numerusform>%n 個のファイルを %1 に書き出しました（16 bit/チャンネルから 8 bit/チャンネルにディザで変換）</numerusform>
+        </translation>
     </message>
     <message numerus="yes">
         <source>Wrote %n file(s) to %1</source>

@@ -91,11 +91,13 @@ TEST_CASE(support_registry_lists_what_p2_and_p3a_port) {
         CHECK(supports(ported, SampleType::U16));
     // Smart objects and Smart Filters.
     CHECK(supports("edit.smartObject", SampleType::U16));
-    // The rest wait.
-    for (const char* later : {"edit.transformSelection", "edit.artboard", "edit.timeline"}) {
-        CHECK(supports(later, SampleType::U8));
-        CHECK(!supports(later, SampleType::U16));
-    }
+    // Camera Raw, G'MIC, Remove Background, artboards, the timeline, the Eyedropper and the last exports.
+    for (const char* ported : {"filter.Camera Raw", "filter.G'MIC", "edit.removeBackground", "edit.artboard", "tool.artboard", "edit.timeline",
+                               "tool.eyedropper", "export.svg", "export.artboards", "export.slices"})
+        CHECK(supports(ported, SampleType::U16));
+    // An id the registry does not list stays 8-bit only.
+    CHECK(supports("edit.transformSelection", SampleType::U8));
+    CHECK(!supports("edit.transformSelection", SampleType::U16));
     CHECK(supports("filter.never-heard-of-it", SampleType::U8));
     CHECK(!supports("filter.never-heard-of-it", SampleType::U16));
     CHECK(!supports("filter.never-heard-of-it", SampleType::F32));
