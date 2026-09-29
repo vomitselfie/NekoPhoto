@@ -136,6 +136,126 @@ void AutomationServer::registerSelectionHandlers() {
         return QJsonObject{{"bounds", rectJson(doc.selection ? doc.selection->bounds() : Rect())}};
     });
 
+    // ---- channels (the Channels panel; docs/channels.md). A channel is "rgb", "red", "green", "blue" or an alpha or
+    // spot channel's id.
+    auto colorBits = [](const QString& name) -> unsigned {
+        const QString n = name.toLower();
+        return n == "rgb" ? colorChannelsAll : n == "red" ? 1u : n == "green" ? 2u : n == "blue" ? 4u : 0u;
+    };
+    auto colorNames = [](unsigned bits) {
+        QJsonArray names;
+        for (int c = 0; c < 3; c++) if (bits >> c & 1) names.append(QStringList{"red", "green", "blue"}[c]);
+        return names;
+    };
+    auto channelOf = [document](const QString& id) -> const Channel& {
+        const Channel* c = findChannel(document(), id.toStdString());
+        if (!c) fail("no channel " + id + "; channels.list gives the ids", invalidParams);
+        return *c;
+    };
+    auto channelJson = [session](const Channel& c, int index) {
+        const QColor color = QColor::fromRgbF(float(c.color[0]), float(c.color[1]), float(c.color[2]));
+        const auto target = session()->targetChannel();
+        return QJsonObject{{"id", qs(c.id)}, {"name", qs(c.name)}, {"kind", c.kind == ChannelKind::Spot ? "spot" : "alpha"}, {"index", index},
+                           {"color", color.name()}, {"opacity", c.opacity}, {"colorIndicates", c.selectedAreas ? "selected" : "masked"},
+                           {"visible", session()->visibleAlphaChannels().count(c.id) > 0}, {"target", target && *target == c.id}};
+    };
+    add("channels.list", [session, document, colorNames, channelJson](const QJsonObject&) {
+        const Document& doc = document();
+        EditorSession* s = session();
+        QJsonArray channels;
+        for (size_t i = 0; i < doc.channels.size(); i++) channels.append(channelJson(doc.channels[i], int(i)));
+        return QJsonObject{{"activeColors", colorNames(s->targetChannel() ? 0u : s->activeColorChannels())}, {"visibleColors", colorNames(s->visibleColorChannels())},
+                           {"target", s->targetChannel() ? qs(*s->targetChannel()) : QString()}, {"quickMask", s->quickMaskActive()}, {"channels", channels}};
+    });
+    add("channels.new", [session, document, channelJson](const QJsonObject& p) {
+        document();
+        QString error;
+        EditorSession* s = session();
+        const auto id = flag(p, "fromSelection", false) ? s->saveSelectionToChannel(std::nullopt, str(p, "name", QString()), SelectionMode::Replace, &error)
+                                                        : s->newChannel(str(p, "name", QString()), &error);
+        if (!id) fail(error.isEmpty() ? QStringLiteral("couldn't add a channel") : error);
+        const Document& doc = document();
+        return channelJson(*findChannel(doc, *id), channelIndex(doc, *id));
+    });
+    add("channels.duplicate", [session, document, channelOf, channelJson](const QJsonObject& p) {
+        const Channel& c = channelOf(str(p, "id"));
+        QString error;
+        const auto id = session()->duplicateChannel(c.id, str(p, "name", QString()), &error);
+        if (!id) fail(error.isEmpty() ? QStringLiteral("couldn't duplicate the channel") : error);
+        const Document& doc = document();
+        return channelJson(*findChannel(doc, *id), channelIndex(doc, *id));
+    });
+    add("channels.delete", [session, channelOf](const QJsonObject& p) {
+        const Channel& c = channelOf(str(p, "id"));
+        session()->deleteChannel(c.id);
+        return QJsonObject{};
+    });
+    add("channels.select", [session, document, colorBits, channelOf](const QJsonObject& p) {
+        document();
+        const QString channel = str(p, "channel");
+        const bool extend = flag(p, "extend", false);
+        if (const unsigned bits = colorBits(channel)) session()->selectColorChannels(bits, extend);
+        else if (!session()->selectAlphaChannel(channelOf(channel).id, extend)) fail("couldn't make the channel the target");
+        return QJsonObject{};
+    });
+    add("channels.set", [session, document, colorBits, channelOf, channelJson](const QJsonObject& p) {
+        document();
+        EditorSession* s = session();
+        const QString channel = str(p, "channel");
+        if (const unsigned bits = colorBits(channel)) {
+            for (const char* key : {"name", "color", "opacity", "colorIndicates", "index"})
+                if (has(p, key)) fail(QStringLiteral("%1 is for alpha and spot channels").arg(key), invalidParams);
+            if (has(p, "visible")) s->setColorChannelVisible(bits, flag(p, "visible", true));
+            return QJsonObject{};
+        }
+        const Channel& c = channelOf(channel);
+        const Uuid id = c.id;
+        if (has(p, "name") || has(p, "color") || has(p, "opacity") || has(p, "colorIndicates")) {
+            const QColor color = has(p, "color") ? QColor(str(p, "color")) : QColor::fromRgbF(float(c.color[0]), float(c.color[1]), float(c.color[2]));
+            if (!color.isValid()) fail("color must be #rrggbb", invalidParams);
+            const QString indicates = str(p, "colorIndicates", c.selectedAreas ? QStringLiteral("selected") : QStringLiteral("masked"));
+            if (indicates != "selected" && indicates != "masked") fail("colorIndicates must be masked or selected", invalidParams);
+            const double opacity = has(p, "opacity") ? num(p, "opacity") : c.opacity;
+            if (opacity < 0 || opacity > 1) fail("opacity must be 0..1", invalidParams);
+            s->setChannelOptions(id, str(p, "name", qs(c.name)), color, opacity, indicates == "selected");
+        }
+        if (has(p, "index")) s->moveChannel(id, integer(p, "index"));
+        if (has(p, "visible")) s->setAlphaChannelVisible(id, flag(p, "visible", true));
+        const Document& doc = document();
+        return channelJson(*findChannel(doc, id), channelIndex(doc, id));
+    });
+    add("channels.saveSelection", [session, document, channelOf, channelJson](const QJsonObject& p) {
+        document();
+        std::optional<Uuid> into;
+        if (has(p, "id")) into = channelOf(str(p, "id")).id;
+        QString error;
+        const auto id = session()->saveSelectionToChannel(into, str(p, "name", QString()), selectionMode(p), &error);
+        if (!id) fail(error.isEmpty() ? QStringLiteral("couldn't save the selection") : error);
+        const Document& doc = document();
+        return channelJson(*findChannel(doc, *id), channelIndex(doc, *id));
+    });
+    add("channels.loadSelection", [session, document, colorBits, channelOf](const QJsonObject& p) {
+        const Document& doc = document();
+        SelectionSource source;
+        if (has(p, "layer")) {
+            const Layer* layer = doc.find(str(p, "layer").toStdString());
+            if (!layer) fail("no layer " + str(p, "layer"), invalidParams);
+            source.kind = flag(p, "mask", false) ? SelectionSource::LayerMask : SelectionSource::Transparency;
+            source.id = layer->id;
+        } else {
+            const QString channel = str(p, "channel");
+            const unsigned bits = colorBits(channel);
+            if (bits == colorChannelsAll) source.kind = SelectionSource::Composite;
+            else if (bits) source.kind = bits == 1 ? SelectionSource::Red : bits == 2 ? SelectionSource::Green : SelectionSource::Blue;
+            else { source.kind = SelectionSource::AlphaChannel; source.id = channelOf(channel).id; }
+        }
+        // A thumbnail's Ctrl-click: shift and alt pick the mode as Photoshop does.
+        const SelectionMode mode = has(p, "shift") || has(p, "alt") ? thumbnailClickMode(flag(p, "shift", false), flag(p, "alt", false)) : selectionMode(p);
+        QString error;
+        if (!session()->loadSelectionFromSource(source, flag(p, "invert", false), mode, &error)) fail(error.isEmpty() ? QStringLiteral("couldn't load the selection") : error);
+        const Document& after = document();
+        return QJsonObject{{"active", bool(after.selection)}, {"bounds", rectJson(after.selection ? after.selection->bounds() : Rect())}};
+    });
 }
 
 } // namespace app
