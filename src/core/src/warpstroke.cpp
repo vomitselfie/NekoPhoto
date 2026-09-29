@@ -4,6 +4,7 @@
 #include "compositor/parallel.h"
 #include <algorithm>
 #include <cmath>
+#include <type_traits>
 
 namespace compositor {
 
@@ -16,8 +17,48 @@ WarpStroke::WarpStroke(std::shared_ptr<Image> image, WarpMode mode, double diame
 WarpStroke::WarpStroke(std::shared_ptr<Image16> image, WarpMode mode, double diameter, double hardness, double strength)
     : mode_(mode), diameter_(std::max(2.0, diameter)), hardness_(std::min(0.98, std::max(0.0, hardness))),
       strength_(std::min(1.0, std::max(0.01, strength))), width_(image->width()), height_(image->height()), image16_(std::move(image)) {
+    channels_ = image16_->channels();
     if (mode_ == WarpMode::Liquify) original16_ = std::make_shared<Image16>(*image16_);
 }
+
+WarpStroke::WarpStroke(std::shared_ptr<ImageC8> image, WarpMode mode, double diameter, double hardness, double strength)
+    : mode_(mode), diameter_(std::max(2.0, diameter)), hardness_(std::min(0.98, std::max(0.0, hardness))),
+      strength_(std::min(1.0, std::max(0.01, strength))), width_(image->width()), height_(image->height()), imageC8_(std::move(image)) {
+    channels_ = imageC8_->channels();
+    if (mode_ == WarpMode::Liquify) originalC8_ = std::make_shared<ImageC8>(*imageC8_);
+}
+
+namespace {
+/// Catmull-Rom over `n` interleaved samples (Liquify on CMYK's five), clamped to 0..`one` and colour to alpha.
+template <class Img>
+void bicubicSamples(const Img& image, double x, double y, typename std::remove_const_t<std::remove_pointer_t<decltype(image.row(0))>>* out, double one) {
+    const int n = image.channels();
+    const double fx = x - 0.5, fy = y - 0.5;
+    const int ix = int(std::floor(fx)), iy = int(std::floor(fy));
+    const double tx = fx - ix, ty = fy - iy;
+    auto weights = [](double t, double w[4]) {
+        const double t2 = t * t, t3 = t2 * t;
+        w[0] = -0.5 * t3 + t2 - 0.5 * t; w[1] = 1.5 * t3 - 2.5 * t2 + 1; w[2] = -1.5 * t3 + 2 * t2 + 0.5 * t; w[3] = 0.5 * t3 - 0.5 * t2;
+    };
+    double wx[4], wy[4], sum[5] = {0, 0, 0, 0, 0};
+    weights(tx, wx); weights(ty, wy);
+    for (int j = 0; j < 4; j++) {
+        const int sy = iy - 1 + j;
+        if (sy < 0 || sy >= image.height()) continue;
+        for (int i = 0; i < 4; i++) {
+            const int sx = ix - 1 + i;
+            if (sx < 0 || sx >= image.width()) continue;
+            const auto* p = image.pixel(sx, sy);
+            const double w = wx[i] * wy[j];
+            for (int c = 0; c < n; c++) sum[c] += p[c] * w;
+        }
+    }
+    using Sample = std::remove_const_t<std::remove_pointer_t<decltype(image.row(0))>>;
+    const double a = std::clamp(sum[n - 1], 0.0, one);
+    out[n - 1] = Sample(std::lround(a));
+    for (int c = 0; c < n - 1; c++) out[c] = Sample(std::lround(std::clamp(sum[c], 0.0, double(out[n - 1]))));
+}
+} // namespace
 
 WarpStroke::WarpStroke(std::shared_ptr<ImageF> image, WarpMode mode, double diameter, double hardness, double strength)
     : mode_(mode), diameter_(std::max(2.0, diameter)), hardness_(std::min(0.98, std::max(0.0, hardness))),
@@ -67,6 +108,7 @@ Rect WarpStroke::takeDirtyRect() {
     // The renderer draws zoomed-out layers from reduced copies cached by image; this image changes in place.
     if (imageF_) MipCache::shared().refresh(imageF_.get(), dirtyX0_, dirtyY0_, dirtyX1_, dirtyY1_);
     else if (image16_) MipCache::shared().refresh(image16_.get(), dirtyX0_, dirtyY0_, dirtyX1_, dirtyY1_);
+    else if (imageC8_) MipCache::shared().refresh(imageC8_.get(), dirtyX0_, dirtyY0_, dirtyX1_, dirtyY1_);
     else MipCache::shared().refresh(image_.get(), dirtyX0_, dirtyY0_, dirtyX1_, dirtyY1_);
     Rect r(dirtyX0_, dirtyY0_, dirtyX1_ - dirtyX0_, dirtyY1_ - dirtyY0_);
     dirtyX0_ = dirtyX1_ = 0;
@@ -75,7 +117,8 @@ Rect WarpStroke::takeDirtyRect() {
 
 void WarpStroke::pickUp(Point center) {
     int r = radius(), side = 2 * r + 1;
-    carried_.assign(size_t(side) * side * 4, 0);
+    const int n = channels_;
+    carried_.assign(size_t(side) * side * size_t(n), 0);
     int cx = int(std::lround(center.x)), cy = int(std::lround(center.y));
     for (int dy = -r; dy <= r; dy++) {
         int y = cy + dy;
@@ -83,7 +126,12 @@ void WarpStroke::pickUp(Point center) {
         for (int dx = -r; dx <= r; dx++) {
             int x = cx + dx;
             if (x < 0 || x >= width_) continue;
-            size_t c = (size_t(dy + r) * side + size_t(dx + r)) * 4;
+            size_t c = (size_t(dy + r) * side + size_t(dx + r)) * size_t(n);
+            if (imageC8_) {
+                const uint8_t* p = imageC8_->pixel(x, y);
+                for (int k = 0; k < n; k++) carried_[c + k] = p[k];
+                continue;
+            }
             if (imageF_) {
                 const float* p = imageF_->pixel(x, y);
                 for (int k = 0; k < 4; k++) carried_[c + k] = p[k];
@@ -91,7 +139,7 @@ void WarpStroke::pickUp(Point center) {
             }
             if (image16_) {
                 const uint16_t* p = image16_->pixel(x, y);
-                for (int k = 0; k < 4; k++) carried_[c + k] = p[k];
+                for (int k = 0; k < n; k++) carried_[c + k] = p[k];
                 continue;
             }
             const uint8_t* p = image_->pixel(x, y);
@@ -105,6 +153,7 @@ void WarpStroke::smudge(Point center) {
     int cx = int(std::lround(center.x)), cy = int(std::lround(center.y));
     markDirty(cx - r, cy - r, cx + r + 1, cy + r + 1);
     float keep = float(strength_), invR = 1 / float(diameter_ / 2);
+    const int n = channels_;
     for (int dy = -r; dy <= r; dy++) {
         int y = cy + dy;
         if (y < 0 || y >= height_) continue;
@@ -113,7 +162,17 @@ void WarpStroke::smudge(Point center) {
             if (x < 0 || x >= width_) continue;
             float w = weight(std::sqrt(float(dx * dx + dy * dy)) * invR);
             if (w <= 0) continue;
-            size_t c = (size_t(dy + r) * side + size_t(dx + r)) * 4;
+            size_t c = (size_t(dy + r) * side + size_t(dx + r)) * size_t(n);
+            if (imageC8_) {
+                uint8_t* p = imageC8_->pixel(x, y);
+                for (int k = 0; k < n; k++) {
+                    float under = p[k];
+                    float painted = under + (carried_[c + k] - under) * w;
+                    p[k] = uint8_t(std::max(0.0f, std::min(255.0f, std::round(painted))));
+                    carried_[c + k] = painted + (carried_[c + k] - painted) * keep;
+                }
+                continue;
+            }
             if (imageF_) {
                 float* p = imageF_->pixel(x, y);
                 for (int k = 0; k < 4; k++) {
@@ -126,7 +185,7 @@ void WarpStroke::smudge(Point center) {
             }
             if (image16_) {
                 uint16_t* p = image16_->pixel(x, y);
-                for (int k = 0; k < 4; k++) {
+                for (int k = 0; k < n; k++) {
                     float under = p[k];
                     float painted = under + (carried_[c + k] - under) * w;
                     p[k] = uint16_t(std::max(0.0f, std::min(32768.0f, std::round(painted))));
@@ -218,7 +277,9 @@ void WarpStroke::push(Point a, Point b) {
                 sampleBicubic(*originalF_, x + 0.5 + d[0], y + 0.5 + d[1], out);
                 for (int k = 0; k < 4; k++) out[k] = std::max(0.0f, out[k]);   // Catmull-Rom rings below zero
                 out[3] = std::min(1.0f, out[3]);
-            } else if (image16_) sampleBicubic(*original16_, x + 0.5 + d[0], y + 0.5 + d[1], image16_->pixel(x, y));
+            } else if (imageC8_) bicubicSamples(*originalC8_, x + 0.5 + d[0], y + 0.5 + d[1], imageC8_->pixel(x, y), 255.0);
+            else if (image16_ && channels_ == 5) bicubicSamples(*original16_, x + 0.5 + d[0], y + 0.5 + d[1], image16_->pixel(x, y), 32768.0);
+            else if (image16_) sampleBicubic(*original16_, x + 0.5 + d[0], y + 0.5 + d[1], image16_->pixel(x, y));
             else sampleBicubic(*original_, x + 0.5 + d[0], y + 0.5 + d[1], image_->pixel(x, y));
         }
     }, 16);

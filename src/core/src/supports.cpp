@@ -206,8 +206,9 @@ constexpr FeatureModes modeTable[] = {
     {"edit.fill", allModes},
     {"export.psd", allModes},
     // Step E, painting (P7): the brush, eraser and imported tip brushes, the Gradient tool, moving selected pixels,
-    // Clone Stamp, the Eyedropper, merging and Apply Layer Mask, in the document's own samples. Spot Healing, the
-    // Healing Brush and Blur, Sharpen, Smudge and Liquify in Lab (four samples, as RGB); CMYK's five wait.
+    // Clone Stamp, the Eyedropper, merging and Apply Layer Mask, in the document's own samples. Retouching: Spot
+    // Healing, the Healing Brush, Patch, Blur, Sharpen, Smudge, Liquify, Dodge, Burn, Sponge and the Paint Bucket, on
+    // L, a and b in Lab and on the five samples in CMYK (heal.h, toning.h, bucket.h).
     {"tool.brush", allModes},
     {"tool.gradient", allModes},
     {"edit.movePixels", allModes},
@@ -215,8 +216,11 @@ constexpr FeatureModes modeTable[] = {
     {"tool.eyedropper", allModes},
     {"layers.merge", allModes},
     {"layers.applyMask", allModes},
-    {"tool.spotHealing", colorModeBit(ColorMode::RGB) | colorModeBit(ColorMode::Lab)},
-    {"tool.smudge", colorModeBit(ColorMode::RGB) | colorModeBit(ColorMode::Lab)},
+    {"tool.spotHealing", allModes},
+    {"tool.smudge", allModes},
+    {"tool.patch", allModes},
+    {"tool.dodge", allModes},
+    {"tool.paintBucket", allModes},
     // Step E, adjustments and filters (P7): Image > Adjustments and adjustment layers on the document's own samples
     // (modeedit.h), each kind in the modes Photoshop offers it (adjustmentOfferedInMode; what it lacks stays greyed for
     // good). Color Lookup's tables are RGB and wait.

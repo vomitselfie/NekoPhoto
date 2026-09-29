@@ -656,7 +656,12 @@ public:
     /// Every colour channel of the document's mode as bits (RGB and Lab 7, CMYK 15): the composite.
     /// Fill in a CMYK or Lab document: `color` (sRGB, as colours are kept) in the document's mode over the active layer's
     /// pixels within the selection (P7 step D: the layer's own grid; a blank layer gets a canvas-sized one).
-    bool fillThroughMode(const QColor& color, const char* name);
+    /// `coverage` (document size) replaces the selection when given, times `opacity`; `from` (document size, the
+    /// document's layout) is copied instead of the colour (Patch).
+    /// The Paint Bucket in a CMYK or Lab document, at document pixel (x, y).
+    bool paintBucketMode(const compositor::Layer& layer, int x, int y);
+    bool fillThroughMode(const QColor& color, const char* name, const compositor::AnyGray* coverage = nullptr, double opacity = 1,
+                         const compositor::AnyImage& from = {});
     unsigned allColors() const { return document_ ? compositor::colorChannelsAllFor(document_->colorMode) : compositor::colorChannelsAll; }
     unsigned activeColorChannels() const { return activeColors_; }
     unsigned visibleColorChannels() const { return visibleColors_; }
@@ -1133,10 +1138,12 @@ private:
     /// Starts a stroke that paints `process`'s version of the active layer (as the canvas shows it) through the tip.
     /// `margin`: how far around a pixel `process` reads (it is run a tile at a time with that much around it).
     /// `process16` is the same for a 16-bit document, `processF` for a 32-bit one (none: refused); a Lab document runs
-    /// `process` or `process16` on its L, a and b.
+    /// `process` or `process16` on its L, a and b; a CMYK one `processC8` at 8 bits and `process16` on five samples at 16
+    /// (none: refused).
     bool beginProcessedStroke(QPointF documentPoint, const std::function<void(compositor::Image&)>& process, int margin,
                               const std::function<void(compositor::Image16&)>& process16,
-                              const std::function<void(compositor::ImageF&)>& processF = {});
+                              const std::function<void(compositor::ImageF&)>& processF = {},
+                              const std::function<void(compositor::ImageC8&)>& processC8 = {});
     /// Fills the active layer (or its mask) with `color` through `coverage` (document size; null: everywhere) at
     /// `opacity`, as one undo step named `name`.
     /// With `from` (document size, premultiplied), each pixel takes `from`'s there instead of `color`.

@@ -199,11 +199,12 @@ TEST_CASE(supports_has_a_mode_axis) {
     CHECK(supports("tool.brush", SampleType::U8, ColorMode::CMYK));
     CHECK(supports("tool.brush", SampleType::U16, ColorMode::Lab));
     CHECK(!supports("brush.mypaint", SampleType::U8, ColorMode::CMYK));
-    CHECK(!supports("tool.spotHealing", SampleType::U8, ColorMode::CMYK));
+    CHECK(supports("tool.spotHealing", SampleType::U8, ColorMode::CMYK));
     CHECK(supports("tool.spotHealing", SampleType::U8, ColorMode::Lab));
     // Greyed for good ("... mode") or until a port ("... mode yet").
     CHECK_EQ(unavailableReason("brush.mypaint", SampleType::U8, ColorMode::Lab), std::string("Not available in Lab mode"));
-    CHECK_EQ(unavailableReason("tool.dodge", SampleType::U8, ColorMode::CMYK), std::string("Not available in CMYK mode yet"));
+    CHECK_EQ(unavailableReason("tool.crop", SampleType::U8, ColorMode::CMYK), std::string("Not available in CMYK mode yet"));
+    CHECK(supports("tool.dodge", SampleType::U16, ColorMode::CMYK));
     CHECK_EQ(unavailableReason("tool.dodge", SampleType::F32, ColorMode::RGB), std::string("Not available in 32-bit mode"));
     CHECK(unavailableReason("tool.brush", SampleType::U16, ColorMode::CMYK).empty());
     CHECK(!supports("filter.never-heard-of-it", SampleType::U8, ColorMode::Lab));

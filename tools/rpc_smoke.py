@@ -1005,7 +1005,8 @@ def colour_mode_painting(rpc):
     """P7 E (docs/color-modes.md): painting in CMYK and Lab documents at 8 and 16 bits in the document's own samples.
     Black in CMYK lays the Working CMYK's rich black (K and C, M, Y); a Lab stroke's L is the colour's; the Eyedropper
     reads inks and L, a, b; the eraser, tip brushes, Clone Stamp, the Gradient tool, merging and Apply Layer Mask work;
-    Lab heals, blurs and smudges; what waits says "... mode yet", and MyPaint stays RGB ("... mode")."""
+    the healers, Patch, Blur, Sharpen, Smudge, Liquify, Dodge, Burn, Sponge and the Paint Bucket work in both; MyPaint
+    stays RGB ("... mode")."""
     first = rpc.call("tabs.list")
     tab = rpc.call("tabs.new")
     tip = tip_brush(rpc)
@@ -1034,16 +1035,24 @@ def colour_mode_painting(rpc):
         rpc.call("gradient.draw", x0=0, y0=0, x1=64, y1=0, foreground="#00ff00", background="#0000ff", style="foreground-to-background", opacity=0.3)
         if rpc.call("brush.presets").get("supported"):
             expect_refused(rpc, "mode", "brush.stroke", points=[[4, 4], [8, 8]], preset="classic/pencil")
-        if mode == "lab":
-            for tool in ("healing", "blur", "sharpen", "smudge", "liquify"):
-                rpc.call("brush.stroke", tool=tool, points=[[20, 20], [30, 22]], size=8)
-        else:
-            expect_refused(rpc, "CMYK mode yet", "brush.stroke", tool="healing", points=[[20, 20], [30, 22]])
-            expect_refused(rpc, "CMYK mode yet", "brush.stroke", tool="smudge", points=[[20, 20], [30, 22]])
-        expect_refused(rpc, "mode yet", "brush.stroke", tool="dodge", points=[[20, 20], [30, 22]])
-        expect_refused(rpc, "mode yet", "pixels.bucket", x=5, y=5, color="#00ff00")
+        # Retouching in the document's own samples, each one undo step.
+        for tool, name in (("healing", "Spot Healing"), ("blur", "Blur"), ("sharpen", "Sharpen"), ("smudge", "Smudge"), ("liquify", "Liquify"),
+                           ("dodge", "Dodge"), ("burn", "Burn"), ("sponge", "Sponge")):
+            rpc.call("brush.stroke", tool=tool, points=[[20, 20], [30, 22]], size=8)
+            assert rpc.call("history.info")["undo"] == name, (mode, bits, name, rpc.call("history.info"))
+        rpc.call("brush.stroke", tool="healingbrush", source={"x": 40, "y": 40}, points=[[20, 28], [26, 28]], size=6)
+        assert rpc.call("history.info")["undo"] == "Healing Brush"
+        rpc.call("selection.rect", x=4, y=24, width=8, height=8)
+        assert rpc.call("pixels.patch", dx=40, dy=0)["patched"]
+        assert rpc.call("history.info")["undo"] == "Patch"
+        rpc.call("selection.none")
+        # The bucket fills with the colour through the profile: black's inks, or L a b, as the brush lays them.
+        assert rpc.call("pixels.bucket", x=62, y=46, color="#000000", tolerance=255, antialias=False)["filled"]
+        assert rpc.call("history.info")["undo"] == "Paint Bucket"
+        filled = rpc.call("color.sample", x=40, y=30)["values"]
+        assert all(abs(a - b) < 1.0 for a, b in zip(filled, black["values"])), ("the bucket's black is the brush's", mode, bits, filled, black)
         undo = rpc.call("history.list")["undo"]
-        assert undo[-1] == ("Liquify" if mode == "lab" else "Gradient"), undo[steps:]
+        assert undo[-1] == "Paint Bucket", undo[steps:]
         rpc.call("layers.add")
         rpc.call("brush.stroke", points=[[20, 24], [44, 24]], size=4, color="#ff00ff")
         assert rpc.call("layers.merge")["merged"]

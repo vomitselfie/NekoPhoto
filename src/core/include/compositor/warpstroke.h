@@ -26,11 +26,15 @@ public:
     WarpStroke(std::shared_ptr<ImageT<SampleType::U16>> image, WarpMode mode, double diameter, double hardness, double strength);
     /// And on a 32-bit document's (premultiplied linear float): nothing is rounded, colour above 1 is carried as it is.
     WarpStroke(std::shared_ptr<ImageT<SampleType::F32>> image, WarpMode mode, double diameter, double hardness, double strength);
+    /// And on an 8-bit CMYK document's (five samples; a 16-bit CMYK one takes the Image16 form with five channels): every
+    /// sample is carried and resampled as stored.
+    WarpStroke(std::shared_ptr<ImageT<SampleType::U8>> image, WarpMode mode, double diameter, double hardness, double strength);
     void append(Point point);
     /// The image being worked: 8-bit, or `image16` for a 16-bit stroke (the other is null).
     std::shared_ptr<const Image> image() const { return image_; }
     std::shared_ptr<const ImageT<SampleType::U16>> image16() const { return image16_; }
     std::shared_ptr<const ImageT<SampleType::F32>> imageF() const { return imageF_; }
+    std::shared_ptr<const ImageT<SampleType::U8>> imageC8() const { return imageC8_; }
     /// The pixels changed since the last call (document pixels: the image is at document size). Also brings
     /// the renderer's reduced copies of the image up to date there.
     Rect takeDirtyRect();
@@ -69,6 +73,9 @@ private:
     std::shared_ptr<const ImageT<SampleType::U16>> original16_;
     std::shared_ptr<ImageT<SampleType::F32>> imageF_;
     std::shared_ptr<const ImageT<SampleType::F32>> originalF_;
+    std::shared_ptr<ImageT<SampleType::U8>> imageC8_;
+    std::shared_ptr<const ImageT<SampleType::U8>> originalC8_;
+    int channels_ = 4;   // samples per pixel: 5 in CMYK
 };
 
 } // namespace compositor

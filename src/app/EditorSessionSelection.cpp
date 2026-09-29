@@ -1,5 +1,6 @@
 // EditorSession: Selections: setting, combining, the magic wand, fill and clear, and the Select menu.
 #include "EditorSession.h"
+#include "compositor/bucket.h"
 #include "ColorManagement.h"
 #include "compositor/smartwand.h"
 #include "compositor/morphology.h"
@@ -13,6 +14,23 @@
 using namespace compositor;
 
 namespace app {
+
+namespace {
+/// `layer` alone at document size in a document of `document`'s size, depth, mode and profile (visible, opaque, Normal,
+/// no mask), for rendering at the document's layout.
+Document layerAloneNative(const Document& document, const Layer& layer, const LayerTransform& transform) {
+    Document single(document.width, document.height);
+    single.sampleType = document.sampleType;
+    single.colorMode = document.colorMode;
+    single.profile = document.profile;
+    single.encodedProfile = document.encodedProfile;
+    Layer copy = layer;
+    copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
+    copy.transform = transform;
+    single.layers = {copy};
+    return single;
+}
+} // namespace
 
 // ---- Selection --------------------------------------------------------------------
 
@@ -228,6 +246,7 @@ bool EditorSession::paintBucket(QPointF documentPoint) {
     if (x < 0 || y < 0 || x >= document_->width || y >= document_->height) return false;
     const Layer* layer = activeLayer();
     if (!layer || layer->isGroup || layer->adjustment) return false;
+    if (document_->colorMode != ColorMode::RGB && !(isMaskSelected_ && layer->mask)) return paintBucketMode(*layer, x, y);
     if (document_->sampleType == SampleType::U16) {
         // What to fill is chosen on the pixels as the canvas shows them (Tolerance counts 8-bit levels, as the Magic
         // Wand's does); the fill itself, its antialiased edge and the selection are 16-bit.
@@ -287,6 +306,35 @@ bool EditorSession::patchSelection(int dx, int dy) {
     if (!layer || layer->isGroup || layer->adjustment || !layer->asset || !layer->asset->image) return false;
     if (isMaskSelected_) { emit error(tr("Patch works on a layer's pixels, not its mask.")); return false; }
     if (smartObjectBlocksPixels(true)) return false;
+    if (document_->colorMode != ColorMode::RGB) {
+        // CMYK and Lab: the layer as the canvas shows it at the document's layout, its samples healed as they are.
+        const AnyImage shown = renderNative(layerAloneNative(*document_, *layer, displayedTransform(*layer)));
+        const AnyGray& selection = document_->selection->coverage;
+        AnyImage healed;
+        auto patch = [&](const auto& image, const auto& coverage) {
+            using Img = std::remove_cvref_t<decltype(image)>;
+            const int n = shown.channels();
+            std::shared_ptr<Img> source;
+            if constexpr (std::is_same_v<Img, Image>) source = std::make_shared<Img>(image.width(), image.height());
+            else source = std::make_shared<Img>(image.width(), image.height(), n);
+            for (int y = 0; y < source->height(); y++) {
+                const int sy = y + dy;
+                if (sy < 0 || sy >= image.height()) continue;
+                for (int x = 0; x < source->width(); x++) {
+                    const int sx = x + dx;
+                    if (sx >= 0 && sx < image.width()) std::memcpy(source->pixel(x, y), image.pixel(sx, sy), size_t(n) * sizeof(*image.pixel(0, 0)));
+                }
+            }
+            auto out = std::make_shared<Img>(image);
+            healFrom(*out, *source, coverage, 1.0f);
+            healed = std::shared_ptr<const Img>(out);
+        };
+        if (shown.u16() && selection.u16()) patch(*shown.u16(), *selection.u16());
+        else if (shown.c8() && selection.u8()) patch(*shown.c8(), *selection.u8());
+        else if (shown.u8() && selection.u8()) patch(*shown.u8(), *selection.u8());
+        else return false;
+        return fillThroughMode(foregroundColor, QT_TRANSLATE_NOOP("History", "Patch"), nullptr, 1, healed);
+    }
     if (document_->sampleType == SampleType::U16) {
         const Gray16* selection = document_->selection->coverage.u16().get();
         if (!selection) return false;
@@ -462,7 +510,37 @@ bool EditorSession::fillThrough16(const QColor& color, const Gray16* selection, 
     return true;
 }
 
-bool EditorSession::fillThroughMode(const QColor& color, const char* name) {
+bool EditorSession::paintBucketMode(const Layer& layer, int x, int y) {
+    // CMYK and Lab: what to fill is chosen on the document's own samples (the canvas as shown, or the layer as placed),
+    // every sample within Tolerance, as Photoshop's bucket compares each channel; the colour goes in through the profile.
+    const AnyGray& selection = document_->selection ? document_->selection->coverage : AnyGray();
+    if (document_->selection) {
+        const float at = selection.u16() ? selection.u16()->at(x, y) : selection.u8() ? selection.u8()->at(x, y) : 0;
+        if (at <= 0) return false;   // a click outside the selection fills nothing
+    }
+    const AnyImage sample = renderNative(bucket.allLayers ? *document_ : layerAloneNative(*document_, layer, displayedTransform(layer)));
+    GrayImage chosen(document_->width, document_->height);
+    if (bucketMask(sample, x, y, std::clamp(bucket.tolerance, 0, 255), bucket.contiguous, chosen) <= 0) return false;
+    AnyGray coverage;
+    if (document_->sampleType == SampleType::U16) {
+        auto wide = widenGray(chosen);
+        if (bucket.antialias) gaussianBlur(*wide, 0.5);
+        if (selection.u16())
+            for (int py = 0; py < wide->height(); py++)
+                for (int px = 0; px < wide->width(); px++) wide->at(px, py) = uint16_t(mul15(wide->at(px, py), std::min<uint32_t>(selection.u16()->at(px, py), one16)));
+        coverage = Gray16Ptr(wide);
+    } else {
+        auto own = std::make_shared<GrayImage>(chosen);
+        if (bucket.antialias) gaussianBlur(*own, 0.5);
+        if (selection.u8())
+            for (int py = 0; py < own->height(); py++)
+                for (int px = 0; px < own->width(); px++) own->at(px, py) = uint8_t((own->at(px, py) * selection.u8()->at(px, py) + 127) / 255);
+        coverage = GrayPtr(own);
+    }
+    return fillThroughMode(foregroundColor, QT_TRANSLATE_NOOP("History", "Paint Bucket"), &coverage, brushSettings.opacity);
+}
+
+bool EditorSession::fillThroughMode(const QColor& color, const char* name, const AnyGray* coverage, double opacity, const AnyImage& from) {
     Layer* layer = activeLayerMutable();
     if (!layer || layer->isGroup || layer->adjustment) return false;
     if (smartObjectBlocksPixels(true)) return false;
@@ -480,24 +558,37 @@ bool EditorSession::fillThroughMode(const QColor& color, const char* name) {
     const LayerTransform placement = source ? layer->transform : LayerTransform(Point(0, 0), doc.size());
     const int w = source ? source.width() : doc.width, h = source ? source.height() : doc.height;
     const Affine toDoc = placement.pixelToDocument(w, h);
-    const AnyGray& selection = doc.selection ? doc.selection->coverage : AnyGray();
-    auto coverageAt = [&](Point d) -> float {
-        if (d.x < 0 || d.y < 0 || d.x >= doc.width || d.y >= doc.height) return 0.f;
-        if (!doc.selection) return 1.f;
+    const AnyGray& selection = coverage ? *coverage : doc.selection ? doc.selection->coverage : AnyGray();
+    const bool limited = coverage || doc.selection;
+    const float strength = float(std::clamp(opacity, 0.0, 1.0));
+    if (from && (from.channels() != n || from.width() != doc.width || from.height() != doc.height)) return false;
+    auto selectedAt = [&](Point d) -> float {
         const int x = std::min(int(d.x), selection.width() - 1), y = std::min(int(d.y), selection.height() - 1);
         if (selection.u16()) return std::min(1.f, selection.u16()->at(x, y) / 32768.f);
         if (selection.u8()) return selection.u8()->at(x, y) / 255.f;
         return 0.f;
     };
+    auto coverageAt = [&](Point d) -> float {
+        if (d.x < 0 || d.y < 0 || d.x >= doc.width || d.y >= doc.height) return 0.f;
+        return limited ? strength * selectedAt(d) : strength;
+    };
+    // A sample of `from` at a document point, as a float of its own scale.
+    auto fromAt = [&](Point d, int k) -> float {
+        const int x = std::min(int(d.x), doc.width - 1), y = std::min(int(d.y), doc.height - 1);
+        if (from.u16()) return from.u16()->pixel(x, y)[k];
+        if (from.c8()) return from.c8()->pixel(x, y)[k];
+        return from.u8()->pixel(x, y)[k];
+    };
     auto fill = [&](auto* out) {
         const float one = deep ? 32768.f : 255.f;
         for (int py = 0; py < h; py++)
             for (int px = 0; px < w; px++) {
-                const float c = coverageAt(toDoc.apply({px + 0.5, py + 0.5}));
+                const Point d = toDoc.apply({px + 0.5, py + 0.5});
+                const float c = coverageAt(d);
                 if (c <= 0) continue;
                 auto* p = out->pixel(px, py);
                 for (int k = 0; k < n; k++) {
-                    const float f = k == n - 1 ? one : float(deep ? widen8(ink[k]) : ink[k]);
+                    const float f = from ? fromAt(d, k) : k == n - 1 ? one : float(deep ? widen8(ink[k]) : ink[k]);
                     p[k] = static_cast<std::remove_cvref_t<decltype(p[k])>>(std::lround(p[k] * (1 - c) + f * c));
                 }
             }

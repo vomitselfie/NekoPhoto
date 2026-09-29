@@ -55,12 +55,12 @@ What works in a document of each depth and colour mode, as the menus, tools and 
 | Brush and Eraser (round tip, tip brushes) | `tool.brush` | native | native | native | native | native | native | native |  |
 | MyPaint brush presets | `brush.mypaint` | native | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | CMYK8, CMYK16, Lab8, Lab16: libmypaint mixes RGB only; greyed rather than painting through RGB and back |
 | Gradient tool | `tool.gradient` | native | native | native | native | native | native | native |  |
-| Paint Bucket | `tool.paintBucket` | native | native | greyed (Photoshop lacks) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
+| Paint Bucket | `tool.paintBucket` | native | native | greyed (Photoshop lacks) | native | native | native | native |  |
 | Clone Stamp | `tool.cloneStamp` | native | native | native | native | native | native | native |  |
-| Spot Healing, Healing Brush | `tool.spotHealing` | native | native | native | greyed (not yet) | greyed (not yet) | native | native |  |
-| Patch tool | `tool.patch` | native | native | greyed (Photoshop lacks) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Blur, Sharpen, Smudge, Liquify tools | `tool.smudge` | native | native | native | greyed (not yet) | greyed (not yet) | native | native |  |
-| Dodge, Burn, Sponge | `tool.dodge` | native | native | greyed (Photoshop lacks) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
+| Spot Healing, Healing Brush | `tool.spotHealing` | native | native | native | native | native | native | native |  |
+| Patch tool | `tool.patch` | native | native | greyed (Photoshop lacks) | native | native | native | native |  |
+| Blur, Sharpen, Smudge, Liquify tools | `tool.smudge` | native | native | native | native | native | native | native |  |
+| Dodge, Burn, Sponge | `tool.dodge` | native | native | greyed (Photoshop lacks) | native | native | native | native |  |
 | Eyedropper | `tool.eyedropper` | native | native | native | native | native | native | native |  |
 | Image > Adjustments (menu) | `adjustment.pixels` | native | native | native | native | native | native | native |  |
 | Levels | `adjustment.Levels` | native | native | native | native | native | native | native |  |
