@@ -1037,9 +1037,13 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             // A 16- or 32-bit layer's channels as stored, and a CMYK or Lab layer's at either depth: written back while
             // its pixels are these (psd_carry.h). A CMYK or Lab layer whose pixels were not read from its planes (a smart
             // object's contents drawn here) has none.
-            if (!rawPlanes.empty() && layer.asset && (nativeMode ? planesRead : bool(layer.asset->image.u16()) || bool(layer.asset->image.f32()))) {
+            // A smart object drawn from its contents keeps the record's planes as Photoshop's raster of the placement.
+            const bool smartRaster = layer.smartObject && !layer.smartObject->locked() && layer.smartImage == layer.asset->image
+                                     && smartObjectPixelsArePlacement(*layer.smartObject);
+            if (!rawPlanes.empty() && layer.asset && (smartRaster || (nativeMode ? planesRead : bool(layer.asset->image.u16()) || bool(layer.asset->image.f32())))) {
                 carry->planes = std::move(rawPlanes);
                 carry->planesHash = carry->contentHash;
+                if (smartRaster) carry->planesRect = std::array<int, 4>{rec.left, rec.top, rec.right, rec.bottom};
             }
             if (layer.adjustment) {
                 // Settings as read, so an unchanged adjustment's own block goes back byte for byte.

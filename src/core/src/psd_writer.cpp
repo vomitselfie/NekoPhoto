@@ -559,8 +559,11 @@ private:
         // A 16-bit layer as read: its channels go back as they were stored, since 0..65535 does not survive the trip
         // through 0..32768 (CarriedPlane); any edit changes the fingerprint and they are written anew. PSD to PSD only
         // (a PSB's RLE rows count in 32 bits).
-        if ((deep_ || float_ || native_) && !options_.large && sameContent && placementKept && !c.planes.empty() && c.planesHash == contentNow && l.asset
+        // A smart object's carried raster goes back with its own bounds, as long as the instance has not moved.
+        const bool smartRaster = c.planesRect && l.smartObject && l.isLiveSmartObject();
+        if ((deep_ || float_ || native_) && !options_.large && (sameContent || smartRaster) && placementKept && !c.planes.empty() && c.planesHash == contentNow && l.asset
             && (float_ ? bool(l.asset->image.f32()) : (l.asset->image.u16() || (native_ && l.asset->image.sampleType() == SampleType::U8)))) {
+            if (smartRaster) { r.left = (*c.planesRect)[0]; r.top = (*c.planesRect)[1]; r.right = (*c.planesRect)[2]; r.bottom = (*c.planesRect)[3]; }
             std::vector<std::pair<int, std::vector<uint8_t>>> channels;
             for (const auto& plane : c.planes) channels.push_back({plane.id, plane.data});
             for (auto& ch : r.channels) if (ch.first < -1) channels.push_back(std::move(ch));

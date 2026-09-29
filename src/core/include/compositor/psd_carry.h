@@ -9,6 +9,8 @@
 // the layer now is, so it is left out and the pixels stand. Styles, Blend If and the like are written back
 // whatever happens. See docs/psd-roundtrip.md.
 #pragma once
+#include <optional>
+#include <array>
 #include "imaget.h"
 #include "transform.h"
 #include <cstdint>
@@ -56,6 +58,10 @@ struct PsdLayerCarry {
     struct CarriedPlane { int id = 0; std::vector<uint8_t> data; };
     std::vector<CarriedPlane> planes;
     uint64_t planesHash = 0;
+    /// Where the planes sit (left, top, right, bottom) when they are not the layer's own pixels: a smart object whose
+    /// pixels here are its contents placed by the quad keeps Photoshop's raster for the placement as it was read,
+    /// written back while the instance is unmoved and its contents unchanged.
+    std::optional<std::array<int, 4>> planesRect;
     /// A folder's end-marker record: its blocks and blending ranges (colour label, locks and the like).
     std::vector<PsdBlock> endBlocks;
     std::vector<uint8_t> endRanges;
