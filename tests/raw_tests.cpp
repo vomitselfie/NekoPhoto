@@ -188,7 +188,7 @@ TEST_CASE(a_raw_smart_object_keeps_its_file_and_settings) {
     CHECK_EQ(kept.rawSettings, redeveloped.rawSettings);
     CHECK(*kept.bytes == *bytes);
     CHECK(kept.image.u16() != nullptr);
-    std::filesystem::remove_all(package);
+    { std::error_code cleanup_; std::filesystem::remove_all(package, cleanup_); }
 
     // A PSD keeps the pixels and carries the RAW file as the embedded source.
     PsdExportSummary summary;

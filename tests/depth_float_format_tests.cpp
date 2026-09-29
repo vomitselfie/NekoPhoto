@@ -291,7 +291,7 @@ TEST_CASE(thirty_two_bit_psd_round_trips_byte_for_byte) {
     REQUIRE(viaProject.size() == 2);
     for (size_t i = 0; i < before.size(); i++) for (auto& [id, bytes] : before[i]) CHECK(viaProject[i].at(id) == bytes);
     CHECK(profileResourceOf(viaProjectFile) == profileResourceOf(original));
-    fs::remove_all(project);
+    { std::error_code cleanup_; fs::remove_all(project, cleanup_); }
 }
 
 TEST_CASE(float_documents_export_as_thirty_two_bit_psd) {
@@ -402,7 +402,7 @@ TEST_CASE(projects_keep_float_pixels_in_sidecars) {
         damaged << "NPF32Z";
     }
     CHECK(!loadProject(path.string(), error).has_value());
-    fs::remove_all(path);
+    { std::error_code cleanup_; fs::remove_all(path, cleanup_); }
 }
 
 TEST_MAIN()

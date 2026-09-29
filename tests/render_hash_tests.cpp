@@ -1589,8 +1589,13 @@ TEST_CASE(render_hashes_match_the_baseline_on_the_pool_and_serially) {
     }
     auto expected = readBaseline(path);
     REQUIRE(!expected.empty());
-    int changed = 0, added = 0, missing = 0;
+    int changed = 0, added = 0, missing = 0, unchecked = 0;
     for (auto& [name, h] : actual) {
+#ifdef _WIN32
+        // 32-bit scenes render through float pow/exp, which MinGW's maths library rounds differently from glibc's; their
+        // kernels are checked within a tolerance everywhere (float_reference), and bit for bit on Linux here.
+        if (name.rfind("f32/", 0) == 0 || name.find("/f32/") != std::string::npos) { unchecked++; continue; }
+#endif
         auto it = expected.find(name);
         if (it == expected.end()) { std::fprintf(stderr, "  new      %s %s\n", name.c_str(), h.c_str()); added++; }
         else if (it->second != h) { std::fprintf(stderr, "  changed  %s %s -> %s\n", name.c_str(), it->second.c_str(), h.c_str()); changed++; }
@@ -1603,7 +1608,7 @@ TEST_CASE(render_hashes_match_the_baseline_on_the_pool_and_serially) {
             missing++;
         }
     if (changed || added || missing)
-        std::fprintf(stderr, "  %d changed, %d new, %d missing; COMPOSITOR_UPDATE_RENDER_HASHES=1 rewrites %s\n", changed, added, missing, path.c_str());
+        std::fprintf(stderr, "  %d changed, %d new, %d missing, %d not compared on this platform; COMPOSITOR_UPDATE_RENDER_HASHES=1 rewrites %s\n", changed, added, missing, unchecked, path.c_str());
     CHECK_EQ(changed, 0);
     CHECK_EQ(added, 0);
     CHECK_EQ(missing, 0);

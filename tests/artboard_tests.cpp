@@ -274,7 +274,7 @@ TEST_CASE(artboards_slices_psd_round_trip) {
 TEST_CASE(artboards_slices_project_round_trip) {
     const Document doc = artboardDocument();
     const auto dir = std::filesystem::temp_directory_path() / "nekophoto-artboard-tests";
-    std::filesystem::remove_all(dir);
+    { std::error_code cleanup_; std::filesystem::remove_all(dir, cleanup_); }
     std::filesystem::create_directories(dir);
     const std::string package = (dir / "Boards.comp").string();
     ProjectError error;
@@ -294,7 +294,7 @@ TEST_CASE(artboards_slices_project_round_trip) {
     // Without them the Mac's version stays.
     Document plain(10, 10);
     CHECK(manifestJson(plain, std::nullopt).find("\"version\": 7") != std::string::npos);
-    std::filesystem::remove_all(dir);
+    { std::error_code cleanup_; std::filesystem::remove_all(dir, cleanup_); }
 }
 
 TEST_CASE(artboards_and_frames_at_sixteen_bits) {

@@ -645,7 +645,7 @@ TEST_CASE(png_round_trip_keeps_pixels) {
     // A colour PNG is not a valid mask.
     REQUIRE(writePngImage((dir / "c.png").string(), *image, 0, &error));
     CHECK(readPngGray((dir / "c.png").string(), &error) == nullptr);
-    fs::remove_all(dir);
+    { std::error_code cleanup_; fs::remove_all(dir, cleanup_); }
 }
 
 TEST_CASE(png_written_in_parallel_strips_decodes_exactly) {
@@ -687,7 +687,7 @@ TEST_CASE(png_written_in_parallel_strips_decodes_exactly) {
     bool same = true;
     for (int y = 0; y < 600; y++) same = same && std::memcmp(g->row(y), gray.row(y), 4099) == 0;
     CHECK(same);
-    fs::remove_all(dir);
+    { std::error_code cleanup_; fs::remove_all(dir, cleanup_); }
 }
 
 TEST_CASE(project_round_trip_preserves_layers_masks_groups_and_unknown_fields) {
@@ -787,7 +787,7 @@ TEST_CASE(project_round_trip_preserves_layers_masks_groups_and_unknown_fields) {
     CHECK(text.find("\"blendMode\": \"Color Dodge\"") != std::string::npos);
     CHECK(text.find("\"sampling\": \"Smooth\"") != std::string::npos);
     in.close();   // Windows will not delete a file that is still open
-    fs::remove_all(dir);
+    { std::error_code cleanup_; fs::remove_all(dir, cleanup_); }
 }
 
 TEST_CASE(text_style_range_splits_patches_and_merges) {
@@ -847,7 +847,7 @@ TEST_CASE(text_runs_survive_a_project) {
     REQUIRE(back.has_value());
     REQUIRE(back->layers[0].text.has_value());
     CHECK(back->layers[0].text->runs == t.runs);
-    fs::remove_all(dir);
+    { std::error_code cleanup_; fs::remove_all(dir, cleanup_); }
 }
 
 TEST_CASE(trim_by_transparency_and_by_corner_colour) {
@@ -890,7 +890,7 @@ TEST_CASE(projects_past_the_macs_100_megapixels_save_and_load) {
     REQUIRE(back.has_value());
     CHECK_EQ(int(back->layers.size()), 3);
     CHECK(back->layerPixels() == 108000000LL);
-    fs::remove_all(dir);
+    { std::error_code cleanup_; fs::remove_all(dir, cleanup_); }
     // One layer still stops at 100 megapixels, as on the Mac.
     Document one(10, 10);
     one.layers.push_back(imageLayer("Too big", std::make_shared<Image>(10001, 10000), {0, 0}));
@@ -898,13 +898,13 @@ TEST_CASE(projects_past_the_macs_100_megapixels_save_and_load) {
     dir = tempDir();
     CHECK(!saveProject(one, std::nullopt, (dir / "Big.comp").string(), error));
     CHECK(error.kind == ProjectError::TooLarge);
-    fs::remove_all(dir);
+    { std::error_code cleanup_; fs::remove_all(dir, cleanup_); }
     // A canvas follows the same rule on load: 30,000 pixels a side is allowed, 900 megapixels is not.
     dir = tempDir();
     REQUIRE(saveProject(Document(30000, 30000), std::nullopt, (dir / "Wide.comp").string(), error));
     CHECK(!loadProject((dir / "Wide.comp").string(), error));
     CHECK(error.kind == ProjectError::TooLarge);
-    fs::remove_all(dir);
+    { std::error_code cleanup_; fs::remove_all(dir, cleanup_); }
 }
 
 TEST_CASE(project_rejects_bad_manifests_like_the_mac) {
@@ -2202,7 +2202,7 @@ TEST_CASE(project_round_trip_keeps_frames_and_old_projects_load) {
     auto damaged = parseManifest(manifest, error);
     REQUIRE(damaged);
     CHECK(damaged->animation.empty());
-    fs::remove_all(dir);
+    { std::error_code cleanup_; fs::remove_all(dir, cleanup_); }
 }
 
 TEST_CASE(save_during_playback_writes_the_document_not_the_frame_shown) {
@@ -2242,7 +2242,7 @@ TEST_CASE(save_during_playback_writes_the_document_not_the_frame_shown) {
     CHECK(doc.layers[0].visible);
     CHECK(doc.layers[1].transform.origin == Point(10, 0));
     CHECK(doc.animation == before.animation);
-    fs::remove_all(dir);
+    { std::error_code cleanup_; fs::remove_all(dir, cleanup_); }
 }
 
 TEST_CASE(selecting_a_frame_is_not_an_undo_step_but_edits_keep_their_frame) {

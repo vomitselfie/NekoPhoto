@@ -166,7 +166,7 @@ TEST_CASE(tip_presets_round_trip_through_their_folder) {
     preset.tip.mousePressureFromSpeed = true;
     preset.tip.randomFlipX = true;
     fs::path dir = fs::temp_directory_path() / "compositor-tip-preset-test";
-    fs::remove_all(dir);
+    { std::error_code cleanup_; fs::remove_all(dir, cleanup_); }
     std::string error;
     REQUIRE(saveTipPreset(dir.string(), preset, &error));
     auto back = loadTipPreset(dir.string(), &error);
@@ -195,7 +195,7 @@ TEST_CASE(tip_presets_round_trip_through_their_folder) {
     for (int y = 0; y < 64; y++) for (int x = 0; x < 256; x++) alpha += preview->pixel(x, y)[3] > 0;
     CHECK(alpha > 500);
     CHECK(!loadTipPreset((dir / "missing").string(), &error).has_value());
-    fs::remove_all(dir);
+    { std::error_code cleanup_; fs::remove_all(dir, cleanup_); }
 }
 
 TEST_CASE(images_become_tips_by_alpha_or_by_darkness_and_import_into_folders) {
@@ -220,7 +220,7 @@ TEST_CASE(images_become_tips_by_alpha_or_by_darkness_and_import_into_folders) {
     CHECK(tipFromImage(blank) == nullptr);
 
     fs::path dir = fs::temp_directory_path() / "compositor-brush-import-test";
-    fs::remove_all(dir);
+    { std::error_code cleanup_; fs::remove_all(dir, cleanup_); }
     fs::create_directories(dir);
     std::string error;
     REQUIRE(writePngImage((dir / "Dab.png").string(), clear, 0, &error));
@@ -236,7 +236,7 @@ TEST_CASE(images_become_tips_by_alpha_or_by_darkness_and_import_into_folders) {
     CHECK(fs::exists(fs::path(written[1]) / "preview.png"));
     CHECK(loadTipPreset(written[1], &error).has_value());
     CHECK(!importBrushFile((dir / "library").string() + "/nothing.abr", &error).has_value());
-    fs::remove_all(dir);
+    { std::error_code cleanup_; fs::remove_all(dir, cleanup_); }
 }
 
 TEST_MAIN()

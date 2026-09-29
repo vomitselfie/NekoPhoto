@@ -423,7 +423,7 @@ TEST_CASE(psd_carry_survives_a_project_save) {
     REQUIRE(loaded->psdCarry);
     CHECK_EQ(int(loaded->psdCarry->resources.size()), 2);
     CHECK(loaded->psdCarry->globals == dc->globals);
-    std::filesystem::remove_all(package);
+    { std::error_code cleanup_; std::filesystem::remove_all(package, cleanup_); }
 
     // Exported: the resources and global block are in the file; after a canvas change, not the guides or paths.
     auto rt = roundTrip(*loaded, "carry-project.psd");

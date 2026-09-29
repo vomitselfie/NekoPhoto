@@ -368,7 +368,7 @@ TEST_CASE(project_smart_objects_have_aggregate_limits) {
     CHECK(!loadProject(path, error));
     CHECK(error.kind == ProjectError::TooLarge);
     CHECK(timer.seconds() < 10);
-    fs::remove_all(dir);
+    { std::error_code cleanup_; fs::remove_all(dir, cleanup_); }
 }
 
 // A 16-bit source is counted at its depth: twice the bytes of an 8-bit one of the same size.
@@ -409,7 +409,7 @@ TEST_CASE(project_smart_object_budget_counts_bytes_at_depth) {
     ProjectLoadLimits atDepth;
     atDepth.smartObjectBytes = 2 * 64 * 64 * 8;
     CHECK(loadProject(path, error, atDepth).has_value());
-    fs::remove_all(dir);
+    { std::error_code cleanup_; fs::remove_all(dir, cleanup_); }
 }
 
 TEST_MAIN()

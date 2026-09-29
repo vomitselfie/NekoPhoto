@@ -253,8 +253,12 @@ void roundTrip(const Document& doc, const char* name, Check&& check) {
     const fs::path dir = scratchDir(name);
     ProjectError error;
     REQUIRE(saveProject(doc, std::nullopt, (dir / "doc.comp").string(), error));
-    std::ifstream manifest(dir / "doc.comp" / "manifest.json");
-    const std::string text((std::istreambuf_iterator<char>(manifest)), std::istreambuf_iterator<char>());
+    std::string text;
+    {
+        // Closed before the folder is removed: Windows cannot delete an open file.
+        std::ifstream manifest(dir / "doc.comp" / "manifest.json");
+        text.assign((std::istreambuf_iterator<char>(manifest)), std::istreambuf_iterator<char>());
+    }
     CHECK(text.find(std::string("\"colorMode\": \"") + colorModeKey(doc.colorMode) + "\"") != std::string::npos);
     CHECK(text.find("\"version\": 9") != std::string::npos);
     auto loaded = loadProject((dir / "doc.comp").string(), error);
@@ -262,7 +266,8 @@ void roundTrip(const Document& doc, const char* name, Check&& check) {
     CHECK(loaded->colorMode == doc.colorMode);
     CHECK(loaded->sampleType == doc.sampleType);
     check(*loaded, dir / "doc.comp");
-    fs::remove_all(dir);
+    std::error_code ignored;
+    fs::remove_all(dir, ignored);
 }
 
 } // namespace
@@ -353,7 +358,7 @@ TEST_CASE(project_refuses_damaged_or_inconsistent_modes) {
     CHECK(error.kind == ProjectError::TooLarge);
     tight.layerBytes = 12 * 12 * 5;
     CHECK(loadProject((dir / "c.comp").string(), error, tight).has_value());
-    fs::remove_all(dir);
+    { std::error_code cleanup_; fs::remove_all(dir, cleanup_); }
 }
 
 TEST_MAIN()

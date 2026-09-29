@@ -235,7 +235,7 @@ TEST_CASE(sixteen_bit_psd_round_trips_byte_for_byte) {
     const auto viaProject = channelsOf(encodePsd(*loaded, PsdExportOptions(), &summary, &error));
     REQUIRE(viaProject.size() == 2);
     for (size_t i = 0; i < before.size(); i++) for (auto& [id, bytes] : before[i]) CHECK(viaProject[i].at(id) == bytes);
-    fs::remove_all(project);
+    { std::error_code cleanup_; fs::remove_all(project, cleanup_); }
 }
 
 TEST_CASE(sixteen_bit_documents_export_as_sixteen_bit_psd) {
@@ -333,7 +333,7 @@ TEST_CASE(project_version_eight_keeps_the_sample_type) {
     std::string unknown = manifest;
     unknown.replace(unknown.find("\"u16\""), 5, "\"u32\"");
     CHECK(!parseManifest(unknown, error).has_value());
-    fs::remove_all(path);
+    { std::error_code cleanup_; fs::remove_all(path, cleanup_); }
 }
 
 TEST_MAIN()

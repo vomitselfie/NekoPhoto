@@ -236,7 +236,7 @@ TEST_CASE(grain_modes_fix_the_grain_to_the_canvas_the_stroke_or_the_dab) {
     REQUIRE(back.has_value());
     CHECK(back->tip.grainMode == M::Stroke);
     CHECK_NEAR(back->tip.grainMovement, 0.5, 1e-12);
-    std::filesystem::remove_all(folder);
+    { std::error_code cleanup_; std::filesystem::remove_all(folder, cleanup_); }
 }
 
 TEST_CASE(the_old_settings_are_mappings_that_paint_the_same) {
@@ -254,7 +254,7 @@ TEST_CASE(the_old_settings_are_mappings_that_paint_the_same) {
         }
     // A brush.json from before mappings opens with them.
     const fs::path dir = fs::temp_directory_path() / "compositor-legacy-tip";
-    fs::remove_all(dir);
+    { std::error_code cleanup_; fs::remove_all(dir, cleanup_); }
     fs::create_directories(dir);
     std::ofstream(dir / "brush.json") << R"({"format": "compositor-tip-brush", "version": 1, "name": "Old", "diameter": 30,
         "spacing": 0.2, "sizeJitter": 0.4, "flowJitter": 0.3, "angleJitter": 60, "pressureSize": 1, "minimumSize": 0.2, "pressureFlow": 0.5})";
@@ -280,7 +280,7 @@ TEST_CASE(the_old_settings_are_mappings_that_paint_the_same) {
     auto again = loadTipPreset(dir.string());
     REQUIRE(again.has_value());
     CHECK_EQ(again->tip.dynamics.size(), d.size());
-    fs::remove_all(dir);
+    { std::error_code cleanup_; fs::remove_all(dir, cleanup_); }
 }
 
 TEST_CASE(screen_speed_is_the_document_step_at_the_view_scale_smoothed_the_same) {

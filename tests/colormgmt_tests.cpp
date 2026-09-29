@@ -489,7 +489,7 @@ TEST_CASE(project_profile_round_trip) {
     auto plainBack = loadProject((dir / "plain.comp").string(), error);
     REQUIRE(plainBack.has_value());
     CHECK(plainBack->profile.empty());
-    fs::remove_all(dir);
+    { std::error_code cleanup_; fs::remove_all(dir, cleanup_); }
 }
 
 TEST_CASE(png_profile_round_trip) {

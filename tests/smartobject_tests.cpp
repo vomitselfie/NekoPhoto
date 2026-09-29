@@ -163,7 +163,7 @@ TEST_CASE(an_instance_draws_its_source_and_survives_a_project) {
     CHECK(source.fileName == "small.png");
     CHECK(*source.bytes == *doc.smartObjects.begin()->second->bytes);
     CHECK(source.image && source.image.width() == 4);
-    std::filesystem::remove_all(package);
+    { std::error_code cleanup_; std::filesystem::remove_all(package, cleanup_); }
 }
 
 TEST_CASE(export_writes_the_placement_where_the_layer_is) {
@@ -779,7 +779,7 @@ TEST_CASE(sixteen_bit_smart_objects_survive_projects_and_psd) {
     CHECK(loaded->smartObjects.at(eight->id)->image.u8() != nullptr);
     CHECK_EQ(int(loaded->smartObjects.at(deep->id)->image.u16()->pixel(7, 3)[0]), 1000 + 7 * 37);
     for (const Layer& l : loaded->layers) CHECK(l.isLiveSmartObject() && l.asset->image.u16() != nullptr);
-    std::filesystem::remove_all(package);
+    { std::error_code cleanup_; std::filesystem::remove_all(package, cleanup_); }
     // A 16-bit PSD: both instances come back live, the 16-bit source at 16 bits.
     auto back = throughPsd(doc);
     REQUIRE(back.has_value());

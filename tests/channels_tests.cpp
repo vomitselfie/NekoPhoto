@@ -462,7 +462,7 @@ TEST_CASE(project_round_trip) {
     REQUIRE(at != std::string::npos);
     bad.insert(at, "\"channels\": [{\"id\": \"" + makeUuid() + "\", \"name\": \"A\"}], ");
     CHECK(!parseManifest(bad, error));
-    fs::remove_all(dir);
+    { std::error_code cleanup_; fs::remove_all(dir, cleanup_); }
 }
 
 TEST_MAIN()
