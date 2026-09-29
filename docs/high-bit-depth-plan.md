@@ -1,6 +1,6 @@
 # High bit depth and colour management: design plan
 
-Status: P1–P4 landed in 1.7 (16-bit RGB editing, painting and colour management); see "Status" below for each phase and what is still gated at 16 bits. P6 (channels) has landed too; P5, P7 and P8 are planned. The design sections below are kept as written.
+Status: P1–P4 landed in 1.7 (16-bit RGB editing, painting and colour management); see "Status" below for each phase and what is still gated at 16 bits. P6 (channels) has landed too, and P5a (the 32-bit core); the rest of P5, P7 and P8 are planned. The design sections below are kept as written.
 
 ## 1. Where we are
 
@@ -456,6 +456,69 @@ U16-vs-U8 calibration tests and U16 render-hash scenes; existing hashes unchange
   table lerp, `screen` as `old + t × (1 − old)`, stores without rounding, colour unclamped but coverage clamped, the
   brush colour linearised first, float overloads of the crop, bounds, gradient, MipCache and Asset calls, and healing
   on the `decisionImage`).
+
+**P5a landed (2026-09-28): the 32-bit core.** User-facing summary: [bit-depth.md](bit-depth.md#32-bits-per-channel).
+
+- Float primitives (`depth_f32.cpp`): `lineariseImage` / `encodeImage8` / `encodeImage16` through the document's
+  `TransferCurve`, with `fromLinearExact` (a table curve's own interpolation inverted), so 8/16 → 32 → 8/16 gives every
+  sample back at every working space and every 15-bit level; coverage widened and narrowed by scale only; premultiply,
+  halvings, bilinear and Catmull-Rom samplers (unquantised), crops, bounds, fingerprints, sRGB-encoded thumbnails,
+  `imageAtDepth(image, type, curve)`, float resampling, MipCache float levels, `cleanFloat` (NaN 0, infinity 65504,
+  negative colour 0, coverage 0..1) at the file entry points, and PSD's byte-planar predictor.
+- Profiles: `linearProfile` (the profile with gamma 1.0 curves, LUT tags dropped, "<name> (Linear)", fixed date),
+  `gammaCounterpart` (the working space it came from, by bytes or primaries, else sRGB's curve), `Document::encodedProfile`
+  (`std::optional`: the profile to go back to, empty for untagged), `encodedProfileOf`, `luminanceWeights`,
+  `PixelFormat::RGBAFloat` (display input) and `toDisplayF`.
+- `view32.h`: `View32 { exposure, gamma, method }` and `ToneMap`. Highlight Compression is extended Reinhard on the
+  profile's luminance with the peak as white (identity when nothing exceeds 1); Photoshop's exact curve is unknown.
+- `blend_f32.cpp`: the W3C formulas for all 27 modes on premultiplied float. Photoshop's 32-bit set (Normal, Dissolve,
+  Darken, Multiply, Lighten, Linear Dodge, Difference, Subtract, Divide, Hue, Saturation, Color, Luminosity, Darker and
+  Lighter Color; `blendModeAt32`) blends unbounded values; the others clamp cb and cs to 0..1 inside B only, so the
+  source and backdrop terms keep their range. ClipColor keeps only its lower bound (light above 1 is not clipped).
+- Rendering: `DeepOps<F32>` (`render_deep_ops_f32.h`), `render_exec_f32.cpp`, `render_f32.cpp`, instantiating
+  `render_exec_deep.inc` and `render_deep.inc` unchanged. The policy's functions are static, so what depends on the
+  document (the curve 8-bit colours are linearised with, the luminance weights, the view) comes from a
+  `FloatRenderScope` the entry points set; one 32-bit render runs at a time. Vector coverage, gradient and pattern fills
+  and mask density and feather come from the 16-bit rasterisers (15 bits), adjustment layers are not drawn yet
+  (`adjust` returns false; converting says so). `drawStyledLayer` has an F32 instance (colours linearised, nothing
+  rounded or clamped above 1). `render()` dispatches F32 through `renderForDisplayF` (the view, then the display transform
+  or the curve).
+- Mode conversion: `convertSampleType(document, type, error, toning)`; to 32 bits one undo step with the byte budget
+  (a quarter of the 8-bit pixels); from 32 bits HDR Toning (Exposure and Gamma, Highlight Compression) with a live
+  preview through the view. `conformToFormat` linearises 8/16-bit buffers reaching a 32-bit document through its
+  encoding curve.
+- `supports()`: a 32-bit column (rendering, Image ▸ Mode, saving and the export formats, the layer structure, masks,
+  whole-layer transforms, canvas size and flip, import, the non-pixel tools, the view), `photoshopLacksAt32` and
+  `notAvailableAtDepth`: "Not available in 32-bit mode" for Photoshop's own gaps (Dodge/Burn/Sponge, the Paint Bucket,
+  the content-aware tools, Brightness/Contrast, Posterize, Threshold, Selective Color, Grain, Mosh, G'MIC, blend modes
+  outside the set), "Not available in 32-bit yet" for the rest. Patch shares `tool.spotHealing` and so says "yet".
+- Formats: PSD/PSB 32 read (`Lr32`, raw/RLE/zip with prediction, float masks, merged image and channels; 1039 taken as the
+  space of the linear values) and written (`Lr32` with zip and prediction, float merged image, 1039 the encoding
+  profile); unedited layers carry their planes byte for byte, also through projects. Projects: `sampleType "f32"`,
+  `.f32z` sidecars, `encoded.icc`. Exports to 8/16-bit formats are tone-mapped at exposure 0 with a note.
+- App: Image ▸ Mode ▸ 32 Bits/Channel, HDR Toning, View ▸ 32-bit Preview Options, the status bar's exposure, the blend
+  picker greying, per-feature tooltips; automation `image.mode` (32, `method`, `exposure`, `gamma`) and `view.exposure`,
+  the MCP bridge, rpc smoke's 32-bit section, Japanese strings.
+- Gates: `depth_float_tests` (every mode against the double reference `tests/float_reference.cpp` within 1e-5 absolute
+  plus relative, with values up to 6, masks, opacity and an isolated folder; exact round trips; opaque Normal stacks
+  identical at 8 bits), `depth_float_format_tests` (a constructed 32-bit PSD, as no Photoshop-saved one exists in
+  Patchy's fixtures: opens as float, channels and 1039 byte for byte through PSD and projects; PSD, raw PSD and PSB of a
+  converted document back to its 8-bit pixels exactly; `.f32z` projects), 72 `f32/` render-hash scenes with every 8- and
+  16-bit hash unchanged, brush parity and the depth tests unchanged, the PSD corpus plus K.psd 118 files / 0 failed /
+  3,975 carried blocks at 8, 16 and (new, `PSD_ROUNDTRIP_32`) 32 bits, full ctest, GCC and Clang `-Werror`, rpc smoke,
+  translations. `bench_core`: instruction counts (`perf stat -e instructions:u`, core 0) of the 8/16-bit lines against
+  the start within ±1%.
+- For P5b (adjustments and filters, selections, pixel edits): adjustment layers need `DeepOps<F32>::adjust`; the float
+  kernels follow `adjustments_u16.cpp`, in linear light (Photoshop's 32-bit Levels, Curves, Exposure, Hue/Saturation,
+  Photo Filter, Channel Mixer, Vibrance...); blur in float; selections as `GrayF` with the wand deciding on a fixed
+  exposure-0 `decisionImage()`; Image Size and the other resamplers.
+- For P5c: `StrokeOps<F32>` (stroke_raster.h lists it); MyPaint's documented 15-bit round trip; healing on the
+  `decisionImage`.
+- For P5d: EXR (optional system library), Radiance .hdr, 32-bit TIFF through libtiff, RAW to linear float. For P5e:
+  exact float vector coverage and gradient ramps (today via 16 bits), text, shape and style editing, smart objects at
+  F32 (their sources are converted with sRGB's curve today). For P5f: Local Adaptation, Equalize, the HDR colour picker.
+  Also open: Assign and Convert to Profile at 32 bits, 32-bit channels in the Channels panel's editing, and a concurrency
+  cost: 32-bit renders serialise on one lock while a scope is active.
 
 ## Review notes
 

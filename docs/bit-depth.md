@@ -1,10 +1,12 @@
-# 16 bits per channel
+# 16 and 32 bits per channel
 
 **English** · [日本語](#日本語)
 
-A document is 8 or 16 bits per channel, as in Photoshop: every layer, mask and the selection have the same depth.
-16 bits keep smooth gradients smooth through blending and masking, where 8 bits can band. Image ▸ Mode ▸
-8 Bits/Channel and 16 Bits/Channel switch a document between the two, as one undo step.
+A document is 8, 16 or 32 bits per channel, as in Photoshop: every layer, mask and the selection have the same depth.
+16 bits keep smooth gradients smooth through blending and masking, where 8 bits can band. 32 bits hold linear light
+in floating point, brighter than white included (HDR). Image ▸ Mode ▸ 8 Bits/Channel, 16 Bits/Channel and
+32 Bits/Channel switch a document between them, as one undo step; [32 bits per channel](#32-bits-per-channel) below says
+what a 32-bit document can do so far.
 
 This page says what works in a 16-bit document (everything NekoPhoto does) and how each part keeps its 16 bits. The
 design is in [high-bit-depth-plan.md](high-bit-depth-plan.md).
@@ -14,7 +16,7 @@ design is in [high-bit-depth-plan.md](high-bit-depth-plan.md).
 - **Image ▸ Mode ▸ 16 Bits/Channel** converts the open document. Converting an 8-bit document is exact: back to
   8 bits, every pixel is what it was.
 - **Opening a 16-bit file**: a 16-bit RGB or grayscale Photoshop file (PSD, PSB), a 16-bit PNG, or a 16-bit TIFF
-  opens as a 16-bit document. Other deep files (32-bit, CMYK and Lab) are still converted to 8 bits, with a note.
+  opens as a 16-bit document (a 32-bit Photoshop file opens at 32 bits, see below).
 - **Projects** keep their depth: a 16-bit project stores its layers and masks as 16-bit PNGs (project format
   version 8, [project-format.md](project-format.md)). Older projects open as 8-bit.
 
@@ -133,8 +135,7 @@ Colour management works at both depths: a 16-bit document keeps its profile, con
 16 bits, and is shown through the monitor profile in the same pass that reduces it to the screen's 8 bits
 ([color-management.md](color-management.md)).
 
-32-bit float, channels, CMYK and Lab follow
-([high-bit-depth-plan.md](high-bit-depth-plan.md), section 9).
+CMYK and Lab follow ([high-bit-depth-plan.md](high-bit-depth-plan.md), section 9).
 
 ## Memory
 
@@ -142,24 +143,120 @@ The size limits are memory limits, so a 16-bit document holds half the pixels of
 per image, layer or mask (100 at 8 bits), and 500 megapixels of layers in all (1,000 at 8 bits). Converting a document
 that would not fit is refused, with the reason.
 
+## 32 bits per channel
+
+A 32-bit document holds premultiplied **linear light** in floating point, in its profile's primaries, as Photoshop's
+32-bit mode does: colour may go above 1 (brighter than white), alpha, masks and the selection stay 0 to 1. Blending in
+linear light is what light does, so soft edges, glows and semi-transparent layers look different from 8 and 16 bits
+(Photoshop's 32-bit mode too).
+
+This is the first step (P5a in [high-bit-depth-plan.md](high-bit-depth-plan.md)): the core, the files and the view.
+Painting, adjustments, filters and selections at 32 bits follow in the next steps.
+
+### Getting a 32-bit document
+
+- **Image ▸ Mode ▸ 32 Bits/Channel** converts the open document, as one undo step (refused, with the reason, when it
+  would not fit: see Memory below). Each layer's colour is linearised through its profile's tone curve (sRGB's curve for
+  an untagged document); the profile becomes its linear version (same primaries and white point, a gamma 1.0 curve,
+  "sRGB IEC61966-2.1 (Linear)"), and the profile it came from is remembered.
+- **Opening a 32-bit file**: a 32-bit RGB or grayscale Photoshop file (PSD, PSB) opens as a 32-bit document, layers,
+  masks, the merged image and alpha channels in float. Its colour profile (resource 1039) is taken as the space its
+  linear values are in, as Photoshop does; an untagged file is linear sRGB.
+- **Projects** keep 32 bits: layers, masks and channels are float sidecars (`.f32z`, [project-format.md](project-format.md)).
+- Values that are not numbers (NaN) or infinite, from a file or elsewhere, are cleaned as they come in: NaN becomes 0,
+  infinity the largest half-float value (65504), negative colour 0, alpha and masks are held to 0..1.
+
+### Going back to 16 or 8 bits: HDR Toning
+
+Image ▸ Mode ▸ 16 or 8 Bits/Channel on a 32-bit document opens **HDR Toning**, whose result the canvas shows while it is
+open:
+
+- **Exposure and Gamma**: the values multiplied by 2^exposure (stops, -20 to 20), then raised to 1 / gamma
+  (0.1 to 9.99); what is above white is clipped.
+- **Highlight Compression**: the brightest luminance is brought down to white along a smooth curve
+  (L (1 + L / W²) / (1 + L), W the brightest), the rest little changed; an image with nothing above white is left as it
+  is.
+
+Then the remembered profile's curve encodes the values for 16 or 8 bits, and the document gets that profile back. Layers
+are kept. At the defaults (Exposure and Gamma, exposure 0, gamma 1) a document that came from 8 or 16 bits comes back
+exactly as it was, every pixel. (Photoshop's Local Adaptation and Equalize Histogram methods are not there yet.)
+
+### The view
+
+A 32-bit document's values are shown through a **view**, per tab, which changes what the canvas shows, never the pixels,
+and is not an undo step:
+
+- the **Exposure** slider in the status bar (32-bit documents only), in stops;
+- **View ▸ 32-bit Preview Options**: Exposure and Gamma, or Highlight Compression (its white point the document's
+  brightest area).
+
+After the view, the canvas goes to the monitor through its profile (from the linear profile, in floating point), or,
+with no monitor profile, is encoded with the document's own curve, so at exposure 0 an 8-bit document converted to
+32 bits looks as it did (edges and transparency aside, which now blend in linear light).
+
+### What works at 32 bits now
+
+- **Rendering**: every blend mode, opacity, layer and folder masks (in float), vector masks, clipping masks, folders
+  (Pass Through and isolated), artboards, shape and fill layers, Dissolve and layer styles (all ten effects, their colours
+  linearised). Vector coverage and gradient and pattern fills come from their 16-bit forms (15 bits of coverage).
+- **Blend modes**: the picker offers Photoshop's 32-bit set: Normal, Dissolve, Darken, Multiply, Lighten, Linear Dodge
+  (Add), Difference, Subtract, Divide, Hue, Saturation, Color, Luminosity, Darker Color and Lighter Color; they work on
+  the values as they are, above white included. The other modes are greyed ("Not available in 32-bit mode"); a layer
+  that already has one (from a file, or converted) still draws, with its colours held to 0..1 inside the blend. The
+  formulas are the W3C Compositing and Blending ones; Hue, Saturation, Color, Luminosity and Darker and Lighter Color
+  take luminance from the profile's own primaries.
+- **The layer structure**: new, duplicate, delete, reorder and group layers, names, visibility, opacity, blend mode,
+  clipping; **masks** (add, enable, link, invert, delete); moving, scaling, rotating and flipping whole layers;
+  **Canvas Size** and **Flip Canvas**; importing images as layers (linearised through the document's curve).
+- **Saving and exporting**: projects and 32-bit PSD and PSB files; PNG and TIFF at 16 bits and JPEG, WebP, TGA, ICO and
+  GIF at 8, each tone-mapped at exposure 0 (values above white clip) and encoded with the document's curve, with a
+  note saying so. The embedded profile is the one the values encode to.
+- **Tools that do not touch pixels**: Move (layers), Hand, Zoom.
+
+Everything else is greyed in a 32-bit document, and automation refuses it. Two wordings tell the reason apart:
+
+- **"Not available in 32-bit mode"**: Photoshop itself has no such thing at 32 bits, so it stays greyed: Dodge, Burn
+  and Sponge, the Paint Bucket, the content-aware tools, Brightness/Contrast, Posterize, Threshold, Selective Color,
+  Grain, Mosh, G'MIC, and the blend modes outside the 32-bit set.
+- **"Not available in 32-bit yet"**: not ported yet: painting and retouching, adjustments and adjustment layers
+  (kept in the document, but not drawn at 32 bits yet: converting says so), filters and Camera Raw, selections and
+  channels editing, fill and the clipboard, Image Size, crops, distortion, text, shape and path editing, layer style
+  editing, smart objects, Remove Background, artboard, slice and SVG export, the timeline, colour conversion (Assign and
+  Convert to Profile).
+
+### Memory at 32 bits
+
+A 32-bit sample takes four bytes, so a 32-bit document holds a quarter of the pixels of an 8-bit one: up to
+25 megapixels per image, layer or mask, and 250 megapixels of layers in all.
+
+### For developers
+
+Pixels are `ImageF` / `GrayF` (`imaget.h`), premultiplied linear float. `depth.h` has the float primitives
+(`lineariseImage`, `encodeImage8/16` with `TransferCurve::fromLinearExact`, the exact inverse that makes 8/16 → 32 → 8/16
+lossless, halvings, samplers, `cleanFloat`); `colormgmt.h` has `linearProfile`, `gammaCounterpart`, `encodedProfileOf`,
+`luminanceWeights`, `PixelFormat::RGBAFloat` and `toDisplayF`; `view32.h` has `View32` and `ToneMap`. The renderer is the
+deep executor template (`render_exec_deep.inc`) over `DeepOps<F32>` (`render_deep_ops_f32.h`), unchanged from 16 bits;
+`blend_f32.cpp` has the modes. `depth_float_tests` checks the renderer against a double-precision reference
+(`tests/float_reference.cpp`) within 1e-5, absolute and relative.
+
 ---
 
 ## 日本語
 
-[English](#16-bits-per-channel) · **日本語**
+[English](#16-and-32-bits-per-channel) · **日本語**
 
-Photoshop と同じく、ドキュメントは 8 bit/チャンネルか 16 bit/チャンネルです。レイヤー・マスク・選択範囲はすべて
+Photoshop と同じく、ドキュメントは 8、16、32 bit/チャンネルのいずれかです。レイヤー・マスク・選択範囲はすべて
 同じビット数を持ちます。16 bit では描画モードやマスクを重ねてもグラデーションが滑らかなままです(8 bit では
-階調の段差が出ることがあります)。イメージ ▸ モード ▸ 8 bit/チャンネル、16 bit/チャンネル で切り替えます(取り消しは
-1 回)。
+階調の段差が出ることがあります)。32 bit はリニアな光を浮動小数点で持ち、白より明るい値(HDR)も扱えます。
+イメージ ▸ モード ▸ 8 bit/チャンネル、16 bit/チャンネル、32 bit/チャンネル で切り替えます(取り消しは 1 回)。32 bit で
+使えるものは後述の「32 bit/チャンネル」をご覧ください。
 
 ### 16 bit のドキュメントを作るには
 
 - **イメージ ▸ モード ▸ 16 bit/チャンネル** で開いているドキュメントを変換します。8 bit からの変換は正確で、8 bit に
   戻せばすべてのピクセルが元どおりです。
 - **16 bit のファイルを開く**:16 bit の RGB/グレースケールの Photoshop ファイル(PSD、PSB)、16 bit の PNG、16 bit の
-  TIFF は 16 bit のドキュメントとして開きます。それ以外の深いファイル(32 bit、CMYK、Lab)は注記つきで 8 bit に
-  変換します。
+  TIFF は 16 bit のドキュメントとして開きます(32 bit の Photoshop ファイルは 32 bit で開きます。後述)。
 - **プロジェクト**はビット数を保ちます(レイヤーとマスクを 16 bit の PNG で保存、プロジェクト形式バージョン 8)。
   以前のプロジェクトは 8 bit で開きます。
 
@@ -276,10 +373,62 @@ PSD には残りません(プロジェクトと 8 bit の PSD には残ります
 カラーマネジメントはどちらのビット数でも使えます。16 bit のドキュメントもプロファイルを持ち、プロファイル変換は 16 bit の
 まま行い、画面の 8 bit への変換と同じ処理でモニタープロファイルを通して表示します([color-management.md](color-management.md))。
 
-この後に 32 bit 浮動小数点、チャンネル、CMYK と Lab が続きます。
+この後に CMYK と Lab が続きます。
 
 ### メモリ
 
 サイズの上限はメモリの上限なので、16 bit のドキュメントが持てるピクセル数は 8 bit の半分です:画像・レイヤー・
 マスク 1 枚あたり 5,000 万画素(8 bit は 1 億)、レイヤー合計 5 億画素(8 bit は 10 億)。収まらないドキュメントの
 変換は理由を添えて中止します。
+
+### 32 bit/チャンネル
+
+32 bit のドキュメントは、Photoshop の 32 bit モードと同じく、プロファイルの原色での**リニアな光**を浮動小数点で持ちます
+(乗算済み)。色は 1 を超えられ(白より明るい)、アルファ・マスク・選択範囲は 0〜1 です。リニアな光で合成するので、
+柔らかい境界・光彩・半透明のレイヤーの見え方は 8 bit や 16 bit と変わります(Photoshop の 32 bit モードも同じです)。
+
+これは最初の段階(計画の P5a)で、中核・ファイル・表示までです。32 bit でのペイント・色調補正・フィルター・選択範囲は
+次の段階で対応します。
+
+**32 bit のドキュメントを作るには**
+
+- **イメージ ▸ モード ▸ 32 bit/チャンネル** で変換します(取り消しは 1 回。メモリに収まらないときは理由を添えて中止)。各レイヤーの
+  色はプロファイルのトーンカーブでリニアにし(プロファイルなしは sRGB のカーブ)、プロファイルは同じ原色と白色点でガンマ 1.0 の
+  リニア版に替わります。元のプロファイルは記憶しておきます。
+- 32 bit の RGB/グレースケールの **Photoshop ファイル(PSD、PSB)** は 32 bit で開きます。プロファイル(リソース 1039)は、
+  Photoshop と同じくリニアな値の色空間として扱います。
+- **プロジェクト**は 32 bit のまま保存します(浮動小数点のファイル `.f32z`)。
+- 数でない値(NaN)や無限大は読み込むときに整えます。
+
+**16 bit・8 bit に戻す:HDR トーン**
+
+32 bit のドキュメントで イメージ ▸ モード ▸ 16 または 8 bit/チャンネル を選ぶと **HDR トーン** が開き、結果をカンバスに
+表示します。**露光量とガンマ**(露光量は段数で -20〜20、ガンマは 0.1〜9.99。白を超える値はクリップ)と**ハイライト圧縮**
+(一番明るい部分を白に収める)が選べます。レイヤーは保持されます。初期値(露光量 0、ガンマ 1)なら、8 bit や 16 bit から
+変換したドキュメントは全ピクセルが元どおりに戻ります(ローカル露光量補正と平均化は未対応)。
+
+**表示**
+
+32 bit のドキュメントは**表示の設定**(タブごと)を通して表示します。ピクセルは変わらず、取り消しの対象にもなりません。
+ステータスバーの**露光量**スライダー(32 bit のドキュメントのみ)と **表示 ▸ 32 bit プレビューオプション**(露光量とガンマ、
+またはハイライト圧縮)で設定します。
+
+**32 bit で使えるもの**
+
+- **合成**:すべての描画モード、不透明度、レイヤーとグループのマスク、ベクトルマスク、クリッピングマスク、グループ、
+  アートボード、シェイプと塗りつぶしレイヤー、ディザ合成、レイヤースタイル(10 種類の効果)。
+- **描画モード**:Photoshop の 32 bit で使えるもの(通常、ディザ合成、比較(暗)、乗算、比較(明)、覆い焼き(リニア)- 加算、
+  差の絶対値、減算、除算、色相、彩度、カラー、輝度、カラー比較(暗)、カラー比較(明))を選べます。それ以外はグレー表示
+  (「32 bit/チャンネルモードでは使用できません」)で、すでに設定されているレイヤーは値を 0〜1 に収めて描画します。
+- **レイヤーの構成**、**マスク**、レイヤー全体の移動・拡大縮小・回転・反転、**カンバスサイズ**と**カンバスの反転**、画像の読み込み。
+- **保存と書き出し**:プロジェクト、32 bit の PSD・PSB。PNG と TIFF は 16 bit、JPEG・WebP・TGA・ICO・GIF は 8 bit で、
+  露光量 0 でトーンマッピングし、その旨をお知らせします。
+- ピクセルに触れないツール(移動、手のひら、ズーム)。
+
+それ以外はグレー表示になり、自動化でも使えません。Photoshop 自体が 32 bit で持たないもの(覆い焼き・焼き込み・スポンジ、
+塗りつぶしツール、コンテンツに応じた各機能、明るさ・コントラスト、ポスタリゼーション、2 階調化、特定色域の選択、粒子、
+Mosh、G'MIC、32 bit で使えない描画モード)は「32 bit/チャンネルモードでは使用できません」、まだ移植していないもの
+(ペイントとレタッチ、色調補正と調整レイヤー(保持はされますが 32 bit ではまだ描画しません)、フィルター、選択範囲など)は
+「32 bit/チャンネルではまだ使用できません」と表示します。
+
+**メモリ**:32 bit の値は 4 バイトなので、持てるピクセル数は 8 bit の 4 分の 1 です(1 枚 2,500 万画素、レイヤー合計 2 億 5,000 万画素)。

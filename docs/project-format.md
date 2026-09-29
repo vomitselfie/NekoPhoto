@@ -38,6 +38,17 @@ the values mapped on the way in and out). An 8-bit document writes no `sampleTyp
 without the key, or with `"u8"`, is 8-bit, and `sampleType` in a manifest below version 8 is refused as damage. The
 byte budgets apply: a 16-bit project holds half the pixels of an 8-bit one.
 
+`"sampleType": "f32"` (still version 8) is a 32-bit document ([bit-depth.md](bit-depth.md#32-bits-per-channel)): its
+layers, masks and channels have no PNG form, and are float sidecars instead: `imageFile` is `<id>.f32z`, `maskFile`
+`<id>.mask.f32z` and a channel's `file` `channels/<id>.f32z`. Each is a 24-byte header, `"NPF32Z"`, 0, 1 (magic and
+version), the width and height as little-endian u32, u8 channels (4 for R, G, B and alpha, 1 for a gray), u8 32, u8 1
+(zlib), a zero byte and a zero u32, then one zlib stream of the planes one after the other, rows top-down, each row in
+PSD's predictor for 32-bit channels: the row's floats split into four byte planes (most significant first, big-endian),
+then every byte replaced by its difference from the one before it in the row. The samples are as held: premultiplied
+linear light, colour unbounded, alpha and grays 0..1; NaN and infinities are cleaned on load. `"encodedProfile"` says
+which profile the document goes back to at 8 or 16 bits: `"encoded.icc"` (that file, verbatim) or `"untagged"`; without
+the key it is the profile's gamma counterpart. The byte budgets hold a quarter of the 8-bit pixels.
+
 Version 8 also carries a colour profile (docs/color-management.md): `"colorSpace": "icc"` with `"profile":
 "profile.icc"` means the document's profile is the package's `profile.icc`, the ICC bytes kept verbatim. An untagged
 document writes `"colorSpace": "sRGB"` and no profile, as before; `"icc"` below version 8, or a `profile` key with

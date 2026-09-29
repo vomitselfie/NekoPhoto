@@ -74,6 +74,10 @@ The monitor profile comes from, in order:
 2. the system's, when **Use the system's monitor profile** is on (the default): X11's `_ICC_PROFILE` on the root
    window (set by colord and other colour managers), Windows' display profile.
 
+A 32-bit document's canvas goes through its view first (exposure, gamma or Highlight Compression,
+[bit-depth.md](bit-depth.md#32-bits-per-channel)), then from its linear profile to the monitor's in floating point; with no
+monitor profile it is encoded with the document's own curve instead.
+
 When no monitor profile is known, or it is the document's own, the canvas is not transformed at all, and 8-bit
 documents are drawn bit for bit as before. The foreground and background swatches are shown through the same
 transform; the values you pick and see in the colour dialogs are the document's.
@@ -101,6 +105,21 @@ Image ▸ Mode ▸ CMYK Color and Lab Color are being built (the plan is in [hig
 - **Features by mode.** What does not work in a mode is greyed out with "Not available in CMYK mode" (or Lab mode), as
   in Photoshop; Camera Raw, G'MIC and the MyPaint brushes stay RGB only.
 - **Projects** save and open CMYK and Lab documents ([project-format.md](project-format.md), version 9).
+
+## 32-bit documents
+
+A 32-bit document holds linear light, so its profile is **linear**: the same primaries and white point as the profile it
+came from, a gamma 1.0 tone curve on each channel, named after it ("sRGB IEC61966-2.1 (Linear)"), made by Little CMS
+with a fixed creation date so its bytes are the same every time. Image ▸ Mode ▸ 32 Bits/Channel makes it from the
+document's profile (an untagged document gets linear sRGB) and remembers the profile it came from; going back to 16 or
+8 bits restores that profile exactly, and its curve encodes the values. A 32-bit Photoshop file's profile (resource
+1039) is taken as the space its linear values are in, as Photoshop does, and written back so.
+
+Exports to 8- and 16-bit formats embed the profile the values encode to (the remembered one, or the linear profile's
+gamma counterpart: the working space with the same primaries). The non-separable blend modes (Hue, Saturation, Color,
+Luminosity, Darker and Lighter Color) take luminance from the linear profile's primaries (their Y).
+
+Assign Profile and Convert to Profile are not available at 32 bits yet.
 
 ## The eyedropper
 
@@ -142,7 +161,11 @@ cache of Little CMS transforms (the 24 most recent), `convertImage` for 8- and 1
 straight for the transform and premultiplied again; 16-bit pixels go through Little CMS's float pipeline, since its
 16-bit one precalculates a grid that is coarse near the gamut's edges), `convertDocumentProfile`, soft-proofing
 transforms, and `TransferCurve`, a profile's tone curve both ways (`documentTransfer(document)`) for code that works
-in linear light. `RenderOptions::display` carries the canvas's transform into the renderer. The app side is
+in linear light; `fromLinearExact` inverts a tabulated curve's own interpolation, which 32-bit documents encode with so
+that 8 and 16 bits come back exactly. For 32 bits: `linearProfile`, `gammaCounterpart`, `encodedProfileOf` (the profile a
+document's values encode to), `encodedTransfer`, `luminanceWeights`, the `RGBAFloat` layout (premultiplied linear float,
+display input only) and `toDisplayF`, which tone-maps a float frame (`ToneMap`, `view32.h`) and takes it to the
+monitor. `RenderOptions::display` carries the canvas's transform into the renderer. The app side is
 `src/app/ColorManagement.{h,cpp}` (settings, monitor profile, policies, export) and `ColorDialogs.cpp`.
 
 The pixel layouts (`PixelFormat`) are RGBA8 and RGBA16, CMYKA8 and CMYKA16 (inverted ink, which is Little CMS's
@@ -210,6 +233,18 @@ NekoPhoto のカラーマネジメントは Photoshop と同じ考え方です�
 変換と同じ 1 回の処理で)。モニタープロファイルは、環境設定で選んだファイル(Wayland ではこれを使います)、または
 システムのもの(X11 の `_ICC_PROFILE`、Windows のディスプレイプロファイル)です。わからないとき、またはドキュメントと
 同じときは変換しないので、8 bit のドキュメントは以前とまったく同じに表示されます。
+
+32 bit のドキュメントは、まず表示の設定(露光量、ガンマ、またはハイライト圧縮)を通し、リニアなプロファイルからモニターの
+プロファイルへ浮動小数点で変換します。モニタープロファイルがないときはドキュメントのカーブで表示用に変換します。
+
+### 32 bit のドキュメント
+
+32 bit のドキュメントはリニアな光を持つので、プロファイルも**リニア**です。元のプロファイルと同じ原色と白色点で、トーンカーブは
+ガンマ 1.0 です(名前は「sRGB IEC61966-2.1 (Linear)」のようになります)。イメージ ▸ モード ▸ 32 bit/チャンネル で元の
+プロファイルから作り(プロファイルなしはリニア sRGB)、元のプロファイルを記憶しておきます。16 bit・8 bit に戻すと元の
+プロファイルがそのまま戻ります。32 bit の Photoshop ファイルのプロファイル(リソース 1039)は、Photoshop と同じくリニアな値の
+色空間として扱います。8 bit・16 bit 形式への書き出しには、値の変換先のプロファイルを埋め込みます。プロファイルの指定と
+プロファイル変換は、32 bit ではまだ使えません。
 
 ### 表示 ▸ 校正設定、色の校正、色域外警告
 
