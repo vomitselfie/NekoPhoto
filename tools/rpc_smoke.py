@@ -1059,6 +1059,70 @@ def colour_mode_painting(rpc):
     rpc.call("tabs.close", index=tab["index"], discard=True)
 
 
+def colour_mode_adjustments(rpc):
+    """P7 E (docs/color-modes.md): Image > Adjustments, adjustment layers and the Filter menu in CMYK and Lab at 8 and
+    16 bits, on the document's own samples. Each kind Photoshop offers in the mode works (one undo step each); what it
+    greys there is refused for good ("... mode"), Color Lookup waits ("... mode yet"). Invert on CMYK inverts the inks;
+    Levels on CMYK's black slot moves the black plate alone; Curves on Lab's lightness leaves a and b."""
+    first = rpc.call("tabs.list")
+    tab = rpc.call("tabs.new")
+    common = ("Levels", "Curves", "Brightness/Contrast", "Invert", "Posterize", "Threshold", "Gradient Map", "Photo Filter")
+    offered = {"cmyk": common + ("Hue/Saturation", "Color Balance", "Selective Color", "Channel Mixer"), "lab": common + ("Exposure",)}
+    lacking = {"cmyk": ("Exposure", "Vibrance", "Black & White", "Grain"),
+               "lab": ("Hue/Saturation", "Color Balance", "Selective Color", "Channel Mixer", "Vibrance", "Black & White", "Grain")}
+    for mode, bits in (("cmyk", 8), ("cmyk", 16), ("lab", 8), ("lab", 16)):
+        rpc.call("document.new", width=48, height=32)
+        rpc.call("pixels.fill", color="#c05030")
+        assert rpc.call("image.mode", colorMode=mode, bits=bits)["colorMode"] == mode
+        before = rpc.call("color.sample", x=10, y=10)["values"]
+        steps = len(rpc.call("history.list")["undo"])
+        rpc.call("pixels.invert")
+        inverted = rpc.call("color.sample", x=10, y=10)["values"]
+        if mode == "cmyk":
+            assert all(abs((100 - b) - a) < 1.0 for a, b in zip(inverted, before)), ("every ink inverted", before, inverted)
+        rpc.call("history.undo")
+        if mode == "cmyk":
+            # Levels on the black slot alone: the black plate moves, cyan, magenta and yellow stay.
+            levels = rpc.call("adjustments.defaults", kind="Levels")["levels"]
+            levels["ranges"].append({"black": 0, "gamma": 1, "white": 128, "outputBlack": 0, "outputWhite": 255})
+            levels["channel"] = "Black"
+            rpc.call("pixels.adjust", kind="Levels", settings={"levels": levels})
+            after = rpc.call("color.sample", x=10, y=10)["values"]
+            assert all(abs(a - b) < 0.5 for a, b in zip(after[:3], before[:3])) and after[3] < before[3], (before, after)
+            rpc.call("history.undo")
+        else:
+            curves = rpc.call("adjustments.defaults", kind="Curves")["curves"]
+            curves["channels"][1] = [{"x": 0, "y": 0}, {"x": 100, "y": 170}, {"x": 255, "y": 255}]
+            curves["channel"] = "Lightness"
+            rpc.call("pixels.adjust", kind="Curves", settings={"curves": curves})
+            after = rpc.call("color.sample", x=10, y=10)["values"]
+            assert after[0] > before[0] + 3 and abs(after[1] - before[1]) < 0.6 and abs(after[2] - before[2]) < 0.6, (before, after)
+            rpc.call("history.undo")
+        rpc.call("selection.rect", x=4, y=4, width=30, height=20)
+        for kind in offered[mode]:
+            rpc.call("pixels.adjust", kind=kind, settings={"exposure": 0.5} if kind == "Exposure" else {})
+        for kind in lacking[mode]:
+            expect_refused(rpc, "mode", "pixels.adjust", kind=kind)
+        expect_refused(rpc, "mode yet", "pixels.adjust", kind="Color Lookup")
+        for kind, extra in (("Gaussian Blur", {"radius": 2}), ("Motion Blur", {"angle": 30, "distance": 8}), ("Add Noise", {"amount": 10, "seed": 7}),
+                            ("Lens Correction", {"distortion": 20})):
+            rpc.call("pixels.filter", kind=kind, **extra)
+        undo = rpc.call("history.list")["undo"]
+        assert len(undo) - steps == len(offered[mode]) + 4 + 1, ("one undo step each", undo[steps:])
+        rpc.call("selection.none")
+        # Adjustment layers draw in the mode; what Photoshop lacks there cannot be added.
+        for kind in offered[mode]:
+            layer = rpc.call("layers.add", kind="adjustment", adjustmentKind=kind)
+            rpc.call("adjustments.set", id=layer["id"], settings=rpc.call("adjustments.defaults", kind=kind))
+        expect_refused(rpc, "mode", "layers.add", kind="adjustment", adjustmentKind="Vibrance")
+        assert rpc.call("render", maxSize=48)["png"]
+        info = rpc.call("document.info")
+        assert info["colorMode"] == mode and info["bits"] == bits, info
+        rpc.call("document.close", discard=True)
+    rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
+    rpc.call("tabs.close", index=tab["index"], discard=True)
+
+
 def colour_modes(rpc):
     """Image > Mode > CMYK Color and Lab Color (docs/color-modes.md): the conversion (one undo step), the colour
     channels, a fill in one channel, PSD in the document's own mode, and back; at 8 and 16 bits, in a tab of its own."""
@@ -1686,6 +1750,7 @@ def main():
     colour_management(rpc)
     colour_modes(rpc)
     colour_mode_painting(rpc)
+    colour_mode_adjustments(rpc)
 
     # Errors come back as errors, not crashes.
     try:
