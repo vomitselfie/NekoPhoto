@@ -503,9 +503,11 @@ stroke recorded with smoothing on carries them, with its times and view scale.
 
 ## 16 bits
 
-A stroke on a 16-bit document (`BrushStroke(layer, mask, settings, canvas, SampleType::U16, selection)`, in
-`brush_u16.cpp`) keeps everything at 0..32768: the working pixels or mask, the coverage grid, the selection, the dab
-profile table and the stamps. The samples and the dynamics are depth-free doubles, so every engine places the same
+A stroke on a 16-bit document (`BrushStroke(layer, mask, settings, canvas, SampleType::U16, selection)`) keeps
+everything at 0..32768: the working pixels or mask, the coverage grid, the selection, the dab profile table and the
+stamps. `BrushStroke` itself is depth-free (the grid's placement, the curve, the tail, the dirty area); the pixels are
+a `StrokeRaster<S>` (`src/core/src/stroke_raster.h`), one template over a `StrokeOps<S>` policy that holds each
+depth's arithmetic, instantiated in `brush.cpp` for 8 bits and `brush_u16.cpp` for 16. The samples and the dynamics are depth-free doubles, so every engine places the same
 dabs at either depth; only what a dab writes differs:
 
 - **Round tip.** The dab table holds 15-bit values; hard tips merge by max, soft ones by screen

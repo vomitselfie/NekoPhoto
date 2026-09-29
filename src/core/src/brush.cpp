@@ -1,145 +1,62 @@
+// BrushStroke: the curve through the samples, the dab spacing, the provisional tail and the dirty area, at any depth.
+// The pixels are a StrokeRaster<S> (stroke_raster.h), instantiated here for 8 bits and in brush_u16.cpp for 16.
 #include "compositor/brush.h"
-#include "compositor/render.h"
-#include "compositor/parallel.h"
-#include "compositor/shape.h"
-#include <algorithm>
-#include <cmath>
-#include <cstring>
-
-#include "compositor/heal.h"
+#include "stroke_raster.h"
 
 namespace compositor {
 
-namespace {
-/// Pixels in a w x h area, without overflow.
-inline long long areaOf(int w, int h) { return (long long)(w) * (long long)(h); }
-} // namespace
+template class StrokeRaster<SampleType::U8>;
+extern template class StrokeRaster<SampleType::U16>;
 
 double brushFalloff(double u) {
     const double k = 2.5;
     return std::max(0.0, (std::exp(-k * u * u) - std::exp(-k)) / (1 - std::exp(-k)));
 }
 
-namespace {
-
-// Nearest-neighbour stretch of a gray image over a rect of the grid (BrushRaster.draw for masks).
-void stretchGray(const GrayImage& source, GrayImage& target, const Rect& rect) {
-    int x0 = std::max(0, int(std::floor(rect.minX()))), y0 = std::max(0, int(std::floor(rect.minY())));
-    int x1 = std::min(target.width(), int(std::ceil(rect.maxX()))), y1 = std::min(target.height(), int(std::ceil(rect.maxY())));
-    for (int y = y0; y < y1; y++) {
-        int sy = clamp(int((y - rect.minY()) / rect.height * source.height()), 0, source.height() - 1);
-        for (int x = x0; x < x1; x++) {
-            int sx = clamp(int((x - rect.minX()) / rect.width * source.width()), 0, source.width() - 1);
-            target.at(x, y) = source.at(sx, sy);
-        }
-    }
-}
-
-void copyImage(const Image& source, Image& target, int dx, int dy) {
-    const int x0 = std::max(0, -dx), x1 = std::min(source.width(), target.width() - dx);
-    if (x1 <= x0) return;
-    parallelFor(0, source.height(), 256, [&](int ya, int yb) {
-        for (int y = ya; y < yb; y++) {
-            const int ty = y + dy;
-            if (ty < 0 || ty >= target.height()) continue;
-            std::memcpy(target.pixel(x0 + dx, ty), source.pixel(x0, y), size_t(x1 - x0) * 4);
-        }
-    });
-}
-
-} // namespace
-
 BrushStroke::BrushStroke(const Layer& layer, bool mask, BrushSettings settings, Size canvas, const GrayImage* selection)
     : isMask_(mask), settings_(settings), canvas_(0, 0, canvas.width, canvas.height), name_(layer.name), layerTransform_(layer.transform) {
-    const GrayImage* placedMask = nullptr;
-    LayerTransform base = layer.transform;
-    if (mask && layer.mask && layer.mask->placement && layer.mask->asset.image.u8()) {
-        placedMask = layer.mask->asset.image.u8().get();
-        base = *layer.mask->placement;
-    }
-    int originalWidth = placedMask ? placedMask->width() : layer.pixelWidth();
-    int originalHeight = placedMask ? placedMask->height() : layer.pixelHeight();
-    Affine originalMapping = base.pixelToDocument(originalWidth, originalHeight);
-    Rect originalBounds(0, 0, originalWidth, originalHeight);
-    Rect extent = originalBounds;
-    if (!mask) extent = originalBounds.unionWith(originalMapping.inverted().mapBounds(canvas_).integral());
-    width_ = int(extent.width);
-    height_ = int(extent.height);
-    sourceRect_ = originalBounds.offsetBy(-extent.minX(), -extent.minY());
-    pixelToDocument_ = originalMapping.translatedBy(extent.minX(), extent.minY());
-    documentToPixel_ = pixelToDocument_.inverted();
-    LayerTransform expanded = base;
-    expanded.size = {double(width_) * base.size.width / originalWidth, double(height_) * base.size.height / originalHeight};
-    Point center = originalMapping.apply({extent.midX(), extent.midY()});
-    expanded.origin = {center.x - expanded.size.width / 2, center.y - expanded.size.height / 2};
-    paintTransform_ = expanded;
+    raster8_ = std::make_unique<StrokeRaster<SampleType::U8>>(*this);
+    valid_ = raster8_->init(layer, mask, selection);
+}
 
-    if (width_ < 1 || height_ < 1 || double(width_) * height_ > 100000000.0 || originalWidth > 30000 || originalHeight > 30000
-        || !std::isfinite(settings.diameter) || settings.diameter < 1 || settings.diameter > 2000
-        || !std::isfinite(settings.hardness) || settings.hardness < 0 || settings.hardness > 1
-        || !std::isfinite(settings.opacity) || settings.opacity < 0.01 || settings.opacity > 1) {
-        error_ = "This stroke exceeds the supported canvas or brush limits.";
+BrushStroke::BrushStroke(const Layer& layer, bool mask, BrushSettings settings, Size canvas, SampleType depth, const Gray16* selection)
+    : isMask_(mask), settings_(settings), canvas_(0, 0, canvas.width, canvas.height), name_(layer.name), layerTransform_(layer.transform) {
+    if (depth != SampleType::U16) {
+        raster8_ = std::make_unique<StrokeRaster<SampleType::U8>>(*this);
+        error_ = "A stroke at this depth needs the 8-bit constructor.";
         return;
     }
-
-    if (mask) {
-        baseMask_ = std::make_shared<GrayImage>(width_, height_, 255);
-        const GrayImage* source = placedMask ? placedMask : (layer.mask && layer.mask->asset.image.u8() ? layer.mask->asset.image.u8().get() : nullptr);
-        if (source) stretchGray(*source, *baseMask_, sourceRect_);
-        workingMask_ = std::make_shared<GrayImage>(*baseMask_);
-    } else {
-        // The grid usually is the layer's own pixel grid: then the layer image (immutable, shared) is the base
-        // and only the working copy is made.
-        const bool sameGrid = layer.asset && layer.asset->image.u8() && sourceRect_ == Rect(0, 0, width_, height_)
-            && layer.asset->image.u8()->width() == width_ && layer.asset->image.u8()->height() == height_;
-        // A blank layer (no pixels yet) needs no copy and no scan: two images of zero pages, which cost nothing
-        // until painted. A layer smaller than the grid is scanned at its own size.
-        const bool blank = !(layer.asset && layer.asset->image.u8());
-        if (sameGrid) {
-            base_ = layer.asset->image.u8();
-            baseBounds_ = alphaBounds(*base_);
-        } else {
-            // Base and working copy each get the layer's own pixels; the rest of the grid is zero pages in both,
-            // so the working copy is not a copy of the whole grid.
-            auto copy = std::make_shared<Image>(width_, height_);
-            auto working = std::make_shared<Image>(width_, height_);
-            if (!blank) {
-                const int dx = int(sourceRect_.minX()), dy = int(sourceRect_.minY());
-                copyImage(*layer.asset->image.u8(), *copy, dx, dy);
-                copyImage(*layer.asset->image.u8(), *working, dx, dy);
-                PixelBounds b = alphaBounds(*layer.asset->image.u8());
-                if (!b.isEmpty()) {
-                    b = {std::max(0, b.x0 + dx), std::max(0, b.y0 + dy), std::min(width_, b.x1 + dx), std::min(height_, b.y1 + dy)};
-                    baseBounds_ = b.isEmpty() ? PixelBounds{} : b;
-                }
-            }
-            base_ = copy;
-            working_ = working;
-        }
-        if (!working_) working_ = std::make_shared<Image>(*base_);
-        // The healers copy only from what the mask shows: a dab at a cut-out's edge closes with the subject.
-        if (layer.mask && layer.mask->enabled && !layer.mask->placement && layer.mask->asset.image.u8()
-            && layer.mask->asset.image.u8()->width() == originalWidth && layer.mask->asset.image.u8()->height() == originalHeight) {
-            visible_ = std::make_shared<GrayImage>(width_, height_, 255);
-            stretchGray(*layer.mask->asset.image.u8(), *visible_, sourceRect_);
-        }
-    }
-    coverage_ = std::make_shared<GrayImage>(width_, height_, 0);
-    if (selection && !selection->isEmpty()) {
-        // Selection coverage resampled into the grid: outside the canvas nothing is selected.
-        selection_ = std::make_shared<GrayImage>(width_, height_, 0);
-        for (int y = 0; y < height_; y++) {
-            Point d = pixelToDocument_.apply({0.5, y + 0.5});
-            Point dd = pixelToDocument_.applyVector({1, 0});
-            for (int x = 0; x < width_; x++, d = d + dd) {
-                int sx = int(std::floor(d.x)), sy = int(std::floor(d.y));
-                if (sx < 0 || sy < 0 || sx >= selection->width() || sy >= selection->height()) continue;
-                selection_->at(x, y) = selection->at(sx, sy);
-            }
-        }
-    }
-    valid_ = true;
+    depth_ = depth;
+    raster16_ = std::make_unique<StrokeRaster<SampleType::U16>>(*this);
+    valid_ = raster16_->init(layer, mask, selection);
 }
+
+BrushStroke::~BrushStroke() = default;
+
+template <class F> decltype(auto) BrushStroke::withRaster(F&& f) {
+    if (raster16_) return f(*raster16_);
+    return f(*raster8_);
+}
+
+template <class F> decltype(auto) BrushStroke::withRaster(F&& f) const {
+    if (raster16_) return f(std::as_const(*raster16_));
+    return f(std::as_const(*raster8_));
+}
+
+void BrushStroke::setMaskClone(std::shared_ptr<const GrayImage> sample) { if (raster8_) raster8_->maskClone = std::move(sample); }
+void BrushStroke::setMaskClone(std::shared_ptr<const Gray16> sample) { if (raster16_) raster16_->maskClone = std::move(sample); }
+ImagePtr BrushStroke::previewImage() const { return raster8_ ? raster8_->working : nullptr; }
+GrayPtr BrushStroke::previewMask() const { return raster8_ ? raster8_->workingMask : nullptr; }
+Image16Ptr BrushStroke::previewImage16() const { return raster16_ ? raster16_->working : nullptr; }
+Gray16Ptr BrushStroke::previewMask16() const { return raster16_ ? raster16_->workingMask : nullptr; }
+const Image* BrushStroke::gridBase() const { return raster8_ ? raster8_->base.get() : nullptr; }
+Image* BrushStroke::gridWorking() { return raster8_ ? raster8_->working.get() : nullptr; }
+const GrayImage* BrushStroke::gridSelection() const { return raster8_ ? raster8_->selection.get() : nullptr; }
+const Image16* BrushStroke::gridBase16() const { return raster16_ ? raster16_->base.get() : nullptr; }
+Image16* BrushStroke::gridWorking16() { return raster16_ ? raster16_->working.get() : nullptr; }
+const Gray16* BrushStroke::gridSelection16() const { return raster16_ ? raster16_->selection.get() : nullptr; }
+GrayImage* BrushStroke::gridCoverage() { return raster8_ ? raster8_->coverage.get() : nullptr; }
+Gray16* BrushStroke::gridCoverage16() { return raster16_ ? raster16_->coverage.get() : nullptr; }
 
 void BrushStroke::markDirty(const Rect& gridRect) {
     Rect r = gridRect.intersection(Rect(0, 0, width_, height_));
@@ -153,10 +70,7 @@ void BrushStroke::refreshLevels(const Rect& grid) const {
     // The renderer draws zoomed-out layers from reduced copies cached by image; the working pixels change in
     // place, so the copies are brought up to date where they changed (else strokes vanish when zoomed out).
     const int x0 = int(std::floor(grid.minX())), y0 = int(std::floor(grid.minY())), x1 = int(std::ceil(grid.maxX())), y1 = int(std::ceil(grid.maxY()));
-    if (working_) MipCache::shared().refresh(working_.get(), x0, y0, x1, y1);
-    if (workingMask_) MipCache::shared().refresh(workingMask_.get(), x0, y0, x1, y1);
-    if (working16_) MipCache::shared().refresh(working16_.get(), x0, y0, x1, y1);
-    if (workingMask16_) MipCache::shared().refresh(workingMask16_.get(), x0, y0, x1, y1);
+    withRaster([&](const auto& raster) { raster.refreshLevels(x0, y0, x1, y1); });
 }
 
 Rect BrushStroke::takeDirtyRect() {
@@ -167,19 +81,19 @@ Rect BrushStroke::takeDirtyRect() {
     return doc;
 }
 
+void BrushStroke::restoreTail() {
+    withRaster([&](auto& raster) { raster.restoreTail(tailRect_); });
+    previous_ = tailPrevious_;
+    distanceToNext_ = tailDistance_;
+    hasTail_ = false;
+    markDirty(tailRect_);
+}
+
 void BrushStroke::append(Point point) {
     if (!valid_ || !point.isFinite() || std::fabs(point.x) > 1e7 || std::fabs(point.y) > 1e7) return;
     if (!samples_.empty() && samples_.back() == point) return;
     // Undo the provisional tail.
-    if (hasTail_) {
-        int x0 = int(tailRect_.minX()), y0 = int(tailRect_.minY()), w = int(tailRect_.width), h = int(tailRect_.height);
-        if (coverage16_) restoreTail();
-        else for (int y = 0; y < h; y++) std::memcpy(coverage_->row(y0 + y) + x0, &tailBackup_[size_t(y) * w], size_t(w));
-        previous_ = tailPrevious_;
-        distanceToNext_ = tailDistance_;
-        hasTail_ = false;
-        markDirty(tailRect_);
-    }
+    if (hasTail_) restoreTail();
     samples_.push_back(point);
     if (samples_.size() > 4) samples_.erase(samples_.begin());
     size_t n = samples_.size();
@@ -195,12 +109,7 @@ void BrushStroke::append(Point point) {
         tailDistance_ = distanceToNext_;
         if (!affected.isEmpty()) {
             tailRect_ = affected;
-            int x0 = int(affected.minX()), y0 = int(affected.minY()), w = int(affected.width), h = int(affected.height);
-            if (coverage16_) saveTail(affected);
-            else {
-                tailBackup_.resize(size_t(w) * h);
-                for (int y = 0; y < h; y++) std::memcpy(&tailBackup_[size_t(y) * w], coverage_->row(y0 + y) + x0, size_t(w));
-            }
+            withRaster([&](auto& raster) { raster.saveTail(affected); });
             hasTail_ = true;
         }
         walk(point);
@@ -219,15 +128,7 @@ void BrushStroke::appendAll(const std::vector<Point>& documentPoints) {
 
 void BrushStroke::flush() {
     if (!valid_) return;
-    if (hasTail_) {
-        int x0 = int(tailRect_.minX()), y0 = int(tailRect_.minY()), w = int(tailRect_.width), h = int(tailRect_.height);
-        if (coverage16_) restoreTail();
-        else for (int y = 0; y < h; y++) std::memcpy(coverage_->row(y0 + y) + x0, &tailBackup_[size_t(y) * w], size_t(w));
-        previous_ = tailPrevious_;
-        distanceToNext_ = tailDistance_;
-        hasTail_ = false;
-        markDirty(tailRect_);
-    }
+    if (hasTail_) restoreTail();
     size_t n = samples_.size();
     if (n >= 2) {
         curve(samples_[n - 2], samples_[n - 1], samples_[n >= 3 ? n - 3 : 0], samples_[n - 1]);
@@ -275,128 +176,8 @@ void BrushStroke::walk(Point point) {
     previous_ = point;
 }
 
-void BrushStroke::refreshDabTable(double radius, double hardness, double footprint) {
-    if (dabTableRadius_ == radius && dabTableHardness_ == hardness && dabTableFootprint_ == footprint) return;
-    dabTableRadius_ = radius; dabTableHardness_ = hardness; dabTableFootprint_ = footprint;
-    const bool hard = hardness >= 1;
-    const double inner = radius * hardness;
-    const double reach = radius + footprint;   // nothing beyond
-    const int entries = 8192;
-    dabTableScale_ = entries / (reach * reach);
-    dabTable_.assign(size_t(entries) + 2, 0);
-    for (int i = 0; i <= entries; i++) {
-        const double dist = std::sqrt(i / dabTableScale_);
-        double value;
-        if (hard) value = clamp((radius - dist) / std::max(1e-9, footprint) + 0.5, 0.0, 1.0);
-        else if (dist <= inner) value = 1;
-        else if (dist >= radius) value = 0;
-        else value = brushFalloff((dist - inner) / std::max(1e-9, radius - inner));
-        dabTable_[size_t(i)] = uint8_t(clamp(value * 255 + 0.5, 0.0, 255.0));
-    }
-}
-
-bool BrushStroke::stampDab(Point center, double radius, const Rect& affected) {
-    const Affine& g = pixelToDocument_;
-    if (!settings_.stampedDabs || g.b != 0 || g.c != 0 || g.a != g.d || !(g.a > 0)) return false;
-    const double scale = g.a;                      // document units per grid pixel
-    const double gridRadius = radius / scale;
-    const int side = 2 * int(std::ceil(gridRadius + 1)) + 2;
-    if (side > 2600) return false;   // beyond, the general path
-    const bool hard = settings_.hardness >= 1;
-    if (stamp_.side != side || stamp_.radius != radius || stamp_.hardness != settings_.hardness || stamp_.scale != scale) {
-        stamp_.side = side; stamp_.radius = radius; stamp_.hardness = settings_.hardness; stamp_.scale = scale;
-        // A hard rim shows a quarter-pixel shift; a soft one does not, so soft tips over 512 pixels keep 4 tiles.
-        stamp_.steps = side <= 512 || (hard && side <= 2048) ? 4 : 2;
-        for (int phase = 0; phase < 16; phase++) { stamp_.tiles[phase].clear(); stamp_.tiles[phase].shrink_to_fit(); stamp_.built[phase] = false; }
-    }
-    // Where the tile lands: its centre pixel on the grid pixel under the dab, at the nearest subpixel phase
-    // (an eighth of a pixel off at most with quarter steps, a quarter with half steps).
-    const int steps = stamp_.steps, shift = steps == 4 ? 2 : 1;
-    const Point gc = documentToPixel_.apply(center);
-    const int qx = int(std::floor(gc.x * steps + 0.5)), qy = int(std::floor(gc.y * steps + 0.5));
-    const int phase = (qx & (steps - 1)) + (qy & (steps - 1)) * steps;
-    const int ox = (qx >> shift) - side / 2, oy = (qy >> shift) - side / 2;
-    if (!stamp_.built[phase]) {
-        // The tip at this phase, from the same profile table the general path reads.
-        const double reach2 = (radius + scale) * (radius + scale);
-        const double cx = side / 2 + double(phase % steps) / steps, cy = side / 2 + double(phase / steps) / steps;
-        std::vector<uint8_t>& tile = stamp_.tiles[phase];
-        tile.assign(size_t(side) * side, 0);
-        parallelRows(0, side, [&](int ya, int yb) {
-            for (int j = ya; j < yb; j++)
-                for (int i = 0; i < side; i++) {
-                    const double dx = (i + 0.5 - cx) * scale, dy = (j + 0.5 - cy) * scale, q = dx * dx + dy * dy;
-                    if (q >= reach2) continue;
-                    const double index = q * dabTableScale_;
-                    const int k = int(index);
-                    const unsigned frac = unsigned((index - k) * 256);
-                    tile[size_t(j) * side + size_t(i)] = uint8_t((dabTable_[size_t(k)] * (256 - frac) + dabTable_[size_t(k) + 1] * frac + 128) >> 8);
-                }
-        }, 64);
-        stamp_.built[phase] = true;
-    }
-    // Rows and columns whose pixel centres lie on the canvas and in the affected rect.
-    const Rect canvasGrid = documentToPixel_.mapBounds(canvas_);
-    const int x0 = std::max({int(affected.minX()), ox, int(std::ceil(canvasGrid.minX() - 0.5))}), x1 = std::min({int(affected.maxX()), ox + side, int(std::ceil(canvasGrid.maxX() - 0.5))});
-    const int y0 = std::max({int(affected.minY()), oy, int(std::ceil(canvasGrid.minY() - 0.5))}), y1 = std::min({int(affected.maxY()), oy + side, int(std::ceil(canvasGrid.maxY() - 0.5))});
-    if (x0 >= x1 || y0 >= y1) return true;
-    const std::vector<uint8_t>& tile = stamp_.tiles[phase];
-    const int n = x1 - x0;
-    auto merge = [&, n](int ya, int yb) {
-        // `n` by value: a byte store may alias anything captured by reference, which would keep the loops scalar.
-        for (int y = ya; y < yb; y++) {
-            uint8_t* row = coverage_->row(y) + x0;
-            const uint8_t* t = &tile[size_t(y - oy) * side + size_t(x0 - ox)];
-            if (hard) for (int i = 0; i < n; i++) row[i] = std::max(row[i], t[i]);
-            else for (int i = 0; i < n; i++) row[i] = uint8_t(row[i] + ((t[i] * (255 - row[i]) + 127) / 255));
-        }
-    };
-    // A large dab is merged on every core; a small one is quicker than handing it out.
-    if (areaOf(n, y1 - y0) >= 1 << 20) parallelRows(y0, y1, merge, 32); else merge(y0, y1);
-    return true;
-}
-
 void BrushStroke::dab(Point center) {
-    if (depth_ != SampleType::U8) { dab16(center); return; }
-    double radius = settings_.diameter / 2;
-    Rect circle(center.x - radius, center.y - radius, radius * 2, radius * 2);
-    Rect clipped = circle.intersection(canvas_);
-    if (clipped.isEmpty()) return;
-    Rect affected = documentToPixel_.mapBounds(clipped).integral().intersection(Rect(0, 0, width_, height_));
-    if (affected.isEmpty()) return;
-    // Document units per grid pixel, for antialiasing the rim.
-    double footprint = std::hypot(pixelToDocument_.a, pixelToDocument_.b);
-    refreshDabTable(radius, settings_.hardness, footprint);
-    if (stampDab(center, radius, affected)) { markDirty(affected); return; }
-    const bool hard = settings_.hardness >= 1;
-    const bool whollyInside = clipped == circle;
-    const double reach2 = (radius + footprint) * (radius + footprint);
-    int x0 = int(affected.minX()), x1 = int(affected.maxX()), y0 = int(affected.minY()), y1 = int(affected.maxY());
-    const Point dd = pixelToDocument_.applyVector({1, 0});
-    const double dd2 = dd.x * dd.x + dd.y * dd.y;
-    auto rows = [&](int ya, int yb) {
-        for (int y = ya; y < yb; y++) {
-            uint8_t* row = coverage_->row(y);
-            Point d = pixelToDocument_.apply({x0 + 0.5, y + 0.5});
-            // Squared distance to the centre is a quadratic along the row: step it with first and second differences.
-            double rx = d.x - center.x, ry = d.y - center.y;
-            double q = rx * rx + ry * ry;
-            double dq = 2 * (rx * dd.x + ry * dd.y) + dd2;
-            for (int x = x0; x < x1; x++, q += dq, dq += 2 * dd2, d = d + dd) {
-                if (q >= reach2) continue;
-                if (!whollyInside && !canvas_.contains(d)) continue;
-                const double index = q * dabTableScale_;
-                const int i = int(index);
-                const unsigned frac = unsigned((index - i) * 256);
-                const unsigned value = (dabTable_[size_t(i)] * (256 - frac) + dabTable_[size_t(i) + 1] * frac + 128) >> 8;
-                if (value == 0) continue;
-                const unsigned old = row[x];
-                row[x] = uint8_t(hard ? std::max(old, value) : old + ((value * (255 - old) + 127) / 255));
-            }
-        }
-    };
-    if (areaOf(x1 - x0, y1 - y0) >= 65536) parallelRows(y0, y1, rows, 32); else rows(y0, y1);
-    markDirty(affected);
+    withRaster([&](auto& raster) { raster.dab(center); });
 }
 
 std::shared_ptr<TiledSource> tiledProcessedDocument(Document document, std::function<void(Image&)> process, int margin) {
@@ -420,197 +201,15 @@ void BrushStroke::recompose(const Rect& gridRect) {
     if (painted_) return;   // another engine owns the working pixels
     Rect r = gridRect.intersection(Rect(0, 0, width_, height_));
     if (r.isEmpty()) return;
-    if (clone_ && (clone_->tiled || clone_->tiled16)) {
-        // The document pixels the bilinear samples under this area read, made before the rows run in parallel.
-        const Rect grid = r.integral();
-        double minX = 1e300, minY = 1e300, maxX = -1e300, maxY = -1e300;
-        for (double gx : {grid.minX(), grid.maxX()})
-            for (double gy : {grid.minY(), grid.maxY()}) {
-                const Point d = pixelToDocument_.apply({gx, gy});
-                minX = std::min(minX, d.x); maxX = std::max(maxX, d.x); minY = std::min(minY, d.y); maxY = std::max(maxY, d.y);
-            }
-        const double ox = clone_->offset.x - 0.5, oy = clone_->offset.y - 0.5;
-        const int ex0 = int(std::floor(minX + ox)) - 2, ey0 = int(std::floor(minY + oy)) - 2, ex1 = int(std::ceil(maxX + ox)) + 3, ey1 = int(std::ceil(maxY + oy)) + 3;
-        if (clone_->tiled) clone_->tiled->ensure(ex0, ey0, ex1, ey1);
-        if (clone_->tiled16) clone_->tiled16->ensure(ex0, ey0, ex1, ey1);
-    }
-    // Rows are independent: a large area (a big brush's dab) is recomposed on every core.
-    if (depth_ != SampleType::U8) {
-        if (areaOf(int(r.width), int(r.height)) < 65536) { recomposeRows16(r); return; }
-        parallelRows(int(r.minY()), int(r.maxY()), [&](int ya, int yb) { recomposeRows16(Rect(r.minX(), ya, r.width, yb - ya)); }, 32);
-        return;
-    }
-    if (areaOf(int(r.width), int(r.height)) < 65536) { recomposeRows(r); return; }
-    parallelRows(int(r.minY()), int(r.maxY()), [&](int ya, int yb) { recomposeRows(Rect(r.minX(), ya, r.width, yb - ya)); }, 32);
-}
-
-void BrushStroke::recomposeRows(const Rect& r) {
-    int x0 = int(r.minX()), x1 = int(r.maxX()), y0 = int(r.minY()), y1 = int(r.maxY());
-    double opacity = settings_.opacity;
-    if (isMask_) {
-        uint8_t paint = uint8_t(clamp(settings_.maskValue * 255 + 0.5, 0.0, 255.0));
-        for (int y = y0; y < y1; y++) {
-            const uint8_t* cov = coverage_->row(y);
-            const uint8_t* sel = selection_ ? selection_->row(y) : nullptr;
-            const uint8_t* base = baseMask_->row(y);
-            uint8_t* out = workingMask_->row(y);
-            Point d = pixelToDocument_.apply({x0 + 0.5, y + 0.5});
-            Point dd = pixelToDocument_.applyVector({1, 0});
-            for (int x = x0; x < x1; x++, d = d + dd) {
-                double c = cov[x] / 255.0 * opacity * (sel ? sel[x] / 255.0 : 1.0);
-                double value = paint;
-                if (maskClone_) {
-                    // The sample under the document point, bilinear.
-                    double sx = d.x - 0.5, sy = d.y - 0.5;
-                    int ix = int(std::floor(sx)), iy = int(std::floor(sy));
-                    double fx = sx - ix, fy = sy - iy, acc = 0, wsum = 0;
-                    for (int j = 0; j < 2; j++) for (int i = 0; i < 2; i++) {
-                        int px = ix + i, py = iy + j;
-                        double w = (i ? fx : 1 - fx) * (j ? fy : 1 - fy);
-                        if (w <= 0 || px < 0 || py < 0 || px >= maskClone_->width() || py >= maskClone_->height()) continue;
-                        acc += maskClone_->at(px, py) * w; wsum += w;
-                    }
-                    value = wsum > 0 ? acc / wsum : base[x];
-                }
-                out[x] = uint8_t(clamp(base[x] * (1 - c) + value * c + 0.5, 0.0, 255.0));
-            }
-        }
-        return;
-    }
-    double cr = settings_.red * 255, cg = settings_.green * 255, cb = settings_.blue * 255;
-    if (settings_.healing && !clone_) { cr = cg = cb = 0.12 * 255; opacity *= 0.45; } // the wash shown while painting (the Healing Brush shows its source)
-    if (!clone_) {
-        // Plain paint or erase: integer lerps, one coverage step per pixel.
-        const unsigned op = unsigned(clamp(opacity * 255 + 0.5, 0.0, 255.0));
-        const int colour[4] = {int(clamp(cr + 0.5, 0.0, 255.0)), int(clamp(cg + 0.5, 0.0, 255.0)), int(clamp(cb + 0.5, 0.0, 255.0)), 255};
-        const bool erasing = settings_.erasing;
-        for (int y = y0; y < y1; y++) {
-            const uint8_t* cov = coverage_->row(y);
-            const uint8_t* sel = selection_ ? selection_->row(y) : nullptr;
-            const uint8_t* base = base_->row(y) + x0 * 4;
-            uint8_t* out = working_->row(y) + x0 * 4;
-            for (int x = x0; x < x1; x++, base += 4, out += 4) {
-                unsigned k = cov[x];
-                if (sel) k = (k * sel[x] + 127) / 255;
-                k = (k * op + 127) / 255;
-                if (k == 0) { std::memcpy(out, base, 4); continue; }
-                if (erasing) { for (int c = 0; c < 4; c++) out[c] = uint8_t((base[c] * (255 - k) + 127) / 255); continue; }
-                for (int c = 0; c < 4; c++) out[c] = uint8_t(base[c] + ((colour[c] - int(base[c])) * int(k) + (colour[c] >= base[c] ? 127 : -127)) / 255);
-            }
-        }
-        return;
-    }
-    for (int y = y0; y < y1; y++) {
-        const uint8_t* cov = coverage_->row(y);
-        const uint8_t* sel = selection_ ? selection_->row(y) : nullptr;
-        const uint8_t* base = base_->row(y) + x0 * 4;
-        uint8_t* out = working_->row(y) + x0 * 4;
-        Point d = pixelToDocument_.apply({x0 + 0.5, y + 0.5});
-        Point dd = pixelToDocument_.applyVector({1, 0});
-        for (int x = x0; x < x1; x++, base += 4, out += 4, d = d + dd) {
-            double c = cov[x] / 255.0 * opacity * (sel ? sel[x] / 255.0 : 1.0);
-            if (c <= 0) { std::memcpy(out, base, 4); continue; }
-            if (clone_ && (clone_->image || clone_->tiled)) {
-                // The sample under the source point, over the original through the tip.
-                const Image* src = clone_->image.get();
-                const TiledSource* tiled = clone_->tiled.get();
-                const int sw = src ? src->width() : tiled->width(), sh = src ? src->height() : tiled->height();
-                double sx = d.x + clone_->offset.x - 0.5, sy = d.y + clone_->offset.y - 0.5;
-                double s[4] = {0, 0, 0, 0};
-                int ix = int(std::floor(sx)), iy = int(std::floor(sy));
-                double fx = sx - ix, fy = sy - iy;
-                for (int j = 0; j < 2; j++) for (int i = 0; i < 2; i++) {
-                    int px = ix + i, py = iy + j;
-                    double w = (i ? fx : 1 - fx) * (j ? fy : 1 - fy);
-                    if (w <= 0 || px < 0 || py < 0 || px >= sw || py >= sh) continue;
-                    const uint8_t* p = src ? src->pixel(px, py) : tiled->pixel(px, py);
-                    if (!p) continue;
-                    for (int k = 0; k < 4; k++) s[k] += p[k] * w;
-                }
-                double sa = replacesWithClone_ ? c : s[3] / 255.0 * c;
-                for (int k = 0; k < 4; k++) out[k] = uint8_t(clamp(s[k] * c + base[k] * (1 - sa) + 0.5, 0.0, 255.0));
-                continue;
-            }
-            if (settings_.erasing) {
-                for (int k = 0; k < 4; k++) out[k] = uint8_t(base[k] * (1 - c) + 0.5);
-            } else {
-                out[0] = uint8_t(clamp(base[0] * (1 - c) + cr * c + 0.5, 0.0, 255.0));
-                out[1] = uint8_t(clamp(base[1] * (1 - c) + cg * c + 0.5, 0.0, 255.0));
-                out[2] = uint8_t(clamp(base[2] * (1 - c) + cb * c + 0.5, 0.0, 255.0));
-                out[3] = uint8_t(clamp(base[3] * (1 - c) + 255 * c + 0.5, 0.0, 255.0));
-            }
-        }
-    }
+    withRaster([&](auto& raster) { raster.recompose(r); });
 }
 
 bool BrushStroke::liftSelection() {
-    if (depth_ != SampleType::U8) return liftSelection16();
-    if (isMask_ || !selection_ || !base_) return false;
-    PixelBounds b = nonzeroBounds(*selection_);
-    Rect region = b.isEmpty() ? Rect() : Rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0).intersection(sourceRect_).integral();
-    if (region.isEmpty()) return false;
-    liftedRect_ = region;
-    lifted_ = std::make_shared<Image>(int(region.width), int(region.height));
-    bool any = false;
-    for (int y = 0; y < lifted_->height(); y++) for (int x = 0; x < lifted_->width(); x++) {
-        int sx = x + int(region.x), sy = y + int(region.y);
-        unsigned k = selection_->at(sx, sy);
-        const uint8_t* s = base_->pixel(sx, sy);
-        uint8_t* d = lifted_->pixel(x, y);
-        for (int c = 0; c < 4; c++) d[c] = uint8_t((s[c] * k + 127) / 255);
-        if (d[3]) any = true;
-    }
-    return any;
+    return withRaster([&](auto& raster) { return raster.liftSelection(); });
 }
 
 void BrushStroke::moveLifted(Point offset, bool duplicate) {
-    if (depth_ != SampleType::U8) { moveLifted16(offset, duplicate); return; }
-    if (!lifted_ || !selection_) return;
-    // The offset in grid pixels (whole document pixels may land between grid pixels on a scaled layer).
-    Point zero = documentToPixel_.apply({0, 0}), moved = documentToPixel_.apply(offset);
-    double gx = moved.x - zero.x, gy = moved.y - zero.y;
-    working_ = std::make_shared<Image>(*base_);
-    if (!duplicate) {
-        for (int y = 0; y < height_; y++) for (int x = 0; x < width_; x++) {
-            unsigned k = selection_->at(x, y);
-            if (!k) continue;
-            uint8_t* p = working_->pixel(x, y);
-            for (int c = 0; c < 4; c++) p[c] = uint8_t((p[c] * (255 - k) + 127) / 255);
-        }
-    }
-    bool whole = std::fabs(gx - std::round(gx)) < 1e-6 && std::fabs(gy - std::round(gy)) < 1e-6;
-    double tx = liftedRect_.x + gx, ty = liftedRect_.y + gy;
-    int lw = lifted_->width(), lh = lifted_->height();
-    Rect target = Rect(tx, ty, lw, lh).insetBy(-1, -1).integral().intersection(Rect(0, 0, width_, height_));
-    for (int y = int(target.minY()); y < int(target.maxY()); y++) for (int x = int(target.minX()); x < int(target.maxX()); x++) {
-        double sx = x - tx, sy = y - ty;
-        float s[4];
-        if (whole) {
-            int ix = int(std::lround(sx)), iy = int(std::lround(sy));
-            if (ix < 0 || iy < 0 || ix >= lw || iy >= lh) continue;
-            const uint8_t* p = lifted_->pixel(ix, iy);
-            for (int c = 0; c < 4; c++) s[c] = p[c];
-        } else {
-            double bx = sx - 0.5 + 0.5, by = sy - 0.5 + 0.5; // sample centre-aligned
-            int x0 = int(std::floor(bx)), y0 = int(std::floor(by));
-            float fx = float(bx - x0), fy = float(by - y0);
-            for (int c = 0; c < 4; c++) s[c] = 0;
-            for (int j = 0; j < 2; j++) for (int i = 0; i < 2; i++) {
-                int px = x0 + i, py = y0 + j;
-                float w = (i ? fx : 1 - fx) * (j ? fy : 1 - fy);
-                if (w <= 0 || px < 0 || py < 0 || px >= lw || py >= lh) continue;
-                const uint8_t* p = lifted_->pixel(px, py);
-                for (int c = 0; c < 4; c++) s[c] += p[c] * w;
-            }
-        }
-        if (s[3] <= 0) continue;
-        uint8_t* d = working_->pixel(x, y);
-        float a = s[3] / 255.0f;
-        for (int c = 0; c < 4; c++) d[c] = uint8_t(clamp(s[c] + d[c] * (1 - a) + 0.5f, 0.0f, 255.0f));
-    }
-    touched_ = true;
-    dirtyGrid_ = {};
-    refreshLevels(Rect(0, 0, width_, height_));
+    withRaster([&](auto& raster) { raster.moveLifted(offset, duplicate); });
 }
 
 void BrushStroke::fillGradientOver(int shape, Point from, Point to, const float startColor[4], const float endColor[4], double opacity) {
@@ -621,20 +220,7 @@ void BrushStroke::fillGradientOver(int shape, Point from, Point to, const float 
 
 void BrushStroke::fillGradientOver(int shape, Point from, Point to, const GradientStops& stops, double opacity) {
     if (!valid_) return;
-    if (depth_ != SampleType::U8) { fillGradientOver16(shape, from, to, stops, opacity); return; }
-    touched_ = true;
-    dirtyGrid_ = {}; // the working image is composed here, not from the coverage
-    // Pixels outside the canvas are left alone: the canvas as grid coverage, times the selection.
-    GrayImage inside(width_, height_, 0);
-    for (int y = 0; y < height_; y++) {
-        Point d = pixelToDocument_.apply({0.5, y + 0.5});
-        Point dd = pixelToDocument_.applyVector({1, 0});
-        for (int x = 0; x < width_; x++, d = d + dd)
-            if (canvas_.contains(d)) inside.at(x, y) = selection_ ? selection_->at(x, y) : 255;
-    }
-    if (isMask_) fillGradient(*baseMask_, *workingMask_, pixelToDocument_, GradientShape(shape), from, to, stops, opacity, &inside);
-    else fillGradient(*base_, *working_, pixelToDocument_, GradientShape(shape), from, to, stops, opacity, &inside);
-    refreshLevels(Rect(0, 0, width_, height_));
+    withRaster([&](auto& raster) { raster.fillGradientOver(shape, from, to, stops, opacity); });
 }
 
 void BrushStroke::fillColor(double red, double green, double blue) {
@@ -643,75 +229,7 @@ void BrushStroke::fillColor(double red, double green, double blue) {
 }
 
 void BrushStroke::heal() {
-    if (depth_ != SampleType::U8) { heal16(); return; }
-    if (!settings_.healing || isMask_ || !coverage_) return;
-    PixelBounds b = nonzeroBounds(*coverage_);
-    if (b.isEmpty()) return;
-    if (clone_ && clone_->image) { healFromClone(b); return; }
-    // Room for the kernel's patch search, which looks up to about three spot-widths away.
-    double reach = (std::max(b.x1 - b.x0, b.y1 - b.y0) + 32) * 3.2;
-    Rect region = Rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0).insetBy(-reach, -reach).intersection(Rect(0, 0, width_, height_)).integral();
-    int rx = int(region.x), ry = int(region.y), rw = int(region.width), rh = int(region.height);
-    if (rw <= 0 || rh <= 0) return;
-    auto pixels = cropImage(*base_, rx, ry, rw, rh);
-    auto painting = cropGray(*coverage_, rx, ry, rw, rh);
-    if (selection_) for (int y = 0; y < rh; y++) for (int x = 0; x < rw; x++) painting->at(x, y) = uint8_t((painting->at(x, y) * selection_->at(x + rx, y + ry) + 127) / 255);
-    // The kernel treats any touched pixel as the hole, so a soft tip would make its own faint rim part of
-    // the hole and leave it half healed. Heal the solid core only, then feather the result in by coverage.
-    auto core = std::make_shared<GrayImage>(rw, rh);
-    for (int y = 0; y < rh; y++) for (int x = 0; x < rw; x++) core->at(x, y) = painting->at(x, y) >= 128 ? 255 : 0;
-    std::shared_ptr<GrayImage> visible = visible_ ? cropGray(*visible_, rx, ry, rw, rh) : nullptr;
-    spotHeal(*pixels, *core, float(settings_.opacity), settings_.healingMode, settings_.healingSeed, visible.get());
-    // The healed pixels replace the wash: the working image becomes the original with the healed region.
-    working_ = std::make_shared<Image>(*base_);
-    for (int y = 0; y < rh; y++) {
-        uint8_t* dst = working_->pixel(rx, y + ry);
-        const uint8_t* healed = pixels->row(y);
-        const uint8_t* orig = base_->pixel(rx, y + ry);
-        for (int x = 0; x < rw; x++, dst += 4, healed += 4, orig += 4) {
-            unsigned k = painting->at(x, y);
-            if (k == 0) continue;
-            if (k >= 255) { std::memcpy(dst, healed, 4); continue; }
-            for (int c = 0; c < 4; c++) dst[c] = uint8_t((orig[c] * (255 - k) + healed[c] * k + 127) / 255);
-        }
-    }
-    refreshLevels(Rect(0, 0, width_, height_));
-}
-
-void BrushStroke::healFromClone(const PixelBounds& b) {
-    // The Healing Brush: the source under the stroke (as Clone Stamp samples it), its tone matched to the edge.
-    Rect region = Rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0).insetBy(-2, -2).intersection(Rect(0, 0, width_, height_)).integral();
-    const int rx = int(region.x), ry = int(region.y), rw = int(region.width), rh = int(region.height);
-    if (rw <= 0 || rh <= 0) return;
-    auto pixels = cropImage(*base_, rx, ry, rw, rh);
-    auto painting = cropGray(*coverage_, rx, ry, rw, rh);
-    if (selection_) for (int y = 0; y < rh; y++) for (int x = 0; x < rw; x++) painting->at(x, y) = uint8_t((painting->at(x, y) * selection_->at(x + rx, y + ry) + 127) / 255);
-    Image source(rw, rh);
-    const Image& src = *clone_->image;
-    for (int y = 0; y < rh; y++) {
-        Point d = pixelToDocument_.apply({rx + 0.5, y + ry + 0.5});
-        const Point dd = pixelToDocument_.applyVector({1, 0});
-        for (int x = 0; x < rw; x++, d = d + dd) {
-            const double sx = d.x + clone_->offset.x - 0.5, sy = d.y + clone_->offset.y - 0.5;
-            const int ix = int(std::floor(sx)), iy = int(std::floor(sy));
-            const double fx = sx - ix, fy = sy - iy;
-            double s[4] = {0, 0, 0, 0};
-            for (int j = 0; j < 2; j++) for (int i = 0; i < 2; i++) {
-                const int px = ix + i, py = iy + j;
-                const double w = (i ? fx : 1 - fx) * (j ? fy : 1 - fy);
-                if (w <= 0 || px < 0 || py < 0 || px >= src.width() || py >= src.height()) continue;
-                const uint8_t* p = src.pixel(px, py);
-                for (int k = 0; k < 4; k++) s[k] += p[k] * w;
-            }
-            uint8_t* out = source.pixel(x, y);
-            for (int k = 0; k < 4; k++) out[k] = uint8_t(std::lround(clamp(s[k], 0.0, 255.0)));
-        }
-    }
-    std::shared_ptr<GrayImage> visible = visible_ ? cropGray(*visible_, rx, ry, rw, rh) : nullptr;
-    healFrom(*pixels, source, *painting, float(settings_.opacity), visible.get());
-    working_ = std::make_shared<Image>(*base_);
-    for (int y = 0; y < rh; y++) std::memcpy(working_->pixel(rx, y + ry), pixels->row(y), size_t(rw) * 4);
-    refreshLevels(Rect(0, 0, width_, height_));
+    withRaster([&](auto& raster) { raster.heal(); });
 }
 
 void BrushStroke::previewHeal() {
@@ -724,30 +242,9 @@ BrushStroke::Commit BrushStroke::commit() {
     Commit result;
     result.transform = layerTransform_;
     if (!valid_) return result;
-    if (depth_ != SampleType::U8) return commit16();
     flush();
     if (settings_.healing) heal();
-    if (isMask_) {
-        result.mask = MaskAsset::make(workingMask_);
-        result.maskPlacement = paintTransform_.samePlacement(layerTransform_) ? std::nullopt : std::optional<LayerTransform>(paintTransform_);
-        return result;
-    }
-    // Keep every nonzero-alpha pixel; an existing layer keeps at least its old bounds. Outside the base's
-    // own alpha and the touched area nothing changed, so only that region needs scanning.
-    Rect scan = Rect(baseBounds_.x0, baseBounds_.y0, baseBounds_.x1 - baseBounds_.x0, baseBounds_.y1 - baseBounds_.y0).unionWith(touchedGrid_).integral();
-    PixelBounds b = scan.isEmpty() ? PixelBounds{} : alphaBounds(*working_, PixelBounds{int(scan.minX()), int(scan.minY()), int(scan.maxX()), int(scan.maxY())});
-    Rect crop = b.isEmpty() ? Rect() : Rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0);
-    bool hadSource = base_ && !baseBounds_.isEmpty();
-    if (hadSource) crop = crop.unionWith(sourceRect_);
-    if (crop.isEmpty()) crop = hadSource ? sourceRect_ : Rect(0, 0, width_, height_);
-    crop = crop.integral();
-    std::shared_ptr<Image> image = (crop == Rect(0, 0, width_, height_)) ? working_ : cropImage(*working_, int(crop.minX()), int(crop.minY()), int(crop.width), int(crop.height));
-    result.asset = Asset::make(image, name_);
-    Point center = pixelToDocument_.apply({crop.midX(), crop.midY()});
-    LayerTransform t = paintTransform_;
-    t.size = {crop.width * paintTransform_.size.width / width_, crop.height * paintTransform_.size.height / height_};
-    t.origin = {center.x - t.size.width / 2, center.y - t.size.height / 2};
-    result.transform = t;
+    withRaster([&](auto& raster) { raster.commit(result); });
     return result;
 }
 

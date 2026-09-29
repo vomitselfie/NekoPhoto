@@ -108,6 +108,8 @@ struct CloneSource {
 /// Soft-brush falloff across the band between the hardness radius and the rim.
 double brushFalloff(double u);
 
+template <SampleType S> class StrokeRaster;
+
 class BrushStroke {
 public:
     /// Begins a stroke on `layer` (its pixels, or its mask when `mask`). The working grid is the
@@ -116,14 +118,17 @@ public:
     /// The same at a document's depth: `depth` U16 makes a 16-bit stroke (its pixels or mask, coverage and selection at
     /// 0..32768; the 16-bit accessors below), taking the 16-bit `selection`. U8 is the constructor above.
     BrushStroke(const Layer& layer, bool mask, BrushSettings settings, Size canvas, SampleType depth, const Gray16* selection);
+    ~BrushStroke();
+    BrushStroke(const BrushStroke&) = delete;
+    BrushStroke& operator=(const BrushStroke&) = delete;
     /// The stroke's depth: its working pixels, mask, coverage and selection are all at it.
     SampleType sampleType() const { return depth_; }
     /// Clone Stamp: the sample painted through the tip instead of the colour. With `replaces`, the sample
     /// replaces what is under the tip rather than drawing over it (so it can clear pixels too).
     void setClone(CloneSource clone, bool replaces = false) { clone_ = std::move(clone); replacesWithClone_ = replaces; }
     /// Painting a mask from a document-sized gray sample (the Blur tool on a mask) instead of a flat value.
-    void setMaskClone(std::shared_ptr<const GrayImage> sample) { maskClone_ = std::move(sample); }
-    void setMaskClone(std::shared_ptr<const Gray16> sample) { maskClone16_ = std::move(sample); }
+    void setMaskClone(std::shared_ptr<const GrayImage> sample);
+    void setMaskClone(std::shared_ptr<const Gray16> sample);
 
     // Moving selected pixels (the Move tool with a selection).
     /// Cuts the selected pixels out of the original image. False when nothing is lifted.
@@ -150,11 +155,11 @@ public:
     void flush();
 
     /// The layer's pixels (or mask) as the stroke leaves them, for the canvas while painting.
-    ImagePtr previewImage() const { return working_; }
-    GrayPtr previewMask() const { return workingMask_; }
+    ImagePtr previewImage() const;
+    GrayPtr previewMask() const;
     /// The same for a 16-bit stroke (null for an 8-bit one, whose 8-bit previews are null in turn).
-    Image16Ptr previewImage16() const { return working16_; }
-    Gray16Ptr previewMask16() const { return workingMask16_; }
+    Image16Ptr previewImage16() const;
+    Gray16Ptr previewMask16() const;
     /// Where the working grid sits on the document.
     const LayerTransform& paintTransform() const { return paintTransform_; }
     /// The document area changed since the last call, then reset.
@@ -176,45 +181,35 @@ public:
 
     // Another paint engine on this stroke's grid (the MyPaint presets): it reads the original pixels, writes
     // the working ones and reports what it changed; the preview, the selection and commit() stay this class's.
-    const Image* gridBase() const { return base_.get(); }
-    Image* gridWorking() { return working_.get(); }
-    const GrayImage* gridSelection() const { return selection_.get(); }
-    const Image16* gridBase16() const { return base16_.get(); }
-    Image16* gridWorking16() { return working16_.get(); }
-    const Gray16* gridSelection16() const { return selection16_.get(); }
+    const Image* gridBase() const;
+    Image* gridWorking();
+    const GrayImage* gridSelection() const;
+    const Image16* gridBase16() const;
+    Image16* gridWorking16();
+    const Gray16* gridSelection16() const;
     const Affine& documentToGrid() const { return documentToPixel_; }
     void markPainted(const Rect& gridRect) { painted_ = true; markDirty(gridRect); }
     // Or an engine that stamps its own dabs (imported tip brushes) into this stroke's coverage: the colour,
     // opacity, selection, erasing and masks then apply exactly as for the round tip.
-    GrayImage* gridCoverage() { return coverage_.get(); }
-    Gray16* gridCoverage16() { return coverage16_.get(); }
+    GrayImage* gridCoverage();
+    Gray16* gridCoverage16();
     const Affine& gridToDocument() const { return pixelToDocument_; }
     const Rect& canvasRect() const { return canvas_; }
     void recomposeCovered(const Rect& gridRect) { markDirty(gridRect); recompose(gridRect); }
 
 private:
+    // The pixels, coverage and selection live in a StrokeRaster at the stroke's depth (stroke_raster.h); this class
+    // keeps the grid's geometry, the curve through the samples, the provisional tail and the dirty area.
+    template <SampleType> friend class StrokeRaster;
+    template <class F> decltype(auto) withRaster(F&& f);
+    template <class F> decltype(auto) withRaster(F&& f) const;
     void walk(Point to);
     void dab(Point center);
     void curve(Point from, Point to, Point before, Point after);
     void recompose(const Rect& gridRect);
-    void recomposeRows(const Rect& gridRect);   // recompose's work over whole rows of the grid
     void markDirty(const Rect& gridRect);
     void heal();
-    void healFromClone(const PixelBounds& bounds);
-    // The 16-bit stroke (brush_u16.cpp): the same steps on the 16-bit buffers.
-    void initSixteen(const Layer& layer, bool mask, const Gray16* selection);
-    void dab16(Point center);
-    bool stampDab16(Point center, double radius, const Rect& affected);
-    void refreshDabTable16(double radius, double hardness, double footprint);
-    void recomposeRows16(const Rect& gridRect);
-    void saveTail(const Rect& affected);
     void restoreTail();
-    bool liftSelection16();
-    void moveLifted16(Point offset, bool duplicate);
-    void fillGradientOver16(int shape, Point from, Point to, const GradientStops& stops, double opacity);
-    void heal16();
-    void healFromClone16(const PixelBounds& bounds);
-    Commit commit16();
 
     bool valid_ = false;
     std::string error_;
@@ -225,62 +220,30 @@ private:
     Affine pixelToDocument_, documentToPixel_;
     LayerTransform paintTransform_;
     Rect sourceRect_;                 // where the original pixels sit in the grid
-    std::shared_ptr<const Image> base_;   // original pixels in the grid (image strokes); the layer's own image when the grid matches it
-    PixelBounds baseBounds_;               // where base_ has any alpha
-    Rect touchedGrid_;                     // every grid pixel a dab or fill may have changed
-    std::shared_ptr<Image> working_;
-    std::shared_ptr<GrayImage> baseMask_;
-    std::shared_ptr<GrayImage> workingMask_;
-    std::shared_ptr<GrayImage> visible_;   // the layer mask's visible pixels on the grid, for the healers; null without an enabled mask on the layer's own grid
-    std::shared_ptr<GrayImage> coverage_;
-    std::shared_ptr<GrayImage> selection_; // selection coverage in grid pixels, if any
+    PixelBounds baseBounds_;          // where the original pixels have any alpha
+    Rect touchedGrid_;                // every grid pixel a dab or fill may have changed
     std::vector<Point> samples_;
     std::optional<Point> previous_;
     double distanceToNext_ = 0;
     Rect dirtyGrid_;
     bool deferRecompose_ = false;
-    /// Dab profile over squared distance (0..255), rebuilt when the tip changes; the dab loop reads it instead
-    /// of computing a square root and a falloff per pixel.
-    std::vector<uint8_t> dabTable_;
-    double dabTableRadius_ = -1, dabTableHardness_ = -1, dabTableFootprint_ = -1, dabTableScale_ = 0;
-    /// On a grid aligned with the document, a dab is a precomputed tile at one of 4x4 subpixel phases (2x2 for
-    /// soft tips over 512 pixels, whose rim hides a quarter pixel), merged row by row (Krita's dab cache). Each phase is built the first time a dab needs it; all are dropped when the
-    /// tip or the grid scale changes.
-    template <class T>
-    struct StampOf {
-        int side = 0, steps = 4;   // steps: subpixel positions per axis
-        double radius = -1, hardness = -1, scale = 0;
-        std::vector<T> tiles[16];
-        bool built[16] = {};
-    };
-    using Stamp = StampOf<uint8_t>;
-    Stamp stamp_;
-    bool stampDab(Point center, double radius, const Rect& affected);
-    void refreshDabTable(double radius, double hardness, double footprint);
     bool touched_ = false;
-    bool painted_ = false;   // another engine wrote the working pixels: never recompose them from coverage_
+    bool painted_ = false;   // another engine wrote the working pixels: never recompose them from the coverage
     // A provisional straight tail is drawn to the newest sample and undone when the next arrives.
     bool hasTail_ = false;
     Rect tailRect_;
-    std::vector<uint8_t> tailBackup_;
     std::optional<Point> tailPrevious_;
     double tailDistance_ = 0;
     std::string name_;
     LayerTransform layerTransform_;
     std::optional<CloneSource> clone_;
     bool replacesWithClone_ = false;
-    std::shared_ptr<const GrayImage> maskClone_;
-    std::shared_ptr<Image> lifted_;
     Rect liftedRect_;
 
-    // A 16-bit stroke's buffers (0..32768); the 8-bit ones above stay null.
     SampleType depth_ = SampleType::U8;
-    std::shared_ptr<const Image16> base16_;
-    std::shared_ptr<Image16> working16_, lifted16_;
-    std::shared_ptr<Gray16> baseMask16_, workingMask16_, visible16_, coverage16_, selection16_;
-    std::shared_ptr<const Gray16> maskClone16_;
-    std::vector<uint16_t> dabTable16_, tailBackup16_;
-    StampOf<uint16_t> stamp16_;
+    // Exactly one is set: the raster at depth_.
+    std::unique_ptr<StrokeRaster<SampleType::U8>> raster8_;
+    std::unique_ptr<StrokeRaster<SampleType::U16>> raster16_;
 };
 
 } // namespace compositor
