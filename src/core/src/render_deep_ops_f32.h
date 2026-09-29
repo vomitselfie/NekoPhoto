@@ -56,6 +56,15 @@ struct DeepOps<SampleType::F32> {
     using Step = float;
 
     static constexpr Sample one = 1.0f;
+    static constexpr int channels = 4;   // RGB and alpha: 32 bits is RGB only
+    static constexpr bool styles = true;
+
+    /// An adjustment layer's blend (not drawn at 32 bits yet, see adjust): straight colour as the RGB policy blends it.
+    static void blendStraight(BlendMode mode, const float* cb, float* cs) {
+        if (mode == BlendMode::Normal) return;
+        const Rgb m = blendColor(mode, {cb[0], cb[1], cb[2]}, {cs[0], cs[1], cs[2]});
+        cs[0] = m.r; cs[1] = m.g; cs[2] = m.b;
+    }
 
     static float unit(Sample s) { return s; }
     static Sample mul(Sample a, Sample b) { return a * b; }
@@ -118,7 +127,9 @@ struct DeepOps<SampleType::F32> {
 
     static std::shared_ptr<Image>& backdrop(RenderCache& cache) { return cache.backdropF; }
     static std::shared_ptr<Image>& above(RenderCache& cache) { return cache.aboveF; }
-    static void resetOtherDepths(RenderCache& cache) { cache.backdrop.reset(); cache.above.reset(); cache.backdrop16.reset(); cache.above16.reset(); }
+    static void resetOtherDepths(RenderCache& cache) {
+        cache.backdrop.reset(); cache.above.reset(); cache.backdrop16.reset(); cache.above16.reset(); cache.backdropC8.reset(); cache.aboveC8.reset();
+    }
 
     static std::shared_ptr<Image> widenFrom8(const compositor::Image& image) { return lineariseImage(image, floatRenderContext().curve); }
     static std::shared_ptr<compositor::Image> narrowTo8(const Image& image) { return encodeImage8(image, floatRenderContext().curve); }

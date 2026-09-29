@@ -808,7 +808,7 @@ def channels(rpc):
         rpc.call("document.save", path=project)
         psd = os.path.join(work, f"Channels{bits}.psd")
         rpc.call("document.export", path=psd)
-        rpc.call("tabs.close", index=next(t["index"] for t in rpc.call("tabs.list") if t["current"]), discard=True)
+        rpc.call("tabs.close", index=tab["index"], discard=True)
         for path in (project, psd):
             reopened = rpc.call("tabs.new")
             rpc.call("document.open", path=path)
@@ -816,9 +816,60 @@ def channels(rpc):
             assert names == ["Edges", "Painted"], (path, names)
             assert rpc.call("document.info")["bits"] == bits
             assert rpc.call("channels.loadSelection", channel=rpc.call("channels.list")["channels"][0]["id"])["bounds"]["width"] == 60
-            rpc.call("tabs.close", index=next(t["index"] for t in rpc.call("tabs.list") if t["current"]), discard=True)
+            rpc.call("tabs.close", index=tab["index"], discard=True)
             del reopened
         del tab
+    rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
+
+
+def colour_modes(rpc):
+    """Image > Mode > CMYK Color and Lab Color (docs/color-modes.md): the conversion (one undo step), the colour
+    channels, a fill in one channel, PSD in the document's own mode, and back; at 8 and 16 bits, in a tab of its own."""
+    work = tempfile.mkdtemp()
+    first = rpc.call("tabs.list")
+    tab = rpc.call("tabs.new")
+    options = rpc.call("color.settings", intent="relative", blackPointCompensation=True)
+    assert options["intent"] == "relative" and options["blackPointCompensation"], options
+    rpc.call("document.new", width=48, height=32)
+    rpc.call("shape.draw", kind="rectangle", x=0, y=0, width=48, height=32, color="#3366cc")
+    rgb = rpc.call("render", maxSize=48)["png"]
+    converted = rpc.call("image.mode", colorMode="cmyk")
+    assert converted["colorMode"] == "cmyk" and converted["bits"] == 8, converted
+    assert rpc.call("document.info")["colorMode"] == "cmyk"
+    assert rpc.call("history.list")["undo"][-1] == "Convert Mode"
+    assert rpc.call("render", maxSize=48)["png"], "a CMYK document renders"
+    listed = rpc.call("channels.list")
+    assert listed["activeColors"] == ["cyan", "magenta", "yellow", "black"], listed
+    # A fill in the Black channel alone: the other inks stay.
+    rpc.call("channels.select", channel="black")
+    before = rpc.call("render", maxSize=48)["png"]
+    rpc.call("pixels.fill", color="#000000")
+    assert rpc.call("render", maxSize=48)["png"] != before, "the Black channel filled"
+    rpc.call("channels.select", channel="cmyk")
+    # A PSD in CMYK (mode 4) opens as CMYK again.
+    psd = os.path.join(work, "cmyk.psd")
+    rpc.call("document.export", path=psd)
+    with open(psd, "rb") as f:
+        header = f.read(26)
+    assert header[24:26] == b"\x00\x04", "PSD colour mode 4"
+    rpc.call("document.close", discard=True)
+    rpc.call("document.open", path=psd)
+    assert rpc.call("document.info")["colorMode"] == "cmyk"
+    # Lab at 16 bits, and back to RGB.
+    lab = rpc.call("image.mode", colorMode="lab", bits=16)
+    assert lab["colorMode"] == "lab" and lab["bits"] == 16, lab
+    assert rpc.call("channels.list")["activeColors"] == ["lightness", "a", "b"]
+    assert rpc.call("image.mode", colorMode="rgb")["colorMode"] == "rgb"
+    rpc.call("history.undo")
+    assert rpc.call("document.info")["colorMode"] == "lab", "one undo step back"
+    try:
+        rpc.call("image.mode", colorMode="hsv")
+        raise AssertionError("colorMode hsv should be refused")
+    except RuntimeError as e:
+        print("expected error:", e)
+    rpc.call("document.close", discard=True)
+    assert rgb
+    rpc.call("tabs.close", index=tab["index"], discard=True)
     rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
 
 
@@ -1394,6 +1445,7 @@ def main():
     thirty_two_bit(rpc)
     channels(rpc)
     colour_management(rpc)
+    colour_modes(rpc)
 
     # Errors come back as errors, not crashes.
     try:

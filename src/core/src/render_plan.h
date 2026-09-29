@@ -96,6 +96,12 @@ void executeRender<SampleType::F32>(const RenderPlan& plan, const Rect& region, 
 /// view (exposure, gamma or Highlight Compression) and the display transform, or the document's curve, to 8 bits.
 void renderForDisplayF(const RenderPlan& plan, const Rect& region, double scale, Image& out, RenderCache* cache, uint64_t version, bool clear,
                        const ColorTransform* display, const View32& view, float peak);
+/// A CMYK or Lab document for the canvas (render_modes.cpp): rendered at its layout, then to 8-bit RGBA through
+/// `display` when that transform reads the document's layout, else to sRGB; never left unconverted.
+void renderForDisplayMode(const Document& document, const RenderPlan& plan, const Rect& region, double scale, Image& out, RenderCache* cache,
+                          uint64_t version, bool clear, const ColorTransform* display);
+/// A CMYK or Lab document as 16-bit sRGB (render16 hands it over): what 16-bit RGB exports take.
+void renderModeAsRgb16(const Document& document, const RenderOptions& options, Image16& out, const Overrides* overrides, RenderCache* cache);
 /// resizeDocument for a 16-bit document (render_u16.cpp).
 bool resizeDocument16(Document& document, int width, int height, double resolution, Sampling sampling);
 

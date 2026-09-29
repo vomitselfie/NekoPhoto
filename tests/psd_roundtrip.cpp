@@ -2,7 +2,8 @@
 // layer record's tagged blocks (but the ones we write ourselves), Blend If ranges and mask section, the
 // image resources and the global blocks. `psd_roundtrip FILE_OR_DIR...`; exit 1 when anything was lost.
 // Patchy's fixtures (Photoshop-saved) are the corpus: psd_roundtrip ../Patchy/test-fixtures/psd
-// A 16-bit file must also come back with every layer's channel data byte for byte (the carried planes, psd_carry.h).
+// A 16-bit file must also come back with every layer's channel data byte for byte (the carried planes, psd_carry.h),
+// and so must a CMYK or Lab file at either depth, which must also reopen in its own colour mode with its profile.
 // PSD_ROUNDTRIP_16=1 or PSD_ROUNDTRIP_32=1 convert each file to 16 or 32 bits first (Image > Mode).
 #include "compositor/psd.h"
 #include "compositor/psd_writer.h"
@@ -42,6 +43,7 @@ struct FileDump {
     std::vector<RecordDump> records;
     bool reduced = false;   // PSB or not 8-bit: masks are written anew, not carried
     int depth = 8;
+    int mode = 3;           // the header's colour mode: 3 RGB, 4 CMYK, 9 Lab
 };
 
 std::string key4(BigEndianReader& r) { auto s = r.read_span(4); return std::string(s.begin(), s.end()); }
@@ -58,6 +60,7 @@ FileDump dump(const Bytes& file) {
     const bool psb = header.large_document;
     d.reduced = psb || header.depth != 8;
     d.depth = header.depth;
+    d.mode = int(header.color_mode);
     r.skip(r.read_u32());
     const size_t resourcesEnd = r.position() + r.read_u32() + 4;
     while (r.position() + 12 <= resourcesEnd) {
@@ -108,7 +111,7 @@ FileDump dump(const Bytes& file) {
             in.skip(extraEnd - in.position());
             d.records.push_back(std::move(rec));
         }
-        if (d.depth == 16)
+        if (d.depth == 16 || d.mode == 4 || d.mode == 9)
             for (RecordDump& rec : d.records)
                 for (auto& [id, length] : rec.channelLengths) rec.channels[id] = in.read_bytes(size_t(length));
     };
@@ -175,10 +178,12 @@ bool check(const fs::path& path, int& carriedBlocks, int& channelsBack) {
         if (x.section != 3 && x.ranges != y.ranges) problems.push_back("\"" + x.name + "\": Blend If ranges changed");
         if (x.section != 3 && !reduced && !x.mask.empty() && x.mask != y.mask) problems.push_back("\"" + x.name + "\": mask section changed");
         if (x.blocks.count("iOpa") && x.blocks.at("iOpa") != (y.blocks.count("iOpa") ? y.blocks.at("iOpa") : Bytes{255, 0, 0, 0})) problems.push_back("\"" + x.name + "\": Fill changed");
-        // A 16-bit layer's pixels: exactly the bytes it was stored with.
-        if (a.depth == 16 && x.section != 3)
-            for (auto& [id, data] : x.channels)
-                if (!y.channels.count(id) || y.channels.at(id) != data) problems.push_back("\"" + x.name + "\": 16-bit channel " + std::to_string(id) + " changed");
+        // A 16-bit layer's pixels, and a CMYK or Lab layer's: exactly the bytes it was stored with.
+        if ((a.depth == 16 || ((a.mode == 4 || a.mode == 9) && !sixteen)) && x.section != 3)
+            for (auto& [id, data] : x.channels) {
+                if (id < -1) continue;   // masks: the mask section's check
+                if (!y.channels.count(id) || y.channels.at(id) != data) problems.push_back("\"" + x.name + "\": " + (a.depth == 16 ? "16-bit " : "") + "channel " + std::to_string(id) + " changed");
+            }
     }
     static const std::set<int> droppedResources{1005, 1033, 1036, 1024, 1026, 1069, 1072, 1044, 1006, 1045, 1053, 1077, 1007, 1047, 1039, 1041, 1013, 1014, 1016, 1017, 1018};
     for (auto& [id, data] : a.resources) {
@@ -199,6 +204,10 @@ bool check(const fs::path& path, int& carriedBlocks, int& channelsBack) {
     if (!reopened) problems.push_back("our file does not reopen: " + error);
     else if (sixteen && reopened->document.sampleType != compositor::SampleType::U16) problems.push_back("our file does not reopen at 16 bits");
     else if (thirtyTwo && reopened->document.sampleType != compositor::SampleType::F32) problems.push_back("our file does not reopen at 32 bits");
+    if (reopened && reopened->document.colorMode != imported->document.colorMode) problems.push_back("our file does not reopen in the same colour mode");
+    if (b.mode != a.mode && (a.mode == 3 || a.mode == 4 || a.mode == 9)) problems.push_back("colour mode " + std::to_string(a.mode) + " -> " + std::to_string(b.mode));
+    // A CMYK file's profile (1039) is the document's and comes back byte for byte.
+    if (a.mode == 4 && a.resources.count(1039) && (!b.resources.count(1039) || b.resources.at(1039) != a.resources.at(1039))) problems.push_back("CMYK profile (1039) changed");
     // Alpha and spot channels: the same names, kinds, display and pixels (a 16-bit file's samples as stored), and
     // the resources that describe them byte for byte.
     if (reopened) {

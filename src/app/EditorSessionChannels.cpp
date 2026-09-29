@@ -11,6 +11,7 @@
 // Photoshop); it is hidden from the Layers panel and never written.
 #include "EditorSession.h"
 #include "ImageConvert.h"
+#include "compositor/colormgmt.h"
 #include "compositor/depth.h"
 #include "compositor/render.h"
 #include <QClipboard>
@@ -57,8 +58,18 @@ AnyGray inverted(const AnyGray& gray) {
     return {};
 }
 
-/// The channel's colour as a canvas-sized fill at the document's depth.
+AnyImage solidColorRgb(const Document& document, const std::array<double, 3>& color);
+
+/// The channel's colour as a canvas-sized fill at the document's depth and in its mode (the colour is sRGB in CMYK and
+/// Lab documents, as their stored colours are).
 AnyImage solidColor(const Document& document, const std::array<double, 3>& color) {
+    const AnyImage rgb = solidColorRgb(document, color);
+    if (document.colorMode == ColorMode::RGB) return rgb;
+    const AnyImage converted = convertImage(rgb, ColorMode::RGB, ColorProfile(), document.colorMode, document.profile);
+    return converted ? converted : rgb;
+}
+
+AnyImage solidColorRgb(const Document& document, const std::array<double, 3>& color) {
     const int w = document.width, h = document.height;
     if (document.sampleType == SampleType::U16) {
         auto pixels = std::make_shared<Image16>(w, h);
@@ -84,10 +95,13 @@ void EditorSession::followChannelDocument() {
     // The channel view belongs to one document: another taking the session (New, Open, a recovered file) starts from
     // the composite, as a newly opened document does in Photoshop.
     const std::optional<Uuid> id = document_ ? std::optional<Uuid>(document_->id) : std::nullopt;
-    if (id == channelsFor_) return;
+    // A mode conversion (Image > Mode) changes which colour channels there are: the composite again.
+    const std::optional<ColorMode> mode = document_ ? std::optional<ColorMode>(document_->colorMode) : std::nullopt;
+    if (id == channelsFor_ && mode == channelsModeFor_) return;
     channelsFor_ = id;
-    const bool changed = activeColors_ != colorChannelsAll || visibleColors_ != colorChannelsAll || !visibleAlpha_.empty() || channelTarget_ || channelProxy_;
-    activeColors_ = visibleColors_ = colorChannelsAll;
+    channelsModeFor_ = mode;
+    const bool changed = activeColors_ != allColors() || visibleColors_ != allColors() || !visibleAlpha_.empty() || channelTarget_ || channelProxy_;
+    activeColors_ = visibleColors_ = allColors();
     visibleAlpha_.clear();
     channelTarget_.reset();
     channelProxy_.reset();
@@ -106,7 +120,7 @@ std::optional<Uuid> EditorSession::targetChannel() const {
 }
 
 void EditorSession::selectColorChannels(unsigned bits, bool extend) {
-    bits &= colorChannelsAll;
+    bits &= allColors();
     if (!bits || !document_) return;
     endChannelEdit();
     channelTarget_.reset();
@@ -149,7 +163,7 @@ bool EditorSession::selectAlphaChannel(const Uuid& id, bool extend) {
 }
 
 void EditorSession::setColorChannelVisible(unsigned bits, bool visible) {
-    bits &= colorChannelsAll;
+    bits &= allColors();
     const unsigned next = visible ? (visibleColors_ | bits) : (visibleColors_ & ~bits);
     if (next == visibleColors_) return;
     visibleColors_ = next;
@@ -171,7 +185,8 @@ void EditorSession::setAlphaChannelVisible(const Uuid& id, bool visible) {
 ChannelView EditorSession::channelView() const {
     ChannelView view;
     view.color = visibleColors_;
-    if (!document_ || (document_->channels.empty() && visibleColors_ == colorChannelsAll)) return view;
+    if (document_) view.mode = document_->colorMode;   // the canvas adds the frame at the document's layout (CMYK, Lab)
+    if (!document_ || (document_->channels.empty() && visibleColors_ == allColors())) return view;
     const std::optional<Uuid> target = targetChannel();
     const bool proxied = target && channelProxy_ && findChannel(*document_, *target)->kind == ChannelKind::Alpha;
     std::optional<Uuid> gray;
@@ -450,7 +465,7 @@ bool EditorSession::loadSelectionFromSource(const SelectionSource& source, bool 
 bool EditorSession::pasteIntoChannels(const AnyImage& image, QPointF origin) {
     if (!document_ || !image) return false;
     const bool intoAlpha = targetChannel() && findChannel(*document_, *targetChannel())->kind == ChannelKind::Alpha;
-    if (!intoAlpha && activeColors_ == colorChannelsAll) return false;
+    if (!intoAlpha && activeColors_ == allColors()) return false;
     // The clipboard's gray (luminosity) and coverage, at 8 bits: what a paste into a channel writes.
     const ImagePtr eight = imageAtDepth(image, SampleType::U8).u8();
     if (!eight) return false;

@@ -34,7 +34,7 @@ void AutomationServer::registerDocumentHandlers() {
         const Document& doc = document();
         EditorSession* s = session();
         QJsonObject o{{"width", doc.width}, {"height", doc.height}, {"resolution", doc.resolution}, {"layers", int(doc.layers.size())},
-                      {"bits", QString::fromLatin1(sampleTypeName(doc.sampleType)).toInt()},
+                      {"bits", QString::fromLatin1(sampleTypeName(doc.sampleType)).toInt()}, {"colorMode", QString::fromLatin1(colorModeKey(doc.colorMode))},
                       {"modified", s->isModified()}, {"title", s->title()}, {"tab", w->currentTabIndex()},
                       {"profile", color::profileLabel(doc.profile)}};
         if (!s->projectPath().isEmpty()) o["path"] = s->projectPath();
@@ -291,12 +291,12 @@ void AutomationServer::registerDocumentHandlers() {
     });
     add("canvas.flip", [session, document](const QJsonObject& p) { document(); session()->flipCanvas(!flag(p, "vertical", false)); return QJsonObject{}; });
     add("image.mode", [session, document](const QJsonObject& p) {
-        // Image > Mode > 8, 16 or 32 Bits/Channel: every layer, mask and the selection converted, one undo step. From 32
-        // bits, HDR Toning's settings (the defaults: the values as they are).
+        // Image > Mode > 8, 16 or 32 Bits/Channel: every layer, mask and the selection converted, one undo step, from 32
+        // bits with HDR Toning's settings (the defaults: the values as they are); and RGB Color, CMYK Color or Lab Color
+        // (docs/color-modes.md), its own undo step: before the depth, or after it when leaving 32 bits (CMYK and Lab
+        // have no 32 bits).
         document();
-        const int bits = integer(p, "bits");
-        if (bits != 8 && bits != 16 && bits != 32) fail("bits must be 8, 16 or 32", invalidParams);
-        const SampleType target = bits == 32 ? SampleType::F32 : bits == 16 ? SampleType::U16 : SampleType::U8;
+        if (!has(p, "bits") && !has(p, "colorMode")) fail("give bits (8, 16 or 32) and/or colorMode (rgb, cmyk or lab)", invalidParams);
         View32 toning;
         if (has(p, "method")) {
             auto method = toneMethodFromKey(str(p, "method").toStdString());
@@ -307,11 +307,27 @@ void AutomationServer::registerDocumentHandlers() {
         if (has(p, "gamma")) toning.gamma = num(p, "gamma");
         if (!(toning.exposure >= View32::minExposure && toning.exposure <= View32::maxExposure)) fail("exposure must be -20..20", invalidParams);
         if (!(toning.gamma >= View32::minGamma && toning.gamma <= View32::maxGamma)) fail("gamma must be 0.1..9.99", invalidParams);
-        if (!toning.isDefault() && document().sampleType != SampleType::F32) fail("method, exposure and gamma are HDR Toning's: they apply from 32 bits", invalidParams);
+        if (!toning.isDefault() && (!has(p, "bits") || document().sampleType != SampleType::F32)) fail("method, exposure and gamma are HDR Toning's: they apply from 32 bits", invalidParams);
         QString error;
-        if (!session()->convertMode(target, &error, toning.isDefault() ? nullptr : &toning)) fail(error.isEmpty() ? QStringLiteral("the document could not be converted") : error);
+        auto convertDepth = [&] {
+            const int bits = integer(p, "bits");
+            if (bits != 8 && bits != 16 && bits != 32) fail("bits must be 8, 16 or 32", invalidParams);
+            const SampleType target = bits == 32 ? SampleType::F32 : bits == 16 ? SampleType::U16 : SampleType::U8;
+            if (!session()->convertMode(target, &error, toning.isDefault() ? nullptr : &toning)) fail(error.isEmpty() ? QStringLiteral("the document could not be converted") : error);
+        };
+        const bool depthFirst = has(p, "bits") && document().sampleType == SampleType::F32;
+        if (depthFirst) convertDepth();
+        if (has(p, "colorMode")) {
+            const QString key = str(p, "colorMode").toLower();
+            const std::optional<ColorMode> mode = key == "rgb" ? std::optional(ColorMode::RGB) : key == "cmyk" ? std::optional(ColorMode::CMYK)
+                                                  : key == "lab" ? std::optional(ColorMode::Lab) : std::nullopt;
+            if (!mode) fail("colorMode must be rgb, cmyk or lab", invalidParams);
+            if (!session()->convertColorMode(*mode, &error)) fail(error.isEmpty() ? QStringLiteral("the document could not be converted") : error);
+        }
+        if (has(p, "bits") && !depthFirst) convertDepth();
         const Document& now = document();
-        return QJsonObject{{"bits", bits}, {"width", now.width}, {"height", now.height}, {"layerBytes", double(now.layerBytes())},
+        const int bits = now.sampleType == SampleType::U16 ? 16 : now.sampleType == SampleType::F32 ? 32 : 8;
+        return QJsonObject{{"bits", bits}, {"colorMode", QString::fromLatin1(colorModeKey(now.colorMode))}, {"width", now.width}, {"height", now.height}, {"layerBytes", double(now.layerBytes())},
                            {"layerBudgetBytes", double(Document::projectPixelBudgetAt(now.sampleType) * 4 * (long long)sampleBytes(now.sampleType))},
                            {"layerPixelBudget", double(Document::projectPixelBudgetAt(now.sampleType))}};
     });

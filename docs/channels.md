@@ -77,6 +77,18 @@ this runs and every edit takes its usual path, so rendering and brush parity are
 The canvas shows one colour channel alone in gray, several in their colours, and any alpha or spot channel shown
 as its colour over its dark areas (`applyChannelView`, after the render; the default view leaves the frame alone).
 
+## CMYK and Lab
+
+A CMYK document's colour channels are **CMYK, Cyan, Magenta, Yellow and Black** (Ctrl+2 to Ctrl+6, the alpha channels
+from Ctrl+7), a Lab document's **Lab, Lightness, a and b** (Ctrl+2 to Ctrl+5). The session's colour channel bits have
+one bit per channel of the mode (`colorChannelsAllFor(mode)`: 15 for CMYK, 7 for RGB and Lab). The view reads them from
+the frame at the document's layout (`ChannelView::native`, `renderNative`): one channel alone in gray, a CMYK plate
+with its ink dark as Photoshop shows it, a and b gray where neutral; several CMYK inks as inks on white paper; several
+Lab channels as their colour with the hidden ones neutral. Loading a CMYK channel as a selection selects its ink (paper
+where the composite is transparent), a Lab channel its value. Single-channel editing (`keepColorChannels`,
+`restrictToColorChannels`) works on 4 or 5 samples a pixel; in these modes Fill is the edit ported so far (P7 step D),
+the brushes and the other tools follow with the editing ports. See [color-modes.md](color-modes.md).
+
 ## Files
 
 - **PSD**: the merged image's planes after the colour (and its transparency) are the alpha and spot channels,
@@ -109,5 +121,6 @@ most 53 alpha and spot channels (Photoshop's 56 with the colour channels).
   their ink's real colour when it is a colour book's.
 - Apply Image and Calculations.
 - Split Channels and Merge Channels, and Multichannel mode.
-- CMYK and Lab colour channels (with those modes, P7).
+- Painting, adjustments and filters in one CMYK or Lab colour channel (Fill works; the rest comes with the editing
+  ports, P7 step E).
 - TIFF extra channels.

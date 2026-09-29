@@ -147,6 +147,8 @@ public:
     /// And in float, for a 32-bit document.
     std::shared_ptr<const ImageT<SampleType::F32>> level(const std::shared_ptr<const ImageT<SampleType::F32>>& image, int level);
     std::shared_ptr<const GrayImageT<SampleType::F32>> level(const std::shared_ptr<const GrayImageT<SampleType::F32>>& image, int level);
+    /// 8-bit CMYK (ImageC8, 5 samples a pixel); a 16-bit CMYK buffer takes the Image16 form.
+    std::shared_ptr<const ImageT<SampleType::U8>> level(const std::shared_ptr<const ImageT<SampleType::U8>>& image, int level);
     /// The level for drawing an image at `factor` destination pixels per source pixel: halvings until the
     /// final resample is at most 2x reduction, or, `rounded`, until it is nearest to 1x (between 0.7x
     /// and 1.4x), which suits a bicubic final step.
@@ -190,6 +192,7 @@ private:
     // A 32-bit document's.
     std::vector<Entry<ImageT<SampleType::F32>>> entriesF_;
     std::vector<Entry<GrayImageT<SampleType::F32>>> grayEntriesF_;
+    std::vector<Entry<ImageT<SampleType::U8>>> entriesC8_;
 };
 
 } // namespace compositor

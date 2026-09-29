@@ -32,6 +32,8 @@
 #include "compositor/mypaint.h"
 #include "compositor/parallel.h"
 #include "compositor/render.h"
+#include "compositor/colormgmt.h"
+#include "compositor/blend.h"
 #include "compositor/tipbrush.h"
 #include "compositor/toning.h"
 #include "compositor/layerstyle.h"
@@ -346,6 +348,60 @@ void addBlendScenes() {
         for (Layer& l : doc.layers) if (l.isGroup) { l.passThrough = true; l.blendMode = BlendMode::Normal; l.opacity = 1; }
         return hashImage(*renderFlattened(doc));
     });
+}
+
+// ---- CMYK and Lab (P7) ---------------------------------------------------------------------------------------------
+//
+// The blend documents converted with Image > Mode (the bundled Working CMYK, Lab D50), at 8 and 16 bits: the native
+// render's samples ("cmyk/", "lab/", "cmyk16/", "lab16/") in every mode the colour mode offers, and the display
+// (through the profile to sRGB) for a few.
+
+uint64_t hashNative(const AnyImage& image) {
+    Fnv f;
+    f.u32(uint32_t(image.width()));
+    f.u32(uint32_t(image.height()));
+    f.u32(uint32_t(image.channels()) << 8 | uint32_t(image.sampleType()));
+    const size_t n = size_t(image.width()) * size_t(image.channels());
+    for (int y = 0; y < image.height(); y++) {
+        if (auto c8 = image.c8()) f.bytes(c8->row(y), n);
+        else if (auto u8 = image.u8()) f.bytes(u8->row(y), n);
+        else if (auto u16 = image.u16()) f.bytes(reinterpret_cast<const uint8_t*>(u16->row(y)), n * 2);
+    }
+    return f.h;
+}
+
+Document inColorMode(Document doc, ColorMode mode, SampleType type) {
+    std::string error;
+    if (!convertDocumentMode(doc, mode, ColorProfile(), ConvertOptions(), &error)) check::fail(__FILE__, __LINE__, "convertDocumentMode: " + error);
+    if (type != SampleType::U8 && !convertSampleType(doc, type, &error)) check::fail(__FILE__, __LINE__, "convertSampleType: " + error);
+    return doc;
+}
+
+void addColorModeScenes() {
+    for (ColorMode colorMode : {ColorMode::CMYK, ColorMode::Lab}) {
+        for (SampleType type : {SampleType::U8, SampleType::U16}) {
+            const std::string prefix = std::string(colorMode == ColorMode::CMYK ? "cmyk" : "lab") + (type == SampleType::U16 ? "16" : "") + "/";
+            for (int m = 0; m < blendModeCount; m++) {
+                const BlendMode mode = BlendMode(m);
+                if (!blendModeAvailable(mode, colorMode)) continue;
+                const std::string name = slug(blendModeName(mode));
+                scene(prefix + "blend/" + name, [=] { return hashNative(renderNative(inColorMode(blendDocument(mode), colorMode, type))); });
+            }
+            scene(prefix + "blend/multiply@0.5", [=] {
+                RenderOptions options;
+                options.region = {16, 8, 200, 160};
+                options.scale = 0.5;
+                return hashNative(renderNative(inColorMode(blendDocument(BlendMode::Multiply), colorMode, type), options));
+            });
+            for (BlendMode mode : {BlendMode::Normal, BlendMode::Multiply, BlendMode::Screen}) {
+                scene(prefix + "display/" + slug(blendModeName(mode)), [=] {
+                    Image out;
+                    render(inColorMode(blendDocument(mode), colorMode, type), RenderOptions(), out);
+                    return hashImage(out);
+                });
+            }
+        }
+    }
 }
 
 // ---- 16 bits ------------------------------------------------------------------------------------------------------
@@ -1188,6 +1244,7 @@ void add16BitLateScenes() {
 TEST_CASE(render_hashes_match_the_baseline_on_the_pool_and_serially) {
     addGoldenScenes();
     addBlendScenes();
+    addColorModeScenes();
     addAdjustmentScenes();
     addFilterScenes();
     addBrushScenes();

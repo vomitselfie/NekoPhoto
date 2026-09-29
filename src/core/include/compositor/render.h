@@ -46,6 +46,8 @@ struct RenderCache {
     std::shared_ptr<Image16> backdrop16, above16;
     /// And a 32-bit one.
     std::shared_ptr<ImageF> backdropF, aboveF;
+    /// The same for an 8-bit CMYK document (a Lab one uses `backdrop`, and 16-bit CMYK and Lab `backdrop16`).
+    std::shared_ptr<ImageC8> backdropC8, aboveC8;
 };
 
 /// Per-layer overrides while an edit is in progress (a transform being dragged, a brush stroke).
@@ -61,6 +63,8 @@ struct LayerOverride {
     /// And in a 32-bit document.
     std::optional<ImageFPtr> imageF;
     std::optional<GrayFPtr> maskImageF;
+    /// The pixels in an 8-bit CMYK document (a Lab one uses `image`, 16-bit CMYK and Lab `image16`).
+    std::optional<ImageC8Ptr> imageC8;
 };
 using Overrides = std::map<Uuid, LayerOverride>;
 
@@ -76,6 +80,12 @@ std::shared_ptr<Image16> renderFlattened16(const Document& document);
 /// linearised through its profile's curve): what 32-bit files and the mode conversion take (render_f32.cpp).
 void renderF(const Document& document, const RenderOptions& options, ImageF& out, const Overrides* overrides = nullptr, RenderCache* cache = nullptr);
 std::shared_ptr<ImageF> renderFlattenedF(const Document& document);
+
+/// A CMYK or Lab document at its own depth and mode (colormodes.h): an `ImageC8`, a 5-channel `Image16`, or a Lab
+/// `Image` / `Image16`; an RGB document renders as render() or render16() do. What the PSD writer's merged image and
+/// the channel views take. render() hands the canvas the same pixels through the display transform, and render16()
+/// converts them to the document's RGB counterpart (sRGB) for 16-bit exports.
+AnyImage renderNative(const Document& document, const RenderOptions& options = {}, const Overrides* overrides = nullptr, RenderCache* cache = nullptr);
 
 /// Draws one raster through a transform into `out`, which represents `region` at `scale`:
 /// resampled (mips + bilinear, or nearest), edges antialiased, then multiplied by

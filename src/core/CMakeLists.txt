@@ -217,6 +217,13 @@ add_library(compositor_core STATIC
     src/blend_f32.cpp
     src/render_exec_f32.cpp
     src/render_f32.cpp
+    src/blend_c8.cpp
+    src/blend_modes16.cpp
+    src/render_modes.cpp
+    src/render_exec_c8.cpp
+    src/render_exec_lab8.cpp
+    src/render_exec_modes16.cpp
+    src/colormode_convert.cpp
 )
 add_library(compositor::core ALIAS compositor_core)
 

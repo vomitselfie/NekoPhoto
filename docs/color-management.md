@@ -34,6 +34,8 @@ A simplified form of Photoshop's dialog (Ctrl+Shift+K):
 - **Working CMYK**: the press profile CMYK colours are for: **ISO Coated v2 300% (basICColor)**, a FOGRA39 profile
   that ships with NekoPhoto (the default), or any CMYK ICC file (Load…). Photoshop's default proof simulates it, and an
   untagged CMYK document is treated as it.
+- **Conversion Options**: the rendering intent (Perceptual, Relative Colorimetric, the default, Saturation or Absolute
+  Colorimetric) and black point compensation (on by default) Image ▸ Mode uses between RGB, CMYK and Lab.
 - **Color management policy (RGB)**, for a file's embedded profile as it opens:
   - **Preserve Embedded Profiles** (the default): the document keeps the file's profile.
   - **Convert to Working RGB**: the pixels are converted to the working space, which the document then carries.
@@ -93,15 +95,18 @@ blues, greens and oranges). Both apply to every window and last until you turn t
 
 ## CMYK and Lab documents
 
-Image ▸ Mode ▸ CMYK Color and Lab Color are being built (the plan is in [high-bit-depth-plan.md](high-bit-depth-plan.md),
-"P7 plan: CMYK and Lab"); until then no document is CMYK or Lab. What is in place:
+Image ▸ Mode ▸ CMYK Color and Lab Color, how such documents draw, their channels and their PSDs are in
+[color-modes.md](color-modes.md). For colour management:
 
 - **The document model.** A CMYK document holds five samples a pixel (cyan, magenta, yellow and black as inverted ink,
   0 being full ink as in PSD, then alpha), a Lab document four (L, a and b offset by 128 at 8 bits and 16384 at 16),
   premultiplied, at 8 or 16 bits. Its byte budget counts the channels: a CMYK layer holds four fifths the pixels of an
   RGB one.
-- **Colour.** Every conversion between RGB, CMYK and Lab pixels at either depth, through the document's profiles (an
-  untagged CMYK document is in the Working CMYK, a Lab document in Lab D50).
+- **Profiles.** A CMYK document is in its own CMYK profile (a CMYK PSD's resource 1039, or the Working CMYK it was
+  converted to; untagged, it is treated as the Working CMYK), a Lab document in Lab D50. Convert to Profile works
+  between CMYK profiles; Lab takes no other profile.
+- **The display is never skipped.** A CMYK or Lab frame is not RGB, so the canvas always converts it: the document's
+  profile to the monitor profile, or to sRGB when none is known, fused with the reduction to 8 bits. Thumbnails too.
 - **Features by mode.** What does not work in a mode is greyed out with "Not available in CMYK mode" (or Lab mode), as
   in Photoshop; Camera Raw, G'MIC and the MyPaint brushes stay RGB only.
 - **Projects** save and open CMYK and Lab documents ([project-format.md](project-format.md), version 9).
@@ -144,7 +149,7 @@ sRGB** first (off by default, on for GIF); converted files carry no profile, whi
 - `document.profile`: `action` get (the default), `assign` or `convert`; `profile` `srgb`, `adobe-rgb`,
   `display-p3`, `prophoto`, `working`, `none` (assign only) or an ICC file's path; `intent` `perceptual` or
   `relative`; `blackPointCompensation`.
-- `color.settings`: reads and sets the working space, `workingCmyk` (`default` for the bundled profile, or a CMYK ICC
+- `color.settings`: reads and sets the working space, the Conversion Options (`intent`, `blackPointCompensation`), `workingCmyk` (`default` for the bundled profile, or a CMYK ICC
   file), the policy, the two prompts, the monitor profile, and the proof (`proofProfile`: `working-cmyk`, the default,
   a working space or an RGB or CMYK ICC file; `proofIntent`, `proofBlackPoint`, `proofColors`, `gamutWarning`,
   `gamutColor`).
@@ -220,6 +225,8 @@ NekoPhoto のカラーマネジメントは Photoshop と同じ考え方です�
 - **プロファイルのない画像は sRGB として扱います。**
 - プロファイルがないとき・作業用スペースと異なるときに確認する(どちらも既定はオフ)。
 
+- **変換オプション**:イメージ ▸ モードで RGB・CMYK・Lab 間を変換するときのマッチング方法(知覚的、相対的な色域を維持
+  (既定)、彩度、絶対的な色域を維持)と黒点の補正(既定はオン)。
 ### 編集 ▸ プロファイルの指定、プロファイル変換
 
 - **プロファイルの指定**:値の解釈だけを変えます(ピクセルの値はそのまま)。取り消しは 1 回。
@@ -255,10 +262,11 @@ NekoPhoto のカラーマネジメントは Photoshop と同じ考え方です�
 
 ### CMYK と Lab のドキュメント
 
-イメージ ▸ モード ▸ CMYK カラーと Lab カラーは準備中です([high-bit-depth-plan.md](high-bit-depth-plan.md) の
-「P7 plan」)。現在はドキュメントのモデル(CMYK は反転したインキ量とアルファの 5 チャンネル、Lab は a・b をオフセット
-した 4 チャンネル、8/16 bit)、RGB・CMYK・Lab 間のすべての変換、モードごとの機能の制限(「CMYK モードでは使用できません」)、
-プロジェクトへの保存(形式バージョン 9)ができています。
+イメージ ▸ モード ▸ CMYK カラーと Lab カラー、表示、チャンネル、PSD は [color-modes.md](color-modes.md) を参照して
+ください。CMYK ドキュメントは自身の CMYK プロファイル(PSD のリソース 1039、または変換先の作業用 CMYK。タグなしは作業用
+CMYK として扱う)、Lab ドキュメントは Lab D50 です。CMYK・Lab のカンバスは常にモニタープロファイル(不明なら sRGB)へ
+変換して表示します。モードにない機能は「CMYK モードでは使用できません」と表示します。プロジェクトへの保存は形式
+バージョン 9 です。
 
 ### スポイト
 

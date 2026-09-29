@@ -41,7 +41,8 @@ struct Asset {
     static Asset make(ImagePtr image, std::string name);
     /// A 16-bit raster; its thumbnail is reduced to 8 bits.
     static Asset make(Image16Ptr image, std::string name);
-    /// An 8-bit CMYK raster. It has no thumbnail yet: drawing one needs the document's profile (P7 step C).
+    /// An 8-bit CMYK raster; its thumbnail is drawn through the default Working CMYK (refreshModeThumbnails redraws it
+    /// in the document's profile).
     static Asset make(ImageC8Ptr image, std::string name);
     /// A 32-bit raster; its thumbnail is tone-mapped at exposure 0 to 8 bits.
     static Asset make(ImageFPtr image, std::string name);

@@ -208,10 +208,12 @@ channel, or `id` with `mode`), `channels.loadSelection` (Select > Load Selection
 
 Canvas and history: `canvas.resize`, `canvas.crop`, `canvas.flip`,
 `image.resize`, `image.trim` (Photoshop's Trim: `basedOn` transparent, topLeft or bottomRight, the sides, `tolerance`),
-`image.mode` (`bits` 8, 16 or 32: Image > Mode, one undo step; refused with the reason when the document would not fit
+`image.mode` (Image > Mode: `bits` 8, 16 or 32, one undo step, refused with the reason when the document would not fit
 its byte budget, half the pixels of an 8-bit one at 16 bits, a quarter at 32; from 32 bits HDR Toning's `method`
 exposure-gamma or highlight-compression, `exposure`, `gamma`, whose defaults give an 8- or 16-bit-sourced document back
-exactly), `document.profile` (colour management, docs/color-management.md:
+exactly; `colorMode` rgb, cmyk or lab, RGB Color, CMYK Color or Lab Color, one undo step, with Color Settings' Working
+CMYK, `intent` and `blackPointCompensation`; with both, the colour mode first, except when leaving 32 bits; 32 bits is
+RGB only; see docs/color-modes.md), `document.profile` (colour management, docs/color-management.md:
 `action` get, `assign` (Edit > Assign Profile, the tag only) or `convert` (Edit > Convert to Profile: every layer's pixels
 and the stored colours); `profile` srgb, adobe-rgb, display-p3, prophoto, working, working-cmyk (CMYK documents), none or
 an ICC file's path of the document's mode; `intent`
@@ -284,7 +286,8 @@ View: `tool.select` (`name`: move, marquee, lasso, wand, quickselect, crop, brus
 smudge, gradient, shape, text, eyedropper, hand or zoom), `colors.set`, `view.zoom`, `view.exposure` (a 32-bit
 document's view, not the pixels and not an undo step: `exposure` in stops, `gamma`, `method` exposure-gamma or
 highlight-compression; with no keys it reads it), `color.settings` (Edit > Color
-Settings: `workingSpace`, `workingCmyk` (default, the bundled ISO Coated v2 300%, or a CMYK ICC file), `policy` preserve,
+Settings: `workingSpace`, `workingCmyk` (default, the bundled ISO Coated v2 300%, or a CMYK ICC file), the Conversion Options
+`intent` (perceptual, relative, saturation, absolute) and `blackPointCompensation` Image > Mode uses, `policy` preserve,
 convert or off, `askMissing`, `askMismatch`; the monitor profile: `monitorProfile` (an ICC file, "" for the system's),
 `useSystemMonitor`; View > Proof Setup: `proofProfile` (working-cmyk, the default, a working space or an RGB or CMYK ICC file),
 `proofIntent`, `proofBlackPoint`, `proofColors`, `gamutWarning`, `gamutColor`; with no keys it only reads them).

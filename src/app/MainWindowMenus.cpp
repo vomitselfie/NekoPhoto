@@ -252,6 +252,14 @@ void MainWindow::buildMenus() {
     // Photoshop's Image > Mode: the document's bits per channel (docs/bit-depth.md).
     QMenu* mode = image->addMenu(tr("&Mode"));
     needsDocument(mode->menuAction(), "document.mode");
+    // The colour modes (docs/color-modes.md): RGB, CMYK and Lab, as Photoshop lists them above the depths.
+    auto* colorModes = new QActionGroup(this);
+    modeRgbAction_ = needsDocument(mode->addAction(tr("&RGB Color"), this, [this] { convertColorMode(ColorMode::RGB); }), "document.mode");
+    modeCmykAction_ = needsDocument(mode->addAction(tr("&CMYK Color"), this, [this] { convertColorMode(ColorMode::CMYK); }), "document.mode");
+    modeLabAction_ = needsDocument(mode->addAction(tr("&Lab Color"), this, [this] { convertColorMode(ColorMode::Lab); }), "document.mode");
+    for (QAction* a : {modeRgbAction_, modeCmykAction_, modeLabAction_}) { a->setCheckable(true); colorModes->addAction(a); }
+    modeRgbAction_->setChecked(true);
+    mode->addSeparator();
     auto* depths = new QActionGroup(this);
     mode8Action_ = needsDocument(mode->addAction(tr("&8 Bits/Channel"), this, [this] { convertMode(SampleType::U8); }), "document.mode");
     mode16Action_ = needsDocument(mode->addAction(tr("&16 Bits/Channel"), this, [this] { convertMode(SampleType::U16); }), "document.mode");
@@ -496,19 +504,22 @@ void MainWindow::buildMenus() {
         if (!session_->document()->selection) { showError(tr("Save Selection"), tr("Make a selection first.")); return; }
         (new SaveSelectionDialog(session_, this))->open();
     }), "edit.channels");
-    // Photoshop's channel keys: Ctrl+2 the composite, Ctrl+3, 4, 5 red, green and blue, Ctrl+6 to 9 the first four alpha
-    // channels; with Alt, the channel is loaded as a selection instead.
+    // Photoshop's channel keys: Ctrl+2 the composite, then one key per colour channel (Ctrl+3, 4, 5 red, green and
+    // blue; Ctrl+3 to 6 cyan to black in CMYK), then the first alpha channels up to Ctrl+9; with Alt, the channel is
+    // loaded as a selection instead.
     auto channelKey = [this](int n, bool load) {
         if (!session_->hasDocument()) return;
         const auto& channels = session_->document()->channels;
-        if (n >= 6 && size_t(n - 6) >= channels.size()) return;
+        const int firstAlpha = 3 + colorModeColorChannels(session_->document()->colorMode);
+        if (n >= firstAlpha && size_t(n - firstAlpha) >= channels.size()) return;
         if (load) {
             SelectionSource source;
-            source.kind = n == 2 ? SelectionSource::Composite : n == 3 ? SelectionSource::Red : n == 4 ? SelectionSource::Green : n == 5 ? SelectionSource::Blue : SelectionSource::AlphaChannel;
-            if (n >= 6) source.id = channels[size_t(n - 6)].id;
+            source.kind = n == 2 ? SelectionSource::Composite : n == 3 ? SelectionSource::Red : n == 4 ? SelectionSource::Green : n == 5 ? SelectionSource::Blue
+                          : n < firstAlpha ? SelectionSource::Black : SelectionSource::AlphaChannel;
+            if (n >= firstAlpha) source.id = channels[size_t(n - firstAlpha)].id;
             session_->loadSelectionFromSource(source, false, SelectionMode::Replace);
-        } else if (n <= 5) session_->selectColorChannels(n == 2 ? colorChannelsAll : 1u << (n - 3));
-        else session_->selectAlphaChannel(channels[size_t(n - 6)].id);
+        } else if (n < firstAlpha) session_->selectColorChannels(n == 2 ? session_->allColors() : 1u << (n - 3));
+        else session_->selectAlphaChannel(channels[size_t(n - firstAlpha)].id);
     };
     for (int n = 2; n <= 9; n++)
         for (bool load : {false, true}) {
@@ -657,6 +668,14 @@ void MainWindow::buildMenus() {
     refreshRecent();
 }
 
+void MainWindow::convertColorMode(ColorMode colorMode) {
+    if (!session_->hasDocument() || session_->document()->colorMode == colorMode) { refreshDepthGating(); return; }
+    QString error;
+    if (!session_->convertColorMode(colorMode, &error)) showError(tr("Mode"), error.isEmpty() ? tr("The document could not be converted.") : error);
+    else { recordAction("image.mode", {{"colorMode", QString::fromLatin1(colorModeKey(colorMode))}}); updateColorSwatches(); }
+    refreshActions();
+}
+
 void MainWindow::convertMode(SampleType type) {
     if (!session_->hasDocument() || session_->sampleType() == type) { refreshDepthGating(); return; }
     // From 32 bits: HDR Toning, previewed on the canvas through the view (docs/bit-depth.md, "32 bits").
@@ -705,11 +724,21 @@ void MainWindow::refreshDepthGating() {
     // Menus show their items' tooltips while something in them is greyed for the depth.
     for (QMenu* menu : menuBar()->findChildren<QMenu*>()) menu->setToolTipsVisible(deep);
     const SampleType depth = has ? session_->sampleType() : SampleType::U8;
+    const ColorMode colorMode = has ? session_->document()->colorMode : ColorMode::RGB;
     if (mode8Action_) {
         mode8Action_->setChecked(depth == SampleType::U8);
         mode16Action_->setChecked(depth == SampleType::U16);
         mode32Action_->setChecked(depth == SampleType::F32);
     }
+    if (modeRgbAction_) {
+        modeRgbAction_->setChecked(colorMode == ColorMode::RGB);
+        modeCmykAction_->setChecked(colorMode == ColorMode::CMYK);
+        modeLabAction_->setChecked(colorMode == ColorMode::Lab);
+    }
+    // 32 bits is RGB only, as in Photoshop: 32 Bits/Channel is greyed in a CMYK or Lab document, and CMYK Color and
+    // Lab Color in a 32-bit one.
+    if (has && mode32Action_ && colorMode != ColorMode::RGB) gate(mode32Action_, false, true, "document.mode");
+    if (has && modeCmykAction_ && depth == SampleType::F32) for (QAction* a : {modeCmykAction_, modeLabAction_}) gate(a, false, true, "mode.cmykLab");
     if (previewOptionsAction_) previewOptionsAction_->setEnabled(depth == SampleType::F32);
     refreshExposure();
 }

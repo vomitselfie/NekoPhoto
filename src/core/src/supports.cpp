@@ -182,6 +182,12 @@ constexpr FeatureModes modeTable[] = {
     {"tool.lasso", allModes},
     {"edit.timeline", allModes},
     {"view", allModes},
+    // Steps C and D (P7): the renderer, Image > Mode, the Channels panel with single-channel fill, PSD (modes 4 and 9).
+    {"render.document", allModes},
+    {"document.mode", allModes},
+    {"edit.channels", allModes},
+    {"edit.fill", allModes},
+    {"export.psd", allModes},
 };
 }   // namespace
 
@@ -208,6 +214,8 @@ constexpr std::string_view lackedAt32[] = {
     "filter.Mosh", "filter.G'MIC",
     // The blend modes outside Photoshop's 32-bit set (blendModeAt32): greyed in the picker, refused by automation.
     "blend.outside32",
+    // Image > Mode > CMYK Color and Lab Color: Photoshop has no 32-bit CMYK or Lab.
+    "mode.cmykLab",
 };
 } // namespace
 

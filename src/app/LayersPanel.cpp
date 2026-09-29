@@ -650,16 +650,23 @@ void LayersPanel::syncAppearance() {
     // Pass Through is a folder's alone.
     if (auto* model = qobject_cast<QStandardItemModel*>(blendCombo_->model())) {
         if (auto* item = model->item(0)) item->setEnabled(active && active->isGroup);
-        // A 32-bit document offers Photoshop's 32-bit modes; the others (which still draw, with their inputs clamped)
-        // are greyed, as Photoshop greys them.
+        // The modes the document's colour mode offers (Lab lacks eight, as in Photoshop); CMYK's Hue, Saturation,
+        // Color, Luminosity, Darker and Lighter Color are offered but draw as Normal until they are calibrated. A
+        // 32-bit document offers Photoshop's 32-bit modes; the others (which still draw, with their inputs clamped) are
+        // greyed, as Photoshop greys them.
+        const ColorMode colorMode = session_->hasDocument() ? session_->document()->colorMode : ColorMode::RGB;
         const bool floatDocument = session_->sampleType() == SampleType::F32;
-        for (int row = 1; row < model->rowCount(); row++) {
-            QStandardItem* item = model->item(row);
-            const QVariant data = item ? item->data(Qt::UserRole) : QVariant();
-            if (!data.isValid() || data.toInt() < 0) continue;
-            const bool offered = !floatDocument || blendModeAt32(BlendMode(data.toInt()));
-            item->setEnabled(offered);
-            item->setToolTip(offered ? QString() : session_->unavailableTip("blend.outside32"));
+        for (int i = 1; i < model->rowCount(); i++) {
+            QStandardItem* item = model->item(i);
+            const QVariant data = blendCombo_->itemData(i);
+            if (!item || !data.isValid() || data.toInt() < 0) continue;
+            const BlendMode mode = BlendMode(data.toInt());
+            const bool at32 = !floatDocument || blendModeAt32(mode);
+            item->setEnabled(blendModeAvailable(mode, colorMode) && at32);
+            item->setToolTip(!at32 ? session_->unavailableTip("blend.outside32")
+                             : !blendModeAvailable(mode, colorMode) ? tr("Not available in Lab mode")
+                             : blendModeApproximated(mode, colorMode) ? tr("Drawn as Normal in CMYK documents for now")
+                             : QString());
         }
     }
     const int shown = !active ? int(BlendMode::Normal) : active->isGroup && active->passThrough ? -1 : int(active->blendMode);

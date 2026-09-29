@@ -109,8 +109,9 @@ Asset Asset::make(ImagePtr image, std::string name) {
 
 Asset Asset::make(Image16Ptr image, std::string name) {
     Asset asset;
-    // A 5-channel (CMYK) raster has no thumbnail yet: drawing one needs the document's profile.
-    asset.thumbnail = image && image->channels() == 4 ? makeThumbnail(*image) : nullptr;
+    // A 5-channel (CMYK) raster is drawn through the default Working CMYK; a document in another profile draws its
+    // layers' thumbnails again with its own (refreshModeThumbnails).
+    asset.thumbnail = !image ? nullptr : image->channels() == 4 ? makeThumbnail(*image) : modeThumbnail(Image16Ptr(image), ColorMode::CMYK, ColorProfile());
     asset.image = std::move(image);
     asset.name = std::move(name);
     return asset;
@@ -118,6 +119,7 @@ Asset Asset::make(Image16Ptr image, std::string name) {
 
 Asset Asset::make(ImageC8Ptr image, std::string name) {
     Asset asset;
+    asset.thumbnail = image ? modeThumbnail(ImageC8Ptr(image), ColorMode::CMYK, ColorProfile()) : nullptr;
     asset.image = std::move(image);
     asset.name = std::move(name);
     return asset;

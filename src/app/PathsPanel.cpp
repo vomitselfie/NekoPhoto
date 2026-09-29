@@ -1,4 +1,5 @@
 #include "PathsPanel.h"
+#include "Icons.h"
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QListWidget>
@@ -17,23 +18,28 @@ PathsPanel::PathsPanel(EditorSession* session, QWidget* parent) : QWidget(parent
     list_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     list_->setContextMenuPolicy(Qt::CustomContextMenu);
     box->addWidget(list_, 1);
+    // Icon buttons with tooltips, as in Photoshop's Paths panel: a row of text buttons made the panel (and the Layers
+    // panel it shares a tab with) at least 470 px wide.
     auto* buttons = new QHBoxLayout;
-    auto button = [&](const QString& text, const QString& tip, auto action) {
+    buttons->setSpacing(2);
+    auto button = [&](const QString& icon, const QString& tip, auto action) {
         auto* b = new QToolButton(this);
-        b->setText(text);
+        b->setIcon(toolIcon(icon, 18));
+        b->setIconSize(QSize(18, 18));
         b->setToolTip(tip);
+        b->setAutoRaise(true);
         connect(b, &QToolButton::clicked, this, action);
         buttons->addWidget(b);
         return b;
     };
-    button(tr("Fill"), tr("Fill the path with the foreground colour"), [this] { if (auto id = chosen()) session_->fillPath(*id); });
-    button(tr("Stroke"), tr("Stroke the path with the brush's size in the foreground colour"), [this] { if (auto id = chosen()) session_->strokePath(*id); });
-    button(tr("Select"), tr("Load the path as a selection"), [this] { if (auto id = chosen()) session_->pathToSelection(*id, SelectionMode::Replace); });
-    button(tr("From Sel."), tr("Make a work path from the selection"), [this] { session_->selectionToWorkPath(); });
-    button(tr("Shape"), tr("Make a shape layer from the path"), [this] { if (auto id = chosen()) session_->pathToShapeLayer(*id); });
-    button(tr("New"), tr("Create a new path"), [this] { session_->newPath(tr("Path %1").arg(list_->count() + 1)); });
-    button(tr("Delete"), tr("Delete the path"), [this] { if (auto id = chosen()) session_->deletePath(*id); });
+    button("paint-bucket", tr("Fill the path with the foreground colour"), [this] { if (auto id = chosen()) session_->fillPath(*id); });
+    button("paintbrush", tr("Stroke the path with the brush's size in the foreground colour"), [this] { if (auto id = chosen()) session_->strokePath(*id); });
+    button("square-dashed", tr("Load the path as a selection"), [this] { if (auto id = chosen()) session_->pathToSelection(*id, SelectionMode::Replace); });
+    button("pen-tool", tr("Make a work path from the selection"), [this] { session_->selectionToWorkPath(); });
+    button("shapes", tr("Make a shape layer from the path"), [this] { if (auto id = chosen()) session_->pathToShapeLayer(*id); });
     buttons->addStretch();
+    button("square-plus", tr("Create a new path"), [this] { session_->newPath(tr("Path %1").arg(list_->count() + 1)); });
+    button("trash-2", tr("Delete the path"), [this] { if (auto id = chosen()) session_->deletePath(*id); });
     box->addLayout(buttons);
 
     connect(list_, &QListWidget::currentRowChanged, this, [this] { if (!refreshing_) session_->selectPath(chosen()); });

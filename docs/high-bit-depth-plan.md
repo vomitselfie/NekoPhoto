@@ -1,6 +1,6 @@
 # High bit depth and colour management: design plan
 
-Status: P1–P4 landed in 1.7 (16-bit RGB editing, painting and colour management); see "Status" below for each phase and what is still gated at 16 bits. P6 (channels) has landed too, and P5a (the 32-bit core); the rest of P5, P7 and P8 are planned. The design sections below are kept as written.
+Status: P1–P4 landed in 1.7 (16-bit RGB editing, painting and colour management); see "Status" below for each phase and what is still gated at 16 bits. P6 (channels) has landed too, P7 steps A–D (CMYK and Lab documents, rendering, PSD and Image ▸ Mode) and P5a (the 32-bit core); the rest of P5 and P7, and P8, are planned. The design sections below are kept as written.
 
 ## 1. Where we are
 
@@ -669,3 +669,75 @@ Minimum shippable subset: A–D and F plus the cheap part of E.
   RGBA8)` plus `convertImageTo8`, never null for CMYK/Lab; `conformToFormat` leaves buffers of another channel count
   alone, so paste/place into CMYK needs `convertImage(..., RGB, from, CMYK, to)`; stored colours (text, shapes, styles)
   are still RGB values in every mode.
+
+**Status (2026-09-28): steps C and D landed.** User-facing summary: [color-modes.md](color-modes.md).
+
+- C, rendering. `RenderExecDeep<S, Ops>` takes its policy as a second template argument and `Ops::channels` (4, or 5
+  for CMYK) as its layout; `Ops::styles` and `Ops::blendStraight` (an adjustment layer's blend) complete the policy.
+  `DeepOps<U16>` keeps channels 4 and the old expressions, so the RGB16 instance is the same code (16-bit hashes
+  identical). `ModeOps<S, M>` (`render_modes.h/.cpp`) is the one CMYK and Lab policy: 8-bit CMYK
+  (`render_exec_c8.cpp`, `ImageC8`), 8-bit Lab (`render_exec_lab8.cpp`, `Image`), 16-bit CMYK and Lab
+  (`render_exec_modes16.cpp`); `render_exec_u8.cpp` and `blend_u8.cpp` are untouched. Its drawLayer has the on-grid
+  span path and bilinear resampling (no Catmull-Rom yet); vector paint and fill layers are drawn in RGB and converted;
+  adjustments drawn: Invert, Levels, Curves (composite), Brightness/Contrast, Posterize; layer styles not drawn yet.
+  `render()` branches once on a non-RGB mode (`renderForDisplayMode`), `render16()` converts to sRGB
+  (`renderModeAsRgb16`), `renderNative()` returns the frame at the layout. MipCache and halving take `ImageC8` and
+  5-channel `Image16`; CMYK assets get thumbnails through the Working CMYK, `refreshModeThumbnails` redraws them in
+  the document's profile.
+- Blend modes (`blend_c8.cpp`, `blend_modes16.cpp` over `blend_modes.inc`): CMYK runs the RGB kernels per ink, as two
+  RGBA passes, (C, M, Y, alpha) and (K, K, K, alpha), so each separable mode keeps its RGB rounding and calibration
+  (`colormodes_render_tests` checks this against `compositePixelSteps` for every mode). Lab: Normal and Dissolve are the
+  RGB arithmetic; Luminosity, Color, Hue, Saturation, Darker and Lighter Color work in L and a/b (LCh); the other offered
+  modes apply to the stored L, a, b. Offered modes: CMYK every mode, which Adobe's help does not restrict; Lab every mode
+  but Color Dodge, Color Burn, Darken, Lighten, Difference, Exclusion, Subtract and Divide, from Adobe's "Layer opacity
+  and blending modes" page ("For Lab images, the Color Dodge, Color Burn, Darken, Lighten, Difference, Exclusion,
+  Subtract, and Divide modes are unavailable"; the page itself answered 403 to a direct fetch, the quote is from the
+  search result). Unverified: what Photoshop's Lab separable modes and its Lab LCh modes compute (no Lab renders to
+  compare), and whether Darker/Lighter Color are offered in Lab. CMYK's non-separable modes draw as Normal
+  (`blendModeApproximated`, with a note in the blend picker); the hook is `modes::cmykNonSeparableCalibrated` and
+  `blendModeFor` in `blend_c8.cpp`.
+- Display: never null for CMYK/Lab: the app's `displayTransform` builds `pixelFormatFor(depth, mode)` to RGBA8 (to the
+  monitor, or sRGB), and `renderForDisplayMode` builds its own to sRGB when the one given reads another layout; the
+  reduction and the transform are one pass (`convertImageTo8`).
+- Channel view: `colorChannelsAllFor(mode)`; `ChannelView::mode` and `native` (the frame at the layout); one channel
+  in gray (a CMYK plate with its ink dark), several CMYK inks tinted on white, several Lab channels as colour with the
+  hidden ones neutral; `keepColorChannels` and `restrictToColorChannels` on 4 or 5 samples; `SelectionSource::Black`
+  and CMYK ink / Lab value selections; the Channels panel, Ctrl+2..9 and `channels.*` name C, M, Y, K and L, a, b.
+- 108 new render_hash scenes (`cmyk/`, `lab/`, `cmyk16/`, `lab16/`: every offered mode, a reduced region, and the
+  display) over the blend documents converted with Image > Mode.
+- D, PSD. Modes 4 and 9 open natively at 8 and 16 bits (`assembleMode8/16`); 1039 is a CMYK document's profile; the
+  merged image is also kept at the layout (`PsdImport::compositeNative`, Lab's a/b matted against neutral). The carry
+  keeps a CMYK or Lab layer's stored channels (-1..3) at either depth while its pixels are the ones read. The writer
+  writes mode 4/9, the layout's planes (`setPixelsMode`), converted RGB rasters, bakes and transformed layers drawn at
+  the layout, and the merged image matted against paper (`writeMergedMode`). Levels/Curves blocks keep Photoshop's
+  record order (composite, then channels 1..4); a CMYK file's per-ink settings are kept and written back with the
+  block but only the composite draws. Duotone, Multichannel, Indexed, Bitmap and Grayscale still convert to RGB.
+- D, Image > Mode > RGB/CMYK/Lab Color: `convertDocumentMode` (`colormode_convert.cpp`) with Color Settings' new
+  Conversion Options (intent, black point compensation) and the Working CMYK or working space; stored colours through
+  `convertModeColor` (they stay RGB values, sRGB in CMYK/Lab; to CMYK they pass through the press gamut); per-channel
+  Levels/Curves reset; adjustment layers without a counterpart (`adjustmentOfferedInMode`, from Photoshop's
+  Image > Adjustments per mode; unverified for Exposure, Vibrance, Photo Filter, Channel Mixer, Color Lookup in Lab) are
+  hidden with a `dormantInMode` marker and restored on the way back; one undo step, budget and depth checks.
+  Automation `image.mode colorMode`, `document.info colorMode`, `color.settings intent/blackPointCompensation`; MCP,
+  automation.md, rpc smoke (`colour_modes`). Fill works in CMYK/Lab (`fillThroughMode`, the layer's grid), so a single
+  colour channel can be filled.
+- Fixtures: Patchy's `photoshop-cmyk-style-colors.psd` (the one Photoshop-saved CMYK file) opens as CMYK and returns
+  every layer channel and 1039 byte for byte. Constructed CMYK and Lab PSDs at 8 and 16 bits (two layers, a mask, a
+  Levels layer, a spot channel), written by our writer and read by an independent decoder in `psd_modes_tests`, then
+  reopened and re-exported byte for byte; marked as constructed. No Photoshop-saved Lab file and no 16-bit CMYK one yet;
+  `/home/dij/Development/linpositor/cmyk-lab-fixtures/` did not exist.
+- Gates: 8/16-bit RGB render hashes and brush_parity byte-identical; PSD corpus plus K.psd 118 files / 0 failed / 3,975
+  carried blocks at 8 and 16 bits (psd_roundtrip now also requires CMYK/Lab files to reopen in their mode with every
+  layer channel back); GCC and Clang `-Werror` full builds; full ctest (56); headless rpc smoke; translations_check.
+  Perf: `perf stat -e instructions:u` on each RGB bench line against main at the lane's start (two alternating
+  rounds, `taskset -c 0`): render 4000x3000 12 layers 67.11e9 both; at 0.25 18.56e9 both; region 21.58e9 both;
+  render16 49.97e9 both; to display 52.49e9 both; through display 75.92e9 both, 122.60e9 both at 16 bits: every line
+  within 0.01%. New lines: cmyk 4000x3000 to display 476 ms (native 379), at 0.25 52 ms, cmyk16 916 ms, lab 340 ms,
+  lab16 627 ms, against 268 ms for the same RGB render (24 threads).
+- For step E: painting (`StrokeRaster` over `ModeOps`-like N-channel ops, MyPaint stays greyed), the adjustments' CMYK
+  and Lab kernels (per-ink Levels and Curves from the model's slots, Hue/Saturation and Selective Color in CMYK, Channel
+  Mixer with a fourth output), blurs and filters on N channels, transforms and resampling of `ImageC8` and 5-channel
+  `Image16` (`resampleLayer`, warps; Catmull-Rom for High), paste and Place (RGB sources through `convertImage`), text and
+  shapes drawn in RGB then converted (their colours are already sRGB values), fill growing the layer to the selection as
+  the RGB fill does, layer styles (effects drawn in RGB and converted, or an N-channel StyledDraw), exports to PNG/JPEG/
+  TIFF converting with a note, and the editing tools' `supports()` entries per mode.

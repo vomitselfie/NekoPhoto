@@ -1,4 +1,5 @@
 #include "compositor/psd_writer.h"
+#include "compositor/colormgmt.h"
 #include "psd_channels.h"
 #include "compositor/smartfilter.h"
 #include "psd/psd_descriptor.hpp"
@@ -241,6 +242,35 @@ std::array<std::vector<uint8_t>, 4> straightPlanes(const Image& image) {
     return planes;
 }
 
+/// Straight planes of a CMYK or Lab buffer, `n` samples a pixel (alpha last), as straightPlanes does for RGB: 8-bit
+/// samples as bytes, 16-bit ones as 0..65535. A transparent pixel stores no ink (CMYK) or neutral a and b (Lab), as
+/// Photoshop's own layers do.
+template <class Img>
+std::vector<std::vector<uint16_t>> straightPlanesMode(const Img& image, int n, bool lab) {
+    const int w = image.width(), h = image.height();
+    constexpr bool deep = sizeof(*image.data()) == 2;
+    const uint32_t one = deep ? one16 : 255u;
+    std::vector<std::vector<uint16_t>> planes(static_cast<size_t>(n));
+    for (auto& p : planes) p.resize(size_t(w) * h);
+    parallelRows(0, h, [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++) {
+            const auto* s = image.row(y);
+            for (int x = 0; x < w; x++, s += n) {
+                const size_t i = size_t(y) * w + x;
+                const uint32_t a = s[n - 1];
+                for (int c = 0; c < n; c++) {
+                    uint32_t v;
+                    if (c == n - 1) v = a;
+                    else if (a == 0) v = lab ? (c == 0 ? 0 : (deep ? 16384u : 128u)) : one;
+                    else v = std::min<uint32_t>(one, (uint32_t(s[c]) * one + a / 2) / a);
+                    planes[size_t(c)][i] = uint16_t(deep ? to65535(v) : v);
+                }
+            }
+        }
+    }, 64);
+    return planes;
+}
+
 const char* blendKey(BlendMode mode) {
     switch (mode) {
     case BlendMode::Normal: return "norm";
@@ -333,7 +363,8 @@ class Writer {
 public:
     Writer(const Document& document, const PsdExportOptions& options, bool encode, PsdExportSummary& summary)
         : doc_(document), options_(options), encode_(encode), deep_(document.sampleType == SampleType::U16), float_(document.sampleType == SampleType::F32),
-          curve_(float_ ? encodedTransfer(document) : TransferCurve::srgb()), summary_(summary) {
+          curve_(float_ ? encodedTransfer(document) : TransferCurve::srgb()), native_(document.colorMode != ColorMode::RGB),
+          colours_(colorModeColorChannels(document.colorMode)), summary_(summary) {
         for (const Layer& l : doc_.layers) byId_[l.id] = &l;
     }
 
@@ -358,6 +389,9 @@ private:
     /// A 32-bit document: float channels and masks, 8-bit rasters (text, fills) linearised through its curve.
     const bool float_;
     const TransferCurve curve_;
+    /// A CMYK or Lab document (P7 step D): its layers' own planes, `colours_` of them (4 for CMYK, 3 for Lab).
+    const bool native_;
+    const int colours_;
     PsdExportSummary& summary_;
     std::map<Uuid, const Layer*> byId_;
     std::vector<Record> records_;
@@ -371,9 +405,11 @@ private:
     void emptyChannels(Record& r, bool alpha = true) const {
         if (!encode_) return;
         for (int id : {-1, 0, 1, 2}) if (id != -1 || alpha) r.channels.push_back({id, encodeChannel({}, 0, 0, false, options_.large)});
+        if (native_ && colours_ == 4) r.channels.push_back({3, encodeChannel({}, 0, 0, false, options_.large)});
     }
 
     void setPixels(Record& r, const Image16& image, int left, int top) const {
+        if (native_) { setPixelsMode(r, image, left, top); return; }
         r.left = left; r.top = top; r.right = left + image.width(); r.bottom = top + image.height();
         if (!encode_) return;
         auto planes = straightPlanes16(image);
@@ -389,7 +425,47 @@ private:
         for (int c = 0; c < 3; c++) r.channels.push_back({c, encodeChannel32(planes[size_t(c)], image.width(), image.height(), options_.compress)});
     }
 
+    /// A CMYK or Lab layer's pixels at the document's layout: alpha, then each colour plane as stored.
+    template <class Img>
+    void setPixelsMode(Record& r, const Img& image, int left, int top) const {
+        r.left = left; r.top = top; r.right = left + image.width(); r.bottom = top + image.height();
+        if (!encode_) return;
+        const int n = colours_ + 1;
+        const auto planes = straightPlanesMode(image, n, doc_.colorMode == ColorMode::Lab);
+        auto encode = [&](const std::vector<uint16_t>& plane) {
+            if constexpr (sizeof(*image.data()) == 2) return encodeChannel16(plane, image.width(), image.height(), options_.compress);
+            else {
+                std::vector<uint8_t> bytes(plane.begin(), plane.end());
+                return encodeChannel(bytes, image.width(), image.height(), options_.compress, options_.large);
+            }
+        };
+        r.channels.push_back({-1, encode(planes[size_t(n - 1)])});
+        for (int c = 0; c < colours_; c++) r.channels.push_back({c, encode(planes[size_t(c)])});
+    }
+    void setPixels(Record& r, const ImageC8& image, int left, int top) const {
+        if (deep_ && encode_) { setPixelsAny(r, imageAtFormat(ImageC8Ptr(std::make_shared<ImageC8>(image)), SampleType::U16, ColorMode::CMYK), left, top); return; }
+        setPixelsMode(r, image, left, top);
+    }
+    /// Pixels of any layout: a CMYK or Lab document's go through setPixelsMode, converted to its layout and depth first
+    /// when they are held in another (an RGB raster placed into it).
+    void setPixelsAny(Record& r, const AnyImage& image, int left, int top) const {
+        if (!image) return;
+        if (!native_) {
+            if (image.f32()) setPixels(r, *image.f32(), left, top);
+            else if (image.u16()) setPixels(r, *image.u16(), left, top);
+            else if (image.u8()) setPixels(r, *image.u8(), left, top);
+            return;
+        }
+        AnyImage at = image.channels() == colours_ + 1 ? image : convertImage(image, ColorMode::RGB, ColorProfile(), doc_.colorMode, doc_.profile);
+        at = at ? imageAtFormat(at, doc_.sampleType, doc_.colorMode) : AnyImage();
+        if (!at) { r.left = left; r.top = top; r.right = left + image.width(); r.bottom = top + image.height(); return; }
+        if (at.u16()) setPixelsMode(r, *at.u16(), left, top);
+        else if (at.c8()) setPixelsMode(r, *at.c8(), left, top);
+        else if (at.u8()) setPixelsMode(r, *at.u8(), left, top);
+    }
+
     void setPixels(Record& r, const Image& image, int left, int top) const {
+        if (native_) { setPixelsAny(r, ImagePtr(std::make_shared<Image>(image)), left, top); return; }
         if (float_ && encode_) { setPixels(r, *lineariseImage(image, curve_), left, top); return; }
         if (deep_ && encode_) { setPixels(r, *widenImage(image), left, top); return; }
         r.left = left; r.top = top; r.right = left + image.width(); r.bottom = top + image.height();
@@ -483,8 +559,8 @@ private:
         // A 16-bit layer as read: its channels go back as they were stored, since 0..65535 does not survive the trip
         // through 0..32768 (CarriedPlane); any edit changes the fingerprint and they are written anew. PSD to PSD only
         // (a PSB's RLE rows count in 32 bits).
-        if ((deep_ || float_) && !options_.large && sameContent && placementKept && !c.planes.empty() && c.planesHash == contentNow && l.asset
-            && (deep_ ? bool(l.asset->image.u16()) : bool(l.asset->image.f32()))) {
+        if ((deep_ || float_ || native_) && !options_.large && sameContent && placementKept && !c.planes.empty() && c.planesHash == contentNow && l.asset
+            && (float_ ? bool(l.asset->image.f32()) : (l.asset->image.u16() || (native_ && l.asset->image.sampleType() == SampleType::U8)))) {
             std::vector<std::pair<int, std::vector<uint8_t>>> channels;
             for (const auto& plane : c.planes) channels.push_back({plane.id, plane.data});
             for (auto& ch : r.channels) if (ch.first < -1) channels.push_back(std::move(ch));
@@ -646,6 +722,38 @@ private:
             if (!folderMasks && l.isGroup) l.mask.reset();
         }
         return renderFlattened(copy);
+    }
+
+    /// renderOnly at the document's layout (CMYK, Lab).
+    AnyImage renderOnlyNative(const std::vector<Uuid>& showing, bool keepClips, std::optional<Uuid> neutralise = std::nullopt, bool folderMasks = true) const {
+        Document copy = doc_;
+        std::map<Uuid, bool> keep;
+        for (const Uuid& id : showing) {
+            keep[id] = true;
+            for (auto p = byId_.at(id)->parentId; p; p = byId_.at(*p)->parentId) keep[*p] = true;
+        }
+        for (Layer& l : copy.layers) {
+            if (!keep.count(l.id)) l.visible = false;
+            if (!keepClips) l.maskSourceId.reset();
+            if (neutralise && l.id == *neutralise) { l.opacity = 1; l.blendMode = BlendMode::Normal; }
+            if (!folderMasks && l.isGroup) l.mask.reset();
+        }
+        return renderNative(copy);
+    }
+
+    /// One layer of a CMYK or Lab document resampled into `bounds` (document pixels): drawn alone at its layout.
+    AnyImage layerInto(const Layer& layer, const Rect& bounds) const {
+        Document single(doc_.width, doc_.height);
+        single.sampleType = doc_.sampleType;
+        single.colorMode = doc_.colorMode;
+        single.profile = doc_.profile;
+        Layer copy = layer;
+        copy.parentId.reset(); copy.visible = true; copy.opacity = 1; copy.blendMode = BlendMode::Normal; copy.mask.reset(); copy.maskSourceId.reset();
+        copy.psdCarry.reset();
+        single.layers = {copy};
+        RenderOptions options;
+        options.region = bounds;
+        return renderNative(single, options);
     }
 
     /// Every layer drawn before `layer` in the stack, and the layer: what an adjustment applies to.
@@ -917,6 +1025,7 @@ private:
         baked.name = l.name;
         baked.hidden = !l.visible;
         if (!l.visible) emptyChannels(baked);   // it showed nothing: an empty hidden layer keeps its place
+        else if (encode_ && native_) setPixelsAny(baked, renderOnlyNative(throughLayer(l), true), 0, 0);
         else if (encode_) setPixels(baked, *renderOnly(throughLayer(l), true), 0, 0);
         else { baked.right = doc_.width; baked.bottom = doc_.height; }
         records_.push_back(std::move(baked));
@@ -946,6 +1055,34 @@ private:
         const LayerTransform& t = l.transform;
         const bool onGrid = t.rotation == 0 && !t.flipX && !t.flipY && t.origin.x == std::round(t.origin.x) && t.origin.y == std::round(t.origin.y)
             && t.size.width == imageWidth && t.size.height == imageHeight;
+        if (clipped && !clipFits && native_) {
+            // A CMYK or Lab layer clipped to one not right beneath it: written as it shows, the clip's alpha applied.
+            summary_.warnings.push_back("Layer \"" + l.name + "\" is clipped to a layer that is not right beneath it, which PSD cannot say; it is written as it shows, unclipped.");
+            const Rect bounds = t.bounds().integral().intersection(doc_.rect());
+            r.clipping = false;
+            if (encode_ && !bounds.isEmpty()) {
+                const AnyImage own = renderOnlyNative({l.id}, false, l.id, false), source = renderOnlyNative({*l.maskSourceId}, true, std::nullopt, false);
+                const int n = colours_ + 1, bx = int(bounds.x), by = int(bounds.y), bw = int(bounds.width), bh = int(bounds.height);
+                auto clip = [&](const auto& o, const auto& c, auto out) {
+                    for (int y = 0; y < bh; y++) {
+                        const auto* s = o.pixel(bx, by + y);
+                        const auto* a = c.pixel(bx, by + y);
+                        auto* d = out->row(y);
+                        const uint32_t one = sizeof(*d) == 2 ? one16 : 255u;
+                        for (int x = 0; x < bw; x++, s += n, a += n, d += n)
+                            for (int k = 0; k < n; k++) d[k] = static_cast<std::remove_cvref_t<decltype(d[k])>>((uint32_t(s[k]) * a[n - 1] + one / 2) / one);
+                    }
+                    setPixelsAny(r, AnyImage(std::shared_ptr<const std::remove_cvref_t<decltype(*out)>>(out)), bx, by);
+                };
+                if (own.u16()) clip(*own.u16(), *source.u16(), std::make_shared<Image16>(bw, bh, n));
+                else if (own.c8()) clip(*own.c8(), *source.c8(), std::make_shared<ImageC8>(bw, bh, n));
+                else if (own.u8()) clip(*own.u8(), *source.u8(), std::make_shared<Image>(bw, bh));
+            } else { r.left = int(bounds.x); r.top = int(bounds.y); r.right = int(bounds.x + bounds.width); r.bottom = int(bounds.y + bounds.height); }
+            applyCarry(r, l, false);
+            records_.push_back(std::move(r));
+            summary_.layers++;
+            return;
+        }
         if (clipped && !clipFits) {
             // PSD clips only to the layer right beneath: this one is written as it shows, clip and mask applied.
             summary_.warnings.push_back("Layer \"" + l.name + "\" is clipped to a layer that is not right beneath it, which PSD cannot say; it is written as it shows, unclipped.");
@@ -972,7 +1109,8 @@ private:
         }
         r.clipping = clipFits;
         if (onGrid) {
-            if (l.asset->image.u16()) setPixels(r, *l.asset->image.u16(), int(t.origin.x), int(t.origin.y));
+            if (native_) setPixelsAny(r, l.asset->image, int(t.origin.x), int(t.origin.y));
+            else if (l.asset->image.u16()) setPixels(r, *l.asset->image.u16(), int(t.origin.x), int(t.origin.y));
             else if (l.asset->image.f32()) setPixels(r, *l.asset->image.f32(), int(t.origin.x), int(t.origin.y));
             else setPixels(r, *l.asset->image.u8(), int(t.origin.x), int(t.origin.y));
             setMask(r, l, Rect(t.origin.x, t.origin.y, imageWidth, imageHeight), true);
@@ -982,7 +1120,8 @@ private:
             const Rect bounds = t.bounds().integral();
             if (encode_ && !bounds.isEmpty()) {
                 LayerTransform target(Point(bounds.x, bounds.y), Size(bounds.width, bounds.height));
-                if (l.asset->image.u16()) setPixels(r, *resampleLayer(l.asset->image.u16(), t, target, int(bounds.width), int(bounds.height)), int(bounds.x), int(bounds.y));
+                if (native_) setPixelsAny(r, layerInto(l, bounds), int(bounds.x), int(bounds.y));
+                else if (l.asset->image.u16()) setPixels(r, *resampleLayer(l.asset->image.u16(), t, target, int(bounds.width), int(bounds.height)), int(bounds.x), int(bounds.y));
                 else if (l.asset->image.f32()) setPixels(r, *resampleLayer(l.asset->image.f32(), t, target, int(bounds.width), int(bounds.height)), int(bounds.x), int(bounds.y));
                 else setPixels(r, *resampleLayer(l.asset->image.u8(), t, target, int(bounds.width), int(bounds.height)), int(bounds.x), int(bounds.y));
             } else { r.left = int(bounds.x); r.top = int(bounds.y); r.right = int(bounds.x + bounds.width); r.bottom = int(bounds.y + bounds.height); }
@@ -1063,6 +1202,60 @@ void writeRecord(Out& o, const Record& r, bool large) {
 
 } // namespace
 
+namespace {
+
+/// The merged image of a CMYK or Lab document: the native render matted against white paper (no ink; L 100, a and b
+/// neutral), the colour planes, its transparency, then the alpha and spot channels, at the document's depth.
+void writeMergedMode(Out& f, const Document& document, const PsdExportOptions& options) {
+    const bool deep = document.sampleType == SampleType::U16, lab = document.colorMode == ColorMode::Lab;
+    const int w = document.width, h = document.height, colours = colorModeColorChannels(document.colorMode), n = colours + 1;
+    const AnyImage flat = renderNative(document);
+    const size_t bytesPer = deep ? 2 : 1;
+    std::vector<std::vector<uint8_t>> raw(static_cast<size_t>(n));
+    for (auto& p : raw) p.resize(size_t(w) * h * bytesPer);
+    for (const Channel& channel : document.channels) raw.push_back(psdChannelPlane(channel, deep, w, h));
+    auto matte = [&](const auto& image) {
+        const uint32_t one = deep ? one16 : 255u, neutral = deep ? 16384u : 128u;
+        parallelRows(0, h, [&](int ya, int yb) {
+            for (int y = ya; y < yb; y++) {
+                const auto* s = image.row(y);
+                for (int x = 0; x < w; x++, s += n) {
+                    const uint32_t a = s[n - 1];
+                    for (int c = 0; c < n; c++) {
+                        const uint32_t paper = lab && c > 0 ? neutral : one;
+                        const uint32_t v = c == n - 1 ? a : std::min(one, uint32_t(s[c]) + (paper * (one - std::min(a, one)) + one / 2) / one);
+                        const size_t i = (size_t(y) * w + x) * bytesPer;
+                        if (deep) { const uint16_t wide = to65535(v); raw[size_t(c)][i] = uint8_t(wide >> 8); raw[size_t(c)][i + 1] = uint8_t(wide); }
+                        else raw[size_t(c)][i] = uint8_t(v);
+                    }
+                }
+            }
+        }, 64);
+    };
+    if (flat.u16()) matte(*flat.u16());
+    else if (flat.c8()) matte(*flat.c8());
+    else if (flat.u8()) matte(*flat.u8());
+    if (options.compress) {
+        std::vector<std::vector<uint8_t>> rows(raw.size() * size_t(h));
+        const int rowBytes = w * int(bytesPer);
+        parallelRows(0, h, [&](int ya, int yb) {
+            for (size_t c = 0; c < raw.size(); c++) for (int y = ya; y < yb; y++) {
+                const uint8_t* row = raw[c].data() + size_t(y) * size_t(rowBytes);
+                packBits(row, rowBytes, rows[c * size_t(h) + size_t(y)]);
+                makeRowEven(rows[c * size_t(h) + size_t(y)], row, rowBytes);
+            }
+        }, 64);
+        f.u16(1);
+        for (auto& r : rows) { if (options.large) f.u32(uint32_t(r.size())); else f.u16(unsigned(r.size())); }
+        for (auto& r : rows) f.bytes(r);
+    } else {
+        f.u16(0);
+        for (auto& p : raw) f.bytes(p);
+    }
+}
+
+} // namespace
+
 PsdExportSummary planPsdExport(const Document& document, const PsdExportOptions& options) {
     PsdExportSummary summary;
     Writer(document, options, false, summary).records();
@@ -1082,14 +1275,16 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
 
     Out f;
     f.str("8BPS"); f.u16(large ? 2 : 1); for (int i = 0; i < 6; i++) f.u8(0);
-    f.u16(4 + unsigned(document.channels.size()));   // RGB, the merged image's transparency, then the alpha and spot channels
+    // The colour channels (3, or 4 for CMYK), the merged image's transparency, then the alpha and spot channels.
+    f.u16(unsigned(colorModeColorChannels(document.colorMode)) + 1 + unsigned(document.channels.size()));
     f.u32(uint32_t(document.height)); f.u32(uint32_t(document.width));
     const bool deep = document.sampleType == SampleType::U16;
     // A 32-bit document: float channels in 'Lr32', the merged image in float, resource 1039 the profile its values
     // encode to (Photoshop's 32-bit files carry the working space's own profile; the values are linear in it).
     const bool floating = document.sampleType == SampleType::F32;
     const ColorProfile fileProfile = floating ? encodedProfileOf(document) : document.profile;
-    f.u16(floating ? 32 : deep ? 16 : 8); f.u16(3);
+    // The colour mode: RGB 3, CMYK 4, Lab 9 (32 bits is RGB only).
+    f.u16(floating ? 32 : deep ? 16 : 8); f.u16(document.colorMode == ColorMode::CMYK ? 4 : document.colorMode == ColorMode::Lab ? 9 : 3);
     f.u32(0);   // colour mode data
     {
         // The resolution (ResolutionInfo, 0x03ED): pixels per inch as 16.16 fixed point, both axes.
@@ -1243,6 +1438,11 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
             }
             f.u16(0);
             for (auto& p : raw) f.bytes(p);
+            if (summaryOut) *summaryOut = summary;
+            return std::move(f.b);
+        }
+        if (document.colorMode != ColorMode::RGB) {
+            writeMergedMode(f, document, options);
             if (summaryOut) *summaryOut = summary;
             return std::move(f.b);
         }

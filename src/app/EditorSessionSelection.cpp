@@ -1,5 +1,6 @@
 // EditorSession: Selections: setting, combining, the magic wand, fill and clear, and the Select menu.
 #include "EditorSession.h"
+#include "ColorManagement.h"
 #include "compositor/smartwand.h"
 #include "compositor/morphology.h"
 #include "compositor/heal.h"
@@ -178,6 +179,10 @@ bool EditorSession::retolerateWand(int tolerance) {
 void EditorSession::fillSelection(const QColor& color) {
     if (refusedAtDepth("edit.fill", tr("Fill"))) return;
     if (!canEditLayers()) return;
+    if (document_->colorMode != ColorMode::RGB && !(isMaskSelected_ && activeLayer() && activeLayer()->mask)) {
+        fillThroughMode(color, QT_TRANSLATE_NOOP("History", "Fill"));
+        return;
+    }
     if (document_->sampleType == SampleType::U16) {
         const Gray16* selection = document_->selection ? document_->selection->coverage.u16().get() : nullptr;
         if (document_->selection && !selection) return;
@@ -430,6 +435,70 @@ bool EditorSession::fillThrough16(const QColor& color, const Gray16* selection, 
     return true;
 }
 
+bool EditorSession::fillThroughMode(const QColor& color, const char* name) {
+    Layer* layer = activeLayerMutable();
+    if (!layer || layer->isGroup || layer->adjustment) return false;
+    if (smartObjectBlocksPixels(true)) return false;
+    const Document& doc = *document_;
+    // The colour in the document's mode and profile, opaque, as 8-bit samples.
+    const ColorTransformPtr t = transformBetween(ColorProfile(), doc.profile, color::conversionOptions(), PixelFormat::RGBA8, pixelFormatFor(SampleType::U8, doc.colorMode));
+    const uint8_t in[4] = {uint8_t(color.red()), uint8_t(color.green()), uint8_t(color.blue()), 255};
+    uint8_t ink[5] = {0, 0, 0, 0, 255};
+    if (!t) return false;
+    t->apply(in, ink, 1);
+    const int n = colorModeChannels(doc.colorMode);
+    const bool deep = doc.sampleType == SampleType::U16;
+    // The layer's own pixels at the document's layout, or a blank canvas-sized raster.
+    AnyImage source = layer->asset && layer->asset->image && layer->asset->image.channels() == n ? layer->asset->image : AnyImage();
+    const LayerTransform placement = source ? layer->transform : LayerTransform(Point(0, 0), doc.size());
+    const int w = source ? source.width() : doc.width, h = source ? source.height() : doc.height;
+    const Affine toDoc = placement.pixelToDocument(w, h);
+    const AnyGray& selection = doc.selection ? doc.selection->coverage : AnyGray();
+    auto coverageAt = [&](Point d) -> float {
+        if (d.x < 0 || d.y < 0 || d.x >= doc.width || d.y >= doc.height) return 0.f;
+        if (!doc.selection) return 1.f;
+        const int x = std::min(int(d.x), selection.width() - 1), y = std::min(int(d.y), selection.height() - 1);
+        if (selection.u16()) return std::min(1.f, selection.u16()->at(x, y) / 32768.f);
+        if (selection.u8()) return selection.u8()->at(x, y) / 255.f;
+        return 0.f;
+    };
+    auto fill = [&](auto* out) {
+        const float one = deep ? 32768.f : 255.f;
+        for (int py = 0; py < h; py++)
+            for (int px = 0; px < w; px++) {
+                const float c = coverageAt(toDoc.apply({px + 0.5, py + 0.5}));
+                if (c <= 0) continue;
+                auto* p = out->pixel(px, py);
+                for (int k = 0; k < n; k++) {
+                    const float f = k == n - 1 ? one : float(deep ? widen8(ink[k]) : ink[k]);
+                    p[k] = static_cast<std::remove_cvref_t<decltype(p[k])>>(std::lround(p[k] * (1 - c) + f * c));
+                }
+            }
+    };
+    AnyImage result;
+    if (deep) {
+        auto out = source.u16() ? std::make_shared<Image16>(*source.u16()) : std::make_shared<Image16>(w, h, n);
+        fill(out.get());
+        result = Image16Ptr(out);
+    } else if (doc.colorMode == ColorMode::CMYK) {
+        auto out = source.c8() ? std::make_shared<ImageC8>(*source.c8()) : std::make_shared<ImageC8>(w, h, n);
+        fill(out.get());
+        result = ImageC8Ptr(out);
+    } else {
+        auto out = source.u8() ? std::make_shared<Image>(*source.u8()) : std::make_shared<Image>(w, h);
+        fill(out.get());
+        result = ImagePtr(out);
+    }
+    beginEdit(name);
+    layer->asset = Asset::makeAny(result, layer->asset ? layer->asset->name : layer->name);
+    layer->asset->thumbnail = modeThumbnail(result, doc.colorMode, doc.profile);
+    layer->transform = placement;
+    layer->shapeImage.reset();
+    endEdit();
+    notifyDocument();
+    return true;
+}
+
 void EditorSession::clearSelectedPixelsNow(Layer& layer) {
     if (layer.asset && layer.asset->image.u16()) {
         const Gray16* selection = document_->selection ? document_->selection->coverage.u16().get() : nullptr;
@@ -485,7 +554,7 @@ void EditorSession::clearSelectionPixels() {
     if (!layer || layer->isGroup || !layer->asset || !layer->asset->image) return;
     if (!document_->selection || !document_->selection->coverage) return;
     // In some colour channels only, Delete fills them with the background colour, as Photoshop clears a channel.
-    if (activeColors_ != colorChannelsAll && !isMaskSelected_) { fillSelection(backgroundColor); return; }
+    if (activeColors_ != allColors() && !isMaskSelected_) { fillSelection(backgroundColor); return; }
     beginEdit(QT_TRANSLATE_NOOP("History", "Clear"));
     clearSelectedPixelsNow(*layer);
     endEdit();

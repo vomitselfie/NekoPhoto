@@ -48,6 +48,11 @@ std::shared_ptr<GrayImage> makeGrayThumbnail(const Gray16& image, int maxSide = 
 
 /// Box-filtered halvings, rounded means as halveImage takes them.
 std::shared_ptr<Image16> halveImage(const Image16& image);
+/// The same for 8-bit CMYK (and a 5-channel Image16, which halveImage takes too): every sample, alpha included.
+std::shared_ptr<ImageC8> halveImage(const ImageC8& image);
+/// A box-filtered reduction to `width` x `height` (thumbnails) for 4- or 5-channel buffers.
+std::shared_ptr<ImageC8> boxResizeImage(const ImageC8& image, int width, int height);
+std::shared_ptr<Image16> boxResizeImage(const Image16& image, int width, int height);
 std::shared_ptr<Gray16> halveGray(const Gray16& image);
 std::shared_ptr<Image16> reduceImage(const Image16& image, int level);
 std::shared_ptr<Gray16> reduceGray(const Gray16& image, int level);

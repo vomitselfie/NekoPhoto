@@ -50,7 +50,9 @@ const MethodDoc methodDocs[] = {
     {"tool.select", "Pick the tool the person sees.", "name:<tool>! The tool"},
     {"colors.set", "Set the foreground and background colours.", "foreground:color Foreground; background:color Background"},
     {"color.settings", "Edit > Color Settings, the monitor profile and View > Proof Setup: read them, or change the keys given (docs/color-management.md). Untagged images are always treated as sRGB; new documents take the working space.",
-     "workingSpace:(srgb|adobe-rgb|display-p3|prophoto) The RGB working space; workingCmyk:string The Working CMYK: default (ISO Coated v2 300%, FOGRA39, bundled) or a CMYK ICC file; policy:(preserve|convert|off) What happens to a file's embedded profile when it opens; "
+     "workingSpace:(srgb|adobe-rgb|display-p3|prophoto) The RGB working space; workingCmyk:string The Working CMYK: default (ISO Coated v2 300%, FOGRA39, bundled) or a CMYK ICC file; "
+     "intent:(perceptual|relative|saturation|absolute) Conversion Options: the intent Image > Mode converts between RGB, CMYK and Lab with; blackPointCompensation:bool Conversion Options: black point compensation; "
+     "policy:(preserve|convert|off) What happens to a file's embedded profile when it opens; "
      "askMissing:bool Ask when a file has no profile; askMismatch:bool Ask when its profile is not the working space; "
      "monitorProfile:string An ICC file for the monitor (\"\" to use the system's); useSystemMonitor:bool Read the system's monitor profile (X11, Windows); "
      "proofProfile:string What to simulate: working-cmyk (the default, Photoshop's), a working space, or an RGB or CMYK ICC file; proofIntent:(perceptual|relative) How colours go to it; proofBlackPoint:bool Black point compensation; "
@@ -106,8 +108,11 @@ const MethodDoc methodDocs[] = {
     {"document.profile", "The document's colour profile: get it, assign one (Edit > Assign Profile: the tag only, the pixel values stay) or convert to one (Edit > Convert to Profile: every layer's pixels and the colours of text, shapes, styles and adjustments, and the foreground and background colours, so the document looks the same). One undo step.",
      "action:(get|assign|convert)=get What to do; profile:string srgb, adobe-rgb, display-p3, prophoto, working (Color Settings' working space: the Working CMYK in a CMYK document), working-cmyk (CMYK documents), none (assign only: untagged, treated as sRGB, or as the Working CMYK in a CMYK document) or an ICC file's path (of the document's mode); "
      "intent:(perceptual|relative)=relative Convert only: the rendering intent; blackPointCompensation:bool=true Convert only"},
-    {"image.mode", "Image > Mode: convert the document to 8, 16 or 32 bits per channel, every layer, mask and the selection, as one undo step. A 16-bit document holds half the pixels of an 8-bit one within the same memory, a 32-bit one a quarter; what has not been ported to the depth yet is refused on it (docs/bit-depth.md). 8 or 16 bits to 32 linearise through the profile's curve; from 32 bits HDR Toning applies (method, exposure, gamma; the defaults give an 8- or 16-bit-sourced document back exactly).",
-     "bits:integer! 8, 16 or 32; method:(exposure-gamma|highlight-compression)=exposure-gamma From 32 bits: HDR Toning's method; exposure:number=0 From 32 bits, Exposure and Gamma: stops, -20..20; gamma:number=1 From 32 bits, Exposure and Gamma: 0.1..9.99"},
+    {"image.mode", "Image > Mode: convert the document to 8, 16 or 32 bits per channel, or to RGB Color, CMYK Color or Lab Color, each as one undo step (with both, the colour mode first, except when leaving 32 bits). "
+     "A 16-bit document holds half the pixels of an 8-bit one within the same memory, a 32-bit one a quarter; what has not been ported to the depth yet is refused on it (docs/bit-depth.md). "
+     "8 or 16 bits to 32 linearise through the profile's curve; from 32 bits HDR Toning applies (method, exposure, gamma; the defaults give an 8- or 16-bit-sourced document back exactly). 32 bits is RGB only, as in Photoshop. "
+     "A colour mode conversion uses Color Settings' Working CMYK, working space, intent and black point compensation; adjustment layers the new mode does not offer are kept hidden and come back on converting back (docs/color-modes.md).",
+     "bits:integer 8, 16 or 32; colorMode:(rgb|cmyk|lab) The colour mode; method:(exposure-gamma|highlight-compression)=exposure-gamma From 32 bits: HDR Toning's method; exposure:number=0 From 32 bits, Exposure and Gamma: stops, -20..20; gamma:number=1 From 32 bits, Exposure and Gamma: 0.1..9.99"},
     {"image.resize", "Resample the whole image (every layer).",
      "width:integer New width (0 keeps the aspect from height); height:integer New height; scale:number Instead of a size: a factor; sampling:(nearest|smooth|high)=high Resampling; resolution:number Pixels per inch to record"},
     // seeing the result
