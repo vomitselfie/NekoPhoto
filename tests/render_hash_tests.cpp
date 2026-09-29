@@ -12,6 +12,11 @@
 // 16-bit scenes ("u16/..."): the same documents converted to 16 bits and rendered at that depth (render16), hashed
 // over their 16-bit samples; and a check that each renders within one 8-bit level of its 8-bit render once reduced.
 //
+// 32-bit scenes ("f32/..."): documents converted to 32 bits (linear float) and rendered at that depth (renderF), hashed
+// over their float samples; the canvas frame through the view (exposure, Highlight Compression) and HDR Toning's
+// conversion back to 8 bits, hashed as bytes. Their accuracy is held against a double-precision reference in
+// depth_float_tests, not here.
+//
 // Not covered, on purpose:
 // - Knockout: the engine has no knockout groups yet; an isolated (non pass-through) group stands in for it.
 // - Color Lookup: needs a LUT file; its interpolation is exercised by its own tests.
@@ -531,6 +536,150 @@ void add16BitVectorScenes() {
     });
 }
 
+// ---- 32 bits ------------------------------------------------------------------------------------------------------
+
+uint64_t hashImageF(const ImageF& image) {
+    Fnv f;
+    f.u32(uint32_t(image.width()));
+    f.u32(uint32_t(image.height()));
+    f.u32(0x33326266u);   // "32bf"
+    for (int y = 0; y < image.height(); y++) f.bytes(reinterpret_cast<const uint8_t*>(image.row(y)), size_t(image.width()) * 16);
+    return f.h;
+}
+
+Document thirtyTwo(Document doc) {
+    std::string error;
+    if (!convertSampleType(doc, SampleType::F32, &error)) check::fail(__FILE__, __LINE__, "convertSampleType: " + error);
+    return doc;
+}
+
+uint64_t hashF(const Document& doc, const RenderOptions& options = {}) {
+    ImageF out;
+    renderF(doc, options, out);
+    return hashImageF(out);
+}
+
+/// Values above 1: a bright layer (straight colour up to 6) in Linear Dodge over the blend scene.
+Document hdrScene() {
+    Document doc = thirtyTwo(blendDocument(BlendMode::Normal));
+    auto bright = std::make_shared<ImageF>(96, 64);
+    for (int y = 0; y < 64; y++)
+        for (int x = 0; x < 96; x++) {
+            float* p = bright->pixel(x, y);
+            const float a = float(std::min(1.0, (x + y) / 80.0));
+            p[0] = 6.0f * float(x) / 95.0f * a; p[1] = 2.0f * float(y) / 63.0f * a; p[2] = 0.5f * a; p[3] = a;
+        }
+    Layer layer(Asset::make(ImageFPtr(bright), "bright"), Point(40, 30));
+    layer.blendMode = BlendMode::LinearDodge;
+    doc.layers.push_back(layer);
+    return doc;
+}
+
+void add32BitScenes() {
+    for (int m = 0; m < blendModeCount; m++) {
+        const BlendMode mode = BlendMode(m);
+        const std::string name = slug(blendModeName(mode));
+        scene("f32/blend/" + name, [mode] { return hashF(thirtyTwo(blendDocument(mode))); });
+        scene("f32/blend/" + name + "@0.5", [mode] { return hashF(thirtyTwo(blendDocument(mode)), reducedRegion()); });
+    }
+    scene("f32/blend/pass_through_group", [] {
+        Document doc = blendDocument(BlendMode::Multiply);
+        for (Layer& l : doc.layers) if (l.isGroup) { l.passThrough = true; l.blendMode = BlendMode::Normal; l.opacity = 0.7; }
+        return hashF(thirtyTwo(doc));
+    });
+    scene("f32/golden/transformed_layer", [] {
+        Document doc = goldenBase();
+        Layer top = layerOf("gradient", gradient(32, 32), {20, 10});
+        top.transform.size = {50, 40};
+        top.transform.rotation = 25;
+        top.transform.flipX = true;
+        doc.layers.push_back(top);
+        return hashF(thirtyTwo(doc));
+    });
+    scene("f32/golden/high_quality_scaled", [] {
+        Document doc = goldenBase();
+        Layer top = layerOf("gradient", gradient(64, 48), {16, 8});
+        top.transform.size = {40, 30};
+        top.transform.sampling = Sampling::High;
+        doc.layers.push_back(top);
+        return hashF(thirtyTwo(doc));
+    });
+    scene("f32/golden/placed_mask", [] {
+        Document doc = goldenBase();
+        Layer top = layerOf("gradient", gradient(64, 48), {16, 8});
+        top.mask = maskOf(radialMask(64, 48));
+        top.mask->placement = LayerTransform(Point(30, 16), Size(64, 48));
+        doc.layers.push_back(top);
+        return hashF(thirtyTwo(doc));
+    });
+    scene("f32/hdr/linear_dodge", [] { return hashF(hdrScene()); });
+    scene("f32/hdr/linear_dodge@0.5", [] { return hashF(hdrScene(), reducedRegion()); });
+    // The canvas frame: through the view, to 8 bits (no display transform: the document's curve encodes).
+    scene("f32/view/exposure_0", [] { Image out; render(hdrScene(), RenderOptions(), out); return hashImage(out); });
+    scene("f32/view/exposure_minus_2_gamma_1_4", [] {
+        RenderOptions o;
+        o.view32.exposure = -2;
+        o.view32.gamma = 1.4;
+        Image out;
+        render(hdrScene(), o, out);
+        return hashImage(out);
+    });
+    scene("f32/view/highlight_compression", [] {
+        RenderOptions o;
+        o.view32.method = ToneMethod::HighlightCompression;
+        Image out;
+        render(hdrScene(), o, out);
+        return hashImage(out);
+    });
+    // HDR Toning back to 8 bits, and the untoned trip.
+    scene("f32/convert/to_8_exposure_gamma", [] {
+        Document doc = hdrScene();
+        View32 toning;
+        toning.exposure = -1.5;
+        toning.gamma = 1.2;
+        std::string error;
+        if (!convertSampleType(doc, SampleType::U8, &error, &toning)) check::fail(__FILE__, __LINE__, error);
+        return hashImage(*renderFlattened(doc));
+    });
+    scene("f32/convert/to_16_highlight_compression", [] {
+        Document doc = hdrScene();
+        View32 toning;
+        toning.method = ToneMethod::HighlightCompression;
+        std::string error;
+        if (!convertSampleType(doc, SampleType::U16, &error, &toning)) check::fail(__FILE__, __LINE__, error);
+        return hashImage16(*renderFlattened16(doc));
+    });
+    // Shapes, vector masks and fill layers (their coverage from the 16-bit rasterisers), and layer styles.
+    scene("f32/shape/solid_ellipse", [] {
+        Document doc = goldenBase();
+        Layer layer = layerOf("shape", std::make_shared<Image>(1, 1), {0, 0});
+        VectorShape ellipse;
+        ellipse.path = ellipsePath(Rect(12.5, 8.25, 60, 44));
+        ellipse.r = 40; ellipse.g = 120; ellipse.b = 220;
+        ellipse.stroke.enabled = false;
+        setVectorShape(layer, doc, ellipse);
+        doc.layers.push_back(layer);
+        return hashF(thirtyTwo(doc));
+    });
+    for (const char* name : {"drop_shadow", "outer_glow", "color_overlay", "gradient_overlay", "stroke", "bevel"}) {
+        const std::string effect = name;
+        scene("f32/style/" + effect, [effect] {
+            LayerStyle s;
+            if (effect == "drop_shadow") { DropShadow d; d.distance = 4; d.size = 5; s.dropShadows.push_back(d); }
+            if (effect == "outer_glow") { OuterGlow g; g.size = 6; s.outerGlows.push_back(g); }
+            if (effect == "color_overlay") { ColorOverlay c; c.color = {20, 180, 90}; c.opacity = 0.6f; s.colorOverlays.push_back(c); }
+            if (effect == "gradient_overlay") { GradientOverlay g; g.gradient = twoStops({255, 0, 0}, {0, 0, 255}, 90); s.gradientOverlays.push_back(g); }
+            if (effect == "stroke") { Stroke k; k.size = 3; s.strokes.push_back(k); }
+            if (effect == "bevel") { Bevel b; b.size = 5; s.bevels.push_back(b); }
+            Document doc = goldenBase();
+            Layer top = layerOf("paint", paint(56, 40, 5), {20, 12});
+            setLayerStyle(top, s);
+            doc.layers.push_back(top);
+            return hashF(thirtyTwo(doc));
+        });
+    }
+}
+
 // ---- adjustment layers in a document -----------------------------------------------------------------------------
 
 AdjustmentSettings exampleAdjustment(AdjustmentKind kind) {
@@ -1047,6 +1196,7 @@ TEST_CASE(render_hashes_match_the_baseline_on_the_pool_and_serially) {
     add16BitVectorScenes();
     add16BitSmartObjectScenes();
     add16BitLateScenes();
+    add32BitScenes();
 
     std::map<std::string, std::string> actual;
     int threadMismatch = 0;

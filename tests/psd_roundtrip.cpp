@@ -3,6 +3,7 @@
 // image resources and the global blocks. `psd_roundtrip FILE_OR_DIR...`; exit 1 when anything was lost.
 // Patchy's fixtures (Photoshop-saved) are the corpus: psd_roundtrip ../Patchy/test-fixtures/psd
 // A 16-bit file must also come back with every layer's channel data byte for byte (the carried planes, psd_carry.h).
+// PSD_ROUNDTRIP_16=1 or PSD_ROUNDTRIP_32=1 convert each file to 16 or 32 bits first (Image > Mode).
 #include "compositor/psd.h"
 #include "compositor/psd_writer.h"
 #include "compositor/psd_carry.h"
@@ -144,6 +145,9 @@ bool check(const fs::path& path, int& carriedBlocks, int& channelsBack) {
     // PSD_ROUNDTRIP_16=1: convert to 16 bits first (Image > Mode), so the 16-bit writer carries the same blocks.
     const bool sixteen = std::getenv("PSD_ROUNDTRIP_16") != nullptr;
     if (sixteen && !compositor::convertSampleType(imported->document, compositor::SampleType::U16, &error)) { std::printf("SKIP %s: %s\n", path.filename().string().c_str(), error.c_str()); return true; }
+    // PSD_ROUNDTRIP_32=1: convert to 32 bits first, so the 32-bit writer ('Lr32', float channels) carries the same blocks.
+    const bool thirtyTwo = std::getenv("PSD_ROUNDTRIP_32") != nullptr;
+    if (thirtyTwo && !compositor::convertSampleType(imported->document, compositor::SampleType::F32, &error)) { std::printf("SKIP %s: %s\n", path.filename().string().c_str(), error.c_str()); return true; }
     Bytes out = compositor::encodePsd(imported->document, options, &summary, &error);
     if (out.empty()) { std::printf("FAIL %s: export: %s\n", path.filename().string().c_str(), error.c_str()); return false; }
     FileDump a, b;
@@ -151,7 +155,7 @@ bool check(const fs::path& path, int& carriedBlocks, int& channelsBack) {
     try { b = dump(out); } catch (std::exception& e) { std::printf("FAIL %s: our file does not parse: %s\n", path.filename().string().c_str(), e.what()); return false; }
     std::vector<std::string> problems;
     // Records: ours has the same folders and layers in the same order, unless the importer dropped some.
-    const bool reduced = a.reduced || sixteen;
+    const bool reduced = a.reduced || sixteen || thirtyTwo;
     static const std::set<std::string> ours{"luni", "lsct", "lsdk", "lyid", "iOpa", "levl", "curv", "hue2", "expA", "grdm"};
     if (a.records.empty()) {}   // a flat file opens as one layer
     else if (a.records.size() != b.records.size()) problems.push_back("record count " + std::to_string(a.records.size()) + " -> " + std::to_string(b.records.size()));
@@ -184,7 +188,7 @@ bool check(const fs::path& path, int& carriedBlocks, int& channelsBack) {
     }
     static const std::set<std::string> droppedGlobals{"Lr16", "Lr32", "Layr", "LMsk", "Mt16", "Mt32", "Mtrn", "Alph"};
     for (auto& [key, data] : a.globals) {
-        if (droppedGlobals.count(key) || (sixteen && (key == "FEid" || key == "FXid"))) continue;   // 8-bit filter caches stay out of a 16-bit file
+        if (droppedGlobals.count(key) || ((sixteen || thirtyTwo) && (key == "FEid" || key == "FXid"))) continue;   // 8-bit filter caches stay out of a deep file
         auto it = b.globals.find(key);
         if (it == b.globals.end() || it->second != data) problems.push_back("global " + key + (it == b.globals.end() ? " lost" : " changed"));
     }
@@ -194,6 +198,7 @@ bool check(const fs::path& path, int& carriedBlocks, int& channelsBack) {
     auto reopened = compositor::importPsd(again.string(), &error);
     if (!reopened) problems.push_back("our file does not reopen: " + error);
     else if (sixteen && reopened->document.sampleType != compositor::SampleType::U16) problems.push_back("our file does not reopen at 16 bits");
+    else if (thirtyTwo && reopened->document.sampleType != compositor::SampleType::F32) problems.push_back("our file does not reopen at 32 bits");
     // Alpha and spot channels: the same names, kinds, display and pixels (a 16-bit file's samples as stored), and
     // the resources that describe them byte for byte.
     if (reopened) {
