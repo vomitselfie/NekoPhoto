@@ -41,7 +41,11 @@ a few levels.
 - **Blend modes.** CMYK offers every mode, as Photoshop does. The separable ones work on each ink as stored
   (inverted, so Multiply adds ink the way it darkens in RGB), with the same arithmetic as RGB's. Hue, Saturation,
   Color, Luminosity, Darker Color and Lighter Color need Photoshop renders of CMYK files to calibrate against, which
-  NekoPhoto does not have yet: until then they **draw as Normal**, and the Layers panel says so. Lab offers every mode
+  NekoPhoto does not have yet: until then they **draw as Normal**, and the Layers panel says so. Checked against
+  Photoshop: a Photoshop-saved 16-bit CMYK PSD (Japan Color 2001 Coated, Normal layers) renders as its stored composite
+  converted through its own profile with Relative Colorimetric and black point compensation (Photoshop's default),
+  2 levels off on average; the few pixels further off are cyans outside sRGB, where 16-bit inks clip red to 0. A
+  gradient fill layer read from a PSD still opens empty (in every mode), so such a file shows blank. Lab offers every mode
   but Color Dodge, Color Burn, Darken, Lighten, Difference, Exclusion, Subtract and Divide (Adobe's list; they are greyed
   out, and a file that has one draws it as Normal). Normal and Dissolve are RGB's; Luminosity takes L from the layer
   and a and b from below, Color the other way round, Hue and Saturation work in L, chroma and hue; the separable modes
