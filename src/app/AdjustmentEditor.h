@@ -69,6 +69,7 @@ private:
     /// The session's document mode (RGB without one): the channel names and what the editors offer.
     compositor::ColorMode colorMode() const;
     int shownChannel(int channel) const;
+    compositor::ColorMode builtMode_ = compositor::ColorMode::RGB;   // the mode the editors were built for
     QComboBox* channelCombo();
     QPointer<EditorSession> session_;   // may go first: its tab can close while a dialog holding this editor is open
     int hueSampleMode_ = 0; // 0 off, 1 sample, 2 add, 3 remove

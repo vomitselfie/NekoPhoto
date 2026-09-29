@@ -151,7 +151,12 @@ AdjustmentEditor::AdjustmentEditor(QWidget* parent) : QWidget(parent) {
 void AdjustmentEditor::setSettings(const AdjustmentSettings& settings) {
     bool sameKind = settings.kind == settings_.kind && body_;
     settings_ = settings;
-    if (!sameKind) rebuild(); else sync();
+    // Lab's Levels and Curves open on Lightness (it has no composite channel).
+    if (colorMode() == ColorMode::Lab) {
+        if (settings_.levels.channel == 0) settings_.levels.channel = 1;
+        if (settings_.curves.channel == 0) settings_.curves.channel = 1;
+    }
+    if (!sameKind || builtMode_ != colorMode()) rebuild(); else sync();
 }
 
 void AdjustmentEditor::setHistogram(const std::array<std::vector<double>, 4>& histogram) {
@@ -230,6 +235,7 @@ QWidget* AdjustmentEditor::sliderRow(const QString& label, double min, double ma
 }
 
 void AdjustmentEditor::rebuild() {
+    builtMode_ = colorMode();
     syncers_.clear();
     histogram_ = nullptr;
     curve_ = nullptr;
@@ -419,7 +425,11 @@ QWidget* AdjustmentEditor::buildHsv() {
 
 AdjustmentEditor::~AdjustmentEditor() { clearHueHooks(); }
 
-void AdjustmentEditor::setSession(EditorSession* session) { session_ = session; }
+void AdjustmentEditor::setSession(EditorSession* session) {
+    session_ = session;
+    // The channel menus and what the editors offer follow the document's mode.
+    if (body_) rebuild();
+}
 
 void AdjustmentEditor::clearHueHooks() {
     if (!session_) return;
