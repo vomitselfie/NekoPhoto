@@ -9,6 +9,7 @@
 #include "compositor/depth.h"
 #include "compositor/document.h"
 #include "compositor/render.h"
+#include "compositor/vectormask.h"
 #include <cmath>
 #include <cstdio>
 #include <random>
@@ -558,4 +559,35 @@ TEST_CASE(cmyk_blend_modes_match_photoshops_own_renders) {
         }
     }
     std::fprintf(stderr, "  CMYK blend modes against Photoshop: at most %d steps off (8-bit), %d (16-bit)\n", worst8, worst16);
+}
+
+TEST_CASE(cmyk_gradient_fills_interpolate_their_own_inks) {
+    // A CMYK document's gradient with CMYK stops runs from ink to ink (Photoshop's), not through RGB.
+    Document doc(64, 8);
+    doc.colorMode = ColorMode::CMYK;
+    VectorPaint paint;
+    paint.kind = VectorPaint::Kind::Gradient;
+    paint.gradient.fillLayer = true;
+    paint.gradient.angle = 0;
+    paint.gradient.colors = {{0, {}, 0.5f, std::array<float, 4>{1.0f, 0.2f, 0.0f, 0.1f}}, {1, {}, 0.5f, std::array<float, 4>{0.0f, 0.6f, 1.0f, 0.5f}}};
+    paint.gradient.alphas = {{0, 1, 0.5f}, {1, 1, 0.5f}};
+    for (bool deep : {false, true}) {
+        const AnyImage inks = renderVectorPaintInks(paint, doc, Rect(), Rect(0, 0, 64, 8), 1, 64, 8, deep);
+        REQUIRE(inks);
+        CHECK_EQ(inks.channels(), 5);
+        const double one = deep ? 32768.0 : 255.0;
+        auto ink = [&](int x, int c) {
+            const double v = deep ? inks.u16()->pixel(x, 4)[c] : inks.c8()->pixel(x, 4)[c];
+            return 1 - v / one;
+        };
+        const float first[4] = {1.0f, 0.2f, 0.0f, 0.1f}, last[4] = {0.0f, 0.6f, 1.0f, 0.5f};
+        for (int c = 0; c < 4; c++) {
+            CHECK_NEAR(ink(0, c), first[c], 0.03);
+            CHECK_NEAR(ink(63, c), last[c], 0.03);
+        }
+        CHECK_NEAR(deep ? inks.u16()->pixel(10, 4)[4] : inks.c8()->pixel(10, 4)[4], one, 0.5);
+    }
+    // A stop without inks (an RGB colour) leaves the gradient to the RGB path.
+    paint.gradient.colors[1].ink.reset();
+    CHECK(!renderVectorPaintInks(paint, doc, Rect(), Rect(0, 0, 64, 8), 1, 64, 8, false));
 }

@@ -49,8 +49,9 @@ a few levels.
   resampling noise of its smart objects. Checked against
   Photoshop: a Photoshop-saved 16-bit CMYK PSD (Japan Color 2001 Coated, Normal layers) renders as its stored composite
   converted through its own profile with Relative Colorimetric and black point compensation (Photoshop's default),
-  2 levels off on average; the few pixels further off are cyans outside sRGB, where 16-bit inks clip red to 0. A
-  gradient fill layer read from a PSD still opens empty (in every mode), so such a file shows blank. Lab offers every mode
+  2 levels off on average; the few pixels further off are cyans outside sRGB, where 16-bit inks clip red to 0.  A gradient
+  fill whose stops are CMYK colours runs from ink to ink, as Photoshop's does, instead of through RGB; the gradient
+  types other than Linear have no Photoshop render to check their geometry against yet. Lab offers every mode
   but Color Dodge, Color Burn, Darken, Lighten, Difference, Exclusion, Subtract and Divide (Adobe's list; they are greyed
   out, and a file that has one draws it as Normal). Normal and Dissolve are RGB's; Luminosity takes L from the layer
   and a and b from below, Color the other way round, Hue and Saturation work in L, chroma and hue; the separable modes
