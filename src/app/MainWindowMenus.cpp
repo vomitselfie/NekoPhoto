@@ -546,7 +546,7 @@ void MainWindow::buildMenus() {
         const ModelInfo* quick = ModelStore::modelById("pphumanseg");
         QString quickPath = quick && ModelStore::isPresent(*quick) ? ModelStore::pathFor(*quick) : QString();
         (new BackgroundDialog(session_, ModelStore::pathFor(ModelStore::selected()), quickPath, this))->show();
-    }));
+    }), "edit.removeBackground");
     refreshBackgroundAction();
 
     QMenu* view = menuBar()->addMenu(tr("&View"));

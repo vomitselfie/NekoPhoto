@@ -78,6 +78,9 @@ constexpr FeatureSupport table[] = {
     {"filter.Camera Raw", eightAndSixteen},
     // Filter > G'MIC: 16-bit pixels go to G'MIC as float on its 0..255 scale and come back at 16 bits (app/Gmic.h).
     {"filter.G'MIC", eightAndSixteen},
+    // Filter > Remove Background: the model and the refinement's guide see the layer reduced to 8 bits, the matte
+    // stays float (AlphaPlane) and is committed as a 16-bit mask, and Clean edge colours works at 16 bits.
+    {"edit.removeBackground", eightAndSixteen},
     // Filter > Mosh (compositor/mosh.h, pixels.mosh): straight float colour at either depth.
     {"filter.Mosh", eightAndSixteen},
     // Selections at the document's depth: the marquee, lasso, Magic Wand and Quick Select tools (they read the

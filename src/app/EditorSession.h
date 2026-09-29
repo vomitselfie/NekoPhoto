@@ -630,6 +630,8 @@ public:
     /// given at the layer's size, replaces the layer's pixels in the same undo step (the edge colours after
     /// foreground estimation). `layerId` as for commitPixels.
     void applySubjectMask(std::shared_ptr<const compositor::GrayImage> mask, std::shared_ptr<const compositor::Image> pixels = nullptr, std::optional<compositor::Uuid> layerId = std::nullopt);
+    /// The same on a 16-bit layer: a 16-bit mask, and its pixels at 16 bits.
+    void applySubjectMask(std::shared_ptr<const compositor::Gray16> mask, std::shared_ptr<const compositor::Image16> pixels, std::optional<compositor::Uuid> layerId = std::nullopt);
 
     // Crop / canvas
     void cropTo(const QRectF& rect, const char* action = QT_TRANSLATE_NOOP("History", "Crop"));

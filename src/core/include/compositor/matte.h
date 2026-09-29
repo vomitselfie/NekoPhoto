@@ -86,6 +86,8 @@ void cleanMatte(AlphaPlane& matte);
 /// The solve runs in linear light when `decode` is a real curve (see MatteTransfer); on the stored values by default.
 std::shared_ptr<Image> estimateForeground(const Image& image, const GrayImage& matte, const MatteTransfer& decode = MatteTransfer::identity());
 std::shared_ptr<Image> estimateForeground(const Image& image, const AlphaPlane& matte, const MatteTransfer& decode = MatteTransfer::identity());
+/// The same on a 16-bit layer: its colours read and written at 16 bits (Decontaminate Colors in a 16-bit document).
+std::shared_ptr<Image16> estimateForeground(const Image16& image, const AlphaPlane& matte, const MatteTransfer& decode = MatteTransfer::identity());
 
 /// Guided filtering (He, Sun & Tang): `mask` pulled onto the edges of `guide` (the layer's pixels), on a copy no
 /// larger than `limit` on its longest side (0 for full size).

@@ -1,6 +1,7 @@
 // EditorSession: Adjustment layers and the destructive adjustments and filters on pixels.
 #include "EditorSession.h"
 #include "Names.h"
+#include "compositor/depth.h"
 #include "compositor/filters.h"
 #include <random>
 
@@ -186,6 +187,42 @@ std::array<std::vector<double>, 4> EditorSession::activeHistogram() const {
     if (!layer || !layer->asset || !layer->asset->image.u8()) return {};
     auto coverage = selectionOnGrid(layer->transform, layer->asset->image.u8()->width(), layer->asset->image.u8()->height());
     return levelsHistogram(*layer->asset->image.u8(), coverage.get());
+}
+
+void EditorSession::applySubjectMask(std::shared_ptr<const Gray16> mask, std::shared_ptr<const Image16> pixels, std::optional<Uuid> layerId) {
+    if (refusedAtDepth("edit.removeBackground", tr("Remove Background"))) return;
+    clearPixelPreview();
+    Layer* layer = layerId ? (document_ ? document_->find(*layerId) : nullptr) : activeLayerMutable();
+    if (!layer || !mask || !layer->asset || !layer->asset->image.u16()) return;
+    const Image16& src = *layer->asset->image.u16();
+    if (mask->width() != src.width() || mask->height() != src.height()) return;
+    auto out = std::make_shared<Gray16>(*mask);
+    // A mask already on the layer (in its own grid) is kept: what either one hides stays hidden.
+    std::shared_ptr<const Gray16> existing;
+    if (layer->mask && layer->mask->asset.image.u16() && !layer->mask->placement) {
+        const Gray16& old = *layer->mask->asset.image.u16();
+        if (old.width() == src.width() && old.height() == src.height()) existing = layer->mask->asset.image.u16();
+        else if (old.width() == 1 && old.height() == 1) { auto e = std::make_shared<Gray16>(src.width(), src.height(), old.at(0, 0)); existing = e; }
+    }
+    const size_t count = size_t(src.width()) * size_t(src.height());
+    if (existing) for (size_t i = 0; i < count; i++) out->data()[i] = uint16_t(mul15(out->data()[i], existing->data()[i]));
+    if (auto coverage = selectionOnGrid16(layer->transform, src.width(), src.height())) {
+        Gray16 base = existing ? *existing : Gray16(src.width(), src.height(), uint16_t(one16));
+        blendThroughCoverage(*out, base, *coverage);
+    }
+    beginEdit(QT_TRANSLATE_NOOP("History", "Remove Background"));
+    LayerMask m;
+    if (layer->mask) { m = *layer->mask; m.placement.reset(); }
+    m.asset = MaskAsset::make(Gray16Ptr(out));
+    m.enabled = true;
+    layer->mask = m;
+    isMaskSelected_ = true;
+    if (pixels && pixels->width() == out->width() && pixels->height() == out->height()) {
+        layer->asset = Asset::makeAny(Image16Ptr(pixels), layer->name);
+        layer->shapeImage.reset();
+    }
+    endEdit();
+    notifyDocument();
 }
 
 void EditorSession::applySubjectMask(std::shared_ptr<const GrayImage> mask, std::shared_ptr<const Image> pixels, std::optional<Uuid> layerId) {

@@ -1,6 +1,7 @@
 #include "Style.h"
 #include "Names.h"
 #include "FilterDialog.h"
+#include "compositor/depth.h"
 #include "ActionLibrary.h"
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -228,8 +229,9 @@ BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QS
     : PixelDialog(session, parent), modelPath_(std::move(modelPath)) {
     setWindowTitle(tr("Remove Background"));
     capture(0, 0);
+    guide_ = source() ? source() : source16() ? std::shared_ptr<const Image>(narrowImage(*source16())) : nullptr;
     // The matting band is worth a few percent of the short side on a big photo.
-    const int mattingMax = source() ? std::max(40, int(std::lround(std::min(source()->width(), source()->height()) * 0.025))) : 40;
+    const int mattingMax = guide_ ? std::max(40, int(std::lround(std::min(guide_->width(), guide_->height()) * 0.025))) : 40;
     auto* layout = new QVBoxLayout(this);
     auto* qualityRow = new QHBoxLayout;
     qualityRow->addWidget(new QLabel(tr("Quality")));
@@ -289,7 +291,7 @@ BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QS
     advanced_->setVisible(false);
     layout->addWidget(advanced_);
     // Best: Advanced with matting in a band of about 1.5% of the short side and the detail pass.
-    const int bestMatting = source() ? std::min(mattingMax, std::max(8, int(std::lround(std::min(source()->width(), source()->height()) * 0.015)))) : 12;
+    const int bestMatting = guide_ ? std::min(mattingMax, std::max(8, int(std::lround(std::min(guide_->width(), guide_->height()) * 0.015)))) : 12;
     connect(quality, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, detail, bestMatting, resync](int i) {
         advancedMode_ = i >= 1;
         if (i == 2) {
@@ -308,12 +310,12 @@ BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QS
     layout->addWidget(note);
     connect(addPreviewAndButtons(layout), &QCheckBox::toggled, this, [this] { refreshPreview(); });
 
-    if (!source()) return;
+    if (!guide_) return;
     // The model runs once, off the UI thread; the sliders only redo the refinement. A quick coarse model,
     // when there is one, gives a preview within a few milliseconds while the chosen model works.
     computing_ = true;
     setCursor(Qt::BusyCursor);
-    std::shared_ptr<const Image> image = source();
+    std::shared_ptr<const Image> image = guide_;
     std::string path = modelPath_.toStdString(), quick = quickModelPath == modelPath_ ? std::string() : quickModelPath.toStdString();
     const bool mirror = ModelStore::mirrorAverage();
     worker_ = std::thread([this, image, path, quick, mirror] {
@@ -336,11 +338,11 @@ BackgroundDialog::BackgroundDialog(EditorSession* session, QString modelPath, QS
 }
 
 void BackgroundDialog::startDetail() {
-    if (!coarse_ || detailed_ || computing_ || !source()) return;
+    if (!coarse_ || detailed_ || computing_ || !guide_) return;
     computing_ = true;
     setCursor(Qt::BusyCursor);
     if (worker_.joinable()) worker_.join();
-    std::shared_ptr<const Image> image = source();
+    std::shared_ptr<const Image> image = guide_;
     std::shared_ptr<const GrayImage> coarse = coarse_;
     std::string path = modelPath_.toStdString();
     worker_ = std::thread([this, image, coarse, path] {
@@ -363,17 +365,35 @@ BackgroundDialog::~BackgroundDialog() {
 std::shared_ptr<GrayImage> BackgroundDialog::refined(int limit) const {
     if (!raw_) return nullptr;
     if (!advancedMode_) return raw_;
-    return refineMatte(*raw_, *source(), settings_, limit);
+    return refineMatte(*raw_, *guide_, settings_, limit);
+}
+
+AlphaPlane BackgroundDialog::refinedPlane(int limit) const {
+    if (!raw_) return {};
+    if (!advancedMode_) return AlphaPlane(*raw_);
+    return refineMatte(AlphaPlane(*raw_), *guide_, settings_, limit);
 }
 
 void BackgroundDialog::refreshPreview() {
-    if (!source() || !raw_) return;
+    if (!guide_ || !raw_) return;
     if (!previewing()) { clearPreview(); return; }
+    if (source16()) {
+        // At 16 bits: the float matte over the layer's 16-bit pixels, with the edge colours they will have.
+        const AlphaPlane plane = refinedPlane(1400);
+        auto out = advancedMode_ && settings_.decontaminate ? estimateForeground(*source16(), plane) : std::make_shared<Image16>(*source16());
+        for (int y = 0; y < out->height(); y++) for (int x = 0; x < out->width(); x++) {
+            const double k = std::clamp(double(plane.at(x, y)), 0.0, 1.0);
+            uint16_t* p = out->pixel(x, y);
+            for (int c = 0; c < 4; c++) p[c] = uint16_t(std::lround(p[c] * k));
+        }
+        showPreview(out);
+        return;
+    }
     auto mask = refined(1400);
     // The layer with its background made transparent by the same mask the commit lays down, with the edge
     // colours it will have.
     std::shared_ptr<const Image> base = source();
-    if (advancedMode_ && settings_.decontaminate) base = estimateForeground(*source(), *mask);
+    if (advancedMode_ && settings_.decontaminate) base = estimateForeground(*guide_, *mask);
     auto out = std::make_shared<Image>(*base);
     for (int y = 0; y < out->height(); y++) for (int x = 0; x < out->width(); x++) {
         unsigned k = mask->at(x, y);
@@ -386,9 +406,16 @@ void BackgroundDialog::refreshPreview() {
 bool BackgroundDialog::apply() {
     if (computing_) return false;   // OK waits for the mask
     if (!raw_) return true;
+    if (source16()) {
+        const AlphaPlane plane = refinedPlane(0);
+        std::shared_ptr<const Image16> pixels;
+        if (advancedMode_ && settings_.decontaminate) pixels = estimateForeground(*source16(), plane);
+        session()->applySubjectMask(plane.toGray16(), pixels, layerId());
+        return true;
+    }
     auto mask = refined(0);
     std::shared_ptr<const Image> pixels;
-    if (advancedMode_ && settings_.decontaminate) pixels = estimateForeground(*source(), *mask);
+    if (advancedMode_ && settings_.decontaminate) pixels = estimateForeground(*guide_, *mask);
     session()->applySubjectMask(mask, pixels, layerId());
     return true;
 }

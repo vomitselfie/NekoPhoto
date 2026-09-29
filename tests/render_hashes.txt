@@ -241,6 +241,7 @@ u16/filter/motion_blur_0 474efff93e42755b
 u16/filter/motion_blur_30 3cf7942e8687c099
 u16/golden/placed_mask 4c7b81da539a597a
 u16/golden/transformed_layer fb6f63fee069e412
+u16/remove_background/refined_and_decontaminated 643cdf115c1b72c0
 u16/shape/dashed_stroke 80dc395a77eec1b8
 u16/shape/gradient_fill_and_stroke 076185b4c9d6b71c
 u16/shape/solid_ellipse 6b34b2a81932f192

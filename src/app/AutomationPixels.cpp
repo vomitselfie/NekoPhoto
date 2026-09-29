@@ -5,6 +5,7 @@
 #include "ModelStore.h"
 #include "MoshDialog.h"
 #include "compositor/cameraraw.h"
+#include "compositor/depth.h"
 #include "compositor/matte.h"
 #include "compositor/subject.h"
 #include <QJsonDocument>
@@ -354,22 +355,34 @@ void AutomationServer::registerPixelsHandlers() {
         if (!ModelStore::ready()) fail("Remove Background is off or its model isn't downloaded: enable it in Edit > Preferences (or run nekophoto --download-model isnet)");
         EditorSession* s = session();
         LayerTransform transform;
-        auto source = s->adjustmentSource(0, transform);
+        // A 16-bit layer: the model and the refinement's guide see it reduced to 8 bits (the model takes 8-bit input),
+        // the matte stays float to the end and becomes a 16-bit mask, and the edge colours are estimated at 16 bits.
+        auto deep = s->adjustmentSource16(0, transform);
+        auto source = deep ? std::shared_ptr<const Image>(narrowImage(*deep)) : s->adjustmentSource(0, transform);
         if (!source) fail("the active layer has no pixels; select a pixel layer with layers.select (document.overview shows each layer's kind)");
         std::string error;
         const std::string modelPath = ModelStore::pathFor(ModelStore::selected()).toStdString();
         const bool detail = flag(p, "detail", false), mirror = flag(p, "flip", ModelStore::mirrorAverage());
         auto mask = detail ? subjectMaskDetailed(*source, modelPath, nullptr, int(num(p, "detailWindows", 12)), &error, mirror) : subjectMask(*source, modelPath, &error, mirror);
         if (!mask) fail("the model failed: " + qs(error));
+        MatteSettings settings;
+        settings.refineEdges = num(p, "refineEdges", settings.refineEdges);
+        settings.contrast = num(p, "contrast", settings.contrast);
+        settings.matting = num(p, "matting", settings.matting);
+        settings.shiftEdge = num(p, "shiftEdge", settings.shiftEdge);
+        settings.cleanup = flag(p, "cleanup", settings.cleanup);
+        settings.decontaminate = flag(p, "decontaminate", settings.decontaminate);
+        const bool refine = flag(p, "refine", true);
+        if (deep) {
+            AlphaPlane plane(*mask);
+            if (refine) plane = refineMatte(plane, *source, settings, 0);
+            std::shared_ptr<const Image16> pixels;
+            if (refine && settings.decontaminate) pixels = estimateForeground(*deep, plane);
+            s->applySubjectMask(plane.toGray16(), pixels);
+            return QJsonObject{{"applied", true}, {"decontaminated", bool(pixels)}, {"detail", detail}};
+        }
         std::shared_ptr<const Image> pixels;
-        if (flag(p, "refine", true)) {
-            MatteSettings settings;
-            settings.refineEdges = num(p, "refineEdges", settings.refineEdges);
-            settings.contrast = num(p, "contrast", settings.contrast);
-            settings.matting = num(p, "matting", settings.matting);
-            settings.shiftEdge = num(p, "shiftEdge", settings.shiftEdge);
-            settings.cleanup = flag(p, "cleanup", settings.cleanup);
-            settings.decontaminate = flag(p, "decontaminate", settings.decontaminate);
+        if (refine) {
             mask = refineMatte(*mask, *source, settings, 0);
             if (settings.decontaminate) pixels = estimateForeground(*source, *mask);
         }

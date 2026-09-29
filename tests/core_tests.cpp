@@ -1,5 +1,6 @@
 // Unit tests for the portable core: geometry, transforms, blending, history,
 // compositing semantics, brush strokes, PNG and the .comp round trip.
+#include "compositor/depth.h"
 #include "check.h"
 #include <climits>
 #include "compositor/trim.h"
@@ -2268,6 +2269,60 @@ TEST_CASE(selecting_a_frame_is_not_an_undo_step_but_edits_keep_their_frame) {
     CHECK(doc->layers[1].transform.origin == Point(12, 2));
     CHECK(doc->animation.frames[0].layers.at(doc->layers[1].id).position == Point(12, 2));
     CHECK(doc->animation.frames[1].layers.at(doc->layers[1].id).position == Point(10, 0));
+}
+
+TEST_CASE(remove_background_at_sixteen_bits_agrees_with_eight_bits) {
+    // A soft-edged subject (red over blue through a ramp, with texture), 8-bit, and the same pixels widened.
+    const int w = 120, h = 60;
+    auto image = std::make_shared<Image>(w, h);
+    auto truth = [](int x, int y) { return std::clamp((72 - x + 4 * std::sin(y * 0.3)) / 24.0, 0.0, 1.0); };
+    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+        const double a = truth(x, y), t = ((x * 7 + y * 13) % 11) - 5;
+        uint8_t* p = image->pixel(x, y);
+        p[0] = uint8_t(std::clamp(std::lround(220 * a + 30 * (1 - a) + t), 0L, 255L));
+        p[1] = uint8_t(std::clamp(std::lround(40 * a + 60 * (1 - a) + t), 0L, 255L));
+        p[2] = uint8_t(std::clamp(std::lround(30 * a + 200 * (1 - a) - t), 0L, 255L));
+        p[3] = 255;
+    }
+    const auto deep = widenImage(*image);
+    // The model's mask stands in as a blurred step; refinement runs on the float plane against the 8-bit guide either way.
+    GrayImage coarse(w, h);
+    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) coarse.at(x, y) = uint8_t(std::clamp(std::lround((66 - x) * 255 / 10.0), 0L, 255L));
+    MatteSettings s;
+    s.matting = 10;
+    const AlphaPlane plane = refineMatte(AlphaPlane(coarse), *image, s, 0);
+    const auto mask8 = refineMatte(coarse, *image, s, 0);
+    const auto mask16 = plane.toGray16();
+    int worstMask = 0, soft16 = 0;
+    std::vector<bool> seen(32769);
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            const uint16_t v = mask16->at(x, y);
+            worstMask = std::max(worstMask, std::abs(int(mask8->at(x, y)) - int(narrow16(v))));
+            if (!seen[v]) { seen[v] = true; soft16++; }
+        }
+    // The 16-bit mask is the 8-bit one's float plane rounded once to 15 bits: within a level of it, with more
+    // distinct soft values than 8 bits hold.
+    std::fprintf(stderr, "  mask: max %d level%s from the 8-bit mask, %d distinct 16-bit values\n", worstMask, worstMask == 1 ? "" : "s", soft16);
+    CHECK(worstMask <= 1);
+    CHECK(soft16 > 256);
+    // Decontamination at 16 bits against the 8-bit one, with the same plane.
+    auto colours8 = estimateForeground(*image, plane);
+    auto colours16 = estimateForeground(*deep, plane);
+    auto narrowed = narrowImage(*colours16);
+    int worst = 0;
+    long long over1 = 0;
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++)
+            for (int c = 0; c < 4; c++) {
+                const int d = std::abs(int(colours8->pixel(x, y)[c]) - int(narrowed->pixel(x, y)[c]));
+                worst = std::max(worst, d);
+                over1 += d > 1;
+            }
+    std::fprintf(stderr, "  decontaminated colours: max %d level%s, over 1: %lld of %d samples\n", worst, worst == 1 ? "" : "s", over1, w * h * 4);
+    CHECK(worst <= 1);
+    // Opaque pixels away from the edge keep their 16-bit colour exactly.
+    CHECK(std::equal(colours16->pixel(5, 30), colours16->pixel(5, 30) + 4, deep->pixel(5, 30)));
 }
 
 TEST_MAIN()

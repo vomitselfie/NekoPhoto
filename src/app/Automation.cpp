@@ -192,7 +192,7 @@ bool worksAtDepth(const QString& method, const EditorSession& session) {
         {"canvas.resize", "canvas.size"}, {"canvas.flip", "canvas.flip"},
         {"slices.add", "tool.slice"}, {"slices.set", "tool.slice"}, {"slices.delete", "tool.slice"},
         {"pixels.adjust", "adjustment.pixels"}, {"pixels.invert", "adjustment.Invert"}, {"adjustments.set", "adjustment.pixels"},
-        {"pixels.filter", "filter.pixels"}, {"pixels.mosh", "filter.Mosh"}, {"pixels.cameraRaw", "filter.Camera Raw"}, {"pixels.gmic", "filter.G'MIC"},
+        {"pixels.filter", "filter.pixels"}, {"pixels.mosh", "filter.Mosh"}, {"pixels.cameraRaw", "filter.Camera Raw"}, {"pixels.gmic", "filter.G'MIC"}, {"pixels.removeBackground", "edit.removeBackground"},
         {"selection.all", "edit.selection"}, {"selection.none", "edit.selection"}, {"selection.invert", "edit.selection"},
         {"selection.quickMask", "edit.selection"}, {"selection.rect", "edit.selection"}, {"selection.polygon", "edit.selection"},
         {"selection.wand", "edit.selection"}, {"selection.scribble", "edit.selection"}, {"selection.subject", "edit.selection"},

@@ -16,6 +16,7 @@
 #include "compositor/parallel.h"
 #include "compositor/render.h"
 #include <algorithm>
+#include <type_traits>
 #include <array>
 #include <cmath>
 #include <vector>
@@ -226,22 +227,35 @@ private:
 
 /// The guide's straight R, G, B in 0..1 at (width, height): unpremultiplied first, then, with a decoder,
 /// decoded to linear light.
-std::array<Map, 3> colourLevels(const Image& image, int width, int height, const Decoder* decode = nullptr) {
-    std::shared_ptr<const Image> source = std::make_shared<Image>(image);
-    if (width != image.width() || height != image.height()) {
-        LayerTransform full(Point(0, 0), Size(image.width(), image.height()));
-        source = resampleLayer(image, full, full, width, height);
-    }
+/// Full scale of a sample: 255 at 8 bits, 32768 at 16.
+template <class ImageT> constexpr float sampleOne() { return std::is_same_v<ImageT, Image16> ? 32768.0f : 255.0f; }
+
+std::shared_ptr<const Image> resampledTo(const Image& image, int width, int height) {
+    LayerTransform full(Point(0, 0), Size(image.width(), image.height()));
+    return resampleLayer(image, full, full, width, height);
+}
+
+std::shared_ptr<const Image16> resampledTo(const Image16& image, int width, int height) {
+    LayerTransform full(Point(0, 0), Size(image.width(), image.height()));
+    return resampleLayer(std::make_shared<const Image16>(image), full, full, width, height);
+}
+
+template <class ImageT>
+std::array<Map, 3> colourLevels(const ImageT& image, int width, int height, const Decoder* decode = nullptr) {
+    constexpr float one = sampleOne<ImageT>();
+    std::shared_ptr<const ImageT> source;
+    if (width != image.width() || height != image.height()) source = resampledTo(image, width, height);
+    const ImageT& at = source ? *source : image;
     std::array<Map, 3> out;
     for (auto& m : out) m.resize(size_t(width) * height);
     const bool linear = decode && !decode->identity();
     parallelRows(0, height, [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) {
-            const uint8_t* p = source->row(y);
+            const auto* p = at.row(y);
             for (int x = 0; x < width; x++, p += 4) {
-                float a = p[3] ? p[3] / 255.0f : 1.0f;
+                float a = p[3] ? p[3] / one : 1.0f;
                 for (int c = 0; c < 3; c++) {
-                    const float v = std::min(1.0f, p[c] / 255.0f / a);
+                    const float v = std::min(1.0f, p[c] / one / a);
                     out[size_t(c)][size_t(y) * width + size_t(x)] = linear ? (*decode)(v) : v;
                 }
             }
@@ -1030,9 +1044,14 @@ std::shared_ptr<Image> estimateForeground(const Image& image, const GrayImage& m
     return estimateForeground(image, AlphaPlane(matte), decode);
 }
 
-std::shared_ptr<Image> estimateForeground(const Image& image, const AlphaPlane& matte, const MatteTransfer& decode) {
+namespace {
+
+template <class ImageT>
+std::shared_ptr<ImageT> estimateForegroundAt(const ImageT& image, const AlphaPlane& matte, const MatteTransfer& decode) {
+    using Sample = std::remove_cvref_t<decltype(*image.row(0))>;
+    constexpr float one = sampleOne<ImageT>();
     const int w = image.width(), h = image.height();
-    auto out = std::make_shared<Image>(image);
+    auto out = std::make_shared<ImageT>(image);
     if (w <= 0 || h <= 0 || matte.width != w || matte.height != h) return out;
     // Solved in linear light when the curve is a real one: unpremultiplied, decoded, solved, encoded.
     const Decoder decoder(decode);
@@ -1088,11 +1107,11 @@ std::shared_ptr<Image> estimateForeground(const Image& image, const AlphaPlane& 
     }
     const ForegroundLevel& base = levels.front();
     auto write = [&](int x, int y, const float f[3]) {
-        uint8_t* p = out->pixel(x, y);
+        Sample* p = out->pixel(x, y);
         const float a = p[3];
         for (int c = 0; c < 3; c++) {
             const float v = std::clamp(f[c], 0.0f, 1.0f);
-            p[c] = uint8_t(std::lround((decoder.identity() ? v : fromLinear(decode, v)) * a));
+            p[c] = Sample(std::lround((decoder.identity() ? v : fromLinear(decode, v)) * a));
         }
     };
     if (base.width == w && base.height == h) {
@@ -1126,11 +1145,11 @@ std::shared_ptr<Image> estimateForeground(const Image& image, const AlphaPlane& 
                 local.work.clear();
                 const double sx = double(base.width) / w, sy = double(base.height) / h;
                 for (int y = ly0; y < ly1; y++) {
-                    const uint8_t* p = image.pixel(lx0, y);
+                    const Sample* p = image.pixel(lx0, y);
                     for (int x = lx0; x < lx1; x++, p += 4) {
                         const size_t i = size_t(y - ly0) * local.width + size_t(x - lx0);
-                        const float a = p[3] ? p[3] / 255.0f : 1.0f;
-                        for (int c = 0; c < 3; c++) local.colour[size_t(c)][i] = decoder(std::min(1.0f, p[c] / 255.0f / a));
+                        const float a = p[3] ? p[3] / one : 1.0f;
+                        for (int c = 0; c < 3; c++) local.colour[size_t(c)][i] = decoder(std::min(1.0f, p[c] / one / a));
                         local.alpha[i] = matte.at(x, y);
                         // Bilinear sample of the base level's F and B.
                         const double bx = std::clamp((x + 0.5) * sx - 0.5, 0.0, double(base.width - 1)), by = std::clamp((y + 0.5) * sy - 0.5, 0.0, double(base.height - 1));
@@ -1155,6 +1174,16 @@ std::shared_ptr<Image> estimateForeground(const Image& image, const AlphaPlane& 
             }
     }, 1);
     return out;
+}
+
+} // namespace
+
+std::shared_ptr<Image> estimateForeground(const Image& image, const AlphaPlane& matte, const MatteTransfer& decode) {
+    return estimateForegroundAt(image, matte, decode);
+}
+
+std::shared_ptr<Image16> estimateForeground(const Image16& image, const AlphaPlane& matte, const MatteTransfer& decode) {
+    return estimateForegroundAt(image, matte, decode);
 }
 
 } // namespace compositor

@@ -29,6 +29,7 @@
 #include "compositor/tipbrush.h"
 #include "compositor/toning.h"
 #include "compositor/layerstyle.h"
+#include "compositor/matte.h"
 #include "compositor/presets.h"
 #include "compositor/png.h"
 #include "compositor/psd_carry.h"
@@ -956,6 +957,24 @@ void add16BitLateScenes() {
     scene("u16/camera_raw/detail_optics", cameraRaw([](CameraRawSettings& s) {
         s.detail.sharpenAmount = 60; s.detail.noiseLuminance = 30; s.optics.distortion = 20; s.optics.removeChromaticAberration = true; }));
     scene("u16/camera_raw/geometry", cameraRaw([](CameraRawSettings& s) { s.geometry.rotate = 4; s.geometry.vertical = 15; }));
+    // Remove Background at 16 bits: a coarse mask refined on the float plane (guided filter, matting, cleanup) against
+    // the 8-bit guide, the 16-bit layer decontaminated with it, and the 16-bit mask laid over it.
+    scene("u16/remove_background/refined_and_decontaminated", [] {
+        auto guide = filterInput();
+        const int w = guide->width(), h = guide->height();
+        GrayImage coarse(w, h);
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++) coarse.at(x, y) = uint8_t(std::clamp(int(std::lround((std::hypot(x - w / 2.0, y - h / 2.0) - w / 4.0) * -20)), 0, 255));
+        MatteSettings s;
+        s.matting = 12;
+        const AlphaPlane plane = refineMatte(AlphaPlane(coarse), *guide, s, 0);
+        auto out = estimateForeground(*widenImage(*guide), plane);
+        const auto mask = plane.toGray16();
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+                for (int c = 0; c < 4; c++) out->pixel(x, y)[c] = uint16_t(mul15(out->pixel(x, y)[c], mask->at(x, y)));
+        return hashImage16(*out);
+    });
 }
 
 TEST_CASE(render_hashes_match_the_baseline_on_the_pool_and_serially) {

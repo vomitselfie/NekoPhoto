@@ -388,6 +388,16 @@ def sixteen_bit(rpc):
     if rpc.call("gmic.filters", search="sharpen")["installed"]:
         assert rpc.call("pixels.gmic", command="blur 1.5")["applied"] == "blur 1.5"
         assert rpc.call("history.info")["undo"] == "G'MIC: blur"
+    # Remove Background at 16 bits, when the model is downloaded: a 16-bit mask. Without it, the model's error, not
+    # a refusal for the depth.
+    try:
+        rpc.call("pixels.removeBackground", matting=8)
+        assert rpc.call("history.info")["undo"] == "Remove Background"
+        assert rpc.call("layers.get", id=layer["id"])["mask"], "a 16-bit mask"
+        rpc.call("history.undo")
+    except RuntimeError as e:
+        assert "16-bit" not in str(e), e
+        print("removeBackground at 16 bits:", e)
     rpc.call("pixels.fill", color="#ffaa00")
     rpc.call("selection.rect", x=40, y=30, width=12, height=10)
     rpc.call("pixels.contentAwareFill")

@@ -59,7 +59,11 @@ private:
     void refreshPreview();
     void startDetail();
     std::shared_ptr<compositor::GrayImage> refined(int limit) const;
+    /// The refined matte as a float plane, for a 16-bit layer's 16-bit mask.
+    compositor::AlphaPlane refinedPlane(int limit) const;
     QString modelPath_;
+    /// What the model and the refinement see: the layer's pixels, reduced to 8 bits on a 16-bit layer.
+    std::shared_ptr<const compositor::Image> guide_;
     QWidget* advanced_;
     bool advancedMode_ = false;
     compositor::MatteSettings settings_;
