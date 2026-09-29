@@ -4,6 +4,7 @@
 #include "document.h"
 #include "cameraraw.h"
 #include "psd_writer.h"
+#include "modetransform.h"
 #include <optional>
 #include <string>
 #include <vector>
@@ -88,6 +89,8 @@ bool warpLayer(Document& document, Layer& layer, const TextWarp& warp, std::stri
 std::optional<WarpMesh> layerWarpCage(const Document& document, const Layer& layer, std::string* error);
 /// A quick look at the layer through `cage`, drawn from a copy of its pixels at most `maxSide` pixels long.
 std::optional<WarpedRaster> previewWarpCage(const Document& document, const Layer& layer, const WarpMesh& cage, int maxSide);
+/// The same at the document's layout: 8-bit RGB as previewWarpCage draws it, CMYK and Lab at their own samples and depth.
+std::optional<WarpedAny> previewWarpCageAny(const Document& document, const Layer& layer, const WarpMesh& cage, int maxSide);
 /// The layer bent through `cage`. False, with `error`, when it cannot be.
 bool warpLayerToCage(Document& document, Layer& layer, const WarpMesh& cage, std::string* error);
 

@@ -11,6 +11,7 @@
 #include "compositor/warp.h"
 #include "compositor/smartfilter.h"
 #include "compositor/warpmesh.h"
+#include "compositor/modetransform.h"
 #include "compositor/png.h"
 #include "compositor/psd.h"
 #include "compositor/psd_writer.h"
@@ -389,6 +390,25 @@ bool warpLayer(Document& document, Layer& layer, const TextWarp& warp, std::stri
         return true;
     }
     // Pixels: bent over their own rectangle, for good.
+    if (layer.asset && isFiveSample(layer.asset->image)) {
+        // CMYK: every ink and alpha bent alike (modetransform.h).
+        const AnyImage& pixels = layer.asset->image;
+        auto mesh = styleWarpMesh(warp.style, warp.bend, warp.verticalOrientation, pixels.width(), pixels.height());
+        if (!mesh) return fail("That warp style is not one NekoPhoto draws.");
+        distortWarpMesh(*mesh, warp.horizontal, warp.vertical);
+        auto bent = renderWarpedOverBoxAny(pixels, *mesh, Rect(0, 0, pixels.width(), pixels.height()));
+        if (!bent) return fail("The warp could not be drawn.");
+        if (layer.mask && !layer.mask->placement) layer.mask->placement = layer.maskTransform();
+        const double sx = layer.transform.size.width / pixels.width(), sy = layer.transform.size.height / pixels.height();
+        const Point origin(layer.transform.origin.x + bent->transform.origin.x * sx, layer.transform.origin.y + bent->transform.origin.y * sy);
+        const int bw = bent->image.width(), bh = bent->image.height();
+        layer.asset = Asset::makeAny(bent->image, layer.name);
+        layer.transform.origin = origin;
+        layer.transform.size = Size(bw * sx, bh * sy);
+        layer.smartObject.reset();
+        layer.smartImage.reset();
+        return true;
+    }
     if (layer.asset && layer.asset->image.f32()) {
         // A 32-bit layer bends in float.
         const ImageF& deep = *layer.asset->image.f32();
@@ -523,6 +543,26 @@ std::optional<WarpedRaster> previewWarpCage(const Document& document, const Laye
     return renderWarpedImage(reduced ? *reduced : *source, cage, hullQuad(cage));
 }
 
+std::optional<WarpedAny> previewWarpCageAny(const Document& document, const Layer& layer, const WarpMesh& cage, int maxSide) {
+    if (document.colorMode == ColorMode::RGB) {
+        auto preview = previewWarpCage(document, layer, cage, maxSide);
+        if (!preview) return std::nullopt;
+        return WarpedAny{ImagePtr(preview->image), preview->transform};
+    }
+    // CMYK and Lab: at the document's own layout and depth, so the preview draws the samples Apply will.
+    const AnyImage source = cageSource(document, layer);
+    if (!source || source.width() <= 0 || source.height() <= 0) return std::nullopt;
+    const double scale = std::min(1.0, double(std::max(16, maxSide)) / std::max(source.width(), source.height()));
+    AnyImage reduced = source;
+    if (scale < 1) {
+        const int w = std::max(1, int(source.width() * scale)), h = std::max(1, int(source.height() * scale));
+        const double stepX = double(source.width()) / w, stepY = double(source.height()) / h;
+        reduced = resampleAxisAlignedAny(source, w, h, stepX / 2, stepX, stepY / 2, stepY, ResampleFilter::Triangle);
+        if (!reduced) return std::nullopt;
+    }
+    return renderWarpedImageAny(reduced, cage, hullQuad(cage));
+}
+
 bool warpLayerToCage(Document& document, Layer& layer, const WarpMesh& cage, std::string* error) {
     auto fail = [&](const char* why) { if (error) *error = why; return false; };
     std::string why;
@@ -577,6 +617,16 @@ bool warpLayerToCage(Document& document, Layer& layer, const WarpMesh& cage, std
         next.placedWidth = raster->image.width();
         next.placedHeight = raster->image.height();
         *layer.smartObject = std::move(next);
+        return true;
+    }
+    if (layer.asset && isFiveSample(layer.asset->image)) {
+        auto raster = renderWarpedImageAny(layer.asset->image, cage, quad);
+        if (!raster) return fail("The warp could not be drawn.");
+        layer.asset = Asset::makeAny(raster->image, layer.name);
+        layer.transform = raster->transform;
+        layer.transform.sampling = sampling;
+        layer.smartObject.reset();
+        layer.smartImage.reset();
         return true;
     }
     if (layer.asset && layer.asset->image.f32()) {
