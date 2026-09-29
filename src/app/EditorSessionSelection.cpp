@@ -112,12 +112,13 @@ void EditorSession::magicWand(QPointF documentPoint, int tolerance, bool contigu
         click.radius = 1 + 2 * std::clamp(sampleRadius, 0, 2);   // the patch: 3, 7 or 11 pixels across
         // The click's cost field, far enough past this tolerance that the slider can move without recomputing.
         click.anywhere = !contiguous;
+        click.tolerance = tolerance;
         click.field = wandSmart_->propagate(x, y, click.radius, wandCost(std::clamp(std::max(tolerance * 2, 64), 0, 255)), {}, click.anywhere);
         if (wandSessionLive() && mode != SelectionMode::Replace && mode != SelectionMode::Intersect) {
             // More evidence for the selection just made: Shift for what belongs, Alt for what does not.
             click.positive = mode == SelectionMode::Add;
             wandSession_->clicks.push_back(std::move(click));
-            applyWandSession(tolerance, true);
+            applyWandSession(tolerance, false);
             return;
         }
         WandSession session;
@@ -139,27 +140,37 @@ bool EditorSession::wandSessionLive() const {
     return wandSession_ && document_ && wandSmart_ && documentRevision_ == wandSession_->revisionAfter;
 }
 
-void EditorSession::applyWandSession(int tolerance, bool replaceStep) {
+void EditorSession::applyWandSession(int tolerance, bool retune) {
     if (refusedAtDepth("edit.selection", tr("Selections"))) return;
     WandSession& session = *wandSession_;
+    WandClick& latest = session.clicks.back();
+    if (retune) latest.tolerance = tolerance;
+    // A keep-out click competes at any cost a positive one can reach, so every field goes as far as the widest tolerance.
+    int widest = 0;
+    for (const WandClick& click : session.clicks) widest = std::max(widest, click.tolerance);
     std::vector<const SmartWandImage::Field*> positive, negative;
+    std::vector<int> tolerances;
     for (WandClick& click : session.clicks) {
-        if (wandCost(tolerance) > click.field.limit)
-            click.field = wandSmart_->propagate(click.x, click.y, click.radius, wandCost(std::clamp(std::max(tolerance * 2, 64), 0, 255)), {}, click.anywhere);
-        // A keep-out click competes at any cost it can reach, so its field goes as far as the positive ones do.
-        (click.positive ? positive : negative).push_back(&click.field);
+        if (wandCost(widest) > click.field.limit)
+            click.field = wandSmart_->propagate(click.x, click.y, click.radius, wandCost(std::clamp(std::max(widest * 2, 64), 0, 255)), {}, click.anywhere);
+        if (click.positive) { positive.push_back(&click.field); tolerances.push_back(click.tolerance); }
+        else negative.push_back(&click.field);
     }
     GrayImage mask(document_->width, document_->height);
-    long count = thresholdWandFields(positive, negative, tolerance, selectionAntialiased, mask);
+    long count = thresholdWandFields(positive, tolerances, negative, selectionAntialiased, mask);
     std::vector<uint32_t> lineColours;
     if (wandRefineEdge) refineWandEdge(*wandSample_, mask, 3, &lineColours);
-    if (replaceStep && session.hasStep) undo();
+    if (retune && latest.hasStep) {
+        wandRetuning_ = true;
+        undo();
+        wandRetuning_ = false;
+    }
     const size_t steps = undoNames().size();
     if (document_->sampleType == SampleType::U16)
         setSelection(combineSelection(session.before, AnyGray(widenGray(mask)), session.mode, selectionAntialiased, SampleType::U16), QT_TRANSLATE_NOOP("History", "Magic Wand"));
     else setSelection(combineSelection(session.before, mask, session.mode, selectionAntialiased), QT_TRANSLATE_NOOP("History", "Magic Wand"));
     // A selection equal to the one before records no step; the next change then has nothing to take back.
-    session.hasStep = undoNames().size() > steps;
+    latest.hasStep = undoNames().size() > steps;
     session.revisionAfter = documentRevision_;
     // The unmixed colours belong to this wand selection only when it replaced the selection outright.
     wandLineColours_ = std::move(lineColours);

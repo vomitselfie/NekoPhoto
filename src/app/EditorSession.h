@@ -1009,13 +1009,14 @@ private:
         int x = 0, y = 0, radius = 0;
         bool positive = true;
         bool anywhere = false;   // Contiguous off: every region that looks like the click
+        int tolerance = 32;      // the tolerance this click was made with (later clicks keep theirs, as in Photoshop)
+        bool hasStep = false;    // whether this click recorded an undo step (a no-change selection records none)
     };
     struct WandSession {
         std::vector<WandClick> clicks;
         std::optional<compositor::Selection> before;
         compositor::SelectionMode mode = compositor::SelectionMode::Replace;
         uint64_t revisionAfter = 0;
-        bool hasStep = false;   // whether the latest undo step is this session's (a no-change selection records none)
     };
     std::optional<WandSession> wandSession_;
     /// The line colours the last refined wand edge found, and the selection they belong to (Delete uses them
@@ -1023,7 +1024,11 @@ private:
     std::vector<uint32_t> wandLineColours_;
     std::shared_ptr<const compositor::GrayImage> wandLineSelection_;
     bool wandSessionLive() const;
-    void applyWandSession(int tolerance, bool replaceStep);
+    /// Thresholds the session's clicks and records the selection: `retune` re-does the latest click at `tolerance` in
+    /// place of its step (the Tolerance field moved right after a click); otherwise the latest click is new and gets a
+    /// step of its own, so Undo takes back one click at a time.
+    void applyWandSession(int tolerance, bool retune);
+    bool wandRetuning_ = false;   // the internal undo of a retune is not a user's undo of a wand click
     bool adjustmentEditing_ = false;
     std::optional<compositor::Uuid> styleEditLayer_;
     std::shared_ptr<const compositor::PsdLayerCarry> styleEditCarry_;

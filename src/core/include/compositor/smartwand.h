@@ -97,6 +97,11 @@ long thresholdWandField(const SmartWandImage::Field& field, int tolerance, bool 
 /// the two kinds of evidence compete for pixels rather than one mask being cut from the other.
 long thresholdWandFields(const std::vector<const SmartWandImage::Field*>& positive, const std::vector<const SmartWandImage::Field*>& negative,
                          int tolerance, bool soft, GrayImage& mask);
+/// The same with a tolerance per positive click (`tolerances[k]` for `positive[k]`): a pixel is selected when it is
+/// within the tolerance of a positive click that reaches it more cheaply than any negative one. Each Shift-click of a
+/// wand session keeps the tolerance it was made with; with every tolerance equal this is the function above exactly.
+long thresholdWandFields(const std::vector<const SmartWandImage::Field*>& positive, const std::vector<int>& tolerances,
+                         const std::vector<const SmartWandImage::Field*>& negative, bool soft, GrayImage& mask);
 
 /// How the confidence margin between positive and negative clicks is scaled (see wandMarginField).
 ///   Difference: n - p, in tolerance units (0 where the two kinds of click reach a pixel equally cheaply).

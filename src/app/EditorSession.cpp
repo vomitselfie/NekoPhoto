@@ -411,13 +411,22 @@ void EditorSession::undo() {
     if (gradient_) { cancelGradient(); return; }
     if (warpCage_) { cancelWarpCage(); return; }   // likewise an open warp cage
     if (!canUndo()) return;
+    // Undoing a smart-wand click takes back that click only: the session keeps the clicks before it, with their own
+    // tolerances, so the next Shift- or Alt-click goes on from there.
+    const bool wandClick = !wandRetuning_ && wandSessionLive() && !wandSession_->clicks.empty() && wandSession_->clicks.back().hasStep;
     auto snapshot = history_.undo();
     if (snapshot) restore(*snapshot);
+    if (wandClick) {
+        wandSession_->clicks.pop_back();
+        if (wandSession_->clicks.empty()) wandSession_.reset();
+        else wandSession_->revisionAfter = documentRevision_;
+    }
 }
 
 void EditorSession::redo() {
     if (warpCage_) cancelWarpCage();
     if (!canRedo()) return;
+    wandSession_.reset();   // a redone click is a plain selection step; a new click starts a new session
     auto snapshot = history_.redo();
     if (snapshot) restore(*snapshot);
 }

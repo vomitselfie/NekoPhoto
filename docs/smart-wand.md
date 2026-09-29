@@ -21,15 +21,17 @@ OKLab), then computes, once, the cost of reaching every pixel from it:
   that mismatch. A grid-lined piece of a texture atlas is taken whole, and the ground around it is not.
 
 Right after a click, Shift-click adds a click that selects and Alt-click one that keeps out; each has its own
-colour model and field, and a pixel is selected when its cheapest selecting cost is within tolerance and
-below its cheapest keep-out cost, so the clicks compete for pixels (Milestone 2). They and tolerance changes
-re-evaluate the one Magic Wand step.
+colour model and field, and a pixel is selected when it is within the tolerance of a selecting click that reaches it
+more cheaply than any keep-out click, so the clicks compete for pixels (Milestone 2). As in Photoshop, **each click
+keeps the tolerance it was made with** (a broad first click and a narrow Shift-click into a detailed area do not
+narrow the first one), and **each click is its own Magic Wand step**: Undo takes back the last click only, and the
+next Shift- or Alt-click goes on from the clicks before it.
 
 A pixel's cost is the worst step on its best path from the click (a bottleneck path, found with a bucket
 queue), in the classic wand's tolerance units. Tolerance only thresholds this field (up to 32 as it is, then
 growing with the square, about 2,000 at 255: `wandCost`), with a two-level soft
-band for antialiasing, so changing the tolerance right after a click re-selects at once from the same field
-and replaces that Magic Wand step. The field is computed to twice the tolerance (at least 64) and again
+band for antialiasing, so changing the tolerance right after a click re-selects that click at once from the same
+field and replaces its Magic Wand step; the earlier clicks keep their tolerances. The field is computed to twice the tolerance (at least 64) and again
 only if the tolerance goes past that.
 
 Because edges cost so much more than shading, a clean region stays the same over a wide stretch of tolerance;

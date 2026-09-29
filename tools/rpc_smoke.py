@@ -1552,16 +1552,18 @@ def main():
     assert failed["error"]["index"] == 1 and failed["rolledBack"], failed
     assert len(rpc.call("layers.list")) == count
 
-    # The edge-aware wand: a keep-out (subtract) click right after a wand click is evidence for the same
-    # selection, one undo step, not a second selection.
+    # The edge-aware wand: a keep-out (subtract) click right after a wand click is evidence for the same selection,
+    # and, as in Photoshop, each click is its own undo step: Undo takes back the keep-out click only.
     background = next(l for l in rpc.call("layers.list") if l["name"] == "Background")
     rpc.call("layers.select", id=background["id"])   # a layer with pixels under both clicks
     rpc.call("selection.wand", x=20, y=20, tolerance=120)
     steps = len(rpc.call("history.list")["undo"])
     first = rpc.call("selection.info")["bounds"]
     rpc.call("selection.wand", x=600, y=380, tolerance=120, mode="subtract")
-    assert len(rpc.call("history.list")["undo"]) == steps, "the keep-out click replaced the step"
+    assert len(rpc.call("history.list")["undo"]) == steps + 1, "the keep-out click is a step of its own"
     assert rpc.call("history.info")["undo"] == "Magic Wand"
+    rpc.call("history.undo")
+    assert rpc.call("selection.info")["bounds"] == first, "undo took back the keep-out click only"
     rpc.call("history.undo")
     rpc.call("selection.none")
 

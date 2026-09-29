@@ -1425,6 +1425,32 @@ TEST_CASE(wand_click_in_a_grid_takes_the_whole_piece) {
     CHECK_EQ(int(mask.at(220, 100)), 0);
 }
 
+TEST_CASE(each_wand_click_keeps_its_own_tolerance) {
+    // A soft left ramp that needs a broad tolerance, and a flat right patch picked with a narrow one: the second
+    // (Shift) click's tolerance must not narrow what the first click took, as in Photoshop.
+    const int W = 200, H = 80;
+    Image image(W, H);
+    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
+        uint8_t* p = image.pixel(x, y);
+        const uint8_t v = x < 100 ? uint8_t(60 + x) : uint8_t(x < 150 ? 220 : 40);
+        p[0] = p[1] = p[2] = v; p[3] = 255;
+    }
+    SmartWandImage prepared(image);
+    const auto ramp = prepared.propagate(10, 40, 1, wandCost(120));
+    const auto flat = prepared.propagate(120, 40, 1, wandCost(120));
+    GrayImage broadAlone(W, H, 0), both(W, H, 0), sameTolerance(W, H, 0), oldApi(W, H, 0);
+    const long alone = thresholdWandFields({&ramp}, {}, 60, false, broadAlone);
+    const long mixed = thresholdWandFields({&ramp, &flat}, std::vector<int>{60, 4}, {}, false, both);
+    // Every pixel the broad click took alone is still taken, and the narrow click adds its patch.
+    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) if (broadAlone.at(x, y) == 255) CHECK_EQ(int(both.at(x, y)), 255);
+    CHECK(mixed > alone);
+    CHECK_EQ(int(both.at(120, 40)), 255);
+    // With one tolerance for every click the per-click form is the old function exactly.
+    thresholdWandFields({&ramp, &flat}, std::vector<int>{4, 4}, {}, true, sameTolerance);
+    thresholdWandFields({&ramp, &flat}, {}, 4, true, oldApi);
+    CHECK(std::memcmp(sameTolerance.data(), oldApi.data(), sameTolerance.byteCount()) == 0);
+}
+
 TEST_CASE(wand_handles_tiny_and_transparent_layers) {
     // One pixel, fully transparent, and a click at the corner of a 2 x 2: no crash, sensible answers.
     Image one(1, 1);

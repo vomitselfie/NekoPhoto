@@ -480,22 +480,34 @@ long thresholdWandField(const SmartWandImage::Field& field, int tolerance, bool 
 
 long thresholdWandFields(const std::vector<const SmartWandImage::Field*>& positive, const std::vector<const SmartWandImage::Field*>& negative,
                          int tolerance, bool soft, GrayImage& mask) {
+    return thresholdWandFields(positive, std::vector<int>(positive.size(), tolerance), negative, soft, mask);
+}
+
+long thresholdWandFields(const std::vector<const SmartWandImage::Field*>& positive, const std::vector<int>& tolerances,
+                         const std::vector<const SmartWandImage::Field*>& negative, bool soft, GrayImage& mask) {
     if (positive.empty()) { std::memset(mask.data(), 0, mask.byteCount()); return 0; }
     const int width = positive[0]->width, height = positive[0]->height;
-    const int inside = wandCost(tolerance) * quarter;
+    std::vector<int> inside(positive.size());
+    for (size_t k = 0; k < positive.size(); k++) inside[k] = wandCost(k < tolerances.size() ? tolerances[k] : tolerances.back()) * quarter;
     const int band = soft ? 2 * quarter : 0;
     long count = 0;
     for (int y = 0; y < height; y++) {
         uint8_t* out = mask.row(y);
         for (int x = 0; x < width; x++) {
             const size_t i = size_t(y) * width + x;
-            int p = 65535, n = 65535;
-            for (auto* f : positive) p = std::min<int>(p, f->cost[i]);
+            // p: the cheapest positive cost (it competes with the negative clicks); over: how far past its own click's
+            // tolerance the best positive click is (at or below 0 inside, within the soft band a partial pixel).
+            int p = 65535, n = 65535, over = 65535;
+            for (size_t k = 0; k < positive.size(); k++) {
+                const int c = positive[k]->cost[i];
+                p = std::min(p, c);
+                if (c != 65535) over = std::min(over, c - inside[k]);
+            }
             for (auto* f : negative) n = std::min<int>(n, f->cost[i]);
             uint8_t m = 0;
             if (p != 65535 && p < n) {
-                if (p <= inside) m = 255;
-                else if (band && p < inside + band) m = uint8_t(255 - (p - inside) * 255 / band);
+                if (over <= 0) m = 255;
+                else if (band && over < band) m = uint8_t(255 - over * 255 / band);
             }
             out[x] = m;
             count += m >= 128;
