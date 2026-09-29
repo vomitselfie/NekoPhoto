@@ -1,6 +1,7 @@
 // The capability matrix (docs/mode-matrix.md), generated from supports(): which features work in which document
 // depth and colour mode. `mode_matrix` prints it; `mode_matrix --write <file>` writes it; `mode_matrix --check <file>`
 // fails when the committed file differs from what supports() says now (a ctest test), so the doc cannot drift.
+#include <algorithm>
 #include "compositor/supports.h"
 #include <cstring>
 #include <fstream>
@@ -97,8 +98,20 @@ int main(int argc, char** argv) {
         std::ifstream in(argv[2], std::ios::binary);
         std::stringstream held;
         held << in.rdbuf();
-        if (held.str() == text) return 0;
+        // Line endings aside (a Windows checkout may turn them into CRLF).
+        std::string committed = held.str();
+        committed.erase(std::remove(committed.begin(), committed.end(), '\r'), committed.end());
+        if (committed == text) return 0;
         std::cerr << argv[2] << " is stale: regenerate it with mode_matrix --write " << argv[2] << "\n";
+        std::istringstream a(committed), b(text);
+        std::string la, lb;
+        for (int line = 1;; line++) {
+            const bool moreA = bool(std::getline(a, la)), moreB = bool(std::getline(b, lb));
+            if (!moreA && !moreB) break;
+            if (!moreA) la.clear();
+            if (!moreB) lb.clear();
+            if (la != lb) { std::cerr << "  first difference, line " << line << ":\n  committed: " << la << "\n  generated: " << lb << "\n"; break; }
+        }
         return 1;
     }
     std::cout << text;
