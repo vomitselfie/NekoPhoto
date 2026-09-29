@@ -18,6 +18,8 @@ QString blendMode(compositor::BlendMode mode);
 QString adjustmentKind(compositor::AdjustmentKind kind);
 QString filterKind(compositor::FilterKind kind);
 QString levelsChannel(int channel);
+/// The Levels and Curves channel in a document of `mode` ("Cyan", "Lightness"); empty for a slot the mode has not.
+QString levelsChannel(int channel, compositor::ColorMode mode);
 QString colorRange(int range);
 
 /// An undo step's name (stored in English, as history.list reports it) for the Edit menu.

@@ -84,8 +84,8 @@ protected:
         p.setPen(QColor(80, 80, 80));
         for (int i = 1; i < 4; i++) { p.drawLine(QPointF(a.left() + a.width() * i / 4, a.top()), QPointF(a.left() + a.width() * i / 4, a.bottom())); p.drawLine(QPointF(a.left(), a.top() + a.height() * i / 4), QPointF(a.right(), a.top() + a.height() * i / 4)); }
         p.setPen(QColor(120, 120, 120)); p.drawLine(toView(0, 0), toView(255, 255));
-        static const QColor colors[4] = {QColor(230, 230, 230), QColor(230, 80, 80), QColor(80, 220, 80), QColor(90, 120, 255)};
-        for (int c = 3; c >= 0; c--) {
+        static const QColor colors[levelsChannelCount] = {QColor(230, 230, 230), QColor(230, 80, 80), QColor(80, 220, 80), QColor(90, 120, 255), QColor(160, 160, 160)};
+        for (int c = levelsChannelCount - 1; c >= 0; c--) {
             if (c != settings_.channel && settings_.channels[size_t(c)].size() == 2 && settings_.channels[size_t(c)][0].y == 0 && settings_.channels[size_t(c)][1].y == 255) continue;
             QPolygonF poly;
             for (int x = 0; x <= 255; x++) poly << toView(x, settings_.value(x, c));
@@ -155,8 +155,31 @@ void AdjustmentEditor::setSettings(const AdjustmentSettings& settings) {
 }
 
 void AdjustmentEditor::setHistogram(const std::array<std::vector<double>, 4>& histogram) {
+    histogramData_ = {histogram[0], histogram[1], histogram[2], histogram[3], {}};
+    sync();
+}
+
+void AdjustmentEditor::setHistogram(const std::array<std::vector<double>, 5>& histogram) {
     histogramData_ = histogram;
     sync();
+}
+
+ColorMode AdjustmentEditor::colorMode() const { return session_ ? session_->colorMode() : ColorMode::RGB; }
+
+int AdjustmentEditor::shownChannel(int channel) const {
+    // Lab has no composite: its first slot is shown as Lightness, which it goes with.
+    if (colorMode() == ColorMode::Lab && channel == 0) return 1;
+    return channel;
+}
+
+QComboBox* AdjustmentEditor::channelCombo() {
+    auto* channel = new QComboBox;
+    const ColorMode mode = colorMode();
+    for (int i = 0; i < levelsChannelCount; i++) {
+        const QString name = mode == ColorMode::RGB ? (i < 4 ? names::levelsChannel(i) : QString()) : names::levelsChannel(i, mode);
+        if (!name.isEmpty()) channel->addItem(name, i);
+    }
+    return channel;
 }
 
 void AdjustmentEditor::changed() {
@@ -227,7 +250,7 @@ void AdjustmentEditor::rebuild() {
 void AdjustmentEditor::sync() {
     syncing_ = true;
     for (auto& s : syncers_) s();
-    if (histogram_) histogram_->setData(histogramData_[size_t(settings_.levels.channel)], settings_.levels.ranges[size_t(settings_.levels.channel)]);
+    if (histogram_) histogram_->setData(histogramData_[size_t(shownChannel(settings_.levels.channel))], settings_.levels.ranges[size_t(settings_.levels.channel)]);
     if (curve_) curve_->setSettings(settings_.curves);
     syncing_ = false;
 }
@@ -238,10 +261,9 @@ QWidget* AdjustmentEditor::buildLevels() {
     v->setContentsMargins(0, 0, 0, 0);
     auto* channelRow = new QHBoxLayout;
     channelRow->addWidget(new QLabel(tr("Channel")));
-    auto* channel = new QComboBox;
-    for (int i = 0; i < 4; i++) channel->addItem(names::levelsChannel(i));
-    connect(channel, QOverload<int>::of(&QComboBox::activated), this, [this](int i) { settings_.levels.channel = i; changed(); });
-    syncers_.push_back([this, channel] { channel->setCurrentIndex(settings_.levels.channel); });
+    auto* channel = channelCombo();
+    connect(channel, QOverload<int>::of(&QComboBox::activated), this, [this, channel](int i) { settings_.levels.channel = channel->itemData(i).toInt(); changed(); });
+    syncers_.push_back([this, channel] { channel->setCurrentIndex(std::max(0, channel->findData(shownChannel(settings_.levels.channel)))); });
     channelRow->addWidget(channel, 1);
     v->addLayout(channelRow);
     histogram_ = new HistogramWidget;
@@ -256,17 +278,27 @@ QWidget* AdjustmentEditor::buildLevels() {
     auto* buttons = new QHBoxLayout;
     auto autoButton = [&](const QString& label, LevelsAuto mode) {
         auto* b = new QPushButton(label);
-        connect(b, &QPushButton::clicked, this, [this, mode] { emit editStarted(); settings_.levels = autoLevels(mode, histogramData_); changed(); emit editFinished(); });
+        connect(b, &QPushButton::clicked, this, [this, mode] {
+            emit editStarted();
+            settings_.levels = autoLevels(mode, {histogramData_[0], histogramData_[1], histogramData_[2], histogramData_[3]});
+            changed();
+            emit editFinished();
+        });
         buttons->addWidget(b);
     };
-    autoButton(tr("Auto Contrast"), LevelsAuto::Contrast);
-    autoButton(tr("Auto Color"), LevelsAuto::Color);
-    autoButton(tr("Auto + Neutral"), LevelsAuto::Neutral);
+    // Auto and the samplers read RGB colour; in CMYK and Lab the channels are set by hand.
+    const bool rgb = colorMode() == ColorMode::RGB;
+    if (rgb) {
+        autoButton(tr("Auto Contrast"), LevelsAuto::Contrast);
+        autoButton(tr("Auto Color"), LevelsAuto::Color);
+        autoButton(tr("Auto + Neutral"), LevelsAuto::Neutral);
+    }
     auto* reset = new QPushButton(tr("Reset"));
     connect(reset, &QPushButton::clicked, this, [this] { emit editStarted(); settings_.levels = LevelsSettings(); changed(); emit editFinished(); });
     buttons->addWidget(reset);
     v->addLayout(buttons);
     // The samplers: click the image to set the black, gray or white point from that colour.
+    if (!rgb) return w;
     auto* samplers = new QHBoxLayout;
     samplers->addWidget(new QLabel(tr("Sample")));
     auto* group = new QButtonGroup(w);
@@ -298,10 +330,9 @@ QWidget* AdjustmentEditor::buildCurves() {
     v->setContentsMargins(0, 0, 0, 0);
     auto* channelRow = new QHBoxLayout;
     channelRow->addWidget(new QLabel(tr("Channel")));
-    auto* channel = new QComboBox;
-    for (int i = 0; i < 4; i++) channel->addItem(names::levelsChannel(i));
-    connect(channel, QOverload<int>::of(&QComboBox::activated), this, [this](int i) { settings_.curves.channel = i; changed(); });
-    syncers_.push_back([this, channel] { channel->setCurrentIndex(settings_.curves.channel); });
+    auto* channel = channelCombo();
+    connect(channel, QOverload<int>::of(&QComboBox::activated), this, [this, channel](int i) { settings_.curves.channel = channel->itemData(i).toInt(); changed(); });
+    syncers_.push_back([this, channel] { channel->setCurrentIndex(std::max(0, channel->findData(shownChannel(settings_.curves.channel)))); });
     channelRow->addWidget(channel, 1);
     v->addLayout(channelRow);
     curve_ = new CurveWidget;
@@ -600,6 +631,20 @@ QWidget* AdjustmentEditor::buildMore() {
         break;
     case AdjustmentKind::ChannelMixer: {
         v->addWidget(checkRow(tr("Monochrome"), [this] { return settings_.channelMixer.monochrome; }, [this](bool on) { settings_.channelMixer.monochrome = on; rebuild(); }));
+        if (colorMode() == ColorMode::CMYK) {
+            // CMYK's four ink rows; monochrome makes the black plate alone.
+            auto* out = new QComboBox;
+            out->addItems({tr("Output: Cyan"), tr("Output: Magenta"), tr("Output: Yellow"), tr("Output: Black")});
+            out->setEnabled(!s.channelMixer.monochrome);
+            out->setCurrentIndex(std::min(mixerOutput_, 3));
+            connect(out, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { mixerOutput_ = i; rebuild(); });
+            v->addWidget(out);
+            const size_t row = s.channelMixer.monochrome ? 3 : size_t(std::min(mixerOutput_, 3));
+            const QString inks[4] = {tr("Cyan"), tr("Magenta"), tr("Yellow"), tr("Black")};
+            for (size_t k = 0; k < 4; k++) slider(inks[k], -200, 200, [this, row, k]() -> double& { return settings_.channelMixer.inks[row][k]; });
+            slider(tr("Constant"), -200, 200, [this, row]() -> double& { return settings_.channelMixer.inks[row][4]; });
+            break;
+        }
         auto* out = new QComboBox;
         out->addItems({tr("Output: Red"), tr("Output: Green"), tr("Output: Blue")});
         out->setEnabled(!s.channelMixer.monochrome);

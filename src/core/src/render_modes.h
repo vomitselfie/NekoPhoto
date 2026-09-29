@@ -7,8 +7,8 @@
 // - pixel layers in every blend mode Photoshop offers there (blend.h's blendModeFor: CMYK's non-separable modes draw
 //   as Normal until they are calibrated), opacity, pixel and vector masks, clipping stacks, folders, artboards,
 //   vector strokes and gradient or pattern fill layers (drawn in RGB and converted);
-// - adjustment layers: Invert, Levels, Curves, Brightness/Contrast and Posterize (on every ink in CMYK, on L in Lab
-//   but Invert and Posterize, which take every channel); the other kinds are not drawn yet (step E);
+// - adjustment layers: every kind Photoshop offers in the mode but Color Lookup, on the document's own samples
+//   (adjustments_modes.cpp, modeedit.h);
 // - layer styles are not drawn in CMYK and Lab yet (the layer draws without its effects; P8).
 //
 // A buffer held in another layout (an 8-bit RGB raster in a CMYK document, say, text rendered before the document's
@@ -104,7 +104,7 @@ struct ModeOps {
     }
     static ImagePtr vectorPaint(const VectorPaint& paint, const Document& document, const Rect& bounds, const Rect& area, double scale, int w, int h);
     static ImagePtr fillLayer(const Layer& layer, const Document& document);
-    static bool adjust(const LayerAdjustment& adjustment, Image& image, const Rect& region, double scale);
+    static bool adjust(const Document& document, const LayerAdjustment& adjustment, Image& image, const Rect& region, double scale);
 
     /// The document's buffers at this layout (converted once when they are held in another).
     static ImagePtr image(const Document& document, const AnyImage& image);

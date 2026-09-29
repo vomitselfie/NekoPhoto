@@ -33,11 +33,14 @@ protected:
     void showPreview(std::shared_ptr<compositor::Image> image, std::optional<compositor::LayerTransform> placement = std::nullopt);
     void showPreview(std::shared_ptr<compositor::Image16> image, std::optional<compositor::LayerTransform> placement = std::nullopt);
     void showPreview(std::shared_ptr<compositor::ImageF> image, std::optional<compositor::LayerTransform> placement = std::nullopt);
+    /// In a CMYK or Lab document: `image` at the document's layout, computed from sourceNative().
+    void showPreviewNative(compositor::AnyImage image, std::optional<compositor::LayerTransform> placement = std::nullopt);
     void clearPreview();
     /// Blends a full-size result computed from source() through the selection.
     void throughSelection(compositor::Image& result) const;
     void throughSelection(compositor::Image16& result) const;
     void throughSelection(compositor::ImageF& result) const;
+    compositor::AnyImage throughSelectionNative(const compositor::AnyImage& result) const;
     /// Replaces the pinned layer's pixels as one undo step and marks the dialog finished.
     void commit(compositor::AnyImage image, const compositor::LayerTransform& placement, const QString& name);
     /// Closes with `result` without committing anything further (after an asynchronous commit, say).
@@ -56,9 +59,14 @@ protected:
     const std::shared_ptr<const compositor::ImageF>& sourceF() const { return sourceF_; }
     const std::shared_ptr<const compositor::ImageF>& previewSourceF() const { return previewSourceF_; }
     const compositor::TransferCurve& curve() const { return curve_; }
+    /// In a CMYK or Lab document the layer's own samples (modeedit.h), previewed at full size; the RGB accessors are
+    /// null there, so no RGB kernel ever meets them.
+    const compositor::AnyImage& sourceNative() const { return sourceNative_; }
+    compositor::ColorMode colorMode() const { return mode_; }
+    const compositor::ColorProfile& documentProfile() const { return profile_; }
     /// Whether the pinned layer's pixels were captured at all, at any depth.
-    bool hasSource() const { return source_ || source16_ || sourceF_; }
-    bool hasPreviewSource() const { return previewSource_ || previewSource16_ || previewSourceF_; }
+    bool hasSource() const { return source_ || source16_ || sourceF_ || sourceNative_; }
+    bool hasPreviewSource() const { return previewSource_ || previewSource16_ || previewSourceF_ || sourceNative_; }
     const compositor::LayerTransform& placement() const { return transform_; }
     /// The selection on source()'s grid, or null when everything is selected.
     const compositor::GrayImage* coverage() const { return coverage_.get(); }
@@ -78,6 +86,10 @@ private:
     std::shared_ptr<const compositor::ImageF> sourceF_, previewSourceF_;
     std::shared_ptr<compositor::GrayF> coverageF_, previewCoverageF_;
     compositor::TransferCurve curve_;
+    compositor::AnyImage sourceNative_;
+    compositor::AnyGray coverageNative_;
+    compositor::ColorMode mode_ = compositor::ColorMode::RGB;
+    compositor::ColorProfile profile_;
     QCheckBox* preview_ = nullptr;
     bool finished_ = false;
 };

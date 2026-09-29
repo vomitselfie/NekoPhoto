@@ -4,6 +4,7 @@
 #include "compositor/colormgmt.h"
 #include "compositor/depth.h"
 #include "compositor/filters.h"
+#include "compositor/modeedit.h"
 #include <random>
 
 using namespace compositor;
@@ -129,6 +130,18 @@ std::shared_ptr<GrayF> EditorSession::selectionOnGridF(const LayerTransform& tra
     return selectionInGrid(*document_->selection->coverage.f32(), transform.pixelToDocument(width, height), width, height);
 }
 
+AnyImage EditorSession::adjustmentSourceAny(int margin, LayerTransform& transform, std::optional<Uuid> layerId) const {
+    const Layer* layer = layerId ? (document_ ? document_->find(*layerId) : nullptr) : activeLayer();
+    if (!layer || !layer->asset || !layer->asset->image) return {};
+    if (margin <= 0) { transform = layer->transform; return layer->asset->image; }
+    return growImageAny(layer->asset->image, layer->transform, margin, transform);
+}
+
+AnyGray EditorSession::selectionOnGridAny(const LayerTransform& transform, int width, int height) const {
+    if (!document_ || !document_->selection || !document_->selection->coverage) return {};
+    return selectionInGridAny(document_->selection->coverage, transform.pixelToDocument(width, height), width, height);
+}
+
 TransferCurve EditorSession::documentCurve() const { return document_ ? encodedTransfer(*document_) : TransferCurve::srgb(); }
 
 void EditorSession::commitPixels(AnyImage image, const LayerTransform& transform, const QString& name, std::optional<Uuid> layerId) {
@@ -191,6 +204,15 @@ void EditorSession::invertActive() {
         notifyDocument();
         return;
     }
+    if (layer->asset && layer->asset->image && colorMode() != ColorMode::RGB) {
+        // CMYK and Lab: every channel as stored, the inks or L, a and b (modeedit.h).
+        const AnyImage before = layer->asset->image;
+        AnyImage out = adjustedInMode(AdjustmentSettings::defaults(AdjustmentKind::Invert), before, colorMode(), document_->profile);
+        if (!out) return;
+        if (AnyGray coverage = selectionOnGridAny(layer->transform, out.width(), out.height())) out = blendThroughCoverageAny(out, before, coverage);
+        commitPixels(out, layer->transform, QT_TRANSLATE_NOOP("History", "Invert"));
+        return;
+    }
     if (layer->asset && layer->asset->image.f32()) {
         const ImageF& before = *layer->asset->image.f32();
         auto out = std::make_shared<ImageF>(before);
@@ -212,6 +234,13 @@ void EditorSession::invertActive() {
     applyInvert(*out);
     if (auto coverage = selectionOnGrid(layer->transform, out->width(), out->height())) blendThroughCoverage(*out, *layer->asset->image.u8(), *coverage);
     commitPixels(out, layer->transform, QT_TRANSLATE_NOOP("History", "Invert"));
+}
+
+std::array<std::vector<double>, 5> EditorSession::activeHistogramNative() const {
+    const Layer* layer = activeLayer();
+    if (!layer || !layer->asset || !layer->asset->image || colorMode() == ColorMode::RGB) return {};
+    const AnyImage& image = layer->asset->image;
+    return levelsHistogramInMode(image, colorMode(), selectionOnGridAny(layer->transform, image.width(), image.height()));
 }
 
 std::array<std::vector<double>, 4> EditorSession::activeHistogram() const {

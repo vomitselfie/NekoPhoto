@@ -413,7 +413,8 @@ std::optional<AdjustmentSettings> levelsFrom(const uint8_t* data, size_t size) {
     Reader r(data, size);
     if (r.u16() != 2) return std::nullopt;
     AdjustmentSettings s = AdjustmentSettings::defaults(AdjustmentKind::Levels);
-    for (int i = 0; i < 4 && r.remaining() >= 10; i++) {
+    // The composite and the document's channels: R, G, B; C, M, Y, K; or Lab's L, a, b.
+    for (int i = 0; i < levelsChannelCount && r.remaining() >= 10; i++) {
         double black = r.u16(), white = r.u16(), outBlack = r.u16(), outWhite = r.u16(), gamma = r.u16() / 100.0;
         s.levels.ranges[size_t(i)] = LevelsRange{black, gamma > 0 ? gamma : 1, white, outBlack, outWhite}.normalized();
     }
@@ -426,13 +427,14 @@ std::optional<AdjustmentSettings> curvesFrom(const uint8_t* data, size_t size) {
     if (r.u16() != 1) return std::nullopt;
     uint32_t mask = r.u32();
     AdjustmentSettings s = AdjustmentSettings::defaults(AdjustmentKind::Curves);
-    // Bit 0 is the composite curve, bits 1..3 red, green, blue; the rest (alpha, spot) have no home here.
+    // Bit 0 is the composite curve, then the document's channels (bits 1..3 red, green, blue; 1..4 cyan to black; 1..3
+    // L, a, b); the rest (alpha, spot) have no home here.
     for (int channel = 0; channel < 32 && r.remaining() >= 2; channel++) {
         if (!(mask & (1u << channel))) continue;
         uint16_t count = r.u16();
         std::vector<CurvePoint> points;
         for (int i = 0; i < count && r.remaining() >= 4; i++) { double out = r.u16(), in = r.u16(); points.push_back({in, out}); }
-        if (channel < 4 && points.size() >= 2) s.curves.channels[size_t(channel)] = points;
+        if (channel < levelsChannelCount && points.size() >= 2) s.curves.channels[size_t(channel)] = points;
     }
     return s.curves.isValid() ? std::optional<AdjustmentSettings>(s) : std::nullopt;
 }
@@ -534,6 +536,19 @@ std::optional<AdjustmentSettings> simpleAdjustmentFrom(const std::string& key, c
             }
             // Monochrome keeps its grey in the first record.
             if (s.channelMixer.monochrome) s.channelMixer.rows[3] = s.channelMixer.rows[0];
+            return s;
+        }
+        if (key == "mixr/cmyk") {
+            // A CMYK file's: four output inks, each from cyan, magenta, yellow, black and a constant; monochrome's black
+            // in the first record.
+            if (r.u16() != 1) return std::nullopt;
+            AdjustmentSettings s = AdjustmentSettings::defaults(AdjustmentKind::ChannelMixer);
+            s.channelMixer.monochrome = r.u16() != 0;
+            for (int out = 0; out < 4 && r.remaining() >= 10; out++) {
+                auto& row = s.channelMixer.inks[size_t(out)];
+                for (double& v : row) v = std::clamp(double(r.i16()), -200.0, 200.0);
+            }
+            if (s.channelMixer.monochrome) s.channelMixer.inks[3] = s.channelMixer.inks[0];
             return s;
         }
         if (key == "selc") {
@@ -1158,7 +1173,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             else if (block("CgEd") || block("brit")) settings = brightnessContrastFrom(block("CgEd"), block("brit"));
             if (!settings)
                 for (const char* key : {"nvrt", "post", "thrs", "blnc", "mixr", "selc", "phfl", "blwh", "vibA", "clrL"})
-                    if (auto b = block(key)) { settings = simpleAdjustmentFrom(key, b->first, b->second); break; }
+                    if (auto b = block(key)) { settings = simpleAdjustmentFrom(mode == 4 && std::string(key) == "mixr" ? "mixr/cmyk" : key, b->first, b->second); break; }
             if (!settings) {
                 static const std::map<std::string, const char*> others{{"brit", "Brightness/Contrast"}, {"blwh", "Black & White"}, {"vibA", "Vibrance"}, {"phfl", "Photo Filter"}, {"mixr", "Channel Mixer"},
                     {"clrL", "Color Lookup"}, {"nvrt", "Invert"}, {"post", "Posterize"}, {"thrs", "Threshold"}, {"selc", "Selective Color"}, {"blnc", "Color Balance"}};

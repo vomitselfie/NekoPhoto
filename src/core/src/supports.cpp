@@ -1,4 +1,5 @@
 #include "compositor/supports.h"
+#include "compositor/colormgmt.h"
 #include <string>
 
 namespace compositor {
@@ -212,6 +213,29 @@ constexpr FeatureModes modeTable[] = {
     {"layers.applyMask", allModes},
     {"tool.spotHealing", colorModeBit(ColorMode::RGB) | colorModeBit(ColorMode::Lab)},
     {"tool.smudge", colorModeBit(ColorMode::RGB) | colorModeBit(ColorMode::Lab)},
+    // Step E, adjustments and filters (P7): Image > Adjustments and adjustment layers on the document's own samples
+    // (modeedit.h), each kind in the modes Photoshop offers it (adjustmentOfferedInMode; what it lacks stays greyed for
+    // good). Color Lookup's tables are RGB and wait.
+    {"adjustment.pixels", allModes},
+    {"adjustment.Levels", allModes},
+    {"adjustment.Curves", allModes},
+    {"adjustment.Brightness/Contrast", allModes},
+    {"adjustment.Invert", allModes},
+    {"adjustment.Posterize", allModes},
+    {"adjustment.Threshold", allModes},
+    {"adjustment.Gradient Map", allModes},
+    {"adjustment.Photo Filter", allModes},
+    {"adjustment.Hue/Saturation", colorModeBit(ColorMode::CMYK)},
+    {"adjustment.Color Balance", colorModeBit(ColorMode::CMYK)},
+    {"adjustment.Selective Color", colorModeBit(ColorMode::CMYK)},
+    {"adjustment.Channel Mixer", colorModeBit(ColorMode::CMYK)},
+    {"adjustment.Exposure", colorModeBit(ColorMode::Lab)},
+    // The Filter menu's built-in filters on every ink, or L, a and b.
+    {"filter.pixels", allModes},
+    {"filter.Gaussian Blur", allModes},
+    {"filter.Motion Blur", allModes},
+    {"filter.Add Noise", allModes},
+    {"filter.Lens Correction", allModes},
 };
 
 // What stays RGB for good (not waiting for a port): refused in CMYK and Lab with "Not available in CMYK mode", where a
@@ -268,6 +292,13 @@ std::string notAvailableInMode(ColorMode mode) {
 bool photoshopLacksInMode(std::string_view feature, ColorMode mode) {
     if (mode == ColorMode::RGB) return false;
     for (std::string_view f : rgbOnly) if (f == feature) return true;
+    // The adjustments Photoshop's Image > Adjustments greys in the mode (Vibrance and Black & White in CMYK and Lab,
+    // Exposure in CMYK; Hue/Saturation, Color Balance, Selective Color and Channel Mixer in Lab), and Grain.
+    constexpr std::string_view prefix = "adjustment.";
+    if (feature.substr(0, prefix.size()) == prefix) {
+        AdjustmentKind kind;
+        if (parseAdjustmentKind(std::string(feature.substr(prefix.size())), kind)) return !adjustmentOfferedInMode(kind, mode);
+    }
     return false;
 }
 

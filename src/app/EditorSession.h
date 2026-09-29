@@ -705,6 +705,10 @@ public:
     /// The same in a 32-bit document, and the curve its colour is encoded with (encodedTransfer).
     std::shared_ptr<const compositor::ImageF> adjustmentSourceF(int margin, compositor::LayerTransform& transform, std::optional<compositor::Uuid> layerId = std::nullopt) const;
     std::shared_ptr<compositor::GrayF> selectionOnGridF(const compositor::LayerTransform& transform, int width, int height) const;
+    /// The same at any depth and layout: a CMYK or Lab layer's own samples (modeedit.h), and the selection at the
+    /// document's depth on their grid (null when everything is selected).
+    compositor::AnyImage adjustmentSourceAny(int margin, compositor::LayerTransform& transform, std::optional<compositor::Uuid> layerId = std::nullopt) const;
+    compositor::AnyGray selectionOnGridAny(const compositor::LayerTransform& transform, int width, int height) const;
     compositor::TransferCurve documentCurve() const;
     /// The composite at a document pixel as the document holds it (the Eyedropper in a 32-bit, CMYK or Lab document):
     /// `values` the straight native values (linear R, G, B at 32 bits; C, M, Y, K ink percentages; L, a, b), `color` the
@@ -717,6 +721,9 @@ public:
     void commitPixels(compositor::AnyImage image, const compositor::LayerTransform& transform, const QString& name, std::optional<compositor::Uuid> layerId = std::nullopt);
     void invertActive();
     std::array<std::vector<double>, 4> activeHistogram() const;
+    /// Levels' histograms of the active layer in a CMYK or Lab document: the composite (the inks' mean in CMYK, empty
+    /// in Lab) and each channel as stored (C, M, Y, K; L, a, b), 256 bins.
+    std::array<std::vector<double>, 5> activeHistogramNative() const;
     /// Remove Background: `mask` (white over the subject, on the layer's pixel grid) becomes the layer mask,
     /// multiplied with any mask already there; with a selection only the selected part changes. `pixels`, when
     /// given at the layer's size, replaces the layer's pixels in the same undo step (the edge colours after

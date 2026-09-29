@@ -416,7 +416,9 @@ struct RenderExecDeep {
         if (!layer.adjustment) return;
         // The adjustment at the document's depth (adjustments_u16.cpp at 16 bits).
         Img adjusted = target;
-        if (!O::adjust(*layer.adjustment, adjusted, region, scale)) return;
+        if constexpr (requires { O::adjust(document, *layer.adjustment, adjusted, region, scale); }) {
+            if (!O::adjust(document, *layer.adjustment, adjusted, region, scale)) return;
+        } else if (!O::adjust(*layer.adjustment, adjusted, region, scale)) return;
         const BlendMode mode = blendOf(layer);
         const float opacity = float(clamp(layer.opacity, 0.0, 1.0));
         Cover clip = coverage;

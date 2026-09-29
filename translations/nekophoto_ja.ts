@@ -1586,6 +1586,38 @@
         <translation>ブルー</translation>
     </message>
     <message>
+        <source>CMYK</source>
+        <translation>CMYK</translation>
+    </message>
+    <message>
+        <source>Cyan</source>
+        <translation>シアン</translation>
+    </message>
+    <message>
+        <source>Magenta</source>
+        <translation>マゼンタ</translation>
+    </message>
+    <message>
+        <source>Yellow</source>
+        <translation>イエロー</translation>
+    </message>
+    <message>
+        <source>Black</source>
+        <translation>ブラック</translation>
+    </message>
+    <message>
+        <source>Lightness</source>
+        <translation>明度</translation>
+    </message>
+    <message>
+        <source>a</source>
+        <translation>a</translation>
+    </message>
+    <message>
+        <source>b</source>
+        <translation>b</translation>
+    </message>
+    <message>
         <source>Master</source>
         <translation>マスター</translation>
     </message>
@@ -3120,6 +3152,22 @@ Working: %2</source>
     <message>
         <source>Monochrome</source>
         <translation>モノクロ</translation>
+    </message>
+    <message>
+        <source>Output: Cyan</source>
+        <translation>出力先: シアン</translation>
+    </message>
+    <message>
+        <source>Output: Magenta</source>
+        <translation>出力先: マゼンタ</translation>
+    </message>
+    <message>
+        <source>Output: Yellow</source>
+        <translation>出力先: イエロー</translation>
+    </message>
+    <message>
+        <source>Output: Black</source>
+        <translation>出力先: ブラック</translation>
     </message>
     <message>
         <source>Output: Red</source>

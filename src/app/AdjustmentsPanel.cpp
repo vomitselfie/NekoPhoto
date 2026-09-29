@@ -1,6 +1,7 @@
 #include "Style.h"
 #include "Names.h"
 #include "AdjustmentsPanel.h"
+#include "compositor/modeedit.h"
 #include <QVBoxLayout>
 
 using namespace compositor;
@@ -47,8 +48,14 @@ void AdjustmentsPanel::sync() {
         Document below = *session_->document();
         int index = below.indexOf(layer->id);
         below.layers.erase(below.layers.begin() + index, below.layers.end());
-        auto flattened = renderFlattened(below);
-        editor_->setHistogram(levelsHistogram(*flattened, nullptr));
+        if (below.colorMode != ColorMode::RGB) {
+            // CMYK and Lab: the channels as the document holds them.
+            RenderOptions options;
+            editor_->setHistogram(levelsHistogramInMode(renderNative(below, options), below.colorMode));
+        } else {
+            auto flattened = renderFlattened(below);
+            editor_->setHistogram(levelsHistogram(*flattened, nullptr));
+        }
     }
 }
 

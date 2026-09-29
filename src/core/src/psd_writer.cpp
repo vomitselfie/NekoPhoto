@@ -806,7 +806,7 @@ private:
         case AdjustmentKind::Levels: {
             o.u16(2);
             for (int i = 0; i < 29; i++) {
-                LevelsRange range = i < 4 ? s.levels.ranges[size_t(i)] : LevelsRange{};
+                LevelsRange range = i < levelsChannelCount ? s.levels.ranges[size_t(i)] : LevelsRange{};
                 o.u16(unsigned(std::lround(std::clamp(range.black, 0.0, 253.0))));
                 o.u16(unsigned(std::lround(std::clamp(range.white, 2.0, 255.0))));
                 o.u16(unsigned(std::lround(std::clamp(range.outputBlack, 0.0, 255.0))));
@@ -820,9 +820,12 @@ private:
             o.u8(0);
             o.u16(1);
             uint32_t mask = 0;
-            for (int c = 0; c < 4; c++) if (s.curves.channels[size_t(c)].size() >= 2) mask |= 1u << c;
+            // The composite and three channels always; CMYK's black when it is set.
+            const bool black = !(s.curves.channels[4] == std::vector<CurvePoint>{{0, 0}, {255, 255}});
+            const int count = black ? 5 : 4;
+            for (int c = 0; c < count; c++) if (s.curves.channels[size_t(c)].size() >= 2) mask |= 1u << c;
             o.u32(mask);
-            for (int c = 0; c < 4; c++) {
+            for (int c = 0; c < count; c++) {
                 const auto& points = s.curves.channels[size_t(c)];
                 if (points.size() < 2) continue;
                 o.u16(unsigned(points.size()));
