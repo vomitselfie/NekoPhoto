@@ -1018,6 +1018,8 @@ private:
     /// The document when the outermost open edit began, while only some colour channels are active.
     std::optional<compositor::Document> channelEditBase_;
     int editDepth_ = 0;
+    std::optional<compositor::Uuid> channelsFor_;   // the document the channel view belongs to
+    void followChannelDocument();
     /// The proxy's mask written into its channel when it changed (from endEdit, inside the step).
     void syncChannelProxy();
     /// The proxy made again from the channel (after the channel changed some other way).

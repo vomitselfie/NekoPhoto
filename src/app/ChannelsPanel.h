@@ -6,7 +6,9 @@
 #pragma once
 #include "EditorSession.h"
 #include <QPointer>
+#include <QPixmap>
 #include <QWidget>
+#include <map>
 
 class QListWidget;
 class QListWidgetItem;
@@ -37,6 +39,7 @@ private:
     QPointer<EditorSession> session_;
     QListWidget* list_;
     QTimer* thumbnails_;
+    std::map<QString, QPixmap> thumbCache_;   // by row and channel id, shown until the next refresh
     bool rebuilding_ = false;
 };
 

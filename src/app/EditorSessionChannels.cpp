@@ -80,6 +80,22 @@ Document withoutTemporaryLayers(const Document& document, const std::vector<Uuid
 
 } // namespace
 
+void EditorSession::followChannelDocument() {
+    // The channel view belongs to one document: another taking the session (New, Open, a recovered file) starts from
+    // the composite, as a newly opened document does in Photoshop.
+    const std::optional<Uuid> id = document_ ? std::optional<Uuid>(document_->id) : std::nullopt;
+    if (id == channelsFor_) return;
+    channelsFor_ = id;
+    const bool changed = activeColors_ != colorChannelsAll || visibleColors_ != colorChannelsAll || !visibleAlpha_.empty() || channelTarget_ || channelProxy_;
+    activeColors_ = visibleColors_ = colorChannelsAll;
+    visibleAlpha_.clear();
+    channelTarget_.reset();
+    channelProxy_.reset();
+    channelSynced_.reset();
+    channelEditBase_.reset();
+    if (changed) emit channelsChanged();
+}
+
 std::optional<Uuid> EditorSession::targetChannel() const {
     if (!document_ || !channelTarget_) return std::nullopt;
     const Channel* channel = findChannel(*document_, *channelTarget_);
@@ -230,7 +246,10 @@ void EditorSession::syncChannelProxy() {
     if (!document_ || !channelProxy_ || !channelTarget_) return;
     const Layer* proxy = document_->find(*channelProxy_);
     Channel* channel = findChannel(*document_, *channelTarget_);
-    if (!proxy || !channel || !proxy->mask || !proxy->mask->asset.image || proxy->mask->asset.image == channelSynced_) return;
+    if (!proxy || !channel) return;
+    // The layer's opacity is the channel's overlay opacity (the Layers panel's slider reaches it while it is active).
+    if (proxy->opacity != channel->opacity) { channel->opacity = proxy->opacity; emit channelsChanged(); }
+    if (!proxy->mask || !proxy->mask->asset.image || proxy->mask->asset.image == channelSynced_) return;
     // The mask as it sits on the canvas (it may have been moved), inverted: the channel's gray.
     AnyGray gray = inverted(grayAtDepth(canvasGray(*document_, *proxy->mask, proxy->maskTransform()), document_->sampleType));
     if (gray) channel->image = gray;

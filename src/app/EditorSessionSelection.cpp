@@ -484,6 +484,8 @@ void EditorSession::clearSelectionPixels() {
     Layer* layer = activeLayerMutable();
     if (!layer || layer->isGroup || !layer->asset || !layer->asset->image) return;
     if (!document_->selection || !document_->selection->coverage) return;
+    // In some colour channels only, Delete fills them with the background colour, as Photoshop clears a channel.
+    if (activeColors_ != colorChannelsAll && !isMaskSelected_) { fillSelection(backgroundColor); return; }
     beginEdit(QT_TRANSLATE_NOOP("History", "Clear"));
     clearSelectedPixelsNow(*layer);
     endEdit();

@@ -55,6 +55,7 @@ QString EditorSession::title() const {
 }
 
 void EditorSession::notifyDocument(QRectF region) {
+    followChannelDocument();   // another document starts from the composite (EditorSessionChannels.cpp)
     documentRevision_++;
     emit documentChanged(region);
     emit layersChanged();
@@ -359,6 +360,7 @@ int EditorSession::squashHistory(uint64_t since, const QString& name) {
 
 void EditorSession::beginEdit(const QString& name) {
     endFramePreview();
+    followChannelDocument();
     // With only some colour channels active, the edit is limited to them when it ends (EditorSessionChannels.cpp).
     if (editDepth_++ == 0 && document_ && activeColors_ != colorChannelsAll) channelEditBase_ = *document_;
     history_.begin(name.toStdString(), document_, activeLayerId_);

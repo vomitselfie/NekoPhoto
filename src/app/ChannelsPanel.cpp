@@ -151,6 +151,7 @@ QWidget* ChannelsPanel::makeRow(int row, const QString& id, const QString& name,
     thumb->setProperty("channelId", id);
     thumb->setToolTip(row == QuickMask ? QString() : tr("Ctrl-click: load as a selection (Shift adds, Alt subtracts, both intersect)"));
     thumb->installEventFilter(this);
+    if (auto cached = thumbCache_.find(QString::number(row) + id); cached != thumbCache_.end()) thumb->setPixmap(cached->second);
     h->addWidget(thumb);
     auto* label = new QLabel(name, w);
     if (italic) { QFont f = label->font(); f.setItalic(true); label->setFont(f); }
@@ -198,7 +199,8 @@ void ChannelsPanel::rebuild() {
         if (session_->quickMaskActive()) add(QuickMask, {}, tr("Quick Mask"), QString(), true, quickMask, true);
     }
     rebuilding_ = false;
-    refreshThumbnails();
+    // The thumbnails as last drawn, then drawn again once the edits pause (a render of the composite).
+    if (thumbCache_.empty()) refreshThumbnails(); else thumbnails_->start();
 }
 
 void ChannelsPanel::refreshThumbnails() {
@@ -250,7 +252,9 @@ void ChannelsPanel::refreshThumbnails() {
             const Layer* layer = session_->quickMaskLayerId() ? doc.find(*session_->quickMaskLayerId()) : nullptr;
             if (layer && layer->mask && layer->mask->asset.thumbnail) { image = toQImage(*layer->mask->asset.thumbnail); image.invertPixels(); }
         }
-        thumb->setPixmap(framed(image, dpr));
+        const QPixmap pixmap = framed(image, dpr);
+        thumb->setPixmap(pixmap);
+        thumbCache_[QString::number(kind) + item->data(idRole).toString()] = pixmap;
     }
 }
 

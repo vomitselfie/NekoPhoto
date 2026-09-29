@@ -274,6 +274,19 @@ TEST_CASE(single_channel_painting) {
         painted.layers[0].transform = done.transform;
         CHECK(restrictToColorChannels(blank, painted, 1));
         CHECK(!painted.layers[0].asset);
+        // Edits of the layer structure or the canvas work on whole layers: a merge (a layer fewer), Image Size.
+        Document two = before;
+        Layer extra = before.layers[0];
+        extra.id = makeUuid();
+        two.layers.push_back(extra);
+        Document merged = before;
+        merged.layers[0].asset = done.asset;
+        merged.layers[0].transform = done.transform;
+        CHECK(!restrictToColorChannels(two, merged, 1));
+        CHECK(merged.layers[0].asset->image == done.asset->image);
+        Document resized = merged;
+        resized.width = W * 2;
+        CHECK(!restrictToColorChannels(before, resized, 1));
     }
 }
 
@@ -389,6 +402,25 @@ TEST_CASE(psd_round_trip) {
     Document edited = imported->document;
     saveSelectionInto(edited.channels[0], rectSelection(Rect(0, 0, 5, 5), SampleType::U16), SelectionMode::Replace, SampleType::U16, W, H);
     CHECK(encodePsd(edited, raw, nullptr, &error) != file);
+    // Damaged channel resources: a Unicode name list claiming billions of characters, a DisplayInfo cut short. The
+    // file still opens with its channels, named from the Pascal list.
+    {
+        std::vector<uint8_t> hostile = encodePsd(channelDocument(SampleType::U8), PsdExportOptions(), nullptr, &error);
+        auto resource = [&](uint16_t id) -> size_t {
+            for (size_t i = 0; i + 12 < hostile.size(); i++)
+                if (hostile[i] == '8' && hostile[i + 1] == 'B' && hostile[i + 2] == 'I' && hostile[i + 3] == 'M' && hostile[i + 4] == (id >> 8) && hostile[i + 5] == (id & 0xFF))
+                    return i + 4 + 2 + 2 + 4;   // signature, id, empty name (padded), length
+            return 0;
+        };
+        const size_t names = resource(1045), display = resource(1077);
+        REQUIRE(names && display);
+        for (int k = 0; k < 4; k++) hostile[names + size_t(k)] = 0xFF;
+        for (int k = 4; k < 12; k++) hostile[display + size_t(k)] = 0xFF;
+        auto opened = importPsdBytes(hostile, &error);
+        REQUIRE(opened);
+        REQUIRE(opened->document.channels.size() == 3);
+        CHECK_EQ(opened->document.channels[0].name, std::string("Alpha 1"));
+    }
     // A document without channels writes what it always did: four channels.
     const std::vector<uint8_t> plain = encodePsd(grayDocument(), PsdExportOptions(), nullptr, &error);
     REQUIRE(plain.size() > 14);
