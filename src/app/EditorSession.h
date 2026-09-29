@@ -720,6 +720,7 @@ public:
     bool deleteSlice(uint32_t id);
     /// The document rendered over `rect` (clipped to the canvas); null when nothing of it is on the canvas.
     std::shared_ptr<compositor::Image> renderRect(const QRect& rect) const;
+    std::shared_ptr<compositor::Image16> renderRect16(const QRect& rect) const;
     /// File ▸ Export Artboards to Files / Export Slices: each one written to `directory` as `format` ("png" or "jpeg"),
     /// named `prefix` + its name. Returns the paths written; `error` says why one failed.
     QStringList exportArtboards(const QString& directory, const QString& format, const QString& prefix, int quality, QString* error);

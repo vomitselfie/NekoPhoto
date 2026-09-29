@@ -168,7 +168,6 @@ void AutomationServer::registerDocumentHandlers() {
         // want (the default for GIF, which has no profile).
         const bool gif = suffix == "gif";
         const color::ExportPlan plan = color::exportPlan(doc, flag(p, "convertToSrgb", gif), flag(p, "embedProfile", true));
-        if (suffix == "svg" && deep) fail("SVG export is not available for 16-bit documents yet");
         if (suffix == "svg") {
             // Shape layers as paths, folders as groups, the rest as embedded PNGs (compositor/svg.h).
             SvgExportSummary summary;
@@ -176,7 +175,8 @@ void AutomationServer::registerDocumentHandlers() {
             if (!compositor::exportSvg(doc, path.toStdString(), &summary, &error)) fail("couldn't write " + path + ": " + qs(error));
             QJsonArray notes;
             for (auto& n : summary.notes) notes.append(qs(n));
-            return QJsonObject{{"path", path}, {"width", doc.width}, {"height", doc.height}, {"shapes", summary.shapes}, {"images", summary.images}, {"groups", summary.groups}, {"notes", notes}};
+            return QJsonObject{{"path", path}, {"width", doc.width}, {"height", doc.height}, {"shapes", summary.shapes}, {"images", summary.images}, {"groups", summary.groups}, {"notes", notes},
+                               {"bits", deep ? 16 : 8}};
         }
         if (suffix == "gif") {
             // The timeline's frames as an animated GIF, or the composite as a still one.
@@ -186,7 +186,9 @@ void AutomationServer::registerDocumentHandlers() {
             if (plan.convert) { converted = document(); convertDocumentProfile(*converted, {}, {}); }
             if (!writeDocumentGif(path.toStdString(), converted ? *converted : document(), &error)) fail("couldn't write " + path + ": " + qs(error));
             const Document& shown = document();
-            return QJsonObject{{"path", path}, {"width", shown.width}, {"height", shown.height}, {"frames", std::max(1, int(shown.animation.frames.size()))}};
+            QJsonObject out{{"path", path}, {"width", shown.width}, {"height", shown.height}, {"frames", std::max(1, int(shown.animation.frames.size()))}, {"bits", 8}};
+            if (deep) out["note"] = "reduced from 16 to 8 bits per channel with dithering";
+            return out;
         }
         // A 16-bit document as a 16-bit PNG (and TIFF, when Qt writes one); the 8-bit formats get it dithered down.
         if (deep && (suffix == "png" || ((suffix == "tif" || suffix == "tiff") && canWriteDeepTiff()))) {

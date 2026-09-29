@@ -77,6 +77,14 @@ QJsonObject exported(const QStringList& files, const QString& error) {
     return QJsonObject{{"files", list}, {"count", int(files.size())}};
 }
 
+/// The files' depth: a 16-bit document writes 16-bit PNGs, and JPEGs dithered down to 8 bits (said in `note`).
+QJsonObject exportedAtDepth(QJsonObject out, const EditorSession& session, const QString& format) {
+    const bool deep = session.sampleType() == SampleType::U16, png = format.toLower() == "png";
+    out["bits"] = deep && png ? 16 : 8;
+    if (deep && !png) out["note"] = "reduced from 16 to 8 bits per channel with dithering";
+    return out;
+}
+
 } // namespace
 
 void AutomationServer::registerArtboardHandlers() {
@@ -122,7 +130,7 @@ void AutomationServer::registerArtboardHandlers() {
         document();
         QString error;
         const QStringList files = session()->exportArtboards(str(p, "directory"), str(p, "format", "png"), str(p, "prefix", QString()), integer(p, "quality", 90), &error);
-        return exported(files, error);
+        return exportedAtDepth(exported(files, error), *session(), str(p, "format", "png"));
     });
 
     // ---- slices
@@ -158,7 +166,7 @@ void AutomationServer::registerArtboardHandlers() {
         document();
         QString error;
         const QStringList files = session()->exportSlices(str(p, "directory"), str(p, "format", "png"), str(p, "prefix", QString()), integer(p, "quality", 90), &error);
-        return exported(files, error);
+        return exportedAtDepth(exported(files, error), *session(), str(p, "format", "png"));
     });
 }
 

@@ -1,5 +1,7 @@
 // SVG import and export (svg.h): shapes become vector shape layers with their colours, transforms and fill rules;
 // what the shape model cannot hold is handed on as raster parts; a document written to SVG reads back the same.
+#include <string>
+#include <vector>
 #include "check.h"
 #include "compositor/render.h"
 #include "compositor/svg.h"
@@ -222,6 +224,51 @@ TEST_CASE(export_and_read_back) {
     for (int y = 0; y < a->height(); y++)
         for (int x = 0; x < a->width() * 4; x++) worst = std::max(worst, std::abs(int(a->row(y)[x]) - int(b->row(y)[x])));
     CHECK(worst <= 2);
+}
+
+TEST_CASE(sixteen_bit_documents_export_sixteen_bit_images) {
+    // A 16-bit document's pixel layers and folder masks go into the SVG as 16-bit PNGs, shapes as paths as ever.
+    Document doc(64, 48);
+    auto ramp = std::make_shared<Image16>(40, 20);
+    for (int y = 0; y < 20; y++) for (int x = 0; x < 40; x++) { uint16_t* p = ramp->pixel(x, y); p[0] = uint16_t(8000 + x * 37); p[1] = 12000; p[2] = 30000; p[3] = 32768; }
+    Layer folder("Folder", doc.size());
+    folder.isGroup = true;
+    folder.passThrough = false;
+    auto soft = std::make_shared<Gray16>(64, 48);
+    for (int y = 0; y < 48; y++) for (int x = 0; x < 64; x++) soft->at(x, y) = uint16_t(x * 512);
+    folder.mask = LayerMask();
+    folder.mask->asset = MaskAsset::make(Gray16Ptr(soft));
+    Layer pixels(Asset::makeAny(Image16Ptr(ramp), "Ramp"), Point(4, 4));
+    pixels.parentId = folder.id;
+    doc.layers = {folder, pixels};
+    doc.sampleType = SampleType::U16;
+    SvgExportSummary summary;
+    const std::string text = writeSvg(doc, &summary);
+    CHECK_EQ(summary.images, 1);
+    // Every embedded PNG (the image and the folder's mask) is 16 bits a channel: the IHDR's bit depth, byte 24.
+    auto decode = [](const std::string& b64) {
+        std::vector<uint8_t> out;
+        uint32_t buffer = 0;
+        int bits = 0;
+        for (char c : b64) {
+            int v = c >= 'A' && c <= 'Z' ? c - 'A' : c >= 'a' && c <= 'z' ? c - 'a' + 26 : c >= '0' && c <= '9' ? c - '0' + 52 : c == '+' ? 62 : c == '/' ? 63 : -1;
+            if (v < 0) break;
+            buffer = (buffer << 6) | uint32_t(v);
+            bits += 6;
+            if (bits >= 8) { bits -= 8; out.push_back(uint8_t(buffer >> bits)); }
+        }
+        return out;
+    };
+    int pngs = 0;
+    const std::string marker = "data:image/png;base64,";
+    for (size_t at = text.find(marker); at != std::string::npos; at = text.find(marker, at + 1)) {
+        const size_t start = at + marker.size();
+        const std::vector<uint8_t> png = decode(text.substr(start, 64));
+        REQUIRE(png.size() > 25);
+        CHECK_EQ(int(png[24]), 16);
+        pngs++;
+    }
+    CHECK(pngs >= 2);
 }
 
 TEST_MAIN()

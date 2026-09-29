@@ -165,6 +165,7 @@ u16/adjust_layer/posterize 4c9e4ff148ce3a4e
 u16/adjust_layer/selective_color ca03e89dffe0c861
 u16/adjust_layer/threshold 4fd6346746e4e01c
 u16/adjust_layer/vibrance 58bebb3d9daca328
+u16/artboard/backgrounds_and_clipping 3ac0c7755467286f
 u16/blend/color 5825725ee63b846c
 u16/blend/color@0.5 e638c90cf16f5c35
 u16/blend/color_burn 51714dedf8001fab
@@ -225,6 +226,8 @@ u16/camera_raw/detail_optics c47426ee5832053e
 u16/camera_raw/effects 7e48353457c0603f
 u16/camera_raw/geometry b3a9a9ce871dab65
 u16/camera_raw/light a5971e4a87834586
+u16/export/artboard_rect 96889daae3a81d02
+u16/export/svg 726261fedab83944
 u16/fill_layer/gradient c8af46e5fa6b5d53
 u16/filter/add_noise_gaussian_mono 3f270c0ca8067784
 u16/filter/add_noise_uniform 4ba05a38e6a1d598
@@ -278,5 +281,6 @@ u16/style/outer_glow 6ac810df2050d00f
 u16/style/pattern_overlay ee4fb5cdf7816a29
 u16/style/satin a97c1f91c6be613d
 u16/style/stroke c09bec720e56b115
+u16/timeline/second_frame 0dee6d1d4573d275
 u16/vector_mask/pixel_layer 32ac1fbb1d1658af
 u16/vector_mask/pixel_layer@0.5 446e54c499c45458

@@ -17,6 +17,7 @@
 // - Color Lookup: needs a LUT file; its interpolation is exercised by its own tests.
 #include "check.h"
 #include "compositor/adjustments.h"
+#include "compositor/animation.h"
 #include "compositor/blur.h"
 #include "compositor/brush.h"
 #include "compositor/cameraraw.h"
@@ -35,6 +36,7 @@
 #include "compositor/psd_carry.h"
 #include "compositor/smartfilter.h"
 #include "compositor/smartobject_edit.h"
+#include "compositor/svg.h"
 #include "compositor/vectorlayer.h"
 #include "compositor/vectormask.h"
 
@@ -957,6 +959,63 @@ void add16BitLateScenes() {
     scene("u16/camera_raw/detail_optics", cameraRaw([](CameraRawSettings& s) {
         s.detail.sharpenAmount = 60; s.detail.noiseLuminance = 30; s.optics.distortion = 20; s.optics.removeChromaticAberration = true; }));
     scene("u16/camera_raw/geometry", cameraRaw([](CameraRawSettings& s) { s.geometry.rotate = 4; s.geometry.vertical = 15; }));
+    // Artboards at 16 bits: a coloured and a white background, a child clipped at an artboard's edge, a soft layer
+    // across both; and the timeline's second frame (the child hidden, the soft layer moved).
+    auto artboards = [] {
+        Document doc = goldenBase();
+        Layer board("Artboard 1", doc.size());
+        board.isGroup = true;
+        Artboard a;
+        a.x = 20; a.y = 10; a.width = 90; a.height = 70;
+        a.background = Artboard::Other;
+        a.red = 0.2; a.green = 0.5; a.blue = 0.8;
+        board.artboard = a;
+        Layer child = layerOf("paint", paint(64, 48, 3), {70, 30});   // reaches past the right edge (110)
+        child.parentId = board.id;
+        Layer second("Artboard 2", doc.size());
+        second.isGroup = true;
+        Artboard b;
+        b.x = 130; b.y = 20; b.width = 60; b.height = 50;
+        b.background = Artboard::White;
+        second.artboard = b;
+        Layer soft = layerOf("soft", paint(80, 40, 5), {100, 40});
+        soft.opacity = 0.6;
+        soft.parentId = second.id;
+        std::vector<Layer> layers = doc.layers;
+        layers.insert(layers.end(), {child, board, soft, second});
+        doc.layers = layers;
+        return sixteen(doc);
+    };
+    scene("u16/artboard/backgrounds_and_clipping", [artboards] { return hash16(artboards()); });
+    scene("u16/timeline/second_frame", [artboards] {
+        Document doc = artboards();
+        ensureAnimation(doc);
+        NEED(duplicateFrame(doc, 0));
+        for (const Layer& l : doc.layers) {
+            if (l.name == "paint") doc.animation.frames[1].layers[l.id].visible = false;
+            if (l.name == "soft") doc.animation.frames[1].layers[l.id].position = l.transform.origin + Point(-30, 12);
+        }
+        applyFrame(doc, doc.animation.frames[1]);
+        return hash16(doc);
+    });
+    // Exporting from a 16-bit document: an artboard's rectangle as Export Artboards renders it, and the SVG's markup.
+    scene("u16/export/artboard_rect", [artboards] {
+        Image16 out;
+        RenderOptions options;
+        options.region = {20, 10, 90, 70};
+        render16(artboards(), options, out);
+        return hashImage16(out);
+    });
+    scene("u16/export/svg", [artboards] {
+        // The markup, without the PNG payloads (their bytes depend on the zlib build; the pixels are the scene above).
+        std::string text = writeSvg(artboards());
+        const std::string marker = "base64,";
+        for (size_t at = text.find(marker); at != std::string::npos; at = text.find(marker, at + marker.size()))
+            text.erase(at + marker.size(), text.find('"', at) - at - marker.size());
+        Fnv f;
+        f.bytes(reinterpret_cast<const uint8_t*>(text.data()), text.size());
+        return f.h;
+    });
     // Remove Background at 16 bits: a coarse mask refined on the float plane (guided filter, matting, cleanup) against
     // the 8-bit guide, the 16-bit layer decontaminated with it, and the 16-bit mask laid over it.
     scene("u16/remove_background/refined_and_decontaminated", [] {

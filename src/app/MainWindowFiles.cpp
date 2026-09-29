@@ -563,6 +563,7 @@ void MainWindow::exportGif() {
     const bool ok = compositor::writeDocumentGif(path.toStdString(), converted ? *converted : *session_->document(), &error);
     QApplication::restoreOverrideCursor();
     if (!ok) showError(tr("Couldn’t export the GIF"), QString::fromStdString(error));
+    else if (session_->sampleType() != SampleType::U8) noteDitheredExport(path);
     else statusBar()->showMessage(tr("Exported %n frame(s) to %1", nullptr, std::max(1, int(session_->document()->animation.frames.size()))).arg(QFileInfo(path).fileName()), 6000);
 }
 
@@ -703,6 +704,8 @@ void MainWindow::exportBoxes(bool slices) {
     const QStringList written = slices ? session_->exportSlices(directory, fmt, prefix->text(), quality->value(), &error)
                                        : session_->exportArtboards(directory, fmt, prefix->text(), quality->value(), &error);
     if (!error.isEmpty()) showError(tr("Couldn’t export"), error);
+    else if (session_->sampleType() != SampleType::U8 && fmt != "png")
+        statusBar()->showMessage(tr("Wrote %n file(s) to %1, reduced from 16 to 8 bits per channel with dithering.", "", int(written.size())).arg(directory), 8000);
     else statusBar()->showMessage(tr("Wrote %n file(s) to %1", "", int(written.size())).arg(directory), 8000);
 }
 

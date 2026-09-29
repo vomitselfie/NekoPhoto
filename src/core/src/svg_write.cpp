@@ -3,6 +3,10 @@
 // by the compositor, so the file always looks like the document. Adjustment layers and blend modes CSS lacks merge
 // everything below them in their folder into one image. Ported from Patchy (MIT,
 // src/third_party/patchy_psd/README.md): formats/svg_document_write.cpp and formats/vector_export_plan.cpp.
+//
+// A 16-bit document's images and folder masks are rendered at 16 bits and embedded as 16-bit PNGs, so the file keeps
+// the document's precision (an SVG <image> takes any PNG).
+#include "compositor/depth.h"
 #include "compositor/layerstyle.h"
 #include "compositor/png.h"
 #include "compositor/render.h"
@@ -14,6 +18,7 @@
 #include <map>
 #include <set>
 #include <sstream>
+#include <type_traits>
 
 namespace compositor {
 
@@ -202,7 +207,7 @@ struct Writer {
             const Layer& l = *it->second;
             styleReach(l);
             if (l.isGroup) continue;
-            if (!l.asset || !l.asset->image.u8()) return canvas;
+            if (!l.asset || !l.asset->image) return canvas;
             const Rect b = l.transform.bounds();
             area = any ? area.unionWith(b) : b;
             any = true;
@@ -215,7 +220,8 @@ struct Writer {
     /// The document with only `showing` (and what they hold) drawn, their folders neutral (the <g> elements carry
     /// those), and `neutral` at full opacity in Normal: the pixels one <image> stands for, over `origin` (document
     /// pixels) of the area they can reach.
-    std::shared_ptr<Image> renderOnly(const std::vector<const Layer*>& showing, const Layer* neutral, Point& origin) const {
+    /// At the document's depth: `Image16` for a 16-bit document, else `Image`.
+    AnyImage renderOnly(const std::vector<const Layer*>& showing, const Layer* neutral, Point& origin) const {
         std::set<Uuid> keep, ancestors;
         for (const Layer* l : showing) {
             descendants(*l, keep);
@@ -233,26 +239,39 @@ struct Writer {
             else if (neutral && l.id == neutral->id) { l.visible = true; l.opacity = 1; l.blendMode = BlendMode::Normal; }
             copy.layers.push_back(std::move(l));
         }
-        auto out = std::make_shared<Image>(int(region.width), int(region.height));
         RenderOptions options;
         options.region = region;
-        render(copy, options, *out);
         origin = Point(region.x, region.y);
-        return out;
+        if (copy.sampleType == SampleType::U16) {
+            auto out = std::make_shared<Image16>(int(region.width), int(region.height));
+            render16(copy, options, *out);
+            return Image16Ptr(out);
+        }
+        auto out = std::make_shared<Image>(int(region.width), int(region.height));
+        render(copy, options, *out);
+        return ImagePtr(out);
     }
 
-    void emitImage(const Image& pixels, Point origin, const std::string& name, const std::string& style, int depth) {
+    void emitImage(const AnyImage& image, Point origin, const std::string& name, const std::string& style, int depth) {
+        image.visit([&](const auto& pixels) { if (pixels) emitImage(*pixels, origin, name, style, depth); });
+    }
+
+    template <class ImageT>
+    void emitImage(const ImageT& pixels, Point origin, const std::string& name, const std::string& style, int depth) {
         int x0 = pixels.width(), y0 = pixels.height(), x1 = -1, y1 = -1;
         for (int y = 0; y < pixels.height(); y++) {
-            const uint8_t* row = pixels.row(y);
+            const auto* row = pixels.row(y);
             for (int x = 0; x < pixels.width(); x++)
                 if (row[x * 4 + 3]) { x0 = std::min(x0, x); x1 = std::max(x1, x); y0 = std::min(y0, y); y1 = y; }
         }
         if (x1 < 0) return;   // nothing shows
-        Image crop(x1 - x0 + 1, y1 - y0 + 1);
+        ImageT crop(x1 - x0 + 1, y1 - y0 + 1);
         for (int y = 0; y < crop.height(); y++) std::copy_n(pixels.row(y0 + y) + x0 * 4, crop.width() * 4, crop.row(y));
         std::vector<uint8_t> png;
-        if (!encodePngImage(crop, png)) { note("An image could not be encoded and was left out."); return; }
+        bool encoded = false;
+        if constexpr (std::is_same_v<ImageT, Image16>) encoded = encodePngImage16(crop, png);
+        else if constexpr (std::is_same_v<ImageT, Image>) encoded = encodePngImage(crop, png);
+        if (!encoded) { note("An image could not be encoded and was left out."); return; }
         const std::string data = "data:image/png;base64," + base64(png);
         indent(body, depth);
         body += "<image id=\"" + escape(uniqueId(name)) + "\" x=\"" + std::to_string(int(origin.x) + x0) + "\" y=\"" + std::to_string(int(origin.y) + y0) + "\" width=\"" + std::to_string(crop.width())
@@ -268,7 +287,7 @@ struct Writer {
         else if (base.isGroup) note("Folder \"" + base.name + "\" was written as one image (SVG cannot draw its style or blending).");
         else if (isVectorShapeLayer(base)) note("Shape layer \"" + base.name + "\" was written as an image (its style, mask, path combination or gradient or pattern paint has no SVG form).");
         Point origin;
-        if (auto pixels = renderOnly(run, &base, origin)) emitImage(*pixels, origin, base.name, css(base), depth);
+        if (auto pixels = renderOnly(run, &base, origin)) emitImage(pixels, origin, base.name, css(base), depth);
     }
 
     // ---- Shapes --------------------------------------------------------------------------------------------------
@@ -367,6 +386,8 @@ struct Writer {
 
     std::string folderMask(const Layer& folder) {
         std::string out;
+        std::vector<uint8_t> png;
+        bool encoded = false;
         if (folder.mask && folder.mask->enabled && folder.mask->asset.image.u8()) {
             GrayImage coverage(document.width, document.height, 0);
             const uint8_t outside = folder.mask->asset.thumbnail ? LayerMask::background(*folder.mask->asset.thumbnail) : 255;
@@ -377,8 +398,22 @@ struct Writer {
                 uint8_t* d = grey.row(y);
                 for (int x = 0; x < document.width; x++) { d[x * 4] = d[x * 4 + 1] = d[x * 4 + 2] = s[x]; d[x * 4 + 3] = 255; }
             }
-            std::vector<uint8_t> png;
-            if (encodePngImage(grey, png)) {
+            encoded = encodePngImage(grey, png);
+        } else if (folder.mask && folder.mask->enabled && folder.mask->asset.image.u16()) {
+            // A 16-bit mask, as a 16-bit gray image.
+            Gray16 coverage(document.width, document.height, 0);
+            const uint16_t outside = widen8(folder.mask->asset.thumbnail ? LayerMask::background(*folder.mask->asset.thumbnail) : 255);
+            sampleMaskCoverage(folder.mask->asset.image.u16(), folder.maskTransform(), document.rect(), 1, outside, coverage, false);
+            Image16 grey(document.width, document.height);
+            for (int y = 0; y < document.height; y++) {
+                const uint16_t* s = coverage.row(y);
+                uint16_t* d = grey.row(y);
+                for (int x = 0; x < document.width; x++) { d[x * 4] = d[x * 4 + 1] = d[x * 4 + 2] = s[x]; d[x * 4 + 3] = uint16_t(one16); }
+            }
+            encoded = encodePngImage16(grey, png);
+        }
+        {
+            if (encoded) {
                 const std::string id = "mask" + std::to_string(++masks), data = "data:image/png;base64," + base64(png);
                 defs += "<mask id=\"" + id + "\" maskUnits=\"userSpaceOnUse\" x=\"0\" y=\"0\" width=\"" + std::to_string(document.width) + "\" height=\"" + std::to_string(document.height)
                       + "\"><image x=\"0\" y=\"0\" width=\"" + std::to_string(document.width) + "\" height=\"" + std::to_string(document.height) + "\" href=\"" + data + "\" xlink:href=\"" + data + "\"/></mask>";
@@ -443,7 +478,7 @@ struct Writer {
             for (size_t i = 0; i < start; i++) for (const Layer* l : units[i]) { merged.push_back(l); names += (names.empty() ? "" : ", ") + l->name; }
             note("Merged into one image, as SVG has no adjustment layers or these blend modes: " + names + ".");
             Point origin;
-            if (auto pixels = renderOnly(merged, nullptr, origin)) emitImage(*pixels, origin, "Merged", "", depth);
+            if (auto pixels = renderOnly(merged, nullptr, origin)) emitImage(pixels, origin, "Merged", "", depth);
         }
         for (size_t i = start; i < units.size(); i++) {
             const auto& unit = units[i];

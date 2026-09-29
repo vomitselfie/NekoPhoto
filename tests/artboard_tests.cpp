@@ -1,5 +1,8 @@
 // Artboards and slices: the Photoshop blocks both ways, the renderer's clip and background, and the round trip
 // through PSD and the project package.
+#include <algorithm>
+#include "compositor/gif.h"
+#include "compositor/depth.h"
 #include "check.h"
 #include "compositor/artboard.h"
 #include "compositor/project.h"
@@ -292,6 +295,36 @@ TEST_CASE(artboards_slices_project_round_trip) {
     Document plain(10, 10);
     CHECK(manifestJson(plain, std::nullopt).find("\"version\": 7") != std::string::npos);
     std::filesystem::remove_all(dir);
+}
+
+TEST_CASE(artboards_and_frames_at_sixteen_bits) {
+    // The artboard document converted to 16 bits: backgrounds and clipping drawn by the 16-bit renderer, within a
+    // level of the 8-bit render (they are exact: flat backgrounds and an opaque child).
+    Document doc = artboardDocument();
+    Document deep = doc;
+    std::string error;
+    REQUIRE(convertSampleType(deep, SampleType::U16, &error));
+    auto eight = renderFlattened(doc);
+    auto sixteen = narrowImage(*renderFlattened16(deep));
+    int worst = 0;
+    for (int y = 0; y < eight->height(); y++)
+        for (int i = 0; i < eight->width() * 4; i++) worst = std::max(worst, std::abs(int(eight->row(y)[i]) - int(sixteen->row(y)[i])));
+    CHECK_EQ(worst, 0);
+    CHECK_EQ(int(at(*sixteen, 55, 25)[3]), 0);   // the child past the edge is clipped at 16 bits too
+    // Two frames (the blue child shown, then hidden), rendered at 16 bits and written as a GIF dithered to 8 bits.
+    ensureAnimation(deep);
+    REQUIRE(duplicateFrame(deep, 0));
+    const Uuid child = deep.layers[0].id;
+    deep.animation.frames[1].layers[child].visible = false;
+    const std::vector<uint8_t> gif = encodeDocumentGif(deep, &error);
+    REQUIRE(!gif.empty());
+    CHECK_EQ(gifFrameCount(gif), 2);
+    auto imported = importGifBytes(gif, &error);
+    REQUIRE(imported && imported->document.layers.size() == 2);
+    const Image& shown = *imported->document.layers[0].asset->image.u8();
+    const Image& hidden = *imported->document.layers[1].asset->image.u8();
+    CHECK_EQ(int(shown.pixel(45, 25)[2]), 255);    // the child in the first frame
+    CHECK_EQ(int(hidden.pixel(45, 25)[0]), 255);   // the red background in the second
 }
 
 TEST_MAIN()

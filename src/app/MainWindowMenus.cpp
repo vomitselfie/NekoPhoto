@@ -170,13 +170,13 @@ void MainWindow::buildMenus() {
     needsDocument(file->addAction(tr("Export as Photoshop &Document (PSD)…"), this, &MainWindow::exportPsd), "export.psd");
     needsDocument(file->addAction(tr("Export &PNG…"), QKeySequence("Ctrl+Shift+E"), this, &MainWindow::exportPng), "export.png");
     needsDocument(file->addAction(tr("Export &JPEG…"), QKeySequence("Ctrl+Alt+Shift+S"), this, &MainWindow::exportJpeg), "export.jpeg");
-    needsDocument(file->addAction(tr("Export S&VG…"), this, &MainWindow::exportSvg));
+    needsDocument(file->addAction(tr("Export S&VG…"), this, &MainWindow::exportSvg), "export.svg");
     if (canWriteImageFormat("webp")) needsDocument(file->addAction(tr("Export &WebP…"), this, &MainWindow::exportWebp), "export.webp");
     if (canWriteImageFormat("tiff")) needsDocument(file->addAction(tr("Export &TIFF…"), this, &MainWindow::exportTiff), "export.tiff");
     needsDocument(file->addAction(tr("Export T&GA…"), this, &MainWindow::exportTga), "export.tga");
     needsDocument(file->addAction(tr("Export &Icon (ICO)…"), this, &MainWindow::exportIco), "export.ico");
-    needsDocument(file->addAction(tr("Export Artboards to Files…"), this, [this] { exportBoxes(false); }));
-    needsDocument(file->addAction(tr("Export S&lices…"), this, [this] { exportBoxes(true); }));
+    needsDocument(file->addAction(tr("Export Artboards to Files…"), this, [this] { exportBoxes(false); }), "export.artboards");
+    needsDocument(file->addAction(tr("Export S&lices…"), this, [this] { exportBoxes(true); }), "export.slices");
     needsDocument(file->addAction(tr("E&xport Animated GIF…"), this, &MainWindow::exportGif), "export.gif");
     file->addSeparator();
     QMenu* automate = file->addMenu(tr("A&utomate"));
@@ -423,8 +423,8 @@ void MainWindow::buildMenus() {
     QMenu* mask = layer->addMenu(tr("Layer &Mask"));
     needsDocument(mask->addAction(tr("Reveal All"), this, [this] { session_->addLayerMask(true); recordAction("layers.mask", {{"action", "add"}}); }), "layers.mask");
     needsDocument(mask->addAction(tr("Hide All"), this, [this] { session_->addLayerMask(false); recordAction("layers.mask", {{"action", "add"}, {"revealing", false}}); }), "layers.mask");
-    needsDocument(mask->addAction(tr("From Selection (Reveal)"), this, [this] { session_->addMaskFromSelection(true); recordAction("layers.mask", {{"action", "addFromSelection"}}); }));
-    needsDocument(mask->addAction(tr("From Selection (Hide)"), this, [this] { session_->addMaskFromSelection(false); recordAction("layers.mask", {{"action", "addFromSelection"}, {"revealing", false}}); }));
+    needsDocument(mask->addAction(tr("From Selection (Reveal)"), this, [this] { session_->addMaskFromSelection(true); recordAction("layers.mask", {{"action", "addFromSelection"}}); }), "edit.selection");
+    needsDocument(mask->addAction(tr("From Selection (Hide)"), this, [this] { session_->addMaskFromSelection(false); recordAction("layers.mask", {{"action", "addFromSelection"}, {"revealing", false}}); }), "edit.selection");
     mask->addSeparator();
     needsDocument(mask->addAction(tr("Enable / Disable"), this, [this] { session_->toggleLayerMask(); recordAction("layers.mask", {{"action", "toggle"}}); }), "layers.mask");
     needsDocument(mask->addAction(tr("Invert"), this, [this] { session_->invertMask(); recordAction("layers.mask", {{"action", "invert"}}); }), "layers.mask");

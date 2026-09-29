@@ -183,7 +183,7 @@ bool worksAtDepth(const QString& method, const EditorSession& session) {
         "document.new", "document.open", "document.close", "document.info", "document.overview",
         "layers.list", "layers.get", "layers.select", "layers.style", "layers.cage", "selection.info", "selection.render",
         "adjustments.get", "adjustments.defaults", "paths.list", "vectorMask.get", "shape.get", "smartObject.filters", "timeline.info",
-        "artboards.list", "slices.list"};
+        "artboards.list", "slices.list", "brush.import", "presets.import", "presets.remove"};
     static const QHash<QString, const char*> features = {
         {"document.save", "document.save"}, {"document.export", "render.document"}, {"document.import", "document.import"}, {"image.mode", "document.mode"}, {"document.profile", "document.profile"},
         {"layers.set", "layers.structure"}, {"layers.add", "layers.structure"}, {"layers.delete", "layers.structure"}, {"layers.duplicate", "layers.structure"},
@@ -193,6 +193,8 @@ bool worksAtDepth(const QString& method, const EditorSession& session) {
         {"slices.add", "tool.slice"}, {"slices.set", "tool.slice"}, {"slices.delete", "tool.slice"},
         {"pixels.adjust", "adjustment.pixels"}, {"pixels.invert", "adjustment.Invert"}, {"adjustments.set", "adjustment.pixels"},
         {"pixels.filter", "filter.pixels"}, {"pixels.mosh", "filter.Mosh"}, {"pixels.cameraRaw", "filter.Camera Raw"}, {"pixels.gmic", "filter.G'MIC"}, {"pixels.removeBackground", "edit.removeBackground"},
+        {"artboards.add", "edit.artboard"}, {"artboards.set", "edit.artboard"}, {"artboards.delete", "edit.artboard"}, {"artboards.export", "export.artboards"},
+        {"slices.export", "export.slices"}, {"timeline.frame", "edit.timeline"}, {"timeline.set", "edit.timeline"}, {"debug.eye", "layers.structure"}, {"debug.dragSmartFilter", "edit.smartObject"},
         {"selection.all", "edit.selection"}, {"selection.none", "edit.selection"}, {"selection.invert", "edit.selection"},
         {"selection.quickMask", "edit.selection"}, {"selection.rect", "edit.selection"}, {"selection.polygon", "edit.selection"},
         {"selection.wand", "edit.selection"}, {"selection.scribble", "edit.selection"}, {"selection.subject", "edit.selection"},

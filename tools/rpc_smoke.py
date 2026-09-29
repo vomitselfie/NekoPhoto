@@ -526,7 +526,8 @@ def sixteen_bit(rpc):
     rpc.call("layers.setTransform", id=converted16["id"], x=12, y=9)
     assert rpc.call("layers.get", id=converted16["id"])["kind"] == "smartObject"
     # Unsharp Mask as a 16-bit Smart Filter.
-    usm = rpc.call("smartObject.addFilter", id=converted16["id"], kind="unsharp mask")
+    assert rpc.call("smartObject.addFilter", id=converted16["id"], kind="unsharp mask")["kind"] == "smartObject"
+    usm = rpc.call("smartObject.filters", id=converted16["id"])
     assert any("Unsharp" in f["name"] for f in usm["filters"]), usm
     warped = rpc.call("layers.warp", id=placed16["id"], style="arc", bend=30)
     assert warped["kind"] == "smartObject", warped
@@ -536,13 +537,30 @@ def sixteen_bit(rpc):
     assert rpc.call("document.info")["bits"] == 16
     shot = rpc.call("render", maxSize=64)
     assert base64.b64decode(shot["png"])[:8] == b"\x89PNG\r\n\x1a\n"
-    # What is not ported yet is refused, saying so.
-    for method, params in (("tool.select", {"name": "artboard"}),):
-        try:
-            rpc.call(method, **params)
-            raise AssertionError(method + " should be refused on a 16-bit document")
-        except RuntimeError as e:
-            assert "not available for 16-bit documents yet" in str(e), e
+    # Artboards, slices and the timeline at 16 bits: made, exported (16-bit PNG; JPEG and GIF dithered down, saying
+    # so), SVG with 16-bit images.
+    assert rpc.call("tool.select", name="artboard")["tool"] == "artboard"
+    rpc.call("tool.select", name="move")
+    board = rpc.call("artboards.add", x=10, y=10, width=60, height=40, background="#204080", name="Deep board")
+    assert rpc.call("artboards.set", id=board["id"], x=14, moveContents=True)["x"] == 14
+    boards = rpc.call("artboards.export", directory=os.path.join(work, "deep_boards"))
+    assert boards["bits"] == 16 and len(boards["files"]) == 1, boards
+    with open(boards["files"][0], "rb") as f:
+        assert f.read(25)[24] == 16, "a 16-bit PNG artboard"
+    rpc.call("slices.add", x=0, y=0, width=30, height=20, name="deep")
+    cut = rpc.call("slices.export", directory=os.path.join(work, "deep_slices"), format="jpeg")
+    assert cut["bits"] == 8 and "dithering" in cut["note"], cut
+    svg = rpc.call("document.export", path=os.path.join(work, "deep.svg"))
+    assert svg["bits"] == 16 and svg["images"] >= 1, svg
+    assert rpc.call("timeline.frame", action="create")["count"] == 1
+    rpc.call("timeline.frame", action="duplicate")
+    rpc.call("layers.set", id=board["id"], visible=False)
+    rpc.call("timeline.set", delay=200, loopCount=0)
+    assert rpc.call("timeline.info")["count"] == 2
+    gif = rpc.call("document.export", path=os.path.join(work, "deep.gif"))
+    assert gif["frames"] == 2 and gif["bits"] == 8 and "dithering" in gif["note"], gif
+    rpc.call("timeline.frame", action="clear")
+    rpc.call("artboards.delete", id=board["id"])
     # PNG at 16 bits; an 8-bit format dithered down, with a note.
     png = os.path.join(work, "deep.png")
     assert rpc.call("document.export", path=png)["bits"] == 16

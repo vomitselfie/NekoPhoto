@@ -139,6 +139,16 @@ constexpr FeatureSupport table[] = {
     // dialog, copy, paste, clear and style presets.
     {"edit.style", eightAndSixteen},
 
+    // Artboards (their backgrounds and clipping drawn by the 16-bit renderer) and the Artboard tool; the timeline's
+    // frames and playback (layer states, no pixels); exporting artboards and slices (16-bit PNG, or JPEG dithered
+    // down to 8 bits) and SVG (images and folder masks embedded as 16-bit PNGs).
+    {"edit.artboard", eightAndSixteen},
+    {"tool.artboard", eightAndSixteen},
+    {"edit.timeline", eightAndSixteen},
+    {"export.artboards", eightAndSixteen},
+    {"export.slices", eightAndSixteen},
+    {"export.svg", eightAndSixteen},
+
     // Smart objects: sources at their own depth, placed at the document's; Place Embedded, Convert (a 16-bit
     // child PSB), Edit Contents, Replace, Rasterize, warps, and Smart Filters with their 16-bit kernels
     // (smartfilter_render16.cpp).

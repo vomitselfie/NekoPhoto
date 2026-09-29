@@ -1,6 +1,7 @@
 // EditorSession: artboards (folders with a rectangle and a background) and slices (named export rectangles).
 #include "EditorSession.h"
 #include "ImageConvert.h"
+#include "compositor/depth.h"
 #include "compositor/png.h"
 #include "compositor/render.h"
 #include <QDir>
@@ -146,6 +147,17 @@ std::shared_ptr<Image> EditorSession::renderRect(const QRect& rect) const {
     return out;
 }
 
+std::shared_ptr<Image16> EditorSession::renderRect16(const QRect& rect) const {
+    if (!document_) return nullptr;
+    const QRect r = rect.intersected(QRect(0, 0, document_->width, document_->height));
+    if (r.isEmpty()) return nullptr;
+    auto out = std::make_shared<Image16>(r.width(), r.height());
+    RenderOptions options;
+    options.region = Rect(r.x(), r.y(), r.width(), r.height());
+    render16(*document_, options, *out);
+    return out;
+}
+
 namespace {
 
 bool writeOne(const Image& image, const QString& path, const QString& format, int quality, double dpi, QString* error) {
@@ -171,15 +183,21 @@ QStringList exportRects(const EditorSession& session, const std::vector<std::pai
     if (fmt != "png" && fmt != "jpeg") { if (error) *error = QObject::tr("The format must be png or jpeg."); return written; }
     if (!QDir().mkpath(directory)) { if (error) *error = QObject::tr("Could not create %1.").arg(directory); return written; }
     QStringList used;
+    // A 16-bit document: PNG at 16 bits, JPEG dithered down to 8.
+    const bool deep = session.sampleType() == SampleType::U16;
     for (const auto& [name, rect] : items) {
-        auto image = session.renderRect(rect);
-        if (!image) continue;
+        std::shared_ptr<Image16> image16 = deep ? session.renderRect16(rect) : nullptr;
+        std::shared_ptr<Image> image = deep ? (image16 && fmt != "png" ? ditherToEightBit(*image16) : nullptr) : session.renderRect(rect);
+        if (!image && !image16) continue;
         QString base = prefix + fileSafe(name, QStringLiteral("untitled"));
         QString candidate = base;
         for (int n = 2; used.contains(candidate, Qt::CaseInsensitive); n++) candidate = base + "-" + QString::number(n);
         used << candidate;
         const QString path = QDir(directory).filePath(candidate + (fmt == "png" ? ".png" : ".jpg"));
-        if (!writeOne(*image, path, fmt, quality, session.document()->resolution, error)) return written;
+        if (deep && fmt == "png") {
+            std::string why;
+            if (!writePngImage16(path.toStdString(), *image16, session.document()->resolution, &why)) { if (error) *error = QString::fromStdString(why); return written; }
+        } else if (!writeOne(*image, path, fmt, quality, session.document()->resolution, error)) return written;
         written << path;
     }
     return written;
