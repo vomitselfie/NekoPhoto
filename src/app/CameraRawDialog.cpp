@@ -183,8 +183,8 @@ QWidget* CameraRawDialog::basicPage() {
         [this, &s](int index) {
             s.whiteBalance = CameraRawWhiteBalance(index);
             // Auto: the gray-world balance of the layer's covered pixels fills Temperature and Tint.
-            if (s.whiteBalance == CameraRawWhiteBalance::Auto && source())
-                if (auto solved = CameraRawSettings::autoBalance(*source())) {
+            if (s.whiteBalance == CameraRawWhiteBalance::Auto && hasSource())
+                if (auto solved = source16() ? CameraRawSettings::autoBalance(*source16()) : CameraRawSettings::autoBalance(*source())) {
                     s.temperature = std::clamp((*solved)[0], -100.0, 100.0);
                     s.tint = std::clamp((*solved)[1], -100.0, 100.0);
                 }
@@ -401,16 +401,29 @@ std::shared_ptr<Image> CameraRawDialog::run(const Image& source, double scale, c
     return out;
 }
 
+std::shared_ptr<Image16> CameraRawDialog::run(const Image16& source, double scale, const CameraRawPreview& preview) const {
+    auto out = std::make_shared<Image16>(source);
+    applyCameraRaw(*out, settings_, scale, seed_, preview);
+    return out;
+}
+
 void CameraRawDialog::refreshPreview() {
-    if (finished() || !previewSource()) return;
+    if (finished() || !hasPreviewSource()) return;
     const bool overlays = preview_.shadowClipIndicator || preview_.highlightClipIndicator || preview_.sharpenMask;
     if (!previewing() || (settings_.normalized().isIdentity() && !overlays)) { clearPreview(); return; }
-    showPreview(run(*previewSource(), previewScale(), preview_), placement());
+    if (previewSource16()) showPreview(run(*previewSource16(), previewScale(), preview_), placement());
+    else showPreview(run(*previewSource(), previewScale(), preview_), placement());
 }
 
 bool CameraRawDialog::apply() {
     remembered() = settings_;
     if (settings_.normalized().isIdentity()) return true;   // an unchanged grade is not an edit
+    if (source16()) {
+        auto out = run(*source16(), 1, {});
+        throughSelection(*out);
+        commit(Image16Ptr(out), placement(), QT_TRANSLATE_NOOP("History", "Camera Raw Filter"));
+        return true;
+    }
     auto out = run(*source(), 1, {});
     throughSelection(*out);
     commit(out, placement(), QT_TRANSLATE_NOOP("History", "Camera Raw Filter"));

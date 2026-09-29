@@ -524,7 +524,7 @@ void MainWindow::buildMenus() {
         if (session_->smartObjectBlocksPixels(true)) return;
         if (!session_->canAdjustPixels()) { showError(tr("Camera Raw Filter"), tr("Select a visible image layer (not a mask) to filter its pixels.")); return; }
         (new CameraRawDialog(session_, this))->show();
-    }));
+    }), "filter.Camera Raw");
     filter->addSeparator();
     needsDocument(filter->addAction(tr("&G'MIC…"), QKeySequence("Ctrl+Shift+G"), this, [this] {
         if (session_->smartObjectBlocksPixels(true)) return;

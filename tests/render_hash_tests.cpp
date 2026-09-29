@@ -19,6 +19,7 @@
 #include "compositor/adjustments.h"
 #include "compositor/blur.h"
 #include "compositor/brush.h"
+#include "compositor/cameraraw.h"
 #include "compositor/depth.h"
 #include "compositor/document.h"
 #include "compositor/filters.h"
@@ -739,6 +740,7 @@ void add16BitSmartObjectScenes() {
         {"surface_blur_wide", smartfilter::SurfaceBlur{12, 30}}, {"motion_blur", smartfilter::MotionBlur{30, 14}},
         {"plastic_wrap", smartfilter::PlasticWrap{9, 7, 5}}, {"mosaic", smartfilter::Mosaic{8}}, {"emboss", smartfilter::Emboss{135, 3, 100}},
         {"box_blur", smartfilter::BoxBlur{4}}, {"radial_blur", smartfilter::RadialBlur{10, 16}}, {"add_noise", smartfilter::AddNoise{20, true, false, 5}},
+        {"unsharp_mask", smartfilter::UnsharpMask{150, 2, 8}},
     };
     for (const auto& [name, parameters] : filters)
         scene("u16/smart_filter/" + name, [parameters] {
@@ -935,6 +937,27 @@ std::map<std::string, std::string> readBaseline(const std::string& path) {
 
 } // namespace
 
+// ---- 16 bits: Camera Raw, Remove Background's matte, artboards and the timeline ------------------------------------
+
+void add16BitLateScenes() {
+    auto cameraRaw = [](std::function<void(CameraRawSettings&)> set) {
+        return [set] {
+            auto image = widenImage(*filterInput());
+            CameraRawSettings s;
+            set(s);
+            NEED(applyCameraRaw(*image, s, 1, 3));
+            return hashImage16(*image);
+        };
+    };
+    scene("u16/camera_raw/light", cameraRaw([](CameraRawSettings& s) { s.exposure = 0.6; s.contrast = 25; s.shadows = 40; s.vibrance = 30; }));
+    scene("u16/camera_raw/color", cameraRaw([](CameraRawSettings& s) {
+        s.curve.rgb = CameraRawCurveSettings::mediumContrast(); s.mixer.hue[1] = 20; s.grading.shadows = {220, 30, 0}; }));
+    scene("u16/camera_raw/effects", cameraRaw([](CameraRawSettings& s) { s.clarity = 30; s.dehaze = 20; s.vignetteAmount = -30; s.grainAmount = 20; }));
+    scene("u16/camera_raw/detail_optics", cameraRaw([](CameraRawSettings& s) {
+        s.detail.sharpenAmount = 60; s.detail.noiseLuminance = 30; s.optics.distortion = 20; s.optics.removeChromaticAberration = true; }));
+    scene("u16/camera_raw/geometry", cameraRaw([](CameraRawSettings& s) { s.geometry.rotate = 4; s.geometry.vertical = 15; }));
+}
+
 TEST_CASE(render_hashes_match_the_baseline_on_the_pool_and_serially) {
     addGoldenScenes();
     addBlendScenes();
@@ -945,6 +968,7 @@ TEST_CASE(render_hashes_match_the_baseline_on_the_pool_and_serially) {
     add16BitEditScenes();
     add16BitVectorScenes();
     add16BitSmartObjectScenes();
+    add16BitLateScenes();
 
     std::map<std::string, std::string> actual;
     int threadMismatch = 0;

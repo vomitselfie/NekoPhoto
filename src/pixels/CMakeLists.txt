@@ -14,6 +14,7 @@ add_library(compositor_pixels STATIC
     ${COMPOSITOR_PIXELS_DIR}/WandPixels.c
     # The Camera Raw kernels, extracted from upstream's newer AdjustPixels.c (the vendored one predates them).
     ${CMAKE_CURRENT_SOURCE_DIR}/CameraRawPixels.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/CameraRawPixelsFloat.c
 )
 add_library(compositor::pixels ALIAS compositor_pixels)
 

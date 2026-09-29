@@ -182,16 +182,25 @@ void AutomationServer::registerPixelsHandlers() {
         if (settings.whiteBalance == CameraRawWhiteBalance::Auto && !obj(p, "settings").contains("temperature") && !obj(p, "settings").contains("tint")) {
             // Auto without explicit numbers: the gray-world balance of the layer, as the dialog's White Balance > Auto.
             LayerTransform probe;
-            if (auto layer = s->adjustmentSource(0, probe))
-                if (auto solved = CameraRawSettings::autoBalance(*layer)) {
-                    settings.temperature = std::clamp((*solved)[0], -100.0, 100.0);
-                    settings.tint = std::clamp((*solved)[1], -100.0, 100.0);
-                }
+            std::optional<std::array<double, 2>> solved;
+            if (auto deep = s->adjustmentSource16(0, probe)) solved = CameraRawSettings::autoBalance(*deep);
+            else if (auto layer = s->adjustmentSource(0, probe)) solved = CameraRawSettings::autoBalance(*layer);
+            if (solved) {
+                settings.temperature = std::clamp((*solved)[0], -100.0, 100.0);
+                settings.tint = std::clamp((*solved)[1], -100.0, 100.0);
+            }
         }
         const CameraRawSettings normalized = settings.normalized();
         QJsonObject applied = QJsonDocument::fromJson(QByteArray::fromStdString(normalized.toJson())).object();
         if (normalized.isIdentity()) return QJsonObject{{"applied", false}, {"settings", applied}};
         LayerTransform transform;
+        if (auto deep = s->adjustmentSource16(0, transform)) {
+            auto out = std::make_shared<Image16>(*deep);
+            if (!applyCameraRaw(*out, normalized, 1, uint32_t(integer(p, "seed", 1)))) fail("settings are out of range", invalidParams);
+            if (auto coverage = s->selectionOnGrid16(transform, deep->width(), deep->height())) blendThroughCoverage(*out, *deep, *coverage);
+            s->commitPixels(Image16Ptr(out), transform, "Camera Raw Filter");
+            return QJsonObject{{"applied", true}, {"settings", applied}};
+        }
         auto source = s->adjustmentSource(0, transform);
         if (!source) fail("the active layer has no pixels; select a pixel layer with layers.select (document.overview shows each layer's kind)");
         auto out = std::make_shared<Image>(*source);

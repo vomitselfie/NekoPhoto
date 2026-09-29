@@ -381,6 +381,9 @@ def sixteen_bit(rpc):
     rpc.call("pixels.adjust", kind="Levels", settings={"ranges": [{"black": 10, "gamma": 1.3, "white": 240, "outputBlack": 0, "outputWhite": 255}]})
     rpc.call("pixels.filter", kind="Gaussian Blur", radius=2)
     assert rpc.call("pixels.mosh", effect="vhs", seed=3)["applied"] == "vhs"
+    # Camera Raw at 16 bits, White Balance > Auto included.
+    raw = rpc.call("pixels.cameraRaw", settings={"exposure": 0.4, "clarity": 20, "whiteBalance": "Auto", "detail": {"sharpenAmount": 30}})
+    assert raw["applied"] and rpc.call("history.info")["undo"] == "Camera Raw Filter", raw
     rpc.call("pixels.fill", color="#ffaa00")
     rpc.call("selection.rect", x=40, y=30, width=12, height=10)
     rpc.call("pixels.contentAwareFill")
@@ -520,7 +523,7 @@ def sixteen_bit(rpc):
     shot = rpc.call("render", maxSize=64)
     assert base64.b64decode(shot["png"])[:8] == b"\x89PNG\r\n\x1a\n"
     # What is not ported yet is refused, saying so.
-    for method, params in (("pixels.cameraRaw", {"settings": {"exposure": 0.5}}), ("tool.select", {"name": "artboard"})):
+    for method, params in (("tool.select", {"name": "artboard"}),):
         try:
             rpc.call(method, **params)
             raise AssertionError(method + " should be refused on a 16-bit document")

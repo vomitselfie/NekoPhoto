@@ -1,6 +1,10 @@
 // Camera Raw Filter: the expected values of upstream Compositor's CompositorTests/CameraRawTests.swift
 // (MIT, see LICENSES/MIT-Compositor.txt), run against the core port. The session tests upstream (the
 // eyedropper on a canvas, OK as one undo step) are app behaviour and are covered by tools/rpc_smoke.py.
+#include <functional>
+#include <cstdio>
+#include <cstdlib>
+#include "compositor/depth.h"
 #include "check.h"
 #include "compositor/cameraraw.h"
 #include <algorithm>
@@ -522,6 +526,118 @@ TEST_CASE(a_reduced_preview_matches_upstream_scale_for_grain_positions) {
     CHECK(applyCameraRaw(big, settings, 1, 9));
     CHECK(applyCameraRaw(small, settings, 0.5, 9));
     CHECK(pixels(small) != pixels(gray(16, 16)));
+}
+
+namespace {
+
+/// A picture with smooth ramps, texture, saturated patches and a half-transparent corner, 8-bit.
+Image calibrationPicture(int width, int height) {
+    Image image(width, height);
+    uint32_t noise = 12345;
+    for (int y = 0; y < height; y++)
+        for (int x = 0; x < width; x++) {
+            noise = noise * 1664525U + 1013904223U;
+            const int jitter = int((noise >> 24) % 21) - 10;
+            int r = x * 255 / (width - 1), g = y * 255 / (height - 1), b = 255 - (x + y) * 255 / (width + height - 2);
+            if ((x / 8 + y / 8) % 3 == 0) { r = std::clamp(r + jitter * 3, 0, 255); g = std::clamp(g - jitter * 2, 0, 255); }
+            if (x > width * 3 / 4 && y > height * 3 / 4) { r = 230; g = 60; b = 20; }
+            const int a = (x < width / 4 && y < height / 4) ? 96 + (x + y) % 128 : 255;
+            uint8_t* p = image.pixel(x, y);
+            p[0] = uint8_t((r * a + 127) / 255); p[1] = uint8_t((g * a + 127) / 255); p[2] = uint8_t((b * a + 127) / 255); p[3] = uint8_t(a);
+        }
+    return image;
+}
+
+struct Agreement { int maxDiff = 0; long long over1 = 0, samples = 0; };
+
+Agreement agree(const Image& a, const Image& b) {
+    Agreement out;
+    for (int y = 0; y < a.height(); y++)
+        for (int x = 0; x < a.width(); x++)
+            for (int c = 0; c < 4; c++) {
+                const int d = std::abs(int(a.pixel(x, y)[c]) - int(b.pixel(x, y)[c]));
+                if (d > 1 && std::getenv("CAMERARAW16_DEBUG"))
+                    std::fprintf(stderr, "    (%d,%d)[%d]: 8-bit %d,%d,%d,%d  16-bit %d,%d,%d,%d\n", x, y, c, a.pixel(x, y)[0], a.pixel(x, y)[1],
+                                 a.pixel(x, y)[2], a.pixel(x, y)[3], b.pixel(x, y)[0], b.pixel(x, y)[1], b.pixel(x, y)[2], b.pixel(x, y)[3]);
+                out.maxDiff = std::max(out.maxDiff, d);
+                out.over1 += d > 1;
+                out.samples++;
+            }
+    return out;
+}
+
+} // namespace
+
+TEST_CASE(sixteen_bit_agrees_with_eight_bit_on_eight_bit_input) {
+    const Image picture = calibrationPicture(64, 48);
+    const auto deep = widenImage(picture);
+    struct Case { const char* name; std::function<void(CameraRawSettings&)> set; int allowed; };
+    // Each panel within a level of the 8-bit result on an 8-bit image, except where the 8-bit kernels' own rounding
+    // is multiplied (docs/bit-depth.md has the figures).
+    const std::vector<Case> cases{
+        {"Exposure +0.7", [](CameraRawSettings& s) { s.exposure = 0.7; }, 1},
+        {"Exposure -1.3", [](CameraRawSettings& s) { s.exposure = -1.3; }, 1},
+        {"Temperature 30, tint -20", [](CameraRawSettings& s) { s.temperature = 30; s.tint = -20; }, 1},
+        {"Contrast 40", [](CameraRawSettings& s) { s.contrast = 40; }, 1},
+        {"Highlights -60, shadows 50", [](CameraRawSettings& s) { s.highlights = -60; s.shadows = 50; }, 1},
+        {"Whites 30, blacks -30", [](CameraRawSettings& s) { s.whites = 30; s.blacks = -30; }, 1},
+        {"Vibrance 40, saturation -20", [](CameraRawSettings& s) { s.vibrance = 40; s.saturation = -20; }, 1},
+        {"Curve medium contrast", [](CameraRawSettings& s) { s.curve.rgb = CameraRawCurveSettings::mediumContrast(); }, 1},
+        {"Mixer", [](CameraRawSettings& s) { s.mixer.hue[1] = 30; s.mixer.saturation[1] = -40; s.mixer.luminance[4] = 25; }, 1},
+        {"Grading", [](CameraRawSettings& s) { s.grading.shadows = {220, 40, -10}; s.grading.highlights = {40, 30, 10}; }, 1},
+        {"Texture 40, clarity 30", [](CameraRawSettings& s) { s.texture = 40; s.clarity = 30; }, 1},
+        {"Dehaze 35", [](CameraRawSettings& s) { s.dehaze = 35; }, 1},
+        {"Glow 50 bloom", [](CameraRawSettings& s) { s.glow = 50; s.glowStyle = CameraRawGlowStyle::Bloom; s.glowRange = 20; }, 1},
+        {"Vignette -40", [](CameraRawSettings& s) { s.vignetteAmount = -40; s.vignetteHighlights = 30; }, 1},
+        {"Grain 30", [](CameraRawSettings& s) { s.grainAmount = 30; }, 1},
+        {"Sharpen 80", [](CameraRawSettings& s) { s.detail.sharpenAmount = 80; s.detail.sharpenMasking = 20; }, 1},
+        {"Noise reduction 40/30", [](CameraRawSettings& s) { s.detail.noiseLuminance = 40; s.detail.noiseColor = 30; }, 1},
+        {"Optics", [](CameraRawSettings& s) { s.optics.distortion = 30; s.optics.purpleAmount = 50; s.optics.vignetteAmount = 20; }, 1},
+        {"Chromatic aberration", [](CameraRawSettings& s) { s.optics.removeChromaticAberration = true; }, 1},
+        {"Geometry", [](CameraRawSettings& s) { s.geometry.rotate = 5; s.geometry.vertical = 10; }, 1},
+        {"Calibration", [](CameraRawSettings& s) { s.calibration.redHue = 30; s.calibration.blueSaturation = -40; s.calibration.shadowTint = 20; }, 1},
+        {"Everything at once", [](CameraRawSettings& s) {
+             s.exposure = 0.4; s.contrast = 20; s.shadows = 30; s.vibrance = 20; s.clarity = 20; s.curve.rgb = CameraRawCurveSettings::mediumContrast();
+             s.grading.midtones = {30, 20, 0}; s.detail.sharpenAmount = 40; s.vignetteAmount = -20; }, 2},
+    };
+    bool within = true;
+    for (const Case& c : cases) {
+        CameraRawSettings settings;
+        c.set(settings);
+        Image eight = picture;
+        REQUIRE(applyCameraRaw(eight, settings, 1, 7));
+        Image16 sixteen = *deep;
+        REQUIRE(applyCameraRaw(sixteen, settings, 1, 7));
+        const Agreement d = agree(eight, *narrowImage(sixteen));
+        std::fprintf(stderr, "  %-28s max %d level%s, over 1: %lld of %lld samples (%.3f%%)\n", c.name, d.maxDiff, d.maxDiff == 1 ? "" : "s",
+                     d.over1, d.samples, 100.0 * double(d.over1) / double(d.samples));
+        within &= d.maxDiff <= c.allowed;
+    }
+    CHECK(within);
+}
+
+TEST_CASE(sixteen_bit_keeps_sixteen_bit_precision) {
+    // A ramp finer than 8 bits through Exposure and a curve keeps more than 256 distinct values.
+    Image16 ramp(2048, 2);
+    for (int y = 0; y < 2; y++)
+        for (int x = 0; x < 2048; x++) { uint16_t* p = ramp.pixel(x, y); p[0] = p[1] = p[2] = uint16_t(4096 + x * 12); p[3] = 32768; }
+    CameraRawSettings settings;
+    settings.exposure = 0.5;
+    settings.curve.rgb = CameraRawCurveSettings::mediumContrast();
+    REQUIRE(applyCameraRaw(ramp, settings));
+    std::vector<bool> seen(32769);
+    int distinct = 0;
+    for (int x = 0; x < 2048; x++) { const uint16_t v = ramp.pixel(x, 1)[0]; if (!seen[v]) { seen[v] = true; distinct++; } }
+    CHECK(distinct > 1000);
+    // Transparent pixels stay transparent.
+    Image16 clear(4, 4);
+    REQUIRE(applyCameraRaw(clear, settings));
+    CHECK_EQ(int(clear.pixel(2, 2)[3]), 0);
+    // Auto white balance reads a 16-bit image as it reads the 8-bit one.
+    const Image warm = solid(4, 4, 0.8, 0.6, 0.4);
+    const auto a = CameraRawSettings::autoBalance(warm), b = CameraRawSettings::autoBalance(*widenImage(warm));
+    REQUIRE(a && b);
+    CHECK(std::abs((*a)[0] - (*b)[0]) < 0.5 && std::abs((*a)[1] - (*b)[1]) < 0.5);
 }
 
 TEST_MAIN()

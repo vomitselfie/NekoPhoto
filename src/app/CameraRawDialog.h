@@ -39,6 +39,7 @@ private:
     void settingsChanged();
     void refreshPreview();
     std::shared_ptr<compositor::Image> run(const compositor::Image& source, double scale, const compositor::CameraRawPreview& preview) const;
+    std::shared_ptr<compositor::Image16> run(const compositor::Image16& source, double scale, const compositor::CameraRawPreview& preview) const;
 
     compositor::CameraRawSettings settings_;
     compositor::CameraRawPreview preview_;

@@ -6,6 +6,7 @@
 #pragma once
 #include "adjustments.h"
 #include "image.h"
+#include "imaget.h"
 #include <array>
 #include <cstdint>
 #include <optional>
@@ -150,6 +151,7 @@ struct CameraRawGeometrySettings {
     /// The perspective and affine warp on the pixel grid; the output keeps the input's size. Transparent past
     /// the warped edges unless Constrain Crop scales the covered part back up to fill the frame.
     Image apply(const Image& image) const;
+    Image16 apply(const Image16& image) const;
 };
 
 struct CameraRawCalibrationSettings {
@@ -216,6 +218,7 @@ struct CameraRawSettings {
     static std::optional<std::array<double, 2>> neutralizeStraight(double red, double green, double blue);
     /// Gray-world balance of the covered pixels (White Balance > Auto). Empty for an image with no coverage.
     static std::optional<std::array<double, 2>> autoBalance(const Image& image);
+    static std::optional<std::array<double, 2>> autoBalance(const Image16& image);
 
     /// JSON with the same keys as the fields above (nested objects for curve, mixer, grading, detail, optics,
     /// geometry, calibration; enums by their names such as "Halation").
@@ -237,6 +240,10 @@ struct CameraRawPreview {
 /// layer pixel (a reduced preview scales the radii); `seed` fixes the grain. Returns false (image untouched) for
 /// settings that do not validate once normalized.
 bool applyCameraRaw(Image& image, const CameraRawSettings& settings, double scale = 1, uint32_t seed = 0,
+                    const CameraRawPreview& preview = {});
+/// The same at 16 bits: the kernels run on float colour without rounding between the steps, and the result is rounded
+/// to 16 bits once. On an 8-bit image widened it agrees with the 8-bit result within a level (cameraraw_tests).
+bool applyCameraRaw(Image16& image, const CameraRawSettings& settings, double scale = 1, uint32_t seed = 0,
                     const CameraRawPreview& preview = {});
 
 } // namespace compositor

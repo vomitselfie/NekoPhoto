@@ -62,6 +62,17 @@ void adjust_camera_raw_calibration(uint8_t *rgba, size_t width, size_t height, s
                                    double greenHue, double greenSaturation, double blueHue, double blueSaturation,
                                    int processVersion);
 
+// The same kernels over premultiplied float RGBA on the 8-bit scale (0..255, alpha too), unrounded: the 16-bit
+// pipeline. `stride` counts floats.
+void adjust_camera_raw_float(float *rgba, size_t width, size_t height, size_t stride, double redGain, double greenGain, double blueGain, double exposure, double contrast, double highlights, double shadows, double whites, double blacks, double vibrance, double saturation, int clipping);
+void adjust_camera_raw_clip_overlay_float(float *rgba, size_t width, size_t height, size_t stride, int shadows, int highlights);
+void adjust_camera_raw_curve_color_float(float *rgba, size_t width, size_t height, size_t stride, const float *lumaLut, const float *redLut, const float *greenLut, const float *blueLut, double refineSaturation, const float *mixer, int pointCount, const float *points, const float *grade, double blending, double balance, int visualize);
+void adjust_camera_raw_effects_float(float *rgba, size_t width, size_t height, size_t stride, double texture, double clarity, double dehaze, double glow, int glowStyle, double glowRange, double glowSpread, double glowWarmth, double vignetteAmount, double vignetteMidpoint, double vignetteRoundness, double vignetteFeather, double vignetteHighlights, int vignetteStyle, double scale);
+void adjust_camera_raw_detail_float(float *rgba, size_t width, size_t height, size_t stride, double sharpenAmount, double sharpenRadius, double sharpenDetail, double sharpenMasking, double noiseLuminance, double noiseLuminanceDetail, double noiseLuminanceContrast, double noiseColor, double noiseColorDetail, double noiseColorSmoothness, double scale);
+void adjust_camera_raw_sharpen_mask_overlay_float(float *rgba, size_t width, size_t height, size_t stride, double sharpenRadius, double sharpenDetail, double sharpenMasking, double scale);
+void adjust_camera_raw_optics_float(float *rgba, size_t width, size_t height, size_t stride, int removeChromatic, int lensProfile, double profileDistortion, double profileVignetting, double distortionK, double purpleAmount, double purpleHueLow, double purpleHueHigh, double greenAmount, double greenHueLow, double greenHueHigh, double vignetteAmount, double vignetteMidpoint, double scale);
+void adjust_camera_raw_calibration_float(float *rgba, size_t width, size_t height, size_t stride, double shadowTint, double redHue, double redSaturation, double greenHue, double greenSaturation, double blueHue, double blueSaturation, int processVersion);
+
 #ifdef __cplusplus
 }
 #endif

@@ -68,12 +68,14 @@ constexpr FeatureSupport table[] = {
     {"adjustment.Channel Mixer", eightAndSixteen},
     {"adjustment.Selective Color", eightAndSixteen},
     {"adjustment.Color Lookup", eightAndSixteen},
-    // The Filter menu's built-in filters (pixels.filter); Camera Raw and G'MIC stay 8-bit.
+    // The Filter menu's built-in filters (pixels.filter).
     {"filter.pixels", eightAndSixteen},
     {"filter.Gaussian Blur", eightAndSixteen},
     {"filter.Motion Blur", eightAndSixteen},
     {"filter.Add Noise", eightAndSixteen},
     {"filter.Lens Correction", eightAndSixteen},
+    // Filter > Camera Raw Filter: its kernels on float colour, rounded to 16 bits once (cameraraw.h).
+    {"filter.Camera Raw", eightAndSixteen},
     // Filter > Mosh (compositor/mosh.h, pixels.mosh): straight float colour at either depth.
     {"filter.Mosh", eightAndSixteen},
     // Selections at the document's depth: the marquee, lasso, Magic Wand and Quick Select tools (they read the

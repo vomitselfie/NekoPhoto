@@ -220,6 +220,11 @@ u16/blend/subtract 931b2eaf9b9c82a0
 u16/blend/subtract@0.5 6df7580d0101afa7
 u16/blend/vivid_light a0c7dd41b3f659c9
 u16/blend/vivid_light@0.5 0c38d4572546c49b
+u16/camera_raw/color 8efeebae7cff9ed8
+u16/camera_raw/detail_optics c47426ee5832053e
+u16/camera_raw/effects 7e48353457c0603f
+u16/camera_raw/geometry b3a9a9ce871dab65
+u16/camera_raw/light a5971e4a87834586
 u16/fill_layer/gradient c8af46e5fa6b5d53
 u16/filter/add_noise_gaussian_mono 3f270c0ca8067784
 u16/filter/add_noise_uniform 4ba05a38e6a1d598
@@ -254,6 +259,7 @@ u16/smart_filter/radial_blur c664eb64557ce43c
 u16/smart_filter/stack_blend_mask 8adeb92e9e8dcec9
 u16/smart_filter/surface_blur 1df977326cc36e6d
 u16/smart_filter/surface_blur_wide 46e2c7c3efdcf71e
+u16/smart_filter/unsharp_mask f753b62352f2106b
 u16/smart_object/placed_16bit_source 7e0a2a0b2018925e
 u16/smart_object/placed_8bit_source df35afab0c5fb667
 u16/smart_object/turned@0.5 6e1facb7cb866278

@@ -4,6 +4,7 @@
 // CameraRawGeometryCalibration.swift. Upstream warps Geometry with Core Image's CIPerspectiveTransform;
 // here the same corners drive a homography resampled bilinearly.
 #include "compositor/cameraraw.h"
+#include "compositor/depth.h"
 #include "compositor/parallel.h"
 #include "compositor/resample.h"
 #include "compositor/warp.h"
@@ -61,10 +62,6 @@ double curveAt(double x, const std::vector<CameraRawCurvePoint>& points) {
     return curve.value(x * 255, 0) / 255;
 }
 
-/// Runs a per-pixel kernel over bands of rows in parallel.
-void perRows(Image& image, const std::function<void(uint8_t*, size_t)>& body) {
-    parallelRows(0, image.height(), [&](int y0, int y1) { body(image.row(y0), size_t(y1 - y0)); });
-}
 
 } // namespace
 
@@ -312,17 +309,19 @@ std::array<std::array<double, 2>, 4> CameraRawGeometrySettings::outputCorners(in
     return c;
 }
 
-Image CameraRawGeometrySettings::apply(const Image& image) const {
-    const CameraRawGeometrySettings s = normalized();
+namespace {
+
+template <typename ImageType>
+ImageType warpGeometry(const CameraRawGeometrySettings& s, const ImageType& image) {
     if (!s.adjusts() || image.isEmpty()) return image;
     const int width = image.width(), height = image.height();
     const auto c = s.outputCorners(width, height);
     Corners corners{Point(c[0][0], c[0][1]), Point(c[1][0], c[1][1]), Point(c[2][0], c[2][1]), Point(c[3][0], c[3][1])};
     const Homography inverse = Homography::unitTo(corners).inverted();
-    Image out(width, height);
+    ImageType out(width, height);
     parallelRows(0, height, [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) {
-            uint8_t* row = out.row(y);
+            auto* row = out.row(y);
             for (int x = 0; x < width; x++) {
                 const Point unit = inverse.map(Point(x + 0.5, y + 0.5));
                 if (!(unit.x >= 0 && unit.x <= 1 && unit.y >= 0 && unit.y <= 1)) continue;
@@ -337,12 +336,12 @@ Image CameraRawGeometrySettings::apply(const Image& image) const {
     if (b.isEmpty() || (cw >= width && ch >= height)) return out;
     const double zoom = std::min(double(width) / cw, double(height) / ch);
     const double left = (width - cw * zoom) / 2, top = (height - ch * zoom) / 2;
-    Image fitted(width, height);
+    ImageType fitted(width, height);
     parallelRows(0, height, [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) {
             const double sy = (y + 0.5 - top) / zoom;
             if (sy < 0 || sy > ch) continue;
-            uint8_t* row = fitted.row(y);
+            auto* row = fitted.row(y);
             for (int x = 0; x < width; x++) {
                 const double sx = (x + 0.5 - left) / zoom;
                 if (sx < 0 || sx > cw) continue;
@@ -352,6 +351,11 @@ Image CameraRawGeometrySettings::apply(const Image& image) const {
     });
     return fitted;
 }
+
+} // namespace
+
+Image CameraRawGeometrySettings::apply(const Image& image) const { return warpGeometry(normalized(), image); }
+Image16 CameraRawGeometrySettings::apply(const Image16& image) const { return warpGeometry(normalized(), image); }
 
 bool CameraRawCalibrationSettings::adjusts() const {
     return shadowTint != 0 || redHue != 0 || redSaturation != 0 || greenHue != 0 || greenSaturation != 0 || blueHue != 0 || blueSaturation != 0;
@@ -445,10 +449,13 @@ std::optional<std::array<double, 2>> CameraRawSettings::neutralizeStraight(doubl
     return neutralize(decode(red), decode(green), decode(blue));
 }
 
-std::optional<std::array<double, 2>> CameraRawSettings::autoBalance(const Image& image) {
+namespace {
+
+template <typename ImageType>
+std::optional<std::array<double, 2>> grayWorld(const ImageType& image) {
     double red = 0, green = 0, blue = 0, count = 0;
     for (int y = 0; y < image.height(); y++) {
-        const uint8_t* p = image.row(y);
+        const auto* p = image.row(y);
         for (int x = 0; x < image.width(); x++, p += 4) {
             const double alpha = p[3];
             if (alpha == 0) continue;
@@ -459,40 +466,125 @@ std::optional<std::array<double, 2>> CameraRawSettings::autoBalance(const Image&
         }
     }
     if (count <= 0) return std::nullopt;
-    return neutralize(red / count, green / count, blue / count);
+    return CameraRawSettings::neutralize(red / count, green / count, blue / count);
 }
+
+} // namespace
+
+std::optional<std::array<double, 2>> CameraRawSettings::autoBalance(const Image& image) { return grayWorld(image); }
+std::optional<std::array<double, 2>> CameraRawSettings::autoBalance(const Image16& image) { return grayWorld(image); }
 
 // ---- Apply --------------------------------------------------------------------------------------
 
-bool applyCameraRaw(Image& image, const CameraRawSettings& raw, double scale, uint32_t seed, const CameraRawPreview& preview) {
-    const CameraRawSettings s = raw.normalized();
+namespace {
+
+/// The 8-bit kernels over the image itself, a byte per sample.
+struct EightBitKernels {
+    Image& image;
+    using Pixel = uint8_t;
+    Pixel* data() { return image.data(); }
+    Pixel* row(int y) { return image.row(y); }
+    size_t stride() const { return size_t(image.stride()); }
+    int width() const { return image.width(); }
+    int height() const { return image.height(); }
+    template <typename... A> void calibration(A... a) { adjust_camera_raw_calibration(a...); }
+    template <typename... A> void light(A... a) { adjust_camera_raw(a...); }
+    template <typename... A> void curveColor(A... a) { adjust_camera_raw_curve_color(a...); }
+    template <typename... A> void effects(A... a) { adjust_camera_raw_effects(a...); }
+    template <typename... A> void sharpenMask(A... a) { adjust_camera_raw_sharpen_mask_overlay(a...); }
+    template <typename... A> void optics(A... a) { adjust_camera_raw_optics(a...); }
+    template <typename... A> void detail(A... a) { adjust_camera_raw_detail(a...); }
+    template <typename... A> void clipOverlay(A... a) { adjust_camera_raw_clip_overlay(a...); }
+    void grain(double amount, double size, double roughness, uint32_t seed, double unitsPerPixel) {
+        parallelRows(0, image.height(), [&](int y0, int y1) {
+            for (int y = y0; y < y1; y++)
+                adjust_grain(image.row(y), size_t(image.width()), 1, stride(), amount, size, roughness, seed, 0, y * unitsPerPixel, unitsPerPixel);
+        });
+    }
+};
+
+/// The float kernels over a 16-bit image: premultiplied float on the 8-bit scale, unrounded between the steps, and
+/// back to 16 bits at the end (docs/bit-depth.md).
+struct FloatKernels {
+    Image16& image;
+    std::vector<float> buffer;
+    using Pixel = float;
+    static constexpr double toFloat = 255.0 / 32768.0;
+    explicit FloatKernels(Image16& target) : image(target) { load(); }
+    void load() {
+        buffer.resize(size_t(image.width()) * size_t(image.height()) * 4U);
+        parallelRows(0, image.height(), [&](int y0, int y1) {
+            for (int y = y0; y < y1; y++) {
+                const uint16_t* p = image.row(y);
+                float* q = row(y);
+                for (int i = 0; i < image.width() * 4; i++) q[i] = float(p[i] * toFloat);
+            }
+        });
+    }
+    void store() {
+        parallelRows(0, image.height(), [&](int y0, int y1) {
+            for (int y = y0; y < y1; y++) {
+                uint16_t* p = image.row(y);
+                const float* q = row(y);
+                for (int x = 0; x < image.width(); x++, p += 4, q += 4) {
+                    const double alpha = std::clamp(std::round(double(q[3]) / toFloat), 0.0, 32768.0);
+                    for (int c = 0; c < 3; c++) p[c] = uint16_t(std::clamp(std::round(double(q[c]) / toFloat), 0.0, alpha));
+                    p[3] = uint16_t(alpha);
+                }
+            }
+        });
+    }
+    Pixel* data() { return buffer.data(); }
+    Pixel* row(int y) { return buffer.data() + size_t(y) * stride(); }
+    size_t stride() const { return size_t(image.width()) * 4U; }
+    int width() const { return image.width(); }
+    int height() const { return image.height(); }
+    template <typename... A> void calibration(A... a) { adjust_camera_raw_calibration_float(a...); }
+    template <typename... A> void light(A... a) { adjust_camera_raw_float(a...); }
+    template <typename... A> void curveColor(A... a) { adjust_camera_raw_curve_color_float(a...); }
+    template <typename... A> void effects(A... a) { adjust_camera_raw_effects_float(a...); }
+    template <typename... A> void sharpenMask(A... a) { adjust_camera_raw_sharpen_mask_overlay_float(a...); }
+    template <typename... A> void optics(A... a) { adjust_camera_raw_optics_float(a...); }
+    template <typename... A> void detail(A... a) { adjust_camera_raw_detail_float(a...); }
+    template <typename... A> void clipOverlay(A... a) { adjust_camera_raw_clip_overlay_float(a...); }
+    /// The Grain adjustment's 16-bit kernel, the same pattern as adjust_grain.
+    void grain(double amount, double size, double roughness, uint32_t seed, double unitsPerPixel) {
+        store();
+        AdjustmentSettings settings;
+        settings.kind = AdjustmentKind::Grain;
+        settings.grain = GrainSettings{amount, size, roughness, seed};
+        applyAdjustment(settings, image, Rect(0, 0, image.width(), image.height()), 1 / unitsPerPixel);
+        load();
+    }
+};
+
+template <typename Kernels>
+void runCameraRaw(Kernels& k, const CameraRawSettings& s, double pixelScale, uint32_t seed, const CameraRawPreview& preview) {
     const bool clipping = preview.clipping != CameraRawClipping::None;
     const bool sharpenMask = preview.sharpenMask;
     const int visualize = preview.visualizePointColor;
     const bool indicators = preview.shadowClipIndicator || preview.highlightClipIndicator;
-    if (s.isIdentity() && !clipping && visualize < 0 && !sharpenMask && !indicators) return true;
-    if (!s.isValid()) return false;
-    if (image.isEmpty()) return true;
-    const double pixelScale = scale > 0 && std::isfinite(scale) ? scale : 1;
     const bool paintColor = !clipping && !sharpenMask && (s.curve.adjusts() || s.mixer.adjusts() || s.grading.adjusts() || visualize >= 0);
     const bool paintEffects = !clipping && !sharpenMask && s.adjustsEffects();
     const bool paintDetailOptics = !clipping && (s.detail.adjusts() || s.optics.adjusts() || sharpenMask);
-    const size_t width = size_t(image.width()), stride = size_t(image.stride());
-
-    if (!clipping && !sharpenMask && visualize < 0 && s.geometry.adjusts()) image = s.geometry.apply(image);
+    const size_t width = size_t(k.width()), height = size_t(k.height()), stride = k.stride();
+    using Pixel = typename Kernels::Pixel;
+    auto perRows = [&](const std::function<void(Pixel*, size_t)>& body) {
+        parallelRows(0, k.height(), [&](int y0, int y1) { body(k.row(y0), size_t(y1 - y0)); });
+    };
 
     if (!clipping && !sharpenMask && s.calibration.adjusts()) {
         const auto& c = s.calibration;
-        perRows(image, [&](uint8_t* rows, size_t count) {
-            adjust_camera_raw_calibration(rows, width, count, stride, c.shadowTint, c.redHue, c.redSaturation, c.greenHue, c.greenSaturation,
-                                          c.blueHue, c.blueSaturation, c.process);
+        perRows([&](Pixel* rows, size_t count) {
+            k.calibration(rows, width, count, stride, c.shadowTint, c.redHue, c.redSaturation, c.greenHue, c.greenSaturation,
+                          c.blueHue, c.blueSaturation, c.process);
         });
     }
     if (s.adjustsLight() || s.adjustsColor() || clipping) {
         const auto gains = s.gains();
-        perRows(image, [&](uint8_t* rows, size_t count) {
-            adjust_camera_raw(rows, width, count, stride, gains[0], gains[1], gains[2], s.exposure, s.contrast, s.highlights, s.shadows,
-                              s.whites, s.blacks, s.vibrance, s.saturation, int(preview.clipping));
+        perRows([&](Pixel* rows, size_t count) {
+            k.light(rows, width, count, stride, gains[0], gains[1], gains[2], s.exposure, s.contrast, s.highlights, s.shadows,
+                    s.whites, s.blacks, s.vibrance, s.saturation, int(preview.clipping));
         });
     }
     if (paintColor) {
@@ -513,48 +605,68 @@ bool applyCameraRaw(Image& image, const CameraRawSettings& raw, double scale, ui
             grade.push_back(float(w->luminance / 100));
         }
         const int pointCount = int(s.mixer.points.size());
-        perRows(image, [&](uint8_t* rows, size_t count) {
-            adjust_camera_raw_curve_color(rows, width, count, stride, luma.data(), red.data(), green.data(), blue.data(),
-                                          s.curve.refineSaturation / 100, mixer.data(), pointCount, points.data(), grade.data(),
-                                          s.grading.blending / 100, s.grading.balance / 100, visualize);
+        perRows([&](Pixel* rows, size_t count) {
+            k.curveColor(rows, width, count, stride, luma.data(), red.data(), green.data(), blue.data(), s.curve.refineSaturation / 100,
+                         mixer.data(), pointCount, points.data(), grade.data(), s.grading.blending / 100, s.grading.balance / 100, visualize);
         });
     }
     if (paintEffects) {
         if (s.texture != 0 || s.clarity != 0 || s.dehaze != 0 || s.glow != 0 || s.vignetteAmount != 0)
-            adjust_camera_raw_effects(image.data(), width, size_t(image.height()), stride, s.texture, s.clarity, s.dehaze, s.glow,
-                                      int(s.glowStyle), s.glowRange, s.glowSpread, s.glowWarmth, s.vignetteAmount, s.vignetteMidpoint,
-                                      s.vignetteRoundness, s.vignetteFeather, s.vignetteHighlights, int(s.vignetteStyle), pixelScale);
-        if (s.grainAmount > 0) {
-            const double unitsPerPixel = 1 / pixelScale, size = s.grainKernelSize();
-            parallelRows(0, image.height(), [&](int y0, int y1) {
-                for (int y = y0; y < y1; y++)
-                    adjust_grain(image.row(y), width, 1, stride, s.grainAmount, size, s.grainRoughness, seed, 0, y * unitsPerPixel, unitsPerPixel);
-            });
-        }
+            k.effects(k.data(), width, height, stride, s.texture, s.clarity, s.dehaze, s.glow, int(s.glowStyle), s.glowRange, s.glowSpread,
+                      s.glowWarmth, s.vignetteAmount, s.vignetteMidpoint, s.vignetteRoundness, s.vignetteFeather, s.vignetteHighlights,
+                      int(s.vignetteStyle), pixelScale);
+        if (s.grainAmount > 0) k.grain(s.grainAmount, s.grainKernelSize(), s.grainRoughness, seed, 1 / pixelScale);
     }
     if (paintDetailOptics) {
         const auto& d = s.detail;
         const auto& o = s.optics;
         if (sharpenMask) {
-            adjust_camera_raw_sharpen_mask_overlay(image.data(), width, size_t(image.height()), stride, d.sharpenRadius, d.sharpenDetail,
-                                                   d.sharpenMasking, pixelScale);
-            return true;
+            k.sharpenMask(k.data(), width, height, stride, d.sharpenRadius, d.sharpenDetail, d.sharpenMasking, pixelScale);
+            return;
         }
         if (o.adjusts())
-            adjust_camera_raw_optics(image.data(), width, size_t(image.height()), stride, o.removeChromaticAberration ? 1 : 0,
-                                     o.enableLensProfile ? 1 : 0, o.profileDistortion, o.profileVignetting, o.distortionK(lensStrength),
-                                     o.purpleAmount, o.purpleHueLow, o.purpleHueHigh, o.greenAmount, o.greenHueLow, o.greenHueHigh,
-                                     o.vignetteAmount, o.vignetteMidpoint, pixelScale);
+            k.optics(k.data(), width, height, stride, o.removeChromaticAberration ? 1 : 0, o.enableLensProfile ? 1 : 0, o.profileDistortion,
+                     o.profileVignetting, o.distortionK(lensStrength), o.purpleAmount, o.purpleHueLow, o.purpleHueHigh, o.greenAmount,
+                     o.greenHueLow, o.greenHueHigh, o.vignetteAmount, o.vignetteMidpoint, pixelScale);
         if (d.adjusts())
-            adjust_camera_raw_detail(image.data(), width, size_t(image.height()), stride, d.sharpenAmount, d.sharpenRadius, d.sharpenDetail,
-                                     d.sharpenMasking, d.noiseLuminance, d.noiseLuminanceDetail, d.noiseLuminanceContrast, d.noiseColor,
-                                     d.noiseColorDetail, d.noiseColorSmoothness, pixelScale);
+            k.detail(k.data(), width, height, stride, d.sharpenAmount, d.sharpenRadius, d.sharpenDetail, d.sharpenMasking, d.noiseLuminance,
+                     d.noiseLuminanceDetail, d.noiseLuminanceContrast, d.noiseColor, d.noiseColorDetail, d.noiseColorSmoothness, pixelScale);
     }
     if (indicators && !clipping && !sharpenMask) {
-        perRows(image, [&](uint8_t* rows, size_t count) {
-            adjust_camera_raw_clip_overlay(rows, width, count, stride, preview.shadowClipIndicator ? 1 : 0, preview.highlightClipIndicator ? 1 : 0);
+        perRows([&](Pixel* rows, size_t count) {
+            k.clipOverlay(rows, width, count, stride, preview.shadowClipIndicator ? 1 : 0, preview.highlightClipIndicator ? 1 : 0);
         });
     }
+}
+
+/// What applyCameraRaw does before the kernels: whether anything is to be done at all, and the Geometry warp.
+template <typename ImageType>
+std::optional<bool> prepareCameraRaw(ImageType& image, const CameraRawSettings& s, const CameraRawPreview& preview) {
+    const bool clipping = preview.clipping != CameraRawClipping::None;
+    const bool indicators = preview.shadowClipIndicator || preview.highlightClipIndicator;
+    if (s.isIdentity() && !clipping && preview.visualizePointColor < 0 && !preview.sharpenMask && !indicators) return true;
+    if (!s.isValid()) return false;
+    if (image.isEmpty()) return true;
+    if (!clipping && !preview.sharpenMask && preview.visualizePointColor < 0 && s.geometry.adjusts()) image = s.geometry.apply(image);
+    return std::nullopt;
+}
+
+} // namespace
+
+bool applyCameraRaw(Image& image, const CameraRawSettings& raw, double scale, uint32_t seed, const CameraRawPreview& preview) {
+    const CameraRawSettings s = raw.normalized();
+    if (auto done = prepareCameraRaw(image, s, preview)) return *done;
+    EightBitKernels kernels{image};
+    runCameraRaw(kernels, s, scale > 0 && std::isfinite(scale) ? scale : 1, seed, preview);
+    return true;
+}
+
+bool applyCameraRaw(Image16& image, const CameraRawSettings& raw, double scale, uint32_t seed, const CameraRawPreview& preview) {
+    const CameraRawSettings s = raw.normalized();
+    if (auto done = prepareCameraRaw(image, s, preview)) return *done;
+    FloatKernels kernels(image);
+    runCameraRaw(kernels, s, scale > 0 && std::isfinite(scale) ? scale : 1, seed, preview);
+    kernels.store();
     return true;
 }
 
