@@ -29,6 +29,10 @@ struct GradientStops {
     void reverse();
 };
 
+/// Where document point `p` falls along a gradient, 0..1 (linear from `from` to `to`, held beyond the ends; radial
+/// centred on `from` with `to` on its rim): what fillGradient samples the stops at.
+double gradientPositionAt(GradientShape shape, Point from, Point to, Point p);
+
 /// A gradient over `out` (premultiplied), whose pixels are placed on the document by `pixelToDocument`, drawn over
 /// `base` at `opacity` through the optional per-pixel `selection` (grid coverage). Linear runs from `from` to `to`
 /// (colours held beyond the ends); radial is centred on `from` with `to` on its rim.

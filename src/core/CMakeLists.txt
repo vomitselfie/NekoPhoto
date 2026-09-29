@@ -136,6 +136,8 @@ add_library(compositor_core STATIC
     src/brushimport.cpp
     src/brush.cpp
     src/brush_u16.cpp
+    src/brush_f32.cpp
+    src/brush_modes.cpp
     src/brushdynamics.cpp
     src/brushsample.cpp
     src/brushsmoothing.cpp

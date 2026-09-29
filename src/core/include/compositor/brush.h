@@ -6,6 +6,7 @@
 // so overlapping dabs never exceed the stroke's opacity.
 #pragma once
 #include "brushsample.h"
+#include "colormgmt.h"
 #include "document.h"
 #include "shape.h"
 #include <algorithm>
@@ -45,8 +46,9 @@ class TiledSourceOf {
 public:
     using Sample = std::remove_cv_t<std::remove_pointer_t<decltype(std::declval<const Img&>().data())>>;
     using Compute = std::function<void(int x, int y, int w, int h, Img& out)>;
-    TiledSourceOf(int width, int height, Compute compute, int tile = 256)
-        : width_(std::max(0, width)), height_(std::max(0, height)), tile_(std::max(16, tile)), compute_(std::move(compute)) {
+    /// `channels`: samples per pixel of each tile (5 for 8-bit CMYK's ImageC8; `Image` is always 4).
+    TiledSourceOf(int width, int height, Compute compute, int tile = 256, int channels = 4)
+        : width_(std::max(0, width)), height_(std::max(0, height)), tile_(std::max(16, tile)), channels_(channels), compute_(std::move(compute)) {
         columns_ = (width_ + tile_ - 1) / tile_;
         rows_ = (height_ + tile_ - 1) / tile_;
         tiles_.resize(size_t(columns_) * size_t(rows_));
@@ -63,7 +65,9 @@ public:
                 auto& slot = tiles_[size_t(ty) * size_t(columns_) + size_t(tx)];
                 if (slot) continue;
                 const int x = tx * tile_, y = ty * tile_, w = std::min(tile_, width_ - x), h = std::min(tile_, height_ - y);
-                auto image = std::make_unique<Img>(w, h);
+                std::unique_ptr<Img> image;
+                if constexpr (std::is_constructible_v<Img, int, int, int>) image = std::make_unique<Img>(w, h, channels_);
+                else image = std::make_unique<Img>(w, h);
                 compute_(x, y, w, h, *image);
                 slot = std::move(image);
             }
@@ -82,33 +86,58 @@ public:
     }
 
 private:
-    int width_, height_, tile_, columns_, rows_;
+    int width_, height_, tile_, channels_, columns_, rows_;
     Compute compute_;
     std::vector<std::unique_ptr<Img>> tiles_;
 };
 using TiledSource = TiledSourceOf<Image>;
 using TiledSource16 = TiledSourceOf<Image16>;
+using TiledSourceF = TiledSourceOf<ImageF>;
+using TiledSourceC8 = TiledSourceOf<ImageC8>;
 
 /// `document` flattened at 1:1 and then `process`ed, as a TiledSource: each tile is rendered and processed with
 /// `margin` document pixels around it (a filter's reach), so it matches processing the whole flattened image.
 std::shared_ptr<TiledSource> tiledProcessedDocument(Document document, std::function<void(Image&)> process, int margin);
 /// The same for a 16-bit document, rendered and processed at 16 bits.
 std::shared_ptr<TiledSource16> tiledProcessedDocument16(Document document, std::function<void(Image16&)> process, int margin);
+/// The same at a document's own layout: a 32-bit document rendered in linear float, a CMYK or Lab one at its mode's
+/// samples (`Img`: ImageF; ImageC8 for 8-bit CMYK; Image for 8-bit Lab; Image16 for 16-bit CMYK and Lab).
+template <class Img>
+std::shared_ptr<TiledSourceOf<Img>> tiledProcessedNative(Document document, std::function<void(Img&)> process, int margin);
+template <> std::shared_ptr<TiledSourceOf<ImageF>> tiledProcessedNative<ImageF>(Document, std::function<void(ImageF&)>, int);
+template <> std::shared_ptr<TiledSourceOf<Image>> tiledProcessedNative<Image>(Document, std::function<void(Image&)>, int);
+template <> std::shared_ptr<TiledSourceOf<Image16>> tiledProcessedNative<Image16>(Document, std::function<void(Image16&)>, int);
+template <> std::shared_ptr<TiledSourceOf<ImageC8>> tiledProcessedNative<ImageC8>(Document, std::function<void(ImageC8&)>, int);
 
 /// Clone Stamp: a document-sized image to copy from, and the offset from each painted point to its source.
-/// `tiled` instead of `image`: the same, made on demand. A stroke on a 16-bit document reads `image16` or `tiled16`.
+/// `tiled` instead of `image`: the same, made on demand. A stroke on a 16-bit document reads `image16` or `tiled16`
+/// (16-bit CMYK: 5 channels), a 32-bit one `imageF` or `tiledF`, an 8-bit CMYK one `imageC8` or `tiledC8`; an 8-bit Lab
+/// one reads `image` holding L, a, b. The pixels are at the document's layout.
 struct CloneSource {
     std::shared_ptr<const Image> image;
     Point offset;
     std::shared_ptr<TiledSource> tiled;
     std::shared_ptr<const Image16> image16;
     std::shared_ptr<TiledSource16> tiled16;
+    std::shared_ptr<const ImageF> imageF;
+    std::shared_ptr<TiledSourceF> tiledF;
+    std::shared_ptr<const ImageC8> imageC8;
+    std::shared_ptr<TiledSourceC8> tiledC8;
+    /// The source at any layout.
+    void setImage(const AnyImage& any) {
+        if (any.f32()) imageF = any.f32();
+        else if (any.c8()) imageC8 = any.c8();
+        else if (any.u16()) image16 = any.u16();
+        else image = any.u8();
+    }
 };
 
 /// Soft-brush falloff across the band between the hardness radius and the rim.
 double brushFalloff(double u);
 
-template <SampleType S> class StrokeRaster;
+template <class Ops> class StrokeRasterOf;
+template <SampleType S> struct StrokeOps;
+template <SampleType S> struct CmykStrokeOps;
 
 class BrushStroke {
 public:
@@ -118,17 +147,32 @@ public:
     /// The same at a document's depth: `depth` U16 makes a 16-bit stroke (its pixels or mask, coverage and selection at
     /// 0..32768; the 16-bit accessors below), taking the 16-bit `selection`. U8 is the constructor above.
     BrushStroke(const Layer& layer, bool mask, BrushSettings settings, Size canvas, SampleType depth, const Gray16* selection);
+    /// A stroke at `document`'s depth and colour mode, through its selection (docs/bit-depth.md, docs/color-modes.md):
+    /// 8/16/32-bit RGB, 8/16-bit Lab (L, a, b as stored) and 8/16-bit CMYK (five samples). The paint colour
+    /// (settings.red, green, blue: straight RGB as the colour pickers hold it, the document's profile in RGB, sRGB in CMYK
+    /// and Lab) is put in the document's own model before anything is painted: linearised through the document's curve
+    /// at 32 bits, converted through its profile to CMYK inks (the profile's black generation) or Lab values with
+    /// `options` in CMYK and Lab. Masks stay one channel. An explicit empty selection makes an invalid stroke.
+    BrushStroke(const Layer& layer, bool mask, BrushSettings settings, const Document& document, const ConvertOptions& options = {});
     ~BrushStroke();
     BrushStroke(const BrushStroke&) = delete;
     BrushStroke& operator=(const BrushStroke&) = delete;
     /// The stroke's depth: its working pixels, mask, coverage and selection are all at it.
     SampleType sampleType() const { return depth_; }
+    ColorMode colorMode() const { return mode_; }
+    /// A straight RGB colour (as settings.red..blue are) in the stroke's samples, as fractions of one: linear light at
+    /// 32 bits, stored inks (inverted) in CMYK, L and offset a, b in Lab; `out[3]` is CMYK's black. The same colour
+    /// in RGB at 8 and 16 bits.
+    void nativeColor(const float rgb[3], double out[4]) const;
+    /// The document's transfer curve, for a 32-bit stroke (what MyPaint's 15-bit round trip and the healers encode with).
+    const TransferCurve* transferCurve() const { return curve_ ? &*curve_ : nullptr; }
     /// Clone Stamp: the sample painted through the tip instead of the colour. With `replaces`, the sample
     /// replaces what is under the tip rather than drawing over it (so it can clear pixels too).
     void setClone(CloneSource clone, bool replaces = false) { clone_ = std::move(clone); replacesWithClone_ = replaces; }
     /// Painting a mask from a document-sized gray sample (the Blur tool on a mask) instead of a flat value.
     void setMaskClone(std::shared_ptr<const GrayImage> sample);
     void setMaskClone(std::shared_ptr<const Gray16> sample);
+    void setMaskClone(std::shared_ptr<const GrayF> sample);
 
     // Moving selected pixels (the Move tool with a selection).
     /// Cuts the selected pixels out of the original image. False when nothing is lifted.
@@ -160,6 +204,9 @@ public:
     /// The same for a 16-bit stroke (null for an 8-bit one, whose 8-bit previews are null in turn).
     Image16Ptr previewImage16() const;
     Gray16Ptr previewMask16() const;
+    /// The working pixels or mask at any depth and layout.
+    AnyImage preview() const;
+    AnyGray previewMaskAny() const;
     /// Where the working grid sits on the document.
     const LayerTransform& paintTransform() const { return paintTransform_; }
     /// The document area changed since the last call, then reset.
@@ -187,20 +234,25 @@ public:
     const Image16* gridBase16() const;
     Image16* gridWorking16();
     const Gray16* gridSelection16() const;
+    const ImageF* gridBaseF() const;
+    ImageF* gridWorkingF();
+    const GrayF* gridSelectionF() const;
     const Affine& documentToGrid() const { return documentToPixel_; }
     void markPainted(const Rect& gridRect) { painted_ = true; markDirty(gridRect); }
     // Or an engine that stamps its own dabs (imported tip brushes) into this stroke's coverage: the colour,
     // opacity, selection, erasing and masks then apply exactly as for the round tip.
+    // The coverage at 8 bits (8-bit RGB, Lab and CMYK strokes) or 16 (16-bit strokes, and a 32-bit stroke's 15-bit
+    // stand-in, which recomposeCovered brings into its float coverage).
     GrayImage* gridCoverage();
     Gray16* gridCoverage16();
     const Affine& gridToDocument() const { return pixelToDocument_; }
     const Rect& canvasRect() const { return canvas_; }
-    void recomposeCovered(const Rect& gridRect) { markDirty(gridRect); recompose(gridRect); }
+    void recomposeCovered(const Rect& gridRect);
 
 private:
     // The pixels, coverage and selection live in a StrokeRaster at the stroke's depth (stroke_raster.h); this class
     // keeps the grid's geometry, the curve through the samples, the provisional tail and the dirty area.
-    template <SampleType> friend class StrokeRaster;
+    template <class> friend class StrokeRasterOf;
     template <class F> decltype(auto) withRaster(F&& f);
     template <class F> decltype(auto) withRaster(F&& f) const;
     void walk(Point to);
@@ -241,9 +293,18 @@ private:
     Rect liftedRect_;
 
     SampleType depth_ = SampleType::U8;
-    // Exactly one is set: the raster at depth_.
-    std::unique_ptr<StrokeRaster<SampleType::U8>> raster8_;
-    std::unique_ptr<StrokeRaster<SampleType::U16>> raster16_;
+    ColorMode mode_ = ColorMode::RGB;
+    /// The paint colour into the document's model (fractions of one), for 32-bit, CMYK and Lab strokes; empty in RGB at
+    /// 8 and 16 bits, whose colour is the settings' as it is.
+    std::function<void(const float rgb[3], double out[4])> toNative_;
+    std::optional<TransferCurve> curve_;
+    void initRaster(const Layer& layer, bool mask, const AnyGray* selection);
+    // Exactly one is set: the raster at depth_ and mode_ (a mask stroke uses the plain raster of its depth).
+    std::unique_ptr<StrokeRasterOf<StrokeOps<SampleType::U8>>> raster8_;
+    std::unique_ptr<StrokeRasterOf<StrokeOps<SampleType::U16>>> raster16_;
+    std::unique_ptr<StrokeRasterOf<StrokeOps<SampleType::F32>>> rasterF_;
+    std::unique_ptr<StrokeRasterOf<CmykStrokeOps<SampleType::U8>>> rasterC8_;
+    std::unique_ptr<StrokeRasterOf<CmykStrokeOps<SampleType::U16>>> rasterC16_;
 };
 
 } // namespace compositor

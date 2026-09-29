@@ -1,31 +1,29 @@
-// The raster side of a BrushStroke at one sample depth (docs/high-bit-depth-plan.md, P5.0b): the working pixels or
-// mask, the coverage grid, the selection, the dab profile table and the stamps, the build-up (max for hard tips,
-// screen for soft), the recompose, clone and processed sources, lifting and moving pixels, gradients and the healing
-// commit. BrushStroke keeps the depth-free half (the grid's geometry, the curve through the samples, the tail, the
-// dirty area) and drives one StrokeRaster<S> through it.
+// The raster side of a BrushStroke at one pixel layout (docs/high-bit-depth-plan.md, P5.0b, P5c, P7 E): the working
+// pixels or mask, the coverage grid, the selection, the dab profile table and the stamps, the build-up (max for hard
+// tips, screen for soft), the recompose, clone and processed sources, lifting and moving pixels, gradients and the
+// healing commit. BrushStroke keeps the depth-free half (the grid's geometry, the curve through the samples, the tail,
+// the dirty area) and drives one StrokeRasterOf<Ops> through it.
 //
-// What differs between depths is the arithmetic, gathered in StrokeOps<S>: how a sample scales by another, how a soft
-// dab screens onto the coverage, how a double is stored back, which buffers and sources of a CloneSource or an
-// AnyImage belong to the depth. StrokeRaster<S> is written once over those operations; brush.cpp instantiates it for
-// U8 and brush_u16.cpp for U16. Every operation keeps the exact expression the separate 8- and 16-bit code had, so both
-// depths paint the same bytes as before and the 8-bit stamp merge still vectorises.
+// What differs between layouts is the arithmetic and the buffers, gathered in a policy: how a sample scales by
+// another, how a soft dab screens onto the coverage, how a double is stored back, how many samples a pixel has, which
+// buffers and sources of a CloneSource or an AnyImage belong to the layout. StrokeRasterOf<Ops> is written once over
+// those operations. Every operation keeps the exact expression the separate 8- and 16-bit code had, so both depths
+// paint the same bytes as before and the 8-bit stamp merge still vectorises.
 //
-// F32 (P5c) needs a StrokeOps<SampleType::F32> and not a new raster:
-// - Sample float, Color ImageF, Gray GrayF, a TiledSourceOf<ImageF>, and CloneSource and the mask clone sources at F32;
-//   `of` reading AnyImage::f32() / AnyGray::f32().
-// - lerpTable as a float lerp (a + (b - a) * frac / 256) instead of the rounded shift; quantise without the + 0.5 and
-//   the truncation; screen as old + t * (1 - old); mul, mix and toward as plain float products and lerps (no rounding
-//   term); solidCore 0.5 (or 128 / 255, to heal the same spot as the lower depths).
-// - store, storeF and nearest without rounding. Coverage, alpha, masks and selections are clamped to 0..1; colour is
-//   not (a 32-bit document's colour may exceed 1), so store needs a colour and a coverage form, and `one` becomes 1.
-// - The brush colour (settings red, green, blue) is display-referred: the stroke linearises it through the document's
-//   TransferCurve before painting, so the raster sees linear light.
-// - bounds (alpha bounds of an ImageF), copyOf, and the float overloads the raster calls: cropImage, cropGray,
-//   nonzeroBounds, fillGradient, MipCache::refresh, Asset::make and MaskAsset::make. Healing decides on the 8-bit
-//   decisionImage (P5c) rather than spotHeal and healFrom at float; Dodge, Burn and Sponge are greyed at 32 bits.
-// - A float stamp tile costs four times the 8-bit one; the merge vectorises as it is (no integer division).
+// The policies:
+// - StrokeOps<U8> and StrokeOps<U16> (brush.cpp, brush_u16.cpp): RGB, and Lab (4 samples; L, a and b as stored, a
+//   and b offset, the same arithmetic).
+// - StrokeOps<F32> (brush_f32.cpp): 32-bit linear float. Float samples, a float table lerp, `screen` as
+//   old + t * (1 - old), products and lerps without a rounding term, stores without rounding; colour is not clamped
+//   above (a 32-bit document's colour may exceed 1), coverage stays in 0..1 because every input does. The brush colour
+//   arrives linearised (BrushStroke's native colour), so the raster sees linear light. Healing works on a 15-bit
+//   encoding of the area (healF); Dodge, Burn and Sponge are greyed at 32 bits, as in Photoshop.
+// - CmykStrokeOps<U8> and CmykStrokeOps<U16> (brush_modes.cpp): 5 samples (inverted ink, then alpha) with the
+//   depth's integer arithmetic on each. The colour arrives as inks through the document's CMYK profile.
+// `channels` is a compile-time constant of each policy, so the RGB loops are the code they were.
 #pragma once
 #include "compositor/brush.h"
+#include "compositor/colormgmt.h"
 #include "compositor/depth.h"
 #include "compositor/heal.h"
 #include "compositor/parallel.h"
@@ -40,6 +38,50 @@ namespace compositor {
 namespace stroke {
 /// Pixels in a w x h area, without overflow.
 inline long long areaOf(int w, int h) { return (long long)(w) * (long long)(h); }
+
+/// Half-open bounds of the pixels with any alpha (the last of `channels()` samples) within `within`.
+template <class Img>
+PixelBounds alphaBoundsOf(const Img& image, const PixelBounds& within) {
+    const int n = image.channels();
+    const int x0 = std::max(0, within.x0), y0 = std::max(0, within.y0), x1 = std::min(image.width(), within.x1), y1 = std::min(image.height(), within.y1);
+    if (x0 >= x1 || y0 >= y1) return {};
+    std::vector<int> first(size_t(y1 - y0), x1), last(size_t(y1 - y0), x0);
+    parallelRows(y0, y1, [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++) {
+            const auto* row = image.row(y);
+            int a = x0;
+            while (a < x1 && !(row[a * n + n - 1] > 0)) a++;
+            if (a == x1) continue;
+            int b = x1;
+            while (b > a && !(row[(b - 1) * n + n - 1] > 0)) b--;
+            first[size_t(y - y0)] = a;
+            last[size_t(y - y0)] = b;
+        }
+    }, 64);
+    int bx0 = x1, by0 = y1, bx1 = x0, by1 = y0;
+    for (int y = y0; y < y1; y++) {
+        const int a = first[size_t(y - y0)], b = last[size_t(y - y0)];
+        if (a >= b) continue;
+        bx0 = std::min(bx0, a); bx1 = std::max(bx1, b); by0 = std::min(by0, y); by1 = std::max(by1, y + 1);
+    }
+    if (bx0 >= bx1 || by0 >= by1) return {};
+    return {bx0, by0, bx1, by1};
+}
+
+/// A crop of an interleaved buffer into `out` (sized to the crop, its channels the source's); outside is zero.
+template <class Img>
+std::shared_ptr<Img> cropInto(const Img& image, int x, int y, std::shared_ptr<Img> out) {
+    using Sample = std::remove_cv_t<std::remove_pointer_t<decltype(image.row(0))>>;
+    const int n = image.channels();
+    const int i0 = std::max(0, -x), i1 = std::min(out->width(), image.width() - x);
+    if (i1 <= i0) return out;
+    for (int j = 0; j < out->height(); j++) {
+        const int sy = y + j;
+        if (sy < 0 || sy >= image.height()) continue;
+        std::memcpy(out->pixel(i0, j), image.pixel(x + i0, sy), size_t(i1 - i0) * size_t(n) * sizeof(Sample));
+    }
+    return out;
+}
 } // namespace stroke
 
 /// The depth-specific operations of a stroke raster. Integer depths share the table interpolation.
@@ -51,10 +93,14 @@ struct IntegerStrokeOps {
 };
 
 template <> struct StrokeOps<SampleType::U8> : IntegerStrokeOps {
+    static constexpr SampleType type = SampleType::U8;
+    static constexpr int channels = 4;
     using Sample = uint8_t;
     using Color = Image;
     using Gray = GrayImage;
     using Tiled = TiledSource;
+    using Calc = uint32_t;   // a coverage or a sample in arithmetic
+    using Paint = int;       // a colour sample as toward() takes it
     static constexpr uint32_t one = 255;
     static constexpr Sample solidCore = 128;   // the healers' solid core: coverage of half and up
 
@@ -77,18 +123,27 @@ template <> struct StrokeOps<SampleType::U8> : IntegerStrokeOps {
     static Sample store(double v) { return Sample(clamp(v + 0.5, 0.0, 255.0)); }
     static Sample storeF(float v) { return Sample(clamp(v + 0.5f, 0.0f, 255.0f)); }
     static Sample nearest(double v) { return Sample(std::lround(clamp(v, 0.0, 255.0))); }
+    /// A colour in sample units as the plain paint path's target, rounded and clamped.
+    static Paint paintValue(double v) { return Paint(clamp(v + 0.5, 0.0, double(one))); }
 
     static PixelBounds bounds(const Color& image) { return alphaBounds(image); }
     static PixelBounds bounds(const Color& image, const PixelBounds& within) { return alphaBounds(image, within); }
     /// A working copy of the layer's own pixels.
     static std::shared_ptr<Color> copyOf(const Color& image) { return std::make_shared<Color>(image); }
+    static std::shared_ptr<Color> make(int width, int height) { return std::make_shared<Color>(width, height); }
+    static std::shared_ptr<Color> crop(const Color& image, int x, int y, int w, int h) { return cropImage(image, x, y, w, h); }
+    static long long budget() { return Document::imagePixelBudget(type); }
 };
 
 template <> struct StrokeOps<SampleType::U16> : IntegerStrokeOps {
+    static constexpr SampleType type = SampleType::U16;
+    static constexpr int channels = 4;
     using Sample = uint16_t;
     using Color = Image16;
     using Gray = Gray16;
     using Tiled = TiledSource16;
+    using Calc = uint32_t;
+    using Paint = int;
     static constexpr uint32_t one = one16;
     static constexpr uint32_t half = one16 / 2;
     static constexpr Sample solidCore = widen8(128);
@@ -109,10 +164,79 @@ template <> struct StrokeOps<SampleType::U16> : IntegerStrokeOps {
     static Sample store(double v) { return Sample(clamp(v + 0.5, 0.0, double(one))); }
     static Sample storeF(float v) { return Sample(clamp(v + 0.5f, 0.0f, float(one))); }
     static Sample nearest(double v) { return Sample(std::lround(clamp(v, 0.0, double(one)))); }
+    static Paint paintValue(double v) { return Paint(clamp(v + 0.5, 0.0, double(one))); }
 
     static PixelBounds bounds(const Color& image) { return bounds(image, {0, 0, image.width(), image.height()}); }
     static PixelBounds bounds(const Color& image, const PixelBounds& within);   // brush_u16.cpp
     static std::shared_ptr<Color> copyOf(const Color& image);                    // brush_u16.cpp
+    static std::shared_ptr<Color> make(int width, int height) { return std::make_shared<Color>(width, height); }
+    static std::shared_ptr<Color> crop(const Color& image, int x, int y, int w, int h) { return cropImage(image, x, y, w, h); }
+    static long long budget() { return Document::imagePixelBudget(type); }
+};
+
+/// 32-bit float: linear light, colour unbounded above, coverage 0..1.
+template <> struct StrokeOps<SampleType::F32> {
+    static constexpr SampleType type = SampleType::F32;
+    static constexpr int channels = 4;
+    using Sample = float;
+    using Color = ImageF;
+    using Gray = GrayF;
+    using Tiled = TiledSourceOf<ImageF>;
+    using Calc = float;
+    using Paint = float;
+    static constexpr float one = 1.0f;
+    static constexpr Sample solidCore = 128.0f / 255.0f;   // the same spot as the lower depths heal
+
+    static const ImageFPtr& of(const AnyImage& image) { return image.f32(); }
+    static const GrayFPtr& of(const AnyGray& image) { return image.f32(); }
+    static const Color* cloneImage(const CloneSource& clone) { return clone.imageF.get(); }
+    static Tiled* cloneTiled(const CloneSource& clone) { return clone.tiledF.get(); }
+
+    static float lerpTable(float a, float b, unsigned frac) { return a + (b - a) * (float(frac) * (1.0f / 256)); }
+    static float mul(float v, float k) { return v * k; }
+    static float screen(float old, float t) { return old + t * (1 - old); }
+    static float toward(float base, float colour, float k) { return base + (colour - base) * k; }
+    static float mix(float a, float b, float k) { return a * (1 - k) + b * k; }
+    static Sample quantise(double unit) { return Sample(clamp(unit, 0.0, 1.0)); }
+    /// Stored without rounding; only below zero is cut (colour above 1 is light, not an overflow).
+    static Sample store(double v) { return Sample(std::max(0.0, v)); }
+    static Sample storeF(float v) { return std::max(0.0f, v); }
+    static Sample nearest(double v) { return Sample(std::max(0.0, v)); }
+    static Paint paintValue(double v) { return Paint(std::max(0.0, v)); }
+
+    static PixelBounds bounds(const Color& image) { return bounds(image, {0, 0, image.width(), image.height()}); }
+    static PixelBounds bounds(const Color& image, const PixelBounds& within) { return stroke::alphaBoundsOf(image, within); }
+    static std::shared_ptr<Color> copyOf(const Color& image) { return std::make_shared<Color>(image); }
+    static std::shared_ptr<Color> make(int width, int height) { return std::make_shared<Color>(width, height); }
+    static std::shared_ptr<Color> crop(const Color& image, int x, int y, int w, int h) { return cropImage(image, x, y, w, h); }
+    static long long budget() { return Document::imagePixelBudget(type); }
+};
+
+/// CMYK at 8 or 16 bits: 5 samples (inverted ink, then alpha), the depth's integer arithmetic on each.
+template <SampleType S> struct CmykStrokeOps;
+template <> struct CmykStrokeOps<SampleType::U8> : StrokeOps<SampleType::U8> {
+    static constexpr int channels = 5;
+    using Color = ImageC8;
+    using Tiled = TiledSourceOf<ImageC8>;
+    using StrokeOps<SampleType::U8>::of;
+    static const ImageC8Ptr& of(const AnyImage& image) { return image.c8(); }
+    static const Color* cloneImage(const CloneSource& clone) { return clone.imageC8.get(); }
+    static Tiled* cloneTiled(const CloneSource& clone) { return clone.tiledC8.get(); }
+    static PixelBounds bounds(const Color& image) { return bounds(image, {0, 0, image.width(), image.height()}); }
+    static PixelBounds bounds(const Color& image, const PixelBounds& within) { return stroke::alphaBoundsOf(image, within); }
+    static std::shared_ptr<Color> copyOf(const Color& image) { return std::make_shared<Color>(image); }
+    static std::shared_ptr<Color> make(int width, int height) { return std::make_shared<Color>(width, height, channels); }
+    static std::shared_ptr<Color> crop(const Color& image, int x, int y, int w, int h) { return stroke::cropInto(image, x, y, make(std::max(0, w), std::max(0, h))); }
+    static long long budget() { return Document::imagePixelBudget(type, ColorMode::CMYK); }
+};
+template <> struct CmykStrokeOps<SampleType::U16> : StrokeOps<SampleType::U16> {
+    static constexpr int channels = 5;
+    static PixelBounds bounds(const Color& image) { return bounds(image, {0, 0, image.width(), image.height()}); }
+    static PixelBounds bounds(const Color& image, const PixelBounds& within) { return stroke::alphaBoundsOf(image, within); }
+    static std::shared_ptr<Color> copyOf(const Color& image) { return std::make_shared<Color>(image); }
+    static std::shared_ptr<Color> make(int width, int height) { return std::make_shared<Color>(width, height, channels); }
+    static std::shared_ptr<Color> crop(const Color& image, int x, int y, int w, int h) { return stroke::cropInto(image, x, y, make(std::max(0, w), std::max(0, h))); }
+    static long long budget() { return Document::imagePixelBudget(type, ColorMode::CMYK); }
 };
 
 /// On a grid aligned with the document, a dab is a precomputed tile at one of 4x4 subpixel phases (2x2 for soft tips
@@ -126,15 +250,18 @@ struct StampOf {
     bool built[16] = {};
 };
 
-template <SampleType S>
-class StrokeRaster {
+template <class OpsT>
+class StrokeRasterOf {
 public:
-    using Ops = StrokeOps<S>;
+    using Ops = OpsT;
+    static constexpr int N = Ops::channels;   // samples per pixel, the last alpha
     using Sample = typename Ops::Sample;
     using Color = typename Ops::Color;
     using Gray = typename Ops::Gray;
+    using Calc = typename Ops::Calc;
+    using Paint = typename Ops::Paint;
 
-    explicit StrokeRaster(BrushStroke& stroke) : g_(stroke) {}
+    explicit StrokeRasterOf(BrushStroke& stroke) : g_(stroke) {}
     /// Sets up the grid and the buffers for `layer` (its pixels, or its mask); false with the stroke's error set.
     bool init(const Layer& layer, bool mask, const Gray* selection);
 
@@ -146,9 +273,16 @@ public:
     bool liftSelection();
     void moveLifted(Point offset, bool duplicate);
     void fillGradientOver(int shape, Point from, Point to, const GradientStops& stops, double opacity);
+    /// A gradient whose stops are already in the layout's samples (fractions of one, straight): `stops` the first three
+    /// colour samples (or the gray value), `fourth` the fourth (CMYK's black) in its red.
+    void fillGradientNative(int shape, Point from, Point to, const GradientStops& stops, const GradientStops* fourth, double opacity);
     void heal();
     void commit(BrushStroke::Commit& result);
     void refreshLevels(int x0, int y0, int x1, int y1) const;
+    /// A 15-bit coverage another engine stamps into (imported tip brushes on a 32-bit stroke), made on first use;
+    /// syncCoverage copies it into the float coverage over `r` before a recompose.
+    Gray16* proxyCoverage();
+    void syncCoverage(const Rect& r);
 
     std::shared_ptr<const Color> base;     // original pixels in the grid (image strokes); the layer's own image when the grid matches it
     std::shared_ptr<Color> working, lifted;
@@ -163,6 +297,9 @@ private:
     bool stampDab(Point center, double radius, const Rect& affected);
     void recomposeRows(const Rect& r);
     void healFromClone(const PixelBounds& bounds);
+    void healF(const PixelBounds& bounds);
+    /// The paint colour in sample units (colour samples, then alpha at one).
+    void paintColour(double out[N], bool wash) const;
 
     BrushStroke& g_;
     /// Dab profile over squared distance (0..one), rebuilt when the tip changes; the dab loop reads it instead of
@@ -171,7 +308,11 @@ private:
     double dabTableRadius_ = -1, dabTableHardness_ = -1, dabTableFootprint_ = -1, dabTableScale_ = 0;
     StampOf<Sample> stamp_;
     std::vector<Sample> tailBackup_;
+    std::shared_ptr<Gray16> proxy_;
 };
+
+template <SampleType S> using StrokeRaster = StrokeRasterOf<StrokeOps<S>>;
+template <SampleType S> using CmykStrokeRaster = StrokeRasterOf<CmykStrokeOps<S>>;
 
 namespace stroke {
 
@@ -189,7 +330,7 @@ void stretchGray(const Gray& source, Gray& target, const Rect& rect) {
     }
 }
 
-template <class Color>
+template <int N, class Color>
 void copyImage(const Color& source, Color& target, int dx, int dy) {
     using Sample = std::remove_cv_t<std::remove_pointer_t<decltype(source.row(0))>>;
     const int x0 = std::max(0, -dx), x1 = std::min(source.width(), target.width() - dx);
@@ -198,15 +339,17 @@ void copyImage(const Color& source, Color& target, int dx, int dy) {
         for (int y = ya; y < yb; y++) {
             const int ty = y + dy;
             if (ty < 0 || ty >= target.height()) continue;
-            std::memcpy(target.pixel(x0 + dx, ty), source.pixel(x0, y), size_t(x1 - x0) * 4 * sizeof(Sample));
+            std::memcpy(target.pixel(x0 + dx, ty), source.pixel(x0, y), size_t(x1 - x0) * N * sizeof(Sample));
         }
     });
 }
+template <class Color>
+void copyImage(const Color& source, Color& target, int dx, int dy) { copyImage<4>(source, target, dx, dy); }
 
 /// A bilinear sample of an image (or an ensured tiled one) at a document point, transparent outside.
-template <class Source>
-void bilinear(const Source& at, int sw, int sh, double sx, double sy, double s[4]) {
-    s[0] = s[1] = s[2] = s[3] = 0;
+template <int N = 4, class Source>
+void bilinear(const Source& at, int sw, int sh, double sx, double sy, double s[N]) {
+    for (int k = 0; k < N; k++) s[k] = 0;
     const int ix = int(std::floor(sx)), iy = int(std::floor(sy));
     const double fx = sx - ix, fy = sy - iy;
     for (int j = 0; j < 2; j++)
@@ -216,14 +359,14 @@ void bilinear(const Source& at, int sw, int sh, double sx, double sy, double s[4
             if (w <= 0 || px < 0 || py < 0 || px >= sw || py >= sh) continue;
             const auto* p = at(px, py);
             if (!p) continue;
-            for (int k = 0; k < 4; k++) s[k] += p[k] * w;
+            for (int k = 0; k < N; k++) s[k] += p[k] * w;
         }
 }
 
 } // namespace stroke
 
-template <SampleType S>
-bool StrokeRaster<S>::init(const Layer& layer, bool mask, const Gray* selectionIn) {
+template <class OpsT>
+bool StrokeRasterOf<OpsT>::init(const Layer& layer, bool mask, const Gray* selectionIn) {
     BrushStroke& g = g_;
     const Gray* ownMask = layer.mask ? Ops::of(layer.mask->asset.image).get() : nullptr;
     const Gray* placedMask = nullptr;
@@ -252,15 +395,18 @@ bool StrokeRaster<S>::init(const Layer& layer, bool mask, const Gray* selectionI
 
     const BrushSettings& settings = g.settings_;
     const Color* own = layer.asset ? Ops::of(layer.asset->image).get() : nullptr;
-    if (width < 1 || height < 1 || double(width) * height > double(Document::imagePixelBudget(S)) || originalWidth > maxImageSide || originalHeight > maxImageSide
+    if constexpr (requires { own->channels(); }) {
+        if (own && own->channels() != N) own = nullptr;   // a buffer of another layout is refused below
+    }
+    if (width < 1 || height < 1 || double(width) * height > double(Ops::budget()) || originalWidth > maxImageSide || originalHeight > maxImageSide
         || !std::isfinite(settings.diameter) || settings.diameter < 1 || settings.diameter > 2000
         || !std::isfinite(settings.hardness) || settings.hardness < 0 || settings.hardness > 1
         || !std::isfinite(settings.opacity) || settings.opacity < 0.01 || settings.opacity > 1) {
         g.error_ = "This stroke exceeds the supported canvas or brush limits.";
         return false;
     }
-    // A deeper stroke refuses pixels of another depth; the 8-bit one has always painted such a layer as blank.
-    if constexpr (S != SampleType::U8) {
+    // A deeper stroke refuses pixels of another depth; the 8-bit RGB one has always painted such a layer as blank.
+    if constexpr (Ops::type != SampleType::U8 || N != 4) {
         if ((!mask && layer.asset && layer.asset->image && !own) || (mask && layer.mask && layer.mask->asset.image && !ownMask)) {
             g.error_ = "The layer's pixels are not at the document's depth.";
             return false;
@@ -283,12 +429,12 @@ bool StrokeRaster<S>::init(const Layer& layer, bool mask, const Gray* selectionI
             // Base and working copy each get the layer's own pixels; the rest of the grid is zero pages in both,
             // so the working copy is not a copy of the whole grid. A blank layer (no pixels yet) needs no copy and
             // no scan: two images of zero pages, which cost nothing until painted.
-            auto copy = std::make_shared<Color>(width, height);
-            auto work = std::make_shared<Color>(width, height);
+            auto copy = Ops::make(width, height);
+            auto work = Ops::make(width, height);
             if (own) {
                 const int dx = int(g.sourceRect_.minX()), dy = int(g.sourceRect_.minY());
-                stroke::copyImage(*own, *copy, dx, dy);
-                stroke::copyImage(*own, *work, dx, dy);
+                stroke::copyImage<N>(*own, *copy, dx, dy);
+                stroke::copyImage<N>(*own, *work, dx, dy);
                 PixelBounds b = Ops::bounds(*own);
                 if (!b.isEmpty()) {
                     b = {std::max(0, b.x0 + dx), std::max(0, b.y0 + dy), std::min(width, b.x1 + dx), std::min(height, b.y1 + dy)};
@@ -314,34 +460,59 @@ bool StrokeRaster<S>::init(const Layer& layer, bool mask, const Gray* selectionI
             for (int x = 0; x < width; x++, d = d + dd) {
                 const int sx = int(std::floor(d.x)), sy = int(std::floor(d.y));
                 if (sx < 0 || sy < 0 || sx >= selectionIn->width() || sy >= selectionIn->height()) continue;
-                selection->at(x, y) = Sample(std::min<uint32_t>(selectionIn->at(sx, sy), Ops::one));
+                selection->at(x, y) = Sample(std::min<Calc>(Calc(selectionIn->at(sx, sy)), Calc(Ops::one)));
             }
         }
     }
     return true;
 }
 
-template <SampleType S>
-void StrokeRaster<S>::refreshLevels(int x0, int y0, int x1, int y1) const {
+template <class OpsT>
+void StrokeRasterOf<OpsT>::refreshLevels(int x0, int y0, int x1, int y1) const {
     if (working) MipCache::shared().refresh(working.get(), x0, y0, x1, y1);
     if (workingMask) MipCache::shared().refresh(workingMask.get(), x0, y0, x1, y1);
 }
 
-template <SampleType S>
-void StrokeRaster<S>::saveTail(const Rect& affected) {
+template <class OpsT>
+Gray16* StrokeRasterOf<OpsT>::proxyCoverage() {
+    if constexpr (Ops::type != SampleType::F32) return nullptr;
+    else {
+        if (!proxy_ && coverage) proxy_ = std::make_shared<Gray16>(coverage->width(), coverage->height());
+        return proxy_.get();
+    }
+}
+
+template <class OpsT>
+void StrokeRasterOf<OpsT>::syncCoverage(const Rect& r) {
+    if constexpr (Ops::type == SampleType::F32) {
+        if (!proxy_ || !coverage) return;
+        const int x0 = std::max(0, int(r.minX())), y0 = std::max(0, int(r.minY()));
+        const int x1 = std::min(coverage->width(), int(std::ceil(r.maxX()))), y1 = std::min(coverage->height(), int(std::ceil(r.maxY())));
+        for (int y = y0; y < y1; y++) {
+            const uint16_t* in = proxy_->row(y);
+            float* out = coverage->row(y);
+            for (int x = x0; x < x1; x++) out[x] = std::min<uint32_t>(in[x], one16) * (1.0f / float(one16));
+        }
+    } else {
+        (void)r;
+    }
+}
+
+template <class OpsT>
+void StrokeRasterOf<OpsT>::saveTail(const Rect& affected) {
     const int x0 = int(affected.minX()), y0 = int(affected.minY()), w = int(affected.width), h = int(affected.height);
     tailBackup_.resize(size_t(w) * size_t(h));
     for (int y = 0; y < h; y++) std::memcpy(&tailBackup_[size_t(y) * size_t(w)], coverage->row(y0 + y) + x0, size_t(w) * sizeof(Sample));
 }
 
-template <SampleType S>
-void StrokeRaster<S>::restoreTail(const Rect& tail) {
+template <class OpsT>
+void StrokeRasterOf<OpsT>::restoreTail(const Rect& tail) {
     const int x0 = int(tail.minX()), y0 = int(tail.minY()), w = int(tail.width), h = int(tail.height);
     for (int y = 0; y < h; y++) std::memcpy(coverage->row(y0 + y) + x0, &tailBackup_[size_t(y) * size_t(w)], size_t(w) * sizeof(Sample));
 }
 
-template <SampleType S>
-void StrokeRaster<S>::refreshDabTable(double radius, double hardness, double footprint) {
+template <class OpsT>
+void StrokeRasterOf<OpsT>::refreshDabTable(double radius, double hardness, double footprint) {
     if (dabTableRadius_ == radius && dabTableHardness_ == hardness && dabTableFootprint_ == footprint) return;
     dabTableRadius_ = radius; dabTableHardness_ = hardness; dabTableFootprint_ = footprint;
     const bool hard = hardness >= 1;
@@ -361,8 +532,8 @@ void StrokeRaster<S>::refreshDabTable(double radius, double hardness, double foo
     }
 }
 
-template <SampleType S>
-bool StrokeRaster<S>::stampDab(Point center, double radius, const Rect& affected) {
+template <class OpsT>
+bool StrokeRasterOf<OpsT>::stampDab(Point center, double radius, const Rect& affected) {
     const BrushStroke& g = g_;
     const Affine& m = g.pixelToDocument_;
     if (!g.settings_.stampedDabs || m.b != 0 || m.c != 0 || m.a != m.d || !(m.a > 0)) return false;
@@ -426,8 +597,8 @@ bool StrokeRaster<S>::stampDab(Point center, double radius, const Rect& affected
     return true;
 }
 
-template <SampleType S>
-void StrokeRaster<S>::dab(Point center) {
+template <class OpsT>
+void StrokeRasterOf<OpsT>::dab(Point center) {
     BrushStroke& g = g_;
     const double radius = g.settings_.diameter / 2;
     const Rect circle(center.x - radius, center.y - radius, radius * 2, radius * 2);
@@ -461,10 +632,10 @@ void StrokeRaster<S>::dab(Point center) {
                 const double index = q * dabTableScale_;
                 const int i = int(index);
                 const unsigned frac = unsigned((index - i) * 256);
-                const unsigned value = Ops::lerpTable(dabTable_[size_t(i)], dabTable_[size_t(i) + 1], frac);
+                const Calc value = Ops::lerpTable(dabTable_[size_t(i)], dabTable_[size_t(i) + 1], frac);
                 if (value == 0) continue;
-                const unsigned old = row[x];
-                row[x] = Sample(hard ? std::max(old, value) : unsigned(Ops::screen(old, value)));
+                const Calc old = row[x];
+                row[x] = Sample(hard ? std::max(old, value) : Calc(Ops::screen(old, value)));
             }
         }
     };
@@ -472,8 +643,8 @@ void StrokeRaster<S>::dab(Point center) {
     g.markDirty(affected);
 }
 
-template <SampleType S>
-void StrokeRaster<S>::recompose(const Rect& r) {
+template <class OpsT>
+void StrokeRasterOf<OpsT>::recompose(const Rect& r) {
     const BrushStroke& g = g_;
     typename Ops::Tiled* tiled = g.clone_ ? Ops::cloneTiled(*g.clone_) : nullptr;
     if (tiled) {
@@ -494,8 +665,26 @@ void StrokeRaster<S>::recompose(const Rect& r) {
     parallelRows(int(r.minY()), int(r.maxY()), [&](int ya, int yb) { recomposeRows(Rect(r.minX(), ya, r.width, yb - ya)); }, 32);
 }
 
-template <SampleType S>
-void StrokeRaster<S>::recomposeRows(const Rect& r) {
+template <class OpsT>
+void StrokeRasterOf<OpsT>::paintColour(double out[N], bool wash) const {
+    const BrushStroke& g = g_;
+    constexpr double one = Ops::one;
+    const BrushSettings& settings = g.settings_;
+    const float rgb[3] = {wash ? 0.12f : float(settings.red), wash ? 0.12f : float(settings.green), wash ? 0.12f : float(settings.blue)};
+    if (g.toNative_) {
+        double native[4] = {0, 0, 0, 0};
+        g.toNative_(rgb, native);
+        for (int c = 0; c < N - 1; c++) out[c] = native[c] * one;
+    } else if (wash) {
+        for (int c = 0; c < N - 1; c++) out[c] = 0.12 * one;
+    } else {
+        out[0] = settings.red * one; out[1] = settings.green * one; out[2] = settings.blue * one;
+    }
+    out[N - 1] = one;
+}
+
+template <class OpsT>
+void StrokeRasterOf<OpsT>::recomposeRows(const Rect& r) {
     const BrushStroke& g = g_;
     const BrushSettings& settings = g.settings_;
     const int x0 = int(r.minX()), x1 = int(r.maxX()), y0 = int(r.minY()), y1 = int(r.maxY());
@@ -534,25 +723,29 @@ void StrokeRaster<S>::recomposeRows(const Rect& r) {
         }
         return;
     }
-    double cr = settings.red * one, cg = settings.green * one, cb = settings.blue * one;
-    if (settings.healing && !g.clone_) { cr = cg = cb = 0.12 * one; opacity *= 0.45; } // the wash shown while painting (the Healing Brush shows its source)
+    const bool wash = settings.healing && !g.clone_;   // the wash shown while painting (the Healing Brush shows its source)
+    double paint[N];
+    paintColour(paint, wash);
+    if (wash) opacity *= 0.45;
     if (!g.clone_) {
         // Plain paint or erase: integer lerps, one coverage step per pixel.
-        const uint32_t op = Ops::quantise(opacity);
-        const int colour[4] = {int(clamp(cr + 0.5, 0.0, one)), int(clamp(cg + 0.5, 0.0, one)), int(clamp(cb + 0.5, 0.0, one)), int(Ops::one)};
+        const Calc op = Ops::quantise(opacity);
+        Paint colour[N];
+        for (int c = 0; c < N - 1; c++) colour[c] = Ops::paintValue(paint[c]);
+        colour[N - 1] = Paint(Ops::one);
         const bool erasing = settings.erasing;
         for (int y = y0; y < y1; y++) {
             const Sample* cov = coverage->row(y);
             const Sample* selRow = sel ? sel->row(y) : nullptr;
-            const Sample* baseRow = base->row(y) + x0 * 4;
-            Sample* out = working->row(y) + x0 * 4;
-            for (int x = x0; x < x1; x++, baseRow += 4, out += 4) {
-                uint32_t k = cov[x];
+            const Sample* baseRow = base->row(y) + x0 * N;
+            Sample* out = working->row(y) + x0 * N;
+            for (int x = x0; x < x1; x++, baseRow += N, out += N) {
+                Calc k = cov[x];
                 if (selRow) k = Ops::mul(k, selRow[x]);
                 k = Ops::mul(k, op);
-                if (k == 0) { std::memcpy(out, baseRow, 4 * sizeof(Sample)); continue; }
-                if (erasing) { for (int c = 0; c < 4; c++) out[c] = Sample(Ops::mul(baseRow[c], Ops::one - k)); continue; }
-                for (int c = 0; c < 4; c++) out[c] = Sample(Ops::toward(int(baseRow[c]), colour[c], int(k)));
+                if (k == 0) { std::memcpy(out, baseRow, N * sizeof(Sample)); continue; }
+                if (erasing) { for (int c = 0; c < N; c++) out[c] = Sample(Ops::mul(baseRow[c], Ops::one - k)); continue; }
+                for (int c = 0; c < N; c++) out[c] = Sample(Ops::toward(Paint(baseRow[c]), colour[c], Paint(k)));
             }
         }
         return;
@@ -564,57 +757,54 @@ void StrokeRaster<S>::recomposeRows(const Rect& r) {
     for (int y = y0; y < y1; y++) {
         const Sample* cov = coverage->row(y);
         const Sample* selRow = sel ? sel->row(y) : nullptr;
-        const Sample* baseRow = base->row(y) + x0 * 4;
-        Sample* out = working->row(y) + x0 * 4;
+        const Sample* baseRow = base->row(y) + x0 * N;
+        Sample* out = working->row(y) + x0 * N;
         Point d = g.pixelToDocument_.apply({x0 + 0.5, y + 0.5});
         const Point dd = g.pixelToDocument_.applyVector({1, 0});
-        for (int x = x0; x < x1; x++, baseRow += 4, out += 4, d = d + dd) {
+        for (int x = x0; x < x1; x++, baseRow += N, out += N, d = d + dd) {
             const double c = cov[x] / one * opacity * (selRow ? selRow[x] / one : 1.0);
-            if (c <= 0) { std::memcpy(out, baseRow, 4 * sizeof(Sample)); continue; }
+            if (c <= 0) { std::memcpy(out, baseRow, N * sizeof(Sample)); continue; }
             if (src || tiled) {
                 // The sample under the source point, over the original through the tip.
-                double s[4];
-                stroke::bilinear(at, sw, sh, d.x + g.clone_->offset.x - 0.5, d.y + g.clone_->offset.y - 0.5, s);
-                const double sa = g.replacesWithClone_ ? c : s[3] / one * c;
-                for (int k = 0; k < 4; k++) out[k] = Ops::store(s[k] * c + baseRow[k] * (1 - sa));
+                double s[N];
+                stroke::bilinear<N>(at, sw, sh, d.x + g.clone_->offset.x - 0.5, d.y + g.clone_->offset.y - 0.5, s);
+                const double sa = g.replacesWithClone_ ? c : s[N - 1] / one * c;
+                for (int k = 0; k < N; k++) out[k] = Ops::store(s[k] * c + baseRow[k] * (1 - sa));
                 continue;
             }
             if (settings.erasing) {
-                for (int k = 0; k < 4; k++) out[k] = Ops::store(baseRow[k] * (1 - c));
+                for (int k = 0; k < N; k++) out[k] = Ops::store(baseRow[k] * (1 - c));
             } else {
-                out[0] = Ops::store(baseRow[0] * (1 - c) + cr * c);
-                out[1] = Ops::store(baseRow[1] * (1 - c) + cg * c);
-                out[2] = Ops::store(baseRow[2] * (1 - c) + cb * c);
-                out[3] = Ops::store(baseRow[3] * (1 - c) + one * c);
+                for (int k = 0; k < N; k++) out[k] = Ops::store(baseRow[k] * (1 - c) + paint[k] * c);
             }
         }
     }
 }
 
-template <SampleType S>
-bool StrokeRaster<S>::liftSelection() {
+template <class OpsT>
+bool StrokeRasterOf<OpsT>::liftSelection() {
     BrushStroke& g = g_;
     if (g.isMask_ || !selection || !base) return false;
     const PixelBounds b = nonzeroBounds(*selection);
     const Rect region = b.isEmpty() ? Rect() : Rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0).intersection(g.sourceRect_).integral();
     if (region.isEmpty()) return false;
     g.liftedRect_ = region;
-    lifted = std::make_shared<Color>(int(region.width), int(region.height));
+    lifted = Ops::make(int(region.width), int(region.height));
     bool any = false;
     for (int y = 0; y < lifted->height(); y++)
         for (int x = 0; x < lifted->width(); x++) {
             const int sx = x + int(region.x), sy = y + int(region.y);
-            const uint32_t k = selection->at(sx, sy);
+            const Calc k = selection->at(sx, sy);
             const Sample* s = base->pixel(sx, sy);
             Sample* d = lifted->pixel(x, y);
-            for (int c = 0; c < 4; c++) d[c] = Sample(Ops::mul(s[c], k));
-            if (d[3]) any = true;
+            for (int c = 0; c < N; c++) d[c] = Sample(Ops::mul(s[c], k));
+            if (d[N - 1]) any = true;
         }
     return any;
 }
 
-template <SampleType S>
-void StrokeRaster<S>::moveLifted(Point offset, bool duplicate) {
+template <class OpsT>
+void StrokeRasterOf<OpsT>::moveLifted(Point offset, bool duplicate) {
     BrushStroke& g = g_;
     if (!lifted || !selection) return;
     const int width = g.width_, height = g.height_;
@@ -625,10 +815,10 @@ void StrokeRaster<S>::moveLifted(Point offset, bool duplicate) {
     if (!duplicate)
         for (int y = 0; y < height; y++)
             for (int x = 0; x < width; x++) {
-                const uint32_t k = selection->at(x, y);
+                const Calc k = selection->at(x, y);
                 if (!k) continue;
                 Sample* p = working->pixel(x, y);
-                for (int c = 0; c < 4; c++) p[c] = Sample(Ops::mul(p[c], Ops::one - std::min(k, Ops::one)));
+                for (int c = 0; c < N; c++) p[c] = Sample(Ops::mul(p[c], Ops::one - std::min(k, Calc(Ops::one))));
             }
     const bool whole = std::fabs(gx - std::round(gx)) < 1e-6 && std::fabs(gy - std::round(gy)) < 1e-6;
     const double tx = g.liftedRect_.x + gx, ty = g.liftedRect_.y + gy;
@@ -637,16 +827,16 @@ void StrokeRaster<S>::moveLifted(Point offset, bool duplicate) {
     for (int y = int(target.minY()); y < int(target.maxY()); y++)
         for (int x = int(target.minX()); x < int(target.maxX()); x++) {
             const double sx = x - tx, sy = y - ty;
-            float s[4] = {0, 0, 0, 0};
+            float s[N] = {};
             if (whole) {
                 const int ix = int(std::lround(sx)), iy = int(std::lround(sy));
                 if (ix < 0 || iy < 0 || ix >= lw || iy >= lh) continue;
                 const Sample* p = lifted->pixel(ix, iy);
-                for (int c = 0; c < 4; c++) s[c] = p[c];
+                for (int c = 0; c < N; c++) s[c] = p[c];
             } else {
                 // The 8-bit path has always centred the sample this way (its rounding kept for identical pixels).
                 double bxf = sx, byf = sy;
-                if constexpr (S == SampleType::U8) { bxf = sx - 0.5 + 0.5; byf = sy - 0.5 + 0.5; }
+                if constexpr (Ops::type == SampleType::U8) { bxf = sx - 0.5 + 0.5; byf = sy - 0.5 + 0.5; }
                 const int bx = int(std::floor(bxf)), by = int(std::floor(byf));
                 const float fx = float(bxf - bx), fy = float(byf - by);
                 for (int j = 0; j < 2; j++)
@@ -655,21 +845,21 @@ void StrokeRaster<S>::moveLifted(Point offset, bool duplicate) {
                         const float w = (i ? fx : 1 - fx) * (j ? fy : 1 - fy);
                         if (w <= 0 || px < 0 || py < 0 || px >= lw || py >= lh) continue;
                         const Sample* p = lifted->pixel(px, py);
-                        for (int c = 0; c < 4; c++) s[c] += p[c] * w;
+                        for (int c = 0; c < N; c++) s[c] += p[c] * w;
                     }
             }
-            if (s[3] <= 0) continue;
+            if (s[N - 1] <= 0) continue;
             Sample* d = working->pixel(x, y);
-            const float a = s[3] / float(Ops::one);
-            for (int c = 0; c < 4; c++) d[c] = Ops::storeF(s[c] + d[c] * (1 - a));
+            const float a = s[N - 1] / float(Ops::one);
+            for (int c = 0; c < N; c++) d[c] = Ops::storeF(s[c] + d[c] * (1 - a));
         }
     g.touched_ = true;
     g.dirtyGrid_ = {};
     refreshLevels(0, 0, width, height);
 }
 
-template <SampleType S>
-void StrokeRaster<S>::fillGradientOver(int shape, Point from, Point to, const GradientStops& stops, double opacity) {
+template <class OpsT>
+void StrokeRasterOf<OpsT>::fillGradientOver(int shape, Point from, Point to, const GradientStops& stops, double opacity) {
     BrushStroke& g = g_;
     g.touched_ = true;
     g.dirtyGrid_ = {}; // the working image is composed here, not from the coverage
@@ -681,85 +871,232 @@ void StrokeRaster<S>::fillGradientOver(int shape, Point from, Point to, const Gr
         for (int x = 0; x < g.width_; x++, d = d + dd)
             if (g.canvas_.contains(d)) inside.at(x, y) = selection ? selection->at(x, y) : Sample(Ops::one);
     }
-    if (g.isMask_) fillGradient(*baseMask, *workingMask, g.pixelToDocument_, GradientShape(shape), from, to, stops, opacity, &inside);
-    else fillGradient(*base, *working, g.pixelToDocument_, GradientShape(shape), from, to, stops, opacity, &inside);
+    if constexpr (Ops::type == SampleType::F32) {
+        (void)stops; (void)opacity; (void)shape; (void)from; (void)to;   // the float gradient goes through fillGradientNative
+    } else {
+        if (g.isMask_) fillGradient(*baseMask, *workingMask, g.pixelToDocument_, GradientShape(shape), from, to, stops, opacity, &inside);
+        else if constexpr (N == 4) fillGradient(*base, *working, g.pixelToDocument_, GradientShape(shape), from, to, stops, opacity, &inside);
+    }
     refreshLevels(0, 0, g.width_, g.height_);
 }
 
-template <SampleType S>
-void StrokeRaster<S>::heal() {
+template <class OpsT>
+void StrokeRasterOf<OpsT>::fillGradientNative(int shape, Point from, Point to, const GradientStops& stops, const GradientStops* fourth, double opacity) {
+    BrushStroke& g = g_;
+    g.touched_ = true;
+    g.dirtyGrid_ = {};
+    constexpr double one = Ops::one;
+    const GradientShape kind = GradientShape(shape);
+    // Each pixel's colour from the stops at its position, over the original by the stop's alpha, the opacity, the
+    // canvas and the selection; in the layout's own samples (linear light at 32 bits, inks in CMYK, L a b in Lab).
+    parallelRows(0, g.height_, [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++) {
+            Point d = g.pixelToDocument_.apply({0.5, y + 0.5});
+            const Point dd = g.pixelToDocument_.applyVector({1, 0});
+            for (int x = 0; x < g.width_; x++, d = d + dd) {
+                if (!g.canvas_.contains(d)) continue;
+                const double t = gradientPositionAt(kind, from, to, d);
+                float col[4], extra[4] = {0, 0, 0, 0};
+                stops.sample(float(t), col);
+                if (fourth) fourth->sample(float(t), extra);
+                const double cov = opacity * (selection ? selection->at(x, y) / one : 1.0);
+                if (g.isMask_) {
+                    const double k = cov * col[3];
+                    workingMask->at(x, y) = Ops::store(baseMask->at(x, y) * (1 - k) + col[0] * one * k);
+                    continue;
+                }
+                const double a = col[3] * cov;
+                const Sample* b = base->pixel(x, y);
+                Sample* o = working->pixel(x, y);
+                if (a <= 0) { std::memcpy(o, b, N * sizeof(Sample)); continue; }
+                double value[N];
+                for (int c = 0; c < N - 1; c++) value[c] = c < 3 ? col[c] : extra[0];
+                value[N - 1] = 1;
+                for (int c = 0; c < N; c++) o[c] = Ops::store(value[c] * a * one + b[c] * (1 - a));
+            }
+        }
+    }, 16);
+    refreshLevels(0, 0, g.width_, g.height_);
+}
+
+template <class OpsT>
+void StrokeRasterOf<OpsT>::heal() {
     const BrushStroke& g = g_;
     if (!g.settings_.healing || g.isMask_ || !coverage) return;
     const PixelBounds b = nonzeroBounds(*coverage);
     if (b.isEmpty()) return;
-    if (g.clone_ && Ops::cloneImage(*g.clone_)) { healFromClone(b); return; }
-    // Room for the kernel's patch search, which looks up to about three spot-widths away.
-    const double reach = (std::max(b.x1 - b.x0, b.y1 - b.y0) + 32) * 3.2;
-    const Rect region = Rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0).insetBy(-reach, -reach).intersection(Rect(0, 0, g.width_, g.height_)).integral();
-    const int rx = int(region.x), ry = int(region.y), rw = int(region.width), rh = int(region.height);
-    if (rw <= 0 || rh <= 0) return;
-    auto pixels = cropImage(*base, rx, ry, rw, rh);
-    auto painting = cropGray(*coverage, rx, ry, rw, rh);
-    if (selection)
+    if constexpr (N != 4) {
+        return;   // CMYK healing is not ported yet (greyed in supports())
+    } else if constexpr (Ops::type == SampleType::F32) {
+        healF(b);
+    } else {
+        if (g.clone_ && Ops::cloneImage(*g.clone_)) { healFromClone(b); return; }
+        // Room for the kernel's patch search, which looks up to about three spot-widths away.
+        const double reach = (std::max(b.x1 - b.x0, b.y1 - b.y0) + 32) * 3.2;
+        const Rect region = Rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0).insetBy(-reach, -reach).intersection(Rect(0, 0, g.width_, g.height_)).integral();
+        const int rx = int(region.x), ry = int(region.y), rw = int(region.width), rh = int(region.height);
+        if (rw <= 0 || rh <= 0) return;
+        auto pixels = cropImage(*base, rx, ry, rw, rh);
+        auto painting = cropGray(*coverage, rx, ry, rw, rh);
+        if (selection)
+            for (int y = 0; y < rh; y++)
+                for (int x = 0; x < rw; x++) painting->at(x, y) = Sample(Ops::mul(painting->at(x, y), selection->at(x + rx, y + ry)));
+        // The kernel treats any touched pixel as the hole, so a soft tip would make its own faint rim part of
+        // the hole and leave it half healed. Heal the solid core only, then feather the result in by coverage.
+        auto core = std::make_shared<Gray>(rw, rh);
         for (int y = 0; y < rh; y++)
-            for (int x = 0; x < rw; x++) painting->at(x, y) = Sample(Ops::mul(painting->at(x, y), selection->at(x + rx, y + ry)));
-    // The kernel treats any touched pixel as the hole, so a soft tip would make its own faint rim part of
-    // the hole and leave it half healed. Heal the solid core only, then feather the result in by coverage.
-    auto core = std::make_shared<Gray>(rw, rh);
-    for (int y = 0; y < rh; y++)
-        for (int x = 0; x < rw; x++) core->at(x, y) = painting->at(x, y) >= Ops::solidCore ? Sample(Ops::one) : Sample(0);
-    std::shared_ptr<Gray> visibleCrop = visible ? cropGray(*visible, rx, ry, rw, rh) : nullptr;
-    spotHeal(*pixels, *core, float(g.settings_.opacity), g.settings_.healingMode, g.settings_.healingSeed, visibleCrop.get());
-    // The healed pixels replace the wash: the working image becomes the original with the healed region.
-    working = std::make_shared<Color>(*base);
-    for (int y = 0; y < rh; y++) {
-        Sample* dst = working->pixel(rx, y + ry);
-        const Sample* healed = pixels->row(y);
-        const Sample* orig = base->pixel(rx, y + ry);
-        for (int x = 0; x < rw; x++, dst += 4, healed += 4, orig += 4) {
-            const uint32_t k = std::min<uint32_t>(painting->at(x, y), Ops::one);
-            if (k == 0) continue;
-            if (k >= Ops::one) { std::memcpy(dst, healed, 4 * sizeof(Sample)); continue; }
-            for (int c = 0; c < 4; c++) dst[c] = Sample(Ops::mix(orig[c], healed[c], k));
+            for (int x = 0; x < rw; x++) core->at(x, y) = painting->at(x, y) >= Ops::solidCore ? Sample(Ops::one) : Sample(0);
+        std::shared_ptr<Gray> visibleCrop = visible ? cropGray(*visible, rx, ry, rw, rh) : nullptr;
+        spotHeal(*pixels, *core, float(g.settings_.opacity), g.settings_.healingMode, g.settings_.healingSeed, visibleCrop.get());
+        // The healed pixels replace the wash: the working image becomes the original with the healed region.
+        working = std::make_shared<Color>(*base);
+        for (int y = 0; y < rh; y++) {
+            Sample* dst = working->pixel(rx, y + ry);
+            const Sample* healed = pixels->row(y);
+            const Sample* orig = base->pixel(rx, y + ry);
+            for (int x = 0; x < rw; x++, dst += 4, healed += 4, orig += 4) {
+                const uint32_t k = std::min<uint32_t>(painting->at(x, y), Ops::one);
+                if (k == 0) continue;
+                if (k >= Ops::one) { std::memcpy(dst, healed, 4 * sizeof(Sample)); continue; }
+                for (int c = 0; c < 4; c++) dst[c] = Sample(Ops::mix(orig[c], healed[c], k));
+            }
         }
+        refreshLevels(0, 0, g.width_, g.height_);
     }
-    refreshLevels(0, 0, g.width_, g.height_);
 }
 
-template <SampleType S>
-void StrokeRaster<S>::healFromClone(const PixelBounds& b) {
-    // The Healing Brush: the source under the stroke (as Clone Stamp samples it), its tone matched to the edge.
-    const BrushStroke& g = g_;
-    const Rect region = Rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0).insetBy(-2, -2).intersection(Rect(0, 0, g.width_, g.height_)).integral();
-    const int rx = int(region.x), ry = int(region.y), rw = int(region.width), rh = int(region.height);
-    if (rw <= 0 || rh <= 0) return;
-    auto pixels = cropImage(*base, rx, ry, rw, rh);
-    auto painting = cropGray(*coverage, rx, ry, rw, rh);
-    if (selection)
-        for (int y = 0; y < rh; y++)
-            for (int x = 0; x < rw; x++) painting->at(x, y) = Sample(Ops::mul(painting->at(x, y), selection->at(x + rx, y + ry)));
-    Color source(rw, rh);
-    const Color& src = *Ops::cloneImage(*g.clone_);
-    auto at = [&](int px, int py) -> const Sample* { return src.pixel(px, py); };
-    for (int y = 0; y < rh; y++) {
-        Point d = g.pixelToDocument_.apply({rx + 0.5, y + ry + 0.5});
-        const Point dd = g.pixelToDocument_.applyVector({1, 0});
-        for (int x = 0; x < rw; x++, d = d + dd) {
-            double s[4];
-            stroke::bilinear(at, src.width(), src.height(), d.x + g.clone_->offset.x - 0.5, d.y + g.clone_->offset.y - 0.5, s);
-            Sample* out = source.pixel(x, y);
-            for (int k = 0; k < 4; k++) out[k] = Ops::nearest(s[k]);
+template <class OpsT>
+void StrokeRasterOf<OpsT>::healFromClone(const PixelBounds& b) {
+    if constexpr (N == 4 && Ops::type != SampleType::F32) {
+        // The Healing Brush: the source under the stroke (as Clone Stamp samples it), its tone matched to the edge.
+        const BrushStroke& g = g_;
+        const Rect region = Rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0).insetBy(-2, -2).intersection(Rect(0, 0, g.width_, g.height_)).integral();
+        const int rx = int(region.x), ry = int(region.y), rw = int(region.width), rh = int(region.height);
+        if (rw <= 0 || rh <= 0) return;
+        auto pixels = cropImage(*base, rx, ry, rw, rh);
+        auto painting = cropGray(*coverage, rx, ry, rw, rh);
+        if (selection)
+            for (int y = 0; y < rh; y++)
+                for (int x = 0; x < rw; x++) painting->at(x, y) = Sample(Ops::mul(painting->at(x, y), selection->at(x + rx, y + ry)));
+        Color source(rw, rh);
+        const Color& src = *Ops::cloneImage(*g.clone_);
+        auto at = [&](int px, int py) -> const Sample* { return src.pixel(px, py); };
+        for (int y = 0; y < rh; y++) {
+            Point d = g.pixelToDocument_.apply({rx + 0.5, y + ry + 0.5});
+            const Point dd = g.pixelToDocument_.applyVector({1, 0});
+            for (int x = 0; x < rw; x++, d = d + dd) {
+                double s[4];
+                stroke::bilinear(at, src.width(), src.height(), d.x + g.clone_->offset.x - 0.5, d.y + g.clone_->offset.y - 0.5, s);
+                Sample* out = source.pixel(x, y);
+                for (int k = 0; k < 4; k++) out[k] = Ops::nearest(s[k]);
+            }
         }
+        std::shared_ptr<Gray> visibleCrop = visible ? cropGray(*visible, rx, ry, rw, rh) : nullptr;
+        healFrom(*pixels, source, *painting, float(g.settings_.opacity), visibleCrop.get());
+        working = std::make_shared<Color>(*base);
+        for (int y = 0; y < rh; y++) std::memcpy(working->pixel(rx, y + ry), pixels->row(y), size_t(rw) * 4 * sizeof(Sample));
+        refreshLevels(0, 0, g.width_, g.height_);
+    } else {
+        (void)b;
     }
-    std::shared_ptr<Gray> visibleCrop = visible ? cropGray(*visible, rx, ry, rw, rh) : nullptr;
-    healFrom(*pixels, source, *painting, float(g.settings_.opacity), visibleCrop.get());
-    working = std::make_shared<Color>(*base);
-    for (int y = 0; y < rh; y++) std::memcpy(working->pixel(rx, y + ry), pixels->row(y), size_t(rw) * 4 * sizeof(Sample));
-    refreshLevels(0, 0, g.width_, g.height_);
 }
 
-template <SampleType S>
-void StrokeRaster<S>::commit(BrushStroke::Commit& result) {
+template <class OpsT>
+void StrokeRasterOf<OpsT>::healF(const PixelBounds& b) {
+    if constexpr (Ops::type == SampleType::F32) {
+        // At 32 bits the healers work on the area encoded through the document's curve at 15 bits (what decides the
+        // patch is the picture as exposure 0 shows it, as the wand's decisionImage), scaled first under its
+        // brightest straight colour when that is above 1, so light above white heals as light and not as a clipped
+        // white. The healed pixels are decoded back and blended in by coverage; pixels the stroke did not cover keep
+        // their exact floats.
+        const BrushStroke& g = g_;
+        const TransferCurve curve = g.curve_ ? *g.curve_ : TransferCurve::srgb();
+        const bool fromClone = g.clone_ && g.clone_->imageF;
+        const double reach = fromClone ? 2 : (std::max(b.x1 - b.x0, b.y1 - b.y0) + 32) * 3.2;
+        const Rect region = Rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0).insetBy(-reach, -reach).intersection(Rect(0, 0, g.width_, g.height_)).integral();
+        const int rx = int(region.x), ry = int(region.y), rw = int(region.width), rh = int(region.height);
+        if (rw <= 0 || rh <= 0) return;
+        auto pixels = cropImage(*base, rx, ry, rw, rh);
+        std::shared_ptr<ImageF> source;
+        if (fromClone) {
+            source = std::make_shared<ImageF>(rw, rh);
+            const ImageF& src = *g.clone_->imageF;
+            auto at = [&](int px, int py) -> const float* { return src.pixel(px, py); };
+            for (int y = 0; y < rh; y++) {
+                Point d = g.pixelToDocument_.apply({rx + 0.5, y + ry + 0.5});
+                const Point dd = g.pixelToDocument_.applyVector({1, 0});
+                for (int x = 0; x < rw; x++, d = d + dd) {
+                    double s[4];
+                    stroke::bilinear(at, src.width(), src.height(), d.x + g.clone_->offset.x - 0.5, d.y + g.clone_->offset.y - 0.5, s);
+                    float* out = source->pixel(x, y);
+                    for (int k = 0; k < 4; k++) out[k] = float(std::max(0.0, s[k]));
+                }
+            }
+        }
+        // The brightest straight colour of what the healers read.
+        float peak = 1;
+        for (const ImageF* image : {pixels.get(), source.get()}) {
+            if (!image) continue;
+            for (int y = 0; y < rh; y++) {
+                const float* p = image->row(y);
+                for (int x = 0; x < rw; x++, p += 4)
+                    if (p[3] > 0) for (int c = 0; c < 3; c++) peak = std::max(peak, p[c] / p[3]);
+            }
+        }
+        auto scaled = [&](const ImageF& image) {
+            if (peak <= 1) return encodeImage16(image, curve);
+            ImageF down(image);
+            for (int y = 0; y < rh; y++) {
+                float* p = down.row(y);
+                for (int x = 0; x < rw; x++, p += 4) for (int c = 0; c < 3; c++) p[c] /= peak;
+            }
+            return encodeImage16(down, curve);
+        };
+        std::shared_ptr<Image16> encoded = scaled(*pixels);
+        Gray16 painting(rw, rh);
+        for (int y = 0; y < rh; y++)
+            for (int x = 0; x < rw; x++) {
+                float k = coverage->at(x + rx, y + ry);
+                if (selection) k *= selection->at(x + rx, y + ry);
+                painting.at(x, y) = uint16_t(std::lround(clamp(k, 0.0f, 1.0f) * float(one16)));
+            }
+        std::shared_ptr<Gray16> visibleCrop;
+        if (visible) {
+            visibleCrop = std::make_shared<Gray16>(rw, rh);
+            for (int y = 0; y < rh; y++)
+                for (int x = 0; x < rw; x++) visibleCrop->at(x, y) = uint16_t(std::lround(clamp(visible->at(x + rx, y + ry), 0.0f, 1.0f) * float(one16)));
+        }
+        if (fromClone) healFrom(*encoded, *scaled(*source), painting, float(g.settings_.opacity), visibleCrop.get());
+        else {
+            Gray16 core(rw, rh);
+            for (int y = 0; y < rh; y++)
+                for (int x = 0; x < rw; x++) core.at(x, y) = painting.at(x, y) >= StrokeOps<SampleType::U16>::solidCore ? uint16_t(one16) : uint16_t(0);
+            spotHeal(*encoded, core, float(g.settings_.opacity), g.settings_.healingMode, g.settings_.healingSeed, visibleCrop.get());
+        }
+        std::shared_ptr<ImageF> healed = lineariseImage(*encoded, curve);
+        working = std::make_shared<Color>(*base);
+        for (int y = 0; y < rh; y++) {
+            float* dst = working->pixel(rx, y + ry);
+            const float* h = healed->row(y);
+            const float* orig = base->pixel(rx, y + ry);
+            for (int x = 0; x < rw; x++, dst += 4, h += 4, orig += 4) {
+                const float k = painting.at(x, y) / float(one16);
+                if (k <= 0) continue;
+                float value[4] = {h[0] * peak, h[1] * peak, h[2] * peak, h[3]};
+                // The Healing Brush replaces the area (healFrom blends by coverage itself); spot healing's core is
+                // feathered in by coverage.
+                const float w = fromClone ? 1.0f : k;
+                for (int c = 0; c < 4; c++) dst[c] = std::max(0.0f, orig[c] * (1 - w) + value[c] * w);
+            }
+        }
+        refreshLevels(0, 0, g.width_, g.height_);
+    } else {
+        (void)b;
+    }
+}
+
+template <class OpsT>
+void StrokeRasterOf<OpsT>::commit(BrushStroke::Commit& result) {
     const BrushStroke& g = g_;
     if (g.isMask_) {
         result.mask = MaskAsset::make(std::shared_ptr<const Gray>(workingMask));
@@ -777,7 +1114,7 @@ void StrokeRaster<S>::commit(BrushStroke::Commit& result) {
     if (hadSource) crop = crop.unionWith(g.sourceRect_);
     if (crop.isEmpty()) crop = hadSource ? g.sourceRect_ : Rect(0, 0, width, height);
     crop = crop.integral();
-    std::shared_ptr<Color> image = (crop == Rect(0, 0, width, height)) ? working : cropImage(*working, int(crop.minX()), int(crop.minY()), int(crop.width), int(crop.height));
+    std::shared_ptr<Color> image = (crop == Rect(0, 0, width, height)) ? working : Ops::crop(*working, int(crop.minX()), int(crop.minY()), int(crop.width), int(crop.height));
     result.asset = Asset::make(std::shared_ptr<const Color>(image), g.name_);
     const Point center = g.pixelToDocument_.apply({crop.midX(), crop.midY()});
     LayerTransform t = g.paintTransform_;

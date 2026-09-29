@@ -160,6 +160,10 @@ public:
     /// The same for a 16-bit stroke's pixels and mask.
     void refresh(const ImageT<SampleType::U16>* image, int x0, int y0, int x1, int y1);
     void refresh(const GrayImageT<SampleType::U16>* image, int x0, int y0, int x1, int y1);
+    /// And for a 32-bit stroke's, and an 8-bit CMYK one's (5 samples; a 16-bit CMYK buffer takes the Image16 form).
+    void refresh(const ImageT<SampleType::F32>* image, int x0, int y0, int x1, int y1);
+    void refresh(const GrayImageT<SampleType::F32>* image, int x0, int y0, int x1, int y1);
+    void refresh(const ImageT<SampleType::U8>* image, int x0, int y0, int x1, int y1);
     void clear();
     void setBudget(size_t bytes);
     size_t budget() const { return budget_; }

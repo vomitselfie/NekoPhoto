@@ -427,7 +427,10 @@ void MipCache::refreshOf(std::vector<Entry<Img>>& entries, const Img* image, int
 
 template <typename Img>
 void MipCache::refreshOf16(std::vector<Entry<Img>>& entries, const Img* image, int x0, int y0, int x1, int y1) {
-    constexpr int channels = std::is_same_v<Img, Image16> ? 4 : 1;
+    // Samples per pixel: 4 for RGB, 5 for CMYK, 1 for a gray; float levels are the plain mean halveImage takes.
+    int channels = 1;
+    if constexpr (requires { image->channels(); }) channels = image->channels();
+    using Sample = std::remove_cv_t<std::remove_pointer_t<decltype(image->row(0))>>;
     std::lock_guard<std::mutex> lock(mutex_);
     for (auto& e : entries) {
         auto source = e.source.lock();
@@ -443,12 +446,15 @@ void MipCache::refreshOf16(std::vector<Entry<Img>>& entries, const Img* image, i
             const Img& src = *above;
             parallelRows(y0, y1, [&](int ya, int yb) {
                 for (int y = ya; y < yb; y++) {
-                    const uint16_t* r0 = src.row(std::min(2 * y, sh - 1));
-                    const uint16_t* r1 = src.row(std::min(2 * y + 1, sh - 1));
-                    uint16_t* o = level.row(y);
+                    const Sample* r0 = src.row(std::min(2 * y, sh - 1));
+                    const Sample* r1 = src.row(std::min(2 * y + 1, sh - 1));
+                    Sample* o = level.row(y);
                     for (int x = x0; x < x1; x++) {
                         const int a = std::min(2 * x, sw - 1) * channels, b = std::min(2 * x + 1, sw - 1) * channels;
-                        for (int c = 0; c < channels; c++) o[x * channels + c] = uint16_t((uint32_t(r0[a + c]) + r0[b + c] + r1[a + c] + r1[b + c] + 2) / 4);
+                        for (int c = 0; c < channels; c++) {
+                            if constexpr (std::is_floating_point_v<Sample>) o[x * channels + c] = (r0[a + c] + r0[b + c] + r1[a + c] + r1[b + c]) * 0.25f;
+                            else o[x * channels + c] = Sample((uint32_t(r0[a + c]) + r0[b + c] + r1[a + c] + r1[b + c] + 2) / 4);
+                        }
                     }
                 }
             }, 64);
@@ -460,6 +466,10 @@ void MipCache::refreshOf16(std::vector<Entry<Img>>& entries, const Img* image, i
 
 void MipCache::refresh(const Image16* image, int x0, int y0, int x1, int y1) { if (image) refreshOf16(entries16_, image, x0, y0, x1, y1); }
 void MipCache::refresh(const Gray16* image, int x0, int y0, int x1, int y1) { if (image) refreshOf16(grayEntries16_, image, x0, y0, x1, y1); }
+
+void MipCache::refresh(const ImageF* image, int x0, int y0, int x1, int y1) { if (image) refreshOf16(entriesF_, image, x0, y0, x1, y1); }
+void MipCache::refresh(const GrayF* image, int x0, int y0, int x1, int y1) { if (image) refreshOf16(grayEntriesF_, image, x0, y0, x1, y1); }
+void MipCache::refresh(const ImageC8* image, int x0, int y0, int x1, int y1) { if (image) refreshOf16(entriesC8_, image, x0, y0, x1, y1); }
 
 void MipCache::refresh(const Image* image, int x0, int y0, int x1, int y1) { if (image) refreshOf(entries_, image, x0, y0, x1, y1); }
 void MipCache::refresh(const GrayImage* image, int x0, int y0, int x1, int y1) { if (image) refreshOf(grayEntries_, image, x0, y0, x1, y1); }

@@ -1,4 +1,5 @@
 #include "compositor/mypaint.h"
+#include "compositor/colormgmt.h"
 #include "compositor/parallel.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -46,6 +47,10 @@ constexpr uint32_t one = 1u << 15;   // libmypaint's fixed-point 1.0
 struct Tiles {
     MyPaintTiledSurface2 parent;
     const Image* base = nullptr;
+    // A 32-bit layer: its linear floats encoded through the document's curve into libmypaint's 15 bits as a tile is
+    // first touched (the documented round trip, docs/bit-depth.md), and decoded back only where a dab changed a sample.
+    const ImageF* baseF = nullptr;
+    const TransferCurve* curve = nullptr;
     const Image16* base16 = nullptr;   // a 16-bit layer: its 0..32768 samples are libmypaint's own fixed point
     int width = 0, height = 0, columns = 0, rows = 0;
     std::vector<std::unique_ptr<uint16_t[]>> tiles;
@@ -58,6 +63,19 @@ struct Tiles {
         if (!slot) {
             // First touch: the layer's own pixels, so smudging and blending read what is really there.
             slot.reset(new uint16_t[size_t(tileSize) * tileSize * 4]());
+            if (baseF) {
+                for (int y = 0; y < tileSize; y++) {
+                    const int py = ty * tileSize + y;
+                    if (py >= height) break;
+                    uint16_t* dst = slot.get() + size_t(y) * tileSize * 4;
+                    for (int x = 0; x < tileSize; x++) {
+                        const int px = tx * tileSize + x;
+                        if (px >= width) break;
+                        encodeF(baseF->pixel(px, py), dst + x * 4);
+                    }
+                }
+                return slot.get();
+            }
             if (base16) {
                 // The same range as libmypaint's: copied as they are.
                 for (int y = 0; y < tileSize; y++) {
@@ -81,6 +99,27 @@ struct Tiles {
             }
         }
         return slot.get();
+    }
+
+    /// A premultiplied linear float pixel as libmypaint's premultiplied 15-bit encoded colour.
+    void encodeF(const float* p, uint16_t* out) const {
+        const float a = std::clamp(p[3], 0.0f, 1.0f);
+        if (!(a > 0)) { out[0] = out[1] = out[2] = out[3] = 0; return; }
+        for (int c = 0; c < 3; c++) {
+            const float straight = std::clamp(p[c] / a, 0.0f, 1.0f);
+            out[c] = uint16_t(std::lround(curve->fromLinearExact(straight) * a * float(one)));
+        }
+        out[3] = uint16_t(std::lround(a * float(one)));
+    }
+    /// And back: premultiplied 15-bit encoded to premultiplied linear float.
+    void decodeF(const uint16_t* in, float* out) const {
+        const float a = std::min<uint32_t>(in[3], one) / float(one);
+        if (!(a > 0)) { out[0] = out[1] = out[2] = out[3] = 0; return; }
+        for (int c = 0; c < 3; c++) {
+            const float straight = std::clamp(std::min<uint32_t>(in[c], one) / float(one) / a, 0.0f, 1.0f);
+            out[c] = curve->toLinear(straight) * a;
+        }
+        out[3] = a;
     }
 
     /// A tile already painted, or null; for reading back once libmypaint is done (no requests in flight).
@@ -145,17 +184,22 @@ bool myPaintSupported() { return true; }
 
 MyPaintStroke::MyPaintStroke(BrushStroke& grid, const std::string& brushJson, const BrushSettings& settings) : grid_(grid) {
     if (!grid_.isValid()) { error_ = grid_.error(); return; }
+    if (grid_.colorMode() != ColorMode::RGB) { error_ = "MyPaint brushes paint RGB documents only."; return; }
     const Image* base = grid_.gridBase();
     const Image16* base16 = grid_.gridBase16();
-    if (!base && !base16) { error_ = "MyPaint brushes paint layer pixels only."; return; }
+    const ImageF* baseF = grid_.gridBaseF();
+    if (!base && !base16 && !baseF) { error_ = "MyPaint brushes paint layer pixels only."; return; }
+    if (baseF && !grid_.transferCurve()) { error_ = "MyPaint brushes paint layer pixels only."; return; }
     engine_ = std::make_unique<Engine>();
     Tiles& t = engine_->tiles;
     mypaint_tiled_surface2_init(&t.parent, requestStart, requestEnd);
     t.parent.threadsafe_tile_requests = TRUE;   // Tiles::tile locks, so libmypaint may render tiles in parallel
     t.base = base;
     t.base16 = base16;
-    t.width = base ? base->width() : base16->width();
-    t.height = base ? base->height() : base16->height();
+    t.baseF = baseF;
+    t.curve = grid_.transferCurve();
+    t.width = base ? base->width() : base16 ? base16->width() : baseF->width();
+    t.height = base ? base->height() : base16 ? base16->height() : baseF->height();
     t.columns = (t.width + tileSize - 1) / tileSize;
     t.rows = (t.height + tileSize - 1) / tileSize;
     t.tiles.resize(size_t(t.columns) * size_t(t.rows));
@@ -219,6 +263,39 @@ void MyPaintStroke::strokeTo(const BrushSample& input) {
     started_ = true;
     last_ = input;
 
+    if (t.baseF) {
+        // A 32-bit layer: a pixel whose four samples a dab left as they were encoded keeps its exact floats; one it
+        // changed is decoded, then taken through the selection in float.
+        ImageF* working = grid_.gridWorkingF();
+        const ImageF* baseF = t.baseF;
+        const GrayF* selection = grid_.gridSelectionF();
+        for (int i = 0; i < changed.num_rectangles; i++) {
+            const MyPaintRectangle& r = rects[i];
+            const int x0 = std::max(0, r.x), y0 = std::max(0, r.y), x1 = std::min(t.width, r.x + r.width), y1 = std::min(t.height, r.y + r.height);
+            if (x0 >= x1 || y0 >= y1) continue;
+            parallelRows(y0, y1, [&](int ya, int yb) {
+                for (int y = ya; y < yb; y++) {
+                    const float* b = baseF->row(y);
+                    float* out = working->row(y);
+                    const float* sel = selection ? selection->row(y) : nullptr;
+                    for (int x = x0; x < x1; x++) {
+                        const uint16_t* tile = t.painted(x / tileSize, y / tileSize);
+                        if (!tile) continue;
+                        const uint16_t* px = tile + (size_t(y % tileSize) * tileSize + size_t(x % tileSize)) * 4;
+                        uint16_t before[4];
+                        t.encodeF(b + x * 4, before);
+                        if (std::equal(before, before + 4, px)) { std::memcpy(out + x * 4, b + x * 4, 4 * sizeof(float)); continue; }
+                        float painted[4];
+                        t.decodeF(px, painted);
+                        const float k = sel ? std::clamp(sel[x], 0.0f, 1.0f) : 1.0f;
+                        for (int c = 0; c < 4; c++) out[x * 4 + c] = b[x * 4 + c] + (painted[c] - b[x * 4 + c]) * k;
+                    }
+                }
+            }, 16);
+            grid_.markPainted(Rect(x0, y0, x1 - x0, y1 - y0));
+        }
+        return;
+    }
     if (t.base16) {
         // A 16-bit layer takes the tiles' samples as they are, through the selection.
         Image16* working = grid_.gridWorking16();

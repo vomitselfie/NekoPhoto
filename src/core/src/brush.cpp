@@ -1,12 +1,16 @@
 // BrushStroke: the curve through the samples, the dab spacing, the provisional tail and the dirty area, at any depth.
-// The pixels are a StrokeRaster<S> (stroke_raster.h), instantiated here for 8 bits and in brush_u16.cpp for 16.
+// The pixels are a StrokeRasterOf<Ops> (stroke_raster.h), instantiated here for 8 bits, in brush_u16.cpp for 16, in
+// brush_f32.cpp for 32 and in brush_modes.cpp for CMYK.
 #include "compositor/brush.h"
 #include "stroke_raster.h"
 
 namespace compositor {
 
-template class StrokeRaster<SampleType::U8>;
-extern template class StrokeRaster<SampleType::U16>;
+template class StrokeRasterOf<StrokeOps<SampleType::U8>>;
+extern template class StrokeRasterOf<StrokeOps<SampleType::U16>>;
+extern template class StrokeRasterOf<StrokeOps<SampleType::F32>>;
+extern template class StrokeRasterOf<CmykStrokeOps<SampleType::U8>>;
+extern template class StrokeRasterOf<CmykStrokeOps<SampleType::U16>>;
 
 double brushFalloff(double u) {
     const double k = 2.5;
@@ -31,32 +35,135 @@ BrushStroke::BrushStroke(const Layer& layer, bool mask, BrushSettings settings, 
     valid_ = raster16_->init(layer, mask, selection);
 }
 
+BrushStroke::BrushStroke(const Layer& layer, bool mask, BrushSettings settings, const Document& document, const ConvertOptions& options)
+    : isMask_(mask), settings_(settings), canvas_(0, 0, document.width, document.height), name_(layer.name), layerTransform_(layer.transform) {
+    depth_ = document.sampleType;
+    mode_ = colorModeSupportsDepth(document.colorMode, depth_) ? document.colorMode : ColorMode::RGB;
+    if (depth_ == SampleType::F32) {
+        // The colour pickers hold encoded colour; a 32-bit document holds linear light.
+        curve_ = documentTransfer(document);
+        const TransferCurve curve = *curve_;
+        toNative_ = [curve](const float rgb[3], double out[4]) {
+            for (int c = 0; c < 3; c++) out[c] = curve.toLinear(std::clamp(rgb[c], 0.0f, 1.0f));
+            out[3] = 0;
+        };
+    } else if (mode_ != ColorMode::RGB) {
+        // The colour (sRGB, as CMYK and Lab documents keep colours) through the document's profile, as Little CMS's
+        // float colours: CMYK ink 0..100 with the profile's black generation, or L 0..100 and signed a, b.
+        const ColorMode m = mode_;
+        const SampleType depth = depth_;
+        ColorTransformPtr t = transformBetween(ColorProfile(), document.profile, options, PixelFormat::RGBFloat,
+                                                             m == ColorMode::CMYK ? PixelFormat::CMYKFloat : PixelFormat::LabFloat);
+        if (!t) { raster8_ = std::make_unique<StrokeRaster<SampleType::U8>>(*this); error_ = "The document's colour profile cannot be used."; return; }
+        toNative_ = [t, m, depth](const float rgb[3], double out[4]) {
+            const float in[3] = {std::clamp(rgb[0], 0.0f, 1.0f), std::clamp(rgb[1], 0.0f, 1.0f), std::clamp(rgb[2], 0.0f, 1.0f)};
+            float v[4] = {0, 0, 0, 0};
+            t->apply(in, v, 1);
+            if (m == ColorMode::CMYK) {
+                for (int c = 0; c < 4; c++) out[c] = 1 - std::clamp(double(v[c]) / 100.0, 0.0, 1.0);   // stored inverted
+                return;
+            }
+            const double one = depth == SampleType::U16 ? double(one16) : 255.0;
+            const double offset = depth == SampleType::U16 ? labOffset<SampleType::U16>() : labOffset<SampleType::U8>();
+            const double scale = depth == SampleType::U16 ? labScale<SampleType::U16>() : labScale<SampleType::U8>();
+            out[0] = std::clamp(double(v[0]) / 100.0, 0.0, 1.0);
+            out[1] = std::clamp((double(v[1]) * scale + offset) / one, 0.0, 1.0);
+            out[2] = std::clamp((double(v[2]) * scale + offset) / one, 0.0, 1.0);
+            out[3] = 0;
+        };
+    }
+    const AnyGray* coverage = document.selection ? &document.selection->coverage : nullptr;
+    initRaster(layer, mask, coverage);
+}
+
+void BrushStroke::initRaster(const Layer& layer, bool mask, const AnyGray* selection) {
+    auto make = [&](auto& raster, const auto* gray) {
+        using R = typename std::remove_reference_t<decltype(raster)>::element_type;
+        raster = std::make_unique<R>(*this);
+        if (selection && *selection && !gray) { error_ = "The selection is not at the document's depth."; return; }
+        valid_ = raster->init(layer, mask, gray);
+    };
+    const bool cmyk = mode_ == ColorMode::CMYK && !mask;
+    switch (depth_) {
+    case SampleType::F32: make(rasterF_, selection ? selection->f32().get() : nullptr); break;
+    case SampleType::U16:
+        if (cmyk) make(rasterC16_, selection ? selection->u16().get() : nullptr);
+        else make(raster16_, selection ? selection->u16().get() : nullptr);
+        break;
+    case SampleType::U8:
+        if (cmyk) make(rasterC8_, selection ? selection->u8().get() : nullptr);
+        else make(raster8_, selection ? selection->u8().get() : nullptr);
+        break;
+    }
+}
+
 BrushStroke::~BrushStroke() = default;
 
 template <class F> decltype(auto) BrushStroke::withRaster(F&& f) {
     if (raster16_) return f(*raster16_);
+    if (rasterF_) return f(*rasterF_);
+    if (rasterC8_) return f(*rasterC8_);
+    if (rasterC16_) return f(*rasterC16_);
     return f(*raster8_);
 }
 
 template <class F> decltype(auto) BrushStroke::withRaster(F&& f) const {
     if (raster16_) return f(std::as_const(*raster16_));
+    if (rasterF_) return f(std::as_const(*rasterF_));
+    if (rasterC8_) return f(std::as_const(*rasterC8_));
+    if (rasterC16_) return f(std::as_const(*rasterC16_));
     return f(std::as_const(*raster8_));
+}
+
+void BrushStroke::nativeColor(const float rgb[3], double out[4]) const {
+    if (toNative_) { toNative_(rgb, out); return; }
+    for (int c = 0; c < 3; c++) out[c] = rgb[c];
+    out[3] = 0;
 }
 
 void BrushStroke::setMaskClone(std::shared_ptr<const GrayImage> sample) { if (raster8_) raster8_->maskClone = std::move(sample); }
 void BrushStroke::setMaskClone(std::shared_ptr<const Gray16> sample) { if (raster16_) raster16_->maskClone = std::move(sample); }
+void BrushStroke::setMaskClone(std::shared_ptr<const GrayF> sample) { if (rasterF_) rasterF_->maskClone = std::move(sample); }
 ImagePtr BrushStroke::previewImage() const { return raster8_ ? raster8_->working : nullptr; }
 GrayPtr BrushStroke::previewMask() const { return raster8_ ? raster8_->workingMask : nullptr; }
-Image16Ptr BrushStroke::previewImage16() const { return raster16_ ? raster16_->working : nullptr; }
+Image16Ptr BrushStroke::previewImage16() const { return raster16_ ? raster16_->working : rasterC16_ ? rasterC16_->working : nullptr; }
 Gray16Ptr BrushStroke::previewMask16() const { return raster16_ ? raster16_->workingMask : nullptr; }
+AnyImage BrushStroke::preview() const {
+    if (raster8_) return ImagePtr(raster8_->working);
+    if (raster16_) return Image16Ptr(raster16_->working);
+    if (rasterF_) return ImageFPtr(rasterF_->working);
+    if (rasterC8_) return ImageC8Ptr(rasterC8_->working);
+    if (rasterC16_) return Image16Ptr(rasterC16_->working);
+    return {};
+}
+AnyGray BrushStroke::previewMaskAny() const {
+    if (raster8_) return GrayPtr(raster8_->workingMask);
+    if (raster16_) return Gray16Ptr(raster16_->workingMask);
+    if (rasterF_) return GrayFPtr(rasterF_->workingMask);
+    return {};
+}
 const Image* BrushStroke::gridBase() const { return raster8_ ? raster8_->base.get() : nullptr; }
 Image* BrushStroke::gridWorking() { return raster8_ ? raster8_->working.get() : nullptr; }
 const GrayImage* BrushStroke::gridSelection() const { return raster8_ ? raster8_->selection.get() : nullptr; }
 const Image16* BrushStroke::gridBase16() const { return raster16_ ? raster16_->base.get() : nullptr; }
 Image16* BrushStroke::gridWorking16() { return raster16_ ? raster16_->working.get() : nullptr; }
 const Gray16* BrushStroke::gridSelection16() const { return raster16_ ? raster16_->selection.get() : nullptr; }
-GrayImage* BrushStroke::gridCoverage() { return raster8_ ? raster8_->coverage.get() : nullptr; }
-Gray16* BrushStroke::gridCoverage16() { return raster16_ ? raster16_->coverage.get() : nullptr; }
+const ImageF* BrushStroke::gridBaseF() const { return rasterF_ ? rasterF_->base.get() : nullptr; }
+ImageF* BrushStroke::gridWorkingF() { return rasterF_ ? rasterF_->working.get() : nullptr; }
+const GrayF* BrushStroke::gridSelectionF() const { return rasterF_ ? rasterF_->selection.get() : nullptr; }
+GrayImage* BrushStroke::gridCoverage() { return raster8_ ? raster8_->coverage.get() : rasterC8_ ? rasterC8_->coverage.get() : nullptr; }
+Gray16* BrushStroke::gridCoverage16() {
+    if (raster16_) return raster16_->coverage.get();
+    if (rasterC16_) return rasterC16_->coverage.get();
+    if (rasterF_) return rasterF_->proxyCoverage();
+    return nullptr;
+}
+
+void BrushStroke::recomposeCovered(const Rect& gridRect) {
+    if (rasterF_) rasterF_->syncCoverage(gridRect.intersection(Rect(0, 0, width_, height_)));
+    markDirty(gridRect);
+    recompose(gridRect);
+}
 
 void BrushStroke::markDirty(const Rect& gridRect) {
     Rect r = gridRect.intersection(Rect(0, 0, width_, height_));
@@ -220,8 +327,29 @@ void BrushStroke::fillGradientOver(int shape, Point from, Point to, const float 
 
 void BrushStroke::fillGradientOver(int shape, Point from, Point to, const GradientStops& stops, double opacity) {
     if (!valid_) return;
-    withRaster([&](auto& raster) { raster.fillGradientOver(shape, from, to, stops, opacity); });
+    if (!toNative_ || (isMask_ && !rasterF_)) {
+        withRaster([&](auto& raster) { raster.fillGradientOver(shape, from, to, stops, opacity); });
+        return;
+    }
+    // Each stop in the document's model, the gradient then running between them there (Photoshop blends a CMYK or
+    // Lab document's gradient in its mode, a 32-bit one's in linear light): the first three samples in `native`, the
+    // fourth (CMYK's black) in `fourth`'s red. A 32-bit mask takes the gray as coverage, not linearised.
+    GradientStops native = stops, fourth = stops;
+    auto convert = [&](const float rgb[3], float first[3], float& extra) {
+        if (isMask_) { for (int c = 0; c < 3; c++) first[c] = rgb[c]; extra = 0; return; }
+        double v[4];
+        nativeColor(rgb, v);
+        for (int c = 0; c < 3; c++) first[c] = float(v[c]);
+        extra = float(v[3]);
+    };
+    float e = 0;
+    convert(stops.start, native.start, e); fourth.start[0] = e;
+    convert(stops.end, native.end, e); fourth.end[0] = e;
+    for (size_t i = 0; i < stops.colors.size(); i++) { convert(stops.colors[i].rgb, native.colors[i].rgb, e); fourth.colors[i].rgb[0] = e; }
+    // The two-stop form lerps its alpha with the colour; the fourth's copy carries the same alpha, so it matches.
+    withRaster([&](auto& raster) { raster.fillGradientNative(shape, from, to, native, mode_ == ColorMode::CMYK && !isMask_ ? &fourth : nullptr, opacity); });
 }
+
 
 void BrushStroke::fillColor(double red, double green, double blue) {
     float color[4] = {float(red), float(green), float(blue), 1.0f};

@@ -76,6 +76,8 @@ size_t runAt(const std::vector<Stop>& stops, float t, float& u) {
 
 } // namespace
 
+double gradientPositionAt(GradientShape shape, Point from, Point to, Point p) { return gradientPosition(shape, from, to, p); }
+
 void GradientStops::sample(float t, float out[4]) const {
     if (colors.empty()) {
         for (int c = 0; c < 4; c++) out[c] = start[c] + (end[c] - start[c]) * t;

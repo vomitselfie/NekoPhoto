@@ -42,7 +42,7 @@ std::shared_ptr<Image16> StrokeOps<SampleType::U16>::copyOf(const Image16& image
     return copy;
 }
 
-template class StrokeRaster<SampleType::U16>;
+template class StrokeRasterOf<StrokeOps<SampleType::U16>>;
 
 std::shared_ptr<TiledSource16> tiledProcessedDocument16(Document document, std::function<void(Image16&)> process, int margin) {
     const int w = document.width, h = document.height;
