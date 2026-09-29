@@ -201,8 +201,9 @@ constexpr FeatureModes modeTable[] = {
     {"edit.fill", allModes},
     {"export.psd", allModes},
     // Step E, painting (P7): the brush, eraser and imported tip brushes, the Gradient tool, moving selected pixels,
-    // Clone Stamp, the Eyedropper, merging and Apply Layer Mask, in the document's own samples. Spot Healing, the
-    // Healing Brush and Blur, Sharpen, Smudge and Liquify in Lab (four samples, as RGB); CMYK's five wait.
+    // Clone Stamp, the Eyedropper, merging and Apply Layer Mask, in the document's own samples. Retouching: Spot
+    // Healing, the Healing Brush, Patch, Blur, Sharpen, Smudge, Liquify, Dodge, Burn, Sponge and the Paint Bucket, on
+    // L, a and b in Lab and on the five samples in CMYK (heal.h, toning.h, bucket.h).
     {"tool.brush", allModes},
     {"tool.gradient", allModes},
     {"edit.movePixels", allModes},
@@ -210,8 +211,11 @@ constexpr FeatureModes modeTable[] = {
     {"tool.eyedropper", allModes},
     {"layers.merge", allModes},
     {"layers.applyMask", allModes},
-    {"tool.spotHealing", colorModeBit(ColorMode::RGB) | colorModeBit(ColorMode::Lab)},
-    {"tool.smudge", colorModeBit(ColorMode::RGB) | colorModeBit(ColorMode::Lab)},
+    {"tool.spotHealing", allModes},
+    {"tool.smudge", allModes},
+    {"tool.patch", allModes},
+    {"tool.dodge", allModes},
+    {"tool.paintBucket", allModes},
 };
 
 // What stays RGB for good (not waiting for a port): refused in CMYK and Lab with "Not available in CMYK mode", where a

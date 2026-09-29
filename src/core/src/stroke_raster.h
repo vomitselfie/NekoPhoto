@@ -925,9 +925,7 @@ void StrokeRasterOf<OpsT>::heal() {
     if (!g.settings_.healing || g.isMask_ || !coverage) return;
     const PixelBounds b = nonzeroBounds(*coverage);
     if (b.isEmpty()) return;
-    if constexpr (N != 4) {
-        return;   // CMYK healing is not ported yet (greyed in supports())
-    } else if constexpr (Ops::type == SampleType::F32) {
+    if constexpr (Ops::type == SampleType::F32) {
         healF(b);
     } else {
         if (g.clone_ && Ops::cloneImage(*g.clone_)) { healFromClone(b); return; }
@@ -936,7 +934,7 @@ void StrokeRasterOf<OpsT>::heal() {
         const Rect region = Rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0).insetBy(-reach, -reach).intersection(Rect(0, 0, g.width_, g.height_)).integral();
         const int rx = int(region.x), ry = int(region.y), rw = int(region.width), rh = int(region.height);
         if (rw <= 0 || rh <= 0) return;
-        auto pixels = cropImage(*base, rx, ry, rw, rh);
+        auto pixels = Ops::crop(*base, rx, ry, rw, rh);
         auto painting = cropGray(*coverage, rx, ry, rw, rh);
         if (selection)
             for (int y = 0; y < rh; y++)
@@ -954,11 +952,11 @@ void StrokeRasterOf<OpsT>::heal() {
             Sample* dst = working->pixel(rx, y + ry);
             const Sample* healed = pixels->row(y);
             const Sample* orig = base->pixel(rx, y + ry);
-            for (int x = 0; x < rw; x++, dst += 4, healed += 4, orig += 4) {
+            for (int x = 0; x < rw; x++, dst += N, healed += N, orig += N) {
                 const uint32_t k = std::min<uint32_t>(painting->at(x, y), Ops::one);
                 if (k == 0) continue;
-                if (k >= Ops::one) { std::memcpy(dst, healed, 4 * sizeof(Sample)); continue; }
-                for (int c = 0; c < 4; c++) dst[c] = Sample(Ops::mix(orig[c], healed[c], k));
+                if (k >= Ops::one) { std::memcpy(dst, healed, N * sizeof(Sample)); continue; }
+                for (int c = 0; c < N; c++) dst[c] = Sample(Ops::mix(orig[c], healed[c], k));
             }
         }
         refreshLevels(0, 0, g.width_, g.height_);
@@ -967,34 +965,35 @@ void StrokeRasterOf<OpsT>::heal() {
 
 template <class OpsT>
 void StrokeRasterOf<OpsT>::healFromClone(const PixelBounds& b) {
-    if constexpr (N == 4 && Ops::type != SampleType::F32) {
+    if constexpr (Ops::type != SampleType::F32) {
         // The Healing Brush: the source under the stroke (as Clone Stamp samples it), its tone matched to the edge.
         const BrushStroke& g = g_;
         const Rect region = Rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0).insetBy(-2, -2).intersection(Rect(0, 0, g.width_, g.height_)).integral();
         const int rx = int(region.x), ry = int(region.y), rw = int(region.width), rh = int(region.height);
         if (rw <= 0 || rh <= 0) return;
-        auto pixels = cropImage(*base, rx, ry, rw, rh);
+        auto pixels = Ops::crop(*base, rx, ry, rw, rh);
         auto painting = cropGray(*coverage, rx, ry, rw, rh);
         if (selection)
             for (int y = 0; y < rh; y++)
                 for (int x = 0; x < rw; x++) painting->at(x, y) = Sample(Ops::mul(painting->at(x, y), selection->at(x + rx, y + ry)));
-        Color source(rw, rh);
+        std::shared_ptr<Color> made = Ops::make(rw, rh);
+        Color& source = *made;
         const Color& src = *Ops::cloneImage(*g.clone_);
         auto at = [&](int px, int py) -> const Sample* { return src.pixel(px, py); };
         for (int y = 0; y < rh; y++) {
             Point d = g.pixelToDocument_.apply({rx + 0.5, y + ry + 0.5});
             const Point dd = g.pixelToDocument_.applyVector({1, 0});
             for (int x = 0; x < rw; x++, d = d + dd) {
-                double s[4];
-                stroke::bilinear(at, src.width(), src.height(), d.x + g.clone_->offset.x - 0.5, d.y + g.clone_->offset.y - 0.5, s);
+                double s[N];
+                stroke::bilinear<N>(at, src.width(), src.height(), d.x + g.clone_->offset.x - 0.5, d.y + g.clone_->offset.y - 0.5, s);
                 Sample* out = source.pixel(x, y);
-                for (int k = 0; k < 4; k++) out[k] = Ops::nearest(s[k]);
+                for (int k = 0; k < N; k++) out[k] = Ops::nearest(s[k]);
             }
         }
         std::shared_ptr<Gray> visibleCrop = visible ? cropGray(*visible, rx, ry, rw, rh) : nullptr;
         healFrom(*pixels, source, *painting, float(g.settings_.opacity), visibleCrop.get());
         working = std::make_shared<Color>(*base);
-        for (int y = 0; y < rh; y++) std::memcpy(working->pixel(rx, y + ry), pixels->row(y), size_t(rw) * 4 * sizeof(Sample));
+        for (int y = 0; y < rh; y++) std::memcpy(working->pixel(rx, y + ry), pixels->row(y), size_t(rw) * N * sizeof(Sample));
         refreshLevels(0, 0, g.width_, g.height_);
     } else {
         (void)b;

@@ -171,6 +171,7 @@ add_library(compositor_core STATIC
     src/layerstyle_write.cpp
     src/layerstyle_json.cpp
     src/toning.cpp
+    src/bucket_modes.cpp
     src/raw.cpp
     src/vectorlayer.cpp
     src/supports.cpp

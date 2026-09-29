@@ -4,6 +4,7 @@
 // after Photoshop's behaviour, not calibrated against it (docs/features.md).
 #pragma once
 #include "image.h"
+#include "colormodes.h"
 #include "imaget.h"
 
 namespace compositor {
@@ -36,5 +37,23 @@ void sharpenImage(ImageT<SampleType::U16>& image, double radius = 1.0);
 /// The Sharpen tool's source at 32 bits: the same unsharp step on straight linear colour, not clamped above 1 (light
 /// stays light), only below 0.
 void sharpenImage(ImageT<SampleType::F32>& image, double radius = 1.0);
+
+// ---- CMYK and Lab (docs/color-modes.md, "Painting"): in the document's own samples, nothing through RGB ----
+// Lab: Dodge and Burn move L along the same curves (a and b stay: Lab keeps colour apart from lightness, so Protect
+// Tones changes nothing there); Sponge scales a and b (twice the chroma, or none), L kept. CMYK: Dodge and Burn take
+// each plate's brightness (the ink inverted, as stored) along the curves, so Dodge removes ink and Burn adds it, K
+// included; Sponge works on C, M and Y as the RGB Sponge does on their complements, K left alone.
+
+/// Dodge, Burn or Sponge at full strength on a Lab (`mode` Lab) or RGB image of 8 or 16 bits.
+void toneImage(Image& image, const ToningSettings& settings, ColorMode mode);
+void toneImage(ImageT<SampleType::U16>& image, const ToningSettings& settings, ColorMode mode);
+/// The same on 8-bit CMYK.
+void toneImage(ImageT<SampleType::U8>& image, const ToningSettings& settings);
+/// Gaussian blur and the Sharpen tool's source on an image of four or five samples (8-bit CMYK, 16-bit CMYK or not):
+/// every sample, alpha last, blurred as it is stored.
+void gaussianBlurSamples(ImageT<SampleType::U8>& image, double sigma);
+void gaussianBlurSamples(ImageT<SampleType::U16>& image, double sigma);
+void sharpenSamples(ImageT<SampleType::U8>& image, double radius = 1.0);
+void sharpenSamples(ImageT<SampleType::U16>& image, double radius = 1.0);
 
 } // namespace compositor

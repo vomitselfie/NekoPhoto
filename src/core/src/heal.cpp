@@ -542,7 +542,13 @@ bool healBySynthesis16(Image16& image, const Gray16& coverage, const PixelBounds
 
 } // namespace
 
+namespace {
+template <SampleType S> void spotHealInks(ImageT<S>& image, const GrayOf<S>& painted, float opacity, int mode, uint32_t seed, const GrayOf<S>* visible);
+template <SampleType S> void healFromInks(ImageT<S>& image, const ImageT<S>& source, const GrayOf<S>& painted, float opacity, const GrayOf<S>* visible);
+} // namespace
+
 void spotHeal(Image16& image, const Gray16& painted, float opacity, int mode, uint32_t seed, const Gray16* visible) {
+    if (image.channels() == 5) { spotHealInks<SampleType::U16>(image, painted, opacity, mode, seed, visible); return; }
     const int W = image.width(), H = image.height();
     if (painted.width() != W || painted.height() != H) return;
     const std::shared_ptr<const Gray16> held = spotCoverage(painted);
@@ -616,6 +622,7 @@ void spotHeal(Image16& image, const Gray16& painted, float opacity, int mode, ui
 }
 
 void healFrom(Image16& image, const Image16& source, const Gray16& painted, float opacity, const Gray16* visible) {
+    if (image.channels() == 5) { healFromInks<SampleType::U16>(image, source, painted, opacity, visible); return; }
     const int W = image.width(), H = image.height();
     if (source.width() != W || source.height() != H || painted.width() != W || painted.height() != H) return;
     const std::shared_ptr<const Gray16> held = spotCoverage(painted);
@@ -660,6 +667,186 @@ void healFrom(Image16& image, const Image16& source, const Gray16& painted, floa
                 store16(t, out);
             }
     });
+}
+
+// ---- CMYK: five samples (docs/color-modes.md, "Painting") -----------------------------------------------------
+// The inks as stored (inverted, premultiplied) with alpha last. Where the spot heals from is decided on an 8-bit proxy
+// of the plates' look (each of C, M and Y as stored times K as stored: the plates' brightness overprinted); the
+// membrane, the grain and the copied samples are the five native ones. Content-Aware synthesis works on RGBA, so in
+// CMYK the Content-Aware type copies the best-matching nearby patch, searching as widely as it does in RGB.
+
+namespace {
+
+template <SampleType S> constexpr double inkOne() { return double(SampleTraits<S>::one); }
+
+template <SampleType S>
+void storeInks(SampleOf<S>* t, const double out[5]) {
+    const double one = inkOne<S>();
+    t[4] = SampleOf<S>(std::lround(std::clamp(out[4], 0.0, one)));
+    for (int c = 0; c < 4; c++) t[c] = SampleOf<S>(std::lround(std::clamp(out[c], 0.0, double(t[4]))));
+}
+
+template <SampleType S>
+std::shared_ptr<Image> inkProxy(const ImageT<S>& image) {
+    const double one = inkOne<S>();
+    auto out = std::make_shared<Image>(image.width(), image.height());
+    for (int y = 0; y < image.height(); y++)
+        for (int x = 0; x < image.width(); x++) {
+            const SampleOf<S>* p = image.pixel(x, y);
+            uint8_t* o = out->pixel(x, y);
+            const double a = std::min(double(p[4]), one);
+            const double k = a > 0 ? std::min(1.0, p[3] / a) : 0;
+            for (int c = 0; c < 3; c++) o[c] = uint8_t(std::lround(std::clamp(p[c] * k / one, 0.0, a / one) * 255));
+            o[3] = uint8_t(std::lround(a / one * 255));
+        }
+    return out;
+}
+
+template <SampleType S>
+std::shared_ptr<GrayImage> grayAt8(const GrayOf<S>& gray, bool spot) {
+    auto out = std::make_shared<GrayImage>(gray.width(), gray.height(), 0);
+    for (int y = 0; y < gray.height(); y++)
+        for (int x = 0; x < gray.width(); x++) {
+            const double v = double(gray.at(x, y));
+            out->at(x, y) = spot ? (v ? 255 : 0) : uint8_t(std::lround(std::min(1.0, v / inkOne<S>()) * 255));
+        }
+    return out;
+}
+
+template <SampleType S>
+std::shared_ptr<const GrayOf<S>> healCoverage(const GrayOf<S>& painted) {
+    if constexpr (S == SampleType::U16) return spotCoverage(painted);
+    else return std::shared_ptr<const GrayOf<S>>(std::shared_ptr<const GrayOf<S>>(), &painted);
+}
+
+template <SampleType S>
+void spotHealInks(ImageT<S>& image, const GrayOf<S>& painted, float opacity, int mode, uint32_t seed, const GrayOf<S>* visible) {
+    constexpr int N = 5;
+    const double one = inkOne<S>();
+    const int W = image.width(), H = image.height();
+    if (painted.width() != W || painted.height() != H) return;
+    const auto held = healCoverage<S>(painted);
+    const GrayOf<S>& coverage = *held;
+    if (visible && (visible->width() != W || visible->height() != H)) visible = nullptr;
+    const PixelBounds b = nonzeroBounds(coverage);
+    if (b.isEmpty()) return;
+    const std::shared_ptr<Image> eight = inkProxy<S>(image);
+    const std::shared_ptr<GrayImage> spot = grayAt8<S>(coverage, true);
+    const std::shared_ptr<GrayImage> visible8 = visible ? grayAt8<S>(*visible, false) : nullptr;
+    SpotPlan plan;
+    if (!planSpot(*eight, *spot, b, mode, seed, visible8.get(), plan)) return;
+    const int wx0 = plan.wx0, wy0 = plan.wy0, ww = plan.ww, wh = plan.wh;
+    const size_t wn = size_t(ww) * wh;
+    const std::vector<uint8_t>& role = plan.role;
+    const int ox = plan.ox, oy = plan.oy;
+    const bool haveSource = plan.haveSource;
+    std::vector<float> value(wn * N, 0.0f);
+    std::vector<uint8_t> hole(wn), known(wn);
+    double detail[N - 1] = {0, 0, 0, 0};
+    for (int y = 0; y < wh; y++)
+        for (int x = 0; x < ww; x++) {
+            const size_t p = size_t(y) * ww + size_t(x);
+            hole[p] = role[p] == Hole; known[p] = role[p] == Ring;
+            if (role[p] != Ring) continue;
+            const int ix = wx0 + x, iy = wy0 + y;
+            const SampleOf<S>* t = image.pixel(ix, iy);
+            const SampleOf<S>* s = haveSource ? image.pixel(ix + ox, iy + oy) : nullptr;
+            for (int c = 0; c < N; c++) value[p * N + size_t(c)] = float(t[c]) - (s ? float(s[c]) : 0.0f);
+            if (!haveSource)
+                for (int c = 0; c < N - 1; c++) {
+                    double around = 0; int n = 0;
+                    const int offsets[4][2] = {{ix - 1, iy}, {ix + 1, iy}, {ix, iy - 1}, {ix, iy + 1}};
+                    for (auto& o : offsets) {
+                        if (o[0] < 0 || o[1] < 0 || o[0] >= W || o[1] >= H) continue;
+                        around += image.pixel(o[0], o[1])[c];
+                        n++;
+                    }
+                    if (n) { const double d = t[c] - around / n; detail[c] += d * d; }
+                }
+        }
+    membraneFill(value.data(), N, hole.data(), known.data(), ww, wh);
+    for (int c = 0; c < N - 1; c++) detail[c] = std::sqrt(detail[c] / double(plan.ringCount)) * 0.9;
+    for (int y = 0; y < wh; y++)
+        for (int x = 0; x < ww; x++) {
+            const size_t p = size_t(y) * ww + size_t(x);
+            if (role[p] != Hole) continue;
+            const int ix = wx0 + x, iy = wy0 + y;
+            SampleOf<S>* t = image.pixel(ix, iy);
+            const SampleOf<S>* s = haveSource ? image.pixel(ix + ox, iy + oy) : nullptr;
+            const double amount = std::min(double(coverage.at(ix, iy)), one) / one * opacity;
+            double grain = 0;
+            if (!haveSource) {
+                const uint32_t key = hash32(seed ^ hash32(uint32_t(long(iy) * W + ix)));
+                const double u1 = unitRandom(key), u2 = unitRandom(key ^ 0x68e31da4U);
+                grain = std::sqrt(-2.0 * std::log(1.0 - u1)) * std::cos(2.0 * M_PI * u2);
+            }
+            double out[N];
+            for (int c = 0; c < N; c++) {
+                const double healed = (s ? double(s[c]) : 0) + value[p * N + size_t(c)] + (c < N - 1 ? grain * detail[c] : 0);
+                out[c] = t[c] + (healed - t[c]) * amount;
+            }
+            storeInks<S>(t, out);
+        }
+}
+
+template <SampleType S>
+void healFromInks(ImageT<S>& image, const ImageT<S>& source, const GrayOf<S>& painted, float opacity, const GrayOf<S>* visible) {
+    constexpr int N = 5;
+    const double one = inkOne<S>();
+    const int W = image.width(), H = image.height();
+    if (source.width() != W || source.height() != H || source.channels() != N || painted.width() != W || painted.height() != H) return;
+    const auto held = healCoverage<S>(painted);
+    const GrayOf<S>& coverage = *held;
+    const PixelBounds bounds = nonzeroBounds(coverage);
+    if (bounds.isEmpty()) return;
+    const int wx0 = std::max(0, bounds.x0 - 1), wy0 = std::max(0, bounds.y0 - 1), wx1 = std::min(W - 1, bounds.x1), wy1 = std::min(H - 1, bounds.y1);
+    const int ww = wx1 - wx0 + 1, wh = wy1 - wy0 + 1;
+    const size_t wn = size_t(ww) * size_t(wh);
+    const double shownFrom = S == SampleType::U16 ? double(shownFrom16) : 128.0;
+    auto shown = [&](int x, int y) { return !visible || double(visible->at(x, y)) >= shownFrom; };
+    std::vector<uint8_t> hole(wn), known(wn);
+    for (int y = 0; y < wh; y++)
+        for (int x = 0; x < ww; x++) hole[size_t(y) * ww + size_t(x)] = coverage.at(wx0 + x, wy0 + y) ? 1 : 0;
+    std::vector<float> value(wn * N, 0.0f);
+    bool anyKnown = false;
+    for (int y = 0; y < wh; y++)
+        for (int x = 0; x < ww; x++) {
+            const size_t p = size_t(y) * ww + size_t(x);
+            if (hole[p]) continue;
+            bool touches = false;
+            const int n[4][2] = {{x - 1, y}, {x + 1, y}, {x, y - 1}, {x, y + 1}};
+            for (auto& o : n) if (o[0] >= 0 && o[1] >= 0 && o[0] < ww && o[1] < wh && hole[size_t(o[1]) * ww + size_t(o[0])]) touches = true;
+            if (!touches || !shown(wx0 + x, wy0 + y)) continue;
+            known[p] = 1;
+            anyKnown = true;
+            const SampleOf<S>* t = image.pixel(wx0 + x, wy0 + y);
+            const SampleOf<S>* s = source.pixel(wx0 + x, wy0 + y);
+            for (int c = 0; c < N; c++) value[p * N + size_t(c)] = float(t[c]) - float(s[c]);
+        }
+    if (anyKnown) membraneFill(value.data(), N, hole.data(), known.data(), ww, wh);
+    parallelRows(0, wh, [&](int r0, int r1) {
+        for (int y = r0; y < r1; y++)
+            for (int x = 0; x < ww; x++) {
+                const size_t p = size_t(y) * ww + size_t(x);
+                if (!hole[p]) continue;
+                const int ix = wx0 + x, iy = wy0 + y;
+                SampleOf<S>* t = image.pixel(ix, iy);
+                const SampleOf<S>* s = source.pixel(ix, iy);
+                const double amount = std::min(double(coverage.at(ix, iy)), one) / one * opacity;
+                double out[N];
+                for (int c = 0; c < N; c++) out[c] = t[c] + (s[c] + value[p * N + size_t(c)] - t[c]) * amount;
+                storeInks<S>(t, out);
+            }
+    });
+}
+
+} // namespace
+
+void spotHeal(ImageC8& image, const GrayImage& coverage, float opacity, int mode, uint32_t seed, const GrayImage* visible) {
+    if (image.channels() == 5) spotHealInks<SampleType::U8>(image, coverage, opacity, mode, seed, visible);
+}
+void healFrom(ImageC8& image, const ImageC8& source, const GrayImage& coverage, float opacity, const GrayImage* visible) {
+    if (image.channels() == 5) healFromInks<SampleType::U8>(image, source, coverage, opacity, visible);
 }
 
 } // namespace compositor
