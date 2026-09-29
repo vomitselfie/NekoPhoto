@@ -367,6 +367,7 @@ QWidget* ToolOptionsBar::buildHealingOptions() {
     h->addWidget(moveOptions);
     moveOptions->setVisible(session_->spotHealingMode == 5);
     connect(mode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, moveOptions](int i) { session_->spotHealingMode = i; moveOptions->setVisible(i == 5); });
+    syncers_.push_back([this, mode] { if (mode->currentIndex() != session_->spotHealingMode) mode->setCurrentIndex(std::clamp(session_->spotHealingMode, 0, 5)); });
     addBrushTipFields(h);
     h->addStretch();
     return w;
@@ -420,7 +421,9 @@ QWidget* ToolOptionsBar::buildSmudgeOptions() {
     auto* h = layoutOf(w);
     auto* mode = new QComboBox;
     mode->addItems({tr("Liquify"), tr("Blur"), tr("Smudge"), tr("Sharpen")});
+    mode->setCurrentIndex(int(session_->blurMode));
     connect(mode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->blurMode = BlurToolMode(i); });
+    syncers_.push_back([this, mode] { QSignalBlocker b(mode); mode->setCurrentIndex(int(session_->blurMode)); });
     h->addWidget(new QLabel(tr("Mode")));
     h->addWidget(mode);
     addBrushTipFields(h);
@@ -450,6 +453,7 @@ QWidget* ToolOptionsBar::buildToningOptions() {
         spongeLabel->setVisible(isSponge); sponge->setVisible(isSponge);
     };
     connect(kind, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, show](int i) { session_->toning.kind = compositor::ToningKind(i); show(); });
+    syncers_.push_back([this, kind, show] { { QSignalBlocker b(kind); kind->setCurrentIndex(int(session_->toning.kind)); } show(); });
     connect(range, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->toning.range = compositor::ToneRange(i); });
     connect(protect, &QCheckBox::toggled, this, [this](bool on) { session_->toning.protectTones = on; });
     connect(sponge, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { session_->toning.saturate = i == 1; });

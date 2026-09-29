@@ -417,7 +417,7 @@ uses a different model than Apple's Vision, so its cutouts differ in detail.
 | Keys | Action |
 |---|---|
 | V M L W C B E J S R G U T I H Z | Tools: Move, Marquee, Lasso, Wand, Crop, Brush, Eraser, Spot Healing, Clone Stamp, Smudge, Gradient, Shape, Text, Eyedropper, Hand, Zoom |
-| Shift M / L / U | Switch the Marquee, Lasso or Shape kind |
+| Shift + tool letter | Next tool of the letter's group, as Photoshop: Shift M rectangle / ellipse marquee, Shift L freehand / polygonal lasso, Shift W Magic Wand / Quick Select, Shift C Crop / Slice, Shift V Move / Artboard, Shift G Gradient / Paint Bucket, Shift J Spot Healing / Healing Brush / Patch / Content-Aware Move, Shift O Dodge / Burn / Sponge, Shift R Blur / Sharpen / Smudge / Liquify, Shift U the shape kinds; Shift P and Shift T pick the Pen and Type tools |
 | 1…9, 0 | Opacity 10%…90%, 100% (two digits quickly for an exact value) |
 | [ ], Shift [ ] | Brush size, hardness |
 | X, D | Swap / reset colours |

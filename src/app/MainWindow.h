@@ -225,6 +225,19 @@ private:
     /// After exporting a 16-bit document to an 8-bit format: says it was dithered down.
     void noteDitheredExport(const QString& path);
     QMap<Tool, QAction*> toolActions_;
+    /// Shift+letter tool groups: the last tool used in each (keyed by the group's first tool), and the Spot
+    /// Healing type Shift+J comes back to.
+    QMap<int, Tool> groupLast_;
+    int spotHealingType_ = 0;
+    static int toolGroupKey(Tool t) {
+        switch (t) {
+        case Tool::Artboard: return int(Tool::Move);
+        case Tool::Scribble: return int(Tool::Wand);
+        case Tool::Slice: return int(Tool::Crop);
+        case Tool::PaintBucket: return int(Tool::Gradient);
+        default: return int(t);
+        }
+    }
     QAction* eraserAction_;
 };
 

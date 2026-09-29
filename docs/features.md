@@ -97,6 +97,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 
 ## Working faster
 - Scrubby labels, as in Photoshop: drag the label beside a number (Size, Opacity, a filter's Radius, a Layer Style's Distance, the transform fields, Camera Raw's sliders) left or right to change it, with Shift for fine steps and Alt or Ctrl for coarse ones; a click on the label still types in the field, and one drag is one undo step
+- Shift + a tool's letter steps through its group, as in Photoshop (Shift+J: Spot Healing, Healing Brush, Patch, Content-Aware Move; Shift+O: Dodge, Burn, Sponge; and the others in [linux-port.md](linux-port.md#keyboard-shortcuts))
 
 ## Automation
 - Scripts and AI agents can drive the editor through a socket or MCP; see [automation.md](automation.md)
@@ -186,6 +187,7 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 
 ### 操作
 - スクラブ(Photoshop と同じ):数値の横のラベル(直径、不透明度、フィルターの半径、レイヤースタイルの距離、変形の数値欄、Camera Raw のスライダー)を左右にドラッグして値を変えられます。Shift で細かく、Alt または Ctrl で大きく動きます。ラベルのクリックでは従来どおり数値を入力でき、1 回のドラッグは 1 つの取り消し単位です
+- Shift + ツールのキーで同じグループのツールを順に切り替えます(Photoshop と同じ。Shift+J:スポット修復ブラシ・修復ブラシ・パッチ・コンテンツに応じた移動、Shift+O:覆い焼き・焼き込み・スポンジ。ほかは [linux-port.md](linux-port.md#keyboard-shortcuts))
 
 ### 自動化
 - スクリプトや AI エージェントからソケットまたは MCP 経由で操作できます。詳しくは [automation.md](automation.md)(英語)
