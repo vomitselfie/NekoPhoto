@@ -1,6 +1,6 @@
 # High bit depth and colour management: design plan
 
-Status: P1–P4 landed in 1.7 (16-bit RGB editing, painting and colour management); see "Status" below for each phase and what is still gated at 16 bits. P5–P8 are planned. The design sections below are kept as written.
+Status: P1–P4 landed in 1.7 (16-bit RGB editing, painting and colour management); see "Status" below for each phase and what is still gated at 16 bits. P6 (channels) has landed too; P5, P7 and P8 are planned. The design sections below are kept as written.
 
 ## 1. Where we are
 
@@ -359,6 +359,42 @@ details and the calibration table: [smart-objects.md](smart-objects.md#at-16-bit
   16-bit section places, converts, edits contents, filters, paints the filter mask, warps, replaces and rasterizes.
 - Still gated at 16 bits: Unsharp Mask as a Smart Filter, Camera Raw, G'MIC, Remove Background, artboards, the
   timeline, SVG and slice export.
+
+**P6 landed (2026-09-28): the Channels panel and alpha channels.** User-facing summary: [channels.md](channels.md).
+
+- `Channel { id, name, image (AnyGray at the document's depth), kind Alpha|Spot, color, opacity, selectedAreas,
+  psdCarry }` in `Document::channels` (section 7's design; the gray is the channel as Photoshop shows it, so Color
+  Indicates Selected Areas stores the inverse and switching it inverts the gray). Channels are in undo snapshots,
+  `retainedBytes`, the mask budget and depth conversion, and follow Crop, Canvas Size, Image Size and Flip Canvas.
+  At most 53 (Photoshop's 56 with the colour channels).
+- `channels.h`: Save Selection into a new or existing channel (replace, add, subtract, intersect), Load Selection
+  from a channel, the composite's luminosity, a colour channel, a layer's transparency or mask (invert, four modes),
+  `thumbnailClickMode` (Ctrl, Ctrl+Shift, Ctrl+Alt, Ctrl+Shift+Alt), `keepColorChannels` / `restrictToColorChannels`,
+  and `applyChannelView` for the canvas.
+- Colour channels are views: the session's `activeColors_` and `visibleColors_` bitsets. With some channels active,
+  every pixel edit is limited to them when the outermost edit ends (the edit's alpha and grid are the layer's own
+  again), and stroke and adjustment previews show it; edits of the canvas or the layer structure are left whole. With
+  all three active nothing runs: 8-bit render hashes and brush parity are byte-identical. Paste into a single
+  channel writes the clipboard's gray; Delete fills the channels with the background colour.
+- An alpha channel made the target is painted through a temporary layer, as Quick Mask is (`paintsQuickMask` covers
+  both), and written back into the channel inside each edit's undo step; choosing a channel is not an undo step.
+- PSD: channels read from the merged image's extra planes with resources 1045/1006 (names), 1077/1007 (display) and
+  1053 (identifiers), written after the transparency; untouched channels keep their DisplayInfo record, identifier
+  and a 16-bit file's own samples (`PsdChannelCarry`). Of the corpus, `photoshop-saved-channels.psd` has two alpha
+  channels and a spot channel (names, display and planes come back byte for byte, resources 1006, 1045, 1077, 1053
+  identical); `arrows.psd` names its merged transparency in 1006/1045, which is recognised and not made a channel.
+  Projects: a `channels` manifest array with `channels/<id>.png` at the document's depth (format 8; no bump).
+  TIFF extra channels: not done (Qt's TIFF plugin does not expose them).
+- App: Window ▸ Channels (tabbed between Layers and Paths), Select ▸ Save Selection and Load Selection, Channel
+  Options, Ctrl+2..9 and Ctrl+Alt+2..9 (no clash with existing bindings). Automation `channels.*` (eight methods),
+  the MCP tools, rpc smoke at 8 and 16 bits. `edit.channels` in supports.cpp (8 and 16 bits).
+- Gates: `channels_tests` (model and undo, every save and load mode at both depths, click modifiers, canvas
+  operations, single-channel painting and Invert at 8 and 16 bits, the view, PSD and project round trips, damaged
+  channel resources); full ctest; 8-bit render hashes and brush parity unchanged; PSD corpus plus K.psd 118 files /
+  0 failed / 3,975 carried blocks at 8 and 16 bits, 3 channels back; GCC and Clang `-Werror`; rpc and MCP smoke;
+  translations_check. bench_core A/B (three alternating rounds of 9) was not conclusive: another lane loaded the machine and 8-bit lines moved from -23% to +54% in both directions; no benchmarked kernel (render, blend, brush, blur, adjustments) changed, and the all-channels path adds only a bitset test per edit.
+- Not done: editing spot channels, Apply Image, Calculations, Split and Merge Channels, TIFF extra channels, CMYK and
+  Lab colour channels (P7).
 
 ## Review notes
 
