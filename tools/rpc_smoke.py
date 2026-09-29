@@ -1127,6 +1127,11 @@ def colour_mode_adjustments(rpc):
         assert rpc.call("render", maxSize=48)["png"]
         info = rpc.call("document.info")
         assert info["colorMode"] == mode and info["bits"] == bits, info
+        rpc.call("document.close", discard=True)
+    rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
+    rpc.call("tabs.close", index=tab["index"], discard=True)
+
+
 def colour_mode_selection(rpc):
     """P7 E (docs/color-modes.md, "Selections"): the Magic Wand and Quick Select in CMYK and Lab documents at 8 and 16
     bits decide in L*a*b* without touching the pixels, and a layer's pixels load as a selection (a CMYK layer's alpha
