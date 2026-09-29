@@ -416,6 +416,29 @@ void AutomationServer::registerLayersHandlers() {
         const Layer* l = session()->activeLayer();
         return l ? layerJson(*l, 0) : QJsonObject{};
     });
+    add("layers.copy", [session, layer](const QJsonObject& p) {
+        // Edit > Copy with layers selected and no selection: these layers (or the selected ones) on the layer clipboard.
+        EditorSession* s = session();
+        if (has(p, "ids")) {
+            std::set<Uuid> ids;
+            for (QJsonValue v : p.value("ids").toArray()) ids.insert(layer(QJsonObject{{"id", v}}).id);
+            if (ids.empty()) fail("ids lists no layer", invalidParams);
+            s->selectLayers(ids, *ids.begin());
+        }
+        if (!s->copyLayers()) fail("select a layer to copy");
+        return QJsonObject{{"copied", int(s->selectedLayerIds().size())}};
+    });
+    add("layers.paste", [session](const QJsonObject&) {
+        // Paste of copied layers into the current document, above the active layer: one undo step.
+        EditorSession* s = session();
+        if (!EditorSession::hasLayerClipboard()) fail("no layers are on the clipboard (layers.copy puts them there)");
+        QString why;
+        const std::vector<Uuid> ids = s->pasteLayers(&why);
+        if (ids.empty()) fail(why.isEmpty() ? QStringLiteral("the layers could not be pasted here") : why);
+        QJsonArray out;
+        for (const Uuid& id : ids) out.append(qs(id));
+        return QJsonObject{{"ids", out}};
+    });
     add("layers.move", [session, layer](const QJsonObject& p) {
         // Into `parent` (or the top level) directly above `above` (or at the bottom / top).
         const Layer& l = layer(p);

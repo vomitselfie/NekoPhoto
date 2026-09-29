@@ -12,6 +12,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Adjustment layers: Hue/Saturation, Levels, Curves, Exposure, Gradient Map, Grain
 - Merge Down, Merge Layers and Merge Group (Ctrl+E)
 - Duplicate, rename, reorder and nest by drag and drop; drag layers between open projects
+- Copy and paste whole layers between documents, as Photoshop: Edit ▸ Copy with layers selected and no selection copies them and the folders' contents with their masks, vector masks, styles, text, shapes, smart objects (and their sources), adjustments, blending and clipping; Paste in any open document puts them above the active layer as one undo step, converted to its colour profile and depth (other apps get the layers flattened)
 
 ## Transform
 - Move, scale, rotate and flip without losing resolution
@@ -120,6 +121,7 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 - 調整レイヤー:色相・彩度、レベル補正、トーンカーブ、露光量、グラデーションマップ、粒子
 - 下のレイヤーと結合、レイヤーを結合、グループを結合(Ctrl+E)
 - ドラッグ&ドロップで複製・名前変更・並べ替え・入れ子。開いているプロジェクト間でもレイヤーを移動可能
+- ドキュメント間でレイヤーごとコピー&ペースト(Photoshop と同じ):選択範囲がなくレイヤーを選択しているときの 編集 ▸ コピー で、レイヤーとグループの中身をマスク・ベクトルマスク・スタイル・テキスト・シェイプ・スマートオブジェクト(ソースごと)・調整レイヤー・描画モード・クリッピングを保ったままコピーし、開いているどのドキュメントでもペーストで作業中のレイヤーの上に 1 回の取り消し単位で追加します。カラープロファイルとビット数はペースト先に合わせて変換します(他のアプリには統合した画像を渡します)
 
 ### 変形
 - 解像度を落とさずに移動・拡大縮小・回転・反転

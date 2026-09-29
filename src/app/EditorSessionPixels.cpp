@@ -273,12 +273,13 @@ void EditorSession::cutSelection() {
 
 bool EditorSession::canPaste() const {
     if (!document_ || !canEditLayers()) return false;
-    return pixelClipboard_.has_value() || QApplication::clipboard()->mimeData()->hasImage();
+    return pixelClipboard_.has_value() || QApplication::clipboard()->mimeData()->hasImage() || hasLayerClipboard();
 }
 
 void EditorSession::paste() {
     if (refusedAtDepth("edit.clipboard", tr("Editing pixels"))) return;
     if (!canPaste()) return;
+    if (hasLayerClipboard()) { QString why; pasteLayers(&why); if (!why.isEmpty()) emit error(why); return; }   // EditorSessionClipboard.cpp
     const QMimeData* mime = QApplication::clipboard()->mimeData();
     QImage external = mime->hasImage() ? qvariant_cast<QImage>(mime->imageData()) : QImage();
     // Pixels copied here go back exactly where they came from unless another app copied since.

@@ -236,7 +236,11 @@ void MainWindow::buildMenus() {
     redoAction_ = edit->addAction(tr("&Redo"), QKeySequence("Ctrl+Shift+Z"), this, [this] { session_->redo(); });
     edit->addSeparator();
     needsDocument(edit->addAction(tr("Cu&t"), QKeySequence::Cut, this, [this] { session_->cutSelection(); }), "edit.clipboard");
-    needsDocument(edit->addAction(tr("&Copy"), QKeySequence::Copy, this, [this] { session_->copySelection(); }), "edit.clipboard");
+    needsDocument(edit->addAction(tr("&Copy"), QKeySequence::Copy, this, [this] {
+        // As Photoshop: with no selection, the selected layers themselves (pasted whole in any document).
+        if (!session_->document()->selection && !session_->selectedLayerIds().empty() && session_->copyLayers()) return;
+        session_->copySelection();
+    }), "edit.clipboard");
     needsDocument(edit->addAction(tr("Copy &Merged"), QKeySequence("Ctrl+Shift+C"), this, [this] { session_->copyMerged(); }), "edit.clipboard");
     needsDocument(edit->addAction(tr("&Paste"), QKeySequence::Paste, this, [this] { session_->paste(); }), "edit.clipboard");
     edit->addSeparator();

@@ -482,6 +482,13 @@ public:
     void cutSelection();
     bool canPaste() const;
     void paste();
+    /// Edit > Copy with layers selected and no selection (EditorSessionClipboard.cpp): the selected layers and
+    /// folders, with everything they hold, go to the layer clipboard every tab shares; other apps get them
+    /// flattened. Paste in any document inserts them above the active layer, one undo step, converted to its
+    /// profile and depth; the new layers' ids come back.
+    bool copyLayers();
+    static bool hasLayerClipboard();
+    std::vector<compositor::Uuid> pasteLayers(QString* error = nullptr);
     void layerViaCopy();
     /// Content-Aware Fill of the selection on the active layer; the layer grows over any selection past its edge.
     /// The request chooses where it copies from and whether the result goes on a new layer.

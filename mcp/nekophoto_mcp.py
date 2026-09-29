@@ -475,6 +475,19 @@ def layers_duplicate(id: str) -> str:
     return text(call("layers.duplicate", id=id))
 
 
+@outside("Copy layers")
+def layers_copy(ids: Optional[list[str]] = None) -> str:
+    """Copy whole layers (default the selected ones) to the layer clipboard, as Edit > Copy with no selection:
+    masks, styles, text, shapes, smart objects and adjustments come along. layers_paste puts them in any open document."""
+    return text(call("layers.copy", **({"ids": ids} if ids else {})))
+
+
+@edit("Paste layers")
+def layers_paste() -> str:
+    """Paste the copied layers into the current document above the active layer (one undo step); answers their ids."""
+    return text(call("layers.paste"))
+
+
 @edit("Move a layer in the tree")
 def layers_move(id: str, parent: Optional[str] = None, above: Optional[str] = None, at_bottom: bool = False) -> str:
     """Re-parent and reorder: into group parent (or the top level), directly above layer above, or at the bottom / top of that level."""

@@ -722,6 +722,10 @@
         <source>Convert to Profile</source>
         <translation>プロファイル変換</translation>
     </message>
+    <message>
+        <source>Paste Layers</source>
+        <translation>レイヤーをペースト</translation>
+    </message>
 </context>
 <context>
     <name>Names</name>

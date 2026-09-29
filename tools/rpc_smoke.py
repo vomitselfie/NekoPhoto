@@ -220,6 +220,16 @@ def remaining_methods(rpc):
     rpc.call("tabs.close", index=icon["tab"], discard=True)
     rpc.call("tabs.select", index=next(t["index"] for t in here if t["current"]))
     placed = rpc.call("document.import", path=image, x=100, y=60)
+    # Whole layers between documents: layers.copy here, layers.paste in the first tab, one undo step.
+    assert rpc.call("layers.copy", ids=[placed["id"]])["copied"] == 1
+    rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
+    before = len(rpc.call("layers.list"))
+    pasted = rpc.call("layers.paste")["ids"]
+    assert len(pasted) == 1 and len(rpc.call("layers.list")) == before + 1, pasted
+    assert rpc.call("history.list")["undo"][-1] == "Paste Layers"
+    rpc.call("history.undo")
+    assert len(rpc.call("layers.list")) == before
+    rpc.call("tabs.select", index=next(t["index"] for t in here if t["current"]))
     rpc.call("layers.duplicate")
     copy = rpc.call("layers.list")[0]
     rpc.call("layers.flip", vertical=True)
