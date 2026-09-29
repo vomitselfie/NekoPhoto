@@ -1228,7 +1228,12 @@ def colour_mode_transforms(rpc):
             rpc.call("layers.set", id=l["id"], visible=True)
         # Flat exports in sRGB.
         for ext in ("png", "jpg", "tif", "webp", "tga", "gif", "ico"):
-            out = rpc.call("document.export", path=os.path.join(work, "%s%d.%s" % (mode, bits, ext)))
+            try:
+                out = rpc.call("document.export", path=os.path.join(work, "%s%d.%s" % (mode, bits, ext)))
+            except RuntimeError as e:
+                # WebP and TIFF need Qt's image-format plugins.
+                assert ext in ("webp", "tif") and "must end in" in str(e), e
+                continue
             assert out.get("convertedToSrgb") is True or ext == "gif", out
         # Layers copied into an RGB document come through the profile.
         rpc.call("layers.select", id=placed["id"])
