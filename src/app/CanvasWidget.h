@@ -215,7 +215,11 @@ private:
         TextCaretGeometry geometry;
         compositor::Affine toDocument;
         QSizeF rasterSize;
-        QString preedit;
+        /// An input method's composition (Japanese and the like), shown inline in the layer until it is committed:
+        /// `base` is the text without it, `start` where it sits, `length` how long it is; `clauses` are the ranges
+        /// (in the composition) the input method marks, `thick` for the one being converted. Never recorded.
+        struct Composition { compositor::LayerText base; int start = 0, length = 0; std::vector<std::tuple<int, int, bool>> clauses; };
+        std::optional<Composition> composition;
     };
     std::optional<TypeState> typeEdit_;
     std::optional<QPointF> typeCreateStart_;
@@ -231,7 +235,8 @@ private:
     void startTypeSession();
     void finishTypeSession(bool keep);
     void setTypeText(compositor::LayerText text, int caret, int anchor, QPointF rasterShift = {}, bool record = true);
-    void typeReplace(int from, int to, const QString& insert);
+    void typeReplace(int from, int to, const QString& insert, bool record = true);
+    void dropComposition();
     bool typeUndo(bool redo);
     bool typeShortcut(QKeyEvent* e) const;
     bool typeKey(QKeyEvent* e);

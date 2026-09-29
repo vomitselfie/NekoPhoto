@@ -48,7 +48,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Quick Mask (Q, or Select ▸ Edit in Quick Mask Mode): the selection as a red overlay to paint with every mask tool, white selecting; saving or exporting leaves it first
 - Gradients and shapes (rectangles, rounded rectangles, ellipses); the Gradient tool draws Foreground to Background, Foreground to Transparent or any multi-stop gradient imported from a Photoshop `.grd` file (docs/presets.md)
 - Text in any installed font, editable until you paint on the layer
-- Type on the canvas, as with Photoshop's Type tool: click to type point text (or click text to edit it), drag a box for paragraph text and resize it by its handles; the arrows, Home and End, Shift or a drag to select, a double-click for a word, Ctrl+A, copy, cut and paste, Enter for a new line, Ctrl+Z inside the edit; the options bar's font, size, bold, italic, colour and alignment apply to the selected letters (or to the letters typed next); Ctrl+Enter, Enter on the keypad or a click outside commits and Esc cancels, one undo step for the edit. Layer ▸ Edit Text… still opens the text dialog
+- Type on the canvas, as with Photoshop's Type tool: click to type point text (or click text to edit it), drag a box for paragraph text and resize it by its handles; the arrows, Home and End, Shift or a drag to select, a double-click for a word, Ctrl+A, copy, cut and paste, Enter for a new line, Ctrl+Z inside the edit; Japanese and other input methods compose inline in the layer's own style, underlined (the clause being converted more heavily), the candidate window beside the caret, and what they commit is one step for Ctrl+Z; the options bar's font, size, bold, italic, colour and alignment apply to the selected letters (or to the letters typed next); Ctrl+Enter, Enter on the keypad or a click outside commits and Esc cancels, one undo step for the edit. Layer ▸ Edit Text… still opens the text dialog
 - Style text letter by letter, as with Photoshop's Type tool: select letters in the text editor and change their font, size, weight, bold and italic, colour, tracking, baseline shift, leading, caps, underline and strikethrough; the Character section shows the style at the cursor or over the selection (blank where it is mixed), with nothing selected a change applies to all the text, and the styles go out to PSD as Photoshop's own style runs
 - Eyedropper and colour picker
 
@@ -151,7 +151,7 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 - 指先ツール、ゆがみ、ぼかしツール(ピクセルにもマスクにも使えます)
 - グラデーションとシェイプ(長方形、角丸長方形、楕円)
 - インストール済みの任意のフォントでテキスト。レイヤーに描画するまでは再編集可能
-- カンバス上で直接入力(Photoshop の文字ツールと同じ):クリックしてポイントテキストを入力(テキストをクリックすると編集)、ドラッグで段落テキストのボックスを作り、ハンドルでサイズを変更。矢印キー、Home と End、Shift またはドラッグで選択、ダブルクリックで単語を選択、Ctrl+A、コピー・カット・ペースト、Enter で改行、編集中の Ctrl+Z。オプションバーのフォント・サイズ・太字・斜体・カラー・行揃えは選択した文字(選択がなければ次に入力する文字)に適用されます。Ctrl+Enter・テンキーの Enter・ボックスの外のクリックで確定、Esc で取り消し。編集全体が 1 つの取り消し単位です。レイヤー ▸ テキストを編集… からは従来のテキストダイアログも開けます
+- カンバス上で直接入力(Photoshop の文字ツールと同じ):クリックしてポイントテキストを入力(テキストをクリックすると編集)、ドラッグで段落テキストのボックスを作り、ハンドルでサイズを変更。矢印キー、Home と End、Shift またはドラッグで選択、ダブルクリックで単語を選択、Ctrl+A、コピー・カット・ペースト、Enter で改行、編集中の Ctrl+Z。日本語などの入力メソッドは、変換中の文字をレイヤーと同じスタイルでその場に下線付きで表示し(変換中の文節は太い下線)、候補ウィンドウはキャレットの横に出ます。確定した文字は Ctrl+Z の 1 単位です。オプションバーのフォント・サイズ・太字・斜体・カラー・行揃えは選択した文字(選択がなければ次に入力する文字)に適用されます。Ctrl+Enter・テンキーの Enter・ボックスの外のクリックで確定、Esc で取り消し。編集全体が 1 つの取り消し単位です。レイヤー ▸ テキストを編集… からは従来のテキストダイアログも開けます
 - スポイトとカラーピッカー
 
 ### 色調補正とフィルター
