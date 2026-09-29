@@ -348,6 +348,7 @@ void MainWindow::offerRecovery() {
 void MainWindow::switchTo(int index) {
     if (index < 0 || index >= int(tabs_.size())) return;
     if (current_ >= 0 && current_ < int(tabs_.size()) && current_ != index) {
+        currentTab().canvas->commitType();
         currentTab().session->commitTransform();
         currentTab().session->resolveGradient();
         currentTab().options->setVisible(false);
@@ -406,7 +407,7 @@ QString MainWindow::toolHint(Tool tool, bool erase) {
     case Tool::Dodge: return tr("Opacity is the Exposure (Dodge, Burn) or Flow (Sponge); a stroke never goes past one full pass");
     case Tool::PaintBucket: return tr("Click to fill pixels like the one clicked with the foreground colour, inside the selection");
     case Tool::Shape: return tr("Drag a shape in the foreground colour; Shift squares, Alt grows from the centre; Shift-U switches kind");
-    case Tool::Text: return tr("Click to add text in the foreground colour, or click a text layer to edit it; the options bar sets the font");
+    case Tool::Text: return tr("Click to type, or drag a box for paragraph text; click text to edit it. Ctrl+Enter commits, Esc cancels; the options bar styles the selected letters");
     case Tool::Eyedropper: return tr("Click sets the foreground colour, Alt-click the background");
     case Tool::Hand: return tr("Drag to pan; hold Space to pan from any tool");
     case Tool::Zoom: return tr("Click zooms in, Alt-click out, drag a box to zoom to it; Ctrl-wheel zooms anywhere");
@@ -424,7 +425,7 @@ void MainWindow::connectSession() {
     for (auto& c : sessionConnections_) disconnect(c);
     sessionConnections_.clear();
     sessionConnections_.push_back(connect(session_, &EditorSession::viewportChanged, this, &MainWindow::refreshZoom));
-    sessionConnections_.push_back(connect(session_, &EditorSession::textEditRequested, this, [this](Uuid id) { (new TextDialog(session_, id, this))->show(); }));
+    sessionConnections_.push_back(connect(session_, &EditorSession::textEditRequested, this, [this](Uuid id) { canvas_->commitType(); (new TextDialog(session_, id, this))->show(); }));
     sessionConnections_.push_back(connect(session_, &EditorSession::titleChanged, this, &MainWindow::refreshTitle));
     sessionConnections_.push_back(connect(session_, &EditorSession::quickSelectBusyChanged, this, [this](bool busy) { if (busy) statusBar()->showMessage(tr("Finding the subject…")); else statusBar()->clearMessage(); }));
     sessionConnections_.push_back(connect(session_, &EditorSession::quickSelectFailed, this, [this](const QString& error) { statusBar()->showMessage(error, 6000); }));

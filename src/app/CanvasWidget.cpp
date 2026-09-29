@@ -61,6 +61,7 @@ CanvasWidget::CanvasWidget(EditorSession* session, QWidget* parent) : QWidget(pa
     // A viewport change leaves the cache valid: ensureCache compares zoom and origin, and a pan scrolls it.
     connect(session_, &EditorSession::viewportChanged, this, [this] { update(); });
     connect(session_, &EditorSession::toolChanged, this, [this] {
+        if (typeEdit_ && session_->tool() != Tool::Text) commitType();   // another tool commits the type, as in Photoshop
         if (session_->tool() != Tool::Crop) crop_.reset();
         if (session_->tool() != Tool::Lasso && drag_ != Drag::Lasso) { lassoPoints_.clear(); lassoCursor_.reset(); }
         if (session_->tool() == Tool::Crop && !crop_ && session_->hasDocument()) {
@@ -85,6 +86,9 @@ CanvasWidget::CanvasWidget(EditorSession* session, QWidget* parent) : QWidget(pa
     connect(&zoomSettle_, &QTimer::timeout, this, [this] { update(); });
     antsTimer_.setInterval(120);
     connect(&antsTimer_, &QTimer::timeout, this, [this] { antsPhase_ = (antsPhase_ + 1) % 8; if (!selectionOutline_.empty() || selectionRasterAnts_) update(); });
+    // The caret blinks at the desktop's rate while typing.
+    caretBlink_.setInterval(std::max(200, QApplication::cursorFlashTime() / 2));
+    connect(&caretBlink_, &QTimer::timeout, this, [this] { if (typeEdit_) { typeEdit_->caretOn = !typeEdit_->caretOn; update(); } });
     zoomInCursor_ = magnifierCursor(false, devicePixelRatioF());
     zoomOutCursor_ = magnifierCursor(true, devicePixelRatioF());
 }

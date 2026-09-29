@@ -440,3 +440,4 @@ uses a different model than Apple's Vision, so its cutouts differ in detail.
 | Ctrl Shift E, Ctrl Alt Shift S | Export PNG, export JPEG |
 | Ctrl Shift K, Ctrl Y, Ctrl Shift Y | Color Settings, Proof Colors, Gamut Warning |
 | Ctrl , | Preferences |
+| Type tool: Ctrl Enter or keypad Enter, Esc | Commit or cancel the text being typed on the canvas (Enter alone starts a new line) |

@@ -24,6 +24,8 @@ void CanvasWidget::mouseMoveEvent(QMouseEvent* e) { session_->pen = mouseSample(
 void CanvasWidget::mouseReleaseEvent(QMouseEvent* e) { session_->pen = mouseSample({}, e->timestamp() / 1000.0); session_->pen.viewScale = session_->viewport.pointsPerPixel(); release(e->position(), e->button(), e->modifiers()); }
 
 void CanvasWidget::mouseDoubleClickEvent(QMouseEvent* e) {
+    // Typing: a double-click selects the word under it.
+    if (e->button() == Qt::LeftButton && typeEdit_ && typeDoubleClick(documentPoint(e->position()))) return;
     // Double-clicking text with any tool opens its editor (the Text tool needs only a click).
     if (e->button() == Qt::LeftButton && session_->hasDocument() && !session_->brushActive() && !session_->warpActive() && !session_->pixelMoveActive()) {
         QPointF doc = documentPoint(e->position());
@@ -249,17 +251,10 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
         session_->beginShape(doc);
         if (session_->shapeDraft()) drag_ = Drag::Shape;
         return;
-    case Tool::Text: {
-        // A click on a text layer edits it; anywhere else starts a new one in the current style.
-        std::optional<Uuid> under = session_->layerAt(doc);
-        const Layer* hit = under ? session_->document()->find(*under) : nullptr;
-        if (hit && hit->isLiveText()) { session_->selectLayer(hit->id, false); session_->requestTextEdit(hit->id); return; }
-        LayerText text = session_->textStyle;
-        text.text = tr("Text").toStdString();
-        text.red = session_->foregroundColor.redF(); text.green = session_->foregroundColor.greenF(); text.blue = session_->foregroundColor.blueF();
-        session_->addTextLayer(doc, text, true);
+    case Tool::Text:
+        // Typing on the canvas (CanvasWidgetText.cpp): a click on text puts the caret in it, elsewhere new type.
+        typePress(view, doc, modifiers);
         return;
-    }
     case Tool::Marquee: {
         const auto& d = session_->document();
         if (selectionMode(modifiers) == SelectionMode::Replace && d->selection && d->selection->coverage) {
@@ -410,6 +405,9 @@ void CanvasWidget::move(QPointF view, Qt::MouseButtons buttons, Qt::KeyboardModi
         break;
     case Drag::Hook:
         if (session_->canvasDragHook) session_->canvasDragHook(dragStartDocument_, doc);
+        break;
+    case Drag::Type:
+        typeMove(doc, modifiers);
         break;
     case Drag::Move: case Drag::Resize: case Drag::Rotate: {
         if (!transformDrag_ || !session_->transformEdit()) break;
@@ -585,6 +583,9 @@ void CanvasWidget::release(QPointF view, Qt::MouseButton button, Qt::KeyboardMod
     switch (drag) {
     case Drag::Hook:
         if (session_->canvasReleaseHook) session_->canvasReleaseHook();
+        break;
+    case Drag::Type:
+        typeRelease(doc);
         break;
     case Drag::Move: case Drag::Resize: case Drag::Rotate:
         transformDrag_.reset();

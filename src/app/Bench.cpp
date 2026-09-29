@@ -6,6 +6,7 @@
 #include "compositor/image.h"
 #include <QApplication>
 #include <QElapsedTimer>
+#include <QKeyEvent>
 #include <QMouseEvent>
 #include <QThread>
 #include <QWheelEvent>
@@ -126,6 +127,91 @@ int runBrushBench(MainWindow& window, const BrushBenchOptions& o) {
     std::printf("moves: mean %.2f ms each with a repaint every %d (keeps up with %.0f moves a second)\n",
                 moveSum / std::max<size_t>(1, moveTotals.size()), std::max(1, o.burst), 1000.0 * moveTotals.size() / std::max(1e-9, moveSum));
     std::fflush(stdout);
+    return 0;
+}
+
+int runTypeBench(MainWindow& window, const QString& screenshot) {
+    EditorSession* session = window.session();
+    CanvasWidget* canvas = window.canvasAt(window.currentTabIndex());
+    if (!session->hasDocument()) session->createDocument(1400, 900, 72, true);
+    session->selectTool(Tool::Text);
+    emit session->toolChanged();
+    session->textStyle.fontSize = 44;
+    session->foregroundColor = QColor(30, 40, 90);
+    session->fitView();
+    QApplication::processEvents();
+    auto pump = [] { QApplication::processEvents(QEventLoop::AllEvents); };
+    auto key = [&](int k, const QString& text, Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+        QElapsedTimer t;
+        t.start();
+        QKeyEvent press(QEvent::KeyPress, k, modifiers, text);
+        QApplication::sendEvent(canvas, &press);
+        QKeyEvent release(QEvent::KeyRelease, k, modifiers, text);
+        QApplication::sendEvent(canvas, &release);
+        canvas->repaint();   // the frame that shows the keystroke
+        pump();
+        return double(t.nsecsElapsed()) / 1e6;
+    };
+    auto type = [&](const QString& s, std::vector<double>* times, std::vector<double>* layer) {
+        for (QChar c : s) {
+            const double ms = key(c == '\n' ? Qt::Key_Return : c.isLetter() ? Qt::Key_A + (c.toUpper().unicode() - 'A') : Qt::Key_Space, c == '\n' ? QString() : QString(c));
+            if (times) times->push_back(ms);
+            if (layer) layer->push_back(canvas->lastTypeLatencyMs());
+        }
+    };
+    if (!canvas->startNewType(QPointF(80, 160), std::nullopt)) { std::printf("could not start typing\n"); return 1; }
+    const QString paragraph1 = QStringLiteral("On-canvas type: a click puts the caret on the canvas,");
+    const QString paragraph2 = QStringLiteral("the letters show as they are typed, and the options");
+    const QString paragraph3 = QStringLiteral("bar styles the selected letters as rich text runs.");
+    std::vector<double> first, third, thirdLayer;
+    type(paragraph1 + '\n', &first, nullptr);
+    type(paragraph2 + '\n', nullptr, nullptr);
+    type(paragraph3, &third, &thirdLayer);
+    auto report = [](const char* what, const std::vector<double>& v) {
+        std::printf("%-44s median %6.2f ms   p95 %6.2f ms   max %6.2f ms   (%zu)\n", what, percentile(v, 0.5), percentile(v, 0.95),
+                    v.empty() ? 0.0 : *std::max_element(v.begin(), v.end()), v.size());
+    };
+    std::printf("type bench: canvas %dx%d at dpr %.2f, %.0f px text\n", canvas->width(), canvas->height(), canvas->devicePixelRatioF(), session->textStyle.fontSize);
+    report("keystroke to screen, first paragraph", first);
+    report("keystroke to screen, third paragraph", third);
+    report("  of which the layer's layout and raster", thirdLayer);
+    // Select "rich text runs" (Shift+Ctrl+Left three times past the full stop) and make it bold and red, as the bar does.
+    key(Qt::Key_Left, {});
+    for (int i = 0; i < 3; i++) key(Qt::Key_Left, {}, Qt::ShiftModifier | Qt::ControlModifier);
+    compositor::TextRunPatch patch;
+    patch.bold = true;
+    patch.color = std::array<double, 3>{0.85, 0.1, 0.1};
+    canvas->applyTypeStyle(patch);
+    canvas->repaint();
+    pump();
+    if (!screenshot.isEmpty()) window.grab().save(screenshot);
+    const auto layerId = session->activeLayerId();
+    key(Qt::Key_Return, {}, Qt::ControlModifier);   // commit
+    const auto undo = session->undoNames();
+    const compositor::Layer* layer = layerId ? session->document()->find(*layerId) : nullptr;
+    std::printf("committed: %s, undo step \"%s\", %zu style runs, %d letters\n", layer && layer->text ? "yes" : "no",
+                undo.empty() ? "" : undo.back().c_str(), layer && layer->text ? layer->text->runs.size() : size_t(0),
+                layer && layer->text ? int(QString::fromStdString(layer->text->text).size()) : 0);
+    // Paragraph text: a box dragged out below, typed into until it wraps, a word selected by a double-click.
+    session->textStyle.fontSize = 30;
+    session->textStyle.alignment = 1;
+    if (!canvas->startNewType(QPointF(0, 0), QRectF(120, 420, 520, 300))) { std::printf("could not start paragraph text\n"); return 1; }
+    std::vector<double> boxed;
+    type(QStringLiteral("Paragraph text wraps inside its box and the handles resize it while the words flow again"), &boxed, nullptr);
+    report("keystroke to screen, paragraph box", boxed);
+    const QPointF word = canvas->viewPointForTest(QPointF(300, 470));
+    QMouseEvent click(QEvent::MouseButtonDblClick, word, canvas->mapToGlobal(word), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(canvas, &click);
+    canvas->repaint();
+    pump();
+    if (!screenshot.isEmpty()) {
+        QString boxShot = screenshot;
+        boxShot.insert(boxShot.lastIndexOf('.'), QStringLiteral("-box"));
+        window.grab().save(boxShot);
+    }
+    key(Qt::Key_Escape, {});   // cancelled: the new box goes, leaving nothing in the history
+    const auto after = session->undoNames();
+    std::printf("paragraph cancelled: undo step \"%s\", %d layers\n", after.empty() ? "" : after.back().c_str(), int(session->document()->layers.size()));
     return 0;
 }
 

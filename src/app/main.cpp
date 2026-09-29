@@ -252,6 +252,7 @@ int run(int argc, char** argv) {
     QCommandLineOption screenshot("screenshot", "Grab the window to <file> after opening, then quit.", "file");
     QCommandLineOption benchBrush("bench-brush", "Developer benchmark: paint strokes with brush preset <id> (or \"round\") through the canvas, print press, move and release latency, then quit.", "id");
     QCommandLineOption benchSize("bench-size", "Document size for --bench-brush, WxH (default 2000x2000).", "size");
+    QCommandLineOption benchType("bench-type", "Developer benchmark: type three paragraphs on the canvas with the Type tool, print each keystroke's latency, then quit (with --screenshot, grab the window while typing).");
     QCommandLineOption benchView("bench-view", "Developer benchmark: zoom, pan and undo on a large multi-layer document (--bench-size, default 4096x4096), print the times, then quit.");
     QCommandLineOption benchOpaque("bench-opaque", "With --bench-brush, paint on the opaque image layer rather than a blank layer.");
     QCommandLineOption benchBrushSize("bench-brush-size", "With --bench-brush, the brush diameter in document pixels.", "pixels");
@@ -279,6 +280,7 @@ int run(int argc, char** argv) {
     parser.addOption(benchBurst);
     parser.addOption(benchHardness);
     parser.addOption(benchView);
+    parser.addOption(benchType);
     parser.addOption(saveAs);
     parser.addOption(prefs);
     QCommandLineOption langOption("lang", "Interface language for this run: en, ja or system (default: the Preferences choice).", "code");
@@ -353,7 +355,7 @@ int run(int argc, char** argv) {
     // quits; anything that asks for a process of its own (screenshots, automation, --new-window) keeps one.
     QStringList handoff;
     for (const QString& path : parser.positionalArguments()) handoff << QDir::current().absoluteFilePath(path);
-    const bool ownProcess = parser.isSet(newWindow) || parser.isSet(benchBrush) || parser.isSet(benchView) || parser.isSet(screenshot) || parser.isSet(headlessOption) || parser.isSet(batchOption) || parser.isSet(dialogOption) || parser.isSet(saveAs) || parser.isSet(prefs) || parser.isSet(langOption) || parser.isSet(demo) || parser.isSet(toolOption);
+    const bool ownProcess = parser.isSet(newWindow) || parser.isSet(benchBrush) || parser.isSet(benchView) || parser.isSet(benchType) || parser.isSet(screenshot) || parser.isSet(headlessOption) || parser.isSet(batchOption) || parser.isSet(dialogOption) || parser.isSet(saveAs) || parser.isSet(prefs) || parser.isSet(langOption) || parser.isSet(demo) || parser.isSet(toolOption);
     const QString rpcRequested = parser.isSet(rpc) || parser.isSet(rpcSocket) ? (parser.value(rpcSocket).isEmpty() ? app::AutomationServer::defaultSocketPath() : parser.value(rpcSocket)) : QString();
     if (!ownProcess && app::SingleInstance::handOff(handoff, rpcRequested)) return 0;
     app::MainWindow window;
@@ -546,6 +548,7 @@ int run(int argc, char** argv) {
     }
     app::PreferencesDialog* preferences = nullptr;
     if (parser.isSet(prefs)) { preferences = new app::PreferencesDialog(&window); preferences->show(); }
+    if (parser.isSet(benchType)) return app::runTypeBench(window, parser.value(screenshot));
     if (parser.isSet(benchView)) {
         app::ViewBenchOptions options;
         const QStringList size = parser.value(benchSize).split('x');

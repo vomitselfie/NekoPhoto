@@ -78,6 +78,7 @@ void CanvasWidget::drawOverlays(QPainter& painter) {
     }
     drawCropOverlay(painter);
     drawBoxes(painter);
+    drawTypeOverlay(painter);
     if (session_->tool() == Tool::CloneStamp && hover_) {
         if (auto sample = session_->cloneSamplePoint(documentPoint(*hover_))) {
             QPointF v = viewPoint(*sample);

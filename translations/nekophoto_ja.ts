@@ -726,6 +726,14 @@
         <source>Paste Layers</source>
         <translation>レイヤーをペースト</translation>
     </message>
+    <message>
+        <source>Edit Type Layer</source>
+        <translation>テキストレイヤーを編集</translation>
+    </message>
+    <message>
+        <source>Type Tool</source>
+        <translation>横書き文字ツール</translation>
+    </message>
 </context>
 <context>
     <name>Names</name>
@@ -3988,10 +3996,6 @@ File &gt; New creates a blank canvas.</source>
         <source>Edit Path</source>
         <translation>パスを編集</translation>
     </message>
-    <message>
-        <source>Text</source>
-        <translation>テキスト</translation>
-    </message>
 </context>
 <context>
     <name>app::ChannelOptionsDialog</name>
@@ -5693,8 +5697,8 @@ File &gt; New creates a blank canvas.</source>
         <translation>描画色でシェイプをドラッグ。Shift で正方形、Alt で中心から拡大。Shift+U で種類を切り替え</translation>
     </message>
     <message>
-        <source>Click to add text in the foreground colour, or click a text layer to edit it; the options bar sets the font</source>
-        <translation>クリックして描画色でテキストを追加、またはテキストレイヤーをクリックして編集。フォントはオプションバーで設定</translation>
+        <source>Click to type, or drag a box for paragraph text; click text to edit it. Ctrl+Enter commits, Esc cancels; the options bar styles the selected letters</source>
+        <translation>クリックして入力、ドラッグで段落テキストのボックス。テキストをクリックすると編集できます。Ctrl+Enter で確定、Esc で取り消し。オプションバーで選択した文字のスタイルを変更</translation>
     </message>
     <message>
         <source>Click sets the foreground colour, Alt-click the background</source>
@@ -8738,6 +8742,11 @@ File &gt; New creates a blank canvas.</source>
         <translation>サイズ (ドキュメントのピクセル単位)</translation>
     </message>
     <message>
+        <source>Size</source>
+        <comment>font size</comment>
+        <translation>サイズ</translation>
+    </message>
+    <message>
         <source>B</source>
         <translation>B</translation>
     </message>
@@ -8764,6 +8773,22 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Alignment of the lines</source>
         <translation>行の揃え方です。</translation>
+    </message>
+    <message>
+        <source>Set the text colour</source>
+        <translation>テキストカラーを設定</translation>
+    </message>
+    <message>
+        <source>Text Colour</source>
+        <translation>テキストカラー</translation>
+    </message>
+    <message>
+        <source>Commit the text (Ctrl+Enter)</source>
+        <translation>現在の編集をすべて確定 (Ctrl+Enter)</translation>
+    </message>
+    <message>
+        <source>Cancel the text edit (Esc)</source>
+        <translation>現在の編集をすべてキャンセル (Esc)</translation>
     </message>
     <message>
         <source>Edit Text…</source>
