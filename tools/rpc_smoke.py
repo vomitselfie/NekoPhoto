@@ -384,6 +384,10 @@ def sixteen_bit(rpc):
     # Camera Raw at 16 bits, White Balance > Auto included.
     raw = rpc.call("pixels.cameraRaw", settings={"exposure": 0.4, "clarity": 20, "whiteBalance": "Auto", "detail": {"sharpenAmount": 30}})
     assert raw["applied"] and rpc.call("history.info")["undo"] == "Camera Raw Filter", raw
+    # G'MIC at 16 bits, when it is installed: the pixels go to it as float and come back at 16 bits.
+    if rpc.call("gmic.filters", search="sharpen")["installed"]:
+        assert rpc.call("pixels.gmic", command="blur 1.5")["applied"] == "blur 1.5"
+        assert rpc.call("history.info")["undo"] == "G'MIC: blur"
     rpc.call("pixels.fill", color="#ffaa00")
     rpc.call("selection.rect", x=40, y=30, width=12, height=10)
     rpc.call("pixels.contentAwareFill")

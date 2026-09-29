@@ -298,6 +298,14 @@ void AutomationServer::registerPixelsHandlers() {
         if (GmicRunner::executable().isEmpty()) fail("G'MIC is not installed (no gmic executable on PATH)");
         if (QString why; !GmicRunner::allowedForAutomation(command, &why)) fail(why, invalidParams);
         LayerTransform transform;
+        if (auto deep = s->adjustmentSource16(0, transform)) {
+            QString error;
+            auto result = GmicRunner::runSync(*deep, command, &error, integer(p, "timeoutMs", 300000));
+            if (!result) fail(error);
+            if (auto coverage = s->selectionOnGrid16(transform, deep->width(), deep->height())) blendThroughCoverage(*result, *deep, *coverage);
+            s->commitPixels(Image16Ptr(result), transform, "G'MIC: " + command.section(' ', 0, 0));
+            return QJsonObject{{"applied", command}, {"gmic", GmicRunner::version()}};
+        }
         auto source = s->adjustmentSource(0, transform);
         if (!source) fail("the active layer has no pixels; select a pixel layer with layers.select (document.overview shows each layer's kind)");
         QString error;

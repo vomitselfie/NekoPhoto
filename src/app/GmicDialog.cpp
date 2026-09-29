@@ -197,6 +197,7 @@ GmicDialog::GmicDialog(EditorSession* session, QWidget* parent) : PixelDialog(se
     debounce_.setInterval(350);
     connect(&debounce_, &QTimer::timeout, this, &GmicDialog::runPreview);
     connect(&preview_runner_, &GmicRunner::finished, this, &GmicDialog::previewFinished);
+    connect(&preview_runner_, &GmicRunner::finished16, this, &GmicDialog::previewFinished16);
     connect(search_, &QLineEdit::textChanged, this, [this](const QString& text) { fillTree(text); });
     connect(showAll_, &QCheckBox::toggled, this, [this] { fillTree(search_->text()); });
     connect(tree_, &QTreeWidget::currentItemChanged, this, [this](QTreeWidgetItem* item, QTreeWidgetItem*) {
@@ -454,19 +455,28 @@ void GmicDialog::updateCommand() {
 }
 
 void GmicDialog::schedulePreview() {
-    if (!preview_->isChecked() || !previewSource() || GmicRunner::executable().isEmpty()) return;
+    if (!preview_->isChecked() || !hasPreviewSource() || GmicRunner::executable().isEmpty()) return;
     debounce_.start();
 }
 
 void GmicDialog::runPreview() {
-    if (applying_ || finished() || !previewSource()) return;
+    if (applying_ || finished() || !hasPreviewSource()) return;
     QString command = customCommand_ ? command_->text().trimmed() : current_.commandLine(true);
     if (command.isEmpty()) { clearPreview(); return; }
     status_->setText(tr("Previewing…"));
-    preview_runner_.start(previewSource(), command, 30 * 1000);   // a preview that takes longer is no preview
+    // A preview that takes longer than this is no preview.
+    if (previewSource16()) preview_runner_.start(previewSource16(), command, 30 * 1000);
+    else preview_runner_.start(previewSource(), command, 30 * 1000);
 }
 
 void GmicDialog::previewFinished(std::shared_ptr<Image> result, QString error) {
+    if (applying_ || finished()) return;
+    if (!result) { status_->setText(error); clearPreview(); return; }
+    status_->clear();
+    showPreview(result);
+}
+
+void GmicDialog::previewFinished16(std::shared_ptr<Image16> result, QString error) {
     if (applying_ || finished()) return;
     if (!result) { status_->setText(error); clearPreview(); return; }
     status_->clear();
@@ -482,17 +492,23 @@ bool GmicDialog::apply() {
     setEnabled(false);
     status_->setText(tr("Applying %1…").arg(current_.name));
     auto* runner = new GmicRunner(this);
-    connect(runner, &GmicRunner::finished, this, [this, runner, command](std::shared_ptr<Image> result, QString error) {
+    const QString name = QStringLiteral("G'MIC: %1").arg(customCommand_ ? command.section(' ', 0, 0) : current_.name);
+    // Either depth: the result comes back at the layer's.
+    auto done = [this, runner, name](auto result, const QString& error) {
         runner->deleteLater();
         setEnabled(true);
         applying_ = false;
         if (finished()) return;   // the tab closed meanwhile
         if (!result) { status_->setText(error); QMessageBox::warning(this, tr("G'MIC"), error); return; }
         throughSelection(*result);
-        commit(result, placement(), QStringLiteral("G'MIC: %1").arg(customCommand_ ? command.section(' ', 0, 0) : current_.name));
+        commit(std::shared_ptr<const typename decltype(result)::element_type>(result), placement(), name);
         finish(QDialog::Accepted);
-    });
-    runner->start(source(), command, 5 * 60 * 1000);   // the dialog is disabled meanwhile, so a run must end
+    };
+    connect(runner, &GmicRunner::finished, this, [done](std::shared_ptr<Image> result, QString error) { done(result, error); });
+    connect(runner, &GmicRunner::finished16, this, [done](std::shared_ptr<Image16> result, QString error) { done(result, error); });
+    // The dialog is disabled meanwhile, so a run must end.
+    if (source16()) runner->start(source16(), command, 5 * 60 * 1000);
+    else runner->start(source(), command, 5 * 60 * 1000);
     return false;   // closes when the run finishes
 }
 

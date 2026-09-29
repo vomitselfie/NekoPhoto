@@ -530,7 +530,7 @@ void MainWindow::buildMenus() {
         if (session_->smartObjectBlocksPixels(true)) return;
             if (!session_->canAdjustPixels()) { showError(tr("G'MIC"), tr("Select a layer with pixels first.")); return; }
         (new GmicDialog(session_, this))->show();
-    }));
+    }), "filter.G'MIC");
     removeBackgroundAction_ = needsDocument(filter->addAction(tr("Remove &Background…"), this, [this] {
         if (!ModelStore::ready()) {
             // Off, or no model yet: the preferences page is where it gets turned on and fetched.

@@ -36,6 +36,7 @@ private:
     void schedulePreview();
     void runPreview();
     void previewFinished(std::shared_ptr<compositor::Image> result, QString error);
+    void previewFinished16(std::shared_ptr<compositor::Image16> result, QString error);
     void updateFilters();
 
     GmicCatalogue catalogue_;

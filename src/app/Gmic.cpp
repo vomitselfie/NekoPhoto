@@ -17,6 +17,12 @@
 #include <QTimer>
 #include <QProcessEnvironment>
 #include <algorithm>
+#include <bit>
+#include <cmath>
+#include <cstring>
+#include <fstream>
+#include <optional>
+#include <sstream>
 
 namespace app {
 
@@ -379,6 +385,10 @@ QString errorLine(QProcess& p) {
 /// The gmic invocation for one round trip. The command goes through a one-line script, so G'MIC parses it as
 /// G'MIC-Qt's does: text arguments with spaces or quotes ("(c) G'MIC", an expression) stay one argument, where
 /// passing it item by item on the command line split them.
+///
+/// The result is cut to G'MIC's 0..255 range, as G'MIC-Qt takes it: a PNG of a result past 255 (an overshooting
+/// sharpen) would otherwise be written as a 16-bit PNG of the raw values and read back scaled down. A PNG result is
+/// rounded too, where CImg's PNG writer would truncate, so the executable gives what the in-process run gives.
 QStringList argumentsFor(const QString& command, const QString& inPath, const QString& outPath) {
     const QString script = QFileInfo(inPath).dir().filePath("command.gmic");
     QFile file(script);
@@ -387,10 +397,12 @@ QStringList argumentsFor(const QString& command, const QString& inPath, const QS
         line.replace('\n', ' ').replace('\r', ' ');
         file.write(("compositor_run :\n  " + line + "\n").toUtf8());
     }
-    return {"-v", "-1", "-m", script, inPath, "compositor_run", "-o", outPath};
+    if (outPath.endsWith(QLatin1String(".png"))) return {"-v", "-1", "-m", script, inPath, "compositor_run", "cut", "0,255", "round", "-o", outPath};
+    return {"-v", "-1", "-m", script, inPath, "compositor_run", "cut", "0,255", "-o", outPath};
 }
 
-std::shared_ptr<compositor::Image> readResult(const QString& outPath, int width, int height, QString* error) {
+std::shared_ptr<compositor::Image> readResult(const QString& outPath, const compositor::Image& source, QString* error) {
+    const int width = source.width(), height = source.height();
     std::string err;
     if (!QFileInfo::exists(outPath)) {
         // Several images come out as out_000000.png, out_000001.png, ...: a filter that makes layers.
@@ -406,7 +418,160 @@ std::shared_ptr<compositor::Image> readResult(const QString& outPath, int width,
         if (error) *error = QObject::tr("The filter changed the image size (%1 x %2 to %3 x %4); only filters that keep it are supported here.").arg(width).arg(height).arg(image->width()).arg(image->height());
         return nullptr;
     }
+    // A gray or RGB result (a PNG without alpha: colour type 0 or 2) keeps the source's alpha, as the in-process run's
+    // does, instead of coming back opaque.
+    QFile file(outPath);
+    if (file.open(QIODevice::ReadOnly)) {
+        const QByteArray head = file.read(26);
+        if (head.size() == 26 && (head[25] == 0 || head[25] == 2)) {
+            for (int y = 0; y < height; y++) {
+                uint8_t* p = image->row(y);
+                const uint8_t* src = source.row(y);
+                for (int x = 0; x < width; x++, p += 4, src += 4) {
+                    const unsigned a = src[3];
+                    for (int c = 0; c < 3; c++) p[c] = uint8_t((p[c] * a + 127) / 255);
+                    p[3] = uint8_t(a);
+                }
+            }
+        }
+    }
     return image;
+}
+
+// ---- 16 bits: straight float planes on G'MIC's 0..255 scale --------------------------------------------------------
+
+/// `value` on the 0..255 scale, or the whole level it is within `tolerance` of. A 16-bit sample that is an 8-bit level
+/// widened is that level give or take the widening's rounding (under half a 16-bit step); taking it to the level itself
+/// lets the many G'MIC filters that index a table by level, or floor, see the level an 8-bit image gives them.
+float onScale(double value, double tolerance) {
+    const double level = std::round(value);
+    return float(std::abs(value - level) <= tolerance ? level : value);
+}
+
+/// Planar straight RGBA floats, G'MIC's convention (0..255 for colour and alpha), from premultiplied 16-bit pixels,
+/// unrounded but for onScale.
+std::vector<float> planesFrom16(const compositor::Image16& source) {
+    const int w = source.width(), h = source.height();
+    const size_t plane = size_t(w) * size_t(h);
+    std::vector<float> planes(plane * 4);
+    for (int y = 0; y < h; y++) {
+        const uint16_t* p = source.row(y);
+        for (int x = 0; x < w; x++, p += 4) {
+            const size_t i = size_t(y) * size_t(w) + size_t(x);
+            const double a = p[3];
+            // Half a 16-bit step, in straight colour: wider where the pixel is nearly transparent.
+            const double tolerance = a > 0 ? std::min(0.5, 0.5 * 255.0 / a) : 0.0;
+            for (int c = 0; c < 3; c++) planes[size_t(c) * plane + i] = a > 0 ? onScale(std::min(255.0, p[c] * 255.0 / a), tolerance) : 0.0f;
+            planes[3 * plane + i] = onScale(a * 255.0 / 32768.0, 0.5 * 255.0 / 32768.0);
+        }
+    }
+    return planes;
+}
+
+/// Premultiplied 16-bit pixels from G'MIC's planar result (`spectrum` planes on the 0..255 scale); a gray or RGB
+/// result keeps the source's alpha.
+std::shared_ptr<compositor::Image16> imageFromPlanes16(const float* o, int spectrum, const compositor::Image16& source) {
+    const int w = source.width(), h = source.height();
+    const size_t plane = size_t(w) * size_t(h);
+    auto result = std::make_shared<compositor::Image16>(w, h);
+    for (int y = 0; y < h; y++) {
+        uint16_t* p = result->row(y);
+        const uint16_t* src = source.row(y);
+        for (int x = 0; x < w; x++, p += 4, src += 4) {
+            const size_t i = size_t(y) * size_t(w) + size_t(x);
+            double rgb[3];
+            if (spectrum >= 3) for (int c = 0; c < 3; c++) rgb[c] = o[size_t(c) * plane + i];
+            else for (int c = 0; c < 3; c++) rgb[c] = o[i];
+            double a = src[3];
+            if (spectrum == 4 || spectrum == 2) a = std::round(std::clamp(double(o[size_t(spectrum - 1) * plane + i]), 0.0, 255.0) * 32768.0 / 255.0);
+            for (int c = 0; c < 3; c++) {
+                const double v = std::isfinite(rgb[c]) ? std::clamp(rgb[c], 0.0, 255.0) : 0.0;
+                p[c] = uint16_t(std::min(a, std::round(v * a / 255.0)));
+            }
+            p[3] = uint16_t(a);
+        }
+    }
+    return result;
+}
+
+/// CImg's own file format (.cimg), which the gmic executable reads and writes in float: an ASCII header, "<images>
+/// <type> <endianness>", then per image "<width> <height> <depth> <spectrum>" and its planar samples.
+bool writeCimg(const QString& path, const std::vector<float>& planes, int width, int height) {
+    std::ofstream out(path.toStdString(), std::ios::binary);
+    if (!out) return false;
+    out << "1 float " << (std::endian::native == std::endian::little ? "little_endian" : "big_endian") << "\n" << width << ' ' << height << " 1 4\n";
+    out.write(reinterpret_cast<const char*>(planes.data()), std::streamsize(planes.size() * sizeof(float)));
+    return bool(out);
+}
+
+struct CimgImage {
+    int width = 0, height = 0, spectrum = 0;
+    std::vector<float> data;
+};
+
+/// Reads the executable's .cimg result: one uncompressed image. G'MIC writes the narrowest type that holds every value
+/// exactly (bytes for a result of whole numbers in 0..255, float otherwise), so nothing is lost whichever it is.
+std::optional<CimgImage> readCimg(const QString& path, QString* error) {
+    std::ifstream in(path.toStdString(), std::ios::binary);
+    auto fail = [&](const QString& why) { if (error) *error = why; return std::optional<CimgImage>(); };
+    if (!in) return fail(QObject::tr("G'MIC produced no image."));
+    std::string line;
+    std::getline(in, line);
+    std::istringstream header(line);
+    int count = 0;
+    std::string type, endianness = "little_endian";
+    header >> count >> type >> endianness;
+    if (count < 1) return fail(QObject::tr("G'MIC produced no image."));
+    if (count > 1) return fail(QObject::tr("The filter makes %1 layers; only filters that give back one image are supported here.").arg(count));
+    std::getline(in, line);
+    std::istringstream size(line);
+    CimgImage image;
+    int depth = 0;
+    size >> image.width >> image.height >> depth >> image.spectrum;
+    if (line.find('#') != std::string::npos) return fail(QObject::tr("G'MIC wrote a compressed image."));
+    if (image.width < 1 || image.height < 1 || depth != 1 || image.spectrum < 1 || image.spectrum > 4)
+        return fail(QObject::tr("G'MIC produced an image this editor cannot take (%1 x %2 x %3, %4 channels).").arg(image.width).arg(image.height).arg(depth).arg(image.spectrum));
+    const size_t n = size_t(image.width) * size_t(image.height) * size_t(image.spectrum);
+    const bool swap = (endianness == "big_endian") != (std::endian::native == std::endian::big);
+    auto readAll = [&](auto sample) -> bool {
+        using T = decltype(sample);
+        std::vector<T> raw(n);
+        if (!in.read(reinterpret_cast<char*>(raw.data()), std::streamsize(n * sizeof(T)))) return false;
+        image.data.resize(n);
+        for (size_t i = 0; i < n; i++) {
+            T v = raw[i];
+            if (swap && sizeof(T) > 1) {
+                unsigned char bytes[sizeof(T)];
+                std::memcpy(bytes, &v, sizeof(T));
+                std::reverse(bytes, bytes + sizeof(T));
+                std::memcpy(&v, bytes, sizeof(T));
+            }
+            image.data[i] = float(v);
+        }
+        return true;
+    };
+    bool ok = false;
+    if (type == "float" || type == "float32") ok = readAll(float());
+    else if (type == "double" || type == "float64") ok = readAll(double());
+    else if (type == "uchar" || type == "unsigned_char" || type == "uint8") ok = readAll(uint8_t());
+    else if (type == "char" || type == "int8") ok = readAll(int8_t());
+    else if (type == "ushort" || type == "unsigned_short" || type == "uint16") ok = readAll(uint16_t());
+    else if (type == "short" || type == "int16") ok = readAll(int16_t());
+    else if (type == "uint" || type == "unsigned_int" || type == "uint32") ok = readAll(uint32_t());
+    else if (type == "int" || type == "int32") ok = readAll(int32_t());
+    else return fail(QObject::tr("G'MIC wrote samples of a type this editor does not read (%1).").arg(QString::fromStdString(type)));
+    if (!ok) return fail(QObject::tr("G'MIC's image was cut short."));
+    return image;
+}
+
+std::shared_ptr<compositor::Image16> readResult16(const QString& outPath, const compositor::Image16& source, QString* error) {
+    auto image = readCimg(outPath, error);
+    if (!image) return nullptr;
+    if (image->width != source.width() || image->height != source.height()) {
+        if (error) *error = QObject::tr("The filter changed the image size (%1 x %2 to %3 x %4); only filters that keep it are supported here.").arg(source.width()).arg(source.height()).arg(image->width).arg(image->height);
+        return nullptr;
+    }
+    return imageFromPlanes16(image->data.data(), image->spectrum, source);
 }
 
 } // namespace
@@ -445,21 +610,8 @@ public:
                 planes[3 * plane + i] = a;
             }
         }
-        try {
-            gmic_->run(("v -1 " + command).toUtf8().constData(), images, names);
-        } catch (gmic_exception& e) {
-            if (error) *error = abortFlag_ ? QString() : QString::fromUtf8(e.what()).trimmed().section('\n', -1);
-            return nullptr;
-        } catch (std::exception& e) {
-            if (error) *error = QString::fromUtf8(e.what());
-            return nullptr;
-        }
-        if (images._width < 1) { if (error) *error = QObject::tr("G'MIC produced no image."); return nullptr; }
+        if (!interpret(images, names, command, w, h, error)) return nullptr;
         const gmic_image<float>& out = images[0];
-        if (int(out._width) != w || int(out._height) != h) {
-            if (error) *error = QObject::tr("The filter changed the image size (%1 x %2 to %3 x %4); only filters that keep it are supported here.").arg(w).arg(h).arg(out._width).arg(out._height);
-            return nullptr;
-        }
         // Back to premultiplied bytes; a gray or RGB result keeps the source's alpha.
         auto result = std::make_shared<compositor::Image>(w, h);
         const int spectrum = int(out._spectrum);
@@ -481,7 +633,47 @@ public:
         return result;
     }
 
+    std::shared_ptr<compositor::Image16> run(const compositor::Image16& source, const QString& command, QString* error) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        reload();
+        abortFlag_ = false;
+        const int w = source.width(), h = source.height();
+        gmic_list<float> images;
+        gmic_list<char> names;
+        images.assign(1);
+        names.assign(1);
+        images[0].assign(w, h, 1, 4);
+        const std::vector<float> planes = planesFrom16(source);
+        std::copy(planes.begin(), planes.end(), images[0]._data);
+        if (!interpret(images, names, command, w, h, error)) return nullptr;
+        return imageFromPlanes16(images[0]._data, int(images[0]._spectrum), source);
+    }
+
 private:
+    /// Runs `command` over `images`; false (with `error`) when it fails or its first image is not `w` x `h`.
+    bool interpret(gmic_list<float>& images, gmic_list<char>& names, const QString& command, int w, int h, QString* error) {
+        try {
+            gmic_->run(("v -1 " + command).toUtf8().constData(), images, names);
+        } catch (gmic_exception& e) {
+            if (error) *error = abortFlag_ ? QString() : QString::fromUtf8(e.what()).trimmed().section('\n', -1);
+            return false;
+        } catch (std::exception& e) {
+            if (error) *error = QString::fromUtf8(e.what());
+            return false;
+        }
+        if (images._width < 1) { if (error) *error = QObject::tr("G'MIC produced no image."); return false; }
+        const gmic_image<float>& out = images[0];
+        if (int(out._width) != w || int(out._height) != h) {
+            if (error) *error = QObject::tr("The filter changed the image size (%1 x %2 to %3 x %4); only filters that keep it are supported here.").arg(w).arg(h).arg(out._width).arg(out._height);
+            return false;
+        }
+        if (out._depth != 1 || out._spectrum < 1 || out._spectrum > 4) {
+            if (error) *error = QObject::tr("G'MIC produced an image this editor cannot take (%1 channels).").arg(out._spectrum);
+            return false;
+        }
+        return true;
+    }
+
     void reload() {
         QString path = GmicCatalogue::preferredFile();
         QDateTime stamp = path.isEmpty() ? QDateTime() : QFileInfo(path).lastModified();
@@ -525,7 +717,82 @@ std::shared_ptr<compositor::Image> GmicRunner::runSync(const compositor::Image& 
         if (error) *error = text.isEmpty() ? QObject::tr("G'MIC failed.") : text;
         return nullptr;
     }
-    return readResult(outPath, source.width(), source.height(), error);
+    return readResult(outPath, source, error);
+}
+
+std::shared_ptr<compositor::Image16> GmicRunner::runSync(const compositor::Image16& source, const QString& command, QString* error, int timeoutMs) {
+#ifdef COMPOSITOR_HAVE_LIBGMIC
+    if (inProcess()) return Interpreter::shared().run(source, command, error);
+#endif
+    QString exe = executable();
+    if (exe.isEmpty()) { if (error) *error = QObject::tr("G'MIC is not installed (no gmic executable on PATH)."); return nullptr; }
+    QTemporaryDir dir;
+    if (!dir.isValid()) { if (error) *error = QObject::tr("Couldn't create a temporary folder."); return nullptr; }
+    QString inPath = dir.filePath("in.cimg"), outPath = dir.filePath("out.cimg");
+    if (!writeCimg(inPath, planesFrom16(source), source.width(), source.height())) { if (error) *error = QObject::tr("Couldn't write G'MIC's input."); return nullptr; }
+    QProcess p;
+    withoutDisplay(p);
+    p.start(exe, argumentsFor(command, inPath, outPath));
+    if (!p.waitForFinished(timeoutMs)) { p.kill(); if (error) *error = QObject::tr("G'MIC took too long and was stopped."); return nullptr; }
+    if (p.exitStatus() != QProcess::NormalExit || p.exitCode() != 0) {
+        const QString text = errorLine(p);
+        if (error) *error = text.isEmpty() ? QObject::tr("G'MIC failed.") : text;
+        return nullptr;
+    }
+    return readResult16(outPath, source, error);
+}
+
+void GmicRunner::start(std::shared_ptr<const compositor::Image16> source, const QString& command, int timeoutMs) {
+    cancel();
+#ifdef COMPOSITOR_HAVE_LIBGMIC
+    if (inProcess()) {
+        const uint64_t run = ++run_;
+        abort_ = std::make_shared<std::atomic<bool>>(false);
+        std::shared_ptr<std::atomic<bool>> abort = abort_;
+        worker_ = std::thread([this, source, command, run, abort] {
+            if (abort->load()) return;
+            QString error;
+            std::shared_ptr<compositor::Image16> result = Interpreter::shared().run(*source, command, &error);
+            if (abort->load()) return;
+            QMetaObject::invokeMethod(this, [this, run, result, error] { if (run == run_) emit finished16(result, error); }, Qt::QueuedConnection);
+        });
+        return;
+    }
+#endif
+    QString exe = executable();
+    if (exe.isEmpty()) { emit finished16(nullptr, QObject::tr("G'MIC is not installed (no gmic executable on PATH).")); return; }
+    dir_ = std::make_unique<QTemporaryDir>();
+    if (!dir_->isValid()) { emit finished16(nullptr, QObject::tr("Couldn't create a temporary folder.")); return; }
+    QString inPath = dir_->filePath("in.cimg"), outPath = dir_->filePath("out.cimg");
+    if (!writeCimg(inPath, planesFrom16(*source), source->width(), source->height())) { emit finished16(nullptr, QObject::tr("Couldn't write G'MIC's input.")); return; }
+    source16_ = source;
+    process_ = new QProcess(this);
+    withoutDisplay(*process_);
+    if (timeoutMs > 0) {
+        if (!limit_) { limit_ = new QTimer(this); limit_->setSingleShot(true); }
+        limit_->disconnect();
+        connect(limit_, &QTimer::timeout, this, [this] {
+            if (!process_) return;
+            cancel();
+            emit finished16(nullptr, QObject::tr("G'MIC took too long and was stopped."));
+        });
+        limit_->start(timeoutMs);
+    }
+    connect(process_, &QProcess::finished, this, [this, outPath](int code, QProcess::ExitStatus status) {
+        if (limit_) limit_->stop();
+        QProcess* p = process_;
+        process_ = nullptr;
+        std::shared_ptr<compositor::Image16> result;
+        QString error;
+        if (status != QProcess::NormalExit || code != 0) {
+            const QString text = errorLine(*p);
+            error = text.isEmpty() ? QObject::tr("G'MIC failed.") : text;
+        } else if (source16_) result = readResult16(outPath, *source16_, &error);
+        source16_.reset();
+        p->deleteLater();
+        emit finished16(result, error);
+    });
+    process_->start(exe, argumentsFor(command, inPath, outPath));
 }
 
 void GmicRunner::start(std::shared_ptr<const compositor::Image> source, const QString& command, int timeoutMs) {
@@ -552,8 +819,7 @@ void GmicRunner::start(std::shared_ptr<const compositor::Image> source, const QS
     QString inPath = dir_->filePath("in.png"), outPath = dir_->filePath("out.png");
     std::string err;
     if (!compositor::writePngImage(inPath.toStdString(), *source, 0, &err)) { emit finished(nullptr, QString::fromStdString(err)); return; }
-    expectedWidth_ = source->width();
-    expectedHeight_ = source->height();
+    source8_ = source;
     process_ = new QProcess(this);
     withoutDisplay(*process_);
     if (timeoutMs > 0) {
@@ -575,7 +841,8 @@ void GmicRunner::start(std::shared_ptr<const compositor::Image> source, const QS
         if (status != QProcess::NormalExit || code != 0) {
             const QString text = errorLine(*p);
             error = text.isEmpty() ? QObject::tr("G'MIC failed.") : text;
-        } else result = readResult(outPath, expectedWidth_, expectedHeight_, &error);
+        } else if (source8_) result = readResult(outPath, *source8_, &error);
+        source8_.reset();
         p->deleteLater();
         emit finished(result, error);
     });

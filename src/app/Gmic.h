@@ -5,6 +5,7 @@
 // every filter it lists is available.
 #pragma once
 #include "compositor/image.h"
+#include "compositor/imaget.h"
 #include <QObject>
 #include <QString>
 #include <QHash>
@@ -85,21 +86,30 @@ public:
     static bool allowedForAutomation(const QString& command, QString* why);
     /// Runs `command` on premultiplied RGBA `source`; the result has the same size or `error` says why not.
     static std::shared_ptr<compositor::Image> runSync(const compositor::Image& source, const QString& command, QString* error, int timeoutMs = 300000);
+    /// The same on a 16-bit layer. G'MIC works in float on the 0..255 scale either way: the 16-bit pixels go in as
+    /// straight float colour on that scale (unrounded), in-process or through a float .cimg file for the executable,
+    /// and come back to 16 bits, so nothing is reduced to 8 bits on the way.
+    static std::shared_ptr<compositor::Image16> runSync(const compositor::Image16& source, const QString& command, QString* error, int timeoutMs = 300000);
 
     /// Starts an asynchronous run; `finished` reports the result (null on failure) and the error.
     /// Stopped with an error after `timeoutMs` (0: no limit), so a filter that never ends cannot hang the dialog.
     void start(std::shared_ptr<const compositor::Image> source, const QString& command, int timeoutMs = 0);
+    /// The same on a 16-bit layer; `finished16` reports it.
+    void start(std::shared_ptr<const compositor::Image16> source, const QString& command, int timeoutMs = 0);
     void cancel();
     bool running() const;
 
 signals:
     void finished(std::shared_ptr<compositor::Image> result, QString error);
+    void finished16(std::shared_ptr<compositor::Image16> result, QString error);
 
 private:
     QProcess* process_ = nullptr;
     QTimer* limit_ = nullptr;
     std::unique_ptr<QTemporaryDir> dir_;
-    int expectedWidth_ = 0, expectedHeight_ = 0;
+    // The executable run's source, for its size and the alpha a gray or RGB result keeps.
+    std::shared_ptr<const compositor::Image> source8_;
+    std::shared_ptr<const compositor::Image16> source16_;
     // The in-process path: a worker thread, an abort flag the interpreter polls, and a run number so a
     // cancelled run's result is dropped.
     std::thread worker_;

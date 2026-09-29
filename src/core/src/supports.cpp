@@ -76,6 +76,8 @@ constexpr FeatureSupport table[] = {
     {"filter.Lens Correction", eightAndSixteen},
     // Filter > Camera Raw Filter: its kernels on float colour, rounded to 16 bits once (cameraraw.h).
     {"filter.Camera Raw", eightAndSixteen},
+    // Filter > G'MIC: 16-bit pixels go to G'MIC as float on its 0..255 scale and come back at 16 bits (app/Gmic.h).
+    {"filter.G'MIC", eightAndSixteen},
     // Filter > Mosh (compositor/mosh.h, pixels.mosh): straight float colour at either depth.
     {"filter.Mosh", eightAndSixteen},
     // Selections at the document's depth: the marquee, lasso, Magic Wand and Quick Select tools (they read the
