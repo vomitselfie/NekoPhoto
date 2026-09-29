@@ -2,6 +2,7 @@
 // below half alpha, and an LZW encoder following Patchy's (MIT, src/formats/gif_document_io.cpp; see
 // src/third_party/patchy_psd/README.md).
 #include "compositor/gif.h"
+#include "compositor/colormgmt.h"
 #include "compositor/depth.h"
 #include "compositor/render.h"
 #include <algorithm>
@@ -279,7 +280,11 @@ std::vector<uint8_t> encodeDocumentGif(const Document& document, std::string* er
     const Animation& a = document.animation;
     // A 16-bit document's frames are rendered at 16 bits and dithered down to 8 before the palette is chosen, as the
     // other 8-bit formats take it (GIF holds 8 bits a channel at most).
-    auto flat = [](const Document& d) { return d.sampleType == SampleType::U16 ? ditherToEightBit(*renderFlattened16(d)) : renderFlattened(d); };
+    auto flat = [](const Document& d) {
+        // A 32-bit document's frames tone-mapped at exposure 0 through its curve.
+        if (d.sampleType == SampleType::F32) return encodeImage8(*renderFlattenedF(d), encodedTransfer(d));
+        return d.sampleType == SampleType::U16 ? ditherToEightBit(*renderFlattened16(d)) : renderFlattened(d);
+    };
     if (a.frames.empty()) {
         images.push_back(flat(document));
         frames.push_back({images.back().get(), 0});

@@ -170,7 +170,7 @@ std::shared_ptr<const PsdLayerCarry> parsePsdLayerCarry(const std::vector<uint8_
     if (r.ok && (r.at < bytes.size() || version == carryVersionDeep)) c->adjustmentJson = r.str();
     if (version == carryVersionDeep) {
         c->maskDepth = int(r.u32());
-        if (c->maskDepth != 8 && c->maskDepth != 16) return nullptr;
+        if (c->maskDepth != 8 && c->maskDepth != 16 && c->maskDepth != 32) return nullptr;
         const uint32_t planes = r.u32();
         for (uint32_t i = 0; i < planes && r.ok; i++) {
             PsdLayerCarry::CarriedPlane plane;

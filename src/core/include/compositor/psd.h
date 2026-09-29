@@ -29,6 +29,8 @@ struct PsdImport {
     ImagePtr composite;
     /// The same at 16 bits, from a 16-bit file.
     Image16Ptr composite16;
+    /// And in linear float, from a 32-bit file.
+    ImageFPtr compositeF;
     /// What the import left behind, one line each (effects, unknown adjustments, rasterised text, ...).
     std::vector<std::string> notes;
     /// Type layers opened as text (see PsdImportedText).

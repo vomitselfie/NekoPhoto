@@ -3,6 +3,7 @@
 #include "compositor/smartfilter.h"
 #include "psd/psd_descriptor.hpp"
 #include "compositor/adjustments.h"
+#include "compositor/colormgmt.h"
 #include "compositor/depth.h"
 #include "compositor/parallel.h"
 #include "compositor/render.h"
@@ -151,6 +152,56 @@ std::vector<uint8_t> encodeChannel16(const std::vector<uint16_t>& plane, int w, 
     return o.b;
 }
 
+/// A 32-bit channel (linear floats) as a record stores it: zip with prediction, as Photoshop writes 32-bit layers (each
+/// row's floats as four byte planes, big-endian, each byte the difference from the one before: predictFloatRow), or raw
+/// big-endian floats.
+std::vector<uint8_t> encodeChannel32(const std::vector<float>& plane, int w, int h, bool compress) {
+    Out o;
+    if (w <= 0 || h <= 0) { o.u16(0); return o.b; }
+    const size_t rowBytes = size_t(w) * 4;
+    std::vector<uint8_t> bytes(rowBytes * size_t(h));
+    if (compress) {
+        for (int y = 0; y < h; y++) predictFloatRow(plane.data() + size_t(y) * size_t(w), w, bytes.data() + size_t(y) * rowBytes);
+        uLongf size = compressBound(uLong(bytes.size()));
+        std::vector<uint8_t> packed(size);
+        if (compress2(packed.data(), &size, bytes.data(), uLong(bytes.size()), 6) == Z_OK) {
+            packed.resize(size);
+            o.b.reserve(2 + packed.size());
+            o.u16(3);
+            o.bytes(packed);
+            return o.b;
+        }
+    }
+    for (size_t i = 0; i < plane.size(); i++) {
+        uint32_t bits;
+        std::memcpy(&bits, &plane[i], 4);
+        for (int b = 0; b < 4; b++) bytes[i * 4 + size_t(b)] = uint8_t(bits >> (24 - 8 * b));
+    }
+    o.b.reserve(2 + bytes.size());
+    o.u16(0);
+    o.bytes(bytes);
+    return o.b;
+}
+
+/// Straight linear float planes from a premultiplied 32-bit image (colour above 1 kept).
+std::array<std::vector<float>, 4> straightPlanesF(const ImageF& image) {
+    const int w = image.width(), h = image.height();
+    std::array<std::vector<float>, 4> planes;
+    for (auto& p : planes) p.resize(size_t(w) * h);
+    parallelRows(0, h, [&](int ya, int yb) {
+        for (int y = ya; y < yb; y++) {
+            const float* s = image.row(y);
+            for (int x = 0; x < w; x++, s += 4) {
+                const size_t i = size_t(y) * w + x;
+                const float a = cleanCoverage(s[3]);
+                planes[3][i] = a;
+                for (int c = 0; c < 3; c++) planes[size_t(c)][i] = a > 0 ? cleanColour(s[c]) / a : 0.0f;
+            }
+        }
+    }, 64);
+    return planes;
+}
+
 /// Straight 0..65535 planes from a premultiplied 16-bit image, as straightPlanes does at 8 bits.
 std::array<std::vector<uint16_t>, 4> straightPlanes16(const Image16& image) {
     const int w = image.width(), h = image.height();
@@ -281,7 +332,8 @@ struct Record {
 class Writer {
 public:
     Writer(const Document& document, const PsdExportOptions& options, bool encode, PsdExportSummary& summary)
-        : doc_(document), options_(options), encode_(encode), deep_(document.sampleType == SampleType::U16), summary_(summary) {
+        : doc_(document), options_(options), encode_(encode), deep_(document.sampleType == SampleType::U16), float_(document.sampleType == SampleType::F32),
+          curve_(float_ ? encodedTransfer(document) : TransferCurve::srgb()), summary_(summary) {
         for (const Layer& l : doc_.layers) byId_[l.id] = &l;
     }
 
@@ -303,6 +355,9 @@ private:
     const bool encode_;
     /// A 16-bit document: 16-bit channels, masks at the same depth.
     const bool deep_;
+    /// A 32-bit document: float channels and masks, 8-bit rasters (text, fills) linearised through its curve.
+    const bool float_;
+    const TransferCurve curve_;
     PsdExportSummary& summary_;
     std::map<Uuid, const Layer*> byId_;
     std::vector<Record> records_;
@@ -326,7 +381,16 @@ private:
         for (int c = 0; c < 3; c++) r.channels.push_back({c, encodeChannel16(planes[size_t(c)], image.width(), image.height(), options_.compress)});
     }
 
+    void setPixels(Record& r, const ImageF& image, int left, int top) const {
+        r.left = left; r.top = top; r.right = left + image.width(); r.bottom = top + image.height();
+        if (!encode_) return;
+        auto planes = straightPlanesF(image);
+        r.channels.push_back({-1, encodeChannel32(planes[3], image.width(), image.height(), options_.compress)});
+        for (int c = 0; c < 3; c++) r.channels.push_back({c, encodeChannel32(planes[size_t(c)], image.width(), image.height(), options_.compress)});
+    }
+
     void setPixels(Record& r, const Image& image, int left, int top) const {
+        if (float_ && encode_) { setPixels(r, *lineariseImage(image, curve_), left, top); return; }
         if (deep_ && encode_) { setPixels(r, *widenImage(image), left, top); return; }
         r.left = left; r.top = top; r.right = left + image.width(); r.bottom = top + image.height();
         if (!encode_) return;
@@ -338,6 +402,7 @@ private:
     /// The layer's mask over `rect` (document pixels): a copy when it lies on the layer's own pixel grid,
     /// else sampled the way the renderer samples it.
     void setMask(Record& r, const Layer& layer, const Rect& rect, bool onGrid) const {
+        if (float_) { setMaskF(r, layer, rect, onGrid); return; }
         if (deep_) { setMask16(r, layer, rect, onGrid); return; }
         if (!layer.mask || !layer.mask->asset.image.u8() || rect.isEmpty()) return;
         const GrayImage& mask = *layer.mask->asset.image.u8();
@@ -358,6 +423,27 @@ private:
             }
         }
         if (encode_) r.channels.push_back({-2, encodeChannel(plane, w, h, options_.compress, options_.large)});
+        summary_.masks++;
+    }
+
+    /// setMask for a 32-bit document: the mask's own floats.
+    void setMaskF(Record& r, const Layer& layer, const Rect& rect, bool onGrid) const {
+        if (!layer.mask || !layer.mask->asset.image || rect.isEmpty()) return;
+        GrayFPtr mask = grayAtDepth(layer.mask->asset.image, SampleType::F32).f32();
+        if (!mask) return;
+        r.mask = true;
+        r.maskLeft = int(rect.x); r.maskTop = int(rect.y); r.maskRight = int(rect.x + rect.width); r.maskBottom = int(rect.y + rect.height);
+        r.maskFlags = layer.mask->enabled ? 0 : 2;
+        const int w = int(rect.width), h = int(rect.height);
+        const bool copy = onGrid && !layer.mask->placement && mask->width() == w && mask->height() == h;
+        r.maskDefault = copy ? 255 : 0;
+        if (encode_) {
+            GrayF sampled(w, h, 0.0f);
+            if (!copy) sampleMaskCoverage(mask, layer.mask->placement ? *layer.mask->placement : layer.transform, rect, 1.0, 0.0f, sampled, false);
+            const GrayF& from = copy ? *mask : sampled;
+            std::vector<float> plane(from.data(), from.data() + size_t(w) * h);
+            r.channels.push_back({-2, encodeChannel32(plane, w, h, options_.compress)});
+        }
         summary_.masks++;
     }
 
@@ -397,7 +483,8 @@ private:
         // A 16-bit layer as read: its channels go back as they were stored, since 0..65535 does not survive the trip
         // through 0..32768 (CarriedPlane); any edit changes the fingerprint and they are written anew. PSD to PSD only
         // (a PSB's RLE rows count in 32 bits).
-        if (deep_ && !options_.large && sameContent && placementKept && !c.planes.empty() && c.planesHash == contentNow && l.asset && l.asset->image.u16()) {
+        if ((deep_ || float_) && !options_.large && sameContent && placementKept && !c.planes.empty() && c.planesHash == contentNow && l.asset
+            && (deep_ ? bool(l.asset->image.u16()) : bool(l.asset->image.f32()))) {
             std::vector<std::pair<int, std::vector<uint8_t>>> channels;
             for (const auto& plane : c.planes) channels.push_back({plane.id, plane.data});
             for (auto& ch : r.channels) if (ch.first < -1) channels.push_back(std::move(ch));
@@ -437,7 +524,7 @@ private:
         if (std::abs(l.opacity - c.opacity / 255.0 * (c.fill / 255.0)) < 0.5 / 255) { r.opacity = c.opacity; r.fill = c.fill; }
         const uint64_t maskHash = l.mask ? psdMaskHash(l.mask->asset.image, l.mask->enabled) : 0;
         // The stored mask channels are PSD's (16-bit row counts) at the file's depth: as they are into a PSD of that depth only.
-        if (!options_.large && !c.maskData.empty() && c.maskDepth == (deep_ ? 16 : 8) && placementKept && maskHash == c.maskHash && !dropped.count("vmsk") && !dropped.count("vsms")) {
+        if (!options_.large && !c.maskData.empty() && c.maskDepth == (float_ ? 32 : deep_ ? 16 : 8) && placementKept && maskHash == c.maskHash && !dropped.count("vmsk") && !dropped.count("vsms")) {
             r.rawMask = c.maskData;
             r.channels.erase(std::remove_if(r.channels.begin(), r.channels.end(), [](auto& ch) { return ch.first == -2 || ch.first == -3; }), r.channels.end());
             if (encode_) for (auto& ch : c.maskChannels) r.channels.push_back(ch);
@@ -886,6 +973,7 @@ private:
         r.clipping = clipFits;
         if (onGrid) {
             if (l.asset->image.u16()) setPixels(r, *l.asset->image.u16(), int(t.origin.x), int(t.origin.y));
+            else if (l.asset->image.f32()) setPixels(r, *l.asset->image.f32(), int(t.origin.x), int(t.origin.y));
             else setPixels(r, *l.asset->image.u8(), int(t.origin.x), int(t.origin.y));
             setMask(r, l, Rect(t.origin.x, t.origin.y, imageWidth, imageHeight), true);
         } else {
@@ -895,6 +983,7 @@ private:
             if (encode_ && !bounds.isEmpty()) {
                 LayerTransform target(Point(bounds.x, bounds.y), Size(bounds.width, bounds.height));
                 if (l.asset->image.u16()) setPixels(r, *resampleLayer(l.asset->image.u16(), t, target, int(bounds.width), int(bounds.height)), int(bounds.x), int(bounds.y));
+                else if (l.asset->image.f32()) setPixels(r, *resampleLayer(l.asset->image.f32(), t, target, int(bounds.width), int(bounds.height)), int(bounds.x), int(bounds.y));
                 else setPixels(r, *resampleLayer(l.asset->image.u8(), t, target, int(bounds.width), int(bounds.height)), int(bounds.x), int(bounds.y));
             } else { r.left = int(bounds.x); r.top = int(bounds.y); r.right = int(bounds.x + bounds.width); r.bottom = int(bounds.y + bounds.height); }
             setMask(r, l, bounds, false);
@@ -996,8 +1085,11 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
     f.u16(4 + unsigned(document.channels.size()));   // RGB, the merged image's transparency, then the alpha and spot channels
     f.u32(uint32_t(document.height)); f.u32(uint32_t(document.width));
     const bool deep = document.sampleType == SampleType::U16;
-    if (document.sampleType == SampleType::F32) { if (error) *error = "32-bit documents cannot be written as PSD yet."; return {}; }
-    f.u16(deep ? 16 : 8); f.u16(3);
+    // A 32-bit document: float channels in 'Lr32', the merged image in float, resource 1039 the profile its values
+    // encode to (Photoshop's 32-bit files carry the working space's own profile; the values are linear in it).
+    const bool floating = document.sampleType == SampleType::F32;
+    const ColorProfile fileProfile = floating ? encodedProfileOf(document) : document.profile;
+    f.u16(floating ? 32 : deep ? 16 : 8); f.u16(3);
     f.u32(0);   // colour mode data
     {
         // The resolution (ResolutionInfo, 0x03ED): pixels per inch as 16.16 fixed point, both axes.
@@ -1011,8 +1103,8 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
             res.str("8BIM"); res.u16(1039);
             res.u8(unsigned(name.size())); res.bytes(std::vector<uint8_t>(name.begin(), name.end()));
             if ((name.size() + 1) & 1) res.u8(0);
-            res.u32(uint32_t(document.profile.icc.size())); res.bytes(document.profile.icc);
-            if (document.profile.icc.size() & 1) res.u8(0);
+            res.u32(uint32_t(fileProfile.icc.size())); res.bytes(fileProfile.icc);
+            if (fileProfile.icc.size() & 1) res.u8(0);
             profileWritten = true;
         };
         if (document.psdCarry) {
@@ -1026,11 +1118,11 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
                 // document's in their place after Assign or Convert, none for an untagged document. The untagged flag
                 // (1041) goes with a profile written.
                 if (resource.id == 1039) {
-                    if (document.profile.empty()) continue;
-                    if (resource.data != document.profile.icc) { writeProfile(resource.name.substr(0, 255)); continue; }
+                    if (fileProfile.empty()) continue;
+                    if (resource.data != fileProfile.icc) { writeProfile(resource.name.substr(0, 255)); continue; }
                     profileWritten = true;
                 }
-                if (resource.id == 1041 && !document.profile.empty() && !resource.data.empty() && resource.data[0] != 0) continue;
+                if (resource.id == 1041 && !fileProfile.empty() && !resource.data.empty() && resource.data[0] != 0) continue;
                 if (resource.id == 1050) {
                     // The file's slices while they are still the document's; else written anew below.
                     std::vector<Slice> held;
@@ -1045,7 +1137,7 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
                 if (resource.data.size() & 1) res.u8(0);
             }
         }
-        if (!profileWritten && !document.profile.empty()) writeProfile("");
+        if (!profileWritten && !fileProfile.empty()) writeProfile("");
         // The alpha and spot channels' names, display and identifiers (psd_channels.h).
         for (const auto& [id, data] : psdChannelResourceBlocks(document)) {
             res.str("8BIM"); res.u16(id); res.u8(0); res.u8(0);
@@ -1068,11 +1160,12 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
         for (const Record& r : records) for (auto& [id, data] : r.channels) info.bytes(data);
         if (info.b.size() & 1) info.u8(0);
         Out section;
-        if (deep) {
-            // A 16-bit file keeps its layers in the 'Lr16' block after an empty layer information, as Photoshop writes it.
+        if (deep || floating) {
+            // A 16-bit file keeps its layers in the 'Lr16' block after an empty layer information, as Photoshop writes it;
+            // a 32-bit one in 'Lr32'.
             section.length(0, large);
             section.u32(0);   // global layer mask info
-            section.str("8BIM"); section.str("Lr16");
+            section.str("8BIM"); section.str(floating ? "Lr32" : "Lr16");
             section.length(info.b.size(), large);
             section.bytes(info.b);
             for (size_t n = info.b.size(); n % 4; n++) section.u8(0);
@@ -1098,7 +1191,7 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
         if (document.psdCarry) for (const PsdBlock& stored : document.psdCarry->globals) {
             if (rebuildLinks && stored.key == "lnk2") continue;
             // Smart Filter caches are 8-bit pixels: a 16-bit file leaves them for Photoshop to rebuild, as the reader does.
-            if (deep && (stored.key == "FEid" || stored.key == "FXid")) continue;
+            if ((deep || floating) && (stored.key == "FEid" || stored.key == "FXid")) continue;
             PsdBlock block = stored;
             if (!writer.filterRecords_.empty() && (block.key == "FEid" || block.key == "FXid"))
                 if (auto replaced = replaceSmartFilterRecords(block.data, writer.filterRecords_)) block.data = std::move(*replaced);
@@ -1120,6 +1213,39 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
         // against white where it is transparent, as Photoshop stores it: premultiplied plus the white behind.
         // The alpha and spot channels follow, one plane each at the document's depth.
         const size_t extra = document.channels.size();
+        if (floating) {
+            // In float, raw (big-endian), colour matted against white where it is transparent as at 8 and 16 bits;
+            // the alpha and spot channels as float coverage.
+            auto flat = renderFlattenedF(document);
+            const int w = document.width, h = document.height;
+            const size_t n = size_t(w) * size_t(h);
+            std::vector<std::vector<uint8_t>> raw(4 + extra, std::vector<uint8_t>(n * 4));
+            auto put = [](std::vector<uint8_t>& plane, size_t i, float v) {
+                uint32_t bits;
+                std::memcpy(&bits, &v, 4);
+                for (int b = 0; b < 4; b++) plane[i * 4 + size_t(b)] = uint8_t(bits >> (24 - 8 * b));
+            };
+            parallelRows(0, h, [&](int ya, int yb) {
+                for (int y = ya; y < yb; y++) {
+                    const float* s = flat->row(y);
+                    for (int x = 0; x < w; x++, s += 4) {
+                        const size_t i = size_t(y) * size_t(w) + size_t(x);
+                        const float a = cleanCoverage(s[3]);
+                        for (int c = 0; c < 3; c++) put(raw[size_t(c)], i, cleanColour(s[c]) + (1 - a));
+                        put(raw[3], i, a);
+                    }
+                }
+            }, 64);
+            for (size_t k = 0; k < extra; k++) {
+                const GrayFPtr gray = grayAtDepth(document.channels[k].image, SampleType::F32).f32();
+                if (gray && gray->width() == w && gray->height() == h)
+                    for (size_t i = 0; i < n; i++) put(raw[4 + k], i, cleanCoverage(gray->data()[i]));
+            }
+            f.u16(0);
+            for (auto& p : raw) f.bytes(p);
+            if (summaryOut) *summaryOut = summary;
+            return std::move(f.b);
+        }
         if (deep) {
             auto flat = renderFlattened16(document);
             const int w = document.width, h = document.height;
