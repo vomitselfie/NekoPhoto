@@ -59,14 +59,16 @@ Photoshop draws them, most within a level of its own renders. What PSD cannot ca
 
 Coming next:
 
+- **Painting at 32 bits and in CMYK and Lab**, and exporting CMYK and Lab to image formats
 - **Brushes that feel the same**: a deeper translation of Clip Studio and Photoshop brush settings, so your favourite brush behaves as it did
 
 ## What it does
 
 - **Layers:** folders, blend modes, opacity, layer masks, clipping masks and adjustment layers
+- **Colour and depth:** 8, 16 and 32 bits per channel. 32-bit HDR documents have HDR Toning, an exposure view, and adjustments, filters, selections and pixel edits that keep light above white. RGB, CMYK and Lab Color documents open from PSD and convert through Image > Mode, colour-managed with ICC profiles. Each mode offers Photoshop's own blend modes and matches its renders. There is a Channels panel and a CMYK proof ([docs/bit-depth.md](docs/bit-depth.md), [docs/color-modes.md](docs/color-modes.md))
 - **Transform:** move, scale, rotate and distort without losing resolution; Content-Aware Scale and Content-Aware Move
 - **Selections:** marquee, lasso, Quick Select by scribble or by click, Content-Aware Fill, and an edge-aware magic wand: shading and texture stay in, edges hold, the tolerance can be changed right after a click, Shift/Alt-clicks add what belongs and what doesn't, and with Contiguous off one click takes a background in many pockets (a baked checkerboard around a character) and Delete leaves the line art without a rim of the background ([docs/smart-wand.md](docs/smart-wand.md))
-- **Painting:** brush, eraser, spot healing, clone stamp, smudge, liquify, gradients, shapes and text
+- **Painting:** brush, eraser, spot healing, clone stamp, smudge, liquify, gradients, shapes, and text typed straight on the canvas
 - **Brushes:** 196 MyPaint brushes (pencils, inks, charcoal, paint, smudging) that follow pen pressure and tilt, and your own brushes imported from Photoshop (`.abr`), Procreate (`.brushset`, `.brush`) and Clip Studio (`.sut`), or any image as a brush tip
 - **Vectors:** Pen and shape tools with path operations, gradient and pattern fills, live rectangles and ellipses, vector masks on any layer, and text to path ([docs/vector-tools.md](docs/vector-tools.md))
 - **Artboards and slices,** exported to files in one go ([docs/artboards-slices.md](docs/artboards-slices.md))
@@ -76,6 +78,7 @@ Coming next:
 - **Remove Background:** an AI model that runs on your own machine; nothing is uploaded
 - **G'MIC:** over 850 more filters with a live preview, when `gmic` is installed
 - **Files:** Photoshop PSD and PSB, and Clip Studio `.clip` projects, with layers, folders, masks, clipping and blend modes; Photoshop's layer styles, vector shapes and masks drawn as it draws them ([docs/layer-styles.md](docs/layer-styles.md), [docs/vector-masks.md](docs/vector-masks.md)); smart objects you can place, convert, edit and replace without losing resolution ([docs/smart-objects.md](docs/smart-objects.md)); text that stays editable both ways; layered PSD export; projects of up to a gigapixel of layers; camera RAW, Affinity, SVG, PDF, GIF, TGA and ICO; PNG, JPEG, WebP, TIFF, SVG, GIF, TGA and ICO export; several projects in tabs; crash recovery
+- **Works the way Photoshop does:** its tools and shortcuts (Shift+letter steps through a tool group), labels you drag to change a number, the Crop tool's ratio presets, and whole layers copied and pasted between documents
 - **AI agents:** Claude Code or any MCP client can drive the editor
 
 The full list is in [docs/features.md](docs/features.md).
@@ -219,14 +222,16 @@ PSD の書き出しは往復テスト済みです。手元にあるレイヤー�
 
 今後の予定:
 
+- **32 ビットと CMYK・Lab での描画**、CMYK・Lab から画像形式への書き出し
 - **同じ描き心地のブラシ**: クリップスタジオや Photoshop のブラシ設定をより深く変換し、お気に入りのブラシがそのままの感覚で使えるように
 
 ### できること
 
 - **レイヤー:** グループ、描画モード、不透明度、レイヤーマスク、クリッピングマスク、調整レイヤー
+- **色とビット数:** 8・16・32 ビット/チャンネル。32 ビットの HDR ドキュメントでは HDR トーン、露光量を変えられる表示、白より明るい光を保ったままの色調補正・フィルター・選択範囲・ピクセル編集が使えます。RGB・CMYK・Lab カラーのドキュメントを PSD から開き、イメージ > モードで変換でき、ICC プロファイルでカラーマネジメントされます。どのモードでも Photoshop と同じ描画モードが使え、Photoshop の描画結果と一致します。チャンネルパネルと CMYK の校正表示もあります
 - **変形:** 解像度を落とさずに移動・拡大縮小・回転・自由変形。コンテンツに応じて拡大・縮小、コンテンツに応じた移動
 - **選択範囲:** 長方形・楕円選択、なげなわ、なぞる/クリックするだけのクイック選択、コンテンツに応じた塗りつぶし、そして輪郭を読み取る自動選択(陰影やテクスチャは含め、境界では止まります。クリック直後に許容値を変えて調整でき、Shift/Alt クリックで含めるもの・除くものを指示できます。「隣接」をオフにすれば、キャラクターの周りに分かれた背景も 1 クリックで選択でき、削除しても線画に背景の色が残りません)
-- **描画:** ブラシ、消しゴム、スポット修復ブラシ、コピースタンプ、指先ツール、ゆがみ、グラデーション、シェイプ、テキスト
+- **描画:** ブラシ、消しゴム、スポット修復ブラシ、コピースタンプ、指先ツール、ゆがみ、グラデーション、シェイプ、キャンバスに直接入力できるテキスト
 - **ブラシ:** 筆圧と傾きに反応する MyPaint ブラシ 196 種類(鉛筆、インク、木炭、絵の具、ぼかし)。Photoshop(`.abr`)、Procreate(`.brushset`・`.brush`)、クリップスタジオ(`.sut`)のブラシや、任意の画像をブラシ先端として読み込めます
 - **ベクター:** パスの結合・型抜きができるペンとシェイプ、グラデーション・パターンの塗り、ライブシェイプ、あらゆるレイヤーのベクターマスク、テキストのパス化
 - **アートボードとスライス:** まとめてファイルに書き出せます
@@ -236,6 +241,7 @@ PSD の書き出しは往復テスト済みです。手元にあるレイヤー�
 - **背景を削除:** AI モデルは手元のマシンで動作し、画像はどこにも送信されません
 - **G'MIC:** `gmic` をインストールすると、850 種類以上のフィルターをライブプレビュー付きで使えます
 - **ファイル:** レイヤー・フォルダー・マスク・クリッピング・描画モードを保ったまま PSD/PSB とクリップスタジオの `.clip` を開け、レイヤー付き PSD に書き出せます。1 ギガピクセルまでのプロジェクト、カメラ RAW・Affinity・SVG・PDF・GIF・TGA・ICO の読み込み、PNG・JPEG・WebP・TIFF・SVG・GIF・TGA・ICO 書き出し、タブで複数のプロジェクト、クラッシュからの復元
+- **Photoshop と同じ操作感:** おなじみのツールとショートカット(Shift+キーでツールグループを切り替え)、ラベルをドラッグして数値を変更、切り抜きツールの比率プリセット、ドキュメント間でのレイヤーのコピー&ペースト
 - **AI エージェント:** Claude Code などの MCP クライアントから操作できます
 
 機能の一覧は [docs/features.md](docs/features.md#日本語) にあります。

@@ -91,8 +91,7 @@ editing ports (step E).
 
 Painting, the retouching tools, most adjustments and filters, transforms of pixels, text and shapes as editable
 objects, and layer styles in CMYK and Lab (greyed out with "Not available in CMYK mode"); exporting CMYK or Lab to
-PNG, JPEG, TIFF and the other formats (projects and PSD save them); CMYK JPEG and TIFF; CMYK's non-separable blend
-modes. Camera Raw, G'MIC and the MyPaint brushes stay RGB only.
+PNG, JPEG, TIFF and the other formats (projects and PSD save them); CMYK JPEG and TIFF. Camera Raw, G'MIC and the MyPaint brushes stay RGB only.
 
 ## Automation
 
