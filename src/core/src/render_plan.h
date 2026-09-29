@@ -4,7 +4,8 @@
 //   clipping stacks, the folders that open and close around their children (isolation, fading, their styles),
 //   the per-layer overrides, and the choice of a cached frame around the one layer being edited.
 // - RenderExec<S>, the pixels at one sample type, which draws the plan into an ImageOf<S>. U8 is the renderer's
-//   former body, moved, not rewritten (render_exec_u8.cpp); U16 follows it at 15 bits (render_exec_u16.cpp).
+//   former body, moved, not rewritten (render_exec_u8.cpp); the deep depths follow it once, in
+//   render_exec_deep.inc over a DeepOps<S> policy (render_deep_ops.h), and U16 instantiates it (render_exec_u16.cpp).
 //
 // render() builds the plan and switches on the document's sample type once.
 #pragma once

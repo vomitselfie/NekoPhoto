@@ -1,8 +1,9 @@
 // The renderer's 16-bit primitives (docs/high-bit-depth-plan.md, P2): mask coverage, drawing a layer and resampling
-// at 0..32768, and the entry points that render a 16-bit document. In a file of their own so the 8-bit renderer
-// (render.cpp) compiles as it did.
+// at 0..32768, and the entry points that render a 16-bit document (written once for the deep depths in
+// render_deep.inc). In a file of their own so the 8-bit renderer (render.cpp) compiles as it did.
 #include "compositor/render.h"
 #include "render_plan.h"
+#include "render_deep.inc"
 #include "compositor/blend.h"
 #include "compositor/colormgmt.h"
 #include "compositor/depth.h"
@@ -288,32 +289,11 @@ std::shared_ptr<Gray16> resampleMask(const Gray16& mask, const LayerTransform& t
 // ---- Rendering a 16-bit document ------------------------------------------------------------------------------
 
 void renderForDisplay16(const RenderPlan& plan, const Rect& region, double scale, Image& out, RenderCache* cache, uint64_t version, bool clear, const ColorTransform* display) {
-    // The canvas takes 8 bits: the frame at the document's depth, then reduced with rounding (toDisplay<U16>), or
-    // through the display's colour transform in the same pass.
-    Image16 deep(out.width(), out.height());
-    if (!clear) deep = *widenImage(out);
-    executeRender<SampleType::U16>(plan, region, scale, deep, cache, version);
-    if (display) convertImage16To8(deep, out, *display);
-    else narrowInto(deep, out);
+    renderForDisplayDeep<SampleType::U16>(plan, region, scale, out, cache, version, clear, display);
 }
 
 void render16(const Document& document, const RenderOptions& options, Image16& out, const Overrides* overrides, RenderCache* cache) {
-    Rect region = options.region.isEmpty() ? document.rect() : options.region;
-    double scale = options.scale > 0 ? options.scale : 1;
-    int w = std::max(1, int(std::ceil(region.width * scale - 1e-9))), h = std::max(1, int(std::ceil(region.height * scale - 1e-9)));
-    if (out.width() != w || out.height() != h) out = Image16(w, h);
-    else if (options.clear) out.clear();
-    if (document.sampleType != SampleType::U16) {
-        Image eight = options.clear ? Image(w, h) : *narrowImage(out);
-        RenderOptions eightOptions = options;
-        eightOptions.clear = false;
-        render(document, eightOptions, eight, overrides, cache);
-        out = *widenImage(eight);
-        return;
-    }
-    RenderPlan plan(document, overrides);
-    plan.build();
-    executeRender<SampleType::U16>(plan, region, scale, out, options.clear ? cache : nullptr, options.version);
+    renderDeep<SampleType::U16>(document, options, out, overrides, cache);
 }
 
 std::shared_ptr<Image16> renderFlattened16(const Document& document) {
