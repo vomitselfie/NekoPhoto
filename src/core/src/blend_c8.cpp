@@ -33,13 +33,8 @@ bool blendModeAvailable(BlendMode mode, ColorMode colorMode) {
     return colorMode != ColorMode::Lab || !modes::unavailableInLab(mode);
 }
 
-bool blendModeApproximated(BlendMode mode, ColorMode colorMode) {
-    if (colorMode == ColorMode::CMYK) return !modes::cmykNonSeparableCalibrated && modes::nonSeparable(mode);
-    return false;
-}
-
 BlendMode blendModeFor(BlendMode mode, ColorMode colorMode) {
-    if (!blendModeAvailable(mode, colorMode) || blendModeApproximated(mode, colorMode)) return BlendMode::Normal;
+    if (!blendModeAvailable(mode, colorMode)) return BlendMode::Normal;
     return mode;
 }
 
@@ -55,6 +50,12 @@ void blendStraightMode(BlendMode mode, ColorMode colorMode, const float* cb, flo
     mode = blendModeFor(mode, colorMode);
     if (mode == BlendMode::Normal || mode == BlendMode::Dissolve) return;
     const int colours = colorModeColorChannels(colorMode);
+    if (colorMode == ColorMode::CMYK && modes::nonSeparable(mode)) {
+        float m[4];
+        modes::cmykNonSeparableColor(mode, cb, cs, m);
+        std::copy(m, m + 4, cs);
+        return;
+    }
     if (colorMode == ColorMode::Lab && modes::nonSeparable(mode)) {
         // Lab's non-separable modes on straight colour (blend_modes.inc's labNonSeparable, without the compositing).
         const float n = 0.5f;

@@ -650,10 +650,9 @@ void LayersPanel::syncAppearance() {
     // Pass Through is a folder's alone.
     if (auto* model = qobject_cast<QStandardItemModel*>(blendCombo_->model())) {
         if (auto* item = model->item(0)) item->setEnabled(active && active->isGroup);
-        // The modes the document's colour mode offers (Lab lacks eight, as in Photoshop); CMYK's Hue, Saturation,
-        // Color, Luminosity, Darker and Lighter Color are offered but draw as Normal until they are calibrated. A
-        // 32-bit document offers Photoshop's 32-bit modes; the others (which still draw, with their inputs clamped) are
-        // greyed, as Photoshop greys them.
+        // The modes the document's colour mode offers (Lab lacks eight, as in Photoshop). A 32-bit document offers
+        // Photoshop's 32-bit modes; the others (which still draw, with their inputs clamped) are greyed, as Photoshop
+        // greys them.
         const ColorMode colorMode = session_->hasDocument() ? session_->document()->colorMode : ColorMode::RGB;
         const bool floatDocument = session_->sampleType() == SampleType::F32;
         for (int i = 1; i < model->rowCount(); i++) {
@@ -665,7 +664,6 @@ void LayersPanel::syncAppearance() {
             item->setEnabled(blendModeAvailable(mode, colorMode) && at32);
             item->setToolTip(!at32 ? session_->unavailableTip("blend.outside32")
                              : !blendModeAvailable(mode, colorMode) ? tr("Not available in Lab mode")
-                             : blendModeApproximated(mode, colorMode) ? tr("Drawn as Normal in CMYK documents for now")
                              : QString());
         }
     }

@@ -57,6 +57,155 @@ int maxDifference(const Image& a, const Image& b) {
     return worst;
 }
 
+bool modes_nonSeparable(BlendMode m) {
+    return m == BlendMode::Hue || m == BlendMode::Saturation || m == BlendMode::Color || m == BlendMode::Luminosity ||
+           m == BlendMode::DarkerColor || m == BlendMode::LighterColor;
+}
+
+/// Photoshop's own CMYK results (ink percent, opaque layer over an opaque backdrop), read with its colour sampler, from
+/// psd-tools' tests/psd_tools/composite/test_blend.py (MIT), which scripted them against Photoshop 2026.
+struct CmykReference { float backdrop[4], source[4]; BlendMode mode; float expected[4]; };
+const CmykReference photoshopCmyk[] = {
+// PHOTOSHOP_CMYK: 6 pairs
+    {{80.0f, 20.0f, 10.0f, 5.0f}, {10.0f, 70.0f, 60.0f, 20.0f}, BlendMode::Hue, {0.0f, 53.73f, 45.1f, 5.1f}},
+    {{80.0f, 20.0f, 10.0f, 5.0f}, {10.0f, 70.0f, 60.0f, 20.0f}, BlendMode::Saturation, {73.73f, 22.35f, 13.73f, 5.1f}},
+    {{80.0f, 20.0f, 10.0f, 5.0f}, {10.0f, 70.0f, 60.0f, 20.0f}, BlendMode::Color, {0.0f, 53.73f, 45.1f, 5.1f}},
+    {{80.0f, 20.0f, 10.0f, 5.0f}, {10.0f, 70.0f, 60.0f, 20.0f}, BlendMode::Luminosity, {93.73f, 33.73f, 23.53f, 20.0f}},
+    {{80.0f, 20.0f, 10.0f, 5.0f}, {10.0f, 70.0f, 60.0f, 20.0f}, BlendMode::DarkerColor, {9.8f, 69.8f, 60.0f, 20.0f}},
+    {{80.0f, 20.0f, 10.0f, 5.0f}, {10.0f, 70.0f, 60.0f, 20.0f}, BlendMode::LighterColor, {80.0f, 20.0f, 9.8f, 5.1f}},
+    {{10.0f, 70.0f, 60.0f, 20.0f}, {80.0f, 20.0f, 10.0f, 5.0f}, BlendMode::Hue, {87.45f, 36.08f, 27.45f, 20.0f}},
+    {{10.0f, 70.0f, 60.0f, 20.0f}, {80.0f, 20.0f, 10.0f, 5.0f}, BlendMode::Saturation, {2.75f, 72.94f, 61.57f, 20.0f}},
+    {{10.0f, 70.0f, 60.0f, 20.0f}, {80.0f, 20.0f, 10.0f, 5.0f}, BlendMode::Color, {93.73f, 33.73f, 23.53f, 20.0f}},
+    {{10.0f, 70.0f, 60.0f, 20.0f}, {80.0f, 20.0f, 10.0f, 5.0f}, BlendMode::Luminosity, {0.0f, 53.73f, 45.1f, 5.1f}},
+    {{10.0f, 70.0f, 60.0f, 20.0f}, {80.0f, 20.0f, 10.0f, 5.0f}, BlendMode::DarkerColor, {9.8f, 69.8f, 60.0f, 20.0f}},
+    {{10.0f, 70.0f, 60.0f, 20.0f}, {80.0f, 20.0f, 10.0f, 5.0f}, BlendMode::LighterColor, {80.0f, 20.0f, 9.8f, 5.1f}},
+    {{5.0f, 5.0f, 90.0f, 0.0f}, {70.0f, 60.0f, 0.0f, 10.0f}, BlendMode::Hue, {17.65f, 14.9f, 0.0f, 0.0f}},
+    {{5.0f, 5.0f, 90.0f, 0.0f}, {70.0f, 60.0f, 0.0f, 10.0f}, BlendMode::Saturation, {6.67f, 6.67f, 76.47f, 0.0f}},
+    {{5.0f, 5.0f, 90.0f, 0.0f}, {70.0f, 60.0f, 0.0f, 10.0f}, BlendMode::Color, {17.65f, 14.9f, 0.0f, 0.0f}},
+    {{5.0f, 5.0f, 90.0f, 0.0f}, {70.0f, 60.0f, 0.0f, 10.0f}, BlendMode::Luminosity, {50.98f, 50.98f, 99.61f, 9.8f}},
+    {{5.0f, 5.0f, 90.0f, 0.0f}, {70.0f, 60.0f, 0.0f, 10.0f}, BlendMode::DarkerColor, {69.8f, 60.0f, 0.0f, 9.8f}},
+    {{5.0f, 5.0f, 90.0f, 0.0f}, {70.0f, 60.0f, 0.0f, 10.0f}, BlendMode::LighterColor, {5.1f, 5.1f, 89.8f, 0.0f}},
+    {{40.0f, 40.0f, 40.0f, 40.0f}, {0.0f, 90.0f, 30.0f, 0.0f}, BlendMode::Hue, {40.0f, 40.0f, 40.0f, 40.0f}},
+    {{40.0f, 40.0f, 40.0f, 40.0f}, {0.0f, 90.0f, 30.0f, 0.0f}, BlendMode::Saturation, {40.0f, 40.0f, 40.0f, 40.0f}},
+    {{40.0f, 40.0f, 40.0f, 40.0f}, {0.0f, 90.0f, 30.0f, 0.0f}, BlendMode::Color, {0.0f, 63.53f, 21.18f, 40.0f}},
+    {{40.0f, 40.0f, 40.0f, 40.0f}, {0.0f, 90.0f, 30.0f, 0.0f}, BlendMode::Luminosity, {56.08f, 56.08f, 56.08f, 0.0f}},
+    {{40.0f, 40.0f, 40.0f, 40.0f}, {0.0f, 90.0f, 30.0f, 0.0f}, BlendMode::DarkerColor, {40.0f, 40.0f, 40.0f, 40.0f}},
+    {{40.0f, 40.0f, 40.0f, 40.0f}, {0.0f, 90.0f, 30.0f, 0.0f}, BlendMode::LighterColor, {0.0f, 89.8f, 29.8f, 0.0f}},
+    {{95.0f, 0.0f, 30.0f, 60.0f}, {20.0f, 15.0f, 85.0f, 2.0f}, BlendMode::Hue, {27.06f, 21.18f, 99.61f, 60.0f}},
+    {{95.0f, 0.0f, 30.0f, 60.0f}, {20.0f, 15.0f, 85.0f, 2.0f}, BlendMode::Saturation, {78.43f, 8.24f, 30.2f, 60.0f}},
+    {{95.0f, 0.0f, 30.0f, 60.0f}, {20.0f, 15.0f, 85.0f, 2.0f}, BlendMode::Color, {27.45f, 22.35f, 92.55f, 60.0f}},
+    {{95.0f, 0.0f, 30.0f, 60.0f}, {20.0f, 15.0f, 85.0f, 2.0f}, BlendMode::Luminosity, {72.16f, 0.0f, 22.75f, 1.96f}},
+    {{95.0f, 0.0f, 30.0f, 60.0f}, {20.0f, 15.0f, 85.0f, 2.0f}, BlendMode::DarkerColor, {94.9f, 0.0f, 29.8f, 60.0f}},
+    {{95.0f, 0.0f, 30.0f, 60.0f}, {20.0f, 15.0f, 85.0f, 2.0f}, BlendMode::LighterColor, {20.0f, 14.9f, 85.1f, 1.96f}},
+    {{0.0f, 0.0f, 0.0f, 0.0f}, {50.0f, 40.0f, 30.0f, 10.0f}, BlendMode::Hue, {0.0f, 0.0f, 0.0f, 0.0f}},
+    {{0.0f, 0.0f, 0.0f, 0.0f}, {50.0f, 40.0f, 30.0f, 10.0f}, BlendMode::Saturation, {0.0f, 0.0f, 0.0f, 0.0f}},
+    {{0.0f, 0.0f, 0.0f, 0.0f}, {50.0f, 40.0f, 30.0f, 10.0f}, BlendMode::Color, {0.0f, 0.0f, 0.0f, 0.0f}},
+    {{0.0f, 0.0f, 0.0f, 0.0f}, {50.0f, 40.0f, 30.0f, 10.0f}, BlendMode::Luminosity, {41.96f, 41.96f, 41.96f, 9.8f}},
+    {{0.0f, 0.0f, 0.0f, 0.0f}, {50.0f, 40.0f, 30.0f, 10.0f}, BlendMode::DarkerColor, {49.8f, 40.0f, 29.8f, 9.8f}},
+    {{0.0f, 0.0f, 0.0f, 0.0f}, {50.0f, 40.0f, 30.0f, 10.0f}, BlendMode::LighterColor, {0.0f, 0.0f, 0.0f, 0.0f}},
+// PHOTOSHOP_CMYK_SEPARABLE: 5 pairs
+    {{80.0f, 20.0f, 10.0f, 5.0f}, {10.0f, 70.0f, 60.0f, 20.0f}, BlendMode::ColorBurn, {88.63f, 66.27f, 24.71f, 6.27f}},
+    {{80.0f, 20.0f, 10.0f, 5.0f}, {10.0f, 70.0f, 60.0f, 20.0f}, BlendMode::ColorDodge, {0.0f, 0.0f, 0.0f, 0.0f}},
+    {{80.0f, 20.0f, 10.0f, 5.0f}, {10.0f, 70.0f, 60.0f, 20.0f}, BlendMode::Darken, {80.0f, 69.8f, 60.0f, 20.0f}},
+    {{80.0f, 20.0f, 10.0f, 5.0f}, {10.0f, 70.0f, 60.0f, 20.0f}, BlendMode::Difference, {29.8f, 50.2f, 49.8f, 85.1f}},
+    {{80.0f, 20.0f, 10.0f, 5.0f}, {10.0f, 70.0f, 60.0f, 20.0f}, BlendMode::Divide, {77.65f, 0.0f, 0.0f, 0.0f}},
+    {{80.0f, 20.0f, 10.0f, 5.0f}, {10.0f, 70.0f, 60.0f, 20.0f}, BlendMode::Exclusion, {25.88f, 38.43f, 41.96f, 77.25f}},
+    {{80.0f, 20.0f, 10.0f, 5.0f}, {10.0f, 70.0f, 60.0f, 20.0f}, BlendMode::HardLight, {16.08f, 51.76f, 27.84f, 1.96f}},
+    {{80.0f, 20.0f, 10.0f, 5.0f}, {10.0f, 70.0f, 60.0f, 20.0f}, BlendMode::HardMix, {0.0f, 0.0f, 0.0f, 0.0f}},
+    {{80.0f, 20.0f, 10.0f, 5.0f}, {10.0f, 70.0f, 60.0f, 20.0f}, BlendMode::Lighten, {9.8f, 20.0f, 9.8f, 5.1f}},
+    {{80.0f, 20.0f, 10.0f, 5.0f}, {10.0f, 70.0f, 60.0f, 20.0f}, BlendMode::LinearBurn, {89.8f, 89.8f, 69.8f, 25.1f}},
+    {{80.0f, 20.0f, 10.0f, 5.0f}, {10.0f, 70.0f, 60.0f, 20.0f}, BlendMode::LinearDodge, {0.0f, 0.0f, 0.0f, 0.0f}},
+    {{80.0f, 20.0f, 10.0f, 5.0f}, {10.0f, 70.0f, 60.0f, 20.0f}, BlendMode::LinearLight, {0.0f, 60.0f, 30.2f, 0.0f}},
+    {{80.0f, 20.0f, 10.0f, 5.0f}, {10.0f, 70.0f, 60.0f, 20.0f}, BlendMode::Multiply, {81.96f, 75.69f, 63.92f, 23.92f}},
+    {{80.0f, 20.0f, 10.0f, 5.0f}, {10.0f, 70.0f, 60.0f, 20.0f}, BlendMode::Normal, {9.8f, 69.8f, 60.0f, 20.0f}},
+    {{80.0f, 20.0f, 10.0f, 5.0f}, {10.0f, 70.0f, 60.0f, 20.0f}, BlendMode::Overlay, {63.92f, 27.84f, 11.76f, 1.96f}},
+    {{80.0f, 20.0f, 10.0f, 5.0f}, {10.0f, 70.0f, 60.0f, 20.0f}, BlendMode::PinLight, {19.61f, 40.0f, 20.39f, 5.1f}},
+    {{80.0f, 20.0f, 10.0f, 5.0f}, {10.0f, 70.0f, 60.0f, 20.0f}, BlendMode::Screen, {7.84f, 14.12f, 5.88f, 1.18f}},
+    {{80.0f, 20.0f, 10.0f, 5.0f}, {10.0f, 70.0f, 60.0f, 20.0f}, BlendMode::SoftLight, {60.39f, 26.27f, 11.76f, 3.53f}},
+    {{80.0f, 20.0f, 10.0f, 5.0f}, {10.0f, 70.0f, 60.0f, 20.0f}, BlendMode::Subtract, {100.0f, 50.2f, 49.8f, 85.1f}},
+    {{80.0f, 20.0f, 10.0f, 5.0f}, {10.0f, 70.0f, 60.0f, 20.0f}, BlendMode::VividLight, {0.0f, 33.33f, 12.16f, 0.0f}},
+    {{10.0f, 70.0f, 60.0f, 20.0f}, {80.0f, 20.0f, 10.0f, 5.0f}, BlendMode::ColorBurn, {49.02f, 87.45f, 66.67f, 21.18f}},
+    {{10.0f, 70.0f, 60.0f, 20.0f}, {80.0f, 20.0f, 10.0f, 5.0f}, BlendMode::ColorDodge, {0.0f, 0.0f, 0.0f, 0.0f}},
+    {{10.0f, 70.0f, 60.0f, 20.0f}, {80.0f, 20.0f, 10.0f, 5.0f}, BlendMode::Darken, {80.0f, 69.8f, 60.0f, 20.0f}},
+    {{10.0f, 70.0f, 60.0f, 20.0f}, {80.0f, 20.0f, 10.0f, 5.0f}, BlendMode::Difference, {29.8f, 50.2f, 49.8f, 85.1f}},
+    {{10.0f, 70.0f, 60.0f, 20.0f}, {80.0f, 20.0f, 10.0f, 5.0f}, BlendMode::Divide, {0.0f, 62.35f, 55.69f, 15.69f}},
+    {{10.0f, 70.0f, 60.0f, 20.0f}, {80.0f, 20.0f, 10.0f, 5.0f}, BlendMode::Exclusion, {25.88f, 38.43f, 41.96f, 77.25f}},
+    {{10.0f, 70.0f, 60.0f, 20.0f}, {80.0f, 20.0f, 10.0f, 5.0f}, BlendMode::HardLight, {63.92f, 28.24f, 12.16f, 1.96f}},
+    {{10.0f, 70.0f, 60.0f, 20.0f}, {80.0f, 20.0f, 10.0f, 5.0f}, BlendMode::HardMix, {0.0f, 0.0f, 0.0f, 0.0f}},
+    {{10.0f, 70.0f, 60.0f, 20.0f}, {80.0f, 20.0f, 10.0f, 5.0f}, BlendMode::Lighten, {9.8f, 20.0f, 9.8f, 5.1f}},
+    {{10.0f, 70.0f, 60.0f, 20.0f}, {80.0f, 20.0f, 10.0f, 5.0f}, BlendMode::LinearBurn, {89.8f, 89.8f, 69.8f, 25.1f}},
+    {{10.0f, 70.0f, 60.0f, 20.0f}, {80.0f, 20.0f, 10.0f, 5.0f}, BlendMode::LinearDodge, {0.0f, 0.0f, 0.0f, 0.0f}},
+    {{10.0f, 70.0f, 60.0f, 20.0f}, {80.0f, 20.0f, 10.0f, 5.0f}, BlendMode::LinearLight, {70.2f, 10.2f, 0.0f, 0.0f}},
+    {{10.0f, 70.0f, 60.0f, 20.0f}, {80.0f, 20.0f, 10.0f, 5.0f}, BlendMode::Multiply, {81.96f, 75.69f, 63.92f, 23.92f}},
+    {{10.0f, 70.0f, 60.0f, 20.0f}, {80.0f, 20.0f, 10.0f, 5.0f}, BlendMode::Normal, {80.0f, 20.0f, 9.8f, 5.1f}},
+    {{10.0f, 70.0f, 60.0f, 20.0f}, {80.0f, 20.0f, 10.0f, 5.0f}, BlendMode::Overlay, {15.69f, 51.76f, 27.84f, 1.96f}},
+    {{10.0f, 70.0f, 60.0f, 20.0f}, {80.0f, 20.0f, 10.0f, 5.0f}, BlendMode::PinLight, {60.0f, 40.0f, 19.61f, 10.2f}},
+    {{10.0f, 70.0f, 60.0f, 20.0f}, {80.0f, 20.0f, 10.0f, 5.0f}, BlendMode::Screen, {7.84f, 14.12f, 5.88f, 1.18f}},
+    {{10.0f, 70.0f, 60.0f, 20.0f}, {80.0f, 20.0f, 10.0f, 5.0f}, BlendMode::SoftLight, {15.29f, 54.9f, 41.57f, 11.76f}},
+    {{10.0f, 70.0f, 60.0f, 20.0f}, {80.0f, 20.0f, 10.0f, 5.0f}, BlendMode::Subtract, {29.8f, 100.0f, 100.0f, 100.0f}},
+    {{10.0f, 70.0f, 60.0f, 20.0f}, {80.0f, 20.0f, 10.0f, 5.0f}, BlendMode::VividLight, {24.71f, 24.31f, 0.0f, 0.0f}},
+    {{100.0f, 0.0f, 50.0f, 0.0f}, {0.0f, 100.0f, 50.0f, 0.0f}, BlendMode::ColorBurn, {100.0f, 0.0f, 99.22f, 0.0f}},
+    {{100.0f, 0.0f, 50.0f, 0.0f}, {0.0f, 100.0f, 50.0f, 0.0f}, BlendMode::ColorDodge, {100.0f, 0.0f, 0.0f, 0.0f}},
+    {{100.0f, 0.0f, 50.0f, 0.0f}, {0.0f, 100.0f, 50.0f, 0.0f}, BlendMode::Darken, {100.0f, 100.0f, 49.8f, 0.0f}},
+    {{100.0f, 0.0f, 50.0f, 0.0f}, {0.0f, 100.0f, 50.0f, 0.0f}, BlendMode::Difference, {0.0f, 0.0f, 100.0f, 100.0f}},
+    {{100.0f, 0.0f, 50.0f, 0.0f}, {0.0f, 100.0f, 50.0f, 0.0f}, BlendMode::Divide, {100.0f, 0.0f, 0.0f, 0.0f}},
+    {{100.0f, 0.0f, 50.0f, 0.0f}, {0.0f, 100.0f, 50.0f, 0.0f}, BlendMode::Exclusion, {0.0f, 0.0f, 49.8f, 100.0f}},
+    {{100.0f, 0.0f, 50.0f, 0.0f}, {0.0f, 100.0f, 50.0f, 0.0f}, BlendMode::HardLight, {0.39f, 100.0f, 49.8f, 0.0f}},
+    {{100.0f, 0.0f, 50.0f, 0.0f}, {0.0f, 100.0f, 50.0f, 0.0f}, BlendMode::HardMix, {100.0f, 0.0f, 0.0f, 0.0f}},
+    {{100.0f, 0.0f, 50.0f, 0.0f}, {0.0f, 100.0f, 50.0f, 0.0f}, BlendMode::Lighten, {0.0f, 0.0f, 49.8f, 0.0f}},
+    {{100.0f, 0.0f, 50.0f, 0.0f}, {0.0f, 100.0f, 50.0f, 0.0f}, BlendMode::LinearBurn, {100.0f, 100.0f, 99.61f, 0.0f}},
+    {{100.0f, 0.0f, 50.0f, 0.0f}, {0.0f, 100.0f, 50.0f, 0.0f}, BlendMode::LinearDodge, {0.0f, 0.0f, 0.0f, 0.0f}},
+    {{100.0f, 0.0f, 50.0f, 0.0f}, {0.0f, 100.0f, 50.0f, 0.0f}, BlendMode::LinearLight, {0.39f, 100.0f, 49.8f, 0.0f}},
+    {{100.0f, 0.0f, 50.0f, 0.0f}, {0.0f, 100.0f, 50.0f, 0.0f}, BlendMode::Multiply, {100.0f, 100.0f, 74.9f, 0.0f}},
+    {{100.0f, 0.0f, 50.0f, 0.0f}, {0.0f, 100.0f, 50.0f, 0.0f}, BlendMode::Normal, {0.0f, 100.0f, 49.8f, 0.0f}},
+    {{100.0f, 0.0f, 50.0f, 0.0f}, {0.0f, 100.0f, 50.0f, 0.0f}, BlendMode::Overlay, {100.0f, 0.0f, 49.8f, 0.0f}},
+    {{100.0f, 0.0f, 50.0f, 0.0f}, {0.0f, 100.0f, 50.0f, 0.0f}, BlendMode::PinLight, {0.0f, 100.0f, 49.8f, 0.0f}},
+    {{100.0f, 0.0f, 50.0f, 0.0f}, {0.0f, 100.0f, 50.0f, 0.0f}, BlendMode::Screen, {0.0f, 0.0f, 24.71f, 0.0f}},
+    {{100.0f, 0.0f, 50.0f, 0.0f}, {0.0f, 100.0f, 50.0f, 0.0f}, BlendMode::SoftLight, {100.0f, 0.0f, 49.8f, 0.0f}},
+    {{100.0f, 0.0f, 50.0f, 0.0f}, {0.0f, 100.0f, 50.0f, 0.0f}, BlendMode::Subtract, {100.0f, 0.0f, 100.0f, 100.0f}},
+    {{100.0f, 0.0f, 50.0f, 0.0f}, {0.0f, 100.0f, 50.0f, 0.0f}, BlendMode::VividLight, {0.0f, 100.0f, 49.8f, 0.0f}},
+    {{25.0f, 75.0f, 95.0f, 95.0f}, {75.0f, 25.0f, 0.0f, 25.0f}, BlendMode::ColorBurn, {100.0f, 100.0f, 94.9f, 100.0f}},
+    {{25.0f, 75.0f, 95.0f, 95.0f}, {75.0f, 25.0f, 0.0f, 25.0f}, BlendMode::ColorDodge, {0.0f, 0.0f, 0.0f, 79.61f}},
+    {{25.0f, 75.0f, 95.0f, 95.0f}, {75.0f, 25.0f, 0.0f, 25.0f}, BlendMode::Darken, {74.9f, 74.9f, 94.9f, 94.9f}},
+    {{25.0f, 75.0f, 95.0f, 95.0f}, {75.0f, 25.0f, 0.0f, 25.0f}, BlendMode::Difference, {50.2f, 50.2f, 5.1f, 30.2f}},
+    {{25.0f, 75.0f, 95.0f, 95.0f}, {75.0f, 25.0f, 0.0f, 25.0f}, BlendMode::Divide, {0.0f, 66.67f, 94.9f, 93.33f}},
+    {{25.0f, 75.0f, 95.0f, 95.0f}, {75.0f, 25.0f, 0.0f, 25.0f}, BlendMode::Exclusion, {37.65f, 37.65f, 5.1f, 27.84f}},
+    {{25.0f, 75.0f, 95.0f, 95.0f}, {75.0f, 25.0f, 0.0f, 25.0f}, BlendMode::HardLight, {62.35f, 38.04f, 0.39f, 47.84f}},
+    {{25.0f, 75.0f, 95.0f, 95.0f}, {75.0f, 25.0f, 0.0f, 25.0f}, BlendMode::HardMix, {0.0f, 100.0f, 0.0f, 100.0f}},
+    {{25.0f, 75.0f, 95.0f, 95.0f}, {75.0f, 25.0f, 0.0f, 25.0f}, BlendMode::Lighten, {25.1f, 25.1f, 0.0f, 25.1f}},
+    {{25.0f, 75.0f, 95.0f, 95.0f}, {75.0f, 25.0f, 0.0f, 25.0f}, BlendMode::LinearBurn, {100.0f, 100.0f, 94.9f, 100.0f}},
+    {{25.0f, 75.0f, 95.0f, 95.0f}, {75.0f, 25.0f, 0.0f, 25.0f}, BlendMode::LinearDodge, {0.0f, 0.0f, 0.0f, 20.0f}},
+    {{25.0f, 75.0f, 95.0f, 95.0f}, {75.0f, 25.0f, 0.0f, 25.0f}, BlendMode::LinearLight, {75.29f, 25.49f, 0.0f, 45.49f}},
+    {{25.0f, 75.0f, 95.0f, 95.0f}, {75.0f, 25.0f, 0.0f, 25.0f}, BlendMode::Multiply, {81.18f, 81.18f, 94.9f, 96.08f}},
+    {{25.0f, 75.0f, 95.0f, 95.0f}, {75.0f, 25.0f, 0.0f, 25.0f}, BlendMode::Normal, {74.9f, 25.1f, 0.0f, 25.1f}},
+    {{25.0f, 75.0f, 95.0f, 95.0f}, {75.0f, 25.0f, 0.0f, 25.0f}, BlendMode::Overlay, {37.65f, 62.35f, 89.8f, 92.55f}},
+    {{25.0f, 75.0f, 95.0f, 95.0f}, {75.0f, 25.0f, 0.0f, 25.0f}, BlendMode::PinLight, {49.8f, 50.59f, 0.0f, 50.59f}},
+    {{25.0f, 75.0f, 95.0f, 95.0f}, {75.0f, 25.0f, 0.0f, 25.0f}, BlendMode::Screen, {18.82f, 18.82f, 0.0f, 23.92f}},
+    {{25.0f, 75.0f, 95.0f, 95.0f}, {75.0f, 25.0f, 0.0f, 25.0f}, BlendMode::SoftLight, {34.51f, 62.35f, 82.35f, 88.63f}},
+    {{25.0f, 75.0f, 95.0f, 95.0f}, {75.0f, 25.0f, 0.0f, 25.0f}, BlendMode::Subtract, {50.2f, 100.0f, 100.0f, 100.0f}},
+    {{25.0f, 75.0f, 95.0f, 95.0f}, {75.0f, 25.0f, 0.0f, 25.0f}, BlendMode::VividLight, {50.2f, 50.2f, 0.0f, 89.8f}},
+    {{0.0f, 0.0f, 0.0f, 0.0f}, {100.0f, 100.0f, 100.0f, 100.0f}, BlendMode::ColorBurn, {0.0f, 0.0f, 0.0f, 0.0f}},
+    {{0.0f, 0.0f, 0.0f, 0.0f}, {100.0f, 100.0f, 100.0f, 100.0f}, BlendMode::ColorDodge, {0.0f, 0.0f, 0.0f, 0.0f}},
+    {{0.0f, 0.0f, 0.0f, 0.0f}, {100.0f, 100.0f, 100.0f, 100.0f}, BlendMode::Darken, {100.0f, 100.0f, 100.0f, 100.0f}},
+    {{0.0f, 0.0f, 0.0f, 0.0f}, {100.0f, 100.0f, 100.0f, 100.0f}, BlendMode::Difference, {0.0f, 0.0f, 0.0f, 0.0f}},
+    {{0.0f, 0.0f, 0.0f, 0.0f}, {100.0f, 100.0f, 100.0f, 100.0f}, BlendMode::Divide, {0.0f, 0.0f, 0.0f, 0.0f}},
+    {{0.0f, 0.0f, 0.0f, 0.0f}, {100.0f, 100.0f, 100.0f, 100.0f}, BlendMode::Exclusion, {0.0f, 0.0f, 0.0f, 0.0f}},
+    {{0.0f, 0.0f, 0.0f, 0.0f}, {100.0f, 100.0f, 100.0f, 100.0f}, BlendMode::HardLight, {100.0f, 100.0f, 100.0f, 100.0f}},
+    {{0.0f, 0.0f, 0.0f, 0.0f}, {100.0f, 100.0f, 100.0f, 100.0f}, BlendMode::HardMix, {0.0f, 0.0f, 0.0f, 0.0f}},
+    {{0.0f, 0.0f, 0.0f, 0.0f}, {100.0f, 100.0f, 100.0f, 100.0f}, BlendMode::Lighten, {0.0f, 0.0f, 0.0f, 0.0f}},
+    {{0.0f, 0.0f, 0.0f, 0.0f}, {100.0f, 100.0f, 100.0f, 100.0f}, BlendMode::LinearBurn, {100.0f, 100.0f, 100.0f, 100.0f}},
+    {{0.0f, 0.0f, 0.0f, 0.0f}, {100.0f, 100.0f, 100.0f, 100.0f}, BlendMode::LinearDodge, {0.0f, 0.0f, 0.0f, 0.0f}},
+    {{0.0f, 0.0f, 0.0f, 0.0f}, {100.0f, 100.0f, 100.0f, 100.0f}, BlendMode::LinearLight, {100.0f, 100.0f, 100.0f, 100.0f}},
+    {{0.0f, 0.0f, 0.0f, 0.0f}, {100.0f, 100.0f, 100.0f, 100.0f}, BlendMode::Multiply, {100.0f, 100.0f, 100.0f, 100.0f}},
+    {{0.0f, 0.0f, 0.0f, 0.0f}, {100.0f, 100.0f, 100.0f, 100.0f}, BlendMode::Normal, {100.0f, 100.0f, 100.0f, 100.0f}},
+    {{0.0f, 0.0f, 0.0f, 0.0f}, {100.0f, 100.0f, 100.0f, 100.0f}, BlendMode::Overlay, {0.0f, 0.0f, 0.0f, 0.0f}},
+    {{0.0f, 0.0f, 0.0f, 0.0f}, {100.0f, 100.0f, 100.0f, 100.0f}, BlendMode::PinLight, {100.0f, 100.0f, 100.0f, 100.0f}},
+    {{0.0f, 0.0f, 0.0f, 0.0f}, {100.0f, 100.0f, 100.0f, 100.0f}, BlendMode::Screen, {0.0f, 0.0f, 0.0f, 0.0f}},
+    {{0.0f, 0.0f, 0.0f, 0.0f}, {100.0f, 100.0f, 100.0f, 100.0f}, BlendMode::SoftLight, {0.0f, 0.0f, 0.0f, 0.0f}},
+    {{0.0f, 0.0f, 0.0f, 0.0f}, {100.0f, 100.0f, 100.0f, 100.0f}, BlendMode::Subtract, {0.0f, 0.0f, 0.0f, 0.0f}},
+    {{0.0f, 0.0f, 0.0f, 0.0f}, {100.0f, 100.0f, 100.0f, 100.0f}, BlendMode::VividLight, {100.0f, 100.0f, 100.0f, 100.0f}},
+};
+
 } // namespace
 
 TEST_CASE(blend_modes_offered_per_mode) {
@@ -68,14 +217,11 @@ TEST_CASE(blend_modes_offered_per_mode) {
         CHECK(blendModeAvailable(mode, ColorMode::RGB));
         CHECK(blendModeAvailable(mode, ColorMode::CMYK));
         offeredInLab += blendModeAvailable(mode, ColorMode::Lab);
-        CHECK(!blendModeApproximated(mode, ColorMode::RGB));
-        CHECK(!blendModeApproximated(mode, ColorMode::Lab));
     }
     CHECK_EQ(offeredInLab, blendModeCount - 8);
     for (BlendMode m : notInLab) { CHECK(!blendModeAvailable(m, ColorMode::Lab)); CHECK(blendModeFor(m, ColorMode::Lab) == BlendMode::Normal); }
     for (BlendMode m : {BlendMode::Hue, BlendMode::Saturation, BlendMode::Color, BlendMode::Luminosity, BlendMode::DarkerColor, BlendMode::LighterColor}) {
-        CHECK(blendModeApproximated(m, ColorMode::CMYK));
-        CHECK(blendModeFor(m, ColorMode::CMYK) == BlendMode::Normal);
+        CHECK(blendModeFor(m, ColorMode::CMYK) == m);
         CHECK(blendModeFor(m, ColorMode::Lab) == m);
     }
     CHECK(blendModeFor(BlendMode::Multiply, ColorMode::CMYK) == BlendMode::Multiply);
@@ -85,7 +231,7 @@ TEST_CASE(cmyk_separable_modes_are_the_rgb_kernels_per_ink) {
     std::mt19937 rng(5);
     for (int m = 0; m < blendModeCount; m++) {
         const BlendMode mode = BlendMode(m);
-        if (mode == BlendMode::Dissolve || blendModeApproximated(mode, ColorMode::CMYK)) continue;
+        if (mode == BlendMode::Dissolve || modes_nonSeparable(mode)) continue;
         for (int trial = 0; trial < 200; trial++) {
             uint8_t src[5], dst[5];
             const uint8_t sa = uint8_t(rng() % 256), da = uint8_t(rng() % 256);
@@ -130,11 +276,31 @@ TEST_CASE(cmyk_display_is_the_documents_pixels_through_its_profile) {
     CHECK(*native.c8() == *doc.layers[0].asset->image.c8());
 }
 
-TEST_CASE(cmyk_non_separable_modes_draw_as_normal_for_now) {
-    const Document hue = inMode(rgbDocument(40, 30, 2, BlendMode::Hue), ColorMode::CMYK);
-    Document normal = hue;
-    normal.layers[1].blendMode = BlendMode::Normal;
-    CHECK(*renderNative(hue).c8() == *renderNative(normal).c8());
+TEST_CASE(cmyk_non_separable_modes_draw_and_carry_k_as_photoshop) {
+    for (BlendMode m : {BlendMode::Hue, BlendMode::Saturation, BlendMode::Color, BlendMode::Luminosity, BlendMode::DarkerColor, BlendMode::LighterColor}) {
+        const Document doc = inMode(rgbDocument(40, 30, 2, m), ColorMode::CMYK);
+        Document normal = doc;
+        normal.layers[1].blendMode = BlendMode::Normal;
+        CHECK(!(*renderNative(doc).c8() == *renderNative(normal).c8()));
+    }
+    // Straight complements (1 is no ink). Hue, Saturation and Color keep the backdrop's K, Luminosity takes the source's.
+    const float cb[4] = {0.2f, 0.8f, 0.9f, 0.95f}, cs0[4] = {0.9f, 0.3f, 0.4f, 0.8f};
+    for (BlendMode m : {BlendMode::Hue, BlendMode::Saturation, BlendMode::Color, BlendMode::Luminosity}) {
+        float cs[4] = {cs0[0], cs0[1], cs0[2], cs0[3]};
+        blendStraightMode(m, ColorMode::CMYK, cb, cs);
+        CHECK_NEAR(cs[3], m == BlendMode::Luminosity ? cs0[3] : cb[3], 1e-6);
+        float same[4] = {cb[0], cb[1], cb[2], cb[3]};
+        blendStraightMode(m, ColorMode::CMYK, cb, same);
+        for (int c = 0; c < 4; c++) CHECK_NEAR(same[c], cb[c], 1e-5);
+    }
+    // Darker and Lighter Color weigh K and take one pixel whole; a tie keeps the backdrop.
+    const float light[4] = {0.5f, 0.5f, 0.5f, 1.0f}, dark[4] = {0.5f, 0.5f, 0.5f, 0.6f};
+    float out[4] = {dark[0], dark[1], dark[2], dark[3]};
+    blendStraightMode(BlendMode::DarkerColor, ColorMode::CMYK, light, out);
+    CHECK_NEAR(out[3], 0.6f, 1e-6);
+    float out2[4] = {dark[0], dark[1], dark[2], dark[3]};
+    blendStraightMode(BlendMode::LighterColor, ColorMode::CMYK, light, out2);
+    CHECK_NEAR(out2[3], 1.0f, 1e-6);
 }
 
 TEST_CASE(cmyk_multiply_darkens_every_ink) {
@@ -362,3 +528,34 @@ TEST_CASE(rgb_lab_round_trip_loss_by_depth) {
 }
 
 TEST_MAIN()
+
+TEST_CASE(cmyk_blend_modes_match_photoshops_own_renders) {
+    // Every mode on opaque pixels at 8 and 16 bits: the non-separable six within two sampler steps (the sampler reads
+    // 8 bits), the separable modes (the RGB kernels, unchanged) within three, as Color Burn and Vivid Light near their
+    // clips move a step further when the percent is quantised at 16 bits instead of 8.
+    int worst8 = 0, worst16 = 0;
+    for (const CmykReference& r : photoshopCmyk) {
+        uint8_t src[5], dst[5];
+        uint16_t src16[5], dst16[5];
+        for (int c = 0; c < 4; c++) {
+            src[c] = uint8_t(std::lround((100 - r.source[c]) * 2.55f)); dst[c] = uint8_t(std::lround((100 - r.backdrop[c]) * 2.55f));
+            src16[c] = uint16_t(std::lround((100 - r.source[c]) * 327.68f)); dst16[c] = uint16_t(std::lround((100 - r.backdrop[c]) * 327.68f));
+        }
+        src[4] = dst[4] = 255; src16[4] = dst16[4] = 32768;
+        const uint16_t k = 256;
+        const uint32_t k16 = 32768;
+        const float tolerance = (modes_nonSeparable(r.mode) ? 2 : 3) * 100.0f / 255.0f;
+        compositeSpanMode8(r.mode, ColorMode::CMYK, src, &k, dst, 1);
+        compositeSpanMode16(r.mode, ColorMode::CMYK, src16, &k16, dst16, 1);
+        for (int c = 0; c < 4; c++) {
+            const float ink8 = 100 - dst[c] / 2.55f, ink16 = 100 - dst16[c] / 327.68f;
+            if (std::fabs(ink8 - r.expected[c]) > tolerance || std::fabs(ink16 - r.expected[c]) > tolerance)
+                std::fprintf(stderr, "  %s ink %d: Photoshop %.2f, ours %.2f (8-bit) %.2f (16-bit)\n", blendModeName(r.mode), c, r.expected[c], ink8, ink16);
+            worst8 = std::max(worst8, int(std::lround(std::fabs(ink8 - r.expected[c]) * 2.55f)));
+            worst16 = std::max(worst16, int(std::lround(std::fabs(ink16 - r.expected[c]) * 2.55f)));
+            CHECK(std::fabs(ink8 - r.expected[c]) <= tolerance);
+            CHECK(std::fabs(ink16 - r.expected[c]) <= tolerance);
+        }
+    }
+    std::fprintf(stderr, "  CMYK blend modes against Photoshop: at most %d steps off (8-bit), %d (16-bit)\n", worst8, worst16);
+}

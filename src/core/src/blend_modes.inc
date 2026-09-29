@@ -33,11 +33,75 @@ inline bool unavailableInLab(BlendMode mode) {
     }
 }
 
-/// The calibration hook for CMYK's non-separable modes. Photoshop's Hue, Saturation, Color, Luminosity, Darker Color
-/// and Lighter Color in CMYK are not documented; they ship when they can be matched against Photoshop renders of
-/// CMYK files (docs/high-bit-depth-plan.md, P7 step G). Until then this returns false and the modes draw as Normal
-/// (blendModeFor), with a notice in the Layers panel. A calibrated approximation goes into cmykNonSeparablePixel.
-constexpr bool cmykNonSeparableCalibrated = false;
+/// CMYK's non-separable modes, as Photoshop computes them (checked against its own renders: tests/colormodes_tests.cpp).
+/// No trip through RGB: the PDF Lum/Sat helpers run on the stored complements of C, M and Y (1 is no ink), and K
+/// is carried apart, the backdrop's for Hue, Saturation and Color and the source's for Luminosity. Darker and
+/// Lighter Color pick a whole pixel, K included, by K' x Lum(C', M', Y'); ties keep the backdrop. `cb` and `cs` are
+/// straight complements in 0..1; `m` receives the blended colour.
+inline void cmykNonSeparableColor(BlendMode mode, const float* cb, const float* cs, float* m) {
+    auto lum = [](const float* c) { return 0.30f * c[0] + 0.59f * c[1] + 0.11f * c[2]; };
+    auto sat = [](const float* c) { return std::max({c[0], c[1], c[2]}) - std::min({c[0], c[1], c[2]}); };
+    auto setLum = [&](float* c, float l) {
+        const float d = l - lum(c);
+        for (int i = 0; i < 3; i++) c[i] += d;
+        const float L = lum(c), lo = std::min({c[0], c[1], c[2]}), hi = std::max({c[0], c[1], c[2]});
+        if (lo < 0 && L - lo != 0) for (int i = 0; i < 3; i++) c[i] = L + (c[i] - L) * L / (L - lo);
+        const float hi2 = std::max({c[0], c[1], c[2]});
+        if (hi2 > 1 && hi2 - L != 0) for (int i = 0; i < 3; i++) c[i] = L + (c[i] - L) * (1 - L) / (hi2 - L);
+        (void)hi;
+        for (int i = 0; i < 3; i++) c[i] = std::clamp(c[i], 0.0f, 1.0f);
+    };
+    auto setSat = [](float* c, float s) {
+        int lo = 0, mid = 1, hi = 2;
+        if (c[lo] > c[mid]) std::swap(lo, mid);
+        if (c[mid] > c[hi]) std::swap(mid, hi);
+        if (c[lo] > c[mid]) std::swap(lo, mid);
+        const float span = c[hi] - c[lo];
+        float out[3] = {0, 0, 0};
+        if (span > 0) { out[mid] = (c[mid] - c[lo]) * s / span; out[hi] = s; }
+        for (int i = 0; i < 3; i++) c[i] = out[i];
+    };
+    auto lightness = [&](const float* c) { return c[3] * lum(c); };
+    const float* whole = cb;
+    switch (mode) {
+    case BlendMode::Hue: std::copy(cs, cs + 3, m); setSat(m, sat(cb)); setLum(m, lum(cb)); m[3] = cb[3]; return;
+    case BlendMode::Saturation: std::copy(cb, cb + 3, m); setSat(m, sat(cs)); setLum(m, lum(cb)); m[3] = cb[3]; return;
+    case BlendMode::Color: std::copy(cs, cs + 3, m); setLum(m, lum(cb)); m[3] = cb[3]; return;
+    case BlendMode::Luminosity: std::copy(cb, cb + 3, m); setLum(m, lum(cs)); m[3] = cs[3]; return;
+    case BlendMode::DarkerColor: if (lightness(cs) < lightness(cb)) whole = cs; break;
+    case BlendMode::LighterColor: if (lightness(cs) > lightness(cb)) whole = cs; break;
+    default: whole = cs; break;
+    }
+    std::copy(whole, whole + 4, m);
+}
+
+/// One premultiplied CMYK pixel (C', M', Y', K', alpha) through a non-separable mode; coverage scales the source's alpha.
+template <class K>
+inline void cmykNonSeparable(BlendMode mode, const typename K::Sample* src, float coverage, typename K::Sample* dst) {
+    using T = typename K::Sample;
+    const float one = float(K::one);
+    const float as = src[4] / one * coverage;
+    if (as <= 0 || src[4] == 0) return;
+    const float ab = dst[4] / one;
+    float cs[4], sp[4], bp[4], out[4];
+    for (int c = 0; c < 4; c++) {
+        cs[c] = std::min(1.0f, src[c] / float(src[4]));
+        sp[c] = cs[c] * as;
+        bp[c] = dst[c] / one;
+    }
+    if (ab <= 0) {
+        for (int c = 0; c < 4; c++) out[c] = sp[c] + bp[c] * (1 - as);
+    } else {
+        float cb[4], m[4];
+        for (int c = 0; c < 4; c++) cb[c] = std::min(1.0f, bp[c] / ab);
+        cmykNonSeparableColor(mode, cb, cs, m);
+        for (int c = 0; c < 4; c++) out[c] = sp[c] * (1 - ab) + bp[c] * (1 - as) + as * ab * std::clamp(m[c], 0.0f, 1.0f);
+    }
+    auto q = [&](float v) { return T(std::clamp(v * one + 0.5f, 0.0f, one)); };
+    const T a = q(as + ab * (1 - as));
+    for (int c = 0; c < 4; c++) dst[c] = std::min(q(out[c]), a);
+    dst[4] = a;
+}
 
 /// One CMYK pixel through an RGBA kernel: (C, M, Y, alpha), then (K, K, K, alpha).
 template <class K>
@@ -105,6 +169,10 @@ void span(BlendMode mode, ColorMode colorMode, const typename K::Sample* src, co
     if (colorMode == ColorMode::RGB) { K::rgbSpan(mode, src, steps, dst, count); return; }
     if (mode == BlendMode::Normal || mode == BlendMode::Dissolve) {
         for (int i = 0; i < count; i++, src += n, dst += n) if (steps[i]) K::normal(src, steps[i], dst, n);
+        return;
+    }
+    if (colorMode == ColorMode::CMYK && nonSeparable(mode)) {
+        for (int i = 0; i < count; i++, src += 5, dst += 5) if (steps[i]) cmykNonSeparable<K>(mode, src, float(steps[i]) / float(K::full), dst);
         return;
     }
     if (colorMode == ColorMode::CMYK) {

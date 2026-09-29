@@ -696,9 +696,9 @@ Minimum shippable subset: A–D and F plus the cheap part of E.
   and blending modes" page ("For Lab images, the Color Dodge, Color Burn, Darken, Lighten, Difference, Exclusion,
   Subtract, and Divide modes are unavailable"; the page itself answered 403 to a direct fetch, the quote is from the
   search result). Unverified: what Photoshop's Lab separable modes and its Lab LCh modes compute (no Lab renders to
-  compare), and whether Darker/Lighter Color are offered in Lab. CMYK's non-separable modes draw as Normal
-  (`blendModeApproximated`, with a note in the blend picker); the hook is `modes::cmykNonSeparableCalibrated` and
-  `blendModeFor` in `blend_c8.cpp`.
+  compare), and whether Darker/Lighter Color are offered in Lab. CMYK's non-separable modes follow Photoshop
+  (`modes::cmykNonSeparableColor` in `blend_modes.inc`, checked against Photoshop-measured values in
+  `tests/colormodes_render_tests.cpp`).
 - Display: never null for CMYK/Lab: the app's `displayTransform` builds `pixelFormatFor(depth, mode)` to RGBA8 (to the
   monitor, or sRGB), and `renderForDisplayMode` builds its own to sRGB when the one given reads another layout; the
   reduction and the transform are one pass (`convertImageTo8`).

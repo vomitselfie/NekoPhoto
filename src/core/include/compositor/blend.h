@@ -76,17 +76,15 @@ float blendChannelF(BlendMode mode, float cb, float cs);
 // (colormodes.h). The separable modes are the RGB kernels applied per channel on the stored values, which for CMYK
 // is Photoshop's own model (inverted ink behaves like light); Normal and Dissolve use the RGB kernels unchanged.
 // Lab's Hue, Saturation, Color, Luminosity, Darker Color and Lighter Color work in L and a/b (LCh) directly.
-// CMYK's non-separable modes have no calibration against Photoshop yet, and draw as Normal (blendModeFor).
+// CMYK's are Photoshop's: the PDF helpers on the C, M and Y complements, K carried apart (blend_modes.inc).
 
 /// Whether Photoshop offers `mode` for layers in documents of `colorMode` (the picker greys the others). RGB: every
 /// mode. CMYK: every mode. Lab: all but Color Dodge, Color Burn, Darken, Lighten, Difference, Exclusion, Subtract and
 /// Divide (Adobe's "Layer opacity and blending modes" help page).
 bool blendModeAvailable(BlendMode mode, ColorMode colorMode);
 /// The mode a layer in `mode` is drawn with in a `colorMode` document: itself, or Normal for a mode that is not
-/// offered there or (CMYK's non-separable modes) not calibrated yet.
+/// offered there (Lab's eight).
 BlendMode blendModeFor(BlendMode mode, ColorMode colorMode);
-/// Whether blendModeFor draws `mode` as Normal in `colorMode` although Photoshop offers it: the canvas's notice.
-bool blendModeApproximated(BlendMode mode, ColorMode colorMode);
 
 /// 8 bits: `count` pixels of `colorMode` (5 samples for CMYK, 4 for Lab), coverage steps 0..256 as the RGB kernels
 /// take them (0 skips a pixel). `mode` is what blendModeFor gives (Dissolve takes compositePixelAtMode8).

@@ -5376,10 +5376,6 @@ File &gt; New creates a blank canvas.</source>
         <translation>Lab モードでは使用できません</translation>
     </message>
     <message>
-        <source>Drawn as Normal in CMYK documents for now</source>
-        <translation>CMYK ドキュメントでは現在「通常」として描画されます</translation>
-    </message>
-    <message>
         <source>Edit Text…</source>
         <translation>テキストを編集...</translation>
     </message>
