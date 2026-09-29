@@ -152,7 +152,7 @@ std::optional<Matrix3> invert(const Matrix3& m) {
 
 namespace {
 
-std::array<double, 3> apply(const Matrix3& m, const std::array<double, 3>& v) {
+std::array<double, 3> multiply3(const Matrix3& m, const std::array<double, 3>& v) {
     return {m[0][0] * v[0] + m[0][1] * v[1] + m[0][2] * v[2], m[1][0] * v[0] + m[1][1] * v[1] + m[1][2] * v[2],
             m[2][0] * v[0] + m[2][1] * v[1] + m[2][2] * v[2]};
 }
@@ -192,7 +192,7 @@ std::optional<Chromaticity> CameraWhiteModel::xyFromNeutral(const std::array<dou
     auto solve = [&](double t) -> std::optional<Chromaticity> {
         const auto inverse = invert(matrixAt(t));
         if (!inverse) return std::nullopt;
-        const auto xyz = apply(*inverse, neutral);
+        const auto xyz = multiply3(*inverse, neutral);
         const double sum = xyz[0] + xyz[1] + xyz[2];
         if (!(sum > 0) || !(xyz[1] > 0) || !std::isfinite(sum)) return std::nullopt;
         const Chromaticity xy{xyz[0] / sum, xyz[1] / sum};
@@ -216,7 +216,7 @@ std::optional<Chromaticity> CameraWhiteModel::xyFromNeutral(const std::array<dou
 std::optional<std::array<double, 3>> CameraWhiteModel::neutralFromXy(Chromaticity xy) const {
     if (!valid || !(xy.y > 0)) return std::nullopt;
     const std::array<double, 3> xyz{xy.x / xy.y, 1, (1 - xy.x - xy.y) / xy.y};
-    const auto n = apply(matrixAt(temperatureTintFromXy(xy).temperature), xyz);
+    const auto n = multiply3(matrixAt(temperatureTintFromXy(xy).temperature), xyz);
     if (!(n[0] > 0 && n[1] > 0 && n[2] > 0) || !std::isfinite(n[0] + n[1] + n[2])) return std::nullopt;
     return std::array<double, 3>{n[0] / n[1], 1, n[2] / n[1]};
 }
