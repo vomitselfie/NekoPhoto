@@ -6255,10 +6255,6 @@ File &gt; New creates a blank canvas.</source>
         <source>Couldn’t export PSD</source>
         <translation>PSD を書き出せませんでした</translation>
     </message>
-    <message>
-        <source>This document is larger than PSD allows (%1 pixels a side). PSB export is not supported yet.</source>
-        <translation>このドキュメントは PSD の上限 (1 辺 %1 ピクセル) を超えています。PSB の書き出しにはまだ対応していません。</translation>
-    </message>
     <message numerus="yes">
         <source>%n layer(s)</source>
         <translation>
@@ -6294,6 +6290,10 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Export…</source>
         <translation>書き出し...</translation>
+    </message>
+    <message>
+        <source>Photoshop large document (*.psb)</source>
+        <translation>Photoshop ラージドキュメント (*.psb)</translation>
     </message>
     <message>
         <source>Photoshop document (*.psd);;Photoshop large document (*.psb)</source>

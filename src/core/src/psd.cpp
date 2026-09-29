@@ -1166,7 +1166,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             if (!settings) {
                 static const std::map<std::string, const char*> others{{"brit", "Brightness/Contrast"}, {"blwh", "Black & White"}, {"vibA", "Vibrance"}, {"phfl", "Photo Filter"}, {"mixr", "Channel Mixer"},
                     {"clrL", "Color Lookup"}, {"nvrt", "Invert"}, {"post", "Posterize"}, {"thrs", "Threshold"}, {"selc", "Selective Color"}, {"blnc", "Color Balance"}};
-                for (auto& [key, name] : others) if (block(key.c_str())) { notes.push_back("Layer \"" + rec.name + "\": " + name + " adjustment layers have no counterpart; it shows as an empty layer here and is written back to PSD as it was."); break; }
+                for (auto& [key, name] : others) if (block(key.c_str())) { notes.push_back("Layer \"" + rec.name + "\": its " + name + " settings could not be read; it shows as an empty layer here and is written back to PSD as it was."); break; }
             }
             if (settings) adjustment = settings->toLayerAdjustment();
             if (!image && !adjustment) {
@@ -1345,9 +1345,8 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             layers.push_back(layer);
             if (!open.empty()) open.back().members.push_back(layer.id);
         }
-        if (effectsCount) notes.push_back(std::to_string(effectsCount) + " layer style(s) (shadows, glows, strokes, bevels, overlays) show as Photoshop draws them, can be edited with Layer > Layer Style, and are written back on PSD export.");
-        if (vectorMasks) notes.push_back(std::to_string(vectorMasks) + " vector mask(s) and shape(s) show as Photoshop draws them and follow their layers; shape layers' paths, fill and stroke can be edited (Direct Selection, the Shape tool's bar), a vector mask on another layer cannot yet.");
-        if (editableSmartObjects) notes.push_back(std::to_string(editableSmartObjects) + " smart object(s) place their contents here: moving or scaling one resamples the original, and each stays a smart object on PSD export.");
+        // Layer styles, vector masks and shapes, and editable smart objects open as Photoshop has them: nothing to note.
+        (void)effectsCount; (void)vectorMasks; (void)editableSmartObjects;
         for (auto& [why, count] : lockedSmartObjects)
             notes.push_back(std::to_string(count) + " smart object(s) " + why + " show Photoshop's preview: they can be moved and scaled, and stay smart objects on PSD export.");
         (void)smartObjects;
@@ -1420,9 +1419,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                     }
                 size_t spots = 0;
                 for (const compositor::Channel& ch : document.channels) spots += ch.kind == ChannelKind::Spot;
-                if (!document.channels.empty())
-                    notes.push_back(std::to_string(document.channels.size() - spots) + " alpha channel(s) and " + std::to_string(spots)
-                                    + " spot channel(s) are in the Channels panel; spot channels are kept and shown, not edited.");
+                if (spots) notes.push_back(std::to_string(spots) + " spot channel(s) are kept and shown in the Channels panel, but not edited.");
             }
             if (ok) {
                 const int colourChannels = colourPlanes;
@@ -1496,7 +1493,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             background.name = "Background";
             layers.push_back(background);
             if (options.mergedOnly) notes.push_back(result.realComposite ? "Opened as the merged image Photoshop stored, without its layers." : "Opened as the merged image, but the file was saved without Maximize Compatibility, so Photoshop stored a blank stand-in.");
-            else if (records.empty()) notes.push_back("The file carries no layers (it was saved flattened); the merged image is the only layer.");
+            // A file saved flattened simply opens as its one layer: nothing to note.
         }
         for (const auto& resource : docCarry->resources)
             if (resource.id == 1050) parseSlicesResource(resource.data, document.slices);

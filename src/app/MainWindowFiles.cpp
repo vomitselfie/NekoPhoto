@@ -520,10 +520,8 @@ void MainWindow::exportPsd() {
     session_->endTemporaryLayers();   // the Quick Mask and filter-mask layers are never written
     if (!session_->hasDocument()) return;
     const compositor::Document& doc = *session_->document();
-    if (doc.width > compositor::psdMaxSide || doc.height > compositor::psdMaxSide) {
-        showError(tr("Couldn’t export PSD"), tr("This document is larger than PSD allows (%1 pixels a side). PSB export is not supported yet.").arg(compositor::psdMaxSide));
-        return;
-    }
+    // Past PSD's 30,000 pixels a side only the large document format holds it, as in Photoshop.
+    const bool psbOnly = doc.width > compositor::psdMaxSide || doc.height > compositor::psdMaxSide;
     // What the file will hold, and what will not look or behave the same in Photoshop, before choosing where.
     const compositor::PsdExportSummary plan = compositor::planPsdExport(doc, app::psdExportOptions());
     if (!plan.warnings.empty()) {
@@ -547,7 +545,8 @@ void MainWindow::exportPsd() {
         box.exec();
         if (box.clickedButton() != static_cast<QAbstractButton*>(go)) return;
     }
-    QString path = askExportPath(tr("Export Photoshop Document"), tr("Photoshop document (*.psd);;Photoshop large document (*.psb)"), {"psd", "psb"});
+    QString path = psbOnly ? askExportPath(tr("Export Photoshop Document"), tr("Photoshop large document (*.psb)"), {"psb"})
+                           : askExportPath(tr("Export Photoshop Document"), tr("Photoshop document (*.psd);;Photoshop large document (*.psb)"), {"psd", "psb"});
     if (path.isEmpty()) return;
     QSettings().setValue("lastDir", QFileInfo(path).absolutePath());
     QApplication::setOverrideCursor(Qt::WaitCursor);

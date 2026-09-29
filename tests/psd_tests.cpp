@@ -222,7 +222,7 @@ TEST_CASE(psd_without_layers_becomes_one_background_layer) {
     REQUIRE(imported->document.layers.size() == 1u);
     CHECK_EQ(imported->document.layers[0].name, std::string("Background"));
     CHECK_EQ(int(imported->document.layers[0].asset->image.u8()->pixel(2, 2)[1]), 200);
-    CHECK(!imported->notes.empty());
+    CHECK(imported->notes.empty());   // a flattened file is just one layer: nothing to note
     // Not a PSD at all.
     std::string bogus = writeTemp({'h', 'e', 'l', 'l', 'o'}, "bogus.psd");
     CHECK(!importPsd(bogus, &error).has_value());
