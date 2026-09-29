@@ -476,6 +476,11 @@ void adjustColor(const HueSaturationSettings& settings, const std::vector<HueRes
 
 void HueSaturationSettings::adjust(double& r, double& g, double& b) const { adjustColor(*this, hueResponse(*this), r, g, b); }
 
+std::function<void(double&, double&, double&)> HueSaturationSettings::adjuster() const {
+    auto response = std::make_shared<const std::vector<HueResponse>>(hueResponse(*this));
+    return [settings = *this, response](double& r, double& g, double& b) { adjustColor(settings, *response, r, g, b); };
+}
+
 double HueSaturationSettings::shiftedHue(double hue) const {
     double shift = 0;
     for (auto& [range, a] : adjustments) if (a.hue != 0) shift += a.hue * weight(range, hue);

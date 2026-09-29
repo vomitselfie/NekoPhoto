@@ -221,8 +221,12 @@ I halve(const I& src) {
         for (int x = 0; x < out.width(); x++) {
             const int x0 = std::min(2 * x, src.width() - 1), x1 = std::min(2 * x + 1, src.width() - 1);
             const int y0 = std::min(2 * y, src.height() - 1), y1 = std::min(2 * y + 1, src.height() - 1);
-            for (int c = 0; c < 4; c++)
-                out.pixel(x, y)[c] = Sample((uint32_t(src.pixel(x0, y0)[c]) + src.pixel(x1, y0)[c] + src.pixel(x0, y1)[c] + src.pixel(x1, y1)[c] + 2) / 4);
+            for (int c = 0; c < 4; c++) {
+                if constexpr (std::is_floating_point_v<Sample>)
+                    out.pixel(x, y)[c] = (src.pixel(x0, y0)[c] + src.pixel(x1, y0)[c] + src.pixel(x0, y1)[c] + src.pixel(x1, y1)[c]) * 0.25f;
+                else
+                    out.pixel(x, y)[c] = Sample((uint32_t(src.pixel(x0, y0)[c]) + src.pixel(x1, y0)[c] + src.pixel(x0, y1)[c] + src.pixel(x1, y1)[c] + 2) / 4);
+            }
         }
     return out;
 }
@@ -242,7 +246,12 @@ void sample(const I& img, double x, double y, Sample* out) {
             const Sample* p = img.pixel(px, py);
             for (int c = 0; c < 4; c++) acc[c] += w * p[c];
         }
-    for (int c = 0; c < 4; c++) out[c] = Sample(std::clamp(std::lround(acc[c]), 0L, full));
+    if constexpr (std::is_floating_point_v<Sample>) {
+        for (int c = 0; c < 3; c++) out[c] = Sample(std::max(0.0, acc[c]));
+        out[3] = Sample(std::clamp(acc[3], 0.0, 1.0));
+    } else {
+        for (int c = 0; c < 4; c++) out[c] = Sample(std::clamp(std::lround(acc[c]), 0L, full));
+    }
 }
 
 } // namespace
@@ -312,6 +321,8 @@ template <class I>
 struct RasterOf { using Type = WarpedRaster; };
 template <>
 struct RasterOf<Image16> { using Type = WarpedRaster16; };
+template <>
+struct RasterOf<ImageF> { using Type = WarpedRasterF; };
 
 template <class I>
 std::optional<typename RasterOf<I>::Type> resampleThrough(const I& image, const std::function<Point(double, double)>& at, const Rect* clip = nullptr) {
@@ -406,6 +417,27 @@ std::optional<WarpedRaster16> renderWarpedImage(const Image16& image, const Warp
     const auto h = rectToQuad(*x0, *y0, *x1, *y1, quad);
     if (!h) return std::nullopt;
     return resampleThrough(image, [&](double u, double v) { return apply(*h, evaluateWarpMesh(mesh, u, v)); }, clip);
+}
+
+std::optional<WarpedRasterF> renderWarpedImage(const ImageF& image, const WarpMesh& mesh, const std::array<double, 8>& quad, const Rect* clip) {
+    if (image.isEmpty() || mesh.xs.size() != size_t(mesh.uOrder * mesh.vOrder) || mesh.ys.size() != mesh.xs.size()) return std::nullopt;
+    for (double v : quad) if (!std::isfinite(v)) return std::nullopt;
+    const auto [x0, x1] = std::minmax_element(mesh.xs.begin(), mesh.xs.end());
+    const auto [y0, y1] = std::minmax_element(mesh.ys.begin(), mesh.ys.end());
+    const auto h = rectToQuad(*x0, *y0, *x1, *y1, quad);
+    if (!h) return std::nullopt;
+    return resampleThrough(image, [&](double u, double v) { return apply(*h, evaluateWarpMesh(mesh, u, v)); }, clip);
+}
+
+std::optional<WarpedRasterF> renderWarpedOverBox(const ImageF& image, const WarpMesh& mesh, const Rect& box) {
+    if (image.isEmpty() || !(box.width > 0) || !(box.height > 0) || mesh.xs.size() != size_t(mesh.uOrder * mesh.vOrder) || mesh.ys.size() != mesh.xs.size())
+        return std::nullopt;
+    const double u0 = -box.x / box.width, u1 = (image.width() - box.x) / box.width;
+    const double v0 = -box.y / box.height, v1 = (image.height() - box.y) / box.height;
+    return resampleThrough(image, [&](double u, double v) {
+        const Point p = evaluateWarpMesh(mesh, u0 + (u1 - u0) * u, v0 + (v1 - v0) * v);
+        return Point(box.x + p.x, box.y + p.y);
+    });
 }
 
 std::optional<WarpedRaster16> renderWarpedOverBox(const Image16& image, const WarpMesh& mesh, const Rect& box) {

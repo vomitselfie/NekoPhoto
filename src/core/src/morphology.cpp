@@ -14,8 +14,10 @@ constexpr float farAway = 1e20f;
 
 /// Full scale and the "selected" threshold (half, rounded up as 128 is at 8 bits) of a coverage raster.
 template <class G> struct Scale;
-template <> struct Scale<GrayImage> { using Sample = uint8_t; static constexpr float one = 255.0f; static constexpr unsigned half = 128; };
-template <> struct Scale<Gray16> { using Sample = uint16_t; static constexpr float one = 32768.0f; static constexpr unsigned half = 16384; };
+template <> struct Scale<GrayImage> { using Sample = uint8_t; static constexpr float one = 255.0f; static constexpr unsigned half = 128; static constexpr float round = 0.5f; };
+template <> struct Scale<Gray16> { using Sample = uint16_t; static constexpr float one = 32768.0f; static constexpr unsigned half = 16384; static constexpr float round = 0.5f; };
+/// 32 bits: coverage 0..1, selected from one half, nothing rounded.
+template <> struct Scale<GrayF> { using Sample = float; static constexpr float one = 1.0f; static constexpr float half = 0.5f; static constexpr float round = 0.0f; };
 
 /// One-dimensional squared distance transform of `f` (n samples, farAway where there is no source)
 /// into `d`, with scratch `v` (n ints) and `z` (n + 1 floats). Felzenszwalb & Huttenlocher 2012, §3.
@@ -79,7 +81,7 @@ template <class G>
 std::shared_ptr<G> growSelectionImpl(const G& coverage, int amount) {
     using S = typename Scale<G>::Sample;
     constexpr float one = Scale<G>::one;
-    constexpr unsigned half = Scale<G>::half;
+    constexpr auto half = Scale<G>::half;
     const int w = coverage.width(), h = coverage.height();
     auto out = std::make_shared<G>(w, h, 0);
     if (amount == 0) { *out = coverage; return out; }
@@ -93,7 +95,7 @@ std::shared_ptr<G> growSelectionImpl(const G& coverage, int amount) {
                 const float* dr = &d[size_t(y) * w];
                 for (int x = 0; x < w; x++) {
                     float v = coverage.at(x, y) >= half ? 1.0f : std::clamp(r + 0.5f - std::sqrt(dr[x]), 0.0f, 1.0f);
-                    o[x] = S(v * one + 0.5f);
+                    o[x] = S(v * one + Scale<G>::round);
                 }
             }
         });
@@ -106,7 +108,7 @@ std::shared_ptr<G> growSelectionImpl(const G& coverage, int amount) {
                 const float* dr = &d[size_t(y) * w];
                 for (int x = 0; x < w; x++) {
                     float v = coverage.at(x, y) < half ? 0.0f : std::clamp(std::sqrt(dr[x]) - r + 0.5f, 0.0f, 1.0f);
-                    o[x] = S(v * one + 0.5f);
+                    o[x] = S(v * one + Scale<G>::round);
                 }
             }
         });
@@ -131,7 +133,7 @@ std::shared_ptr<G> borderSelectionImpl(const G& coverage, int width) {
                 // Signed distance to the edge: positive inside (to the outside), negative outside (to the selection).
                 float signedDistance = coverage.at(x, y) >= Scale<G>::half ? std::sqrt(toOutside[i]) - 0.5f : -(std::sqrt(toSelected[i]) - 0.5f);
                 float v = std::clamp(half + 0.5f - std::fabs(signedDistance), 0.0f, 1.0f);
-                o[x] = S(v * Scale<G>::one + 0.5f);
+                o[x] = S(v * Scale<G>::one + Scale<G>::round);
             }
         }
     });
@@ -194,5 +196,9 @@ std::shared_ptr<Gray16> growSelection(const Gray16& coverage, int amount) { retu
 std::shared_ptr<Gray16> smoothSelection(const Gray16& coverage, int radius) { return smoothSelectionImpl(coverage, radius); }
 std::shared_ptr<Gray16> borderSelection(const Gray16& coverage, int width) { return borderSelectionImpl(coverage, width); }
 std::shared_ptr<Gray16> featherSelection(const Gray16& coverage, double radius) { return featherSelectionImpl(coverage, radius); }
+std::shared_ptr<GrayF> growSelection(const GrayF& coverage, int amount) { return growSelectionImpl(coverage, amount); }
+std::shared_ptr<GrayF> smoothSelection(const GrayF& coverage, int radius) { return smoothSelectionImpl(coverage, radius); }
+std::shared_ptr<GrayF> borderSelection(const GrayF& coverage, int width) { return borderSelectionImpl(coverage, width); }
+std::shared_ptr<GrayF> featherSelection(const GrayF& coverage, double radius) { return featherSelectionImpl(coverage, radius); }
 
 } // namespace compositor

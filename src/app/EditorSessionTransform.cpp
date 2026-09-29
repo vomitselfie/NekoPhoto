@@ -185,11 +185,13 @@ void EditorSession::commitMaskTransform(const TransformEdit& edit) {
 
 void EditorSession::commitDistort(const TransformEdit& edit) {
     distortCache_.clear();
+    distortCacheF_.clear();
     std::vector<Uuid> ids;
     if (edit.group) for (auto& [id, t] : edit.group->originals) ids.push_back(id); else ids.push_back(edit.layerId);
     beginEdit(edit.group ? QT_TRANSLATE_NOOP("History", "Distort Layers") : QT_TRANSLATE_NOOP("History", "Distort"));
     for (auto& id : ids) {
         Layer* layer = document_->find(id);
+        if (layer && layer->asset && layer->asset->image.f32()) { distortLayerF(*layer, edit); continue; }
         if (layer && layer->asset && layer->asset->image.u16()) { distortLayer16(*layer, edit); continue; }
         if (!layer || !layer->asset || !layer->asset->image.u8()) continue;
         auto target = distortTarget(*layer, edit);
@@ -259,6 +261,7 @@ void EditorSession::mergeFloatingTransform(const TransformEdit& edit) {
     Layer* moving = document_->find(edit.layerId);
     Layer* source = document_->find(floating.sourceId);
     if (!moving || !source || !moving->asset || !source->asset || !edit.draft.isValid()) { cancelFloatingTransform(floating); return; }
+    if (moving->asset->image.f32() && source->asset->image.f32()) { mergeFloatingTransformF(edit); return; }
     if (moving->asset->image.u16() && source->asset->image.u16()) { mergeFloatingTransform16(edit); return; }
     std::shared_ptr<const Image> pixels = moving->asset->image.u8();
     LayerTransform placed = edit.draft;
@@ -397,6 +400,7 @@ void EditorSession::commitTransform() {
     TransformEdit edit = *transformEdit_;
     transformEdit_.reset();
     distortCache_.clear();
+    distortCacheF_.clear();
     auto finishDuplicate = [&] { if (transformDuplicate_) { transformDuplicate_.reset(); endEdit(); } };
     if (edit.floating) {
         if (edit.draft == edit.floating->original && !edit.corners) cancelFloatingTransform(*edit.floating);
@@ -443,6 +447,7 @@ void EditorSession::cancelTransform() {
     TransformEdit edit = *transformEdit_;
     transformEdit_.reset();
     distortCache_.clear();
+    distortCacheF_.clear();
     if (transformDuplicate_) {
         auto [copy, source] = *transformDuplicate_;
         document_->layers.erase(std::remove_if(document_->layers.begin(), document_->layers.end(), [&](const Layer& l) { return l.id == copy; }), document_->layers.end());
@@ -514,7 +519,7 @@ std::optional<Uuid> EditorSession::layerAt(QPointF documentPoint) const {
         int x = int(std::floor(p.x)), y = int(std::floor(p.y));
         if (x < 0 || y < 0 || x >= image.width() || y >= image.height()) continue;
         // Any alpha at all, at whatever depth the pixels are.
-        if (image.u8() ? image.u8()->pixel(x, y)[3] > 0 : image.u16() && image.u16()->pixel(x, y)[3] > 0) return layer->id;
+        if (image.u8() ? image.u8()->pixel(x, y)[3] > 0 : image.u16() ? image.u16()->pixel(x, y)[3] > 0 : image.f32() && image.f32()->pixel(x, y)[3] > 0) return layer->id;
     }
     return std::nullopt;
 }

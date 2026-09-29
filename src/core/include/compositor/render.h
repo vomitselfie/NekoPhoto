@@ -80,6 +80,10 @@ std::shared_ptr<Image16> renderFlattened16(const Document& document);
 /// linearised through its profile's curve): what 32-bit files and the mode conversion take (render_f32.cpp).
 void renderF(const Document& document, const RenderOptions& options, ImageF& out, const Overrides* overrides = nullptr, RenderCache* cache = nullptr);
 std::shared_ptr<ImageF> renderFlattenedF(const Document& document);
+/// What the Magic Wand, Quick Select and Trim decide on (docs/bit-depth.md, "32 bits"): the document flattened to 8
+/// bits; a 32-bit document at exposure 0 through its encoding curve, never the view's exposure or gamma, so a result
+/// does not change with the view. For 8- and 16-bit documents it is renderFlattened.
+std::shared_ptr<Image> decisionImage(const Document& document);
 
 /// A CMYK or Lab document at its own depth and mode (colormodes.h): an `ImageC8`, a 5-channel `Image16`, or a Lab
 /// `Image` / `Image16`; an RGB document renders as render() or render16() do. What the PSD writer's merged image and

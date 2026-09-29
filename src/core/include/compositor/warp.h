@@ -29,6 +29,8 @@ struct WarpedImage { std::shared_ptr<Image> image; LayerTransform transform; };
 struct WarpedMask { std::shared_ptr<GrayImage> image; LayerTransform transform; };
 struct WarpedImage16 { std::shared_ptr<Image16> image; LayerTransform transform; };
 struct WarpedMask16 { std::shared_ptr<Gray16> image; LayerTransform transform; };
+struct WarpedImageF { std::shared_ptr<ImageF> image; LayerTransform transform; };
+struct WarpedMaskF { std::shared_ptr<GrayF> image; LayerTransform transform; };
 
 /// `image`, shown through `transform`, resampled so its corners land on `corners`: the warped
 /// pixels over the shape's whole-pixel bounds and the axis-aligned transform placing them.
@@ -46,11 +48,16 @@ std::optional<WarpedMask> warpMask(const GrayImage& mask, const LayerTransform& 
 std::optional<WarpedImage16> warpImage(const Image16Ptr& image, const LayerTransform& transform, const Corners& corners, int limit = 0);
 std::optional<WarpedImage16> warpImageTrimmed(const Image16Ptr& image, const LayerTransform& transform, const Corners& corners, Rect* crop = nullptr);
 std::optional<WarpedMask16> warpMask(const Gray16& mask, const LayerTransform& transform, const Corners& corners, uint16_t background, int limit = 0);
+/// The same at 32 bits: float samplers with exact weights, the edge antialias unrounded.
+std::optional<WarpedImageF> warpImage(const ImageFPtr& image, const LayerTransform& transform, const Corners& corners, int limit = 0);
+std::optional<WarpedImageF> warpImageTrimmed(const ImageFPtr& image, const LayerTransform& transform, const Corners& corners, Rect* crop = nullptr);
+std::optional<WarpedMaskF> warpMask(const GrayF& mask, const LayerTransform& transform, const Corners& corners, float background, int limit = 0);
 /// Where `placement`'s corners land when the perspective taking `by`'s corners to `corners` is applied to it too.
 Corners carriedCorners(const LayerTransform& placement, const LayerTransform& by, const Corners& corners);
 /// Document coverage carried by the same perspective: `coverage(doc) -> coverage(warped doc)`. The result has the
 /// document's size; the mapping is from the pixel grid placed by `original` to `corners`.
 std::shared_ptr<GrayImage> warpCoverage(const GrayImage& coverage, const LayerTransform& original, int pixelWidth, int pixelHeight, const Corners& corners);
 std::shared_ptr<Gray16> warpCoverage(const Gray16& coverage, const LayerTransform& original, int pixelWidth, int pixelHeight, const Corners& corners);
+std::shared_ptr<GrayF> warpCoverage(const GrayF& coverage, const LayerTransform& original, int pixelWidth, int pixelHeight, const Corners& corners);
 
 } // namespace compositor

@@ -1,6 +1,7 @@
 // EditorSession: Adjustment layers and the destructive adjustments and filters on pixels.
 #include "EditorSession.h"
 #include "Names.h"
+#include "compositor/colormgmt.h"
 #include "compositor/depth.h"
 #include "compositor/filters.h"
 #include <random>
@@ -116,6 +117,20 @@ std::shared_ptr<Gray16> EditorSession::selectionOnGrid16(const LayerTransform& t
     return selectionInGrid(*document_->selection->coverage.u16(), transform.pixelToDocument(width, height), width, height);
 }
 
+std::shared_ptr<const ImageF> EditorSession::adjustmentSourceF(int margin, LayerTransform& transform, std::optional<Uuid> layerId) const {
+    const Layer* layer = layerId ? (document_ ? document_->find(*layerId) : nullptr) : activeLayer();
+    if (!layer || !layer->asset || !layer->asset->image.f32()) return nullptr;
+    if (margin <= 0) { transform = layer->transform; return layer->asset->image.f32(); }
+    return growImage(*layer->asset->image.f32(), layer->transform, margin, transform);
+}
+
+std::shared_ptr<GrayF> EditorSession::selectionOnGridF(const LayerTransform& transform, int width, int height) const {
+    if (!document_ || !document_->selection || !document_->selection->coverage.f32()) return nullptr;
+    return selectionInGrid(*document_->selection->coverage.f32(), transform.pixelToDocument(width, height), width, height);
+}
+
+TransferCurve EditorSession::documentCurve() const { return document_ ? encodedTransfer(*document_) : TransferCurve::srgb(); }
+
 void EditorSession::commitPixels(AnyImage image, const LayerTransform& transform, const QString& name, std::optional<Uuid> layerId) {
     clearPixelPreview();
     Layer* layer = layerId ? (document_ ? document_->find(*layerId) : nullptr) : activeLayerMutable();
@@ -135,6 +150,20 @@ void EditorSession::invertActive() {
     if (!canEditLayers()) return;
     Layer* layer = activeLayerMutable();
     if (!layer || layer->isGroup) return;
+    if (isMaskSelected_ && layer->mask && layer->mask->asset.image.f32()) {
+        const GrayF& before = *layer->mask->asset.image.f32();
+        auto out = std::make_shared<GrayF>(before);
+        applyInvert(*out);
+        if (document_->selection && document_->selection->coverage.f32() && out->width() > 1) {
+            auto coverage = selectionInGrid(*document_->selection->coverage.f32(), layer->maskTransform().pixelToDocument(out->width(), out->height()), out->width(), out->height());
+            blendThroughCoverage(*out, before, *coverage);
+        }
+        beginEdit(QT_TRANSLATE_NOOP("History", "Invert"));
+        layer->mask->asset = MaskAsset::make(GrayFPtr(out));
+        endEdit();
+        notifyDocument();
+        return;
+    }
     if (isMaskSelected_ && layer->mask && layer->mask->asset.image.u16()) {
         const Gray16& before = *layer->mask->asset.image.u16();
         auto out = std::make_shared<Gray16>(before);
@@ -162,6 +191,14 @@ void EditorSession::invertActive() {
         notifyDocument();
         return;
     }
+    if (layer->asset && layer->asset->image.f32()) {
+        const ImageF& before = *layer->asset->image.f32();
+        auto out = std::make_shared<ImageF>(before);
+        applyInvert(*out, documentCurve());
+        if (auto coverage = selectionOnGridF(layer->transform, out->width(), out->height())) blendThroughCoverage(*out, before, *coverage);
+        commitPixels(ImageFPtr(out), layer->transform, QT_TRANSLATE_NOOP("History", "Invert"));
+        return;
+    }
     if (layer->asset && layer->asset->image.u16()) {
         const Image16& before = *layer->asset->image.u16();
         auto out = std::make_shared<Image16>(before);
@@ -179,6 +216,11 @@ void EditorSession::invertActive() {
 
 std::array<std::vector<double>, 4> EditorSession::activeHistogram() const {
     const Layer* layer = activeLayer();
+    if (layer && layer->asset && layer->asset->image.f32()) {
+        const ImageF& image = *layer->asset->image.f32();
+        auto coverage = selectionOnGridF(layer->transform, image.width(), image.height());
+        return levelsHistogram(image, coverage.get(), documentCurve());
+    }
     if (layer && layer->asset && layer->asset->image.u16()) {
         const Image16& image = *layer->asset->image.u16();
         auto coverage = selectionOnGrid16(layer->transform, image.width(), image.height());

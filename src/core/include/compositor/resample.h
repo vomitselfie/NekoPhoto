@@ -34,5 +34,8 @@ std::shared_ptr<GrayImage> resampleAxisAligned(const GrayImage& mask, int width,
 /// The same at 16 bits.
 std::shared_ptr<Image16> resampleAxisAligned(const Image16& image, int width, int height, double originX, double stepX, double originY, double stepY, ResampleFilter filter);
 std::shared_ptr<Gray16> resampleAxisAligned(const Gray16& mask, int width, int height, double originX, double stepX, double originY, double stepY, ResampleFilter filter, uint16_t outside);
+/// The same at 32 bits (resample_f32.cpp): exact weights, light above 1 kept, negative lobes held at zero.
+std::shared_ptr<ImageF> resampleAxisAligned(const ImageF& image, int width, int height, double originX, double stepX, double originY, double stepY, ResampleFilter filter);
+std::shared_ptr<GrayF> resampleAxisAligned(const GrayF& mask, int width, int height, double originX, double stepX, double originY, double stepY, ResampleFilter filter, float outside);
 
 } // namespace compositor

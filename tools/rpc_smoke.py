@@ -657,10 +657,10 @@ def thirty_two_bit(rpc):
     assert rpc.call("history.info")["undo"] == undo, "the view is not an undo step"
     expect_refused(rpc, "-20..20", "view.exposure", exposure=40)
     # Not ported yet: "... not available for 32-bit documents yet"; what Photoshop lacks at 32 bits: "in 32-bit mode".
+    # (Adjustments, filters, selections and pixel edits: thirty_two_bit_editing.)
     rpc.call("layers.select", id=layer["id"])
     expect_refused(rpc, "32-bit documents yet", "brush.stroke", points=[[10, 10], [40, 30]])
-    expect_refused(rpc, "32-bit documents yet", "pixels.filter", kind="Gaussian Blur", radius=2)
-    expect_refused(rpc, "32-bit documents yet", "selection.rect", x=4, y=4, width=20, height=20)
+    expect_refused(rpc, "32-bit documents yet", "pixels.cameraRaw", settings={"exposure": 0.5})
     expect_refused(rpc, "in 32-bit mode", "pixels.bucket", x=10, y=10, color="#ffffff")
     expect_refused(rpc, "in 32-bit mode", "pixels.mosh", effect="vhs")
     expect_refused(rpc, "in 32-bit mode", "pixels.contentAwareFill")
@@ -701,6 +701,97 @@ def thirty_two_bit(rpc):
     assert rpc.call("image.mode", bits=16, colorMode="cmyk")["colorMode"] == "cmyk", "the depth first, then the colour mode"
     expect_refused(rpc, "RGB", "image.mode", bits=32)
     expect_refused(rpc, "32-bit document", "view.exposure", exposure=1)
+    rpc.call("document.close", discard=True)
+    rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
+    rpc.call("tabs.close", index=tab["index"], discard=True)
+
+
+def thirty_two_bit_editing(rpc):
+    """P5b (docs/bit-depth.md, "32 bits"): Photoshop's 32-bit adjustments on pixels and as adjustment layers, the
+    filters, selections (the marquee, lasso, wand, Quick Select, the Select menu, Quick Mask, channels) and the pixel
+    edits (fill, clear, Image Size, Crop, Trim, Canvas Size, warps) on a 32-bit document, and what stays greyed."""
+    first = rpc.call("tabs.list")
+    tab = rpc.call("tabs.new")
+    rpc.call("document.new", width=96, height=64)
+    assert rpc.call("image.mode", bits=32)["bits"] == 32
+    rpc.call("layers.add", kind="pixels")
+    rpc.call("pixels.fill", color="#336699")
+    # Selections are float coverage: shapes, the Select menu, the wand (it decides at exposure 0, not on the view).
+    rpc.call("selection.rect", x=10, y=10, width=40, height=30)
+    rpc.call("pixels.fill", color="#cc3300")
+    info = rpc.call("selection.info")
+    assert info["active"] and info["bounds"]["width"] == 40, info
+    rpc.call("selection.feather", radius=3)
+    rpc.call("selection.grow", amount=2)
+    rpc.call("selection.grow", amount=-2)
+    rpc.call("selection.smooth", radius=2)
+    rpc.call("selection.border", width=3)
+    rpc.call("selection.invert")
+    rpc.call("selection.all")
+    rpc.call("selection.none")
+    rpc.call("selection.polygon", points=[[5, 5], [60, 8], [30, 50]])
+    rpc.call("selection.rect", x=0, y=0, width=20, height=20, mode="add", ellipse=True)
+    rpc.request("view.exposure", {"exposure": 3})
+    wand = rpc.call("selection.wand", x=30, y=25, tolerance=8, contiguous=True, sampleAll=True, edgeAware=False, mode="replace")
+    area = rpc.call("selection.info")["bounds"]
+    rpc.request("view.exposure", {"exposure": 0})
+    rpc.call("selection.wand", x=30, y=25, tolerance=8, contiguous=True, sampleAll=True, edgeAware=False, mode="replace")
+    assert rpc.call("selection.info")["bounds"] == area, "the wand does not follow the view's exposure"
+    assert area["width"] == 40 and area["height"] == 30, (wand, area)
+    rpc.call("selection.scribble", foreground=[[[20, 20], [40, 30]]], background=[[[80, 55], [90, 60]]], clear=True)
+    # Quick Mask and channels hold float coverage too.
+    rpc.call("selection.rect", x=10, y=10, width=40, height=30)
+    rpc.call("selection.quickMask", on=True)
+    rpc.call("selection.quickMask", on=False)
+    assert rpc.call("selection.info")["active"]
+    saved = rpc.call("channels.saveSelection")
+    channel = saved.get("id") or rpc.call("channels.list")["channels"][0]["id"]
+    rpc.call("selection.none")
+    rpc.call("channels.loadSelection", channel=channel)
+    assert rpc.call("selection.info")["bounds"]["width"] == 40
+    rpc.call("channels.loadSelection", channel="rgb")
+    rpc.call("channels.new", name="Empty")
+    rpc.call("channels.select", channel="rgb")
+    pixel = next(l for l in rpc.call("layers.list") if l["kind"] == "pixels")
+    rpc.call("layers.select", id=pixel["id"])
+    rpc.call("selection.fromLayer")
+    # Photoshop's 32-bit adjustments, on pixels and as layers; the others are refused for good.
+    rpc.call("selection.rect", x=10, y=10, width=40, height=30)
+    for kind in ("Levels", "Curves", "Exposure", "Hue/Saturation", "Color Balance", "Black & White", "Photo Filter", "Channel Mixer", "Vibrance", "Gradient Map"):
+        rpc.call("pixels.adjust", kind=kind, settings={"exposure": 0.5} if kind == "Exposure" else {})
+    rpc.call("pixels.invert")
+    expect_refused(rpc, "in 32-bit mode", "pixels.adjust", kind="Posterize")
+    expect_refused(rpc, "in 32-bit mode", "pixels.adjust", kind="Threshold")
+    levels = rpc.call("layers.add", kind="adjustment", adjustmentKind="Levels")
+    rpc.call("adjustments.set", id=levels["id"], settings=rpc.call("adjustments.defaults", kind="Levels"))
+    rpc.call("layers.add", kind="adjustment", adjustmentKind="Exposure")
+    expect_refused(rpc, "32-bit mode", "layers.add", kind="adjustment", adjustmentKind="Brightness/Contrast")
+    rpc.call("render", maxSize=64)
+    rpc.call("layers.render", id=pixel["id"], masked=False, maxSize=32)
+    rpc.call("layers.select", id=pixel["id"])
+    # The filters.
+    for kind, extra in (("Gaussian Blur", {"radius": 2}), ("Motion Blur", {"angle": 30, "distance": 8}), ("Add Noise", {"amount": 10, "seed": 7}),
+                        ("Lens Correction", {"distortion": 20})):
+        rpc.call("pixels.filter", kind=kind, **extra)
+    # Pixel edits: clear, fill, Image Size, Crop, Trim, Canvas Size, warps.
+    rpc.call("pixels.clear")
+    rpc.call("selection.none")
+    rpc.call("image.resize", width=120, sampling="high")
+    assert rpc.call("document.info")["width"] == 120
+    rpc.call("image.resize", width=96, sampling="smooth")
+    rpc.call("canvas.crop", x=2, y=2, width=90, height=58)
+    rpc.call("canvas.resize", width=100, height=70)
+    rpc.call("image.trim", basedOn="transparent")
+    rpc.call("layers.warp", id=pixel["id"], style="arc", bend=30)
+    cage = rpc.call("layers.cage", id=pixel["id"])
+    points = cage["points"] if isinstance(cage, dict) else cage
+    rpc.call("layers.setCage", id=pixel["id"], points=[[x + (3 if i == 5 else 0), y] for i, (x, y) in enumerate(points)])
+    assert rpc.call("document.info")["bits"] == 32
+    for _ in range(4):
+        rpc.call("history.undo")
+    # Still greyed: G'MIC, Mosh (in 32-bit mode), Camera Raw and the brush (not yet).
+    expect_refused(rpc, "in 32-bit mode", "pixels.gmic", command="blur 2")
+    expect_refused(rpc, "32-bit documents yet", "brush.stroke", points=[[10, 10], [40, 30]])
     rpc.call("document.close", discard=True)
     rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
     rpc.call("tabs.close", index=tab["index"], discard=True)
@@ -1463,6 +1554,7 @@ def main():
     remaining_methods(rpc)
     sixteen_bit(rpc)
     thirty_two_bit(rpc)
+    thirty_two_bit_editing(rpc)
     channels(rpc)
     colour_management(rpc)
     colour_modes(rpc)

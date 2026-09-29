@@ -701,6 +701,10 @@ public:
     /// The same in a 16-bit document.
     std::shared_ptr<const compositor::Image16> adjustmentSource16(int margin, compositor::LayerTransform& transform, std::optional<compositor::Uuid> layerId = std::nullopt) const;
     std::shared_ptr<compositor::Gray16> selectionOnGrid16(const compositor::LayerTransform& transform, int width, int height) const;
+    /// The same in a 32-bit document, and the curve its colour is encoded with (encodedTransfer).
+    std::shared_ptr<const compositor::ImageF> adjustmentSourceF(int margin, compositor::LayerTransform& transform, std::optional<compositor::Uuid> layerId = std::nullopt) const;
+    std::shared_ptr<compositor::GrayF> selectionOnGridF(const compositor::LayerTransform& transform, int width, int height) const;
+    compositor::TransferCurve documentCurve() const;
     /// Replaces a layer's pixels as one undo step: `layerId`'s, or the active layer's. A dialog that opened on
     /// one layer passes that layer, so its result never lands on whatever was selected since.
     void commitPixels(compositor::AnyImage image, const compositor::LayerTransform& transform, const QString& name, std::optional<compositor::Uuid> layerId = std::nullopt);
@@ -1136,6 +1140,21 @@ private:
     std::optional<std::pair<int, qint64>> pendingOpacityDigit_;
     std::optional<compositor::BlendMode> blendPreview_;
     QElapsedTimer opacityTimer_;
+
+    // ---- 32 bits (EditorSessionFloat.cpp): the float counterparts of the 16-bit pixel edits.
+    bool fillThroughF(const QColor& color, const compositor::GrayF* coverage, const char* name);
+    void clearSelectedPixelsF(compositor::Layer& layer);
+    std::optional<PixelClipboard> renderSelectedPixelsF(bool merged, const compositor::Rect& region) const;
+    void distortLayerF(compositor::Layer& layer, const TransformEdit& edit);
+    void mergeFloatingTransformF(const TransformEdit& edit);
+    std::shared_ptr<compositor::GrayF> floatingSelectionF(const TransformEdit& edit) const;
+    /// Fills `o` with a 32-bit layer's pending distortion; false when the layer is not one.
+    bool distortOverrideF(const compositor::Layer& layer, const TransformEdit& edit, compositor::LayerOverride& o) const;
+    struct DistortCacheF {
+        compositor::Corners corners; compositor::LayerTransform transform; compositor::ImageFPtr source; compositor::GrayFPtr mask;
+        std::optional<compositor::WarpedImageF> image; std::shared_ptr<compositor::GrayF> warpedMask;
+    };
+    mutable std::map<compositor::Uuid, DistortCacheF> distortCacheF_;
 };
 
 } // namespace app

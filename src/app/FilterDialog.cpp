@@ -51,7 +51,7 @@ PixelAdjustmentDialog::PixelAdjustmentDialog(EditorSession* session, AdjustmentK
     // the rest from a reduced copy.
     capture(0, kind == AdjustmentKind::Grain ? 0 : (kind == AdjustmentKind::Levels || kind == AdjustmentKind::HueSaturation) ? 8000 : previewLimit);
     if (source() && kind == AdjustmentKind::Levels) editor_->setHistogram(levelsHistogram(*source(), coverage()));
-    if (source16() && kind == AdjustmentKind::Levels) editor_->setHistogram(session->activeHistogram());
+    if ((source16() || sourceF()) && kind == AdjustmentKind::Levels) editor_->setHistogram(session->activeHistogram());
     connect(editor_, &AdjustmentEditor::settingsChanged, this, [this] { refreshPreview(); });
     connect(preview, &QCheckBox::toggled, this, [this] { refreshPreview(); });
     refreshPreview();
@@ -71,17 +71,28 @@ std::shared_ptr<Image16> PixelAdjustmentDialog::run(const Image16& source, doubl
     return out;
 }
 
+std::shared_ptr<ImageF> PixelAdjustmentDialog::run(const ImageF& source, double scale) const {
+    auto out = std::make_shared<ImageF>(source);
+    applyAdjustment(editor_->settings(), *out, Rect(0, 0, source.width(), source.height()), scale, curve());
+    return out;
+}
+
 void PixelAdjustmentDialog::refreshPreview() {
     if (!hasPreviewSource()) return;
     if (!previewing() || editor_->settings().isIdentity()) { clearPreview(); return; }
-    if (previewSource16()) showPreview(run(*previewSource16(), previewScale()));
+    if (previewSourceF()) showPreview(run(*previewSourceF(), previewScale()));
+    else if (previewSource16()) showPreview(run(*previewSource16(), previewScale()));
     else showPreview(run(*previewSource(), previewScale()));
 }
 
 bool PixelAdjustmentDialog::apply() {
     if (editor_->settings().isIdentity()) return true;
     const QString name = QString::fromUtf8(adjustmentKindName(editor_->settings().kind));
-    if (source16()) {
+    if (sourceF()) {
+        auto out = run(*sourceF(), 1);
+        throughSelection(*out);
+        commit(ImageFPtr(out), placement(), name);
+    } else if (source16()) {
         auto out = run(*source16(), 1);
         throughSelection(*out);
         commit(Image16Ptr(out), placement(), name);
@@ -174,12 +185,19 @@ std::shared_ptr<Image16> FilterDialog::run(const Image16& source, double scale) 
     return out;
 }
 
+std::shared_ptr<ImageF> FilterDialog::run(const ImageF& source, double scale) const {
+    auto out = std::make_shared<ImageF>(source);
+    applyFilter(kind_, *out, settings_, curve(), scale, seed_);
+    return out;
+}
+
 void FilterDialog::refreshPreview() {
     if (finished()) return;
     prepareSource();
     if (!hasPreviewSource()) return;
     if (!previewing() || identity()) { clearPreview(); return; }
-    if (previewSource16()) showPreview(run(*previewSource16(), previewScale()), placement());
+    if (previewSourceF()) showPreview(run(*previewSourceF(), previewScale()), placement());
+    else if (previewSource16()) showPreview(run(*previewSource16(), previewScale()), placement());
     else showPreview(run(*previewSource(), previewScale()), placement());
 }
 
@@ -200,7 +218,13 @@ bool FilterDialog::apply() {
     if (identity()) return true;
     LayerTransform placed = placement();
     const bool trims = kind_ == FilterKind::GaussianBlur || kind_ == FilterKind::MotionBlur;
-    if (source16()) {
+    if (sourceF()) {
+        auto out = run(*sourceF(), 1);
+        throughSelection(*out);
+        ImageFPtr image = out;
+        if (trims) image = trimToPixels(*out, placement(), placed);
+        commit(image, placed, QString::fromUtf8(filterKindName(kind_)));
+    } else if (source16()) {
         auto out = run(*source16(), 1);
         throughSelection(*out);
         Image16Ptr image = out;

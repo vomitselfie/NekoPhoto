@@ -517,7 +517,7 @@ void AutomationServer::registerLayersHandlers() {
         return QJsonObject{{"merged", true}, {"action", title}};
     });
     add("layers.group", [session, document](const QJsonObject&) { document(); session()->groupSelectedLayers(); const Layer* l = session()->activeLayer(); return l ? layerJson(*l, 0) : QJsonObject{}; });
-    add("layers.render", [layer](const QJsonObject& p) {
+    add("layers.render", [layer, session](const QJsonObject& p) {
         // A layer's own pixels (not composited), downscaled to maxSize. With a mask, as the layer shows: the
         // mask applied, placed and rotated as on the canvas, over the layer's bounds (masked: false for the
         // raw pixels).
@@ -545,8 +545,10 @@ void AutomationServer::registerLayersHandlers() {
             render(solo, options, out, nullptr);
             return deliverPng(out, p, {{"id", qs(l.id)}, {"masked", true}, {"region", rectJson(bounds)}, {"transform", transformJson(l.transform)}});
         }
-        // A 16-bit layer's pixels reduced to 8 bits for the PNG.
-        const ImagePtr pixels = l.asset->image.u8() ? l.asset->image.u8() : ImagePtr(narrowImage(*l.asset->image.u16()));
+        // A 16-bit layer's pixels reduced to 8 bits for the PNG; a 32-bit layer's tone-mapped at exposure 0.
+        const ImagePtr pixels = l.asset->image.u8() ? l.asset->image.u8()
+            : l.asset->image.f32() ? ImagePtr(encodeImage8(*l.asset->image.f32(), session()->documentCurve()))
+            : ImagePtr(narrowImage(*l.asset->image.u16()));
         auto copy = scaledCopy(*pixels, num(p, "maxSize", 1024));
         return deliverPng(*copy, p, {{"id", qs(l.id)}, {"transform", transformJson(l.transform)}, {"pixelWidth", l.pixelWidth()}, {"pixelHeight", l.pixelHeight()}});
     });

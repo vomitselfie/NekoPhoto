@@ -38,6 +38,7 @@
 #include "compositor/toning.h"
 #include "compositor/layerstyle.h"
 #include "compositor/matte.h"
+#include "compositor/morphology.h"
 #include "compositor/presets.h"
 #include "compositor/png.h"
 #include "compositor/psd_carry.h"
@@ -46,6 +47,7 @@
 #include "compositor/svg.h"
 #include "compositor/vectorlayer.h"
 #include "compositor/vectormask.h"
+#include "compositor/warp.h"
 
 #include <algorithm>
 #include <cctype>
@@ -889,6 +891,127 @@ void add16BitEditScenes() {
     scene("u16/filter/invert", [] { auto image = widenImage(*filterInput()); applyInvert(*image); return hashImage16(*image); });
 }
 
+// ---- editing at 32 bits (P5b) ------------------------------------------------------------------------------------
+
+uint64_t hashGrayF(const GrayF& gray) {
+    Fnv f;
+    f.u32(uint32_t(gray.width()));
+    f.u32(uint32_t(gray.height()));
+    f.u32(0x31326266u);   // "1bf2"
+    for (int y = 0; y < gray.height(); y++) f.bytes(reinterpret_cast<const uint8_t*>(gray.row(y)), size_t(gray.width()) * 4);
+    return f.h;
+}
+
+/// The adjust/ scene's input linearised, with a bright float strip (light up to 5) across its lower rows.
+std::shared_ptr<ImageF> floatEditInput() {
+    auto image = noisyBase(200, 150);
+    auto over = paint(200, 150, 7);
+    for (int y = 0; y < 150; y++) for (int x = 0; x < 100; x++) std::memcpy(image->pixel(x, y), over->pixel(x, y), 4);
+    auto deep = lineariseImage(*image, TransferCurve::srgb());
+    for (int y = 120; y < 150; y++)
+        for (int x = 0; x < 200; x++) {
+            float* p = deep->pixel(x, y);
+            p[0] = 5.0f * float(x) / 199.0f; p[1] = 2.5f; p[2] = 0.25f + float(y - 120) / 10.0f; p[3] = 1.0f;
+        }
+    return deep;
+}
+
+void add32BitEditScenes() {
+    for (int k = 0; k < adjustmentKindCount; k++) {
+        const AdjustmentKind kind = AdjustmentKind(k);
+        if (kind == AdjustmentKind::ColorLookup || !adjustmentAt32(kind)) continue;
+        const std::string name = slug(adjustmentKindName(kind));
+        scene("f32/adjust/" + name, [kind] {
+            auto deep = floatEditInput();
+            NEED(applyAdjustment(exampleAdjustment(kind), *deep, Rect{0, 0, 200, 150}, 1, TransferCurve::srgb()));
+            return hashImageF(*deep);
+        });
+        scene("f32/adjust_layer/" + name, [kind] {
+            Document doc(200, 150);
+            doc.id = "00000000-0000-4000-8000-000000000032";
+            doc.layers.push_back(layerOf("base", noisyBase(200, 150), {0, 0}));
+            doc.layers.push_back(layerOf("paint", paint(120, 100, 9), {40, 25}));
+            Layer adj("Adjustment", doc.size());
+            adj.adjustment = exampleAdjustment(kind).toLayerAdjustment();
+            adj.opacity = 0.7;
+            adj.mask = maskOf(radialMask(200, 150));
+            doc.layers.push_back(adj);
+            return hashF(thirtyTwo(doc));
+        });
+    }
+    // A kind Photoshop lacks at 32 bits is kept but not drawn: the same as the document without it.
+    scene("f32/adjust_layer/posterize_not_drawn", [] {
+        Document doc(200, 150);
+        doc.layers.push_back(layerOf("base", noisyBase(200, 150), {0, 0}));
+        Layer adj("Adjustment", doc.size());
+        adj.adjustment = exampleAdjustment(AdjustmentKind::Posterize).toLayerAdjustment();
+        doc.layers.push_back(adj);
+        return hashF(thirtyTwo(doc));
+    });
+    // Twelve layers with adjustment layers between them (the bench's scene, small).
+    scene("f32/adjust_layer/stack", [] {
+        Document doc(200, 150);
+        doc.layers.push_back(layerOf("base", noisyBase(200, 150), {0, 0}));
+        for (int i = 0; i < 12; i++) {
+            doc.layers.push_back(layerOf("paint", paint(90, 70, uint32_t(20 + i)), {double(i * 9), double(i * 6)}));
+            if (i % 4 == 3) {
+                Layer adj("Adjustment", doc.size());
+                adj.adjustment = exampleAdjustment(i == 3 ? AdjustmentKind::Levels : i == 7 ? AdjustmentKind::HueSaturation : AdjustmentKind::Curves).toLayerAdjustment();
+                adj.opacity = 0.8;
+                doc.layers.push_back(adj);
+            }
+        }
+        return hashF(thirtyTwo(doc));
+    });
+    auto filter = [](FilterKind kind, FilterSettings s, uint32_t seed = 0) {
+        auto image = lineariseImage(*filterInput(), TransferCurve::srgb());
+        applyFilter(kind, *image, s, TransferCurve::srgb(), 1, seed);
+        return hashImageF(*image);
+    };
+    for (double r : {0.6, 2.0, 7.5, 30.0})
+        scene("f32/filter/gaussian_blur_" + std::to_string(int(r * 10)), [=] { FilterSettings s; s.radius = r; return filter(FilterKind::GaussianBlur, s); });
+    for (double a : {0.0, 30.0, -90.0})
+        scene("f32/filter/motion_blur_" + std::to_string(int(a)), [=] { FilterSettings s; s.angle = a; s.distance = 15; return filter(FilterKind::MotionBlur, s); });
+    scene("f32/filter/add_noise_uniform", [=] { FilterSettings s; s.amount = 25; return filter(FilterKind::AddNoise, s, 42); });
+    scene("f32/filter/add_noise_gaussian_mono", [=] { FilterSettings s; s.amount = 40; s.gaussian = true; s.monochromatic = true; return filter(FilterKind::AddNoise, s, 7); });
+    scene("f32/filter/lens_correction", [=] { FilterSettings s; s.distortion = 35; return filter(FilterKind::LensCorrection, s); });
+    scene("f32/filter/lens_correction_bicubic", [=] { FilterSettings s; s.distortion = -40; s.bicubic = true; return filter(FilterKind::LensCorrection, s); });
+    scene("f32/filter/gaussian_blur_hdr", [] { auto image = floatEditInput(); gaussianBlur(*image, 3.5); return hashImageF(*image); });
+    scene("f32/filter/invert", [] { auto image = lineariseImage(*filterInput(), TransferCurve::srgb()); applyInvert(*image, TransferCurve::srgb()); return hashImageF(*image); });
+    // Selections in float: feather, expand, border, smooth.
+    auto selection = [] { return widenGrayF(*radialMask(180, 140)); };
+    scene("f32/selection/feather", [=] { return hashGrayF(*featherSelection(*selection(), 4.5)); });
+    scene("f32/selection/expand", [=] { return hashGrayF(*growSelection(*selection(), 6)); });
+    scene("f32/selection/contract", [=] { return hashGrayF(*growSelection(*selection(), -6)); });
+    scene("f32/selection/border", [=] { return hashGrayF(*borderSelection(*selection(), 5)); });
+    scene("f32/selection/smooth", [=] { return hashGrayF(*smoothSelection(*selection(), 3)); });
+    // Image Size, Distort and Warp of a layer at 32 bits.
+    for (Sampling sampling : {Sampling::Nearest, Sampling::Smooth, Sampling::High})
+        scene(std::string("f32/edit/image_size_") + (sampling == Sampling::Nearest ? "nearest" : sampling == Sampling::Smooth ? "smooth" : "high"), [sampling] {
+            Document doc = goldenBase();
+            Layer top = layerOf("gradient", gradient(64, 48), {16, 8});
+            top.transform.rotation = 15;
+            doc.layers.push_back(top);
+            Document f = thirtyTwo(doc);
+            NEED(resizeDocument(f, 150, 97, 144, sampling));
+            return hashF(f);
+        });
+    scene("f32/edit/distort", [] {
+        auto image = floatEditInput();
+        const LayerTransform t(Point(10, 10), Size(200, 150));
+        auto warped = warpImage(ImageFPtr(image), t, Corners{Point(20, 5), Point(200, 30), Point(190, 160), Point(5, 140)});
+        NEED(bool(warped));
+        return hashImageF(*warped->image);
+    });
+    scene("f32/edit/warp_arc", [] {
+        Document doc = thirtyTwo(goldenBase());
+        Layer& layer = doc.layers.back();
+        std::string error;
+        NEED(warpLayer(doc, layer, TextWarp{"warpArc", 35, 0, 0, false}, &error));
+        return hashF(doc);
+    });
+}
+
 // ---- smart objects at 16 bits ------------------------------------------------------------------------------------
 
 /// A 16-bit document over a busy base placing `source` on a turned, scaled quad-free transform.
@@ -1254,6 +1377,7 @@ TEST_CASE(render_hashes_match_the_baseline_on_the_pool_and_serially) {
     add16BitSmartObjectScenes();
     add16BitLateScenes();
     add32BitScenes();
+    add32BitEditScenes();
 
     std::map<std::string, std::string> actual;
     int threadMismatch = 0;

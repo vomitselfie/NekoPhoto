@@ -104,5 +104,7 @@ void renderForDisplayMode(const Document& document, const RenderPlan& plan, cons
 void renderModeAsRgb16(const Document& document, const RenderOptions& options, Image16& out, const Overrides* overrides, RenderCache* cache);
 /// resizeDocument for a 16-bit document (render_u16.cpp).
 bool resizeDocument16(Document& document, int width, int height, double resolution, Sampling sampling);
+/// And for a 32-bit one (render_f32.cpp): the float warps and resamplers.
+bool resizeDocumentF(Document& document, int width, int height, double resolution, Sampling sampling);
 
 } // namespace compositor

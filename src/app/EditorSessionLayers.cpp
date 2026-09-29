@@ -673,7 +673,15 @@ void EditorSession::addMaskFromSelection(bool revealing) {
     // The selection resampled into the layer's own pixel grid; the selected area gets the opposite value.
     LayerTransform docTransform(Point(0, 0), document_->size());
     LayerMask m;
-    if (const Gray16Ptr& deep = document_->selection->coverage.u16()) {
+    if (const GrayFPtr& floating = document_->selection->coverage.f32()) {
+        auto selected = resampleMask(*floating, docTransform, layer->transform, width, height, 0.0f);
+        auto mask = std::make_shared<GrayF>(width, height);
+        for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) {
+            const float s = cleanCoverage(selected->at(x, y));
+            mask->at(x, y) = revealing ? 1.0f - s : s;
+        }
+        m.asset = MaskAsset::make(GrayFPtr(mask));
+    } else if (const Gray16Ptr& deep = document_->selection->coverage.u16()) {
         auto selected = resampleMask(*deep, docTransform, layer->transform, width, height, 0);
         auto mask = std::make_shared<Gray16>(width, height);
         for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) {
@@ -857,7 +865,8 @@ void EditorSession::flipCanvas(bool horizontal) {
             return out;
         };
         const AnyGray& coverage = document_->selection->coverage;
-        if (coverage.u16()) document_->selection->coverage = Gray16Ptr(flipped(coverage.u16()));
+        if (coverage.f32()) document_->selection->coverage = GrayFPtr(flipped(coverage.f32()));
+        else if (coverage.u16()) document_->selection->coverage = Gray16Ptr(flipped(coverage.u16()));
         else if (coverage.u8()) document_->selection->coverage = GrayPtr(flipped(coverage.u8()));
     }
     flipChannels(*document_, horizontal);   // the alpha channels mirror too

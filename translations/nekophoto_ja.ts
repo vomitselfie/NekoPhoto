@@ -4447,8 +4447,8 @@ File &gt; New creates a blank canvas.</source>
         <translation>このドキュメントは %1 bit/チャンネルには大きすぎます：%2</translation>
     </message>
     <message>
-        <source>Adjustment layers are kept but not drawn in a 32-bit document yet; at 8 or 16 bits they draw again.</source>
-        <translation>調整レイヤーは保持されますが、32 bit/チャンネルのドキュメントではまだ描画されません。8 または 16 bit/チャンネルに戻すと再び描画されます。</translation>
+        <source>Brightness/Contrast, Posterize, Threshold, Selective Color and Grain adjustment layers are kept but not drawn in 32-bit mode; at 8 or 16 bits they draw again.</source>
+        <translation>明るさ・コントラスト、ポスタリゼーション、2階調化、特定色域の選択、粒子の調整レイヤーは保持されますが、32 bit/チャンネルモードでは描画されません。8 または 16 bit/チャンネルに戻すと再び描画されます。</translation>
     </message>
     <message>
         <source>Cropping</source>

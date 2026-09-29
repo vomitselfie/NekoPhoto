@@ -1,4 +1,4 @@
-// The kernels of blur.cpp templated over the buffer, for the 16-bit blurs (blur_u16.cpp). blur.cpp keeps its own
+// The kernels of blur.cpp templated over the buffer, for the 16- and 32-bit blurs (blur_u16.cpp, blur_f32.cpp). blur.cpp keeps its own
 // 8-bit copy, so the 8-bit build is exactly what it was; a change to a kernel belongs in both.
 #pragma once
 #include "compositor/blur.h"
@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <type_traits>
 #include <vector>
 
 namespace compositor {
@@ -22,12 +23,26 @@ template <> struct Raster<Image> { static constexpr int C = 4; using Sample = ui
 template <> struct Raster<GrayImage> { static constexpr int C = 1; using Sample = uint8_t; static constexpr float one = 255.0f; };
 template <> struct Raster<Image16> { static constexpr int C = 4; using Sample = uint16_t; static constexpr float one = 32768.0f; };
 template <> struct Raster<Gray16> { static constexpr int C = 1; using Sample = uint16_t; static constexpr float one = 32768.0f; };
+template <> struct Raster<ImageF> { static constexpr int C = 4; using Sample = float; static constexpr float one = 1.0f; };
+template <> struct Raster<GrayF> { static constexpr int C = 1; using Sample = float; static constexpr float one = 1.0f; };
 
-/// Stores a float value back into a sample, clamping colour to alpha for RGBA.
+/// Stores a float value back into a sample, clamping colour to alpha for RGBA. Float samples (32 bits) are stored
+/// unrounded: colour only kept from going negative (it may exceed alpha: light above 1), alpha and coverage 0..1.
 template <class T, int C = Raster<T>::C>
 inline void storeRow(typename Raster<T>::Sample* out, const float* in, int w) {
     using S = typename Raster<T>::Sample;
     constexpr float one = Raster<T>::one;
+    if constexpr (std::is_floating_point_v<S>) {
+        for (int x = 0; x < w; x++, out += C, in += C) {
+            if constexpr (C == 4) {
+                for (int c = 0; c < 3; c++) out[c] = std::max(0.0f, in[c]);
+                out[3] = std::clamp(in[3], 0.0f, one);
+            } else {
+                out[0] = std::clamp(in[0], 0.0f, one);
+            }
+        }
+        return;
+    }
     for (int x = 0; x < w; x++, out += C, in += C) {
         if constexpr (C == 4) {
             S a = S(std::min(one, std::max(0.0f, in[3] + 0.5f)));

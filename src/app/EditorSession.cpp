@@ -392,9 +392,10 @@ bool EditorSession::convertMode(SampleType type, QString* errorText, const View3
     if (!ok) { if (errorText) *errorText = QString::fromStdString(why); return false; }
     // A tool that does not work at the new depth gives way to the Move tool.
     if (!toolSupportedAtDepth(tool_)) selectTool(Tool::Move);
-    // Adjustment layers are kept at 32 bits but not drawn until they are ported (P5b).
-    if (type == SampleType::F32 && std::any_of(document_->layers.begin(), document_->layers.end(), [](const Layer& l) { return l.adjustment.has_value(); }))
-        emit notice(tr("Adjustment layers are kept but not drawn in a 32-bit document yet; at 8 or 16 bits they draw again."));
+    // Adjustment layers of the kinds Photoshop lacks at 32 bits (Brightness/Contrast, Posterize, Threshold, Selective
+    // Color, Grain) are kept but not drawn there.
+    if (type == SampleType::F32 && std::any_of(document_->layers.begin(), document_->layers.end(), [](const Layer& l) { return l.adjustment && !adjustmentAt32(l.adjustment->kind); }))
+        emit notice(tr("Brightness/Contrast, Posterize, Threshold, Selective Color and Grain adjustment layers are kept but not drawn in 32-bit mode; at 8 or 16 bits they draw again."));
     notifyDocument();
     emit selectionChanged();
     emit toolChanged();
@@ -492,7 +493,7 @@ void EditorSession::endEdit() {
 bool EditorSession::trim(const TrimOptions& options) {
     if (refusedAtDepth("edit.crop", tr("Cropping"))) return false;
     if (!canEditLayers()) return false;
-    auto flat = renderFlattened(*document_);
+    auto flat = decisionImage(*document_);   // at 32 bits exposure 0, whatever the view shows
     auto rect = flat ? trimRect(*flat, options) : std::nullopt;
     if (!rect || *rect == document_->rect()) return false;
     cropTo(QRectF(rect->x, rect->y, rect->width, rect->height), QT_TRANSLATE_NOOP("History", "Trim"));
@@ -517,6 +518,7 @@ void EditorSession::cropTo(const QRectF& rectF, const char* action) {
     cropChannels(doc, int(rect.x), int(rect.y), doc.width, doc.height);
     if (doc.selection && doc.selection->coverage.u8()) doc.selection->coverage = cropGray(*doc.selection->coverage.u8(), int(rect.x), int(rect.y), doc.width, doc.height);
     else if (doc.selection && doc.selection->coverage.u16()) doc.selection->coverage = Gray16Ptr(cropGray(*doc.selection->coverage.u16(), int(rect.x), int(rect.y), doc.width, doc.height));
+    else if (doc.selection && doc.selection->coverage.f32()) doc.selection->coverage = GrayFPtr(cropGray(*doc.selection->coverage.f32(), int(rect.x), int(rect.y), doc.width, doc.height));
     document_ = doc;
     endEdit();
     viewport.fit({double(doc.width), double(doc.height)});
@@ -633,6 +635,7 @@ Overrides EditorSession::renderOverrides() const {
             LayerTransform shown = displayedTransform(*layer);
             o.transform = shown;
             if (layer->mask) o.maskPlacement = displayedMaskPlacement(*layer);
+            if (distortOverrideF(*layer, edit, o)) continue;   // 32 bits (EditorSessionFloat.cpp)
             if (edit.corners && layer->asset && layer->asset->image.u16()) {
                 // The same at 16 bits.
                 auto target = distortTarget(*layer, edit);
@@ -688,7 +691,8 @@ Overrides EditorSession::renderOverrides() const {
     if (blendPreview_ && activeLayerId_) overrides[*activeLayerId_].blendMode = *blendPreview_;
     if (previewImage_ && previewLayerId_ && document_ && document_->find(*previewLayerId_)) {
         LayerOverride& o = overrides[*previewLayerId_];
-        if (previewImage_.u16()) o.image16 = previewImage_.u16();
+        if (previewImage_.f32()) o.imageF = previewImage_.f32();
+        else if (previewImage_.u16()) o.image16 = previewImage_.u16();
         else o.image = previewImage_.u8();
         if (previewTransform_) o.transform = *previewTransform_;
         const Layer* layer = document_->find(*previewLayerId_);
@@ -697,7 +701,8 @@ Overrides EditorSession::renderOverrides() const {
         if (activeColors_ != allColors() && layer && layer->asset) {
             const AnyImage kept = keepColorChannels(layer->asset->image, layer->transform, previewImage_, previewTransform_.value_or(layer->transform), activeColors_);
             if (kept) {
-                if (kept.u16()) o.image16 = kept.u16();
+                if (kept.f32()) o.imageF = kept.f32();
+                else if (kept.u16()) o.image16 = kept.u16();
                 else o.image = kept.u8();
                 o.transform = layer->transform;
                 o.maskPlacement.reset();

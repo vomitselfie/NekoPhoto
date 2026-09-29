@@ -52,6 +52,11 @@ void perPixel(Image16& image, F&& f) {
     });
 }
 
+// The same at 32 bits: the colour encoded through the document's curve (forEachEncodedColour, adjustments_f32.cpp).
+struct EncodedImageF { ImageF& image; const TransferCurve& curve; };
+template <class F>
+void perPixel(EncodedImageF& target, F&& f) { forEachEncodedColour(target.image, target.curve, f); }
+
 double luma(double r, double g, double b) { return 0.299 * r + 0.587 * g + 0.114 * b; }
 
 // ---- Brightness/Contrast (Patchy's closed forms; see adjustment_layer.cpp there for the capture record) ----
@@ -304,6 +309,11 @@ void applyChannelMixer(Image& image, const ChannelMixerSettings& s) { applyChann
 void applyChannelMixer(Image16& image, const ChannelMixerSettings& s) { applyChannelMixerImpl(image, s); }
 void applySelectiveColor(Image& image, const SelectiveColorSettings& s) { applySelectiveColorImpl(image, s); }
 void applySelectiveColor(Image16& image, const SelectiveColorSettings& s) { applySelectiveColorImpl(image, s); }
+void applyBlackWhite(ImageF& image, const BlackWhiteSettings& s, const TransferCurve& curve) { EncodedImageF t{image, curve}; applyBlackWhiteImpl(t, s); }
+void applyColorBalance(ImageF& image, const ColorBalanceSettings& s, const TransferCurve& curve) { EncodedImageF t{image, curve}; applyColorBalanceImpl(t, s); }
+void applyVibrance(ImageF& image, const VibranceSettings& s, const TransferCurve& curve) { EncodedImageF t{image, curve}; applyVibranceImpl(t, s); }
+void applyPhotoFilter(ImageF& image, const PhotoFilterSettings& s, const TransferCurve& curve) { EncodedImageF t{image, curve}; applyPhotoFilterImpl(t, s); }
+void applyChannelMixer(ImageF& image, const ChannelMixerSettings& s, const TransferCurve& curve) { EncodedImageF t{image, curve}; applyChannelMixerImpl(t, s); }
 
 void applyThreshold(Image16& image, const ThresholdSettings& s) {
     // Photoshop's luminance weights on the exact straight colour. The half-unit allowance makes a 16-bit copy of an

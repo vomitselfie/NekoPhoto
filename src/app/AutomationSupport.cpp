@@ -66,7 +66,7 @@ QString adjustmentKindList() {
 }
 
 std::optional<AdjustmentKind> adjustmentKindNamed(QString name) {
-    name = name.toLower().remove('/').remove(' ').remove('-');
+    name = name.toLower().remove('/').remove(' ').remove('-').remove('&');
     for (int i = 0; i < adjustmentKindCount; i++) {
         QString n = QString::fromUtf8(adjustmentKindName(AdjustmentKind(i))).toLower().remove('/').remove(' ').remove('-').remove('&');
         if (n == name) return AdjustmentKind(i);

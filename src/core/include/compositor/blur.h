@@ -16,10 +16,14 @@ void gaussianBlur(GrayImage& image, double sigma);
 /// The same at 16 bits (0..32768).
 void gaussianBlur(Image16& image, double sigma);
 void gaussianBlur(Gray16& image, double sigma);
+/// The same at 32 bits (premultiplied linear float, unrounded; blur_f32.cpp).
+void gaussianBlur(ImageF& image, double sigma);
+void gaussianBlur(GrayF& image, double sigma);
 
 /// Photoshop's Motion Blur: an even smear along `distance` pixels at `angleDegrees` (counterclockwise from
 /// horizontal, y down), in place.
 void motionBlur(Image& image, double distance, double angleDegrees);
 void motionBlur(Image16& image, double distance, double angleDegrees);
+void motionBlur(ImageF& image, double distance, double angleDegrees);
 
 } // namespace compositor

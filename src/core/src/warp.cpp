@@ -161,6 +161,12 @@ MipSource<I> mipSourceFor(const I& image, const std::shared_ptr<const I>& owner,
 template <class I> struct Warped;
 template <> struct Warped<Image> { using Type = WarpedImage; using Mask = WarpedMask; };
 template <> struct Warped<Image16> { using Type = WarpedImage16; using Mask = WarpedMask16; };
+template <> struct Warped<ImageF> { using Type = WarpedImageF; using Mask = WarpedMaskF; };
+/// A mask buffer's colour counterpart, and its full value (float masks are 0..1 and are never rounded).
+template <class G> struct MaskTraits;
+template <> struct MaskTraits<GrayImage> { using Color = Image; static constexpr float full = 255.0f; static constexpr float round = 0.5f; };
+template <> struct MaskTraits<Gray16> { using Color = Image16; static constexpr float full = 32768.0f; static constexpr float round = 0.5f; };
+template <> struct MaskTraits<GrayF> { using Color = ImageF; static constexpr float full = 1.0f; static constexpr float round = 0.0f; };
 
 template <class I>
 std::optional<typename Warped<I>::Type> warpImageImpl(const I& image, const std::shared_ptr<const I>& owner, const LayerTransform& transform, const Corners& corners, int limit) {
@@ -207,8 +213,12 @@ std::optional<typename Warped<I>::Type> warpImageImpl(const I& image, const std:
                 Sample s[4];
                 if (transform.sampling == Sampling::High) sampleBicubic(*source, px.x / mip, px.y / mip, s);
                 else sampleBilinear(*source, px.x / mip, px.y / mip, s);
-                const int e = int(edge * 256 + 0.5f);
-                for (int c = 0; c < 4; c++) row[c] = Sample((uint32_t(s[c]) * uint32_t(e) + 128) >> 8);
+                if constexpr (std::is_floating_point_v<Sample>) {
+                    for (int c = 0; c < 4; c++) row[c] = s[c] * edge;
+                } else {
+                    const int e = int(edge * 256 + 0.5f);
+                    for (int c = 0; c < 4; c++) row[c] = Sample((uint32_t(s[c]) * uint32_t(e) + 128) >> 8);
+                }
             }
         }
     });
@@ -254,6 +264,13 @@ std::optional<WarpedImage16> warpImage(const Image16Ptr& image, const LayerTrans
 std::optional<WarpedImage16> warpImageTrimmed(const Image16Ptr& image, const LayerTransform& transform, const Corners& corners, Rect* crop) {
     return trimWarped(warpImage(image, transform, corners, 0), crop);
 }
+std::optional<WarpedImageF> warpImage(const ImageFPtr& image, const LayerTransform& transform, const Corners& corners, int limit) {
+    if (!image) return std::nullopt;
+    return warpImageImpl(*image, image, transform, corners, limit);
+}
+std::optional<WarpedImageF> warpImageTrimmed(const ImageFPtr& image, const LayerTransform& transform, const Corners& corners, Rect* crop) {
+    return trimWarped(warpImage(image, transform, corners, 0), crop);
+}
 
 std::optional<WarpedMask> warpMask(const GrayPtr& mask, const LayerTransform& transform, const Corners& corners, uint8_t background, int limit) {
     if (!mask) return std::nullopt;
@@ -263,10 +280,10 @@ std::optional<WarpedMask> warpMask(const GrayPtr& mask, const LayerTransform& tr
 namespace {
 
 template <class G>
-std::optional<typename Warped<std::conditional_t<std::is_same_v<G, GrayImage>, Image, Image16>>::Mask> warpMaskImpl(const G& mask, const LayerTransform& transform, const Corners& corners, std::remove_cvref_t<decltype(std::declval<G&>().at(0, 0))> background, int limit) {
-    using Result = typename Warped<std::conditional_t<std::is_same_v<G, GrayImage>, Image, Image16>>::Mask;
+std::optional<typename Warped<typename MaskTraits<G>::Color>::Mask> warpMaskImpl(const G& mask, const LayerTransform& transform, const Corners& corners, std::remove_cvref_t<decltype(std::declval<G&>().at(0, 0))> background, int limit) {
+    using Result = typename Warped<typename MaskTraits<G>::Color>::Mask;
     using Sample = std::remove_cvref_t<decltype(std::declval<G&>().at(0, 0))>;
-    constexpr float full = std::is_same_v<G, GrayImage> ? 255.0f : 32768.0f;
+    constexpr float full = MaskTraits<G>::full, rounding = MaskTraits<G>::round;
     auto frame = frameFor(transform, corners, limit);
     if (!frame || mask.isEmpty()) return std::nullopt;
     const WarpFrame& f = *frame;
@@ -292,7 +309,7 @@ std::optional<typename Warped<std::conditional_t<std::is_same_v<G, GrayImage>, I
                 float edge = float(clamp(e + 0.5, 0.0, 1.0));
                 if (edge <= 0) continue;
                 float v = float(sampleGrayBilinear(mask, px.x, px.y));
-                row[x] = Sample(clamp(v * edge + float(background) * (1 - edge) + 0.5f, 0.0f, full));
+                row[x] = Sample(clamp(v * edge + float(background) * (1 - edge) + rounding, 0.0f, full));
             }
         }
     });
@@ -305,6 +322,9 @@ std::optional<WarpedMask> warpMask(const GrayImage& mask, const LayerTransform& 
     return warpMaskImpl(mask, transform, corners, background, limit);
 }
 std::optional<WarpedMask16> warpMask(const Gray16& mask, const LayerTransform& transform, const Corners& corners, uint16_t background, int limit) {
+    return warpMaskImpl(mask, transform, corners, background, limit);
+}
+std::optional<WarpedMaskF> warpMask(const GrayF& mask, const LayerTransform& transform, const Corners& corners, float background, int limit) {
     return warpMaskImpl(mask, transform, corners, background, limit);
 }
 
@@ -322,7 +342,7 @@ namespace {
 template <class G>
 std::shared_ptr<G> warpCoverageImpl(const G& coverage, const LayerTransform& original, int pixelWidth, int pixelHeight, const Corners& corners) {
     using Sample = std::remove_cvref_t<decltype(std::declval<G&>().at(0, 0))>;
-    constexpr float full = std::is_same_v<G, GrayImage> ? 255.0f : 32768.0f;
+    constexpr float full = MaskTraits<G>::full, rounding = MaskTraits<G>::round;
     auto out = std::make_shared<G>(coverage.width(), coverage.height(), 0);
     if (!cornersUsable(corners)) return out;
     Corners target = corners;
@@ -345,7 +365,7 @@ std::shared_ptr<G> warpCoverageImpl(const G& coverage, const LayerTransform& ori
                 int x0 = int(bx), yy0 = int(by), x1 = std::min(x0 + 1, w - 1), yy1 = std::min(yy0 + 1, h - 1);
                 float fx = float(bx - x0), fy = float(by - yy0);
                 float v = coverage.at(x0, yy0) * (1 - fx) * (1 - fy) + coverage.at(x1, yy0) * fx * (1 - fy) + coverage.at(x0, yy1) * (1 - fx) * fy + coverage.at(x1, yy1) * fx * fy;
-                out->at(x, y) = Sample(clamp(v + 0.5f, 0.0f, full));
+                out->at(x, y) = Sample(clamp(v + rounding, 0.0f, full));
             }
         }
     });
@@ -358,6 +378,9 @@ std::shared_ptr<GrayImage> warpCoverage(const GrayImage& coverage, const LayerTr
     return warpCoverageImpl(coverage, original, pixelWidth, pixelHeight, corners);
 }
 std::shared_ptr<Gray16> warpCoverage(const Gray16& coverage, const LayerTransform& original, int pixelWidth, int pixelHeight, const Corners& corners) {
+    return warpCoverageImpl(coverage, original, pixelWidth, pixelHeight, corners);
+}
+std::shared_ptr<GrayF> warpCoverage(const GrayF& coverage, const LayerTransform& original, int pixelWidth, int pixelHeight, const Corners& corners) {
     return warpCoverageImpl(coverage, original, pixelWidth, pixelHeight, corners);
 }
 
