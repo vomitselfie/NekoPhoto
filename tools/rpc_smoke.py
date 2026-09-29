@@ -680,6 +680,12 @@ def thirty_two_bit(rpc):
     assert rpc.call("document.info")["bits"] == 32
     assert rpc.request("image.mode", {"bits": 16, "method": "highlight-compression"})["bits"] == 16
     expect_refused(rpc, "HDR Toning", "image.mode", bits=8, exposure=1)
+    # 32 bits is RGB only, as in Photoshop: no CMYK at 32 bits, and no 32 bits in CMYK.
+    rpc.call("history.undo")
+    assert rpc.call("document.info")["bits"] == 32
+    expect_refused(rpc, "32-bit mode", "image.mode", colorMode="cmyk")
+    assert rpc.call("image.mode", bits=16, colorMode="cmyk")["colorMode"] == "cmyk", "the depth first, then the colour mode"
+    expect_refused(rpc, "RGB", "image.mode", bits=32)
     expect_refused(rpc, "32-bit document", "view.exposure", exposure=1)
     rpc.call("document.close", discard=True)
     rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
