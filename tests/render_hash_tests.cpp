@@ -355,8 +355,9 @@ void addBlendScenes() {
 // ---- CMYK and Lab (P7) ---------------------------------------------------------------------------------------------
 //
 // The blend documents converted with Image > Mode (the bundled Working CMYK, Lab D50), at 8 and 16 bits: the native
-// render's samples ("cmyk/", "lab/", "cmyk16/", "lab16/") in every mode the colour mode offers, and the display
-// (through the profile to sRGB) for a few.
+// render's samples ("cmyk/", "lab/", "cmyk16/", "lab16/") in every mode the colour mode offers. The display (through
+// the profile to sRGB) is not hashed: Little CMS's float maths rounds differently with the system's libm, so it is
+// checked against the same transform in colormodes_render_tests instead.
 
 uint64_t hashNative(const AnyImage& image) {
     Fnv f;
@@ -395,13 +396,6 @@ void addColorModeScenes() {
                 options.scale = 0.5;
                 return hashNative(renderNative(inColorMode(blendDocument(BlendMode::Multiply), colorMode, type), options));
             });
-            for (BlendMode mode : {BlendMode::Normal, BlendMode::Multiply, BlendMode::Screen}) {
-                scene(prefix + "display/" + slug(blendModeName(mode)), [=] {
-                    Image out;
-                    render(inColorMode(blendDocument(mode), colorMode, type), RenderOptions(), out);
-                    return hashImage(out);
-                });
-            }
         }
     }
 }

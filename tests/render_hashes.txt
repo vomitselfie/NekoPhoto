@@ -122,9 +122,6 @@ cmyk/blend/screen 5666e0fd505d6f0b
 cmyk/blend/soft_light de55f04f6215d2e1
 cmyk/blend/subtract 92499ed7aae75574
 cmyk/blend/vivid_light 2a1936347569f963
-cmyk/display/multiply 5693e4f4b8f6b8ad
-cmyk/display/normal b481ef56315d08ea
-cmyk/display/screen 6dd3ba8907a591a4
 cmyk16/blend/color fb3501015a53750d
 cmyk16/blend/color_burn d23efd92d8b96ce7
 cmyk16/blend/color_dodge 0a757efcf8e42fd4
@@ -153,9 +150,6 @@ cmyk16/blend/screen ba8f18ef8e2e85dc
 cmyk16/blend/soft_light 23b0631f85428056
 cmyk16/blend/subtract 95dc26703b1c914c
 cmyk16/blend/vivid_light b3decfe3da3a9fd8
-cmyk16/display/multiply fc075acec14a1870
-cmyk16/display/normal 99b7bf3d23763837
-cmyk16/display/screen dd08622d1d493f50
 f32/adjust/black_&_white 1ee697096b01db23
 f32/adjust/channel_mixer a80a21238ed30660
 f32/adjust/color_balance ca6aa4796f9e0c5c
@@ -331,9 +325,6 @@ lab/blend/saturation 2280594cf827508e
 lab/blend/screen e0da3522c9234d2d
 lab/blend/soft_light 03ffc3c7e824d054
 lab/blend/vivid_light 25f705d60cfaa3ef
-lab/display/multiply 96f2b8928be4d9c2
-lab/display/normal 6f840b7b63b16bd0
-lab/display/screen 5439352bd78e3f1e
 lab16/blend/color f0f60a90ed01d0b8
 lab16/blend/darker_color d1b1ea19216a3489
 lab16/blend/dissolve b6821fd397b6ff87
@@ -354,9 +345,6 @@ lab16/blend/saturation 8790952330b55713
 lab16/blend/screen c18bc2241a35d472
 lab16/blend/soft_light ac563be5b0d6fc5c
 lab16/blend/vivid_light a5033852efceab3c
-lab16/display/multiply 51893f36bacfd375
-lab16/display/normal 7ad585aab1fc4c92
-lab16/display/screen 611814fe49aad964
 mypaint/classic/charcoal bb3e2b751085771c
 mypaint/classic/pencil 3b4bf22b06fb2543
 mypaint/deevad/watercolor_glazing 5bcc9f4e4c19c6ff
