@@ -14,6 +14,11 @@
 
 namespace compositor {
 
+namespace blobs {
+extern const unsigned char defaultCmykProfile[];
+extern const unsigned long long defaultCmykProfileSize;
+} // namespace blobs
+
 namespace {
 
 uint64_t fingerprint(const std::vector<uint8_t>& bytes) {
@@ -28,11 +33,28 @@ cmsHPROFILE openProfile(cmsContext context, const ColorProfile& profile) {
     return cmsOpenProfileFromMemTHR(context, p.icc.data(), cmsUInt32Number(p.icc.size()));
 }
 
-cmsUInt32Number lcmsFormat(PixelFormat f) {
+/// Whether a transform between these layouts stages its pixels itself (ColorTransform::applyStaged): any CMYK or Lab
+/// pixel layout. RGBA to RGBA keeps Little CMS's alpha-carrying layouts, as before CMYK and Lab existed.
+bool stagedLayouts(PixelFormat input, PixelFormat output) {
+    if (isColorFormat(input) || isColorFormat(output)) return false;
+    auto rgba = [](PixelFormat f) { return f == PixelFormat::RGBA8 || f == PixelFormat::RGBA16; };
+    return !(rgba(input) && rgba(output));
+}
+
+bool wideFormat(PixelFormat f) { return f == PixelFormat::RGBA16 || f == PixelFormat::CMYKA16 || f == PixelFormat::LabA16; }
+
+/// Little CMS's layout for `f`. Staged transforms see colours only, straight: bytes for the 8-bit layouts (reversed
+/// CMYK for inverted ink, Little CMS's 8-bit Lab, which is the same 128 offset), floats for the 16-bit ones (CMYK ink
+/// 0..100, Lab L 0..100 and signed a and b).
+cmsUInt32Number lcmsFormat(PixelFormat f, bool staged = false) {
     switch (f) {
-    case PixelFormat::RGBA8: return TYPE_RGBA_8;
-    case PixelFormat::RGBA16: return TYPE_RGBA_FLT;   // through the float pipeline: exact for 15-bit levels
+    case PixelFormat::RGBA8: return staged ? TYPE_RGB_8 : TYPE_RGBA_8;
+    case PixelFormat::RGBA16: return staged ? TYPE_RGB_FLT : TYPE_RGBA_FLT;   // through the float pipeline: exact for 15-bit levels
     case PixelFormat::RGBFloat: return TYPE_RGB_FLT;
+    case PixelFormat::CMYKA8: return TYPE_CMYK_8_REV;
+    case PixelFormat::CMYKA16: case PixelFormat::CMYKFloat: return TYPE_CMYK_FLT;
+    case PixelFormat::LabA8: return TYPE_Lab_8;
+    case PixelFormat::LabA16: case PixelFormat::LabFloat: return TYPE_Lab_FLT;
     }
     return TYPE_RGBA_8;
 }
@@ -82,6 +104,7 @@ struct TransformFactory {
         t->transform_ = transform;
         t->input_ = input;
         t->output_ = output;
+        t->staged_ = stagedLayouts(input, output);
         return t;
     }
 };
@@ -91,9 +114,76 @@ ColorTransform::~ColorTransform() {
     if (context_) cmsDeleteContext(static_cast<cmsContext>(context_));
 }
 
+void ColorTransform::applyStaged(const void* in, void* out, size_t count) const {
+    // CMYK and Lab layouts (and RGBA beside them): the colours made straight into Little CMS's own units a chunk at a
+    // time, converted, and premultiplied again with the input's alpha brought to the output's depth. Everything a
+    // chunk reads is staged before anything is written, so `out` may be `in` when the layouts have the same size.
+    auto* t = static_cast<cmsHTRANSFORM>(transform_);
+    const size_t inColors = size_t(pixelFormatChannels(input_) - 1), outColors = size_t(pixelFormatChannels(output_) - 1);
+    const bool inWide = wideFormat(input_), outWide = wideFormat(output_);
+    const ColorModel inModel = pixelFormatModel(input_), outModel = pixelFormatModel(output_);
+    constexpr size_t chunk = 1024;
+    thread_local std::vector<uint8_t> in8, out8;
+    thread_local std::vector<float> inF, outF;
+    thread_local std::vector<uint32_t> alphas;
+    in8.resize(chunk * 4); out8.resize(chunk * 4); inF.resize(chunk * 4); outF.resize(chunk * 4); alphas.resize(chunk);
+    constexpr float unit = 1.0f / float(one16);
+    for (size_t done = 0; done < count; done += chunk) {
+        const size_t n = std::min(chunk, count - done);
+        const uint8_t* src8 = inWide ? nullptr : static_cast<const uint8_t*>(in) + done * (inColors + 1);
+        const uint16_t* src16 = inWide ? static_cast<const uint16_t*>(in) + done * (inColors + 1) : nullptr;
+        for (size_t i = 0; i < n; i++) {
+            if (!inWide) {
+                const uint8_t* p = src8 + i * (inColors + 1);
+                const unsigned a = p[inColors];
+                alphas[i] = outWide ? widen8(uint8_t(a)) : a;
+                for (size_t c = 0; c < inColors; c++)
+                    in8[i * inColors + c] = a == 255 ? p[c] : a == 0 ? 0 : uint8_t(std::min(255u, (p[c] * 255u + a / 2) / a));
+            } else {
+                const uint16_t* p = src16 + i * (inColors + 1);
+                const uint32_t a = std::min<uint32_t>(p[inColors], one16);
+                alphas[i] = outWide ? a : narrow16(a);
+                for (size_t c = 0; c < inColors; c++) {
+                    const float s = a >= one16 ? float(p[c]) * unit : a == 0 ? 0.0f : std::min(1.0f, float(p[c]) / float(a));
+                    float v = s;
+                    if (inModel == ColorModel::CMYK) v = (1.0f - s) * 100.0f;
+                    else if (inModel == ColorModel::Lab) v = c == 0 ? s * 100.0f : (s * float(one16) - 16384.0f) / 128.0f;
+                    inF[i * inColors + c] = v;
+                }
+            }
+        }
+        cmsDoTransform(t, inWide ? static_cast<const void*>(inF.data()) : in8.data(), outWide ? static_cast<void*>(outF.data()) : out8.data(), cmsUInt32Number(n));
+        if (!outWide) {
+            uint8_t* dst = static_cast<uint8_t*>(out) + done * (outColors + 1);
+            for (size_t i = 0; i < n; i++, dst += outColors + 1) {
+                const unsigned a = alphas[i];
+                for (size_t c = 0; c < outColors; c++) {
+                    const unsigned v = out8[i * outColors + c];
+                    dst[c] = a == 255 ? uint8_t(v) : uint8_t((v * a + 127) / 255);
+                }
+                dst[outColors] = uint8_t(a);
+            }
+        } else {
+            uint16_t* dst = static_cast<uint16_t*>(out) + done * (outColors + 1);
+            for (size_t i = 0; i < n; i++, dst += outColors + 1) {
+                const uint32_t a = alphas[i];
+                for (size_t c = 0; c < outColors; c++) {
+                    const float f = outF[i * outColors + c];
+                    float s = f;
+                    if (outModel == ColorModel::CMYK) s = 1.0f - f / 100.0f;
+                    else if (outModel == ColorModel::Lab) s = c == 0 ? f / 100.0f : (f * 128.0f + 16384.0f) / float(one16);
+                    dst[c] = uint16_t(std::lround(std::clamp(s, 0.0f, 1.0f) * float(a)));
+                }
+                dst[outColors] = uint16_t(a);
+            }
+        }
+    }
+}
+
 void ColorTransform::apply(const void* in, void* out, size_t count) const {
     auto* t = static_cast<cmsHTRANSFORM>(transform_);
-    if (input_ == PixelFormat::RGBFloat) { cmsDoTransform(t, in, out, cmsUInt32Number(count)); return; }
+    if (isColorFormat(input_)) { cmsDoTransform(t, in, out, cmsUInt32Number(count)); return; }
+    if (staged_) { applyStaged(in, out, count); return; }
     // Premultiplied pixels are made straight for Little CMS a chunk at a time, and premultiplied again after; alpha is
     // copied. An 8-bit chunk that is all opaque goes through as it is. 16-bit pixels go through Little CMS's float
     // pipeline (its 16-bit one precalculates a grid, which is coarse near the gamut's edges).
@@ -245,6 +335,40 @@ std::vector<uint8_t> makeBuiltin(WorkingSpace space) {
     return bytes;
 }
 
+/// A profile's bytes made the same in every session: a fixed creation date (2026-01-01), then the profile ID computed
+/// over it.
+void stabilise(cmsContext context, std::vector<uint8_t>& bytes) {
+    if (bytes.size() < 128) return;
+    const uint16_t date[6] = {2026, 1, 1, 0, 0, 0};
+    for (int i = 0; i < 6; i++) { bytes[size_t(24 + i * 2)] = uint8_t(date[i] >> 8); bytes[size_t(25 + i * 2)] = uint8_t(date[i]); }
+    if (cmsHPROFILE again = cmsOpenProfileFromMemTHR(context, bytes.data(), cmsUInt32Number(bytes.size()))) {
+        cmsMD5computeID(again);
+        std::vector<uint8_t> resaved = saveProfile(again);
+        if (!resaved.empty()) bytes = std::move(resaved);
+        cmsCloseProfile(again);
+    }
+}
+
+std::vector<uint8_t> makeLab() {
+    cmsContext context = cmsCreateContext(nullptr, nullptr);
+    std::vector<uint8_t> bytes;
+    if (cmsHPROFILE h = cmsCreateLab4ProfileTHR(context, cmsD50_xyY())) {
+        cmsMLU* description = cmsMLUalloc(context, 1);
+        cmsMLUsetASCII(description, "en", "US", "Lab D50");
+        cmsWriteTag(h, cmsSigProfileDescriptionTag, description);
+        cmsMLUfree(description);
+        cmsMLU* copyright = cmsMLUalloc(context, 1);
+        cmsMLUsetASCII(copyright, "en", "US", "No copyright, use freely");
+        cmsWriteTag(h, cmsSigCopyrightTag, copyright);
+        cmsMLUfree(copyright);
+        bytes = saveProfile(h);
+        cmsCloseProfile(h);
+    }
+    stabilise(context, bytes);
+    cmsDeleteContext(context);
+    return bytes;
+}
+
 ColorModel modelOf(cmsColorSpaceSignature space) {
     switch (space) {
     case cmsSigRgbData: return ColorModel::RGB;
@@ -290,6 +414,65 @@ std::optional<ColorProfile> profileFromIcc(const uint8_t* data, size_t size) {
 std::optional<ColorProfile> profileFromIcc(const std::vector<uint8_t>& icc) { return profileFromIcc(icc.data(), icc.size()); }
 
 const ColorProfile& effectiveProfile(const ColorProfile& profile) { return profile.empty() ? srgbProfile() : profile; }
+
+const ColorProfile& effectiveProfile(const ColorProfile& profile, ColorModel model) {
+    if (!profile.empty()) return profile;
+    if (model == ColorModel::CMYK) return defaultCmykProfile();
+    if (model == ColorModel::Lab) return labProfile();
+    return srgbProfile();
+}
+
+const ColorProfile& labProfile() {
+    static const ColorProfile profile = [] {
+        ColorProfile p;
+        p.icc = makeLab();
+        p.description = "Lab D50";
+        p.model = ColorModel::Lab;
+        return p;
+    }();
+    return profile;
+}
+
+const ColorProfile& defaultCmykProfile() {
+    static const ColorProfile profile = [] {
+        auto p = profileFromIcc(blobs::defaultCmykProfile, size_t(blobs::defaultCmykProfileSize));
+        return p ? *p : ColorProfile{};
+    }();
+    return profile;
+}
+
+PixelFormat pixelFormatFor(SampleType type, ColorMode mode) {
+    const bool wide = type != SampleType::U8;
+    switch (mode) {
+    case ColorMode::CMYK: return wide ? PixelFormat::CMYKA16 : PixelFormat::CMYKA8;
+    case ColorMode::Lab: return wide ? PixelFormat::LabA16 : PixelFormat::LabA8;
+    case ColorMode::RGB: break;
+    }
+    return wide ? PixelFormat::RGBA16 : PixelFormat::RGBA8;
+}
+
+ColorModel pixelFormatModel(PixelFormat format) {
+    switch (format) {
+    case PixelFormat::CMYKA8: case PixelFormat::CMYKA16: case PixelFormat::CMYKFloat: return ColorModel::CMYK;
+    case PixelFormat::LabA8: case PixelFormat::LabA16: case PixelFormat::LabFloat: return ColorModel::Lab;
+    case PixelFormat::RGBA8: case PixelFormat::RGBA16: case PixelFormat::RGBFloat: break;
+    }
+    return ColorModel::RGB;
+}
+
+int pixelFormatChannels(PixelFormat format) {
+    switch (format) {
+    case PixelFormat::CMYKA8: case PixelFormat::CMYKA16: return 5;
+    case PixelFormat::CMYKFloat: return 4;
+    case PixelFormat::RGBFloat: case PixelFormat::LabFloat: return 3;
+    case PixelFormat::RGBA8: case PixelFormat::RGBA16: case PixelFormat::LabA8: case PixelFormat::LabA16: break;
+    }
+    return 4;
+}
+
+bool isColorFormat(PixelFormat format) {
+    return format == PixelFormat::RGBFloat || format == PixelFormat::CMYKFloat || format == PixelFormat::LabFloat;
+}
 
 bool equivalentProfiles(const ColorProfile& a, const ColorProfile& b) {
     const ColorProfile& pa = effectiveProfile(a);
@@ -356,17 +539,19 @@ std::optional<RenderingIntent> renderingIntentFromKey(const std::string& key) {
 namespace {
 cmsUInt32Number baseFlags(PixelFormat input, PixelFormat output) {
     cmsUInt32Number flags = cmsFLAGS_NOCACHE;   // no one-pixel cache: safe to apply from several threads
-    if (input != PixelFormat::RGBFloat && output != PixelFormat::RGBFloat) flags |= cmsFLAGS_COPY_ALPHA;
+    // Alpha rides along in Little CMS's RGBA layouts; staged layouts hand it colours only.
+    if (!isColorFormat(input) && !isColorFormat(output) && !stagedLayouts(input, output)) flags |= cmsFLAGS_COPY_ALPHA;
     return flags;
 }
 } // namespace
 
 ColorTransformPtr transformBetween(const ColorProfile& from, const ColorProfile& to, const ConvertOptions& options, PixelFormat input, PixelFormat output) {
-    if ((input == PixelFormat::RGBFloat) != (output == PixelFormat::RGBFloat)) return nullptr;
-    if (equivalentProfiles(from, to) && input == output) return nullptr;
-    const ColorProfile& a = effectiveProfile(from);
-    const ColorProfile& b = effectiveProfile(to);
-    if (a.model != ColorModel::RGB || b.model != ColorModel::RGB) return nullptr;
+    if (isColorFormat(input) != isColorFormat(output)) return nullptr;
+    const ColorProfile& a = effectiveProfile(from, pixelFormatModel(input));
+    const ColorProfile& b = effectiveProfile(to, pixelFormatModel(output));
+    if (a.model != pixelFormatModel(input) || b.model != pixelFormatModel(output)) return nullptr;
+    if (input == output && equivalentProfiles(a, b)) return nullptr;
+    const bool staged = stagedLayouts(input, output);
     CacheKey key;
     key.from = fingerprint(a.icc); key.to = fingerprint(b.icc);
     key.intent = int(options.intent); key.flags = options.blackPointCompensation ? 1 : 0;
@@ -378,7 +563,7 @@ ColorTransformPtr transformBetween(const ColorProfile& from, const ColorProfile&
     if (ha && hb) {
         cmsUInt32Number flags = baseFlags(input, output);
         if (options.blackPointCompensation) flags |= cmsFLAGS_BLACKPOINTCOMPENSATION;
-        t = cmsCreateTransformTHR(context, ha, lcmsFormat(input), hb, lcmsFormat(output), lcmsIntent(options.intent), flags);
+        t = cmsCreateTransformTHR(context, ha, lcmsFormat(input, staged), hb, lcmsFormat(output, staged), lcmsIntent(options.intent), flags);
     }
     if (ha) cmsCloseProfile(ha);
     if (hb) cmsCloseProfile(hb);
@@ -389,10 +574,13 @@ ColorTransformPtr transformBetween(const ColorProfile& from, const ColorProfile&
 }
 
 ColorTransformPtr proofTransform(const ColorProfile& document, const ColorProfile& display, const ProofSettings& proof, PixelFormat input, PixelFormat output) {
-    const ColorProfile& a = effectiveProfile(document);
-    const ColorProfile& b = effectiveProfile(display);
-    const ColorProfile& c = effectiveProfile(proof.profile);
-    if (a.model != ColorModel::RGB || b.model != ColorModel::RGB) return nullptr;
+    if (isColorFormat(input) != isColorFormat(output)) return nullptr;
+    const ColorProfile& a = effectiveProfile(document, pixelFormatModel(input));
+    const ColorProfile& b = effectiveProfile(display, pixelFormatModel(output));
+    const ColorProfile& c = effectiveProfile(proof.profile);   // any model: an RGB device, or a press (Working CMYK)
+    if (a.model != pixelFormatModel(input) || b.model != pixelFormatModel(output)) return nullptr;
+    if (c.model != ColorModel::RGB && c.model != ColorModel::CMYK && c.model != ColorModel::Gray) return nullptr;
+    const bool staged = stagedLayouts(input, output);
     CacheKey key;
     key.from = fingerprint(a.icc); key.to = fingerprint(b.icc); key.proof = fingerprint(c.icc) | 1;
     key.intent = int(RenderingIntent::RelativeColorimetric); key.proofIntent = int(proof.intent);
@@ -412,7 +600,7 @@ ColorTransformPtr proofTransform(const ColorProfile& document, const ColorProfil
             for (int i = 0; i < 3; i++) alarm[i] = cmsUInt16Number(proof.warning[i] * 257);
             cmsSetAlarmCodesTHR(context, alarm);
         }
-        t = cmsCreateProofingTransformTHR(context, ha, lcmsFormat(input), hb, lcmsFormat(output), hc, lcmsIntent(proof.intent),
+        t = cmsCreateProofingTransformTHR(context, ha, lcmsFormat(input, staged), hb, lcmsFormat(output, staged), hc, lcmsIntent(proof.intent),
                                           INTENT_RELATIVE_COLORIMETRIC, flags);
     }
     for (cmsHPROFILE h : {ha, hb, hc}) if (h) cmsCloseProfile(h);
@@ -443,9 +631,60 @@ void convertImage(Image& image, const ColorTransform* transform) {
 
 void convertImage(Image16& image, const ColorTransform* transform) {
     if (!transform || image.width() <= 0 || image.height() <= 0) return;
+    if (pixelFormatChannels(transform->input()) != image.channels() || pixelFormatChannels(transform->output()) != image.channels()) return;
     parallelRows(0, image.height(), [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) transform->apply(image.row(y), image.row(y), size_t(image.width()));
     }, 16);
+}
+
+void convertImage(ImageC8& image, const ColorTransform* transform) {
+    if (!transform || image.isEmpty() || transform->input() != PixelFormat::CMYKA8 || transform->output() != PixelFormat::CMYKA8) return;
+    parallelRows(0, image.height(), [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++) transform->apply(image.row(y), image.row(y), size_t(image.width()));
+    }, 16);
+}
+
+namespace {
+/// The layout a buffer holds, when it is `mode`'s at its own depth.
+std::optional<PixelFormat> layoutOf(const AnyImage& image, ColorMode mode) {
+    if (!image || image.sampleType() == SampleType::F32 || image.channels() != colorModeChannels(mode)) return std::nullopt;
+    if (image.sampleType() == SampleType::U8 && (mode == ColorMode::CMYK) != bool(image.c8())) return std::nullopt;
+    return pixelFormatFor(image.sampleType(), mode);
+}
+
+template <class In, class Out>
+void convertRows(const In& in, Out& out, const ColorTransform& transform) {
+    parallelRows(0, in.height(), [&](int y0, int y1) {
+        for (int y = y0; y < y1; y++) transform.apply(in.row(y), out.row(y), size_t(in.width()));
+    }, 16);
+}
+} // namespace
+
+AnyImage convertImage(const AnyImage& image, ColorMode fromMode, const ColorProfile& from, ColorMode toMode, const ColorProfile& to, const ConvertOptions& options) {
+    const auto input = layoutOf(image, fromMode);
+    if (!input) return nullptr;
+    const PixelFormat output = pixelFormatFor(image.sampleType(), toMode);
+    ColorTransformPtr t = transformBetween(from, to, options, *input, output);
+    if (!t) {
+        // Nothing to do when both are the same colours in the same layout; otherwise a profile could not be used.
+        if (*input == output && equivalentProfiles(effectiveProfile(from, pixelFormatModel(output)), effectiveProfile(to, pixelFormatModel(output)))) return image;
+        return nullptr;
+    }
+    const int w = image.width(), h = image.height();
+    if (image.sampleType() == SampleType::U16) {
+        auto out = std::make_shared<Image16>(w, h, colorModeChannels(toMode));
+        convertRows(*image.u16(), *out, *t);
+        return Image16Ptr(out);
+    }
+    auto source = [&](auto&& f) { if (image.c8()) f(*image.c8()); else f(*image.u8()); };
+    if (toMode == ColorMode::CMYK) {
+        auto out = std::make_shared<ImageC8>(w, h, 5);
+        source([&](const auto& in) { convertRows(in, *out, *t); });
+        return ImageC8Ptr(out);
+    }
+    auto out = std::make_shared<Image>(w, h);
+    source([&](const auto& in) { convertRows(in, *out, *t); });
+    return ImagePtr(out);
 }
 
 bool convertImage(Image& image, const ColorProfile& from, const ColorProfile& to, const ConvertOptions& options) {
@@ -469,6 +708,19 @@ void convertImage16To8(const Image16& in, Image& out, const ColorTransform& tran
     parallelRows(0, in.height(), [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) transform.apply(in.row(y), out.row(y), size_t(in.width()));
     }, 16);
+}
+
+bool convertImageTo8(const AnyImage& in, Image& out, const ColorTransform& transform) {
+    const PixelFormat f = transform.input();
+    if (!in || transform.output() != PixelFormat::RGBA8 || isColorFormat(f) || pixelFormatChannels(f) != in.channels()) return false;
+    const bool wide = f == PixelFormat::RGBA16 || f == PixelFormat::CMYKA16 || f == PixelFormat::LabA16;
+    if (wide != (in.sampleType() == SampleType::U16) || (f == PixelFormat::CMYKA8) != bool(in.c8())) return false;
+    if (out.width() != in.width() || out.height() != in.height()) out = Image(in.width(), in.height());
+    if (in.u16()) convertRows(*in.u16(), out, transform);
+    else if (in.c8()) convertRows(*in.c8(), out, transform);
+    else if (in.u8()) convertRows(*in.u8(), out, transform);
+    else return false;
+    return true;
 }
 
 void convertColor(const ColorProfile& from, const ColorProfile& to, double rgb[3], const ConvertOptions& options) {

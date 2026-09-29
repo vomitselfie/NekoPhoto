@@ -234,11 +234,16 @@ void AutomationServer::registerDocumentHandlers() {
         const QString action = str(p, "action", QStringLiteral("get"));
         if (action != "get" && action != "assign" && action != "convert") fail("action must be get, assign or convert", invalidParams);
         if (action != "get") {
-            if (!has(p, "profile")) fail("give profile: srgb, adobe-rgb, display-p3, prophoto, working, none (assign only) or an ICC file's path", invalidParams);
+            if (!has(p, "profile")) fail("give profile: srgb, adobe-rgb, display-p3, prophoto, working, working-cmyk, none (assign only) or an ICC file's path", invalidParams);
             QString key = str(p, "profile"), error;
-            if (key == "working") key = QString::fromLatin1(workingSpaceKey(color::settings().workingSpace));
-            if (key == "none" && action == "convert") key = "srgb";
-            auto profile = color::profileForKey(key, &error);
+            // A document takes profiles of its own mode: RGB ones, or CMYK ones in a CMYK document. Lab documents are in
+            // Lab D50 and have no other profile.
+            const ColorMode mode = document().colorMode;
+            if (mode == ColorMode::Lab) fail("a Lab document's values are Lab D50; it takes no other profile", invalidParams);
+            const color::ProfileKinds kinds = mode == ColorMode::CMYK ? color::ProfileKinds::CMYK : color::ProfileKinds::RGB;
+            if (key == "working") key = mode == ColorMode::CMYK ? QStringLiteral("working-cmyk") : QString::fromLatin1(workingSpaceKey(color::settings().workingSpace));
+            if (key == "none" && action == "convert") key = mode == ColorMode::CMYK ? QStringLiteral("working-cmyk") : QStringLiteral("srgb");
+            auto profile = color::profileForKey(key, &error, kinds);
             if (!profile) fail(error, invalidParams);
             if (action == "assign") session()->assignProfile(*profile);
             else {

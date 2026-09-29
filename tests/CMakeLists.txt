@@ -293,3 +293,7 @@ endif()
 add_executable(colormgmt_tests colormgmt_tests.cpp)
 target_link_libraries(colormgmt_tests PRIVATE compositor::core compositor_warnings nekophoto_lcms2)
 add_test(NAME colormgmt_tests COMMAND colormgmt_tests)
+
+add_executable(colormgmt_cmyk_tests colormgmt_cmyk_tests.cpp)
+target_link_libraries(colormgmt_cmyk_tests PRIVATE compositor::core compositor_warnings nekophoto_lcms2)
+add_test(NAME colormgmt_cmyk_tests COMMAND colormgmt_cmyk_tests)

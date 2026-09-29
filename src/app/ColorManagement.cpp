@@ -46,12 +46,13 @@ Settings loadSettings() {
     Settings s;
     q.beginGroup(QStringLiteral("color"));
     if (auto w = workingSpaceFromKey(q.value("workingSpace", "srgb").toString().toStdString())) s.workingSpace = *w;
+    s.workingCmyk = q.value("workingCmyk").toString();
     if (auto p = policyFromKey(q.value("policy", "preserve").toString())) s.policy = *p;
     s.askMissing = q.value("askMissing", false).toBool();
     s.askMismatch = q.value("askMismatch", false).toBool();
     s.monitorFile = q.value("monitorFile").toString();
     s.useSystemMonitor = q.value("useSystemMonitor", true).toBool();
-    s.proofProfile = q.value("proofProfile", "srgb").toString();
+    s.proofProfile = q.value("proofProfile", "working-cmyk").toString();
     if (auto i = renderingIntentFromKey(q.value("proofIntent", "relative").toString().toStdString())) s.proofIntent = *i;
     s.proofBlackPoint = q.value("proofBlackPoint", true).toBool();
     const QColor gamut(q.value("gamutColor", "#808080").toString());
@@ -79,6 +80,7 @@ void setSettings(const Settings& s) {
     QSettings q;
     q.beginGroup(QStringLiteral("color"));
     q.setValue("workingSpace", QString::fromLatin1(workingSpaceKey(s.workingSpace)));
+    q.setValue("workingCmyk", s.workingCmyk);
     q.setValue("policy", QString::fromLatin1(policyKey(s.policy)));
     q.setValue("askMissing", s.askMissing);
     q.setValue("askMismatch", s.askMismatch);
@@ -103,22 +105,52 @@ Notifier* notifier() {
 
 const ColorProfile& workingProfile() { return builtinProfile(settings().workingSpace); }
 
-std::optional<ColorProfile> readProfileFile(const QString& path, QString* error) {
+ColorProfile workingCmykProfile() {
+    // Read once per file chosen; the bundled profile when none is, or the file is unusable.
+    static std::mutex mutex;
+    static QString readPath;
+    static ColorProfile read;
+    const QString path = settings().workingCmyk;
+    if (path.isEmpty()) return defaultCmykProfile();
+    std::lock_guard<std::mutex> lock(mutex);
+    if (path != readPath) {
+        readPath = path;
+        auto p = readProfileFile(path, nullptr, ProfileKinds::CMYK);
+        read = p ? *p : defaultCmykProfile();
+    }
+    return read;
+}
+
+QString workingCmykLabel() { return QString::fromStdString(workingCmykProfile().description); }
+
+std::optional<ColorProfile> readProfileFile(const QString& path, QString* error, ProfileKinds kinds) {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) { if (error) *error = QObject::tr("Couldn’t read %1.").arg(QFileInfo(path).fileName()); return std::nullopt; }
     if (file.size() > (qint64(64) << 20)) { if (error) *error = QObject::tr("%1 is too large to be a colour profile.").arg(QFileInfo(path).fileName()); return std::nullopt; }
     const QByteArray bytes = file.readAll();
     auto profile = profileFromIcc(reinterpret_cast<const uint8_t*>(bytes.constData()), size_t(bytes.size()));
     if (!profile) { if (error) *error = QObject::tr("%1 is not a colour profile.").arg(QFileInfo(path).fileName()); return std::nullopt; }
-    if (profile->model != ColorModel::RGB) { if (error) *error = QObject::tr("%1 is not an RGB profile.").arg(QFileInfo(path).fileName()); return std::nullopt; }
+    const bool rgb = profile->model == ColorModel::RGB, cmyk = profile->model == ColorModel::CMYK;
+    if (kinds == ProfileKinds::RGB && !rgb) { if (error) *error = QObject::tr("%1 is not an RGB profile.").arg(QFileInfo(path).fileName()); return std::nullopt; }
+    if (kinds == ProfileKinds::CMYK && !cmyk) { if (error) *error = QObject::tr("%1 is not a CMYK profile.").arg(QFileInfo(path).fileName()); return std::nullopt; }
+    if (kinds == ProfileKinds::RGBOrCMYK && !rgb && !cmyk) { if (error) *error = QObject::tr("%1 is not an RGB or CMYK profile.").arg(QFileInfo(path).fileName()); return std::nullopt; }
     return profile;
 }
 
-std::optional<ColorProfile> profileForKey(const QString& key, QString* error) {
+std::optional<ColorProfile> profileForKey(const QString& key, QString* error, ProfileKinds kinds) {
     if (key == QLatin1String("none")) return ColorProfile{};
-    if (auto space = workingSpaceFromKey(key.toStdString())) return builtinProfile(*space);
+    if (key == QLatin1String("working-cmyk")) {
+        if (kinds != ProfileKinds::RGB) return workingCmykProfile();
+        if (error) *error = QObject::tr("The Working CMYK is a CMYK profile; an RGB document takes RGB profiles.");
+        return std::nullopt;
+    }
+    if (auto space = workingSpaceFromKey(key.toStdString())) {
+        if (kinds != ProfileKinds::CMYK) return builtinProfile(*space);
+        if (error) *error = QObject::tr("%1 is an RGB profile; a CMYK profile is needed here.").arg(QString::fromLatin1(workingSpaceName(*space)));
+        return std::nullopt;
+    }
     if (key.isEmpty()) { if (error) *error = QObject::tr("No profile given."); return std::nullopt; }
-    return readProfileFile(key, error);
+    return readProfileFile(key, error, kinds);
 }
 
 QString profileLabel(const ColorProfile& profile) {
@@ -164,7 +196,7 @@ ColorTransformPtr displayTransform(const Document& document) {
     const PixelFormat input = document.sampleType == SampleType::U16 ? PixelFormat::RGBA16 : PixelFormat::RGBA8;
     if (s.proofColors || s.gamutWarning) {
         ProofSettings proof;
-        if (auto p = profileForKey(s.proofProfile)) proof.profile = *p;
+        if (auto p = profileForKey(s.proofProfile, nullptr, ProfileKinds::RGBOrCMYK)) proof.profile = *p;
         proof.intent = s.proofIntent;
         proof.blackPointCompensation = s.proofBlackPoint;
         proof.gamutWarning = s.gamutWarning;

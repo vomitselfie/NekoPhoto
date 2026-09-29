@@ -797,6 +797,32 @@ def colour_management(rpc):
     rpc.call("color.settings", proofColors=False, gamutWarning=False)
     assert rpc.call("screenshot", maxSize=64)["png"] == plain
     rpc.call("document.close", discard=True)
+    # Proof Setup > Working CMYK (Photoshop's default proof) on an RGB document: sRGB's pure blue is outside the press's
+    # gamut, so the warning covers it; a mid grey prints and shows no warning.
+    cmyk = rpc.call("color.settings", proofProfile="working-cmyk")
+    assert cmyk["workingCmyk"] == "default" and "ISO Coated v2 300%" in cmyk["workingCmykName"], cmyk
+    rpc.call("document.new", width=32, height=32)
+    rpc.call("shape.draw", kind="rectangle", x=0, y=0, width=32, height=32, color="#0000ff")
+    blue = rpc.call("screenshot", maxSize=64)["png"]
+    rpc.call("color.settings", proofColors=True)
+    assert rpc.call("screenshot", maxSize=64)["png"] != blue, "Proof Colors shows the press's blue"
+    rpc.call("color.settings", gamutWarning=True, gamutColor="#00ff00")
+    warned = rpc.call("screenshot", maxSize=64)["png"]
+    rpc.call("color.settings", proofColors=False, gamutWarning=False)
+    assert rpc.call("screenshot", maxSize=64)["png"] == blue and warned != blue
+    # Working CMYK takes CMYK profiles only; an RGB document takes no CMYK profile.
+    for bad in ({"workingCmyk": os.path.join(work, "missing.icc")}, {"proofProfile": "none"}):
+        try:
+            rpc.call("color.settings", **bad)
+            raise AssertionError(f"color.settings {bad} should be refused")
+        except RuntimeError as e:
+            print("expected error:", e)
+    try:
+        rpc.call("document.profile", action="assign", profile="working-cmyk")
+        raise AssertionError("an RGB document takes no CMYK profile")
+    except RuntimeError as e:
+        print("expected error:", e)
+    rpc.call("document.close", discard=True)
     rpc.call("document.open", path=project)
     # At 16 bits too.
     rpc.call("image.mode", bits=16)

@@ -601,12 +601,18 @@ void MainWindow::buildMenus() {
     // Soft proofing (docs/color-management.md): Photoshop's Proof Setup, Proof Colors and Gamut Warning.
     QMenu* proofSetup = view->addMenu(tr("Proof Set&up"));
     proofSetup->addAction(tr("Custom…"), this, [this] { color::showProofSetup(this); });
+    proofSetup->addSeparator();
+    // Photoshop's default proof: the press the Working CMYK describes.
+    QAction* proofCmyk = proofSetup->addAction(tr("Working CMYK"), this, [] { color::Settings s = color::settings(); s.proofProfile = QStringLiteral("working-cmyk"); color::setSettings(s); });
+    proofCmyk->setCheckable(true);
+    proofCmyk->setChecked(color::settings().proofProfile == QLatin1String("working-cmyk"));
     QAction* proof = view->addAction(tr("Proof Colo&rs"), QKeySequence("Ctrl+Y"), this, [](bool on) { color::Settings s = color::settings(); s.proofColors = on; color::setSettings(s); });
     QAction* gamut = view->addAction(tr("Gamut Wa&rning"), QKeySequence("Ctrl+Shift+Y"), this, [](bool on) { color::Settings s = color::settings(); s.gamutWarning = on; color::setSettings(s); });
     for (QAction* a : {proof, gamut}) a->setCheckable(true);
-    connect(color::notifier(), &color::Notifier::changed, this, [this, proof, gamut] {
+    connect(color::notifier(), &color::Notifier::changed, this, [this, proof, gamut, proofCmyk] {
         proof->setChecked(color::settings().proofColors);
         gamut->setChecked(color::settings().gamutWarning);
+        proofCmyk->setChecked(color::settings().proofProfile == QLatin1String("working-cmyk"));
         updateColorSwatches();
     });
     view->addSeparator();

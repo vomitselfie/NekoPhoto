@@ -24,6 +24,8 @@ std::optional<EmbeddedPolicy> policyFromKey(const QString& key);
 
 struct Settings {
     compositor::WorkingSpace workingSpace = compositor::WorkingSpace::SRGB;
+    /// Working CMYK: an ICC file's path, or empty for the bundled ISO Coated v2 300% (basICColor, FOGRA39).
+    QString workingCmyk;
     EmbeddedPolicy policy = EmbeddedPolicy::Preserve;
     /// Photoshop's "Ask When Opening" for a missing profile and a profile other than the working space.
     bool askMissing = false, askMismatch = false;
@@ -31,9 +33,10 @@ struct Settings {
     /// display profile), when it reports one.
     QString monitorFile;
     bool useSystemMonitor = true;
-    /// View > Proof Setup: a working-space key ("srgb", ...) or an ICC file's path; the intent and black point
-    /// compensation for the proof; the gamut warning's colour.
-    QString proofProfile = QStringLiteral("srgb");
+    /// View > Proof Setup: "working-cmyk" (Photoshop's default proof, the Working CMYK), a working-space key ("srgb",
+    /// ...) or an ICC file's path (RGB or CMYK); the intent and black point compensation for the proof; the gamut
+    /// warning's colour.
+    QString proofProfile = QStringLiteral("working-cmyk");
     compositor::RenderingIntent proofIntent = compositor::RenderingIntent::RelativeColorimetric;
     bool proofBlackPoint = true;
     QColor gamutColor{128, 128, 128};
@@ -55,16 +58,23 @@ Notifier* notifier();
 
 /// The working space's profile.
 const compositor::ColorProfile& workingProfile();
+/// The Working CMYK profile: the chosen ICC file, or the bundled one (also when the file cannot be read).
+compositor::ColorProfile workingCmykProfile();
+/// How Color Settings names the Working CMYK: its description.
+QString workingCmykLabel();
 /// The monitor's profile (the Preferences file, else the system's), empty when none is known: then the canvas shows
 /// document values as they are. Read once and kept until the settings change.
 compositor::ColorProfile monitorProfile();
 /// Where the monitor profile came from, for Preferences ("System: <name>", "<file>", "None").
 QString monitorProfileSource();
 
-/// An ICC file as a profile; nullopt with `error` when it is not a usable RGB profile.
-std::optional<compositor::ColorProfile> readProfileFile(const QString& path, QString* error = nullptr);
-/// A working-space key ("srgb", "adobe-rgb", "display-p3", "prophoto"), "none" (untagged) or an ICC file's path.
-std::optional<compositor::ColorProfile> profileForKey(const QString& key, QString* error = nullptr);
+/// The profiles a chooser takes: RGB (documents, the monitor), RGB or CMYK (a proof), CMYK (Working CMYK).
+enum class ProfileKinds { RGB, RGBOrCMYK, CMYK };
+/// An ICC file as a profile; nullopt with `error` when it is not a usable profile of `kinds`.
+std::optional<compositor::ColorProfile> readProfileFile(const QString& path, QString* error = nullptr, ProfileKinds kinds = ProfileKinds::RGB);
+/// A working-space key ("srgb", "adobe-rgb", "display-p3", "prophoto"), "none" (untagged), "working-cmyk" (when
+/// `kinds` takes CMYK) or an ICC file's path.
+std::optional<compositor::ColorProfile> profileForKey(const QString& key, QString* error = nullptr, ProfileKinds kinds = ProfileKinds::RGB);
 /// How the menus name a document's profile: its description, or "Untagged RGB (sRGB)".
 QString profileLabel(const compositor::ColorProfile& profile);
 
