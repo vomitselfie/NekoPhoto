@@ -7,6 +7,8 @@
 #include "compositor/imaget.h"
 #include <QDialog>
 #include <QImage>
+#include "compositor/raw.h"
+#include <array>
 #include <atomic>
 #include <memory>
 #include <thread>
@@ -45,8 +47,13 @@ protected:
     void reject() override;
 
 private:
+    /// The quick decode at the current white balance's multipliers, off the UI thread; one at a time.
     void startPreviewDecode();
-    void previewDecoded();
+    void previewDecoded(std::shared_ptr<compositor::Image16> image, const std::string& error, const std::array<double, 3>& multipliers,
+                        int generation);
+    void stopPreview();
+    /// The multipliers the settings develop with.
+    std::array<double, 3> targetMultipliers() const;
     void refreshPreview();
     void showPreviewImage();
     void develop(Choice choice);
@@ -66,7 +73,14 @@ private:
     QPushButton* cancel_ = nullptr;
     QTimer* debounce_ = nullptr;
     int fullWidth_ = 0, fullHeight_ = 0;
+    compositor::RawWhiteBalance balance_;
     std::shared_ptr<compositor::Image16> base_;      // the quick decode, reduced for previewing
+    std::array<double, 3> baseMultipliers_{1, 1, 1};   // the multipliers base_ was decoded with
+    std::thread previewWorker_;
+    std::atomic<bool> previewCancel_{false};
+    int previewGeneration_ = 0;
+    bool previewBusy_ = false;
+    QTimer* settle_ = nullptr;
     QImage shown_;
     std::shared_ptr<compositor::Image16> developed_;
     std::shared_ptr<compositor::Image16> workerResult_;

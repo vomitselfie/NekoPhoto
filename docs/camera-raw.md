@@ -19,7 +19,8 @@ matches the full-size result.
 ## Panels
 
 - **Basic**: White Balance (Custom, or Auto, the gray-world balance of the layer), Temperature and Tint
-  (relative, not kelvin), Exposure in stops, Contrast, Highlights, Shadows, Whites, Blacks, Texture, Clarity,
+  (relative, −100…100, as Photoshop's Camera Raw Filter has them for pixels; a RAW file has kelvin, see
+  [White balance](#white-balance)), Exposure in stops, Contrast, Highlights, Shadows, Whites, Blacks, Texture, Clarity,
   Dehaze, Vibrance (protects skin tones) and Saturation. Two check boxes paint clipped shadows blue and
   clipped highlights red in the preview only.
 - **Curve**: the parametric curve (Highlights, Lights, Darks, Shadows and the three splits), an RGB point
@@ -46,9 +47,7 @@ open document.
 
 - The dialog appears at once: a half-size decode (one pixel per Bayer quad) runs off the UI thread and fills the
   preview when it is ready, reduced to 1,600 pixels on the long side. The panels are the filter's, with White
-  Balance **As Shot** (the camera's balance, Temperature and Tint at 0), **Auto** (the gray-world balance of the
-  as-shot decode) or **Custom**. Temperature and Tint stay relative to the as-shot balance, not kelvin: the engine
-  has no kelvin model, so the dialog does not pretend to one.
+  Balance as Camera Raw shows it for a RAW file: Temperature in kelvin and Tint (see [White balance](#white-balance)).
 - **Depth** is Camera Raw's workflow option: 16 Bits/Channel (the default) or 8. The choice is remembered for the next
   file, as Photoshop remembers its workflow options. The colour space is sRGB, which is what LibRaw develops into.
 - **Open** develops the whole file (off the UI thread) and opens it as a new document with one layer.
@@ -58,8 +57,8 @@ open document.
   Raw with those settings; OK develops it again and every layer placing it updates, as one undo step.
 - **Cancel** (or Escape) stops a decode that is running and opens nothing.
 
-The develop is `compositor/raw.h`: LibRaw demosaics with the camera's white balance into sRGB at 16 bits, then
-`applyCameraRaw` grades it with the settings, the same code as the filter (so the dialog's result equals Open with
+The develop is `compositor/raw.h`: LibRaw demosaics with the white balance's multipliers (the camera's own for As
+Shot) into sRGB at 16 bits, then `applyCameraRaw` grades it with the settings, the same code as the filter (so the dialog's result equals Open with
 no settings followed by Filter ▸ Camera Raw Filter with them, which `raw_tests` checks).
 
 Where it is kept:
@@ -75,12 +74,70 @@ Where it is kept:
   project to keep the settings.
 
 Automation opens a RAW file without the dialog: `document.open` develops it as shot, or with `settings` (the same
-object as `pixels.cameraRaw`), at `bitsPerChannel` 16 or 8, and `asSmartObject: true` makes the Open Object smart
+object as `pixels.cameraRaw`, with white balance as below), at `bitsPerChannel` 16 or 8, and `asSmartObject: true` makes the Open Object smart
 object. `smartObject.editContents` on such a smart object develops it again with `settings` (or its own). A run
 without a window on screen (`--headless`) does the same.
 
-`tools/make_test_dng.py` writes the synthetic DNG in `tests/fixtures/raw` (a grey ramp and six patches shot under a
-warm light, with the as-shot neutral that corrects it) that the tests and `rpc_smoke` open.
+`tools/make_test_dng.py` writes the synthetic DNGs in `tests/fixtures/raw` (a grey ramp and six patches under a
+coloured light, with the as-shot neutral that corrects it; `synthetic-dual.dng` carries a second colour matrix for
+Standard light A) that the tests and `rpc_smoke` open.
+
+## White balance
+
+For a RAW file White Balance reads as Camera Raw's does: **As Shot**, **Auto**, the presets the file records
+(**Daylight**, **Cloudy**, **Shade**, **Tungsten**, **Fluorescent**, **Flash**; only those the camera wrote into the
+file, none made up), and **Custom**, with **Temperature** in kelvin (2000–50000 K, the slider even in reciprocal
+temperature) and **Tint** (−150…150, positive toward magenta). Moving either slider makes it Custom.
+
+- **As Shot** develops with the camera's own multipliers exactly (LibRaw's `cam_mul`, which carries a DNG's
+  AsShotNeutral), and shows the white point they balance for. Choosing it again restores them, whatever the sliders did.
+- **Presets** develop with the multipliers the camera recorded for that light (LibRaw's `WB_Coeffs`) and show their
+  white point.
+- **Auto** is the gray-world white point of the quick decode, in kelvin.
+- **Custom** turns Temperature and Tint into a white point, the white point into the camera's neutral through the
+  camera's colour matrix, and the neutral into multipliers for the develop.
+
+The conversions (`compositor/whitebalance.h`):
+
+- Camera neutral ↔ white point: through the camera's XYZ → camera matrix, as the DNG specification describes. A DNG
+  gives ColorMatrix1/2 (with CameraCalibration1/2 when present) for its two calibration illuminants, interpolated
+  linearly in reciprocal temperature (1/T) between them and solved together with the temperature; other formats use
+  LibRaw's matrix for the camera (Adobe's D65 matrix). A four-colour camera, or one LibRaw has no matrix for, keeps
+  the older relative Temperature and Tint (−100…100 around As Shot).
+- White point ↔ Temperature: Robertson's isotemperature-line method (1968) over the table Wyszecki & Stiles
+  publish, 0–600 mired.
+- **Tint** is the white point's distance from the Planckian locus along the isotemperature line, in CIE 1960 uv,
+  times 3000: one unit of tint is 1/3000 of a uv unit. Positive is a white point on the green side of the locus,
+  which the correction answers with magenta, as Camera Raw's positive Tint does. The readout and the develop use the
+  same conversion both ways, so a white point read and set again returns the same multipliers (to rounding).
+
+Temperature and Tint are an interpretation of the camera's matrix, so they can differ from Photoshop's by some
+kelvin and a few tint units for cameras whose Adobe profile has a second (Standard light A) matrix that LibRaw does
+not carry; the develop uses the multipliers, and As Shot is exact either way.
+
+Settings keep the white balance as `rawTemperature` and `rawTint` beside `whiteBalance` (`As Shot`, `Auto`,
+`Custom` or a preset's name). Projects saved before kelvin white balance hold relative `temperature` and `tint`
+and no `rawTemperature`: they develop exactly as before (as shot, then the relative grade). Edit Contents opens such
+a smart object with its relative values turned into the white point they neutralize (0, 0 is As Shot), and OK stores
+kelvin from then on.
+
+Automation takes the same settings on `document.open` and `smartObject.editContents`:
+
+- `temperature` above 100 is kelvin (2000–50000) and `tint` then Camera Raw's tint (−150…150, the as-shot tint when
+  left out); `rawTemperature` and `rawTint` say the same.
+- `whiteBalance` `As Shot` or a preset's name fills in the file's values; a preset the file does not record is
+  refused. `Auto` without numbers solves the white point.
+- Settings that say nothing about white balance open As Shot.
+- A `temperature` within −100…100 is the older relative form and stays relative (as do `tint` values without a
+  kelvin temperature).
+- The reply's `settings` carry `whiteBalance`, `rawTemperature` and `rawTint`.
+
+```json
+{"method": "document.open", "params": {"path": "IMG_0001.CR3", "settings": {"temperature": 5200, "tint": 8, "exposure": 0.3}}}
+```
+
+`pixels.cameraRaw` (the filter on pixels) keeps relative Temperature and Tint, as Photoshop's Camera Raw Filter does,
+and refuses the RAW-only keys.
 
 ## Automation
 

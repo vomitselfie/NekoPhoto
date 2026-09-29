@@ -58,8 +58,9 @@ QWidget* scrolled(QWidget* page) {
 
 } // namespace
 
-CameraRawPanels::CameraRawPanels(Mode mode, const CameraRawSettings& settings, QWidget* parent)
+CameraRawPanels::CameraRawPanels(Mode mode, const CameraRawSettings& settings, QWidget* parent, const RawWhiteBalance* raw)
     : QWidget(parent), settings_(settings), mode_(mode) {
+    if (raw) raw_ = *raw;
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     // Upstream's panel column: a list of the panels beside the one shown, which stays narrow where eight tabs would not.
@@ -86,11 +87,21 @@ CameraRawPanels::CameraRawPanels(Mode mode, const CameraRawSettings& settings, Q
     auto* resetRow = new QHBoxLayout;
     auto* reset = new QPushButton(tr("Reset All"));
     reset->setToolTip(tr("Put every panel back to its defaults"));
-    connect(reset, &QPushButton::clicked, this, [this] { settings_ = CameraRawSettings(); sync(); emitChanged(); });
+    connect(reset, &QPushButton::clicked, this, [this] { settings_ = defaults(); sync(); emitChanged(); });
     resetRow->addWidget(reset);
     resetRow->addStretch(1);
     layout->addLayout(resetRow);
     sync();
+}
+
+CameraRawSettings CameraRawPanels::defaults() const {
+    CameraRawSettings d;
+    if (mode_ == Mode::Raw && raw_ && raw_->kelvin) {   // a RAW file starts As Shot
+        d.whiteBalance = CameraRawWhiteBalance::AsShot;
+        d.rawTemperature = raw_->asShotValue.temperature;
+        d.rawTint = raw_->asShotValue.tint;
+    }
+    return d.normalized();
 }
 
 void CameraRawPanels::setSettings(const CameraRawSettings& settings) {
@@ -155,6 +166,106 @@ void CameraRawPanels::emitChanged() {
     if (!syncing_) emit changed();
 }
 
+void CameraRawPanels::whiteBalanceKelvin(QFormLayout* white) {
+    // Camera Raw's White Balance for a RAW file: As Shot, Auto, the presets the file records, and Custom; Temperature in
+    // kelvin and Tint set the white point, which the develop turns into the camera's multipliers.
+    CameraRawSettings& s = settings_;
+    std::vector<CameraRawWhiteBalance> modes{CameraRawWhiteBalance::AsShot, CameraRawWhiteBalance::Auto};
+    for (const auto& p : raw_->presets) modes.push_back(p.mode);
+    modes.push_back(CameraRawWhiteBalance::Custom);
+    QStringList names;
+    for (CameraRawWhiteBalance m : modes) names << whiteBalanceName(m);
+    const int custom = int(modes.size()) - 1;
+    whiteBalance_ = choice(white, tr("Mode"), names,
+        [&s, modes, custom] {
+            const auto it = std::find(modes.begin(), modes.end(), s.whiteBalance);
+            return it == modes.end() ? custom : int(it - modes.begin());
+        },
+        [this, &s, modes](int index) {
+            const CameraRawWhiteBalance mode = modes[size_t(index)];
+            if (mode == CameraRawWhiteBalance::AsShot) {
+                s.rawTemperature = raw_->asShotValue.temperature;
+                s.rawTint = raw_->asShotValue.tint;
+            } else if (mode == CameraRawWhiteBalance::Auto) {
+                if (autoBalance)
+                    if (auto solved = autoBalance()) { s.rawTemperature = (*solved)[0]; s.rawTint = (*solved)[1]; }
+            } else if (const auto* preset = raw_->preset(mode)) {
+                s.rawTemperature = preset->value.temperature;
+                s.rawTint = preset->value.tint;
+            }
+            s.rawTemperature = std::clamp(s.rawTemperature, kMinRawTemperature, kMaxRawTemperature);
+            s.rawTint = std::clamp(s.rawTint, -kMaxRawTint, kMaxRawTint);
+            s.whiteBalance = mode;
+            s.temperature = s.tint = 0;
+            sync();
+            emitChanged();
+        });
+    auto toCustom = [this, &s, custom] {
+        s.whiteBalance = CameraRawWhiteBalance::Custom;
+        if (whiteBalance_) { QSignalBlocker b(whiteBalance_); whiteBalance_->setCurrentIndex(custom); }
+    };
+
+    // Temperature: the slider runs evenly in reciprocal temperature (mired), as a white point's perceived change does,
+    // so the warm end is not crowded into a sliver of a 2000-50000 K scale; the number is kelvin.
+    constexpr int steps = 1000;
+    const double hotMired = 1e6 / kMaxRawTemperature, coldMired = 1e6 / kMinRawTemperature;
+    auto toPosition = [=](double kelvin) { return int(std::lround((coldMired - 1e6 / kelvin) / (coldMired - hotMired) * steps)); };
+    auto toKelvin = [=](int position) { return 1e6 / (coldMired - double(position) / steps * (coldMired - hotMired)); };
+    auto* row = new QHBoxLayout;
+    auto* slider = new QSlider(Qt::Horizontal);
+    slider->setObjectName("rawTemperature");
+    slider->setRange(0, steps);
+    slider->setMinimumWidth(120);
+    auto* spin = new QDoubleSpinBox;
+    spin->setObjectName("rawTemperatureValue");
+    spin->setRange(kMinRawTemperature, kMaxRawTemperature);
+    spin->setSingleStep(50);
+    spin->setDecimals(0);
+    spin->setSuffix(tr(" K"));
+    spin->setKeyboardTracking(false);
+    spin->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    spin->setAlignment(Qt::AlignRight);
+    spin->setFixedWidth(72);
+    row->addWidget(slider, 1);
+    row->addWidget(spin);
+    auto set = [this, &s, toCustom](double kelvin) {
+        if (syncing_) return;
+        s.rawTemperature = std::clamp(kelvin, kMinRawTemperature, kMaxRawTemperature);
+        toCustom();
+        emitChanged();
+    };
+    connect(slider, &QSlider::valueChanged, this, [spin, set, toKelvin](int p) {
+        const double kelvin = std::round(toKelvin(p));
+        { QSignalBlocker b(spin); spin->setValue(kelvin); }
+        set(kelvin);
+    });
+    connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [slider, set, toPosition](double kelvin) {
+        { QSignalBlocker b(slider); slider->setValue(toPosition(kelvin)); }
+        set(kelvin);
+    });
+    syncers_.push_back([slider, spin, &s, toPosition] {
+        QSignalBlocker a(slider), b(spin);
+        slider->setValue(toPosition(s.rawTemperature));
+        spin->setValue(std::round(s.rawTemperature));
+    });
+    white->addRow(tr("Temperature"), row);
+    this->slider(white, tr("Tint"), -kMaxRawTint, kMaxRawTint, 1, [&s]() -> double& { return s.rawTint; }, toCustom);
+}
+
+QString CameraRawPanels::whiteBalanceName(CameraRawWhiteBalance mode) {
+    switch (mode) {
+    case CameraRawWhiteBalance::AsShot: return tr("As Shot");
+    case CameraRawWhiteBalance::Auto: return tr("Auto");
+    case CameraRawWhiteBalance::Daylight: return tr("Daylight");
+    case CameraRawWhiteBalance::Cloudy: return tr("Cloudy");
+    case CameraRawWhiteBalance::Shade: return tr("Shade");
+    case CameraRawWhiteBalance::Tungsten: return tr("Tungsten");
+    case CameraRawWhiteBalance::Fluorescent: return tr("Fluorescent");
+    case CameraRawWhiteBalance::Flash: return tr("Flash");
+    default: return tr("Custom");
+    }
+}
+
 // ---- panels -----------------------------------------------------------------------------------------
 
 QWidget* CameraRawPanels::basicPage() {
@@ -163,36 +274,40 @@ QWidget* CameraRawPanels::basicPage() {
     CameraRawSettings& s = settings_;
 
     QFormLayout* white = section(v, tr("White Balance"));
-    // The filter offers Custom and Auto; a RAW file As Shot (the camera's balance: Temperature and Tint at 0), Auto
-    // and Custom, as Camera Raw does. Temperature and Tint are relative to the as-shot balance, not kelvin.
-    const bool raw = mode_ == Mode::Raw;
-    auto solveAuto = [this, &s] {
-        if (autoBalance)
-            if (auto solved = autoBalance()) {
-                s.temperature = std::clamp((*solved)[0], -100.0, 100.0);
-                s.tint = std::clamp((*solved)[1], -100.0, 100.0);
-            }
-    };
-    whiteBalance_ = choice(white, tr("Mode"), raw ? QStringList{tr("As Shot"), tr("Auto"), tr("Custom")} : QStringList{tr("Custom"), tr("Auto")},
-        [&s, raw] {
-            if (!raw) return int(s.whiteBalance);
-            if (s.whiteBalance == CameraRawWhiteBalance::Auto) return 1;
-            return s.temperature == 0 && s.tint == 0 ? 0 : 2;
-        },
-        [this, &s, raw, solveAuto](int index) {
-            const bool automatic = index == 1;
-            s.whiteBalance = automatic ? CameraRawWhiteBalance::Auto : CameraRawWhiteBalance::Custom;
-            if (automatic) solveAuto();   // the gray-world balance of the image fills Temperature and Tint
-            else if (raw && index == 0) s.temperature = s.tint = 0;
-            sync();
-            emitChanged();
-        });
-    auto toCustom = [&s, this, raw] {
-        s.whiteBalance = CameraRawWhiteBalance::Custom;
-        if (whiteBalance_) { QSignalBlocker b(whiteBalance_); whiteBalance_->setCurrentIndex(raw ? (s.temperature == 0 && s.tint == 0 ? 0 : 2) : 0); }
-    };
-    slider(white, tr("Temperature"), -100, 100, 1, [&s]() -> double& { return s.temperature; }, toCustom);
-    slider(white, tr("Tint"), -100, 100, 1, [&s]() -> double& { return s.tint; }, toCustom);
+    if (mode_ == Mode::Raw && raw_ && raw_->kelvin) {
+        whiteBalanceKelvin(white);
+    } else {
+        // The filter offers Custom and Auto, relative to the layer's colours. A RAW file whose camera matrix is unknown
+        // offers As Shot (the camera's balance: Temperature and Tint at 0), Auto and Custom, relative to the as-shot balance.
+        const bool raw = mode_ == Mode::Raw;
+        auto solveAuto = [this, &s] {
+            if (autoBalance)
+                if (auto solved = autoBalance()) {
+                    s.temperature = std::clamp((*solved)[0], -100.0, 100.0);
+                    s.tint = std::clamp((*solved)[1], -100.0, 100.0);
+                }
+        };
+        whiteBalance_ = choice(white, tr("Mode"), raw ? QStringList{tr("As Shot"), tr("Auto"), tr("Custom")} : QStringList{tr("Custom"), tr("Auto")},
+            [&s, raw] {
+                if (!raw) return s.whiteBalance == CameraRawWhiteBalance::Auto ? 1 : 0;
+                if (s.whiteBalance == CameraRawWhiteBalance::Auto) return 1;
+                return s.temperature == 0 && s.tint == 0 ? 0 : 2;
+            },
+            [this, &s, raw, solveAuto](int index) {
+                const bool automatic = index == 1;
+                s.whiteBalance = automatic ? CameraRawWhiteBalance::Auto : CameraRawWhiteBalance::Custom;
+                if (automatic) solveAuto();   // the gray-world balance of the image fills Temperature and Tint
+                else if (raw && index == 0) s.temperature = s.tint = 0;
+                sync();
+                emitChanged();
+            });
+        auto toCustom = [&s, this, raw] {
+            s.whiteBalance = CameraRawWhiteBalance::Custom;
+            if (whiteBalance_) { QSignalBlocker b(whiteBalance_); whiteBalance_->setCurrentIndex(raw ? (s.temperature == 0 && s.tint == 0 ? 0 : 2) : 0); }
+        };
+        slider(white, tr("Temperature"), -100, 100, 1, [&s]() -> double& { return s.temperature; }, toCustom);
+        slider(white, tr("Tint"), -100, 100, 1, [&s]() -> double& { return s.tint; }, toCustom);
+    }
 
     QFormLayout* light = section(v, tr("Light"));
     slider(light, tr("Exposure"), -5, 5, 0.05, [&s]() -> double& { return s.exposure; });

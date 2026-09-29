@@ -1,5 +1,5 @@
 // The Camera Raw dialog a camera RAW file opens in (see RawDevelopDialog.h). The develop is compositor/raw.h: LibRaw's
-// as-shot decode graded by the Camera Raw settings of compositor/cameraraw.h.
+// decode at the white balance's multipliers, graded by the Camera Raw settings of compositor/cameraraw.h.
 #include "RawDevelopDialog.h"
 #include "CameraRawPanels.h"
 #include "compositor/depth.h"
@@ -61,6 +61,8 @@ RawDevelopDialog::RawDevelopDialog(std::shared_ptr<const std::vector<uint8_t>> b
     RawInfo info;
     std::string error;
     const bool known = readRawInfo(*bytes_, info, &error);
+    if (known) readRawWhiteBalance(*bytes_, balance_, nullptr);
+    baseMultipliers_ = balance_.asShot;
     fullWidth_ = info.width;
     fullHeight_ = info.height;
     const QString camera = QString::fromStdString((info.make + " " + info.model)).trimmed();
@@ -71,6 +73,14 @@ RawDevelopDialog::RawDevelopDialog(std::shared_ptr<const std::vector<uint8_t>> b
     debounce_->setSingleShot(true);
     debounce_->setInterval(15);
     connect(debounce_, &QTimer::timeout, this, [this] { refreshPreview(); });
+    // A white balance change previews at once as a rebalance of the last decode; once it settles, the file is decoded
+    // again at the new multipliers so the preview is the develop's.
+    settle_ = new QTimer(this);
+    settle_->setSingleShot(true);
+    settle_->setInterval(350);
+    connect(settle_, &QTimer::timeout, this, [this] {
+        if (base_ && !developing_ && targetMultipliers() != baseMultipliers_) startPreviewDecode();
+    });
 
     auto* layout = new QVBoxLayout(this);
     auto* body = new QHBoxLayout;
@@ -80,15 +90,20 @@ RawDevelopDialog::RawDevelopDialog(std::shared_ptr<const std::vector<uint8_t>> b
     preview_->setMinimumSize(420, 320);
     preview_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
     body->addWidget(preview_, 1);
-    panels_ = new CameraRawPanels(CameraRawPanels::Mode::Raw, settings, this);
+    // Settings saved before kelvin white balance open in kelvin (their relative values as the white point they meant).
+    panels_ = new CameraRawPanels(CameraRawPanels::Mode::Raw, balance_.inKelvin(settings), this, &balance_);
     panels_->setMinimumWidth(440);
     panels_->setMaximumWidth(540);
-    // White Balance > Auto: the gray-world balance of the as-shot decode.
+    // White Balance > Auto: the gray-world white point of the quick decode (kelvin and tint), or for a camera without a
+    // colour model the gray-world balance relative to as shot.
     panels_->autoBalance = [this]() -> std::optional<std::array<double, 2>> {
         if (!base_) return std::nullopt;
-        return CameraRawSettings::autoBalance(*base_);
+        if (!balance_.kelvin) return CameraRawSettings::autoBalance(*base_);
+        const auto solved = rawAutoWhiteBalance(*base_, baseMultipliers_, balance_);
+        if (!solved) return std::nullopt;
+        return std::array<double, 2>{solved->temperature, solved->tint};
     };
-    connect(panels_, &CameraRawPanels::changed, this, [this] { debounce_->start(); });
+    connect(panels_, &CameraRawPanels::changed, this, [this] { debounce_->start(); settle_->start(); });
     body->addWidget(panels_);
     layout->addLayout(body, 1);
 
@@ -125,7 +140,10 @@ RawDevelopDialog::RawDevelopDialog(std::shared_ptr<const std::vector<uint8_t>> b
     startPreviewDecode();
 }
 
-RawDevelopDialog::~RawDevelopDialog() { stopWorker(); }
+RawDevelopDialog::~RawDevelopDialog() {
+    stopPreview();
+    stopWorker();
+}
 
 const CameraRawSettings& RawDevelopDialog::settings() const { return panels_->settings(); }
 
@@ -137,37 +155,63 @@ void RawDevelopDialog::stopWorker() {
     cancelFlag_ = false;
 }
 
+std::array<double, 3> RawDevelopDialog::targetMultipliers() const {
+    return balance_.multipliersFor(panels_->settings().normalized()).value_or(balance_.asShot);
+}
+
 void RawDevelopDialog::startPreviewDecode() {
     // The quick decode (half size) off the UI thread; the dialog shows at once and the preview follows.
+    if (previewBusy_) return;   // the one under way starts the next when it is done
+    if (previewWorker_.joinable()) previewWorker_.join();
+    previewBusy_ = true;
+    const int generation = ++previewGeneration_;
+    const std::array<double, 3> target = targetMultipliers();
+    std::optional<std::array<double, 3>> multipliers;
+    if (target != balance_.asShot) multipliers = target;   // as shot is the camera's own balance, exactly
     auto bytes = bytes_;
-    worker_ = std::thread([this, bytes] {
+    previewWorker_ = std::thread([this, bytes, multipliers, target, generation] {
         RawDecodeOptions options;
         options.halfSize = true;
-        options.cancel = &cancelFlag_;
+        options.cancel = &previewCancel_;
+        options.multipliers = multipliers;
         std::string error;
         auto image = decodeRaw16(*bytes, options, &error);
         if (image) image = reduced(std::move(image), previewLimit);
-        workerResult_ = image;
-        workerError_ = error;
-        QMetaObject::invokeMethod(this, [this] { previewDecoded(); }, Qt::QueuedConnection);
+        QMetaObject::invokeMethod(this, [this, image, error, target, generation] { previewDecoded(image, error, target, generation); },
+                                  Qt::QueuedConnection);
     });
 }
 
-void RawDevelopDialog::previewDecoded() {
-    if (worker_.joinable()) worker_.join();
-    base_ = std::move(workerResult_);
-    if (!base_) {
-        preview_->setText(QString::fromStdString(workerError_));
+void RawDevelopDialog::previewDecoded(std::shared_ptr<Image16> image, const std::string& error, const std::array<double, 3>& multipliers,
+                                      int generation) {
+    if (previewWorker_.joinable()) previewWorker_.join();
+    previewBusy_ = false;
+    if (generation != previewGeneration_ || developing_) return;   // stopped for a develop
+    if (!image) {
+        if (base_) return;   // a later decode failed: keep previewing the last one
+        preview_->setText(QString::fromStdString(error));
         open_->setEnabled(false);
         if (openObject_) openObject_->setEnabled(false);
         return;
     }
+    base_ = std::move(image);
+    baseMultipliers_ = multipliers;
     refreshPreview();
+    if (targetMultipliers() != baseMultipliers_ && !settle_->isActive()) startPreviewDecode();   // the balance moved on meanwhile
+}
+
+void RawDevelopDialog::stopPreview() {
+    previewCancel_ = true;
+    if (previewWorker_.joinable()) previewWorker_.join();
+    previewCancel_ = false;
+    previewBusy_ = false;
+    previewGeneration_++;   // a result already queued is ignored
 }
 
 void RawDevelopDialog::refreshPreview() {
     if (!base_ || developing_) return;
     Image16 graded = *base_;
+    if (const auto target = targetMultipliers(); target != baseMultipliers_) rebalanceRawDecode(graded, balance_, baseMultipliers_, target);
     const double scale = fullWidth_ > 0 ? double(base_->width()) / fullWidth_ : 0.5;
     const CameraRawSettings normalized = panels_->settings().normalized();
     const CameraRawPreview& overlays = panels_->preview();
@@ -193,6 +237,8 @@ void RawDevelopDialog::resizeEvent(QResizeEvent* event) {
 void RawDevelopDialog::develop(Choice choice) {
     if (developing_ || !base_) return;
     developing_ = true;
+    settle_->stop();
+    stopPreview();
     if (depth_) QSettings().setValue("cameraRaw/bitsPerChannel", bitsPerChannel());
     panels_->setEnabled(false);
     open_->setEnabled(false);
@@ -218,6 +264,7 @@ void RawDevelopDialog::developed(Choice choice) {
     developed_ = std::move(workerResult_);
     if (!developed_) {
         status_->setText(QString::fromStdString(workerError_));
+        settle_->start();
         panels_->setEnabled(true);
         open_->setEnabled(true);
         if (openObject_) openObject_->setEnabled(true);
@@ -230,6 +277,8 @@ void RawDevelopDialog::developed(Choice choice) {
 
 void RawDevelopDialog::reject() {
     // Cancel, Escape or closing: a decode under way stops, and nothing opens.
+    settle_->stop();
+    stopPreview();
     stopWorker();
     developing_ = false;
     choice_ = Choice::Cancelled;

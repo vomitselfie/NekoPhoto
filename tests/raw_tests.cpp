@@ -295,6 +295,41 @@ TEST_CASE(kelvin_white_balance_develops_through_the_multipliers) {
     for (int c = 0; c < 3; c++) CHECK_NEAR(at(quick, 64, 20)[size_t(c)], w[size_t(c)], 0.03);
 }
 
+TEST_CASE(older_relative_settings_keep_developing_and_move_to_kelvin_in_the_dialog) {
+    if (!rawSupported()) return;
+    const auto bytes = fixture();
+    std::string error;
+    RawWhiteBalance balance;
+    REQUIRE(readRawWhiteBalance(bytes, balance, &error));
+    // A record written before kelvin white balance: relative temperature over the as-shot decode.
+    CameraRawSettings old;
+    REQUIRE(CameraRawSettings::parse(R"({"whiteBalance": "Custom", "temperature": 30, "tint": -10, "exposure": 0.2})", old));
+    CHECK_EQ(old.rawTemperature, 0.0);
+    auto legacy = developRaw(bytes, old, {}, &error);
+    REQUIRE(legacy);
+    auto plain = developRaw(bytes, {}, {}, &error);
+    Image16 filtered = *plain;
+    applyCameraRaw(filtered, old.normalized(), 1, 0);
+    CHECK(filtered == *legacy);   // develops exactly as it always did
+    // Opened in the dialog it becomes the white point its gains neutralize: the grey ramp keeps its colour.
+    const CameraRawSettings moved = balance.inKelvin(old);
+    CHECK(moved.rawTemperature > 0);
+    CHECK_EQ(moved.temperature, 0.0);
+    CHECK_EQ(moved.exposure, 0.2);
+    auto kelvin = developRaw(bytes, moved, {}, &error);
+    REQUIRE(kelvin);
+    for (int c = 0; c < 3; c++) CHECK_NEAR(at(*kelvin, 64, 20)[size_t(c)], at(*legacy, 64, 20)[size_t(c)], 0.04);
+    // Zero relative values are As Shot, exactly.
+    CameraRawSettings zero;
+    zero.exposure = 0.2;
+    const CameraRawSettings asShot = balance.inKelvin(zero);
+    CHECK(asShot.whiteBalance == CameraRawWhiteBalance::AsShot);
+    auto same = developRaw(bytes, asShot, {}, &error);
+    auto before = developRaw(bytes, zero, {}, &error);
+    REQUIRE(same && before);
+    CHECK(*same == *before);
+}
+
 TEST_CASE(automation_settings_settle_against_the_file) {
     if (!rawSupported()) return;
     const auto bytes = fixture();
@@ -367,7 +402,13 @@ TEST_CASE(real_camera_files_round_trip_their_as_shot_balance) {
         std::printf("%s as shot: multipliers %.4f %.4f %.4f -> %.0f K, tint %+.1f; presets:", name, balance.asShot[0], balance.asShot[1],
                     balance.asShot[2], balance.asShotValue.temperature, balance.asShotValue.tint);
         for (const auto& p : balance.presets) std::printf(" %s %.0f K %+.1f,", cameraRawName(p.mode), p.value.temperature, p.value.tint);
-        std::printf("\n");
+        RawDecodeOptions quick;
+        quick.halfSize = true;
+        auto decoded = decodeRaw16(bytes, quick, &error);
+        REQUIRE(decoded);
+        const auto automatic = rawAutoWhiteBalance(*decoded, balance.asShot, balance);
+        REQUIRE(automatic);
+        std::printf(" Auto %.0f K %+.1f\n", automatic->temperature, automatic->tint);
     }
 }
 

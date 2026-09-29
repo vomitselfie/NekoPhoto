@@ -400,6 +400,8 @@ def sixteen_bit(rpc):
     # Camera Raw at 16 bits, White Balance > Auto included.
     raw = rpc.call("pixels.cameraRaw", settings={"exposure": 0.4, "clarity": 20, "whiteBalance": "Auto", "detail": {"sharpenAmount": 30}})
     assert raw["applied"] and rpc.call("history.info")["undo"] == "Camera Raw Filter", raw
+    expect_refused(rpc, "camera RAW", "pixels.cameraRaw", settings={"whiteBalance": "As Shot"})
+    expect_refused(rpc, "camera RAW", "pixels.cameraRaw", settings={"rawTemperature": 5000})
     # G'MIC at 16 bits, when it is installed: the pixels go to it as float and come back at 16 bits.
     if rpc.call("gmic.filters", search="sharpen")["installed"]:
         assert rpc.call("pixels.gmic", command="blur 1.5")["applied"] == "blur 1.5"
@@ -1967,6 +1969,19 @@ def main():
         assert rpc.call("document.info")["bits"] == 16
         plain = rpc.call("render", maxSize=32)
         rpc.call("tabs.close", index=shot["tab"], discard=True)
+        # White balance in kelvin: As Shot reads the file's white point, and a kelvin temperature develops through it.
+        asshot_open = rpc.call("document.open", path=dng, settings={"whiteBalance": "As Shot"})
+        asshot = asshot_open["settings"]
+        assert asshot["whiteBalance"] == "As Shot" and 2000 <= asshot["rawTemperature"] <= 50000, asshot
+        assert rpc.call("render", maxSize=32) == plain, "As Shot is the camera's own balance"
+        rpc.call("tabs.close", index=asshot_open["tab"], discard=True)
+        warm = rpc.call("document.open", path=dng, settings={"temperature": asshot["rawTemperature"] + 2000, "tint": 10})
+        assert abs(warm["settings"]["rawTemperature"] - asshot["rawTemperature"] - 2000) < 1e-6, warm
+        assert warm["settings"]["rawTint"] == 10 and warm["settings"]["temperature"] == 0 and warm["settings"]["whiteBalance"] == "Custom", warm
+        assert rpc.call("render", maxSize=32) != plain, "a kelvin white balance changes the develop"
+        rpc.call("tabs.close", index=warm["tab"], discard=True)
+        for bad in ({"temperature": 60000}, {"temperature": 5000, "tint": 200}, {"whiteBalance": "Daylight"}):
+            expect_refused(rpc, "", "document.open", path=dng, settings=bad)
         eight = rpc.call("document.open", path=dng, bitsPerChannel=8, settings={"exposure": 1, "whiteBalance": "Auto"})
         assert rpc.call("document.info")["bits"] == 8 and eight["settings"]["exposure"] == 1, eight
         assert rpc.call("render", maxSize=32) != plain, "the settings change the develop"
@@ -1976,8 +1991,9 @@ def main():
         layer = rpc.call("layers.list")[0]
         assert layer["kind"] == "smartObject" and layer["smartObject"]["state"] == "editable", layer
         before = rpc.call("render", maxSize=32)
-        again = rpc.call("smartObject.editContents", id=layer["id"], settings={"exposure": -1})
+        again = rpc.call("smartObject.editContents", id=layer["id"], settings={"exposure": -1, "temperature": 5000, "tint": -5})
         assert again["developed"] and again["settings"]["exposure"] == -1 and again["tab"] == obj["tab"], again
+        assert again["settings"]["rawTemperature"] == 5000 and again["settings"]["rawTint"] == -5, again
         assert rpc.call("history.info")["undo"] == "Camera Raw"
         assert rpc.call("render", maxSize=32) != before
         rpc.call("history.undo")

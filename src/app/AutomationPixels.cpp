@@ -226,6 +226,10 @@ void AutomationServer::registerPixelsHandlers() {
         std::string error;
         const QByteArray text = QJsonDocument(obj(p, "settings")).toJson(QJsonDocument::Compact);
         if (!CameraRawSettings::parse(text.toStdString(), settings, &error)) fail("settings." + qs(error), invalidParams);
+        if (settings.rawTemperature != 0 || settings.rawTint != 0
+            || (settings.whiteBalance != CameraRawWhiteBalance::Custom && settings.whiteBalance != CameraRawWhiteBalance::Auto))
+            fail("settings: rawTemperature, rawTint and the As Shot and preset white balances apply to camera RAW files; the filter's "
+                 "whiteBalance is Custom or Auto with relative temperature and tint", invalidParams);
         if (settings.whiteBalance == CameraRawWhiteBalance::Auto && !obj(p, "settings").contains("temperature") && !obj(p, "settings").contains("tint")) {
             // Auto without explicit numbers: the gray-world balance of the layer, as the dialog's White Balance > Auto.
             LayerTransform probe;

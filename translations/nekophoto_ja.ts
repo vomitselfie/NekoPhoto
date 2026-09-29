@@ -3703,8 +3703,36 @@ Add one from the Layers panel or Layer &gt; New Adjustment Layer.</source>
         <translation>色温度</translation>
     </message>
     <message>
+        <source> K</source>
+        <translation> K</translation>
+    </message>
+    <message>
         <source>Tint</source>
         <translation>着色</translation>
+    </message>
+    <message>
+        <source>Daylight</source>
+        <translation>昼光</translation>
+    </message>
+    <message>
+        <source>Cloudy</source>
+        <translation>曇天</translation>
+    </message>
+    <message>
+        <source>Shade</source>
+        <translation>日陰</translation>
+    </message>
+    <message>
+        <source>Tungsten</source>
+        <translation>白熱灯</translation>
+    </message>
+    <message>
+        <source>Fluorescent</source>
+        <translation>蛍光灯</translation>
+    </message>
+    <message>
+        <source>Flash</source>
+        <translation>フラッシュ</translation>
     </message>
     <message>
         <source>Light</source>

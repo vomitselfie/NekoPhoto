@@ -207,8 +207,10 @@ void AutomationServer::registerLayersHandlers() {
                 std::string why;
                 const QJsonObject given = obj(p, "settings");
                 if (!CameraRawSettings::parse(QJsonDocument(given).toJson(QJsonDocument::Compact).toStdString(), settings, &why)) fail("settings." + QString::fromStdString(why), invalidParams);
-                if (settings.whiteBalance == CameraRawWhiteBalance::Auto && !given.contains("temperature") && !given.contains("tint"))
-                    if (auto solved = compositor::rawAutoBalance(*session()->activeRawSmartObject()->bytes)) { settings.temperature = (*solved)[0]; settings.tint = (*solved)[1]; }
+                // White balance against the file: kelvin, As Shot, the file's presets, Auto (docs/camera-raw.md).
+                const std::string refused = compositor::resolveRawWhiteBalance(*session()->activeRawSmartObject()->bytes, settings,
+                                                                               given.contains("temperature"), given.contains("tint"));
+                if (!refused.empty()) fail("settings: " + QString::fromStdString(refused), invalidParams);
             }
             if (!w->editSmartObjectContents(&error, &settings)) fail(error);
             CameraRawSettings now;

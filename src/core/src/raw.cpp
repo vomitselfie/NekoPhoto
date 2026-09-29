@@ -265,6 +265,32 @@ std::optional<std::array<double, 3>> RawWhiteBalance::multipliersFor(const Camer
     return multipliersFor(TemperatureTint{settings.rawTemperature, settings.rawTint});
 }
 
+CameraRawSettings RawWhiteBalance::inKelvin(const CameraRawSettings& settings) const {
+    if (!kelvin || settings.rawTemperature > 0) return settings;
+    CameraRawSettings r = settings;
+    if (settings.temperature == 0 && settings.tint == 0) {
+        if (r.whiteBalance == CameraRawWhiteBalance::Custom) r.whiteBalance = CameraRawWhiteBalance::AsShot;
+        r.rawTemperature = std::clamp(asShotValue.temperature, kMinRawTemperature, kMaxRawTemperature);
+        r.rawTint = std::clamp(asShotValue.tint, -kMaxRawTint, kMaxRawTint);
+        return r;
+    }
+    // The relative gains act on the as-shot decode in linear light: the colour they bring to grey is 1 / gain, and its
+    // raw camera response is the white point's neutral.
+    const auto toCamera = invert(cameraToSrgb);
+    if (!toCamera) return settings;
+    const auto gains = settings.normalized().gains();
+    const auto camera = times(*toCamera, {1 / gains[0], 1 / gains[1], 1 / gains[2]});
+    std::array<double, 3> neutral{};
+    for (int c = 0; c < 3; c++) neutral[size_t(c)] = camera[size_t(c)] / asShot[size_t(c)];
+    if (!(neutral[0] > 0 && neutral[1] > 0 && neutral[2] > 0)) return settings;
+    const auto value = valueOf(multipliersFromNeutral(neutral));
+    if (!value) return settings;
+    r.rawTemperature = std::clamp(value->temperature, kMinRawTemperature, kMaxRawTemperature);
+    r.rawTint = std::clamp(value->tint, -kMaxRawTint, kMaxRawTint);
+    r.temperature = r.tint = 0;
+    return r;
+}
+
 bool readRawWhiteBalance(const std::vector<uint8_t>& bytes, RawWhiteBalance& out, std::string* error) {
 #ifdef COMPOSITOR_HAVE_LIBRAW
     auto raw = openRaw(bytes, error);

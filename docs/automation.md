@@ -116,7 +116,10 @@ shape layers), a PDF page (`page`, 1-based, and `resolution` in pixels per inch,
 `pdf`) or an animated GIF (a layer per frame, "Frame N (D ms)", frame 1
 at the bottom and the only one visible, with the frames, delays and loop count on the timeline), which open in a tab of their own and answer with `layers` and the import
 `notes`; or an image, .tga included; a camera RAW file always opens in a new tab, developed without the Camera Raw
-dialog, as shot or with `settings` (the object `pixels.cameraRaw` takes), at `bitsPerChannel` 16 or 8, and with
+dialog, as shot or with `settings` (the object `pixels.cameraRaw` takes; white balance as Camera Raw shows it for RAW:
+`temperature` in kelvin 2000..50000 and `tint` -150..150, `whiteBalance` `As Shot`, `Auto`, `Custom` or a preset the file
+records, and the reply's `settings` carry them as `rawTemperature` and `rawTint`; see
+[camera-raw.md](camera-raw.md#white-balance)), at `bitsPerChannel` 16 or 8, and with
 `asSmartObject: true` as a smart object keeping the RAW file and the settings), `document.import` (an image as a layer),
 `document.save` (answers `macCompatible`: false past the 100 megapixels of layers Compositor for
 macOS opens; projects here hold up to a gigapixel), `document.export` (.psd, layered, text layers as Photoshop text (`texts` counts them), answering with the counts and any `warnings` and `notes` about what Photoshop cannot carry; or .svg, answering with the `shapes`, `images` and `groups` written and `notes` on what became images (docs/svg-pdf.md); an animated .gif of the timeline's frames (the composite when there are none; `frames` counts them); or the composite as .png, .jpg, .webp or .tif; `quality` for JPEG and WebP, where 100 is lossless; `background` behind a JPEG; PNG, JPEG, WebP, TIFF and PSD carry the
@@ -133,7 +136,7 @@ shows a folder's `artboard`; `tool.select` takes `artboard` and `slice`.
 
 Smart objects: `smartObject.convert` (the selection or `ids`), `smartObject.place` (`path`), `smartObject.replace`
 (`path`), `smartObject.rasterize`, `smartObject.editContents` (opens a tab; a smart object made from a camera RAW file is developed again instead, with
-`settings` or its own, one undo step) and `smartObject.commit` (in that tab).
+`settings`, white balance in kelvin as `document.open` takes it, or its own, one undo step) and `smartObject.commit` (in that tab).
 `smartObject.addFilter` adds a Smart Filter (any of the thirteen drawn here, with its settings, opacity and blend) on
 top of a smart object's stack. `smartObject.filters` lists the stack (entries by `index` in running order, 0 applied
 first; each with its `kind`, `settings`, `enabled`, `opacity`, `blend`, and `drawn` false for one NekoPhoto does not draw,
@@ -177,7 +180,8 @@ Channel Mixer `cyan` ... `black` ink rows),
 0..100 for the seeded effects, `layer` (the id of the layer `overlay` and `mask` read) and `text` (what `caption` stamps);
 replies with the settings applied; [mosh.md](mosh.md) lists every effect and parameter),
 `pixels.cameraRaw` (Filter > Camera Raw Filter: `settings` with the model's keys, nested `curve`, `mixer`, `grading`,
-`detail`, `optics`, `geometry` and `calibration` objects, unknown keys refused, `whiteBalance: "Auto"` balances the layer;
+`detail`, `optics`, `geometry` and `calibration` objects, unknown keys refused, `whiteBalance: "Auto"` balances the layer,
+`temperature` and `tint` relative, -100..100, as Photoshop's filter has them;
 `rpc.describe` lists every key and range and [camera-raw.md](camera-raw.md) what each does), `pixels.invert`, `pixels.fill`, `pixels.clear`,
 `pixels.contentAwareFill` (`sampling`: `auto` around the selection, `all` the whole layer, or `custom`: the
 `include` rectangles, the whole canvas when none, less the `exclude` rectangles; `output`: `current` or `new`, only

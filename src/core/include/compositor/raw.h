@@ -1,6 +1,7 @@
 // Camera RAW files (CR2, CR3, NEF, ARW, RAF, ORF, RW2, DNG, ...) developed through LibRaw (LGPL 2.1 / CDDL 1.0):
-// demosaiced with the camera's as-shot white balance into sRGB, turned upright. Optional: builds without LibRaw
-// refuse them. Opening one goes through the Camera Raw dialog (the grade of cameraraw.h over the as-shot decode);
+// demosaiced with the camera's as-shot white balance, or the multipliers of a Temperature and Tint (whitebalance.h), into
+// sRGB, turned upright. Optional: builds without LibRaw refuse them. Opening one goes through the Camera Raw dialog (the
+// grade of cameraraw.h over the decode);
 // docs/camera-raw.md has the workflow.
 #pragma once
 #include "cameraraw.h"
@@ -60,6 +61,10 @@ struct RawWhiteBalance {
     std::optional<TemperatureTint> valueOf(const std::array<double, 3>& multipliers) const;
     /// The multipliers `settings` develops with; empty for the camera's own (As Shot, or no kelvin balance set).
     std::optional<std::array<double, 3>> multipliersFor(const CameraRawSettings& settings) const;
+    /// Settings saved before kelvin white balance (relative Temperature and Tint over the as-shot decode) in kelvin, for
+    /// the Camera Raw dialog: relative 0, 0 is As Shot exactly; other values become the white point their gains bring to
+    /// grey. Unchanged without a colour model or when the settings already hold a kelvin balance.
+    CameraRawSettings inKelvin(const CameraRawSettings& settings) const;
 };
 bool readRawWhiteBalance(const std::vector<uint8_t>& bytes, RawWhiteBalance& out, std::string* error);
 
@@ -82,7 +87,7 @@ struct RawInfo {
 };
 bool readRawInfo(const std::vector<uint8_t>& bytes, RawInfo& info, std::string* error);
 
-/// The file's pixels as shot at 16 bits (0..32768, opaque), in sRGB: the camera's white balance, no grade.
+/// The file's pixels at 16 bits (0..32768, opaque), in sRGB: the camera's white balance (or options.multipliers), no grade.
 std::shared_ptr<Image16> decodeRaw16(const std::vector<uint8_t>& bytes, const RawDecodeOptions& options, std::string* error);
 
 /// Decoded as shot, then graded by `settings` (Camera Raw's panels): what Open in the Camera Raw dialog makes.

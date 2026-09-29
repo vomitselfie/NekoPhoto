@@ -310,7 +310,9 @@ def document_open(path: str, page: Optional[int] = None, resolution: Optional[fl
     layer per size) or an animated GIF (a layer per frame, frame 1 visible); or an image file, .tga included, as a
     layer (a first image creates the canvas).
     A camera RAW file (CR2, NEF, ARW, DNG, ...; when app_info reports raw) always opens in a new tab, developed from the
-    camera's white balance with settings (pixels_camera_raw's keys; temperature and tint are relative to as shot),
+    camera's white balance (As Shot) or with settings (pixels_camera_raw's keys; for RAW, temperature is kelvin
+    2000..50000 and tint -150..150, whiteBalance "As Shot", "Auto", "Custom" or a preset the file records such as
+    "Daylight"; the reply's settings carry rawTemperature and rawTint),
     at bitsPerChannel 16 (or 8); asSmartObject=True makes a smart object that keeps the RAW file and the settings, which
     smart_object_edit_contents develops again. mergedOnly=True opens a PSD/PSB as the merged image Photoshop stored,
     one layer, for a file whose layers do not fit (a new, untitled document)."""
@@ -707,7 +709,8 @@ def layers_warp(style: str, id: Optional[str] = None, bend: float = 50, horizont
 def smart_object_edit_contents(id: Optional[str] = None, settings: Optional[dict] = None) -> str:
     """Open a smart object's contents in a new tab. Edit them there with the usual tools, then smart_object_commit
     puts them back into every layer placing them (and tabs_select returns to the document). A smart object made from
-    a camera RAW file is developed again instead, with settings (pixels_camera_raw's keys) or its own, as one undo step."""
+    a camera RAW file is developed again instead, with settings (pixels_camera_raw's keys; temperature in kelvin and
+    tint as document_open takes them) or its own, as one undo step."""
     return text(call("smartObject.editContents", id=id, settings=settings))
 
 

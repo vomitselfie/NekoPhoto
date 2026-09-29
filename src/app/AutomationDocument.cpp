@@ -115,17 +115,18 @@ void AutomationServer::registerDocumentHandlers() {
             // Camera RAW: developed without the dialog (as shot, or with `settings`), into a new tab.
             if (!compositor::rawSupported()) fail("this build cannot open camera RAW files (LibRaw was not found)");
             MainWindow::RawOpenRequest request;
+            const QJsonObject given = obj(p, "settings");
             if (has(p, "settings")) {
                 std::string why;
-                const QJsonObject given = obj(p, "settings");
                 if (!CameraRawSettings::parse(QJsonDocument(given).toJson(QJsonDocument::Compact).toStdString(), request.settings, &why)) fail("settings." + QString::fromStdString(why), invalidParams);
-                if (request.settings.whiteBalance == CameraRawWhiteBalance::Auto && !given.contains("temperature") && !given.contains("tint")) {
-                    std::string ignored;
-                    if (auto solved = compositor::rawAutoBalance(compositor::readRawFileBytes(path.toStdString(), &ignored))) {
-                        request.settings.temperature = (*solved)[0];
-                        request.settings.tint = (*solved)[1];
-                    }
-                }
+            }
+            {
+                // White balance against the file: kelvin, As Shot, the file's presets, Auto (docs/camera-raw.md).
+                std::string why;
+                const auto bytes = compositor::readRawFileBytes(path.toStdString(), &why);
+                if (bytes.empty()) fail(QString::fromStdString(why));
+                const std::string refused = compositor::resolveRawWhiteBalance(bytes, request.settings, given.contains("temperature"), given.contains("tint"));
+                if (!refused.empty()) fail("settings: " + QString::fromStdString(refused), invalidParams);
             }
             request.asSmartObject = flag(p, "asSmartObject", false);
             request.bitsPerChannel = integer(p, "bitsPerChannel", 16);
