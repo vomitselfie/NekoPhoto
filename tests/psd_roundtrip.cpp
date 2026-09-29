@@ -8,6 +8,7 @@
 #include "compositor/psd.h"
 #include "compositor/psd_writer.h"
 #include "compositor/psd_carry.h"
+#include "compositor/vectormask.h"
 #include "psd/psd_binary.hpp"
 #include <algorithm>
 #include <cstdio>
@@ -157,6 +158,37 @@ bool check(const fs::path& path, int& carriedBlocks, int& channelsBack) {
     try { a = dump(readFile(path)); } catch (std::exception& e) { std::printf("SKIP %s: unreadable here (%s)\n", path.filename().string().c_str(), e.what()); return true; }
     try { b = dump(out); } catch (std::exception& e) { std::printf("FAIL %s: our file does not parse: %s\n", path.filename().string().c_str(), e.what()); return false; }
     std::vector<std::string> problems;
+    // Fill layers Photoshop stored pixels for: our own drawing of the gradient or pattern against them (reported, not
+    // gated: PSD_ROUNDTRIP_FILLS=1 prints each one).
+    if (std::getenv("PSD_ROUNDTRIP_FILLS"))
+        for (const compositor::Layer& layer : imported->document.layers) {
+            const compositor::Image* stored = layer.asset ? layer.asset->image.u8().get() : nullptr;
+            if (!stored || !layer.psdCarry) continue;
+            auto drawn = compositor::renderFillLayer(layer, imported->document);
+            if (!drawn) continue;
+            const int ox = int(layer.origin().x), oy = int(layer.origin().y);
+            double sum = 0; int worst = 0; long n = 0;
+            for (int y = 0; y < stored->height(); y++)
+                for (int x = 0; x < stored->width(); x++) {
+                    const int dx = x + ox, dy = y + oy;
+                    if (dx < 0 || dy < 0 || dx >= drawn->width() || dy >= drawn->height()) continue;
+                    const uint8_t* a = stored->pixel(x, y); const uint8_t* b = drawn->pixel(dx, dy);
+                    for (int c = 0; c < 4; c++) { const int d = std::abs(int(a[c]) - int(b[c])); worst = std::max(worst, d); sum += d; }
+                    n += 4;
+                }
+            if (const char* dir = std::getenv("PSD_ROUNDTRIP_FILLS_DUMP")) {
+                for (int which = 0; which < 2; which++) {
+                    std::ofstream out(std::string(dir) + "/" + layer.name + (which ? ".drawn.pam" : ".stored.pam"), std::ios::binary);
+                    out << "P7\nWIDTH " << stored->width() << "\nHEIGHT " << stored->height() << "\nDEPTH 4\nMAXVAL 255\nTUPLTYPE RGB_ALPHA\nENDHDR\n";
+                    for (int y = 0; y < stored->height(); y++)
+                        for (int x = 0; x < stored->width(); x++) {
+                            const int dx = std::clamp(x + ox, 0, drawn->width() - 1), dy = std::clamp(y + oy, 0, drawn->height() - 1);
+                            out.write(reinterpret_cast<const char*>(which ? drawn->pixel(dx, dy) : stored->pixel(x, y)), 4);
+                        }
+                }
+            }
+            std::printf("     fill \"%s\": drawn against Photoshop's pixels: mean %.2f, max %d levels\n", layer.name.c_str(), n ? sum / double(n) : 0.0, worst);
+        }
     // The size check before opening (estimatePsd) reads the same records the importer does, seeking past the pixels.
     if (auto e = compositor::estimatePsd(path.string(), &error)) {
         if (e->layers != int(a.records.size()) || e->width != imported->document.width || e->height != imported->document.height)

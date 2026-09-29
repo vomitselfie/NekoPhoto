@@ -214,3 +214,18 @@ TEST_CASE(style_json_is_held_to_the_dialog_ranges) {
 }
 
 TEST_MAIN()
+
+TEST_CASE(radial_fill_layer_gradients_snap_as_photoshop_draws_them) {
+    // A Photoshop-saved 100 x 100 radial fill (scale 85%) is centred on pixel 50's centre and spans a whole-pixel
+    // radius (42, not 42.5); a linear fill stays unsnapped (Patchy's calibration).
+    StyleGradient g;
+    g.fillLayer = true;
+    g.type = StyleGradient::Type::Radial;
+    g.angle = 90;
+    g.scale = 0.85f;
+    CHECK_NEAR(gradientPosition(g, 0, 0, 100, 100, 50, 50), 0.0, 1e-6);
+    CHECK_NEAR(gradientPosition(g, 0, 0, 100, 100, 50 + 21, 50), 0.5, 1e-6);
+    CHECK_NEAR(gradientPosition(g, 0, 0, 100, 100, 50 + 42, 50), 1.0, 1e-6);
+    g.type = StyleGradient::Type::Linear;
+    CHECK_NEAR(gradientPosition(g, 0, 0, 100, 100, 49.5, 49.5), 0.5, 1e-6);
+}

@@ -86,6 +86,15 @@ StyleColor colorOf(const psd::DescriptorObject& o, const char* key, StyleColor f
         return {byte(255 * (1 - ink("Cyn ")) * (1 - k)), byte(255 * (1 - ink("Mgnt")) * (1 - k)), byte(255 * (1 - ink("Ylw ")) * (1 - k))};
     }
     if (c->class_id == "Grsc") { const uint8_t g = byte(255 * (1 - psd::descriptor_number(*c, "Gry ") / 100.0)); return {g, g, g}; }
+    if (c->class_id == "HSBC") {
+        // Hue in degrees, saturation and brightness in percent (a gradient's stops often come this way).
+        const double h = std::fmod(std::fmod(psd::descriptor_number(*c, "H   "), 360.0) + 360.0, 360.0) / 60.0;
+        const double s = std::clamp(psd::descriptor_number(*c, "Strt") / 100.0, 0.0, 1.0), v = std::clamp(psd::descriptor_number(*c, "Brgh") / 100.0, 0.0, 1.0);
+        const double chroma = v * s, x = chroma * (1 - std::abs(std::fmod(h, 2.0) - 1)), m = v - chroma;
+        const double table[6][3] = {{chroma, x, 0}, {x, chroma, 0}, {0, chroma, x}, {0, x, chroma}, {x, 0, chroma}, {chroma, 0, x}};
+        const int sector = int(h) % 6;
+        return {byte((table[sector][0] + m) * 255), byte((table[sector][1] + m) * 255), byte((table[sector][2] + m) * 255)};
+    }
     return {byte(psd::descriptor_number(*c, "Rd  ")), byte(psd::descriptor_number(*c, "Grn ")), byte(psd::descriptor_number(*c, "Bl  "))};
 }
 
@@ -647,7 +656,10 @@ float gradientPosition(const StyleGradient& g, double bx, double by, double bw, 
     // Photoshop's overlay geometry (Patchy's gradient_position, LayerProjection basis): the centre snaps to a
     // pixel, Linear and Reflected span the bounds' projection on the axis, the half-ramp is whole pixels.
     double cx = bx + bw * (0.5 + g.offsetX / 100.0), cy = by + bh * (0.5 + g.offsetY / 100.0);
-    if (!g.fillLayer) { cx = std::floor(cx) + 0.5; cy = std::floor(cy) + 0.5; }
+    // A fill layer's Linear ramp is unsnapped (Patchy's calibration); its Radial one snaps as the overlay does (a
+    // Photoshop-saved radial fill: centre on a pixel's centre, a whole-pixel radius).
+    const bool snapped = !g.fillLayer || g.type != StyleGradient::Type::Linear;
+    if (snapped) { cx = std::floor(cx) + 0.5; cy = std::floor(cy) + 0.5; }
     const double px = x + 0.5, py = y + 0.5, a = g.angle * M_PI / 180;
     const double lx = (px - cx) * std::cos(a) - (py - cy) * std::sin(a), ly = (px - cx) * std::sin(a) + (py - cy) * std::cos(a);
     const double ac = std::abs(std::cos(a)), as = std::abs(std::sin(a));
@@ -655,7 +667,7 @@ float gradientPosition(const StyleGradient& g, double bx, double by, double bw, 
     const double span = g.fillLayer ? std::max(1.0, std::min(ac > 1e-6 ? bw / ac : 1e300, as > 1e-6 ? bh / as : 1e300))
                                     : std::max(1.0, ac * bw + as * bh);
     const double raw = span * std::max(0.01f, g.scale) * 0.5;
-    const double half = g.fillLayer ? std::max(0.5, raw) : std::max(1.0, std::floor(raw));
+    const double half = snapped ? std::max(1.0, std::floor(raw)) : std::max(0.5, raw);
     double position = 0;
     switch (g.type) {
     case StyleGradient::Type::Radial: position = std::sqrt(lx * lx + ly * ly) / half; break;
