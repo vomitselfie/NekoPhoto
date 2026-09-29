@@ -55,7 +55,8 @@ void setError(std::string* error, const std::string& message) { if (error) *erro
 std::unique_ptr<LibRaw> openRaw(const std::vector<uint8_t>& bytes, std::string* error) {
     if (bytes.empty()) { setError(error, "The file is empty."); return nullptr; }
     auto raw = std::make_unique<LibRaw>();   // large: on the heap
-    if (int r = raw->open_buffer(bytes.data(), bytes.size()); r != LIBRAW_SUCCESS) {
+    // LibRaw only reads the buffer; before 0.21 its parameter was a plain void*.
+    if (int r = raw->open_buffer(const_cast<uint8_t*>(bytes.data()), bytes.size()); r != LIBRAW_SUCCESS) {
         setError(error, std::string("Couldn't read the RAW file: ") + libraw_strerror(r));
         return nullptr;
     }
