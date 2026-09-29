@@ -43,6 +43,12 @@ Version 8 also carries a colour profile (docs/color-management.md): `"colorSpace
 document writes `"colorSpace": "sRGB"` and no profile, as before; `"icc"` below version 8, or a `profile` key with
 `"sRGB"`, is refused as damage, and an unreadable `profile.icc` leaves the document untagged.
 
+Version 8 also carries alpha and spot channels ([channels.md](channels.md)): a `channels` array of `{id, name, kind`
+(`"alpha"` or `"spot"`)`, color` (`[r, g, b]`, 0..1)`, opacity, colorIndicates` (`"masked"` or `"selected"`)`, file}`,
+where `file` is `channels/<id>.png`, a gray PNG of the canvas's size at the document's depth, and
+`channels/<id>.psdcarry` keeps what a PSD said about the channel. A missing or wrongly sized channel PNG is damage;
+`channels` below version 8 is refused; a document without channels writes no key.
+
 ## Frame animation (NekoPhoto)
 
 A document with frames (Window > Timeline) adds an `animation` object to the manifest; readers that do not know it

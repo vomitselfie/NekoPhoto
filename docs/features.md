@@ -25,6 +25,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Quick Select (Shift+W): scribble over the subject, or click it (a 48 MB model, downloaded from the options bar); the selection snaps to the image's edges
 - Add (Shift), subtract (Alt) and intersect (Shift+Alt)
 - Expand, Contract, Feather, Smooth, Border, Invert; load a layer or mask as a selection
+- Channels (Window ▸ Channels, [details](channels.md)): alpha channels as saved selections (Select ▸ Save Selection and Load Selection in every combine mode, Ctrl-click a thumbnail with Shift, Alt or both), painted like Quick Mask, with Channel Options; one colour channel in gray (Ctrl+3, 4, 5) that the brush, fills, adjustments, filters and paste then change alone; spot channels kept from PSD files; channels in PSD files and projects, at 8 and 16 bits
 - Content-Aware Fill, which continues edges and patterns and can extend an image past its borders; its dialog (Edit > Content-Aware Fill…) chooses the sampling area (Auto, the whole layer, or Custom painted with an include/exclude brush), previews on the canvas and can output to a new layer ([content-aware.md](content-aware.md))
 - Content-Aware Scale (Edit menu): seam carving narrows, widens, shortens or heightens a layer while the parts that carry detail keep their proportions; Protect keeps the selection, with a live preview ([details](content-aware-scale.md))
 
@@ -126,6 +127,7 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 - クイック選択(Shift+W):被写体をなぞるか、クリックするだけ(クリック用の 48 MB のモデルはオプションバーからダウンロード)。選択範囲は画像の輪郭に合わせて調整されます
 - 追加(Shift)、削除(Alt)、共通範囲(Shift+Alt)
 - 拡張、縮小、境界をぼかす、滑らかに、境界線、選択範囲を反転。レイヤーやマスクから選択範囲を作成
+- チャンネル(ウィンドウ ▸ チャンネル、[詳細](channels.md)):選択範囲を保存したアルファチャンネル(選択範囲 ▸ 選択範囲を保存・選択範囲を読み込むは追加・一部削除・共通範囲にも対応、サムネールの Ctrl+クリックと Shift・Alt)。クイックマスクと同じように描画でき、チャンネルオプションでマスク範囲・選択範囲、カラー、不透明度を設定。カラーチャンネルを 1 つだけグレーで表示(Ctrl+3、4、5)すると、ブラシ、塗りつぶし、色調補正、フィルター、ペーストがそのチャンネルだけに適用されます。PSD のスポットカラーチャンネルは保持。チャンネルは PSD とプロジェクトに保存され、8 ビットと 16 ビットの両方で使えます
 - コンテンツに応じた塗りつぶし:輪郭や模様をつなげ、画像の外側への拡張にも使えます
 
 ### 描画とレタッチ

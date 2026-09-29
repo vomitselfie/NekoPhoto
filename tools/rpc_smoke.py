@@ -594,6 +594,142 @@ def sixteen_bit(rpc):
     rpc.call("tabs.close", index=tab["index"], discard=True)
 
 
+def png_pixels(path):
+    """An RGB or RGBA PNG (8 or 16 bits) as (width, height, pixel(x, y) -> (r, g, b, a) in 0..255)."""
+    with open(path, "rb") as f:
+        data = f.read()
+    pos, idat = 8, b""
+    while pos < len(data):
+        length, kind = struct.unpack(">I4s", data[pos:pos + 8])
+        body = data[pos + 8:pos + 8 + length]
+        if kind == b"IHDR":
+            width, height, depth, colour = struct.unpack(">IIBB", body[:10])
+        elif kind == b"IDAT":
+            idat += body
+        pos += 12 + length
+    channels = 4 if colour == 6 else 3
+    step = channels * depth // 8
+    raw, rows, prev = zlib.decompress(idat), [], bytearray(width * step)
+    for y in range(height):
+        start = y * (width * step + 1)
+        kind, row = raw[start], bytearray(raw[start + 1:start + 1 + width * step])
+        for i in range(len(row)):
+            a = row[i - step] if i >= step else 0
+            b = prev[i]
+            c = prev[i - step] if i >= step else 0
+            if kind == 1: row[i] = (row[i] + a) & 255
+            elif kind == 2: row[i] = (row[i] + b) & 255
+            elif kind == 3: row[i] = (row[i] + (a + b) // 2) & 255
+            elif kind == 4:
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                row[i] = (row[i] + (a if pa <= pb and pa <= pc else b if pb <= pc else c)) & 255
+        rows.append(row)
+        prev = row
+    def pixel(x, y):
+        at = x * step
+        values = [rows[y][at + k * (depth // 8)] for k in range(channels)]   # the high byte of a 16-bit sample
+        return tuple(values) + ((255,) if channels == 3 else ())
+    return width, height, pixel
+
+
+def channels(rpc):
+    """Channels (docs/channels.md): alpha channels saved from and loaded as selections in every mode, the thumbnail
+    click modifiers, painting an alpha channel, Channel Options, order, undo, single-channel editing, and the channels
+    kept through a project and a PSD, at 8 and 16 bits; each in a tab of its own, closed afterwards."""
+    work = tempfile.mkdtemp()
+    first = rpc.call("tabs.list")
+    for bits in (8, 16):
+        tab = rpc.call("tabs.new")
+        rpc.call("document.new", width=60, height=40)
+        rpc.call("selection.all")
+        rpc.call("pixels.fill", color="#808080")
+        rpc.call("selection.none")
+        if bits == 16:
+            assert rpc.call("image.mode", bits=16)["bits"] == 16
+        listed = rpc.call("channels.list")
+        assert listed["channels"] == [] and listed["activeColors"] == ["red", "green", "blue"], listed
+        # Save Selection: a new channel, then Add into it.
+        rpc.call("selection.rect", x=0, y=0, width=20, height=40)
+        a = rpc.call("channels.saveSelection")
+        assert a["name"] == "Alpha 1" and a["kind"] == "alpha" and a["colorIndicates"] == "masked", a
+        assert rpc.call("history.info")["undo"] == "Save Selection"
+        rpc.call("selection.rect", x=40, y=0, width=20, height=40)
+        rpc.call("channels.saveSelection", id=a["id"], mode="add")
+        rpc.call("selection.none")
+        loaded = rpc.call("channels.loadSelection", channel=a["id"])
+        assert loaded["active"] and loaded["bounds"]["width"] == 60, loaded
+        # Load Selection in each mode, and Ctrl-click's modifiers: Shift adds, Alt subtracts, both intersect.
+        rpc.call("selection.rect", x=10, y=0, width=40, height=20)
+        assert rpc.call("channels.loadSelection", channel=a["id"], shift=True, alt=True)["bounds"] == {"x": 10, "y": 0, "width": 40, "height": 20}
+        rpc.call("selection.rect", x=10, y=0, width=40, height=20)
+        sub = rpc.call("channels.loadSelection", channel=a["id"], alt=True)["bounds"]
+        assert sub == {"x": 20, "y": 0, "width": 20, "height": 20}, sub
+        inverted = rpc.call("channels.loadSelection", channel=a["id"], invert=True)["bounds"]
+        assert inverted == {"x": 20, "y": 0, "width": 20, "height": 40}, inverted
+        assert rpc.call("channels.loadSelection", channel="rgb")["active"]
+        layer = rpc.call("layers.list")[0]["id"]
+        assert rpc.call("channels.loadSelection", layer=layer, mode="replace")["bounds"]["width"] == 60
+        # A new channel is the target: painted like Quick Mask, white selects.
+        painted = rpc.call("channels.new", name="Painted")
+        assert painted["target"] and rpc.call("channels.list")["target"] == painted["id"]
+        rpc.call("brush.stroke", points=[[10, 20], [50, 20]], size=10, mask=True, color="#ffffff")
+        rpc.call("channels.select", channel="rgb")
+        assert not rpc.call("channels.list")["target"]
+        stroke = rpc.call("channels.loadSelection", channel=painted["id"])["bounds"]
+        assert stroke["width"] >= 40 and stroke["height"] <= 14, stroke
+        # Channel Options: colour, opacity, and Color Indicates Selected Areas, which keeps what the channel selects.
+        options = rpc.call("channels.set", channel=a["id"], color="#00ff00", opacity=0.3, colorIndicates="selected", name="Edges")
+        assert options["color"] == "#00ff00" and abs(options["opacity"] - 0.3) < 1e-6 and options["colorIndicates"] == "selected" and options["name"] == "Edges", options
+        rpc.call("selection.none")
+        assert rpc.call("channels.loadSelection", channel=a["id"])["bounds"]["width"] == 60
+        # Duplicate, reorder, delete, undo.
+        copy = rpc.call("channels.duplicate", id=a["id"])
+        assert copy["name"] == "Edges copy" and copy["index"] == 1, copy
+        assert rpc.call("channels.set", channel=copy["id"], index=0)["index"] == 0
+        rpc.call("channels.delete", id=copy["id"])
+        assert len(rpc.call("channels.list")["channels"]) == 2
+        rpc.call("history.undo")
+        assert len(rpc.call("channels.list")["channels"]) == 3
+        rpc.call("channels.delete", id=copy["id"])
+        # The eye: a colour channel hidden and shown again; an alpha channel shown over the image.
+        rpc.call("channels.set", channel="green", visible=False)
+        assert rpc.call("channels.list")["visibleColors"] == ["red", "blue"]
+        rpc.call("channels.set", channel="rgb", visible=True)
+        assert rpc.call("channels.set", channel=a["id"], visible=True)["visible"]
+        rpc.call("screenshot", maxSize=64)
+        rpc.call("channels.set", channel=a["id"], visible=False)
+        # Single-channel editing: with red alone the target, a black fill changes only red.
+        rpc.call("channels.select", channel="red")
+        assert rpc.call("channels.list")["activeColors"] == ["red"]
+        rpc.call("selection.all")
+        rpc.call("pixels.fill", color="#000000")
+        rpc.call("selection.none")
+        rpc.call("channels.select", channel="rgb")
+        out = os.path.join(work, f"layer{bits}.png")
+        rpc.call("layers.render", id=layer, path=out, maxSize=0)
+        _, _, pixel = png_pixels(out)
+        r, g, b, alpha = pixel(30, 20)
+        assert r == 0 and abs(g - 128) <= 1 and abs(b - 128) <= 1 and alpha == 255, (bits, r, g, b, alpha)
+        # A project and a PSD keep the channels.
+        project = os.path.join(work, f"Channels{bits}.comp")
+        rpc.call("document.save", path=project)
+        psd = os.path.join(work, f"Channels{bits}.psd")
+        rpc.call("document.export", path=psd)
+        rpc.call("tabs.close", index=next(t["index"] for t in rpc.call("tabs.list") if t["current"]), discard=True)
+        for path in (project, psd):
+            reopened = rpc.call("tabs.new")
+            rpc.call("document.open", path=path)
+            names = [c["name"] for c in rpc.call("channels.list")["channels"]]
+            assert names == ["Edges", "Painted"], (path, names)
+            assert rpc.call("document.info")["bits"] == bits
+            assert rpc.call("channels.loadSelection", channel=rpc.call("channels.list")["channels"][0]["id"])["bounds"]["width"] == 60
+            rpc.call("tabs.close", index=next(t["index"] for t in rpc.call("tabs.list") if t["current"]), discard=True)
+            del reopened
+        del tab
+    rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
+
+
 def colour_management(rpc):
     """Colour management (docs/color-management.md): Color Settings, Assign and Convert to Profile, the profile in
     exports, PSDs and projects, soft proofing; in a tab of its own that is closed afterwards."""
@@ -1137,6 +1273,7 @@ def main():
 
     remaining_methods(rpc)
     sixteen_bit(rpc)
+    channels(rpc)
     colour_management(rpc)
 
     # Errors come back as errors, not crashes.

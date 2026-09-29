@@ -1,4 +1,5 @@
 #include "compositor/psd.h"
+#include "psd_channels.h"
 #include "photoshop.h"
 #include "compositor/adjustments.h"
 #include "compositor/colour.h"
@@ -29,7 +30,7 @@ namespace {
 
 // ---- Channel data ------------------------------------------------------------------------------------
 
-struct Channel { int id = 0; uint64_t length = 0; const uint8_t* data = nullptr; };
+struct RecordChannel { int id = 0; uint64_t length = 0; const uint8_t* data = nullptr; };
 
 /// PackBits: literal runs and repeats.
 void unpackBits(const uint8_t* in, size_t n, uint8_t* out, size_t outSize) {
@@ -51,7 +52,7 @@ uint8_t encodeLinear(float v) {
 /// Decodes one plane of `width` x `height` samples to 8 bits from `compression` (0 raw, 1 RLE, 2 zip,
 /// 3 zip with prediction) and `depth` bits. False when the data does not add up.
 bool decodePlane(const uint8_t* data, size_t size, int compression, int width, int height, int depth, bool psb, std::vector<uint8_t>& out, std::string* why,
-                 std::vector<uint16_t>* wide = nullptr) {
+                 std::vector<uint16_t>* wide = nullptr, std::vector<uint8_t>* raw16 = nullptr) {
     const size_t bytesPer = size_t(depth) / 8, rowBytes = size_t(width) * bytesPer, total = rowBytes * size_t(height);
     if (depth != 8 && depth != 16 && depth != 32) { if (why) *why = "unsupported bit depth"; return false; }
     std::vector<uint8_t> raw(total);
@@ -85,6 +86,7 @@ bool decodePlane(const uint8_t* data, size_t size, int compression, int width, i
     } catch (Truncated&) { if (why) *why = "channel data ends early"; return false; }
     out.resize(size_t(width) * size_t(height));
     // A 16-bit plane also at Photoshop's internal 0..32768, for a 16-bit document.
+    if (raw16 && depth == 16) *raw16 = raw;   // the file's own samples (an alpha channel's carry)
     if (wide && depth == 16) {
         wide->resize(out.size());
         for (size_t i = 0; i < out.size(); i++) (*wide)[i] = from65535(unsigned(raw[i * 2]) * 256 + raw[i * 2 + 1]);
@@ -195,7 +197,7 @@ struct MaskRecord {
 
 struct Record {
     int top = 0, left = 0, bottom = 0, right = 0;
-    std::vector<Channel> channels;
+    std::vector<RecordChannel> channels;
     std::string blend = "norm";
     uint8_t opacity = 255, clipping = 0, flags = 0, fillOpacity = 255;
     MaskRecord mask;
@@ -238,7 +240,7 @@ Record readRecord(Reader& r, bool psb) {
     if (int64_t(rec.right) - rec.left > maxImageSide || int64_t(rec.bottom) - rec.top > maxImageSide) throw Truncated{};
     uint16_t channels = r.u16();
     if (channels > 64) throw Truncated{};
-    for (int i = 0; i < channels; i++) { Channel c; c.id = r.i16(); c.length = r.length(psb); rec.channels.push_back(c); }
+    for (int i = 0; i < channels; i++) { RecordChannel c; c.id = r.i16(); c.length = r.length(psb); rec.channels.push_back(c); }
     if (r.chars(4) != "8BIM") throw Truncated{};
     rec.blend = r.chars(4);
     rec.opacity = r.u8(); rec.clipping = r.u8(); rec.flags = r.u8(); r.u8();
@@ -697,6 +699,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
         // Image resources: the resolution is ours; the rest is carried for PSD export (psd_carry.h).
         Document document{int(width), int(height)};
         auto docCarry = std::make_shared<PsdDocumentCarry>();
+        PsdChannelResources channelResources;
         std::shared_ptr<const CmykToSrgb> cmykProfile;
         docCarry->width = int(width); docCarry->height = int(height);
         uint32_t resourcesLen = r.u32();
@@ -710,6 +713,14 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             if (len <= r.remaining() && carriedResource(id, mode)) {
                 const uint8_t* p = r.bytes(len);
                 docCarry->resources.push_back({id, resourceName, std::vector<uint8_t>(p, p + len)});
+                r.seek(dataStart);
+            }
+            if ((id == 1006 || id == 1045 || id == 1077 || id == 1007 || id == 1053) && len <= r.remaining() && len <= 65536) {
+                // Alpha and spot channels' names, display and identifiers (psd_channels.h).
+                const uint8_t* p = r.bytes(len);
+                std::vector<uint8_t>& into = id == 1006 ? channelResources.names : id == 1045 ? channelResources.unicodeNames : id == 1077 ? channelResources.displayInfo
+                                             : id == 1007 ? channelResources.oldDisplayInfo : channelResources.identifiers;
+                into.assign(p, p + len);
                 r.seek(dataStart);
             }
             if (id == 0x03ED && len >= 4) { double hres = r.u32() / 65536.0; if (hres > 0 && hres < 100000) document.resolution = hres; }
@@ -799,7 +810,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
         auto decodeRecordChannels = [&](const Record& rec, std::map<int, std::vector<uint8_t>>& planes, std::map<int, std::vector<uint8_t>>& maskPlanes, size_t& cursor,
                                         std::vector<std::pair<int, std::vector<uint8_t>>>& maskRaw, WidePlanes& widePlanes, WidePlanes& wideMaskPlanes,
                                         std::vector<PsdLayerCarry::CarriedPlane>& rawPlanes) {
-            for (const Channel& c : rec.channels) {
+            for (const RecordChannel& c : rec.channels) {
                 // Subtraction, not addition: a PSB's channel length is a full 64-bit field, so `cursor +
                 // c.length` wraps and a wrapped sum passes the test while the reader runs off the file.
                 if (c.length < 2 || cursor > file.size() || c.length > file.size() - cursor) throw Truncated{};
@@ -1148,12 +1159,18 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             const size_t planeTotal = static_cast<size_t>(planeCount);
             std::vector<std::vector<uint8_t>> decoded(planeTotal);
             std::vector<std::vector<uint16_t>> decodedWide(planeTotal);
+            // The alpha and spot channels' planes follow the colour (and the transparency): their 16-bit samples as stored too.
+            const int colourPlanes = mode == RGB || mode == Lab ? 3 : mode == CMYK ? 4 : 1;
+            const int firstExtra = colourPlanes + (transparencyFirst ? 1 : 0);
+            const bool extrasWanted = mode != Bitmap && mode != Multichannel;
+            std::vector<std::vector<uint8_t>> raw16(planeTotal);
+            auto rawFor = [&](int c) { return deep && extrasWanted && c >= firstExtra ? &raw16[size_t(c)] : nullptr; };
             bool ok = true;
             if (compression == 0) {
                 for (int c = 0; c < planeCount && ok; c++) {
                     if (size_t(c + 1) * planeBytes > available) { ok = false; break; }
                     std::string why;
-                    ok = decodePlane(data + size_t(c) * planeBytes, planeBytes, 0, int(width), int(height), depth, psb, decoded[size_t(c)], &why, deep ? &decodedWide[size_t(c)] : nullptr);
+                    ok = decodePlane(data + size_t(c) * planeBytes, planeBytes, 0, int(width), int(height), depth, psb, decoded[size_t(c)], &why, deep ? &decodedWide[size_t(c)] : nullptr, rawFor(c));
                 }
             } else if (compression == 1) {
                 // Row byte counts for every channel first, then the rows.
@@ -1175,11 +1192,22 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                     stream.insert(stream.end(), data + offset, data + offset + total);
                     offset += total;
                     std::string why;
-                    ok = decodePlane(stream.data(), stream.size(), 1, int(width), int(height), depth, psb, decoded[size_t(c)], &why, deep ? &decodedWide[size_t(c)] : nullptr);
+                    ok = decodePlane(stream.data(), stream.size(), 1, int(width), int(height), depth, psb, decoded[size_t(c)], &why, deep ? &decodedWide[size_t(c)] : nullptr, rawFor(c));
                 }
             } else ok = false;
+            if (ok && extrasWanted && planeCount > firstExtra) {
+                std::vector<PsdExtraPlane> extras;
+                for (int c = firstExtra; c < planeCount; c++)
+                    extras.push_back({std::move(decoded[size_t(c)]), std::move(decodedWide[size_t(c)]), std::move(raw16[size_t(c)])});
+                document.channels = psdChannels(channelResources, extras, transparencyFirst, int(width), int(height), deep);
+                size_t spots = 0;
+                for (const compositor::Channel& ch : document.channels) spots += ch.kind == ChannelKind::Spot;
+                if (!document.channels.empty())
+                    notes.push_back(std::to_string(document.channels.size() - spots) + " alpha channel(s) and " + std::to_string(spots)
+                                    + " spot channel(s) are in the Channels panel; spot channels are kept and shown, not edited.");
+            }
             if (ok) {
-                const int colourChannels = mode == RGB || mode == Lab ? 3 : mode == CMYK ? 4 : 1;
+                const int colourChannels = colourPlanes;
                 std::map<int, std::vector<uint16_t>> widePlanes;
                 for (int c = 0; c < planeCount; c++) {
                     const int id = c < colourChannels ? c : c == colourChannels && transparencyFirst ? -1 : -9;

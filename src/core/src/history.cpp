@@ -130,6 +130,10 @@ void heavyBuffers(const Document& document, Add&& add) {
             for (const PsdBlock& b : layer.smartObject->psdBlocks) if (!b.data.empty()) add(b.data.data(), b.data.size());
     }
     if (document.selection) image(document.selection->coverage);
+    for (const Channel& channel : document.channels) {
+        image(channel.image);
+        if (const PsdChannelCarry* carry = channel.psdCarry.get()) add(carry, carry->displayInfo.size() + carry->plane16.size());
+    }
     if (const PsdDocumentCarry* carry = document.psdCarry.get()) {
         size_t total = 0;
         for (const auto& resource : carry->resources) total += resource.data.size();

@@ -859,6 +859,46 @@ def selection_quick_mask(on: Optional[bool] = None) -> str:
     return text(call("selection.quickMask", on=on))
 
 
+@look("Channels")
+def channels_list() -> str:
+    """The Channels panel: which colour channels edits write to (activeColors) and the canvas shows, the alpha channel being edited (target), Quick Mask, and every alpha and spot channel (id, name, kind, colour, opacity, colorIndicates, visible)."""
+    return text(call("channels.list"))
+
+
+@edit("Channel")
+def channels_new(name: Optional[str] = None, from_selection: bool = False, duplicate: Optional[str] = None, delete: Optional[str] = None) -> str:
+    """Add an alpha channel (black, or the selection with from_selection), duplicate the channel whose id is `duplicate`, or delete the one whose id is `delete`. Alpha channels are saved selections."""
+    if delete:
+        return text(call("channels.delete", id=delete))
+    if duplicate:
+        return text(call("channels.duplicate", id=duplicate, name=name))
+    return text(call("channels.new", name=name, fromSelection=from_selection))
+
+
+@edit("Target channel")
+def channels_select(channel: str, extend: bool = False) -> str:
+    """Make a channel the target: rgb (the composite, the usual case), red, green or blue (painting, fills, adjustments, filters and paste then change only that channel, shown alone in grey), or an alpha channel's id (paint it with brush_stroke mask=true: white selects). extend adds a colour channel (Shift-click)."""
+    return text(call("channels.select", channel=channel, extend=extend))
+
+
+@edit("Channel options")
+def channels_set(channel: str, name: Optional[str] = None, color: Optional[str] = None, opacity: Optional[float] = None, color_indicates: Optional[str] = None, index: Optional[int] = None, visible: Optional[bool] = None) -> str:
+    """Channel Options and the eye: rename, overlay color (#rrggbb) and opacity 0..1, color_indicates masked or selected, move to index, show or hide. channel is an alpha or spot channel's id, or rgb/red/green/blue for visibility only."""
+    return text(call("channels.set", channel=channel, name=name, color=color, opacity=opacity, colorIndicates=color_indicates, index=index, visible=visible))
+
+
+@edit("Save selection")
+def channels_save_selection(id: Optional[str] = None, name: Optional[str] = None, mode: str = "replace") -> str:
+    """Select > Save Selection: into a new alpha channel (name), or into channel id combined with mode replace/add/subtract/intersect."""
+    return text(call("channels.saveSelection", id=id, name=name, mode=mode))
+
+
+@edit("Load selection")
+def channels_load_selection(channel: Optional[str] = None, layer: Optional[str] = None, mask: bool = False, invert: bool = False, mode: str = "replace") -> str:
+    """Select > Load Selection: from an alpha channel's id, rgb (the composite's luminosity), red/green/blue, or a layer's transparency (layer) or mask (layer, mask=true); invert first if asked; mode replace/add/subtract/intersect."""
+    return text(call("channels.loadSelection", channel=channel, layer=layer, mask=mask if layer else None, invert=invert, mode=mode))
+
+
 @edit("Patch")
 def pixels_patch(dx: float, dy: float) -> str:
     """Patch: replace the selection's pixels on the active layer with those dx, dy pixels away, their tone blended to meet the selection's edge (Photoshop's Patch tool). Select the blemish first (selection_rect, selection_polygon, ...)."""

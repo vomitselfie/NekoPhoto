@@ -26,6 +26,7 @@
 #include <QPointer>
 #include "compositor/render.h"
 #include "compositor/selection.h"
+#include "compositor/channels.h"
 #include "compositor/smartwand.h"
 #include "compositor/shape.h"
 #include "compositor/warp.h"
@@ -599,12 +600,47 @@ public:
 
     // Quick Mask (Select ▸ Edit in Quick Mask Mode)
     bool quickMaskActive() const;
-    /// Whether painting now goes to the Quick Mask (its mask values are the inverse of the selection's).
+    /// The Quick Mask's layer while it is on (the Channels panel shows it).
+    std::optional<compositor::Uuid> quickMaskLayerId() const { return quickMaskActive() ? quickMaskLayer_ : std::nullopt; }
+    /// Whether painting now goes to the Quick Mask or an alpha channel (their layer masks hold the inverse of what they select).
     bool paintsQuickMask() const;
     void toggleQuickMask();
     bool beginQuickMask();
     /// Leaves Quick Mask, its mask becoming the selection; false when it was not on.
     bool endQuickMask();
+
+    // Channels (Window ▸ Channels; EditorSessionChannels.cpp, docs/channels.md). The colour channels are views: the
+    // ones edits write to (bits: red 1, green 2, blue 4; all three is the composite and the usual path) and the ones
+    // the canvas shows. An alpha channel made the target is painted through a temporary layer, as Quick Mask is.
+    unsigned activeColorChannels() const { return activeColors_; }
+    unsigned visibleColorChannels() const { return visibleColors_; }
+    const std::set<compositor::Uuid>& visibleAlphaChannels() const { return visibleAlpha_; }
+    /// The alpha channel being edited, when one is.
+    std::optional<compositor::Uuid> targetChannel() const;
+    /// Clicking colour channels in the panel (`extend`: Shift-click adds them to the target).
+    void selectColorChannels(unsigned bits, bool extend = false);
+    /// Clicking an alpha or spot channel: it becomes the target and shows over the image (a spot channel only shows).
+    bool selectAlphaChannel(const compositor::Uuid& id, bool extend = false);
+    void setColorChannelVisible(unsigned bits, bool visible);
+    void setAlphaChannelVisible(const compositor::Uuid& id, bool visible);
+    /// What the canvas shows of the channels (applied after rendering; the default leaves the frame alone).
+    compositor::ChannelView channelView() const;
+    /// New Channel (black), Duplicate, Delete, rename and Channel Options, reorder: one undo step each.
+    std::optional<compositor::Uuid> newChannel(const QString& name = {}, QString* error = nullptr);
+    std::optional<compositor::Uuid> duplicateChannel(const compositor::Uuid& id, const QString& name = {}, QString* error = nullptr);
+    bool deleteChannel(const compositor::Uuid& id);
+    bool renameChannel(const compositor::Uuid& id, const QString& name);
+    bool setChannelOptions(const compositor::Uuid& id, const QString& name, const QColor& color, double opacity, bool selectedAreas);
+    bool moveChannel(const compositor::Uuid& id, int index);
+    /// Select ▸ Save Selection: into a new channel (`into` empty; named `name`) or into `into` combined in `mode`.
+    std::optional<compositor::Uuid> saveSelectionToChannel(const std::optional<compositor::Uuid>& into, const QString& name,
+                                                           compositor::SelectionMode mode, QString* error = nullptr);
+    /// Select ▸ Load Selection, and a Ctrl-click on a channel's thumbnail (thumbnailClickMode).
+    bool loadSelectionFromSource(const compositor::SelectionSource& source, bool invert, compositor::SelectionMode mode, QString* error = nullptr);
+    /// The temporary layer an alpha channel is painted through (hidden from the Layers panel, never written).
+    bool isChannelProxy(const compositor::Uuid& layerId) const { return channelProxy_ && *channelProxy_ == layerId; }
+    /// Stops editing an alpha channel (its layer goes); the composite is the target again.
+    void endChannelEdit();
 
     // Destructive adjustments and filters on the active layer's pixels, inside the selection.
     bool canAdjustPixels() const;
@@ -798,6 +834,8 @@ public:
 
 signals:
     void pathsChanged();
+    /// The channels, their target or what the canvas shows of them changed.
+    void channelsChanged();
     /// The open project changed on disk while there is unsaved work: ask, then call resolveExternalChange.
     void externalChangeConflict(const QString& path);
     /// The open project was reloaded because its package changed on disk.
@@ -975,6 +1013,27 @@ private:
     void previewWarpCage();
     bool pathEditing_ = false;
     std::optional<compositor::Uuid> quickMaskLayer_, quickMaskReturnLayer_;
+    // Channels (EditorSessionChannels.cpp).
+    unsigned activeColors_ = compositor::colorChannelsAll, visibleColors_ = compositor::colorChannelsAll;
+    std::set<compositor::Uuid> visibleAlpha_;
+    std::optional<compositor::Uuid> channelTarget_, channelProxy_, channelReturnLayer_;
+    compositor::AnyGray channelSynced_;   // the proxy's mask as last written into the channel
+    /// The document when the outermost open edit began, while only some colour channels are active.
+    std::optional<compositor::Document> channelEditBase_;
+    int editDepth_ = 0;
+    std::optional<compositor::Uuid> channelsFor_;   // the document the channel view belongs to
+    void followChannelDocument();
+    /// The proxy's mask written into its channel when it changed (from endEdit, inside the step).
+    void syncChannelProxy();
+    /// The proxy made again from the channel (after the channel changed some other way).
+    void refreshChannelProxy();
+    bool beginChannelEdit(const compositor::Uuid& id);
+    /// Paste into the active colour channels or the target alpha channel: the clipboard's gray (Photoshop's paste
+    /// into a channel). False when it does not apply (the usual paste then runs).
+    bool pasteIntoChannels(const compositor::AnyImage& image, QPointF origin);
+    /// A stroke's preview limited to the active colour channels.
+    mutable std::shared_ptr<const compositor::Image> channelStrokePreview_;
+    mutable std::shared_ptr<const compositor::Image16> channelStrokePreview16_;
     std::optional<compositor::Uuid> filterMaskLayer_, filterMaskOwner_;
     compositor::AnyGray filterMaskSynced_;    // the proxy's mask as last written into the stack
     bool filterMaskShown_ = false;

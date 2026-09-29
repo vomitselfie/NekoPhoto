@@ -17,6 +17,8 @@ bool EditorSession::quickMaskActive() const {
 }
 
 bool EditorSession::paintsQuickMask() const {
+    // An alpha channel is painted the same way (EditorSessionChannels.cpp): its layer's mask is the channel's inverse.
+    if (channelProxy_ && activeLayerId_ == channelProxy_ && isMaskSelected_ && document_ && document_->find(*channelProxy_)) return true;
     return quickMaskActive() && activeLayerId_ == quickMaskLayer_ && isMaskSelected_;
 }
 

@@ -5,6 +5,7 @@
 #include "Autosave.h"
 #include "LayersPanel.h"
 #include "PathsPanel.h"
+#include "ChannelsPanel.h"
 #include "AdjustmentsPanel.h"
 #include "Automation.h"
 #include "ActionLibrary.h"
@@ -110,7 +111,15 @@ MainWindow::MainWindow() {
     pathsStack_ = new QStackedWidget;
     pathsDock_->setWidget(pathsStack_);
     addDockWidget(Qt::RightDockWidgetArea, pathsDock_);
-    tabifyDockWidget(dock, pathsDock_);
+    // Channels, between Layers and Paths as in Photoshop.
+    channelsDock_ = new QDockWidget(tr("Channels"), this);
+    channelsDock_->setObjectName("channelsDock");
+    channelsDock_->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetClosable);
+    channelsStack_ = new QStackedWidget;
+    channelsDock_->setWidget(channelsStack_);
+    addDockWidget(Qt::RightDockWidgetArea, channelsDock_);
+    tabifyDockWidget(dock, channelsDock_);
+    tabifyDockWidget(channelsDock_, pathsDock_);
     dock->raise();   // Layers is the tab in front
     adjustDock_ = adjustDock;
     // Actions and Timeline (Window menu), hidden until asked for.
@@ -193,6 +202,14 @@ MainWindow::MainWindow() {
         layersDock_->raise();
         settings.setValue("window/pathsDockPlaced", 1);
     }
+    // Likewise a layout saved before the Channels panel existed: it joins Layers as a tab once.
+    if (settings.value("window/channelsDockPlaced").toInt() < 1) {
+        tabifyDockWidget(layersDock_, channelsDock_);
+        tabifyDockWidget(channelsDock_, pathsDock_);   // Photoshop's order: Layers, Channels, Paths
+        channelsDock_->show();
+        layersDock_->raise();
+        settings.setValue("window/channelsDockPlaced", 1);
+    }
     // The saved state remembers each tab's options bar by name, and only the current tab's is visible when the
     // window closes; restoring it could hide the bar of the tab this launch shows. The current tab owns the bar.
     for (size_t i = 0; i < tabs_.size(); i++) tabs_[i].options->setVisible(int(i) == current_);
@@ -237,6 +254,8 @@ MainWindow::Tab& MainWindow::addTab(bool reuseEmpty) {
     layersStack_->addWidget(tab.layers);
     tab.paths = new PathsPanel(tab.session);
     pathsStack_->addWidget(tab.paths);
+    tab.channels = new ChannelsPanel(tab.session);
+    channelsStack_->addWidget(tab.channels);
     adjustStack_->addWidget(tab.adjustments);
     tabs_.push_back(tab);
     int index = int(tabs_.size()) - 1;
@@ -317,6 +336,7 @@ void MainWindow::switchTo(int index) {
     canvasStack_->setCurrentWidget(tab.frame);
     layersStack_->setCurrentWidget(tab.layers);
     pathsStack_->setCurrentWidget(tab.paths);
+    channelsStack_->setCurrentWidget(tab.channels);
     adjustStack_->setCurrentWidget(tab.adjustments);
     if (timeline_) timeline_->setSession(session_);
     tab.options->setVisible(true);
@@ -443,6 +463,8 @@ void MainWindow::closeTab(int index) {
     layersStack_->removeWidget(tab.layers);
     pathsStack_->removeWidget(tab.paths);
     tab.paths->deleteLater();
+    channelsStack_->removeWidget(tab.channels);
+    tab.channels->deleteLater();
     adjustStack_->removeWidget(tab.adjustments);
     removeToolBar(tab.options);
     tab.frame->deleteLater(); tab.layers->deleteLater(); tab.adjustments->deleteLater(); tab.options->deleteLater();
@@ -596,6 +618,7 @@ bool MainWindow::startAutomation(const QString& socketPath) {
 
 void MainWindow::showPanel(const QString& name) {
     if (name == "actions") { actionsDock_->show(); actionsDock_->raise(); }
+    else if (name == "channels") { channelsDock_->show(); channelsDock_->raise(); }
     else if (name == "timeline") {
         timelineDock_->show();
         if (session_->hasDocument() && session_->document()->animation.empty()) session_->timelineFramesFromLayers();

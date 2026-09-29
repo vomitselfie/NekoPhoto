@@ -231,6 +231,7 @@ void EditorSession::endTemporaryLayers() {
     endFramePreview();   // likewise playback's frame: saves and exports write the document, not what it shows
     endFilterMaskEdit();
     endQuickMask();
+    endChannelEdit();   // and the layer an alpha channel is painted through
 }
 
 void EditorSession::syncFilterMask() {

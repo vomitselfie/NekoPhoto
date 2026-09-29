@@ -183,7 +183,7 @@ bool worksAtDepth(const QString& method, const EditorSession& session) {
         "document.new", "document.open", "document.close", "document.info", "document.overview",
         "layers.list", "layers.get", "layers.select", "layers.style", "layers.cage", "selection.info", "selection.render",
         "adjustments.get", "adjustments.defaults", "paths.list", "vectorMask.get", "shape.get", "smartObject.filters", "timeline.info",
-        "artboards.list", "slices.list", "brush.import", "presets.import", "presets.remove"};
+        "artboards.list", "slices.list", "brush.import", "presets.import", "presets.remove", "channels.list"};
     static const QHash<QString, const char*> features = {
         {"document.save", "document.save"}, {"document.export", "render.document"}, {"document.import", "document.import"}, {"image.mode", "document.mode"}, {"document.profile", "document.profile"},
         {"layers.set", "layers.structure"}, {"layers.add", "layers.structure"}, {"layers.delete", "layers.structure"}, {"layers.duplicate", "layers.structure"},
@@ -200,6 +200,8 @@ bool worksAtDepth(const QString& method, const EditorSession& session) {
         {"selection.wand", "edit.selection"}, {"selection.scribble", "edit.selection"}, {"selection.subject", "edit.selection"},
         {"selection.fromLayer", "edit.selection"}, {"selection.feather", "edit.selection"}, {"selection.smooth", "edit.selection"},
         {"selection.border", "edit.selection"}, {"selection.grow", "edit.selection"}, {"paths.toSelection", "edit.selection"},
+        {"channels.new", "edit.channels"}, {"channels.duplicate", "edit.channels"}, {"channels.delete", "edit.channels"}, {"channels.select", "edit.channels"},
+        {"channels.set", "edit.channels"}, {"channels.saveSelection", "edit.channels"}, {"channels.loadSelection", "edit.selection"},
         {"pixels.fill", "edit.fill"}, {"pixels.clear", "edit.fill"},
         {"image.resize", "edit.imageSize"}, {"image.trim", "edit.crop"}, {"canvas.crop", "edit.crop"},
         {"layers.warp", "edit.distort"}, {"layers.setCage", "edit.distort"},

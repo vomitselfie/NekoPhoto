@@ -197,6 +197,8 @@ add_library(compositor_core STATIC
     src/render_plan.cpp
     src/render_exec_u8.cpp
     src/selection.cpp
+    src/channels.cpp
+    src/psd_channels.cpp
     src/shape.cpp
     src/warp.cpp
     src/warpmesh.cpp

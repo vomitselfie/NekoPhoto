@@ -15,6 +15,7 @@ namespace app {
 void EditorSession::selectLayer(const std::optional<Uuid>& id, bool mask) {
     if (stroke_ || warp_ || pixelMove_) return;
     if (filterMaskLayer() && id != filterMaskLayer_) endFilterMaskEdit();   // selecting a layer ends painting the filter mask
+    if (channelProxy_ && id != channelProxy_) endChannelEdit();   // and painting an alpha channel
     if (id != activeLayerId_ || (mask != isMaskSelected_)) { commitTransform(); resolveGradient(); cancelWarpCage(); }
     vectorMaskTarget_.reset();   // the layer itself (targetVectorMask targets its vector mask after this)
     selectedSubpath_.reset();
@@ -28,6 +29,7 @@ void EditorSession::selectLayer(const std::optional<Uuid>& id, bool mask) {
 void EditorSession::selectLayers(const std::set<Uuid>& ids, const std::optional<Uuid>& primary) {
     if (stroke_ || warp_ || pixelMove_ || !document_) return;
     if (filterMaskLayer() && !(ids.size() == 1 && ids.count(*filterMaskLayer_))) endFilterMaskEdit();
+    if (channelProxy_ && !(ids.size() == 1 && ids.count(*channelProxy_))) endChannelEdit();
     std::set<Uuid> valid;
     for (auto& id : ids) if (document_->find(id)) valid.insert(id);
     if (valid != selectedLayerIds_) { commitTransform(); resolveGradient(); }
@@ -852,6 +854,7 @@ void EditorSession::flipCanvas(bool horizontal) {
         if (coverage.u16()) document_->selection->coverage = Gray16Ptr(flipped(coverage.u16()));
         else if (coverage.u8()) document_->selection->coverage = GrayPtr(flipped(coverage.u8()));
     }
+    flipChannels(*document_, horizontal);   // the alpha channels mirror too
     endEdit();
     notifyDocument();
     emit selectionChanged();

@@ -197,6 +197,15 @@ model once downloaded: `foreground` and `background` points as `[x, y]` lists, a
 `selection.fromLayer`, `selection.grow`, `selection.feather` (`radius`), `selection.smooth`
 (`radius`), `selection.border` (`width`).
 
+Channels ([channels.md](channels.md)): `channels.list` (the colour channels edits write to and the canvas shows, the
+target alpha channel, every alpha and spot channel), `channels.new` (`name`, `fromSelection`), `channels.duplicate`,
+`channels.delete`, `channels.select` (`channel` rgb, red, green, blue or an alpha channel's id; `extend` as a Shift-click:
+with one colour channel the target, brushes, fills, adjustments, filters and paste change only it; an alpha channel is
+painted with `brush.stroke` and `mask: true`), `channels.set` (Channel Options: `name`, `color`, `opacity`,
+`colorIndicates` masked or selected, `index`, `visible`), `channels.saveSelection` (Select > Save Selection: a new
+channel, or `id` with `mode`), `channels.loadSelection` (Select > Load Selection: `channel`, or `layer` with `mask`;
+`invert`, `mode`, or a thumbnail Ctrl-click's `shift` and `alt`).
+
 Canvas and history: `canvas.resize`, `canvas.crop`, `canvas.flip`,
 `image.resize`, `image.trim` (Photoshop's Trim: `basedOn` transparent, topLeft or bottomRight, the sides, `tolerance`),
 `image.mode` (`bits` 8 or 16: Image > Mode, one undo step; refused with the reason when a 16-bit document would not fit

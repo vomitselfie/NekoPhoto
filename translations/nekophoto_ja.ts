@@ -451,6 +451,38 @@
         <translation>ピクセルを移動</translation>
     </message>
     <message>
+        <source>New Channel</source>
+        <translation>新規チャンネル</translation>
+    </message>
+    <message>
+        <source>Duplicate Channel</source>
+        <translation>チャンネルを複製</translation>
+    </message>
+    <message>
+        <source>Delete Channel</source>
+        <translation>チャンネルを削除</translation>
+    </message>
+    <message>
+        <source>Rename Channel</source>
+        <translation>チャンネル名の変更</translation>
+    </message>
+    <message>
+        <source>Channel Options</source>
+        <translation>チャンネルオプション</translation>
+    </message>
+    <message>
+        <source>Channel Order</source>
+        <translation>チャンネルの順序</translation>
+    </message>
+    <message>
+        <source>Save Selection</source>
+        <translation>選択範囲を保存</translation>
+    </message>
+    <message>
+        <source>Load Selection</source>
+        <translation>選択範囲を読み込む</translation>
+    </message>
+    <message>
         <source>Paste</source>
         <translation>ペースト</translation>
     </message>
@@ -1588,6 +1620,10 @@
     <message>
         <source>High quality</source>
         <translation>高品質</translation>
+    </message>
+    <message>
+        <source>Alpha</source>
+        <translation>アルファチャンネル</translation>
     </message>
 </context>
 <context>
@@ -3944,6 +3980,160 @@ File &gt; New creates a blank canvas.</source>
     </message>
 </context>
 <context>
+    <name>app::ChannelOptionsDialog</name>
+    <message>
+        <source>Channel Options</source>
+        <translation>チャンネルオプション</translation>
+    </message>
+    <message>
+        <source>Name:</source>
+        <translation>名前:</translation>
+    </message>
+    <message>
+        <source>Color Indicates:</source>
+        <translation>着色表示:</translation>
+    </message>
+    <message>
+        <source>Masked Areas</source>
+        <translation>マスク範囲</translation>
+    </message>
+    <message>
+        <source>Selected Areas</source>
+        <translation>選択範囲</translation>
+    </message>
+    <message>
+        <source>Spot Color</source>
+        <translation>スポットカラー</translation>
+    </message>
+    <message>
+        <source>Color</source>
+        <translation>カラー</translation>
+    </message>
+    <message>
+        <source>The colour the channel shows in over the image</source>
+        <translation>画像の上にチャンネルを表示するときのカラー</translation>
+    </message>
+    <message>
+        <source>Color:</source>
+        <translation>カラー:</translation>
+    </message>
+    <message>
+        <source>Solidity:</source>
+        <translation>濃度:</translation>
+    </message>
+    <message>
+        <source>Opacity:</source>
+        <translation>不透明度:</translation>
+    </message>
+    <message>
+        <source>Channel Color</source>
+        <translation>チャンネルのカラー</translation>
+    </message>
+</context>
+<context>
+    <name>app::ChannelsPanel</name>
+    <message>
+        <source>Load channel as selection</source>
+        <translation>チャンネルを選択範囲として読み込む</translation>
+    </message>
+    <message>
+        <source>Save selection as channel</source>
+        <translation>選択範囲をチャンネルとして保存</translation>
+    </message>
+    <message>
+        <source>Save Selection</source>
+        <translation>選択範囲を保存</translation>
+    </message>
+    <message>
+        <source>Create new channel</source>
+        <translation>新規チャンネルを作成</translation>
+    </message>
+    <message>
+        <source>Delete current channel</source>
+        <translation>現在のチャンネルを削除</translation>
+    </message>
+    <message>
+        <source>Show or hide the channel</source>
+        <translation>チャンネルの表示/非表示</translation>
+    </message>
+    <message>
+        <source>Ctrl-click: load as a selection (Shift adds, Alt subtracts, both intersect)</source>
+        <translation>Ctrl+クリック:選択範囲として読み込む(Shift で追加、Alt で一部削除、両方で共通範囲)</translation>
+    </message>
+    <message>
+        <source>RGB</source>
+        <translation>RGB</translation>
+    </message>
+    <message>
+        <source>Red</source>
+        <translation>レッド</translation>
+    </message>
+    <message>
+        <source>Green</source>
+        <translation>グリーン</translation>
+    </message>
+    <message>
+        <source>Blue</source>
+        <translation>ブルー</translation>
+    </message>
+    <message>
+        <source>Quick Mask</source>
+        <translation>クイックマスク</translation>
+    </message>
+    <message>
+        <source>Load Selection</source>
+        <translation>選択範囲を読み込む</translation>
+    </message>
+    <message>
+        <source>New Channel…</source>
+        <translation>新規チャンネル...</translation>
+    </message>
+    <message>
+        <source>New Channel</source>
+        <translation>新規チャンネル</translation>
+    </message>
+    <message>
+        <source>Name:</source>
+        <translation>名前:</translation>
+    </message>
+    <message>
+        <source>Duplicate Channel…</source>
+        <translation>チャンネルを複製...</translation>
+    </message>
+    <message>
+        <source>Duplicate Channel</source>
+        <translation>チャンネルを複製</translation>
+    </message>
+    <message>
+        <source>As:</source>
+        <translation>名前:</translation>
+    </message>
+    <message>
+        <source>%1 copy</source>
+        <translation>%1 のコピー</translation>
+    </message>
+    <message>
+        <source>Delete Channel</source>
+        <translation>チャンネルを削除</translation>
+    </message>
+    <message>
+        <source>Rename…</source>
+        <translation>名前を変更...</translation>
+    </message>
+    <message>
+        <source>Rename Channel</source>
+        <translation>チャンネル名の変更</translation>
+    </message>
+    <message>
+        <source>Channel Options…</source>
+        <translation>チャンネルオプション...</translation>
+    </message>
+    <message>
+        <source>Load as Selection</source>
+        <translation>選択範囲として読み込む</translation>
+    </message>
+</context>
+<context>
     <name>app::ColorSwatches</name>
     <message>
         <source>Foreground and background colours. Click one to change it; X swaps them, D resets them.</source>
@@ -4417,6 +4607,30 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Remove Background</source>
         <translation>背景を削除</translation>
+    </message>
+    <message>
+        <source>Channels</source>
+        <translation>チャンネル</translation>
+    </message>
+    <message>
+        <source>No more channels can be added: %1</source>
+        <translation>これ以上チャンネルを追加できません: %1</translation>
+    </message>
+    <message>
+        <source>There is no such channel.</source>
+        <translation>そのチャンネルはありません。</translation>
+    </message>
+    <message>
+        <source>%1 copy</source>
+        <translation>%1 のコピー</translation>
+    </message>
+    <message>
+        <source>There is no selection to save.</source>
+        <translation>保存する選択範囲がありません。</translation>
+    </message>
+    <message>
+        <source>There is no such alpha channel.</source>
+        <translation>そのアルファチャンネルはありません。</translation>
     </message>
     <message>
         <source>Selections</source>
@@ -5199,6 +5413,65 @@ File &gt; New creates a blank canvas.</source>
     </message>
 </context>
 <context>
+    <name>app::LoadSelectionDialog</name>
+    <message>
+        <source>Load Selection</source>
+        <translation>選択範囲を読み込む</translation>
+    </message>
+    <message>
+        <source>Source</source>
+        <translation>読み込み元</translation>
+    </message>
+    <message>
+        <source>Document:</source>
+        <translation>ドキュメント:</translation>
+    </message>
+    <message>
+        <source>This document</source>
+        <translation>このドキュメント</translation>
+    </message>
+    <message>
+        <source>%1 Transparency</source>
+        <translation>%1 の透明部分</translation>
+    </message>
+    <message>
+        <source>%1 Mask</source>
+        <translation>%1 のマスク</translation>
+    </message>
+    <message>
+        <source>Channel:</source>
+        <translation>チャンネル:</translation>
+    </message>
+    <message>
+        <source>Invert</source>
+        <translation>反転</translation>
+    </message>
+    <message>
+        <source>Operation</source>
+        <translation>処理</translation>
+    </message>
+    <message>
+        <source>New Selection</source>
+        <translation>新しい選択範囲</translation>
+    </message>
+    <message>
+        <source>Add to Selection</source>
+        <translation>選択範囲に追加</translation>
+    </message>
+    <message>
+        <source>Subtract from Selection</source>
+        <translation>選択範囲から一部削除</translation>
+    </message>
+    <message>
+        <source>Intersect with Selection</source>
+        <translation>選択範囲との共通範囲</translation>
+    </message>
+    <message>
+        <source>The selection could not be loaded.</source>
+        <translation>選択範囲を読み込めませんでした。</translation>
+    </message>
+</context>
+<context>
     <name>app::MainWindow</name>
     <message>
         <source>Layers</source>
@@ -5211,6 +5484,10 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Paths</source>
         <translation>パス</translation>
+    </message>
+    <message>
+        <source>Channels</source>
+        <translation>チャンネル</translation>
     </message>
     <message>
         <source>Actions</source>
@@ -6819,6 +7096,30 @@ File &gt; New creates a blank canvas.</source>
         <translation>レイヤーのピクセルと交差</translation>
     </message>
     <message>
+        <source>Load Selection…</source>
+        <translation>選択範囲を読み込む...</translation>
+    </message>
+    <message>
+        <source>Save Selection…</source>
+        <translation>選択範囲を保存...</translation>
+    </message>
+    <message>
+        <source>Save Selection</source>
+        <translation>選択範囲を保存</translation>
+    </message>
+    <message>
+        <source>Make a selection first.</source>
+        <translation>先に選択範囲を作成してください。</translation>
+    </message>
+    <message>
+        <source>Load Channel %1 as Selection</source>
+        <translation>チャンネル %1 を選択範囲として読み込む</translation>
+    </message>
+    <message>
+        <source>Select Channel %1</source>
+        <translation>チャンネル %1 を選択</translation>
+    </message>
+    <message>
         <source>Filte&amp;r</source>
         <translation>フィルター(&amp;R)</translation>
     </message>
@@ -6957,6 +7258,10 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>&amp;Actions</source>
         <translation>アクション(&amp;A)</translation>
+    </message>
+    <message>
+        <source>&amp;Channels</source>
+        <translation>チャンネル(&amp;C)</translation>
     </message>
     <message>
         <source>&amp;Timeline</source>
@@ -7312,6 +7617,65 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>%1: not a Photoshop styles (.asl), patterns (.pat) or gradients (.grd) file</source>
         <translation>%1: Photoshop のスタイル(.asl)、パターン(.pat)、グラデーション(.grd)ファイルではありません</translation>
+    </message>
+</context>
+<context>
+    <name>app::SaveSelectionDialog</name>
+    <message>
+        <source>Save Selection</source>
+        <translation>選択範囲を保存</translation>
+    </message>
+    <message>
+        <source>Destination</source>
+        <translation>保存先</translation>
+    </message>
+    <message>
+        <source>This document</source>
+        <translation>このドキュメント</translation>
+    </message>
+    <message>
+        <source>Document:</source>
+        <translation>ドキュメント:</translation>
+    </message>
+    <message>
+        <source>New</source>
+        <translation>新規</translation>
+    </message>
+    <message>
+        <source>Channel:</source>
+        <translation>チャンネル:</translation>
+    </message>
+    <message>
+        <source>Name:</source>
+        <translation>名前:</translation>
+    </message>
+    <message>
+        <source>Operation</source>
+        <translation>処理</translation>
+    </message>
+    <message>
+        <source>New Channel</source>
+        <translation>新規チャンネル</translation>
+    </message>
+    <message>
+        <source>Add to Channel</source>
+        <translation>チャンネルに追加</translation>
+    </message>
+    <message>
+        <source>Subtract from Channel</source>
+        <translation>チャンネルから一部削除</translation>
+    </message>
+    <message>
+        <source>Intersect with Channel</source>
+        <translation>チャンネルとの共通範囲</translation>
+    </message>
+    <message>
+        <source>Replace Channel</source>
+        <translation>チャンネルの置き換え</translation>
+    </message>
+    <message>
+        <source>The selection could not be saved.</source>
+        <translation>選択範囲を保存できませんでした。</translation>
     </message>
 </context>
 <context>

@@ -289,6 +289,26 @@ const MethodDoc methodDocs[] = {
     {"selection.feather", "Soften the selection's edge.", "radius:number! Pixels"},
     {"selection.smooth", "Smooth the selection's outline.", "radius:integer! Pixels"},
     {"selection.border", "Select a band along the selection's edge.", "width:integer! Pixels"},
+    // channels
+    {"channels.list", "The Channels panel: the colour channels edits write to (activeColors) and the canvas shows, the alpha channel being edited (target), "
+     "whether Quick Mask is on, and every alpha and spot channel (id, name, kind, colour, opacity, colorIndicates, visible, target).", ""},
+    {"channels.new", "New Channel: a black alpha channel (nothing selected), or with fromSelection the selection saved as one; it becomes the target.",
+     "name:string The channel's name (default Alpha N); fromSelection:bool=false Save the selection into it"},
+    {"channels.duplicate", "Duplicate an alpha or spot channel, placed after it.", "id:string! The channel; name:string The copy's name (default \"<name> copy\")"},
+    {"channels.delete", "Delete an alpha or spot channel.", "id:string! The channel"},
+    {"channels.select", "Make a channel the target, as a click in the Channels panel: rgb (all colour channels, the usual case), red, green or blue (edits then "
+     "change only it and it shows alone in grey), or an alpha channel's id (painted like Quick Mask: brush.stroke with mask true, white selects).",
+     "channel:string! rgb, red, green, blue or a channel id; extend:bool=false Shift-click: add a colour channel to the target, or show an alpha channel beside it"},
+    {"channels.set", "Channel Options and the eye: rename, colour, opacity, what the colour indicates, order, visibility (colour channels: visibility only).",
+     "channel:string! rgb, red, green, blue or a channel id; name:string New name; color:string #rrggbb overlay colour; opacity:number Overlay opacity 0..1; "
+     "colorIndicates:(masked|selected) What the colour shows (the gray is inverted so the channel keeps what it selects); index:integer New place among the channels; "
+     "visible:bool Show or hide it"},
+    {"channels.saveSelection", "Select > Save Selection: the selection into a new alpha channel, or into an existing one combined in a mode.",
+     "id:string Into this alpha channel (default a new one); name:string A new channel's name; mode:<selectionMode>=replace How it combines with the channel"},
+    {"channels.loadSelection", "Select > Load Selection, or a Ctrl-click on a channel's thumbnail: a channel, the composite's luminosity (rgb), a colour channel, "
+     "or a layer's transparency or mask, as the selection.",
+     "channel:string rgb, red, green, blue or a channel id; layer:layer Instead, a layer's transparency; mask:bool=false With layer: its mask; invert:bool=false Invert it first; "
+     "mode:<selectionMode>=replace How it combines; shift:bool The thumbnail's Shift (add; with alt, intersect); alt:bool The thumbnail's Alt (subtract)"},
     // painting
     {"brush.presets", "The MyPaint brush presets and imported brushes: id, name, group, size, whether an eraser.", "group:string Only this group"},
     {"brush.import", "Import brushes: Photoshop .abr, Procreate .brushset/.brush, Clip Studio .sut, or images as tips.",
