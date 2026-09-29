@@ -52,7 +52,7 @@ What works in a document of each depth and colour mode, as the menus, tools and 
 | Channels panel, alpha channels | `edit.channels` | native | native | native | native | native | native | native |  |
 | Fill, Clear | `edit.fill` | native | native | native | native | native | native | native |  |
 | Cut, Copy, Paste | `edit.clipboard` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Brush, Pencil, Eraser (round tip, tip brushes) | `tool.brush` | native | native | native | native | native | native | native |  |
+| Brush and Eraser (round tip, tip brushes) | `tool.brush` | native | native | native | native | native | native | native |  |
 | MyPaint brush presets | `brush.mypaint` | native | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | CMYK8, CMYK16, Lab8, Lab16: libmypaint mixes RGB only; greyed rather than painting through RGB and back |
 | Gradient tool | `tool.gradient` | native | native | native | native | native | native | native |  |
 | Paint Bucket | `tool.paintBucket` | native | native | greyed (Photoshop lacks) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |

@@ -571,6 +571,51 @@ U16-vs-U8 calibration tests and U16 render-hash scenes; existing hashes unchange
   one table per channel where the function is smooth (the black point's corner and a gamma's infinite slope at 0 keep
   them exact today).
 
+**P5c and P7 E's painting half landed (2026-09-28): painting and retouching at 32 bits and in CMYK and Lab.**
+User-facing summaries: [bit-depth.md](bit-depth.md#painting-at-32-bits), [color-modes.md](color-modes.md#painting), and the
+generated [capability matrix](mode-matrix.md).
+
+- The raster is `StrokeRasterOf<Ops>`: the policy carries its samples per pixel (`channels`, a compile-time constant),
+  its arithmetic types (`Calc`, `Paint`), `make`, `crop` and the byte budget. New policies: `StrokeOps<F32>` (float, no
+  rounding, colour unbounded above) and `CmykStrokeOps<U8/U16>` (five samples, the depth's integer arithmetic). Lab
+  paints with the RGB rasters of its depth. The RGB 8/16 instances compile to the code they were (render hashes and
+  brush parity unchanged).
+- `BrushStroke(layer, mask, settings, document, options)` picks the raster from the document's depth and mode and puts
+  the colour in its model first: linearised through `documentTransfer` at 32 bits; sRGB through the document's profile
+  to `CMYKFloat` (the profile's black generation) or `LabFloat` with Color Settings' Conversion Options. Gradients
+  convert their stops and run between them in the model (`fillGradientNative`; CMYK's black rides in a second stop
+  set). Previews at any layout (`preview()`, `previewMaskAny()`), float mask clones, `CloneSource` at every layout,
+  `tiledProcessedNative` (Blur and Sharpen sources rendered at the layout), a 15-bit coverage stand-in for imported tip
+  brushes at 32 bits.
+- 32 bits: MyPaint's documented 15-bit round trip (tiles encoded through the curve as first touched; a pixel whose four
+  15-bit samples a dab left unchanged keeps its exact floats); the healers (`healF`) on the area encoded at 15 bits,
+  divided first by its brightest straight colour when that is above 1 and scaled back after; `WarpStroke` on float
+  (Smudge, Liquify); `sharpenImage(ImageF)`; the Eyedropper reads the linear composite (`nativeColorAt`); merges and
+  Apply Layer Mask at float (`trimToPixelsAny`, `applyMaskAny`); `MipCache::refresh` for float and 5-channel levels.
+- CMYK and Lab: the brush, eraser and tip brushes, gradients, Clone Stamp, moving selected pixels, the Eyedropper (inks
+  and L a b through the profile), merges, Apply Layer Mask; Lab also heals and blurs/smudges (four samples). Selections
+  join the mode table (the wand and Quick Select, which read colour, have their own features now); loading a CMYK layer's
+  pixels as a selection is refused ("yet"). Thumbnails of painted CMYK and Lab layers are drawn through the profile.
+- `supports()`: `unavailableReason(feature, type, mode)` is the one wording ("Not available in 32-bit mode" / "... yet",
+  "Not available in CMYK mode" for good / "... mode yet"), `photoshopLacksInMode` lists what stays RGB (Camera Raw,
+  G'MIC, `brush.mypaint`), `tool.patch` is split from `tool.spotHealing` (Photoshop has no Patch at 32 bits),
+  `featureRows` and `throughRgbNote` feed `tests/mode_matrix`, which writes `docs/mode-matrix.md` and whose ctest check
+  fails when the doc is stale. Marked native-with-a-note: CMYK/Lab rendering and merging (fill layers and shape paint are
+  drawn in sRGB and converted); every painting cell touched here is native.
+- Automation: `color.sample` (the Eyedropper; MCP `color_sample`, automation.md); `brush.stroke` refuses with the reason
+  per tool; `pixels.patch` maps to `tool.patch`, `selection.wand` to `tool.wand`, `selection.scribble` and
+  `selection.subject` to `tool.quickSelect`. rpc smoke gains a 32-bit painting section and a CMYK/Lab painting section.
+- Gates: `paint_modes_tests` (a float dab at three hardnesses, stamped and per pixel, painting and erasing, through a
+  selection over light up to 4, within 1e-5 absolute plus relative of `float_reference::brushDab`, worst 0.08 of the
+  bound; CMYK black equal to Little CMS's inks within half a level at 8 and 16 bits; Lab L, a, b; CMYK gradients; moves and
+  clones carrying five samples; float healing of light at 2.5; MyPaint keeping untouched floats); 19 new `paint/`
+  render-hash scenes, every earlier hash unchanged; brush parity unchanged. Instruction counts (`perf stat -e
+  instructions:u`, core 0, base = 1.8.4) in the report of the lane.
+- Not done: CMYK healing (the patch search is RGBA; two passes would choose different patches), CMYK Blur, Sharpen,
+  Smudge and Liquify (share `tool.smudge`), Dodge, Burn and Sponge in CMYK and Lab, the Paint Bucket and Patch in CMYK
+  and Lab (their decisions read colour, as the wand's), the wand and Quick Select in CMYK and Lab, an HDR colour picker
+  (P5f).
+
 ## Review notes
 
 - Mac project compatibility: since 2026-09-26 NekoPhoto no longer keeps Mac Compositor project-format parity, so

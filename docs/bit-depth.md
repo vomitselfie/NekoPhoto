@@ -151,7 +151,8 @@ linear light is what light does, so soft edges, glows and semi-transparent layer
 (Photoshop's 32-bit mode too).
 
 The core, the files and the view came first (P5a in [high-bit-depth-plan.md](high-bit-depth-plan.md)); adjustments,
-filters, selections and pixel edits followed (P5b). Painting at 32 bits is the next step.
+filters, selections and pixel edits followed (P5b), then painting and retouching (P5c). Which features work in which
+depth and colour mode is in the [capability matrix](mode-matrix.md), generated from the code.
 
 ### Getting a 32-bit document
 
@@ -231,19 +232,54 @@ with no monitor profile, is encoded with the document's own curve, so at exposur
 - **Saving and exporting**: projects and 32-bit PSD and PSB files; PNG and TIFF at 16 bits and JPEG, WebP, TGA, ICO and
   GIF at 8, each tone-mapped at exposure 0 (values above white clip) and encoded with the document's curve, with a
   note saying so. The embedded profile is the one the values encode to.
+- **Painting and retouching** ([below](#painting-at-32-bits)): the Brush and Eraser with the round tip and imported tip
+  brushes, the MyPaint presets, on pixels, masks and the Quick Mask; the Gradient tool; Clone Stamp; Spot Healing and the
+  Healing Brush; Blur, Sharpen, Smudge and Liquify; moving and duplicating selected pixels with the Move tool; the
+  Eyedropper; Merge Down and Merge Layers; Layer Mask ▸ Apply.
 - **Tools that do not touch pixels**: Move (layers), Hand, Zoom.
 
 Everything else is greyed in a 32-bit document, and automation refuses it. Two wordings tell the reason apart:
 
 - **"Not available in 32-bit mode"**: Photoshop itself has no such thing at 32 bits, so it stays greyed: Dodge, Burn
-  and Sponge, the Paint Bucket, the content-aware tools, the Brightness/Contrast, Posterize, Threshold, Selective Color
+  and Sponge, the Paint Bucket, the Patch tool, the content-aware tools, the Brightness/Contrast, Posterize, Threshold, Selective Color
   and Grain adjustments (as adjustment layers they are kept but not drawn; converting says so), Mosh, G'MIC, and the blend
   modes outside the 32-bit set.
-- **"Not available in 32-bit yet"**: not ported yet: painting and retouching (the brush in every engine, the eraser,
-  Clone Stamp, the healing tools, Patch, Smudge, Blur and Sharpen, Liquify, gradients, moving selected pixels with the
-  Move tool), the Camera Raw Filter, Remove Background, text, shape and path editing, layer style editing, smart objects
-  and Smart Filters, merges and Apply Layer Mask, the Eyedropper, artboard, slice and SVG export, the timeline, colour
-  conversion (Assign and Convert to Profile).
+- **"Not available in 32-bit yet"**: not ported yet: the Camera Raw Filter, Remove Background, text, shape and path
+  editing, layer style editing, smart objects and Smart Filters, deleting a clipping base (which bakes its clipped
+  layers), artboard, slice and SVG export, the timeline, colour conversion (Assign and Convert to Profile).
+
+### Painting at 32 bits
+
+A stroke at 32 bits is the same stroke as at 8 and 16 bits (the dab spacing, the tip's profile, hard tips building up
+to their opacity, soft ones screening) worked out in float, without rounding:
+
+- **The colour** you pick is the colour the pickers show, encoded; it is linearised through the document's curve before
+  it is painted, so a 50% grey paints 0.214 (sRGB), as in Photoshop. Soft edges, low opacity and the eraser blend in
+  **linear light**, so they look different from 8 and 16 bits (as in Photoshop). Light above
+  white under the brush is blended as it is: a half-covered pixel over 4.0 lands between the colour and 4.0; pixels a
+  stroke does not touch keep their exact values.
+- **Gradients** run between their stops in linear light (the stops linearised), as Photoshop's 32-bit gradients do; a
+  mask's gradient is coverage and is not linearised.
+- **Imported tip brushes** stamp their coverage at 15 bits (the same stamps as at 16 bits), then paint in float.
+- **MyPaint presets**: libmypaint paints in 15-bit fixed point, so the layer goes to it encoded through the document's
+  curve at 15 bits, a tile at a time as the brush reaches it, and comes back linearised. Only the samples a dab
+  actually changed are rewritten; every other pixel, light above white included, keeps its exact float.
+- **Spot Healing and the Healing Brush** work on the area around the spot encoded at 15 bits through the document's
+  curve (what the patch search sees is the picture at exposure 0, as the Magic Wand decides), after dividing the area by
+  its brightest straight colour when that is above 1, so a highlight heals as light and not as a white clipped at 1;
+  the result is decoded, scaled back and blended in by the brush's coverage. Pixels the stroke does not cover keep their
+  exact values.
+- **Blur and Sharpen** paint a blurred or sharpened float copy of the layer through the tip (Sharpen on straight colour,
+  not clamped above 1); **Smudge and Liquify** carry and resample float pixels.
+- **The Eyedropper** reads the composite's linear value (`color.sample` answers it); the foreground colour it sets is
+  that value encoded through the document's curve, so light above white shows as white in the pickers (an HDR colour
+  picker is P5f).
+- **Moving selected pixels**, **Merge Down** and **Layer Mask ▸ Apply** work on the float pixels exactly.
+
+Checked by `paint_modes_tests`: a dab at every hardness, stamped and per pixel, painting and erasing, through a
+selection over light up to 4, is within 1e-5 (absolute plus relative) of a double-precision reference
+(`tests/float_reference.cpp`, worst 0.08 of the bound); a stroke's core is the linearised colour exactly; MyPaint leaves
+every untouched float as it was; spot healing brings a dark dot in light at 2.5 back to 2.5 within 2%.
 
 ### Adjustments and filters at 32 bits
 
@@ -281,7 +317,7 @@ The **Camera Raw Filter** stays greyed ("yet") although Photoshop offers it at 3
 Highlights, the tone curve, Clarity's masks) are written for display-referred values from 0 to 1, and porting it means
 a scene-referred pipeline with HDR Toning's Local Adaptation (P5f), not the 16-bit float kernels run on clipped values.
 NekoPhoto has no destructive Unsharp Mask or Offset filter; Unsharp Mask as a Smart Filter waits for smart objects at 32
-bits, the Sharpen tool for painting.
+bits (the Sharpen tool works).
 
 ### Memory at 32 bits
 
@@ -305,6 +341,11 @@ kinds' float frame `forEachEncodedColour`, `blur_f32.cpp`, `filters_f32.cpp`, `r
 paths are in `EditorSessionFloat.cpp`. `depth_float_edit_tests` checks every kernel against double-precision versions
 in the same reference (1e-5 absolute plus relative, the recursive Gaussian above sigma 6 included), the extension
 above 1, adjustment layers in the renderer, and the cross-depth parity above.
+
+Painting (P5c): the brush stroke's raster is `StrokeRasterOf<StrokeOps<F32>>` (`stroke_raster.h`, `brush_f32.cpp`); the
+`BrushStroke` constructor that takes a `Document` linearises the colour and picks the raster for the document's depth
+and mode. `mypaint.cpp` has the 15-bit round trip, `StrokeRasterOf::healF` the healers' encoding, `warpstroke.cpp` and
+`toning.cpp` (Sharpen) float paths, `pixels_any.cpp` merging and Apply Layer Mask at any layout.
 
 ---
 
@@ -454,8 +495,9 @@ PSD には残りません(プロジェクトと 8 bit の PSD には残ります
 (乗算済み)。色は 1 を超えられ(白より明るい)、アルファ・マスク・選択範囲は 0〜1 です。リニアな光で合成するので、
 柔らかい境界・光彩・半透明のレイヤーの見え方は 8 bit や 16 bit と変わります(Photoshop の 32 bit モードも同じです)。
 
-中核・ファイル・表示が最初の段階(計画の P5a)、色調補正・フィルター・選択範囲・ピクセルの編集が次の段階(P5b)です。
-32 bit でのペイントはその次の段階で対応します。
+中核・ファイル・表示が最初の段階(計画の P5a)、色調補正・フィルター・選択範囲・ピクセルの編集が次の段階(P5b)、
+ペイントとレタッチがその次(P5c)です。どの機能がどのビット数とカラーモードで使えるかは、コードから生成した
+[機能表](mode-matrix.md)にあります。
 
 **32 bit のドキュメントを作るには**
 
@@ -510,19 +552,46 @@ PSD には残りません(プロジェクトと 8 bit の PSD には残ります
 - **レイヤーの構成**、**マスク**、レイヤー全体の移動・拡大縮小・回転・反転、**カンバスの反転**、画像の読み込み。
 - **保存と書き出し**:プロジェクト、32 bit の PSD・PSB。PNG と TIFF は 16 bit、JPEG・WebP・TGA・ICO・GIF は 8 bit で、
   露光量 0 でトーンマッピングし、その旨をお知らせします。
+- **ペイントとレタッチ**(下の「32 bit でのペイント」):ブラシと消しゴム(円形ブラシ先端と読み込んだブラシ先端)、
+  MyPaint のプリセット(ピクセル、マスク、クイックマスク)、グラデーションツール、コピースタンプ、スポット修復ブラシと
+  修復ブラシ、ぼかし・シャープ・指先・ゆがみ、移動ツールでの選択ピクセルの移動と複製、スポイトツール、下のレイヤーと結合と
+  レイヤーを結合、レイヤーマスク ▸ 適用。
 - ピクセルに触れないツール(移動、手のひら、ズーム)。
 
 それ以外はグレー表示になり、自動化でも使えません。理由は 2 通りの表示で区別します。
 
 - 「**32 bit/チャンネルモードでは使用できません**」:Photoshop 自体が 32 bit で持たないもので、今後もグレー表示のままです。
-  覆い焼き・焼き込み・スポンジ、塗りつぶしツール、コンテンツに応じた各機能、明るさ・コントラスト、ポスタリゼーション、
+  覆い焼き・焼き込み・スポンジ、塗りつぶしツール、パッチツール、コンテンツに応じた各機能、明るさ・コントラスト、ポスタリゼーション、
   2 階調化、特定色域の選択、粒子の色調補正(調整レイヤーは保持されますが 32 bit では描画しません。変換のときにお知らせします)、
   Mosh、G'MIC、32 bit で使えない描画モード。
-- 「**32 bit/チャンネルではまだ使用できません**」:まだ移植していないもの。ペイントとレタッチ(すべてのエンジンのブラシ、
-  消しゴム、コピースタンプ、修復系のツール、パッチ、指先、ぼかしとシャープ、ゆがみ、グラデーション、移動ツールでの
-  選択ピクセルの移動)、Camera Raw フィルター、背景を削除、テキスト・シェイプ・パスの編集、レイヤースタイルの編集、
-  スマートオブジェクトとスマートフィルター、結合とレイヤーマスクを適用、スポイトツール、アートボード・スライス・SVG の
-  書き出し、タイムライン、色の変換(プロファイルの指定とプロファイル変換)。
+- 「**32 bit/チャンネルではまだ使用できません**」:まだ移植していないもの。Camera Raw フィルター、背景を削除、テキスト・
+  シェイプ・パスの編集、レイヤースタイルの編集、スマートオブジェクトとスマートフィルター、クリッピングの基点の削除
+  (クリップされたレイヤーに焼き込む処理)、アートボード・スライス・SVG の書き出し、タイムライン、色の変換(プロファイルの
+  指定とプロファイル変換)。
+
+**32 bit でのペイント**
+
+32 bit のストロークは 8 bit・16 bit と同じストローク(ブラシの間隔、ブラシ先端の形、硬いブラシは不透明度まで、柔らかい
+ブラシはスクリーンで重なる)を、丸めずに浮動小数点で計算します。
+
+- **色**:カラーピッカーに表示される色(書き出した値)を、ドキュメントのカーブでリニアにしてから塗ります。50% のグレーは
+  0.214(sRGB)になり、Photoshop と同じです。柔らかい境界、低い不透明度、消しゴムは**リニアな光**で混ざります。ブラシの下の
+  白より明るい光はそのまま混ざり(4.0 の上の半分覆われたピクセルは、色と 4.0 の間になります)、ストロークが触れない
+  ピクセルは値がそのまま残ります。
+- **グラデーション**は、Photoshop の 32 bit と同じく、リニアにした分岐点の間をリニアな光で補間します。マスクへの
+  グラデーションは範囲なのでリニアにしません。
+- **読み込んだブラシ先端**は範囲を 15 bit で押してから(16 bit と同じ)、浮動小数点で塗ります。
+- **MyPaint のプリセット**:libmypaint は 15 bit の固定小数点で塗るので、レイヤーはドキュメントのカーブで 15 bit に
+  書き出してから(ブラシが届いたタイルごと)渡し、リニアに戻します。書き換えるのはダブが実際に変えた値だけで、ほかの
+  ピクセルは白より明るい光も含めて正確な値のまま残ります。
+- **スポット修復ブラシと修復ブラシ**は、スポットの周りをドキュメントのカーブで 15 bit に書き出して処理します(パッチを
+  探す基準は露光量 0 の画像で、自動選択ツールと同じです)。領域の一番明るい色が 1 を超えるときは先にその値で割るので、
+  ハイライトは 1 で切れた白ではなく光として修復されます。結果はリニアに戻し、元の倍率に戻してブラシの範囲で合成します。
+- **ぼかしとシャープ**は、ぼかした・シャープにした浮動小数点のコピーをブラシで塗ります(シャープは 1 を超えても切りません)。
+  **指先とゆがみ**は浮動小数点のピクセルを運び、再サンプルします。
+- **スポイトツール**は合成画像のリニアな値を読み(`color.sample` が返します)、描画色にはそれをドキュメントのカーブで
+  書き出した色を設定します。白より明るい光はピッカーでは白になります(HDR カラーピッカーは P5f)。
+- **選択ピクセルの移動**、**下のレイヤーと結合**、**レイヤーマスク ▸ 適用**は浮動小数点のピクセルのまま正確に処理します。
 
 **32 bit での色調補正とフィルター**
 
@@ -556,6 +625,6 @@ PSD には残りません(プロジェクトと 8 bit の PSD には残ります
 (白レベル、ハイライト、トーンカーブ、明瞭度のマスク)が 0〜1 の表示用の値を前提にしているため、移植には HDR トーンの
 ローカル露光量補正(P5f)と同じシーンを基準にした処理が必要で、16 bit の浮動小数点の処理を切り詰めた値に適用するだけでは
 足りないからです。NekoPhoto には破壊的なアンシャープマスクやスクロールのフィルターはありません。スマートフィルターの
-アンシャープマスクは 32 bit のスマートオブジェクトを、シャープツールはペイントの移植を待ちます。
+アンシャープマスクは 32 bit のスマートオブジェクトを待ちます(シャープツールは使えます)。
 
 **メモリ**:32 bit の値は 4 バイトなので、持てるピクセル数は 8 bit の 4 分の 1 です(1 枚 2,500 万画素、レイヤー合計 2 億 5,000 万画素)。

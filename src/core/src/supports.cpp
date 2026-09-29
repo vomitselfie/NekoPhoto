@@ -320,7 +320,7 @@ constexpr FeatureRow rows[] = {
     {"edit.channels", "Channels panel, alpha channels"},
     {"edit.fill", "Fill, Clear"},
     {"edit.clipboard", "Cut, Copy, Paste"},
-    {"tool.brush", "Brush, Pencil, Eraser (round tip, tip brushes)"},
+    {"tool.brush", "Brush and Eraser (round tip, tip brushes)"},
     {"brush.mypaint", "MyPaint brush presets"},
     {"tool.gradient", "Gradient tool"},
     {"tool.paintBucket", "Paint Bucket"},
