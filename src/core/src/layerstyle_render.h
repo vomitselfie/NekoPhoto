@@ -20,6 +20,12 @@ struct StyledDraw {
     std::function<void(Image16& into, const Rect& region)> drawSource16;
     /// And in float, for a 32-bit target.
     std::function<void(ImageF& into, const Rect& region)> drawSourceF;
+    /// And for an 8-bit CMYK target (5 samples a pixel).
+    std::function<void(ImageC8& into, const Rect& region)> drawSourceC8;
+    /// The document's mode and profile: in CMYK and Lab the effects' colours (sRGB values) go through the profile and
+    /// are composited in the document's channels. The 8-bit `Image` target is RGB or Lab, the 16-bit one any mode.
+    ColorMode colorMode = ColorMode::RGB;
+    const ColorProfile* profile = nullptr;
     /// A 32-bit target's curve: the effects' colours (8-bit values in the document's encoding) are linearised with it
     /// as they are drawn. Null: sRGB's.
     const TransferCurve* linear = nullptr;
@@ -45,6 +51,7 @@ struct StyledDraw {
 /// Draws the layer with its effects onto `target`, at its depth (`drawSource` and `coverage` for 8 bits,
 /// `drawSource16` and `coverage16` for 16).
 void drawStyledLayer(const StyledDraw& draw, Image& target);
+void drawStyledLayer(const StyledDraw& draw, ImageC8& target);
 void drawStyledLayer(const StyledDraw& draw, Image16& target);
 void drawStyledLayer(const StyledDraw& draw, ImageF& target);
 

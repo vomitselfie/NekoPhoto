@@ -1,6 +1,7 @@
 #include "LayerStyleDialog.h"
 #include "Names.h"
 #include "PresetLibrary.h"
+#include "compositor/blend.h"
 #include <QCheckBox>
 #include <QColorDialog>
 #include <QComboBox>
@@ -15,6 +16,7 @@
 #include <QListWidget>
 #include <QPushButton>
 #include <QStackedWidget>
+#include <QStandardItemModel>
 #include <QVBoxLayout>
 
 using namespace compositor;
@@ -470,6 +472,15 @@ void LayerStyleDialog::blendRow(QFormLayout* form, const QString& label, EffectB
     QStringList names;
     for (int i = 0; i < kBlendCount; i++) names << app::names::core(kBlendNames[i]);
     comboRow(form, label, names, [mode] { return int(*mode); }, [mode](int i) { *mode = EffectBlend(std::clamp(i, 0, kBlendCount - 1)); });
+    // A Lab document has no Color Dodge, Color Burn, Darken, Lighten, Difference, Exclusion, Subtract or Divide: greyed,
+    // as in the layer blend menu (an effect set to one draws as Normal).
+    const ColorMode colorMode = session_ && session_->document() ? session_->document()->colorMode : ColorMode::RGB;
+    if (colorMode == ColorMode::RGB || form->rowCount() == 0) return;
+    auto* combo = qobject_cast<QComboBox*>(form->itemAt(form->rowCount() - 1, QFormLayout::FieldRole)->widget());
+    auto* model = combo ? qobject_cast<QStandardItemModel*>(combo->model()) : nullptr;
+    if (!model) return;
+    for (int i = 0; i < kBlendCount && i < model->rowCount(); i++)
+        if (!blendModeAvailable(effectBlendMode(EffectBlend(i)), colorMode)) model->item(i)->setEnabled(false);
 }
 
 void LayerStyleDialog::colourRow(QFormLayout* form, const QString& label, StyleColor* colour) {

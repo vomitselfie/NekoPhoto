@@ -9,13 +9,15 @@
 //   vector strokes and gradient or pattern fill layers (drawn in RGB and converted);
 // - adjustment layers: every kind Photoshop offers in the mode but Color Lookup, on the document's own samples
 //   (adjustments_modes.cpp, modeedit.h);
-// - layer styles are not drawn in CMYK and Lab yet (the layer draws without its effects; P8).
+// - layer styles: every effect, its masks as in RGB, its colours through the document's profile and its blending in
+//   the document's channels (layerstyle_render.cpp).
 //
 // A buffer held in another layout (an 8-bit RGB raster in a CMYK document, say, text rendered before the document's
 // conversion reached it) is converted to the document's mode from sRGB once and kept while it lives.
 #pragma once
 #include "render_deep_ops.h"
 #include "render_plan.h"
+#include "layerstyle_render.h"
 #include "compositor/blend.h"
 #include "compositor/colormgmt.h"
 #include "compositor/depth.h"
@@ -23,6 +25,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <type_traits>
 
@@ -52,7 +55,7 @@ struct ModeOps {
     static constexpr ColorMode colorMode = M;
     static constexpr Sample one = SampleTraits<S>::one;
     static constexpr int channels = colorModeChannels(M);
-    static constexpr bool styles = false;
+    static constexpr bool styles = true;
 
     static float unit(Sample s) { return float(s) / float(one); }
     static Sample mul(Sample a, Sample b) {
@@ -85,6 +88,22 @@ struct ModeOps {
         span(mode, src, &k, dst, 1);
     }
     static void blendStraight(BlendMode mode, const float* cb, float* cs) { blendStraightMode(mode, M, cb, cs); }
+
+    // Layer styles in the document's channels (layerstyle_render.cpp): the effects' colours through its profile.
+    static void drawStyled(const StyledDraw& draw, Image& target) { drawStyledLayer(draw, target); }
+    static void setStyleSource(StyledDraw& draw, std::function<void(Image&, const Rect&)> source) {
+        if constexpr (deep) draw.drawSource16 = std::move(source);
+        else if constexpr (M == ColorMode::CMYK) draw.drawSourceC8 = std::move(source);
+        else draw.drawSource = std::move(source);
+    }
+    static void setStyleCoverage(StyledDraw& draw, const Gray* coverage) {
+        if constexpr (deep) draw.coverage16 = coverage;
+        else draw.coverage = coverage;
+    }
+    static void setStyleMode(StyledDraw& draw, const Document& document) {
+        draw.colorMode = M;
+        draw.profile = &document.profile;
+    }
 
     // The primitives (render_modes.cpp).
     static void drawLayer(const Params& params, const Rect& region, double scale, const Gray* coverage, Image& out);

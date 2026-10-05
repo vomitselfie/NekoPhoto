@@ -19,6 +19,7 @@ namespace compositor {
 
 struct Layer;
 struct Document;
+enum class BlendMode;
 
 /// Every Photoshop blend mode an effect can use (ours are a subset).
 enum class EffectBlend {
@@ -27,7 +28,17 @@ enum class EffectBlend {
     Subtract, Divide, Hue, Saturation, Color, Luminosity
 };
 
-struct StyleColor { uint8_t r = 0, g = 0, b = 0; };
+/// An effect's colour: sRGB bytes, as colours are kept in every mode. `ink`: the C, M, Y and K (0..1) of a CMYK colour
+/// read from a file ('CMYC'), which a CMYK document draws as they are while r, g and b still equal their plain
+/// conversion (inkMatches); an edit or a mode conversion changes r, g and b and so retires them.
+struct StyleColor {
+    uint8_t r = 0, g = 0, b = 0;
+    std::optional<std::array<float, 4>> ink = std::nullopt;
+};
+/// The plain RGB a 'CMYC' colour is read as (no profile), which `ink` must still match to be used.
+StyleColor plainRgbOfInk(const std::array<float, 4>& ink);
+/// Whether `c` carries inks that still describe it.
+bool inkMatches(const StyleColor& c);
 
 struct StyleGradient {
     enum class Type { Linear, Radial, Angle, Reflected, Diamond, ShapeBurst };
@@ -186,6 +197,11 @@ float folderContentFill(const Layer& layer);
 
 /// `backdrop` (straight 0..1) blended with `source` in `mode`.
 void effectBlend(EffectBlend mode, const float backdrop[3], const float source[3], float out[3]);
+/// The layer blend mode an effect's mode is (Normal for one with none).
+BlendMode effectBlendMode(EffectBlend mode);
+/// One channel of a separable mode's blend, as effectBlend computes it (`mode` not Hue, Saturation, Color, Luminosity,
+/// Darker Color or Lighter Color).
+float effectBlendChannel(EffectBlend mode, float backdrop, float source);
 /// A gradient's position (0..1) at document pixel (x, y) over `bounds` (document pixels).
 float gradientPosition(const StyleGradient& g, double boundsX, double boundsY, double boundsW, double boundsH, double x, double y);
 StyleColor gradientColor(const StyleGradient& g, float position);

@@ -91,7 +91,16 @@ const char* blendValue(EffectBlend mode) {
 Desc& blend(Desc& d, const char* key, EffectBlend mode) { return d.enumeration(key, "BlnM", blendValue(mode)); }
 
 /// A colour object: channels 0..255 as plain doubles, the form Photoshop writes.
-Desc rgb(StyleColor c) { Desc d("RGBC"); d.number("Rd  ", c.r).number("Grn ", c.g).number("Bl  ", c.b); return d; }
+/// A colour object: 'CMYC' for a colour that still carries the inks it was read with (a CMYK file's), else 'RGBC'.
+Desc rgb(StyleColor c) {
+    if (inkMatches(c)) {
+        Desc d("CMYC");
+        const auto& ink = *c.ink;
+        d.number("Cyn ", double(ink[0]) * 100).number("Mgnt", double(ink[1]) * 100).number("Ylw ", double(ink[2]) * 100).number("Blck", double(ink[3]) * 100);
+        return d;
+    }
+    Desc d("RGBC"); d.number("Rd  ", c.r).number("Grn ", c.g).number("Bl  ", c.b); return d;
+}
 
 int32_t location(float f) { return int32_t(std::lround(std::clamp(f, 0.0f, 1.0f) * 4096.0f)); }
 int32_t midpoint(float f) { return int32_t(std::lround(std::clamp(f, 0.0f, 1.0f) * 100.0f)); }
