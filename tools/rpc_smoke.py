@@ -1368,8 +1368,14 @@ def pixel_clipboard(rpc):
         # Cut clears the pasted pixels and keeps them on the clipboard.
         rpc.call("pixels.cut")
         cleared = rpc.call("history.info")["undo"]
-        # (Clear leaves 8-bit CMYK pixels as they are: pixels.clear makes no step there either.)
-        assert cleared == "Clear" or (mode, bits) == ("cmyk", 8), (mode, bits, cleared)
+        assert cleared == "Clear", (mode, bits, cleared)
+        try:   # the cut area is transparent on that layer, at every depth and mode (CMYK's alpha included)
+            visible = [l for l in rpc.call("layers.list") if l["visible"]]
+            for l in visible:
+                if l["id"] != pasted["id"]: rpc.call("layers.set", id=l["id"], visible=False)
+            expect_refused(rpc, "transparent", "color.sample", x=8, y=8)
+        finally:
+            for l in visible: rpc.call("layers.set", id=l["id"], visible=True)
         rpc.call("pixels.paste")
         assert rpc.call("history.info")["undo"] == "Paste"
         expect_refused(rpc, "nothing to cut", "pixels.cut")

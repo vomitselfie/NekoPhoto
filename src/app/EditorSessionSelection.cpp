@@ -637,6 +637,7 @@ void EditorSession::clearSelectedPixelsNow(Layer& layer) {
         if (!selection) return;
         const Image16& src = *layer.asset->image.u16();
         auto out = std::make_shared<Image16>(src);
+        const int n = src.channels();   // 4, or 5 for CMYK
         const Affine toDoc = layer.transform.pixelToDocument(src.width(), src.height());
         for (int y = 0; y < src.height(); y++)
             for (int x = 0; x < src.width(); x++) {
@@ -645,9 +646,30 @@ void EditorSession::clearSelectedPixelsNow(Layer& layer) {
                 const uint32_t c = std::min<uint32_t>(selection->at(int(d.x), int(d.y)), one16);
                 if (!c) continue;
                 uint16_t* p = out->pixel(x, y);
-                for (int k = 0; k < 4; k++) p[k] = uint16_t((p[k] * (one16 - c) + one16 / 2) >> 15);
+                for (int k = 0; k < n; k++) p[k] = uint16_t((p[k] * (one16 - c) + one16 / 2) >> 15);   // every sample, alpha included
             }
         layer.asset = Asset::make(Image16Ptr(out), layer.name);
+        layer.shapeImage.reset();
+        return;
+    }
+    if (layer.asset && layer.asset->image.c8()) {
+        // 8-bit CMYK: the four inks and alpha, premultiplied, faded together as RGBA's are.
+        const GrayImage* selection = document_->selection && document_->selection->coverage.u8() ? document_->selection->coverage.u8().get() : nullptr;
+        if (!selection) return;
+        const ImageC8& src = *layer.asset->image.c8();
+        auto out = std::make_shared<ImageC8>(src);
+        const int n = src.channels();
+        const Affine toDoc = layer.transform.pixelToDocument(src.width(), src.height());
+        for (int y = 0; y < src.height(); y++)
+            for (int x = 0; x < src.width(); x++) {
+                const Point d = toDoc.apply({x + 0.5, y + 0.5});
+                if (d.x < 0 || d.y < 0 || d.x >= document_->width || d.y >= document_->height) continue;
+                const double c = selection->at(int(d.x), int(d.y)) / 255.0;
+                if (c <= 0) continue;
+                uint8_t* p = out->pixel(x, y);
+                for (int k = 0; k < n; k++) p[k] = uint8_t(p[k] * (1 - c) + 0.5);
+            }
+        layer.asset = Asset::makeAny(ImageC8Ptr(out), layer.name);
         layer.shapeImage.reset();
         return;
     }
