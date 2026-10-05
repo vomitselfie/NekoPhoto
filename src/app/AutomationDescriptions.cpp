@@ -88,6 +88,10 @@ const MethodDoc methodDocs[] = {
      "index:integer The frame (default the current one; -1 every frame); delay:integer Milliseconds 0..655350; loopCount:integer 0 forever, 1 once, n times"},
     // documents and canvas
     {"document.info", "The current document: size, resolution, layer count, active layer, path, whether modified.", ""},
+    {"document.histogram", "The Histogram panel's numbers: 256 bins of one channel (alpha-weighted, 16-bit rounded to 8, 32-bit encoded at exposure 0) with Mean, Std Dev, Median, Pixels and the cache level counted.",
+     "channel:string The channel by name in the document's mode: rgb (or composite), red, green, blue, luminosity; cmyk, cyan, magenta, yellow, black; lightness, a, b (default the composite, lightness in Lab); "
+     "source:(entire|layer|adjustment)=entire Entire Image, the Selected Layer's pixels, or the Adjustment Composite (the active adjustment layer and everything below); "
+     "cached:bool=false Count a reduced render as the panel does (its cache level) instead of every pixel"},
     {"document.overview", "The document at a glance, as text: size, selection, undo, and the layer tree top first with each layer's kind, bounds, opacity, blend, mask and id.",
      "maxLayers:integer=80 List at most this many layers"},
     {"document.new", "A new document in the current tab (or a new tab if this one has a document).",

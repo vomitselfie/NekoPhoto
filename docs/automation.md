@@ -104,6 +104,8 @@ print(json.loads(f.readline())["result"])
 Observe: `app.info`, `rpc.describe`, `tabs.list`, `document.overview` (the document, selection, undo and
 layer tree as text, one line per layer with its id: where an agent starts), `document.info`, `layers.list`, `layers.get` (a smart object is kind `smartObject`, with its source and whether it is preview-locked),
 `adjustments.get`, `adjustments.defaults`, `selection.info`, `history.info`,
+`document.histogram` (the Histogram panel's 256 bins of a `channel` with `mean`, `stdDev`, `median`, `pixels` and
+`cacheLevel`; `source` entire, layer or adjustment; every pixel unless `cached`),
 `render` (composite, or a `region`, longest side `maxSize`; `zoom` 2..32 enlarges a region with square
 pixels to judge an edge exactly; `path` writes a file instead of returning base64), `layers.render` (one
 layer alone; a masked layer as it shows, `masked: false` for its raw pixels),

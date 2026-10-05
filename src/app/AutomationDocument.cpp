@@ -15,6 +15,7 @@
 #include "compositor/tga.h"
 #include "compositor/svg.h"
 #include "VectorFiles.h"
+#include "HistogramPanel.h"
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QRegularExpression>
@@ -46,6 +47,40 @@ void AutomationServer::registerDocumentHandlers() {
         o["undo"] = s->canUndo() ? QJsonValue(s->undoName()) : QJsonValue::Null;
         o["redo"] = s->canRedo() ? QJsonValue(s->redoName()) : QJsonValue::Null;
         return o;
+    });
+    add("document.histogram", [session, document](const QJsonObject& p) {
+        // The Histogram panel's numbers: one channel's 256 bins and its statistics, from every pixel unless cached.
+        const Document& doc = document();
+        const QString sourceName = str(p, "source", QStringLiteral("entire"));
+        HistogramPanel::Source source = HistogramPanel::Source::EntireImage;
+        if (sourceName == "layer") source = HistogramPanel::Source::SelectedLayer;
+        else if (sourceName == "adjustment") source = HistogramPanel::Source::AdjustmentComposite;
+        else if (sourceName != "entire") fail("source must be entire, layer or adjustment", invalidParams);
+        // The channel by its name in the document's mode: the composite, each channel, luminosity (RGB) or colors.
+        QStringList names;
+        for (int i = 0; i < levelsChannelCount; i++)
+            names << QString::fromUtf8(doc.colorMode == ColorMode::RGB ? (i < 4 ? levelsChannelName(i) : "") : levelsChannelName(i, doc.colorMode)).toLower();
+        const QString channelName = str(p, "channel", doc.colorMode == ColorMode::Lab ? QStringLiteral("lightness") : names[0]).toLower();
+        int channel = names.indexOf(channelName);
+        if (channelName == "composite" && doc.colorMode != ColorMode::Lab) channel = 0;
+        if (channelName == "luminosity" && doc.colorMode == ColorMode::RGB) channel = HistogramPanel::luminosityChannel;
+        if (channel < 0 || channelName.isEmpty()) {
+            QStringList offered;
+            for (const QString& n : names) if (!n.isEmpty()) offered << n;
+            if (doc.colorMode == ColorMode::RGB) offered << "luminosity";
+            fail(QStringLiteral("channel must be one of: %1").arg(offered.join(", ")), invalidParams);
+        }
+        HistogramPanel::Request request;
+        if (!HistogramPanel::makeRequest(*session(), source, !flag(p, "cached", false), request))
+            fail(source == HistogramPanel::Source::AdjustmentComposite ? "the active layer is not an adjustment layer" : "the active layer has no pixels");
+        const ImageHistogram histogram = HistogramPanel::computeHistogram(request);
+        const auto& bins = HistogramPanel::binsFor(histogram, channel);
+        if (bins.size() != 256) fail("nothing to count");
+        const HistogramStats stats = histogramStats(bins);
+        QJsonArray values;
+        for (double b : bins) values.append(std::round(b * 1000) / 1000);
+        return QJsonObject{{"channel", channelName}, {"source", sourceName}, {"bins", values}, {"mean", stats.mean}, {"stdDev", stats.stdDev},
+                           {"median", stats.median}, {"pixels", stats.pixels}, {"cacheLevel", histogram.cacheLevel}};
     });
     add("document.overview", [w, session, document](const QJsonObject& p) {
         // Everything an agent reads before touching a document, as text: one line per layer, top first.

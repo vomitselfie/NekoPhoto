@@ -239,7 +239,7 @@ void ActionLibrary::record(const QString& method, const QJsonObject& params) {
 bool ActionLibrary::recordable(const QString& method) {
     static const QSet<QString> prefixes = {"rpc", "app", "events", "tabs", "history", "debug", "actions", "view", "tool"};
     static const QSet<QString> looks = {"info", "list", "get", "render", "overview", "describe", "methods", "filters", "presets", "defaults",
-                                        "style", "cage", "import", "remove", "screenshot"};
+                                        "style", "cage", "import", "remove", "screenshot", "histogram"};
     if (method == "rpc.batch") return true;
     const QString area = method.section('.', 0, 0), verb = method.section('.', 1);
     if (method == "screenshot" || method == "render" || prefixes.contains(area)) return false;
