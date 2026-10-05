@@ -7985,6 +7985,14 @@ File &gt; New creates a blank canvas.</source>
         <source>Add Layer Mask</source>
         <translation>レイヤーマスクを追加</translation>
     </message>
+    <message>
+        <source>Select Inverse</source>
+        <translation>選択範囲を反転</translation>
+    </message>
+    <message>
+        <source>Select All</source>
+        <translation>すべてを選択</translation>
+    </message>
 </context>
 <context>
     <name>app::MoshDialog</name>

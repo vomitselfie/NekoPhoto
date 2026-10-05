@@ -18,6 +18,7 @@
 #include <QJsonDocument>
 #include <QKeyEvent>
 #include <QMouseEvent>
+#include <QMenu>
 #include <QMenuBar>
 #include <cmath>
 #include <cstdio>
@@ -257,12 +258,59 @@ int guides(MainWindow& w) {
     return failures ? 1 : 0;
 }
 
+/// The canvas's context menu offers what the tool and the point allow, and leaves the rest out.
+int canvasMenus(MainWindow& w) {
+    EditorSession& s = *w.session();
+    buildDemoDocument(s);
+    CanvasWidget* canvas = w.canvasAt(w.currentTabIndex());
+    int failures = 0;
+    auto texts = [&](QPointF doc) {
+        QMenu* menu = w.buildCanvasMenu(canvas->viewPointForTest(doc), &w);
+        QStringList out;
+        for (QAction* a : menu->actions()) if (!a->isSeparator()) out << a->text().remove('&').section('\t', 0, 0);
+        delete menu;
+        return out;
+    };
+    auto expect = [&](const QStringList& menu, const QStringList& present, const QStringList& absent, const char* where) {
+        for (const QString& t : present) if (!menu.contains(t)) { std::fprintf(stderr, "%s: no \"%s\" in [%s]\n", where, qPrintable(t), qPrintable(menu.join(", "))); failures++; }
+        for (const QString& t : absent) if (menu.contains(t)) { std::fprintf(stderr, "%s: \"%s\" should not be there\n", where, qPrintable(t)); failures++; }
+    };
+    select(s, "Background");
+    s.selectTool(Tool::Move);
+    expect(texts(QPointF(20, 20)), {"Background", "Free Transform", "Duplicate Layer", "Add Layer Mask"}, {"Deselect"}, "Move tool");
+    s.selectTool(Tool::Marquee);
+    s.selectAll();
+    expect(texts(QPointF(20, 20)), {"Deselect", "Select Inverse", "Feather…", "Layer via Copy"}, {"Select All", "Background"}, "Marquee with a selection");
+    s.deselect();
+    expect(texts(QPointF(20, 20)), {"Select All", "Reselect"}, {"Deselect", "Select Inverse"}, "Marquee without a selection");
+    // An open path: anchors, a segment, and the path's own commands.
+    s.selectTool(Tool::Pen);
+    s.penMode = EditorSession::PenMode::Path;
+    s.penPress(QPointF(40, 40));
+    s.penPress(QPointF(200, 40));
+    s.penPress(QPointF(200, 200));
+    expect(texts(QPointF(100, 100)), {"Close Path", "End Path"}, {}, "Pen drawing");
+    s.penFinish(false);
+    s.selectTool(Tool::DirectSelect);
+    expect(texts(QPointF(200, 40)), {"Delete Anchor Point", "Convert Point", "Close Path", "Make Selection", "Fill Path", "Stroke Path", "Delete Path"}, {"Add Anchor Point"}, "Direct Selection on an anchor");
+    expect(texts(QPointF(120, 40)), {"Add Anchor Point"}, {"Delete Anchor Point"}, "Direct Selection on a segment");
+    // A transform in progress.
+    s.selectTool(Tool::Move);
+    select(s, "Paint");
+    s.transformCommand();
+    expect(texts(QPointF(20, 20)), {"Distort", "Rotate 180°", "Flip Horizontal", "Apply Transform", "Cancel Transform"}, {"Duplicate Layer"}, "Free Transform");
+    s.cancelTransform();
+    std::printf("canvas-menus: %s\n", failures ? "FAILED" : "ok");
+    return failures ? 1 : 0;
+}
+
 } // namespace
 
 int runSelfTest(MainWindow& window, const QString& name) {
     if (name == QLatin1String("command-path")) return commandPath(window);
     if (name == QLatin1String("guides")) return guides(window);
-    std::fprintf(stderr, "unknown self-test %s (command-path, guides)\n", qPrintable(name));
+    if (name == QLatin1String("canvas-menus")) return canvasMenus(window);
+    std::fprintf(stderr, "unknown self-test %s (command-path, guides, canvas-menus)\n", qPrintable(name));
     return 2;
 }
 

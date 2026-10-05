@@ -366,6 +366,10 @@ if(TARGET nekophoto)
     set_tests_properties(command_path_selftest PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/selftest-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/selftest-home/data")
     # Ruler guides through the pointer: out of a ruler, moved, dragged off; each one undo step.
+    # The canvas's context menu per tool: what applies is there, the rest left out (English, for the texts).
+    add_test(NAME canvas_menus_selftest COMMAND nekophoto --lang en --self-test canvas-menus)
+    set_tests_properties(canvas_menus_selftest PROPERTIES ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/selftest-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/selftest-home/data")
     add_test(NAME guides_selftest COMMAND nekophoto --self-test guides)
     set_tests_properties(guides_selftest PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/selftest-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/selftest-home/data")

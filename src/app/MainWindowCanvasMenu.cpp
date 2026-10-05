@@ -140,7 +140,7 @@ QMenu* MainWindow::buildCanvasMenu(QPointF view, QWidget* parent) {
     case Tool::Marquee: case Tool::Lasso: case Tool::Wand: case Tool::Scribble:
         if (hasSelection) {
             add("select.deselect");
-            add("select.inverse");
+            as(tr("Select Inverse"), "select.inverse");
             add("select.feather");
             separate();
             as(tr("Free Transform"), "edit.freeTransform", s->canTransformSelection());
@@ -154,7 +154,7 @@ QMenu* MainWindow::buildCanvasMenu(QPointF view, QWidget* parent) {
             add("edit.fillBackground");
             add("edit.contentAwareFill", s->canAdjustPixels());
         } else {
-            add("select.all");
+            as(tr("Select All"), "select.all");
             add("select.reselect", s->canReselect());
             if (active) {
                 separate();
