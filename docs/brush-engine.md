@@ -195,6 +195,9 @@ output = offset + depth × curve(input)        (the range runs from offset to of
 | Random | a draw from the stroke's seeded generator; on angles, -1..1 |
 | StrokeProgress | `distance / (scale × diameter)` with a `scale`; else `progress` when the stroke's length is known; else 25 diameters, Photoshop's default Fade |
 | Roll | `twistAngle` as a fraction of a turn when the pen reports its twist, else the stroke's `direction`: a tip that turns with the barrel follows the stroke on a pen without one |
+| StrokeRandom | one draw per stroke, the same for all its dabs (on angles, −1..1), from a generator of its own so the dabs' draws are unchanged: Procreate's Randomized |
+| InitialDirection | the way the stroke set off, as a fraction of a turn; the first dab waits for it: Photoshop's Initial Direction |
+| Wheel | the airbrush wheel, `(tangentialPressure + 1) / 2`: Photoshop's Stylus Wheel |
 
 ### Targets and the combination rule
 
@@ -266,6 +269,15 @@ existed paint as they did.
   `densityReference` (25% by default) and `s` the step divided by the dab size. Applied per pixel through a 256-entry
   table. In the harness a light flow's interior alpha stays within about 1% from 2% to 50% spacing with the option on,
   and falls from 1.0 to 0.5 over the same range with it off.
+- **Taper** (`taper`, and `mouseTaper` for a mouse when set; none by default). The stroke narrows (`size`, 0..1) and
+  fades (`opacity`, 0..1) linearly over `start` document pixels from its first dab and over `end` pixels to its last:
+  at a distance `d` along a stroke of length `L`, `f = min(1, d / start, (L − d) / end)`, and the dab's size is multiplied
+  by `1 − size × (1 − f)`, its opacity by `1 − opacity × (1 − f)`; the spacing follows the tapered size, so the tip stays
+  solid. The end is known only when the pen lifts, so with an end taper the stroke holds back the samples within `end`
+  pixels of the pen and paints them, tapered, at `finish()`: the stroke's tip trails the pen by that length while
+  drawing. Lengths are pixels, not diameters, since a taper in Procreate and in Clip Studio does not grow with the brush.
+  A brush without a taper takes exactly the code path it took before (`no_taper_paints_as_before`; the parity baseline
+  and render hashes are unchanged).
 - **Mouse speed as pressure** (`mousePressureFromSpeed`, off by default, labelled simulated). For a mouse only:
   `pressure = clamp(1.1 - speed / 1500, 0.25, 1) × min(1, 0.3 + 0.7 × distance / (2 × diameter))`: slow presses harder,
   a flick lifts, and the first two diameters ramp in. A stylus's pressure is never replaced.
@@ -323,14 +335,20 @@ truth:
 | Size jitter | Random → Size | strongly inferred |
 | Angle jitter | Random → Angle (jitter × 180 degrees) | strongly inferred |
 | Angle control Pen Tilt | TiltDirection → Angle (depth 360) | weakly inferred: the sign is the opposite of Procreate's `shapeAzimuth` (−360) and neither is checked |
-| Angle control Direction | `followStroke` | strongly inferred |
+| Angle control Direction (`bVTy` 7) | `followStroke` | strongly inferred (earlier versions read it from 6, so Direction brushes did not follow the stroke) |
+| Angle control Initial Direction (6) | InitialDirection → Angle (depth −360) | strongly inferred |
+| Angle control Rotation (5) | Twist → Angle (depth −360) | strongly inferred; the sign weakly |
+| Angle control Stylus Wheel (4) | Wheel → Angle (depth 360) | weakly inferred |
+| Size, roundness, flow or opacity control Stylus Wheel (4) | Wheel → the target from the minimum up | strongly inferred |
 | Roundness jitter, control and Minimum Roundness | the same shapes on Roundness | as for size: pressure, fade and jitter strongly inferred, tilt weakly |
 | Scatter, control Pen Pressure | `scatter`; Pressure → Scatter | strongly inferred |
 | Transfer: Flow jitter and control | on Flow | strongly inferred |
 | Transfer: Opacity jitter and control | on Opacity (the most a dab builds up to) | strongly inferred: Photoshop's opacity caps the stroke, its flow is per dab |
 
 Texture, dual brush, colour dynamics, wet edges, noise and build-up are noted as left out. Versions 1 and 2 hold no
-dynamics.
+dynamics. The control numbers (0 off, 1 fade, 2 pressure, 3 tilt, 4 stylus wheel, 5 rotation, 6 initial direction, 7
+direction) are those Photoshop writes, as the Patchy editor's ABR reader documents them and its self-made Photoshop
+2026 fixture (angle control 7) shows.
 
 **Procreate (`.brushset`, `.brush`).** Each setting below becomes a mapping; every scaling lives in one block at the top
 of `procreate.cpp` (`namespace scaling`), whose comments carry the same tags, so the reference brushes made in
@@ -338,9 +356,17 @@ Procreate can tune each in one place. Curves are the identity unless the row say
 
 | Procreate | Input → target | Offset, depth | Confidence |
 |---|---|---|---|
-| `dynamicsPressureSize` p | Pressure → Size | 1 − p, p | strongly inferred |
+| `dynamicsPressureSize` p | Pressure → Size, through `dynamicsPressureSizeCurve` | 1 − p, p | strongly inferred |
 | `dynamicsJitterSize` j | Random → Size | 1, −j | strongly inferred |
-| `dynamicsPressureOpacity` p | Pressure → Flow (Procreate's opacity is per dab) | 1 − p, p | strongly inferred; the target (flow, not the stroke's ceiling) weakly |
+| `dynamicsPressureOpacity` p | Pressure → Flow (Procreate's opacity is per dab), through `dynamicsPressureOpacityCurve` | 1 − p, p | strongly inferred; the target (flow, not the stroke's ceiling) weakly |
+| the pressure curves (`dynamicsPressure…Curve`) | the mapping's curve: the points (stored as `"{x, y}"` strings, in any order) sorted, drawn smoothly (monotone cubic); a straight 0..1 line is no curve | | strongly inferred: Procreate's curve editor draws a smooth curve through its points; the exact spline is not checked |
+| `dynamicsPressureBleed` a | Pressure → Flow, through its curve | 1 − 0.5 a, 0.5 a: each dab thins at light pressure | weakly inferred, as the tilt bleed |
+| `jitterShapeRoundness` j | Random → Roundness | 1, −j | strongly inferred |
+| `shapeRandomise` | StrokeRandom → Angle | 0, 180: each stroke's tip turned at random, every dab alike | strongly inferred |
+| `plotSpacingJitter` j | Random → Spacing | 1, j: the gaps widen at random | weakly inferred: the scale |
+| `pencilTaperStartLength`, `…EndLength`, `pencilTaperSize`, `pencilTaperOpacity` | `taper`: each length × 300 pixels (`taperFullLength`), size and opacity as they are | | lengths weakly inferred (pixels, not diameters; the 300 is a guess); size and opacity strongly |
+| `taperStartLength`, `taperEndLength`, `taperSize`, `taperOpacity` (touch) | `mouseTaper`, the same way | | as the pencil's |
+| `textureBrightness` b, `textureContrast` c, −1..1 | the grain image changed once: `(v − 0.5) × gain + 0.5 + b`, gain `1 + 3c` (c ≥ 0) or `1 + c` | | weakly inferred: the scale of contrast |
 | `dynamicsJitterOpacity` j | Random → Flow | 1, −j | strongly inferred |
 | `shapeScatter` s | Random → Angle | 0, s × 180 degrees | strongly inferred |
 | `dynamicsSpeedSize` a, −1..1 | ScreenSpeed → Size, full at `fullSpeed` | 1, a: grows with speed when positive, shrinks when negative | sign weakly inferred; scale synthetic-only |
@@ -395,13 +421,20 @@ What a brush uses that has no mapping is listed in the import's notes, one line 
 brushes using it (`notCarriedSettings` in `procreate.cpp`; a setting counts when it is off its neutral value, and a
 roundness setting only while its minimum is below full).
 
-**Clip Studio (`.sut`).** The effector's own curve is not decoded yet (it needs Clip Studio to make reference files), so
-the response is linear; when it is, it goes into the mapping's curve with no change to the engine.
+Colour jitter and wet mixing are counted in the notes ("brushes with colour jitter", "brushes with wet mix"): they
+paint in the chosen colour. `dynamicsFalloff` and `shapeCountJitter` are listed as not carried over.
+
+**Clip Studio (`.sut`).** An effector blob is a header of eleven big-endian words (its size, 44; a marker; flags, bit
+0x10 when pressure drives it; the minimum in percent; the ninth word the first curve block's length) and then curve
+blocks: 12, the number of points, 16, and the points as big-endian doubles x, y. The first is the pressure curve; the
+others (a four-point falling curve in every sample) are not read.
 
 | Clip Studio | Mapping | Confidence |
 |---|---|---|
-| `BrushSizeEffector` with pressure, its minimum | Pressure → Size from the minimum | strongly inferred for the minimum; the linear response weakly (the curve is not decoded) |
-| `BrushOpacityEffector` or `BrushFlowEffector` with pressure | Pressure → Flow from 0 | weakly inferred: from nothing up, linear, and opacity read as flow |
+| `BrushSizeEffector` with pressure, its minimum and curve | Pressure → Size from the minimum, through the curve (smooth) | strongly inferred for the minimum and the curve's place; the smooth drawing weakly |
+| `BrushOpacityEffector` or `BrushFlowEffector` with pressure | Pressure → Flow from its minimum, through its curve | weakly inferred: opacity read as flow |
+| `BrushUseIn`/`BrushInLength`, `BrushUseOut`/`BrushOutLength` (starting and ending) | `taper` in pixels, on size | strongly inferred for the lengths (unit 0, pixels; other units read as pixels); which settings it tapers (`BrushInOutTarget`) is not decoded, so size |
+| `TextureBrightness`, `TextureContrast`, −100..100 | the texture image changed once, as Procreate's | weakly inferred |
 
 ## The parity harness
 
@@ -538,7 +571,13 @@ baseline's `u16/` section, with each scene's distance from its 8-bit render (`vs
 
 ## Not yet
 
-- Clip Studio's effector curves, a continuous swept round brush, and MyPaint's newer inputs. Clip Studio's own
+- Clip Studio's tilt, velocity and random effectors (the flags beside pressure are not decoded), a continuous swept
+  round brush, and MyPaint's newer inputs.
+- Photoshop's texture, dual brush, wet edges, colour dynamics, noise and build-up. Texture and dual brush need a second
+  image composed with the tip and a pattern section reader; wet edges a stroke-wide mask. Adobe has active patents on
+  input-driven brush texture, dual brush hierarchies and colour dynamics, so any of these wants a claim check first.
+- Procreate's fall-off (`dynamicsFalloff`), shape count jitter, grain zoom (`textureZoom`), grain offset jitter, the
+  pressure response lag (`dynamicsPressure…Speed`) and StreamLine. Clip Studio's own
   stabilisation and Procreate's StreamLine are not read from imported brushes; the stabiliser is the tool's setting.
 - Colour by tilt or pressure (Procreate's `dynamicsTilt/PressureHue`, `Saturation`, `Brightness`, `SecondaryColor` and the
   colour jitters): a stroke's colour is one value for the whole stroke, laid down through its coverage, so a colour per dab
