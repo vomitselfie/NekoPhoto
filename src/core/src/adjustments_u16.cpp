@@ -169,6 +169,8 @@ void applyGradientMap16(Image16& image, const GradientMapSettings& settings) {
     const AdjustmentColor dark = (settings.reversed ? settings.highlights : settings.shadows).clamped();
     const AdjustmentColor light = (settings.reversed ? settings.shadows : settings.highlights).clamped();
     const double from[3] = {dark.red, dark.green, dark.blue}, span[3] = {light.red - dark.red, light.green - dark.green, light.blue - dark.blue};
+    // Perceptual and Linear: the method's ramp, sampled at the exact luma.
+    const std::optional<GradientStops> ramp = settings.method == GradientMethod::Classic ? std::nullopt : std::optional<GradientStops>(settings.ramp());
     parallelRows(0, image.height(), [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) {
             uint16_t* p = image.row(y);
@@ -176,6 +178,12 @@ void applyGradientMap16(Image16& image, const GradientMapSettings& settings) {
                 const uint32_t a = p[3];
                 if (!a) continue;
                 const double t = std::min(1.0, (0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2]) / a);
+                if (ramp) {
+                    float col[4];
+                    ramp->sample(float(t), col);
+                    for (int c = 0; c < 3; c++) p[c] = uint16_t(std::min<long>(long(a), std::lround(std::clamp(double(col[c]), 0.0, 1.0) * a)));
+                    continue;
+                }
                 for (int c = 0; c < 3; c++) p[c] = uint16_t(std::min<long>(long(a), std::lround((from[c] + span[c] * t) * a)));
             }
         }

@@ -1,6 +1,7 @@
 // The Shape tool's rasters and the Gradient tool's fills.
 #pragma once
 #include "document.h"
+#include "gradient_method.h"
 
 namespace compositor {
 
@@ -23,8 +24,15 @@ struct GradientStops {
     float end[4] = {0, 0, 0, 0};
     std::vector<GradientColorStop> colors;
     std::vector<GradientAlphaStop> alphas;
-    /// The colour at `t` (0..1).
+    /// Photoshop's Method: Classic blends the runs linearly as above; Perceptual and Linear blend them in their own
+    /// space with the smoothness (0..1) easing them, as layer styles do (gradient_method.h).
+    GradientMethod method = GradientMethod::Classic;
+    float smoothness = 1;
+    /// The colour at `t` (0..1), Classic (a Perceptual or Linear gradient is drawn from `baked()`).
     void sample(float t, float out[4]) const;
+    /// A Classic gradient that draws this one: its method's colours sampled at 257 even stops (the opacity stops
+    /// kept). A Classic gradient comes back as it is.
+    GradientStops baked() const;
     /// The stops mirrored end for end (the Reverse option).
     void reverse();
 };

@@ -5,6 +5,7 @@
 // see docs/layer-styles.md.
 #pragma once
 #include "blendif.h"
+#include "gradient_method.h"
 #include "image.h"
 #include <array>
 #include <cstdint>
@@ -30,7 +31,7 @@ struct StyleColor { uint8_t r = 0, g = 0, b = 0; };
 
 struct StyleGradient {
     enum class Type { Linear, Radial, Angle, Reflected, Diamond, ShapeBurst };
-    enum class Interpolation { Classic, Perceptual, Linear };
+    using Interpolation = GradientMethod;
     /// `ink`: a CMYK stop's own C, M, Y and K (0..1 ink), which a CMYK document interpolates as they are.
     struct ColorStop { float location = 0; StyleColor color; float midpoint = 0.5f; std::optional<std::array<float, 4>> ink; };
     struct AlphaStop { float location = 0; float opacity = 1; float midpoint = 0.5f; };

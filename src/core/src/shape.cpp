@@ -65,6 +65,13 @@ size_t runAt(const std::vector<Stop>& stops, float t, float& u) {
     u = 0;
     if (t <= stops.front().location) return 0;
     if (t >= stops.back().location) return stops.size();
+    if (stops.size() > 16) {
+        // Many stops (a baked gradient): the first whose location is at or past `t`, found by halving.
+        const size_t i = size_t(std::lower_bound(stops.begin() + 1, stops.end(), t, [](const Stop& s, float v) { return s.location < v; }) - stops.begin());
+        const float span = stops[i].location - stops[i - 1].location;
+        u = span > 1e-6f ? midpointRemap((t - stops[i - 1].location) / span, stops[i].midpoint) : 1.0f;
+        return i;
+    }
     for (size_t i = 1; i < stops.size(); i++) {
         if (t > stops[i].location) continue;
         const float span = stops[i].location - stops[i - 1].location;
@@ -94,6 +101,36 @@ void GradientStops::sample(float t, float out[4]) const {
            : alphas[j - 1].opacity + (alphas[j].opacity - alphas[j - 1].opacity) * u;
 }
 
+GradientStops GradientStops::baked() const {
+    if (method == GradientMethod::Classic) return *this;
+    GradientStops out;
+    out.alphas = alphas;
+    if (colors.empty()) out.alphas = {{0, start[3], 0.5f}, {1, end[3], 0.5f}};
+    constexpr int runs = 256;
+    out.colors.reserve(runs + 1);
+    for (int j = 0; j <= runs; j++) {
+        const float t = float(j) / runs;
+        double p[3], l[3], r[3], n[3], u = t;
+        if (colors.empty()) {
+            for (int k = 0; k < 3; k++) { p[k] = l[k] = start[k]; r[k] = n[k] = end[k]; }
+        } else {
+            float f = 0;
+            const size_t i = runAt(colors, t, f);
+            const size_t a = i == 0 ? 0 : i >= colors.size() ? colors.size() - 1 : i - 1, b = i == 0 ? 0 : std::min(i, colors.size() - 1);
+            const size_t before = a > 0 ? a - 1 : a, after = b + 1 < colors.size() ? b + 1 : b;
+            for (int k = 0; k < 3; k++) { p[k] = colors[before].rgb[k]; l[k] = colors[a].rgb[k]; r[k] = colors[b].rgb[k]; n[k] = colors[after].rgb[k]; }
+            u = a == b ? 0 : f;
+        }
+        double c[3];
+        gradientMethodRun(method, std::clamp(double(smoothness), 0.0, 1.0), p, l, r, n, u, c);
+        GradientColorStop stop;
+        stop.location = t;
+        for (int k = 0; k < 3; k++) stop.rgb[k] = float(c[k]);
+        out.colors.push_back(stop);
+    }
+    return out;
+}
+
 void GradientStops::reverse() {
     for (int c = 0; c < 4; c++) std::swap(start[c], end[c]);
     // A stop's midpoint belongs to the run ending at it (Photoshop's and the layer-style renderer's convention);
@@ -109,6 +146,7 @@ void GradientStops::reverse() {
 }
 
 void fillGradient(const Image& base, Image& out, const Affine& pixelToDocument, GradientShape shape, Point from, Point to, const GradientStops& stops, double opacity, const GrayImage* selection) {
+    if (stops.method != GradientMethod::Classic) return fillGradient(base, out, pixelToDocument, shape, from, to, stops.baked(), opacity, selection);
     int w = out.width(), h = out.height();
     parallelRows(0, h, [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) {
@@ -131,6 +169,7 @@ void fillGradient(const Image& base, Image& out, const Affine& pixelToDocument, 
 }
 
 void fillGradient(const GrayImage& base, GrayImage& out, const Affine& pixelToDocument, GradientShape shape, Point from, Point to, const GradientStops& stops, double opacity, const GrayImage* selection) {
+    if (stops.method != GradientMethod::Classic) return fillGradient(base, out, pixelToDocument, shape, from, to, stops.baked(), opacity, selection);
     int w = out.width(), h = out.height();
     parallelRows(0, h, [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) {
@@ -151,6 +190,7 @@ void fillGradient(const GrayImage& base, GrayImage& out, const Affine& pixelToDo
 // ---- 16 bits ---------------------------------------------------------------------------------------------
 
 void fillGradient(const Image16& base, Image16& out, const Affine& pixelToDocument, GradientShape shape, Point from, Point to, const GradientStops& stops, double opacity, const Gray16* selection) {
+    if (stops.method != GradientMethod::Classic) return fillGradient(base, out, pixelToDocument, shape, from, to, stops.baked(), opacity, selection);
     const int w = out.width(), h = out.height();
     constexpr float one = 32768.0f;
     parallelRows(0, h, [&](int y0, int y1) {
@@ -174,6 +214,7 @@ void fillGradient(const Image16& base, Image16& out, const Affine& pixelToDocume
 }
 
 void fillGradient(const Gray16& base, Gray16& out, const Affine& pixelToDocument, GradientShape shape, Point from, Point to, const GradientStops& stops, double opacity, const Gray16* selection) {
+    if (stops.method != GradientMethod::Classic) return fillGradient(base, out, pixelToDocument, shape, from, to, stops.baked(), opacity, selection);
     const int w = out.width(), h = out.height();
     parallelRows(0, h, [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) {

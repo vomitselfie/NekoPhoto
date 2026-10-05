@@ -6,6 +6,7 @@
 #include "compositor/document.h"
 #include "psd/psd_descriptor.hpp"
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <mutex>
 
@@ -663,13 +664,21 @@ double toSrgb(double v) { v = std::clamp(v, 0.0, 1.0); return v <= 0.0031308 ? v
 // between two stops) follows PhotoCraft's Photoshop-fitted crates/io/src/gradient_bake.rs at 7c6a78b (Apache-2.0,
 // THIRD-PARTY-NOTICES.md), and is checked here against ag-psd's Photoshop-saved fixtures (docs/layer-styles.md).
 using Triple = std::array<double, 3>;
-Triple toOklab(const StyleColor& c) {
-    const double r = toLinear(c.r / 255.0), g = toLinear(c.g / 255.0), b = toLinear(c.b / 255.0);
+Triple oklabFromLinear(double r, double g, double b) {
     const double l = std::cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
     const double m = std::cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
     const double s = std::cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
     return {0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s, 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
             0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s};
+}
+Triple toOklab(const StyleColor& c) { return oklabFromLinear(toLinear(c.r / 255.0), toLinear(c.g / 255.0), toLinear(c.b / 255.0)); }
+/// Back to sRGB, 0..1.
+Triple fromOklabUnit(const Triple& p) {
+    const double l = std::pow(p[0] + 0.3963377774 * p[1] + 0.2158037573 * p[2], 3);
+    const double m = std::pow(p[0] - 0.1055613458 * p[1] - 0.0638541728 * p[2], 3);
+    const double s = std::pow(p[0] - 0.0894841775 * p[1] - 1.2914855480 * p[2], 3);
+    return {toSrgb(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s), toSrgb(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
+            toSrgb(-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s)};
 }
 Triple fromOklab(const Triple& p) {
     const double l = std::pow(p[0] + 0.3963377774 * p[1] + 0.2158037573 * p[2], 3);
@@ -687,6 +696,44 @@ Triple outOfSpace(StyleGradient::Interpolation mode, const Triple& p) {
     return {toSrgb(p[0]) * 255, toSrgb(p[1]) * 255, toSrgb(p[2]) * 255};
 }
 } // namespace
+
+const char* gradientMethodKey(GradientMethod method) {
+    return method == GradientMethod::Perceptual ? "perceptual" : method == GradientMethod::Linear ? "linear" : "classic";
+}
+
+bool parseGradientMethod(const std::string& key, GradientMethod& out) {
+    std::string k;
+    for (char c : key) k += char(std::tolower(static_cast<unsigned char>(c)));
+    if (k == "classic") out = GradientMethod::Classic;
+    else if (k == "perceptual") out = GradientMethod::Perceptual;
+    else if (k == "linear") out = GradientMethod::Linear;
+    else return false;
+    return true;
+}
+
+void gradientMethodRun(GradientMethod method, double smoothness, const double p[3], const double l[3], const double r[3], const double n[3], double u,
+                       double out[3]) {
+    if (method == GradientMethod::Classic) {
+        for (int k = 0; k < 3; k++) {
+            const double lin = l[k] + (r[k] - l[k]) * u;
+            out[k] = lin + (catmullRom(p[k], l[k], r[k], n[k], u) - lin) * smoothness;
+        }
+        return;
+    }
+    // The space's coordinates: linear light, or Oklab from it.
+    auto into = [&](const double c[3]) -> Triple {
+        const double lr = toLinear(c[0]), lg = toLinear(c[1]), lb = toLinear(c[2]);
+        return method == GradientMethod::Perceptual ? oklabFromLinear(lr, lg, lb) : Triple{lr, lg, lb};
+    };
+    const Triple P = into(p), L = into(l), R = into(r), N = into(n);
+    Triple mixed;
+    for (size_t k = 0; k < 3; k++) {
+        const double lin = L[k] + (R[k] - L[k]) * u;
+        mixed[k] = lin + (catmullRom(P[k], L[k], R[k], N[k], u) - lin) * smoothness;
+    }
+    const Triple c = method == GradientMethod::Perceptual ? fromOklabUnit(mixed) : Triple{toSrgb(mixed[0]), toSrgb(mixed[1]), toSrgb(mixed[2])};
+    for (int k = 0; k < 3; k++) out[k] = c[k];
+}
 
 float gradientPosition(const StyleGradient& g, double bx, double by, double bw, double bh, double x, double y) {
     // Photoshop's overlay geometry (Patchy's gradient_position, LayerProjection basis): the centre snaps to a

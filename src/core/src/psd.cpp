@@ -648,17 +648,27 @@ std::optional<AdjustmentSettings> simpleAdjustmentFrom(const std::string& key, c
 
 std::optional<AdjustmentSettings> gradientMapFrom(const uint8_t* data, size_t size) {
     Reader r(data, size);
-    if (r.u16() != 1) return std::nullopt;
+    const uint16_t version = r.u16();
+    if (version != 1 && version != 3) return std::nullopt;
     AdjustmentSettings s = AdjustmentSettings::defaults(AdjustmentKind::GradientMap);
     s.gradientMap.reversed = r.u8() != 0;
     r.u8();
+    // Version 3 (Photoshop 2023 and later) adds the Method after Dither: the gradientInterpolationMethodType's
+    // four-character code (a Photoshop-saved Perceptual map in ag-psd's tests holds 'Perc'). A zero first byte is the
+    // name's length instead (as ag-psd reads it: src/additionalInfo.ts at 3870496, MIT; THIRD-PARTY-NOTICES.md).
+    if (version == 3 && r.remaining() >= 4 && data[r.position()] != 0) {
+        std::string code;
+        for (int i = 0; i < 4; i++) code += char(r.u8());
+        s.gradientMap.method = code == "Perc" ? GradientMethod::Perceptual : code == "Lnr " ? GradientMethod::Linear : GradientMethod::Classic;
+    }
     r.unicode();
     uint16_t stops = r.u16();
     // The first and last colour stops give the ends of the ramp; the ramp in between is ours.
     std::optional<AdjustmentColor> first, last;
-    for (int i = 0; i < stops && r.remaining() >= 18; i++) {
+    // Each stop is 20 bytes: location, midpoint, the colour (space and four values), two bytes of padding.
+    for (int i = 0; i < stops && r.remaining() >= 20; i++) {
         r.i32(); r.i32(); r.i16();
-        double cr = r.u16() / 65535.0, cg = r.u16() / 65535.0, cb = r.u16() / 65535.0; r.u16();
+        double cr = r.u16() / 65535.0, cg = r.u16() / 65535.0, cb = r.u16() / 65535.0; r.u16(); r.u16();
         AdjustmentColor colour{cr, cg, cb};
         if (!first) first = colour;
         last = colour;

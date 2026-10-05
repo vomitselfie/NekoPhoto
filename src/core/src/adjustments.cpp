@@ -268,7 +268,26 @@ void applyExposure(Image& image, const ExposureSettings& settings) {
 
 AdjustmentColor AdjustmentColor::clamped() const { return {clampFinite(red, 0, 1, 0), clampFinite(green, 0, 1, 0), clampFinite(blue, 0, 1, 0)}; }
 
+GradientStops GradientMapSettings::ramp() const {
+    const AdjustmentColor dark = (reversed ? highlights : shadows).clamped(), light = (reversed ? shadows : highlights).clamped();
+    GradientStops stops;
+    stops.start[0] = float(dark.red); stops.start[1] = float(dark.green); stops.start[2] = float(dark.blue); stops.start[3] = 1;
+    stops.end[0] = float(light.red); stops.end[1] = float(light.green); stops.end[2] = float(light.blue); stops.end[3] = 1;
+    stops.method = method;
+    return stops.baked();
+}
+
 std::vector<uint8_t> GradientMapSettings::table() const {
+    if (method != GradientMethod::Classic) {
+        const GradientStops stops = ramp();
+        std::vector<uint8_t> result(256 * 3);
+        for (int i = 0; i < 256; i++) {
+            float c[4];
+            stops.sample(i / 255.0f, c);
+            for (int k = 0; k < 3; k++) result[size_t(i * 3 + k)] = uint8_t(std::clamp(std::lround(c[k] * 255.0), 0L, 255L));
+        }
+        return result;
+    }
     AdjustmentColor dark = (reversed ? highlights : shadows).clamped(), light = (reversed ? shadows : highlights).clamped();
     std::vector<uint8_t> result(256 * 3);
     for (int i = 0; i < 256; i++) {
@@ -836,6 +855,10 @@ bool AdjustmentSettings::parse(const std::string& text, AdjustmentSettings& out)
         };
         if (!color("shadows", s.gradientMap.shadows) || !color("highlights", s.gradientMap.highlights)) return false;
         s.gradientMap.reversed = boolean(*gradient, "reversed", false);
+        auto method = gradient->find("interpolation");
+        if (method != gradient->end()) {
+            if (!method->is_string() || !parseGradientMethod(method->get<std::string>(), s.gradientMap.method)) return false;
+        }
     }
     auto grain = j.find("grainSettings");
     if (grain != j.end() && grain->is_object()) {
@@ -870,7 +893,7 @@ std::string AdjustmentSettings::toJson() const {
     j["exposureSettings"] = {{"exposure", number(exposure.exposure)}, {"offset", number(exposure.offset)}, {"gamma", number(exposure.gamma)}};
     j["gradientMapSettings"] = {{"shadows", {{"red", number(gradientMap.shadows.red)}, {"green", number(gradientMap.shadows.green)}, {"blue", number(gradientMap.shadows.blue)}}},
                                 {"highlights", {{"red", number(gradientMap.highlights.red)}, {"green", number(gradientMap.highlights.green)}, {"blue", number(gradientMap.highlights.blue)}}},
-                                {"reversed", gradientMap.reversed}};
+                                {"reversed", gradientMap.reversed}, {"interpolation", gradientMethodKey(gradientMap.method)}};
     j["grainSettings"] = {{"amount", number(grain.amount)}, {"size", number(grain.size)}, {"roughness", number(grain.roughness)}, {"seed", grain.seed}};
     moreJson(*this, j);
     return j.dump();

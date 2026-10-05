@@ -4,6 +4,7 @@
 // AGPSD_FIXTURES pointing at ag-psd's test folder (MIT, https://github.com/Agamnentzar/ag-psd), its Photoshop-saved
 // Perceptual and Linear files are rendered against their merged images.
 #include "check.h"
+#include "compositor/adjustments.h"
 #include "compositor/colormgmt.h"
 #include "compositor/colormodes.h"
 #include "compositor/depth.h"
@@ -13,6 +14,7 @@
 #include "compositor/psd_carry.h"
 #include "compositor/psd_writer.h"
 #include "compositor/render.h"
+#include "compositor/shape.h"
 #include "compositor/vectorlayer.h"
 #include "compositor/vectormask.h"
 #include <cmath>
@@ -205,6 +207,127 @@ TEST_CASE(ag_psd_photoshop_files_match_their_merged_images) {
         CHECK(mean < c.mean);
         CHECK(worst <= c.worst);
     }
+}
+
+namespace {
+
+/// A two-stop gradient between straight sRGB colours, as a layer style holds it (the reference colours).
+StyleGradient twoStops(StyleColor a, StyleColor b, Method method) {
+    StyleGradient g;
+    g.colors = {{0, a, 0.5f}, {1, b, 0.5f}};
+    g.interpolation = method;
+    return g;
+}
+
+} // namespace
+
+TEST_CASE(gradient_tool_draws_each_method) {
+    // The Gradient tool's ramp (GradientStops) in each method: the same colours as a layer style's two-stop gradient,
+    // and Classic exactly as before (a straight blend of the stored values).
+    const StyleColor red{255, 0, 0}, blue{0, 0, 255};
+    for (Method method : {Method::Classic, Method::Perceptual, Method::Linear}) {
+        GradientStops stops;
+        stops.start[0] = 1; stops.start[1] = 0; stops.start[2] = 0; stops.start[3] = 1;
+        stops.end[0] = 0; stops.end[1] = 0; stops.end[2] = 1; stops.end[3] = 1;
+        stops.method = method;
+        Image base(256, 1), out(256, 1);
+        fillGradient(base, out, Affine(), GradientShape::Linear, {0, 0}, {256, 0}, stops, 1, nullptr);
+        int worst = 0;
+        for (int x = 0; x < 256; x++) {
+            const float t = (x + 0.5f) / 256;
+            double want[3];
+            if (method == Method::Classic) { want[0] = 255 * (1 - t); want[1] = 0; want[2] = 255 * t; }
+            else gradientColorExact(twoStops(red, blue, method), t, want);
+            for (int k = 0; k < 3; k++) worst = std::max(worst, int(std::abs(out.row(0)[x * 4 + k] - want[k]) + 0.5));
+        }
+        std::printf("  %s tool ramp: within %d levels\n", methodName(method), worst);
+        CHECK(worst <= 1);
+    }
+    // Classic bakes to itself; the others to 257 Classic stops with the opacity carried.
+    GradientStops fade;
+    fade.end[3] = 0;
+    CHECK(fade.baked().colors.empty());
+    fade.method = Method::Perceptual;
+    const GradientStops baked = fade.baked();
+    CHECK_EQ(baked.colors.size(), size_t(257));
+    CHECK(baked.method == Method::Classic);
+    float mid[4];
+    baked.sample(0.5f, mid);
+    CHECK(std::abs(mid[3] - 0.5f) < 1e-4f);
+}
+
+TEST_CASE(gradient_map_draws_each_method) {
+    AdjustmentSettings s = AdjustmentSettings::defaults(AdjustmentKind::GradientMap);
+    s.gradientMap.shadows = {1, 0, 0};
+    s.gradientMap.highlights = {0, 0, 1};
+    // Classic: the straight blend it always had, byte for byte.
+    const std::vector<uint8_t> classic = s.gradientMap.table();
+    for (int i = 0; i < 256; i++) {
+        CHECK_EQ(int(classic[size_t(i * 3)]), int(std::round(255 * (1 - i / 255.0))));
+        CHECK_EQ(int(classic[size_t(i * 3 + 2)]), int(std::round(255.0 * i / 255.0)));
+    }
+    for (Method method : {Method::Perceptual, Method::Linear}) {
+        s.gradientMap.method = method;
+        // 8 bits: a gray ramp maps through the method's colours.
+        Image ramp(256, 1);
+        for (int x = 0; x < 256; x++) { uint8_t* p = ramp.row(0) + x * 4; p[0] = p[1] = p[2] = uint8_t(x); p[3] = 255; }
+        REQUIRE(applyAdjustment(s, ramp, Rect(0, 0, 256, 1), 1));
+        // 16 bits: the same at the exact luma.
+        Image16 deep(256, 1);
+        for (int x = 0; x < 256; x++) { uint16_t* p = deep.row(0) + x * 4; p[0] = p[1] = p[2] = uint16_t(std::lround(x / 255.0 * 32768)); p[3] = 32768; }
+        REQUIRE(applyAdjustment(s, deep, Rect(0, 0, 256, 1), 1));
+        int worst = 0, worstDeep = 0, apart = 0;
+        for (int x = 0; x < 256; x++) {
+            double want[3];
+            gradientColorExact(twoStops({255, 0, 0}, {0, 0, 255}, method), x / 255.0f, want);
+            for (int k = 0; k < 3; k++) {
+                worst = std::max(worst, int(std::abs(ramp.row(0)[x * 4 + k] - want[k]) + 0.5));
+                worstDeep = std::max(worstDeep, int(std::abs(deep.row(0)[x * 4 + k] / 32768.0 * 255 - want[k]) + 0.5));
+                apart = std::max(apart, std::abs(int(ramp.row(0)[x * 4 + k]) - int(classic[size_t(x * 3 + k)])));
+            }
+        }
+        std::printf("  %s gradient map: within %d levels at 8 bits, %d at 16; %d from Classic\n", methodName(method), worst, worstDeep, apart);
+        CHECK(worst <= 1);
+        CHECK(worstDeep <= 1);
+        CHECK(apart > 10);
+        // Kept in the settings' JSON (projects and automation).
+        AdjustmentSettings back;
+        REQUIRE(AdjustmentSettings::parse(s.toJson(), back));
+        CHECK(back.gradientMap.method == method);
+    }
+    // An old project's settings (no method) read as Classic; an unknown method is refused.
+    const std::string json = AdjustmentSettings::defaults(AdjustmentKind::GradientMap).toJson();
+    const std::string key = "\"interpolation\":\"classic\"";
+    const size_t at = json.find(key);
+    REQUIRE(at != std::string::npos);
+    AdjustmentSettings old;
+    std::string without = json;
+    without.replace(at, key.size(), "\"unused\":false");
+    REQUIRE(AdjustmentSettings::parse(without, old));
+    CHECK(old.gradientMap.method == Method::Classic);
+    std::string bad = json;
+    bad.replace(at, key.size(), "\"interpolation\":\"oklch\"");
+    CHECK(!AdjustmentSettings::parse(bad, old));
+}
+
+TEST_CASE(photoshop_gradient_map_method_is_read) {
+    // ag-psd's gradient-overlay-2: a Photoshop-saved Gradient Map adjustment layer, its 'grdm' at version 3 with 'Perc'.
+    const char* dir = std::getenv("AGPSD_FIXTURES");
+    if (!dir) { std::printf("  skipped: AGPSD_FIXTURES is not set\n"); return; }
+    std::string error;
+    auto imported = importPsd(std::string(dir) + "/read/gradient-overlay-2/src.psd", &error);
+    if (!imported) { std::printf("  skipped: %s\n", error.c_str()); return; }
+    int maps = 0;
+    for (const Layer& l : imported->document.layers) {
+        if (!l.adjustment || l.adjustment->kind != AdjustmentKind::GradientMap) continue;
+        AdjustmentSettings s;
+        REQUIRE(AdjustmentSettings::parse(l.adjustment->json, s));
+        CHECK(s.gradientMap.method == Method::Perceptual);
+        // The first and last stops: black and white.
+        CHECK(s.gradientMap.shadows.red < 0.01 && s.gradientMap.highlights.red > 0.99);
+        maps++;
+    }
+    CHECK_EQ(maps, 1);
 }
 
 TEST_MAIN()

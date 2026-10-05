@@ -4,6 +4,7 @@
 #pragma once
 #include "document.h"
 #include "imaget.h"
+#include "shape.h"
 #include <array>
 #include <functional>
 #include <map>
@@ -72,9 +73,14 @@ struct GradientMapSettings {
     AdjustmentColor shadows{0, 0, 0};
     AdjustmentColor highlights{1, 1, 1};
     bool reversed = false;
+    /// Photoshop's Method (Classic: the straight blend it always had).
+    GradientMethod method = GradientMethod::Classic;
     bool operator==(const GradientMapSettings&) const = default;
     /// 256 x 3 straight sRGB bytes, darkest first.
     std::vector<uint8_t> table() const;
+    /// The ramp from the dark end to the light one (straight sRGB 0..1, Reverse applied) for a Perceptual or Linear
+    /// method: Classic stops sampled from it (GradientStops::baked).
+    GradientStops ramp() const;
 };
 
 struct GrainSettings {

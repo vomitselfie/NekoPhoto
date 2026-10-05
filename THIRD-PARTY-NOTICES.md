@@ -85,9 +85,12 @@ Gradient interpolation methods (`src/core/src/layerstyle.cpp`): the model (Perce
 linear light, Classic in the stored values, with the smoothness applied in each space) is adapted from
 [PhotoCraft](https://github.com/storytold/photocraft)'s `crates/io/src/gradient_bake.rs` at commit
 7c6a78b05abd32ce6363be4cdfb2856220ed1897 (Apache-2.0, [Apache-2.0.txt](LICENSES/Apache-2.0.txt); the file has no
-header of its own), (c) its authors; the Oklab matrices are Björn Ottosson's (public domain). It is checked against
+header of its own), (c) its authors; the Oklab matrices are Björn Ottosson's (public domain). The Gradient tool and
+Gradient Map use the same model (`gradientMethodRun`, sampled into stops by `src/core/src/shape.cpp`). It is checked against
 Photoshop-saved files from [ag-psd](https://github.com/Agamnentzar/ag-psd)'s tests (MIT; read from a local checkout,
-not distributed).
+not distributed). Reading a Gradient Map's method from 'grdm' version 3 (`src/core/src/psd.cpp`) follows ag-psd's
+`src/additionalInfo.ts` at commit 387049670cb89b88fb8fe1b7c01aeacf98dd2e3b (MIT, (c) Agamnentzar): the method's
+four-character code after Dither, present when its first byte is not zero.
 
 Blend If (`src/core/src/blendif.cpp`): the inclusive split-handle ramp, the Gray weights and the transparency rule
 follow Patchy's calibration notes (`docs/layer-effects-render.md`, MIT, above), checked against its Photoshop fixture.

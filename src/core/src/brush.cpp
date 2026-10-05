@@ -327,6 +327,8 @@ void BrushStroke::fillGradientOver(int shape, Point from, Point to, const float 
 
 void BrushStroke::fillGradientOver(int shape, Point from, Point to, const GradientStops& stops, double opacity) {
     if (!valid_) return;
+    // Perceptual and Linear: drawn from their colours baked into a Classic ramp (any depth and mode).
+    if (stops.method != GradientMethod::Classic) { fillGradientOver(shape, from, to, stops.baked(), opacity); return; }
     if (!toNative_ || (isMask_ && !rasterF_)) {
         withRaster([&](auto& raster) { raster.fillGradientOver(shape, from, to, stops, opacity); });
         return;

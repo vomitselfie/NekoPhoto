@@ -221,6 +221,24 @@ bool applyInMode(const AdjustmentSettings& s, Img& image, const ColorProfile& pr
         const AdjustmentColor dark = (g.reversed ? g.highlights : g.shadows).clamped(), light = (g.reversed ? g.shadows : g.highlights).clamped();
         double from[4], to[4];
         if (!nativeColour<S>(dark.red, dark.green, dark.blue, M, profile, from) || !nativeColour<S>(light.red, light.green, light.blue, M, profile, to)) return false;
+        if (g.method != GradientMethod::Classic) {
+            // Perceptual and Linear: the method's ramp at 257 even steps in the mode's own values, blended between them.
+            constexpr int steps = 256;
+            const GradientStops ramp = g.ramp();
+            std::vector<std::array<double, 4>> native(steps + 1);
+            for (int j = 0; j <= steps; j++) {
+                float c[4];
+                ramp.sample(float(j) / steps, c);
+                if (!nativeColour<S>(c[0], c[1], c[2], M, profile, native[size_t(j)].data())) return false;
+            }
+            eachStraight<S>(image, N, lightness.get(), [&](double* v, double l) {
+                const double at = std::clamp(l / 100, 0.0, 1.0) * steps;
+                const int j = std::min(steps - 1, int(at));
+                const double f = at - j;
+                for (int k = 0; k < C; k++) v[k] = native[size_t(j)][size_t(k)] + (native[size_t(j + 1)][size_t(k)] - native[size_t(j)][size_t(k)]) * f;
+            });
+            return true;
+        }
         eachStraight<S>(image, N, lightness.get(), [&](double* v, double l) {
             const double t = std::clamp(l / 100, 0.0, 1.0);
             for (int k = 0; k < C; k++) v[k] = from[k] + (to[k] - from[k]) * t;

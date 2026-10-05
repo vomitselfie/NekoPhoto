@@ -238,6 +238,8 @@ void applyGradientMapF(ImageF& image, const GradientMapSettings& settings, const
     const AdjustmentColor light = (settings.reversed ? settings.shadows : settings.highlights).clamped();
     const double from[3] = {dark.red, dark.green, dark.blue}, span[3] = {light.red - dark.red, light.green - dark.green, light.blue - dark.blue};
     const Encoding encoding(curve);
+    // Perceptual and Linear: the method's ramp (in the encoded values, as Classic's).
+    const std::optional<GradientStops> ramp = settings.method == GradientMethod::Classic ? std::nullopt : std::optional<GradientStops>(settings.ramp());
     parallelRows(0, image.height(), [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) {
             float* p = image.row(y);
@@ -247,6 +249,12 @@ void applyGradientMapF(ImageF& image, const GradientMapSettings& settings, const
                 double e[3];
                 for (int c = 0; c < 3; c++) e[c] = encoding.encode(p[c] / a);
                 const double t = std::min(1.0, 0.2126 * e[0] + 0.7152 * e[1] + 0.0722 * e[2]);
+                if (ramp) {
+                    float col[4];
+                    ramp->sample(float(std::max(0.0, t)), col);
+                    for (int c = 0; c < 3; c++) p[c] = cleanColour(encoding.decode(col[c]) * a);
+                    continue;
+                }
                 for (int c = 0; c < 3; c++) p[c] = cleanColour(encoding.decode(float(from[c] + span[c] * t)) * a);
             }
         }
