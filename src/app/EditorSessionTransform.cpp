@@ -568,10 +568,13 @@ void EditorSession::redrawShape(Layer& layer) {
     if (!layer.isLiveShape() || !layer.asset) return;
     int w = std::max(1, int(std::lround(layer.transform.size.width))), h = std::max(1, int(std::lround(layer.transform.size.height)));
     if ((w == layer.asset->image.width() && h == layer.asset->image.height()) || (long long)w * h > Document::pixelBudget) return;
-    auto image = shapeImage(layer.shape->kind, w, h, layer.shape->red, layer.shape->green, layer.shape->blue, layer.shape->cornerRadius);
+    AnyImage image = ImagePtr(shapeImage(layer.shape->kind, w, h, layer.shape->red, layer.shape->green, layer.shape->blue, layer.shape->cornerRadius));
+    // CMYK and Lab: the shape's sRGB colour through the document's profile, in its channels.
+    if (document_ && document_->colorMode != ColorMode::RGB) image = pixelsForDocument(image, ColorMode::RGB, ColorProfile());
+    if (!image) return;
     // A mask that follows the layer's pixel grid stays exactly where it is while that grid changes size.
     if (layer.mask && !layer.mask->placement) layer.mask->placement = layer.maskTransform();
-    layer.asset = Asset::make(image, layer.name);
+    layer.asset = Asset::makeAny(image, layer.name);
     layer.shapeImage = image;
 }
 

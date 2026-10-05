@@ -875,7 +875,7 @@ bool EditorSession::redrawText(Layer& layer) {
     // stays where it was and only the bend moves the pixels).
     QPointF warpOffset;
     // At the document's depth: a 16-bit document's text is painted at 16 bits.
-    const AnyImage image = renderTextLayerAt(*layer.text, sampleType(), &warpOffset);
+    const AnyImage image = renderTextForDocument(*layer.text, *document_, &warpOffset, color::conversionOptions());
     QPointF oldWarpOffset;
     if (layer.extraJson.find("textWarpOffset") != std::string::npos) {
         const QJsonArray o = QJsonDocument::fromJson(QByteArray::fromStdString(layer.extraJson)).object().value("textWarpOffset").toArray();
@@ -951,7 +951,7 @@ bool EditorSession::redrawText(Layer& layer) {
 std::optional<Uuid> EditorSession::addTextLayer(QPointF documentPoint, const LayerText& text, bool openEditor) {
     if (refusedAtDepth("edit.text", tr("Text"))) return std::nullopt;
     if (!canEditLayers()) return std::nullopt;
-    const AnyImage image = renderTextLayerAt(text, sampleType());
+    const AnyImage image = renderTextForDocument(text, *document_, nullptr, color::conversionOptions());
     if (!image) { emit error(tr("That text is too large to render. Text can cover up to 100 megapixels.")); return std::nullopt; }
     Layer layer(Asset::makeAny(image, nextLayerName(document_->layers, QCoreApplication::translate("Names", "Text").toStdString())), Point(documentPoint.x() - textPadding, documentPoint.y() - textPadding));
     layer.name = layer.asset->name;

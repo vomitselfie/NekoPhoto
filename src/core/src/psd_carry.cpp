@@ -53,6 +53,22 @@ uint64_t psdMaskHash(const GrayImage* mask, bool enabled) {
 uint64_t psdContentHash(const AnyImage& image) {
     if (image.u16()) return contentHash(image.u16().get());
     if (image.f32()) return contentHash(image.f32().get());
+    if (const ImageC8Ptr& c8 = image.c8()) {
+        // 8-bit CMYK: every sample of the five (the RGB fingerprint's four would miss the last fifth of each row).
+        if (c8->isEmpty()) return 0;
+        uint64_t h = 0x9e3779b97f4a7c15ull ^ (uint64_t(c8->width()) << 32 | uint32_t(c8->height())) ^ 0xc8c8;
+        auto mix = [&](uint64_t v) { h ^= v; h *= 0xff51afd7ed558ccdull; h ^= h >> 29; };
+        const size_t rowBytes = size_t(c8->width()) * size_t(c8->channels());
+        for (int y = 0; y < c8->height(); y++) {
+            const uint8_t* p = c8->row(y);
+            size_t i = 0;
+            for (; i + 8 <= rowBytes; i += 8) { uint64_t v; std::memcpy(&v, p + i, 8); mix(v); }
+            uint64_t tail = 0;
+            std::memcpy(&tail, p + i, rowBytes - i);
+            mix(tail ^ (uint64_t(y) << 48));
+        }
+        return h ? h : 1;
+    }
     return psdContentHash(image.u8().get());
 }
 

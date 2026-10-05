@@ -158,9 +158,9 @@ TEST_CASE(every_method_renders_and_round_trips_in_every_mode) {
                 const LayerStyle style = editableLayerStyle(l, back->document);
                 for (const GradientOverlay& o : style.gradientOverlays) { CHECK(o.gradient.interpolation == method); found++; }
             }
-            // A CMYK or Lab document's shape goes out as pixels (converting the mode changed its pixels from the ones its
-            // fill describes, psd-roundtrip.md), so there only the overlay carries the method through the file.
-            CHECK_EQ(found, v.mode == ColorMode::RGB ? 3 : 1);
+            // The shape stays a shape through Image > Mode, so in every mode its fill, its stroke and the overlay carry the
+            // method through the file.
+            CHECK_EQ(found, 3);
             Image after;
             render(back->document, RenderOptions(), after);
             const int apart = maxApart(before, after);

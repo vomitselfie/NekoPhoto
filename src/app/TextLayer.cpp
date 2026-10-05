@@ -316,6 +316,13 @@ compositor::AnyImage renderTextLayerAt(const compositor::LayerText& text, compos
     return image ? compositor::AnyImage(compositor::ImagePtr(image)) : compositor::AnyImage();
 }
 
+compositor::AnyImage renderTextForDocument(const compositor::LayerText& text, const compositor::Document& document, QPointF* warpOffset,
+                                           const compositor::ConvertOptions& options) {
+    if (document.colorMode == compositor::ColorMode::RGB) return renderTextLayerAt(text, document.sampleType, warpOffset);
+    auto image = renderTextLayer16(text, warpOffset);
+    return image ? compositor::textRasterInMode(*image, text, document, options) : compositor::AnyImage();
+}
+
 namespace {
 
 QImage renderUpright(const compositor::LayerText& text, bool deep) {
@@ -604,7 +611,7 @@ void finishPendingText(compositor::PsdImport& imported) {
         for (const std::string& family : missing)
             imported.notes.push_back(QCoreApplication::translate("app::TextLayer", "Layer \"%1\": the font %2 is not installed; the closest match, %3, draws it until you install it.")
                                          .arg(QString::fromStdString(layer->name), QString::fromStdString(family), QFontInfo(QFont(QString::fromStdString(family))).family()).toStdString());
-        const compositor::AnyImage image = renderTextLayerAt(text, imported.document.sampleType);
+        const compositor::AnyImage image = renderTextForDocument(text, imported.document);
         if (!image) continue;
         const auto m = psdTextMetrics(text);
         const double blockTop = m ? m->blockTop : textPadding, ascent = m ? m->ascent : 0;

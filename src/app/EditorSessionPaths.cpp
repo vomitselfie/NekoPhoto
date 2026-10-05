@@ -242,6 +242,7 @@ bool EditorSession::textToShape(const Uuid& id, QString* error) {
     shape.path = *path;
     auto byte = [](double v) { return uint8_t(std::clamp(std::lround(v * 255), 0L, 255L)); };
     shape.r = byte(layer.text->red); shape.g = byte(layer.text->green); shape.b = byte(layer.text->blue);
+    if (textInkMatches(layer.text->red, layer.text->green, layer.text->blue, layer.text->ink)) shape.ink = layer.text->ink;   // a CMYK file's inks
     shape.fill = true;
     shape.stroke.enabled = false;
     setVectorShape(layer, *document_, shape);
@@ -434,6 +435,14 @@ bool EditorSession::fillPath(uint16_t id) {
     if (!canEditLayers()) return false;
     auto p = documentPath(*document_, id);
     if (!p || p->path.subpaths.empty()) return false;
+    const Layer* target = activeLayer();
+    if (document_->colorMode != ColorMode::RGB && !(isMaskSelected_ && target && target->mask)) {
+        // CMYK and Lab: the foreground colour through the profile, painted in the document's channels (a layer mask
+        // takes the grey, below, as in RGB).
+        const AnyGray coverage = document_->sampleType == SampleType::U16 ? AnyGray(rasterizeVectorMask16(p->path, document_->rect(), 1, document_->width, document_->height))
+                                                                         : AnyGray(rasterizeVectorMask(p->path, document_->rect(), 1, document_->width, document_->height));
+        return fillThroughMode(foregroundColor, QT_TRANSLATE_NOOP("History", "Fill Path"), &coverage, brushSettings.opacity);
+    }
     if (document_->sampleType == SampleType::U16) {
         auto coverage = rasterizeVectorMask16(p->path, document_->rect(), 1, document_->width, document_->height);
         return fillThrough16(foregroundColor, faded(*coverage, brushSettings.opacity).get(), QT_TRANSLATE_NOOP("History", "Fill Path"));
@@ -453,6 +462,12 @@ bool EditorSession::strokePath(uint16_t id) {
     stroke.width = std::max(1.0, brushSettings.diameter);
     stroke.cap = VectorStroke::Cap::Round;
     stroke.join = VectorStroke::Join::Round;
+    const Layer* target = activeLayer();
+    if (document_->colorMode != ColorMode::RGB && !(isMaskSelected_ && target && target->mask)) {
+        const AnyGray band = document_->sampleType == SampleType::U16 ? AnyGray(rasterizeVectorStroke16(p->path, stroke, document_->rect(), 1, document_->width, document_->height))
+                                                                     : AnyGray(rasterizeVectorStroke(p->path, stroke, document_->rect(), 1, document_->width, document_->height));
+        return fillThroughMode(foregroundColor, QT_TRANSLATE_NOOP("History", "Stroke Path"), &band, brushSettings.opacity);
+    }
     if (document_->sampleType == SampleType::U16) {
         auto band = rasterizeVectorStroke16(p->path, stroke, document_->rect(), 1, document_->width, document_->height);
         return fillThrough16(foregroundColor, faded(*band, brushSettings.opacity).get(), QT_TRANSLATE_NOOP("History", "Stroke Path"));

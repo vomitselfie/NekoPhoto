@@ -38,7 +38,8 @@ a few levels.
 ## What a CMYK or Lab document draws
 
 - Pixel layers with opacity, pixel and vector masks, clipping masks, folders (Pass Through and isolated), artboards,
-  vector shapes' strokes, gradient and pattern fill layers, and hidden layers, at 8 and 16 bits.
+  text, shape layers and their strokes, gradient and pattern fill layers, layer styles, and hidden layers, at 8 and 16
+  bits.
 - **Blend modes.** CMYK offers every mode, as Photoshop does. The separable ones work on each ink as stored
   (inverted, so Multiply adds ink the way it darkens in RGB), with the same arithmetic as RGB's. Hue, Saturation,
   Color, Luminosity, Darker Color and Lighter Color are Photoshop's too, and do not pass through RGB: the PDF
@@ -61,7 +62,7 @@ a few levels.
   chart with 1-level lightness step wedges (at most 1 level off). The other Lab modes have no Photoshop reference yet.
 - **Adjustment layers**: every kind Photoshop offers in the mode draws on the document's own samples (see
   [Adjustments and filters](#adjustments-and-filters)); Color Lookup is kept and written back to PSD but not drawn yet.
-- **Layer styles** are kept and written back but not drawn in CMYK and Lab yet.
+- **Layer styles** draw in the document's channels: see [Text, shapes and layer styles](#text-shapes-and-layer-styles).
 - The canvas always goes through a colour transform: the document's profile to the monitor profile, or to sRGB when
   none is known, in the same pass that reduces the frame to 8 bits. Layer thumbnails are drawn the same way.
 
@@ -170,6 +171,40 @@ smudges and pushes black ink, and checks the bucket's choice on K and on Lab's a
 clones, heals, patches, blurs, sharpens, smudges, dodges, burns, sponges, fills with the bucket, merges and applies a
 mask in each mode.
 
+## Text, shapes and layer styles
+
+Text, shape layers, paths, vector masks and layer styles work in CMYK and Lab at 8 and 16 bits, as in RGB: the Type
+tool and Edit Text, the Shape, Pen and Direct Selection tools, live shapes, Fill Path and Stroke Path, Layer ▸ Vector
+Mask, the Layer Style dialog, copying, pasting and clearing a style, style presets, and their automation methods. Each
+edit is one undo step.
+
+- **Layer styles**: every effect (drop and inner shadow, outer and inner glow, bevel and emboss, satin, colour,
+  gradient and pattern overlay, stroke), on layers and folders. The shapes the effects take (blurs, spread and choke,
+  distance fields, the bevel's height) are the same as in RGB; what changes is colour. Each effect colour, gradient ramp
+  and pattern tile goes through the document's profile once (Color Settings' Conversion Options), and the effects blend
+  in the document's own channels with the mode's blend modes: per ink in CMYK (Multiply adds ink), on L, a and b as
+  stored in Lab, Hue, Saturation, Color, Luminosity, Darker and Lighter Color as the mode's layers compute them. A Lab
+  document offers no Color Dodge, Color Burn, Darken, Lighten, Difference, Exclusion, Subtract or Divide for effects
+  either: the dialog greys them, and an effect a file sets to one draws as Normal. A colour a CMYK file gives as inks
+  (Photoshop's 'CMYC') draws as exactly those inks and is written back as inks until it is changed; a gradient whose
+  stops are all inks runs from ink to ink.
+- **Text** is typed on the canvas or set in the Text dialog as in RGB. Qt paints the glyphs in sRGB at 16 bits; each
+  colour then goes through the profile once and the glyphs' coverage is kept, so the text lands in the document's
+  channels (a run whose colour a CMYK file gave as inks keeps those inks). Photoshop type layers in CMYK files, whose
+  colours are inks, open as editable text and are written back as type with their inks.
+- **Shape layers** fill in the document's channels: a solid colour through the profile (a CMYK file's ink colour as
+  its inks), a gradient of inks from ink to ink, RGB gradients and patterns drawn in sRGB and converted. PSD writes them
+  as shape layers, and a shape layer stays one through Image ▸ Mode and Convert to Profile. **Fill Path** and **Stroke
+  Path** paint the foreground colour through the profile, as the brush does.
+- Checked: a document drawn in CMYK or Lab against the same document drawn in RGB and converted, every effect alone
+  and together, at 8 and 16 bits (`style_modes_tests`): on average at most 1.7 levels apart in CMYK and 1.1 in Lab (sRGB
+  levels), the largest gaps where a soft edge mixes two far-apart colours, which blending in inks or in L, a and b
+  mixes differently from RGB. Patchy's `photoshop-cmyk-style-colors.psd` (Photoshop-saved CMYK) draws its colour
+  overlay as the file's inks exactly (42/45/67/13%) and its red type (0/100/100/0%) as inks, and its type layer opens
+  as editable text. That file stores no composite, so no Photoshop render of effects in CMYK or Lab was available to
+  compare against; how Photoshop blends a and b for the separable modes in Lab (as stored, as NekoPhoto does) is
+  unverified, as it is for Lab's layers.
+
 ## Photoshop files
 
 - CMYK (mode 4) and Lab (mode 9) PSDs **open in their own mode** at 8 and 16 bits: the layers' planes as stored, the
@@ -197,8 +232,8 @@ mask in each mode.
   converts a document. Other apps get an 8-bit sRGB copy; their pixels come in as sRGB. Pasting into one colour channel
   writes the pixels' gray (read in sRGB) into it.
 - **File ▸ Import** converts the file once, from its embedded profile (sRGB when it has none) through the document's.
-- Place Embedded and smart objects, text and shapes stay greyed, as do Paste Into and Layer via Cut, which NekoPhoto
-  has in no mode yet.
+- Place Embedded and smart objects stay greyed, as do Paste Into and Layer via Cut, which NekoPhoto has in no mode
+  yet.
 
 ## Exports
 
@@ -216,8 +251,8 @@ and depth).
 
 ## Not yet
 
-Color Lookup, Mosh, text and shapes as editable objects, and layer styles in CMYK and Lab (greyed out with "Not
-available in CMYK mode yet"); CMYK JPEG and TIFF (a CMYK document exports them in sRGB). Whether Photoshop offers Color
+Color Lookup, Mosh, smart objects, artboards and slices in CMYK and Lab (greyed out with "Not available in CMYK mode
+yet"); CMYK JPEG and TIFF (a CMYK document exports them in sRGB). Whether Photoshop offers Color
 Lookup in CMYK and Lab has not been checked against Photoshop itself. Camera Raw, G'MIC and the MyPaint brushes stay
 RGB only ("Not available in CMYK mode", for good).
 
@@ -249,7 +284,13 @@ colour channels `cyan` ... `black` and `lightness`, `a`, `b`, and the composite 
   `renderWarpedImage` and `renderWarpedOverBox` over any layout: CMYK as (C, M, Y, alpha) and (K, K, K, alpha),
   joined back. The session's CMYK and Lab paths (clipboard, Distort, merging a floating selection, conversions between
   modes) are in `EditorSessionModes.cpp`.
-- Tests: `colormodes_render_tests`, `psd_modes_tests`, `paint_modes_tests`, `transform_modes_tests`, `select_modes_tests` (the wand, Quick Select and loading a CMYK layer as a selection), CMYK and Lab scenes in `render_hash_tests`, and
+- Text, shapes and styles: `ModeOps` draws styles through `drawStyledLayer` (`layerstyle_render.cpp`, templated on the
+  mode: `NativeColours` converts the colours, ramps and tiles, `blendEffect` blends in the mode's channels);
+  `textRasterInMode` (`colormode_convert.cpp`) takes Qt's 16-bit text raster into the document's mode;
+  `setVectorShape` fills in the document's channels and `keepVectorShapeBlocks` keeps a shape through conversions.
+  Inks read from CMYK files live on `StyleColor::ink`, `TextRun::ink` / `LayerText::ink` and `VectorShape::ink`,
+  used while their RGB still matches (`inkMatches`, `textInkMatches`).
+- Tests: `colormodes_render_tests`, `psd_modes_tests`, `style_modes_tests`, `paint_modes_tests`, `transform_modes_tests`, `select_modes_tests` (the wand, Quick Select and loading a CMYK layer as a selection), CMYK and Lab scenes in `render_hash_tests`, and
   `psd_roundtrip` (CMYK and Lab files must reopen in their mode with every layer channel byte for byte).
 
 ## 日本語
@@ -274,13 +315,15 @@ colour channels `cyan` ... `black` and `lightness`, `a`, `b`, and the composite 
 ### CMYK・Lab ドキュメントの表示
 
 - ピクセルレイヤー、不透明度、ピクセルマスクとベクトルマスク、クリッピングマスク、グループ、アートボード、
-  グラデーション・パターンの塗りつぶしレイヤーを 8/16 bit で合成します。
+  テキスト、シェイプレイヤーとその線、グラデーション・パターンの塗りつぶしレイヤー、レイヤースタイルを 8/16 bit で
+  合成します。
 - **描画モード**:CMYK ではすべてのモードを使えます。分離可能なモードは各インキに RGB と同じ計算で適用します。
-  色相・彩度・カラー・輝度・カラー比較(暗)・カラー比較(明)は Photoshop の CMYK の結果と照合できるまで**通常として
-  描画**し、レイヤーパネルにその旨を表示します。Lab では覆い焼きカラー・焼き込みカラー・比較(暗)・比較(明)・
+  色相・彩度・カラー・輝度・カラー比較(暗)・カラー比較(明)も Photoshop と同じ計算で、RGB を経由しません
+  (Photoshop の値と 8 bit の 2 階調以内で一致)。Lab では覆い焼きカラー・焼き込みカラー・比較(暗)・比較(明)・
   差の絶対値・除外・減算・除算は使えません(Adobe の説明のとおり)。
 - 調整レイヤーは、そのモードで Photoshop にある種類をすべてドキュメント自身の値で描画します(下の「色調補正と
-  フィルター」)。カラールックアップとレイヤースタイルは保持して PSD に書き戻しますが、まだ描画しません。
+  フィルター」)。カラールックアップは保持して PSD に書き戻しますが、まだ描画しません。レイヤースタイルは
+  ドキュメントのチャンネルで描画します(下の「テキスト、シェイプ、レイヤースタイル」)。
 - カンバスは常にドキュメントのプロファイルからモニタープロファイル(不明なら sRGB)へ変換して表示します。
 
 ### 色調補正とフィルター
@@ -362,6 +405,40 @@ RGB で塗ってから変換することはありません。
 - **MyPaint** のプリセットは今後も使えません(「CMYK モードでは使用できません」)。libmypaint は RGB で混色し、インキや
   Lab を持たないため、RGB で塗って変換するしかなく、NekoPhoto はそうしないからです。
 
+### テキスト、シェイプ、レイヤースタイル
+
+テキスト、シェイプレイヤー、パス、ベクトルマスク、レイヤースタイルは CMYK と Lab(8/16 bit)でも RGB と同じように
+使えます:横書き文字ツールとテキストの編集、シェイプ・ペン・パス選択ツール、ライブシェイプ、パスの塗りつぶしと
+境界線、レイヤー ▸ ベクトルマスク、レイヤースタイルダイアログ、スタイルのコピー・ペースト・消去、スタイルの
+プリセット、それぞれの自動化メソッド。どの編集も 1 回の取り消しで戻ります。
+
+- **レイヤースタイル**:すべての効果(ドロップシャドウ、シャドウ(内側)、光彩(外側)・(内側)、ベベルとエンボス、
+  サテン、カラー・グラデーション・パターンオーバーレイ、境界線)を、レイヤーにもグループにも描画します。効果の形
+  (ぼかし、スプレッドとチョーク、距離、ベベルの高さ)は RGB と同じで、変わるのは色です。効果の色、グラデーション、
+  パターンはドキュメントのプロファイルで一度だけ変換し(カラー設定の変換オプション)、ドキュメント自身のチャンネルで
+  そのモードの描画モードで合成します:CMYK はインキごと(乗算でインキが増えます)、Lab は L・a・b をそのまま、
+  色相・彩度・カラー・輝度・カラー比較(暗・明)はそのモードのレイヤーと同じ計算です。Lab では効果でも覆い焼き
+  カラー・焼き込みカラー・比較(暗)・比較(明)・差の絶対値・除外・減算・除算は使えず、ダイアログでは選べず、
+  ファイルで指定されていれば通常として描画します。CMYK ファイルでインキとして指定された色('CMYC')はそのインキの
+  まま描画し、変更するまでインキのまま書き戻します。分岐点がすべてインキのグラデーションはインキからインキへ
+  補間します。
+- **テキスト**は RGB と同じくカンバスまたはテキストダイアログで入力します。Qt がグリフを sRGB の 16 bit で描き、
+  それぞれの色をプロファイルで一度変換し、グリフの被覆はそのまま残すので、テキストはドキュメントのチャンネルに
+  なります(CMYK ファイルでインキとして指定された色はそのインキのまま)。色がインキの CMYK ファイルの Photoshop
+  テキストレイヤーは編集可能なテキストとして開き、インキのままテキストとして書き戻します。
+- **シェイプレイヤー**はドキュメントのチャンネルで塗ります:単色はプロファイルを通した色(CMYK ファイルのインキ色は
+  そのインキ)、インキのグラデーションはインキからインキへ、RGB のグラデーションとパターンは sRGB で描いて変換します。
+  PSD にはシェイプレイヤーとして書き出し、イメージ ▸ モードやプロファイル変換の後もシェイプレイヤーのままです。
+  **パスの塗りつぶし**と**パスの境界線**は描画色をブラシと同じくプロファイルで変換して塗ります。
+- 確認:CMYK・Lab で描いたドキュメントと、同じドキュメントを RGB で描いて変換したものを、各効果単独とすべての組み合わせで
+  8/16 bit で比べました(`style_modes_tests`)。平均の差は CMYK で最大 1.7、Lab で最大 1.1(sRGB の階調)、最大の差は
+  離れた 2 色が柔らかい境界で混ざる所で、インキや L・a・b での合成は RGB とは混ざり方が違います。Patchy の
+  `photoshop-cmyk-style-colors.psd`(Photoshop で保存した CMYK)はカラーオーバーレイをファイルのインキどおり
+  (42/45/67/13%)、赤い文字(0/100/100/0%)もインキどおりに描画し、テキストレイヤーは編集可能なテキストとして
+  開きます。このファイルには合成画像がないため、CMYK・Lab の効果を Photoshop の描画と比べることはできていません。
+  Lab の分離可能な描画モードで a と b を Photoshop がどう合成するか(NekoPhoto は値のまま)は、Lab のレイヤーと
+  同じく未確認です。
+
 ### Photoshop ファイル
 
 CMYK(モード 4)と Lab(モード 9)の PSD は 8/16 bit のまま**そのモードで開き**、CMYK のプロファイル(リソース 1039)も
@@ -382,8 +459,8 @@ RGB に変換します。
   相互)。コピーしたレイヤー(選択範囲なしのコピー)はイメージ ▸ モードと同じように変換します。ほかのアプリには
   8 bit の sRGB を渡し、ほかのアプリからのピクセルは sRGB として受け取ります。
 - **ファイル ▸ 読み込み**は埋め込みプロファイル(なければ sRGB)からドキュメントのプロファイルへ一度だけ変換します。
-- 埋め込みで配置、スマートオブジェクト、テキスト、シェイプは使えないままです。「ペースト(選択範囲内)」と「カットした
-  レイヤー」はどのモードにもまだありません。
+- 埋め込みで配置とスマートオブジェクトは使えないままです。「ペースト(選択範囲内)」と「カットしたレイヤー」は
+  どのモードにもまだありません。
 
 ### 書き出し
 
@@ -394,6 +471,6 @@ CMYK・Lab ドキュメントの PNG、JPEG、WebP、TIFF、TGA、ICO、GIF へ�
 
 ### 未対応
 
-カラールックアップ、Mosh、編集可能なテキストとシェイプ、レイヤースタイルの描画(「CMYK モードではまだ使用
-できません」と表示)、CMYK の JPEG と TIFF(CMYK ドキュメントは sRGB で書き出します)、CMYK の分離不可能な描画モード。
+カラールックアップ、Mosh、スマートオブジェクト、アートボードとスライス(「CMYK モードではまだ使用できません」と
+表示)、CMYK の JPEG と TIFF(CMYK ドキュメントは sRGB で書き出します)。
 カラールックアップが Photoshop の CMYK・Lab にあるかは Photoshop で確認していません。

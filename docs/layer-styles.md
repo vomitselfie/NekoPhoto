@@ -9,6 +9,9 @@ was carried (psd-roundtrip.md) and go back unchanged on PSD export, and Layer �
 - Drawing: `src/core/src/layerstyle_render.cpp`, called by the renderer for a styled layer (`drawOwn`), a
   clipping base with a style, and a styled folder (exterior effects before its first child, the rest after its
   last, over the shape of its children drawn alone).
+- Colour modes: at 8, 16 and 32 bits in RGB, and at 8 and 16 bits in CMYK and Lab, where the effects' colours go
+  through the document's profile and they blend in its own channels (color-modes.md, "Text, shapes and layer
+  styles").
 
 - Editing: Layer ▸ Layer Style (and the Layers panel's menu) opens Photoshop's dialog: Blending Options and the
   ten effects, each with its switch; a page edits the effect's first instance, further ones are kept. Copy,
@@ -56,8 +59,7 @@ Lightness, a and b in Lab.
   Converting the colour mode keeps the Gray range (Lab reads it on Lightness) and resets the per-channel ones.
 - Editing: Layer ▸ Layer Style ▸ Blending Options (the channel menu and the two sliders), Copy and Paste Layer Style,
   and automation's `layers.set` `blendIf` (any layer kind, folders and adjustment layers included; `layers.get`
-  reports it). The dialog does not open on adjustment layers yet, nor in CMYK and Lab documents, where layer styles
-  are not edited: there `layers.set` sets Blend If. An edit patches the record's ranges (a transparency pair the
+  reports it). The dialog does not open on adjustment layers yet. An edit patches the record's ranges (a transparency pair the
   file had is kept); ranges never edited go back to a PSD byte for byte; projects keep them.
 - How close: Patchy's `photoshop-blend-if-4b` (a layer with Gray and per-channel split ranges on both sliders, a
   Levels adjustment layer and a folder) matches Photoshop's render within 2 levels, mean 0.52 per channel (it was

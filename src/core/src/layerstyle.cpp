@@ -82,9 +82,13 @@ StyleColor colorOf(const psd::DescriptorObject& o, const char* key, StyleColor f
     if (!c) return fallback;
     auto byte = [](double v) { return uint8_t(std::clamp(std::lround(v), 0L, 255L)); };
     if (c->class_id == "CMYC") {
+        // The inks as read, kept for a CMYK document to draw; the RGB is their plain conversion.
         auto ink = [&](const char* k) { return psd::descriptor_number(*c, k) / 100.0; };
         const double k = ink("Blck");
-        return {byte(255 * (1 - ink("Cyn ")) * (1 - k)), byte(255 * (1 - ink("Mgnt")) * (1 - k)), byte(255 * (1 - ink("Ylw ")) * (1 - k))};
+        StyleColor rgb{byte(255 * (1 - ink("Cyn ")) * (1 - k)), byte(255 * (1 - ink("Mgnt")) * (1 - k)), byte(255 * (1 - ink("Ylw ")) * (1 - k))};
+        auto unit = [](double v) { return float(std::clamp(v, 0.0, 1.0)); };
+        rgb.ink = std::array<float, 4>{unit(ink("Cyn ")), unit(ink("Mgnt")), unit(ink("Ylw ")), unit(k)};
+        return rgb;
     }
     if (c->class_id == "Grsc") { const uint8_t g = byte(255 * (1 - psd::descriptor_number(*c, "Gry ") / 100.0)); return {g, g, g}; }
     if (c->class_id == "HSBC") {
@@ -609,8 +613,11 @@ void effectBlend(EffectBlend mode, const float b[3], const float s[3], float out
     case EffectBlend::LighterColor: for (int k = 0; k < 3; k++) out[k] = lum(s) > lum(b) ? s[k] : b[k]; return;
     default: break;
     }
-    for (int k = 0; k < 3; k++) {
-        const float cb = b[k], cs = s[k];
+    for (int k = 0; k < 3; k++) out[k] = effectBlendChannel(mode, b[k], s[k]);
+}
+
+float effectBlendChannel(EffectBlend mode, float cb, float cs) {
+    {
         float r = cs;
         switch (mode) {
         case EffectBlend::Darken: r = std::min(cb, cs); break;
@@ -640,8 +647,54 @@ void effectBlend(EffectBlend mode, const float b[3], const float s[3], float out
         case EffectBlend::Divide: r = cs <= 0 ? (cb > 0 ? 1 : 0) : std::min(1.0f, cb / cs); break;
         default: break;
         }
-        out[k] = r;
+        return r;
     }
+}
+
+BlendMode effectBlendMode(EffectBlend m) {
+    switch (m) {
+    case EffectBlend::Multiply: return BlendMode::Multiply;
+    case EffectBlend::Screen: return BlendMode::Screen;
+    case EffectBlend::Overlay: return BlendMode::Overlay;
+    case EffectBlend::Darken: return BlendMode::Darken;
+    case EffectBlend::Lighten: return BlendMode::Lighten;
+    case EffectBlend::Difference: return BlendMode::Difference;
+    case EffectBlend::ColorDodge: return BlendMode::ColorDodge;
+    case EffectBlend::ColorBurn: return BlendMode::ColorBurn;
+    case EffectBlend::Hue: return BlendMode::Hue;
+    case EffectBlend::Saturation: return BlendMode::Saturation;
+    case EffectBlend::Color: return BlendMode::Color;
+    case EffectBlend::Luminosity: return BlendMode::Luminosity;
+    case EffectBlend::Dissolve: return BlendMode::Dissolve;
+    case EffectBlend::LinearBurn: return BlendMode::LinearBurn;
+    case EffectBlend::DarkerColor: return BlendMode::DarkerColor;
+    case EffectBlend::LinearDodge: return BlendMode::LinearDodge;
+    case EffectBlend::LighterColor: return BlendMode::LighterColor;
+    case EffectBlend::SoftLight: return BlendMode::SoftLight;
+    case EffectBlend::HardLight: return BlendMode::HardLight;
+    case EffectBlend::VividLight: return BlendMode::VividLight;
+    case EffectBlend::LinearLight: return BlendMode::LinearLight;
+    case EffectBlend::PinLight: return BlendMode::PinLight;
+    case EffectBlend::HardMix: return BlendMode::HardMix;
+    case EffectBlend::Exclusion: return BlendMode::Exclusion;
+    case EffectBlend::Subtract: return BlendMode::Subtract;
+    case EffectBlend::Divide: return BlendMode::Divide;
+    default: return BlendMode::Normal;
+    }
+}
+
+StyleColor plainRgbOfInk(const std::array<float, 4>& ink) {
+    auto byte = [](double v) { return uint8_t(std::clamp(std::lround(v), 0L, 255L)); };
+    const double k = ink[3];
+    return {byte(255 * (1 - double(ink[0])) * (1 - k)), byte(255 * (1 - double(ink[1])) * (1 - k)), byte(255 * (1 - double(ink[2])) * (1 - k)), ink};
+}
+
+bool inkMatches(const StyleColor& c) {
+    if (!c.ink) return false;
+    // Within a level: the inks are kept as floats, the RGB was rounded from the file's doubles.
+    const StyleColor plain = plainRgbOfInk(*c.ink);
+    auto near = [](uint8_t a, uint8_t b) { return std::abs(int(a) - int(b)) <= 1; };
+    return near(plain.r, c.r) && near(plain.g, c.g) && near(plain.b, c.b);
 }
 
 namespace {

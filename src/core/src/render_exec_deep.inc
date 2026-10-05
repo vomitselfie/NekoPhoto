@@ -220,6 +220,7 @@ struct RenderExecDeep {
         draw.patterns = documentPatterns(document);
         draw.documentWidth = document.width;
         draw.documentHeight = document.height;
+        if constexpr (requires { O::setStyleMode(draw, document); }) O::setStyleMode(draw, document);
         O::setStyleSource(draw, [&](Img& into, const Rect& area) {
             RenderPlan subPlan(document, overrides);
             subPlan.buildWithin(plan, group.id);
@@ -434,6 +435,7 @@ struct RenderExecDeep {
             draw.documentWidth = document.width;
             draw.documentHeight = document.height;
             draw.bounds = params.transform.bounds();
+            if constexpr (requires { O::setStyleMode(draw, document); }) O::setStyleMode(draw, document);
             // Blend If gates the pixels before the interior effects land. With Blend Interior Effects as Group the
             // interiors join the pixels and are gated with them; a shape's stroke, drawn after the effects, keeps
             // the gate over the whole draw.
