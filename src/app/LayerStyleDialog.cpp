@@ -607,6 +607,10 @@ void LayerStyleDialog::gradientRows(QFormLayout* form, StyleGradient* g) {
         });
     comboRow(form, tr("Style"), {tr("Linear"), tr("Radial"), tr("Angle"), tr("Reflected"), tr("Diamond"), tr("Shape Burst")},
              [g] { return int(g->type); }, [g](int i) { g->type = StyleGradient::Type(i); });
+    // Photoshop's Method menu, in its order: Perceptual, Linear, Classic.
+    comboRow(form, tr("Method"), {tr("Perceptual"), tr("Linear"), tr("Classic")},
+             [g] { return g->interpolation == StyleGradient::Interpolation::Perceptual ? 0 : g->interpolation == StyleGradient::Interpolation::Linear ? 1 : 2; },
+             [g](int i) { g->interpolation = i == 0 ? StyleGradient::Interpolation::Perceptual : i == 1 ? StyleGradient::Interpolation::Linear : StyleGradient::Interpolation::Classic; });
     numberRow(form, tr("Angle"), &g->angle, -180, 180, QStringLiteral("°"));
     percentRow(form, tr("Scale"), &g->scale, 150);
     checkRow(form, tr("Reverse"), &g->reverse);

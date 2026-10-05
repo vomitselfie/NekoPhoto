@@ -364,3 +364,7 @@ target_link_libraries(blendif_tests PRIVATE compositor::core compositor_warnings
 # Patchy beside this checkout (CONTRIBUTING.md); PATCHY_FIXTURES in the environment overrides it.
 target_compile_definitions(blendif_tests PRIVATE PATCHY_FIXTURES="${CMAKE_SOURCE_DIR}/../Patchy/test-fixtures/psd")
 add_test(NAME blendif_tests COMMAND blendif_tests)
+
+add_executable(gradient_method_tests gradient_method_tests.cpp)
+target_link_libraries(gradient_method_tests PRIVATE compositor::core compositor_warnings)
+add_test(NAME gradient_method_tests COMMAND gradient_method_tests)

@@ -664,6 +664,34 @@ void add16BitVectorScenes() {
         doc.layers.push_back(top);
         return hash16(sixteen(doc), reducedRegion());
     });
+    // Gradient interpolation methods (Linear in linear light, Perceptual in Oklab) on a fill layer of three stops with
+    // a midpoint and on a gradient overlay, at 8 and 16 bits.
+    for (auto method : {StyleGradient::Interpolation::Linear, StyleGradient::Interpolation::Perceptual}) {
+        const std::string name = method == StyleGradient::Interpolation::Linear ? "linear" : "perceptual";
+        auto methodScene = [method] {
+            Document doc = goldenBase();
+            StyleGradient g = twoStops({250, 200, 10}, {10, 40, 220}, 60);
+            g.colors.insert(g.colors.begin() + 1, StyleGradient::ColorStop{0.4f, {200, 30, 160}, 0.3f});
+            g.interpolation = method;
+            Layer fill("Gradient Fill", doc.size());
+            auto carry = std::make_shared<PsdLayerCarry>();
+            carry->blocks.push_back({"GdFl", authorGradientFill(g)});
+            fill.psdCarry = carry;
+            fill.opacity = 0.7;
+            doc.layers.push_back(fill);
+            Layer top = layerOf("paint", paint(56, 40, 5), {20, 12});
+            LayerStyle style;
+            GradientOverlay overlay;
+            overlay.gradient = g;
+            overlay.gradient.angle = 0;
+            style.gradientOverlays.push_back(overlay);
+            setLayerStyle(top, style);
+            doc.layers.push_back(top);
+            return doc;
+        };
+        scene("gradient_method/" + name, [methodScene] { return hashImage(*renderFlattened(methodScene())); });
+        scene("u16/gradient_method/" + name, [methodScene] { return hash16(sixteen(methodScene())); });
+    }
     scene("u16/fill_layer/gradient", [] {
         Document doc = goldenBase();
         Layer fill("Gradient Fill", doc.size());
@@ -1660,6 +1688,8 @@ TEST_CASE(render_hashes_match_the_baseline_on_the_pool_and_serially) {
         // 32-bit scenes render through float pow/exp, which MinGW's maths library rounds differently from glibc's; their
         // kernels are checked within a tolerance everywhere (float_reference), and bit for bit on Linux here.
         if (name.rfind("f32/", 0) == 0 || name.find("/f32/") != std::string::npos) { unchecked++; continue; }
+        // So do the Linear and Perceptual gradient methods (pow and cbrt into linear light and Oklab and back).
+        if (name.find("gradient_method/") != std::string::npos) { unchecked++; continue; }
 #endif
         auto it = expected.find(name);
         if (it == expected.end()) { std::fprintf(stderr, "  new      %s %s\n", name.c_str(), h.c_str()); added++; }

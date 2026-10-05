@@ -326,6 +326,8 @@ golden/reduced_layer 20afb8f967832f5c
 golden/transformed_layer c8ae323d04ec301c
 golden/transformed_layer_nearest dc1e414ea473abb4
 golden/zoomed_region 2ac737d156e610ab
+gradient_method/linear 2a0e94230286c2e4
+gradient_method/perceptual 97a90a8ed284325f
 lab/adjust/levels_curves 125f0e4cf3ae6847
 lab/adjust/tones 4d92e8c5c720b571
 lab/blend/color 96fa7cbe05b06b66
@@ -516,6 +518,8 @@ u16/filter/motion_blur_0 474efff93e42755b
 u16/filter/motion_blur_30 3cf7942e8687c099
 u16/golden/placed_mask 4c7b81da539a597a
 u16/golden/transformed_layer fb6f63fee069e412
+u16/gradient_method/linear 590f9b32ef98bc44
+u16/gradient_method/perceptual 95e084c4273ad7b5
 u16/remove_background/refined_and_decontaminated 643cdf115c1b72c0
 u16/shape/dashed_stroke 80dc395a77eec1b8
 u16/shape/gradient_fill_and_stroke 076185b4c9d6b71c
