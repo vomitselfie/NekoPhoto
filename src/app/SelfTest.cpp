@@ -3,23 +3,36 @@
 // command-path: the converted commands (New Layer, Duplicate Layer, Merge Down, Gaussian Blur's OK, Levels' OK and
 // Free Transform's commit) give the same document and the same history whether they come from the interface
 // (menu actions, the dialogs, the canvas's Enter) or from automation requests, and an action recording the
-// interface path holds the requests automation would send.
+// interface path holds the requests automation would send. Then the same for the menu items, dialogs and panel
+// buttons converted after them (menuCommands): each through the menu bar (answering its dialog), through the
+// requests the recording holds, and through the session calls the interface made before, compared as documents and
+// history names, with each recorded once as the method it names.
 #include "SelfTest.h"
 #include "ActionLibrary.h"
 #include "AdjustmentEditor.h"
 #include "Automation.h"
 #include "CanvasWidget.h"
+#include "ChannelsPanel.h"
 #include "FilterDialog.h"
+#include "Names.h"
+#include "PathsPanel.h"
 #include "MainWindow.h"
 #include "Ruler.h"
 #include <QApplication>
 #include <QDoubleSpinBox>
+#include <QInputDialog>
+#include <QSpinBox>
+#include <QTimer>
+#include <QToolButton>
+#include <functional>
+#include <memory>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QMenu>
 #include <QMenuBar>
+#include <QMessageBox>
 #include <cmath>
 #include <cstdio>
 
@@ -52,7 +65,19 @@ QString describe(EditorSession& s) {
                    .arg(l.transform.rotation, 0, 'g', 17).arg(l.transform.flipX).arg(l.transform.flipY).arg(l.opacity).arg(int(l.blendMode)).arg(l.visible)
                    .arg(pixels).arg(l.asset && l.asset->image ? l.asset->image.width() : 0).arg(l.asset && l.asset->image ? l.asset->image.height() : 0).arg(mask);
     }
-    out << QString("selection %1").arg(d.selection.has_value());
+    // Clipping, resampling, smart objects and a mask's state, which the pixels alone do not show.
+    for (const Layer& l : d.layers)
+        out << QString("  %1: clipped %2 sampling %3 smart %4 mask on %5 adjustment %6").arg(QString::fromStdString(l.name)).arg(l.maskSourceId.has_value()).arg(int(l.transform.sampling))
+                   .arg(l.smartObject.has_value()).arg(l.mask ? l.mask->enabled : false).arg(l.adjustment.has_value());
+    uint64_t coverage = 0;
+    if (d.selection && d.selection->coverage.u8()) coverage = hashBytes(d.selection->coverage.u8()->data(), d.selection->coverage.u8()->byteCount());
+    out << QString("selection %1 %2").arg(d.selection.has_value()).arg(coverage);
+    out << QString("size %1x%2 mode %3 depth %4").arg(d.width).arg(d.height).arg(int(d.colorMode)).arg(int(d.sampleType));
+    QStringList paths, channels;
+    for (const DocumentPath& path : s.paths()) paths << QString::fromStdString(path.name) + ":" + QString::number(path.path.subpaths.size());
+    for (const Channel& c : d.channels) channels << QString::fromStdString(c.name) + ":" + QString::number(c.image.u8() ? hashBytes(c.image.u8()->data(), c.image.u8()->byteCount()) : 0);
+    out << "paths " + paths.join(", ");
+    out << "channels " + channels.join(", ");
     out << QString("guides %1").arg(d.guides.size());
     if (auto flat = s.flattened()) out << QString("composite %1").arg(hashBytes(flat->data(), flat->byteCount()));
     QStringList history;
@@ -210,6 +235,332 @@ int commandPath(MainWindow& w) {
     return failures ? 1 : 0;
 }
 
+// ---- The menu items, dialogs and panel buttons converted after the first six ---------------------------------
+
+/// A menu bar item by its path of titles ("Layer", "Layer Mask", "Invert"), mnemonics and shortcuts left out.
+QAction* menuItem(MainWindow& w, const QStringList& path) {
+    QList<QAction*> actions = w.menuBar()->actions();
+    QAction* found = nullptr;
+    for (int i = 0; i < path.size(); i++) {
+        found = nullptr;
+        for (QAction* a : actions)
+            if (a->text().remove('&').section('\t', 0, 0) == path[i]) { found = a; break; }
+        if (!found || (i + 1 < path.size() && !found->menu())) { std::fprintf(stderr, "no menu item %s\n", qPrintable(path.join(" > "))); return nullptr; }
+        if (i + 1 < path.size()) {
+            emit found->menu()->aboutToShow();
+            actions = found->menu()->actions();
+        }
+    }
+    return found;
+}
+
+/// Answers the next modal dialog (an input dialog, Canvas Size, Trim ...): `fill` sets its fields, then OK.
+void answerModal(std::function<void(QDialog*)> fill) {
+    QTimer::singleShot(0, [fill] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if (!dialog) { std::fprintf(stderr, "no modal dialog to answer\n"); return; }
+        if (fill) fill(dialog);
+        dialog->accept();
+    });
+}
+
+template <class T> T* nth(QObject* parent, int index) {
+    const auto all = parent->findChildren<T*>();
+    return index < all.size() ? all[index] : nullptr;
+}
+
+QToolButton* buttonWithTip(QWidget* panel, const QString& tip) {
+    for (QToolButton* b : panel->findChildren<QToolButton*>()) if (b->toolTip() == tip) return b;
+    std::fprintf(stderr, "no button \"%s\"\n", qPrintable(tip));
+    return nullptr;
+}
+
+struct Converted {
+    QString label;                                                // for messages
+    const char* layer = nullptr;                                  // made active first (none: as it is)
+    std::function<void(EditorSession&)> setup;                    // plain session calls before the step, in every run
+    std::function<bool(MainWindow&, EditorSession&)> ui;          // the interface: false when it could not be done
+    std::function<void(EditorSession&, const QList<ActionStep>&)> direct;   // the edit as the interface made it before
+    QStringList methods;                                          // the steps Actions records for it
+};
+
+std::function<bool(MainWindow&, EditorSession&)> trigger(QStringList path, std::function<void(QDialog*)> modal = {}, bool hasModal = false) {
+    return [path, modal, hasModal](MainWindow& w, EditorSession&) {
+        QAction* a = menuItem(w, path);
+        if (!a) return false;
+        if (!a->isEnabled()) { std::fprintf(stderr, "%s is disabled\n", qPrintable(path.join(" > "))); return false; }
+        if (modal || hasModal) answerModal(modal);
+        a->trigger();
+        QApplication::processEvents();
+        return true;
+    };
+}
+
+std::function<void(QDialog*)> inputValue(QVariant value) {
+    return [value](QDialog* d) {
+        auto* input = qobject_cast<QInputDialog*>(d);
+        if (!input) { std::fprintf(stderr, "not an input dialog\n"); return; }
+        if (value.typeId() == QMetaType::Int) input->setIntValue(value.toInt());
+        else if (value.typeId() == QMetaType::Double) input->setDoubleValue(value.toDouble());
+        else input->setTextValue(value.toString());
+    };
+}
+
+template <class Dialog, class Kind> std::function<bool(MainWindow&, EditorSession&)> pixelDialog(Kind kind, std::function<void(Dialog*)> set) {
+    return [kind, set](MainWindow& w, EditorSession& s) {
+        auto* dialog = new Dialog(&s, kind, &w);
+        set(dialog);
+        dialog->accept();
+        QApplication::processEvents();
+        return true;
+    };
+}
+
+std::function<void(FilterDialog*)> filterValues(std::vector<double> values, uint32_t seed = 0) {
+    return [values, seed](FilterDialog* d) {
+        if (seed) d->setSeed(seed);
+        for (size_t i = 0; i < values.size(); i++) if (auto* spin = nth<QDoubleSpinBox>(d, int(i))) spin->setValue(values[i]);
+    };
+}
+
+std::function<void(PixelAdjustmentDialog*)> adjustmentValues(AdjustmentSettings settings) {
+    return [settings](PixelAdjustmentDialog* d) { d->findChild<AdjustmentEditor*>()->setSettings(settings); };
+}
+
+/// A pixel dialog the way it committed before the command path: the session is not routed, so it commits itself.
+template <class Dialog, class Kind> std::function<void(EditorSession&, const QList<ActionStep>&)> directDialog(MainWindow* w, Kind kind, std::function<void(Dialog*)> set) {
+    return [w, kind, set](EditorSession& s, const QList<ActionStep>&) { pixelDialog<Dialog>(kind, set)(*w, s); };
+}
+
+std::function<bool(MainWindow&, EditorSession&)> panelButton(bool paths, QString tip) {
+    return [paths, tip](MainWindow&, EditorSession& s) {
+        // A panel of the session's own: the tab's panel calls the same session.
+        std::unique_ptr<QWidget> panel(paths ? static_cast<QWidget*>(new PathsPanel(&s)) : static_cast<QWidget*>(new ChannelsPanel(&s)));
+        QToolButton* b = buttonWithTip(panel.get(), tip);
+        if (!b) return false;
+        b->click();
+        QApplication::processEvents();
+        return true;
+    };
+}
+
+int menuCommands(MainWindow& w) {
+    const QColor fg(255, 230, 40);
+    AdjustmentSettings curves = AdjustmentSettings::defaults(AdjustmentKind::Curves);
+    curves.curves.channels[0] = {{0, 0}, {120, 160}, {255, 255}};
+    AdjustmentSettings brightness = AdjustmentSettings::defaults(AdjustmentKind::BrightnessContrast);
+    brightness.brightnessContrast.brightness = 25;
+    brightness.brightnessContrast.contrast = 10;
+    AdjustmentSettings posterize = AdjustmentSettings::defaults(AdjustmentKind::Posterize);
+    posterize.posterize.levels = 6;
+    auto layerSelection = [](const char* name) {
+        return [name](EditorSession& s) { select(s, name); s.loadLayerAsSelection(*s.activeLayerId(), false, SelectionMode::Replace); };
+    };
+    auto params = [](const QList<ActionStep>& steps, int i = 0) { return i < steps.size() ? steps[i].params : QJsonObject{}; };
+    MainWindow* window = &w;
+
+    const std::vector<Converted> steps = {
+        {"New Layer Below", "Paint", {}, trigger({"Layer", "New Layer Below"}), [](EditorSession& s, auto&) { s.addBlankLayer(true); }, {"layers.add"}},
+        {"New Folder", "Paint", {}, trigger({"Layer", "New Folder"}), [](EditorSession& s, auto&) { s.addGroup(); }, {"layers.add"}},
+        {"New Adjustment Layer", "Paint", {}, trigger({"Layer", "New Adjustment Layer", names::adjustmentKind(AdjustmentKind::Curves)}),
+         [](EditorSession& s, auto&) { s.addAdjustmentLayer(AdjustmentKind::Curves); }, {"layers.add"}},
+        {"Rename Layer", nullptr, {}, trigger({"Layer", "Rename Layer…"}, inputValue(QStringLiteral("Renamed"))),
+         [](EditorSession& s, auto&) { s.renameLayer(*s.activeLayerId(), "Renamed"); }, {"layers.set"}},
+        {"Delete Layer", "Renamed", {}, trigger({"Layer", "Delete Layer"}), [](EditorSession& s, auto&) { s.deleteLayersResolvingClipping({*s.activeLayerId()}, false); }, {"layers.delete"}},
+        {"Group Layers", "Paint", {}, trigger({"Layer", "Group Layers"}), [](EditorSession& s, auto&) { s.groupSelectedLayers(); }, {"layers.group"}},
+        {"Bring Forward", "Background", {}, trigger({"Layer", "Bring Forward"}), [](EditorSession& s, auto&) { s.moveActiveLayer(1); }, {"layers.reorder"}},
+        {"Send Backward", "Background", {}, trigger({"Layer", "Send Backward"}), [](EditorSession& s, auto&) { s.moveActiveLayer(-1); }, {"layers.reorder"}},
+        {"Flip Layer Horizontal", "Background", {}, trigger({"Layer", "Flip Layer Horizontal"}), [](EditorSession& s, auto&) { s.flipLayer(true); }, {"layers.flip"}},
+        {"Flip Layer Vertical", "Background", {}, trigger({"Layer", "Flip Layer Vertical"}), [](EditorSession& s, auto&) { s.flipLayer(false); }, {"layers.flip"}},
+        {"Resampling", "Background", {}, trigger({"Layer", "Resampling", "Smooth"}), [](EditorSession& s, auto&) { s.setLayerSampling(Sampling::Smooth); }, {"layers.set"}},
+        {"Mask Reveal All", "Background", {}, trigger({"Layer", "Layer Mask", "Reveal All"}), [](EditorSession& s, auto&) { s.addLayerMask(true); }, {"layers.mask"}},
+        {"Mask Invert", "Background", {}, trigger({"Layer", "Layer Mask", "Invert"}), [](EditorSession& s, auto&) { s.invertMask(); }, {"layers.mask"}},
+        {"Mask Disable", "Background", {}, trigger({"Layer", "Layer Mask", "Enable / Disable"}), [](EditorSession& s, auto&) { s.toggleLayerMask(); }, {"layers.mask"}},
+        {"Mask Enable", "Background", {}, trigger({"Layer", "Layer Mask", "Enable / Disable"}), [](EditorSession& s, auto&) { s.toggleLayerMask(); }, {"layers.mask"}},
+        {"Mask Apply", "Background", {}, trigger({"Layer", "Layer Mask", "Apply"}), [](EditorSession& s, auto&) { s.applyMask(); }, {"layers.mask"}},
+        {"Mask Hide All", "Background", {}, trigger({"Layer", "Layer Mask", "Hide All"}), [](EditorSession& s, auto&) { s.addLayerMask(false); }, {"layers.mask"}},
+        {"Mask Delete", "Background", {}, trigger({"Layer", "Layer Mask", "Delete"}), [](EditorSession& s, auto&) { s.deleteLayerMask(); }, {"layers.mask"}},
+        {"Clipping Mask", "Background", [](EditorSession& s) { s.addBlankLayer(); }, trigger({"Layer", "Create / Release Clipping Mask"}),
+         [](EditorSession& s, auto&) { s.toggleClippingMask(*s.activeLayerId()); }, {"layers.set"}},
+        {"Rasterize", "Background", [](EditorSession& s) { s.convertToSmartObject(nullptr); }, trigger({"Layer", "Smart Objects", "Rasterize"}),
+         [](EditorSession& s, auto&) { s.rasterizeSmartObject(); }, {"smartObject.rasterize"}},
+        {"Layer via Copy", "Background", layerSelection("Red"), trigger({"Layer", "Layer via Copy"}), [](EditorSession& s, auto&) { s.layerViaCopy(); }, {"layers.viaCopy"}},
+        {"Convert to Smart Object", nullptr, {}, trigger({"Layer", "Smart Objects", "Convert to Smart Object"}),
+         [](EditorSession& s, auto&) { s.convertToSmartObject(nullptr); }, {"smartObject.convert"}},
+        // Select
+        {"Load Layer Pixels", "Red", {}, trigger({"Select", "Load as Selection", "Layer Pixels"}),
+         [](EditorSession& s, auto&) { s.loadLayerAsSelection(*s.activeLayerId(), false, SelectionMode::Replace); }, {"selection.fromLayer"}},
+        {"Expand", nullptr, {}, trigger({"Select", "Modify", "Expand…"}, inputValue(3)), [](EditorSession& s, auto&) { s.selectionExpand(3); }, {"selection.grow"}},
+        {"Contract", nullptr, {}, trigger({"Select", "Modify", "Contract…"}, inputValue(1)), [](EditorSession& s, auto&) { s.selectionContract(1); }, {"selection.grow"}},
+        {"Feather", nullptr, {}, trigger({"Select", "Modify", "Feather…"}, inputValue(2.5)), [](EditorSession& s, auto&) { s.selectionFeather(2.5); }, {"selection.feather"}},
+        {"Smooth", nullptr, {}, trigger({"Select", "Modify", "Smooth…"}, inputValue(2)), [](EditorSession& s, auto&) { s.selectionSmooth(2); }, {"selection.smooth"}},
+        {"Border", nullptr, {}, trigger({"Select", "Modify", "Border…"}, inputValue(4)), [](EditorSession& s, auto&) { s.selectionBorder(4); }, {"selection.border"}},
+        {"Inverse", nullptr, {}, trigger({"Select", "Inverse"}), [](EditorSession& s, auto&) { s.invertSelection(); }, {"selection.invert"}},
+        {"Deselect", nullptr, {}, trigger({"Select", "Deselect"}), [](EditorSession& s, auto&) { s.deselect(); }, {"selection.none"}},
+        {"Select All", nullptr, {}, trigger({"Select", "All"}), [](EditorSession& s, auto&) { s.selectAll(); }, {"selection.all"}},
+        {"Subtract Layer Pixels", "Paint", {}, trigger({"Select", "Load as Selection", "Subtract Layer Pixels"}),
+         [](EditorSession& s, auto&) { s.loadLayerAsSelection(*s.activeLayerId(), false, SelectionMode::Subtract); }, {"selection.fromLayer"}},
+        {"Add Layer Pixels", "Paint", {}, trigger({"Select", "Load as Selection", "Add Layer Pixels"}),
+         [](EditorSession& s, auto&) { s.loadLayerAsSelection(*s.activeLayerId(), false, SelectionMode::Add); }, {"selection.fromLayer"}},
+        {"Intersect Layer Pixels", "Red", {}, trigger({"Select", "Load as Selection", "Intersect with Layer Pixels"}),
+         [](EditorSession& s, auto&) { s.loadLayerAsSelection(*s.activeLayerId(), false, SelectionMode::Intersect); }, {"selection.fromLayer"}},
+        {"Load Layer Mask", "Red", {}, trigger({"Select", "Load as Selection", "Layer Mask"}),
+         [](EditorSession& s, auto&) { s.loadLayerAsSelection(*s.activeLayerId(), true, SelectionMode::Replace); }, {"selection.fromLayer"}},
+        // Edit
+        {"Fill with Foreground", "Background", {}, trigger({"Edit", "Fill with Foreground"}), [fg](EditorSession& s, auto&) { s.fillSelection(fg); }, {"pixels.fill"}},
+        {"Fill with Background", "Background", [](EditorSession& s) { s.backgroundColor = QColor(20, 90, 200); }, trigger({"Edit", "Fill with Background"}),
+         [](EditorSession& s, auto&) { s.fillSelection(s.backgroundColor); }, {"pixels.fill"}},
+        {"Clear", "Paint", {}, trigger({"Edit", "Clear"}), [](EditorSession& s, auto&) { s.clearSelectionPixels(); }, {"pixels.clear"}},
+        // Image
+        {"Invert", "Background", {}, trigger({"Image", "Adjustments", "Invert"}), [](EditorSession& s, auto&) { s.invertActive(); }, {"pixels.invert"}},
+        {"Flip Canvas Horizontal", nullptr, {}, trigger({"Image", "Flip Canvas Horizontal"}), [](EditorSession& s, auto&) { s.flipCanvas(true); }, {"canvas.flip"}},
+        {"Flip Canvas Vertical", nullptr, {}, trigger({"Image", "Flip Canvas Vertical"}), [](EditorSession& s, auto&) { s.flipCanvas(false); }, {"canvas.flip"}},
+        {"Crop to Selection", nullptr, layerSelection("Red"), trigger({"Image", "Crop to Selection"}),
+         [](EditorSession& s, auto&) { const Rect b = s.document()->selection->bounds(); s.cropTo(QRectF(b.x, b.y, b.width, b.height)); s.deselect(); }, {"canvas.crop", "selection.none"}},
+        {"Canvas Size", nullptr, {}, trigger({"Image", "Canvas Size…"}, [](QDialog* d) { nth<QSpinBox>(d, 0)->setValue(nth<QSpinBox>(d, 0)->value() + 40); nth<QSpinBox>(d, 1)->setValue(nth<QSpinBox>(d, 1)->value() + 24); }),
+         [](EditorSession& s, auto&) { s.resizeCanvas(s.document()->width + 40, s.document()->height + 24, 0.5, 0.5); }, {"canvas.resize"}},
+        {"Trim", nullptr, [](EditorSession& s) {
+             // Only the masked circle shows, inside the transparent border Canvas Size added.
+             std::vector<Uuid> hide;
+             for (const Layer& l : s.document()->layers) if (!l.isGroup && l.name != "Red" && l.visible) hide.push_back(l.id);
+             for (const Uuid& id : hide) s.toggleLayerVisibility(id);
+         }, trigger({"Image", "Trim…"}, {}, true), [](EditorSession& s, auto&) { s.trim(TrimOptions{}); }, {"image.trim"}},
+        {"Image Size", nullptr, [](EditorSession& s) {
+             std::vector<Uuid> show;
+             for (const Layer& l : s.document()->layers) if (!l.isGroup && !l.visible) show.push_back(l.id);
+             for (const Uuid& id : show) s.toggleLayerVisibility(id);
+         }, trigger({"Image", "Image Size…"}, [](QDialog* d) { nth<QSpinBox>(d, 0)->setValue(150); }),
+         [params](EditorSession& s, const QList<ActionStep>& r) {
+             const QJsonObject p = params(r);
+             s.resizeImage(p["width"].toInt(), p["height"].toInt(), p["resolution"].toDouble(), p["sampling"].toString() == "nearest" ? 0 : p["sampling"].toString() == "smooth" ? 1 : 2);
+         }, {"image.resize"}},
+        {"16 Bits", nullptr, {}, trigger({"Image", "Mode", "16 Bits/Channel"}), [](EditorSession& s, auto&) { s.convertMode(SampleType::U16); }, {"image.mode"}},
+        {"8 Bits", nullptr, {}, trigger({"Image", "Mode", "8 Bits/Channel"}), [](EditorSession& s, auto&) { s.convertMode(SampleType::U8); }, {"image.mode"}},
+        {"Lab Color", nullptr, {}, trigger({"Image", "Mode", "Lab Color"}), [](EditorSession& s, auto&) { s.convertColorMode(ColorMode::Lab); }, {"image.mode"}},
+        {"RGB Color", nullptr, {}, trigger({"Image", "Mode", "RGB Color"}), [](EditorSession& s, auto&) { s.convertColorMode(ColorMode::RGB); }, {"image.mode"}},
+        // Dialogs' OK
+        {"Motion Blur", "Background", {}, pixelDialog<FilterDialog>(FilterKind::MotionBlur, filterValues({20, 15})),
+         directDialog<FilterDialog>(window, FilterKind::MotionBlur, filterValues({20, 15})), {"pixels.filter"}},
+        {"Add Noise", "Background", {}, pixelDialog<FilterDialog>(FilterKind::AddNoise, filterValues({12}, 4242)),
+         directDialog<FilterDialog>(window, FilterKind::AddNoise, filterValues({12}, 4242)), {"pixels.filter"}},
+        {"Lens Correction", "Background", {}, pixelDialog<FilterDialog>(FilterKind::LensCorrection, filterValues({30})),
+         directDialog<FilterDialog>(window, FilterKind::LensCorrection, filterValues({30})), {"pixels.filter"}},
+        {"Curves", "Background", {}, pixelDialog<PixelAdjustmentDialog>(AdjustmentKind::Curves, adjustmentValues(curves)),
+         directDialog<PixelAdjustmentDialog>(window, AdjustmentKind::Curves, adjustmentValues(curves)), {"pixels.adjust"}},
+        {"Brightness/Contrast", "Background", {}, pixelDialog<PixelAdjustmentDialog>(AdjustmentKind::BrightnessContrast, adjustmentValues(brightness)),
+         directDialog<PixelAdjustmentDialog>(window, AdjustmentKind::BrightnessContrast, adjustmentValues(brightness)), {"pixels.adjust"}},
+        {"Posterize", "Background", {}, pixelDialog<PixelAdjustmentDialog>(AdjustmentKind::Posterize, adjustmentValues(posterize)),
+         directDialog<PixelAdjustmentDialog>(window, AdjustmentKind::Posterize, adjustmentValues(posterize)), {"pixels.adjust"}},
+        // The Paths and Channels panels' buttons
+        {"Work Path from Selection", "Background", layerSelection("Red"), panelButton(true, PathsPanel::tr("Make a work path from the selection")),
+         [](EditorSession& s, auto&) { s.selectionToWorkPath(); }, {"paths.fromSelection"}},
+        {"Fill Path", "Background", {}, panelButton(true, PathsPanel::tr("Fill the path with the foreground colour")),
+         [](EditorSession& s, auto&) { s.fillPath(*s.activePathId()); }, {"paths.fill"}},
+        {"Stroke Path", "Background", {}, panelButton(true, PathsPanel::tr("Stroke the path with the brush's size in the foreground colour")),
+         [](EditorSession& s, auto&) { s.strokePath(*s.activePathId()); }, {"paths.stroke"}},
+        {"Path to Selection", "Background", [](EditorSession& s) { s.deselect(); }, panelButton(true, PathsPanel::tr("Load the path as a selection")),
+         [](EditorSession& s, auto&) { s.pathToSelection(*s.activePathId(), SelectionMode::Replace); }, {"paths.toSelection"}},
+        {"Save Selection as Channel", "Background", {}, panelButton(false, ChannelsPanel::tr("Save selection as channel")),
+         [](EditorSession& s, auto&) { s.saveSelectionToChannel(std::nullopt, QString(), SelectionMode::Replace); }, {"channels.saveSelection"}},
+        {"New Channel", "Background", {}, panelButton(false, ChannelsPanel::tr("Create new channel")), [](EditorSession& s, auto&) { s.newChannel(); }, {"channels.new"}},
+        {"Path to Shape", "Background", {}, panelButton(true, PathsPanel::tr("Make a shape layer from the path")),
+         [](EditorSession& s, auto&) { s.pathToShapeLayer(*s.activePathId()); }, {"paths.toShape"}},
+        {"Delete Path", "Background", [](EditorSession& s) { s.selectPath(kWorkPathId); }, panelButton(true, PathsPanel::tr("Delete the path")),
+         [](EditorSession& s, auto&) { s.deletePath(*s.activePathId()); }, {"paths.delete"}},
+    };
+
+    int failures = 0;
+    auto prepare = [](EditorSession& s) {
+        buildDemoDocument(s);
+        s.deselect();
+        s.foregroundColor = QColor(255, 230, 40);
+    };
+    auto before = [](EditorSession& s, const Converted& step) {
+        if (step.layer) select(s, step.layer);
+        if (step.setup) step.setup(s);
+    };
+
+    // The interface, recorded.
+    w.newTab();
+    EditorSession& a = *w.session();
+    prepare(a);
+    ActionLibrary::instance().startRecording(QStringLiteral("menu-commands self-test"));
+    std::vector<int> recordedBefore;
+    auto recorded = [] {
+        const RecordedAction* r = ActionLibrary::instance().find(QStringLiteral("menu-commands self-test"));
+        return r ? QList<ActionStep>(r->steps.begin(), r->steps.end()) : QList<ActionStep>{};
+    };
+    // An error the window shows is a failure: the message box is closed and reported, so nothing waits on it.
+    QTimer watchdog;
+    QString current;
+    QObject::connect(&watchdog, &QTimer::timeout, [&] {
+        if (auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
+            std::fprintf(stderr, "%s: the window showed \"%s\"\n", qPrintable(current), qPrintable(box->text()));
+            failures++;
+            box->reject();
+        }
+    });
+    watchdog.start(20);
+    for (const Converted& step : steps) {
+        current = step.label;
+        before(a, step);
+        recordedBefore.push_back(int(recorded().size()));
+        const auto history = a.undoNames();   // (the list is capped: compare it, not its length)
+        if (!step.ui(w, a)) { std::fprintf(stderr, "%s: could not be done through the interface\n", qPrintable(step.label)); failures++; }
+        if (a.undoNames() == history) { std::fprintf(stderr, "%s left no history step\n", qPrintable(step.label)); failures++; }
+    }
+    watchdog.stop();
+    ActionLibrary::instance().stopRecording();
+    const QList<ActionStep> steps_ = recorded();
+    ActionLibrary::instance().remove(QStringLiteral("menu-commands self-test"));
+    recordedBefore.push_back(int(steps_.size()));
+    const QString viaInterface = describe(a);
+
+    // Actions recorded each command once, as the method automation runs.
+    for (size_t i = 0; i < steps.size(); i++) {
+        QStringList got;
+        for (int k = recordedBefore[i]; k < recordedBefore[i + 1]; k++) got << steps_[k].method;
+        if (got != steps[i].methods) { std::fprintf(stderr, "%s recorded [%s], expected [%s]\n", qPrintable(steps[i].label), qPrintable(got.join(", ")), qPrintable(steps[i].methods.join(", "))); failures++; }
+    }
+
+    // Automation: the recorded requests, sent as the socket sends them.
+    AutomationServer* engine = w.automationEngine();
+    w.newTab();
+    EditorSession& b = *w.session();
+    prepare(b);
+    for (size_t i = 0; i < steps.size(); i++) {
+        before(b, steps[i]);
+        for (int k = recordedBefore[i]; k < recordedBefore[i + 1]; k++) {
+            const QJsonObject reply = engine->handle(QJsonObject{{"jsonrpc", "2.0"}, {"id", 1}, {"method", steps_[k].method}, {"params", steps_[k].params}});
+            if (reply.contains("error")) { std::fprintf(stderr, "%s: %s\n", qPrintable(steps_[k].method), qPrintable(reply.value("error").toObject().value("message").toString())); failures++; }
+        }
+    }
+    const QString viaAutomation = describe(b);
+
+    // The interface's own calls, as before the command path.
+    w.newTab();
+    EditorSession& c = *w.session();
+    c.commandReady = [] { return false; };
+    prepare(c);
+    for (size_t i = 0; i < steps.size(); i++) {
+        before(c, steps[i]);
+        steps[i].direct(c, steps_.mid(recordedBefore[i], recordedBefore[i + 1] - recordedBefore[i]));
+        QApplication::processEvents();
+    }
+    const QString direct = describe(c);
+
+    if (viaInterface != viaAutomation) {
+        std::fprintf(stderr, "menu commands: the interface and automation differ:\n--- interface\n%s\n--- automation\n%s\n", qPrintable(viaInterface), qPrintable(viaAutomation));
+        failures++;
+    }
+    if (viaInterface != direct) {
+        std::fprintf(stderr, "menu commands: the command path changed what the interface does:\n--- now\n%s\n--- before\n%s\n", qPrintable(viaInterface), qPrintable(direct));
+        failures++;
+    }
+    std::printf("menu commands: %d checked, %s\n", int(steps.size()), failures ? "FAILED" : "ok");
+    return failures;
+}
+
 /// Ruler guides through the pointer: one pulled out of the top ruler, moved with the Move tool, dragged off the
 /// canvas; each an undo step named as Photoshop names it, and undone again.
 int guides(MainWindow& w) {
@@ -307,7 +658,10 @@ int canvasMenus(MainWindow& w) {
 } // namespace
 
 int runSelfTest(MainWindow& window, const QString& name) {
-    if (name == QLatin1String("command-path")) return commandPath(window);
+    if (name == QLatin1String("command-path")) {
+        const int first = commandPath(window);
+        return menuCommands(window) || first ? 1 : 0;
+    }
     if (name == QLatin1String("guides")) return guides(window);
     if (name == QLatin1String("canvas-menus")) return canvasMenus(window);
     std::fprintf(stderr, "unknown self-test %s (command-path, guides, canvas-menus)\n", qPrintable(name));
