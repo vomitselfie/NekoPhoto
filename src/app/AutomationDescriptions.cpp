@@ -130,7 +130,7 @@ const MethodDoc methodDocs[] = {
     // layers
     {"layers.list", "The layer tree, top first: id, name, depth, kind, visibility, opacity, blend, transform, mask, text.",
      "thumbnails:bool=false Add each pixel layer's 96 px thumbnail as base64 PNG"},
-    {"layers.get", "One layer, as layers.list reports it.", "id:layer! The layer"},
+    {"layers.get", "One layer, as layers.list reports it, with its Blend If ranges when it has any.", "id:layer! The layer"},
     {"layers.style", "A layer's effects (Photoshop's layer style): each kind as a list, the ones switched off too.", "id:layer! The layer"},
     {"layers.setStyle", "Replace a layer's effects, shaped as layers.style shows (settings left out take Photoshop's defaults; an empty object clears the style).",
      "id:layer! The layer; style:object! dropShadows, innerShadows, outerGlows, innerGlows, bevels, satins, colorOverlays, gradientOverlays, patternOverlays, strokes (lists), visible, maskHidesEffects, blendInteriorAsGroup"},
@@ -142,7 +142,8 @@ const MethodDoc methodDocs[] = {
     {"layers.select", "Make a layer (or its mask) active, or select several.",
      "id:layer The layer (the primary one with ids); ids:array Several layer ids; mask:bool=false Select the layer's mask for painting and filters"},
     {"layers.set", "Change a layer's properties.",
-     "id:layer! The layer; name:string New name; visible:bool Shown; opacity:number 0..1; blend:<blend> Blend mode; sampling:<sampling> How it is resampled when transformed; clipping:bool Clip to the layer beneath"},
+     "id:layer! The layer; name:string New name; visible:bool Shown; opacity:number 0..1; blend:<blend> Blend mode; sampling:<sampling> How it is resampled when transformed; clipping:bool Clip to the layer beneath; "
+     "blendIf:object Blending Options' Blend If: channels (gray, red, green, blue; gray, cyan, magenta, yellow, black; lightness, a, b) each with thisLayer and/or underlying as [black low, black high, white low, white high] 0..255 (split handles when low differs from high); channels left out stay; reset true clears the others first"},
     {"layers.add", "Add a layer above the active one and make it active.",
      "kind:(pixels|group|adjustment|text)=pixels What to add; name:string Its name; below:bool=false Put a pixel layer under the active one instead; "
      "adjustmentKind:<adjustment> For kind adjustment; settings:object For kind adjustment: settings as adjustments.defaults shows them; "

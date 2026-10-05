@@ -21,6 +21,65 @@ using namespace app::rpc;
 
 namespace app {
 
+namespace {
+
+/// Blend If's channels by their automation names in a colour mode (gray, red, green, blue; gray, cyan, magenta,
+/// yellow, black; lightness, a, b), as indices into BlendIf::channels.
+QString blendIfKey(ColorMode mode, int channel) { return QString::fromLatin1(blendIfChannelName(mode, channel)).toLower(); }
+
+QJsonArray rangeJson(const BlendIfRange& r) { return QJsonArray{r.blackLow, r.blackHigh, r.whiteLow, r.whiteHigh}; }
+
+/// A layer's Blend If as layers.get reports it: each channel the mode offers, This Layer and Underlying Layer as
+/// [black low, black high, white low, white high].
+QJsonObject blendIfJson(const BlendIf& b, ColorMode mode) {
+    QJsonObject o;
+    for (int c : blendIfChannels(mode))
+        o[blendIfKey(mode, c)] = QJsonObject{{"thisLayer", rangeJson(b.channels[size_t(c)].thisLayer)}, {"underlying", rangeJson(b.channels[size_t(c)].underlying)}};
+    return o;
+}
+
+/// layers.set's `blendIf` over the layer's current ranges: the channels given change; `reset` true starts from none.
+BlendIf blendIfFrom(const QJsonValue& v, BlendIf b, ColorMode mode) {
+    if (!v.isObject()) fail("blendIf must be an object of channels", invalidParams);
+    const QJsonObject o = v.toObject();
+    if (o.contains("reset")) {
+        if (!o["reset"].isBool()) fail("blendIf.reset must be true or false", invalidParams);
+        if (o["reset"].toBool()) b = BlendIf{};
+    }
+    const std::vector<int> offered = blendIfChannels(mode);
+    for (auto it = o.begin(); it != o.end(); ++it) {
+        if (it.key() == QLatin1String("reset")) continue;
+        int channel = -1;
+        for (int c : offered) if (blendIfKey(mode, c) == it.key()) channel = c;
+        if (channel < 0) {
+            QStringList names;
+            for (int c : offered) names << blendIfKey(mode, c);
+            fail("unknown Blend If channel '" + it.key() + "'; this document offers " + names.join(", "), invalidParams);
+        }
+        if (!it.value().isObject()) fail("blendIf." + it.key() + " must be an object with thisLayer and/or underlying", invalidParams);
+        const QJsonObject ch = it.value().toObject();
+        for (auto r = ch.begin(); r != ch.end(); ++r) {
+            if (r.key() != QLatin1String("thisLayer") && r.key() != QLatin1String("underlying"))
+                fail("blendIf." + it.key() + " takes thisLayer and underlying, not " + r.key(), invalidParams);
+            const QJsonArray a = r.value().toArray();
+            int v4[4];
+            bool ok = a.size() == 4;
+            for (int i = 0; ok && i < 4; i++) {
+                const double d = a[i].toDouble(-1);
+                ok = a[i].isDouble() && d >= 0 && d <= 255 && d == std::floor(d);
+                v4[i] = int(d);
+            }
+            if (!ok || !(v4[0] <= v4[1] && v4[1] <= v4[2] && v4[2] <= v4[3]))
+                fail("blendIf." + it.key() + "." + r.key() + " must be [black low, black high, white low, white high], whole numbers 0..255 in order", invalidParams);
+            BlendIfRange& range = r.key() == QLatin1String("thisLayer") ? b.channels[size_t(channel)].thisLayer : b.channels[size_t(channel)].underlying;
+            range = BlendIfRange{uint8_t(v4[0]), uint8_t(v4[1]), uint8_t(v4[2]), uint8_t(v4[3])};
+        }
+    }
+    return b;
+}
+
+} // namespace
+
 void AutomationServer::registerLayersHandlers() {
     MainWindow* w = window_;
     const SessionOf session{w};
@@ -244,7 +303,13 @@ void AutomationServer::registerLayersHandlers() {
         }
         return out;
     });
-    add("layers.get", [layer](const QJsonObject& p) { return layerJson(layer(p), 0); });
+    add("layers.get", [session, layer](const QJsonObject& p) {
+        const Layer& l = layer(p);
+        QJsonObject o = layerJson(l, 0);
+        const ColorMode mode = session()->document()->colorMode;
+        if (auto b = layerBlendIf(l, mode)) o["blendIf"] = blendIfJson(*b, mode);
+        return o;
+    });
     add("layers.style", [session, layer](const QJsonObject& p) {
         const std::string json = layerStyleToJson(session()->layerStyle(layer(p).id));
         return QJsonDocument::fromJson(QByteArray::fromStdString(json)).object();
@@ -334,8 +399,17 @@ void AutomationServer::registerLayersHandlers() {
             if (!s->canToggleClippingMask(id)) fail("this layer can't be clipped (it needs a pixel layer beneath it in the same folder)");
             s->toggleClippingMask(id);
         }
+        const ColorMode mode = s->document()->colorMode;
+        if (has(p, "blendIf")) {
+            const Layer* current = s->document()->find(id);
+            const BlendIf b = blendIfFrom(p["blendIf"], current ? editableBlendIf(*current, mode) : BlendIf{}, mode);
+            if (!s->setLayerBlendIf(id, b)) fail("Blend If can't be changed now");
+        }
         const Layer* now = s->document()->find(id);
-        return now ? layerJson(*now, 0) : QJsonObject{};
+        if (!now) return QJsonObject{};
+        QJsonObject o = layerJson(*now, 0);
+        if (auto b = layerBlendIf(*now, mode)) o["blendIf"] = blendIfJson(*b, mode);
+        return o;
     });
     add("layers.add", [session, document](const QJsonObject& p) {
         document();

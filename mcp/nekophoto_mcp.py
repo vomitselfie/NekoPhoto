@@ -441,9 +441,11 @@ def layers_get(id: str) -> str:
 
 
 @edit("Set layer properties")
-def layers_set(id: str, name: Optional[str] = None, visible: Optional[bool] = None, opacity: Optional[float] = None, blend: Optional[str] = None, clipping: Optional[bool] = None) -> str:
-    """Change a layer's name, visibility, opacity (0..1), blend mode (any of Photoshop's: Normal, Dissolve, Darken, Multiply, Color Burn, Linear Burn, Darker Color, Lighten, Screen, Color Dodge, Linear Dodge (Add), Lighter Color, Overlay, Soft Light, Hard Light, Vivid Light, Linear Light, Pin Light, Hard Mix, Difference, Exclusion, Subtract, Divide, Hue, Saturation, Color, Luminosity; a folder also Pass Through) or whether it clips to the layer beneath."""
-    return text(call("layers.set", id=id, name=name, visible=visible, opacity=opacity, blend=blend, clipping=clipping))
+def layers_set(id: str, name: Optional[str] = None, visible: Optional[bool] = None, opacity: Optional[float] = None, blend: Optional[str] = None, clipping: Optional[bool] = None,
+               blend_if: Optional[dict] = None) -> str:
+    """Change a layer's name, visibility, opacity (0..1), blend mode (any of Photoshop's: Normal, Dissolve, Darken, Multiply, Color Burn, Linear Burn, Darker Color, Lighten, Screen, Color Dodge, Linear Dodge (Add), Lighter Color, Overlay, Soft Light, Hard Light, Vivid Light, Linear Light, Pin Light, Hard Mix, Difference, Exclusion, Subtract, Divide, Hue, Saturation, Color, Luminosity; a folder also Pass Through) or whether it clips to the layer beneath.
+    blend_if is Blending Options' Blend If: channels (gray, red, green, blue; in CMYK gray, cyan, magenta, yellow, black; in Lab lightness, a, b), each with thisLayer and/or underlying as [black low, black high, white low, white high] 0..255; a split handle is low != high and fades between them. Example: {"gray": {"underlying": [0, 0, 120, 200]}} lets the layer show only over darker pixels, fading out from 120 to 200. Channels left out stay; {"reset": true} clears them. layers_get reports blendIf."""
+    return text(call("layers.set", id=id, name=name, visible=visible, opacity=opacity, blend=blend, clipping=clipping, blendIf=blend_if))
 
 
 @edit("Add a layer")

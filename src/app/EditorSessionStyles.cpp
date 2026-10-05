@@ -10,7 +10,29 @@ namespace app {
 
 LayerStyle EditorSession::layerStyle(const Uuid& id) const {
     const Layer* layer = document_ ? document_->find(id) : nullptr;
-    return layer ? editableLayerStyle(*layer, *document_) : LayerStyle{};
+    if (!layer) return LayerStyle{};
+    LayerStyle style = editableLayerStyle(*layer, *document_);
+    style.blendIf = editableBlendIf(*layer, document_->colorMode);
+    return style;
+}
+
+/// The style's effects and, when it holds them, its Blend If ranges.
+void EditorSession::giveLayerStyle(Layer& layer, const LayerStyle& style) {
+    setLayerStyle(layer, style);
+    if (style.blendIf) compositor::setLayerBlendIf(layer, *style.blendIf, document_->colorMode);
+}
+
+bool EditorSession::setLayerBlendIf(const Uuid& id, const BlendIf& blendIf) {
+    if (!canEditLayers() || styleEditLayer_) return false;
+    const Layer* layer = document_->find(id);
+    if (!layer) return false;
+    Layer probe = *layer;
+    if (!compositor::setLayerBlendIf(probe, blendIf, document_->colorMode)) return true;   // already so
+    beginEdit(QT_TRANSLATE_NOOP("History", "Blending Options"));
+    compositor::setLayerBlendIf(*document_->find(id), blendIf, document_->colorMode);
+    endEdit();
+    notifyDocument();
+    return true;
 }
 
 bool EditorSession::canStyleLayer(const Uuid& id) const {
@@ -35,7 +57,7 @@ void EditorSession::previewLayerStyle(const LayerStyle& style) {
     if (!layer) return;
     // A pattern chosen from the preset library joins the document's patterns, as Photoshop's picker does.
     addDocumentPatterns(*document_, PresetLibrary::instance().patternsFor(style));
-    setLayerStyle(*layer, style);
+    giveLayerStyle(*layer, style);
     emit documentChanged({});
 }
 
@@ -57,7 +79,7 @@ bool EditorSession::applyLayerStyle(const Uuid& id, const LayerStyle& style) {
     if (styleEditLayer_ || !canStyleLayer(id)) return false;
     beginEdit(QT_TRANSLATE_NOOP("History", "Layer Style"));
     addDocumentPatterns(*document_, PresetLibrary::instance().patternsFor(style));   // library patterns it names
-    setLayerStyle(*document_->find(id), style);
+    giveLayerStyle(*document_->find(id), style);
     endEdit();
     notifyDocument();
     return true;
@@ -95,7 +117,7 @@ void EditorSession::pasteLayerStyle() {
     if (refusedAtDepth("edit.style", tr("Layer styles"))) return;
     if (!styleClipboard_ || !activeLayerId_ || !canStyleLayer(*activeLayerId_)) return;
     beginEdit(QT_TRANSLATE_NOOP("History", "Paste Layer Style"));
-    setLayerStyle(*activeLayerMutable(), *styleClipboard_);
+    giveLayerStyle(*activeLayerMutable(), *styleClipboard_);
     endEdit();
     notifyDocument();
 }

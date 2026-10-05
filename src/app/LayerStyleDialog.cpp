@@ -9,6 +9,9 @@
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMouseEvent>
+#include <QPainter>
+#include <QPainterPath>
 #include <QListWidget>
 #include <QPushButton>
 #include <QStackedWidget>
@@ -30,6 +33,13 @@ const char* const kBlendNames[] = {"Normal", "Dissolve", "Darken", "Multiply", "
                                    "Color", "Luminosity"};
 constexpr int kBlendCount = int(std::size(kBlendNames));
 
+/// Blend If's channel names (blendIfChannelName), for translation.
+[[maybe_unused]] const char* const kBlendIfChannelNames[] = {
+    QT_TRANSLATE_NOOP("app::LayerStyleDialog", "Gray"), QT_TRANSLATE_NOOP("app::LayerStyleDialog", "Red"), QT_TRANSLATE_NOOP("app::LayerStyleDialog", "Green"),
+    QT_TRANSLATE_NOOP("app::LayerStyleDialog", "Blue"), QT_TRANSLATE_NOOP("app::LayerStyleDialog", "Cyan"), QT_TRANSLATE_NOOP("app::LayerStyleDialog", "Magenta"),
+    QT_TRANSLATE_NOOP("app::LayerStyleDialog", "Yellow"), QT_TRANSLATE_NOOP("app::LayerStyleDialog", "Black"), QT_TRANSLATE_NOOP("app::LayerStyleDialog", "Lightness"),
+    QT_TRANSLATE_NOOP("app::LayerStyleDialog", "a"), QT_TRANSLATE_NOOP("app::LayerStyleDialog", "b")};
+
 void paintSwatch(QPushButton* button, StyleColor c) {
     button->setStyleSheet(QStringLiteral("background-color: rgb(%1,%2,%3); min-width: 48px;").arg(c.r).arg(c.g).arg(c.b));
 }
@@ -40,6 +50,115 @@ T* firstOf(std::vector<T>& list, bool& madeUp) {
     if (list.empty()) { list.push_back(T{}); list.back().enabled = false; madeUp = true; }
     return &list.front();
 }
+
+/// One of Blend If's sliders: a gradient bar for the channel and its black and white handles. A handle drags as one
+/// until Alt splits it (Photoshop's Alt-drag); then each half moves alone, and between them the layer fades.
+class BlendIfSlider : public QWidget {
+public:
+    BlendIfSlider(std::function<void()> changed, QWidget* parent) : QWidget(parent), changed_(std::move(changed)) {
+        setMinimumSize(256 + 2 * kMargin, 44);
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        setToolTip(LayerStyleDialog::tr("Drag the black and white handles; Alt-drag splits a handle so the layer fades between the halves."));
+    }
+    void setRange(BlendIfRange* range, QColor from, QColor to) { range_ = range; from_ = from; to_ = to; update(); }
+
+protected:
+    static constexpr int kMargin = 7, kBar = 12;
+    double xOf(int v) const { return kMargin + v * double(width() - 2 * kMargin) / 255.0; }
+    int valueAt(double x) const { return std::clamp(int(std::lround((x - kMargin) * 255.0 / std::max(1, width() - 2 * kMargin))), 0, 255); }
+
+    void paintEvent(QPaintEvent*) override {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        const QRectF bar(kMargin, 2, width() - 2 * kMargin, kBar);
+        QLinearGradient g(bar.topLeft(), bar.topRight());
+        g.setColorAt(0, from_);
+        g.setColorAt(1, to_);
+        p.fillRect(bar, g);
+        p.setPen(palette().color(QPalette::Mid));
+        p.drawRect(bar);
+        if (!range_) return;
+        auto handle = [&](int v, bool black, int half) {
+            // A whole handle is a triangle; a split one shows its two halves, each half a triangle.
+            const double x = xOf(v), top = bar.bottom() + 1, h = 10, w = 6;
+            QPainterPath path;
+            if (half == 0) { path.moveTo(x, top); path.lineTo(x - w, top + h); path.lineTo(x + w, top + h); }
+            else if (half < 0) { path.moveTo(x, top); path.lineTo(x - w, top + h); path.lineTo(x, top + h); }
+            else { path.moveTo(x, top); path.lineTo(x, top + h); path.lineTo(x + w, top + h); }
+            path.closeSubpath();
+            p.setPen(QPen(black ? QColor(200, 200, 200) : QColor(40, 40, 40), 1));
+            p.setBrush(black ? QColor(0, 0, 0) : QColor(255, 255, 255));
+            p.drawPath(path);
+        };
+        const BlendIfRange& r = *range_;
+        if (r.blackLow == r.blackHigh) handle(r.blackLow, true, 0); else { handle(r.blackLow, true, -1); handle(r.blackHigh, true, 1); }
+        if (r.whiteLow == r.whiteHigh) handle(r.whiteLow, false, 0); else { handle(r.whiteLow, false, -1); handle(r.whiteHigh, false, 1); }
+        // The values, as Photoshop prints them under the bar ("20 / 40" for a split handle).
+        auto label = [](int a, int b) { return a == b ? QString::number(a) : QStringLiteral("%1 / %2").arg(a).arg(b); };
+        p.setPen(palette().color(QPalette::WindowText));
+        const QRectF text(kMargin, bar.bottom() + 12, width() - 2 * kMargin, height() - bar.bottom() - 12);
+        p.drawText(text, Qt::AlignLeft | Qt::AlignVCenter, label(r.blackLow, r.blackHigh));
+        p.drawText(text, Qt::AlignRight | Qt::AlignVCenter, label(r.whiteLow, r.whiteHigh));
+    }
+
+    void mousePressEvent(QMouseEvent* e) override {
+        if (!range_ || e->button() != Qt::LeftButton) return;
+        const double x = e->position().x();
+        const bool alt = e->modifiers() & Qt::AltModifier;
+        BlendIfRange& r = *range_;
+        // The nearest handle; a whole one drags whole unless Alt splits it (the inner half moves).
+        struct Pick { uint8_t* a; uint8_t* b; int v; };
+        std::vector<Pick> picks;
+        if (r.blackLow == r.blackHigh) picks.push_back(alt ? Pick{&r.blackHigh, nullptr, r.blackHigh} : Pick{&r.blackLow, &r.blackHigh, r.blackLow});
+        else { picks.push_back({&r.blackLow, nullptr, r.blackLow}); picks.push_back({&r.blackHigh, nullptr, r.blackHigh}); }
+        if (r.whiteLow == r.whiteHigh) picks.push_back(alt ? Pick{&r.whiteLow, nullptr, r.whiteLow} : Pick{&r.whiteLow, &r.whiteHigh, r.whiteLow});
+        else { picks.push_back({&r.whiteLow, nullptr, r.whiteLow}); picks.push_back({&r.whiteHigh, nullptr, r.whiteHigh}); }
+        double best = 1e9;
+        for (const Pick& k : picks) {
+            const double d = std::abs(xOf(k.v) - x);
+            // Ties (a black and a white handle on one spot) go to the one that can move toward the click: white
+            // to the right, black to the left.
+            const bool white = k.a == &r.whiteLow || k.a == &r.whiteHigh;
+            if (d < best || (d == best && (x > xOf(k.v)) == white)) { best = d; drag_ = k.a; dragPair_ = k.b; }
+        }
+        if (best > 10) { drag_ = dragPair_ = nullptr; return; }
+        // Alt on a whole handle: the half that moves is the one on the side it is dragged to.
+        splitting_ = alt && !dragPair_ && ((drag_ == &r.blackHigh && r.blackLow == r.blackHigh) || (drag_ == &r.whiteLow && r.whiteLow == r.whiteHigh));
+        mouseMoveEvent(e);
+    }
+
+    void mouseMoveEvent(QMouseEvent* e) override {
+        if (!range_ || !drag_) return;
+        BlendIfRange& r = *range_;
+        const int v = valueAt(e->position().x());
+        const BlendIfRange before = r;
+        if (splitting_) {
+            if (drag_ == &r.blackHigh && v < r.blackLow) { drag_ = &r.blackLow; splitting_ = false; }
+            else if (drag_ == &r.whiteLow && v > r.whiteHigh) { drag_ = &r.whiteHigh; splitting_ = false; }
+            else if (v != (drag_ == &r.blackHigh ? r.blackHigh : r.whiteLow)) splitting_ = false;
+        }
+        // Each half stays on its side: black low <= black high <= white low <= white high.
+        auto clampTo = [](int value, int lo, int hi) { return std::clamp(value, lo, std::max(lo, hi)); };
+        if (dragPair_) {
+            if (drag_ == &r.blackLow) { r.blackLow = r.blackHigh = uint8_t(clampTo(v, 0, r.whiteLow)); }
+            else { r.whiteLow = r.whiteHigh = uint8_t(clampTo(v, r.blackHigh, 255)); }
+        } else if (drag_ == &r.blackLow) r.blackLow = uint8_t(clampTo(v, 0, r.blackHigh));
+        else if (drag_ == &r.blackHigh) r.blackHigh = uint8_t(clampTo(v, r.blackLow, r.whiteLow));
+        else if (drag_ == &r.whiteLow) r.whiteLow = uint8_t(clampTo(v, r.blackHigh, r.whiteHigh));
+        else if (drag_ == &r.whiteHigh) r.whiteHigh = uint8_t(clampTo(v, r.whiteLow, 255));
+        if (!(r == before)) { update(); changed_(); }
+    }
+
+    void mouseReleaseEvent(QMouseEvent*) override { drag_ = dragPair_ = nullptr; splitting_ = false; }
+
+private:
+    std::function<void()> changed_;
+    BlendIfRange* range_ = nullptr;
+    uint8_t* drag_ = nullptr;
+    uint8_t* dragPair_ = nullptr;
+    bool splitting_ = false;
+    QColor from_ = Qt::black, to_ = Qt::white;
+};
 
 } // namespace
 
@@ -76,6 +195,7 @@ LayerStyleDialog::LayerStyleDialog(EditorSession* session, const Uuid& layer, QW
     checkRow(blending, tr("Show effects"), &style_.visible);
     checkRow(blending, tr("Layer mask hides effects"), &style_.maskHidesEffects);
     checkRow(blending, tr("Blend interior effects as group"), &style_.blendInteriorAsGroup);
+    blendIfRows(blending);
     addEffectPages();
 
     connect(list_, &QListWidget::currentRowChanged, pages_, &QStackedWidget::setCurrentIndex);
@@ -144,6 +264,38 @@ LayerStyle LayerStyleDialog::output() const {
 }
 
 // ---- Pages ---------------------------------------------------------------------------------------------------
+
+void LayerStyleDialog::blendIfRows(QFormLayout* form) {
+    // Blend If: the channel, then This Layer's and Underlying Layer's sliders for it (blendif.h).
+    if (!style_.blendIf) style_.blendIf = BlendIf{};
+    const ColorMode mode = session_ && session_->document() ? session_->document()->colorMode : ColorMode::RGB;
+    const std::vector<int> channels = blendIfChannels(mode);
+    auto* combo = new QComboBox;
+    for (int c : channels) combo->addItem(tr(blendIfChannelName(mode, c)), c);
+    auto* thisLayer = new BlendIfSlider([this] { changed(); }, this);
+    auto* underlying = new BlendIfSlider([this] { changed(); }, this);
+    auto show = [this, mode, combo, thisLayer, underlying] {
+        const int c = combo->currentData().toInt();
+        // The bar runs through the channel's own colour: grey for Gray and Lightness, the ink or primary otherwise.
+        QColor to = Qt::white;
+        if (mode == ColorMode::RGB) to = c == 1 ? QColor(255, 0, 0) : c == 2 ? QColor(0, 255, 0) : c == 3 ? QColor(0, 0, 255) : Qt::white;
+        if (mode == ColorMode::CMYK) to = c == 1 ? QColor(0, 174, 239) : c == 2 ? QColor(236, 0, 140) : c == 3 ? QColor(255, 242, 0) : Qt::white;
+        QColor from = Qt::black;
+        if (mode == ColorMode::Lab && c == 2) { from = QColor(0, 160, 120); to = QColor(220, 0, 120); }
+        if (mode == ColorMode::Lab && c == 3) { from = QColor(40, 80, 220); to = QColor(240, 220, 0); }
+        thisLayer->setRange(&style_.blendIf->channels[size_t(c)].thisLayer, from, to);
+        underlying->setRange(&style_.blendIf->channels[size_t(c)].underlying, from, to);
+    };
+    connect(combo, &QComboBox::currentIndexChanged, this, show);
+    show();
+    auto* heading = new QLabel(tr("Blend If"));
+    QFont bold = heading->font();
+    bold.setBold(true);
+    heading->setFont(bold);
+    form->addRow(heading, combo);
+    form->addRow(tr("This Layer"), thisLayer);
+    form->addRow(tr("Underlying Layer"), underlying);
+}
 
 void LayerStyleDialog::addEffectPages() {
     const QStringList techniques{tr("Softer"), tr("Precise")};

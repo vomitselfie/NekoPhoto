@@ -625,6 +625,8 @@ public:
     /// A layer's style for editing (every effect, the ones switched off too); empty when it has none.
     compositor::LayerStyle layerStyle(const compositor::Uuid& id) const;
     bool canStyleLayer(const compositor::Uuid& id) const;
+    /// Blending Options' Blend If (blendif.h) on any layer, folders and adjustment layers too: one undo step.
+    bool setLayerBlendIf(const compositor::Uuid& id, const compositor::BlendIf& blendIf);
     /// The Layer Style dialog's live edit: begin, show each change on the layer, then keep it as one undo step or put
     /// the layer back as it was (its carried style bytes untouched when nothing changed).
     bool beginLayerStyleEdit(const compositor::Uuid& id);
@@ -1093,6 +1095,7 @@ private:
     bool wandRetuning_ = false;   // the internal undo of a retune is not a user's undo of a wand click
     bool adjustmentEditing_ = false;
     std::optional<compositor::Uuid> styleEditLayer_;
+    void giveLayerStyle(compositor::Layer& layer, const compositor::LayerStyle& style);
     std::shared_ptr<const compositor::PsdLayerCarry> styleEditCarry_;
     std::shared_ptr<const compositor::PsdDocumentCarry> styleEditDocumentCarry_;   // put back on Cancel (patterns the preview added)
     std::optional<compositor::LayerStyle> styleClipboard_;

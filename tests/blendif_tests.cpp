@@ -4,11 +4,14 @@
 #include "compositor/blendif.h"
 #include "compositor/document.h"
 #include "compositor/psd.h"
+#include "compositor/project.h"
 #include "compositor/psd_carry.h"
+#include "compositor/psd_writer.h"
 #include "compositor/render.h"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <string>
@@ -124,6 +127,36 @@ TEST_CASE(editing_keeps_unchanged_bytes) {
     CHECK(layer.psdCarry == carry);   // the same bytes, not a copy
     CHECK(setLayerBlendIf(layer, BlendIf{}, ColorMode::RGB));
     CHECK(!layerBlendIf(layer, ColorMode::RGB).has_value());
+}
+
+TEST_CASE(edited_ranges_survive_psd_export_and_projects) {
+    Document doc(8, 8);
+    Layer layer("L", doc.size());
+    auto image = std::make_shared<Image>(8, 8);
+    for (size_t i = 0; i < image->byteCount(); i++) image->data()[i] = uint8_t(i * 7);
+    for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++) image->row(y)[x * 4 + 3] = 255;
+    layer.asset = Asset::make(image, "L");
+    BlendIf b;
+    b.channels[0].underlying = {0, 0, 120, 200};
+    b.channels[2].thisLayer = {5, 60, 255, 255};
+    REQUIRE(setLayerBlendIf(layer, b, ColorMode::RGB));
+    doc.layers.push_back(layer);
+    // PSD: written into the record and read back.
+    std::string error;
+    const auto bytes = encodePsd(doc, PsdExportOptions(), nullptr, &error);
+    REQUIRE(!bytes.empty());
+    auto back = importPsdBytes(bytes, &error);
+    REQUIRE(back.has_value());
+    REQUIRE(!back->document.layers.empty());
+    CHECK(editableBlendIf(back->document.layers.back(), ColorMode::RGB) == b);
+    // A project keeps the carry.
+    const std::string path = (std::filesystem::temp_directory_path() / "blendif_tests.comp").string();
+    ProjectError projectError;
+    REQUIRE(saveProject(doc, std::nullopt, path, projectError));
+    auto loaded = loadProject(path, projectError);
+    REQUIRE(loaded.has_value());
+    CHECK(editableBlendIf(loaded->layers.back(), ColorMode::RGB) == b);
+    std::filesystem::remove_all(path);
 }
 
 TEST_CASE(photoshop_fixture_matches_photoshops_render) {
