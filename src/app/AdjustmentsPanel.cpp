@@ -2,6 +2,7 @@
 #include "Names.h"
 #include "AdjustmentsPanel.h"
 #include "compositor/modeedit.h"
+#include "compositor/histogram.h"
 #include <QVBoxLayout>
 
 using namespace compositor;
@@ -18,6 +19,19 @@ AdjustmentsPanel::AdjustmentsPanel(EditorSession* session, QWidget* parent) : QW
     editor_->setSession(session_);
     layout->addWidget(editor_);
     layout->addStretch();
+    // The clipping display shows what the adjustment would clip of everything beneath it.
+    editor_->setClippingSource([this]() -> std::optional<AdjustmentEditor::ClippingSource> {
+        if (!layerId_ || !session_->document()) return std::nullopt;
+        Document below = *session_->document();
+        const int index = below.indexOf(*layerId_);
+        if (index < 0) return std::nullopt;
+        below.layers.erase(below.layers.begin() + index, below.layers.end());
+        const double scale = std::min(1.0, double(AdjustmentEditor::clippingLimit) / std::max({1, below.width, below.height}));
+        AnyImage image = renderComposite(below, scale);
+        if (!image) return std::nullopt;
+        const Affine toDocument = Affine::scaling(double(below.width) / image.width(), double(below.height) / image.height());
+        return AdjustmentEditor::ClippingSource{image, toDocument, below.colorMode, below.profile, session_->documentCurve()};
+    });
     connect(editor_, &AdjustmentEditor::editStarted, this, [this] { if (layerId_) { session_->beginAdjustmentEdit(); editing_ = true; } });
     connect(editor_, &AdjustmentEditor::settingsChanged, this, [this](const AdjustmentSettings& s) { if (layerId_) session_->setAdjustment(*layerId_, s); });
     connect(editor_, &AdjustmentEditor::editFinished, this, [this] { if (editing_) { editing_ = false; session_->endAdjustmentEdit(); } });

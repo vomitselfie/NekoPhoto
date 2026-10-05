@@ -13,6 +13,7 @@
 #include "ActionLibrary.h"
 #include "ActionsPanel.h"
 #include "TimelinePanel.h"
+#include "HistogramPanel.h"
 #include "TextDialog.h"
 #include "PreferencesDialog.h"
 #include "ToolOptionsBar.h"
@@ -149,6 +150,20 @@ MainWindow::MainWindow() {
     tabifyDockWidget(channelsDock_, pathsDock_);
     dock->raise();   // Layers is the tab in front
     adjustDock_ = adjustDock;
+    // Histogram (Window menu), a tab beside Adjustments: it shares that column's width rather than widening it.
+    histogramDock_ = new QDockWidget(tr("Histogram"), this);
+    histogramDock_->setObjectName("histogramDock");
+    histogramDock_->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable);
+    histogram_ = new HistogramPanel;
+    // Scrolled too, so the Expanded View's statistics never make the column taller or squeeze the Layers panel.
+    auto* histogramScroll = new QScrollArea;
+    histogramScroll->setWidgetResizable(true);
+    histogramScroll->setFrameShape(QFrame::NoFrame);
+    histogramScroll->setWidget(histogram_);
+    histogramDock_->setWidget(histogramScroll);
+    addDockWidget(Qt::RightDockWidgetArea, histogramDock_);
+    tabifyDockWidget(adjustDock_, histogramDock_);
+    adjustDock_->raise();
     // Actions and Timeline (Window menu), hidden until asked for.
     actionsDock_ = new QDockWidget(tr("Actions"), this);
     actionsDock_->setObjectName("actionsDock");
@@ -258,6 +273,13 @@ MainWindow::MainWindow() {
         channelsDock_->show();
         layersDock_->raise();
         settings.setValue("window/channelsDockPlaced", 1);
+    }
+    // And one saved before the Histogram panel: it joins Adjustments as a tab once, behind it.
+    if (settings.value("window/histogramDockPlaced").toInt() < 1) {
+        tabifyDockWidget(adjustDock_, histogramDock_);
+        histogramDock_->show();
+        adjustDock_->raise();
+        settings.setValue("window/histogramDockPlaced", 1);
     }
     // The saved state remembers each tab's options bar by name, and only the current tab's is visible when the
     // window closes; restoring it could hide the bar of the tab this launch shows. The current tab owns the bar.
@@ -395,6 +417,7 @@ void MainWindow::switchTo(int index) {
     channelsStack_->setCurrentWidget(tab.channels);
     adjustStack_->setCurrentWidget(tab.adjustments);
     if (timeline_) timeline_->setSession(session_);
+    if (histogram_) histogram_->setSession(session_);
     tab.options->setVisible(true);
     // The import bar shows over its own document only.
     if (importBanner_) importBanner_->setVisible(bannerSession_ && bannerSession_ == session_ && !importBanner_->notes().isEmpty());
@@ -729,6 +752,7 @@ bool MainWindow::startAutomation(const QString& socketPath) {
 void MainWindow::showPanel(const QString& name) {
     if (name == "actions") { actionsDock_->show(); actionsDock_->raise(); }
     else if (name == "channels") { channelsDock_->show(); channelsDock_->raise(); }
+    else if (name == "histogram") { histogramDock_->show(); histogramDock_->raise(); }
     else if (name == "timeline") {
         timelineDock_->show();
         if (session_->hasDocument() && session_->document()->animation.empty()) session_->timelineFramesFromLayers();

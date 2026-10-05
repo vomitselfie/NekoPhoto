@@ -3078,10 +3078,6 @@ Working: %2</source>
         <translation>白</translation>
     </message>
     <message>
-        <source>Click the curve to add a point, drag to move, double-click to remove.</source>
-        <translation>カーブをクリックしてポイントを追加、ドラッグで移動、ダブルクリックで削除します。</translation>
-    </message>
-    <message>
         <source>Range</source>
         <translation>範囲</translation>
     </message>
@@ -3312,6 +3308,14 @@ Working: %2</source>
     <message>
         <source>Constant</source>
         <translation>定数</translation>
+    </message>
+    <message>
+        <source>Click the curve to add a point, drag to move, double-click to remove. Alt-drag the black or white point to see what it clips.</source>
+        <translation>カーブをクリックでポイントを追加、ドラッグで移動、ダブルクリックで削除。黒点・白点を Alt キーを押しながらドラッグすると、切り捨てられる部分を表示します。</translation>
+    </message>
+    <message>
+        <source>Show Clipping</source>
+        <translation>クリッピングを表示</translation>
     </message>
     <message>
         <source>No LUT loaded.</source>
@@ -5296,6 +5300,93 @@ File &gt; New creates a blank canvas.</source>
     </message>
 </context>
 <context>
+    <name>app::HistogramPanel</name>
+    <message>
+        <source>Channel:</source>
+        <translation>チャンネル:</translation>
+    </message>
+    <message>
+        <source>Histogram options</source>
+        <translation>ヒストグラムのオプション</translation>
+    </message>
+    <message>
+        <source>Uncached Refresh</source>
+        <translation>キャッシュなしのデータで更新</translation>
+    </message>
+    <message>
+        <source>Click to refresh the histogram from the image&apos;s own pixels (uncached)</source>
+        <translation>クリックすると画像のピクセルからヒストグラムを更新します(キャッシュなし)</translation>
+    </message>
+    <message>
+        <source>Source:</source>
+        <translation>ソース:</translation>
+    </message>
+    <message>
+        <source>Entire Image</source>
+        <translation>画像全体</translation>
+    </message>
+    <message>
+        <source>Selected Layer</source>
+        <translation>選択したレイヤー</translation>
+    </message>
+    <message>
+        <source>Adjustment Composite</source>
+        <translation>調整コンポジット</translation>
+    </message>
+    <message>
+        <source>Mean:</source>
+        <translation>平均値:</translation>
+    </message>
+    <message>
+        <source>Std Dev:</source>
+        <translation>標準偏差:</translation>
+    </message>
+    <message>
+        <source>Median:</source>
+        <translation>中間値:</translation>
+    </message>
+    <message>
+        <source>Pixels:</source>
+        <translation>ピクセル数:</translation>
+    </message>
+    <message>
+        <source>Level:</source>
+        <translation>レベル:</translation>
+    </message>
+    <message>
+        <source>Count:</source>
+        <translation>数:</translation>
+    </message>
+    <message>
+        <source>Percentile:</source>
+        <translation>パーセントの位置:</translation>
+    </message>
+    <message>
+        <source>Cache Level:</source>
+        <translation>キャッシュレベル:</translation>
+    </message>
+    <message>
+        <source>Compact View</source>
+        <translation>コンパクト表示</translation>
+    </message>
+    <message>
+        <source>Expanded View</source>
+        <translation>拡張表示</translation>
+    </message>
+    <message>
+        <source>Show Statistics</source>
+        <translation>統計情報を表示</translation>
+    </message>
+    <message>
+        <source>Luminosity</source>
+        <translation>輝度</translation>
+    </message>
+    <message>
+        <source>Colors</source>
+        <translation>カラー</translation>
+    </message>
+</context>
+<context>
     <name>app::ImportBanner</name>
     <message>
         <source>Import notes</source>
@@ -6092,6 +6183,10 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Channels</source>
         <translation>チャンネル</translation>
+    </message>
+    <message>
+        <source>Histogram</source>
+        <translation>ヒストグラム</translation>
     </message>
     <message>
         <source>Actions</source>
@@ -8080,6 +8175,10 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>&amp;Channels</source>
         <translation>チャンネル(&amp;C)</translation>
+    </message>
+    <message>
+        <source>&amp;Histogram</source>
+        <translation>ヒストグラム(&amp;H)</translation>
     </message>
     <message>
         <source>&amp;Timeline</source>

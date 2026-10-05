@@ -228,7 +228,7 @@ bool worksAtDepth(const QString& method, const EditorSession& session) {
         "history.beginGroup", "history.endGroup", "rpc.methods", "rpc.describe", "rpc.batch", "events.subscribe", "events.unsubscribe",
         "view.zoom", "view.exposure", "screenshot", "render", "colors.set", "color.settings", "presets.list", "brush.presets", "gmic.filters", "tool.select",
         "actions.list", "actions.record", "actions.save", "actions.delete", "actions.export", "actions.import", "actions.play", "actions.batch",
-        "document.new", "document.open", "document.close", "document.info", "document.overview",
+        "document.new", "document.open", "document.close", "document.info", "document.overview", "document.histogram",
         "layers.list", "layers.get", "layers.select", "layers.style", "layers.cage", "selection.info", "selection.render",
         "adjustments.get", "adjustments.defaults", "paths.list", "vectorMask.get", "shape.get", "smartObject.filters", "timeline.info",
         "artboards.list", "slices.list", "brush.import", "presets.import", "presets.remove", "channels.list"};

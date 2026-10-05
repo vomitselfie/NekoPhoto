@@ -1,6 +1,9 @@
 #include "Style.h"
 #include "Names.h"
 #include "AdjustmentEditor.h"
+#include "HistogramView.h"
+#include "ImageConvert.h"
+#include "compositor/histogram.h"
 #include <QMessageBox>
 #include <QFileInfo>
 #include <QFile>
@@ -26,50 +29,14 @@ using namespace compositor;
 
 namespace app {
 
-// ---- Histogram --------------------------------------------------------------------------
-
-class HistogramWidget : public QWidget {
-public:
-    explicit HistogramWidget(QWidget* parent = nullptr) : QWidget(parent) { setMinimumHeight(90); }
-    void setData(const std::vector<double>& bins, const LevelsRange& range) { bins_ = bins; range_ = range; update(); }
-protected:
-    void paintEvent(QPaintEvent*) override {
-        QPainter p(this);
-        p.fillRect(rect(), QColor(40, 40, 40));
-        if (bins_.size() != 256) return;
-        double peak = 0;
-        std::vector<double> interior;
-        for (size_t i = 1; i < 255; i++) if (bins_[i] > 0) interior.push_back(bins_[i]);
-        for (double b : bins_) peak = std::max(peak, b);
-        if (!interior.empty()) { std::sort(interior.begin(), interior.end()); peak = std::min(peak, interior[size_t((interior.size() - 1) * 0.95)] * 4); }
-        if (peak <= 0) return;
-        double w = width() / 256.0, h = height() - 14;
-        p.setPen(Qt::NoPen);
-        p.setBrush(QColor(200, 200, 200));
-        for (int i = 0; i < 256; i++) {
-            double v = std::min(1.0, bins_[size_t(i)] / peak);
-            p.drawRect(QRectF(i * w, h - v * h, std::max(1.0, w), v * h));
-        }
-        // Black, gamma and white markers.
-        LevelsRange r = range_.normalized();
-        double mid = r.black + (r.white - r.black) * std::pow(0.5, r.gamma);
-        auto marker = [&](double level, QColor color) {
-            double x = level / 255.0 * width();
-            QPolygonF tri{{x, h}, {x - 5, height() - 1.0}, {x + 5, height() - 1.0}};
-            p.setBrush(color); p.setPen(Qt::black); p.drawPolygon(tri);
-        };
-        marker(r.black, Qt::black); marker(mid, QColor(128, 128, 128)); marker(r.white, Qt::white);
-    }
-private:
-    std::vector<double> bins_;
-    LevelsRange range_;
-};
-
 // ---- Curve editor -------------------------------------------------------------------------
 
 class CurveWidget : public QWidget {
 public:
     std::function<void()> started, changed, finished;
+    /// The clipping display: 1 while the black point is dragged, 2 the white point, 0 when the drag ends.
+    std::function<void(int)> clipping;
+    bool showClipping = false;
     explicit CurveWidget(QWidget* parent = nullptr) : QWidget(parent) { setMinimumSize(200, 200); setCursor(Qt::CrossCursor); }
     void setSettings(const CurvesSettings& s) { settings_ = s; update(); }
     const CurvesSettings& settings() const { return settings_; }
@@ -86,7 +53,7 @@ protected:
         p.setPen(QColor(120, 120, 120)); p.drawLine(toView(0, 0), toView(255, 255));
         static const QColor colors[levelsChannelCount] = {QColor(230, 230, 230), QColor(230, 80, 80), QColor(80, 220, 80), QColor(90, 120, 255), QColor(160, 160, 160)};
         for (int c = levelsChannelCount - 1; c >= 0; c--) {
-            if (c != settings_.channel && settings_.channels[size_t(c)].size() == 2 && settings_.channels[size_t(c)][0].y == 0 && settings_.channels[size_t(c)][1].y == 255) continue;
+            if (c != settings_.channel && settings_.channels[size_t(c)].size() == 2 && settings_.channels[size_t(c)][0].y == 0 && settings_.channels[size_t(c)][1].y == 255 && settings_.channels[size_t(c)][0].x == 0 && settings_.channels[size_t(c)][1].x == 255) continue;
             QPolygonF poly;
             for (int x = 0; x <= 255; x++) poly << toView(x, settings_.value(x, c));
             p.setPen(QPen(colors[c], c == settings_.channel ? 2 : 1));
@@ -114,6 +81,9 @@ protected:
             dragging_ = int(insert);
         }
         if (dragging_ >= 0 && started) started();
+        // Alt on the black or white point (or Show Clipping) shows what it clips, as Photoshop does.
+        const bool end = dragging_ == 0 || (dragging_ > 0 && size_t(dragging_) == pts.size() - 1);
+        if (end && clipping && (showClipping || (e->modifiers() & Qt::AltModifier))) clipping(dragging_ == 0 ? 1 : 2);
         update();
     }
     void mouseMoveEvent(QMouseEvent* e) override {
@@ -123,13 +93,19 @@ protected:
         double y = std::clamp((a.bottom() - e->position().y()) / a.height() * 255, 0.0, 255.0);
         double x = std::clamp((e->position().x() - a.left()) / a.width() * 255, 0.0, 255.0);
         size_t i = size_t(dragging_);
-        if (i == 0) x = 0; else if (i == pts.size() - 1) x = 255;
+        // The end points move in from the sides too: Photoshop's black and white input points.
+        if (i == 0) x = std::clamp(x, 0.0, pts[1].x - 1);
+        else if (i == pts.size() - 1) x = std::clamp(x, pts[i - 1].x + 1, 255.0);
         else x = std::clamp(x, pts[i - 1].x + 1, pts[i + 1].x - 1);
         pts[i] = {x, y};
         if (changed) changed();
         update();
     }
-    void mouseReleaseEvent(QMouseEvent*) override { if (dragging_ >= 0 && finished) finished(); dragging_ = -1; }
+    void mouseReleaseEvent(QMouseEvent*) override {
+        if (dragging_ >= 0 && clipping) clipping(0);
+        if (dragging_ >= 0 && finished) finished();
+        dragging_ = -1;
+    }
     void mouseDoubleClickEvent(QMouseEvent* e) override {
         int i = hit(e->position());
         auto& pts = settings_.channels[size_t(settings_.channel)];
@@ -191,9 +167,43 @@ void AdjustmentEditor::changed() {
     if (syncing_) return;
     emit settingsChanged(settings_);
     sync();
+    if (clipPoint_) refreshClipping();
 }
 
-QWidget* AdjustmentEditor::sliderRow(const QString& label, double min, double max, int decimals, double scale, std::function<double()> get, std::function<void(double)> apply) {
+void AdjustmentEditor::showClipping(int point) {
+    if (!point) {
+        if (clipPoint_ && session_) session_->setViewOverlay(std::nullopt);
+        clipPoint_ = 0;
+        clipping_.reset();
+        return;
+    }
+    if (!session_) return;
+    if (!clipping_) {
+        if (!clippingSource_) return;
+        clipping_ = clippingSource_();
+        if (!clipping_ || !clipping_->image) { clipping_.reset(); return; }
+        // Reduced for the drag: the display is a guide, refreshed on every move.
+        const int longest = std::max(clipping_->image.width(), clipping_->image.height());
+        const int step = (longest + clippingLimit - 1) / clippingLimit;
+        if (step > 1) {
+            clipping_->image = subsampled(clipping_->image, step);
+            const Affine& a = clipping_->pixelToDocument;
+            clipping_->pixelToDocument = Affine(a.a * step, a.b * step, a.c * step, a.d * step, a.tx, a.ty);
+        }
+    }
+    clipPoint_ = point;
+    refreshClipping();
+}
+
+void AdjustmentEditor::refreshClipping() {
+    if (!clipping_ || !session_ || !clipPoint_) return;
+    const AnyImage adjusted = adjustedAny(clippingSettings(settings_), clipping_->image, clipping_->mode, clipping_->profile, clipping_->curve);
+    auto display = clippingDisplay(adjusted ? adjusted : clipping_->image, clipping_->mode, clipPoint_ == 2);
+    if (!display) return;
+    session_->setViewOverlay(EditorSession::ViewOverlay{toQImage(*display), clipping_->pixelToDocument, clipPoint_ == 2 ? QColor(Qt::black) : QColor(Qt::white)});
+}
+
+QWidget* AdjustmentEditor::sliderRow(const QString& label, double min, double max, int decimals, double scale, std::function<double()> get, std::function<void(double)> apply, int clipPoint) {
     auto* row = new QWidget;
     auto* h = new QHBoxLayout(row);
     h->setContentsMargins(0, 0, 0, 0);
@@ -209,13 +219,25 @@ QWidget* AdjustmentEditor::sliderRow(const QString& label, double min, double ma
     spin->setKeyboardTracking(false);
     spin->setFixedWidth(84);
     h->addWidget(spin);
-    connect(slider, &QSlider::sliderPressed, this, [this] { emit editStarted(); });
-    connect(slider, &QSlider::sliderReleased, this, [this] { emit editFinished(); });
-    connect(slider, &QSlider::valueChanged, this, [this, spin, apply, scale](int v) {
+    connect(slider, &QSlider::sliderPressed, this, [this, clipPoint] {
+        emit editStarted();
+        if (clipPoint && (QApplication::keyboardModifiers() & Qt::AltModifier)) showClipping(clipPoint);
+    });
+    connect(slider, &QSlider::sliderReleased, this, [this, clipPoint] {
+        if (clipPoint) showClipping(0);
+        emit editFinished();
+    });
+    connect(slider, &QSlider::valueChanged, this, [this, slider, spin, apply, scale, clipPoint](int v) {
         if (syncing_) return;
         double value = v / scale;
         { QSignalBlocker b(spin); spin->setValue(value); }
         apply(value);
+        // Alt pressed or let go mid-drag shows or hides the clipping display, as in Photoshop.
+        if (clipPoint && slider->isSliderDown()) {
+            const bool alt = QApplication::keyboardModifiers() & Qt::AltModifier;
+            if (alt && !clipPoint_) showClipping(clipPoint);
+            else if (!alt && clipPoint_) showClipping(0);
+        }
         changed();
     });
     connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this, slider, apply, scale](double v) {
@@ -272,13 +294,13 @@ QWidget* AdjustmentEditor::buildLevels() {
     syncers_.push_back([this, channel] { channel->setCurrentIndex(std::max(0, channel->findData(shownChannel(settings_.levels.channel)))); });
     channelRow->addWidget(channel, 1);
     v->addLayout(channelRow);
-    histogram_ = new HistogramWidget;
+    histogram_ = new HistogramView;
     v->addWidget(histogram_);
     auto range = [this]() -> LevelsRange& { return settings_.levels.ranges[size_t(settings_.levels.channel)]; };
     auto normalize = [this] { auto& r = settings_.levels.ranges[size_t(settings_.levels.channel)]; r = r.normalized(); };
-    v->addWidget(sliderRow(tr("Input black"), 0, 254, 0, 1, [range] { return range().black; }, [range, normalize](double x) { range().black = x; normalize(); }));
+    v->addWidget(sliderRow(tr("Input black"), 0, 254, 0, 1, [range] { return range().black; }, [range, normalize](double x) { range().black = x; normalize(); }, 1));
     v->addWidget(sliderRow(tr("Gamma"), 0.1, 9.99, 2, 100, [range] { return range().gamma; }, [range, normalize](double x) { range().gamma = x; normalize(); }));
-    v->addWidget(sliderRow(tr("Input white"), 1, 255, 0, 1, [range] { return range().white; }, [range, normalize](double x) { range().white = x; normalize(); }));
+    v->addWidget(sliderRow(tr("Input white"), 1, 255, 0, 1, [range] { return range().white; }, [range, normalize](double x) { range().white = x; normalize(); }, 2));
     v->addWidget(sliderRow(tr("Output black"), 0, 255, 0, 1, [range] { return range().outputBlack; }, [range](double x) { range().outputBlack = x; }));
     v->addWidget(sliderRow(tr("Output white"), 0, 255, 0, 1, [range] { return range().outputWhite; }, [range](double x) { range().outputWhite = x; }));
     auto* buttons = new QHBoxLayout;
@@ -345,11 +367,18 @@ QWidget* AdjustmentEditor::buildCurves() {
     curve_->started = [this] { emit editStarted(); };
     curve_->changed = [this] { settings_.curves = curve_->settings(); if (!syncing_) emit settingsChanged(settings_); };
     curve_->finished = [this] { emit editFinished(); };
+    curve_->clipping = [this](int point) { showClipping(point); };
+    curve_->showClipping = curvesShowClipping_;
     v->addWidget(curve_, 1);
-    auto* hint = new QLabel(tr("Click the curve to add a point, drag to move, double-click to remove."));
+    auto* hint = new QLabel(tr("Click the curve to add a point, drag to move, double-click to remove. Alt-drag the black or white point to see what it clips."));
     hint->setWordWrap(true);
     hint->setStyleSheet(hintStyle());
     v->addWidget(hint);
+    // Photoshop's Show Clipping: the clipping display while the black or white point is dragged, without Alt.
+    auto* clip = new QCheckBox(tr("Show Clipping"));
+    clip->setChecked(curvesShowClipping_);
+    connect(clip, &QCheckBox::toggled, this, [this](bool on) { curvesShowClipping_ = on; if (curve_) curve_->showClipping = on; });
+    v->addWidget(clip);
     auto* reset = new QPushButton(tr("Reset"));
     connect(reset, &QPushButton::clicked, this, [this] { emit editStarted(); settings_.curves = CurvesSettings(); changed(); emit editFinished(); });
     v->addWidget(reset);
@@ -423,7 +452,10 @@ QWidget* AdjustmentEditor::buildHsv() {
     return w;
 }
 
-AdjustmentEditor::~AdjustmentEditor() { clearHueHooks(); }
+AdjustmentEditor::~AdjustmentEditor() {
+    showClipping(0);
+    clearHueHooks();
+}
 
 void AdjustmentEditor::setSession(EditorSession* session) {
     session_ = session;

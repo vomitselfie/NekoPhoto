@@ -63,6 +63,8 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Filter > Mosh: OpenMosh's 54 glitch, distortion, retro, stylize, colour and composite effects (Pixel Sort, Data-Mosh, Hard Glitch, VHS, CRT, Halftone, Kaleidoscope, Glow, Light Streak, Feedback, Optical-Flow, Ascii, ChromaKey and more), with a live preview and a reroll for the random ones, at 8 and 16 bits; Overlay and Mask read another layer where it lies over this one, and Caption stamps text ([mosh.md](mosh.md))
 - Smart Filters on smart objects, edited as in Photoshop's Layers panel: each filter's settings (double-click), blending options, on/off per filter or for the whole stack, reorder by dragging (or from the menu), delete or clear them, and paint, show, invert, disable or delete the shared filter mask; PSD export keeps them ([smart-objects.md](smart-objects.md))
 - Live previews on the canvas, limited to the selection when there is one
+- Photoshop's clipping display in Levels and Curves, in Image > Adjustments and in an adjustment layer's Properties: hold Alt while dragging Levels' Input black or Input white slider, or Curves' black or white point (or tick Curves' Show Clipping), and the canvas shows what the point clips. For the white point it is black everywhere but the clipped channels in their colours (white where every channel clips); for the black point, white everywhere but the clipped channels (black where every one does). It is a view, never an edit, and goes on release; it works at 8, 16 and 32 bits and in CMYK (the inks as their complements) and Lab. Curves' black and white points now move in from the sides too, Photoshop's black and white input points
+- Window > Histogram, as Photoshop's panel, tabbed with Adjustments: Compact View (the channels overlaid in their colours) or Expanded View with Channel (RGB, Red, Green, Blue, Luminosity, Colors; CMYK, Cyan, Magenta, Yellow, Black; Lightness, a, b), Source (Entire Image, Selected Layer, Adjustment Composite) and the statistics: Mean, Std Dev, Median, Pixels, the Level, Count and Percentile under the pointer (drag across the graph for a range) and the Cache Level. It counts a reduced render on a worker thread a moment after each change, so painting never waits for it; the warning triangle means the numbers come from cached data or no longer match, and clicking it (or Uncached Refresh) counts every pixel. 16-bit documents count in 256 levels as Photoshop's panel does, and 32-bit ones encoded at exposure 0
 
 ## Remove Background
 - Off until you turn it on in Edit > Preferences, which downloads a model once
@@ -110,7 +112,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Shift + a tool's letter steps through its group, as in Photoshop (Shift+J: Spot Healing, Healing Brush, Patch, Content-Aware Move; Shift+O: Dodge, Burn, Sponge; and the others in [linux-port.md](linux-port.md#keyboard-shortcuts))
 
 ## Automation
-- Scripts and AI agents can drive the editor through a socket or MCP; see [automation.md](automation.md)
+- Scripts and AI agents can drive the editor through a socket or MCP; see [automation.md](automation.md). `document.histogram` returns the Histogram panel's bins and statistics
 
 ---
 
@@ -171,6 +173,8 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 - フィルター > Mosh:OpenMosh のグリッチ・変形・レトロ・表現手法・カラー・合成のエフェクト 54 種(ピクセルソート、データモッシュ、ハードグリッチ、VHS、CRT、ハーフトーン、万華鏡、グロー、ライトストリーク、フィードバック、オプティカルフロー、アスキー、クロマキーなど)。ライブプレビュー付きで、ランダムなものはシードを振り直せます。8 ビットと 16 ビットに対応。オーバーレイとマスクはほかのレイヤーを重なる位置で読み込み、キャプションはテキストを描き込みます
 - スマートオブジェクトのスマートフィルターを Photoshop のレイヤーパネルと同じように編集:各フィルターの設定(ダブルクリック)、描画オプション、フィルターごと・全体のオン/オフ、ドラッグ(またはメニュー)での並べ替え、削除・すべて消去、共有フィルターマスクへの描画・表示・反転・無効化・削除。PSD に書き出しても保たれます
 - カンバス上でのライブプレビュー(選択範囲があればその中だけ)
+- レベル補正とトーンカーブの Photoshop と同じクリッピング表示(イメージ > 色調補正 でも、調整レイヤーのプロパティでも):レベル補正の入力の黒・入力の白スライダー、またはトーンカーブの黒点・白点を Alt キーを押しながらドラッグすると(トーンカーブは「クリッピングを表示」をオンにしても)、そのポイントで切り捨てられる部分がカンバスに表示されます。白点では切り捨てられたチャンネルをその色で、それ以外を黒で(すべてのチャンネルが切り捨てられた部分は白)、黒点では切り捨てられたチャンネル以外を白で(すべての部分は黒)表示します。表示だけでドキュメントは変わらず、ボタンを離すと元に戻ります。8・16・32 bit、CMYK(インキは補色で表示)と Lab で使えます。トーンカーブの黒点・白点は左右にも動かせるようになりました(Photoshop の入力の黒点・白点)
+- ウィンドウ > ヒストグラム:Photoshop と同じパネルで、色調補正パネルとタブで並びます。コンパクト表示(各チャンネルをその色で重ねて表示)と拡張表示があり、拡張表示ではチャンネル(RGB・レッド・グリーン・ブルー・輝度・カラー、CMYK・シアン・マゼンタ・イエロー・ブラック、明度・a・b)、ソース(画像全体・選択したレイヤー・調整コンポジット)と統計情報(平均値・標準偏差・中間値・ピクセル数、ポインターの位置のレベル・数・パーセントの位置(グラフ上をドラッグすると範囲)、キャッシュレベル)を表示します。変更の少し後に縮小した描画を別スレッドで集計するので、ペイントが待たされることはありません。警告の三角形はキャッシュのデータであるか画像と一致しなくなったことを示し、クリック(またはキャッシュなしのデータで更新)するとすべてのピクセルを集計します。16 bit のドキュメントは Photoshop のパネルと同じく 256 レベルで、32 bit は露光量 0 でエンコードして集計します
 
 ### 背景を削除
 - 初期状態ではオフ。編集 > 環境設定 でオンにするとモデルを一度だけダウンロードします
@@ -211,4 +215,4 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 - Shift + ツールのキーで同じグループのツールを順に切り替えます(Photoshop と同じ。Shift+J:スポット修復ブラシ・修復ブラシ・パッチ・コンテンツに応じた移動、Shift+O:覆い焼き・焼き込み・スポンジ。ほかは [linux-port.md](linux-port.md#keyboard-shortcuts))
 
 ### 自動化
-- スクリプトや AI エージェントからソケットまたは MCP 経由で操作できます。詳しくは [automation.md](automation.md)(英語)
+- スクリプトや AI エージェントからソケットまたは MCP 経由で操作できます。詳しくは [automation.md](automation.md)(英語)。`document.histogram` はヒストグラムパネルのビンと統計情報を返します

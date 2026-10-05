@@ -411,6 +411,40 @@ def remaining_methods(rpc):
     rpc.call("tabs.close", index=tab["index"], discard=True)
 
 
+def histogram(rpc):
+    """document.histogram (the Histogram panel's numbers) at 8, 16 and 32 bits and in CMYK and Lab, in a tab of its own."""
+    first = rpc.call("tabs.list")
+    tab = rpc.call("tabs.new")
+    rpc.call("document.new", width=64, height=32)
+    rpc.call("shape.draw", kind="rectangle", x=0, y=0, width=32, height=32, color="#ff0000")
+    whole = rpc.call("document.histogram")
+    assert len(whole["bins"]) == 256 and whole["cacheLevel"] == 1, whole
+    assert abs(sum(whole["bins"]) - whole["pixels"]) < 0.5, whole
+    red = rpc.call("document.histogram", channel="red")
+    assert red["bins"][255] >= 32 * 32 - 0.5, red["bins"][255]
+    assert rpc.call("document.histogram", channel="luminosity", cached=True)["pixels"] > 0
+    layer = rpc.call("document.histogram", channel="green", source="layer")
+    assert layer["source"] == "layer" and layer["bins"][0] >= 32 * 32 - 0.5, layer
+    expect_refused(rpc, "channel must be one of", "document.histogram", channel="cyan")
+    expect_refused(rpc, "not an adjustment layer", "document.histogram", source="adjustment")
+    rpc.call("layers.add", kind="adjustment", adjustmentKind="levels")
+    assert rpc.call("document.histogram", source="adjustment")["pixels"] > 0
+    rpc.call("image.mode", bits=16)
+    assert rpc.call("document.histogram", channel="red")["bins"][255] >= 32 * 32 - 0.5
+    rpc.call("image.mode", bits=32)
+    assert rpc.call("document.histogram", channel="red")["bins"][255] >= 32 * 32 - 0.5
+    rpc.call("image.mode", bits=16)
+    rpc.call("image.mode", colorMode="cmyk")
+    cyan = rpc.call("document.histogram", channel="cyan")
+    assert len(cyan["bins"]) == 256 and cyan["pixels"] > 0, cyan
+    expect_refused(rpc, "channel must be one of", "document.histogram", channel="luminosity")
+    rpc.call("image.mode", colorMode="lab")
+    lab = rpc.call("document.histogram")
+    assert lab["channel"] == "lightness" and lab["pixels"] > 0, lab
+    rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
+    rpc.call("tabs.close", index=tab["index"], discard=True)
+
+
 def sixteen_bit(rpc):
     """Image > Mode > 16 Bits/Channel (docs/bit-depth.md): what works on a 16-bit document, what is refused with the
     reason, and the files it writes; in a tab of its own that is closed afterwards."""
@@ -1923,6 +1957,7 @@ def main():
             print("gmic", cat["version"], "(no catalogue file)")
 
     remaining_methods(rpc)
+    histogram(rpc)
     sixteen_bit(rpc)
     thirty_two_bit(rpc)
     thirty_two_bit_editing(rpc)

@@ -206,6 +206,16 @@ def document_info() -> str:
     return text(call("document.info"))
 
 
+@look("Histogram")
+def document_histogram(channel: Optional[str] = None, source: str = "entire", cached: bool = False) -> str:
+    """The Histogram panel's numbers: 256 bins of one channel (rgb/red/green/blue/luminosity; cmyk/cyan/magenta/
+    yellow/black; lightness/a/b) with mean, stdDev, median and pixels. source: entire, layer or adjustment."""
+    params = {"source": source, "cached": cached}
+    if channel:
+        params["channel"] = channel
+    return text(call("document.histogram", **params))
+
+
 @look("Document overview", structured_output=False)
 def document_overview(render: bool = False, max_size: int = 512, max_layers: int = 80) -> list:
     """Start here. The document at a glance as text: size, selection, what undo would revert, and the layer tree
