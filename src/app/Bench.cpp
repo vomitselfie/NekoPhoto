@@ -1,3 +1,4 @@
+#include "compositor/supports.h"
 #include "Bench.h"
 #include "BrushLibrary.h"
 #include "CanvasWidget.h"
@@ -397,6 +398,11 @@ int runAdjustBench(MainWindow& window, const AdjustBenchOptions& o) {
     // A slider drag: the adjustment layer's settings change on each tick inside one edit, as the Properties
     // panel does, and the canvas repaints before the next.
     auto drag = [&](compositor::AdjustmentKind kind, const char* label, auto&& tick) {
+        // A kind the mode lacks (Exposure in CMYK) is refused with a message; skip it rather than wait on that.
+        if (!compositor::unavailableReason(std::string("adjustment.") + compositor::adjustmentKindName(kind), session->sampleType(), session->colorMode()).empty()) {
+            std::printf("%-30s not available in this mode\n", label);
+            return;
+        }
         session->addAdjustmentLayer(kind);
         const auto id = session->activeLayerId();
         if (!id) return;
