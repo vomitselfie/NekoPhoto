@@ -203,7 +203,10 @@ TEST_CASE(supports_has_a_mode_axis) {
     CHECK(supports("tool.spotHealing", SampleType::U8, ColorMode::Lab));
     // Greyed for good ("... mode") or until a port ("... mode yet").
     CHECK_EQ(unavailableReason("brush.mypaint", SampleType::U8, ColorMode::Lab), std::string("Not available in Lab mode"));
-    CHECK_EQ(unavailableReason("tool.text", SampleType::U8, ColorMode::CMYK), std::string("Not available in CMYK mode yet"));
+    CHECK_EQ(unavailableReason("edit.smartObject", SampleType::U8, ColorMode::CMYK), std::string("Not available in CMYK mode yet"));
+    // Text, shapes and layer styles (P8).
+    for (const char* f : {"tool.text", "edit.text", "tool.shape", "tool.pen", "tool.directSelect", "edit.vector", "edit.paint", "edit.style"})
+        for (ColorMode m : {ColorMode::CMYK, ColorMode::Lab}) CHECK(supports(f, SampleType::U8, m) && supports(f, SampleType::U16, m));
     CHECK(supports("tool.crop", SampleType::U16, ColorMode::CMYK) && supports("edit.clipboard", SampleType::U8, ColorMode::Lab));
     CHECK(supports("tool.dodge", SampleType::U16, ColorMode::CMYK));
     CHECK_EQ(unavailableReason("tool.dodge", SampleType::F32, ColorMode::RGB), std::string("Not available in 32-bit mode"));

@@ -39,6 +39,9 @@ struct VectorShape {
     VectorPaint fillPaint;                 // Solid, or a gradient ('GdFl') or pattern ('PtFl') fill
     VectorStroke stroke;                   // stroke.enabled false: no stroke
     std::vector<LiveShape> live;           // live shape properties of its groups; kept only while they hold
+    /// A CMYK file's solid colour as its inks (C, M, Y, K 0..1): a CMYK document fills with them and writes them back
+    /// while r, g and b are still their plain conversion (an edit to the colour retires them, as StyleColor's do).
+    std::optional<std::array<float, 4>> ink;
 };
 
 /// The blocks, as Photoshop writes them. The path is stored against a `canvasWidth` x `canvasHeight` canvas.
@@ -57,6 +60,10 @@ std::optional<VectorShape> vectorShapeOf(const Layer& layer, const Document& doc
 /// its carry takes the path, stroke and fill blocks, pinned to those pixels so they are kept. Other carried blocks
 /// (styles, Blend If, ...) stay.
 void setVectorShape(Layer& layer, const Document& document, const VectorShape& shape);
+
+/// After a shape layer's pixels were converted in place (Image > Mode, Convert to Profile): its blocks are pinned to
+/// the new pixels, so it stays a shape layer.
+void keepVectorShapeBlocks(Layer& layer);
 
 /// Vector shape layers moved, scaled or rotated since they were drawn, drawn again on their moved path (a shape
 /// scales as a path, not as pixels). Returns how many.

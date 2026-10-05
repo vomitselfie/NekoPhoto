@@ -1181,6 +1181,73 @@ def colour_mode_painting(rpc):
     rpc.call("tabs.close", index=tab["index"], discard=True)
 
 
+def colour_mode_vectors(rpc):
+    """Text, shapes and layer styles in CMYK and Lab documents at 8 and 16 bits (docs/color-modes.md): the Type tool and
+    editing, a shape whose fill is the colour through the profile (as the brush lays it), Fill and Stroke Path, vector
+    masks, every effect, each one undo step; a PSD in the document's mode keeps the text editable, the shape a shape and
+    the style; a shape layer survives Image > Mode."""
+    work = tempfile.mkdtemp()
+    first = rpc.call("tabs.list")
+    tab = rpc.call("tabs.new")
+    for mode, bits in (("cmyk", 8), ("cmyk", 16), ("lab", 8), ("lab", 16)):
+        rpc.call("document.new", width=96, height=64)
+        rpc.call("pixels.fill", color="#ffffff")
+        rpc.call("image.mode", colorMode=mode, bits=bits)
+        # The brush's colour, for comparing.
+        rpc.call("brush.stroke", points=[[2, 60], [10, 60]], size=4, color="#2060c0")
+        brushed = rpc.call("color.sample", x=6, y=60)["values"]
+        assert rpc.call("tool.select", name="text")["tool"] == "text"
+        words = rpc.call("layers.add", kind="text", text="Ink", x=4, y=4, size=24, color="#c02020")
+        assert words["kind"] == "text", words
+        assert rpc.call("text.set", id=words["id"], text="Inks", bold=True)["text"]["text"] == "Inks"
+        assert rpc.call("history.info")["undo"] == "Edit Text"
+        assert rpc.call("tool.select", name="shape")["tool"] == "shape"
+        box = rpc.call("shape.draw", kind="rectangle", x=50, y=10, width=40, height=40, color="#2060c0")
+        assert box["kind"] == "shape", box
+        inside = rpc.call("color.sample", x=70, y=30)["values"]
+        assert all(abs(a - b) < 1.0 for a, b in zip(inside, brushed)), ("the shape's fill is the brush's colour", mode, bits, inside, brushed)
+        rpc.call("shape.set", id=box["id"], color="#000000")
+        assert rpc.call("history.info")["undo"] != "Edit Text"
+        styled = rpc.call("layers.setStyle", id=box["id"], style={"dropShadows": [{"distance": 4, "size": 3}], "strokes": [{"size": 3, "color": "#2060c0"}],
+                                                                 "outerGlows": [{"size": 5}], "innerShadows": [{"size": 3}], "innerGlows": [{"size": 4}],
+                                                                 "bevels": [{"size": 5}], "satins": [{"size": 6}], "colorOverlays": [{"color": "#00ff00", "opacity": 0.3}],
+                                                                 "gradientOverlays": [{"opacity": 0.5}]})
+        assert "strokes" in styled and "bevels" in styled, styled
+        assert rpc.call("history.info")["undo"] == "Layer Style", rpc.call("history.info")
+        # The outside stroke's middle: the stroke colour through the profile, as the brush lays it.
+        stroked = rpc.call("color.sample", x=70, y=8)["values"]
+        assert all(abs(a - b) < 1.5 for a, b in zip(stroked, brushed)), ("the stroke is the brush's colour", mode, bits, stroked, brushed)
+        path = rpc.call("paths.set", name="Ink path", path=[{"knots": [[5, 40], [45, 40], [25, 62]]}])
+        pixels = rpc.call("layers.add", kind="pixels", name="Ink paths")
+        rpc.call("paths.fill", id=path["id"])
+        assert rpc.call("history.info")["undo"] == "Fill Path"
+        rpc.call("paths.stroke", id=path["id"])
+        assert rpc.call("history.info")["undo"] == "Stroke Path"
+        assert len(rpc.call("vectorMask.set", id=pixels["id"], path=[{"knots": [[5, 30], [45, 30], [45, 62], [5, 62]]}])["path"]) == 1
+        assert rpc.call("text.toShape", id=rpc.call("layers.add", kind="text", text="Ok", x=4, y=30, size=16, color="#00aa00")["id"])["kind"] == "shape"
+        # A PSD in the document's mode: the text stays text, the shape a shape with its style.
+        psd = os.path.join(work, f"vectors-{mode}{bits}.psd")
+        rpc.call("document.export", path=psd)
+        rpc.call("document.close", discard=True)
+        rpc.call("document.open", path=psd)
+        info = rpc.call("document.info")
+        assert info["colorMode"] == mode and info["bits"] == bits, info
+        kinds = {l["name"]: l["kind"] for l in rpc.call("layers.list")}
+        assert kinds.get(words["name"]) == "text", kinds
+        assert kinds.get(box["name"]) == "shape", kinds
+        reopened = next(l for l in rpc.call("layers.list") if l["name"] == box["name"])
+        assert "strokes" in rpc.call("layers.style", id=reopened["id"]), "the style came back"
+        rpc.call("document.close", discard=True)
+    # A shape drawn in RGB stays a shape through Image > Mode.
+    rpc.call("document.new", width=32, height=32)
+    shape = rpc.call("shape.draw", kind="ellipse", x=4, y=4, width=24, height=24, color="#cc3300")
+    rpc.call("image.mode", colorMode="cmyk")
+    assert next(l for l in rpc.call("layers.list") if l["id"] == shape["id"])["kind"] == "shape"
+    rpc.call("document.close", discard=True)
+    rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
+    rpc.call("tabs.close", index=tab["index"], discard=True)
+
+
 def colour_mode_adjustments(rpc):
     """P7 E (docs/color-modes.md): Image > Adjustments, adjustment layers and the Filter menu in CMYK and Lab at 8 and
     16 bits, on the document's own samples. Each kind Photoshop offers in the mode works (one undo step each); what it
@@ -2047,6 +2114,7 @@ def main():
     colour_modes(rpc)
     pixel_clipboard(rpc)
     colour_mode_painting(rpc)
+    colour_mode_vectors(rpc)
     gradient_methods(rpc)
     colour_mode_adjustments(rpc)
     colour_mode_selection(rpc)

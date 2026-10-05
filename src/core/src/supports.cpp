@@ -261,6 +261,19 @@ constexpr FeatureModes modeTable[] = {
     {"export.tga", allModes},
     {"export.ico", allModes},
     {"export.gif", allModes},
+    // Text, shapes and layer styles (P8): text painted through Qt in RGB at 16 bits, its colours then taken through the
+    // document's profile pixel by pixel (the glyph coverage composited in the document's channels); shape layers
+    // filled in the document's channels (a CMYK gradient of inks from ink to ink), vector masks, paths, Fill and Stroke
+    // Path; every layer effect drawn in the document's channels with its colours through the profile
+    // (layerstyle_render.cpp), the Layer Style dialog, copy, paste and presets.
+    {"tool.text", allModes},
+    {"edit.text", allModes},
+    {"tool.shape", allModes},
+    {"tool.pen", allModes},
+    {"tool.directSelect", allModes},
+    {"edit.vector", allModes},
+    {"edit.paint", allModes},
+    {"edit.style", allModes},
 };
 
 // What stays RGB for good (not waiting for a port): refused in CMYK and Lab with "Not available in CMYK mode", where a
@@ -436,6 +449,10 @@ std::string_view throughRgbNote(std::string_view feature, SampleType type, Color
     // The renderer draws fill layers (solid, gradient, pattern) and vector shapes' paint in sRGB and converts them
     // (render_modes.cpp); merging renders the same way.
     if (feature == "render.document" || feature == "layers.merge") return "fill layers and shape paint are drawn in sRGB, then converted";
+    // Text: Qt paints the glyphs in sRGB at 16 bits; each colour then goes through the profile, the coverage kept.
+    if (feature == "tool.text" || feature == "edit.text") return "glyphs painted in sRGB, each colour then taken through the profile";
+    // Shape fills: inks as they are; RGB colours, RGB gradients and patterns drawn in sRGB and converted.
+    if (feature == "edit.paint" || feature == "tool.shape") return "RGB gradient and pattern fills drawn in sRGB, then converted";
     // The flat formats hold RGB: the composite is drawn through the document's profile to sRGB (Photoshop's Export As).
     if (feature.substr(0, 7) == "export." && feature != "export.psd") return "written as sRGB, converted through the document's profile";
     return {};

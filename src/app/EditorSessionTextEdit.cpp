@@ -2,6 +2,7 @@
 // The canvas (CanvasWidgetText.cpp) keeps the caret and the selection; the session holds the undo step open,
 // sets the text exactly as typed and keeps the text anchored while it grows.
 #include "EditorSession.h"
+#include "ColorManagement.h"
 #include "TextLayer.h"
 #include <QCoreApplication>
 #include <QFontMetricsF>
@@ -44,7 +45,7 @@ std::optional<Uuid> EditorSession::beginNewTypeEdit(QPointF point, const LayerTe
     text.text.clear();
     text.runs.clear();
     if (box) { text.boxWidth = std::max(1.0, box->width()); text.boxHeight = std::max(1.0, box->height()); }
-    const AnyImage image = renderTextLayerAt(text, sampleType());
+    const AnyImage image = renderTextForDocument(text, *document_, nullptr, color::conversionOptions());
     if (!image) return std::nullopt;
     // Point text: the click is the first baseline's start (Photoshop's); paragraph text: the box's corner.
     QPointF topLeft = point - QPointF(textPadding, textPadding);

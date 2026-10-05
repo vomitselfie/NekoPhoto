@@ -63,6 +63,24 @@ bool getDouble(const json& j, const char* key, double& out, bool required) {
     return std::isfinite(out);
 }
 
+/// A CMYK file's text colour as its inks, [c, m, y, k] in 0..1 (optional; false when malformed).
+bool readInk(const json& j, std::optional<std::array<float, 4>>& out) {
+    auto it = j.find("ink");
+    if (it == j.end() || it->is_null()) return true;
+    if (!it->is_array() || it->size() != 4) return false;
+    std::array<float, 4> ink{};
+    for (size_t i = 0; i < 4; i++) {
+        if (!(*it)[i].is_number()) return false;
+        const double v = (*it)[i].get<double>();
+        if (!std::isfinite(v)) return false;
+        ink[i] = float(std::clamp(v, 0.0, 1.0));
+    }
+    out = ink;
+    return true;
+}
+
+json inkJson(const std::array<float, 4>& ink) { return json::array({number(ink[0]), number(ink[1]), number(ink[2]), number(ink[3])}); }
+
 bool getInt(const json& j, const char* key, int& out, bool required) {
     auto it = j.find(key);
     if (it == j.end() || it->is_null()) return !required;
@@ -222,6 +240,7 @@ bool parseRecord(const json& j, Record& r) {
             if (wj->contains("verticalOrientation") && !getBool(*wj, "verticalOrientation", t.warp.verticalOrientation, true)) return false;
         }
         if (!(t.fontSize > 0) || !std::isfinite(t.fontSize) || !std::isfinite(t.lineSpacing) || !std::isfinite(t.letterSpacing)) return false;
+        if (!readInk(*tx, t.ink)) return false;
         if (auto rs = tx->find("runs"); rs != tx->end()) {
             if (!rs->is_array() || rs->size() > 100000) return false;
             for (const json& rj : *rs) {
@@ -241,6 +260,7 @@ bool parseRecord(const json& j, Record& r) {
                 if (!(length >= 0 && length < 1e9) || !(r.fontSize > 0) || !std::isfinite(r.fontSize) || !std::isfinite(r.letterSpacing) || !std::isfinite(r.baselineShift) || !std::isfinite(r.leading)) return false;
                 r.length = int(length);
                 r.caps = caps == 1 ? TextRun::Caps::Small : caps == 2 ? TextRun::Caps::All : TextRun::Caps::Normal;
+                if (!readInk(rj, r.ink)) return false;
                 t.runs.push_back(r);
             }
         }
@@ -297,6 +317,7 @@ json recordJson(const Layer& l) {
                      {"red", number(t.red)}, {"green", number(t.green)}, {"blue", number(t.blue)}, {"alignment", t.alignment},
                      {"lineSpacing", number(t.lineSpacing)}, {"letterSpacing", number(t.letterSpacing)}};
         if (t.boxWidth > 0 && t.boxHeight > 0) { j["text"]["boxWidth"] = number(t.boxWidth); j["text"]["boxHeight"] = number(t.boxHeight); }
+        if (textInkMatches(t.red, t.green, t.blue, t.ink)) j["text"]["ink"] = inkJson(*t.ink);
         if (t.warp.active())
             j["text"]["warp"] = {{"style", t.warp.style}, {"bend", number(t.warp.bend)}, {"horizontal", number(t.warp.horizontal)},
                                  {"vertical", number(t.warp.vertical)}, {"verticalOrientation", t.warp.verticalOrientation}};
@@ -311,6 +332,7 @@ json recordJson(const Layer& l) {
                 if (r.caps != TextRun::Caps::Normal) rj["caps"] = r.caps == TextRun::Caps::Small ? 1 : 2;
                 if (r.underline) rj["underline"] = true;
                 if (r.strikethrough) rj["strikethrough"] = true;
+                if (textInkMatches(r.red, r.green, r.blue, r.ink)) rj["ink"] = inkJson(*r.ink);
                 runs.push_back(rj);
             }
             j["text"]["runs"] = runs;

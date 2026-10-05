@@ -7,7 +7,9 @@
 #include "compositor/document.h"
 #include "compositor/blendif.h"
 #include "compositor/layerstyle.h"
+#include "compositor/vectorlayer.h"
 #include <nlohmann/json.hpp>
+#include <map>
 #include <algorithm>
 #include <cmath>
 
@@ -167,12 +169,16 @@ bool convertDocumentMode(Document& document, ColorMode to, const ColorProfile& t
         if (layer.asset && layer.asset->image) {
             const AnyImage before = layer.asset->image;
             const bool liveShape = layer.isLiveShape(), liveText = layer.isLiveText(), liveSmart = layer.isLiveSmartObject();
+            const bool vectorShape = isVectorShapeLayer(layer);
             const AnyImage after = convertImage(before, from, fromProfile, to, toProfile, options);
             if (!after) {
                 if (why) *why = "The colours could not be converted (a profile could not be used).";
                 return false;
             }
             layer.asset = Asset::makeAny(after, layer.asset->name);
+            // A shape layer stays one: its fill and path blocks describe the converted pixels (Photoshop's shape layers
+            // survive Image > Mode; its colour is read in the new mode, through the profile, as before).
+            if (vectorShape) keepVectorShapeBlocks(layer);
             if (liveShape) layer.shapeImage = after;
             if (liveText) layer.textImage = after;
             if (liveSmart) layer.smartImage = after;
@@ -230,6 +236,71 @@ bool convertDocumentMode(Document& document, ColorMode to, const ColorProfile& t
     refreshModeThumbnails(out);
     document = std::move(out);
     return true;
+}
+
+AnyImage textRasterInMode(const Image16& rgb, const LayerText& text, const Document& document, const ConvertOptions& options) {
+    const ColorMode mode = document.colorMode;
+    if (mode == ColorMode::RGB || rgb.isEmpty()) return {};
+    const bool deep = document.sampleType == SampleType::U16, cmyk = mode == ColorMode::CMYK;
+    const int nc = colorModeColorChannels(mode), n = nc + 1;
+    // Each straight colour the glyphs show (rounded to 8 bits: the text's own colours, and their antialiased edges'
+    // near-copies) once through the profile, as the document's straight samples (0..1).
+    ColorTransformPtr transform = transformBetween(ColorProfile(), document.profile, options, PixelFormat::RGBFloat,
+                                                   cmyk ? PixelFormat::CMYKFloat : PixelFormat::LabFloat);
+    std::map<uint32_t, std::array<float, 4>> inks;
+    if (cmyk)
+        for (const TextRun& run : textRuns(text))
+            if (textInkMatches(run.red, run.green, run.blue, run.ink)) {
+                auto byte = [](double v) { return uint32_t(std::clamp(std::lround(v * 255), 0L, 255L)); };
+                const auto& ink = *run.ink;
+                inks[byte(run.red) << 16 | byte(run.green) << 8 | byte(run.blue)] = {1 - ink[0], 1 - ink[1], 1 - ink[2], 1 - ink[3]};
+            }
+    std::map<uint32_t, std::array<float, 4>> seen;
+    const double one = deep ? double(one16) : 255.0;
+    const double offset = deep ? labOffset<SampleType::U16>() : labOffset<SampleType::U8>(), scale = deep ? labScale<SampleType::U16>() : labScale<SampleType::U8>();
+    auto native = [&](uint32_t key) -> const std::array<float, 4>& {
+        auto it = seen.find(key);
+        if (it != seen.end()) return it->second;
+        std::array<float, 4> out{0, 0, 0, 0};
+        if (auto ink = inks.find(key); ink != inks.end()) out = ink->second;
+        else {
+            const float in[3] = {float(key >> 16) / 255.0f, float((key >> 8) & 255) / 255.0f, float(key & 255) / 255.0f};
+            float v[4] = {0, 0, 0, 0};
+            if (transform) transform->apply(in, v, 1);
+            if (cmyk) for (int c = 0; c < 4; c++) out[size_t(c)] = 1 - std::clamp(v[c] / 100.0f, 0.0f, 1.0f);
+            else {
+                out[0] = std::clamp(v[0] / 100.0f, 0.0f, 1.0f);
+                for (int c = 1; c < 3; c++) out[size_t(c)] = float(std::clamp((double(v[c]) * scale + offset) / one, 0.0, 1.0));
+            }
+        }
+        return seen.emplace(key, out).first->second;
+    };
+    const int w = rgb.width(), h = rgb.height();
+    std::shared_ptr<Image16> out16 = deep ? std::make_shared<Image16>(w, h, n) : nullptr;
+    std::shared_ptr<ImageC8> outC8 = !deep && cmyk ? std::make_shared<ImageC8>(w, h, n) : nullptr;
+    std::shared_ptr<Image> outLab8 = !deep && !cmyk ? std::make_shared<Image>(w, h) : nullptr;
+    for (int y = 0; y < h; y++) {
+        const uint16_t* p = rgb.row(y);
+        for (int x = 0; x < w; x++, p += 4) {
+            const uint32_t a = p[3];
+            if (!a) continue;
+            auto straight = [&](int c) { return uint32_t(std::min<uint64_t>(255, (uint64_t(p[c]) * 255 + a / 2) / a)); };
+            const std::array<float, 4>& colour = native(straight(0) << 16 | straight(1) << 8 | straight(2));
+            if (deep) {
+                uint16_t* q = out16->pixel(x, y);
+                for (int c = 0; c < nc; c++) q[c] = uint16_t(std::lround(colour[size_t(c)] * float(a)));
+                q[nc] = uint16_t(a);
+            } else {
+                const uint8_t a8 = narrow16(uint16_t(a));
+                uint8_t* q = cmyk ? outC8->pixel(x, y) : outLab8->pixel(x, y);
+                for (int c = 0; c < nc; c++) q[c] = uint8_t(std::lround(colour[size_t(c)] * float(a8)));
+                q[nc] = a8;
+            }
+        }
+    }
+    if (out16) return Image16Ptr(out16);
+    if (outC8) return ImageC8Ptr(outC8);
+    return ImagePtr(outLab8);
 }
 
 } // namespace compositor

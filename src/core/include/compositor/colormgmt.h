@@ -27,6 +27,7 @@ namespace compositor {
 struct Document;
 struct ToneMap;
 struct Layer;
+struct LayerText;
 enum class AdjustmentKind;
 
 // ---- Profiles ------------------------------------------------------------------------------------------------------
@@ -192,6 +193,10 @@ bool convertDocumentMode(Document& document, ColorMode to, const ColorProfile& t
 /// A stored colour (straight RGB, 0..1) as convertDocumentMode converts it: the foreground and background colours.
 void convertModeColor(ColorMode from, const ColorProfile& fromProfile, ColorMode to, const ColorProfile& toProfile, const ConvertOptions& options,
                       double rgb[3]);
+/// A text layer's raster in a CMYK or Lab document: `rgb` is the text as painted (16-bit sRGB, premultiplied), and
+/// each pixel's colour goes through `document`'s profile once (a run's own inks as they are, in CMYK) while its
+/// coverage stays as the glyphs left it, at the document's depth and in its channels. Null for an RGB document.
+AnyImage textRasterInMode(const Image16& rgb, const LayerText& text, const Document& document, const ConvertOptions& options = {});
 /// Whether Photoshop offers the adjustment kind in `mode` (docs/color-modes.md; every kind in RGB).
 bool adjustmentOfferedInMode(AdjustmentKind kind, ColorMode mode);
 /// An adjustment layer kept dormant by a mode conversion (hidden until the document returns to a mode offering it).

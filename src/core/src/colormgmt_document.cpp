@@ -75,7 +75,9 @@ bool convertDocumentProfile(Document& document, const ColorProfile& target, cons
             else if (auto p8 = before.u8()) { auto copy = std::make_shared<Image>(*p8); convertImage(*copy, pixels.get()); after = ImagePtr(copy); }
             if (!after) continue;
             const bool liveShape = layer.isLiveShape(), liveText = layer.isLiveText(), liveSmart = layer.isLiveSmartObject();
+            const bool vectorShape = isVectorShapeLayer(layer);
             layer.asset = Asset::makeAny(after, layer.asset->name);
+            if (vectorShape) keepVectorShapeBlocks(layer);
             if (liveShape) layer.shapeImage = after;
             if (liveText) layer.textImage = after;
             if (liveSmart) layer.smartImage = after;

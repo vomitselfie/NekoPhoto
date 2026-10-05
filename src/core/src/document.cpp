@@ -618,7 +618,15 @@ TextRun baseTextRun(const LayerText& t) {
     TextRun r;
     r.fontFamily = t.fontFamily; r.fontSize = t.fontSize; r.bold = t.bold; r.italic = t.italic;
     r.red = t.red; r.green = t.green; r.blue = t.blue; r.letterSpacing = t.letterSpacing;
+    r.ink = t.ink;
     return r;
+}
+
+bool textInkMatches(double red, double green, double blue, const std::optional<std::array<float, 4>>& ink) {
+    if (!ink) return false;
+    const double k = (*ink)[3];
+    auto near = [&](double channel, float i) { return std::abs(std::lround(channel * 255) - std::lround(255 * (1 - double(i)) * (1 - k))) <= 1; };
+    return near(red, (*ink)[0]) && near(green, (*ink)[1]) && near(blue, (*ink)[2]);
 }
 
 std::vector<TextRun> textRuns(const LayerText& text) {
@@ -680,6 +688,7 @@ void settleTextRuns(LayerText& text, bool leadingIsAuto) {
     const TextRun& first = text.runs.front();
     text.fontFamily = first.fontFamily; text.fontSize = first.fontSize; text.bold = first.bold; text.italic = first.italic;
     text.red = first.red; text.green = first.green; text.blue = first.blue; text.letterSpacing = first.letterSpacing;
+    text.ink = first.ink;
     // One run that the plain fields say in full is no runs at all.
     if (text.runs.size() == 1 && first.weight == 0 && (leadingIsAuto || first.leading == 0) && first.baselineShift == 0 && first.caps == TextRun::Caps::Normal && !first.underline && !first.strikethrough) text.runs.clear();
 }

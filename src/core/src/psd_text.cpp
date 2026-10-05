@@ -78,6 +78,13 @@ std::string style(const TextRun& run, int font, bool fauxBold, bool fauxItalic, 
     if (run.caps != TextRun::Caps::Normal) s += std::string(" /FontCaps ") + (run.caps == TextRun::Caps::Small ? "1" : "2");
     if (run.underline) s += " /Underline true";
     if (run.strikethrough) s += " /Strikethrough true";
+    if (textInkMatches(run.red, run.green, run.blue, run.ink)) {
+        // The inks it was read with (a CMYK document's text), as Photoshop writes them.
+        const auto& ink = *run.ink;
+        s += " /AutoKerning true /Kerning 0 /FillColor << /Type 2 /Values [ 1.0 " + number(ink[0]) + " " + number(ink[1]) + " " + number(ink[2]) + " " +
+             number(ink[3]) + " ] >> >>";
+        return s;
+    }
     s += " /AutoKerning true /Kerning 0 /FillColor << /Type 1 /Values [ 1.0 " + number(std::clamp(run.red, 0.0, 1.0)) + " " +
          number(std::clamp(run.green, 0.0, 1.0)) + " " + number(std::clamp(run.blue, 0.0, 1.0)) + " ] >> >>";
     return s;
@@ -473,8 +480,19 @@ std::optional<PsdTypeLayer> readPhotoshopType(const uint8_t* data, size_t size, 
             run.fontSize = fontSize;
             if (auto fill = style.get("FillColor")) {
                 const EngineValue* values = fill->get("Values");
-                if (fill->num("Type", 1) != 1 || !values || values->items.size() != 4) return no("filled with a non-RGB colour");
-                run.red = values->items[1].number; run.green = values->items[2].number; run.blue = values->items[3].number;
+                const int type = int(fill->num("Type", 1));
+                if (type == 2 && values && values->items.size() == 5) {
+                    // A CMYK document's text: its inks (alpha, then C, M, Y and K, 0..1), kept, and their plain RGB.
+                    auto ink = [&](size_t i) { return float(std::clamp(values->items[i].number, 0.0, 1.0)); };
+                    run.ink = std::array<float, 4>{ink(1), ink(2), ink(3), ink(4)};
+                    const double k = (*run.ink)[3];
+                    run.red = std::lround(255 * (1 - double((*run.ink)[0])) * (1 - k)) / 255.0;
+                    run.green = std::lround(255 * (1 - double((*run.ink)[1])) * (1 - k)) / 255.0;
+                    run.blue = std::lround(255 * (1 - double((*run.ink)[2])) * (1 - k)) / 255.0;
+                } else {
+                    if (type != 1 || !values || values->items.size() != 4) return no("filled with a colour other than RGB or CMYK");
+                    run.red = values->items[1].number; run.green = values->items[2].number; run.blue = values->items[3].number;
+                }
             }
             run.letterSpacing = style.num("Tracking", 0) / 1000 * fontSize;
             run.baselineShift = style.num("BaselineShift", 0) * scale;

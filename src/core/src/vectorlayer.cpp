@@ -1,4 +1,5 @@
 #include "compositor/vectorlayer.h"
+#include "compositor/colormgmt.h"
 #include "compositor/depth.h"
 #include "compositor/psd_carry.h"
 #include "compositor/selection.h"
@@ -177,6 +178,24 @@ std::vector<uint8_t> authorSolidColour(uint8_t r, uint8_t g, uint8_t b) {
     return descriptorBlock(d);
 }
 
+namespace {
+/// A solid colour's block in inks ('CMYC', percent), as Photoshop writes a CMYK document's.
+std::vector<uint8_t> authorSolidInks(const std::array<float, 4>& ink) {
+    Desc c("CMYC");
+    c.number("Cyn ", double(ink[0]) * 100).number("Mgnt", double(ink[1]) * 100).number("Ylw ", double(ink[2]) * 100).number("Blck", double(ink[3]) * 100);
+    Desc d("null");
+    d.object("Clr ", c);
+    return descriptorBlock(d);
+}
+
+/// Whether a shape's inks still describe its colour (their plain conversion within a level, as StyleColor's).
+bool shapeInkMatches(const VectorShape& shape) {
+    if (!shape.ink) return false;
+    StyleColor c{shape.r, shape.g, shape.b, shape.ink};
+    return inkMatches(c);
+}
+} // namespace
+
 void pathCanvas(const Document& document, int& width, int& height) {
     width = document.psdCarry && document.psdCarry->width > 0 ? document.psdCarry->width : document.width;
     height = document.psdCarry && document.psdCarry->height > 0 ? document.psdCarry->height : document.height;
@@ -218,11 +237,19 @@ bool hasShapeBlocks(const Layer& layer) {
     if (layer.isGroup || layer.adjustment || !layer.asset || !layer.asset->image || !(block(layer, "vsms") || block(layer, "vmsk"))
         || !(block(layer, "SoCo") || block(layer, "GdFl") || block(layer, "PtFl"))) return false;
     const AnyImage& image = layer.asset->image;
+    if (image.c8()) return layer.psdCarry->contentHash == psdContentHash(image);
     return layer.psdCarry->contentHash == (image.u16() ? cachedContentHash(image.u16()) : cachedContentHash(image.u8()));
 }
 }
 
 bool isVectorShapeLayer(const Layer& layer) { return hasShapeBlocks(layer); }
+
+void keepVectorShapeBlocks(Layer& layer) {
+    if (!layer.psdCarry || !layer.asset) return;
+    auto carry = std::make_shared<PsdLayerCarry>(*layer.psdCarry);
+    carry->contentHash = psdContentHash(layer.asset->image);
+    layer.psdCarry = std::move(carry);
+}
 
 int refreshVectorShapes(Document& document) {
     int redrawn = 0;
@@ -252,7 +279,15 @@ std::optional<VectorShape> vectorShapeOf(const Layer& layer, const Document& doc
                 const psd::DescriptorObject d = psd::read_descriptor(r);
                 if (auto c = psd::descriptor_object(d, "Clr ")) {
                     auto byte = [](double v) { return uint8_t(std::clamp(std::lround(v), 0L, 255L)); };
-                    shape.r = byte(psd::descriptor_number(*c, "Rd  ")); shape.g = byte(psd::descriptor_number(*c, "Grn ")); shape.b = byte(psd::descriptor_number(*c, "Bl  "));
+                    if (c->class_id == "CMYC") {
+                        // A CMYK file's colour: its inks, and their plain conversion as the RGB it is kept as.
+                        auto ink = [&](const char* k) { return float(std::clamp(psd::descriptor_number(*c, k) / 100.0, 0.0, 1.0)); };
+                        const StyleColor plain = plainRgbOfInk({ink("Cyn "), ink("Mgnt"), ink("Ylw "), ink("Blck")});
+                        shape.r = plain.r; shape.g = plain.g; shape.b = plain.b;
+                        shape.ink = plain.ink;
+                    } else {
+                        shape.r = byte(psd::descriptor_number(*c, "Rd  ")); shape.g = byte(psd::descriptor_number(*c, "Grn ")); shape.b = byte(psd::descriptor_number(*c, "Bl  "));
+                    }
                 }
             }
         } catch (std::exception&) {}
@@ -351,6 +386,36 @@ void setVectorShape(Layer& layer, const Document& document, const VectorShape& s
         image = AnyImage(ImagePtr(eight));
         layer.asset = Asset::make(eight, layer.name);
     }
+    if (document.colorMode != ColorMode::RGB) {
+        // A CMYK or Lab document: the fill in its own channels. Inks as they are (a CMYK file's solid colour, a ramp of
+        // ink stops from ink to ink); anything else drawn in sRGB above and taken through the document's profile.
+        const bool deep = document.sampleType == SampleType::U16;
+        AnyImage native;
+        if (document.colorMode == ColorMode::CMYK && !paintedFill && shapeInkMatches(shape)) {
+            const auto& ink = *shape.ink;
+            if (deep) {
+                auto inks = std::make_shared<Image16>(w, h, 5);
+                const uint16_t px[5] = {uint16_t(std::lround((1 - ink[0]) * one16)), uint16_t(std::lround((1 - ink[1]) * one16)),
+                                        uint16_t(std::lround((1 - ink[2]) * one16)), uint16_t(std::lround((1 - ink[3]) * one16)), uint16_t(one16)};
+                inks->fill(px);
+                native = Image16Ptr(inks);
+            } else {
+                auto inks = std::make_shared<ImageC8>(w, h, 5);
+                const uint8_t px[5] = {uint8_t(std::lround((1 - ink[0]) * 255)), uint8_t(std::lround((1 - ink[1]) * 255)),
+                                       uint8_t(std::lround((1 - ink[2]) * 255)), uint8_t(std::lround((1 - ink[3]) * 255)), 255};
+                inks->fill(px);
+                native = ImageC8Ptr(inks);
+            }
+        } else if (document.colorMode == ColorMode::CMYK && paintedFill && shape.fillPaint.kind == VectorPaint::Kind::Gradient) {
+            native = renderVectorPaintInks(shape.fillPaint, document, pathBounds(shape.path), Rect(x0, y0, w, h), 1, w, h, deep);
+        }
+        if (!native) native = convertImage(image, ColorMode::RGB, ColorProfile(), document.colorMode, document.profile);
+        if (native) native = imageAtFormat(native, document.sampleType, document.colorMode);
+        if (native) {
+            image = native;
+            layer.asset = Asset::makeAny(native, layer.name);
+        }
+    }
     layer.transform = LayerTransform(Point(x0, y0), Size(w, h));
     layer.shape.reset();
     layer.shapeImage.reset();
@@ -368,6 +433,7 @@ void setVectorShape(Layer& layer, const Document& document, const VectorShape& s
     path.disabled = false;
     if (paintedFill && shape.fillPaint.kind == VectorPaint::Kind::Gradient) blocks.push_back({"GdFl", authorGradientFill(shape.fillPaint.gradient)});
     else if (paintedFill && shape.fillPaint.kind == VectorPaint::Kind::Pattern) blocks.push_back({"PtFl", authorPatternFill(shape.fillPaint.pattern)});
+    else if (shapeInkMatches(shape)) blocks.push_back({"SoCo", authorSolidInks(*shape.ink)});
     else blocks.push_back({"SoCo", authorSolidColour(shape.r, shape.g, shape.b)});
     blocks.push_back({"vsms", authorVectorMask(path, cw, ch)});
     VectorStroke stroke = shape.stroke;

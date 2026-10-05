@@ -1,5 +1,6 @@
 // Text layers: the raster a LayerText renders to, through Qt's font engine (the core has no fonts).
 #pragma once
+#include "compositor/colormgmt.h"
 #include "compositor/document.h"
 #include "compositor/psd.h"
 #include "compositor/psd_writer.h"
@@ -11,6 +12,7 @@
 #include <vector>
 #include <QString>
 #include <memory>
+
 
 namespace app {
 
@@ -29,6 +31,10 @@ std::shared_ptr<compositor::Image> renderTextLayer(const compositor::LayerText& 
 std::shared_ptr<compositor::Image16> renderTextLayer16(const compositor::LayerText& text, QPointF* warpOffset = nullptr);
 /// The text at a document's depth; empty when it would exceed the pixel budget.
 compositor::AnyImage renderTextLayerAt(const compositor::LayerText& text, compositor::SampleType type, QPointF* warpOffset = nullptr);
+/// The text as `document` holds it: at its depth, and in a CMYK or Lab document painted at 16 bits in sRGB then each
+/// colour taken through the document's profile with the glyphs' coverage kept (textRasterInMode).
+compositor::AnyImage renderTextForDocument(const compositor::LayerText& text, const compositor::Document& document, QPointF* warpOffset = nullptr,
+                                           const compositor::ConvertOptions& options = {});
 /// Where the caret and the selection go on a text layer's upright raster (renderTextLayer's pixels, the padding
 /// included), for typing on the canvas. Positions are UTF-16 units of the text, 0 to its length.
 struct TextCaretGeometry {

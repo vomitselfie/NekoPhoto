@@ -616,8 +616,8 @@ StyleGradient twoStops(StyleColor from, StyleColor to, float angle) {
     return g;
 }
 
-/// Soft paint carrying `style` over the golden base, converted to 16 bits.
-Document styledScene(const LayerStyle& style) {
+/// Soft paint carrying `style` over the golden base (8-bit RGB).
+Document styledScene8(const LayerStyle& style) {
     Document doc = goldenBase();
     std::vector<uint8_t> rgba;
     for (int i = 0; i < 16; i++) { rgba.push_back(uint8_t(60 * (i % 4))); rgba.push_back(uint8_t(60 * (i / 4))); rgba.push_back(200); rgba.push_back(255); }
@@ -625,7 +625,57 @@ Document styledScene(const LayerStyle& style) {
     Layer top = layerOf("paint", paint(56, 40, 5), {20, 12});
     setLayerStyle(top, style);
     doc.layers.push_back(top);
-    return sixteen(doc);
+    return doc;
+}
+
+/// The same converted to 16 bits.
+Document styledScene(const LayerStyle& style) { return sixteen(styledScene8(style)); }
+
+/// Each effect alone, then all ten together.
+std::vector<std::pair<std::string, LayerStyle>> effectStyles() {
+    std::vector<std::pair<std::string, LayerStyle>> styles;
+    auto effect = [&](const std::string& name, const std::function<void(LayerStyle&)>& make) { LayerStyle s; make(s); styles.push_back({name, s}); };
+    effect("drop_shadow", [](LayerStyle& s) { DropShadow d; d.distance = 4; d.size = 5; s.dropShadows.push_back(d); });
+    effect("inner_shadow", [](LayerStyle& s) { InnerShadow d; d.size = 4; s.innerShadows.push_back(d); });
+    effect("outer_glow", [](LayerStyle& s) { OuterGlow g; g.size = 6; s.outerGlows.push_back(g); });
+    effect("inner_glow", [](LayerStyle& s) { InnerGlow g; g.size = 5; s.innerGlows.push_back(g); });
+    effect("satin", [](LayerStyle& s) { Satin t; t.size = 8; s.satins.push_back(t); });
+    effect("color_overlay", [](LayerStyle& s) { ColorOverlay c; c.color = {20, 180, 90}; c.opacity = 0.6f; s.colorOverlays.push_back(c); });
+    effect("gradient_overlay", [](LayerStyle& s) { GradientOverlay g; g.gradient = twoStops({255, 0, 0}, {0, 0, 255}, 90); s.gradientOverlays.push_back(g); });
+    effect("pattern_overlay", [](LayerStyle& s) { PatternOverlay p; p.patternId = "tile"; p.opacity = 0.7f; s.patternOverlays.push_back(p); });
+    effect("stroke", [](LayerStyle& s) { Stroke k; k.size = 3; s.strokes.push_back(k); });
+    effect("bevel", [](LayerStyle& s) { Bevel b; b.size = 5; s.bevels.push_back(b); });
+    LayerStyle all;
+    for (auto& [name, style] : styles) {
+        for (auto& v : style.dropShadows) all.dropShadows.push_back(v);
+        for (auto& v : style.innerShadows) all.innerShadows.push_back(v);
+        for (auto& v : style.outerGlows) all.outerGlows.push_back(v);
+        for (auto& v : style.innerGlows) all.innerGlows.push_back(v);
+        for (auto& v : style.satins) all.satins.push_back(v);
+        for (auto& v : style.colorOverlays) all.colorOverlays.push_back(v);
+        for (auto& v : style.gradientOverlays) all.gradientOverlays.push_back(v);
+        for (auto& v : style.patternOverlays) all.patternOverlays.push_back(v);
+        for (auto& v : style.strokes) all.strokes.push_back(v);
+        for (auto& v : style.bevels) all.bevels.push_back(v);
+    }
+    styles.push_back({"all_ten", all});
+    return styles;
+}
+
+/// A folder with an outer glow and a white stroke around one layer.
+Document styledFolderScene() {
+    Document doc = goldenBase();
+    Layer folder("Folder", doc.size());
+    folder.isGroup = true;
+    LayerStyle style;
+    OuterGlow glow; glow.size = 6; style.outerGlows.push_back(glow);
+    Stroke stroke; stroke.size = 2; stroke.color = {255, 255, 255}; style.strokes.push_back(stroke);
+    setLayerStyle(folder, style);
+    Layer a = layerOf("a", paint(48, 36, 3), {10, 10});
+    a.parentId = folder.id;
+    doc.layers.push_back(folder);
+    doc.layers.push_back(a);
+    return doc;
 }
 
 void add16BitVectorScenes() {
@@ -703,51 +753,63 @@ void add16BitVectorScenes() {
         return hash16(sixteen(doc));
     });
     // Each effect alone, then all ten together, then a folder's style.
-    std::vector<std::pair<std::string, LayerStyle>> styles;
-    auto effect = [&](const std::string& name, const std::function<void(LayerStyle&)>& make) { LayerStyle s; make(s); styles.push_back({name, s}); };
-    effect("drop_shadow", [](LayerStyle& s) { DropShadow d; d.distance = 4; d.size = 5; s.dropShadows.push_back(d); });
-    effect("inner_shadow", [](LayerStyle& s) { InnerShadow d; d.size = 4; s.innerShadows.push_back(d); });
-    effect("outer_glow", [](LayerStyle& s) { OuterGlow g; g.size = 6; s.outerGlows.push_back(g); });
-    effect("inner_glow", [](LayerStyle& s) { InnerGlow g; g.size = 5; s.innerGlows.push_back(g); });
-    effect("satin", [](LayerStyle& s) { Satin t; t.size = 8; s.satins.push_back(t); });
-    effect("color_overlay", [](LayerStyle& s) { ColorOverlay c; c.color = {20, 180, 90}; c.opacity = 0.6f; s.colorOverlays.push_back(c); });
-    effect("gradient_overlay", [](LayerStyle& s) { GradientOverlay g; g.gradient = twoStops({255, 0, 0}, {0, 0, 255}, 90); s.gradientOverlays.push_back(g); });
-    effect("pattern_overlay", [](LayerStyle& s) { PatternOverlay p; p.patternId = "tile"; p.opacity = 0.7f; s.patternOverlays.push_back(p); });
-    effect("stroke", [](LayerStyle& s) { Stroke k; k.size = 3; s.strokes.push_back(k); });
-    effect("bevel", [](LayerStyle& s) { Bevel b; b.size = 5; s.bevels.push_back(b); });
-    LayerStyle all;
-    for (auto& [name, style] : styles) {
-        for (auto& v : style.dropShadows) all.dropShadows.push_back(v);
-        for (auto& v : style.innerShadows) all.innerShadows.push_back(v);
-        for (auto& v : style.outerGlows) all.outerGlows.push_back(v);
-        for (auto& v : style.innerGlows) all.innerGlows.push_back(v);
-        for (auto& v : style.satins) all.satins.push_back(v);
-        for (auto& v : style.colorOverlays) all.colorOverlays.push_back(v);
-        for (auto& v : style.gradientOverlays) all.gradientOverlays.push_back(v);
-        for (auto& v : style.patternOverlays) all.patternOverlays.push_back(v);
-        for (auto& v : style.strokes) all.strokes.push_back(v);
-        for (auto& v : style.bevels) all.bevels.push_back(v);
-    }
-    styles.push_back({"all_ten", all});
+    const auto styles = effectStyles();
     for (auto& [name, style] : styles) {
         const LayerStyle copy = style;
         scene("u16/style/" + name, [copy] { return hash16(styledScene(copy)); });
     }
+    const LayerStyle all = styles.back().second;
     scene("u16/style/all_ten@0.5", [all] { return hash16(styledScene(all), reducedRegion()); });
-    scene("u16/style/folder", [] {
-        Document doc = goldenBase();
-        Layer folder("Folder", doc.size());
-        folder.isGroup = true;
-        LayerStyle style;
-        OuterGlow glow; glow.size = 6; style.outerGlows.push_back(glow);
-        Stroke stroke; stroke.size = 2; stroke.color = {255, 255, 255}; style.strokes.push_back(stroke);
-        setLayerStyle(folder, style);
-        Layer a = layerOf("a", paint(48, 36, 3), {10, 10});
-        a.parentId = folder.id;
-        doc.layers.push_back(folder);
-        doc.layers.push_back(a);
-        return hash16(sixteen(doc));
-    });
+    scene("u16/style/folder", [] { return hash16(sixteen(styledFolderScene())); });
+}
+
+// ---- Layer styles, shapes and text in CMYK and Lab (P8) -------------------------------------------------------------
+//
+// The 16-bit style scenes converted with Image > Mode at 8 and 16 bits: every effect drawn in the document's channels,
+// its colours through the profile ("cmyk/style/", "lab16/style/", ...); shape layers made in the converted document,
+// and one drawn in RGB and converted with it (still a shape).
+
+void addColorModeVectorScenes() {
+    for (ColorMode colorMode : {ColorMode::CMYK, ColorMode::Lab})
+        for (SampleType type : {SampleType::U8, SampleType::U16}) {
+            const std::string prefix = std::string(colorMode == ColorMode::CMYK ? "cmyk" : "lab") + (type == SampleType::U16 ? "16" : "") + "/";
+            for (auto& [name, style] : effectStyles()) {
+                const LayerStyle copy = style;
+                scene(prefix + "style/" + name, [=] { return hashNative(renderNative(inColorMode(styledScene8(copy), colorMode, type))); });
+            }
+            scene(prefix + "style/all_ten@0.5", [=] {
+                return hashNative(renderNative(inColorMode(styledScene8(effectStyles().back().second), colorMode, type), reducedRegion()));
+            });
+            scene(prefix + "style/folder", [=] { return hashNative(renderNative(inColorMode(styledFolderScene(), colorMode, type))); });
+            auto shapeScene = [=](const VectorShape& shape) {
+                Document doc = inColorMode(goldenBase(), colorMode, type);
+                Layer layer = layerOf("shape", std::make_shared<Image>(1, 1), {0, 0});
+                setVectorShape(layer, doc, shape);
+                doc.layers.push_back(layer);
+                return hashNative(renderNative(doc));
+            };
+            VectorShape ellipse;
+            ellipse.path = ellipsePath(Rect(12.5, 8.25, 60, 44));
+            ellipse.r = 200; ellipse.g = 60; ellipse.b = 30;
+            ellipse.stroke.enabled = false;
+            scene(prefix + "shape/solid_ellipse", [=] { return shapeScene(ellipse); });
+            VectorShape gradient = ellipse;
+            gradient.path = rectanglePath(Rect(16, 10, 60, 40), 8);
+            gradient.fillPaint.kind = VectorPaint::Kind::Gradient;
+            gradient.fillPaint.gradient = twoStops({255, 0, 0}, {0, 0, 255}, 30);
+            gradient.stroke.enabled = true;
+            gradient.stroke.width = 4;
+            gradient.stroke.paint.kind = VectorPaint::Kind::Gradient;
+            gradient.stroke.paint.gradient = twoStops({255, 255, 0}, {0, 128, 0}, 90);
+            scene(prefix + "shape/gradient_fill_and_stroke", [=] { return shapeScene(gradient); });
+            scene(prefix + "shape/converted_from_rgb", [=] {
+                Document doc = goldenBase();
+                Layer layer = layerOf("shape", std::make_shared<Image>(1, 1), {0, 0});
+                setVectorShape(layer, doc, ellipse);
+                doc.layers.push_back(layer);
+                return hashNative(renderNative(inColorMode(doc, colorMode, type)));
+            });
+        }
 }
 
 // ---- 32 bits ------------------------------------------------------------------------------------------------------
@@ -1651,6 +1713,7 @@ TEST_CASE(render_hashes_match_the_baseline_on_the_pool_and_serially) {
     add16BitScenes();
     add16BitEditScenes();
     add16BitVectorScenes();
+    addColorModeVectorScenes();
     add16BitSmartObjectScenes();
     add16BitLateScenes();
     add32BitScenes();
@@ -1690,6 +1753,8 @@ TEST_CASE(render_hashes_match_the_baseline_on_the_pool_and_serially) {
         if (name.rfind("f32/", 0) == 0 || name.find("/f32/") != std::string::npos) { unchecked++; continue; }
         // So do the Linear and Perceptual gradient methods (pow and cbrt into linear light and Oklab and back).
         if (name.find("gradient_method/") != std::string::npos) { unchecked++; continue; }
+        // CMYK and Lab effects take their colours through Little CMS's float transforms, whose curves use pow.
+        if ((name.rfind("cmyk", 0) == 0 || name.rfind("lab", 0) == 0) && name.find("/style/") != std::string::npos) { unchecked++; continue; }
 #endif
         auto it = expected.find(name);
         if (it == expected.end()) { std::fprintf(stderr, "  new      %s %s\n", name.c_str(), h.c_str()); added++; }

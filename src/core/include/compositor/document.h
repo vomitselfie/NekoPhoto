@@ -117,6 +117,9 @@ struct TextRun {
     double leading = 0;                // baseline to baseline for a line holding it (the largest on a line wins); 0: 1.2 x size
     enum class Caps { Normal, Small, All } caps = Caps::Normal;
     bool underline = false, strikethrough = false;
+    /// A CMYK file's colour as its inks (C, M, Y, K 0..1): a CMYK document paints them and writes them back while
+    /// red, green and blue are still their plain conversion (textInkMatches); picking another colour retires them.
+    std::optional<std::array<float, 4>> ink;
     bool operator==(const TextRun&) const = default;
 };
 
@@ -148,6 +151,8 @@ struct LayerText {
     /// Text in more than one style: the runs, in order, covering the text (the fields above then mirror the first
     /// run). Empty: all of it in the style above.
     std::vector<TextRun> runs;
+    /// The colour's inks, as TextRun's (the fields above mirror the first run's).
+    std::optional<std::array<float, 4>> ink;
     bool operator==(const LayerText&) const = default;
 };
 
@@ -158,6 +163,8 @@ int utf16Length(const std::string& utf8);
 std::vector<TextRun> textRuns(const LayerText& text);
 /// The layer's style as one run (its fields).
 TextRun baseTextRun(const LayerText& text);
+/// Whether a text colour's inks still describe its red, green and blue (their plain conversion, within a level).
+bool textInkMatches(double red, double green, double blue, const std::optional<std::array<float, 4>>& ink);
 /// Runs kept in step with an edit that turned `before` into `after` (the changed middle takes the style of the run
 /// it starts in).
 std::vector<TextRun> adjustTextRuns(const std::vector<TextRun>& runs, const std::string& before, const std::string& after);
