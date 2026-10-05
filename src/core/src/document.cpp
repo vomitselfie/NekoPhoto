@@ -235,7 +235,7 @@ Rect Selection::bounds() const {
 Document::Document(int width_, int height_) : id(makeUuid()), width(width_), height(height_) {}
 
 bool Document::operator==(const Document& o) const {
-    return id == o.id && width == o.width && height == o.height && resolution == o.resolution && sampleType == o.sampleType && colorMode == o.colorMode && profile == o.profile && encodedProfile == o.encodedProfile && layers == o.layers && selection == o.selection && psdCarry == o.psdCarry && smartObjects == o.smartObjects && slices == o.slices && animation == o.animation && channels == o.channels;
+    return id == o.id && width == o.width && height == o.height && resolution == o.resolution && sampleType == o.sampleType && colorMode == o.colorMode && profile == o.profile && encodedProfile == o.encodedProfile && layers == o.layers && selection == o.selection && psdCarry == o.psdCarry && smartObjects == o.smartObjects && slices == o.slices && guides == o.guides && animation == o.animation && channels == o.channels;
 }
 
 long long Document::layerPixels() const {

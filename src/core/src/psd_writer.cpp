@@ -1301,7 +1301,8 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
         res.str("8BIM"); res.u16(0x03ED); res.u8(0); res.u8(0); res.u32(16);
         res.u32(ppi); res.u16(1); res.u16(1); res.u32(ppi); res.u16(1); res.u16(1);
         // The PSD's own resources, when the document came from one.
-        bool slicesWritten = false, profileWritten = false;
+        bool slicesWritten = false, guidesWritten = false, profileWritten = false;
+        std::optional<std::pair<uint32_t, uint32_t>> grid;   // the file's grid words, kept when the guides change
         auto writeProfile = [&](const std::string& name) {
             res.str("8BIM"); res.u16(1039);
             res.u8(unsigned(name.size())); res.bytes(std::vector<uint8_t>(name.begin(), name.end()));
@@ -1326,6 +1327,12 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
                     profileWritten = true;
                 }
                 if (resource.id == 1041 && !fileProfile.empty() && !resource.data.empty() && resource.data[0] != 0) continue;
+                if (resource.id == 1032) {
+                    // The file's guides (and grid) while they are still the document's; else written anew below.
+                    std::vector<Guide> held;
+                    if (!parseGuidesResource(resource.data, held, &grid) || held != document.guides) continue;
+                    guidesWritten = true;
+                }
                 if (resource.id == 1050) {
                     // The file's slices while they are still the document's; else written anew below.
                     std::vector<Slice> held;
@@ -1344,6 +1351,12 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
         // The alpha and spot channels' names, display and identifiers (psd_channels.h).
         for (const auto& [id, data] : psdChannelResourceBlocks(document)) {
             res.str("8BIM"); res.u16(id); res.u8(0); res.u8(0);
+            res.u32(uint32_t(data.size())); res.bytes(data);
+            if (data.size() & 1) res.u8(0);
+        }
+        if (!guidesWritten && !document.guides.empty()) {
+            const std::vector<uint8_t> data = guidesResource(document.guides, grid);
+            res.str("8BIM"); res.u16(1032); res.u8(0); res.u8(0);
             res.u32(uint32_t(data.size())); res.bytes(data);
             if (data.size() & 1) res.u8(0);
         }

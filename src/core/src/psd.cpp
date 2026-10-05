@@ -1516,6 +1516,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
         }
         for (const auto& resource : docCarry->resources)
             if (resource.id == 1050) parseSlicesResource(resource.data, document.slices);
+            else if (resource.id == 1032) parseGuidesResource(resource.data, document.guides);
         if (!docCarry->resources.empty() || !docCarry->globals.empty()) document.psdCarry = docCarry;
         if (deep) {
             // What was not read from 16-bit planes (fills, smart object contents, text drawn anew) is widened, so the
