@@ -75,7 +75,9 @@ fitted to Photoshop's composites, and is checked against two Photoshop-saved fil
 merged images it now matches (mean / max level difference): a Perceptual gradient overlay 0.57 / 4 (8.1 / 20 drawn
 as Classic), a Linear one 0.08 / 1 (2.2 / 12 before). `build/tests/gradient_method_tests` re-measures them with
 `AGPSD_FIXTURES` set to ag-psd's `test` folder, and runs every method through a PSD at 8 and 16 bits in RGB, CMYK
-and Lab.
+and Lab. The method is written as Photoshop writes it: the `gradientInterpolationMethodType` enum `Gcls`, `Perc` or
+`Lnr ` (under `gs99` in a gradient overlay, `gradientsInterpolationMethod` in a stroke and a gradient fill), as in
+those files; the lower-case `perceptual` and `linear` some other writers use are read too.
 
 Unverified: a CMYK fill whose stops are inks interpolates the inks in every method (no Photoshop-saved CMYK file
 with Linear or Perceptual exists here); the Gradient tool and Gradient Map have no Method setting yet (they draw as

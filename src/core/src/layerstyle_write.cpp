@@ -138,8 +138,9 @@ const char* gradientType(StyleGradient::Type t) {
     return "Lnr ";
 }
 
+/// Photoshop's gradientInterpolationMethodType values, as its own files hold them (ag-psd's Photoshop-saved fixtures).
 const char* interpolation(StyleGradient::Interpolation i) {
-    return i == StyleGradient::Interpolation::Perceptual ? "perceptual" : i == StyleGradient::Interpolation::Linear ? "linear" : "Gcls";
+    return i == StyleGradient::Interpolation::Perceptual ? "Perc" : i == StyleGradient::Interpolation::Linear ? "Lnr " : "Gcls";
 }
 
 Desc point(double x, double y, bool percent) {

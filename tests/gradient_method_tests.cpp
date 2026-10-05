@@ -19,6 +19,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <vector>
 
 using namespace compositor;
 
@@ -70,6 +71,18 @@ Document fillDocument(Method method) {
     setLayerStyle(box, style);
     doc.layers.push_back(box);
     return doc;
+}
+
+/// How many gradientInterpolationMethodType enums in `bytes` hold `method`'s value as Photoshop spells it.
+int methodEnums(const std::vector<uint8_t>& bytes, Method method) {
+    const std::string type = "gradientInterpolationMethodType";
+    const std::string value = method == Method::Perceptual ? "Perc" : method == Method::Linear ? "Lnr " : "Gcls";
+    const std::string all(bytes.begin(), bytes.end());
+    int count = 0;
+    // The type ID, then the value as a four-character code: a zero length and the code.
+    for (size_t at = all.find(type); at != std::string::npos; at = all.find(type, at + 1))
+        if (all.compare(at + type.size(), 8, std::string("\0\0\0\0", 4) + value) == 0) count++;
+    return count;
 }
 
 int maxApart(const Image& a, const Image& b) {
@@ -126,6 +139,8 @@ TEST_CASE(every_method_renders_and_round_trips_in_every_mode) {
             // Saved and read back: the method is still there, and the render is the same.
             const auto bytes = encodePsd(doc, PsdExportOptions(), nullptr, &error);
             REQUIRE(!bytes.empty());
+            // Written as Photoshop writes it: the gradientInterpolationMethodType enum's Gcls, Perc or Lnr.
+            if (v.mode == ColorMode::RGB) CHECK_EQ(methodEnums(bytes, method), 3);
             auto back = importPsdBytes(bytes, &error);
             REQUIRE(back.has_value());
             int found = 0;
