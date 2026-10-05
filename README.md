@@ -59,17 +59,17 @@ Photoshop draws them, most within a level of its own renders. What PSD cannot ca
 
 Coming next:
 
-- **Text, shapes and layer styles in CMYK and Lab documents** (everything else already works there)
-- **Brushes that feel the same**: a deeper translation of Clip Studio and Photoshop brush settings, so your favourite brush behaves as it did
+- **Smart objects, artboards and slices in CMYK and Lab documents** (text, shapes, layer styles and everything else already work there)
+- **Colour jitter for imported brushes**: imported Procreate, Clip Studio and Photoshop brushes already keep their pressure curves, tapers, jitter and angle behaviour
 
 ## What it does
 
 - **Layers:** folders, blend modes, opacity, layer masks, clipping masks, adjustment layers, and Blend If (Layer Style ▸ Blending Options: show or hide a layer by the brightness of its own pixels or of what's beneath, with Alt-split sliders for soft edges)
-- **Colour and depth:** 8, 16 and 32 bits per channel. 32-bit HDR documents have HDR Toning, an exposure view, and adjustments, filters, selections and pixel edits that keep light above white. RGB, CMYK and Lab Color documents open from PSD and convert through Image > Mode, colour-managed with ICC profiles. Each mode offers Photoshop's own blend modes and matches its renders. You paint, retouch, adjust, filter, select, crop and transform CMYK and Lab documents in their own colours, never through RGB, and export them to PNG, JPEG, WebP or TIFF. There is a Channels panel, a Histogram panel and a CMYK proof ([docs/bit-depth.md](docs/bit-depth.md), [docs/color-modes.md](docs/color-modes.md))
+- **Colour and depth:** 8, 16 and 32 bits per channel. 32-bit HDR documents have HDR Toning, an exposure view, and adjustments, filters, selections and pixel edits that keep light above white. RGB, CMYK and Lab Color documents open from PSD and convert through Image > Mode, colour-managed with ICC profiles. Each mode offers Photoshop's own blend modes and matches its renders. You paint, retouch, adjust, filter, select, crop, transform, type, draw shapes and use layer styles in CMYK and Lab documents in their own colours, never through RGB, and export them to PNG, JPEG, WebP or TIFF. There is a Channels panel, a Histogram panel and a CMYK proof ([docs/bit-depth.md](docs/bit-depth.md), [docs/color-modes.md](docs/color-modes.md))
 - **Transform:** move, scale, rotate and distort without losing resolution; Content-Aware Scale and Content-Aware Move
 - **Selections:** marquee, lasso, Quick Select by scribble or by click, Content-Aware Fill, and an edge-aware magic wand: shading and texture stay in, edges hold, the tolerance can be changed right after a click, Shift/Alt-clicks add what belongs and what doesn't, and with Contiguous off one click takes a background in many pockets (a baked checkerboard around a character) and Delete leaves the line art without a rim of the background ([docs/smart-wand.md](docs/smart-wand.md))
 - **Painting:** brush, eraser, spot healing, clone stamp, smudge, liquify, gradients (Photoshop's Classic, Perceptual and Linear methods), shapes, and text typed straight on the canvas, Japanese input included
-- **Brushes:** 196 MyPaint brushes (pencils, inks, charcoal, paint, smudging) that follow pen pressure and tilt, and your own brushes imported from Photoshop (`.abr`), Procreate (`.brushset`, `.brush`) and Clip Studio (`.sut`), or any image as a brush tip
+- **Brushes:** 196 MyPaint brushes (pencils, inks, charcoal, paint, smudging) that follow pen pressure and tilt, and your own brushes imported from Photoshop (`.abr`), Procreate (`.brushset`, `.brush`) and Clip Studio (`.sut`) with their pressure curves, tapers and jitter, or any image as a brush tip
 - **Vectors:** Pen and shape tools with path operations, gradient and pattern fills, live rectangles and ellipses, vector masks on any layer, and text to path ([docs/vector-tools.md](docs/vector-tools.md))
 - **Artboards and slices,** exported to files in one go ([docs/artboards-slices.md](docs/artboards-slices.md))
 - **Actions and Batch:** record steps, play them back, and run them over a folder of files; almost every menu command and the Layers panel's controls are recorded ([docs/actions.md](docs/actions.md))
@@ -222,13 +222,13 @@ PSD の書き出しは往復テスト済みです。手元にあるレイヤー�
 
 今後の予定:
 
-- **CMYK・Lab ドキュメントでのテキスト・シェイプ・レイヤースタイル**(それ以外はすでに使えます)
-- **同じ描き心地のブラシ**: クリップスタジオや Photoshop のブラシ設定をより深く変換し、お気に入りのブラシがそのままの感覚で使えるように
+- **CMYK・Lab ドキュメントでのスマートオブジェクト・アートボード・スライス**(テキスト・シェイプ・レイヤースタイルなど、それ以外はすでに使えます)
+- **読み込んだブラシのカラージッター**: Procreate・クリップスタジオ・Photoshop のブラシは、筆圧カーブ・入り抜き・ジッター・角度の挙動をすでに引き継ぎます
 
 ### できること
 
 - **レイヤー:** グループ、描画モード、不透明度、レイヤーマスク、クリッピングマスク、調整レイヤー、ブレンド条件(レイヤースタイル ▸ レイヤー効果の詳細:自分や下のレイヤーの明るさでピクセルを表示・非表示。Alt で分割したスライダーで境界をなめらかに)
-- **色とビット数:** 8・16・32 ビット/チャンネル。32 ビットの HDR ドキュメントでは HDR トーン、露光量を変えられる表示、白より明るい光を保ったままの色調補正・フィルター・選択範囲・ピクセル編集が使えます。RGB・CMYK・Lab カラーのドキュメントを PSD から開き、イメージ > モードで変換でき、ICC プロファイルでカラーマネジメントされます。どのモードでも Photoshop と同じ描画モードが使え、Photoshop の描画結果と一致します。CMYK・Lab のドキュメントは RGB を経由せずそのままの色で描画・修正・色調補正・フィルター・選択・切り抜き・変形ができ、PNG・JPEG・WebP・TIFF に書き出せます。チャンネルパネル、ヒストグラムパネル、CMYK の校正表示もあります
+- **色とビット数:** 8・16・32 ビット/チャンネル。32 ビットの HDR ドキュメントでは HDR トーン、露光量を変えられる表示、白より明るい光を保ったままの色調補正・フィルター・選択範囲・ピクセル編集が使えます。RGB・CMYK・Lab カラーのドキュメントを PSD から開き、イメージ > モードで変換でき、ICC プロファイルでカラーマネジメントされます。どのモードでも Photoshop と同じ描画モードが使え、Photoshop の描画結果と一致します。CMYK・Lab のドキュメントは RGB を経由せずそのままの色で描画・修正・色調補正・フィルター・選択・切り抜き・変形・文字入力・シェイプ・レイヤースタイルが使え、PNG・JPEG・WebP・TIFF に書き出せます。チャンネルパネル、ヒストグラムパネル、CMYK の校正表示もあります
 - **変形:** 解像度を落とさずに移動・拡大縮小・回転・自由変形。コンテンツに応じて拡大・縮小、コンテンツに応じた移動
 - **選択範囲:** 長方形・楕円選択、なげなわ、なぞる/クリックするだけのクイック選択、コンテンツに応じた塗りつぶし、そして輪郭を読み取る自動選択(陰影やテクスチャは含め、境界では止まります。クリック直後に許容値を変えて調整でき、Shift/Alt クリックで含めるもの・除くものを指示できます。「隣接」をオフにすれば、キャラクターの周りに分かれた背景も 1 クリックで選択でき、削除しても線画に背景の色が残りません)
 - **描画:** ブラシ、消しゴム、スポット修復ブラシ、コピースタンプ、指先ツール、ゆがみ、グラデーション(Photoshop と同じクラシック・知覚的・リニアの方式)、シェイプ、キャンバスに直接入力できるテキスト(日本語入力にも対応)
