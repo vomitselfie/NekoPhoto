@@ -1084,6 +1084,36 @@ def thirty_two_bit_painting(rpc):
     rpc.call("tabs.close", index=tab["index"], discard=True)
 
 
+def gradient_methods(rpc):
+    """Photoshop's gradient Method on the Gradient tool (gradient.draw interpolation) and on Gradient Map
+    adjustment layers (its settings' interpolation): Classic draws as before, Perceptual and Linear blend elsewhere; unknown methods are
+    refused."""
+    first = rpc.call("tabs.list")
+    tab = rpc.call("tabs.new")
+    rpc.call("document.new", width=64, height=8)
+    rpc.call("pixels.fill", color="#ffffff")
+    middle = {}
+    for method in ("classic", "perceptual", "linear"):
+        rpc.call("gradient.draw", x0=0, y0=0, x1=64, y1=0, foreground="#ff0000", background="#0000ff", style="foreground-to-background", interpolation=method)
+        assert rpc.call("history.info")["undo"] == "Gradient"
+        middle[method] = rpc.call("color.sample", x=32, y=4)["color"]
+    assert middle["classic"] != middle["perceptual"] and middle["classic"] != middle["linear"], middle
+    expect_refused(rpc, "interpolation must be", "gradient.draw", x0=0, y0=0, x1=64, y1=0, interpolation="oklch")
+    rpc.call("layers.add", kind="adjustment", adjustmentKind="Gradient Map")
+    settings = rpc.call("adjustments.get")["settings"]
+    assert settings["gradientMapSettings"]["interpolation"] == "classic", settings["gradientMapSettings"]
+    assert rpc.call("adjustments.defaults", kind="Gradient Map")["gradientMapSettings"]["interpolation"] == "classic"
+    settings["gradientMapSettings"]["interpolation"] = "perceptual"
+    changed = rpc.call("adjustments.set", settings={"gradientMapSettings": settings["gradientMapSettings"]})
+    assert changed["settings"]["gradientMapSettings"]["interpolation"] == "perceptual", changed
+    assert rpc.call("adjustments.get")["settings"]["gradientMapSettings"]["interpolation"] == "perceptual"
+    bad = dict(settings["gradientMapSettings"], interpolation="oklch")
+    expect_refused(rpc, "couldn't parse", "adjustments.set", settings={"gradientMapSettings": bad})
+    rpc.call("document.close", discard=True)
+    rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
+    rpc.call("tabs.close", index=tab["index"], discard=True)
+
+
 def colour_mode_painting(rpc):
     """P7 E (docs/color-modes.md): painting in CMYK and Lab documents at 8 and 16 bits in the document's own samples.
     Black in CMYK lays the Working CMYK's rich black (K and C, M, Y); a Lab stroke's L is the colour's; the Eyedropper
@@ -1966,6 +1996,7 @@ def main():
     colour_management(rpc)
     colour_modes(rpc)
     colour_mode_painting(rpc)
+    gradient_methods(rpc)
     colour_mode_adjustments(rpc)
     colour_mode_selection(rpc)
     colour_mode_transforms(rpc)

@@ -361,6 +361,11 @@ void AutomationServer::registerPaintHandlers() {
         }
         s->gradientSettings.reversed = flag(p, "reversed", false);
         s->gradientSettings.opacity = std::clamp(num(p, "opacity", 1), 0.0, 1.0);
+        s->gradientSettings.method = GradientMethod::Classic;
+        if (has(p, "interpolation") && !parseGradientMethod(str(p, "interpolation").toStdString(), s->gradientSettings.method)) {
+            restore();
+            fail("interpolation must be classic, perceptual or linear", invalidParams);
+        }
         if (has(p, "foreground")) s->foregroundColor = QColor(str(p, "foreground"));
         if (has(p, "background")) s->backgroundColor = QColor(str(p, "background"));
         QPointF a(num(p, "x0"), num(p, "y0")), b(num(p, "x1"), num(p, "y1"));

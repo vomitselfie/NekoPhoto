@@ -100,6 +100,8 @@ struct GradientSettings {
     QString preset;
     bool reversed = false;
     double opacity = 1;
+    /// Photoshop's Method menu: the space the colours blend in (Classic: as before).
+    compositor::GradientMethod method = compositor::GradientMethod::Classic;
 };
 
 /// A shape being dragged out with the Shape tool, in whole document pixels.

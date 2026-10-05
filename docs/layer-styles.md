@@ -66,8 +66,9 @@ Lightness, a and b in Lab.
 
 ## Gradient methods
 
-Gradients follow Photoshop's Method (gradient overlays, layer-style strokes, gradient fill layers and shape strokes;
-the Layer Style dialog's gradients have the menu): Classic interpolates the stored sRGB values, Linear interpolates
+Gradients follow Photoshop's Method (gradient overlays, layer-style strokes, gradient fill layers and shape strokes,
+the Gradient tool and Gradient Map; the Layer Style dialog, the Gradient tool's options bar and the Gradient Map
+editor have the menu): Classic interpolates the stored sRGB values, Linear interpolates
 in linear light, and Perceptual in Oklab, each with the gradient's smoothness applied in its own space (between two
 stops too; Classic smooths only past two stops, as before). Colour stops, midpoints and opacity stops work as in
 Classic; opacity interpolates linearly in every method. The model follows PhotoCraft's (THIRD-PARTY-NOTICES.md),
@@ -79,9 +80,16 @@ and Lab. The method is written as Photoshop writes it: the `gradientInterpolatio
 `Lnr ` (under `gs99` in a gradient overlay, `gradientsInterpolationMethod` in a stroke and a gradient fill), as in
 those files; the lower-case `perceptual` and `linear` some other writers use are read too.
 
+The Gradient tool and Gradient Map draw Perceptual and Linear from the same model, the ramp sampled at 257 even
+stops (within a level of the overlay's colours; Classic draws exactly as before, and stays the default, while
+Photoshop's tool now defaults to Perceptual). Gradient Map reads its method from a Photoshop file's 'grdm' (version 3
+holds the enum's code after Dither: ag-psd's Photoshop-saved Perceptual map is read as Perceptual); NekoPhoto's Gradient
+Map is a two-colour ramp, so PSD export still writes it as pixels and the method lives in projects. Automation:
+`gradient.draw` `interpolation`, and `interpolation` in a Gradient Map's `gradientMapSettings`.
+
 Unverified: a CMYK fill whose stops are inks interpolates the inks in every method (no Photoshop-saved CMYK file
-with Linear or Perceptual exists here); the Gradient tool and Gradient Map have no Method setting yet (they draw as
-before).
+with Linear or Perceptual exists here); no Photoshop render of the Gradient tool or of a two-stop Gradient Map in
+Perceptual or Linear is here to compare with (they share the overlay's measured model).
 
 ## How close
 

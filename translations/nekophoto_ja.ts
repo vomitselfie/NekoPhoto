@@ -3158,6 +3158,22 @@ Working: %2</source>
         <translation>逆方向</translation>
     </message>
     <message>
+        <source>Method</source>
+        <translation>方法</translation>
+    </message>
+    <message>
+        <source>Perceptual</source>
+        <translation>知覚的</translation>
+    </message>
+    <message>
+        <source>Linear</source>
+        <translation>線形</translation>
+    </message>
+    <message>
+        <source>Classic</source>
+        <translation>クラシック</translation>
+    </message>
+    <message>
         <source>Amount</source>
         <translation>量</translation>
     </message>
@@ -9537,6 +9553,22 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Reverse</source>
         <translation>逆方向</translation>
+    </message>
+    <message>
+        <source>Method</source>
+        <translation>方法</translation>
+    </message>
+    <message>
+        <source>How the colours blend: Perceptual and Linear as Photoshop 2023 and later, Classic as before</source>
+        <translation>色の混ぜ方：知覚的と線形は Photoshop 2023 以降と同じ、クラシックは従来どおり</translation>
+    </message>
+    <message>
+        <source>Perceptual</source>
+        <translation>知覚的</translation>
+    </message>
+    <message>
+        <source>Classic</source>
+        <translation>クラシック</translation>
     </message>
     <message>
         <source>Rectangle</source>

@@ -567,6 +567,24 @@ QWidget* AdjustmentEditor::buildGradientMap() {
     connect(reversed, &QCheckBox::toggled, this, [this](bool on) { if (syncing_) return; emit editStarted(); settings_.gradientMap.reversed = on; changed(); emit editFinished(); });
     syncers_.push_back([this, reversed] { reversed->setChecked(settings_.gradientMap.reversed); });
     v->addWidget(reversed);
+    // Photoshop's Method menu, in its order: Perceptual, Linear, Classic.
+    auto* methodRow = new QHBoxLayout;
+    methodRow->addWidget(new QLabel(tr("Method")));
+    auto* method = new QComboBox;
+    method->addItems({tr("Perceptual"), tr("Linear"), tr("Classic")});
+    connect(method, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) {
+        if (syncing_) return;
+        emit editStarted();
+        settings_.gradientMap.method = i == 0 ? GradientMethod::Perceptual : i == 1 ? GradientMethod::Linear : GradientMethod::Classic;
+        changed();
+        emit editFinished();
+    });
+    syncers_.push_back([this, method] {
+        const GradientMethod m = settings_.gradientMap.method;
+        method->setCurrentIndex(m == GradientMethod::Perceptual ? 0 : m == GradientMethod::Linear ? 1 : 2);
+    });
+    methodRow->addWidget(method, 1);
+    v->addLayout(methodRow);
     return w;
 }
 

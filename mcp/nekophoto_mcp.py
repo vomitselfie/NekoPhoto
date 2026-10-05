@@ -990,9 +990,9 @@ def brush_presets(group: Optional[str] = None) -> str:
 
 
 @edit("Draw a gradient")
-def gradient_draw(x0: float, y0: float, x1: float, y1: float, shape: str = "linear", style: str = "foreground-to-transparent", reversed: bool = False, opacity: float = 1.0, foreground: Optional[str] = None, background: Optional[str] = None, preset: Optional[str] = None) -> str:
-    """Draw a gradient on the active layer from (x0, y0) to (x1, y1): shape linear or radial; style foreground-to-transparent or foreground-to-background, or preset, an imported gradient's name from presets_list (its foreground and background stops take the colours); colours as CSS strings."""
-    return text(call("gradient.draw", x0=x0, y0=y0, x1=x1, y1=y1, shape=shape, style=style, reversed=reversed, opacity=opacity, foreground=foreground, background=background, preset=preset))
+def gradient_draw(x0: float, y0: float, x1: float, y1: float, shape: str = "linear", style: str = "foreground-to-transparent", reversed: bool = False, opacity: float = 1.0, foreground: Optional[str] = None, background: Optional[str] = None, preset: Optional[str] = None, interpolation: str = "classic") -> str:
+    """Draw a gradient on the active layer from (x0, y0) to (x1, y1): shape linear or radial; style foreground-to-transparent or foreground-to-background, or preset, an imported gradient's name from presets_list (its foreground and background stops take the colours); colours as CSS strings; interpolation classic, perceptual or linear (Photoshop's Method: the space the colours blend in)."""
+    return text(call("gradient.draw", x0=x0, y0=y0, x1=x1, y1=y1, shape=shape, style=style, reversed=reversed, opacity=opacity, foreground=foreground, background=background, preset=preset, interpolation=interpolation))
 
 
 @edit("Import presets")

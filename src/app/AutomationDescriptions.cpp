@@ -363,7 +363,8 @@ const MethodDoc methodDocs[] = {
      "contiguous:bool=true Only pixels connected to the point; antialias:bool=true Soften the edge; allLayers:bool=false Compare with the document as shown, not the active layer"},
     {"gradient.draw", "Draw a gradient on the active layer, inside the selection.",
      "x0:number! Start; y0:number! Start; x1:number! End; y1:number! End; shape:(linear|radial)=linear Shape; "
-     "style:(foreground-to-transparent|foreground-to-background)=foreground-to-transparent Colours; reversed:bool=false Swap the ends; opacity:number=1 0..1; foreground:color Start colour; background:color End colour; preset:string An imported gradient preset by name (presets.list), which replaces style"},
+     "style:(foreground-to-transparent|foreground-to-background)=foreground-to-transparent Colours; reversed:bool=false Swap the ends; opacity:number=1 0..1; foreground:color Start colour; background:color End colour; preset:string An imported gradient preset by name (presets.list), which replaces style; "
+     "interpolation:(classic|perceptual|linear)=classic Photoshop's Method: the space the colours blend in (Classic the stored values, Linear linear light, Perceptual Oklab)"},
     {"shape.draw", "Add a vector shape layer (editable: shape.get, shape.set, and PSD's own shape layer on export).",
      "x:number! Left (a line's start); y:number! Top; width:number Width; height:number Height; kind:(rectangle|ellipse|polygon|star|line|custom)=rectangle Shape; "
      "cornerRadius:number=0 Rectangle corners; sides:integer=5 Polygon or star points; star:number Star inset 0..0.99; x2:number Line end x; y2:number Line end y; weight:number=4 Line weight; "

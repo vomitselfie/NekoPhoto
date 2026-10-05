@@ -696,6 +696,8 @@ void EditorSession::refreshGradient() {
                     s.rgb[0] = s.rgb[1] = s.rgb[2] = v;
                 }
             if (gradientSettings.reversed) stops.reverse();
+            stops.method = gradientSettings.method;
+            stops.smoothness = preset->smoothness;
             gradient_->raster->fillGradientOver(shape, toPoint(a), toPoint(b), stops, gradientSettings.opacity);
             emit documentChanged({});
             return;
@@ -713,7 +715,10 @@ void EditorSession::refreshGradient() {
             else { end[0] = fg.redF(); end[1] = fg.greenF(); end[2] = fg.blueF(); end[3] = 0; }
         }
         if (gradientSettings.reversed) for (int c = 0; c < 4; c++) std::swap(start[c], end[c]);
-        gradient_->raster->fillGradientOver(shape, toPoint(a), toPoint(b), start, end, gradientSettings.opacity);
+        GradientStops stops;
+        for (int c = 0; c < 4; c++) { stops.start[c] = start[c]; stops.end[c] = end[c]; }
+        stops.method = gradientSettings.method;
+        gradient_->raster->fillGradientOver(shape, toPoint(a), toPoint(b), stops, gradientSettings.opacity);
     }
     emit documentChanged({});
 }

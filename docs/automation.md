@@ -303,7 +303,8 @@ and `pressureSmoothing` 0..100 the other two filters; none applies unless given,
 `.abr`, Procreate `.brushset`/`.brush`, Clip Studio `.sut` or images as tips;
 answers the new preset ids and notes on what was approximated), `gradient.draw` (`x0, y0, x1, y1`, `shape` linear or radial, `style`
 foreground-to-transparent or foreground-to-background, `reversed`, `opacity`,
-`foreground`, `background`, `preset`: an imported gradient's name, used instead of `style`), `shape.draw` (a new shape layer: `kind` rectangle
+`foreground`, `background`, `preset`: an imported gradient's name, used instead of `style`; `interpolation` classic (the default),
+perceptual or linear: Photoshop's Method, named as in layer styles' gradients), `shape.draw` (a new shape layer: `kind` rectangle
 or ellipse, `x, y, width, height`, `cornerRadius`, `color`). The person's tool,
 brush settings and colours are restored afterwards.
 

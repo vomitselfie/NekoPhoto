@@ -652,6 +652,20 @@ QWidget* ToolOptionsBar::buildGradientOptions() {
     auto* reverse = new QCheckBox(tr("Reverse"));
     connect(reverse, &QCheckBox::toggled, this, [this](bool on) { session_->gradientSettings.reversed = on; session_->refreshGradient(); });
     h->addWidget(reverse);
+    // Photoshop's Method menu, in its order: Perceptual, Linear, Classic.
+    h->addWidget(new QLabel(tr("Method")));
+    auto* method = new QComboBox;
+    method->setProperty("role", "gradientMethod");
+    method->setToolTip(tr("How the colours blend: Perceptual and Linear as Photoshop 2023 and later, Classic as before"));
+    method->addItems({tr("Perceptual"), tr("Linear"), tr("Classic")});
+    auto methodIndex = [this] { const GradientMethod m = session_->gradientSettings.method; return m == GradientMethod::Perceptual ? 0 : m == GradientMethod::Linear ? 1 : 2; };
+    method->setCurrentIndex(methodIndex());
+    connect(method, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) {
+        session_->gradientSettings.method = i == 0 ? GradientMethod::Perceptual : i == 1 ? GradientMethod::Linear : GradientMethod::Classic;
+        session_->refreshGradient();
+    });
+    syncers_.push_back([method, methodIndex] { QSignalBlocker b(method); method->setCurrentIndex(methodIndex()); });
+    h->addWidget(method);
     h->addWidget(separator());
     h->addWidget(new QLabel(tr("Opacity")));
     auto* opacity = numberField(1, 100, 0, "%", tr("Opacity"));
