@@ -686,7 +686,7 @@ void MainWindow::buildMenus() {
                                 viewOption(snapTo, tr("&Layers"), QKeySequence(), &ViewOptions::snapToLayers),
                                 viewOption(snapTo, tr("&Document Bounds"), QKeySequence(), &ViewOptions::snapToBounds)};
     snapTo->addSeparator();
-    auto setAllTargets = [this, snapTargets](bool on) {
+    auto setAllTargets = [snapTargets](bool on) {
         ViewOptions& o = ViewOptions::get();
         o.snapToGuides = o.snapToLayers = o.snapToBounds = on;
         o.save();
