@@ -146,13 +146,14 @@ reuses the menu bar's `QAction`s (by the keys `nameAction` gives them), so it fo
 
 ### Converted
 
-`command_path_selftest` checks every item below that is marked *checked* (69 of them): the menu path (or dialog,
-or panel button), the requests the recording holds, and the session calls the item made before, compared as
+`command_path_selftest` checks every item below that is marked *checked* (89 of them): the menu path (or dialog,
+or panel control), the requests the recording holds, and the session calls the item made before, compared as
 documents, selections, paths, channels and history names, with each recorded once.
 
 | Where | Items | Method |
 |---|---|---|
 | Edit | Fill with Foreground / Background *(checked)*; Clear *(checked)*: pixels with a selection, else one layer that supplies no clipping mask | `pixels.fill`, `pixels.clear`, `layers.delete` |
+| Edit | Cut, Copy, Copy Merged, Paste *(checked)*: Copy with layers selected and no selection copies the layers, Paste pastes copied layers | `pixels.cut`, `pixels.copy`, `pixels.copyMerged`, `pixels.paste`, `layers.copy`, `layers.paste` |
 | Edit | Free Transform's commit *(checked)* | `layers.setTransform` |
 | Edit | Assign Profile…, Convert to Profile… for a built-in profile or none | `document.profile` |
 | Edit | Content-Aware Fill's OK, Auto and All sampling | `pixels.contentAwareFill` |
@@ -162,7 +163,8 @@ documents, selections, paths, channels and history names, with each recorded onc
 | Layer | New Layer, New Layer Below, New Folder, New Adjustment Layer, Layer via Copy, Duplicate, Delete, Merge Down, Rename, Group, Bring Forward, Send Backward, Flip Layer Horizontal / Vertical, Resampling, Create / Release Clipping Mask *(checked)* | `layers.add`, `layers.viaCopy`, `layers.duplicate`, `layers.delete`, `layers.merge`, `layers.set`, `layers.group`, `layers.reorder`, `layers.flip` |
 | Layer | Layer Mask: Reveal All, Hide All, From Selection (Reveal / Hide), Enable / Disable, Invert, Apply, Delete *(checked but From Selection)* | `layers.mask` |
 | Layer | Smart Objects: Convert *(checked)*, Rasterize *(checked)*, Replace Contents…; File > Place Embedded… | `smartObject.convert`, `smartObject.rasterize`, `smartObject.replace`, `smartObject.place` |
-| Select | All, Deselect, Inverse, Modify (Expand, Contract, Feather, Smooth, Border), Load as Selection (Layer Pixels, Layer Mask, Add, Subtract, Intersect) *(checked)* | `selection.*` |
+| Select | All, Deselect, Inverse, Reselect, Modify (Expand, Contract, Feather, Smooth, Border), Load as Selection (Layer Pixels, Layer Mask, Add, Subtract, Intersect) *(checked)* | `selection.*` |
+| Layers panel | New layer (Ctrl-click: below), New folder, New adjustment layer's menu, Add layer mask, Delete, the opacity slider (one step per drag, shown as it goes) and field, the blend mode, an eye clicked, Alt-click to clip or release, Rename, a row dragged to another place *(checked)*; the row menu's Duplicate, Delete, Create / Release Clipping Mask, Merge Down and mask items | `layers.add`, `layers.mask`, `layers.delete`, `layers.set`, `layers.move`, `layers.duplicate`, `layers.merge` |
 | View | New Guide…, Clear Guides; the rulers' and Move tool's guides | `guides.*` |
 | Paths panel | Make Work Path, Fill, Stroke, Make Selection, Make Shape Layer, Delete *(checked)*; Add to Selection | `paths.*` |
 | Channels panel | Save selection as channel, Create new channel *(checked)*; New Channel… | `channels.saveSelection`, `channels.new` |
@@ -170,21 +172,24 @@ documents, selections, paths, channels and history names, with each recorded onc
 Where the method cannot express what the item does, the item keeps its direct call (and its old `recordAction`):
 Delete with several layers selected or clipped layers above (it asks whether to bake), a fill colour finer than
 `#rrggbb` (a 16-bit pick), an ICC profile file in Assign / Convert to Profile, Content-Aware Fill's painted Custom
-area, and a dialog left open on another tab.
+area, Cut on a smart object (it copies, then asks to rasterize), the Layers panel's bin with several layers selected,
+an eye swipe across several layers (one undo step, which a `layers.set` per layer would split), and a dialog left
+open on another tab. An eye clicked on another layer than the active one, and a dragged row, record the layers'
+ids (`layers.set` with `id`, `layers.move`), as an agent's requests do.
 
 ### Not converted, and why
 
 | Items | Why |
 |---|---|
 | File: New, Open, Import, Save, Save As, Export…, Batch, tabs, Quit | File dialogs and the document's lifetime; `document.*` and `tabs.*` are there for scripts, and Photoshop's actions record none of them as edits |
-| Edit: Undo, Redo; Cut, Copy, Copy Merged, Paste | History is not a command; the pixel clipboard has no method (`layers.copy` / `layers.paste` cover whole layers only) |
+| Edit: Undo, Redo | History is not a command |
 | Edit: Warp…, Warp Cage, Content-Aware Scale… | Interactive; `layers.warp`, `layers.setCage` and `pixels.contentAwareScale` exist, but the commits are not proven identical yet |
 | Edit: Color Settings…, Preferences… | Application settings, not document edits |
 | Layer: Edit Text…, Move Out of Folder, Layer Style (dialogs, copy, paste, clear, Apply Style), Smart Objects > Edit Contents, Vector Mask (every item), Type > Create Work Path / Convert to Shape | Their methods name the layer, a style or a path by id (not portable in an action), or the item opens an editor or a tab |
-| Select: Reselect, Edit in Quick Mask Mode, Load Selection…, Save Selection… | Reselect has no method; Quick Mask is a mode; the two dialogs choose channels by id |
+| Select: Edit in Quick Mask Mode, Load Selection…, Save Selection… | Quick Mask is a mode; the two dialogs choose channels by id |
 | Channels panel: Duplicate, Delete, Rename, reorder, eyes, Load as selection | The methods name channels by id; the eyes are view state |
 | Filter: Camera Raw, G'MIC, Remove Background, Mosh, Smart Filters | Large dialogs with their own state (models, presets, layer sources) whose OK is not one request yet |
-| Layers panel buttons, opacity and blend controls, eyes | Panel gestures (many of them per-drag); not yet routed |
+| Layers panel: Alt-drag a row (a copy placed there), Alt-drag a mask onto another layer, a folder's fold, the row menu's Layer Style and vector mask items, the Smart Filter rows | No method copies a layer or a mask to a place; folding is view state; the rest name a layer, a style or a filter by id, as the Layer menu's items do |
 | View, Window, Help | Interface only (zoom, rulers, proofing, panels, about) |
 
 ## Where to start

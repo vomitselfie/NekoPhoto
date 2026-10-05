@@ -7251,16 +7251,32 @@ File &gt; New creates a blank canvas.</source>
         <translation>カット(&amp;T)</translation>
     </message>
     <message>
+        <source>Cut</source>
+        <translation>カット</translation>
+    </message>
+    <message>
         <source>&amp;Copy</source>
         <translation>コピー(&amp;C)</translation>
+    </message>
+    <message>
+        <source>Copy</source>
+        <translation>コピー</translation>
     </message>
     <message>
         <source>Copy &amp;Merged</source>
         <translation>結合部分をコピー(&amp;M)</translation>
     </message>
     <message>
+        <source>Copy Merged</source>
+        <translation>結合部分をコピー</translation>
+    </message>
+    <message>
         <source>&amp;Paste</source>
         <translation>ペースト(&amp;P)</translation>
+    </message>
+    <message>
+        <source>Paste</source>
+        <translation>ペースト</translation>
     </message>
     <message>
         <source>&amp;Free Transform</source>
@@ -7385,6 +7401,10 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>&amp;Trim…</source>
         <translation>トリミング(&amp;T)...</translation>
+    </message>
+    <message>
+        <source>Reselect</source>
+        <translation>再選択</translation>
     </message>
     <message>
         <source>Load as Selection</source>

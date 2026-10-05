@@ -239,14 +239,26 @@ void MainWindow::buildMenus() {
     undoAction_ = edit->addAction(tr("&Undo"), QKeySequence::Undo, this, [this] { session_->undo(); });
     redoAction_ = edit->addAction(tr("&Redo"), QKeySequence("Ctrl+Shift+Z"), this, [this] { session_->redo(); });
     edit->addSeparator();
-    nameAction("edit.cut", needsDocument(edit->addAction(tr("Cu&t"), QKeySequence::Cut, this, [this] { session_->cutSelection(); }), "edit.clipboard"));
+    // The pixel clipboard runs pixels.cut, pixels.copy, pixels.copyMerged and pixels.paste (layers.copy and
+    // layers.paste for whole layers); with nothing to copy or paste the items do nothing, as before.
+    nameAction("edit.cut", needsDocument(edit->addAction(tr("Cu&t"), QKeySequence::Cut, this, [this] {
+        if (!session_->document()->selection || !session_->canCopyPixels()) return;
+        // A smart object: copied, then the question about rasterizing it (pixels.cut refuses one).
+        if (session_->smartObjectBlocksPixels()) { session_->cutSelection(); return; }
+        runCommand("pixels.cut", {}, tr("Cut"));
+    }), "edit.clipboard"))->setObjectName("command.pixels.cut");
     nameAction("edit.copy", needsDocument(edit->addAction(tr("&Copy"), QKeySequence::Copy, this, [this] {
         // As Photoshop: with no selection, the selected layers themselves (pasted whole in any document).
-        if (!session_->document()->selection && !session_->selectedLayerIds().empty() && session_->copyLayers()) return;
-        session_->copySelection();
-    }), "edit.clipboard"));
-    needsDocument(edit->addAction(tr("Copy &Merged"), QKeySequence("Ctrl+Shift+C"), this, [this] { session_->copyMerged(); }), "edit.clipboard");
-    nameAction("edit.paste", needsDocument(edit->addAction(tr("&Paste"), QKeySequence::Paste, this, [this] { session_->paste(); }), "edit.clipboard"));
+        if (!session_->document()->selection && !session_->selectedLayerIds().empty()) { runCommand("layers.copy", {}, tr("Copy")); return; }
+        if (session_->canCopyPixels()) runCommand("pixels.copy", {}, tr("Copy"));
+    }), "edit.clipboard"))->setObjectName("command.pixels.copy");
+    needsDocument(edit->addAction(tr("Copy &Merged"), QKeySequence("Ctrl+Shift+C"), this, [this] {
+        if (session_->canEditLayers() && !(session_->document()->selection && session_->document()->selection->isEmpty())) runCommand("pixels.copyMerged", {}, tr("Copy Merged"));
+    }), "edit.clipboard")->setObjectName("command.pixels.copyMerged");
+    nameAction("edit.paste", needsDocument(edit->addAction(tr("&Paste"), QKeySequence::Paste, this, [this] {
+        if (EditorSession::hasLayerClipboard()) { if (session_->canPaste()) runCommand("layers.paste", {}, tr("Paste")); return; }
+        if (session_->hasPixelsToPaste()) runCommand("pixels.paste", {}, tr("Paste"));
+    }), "edit.clipboard"))->setObjectName("command.pixels.paste");
     edit->addSeparator();
     // Free Transform is interactive: Ctrl+T invokes it, the canvas updates it, and Enter or Apply commits it through
     // the command layers.setTransform (EditorSession::commitTransformCommand).
@@ -545,7 +557,7 @@ void MainWindow::buildMenus() {
     QMenu* select = menuBar()->addMenu(tr("&Select"));
     nameAction("select.all", needsDocument(select->addAction(tr("&All"), QKeySequence::SelectAll, this, [this] { runCommand("selection.all", {}, tr("Select All")); }), "edit.selection"));
     nameAction("select.deselect", needsDocument(select->addAction(tr("&Deselect"), QKeySequence("Ctrl+D"), this, [this] { runCommand("selection.none", {}, tr("Deselect")); }), "edit.selection"));
-    nameAction("select.reselect", needsDocument(select->addAction(tr("&Reselect"), QKeySequence("Shift+Ctrl+D"), this, [this] { session_->reselect(); }), "edit.selection"));
+    nameAction("select.reselect", needsDocument(select->addAction(tr("&Reselect"), QKeySequence("Shift+Ctrl+D"), this, [this] { if (session_->canReselect()) runCommand("selection.reselect", {}, tr("Reselect")); }), "edit.selection"));
     nameAction("select.inverse", needsDocument(select->addAction(tr("&Inverse"), QKeySequence("Ctrl+Shift+I"), this, [this] { runCommand("selection.invert", {}, tr("Inverse")); }), "edit.selection"));
     needsDocument(select->addAction(tr("Edit in &Quick Mask Mode"), QKeySequence("Q"), this, [this] { session_->toggleQuickMask(); }), "edit.selection");
     select->addSeparator();

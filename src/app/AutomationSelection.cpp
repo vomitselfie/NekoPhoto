@@ -37,6 +37,13 @@ void AutomationServer::registerSelectionHandlers() {
     add("selection.all", [session, document](const QJsonObject&) { document(); session()->selectAll(); return QJsonObject{}; });
     add("selection.none", [session, document](const QJsonObject&) { document(); session()->deselect(); return QJsonObject{}; });
     add("selection.invert", [session, document](const QJsonObject&) { document(); session()->invertSelection(); return QJsonObject{}; });
+    add("selection.reselect", [session, document](const QJsonObject&) {
+        // Select > Reselect: the selection last dropped, back (on the canvas it was made on, at its depth).
+        document();
+        if (!session()->canReselect()) fail("nothing to reselect: there is a selection already, or none was dropped on this canvas");
+        session()->reselect();
+        return QJsonObject{};
+    });
     add("selection.quickMask", [session, document](const QJsonObject& p) {
         document();
         EditorSession* s = session();

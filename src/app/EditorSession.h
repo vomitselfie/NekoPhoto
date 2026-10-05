@@ -252,15 +252,26 @@ public:
     void mergeDown();
     void renameLayer(const compositor::Uuid& id, const QString& name);
     void toggleLayerVisibility(const compositor::Uuid& id);
+    /// The Layers panel's eyes: a press toggles the eye and a drag across others sets them alike, shown as it goes;
+    /// the release makes it one undo step. One eye changed is layers.set (visible) when commands are routed.
     void beginVisibilitySwipe(const compositor::Uuid& id);
     void setVisibilityInSwipe(const compositor::Uuid& id, bool visible);
     void endVisibilitySwipe();
     void moveActiveLayer(int offset);
     bool canMoveActiveLayer(int offset) const;
     bool placeLayer(const compositor::Uuid& id, const std::optional<compositor::Uuid>& parent, const std::optional<compositor::Uuid>& above, bool atBottom = false);
+    /// Whether placeLayer would move the layer there.
+    bool canPlaceLayer(const compositor::Uuid& id, const std::optional<compositor::Uuid>& parent, const std::optional<compositor::Uuid>& above, bool atBottom = false) const;
     void setLayerOpacity(double opacity);
     void beginOpacityEdit();
     void endOpacityEdit();
+    /// The Layers panel's opacity slider dragged while commands are routed: the selected layers show each value
+    /// with no undo step, and the release puts them back and answers the value to commit (layers.set), or none
+    /// when it did not change. Another edit starting mid-drag commits it first, as endOpacityEdit does.
+    void beginOpacityPreview();
+    void previewLayerOpacity(double opacity);
+    std::optional<double> endOpacityPreview();
+    bool opacityPreviewing() const { return opacityPreview_.has_value(); }
     void setLayerBlendMode(compositor::BlendMode mode, bool passThrough = false);
     /// Hovering the blend menu: the active layer drawn in `mode` until the menu closes.
     void previewBlendMode(std::optional<compositor::BlendMode> mode);
@@ -543,11 +554,19 @@ public:
 
     // Clipboard
     bool canCopyPixels() const;
-    void copySelection();
-    void copyMerged();
-    void cutSelection();
+    /// Edit > Copy, Copy Merged and Cut of pixels (pixels.copy, pixels.copyMerged, pixels.cut): false when there
+    /// was nothing to copy. The system clipboard gets them at 8 bits, sRGB.
+    bool copySelection();
+    bool copyMerged();
+    bool cutSelection();
     bool canPaste() const;
+    /// Edit > Paste: copied layers (pasteLayers) when the layer clipboard holds them, else pixels (pastePixels).
     void paste();
+    /// Pixels copied here or by another app, as a new layer (or into the one channel being edited), converted to
+    /// the document's mode, profile and depth; false (with the reason in `error` when there is one) if nothing was
+    /// pasted.
+    bool pastePixels(QString* error = nullptr);
+    bool hasPixelsToPaste() const;
     /// Edit > Copy with layers selected and no selection (EditorSessionClipboard.cpp): the selected layers and
     /// folders, with everything they hold, go to the layer clipboard every tab shares; other apps get them
     /// flattened. Paste in any document inserts them above the active layer, one undo step, converted to its
@@ -1097,7 +1116,12 @@ private:
     /// A new layer of `image`, brought to the document's depth.
     void addPixelLayer(compositor::AnyImage image, QPointF origin, const QString& editName, bool dropsSelection);
     bool opacityEditing_ = false;
+    std::optional<std::map<compositor::Uuid, double>> opacityPreview_;   // the layers' opacity before the drag
     bool visibilitySwipe_ = false;
+    std::map<compositor::Uuid, bool> swipeOriginal_;   // each eye the swipe changed, as it was
+    const char* swipeName_ = nullptr;
+    /// placeLayer's new layer order, or none when the move is not allowed.
+    std::optional<std::vector<compositor::Layer>> placement(const compositor::Uuid& id, const std::optional<compositor::Uuid>& parent, const std::optional<compositor::Uuid>& above, bool atBottom) const;
     /// Bumped on every document notification; cheap change detection for caches.
     uint64_t documentRevision_ = 0;
     compositor::View32 view32_;

@@ -14,14 +14,19 @@
 #include "CanvasWidget.h"
 #include "ChannelsPanel.h"
 #include "FilterDialog.h"
+#include "LayersPanel.h"
 #include "Names.h"
 #include "PathsPanel.h"
 #include "MainWindow.h"
 #include "Ruler.h"
 #include <QApplication>
 #include <QDoubleSpinBox>
+#include <QComboBox>
 #include <QInputDialog>
+#include <QLineEdit>
+#include <QSlider>
 #include <QSpinBox>
+#include <QTreeWidgetItemIterator>
 #include <QTimer>
 #include <QToolButton>
 #include <functional>
@@ -282,6 +287,7 @@ struct Converted {
     std::function<bool(MainWindow&, EditorSession&)> ui;          // the interface: false when it could not be done
     std::function<void(EditorSession&, const QList<ActionStep>&)> direct;   // the edit as the interface made it before
     QStringList methods;                                          // the steps Actions records for it
+    bool edits = true;                                            // false: it leaves no history step (a copy)
 };
 
 std::function<bool(MainWindow&, EditorSession&)> trigger(QStringList path, std::function<void(QDialog*)> modal = {}, bool hasModal = false) {
@@ -294,6 +300,54 @@ std::function<bool(MainWindow&, EditorSession&)> trigger(QStringList path, std::
         QApplication::processEvents();
         return true;
     };
+}
+
+/// The Layers panel of the session (the tab's panel calls the same session), shown so its rows are laid out, with
+/// `act` done on it.
+std::function<bool(MainWindow&, EditorSession&)> layersPanel(std::function<bool(LayersPanel&, EditorSession&)> act) {
+    return [act](MainWindow&, EditorSession& s) {
+        auto panel = std::make_unique<LayersPanel>(&s);
+        panel->resize(360, 900);
+        panel->show();
+        QApplication::processEvents();
+        const bool ok = act(*panel, s);
+        QApplication::processEvents();
+        return ok;
+    };
+}
+
+std::function<bool(MainWindow&, EditorSession&)> layersButton(QString tip) {
+    return layersPanel([tip](LayersPanel& p, EditorSession&) {
+        QToolButton* b = buttonWithTip(&p, tip);
+        if (b) b->click();
+        return b != nullptr;
+    });
+}
+
+Uuid layerId(EditorSession& s, const char* name) {
+    for (const Layer& l : s.document()->layers) if (l.name == name) return l.id;
+    std::fprintf(stderr, "no layer named %s\n", name);
+    return {};
+}
+
+/// The panel's row for a layer.
+QTreeWidgetItem* layerRow(LayersPanel& panel, const Uuid& id) {
+    auto* tree = panel.findChild<LayerTree*>();
+    for (QTreeWidgetItemIterator it(tree); *it; ++it) if ((*it)->data(0, Qt::UserRole).toString().toStdString() == id) return *it;
+    std::fprintf(stderr, "no row for layer %s\n", id.c_str());
+    return nullptr;
+}
+
+/// A click on a layer's eye: the press starts the swipe, the release on it ends it.
+std::function<bool(MainWindow&, EditorSession&)> clickEye(const char* name) {
+    return layersPanel([name](LayersPanel& p, EditorSession& s) {
+        QToolButton* eye = p.eyeButton(layerId(s, name));
+        if (!eye) return false;
+        emit eye->pressed();
+        QMouseEvent release(QEvent::MouseButtonRelease, QPointF(4, 4), eye->mapToGlobal(QPointF(4, 4)), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(eye, &release);
+        return true;
+    });
 }
 
 std::function<void(QDialog*)> inputValue(QVariant value) {
@@ -357,6 +411,8 @@ int menuCommands(MainWindow& w) {
         return [name](EditorSession& s) { select(s, name); s.loadLayerAsSelection(*s.activeLayerId(), false, SelectionMode::Replace); };
     };
     auto params = [](const QList<ActionStep>& steps, int i = 0) { return i < steps.size() ? steps[i].params : QJsonObject{}; };
+    // Red's pixels selected, Background active.
+    auto backgroundUnderRed = [](EditorSession& s) { select(s, "Red"); s.loadLayerAsSelection(*s.activeLayerId(), false, SelectionMode::Replace); select(s, "Background"); };
     MainWindow* window = &w;
 
     const std::vector<Converted> steps = {
@@ -467,6 +523,79 @@ int menuCommands(MainWindow& w) {
          [](EditorSession& s, auto&) { s.pathToShapeLayer(*s.activePathId()); }, {"paths.toShape"}},
         {"Delete Path", "Background", [](EditorSession& s) { s.selectPath(kWorkPathId); }, panelButton(true, PathsPanel::tr("Delete the path")),
          [](EditorSession& s, auto&) { s.deletePath(*s.activePathId()); }, {"paths.delete"}},
+        // The pixel clipboard and Reselect
+        {"Copy", "Background", backgroundUnderRed, trigger({"Edit", "Copy"}), [](EditorSession& s, auto&) { s.copySelection(); }, {"pixels.copy"}, false},
+        {"Paste", nullptr, {}, trigger({"Edit", "Paste"}), [](EditorSession& s, auto&) { s.paste(); }, {"pixels.paste"}},
+        {"Reselect", nullptr, {}, trigger({"Select", "Reselect"}), [](EditorSession& s, auto&) { s.reselect(); }, {"selection.reselect"}},
+        {"Cut", "Background", {}, trigger({"Edit", "Cut"}), [](EditorSession& s, auto&) { s.cutSelection(); }, {"pixels.cut"}},
+        {"Copy Merged", nullptr, {}, trigger({"Edit", "Copy Merged"}), [](EditorSession& s, auto&) { s.copyMerged(); }, {"pixels.copyMerged"}, false},
+        {"Paste Merged", nullptr, {}, trigger({"Edit", "Paste"}), [](EditorSession& s, auto&) { s.paste(); }, {"pixels.paste"}},
+        // The Layers panel
+        {"Panel New Layer", "Paint", [](EditorSession& s) { s.deselect(); }, layersButton(LayersPanel::tr("New layer (Ctrl-click: below the current layer)")),
+         [](EditorSession& s, auto&) { s.addBlankLayer(false); }, {"layers.add"}},
+        {"Panel New Folder", "Paint", {}, layersButton(LayersPanel::tr("New folder")), [](EditorSession& s, auto&) { s.addGroup(); }, {"layers.add"}},
+        {"Panel Adjustment Layer", "Paint", {}, layersPanel([](LayersPanel& p, EditorSession&) {
+             QToolButton* b = buttonWithTip(&p, LayersPanel::tr("New adjustment layer"));
+             if (!b || !b->menu()) return false;
+             for (QAction* a : b->menu()->actions()) if (a->text() == names::adjustmentKind(AdjustmentKind::Levels)) { a->trigger(); return true; }
+             return false;
+         }), [](EditorSession& s, auto&) { s.addAdjustmentLayer(AdjustmentKind::Levels); }, {"layers.add"}},
+        {"Panel Delete", nullptr, {}, layersButton(LayersPanel::tr("Delete the selected layers")), [](EditorSession& s, auto&) { s.deleteSelectedLayers(); }, {"layers.delete"}},
+        {"Panel Mask", "Background", backgroundUnderRed, layersButton(LayersPanel::tr("Add layer mask (reveal all, or hide the selection)")),
+         [](EditorSession& s, auto&) { s.addMaskFromSelection(true); }, {"layers.mask"}},
+        {"Panel Opacity Drag", "Paint", {}, layersPanel([](LayersPanel& p, EditorSession&) {
+             auto* slider = p.findChild<QSlider*>();
+             if (!slider) return false;
+             slider->setSliderDown(true);
+             for (int v : {80, 40, 55}) slider->setValue(v);
+             slider->setSliderDown(false);
+             return true;
+         }), [](EditorSession& s, auto&) { s.beginOpacityEdit(); for (int v : {80, 40, 55}) s.setLayerOpacity(v / 100.0); s.endOpacityEdit(); }, {"layers.set"}},
+        {"Panel Opacity Field", "Paint", {}, layersPanel([](LayersPanel& p, EditorSession&) {
+             auto* spin = p.findChild<QSpinBox*>();
+             if (spin) spin->setValue(70);
+             return spin != nullptr;
+         }), [](EditorSession& s, auto&) { s.setLayerOpacity(0.7); }, {"layers.set"}},
+        {"Panel Blend Mode", "Paint", {}, layersPanel([](LayersPanel& p, EditorSession&) {
+             auto* combo = p.findChild<QComboBox*>();
+             if (!combo) return false;
+             emit combo->activated(combo->findData(int(BlendMode::Screen)));
+             return true;
+         }), [](EditorSession& s, auto&) { s.setLayerBlendMode(BlendMode::Screen); }, {"layers.set"}},
+        {"Panel Hide", "Paint", {}, clickEye("Paint"), [](EditorSession& s, auto&) { s.toggleLayerVisibility(*s.activeLayerId()); }, {"layers.set"}},
+        {"Panel Show", "Paint", {}, clickEye("Paint"), [](EditorSession& s, auto&) { s.toggleLayerVisibility(*s.activeLayerId()); }, {"layers.set"}},
+        {"Panel Hide Another", "Paint", {}, clickEye("Red"), [](EditorSession& s, auto&) { s.toggleLayerVisibility(layerId(s, "Red")); }, {"layers.set"}},
+        {"Panel Clip", "Paint", [](EditorSession& s) { s.addBlankLayer(); s.renameLayer(*s.activeLayerId(), "Clipped"); },
+         layersPanel([](LayersPanel& p, EditorSession& s) {
+             QTreeWidgetItem* row = layerRow(p, layerId(s, "Clipped"));
+             auto* tree = p.findChild<LayerTree*>();
+             if (!row || !tree) return false;
+             const QPointF at = tree->visualItemRect(row).center();
+             QMouseEvent press(QEvent::MouseButtonPress, at, tree->viewport()->mapToGlobal(at), Qt::LeftButton, Qt::LeftButton, Qt::AltModifier);
+             QApplication::sendEvent(tree->viewport(), &press);
+             QMouseEvent release(QEvent::MouseButtonRelease, at, tree->viewport()->mapToGlobal(at), Qt::LeftButton, Qt::NoButton, Qt::AltModifier);
+             QApplication::sendEvent(tree->viewport(), &release);
+             return true;
+         }), [](EditorSession& s, auto&) { s.toggleClippingMask(*s.activeLayerId()); }, {"layers.set"}},
+        {"Panel Rename", "Clipped", {}, layersPanel([](LayersPanel& p, EditorSession& s) {
+             QTreeWidgetItem* row = layerRow(p, layerId(s, "Clipped"));
+             auto* tree = p.findChild<LayerTree*>();
+             if (!row || !tree) return false;
+             emit tree->itemDoubleClicked(row, 0);
+             QLineEdit* edit = nullptr;
+             for (QLineEdit* e : p.findChildren<QLineEdit*>()) if (e->property("renameEditor").toBool()) edit = e;
+             if (!edit) { std::fprintf(stderr, "no rename field\n"); return false; }
+             edit->setText(QStringLiteral("Clip Renamed"));
+             emit edit->editingFinished();
+             return true;
+         }), [](EditorSession& s, auto&) { s.renameLayer(*s.activeLayerId(), "Clip Renamed"); }, {"layers.set"}},
+        {"Panel Drag", "Clip Renamed", {}, layersPanel([](LayersPanel& p, EditorSession& s) {
+             auto* tree = p.findChild<LayerTree*>();
+             if (!tree) return false;
+             // Paint dropped on the row above Background: directly above it, at the top level.
+             emit tree->dropRequested(layerId(s, "Paint"), std::nullopt, layerId(s, "Background"), false);
+             return true;
+         }), [](EditorSession& s, auto&) { s.placeLayer(layerId(s, "Paint"), std::nullopt, layerId(s, "Background"), false); }, {"layers.move"}},
     };
 
     int failures = 0;
@@ -501,13 +630,18 @@ int menuCommands(MainWindow& w) {
         }
     });
     watchdog.start(20);
+    // The layers' names when each step was made: steps that name layers by id (an eye, a drag) are replayed on the
+    // other tabs' layers of the same name.
+    std::vector<std::map<std::string, std::string>> namesAt;
     for (const Converted& step : steps) {
         current = step.label;
         before(a, step);
+        namesAt.emplace_back();
+        for (const Layer& l : a.document()->layers) namesAt.back()[l.id] = l.name;
         recordedBefore.push_back(int(recorded().size()));
         const auto history = a.undoNames();   // (the list is capped: compare it, not its length)
         if (!step.ui(w, a)) { std::fprintf(stderr, "%s: could not be done through the interface\n", qPrintable(step.label)); failures++; }
-        if (a.undoNames() == history) { std::fprintf(stderr, "%s left no history step\n", qPrintable(step.label)); failures++; }
+        if ((a.undoNames() == history) == step.edits) { std::fprintf(stderr, step.edits ? "%s left no history step\n" : "%s left a history step\n", qPrintable(step.label)); failures++; }
     }
     watchdog.stop();
     ActionLibrary::instance().stopRecording();
@@ -531,7 +665,14 @@ int menuCommands(MainWindow& w) {
     for (size_t i = 0; i < steps.size(); i++) {
         before(b, steps[i]);
         for (int k = recordedBefore[i]; k < recordedBefore[i + 1]; k++) {
-            const QJsonObject reply = engine->handle(QJsonObject{{"jsonrpc", "2.0"}, {"id", 1}, {"method", steps_[k].method}, {"params", steps_[k].params}});
+            QJsonObject sent = steps_[k].params;
+            for (const char* key : {"id", "parent", "above"}) {
+                if (!sent.value(key).isString()) continue;
+                auto name = namesAt[i].find(sent.value(key).toString().toStdString());
+                if (name == namesAt[i].end()) continue;
+                for (const Layer& l : b.document()->layers) if (l.name == name->second) sent[key] = QString::fromStdString(l.id);
+            }
+            const QJsonObject reply = engine->handle(QJsonObject{{"jsonrpc", "2.0"}, {"id", 1}, {"method", steps_[k].method}, {"params", sent}});
             if (reply.contains("error")) { std::fprintf(stderr, "%s: %s\n", qPrintable(steps_[k].method), qPrintable(reply.value("error").toObject().value("message").toString())); failures++; }
         }
     }

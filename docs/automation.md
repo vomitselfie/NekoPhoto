@@ -195,6 +195,10 @@ replies with the settings applied; [mosh.md](mosh.md) lists every effect and par
 `detail`, `optics`, `geometry` and `calibration` objects, unknown keys refused, `whiteBalance: "Auto"` balances the layer,
 `temperature` and `tint` relative, -100..100, as Photoshop's filter has them;
 `rpc.describe` lists every key and range and [camera-raw.md](camera-raw.md) what each does), `pixels.invert`, `pixels.fill`, `pixels.clear`,
+`pixels.copy`, `pixels.copyMerged`, `pixels.cut` and `pixels.paste` (Edit > Copy, Copy Merged, Cut and Paste of pixels: the active
+layer's, or every visible layer's, inside the selection or all of them; other apps get them at 8 bits, sRGB; the paste is a new layer
+where they were copied from, or centred when another app copied them, converted to the document's mode, profile and depth, and drops
+the selection),
 `pixels.contentAwareFill` (`sampling`: `auto` around the selection, `all` the whole layer, or `custom`: the
 `include` rectangles, the whole canvas when none, less the `exclude` rectangles; `output`: `current` or `new`, only
 the filled pixels on a new layer, whose id comes back as `layer`), `pixels.contentAwareMove` (Content-Aware Move:
@@ -211,7 +215,7 @@ refused unless `COMPOSITOR_GMIC_UNRESTRICTED=1` is set; the G'MIC dialog is not 
 `gmic.filters` lists the catalogue with parameters and defaults, leaving out the filters that do not
 work here unless `all: true`, when they carry an `unsupported` reason).
 
-Selection: `selection.all`, `selection.none`, `selection.invert`,
+Selection: `selection.all`, `selection.none`, `selection.invert`, `selection.reselect` (the selection last dropped, back),
 `selection.rect` (or `ellipse: true`), `selection.polygon`, `selection.wand` (`edgeAware`, on by default: see docs/smart-wand.md),
 `selection.scribble` (`foreground` and `background`: lists of strokes, each a list of `[x, y]`
 points; `size`, `refine` 0..40, `clear`), `selection.subject` (click to select with the EfficientSAM

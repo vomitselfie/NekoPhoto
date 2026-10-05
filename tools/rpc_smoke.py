@@ -1368,6 +1368,56 @@ def colour_mode_transforms(rpc):
     rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
 
 
+def pixel_clipboard(rpc):
+    """Edit > Cut, Copy, Copy Merged and Paste of pixels (pixels.cut, pixels.copy, pixels.copyMerged, pixels.paste)
+    and Select > Reselect, at 8, 16 and 32 bits and in CMYK and Lab, in a tab of its own: a paste is one undo step
+    named Paste, a new layer where the pixels were copied from, and drops the selection; Reselect brings back the
+    selection Deselect dropped."""
+    first = rpc.call("tabs.list")
+    tab = rpc.call("tabs.new")
+    near = lambda a, b: all(abs(int(a[i:i + 2], 16) - int(b[i:i + 2], 16)) <= 2 for i in (1, 3, 5))
+    for mode, bits in (("rgb", 8), ("rgb", 16), ("rgb", 32), ("cmyk", 8), ("lab", 16)):
+        rpc.call("document.new", width=40, height=30)
+        rpc.call("pixels.fill", color="#c03020")
+        if mode != "rgb" or bits != 8:
+            rpc.call("image.mode", colorMode=mode, bits=bits)
+        rpc.call("selection.rect", x=4, y=4, width=10, height=8)
+        expect_refused(rpc, "nothing to reselect", "selection.reselect")
+        colour = rpc.call("color.sample", x=8, y=8)["color"]
+        assert rpc.call("pixels.copy")["copied"]
+        count = len(rpc.call("layers.list"))
+        pasted = rpc.call("pixels.paste")
+        assert pasted["id"] and rpc.call("history.info")["undo"] == "Paste", (mode, bits)
+        assert len(rpc.call("layers.list")) == count + 1
+        assert not rpc.call("selection.info")["active"], "the paste drops the selection"
+        assert near(rpc.call("color.sample", x=8, y=8)["color"], colour), (mode, bits)
+        rpc.call("selection.rect", x=4, y=4, width=10, height=8)
+        rpc.call("selection.none")
+        rpc.call("selection.reselect")
+        assert rpc.call("selection.info")["active"] and rpc.call("history.info")["undo"] == "Reselect"
+        # Cut clears the pasted pixels and keeps them on the clipboard.
+        rpc.call("pixels.cut")
+        cleared = rpc.call("history.info")["undo"]
+        assert cleared == "Clear", (mode, bits, cleared)
+        try:   # the cut area is transparent on that layer, at every depth and mode (CMYK's alpha included)
+            visible = [l for l in rpc.call("layers.list") if l["visible"]]
+            for l in visible:
+                if l["id"] != pasted["id"]: rpc.call("layers.set", id=l["id"], visible=False)
+            expect_refused(rpc, "transparent", "color.sample", x=8, y=8)
+        finally:
+            for l in visible: rpc.call("layers.set", id=l["id"], visible=True)
+        rpc.call("pixels.paste")
+        assert rpc.call("history.info")["undo"] == "Paste"
+        expect_refused(rpc, "nothing to cut", "pixels.cut")
+        # Copy Merged with no selection: the whole composite, back where it was.
+        assert rpc.call("pixels.copyMerged")["copied"]
+        rpc.call("pixels.paste")
+        assert near(rpc.call("color.sample", x=8, y=8)["color"], colour), (mode, bits)
+        rpc.call("document.close", discard=True)
+    rpc.call("tabs.close", index=tab["index"], discard=True)
+    rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
+
+
 def colour_modes(rpc):
     """Image > Mode > CMYK Color and Lab Color (docs/color-modes.md): the conversion (one undo step), the colour
     channels, a fill in one channel, PSD in the document's own mode, and back; at 8 and 16 bits, in a tab of its own."""
@@ -1995,6 +2045,7 @@ def main():
     channels(rpc)
     colour_management(rpc)
     colour_modes(rpc)
+    pixel_clipboard(rpc)
     colour_mode_painting(rpc)
     gradient_methods(rpc)
     colour_mode_adjustments(rpc)

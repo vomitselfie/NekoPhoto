@@ -136,6 +136,45 @@ GrayPtr smartFilterMaskThumbnail(const SmartFilterStack& stack, int docW, int do
     return out;
 }
 
+// The panel's edits run their automation method when the session's commands are routed (CONTRIBUTING.md,
+// "Commands"), so Actions record them; otherwise the session call they made before.
+
+/// A method's parameters for a layer: no id for the active one, so a recorded step plays on any document.
+QJsonObject onLayer(EditorSession* s, const Uuid& id, QJsonObject params) {
+    if (s->activeLayerId() != id) params["id"] = QString::fromStdString(id);
+    return params;
+}
+
+/// Alt-click on a row, or the row's menu: clip the layer to the one below, or release it.
+void toggleClipping(EditorSession* s, const Uuid& id) {
+    if (!s->canToggleClippingMask(id)) return;
+    const bool clipped = s->document()->find(id)->maskSourceId.has_value();
+    s->runCommandOr(QStringLiteral("layers.set"), onLayer(s, id, {{"clipping", !clipped}}), [s, id] { s->toggleClippingMask(id); });
+}
+
+/// The bin, or the row's Delete Layer (`id`): no baking of layers clipped to it, as before. Several layers stay
+/// with the session (layers.delete would name them by id).
+void deleteLayers(EditorSession* s, std::optional<Uuid> id = std::nullopt) {
+    if (!s->hasDocument()) return;
+    const auto active = s->activeLayerId();
+    const auto& selected = s->selectedLayerIds();
+    const bool single = id ? true : active && (selected.empty() || (selected.size() == 1 && selected.count(*active)));
+    const Uuid target = id ? *id : active ? *active : Uuid();
+    if (!single || target.empty() || !s->document()->find(target) || !s->commandsRouted()) {
+        if (id) s->deleteLayer(*id); else s->deleteSelectedLayers();
+        return;
+    }
+    QJsonObject params;
+    if (!s->clippingDependents({target}).empty()) params["bakeClipping"] = false;
+    s->runCommand(QStringLiteral("layers.delete"), onLayer(s, target, params));
+}
+
+/// The layer mask items: layers.mask on the active layer.
+void maskCommand(EditorSession* s, const QJsonObject& params, const std::function<void()>& direct) {
+    if (!s->activeLayerId()) return;
+    s->runCommandOr(QStringLiteral("layers.mask"), params, direct);
+}
+
 } // namespace
 
 // ---- LayerTree ---------------------------------------------------------------------
@@ -233,7 +272,7 @@ void LayerTree::mousePressEvent(QMouseEvent* event) {
             QWidget* w = childAt(event->position().toPoint());
             while (w && w->property("layerId").isNull()) w = w->parentWidget();
             if (!(w && (w->property("eye").toBool() || w->property("mask").toBool()))) {
-                session_->toggleClippingMask(item->data(0, Qt::UserRole).toString().toStdString());
+                toggleClipping(session_, item->data(0, Qt::UserRole).toString().toStdString());
                 return;
             }
         }
@@ -379,40 +418,62 @@ LayersPanel::LayersPanel(EditorSession* session, QWidget* parent) : QWidget(pare
         footer->addWidget(b);
         return b;
     };
-    button("square-plus", tr("New layer (Ctrl-click: below the current layer)"), [this] { session_->addBlankLayer(QApplication::keyboardModifiers() & Qt::ControlModifier); });
-    button("folder-plus", tr("New folder"), [this] { session_->addGroup(); });
-    button("mask", tr("Add layer mask (reveal all, or hide the selection)"), [this] { session_->addMaskFromSelection(true); });
+    button("square-plus", tr("New layer (Ctrl-click: below the current layer)"), [this] {
+        const bool below = QApplication::keyboardModifiers() & Qt::ControlModifier;
+        session_->runCommandOr(QStringLiteral("layers.add"), below ? QJsonObject{{"below", true}} : QJsonObject{}, [this, below] { session_->addBlankLayer(below); });
+    });
+    button("folder-plus", tr("New folder"), [this] { session_->runCommandOr(QStringLiteral("layers.add"), {{"kind", "group"}}, [this] { session_->addGroup(); }); });
+    button("mask", tr("Add layer mask (reveal all, or hide the selection)"), [this] { addMask(true); });
     auto* adjust = button("sliders-horizontal", tr("New adjustment layer"), [] {});
     auto* adjustMenu = new QMenu(adjust);
     for (int i = 0; i < adjustmentKindCount; i++) {
         AdjustmentKind kind = AdjustmentKind(i);
-        adjustMenu->addAction(names::adjustmentKind(kind), this, [this, kind] { session_->addAdjustmentLayer(kind); });
+        adjustMenu->addAction(names::adjustmentKind(kind), this, [this, kind] {
+            session_->runCommandOr(QStringLiteral("layers.add"), {{"kind", "adjustment"}, {"adjustmentKind", QString::fromUtf8(adjustmentKindName(kind))}},
+                                   [this, kind] { session_->addAdjustmentLayer(kind); });
+        });
     }
     adjust->setMenu(adjustMenu);
     adjust->setPopupMode(QToolButton::InstantPopup);
     footer->addStretch();
-    button("trash-2", tr("Delete the selected layers"), [this] { session_->deleteSelectedLayers(); });
+    button("trash-2", tr("Delete the selected layers"), [this] { deleteLayers(session_); });
     layout->addLayout(footer);
 
     connect(blendCombo_, QOverload<int>::of(&QComboBox::activated), this, [this](int index) {
         const QVariant mode = blendCombo_->itemData(index);
         if (!mode.isValid()) return;
-        if (mode.toInt() < 0) session_->setLayerBlendMode(BlendMode::Normal, true);
-        else session_->setLayerBlendMode(BlendMode(mode.toInt()));
+        const bool passThrough = mode.toInt() < 0;
+        const BlendMode blend = passThrough ? BlendMode::Normal : BlendMode(mode.toInt());
+        auto direct = [this, blend, passThrough] { session_->setLayerBlendMode(blend, passThrough); };
+        // The mode it already has changes nothing (and records nothing).
+        const Layer* active = session_->activeLayer();
+        const bool same = active && (active->isGroup ? active->passThrough == passThrough && (passThrough || active->blendMode == blend) : !passThrough && active->blendMode == blend);
+        if (!active || same) { direct(); return; }
+        session_->runCommandOr(QStringLiteral("layers.set"), {{"blend", passThrough ? QStringLiteral("Pass Through") : QString::fromUtf8(blendModeName(blend))}}, direct);
     });
     connect(blendCombo_, QOverload<int>::of(&QComboBox::highlighted), this, [this](int index) {
         const QVariant mode = blendCombo_->itemData(index);
         if (session_->canEditLayers() && mode.isValid() && mode.toInt() >= 0) session_->previewBlendMode(BlendMode(mode.toInt()));
     });
     blendCombo_->view()->installEventFilter(this);
-    connect(opacitySlider_, &QSlider::sliderPressed, this, [this] { session_->beginOpacityEdit(); });
-    connect(opacitySlider_, &QSlider::sliderReleased, this, [this] { session_->endOpacityEdit(); });
+    // A drag is one undo step: shown as it goes (a preview when routed, an open edit when not), committed at the
+    // release as layers.set. A click on the track, a key or the field is a step of its own each time.
+    connect(opacitySlider_, &QSlider::sliderPressed, this, [this] {
+        if (session_->commandsRouted()) session_->beginOpacityPreview(); else session_->beginOpacityEdit();
+    });
+    connect(opacitySlider_, &QSlider::sliderReleased, this, [this] {
+        if (!session_->opacityPreviewing()) { session_->endOpacityEdit(); return; }
+        if (const std::optional<double> value = session_->endOpacityPreview()) commitOpacity(*value);
+    });
     connect(opacitySlider_, &QSlider::valueChanged, this, [this](int value) {
         if (opacitySpin_->value() != value) { QSignalBlocker b(opacitySpin_); opacitySpin_->setValue(value); }
-        if (!rebuilding_) session_->setLayerOpacity(value / 100.0);
+        if (rebuilding_) return;
+        if (session_->opacityPreviewing()) session_->previewLayerOpacity(value / 100.0);
+        else if (opacitySlider_->isSliderDown()) session_->setLayerOpacity(value / 100.0);
+        else commitOpacity(value / 100.0);
     });
     connect(opacitySpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int value) {
-        if (opacitySlider_->value() != value) { QSignalBlocker b(opacitySlider_); opacitySlider_->setValue(value); if (!rebuilding_) session_->setLayerOpacity(value / 100.0); }
+        if (opacitySlider_->value() != value) { QSignalBlocker b(opacitySlider_); opacitySlider_->setValue(value); if (!rebuilding_) commitOpacity(value / 100.0); }
     });
     connect(tree_, &QTreeWidget::itemSelectionChanged, this, [this] {
         if (rebuilding_) return;
@@ -434,8 +495,15 @@ LayersPanel::LayersPanel(EditorSession* session, QWidget* parent) : QWidget(pare
     connect(tree_, &QTreeWidget::itemCollapsed, this, [folded](QTreeWidgetItem* item) { folded(item, true); });
     connect(tree_, &LayerTree::dropRequested, this, [this](Uuid id, std::optional<Uuid> parent, std::optional<Uuid> above, bool atBottom) {
         // Dropped "above" a shown item means directly above it in the stack: the item shown becomes the one below.
-        if (tree_->dropDuplicates) session_->duplicateLayerTo(id, parent, above, atBottom && !above);
-        else session_->placeLayer(id, parent, above, atBottom && !above);
+        const bool bottom = atBottom && !above;
+        if (tree_->dropDuplicates) { session_->duplicateLayerTo(id, parent, above, bottom); return; }
+        // layers.move names the layers by id (the method cannot place one otherwise).
+        if (!session_->commandsRouted() || !session_->canPlaceLayer(id, parent, above, bottom)) { session_->placeLayer(id, parent, above, bottom); return; }
+        QJsonObject params{{"id", QString::fromStdString(id)}};
+        if (parent) params["parent"] = QString::fromStdString(*parent);
+        if (above) params["above"] = QString::fromStdString(*above);
+        if (bottom) params["atBottom"] = true;
+        session_->runCommand(QStringLiteral("layers.move"), params);
     });
     connect(tree_, &LayerTree::smartFilterMoveRequested, this, [this](Uuid id, int from, int to) {
         QString e;
@@ -676,6 +744,20 @@ void LayersPanel::syncAppearance() {
     opacitySpin_->setValue(opacity);
 }
 
+void LayersPanel::commitOpacity(double opacity) {
+    session_->runCommandOr(QStringLiteral("layers.set"), {{"opacity", opacity}}, [this, opacity] { session_->setLayerOpacity(opacity); });
+}
+
+void LayersPanel::addMask(bool revealing) {
+    // Layer > Layer Mask's Reveal All / Hide All, or From Selection with a selection: layers.mask.
+    const Layer* active = session_->activeLayer();
+    if (!active || active->mask || !session_->supportsFeature("edit.selection")) { session_->addMaskFromSelection(revealing); return; }
+    const bool selection = session_->document() && session_->document()->selection;
+    QJsonObject params{{"action", selection ? "addFromSelection" : "add"}};
+    if (!revealing) params["revealing"] = false;
+    maskCommand(session_, params, [this, revealing] { session_->addMaskFromSelection(revealing); });
+}
+
 void LayersPanel::startRename(const Uuid& id) {
     QTreeWidgetItem* item = itemFor(id);
     if (!item) return;
@@ -694,7 +776,10 @@ void LayersPanel::startRename(const Uuid& id) {
         *done = true;
         QString text = edit->text();
         edit->deleteLater();
-        if (apply) session_->renameLayer(id, text);
+        if (!apply) return;
+        const Layer* layer = session_->document() ? session_->document()->find(id) : nullptr;
+        if (!layer || text.trimmed().isEmpty() || layer->name == text.trimmed().toStdString()) return;   // nothing to rename
+        session_->runCommandOr(QStringLiteral("layers.set"), onLayer(session_, id, {{"name", text}}), [this, id, text] { session_->renameLayer(id, text); });
     };
     connect(edit, &QLineEdit::editingFinished, this, [finish] { finish(true); });
     edit->installEventFilter(this);
@@ -798,24 +883,26 @@ void LayersPanel::showContextMenu(const QPoint& pos) {
         gatedAtDepth(clear, "edit.smartObject");
         menu->addSeparator();
     }
-    menu->addAction(tr("Duplicate Layer"), this, [this] { session_->duplicateActiveLayer(); });
-    menu->addAction(tr("Delete Layer"), this, [this, id] { session_->deleteLayer(id); });
+    menu->addAction(tr("Duplicate Layer"), this, [this] { session_->runCommandOr(QStringLiteral("layers.duplicate"), {}, [this] { session_->duplicateActiveLayer(); }); });
+    menu->addAction(tr("Delete Layer"), this, [this, id] { deleteLayers(session_, id); });
     menu->addSeparator();
     if (!layer->isGroup) {
-        QAction* clip = menu->addAction(layer->maskSourceId ? tr("Release Clipping Mask") : tr("Create Clipping Mask"), this, [this, id] { session_->toggleClippingMask(id); });
+        QAction* clip = menu->addAction(layer->maskSourceId ? tr("Release Clipping Mask") : tr("Create Clipping Mask"), this, [this, id] { toggleClipping(session_, id); });
         clip->setEnabled(session_->canToggleClippingMask(id));
-        menu->addAction(tr("Merge Down"), this, [this] { session_->mergeDown(); });
+        menu->addAction(tr("Merge Down"), this, [this] {
+            if (session_->canMergeLayers()) session_->runCommandOr(QStringLiteral("layers.merge"), {}, [this] { session_->mergeDown(); });
+        });
         menu->addSeparator();
     }
     if (layer->mask) {
-        menu->addAction(layer->mask->enabled ? tr("Disable Layer Mask") : tr("Enable Layer Mask"), this, [this] { session_->toggleLayerMask(); });
-        menu->addAction(layer->mask->linked ? tr("Unlink Layer Mask") : tr("Link Layer Mask"), this, [this, id] { session_->toggleMaskLink(id); });
-        menu->addAction(tr("Invert Mask"), this, [this] { session_->invertMask(); });
-        if (!layer->isGroup) menu->addAction(tr("Apply Layer Mask"), this, [this] { session_->applyMask(); });
-        menu->addAction(tr("Delete Layer Mask"), this, [this] { session_->deleteLayerMask(); });
+        menu->addAction(layer->mask->enabled ? tr("Disable Layer Mask") : tr("Enable Layer Mask"), this, [this] { maskCommand(session_, {{"action", "toggle"}}, [this] { session_->toggleLayerMask(); }); });
+        menu->addAction(layer->mask->linked ? tr("Unlink Layer Mask") : tr("Link Layer Mask"), this, [this, id] { maskCommand(session_, {{"action", "link"}}, [this, id] { session_->toggleMaskLink(id); }); });
+        menu->addAction(tr("Invert Mask"), this, [this] { maskCommand(session_, {{"action", "invert"}}, [this] { session_->invertMask(); }); });
+        if (!layer->isGroup) menu->addAction(tr("Apply Layer Mask"), this, [this] { maskCommand(session_, {{"action", "apply"}}, [this] { session_->applyMask(); }); });
+        menu->addAction(tr("Delete Layer Mask"), this, [this] { maskCommand(session_, {{"action", "delete"}}, [this] { session_->deleteLayerMask(); }); });
     } else {
-        menu->addAction(tr("Add Reveal-All Mask"), this, [this] { session_->addMaskFromSelection(true); });
-        menu->addAction(tr("Add Hide-All Mask"), this, [this] { session_->addMaskFromSelection(false); });
+        menu->addAction(tr("Add Reveal-All Mask"), this, [this] { addMask(true); });
+        menu->addAction(tr("Add Hide-All Mask"), this, [this] { addMask(false); });
     }
     if (hasLayerVectorMask(*layer)) gatedAtDepth(menu->addAction(tr("Delete Vector Mask"), this, [this] { session_->deleteVectorMask(); }), "edit.vector");
     else if (!isVectorShapeLayer(*layer)) {
