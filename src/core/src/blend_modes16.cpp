@@ -2,6 +2,7 @@
 // on each channel (blend_modes.inc), and Lab's own non-separable modes. RGB documents never reach this file.
 #include "blend_modes.inc"
 #include "compositor/depth.h"
+#include "compositor/simd.h"
 
 namespace compositor {
 
@@ -20,7 +21,9 @@ struct Kernels16 {
         const uint64_t sa = (uint64_t(src[n - 1]) * k + one / 2) >> 15;
         if (sa == 0) return;
         const uint64_t inv = one - sa;
-        for (int c = 0; c < n; c++)
+        int c = 0;
+        if (n >= 4 && k <= one && sa <= one) { simd::sourceOver16(src, k, uint32_t(inv), dst, one); c = 4; }
+        for (; c < n; c++)
             dst[c] = uint16_t(std::min<uint64_t>(one, ((uint64_t(src[c]) * k + one / 2) >> 15) + ((uint64_t(dst[c]) * inv + one / 2) >> 15)));
     }
     static void rgbSpan(BlendMode mode, const uint16_t* src, const uint32_t* steps, uint16_t* dst, int count) { compositeSpan16(mode, src, steps, dst, count); }
