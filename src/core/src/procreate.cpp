@@ -10,6 +10,7 @@
 #include "zip.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <map>
 
 namespace compositor {
@@ -161,7 +162,45 @@ DynamicsMapping azimuthAngle() { return dynamicsMapping(DynamicsInput::TiltDirec
 /// Weakly inferred: the sign, and how it combines with shapeAzimuth.
 DynamicsMapping rollAngle() { return dynamicsMapping(DynamicsInput::Roll, DynamicsTarget::Angle, 0, -360); }
 
+// Taper. Procreate's taper lengths are sliders, 0..1; the stroke narrows (and, with Opacity, fades) over that length
+// at each end. A length of 1 is read as `taperFullLength` pixels whatever the brush's size (weakly inferred: a taper
+// does not lengthen with the brush in Procreate, and a full one on a real "fade out" brush runs a whole short stroke).
+// Size and Opacity are how thin and how faint the very tip gets (strongly inferred).
+constexpr double taperFullLength = 300;
+
+BrushTip::Taper taper(double start, double end, double size, double opacity) {
+    BrushTip::Taper t;
+    t.start = std::clamp(start, 0.0, 1.0) * taperFullLength;
+    t.end = std::clamp(end, 0.0, 1.0) * taperFullLength;
+    t.size = std::clamp(size, 0.0, 1.0);
+    t.opacity = std::clamp(opacity, 0.0, 1.0);
+    return t;
+}
+
+/// dynamicsPressureBleed, 0..1: the dab thins at light pressure, as the tilt bleed does as the pen leans (weakly inferred).
+DynamicsMapping pressureBleed(double amount) {
+    const double a = tiltBleedFlow * std::clamp(amount, 0.0, 1.0);
+    return dynamicsMapping(DynamicsInput::Pressure, DynamicsTarget::Flow, 1 - a, a);
+}
+
 } // namespace scaling
+
+/// A Procreate response curve (dynamicsPressureSizeCurve and the like): points as "{x, y}" strings, in any order,
+/// through which Procreate draws a smooth curve. A straight line from 0 to 1 is no curve.
+DynamicsCurve procreateCurve(const plist::Binary& archive, const plist::Value* object) {
+    DynamicsCurve curve;
+    if (!object) return curve;
+    for (const std::string& text : plist::keyedStrings(archive, *object, "points")) {
+        double x = 0, y = 0;
+        if (std::sscanf(text.c_str(), " {%lf , %lf}", &x, &y) == 2) curve.points.emplace_back(x, y);
+    }
+    curve.kind = DynamicsCurve::Kind::Smooth;
+    curve.normalize();
+    bool straight = true;
+    for (auto [x, y] : curve.points) straight = straight && std::fabs(x - y) < 1e-4;
+    if (straight) curve.points.clear();
+    return curve;
+}
 
 /// Settings that change how a brush paints and have no mapping here yet. A setting counts when it is off its
 /// neutral value; the import's notes list how many brushes use each. As a setting gets a mapping it leaves this list.
@@ -172,7 +211,7 @@ const char* const notCarriedSettings[] = {
     "dynamicsTiltCompression", "dynamicsTiltGradation", "shapeRollMode",
     "dynamicsTiltHue", "dynamicsTiltSaturation", "dynamicsTiltBrightness", "dynamicsTiltSecondaryColor",
     "dynamicsPressureHue", "dynamicsPressureSaturation", "dynamicsPressureBrightness", "dynamicsPressureSecondaryColor",
-    "dynamicsPressureBleed", "dynamicsPressureShapeRoundness"};
+    "dynamicsPressureShapeRoundness", "dynamicsFalloff", "shapeCountJitter"};
 
 bool inUse(const std::map<std::string, plist::Value>& s, const std::string& key) {
     if (std::fabs(number(s, key.c_str(), 0)) < 1e-6) return false;
@@ -183,7 +222,7 @@ bool inUse(const std::map<std::string, plist::Value>& s, const std::string& key)
     return true;
 }
 
-std::optional<TipPreset> readBrush(const ZipArchive& zip, const std::string& folder, Notes& notes) {
+std::optional<TipPreset> readBrush(const ZipArchive& zip, const std::string& folder, Notes& notes, std::map<std::string, int>& colourNotes) {
     auto archive = zip.read(folder + "Brush.archive", 16u << 20);
     if (!archive) return std::nullopt;
     auto binary = plist::Binary::parse(archive->data(), archive->size());
@@ -191,6 +230,7 @@ std::optional<TipPreset> readBrush(const ZipArchive& zip, const std::string& fol
     auto settings = plist::keyedRoot(*binary);
     if (!settings) return std::nullopt;
     const auto& s = *settings;
+    auto curveOf = [&](const char* key) { auto it = s.find(key); return procreateCurve(*binary, it == s.end() ? nullptr : &it->second); };
     TipPreset preset;
     preset.name = text(s, "name");
     BrushTip& tip = preset.tip;
@@ -212,6 +252,18 @@ std::optional<TipPreset> readBrush(const ZipArchive& zip, const std::string& fol
     if (auto png = zip.read(folder + "Grain.png")) {
         if (auto image = decodePngImage(png->data(), png->size())) {
             tip.grain = procreateTip(*image, number(s, "textureInverted", 0) != 0, false);
+            // Brightness and contrast change the grain image itself, once (strongly inferred: -1..1 each, contrast
+            // about the middle grey).
+            const double brightness = std::clamp(number(s, "textureBrightness", 0), -1.0, 1.0), contrast = std::clamp(number(s, "textureContrast", 0), -1.0, 1.0);
+            if (std::fabs(brightness) > 1e-6 || std::fabs(contrast) > 1e-6) {
+                auto adjusted = std::make_shared<GrayImage>(*tip.grain);
+                const double gain = contrast >= 0 ? 1 + 3 * contrast : 1 + contrast;
+                for (size_t i = 0; i < adjusted->byteCount(); i++) {
+                    const double v = (adjusted->data()[i] / 255.0 - 0.5) * gain + 0.5 + brightness;
+                    adjusted->data()[i] = uint8_t(std::lround(255 * std::clamp(v, 0.0, 1.0)));
+                }
+                tip.grain = adjusted;
+            }
             tip.grainDepth = std::clamp(number(s, "grainDepth", 1), 0.0, 1.0);
             tip.grainScale = 1 / std::clamp(number(s, "textureScale", 1), 0.05, 16.0);
             // Moving grain (textureApplication 0) rolls with the stroke, as far as its Movement says; texturized grain
@@ -242,11 +294,41 @@ std::optional<TipPreset> readBrush(const ZipArchive& zip, const std::string& fol
     // of the size pressure takes away at its lightest.
     auto add = [&](DynamicsInput input, DynamicsTarget target, double offset, double depth) { tip.dynamics.push_back(dynamicsMapping(input, target, offset, depth)); };
     const double pressureSize = number(s, "dynamicsPressureSize", 0);
-    if (pressureSize > 0) { const double minimum = 1 - std::min(1.0, pressureSize); add(DynamicsInput::Pressure, DynamicsTarget::Size, minimum, 1 - minimum); }
+    if (pressureSize > 0) {
+        const double minimum = 1 - std::min(1.0, pressureSize);
+        add(DynamicsInput::Pressure, DynamicsTarget::Size, minimum, 1 - minimum);
+        tip.dynamics.back().curve = curveOf("dynamicsPressureSizeCurve");   // the brush's own response, strongly inferred
+    }
     const double sizeJitter = std::clamp(number(s, "dynamicsJitterSize", 0), 0.0, 1.0);
     if (sizeJitter > 0) add(DynamicsInput::Random, DynamicsTarget::Size, 1, -sizeJitter);
     const double pressureOpacity = std::clamp(number(s, "dynamicsPressureOpacity", 0), 0.0, 1.0);
-    if (pressureOpacity > 0) add(DynamicsInput::Pressure, DynamicsTarget::Flow, 1 - pressureOpacity, pressureOpacity);
+    if (pressureOpacity > 0) {
+        add(DynamicsInput::Pressure, DynamicsTarget::Flow, 1 - pressureOpacity, pressureOpacity);
+        tip.dynamics.back().curve = curveOf("dynamicsPressureOpacityCurve");
+    }
+    if (const double v = number(s, "dynamicsPressureBleed", 0); v >= 1e-6) {
+        tip.dynamics.push_back(scaling::pressureBleed(v));
+        tip.dynamics.back().curve = curveOf("dynamicsPressureBleedCurve");
+    }
+    // Shape: roundness jitter flattens dabs at random (strongly inferred); Randomized turns each stroke's tip by a draw of
+    // its own (strongly inferred). Stroke path: spacing jitter widens the gaps at random, by up to the amount (weakly
+    // inferred).
+    if (const double v = std::clamp(number(s, "jitterShapeRoundness", 0), 0.0, 1.0); v > 0) add(DynamicsInput::Random, DynamicsTarget::Roundness, 1, -v);
+    if (number(s, "shapeRandomise", 0) != 0) add(DynamicsInput::StrokeRandom, DynamicsTarget::Angle, 0, 180);
+    if (const double v = std::clamp(number(s, "plotSpacingJitter", 0), 0.0, 10.0); v > 0) add(DynamicsInput::Random, DynamicsTarget::Spacing, 1, v);
+    // Taper: the pencil's for a stylus, the touch taper for a mouse.
+    tip.taper = scaling::taper(number(s, "pencilTaperStartLength", 0), number(s, "pencilTaperEndLength", 0), number(s, "pencilTaperSize", 0),
+                               number(s, "pencilTaperOpacity", 0));
+    {
+        const BrushTip::Taper touch = scaling::taper(number(s, "taperStartLength", 0), number(s, "taperEndLength", 0), number(s, "taperSize", 0),
+                                                     number(s, "taperOpacity", 0));
+        if (!touch.isNone()) tip.mouseTaper = touch;
+    }
+    // Colour dynamics and wet mixing change the paint's colour, which a tip brush does not: counted for the notes.
+    for (const char* key : {"dynamicsJitterHue", "dynamicsJitterSaturation", "dynamicsJitterLightness", "dynamicsJitterDarkness", "dynamicsJitterStrokeHue",
+                            "dynamicsJitterStrokeSaturation", "dynamicsJitterStrokeLightness", "dynamicsJitterStrokeDarkness"})
+        if (std::fabs(number(s, key, 0)) > 1e-3) { colourNotes["colour jitter"]++; break; }
+    if (number(s, "dynamicsMix", 0) > 1e-3 || number(s, "dynamicsLoad", 0) > 1e-3) colourNotes["wet mix"]++;
     const double opacityJitter = std::clamp(number(s, "dynamicsJitterOpacity", 0), 0.0, 1.0);
     if (opacityJitter > 0) add(DynamicsInput::Random, DynamicsTarget::Flow, 1, -opacityJitter);
     if (angleJitter > 0) add(DynamicsInput::Random, DynamicsTarget::Angle, 0, angleJitter);
@@ -298,13 +380,15 @@ std::optional<BrushImport> readProcreate(const uint8_t* data, size_t size, const
     if (folders.empty()) {
         // A single .brush, or a set without its list: every Brush.archive outside a Reset copy.
         for (const std::string& entry : zip->names()) {
-            if (entry.size() < 13 || entry.compare(entry.size() - 13, 13, "Brush.archive") != 0 || entry.find("Reset/") != std::string::npos) continue;
+            if (entry.size() < 13 || entry.compare(entry.size() - 13, 13, "Brush.archive") != 0 || entry.find("Reset/") != std::string::npos
+                || entry.find("__MACOSX/") != std::string::npos || entry.find("/._") != std::string::npos) continue;
             folders.push_back(entry.substr(0, entry.size() - 13));
         }
     }
     Notes notes;
+    std::map<std::string, int> colourNotes;
     for (const std::string& folder : folders) {
-        auto preset = readBrush(*zip, folder, notes);
+        auto preset = readBrush(*zip, folder, notes, colourNotes);
         if (!preset) continue;
         if (preset->name.empty()) preset->name = name + " " + std::to_string(import.brushes.size() + 1);
         import.brushes.push_back(std::move(*preset));
@@ -312,6 +396,8 @@ std::optional<BrushImport> readProcreate(const uint8_t* data, size_t size, const
     auto note = [&](int count, const char* what) { if (count) import.notes.push_back(what + std::string(": ") + std::to_string(count)); };
     note(notes.bundledShapes, "brushes whose shape is from Procreate's own library, not in the file (a soft round tip stands in)");
     note(notes.bundledGrains, "brushes whose grain is from Procreate's own library, not in the file (they paint without grain)");
+    for (const auto& [what, count] : colourNotes)
+        import.notes.push_back("brushes with " + what + " (they paint in the chosen colour only): " + std::to_string(count));
     if (!notes.notCarried.empty()) {
         std::string list;
         for (const auto& [key, count] : notes.notCarried) list += (list.empty() ? "" : ", ") + key + " " + std::to_string(count);

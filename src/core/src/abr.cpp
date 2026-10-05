@@ -104,7 +104,9 @@ std::optional<BrushImport> readOld(Reader& r, int version, const std::string& na
 // ---- Versions 6 to 10 ----------------------------------------------------------------------------
 
 /// One of Photoshop's dynamics: its jitter, what controls it (brVr, bVTy: 0 off, 1 fade, 2 pen pressure, 3 pen tilt,
-/// 4 stylus wheel, 6 direction on the angle), the fade's steps and the minimum the control goes down to.
+/// 4 stylus wheel, 5 rotation, and on the angle only 6 initial direction and 7 direction), the fade's steps and the
+/// minimum the control goes down to. The control numbers are those Photoshop writes, as the Patchy editor's ABR reader (MIT) documents them
+/// in its docs/brushes.md, and as its self-made Photoshop fixtures show.
 struct Variation { double jitter = 0; int control = 0; double steps = 0; double minimum = 0; };
 Variation variation(const Descriptor* d) {
     Variation v;
@@ -193,6 +195,7 @@ std::optional<BrushImport> readSections(Reader& r, const std::string& name, std:
                 const double low = std::clamp(minimum, 0.0, 1.0);
                 if (v.control == 2) add(DynamicsInput::Pressure, target, low, 1 - low);
                 else if (v.control == 3) add(DynamicsInput::Tilt, target, 1, low - 1);   // upright is full, flat the minimum
+                else if (v.control == 4) add(DynamicsInput::Wheel, target, low, 1 - low);
                 else if (v.control == 1 && v.steps > 0) add(DynamicsInput::StrokeProgress, target, 1, low - 1, v.steps * tip.spacing);
                 if (v.jitter > 0) add(DynamicsInput::Random, target, 1, -std::min(1.0, v.jitter));
             };
@@ -201,7 +204,12 @@ std::optional<BrushImport> readSections(Reader& r, const std::string& name, std:
                 const Variation angle = variation(entry.item("angleDynamics"));
                 if (angle.control == 3) add(DynamicsInput::TiltDirection, DynamicsTarget::Angle, 0, 360);   // pen tilt turns the tip
                 if (angle.jitter > 0) add(DynamicsInput::Random, DynamicsTarget::Angle, 0, std::min(180.0, angle.jitter * 180));
-                if (angle.control == 6) tip.followStroke = true;   // direction
+                // Rotation turns the tip with the pen's barrel, Initial Direction with the way the stroke set off,
+                // Direction with the stroke all along, Stylus Wheel with the wheel.
+                if (angle.control == 4) add(DynamicsInput::Wheel, DynamicsTarget::Angle, 0, 360);
+                if (angle.control == 5) add(DynamicsInput::Twist, DynamicsTarget::Angle, 0, -360);
+                if (angle.control == 6) add(DynamicsInput::InitialDirection, DynamicsTarget::Angle, 0, -360);
+                if (angle.control == 7) tip.followStroke = true;
                 const Variation roundness = variation(entry.item("roundnessDynamics"));
                 control(roundness, DynamicsTarget::Roundness, entry.numberAt("minimumRoundness", 0) / 100.0);
                 tip.randomFlipX = entry.numberAt("flipX", 0) != 0;

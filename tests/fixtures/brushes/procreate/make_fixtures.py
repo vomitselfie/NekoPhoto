@@ -24,6 +24,12 @@ BASELINE = {
     "shapeRoundness": 1.0,
 }
 
+class Curve:
+    """A ValkyrieMagnitudinalCurve: its points as "{x, y}" strings in an NSArray, in the order given."""
+    def __init__(self, points):
+        self.points = points
+
+
 # name: (settings changed from the baseline, grain)
 FIXTURES = {
     "syn_00_baseline": ({}, False),
@@ -41,7 +47,15 @@ FIXTURES = {
     "syn_12_roll": ({"shapeRoll": True}, False),
     "syn_13_grain_moving": ({"textureApplication": 0, "textureMovement": 1.0, "grainDepth": 1.0, "textureScale": 1.0}, True),
     "syn_14_grain_texturized": ({"textureApplication": 1, "grainDepth": 1.0, "textureScale": 1.0}, True),
+    # Pressure on size through a curve that rises fast (half the size at a quarter of the pressure), as most of the
+    # pressure curves in real brush sets do.
+    "syn_15_pressure_curve": ({"dynamicsPressureSize": 1.0,
+                               "dynamicsPressureSizeCurve": Curve([(0, 0), (1, 1), (0.25, 0.5)])}, False),
+    # The pencil's taper: a third of the slider at each end, down to nothing in size; the touch taper only at the start.
+    "syn_16_taper": ({"pencilTaperStartLength": 1 / 3, "pencilTaperEndLength": 1 / 3, "pencilTaperSize": 1.0,
+                      "taperStartLength": 0.25, "taperSize": 1.0, "taperOpacity": 1.0}, False),
 }
+
 
 
 def keyed_archive(settings):
@@ -49,7 +63,20 @@ def keyed_archive(settings):
     root = {"$class": plistlib.UID(3)}
     objects = ["$null", root, settings.get("name", ""), {"$classname": "SilicaBrush", "$classes": ["SilicaBrush", "NSObject"]}]
     for key in sorted(settings):
-        root[key] = plistlib.UID(2) if key == "name" else settings[key]
+        value = settings[key]
+        if isinstance(value, Curve):
+            strings = []
+            for x, y in value.points:
+                objects.append("{%f, %f}" % (x, y))
+                strings.append(plistlib.UID(len(objects) - 1))
+            objects.append({"$classname": "NSArray", "$classes": ["NSArray", "NSObject"]})
+            objects.append({"NS.objects": strings, "$class": plistlib.UID(len(objects) - 1)})
+            array = plistlib.UID(len(objects) - 1)
+            objects.append({"$classname": "ValkyrieMagnitudinalCurve", "$classes": ["ValkyrieMagnitudinalCurve", "NSObject"]})
+            objects.append({"points": array, "$class": plistlib.UID(len(objects) - 1)})
+            root[key] = plistlib.UID(len(objects) - 1)
+        else:
+            root[key] = plistlib.UID(2) if key == "name" else value
     archive = {"$archiver": "NSKeyedArchiver", "$version": 100000, "$top": {"root": plistlib.UID(1)}, "$objects": objects}
     return plistlib.dumps(archive, fmt=plistlib.FMT_BINARY, sort_keys=True)
 

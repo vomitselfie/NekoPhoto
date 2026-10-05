@@ -4,10 +4,13 @@
 //   brush_parity_tool list                            the fixtures and presets
 //   brush_parity_tool dump <folder> [filter]          <fixture>__<preset>.png, metrics.txt and fixtures/*.json
 //   brush_parity_tool render <stroke.json> <preset> <out.png>   one recorded stroke with one preset
+//   brush_parity_tool sheet <brush file> <out.png> [filter]     every imported brush on the same synthetic strokes
 //   brush_parity_tool grain <folder>                  the moving-grain torture scenes (brush_grain_tests), the grain
 //                                                     itself, and each scene's dabs (centre, tangent, grain offset)
 #include "brush_harness.h"
+#include "compositor/brushimport.h"
 #include "compositor/png.h"
+#include <algorithm>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -19,7 +22,7 @@ namespace fs = std::filesystem;
 namespace {
 
 int usage() {
-    std::fprintf(stderr, "usage: brush_parity_tool list | dump <folder> [filter] | render <stroke.json> <preset> <out.png> | grain <folder>\n");
+    std::fprintf(stderr, "usage: brush_parity_tool list | dump <folder> [filter] | render <stroke.json> <preset> <out.png> | sheet <brush file> <out.png> [filter] | grain <folder>\n");
     return 2;
 }
 
@@ -92,6 +95,52 @@ int main(int argc, char** argv) {
                 written++;
             }
         std::printf("%d renders in %s (each with its dabs: distance, x, y, size, direction, tangent, grain offset x, y)\n", written, folder.string().c_str());
+        return 0;
+    }
+    if (command == "sheet" && argc >= 4) {
+        // Every brush of an imported file on the same synthetic strokes: a row per brush, a column per stroke (pressure
+        // ramp, tilt sweep, speed sweep and S curve with a pen, then a straight line with a mouse), on white.
+        std::string error;
+        auto import = importBrushFile(argv[2], &error);
+        if (!import) { std::fprintf(stderr, "%s\n", error.c_str()); return 1; }
+        const std::string filter = argc > 4 ? argv[4] : "";
+        std::vector<StrokeFixture> strokes;
+        for (const StrokeFixture& f : standardFixtures())
+            if (f.name == "pressure_ramp" || f.name == "tilt_sweep" || f.name == "speed_sweep" || f.name == "s_curve") strokes.push_back(f);
+        for (const StrokeFixture& f : standardFixtures())
+            if (f.name == "straight_line") { strokes.push_back(f); strokes.back().name = "mouse_line"; strokes.back().stylus = false; }
+        std::vector<const TipPreset*> brushes;
+        for (const TipPreset& b : import->brushes)
+            if (filter.empty() || b.name.find(filter) != std::string::npos) brushes.push_back(&b);
+        if (brushes.empty()) { std::fprintf(stderr, "no brush matches\n"); return 1; }
+        Image sheet(int(strokes.size()) * canvasWidth, int(brushes.size()) * canvasHeight);
+        for (int y = 0; y < sheet.height(); y++)
+            for (int x = 0; x < sheet.width(); x++) { uint8_t* p = sheet.pixel(x, y); p[0] = p[1] = p[2] = p[3] = 255; }
+        for (size_t row = 0; row < brushes.size(); row++) {
+            Preset preset;
+            preset.name = brushes[row]->name;
+            preset.engine = Preset::Engine::Tip;
+            preset.tip = *brushes[row];
+            preset.settings.diameter = std::clamp(brushes[row]->diameter, 4.0, 40.0);
+            preset.settings.red = preset.settings.green = preset.settings.blue = 0;
+            std::printf("row %zu: %s (diameter %.1f, %zu mappings)\n", row, preset.name.c_str(), brushes[row]->diameter, brushes[row]->tip.dynamics.size());
+            for (size_t column = 0; column < strokes.size(); column++) {
+                const Render r = render(strokes[column], preset);
+                if (!r.image) continue;
+                const Metrics m = measure(strokes[column], r);
+                std::printf("  %-14s %s\n", strokes[column].name.c_str(), formatMetrics(m).c_str());
+                for (int y = 0; y < canvasHeight; y++)
+                    for (int x = 0; x < canvasWidth; x++) {
+                        const unsigned a = r.paint[size_t(y) * canvasWidth + size_t(x)];
+                        uint8_t* p = sheet.pixel(int(column) * canvasWidth + x, int(row) * canvasHeight + y);
+                        // A hairline between cells.
+                        const uint8_t v = uint8_t(255 - a);
+                        p[0] = p[1] = p[2] = (x == 0 || y == 0) ? uint8_t(200) : v;
+                    }
+            }
+        }
+        writePngImage(argv[3], sheet);
+        for (const std::string& note : import->notes) std::printf("note: %s\n", note.c_str());
         return 0;
     }
     if (command == "render" && argc >= 5) {

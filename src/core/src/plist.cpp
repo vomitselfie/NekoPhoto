@@ -107,6 +107,35 @@ std::optional<Binary> Binary::parse(const uint8_t* data, size_t size) {
     return out;
 }
 
+std::vector<std::string> keyedStrings(const Binary& archive, const Value& object, const std::string& key) {
+    std::vector<std::string> out;
+    const Value& top = archive.objects[archive.top];
+    const Value* objectsList = nullptr;
+    for (const auto& [k, v] : top.pairs)
+        if (archive.objects[k].kind == Value::Kind::String && archive.objects[k].text == "$objects") objectsList = &archive.objects[v];
+    if (!objectsList || objectsList->kind != Value::Kind::Array) return out;
+    auto resolve = [&](const Value* v) -> const Value* {
+        if (v && v->kind == Value::Kind::Uid) return v->uid < objectsList->items.size() ? &archive.objects[objectsList->items[size_t(v->uid)]] : nullptr;
+        return v;
+    };
+    auto find = [&](const Value& dict, const std::string& name) -> const Value* {
+        if (dict.kind != Value::Kind::Dict) return nullptr;
+        for (const auto& [k, v] : dict.pairs)
+            if (archive.objects[k].kind == Value::Kind::String && archive.objects[k].text == name) return resolve(&archive.objects[v]);
+        return nullptr;
+    };
+    const Value* array = find(object, key);
+    if (!array) return out;
+    // An NSArray: its items under NS.objects.
+    if (const Value* items = find(*array, "NS.objects")) array = items;
+    if (array->kind != Value::Kind::Array) return out;
+    for (size_t index : array->items) {
+        const Value* item = resolve(&archive.objects[index]);
+        if (item && item->kind == Value::Kind::String && out.size() < 256) out.push_back(item->text);
+    }
+    return out;
+}
+
 std::optional<std::map<std::string, Value>> keyedRoot(const Binary& archive) {
     const Value& top = archive.objects[archive.top];
     if (top.kind != Value::Kind::Dict) return std::nullopt;

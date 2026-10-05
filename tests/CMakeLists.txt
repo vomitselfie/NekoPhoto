@@ -248,6 +248,10 @@ add_test(NAME brush_grain_tests COMMAND brush_grain_tests)
 add_executable(brush_smoothing_tests brush_smoothing_tests.cpp)
 target_link_libraries(brush_smoothing_tests PRIVATE brush_harness)
 add_test(NAME brush_smoothing_tests COMMAND brush_smoothing_tests)
+# Imported brushes behaving as in their own application: taper, the stroke's own inputs, curves and controls.
+add_executable(brush_feel_tests brush_feel_tests.cpp)
+target_link_libraries(brush_feel_tests PRIVATE brush_harness)
+add_test(NAME brush_feel_tests COMMAND brush_feel_tests)
 add_executable(brush_parity_tool brush_parity_tool.cpp)
 target_link_libraries(brush_parity_tool PRIVATE brush_harness)
 

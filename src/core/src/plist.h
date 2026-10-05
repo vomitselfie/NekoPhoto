@@ -32,6 +32,10 @@ struct Binary {
 /// the archive's objects (one level).
 std::optional<std::map<std::string, Value>> keyedRoot(const Binary& archive);
 
+/// The strings of an archived array that `object` (an archived object, as keyedRoot gives it) holds under `key`:
+/// Procreate's curves keep their points so, as "{x, y}" strings. Empty when there is no such array.
+std::vector<std::string> keyedStrings(const Binary& archive, const Value& object, const std::string& key);
+
 /// An XML plist's top dictionary, keeping only string values and arrays of strings.
 struct XmlDict { std::map<std::string, std::string> strings; std::map<std::string, std::vector<std::string>> arrays; };
 std::optional<XmlDict> parseXmlDict(const std::string& xml);

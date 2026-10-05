@@ -1,7 +1,7 @@
 // Clip Studio Paint brushes (.sut): an SQLite database. Each tool is a row of Node (its name and the Variant
 // it uses), and each Variant row holds the settings in named columns. Column meanings are read from the
 // column names and checked against a real file. The "effectors" (dynamics) are coded blobs with no public
-// description; only whether pressure drives size and opacity, and size's minimum, is read (see pressureMinimum).
+// description; whether pressure drives size and opacity, its minimum and its curve are read (see pressureEffector).
 //
 // Tip images and paper textures are materials, one MaterialFile row each: a tar holding the material's
 // layer file (data/material*.layer) and icedata/layerData.xml, whose tags say BrushPattern or PaperTexture.
@@ -306,16 +306,57 @@ std::string materialReference(const void* blob, int size) {
     return std::string(reinterpret_cast<const char*>(p + 16), length);
 }
 
+/// A pressure "effector": the minimum, in percent, and the pressure curve.
+struct Effector {
+    double minimum = 0;
+    DynamicsCurve curve;
+};
+
 /// A pressure "effector" blob: after its header size and a marker come flags and the minimum, in percent.
 /// Bit 0x10 of the flags is taken as "pressure drives it": a sample brush with size pressure on carries 0x90
-/// and a minimum of 10, and one with opacity pressure off carries 0. The pressure curve after the header is
-/// left out. Nullopt when pressure does not drive it.
-std::optional<double> pressureMinimum(const void* blob, int size) {
+/// and a minimum of 10, and one with opacity pressure off carries 0. After the header come curves, the first the
+/// pressure curve: a block size (12), the number of points and each point's size (16), then the points as
+/// big-endian doubles x, y in 0..1. The header's ninth word is that block's length. Clip Studio draws the curve
+/// smoothly through its points. Nullopt when pressure does not drive it.
+std::optional<Effector> pressureEffector(const void* blob, int size) {
     const auto* p = static_cast<const uint8_t*>(blob);
     if (!p || size < 20 || be32(p) < 20 || !(be32(p + 8) & 0x10)) return std::nullopt;
     const uint32_t minimum = be32(p + 12);
     if (minimum > 100) return std::nullopt;
-    return minimum / 100.0;
+    Effector e;
+    e.minimum = minimum / 100.0;
+    const size_t at = be32(p);
+    auto f64 = [&](size_t offset) {
+        const uint64_t bits = uint64_t(be32(p + offset)) << 32 | be32(p + offset + 4);
+        double v;
+        std::memcpy(&v, &bits, 8);
+        return v;
+    };
+    if (at + 12 <= size_t(size) && be32(p + at) == 12 && be32(p + at + 8) == 16) {
+        const size_t count = be32(p + at + 4);
+        if (count >= 2 && count <= 64 && at + 12 + count * 16 <= size_t(size)) {
+            for (size_t i = 0; i < count; i++) e.curve.points.emplace_back(f64(at + 12 + 16 * i), f64(at + 20 + 16 * i));
+            e.curve.kind = DynamicsCurve::Kind::Smooth;
+            e.curve.normalize();
+            bool straight = true;
+            for (auto [x, y] : e.curve.points) straight = straight && std::fabs(x - y) < 1e-4;
+            if (straight) e.curve.points.clear();
+        }
+    }
+    return e;
+}
+
+/// A texture image with Clip Studio's brightness and contrast (-100..100 each) applied once.
+std::shared_ptr<const GrayImage> adjustTexture(const std::shared_ptr<const GrayImage>& image, double brightness, double contrast) {
+    if (std::fabs(brightness) < 1e-6 && std::fabs(contrast) < 1e-6) return image;
+    auto out = std::make_shared<GrayImage>(*image);
+    const double b = std::clamp(brightness, -100.0, 100.0) / 100, c = std::clamp(contrast, -100.0, 100.0) / 100;
+    const double gain = c >= 0 ? 1 + 3 * c : 1 + c;
+    for (size_t i = 0; i < out->byteCount(); i++) {
+        const double v = (out->data()[i] / 255.0 - 0.5) * gain + 0.5 + b;
+        out->data()[i] = uint8_t(std::lround(255 * std::clamp(v, 0.0, 1.0)));
+    }
+    return out;
 }
 
 } // namespace
@@ -342,11 +383,11 @@ std::optional<BrushImport> readClipStudio(const std::string& path, const std::st
     auto number = [&](const char* key, double fallback) { return has(key) ? sqlite3_column_double(rows, column[key]) : fallback; };
     auto reference = [&](const char* key) { return has(key) ? materialReference(sqlite3_column_blob(rows, column[key]), sqlite3_column_bytes(rows, column[key])) : std::string(); };
 
-    struct Wants { std::string tip, texture; bool reverseTexture = false; };
+    struct Wants { std::string tip, texture; bool reverseTexture = false; double brightness = 0, contrast = 0; };
     std::vector<Wants> wants;
     std::vector<std::string> tipOrder, textureOrder;   // references in the order the brushes first use them
     auto remember = [](std::vector<std::string>& order, const std::string& ref) { if (!ref.empty() && std::find(order.begin(), order.end(), ref) == order.end()) order.push_back(ref); };
-    int watercolour = 0, dual = 0, pressured = 0;
+    int watercolour = 0, dual = 0, pressured = 0, tapered = 0;
     while (sqlite3_step(rows) == SQLITE_ROW && import.brushes.size() < 1000) {
         TipPreset preset;
         if (const unsigned char* title = sqlite3_column_text(rows, 0)) preset.name = reinterpret_cast<const char*>(title);
@@ -367,17 +408,30 @@ std::optional<BrushImport> readClipStudio(const std::string& path, const std::st
         }
         auto effector = [&](const char* key) {
             return has(key) && sqlite3_column_type(rows, column[key]) == SQLITE_BLOB
-                ? pressureMinimum(sqlite3_column_blob(rows, column[key]), sqlite3_column_bytes(rows, column[key])) : std::nullopt;
+                ? pressureEffector(sqlite3_column_blob(rows, column[key]), sqlite3_column_bytes(rows, column[key])) : std::nullopt;
         };
-        // Pressure as mappings (brushdynamics.h): size from the effector's minimum up, opacity or flow from nothing up.
-        // The effector's curve is not decoded yet: the response is linear.
-        if (auto minimum = effector("BrushSizeEffector")) {
-            tip.dynamics.push_back(dynamicsMapping(DynamicsInput::Pressure, DynamicsTarget::Size, *minimum, 1 - *minimum));
+        // Pressure as mappings (brushdynamics.h): size from the effector's minimum up, opacity or flow from theirs,
+        // each through its own pressure curve.
+        if (auto e = effector("BrushSizeEffector")) {
+            tip.dynamics.push_back(dynamicsMapping(DynamicsInput::Pressure, DynamicsTarget::Size, e->minimum, 1 - e->minimum));
+            tip.dynamics.back().curve = e->curve;
             pressured++;
         }
-        if (effector("BrushOpacityEffector") || effector("BrushFlowEffector")) {
-            tip.dynamics.push_back(dynamicsMapping(DynamicsInput::Pressure, DynamicsTarget::Flow, 0, 1));
-            pressured++;
+        for (const char* key : {"BrushOpacityEffector", "BrushFlowEffector"})
+            if (auto e = effector(key)) {
+                tip.dynamics.push_back(dynamicsMapping(DynamicsInput::Pressure, DynamicsTarget::Flow, e->minimum, 1 - e->minimum));
+                tip.dynamics.back().curve = e->curve;
+                pressured++;
+                break;
+            }
+        // Starting and ending: the size grows in over the first length and out over the last, in pixels when the unit
+        // is 0 (the other units are relative and read as pixels too). Which settings it acts on (BrushInOutTarget) is
+        // not decoded; Clip Studio's own brushes taper the size, so the size is tapered.
+        if (number("BrushUseIn", 0) != 0 || number("BrushUseOut", 0) != 0) {
+            tip.taper.size = 1;
+            if (number("BrushUseIn", 0) != 0) tip.taper.start = std::clamp(number("BrushInLength", 0), 0.0, 20000.0);
+            if (number("BrushUseOut", 0) != 0) tip.taper.end = std::clamp(number("BrushOutLength", 0), 0.0, 20000.0);
+            tapered++;
         }
         Wants want;
         if (number("BrushUsePatternImage", 0) != 0) want.tip = reference("BrushPatternImageArray");
@@ -386,6 +440,8 @@ std::optional<BrushImport> readClipStudio(const std::string& path, const std::st
             tip.grainDepth = std::clamp(number("TextureDensity", 100), 0.0, 100.0) / 100;
             tip.grainScale = 100 / std::clamp(number("TextureScale2", number("TextureScale", 100)), 1.0, 10000.0);
             want.reverseTexture = number("TextureReverseDensity", 0) != 0;
+            want.brightness = number("TextureBrightness", 0);
+            want.contrast = number("TextureContrast", 0);
         }
         remember(tipOrder, want.tip);
         remember(textureOrder, want.texture);
@@ -430,6 +486,7 @@ std::optional<BrushImport> readClipStudio(const std::string& path, const std::st
                 } else {
                     tip.grain = textures[k];
                 }
+                tip.grain = adjustTexture(tip.grain, want.brightness, want.contrast);
                 textured++;
             } else {
                 missingTextures++;
@@ -439,14 +496,15 @@ std::optional<BrushImport> readClipStudio(const std::string& path, const std::st
     auto note = [&](int count, const char* what) { if (count) import.notes.push_back(what + std::string(": ") + std::to_string(count)); };
     note(missingTips, "brushes whose tip image is not in the file (a round tip stands in)");
     note(missingTextures, "brushes whose paper texture is not in the file (they paint without it)");
-    note(textured, "brushes with a paper texture, whose rotation, brightness and contrast are left out");
+    note(textured, "brushes with a paper texture, whose rotation is left out");
+    note(tapered, "brushes with starting and ending, tapered in size");
     note(watercolour, "brushes with watercolour or colour mixing, which is left out");
     note(dual, "brushes with a dual brush, which is left out");
     if (tipOrder.size() > 1 || textureOrder.size() > 1)
         import.notes.push_back("the file does not say which embedded image belongs to which brush; they are matched in the order the brushes use them");
     if (!import.brushes.empty())
-        import.notes.push_back(pressured ? "size and opacity follow pen pressure where the brush says so; Clip Studio's pressure curves and its other dynamics are left out"
-                                         : "Clip Studio's pressure curves and its other dynamics are left out");
+        import.notes.push_back(pressured ? "size and opacity follow pen pressure and its curve where the brush says so; Clip Studio's other dynamics (tilt, velocity, random) are left out"
+                                         : "Clip Studio's dynamics other than pen pressure (tilt, velocity, random) are left out");
     if (import.brushes.empty()) { if (error) *error = "the file holds no Clip Studio brush this reader can use"; return std::nullopt; }
     return import;
 }
