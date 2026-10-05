@@ -208,6 +208,8 @@ private:
     QDockWidget* actionsDock_ = nullptr;
     QDockWidget* timelineDock_ = nullptr;
     class TimelinePanel* timeline_ = nullptr;
+    QDockWidget* histogramDock_ = nullptr;
+    class HistogramPanel* histogram_ = nullptr;
     Autosave* autosave_ = nullptr;
     void offerRecovery();
     void watchForRecovery(EditorSession* session);

@@ -38,6 +38,12 @@ PixelAdjustmentDialog::PixelAdjustmentDialog(EditorSession* session, AdjustmentK
     auto* layout = new QVBoxLayout(this);
     editor_ = new AdjustmentEditor;
     editor_->setSession(session);
+    // The clipping display (Alt on Levels' or Curves' black or white point) works on the layer's own pixels.
+    editor_->setClippingSource([this]() -> std::optional<AdjustmentEditor::ClippingSource> {
+        const AnyImage image = sourceNative() ? sourceNative() : sourceF() ? AnyImage(sourceF()) : source16() ? AnyImage(source16()) : AnyImage(source());
+        if (!image) return std::nullopt;
+        return AdjustmentEditor::ClippingSource{image, placement().pixelToDocument(image.width(), image.height()), colorMode(), documentProfile(), curve()};
+    });
     AdjustmentSettings settings = AdjustmentSettings::defaults(kind);
     if (kind == AdjustmentKind::GradientMap) {
         settings.gradientMap.shadows = {session->foregroundColor.redF(), session->foregroundColor.greenF(), session->foregroundColor.blueF()};

@@ -751,6 +751,8 @@ void MainWindow::buildMenus() {
     window->addAction(layersDock_->toggleViewAction());
     channelsDock_->toggleViewAction()->setText(tr("&Channels"));
     window->addAction(channelsDock_->toggleViewAction());
+    histogramDock_->toggleViewAction()->setText(tr("&Histogram"));
+    window->addAction(histogramDock_->toggleViewAction());
     window->addAction(pathsDock_->toggleViewAction());
     timelineDock_->toggleViewAction()->setText(tr("&Timeline"));
     window->addAction(timelineDock_->toggleViewAction());

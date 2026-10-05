@@ -63,6 +63,7 @@ CanvasWidget::CanvasWidget(EditorSession* session, QWidget* parent) : QWidget(pa
     connect(session_, &EditorSession::selectionChanged, this, [this] { refreshSelectionOutline(); update(); });
     connect(session_, &EditorSession::scribblesChanged, this, [this] { update(); });
     connect(session_, &EditorSession::guidesChanged, this, [this] { update(); });
+    connect(session_, &EditorSession::viewOverlayChanged, this, [this] { update(); });
     // A viewport change leaves the cache valid: ensureCache compares zoom and origin, and a pan scrolls it.
     connect(session_, &EditorSession::viewportChanged, this, [this] { update(); });
     connect(session_, &EditorSession::toolChanged, this, [this] {
@@ -323,6 +324,18 @@ void CanvasWidget::paintEvent(QPaintEvent*) {
         // The ratio set on the cache itself: on a copy it would make Qt copy the whole image on every paint.
         cache_.setDevicePixelRatio(dpr);
         painter.drawImage(QPointF(cacheDeviceRect_.x() / dpr, cacheDeviceRect_.y() / dpr), cache_);
+    }
+    if (const auto& overlay = session_->viewOverlay()) {
+        // The clipping display: a view of the document, not part of it.
+        painter.save();
+        painter.setClipRect(docView);
+        painter.fillRect(docView, overlay->ground);
+        const QPointF o = viewPoint({0, 0}), ex = viewPoint({1, 0}) - o, ey = viewPoint({0, 1}) - o;
+        const QTransform toView(ex.x(), ex.y(), ey.x(), ey.y(), o.x(), o.y());
+        const Affine& a = overlay->pixelToDocument;
+        painter.setTransform(QTransform(a.a, a.b, a.c, a.d, a.tx, a.ty) * toView, true);
+        painter.drawImage(QPointF(0, 0), overlay->image);
+        painter.restore();
     }
     painter.setPen(QPen(QColor(0, 0, 0, 90), 1));
     painter.setBrush(Qt::NoBrush);

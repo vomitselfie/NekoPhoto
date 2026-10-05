@@ -93,6 +93,8 @@ qt_add_executable(nekophoto
     LayersPanel.cpp
     AdjustmentEditor.h
     AdjustmentEditor.cpp
+    HistogramView.cpp
+    HistogramPanel.cpp
     AdjustmentsPanel.h
     AdjustmentsPanel.cpp
     BrushLibrary.h

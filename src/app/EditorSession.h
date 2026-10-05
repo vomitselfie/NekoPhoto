@@ -33,6 +33,7 @@
 #include "compositor/warp.h"
 #include "compositor/warpstroke.h"
 #include <QElapsedTimer>
+#include <QImage>
 #include <QJsonObject>
 #include <QJsonValue>
 class QFileSystemWatcher;
@@ -758,6 +759,20 @@ public:
     /// Levels' histograms of the active layer in a CMYK or Lab document: the composite (the inks' mean in CMYK, empty
     /// in Lab) and each channel as stored (C, M, Y, K; L, a, b), 256 bins.
     std::array<std::vector<double>, 5> activeHistogramNative() const;
+    /// A temporary picture over the canvas that is never part of the document: the Levels and Curves clipping display
+    /// while Alt is held on a black or white point. `image` lies on the document through `pixelToDocument`; `ground`
+    /// fills the rest of the canvas.
+    struct ViewOverlay {
+        QImage image;
+        compositor::Affine pixelToDocument;
+        QColor ground;
+    };
+    const std::optional<ViewOverlay>& viewOverlay() const { return viewOverlay_; }
+    void setViewOverlay(std::optional<ViewOverlay> overlay) {
+        if (!overlay && !viewOverlay_) return;
+        viewOverlay_ = std::move(overlay);
+        emit viewOverlayChanged();
+    }
     /// Remove Background: `mask` (white over the subject, on the layer's pixel grid) becomes the layer mask,
     /// multiplied with any mask already there; with a selection only the selected part changes. `pixels`, when
     /// given at the layer's size, replaces the layer's pixels in the same undo step (the edge colours after
@@ -981,8 +996,11 @@ signals:
     void error(QString message);
     /// The text editor should open for this layer (a new one, or a text layer clicked with the Text tool).
     void textEditRequested(compositor::Uuid id);
+    /// The clipping display's overlay came, changed or went (setViewOverlay).
+    void viewOverlayChanged();
 
 private:
+    std::optional<ViewOverlay> viewOverlay_;
     /// The coverage Select All last made: Select All over it again reuses it, so the document is unchanged and no
     /// history step is added (without comparing pixels).
     std::weak_ptr<const compositor::GrayImage> selectAllCoverage_;

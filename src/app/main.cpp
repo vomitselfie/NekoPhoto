@@ -21,6 +21,7 @@
 #include "compositor/raw.h"
 #include "LayerStyleDialog.h"
 #include "FilterDialog.h"
+#include "HistogramPanel.h"
 #include "GmicDialog.h"
 #include "MoshDialog.h"
 #include "BrushDynamicsDialog.h"
@@ -315,7 +316,7 @@ int run(int argc, char** argv) {
     parser.addOption(langOption);
     QCommandLineOption toolOption("tool", "Select tool <name> after opening (move, marquee, lasso, wand, crop, brush, healing, clone, smudge, gradient, shape, eyedropper, hand, zoom).", "name");
     parser.addOption(toolOption);
-    QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: welcome (or welcome:N for page N), new, canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, cameraraw (or cameraraw:N for panel N), raw:<file> (the Camera Raw dialog a RAW file opens in), gmic, mosh (or mosh:<effect id>), content-fill, background, text, fonts, brushes, brush-dynamics (the first imported tip brush), actions, timeline (frames made from the layers when there are none), batch, layers-menu (the active layer's context menu), guides (two ruler guides, and a smart guide as a snap shows it).", "name");
+    QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: welcome (or welcome:N for page N), new, canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, cameraraw (or cameraraw:N for panel N), raw:<file> (the Camera Raw dialog a RAW file opens in), gmic, mosh (or mosh:<effect id>), content-fill, background, levels-clip and curves-clip (the clipping display), histogram and histogram-compact (the panel), text, fonts, brushes, brush-dynamics (the first imported tip brush), actions, timeline (frames made from the layers when there are none), batch, layers-menu (the active layer's context menu), guides (two ruler guides, and a smart guide as a snap shows it).", "name");
     parser.addOption(dialogOption);
     QCommandLineOption contextMenuOption("context-menu", "Open the canvas's context menu at document point <x,y> after opening (with --tool, for screenshots); x,y,transform or x,y,type first starts a free transform or typing there.", "x,y");
     parser.addOption(contextMenuOption);
@@ -462,6 +463,26 @@ int run(int argc, char** argv) {
             static const QMap<QString, FilterKind> filters{{"blur", FilterKind::GaussianBlur}, {"motion-blur", FilterKind::MotionBlur}, {"noise", FilterKind::AddNoise}, {"lens", FilterKind::LensCorrection}};
             app::EditorSession* s = window.session();
             if (adjustments.contains(name)) (new app::PixelAdjustmentDialog(s, adjustments.value(name), &window))->show();
+            else if (name == "levels-clip" || name == "curves-clip") {
+                // The clipping display as Alt on the white point (Levels, Input white at 170) or the black point
+                // (Curves, moved in to 60) shows it.
+                const bool levels = name == "levels-clip";
+                for (const auto& l : s->document()->layers) if (l.name == "Background") s->selectLayer(l.id);   // pixels to clip
+                auto* dialog = new app::PixelAdjustmentDialog(s, levels ? AdjustmentKind::Levels : AdjustmentKind::Curves, &window);
+                dialog->show();
+                if (auto* editor = dialog->findChild<app::AdjustmentEditor*>()) {
+                    compositor::AdjustmentSettings settings = editor->settings();
+                    if (levels) settings.levels.ranges[0].white = 170;
+                    else settings.curves.channels[0][0].x = 60;
+                    editor->setSettings(settings);
+                    editor->showClipping(levels ? 2 : 1);
+                }
+                dialog->hide();   // the window, with the canvas, is what the screenshot grabs
+            }
+            else if (name == "histogram" || name == "histogram-compact") {
+                window.showPanel("histogram");
+                if (auto* panel = window.findChild<app::HistogramPanel*>()) panel->setExpanded(name == "histogram");
+            }
             else if (filters.contains(name)) (new app::FilterDialog(s, filters.value(name), &window))->show();
             else if (name == "content-aware-scale") {
                 for (const auto& l : s->document()->layers) if (l.name == "Background") s->selectLayer(l.id);   // an image layer to scale
