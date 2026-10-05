@@ -344,7 +344,7 @@ void MainWindow::offerRecovery() {
     for (const auto& r : recovered)
         lines << tr("%1, saved %2").arg(r.title.isEmpty() ? tr("Untitled") : r.title, QLocale().toString(r.saved.toLocalTime(), QLocale::ShortFormat));
     QMessageBox box(QMessageBox::Question, tr("Recover Unsaved Work"),
-        tr("Compositor did not close properly last time. Recover %n document(s) with unsaved changes?", nullptr, int(recovered.size())), QMessageBox::NoButton, this);
+        tr("NekoPhoto did not close properly last time. Recover %n document(s) with unsaved changes?", nullptr, int(recovered.size())), QMessageBox::NoButton, this);
     box.setInformativeText(lines.join('\n'));
     QPushButton* recover = box.addButton(tr("Recover"), QMessageBox::AcceptRole);
     QPushButton* discard = box.addButton(tr("Discard"), QMessageBox::DestructiveRole);
@@ -366,6 +366,7 @@ void MainWindow::offerRecovery() {
         Tab& tab = addTab(true);
         const QString name = tr("%1 (recovered)").arg(r.title.isEmpty() ? tr("Untitled") : r.title);
         tab.session->adoptDocument(project->document, name);
+        if (project->activeLayer && tab.session->document()->find(*project->activeLayer)) tab.session->selectLayer(*project->activeLayer);
         tab.defaultName = name;
         tab.session->markUnsaved();   // it exists nowhere else now
         refreshTabTitles();

@@ -6022,9 +6022,9 @@ File &gt; New creates a blank canvas.</source>
         <translation>未保存の作業を復元</translation>
     </message>
     <message numerus="yes">
-        <source>Compositor did not close properly last time. Recover %n document(s) with unsaved changes?</source>
+        <source>NekoPhoto did not close properly last time. Recover %n document(s) with unsaved changes?</source>
         <translation>
-            <numerusform>前回 Compositor が正しく終了しませんでした。未保存の変更がある %n 個のドキュメントを復元しますか?</numerusform>
+            <numerusform>前回 NekoPhoto が正しく終了しませんでした。未保存の変更がある %n 個のドキュメントを復元しますか?</numerusform>
         </translation>
     </message>
     <message>
