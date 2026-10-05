@@ -149,3 +149,28 @@ changed area and the repaint. With `--screenshot out.png` it grabs the window wh
 4.6 to 6.6 ms each (median; about a third of it the layer's layout and raster), a wrapping box 6.6 ms. It ends by
 sending an input method's events (にほんご composed, converted to 日本語, committed, then です) and checks the
 text shows inline while composing, commits once and undoes by the commit; `out-ime.png` grabs the conversion.
+
+## Adjustment drags: `--bench-adjust`
+
+`nekophoto --bench-adjust` builds the view bench's document (`--bench-size`, five layers) at a depth and mode
+(`--bench-depth 8|16|32`, `--bench-mode rgb|cmyk|lab`), fits it to the window, times five full view renders, then
+drags a Levels and an Exposure adjustment layer's slider for thirty ticks each (one edit, as the Properties panel
+does) and prints each tick's time to reach the screen. Offscreen at 1400 × 900 on the desktop (median, ms; the
+machine was shared, so the 8-bit rows show the noise):
+
+| Document | View before | View after | Levels tick before | Levels tick after |
+|---|---:|---:|---:|---:|
+| 3840 × 2160, 8-bit RGB | 11.2 | 11.5 | 11.0 | 10.5 |
+| 7680 × 4320, 8-bit RGB | 11.7 | 10.5 | 9.3 | 9.5 |
+| 3840 × 2160, 16-bit RGB | 18.4 | 18.1 | 25.6 | 24.8 |
+| 7680 × 4320, 16-bit RGB | 72.0 | 17.7 | 82.6 | 25.8 |
+| 7680 × 4320, 16-bit CMYK | 148 | 33.5 | 140 | 35.4 |
+| 7680 × 4320, 16-bit Lab | 76.2 | 19.2 | 78.3 | 22.0 |
+
+At fit zoom every layer is drawn from a reduction (level 2 here). The mip cache kept the level 1 it was built
+from as well, four times larger: at 16 bits an 8K layer's two levels take 83 MB (104 MB in CMYK), five layers
+passed the cache's 400 MB budget, and every frame evicted and rebuilt the reductions from the full-size pixels.
+Over budget the cache now releases the levels kept only as steps to a deeper one before it evicts whole images,
+so the cost follows the view again. The reductions are the same pixels (a released level is rebuilt, and a stroke's
+refresh worked through, by the same halvings), so the view is unchanged and peak memory is the same. A deep
+document still costs about twice an 8-bit one at the same view size: that is the 16-bit compositing itself.
