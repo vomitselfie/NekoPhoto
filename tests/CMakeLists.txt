@@ -358,3 +358,9 @@ add_test(NAME colormgmt_tests COMMAND colormgmt_tests)
 add_executable(colormgmt_cmyk_tests colormgmt_cmyk_tests.cpp)
 target_link_libraries(colormgmt_cmyk_tests PRIVATE compositor::core compositor_warnings nekophoto_lcms2)
 add_test(NAME colormgmt_cmyk_tests COMMAND colormgmt_cmyk_tests)
+
+add_executable(blendif_tests blendif_tests.cpp)
+target_link_libraries(blendif_tests PRIVATE compositor::core compositor_warnings)
+# Patchy beside this checkout (CONTRIBUTING.md); PATCHY_FIXTURES in the environment overrides it.
+target_compile_definitions(blendif_tests PRIVATE PATCHY_FIXTURES="${CMAKE_SOURCE_DIR}/../Patchy/test-fixtures/psd")
+add_test(NAME blendif_tests COMMAND blendif_tests)
