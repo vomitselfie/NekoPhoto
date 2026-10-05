@@ -128,6 +128,7 @@ add_library(compositor_core STATIC
     src/affinity_tree.cpp
     src/adjustments.cpp
     src/adjustments_modes.cpp
+    src/histogram.cpp
     src/adjustments_more.cpp
     src/adjustments_u16.cpp
     src/colorlookup.cpp

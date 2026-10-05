@@ -185,7 +185,8 @@ LevelsSettings sampleLevels(const LevelsSettings& settings, double r, double g, 
 
 bool CurvesSettings::isValid() const {
     for (auto& points : channels) {
-        if (points.size() < 2 || points.size() > 32 || points.front().x != 0 || points.back().x != 255) return false;
+        // The end points may move in from 0 and 255 (Photoshop's black and white input points): flat beyond them.
+        if (points.size() < 2 || points.size() > 32) return false;
         for (size_t i = 0; i < points.size(); i++) {
             if (!std::isfinite(points[i].x) || !std::isfinite(points[i].y) || points[i].x < 0 || points[i].x > 255 || points[i].y < 0 || points[i].y > 255) return false;
             if (i > 0 && !(points[i - 1].x < points[i].x)) return false;
@@ -197,7 +198,7 @@ bool CurvesSettings::isValid() const {
 bool CurvesSettings::isIdentity() const {
     for (auto& points : channels) {
         if (points.size() != 2) return false;
-        if (points[0].y != 0 || points[1].y != 255) return false;
+        if (points[0].x != 0 || points[1].x != 255 || points[0].y != 0 || points[1].y != 255) return false;
     }
     return true;
 }
