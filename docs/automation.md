@@ -152,7 +152,7 @@ to paint it with `brush.stroke` `mask` and the other mask tools, `show` to see i
 own Custom warp). `layers.warp` bends a layer with one of Photoshop's fifteen presets (`style`, `bend`, `horizontal`, `vertical`,
 `orientation`): Warp Text on text (`none` removes it), a mesh baked into a smart object's placement, bent pixels
 otherwise.
-Layers: `layers.select`, `layers.set` (name, visible, opacity, blend (a folder also takes "Pass Through"), sampling,
+Layers: `layers.select`, `layers.set` (on `id`, or the active layer when it is left out: name, visible, opacity, blend (a folder also takes "Pass Through"), sampling,
 clipping, `blendIf`: Blending Options' Blend If on any layer, folders and adjustment layers included, one undo step:
 channels by name (`gray`, `red`, `green`, `blue`; in CMYK `gray`, `cyan`, `magenta`, `yellow`, `black`; in Lab
 `lightness`, `a`, `b`), each with `thisLayer` and/or `underlying` as `[blackLow, blackHigh, whiteLow, whiteHigh]`
@@ -164,7 +164,8 @@ content and style, same keys plus `lineSpacing` and `letterSpacing`; on text in 
 Photoshop's Character panel on a selection: `start` and `length` in UTF-16 units of the text, default all of it, and
 any of `font`, `size`, `bold`, `weight`, `italic`, `color`, `letterSpacing`, `baselineShift`, `leading`, `caps`
 (normal, small, all), `underline`, `strikethrough`; the runs split and merge as needed), `layers.delete`,
-`layers.duplicate`, `layers.copy` and `layers.paste` (whole layers between documents, as Edit > Copy with layers
+`layers.duplicate`, `layers.viaCopy` (Layer via Copy: the selected pixels of the active layer as a new layer
+above it, the whole layer without a selection), `layers.copy` and `layers.paste` (whole layers between documents, as Edit > Copy with layers
 selected and no selection, then Paste: `ids` to copy, default the selected ones; the paste answers the new ids),
 `layers.move`, `layers.reorder`, `layers.setTransform`,
 `layers.flip`, `layers.mask` (add, addFromSelection, delete, toggle, invert,

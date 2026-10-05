@@ -230,6 +230,13 @@ def remaining_methods(rpc):
     rpc.call("history.undo")
     assert len(rpc.call("layers.list")) == before
     rpc.call("tabs.select", index=next(t["index"] for t in here if t["current"]))
+    # Layer via Copy: the selected pixels as a layer of their own, one undo step.
+    count = len(rpc.call("layers.list"))
+    rpc.call("selection.rect", x=4, y=4, width=20, height=12)
+    via = rpc.call("layers.viaCopy")
+    assert len(rpc.call("layers.list")) == count + 1 and rpc.call("history.info")["undo"] == "Layer via Copy", via
+    rpc.call("history.undo")
+    rpc.call("selection.none")
     rpc.call("layers.duplicate")
     copy = rpc.call("layers.list")[0]
     rpc.call("layers.flip", vertical=True)
@@ -324,6 +331,16 @@ def remaining_methods(rpc):
     assert "blendIf" in rpc.call("layers.get", id=top["id"])
     rpc.call("history.undo")
     assert "blendIf" not in rpc.call("layers.get", id=top["id"])
+    # Without an id, layers.set changes the active layer (Layer > Rename Layer, Resampling and the clipping mask run
+    # it so, and record it so in Actions).
+    rpc.call("layers.select", id=top["id"])
+    renamed = rpc.call("layers.set", name="Smoke Active", sampling="Smooth")
+    assert renamed["id"] == top["id"] and renamed["name"] == "Smoke Active", renamed
+    for _ in range(3):
+        if rpc.call("layers.get", id=top["id"])["name"] != "Smoke Active":
+            break
+        rpc.call("history.undo")
+    assert rpc.call("layers.get", id=top["id"])["name"] == top["name"]
     # Artboards and slices: made, changed, exported, through a PSD and back, removed.
     board = rpc.call("artboards.add", x=10, y=10, width=80, height=60, background="#ff0000", name="Hero")
     moved = rpc.call("artboards.set", id=board["id"], x=20, moveContents=True)

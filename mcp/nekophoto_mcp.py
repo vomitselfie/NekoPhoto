@@ -441,11 +441,11 @@ def layers_get(id: str) -> str:
 
 
 @edit("Set layer properties")
-def layers_set(id: str, name: Optional[str] = None, visible: Optional[bool] = None, opacity: Optional[float] = None, blend: Optional[str] = None, clipping: Optional[bool] = None,
-               blend_if: Optional[dict] = None) -> str:
-    """Change a layer's name, visibility, opacity (0..1), blend mode (any of Photoshop's: Normal, Dissolve, Darken, Multiply, Color Burn, Linear Burn, Darker Color, Lighten, Screen, Color Dodge, Linear Dodge (Add), Lighter Color, Overlay, Soft Light, Hard Light, Vivid Light, Linear Light, Pin Light, Hard Mix, Difference, Exclusion, Subtract, Divide, Hue, Saturation, Color, Luminosity; a folder also Pass Through) or whether it clips to the layer beneath.
+def layers_set(id: Optional[str] = None, name: Optional[str] = None, visible: Optional[bool] = None, opacity: Optional[float] = None, blend: Optional[str] = None, clipping: Optional[bool] = None,
+               blend_if: Optional[dict] = None, sampling: Optional[str] = None) -> str:
+    """Change a layer's name, visibility, opacity (0..1), blend mode (any of Photoshop's: Normal, Dissolve, Darken, Multiply, Color Burn, Linear Burn, Darker Color, Lighten, Screen, Color Dodge, Linear Dodge (Add), Lighter Color, Overlay, Soft Light, Hard Light, Vivid Light, Linear Light, Pin Light, Hard Mix, Difference, Exclusion, Subtract, Divide, Hue, Saturation, Color, Luminosity; a folder also Pass Through) or whether it clips to the layer beneath; sampling (Nearest, Smooth, High quality) is how it resamples when transformed. id defaults to the active layer.
     blend_if is Blending Options' Blend If: channels (gray, red, green, blue; in CMYK gray, cyan, magenta, yellow, black; in Lab lightness, a, b), each with thisLayer and/or underlying as [black low, black high, white low, white high] 0..255; a split handle is low != high and fades between them. Example: {"gray": {"underlying": [0, 0, 120, 200]}} lets the layer show only over darker pixels, fading out from 120 to 200. Channels left out stay; {"reset": true} clears them. layers_get reports blendIf."""
-    return text(call("layers.set", id=id, name=name, visible=visible, opacity=opacity, blend=blend, clipping=clipping, blendIf=blend_if))
+    return text(call("layers.set", id=id, name=name, visible=visible, opacity=opacity, blend=blend, clipping=clipping, blendIf=blend_if, sampling=sampling))
 
 
 @edit("Add a layer")
@@ -477,6 +477,13 @@ def text_style_range(id: Optional[str] = None, start: Optional[int] = None, leng
 def layers_delete(ids: list[str]) -> str:
     """Delete layers by id (layers clipped to them keep their masked look baked in)."""
     return text(call("layers.delete", ids=ids))
+
+
+@edit("Layer via Copy")
+def layers_via_copy() -> str:
+    """Layer via Copy (Ctrl+J): the selected pixels of the active layer as a new layer above it, made active; the
+    whole layer, as layers_duplicate, when nothing is selected."""
+    return text(call("layers.viaCopy"))
 
 
 @edit("Duplicate a layer")

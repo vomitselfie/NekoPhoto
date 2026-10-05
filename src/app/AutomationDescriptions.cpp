@@ -142,7 +142,7 @@ const MethodDoc methodDocs[] = {
     {"layers.select", "Make a layer (or its mask) active, or select several.",
      "id:layer The layer (the primary one with ids); ids:array Several layer ids; mask:bool=false Select the layer's mask for painting and filters"},
     {"layers.set", "Change a layer's properties.",
-     "id:layer! The layer; name:string New name; visible:bool Shown; opacity:number 0..1; blend:<blend> Blend mode; sampling:<sampling> How it is resampled when transformed; clipping:bool Clip to the layer beneath; "
+     "id:layer The layer (the active one when left out); name:string New name; visible:bool Shown; opacity:number 0..1; blend:<blend> Blend mode; sampling:<sampling> How it is resampled when transformed; clipping:bool Clip to the layer beneath; "
      "blendIf:object Blending Options' Blend If: channels (gray, red, green, blue; gray, cyan, magenta, yellow, black; lightness, a, b) each with thisLayer and/or underlying as [black low, black high, white low, white high] 0..255 (split handles when low differs from high); channels left out stay; reset true clears the others first"},
     {"layers.add", "Add a layer above the active one and make it active.",
      "kind:(pixels|group|adjustment|text)=pixels What to add; name:string Its name; below:bool=false Put a pixel layer under the active one instead; "
@@ -159,6 +159,7 @@ const MethodDoc methodDocs[] = {
      "caps:(normal|small|all) Capitals; underline:bool Underline; strikethrough:bool Strikethrough"},
     {"layers.delete", "Delete layers.", "id:layer One layer (default the active one); ids:array Several layer ids; bakeClipping:bool=true Keep the look of layers clipped to a deleted one by baking them"},
     {"layers.duplicate", "Duplicate a layer above itself.", "id:layer The layer (default the active one)"},
+    {"layers.viaCopy", "Layer via Copy: the selected pixels of the active layer as a new layer above it (the whole layer when nothing is selected).", ""},
     {"layers.copy", "Copy whole layers, as Edit > Copy with layers selected and no selection: the layers and folders with their masks, styles, text, shapes, smart objects and adjustments go to the layer clipboard every tab shares (other apps get them flattened).",
      "ids:array The layers to copy (default the selected ones)"},
     {"layers.paste", "Paste copied layers into the current document above the active layer, converted to its profile and depth; one undo step. Answers the new layers' ids.", ""},

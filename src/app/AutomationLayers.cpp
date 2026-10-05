@@ -366,8 +366,8 @@ void AutomationServer::registerLayersHandlers() {
         } else s->selectLayer(layer(p).id, flag(p, "mask", false));
         return QJsonObject{{"activeLayer", s->activeLayerId() ? qs(*s->activeLayerId()) : QString()}, {"maskSelected", s->isMaskSelected()}};
     });
-    add("layers.set", [session, layer, withActive](const QJsonObject& p) {
-        const Layer& l = layer(p);
+    add("layers.set", [session, layerOrActive, withActive](const QJsonObject& p) {
+        const Layer& l = layerOrActive(p);
         Uuid id = l.id;
         EditorSession* s = session();
         if (has(p, "name")) s->renameLayer(id, str(p, "name"));
@@ -509,6 +509,19 @@ void AutomationServer::registerLayersHandlers() {
         else ids.push_back(layerOrActive(p).id);
         session()->deleteLayersResolvingClipping(ids, flag(p, "bakeClipping", true));
         return QJsonObject{{"deleted", int(ids.size())}};
+    });
+    add("layers.viaCopy", [session, document](const QJsonObject&) {
+        // Layer > New > Layer via Copy: the selected pixels of the active layer as a layer above it (the whole layer,
+        // as Duplicate Layer, when nothing is selected).
+        document();
+        EditorSession* s = session();
+        const Layer* active = s->activeLayer();
+        if (!active || active->isGroup) fail("select a layer with pixels to copy");
+        const std::vector<std::string> before = s->undoNames();
+        s->layerViaCopy();
+        if (s->undoNames() == before) fail("nothing to copy: the selection holds none of the layer's pixels");
+        const Layer* l = s->activeLayer();
+        return l ? layerJson(*l, 0) : QJsonObject{};
     });
     add("layers.duplicate", [session, layerOrActive, withActive](const QJsonObject& p) {
         Uuid id = layerOrActive(p).id;

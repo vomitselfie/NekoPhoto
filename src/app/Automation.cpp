@@ -178,7 +178,7 @@ namespace {
 const QHash<QString, const char*>& depthFeatures() {
     static const QHash<QString, const char*> features = {
         {"document.save", "document.save"}, {"document.export", "render.document"}, {"document.import", "document.import"}, {"image.mode", "document.mode"}, {"document.profile", "document.profile"},
-        {"layers.set", "layers.structure"}, {"layers.add", "layers.structure"}, {"layers.delete", "layers.structure"}, {"layers.duplicate", "layers.structure"},
+        {"layers.set", "layers.structure"}, {"layers.add", "layers.structure"}, {"layers.delete", "layers.structure"}, {"layers.duplicate", "layers.structure"}, {"layers.viaCopy", "edit.clipboard"},
         {"layers.move", "layers.structure"}, {"layers.reorder", "layers.structure"}, {"layers.group", "layers.structure"},
         {"layers.setTransform", "layers.transform"}, {"layers.flip", "layers.transform"}, {"layers.mask", "layers.mask"}, {"layers.render", "render.document"},
         {"canvas.resize", "canvas.size"}, {"canvas.flip", "canvas.flip"},
