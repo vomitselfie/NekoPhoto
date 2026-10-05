@@ -15,7 +15,10 @@ results:
 - An agent recording an action gets its own requests as steps, with nothing to translate.
 - The menu commands, dialogs and tools that record are the ones that know the request that repeats them. The list
   below is what records today; anything else you do while recording is not added (the action still plays, it just
-  skips that edit).
+  skips that edit). Commands converted to the command path (CONTRIBUTING.md, "Commands") record by running the
+  request itself: New Layer, Duplicate Layer, Merge Down, Gaussian Blur's and Levels' OK, Free Transform applied
+  (as `layers.setTransform`), and the guides (`guides.add`, `guides.move`, `guides.delete`, from the rulers, the Move
+  tool, New Guide… and Clear Guides).
 
 The library lives in `actions.json` in the app data folder (`~/.local/share/nekophoto/nekophoto/actions.json`), so it
 outlasts the session. Import and Export (the panel's … menu, or `actions.import` / `actions.export`) read and write
@@ -45,6 +48,8 @@ the same format: `{"format": "nekophoto.actions", "version": 1, "actions": [{"na
 | Layer > New Layer, New Layer Below, New Folder, Group, Duplicate, Delete, Merge Down, New Adjustment Layer, Layer Mask (every item), Flip Layer | `layers.add`, `layers.group`, `layers.duplicate`, `layers.delete`, `layers.merge`, `layers.mask`, `layers.flip` |
 | Select > All, Deselect, Inverse, Modify (Expand, Contract, Feather, Smooth, Border), Load Layer Pixels / Mask | `selection.all`, `selection.none`, `selection.invert`, `selection.grow`, `selection.feather`, `selection.smooth`, `selection.border`, `selection.fromLayer` |
 | A rectangular or elliptical marquee | `selection.rect` with its box and mode |
+| Free Transform of a layer, applied (Enter, Apply or a double-click) | `layers.setTransform` with the box's position, size, angle and flips |
+| A guide dragged out of a ruler, moved, or dragged off; View > New Guide…, Clear Guides | `guides.add`, `guides.move`, `guides.delete` |
 | A Brush or Eraser stroke (on pixels or a mask) | `brush.stroke` with its points (to a tenth of a pixel), size, hardness, opacity, colour, preset, and the pen's pressure when a tablet drew it |
 | Swap or reset the colours, or pick one in the colour dialog | `colors.set` |
 
@@ -52,7 +57,7 @@ Steps act on the active layer, as the menu command did, so an action recorded on
 Requests an agent records may name layers by id (`layers.select`, `layers.set`); those ids belong to the document
 they were recorded on, so edit or switch off such steps before playing the action elsewhere.
 
-Not recorded (yet): the Move tool and Free Transform drags, the lasso and magic wand, Quick Select, the Gradient,
+Not recorded (yet): the Move tool's drags and a distortion or a transform of several layers, a mask alone or selected pixels, the lasso and magic wand, Quick Select, the Gradient,
 Shape, Text, Clone, Healing, Smudge and Dodge tools, the Layers panel's own buttons, eyes, opacity and blend
 controls, the Paths panel, G'MIC, Camera Raw and Remove Background dialogs, layer styles and smart objects. Each can
 still be added by hand as the request that does it (`rpc.describe` lists every method's parameters). Looking

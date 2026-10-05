@@ -134,6 +134,11 @@ writes 16-bit PNGs, and JPEGs dithered down to 8 bits with a `note`); `slices.li
 (by numeric `id`; `name`, `url`, `target`, `altTag`), `slices.delete` and `slices.export` (as `artboards.export`). `layers.get`
 shows a folder's `artboard`; `tool.select` takes `artboard` and `slice`.
 
+Ruler guides (View > Show > Guides): `guides.list` (`index`, `orientation`, `position` in document pixels), `guides.add`
+(`orientation` vertical or horizontal, `position`; kept to 1/32 pixel, as a PSD holds them), `guides.move` (`index`,
+`position`) and `guides.delete` (`index`, or `all: true` for View > Clear Guides); each change is one undo step, and
+guides are saved in projects and PSDs.
+
 Smart objects: `smartObject.convert` (the selection or `ids`), `smartObject.place` (`path`), `smartObject.replace`
 (`path`), `smartObject.rasterize`, `smartObject.editContents` (opens a tab; a smart object made from a camera RAW file is developed again instead, with
 `settings`, white balance in kelvin as `document.open` takes it, or its own, one undo step) and `smartObject.commit` (in that tab).

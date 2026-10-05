@@ -78,6 +78,10 @@ docs/         design notes per feature; docs/linux-port-architecture.md maps the
   3. a matching tool in `mcp/nekophoto_mcp.py`, marked `@look`, `@edit` or `@outside`;
   4. a line in `docs/automation.md`;
   5. coverage in `tools/rpc_smoke.py` (and `tools/mcp_smoke.py` when the bridge does something special).
+- **Commands have one implementation.** An edit that automation can make is made by its automation method, and a
+  menu item, shortcut, dialog OK or canvas gesture that makes the same edit should run that method rather than
+  call `EditorSession` itself. See [Commands](#commands) below; most menu items still call the session directly and
+  are converted one at a time.
 - **Every visible string goes through `tr()`** and gets its Japanese translation in the same change; the
   `translations_check` test fails otherwise. How to update and translate: [docs/translating.md](docs/translating.md).
 - **No warnings.** CI builds with `-Werror` on GCC and Clang.
@@ -99,6 +103,47 @@ docs/         design notes per feature; docs/linux-port-architecture.md maps the
   [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Test files and sample art must be clearly licensed for
   redistribution.
 
+## Commands
+
+The automation registry (`add("name", handler)` in `src/app/Automation*.cpp`, with each method's parameters in
+`AutomationDescriptions.cpp`) is the command layer: the socket, `--call`, `--batch`, MCP and Actions playback all run
+those handlers. A menu item converted to it runs the method too, so the edit has one implementation, one history
+entry and one Actions step, wherever it starts:
+
+```cpp
+// MainWindowMenus.cpp: the menu item (and its shortcut) runs the method with typed parameters.
+layer->addAction(tr("&New Layer"), QKeySequence("Ctrl+Shift+N"), this,
+                 [this] { runCommand("layers.add", {}, tr("New Layer")); });
+```
+
+`MainWindow::runCommand(method, params, title)` sends the request through `AutomationServer::handle`, exactly as a
+socket request: the parameters are checked against the description, the depth gate applies, an action that is
+recording gets the step (once), and an error is shown in a dialog titled `title`. Code that has a session but not the
+window (dialogs, the canvas) calls `EditorSession::runCommand(method, params)`, which `MainWindow` routes to the
+same place for the tab on screen; `commandsRouted()` says whether it will, and when it will not (a dialog left open on
+another tab) the caller makes the edit directly as before.
+
+To convert a menu item:
+
+1. Find (or add, with the five pieces above) the method whose handler makes the same edit. Its result must be the
+   same document and the same history name as the menu's direct call; if the handler differs, make the handler
+   right, not the menu.
+2. Replace the lambda's session call and its `recordAction(...)` with `runCommand("method", params)`. Do not keep
+   the `recordAction`: `handle` records the step.
+3. A dialog's OK builds the same parameters it used to record and calls `commitAsCommand(method, params)`
+   (`PixelDialog`), keeping its own commit only as the fallback.
+4. Interactive commands keep their stages in the interface and converge on the command at the commit. Free
+   Transform: Ctrl+T invokes it (`transformCommand`), the canvas updates it (`previewTransform`), Enter, Apply or a
+   double-click commits it through `commitTransformCommand`, which runs `layers.setTransform` with the box's final
+   values, and Esc cancels it (`cancelTransform`). What the method cannot express (a distortion, several layers, a
+   mask alone, selected pixels) still commits directly.
+5. Add the item to `tests`' `command_path_selftest` (`src/app/SelfTest.cpp`): the menu path and the automation path
+   must give the same document and history names, and the same document as the direct call did before.
+
+Converted so far: New Layer, Duplicate Layer, Merge Down (Layer menu), Gaussian Blur's and Levels' OK, Free
+Transform's commit, View > New Guide… and Clear Guides. The canvas context menu (`MainWindowCanvasMenu.cpp`) reuses
+the menu bar's `QAction`s (by the keys `nameAction` gives them), so it follows whatever path each item takes.
+
 ## Where to start
 
 | You want to ... | Look at |
@@ -115,7 +160,8 @@ docs/         design notes per feature; docs/linux-port-architecture.md maps the
 | Filters and adjustments | `src/core/src/filters.cpp`, `adjustments*.cpp`, `src/app/FilterDialog.cpp`, `AdjustmentEditor.cpp` |
 | Selections, wand, Quick Select | `src/core/src/selection.cpp`, `smartwand.cpp`, `scribble.cpp`, `src/app/EditorSessionSelection.cpp` |
 | A tool's canvas behaviour | `src/app/CanvasWidget*.cpp`, `ToolOptionsBar.cpp` |
-| Menus and shortcuts | `src/app/MainWindowMenus.cpp` |
+| Menus and shortcuts | `src/app/MainWindowMenus.cpp`; the canvas's context menu in `MainWindowCanvasMenu.cpp` and `CanvasWidgetMenu.cpp` |
+| Rulers, guides and snapping | `src/app/Ruler.h`, `CanvasWidgetGuides.cpp`, `CanvasWidgetPointer.cpp` (`guideTargets`), `ViewOptions.h`; `src/core/src/guides.cpp` |
 | The Layers panel | `src/app/LayersPanel.cpp` |
 | Other file formats | `src/core/src/{tga,ico,gif,aseprite,svg,affinity,raw}.cpp`, `src/app/MainWindowFiles.cpp` |
 | An automation method | `src/app/Automation*.cpp`, `AutomationDescriptions.cpp`, `mcp/nekophoto_mcp.py`, [docs/automation.md](docs/automation.md) |
