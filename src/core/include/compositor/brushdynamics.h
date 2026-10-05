@@ -26,8 +26,11 @@ namespace compositor {
 /// not, so a tip that turns with the barrel on a pen that has one follows the stroke on a pen that has not.
 /// Speed is measured in the document (pixels per second, so zooming in makes the same hand motion faster); ScreenSpeed
 /// on the screen (points per second, the same at any zoom), as Procreate measures it.
-enum class DynamicsInput { Pressure, Speed, Tilt, TiltDirection, Twist, Random, StrokeProgress, Roll, ScreenSpeed };
-constexpr int dynamicsInputCount = 9;
+/// StrokeRandom is one draw per stroke (0..1, centred -1..1 on a circular target), the same for every dab of it, as
+/// Procreate's Randomized rotation. InitialDirection is the way the stroke set off (a turn, 0..1), as Photoshop's
+/// Initial Direction. Wheel is the airbrush wheel (tangential pressure -1..1 read as 0..1), Photoshop's Stylus Wheel.
+enum class DynamicsInput { Pressure, Speed, Tilt, TiltDirection, Twist, Random, StrokeProgress, Roll, ScreenSpeed, StrokeRandom, InitialDirection, Wheel };
+constexpr int dynamicsInputCount = 12;
 enum class DynamicsTarget { Size, Flow, Opacity, Angle, Roundness, Spacing, Scatter, GrainDepth, GrainRotation };
 constexpr int dynamicsTargetCount = 9;
 

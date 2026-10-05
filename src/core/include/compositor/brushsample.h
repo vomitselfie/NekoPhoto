@@ -36,6 +36,10 @@ struct BrushSample {
     double twistAngle = 0;          // the twist in radians, unwrapped
     double distance = 0;            // document pixels travelled since the stroke began
     double progress = -1;           // 0..1 along a stroke whose whole length is known (a replay); -1 while painting
+
+    // ---- Set by the brush engine for its own dabs, not by the track ----
+    double strokeRandom = 0;        // one draw per stroke, 0..1 (DynamicsInput::StrokeRandom)
+    double initialDirection = 0;    // radians the stroke set off in (DynamicsInput::InitialDirection)
 };
 
 /// A mouse event: neutral pressure, no tilt or twist.

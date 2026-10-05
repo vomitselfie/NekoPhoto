@@ -52,6 +52,20 @@ struct BrushTip {
     /// A mouse's speed stands in for pressure (slow presses harder, fast lifts), with a short ramp in at the start.
     /// Simulated, and only for a mouse: a stylus always gives its own pressure. Off, a mouse is full pressure.
     bool mousePressureFromSpeed = false;
+    /// Taper: the stroke's start and end narrow (and fade) over a length, as Procreate's and Clip Studio's tapers
+    /// (Clip Studio's "starting and ending"). Lengths are in document pixels, whatever the brush's size, as both applications
+    /// measure them; `size` and
+    /// `opacity` are how much the dab shrinks and fades at the very tip, 0..1, falling linearly to nothing over the
+    /// length. The end taper is known only once the pen lifts, so with one the stroke holds back its last `end`
+    /// diameters and paints them, tapered, at finish(). `mouseTaper` is used instead for a mouse when set (Procreate's
+    /// touch taper).
+    struct Taper {
+        double start = 0, end = 0;
+        double size = 1, opacity = 0;
+        bool isNone() const { return !(start > 0) && !(end > 0); }
+    };
+    Taper taper;
+    std::optional<Taper> mouseTaper;
 
     /// Clamped to the documented ranges; false when there is no usable shape.
     bool normalize();
@@ -156,6 +170,20 @@ private:
     std::vector<Stamp> pending_;   // placed, not yet drawn
     std::vector<TipDab>* trace_ = nullptr;
     size_t dabCount_ = 0;
+    /// Inputs only some brushes read, set on each dab's sample: the stroke's own random draw (from a generator of its
+    /// own, so the dabs' draws stay as they were) and the direction it set off in.
+    double strokeRandom_ = 0, initialDirection_ = 0;
+    bool initialDirectionSet_ = false, waitForDirection_ = false;
+    /// Taper: the one in use for this stroke (pen or mouse, chosen at its first sample), the samples held back for the
+    /// end taper, and the stroke's length once it is known (at finish; negative while painting).
+    BrushTip::Taper activeTaper_;
+    std::vector<BrushSample> held_;
+    double strokeLength_ = -1;
+    /// What tapering leaves of the size and of the opacity at `distance` along the stroke.
+    std::pair<double, double> taperAt(double distance) const;
+    /// Walks the path from last_ to `input`, stamping dabs (strokeTo's body).
+    void walkTo(const BrushSample& input, Rect& changed);
+    BrushSample withStrokeInputs(BrushSample s) const;
 };
 
 /// A preview stroke of `preset` (an S curve in black on transparent), for pickers.

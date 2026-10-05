@@ -3545,6 +3545,18 @@ Add one from the Layers panel or Layer &gt; New Adjustment Layer.</source>
         <translation>ロール</translation>
     </message>
     <message>
+        <source>Random per stroke</source>
+        <translation>ストロークごとにランダム</translation>
+    </message>
+    <message>
+        <source>Initial direction</source>
+        <translation>初期方向</translation>
+    </message>
+    <message>
+        <source>Stylus wheel</source>
+        <translation>スタイラスホイール</translation>
+    </message>
+    <message>
         <source>Size</source>
         <translation>サイズ</translation>
     </message>

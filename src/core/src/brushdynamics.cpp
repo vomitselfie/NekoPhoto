@@ -97,6 +97,9 @@ double dynamicsInput(const DynamicsMapping& m, const BrushSample& s, double diam
     case DynamicsInput::Twist: return turn(s.twistAngle);
     case DynamicsInput::Roll: return turn(s.twistReported ? s.twistAngle : s.direction);
     case DynamicsInput::Random: return isCircular(m.target) ? std::clamp(random, -1.0, 1.0) : std::clamp(random, 0.0, 1.0);
+    case DynamicsInput::StrokeRandom: return isCircular(m.target) ? std::clamp(s.strokeRandom * 2 - 1, -1.0, 1.0) : std::clamp(s.strokeRandom, 0.0, 1.0);
+    case DynamicsInput::InitialDirection: return turn(s.initialDirection);
+    case DynamicsInput::Wheel: return std::clamp((s.tangentialPressure + 1) / 2, 0.0, 1.0);
     case DynamicsInput::StrokeProgress: {
         const double size = std::max(diameter, 1e-6);
         if (m.scale > 0) return std::clamp(s.distance / (m.scale * size), 0.0, 1.0);
@@ -205,7 +208,7 @@ void removeTiltShape(BrushDynamics& dynamics) {
 // ---- Names -------------------------------------------------------------------------------------------------------
 
 namespace {
-const char* const inputNames[] = {"pressure", "speed", "tilt", "tiltDirection", "twist", "random", "strokeProgress", "roll", "screenSpeed"};
+const char* const inputNames[] = {"pressure", "speed", "tilt", "tiltDirection", "twist", "random", "strokeProgress", "roll", "screenSpeed", "strokeRandom", "initialDirection", "wheel"};
 const char* const targetNames[] = {"size", "flow", "opacity", "angle", "roundness", "spacing", "scatter", "grainDepth", "grainRotation"};
 } // namespace
 

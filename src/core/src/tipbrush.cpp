@@ -75,6 +75,14 @@ bool BrushTip::normalize() {
     fix(grainMovement, 0, 1, 1);
     if (int(grainMode) < 0 || int(grainMode) > int(GrainMode::Dab)) grainMode = GrainMode::Canvas;
     fix(densityReference, 0.01, 10, 0.25);
+    auto fixTaper = [&](Taper& t) {
+        fix(t.start, 0, 100000, 0);
+        fix(t.end, 0, 100000, 0);
+        fix(t.size, 0, 1, 1);
+        fix(t.opacity, 0, 1, 0);
+    };
+    fixTaper(taper);
+    if (mouseTaper) fixTaper(*mouseTaper);
     // Mappings with numbers that mean nothing go; the rest keep their order, which is the order they multiply in.
     BrushDynamics kept;
     for (DynamicsMapping m : dynamics) {
@@ -163,6 +171,14 @@ std::optional<TipPreset> loadTipPreset(const std::string& folder, std::string* e
     t.densityBySpacing = boolean("densityBySpacing", t.densityBySpacing);
     t.densityReference = number("densityReference", t.densityReference);
     t.mousePressureFromSpeed = boolean("mousePressureFromSpeed", t.mousePressureFromSpeed);
+    auto taperFrom = [](const nlohmann::json& o) {
+        BrushTip::Taper t;
+        auto n = [&](const char* key, double fallback) { auto it = o.find(key); return it != o.end() && it->is_number() ? it->get<double>() : fallback; };
+        t.start = n("start", 0); t.end = n("end", 0); t.size = n("size", 1); t.opacity = n("opacity", 0);
+        return t;
+    };
+    if (auto it = j.find("taper"); it != j.end() && it->is_object()) t.taper = taperFrom(*it);
+    if (auto it = j.find("mouseTaper"); it != j.end() && it->is_object()) t.mouseTaper = taperFrom(*it);
     if (auto it = j.find("dynamics"); it != j.end() && it->is_array()) {
         for (const auto& item : *it)
             if (auto m = mappingFromJson(item)) t.dynamics.push_back(std::move(*m));
@@ -205,6 +221,9 @@ bool saveTipPreset(const std::string& folder, const TipPreset& preset, std::stri
         {"grainMovement", t.grainMovement}, {"dynamics", dynamics},
         {"densityBySpacing", t.densityBySpacing}, {"densityReference", t.densityReference},
         {"mousePressureFromSpeed", t.mousePressureFromSpeed}};
+    auto taperJson = [](const BrushTip::Taper& t) { return nlohmann::json{{"start", t.start}, {"end", t.end}, {"size", t.size}, {"opacity", t.opacity}}; };
+    if (!t.taper.isNone()) j["taper"] = taperJson(t.taper);
+    if (t.mouseTaper) j["mouseTaper"] = taperJson(*t.mouseTaper);
     std::ofstream out(dir / "brush.json");
     out << j.dump(2) << "\n";
     if (!out) { if (error) *error = "cannot write brush.json in " + folder; return false; }
@@ -231,6 +250,10 @@ TipStroke::TipStroke(BrushStroke& grid, BrushTip tip, double diameter, uint32_t 
     }
     for (int i = 0; i < dynamicsTargetCount; i++) randomOn_[size_t(i)] = hasMapping(tip_.dynamics, DynamicsTarget(i), DynamicsInput::Random);
     rollOn_ = std::any_of(tip_.dynamics.begin(), tip_.dynamics.end(), [](const DynamicsMapping& m) { return m.input == DynamicsInput::Roll; });
+    waitForDirection_ = std::any_of(tip_.dynamics.begin(), tip_.dynamics.end(), [](const DynamicsMapping& m) { return m.input == DynamicsInput::InitialDirection; });
+    // The stroke's own draw comes from a generator of its own, so the dabs' draws are those of a brush without it.
+    std::mt19937 strokeRng(seed * 2654435761u + 0x9e3779b9u);
+    strokeRandom_ = std::uniform_real_distribution<double>(0.0, 1.0)(strokeRng);
     valid_ = true;
 }
 
@@ -242,7 +265,7 @@ const TipStroke::Level& TipStroke::levelFor(double tipPixelsPerGridPixel) const 
 }
 
 double TipStroke::steadySize(const BrushSample& sample) const {
-    return applyDynamics(tip_.dynamics, DynamicsTarget::Size, diameter_, sample, diameter_, 0, false);
+    return applyDynamics(tip_.dynamics, DynamicsTarget::Size, diameter_, sample, diameter_, 0, false) * taperAt(sample.distance).first;
 }
 
 void TipStroke::dab(Point center, const BrushSample& pen, double direction, double spacing, Rect& changed) {
@@ -295,7 +318,8 @@ void TipStroke::dab(Point center, const BrushSample& pen, double direction, doub
     for (int n = 0; n < tip_.count; n++) {
         // The draws every dab makes, in the order brushes were first painted with, so a seed paints the same.
         const double sizeRandom = unit(rng_), flowRandom = unit(rng_), angleRandom = signedUnit(rng_);
-        const double size = applyDynamics(dynamics, DynamicsTarget::Size, diameter_, pen, diameter_, sizeRandom);
+        const auto [taperSize, taperOpacity] = taperAt(pen.distance);
+        const double size = applyDynamics(dynamics, DynamicsTarget::Size, diameter_, pen, diameter_, sizeRandom) * taperSize;
         const double flow = applyDynamics(dynamics, DynamicsTarget::Flow, tip_.flow, pen, diameter_, flowRandom);
         const double angle = applyDynamics(dynamics, DynamicsTarget::Angle, tip_.angle, pen, diameter_, angleRandom);
         // Angles in the document's y-down frame: a counterclockwise angle on screen is a negative rotation.
@@ -319,7 +343,7 @@ void TipStroke::dab(Point center, const BrushSample& pen, double direction, doub
             at = {center.x - std::sin(direction) * across + std::cos(direction) * along, center.y + std::cos(direction) * across + std::sin(direction) * along};
         }
         if (size < 0.25 || flow <= 0) continue;
-        const double opacity = applyDynamics(dynamics, DynamicsTarget::Opacity, 1, pen, diameter_, opacityRandom);
+        const double opacity = applyDynamics(dynamics, DynamicsTarget::Opacity, 1, pen, diameter_, opacityRandom) * taperOpacity;
         const unsigned ceiling = unsigned(std::lround((coverage16 ? one16 : 255) * std::clamp(opacity, 0.0, 1.0)));
         if (!ceiling) continue;
         const double roundness = applyDynamics(dynamics, DynamicsTarget::Roundness, tip_.roundness, pen, diameter_, roundnessRandom);
@@ -538,58 +562,99 @@ double pressureFromSpeed(const BrushSample& s, double diameter) {
 
 } // namespace
 
+BrushSample TipStroke::withStrokeInputs(BrushSample s) const {
+    s.strokeRandom = strokeRandom_;
+    s.initialDirection = initialDirection_;
+    return s;
+}
+
+std::pair<double, double> TipStroke::taperAt(double distance) const {
+    const BrushTip::Taper& t = activeTaper_;
+    if (t.isNone()) return {1.0, 1.0};
+    double f = 1;
+    if (t.start > 0) f = std::min(f, distance / t.start);
+    // The end is known only once the stroke is: a click that never moved is not tapered away to nothing.
+    if (t.end > 0 && strokeLength_ > 0) f = std::min(f, (strokeLength_ - distance) / t.end);
+    f = std::clamp(f, 0.0, 1.0);
+    return {1 - t.size * (1 - f), 1 - t.opacity * (1 - f)};
+}
+
 void TipStroke::strokeTo(const BrushSample& sample) {
     if (!valid_ || !sample.position.isFinite()) return;
     BrushSample input = sample;
     if (!input.stylus) input.pressure = tip_.mousePressureFromSpeed ? pressureFromSpeed(input, diameter_) : 1;
+    if (!last_ && held_.empty()) activeTaper_ = !input.stylus && tip_.mouseTaper ? *tip_.mouseTaper : tip_.taper;
     Rect changed;
-    std::uniform_real_distribution<double> unit(0.0, 1.0);
-    const bool randomSpacing = randomOn_[size_t(DynamicsTarget::Spacing)];
-    if (!last_) {
-        last_ = input;
-        carried_ = 0;
-        // Whatever turns with the stroke (Stroke grain, a tip following the stroke, Roll on a pen without twist) turns
-        // from the first dab: that dab waits until the stroke has a direction.
-        const bool strokeGrain = tip_.grain && tip_.grainMode == BrushTip::GrainMode::Stroke;
-        if (strokeGrain || tip_.followStroke || (rollOn_ && !input.twistReported)) { firstPending_ = true; return; }
-        dab(input.position, input, 0, tip_.spacing, changed);
+    if (activeTaper_.end > 0) {
+        // The end taper: the samples within its length of the pen wait, so the stroke's end can be tapered at finish().
+        held_.push_back(input);
+        const double length = activeTaper_.end;
+        while (held_.size() >= 2 && held_.back().distance - held_[1].distance >= length) {
+            walkTo(held_.front(), changed);
+            held_.erase(held_.begin());
+        }
     } else {
-        const Point from = last_->position, to = input.position;
-        const double dx = to.x - from.x, dy = to.y - from.y, length = std::hypot(dx, dy);
-        if (length <= 0) return;
-        const double direction = std::atan2(dy, dx);
-        if (firstPending_) {
-            // The first sample has no direction of its own (the track gives it 0, along +x): it takes the stroke's.
-            BrushSample first = *last_;
-            first.direction = direction;
-            dab(from, first, direction, tip_.spacing, changed);
-            firstPending_ = false;
-        }
-        // Dabs every `spacing` of the dab's size, the size read at the point reached so far.
-        double walked = 0;
-        while (true) {
-            const BrushSample here = interpolate(*last_, input, walked / length);
-            const double size = steadySize(here);
-            const double spacing = applyDynamics(tip_.dynamics, DynamicsTarget::Spacing, tip_.spacing, here, diameter_, randomSpacing ? unit(rng_) : 0.0);
-            const double step = std::max(0.5, spacing * size);
-            const double need = step - carried_;
-            if (walked + need > length) { carried_ += length - walked; break; }
-            walked += need;
-            carried_ = 0;
-            const double at = walked / length;
-            dab({from.x + dx * at, from.y + dy * at}, interpolate(*last_, input, at), direction, size > 0 ? step / size : spacing, changed);
-        }
-        last_ = input;
+        walkTo(input, changed);
     }
     drawPending();
     if (!changed.isEmpty()) grid_.recomposeCovered(changed);
 }
 
+void TipStroke::walkTo(const BrushSample& input, Rect& changed) {
+    std::uniform_real_distribution<double> unit(0.0, 1.0);
+    const bool randomSpacing = randomOn_[size_t(DynamicsTarget::Spacing)];
+    if (!last_) {
+        last_ = input;
+        carried_ = 0;
+        // Whatever turns with the stroke (Stroke grain, a tip following the stroke, Roll on a pen without twist, the
+        // initial direction) turns from the first dab: that dab waits until the stroke has a direction.
+        const bool strokeGrain = tip_.grain && tip_.grainMode == BrushTip::GrainMode::Stroke;
+        if (strokeGrain || tip_.followStroke || waitForDirection_ || (rollOn_ && !input.twistReported)) { firstPending_ = true; return; }
+        dab(input.position, withStrokeInputs(input), 0, tip_.spacing, changed);
+        return;
+    }
+    const Point from = last_->position, to = input.position;
+    const double dx = to.x - from.x, dy = to.y - from.y, length = std::hypot(dx, dy);
+    if (length <= 0) return;
+    const double direction = std::atan2(dy, dx);
+    if (!initialDirectionSet_) { initialDirection_ = direction; initialDirectionSet_ = true; }
+    if (firstPending_) {
+        // The first sample has no direction of its own (the track gives it 0, along +x): it takes the stroke's.
+        BrushSample first = withStrokeInputs(*last_);
+        first.direction = direction;
+        dab(from, first, direction, tip_.spacing, changed);
+        firstPending_ = false;
+    }
+    // Dabs every `spacing` of the dab's size, the size read at the point reached so far.
+    double walked = 0;
+    while (true) {
+        const BrushSample here = withStrokeInputs(interpolate(*last_, input, walked / length));
+        const double size = steadySize(here);
+        const double spacing = applyDynamics(tip_.dynamics, DynamicsTarget::Spacing, tip_.spacing, here, diameter_, randomSpacing ? unit(rng_) : 0.0);
+        const double step = std::max(0.5, spacing * size);
+        const double need = step - carried_;
+        if (walked + need > length) { carried_ += length - walked; break; }
+        walked += need;
+        carried_ = 0;
+        const double at = walked / length;
+        dab({from.x + dx * at, from.y + dy * at}, withStrokeInputs(interpolate(*last_, input, at)), direction, size > 0 ? step / size : spacing, changed);
+    }
+    last_ = input;
+}
+
 void TipStroke::finish() {
-    if (!valid_ || !firstPending_ || !last_) return;
-    firstPending_ = false;
+    if (!valid_) return;
     Rect changed;
-    dab(last_->position, *last_, 0, tip_.spacing, changed);
+    if (!held_.empty()) {
+        // The stroke's length is known now: the held end is painted, tapered.
+        strokeLength_ = held_.back().distance;
+        for (const BrushSample& s : held_) walkTo(s, changed);
+        held_.clear();
+    }
+    if (firstPending_ && last_) {
+        firstPending_ = false;
+        dab(last_->position, withStrokeInputs(*last_), 0, tip_.spacing, changed);
+    }
     drawPending();
     if (!changed.isEmpty()) grid_.recomposeCovered(changed);
 }

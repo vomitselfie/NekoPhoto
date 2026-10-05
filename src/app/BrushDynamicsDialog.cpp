@@ -141,6 +141,9 @@ QString BrushDynamicsDialog::inputLabel(DynamicsInput input) {
     case DynamicsInput::Random: return tr("Random");
     case DynamicsInput::StrokeProgress: return tr("Fade");
     case DynamicsInput::Roll: return tr("Roll");
+    case DynamicsInput::StrokeRandom: return tr("Random per stroke");
+    case DynamicsInput::InitialDirection: return tr("Initial direction");
+    case DynamicsInput::Wheel: return tr("Stylus wheel");
     }
     return {};
 }
