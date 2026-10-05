@@ -233,6 +233,19 @@ int run(int argc, char** argv) {
     QApplication app(argc, argv);
     QApplication::setOrganizationName("nekophoto");
     QApplication::setApplicationName("nekophoto");
+    // --self-test runs under ctest: its settings and files go to a scratch place of their own, never the user's (on
+    // Windows XDG variables do nothing and QSettings is the registry, so both are redirected here).
+    for (int i = 1; i < argc; i++)
+        if (std::strcmp(argv[i], "--self-test") == 0) {
+            QStandardPaths::setTestModeEnabled(true);
+            const QString scratch = QDir::temp().filePath(QStringLiteral("nekophoto-selftest-%1").arg(QCoreApplication::applicationPid()));
+            QDir().mkpath(scratch);
+            QSettings::setDefaultFormat(QSettings::IniFormat);
+            QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, scratch);
+            // Removed when the run ends, however it returns.
+            static const struct Scratch { QString path; ~Scratch() { QDir(path).removeRecursively(); } } removeAtExit{scratch};
+            break;
+        }
     QApplication::setApplicationDisplayName("NekoPhoto");
     migrateFromOldName();
     app::cpupower::apply();   // the pool's size and the priority, before anything runs a parallel loop
