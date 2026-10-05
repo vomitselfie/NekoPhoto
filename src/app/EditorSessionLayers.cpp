@@ -445,14 +445,16 @@ void EditorSession::beginVisibilitySwipe(const Uuid& id) {
     Layer* layer = document_->find(id);
     if (!layer) return;
     visibilitySwipe_ = true;
-    beginEdit(layer->visible ? QT_TRANSLATE_NOOP("History", "Hide Layer") : QT_TRANSLATE_NOOP("History", "Show Layer"));
+    swipeOriginal_.clear();
+    swipeName_ = layer->visible ? QT_TRANSLATE_NOOP("History", "Hide Layer") : QT_TRANSLATE_NOOP("History", "Show Layer");
     setVisibilityInSwipe(id, !layer->visible);
 }
 
 void EditorSession::setVisibilityInSwipe(const Uuid& id, bool visible) {
-    if (!document_) return;
+    if (!document_ || !visibilitySwipe_) return;
     Layer* layer = document_->find(id);
     if (!layer || layer->visible == visible) return;
+    swipeOriginal_.emplace(id, layer->visible);   // (the first time only)
     layer->visible = visible;
     emit documentChanged({});
     emit layersChanged();
@@ -461,6 +463,23 @@ void EditorSession::setVisibilityInSwipe(const Uuid& id, bool visible) {
 void EditorSession::endVisibilitySwipe() {
     if (!visibilitySwipe_) return;
     visibilitySwipe_ = false;
+    // What the swipe showed, put back, then made as one edit.
+    std::map<Uuid, bool> changed;
+    for (const auto& [id, was] : swipeOriginal_)
+        if (Layer* layer = document_ ? document_->find(id) : nullptr) {
+            if (layer->visible != was) changed[id] = layer->visible;
+            layer->visible = was;
+        }
+    swipeOriginal_.clear();
+    if (changed.empty()) { emit documentChanged({}); emit layersChanged(); return; }
+    if (changed.size() == 1 && commandsRouted()) {
+        const auto& [id, visible] = *changed.begin();
+        QJsonObject params{{"visible", visible}};
+        if (activeLayerId_ != id) params["id"] = QString::fromStdString(id);
+        if (runCommand(QStringLiteral("layers.set"), params)) return;
+    }
+    beginEdit(swipeName_);
+    for (const auto& [id, visible] : changed) if (Layer* layer = document_->find(id)) layer->visible = visible;
     endEdit();
     notifyDocument();
 }
@@ -526,11 +545,11 @@ void EditorSession::releaseDetachedClipping(std::vector<Layer>& layers) {
     }
 }
 
-bool EditorSession::placeLayer(const Uuid& id, const std::optional<Uuid>& parent, const std::optional<Uuid>& above, bool atBottom) {
-    if (!canEditLayers() || !document_->find(id) || above == id) return false;
+std::optional<std::vector<Layer>> EditorSession::placement(const Uuid& id, const std::optional<Uuid>& parent, const std::optional<Uuid>& above, bool atBottom) const {
+    if (!canEditLayers() || !document_->find(id) || above == id) return std::nullopt;
     if (parent) {
         const Layer* group = document_->find(*parent);
-        if (!group || !group->isGroup || *parent == id || descendantIds(document_->layers, id).count(*parent)) return false;
+        if (!group || !group->isGroup || *parent == id || descendantIds(document_->layers, id).count(*parent)) return std::nullopt;
     }
     std::vector<Layer> layers = document_->layers;
     int index = -1;
@@ -546,7 +565,7 @@ bool EditorSession::placeLayer(const Uuid& id, const std::optional<Uuid>& parent
     if (above) {
         int target = -1;
         for (size_t i = 0; i < layers.size(); i++) if (layers[i].id == *above && layers[i].parentId == parent) target = int(i);
-        if (target < 0) return false;
+        if (target < 0) return std::nullopt;
         // Above a folder means above everything inside it.
         auto inside = descendantIds(layers, *above);
         for (size_t i = 0; i < layers.size(); i++) if (inside.count(layers[i].id)) target = std::max(target, int(i));
@@ -556,9 +575,22 @@ bool EditorSession::placeLayer(const Uuid& id, const std::optional<Uuid>& parent
     layers.insert(layers.begin() + insertion + 1, subtree.begin(), subtree.end());
     adoptClipping(id, layers);
     releaseDetachedClipping(layers);
-    if (!validateHierarchy(layers)) return false;
+    if (!validateHierarchy(layers)) return std::nullopt;
+    return layers;
+}
+
+bool EditorSession::canPlaceLayer(const Uuid& id, const std::optional<Uuid>& parent, const std::optional<Uuid>& above, bool atBottom) const {
+    return placement(id, parent, above, atBottom).has_value();
+}
+
+bool EditorSession::placeLayer(const Uuid& idRef, const std::optional<Uuid>& parentRef, const std::optional<Uuid>& above, bool atBottom) {
+    // Copies: callers pass references into the layers this replaces.
+    const Uuid id = idRef;
+    const std::optional<Uuid> parent = parentRef;
+    std::optional<std::vector<Layer>> layers = placement(id, parent, above, atBottom);
+    if (!layers) return false;
     beginEdit(QT_TRANSLATE_NOOP("History", "Move Layer"));
-    document_->layers = layers;
+    document_->layers = std::move(*layers);
     setActiveLayer(id);
     if (parent) collapsedGroupIds.erase(*parent);
     endEdit();
@@ -573,6 +605,11 @@ void EditorSession::beginOpacityEdit() {
 }
 
 void EditorSession::endOpacityEdit() {
+    if (opacityPreview_) {
+        // Another edit starts while the slider is held: the value it shows becomes its own step first.
+        if (const std::optional<double> value = endOpacityPreview()) setLayerOpacity(*value);
+        return;
+    }
     if (!opacityEditing_) return;
     opacityEditing_ = false;
     endEdit();
@@ -590,6 +627,38 @@ void EditorSession::setLayerOpacity(double opacity) {
     for (Layer* l : targets) l->opacity = value;
     if (standalone) { endEdit(); notifyDocument(); }
     else { emit documentChanged({}); emit layersChanged(); }
+}
+
+void EditorSession::beginOpacityPreview() {
+    if (!canEditLayers() || opacityEditing_ || opacityPreview_ || !activeLayerId_) return;
+    std::map<Uuid, double> before;
+    for (const Layer& l : document_->layers) if (selectedLayerIds_.count(l.id)) before[l.id] = l.opacity;
+    opacityPreview_ = std::move(before);
+}
+
+void EditorSession::previewLayerOpacity(double opacity) {
+    if (!opacityPreview_ || !document_ || !std::isfinite(opacity)) return;
+    const double value = std::clamp(opacity, 0.0, 1.0);
+    for (const auto& [id, was] : *opacityPreview_) if (Layer* l = document_->find(id)) l->opacity = value;
+    emit documentChanged({});
+    emit layersChanged();
+}
+
+std::optional<double> EditorSession::endOpacityPreview() {
+    if (!opacityPreview_) return std::nullopt;
+    const std::map<Uuid, double> before = std::move(*opacityPreview_);
+    opacityPreview_.reset();
+    std::optional<double> shown;
+    bool changed = false;
+    for (const auto& [id, was] : before)
+        if (Layer* l = document_ ? document_->find(id) : nullptr) {
+            if (!shown || id == activeLayerId_) shown = l->opacity;
+            changed = changed || l->opacity != was;
+            l->opacity = was;
+        }
+    emit documentChanged({});
+    emit layersChanged();
+    return changed ? shown : std::nullopt;
 }
 
 void EditorSession::previewBlendMode(std::optional<BlendMode> mode) {
