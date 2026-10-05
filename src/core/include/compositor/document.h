@@ -4,6 +4,7 @@
 // copying a Document (for undo) costs no pixels.
 #pragma once
 #include "artboard.h"
+#include "guides.h"
 #include "animation.h"
 #include "colormodes.h"
 #include "colorprofile.h"
@@ -325,6 +326,8 @@ struct Document {
     std::map<std::string, std::shared_ptr<const SmartObjectSource>> smartObjects;
     /// Slices (artboard.h), for Export Slices and the PSD's resource 1050.
     std::vector<Slice> slices;
+    /// Ruler guides (guides.h), for View > Show > Guides and the PSD's resource 1032.
+    std::vector<Guide> guides;
     /// Frame animation (animation.h); empty for a still document.
     Animation animation;
     /// Alpha and spot channels, in the Channels panel's order (channels.h). They do not render.

@@ -81,7 +81,20 @@ void EditorSession::selectAll() {
 
 void EditorSession::deselect() {
     if (!document_ || !document_->selection) return;
+    lastSelection_ = document_->selection;
     setSelection(std::nullopt, QT_TRANSLATE_NOOP("History", "Deselect"));
+}
+
+bool EditorSession::canReselect() const {
+    if (!document_ || document_->selection || !lastSelection_ || !lastSelection_->coverage) return false;
+    // Only on the canvas it was made on, at the document's depth.
+    return lastSelection_->coverage.width() == document_->width && lastSelection_->coverage.height() == document_->height
+           && lastSelection_->coverage.sampleType() == document_->sampleType;
+}
+
+void EditorSession::reselect() {
+    if (!canReselect()) return;
+    setSelection(lastSelection_, QT_TRANSLATE_NOOP("History", "Reselect"));
 }
 
 void EditorSession::invertSelection() {

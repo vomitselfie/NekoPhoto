@@ -162,6 +162,50 @@ void AutomationServer::registerArtboardHandlers() {
         if (!session()->deleteSlice(id)) fail("the slice could not be deleted");
         return QJsonObject{{"removed", int(id)}};
     });
+    // ---- ruler guides (View > New Guide, Clear Guides; dragged out of the rulers)
+    auto guideJson = [](const Guide& g, int index) {
+        return QJsonObject{{"index", index}, {"orientation", g.vertical() ? "vertical" : "horizontal"}, {"position", g.position}};
+    };
+    auto guidesJson = [guideJson](const std::vector<Guide>& guides) {
+        QJsonArray list;
+        for (size_t i = 0; i < guides.size(); i++) list.append(guideJson(guides[i], int(i)));
+        return QJsonObject{{"guides", list}};
+    };
+    auto guideIndex = [document](const QJsonObject& p) {
+        const int index = integer(p, "index");
+        const int count = int(document().guides.size());
+        if (index < 0 || index >= count) fail(QStringLiteral("no guide %1 (there are %2; guides.list shows them)").arg(index).arg(count), invalidParams);
+        return index;
+    };
+    add("guides.list", [document, guidesJson](const QJsonObject&) { return guidesJson(document().guides); });
+    add("guides.add", [session, document, guideJson](const QJsonObject& p) {
+        document();
+        const QString orientation = str(p, "orientation").toLower();
+        if (orientation != "vertical" && orientation != "horizontal") fail("orientation must be vertical or horizontal", invalidParams);
+        const double position = num(p, "position");
+        if (!std::isfinite(position) || std::abs(position) > guideReach) fail(QStringLiteral("position must be within ±%1 pixels").arg(guideReach), invalidParams);
+        auto index = session()->addGuide(Guide{orientation == "vertical" ? Guide::Orientation::Vertical : Guide::Orientation::Horizontal, position});
+        if (!index) fail("the guide could not be added");
+        return guideJson(document().guides[size_t(*index)], *index);
+    });
+    add("guides.move", [session, document, guideIndex, guideJson](const QJsonObject& p) {
+        const int index = guideIndex(p);
+        const double position = num(p, "position");
+        if (!std::isfinite(position) || std::abs(position) > guideReach) fail(QStringLiteral("position must be within ±%1 pixels").arg(guideReach), invalidParams);
+        if (!session()->moveGuide(index, position)) fail("the guide could not be moved");
+        return guideJson(document().guides[size_t(index)], index);
+    });
+    add("guides.delete", [session, document, guideIndex, guidesJson](const QJsonObject& p) {
+        // One guide by index, or every guide (View > Clear Guides).
+        if (flag(p, "all", false)) {
+            if (has(p, "index")) fail("give index or all, not both", invalidParams);
+            session()->clearGuides();
+            return guidesJson(document().guides);
+        }
+        if (!has(p, "index")) fail("give the guide's index (guides.list), or all: true", invalidParams);
+        if (!session()->removeGuide(guideIndex(p))) fail("the guide could not be deleted");
+        return guidesJson(document().guides);
+    });
     add("slices.export", [session, document](const QJsonObject& p) {
         document();
         QString error;

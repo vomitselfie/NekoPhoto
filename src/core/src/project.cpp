@@ -133,7 +133,7 @@ json transformJson(const LayerTransform& t) {
 
 const std::set<std::string> knownLayerKeys = {"id", "name", "isVisible", "transform", "imageFile", "parentID", "isGroup", "opacity", "blendMode",
     "maskFile", "maskEnabled", "maskSourceID", "adjustment", "maskPlacement", "maskLinked", "shape", "text", "passThrough", "artboard"};
-const std::set<std::string> knownManifestKeys = {"format", "version", "colorSpace", "resolution", "documentID", "width", "height", "activeLayerID", "layers", "slices", "animation", "sampleType", "profile", "channels", "colorMode", "encodedProfile"};
+const std::set<std::string> knownManifestKeys = {"format", "version", "colorSpace", "resolution", "documentID", "width", "height", "activeLayerID", "layers", "slices", "guides", "animation", "sampleType", "profile", "channels", "colorMode", "encodedProfile"};
 
 struct Record {
     Layer layer;
@@ -327,6 +327,7 @@ struct Manifest {
     std::optional<Uuid> activeLayerId;
     std::vector<Record> records;
     std::vector<Slice> slices;
+    std::vector<Guide> guides;
     std::string extraJson;
     Animation animation;
     SampleType sampleType = SampleType::U8;
@@ -436,6 +437,20 @@ bool parseManifestJson(const json& j, Manifest& m, ProjectError& error) {
                 || !getString(e, "message", s.message, false) || !getString(e, "altTag", s.altTag, false) || s.width < 1 || s.height < 1) { error = invalid(); return false; }
             s.id = uint32_t(id);
             m.slices.push_back(std::move(s));
+        }
+    }
+    if (auto gl = j.find("guides"); gl != j.end() && !gl->is_null()) {
+        // [{"orientation": "vertical" | "horizontal", "position": pixels}]
+        if (!gl->is_array() || gl->size() > maxGuides) { error = invalid(); return false; }
+        for (auto& e : *gl) {
+            auto o = e.is_object() ? e.find("orientation") : e.end();
+            auto at = e.is_object() ? e.find("position") : e.end();
+            if (o == e.end() || at == e.end() || !o->is_string() || !at->is_number()) { error = invalid(); return false; }
+            const std::string orientation = o->get<std::string>();
+            if (orientation != "vertical" && orientation != "horizontal") { error = invalid(); return false; }
+            const double position = at->get<double>();
+            if (!std::isfinite(position) || std::abs(position) > guideReach) { error = invalid(); return false; }
+            m.guides.push_back({orientation == "vertical" ? Guide::Orientation::Vertical : Guide::Orientation::Horizontal, guidePosition(position)});
         }
     }
     if (auto ch = j.find("channels"); ch != j.end() && !ch->is_null()) {
@@ -746,6 +761,7 @@ Document documentFrom(const Manifest& m) {
     d.colorMode = m.colorMode;
     if (m.encoded == Manifest::Encoded::Untagged) d.encodedProfile = ColorProfile{};
     d.slices = m.slices;
+    d.guides = m.guides;
     for (auto& r : m.records) d.layers.push_back(r.layer);
     d.channels = m.channels;
     d.animation = m.animation;
@@ -1007,6 +1023,10 @@ std::string manifestJson(const Document& document, const std::optional<Uuid>& ac
             j["slices"].push_back({{"id", s.id}, {"name", s.name}, {"x", s.x}, {"y", s.y}, {"width", s.width}, {"height", s.height},
                                    {"url", s.url}, {"target", s.target}, {"message", s.message}, {"altTag", s.altTag}});
     }
+    if (!document.guides.empty()) {
+        j["guides"] = json::array();
+        for (const Guide& g : document.guides) j["guides"].push_back({{"orientation", g.vertical() ? "vertical" : "horizontal"}, {"position", number(g.position)}});
+    } else j.erase("guides");
     if (!document.animation.empty()) j["animation"] = json::parse(animationJson(document.animation));
     else j.erase("animation");
     if (!document.channels.empty()) {

@@ -62,6 +62,7 @@ CanvasWidget::CanvasWidget(EditorSession* session, QWidget* parent) : QWidget(pa
     });
     connect(session_, &EditorSession::selectionChanged, this, [this] { refreshSelectionOutline(); update(); });
     connect(session_, &EditorSession::scribblesChanged, this, [this] { update(); });
+    connect(session_, &EditorSession::guidesChanged, this, [this] { update(); });
     // A viewport change leaves the cache valid: ensureCache compares zoom and origin, and a pan scrolls it.
     connect(session_, &EditorSession::viewportChanged, this, [this] { update(); });
     connect(session_, &EditorSession::toolChanged, this, [this] {

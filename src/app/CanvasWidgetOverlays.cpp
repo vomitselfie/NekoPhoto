@@ -40,9 +40,7 @@ void CanvasWidget::drawOverlays(QPainter& painter) {
         bool distorting = session_->transformEdit() && session_->transformEdit()->corners;
         drawTransformBox(painter, session_->editedCorners(*active), true, distorting);
     }
-    painter.setPen(QPen(QColor(255, 0, 200), 1));
-    for (double x : session_->snapGuidesX) { double vx = viewPoint({x, 0}).x(); painter.drawLine(QPointF(vx, 0), QPointF(vx, height())); }
-    for (double y : session_->snapGuidesY) { double vy = viewPoint({0, y}).y(); painter.drawLine(QPointF(0, vy), QPointF(width(), vy)); }
+    drawGuides(painter);   // ruler guides and the smart guide of a snap in effect (CanvasWidgetGuides.cpp)
     if (marquee_) {
         painter.setPen(QPen(Qt::black, 1, Qt::DashLine));
         painter.setBrush(Qt::NoBrush);

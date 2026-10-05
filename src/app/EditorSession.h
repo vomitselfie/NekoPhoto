@@ -33,6 +33,8 @@
 #include "compositor/warp.h"
 #include "compositor/warpstroke.h"
 #include <QElapsedTimer>
+#include <QJsonObject>
+#include <QJsonValue>
 class QFileSystemWatcher;
 class QTimer;
 #include <functional>
@@ -280,6 +282,22 @@ public:
     void previewTransform(const compositor::LayerTransform& value);
     void commitTransform();
     void cancelTransform();
+    /// One command path (CONTRIBUTING.md, "Commands"): the menus, shortcuts, dialogs and canvas gestures that have
+    /// been converted run their edit as the automation method that does it, through this runner, so the socket,
+    /// --call, --batch, Actions playback and the interface share one implementation and Actions record the same
+    /// step. MainWindow installs it on every tab's session; the result, or none after an error it has shown.
+    std::function<std::optional<QJsonValue>(const QString& method, const QJsonObject& params)> commandRunner;
+    std::optional<QJsonValue> runCommand(const QString& method, const QJsonObject& params = {});
+    /// Whether runCommand reaches the registry for this session now (it does for the tab on screen); when it does
+    /// not, callers make the edit directly, as they did before the command path.
+    std::function<bool()> commandReady;
+    bool commandsRouted() const { return commandRunner && (!commandReady || commandReady()); }
+    /// Free Transform's commit stage (Enter, the options bar's Apply, a double-click): the transform is invoked
+    /// (transformCommand), updated interactively on the canvas (previewTransform), then committed here. A plain
+    /// layer transform commits as the command layers.setTransform with the box's final values, the same call
+    /// automation makes; a distortion, a folder, several layers, a mask alone or selected pixels (which that method
+    /// cannot express) commit directly, as before.
+    void commitTransformCommand();
     void nudgeLayer(double dx, double dy);
     /// Ctrl+T: transforms the selected pixels when there is a selection, else the layer(s).
     void transformCommand();
@@ -307,6 +325,8 @@ public:
     void setSnapGuides(std::vector<double> xs, std::vector<double> ys);
     /// The topmost visible layer with pixels under a document point.
     std::optional<compositor::Uuid> layerAt(QPointF documentPoint) const;
+    /// Every visible layer with pixels under a document point, topmost first (the Move tool's context menu).
+    std::vector<compositor::Uuid> layersAt(QPointF documentPoint, size_t limit = 64) const;
     /// Pixels the transform places (what 100% draws 1:1).
     std::optional<compositor::Size> transformPixelSize() const;
 
@@ -552,6 +572,9 @@ public:
     void applySelectionShape(const compositor::Gray16& shape, compositor::SelectionMode mode, const QString& name);
     void selectAll();
     void deselect();
+    /// Select > Reselect: the selection the last Deselect dropped, back as one undo step.
+    void reselect();
+    bool canReselect() const;
     void invertSelection();
     void setSelection(const std::optional<compositor::Selection>& selection, const QString& name);
     /// `sampleRadius` 0, 1 or 2: the point, a 3x3 or a 5x5 average sets the colour to match (Photoshop's Sample Size).
@@ -826,6 +849,19 @@ public:
     std::optional<uint32_t> addSlice(compositor::Slice slice);
     bool setSlice(const compositor::Slice& slice);
     bool deleteSlice(uint32_t id);
+
+    // ---- Guides (EditorSessionArtboards.cpp) ----------------------------------------------------------------
+    /// Ruler guides are document state: each add, move, removal or clearing is one undo step, named as
+    /// Photoshop names it (New Guide, Move Guide, Delete Guide, Clear Guides). Positions are document pixels,
+    /// rounded to the PSD's 1/32 pixel. The index of the new guide, or none without a document.
+    std::optional<int> addGuide(compositor::Guide guide);
+    bool moveGuide(int index, double position);
+    bool removeGuide(int index);
+    bool clearGuides();
+    const std::vector<compositor::Guide>& guides() const;
+    /// The guide within `tolerance` document pixels of a point (the nearest), for picking one up with the Move tool.
+    std::optional<int> guideAt(QPointF documentPoint, double tolerance) const;
+
     /// The document rendered over `rect` (clipped to the canvas); null when nothing of it is on the canvas.
     std::shared_ptr<compositor::Image> renderRect(const QRect& rect) const;
     std::shared_ptr<compositor::Image16> renderRect16(const QRect& rect) const;
@@ -910,6 +946,8 @@ public:
 
 signals:
     void pathsChanged();
+    /// The ruler guides changed (added, moved, removed, or by undo); the canvas draws them again.
+    void guidesChanged();
     /// The channels, their target or what the canvas shows of them changed.
     void channelsChanged();
     /// The open project changed on disk while there is unsaved work: ask, then call resolveExternalChange.
@@ -1098,6 +1136,7 @@ private:
     std::optional<compositor::LayerStyle> styleClipboard_;
     std::optional<compositor::VectorPath::Subpath> penDraft_;
     std::optional<uint16_t> activePathId_;
+    std::optional<compositor::Selection> lastSelection_;   // what Deselect dropped, for Reselect
     std::optional<int> selectedSubpath_;
     std::optional<compositor::Uuid> vectorMaskTarget_;
     /// Where penFinish and finishShape put a new outline: `path` added to the target as a component by `pathOp`,

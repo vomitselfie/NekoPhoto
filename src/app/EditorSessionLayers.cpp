@@ -874,6 +874,7 @@ void EditorSession::flipCanvas(bool horizontal) {
     if (!canEditLayers()) return;
     beginEdit(horizontal ? QT_TRANSLATE_NOOP("History", "Flip Canvas Horizontal") : QT_TRANSLATE_NOOP("History", "Flip Canvas Vertical"));
     double w = document_->width, h = document_->height;
+    flipGuides(document_->guides, horizontal, horizontal ? w : h);
     auto flip = [&](LayerTransform t) {
         Point c = t.center();
         if (horizontal) { t.flipX = !t.flipX; c.x = w - c.x; } else { t.flipY = !t.flipY; c.y = h - c.y; }

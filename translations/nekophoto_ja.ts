@@ -55,6 +55,10 @@
         <translation>アンカーポイントの切り替え</translation>
     </message>
     <message>
+        <source>Close Path</source>
+        <translation>パスを閉じる</translation>
+    </message>
+    <message>
         <source>Move Selection</source>
         <translation>選択範囲を移動</translation>
     </message>
@@ -145,6 +149,22 @@
     <message>
         <source>Delete Slice</source>
         <translation>スライスを削除</translation>
+    </message>
+    <message>
+        <source>New Guide</source>
+        <translation>新規ガイド</translation>
+    </message>
+    <message>
+        <source>Move Guide</source>
+        <translation>ガイドを移動</translation>
+    </message>
+    <message>
+        <source>Delete Guide</source>
+        <translation>ガイドを削除</translation>
+    </message>
+    <message>
+        <source>Clear Guides</source>
+        <translation>ガイドを消去</translation>
     </message>
     <message>
         <source>New Blank Layer</source>
@@ -525,6 +545,10 @@
     <message>
         <source>Deselect</source>
         <translation>選択を解除</translation>
+    </message>
+    <message>
+        <source>Reselect</source>
+        <translation>再選択</translation>
     </message>
     <message>
         <source>Inverse</source>
@@ -1783,6 +1807,30 @@
     <message>
         <source>Create</source>
         <translation>作成</translation>
+    </message>
+    <message>
+        <source>New Guide</source>
+        <translation>新規ガイド</translation>
+    </message>
+    <message>
+        <source>Horizontal</source>
+        <translation>水平方向</translation>
+    </message>
+    <message>
+        <source>Vertical</source>
+        <translation>垂直方向</translation>
+    </message>
+    <message>
+        <source> px</source>
+        <translation> px</translation>
+    </message>
+    <message>
+        <source>Orientation</source>
+        <translation>方向</translation>
+    </message>
+    <message>
+        <source>Position</source>
+        <translation>位置</translation>
     </message>
     <message>
         <source>Canvas Size</source>
@@ -4148,8 +4196,84 @@ File &gt; New creates a blank canvas.</source>
 ファイル &gt; 新規 で空白のカンバスを作成できます。</translation>
     </message>
     <message>
+        <source>Close Path</source>
+        <translation>パスを閉じる</translation>
+    </message>
+    <message>
+        <source>End Path</source>
+        <translation>パスを終了</translation>
+    </message>
+    <message>
+        <source>Delete Anchor Point</source>
+        <translation>アンカーポイントを削除</translation>
+    </message>
+    <message>
+        <source>Convert Point</source>
+        <translation>アンカーポイントの切り替え</translation>
+    </message>
+    <message>
         <source>Add Anchor Point</source>
         <translation>アンカーポイントを追加</translation>
+    </message>
+    <message>
+        <source>Make Selection</source>
+        <translation>選択範囲を作成</translation>
+    </message>
+    <message>
+        <source>Fill Path</source>
+        <translation>パスを塗りつぶし</translation>
+    </message>
+    <message>
+        <source>Stroke Path</source>
+        <translation>パスの境界線を描く</translation>
+    </message>
+    <message>
+        <source>Delete Path</source>
+        <translation>パスを削除</translation>
+    </message>
+    <message>
+        <source>Undo Typing</source>
+        <translation>入力の取り消し</translation>
+    </message>
+    <message>
+        <source>Cut</source>
+        <translation>カット</translation>
+    </message>
+    <message>
+        <source>Copy</source>
+        <translation>コピー</translation>
+    </message>
+    <message>
+        <source>Paste</source>
+        <translation>ペースト</translation>
+    </message>
+    <message>
+        <source>Select All</source>
+        <translation>すべてを選択</translation>
+    </message>
+    <message>
+        <source>Faux Bold</source>
+        <translation>疑似ボールド</translation>
+    </message>
+    <message>
+        <source>Faux Italic</source>
+        <translation>疑似斜体</translation>
+    </message>
+    <message>
+        <source>Underline</source>
+        <translation>下線</translation>
+    </message>
+    <message>
+        <source>Strikethrough</source>
+        <translation>打ち消し線</translation>
+    </message>
+    <message>
+        <source>Commit Typing</source>
+        <translation>入力を確定</translation>
+    </message>
+    <message>
+        <source>Cancel Typing</source>
+        <translation>入力をキャンセル</translation>
     </message>
     <message>
         <source>Move Path</source>
@@ -6136,6 +6260,10 @@ File &gt; New creates a blank canvas.</source>
         <translation>Web サムネール</translation>
     </message>
     <message>
+        <source>Couldn’t do that</source>
+        <translation>実行できませんでした</translation>
+    </message>
+    <message>
         <source>“%1” stopped at step %2 (%3): %4</source>
         <translation>「%1」はステップ %2 (%3) で停止しました: %4</translation>
     </message>
@@ -7132,6 +7260,10 @@ File &gt; New creates a blank canvas.</source>
         <translation>新規レイヤー(&amp;N)</translation>
     </message>
     <message>
+        <source>New Layer</source>
+        <translation>新規レイヤー</translation>
+    </message>
+    <message>
         <source>New Layer &amp;Below</source>
         <translation>下に新規レイヤー(&amp;B)</translation>
     </message>
@@ -7150,6 +7282,10 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>&amp;Duplicate Layer</source>
         <translation>レイヤーを複製(&amp;D)</translation>
+    </message>
+    <message>
+        <source>Duplicate Layer</source>
+        <translation>レイヤーを複製</translation>
     </message>
     <message>
         <source>De&amp;lete Layer</source>
@@ -7420,6 +7556,10 @@ File &gt; New creates a blank canvas.</source>
         <translation>選択を解除(&amp;D)</translation>
     </message>
     <message>
+        <source>&amp;Reselect</source>
+        <translation>再選択(&amp;R)</translation>
+    </message>
+    <message>
         <source>&amp;Inverse</source>
         <translation>選択範囲を反転(&amp;I)</translation>
     </message>
@@ -7632,6 +7772,64 @@ File &gt; New creates a blank canvas.</source>
         <translation>定規(&amp;R)</translation>
     </message>
     <message>
+        <source>S&amp;how</source>
+        <translation>表示・非表示(&amp;H)</translation>
+    </message>
+    <message>
+        <source>&amp;Guides</source>
+        <translation>ガイド(&amp;G)</translation>
+    </message>
+    <message>
+        <source>&amp;Smart Guides</source>
+        <translation>スマートガイド(&amp;S)</translation>
+    </message>
+    <message>
+        <source>Sn&amp;ap</source>
+        <translation>スナップ(&amp;A)</translation>
+    </message>
+    <message>
+        <source>Snap &amp;To</source>
+        <translation>スナップ先(&amp;T)</translation>
+    </message>
+    <message>
+        <source>&amp;Layers</source>
+        <translation>レイヤー(&amp;L)</translation>
+    </message>
+    <message>
+        <source>&amp;Document Bounds</source>
+        <translation>ドキュメントの境界(&amp;D)</translation>
+    </message>
+    <message>
+        <source>&amp;All</source>
+        <comment>snap to</comment>
+        <translation>すべて(&amp;A)</translation>
+    </message>
+    <message>
+        <source>&amp;None</source>
+        <comment>snap to</comment>
+        <translation>なし(&amp;N)</translation>
+    </message>
+    <message>
+        <source>Lock Gu&amp;ides</source>
+        <translation>ガイドをロック(&amp;I)</translation>
+    </message>
+    <message>
+        <source>C&amp;lear Guides</source>
+        <translation>ガイドを消去(&amp;L)</translation>
+    </message>
+    <message>
+        <source>Clear Guides</source>
+        <translation>ガイドを消去</translation>
+    </message>
+    <message>
+        <source>&amp;New Guide…</source>
+        <translation>新規ガイド(&amp;N)...</translation>
+    </message>
+    <message>
+        <source>New Guide</source>
+        <translation>新規ガイド</translation>
+    </message>
+    <message>
         <source>&amp;Layers Panel</source>
         <translation>レイヤーパネル(&amp;L)</translation>
     </message>
@@ -7718,6 +7916,82 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>The document could not be converted.</source>
         <translation>ドキュメントを変換できませんでした。</translation>
+    </message>
+    <message>
+        <source>Free Transform</source>
+        <translation>自由変形</translation>
+    </message>
+    <message>
+        <source>Distort</source>
+        <translation>自由な形に</translation>
+    </message>
+    <message>
+        <source>Rotate 180°</source>
+        <translation>180° 回転</translation>
+    </message>
+    <message>
+        <source>Rotate 90° Clockwise</source>
+        <translation>90° 回転(時計回り)</translation>
+    </message>
+    <message>
+        <source>Rotate 90° Counter Clockwise</source>
+        <translation>90° 回転(反時計回り)</translation>
+    </message>
+    <message>
+        <source>Flip Horizontal</source>
+        <translation>水平方向に反転</translation>
+    </message>
+    <message>
+        <source>Flip Vertical</source>
+        <translation>垂直方向に反転</translation>
+    </message>
+    <message>
+        <source>Apply Transform</source>
+        <translation>変形を確定</translation>
+    </message>
+    <message>
+        <source>Cancel Transform</source>
+        <translation>変形をキャンセル</translation>
+    </message>
+    <message>
+        <source>Select Group “%1”</source>
+        <translation>グループ「%1」を選択</translation>
+    </message>
+    <message>
+        <source>Rasterize Layer</source>
+        <translation>レイヤーをラスタライズ</translation>
+    </message>
+    <message>
+        <source>Disable Layer Mask</source>
+        <translation>レイヤーマスクを使用しない</translation>
+    </message>
+    <message>
+        <source>Enable Layer Mask</source>
+        <translation>レイヤーマスクを使用</translation>
+    </message>
+    <message>
+        <source>Invert Layer Mask</source>
+        <translation>レイヤーマスクを反転</translation>
+    </message>
+    <message>
+        <source>Apply Layer Mask</source>
+        <translation>レイヤーマスクを適用</translation>
+    </message>
+    <message>
+        <source>Delete Layer Mask</source>
+        <translation>レイヤーマスクを削除</translation>
+    </message>
+    <message>
+        <source>Add Layer Mask</source>
+        <translation>レイヤーマスクを追加</translation>
+    </message>
+    <message>
+        <source>Select Inverse</source>
+        <translation>選択範囲を反転</translation>
+    </message>
+    <message>
+        <source>Select All</source>
+        <translation>すべてを選択</translation>
     </message>
 </context>
 <context>

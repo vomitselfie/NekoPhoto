@@ -328,3 +328,66 @@ TEST_CASE(artboards_and_frames_at_sixteen_bits) {
 }
 
 TEST_MAIN()
+
+TEST_CASE(guides_resource_and_round_trips) {
+    // Resource 1032: version 1, the grid words, the count, then 1/32-pixel positions and a direction byte.
+    std::vector<Guide> guides = {{Guide::Orientation::Vertical, 12.5}, {Guide::Orientation::Horizontal, -3.25}, {Guide::Orientation::Vertical, 99}};
+    auto bytes = guidesResource(guides, std::pair<uint32_t, uint32_t>{640, 320});
+    REQUIRE(bytes.size() == 16 + 3 * 5);
+    CHECK_EQ(int(bytes[19]), 400 & 0xff);   // 12.5 * 32 = 400, big-endian
+    CHECK_EQ(int(bytes[20]), 0);
+    CHECK_EQ(int(bytes[25]), 1);
+    std::vector<Guide> back;
+    std::optional<std::pair<uint32_t, uint32_t>> grid;
+    REQUIRE(parseGuidesResource(bytes, back, &grid));
+    CHECK(back == guides);
+    REQUIRE(grid);
+    CHECK_EQ(grid->first, 640u);
+    CHECK(!parseGuidesResource({0, 0, 0, 2}, back));
+    CHECK_NEAR(guidePosition(1.0 / 7), 5.0 / 32, 0);
+
+    // Through a PSD: the guides come back; unchanged, the file's resource (with its grid) is written as it was.
+    Document doc(64, 48);
+    auto red = std::make_shared<Image>(64, 48);
+    red->fill(255, 0, 0, 255);
+    doc.layers = {Layer(Asset::make(red, "Background"), Point(0, 0))};
+    doc.guides = guides;
+    std::string error;
+    auto psdBytes = encodePsd(doc, {}, nullptr, &error);
+    auto imported = importPsdBytes(psdBytes, &error);
+    REQUIRE(imported);
+    CHECK(imported->document.guides == guides);
+    auto again = encodePsd(imported->document, {}, nullptr, &error);
+    CHECK(again == encodePsd(imported->document, {}, nullptr, &error));
+    CHECK_EQ(again.size(), psdBytes.size());
+    Document moved = imported->document;
+    moved.guides[0].position = 20;
+    moved.guides.pop_back();
+    auto third = importPsdBytes(encodePsd(moved, {}, nullptr, &error), &error);
+    REQUIRE(third);
+    CHECK(third->document.guides == moved.guides);
+
+    // Through a project package.
+    const auto dir = std::filesystem::temp_directory_path() / "nekophoto-guide-tests";
+    { std::error_code cleanup_; std::filesystem::remove_all(dir, cleanup_); }
+    std::filesystem::create_directories(dir);
+    const std::string package = (dir / "Guides.comp").string();
+    ProjectError projectError;
+    REQUIRE(saveProject(doc, std::nullopt, package, projectError));
+    auto loaded = loadProject(package, projectError);
+    REQUIRE(loaded);
+    CHECK(loaded->guides == guides);
+    { std::error_code cleanup_; std::filesystem::remove_all(dir, cleanup_); }
+
+    // The canvas changes carry them.
+    std::vector<Guide> g = {{Guide::Orientation::Vertical, 10}, {Guide::Orientation::Horizontal, 4}};
+    offsetGuides(g, -2, 3);
+    CHECK_NEAR(g[0].position, 8, 0);
+    CHECK_NEAR(g[1].position, 7, 0);
+    scaleGuides(g, 2, 0.5);
+    CHECK_NEAR(g[0].position, 16, 0);
+    CHECK_NEAR(g[1].position, 3.5, 0);
+    flipGuides(g, true, 64);
+    CHECK_NEAR(g[0].position, 48, 0);
+    CHECK_NEAR(g[1].position, 3.5, 0);
+}

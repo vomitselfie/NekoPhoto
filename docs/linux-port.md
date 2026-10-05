@@ -424,6 +424,10 @@ uses a different model than Apple's Vision, so its cutouts differ in detail.
 | Space + drag, middle drag, wheel | Pan |
 | Ctrl + wheel, Ctrl +/−, Ctrl 0, Ctrl 1 | Zoom, fit, 100% |
 | Ctrl T, Enter, Esc | Free transform (of the selection when there is one), apply, cancel |
+| Ctrl R | Rulers (drag a guide out of one; drag it back to delete it) |
+| Ctrl ; , Alt Ctrl ; , Shift Ctrl ; | Show guides, lock guides, snap |
+| Ctrl + drag | Move, transform, marquee, crop or shape without snapping |
+| Right-click on the canvas | Context menu for the tool (the brush picker with the Brush or Eraser) |
 | Ctrl + drag handle | Free distort |
 | Ctrl + arrows | Nudge selected pixels |
 | Arrows with a selection tool | Nudge the selection outline |
@@ -432,7 +436,7 @@ uses a different model than Apple's Vision, so its cutouts differ in detail.
 | Ctrl Shift N, Ctrl G, Ctrl J, Ctrl E | New layer, group, duplicate, merge down |
 | Ctrl Alt G | Clipping mask |
 | Ctrl ] / Ctrl [ | Bring forward / send backward |
-| Ctrl A, Ctrl D, Ctrl Shift I | Select all, deselect, inverse |
+| Ctrl A, Ctrl D, Ctrl Shift D, Ctrl Shift I | Select all, deselect, reselect, inverse |
 | Ctrl L, Ctrl M, Ctrl U, Ctrl I | Levels, Curves, Hue/Saturation, Invert |
 | Ctrl X, Ctrl C, Ctrl Shift C, Ctrl V | Cut, copy, copy merged, paste |
 | Alt Backspace, Ctrl Backspace, Delete, Shift F5 | Fill foreground / background, clear, content-aware fill |

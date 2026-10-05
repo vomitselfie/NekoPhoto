@@ -40,6 +40,7 @@ qt_add_executable(nekophoto
     Icons.h
     ColorSwatches.h
     Ruler.h
+    ViewOptions.h
     CanvasFrame.h
     icons.qrc
     Viewport.h
@@ -70,6 +71,11 @@ qt_add_executable(nekophoto
     EditorSessionSmartObjects.cpp
     EditorSessionArtboards.cpp
     CanvasWidgetBoxes.cpp
+    CanvasWidgetGuides.cpp
+    CanvasWidgetMenu.cpp
+    MainWindowCanvasMenu.cpp
+    SelfTest.h
+    SelfTest.cpp
     EditorSessionSmartFilters.cpp
     EditorSessionWatch.cpp
     EditorSessionTransform.cpp

@@ -188,7 +188,7 @@ QWidget* ToolOptionsBar::buildMoveOptions() {
         connect(f, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &ToolOptionsBar::applyTransformField);
     auto* apply = new QPushButton(tr("Apply"));
     apply->setToolTip(tr("Apply the pending transform (Enter)"));
-    connect(apply, &QPushButton::clicked, this, [this] { session_->commitTransform(); });
+    connect(apply, &QPushButton::clicked, this, [this] { session_->commitTransformCommand(); });
     auto* cancel = new QPushButton(tr("Cancel"));
     connect(cancel, &QPushButton::clicked, this, [this] { session_->cancelTransform(); });
     fields->addWidget(apply);

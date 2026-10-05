@@ -520,6 +520,7 @@ void EditorSession::cropTo(const QRectF& rectF, const char* action) {
         if (l.mask && l.mask->placement) { l.mask->placement->origin.x -= rect.x; l.mask->placement->origin.y -= rect.y; }
     }
     offsetAnimation(doc, -rect.x, -rect.y);
+    offsetGuides(doc.guides, -rect.x, -rect.y);   // guides keep their place on the image, as in Photoshop
     cropChannels(doc, int(rect.x), int(rect.y), doc.width, doc.height);
     if (doc.selection && doc.selection->coverage.u8()) doc.selection->coverage = cropGray(*doc.selection->coverage.u8(), int(rect.x), int(rect.y), doc.width, doc.height);
     else if (doc.selection && doc.selection->coverage.u16()) doc.selection->coverage = Gray16Ptr(cropGray(*doc.selection->coverage.u16(), int(rect.x), int(rect.y), doc.width, doc.height));
@@ -548,6 +549,7 @@ void EditorSession::resizeCanvas(int width, int height, double anchorX, double a
         if (l.mask && l.mask->placement) { l.mask->placement->origin.x += dx; l.mask->placement->origin.y += dy; }
     }
     offsetAnimation(doc, dx, dy);
+    offsetGuides(doc.guides, dx, dy);
     cropChannels(doc, int(-dx), int(-dy), width, height);
     doc.selection.reset();
     document_ = doc;
@@ -567,6 +569,7 @@ void EditorSession::resizeImage(int width, int height, double resolution, int sa
     const double sx = double(width) / doc.width, sy = double(height) / doc.height;
     if (!resizeDocument(doc, width, height, resolution, mode)) { emit error(tr("The resized layers would not fit the document's budgets.")); return; }
     scaleAnimation(doc, sx, sy);
+    scaleGuides(doc.guides, sx, sy);
     resampleChannels(doc, document_->width, document_->height, mode);
     beginEdit(QT_TRANSLATE_NOOP("History", "Image Size"));
     document_ = doc;

@@ -12,6 +12,8 @@
 #include <optional>
 #include <vector>
 
+class QMenu;
+
 namespace app {
 
 class CanvasWidget : public QWidget {
@@ -56,8 +58,23 @@ public:
     bool startNewType(QPointF documentPoint, std::optional<QRectF> box);
     QPointF viewPointForTest(QPointF documentPoint) const { return viewPoint(documentPoint); }
 
+    /// A guide pulled out of a ruler (Ruler forwards its press, moves and release, in global coordinates): the top
+    /// ruler gives a horizontal guide, the left one a vertical guide.
+    void beginRulerGuide(Qt::Orientation ruler, QPoint globalPosition);
+    void moveRulerGuide(QPoint globalPosition, Qt::KeyboardModifiers modifiers);
+    void endRulerGuide(QPoint globalPosition, Qt::KeyboardModifiers modifiers);
+
+    /// The context menu's canvas-side parts (CanvasWidgetMenu.cpp): the Pen and Direct Selection tools' anchor and
+    /// path commands at a view point, and the text being typed (cut, copy, paste, select all, style). Each adds
+    /// what applies and returns whether it added anything.
+    bool addPathMenu(QMenu* menu, QPointF viewPoint);
+    bool addTypeMenu(QMenu* menu);
+    bool dragging() const { return drag_ != Drag::None; }
+
 signals:
     void cursorMoved(QPointF documentPoint);
+    /// A right-click (or the menu key) on the canvas: MainWindow shows the context menu.
+    void contextMenuRequested(QPointF viewPoint);
     void cropChanged();
     void cropRatioChanged();
     /// Typing started or ended, or the caret or selection moved.
@@ -78,6 +95,7 @@ protected:
     bool event(QEvent*) override;
     void focusOutEvent(QFocusEvent*) override;
     void inputMethodEvent(QInputMethodEvent*) override;
+    void contextMenuEvent(QContextMenuEvent*) override;
     QVariant inputMethodQuery(Qt::InputMethodQuery query) const override;
 
 private:
@@ -91,7 +109,7 @@ private:
     /// the view must be rendered afresh.
     bool scrollCache(QRect visible, QPointF origin, double zoom);
     bool boxPainted_ = false;   // whether the last paint drew a transform box
-    enum class Drag { None, Pan, Move, Resize, Rotate, Distort, PixelMove, Brush, Warp, Gradient, Shape, Marquee, Lasso, Scribble, ClickBox, SelectionMove, Patch, Pen, PathEdit, WarpCage, Crop, CropMove, CropResize, ZoomRect, Hook, Box, Type };
+    enum class Drag { None, Pan, Move, Resize, Rotate, Distort, PixelMove, Brush, Warp, Gradient, Shape, Marquee, Lasso, Scribble, ClickBox, SelectionMove, Patch, Pen, PathEdit, WarpCage, Crop, CropMove, CropResize, ZoomRect, Hook, Box, Type, Guide };
     struct HandleHit { bool hit = false; int index = 0; bool rotate = false; };
 
     /// Notes a changed part of the document for the next paint, which renders all of it at once (flushDirty).
@@ -122,7 +140,20 @@ private:
     QRectF dragBox(QPointF anchor, QPointF point, bool square, bool fromCenter, double ratio = 0) const;
 
     void refreshSelectionOutline();
-    void guideTargets(std::vector<double>& xs, std::vector<double>& ys) const;
+    void guideTargets(std::vector<double>& xs, std::vector<double>& ys, bool withGuides = true) const;
+    /// Ruler guides: the one under a view point that the Move tool would pick up (none while they are hidden or
+    /// locked), and a guide being dragged, from the canvas or out of a ruler. Dropped outside the canvas, it goes.
+    std::optional<int> guideUnder(QPointF viewPoint) const;
+    struct GuideDrag {
+        std::optional<int> index;   // none: a new guide coming out of a ruler
+        compositor::Guide::Orientation orientation = compositor::Guide::Orientation::Vertical;
+        double position = 0;
+        bool outside = false;       // over a ruler or beyond the canvas: dropping removes it
+    };
+    std::optional<GuideDrag> guideDrag_;
+    void dragGuide(QPointF viewPoint, Qt::KeyboardModifiers modifiers);
+    void finishGuideDrag();
+    void drawGuides(QPainter& painter);
     void snapMove(compositor::LayerTransform& draft);
     QPointF snapPoint(QPointF documentPoint);
     bool isBrushLike() const;
@@ -151,6 +182,8 @@ private:
     /// Direct Selection: what a view point is over on the target path, the knot chosen, and a drag in progress.
     struct PathHit { int sub = -1, knot = -1; enum Part { None, Anchor, In, Out, Subpath } part = None; };
     PathHit pathHit(QPointF view) const;
+    /// Photoshop's Convert Point on knot `knot`: smooth becomes corner, corner smooth.
+    static void convertPoint(compositor::VectorPath::Subpath& subpath, int knot);
     std::optional<std::pair<int, int>> selectedKnot_;
     int cageIndex_ = -1;
     void drawWarpCage(QPainter& painter);

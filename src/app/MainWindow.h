@@ -3,8 +3,11 @@
 // with its own session, canvas and panels; the menus act on the current one.
 #pragma once
 #include "EditorSession.h"
+#include <QJsonObject>
+#include <QJsonValue>
 #include <QMainWindow>
 #include <QPointer>
+#include <QHash>
 #include <QStringList>
 #include <QTabBar>
 #include <vector>
@@ -108,6 +111,10 @@ public:
     void setErrorSink(QString* sink) { errorSink_ = sink; }
     /// Starts listening on `socketPath` (empty: the default); returns false with a warning on failure.
     bool startAutomation(const QString& socketPath);
+    /// One command path (CONTRIBUTING.md, "Commands"): runs automation method `method` with `params` on the current
+    /// tab exactly as a request from the socket would, so a converted menu item, its shortcut, automation and Actions
+    /// recording share one implementation. An error is shown (titled `title`) and gives none.
+    std::optional<QJsonValue> runCommand(const QString& method, const QJsonObject& params = {}, const QString& title = {});
     /// What plays actions: the socket's server, or one of the window's own when automation is off.
     AutomationServer* automationEngine();
     /// Plays an action on the current tab; returns why it stopped, empty when it completed.
@@ -117,6 +124,12 @@ public:
     /// For screenshots: the Actions or Timeline panel (with frames made from the layers when there are none), or
     /// the Batch dialog.
     void showPanel(const QString& name);
+    /// The canvas's context menu (MainWindowCanvasMenu.cpp) for what the active tool and the point under the
+    /// pointer offer, as Photoshop's: the layers under the Move tool, the selection commands, the path's anchors,
+    /// the transform's, the text being typed. Empty when nothing applies. For screenshots it is built and shown at
+    /// `viewPoint` on the canvas.
+    QMenu* buildCanvasMenu(QPointF viewPoint, QWidget* parent);
+    void showCanvasMenu(QPointF viewPoint);
 
 signals:
     /// Something an agent may want to know about changed: document, layers, selection, history, tool, view, tabs.
@@ -199,6 +212,8 @@ private:
     void offerRecovery();
     void watchForRecovery(EditorSession* session);
     QLabel* automationLabel_ = nullptr;
+    QHash<QString, QAction*> named_;   // menu actions the canvas menu reuses, by key ("select.deselect", ...)
+    QAction* named(const QString& key) const { return named_.value(key); }
     QAction* mergeAction_ = nullptr;
     QAction* editTextAction_ = nullptr;
     QStringList lastImportNotes_;   // what the last PSD import could not carry, for automation callers

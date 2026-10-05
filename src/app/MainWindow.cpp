@@ -269,7 +269,12 @@ MainWindow::Tab& MainWindow::addTab(bool reuseEmpty) {
     Tab tab;
     tab.defaultName = tabs_.empty() ? tr("Untitled") : tr("Untitled %1").arg(nextNumber_++);
     tab.session = new EditorSession(this);
+    // The command path (EditorSession::runCommand): edits that menus, dialogs and the canvas make through the
+    // automation registry, for the tab on screen.
+    tab.session->commandRunner = [this](const QString& method, const QJsonObject& params) { return runCommand(method, params); };
+    tab.session->commandReady = [this, session = tab.session] { return session == session_; };
     tab.canvas = new CanvasWidget(tab.session);
+    connect(tab.canvas, &CanvasWidget::contextMenuRequested, this, [this, canvas = tab.canvas](QPointF at) { if (canvas == canvas_) showCanvasMenu(at); });
     tab.frame = new CanvasFrame(tab.session, tab.canvas);
     tab.frame->setRulersVisible(rulersAction_ && rulersAction_->isChecked());
     tab.layers = new LayersPanel(tab.session);
@@ -701,6 +706,17 @@ void MainWindow::showPanel(const QString& name) {
         }
         showBatchDialog();
     }
+}
+
+std::optional<QJsonValue> MainWindow::runCommand(const QString& method, const QJsonObject& params, const QString& title) {
+    // The same request the socket, --call and --batch send: parameters checked against the method's description,
+    // the depth gate, one undo step, and one Actions step when an action is recording.
+    const QJsonObject reply = automationEngine()->handle(QJsonObject{{"jsonrpc", "2.0"}, {"id", 0}, {"method", method}, {"params", params}});
+    if (reply.contains("error")) {
+        showError(title.isEmpty() ? tr("Couldn’t do that") : title, reply.value("error").toObject().value("message").toString());
+        return std::nullopt;
+    }
+    return reply.value("result");
 }
 
 AutomationServer* MainWindow::automationEngine() {

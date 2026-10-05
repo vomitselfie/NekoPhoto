@@ -47,6 +47,7 @@ void CanvasWidget::updateCursor(QPointF view, Qt::KeyboardModifiers modifiers) {
                 return;
             }
         }
+        if (auto guide = guideUnder(view)) { setCursor(session_->guides()[size_t(*guide)].vertical() ? Qt::SplitHCursor : Qt::SplitVCursor); return; }
         if (session_->canMovePixels(documentPoint(view))) { setCursor(Qt::DragMoveCursor); return; }
         setCursor((modifiers & Qt::ControlModifier) || session_->transformAutoSelect ? Qt::PointingHandCursor : Qt::SizeAllCursor);
         return;
@@ -137,7 +138,7 @@ void CanvasWidget::keyPressEvent(QKeyEvent* e) {
         if (crop_) { cancelCrop(); return; }
         return;
     case Qt::Key_Return: case Qt::Key_Enter:
-        if (session_->transformEdit()) { session_->commitTransform(); return; }
+        if (session_->transformEdit()) { session_->commitTransformCommand(); return; }
         if (session_->gradientPending()) { session_->commitGradient(); return; }
         if (session_->penDraft()) { session_->penFinish(false); return; }
         if (session_->warpCage()) { QString error; if (!session_->commitWarpCage(&error) && !error.isEmpty()) emit session_->error(error); return; }

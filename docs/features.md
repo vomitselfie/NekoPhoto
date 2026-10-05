@@ -18,7 +18,8 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Move, scale, rotate and flip without losing resolution
 - Free distort (Ctrl-drag a handle)
 - Transform several layers, or a whole folder, at once
-- Snapping to the canvas and other layers, with guides
+- Snapping to ruler guides, the canvas's edges and centre and other layers, within the same screen distance at every zoom; View ▸ Snap (Shift+Ctrl+;) and Snap To choose what snaps (Guides, Layers, Document Bounds), Ctrl held while dragging turns it off. Smart Guides (View ▸ Show) draw the one alignment in effect, in magenta, while you drag. Moving, transforming, the marquee, the crop box and shapes all snap
+- Ruler guides, as Photoshop's: drag one out of a ruler (View ▸ Rulers, Ctrl+R), move it with the Move tool, drag it back onto a ruler to delete it; View ▸ Show ▸ Guides (Ctrl+;), Lock Guides (Alt+Ctrl+;), Clear Guides and New Guide…. Each add, move or removal is one undo step, and guides are saved in projects and in PSDs (Photoshop's guides resource, written back unchanged when they are)
 - Exact position, size and angle in the options bar
 
 ## Selections
@@ -102,6 +103,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - The interface in English or Japanese (Photoshop's Japanese terms): it follows the desktop's language, or Edit > Preferences > Language picks one; `--lang ja` for one run ([translating.md](translating.md) explains adding a language)
 
 ## Working faster
+- A right-click on the canvas opens Photoshop's context menu for the tool and what is under the pointer: with the Move tool, the layers under it (pick one to select it) and their folders, then what the active layer allows (Free Transform, Duplicate, Delete, Merge, clipping, smart object, text and layer mask commands); with a selection tool, Deselect, Select Inverse, Feather, Free Transform, Save Selection, Layer via Copy, Cut, Copy and the fills (Select All and Reselect when nothing is selected); with the Pen or Direct Selection, Add / Delete Anchor Point, Convert Point, Close Path, Make Selection, Fill Path, Stroke Path and Delete Path; while transforming, Distort, Rotate 180° / 90°, Flip, Apply and Cancel; while typing, Cut, Copy, Paste, Select All and the faux styles. With the Brush or Eraser it opens the brush picker at the pointer
 - Scrubby labels, as in Photoshop: drag the label beside a number (Size, Opacity, a filter's Radius, a Layer Style's Distance, the transform fields, Camera Raw's sliders) left or right to change it, with Shift for fine steps and Alt or Ctrl for coarse ones; a click on the label still types in the field, and one drag is one undo step
 - Opening a file that could not be carried over whole (PSD, PSB, Clip Studio, Affinity, SVG, PDF, imported brushes) shows a bar over the canvas instead of a dialog: how many things changed and the first of them, Details for the full list, Undo Open to close the document again
 - Shift + a tool's letter steps through its group, as in Photoshop (Shift+J: Spot Healing, Healing Brush, Patch, Content-Aware Move; Shift+O: Dodge, Burn, Sponge; and the others in [linux-port.md](linux-port.md#keyboard-shortcuts))
@@ -131,7 +133,8 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 - 解像度を落とさずに移動・拡大縮小・回転・反転
 - 自由な形に(Ctrl を押しながらハンドルをドラッグ)
 - 複数のレイヤーやグループをまとめて変形
-- カンバスや他のレイヤーへのスナップとガイド
+- ガイド・カンバスの端と中心・他のレイヤーへのスナップ(どの表示倍率でも画面上の同じ距離で吸着)。表示 ▸ スナップ(Shift+Ctrl+;)とスナップ先(ガイド・レイヤー・ドキュメントの境界)で対象を選び、ドラッグ中に Ctrl を押すと一時的に無効。スマートガイド(表示 ▸ 表示・非表示)はドラッグ中に効いている整列だけをマゼンタの線で表示。移動・変形・長方形選択・切り抜きボックス・シェイプがスナップします
+- 定規のガイド(Photoshop と同じ):定規(表示 ▸ 定規、Ctrl+R)からドラッグして作成、移動ツールで移動、定規へドラッグして戻すと削除。表示 ▸ 表示・非表示 ▸ ガイド(Ctrl+;)、ガイドをロック(Alt+Ctrl+;)、ガイドを消去、新規ガイド…。追加・移動・削除はそれぞれ 1 回の取り消し単位で、ガイドはプロジェクトと PSD(Photoshop のガイドのリソース。変更がなければそのまま書き戻します)に保存されます
 - オプションバーで位置・サイズ・角度を数値指定
 
 ### 選択範囲
@@ -200,6 +203,7 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 - 画面表示は日本語と英語(用語は Photoshop 日本語版に準拠)。デスクトップの言語に合わせるか、編集 > 環境設定 > 言語 で選べます。`--lang ja` でその回だけ切り替えることもできます
 
 ### 操作
+- カンバスを右クリックすると、Photoshop と同じくツールとポインター下の対象に応じたコンテキストメニューが開きます:移動ツールではポインター下のレイヤー(選ぶとそのレイヤーを選択)とそのグループ、続いて作業中のレイヤーでできること(自由変形、複製、削除、結合、クリッピング、スマートオブジェクト・テキスト・レイヤーマスクのコマンド)。選択ツールでは選択を解除、選択範囲を反転、境界をぼかす、自由変形、選択範囲を保存、コピーしたレイヤー、カット、コピー、塗りつぶし(選択範囲がなければすべてを選択と再選択)。ペンツールとパス選択ツールではアンカーポイントの追加・削除、アンカーポイントの切り替え、パスを閉じる、選択範囲を作成、パスの塗りつぶし、パスの境界線、パスを削除。変形中は自由な形に、180° / 90° 回転、反転、確定、キャンセル。テキスト入力中はカット、コピー、ペースト、すべてを選択と疑似スタイル。ブラシと消しゴムではポインターの位置にブラシの一覧が開きます
 - スクラブ(Photoshop と同じ):数値の横のラベル(直径、不透明度、フィルターの半径、レイヤースタイルの距離、変形の数値欄、Camera Raw のスライダー)を左右にドラッグして値を変えられます。Shift で細かく、Alt または Ctrl で大きく動きます。ラベルのクリックでは従来どおり数値を入力でき、1 回のドラッグは 1 つの取り消し単位です
 - そのままでは引き継げない要素のあるファイル(PSD、PSB、クリップスタジオ、Affinity、SVG、PDF、読み込んだブラシ)を開くと、ダイアログではなくカンバス上部のバーで知らせます:変更の件数と最初の 1 件、詳細で全件の一覧、開くの取り消しでドキュメントを閉じます
 - Shift + ツールのキーで同じグループのツールを順に切り替えます(Photoshop と同じ。Shift+J:スポット修復ブラシ・修復ブラシ・パッチ・コンテンツに応じた移動、Shift+O:覆い焼き・焼き込み・スポンジ。ほかは [linux-port.md](linux-port.md#keyboard-shortcuts))

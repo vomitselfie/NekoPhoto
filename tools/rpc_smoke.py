@@ -317,6 +317,18 @@ def remaining_methods(rpc):
     assert rpc.call("history.list")["undo"][-1] == "Move Artboard"   # one step, contents and all
     assert [a["name"] for a in rpc.call("artboards.list")["artboards"]] == ["Hero"]
     assert rpc.call("layers.get", id=board["id"])["artboard"]["width"] == 80
+    # Ruler guides: one undo step each, kept through a PSD (resource 1032) with the slices below.
+    rpc.call("guides.add", orientation="vertical", position=33.3)
+    rpc.call("guides.add", orientation="horizontal", position=20)
+    assert rpc.call("history.list")["undo"][-1] == "New Guide"
+    assert rpc.call("guides.move", index=1, position=25)["position"] == 25
+    rpc.call("guides.delete", all=True)
+    assert rpc.call("guides.list")["guides"] == []
+    rpc.call("history.undo")
+    guides = rpc.call("guides.list")["guides"]
+    assert [(g["orientation"], g["position"]) for g in guides] == [("vertical", 33.3125), ("horizontal", 25)], guides
+    expect_refused(rpc, "no guide 7", "guides.move", index=7, position=1)
+    expect_refused(rpc, "orientation must be", "guides.add", orientation="diagonal", position=1)
     piece = rpc.call("slices.add", x=0, y=0, width=50, height=40, name="top")
     rpc.call("slices.set", id=piece["id"], altTag="Top")
     assert rpc.call("slices.list")["slices"][0]["altTag"] == "Top"
@@ -330,6 +342,7 @@ def remaining_methods(rpc):
     reopened = rpc.call("document.open", path=boards_psd)
     assert [a["name"] for a in rpc.call("artboards.list")["artboards"]] == ["Hero"]
     assert [s["name"] for s in rpc.call("slices.list")["slices"]] == ["top"]
+    assert [g["position"] for g in rpc.call("guides.list")["guides"]] == [33.3125, 25]
     rpc.call("tabs.close", index=reopened["tab"], discard=True)
     # The merged image alone: one layer, untitled (so saving cannot replace the layered file).
     merged = rpc.call("document.open", path=boards_psd, mergedOnly=True)
@@ -339,6 +352,8 @@ def remaining_methods(rpc):
     expect_refused(rpc, "mergedOnly applies", "document.open", path=written[0], mergedOnly=True)
     rpc.call("tabs.select", index=next(t["index"] for t in here if t["current"]))
     rpc.call("slices.delete", id=piece["id"])
+    rpc.call("guides.delete", index=0)
+    rpc.call("guides.delete", index=0)
     rpc.call("artboards.delete", id=board["id"])
     assert rpc.call("artboards.list")["artboards"] == [] and rpc.call("slices.list")["slices"] == []
     for name in ("artboard", "slice"):

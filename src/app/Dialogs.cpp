@@ -134,6 +134,30 @@ std::optional<NewDocumentOptions> askNewDocument(QWidget* parent, NewDocumentOpt
     return NewDocumentOptions{width->value(), height->value(), resolution->value()};
 }
 
+std::optional<compositor::Guide> askNewGuide(QWidget* parent) {
+    QDialog dialog(parent);
+    dialog.setWindowTitle(QObject::tr("New Guide"));
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* form = new QFormLayout;
+    auto* orientation = new QComboBox;
+    orientation->addItems({QObject::tr("Horizontal"), QObject::tr("Vertical")});
+    orientation->setObjectName("guideOrientation");
+    auto* position = new QDoubleSpinBox;
+    position->setObjectName("guidePosition");
+    position->setRange(-compositor::guideReach, compositor::guideReach);
+    position->setDecimals(2);
+    position->setSuffix(QObject::tr(" px"));
+    form->addRow(QObject::tr("Orientation"), orientation);
+    form->addRow(QObject::tr("Position"), position);
+    layout->addLayout(form);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+    if (dialog.exec() != QDialog::Accepted) return std::nullopt;
+    return compositor::Guide{orientation->currentIndex() == 1 ? compositor::Guide::Orientation::Vertical : compositor::Guide::Orientation::Horizontal, position->value()};
+}
+
 std::optional<CanvasSizeOptions> askCanvasSize(QWidget* parent, int currentWidth, int currentHeight) {
     QDialog dialog(parent);
     dialog.setWindowTitle(QObject::tr("Canvas Size"));

@@ -4,6 +4,7 @@
 #include "VectorPathQt.h"
 #include <cstring>
 #include "QtGeometry.h"
+#include "ViewOptions.h"
 #include <QApplication>
 #include <QMouseEvent>
 #include <QTabletEvent>
@@ -45,7 +46,7 @@ void CanvasWidget::mouseDoubleClickEvent(QMouseEvent* e) {
     }
     if (session_->tool() == Tool::Lasso && session_->lassoKind == LassoKind::Polygonal && !lassoPoints_.empty()) { finishPolygonalLasso(); return; }
     if (session_->tool() == Tool::Crop && crop_) { applyCrop(); return; }
-    if (session_->tool() == Tool::Move && session_->transformEdit()) { session_->commitTransform(); return; }
+    if (session_->tool() == Tool::Move && session_->transformEdit()) { session_->commitTransformCommand(); return; }
     if (session_->tool() == Tool::Gradient && session_->gradientPending()) { session_->commitGradient(); return; }
     press(e->position(), e->button(), e->modifiers());
 }
@@ -117,6 +118,14 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
                 drag_ = hit.rotate ? Drag::Rotate : Drag::Resize;
                 return;
             }
+        }
+        // A ruler guide under the pointer: drag it (out of the canvas deletes it), as Photoshop's Move tool does.
+        if (auto guide = guideUnder(view)) {
+            const Guide& g = session_->guides()[size_t(*guide)];
+            guideDrag_ = GuideDrag{*guide, g.orientation, g.position, false};
+            drag_ = Drag::Guide;
+            update();
+            return;
         }
         // Selected pixels under the pointer: drag them (Alt duplicates).
         if (!session_->transformEdit() && session_->canMovePixels(doc)) {
@@ -215,16 +224,7 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
         if (!path) return;
         if (hit.part == PathHit::Anchor && (modifiers & Qt::AltModifier)) {
             // Alt-click: a smooth knot becomes a corner (its handles pulled in), a corner smooth (handles along its neighbours).
-            auto& sub = path->subpaths[size_t(hit.sub)];
-            auto& k = sub.knots[size_t(hit.knot)];
-            if (knotIsSmooth(k) || k.inX != k.x || k.outX != k.x || k.inY != k.y || k.outY != k.y) { k.inX = k.outX = k.x; k.inY = k.outY = k.y; }
-            else {
-                const size_t n = sub.knots.size(), i = size_t(hit.knot);
-                const auto& prev = sub.knots[(i + n - 1) % n];
-                const auto& next = sub.knots[(i + 1) % n];
-                const double dx = (next.x - prev.x) / 6, dy = (next.y - prev.y) / 6;
-                k.inX = k.x - dx; k.inY = k.y - dy; k.outX = k.x + dx; k.outY = k.y + dy;
-            }
+            convertPoint(path->subpaths[size_t(hit.sub)], hit.knot);
             session_->setTargetPath(*path, QT_TRANSLATE_NOOP("History", "Convert Point"));
             selectedKnot_ = std::make_pair(hit.sub, hit.knot);
             return;
@@ -248,7 +248,7 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
         if (session_->gradientPending()) drag_ = Drag::Gradient;
         return;
     case Tool::Shape:
-        session_->beginShape(doc);
+        session_->beginShape((modifiers & Qt::ControlModifier) ? doc : snapPoint(doc));
         if (session_->shapeDraft()) drag_ = Drag::Shape;
         return;
     case Tool::Text:
@@ -267,7 +267,8 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
                 return;
             }
         }
-        QPointF anchor(std::round(doc.x()), std::round(doc.y()));
+        const QPointF start = (modifiers & Qt::ControlModifier) ? doc : snapPoint(doc);
+        QPointF anchor(std::round(start.x()), std::round(start.y()));
         dragStartDocument_ = anchor;
         marquee_ = QRectF(anchor, QSizeF(0, 0));
         drag_ = Drag::Marquee;
@@ -332,10 +333,21 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
     }
 }
 
-void CanvasWidget::guideTargets(std::vector<double>& xs, std::vector<double>& ys) const {
+void CanvasWidget::guideTargets(std::vector<double>& xs, std::vector<double>& ys, bool withGuides) const {
+    // View > Snap To: the ruler guides (while shown), the canvas's edges and centre, and the other layers' edges and
+    // centres. The tolerance is in screen points (snapDistance), so it holds at every zoom.
+    xs.clear();
+    ys.clear();
+    const ViewOptions& options = ViewOptions::get();
+    if (!options.snap) return;
     const auto& doc = session_->document();
-    xs = {0, doc->width / 2.0, double(doc->width)};
-    ys = {0, doc->height / 2.0, double(doc->height)};
+    if (withGuides && options.snapToGuides && options.showGuides)
+        for (const Guide& g : doc->guides) (g.vertical() ? xs : ys).push_back(g.position);
+    if (options.snapToBounds) {
+        xs.insert(xs.end(), {0, doc->width / 2.0, double(doc->width)});
+        ys.insert(ys.end(), {0, doc->height / 2.0, double(doc->height)});
+    }
+    if (!options.snapToLayers) return;
     std::set<Uuid> moving;
     if (auto& edit = session_->transformEdit()) {
         moving.insert(edit->layerId);
@@ -459,10 +471,10 @@ void CanvasWidget::move(QPointF view, Qt::MouseButtons buttons, Qt::KeyboardModi
         break;
     }
     case Drag::Shape:
-        session_->dragShape(doc, modifiers & Qt::ShiftModifier, modifiers & Qt::AltModifier);
+        session_->dragShape((modifiers & Qt::ControlModifier) ? doc : snapPoint(doc), modifiers & Qt::ShiftModifier, modifiers & Qt::AltModifier);
         break;
     case Drag::Marquee:
-        marquee_ = dragBox(dragStartDocument_, doc, modifiers & Qt::ShiftModifier, false);
+        marquee_ = dragBox(dragStartDocument_, (modifiers & Qt::ControlModifier) ? doc : snapPoint(doc), modifiers & Qt::ShiftModifier, false);
         update();
         break;
     case Drag::Lasso:
@@ -563,6 +575,9 @@ void CanvasWidget::move(QPointF view, Qt::MouseButtons buttons, Qt::KeyboardModi
         update();
         break;
     }
+    case Drag::Guide:
+        dragGuide(view, modifiers);
+        break;
     case Drag::ZoomRect:
         zoomRect_ = QRectF(dragStartDocument_, doc).normalized();
         update();
@@ -611,9 +626,15 @@ void CanvasWidget::release(QPointF view, Qt::MouseButton button, Qt::KeyboardMod
         session_->endGradientDrag();
         break;
     case Drag::Shape:
+        session_->setSnapGuides({}, {});
         session_->finishShape();
         break;
+    case Drag::Guide:
+        dragGuide(view, modifiers);
+        finishGuideDrag();
+        break;
     case Drag::Marquee:
+        session_->setSnapGuides({}, {});
         finishMarquee(modifiers);
         break;
     case Drag::Lasso:

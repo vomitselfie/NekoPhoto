@@ -23,7 +23,7 @@ BrushPicker::BrushPicker(QWidget* parent) : QToolButton(parent) {
     setIconSize(QSize(20, 20));
     setToolTip(tr("Brush: the round tip, or one of the MyPaint presets (pencils, inks, charcoal, paint, smudging). "
                   "Presets respond to pen pressure and tilt; Size and Opacity still apply."));
-    connect(this, &QToolButton::clicked, this, &BrushPicker::openPopup);
+    connect(this, &QToolButton::clicked, this, [this] { openPopup(); });
     setPreset({});
 }
 
@@ -35,8 +35,9 @@ void BrushPicker::setPreset(const QString& id) {
 }
 
 void BrushPicker::showPicker() { if (!popup_) openPopup(); }
+void BrushPicker::showPickerAt(QPoint globalPosition) { if (!popup_) openPopup(globalPosition); }
 
-void BrushPicker::openPopup() {
+void BrushPicker::openPopup(std::optional<QPoint> at) {
     if (popup_) { popup_->close(); return; }
     popup_ = new QFrame(this, Qt::Popup | Qt::FramelessWindowHint);
     popup_->setFrameShape(QFrame::StyledPanel);
@@ -70,11 +71,11 @@ void BrushPicker::openPopup() {
     connect(popup_, &QObject::destroyed, this, [this] { popup_ = nullptr; filter_ = nullptr; tree_ = nullptr; });
     rebuild({});
     // Below the button, within the screen.
-    QPoint below = mapToGlobal(QPoint(0, height()));
+    QPoint below = at ? *at : mapToGlobal(QPoint(0, height()));
     QSize size(340, 480);
     if (QScreen* screen = this->screen()) {
         QRect available = screen->availableGeometry();
-        if (below.y() + size.height() > available.bottom()) below.setY(std::max(available.top(), mapToGlobal(QPoint(0, 0)).y() - size.height()));
+        if (below.y() + size.height() > available.bottom()) below.setY(std::max(available.top(), (at ? at->y() : mapToGlobal(QPoint(0, 0)).y()) - size.height()));
         if (below.x() + size.width() > available.right()) below.setX(std::max(available.left(), available.right() - size.width()));
     }
     popup_->setGeometry(QRect(below, size));

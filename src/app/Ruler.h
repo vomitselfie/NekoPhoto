@@ -4,6 +4,8 @@
 #include "EditorSession.h"
 #include "Style.h"
 #include <QFontMetrics>
+#include <QMouseEvent>
+#include <functional>
 #include <QPainter>
 #include <QWidget>
 #include <cmath>
@@ -27,8 +29,21 @@ public:
 
     void setPointer(QPointF documentPoint) { pointer_ = documentPoint; hasPointer_ = true; update(); }
     void clearPointer() { hasPointer_ = false; update(); }
+    /// Dragging out of the ruler pulls a guide: press (0), move (1) and release (2), in global coordinates.
+    std::function<void(int phase, QPoint global, Qt::KeyboardModifiers modifiers)> guideDrag;
 
 protected:
+    void mousePressEvent(QMouseEvent* e) override {
+        if (e->button() != Qt::LeftButton || !guideDrag || !session_->hasDocument()) return;
+        dragging_ = true;
+        guideDrag(0, e->globalPosition().toPoint(), e->modifiers());
+    }
+    void mouseMoveEvent(QMouseEvent* e) override { if (dragging_ && guideDrag) guideDrag(1, e->globalPosition().toPoint(), e->modifiers()); }
+    void mouseReleaseEvent(QMouseEvent* e) override {
+        if (!dragging_ || e->button() != Qt::LeftButton) return;
+        dragging_ = false;
+        if (guideDrag) guideDrag(2, e->globalPosition().toPoint(), e->modifiers());
+    }
     void paintEvent(QPaintEvent*) override {
         QPainter p(this);
         p.fillRect(rect(), palette().color(QPalette::Window));
@@ -86,6 +101,7 @@ private:
     Qt::Orientation orientation_;
     QPointF pointer_;
     bool hasPointer_ = false;
+    bool dragging_ = false;
 };
 
 } // namespace app

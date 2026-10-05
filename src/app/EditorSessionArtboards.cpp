@@ -136,6 +136,69 @@ bool EditorSession::deleteSlice(uint32_t id) {
     return true;
 }
 
+// ---- Guides -----------------------------------------------------------------------------------------------
+
+namespace {
+const std::vector<Guide> noGuides;
+}
+
+const std::vector<Guide>& EditorSession::guides() const { return document_ ? document_->guides : noGuides; }
+
+std::optional<int> EditorSession::addGuide(Guide guide) {
+    if (!document_ || document_->guides.size() >= maxGuides || !std::isfinite(guide.position)) return std::nullopt;
+    guide.position = guidePosition(guide.position);
+    beginEdit(QT_TRANSLATE_NOOP("History", "New Guide"));
+    document_->guides.push_back(guide);
+    endEdit();
+    documentRevision_++;
+    emit guidesChanged(); emit historyChanged(); emit titleChanged();
+    return int(document_->guides.size()) - 1;
+}
+
+bool EditorSession::moveGuide(int index, double position) {
+    if (!document_ || index < 0 || size_t(index) >= document_->guides.size() || !std::isfinite(position)) return false;
+    position = guidePosition(position);
+    if (document_->guides[size_t(index)].position == position) return true;
+    beginEdit(QT_TRANSLATE_NOOP("History", "Move Guide"));
+    document_->guides[size_t(index)].position = position;
+    endEdit();
+    documentRevision_++;
+    emit guidesChanged(); emit historyChanged(); emit titleChanged();
+    return true;
+}
+
+bool EditorSession::removeGuide(int index) {
+    if (!document_ || index < 0 || size_t(index) >= document_->guides.size()) return false;
+    beginEdit(QT_TRANSLATE_NOOP("History", "Delete Guide"));
+    document_->guides.erase(document_->guides.begin() + index);
+    endEdit();
+    documentRevision_++;
+    emit guidesChanged(); emit historyChanged(); emit titleChanged();
+    return true;
+}
+
+bool EditorSession::clearGuides() {
+    if (!document_ || document_->guides.empty()) return false;
+    beginEdit(QT_TRANSLATE_NOOP("History", "Clear Guides"));
+    document_->guides.clear();
+    endEdit();
+    documentRevision_++;
+    emit guidesChanged(); emit historyChanged(); emit titleChanged();
+    return true;
+}
+
+std::optional<int> EditorSession::guideAt(QPointF p, double tolerance) const {
+    if (!document_) return std::nullopt;
+    std::optional<int> best;
+    double bestDistance = tolerance;
+    for (size_t i = 0; i < document_->guides.size(); i++) {
+        const Guide& g = document_->guides[i];
+        const double d = std::abs((g.vertical() ? p.x() : p.y()) - g.position);
+        if (d <= bestDistance) { bestDistance = d; best = int(i); }
+    }
+    return best;
+}
+
 std::shared_ptr<Image> EditorSession::renderRect(const QRect& rect) const {
     if (!document_) return nullptr;
     const QRect r = rect.intersected(QRect(0, 0, document_->width, document_->height));
