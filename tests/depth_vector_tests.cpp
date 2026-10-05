@@ -395,4 +395,46 @@ TEST_CASE(a_sixteen_bit_style_keeps_a_smooth_ramp_smooth) {
     CHECK(levels.size() > 500);   // 65 levels at 8 bits
 }
 
+// The view at a quarter size draws from the layers' level-2 mips. With a mip budget too small for the level-1
+// steps as well (a large 16-bit document at fit zoom), those steps are released and the view is unchanged; and it
+// stays within a fraction of an 8-bit level of a box downscale of the 1:1 render.
+TEST_CASE(deep_reduced_view_keeps_its_mips_under_a_tight_budget) {
+    Document doc = backdrop();
+    for (int i = 0; i < 3; i++) {
+        Layer layer(Asset::make(base(W, H), "Copy"), Point(0, 0));
+        layer.opacity = 0.4 + 0.1 * i;
+        doc.layers.push_back(layer);
+    }
+    const Document deep = sixteen(doc);
+    RenderOptions options;
+    options.region = {0, 0, double(W), double(H)};
+    options.scale = 0.25;
+    MipCache& cache = MipCache::shared();
+    const size_t previous = cache.budget();
+    cache.clear();
+    Image16 roomy;
+    render16(deep, options, roomy);
+    // Each layer's level 2 fits, level 1 beside it does not.
+    const size_t level2 = size_t((W / 4) * (H / 4)) * 4 * sizeof(uint16_t), level1 = level2 * 4;
+    cache.clear();
+    cache.setBudget(deep.layers.size() * level2 + level1);
+    Image16 tight;
+    render16(deep, options, tight);
+    CHECK(tight == roomy);
+    CHECK(cache.bytesUsed() <= cache.budget());
+    Image16 again;
+    render16(deep, options, again);
+    CHECK(again == roomy);
+    cache.setBudget(previous);
+    cache.clear();
+    Image16 whole;
+    render16(deep, {}, whole);
+    const auto box = boxResizeImage(whole, roomy.width(), roomy.height());
+    int worst = 0;
+    for (int y = 0; y < roomy.height(); y++)
+        for (int x = 0; x < roomy.width(); x++)
+            for (int c = 0; c < 4; c++) worst = std::max(worst, std::abs(int(roomy.pixel(x, y)[c]) - int(box->pixel(x, y)[c])));
+    CHECK(worst <= 64);   // under half an 8-bit level (128 in 0..32768)
+}
+
 TEST_MAIN()

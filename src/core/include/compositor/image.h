@@ -134,7 +134,10 @@ void unpremultiply(Image& image);
 
 /// Power-of-two reductions of an image, built on demand and cached by image identity. The cache holds
 /// only weak references to the sources; the reductions it keeps are bounded by a byte budget (the Mac
-/// caps its cache at 400 MB), the least recently used going first.
+/// caps its cache at 400 MB). Over budget, the levels that only served to build a deeper one are released
+/// first (an image drawn at fit zoom keeps its level 2 or 3, not the level 1 that is four times larger),
+/// least recently used image first, and only then whole images, the least recently used going first.
+/// A released level is rebuilt from the nearest one kept when asked for again, to the same pixels.
 class MipCache {
 public:
     static MipCache& shared();
@@ -173,10 +176,17 @@ private:
     template <typename Img>
     struct Entry {
         std::weak_ptr<const Img> source;
-        std::vector<std::shared_ptr<const Img>> levels;   // level k at index k - 1
+        std::vector<std::shared_ptr<const Img>> levels;   // level k at index k - 1; null once released
         size_t bytes = 0;
         uint64_t lastUse = 0;
+        int wanted = 0;   // the level last asked for: the levels below it are intermediates
     };
+    template <typename Img>
+    static bool hasIntermediate(const Entry<Img>& e);
+    template <typename Img>
+    void dropIntermediates(Entry<Img>& e);
+    template <typename Img>
+    void refreshWithGaps(Entry<Img>& e, const Img* image, int channels, int x0, int y0, int x1, int y1);
     template <typename Img>
     std::shared_ptr<const Img> levelOf(std::vector<Entry<Img>>& entries, const std::shared_ptr<const Img>& image, int level);
     template <typename Img>

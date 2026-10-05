@@ -1,6 +1,7 @@
 // The fixed-point samplers against their float formulas, the separable resample against exact cases,
 // the vectorised halving against the scalar one, and the mip cache's budget.
 #include "check.h"
+#include "compositor/depth.h"
 #include "compositor/resample.h"
 #include "compositor/render.h"
 #include "compositor/warp.h"
@@ -225,6 +226,92 @@ TEST_CASE(mip_cache_keeps_a_budget_and_no_sources) {
     a.reset(); a1.reset();
     (void)cache.level(b, 2);
     CHECK(watch.expired());
+    cache.setBudget(previous);
+    cache.clear();
+}
+
+namespace {
+template <typename Img>
+std::shared_ptr<const Img> chainLevel(const Img& image, int level) {
+    std::shared_ptr<const Img> out;
+    for (int i = 0; i < level; i++) out = halveImage(out ? *out : image);
+    return out;
+}
+template <typename Img, typename Fill>
+std::vector<std::shared_ptr<Img>> mipSources(int count, int w, int h, int channels, Fill fill) {
+    std::vector<std::shared_ptr<Img>> out;
+    for (int i = 0; i < count; i++) {
+        auto img = std::make_shared<Img>(w, h, channels);
+        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) for (int c = 0; c < channels; c++) img->pixel(x, y)[c] = fill(x, y, c, i);
+        out.push_back(img);
+    }
+    return out;
+}
+// Several images drawn at a quarter size with a budget that holds their level 2 but not level 1 too: the level-1
+// steps are released, not the images, so every level 2 stays cached (the same pointer each time) and matches the
+// plain halving chain. A write to a source then refreshes level 2 through the released level exactly.
+template <typename Img, typename Fill>
+void checkIntermediatesReleased(int channels, Fill fill) {
+    MipCache& cache = MipCache::shared();
+    cache.clear();
+    const size_t previous = cache.budget();
+    const int w = 203, h = 147, count = 4;   // odd sizes: the clamped edges
+    auto sources = mipSources<Img>(count, w, h, channels, fill);
+    const size_t level2 = chainLevel<Img>(*sources[0], 2)->byteCount();
+    const size_t level1 = chainLevel<Img>(*sources[0], 1)->byteCount();
+    cache.setBudget(count * level2 + level1 + level1 / 2);
+    std::vector<std::shared_ptr<const Img>> first;
+    for (int pass = 0; pass < 3; pass++)
+        for (int i = 0; i < count; i++) {
+            auto got = cache.level(std::shared_ptr<const Img>(sources[size_t(i)]), 2);
+            REQUIRE(got);
+            if (pass == 0) first.push_back(got);
+            else CHECK(got == first[size_t(i)]);   // kept, not rebuilt
+            CHECK(*got == *chainLevel<Img>(*sources[size_t(i)], 2));
+        }
+    CHECK(cache.bytesUsed() <= cache.budget());
+    // A stroke's write in place under the same pointer, refreshed through the released level 1.
+    Img& target = *sources[1];
+    for (int y = 30; y < 101; y++) for (int x = 51; x < w; x++) for (int c = 0; c < channels; c++) target.pixel(x, y)[c] = fill(x * 3, y + 7, c, 9);
+    cache.refresh(&target, 51, 30, w, 101);
+    auto refreshed = cache.level(std::shared_ptr<const Img>(sources[1]), 2);
+    CHECK(refreshed == first[1]);
+    CHECK(*refreshed == *chainLevel<Img>(target, 2));
+    // Level 1 asked for again is rebuilt to the same pixels.
+    auto again = cache.level(std::shared_ptr<const Img>(sources[1]), 1);
+    CHECK(*again == *chainLevel<Img>(target, 1));
+    cache.setBudget(previous);
+    cache.clear();
+}
+}
+
+TEST_CASE(mip_cache_releases_intermediate_levels_first) {
+    checkIntermediatesReleased<Image16>(4, [](int x, int y, int c, int i) { return uint16_t(c == 3 ? 32768 : (x * 977 + y * 131 + c * 4099 + i * 7) % 32769); });
+    checkIntermediatesReleased<Image16>(5, [](int x, int y, int c, int i) { return uint16_t(c == 4 ? 32768 - (x % 5) : (x * 311 + y * 733 + c * 97 + i) % 32769); });
+    checkIntermediatesReleased<ImageC8>(5, [](int x, int y, int c, int i) { return uint8_t((x * 37 + y * 11 + c * 50 + i) % 256); });
+    checkIntermediatesReleased<ImageF>(4, [](int x, int y, int c, int i) { return float((x * 7 + y * 3 + c + i) % 101) / 37.0f; });
+}
+
+TEST_CASE(mip_cache_releases_intermediate_8bit_levels_first) {
+    MipCache& cache = MipCache::shared();
+    cache.clear();
+    const size_t previous = cache.budget();
+    std::vector<std::shared_ptr<Image>> sources;
+    for (int i = 0; i < 4; i++) sources.push_back(std::make_shared<Image>(busy(301, 211, unsigned(i + 3))));
+    const size_t level2 = reduceImage(*sources[0], 2)->byteCount(), level1 = reduceImage(*sources[0], 1)->byteCount();
+    cache.setBudget(4 * level2 + level1 + level1 / 2);
+    std::vector<ImagePtr> first;
+    for (int pass = 0; pass < 2; pass++)
+        for (size_t i = 0; i < sources.size(); i++) {
+            ImagePtr got = cache.level(ImagePtr(sources[i]), 2);
+            if (pass == 0) first.push_back(got);
+            else CHECK(got == first[i]);
+            CHECK_EQ(worstDifference(*got, *reduceImage(*sources[i], 2)), 0);
+        }
+    Image& target = *sources[2];
+    for (int y = 17; y < 140; y++) for (int x = 9; x < 77; x++) { uint8_t* p = target.pixel(x, y); p[0] = uint8_t(x); p[1] = uint8_t(y); p[2] = uint8_t(x ^ y); p[3] = 255; }
+    cache.refresh(&target, 9, 17, 77, 140);
+    CHECK_EQ(worstDifference(*cache.level(ImagePtr(sources[2]), 2), *reduceImage(target, 2)), 0);
     cache.setBudget(previous);
     cache.clear();
 }

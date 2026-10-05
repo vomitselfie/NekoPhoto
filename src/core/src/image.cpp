@@ -1,3 +1,4 @@
+#include <functional>
 #include "compositor/image.h"
 #include "compositor/depth.h"
 #include "compositor/parallel.h"
@@ -357,6 +358,15 @@ std::shared_ptr<GrayImage> reduceGray(const GrayImage& image, int level) {
     return out;
 }
 
+namespace {
+template <typename Img>
+std::shared_ptr<const Img> halveMip(const Img& last) {
+    if constexpr (std::is_same_v<Img, GrayImage> || std::is_same_v<Img, GrayImageT<SampleType::U16>> || std::is_same_v<Img, GrayImageT<SampleType::F32>>)
+        return halveGray(last);
+    else return halveImage(last);
+}
+}
+
 template <typename Img>
 std::shared_ptr<const Img> MipCache::levelOf(std::vector<Entry<Img>>& entries, const std::shared_ptr<const Img>& image, int level) {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -367,25 +377,92 @@ std::shared_ptr<const Img> MipCache::levelOf(std::vector<Entry<Img>>& entries, c
     }
     Entry<Img>* entry = nullptr;
     for (auto& e : entries) if (e.source.lock() == image) { entry = &e; break; }
-    if (!entry) { entries.push_back({image, {}, 0, 0}); entry = &entries.back(); }
+    if (!entry) { entries.push_back({image, {}, 0, 0, 0}); entry = &entries.back(); }
     entry->lastUse = ++clock_;
-    while (int(entry->levels.size()) < level) {
-        const Img& last = entry->levels.empty() ? *image : *entry->levels.back();
-        if (last.width() <= 1 && last.height() <= 1) break;
-        std::shared_ptr<const Img> next;
-        if constexpr (std::is_same_v<Img, Image>) next = halveImage(last);
-        else if constexpr (std::is_same_v<Img, GrayImage>) next = halveGray(last);
-        else if constexpr (std::is_same_v<Img, Image16>) next = halveImage(last);
-        else if constexpr (std::is_same_v<Img, ImageF>) next = halveImage(last);
-        else if constexpr (std::is_same_v<Img, ImageC8>) next = halveImage(last);
-        else next = halveGray(last);
-        entry->bytes += next->byteCount();
-        used_ += next->byteCount();
-        entry->levels.push_back(next);
+    if (level <= 0) return image;
+    auto& levels = entry->levels;
+    if (level > int(levels.size()) || !levels[size_t(level - 1)]) {
+        // Built from the nearest level held above it (a released one is rebuilt by the same halvings, so to the same
+        // pixels); the steps between are kept until the budget wants them back.
+        int from = std::min(level - 1, int(levels.size()));
+        while (from > 0 && !levels[size_t(from - 1)]) from--;
+        for (int k = from + 1; k <= level; k++) {
+            const Img& above = k == 1 ? *image : *levels[size_t(k - 2)];
+            if (above.width() <= 1 && above.height() <= 1) break;
+            std::shared_ptr<const Img> next = halveMip(above);
+            entry->bytes += next->byteCount();
+            used_ += next->byteCount();
+            if (k <= int(levels.size())) levels[size_t(k - 1)] = next;
+            else levels.push_back(next);
+        }
     }
-    std::shared_ptr<const Img> result = entry->levels.empty() ? image : entry->levels[size_t(std::min(level, int(entry->levels.size())) - 1)];
+    int have = std::min(level, int(levels.size()));
+    while (have > 0 && !levels[size_t(have - 1)]) have--;   // only when the chain ends at 1x1 before a released level
+    entry->wanted = have;
+    std::shared_ptr<const Img> result = have == 0 ? image : levels[size_t(have - 1)];
     enforceBudget(entry->lastUse);
     return result;
+}
+
+template <typename Img>
+bool MipCache::hasIntermediate(const Entry<Img>& e) {
+    for (int k = 1; k < e.wanted && k <= int(e.levels.size()); k++) if (e.levels[size_t(k - 1)]) return true;
+    return false;
+}
+
+template <typename Img>
+void MipCache::dropIntermediates(Entry<Img>& e) {
+    for (int k = 1; k < e.wanted && k <= int(e.levels.size()); k++) {
+        auto& slot = e.levels[size_t(k - 1)];
+        if (!slot) continue;
+        e.bytes -= slot->byteCount();
+        used_ -= slot->byteCount();
+        slot.reset();
+    }
+}
+
+template <typename Img>
+void MipCache::refreshWithGaps(Entry<Img>& e, const Img* image, int channels, int x0, int y0, int x1, int y1) {
+    // Some levels were released: a held level's pixel is the chain of rounded 2x2 means taken through the released
+    // ones, so each is worked out from the nearest held level above it (the same sums in the same order).
+    using Sample = std::remove_cv_t<std::remove_pointer_t<decltype(image->row(0))>>;
+    const int n = int(e.levels.size());
+    std::vector<const Img*> held(size_t(n) + 1, nullptr);
+    std::vector<int> widths(size_t(n) + 1), heights(size_t(n) + 1);
+    held[0] = image; widths[0] = image->width(); heights[0] = image->height();
+    for (int k = 1; k <= n; k++) {
+        held[size_t(k)] = e.levels[size_t(k - 1)].get();
+        widths[size_t(k)] = (widths[size_t(k - 1)] + 1) / 2;
+        heights[size_t(k)] = (heights[size_t(k - 1)] + 1) / 2;
+    }
+    // sample(k, x, y, c): level k's value at (x, y), its sources clamped to the level above's edge as halveImage clamps.
+    // `upTo` hides the level being written so its value comes from above.
+    auto sample = [&](auto&& self, int k, int x, int y, int c, int upTo) -> Sample {
+        if (k < upTo && held[size_t(k)]) return held[size_t(k)]->row(y)[x * channels + c];
+        if (k == 0) return image->row(y)[x * channels + c];
+        const int sw = widths[size_t(k - 1)], sh = heights[size_t(k - 1)];
+        const int xa = std::min(2 * x, sw - 1), xb = std::min(2 * x + 1, sw - 1);
+        const int ya = std::min(2 * y, sh - 1), yb = std::min(2 * y + 1, sh - 1);
+        const Sample a = self(self, k - 1, xa, ya, c, upTo), b = self(self, k - 1, xb, ya, c, upTo);
+        const Sample p = self(self, k - 1, xa, yb, c, upTo), q = self(self, k - 1, xb, yb, c, upTo);
+        if constexpr (std::is_floating_point_v<Sample>) return (a + b + p + q) * 0.25f;
+        else return Sample((uint32_t(a) + b + p + q + 2) / 4);
+    };
+    for (int k = 1; k <= n; k++) {
+        x0 = x0 / 2; y0 = y0 / 2; x1 = (x1 + 1) / 2; y1 = (y1 + 1) / 2;
+        x1 = std::min(x1, widths[size_t(k)]); y1 = std::min(y1, heights[size_t(k)]);
+        if (x0 >= x1 || y0 >= y1) break;
+        if (!held[size_t(k)]) continue;
+        Img& level = const_cast<Img&>(*held[size_t(k)]);
+        const int rx0 = x0, rx1 = x1;
+        parallelRows(y0, y1, [&](int ya, int yb) {
+            for (int y = ya; y < yb; y++) {
+                Sample* o = level.row(y);
+                for (int x = rx0; x < rx1; x++)
+                    for (int c = 0; c < channels; c++) o[x * channels + c] = sample(sample, k, x, y, c, k);
+            }
+        }, 16);
+    }
 }
 
 template <typename Img>
@@ -395,6 +472,7 @@ void MipCache::refreshOf(std::vector<Entry<Img>>& entries, const Img* image, int
     for (auto& e : entries) {
         auto source = e.source.lock();
         if (source.get() != image) continue;
+        for (const auto& l : e.levels) if (!l) { refreshWithGaps(e, image, channels, x0, y0, x1, y1); return; }
         const Img* above = image;
         for (auto& levelPtr : e.levels) {
             // The level's pixels whose 2x2 sources overlap the changed rect, the same rounded mean halveImage takes.
@@ -435,6 +513,7 @@ void MipCache::refreshOf16(std::vector<Entry<Img>>& entries, const Img* image, i
     for (auto& e : entries) {
         auto source = e.source.lock();
         if (source.get() != image) continue;
+        for (const auto& l : e.levels) if (!l) { refreshWithGaps(e, image, channels, x0, y0, x1, y1); return; }
         const Img* above = image;
         for (auto& levelPtr : e.levels) {
             // As refreshOf: the level's pixels over the changed rect, the rounded mean halveImage takes at 16 bits.
@@ -510,6 +589,20 @@ GrayFPtr MipCache::level(const GrayFPtr& image, int level) {
 }
 
 void MipCache::enforceBudget(uint64_t keep) {
+    // First the levels kept only as steps to a deeper one, least recently used image first (the one just used too:
+    // the level it asked for stays).
+    while (used_ > budget_) {
+        uint64_t oldest = UINT64_MAX;
+        std::function<void()> drop;
+        auto consider = [&](auto& entries) {
+            for (auto& e : entries)
+                if (e.lastUse < oldest && hasIntermediate(e)) { oldest = e.lastUse; drop = [this, &e] { dropIntermediates(e); }; }
+        };
+        consider(entries_); consider(grayEntries_); consider(entries16_); consider(grayEntries16_);
+        consider(entriesC8_); consider(entriesF_); consider(grayEntriesF_);
+        if (!drop) break;
+        drop();
+    }
     // The least recently used entries go first; the one just used stays whatever its size.
     while (used_ > budget_) {
         uint64_t oldest = keep;
