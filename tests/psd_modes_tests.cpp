@@ -10,6 +10,7 @@
 #include "compositor/depth.h"
 #include "compositor/document.h"
 #include "compositor/psd.h"
+#include "compositor/psd_carry.h"
 #include "compositor/psd_writer.h"
 #include "compositor/render.h"
 #include <cstdio>
@@ -329,6 +330,23 @@ TEST_CASE(photoshop_cmyk_fixture_opens_as_cmyk) {
         for (int y = 0; y < ps.height(); y++) for (int x = 0; x < ps.width() * 4; x++) sum += std::abs(int(ps.row(y)[x]) - int(ours.row(y)[x]));
         std::printf("  mean difference from Photoshop's merged image: %.2f levels\n", sum / (ps.width() * ps.height() * 4.0));
     }
+}
+
+TEST_CASE(a_cmyk_layers_fingerprint_sees_every_sample) {
+    // What decides that a layer is unchanged since it was read (its stored channels then go back byte for byte) sees
+    // every sample: an 8-bit CMYK layer's (once always 0, so an edit was written as the pixels first read) and the last
+    // fifth of a 16-bit CMYK layer's rows.
+    auto c8 = std::make_shared<ImageC8>(8, 4, 5);
+    const uint64_t blank = psdContentHash(AnyImage(ImageC8Ptr(c8)));
+    CHECK(blank != 0);
+    auto painted = std::make_shared<ImageC8>(*c8);
+    painted->pixel(2, 1)[3] = 9;
+    CHECK(psdContentHash(AnyImage(ImageC8Ptr(painted))) != blank);
+    auto deep = std::make_shared<Image16>(10, 2, 5);
+    const uint64_t before = psdContentHash(AnyImage(Image16Ptr(deep)));
+    auto edited = std::make_shared<Image16>(*deep);
+    edited->pixel(9, 1)[4] = 77;   // the last pixel's alpha: past four fifths of the row
+    CHECK(psdContentHash(AnyImage(Image16Ptr(edited))) != before);
 }
 
 TEST_MAIN()

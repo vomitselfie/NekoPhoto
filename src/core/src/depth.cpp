@@ -242,7 +242,8 @@ PixelBounds nonzeroBounds(const Gray16& image) {
     return b;
 }
 
-uint64_t contentHash(const Image16* image) { return hashSamples(image, 4); }
+// Every sample a pixel holds (5 in CMYK).
+uint64_t contentHash(const Image16* image) { return image ? hashSamples(image, image->channels()) : 0; }
 uint64_t contentHash(const Gray16* image) { return hashSamples(image, 1); }
 
 AnyImage imageAtDepth(const AnyImage& image, SampleType type) {
