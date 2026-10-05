@@ -3,6 +3,7 @@
 // document's mode, the adjustment layers drawn in these modes, and the entry points: the canvas's display (never
 // without a colour transform, since a CMYK or Lab buffer is not RGB), the native render, and RGB for 16-bit exports.
 #include "render_modes.h"
+#include "edge_interior.h"
 #include "compositor/adjustments.h"
 #include "compositor/modeedit.h"
 #include "compositor/parallel.h"
@@ -192,6 +193,8 @@ void ModeOps<S, M>::drawLayer(const Params& params, const Rect& region, double s
             const Sample* covRow = coverage ? coverage->row(y) : nullptr;
             const Sample* placedRow = placedMask ? placedMask->row(y) : nullptr;
             Point p = m.outputToPixel.apply({xBegin + 0.5, y + 0.5});
+            int interiorFrom = xBegin, interiorTo = xBegin;
+            if (!nearest) edgeInterior(p, dp, sx, sy, pw, ph, xBegin, xEnd - xBegin, interiorFrom, interiorTo);
             bool any = false;
             for (int x = xBegin; x < xEnd; x++, p = p + dp) {
                 const size_t i = size_t(x - xBegin);
@@ -199,6 +202,8 @@ void ModeOps<S, M>::drawLayer(const Params& params, const Rect& region, double s
                 float edge;
                 if (nearest) {
                     if (p.x < 0 || p.x >= pw || p.y < 0 || p.y >= ph) continue;
+                    edge = 1;
+                } else if (x >= interiorFrom && x < interiorTo) {
                     edge = 1;
                 } else {
                     const double ex = std::min(p.x, pw - p.x) / std::max(1e-9, sx), ey = std::min(p.y, ph - p.y) / std::max(1e-9, sy);
