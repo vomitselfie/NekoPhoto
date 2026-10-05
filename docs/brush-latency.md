@@ -174,3 +174,41 @@ Over budget the cache now releases the levels kept only as steps to a deeper one
 so the cost follows the view again. The reductions are the same pixels (a released level is rebuilt, and a stroke's
 refresh worked through, by the same halvings), so the view is unchanged and peak memory is the same. A deep
 document still costs about twice an 8-bit one at the same view size: that is the 16-bit compositing itself.
+
+### Where a deep document's time went
+
+Profiled with `perf` on one core over the whole `--bench-adjust` run (3840 × 2160, five layers, fit). In 8-bit RGB
+the Catmull-Rom point sampler takes about 45 % of the time. At 16 bits it took 71 %, because it summed each channel
+in 64-bit scalars. CMYK and Lab layers use the bilinear sampler, which ran its 4 or 5 samples one float at a time.
+16-bit Normal compositing ran in 64-bit scalars too. 16-bit drawing worked out the edge antialias with two divisions
+for every pixel, where 8-bit skips that inside the layer. On each slider tick, Levels, Curves, Exposure and similar
+adjustments filled three 32769-entry tables on a single thread. In 16-bit CMYK, turning the frame into the screen's
+RGB took over 40 % of the time: Little CMS's float pipeline (per-pixel tone curves with `pow`, a 4-D CLUT).
+
+The changes below leave every output bit unchanged; render_hash_tests, brush parity and the golden tests pass as
+they are.
+
+| Change | Instructions, whole run (16 RGB / CMYK / Lab) |
+|---|---|
+| Before | 145.6 G / 121.4 G / 150.1 G |
+| 16-bit bicubic in 32-bit lanes (each row's sum split into high and low halves, recombined exactly) | 92.1 G / 121.2 G / — |
+| CMYK/Lab bilinear: four samples in float lanes, same operation order | — / 115.3 G / 136.8 G |
+| 16-bit Normal source-over in 32-bit lanes; skip the edge formula inside the layer (with a 1/1000 px margin) | 81.7 G / 110.9 G / 133.7 G |
+| 16-bit adjustment tables filled on the pool | the same count, off the critical path |
+
+Medians (ms; best of three runs on a shared machine, 1400 × 900 offscreen):
+
+| Document | View before | View after | Levels tick before | Levels tick after | Exposure tick before | Exposure tick after |
+|---|---:|---:|---:|---:|---:|---:|
+| 8-bit RGB | 8.2 | 8.4 | 6.9 | 7.1 | 7.1 | 7.1 |
+| 16-bit RGB | 17.1 | 11.1 | 24.0 | 12.5 | 26.5 | 12.5 |
+| 16-bit CMYK | 29.7 | 26.5 | 32.1 | 28.2 | — | — |
+| 16-bit Lab | 23.0 | 18.6 | 24.1 | 20.6 | 23.5 | 20.8 |
+
+16-bit RGB is now within about 1.5× of 8-bit, which is roughly what twice the bytes costs. CMYK and Lab are still
+about 2.5–3× slower, and the extra time is the display conversion. An 8-bit CMYK frame goes through Little CMS's
+precalculated 8-bit grid. A 16-bit frame goes through the exact float pipeline, chosen for precision, and that is
+roughly 1000 instructions a pixel. A per-thread memo keyed on the pixel's samples gained nothing on photo-like
+content and was dropped. Closing the gap would need a design change, such as a precalculated 16-bit display grid,
+which changes the displayed bytes, or splitting the pipeline so the final 8-bit tone curve becomes a threshold lookup.
+Either one changes what the screen shows, so it was left alone. 32-bit was not changed.

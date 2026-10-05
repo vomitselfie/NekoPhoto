@@ -3,6 +3,7 @@
 // render_deep.inc). In a file of their own so the 8-bit renderer (render.cpp) compiles as it did.
 #include "compositor/render.h"
 #include "render_plan.h"
+#include "edge_interior.h"
 #include "render_deep.inc"
 #include "compositor/blend.h"
 #include "compositor/colormgmt.h"
@@ -194,6 +195,8 @@ void drawLayer(const DrawParams16& params, const Rect& region, double scale, con
             const uint16_t* covRow = coverage ? coverage->row(y) : nullptr;
             const uint16_t* placedRow = placedMask ? placedMask->row(y) : nullptr;
             Point p = m.outputToPixel.apply({xBegin + 0.5, y + 0.5});
+            int interiorFrom = xBegin, interiorTo = xBegin;
+            if (!nearest) edgeInterior(p, dp, sx, sy, pw, ph, xBegin, xEnd - xBegin, interiorFrom, interiorTo);
             bool any = false;
             for (int x = xBegin; x < xEnd; x++, p = p + dp) {
                 const size_t i = size_t(x - xBegin);
@@ -201,6 +204,8 @@ void drawLayer(const DrawParams16& params, const Rect& region, double scale, con
                 float edge;
                 if (nearest) {
                     if (p.x < 0 || p.x >= pw || p.y < 0 || p.y >= ph) continue;
+                    edge = 1;
+                } else if (x >= interiorFrom && x < interiorTo) {
                     edge = 1;
                 } else {
                     const double ex = std::min(p.x, pw - p.x) / std::max(1e-9, sx), ey = std::min(p.y, ph - p.y) / std::max(1e-9, sy);

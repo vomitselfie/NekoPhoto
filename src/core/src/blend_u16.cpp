@@ -16,6 +16,7 @@
 // make, which are taken on the pixels rounded to 8 bits.
 #include "compositor/blend.h"
 #include "compositor/depth.h"
+#include "compositor/simd.h"
 #include <algorithm>
 #include <cmath>
 
@@ -55,6 +56,7 @@ inline void compositeNormal16(const uint16_t* src, u64 k, uint16_t* dst) {
     const u64 sa = (src[3] * k + ONE / 2) >> 15;
     if (sa == 0) return;
     const u64 inv = ONE - sa;
+    if (k <= ONE && sa <= ONE) { simd::sourceOver16(src, uint32_t(k), uint32_t(inv), dst, uint32_t(ONE)); return; }
     for (int c = 0; c < 4; c++) dst[c] = uint16_t(std::min<u64>(ONE, ((src[c] * k + ONE / 2) >> 15) + ((dst[c] * inv + ONE / 2) >> 15)));
 }
 
