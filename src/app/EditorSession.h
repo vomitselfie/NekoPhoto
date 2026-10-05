@@ -541,11 +541,19 @@ public:
 
     // Clipboard
     bool canCopyPixels() const;
-    void copySelection();
-    void copyMerged();
-    void cutSelection();
+    /// Edit > Copy, Copy Merged and Cut of pixels (pixels.copy, pixels.copyMerged, pixels.cut): false when there
+    /// was nothing to copy. The system clipboard gets them at 8 bits, sRGB.
+    bool copySelection();
+    bool copyMerged();
+    bool cutSelection();
     bool canPaste() const;
+    /// Edit > Paste: copied layers (pasteLayers) when the layer clipboard holds them, else pixels (pastePixels).
     void paste();
+    /// Pixels copied here or by another app, as a new layer (or into the one channel being edited), converted to
+    /// the document's mode, profile and depth; false (with the reason in `error` when there is one) if nothing was
+    /// pasted.
+    bool pastePixels(QString* error = nullptr);
+    bool hasPixelsToPaste() const;
     /// Edit > Copy with layers selected and no selection (EditorSessionClipboard.cpp): the selected layers and
     /// folders, with everything they hold, go to the layer clipboard every tab shares; other apps get them
     /// flattened. Paste in any document inserts them above the active layer, one undo step, converted to its

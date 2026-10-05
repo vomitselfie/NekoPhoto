@@ -840,6 +840,26 @@ def pixels_clear() -> str:
     return text(call("pixels.clear"))
 
 
+@outside("Copy pixels")
+def pixels_copy(merged: bool = False) -> str:
+    """Edit > Copy: the active layer's pixels inside the selection (all of them without one) to the clipboard;
+    merged=true is Copy Merged, every visible layer. Other apps get them at 8 bits, sRGB. pixels_paste puts them back."""
+    return text(call("pixels.copyMerged" if merged else "pixels.copy"))
+
+
+@edit("Cut pixels")
+def pixels_cut() -> str:
+    """Edit > Cut: copy the selected pixels of the active layer to the clipboard and clear them (needs a selection)."""
+    return text(call("pixels.cut"))
+
+
+@edit("Paste pixels")
+def pixels_paste() -> str:
+    """Edit > Paste of pixels (from pixels_copy, pixels_cut or another app) as a new layer above the active one, where
+    they were copied from or centred, converted to the document's mode, profile and depth; one undo step."""
+    return text(call("pixels.paste"))
+
+
 @edit("Invert colours")
 def pixels_invert() -> str:
     """Invert the active layer's colours."""
@@ -1164,7 +1184,7 @@ def selection_from_layer(id: str, mask: bool = False, mode: str = "replace") -> 
 
 @edit("Modify the selection")
 def selection_edit(action: str, amount: float = 0) -> str:
-    """action all, none, invert, grow (by amount pixels; negative contracts), feather (Gaussian of that radius), smooth (disc majority of that radius) or border (a band that wide)."""
+    """action all, none, invert, reselect (the selection last dropped, back), grow (by amount pixels; negative contracts), feather (Gaussian of that radius), smooth (disc majority of that radius) or border (a band that wide)."""
     if action == "grow":
         return text(call("selection.grow", amount=int(amount)))
     if action == "feather":

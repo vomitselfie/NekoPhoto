@@ -201,6 +201,7 @@ const QHash<QString, const char*>& depthFeatures() {
         {"brush.stroke", "tool.brush"}, {"pixels.bucket", "tool.paintBucket"}, {"pixels.patch", "tool.patch"}, {"color.sample", "tool.eyedropper"}, {"gradient.draw", "tool.gradient"},
         {"layers.merge", "layers.merge"},
         {"layers.copy", "edit.clipboard"}, {"layers.paste", "edit.clipboard"},
+        {"pixels.copy", "edit.clipboard"}, {"pixels.copyMerged", "edit.clipboard"}, {"pixels.cut", "edit.clipboard"}, {"pixels.paste", "edit.clipboard"}, {"selection.reselect", "edit.selection"},
         {"text.set", "edit.text"}, {"text.styleRange", "edit.text"}, {"text.toPath", "edit.text"}, {"text.toShape", "edit.paint"},
         {"shape.draw", "edit.paint"}, {"shape.set", "edit.paint"}, {"paths.fill", "edit.paint"}, {"paths.stroke", "edit.paint"}, {"paths.toShape", "edit.paint"},
         {"paths.set", "edit.vector"}, {"paths.select", "edit.vector"}, {"paths.delete", "edit.vector"}, {"paths.addAnchor", "edit.vector"},

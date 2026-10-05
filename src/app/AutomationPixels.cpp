@@ -272,6 +272,33 @@ void AutomationServer::registerPixelsHandlers() {
     });
     add("pixels.clear", [session, document](const QJsonObject&) {
         refuseSmartObject(session()); document(); session()->clearSelectionPixels(); return QJsonObject{}; });
+    // The pixel clipboard: Edit > Copy, Copy Merged, Cut and Paste. Other apps get the pixels at 8 bits, sRGB; a
+    // paste converts them to the document's mode, profile and depth.
+    add("pixels.copy", [session, document](const QJsonObject&) {
+        document();
+        if (!session()->copySelection()) fail("nothing to copy: select a layer with pixels (or its mask), and pixels of it with the selection");
+        return QJsonObject{{"copied", true}};
+    });
+    add("pixels.copyMerged", [session, document](const QJsonObject&) {
+        document();
+        if (!session()->copyMerged()) fail("nothing to copy: the selection is empty");
+        return QJsonObject{{"copied", true}};
+    });
+    add("pixels.cut", [session, document](const QJsonObject&) {
+        refuseSmartObject(session());
+        document();
+        if (!session()->cutSelection()) fail("nothing to cut: make a selection on a layer with pixels");
+        return QJsonObject{{"copied", true}};
+    });
+    add("pixels.paste", [session, document](const QJsonObject&) {
+        document();
+        EditorSession* s = session();
+        if (!s->hasPixelsToPaste()) fail("no pixels are on the clipboard (pixels.copy puts them there; layers.paste pastes copied layers)");
+        QString why;
+        if (!s->pastePixels(&why)) fail(why.isEmpty() ? QStringLiteral("the pixels could not be pasted here") : why);
+        const Layer* l = s->activeLayer();
+        return l ? layerJson(*l, 0) : QJsonObject{};
+    });
     add("pixels.contentAwareFill", [session, document](const QJsonObject& p) {
         refuseSmartObject(session());
         const Document& d = document();

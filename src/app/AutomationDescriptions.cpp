@@ -271,6 +271,10 @@ const MethodDoc methodDocs[] = {
     {"pixels.invert", "Invert the active layer's colours inside the selection.", ""},
     {"pixels.fill", "Fill the selection (or the whole layer) with a colour.", "color:color=#000000 The colour"},
     {"pixels.clear", "Clear the selection (or the whole layer) to transparent.", ""},
+    {"pixels.copy", "Edit > Copy: the active layer's pixels (or its mask's) inside the selection, or all of them, to the clipboard; other apps get them at 8 bits, sRGB. layers.copy copies whole layers.", ""},
+    {"pixels.copyMerged", "Edit > Copy Merged: every visible layer's pixels inside the selection (or the whole canvas) to the clipboard.", ""},
+    {"pixels.cut", "Edit > Cut: copy the selected pixels of the active layer to the clipboard and clear them (needs a selection).", ""},
+    {"pixels.paste", "Edit > Paste of pixels: what pixels.copy, pixels.cut or another app put on the clipboard, as a new layer above the active one (where they were copied from, or centred), converted to the document's mode, profile and depth; into the channel being edited when one is. Drops the selection. Answers the active layer.", ""},
     {"pixels.contentAwareFill", "Content-Aware Fill: fill the selection from its surroundings (needs a selection).",
      "sampling:(auto|all|custom)=auto Where it copies from: around the selection, anywhere on the layer, or the include/exclude rectangles; "
      "include:array Custom: rectangles {x, y, width, height} to copy from (none: the whole canvas); exclude:array Custom: rectangles never copied from; "
@@ -296,6 +300,7 @@ const MethodDoc methodDocs[] = {
     {"selection.all", "Select the whole canvas.", ""},
     {"selection.none", "Deselect.", ""},
     {"selection.invert", "Invert the selection.", ""},
+    {"selection.reselect", "Select > Reselect: bring back the last selection after it was dropped (on the same canvas, at the same depth).", ""},
     {"selection.quickMask", "Quick Mask: the selection as a mask to paint (brush.stroke with mask true, white selects; gradients, fills and filters too), then back.",
      "on:bool Enter (true) or leave (false, the mask becoming the selection); left out, it toggles"},
     {"selection.rect", "Select a rectangle or ellipse.",

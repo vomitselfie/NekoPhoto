@@ -323,33 +323,36 @@ QImage clipboardImage(const AnyImage& image, const TransferCurve& curve) {
 
 } // namespace
 
-void EditorSession::copySelection() {
-    if (refusedAtDepth("edit.clipboard", tr("Editing pixels"))) return;
-    if (!canCopyPixels()) return;
+bool EditorSession::copySelection() {
+    if (refusedAtDepth("edit.clipboard", tr("Editing pixels"))) return false;
+    if (!canCopyPixels()) return false;
     auto copied = renderSelectedPixels(false);
-    if (!copied) return;
+    if (!copied) return false;
     copied->mode = document_->colorMode;
     copied->profile = document_->profile;
     pixelClipboard_ = copied;
     QApplication::clipboard()->setImage(document_->colorMode != ColorMode::RGB ? clipboardImageFor(copied->image) : clipboardImage(copied->image, documentCurve()));
+    return true;
 }
 
-void EditorSession::copyMerged() {
-    if (refusedAtDepth("edit.clipboard", tr("Editing pixels"))) return;
-    if (!canEditLayers() || (document_->selection && document_->selection->isEmpty())) return;
+bool EditorSession::copyMerged() {
+    if (refusedAtDepth("edit.clipboard", tr("Editing pixels"))) return false;
+    if (!canEditLayers() || (document_->selection && document_->selection->isEmpty())) return false;
     auto copied = renderSelectedPixels(true);
-    if (!copied) return;
+    if (!copied) return false;
     copied->mode = document_->colorMode;
     copied->profile = document_->profile;
     pixelClipboard_ = copied;
     QApplication::clipboard()->setImage(document_->colorMode != ColorMode::RGB ? clipboardImageFor(copied->image) : clipboardImage(copied->image, documentCurve()));
+    return true;
 }
 
-void EditorSession::cutSelection() {
-    if (refusedAtDepth("edit.clipboard", tr("Editing pixels"))) return;
-    if (!document_ || !document_->selection || !canCopyPixels()) return;
-    copySelection();
+bool EditorSession::cutSelection() {
+    if (refusedAtDepth("edit.clipboard", tr("Editing pixels"))) return false;
+    if (!document_ || !document_->selection || !canCopyPixels()) return false;
+    if (!copySelection()) return false;
     clearSelectionPixels();
+    return true;
 }
 
 bool EditorSession::canPaste() const {
@@ -357,32 +360,47 @@ bool EditorSession::canPaste() const {
     return pixelClipboard_.has_value() || QApplication::clipboard()->mimeData()->hasImage() || hasLayerClipboard();
 }
 
+bool EditorSession::hasPixelsToPaste() const {
+    if (!document_ || !canEditLayers()) return false;
+    return pixelClipboard_.has_value() || QApplication::clipboard()->mimeData()->hasImage();
+}
+
 void EditorSession::paste() {
     if (refusedAtDepth("edit.clipboard", tr("Editing pixels"))) return;
     if (!canPaste()) return;
     if (hasLayerClipboard()) { QString why; pasteLayers(&why); if (!why.isEmpty()) emit error(why); return; }   // EditorSessionClipboard.cpp
+    QString why;
+    if (!pastePixels(&why) && !why.isEmpty()) emit error(why);
+}
+
+bool EditorSession::pastePixels(QString* errorText) {
+    if (refusedAtDepth("edit.clipboard", tr("Editing pixels"))) return false;
+    if (!hasPixelsToPaste()) return false;
     const QMimeData* mime = QApplication::clipboard()->mimeData();
     QImage external = mime->hasImage() ? qvariant_cast<QImage>(mime->imageData()) : QImage();
+    const std::vector<uint64_t> before = historyRevisions();
+    const QString unconvertible = tr("The pixels could not be converted to this document's colour mode.");
     // Pixels copied here go back exactly where they came from unless another app copied since.
     if (pixelClipboard_ && (!mime->hasImage() || (external.width() == pixelClipboard_->image.width() && external.height() == pixelClipboard_->image.height()))) {
         // With a single channel as the target, the pixels' gray goes into it (EditorSessionChannels.cpp); the gray is
         // read from sRGB when they came from a CMYK or Lab document.
         const PixelClipboard clip = *pixelClipboard_;
         const AnyImage gray = clip.mode == ColorMode::RGB ? clip.image : convertImage(clip.image, clip.mode, clip.profile, ColorMode::RGB, ColorProfile());
-        if (pasteIntoChannels(gray, clip.origin)) return;
+        if (pasteIntoChannels(gray, clip.origin)) return true;
         // Pixels from a document of another mode are converted through the profiles (EditorSessionModes.cpp).
         const AnyImage pixels = pixelsForDocument(clip.image, clip.mode, clip.profile);
-        if (!pixels) { emit error(tr("The pixels could not be converted to this document's colour mode.")); return; }
+        if (!pixels) { if (errorText) *errorText = unconvertible; return false; }
         addPixelLayer(pixels, clip.origin, QT_TRANSLATE_NOOP("History", "Paste"), true);
-        return;
+        return historyRevisions() != before;
     }
-    if (external.isNull()) return;
+    if (external.isNull()) return false;
     QPointF origin(std::floor((document_->width - external.width()) / 2.0), std::floor((document_->height - external.height()) / 2.0));
-    if (pasteIntoChannels(fromQImage(external), origin)) return;
+    if (pasteIntoChannels(fromQImage(external), origin)) return true;
     // Another app's pixels are sRGB: into a CMYK or Lab document through the profiles.
     const AnyImage pixels = pixelsForDocument(fromQImage(external), ColorMode::RGB, ColorProfile());
-    if (!pixels) { emit error(tr("The pixels could not be converted to this document's colour mode.")); return; }
+    if (!pixels) { if (errorText) *errorText = unconvertible; return false; }
     addPixelLayer(pixels, origin, QT_TRANSLATE_NOOP("History", "Paste"), true);
+    return historyRevisions() != before;
 }
 
 void EditorSession::layerViaCopy() {
