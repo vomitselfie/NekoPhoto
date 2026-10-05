@@ -1,3 +1,4 @@
+#include <QSet>
 #include "Autosave.h"
 #include "EditorSession.h"
 #include "compositor/project.h"
@@ -82,18 +83,21 @@ void Autosave::tick() {
         const QString key = entry.key, dir = dir_, title = entry.title ? entry.title() : QString(), original = session->projectPath();
         EditorSession* owner = session;
         pool_.start([this, document, active, key, dir, title, original, owner] {
-            const QString saving = dir + "/" + key + ".saving.comp", final = dir + "/" + key + ".comp";
+            // A crash at any point leaves a whole copy to offer: the new one is written beside the last, the last is
+            // moved aside before the new one takes its name, and only then removed (claimOrphans takes either).
+            const QString saving = dir + "/" + key + ".saving.comp", final = dir + "/" + key + ".comp", previous = dir + "/" + key + ".old.comp";
             QDir(saving).removeRecursively();
             compositor::ProjectError error;
             bool ok = compositor::saveProject(*document, active, saving.toStdString(), error);
             if (ok) {
-                QDir(final).removeRecursively();
-                ok = QDir().rename(saving, final);
-            }
-            if (ok) {
+                // The description first, so even a first copy is offered if the rename is the last thing that happens.
                 QFile meta(dir + "/" + key + ".json");
                 if (meta.open(QIODevice::WriteOnly))
                     meta.write(QJsonDocument(QJsonObject{{"title", title}, {"originalPath", original}, {"saved", QDateTime::currentDateTimeUtc().toString(Qt::ISODate)}}).toJson());
+                QDir(previous).removeRecursively();
+                if (QFileInfo(final).isDir()) ok = QDir().rename(final, previous);
+                if (ok) ok = QDir().rename(saving, final);
+                if (ok) QDir(previous).removeRecursively();
             } else {
                 QDir(saving).removeRecursively();
             }
@@ -126,13 +130,22 @@ std::vector<Autosave::Recovered> Autosave::claimOrphans() {
         if (!lock->tryLock(0)) continue;   // its instance is still running
         const QDir folder(base.filePath(name));
         bool any = false;
-        for (const QString& meta : folder.entryList({"*.json"}, QDir::Files)) {
-            const QString key = meta.chopped(5), project = folder.filePath(key + ".comp");
+        // Every document's newest whole copy: its project, else the previous one a crash left mid-swap (a
+        // '.saving' copy may be partial and is never offered); the description when there is one.
+        QSet<QString> keys;
+        for (const QString& meta : folder.entryList({"*.json"}, QDir::Files)) keys.insert(meta.chopped(5));
+        for (const QString& dir : folder.entryList({"*.comp"}, QDir::Dirs | QDir::NoDotAndDotDot))
+            if (!dir.endsWith(".saving.comp")) keys.insert(dir.endsWith(".old.comp") ? dir.chopped(9) : dir.chopped(5));
+        for (const QString& key : keys) {
+            QString project = folder.filePath(key + ".comp");
+            if (!QFileInfo(project).isDir()) project = folder.filePath(key + ".old.comp");
             if (!QFileInfo(project).isDir()) continue;
-            QFile file(folder.filePath(meta));
-            if (!file.open(QIODevice::ReadOnly)) continue;
-            const QJsonObject o = QJsonDocument::fromJson(file.readAll()).object();
-            out.push_back({project, o.value("title").toString(), o.value("originalPath").toString(), QDateTime::fromString(o.value("saved").toString(), Qt::ISODate)});
+            QJsonObject o;
+            QFile file(folder.filePath(key + ".json"));
+            if (file.open(QIODevice::ReadOnly)) o = QJsonDocument::fromJson(file.readAll()).object();
+            QDateTime saved = QDateTime::fromString(o.value("saved").toString(), Qt::ISODate);
+            if (!saved.isValid()) saved = QFileInfo(project).lastModified().toUTC();
+            out.push_back({project, o.value("title").toString(), o.value("originalPath").toString(), saved});
             any = true;
         }
         if (!any) { QDir(folder).removeRecursively(); lock->unlock(); continue; }   // nothing worth offering
