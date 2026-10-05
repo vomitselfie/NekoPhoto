@@ -35,6 +35,16 @@ struct ViewBenchOptions {
 };
 int runViewBench(MainWindow& window, const ViewBenchOptions& options);
 
+/// --bench-adjust: the view bench's document at a depth and colour mode, an adjustment layer over it, and slider
+/// drags on it (each tick re-renders the canvas): prints the tick-to-repaint times, then quits.
+struct AdjustBenchOptions {
+    QSize document{4096, 4096};
+    int layers = 5;
+    int bits = 8;                   // 8, 16 or 32
+    QString mode = "rgb";           // rgb, cmyk or lab
+};
+int runAdjustBench(MainWindow& window, const AdjustBenchOptions& options);
+
 /// --bench-type: types three paragraphs on the canvas with the Type tool through key events, prints how long each
 /// keystroke takes to reach the screen (the text's layout and raster, and the repaint), styles a selection, and
 /// commits. With `screenshot`, grabs the window while the caret and selection show, before committing.

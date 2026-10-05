@@ -256,6 +256,9 @@ int run(int argc, char** argv) {
     QCommandLineOption benchSize("bench-size", "Document size for --bench-brush, WxH (default 2000x2000).", "size");
     QCommandLineOption benchType("bench-type", "Developer benchmark: type three paragraphs on the canvas with the Type tool, print each keystroke's latency, then quit (with --screenshot, grab the window while typing).");
     QCommandLineOption benchView("bench-view", "Developer benchmark: zoom, pan and undo on a large multi-layer document (--bench-size, default 4096x4096), print the times, then quit.");
+    QCommandLineOption benchAdjust("bench-adjust", "Developer benchmark: drag adjustment-layer sliders on a large multi-layer document (--bench-size, --bench-depth, --bench-mode), print each tick's time to repaint, then quit.");
+    QCommandLineOption benchDepth("bench-depth", "With --bench-adjust, the document depth: 8, 16 or 32.", "bits");
+    QCommandLineOption benchMode("bench-mode", "With --bench-adjust, the colour mode: rgb, cmyk or lab.", "mode");
     QCommandLineOption benchOpaque("bench-opaque", "With --bench-brush, paint on the opaque image layer rather than a blank layer.");
     QCommandLineOption benchBrushSize("bench-brush-size", "With --bench-brush, the brush diameter in document pixels.", "pixels");
     QCommandLineOption benchEraser("bench-eraser", "With --bench-brush, erase instead of painting.");
@@ -282,6 +285,9 @@ int run(int argc, char** argv) {
     parser.addOption(benchBurst);
     parser.addOption(benchHardness);
     parser.addOption(benchView);
+    parser.addOption(benchAdjust);
+    parser.addOption(benchDepth);
+    parser.addOption(benchMode);
     parser.addOption(benchType);
     parser.addOption(saveAs);
     parser.addOption(prefs);
@@ -357,7 +363,7 @@ int run(int argc, char** argv) {
     // quits; anything that asks for a process of its own (screenshots, automation, --new-window) keeps one.
     QStringList handoff;
     for (const QString& path : parser.positionalArguments()) handoff << QDir::current().absoluteFilePath(path);
-    const bool ownProcess = parser.isSet(newWindow) || parser.isSet(benchBrush) || parser.isSet(benchView) || parser.isSet(benchType) || parser.isSet(screenshot) || parser.isSet(headlessOption) || parser.isSet(batchOption) || parser.isSet(dialogOption) || parser.isSet(saveAs) || parser.isSet(prefs) || parser.isSet(langOption) || parser.isSet(demo) || parser.isSet(toolOption);
+    const bool ownProcess = parser.isSet(newWindow) || parser.isSet(benchBrush) || parser.isSet(benchView) || parser.isSet(benchAdjust) || parser.isSet(benchType) || parser.isSet(screenshot) || parser.isSet(headlessOption) || parser.isSet(batchOption) || parser.isSet(dialogOption) || parser.isSet(saveAs) || parser.isSet(prefs) || parser.isSet(langOption) || parser.isSet(demo) || parser.isSet(toolOption);
     const QString rpcRequested = parser.isSet(rpc) || parser.isSet(rpcSocket) ? (parser.value(rpcSocket).isEmpty() ? app::AutomationServer::defaultSocketPath() : parser.value(rpcSocket)) : QString();
     if (!ownProcess && app::SingleInstance::handOff(handoff, rpcRequested)) return 0;
     app::MainWindow window;
@@ -576,6 +582,14 @@ int run(int argc, char** argv) {
         const QStringList size = parser.value(benchSize).split('x');
         if (size.size() == 2 && size[0].toInt() > 0 && size[1].toInt() > 0) options.document = QSize(size[0].toInt(), size[1].toInt());
         return app::runViewBench(window, options);
+    }
+    if (parser.isSet(benchAdjust)) {
+        app::AdjustBenchOptions options;
+        const QStringList size = parser.value(benchSize).split('x');
+        if (size.size() == 2 && size[0].toInt() > 0 && size[1].toInt() > 0) options.document = QSize(size[0].toInt(), size[1].toInt());
+        if (parser.isSet(benchDepth)) options.bits = parser.value(benchDepth).toInt();
+        if (parser.isSet(benchMode)) options.mode = parser.value(benchMode).toLower();
+        return app::runAdjustBench(window, options);
     }
     if (parser.isSet(benchBrush)) {
         app::BrushBenchOptions options;

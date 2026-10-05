@@ -346,4 +346,86 @@ int runViewBench(MainWindow& window, const ViewBenchOptions& o) {
     return 0;
 }
 
+int runAdjustBench(MainWindow& window, const AdjustBenchOptions& o) {
+    EditorSession* session = window.session();
+    CanvasWidget* canvas = window.canvasAt(window.currentTabIndex());
+    const int w = o.document.width(), h = o.document.height();
+    // The view bench's document: a photo-like base and soft, partly transparent layers over it.
+    auto base = std::make_shared<compositor::Image>(w, h);
+    for (int y = 0; y < h; y++) {
+        uint8_t* row = base->row(y);
+        for (int x = 0; x < w; x++, row += 4) { row[0] = uint8_t(x * 255 / w); row[1] = uint8_t(y * 255 / h); row[2] = uint8_t((x ^ y) & 0xFF); row[3] = 255; }
+    }
+    session->insertImage(base, "Base");
+    for (int l = 1; l < o.layers; l++) {
+        auto layer = std::make_shared<compositor::Image>(w, h);
+        const double cx = w * (0.3 + 0.1 * l), cy = h * (0.6 - 0.08 * l), r = std::min(w, h) * 0.45;
+        for (int y = 0; y < h; y++) {
+            uint8_t* row = layer->row(y);
+            for (int x = 0; x < w; x++, row += 4) {
+                const double d = std::hypot(x - cx, y - cy) / r;
+                const unsigned a = d >= 1 ? 0 : unsigned(200 * (1 - d));
+                row[0] = uint8_t((a * (40 * l)) / 255); row[1] = uint8_t((a * (255 - 40 * l)) / 255); row[2] = uint8_t(a / 2); row[3] = uint8_t(a);
+            }
+        }
+        session->insertImage(layer, QString("Paint %1").arg(l));
+    }
+    QString error;
+    if (o.mode == "cmyk" || o.mode == "lab") {
+        if (!session->convertColorMode(o.mode == "cmyk" ? compositor::ColorMode::CMYK : compositor::ColorMode::Lab, &error)) { std::printf("mode: %s\n", qPrintable(error)); return 1; }
+    }
+    if (o.bits != 8 && !session->convertMode(o.bits == 16 ? compositor::SampleType::U16 : compositor::SampleType::F32, &error)) { std::printf("depth: %s\n", qPrintable(error)); return 1; }
+    session->fitView();
+    QApplication::processEvents();
+    auto pump = [] { QApplication::processEvents(QEventLoop::AllEvents); };
+    auto report = [](const char* what, std::vector<double> v) {
+        std::printf("%-30s median %7.2f ms   p95 %7.2f ms   max %7.2f ms   (%zu)\n", what, percentile(v, 0.5), percentile(v, 0.95),
+                    v.empty() ? 0.0 : *std::max_element(v.begin(), v.end()), v.size());
+    };
+    std::printf("adjust bench: %dx%d, %d layers, %d-bit %s, canvas %dx%d at dpr %.2f\n", w, h, o.layers, o.bits, qPrintable(o.mode),
+                canvas->width(), canvas->height(), canvas->devicePixelRatioF());
+    std::vector<double> full;
+    for (int i = 0; i < 5; i++) {
+        QElapsedTimer t;
+        t.start();
+        emit session->documentChanged({});
+        canvas->repaint();
+        pump();
+        full.push_back(double(t.nsecsElapsed()) / 1e6);
+    }
+    report("full view render (fit)", full);
+    // A slider drag: the adjustment layer's settings change on each tick inside one edit, as the Properties
+    // panel does, and the canvas repaints before the next.
+    auto drag = [&](compositor::AdjustmentKind kind, const char* label, auto&& tick) {
+        session->addAdjustmentLayer(kind);
+        const auto id = session->activeLayerId();
+        if (!id) return;
+        auto settings = session->adjustmentSettings(*id);
+        if (!settings) { std::printf("%s: not available here\n", label); return; }
+        std::vector<double> ticks;
+        session->beginAdjustmentEdit();
+        for (int i = 0; i < 30; i++) {
+            tick(*settings, i);
+            QElapsedTimer t;
+            t.start();
+            session->setAdjustment(*id, *settings);
+            canvas->repaint();
+            pump();
+            ticks.push_back(double(t.nsecsElapsed()) / 1e6);
+        }
+        session->endAdjustmentEdit();
+        report(label, ticks);
+        session->undo();
+        session->undo();
+    };
+    drag(compositor::AdjustmentKind::Levels, "Levels: drag white input", [](compositor::AdjustmentSettings& s, int i) {
+        s.levels.ranges[0].white = 255 - i * 3;
+    });
+    drag(compositor::AdjustmentKind::Exposure, "Exposure: drag exposure", [](compositor::AdjustmentSettings& s, int i) {
+        s.exposure.exposure = 0.05 * (i + 1);
+    });
+    return 0;
+}
+
+
 } // namespace app
