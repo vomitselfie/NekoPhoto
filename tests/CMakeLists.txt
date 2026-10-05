@@ -358,3 +358,15 @@ add_test(NAME colormgmt_tests COMMAND colormgmt_tests)
 add_executable(colormgmt_cmyk_tests colormgmt_cmyk_tests.cpp)
 target_link_libraries(colormgmt_cmyk_tests PRIVATE compositor::core compositor_warnings nekophoto_lcms2)
 add_test(NAME colormgmt_cmyk_tests COMMAND colormgmt_cmyk_tests)
+
+if(TARGET nekophoto)
+    # The whole window: the converted commands give the same document and history from the menus, dialogs and
+    # canvas as from automation, as before the command path, and record the same Actions steps (SelfTest.cpp).
+    add_test(NAME command_path_selftest COMMAND nekophoto --self-test command-path)
+    set_tests_properties(command_path_selftest PROPERTIES ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/selftest-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/selftest-home/data")
+    # Ruler guides through the pointer: out of a ruler, moved, dragged off; each one undo step.
+    add_test(NAME guides_selftest COMMAND nekophoto --self-test guides)
+    set_tests_properties(guides_selftest PROPERTIES ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/selftest-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/selftest-home/data")
+endif()

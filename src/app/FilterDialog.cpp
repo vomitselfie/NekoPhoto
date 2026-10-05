@@ -90,6 +90,12 @@ void PixelAdjustmentDialog::refreshPreview() {
 
 bool PixelAdjustmentDialog::apply() {
     if (editor_->settings().isIdentity()) return true;
+    if (editor_->settings().kind == AdjustmentKind::Levels) {
+        // Converted to the command path: OK is pixels.adjust, as automation and a recorded action run it.
+        const QJsonObject step{{"kind", QString::fromUtf8(adjustmentKindName(editor_->settings().kind))},
+                               {"settings", QJsonDocument::fromJson(QByteArray::fromStdString(editor_->settings().toJson())).object()}};
+        if (commitAsCommand(QStringLiteral("pixels.adjust"), step)) return true;
+    }
     const QString name = QString::fromUtf8(adjustmentKindName(editor_->settings().kind));
     if (sourceNative()) {
         const AnyImage out = adjustedInMode(editor_->settings(), sourceNative(), colorMode(), documentProfile());
@@ -224,6 +230,10 @@ bool FilterDialog::apply() {
         return true;
     }
     if (identity()) return true;
+    if (kind_ == FilterKind::GaussianBlur) {
+        // Converted to the command path: OK is pixels.filter, as automation and a recorded action run it.
+        if (commitAsCommand(QStringLiteral("pixels.filter"), QJsonObject{{"kind", QString::fromUtf8(filterKindName(kind_))}, {"radius", settings_.normalized().radius}})) return true;
+    }
     LayerTransform placed = placement();
     const bool trims = kind_ == FilterKind::GaussianBlur || kind_ == FilterKind::MotionBlur;
     if (sourceNative()) {

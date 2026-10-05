@@ -4,11 +4,15 @@
 #include <QDialog>
 #include <QImage>
 #include <optional>
+#include "compositor/guides.h"
 
 namespace app {
 
 struct NewDocumentOptions { int width = 1920, height = 1080; double resolution = 72; };
 std::optional<NewDocumentOptions> askNewDocument(QWidget* parent, NewDocumentOptions initial);
+
+/// View > New Guide…: Photoshop's sheet, an orientation and a position in pixels.
+std::optional<compositor::Guide> askNewGuide(QWidget* parent);
 
 struct CanvasSizeOptions { int width, height; double anchorX = 0.5, anchorY = 0.5; };
 std::optional<CanvasSizeOptions> askCanvasSize(QWidget* parent, int width, int height);

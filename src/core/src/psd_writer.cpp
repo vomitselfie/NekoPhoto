@@ -1330,7 +1330,9 @@ std::vector<uint8_t> encodePsd(const Document& document, const PsdExportOptions&
                 if (resource.id == 1032) {
                     // The file's guides (and grid) while they are still the document's; else written anew below.
                     std::vector<Guide> held;
-                    if (!parseGuidesResource(resource.data, held, &grid) || held != document.guides) continue;
+                    // Bytes that are not a guides resource go back untouched while the document has no guides of its own.
+                    const bool parsed = parseGuidesResource(resource.data, held, &grid);
+                    if (parsed ? held != document.guides : !document.guides.empty()) continue;
                     guidesWritten = true;
                 }
                 if (resource.id == 1050) {

@@ -2,6 +2,7 @@
 // that drops a filterable list of the presets, grouped by author, with their preview strokes.
 #pragma once
 #include <QToolButton>
+#include <optional>
 
 class QFrame;
 class QLineEdit;
@@ -18,6 +19,8 @@ public:
     void setPreset(const QString& id);
     /// Drops the list (what a click does), for scripts and screenshots.
     void showPicker();
+    /// Drops the list at a screen point (the Brush tool's right-click on the canvas, as in Photoshop).
+    void showPickerAt(QPoint globalPosition);
 
 signals:
     void presetChosen(const QString& id);
@@ -25,7 +28,7 @@ signals:
     void importRequested();
 
 private:
-    void openPopup();
+    void openPopup(std::optional<QPoint> at = std::nullopt);
     void rebuild(const QString& filter);
     void choose(const QString& id);
     bool eventFilter(QObject* watched, QEvent* event) override;

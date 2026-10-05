@@ -179,6 +179,20 @@ void PixelDialog::commit(AnyImage image, const LayerTransform& placement, const 
     if (session_) session_->commitPixels(std::move(image), placement, name, layerId_);
 }
 
+bool PixelDialog::commitAsCommand(const QString& method, const QJsonObject& params) {
+    if (!session_ || !session_->commandsRouted() || !layerId_ || !session_->document() || !session_->document()->find(*layerId_)) return false;
+    finished_ = true;
+    session_->clearPixelPreview();
+    // The method acts on the active layer: the pinned one for the moment, as automation's own requests do.
+    const auto previous = session_->activeLayerId();
+    const bool previousMask = session_->isMaskSelected();
+    const bool swap = previous != layerId_ || previousMask;
+    if (swap) session_->selectLayer(layerId_, false);
+    session_->runCommand(method, params);
+    if (swap && previous && session_->document() && session_->document()->find(*previous)) session_->selectLayer(previous, previousMask);
+    return true;
+}
+
 void PixelDialog::finish(int result) {
     finished_ = true;
     QDialog::done(result);

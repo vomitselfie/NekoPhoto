@@ -26,6 +26,15 @@ public:
         grid->addWidget(canvas_, 1, 1);
         grid->setRowStretch(1, 1);
         grid->setColumnStretch(1, 1);
+        for (Ruler* ruler : {top_, left_}) {
+            const Qt::Orientation orientation = ruler == top_ ? Qt::Horizontal : Qt::Vertical;
+            ruler->setCursor(orientation == Qt::Horizontal ? Qt::SplitVCursor : Qt::SplitHCursor);
+            ruler->guideDrag = [this, orientation](int phase, QPoint global, Qt::KeyboardModifiers modifiers) {
+                if (phase == 0) canvas_->beginRulerGuide(orientation, global);
+                else if (phase == 1) canvas_->moveRulerGuide(global, modifiers);
+                else canvas_->endRulerGuide(global, modifiers);
+            };
+        }
         connect(canvas_, &CanvasWidget::cursorMoved, this, [this](QPointF p) { top_->setPointer(p); left_->setPointer(p); });
     }
 

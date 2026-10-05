@@ -445,6 +445,24 @@ void EditorSession::commitTransform() {
     emit transformChanged();
 }
 
+std::optional<QJsonValue> EditorSession::runCommand(const QString& method, const QJsonObject& params) {
+    if (!commandsRouted()) return std::nullopt;
+    return commandRunner(method, params);
+}
+
+void EditorSession::commitTransformCommand() {
+    if (!transformEdit_) return;
+    const TransformEdit& edit = *transformEdit_;
+    const Layer* layer = document_ ? document_->find(edit.layerId) : nullptr;
+    const bool plain = commandsRouted() && layer && !layer->isGroup && edit.persistent && !edit.mask && !edit.corners && !edit.group && !edit.floating
+                       && !transformDuplicate_ && activeLayerId_ == edit.layerId && edit.draft.isValid() && edit.draft.sampling == layer->transform.sampling && !edit.draft.samePlacement(layer->transform);
+    if (!plain) { commitTransform(); return; }
+    const LayerTransform& t = edit.draft;
+    const QJsonObject params{{"x", t.origin.x}, {"y", t.origin.y}, {"width", t.size.width}, {"height", t.size.height},
+                             {"rotation", t.rotation}, {"flipX", t.flipX}, {"flipY", t.flipY}};
+    if (!runCommand(QStringLiteral("layers.setTransform"), params)) commitTransform();   // refused: commit as before
+}
+
 void EditorSession::cancelTransform() {
     snapGuidesX.clear();
     snapGuidesY.clear();
@@ -513,9 +531,15 @@ void EditorSession::setSnapGuides(std::vector<double> xs, std::vector<double> ys
 }
 
 std::optional<Uuid> EditorSession::layerAt(QPointF documentPoint) const {
-    if (!document_) return std::nullopt;
+    const std::vector<Uuid> under = layersAt(documentPoint, 1);
+    return under.empty() ? std::nullopt : std::optional<Uuid>(under.front());
+}
+
+std::vector<Uuid> EditorSession::layersAt(QPointF documentPoint, size_t limit) const {
+    std::vector<Uuid> found;
+    if (!document_) return found;
     auto layers = renderLayers(document_->layers);
-    for (auto it = layers.rbegin(); it != layers.rend(); ++it) {
+    for (auto it = layers.rbegin(); it != layers.rend() && found.size() < limit; ++it) {
         const Layer* layer = *it;
         if (!layer->asset || !layer->asset->image) continue;
         const AnyImage& image = layer->asset->image;
@@ -525,9 +549,9 @@ std::optional<Uuid> EditorSession::layerAt(QPointF documentPoint) const {
         int x = int(std::floor(p.x)), y = int(std::floor(p.y));
         if (x < 0 || y < 0 || x >= image.width() || y >= image.height()) continue;
         // Any alpha at all, at whatever depth the pixels are.
-        if (image.u8() ? image.u8()->pixel(x, y)[3] > 0 : image.u16() ? image.u16()->pixel(x, y)[3] > 0 : image.f32() && image.f32()->pixel(x, y)[3] > 0) return layer->id;
+        if (image.u8() ? image.u8()->pixel(x, y)[3] > 0 : image.u16() ? image.u16()->pixel(x, y)[3] > 0 : image.f32() && image.f32()->pixel(x, y)[3] > 0) found.push_back(layer->id);
     }
-    return std::nullopt;
+    return found;
 }
 
 std::optional<Size> EditorSession::transformPixelSize() const {

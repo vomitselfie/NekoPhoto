@@ -614,6 +614,30 @@ def slices_delete(id: int) -> str:
     return text(call("slices.delete", id=id))
 
 
+@look("List guides")
+def guides_list() -> str:
+    """The ruler guides: index, orientation (vertical is an x, horizontal a y) and position in document pixels."""
+    return text(call("guides.list"))
+
+
+@edit("Add a guide")
+def guides_add(orientation: str, position: float) -> str:
+    """A new ruler guide (View > New Guide): orientation "vertical" (an x position) or "horizontal" (a y); saved in projects and PSDs."""
+    return text(call("guides.add", orientation=orientation, position=position))
+
+
+@edit("Move a guide")
+def guides_move(index: int, position: float) -> str:
+    """Move a ruler guide (index from guides_list) to a new position in document pixels."""
+    return text(call("guides.move", index=index, position=position))
+
+
+@edit("Delete guides")
+def guides_delete(index: Optional[int] = None, all: bool = False) -> str:
+    """Delete one ruler guide by index, or every guide with all=True (View > Clear Guides)."""
+    return text(call("guides.delete", index=index, all=all or None))
+
+
 @outside("Export slices")
 def slices_export(directory: str, format: str = "png", prefix: Optional[str] = None, quality: int = 90) -> str:
     """Each slice as its own PNG or JPEG in directory, named after the slice."""

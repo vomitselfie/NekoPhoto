@@ -3,6 +3,7 @@
 #pragma once
 #include "EditorSession.h"
 #include <QDialog>
+#include <QJsonObject>
 #include <QPointer>
 
 class QCheckBox;
@@ -43,6 +44,11 @@ protected:
     compositor::AnyImage throughSelectionNative(const compositor::AnyImage& result) const;
     /// Replaces the pinned layer's pixels as one undo step and marks the dialog finished.
     void commit(compositor::AnyImage image, const compositor::LayerTransform& placement, const QString& name);
+    /// The command path (CONTRIBUTING.md, "Commands"): OK runs automation method `method` with `params` on the pinned
+    /// layer instead of committing the dialog's own result, so the menu, automation and Actions share one edit. True
+    /// when it ran (an error is shown by the window), false when the command path is not available here (another
+    /// tab is on screen, the layer went): the caller commits as before.
+    bool commitAsCommand(const QString& method, const QJsonObject& params);
     /// Closes with `result` without committing anything further (after an asynchronous commit, say).
     void finish(int result);
 

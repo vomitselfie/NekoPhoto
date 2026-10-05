@@ -3,6 +3,8 @@
 #include <QAbstractButton>
 #include "ContentAwareScaleDialog.h"
 #include "MainWindow.h"
+#include "CanvasWidget.h"
+#include "SelfTest.h"
 #include "ChannelDialogs.h"
 #include "LayersPanel.h"
 #include "WelcomeDialog.h"
@@ -216,6 +218,11 @@ static void migrateFromOldName() {
     QDir().rmdir(config + "/compositor-linux");
 }
 
+namespace app {
+/// The demo document, for the self-tests (SelfTest.cpp).
+void buildDemoDocument(EditorSession& session) { buildDemo(session, QString()); }
+} // namespace app
+
 int run(int argc, char** argv) {
     // --headless: no window on screen; the automation socket is the only way in. Must be decided before QApplication.
     // --call and --batch never show a window either, so they must work without a display.
@@ -289,8 +296,12 @@ int run(int argc, char** argv) {
     parser.addOption(langOption);
     QCommandLineOption toolOption("tool", "Select tool <name> after opening (move, marquee, lasso, wand, crop, brush, healing, clone, smudge, gradient, shape, eyedropper, hand, zoom).", "name");
     parser.addOption(toolOption);
-    QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: welcome (or welcome:N for page N), new, canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, cameraraw (or cameraraw:N for panel N), raw:<file> (the Camera Raw dialog a RAW file opens in), gmic, mosh (or mosh:<effect id>), content-fill, background, text, fonts, brushes, brush-dynamics (the first imported tip brush), actions, timeline (frames made from the layers when there are none), batch, layers-menu (the active layer's context menu).", "name");
+    QCommandLineOption dialogOption("dialog", "Open dialog <name> after opening, for screenshots: welcome (or welcome:N for page N), new, canvas-size, image-size, jpeg, levels, curves, hue, exposure, gradient-map, grain, blur, motion-blur, noise, lens, cameraraw (or cameraraw:N for panel N), raw:<file> (the Camera Raw dialog a RAW file opens in), gmic, mosh (or mosh:<effect id>), content-fill, background, text, fonts, brushes, brush-dynamics (the first imported tip brush), actions, timeline (frames made from the layers when there are none), batch, layers-menu (the active layer's context menu), guides (two ruler guides, and a smart guide as a snap shows it).", "name");
     parser.addOption(dialogOption);
+    QCommandLineOption contextMenuOption("context-menu", "Open the canvas's context menu at document point <x,y> after opening (with --tool, for screenshots); x,y,transform or x,y,type first starts a free transform or typing there.", "x,y");
+    parser.addOption(contextMenuOption);
+    QCommandLineOption selfTestOption("self-test", "Developer check: run in-app test <name> (command-path) on a demo document, print the result and quit with its status.", "name");
+    parser.addOption(selfTestOption);
     QCommandLineOption rpc("rpc", "Listen on the automation socket (JSON-RPC over a local socket, for the MCP bridge). Also on when the automation preference is set.");
     QCommandLineOption rpcSocket("rpc-socket", "Socket path for --rpc (default: $XDG_RUNTIME_DIR/nekophoto.sock, or $COMPOSITOR_RPC_SOCKET; on Windows the named pipe nekophoto-<user>).", "path");
     QCommandLineOption headlessOption("headless", "Run without a visible window (offscreen) with the automation socket on; implies --rpc.");
@@ -357,13 +368,14 @@ int run(int argc, char** argv) {
     // quits; anything that asks for a process of its own (screenshots, automation, --new-window) keeps one.
     QStringList handoff;
     for (const QString& path : parser.positionalArguments()) handoff << QDir::current().absoluteFilePath(path);
-    const bool ownProcess = parser.isSet(newWindow) || parser.isSet(benchBrush) || parser.isSet(benchView) || parser.isSet(benchType) || parser.isSet(screenshot) || parser.isSet(headlessOption) || parser.isSet(batchOption) || parser.isSet(dialogOption) || parser.isSet(saveAs) || parser.isSet(prefs) || parser.isSet(langOption) || parser.isSet(demo) || parser.isSet(toolOption);
+    const bool ownProcess = parser.isSet(newWindow) || parser.isSet(benchBrush) || parser.isSet(benchView) || parser.isSet(benchType) || parser.isSet(screenshot) || parser.isSet(headlessOption) || parser.isSet(batchOption) || parser.isSet(dialogOption) || parser.isSet(saveAs) || parser.isSet(prefs) || parser.isSet(langOption) || parser.isSet(demo) || parser.isSet(toolOption) || parser.isSet(contextMenuOption) || parser.isSet(selfTestOption);
     const QString rpcRequested = parser.isSet(rpc) || parser.isSet(rpcSocket) ? (parser.value(rpcSocket).isEmpty() ? app::AutomationServer::defaultSocketPath() : parser.value(rpcSocket)) : QString();
     if (!ownProcess && app::SingleInstance::handOff(handoff, rpcRequested)) return 0;
     app::MainWindow window;
     window.show();
     app::SingleInstance instance;
     if (!ownProcess) instance.serve(window);   // best effort; without it the window still runs
+    if (parser.isSet(selfTestOption)) return app::runSelfTest(window, parser.value(selfTestOption));
     if (parser.isSet(batchOption)) {
         // Requests from a file, handled in this instance without a socket; responses one per line.
         app::AutomationServer server(&window);
@@ -560,12 +572,31 @@ int run(int argc, char** argv) {
                     else if (name == "channel-options" && second) (new app::ChannelOptionsDialog(s, *second, &window))->show();
                 }
             }
+            else if (name == "guides") {
+                if (s->hasDocument()) {
+                    s->addGuide(compositor::Guide{compositor::Guide::Orientation::Vertical, std::round(s->document()->width / 3.0)});
+                    s->addGuide(compositor::Guide{compositor::Guide::Orientation::Horizontal, std::round(s->document()->height / 2.0)});
+                    s->setSnapGuides({s->document()->width * 0.4}, {});
+                }
+            }
             else if (name == "layers-menu") { if (auto* panel = window.findChild<app::LayersPanel*>()) panel->showActiveLayerMenu(); }
             else if (name == "new") app::askNewDocument(&window, {});
             else if (name == "canvas-size") app::askCanvasSize(&window, s->hasDocument() ? s->document()->width : 1920, s->hasDocument() ? s->document()->height : 1080);
             else if (name == "image-size") app::askImageSize(&window, s->hasDocument() ? s->document()->width : 1920, s->hasDocument() ? s->document()->height : 1080, 72);
             else if (name == "jpeg") { auto flat = s->hasDocument() ? s->flattened() : nullptr; if (flat) app::askJpegExport(&window, app::toQImage(*flat)); }
             else qWarning("unknown dialog: %s", qPrintable(name));
+        });
+    }
+    if (parser.isSet(contextMenuOption)) {
+        const QStringList at = parser.value(contextMenuOption).split(',');
+        const QPointF point(at.value(0).toDouble(), at.value(1).toDouble());
+        const QString state = at.value(2);   // "transform" or "type": the menu of a transform or of typing in progress
+        QTimer::singleShot(120, &window, [&window, point, state] {
+            auto* canvas = window.canvasAt(window.currentTabIndex());
+            if (!canvas) return;
+            if (state == QLatin1String("transform")) window.session()->transformCommand();
+            if (state == QLatin1String("type")) canvas->startNewType(point, std::nullopt);
+            window.showCanvasMenu(canvas->viewPointForTest(point));
         });
     }
     app::PreferencesDialog* preferences = nullptr;
