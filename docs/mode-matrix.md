@@ -90,14 +90,14 @@ What works in a document of each depth and colour mode, as the menus, tools and 
 | Mosh | `filter.Mosh` | native | native | greyed (Photoshop lacks) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
 | Remove Background | `edit.removeBackground` | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
 | Content-Aware Fill / Move / Scale | `edit.contentAware` | native | native | greyed (Photoshop lacks) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Type tool | `tool.text` | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Text editing | `edit.text` | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Shape tool | `tool.shape` | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Pen tool | `tool.pen` | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Direct Selection tool | `tool.directSelect` | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Paths, vector masks | `edit.vector` | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Shape and path fills and strokes (text/shape colour) | `edit.paint` | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Layer styles | `edit.style` | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
+| Type tool | `tool.text` | native | native | greyed (not yet) | native\* | native\* | native\* | native\* | CMYK8, CMYK16, Lab8, Lab16: glyphs painted in sRGB, each colour then taken through the profile |
+| Text editing | `edit.text` | native | native | greyed (not yet) | native\* | native\* | native\* | native\* | CMYK8, CMYK16, Lab8, Lab16: glyphs painted in sRGB, each colour then taken through the profile |
+| Shape tool | `tool.shape` | native | native | greyed (not yet) | native\* | native\* | native\* | native\* | CMYK8, CMYK16, Lab8, Lab16: RGB gradient and pattern fills drawn in sRGB, then converted |
+| Pen tool | `tool.pen` | native | native | greyed (not yet) | native | native | native | native |  |
+| Direct Selection tool | `tool.directSelect` | native | native | greyed (not yet) | native | native | native | native |  |
+| Paths, vector masks | `edit.vector` | native | native | greyed (not yet) | native | native | native | native |  |
+| Shape and path fills and strokes (text/shape colour) | `edit.paint` | native | native | greyed (not yet) | native\* | native\* | native\* | native\* | CMYK8, CMYK16, Lab8, Lab16: RGB gradient and pattern fills drawn in sRGB, then converted |
+| Layer styles | `edit.style` | native | native | greyed (not yet) | native | native | native | native |  |
 | Smart objects, Smart Filters | `edit.smartObject` | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
 | Artboards | `edit.artboard` | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
 | Artboard tool | `tool.artboard` | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |

@@ -1,6 +1,6 @@
 # High bit depth and colour management: design plan
 
-Status: P1–P4 landed in 1.7 (16-bit RGB editing, painting and colour management); see "Status" below for each phase and what is still gated at 16 bits. P6 (channels) has landed too, P7 steps A–E (CMYK and Lab documents, rendering, PSD, Image ▸ Mode, painting, adjustments, filters, retouching and selections) P5a (the 32-bit core) and P5b (32-bit adjustments, filters, selections and pixel edits); the rest of P5 and P7, and P8, are planned. The design sections below are kept as written.
+Status: P1–P4 landed in 1.7 (16-bit RGB editing, painting and colour management); see "Status" below for each phase and what is still gated at 16 bits. P6 (channels) has landed too, P7 steps A–E (CMYK and Lab documents, rendering, PSD, Image ▸ Mode, painting, adjustments, filters, retouching and selections) P5a (the 32-bit core) and P5b (32-bit adjustments, filters, selections and pixel edits); the rest of P5 and P7 are planned, and of P8 text, shapes and layer styles in CMYK and Lab have landed. The design sections below are kept as written.
 
 ## 1. Where we are
 
@@ -654,6 +654,21 @@ generated [capability matrix](mode-matrix.md).
   Smudge and Liquify (share `tool.smudge`), Dodge, Burn and Sponge in CMYK and Lab, the Paint Bucket and Patch in CMYK
   and Lab (their decisions read colour, as the wand's), the wand and Quick Select in CMYK and Lab, an HDR colour picker
   (P5f).
+
+### Text, shapes and layer styles in CMYK and Lab
+
+- Layer styles draw in CMYK and Lab at 8 and 16 bits: `ModeOps::styles` is on, and `drawStyled` is templated on the
+  mode (`colourChannels<M>`, `blendEffect<M>`, `NativeColours<S, M>` converting effect colours, gradient ramps and
+  pattern tiles through the profile once). The RGB paths compile to the same arithmetic: every render hash and brush
+  parity unchanged.
+- Text through `textRasterInMode` (Qt's 16-bit raster, each colour through the profile, coverage kept); shapes filled in
+  the document's channels by `setVectorShape`, kept as shapes through Image ▸ Mode and Convert to Profile
+  (`keepVectorShapeBlocks`); Fill and Stroke Path through `fillThroughMode`. Inks a CMYK file gives (style 'CMYC'
+  colours, type FillColor Type 2, SoCo 'CMYC') are kept while their RGB still matches and written back as inks.
+- The layer fingerprint (`psdContentHash`) now covers 8-bit CMYK layers (it was always 0, so an edit to a CMYK layer
+  read from a PSD was written back as the planes first read) and all five samples of 16-bit CMYK rows.
+- Still greyed in CMYK and Lab: smart objects, artboards and slices (and their exports), SVG export, Color Lookup and
+  Mosh, deleting a clipping base.
 
 ## Review notes
 

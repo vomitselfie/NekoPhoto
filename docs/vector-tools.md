@@ -92,6 +92,10 @@ pattern fills and strokes and live shape properties through a PSD, gives a pixel
 and checks that an empty vector mask reveals all (and inverted hides all). `tools/rpc_smoke.py` drives each through
 automation, including text to a path and a shape.
 
+Shapes, paths and vector masks work the same in CMYK and Lab documents at 8 and 16 bits: a shape's fill is in the
+document's channels (its colour through the profile, a CMYK file's ink colour as its inks), it is written to PSD as a
+shape layer, and it stays one through Image ▸ Mode (color-modes.md, "Text, shapes and layer styles").
+
 ## Not yet
 
 Custom shapes from .csh files; live properties of lines and polygons (Photoshop 2026's `vogk` line entries are read
