@@ -9,6 +9,7 @@
 #include <QInputDialog>
 #include <QLabel>
 #include <QListWidget>
+#include <QJsonObject>
 #include <QMenu>
 #include <QMessageBox>
 #include <QMouseEvent>
@@ -100,11 +101,15 @@ ChannelsPanel::ChannelsPanel(EditorSession* session, QWidget* parent) : QWidget(
         if (item) loadAsSelection(item->data(rowRole).toInt(), item->data(idRole).toString(), Qt::NoModifier);
     });
     button("mask", tr("Save selection as channel"), [this] {
-        QString error;
-        if (session_ && !session_->saveSelectionToChannel(std::nullopt, QString(), SelectionMode::Replace, &error) && !error.isEmpty())
-            QMessageBox::information(this, tr("Save Selection"), error);
+        if (!session_) return;
+        // On the command path (CONTRIBUTING.md, "Commands"), so Actions record it.
+        session_->runCommandOr(QStringLiteral("channels.saveSelection"), {}, [this] {
+            QString error;
+            if (!session_->saveSelectionToChannel(std::nullopt, QString(), SelectionMode::Replace, &error) && !error.isEmpty())
+                QMessageBox::information(this, tr("Save Selection"), error);
+        });
     });
-    button("square-plus", tr("Create new channel"), [this] { if (session_) session_->newChannel(); });
+    button("square-plus", tr("Create new channel"), [this] { if (session_) session_->runCommandOr(QStringLiteral("channels.new"), {}, [this] { session_->newChannel(); }); });
     button("trash-2", tr("Delete current channel"), [this] { if (session_ && session_->targetChannel()) session_->deleteChannel(*session_->targetChannel()); });
     box->addLayout(footer);
 
@@ -343,7 +348,7 @@ void ChannelsPanel::showMenu(const QPoint& at) {
         bool ok = false;
         const QString name = QInputDialog::getText(this, tr("New Channel"), tr("Name:"), QLineEdit::Normal,
                                                    QString::fromStdString(nextChannelName(*session_->document(), QCoreApplication::translate("Names", "Alpha").toStdString())), &ok);
-        if (ok) session_->newChannel(name);
+        if (ok) session_->runCommandOr(QStringLiteral("channels.new"), {{"name", name}}, [this, name] { session_->newChannel(name); });
     });
     if (row == Alpha) {
         menu.addAction(tr("Duplicate Channel…"), this, [this, id] {

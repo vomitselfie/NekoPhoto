@@ -292,6 +292,11 @@ public:
     /// not, callers make the edit directly, as they did before the command path.
     std::function<bool()> commandReady;
     bool commandsRouted() const { return commandRunner && (!commandReady || commandReady()); }
+    /// A panel's command: the method when it is routed, else `direct` (the edit as before the command path).
+    template <class F> void runCommandOr(const QString& method, const QJsonObject& params, F&& direct) {
+        if (commandsRouted()) runCommand(method, params);
+        else direct();
+    }
     /// Free Transform's commit stage (Enter, the options bar's Apply, a double-click): the transform is invoked
     /// (transformCommand), updated interactively on the canvas (previewTransform), then committed here. A plain
     /// layer transform commits as the command layers.setTransform with the box's final values, the same call

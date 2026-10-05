@@ -18,6 +18,11 @@ public:
 private:
     void refresh();
     std::optional<uint16_t> chosen() const;
+    void fill(uint16_t id);
+    void stroke(uint16_t id);
+    void toSelection(uint16_t id, bool add);
+    void toShape(uint16_t id);
+    void deletePath(uint16_t id);
     QPointer<EditorSession> session_;
     QListWidget* list_;
     bool refreshing_ = false;

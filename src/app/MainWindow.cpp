@@ -589,6 +589,39 @@ void MainWindow::deleteSelectedLayers() {
     else if (box.clickedButton() == remove) session_->deleteLayersResolvingClipping(ids, false);
 }
 
+void MainWindow::deleteLayersCommand() {
+    if (!session_->hasDocument()) return;
+    // One layer that supplies no clipping mask is layers.delete; several layers, or the question about clipped
+    // layers, stay with the window (the method's step names no layers, so it records as before).
+    const auto active = session_->activeLayerId();
+    const auto& selected = session_->selectedLayerIds();
+    const bool single = active && (selected.empty() || (selected.size() == 1 && selected.count(*active)));
+    if (single && session_->clippingDependents({*active}).empty()) { runCommand("layers.delete", {}, tr("Delete Layer")); return; }
+    deleteSelectedLayers();
+    recordAction("layers.delete");
+}
+
+void MainWindow::fillWith(const QColor& color) {
+    // pixels.fill takes #rrggbb; a colour finer than that (a 16-bit pick) fills directly, so the pixels do not change.
+    if (QColor(color.name()) == color) { runCommand("pixels.fill", {{"color", color.name()}}, tr("Fill")); return; }
+    session_->fillSelection(color);
+    recordAction("pixels.fill", {{"color", color.name()}});
+}
+
+void MainWindow::maskCommand(const QJsonObject& params) {
+    if (session_->activeLayerId()) runCommand("layers.mask", params, tr("Layer Mask"));
+}
+
+void MainWindow::samplingCommand(compositor::Sampling sampling) {
+    if (session_->activeLayerId()) runCommand("layers.set", {{"sampling", QString::fromUtf8(compositor::samplingName(sampling))}}, tr("Resampling"));
+}
+
+void MainWindow::trimCommand(const QJsonObject& params) {
+    const auto result = runCommand("image.trim", params, tr("Trim"));
+    if (result && !result->toObject().value("trimmed").toBool())
+        showError(tr("Trim"), tr("There is nothing to trim: the canvas already ends at its content, or nothing would remain."));
+}
+
 void MainWindow::showPreferences() {
     auto* dialog = new PreferencesDialog(this);
     dialog->setAttribute(Qt::WA_DeleteOnClose);

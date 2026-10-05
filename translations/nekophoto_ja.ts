@@ -2676,6 +2676,70 @@ Working: %2</source>
         <translation>レイヤーを設定</translation>
     </message>
     <message>
+        <source>Arrange</source>
+        <translation>重ね順</translation>
+    </message>
+    <message>
+        <source>Layer via Copy</source>
+        <translation>選択範囲をコピーしたレイヤー</translation>
+    </message>
+    <message>
+        <source>Convert to Smart Object</source>
+        <translation>スマートオブジェクトに変換</translation>
+    </message>
+    <message>
+        <source>Rasterize Smart Object</source>
+        <translation>スマートオブジェクトをラスタライズ</translation>
+    </message>
+    <message>
+        <source>Replace Contents</source>
+        <translation>内容を置き換え</translation>
+    </message>
+    <message>
+        <source>Mode</source>
+        <translation>モード</translation>
+    </message>
+    <message>
+        <source>Profile</source>
+        <translation>プロファイル</translation>
+    </message>
+    <message>
+        <source>Place Embedded</source>
+        <translation>埋め込みを配置</translation>
+    </message>
+    <message>
+        <source>Make Work Path</source>
+        <translation>作業用パスを作成</translation>
+    </message>
+    <message>
+        <source>Fill Path</source>
+        <translation>パスを塗りつぶし</translation>
+    </message>
+    <message>
+        <source>Stroke Path</source>
+        <translation>パスの境界線を描く</translation>
+    </message>
+    <message>
+        <source>Load Path as Selection</source>
+        <translation>パスを選択範囲として読み込む</translation>
+    </message>
+    <message>
+        <source>Shape from Path</source>
+        <translation>パスからシェイプを作成</translation>
+    </message>
+    <message>
+        <source>Delete Path</source>
+        <translation>パスを削除</translation>
+    </message>
+    <message>
+        <source>New Channel</source>
+        <translation>新規チャンネル</translation>
+    </message>
+    <message>
+        <source>Save Selection</source>
+        <translation>選択範囲を保存</translation>
+    </message>
+    <message>
         <source>Select All</source>
         <translation>すべてを選択</translation>
     </message>
@@ -6280,6 +6344,14 @@ File &gt; New creates a blank canvas.</source>
         <translation>リンクを解除して削除</translation>
     </message>
     <message>
+        <source>Delete Layer</source>
+        <translation>レイヤーを削除</translation>
+    </message>
+    <message>
+        <source>Fill</source>
+        <translation>塗りつぶし</translation>
+    </message>
+    <message>
         <source>Unavailable: this build has no OpenCV</source>
         <translation>使用不可: このビルドには OpenCV が含まれていません</translation>
     </message>
@@ -7136,6 +7208,10 @@ File &gt; New creates a blank canvas.</source>
         <translation>プロファイルの指定…</translation>
     </message>
     <message>
+        <source>Assign Profile</source>
+        <translation>プロファイルの指定</translation>
+    </message>
+    <message>
         <source>Convert to Profile…</source>
         <translation>プロファイル変換…</translation>
     </message>
@@ -7184,12 +7260,24 @@ File &gt; New creates a blank canvas.</source>
         <translation>カンバスサイズ(&amp;C)...</translation>
     </message>
     <message>
+        <source>Canvas Size</source>
+        <translation>カンバスサイズ</translation>
+    </message>
+    <message>
         <source>&amp;Image Size…</source>
         <translation>画像解像度(&amp;I)...</translation>
     </message>
     <message>
+        <source>Image Size</source>
+        <translation>画像解像度</translation>
+    </message>
+    <message>
         <source>&amp;Trim…</source>
         <translation>トリミング(&amp;T)...</translation>
+    </message>
+    <message>
+        <source>Load as Selection</source>
+        <translation>選択範囲として読み込む</translation>
     </message>
     <message>
         <source>Trim</source>
@@ -7344,16 +7432,32 @@ File &gt; New creates a blank canvas.</source>
         <translation>下に新規レイヤー(&amp;B)</translation>
     </message>
     <message>
+        <source>New Layer Below</source>
+        <translation>下に新規レイヤー</translation>
+    </message>
+    <message>
         <source>New &amp;Folder</source>
         <translation>新規グループ(&amp;F)</translation>
+    </message>
+    <message>
+        <source>New Folder</source>
+        <translation>新規グループ</translation>
     </message>
     <message>
         <source>&amp;Group Layers</source>
         <translation>レイヤーをグループ化(&amp;G)</translation>
     </message>
     <message>
+        <source>Group Layers</source>
+        <translation>レイヤーをグループ化</translation>
+    </message>
+    <message>
         <source>Layer via &amp;Copy</source>
         <translation>選択範囲をコピーしたレイヤー(&amp;C)</translation>
+    </message>
+    <message>
+        <source>Layer via Copy</source>
+        <translation>選択範囲をコピーしたレイヤー</translation>
     </message>
     <message>
         <source>&amp;Duplicate Layer</source>
@@ -7394,6 +7498,10 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>New &amp;Adjustment Layer</source>
         <translation>新規調整レイヤー(&amp;A)</translation>
+    </message>
+    <message>
+        <source>New Adjustment Layer</source>
+        <translation>新規調整レイヤー</translation>
     </message>
     <message>
         <source>Layer St&amp;yle</source>
@@ -7564,6 +7672,10 @@ File &gt; New creates a blank canvas.</source>
         <translation>クリッピングマスクを作成 / 解除(&amp;I)</translation>
     </message>
     <message>
+        <source>Clipping Mask</source>
+        <translation>クリッピングマスク</translation>
+    </message>
+    <message>
         <source>Bring Forward</source>
         <translation>前面へ</translation>
     </message>
@@ -7632,12 +7744,20 @@ File &gt; New creates a blank canvas.</source>
         <translation>選択を解除(&amp;D)</translation>
     </message>
     <message>
+        <source>Deselect</source>
+        <translation>選択を解除</translation>
+    </message>
+    <message>
         <source>&amp;Reselect</source>
         <translation>再選択(&amp;R)</translation>
     </message>
     <message>
         <source>&amp;Inverse</source>
         <translation>選択範囲を反転(&amp;I)</translation>
+    </message>
+    <message>
+        <source>Inverse</source>
+        <translation>選択範囲を反転</translation>
     </message>
     <message>
         <source>Edit in &amp;Quick Mask Mode</source>
@@ -7988,10 +8108,6 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Mode</source>
         <translation>モード</translation>
-    </message>
-    <message>
-        <source>The document could not be converted.</source>
-        <translation>ドキュメントを変換できませんでした。</translation>
     </message>
     <message>
         <source>Free Transform</source>

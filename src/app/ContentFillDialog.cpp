@@ -187,14 +187,22 @@ void ContentFillDialog::apply() {
     if (!session_ || !session_->document()) { reject(); return; }
     if (previewShown_) { session_->clearPixelPreview(); previewShown_ = false; }
     QString error;
-    QApplication::setOverrideCursor(Qt::WaitCursor);
     const ContentFillRequest r = request();
+    // Auto and All are pixels.contentAwareFill (the command path; an error is shown by it). A painted custom
+    // sampling area has no request form (the method takes rectangles), so it fills directly and is not recorded.
+    const QJsonObject step{{"sampling", r.sampling == ContentFillRequest::Sampling::All ? "all" : "auto"}, {"output", r.newLayer ? "new" : "current"}};
+    if (r.sampling != ContentFillRequest::Sampling::Custom && session_->commandsRouted()) {
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+        const bool filled = session_->runCommand(QStringLiteral("pixels.contentAwareFill"), step).has_value();
+        QApplication::restoreOverrideCursor();
+        if (filled) accept();
+        return;
+    }
+    QApplication::setOverrideCursor(Qt::WaitCursor);
     const bool done = session_->contentAwareFill(&error, r);
     QApplication::restoreOverrideCursor();
     if (!done) { QMessageBox::warning(this, windowTitle(), error); return; }
-    // A painted custom sampling area has no request form (the method takes rectangles), so only Auto and All record.
-    if (r.sampling != ContentFillRequest::Sampling::Custom)
-        recordAction("pixels.contentAwareFill", {{"sampling", r.sampling == ContentFillRequest::Sampling::All ? "all" : "auto"}, {"output", r.newLayer ? "new" : "current"}});
+    if (r.sampling != ContentFillRequest::Sampling::Custom) recordAction("pixels.contentAwareFill", step);
     accept();
 }
 

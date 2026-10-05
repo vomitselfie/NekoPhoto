@@ -31,6 +31,8 @@ class FilterDialog : public PixelDialog {
 public:
     /// `smart`: on a smart object, OK adds the filter as a Smart Filter instead of changing pixels.
     FilterDialog(EditorSession* session, compositor::FilterKind kind, QWidget* parent = nullptr, bool smart = false);
+    /// Add Noise's seed (random per dialog); for checks that compare runs.
+    void setSeed(uint32_t seed) { seed_ = seed % 1000000000u; }
 protected:
     bool apply() override;
 private:

@@ -195,6 +195,13 @@ private:
     void refreshActions();
     void chooseColor(bool background);
     void deleteSelectedLayers();
+    // Menu commands on the command path (CONTRIBUTING.md, "Commands") with a direct fallback for what the method
+    // cannot express.
+    void deleteLayersCommand();
+    void fillWith(const QColor& color);
+    void maskCommand(const QJsonObject& params);
+    void samplingCommand(compositor::Sampling sampling);
+    void trimCommand(const QJsonObject& params);
     void updateColorSwatches();
     void showError(const QString& title, const QString& message);
     void copyLayerFromPayload(int tabIndex, const QString& payload);

@@ -90,8 +90,8 @@ void PixelAdjustmentDialog::refreshPreview() {
 
 bool PixelAdjustmentDialog::apply() {
     if (editor_->settings().isIdentity()) return true;
-    if (editor_->settings().kind == AdjustmentKind::Levels) {
-        // Converted to the command path: OK is pixels.adjust, as automation and a recorded action run it.
+    {
+        // On the command path: OK is pixels.adjust, as automation and a recorded action run it.
         const QJsonObject step{{"kind", QString::fromUtf8(adjustmentKindName(editor_->settings().kind))},
                                {"settings", QJsonDocument::fromJson(QByteArray::fromStdString(editor_->settings().toJson())).object()}};
         if (commitAsCommand(QStringLiteral("pixels.adjust"), step)) return true;
@@ -122,7 +122,7 @@ bool PixelAdjustmentDialog::apply() {
 // ---- Filters ----------------------------------------------------------------------------------
 
 FilterDialog::FilterDialog(EditorSession* session, FilterKind kind, QWidget* parent, bool smart)
-    : PixelDialog(session, parent), kind_(kind), smart_(smart), seed_(uint32_t(std::random_device{}())) {
+    : PixelDialog(session, parent), kind_(kind), smart_(smart), seed_(uint32_t(std::random_device{}() % 1000000000u)) {
     setWindowTitle(smart ? tr("%1 (Smart Filter)").arg(names::filterKind(kind)) : names::filterKind(kind));
     setMinimumWidth(420);
     auto* layout = new QVBoxLayout(this);
@@ -230,10 +230,14 @@ bool FilterDialog::apply() {
         return true;
     }
     if (identity()) return true;
-    if (kind_ == FilterKind::GaussianBlur) {
-        // Converted to the command path: OK is pixels.filter, as automation and a recorded action run it.
-        if (commitAsCommand(QStringLiteral("pixels.filter"), QJsonObject{{"kind", QString::fromUtf8(filterKindName(kind_))}, {"radius", settings_.normalized().radius}})) return true;
-    }
+    // On the command path: OK is pixels.filter, as automation and a recorded action run it.
+    const FilterSettings f = settings_.normalized();
+    QJsonObject step{{"kind", QString::fromUtf8(filterKindName(kind_))}};
+    if (kind_ == FilterKind::GaussianBlur) step["radius"] = f.radius;
+    else if (kind_ == FilterKind::MotionBlur) { step["angle"] = f.angle; step["distance"] = f.distance; }
+    else if (kind_ == FilterKind::AddNoise) { step["amount"] = f.amount; step["gaussian"] = f.gaussian; step["monochromatic"] = f.monochromatic; step["seed"] = int(seed_); }
+    else if (kind_ == FilterKind::LensCorrection) { step["distortion"] = f.distortion; step["bicubic"] = f.bicubic; }
+    if (commitAsCommand(QStringLiteral("pixels.filter"), step)) return true;
     LayerTransform placed = placement();
     const bool trims = kind_ == FilterKind::GaussianBlur || kind_ == FilterKind::MotionBlur;
     if (sourceNative()) {
@@ -261,12 +265,6 @@ bool FilterDialog::apply() {
         if (trims) image = trimToPixels(*out, placement(), placed);
         commit(image, placed, QString::fromUtf8(filterKindName(kind_)));
     }
-    const FilterSettings f = settings_.normalized();
-    QJsonObject step{{"kind", QString::fromUtf8(filterKindName(kind_))}};
-    if (kind_ == FilterKind::GaussianBlur) step["radius"] = f.radius;
-    else if (kind_ == FilterKind::MotionBlur) { step["angle"] = f.angle; step["distance"] = f.distance; }
-    else if (kind_ == FilterKind::AddNoise) { step["amount"] = f.amount; step["gaussian"] = f.gaussian; step["monochromatic"] = f.monochromatic; step["seed"] = int(seed_ % 1000000000u); }
-    else if (kind_ == FilterKind::LensCorrection) { step["distortion"] = f.distortion; step["bicubic"] = f.bicubic; }
     recordAction("pixels.filter", step);
     return true;
 }
