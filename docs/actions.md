@@ -45,11 +45,15 @@ the same format: `{"format": "nekophoto.actions", "version": 1, "actions": [{"na
 | Filter > Gaussian Blur, Motion Blur, Add Noise (with its seed), Lens Correction | `pixels.filter` |
 | Edit > Fill with Foreground / Background, Clear, Content-Aware Fill | `pixels.fill` with the colour, `pixels.clear` (or `layers.delete` without a selection), `pixels.contentAwareFill` (Auto and All sampling; a painted Custom area is not recorded) |
 | Edit > Assign Profile, Convert to Profile (a built-in profile or none) | `document.profile` |
+| Edit > Cut, Copy, Copy Merged, Paste | `pixels.cut`, `pixels.copy`, `pixels.copyMerged`, `pixels.paste`; with layers selected and no selection, Copy is `layers.copy`, and Paste of copied layers `layers.paste` |
 | Layer > New Layer, New Layer Below, New Folder, Layer via Copy, Group, Duplicate, Delete, Merge Down, New Adjustment Layer, Layer Mask (every item), Flip Layer | `layers.add`, `layers.viaCopy`, `layers.group`, `layers.duplicate`, `layers.delete`, `layers.merge`, `layers.mask`, `layers.flip` |
 | Layer > Rename Layer, Create / Release Clipping Mask, Resampling | `layers.set` on the active layer (no id) |
 | Layer > Bring Forward, Send Backward | `layers.reorder` |
 | Layer > Smart Objects > Convert to Smart Object, Replace Contents, Rasterize | `smartObject.convert`, `smartObject.replace` with the file, `smartObject.rasterize` |
-| Select > All, Deselect, Inverse, Modify (Expand, Contract, Feather, Smooth, Border), Load as Selection (Layer Pixels, Layer Mask, Add, Subtract, Intersect) | `selection.all`, `selection.none`, `selection.invert`, `selection.grow`, `selection.feather`, `selection.smooth`, `selection.border`, `selection.fromLayer` |
+| Select > All, Deselect, Inverse, Reselect, Modify (Expand, Contract, Feather, Smooth, Border), Load as Selection (Layer Pixels, Layer Mask, Add, Subtract, Intersect) | `selection.all`, `selection.none`, `selection.invert`, `selection.reselect`, `selection.grow`, `selection.feather`, `selection.smooth`, `selection.border`, `selection.fromLayer` |
+| The Layers panel: New layer, New folder, a new adjustment layer, Add layer mask, Delete, Duplicate, Merge Down and the mask items of a row's menu | `layers.add`, `layers.mask`, `layers.delete`, `layers.duplicate`, `layers.merge` |
+| The Layers panel: opacity (a drag is one step, at its release), blend mode, an eye clicked, Alt-click to clip or release, Rename | `layers.set` on the active layer (no id); an eye of another layer names that layer by id |
+| The Layers panel: a row dragged to another place | `layers.move` (by the layers' ids) |
 | The Paths panel: Make Work Path, Fill, Stroke, Make Selection, Add to Selection, Make Shape Layer, Delete | `paths.fromSelection`, `paths.fill`, `paths.stroke`, `paths.toSelection`, `paths.toShape`, `paths.delete` (by the path's id: the Work Path's is the same in every document) |
 | The Channels panel: Save selection as channel, New Channel | `channels.saveSelection`, `channels.new` |
 | A rectangular or elliptical marquee | `selection.rect` with its box and mode |
@@ -59,12 +63,13 @@ the same format: `{"format": "nekophoto.actions", "version": 1, "actions": [{"na
 | Swap or reset the colours, or pick one in the colour dialog | `colors.set` |
 
 Steps act on the active layer, as the menu command did, so an action recorded on one document plays on another.
-Requests an agent records may name layers by id (`layers.select`, `layers.set`); those ids belong to the document
-they were recorded on, so edit or switch off such steps before playing the action elsewhere.
+Requests an agent records may name layers by id (`layers.select`, `layers.set`), as do a dragged Layers panel row
+and an eye clicked on a layer other than the active one; those ids belong to the document they were recorded on, so
+edit or switch off such steps before playing the action elsewhere.
 
 Not recorded (yet): the Move tool's drags and a distortion or a transform of several layers, a mask alone or selected pixels, the lasso and magic wand, Quick Select, the Gradient,
-Shape, Text, Clone, Healing, Smudge and Dodge tools, the Layers panel's own buttons, eyes, opacity and blend
-controls, G'MIC, Camera Raw and Remove Background dialogs, layer styles, smart objects' Edit Contents and filters,
+Shape, Text, Clone, Healing, Smudge and Dodge tools, an eye swipe across several layers, deleting several layers
+from the Layers panel, Alt-dragging a layer or a mask there, G'MIC, Camera Raw and Remove Background dialogs, layer styles, smart objects' Edit Contents and filters,
 vector masks, Type > Create Work Path and Convert to Shape (their methods name the layer), and the Channels panel's
 other items (they name a channel). Each can
 still be added by hand as the request that does it (`rpc.describe` lists every method's parameters). Looking
