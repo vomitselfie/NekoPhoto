@@ -639,6 +639,10 @@
         <translation>スマートオブジェクトの内容を編集</translation>
     </message>
     <message>
+        <source>Blending Options</source>
+        <translation>描画オプション</translation>
+    </message>
+    <message>
         <source>Layer Style</source>
         <translation>レイヤースタイル</translation>
     </message>
@@ -5181,6 +5185,54 @@ File &gt; New creates a blank canvas.</source>
         <translation>ドロップシャドウ</translation>
     </message>
     <message>
+        <source>Gray</source>
+        <translation>グレー</translation>
+    </message>
+    <message>
+        <source>Red</source>
+        <translation>レッド</translation>
+    </message>
+    <message>
+        <source>Green</source>
+        <translation>グリーン</translation>
+    </message>
+    <message>
+        <source>Blue</source>
+        <translation>ブルー</translation>
+    </message>
+    <message>
+        <source>Cyan</source>
+        <translation>シアン</translation>
+    </message>
+    <message>
+        <source>Magenta</source>
+        <translation>マゼンタ</translation>
+    </message>
+    <message>
+        <source>Yellow</source>
+        <translation>イエロー</translation>
+    </message>
+    <message>
+        <source>Black</source>
+        <translation>ブラック</translation>
+    </message>
+    <message>
+        <source>Lightness</source>
+        <translation>明度</translation>
+    </message>
+    <message>
+        <source>a</source>
+        <translation>a</translation>
+    </message>
+    <message>
+        <source>b</source>
+        <translation>b</translation>
+    </message>
+    <message>
+        <source>Drag the black and white handles; Alt-drag splits a handle so the layer fades between the halves.</source>
+        <translation>黒と白のスライダーをドラッグします。Alt キーを押しながらドラッグするとスライダーが分割され、その間でレイヤーがフェードします。</translation>
+    </message>
+    <message>
         <source>Layer Style</source>
         <translation>レイヤースタイル</translation>
     </message>
@@ -5203,6 +5255,18 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Blend interior effects as group</source>
         <translation>内部効果をグループとして描画</translation>
+    </message>
+    <message>
+        <source>Blend If</source>
+        <translation>ブレンド条件</translation>
+    </message>
+    <message>
+        <source>This Layer</source>
+        <translation>このレイヤー</translation>
+    </message>
+    <message>
+        <source>Underlying Layer</source>
+        <translation>下になっているレイヤー</translation>
     </message>
     <message>
         <source>Softer</source>
@@ -5467,6 +5531,18 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Shape Burst</source>
         <translation>シェイプバースト</translation>
+    </message>
+    <message>
+        <source>Method</source>
+        <translation>方法</translation>
+    </message>
+    <message>
+        <source>Perceptual</source>
+        <translation>知覚的</translation>
+    </message>
+    <message>
+        <source>Classic</source>
+        <translation>クラシック</translation>
     </message>
     <message>
         <source>Reverse</source>

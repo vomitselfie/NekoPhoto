@@ -71,6 +71,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 ## Files and canvas
 - Open Photoshop PSD and PSB files with their layers, folders, masks, blend modes, most adjustment layers, layer styles drawn as Photoshop draws them (docs/layer-styles.md), folders isolated and faded as in Photoshop, smart objects that keep their source (docs/smart-objects.md), vector masks and shape layers drawn from their paths (docs/vector-masks.md) and simple text as editable text; what cannot be kept is listed after opening
 - Layer ▸ Layer Style: Photoshop's Layer Style dialog for drop and inner shadows, outer and inner glows, bevel and emboss, satin, colour, gradient and pattern overlays and stroke, with Copy, Paste and Clear Layer Style; styles export to PSD as Photoshop's own (docs/layer-styles.md)
+- Blend If (Layer Style ▸ Blending Options): This Layer and Underlying Layer sliders for Gray and each colour channel, split with Alt-drag for a soft fade, on layers, folders and adjustment layers, drawn at every depth and kept in PSD files and projects; gradients draw in Photoshop's Perceptual, Linear or Classic method (docs/layer-styles.md)
 - Photoshop presets (File ▸ Import Presets…): layer styles from `.asl` files, applied from Layer ▸ Layer Style ▸ Apply Style with the patterns they use; patterns from `.pat` files for pattern overlays and bevel textures; gradients from `.grd` files for the Gradient tool and the Layer Style dialog's gradients. They stay in the library across sessions (docs/presets.md)
 - Export layered Photoshop PSD files (File > Export as Photoshop Document): layers, folders, masks, clipping, blend modes and Levels, Curves, Exposure and Hue/Saturation adjustment layers, with a merged image; text layers as editable Photoshop text; a PSD you opened keeps its layer styles, editable text, smart objects and vector masks on the way back out while they still match their layers (docs/psd-roundtrip.md); anything Photoshop cannot carry is listed before you export (docs/psd-export.md)
 - Open Clip Studio `.clip` projects with their layers, folders, masks, clipping, opacity and blend modes (vector and text layers come in as their pixels)
@@ -124,6 +125,7 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 - クリッピングマスクとグループのマスク
 - 調整レイヤー:色相・彩度、レベル補正、トーンカーブ、露光量、グラデーションマップ、粒子
 - 下のレイヤーと結合、レイヤーを結合、グループを結合(Ctrl+E)
+- ブレンド条件(レイヤースタイル ▸ 描画オプション):グレーと各カラーチャンネルの「このレイヤー」「下になっているレイヤー」のスライダー。Alt キーを押しながらドラッグして分割すると、その間でなめらかにフェードします。レイヤー・グループ・調整レイヤーに使え、すべてのビット数で描画し、PSD とプロジェクトに保存されます。グラデーションは Photoshop の方法(知覚的・リニア・クラシック)で描画します([layer-styles.md](layer-styles.md)、英語)
 - ドラッグ&ドロップで複製・名前変更・並べ替え・入れ子。開いているプロジェクト間でもレイヤーを移動可能
 - ドキュメント間でレイヤーごとコピー&ペースト(Photoshop と同じ):選択範囲がなくレイヤーを選択しているときの 編集 ▸ コピー で、レイヤーとグループの中身をマスク・ベクトルマスク・スタイル・テキスト・シェイプ・スマートオブジェクト(ソースごと)・調整レイヤー・描画モード・クリッピングを保ったままコピーし、開いているどのドキュメントでもペーストで作業中のレイヤーの上に 1 回の取り消し単位で追加します。カラープロファイルとビット数はペースト先に合わせて変換します(他のアプリには統合した画像を渡します)
 

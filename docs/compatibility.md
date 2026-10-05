@@ -51,8 +51,12 @@ Read, drawn and written back:
 - **Adjustment layers**: Levels, Curves, Exposure and Hue/Saturation as Photoshop adjustment layers; the rest
   (Brightness/Contrast, Color Balance, Selective Color ...) carried unchanged.
 - **Layer styles**: drop and inner shadow, outer and inner glow, bevel and emboss (with texture and contour),
-  satin, colour, gradient and pattern overlays, strokes (several per layer), Blend If, knockout, blend-interior
-  options, drawn as Photoshop draws them and written back as its bytes ([layer-styles.md](layer-styles.md)).
+  satin, colour, gradient and pattern overlays, strokes (several per layer), knockout, blend-interior options,
+  drawn as Photoshop draws them and written back as its bytes; gradients in Photoshop's Perceptual, Linear and
+  Classic methods ([layer-styles.md](layer-styles.md#gradient-methods)).
+- **Blend If**: This Layer and Underlying Layer ranges per channel with split points, on layers, adjustment layers
+  and folders, drawn at every depth and edited in Blending Options; unedited ranges go back byte for byte
+  ([layer-styles.md](layer-styles.md#blend-if)).
 - **Shapes**: solid, gradient and pattern fill layers, strokes (inside, centred, outside; dashes, caps, joins),
   path booleans, live rectangles ([vector-masks.md](vector-masks.md)).
 - **Text**: point and box text, several style runs, tracking, leading, alignment, rotation, the fifteen Warp Text
@@ -93,8 +97,11 @@ Collected from the pages above; each is also listed before you export or in the 
   drawn here, no linked filter mask, no relinking of linked files.
 
 How close the drawing is, as a mean difference per pixel on a 0-255 scale against Photoshop's own renders of the
-fixtures: most layer styles 0.00-0.9, vector masks and shapes 0.00-1.3, styled folders 0.00-2.6
+fixtures: most layer styles 0.00-0.9, vector masks and shapes 0.00-1.3, styled folders 0.00-2.6, Blend If 0.52
+(within 2 levels), Perceptual and Linear gradients 0.57 and 0.08 (against ag-psd's Photoshop-saved files)
 ([layer-styles.md](layer-styles.md#how-close), [vector-masks.md](vector-masks.md#how-close)).
+Blend If in CMYK and Lab, and Perceptual and Linear gradients between CMYK inks, have no Photoshop-saved file to
+check against.
 
 ## Continuous integration
 
@@ -144,7 +151,9 @@ NekoPhoto 1.6.1 でツールを実行して集計したものです。
   Photoshop 2026 で保存)すべてが合格し、3,675 個のブロックがバイト単位で変化なく戻りました。テキストレイヤー 20 個は編集可能なテキストとして開きます。
 - **描画のハッシュ**: 235 シーン(8 bit 133、16 bit 102)。**ゴールデン画像**: 6 テスト・参照 PNG 21 枚。**テストスイート**: CTest 41 個(すべて合格)。
 - **対応している PSD の要素**: レイヤーとグループ、描画モード、マスク(レイヤーマスク・ベクターマスク・両方・濃度とぼかし)、
-  クリッピング、調整レイヤー、レイヤースタイル、シェイプ、編集可能なテキスト、スマートオブジェクトとスマートフィルター、PSB。
+  クリッピング、調整レイヤー、レイヤースタイル、ブレンド条件(このレイヤー・下になっているレイヤー、チャンネルごと、分割した
+  スライダー。Photoshop の描画との差は 2 レベル以内)、グラデーションの方法(知覚的・リニア・クラシック)、シェイプ、
+  編集可能なテキスト、スマートオブジェクトとスマートフィルター、PSB。
 - **16 bit**: 16 bit の PSD は 16 bit のまま開いて書き出し、編集していないレイヤーのチャンネルデータはバイト単位で戻ります。
   上のテストファイルを 16 bit に変換して書き出しても、118 個すべてで引き継いだブロックが戻ります([bit-depth.md](bit-depth.md))。
 - **カラープロファイル**: テストファイルのうちプロファイル付きの RGB の PSD 64 個すべてで、ICC プロファイル(リソース 1039)が

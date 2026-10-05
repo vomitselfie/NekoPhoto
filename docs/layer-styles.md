@@ -32,6 +32,52 @@ blends its own pixels and the interior effects land on that, with it on they fol
 Stroke with Overprint off knocks the layer's content out of its band, even at 0% opacity; a clipped layer is
 masked by the base's pixels, never its effects; with Fill below 100% the overlays are their own passes.
 
+## Blend If
+
+Blending Options' Blend If is drawn and editable (`src/core/include/compositor/blendif.h`). A layer, an adjustment
+layer or a folder shows only where its own colours (This Layer) and the colours under it (Underlying Layer) fall
+within a black and a white point per channel; Alt-drag splits a point in two, and between the halves the layer fades.
+The channels are Photoshop's: Gray, Red, Green and Blue in RGB; Gray, Cyan, Magenta, Yellow and Black in CMYK;
+Lightness, a and b in Lab.
+
+- Drawing follows Photoshop 2026 as Patchy calibrated it: the channels' gates multiply, This Layer's multiplies
+  Underlying Layer's; byte v in a split black range [a, b] keeps (v - a + 1) / (b - a + 1) for a <= v < b (the white
+  side mirrors it; joined points cut hard); Gray is (299 R + 590 G + 111 B) / 1000, rounded; a transparent backdrop
+  always passes. An adjustment layer reads This Layer on its adjusted colours and Underlying Layer on the colours
+  before it. A folder with Blend If isolates (Pass Through too) and its result is gated against what is under it. A
+  clipping base's ranges gate the clipped result, not the shape the clipped layers take. A layer's exterior effects
+  are not gated; its interior effects are gated with its pixels (Photoshop leaves them ungated: a small difference).
+- Depths and modes: the gates read 8-bit levels at every depth (16-bit samples rounded to a level, 32-bit ones
+  through the document's curve). CMYK reads the stored values (255 is no ink) and its Gray from the complements of C,
+  M and Y darkened by K; Lab reads L, a and b as stored. Neither has a Photoshop-saved fixture: unverified.
+  Converting the colour mode keeps the Gray range (Lab reads it on Lightness) and resets the per-channel ones.
+- Editing: Layer ▸ Layer Style ▸ Blending Options (the channel menu and the two sliders), Copy and Paste Layer Style,
+  and automation's `layers.set` `blendIf` (any layer kind, folders and adjustment layers included; `layers.get`
+  reports it). The dialog does not open on adjustment layers yet, nor in CMYK and Lab documents, where layer styles
+  are not edited: there `layers.set` sets Blend If. An edit patches the record's ranges (a transparency pair the
+  file had is kept); ranges never edited go back to a PSD byte for byte; projects keep them.
+- How close: Patchy's `photoshop-blend-if-4b` (a layer with Gray and per-channel split ranges on both sliders, a
+  Levels adjustment layer and a folder) matches Photoshop's render within 2 levels, mean 0.52 per channel (it was
+  106 levels off when the ranges were ignored); `build/tests/blendif_tests` checks it when Patchy is beside the
+  checkout.
+
+## Gradient methods
+
+Gradients follow Photoshop's Method (gradient overlays, layer-style strokes, gradient fill layers and shape strokes;
+the Layer Style dialog's gradients have the menu): Classic interpolates the stored sRGB values, Linear interpolates
+in linear light, and Perceptual in Oklab, each with the gradient's smoothness applied in its own space (between two
+stops too; Classic smooths only past two stops, as before). Colour stops, midpoints and opacity stops work as in
+Classic; opacity interpolates linearly in every method. The model follows PhotoCraft's (THIRD-PARTY-NOTICES.md),
+fitted to Photoshop's composites, and is checked against two Photoshop-saved files of ag-psd's tests (MIT), whose
+merged images it now matches (mean / max level difference): a Perceptual gradient overlay 0.57 / 4 (8.1 / 20 drawn
+as Classic), a Linear one 0.08 / 1 (2.2 / 12 before). `build/tests/gradient_method_tests` re-measures them with
+`AGPSD_FIXTURES` set to ag-psd's `test` folder, and runs every method through a PSD at 8 and 16 bits in RGB, CMYK
+and Lab.
+
+Unverified: a CMYK fill whose stops are inks interpolates the inks in every method (no Photoshop-saved CMYK file
+with Linear or Perceptual exists here); the Gradient tool and Gradient Map have no Method setting yet (they draw as
+before).
+
 ## How close
 
 Against Photoshop's own renders of Patchy's fixtures (`../Patchy/test-fixtures/psd/*.bmp`), mean difference per
