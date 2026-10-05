@@ -83,8 +83,9 @@ those files; the lower-case `perceptual` and `linear` some other writers use are
 The Gradient tool and Gradient Map draw Perceptual and Linear from the same model, the ramp sampled at 257 even
 stops (within a level of the overlay's colours; Classic draws exactly as before, and stays the default, while
 Photoshop's tool now defaults to Perceptual). Gradient Map reads its method from a Photoshop file's 'grdm' (version 3
-holds the enum's code after Dither: ag-psd's Photoshop-saved Perceptual map is read as Perceptual); NekoPhoto's Gradient
-Map is a two-colour ramp, so PSD export still writes it as pixels and the method lives in projects. Automation:
+holds the enum's code after Dither: ag-psd's Photoshop-saved Perceptual map is read as Perceptual). NekoPhoto's Gradient
+Map is a two-colour ramp (a file's first and last stops), so an unedited map goes back to PSD as its own 'grdm', byte for
+byte, and an edited one is written as pixels as before; projects keep the method. Automation:
 `gradient.draw` `interpolation`, and `interpolation` in a Gradient Map's `gradientMapSettings`.
 
 Unverified: a CMYK fill whose stops are inks interpolates the inks in every method (no Photoshop-saved CMYK file

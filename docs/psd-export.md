@@ -35,8 +35,8 @@ Each is listed before you export (the export dialog) or in the reply (`warnings`
 - **Shape layers** are written as Photoshop live shape layers (see [vector-tools.md](vector-tools.md)). **Text layers** are
   written as Photoshop type layers over the same pixels (see [psd-roundtrip.md](psd-roundtrip.md#text)); flipped text
   is written as pixels (a note).
-- **Adjustments Photoshop has no equivalent for** (Grain; Gradient Map, whose ramp between its ends is
-  NekoPhoto's own; Hue/Saturation that moves saturation on the plain scale, or with Invert Range on) become a pixel layer holding the adjusted look of
+- **Adjustments Photoshop has no equivalent for** (Grain; a Gradient Map made or edited in NekoPhoto, whose ramp
+  between its ends is NekoPhoto's own (one read from a PSD and left alone goes back as it was); Hue/Saturation that moves saturation on the plain scale, or with Invert Range on) become a pixel layer holding the adjusted look of
   everything beneath, in the adjustment's place. The layers beneath stay in the file (a warning).
 - **A layer clipped to one that is not right beneath it** is written unclipped, as it shows (a warning).
 - **Folder opacity and folder blend modes** are written as set, but NekoPhoto does not apply them while

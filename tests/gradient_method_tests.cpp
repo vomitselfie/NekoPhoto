@@ -20,6 +20,8 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -328,6 +330,20 @@ TEST_CASE(photoshop_gradient_map_method_is_read) {
         maps++;
     }
     CHECK_EQ(maps, 1);
+    // Unedited, its 'grdm' goes back to PSD byte for byte (stops, method and all).
+    auto grdm = [](const std::vector<uint8_t>& bytes) {
+        const std::string all(bytes.begin(), bytes.end()), tag = "8BIMgrdm";
+        const size_t at = all.find(tag);
+        if (at == std::string::npos || at + 12 > all.size()) return std::string();
+        const size_t size = size_t(uint8_t(all[at + 8])) << 24 | size_t(uint8_t(all[at + 9])) << 16 | size_t(uint8_t(all[at + 10])) << 8 | uint8_t(all[at + 11]);
+        return all.substr(at, 12 + size);
+    };
+    std::ifstream in(std::string(dir) + "/read/gradient-overlay-2/src.psd", std::ios::binary);
+    const std::vector<uint8_t> original((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    const auto written = encodePsd(imported->document, PsdExportOptions(), nullptr, &error);
+    REQUIRE(!written.empty());
+    CHECK(!grdm(original).empty());
+    CHECK(grdm(written) == grdm(original));
 }
 
 TEST_MAIN()

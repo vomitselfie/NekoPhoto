@@ -83,7 +83,7 @@ Collected from the pages above; each is also listed before you export or in the 
   Photoshop to rebuild. No Photoshop-saved 16-bit file is in the corpus: the 16-bit round trip is checked on a file
   built the way Photoshop lays one out, and on the corpus converted to 16 bits.
 - **Written as pixels**: scaled, rotated or flipped layers are resampled into place; shape layers made in
-  NekoPhoto; flipped text; adjustments Photoshop has no equivalent for (Grain, Gradient Map, Hue/Saturation on
+  NekoPhoto; flipped text; adjustments Photoshop has no equivalent for (Grain, a Gradient Map made or edited here, Hue/Saturation on
   the plain scale) become a pixel layer of their result; a layer clipped to one not directly beneath it is
   written unclipped.
 - **Folder opacity and blend modes** set in NekoPhoto are written as set but shown differently than in Photoshop.

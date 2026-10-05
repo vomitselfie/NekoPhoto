@@ -396,7 +396,8 @@ bool smartObjectBlock(const std::string& key) { return key == "SoLd" || key == "
 bool carriedLayerBlock(const std::string& key, bool modelledAdjustment, bool smartObject = false) {
     if (smartObject && smartObjectBlock(key)) return false;   // the instance keeps them (smartobject.h)
     static const std::set<std::string> never{"luni", "lsct", "lsdk", "iOpa", "lyid"};
-    static const std::set<std::string> adjustments{"levl", "curv", "hue2", "expA", "grdm"};
+    // A Gradient Map's grdm is carried: written back while unedited (its stops beyond the ends are not modelled).
+    static const std::set<std::string> adjustments{"levl", "curv", "hue2", "expA"};
     if (never.count(key)) return false;
     if (modelledAdjustment && adjustments.count(key)) return false;
     return true;

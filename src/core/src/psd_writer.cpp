@@ -881,10 +881,11 @@ private:
         static const std::map<AdjustmentKind, const char*> keys{{AdjustmentKind::Invert, "nvrt"}, {AdjustmentKind::BrightnessContrast, "brit"},
             {AdjustmentKind::Posterize, "post"}, {AdjustmentKind::Threshold, "thrs"}, {AdjustmentKind::BlackWhite, "blwh"}, {AdjustmentKind::ColorBalance, "blnc"},
             {AdjustmentKind::Vibrance, "vibA"}, {AdjustmentKind::PhotoFilter, "phfl"}, {AdjustmentKind::ChannelMixer, "mixr"}, {AdjustmentKind::SelectiveColor, "selc"},
-            {AdjustmentKind::ColorLookup, "clrL"}};
+            {AdjustmentKind::ColorLookup, "clrL"}, {AdjustmentKind::GradientMap, "grdm"}};
         auto key = keys.find(s.kind);
         if (key == keys.end()) return false;
-        // Unchanged since the file was read: its carried block goes back as it was.
+        // Unchanged since the file was read: its carried block goes back as it was. (A Gradient Map, which holds only
+        // the ramp's ends and its method here, goes back only so; edited, it is written as pixels.)
         if (l.psdCarry && !l.psdCarry->adjustmentJson.empty() && l.psdCarry->adjustmentJson == s.toJson()) {
             for (const PsdBlock& b : l.psdCarry->blocks) if (b.key == key->second) return true;
         }
