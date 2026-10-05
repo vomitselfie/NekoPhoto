@@ -48,6 +48,42 @@ struct RenderExec<SampleType::U8> {
     std::map<Uuid, std::shared_ptr<GrayImage>> liveCoverage;
     std::set<Uuid> visiting;
     bool plainOnly = false;   // while taking a clipping base's transparency
+    bool ungated = false;     // drawing a Blend If layer's own pass (blendif.h)
+
+    /// Blend If: `target` holds the layer drawn over `before`; each pixel keeps the share the gates allow, This
+    /// Layer read from `source` (the layer's own colours) and Underlying Layer from `before`. Where the layer has no
+    /// pixels (its exterior effects) nothing is gated, as in Photoshop.
+    void applyGate(const BlendIfGate& gate, const Image& source, const Image& before, Image& target) {
+        parallelRows(0, outHeight, [&](int ya, int yb) {
+            for (int y = ya; y < yb; y++) {
+                const uint8_t* s = source.row(y);
+                const uint8_t* b = before.row(y);
+                uint8_t* d = target.row(y);
+                for (int x = 0; x < outWidth; x++, s += 4, b += 4, d += 4) {
+                    if (!s[3] || std::memcmp(b, d, 4) == 0) continue;
+                    int c[3];
+                    for (int k = 0; k < 3; k++) c[k] = std::min(255, (s[k] * 255 + s[3] / 2) / s[3]);
+                    float g = gate.sourceFactor(c);
+                    if (g > 0 && gate.anyUnder && b[3]) {
+                        for (int k = 0; k < 3; k++) c[k] = std::min(255, (b[k] * 255 + b[3] / 2) / b[3]);
+                        g *= gate.underFactor(c, b[3] / 255.0f);
+                    }
+                    if (g >= 1) continue;
+                    for (int k = 0; k < 4; k++) d[k] = uint8_t(std::lround(b[k] + (d[k] - b[k]) * g));
+                }
+            }
+        });
+    }
+
+    /// The layer's own colours, for This Layer's gate: drawn alone, without effects or folder masks.
+    Image ownColours(const Layer& layer) {
+        Image source(outWidth, outHeight);
+        const bool wasPlain = plainOnly, wasUngated = ungated;
+        plainOnly = true; ungated = true;
+        drawOwn(layer, source, nullptr);
+        plainOnly = wasPlain; ungated = wasUngated;
+        return source;
+    }
 
     static bool isolates(const Layer& g) { return RenderPlan::isolates(g); }
     static bool fades(const Layer& g) { return RenderPlan::fades(g); }
@@ -88,6 +124,9 @@ struct RenderExec<SampleType::U8> {
             // The folder's result, in its own mode and opacity, over what is below it.
             cur = f.parent;
             const BlendMode mode = blendOf(g);
+            const std::optional<BlendIf> blendIf = layerBlendIf(g, document.colorMode);
+            std::optional<Image> before;
+            if (blendIf) before.emplace(*cur);
             parallelRows(0, outHeight, [&](int ya, int yb) {
                 for (int y = ya; y < yb; y++) {
                     const uint8_t* src = f.buffer->row(y);
@@ -95,6 +134,8 @@ struct RenderExec<SampleType::U8> {
                     for (int x = 0; x < outWidth; x++) if (src[x * 4 + 3]) compositePixelAt(mode, src + x * 4, opacity, dst + x * 4, docX(region, scale, x), docY(region, scale, y));
                 }
             });
+            // A folder's Blend If gates its result against what is under the folder.
+            if (blendIf) applyGate(BlendIfGate(*blendIf, document.colorMode), *f.buffer, *before, *cur);
         } else if (f.before) {
             // Pass Through at reduced opacity: the children met the backdrop at full strength; the result fades
             // back toward it (Photoshop's non-isolated group opacity).
@@ -257,6 +298,14 @@ struct RenderExec<SampleType::U8> {
     }
 
     void drawOwn(const Layer& layer, Image& target, const GrayImage* coverage) {
+        if (!plainOnly && !ungated) if (auto blendIf = layerBlendIf(layer, document.colorMode)) {
+            const Image before = target;
+            ungated = true;
+            drawOwn(layer, target, coverage);
+            ungated = false;
+            applyGate(BlendIfGate(*blendIf, document.colorMode), ownColours(layer), before, target);
+            return;
+        }
         ImagePtr image = imageOf(layer);
         if (!image) image = fillImage(layer);
         if (!image) return;
@@ -400,7 +449,11 @@ struct RenderExec<SampleType::U8> {
             sampleMaskCoverage(layer.mask->asset.image.u8(), transformOf(layer), region, scale, 0, *own, false);
             clip = multiply(clip, own);
         }
-        if (mode == BlendMode::Normal) {
+        // Blend If: This Layer reads the adjusted colours, Underlying Layer the colours before the adjustment.
+        const std::optional<BlendIf> blendIf = layerBlendIf(layer, document.colorMode);
+        std::optional<BlendIfGate> gate;
+        if (blendIf) gate.emplace(*blendIf, document.colorMode);
+        if (mode == BlendMode::Normal && !gate) {
             // Same alpha on both sides, so the straight-colour lerp is a premultiplied lerp: no divides.
             parallelRows(0, outHeight, [&](int ya, int yb) {
             for (int y = ya; y < yb; y++) {
@@ -428,6 +481,12 @@ struct RenderExec<SampleType::U8> {
             for (int x = 0; x < outWidth; x++, d += 4, a += 4) {
                 float mix = opacity * (c ? c[x] / 255.0f : 1.0f);
                 if (mix <= 0 || d[3] == 0) continue;
+                if (gate) {
+                    int sc[3], bc[3];
+                    for (int k = 0; k < 3; k++) { sc[k] = std::min(255, (a[k] * 255 + d[3] / 2) / d[3]); bc[k] = std::min(255, (d[k] * 255 + d[3] / 2) / d[3]); }
+                    mix *= gate->sourceFactor(sc) * gate->underFactor(bc, d[3] / 255.0f);
+                    if (mix <= 0) continue;
+                }
                 float ab = d[3] / 255.0f;
                 float cb[3], cs[3];
                 for (int k = 0; k < 3; k++) { cb[k] = d[k] / 255.0f / ab; cs[k] = a[k] / 255.0f / ab; }
@@ -451,6 +510,7 @@ struct RenderExec<SampleType::U8> {
         if (blendOf(layer) != BlendMode::Normal || clamp(layer.opacity, 0.0, 1.0) < 1) return std::nullopt;
         if (layer.mask && layer.mask->enabled && layer.mask->asset.image.u8()) return std::nullopt;
         if (foldersCoverage(layer.parentId)) return std::nullopt;
+        if (plan.hasBlendIf(layer)) return std::nullopt;
         AdjustmentSettings settings;
         if (!AdjustmentSettings::parse(layer.adjustment->json, settings)) return std::nullopt;
         return adjustmentTransfer(settings);
@@ -481,7 +541,13 @@ struct RenderExec<SampleType::U8> {
         }
         // A clipping stack: the base's alpha is shared by the layers clipped to it.
         Image group(outWidth, outHeight);
+        // A base with Blend If: its gate applies to the clipped result against the backdrop, so it does not shrink
+        // the shape the clipped layers take.
+        const std::optional<BlendIf> blendIf = plainOnly ? std::nullopt : layerBlendIf(layer, document.colorMode);
+        const bool wasUngated = ungated;
+        if (blendIf) ungated = true;
         drawOwn(layer, group, nullptr);
+        ungated = wasUngated;
         std::vector<uint8_t> alpha(size_t(outWidth) * outHeight);
         layer_extract_alpha(group.data(), size_t(group.stride()), alpha.data(), size_t(outWidth), size_t(outWidth), size_t(outHeight));
         layer_unpremultiply_opaque(group.data(), size_t(group.stride()), size_t(outWidth), size_t(outHeight));
@@ -493,6 +559,8 @@ struct RenderExec<SampleType::U8> {
         }
         layer_restore_alpha(group.data(), size_t(group.stride()), alpha.data(), size_t(outWidth), size_t(outWidth), size_t(outHeight));
         BlendMode mode = blendOf(layer);
+        std::optional<Image> before;
+        if (blendIf) before.emplace(out);
         parallelRows(0, outHeight, [&](int ya, int yb) {
         for (int y = ya; y < yb; y++) {
             const uint8_t* s = group.row(y);
@@ -504,6 +572,7 @@ struct RenderExec<SampleType::U8> {
             }
         }
         });
+        if (blendIf) applyGate(BlendIfGate(*blendIf, document.colorMode), ownColours(layer), *before, out);
     }
 
     /// Draws the layers order[from, to) over `out`.

@@ -4,6 +4,7 @@
 // rules follow Patchy (MIT, src/third_party/patchy_psd/README.md), which pinned them against Photoshop 2026;
 // see docs/layer-styles.md.
 #pragma once
+#include "blendif.h"
 #include "image.h"
 #include <array>
 #include <cstdint>
@@ -121,6 +122,10 @@ struct LayerStyle {
     std::vector<Bevel> bevels;
     /// The layers's effects reference point ('fxrp'), for patterns linked with the layer.
     double referenceX = 0, referenceY = 0;
+    /// Blending Options' Blend If, for the Layer Style dialog and Copy/Paste Layer Style: it lives in the record's
+    /// blending ranges, not in the effects block, so setLayerStyle leaves it alone (the editor applies it with
+    /// setLayerBlendIf); none leaves the layer's ranges as they are.
+    std::optional<BlendIf> blendIf;
     bool empty() const;
     /// How far, in document pixels, the effects reach past the layer's pixels (or read past them).
     double reach() const;

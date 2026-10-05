@@ -374,3 +374,13 @@ if(TARGET nekophoto)
     set_tests_properties(guides_selftest PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/selftest-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/selftest-home/data")
 endif()
+
+add_executable(blendif_tests blendif_tests.cpp)
+target_link_libraries(blendif_tests PRIVATE compositor::core compositor_warnings)
+# Patchy beside this checkout (CONTRIBUTING.md); PATCHY_FIXTURES in the environment overrides it.
+target_compile_definitions(blendif_tests PRIVATE PATCHY_FIXTURES="${CMAKE_SOURCE_DIR}/../Patchy/test-fixtures/psd")
+add_test(NAME blendif_tests COMMAND blendif_tests)
+
+add_executable(gradient_method_tests gradient_method_tests.cpp)
+target_link_libraries(gradient_method_tests PRIVATE compositor::core compositor_warnings)
+add_test(NAME gradient_method_tests COMMAND gradient_method_tests)

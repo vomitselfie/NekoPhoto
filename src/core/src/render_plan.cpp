@@ -85,7 +85,8 @@ size_t RenderPlan::editedIndex() const {
 
 bool RenderPlan::plainAbove(const Layer& l) const {
     return !l.adjustment && !l.maskSourceId && !stacks.count(l.id) && !stacked.count(l.id) && blendOf(l) == BlendMode::Normal
-        && !layerStyleOf(l, document);   // effects blend in their own modes
+        && !layerStyleOf(l, document)   // effects blend in their own modes
+        && !hasBlendIf(l);               // gated by what is under it
 }
 
 void RenderPlan::build() {

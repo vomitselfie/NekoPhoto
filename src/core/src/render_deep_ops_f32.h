@@ -70,6 +70,11 @@ struct DeepOps<SampleType::F32> {
     static Sample mul(Sample a, Sample b) { return a * b; }
     /// Colour over alpha, unbounded (a clipping base's colour may be above 1).
     static Sample unpremultiply(Sample c, Sample a) { return a > 0 ? c / a : 0.0f; }
+    /// Blend If reads a 32-bit colour through the document's curve, as its 0..255 sliders show it.
+    static int blendIfLevel(Sample c, Sample a) {
+        const float v = a > 0 ? std::clamp(c / a, 0.0f, 1.0f) : 0.0f;
+        return std::clamp(int(std::lround(floatRenderContext().curve.fromLinear(v) * 255.0f)), 0, 255);
+    }
     static Sample coverage(float f) { return cleanCoverage(f); }
     static Sample fade(Sample before, Sample after, float t) { return before + (after - before) * t; }
     static Sample store(float v, Sample) { return cleanColour(v); }

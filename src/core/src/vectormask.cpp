@@ -745,6 +745,9 @@ AnyImage renderVectorPaintInks(const VectorPaint& paint, const Document& documen
     // Interpolation is per channel, so the RGB renderer draws the inks: C, M and Y's complements as red, green and
     // blue, then K's as grey; the two share the alpha stops.
     VectorPaint cmy = paint, k = paint;
+    // Inks run from ink to ink whatever the interpolation method: Linear and Perceptual are RGB spaces (unverified
+    // against a Photoshop-saved CMYK file with them).
+    cmy.gradient.interpolation = k.gradient.interpolation = StyleGradient::Interpolation::Classic;
     auto level = [](float ink) { return uint8_t(std::lround((1 - ink) * 255)); };
     for (size_t i = 0; i < paint.gradient.colors.size(); i++) {
         const auto& ink = *paint.gradient.colors[i].ink;

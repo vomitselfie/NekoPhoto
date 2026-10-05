@@ -310,6 +310,20 @@ def remaining_methods(rpc):
     rpc.call("history.undo")
     rpc.call("layers.select", id=placed["id"])
     rpc.call("layers.merge", down=True)
+    # Blend If (Blending Options): set by channel, one undo step, reported by layers.get, cleared by reset.
+    top = rpc.call("layers.list")
+    top = (top["layers"] if isinstance(top, dict) else top)[0]
+    gated = rpc.call("layers.set", id=top["id"], blendIf={"gray": {"underlying": [0, 0, 120, 200]}, "red": {"thisLayer": [10, 40, 255, 255]}})
+    assert gated["blendIf"]["gray"]["underlying"] == [0, 0, 120, 200] and gated["blendIf"]["red"]["thisLayer"] == [10, 40, 255, 255], gated
+    assert rpc.call("history.info")["undo"] == "Blending Options"
+    assert rpc.call("layers.get", id=top["id"])["blendIf"]["green"]["thisLayer"] == [0, 0, 255, 255]
+    expect_refused(rpc, "unknown Blend If channel", "layers.set", id=top["id"], blendIf={"cyan": {"thisLayer": [0, 0, 255, 255]}})
+    expect_refused(rpc, "in order", "layers.set", id=top["id"], blendIf={"gray": {"thisLayer": [50, 10, 255, 255]}})
+    assert "blendIf" not in rpc.call("layers.set", id=top["id"], blendIf={"reset": True})
+    rpc.call("history.undo")
+    assert "blendIf" in rpc.call("layers.get", id=top["id"])
+    rpc.call("history.undo")
+    assert "blendIf" not in rpc.call("layers.get", id=top["id"])
     # Artboards and slices: made, changed, exported, through a PSD and back, removed.
     board = rpc.call("artboards.add", x=10, y=10, width=80, height=60, background="#ff0000", name="Hero")
     moved = rpc.call("artboards.set", id=board["id"], x=20, moveContents=True)

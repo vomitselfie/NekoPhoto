@@ -153,7 +153,11 @@ own Custom warp). `layers.warp` bends a layer with one of Photoshop's fifteen pr
 `orientation`): Warp Text on text (`none` removes it), a mesh baked into a smart object's placement, bent pixels
 otherwise.
 Layers: `layers.select`, `layers.set` (name, visible, opacity, blend (a folder also takes "Pass Through"), sampling,
-clipping), `layers.add` (pixels, group, adjustment, or text with `text`, `x`, `y`, `font`, `size`, `bold`,
+clipping, `blendIf`: Blending Options' Blend If on any layer, folders and adjustment layers included, one undo step:
+channels by name (`gray`, `red`, `green`, `blue`; in CMYK `gray`, `cyan`, `magenta`, `yellow`, `black`; in Lab
+`lightness`, `a`, `b`), each with `thisLayer` and/or `underlying` as `[blackLow, blackHigh, whiteLow, whiteHigh]`
+0..255, a split handle where low and high differ; channels left out stay, `reset: true` clears the rest first;
+`layers.get` reports `blendIf` when a layer has any; see docs/layer-styles.md), `layers.add` (pixels, group, adjustment, or text with `text`, `x`, `y`, `font`, `size`, `bold`,
 `italic`, `color`, `align`; `below: true` puts it under the active layer), `text.set` (a text layer's
 content and style, same keys plus `lineSpacing` and `letterSpacing`; on text in several styles, which
 `layers.get` lists as `text.runs`, the change carries into every run and a new size scales each), `text.styleRange` (some letters' style, as

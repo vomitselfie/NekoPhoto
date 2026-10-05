@@ -656,6 +656,36 @@ double catmullRom(double p0, double p1, double p2, double p3, double t) {
 }
 double toLinear(double v) { v = std::clamp(v, 0.0, 1.0); return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4); }
 double toSrgb(double v) { v = std::clamp(v, 0.0, 1.0); return v <= 0.0031308 ? v * 12.92 : 1.055 * std::pow(v, 1 / 2.4) - 0.055; }
+
+// The colour spaces a gradient interpolates in (Photoshop 2023's Gradient Interpolation Method): Classic in the stored
+// sRGB values, Linear in linear light, Perceptual in Oklab. The Oklab matrices are Björn Ottosson's (public domain,
+// https://bottosson.github.io/posts/oklab/); the model (each method's space, the smoothness applied in it, even
+// between two stops) follows PhotoCraft's Photoshop-fitted crates/io/src/gradient_bake.rs at 7c6a78b (Apache-2.0,
+// THIRD-PARTY-NOTICES.md), and is checked here against ag-psd's Photoshop-saved fixtures (docs/layer-styles.md).
+using Triple = std::array<double, 3>;
+Triple toOklab(const StyleColor& c) {
+    const double r = toLinear(c.r / 255.0), g = toLinear(c.g / 255.0), b = toLinear(c.b / 255.0);
+    const double l = std::cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+    const double m = std::cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+    const double s = std::cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+    return {0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s, 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+            0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s};
+}
+Triple fromOklab(const Triple& p) {
+    const double l = std::pow(p[0] + 0.3963377774 * p[1] + 0.2158037573 * p[2], 3);
+    const double m = std::pow(p[0] - 0.1055613458 * p[1] - 0.0638541728 * p[2], 3);
+    const double s = std::pow(p[0] - 0.0894841775 * p[1] - 1.2914855480 * p[2], 3);
+    return {toSrgb(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s) * 255, toSrgb(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s) * 255,
+            toSrgb(-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s) * 255};
+}
+Triple intoSpace(StyleGradient::Interpolation mode, const StyleColor& c) {
+    if (mode == StyleGradient::Interpolation::Perceptual) return toOklab(c);
+    return {toLinear(c.r / 255.0), toLinear(c.g / 255.0), toLinear(c.b / 255.0)};
+}
+Triple outOfSpace(StyleGradient::Interpolation mode, const Triple& p) {
+    if (mode == StyleGradient::Interpolation::Perceptual) return fromOklab(p);
+    return {toSrgb(p[0]) * 255, toSrgb(p[1]) * 255, toSrgb(p[2]) * 255};
+}
 } // namespace
 
 float gradientPosition(const StyleGradient& g, double bx, double by, double bw, double bh, double x, double y) {
@@ -720,15 +750,24 @@ void gradientColorExact(const StyleGradient& g, float t, double out[3]) {
         if (t > s[i].location) continue;
         const auto &l = s[i - 1], &r = s[i];
         double u = midpointRemap((t - l.location) / std::max(0.0001f, r.location - l.location), r.midpoint);
-        if (g.interpolation == StyleGradient::Interpolation::Linear) {
-            auto c = [&](uint8_t a, uint8_t b) { return toSrgb(toLinear(a / 255.0) + (toLinear(b / 255.0) - toLinear(a / 255.0)) * u) * 255; };
-            put(c(l.color.r, r.color.r), c(l.color.g, r.color.g), c(l.color.b, r.color.b));
+        const auto& p = i > 1 ? s[i - 2].color : l.color;
+        const auto& n = i + 1 < s.size() ? s[i + 1].color : r.color;
+        if (g.interpolation != StyleGradient::Interpolation::Classic) {
+            // Linear and Perceptual: the same ramp in their own space (the neighbours' Catmull-Rom by the smoothness,
+            // between two stops too), then back to sRGB.
+            const Triple P = intoSpace(g.interpolation, p), L = intoSpace(g.interpolation, l.color), R = intoSpace(g.interpolation, r.color),
+                         N = intoSpace(g.interpolation, n);
+            Triple mixed;
+            for (size_t k = 0; k < 3; k++) {
+                const double lin = L[k] + (R[k] - L[k]) * u;
+                mixed[k] = lin + (catmullRom(P[k], L[k], R[k], N[k], u) - lin) * g.smoothness;
+            }
+            const Triple c = outOfSpace(g.interpolation, mixed);
+            put(c[0], c[1], c[2]);
             return;
         }
         // Classic: linear blended toward a Catmull-Rom through the neighbours by the smoothness (when there are
-        // more than two stops). Perceptual renders as Classic here.
-        const auto& p = i > 1 ? s[i - 2].color : l.color;
-        const auto& n = i + 1 < s.size() ? s[i + 1].color : r.color;
+        // more than two stops).
         const double smooth = s.size() > 2 || g.fillLayer ? g.smoothness : 0.0;
         auto c = [&](uint8_t p0, uint8_t p1, uint8_t p2, uint8_t p3) { const double lin = p1 + (p2 - p1) * u; return lin + (catmullRom(p0, p1, p2, p3, u) - lin) * smooth; };
         put(c(p.r, l.color.r, r.color.r, n.r), c(p.g, l.color.g, r.color.g, n.g), c(p.b, l.color.b, r.color.b, n.b));

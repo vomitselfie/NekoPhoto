@@ -5,6 +5,7 @@
 #include "compositor/colormgmt.h"
 #include "compositor/depth.h"
 #include "compositor/document.h"
+#include "compositor/blendif.h"
 #include "compositor/layerstyle.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -186,6 +187,13 @@ bool convertDocumentMode(Document& document, ColorMode to, const ColorProfile& t
         if (layerStyleOf(layer, out) || layer.psdCarry) {
             LayerStyle style = editableLayerStyle(layer, out);
             if (convertStyleColours(style, colours)) setLayerStyle(layer, style);
+        }
+        // Blend If: the composite range stays (Lab reads it on Lightness); the colour channels' ranges are reset, as
+        // the per-channel curves and levels are, since the channels mean something else now.
+        if (layer.psdCarry && !layer.psdCarry->blendingRanges.empty()) {
+            BlendIf blendIf = editableBlendIf(layer, from);
+            for (int c = 1; c < BlendIf::maxChannels; c++) blendIf.channels[size_t(c)] = BlendIfChannel{};
+            if (!(editableBlendIf(layer, from) == blendIf)) setLayerBlendIf(layer, blendIf, to);
         }
         // Adjustment layers: colours converted, per-channel curves and levels reset (the channels mean something else
         // now), and a kind the new mode does not offer kept but made dormant: hidden and marked, so converting back

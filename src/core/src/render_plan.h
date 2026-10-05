@@ -9,6 +9,7 @@
 //
 // render() builds the plan and switches on the document's sample type once.
 #pragma once
+#include "compositor/blendif.h"
 #include "compositor/render.h"
 #include <cmath>
 #include <cstddef>
@@ -39,8 +40,10 @@ struct RenderPlan {
     void buildWithin(const RenderPlan& parent, const Uuid& group);
 
     bool within(const Layer& layer, const Uuid& group) const;
-    static bool isolates(const Layer& g) { return !g.passThrough; }
-    static bool fades(const Layer& g) { return g.passThrough && g.opacity < 1; }
+    /// A folder with Blend If isolates even in Pass Through: its result is gated against what is under it.
+    static bool isolates(const Layer& g) { return !g.passThrough || hasBlendIf(g); }
+    static bool hasBlendIf(const Layer& l) { return l.psdCarry && !l.psdCarry->blendingRanges.empty() && layerBlendIf(l, ColorMode::CMYK); }
+    static bool fades(const Layer& g) { return g.passThrough && g.opacity < 1 && !hasBlendIf(g); }
 
     const LayerOverride* over(const Uuid& id) const {
         if (!overrides) return nullptr;

@@ -23,6 +23,7 @@
 #include "check.h"
 #include "compositor/adjustments.h"
 #include "compositor/animation.h"
+#include "compositor/blendif.h"
 #include "compositor/blur.h"
 #include "compositor/brush.h"
 #include "compositor/cameraraw.h"
@@ -478,7 +479,70 @@ Document sixteen(Document doc) {
     return doc;
 }
 
-uint64_t hash16(const Document& doc, const RenderOptions& options = {}) {
+// ---- Blend If (blendif.h) ------------------------------------------------------------------------------------------
+//
+// The blend document with Blend If on a layer (split Gray and Red ranges on This Layer, Underlying Gray), on the
+// clipping base, on a pass-through folder, and on a Levels adjustment layer; at 8, 16 and 32 bits and in CMYK and Lab.
+
+Document blendIfDocument() {
+    Document doc = blendDocument(BlendMode::Multiply);
+    BlendIf layerRanges;
+    layerRanges.channels[0].thisLayer = {20, 70, 190, 240};
+    layerRanges.channels[1].thisLayer = {0, 0, 200, 255};
+    layerRanges.channels[0].underlying = {0, 40, 255, 255};
+    BlendIf folderRanges;
+    folderRanges.channels[0].underlying = {30, 30, 180, 230};
+    for (Layer& l : doc.layers) {
+        if (l.name == "top") setLayerBlendIf(l, layerRanges, ColorMode::RGB);
+        if (l.name == "inner mode") { l.blendMode = BlendMode::Screen; setLayerBlendIf(l, layerRanges, ColorMode::RGB); }
+        if (l.isGroup) { l.passThrough = true; l.blendMode = BlendMode::Normal; setLayerBlendIf(l, folderRanges, ColorMode::RGB); }
+    }
+    Layer adj("Levels", doc.size());
+    AdjustmentSettings levels = AdjustmentSettings::defaults(AdjustmentKind::Levels);
+    levels.levels.ranges[0] = {40, 1.4, 220, 0, 255};
+    adj.adjustment = levels.toLayerAdjustment();
+    BlendIf adjRanges;
+    adjRanges.channels[0].underlying = {0, 0, 120, 200};
+    adjRanges.channels[3].thisLayer = {10, 60, 255, 255};
+    setLayerBlendIf(adj, adjRanges, ColorMode::RGB);
+    doc.layers.push_back(adj);
+    return doc;
+}
+
+uint64_t hash16(const Document& doc, const RenderOptions& options = {});
+Document sixteen(Document doc);
+Document thirtyTwo(Document doc);
+uint64_t hashF(const Document& doc, const RenderOptions& options = {});
+
+void addBlendIfScenes() {
+    scene("blendif/layer_folder_clip_adjustment", [] { return hashImage(*renderFlattened(blendIfDocument())); });
+    scene("blendif/layer_folder_clip_adjustment@0.5", [] {
+        Image out;
+        RenderOptions options;
+        options.region = {16, 8, 200, 160};
+        options.scale = 0.5;
+        render(blendIfDocument(), options, out);
+        return hashImage(out);
+    });
+    scene("u16/blendif/layer_folder_clip_adjustment", [] { return hash16(sixteen(blendIfDocument())); });
+    scene("f32/blendif/layer_folder_clip_adjustment", [] { return hashF(thirtyTwo(blendIfDocument())); });
+    for (ColorMode colorMode : {ColorMode::CMYK, ColorMode::Lab})
+        for (SampleType type : {SampleType::U8, SampleType::U16}) {
+            const std::string prefix = std::string(colorMode == ColorMode::CMYK ? "cmyk" : "lab") + (type == SampleType::U16 ? "16" : "") + "/";
+            scene(prefix + "blendif/layer_folder_clip_adjustment", [=] {
+                Document doc = inColorMode(blendIfDocument(), colorMode, type);
+                // The colour channels were reset by the conversion: gate on the mode's first channel too.
+                for (Layer& l : doc.layers) if (l.name == "top") {
+                    BlendIf b = editableBlendIf(l, colorMode);
+                    b.channels[1].thisLayer = {0, 30, 200, 250};
+                    setLayerBlendIf(l, b, colorMode);
+                }
+                return hashNative(renderNative(doc));
+            });
+        }
+}
+
+uint64_t hash16(const Document& doc, const RenderOptions& options) {
     Image16 out;
     render16(doc, options, out);
     return hashImage16(out);
@@ -600,6 +664,34 @@ void add16BitVectorScenes() {
         doc.layers.push_back(top);
         return hash16(sixteen(doc), reducedRegion());
     });
+    // Gradient interpolation methods (Linear in linear light, Perceptual in Oklab) on a fill layer of three stops with
+    // a midpoint and on a gradient overlay, at 8 and 16 bits.
+    for (auto method : {StyleGradient::Interpolation::Linear, StyleGradient::Interpolation::Perceptual}) {
+        const std::string name = method == StyleGradient::Interpolation::Linear ? "linear" : "perceptual";
+        auto methodScene = [method] {
+            Document doc = goldenBase();
+            StyleGradient g = twoStops({250, 200, 10}, {10, 40, 220}, 60);
+            g.colors.insert(g.colors.begin() + 1, StyleGradient::ColorStop{0.4f, {200, 30, 160}, 0.3f});
+            g.interpolation = method;
+            Layer fill("Gradient Fill", doc.size());
+            auto carry = std::make_shared<PsdLayerCarry>();
+            carry->blocks.push_back({"GdFl", authorGradientFill(g)});
+            fill.psdCarry = carry;
+            fill.opacity = 0.7;
+            doc.layers.push_back(fill);
+            Layer top = layerOf("paint", paint(56, 40, 5), {20, 12});
+            LayerStyle style;
+            GradientOverlay overlay;
+            overlay.gradient = g;
+            overlay.gradient.angle = 0;
+            style.gradientOverlays.push_back(overlay);
+            setLayerStyle(top, style);
+            doc.layers.push_back(top);
+            return doc;
+        };
+        scene("gradient_method/" + name, [methodScene] { return hashImage(*renderFlattened(methodScene())); });
+        scene("u16/gradient_method/" + name, [methodScene] { return hash16(sixteen(methodScene())); });
+    }
     scene("u16/fill_layer/gradient", [] {
         Document doc = goldenBase();
         Layer fill("Gradient Fill", doc.size());
@@ -675,7 +767,7 @@ Document thirtyTwo(Document doc) {
     return doc;
 }
 
-uint64_t hashF(const Document& doc, const RenderOptions& options = {}) {
+uint64_t hashF(const Document& doc, const RenderOptions& options) {
     ImageF out;
     renderF(doc, options, out);
     return hashImageF(out);
@@ -1553,6 +1645,7 @@ TEST_CASE(render_hashes_match_the_baseline_on_the_pool_and_serially) {
     addBlendScenes();
     addColorModeScenes();
     addAdjustmentScenes();
+    addBlendIfScenes();
     addFilterScenes();
     addBrushScenes();
     add16BitScenes();
@@ -1595,6 +1688,8 @@ TEST_CASE(render_hashes_match_the_baseline_on_the_pool_and_serially) {
         // 32-bit scenes render through float pow/exp, which MinGW's maths library rounds differently from glibc's; their
         // kernels are checked within a tolerance everywhere (float_reference), and bit for bit on Linux here.
         if (name.rfind("f32/", 0) == 0 || name.find("/f32/") != std::string::npos) { unchecked++; continue; }
+        // So do the Linear and Perceptual gradient methods (pow and cbrt into linear light and Oklab and back).
+        if (name.find("gradient_method/") != std::string::npos) { unchecked++; continue; }
 #endif
         auto it = expected.find(name);
         if (it == expected.end()) { std::fprintf(stderr, "  new      %s %s\n", name.c_str(), h.c_str()); added++; }
