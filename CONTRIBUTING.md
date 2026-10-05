@@ -140,9 +140,52 @@ To convert a menu item:
 5. Add the item to `tests`' `command_path_selftest` (`src/app/SelfTest.cpp`): the menu path and the automation path
    must give the same document and history names, and the same document as the direct call did before.
 
-Converted so far: New Layer, Duplicate Layer, Merge Down (Layer menu), Gaussian Blur's and Levels' OK, Free
-Transform's commit, View > New Guide… and Clear Guides. The canvas context menu (`MainWindowCanvasMenu.cpp`) reuses
-the menu bar's `QAction`s (by the keys `nameAction` gives them), so it follows whatever path each item takes.
+A panel that has only the session uses `EditorSession::runCommandOr(method, params, direct)`: the method when the
+session is routed, `direct` (the old call) when it is not. The canvas context menu (`MainWindowCanvasMenu.cpp`)
+reuses the menu bar's `QAction`s (by the keys `nameAction` gives them), so it follows whatever path each item takes.
+
+### Converted
+
+`command_path_selftest` checks every item below that is marked *checked* (69 of them): the menu path (or dialog,
+or panel button), the requests the recording holds, and the session calls the item made before, compared as
+documents, selections, paths, channels and history names, with each recorded once.
+
+| Where | Items | Method |
+|---|---|---|
+| Edit | Fill with Foreground / Background *(checked)*; Clear *(checked)*: pixels with a selection, else one layer that supplies no clipping mask | `pixels.fill`, `pixels.clear`, `layers.delete` |
+| Edit | Free Transform's commit *(checked)* | `layers.setTransform` |
+| Edit | Assign Profile…, Convert to Profile… for a built-in profile or none | `document.profile` |
+| Edit | Content-Aware Fill's OK, Auto and All sampling | `pixels.contentAwareFill` |
+| Image | Mode: RGB, CMYK, Lab, 8, 16, 32 Bits *(checked: 16, 8, Lab, RGB)*; Canvas Size, Image Size, Trim, Crop to Selection, Flip Canvas Horizontal / Vertical, Adjustments > Invert *(checked)* | `image.mode`, `canvas.resize`, `image.resize`, `image.trim`, `canvas.crop` + `selection.none`, `canvas.flip`, `pixels.invert` |
+| Image | Adjustments: every dialog's OK *(checked: Levels, Curves, Brightness/Contrast, Posterize)* | `pixels.adjust` |
+| Filter | Gaussian Blur, Motion Blur, Add Noise, Lens Correction OK *(checked)* | `pixels.filter` |
+| Layer | New Layer, New Layer Below, New Folder, New Adjustment Layer, Layer via Copy, Duplicate, Delete, Merge Down, Rename, Group, Bring Forward, Send Backward, Flip Layer Horizontal / Vertical, Resampling, Create / Release Clipping Mask *(checked)* | `layers.add`, `layers.viaCopy`, `layers.duplicate`, `layers.delete`, `layers.merge`, `layers.set`, `layers.group`, `layers.reorder`, `layers.flip` |
+| Layer | Layer Mask: Reveal All, Hide All, From Selection (Reveal / Hide), Enable / Disable, Invert, Apply, Delete *(checked but From Selection)* | `layers.mask` |
+| Layer | Smart Objects: Convert *(checked)*, Rasterize *(checked)*, Replace Contents…; File > Place Embedded… | `smartObject.convert`, `smartObject.rasterize`, `smartObject.replace`, `smartObject.place` |
+| Select | All, Deselect, Inverse, Modify (Expand, Contract, Feather, Smooth, Border), Load as Selection (Layer Pixels, Layer Mask, Add, Subtract, Intersect) *(checked)* | `selection.*` |
+| View | New Guide…, Clear Guides; the rulers' and Move tool's guides | `guides.*` |
+| Paths panel | Make Work Path, Fill, Stroke, Make Selection, Make Shape Layer, Delete *(checked)*; Add to Selection | `paths.*` |
+| Channels panel | Save selection as channel, Create new channel *(checked)*; New Channel… | `channels.saveSelection`, `channels.new` |
+
+Where the method cannot express what the item does, the item keeps its direct call (and its old `recordAction`):
+Delete with several layers selected or clipped layers above (it asks whether to bake), a fill colour finer than
+`#rrggbb` (a 16-bit pick), an ICC profile file in Assign / Convert to Profile, Content-Aware Fill's painted Custom
+area, and a dialog left open on another tab.
+
+### Not converted, and why
+
+| Items | Why |
+|---|---|
+| File: New, Open, Import, Save, Save As, Export…, Batch, tabs, Quit | File dialogs and the document's lifetime; `document.*` and `tabs.*` are there for scripts, and Photoshop's actions record none of them as edits |
+| Edit: Undo, Redo; Cut, Copy, Copy Merged, Paste | History is not a command; the pixel clipboard has no method (`layers.copy` / `layers.paste` cover whole layers only) |
+| Edit: Warp…, Warp Cage, Content-Aware Scale… | Interactive; `layers.warp`, `layers.setCage` and `pixels.contentAwareScale` exist, but the commits are not proven identical yet |
+| Edit: Color Settings…, Preferences… | Application settings, not document edits |
+| Layer: Edit Text…, Move Out of Folder, Layer Style (dialogs, copy, paste, clear, Apply Style), Smart Objects > Edit Contents, Vector Mask (every item), Type > Create Work Path / Convert to Shape | Their methods name the layer, a style or a path by id (not portable in an action), or the item opens an editor or a tab |
+| Select: Reselect, Edit in Quick Mask Mode, Load Selection…, Save Selection… | Reselect has no method; Quick Mask is a mode; the two dialogs choose channels by id |
+| Channels panel: Duplicate, Delete, Rename, reorder, eyes, Load as selection | The methods name channels by id; the eyes are view state |
+| Filter: Camera Raw, G'MIC, Remove Background, Mosh, Smart Filters | Large dialogs with their own state (models, presets, layer sources) whose OK is not one request yet |
+| Layers panel buttons, opacity and blend controls, eyes | Panel gestures (many of them per-drag); not yet routed |
+| View, Window, Help | Interface only (zoom, rulers, proofing, panels, about) |
 
 ## Where to start
 

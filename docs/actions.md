@@ -15,10 +15,8 @@ results:
 - An agent recording an action gets its own requests as steps, with nothing to translate.
 - The menu commands, dialogs and tools that record are the ones that know the request that repeats them. The list
   below is what records today; anything else you do while recording is not added (the action still plays, it just
-  skips that edit). Commands converted to the command path (CONTRIBUTING.md, "Commands") record by running the
-  request itself: New Layer, Duplicate Layer, Merge Down, Gaussian Blur's and Levels' OK, Free Transform applied
-  (as `layers.setTransform`), and the guides (`guides.add`, `guides.move`, `guides.delete`, from the rulers, the Move
-  tool, New Guide… and Clear Guides).
+  skips that edit). Almost every menu command in the table runs the request itself (the command path,
+  CONTRIBUTING.md, "Commands"), so what records is exactly what plays back.
 
 The library lives in `actions.json` in the app data folder (`~/.local/share/nekophoto/nekophoto/actions.json`), so it
 outlasts the session. Import and Export (the panel's … menu, or `actions.import` / `actions.export`) read and write
@@ -41,12 +39,19 @@ the same format: `{"format": "nekophoto.actions", "version": 1, "actions": [{"na
 | You do | Recorded as |
 | --- | --- |
 | Any editing request on the automation socket (from an agent, a script or `--batch`) | the request itself |
+| Image > Mode (RGB, CMYK, Lab; 8, 16, 32 Bits, with HDR Toning's settings) | `image.mode` |
 | Image > Canvas Size, Image Size, Trim, Crop to Selection, Flip Canvas | `canvas.resize`, `image.resize`, `image.trim`, `canvas.crop`, `canvas.flip` |
 | Image > Adjustments (every dialog), Invert | `pixels.adjust` with the dialog's settings, `pixels.invert` |
 | Filter > Gaussian Blur, Motion Blur, Add Noise (with its seed), Lens Correction | `pixels.filter` |
 | Edit > Fill with Foreground / Background, Clear, Content-Aware Fill | `pixels.fill` with the colour, `pixels.clear` (or `layers.delete` without a selection), `pixels.contentAwareFill` (Auto and All sampling; a painted Custom area is not recorded) |
-| Layer > New Layer, New Layer Below, New Folder, Group, Duplicate, Delete, Merge Down, New Adjustment Layer, Layer Mask (every item), Flip Layer | `layers.add`, `layers.group`, `layers.duplicate`, `layers.delete`, `layers.merge`, `layers.mask`, `layers.flip` |
-| Select > All, Deselect, Inverse, Modify (Expand, Contract, Feather, Smooth, Border), Load Layer Pixels / Mask | `selection.all`, `selection.none`, `selection.invert`, `selection.grow`, `selection.feather`, `selection.smooth`, `selection.border`, `selection.fromLayer` |
+| Edit > Assign Profile, Convert to Profile (a built-in profile or none) | `document.profile` |
+| Layer > New Layer, New Layer Below, New Folder, Layer via Copy, Group, Duplicate, Delete, Merge Down, New Adjustment Layer, Layer Mask (every item), Flip Layer | `layers.add`, `layers.viaCopy`, `layers.group`, `layers.duplicate`, `layers.delete`, `layers.merge`, `layers.mask`, `layers.flip` |
+| Layer > Rename Layer, Create / Release Clipping Mask, Resampling | `layers.set` on the active layer (no id) |
+| Layer > Bring Forward, Send Backward | `layers.reorder` |
+| Layer > Smart Objects > Convert to Smart Object, Replace Contents, Rasterize | `smartObject.convert`, `smartObject.replace` with the file, `smartObject.rasterize` |
+| Select > All, Deselect, Inverse, Modify (Expand, Contract, Feather, Smooth, Border), Load as Selection (Layer Pixels, Layer Mask, Add, Subtract, Intersect) | `selection.all`, `selection.none`, `selection.invert`, `selection.grow`, `selection.feather`, `selection.smooth`, `selection.border`, `selection.fromLayer` |
+| The Paths panel: Make Work Path, Fill, Stroke, Make Selection, Add to Selection, Make Shape Layer, Delete | `paths.fromSelection`, `paths.fill`, `paths.stroke`, `paths.toSelection`, `paths.toShape`, `paths.delete` (by the path's id: the Work Path's is the same in every document) |
+| The Channels panel: Save selection as channel, New Channel | `channels.saveSelection`, `channels.new` |
 | A rectangular or elliptical marquee | `selection.rect` with its box and mode |
 | Free Transform of a layer, applied (Enter, Apply or a double-click) | `layers.setTransform` with the box's position, size, angle and flips |
 | A guide dragged out of a ruler, moved, or dragged off; View > New Guide…, Clear Guides | `guides.add`, `guides.move`, `guides.delete` |
@@ -59,7 +64,9 @@ they were recorded on, so edit or switch off such steps before playing the actio
 
 Not recorded (yet): the Move tool's drags and a distortion or a transform of several layers, a mask alone or selected pixels, the lasso and magic wand, Quick Select, the Gradient,
 Shape, Text, Clone, Healing, Smudge and Dodge tools, the Layers panel's own buttons, eyes, opacity and blend
-controls, the Paths panel, G'MIC, Camera Raw and Remove Background dialogs, layer styles and smart objects. Each can
+controls, G'MIC, Camera Raw and Remove Background dialogs, layer styles, smart objects' Edit Contents and filters,
+vector masks, Type > Create Work Path and Convert to Shape (their methods name the layer), and the Channels panel's
+other items (they name a channel). Each can
 still be added by hand as the request that does it (`rpc.describe` lists every method's parameters). Looking
 (`layers.list`, `render`, `document.info` and the like), tab switching, undo and redo are never recorded.
 
