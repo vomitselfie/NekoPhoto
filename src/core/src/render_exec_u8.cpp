@@ -20,6 +20,7 @@
 #include <map>
 #include <optional>
 #include <set>
+#include <utility>
 
 extern "C" {
 #include "BrushPixels.h"
@@ -48,6 +49,8 @@ struct RenderExec<SampleType::U8> {
     std::map<Uuid, std::shared_ptr<GrayImage>> liveCoverage;
     std::set<Uuid> visiting;
     bool plainOnly = false;   // while taking a clipping base's transparency
+    /// A Blend If layer's gate, for its styled draw to run between its pixels and its interior effects.
+    std::function<void()>* interiorGate = nullptr;
     bool ungated = false;     // drawing a Blend If layer's own pass (blendif.h)
 
     /// Blend If: `target` holds the layer drawn over `before`; each pixel keeps the share the gates allow, This
@@ -300,12 +303,20 @@ struct RenderExec<SampleType::U8> {
     void drawOwn(const Layer& layer, Image& target, const GrayImage* coverage) {
         if (!plainOnly && !ungated) if (auto blendIf = layerBlendIf(layer, document.colorMode)) {
             const Image before = target;
+            const BlendIfGate gate(*blendIf, document.colorMode);
+            // The gate takes the layer's pixels; a styled draw runs it before the interior effects (Photoshop does
+            // not gate them), otherwise it runs over the whole draw (exterior effects outside the pixels pass).
+            bool gated = false;
+            std::function<void()> gateNow = [&] { applyGate(gate, ownColours(layer), before, target); gated = true; };
             ungated = true;
+            interiorGate = &gateNow;
             drawOwn(layer, target, coverage);
+            interiorGate = nullptr;
             ungated = false;
-            applyGate(BlendIfGate(*blendIf, document.colorMode), ownColours(layer), before, target);
+            if (!gated) gateNow();
             return;
         }
+        std::function<void()>* const gateInside = std::exchange(interiorGate, nullptr);
         ImagePtr image = imageOf(layer);
         if (!image) image = fillImage(layer);
         if (!image) return;
@@ -388,6 +399,10 @@ struct RenderExec<SampleType::U8> {
             draw.documentWidth = document.width;
             draw.documentHeight = document.height;
             draw.bounds = params.transform.bounds();
+            // Blend If gates the pixels before the interior effects land. With Blend Interior Effects as Group the
+            // interiors join the pixels and are gated with them; a shape's stroke, drawn after the effects, keeps
+            // the gate over the whole draw.
+            if (gateInside && !style->blendInteriorAsGroup && !(stroke && stroke->enabled)) draw.afterContent = *gateInside;
             draw.drawSource = [&](Image& into, const Rect& area) {
                 DrawParams plain = params;
                 plain.opacity = 1;

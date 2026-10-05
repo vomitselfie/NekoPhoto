@@ -3,6 +3,7 @@
 #include "check.h"
 #include "compositor/blendif.h"
 #include "compositor/document.h"
+#include "compositor/layerstyle.h"
 #include "compositor/psd.h"
 #include "compositor/project.h"
 #include "compositor/psd_carry.h"
@@ -180,6 +181,64 @@ TEST_CASE(photoshop_fixture_matches_photoshops_render) {
     std::printf("  against Photoshop's render: mean %.3f, max %d levels\n", sum / (w * h * 3.0), worst);
     CHECK(worst <= 2);
     CHECK(sum / (w * h * 3.0) < 0.6);
+}
+
+namespace {
+
+/// A gray backdrop under a layer whose left half is dark and right half bright; This Layer's Gray range hides the
+/// bright half. Optionally a blue Color Overlay on the layer, and Blend Interior Effects as Group.
+Document gatedOverlayDocument(bool overlay, bool interiorAsGroup) {
+    Document doc(16, 8);
+    Layer base("Base", doc.size());
+    auto gray = std::make_shared<Image>(16, 8);
+    for (int y = 0; y < 8; y++) for (int x = 0; x < 16; x++) { uint8_t* p = gray->row(y) + x * 4; p[0] = p[1] = p[2] = 100; p[3] = 255; }
+    base.asset = Asset::make(gray, "Base");
+    doc.layers.push_back(base);
+    Layer top("Top", doc.size());
+    auto pixels = std::make_shared<Image>(16, 8);
+    for (int y = 2; y < 6; y++) for (int x = 2; x < 14; x++) { uint8_t* p = pixels->row(y) + x * 4; p[0] = p[1] = p[2] = x < 8 ? 50 : 200; p[3] = 255; }
+    top.asset = Asset::make(pixels, "Top");
+    BlendIf b;
+    b.channels[0].thisLayer = {0, 0, 128, 128};
+    setLayerBlendIf(top, b, ColorMode::RGB);
+    if (overlay) {
+        LayerStyle style;
+        ColorOverlay o;
+        o.color = {0, 0, 255};
+        style.colorOverlays.push_back(o);
+        style.blendInteriorAsGroup = interiorAsGroup;
+        setLayerStyle(top, style);
+    }
+    doc.layers.push_back(top);
+    return doc;
+}
+
+} // namespace
+
+TEST_CASE(interior_effects_are_not_gated) {
+    // Photoshop gates the layer's own pixels; its interior effects land on the gated result inside the layer's shape.
+    // Plain: the bright half is gated away and shows the backdrop.
+    auto plain = renderFlattened(gatedOverlayDocument(false, false));
+    CHECK_EQ(int(plain->pixel(4, 4)[0]), 50);
+    CHECK_EQ(int(plain->pixel(11, 4)[0]), 100);
+    // With a Color Overlay: blue over the whole shape, gated pixels included, at 8 and 16 bits.
+    for (SampleType depth : {SampleType::U8, SampleType::U16}) {
+        Document doc = gatedOverlayDocument(true, false);
+        if (depth != SampleType::U8) REQUIRE(convertSampleType(doc, depth));
+        auto styled = renderFlattened(doc);
+        for (int x : {4, 11}) {
+            const uint8_t* p = styled->pixel(x, 4);
+            CHECK_EQ(int(p[0]), 0);
+            CHECK_EQ(int(p[2]), 255);
+        }
+        // Outside the shape the backdrop is untouched.
+        CHECK_EQ(int(styled->pixel(0, 0)[0]), 100);
+    }
+    // Blend Interior Effects as Group: the overlay joins the pixels and is gated with them.
+    auto grouped = renderFlattened(gatedOverlayDocument(true, true));
+    CHECK_EQ(int(grouped->pixel(4, 4)[2]), 255);
+    CHECK_EQ(int(grouped->pixel(11, 4)[0]), 100);
+    CHECK_EQ(int(grouped->pixel(11, 4)[2]), 100);
 }
 
 TEST_MAIN()

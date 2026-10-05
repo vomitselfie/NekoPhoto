@@ -45,8 +45,11 @@ Lightness, a and b in Lab.
   side mirrors it; joined points cut hard); Gray is (299 R + 590 G + 111 B) / 1000, rounded; a transparent backdrop
   always passes. An adjustment layer reads This Layer on its adjusted colours and Underlying Layer on the colours
   before it. A folder with Blend If isolates (Pass Through too) and its result is gated against what is under it. A
-  clipping base's ranges gate the clipped result, not the shape the clipped layers take. A layer's exterior effects
-  are not gated; its interior effects are gated with its pixels (Photoshop leaves them ungated: a small difference).
+  clipping base's ranges gate the clipped result, not the shape the clipped layers take. Only the layer's own pixels
+  are gated, as in Photoshop: its exterior effects outside them are not, and its interior effects (overlays, satin,
+  inner glow and shadow, stroke, bevel) land ungated on the gated pixels. With Blend Interior Effects as Group the
+  interiors join the pixels and are gated with them, and a shape layer's own stroke keeps the gate over the whole
+  draw (no Photoshop-saved file here combines Blend If with effects: unverified). `blendif_tests` pins it.
 - Depths and modes: the gates read 8-bit levels at every depth (16-bit samples rounded to a level, 32-bit ones
   through the document's curve). CMYK reads the stored values (255 is no ink) and its Gray from the complements of C,
   M and Y darkened by K; Lab reads L, a and b as stored. Neither has a Photoshop-saved fixture: unverified.

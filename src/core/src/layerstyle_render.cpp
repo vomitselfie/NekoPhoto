@@ -708,7 +708,8 @@ void drawStyled(const StyledDraw& in, ImageOf<S>& target) {
         for (auto& v : m) { v = unit(std::abs(v)); if (satin.invert) v = 1 - v; }
         satins.push_back({&satin, std::move(m)});
     }
-    const bool foldInteriors = fill >= 0.999f && ownContent;
+    const bool foldables = !style.patternOverlays.empty() || !style.gradientOverlays.empty() || !style.colorOverlays.empty() || !satins.empty();
+    const bool foldInteriors = fill >= 0.999f && ownContent && !(in.afterContent && foldables);
     auto foldInto = [&](float c[3], int ox, int oy, size_t i) {
         const double x = docX(ox), y = docY(oy);
         for (const PatternOverlay& p : style.patternOverlays) {
@@ -785,6 +786,7 @@ void drawStyled(const StyledDraw& in, ImageOf<S>& target) {
         }
         compositeEffect(d, c, paint, layerMode);
     });
+    if (ownContent && in.afterContent) in.afterContent();
 
     // With Fill below 100% the overlays and satins are their own passes (Fill fades the pixels, not the effects).
     if (!foldInteriors) {

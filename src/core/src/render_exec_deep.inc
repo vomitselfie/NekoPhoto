@@ -14,10 +14,12 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
 #include <set>
+#include <utility>
 #include <vector>
 
 namespace compositor {
@@ -68,6 +70,8 @@ struct RenderExecDeep {
     std::map<Uuid, Cover> liveCoverage;
     std::set<Uuid> visiting;
     bool plainOnly = false;
+    /// A Blend If layer's gate, for its styled draw to run between its pixels and its interior effects.
+    std::function<void()>* interiorGate = nullptr;
     bool ungated = false;   // drawing a Blend If layer's own pass (blendif.h)
 
     /// A straight colour sample as Blend If reads it: 0..255, in the document's encoding.
@@ -329,12 +333,20 @@ struct RenderExecDeep {
     void drawOwn(const Layer& layer, Img& target, const Gray* coverage) {
         if (!plainOnly && !ungated) if (auto blendIf = layerBlendIf(layer, document.colorMode)) {
             const Img before = target;
+            const BlendIfGate gate(*blendIf, document.colorMode);
+            // The gate takes the layer's pixels; a styled draw runs it before the interior effects (Photoshop does
+            // not gate them), otherwise it runs over the whole draw (exterior effects outside the pixels pass).
+            bool gated = false;
+            std::function<void()> gateNow = [&] { applyGate(gate, ownColours(layer), before, target); gated = true; };
             ungated = true;
+            interiorGate = &gateNow;
             drawOwn(layer, target, coverage);
+            interiorGate = nullptr;
             ungated = false;
-            applyGate(BlendIfGate(*blendIf, document.colorMode), ownColours(layer), before, target);
+            if (!gated) gateNow();
             return;
         }
+        [[maybe_unused]] std::function<void()>* const gateInside = std::exchange(interiorGate, nullptr);
         ImagePtr image = imageOf(layer);
         if (!image) image = fillImage(layer);
         if (!image) return;
@@ -422,6 +434,10 @@ struct RenderExecDeep {
             draw.documentWidth = document.width;
             draw.documentHeight = document.height;
             draw.bounds = params.transform.bounds();
+            // Blend If gates the pixels before the interior effects land. With Blend Interior Effects as Group the
+            // interiors join the pixels and are gated with them; a shape's stroke, drawn after the effects, keeps
+            // the gate over the whole draw.
+            if (gateInside && !style->blendInteriorAsGroup && !(stroke && stroke->enabled)) draw.afterContent = *gateInside;
             O::setStyleSource(draw, [&](Img& into, const Rect& area) {
                 Params plain = params;
                 plain.opacity = 1;
