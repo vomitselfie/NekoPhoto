@@ -8,6 +8,7 @@
 #include "compositor/depth.h"
 #include "compositor/parallel.h"
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <vector>
 
@@ -23,17 +24,21 @@ using Tables16 = std::array<std::vector<uint16_t>, 3>;
 /// Tables from `f(channel, x)`, x and the result straight 0..1; false when every table is the identity.
 template <class F>
 bool buildTables(Tables16& tables, F&& f) {
-    bool identity = true;
-    for (int c = 0; c < 3; c++) {
-        std::vector<uint16_t>& t = tables[size_t(c)];
-        t.resize(size_t(levels16));
-        for (int i = 0; i < levels16; i++) {
+    // 98307 evaluations of `f` (a pow or more each): spread over the pool, as a slider tick waits on them.
+    for (auto& t : tables) t.resize(size_t(levels16));
+    std::atomic<bool> changed{false};
+    parallelRows(0, 3 * levels16, [&](int j0, int j1) {
+        bool any = false;
+        for (int j = j0; j < j1; j++) {
+            const int c = j / levels16, i = j % levels16;
             const double v = f(c, i / double(one16));
-            t[size_t(i)] = uint16_t(std::lround(std::clamp(std::isfinite(v) ? v : 0.0, 0.0, 1.0) * one16));
-            identity = identity && t[size_t(i)] == i;
+            const uint16_t e = uint16_t(std::lround(std::clamp(std::isfinite(v) ? v : 0.0, 0.0, 1.0) * one16));
+            tables[size_t(c)][size_t(i)] = e;
+            any = any || e != i;
         }
-    }
-    return !identity;
+        if (any) changed.store(true, std::memory_order_relaxed);
+    }, 4096);
+    return changed.load();
 }
 
 /// Applies per-channel tables: opaque pixels by lookup, partial alpha through the straight value with its fraction
