@@ -271,6 +271,13 @@ std::shared_ptr<GrayImage> resampleAxisAligned(const GrayImage& mask, int width,
     return out;
 }
 
+/// The four channels of a 16-bit pixel as 32-bit lanes.
+inline i32x4 lanes16(const uint16_t* p) {
+    simd::u16x4 v;
+    std::memcpy(&v, p, 8);
+    return __builtin_convertvector(v, i32x4);
+}
+
 // ---- 16-bit point samplers: the same taps, 64-bit sums -------------------------------------------
 
 void sampleBilinear(const Image16& image, double x, double y, uint16_t out[4]) {
@@ -285,19 +292,25 @@ void sampleBilinear(const Image16& image, double x, double y, uint16_t out[4]) {
 
 void sampleBicubic(const Image16& image, double x, double y, uint16_t out[4]) {
     const Taps4 tx = bicubicTaps(x, image.width()), ty = bicubicTaps(y, image.height());
-    int64_t acc[4] = {0, 0, 0, 0};
+    // The exact 64-bit sum in 32-bit lanes: a row's sum h is under 2^25 (65535 * at most 320), so it splits into
+    // h = hi * 65536 + lo with hi and lo each weighted without overflow, and acc = hi_sum * 65536 + lo_sum gives
+    // (acc + 32768) >> 16 = hi_sum + ((lo_sum + 32768) >> 16), the same value the 64-bit sum rounds to.
+    i32x4 hiSum = {0, 0, 0, 0}, loSum = {0, 0, 0, 0};
+    const i32x4 lowMask = {0xffff, 0xffff, 0xffff, 0xffff};
     for (int j = 0; j < 4; j++) {
         const uint16_t* row = image.row(ty.i[j]);
-        for (int k = 0; k < 4; k++) {
-            int64_t h = 0;
-            for (int i = 0; i < 4; i++) h += int64_t(row[size_t(tx.i[i]) * 4 + size_t(k)]) * tx.w[i];
-            acc[k] += h * ty.w[j];
-        }
+        const i32x4 h = lanes16(row + size_t(tx.i[0]) * 4) * tx.w[0] + lanes16(row + size_t(tx.i[1]) * 4) * tx.w[1]
+                      + lanes16(row + size_t(tx.i[2]) * 4) * tx.w[2] + lanes16(row + size_t(tx.i[3]) * 4) * tx.w[3];
+        hiSum += (h >> 16) * ty.w[j];
+        loSum += (h & lowMask) * ty.w[j];
     }
-    int64_t v[4];
-    for (int k = 0; k < 4; k++) v[k] = std::clamp<int64_t>((acc[k] + 32768) >> 16, 0, one16);
-    for (int k = 0; k < 3; k++) out[k] = uint16_t(std::min(v[k], v[3]));
-    out[3] = uint16_t(v[3]);
+    const i32x4 zero = {0, 0, 0, 0}, full = {int(one16), int(one16), int(one16), int(one16)};
+    i32x4 v = hiSum + ((loSum + 32768) >> 16);
+    v = v < zero ? zero : v;
+    v = v > full ? full : v;
+    const int a = v[3];
+    for (int k = 0; k < 3; k++) out[k] = uint16_t(std::min(v[k], a));
+    out[3] = uint16_t(a);
 }
 
 int sampleGrayBilinear(const Gray16& image, double x, double y) {

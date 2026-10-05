@@ -10,6 +10,7 @@ namespace compositor::simd {
 typedef uint8_t u8x4 __attribute__((vector_size(4)));
 typedef uint8_t u8x8 __attribute__((vector_size(8)));
 typedef uint8_t u8x16 __attribute__((vector_size(16)));
+typedef uint16_t u16x4 __attribute__((vector_size(8)));
 typedef uint16_t u16x8 __attribute__((vector_size(16)));
 typedef int32_t i32x4 __attribute__((vector_size(16)));
 typedef uint32_t u32x4 __attribute__((vector_size(16)));
