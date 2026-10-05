@@ -14,6 +14,7 @@ typedef uint16_t u16x4 __attribute__((vector_size(8)));
 typedef uint16_t u16x8 __attribute__((vector_size(16)));
 typedef int32_t i32x4 __attribute__((vector_size(16)));
 typedef uint32_t u32x4 __attribute__((vector_size(16)));
+typedef float f32x4 __attribute__((vector_size(16)));
 
 /// Lanes picked from `a` (0..N-1) and `b` (N..2N-1) into a vector of the same type; `type` names it.
 #if defined(__clang__) || (defined(__GNUC__) && __GNUC__ >= 12)

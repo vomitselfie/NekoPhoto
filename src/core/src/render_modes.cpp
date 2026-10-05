@@ -8,6 +8,7 @@
 #include "compositor/parallel.h"
 #include "compositor/render.h"
 #include "compositor/resample.h"
+#include "compositor/simd.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -48,6 +49,14 @@ inline void sampleNearestN(const Img& image, double x, double y, T* out, int n) 
     std::memcpy(out, image.pixel(ix, iy), size_t(n) * sizeof(T));
 }
 
+/// Four samples as float lanes.
+template <class T>
+inline simd::f32x4 lanesF(const T* p) {
+    T v[4];
+    std::memcpy(v, p, sizeof v);
+    return simd::f32x4{float(v[0]), float(v[1]), float(v[2]), float(v[3])};
+}
+
 /// Bilinear at continuous pixel coordinates (pixel i spans [i, i + 1)), clamped to the edge, for 4 or 5 samples. The
 /// RGB samplers' Catmull-Rom (High) is not repeated here: CMYK and Lab layers resample bilinearly at every setting.
 template <class Img, class T>
@@ -59,7 +68,16 @@ inline void sampleBilinearN(const Img& image, double x, double y, T* out, int n)
     const int xa = std::clamp(x0, 0, w - 1), xb = std::clamp(x0 + 1, 0, w - 1), ya = std::clamp(y0, 0, h - 1), yb = std::clamp(y0 + 1, 0, h - 1);
     const T* p00 = image.pixel(xa, ya); const T* p10 = image.pixel(xb, ya);
     const T* p01 = image.pixel(xa, yb); const T* p11 = image.pixel(xb, yb);
-    for (int c = 0; c < n; c++) {
+    // The first four samples in float lanes (the same operations in the same order as the scalar tail), the rest one
+    // at a time.
+    int c = 0;
+    if (n >= 4) {
+        const simd::f32x4 a = lanesF(p00), b = lanesF(p10), d = lanesF(p01), e = lanesF(p11);
+        const simd::f32x4 top = a + (b - a) * tx, bottom = d + (e - d) * tx;
+        const simd::i32x4 v = __builtin_convertvector(top + (bottom - top) * ty + 0.5f, simd::i32x4);
+        for (; c < 4; c++) out[c] = T(v[c]);
+    }
+    for (; c < n; c++) {
         const float top = p00[c] + (float(p10[c]) - p00[c]) * tx, bottom = p01[c] + (float(p11[c]) - p01[c]) * tx;
         out[c] = T(top + (bottom - top) * ty + 0.5f);
     }
