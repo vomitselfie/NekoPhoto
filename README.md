@@ -85,7 +85,7 @@ The full list is in [docs/features.md](docs/features.md).
 
 | Remove Background | G'MIC filters |
 |:---:|:---:|
-| <img src="docs/images/remove-background.jpg" alt="Remove Background's settings dialog open over K.psd by Nathan Lincoln" width="420"> | <img src="docs/images/filters.jpg" alt="The G'MIC filter browser open over K.psd by Nathan Lincoln, showing Sharpen (Unsharp Mask)" width="420"> |
+| <img src="docs/images/remove-background.jpg" alt="Remove Background's settings dialog open over K.psd by Nathan Lincoln" width="420"> | <img src="docs/images/filters.jpg" alt="The G'MIC filter browser open over K.psd by Nathan Lincoln, previewing Old Photo on it" width="420"> |
 
 ## Performance
 
@@ -255,7 +255,7 @@ PSD の書き出しは往復テスト済みです。手元にあるレイヤー�
 
 | 背景を削除 | G'MIC フィルター |
 |:---:|:---:|
-| <img src="docs/images/remove-background.jpg" alt="Nathan Lincoln の K.psd の上に背景を削除の設定画面を開いたところ" width="420"> | <img src="docs/images/filters.jpg" alt="Nathan Lincoln の K.psd の上に G'MIC フィルターブラウザーを開き、アンシャープマスクを表示したところ" width="420"> |
+| <img src="docs/images/remove-background.jpg" alt="Nathan Lincoln の K.psd の上に背景を削除の設定画面を開いたところ" width="420"> | <img src="docs/images/filters.jpg" alt="Nathan Lincoln の K.psd の上に G'MIC フィルターブラウザーを開き、オールドフォトをプレビューしているところ" width="420"> |
 
 ### パフォーマンス
 

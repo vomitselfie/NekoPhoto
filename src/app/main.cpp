@@ -23,6 +23,7 @@
 #include "FilterDialog.h"
 #include "HistogramPanel.h"
 #include "GmicDialog.h"
+#include "ImportBanner.h"
 #include "MoshDialog.h"
 #include "BrushDynamicsDialog.h"
 #include "BrushPicker.h"
@@ -462,6 +463,7 @@ int run(int argc, char** argv) {
                 {"photo-filter", AdjustmentKind::PhotoFilter}, {"channel-mixer", AdjustmentKind::ChannelMixer}, {"selective-color", AdjustmentKind::SelectiveColor}};
             static const QMap<QString, FilterKind> filters{{"blur", FilterKind::GaussianBlur}, {"motion-blur", FilterKind::MotionBlur}, {"noise", FilterKind::AddNoise}, {"lens", FilterKind::LensCorrection}};
             app::EditorSession* s = window.session();
+            if (auto* banner = window.findChild<app::ImportBanner*>()) banner->hide();   // dialog shots show the dialog, not an open's notes
             if (adjustments.contains(name)) (new app::PixelAdjustmentDialog(s, adjustments.value(name), &window))->show();
             else if (name == "levels-clip" || name == "curves-clip") {
                 // The clipping display as Alt on the white point (Levels, Input white at 170) or the black point
@@ -674,11 +676,15 @@ int run(int argc, char** argv) {
     }
     if (parser.isSet(screenshot)) {
         QString target = parser.value(screenshot), savePath = parser.value(saveAs);
-        QTimer::singleShot(400, &window, [&window, target, savePath, preferences] {
+        // COMPOSITOR_SCREENSHOT_DELAY (ms) waits longer, for a preview that runs in the background.
+        const int delay = qEnvironmentVariableIsSet("COMPOSITOR_SCREENSHOT_DELAY") ? qEnvironmentVariableIntValue("COMPOSITOR_SCREENSHOT_DELAY") : 400;
+        QTimer::singleShot(delay, &window, [&window, target, savePath, preferences] {
             QWidget* subject = preferences;
             if (!subject) for (QWidget* w : QApplication::topLevelWidgets()) if (w->isVisible() && qobject_cast<QDialog*>(w)) subject = w;
             for (QWidget* w : QApplication::topLevelWidgets()) if (w->isVisible() && w->windowType() == Qt::Popup) subject = w;   // a dropped-down picker wins
             (subject ? subject->grab() : window.grab()).save(target);
+            // A dialog's shot also saves the window behind it, its preview on the canvas, as <name>.window.<ext>.
+            if (subject) { QFileInfo info(target); window.grab().save(info.path() + "/" + info.completeBaseName() + ".window." + info.suffix()); }
             if (!savePath.isEmpty()) { QString error; window.session()->saveProject(savePath, &error); if (!error.isEmpty()) qWarning("%s", qPrintable(error)); }
             // exit() rather than quit(): newer Qt closes the windows on quit(), and the unsaved demo would prompt.
             QCoreApplication::exit(0);
