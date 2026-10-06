@@ -301,33 +301,16 @@ void AutomationServer::registerPixelsHandlers() {
     });
     add("pixels.contentAwareFill", [session, document](const QJsonObject& p) {
         refuseSmartObject(session());
-        const Document& d = document();
+        document();
         ContentFillRequest request;
         const QString sampling = str(p, "sampling", QStringLiteral("auto")).toLower();
+        // No user-drawn sampling region (docs/legal-boundaries.md, "Content-Aware Fill").
+        if (sampling == "custom") fail("custom sampling areas are not available: use auto or all", invalidParams);
         if (sampling == "all") request.sampling = ContentFillRequest::Sampling::All;
-        else if (sampling == "custom") request.sampling = ContentFillRequest::Sampling::Custom;
-        else if (sampling != "auto") fail("sampling must be auto, all or custom", invalidParams);
+        else if (sampling != "auto") fail("sampling must be auto or all", invalidParams);
         const QString output = str(p, "output", QStringLiteral("current")).toLower();
         if (output != "current" && output != "new") fail("output must be current or new", invalidParams);
         request.newLayer = output == "new";
-        if ((has(p, "include") || has(p, "exclude")) && request.sampling != ContentFillRequest::Sampling::Custom) fail("include and exclude need sampling: custom", invalidParams);
-        if (request.sampling == ContentFillRequest::Sampling::Custom) {
-            // The sampling area: the include rectangles (everything when none), less the exclude rectangles.
-            auto area = std::make_shared<GrayImage>(d.width, d.height, has(p, "include") ? 0 : 255);
-            auto paint = [&](const char* key, uint8_t value) {
-                for (const QJsonValue& v : p.value(key).toArray()) {
-                    const QJsonObject r = v.toObject();
-                    if (!r.contains("x") || !r.contains("y") || !r.contains("width") || !r.contains("height")) fail(QString("%1 takes rectangles {x, y, width, height}").arg(key), invalidParams);
-                    const int x0 = std::clamp(int(std::floor(r.value("x").toDouble())), 0, d.width), y0 = std::clamp(int(std::floor(r.value("y").toDouble())), 0, d.height);
-                    const int x1 = std::clamp(int(std::ceil(r.value("x").toDouble() + r.value("width").toDouble())), 0, d.width);
-                    const int y1 = std::clamp(int(std::ceil(r.value("y").toDouble() + r.value("height").toDouble())), 0, d.height);
-                    for (int y = y0; y < y1; y++) std::memset(area->row(y) + x0, value, size_t(std::max(0, x1 - x0)));
-                }
-            };
-            paint("include", 255);
-            paint("exclude", 0);
-            request.sampleArea = area;
-        }
         QString error;
         if (!session()->contentAwareFill(&error, request)) fail(error.isEmpty() ? "content-aware fill needs a selection on a pixel layer" : error);
         QJsonObject answer{{"filled", true}};

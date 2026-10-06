@@ -606,12 +606,13 @@ AlphaPlane matteBand(const AlphaPlane& matte, const Image& guide, double bandFul
     auto colourAt = [&](size_t i, float out[3]) { out[0] = colour[0][i]; out[1] = colour[1][i]; out[2] = colour[2][i]; };
     auto solveColourAt = [&](size_t i, float out[3]) { out[0] = solveColour[0][i]; out[1] = solveColour[1][i]; out[2] = solveColour[2][i]; };
 
-    // Global sampling (He, Rhemann, Rother, Tang & Sun 2011): the candidates are every sure pixel within a few
-    // pixels of the band, sorted by luma so that nearby indices are similar colours, and each unknown pixel
-    // searches the (foreground, background) index space PatchMatch-style: good pairs propagate along the row
-    // and from the previous sweep's row above or below, and random pairs are tried at halving distances. A
-    // pair anywhere along the edge can explain a pixel, not only the first one a ray happens to hit, which is
-    // what dark fur beside light fur needs.
+    // Global sampling (after He, Rhemann, Rother, Tang & Sun 2011): the candidates are every sure pixel within a
+    // few pixels of the band, sorted by luma so that nearby indices are similar colours. Each unknown pixel scores,
+    // on its own, every pair from a fixed window of the foreground and background candidates nearest its colour,
+    // plus the "opaque" and "transparent" seed pairs. Legal boundary (docs/legal-boundaries.md): no pair is
+    // propagated from a neighbouring pixel, perturbed or searched at random, and nothing iterates (the
+    // PatchMatch-style search of the original method is Adobe US 8285055's claim). A pair anywhere along the edge
+    // can explain a pixel, not only the first one a ray happens to hit, which is what dark fur beside light fur needs.
     constexpr int depth = 4;
     GrayImage innerF = eroded, outerB = dilated;
     runningExtreme(innerF, depth, false);
@@ -687,16 +688,8 @@ AlphaPlane matteBand(const AlphaPlane& matte, const Image& guide, double bandFul
             trial(x, y, p, iF, iB, best);
             if (best.cost < before) { chosenF[s] = iF; chosenB[s] = iB; }
         };
-        auto hash = [](uint32_t a, uint32_t b, uint32_t c) {
-            uint32_t h = a * 0x9E3779B1u ^ (b + 0x7F4A7C15u) * 0x85EBCA77u ^ (c + 1) * 0xC2B2AE3Du;
-            h ^= h >> 15; h *= 0x2C1B3C6Du; h ^= h >> 12;
-            return h;
-        };
-        // Every pixel starts from the two hypotheses that matter, "opaque" (the foreground candidate nearest
-        // its colour, with a background as far from it in luma as the list offers) and "transparent" (the
-        // reverse), plus a random pair; the search then trades them for nearer samples of the same colours.
-        // Without the seeds, a pair that needs both indices in narrow ranges of the sorted lists (dark fur
-        // against a mostly dark background, say) is rarely hit by random draws.
+        // Two hypotheses always take part, "opaque" (the foreground candidate nearest the pixel's colour, with a
+        // background as far from it in luma as the list offers) and "transparent" (the reverse).
         std::vector<float> fLuma(fs.size()), bLuma(bs.size());
         for (size_t i = 0; i < fs.size(); i++) fLuma[i] = fs[i].luma;
         for (size_t i = 0; i < bs.size(); i++) bLuma[i] = bs[i].luma;
@@ -713,48 +706,24 @@ AlphaPlane matteBand(const AlphaPlane& matte, const Image& guide, double bandFul
             }
             return best;
         };
+        constexpr int window = 8;   // candidates each side of the nearest in luma order
         parallelRows(0, height, [&](int y0, int y1) {
             for (int y = y0; y < y1; y++)
                 for (int x = 0; x < width; x++) {
                     const size_t p = at(x, y);
                     if (region[p] != Unknown) continue;
-                    const uint32_t h = hash(uint32_t(x), uint32_t(y), 0);
-                    evaluate(x, y, p, int(h % uint32_t(nF)), int((h >> 7) % uint32_t(nB)));
                     float c[3];
                     colourAt(p, c);
                     const float luma = 0.299f * c[0] + 0.587f * c[1] + 0.114f * c[2];
                     const int farB = std::fabs(bLuma.front() - luma) > std::fabs(bLuma.back() - luma) ? 0 : nB - 1;
                     const int farF = std::fabs(fLuma.front() - luma) > std::fabs(fLuma.back() - luma) ? 0 : nF - 1;
-                    evaluate(x, y, p, nearestByColour(fs, fLuma, c), farB);
-                    evaluate(x, y, p, farF, nearestByColour(bs, bLuma, c));
+                    const int cF = nearestByColour(fs, fLuma, c), cB = nearestByColour(bs, bLuma, c);
+                    evaluate(x, y, p, cF, farB);
+                    evaluate(x, y, p, farF, cB);
+                    for (int iF = std::max(0, cF - window); iF <= std::min(nF - 1, cF + window); iF++)
+                        for (int iB = std::max(0, cB - window); iB <= std::min(nB - 1, cB + window); iB++) evaluate(x, y, p, iF, iB);
                 }
         }, 8);
-        constexpr int iterations = 8;
-        std::vector<int32_t> previousF, previousB;
-        for (int it = 0; it < iterations; it++) {
-            const bool forward = it % 2 == 0;
-            previousF = chosenF;   // the row above or below is read from the last sweep, so rows can run in parallel
-            previousB = chosenB;
-            parallelRows(0, height, [&](int y0, int y1) {
-                for (int y = y0; y < y1; y++)
-                    for (int k = 0; k < width; k++) {
-                        const int x = forward ? k : width - 1 - k;
-                        const size_t p = at(x, y);
-                        if (region[p] != Unknown) continue;
-                        const size_t s = size_t(slot[p]);
-                        const int nx = forward ? x - 1 : x + 1, ny = forward ? y - 1 : y + 1;
-                        if (nx >= 0 && nx < width) { const int32_t ns = slot[at(nx, y)]; if (ns >= 0) evaluate(x, y, p, chosenF[size_t(ns)], chosenB[size_t(ns)]); }
-                        if (ny >= 0 && ny < height) { const int32_t ns = slot[at(x, ny)]; if (ns >= 0) evaluate(x, y, p, previousF[size_t(ns)], previousB[size_t(ns)]); }
-                        int step = 0;
-                        for (float rF = float(nF), rB = float(nB); rF >= 1 || rB >= 1; rF *= 0.5f, rB *= 0.5f, step++) {
-                            const uint32_t r = hash(uint32_t(x), uint32_t(y), uint32_t(it * 64 + step + 1));
-                            const float u = float(r & 0xFFFF) / 32768.0f - 1, v = float((r >> 16) & 0xFFFF) / 32768.0f - 1;
-                            const int iF = std::clamp(chosenF[s] + int(u * rF), 0, nF - 1), iB = std::clamp(chosenB[s] + int(v * rB), 0, nB - 1);
-                            evaluate(x, y, p, iF, iB);
-                        }
-                    }
-            }, 8);
-        }
     }
     // Smoothing: opacities averaged over a small window, weighted by confidence and colour similarity.
     constexpr int radius = 3;

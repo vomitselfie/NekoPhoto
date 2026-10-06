@@ -83,6 +83,49 @@ TEST_CASE(gmic_catalogue_reads_the_compressed_file_gmic_eu_serves) {
     CHECK(!c.load(write("compositor-test-catalogue-bad.gmic", "1 uint8 little_endian\n1 99 1 1 #3\nxyz"), &error));
 }
 
+TEST_CASE(gmic_patch_based_commands_are_never_offered_or_run) {
+    // The legal boundary (docs/legal-boundaries.md, "G'MIC"): patch-match and patch-based inpainting, and anything
+    // defined on top of them, are left out of the browser and refused by every run path.
+    const QByteArray text =
+        "#@gui _<b>Repair</b>\n"
+        "#@gui Inpaint Patch:fx_my_inpaint,fx_my_inpaint\n"
+        "#@gui :Size=int(5,1,10)\n"
+        "#@gui Smooth:fx_my_smooth,fx_my_smooth\n"
+        "#@gui :Size=int(5,1,10)\n"
+        "fx_my_inpaint :\n"
+        "  _fx_my_helper $1\n"
+        "_fx_my_helper :\n"
+        "  matchpatch[0] [1],$1\n"
+        "fx_my_smooth :\n"
+        "  blur $1\n";
+    const QSet<QString> excluded = GmicCatalogue::excludedCommands(text);
+    CHECK(excluded.contains("matchpatch"));
+    CHECK(excluded.contains("_fx_my_helper"));
+    CHECK(excluded.contains("fx_my_inpaint"));   // through the helper
+    CHECK(!excluded.contains("fx_my_smooth"));
+    GmicCatalogue c;
+    REQUIRE(c.load(write("compositor-test-catalogue-patch.gmic", text)));
+    REQUIRE(c.filters().size() == 1);
+    CHECK(c.filters()[0].command == "fx_my_smooth");
+    // The base set holds whatever the definition file: typed commands and automation are refused.
+    QString why;
+    CHECK(!GmicRunner::allowedForAutomation("inpaint_patch 7", &why));
+    CHECK(!GmicCatalogue::excludedIn("blur 3 matchpatch[0] [1]").isEmpty());
+    CHECK(GmicCatalogue::excludedIn("blur 3").isEmpty());
+    compositor::Image tiny(4, 4);
+    QString error;
+    CHECK(!GmicRunner::runSync(tiny, "+matchpatch[0] [0],3", &error));
+    CHECK(error.contains("matchpatch"));
+    // The real definition file, when one is installed: report how much it leaves out.
+    if (const QString path = GmicCatalogue::preferredFile(); !path.isEmpty()) {
+        GmicCatalogue real;
+        if (real.load(path)) {
+            std::printf("  %s: %d filters offered, %d commands excluded\n", qPrintable(path), int(real.filters().size()), int(GmicCatalogue::excluded().size()));
+            for (const GmicFilter& f : real.filters()) CHECK(GmicCatalogue::excludedIn(f.command).isEmpty());
+        }
+    }
+}
+
 TEST_CASE(gmic_at_sixteen_bits_agrees_with_eight_bits_on_eight_bit_input) {
     if (GmicRunner::executable().isEmpty()) { std::fprintf(stderr, "  skipped: no gmic executable\n"); return; }
     // An 8-bit picture (ramps, texture, and a half-transparent corner or not) and the same pixels widened to 16 bits.

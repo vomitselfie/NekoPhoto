@@ -328,11 +328,12 @@ TEST_CASE(a_mouse_can_press_by_its_speed_when_asked) {
     // Off (the default), a mouse is full pressure: the same width all along.
     const auto plain = paintTip(tip, 24, samples);
     CHECK(std::abs(width(*plain, 200) - width(*plain, 60)) <= 1);
-    // On, the fast middle is thinner than the slow ends; a stylus's pressure is never replaced.
+    // On, it still paints full pressure: a mouse's pressure never follows its speed, since pressure can drive flow and
+    // opacity (docs/legal-boundaries.md, "Brushes"). A stylus's pressure is never replaced either.
     tip.mousePressureFromSpeed = true;
     const auto simulated = paintTip(tip, 24, samples);
-    std::fprintf(stderr, "  mouse speed as pressure: %d px wide slow, %d px fast\n", width(*simulated, 350), width(*simulated, 200));
-    CHECK(width(*simulated, 200) + 3 < width(*simulated, 350));
+    std::fprintf(stderr, "  mouse speed as pressure (not applied): %d px wide slow, %d px fast\n", width(*simulated, 350), width(*simulated, 200));
+    CHECK(std::abs(width(*simulated, 200) - width(*simulated, 350)) <= 1);
     const auto pen = paintTip(tip, 24, straightStroke(true));
     CHECK(std::abs(width(*pen, 200) - width(*pen, 60)) <= 1);
 }
@@ -364,7 +365,7 @@ TEST_CASE(procreate_speed_responds_the_same_at_any_zoom) {
     std::vector<const Preset*> speedBrushes;
     for (const Preset& p : synthetic.presets)
         if (p.name.find("speed") != std::string::npos) speedBrushes.push_back(&p);
-    REQUIRE(speedBrushes.size() == 5);
+    REQUIRE(speedBrushes.size() == 5);   // two of them (speed on opacity) import without it
     std::vector<Point> screen;
     for (int i = 0; i <= 120; i++) {
         const double u = i / 120.0, eased = u - std::sin(2 * 3.14159265358979323846 * u) / (2 * 3.14159265358979323846);
@@ -387,12 +388,14 @@ TEST_CASE(procreate_speed_responds_the_same_at_any_zoom) {
     const DynamicsTarget targets[] = {DynamicsTarget::Size, DynamicsTarget::Opacity, DynamicsTarget::Spacing};
     for (const Preset* brush : speedBrushes) {
         const BrushTip& tip = brush->tip->tip;
-        // Every speed setting reads the screen's speed, never the document's.
+        // Every speed setting reads the screen's speed, never the document's. Speed on opacity is not imported at all
+        // (docs/legal-boundaries.md, "Brushes").
         int onScreen = 0;
         for (const DynamicsMapping& m : tip.dynamics) {
             CHECK(m.input != DynamicsInput::Speed);
             onScreen += m.input == DynamicsInput::ScreenSpeed;
         }
+        if (brush->name.find("opacity") != std::string::npos) { CHECK_EQ(onScreen, 0); continue; }
         CHECK_EQ(onScreen, 1);
         auto resolve = [&](const BrushSample& s, DynamicsTarget t) {
             const double base = t == DynamicsTarget::Size ? brush->settings.diameter : t == DynamicsTarget::Spacing ? tip.spacing : 1.0;

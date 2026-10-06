@@ -166,6 +166,68 @@ QByteArray catalogueText(const QByteArray& raw) {
 
 } // namespace
 
+QSet<QString> GmicCatalogue::excludedCommands(const QByteArray& text) {
+    // The base set: PatchMatch itself (CImg's matchpatch, Barnes et al. 2009: neighbour propagation plus random
+    // search, Adobe US 8285055) and the patch-based inpainting and synthesis commands. G'MIC's diffusion and
+    // morphological inpainting stay available.
+    QSet<QString> out = {"matchpatch", "patchmatch", "inpaint_patch", "inpaint_matchpatch", "inpaint_multiscale",
+                         "syntexturize_matchpatch", "fx_inpaint_patch", "fx_inpaint_matchpatch", "fx_inpaint_multiscale",
+                         "fx_inpaint_holes", "fx_stylize", "fx_gcd_transfer_colors_patch", "fx_gcd_upscale_patch2x"};
+    if (text.isEmpty()) return out;
+    // Every definition (`name :` at the start of a line) and the identifiers its body names.
+    QHash<QString, QSet<QString>> uses;
+    static const QRegularExpression definition(QStringLiteral(R"(^([A-Za-z_][A-Za-z0-9_]*)\s*:)"));
+    static const QRegularExpression identifier(QStringLiteral(R"([A-Za-z_][A-Za-z0-9_]*)"));
+    QString current;
+    for (const QByteArray& raw : text.split('\n')) {
+        const QString line = QString::fromUtf8(raw);
+        if (line.startsWith('#')) continue;
+        if (const auto m = definition.match(line); m.hasMatch()) { current = m.captured(1); uses[current]; }
+        if (current.isEmpty()) continue;
+        for (auto it = identifier.globalMatch(line); it.hasNext();) uses[current].insert(it.next().captured());
+    }
+    // The closure: a filter-level command that calls an excluded one is excluded too. Only filter commands (fx_ and
+    // gcd_ ones, with or without a leading underscore) and patch or inpainting helpers take part: the generic library
+    // commands name every command in their help and demo text, and following those would exclude everything.
+    auto filterLevel = [](const QString& name) {
+        QString bare = name;
+        while (bare.startsWith('_')) bare.remove(0, 1);
+        return bare.startsWith(QLatin1String("fx_")) || bare.startsWith(QLatin1String("gcd_")) || name.contains(QLatin1String("inpaint"))
+            || name.contains(QLatin1String("patch")) || name.contains(QLatin1String("syntexturize"));
+    };
+    for (bool grew = true; grew;) {
+        grew = false;
+        for (auto it = uses.cbegin(); it != uses.cend(); ++it) {
+            if (out.contains(it.key()) || !filterLevel(it.key())) continue;
+            for (const QString& name : it.value())
+                if (name != it.key() && out.contains(name)) { out.insert(it.key()); grew = true; break; }
+        }
+    }
+    return out;
+}
+
+const QSet<QString>& GmicCatalogue::excluded() {
+    static const QSet<QString> set = [] {
+        QByteArray text;
+        if (const QString path = preferredFile(); !path.isEmpty()) {
+            QFile file(path);
+            if (file.open(QIODevice::ReadOnly)) text = catalogueText(file.readAll());
+        }
+        return excludedCommands(text);
+    }();
+    return set;
+}
+
+QString GmicCatalogue::excludedIn(const QString& command) {
+    static const QRegularExpression identifier(QStringLiteral(R"([A-Za-z_][A-Za-z0-9_]*)"));
+    const QSet<QString>& set = excluded();
+    for (auto it = identifier.globalMatch(command); it.hasNext();) {
+        const QString name = it.next().captured();
+        if (set.contains(name)) return name;
+    }
+    return {};
+}
+
 bool GmicCatalogue::load(const QString& path, QString* error) {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) { if (error) *error = QObject::tr("Couldn't read %1").arg(path); return false; }
@@ -175,6 +237,7 @@ bool GmicCatalogue::load(const QString& path, QString* error) {
     in.setEncoding(QStringConverter::Utf8);
     filters_.clear();
     source_ = path;
+    const QSet<QString> excludedSet = excludedCommands(text);
     // Folder lines nest by leading underscores: `_<b>Name</b>` opens a folder at the top, and `__<b>Name</b>`
     // (G'MIC 3.4 on) or a plain `<b>Name</b>` (older files) a subfolder of the last top folder; filters show
     // under "Top / Sub". Italic lines are author subfolders of the top folder (Testing's, in practice).
@@ -224,6 +287,8 @@ bool GmicCatalogue::load(const QString& path, QString* error) {
         f.folder = folder;
         // Hidden entries, and the pages with no command (About, Release Notes, ...).
         if (f.name.startsWith('_') || f.command.isEmpty() || f.command == "_none_") { current = nullptr; skipping = true; continue; }
+        // Never offered, even with "Show all filters": patch-match and patch-based inpainting (excludedCommands).
+        if (excludedSet.contains(f.command) || (!f.previewCommand.isEmpty() && excludedSet.contains(f.previewCommand))) { current = nullptr; skipping = true; continue; }
         filters_.push_back(f);
         current = &filters_.back();
         skipping = false;
@@ -324,7 +389,14 @@ QStringList GmicRunner::tokenize(const QString& command) {
 }
 
 bool GmicRunner::allowedForAutomation(const QString& command, QString* why) {
-    if (qEnvironmentVariableIntValue("COMPOSITOR_GMIC_UNRESTRICTED") == 1) return true;
+    if (qEnvironmentVariableIntValue("COMPOSITOR_GMIC_UNRESTRICTED") == 1) {
+        // Unrestricted lifts the language check, never the legal one.
+        if (const QString name = GmicCatalogue::excludedIn(command); !name.isEmpty()) {
+            if (why) *why = QStringLiteral("\"%1\" is a patch-based command NekoPhoto does not run").arg(name);
+            return false;
+        }
+        return true;
+    }
     auto refuse = [&](const QString& reason) { if (why) *why = reason; return false; };
     // Characters that make strings, paths, URLs, substitutions, math expressions or definitions.
     static const QRegularExpression forbidden(QStringLiteral(R"([$@{}`\"'/:;()<>|&=\n\r])"));
@@ -347,6 +419,8 @@ bool GmicRunner::allowedForAutomation(const QString& command, QString* why) {
         return names;
     }();
     static const QRegularExpression numbers(QStringLiteral(R"(^[-+]?[0-9.,eE%+-]*[0-9][0-9.,eE%+-]*$)"));
+    if (const QString name = GmicCatalogue::excludedIn(command); !name.isEmpty())
+        return refuse(QStringLiteral("\"%1\" is a patch-based command NekoPhoto does not run").arg(name));
     const QStringList tokens = tokenize(command);
     if (tokens.isEmpty()) return refuse(QStringLiteral("the command is empty"));
     for (int i = 0; i < tokens.size(); i++) {
@@ -698,6 +772,10 @@ private:
 #endif
 
 std::shared_ptr<compositor::Image> GmicRunner::runSync(const compositor::Image& source, const QString& command, QString* error, int timeoutMs) {
+    if (const QString name = GmicCatalogue::excludedIn(command); !name.isEmpty()) {
+        if (error) *error = QObject::tr("%1 is a patch-based G'MIC command that NekoPhoto does not run.").arg(name);
+        return nullptr;
+    }
 #ifdef COMPOSITOR_HAVE_LIBGMIC
     if (inProcess()) return Interpreter::shared().run(source, command, error);
 #endif
@@ -721,6 +799,10 @@ std::shared_ptr<compositor::Image> GmicRunner::runSync(const compositor::Image& 
 }
 
 std::shared_ptr<compositor::Image16> GmicRunner::runSync(const compositor::Image16& source, const QString& command, QString* error, int timeoutMs) {
+    if (const QString name = GmicCatalogue::excludedIn(command); !name.isEmpty()) {
+        if (error) *error = QObject::tr("%1 is a patch-based G'MIC command that NekoPhoto does not run.").arg(name);
+        return nullptr;
+    }
 #ifdef COMPOSITOR_HAVE_LIBGMIC
     if (inProcess()) return Interpreter::shared().run(source, command, error);
 #endif
@@ -744,6 +826,11 @@ std::shared_ptr<compositor::Image16> GmicRunner::runSync(const compositor::Image
 
 void GmicRunner::start(std::shared_ptr<const compositor::Image16> source, const QString& command, int timeoutMs) {
     cancel();
+    if (const QString name = GmicCatalogue::excludedIn(command); !name.isEmpty()) {
+        const QString error = tr("%1 is a patch-based G'MIC command that NekoPhoto does not run.").arg(name);
+        QMetaObject::invokeMethod(this, [this, error] { emit finished16(nullptr, error); }, Qt::QueuedConnection);
+        return;
+    }
 #ifdef COMPOSITOR_HAVE_LIBGMIC
     if (inProcess()) {
         const uint64_t run = ++run_;
@@ -797,6 +884,11 @@ void GmicRunner::start(std::shared_ptr<const compositor::Image16> source, const 
 
 void GmicRunner::start(std::shared_ptr<const compositor::Image> source, const QString& command, int timeoutMs) {
     cancel();
+    if (const QString name = GmicCatalogue::excludedIn(command); !name.isEmpty()) {
+        const QString error = tr("%1 is a patch-based G'MIC command that NekoPhoto does not run.").arg(name);
+        QMetaObject::invokeMethod(this, [this, error] { emit finished(nullptr, error); }, Qt::QueuedConnection);
+        return;
+    }
 #ifdef COMPOSITOR_HAVE_LIBGMIC
     if (inProcess()) {
         const uint64_t run = ++run_;

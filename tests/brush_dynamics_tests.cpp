@@ -3,6 +3,8 @@
 #include "compositor/brushdynamics.h"
 #include "compositor/png.h"
 #include "compositor/tipbrush.h"
+#include "compositor/warpstroke.h"
+#include <memory>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -218,12 +220,14 @@ TEST_CASE(grain_modes_fix_the_grain_to_the_canvas_the_stroke_or_the_dab) {
         return row;
     };
     using M = BrushTip::GrainMode;
-    // On the canvas the grain stays put, so the dab's pattern moves when the stroke starts elsewhere; fixed to the
-    // stroke or the dab, the first dab looks the same wherever it starts.
+    // On the canvas the grain stays put, so the dab's pattern moves when the stroke starts elsewhere. Stroke and Dab
+    // grain are not applied: the grain is one static mask anchored to the document (docs/legal-boundaries.md,
+    // "Brushes"), so those modes paint exactly as Canvas does.
     CHECK(paint(M::Canvas, 40) != paint(M::Canvas, 43));
-    CHECK(paint(M::Stroke, 40) == paint(M::Stroke, 43));
-    CHECK(paint(M::Dab, 40) == paint(M::Dab, 43));
-    // A preset keeps its mode.
+    CHECK(paint(M::Stroke, 40) == paint(M::Canvas, 40));
+    CHECK(paint(M::Stroke, 43) == paint(M::Canvas, 43));
+    CHECK(paint(M::Dab, 43) == paint(M::Canvas, 43));
+    // A preset keeps its mode (it is stored, and only painting ignores it).
     BrushTip tip;
     tip.grainMode = M::Stroke;
     tip.grainMovement = 0.5;
@@ -510,6 +514,41 @@ TEST_CASE(a_stroke_across_the_wrap_replays_the_same) {
     }
     CHECK(*a.image == *b.image);
     CHECK(*a.image == *c.image);
+}
+
+TEST_CASE(dynamics_never_drive_the_grain_or_tie_deposition_to_speed) {
+    // The legal boundaries (docs/legal-boundaries.md, "Brushes"): the grain is static, and flow and opacity never follow
+    // the pen's speed. Such mappings load but do nothing.
+    BrushSample fast;
+    fast.pressure = 0.5;
+    fast.speed = fast.screenSpeed = 1e6;
+    const BrushDynamics d = {dynamicsMapping(DynamicsInput::Pressure, DynamicsTarget::GrainDepth, 0, 1),
+                             dynamicsMapping(DynamicsInput::Speed, DynamicsTarget::GrainRotation, 0, 90),
+                             dynamicsMapping(DynamicsInput::ScreenSpeed, DynamicsTarget::Opacity, 0, 0.5),
+                             dynamicsMapping(DynamicsInput::Speed, DynamicsTarget::Flow, 0, 0.5),
+                             dynamicsMapping(DynamicsInput::Speed, DynamicsTarget::Size, 0, 0.5)};
+    CHECK_EQ(applyDynamics(d, DynamicsTarget::GrainDepth, 0.7, fast, 10, 0), 0.7);
+    CHECK_EQ(applyDynamics(d, DynamicsTarget::GrainRotation, 0, fast, 10, 0), 0.0);
+    CHECK_EQ(applyDynamics(d, DynamicsTarget::Opacity, 1, fast, 10, 0), 1.0);
+    CHECK_EQ(applyDynamics(d, DynamicsTarget::Flow, 1, fast, 10, 0), 1.0);
+    CHECK(applyDynamics(d, DynamicsTarget::Size, 1, fast, 10, 0) < 1.0);   // speed on size (shape dynamics) stays
+    CHECK(!mappingAllowed(DynamicsTarget::Opacity, DynamicsInput::Speed));
+    CHECK(mappingAllowed(DynamicsTarget::Opacity, DynamicsInput::Pressure));
+}
+
+TEST_CASE(smudge_carries_one_colour_not_a_patch) {
+    // The legal boundary (docs/legal-boundaries.md, "Brushes"): the smudge's pickup is one running average, so a
+    // stroke that starts on a two-colour edge smears their mix, never a copy of the edge.
+    auto img = std::make_shared<Image>(64, 32);
+    for (int y = 0; y < 32; y++) for (int x = 0; x < 64; x++) { uint8_t* p = img->pixel(x, y); const bool top = y < 16; p[0] = top ? 255 : 0; p[1] = 0; p[2] = top ? 0 : 255; p[3] = 255; }
+    WarpStroke smudge(img, WarpMode::Smudge, 12, 0.9, 1.0);   // strength 1: the carried colour never changes
+    smudge.append({8, 16});
+    smudge.append({56, 16});
+    // Far along the stroke, above and below its line: the same carried mix, not the red-over-blue edge it started on.
+    const uint8_t* above = img->pixel(50, 13);
+    const uint8_t* below = img->pixel(50, 19);
+    CHECK(std::abs(int(above[0]) - int(below[0])) <= 40);
+    CHECK(std::abs(int(above[2]) - int(below[2])) <= 40);
 }
 
 TEST_MAIN()

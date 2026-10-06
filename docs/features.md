@@ -24,11 +24,11 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 
 ## Selections
 - Rectangle and ellipse marquee, freehand and polygonal lasso, and an edge-aware magic wand: shading and texture stay in, edges between similar colours hold, and the tolerance can be changed right after a click
-- Quick Select (Shift+W): scribble over the subject, or click it (a 48 MB model, downloaded from the options bar); the selection snaps to the image's edges
+- Quick Select (Shift+W): scribble over the subject, or click it (a 48 MB model, downloaded from the options bar); the selection snaps to the image's edges and updates when you release the mouse ([legal-boundaries.md](legal-boundaries.md))
 - Add (Shift), subtract (Alt) and intersect (Shift+Alt)
 - Expand, Contract, Feather, Smooth, Border, Invert; load a layer or mask as a selection
 - Channels (Window ▸ Channels, [details](channels.md)): alpha channels as saved selections (Select ▸ Save Selection and Load Selection in every combine mode, Ctrl-click a thumbnail with Shift, Alt or both), painted like Quick Mask, with Channel Options; one colour channel in gray (Ctrl+3, 4, 5) that the brush, fills, adjustments, filters and paste then change alone; spot channels kept from PSD files; channels in PSD files and projects, at 8 and 16 bits
-- Content-Aware Fill, which continues edges and patterns and can extend an image past its borders; its dialog (Edit > Content-Aware Fill…) chooses the sampling area (Auto, the whole layer, or Custom painted with an include/exclude brush), previews on the canvas and can output to a new layer ([content-aware.md](content-aware.md))
+- Content-Aware Fill, which continues edges and patterns and can extend an image past its borders; its dialog (Edit > Content-Aware Fill…) chooses the search area (Auto or Wide Area; there is no hand-painted sampling area, see [legal-boundaries.md](legal-boundaries.md)), previews on the canvas and can output to a new layer ([content-aware.md](content-aware.md))
 - Content-Aware Scale (Edit menu): seam carving narrows, widens, shortens or heightens a layer while the parts that carry detail keep their proportions; Protect keeps the selection, with a live preview ([details](content-aware-scale.md))
 
 ## Painting and retouching
@@ -38,7 +38,7 @@ listed in [linux-port.md](linux-port.md#keyboard-shortcuts).
 - Brush dynamics for tip brushes (the Dynamics… button in the Brush tool's options bar): a pressure curve with a minimum for size and for flow, Density by spacing (the stroke looks as dense at any spacing), and Mouse speed as pressure, a simulated pressure for mouse users, off by default. Imported brushes bring their own dynamics too: pressure, pen tilt, fade and jitter on size, flow, opacity, angle, roundness and scatter, and tablet tilt, barrel rotation and speed are all read. Procreate brushes bring speed on size, opacity and spacing, tilt on size, opacity, bleed and roundness, azimuth and barrel roll turning the tip (following the stroke on a pen without barrel rotation), moving grain that rolls with the stroke, their own pressure curves, start and end tapers (the pencil's for a pen, the touch taper for a mouse), roundness and spacing jitter, and a random turn per stroke. Clip Studio brushes bring their pressure curves and starting and ending; Photoshop brushes their angle following the stroke, the initial direction, the barrel's rotation or the stylus wheel. A tip that turns with the stroke starts turned the way the stroke goes, from its first dab. Pen tilt shapes the tip turns any tip brush into a tilted pencil that flattens and turns the way the pen leans ([brush-engine.md](brush-engine.md))
 - Smoothing for the Brush and Eraser, as in Photoshop: a Smoothing % in the options bar steadies the line, which trails the pen, with Pulled String Mode, Stroke Catch-Up, Catch-Up On Stroke End and Adjust For Zoom under Dynamics…, next to two lighter filters of their own: input smoothing (steadies a jittery tablet with next to no lag) and pressure smoothing. All off by default ([brush-engine.md](brush-engine.md#smoothing))
 - Spot Healing Brush and Clone Stamp; both ignore what a layer mask hides
-- Smudge, Liquify and Blur, on pixels or masks, and Sharpen
+- Smudge (it carries one colour along the stroke), Liquify and Blur, on pixels or masks, and Sharpen
 - Warp Cage (Edit ▸ Warp Cage, Photoshop's custom warp): drag the 16 points of a 4 × 4 mesh over a layer with a live preview; pixels bend for good, a smart object keeps it as its own editable Custom warp (written to PSD as Photoshop's), and a shape layer bends as a path
 - Vector shape layers (Photoshop's shape layers, editable and written to PSD as such): the Shape tool's rectangle, ellipse, polygon, star, line and custom shapes with fill and stroke (colour, width, alignment, dashes) editable from the options bar; gradient and pattern fills and strokes; path operations (Combine, Subtract Front Shape, Intersect, Exclude, Merge Shape Components); live rectangles (per-corner radii) and ellipses with their properties in the Shape bar; the Pen (P) and Direct Selection (A); vector masks on any layer (Layer ▸ Vector Mask); Type ▸ Create Work Path and Convert to Shape; the Paths panel (Work Path and saved paths: fill, stroke, load as selection, make from selection, make shape layer) (docs/vector-tools.md)
 - Dodge, Burn (Shadows, Midtones, Highlights; Protect Tones) and Sponge (desaturate or saturate), painted through the brush with Exposure or Flow as its opacity; their curves are shaped after Photoshop's behaviour, not measured against it
@@ -143,11 +143,11 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 
 ### 選択範囲
 - 長方形選択・楕円選択、なげなわ・多角形選択、自動選択
-- クイック選択(Shift+W):被写体をなぞるか、クリックするだけ(クリック用の 48 MB のモデルはオプションバーからダウンロード)。選択範囲は画像の輪郭に合わせて調整されます
+- クイック選択(Shift+W):被写体をなぞるか、クリックするだけ(クリック用の 48 MB のモデルはオプションバーからダウンロード)。選択範囲は画像の輪郭に合わせて調整され、マウスを離したときに更新されます([legal-boundaries.md](legal-boundaries.md#日本語))
 - 追加(Shift)、削除(Alt)、共通範囲(Shift+Alt)
 - 拡張、縮小、境界をぼかす、滑らかに、境界線、選択範囲を反転。レイヤーやマスクから選択範囲を作成
 - チャンネル(ウィンドウ ▸ チャンネル、[詳細](channels.md)):選択範囲を保存したアルファチャンネル(選択範囲 ▸ 選択範囲を保存・選択範囲を読み込むは追加・一部削除・共通範囲にも対応、サムネールの Ctrl+クリックと Shift・Alt)。クイックマスクと同じように描画でき、チャンネルオプションでマスク範囲・選択範囲、カラー、不透明度を設定。カラーチャンネルを 1 つだけグレーで表示(Ctrl+3、4、5)すると、ブラシ、塗りつぶし、色調補正、フィルター、ペーストがそのチャンネルだけに適用されます。PSD のスポットカラーチャンネルは保持。チャンネルは PSD とプロジェクトに保存され、8 ビットと 16 ビットの両方で使えます
-- コンテンツに応じた塗りつぶし:輪郭や模様をつなげ、画像の外側への拡張にも使えます
+- コンテンツに応じた塗りつぶし:輪郭や模様をつなげ、画像の外側への拡張にも使えます(探す範囲は「自動」と「広い範囲」。手で塗るサンプリング範囲はありません)
 
 ### 描画とレタッチ
 - サイズ・硬さ・不透明度を指定できるブラシと消しゴム。Shift で直線

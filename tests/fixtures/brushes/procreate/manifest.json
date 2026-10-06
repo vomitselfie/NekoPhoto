@@ -6,8 +6,8 @@
   "brushes": {
     "syn_01_speed_size_pos.brush": {"setting": "dynamicsSpeedSize", "value": 0.8, "input": "speed", "target": "size", "stroke": "speed_sweep", "measure": "width", "expect": "up"},
     "syn_02_speed_size_neg.brush": {"setting": "dynamicsSpeedSize", "value": -0.8, "input": "speed", "target": "size", "stroke": "speed_sweep", "measure": "width", "expect": "down"},
-    "syn_03_speed_opacity_pos.brush": {"setting": "dynamicsSpeedOpacity", "value": 0.8, "input": "speed", "target": "opacity", "stroke": "speed_sweep", "measure": "peak", "expect": "up"},
-    "syn_04_speed_opacity_neg.brush": {"setting": "dynamicsSpeedOpacity", "value": -0.8, "input": "speed", "target": "opacity", "stroke": "speed_sweep", "measure": "peak", "expect": "down"},
+    "syn_03_speed_opacity_pos.brush": {"setting": "dynamicsSpeedOpacity", "value": 0.8, "input": "speed", "target": "opacity", "stroke": "speed_sweep", "measure": "peak", "expect": "same"},
+    "syn_04_speed_opacity_neg.brush": {"setting": "dynamicsSpeedOpacity", "value": -0.8, "input": "speed", "target": "opacity", "stroke": "speed_sweep", "measure": "peak", "expect": "same"},
     "syn_05_speed_spacing.brush": {"setting": "plotSpacingSpeed", "value": 1.0, "input": "speed", "target": "spacing", "stroke": "speed_sweep", "measure": "peak", "expect": "down"},
     "syn_06_tilt_size.brush": {"setting": "dynamicsTiltSize", "value": 0.8, "input": "tilt", "target": "size", "stroke": "tilt_sweep", "measure": "width", "expect": "up"},
     "syn_07_tilt_opacity.brush": {"setting": "dynamicsTiltOpacity", "value": 0.8, "input": "tilt", "target": "opacity", "stroke": "tilt_sweep", "measure": "peak", "expect": "down"},
@@ -18,7 +18,7 @@
     "syn_12_roll.brush": {"setting": "shapeRoll", "value": true, "input": "roll", "target": "angle", "stroke": "twist_sweep", "measure": "width", "expect": "turns",
                           "also": [{"stroke": "twist_wrap", "measure": "width", "expect": "continuous"},
                                    {"stroke": "circle", "measure": "width", "expect": "steady"}]},
-    "syn_13_grain_moving.brush": {"setting": "textureApplication", "value": 0, "input": "grain", "target": "stroke", "stroke": "straight_line", "measure": "render", "expect": "differs", "against": "syn_14_grain_texturized.brush"},
+    "syn_13_grain_moving.brush": {"setting": "textureApplication", "value": 0, "input": "grain", "target": "stroke", "stroke": "straight_line", "measure": "render", "expect": "same", "against": "syn_14_grain_texturized.brush"},
     "syn_14_grain_texturized.brush": {"setting": "textureApplication", "value": 1, "input": "grain", "target": "canvas", "stroke": "straight_line", "measure": "render", "expect": "differs"}
   }
 }

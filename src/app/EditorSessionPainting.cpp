@@ -185,7 +185,6 @@ bool EditorSession::beginBrush(QPointF documentPoint, bool straightFromLast) {
     strokeRegion_ = toQRect(stroke_->takeDirtyRect());
     if (!strokeRegion_.isEmpty()) emit documentChanged(strokeRegion_);
     if (myPaint_) myPaintSettle_.start();
-    if (settings.healing) healPreview_.start();
     return true;
 }
 
@@ -227,7 +226,6 @@ void EditorSession::continueBrush(QPointF documentPoint) {
     lastBrushPoint_ = documentPoint;
     if (strokePoints_.size() < 20000) { strokePoints_.push_back(documentPoint); strokeSamples_.push_back(pen); }
     takeBrushDirty();
-    if (healPreview_.isActive() || tool_ == Tool::SpotHealing) healPreview_.start();
 }
 
 std::unique_ptr<BrushStroke> EditorSession::makeRasterEdit(const Layer& layer, bool mask, const BrushSettings& settings) const {
@@ -276,7 +274,6 @@ void EditorSession::commitRasterEdit(BrushStroke& stroke, const Uuid& layerId, b
 
 void EditorSession::endBrush() {
     if (!stroke_) return;
-    healPreview_.stop();
     myPaintSettle_.stop();
     stabilizerTick_.stop();
     if (stabilizing_) {
@@ -350,7 +347,6 @@ void EditorSession::endBrush() {
 
 void EditorSession::cancelBrush() {
     if (!stroke_) return;
-    healPreview_.stop();
     myPaintSettle_.stop();
     stabilizerTick_.stop();
     stabilizing_ = false;

@@ -20,14 +20,8 @@ EditorSession::~EditorSession() {
 }
 
 EditorSession::EditorSession(QObject* parent) : QObject(parent) {
-    // Spot healing previews its result once the pointer has paused; the stroke goes on from there.
-    healPreview_.setSingleShot(true);
-    healPreview_.setInterval(180);
-    connect(&healPreview_, &QTimer::timeout, this, [this] {
-        if (!stroke_ || strokeMask_) return;
-        stroke_->previewHeal();
-        emit documentChanged({});
-    });
+    // Healing strokes heal once, when the pointer is released: no healed result is shown while the stroke is
+    // being painted (docs/legal-boundaries.md, "Healing": no live healing preview, US 8050498).
     // Presets with slow position tracking trail the pointer and only move on input; a mouse held still sends
     // none, so the brush would stop short of it. The last input repeats at 60 a second until it has caught up.
     myPaintSettle_.setInterval(16);

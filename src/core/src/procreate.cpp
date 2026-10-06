@@ -62,7 +62,7 @@ std::string text(const std::map<std::string, plist::Value>& s, const char* key) 
 }
 
 struct Notes {
-    int bundledShapes = 0, bundledGrains = 0;
+    int bundledShapes = 0, bundledGrains = 0, movingGrain = 0, speedOpacity = 0;
     std::map<std::string, int> notCarried;   // setting -> brushes using it
 };
 
@@ -86,15 +86,6 @@ constexpr double fullSpeed = 1500;
 /// The sign weakly inferred; the scale synthetic-only.
 DynamicsMapping speedSize(double amount) {
     return dynamicsMapping(DynamicsInput::ScreenSpeed, DynamicsTarget::Size, 1, std::clamp(amount, -0.95, 1.0), fullSpeed);
-}
-
-/// dynamicsSpeedOpacity, -1..1: positive makes slow strokes lighter (from 1 - amount at rest to full at full speed);
-/// negative makes fast strokes lighter (to 1 + amount at full speed). Opacity is the most a stroke builds up to.
-/// The sign weakly inferred; the scale synthetic-only.
-DynamicsMapping speedOpacity(double amount) {
-    const double a = std::clamp(amount, -1.0, 1.0);
-    return a > 0 ? dynamicsMapping(DynamicsInput::ScreenSpeed, DynamicsTarget::Opacity, 1 - a, a, fullSpeed)
-                 : dynamicsMapping(DynamicsInput::ScreenSpeed, DynamicsTarget::Opacity, 1, a, fullSpeed);
 }
 
 /// plotSpacingSpeed, 0 and up: the spacing widens with speed, to 1 + amount times at full speed. The direction
@@ -266,12 +257,9 @@ std::optional<TipPreset> readBrush(const ZipArchive& zip, const std::string& fol
             }
             tip.grainDepth = std::clamp(number(s, "grainDepth", 1), 0.0, 1.0);
             tip.grainScale = 1 / std::clamp(number(s, "textureScale", 1), 0.05, 16.0);
-            // Moving grain (textureApplication 0) rolls with the stroke, as far as its Movement says; texturized grain
-            // stays on the canvas. Which value is moving: weakly inferred; Movement's scale: synthetic-only.
-            if (number(s, "textureApplication", 1) == 0) {
-                tip.grainMode = BrushTip::GrainMode::Stroke;
-                tip.grainMovement = std::clamp(number(s, "textureMovement", 1), 0.0, 1.0);
-            }
+            // Moving grain (textureApplication 0) would roll with the stroke; NekoPhoto's grain always stays on the
+            // canvas (docs/legal-boundaries.md, "Brushes"), so it imports as texturized grain, with a note.
+            if (number(s, "textureApplication", 1) == 0) notes.movingGrain++;
         }
     } else if (!text(s, "bundledGrainPath").empty()) notes.bundledGrains++;
 
@@ -334,7 +322,8 @@ std::optional<TipPreset> readBrush(const ZipArchive& zip, const std::string& fol
     if (angleJitter > 0) add(DynamicsInput::Random, DynamicsTarget::Angle, 0, angleJitter);
     // Speed (scaling above).
     if (const double v = number(s, "dynamicsSpeedSize", 0); std::fabs(v) >= 1e-6) tip.dynamics.push_back(scaling::speedSize(v));
-    if (const double v = number(s, "dynamicsSpeedOpacity", 0); std::fabs(v) >= 1e-6) tip.dynamics.push_back(scaling::speedOpacity(v));
+    // Speed on opacity is not imported: deposition never follows the pen's speed (docs/legal-boundaries.md).
+    if (const double v = number(s, "dynamicsSpeedOpacity", 0); std::fabs(v) >= 1e-6) notes.speedOpacity++;
     if (const double v = number(s, "plotSpacingSpeed", 0); v >= 1e-6) tip.dynamics.push_back(scaling::speedSpacing(v));
     // Tilt (scaling above), each from its own tilt angle when the brush has one.
     const double tiltAngle = number(s, "dynamicsTiltAngle", 0);
@@ -396,6 +385,8 @@ std::optional<BrushImport> readProcreate(const uint8_t* data, size_t size, const
     auto note = [&](int count, const char* what) { if (count) import.notes.push_back(what + std::string(": ") + std::to_string(count)); };
     note(notes.bundledShapes, "brushes whose shape is from Procreate's own library, not in the file (a soft round tip stands in)");
     note(notes.bundledGrains, "brushes whose grain is from Procreate's own library, not in the file (they paint without grain)");
+    note(notes.movingGrain, "brushes with moving grain (their grain stays on the canvas here, as texturized grain)");
+    note(notes.speedOpacity, "brushes whose opacity follows the pen's speed (not imported: opacity here never follows speed)");
     for (const auto& [what, count] : colourNotes)
         import.notes.push_back("brushes with " + what + " (they paint in the chosen colour only): " + std::to_string(count));
     if (!notes.notCarried.empty()) {

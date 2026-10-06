@@ -9,6 +9,7 @@
 #include <QObject>
 #include <QString>
 #include <QHash>
+#include <QSet>
 #include <QStringList>
 #include <atomic>
 #include <memory>
@@ -59,6 +60,14 @@ public:
     /// layers, fail or give a blank image), by command, with the reason: src/app/gmic/unsupported.txt, made by
     /// tools/gmic-sweep.py. The dialog hides them unless asked to show all.
     static const QHash<QString, QString>& unsupported();
+    /// G'MIC commands NekoPhoto never runs (docs/legal-boundaries.md, "G'MIC"): patch-match searches and the
+    /// patch-based inpainting built on them, plus every command of the definition file whose body calls one of those,
+    /// directly or through others. `catalogueText` is the decompressed definition file (empty: the base set only).
+    static QSet<QString> excludedCommands(const QByteArray& catalogueText);
+    /// The excluded set for the definition file in use (computed once).
+    static const QSet<QString>& excluded();
+    /// The first excluded command named anywhere in `command`, or empty.
+    static QString excludedIn(const QString& command);
 
 private:
     std::vector<GmicFilter> filters_;

@@ -1786,7 +1786,7 @@ def main():
     rpc.call("selection.rect", x=40, y=40, width=30, height=30)
     rpc.call("pixels.contentAwareFill")
     layers_before_fill = len(rpc.call("layers.list"))
-    filled = rpc.call("pixels.contentAwareFill", sampling="custom", include=[{"x": 0, "y": 0, "width": 140, "height": 140}], exclude=[{"x": 100, "y": 100, "width": 20, "height": 20}], output="new")
+    filled = rpc.call("pixels.contentAwareFill", sampling="all", output="new")
     assert filled["filled"] and "layer" in filled, filled
     assert len(rpc.call("layers.list")) == layers_before_fill + 1
     rpc.call("history.undo")
@@ -1795,6 +1795,13 @@ def main():
         raise AssertionError("an unknown sampling was accepted")
     except RuntimeError as e:
         assert "sampling" in str(e), e
+    # No user-drawn sampling area (docs/legal-boundaries.md): custom sampling and its rectangles are refused.
+    for bad in ({"sampling": "custom"}, {"sampling": "custom", "include": [{"x": 0, "y": 0, "width": 10, "height": 10}]}):
+        try:
+            rpc.call("pixels.contentAwareFill", **bad)
+            raise AssertionError("custom sampling was accepted: %r" % bad)
+        except RuntimeError:
+            pass
     moved = rpc.call("pixels.contentAwareMove", dx=30, dy=10, adaptation=3)
     assert moved["moved"] and moved["mode"] == "move", moved
     sel = rpc.call("selection.info")

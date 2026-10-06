@@ -813,6 +813,12 @@ bool checkExpectation(const Expectation& e, const std::vector<StrokeFixture>& fi
     const Render a = render(*stroke, *brush), b = render(*stroke, *against);
     const Metrics ma = measure(*stroke, a), mb = measure(*stroke, b);
     char buffer[256];
+    // "same": a setting NekoPhoto deliberately does not apply (docs/legal-boundaries.md) paints as the brush without it.
+    if (e.expect == "same") {
+        const bool same = hashRender(a) == hashRender(b);
+        if (why) *why = same ? "the render is the same" : "the render differs";
+        return same;
+    }
     if (e.measure == "render" || e.expect == "differs") {
         const bool differs = hashRender(a) != hashRender(b);
         if (why) *why = differs ? "the render differs" : "the render is the same";

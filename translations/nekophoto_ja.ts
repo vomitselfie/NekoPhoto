@@ -2153,6 +2153,10 @@ Working: %2</source>
         <translation>G&apos;MIC の出力はこのエディターで扱えない画像です（%1 チャンネル）。</translation>
     </message>
     <message>
+        <source>%1 is a patch-based G&apos;MIC command that NekoPhoto does not run.</source>
+        <translation>%1 はパッチベースの G&apos;MIC コマンドのため、NekoPhoto では実行しません。</translation>
+    </message>
+    <message>
         <source>G&apos;MIC is not installed (no gmic executable on PATH).</source>
         <translation>G&apos;MIC がインストールされていません(PATH に gmic 実行ファイルがありません)。</translation>
     </message>
@@ -3696,6 +3700,10 @@ Add one from the Layers panel or Layer &gt; New Adjustment Layer.</source>
         <source>%1 → %2</source>
         <translation>%1 → %2</translation>
     </message>
+    <message>
+        <source>%1 → %2 (not applied)</source>
+        <translation>%1 → %2（適用しません）</translation>
+    </message>
     <message numerus="yes">
         <source>Other dynamics of this brush (%n: jitter, tilt, fade and the like) stay as they are.</source>
         <translation>
@@ -4627,36 +4635,20 @@ File &gt; New creates a blank canvas.</source>
         <translation>自動</translation>
     </message>
     <message>
-        <source>All of the Layer</source>
-        <translation>レイヤー全体</translation>
-    </message>
-    <message>
-        <source>Custom</source>
-        <translation>カスタム</translation>
-    </message>
-    <message>
         <source>Copy from around the selection</source>
         <translation>選択範囲の周囲からコピーします</translation>
     </message>
     <message>
-        <source>Copy from anywhere on the layer</source>
-        <translation>レイヤー上のどこからでもコピーします</translation>
+        <source>Wide Area</source>
+        <translation>広い範囲</translation>
     </message>
     <message>
-        <source>Copy only from the area painted green: the left button adds, the right button or Alt removes</source>
-        <translation>緑で塗った領域からのみコピーします。左ボタンで追加、右ボタンまたは Alt で削除します</translation>
+        <source>Copy from a wider area around the selection (slower)</source>
+        <translation>選択範囲の周りのより広い範囲からコピーします（時間がかかります）</translation>
     </message>
     <message>
-        <source>Brush</source>
-        <translation>ブラシ</translation>
-    </message>
-    <message>
-        <source> px</source>
-        <translation> px</translation>
-    </message>
-    <message>
-        <source>The sampling brush&apos;s diameter on this picture</source>
-        <translation>この画像上でのサンプリングブラシの直径です</translation>
+        <source>A hand-painted sampling area is not available in NekoPhoto.</source>
+        <translation>手で塗ったサンプリング範囲は NekoPhoto では使えません。</translation>
     </message>
     <message>
         <source>Output</source>
@@ -4928,10 +4920,6 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Select an area to fill.</source>
         <translation>塗りつぶす範囲を選択してください。</translation>
-    </message>
-    <message>
-        <source>The sampling area holds no opaque image pixels outside the selection to copy from.</source>
-        <translation>サンプリング領域の選択範囲外に、コピー元となる不透明なピクセルがありません。</translation>
     </message>
     <message>
         <source>Not enough unselected, opaque image pixels to synthesize a fill. Use a smaller selection with some surrounding image.</source>
@@ -5325,6 +5313,13 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>%1 filters ready.</source>
         <translation>%1 個のフィルターを使用できます。</translation>
+    </message>
+</context>
+<context>
+    <name>app::GmicRunner</name>
+    <message>
+        <source>%1 is a patch-based G&apos;MIC command that NekoPhoto does not run.</source>
+        <translation>%1 はパッチベースの G&apos;MIC コマンドのため、NekoPhoto では実行しません。</translation>
     </message>
 </context>
 <context>
