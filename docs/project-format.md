@@ -1,6 +1,6 @@
-# Compositor project format, versions 1–6
+# NekoPhoto project format (.comp), versions 1–8
 
-A `.comp` file is a macOS document package containing `manifest.json` and an `images/` directory of `<layer UUID>.png` assets.
+A `.comp` project is a folder (a document package on macOS, where the format began) containing `manifest.json` and an `images/` directory of `<layer UUID>.png` assets.
 
 The manifest identifies `com.compositor.project`, version `6` for new saves (versions `1`–`5` remain readable), and the sRGB working space. It stores document UUID, pixel dimensions, active layer UUID, and layers in bottom-to-top order. Each layer stores its UUID, name, visibility, transform (origin, size, clockwise rotation, flips, sampling), and optional image filename. Blank layers have no image asset.
 

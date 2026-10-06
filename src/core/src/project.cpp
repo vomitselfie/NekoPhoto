@@ -29,7 +29,7 @@ const char* formatIdentifier = "com.compositor.project";
 constexpr size_t manifestLimit = 4 * 1024 * 1024;
 constexpr uintmax_t assetLimit = uintmax_t(512) * 1024 * 1024;
 
-ProjectError invalid() { return {ProjectError::Invalid, "This is not a valid Compositor project, or its metadata is damaged."}; }
+ProjectError invalid() { return {ProjectError::Invalid, "This is not a valid NekoPhoto project, or its metadata is damaged."}; }
 
 /// Whether a parsed manifest nests deeper than any real one does. Parsing and destroying a json are
 /// iterative, but dump() (which keeps unknown fields for saving) recurses, so a crafted manifest of deeply

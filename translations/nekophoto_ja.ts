@@ -6706,8 +6706,8 @@ File &gt; New creates a blank canvas.</source>
         <translation>プロジェクトを保存</translation>
     </message>
     <message>
-        <source>Compositor project (*.comp)</source>
-        <translation>Compositor プロジェクト (*.comp)</translation>
+        <source>NekoPhoto project (*.comp)</source>
+        <translation>NekoPhoto プロジェクト (*.comp)</translation>
     </message>
     <message>
         <source>Couldn’t save the project</source>

@@ -471,7 +471,7 @@ bool MainWindow::save(bool asNew) {
     QString path = session_->projectPath();
     if (asNew || path.isEmpty()) {
         QString suggested = QDir(QSettings().value("lastDir").toString()).filePath((path.isEmpty() ? QStringLiteral("Untitled") : QFileInfo(path).completeBaseName()) + ".comp");
-        path = QFileDialog::getSaveFileName(this, tr("Save Project"), suggested, tr("Compositor project (*.comp)"));
+        path = QFileDialog::getSaveFileName(this, tr("Save Project"), suggested, tr("NekoPhoto project (*.comp)"));
         if (path.isEmpty()) return false;
         if (!path.endsWith(".comp", Qt::CaseInsensitive)) path += ".comp";
         QSettings().setValue("lastDir", QFileInfo(path).path());

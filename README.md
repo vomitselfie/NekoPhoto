@@ -34,7 +34,7 @@ listed before you export. The counts, the known gaps and how to rerun the checks
 used with permission (also in the screenshot above). Brush demo: the CC0 “Myer Settlement Brushes” by K. M. Alexander, from Patchy's test fixtures.</sub>
 
 NekoPhoto began as a Linux port of [Compositor](https://github.com/robbietilton/Compositor)
-for macOS, and opens its older `.comp` projects. Until version 1.0 it was
+for macOS, and keeps its `.comp` project folder as NekoPhoto's own format. Until version 1.0 it was
 called compositor-linux; your settings, brushes and downloaded model move over
 by themselves the first time you start it.
 
@@ -210,7 +210,7 @@ Linux: 2022 年以降の x86_64 ディストリビューション(Wayland・X11)
 『K』(許可を得て使用)。ブラシのデモ: K. M. Alexander による CC0 の「Myer Settlement Brushes」(Patchy のテスト用ファイルより)。</sub>
 
 NekoPhoto は macOS 版 [Compositor](https://github.com/robbietilton/Compositor) の
-Linux 移植として始まり、Mac 版の以前の `.comp` プロジェクトも開けます。バージョン 1.0 までは
+Linux 移植として始まりました。`.comp` プロジェクト(フォルダー形式)はそのまま NekoPhoto 自身の形式です。バージョン 1.0 までは
 compositor-linux という名前でした。設定・ブラシ・ダウンロード済みのモデルは、初回起動時に自動で引き継がれます。
 
 ### 作品をそのまま持ってくる
