@@ -1321,6 +1321,79 @@ void add16BitSmartObjectScenes() {
     });
 }
 
+
+// ---- Smart objects and artboards in CMYK and Lab (P9) ----------------------------------------------------------------
+//
+// A noisy base converted with Image > Mode, then: an RGB source placed (converted through the profiles once), the same
+// warped, every Smart Filter Photoshop offers in the mode run on the document's samples, layers converted to a smart
+// object (a child of the document's mode, placed as it is), and an artboard with a coloured background.
+
+Document modeSmartScene(ColorMode colorMode, SampleType type, const std::shared_ptr<const SmartObjectSource>& source) {
+    Document doc = inColorMode([] {
+        Document d(200, 150);
+        d.id = "00000000-0000-4000-8000-000000000017";
+        d.layers.push_back(layerOf("base", noisyBase(200, 150), {0, 0}));
+        return d;
+    }(), colorMode, type);
+    doc.smartObjects[source->id] = source;
+    doc.layers.push_back(smartObjectLayer(source, {40, 30, 150, 30, 150, 110, 40, 110}, "Contents", smartObjectTargetOf(doc)));
+    return doc;
+}
+
+void addColorModeSmartObjectScenes() {
+    for (ColorMode colorMode : {ColorMode::CMYK, ColorMode::Lab})
+        for (SampleType type : {SampleType::U8, SampleType::U16}) {
+            const std::string prefix = std::string(colorMode == ColorMode::CMYK ? "cmyk" : "lab") + (type == SampleType::U16 ? "16" : "") + "/";
+            scene(prefix + "smart_object/placed_rgb_source", [=] { return hashNative(renderNative(modeSmartScene(colorMode, type, smartSource8()))); });
+            scene(prefix + "smart_object/placed_16bit_source", [=] { return hashNative(renderNative(modeSmartScene(colorMode, type, smartSource16()))); });
+            scene(prefix + "smart_object/warped", [=] {
+                Document doc = modeSmartScene(colorMode, type, smartSource8());
+                std::string error;
+                if (!warpLayer(doc, doc.layers[1], TextWarp{"warpArc", 40, 0, 0, false}, &error)) check::fail(__FILE__, __LINE__, "warp: " + error);
+                return hashNative(renderNative(doc));
+            });
+            const std::vector<std::pair<std::string, SmartFilterParameters>> filters{
+                {"gaussian_blur", smartfilter::GaussianBlur{3}}, {"high_pass", smartfilter::HighPass{4}}, {"median", smartfilter::Median{2}},
+                {"dust_and_scratches", smartfilter::DustAndScratches{2, 10}}, {"surface_blur", smartfilter::SurfaceBlur{5, 15}},
+                {"motion_blur", smartfilter::MotionBlur{30, 14}}, {"mosaic", smartfilter::Mosaic{8}}, {"emboss", smartfilter::Emboss{135, 3, 100}},
+                {"box_blur", smartfilter::BoxBlur{4}}, {"radial_blur", smartfilter::RadialBlur{10, 16}}, {"add_noise", smartfilter::AddNoise{20, true, false, 5}},
+                {"unsharp_mask", smartfilter::UnsharpMask{150, 2, 8}},
+            };
+            for (const auto& [name, parameters] : filters)
+                scene(prefix + "smart_filter/" + name, [=] {
+                    Document doc = modeSmartScene(colorMode, type, smartSource8());
+                    SmartFilterEntry entry;
+                    entry.parameters = parameters;
+                    std::string error;
+                    if (!addSmartFilter(doc, doc.layers[1], entry, &error)) check::fail(__FILE__, __LINE__, "addSmartFilter: " + error);
+                    return hashNative(renderNative(doc));
+                });
+            scene(prefix + "smart_object/converted_layers", [=] {
+                Document doc = inColorMode(blendDocument(BlendMode::Multiply), colorMode, type);
+                std::vector<Uuid> ids;
+                for (const Layer& l : doc.layers) ids.push_back(l.id);
+                std::string error;
+                if (!convertToSmartObject(doc, ids, &error)) check::fail(__FILE__, __LINE__, "convertToSmartObject: " + error);
+                return hashNative(renderNative(doc));
+            });
+            scene(prefix + "artboard/coloured_background", [=] {
+                Document doc = goldenBase();
+                Layer board("Artboard", doc.size());
+                board.isGroup = true;
+                Artboard a;
+                a.x = 10; a.y = 6; a.width = 60; a.height = 40;
+                a.background = Artboard::Other;
+                a.red = 0.9; a.green = 0.4; a.blue = 0.1;
+                board.artboard = a;
+                Layer inside = layerOf("inside", noisyBase(50, 50, 3), {30, 20});   // reaches past the right edge (70)
+                inside.parentId = board.id;
+                doc.layers.push_back(inside);
+                doc.layers.push_back(board);
+                return hashNative(renderNative(inColorMode(doc, colorMode, type)));
+            });
+        }
+}
+
 // ---- brushes -----------------------------------------------------------------------------------------------------
 
 Layer paper(int w, int h) {
@@ -1715,6 +1788,7 @@ TEST_CASE(render_hashes_match_the_baseline_on_the_pool_and_serially) {
     add16BitVectorScenes();
     addColorModeVectorScenes();
     add16BitSmartObjectScenes();
+    addColorModeSmartObjectScenes();
     add16BitLateScenes();
     add32BitScenes();
     add32BitEditScenes();
@@ -1755,6 +1829,9 @@ TEST_CASE(render_hashes_match_the_baseline_on_the_pool_and_serially) {
         if (name.find("gradient_method/") != std::string::npos) { unchecked++; continue; }
         // CMYK and Lab effects take their colours through Little CMS's float transforms, whose curves use pow.
         if ((name.rfind("cmyk", 0) == 0 || name.rfind("lab", 0) == 0) && name.find("/style/") != std::string::npos) { unchecked++; continue; }
+        // So do smart object contents and artboard backgrounds converted into CMYK or Lab.
+        if ((name.rfind("cmyk", 0) == 0 || name.rfind("lab", 0) == 0)
+            && (name.find("/smart_") != std::string::npos || name.find("/artboard/") != std::string::npos)) { unchecked++; continue; }
 #endif
         auto it = expected.find(name);
         if (it == expected.end()) { std::fprintf(stderr, "  new      %s %s\n", name.c_str(), h.c_str()); added++; }

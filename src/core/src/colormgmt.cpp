@@ -588,6 +588,41 @@ ColorTransformPtr transformBetween(const ColorProfile& from, const ColorProfile&
     return made;
 }
 
+ColorTransformPtr lookupTransform(const ColorProfile& document, const std::vector<uint8_t>& lookup, PixelFormat format) {
+    if (isColorFormat(format) || format == PixelFormat::RGBAFloat) return nullptr;
+    const ColorModel model = pixelFormatModel(format);
+    const ColorProfile& a = effectiveProfile(document, model);
+    if (a.model != model) return nullptr;
+    const bool staged = stagedLayouts(format, format);
+    CacheKey key;
+    key.from = fingerprint(a.icc); key.to = key.from; key.proof = fingerprint(lookup) | 2;
+    key.intent = int(RenderingIntent::Perceptual);
+    key.input = int(format); key.output = int(format);
+    if (auto hit = cached(key)) return hit;
+    cmsContext context = cmsCreateContext(nullptr, nullptr);
+    cmsHPROFILE doc = openProfile(context, a);
+    cmsHPROFILE link = cmsOpenProfileFromMemTHR(context, lookup.data(), cmsUInt32Number(lookup.size()));
+    cmsHTRANSFORM t = nullptr;
+    if (doc && link) {
+        const cmsColorSpaceSignature space = model == ColorModel::CMYK ? cmsSigCmykData : model == ColorModel::Lab ? cmsSigLabData : cmsSigRgbData;
+        const cmsProfileClassSignature cls = cmsGetDeviceClass(link);
+        if (cls == cmsSigAbstractClass) {
+            // An abstract profile works on the profile connection space: the document's values through it and back.
+            cmsHPROFILE chain[3] = {doc, link, doc};
+            t = cmsCreateMultiprofileTransformTHR(context, chain, 3, lcmsFormat(format, staged), lcmsFormat(format, staged), INTENT_PERCEPTUAL, baseFlags(format, format));
+        } else if (cls == cmsSigLinkClass && cmsGetColorSpace(link) == space && cmsGetPCS(link) == space) {
+            // A device link from the document's colour space to itself (a CMYK to CMYK link, say), applied as it is.
+            t = cmsCreateTransformTHR(context, link, lcmsFormat(format, staged), nullptr, lcmsFormat(format, staged), INTENT_PERCEPTUAL, baseFlags(format, format));
+        }
+    }
+    if (doc) cmsCloseProfile(doc);
+    if (link) cmsCloseProfile(link);
+    if (!t) { cmsDeleteContext(context); return nullptr; }
+    ColorTransformPtr made = TransformFactory::make(context, t, format, format);
+    remember(key, made);
+    return made;
+}
+
 ColorTransformPtr proofTransform(const ColorProfile& document, const ColorProfile& display, const ProofSettings& proof, PixelFormat input, PixelFormat output) {
     if (isColorFormat(input) != isColorFormat(output)) return nullptr;
     if (output == PixelFormat::RGBAFloat || (input == PixelFormat::RGBAFloat && output != PixelFormat::RGBA8)) return nullptr;

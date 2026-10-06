@@ -12,9 +12,13 @@
 
 namespace compositor {
 
-/// Whether Image > Adjustments and adjustment layers apply `kind` in a document of `mode` (every kind in RGB). The
-/// kinds Photoshop offers there (adjustmentOfferedInMode) but Color Lookup, whose tables are RGB.
+/// Whether Image > Adjustments and adjustment layers apply `kind` in a document of `mode` (every kind in RGB): the kinds
+/// Photoshop offers there (adjustmentOfferedInMode).
 bool adjustmentAppliesInMode(AdjustmentKind kind, ColorMode mode);
+/// Whether Color Lookup with `settings` draws in a document of `mode` and `profile`: any readable LUT in RGB; in CMYK and
+/// Lab an ICC abstract profile, or a device link from the document's colour space to itself (3DLUT files are RGB only,
+/// as in Photoshop).
+bool colorLookupAppliesInMode(const ColorLookupSettings& settings, ColorMode mode, const ColorProfile& profile);
 
 /// Applies `settings` to a buffer at a CMYK or Lab layout, in place; false (the pixels untouched) for a kind that does
 /// not apply in the mode. `profile` is the document's (the CMYK profile; ignored in Lab).

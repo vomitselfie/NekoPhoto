@@ -160,6 +160,17 @@ bool applyInMode(const AdjustmentSettings& s, Img& image, const ColorProfile& pr
     constexpr bool cmyk = M == ColorMode::CMYK;
     if (!adjustmentAppliesInMode(s.kind, M)) return false;
     if constexpr (requires { image.channels(); }) if (image.channels() != N) return false;
+    if (s.kind == AdjustmentKind::ColorLookup) {
+        // An ICC abstract profile or a device link of the document's colour space, through Little CMS on the document's
+        // own samples (colorLookupAppliesInMode); 3DLUT tables are RGB and draw nothing here, as Photoshop offers them in
+        // RGB only.
+        if (s.colorLookup.format != "icc") return false;
+        const auto bytes = fromBase64(s.colorLookup.data);
+        const ColorTransformPtr t = bytes ? lookupTransform(profile, *bytes, pixelFormatFor(S, M)) : nullptr;
+        if (!t) return false;
+        convertImage(image, t.get());
+        return true;
+    }
     std::array<Table, 4> tables;
     std::array<const Table*, 4> use{nullptr, nullptr, nullptr, nullptr};
     auto useTable = [&](int k, const Table& t) { tables[size_t(k)] = t; if (!isIdentity(t)) use[size_t(k)] = &tables[size_t(k)]; };
@@ -344,7 +355,14 @@ bool applyInMode(const AdjustmentSettings& s, Img& image, const ColorProfile& pr
 
 bool adjustmentAppliesInMode(AdjustmentKind kind, ColorMode mode) {
     if (mode == ColorMode::RGB) return true;
-    return adjustmentOfferedInMode(kind, mode) && kind != AdjustmentKind::ColorLookup;
+    return adjustmentOfferedInMode(kind, mode);
+}
+
+bool colorLookupAppliesInMode(const ColorLookupSettings& settings, ColorMode mode, const ColorProfile& profile) {
+    if (mode == ColorMode::RGB) return colorLookupReadable(settings);
+    if (settings.format != "icc") return false;
+    const auto bytes = fromBase64(settings.data);
+    return bytes && lookupTransform(profile, *bytes, pixelFormatFor(SampleType::U8, mode)) != nullptr;
 }
 
 bool applyAdjustmentMode(const AdjustmentSettings& settings, ImageC8& cmyk, const ColorProfile& profile) {

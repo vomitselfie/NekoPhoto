@@ -119,6 +119,14 @@ void AutomationServer::registerLayersHandlers() {
         if (!ok) fail(error);
         return layerJson(*session()->document()->find(id), 0);
     });
+    add("smartObject.viaCopy", [session, layerOrActive](const QJsonObject& p) {
+        // Layer > Smart Objects > New Smart Object via Copy: a copy with contents of its own.
+        const Uuid id = layerOrActive(p).id;
+        session()->selectLayer(id);
+        QString error;
+        if (!session()->newSmartObjectViaCopy(&error)) fail(error.isEmpty() ? QStringLiteral("not a smart object") : error, invalidParams);
+        return layerJson(*session()->activeLayer(), 0);
+    });
     add("smartObject.rasterize", [session, layerOrActive, withActive](const QJsonObject& p) {
         const Uuid id = layerOrActive(p).id;
         bool ok = false;

@@ -8,6 +8,8 @@
 // is "preview-locked": it shows the preview the file carried and can still be moved and scaled, and its
 // Photoshop data is written back with the placement patched in, never rewritten.
 #pragma once
+#include "colormodes.h"
+#include "colorprofile.h"
 #include "image.h"
 #include "imaget.h"
 #include "psd_carry.h"
@@ -31,6 +33,13 @@ struct SmartObjectDepthCache {
     std::mutex mutex;
     const void* from = nullptr;
     AnyImage converted;
+    /// The same in a CMYK or Lab document's layout: the contents taken through the profiles once, for the depth, mode
+    /// and profile they were made for.
+    const void* modeFrom = nullptr;
+    AnyImage modeConverted;
+    SampleType modeType = SampleType::U8;
+    ColorMode mode = ColorMode::RGB;
+    ColorProfile modeProfile;
 };
 
 struct SmartObjectSource {
@@ -44,6 +53,15 @@ struct SmartObjectSource {
     /// The contents as an image at their own depth (an 8-bit PNG 8-bit, a 16-bit PSB 16-bit), whatever the depth of
     /// the documents placing it; null when they cannot be read here.
     AnyImage image;
+    /// The profile `image` is in (empty: sRGB). An RGB document places `image` as it is; a CMYK or Lab one converts it
+    /// from this profile to its own.
+    ColorProfile profile;
+    /// CMYK or Lab contents (a CMYK PSB, a Lab PSD) at their own layout and depth, in `nativeProfile`; `image` is then
+    /// the same contents in sRGB. A document of the same mode and profile places these samples as they are; any other
+    /// CMYK or Lab document converts them through the profiles. Null for RGB contents.
+    AnyImage native;
+    ColorMode nativeMode = ColorMode::RGB;
+    ColorProfile nativeProfile;
     std::shared_ptr<SmartObjectDepthCache> depthCache = std::make_shared<SmartObjectDepthCache>();
     int width = 0, height = 0;             // the contents' size in pixels
     double resolution = 72;
@@ -78,6 +96,21 @@ const char* smartObjectLockDescription(SmartObjectInstance::Lock lock);
 /// The source's contents at `type` (U8 or U16): the image itself at its own depth, else a converted copy made once
 /// and shared. Null when the contents cannot be read.
 AnyImage smartObjectSourceImage(const SmartObjectSource& source, SampleType type);
+
+/// The layout a document places contents in: its depth, and for CMYK and Lab its mode and profile (the profile must
+/// outlive the call). Converts from a depth alone, for RGB.
+struct SmartObjectTarget {
+    SampleType type = SampleType::U8;
+    ColorMode mode = ColorMode::RGB;
+    const ColorProfile* profile = nullptr;
+    SmartObjectTarget() = default;
+    SmartObjectTarget(SampleType t) : type(t) {}
+    SmartObjectTarget(SampleType t, ColorMode m, const ColorProfile* p) : type(t), mode(m), profile(p) {}
+};
+/// The contents in `target`'s layout: in RGB as above; in CMYK and Lab the contents' own samples when they are of that
+/// mode and profile, else converted through the profiles (Relative Colorimetric with black point compensation, as
+/// Photoshop places) once and shared. Null when the contents cannot be read or converted.
+AnyImage smartObjectSourceImage(const SmartObjectSource& source, const SmartObjectTarget& target);
 /// A PNG file's pixels at its own depth: a 16-bit PNG as 16 bits, any other as 8. Null when it is not one.
 AnyImage decodeSmartObjectPng(const std::vector<uint8_t>& bytes);
 

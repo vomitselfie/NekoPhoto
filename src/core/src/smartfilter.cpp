@@ -3,6 +3,8 @@
 // psd_smart_objects.cpp and psd_filter_effects.cpp (MIT, src/third_party/patchy_psd/README.md); the kernels live in
 // smartfilter_render.cpp.
 #include "compositor/smartfilter.h"
+#include "compositor/colormgmt.h"
+#include "compositor/modetransform.h"
 #include "psd/psd_descriptor.hpp"
 #include <algorithm>
 #include <cmath>
@@ -290,6 +292,11 @@ std::optional<SmartFilterCache> findSmartFilterCache(const std::vector<PsdBlock>
 
 std::vector<uint8_t> authorSmartFilterRecord(const std::string& placedId, const PixelRect& document, const PlacedRaster& unfiltered,
                                              const GrayImage* mask, const PixelRect& maskBounds, uint8_t maskDefault) {
+    return authorSmartFilterRecord(placedId, document, AnyImage(ImagePtr(unfiltered.image)), unfiltered.x, unfiltered.y, mask, maskBounds, maskDefault);
+}
+
+std::vector<uint8_t> authorSmartFilterRecord(const std::string& placedId, const PixelRect& document, const AnyImage& unfilteredImage, int ux, int uy,
+                                             const GrayImage* mask, const PixelRect& maskBounds, uint8_t maskDefault) {
     auto plane = [&](auto sample) {
         std::vector<std::vector<uint8_t>> rows;
         std::vector<uint8_t> row(size_t(document.width));
@@ -303,16 +310,23 @@ std::vector<uint8_t> authorSmartFilterRecord(const std::string& placedId, const 
         for (auto& r : rows) w.write_bytes(r);
         return w.bytes();
     };
-    // The cache holds straight colour, as a PSD's channels do.
+    // The cache holds straight colour, as a PSD's channels do: red, green and blue (CMYK's four inks stored inverted,
+    // Lab's L, a and b), then alpha. `c` is a colour channel, or -1 for alpha.
+    const int samples = unfilteredImage.channels();
+    const ImagePtr& rgb = unfilteredImage.u8();
+    const ImageC8Ptr& cmyk = unfilteredImage.c8();
     auto channel = [&](int c) {
         return [&, c](int x, int y) -> uint8_t {
-            const int lx = x - unfiltered.x, ly = y - unfiltered.y;
-            if (!unfiltered.image || lx < 0 || ly < 0 || lx >= unfiltered.image->width() || ly >= unfiltered.image->height()) return 0;
-            const uint8_t* p = unfiltered.image->pixel(lx, ly);
-            if (c == 3) return p[3];
-            return p[3] ? uint8_t(std::min(255, (p[c] * 255 + p[3] / 2) / p[3])) : 0;
+            const int lx = x - ux, ly = y - uy;
+            if (lx < 0 || ly < 0 || lx >= unfilteredImage.width() || ly >= unfilteredImage.height()) return 0;
+            const uint8_t* p = rgb ? rgb->pixel(lx, ly) : cmyk ? cmyk->pixel(lx, ly) : nullptr;
+            if (!p) return 0;
+            const uint8_t alpha = p[samples - 1];
+            if (c < 0) return alpha;
+            return alpha ? uint8_t(std::min(255, (p[c] * 255 + alpha / 2) / alpha)) : 0;
         };
     };
+    const int colours = samples - 1;
     auto maskAt = [&](int x, int y) -> uint8_t {
         const int lx = x - maskBounds.x, ly = y - maskBounds.y;
         if (mask && lx >= 0 && ly >= 0 && lx < mask->width() && ly < mask->height()) return mask->row(ly)[lx];
@@ -326,8 +340,9 @@ std::vector<uint8_t> authorSmartFilterRecord(const std::string& placedId, const 
     cache.write_u32(8);
     cache.write_u32(24);
     for (uint32_t slot = 0; slot < 26; slot++) {
-        const int c = slot <= 2 ? int(slot) : slot == 25 ? 3 : -1;
-        if (c < 0) { cache.write_u32(0); continue; }
+        const bool used = int(slot) < colours || slot == 25;
+        if (!used) { cache.write_u32(0); continue; }
+        const int c = slot == 25 ? -1 : int(slot);
         const auto bytes = plane(channel(c));
         cache.write_u32(1);
         cache.write_u64(bytes.size());
@@ -435,11 +450,86 @@ std::optional<PlacedRaster16> filteredSmartObjectRaster(const std::vector<PsdBlo
     return renderSmartFilterStack(*placed, cache->canvas, *stack);
 }
 
+SmartObjectTarget smartObjectTargetOf(const Document& document) {
+    return SmartObjectTarget(document.sampleType, document.colorMode, &document.profile);
+}
+
+bool smartFilterDrawsInMode(const SmartFilterParameters& parameters, ColorMode mode) {
+    // Plastic Wrap is a Filter Gallery filter, which Photoshop offers in RGB (and Grayscale) only.
+    return mode == ColorMode::RGB || !std::holds_alternative<smartfilter::PlasticWrap>(parameters);
+}
+
+namespace {
+
+/// The stack on a CMYK or Lab raster: Lab's four samples run the kernels as they are; CMYK's five as (C, M, Y, alpha)
+/// and (K, K, K, alpha), which see the same alpha and so grow and trim alike, joined back. The kernels weigh the stored
+/// samples as they weigh red, green and blue.
+std::optional<AnyPlacedRaster> filteredInMode(const AnyImage& placed, int x, int y, const PixelRect& canvas, const SmartFilterStack& stack) {
+    for (const SmartFilterEntry& e : stack.entries) if (!smartFilterDrawsInMode(e.parameters, ColorMode::CMYK)) return std::nullopt;
+    auto placedAt = [](AnyImage image, int px, int py) {
+        const Size size(image.width(), image.height());
+        return AnyPlacedRaster{std::move(image), px, py, LayerTransform(Point(px, py), size)};
+    };
+    if (const ImageC8Ptr& c8 = placed.c8()) {
+        auto [cmy, black] = splitFiveSample(*c8);
+        auto a = renderSmartFilterStack(PlacedRaster{cmy, x, y}, canvas, stack);
+        auto b = renderSmartFilterStack(PlacedRaster{black, x, y}, canvas, stack);
+        if (!a || !b || !a->image || !b->image || !(a->bounds() == b->bounds())) return std::nullopt;
+        return placedAt(ImageC8Ptr(joinFiveSample(*a->image, *b->image)), a->x, a->y);
+    }
+    if (const Image16Ptr& deep = placed.u16()) {
+        if (deep->channels() == 5) {
+            auto [cmy, black] = splitFiveSample(*deep);
+            auto a = renderSmartFilterStack(PlacedRaster16{cmy, x, y}, canvas, stack);
+            auto b = renderSmartFilterStack(PlacedRaster16{black, x, y}, canvas, stack);
+            if (!a || !b || !a->image || !b->image || !(a->bounds() == b->bounds())) return std::nullopt;
+            return placedAt(Image16Ptr(joinFiveSample(*a->image, *b->image)), a->x, a->y);
+        }
+        auto f = renderSmartFilterStack(PlacedRaster16{std::const_pointer_cast<Image16>(deep), x, y}, canvas, stack);
+        if (!f || !f->image) return std::nullopt;
+        return placedAt(Image16Ptr(f->image), f->x, f->y);
+    }
+    if (const ImagePtr& lab = placed.u8()) {
+        auto f = renderSmartFilterStack(PlacedRaster{std::const_pointer_cast<Image>(lab), x, y}, canvas, stack);
+        if (!f || !f->image) return std::nullopt;
+        return placedAt(ImagePtr(f->image), f->x, f->y);
+    }
+    return std::nullopt;
+}
+
+/// drawSmartObjectRaster in a CMYK or Lab document: the contents in its layout, placed through the warp (or flat),
+/// then the Smart Filters on them.
+std::optional<AnyPlacedRaster> drawInMode(const std::vector<PsdBlock>& globals, const SmartObjectInstance& instance, const AnyImage& image,
+                                          const std::array<double, 8>& quad, SmartObjectDraw how) {
+    auto mesh = smartObjectWarp(instance);
+    if (how == SmartObjectDraw::Warped && !mesh) return std::nullopt;
+    const WarpMesh flat = identityWarpMesh(0, 0, image.width(), image.height(), 2, 2);
+    std::optional<SmartFilterStack> stack;
+    std::optional<SmartFilterCache> cache;
+    std::optional<Rect> clip;
+    if (how == SmartObjectDraw::Filtered) {
+        if (!drawableStack(globals, instance, stack, cache)) return std::nullopt;
+        stack->mask = cache->mask;
+        stack->maskBounds = cache->maskBounds;
+        clip = Rect(cache->canvas.x, cache->canvas.y, cache->canvas.width, cache->canvas.height);
+    }
+    auto raster = renderWarpedImageAny(image, mesh ? *mesh : flat, quad, clip ? &*clip : nullptr);
+    if (!raster || !raster->image) return std::nullopt;
+    const int x = int(std::lround(raster->transform.origin.x)), y = int(std::lround(raster->transform.origin.y));
+    if (how == SmartObjectDraw::Filtered) return filteredInMode(raster->image, x, y, cache->canvas, *stack);
+    AnyPlacedRaster r{raster->image, x, y, LayerTransform(Point(x, y), Size(raster->image.width(), raster->image.height()))};
+    if (how == SmartObjectDraw::Warped) r.transform = raster->transform;
+    return r;
+}
+
+} // namespace
+
 std::optional<AnyPlacedRaster> drawSmartObjectRaster(const std::vector<PsdBlock>& globals, const SmartObjectInstance& instance,
-                                                     const SmartObjectSource& source, const std::array<double, 8>& quad, SampleType type,
+                                                     const SmartObjectSource& source, const std::array<double, 8>& quad, const SmartObjectTarget& target,
                                                      SmartObjectDraw how) {
-    const AnyImage image = smartObjectSourceImage(source, type);
+    const AnyImage image = smartObjectSourceImage(source, target);
     if (!image) return std::nullopt;
+    if (target.mode != ColorMode::RGB) return drawInMode(globals, instance, image, quad, how);
     auto placedAt = [](auto&& image, int x, int y) {
         const Size size(image->width(), image->height());
         return AnyPlacedRaster{std::move(image), x, y, LayerTransform(Point(x, y), size)};
@@ -478,7 +568,7 @@ int refreshSmartObjectRasters(Document& document) {
         if (source == document.smartObjects.end() || !source->second->image) continue;
         const int w = layer.asset->image.width(), h = layer.asset->image.height();
         const std::array<double, 8> quad = moveQuad(so.quad, so.placedTransform, so.placedWidth, so.placedHeight, layer.transform, w, h);
-        auto raster = drawSmartObjectRaster(document.psdCarry ? document.psdCarry->globals : none, so, *source->second, quad, document.sampleType,
+        auto raster = drawSmartObjectRaster(document.psdCarry ? document.psdCarry->globals : none, so, *source->second, quad, smartObjectTargetOf(document),
                                             smartObjectFiltered(so) ? SmartObjectDraw::Filtered : SmartObjectDraw::Warped);
         if (!raster || !raster->image) {
             // Filters that cannot be drawn after all (opened with Photoshop's raster, then moved): it goes back to
@@ -498,6 +588,7 @@ int refreshSmartObjectRasters(Document& document) {
         so.placedTransform = layer.transform;
         so.placedWidth = raster->image.width();
         so.placedHeight = raster->image.height();
+        refreshModeThumbnail(layer, document);
         redrawn++;
     }
     return redrawn;
@@ -709,6 +800,14 @@ bool setSmartFilters(Document& document, Layer& layer, const SmartFilterStack& w
         clampSmartFilterParameters(e.parameters);
         e.opacity = std::isfinite(e.opacity) ? std::clamp(e.opacity, 0.0, 1.0) : 1.0;
         if (e.name.empty()) e.name = smartFilterName(e.parameters);
+        if (!smartFilterDrawsInMode(e.parameters, document.colorMode)) {
+            if (error) {
+                std::string name = e.name;
+                if (name.size() > 3 && name.compare(name.size() - 3, 3, "...") == 0) name.resize(name.size() - 3);
+                *error = name + " is not available in " + colorModeName(document.colorMode) + " mode.";
+            }
+            return false;
+        }
         if (document.sampleType == SampleType::U16 && !smartFilterDrawsAt16(e.parameters)) {
             if (error) {
                 std::string name = e.name;
@@ -740,11 +839,19 @@ bool setSmartFilters(Document& document, Layer& layer, const SmartFilterStack& w
     std::vector<uint8_t> record;
     if (!removing) {
         const PixelRect canvas{0, 0, document.width, document.height};
-        // The record is Photoshop's 8-bit cache, whatever the document's depth.
-        const AnyImage eight = smartObjectSourceImage(*source->second, SampleType::U8);
-        auto unfiltered = eight.u8() ? placedSmartObjectRaster(next, *eight.u8(), quad) : std::nullopt;
-        if (!unfiltered) return fail("It could not be drawn.");
-        record = authorSmartFilterRecord(next.placedId, canvas, *unfiltered, stack.mask.get(), stack.maskBounds, stack.maskDefault);
+        // The record is Photoshop's 8-bit cache, whatever the document's depth, in the document's channels.
+        if (document.colorMode != ColorMode::RGB) {
+            auto unfiltered = drawSmartObjectRaster({}, next, *source->second, quad, SmartObjectTarget(SampleType::U8, document.colorMode, &document.profile),
+                                                    SmartObjectDraw::Unfiltered);
+            if (!unfiltered || !unfiltered->image) return fail("It could not be drawn.");
+            record = authorSmartFilterRecord(next.placedId, canvas, unfiltered->image, unfiltered->x, unfiltered->y, stack.mask.get(), stack.maskBounds,
+                                             stack.maskDefault);
+        } else {
+            const AnyImage eight = smartObjectSourceImage(*source->second, SampleType::U8);
+            auto unfiltered = eight.u8() ? placedSmartObjectRaster(next, *eight.u8(), quad) : std::nullopt;
+            if (!unfiltered) return fail("It could not be drawn.");
+            record = authorSmartFilterRecord(next.placedId, canvas, *unfiltered, stack.mask.get(), stack.maskBounds, stack.maskDefault);
+        }
     }
     bool placed = false;
     // Where the record already is (a document may hold both an FEid and an FXid block): replaced there, never added
@@ -784,7 +891,7 @@ bool setSmartFilters(Document& document, Layer& layer, const SmartFilterStack& w
         while (w.bytes().size() % 4) w.write_u8(0);
         carry->globals.push_back({"FEid", w.bytes()});
     }
-    auto drawn = drawSmartObjectRaster(carry->globals, next, *source->second, quad, document.sampleType,
+    auto drawn = drawSmartObjectRaster(carry->globals, next, *source->second, quad, smartObjectTargetOf(document),
                                        removing ? SmartObjectDraw::Unfiltered : SmartObjectDraw::Filtered);
     if (!drawn || !drawn->image) return fail("The filters could not be drawn.");
     document.psdCarry = carry;
@@ -798,6 +905,7 @@ bool setSmartFilters(Document& document, Layer& layer, const SmartFilterStack& w
     next.placedWidth = drawn->image.width();
     next.placedHeight = drawn->image.height();
     so = std::move(next);
+    refreshModeThumbnail(layer, document);
     return true;
 }
 
@@ -829,6 +937,33 @@ bool addDefaultSmartFilterCache(std::vector<PsdBlock>& globals, const SmartObjec
     while (w.bytes().size() % 4) w.write_u8(0);
     globals.push_back({"FEid", w.bytes()});
     return true;
+}
+
+bool copySmartFilterRecord(std::vector<PsdBlock>& globals, const std::string& from, const std::string& to) {
+    if (from.empty() || to.empty() || to.size() > 255 || !findSmartFilterCache(globals, from)) return false;
+    for (PsdBlock& b : globals) {
+        if (b.key != "FEid" && b.key != "FXid") continue;
+        auto records = walk(b.data);
+        if (!records) continue;
+        for (auto [at, n] : *records) {
+            const auto body = std::span<const uint8_t>(b.data).subspan(at, n);
+            if (body.empty() || size_t(body[0]) + 1 > body.size() || std::string(body.begin() + 1, body.begin() + 1 + body[0]) != from) continue;
+            // The same record under the new id: its Pascal id, then everything after the old one.
+            psd::BigEndianWriter record;
+            record.write_u8(uint8_t(to.size()));
+            for (char ch : to) record.write_u8(uint8_t(ch));
+            record.write_bytes(body.subspan(size_t(body[0]) + 1));
+            psd::BigEndianWriter w;
+            w.write_bytes(b.data);
+            while (w.bytes().size() % 4) w.write_u8(0);
+            w.write_u64(record.bytes().size());
+            w.write_bytes(record.bytes());
+            while (w.bytes().size() % 4) w.write_u8(0);
+            b.data = w.bytes();
+            return true;
+        }
+    }
+    return false;
 }
 
 bool addSmartFilter(Document& document, Layer& layer, const SmartFilterEntry& entry, std::string* error) {

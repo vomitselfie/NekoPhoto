@@ -18,6 +18,11 @@ struct SmartObjectContents {
     std::string fileName, fileType;
     AnyImage image;
     double resolution = 72;
+    /// The profile `image` is in (empty: sRGB), and CMYK or Lab contents at their own layout (SmartObjectSource).
+    ColorProfile profile;
+    AnyImage native;
+    ColorMode nativeMode = ColorMode::RGB;
+    ColorProfile nativeProfile;
 };
 
 /// A new source (fresh id) from `contents`; null without an image.
@@ -39,9 +44,9 @@ int redevelopRawSmartObject(Document& document, const std::string& sourceId, con
 std::string smartObjectFileType(const std::string& fileName);
 
 /// A layer placing `source` on `quad` (a new Photoshop placement authored for it); not yet in any document. Its
-/// pixels are the source at `type`, the depth of the document it goes into.
+/// pixels are the source in `target`, the layout of the document it goes into (smartObjectTargetOf).
 Layer smartObjectLayer(const std::shared_ptr<const SmartObjectSource>& source, const std::array<double, 8>& quad, const std::string& name,
-                       SampleType type = SampleType::U8);
+                       const SmartObjectTarget& target = SmartObjectTarget(SampleType::U8));
 
 /// Photoshop's Place: 1:1 in the middle of the canvas, scaled down to fit when larger.
 std::array<double, 8> placementQuad(const Document& document, int width, int height);
@@ -56,8 +61,15 @@ Uuid placeSmartObject(Document& document, const std::shared_ptr<const SmartObjec
 std::optional<Uuid> convertToSmartObject(Document& document, const std::vector<Uuid>& ids, std::string* error, const PsdExportOptions& options = {});
 
 /// Points every layer placing source `from` at `replacement` (added to the document), each rebuilt about its own
-/// centre at its own scale; `from` is dropped. The instances must all be editable. Returns how many changed.
-int replaceSmartObjectSource(Document& document, const std::string& from, const std::shared_ptr<const SmartObjectSource>& replacement);
+/// centre at its own scale; `from` is dropped. The instances must all be editable. Returns how many changed. `from` is
+/// taken by value: callers pass a layer's own source id, which the replacement changes.
+int replaceSmartObjectSource(Document& document, std::string from, const std::shared_ptr<const SmartObjectSource>& replacement);
+
+/// Layer > Smart Objects > New Smart Object via Copy: a copy of the smart object layer `id` above it, named `name`,
+/// placing a copy of its contents under a new id, so editing either one's contents leaves the other as it is (Duplicate
+/// Layer shares them). Its warp, Smart Filters and filter mask come along. None, with `error`, for a layer that is not an
+/// editable smart object.
+std::optional<Uuid> newSmartObjectViaCopy(Document& document, const Uuid& id, const std::string& name, std::string* error);
 
 /// Whether every layer placing `sourceId` can take new contents (none is preview-locked).
 bool smartObjectContentsEditable(const Document& document, const std::string& sourceId, std::string* why = nullptr);

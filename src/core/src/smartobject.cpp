@@ -6,6 +6,7 @@
 // version-16 descriptor ('Idnt', 'placed', 'Trnf', 'nonAffineTransform', 'Sz  ', 'Rslt', 'warp', 'filterFX');
 // 'PlLd' is 'plcL', version 3, the Pascal uuid, page, pages, antialias, type and the eight quad doubles.
 #include "compositor/smartobject.h"
+#include "compositor/colormgmt.h"
 #include "compositor/depth.h"
 #include "compositor/png.h"
 #include "compositor/uuid.h"
@@ -39,6 +40,34 @@ AnyImage smartObjectSourceImage(const SmartObjectSource& source, SampleType type
         cache.from = source.image.identity();
     }
     return cache.converted;
+}
+
+AnyImage smartObjectSourceImage(const SmartObjectSource& source, const SmartObjectTarget& target) {
+    if (target.mode == ColorMode::RGB || target.type == SampleType::F32) return smartObjectSourceImage(source, target.type);
+    static const ColorProfile untagged;
+    const ColorProfile& to = target.profile ? *target.profile : untagged;
+    const bool native = source.native && source.nativeMode != ColorMode::RGB;
+    if (!native && !source.image) return nullptr;
+    const AnyImage& from = native ? source.native : source.image;
+    auto make = [&]() -> AnyImage {
+        if (native && source.nativeMode == target.mode
+            && equivalentProfiles(effectiveProfile(source.nativeProfile, colorModelOf(target.mode)), effectiveProfile(to, colorModelOf(target.mode))))
+            return imageAtFormat(source.native, target.type, target.mode);
+        const AnyImage atDepth = native ? imageAtFormat(source.native, target.type, source.nativeMode) : imageAtDepth(source.image, target.type);
+        if (!atDepth) return nullptr;
+        return convertImage(atDepth, native ? source.nativeMode : ColorMode::RGB, native ? source.nativeProfile : source.profile, target.mode, to);
+    };
+    if (!source.depthCache) return make();
+    std::lock_guard<std::mutex> lock(source.depthCache->mutex);
+    SmartObjectDepthCache& cache = *source.depthCache;
+    if (cache.modeFrom != from.identity() || !cache.modeConverted || cache.modeType != target.type || cache.mode != target.mode || cache.modeProfile != to) {
+        cache.modeConverted = make();
+        cache.modeFrom = from.identity();
+        cache.modeType = target.type;
+        cache.mode = target.mode;
+        cache.modeProfile = to;
+    }
+    return cache.modeConverted;
 }
 
 AnyImage decodeSmartObjectPng(const std::vector<uint8_t>& bytes) {
@@ -530,8 +559,11 @@ std::optional<std::vector<uint8_t>> repointPsdPlacement(const std::string& key, 
 std::vector<uint8_t> serializeSmartObjectSource(const SmartObjectSource& s) {
     psd::BigEndianWriter w;
     for (char c : std::string("NPSS")) w.write_u8(uint8_t(c));
-    // Version 3 adds the Camera Raw settings; a source without them is written as version 2, as before.
-    w.write_u32(s.rawSettings.empty() ? 2 : 3);
+    // Version 3 adds the Camera Raw settings; a source without them is written as version 2, as before. Version 4 adds
+    // the contents' profile and, for CMYK or Lab contents, their mode and profile (their samples are read again from
+    // the file's bytes on load).
+    const bool colour = !s.profile.empty() || (s.native && s.nativeMode != ColorMode::RGB);
+    w.write_u32(colour ? 4 : s.rawSettings.empty() ? 2 : 3);
     auto str = [&](const std::string& v) { w.write_u32(uint32_t(v.size())); w.write_bytes(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(v.data()), v.size())); };
     str(s.id);
     w.write_u32(uint32_t(s.kind));
@@ -543,7 +575,13 @@ std::vector<uint8_t> serializeSmartObjectSource(const SmartObjectSource& s) {
     str(s.psdBlock);
     w.write_u64(s.psdElement ? s.psdElement->size() : 0);
     if (s.psdElement) w.write_bytes(*s.psdElement);
-    if (!s.rawSettings.empty()) str(s.rawSettings);
+    if (colour || !s.rawSettings.empty()) str(s.rawSettings);
+    if (colour) {
+        auto icc = [&](const ColorProfile& p) { w.write_u64(p.icc.size()); w.write_bytes(p.icc); };
+        icc(s.profile);
+        w.write_u32(s.native ? uint32_t(s.nativeMode) : 0);
+        icc(s.nativeProfile);
+    }
     return w.bytes();
 }
 
@@ -552,7 +590,7 @@ std::optional<SmartObjectSource> parseSmartObjectSource(const std::vector<uint8_
         psd::BigEndianReader r(bytes);
         if (four(r) != "NPSS") return std::nullopt;
         const uint32_t version = r.read_u32();
-        if (version < 1 || version > 3) return std::nullopt;
+        if (version < 1 || version > 4) return std::nullopt;
         auto str = [&]() { const uint32_t n = r.read_u32(); auto v = r.read_span(n); return std::string(v.begin(), v.end()); };
         SmartObjectSource s;
         s.id = str();
@@ -573,7 +611,22 @@ std::optional<SmartObjectSource> parseSmartObjectSource(const std::vector<uint8_
         }
         if (version >= 3) {
             s.rawSettings = str();
-            if (s.rawSettings.empty()) return std::nullopt;
+            if (version == 3 && s.rawSettings.empty()) return std::nullopt;
+        }
+        if (version >= 4) {
+            auto icc = [&](ColorProfile& p) -> bool {
+                const uint64_t n = r.read_u64();
+                if (n > r.remaining()) return false;
+                if (!n) return true;
+                auto v = r.read_span(size_t(n));
+                if (auto read = profileFromIcc(v.data(), v.size())) p = std::move(*read);
+                return true;
+            };
+            if (!icc(s.profile)) return std::nullopt;
+            const uint32_t mode = r.read_u32();
+            if (mode > uint32_t(ColorMode::Lab)) return std::nullopt;
+            s.nativeMode = ColorMode(mode);
+            if (!icc(s.nativeProfile)) return std::nullopt;
         }
         if (r.remaining() || s.id.empty()) return std::nullopt;
         return s;

@@ -209,7 +209,7 @@ const QHash<QString, const char*>& depthFeatures() {
         {"paths.setOperation", "edit.vector"}, {"vectorMask.set", "edit.vector"}, {"vectorMask.delete", "edit.vector"}, {"vectorMask.target", "edit.vector"},
         {"layers.setStyle", "edit.style"}, {"layers.applyStyle", "edit.style"},
         {"smartObject.convert", "edit.smartObject"}, {"smartObject.place", "edit.smartObject"}, {"smartObject.replace", "edit.smartObject"},
-        {"smartObject.rasterize", "edit.smartObject"}, {"smartObject.addFilter", "edit.smartObject"}, {"smartObject.setFilter", "edit.smartObject"},
+        {"smartObject.rasterize", "edit.smartObject"}, {"smartObject.viaCopy", "edit.smartObject"}, {"smartObject.addFilter", "edit.smartObject"}, {"smartObject.setFilter", "edit.smartObject"},
         {"smartObject.removeFilter", "edit.smartObject"}, {"smartObject.moveFilter", "edit.smartObject"}, {"smartObject.filterMask", "edit.smartObject"},
         {"smartObject.editContents", "edit.smartObject"}, {"smartObject.commit", "edit.smartObject"}};
     return features;

@@ -367,7 +367,8 @@ TEST_CASE(channel_mixer_sleeps_in_lab) {
     // Photoshop greys Channel Mixer in Lab: converting keeps the layer, hidden and marked.
     CHECK(!adjustmentOfferedInMode(AdjustmentKind::ChannelMixer, ColorMode::Lab));
     CHECK(adjustmentOfferedInMode(AdjustmentKind::ChannelMixer, ColorMode::CMYK));
-    CHECK(!adjustmentAppliesInMode(AdjustmentKind::ColorLookup, ColorMode::Lab));
+    // Color Lookup applies in Lab with an abstract profile (3DLUT files stay RGB only: colorLookupAppliesInMode).
+    CHECK(adjustmentAppliesInMode(AdjustmentKind::ColorLookup, ColorMode::Lab));
     CHECK(adjustmentAppliesInMode(AdjustmentKind::ColorLookup, ColorMode::RGB));
 }
 

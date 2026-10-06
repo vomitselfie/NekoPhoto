@@ -26,9 +26,9 @@ What works in a document of each depth and colour mode, as the menus, tools and 
 | Export TGA | `export.tga` | native | native | native | native\* | native\* | native\* | native\* | CMYK8, CMYK16, Lab8, Lab16: written as sRGB, converted through the document's profile |
 | Export ICO | `export.ico` | native | native | native | native\* | native\* | native\* | native\* | CMYK8, CMYK16, Lab8, Lab16: written as sRGB, converted through the document's profile |
 | Export GIF | `export.gif` | native | native | native | native\* | native\* | native\* | native\* | CMYK8, CMYK16, Lab8, Lab16: written as sRGB, converted through the document's profile |
-| Export SVG | `export.svg` | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Export Artboards | `export.artboards` | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Export Slices | `export.slices` | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
+| Export SVG | `export.svg` | native | native | greyed (not yet) | native\* | native\* | native\* | native\* | CMYK8, CMYK16, Lab8, Lab16: written as sRGB, converted through the document's profile |
+| Export Artboards | `export.artboards` | native | native | greyed (not yet) | native\* | native\* | native\* | native\* | CMYK8, CMYK16, Lab8, Lab16: written as sRGB, converted through the document's profile |
+| Export Slices | `export.slices` | native | native | greyed (not yet) | native\* | native\* | native\* | native\* | CMYK8, CMYK16, Lab8, Lab16: written as sRGB, converted through the document's profile |
 | Layers: add, delete, order, group, opacity, blend mode | `layers.structure` | native | native | native | native | native | native | native |  |
 | Layers: move, scale, rotate, flip (whole layer) | `layers.transform` | native | native | native | native | native | native | native |  |
 | Layer masks | `layers.mask` | native | native | native | native | native | native | native |  |
@@ -79,7 +79,7 @@ What works in a document of each depth and colour mode, as the menus, tools and 
 | Photo Filter | `adjustment.Photo Filter` | native | native | native | native | native | native | native |  |
 | Channel Mixer | `adjustment.Channel Mixer` | native | native | native | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |
 | Selective Color | `adjustment.Selective Color` | native | native | greyed (Photoshop lacks) | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |
-| Color Lookup | `adjustment.Color Lookup` | native | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
+| Color Lookup | `adjustment.Color Lookup` | native | native | native | native | native | native | native |  |
 | Filter menu | `filter.pixels` | native | native | native | native | native | native | native |  |
 | Gaussian Blur | `filter.Gaussian Blur` | native | native | native | native | native | native | native |  |
 | Motion Blur | `filter.Motion Blur` | native | native | native | native | native | native | native |  |
@@ -87,7 +87,7 @@ What works in a document of each depth and colour mode, as the menus, tools and 
 | Lens Correction | `filter.Lens Correction` | native | native | native | native | native | native | native |  |
 | Camera Raw Filter | `filter.Camera Raw` | native | native | greyed (not yet) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |
 | G'MIC | `filter.G'MIC` | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |
-| Mosh | `filter.Mosh` | native | native | greyed (Photoshop lacks) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
+| Mosh | `filter.Mosh` | native | native | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) | greyed (Photoshop lacks) |  |
 | Remove Background | `edit.removeBackground` | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
 | Content-Aware Fill / Move / Scale | `edit.contentAware` | native | native | greyed (Photoshop lacks) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
 | Type tool | `tool.text` | native | native | greyed (not yet) | native\* | native\* | native\* | native\* | CMYK8, CMYK16, Lab8, Lab16: glyphs painted in sRGB, each colour then taken through the profile |
@@ -98,11 +98,11 @@ What works in a document of each depth and colour mode, as the menus, tools and 
 | Paths, vector masks | `edit.vector` | native | native | greyed (not yet) | native | native | native | native |  |
 | Shape and path fills and strokes (text/shape colour) | `edit.paint` | native | native | greyed (not yet) | native\* | native\* | native\* | native\* | CMYK8, CMYK16, Lab8, Lab16: RGB gradient and pattern fills drawn in sRGB, then converted |
 | Layer styles | `edit.style` | native | native | greyed (not yet) | native | native | native | native |  |
-| Smart objects, Smart Filters | `edit.smartObject` | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Artboards | `edit.artboard` | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Artboard tool | `tool.artboard` | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
-| Slice tool | `tool.slice` | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
+| Smart objects, Smart Filters | `edit.smartObject` | native | native | greyed (not yet) | native\* | native\* | native\* | native\* | CMYK8, CMYK16, Lab8, Lab16: RGB contents converted through the profiles once, as Photoshop places them |
+| Artboards | `edit.artboard` | native | native | greyed (not yet) | native | native | native | native |  |
+| Artboard tool | `tool.artboard` | native | native | greyed (not yet) | native | native | native | native |  |
+| Slice tool | `tool.slice` | native | native | greyed (not yet) | native | native | native | native |  |
 | Timeline | `edit.timeline` | native | native | greyed (not yet) | native | native | native | native |  |
-| Delete clipping base (baked pixels) | `edit.pixels` | native | native | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) | greyed (not yet) |  |
+| Delete clipping base (baked pixels) | `edit.pixels` | native | native | greyed (not yet) | native | native | native | native |  |
 
 A feature id missing from the tables is 8-bit RGB only (supports.h): new features are safe by default.

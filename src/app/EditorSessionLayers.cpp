@@ -169,6 +169,46 @@ std::optional<Asset> EditorSession::bakeClipping(const Uuid& target) const {
     std::optional<Uuid> current = layer->maskSourceId;
     for (int i = 0; i < 256 && current; i++) { keep.insert(*current); const Layer* l = document_->find(*current); current = l ? l->maskSourceId : std::nullopt; }
     for (auto& l : document_->layers) if (keep.count(l.id)) { Layer c = l; c.parentId.reset(); c.visible = true; chain.layers.push_back(c); }
+    if (document_->colorMode != ColorMode::RGB) {
+        // CMYK and Lab: the source's coverage from its render in the document's layout, multiplied into every sample
+        // (premultiplied inks, or L, a and b) at the layer's depth.
+        chain.sampleType = document_->sampleType;
+        chain.colorMode = document_->colorMode;
+        chain.profile = document_->profile;
+        const AnyImage flat = renderNative(chain);
+        const AnyImage& own = layer->asset->image;
+        const int n = own.channels();
+        if (!flat || n != colorModeChannels(document_->colorMode)) return std::nullopt;
+        if (const ImageC8Ptr& c8 = flat.c8(); c8 || flat.u8()) {
+            GrayImage coverage(document_->width, document_->height);
+            for (int y = 0; y < coverage.height(); y++)
+                for (int x = 0; x < coverage.width(); x++) coverage.at(x, y) = c8 ? c8->pixel(x, y)[4] : flat.u8()->pixel(x, y)[3];
+            auto inGrid = resampleMask(coverage, LayerTransform(Point(0, 0), document_->size()), layer->transform, own.width(), own.height(), 0);
+            auto scale = [&](auto out) {
+                for (int y = 0; y < out->height(); y++)
+                    for (int x = 0; x < out->width(); x++) { const unsigned k = inGrid->at(x, y); uint8_t* p = out->pixel(x, y); for (int c = 0; c < n; c++) p[c] = uint8_t((p[c] * k + 127) / 255); }
+                return out;
+            };
+            std::optional<Asset> baked;
+            if (own.c8()) baked = Asset::makeAny(ImageC8Ptr(scale(std::make_shared<ImageC8>(*own.c8()))), layer->name);
+            else if (own.u8()) baked = Asset::makeAny(ImagePtr(scale(std::make_shared<Image>(*own.u8()))), layer->name);
+            if (baked) baked->thumbnail = modeThumbnail(baked->image, document_->colorMode, document_->profile);
+            return baked;
+        }
+        const Image16Ptr& deepFlat = flat.u16();
+        const Image16Ptr& deepOwn = own.u16();
+        if (!deepFlat || !deepOwn) return std::nullopt;
+        const int alpha = deepFlat->channels() - 1;
+        Gray16 coverage(document_->width, document_->height);
+        for (int y = 0; y < coverage.height(); y++) for (int x = 0; x < coverage.width(); x++) coverage.at(x, y) = deepFlat->pixel(x, y)[alpha];
+        auto inGrid = resampleMask(coverage, LayerTransform(Point(0, 0), document_->size()), layer->transform, deepOwn->width(), deepOwn->height(), 0);
+        auto out = std::make_shared<Image16>(*deepOwn);
+        for (int y = 0; y < out->height(); y++)
+            for (int x = 0; x < out->width(); x++) { const uint32_t k = inGrid->at(x, y); uint16_t* p = out->pixel(x, y); for (int c = 0; c < n; c++) p[c] = uint16_t(mul15(p[c], k)); }
+        Asset baked = Asset::make(Image16Ptr(out), layer->name);
+        baked.thumbnail = modeThumbnail(baked.image, document_->colorMode, document_->profile);
+        return baked;
+    }
     if (const Image16Ptr deep = layer->asset->image.u16()) {
         // At 16 bits: the source's coverage and the multiplication at 15 bits.
         chain.sampleType = SampleType::U16;

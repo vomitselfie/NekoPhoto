@@ -9,6 +9,7 @@
 #include "compositor/depth.h"
 #include "compositor/layerstyle.h"
 #include "compositor/png.h"
+#include "compositor/colormgmt.h"
 #include "compositor/render.h"
 #include "compositor/svg.h"
 #include <algorithm>
@@ -322,9 +323,32 @@ struct Writer {
         return id;
     }
 
+    /// A stored colour as SVG's sRGB: as it is in an RGB document; in CMYK and Lab as the document draws it (its inks,
+    /// or the sRGB value taken into the document's mode), then through the profile to sRGB, as the images are.
+    std::string colour(uint8_t r, uint8_t g, uint8_t b, const std::array<float, 4>* ink = nullptr) const {
+        if (document.colorMode == ColorMode::RGB) return hex(r, g, b);
+        AnyImage inMode;
+        if (ink && document.colorMode == ColorMode::CMYK) {
+            auto c = std::make_shared<ImageC8>(1, 1, 5);
+            uint8_t* p = c->pixel(0, 0);
+            for (int k = 0; k < 4; k++) p[k] = uint8_t(std::lround(255 * (1 - std::clamp(double((*ink)[size_t(k)]), 0.0, 1.0))));
+            p[4] = 255;
+            inMode = ImageC8Ptr(c);
+        } else {
+            auto rgb = std::make_shared<Image>(1, 1);
+            uint8_t* p = rgb->pixel(0, 0);
+            p[0] = r; p[1] = g; p[2] = b; p[3] = 255;
+            inMode = convertImage(AnyImage(ImagePtr(rgb)), ColorMode::RGB, ColorProfile(), document.colorMode, document.profile);
+        }
+        const AnyImage back = inMode ? convertImage(inMode, document.colorMode, document.profile, ColorMode::RGB, ColorProfile()) : AnyImage();
+        if (!back.u8()) return hex(r, g, b);
+        const uint8_t* q = back.u8()->pixel(0, 0);
+        return hex(q[0], q[1], q[2]);
+    }
+
     std::string strokeAttributes(const VectorStroke& s) const {
         const bool doubled = s.align != VectorStroke::Align::Center;
-        std::string out = " stroke=\"" + hex(s.r, s.g, s.b) + "\" stroke-width=\"" + number(s.width * (doubled ? 2 : 1)) + "\"";
+        std::string out = " stroke=\"" + colour(s.r, s.g, s.b) + "\" stroke-width=\"" + number(s.width * (doubled ? 2 : 1)) + "\"";
         out += std::string(" stroke-linecap=\"") + (s.cap == VectorStroke::Cap::Round ? "round" : s.cap == VectorStroke::Cap::Square ? "square" : "butt") + "\"";
         out += std::string(" stroke-linejoin=\"") + (s.join == VectorStroke::Join::Round ? "round" : s.join == VectorStroke::Join::Bevel ? "bevel" : "miter") + "\"";
         if (s.join == VectorStroke::Join::Miter) out += " stroke-miterlimit=\"" + number(std::max(1.0, s.miterLimit)) + "\"";
@@ -345,7 +369,7 @@ struct Writer {
     void emitShape(const Layer& layer, const VectorShape& shape, int depth) {
         const Combine combine = classify(shape.path);
         const bool single = combine == Combine::SinglePath;
-        const std::string fill = shape.fill ? hex(shape.r, shape.g, shape.b) : "none";
+        const std::string fill = shape.fill ? colour(shape.r, shape.g, shape.b, shape.ink ? &*shape.ink : nullptr) : "none";
         const VectorStroke& stroke = shape.stroke;
         std::string style = css(layer);
         std::string cut;   // what cuts a doubled stroke to one side

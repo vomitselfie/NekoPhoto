@@ -1,6 +1,7 @@
 // Smart objects in the editor: the menu commands over the core's operations (smartobject_edit.h), each one undo
 // step, and a contents tab sending its document back to the smart object it came from.
 #include "compositor/vectorlayer.h"
+#include "ColorManagement.h"
 #include "EditorSession.h"
 #include "ImageConvert.h"
 #include "TextLayer.h"
@@ -11,6 +12,8 @@
 #include "compositor/render.h"
 #include "compositor/smartobject_edit.h"
 #include <QBuffer>
+#include <QCoreApplication>
+#include <QColorSpace>
 #include <QFile>
 #include <QFileInfo>
 #include <QImage>
@@ -40,6 +43,12 @@ std::optional<SmartObjectContents> contentsFromFile(const QString& path, QString
         if (imported->document.sampleType == SampleType::U16)
             c.image = imported->realComposite && imported->composite16 ? imported->composite16 : Image16Ptr(renderFlattened16(imported->document));
         else c.image = imported->realComposite && imported->composite ? imported->composite : ImagePtr(renderFlattened(imported->document));
+        // A CMYK or Lab file's own samples too (the image above is them in sRGB), which a document of its mode places.
+        if (imported->document.colorMode != ColorMode::RGB) {
+            c.native = imported->realComposite && imported->compositeNative ? imported->compositeNative : renderNative(imported->document);
+            c.nativeMode = imported->document.colorMode;
+            c.nativeProfile = imported->document.profile;
+        } else c.profile = imported->document.profile;
         c.resolution = imported->document.resolution;
         if (data.size() > 5 && data[5] == 2) c.fileType = "8BPB";
     } else if (data.size() >= 4 && data[0] == '\0' && uint8_t(data[1]) == 0xFF && data[2] == 'K' && data[3] == 'A') {
@@ -63,6 +72,8 @@ std::optional<SmartObjectContents> contentsFromFile(const QString& path, QString
         }
         if (deepPng) c.image = decodeSmartObjectPng(c.bytes);
         if (!c.image) c.image = deep ? AnyImage(Image16Ptr(fromQImage16(image))) : AnyImage(ImagePtr(fromQImage(image)));
+        // Its embedded profile: a CMYK or Lab document converts the contents from it.
+        if (auto profile = color::embeddedProfile(image.colorSpace().iccProfile())) c.profile = std::move(*profile);
         if (image.dotsPerMeterX() > 0) c.resolution = image.dotsPerMeterX() * 0.0254;
     }
     if (c.fileType.empty()) c.fileType = "    ";
@@ -89,6 +100,28 @@ bool EditorSession::convertToSmartObject(QString* error) {
     if (!id) { if (error) *error = QString::fromStdString(why); return false; }
     endOpacityEdit();
     beginEdit(QT_TRANSLATE_NOOP("History", "Convert to Smart Object"));
+    *document_ = std::move(next);
+    endEdit();
+    setActiveLayer(*id);
+    notifyDocument();
+    return true;
+}
+
+bool EditorSession::newSmartObjectViaCopy(QString* error) {
+    if (refusedAtDepth("edit.smartObject", tr("Smart objects"), error)) return false;
+    const Layer* layer = activeLayer();
+    if (!canEditLayers() || !layer || !layer->isLiveSmartObject()) { if (error) *error = tr("Select a smart object."); return false; }
+    if (document_->layers.size() >= size_t(Document::maxLayers)) { if (error) *error = tr("The document has too many layers."); return false; }
+    const long long pixels = (long long)layer->asset->image.width() * layer->asset->image.height();
+    const long long maskPixels = layer->mask && layer->mask->asset.image ? (long long)layer->mask->asset.image.width() * layer->mask->asset.image.height() : 0;
+    if (const BudgetCheck check = document_->canAddLayers(1, pixels, maskPixels); !check) { if (error) *error = budgetText(check); return false; }
+    Document next = *document_;
+    std::string why;
+    const std::string name = QCoreApplication::translate("Names", "%1 copy").arg(QString::fromStdString(layer->name)).toStdString();
+    auto id = compositor::newSmartObjectViaCopy(next, layer->id, name, &why);
+    if (!id) { if (error) *error = QString::fromStdString(why); return false; }
+    endOpacityEdit();
+    beginEdit(QT_TRANSLATE_NOOP("History", "New Smart Object via Copy"));
     *document_ = std::move(next);
     endEdit();
     setActiveLayer(*id);
@@ -364,6 +397,12 @@ bool EditorSession::commitSmartObjectContents(const std::string& sourceId, const
     std::shared_ptr<Image> flat = deep ? nullptr : renderFlattened(contents);
     if (deep) c.image = Image16Ptr(deep);
     else if (flat) c.image = ImagePtr(flat);
+    // CMYK or Lab contents keep their own samples (the image above is them in sRGB).
+    if (contents.colorMode != ColorMode::RGB) {
+        c.native = renderNative(contents);
+        c.nativeMode = contents.colorMode;
+        c.nativeProfile = contents.profile;
+    } else c.profile = contents.profile;
     if (c.bytes.empty() && c.image) {
         // A type the core does not write (JPEG, TIFF, ...): Qt writes it in the same format (a 16-bit TIFF at 16 bits
         // when Qt's plugin keeps them).

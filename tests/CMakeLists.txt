@@ -282,6 +282,10 @@ add_executable(style_modes_tests style_modes_tests.cpp)
 target_link_libraries(style_modes_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME style_modes_tests COMMAND style_modes_tests)
 
+add_executable(smartobject_modes_tests smartobject_modes_tests.cpp)
+target_link_libraries(smartobject_modes_tests PRIVATE compositor::core compositor_warnings nekophoto_lcms2)
+add_test(NAME smartobject_modes_tests COMMAND smartobject_modes_tests)
+
 add_executable(smartobject_tests smartobject_tests.cpp)
 target_link_libraries(smartobject_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME smartobject_tests COMMAND smartobject_tests)

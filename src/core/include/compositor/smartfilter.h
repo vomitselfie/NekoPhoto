@@ -141,6 +141,9 @@ std::optional<SmartFilterCache> findSmartFilterCache(const std::vector<PsdBlock>
 /// as the cache, and the mask (none: all white) over the same rect.
 std::vector<uint8_t> authorSmartFilterRecord(const std::string& placedId, const PixelRect& document, const PlacedRaster& unfiltered,
                                              const GrayImage* mask, const PixelRect& maskBounds, uint8_t maskDefault);
+/// The same for an 8-bit raster of any layout placed at (`x`, `y`): RGB, CMYK (`ImageC8`, its four inks) or Lab.
+std::vector<uint8_t> authorSmartFilterRecord(const std::string& placedId, const PixelRect& document, const AnyImage& unfiltered, int x, int y,
+                                             const GrayImage* mask, const PixelRect& maskBounds, uint8_t maskDefault);
 /// The FEid / FXid payload with the records named by `replacements` (placed id to new record body) swapped in, the
 /// rest byte for byte; an empty body drops that record. None when the block cannot be walked.
 std::optional<std::vector<uint8_t>> replaceSmartFilterRecords(const std::vector<uint8_t>& payload,
@@ -151,6 +154,10 @@ std::optional<std::vector<uint8_t>> replaceSmartFilterRecords(const std::vector<
 /// 16-bit writer leaves the 8-bit one out): its supported stacks are then drawn and editable here. False when the
 /// stack is not one drawn here or the instance cannot be placed.
 bool addDefaultSmartFilterCache(std::vector<PsdBlock>& globals, const SmartObjectInstance& instance, const SmartObjectSource& source, int width, int height);
+
+/// A copy of the document's cache record for instance `from` under the id `to` (New Smart Object via Copy: the copy keeps
+/// the filter canvas and mask), added to the block holding `from`'s. False when there is no single readable record.
+bool copySmartFilterRecord(std::vector<PsdBlock>& globals, const std::string& from, const std::string& to);
 
 /// Whether the instance's Smart Filters (stack and cache) are ones drawn here, without drawing them.
 bool smartFiltersDrawable(const std::vector<PsdBlock>& globals, const SmartObjectInstance& instance);
@@ -173,9 +180,16 @@ std::optional<PlacedRaster16> placedSmartObjectRaster(const SmartObjectInstance&
 enum class SmartObjectDraw { Filtered, Warped, Unfiltered };
 /// The instance drawn from `source` at `type` (the document's depth; the source is converted when its own differs):
 /// the one entry point that picks the 8- or 16-bit path. None when it cannot be drawn that way.
+/// In a CMYK or Lab document (`target` with its mode and profile) the contents are placed in its layout and the filters
+/// run on its samples (smartFilterDrawsInMode).
 std::optional<AnyPlacedRaster> drawSmartObjectRaster(const std::vector<PsdBlock>& globals, const SmartObjectInstance& instance,
-                                                     const SmartObjectSource& source, const std::array<double, 8>& quad, SampleType type,
+                                                     const SmartObjectSource& source, const std::array<double, 8>& quad, const SmartObjectTarget& target,
                                                      SmartObjectDraw how);
+/// The layout `document` places smart object contents in (its depth, mode and profile).
+SmartObjectTarget smartObjectTargetOf(const Document& document);
+/// Whether a filter is drawn as a Smart Filter in a document of `mode`: in CMYK and Lab every one but Plastic Wrap, a
+/// Filter Gallery filter Photoshop offers in RGB only.
+bool smartFilterDrawsInMode(const SmartFilterParameters& parameters, ColorMode mode);
 
 /// Warped and filtered instances whose layer was moved, scaled or rotated since they were drawn, drawn again from their
 /// contents on the moved quad (their pixels are not the placement, so resampling them would soften them and slide the

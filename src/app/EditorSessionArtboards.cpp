@@ -229,6 +229,8 @@ bool writeOne(const Image& image, const QString& path, const QString& format, in
         if (!writePngImage(path.toStdString(), image, dpi, &why)) { if (error) *error = QString::fromStdString(why); return false; }
         return true;
     }
+    // WebP and TIFF keep transparency (WebP at quality 100 is lossless).
+    if (format == "webp" || format == "tiff") return writeQtImage(path, format == "webp" ? "webp" : "tiff", toQImage(image), quality, dpi, error);
     // JPEG: over white, as Photoshop's export mattes transparency.
     QImage source = toQImage(image);
     QImage flat(source.size(), QImage::Format_RGB32);
@@ -243,24 +245,33 @@ QStringList exportRects(const EditorSession& session, const std::vector<std::pai
                         const QString& format, const QString& prefix, int quality, QString* error) {
     QStringList written;
     const QString fmt = format.toLower() == "jpg" ? QStringLiteral("jpeg") : format.toLower();
-    if (fmt != "png" && fmt != "jpeg") { if (error) *error = QObject::tr("The format must be png or jpeg."); return written; }
+    const QString fmt2 = fmt == "tif" ? QStringLiteral("tiff") : fmt;
+    if (fmt2 != "png" && fmt2 != "jpeg" && fmt2 != "webp" && fmt2 != "tiff") { if (error) *error = QObject::tr("The format must be png, jpeg, webp or tiff."); return written; }
+    if ((fmt2 == "webp" || fmt2 == "tiff") && !canWriteImageFormat(fmt2 == "webp" ? "webp" : "tiff")) {
+        if (error) *error = QObject::tr("This system has no %1 writer.").arg(fmt2.toUpper());
+        return written;
+    }
     if (!QDir().mkpath(directory)) { if (error) *error = QObject::tr("Could not create %1.").arg(directory); return written; }
     QStringList used;
-    // A 16-bit document: PNG at 16 bits, JPEG dithered down to 8.
+    // A 16-bit document: PNG (and TIFF, where Qt writes 16 bits) at 16 bits, the rest dithered down to 8. A CMYK or Lab
+    // document's areas come out in sRGB, through its profile, as its flat exports do.
     const bool deep = session.sampleType() == SampleType::U16;
+    const bool deepFile = deep && (fmt2 == "png" || (fmt2 == "tiff" && canWriteDeepTiff()));
     for (const auto& [name, rect] : items) {
         std::shared_ptr<Image16> image16 = deep ? session.renderRect16(rect) : nullptr;
-        std::shared_ptr<Image> image = deep ? (image16 && fmt != "png" ? ditherToEightBit(*image16) : nullptr) : session.renderRect(rect);
+        std::shared_ptr<Image> image = deep ? (image16 && !deepFile ? ditherToEightBit(*image16) : nullptr) : session.renderRect(rect);
         if (!image && !image16) continue;
         QString base = prefix + fileSafe(name, QStringLiteral("untitled"));
         QString candidate = base;
         for (int n = 2; used.contains(candidate, Qt::CaseInsensitive); n++) candidate = base + "-" + QString::number(n);
         used << candidate;
-        const QString path = QDir(directory).filePath(candidate + (fmt == "png" ? ".png" : ".jpg"));
-        if (deep && fmt == "png") {
+        const QString path = QDir(directory).filePath(candidate + (fmt2 == "png" ? ".png" : fmt2 == "jpeg" ? ".jpg" : fmt2 == "webp" ? ".webp" : ".tif"));
+        if (deepFile && fmt2 == "png") {
             std::string why;
             if (!writePngImage16(path.toStdString(), *image16, session.document()->resolution, &why)) { if (error) *error = QString::fromStdString(why); return written; }
-        } else if (!writeOne(*image, path, fmt, quality, session.document()->resolution, error)) return written;
+        } else if (deepFile) {
+            if (!writeQtImage(path, "tiff", toQImage16(*image16), 100, session.document()->resolution, error)) return written;
+        } else if (!writeOne(*image, path, fmt2, quality, session.document()->resolution, error)) return written;
         written << path;
     }
     return written;

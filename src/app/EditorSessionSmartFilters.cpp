@@ -182,7 +182,11 @@ bool EditorSession::beginFilterMaskEdit(const Uuid& id, bool show, QString* erro
     // The proxy is at the document's depth (painted with its brushes); the stack's mask stays Photoshop's 8-bit plane.
     const std::string name = QCoreApplication::translate("Names", "Smart Filter Mask").toStdString();
     const bool deep = document_->sampleType == SampleType::U16;
-    Layer layer(deep ? Asset::make(Image16Ptr(std::make_shared<Image16>(w, h)), name) : Asset::make(std::make_shared<Image>(w, h), name), Point(0, 0));
+    // Transparent, at the document's layout (five samples in CMYK).
+    const int samples = colorModeChannels(document_->colorMode);
+    Layer layer(deep ? Asset::make(Image16Ptr(std::make_shared<Image16>(w, h, samples)), name)
+                     : samples == 5 ? Asset::make(ImageC8Ptr(std::make_shared<ImageC8>(w, h, 5)), name) : Asset::make(std::make_shared<Image>(w, h), name),
+                Point(0, 0));
     LayerMask m;
     m.asset = deep ? MaskAsset::make(Gray16Ptr(widenGray(*mask))) : MaskAsset::make(mask);
     layer.mask = m;

@@ -810,7 +810,7 @@ void MainWindow::exportBoxes(bool slices) {
     dialog.setWindowTitle(slices ? tr("Export Slices") : tr("Artboards to Files"));
     auto* form = new QFormLayout(&dialog);
     auto* format = new QComboBox;
-    format->addItems({"PNG", "JPEG"});
+    format->addItems({"PNG", "JPEG", "WebP", "TIFF"});
     auto* prefix = new QLineEdit(session_->projectPath().isEmpty() ? QString() : QFileInfo(session_->projectPath()).completeBaseName() + "_");
     auto* quality = new QSpinBox;
     quality->setRange(1, 100);
@@ -827,11 +827,11 @@ void MainWindow::exportBoxes(bool slices) {
     if (directory.isEmpty()) return;
     QSettings().setValue("lastDir", directory);
     QString error;
-    const QString fmt = format->currentIndex() == 0 ? QStringLiteral("png") : QStringLiteral("jpeg");
+    const QString fmt = QStringList{"png", "jpeg", "webp", "tiff"}.value(format->currentIndex(), QStringLiteral("png"));
     const QStringList written = slices ? session_->exportSlices(directory, fmt, prefix->text(), quality->value(), &error)
                                        : session_->exportArtboards(directory, fmt, prefix->text(), quality->value(), &error);
     if (!error.isEmpty()) showError(tr("Couldn’t export"), error);
-    else if (session_->sampleType() != SampleType::U8 && fmt != "png")
+    else if (session_->sampleType() != SampleType::U8 && fmt != "png" && !(fmt == "tiff" && canWriteDeepTiff()))
         statusBar()->showMessage(tr("Wrote %n file(s) to %1, reduced from 16 to 8 bits per channel with dithering.", "", int(written.size())).arg(directory), 8000);
     else statusBar()->showMessage(tr("Wrote %n file(s) to %1", "", int(written.size())).arg(directory), 8000);
 }

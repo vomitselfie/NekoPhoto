@@ -138,6 +138,11 @@ struct ProofSettings {
 ColorTransformPtr proofTransform(const ColorProfile& document, const ColorProfile& display, const ProofSettings& proof,
                                  PixelFormat input, PixelFormat output);
 
+/// Color Lookup with an ICC profile in a document of `format`'s model: an abstract profile run from the document's
+/// profile through it and back, or a device link from that colour space to itself, perceptual. Null when `lookup` is
+/// neither (a 3DLUT file, an RGB link in a CMYK document) or cannot be read.
+ColorTransformPtr lookupTransform(const ColorProfile& document, const std::vector<uint8_t>& lookup, PixelFormat format);
+
 /// Drops every cached transform (tests; the cache otherwise keeps the most recently used).
 void clearTransformCache();
 size_t transformCacheSize();
@@ -205,6 +210,8 @@ bool isDormantAdjustment(const Layer& layer);
 ImagePtr modeThumbnail(const AnyImage& image, ColorMode mode, const ColorProfile& profile, int maxSide = 96);
 /// Every layer's thumbnail drawn again from its pixels in the document's mode and profile (CMYK and Lab documents).
 void refreshModeThumbnails(Document& document);
+/// The same for one layer (nothing in an RGB document).
+void refreshModeThumbnail(Layer& layer, const Document& document);
 
 // ---- Transfer curves (for code that works in linear light) -------------------------------------------------------
 

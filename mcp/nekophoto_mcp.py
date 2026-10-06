@@ -603,7 +603,8 @@ def artboards_delete(id: str, contents: bool = False) -> str:
 
 @outside("Export artboards to files")
 def artboards_export(directory: str, format: str = "png", prefix: Optional[str] = None, quality: int = 90) -> str:
-    """Each visible artboard as its own PNG or JPEG in directory, named after the artboard."""
+    """Each visible artboard as its own PNG, JPEG, WebP or TIFF in directory (format png, jpeg, webp or tiff), named after the
+    artboard; a CMYK or Lab document's files are in sRGB."""
     return text(call("artboards.export", directory=os.path.abspath(directory), format=format, prefix=prefix, quality=quality))
 
 
@@ -659,7 +660,7 @@ def guides_delete(index: Optional[int] = None, all: bool = False) -> str:
 
 @outside("Export slices")
 def slices_export(directory: str, format: str = "png", prefix: Optional[str] = None, quality: int = 90) -> str:
-    """Each slice as its own PNG or JPEG in directory, named after the slice."""
+    """Each slice as its own PNG, JPEG, WebP or TIFF in directory (format png, jpeg, webp or tiff), named after the slice."""
     return text(call("slices.export", directory=os.path.abspath(directory), format=format, prefix=prefix, quality=quality))
 
 
@@ -689,13 +690,20 @@ def smart_object_rasterize(id: Optional[str] = None) -> str:
     return text(call("smartObject.rasterize", id=id))
 
 
+@edit("New smart object via copy")
+def smart_object_via_copy(id: Optional[str] = None) -> str:
+    """Layer > Smart Objects > New Smart Object via Copy: a copy of the smart object above it with contents of its own,
+    so editing either one's contents leaves the other as it is (layers_duplicate shares them)."""
+    return text(call("smartObject.viaCopy", id=id))
+
+
 @edit("Add a Smart Filter")
 def smart_object_add_filter(kind: str, id: Optional[str] = None, radius: Optional[float] = None, threshold: Optional[float] = None,
                             amount: Optional[float] = None, angle: Optional[float] = None, distance: Optional[float] = None,
                             cell_size: Optional[float] = None, height: Optional[float] = None, opacity: float = 100) -> str:
     """Add a Smart Filter on top of a smart object's stack, as Photoshop keeps it (non-destructive): gaussian blur,
     high pass, median, dust and scratches, surface blur, unsharp mask, motion blur, plastic wrap, mosaic, emboss,
-    box blur, radial blur or add noise. Only the settings the filter uses matter."""
+    box blur, radial blur or add noise (plastic wrap is RGB only, as in Photoshop). Only the settings the filter uses matter."""
     return text(call("smartObject.addFilter", id=id, kind=kind, radius=radius, threshold=threshold, amount=amount, angle=angle,
                      distance=distance, cellSize=cell_size, height=height, opacity=opacity))
 

@@ -10,6 +10,7 @@
 #include "compositor/png.h"
 #include "compositor/render.h"
 #include "compositor/smartfilter.h"
+#include "compositor/modetransform.h"
 #include "psd/psd_descriptor.hpp"
 #include <cstdio>
 #include <new>
@@ -818,7 +819,7 @@ namespace {
 /// A smart object source's contents as an image at their own depth: an embedded PSD/PSB through this importer
 /// (Photoshop's merged image when it is real, else our render of its layers; 16 bits from a 16-bit file), PNG
 /// directly (16 bits from a 16-bit PNG), anything else through the app's hook.
-AnyImage decodeSource(const SmartObjectSource& source, const PsdImportOptions& options) {
+AnyImage decodeSource(SmartObjectSource& source, const PsdImportOptions& options) {
     if (source.kind != SmartObjectSource::Kind::Embedded || !source.bytes || source.bytes->empty()) return nullptr;
     const std::vector<uint8_t>& bytes = *source.bytes;
     const bool psdFile = bytes.size() >= 4 && std::memcmp(bytes.data(), "8BPS", 4) == 0;
@@ -829,6 +830,13 @@ AnyImage decodeSource(const SmartObjectSource& source, const PsdImportOptions& o
         std::string error;
         auto nested = importPsdBytes(bytes, &error, inner);
         if (!nested) return nullptr;
+        // The profile the image below is in, and CMYK or Lab contents at their own layout too (smartobject.h): what a
+        // CMYK or Lab document places.
+        if (nested->document.colorMode != ColorMode::RGB) {
+            source.native = nested->realComposite && nested->compositeNative ? nested->compositeNative : renderNative(nested->document);
+            source.nativeMode = nested->document.colorMode;
+            source.nativeProfile = nested->document.profile;
+        } else source.profile = nested->document.profile;
         if (nested->document.sampleType == SampleType::U16) {
             if (nested->realComposite && nested->composite16) return nested->composite16;
             return Image16Ptr(renderFlattened16(nested->document));
@@ -1271,6 +1279,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             // The mask covers the layer's pixels (the canvas for a layer without any).
             if (auto lm = userMaskFor(image ? image->width() : int(width), image ? image->height() : int(height),
                                       image ? int(layer.transform.origin.x) : 0, image ? int(layer.transform.origin.y) : 0)) layer.mask = lm;
+            bool smartInMode = false;
             // A placed layer: an instance of its source. Editable, its pixels become the source's image placed by
             // the quad (the mask keeps the place it had); otherwise it shows Photoshop's preview, locked.
             {
@@ -1296,6 +1305,10 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                         : !source->second->image ? Lock::Unreadable : placement->nonAffine || !placed ? Lock::Perspective : Lock::None;
                     std::optional<AnyPlacedRaster> warped;
                     bool keptFiltered = false;
+                    // A CMYK or Lab document places the contents in its own layout (through the profiles when they are
+                    // of another mode); `inMode` says the layer's pixels below are already in it.
+                    const SmartObjectTarget placeTarget = nativeMode ? SmartObjectTarget(sampleType, colorMode, &document.profile) : SmartObjectTarget(sampleType);
+                    bool inMode = false;
                     if (instance.lock == Lock::Filters && source != document.smartObjects.end() && source->second->kind == SmartObjectSource::Kind::Embedded
                         && source->second->image) {
                         // Smart Filters NekoPhoto draws: editable. The layer's pixels are Photoshop's own filtered raster
@@ -1309,16 +1322,23 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                             if (layer.asset && layer.asset->image && layer.asset->image.width() > 0 && layer.asset->image.height() > 0) {
                                 instance.lock = Lock::None;
                                 keptFiltered = true;
-                            } else if (auto filtered = drawSmartObjectRaster(docCarry->globals, instance, *source->second, placement->quad, sampleType,
+                            } else if (auto filtered = drawSmartObjectRaster(docCarry->globals, instance, *source->second, placement->quad, placeTarget,
                                                                              SmartObjectDraw::Filtered)) {
                                 warped = std::move(filtered);
                                 instance.lock = Lock::None;
+                                inMode = nativeMode;
                             }
                         }
                     }
                     if (!warped && !keptFiltered && placement->warp && (instance.lock == Lock::None || instance.lock == Lock::Perspective)) {
                         // A warp NekoPhoto draws: from the contents, through the mesh, onto the quad (any quad).
-                        if (const AnyImage contents = smartObjectSourceImage(*source->second, sampleType); contents.u16()) {
+                        if (nativeMode) {
+                            if (const AnyImage contents = smartObjectSourceImage(*source->second, placeTarget))
+                                if (auto w = renderWarpedImageAny(contents, *placement->warp, placement->quad); w && w->image) {
+                                    warped = AnyPlacedRaster{w->image, 0, 0, w->transform};
+                                    inMode = true;
+                                }
+                        } else if (const AnyImage contents = smartObjectSourceImage(*source->second, sampleType); contents.u16()) {
                             if (auto w = renderWarpedImage(*contents.u16(), *placement->warp, placement->quad))
                                 warped = AnyPlacedRaster{Image16Ptr(w->image), 0, 0, w->transform};
                         } else if (contents.u8()) {
@@ -1335,7 +1355,9 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                         if (layer.mask && !layer.mask->placement) layer.mask->placement = raster;
                     } else if (!instance.locked() && !keptFiltered) {
                         const LayerTransform raster = layer.transform;
-                        layer.asset = Asset::makeAny(smartObjectSourceImage(*source->second, sampleType), layer.name);
+                        const AnyImage placedContents = nativeMode ? smartObjectSourceImage(*source->second, placeTarget) : AnyImage();
+                        inMode = bool(placedContents);
+                        layer.asset = Asset::makeAny(inMode ? placedContents : smartObjectSourceImage(*source->second, sampleType), layer.name);
                         layer.transform = *placed;
                         layer.transform.sampling = raster.sampling;
                         if (layer.mask && !layer.mask->placement) layer.mask->placement = raster;
@@ -1345,6 +1367,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
                     instance.placedHeight = layer.asset->image.height();
                     layer.smartImage = layer.asset->image;
                     layer.smartObject = std::move(instance);
+                    smartInMode = inMode;
                     if (layer.smartObject->locked()) lockedSmartObjects[smartObjectLockDescription(layer.smartObject->lock)]++;
                     else editableSmartObjects++;
                 }
@@ -1353,7 +1376,7 @@ std::optional<PsdImport> importPsdBytes(const std::vector<uint8_t>& file, std::s
             // assembled as stored (the RGB image above only stood in for the checks); anything drawn here in RGB (a
             // solid fill, a smart object's contents, an empty type layer's pixel) is converted from sRGB.
             bool planesRead = false;
-            if (nativeMode && layer.asset && layer.asset->image) {
+            if (nativeMode && layer.asset && layer.asset->image && !smartInMode) {
                 const bool live = layer.text && layer.textImage == layer.asset->image, smart = layer.smartObject && layer.smartImage == layer.asset->image;
                 if (image && layer.asset->image.u8() == image && !planes.empty()) {
                     layer.asset = Asset::makeAny(deep && !widePlanes.empty() ? assembleMode16(mode, rec.width(), rec.height(), widePlanes)
