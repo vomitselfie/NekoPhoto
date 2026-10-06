@@ -1821,6 +1821,14 @@ TEST_CASE(render_hashes_match_the_baseline_on_the_pool_and_serially) {
     REQUIRE(!expected.empty());
     int changed = 0, added = 0, missing = 0, unchecked = 0;
     for (auto& [name, h] : actual) {
+        // CMYK through Little CMS's float transforms (smart object contents and filters, gradients) lands a level apart
+        // with another libm's pow (Ubuntu's glibc against a newer one); smartobject_modes_tests and style_modes_tests
+        // check them within a tolerance everywhere, so they are not compared bit for bit.
+        if (name.rfind("cmyk", 0) == 0
+            && (name.find("/smart_") != std::string::npos || name.find("/style/") != std::string::npos || name.find("gradient") != std::string::npos)) {
+            unchecked++;
+            continue;
+        }
 #ifdef _WIN32
         // 32-bit scenes render through float pow/exp, which MinGW's maths library rounds differently from glibc's; their
         // kernels are checked within a tolerance everywhere (float_reference), and bit for bit on Linux here.
