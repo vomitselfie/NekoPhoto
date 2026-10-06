@@ -3,6 +3,7 @@
 #include "ModelStore.h"
 #include "compositor/scribble.h"
 #include "compositor/matte.h"
+#include "compositor/morphology.h"
 #include "compositor/subject.h"
 #include "compositor/colormgmt.h"
 #include "compositor/depth.h"
@@ -39,17 +40,14 @@ void stampScribble(GrayImage& labels, const EditorSession::Scribble& stroke, uin
     }
 }
 
-/// The panel's refinement for a Quick Select result: pulled onto the image's edges, hazed values pushed apart,
-/// specks dropped; no matting and no colour change (the selection is what comes out, not pixels).
+/// The panel's refinement (Enhance Edge) for a Quick Select result: purely geometric smoothing of the outline (the
+/// selection's own shape, majority-smoothed), never pulled onto the image's colours. Legal boundary
+/// (docs/legal-boundaries.md, "Quick Select"): edge opacity from a local colour model is Adobe US 8013870's claim, so
+/// the image is not read here.
 std::shared_ptr<GrayImage> refinedQuickSelect(const GrayImage& coverage, const Image& composite, int refine) {
+    (void)composite;
     if (refine <= 0) return std::make_shared<GrayImage>(coverage);
-    MatteSettings settings;
-    settings.refineEdges = refine;
-    settings.contrast = 25;
-    settings.matting = 0;
-    settings.cleanup = true;
-    settings.decontaminate = false;
-    return refineMatte(coverage, composite, settings, 0);
+    return smoothSelection(coverage, std::max(1, refine / 4));
 }
 
 } // namespace

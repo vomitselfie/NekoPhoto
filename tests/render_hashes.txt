@@ -399,7 +399,7 @@ paint/f32/clone 16d3bac7f784fe01
 paint/f32/eraser 645a7cea28041357
 paint/f32/gradient 9583d85da5323000
 paint/f32/moved_selection 5292ec630b76cbae
-paint/f32/spot_healing 3eeb98d25d15b6fe
+paint/f32/spot_healing 1a96c6af6bd87ba6
 paint/lab/clone 53ea516a63e6f849
 paint/lab/eraser a8b1e5c40a2f2822
 paint/lab/moved_selection 89cc73771612a932
@@ -520,7 +520,7 @@ u16/golden/placed_mask 4c7b81da539a597a
 u16/golden/transformed_layer fb6f63fee069e412
 u16/gradient_method/linear 590f9b32ef98bc44
 u16/gradient_method/perceptual 95e084c4273ad7b5
-u16/remove_background/refined_and_decontaminated 643cdf115c1b72c0
+u16/remove_background/refined_and_decontaminated b119da06acd53cf8
 u16/shape/dashed_stroke 80dc395a77eec1b8
 u16/shape/gradient_fill_and_stroke 076185b4c9d6b71c
 u16/shape/solid_ellipse 6b34b2a81932f192
