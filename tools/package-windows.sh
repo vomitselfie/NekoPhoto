@@ -83,5 +83,10 @@ if command -v pacman >/dev/null; then
     done
 fi
 
+# No HEVC or JPEG XR codec may ship (docs/legal-boundaries.md).
+if find "$stage" -iname '*heif*' -o -iname '*heic*' -o -iname '*de265*' -o -iname '*x265*' -o -iname '*jxr*' -o -iname '*jpegxr*' | grep -q .; then
+    echo "error: an HEVC/HEIF or JPEG XR codec was bundled" >&2
+    exit 1
+fi
 (cd "$PWD" && if command -v zip >/dev/null; then zip -qr9 "$name.zip" "$name"; else 7z a -tzip -mx=9 "$name.zip" "$name" >/dev/null; fi)
 echo "$name.zip: $(find "$stage" -type f | wc -l) files, $(du -sh "$name.zip" | cut -f1)"

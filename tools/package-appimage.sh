@@ -58,6 +58,13 @@ for lib in AppDir/usr/lib/*.so*; do
     fi
 done
 ls "$bundled"
+# No HEVC or JPEG XR codec may ship (docs/legal-boundaries.md): a Qt with kimageformats or a HEIF plugin installed would
+# pull in libheif and libde265/x265, so refuse to package rather than bundle them.
+if find AppDir -iname '*heif*' -o -iname '*heic*' -o -iname '*de265*' -o -iname '*x265*' -o -iname '*jxr*' -o -iname '*jpegxr*' | grep -q .; then
+    echo "error: an HEVC/HEIF or JPEG XR codec was bundled:" >&2
+    find AppDir -iname '*heif*' -o -iname '*heic*' -o -iname '*de265*' -o -iname '*x265*' -o -iname '*jxr*' -o -iname '*jpegxr*' >&2
+    exit 1
+fi
 linuxdeploy --appdir AppDir --output appimage
 rm -rf "$tools"
 ls -la ./*.AppImage*

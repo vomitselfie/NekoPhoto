@@ -71,7 +71,9 @@ Read, drawn and written back:
 
 ## Known fidelity gaps
 
-Collected from the pages above; each is also listed before you export or in the export's notes.
+Collected from the pages above; each is also listed before you export or in the export's notes. Features that
+deliberately work differently from Photoshop (Quick Select, Content-Aware Fill, healing, brush textures, Smudge,
+some G'MIC filters) are listed in [legal-boundaries.md](legal-boundaries.md).
 
 - **Not verified in Photoshop.** The files match what Photoshop wrote, structure for structure, but they have
   not been opened in Photoshop itself, so a warning on open or a re-layout of our type layers there is not ruled
@@ -144,7 +146,9 @@ Application-level timings (opening a 70 MB PSD in 0.7 s and so on) are in the [R
 
 [English](#compatibility--correctness) · **日本語**
 
-NekoPhoto が何をどのくらいの頻度で検証しているか、そしてまだ足りない点をまとめたページです。数値は 2026-09-27 に
+NekoPhoto が何をどのくらいの頻度で検証しているか、そしてまだ足りない点をまとめたページです。意図的に Photoshop と異なる
+動作をする機能(クイック選択、コンテンツに応じた塗りつぶし、修復、ブラシのテクスチャ、指先ツール、一部の G'MIC フィルター)は
+[legal-boundaries.md](legal-boundaries.md#日本語) にまとめています。数値は 2026-09-27 に
 NekoPhoto 1.6.1 でツールを実行して集計したものです。
 
 - **PSD の往復**: [Patchy](https://github.com/SethRobinson/Patchy) の MIT ライセンスのテストファイル 117 個(2 個を除き

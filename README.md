@@ -173,6 +173,13 @@ Assembly LLC, whose code keeps its MIT licence
 components and their licences are listed in
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
+### Trademarks
+
+Adobe and Photoshop are trademarks of Adobe Inc. NekoPhoto is not affiliated with or endorsed by Adobe; Photoshop is
+named only to describe compatibility. Clip Studio Paint is a trademark of CELSYS, Inc. and Procreate of Savage
+Interactive Pty Ltd. A few features deliberately work differently from Photoshop: see
+[docs/legal-boundaries.md](docs/legal-boundaries.md).
+
 ---
 
 ## 日本語
@@ -317,3 +324,9 @@ Windows では MSYS2(UCRT64)の MinGW-w64 でビルドします。手順とビ�
 GPL-3.0-or-later です([LICENSE](LICENSE))。Wonder Assembly LLC の Compositor を元にしており、
 その部分のコードは MIT ライセンスのままです([LICENSES/MIT-Compositor.txt](LICENSES/MIT-Compositor.txt))。
 サードパーティー製コンポーネントとそのライセンスは [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) にまとめています。
+
+### 商標
+
+Adobe と Photoshop は Adobe Inc. の商標です。NekoPhoto は Adobe とは関係がなく、Adobe の承認も受けていません。Photoshop の
+名前は互換性を説明するためだけに使っています。CLIP STUDIO PAINT は株式会社セルシスの、Procreate は Savage Interactive Pty Ltd
+の商標です。いくつかの機能は意図的に Photoshop と異なる動作をします:[docs/legal-boundaries.md](docs/legal-boundaries.md#日本語)

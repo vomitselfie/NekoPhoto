@@ -48,6 +48,8 @@ the AppImage and the tarball).
 | [libmypaint](https://github.com/mypaint/libmypaint) 1.6, the MyPaint brush engine | ISC | [libmypaint-ISC.txt](LICENSES/libmypaint-ISC.txt) |
 | [json-c](https://github.com/json-c/json-c), which libmypaint uses to read presets | MIT | [json-c-MIT.txt](LICENSES/json-c-MIT.txt) |
 | [SQLite](https://sqlite.org), which reads Clip Studio brushes | Public domain | none required |
+| [LibRaw](https://www.libraw.org), which develops camera RAW files (Linux AppImage and tarball; the Windows zip below) | LGPL-2.1 or CDDL-1.0 (used under the LGPL; unmodified, replaceable shared library) | the copyright file shipped with it under `share/doc/nekophoto/bundled/` |
+| [Zstandard](https://facebook.github.io/zstd/), which reads Affinity documents (Linux AppImage and tarball; the Windows zip below) | BSD-3-Clause | the copyright file shipped with it under `share/doc/nekophoto/bundled/` |
 
 The AppImage also carries system libraries that Qt depends on (fonts, text
 shaping, input, graphics). Their copyright files are collected at build time
