@@ -156,6 +156,16 @@ void EditorSession::adoptDocument(const Document& document, const QString& name)
     emit selectionChanged();
 }
 
+void EditorSession::adoptRecovered(const Document& document, const QString& name, const QString& originalPath) {
+    adoptDocument(document, name);
+    if (!originalPath.isEmpty()) {
+        projectPath_ = originalPath;
+        watchProject();   // what is on disk now is the baseline; a later change there is asked about, as for any edit
+        emit projectPathChanged();
+    }
+    markUnsaved();   // it exists nowhere else now
+}
+
 bool EditorSession::saveProject(const QString& path, QString* error) {
     endTemporaryLayers();   // the Quick Mask and filter-mask layers are never saved
     if (!document_) return false;

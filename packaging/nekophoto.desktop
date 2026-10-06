@@ -7,5 +7,5 @@ Exec=nekophoto %F
 Icon=nekophoto
 Terminal=false
 Categories=Graphics;RasterGraphics;2DGraphics;
-MimeType=image/png;image/jpeg;image/tiff;image/webp;image/vnd.adobe.photoshop;application/x-compositor-project;application/x-clip-studio-project;
+MimeType=image/png;image/jpeg;image/tiff;image/webp;image/vnd.adobe.photoshop;application/vnd.nekophoto.document;application/x-compositor-project;application/x-clip-studio-project;
 Keywords=image;layers;compositing;photo;editor;paint;brush;psd;clip;

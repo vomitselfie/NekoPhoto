@@ -67,20 +67,24 @@ QString imageFilter() {
 }
 
 /// Everything File > Open and Import File take: Photoshop, Clip Studio and Aseprite files, images (TGA, ICO and GIF
-/// through the core's own readers), and a project's manifest.json.
+/// through the core's own readers), NekoPhoto projects (.nekophoto), and a .comp project folder's manifest.json.
 QString openFilter() {
-    QStringList patterns = {"*.psd", "*.psb", "*.clip", "*.ase", "*.aseprite", "*.tga", "*.ico", "*.cur", "*.gif", "*.afphoto", "*.afdesign", "*.afpub", "*.af", "*.svg", "*.svgz", "manifest.json"};
+    QStringList patterns = {"*.nekophoto", "*.psd", "*.psb", "*.clip", "*.ase", "*.aseprite", "*.tga", "*.ico", "*.cur", "*.gif", "*.afphoto", "*.afdesign", "*.afpub", "*.af", "*.svg", "*.svgz", "manifest.json"};
     if (pdfSupported()) patterns << "*.pdf";
     for (auto& format : QImageReader::supportedImageFormats()) patterns << "*." + QString::fromLatin1(format);
     patterns.removeDuplicates();
-    return QObject::tr("Images, layered files and projects (%1)").arg(patterns.join(' ')) + ";;" + imageFilter() + ";;"
-        + QObject::tr("Photoshop files (*.psd *.psb)") + ";;" + QObject::tr("Clip Studio files (*.clip)") + ";;"
+    return QObject::tr("Images, layered files and projects (%1)").arg(patterns.join(' ')) + ";;" + QObject::tr("NekoPhoto projects (*.nekophoto)") + ";;"
+        + imageFilter() + ";;" + QObject::tr("Photoshop files (*.psd *.psb)") + ";;" + QObject::tr("Clip Studio files (*.clip)") + ";;"
         + QObject::tr("Aseprite files (*.ase *.aseprite)") + ";;" + QObject::tr("Icons (*.ico *.cur)") + ";;" + QObject::tr("TGA images (*.tga)") + ";;"
         + QObject::tr("Affinity files (*.afphoto *.afdesign *.afpub *.af)") + ";;" + QObject::tr("SVG files (*.svg *.svgz)")
         + (pdfSupported() ? ";;" + QObject::tr("PDF files (*.pdf)") : QString());
 }
 
-bool isProjectPath(const QString& path) { return path.endsWith(".comp", Qt::CaseInsensitive) && QFileInfo(path).isDir(); }
+/// A NekoPhoto project: a .nekophoto file, or a .comp project folder.
+bool isProjectPath(const QString& path) {
+    if (path.endsWith(".nekophoto", Qt::CaseInsensitive)) return QFileInfo(path).isFile();
+    return path.endsWith(".comp", Qt::CaseInsensitive) && QFileInfo(path).isDir();
+}
 
 bool hasSuffix(const QString& path, std::initializer_list<const char*> suffixes) {
     for (const char* s : suffixes) if (path.endsWith(QLatin1String(s), Qt::CaseInsensitive)) return true;
@@ -227,8 +231,8 @@ void MainWindow::openLayeredFile(const QString& path) {
 }
 
 void MainWindow::openProject() {
-    // A .comp project is a folder, so the picker chooses a directory.
-    QString path = QFileDialog::getExistingDirectory(this, tr("Open Project (a .comp folder)"), QSettings().value("lastDir").toString());
+    // A .comp project is a folder, so the picker chooses a directory (.nekophoto files open through File > Open).
+    QString path = QFileDialog::getExistingDirectory(this, tr("Open Project Folder (.comp)"), QSettings().value("lastDir").toString());
     if (path.isEmpty()) return;
     if (!path.endsWith(".comp", Qt::CaseInsensitive)) { showError(tr("Not a project"), tr("Choose a folder ending in .comp.")); return; }
     QSettings().setValue("lastDir", QFileInfo(path).path());
@@ -340,8 +344,8 @@ bool MainWindow::overTabStrip(const QPointF& windowPosition) const {
 }
 
 void MainWindow::openFiles() {
-    // Photoshop and Clip Studio files, images, and a project picked by its manifest.json (a .comp is a folder, which a file
-    // picker cannot choose); each opens in its own tab.
+    // NekoPhoto projects, Photoshop and Clip Studio files, images, and a .comp project folder picked by its manifest.json
+    // (a folder, which a file picker cannot choose); each opens in its own tab.
     QStringList paths = QFileDialog::getOpenFileNames(this, tr("Open"), QSettings().value("lastDir").toString(), openFilter());
     if (paths.isEmpty()) return;
     QSettings().setValue("lastDir", QFileInfo(paths.first()).path());
@@ -470,10 +474,14 @@ bool MainWindow::save(bool asNew) {
     }
     QString path = session_->projectPath();
     if (asNew || path.isEmpty()) {
-        QString suggested = QDir(QSettings().value("lastDir").toString()).filePath((path.isEmpty() ? QStringLiteral("Untitled") : QFileInfo(path).completeBaseName()) + ".comp");
-        path = QFileDialog::getSaveFileName(this, tr("Save Project"), suggested, tr("Compositor project (*.comp)"));
+        // A single .nekophoto file by default; a .comp project folder when chosen (as one that was opened saves in place).
+        const QString fileFilter = tr("NekoPhoto project (*.nekophoto)"), folderFilter = tr("NekoPhoto project folder (*.comp)");
+        QString suggested = QDir(QSettings().value("lastDir").toString()).filePath((path.isEmpty() ? QStringLiteral("Untitled") : QFileInfo(path).completeBaseName()) + ".nekophoto");
+        QString selected = fileFilter;
+        path = QFileDialog::getSaveFileName(this, tr("Save Project"), suggested, fileFilter + ";;" + folderFilter, &selected);
         if (path.isEmpty()) return false;
-        if (!path.endsWith(".comp", Qt::CaseInsensitive)) path += ".comp";
+        if (!path.endsWith(".nekophoto", Qt::CaseInsensitive) && !path.endsWith(".comp", Qt::CaseInsensitive))
+            path += selected == folderFilter ? QStringLiteral(".comp") : QStringLiteral(".nekophoto");
         QSettings().setValue("lastDir", QFileInfo(path).path());
     }
     QString error;

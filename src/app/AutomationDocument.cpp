@@ -208,7 +208,8 @@ void AutomationServer::registerDocumentHandlers() {
         document();
         QString path = has(p, "path") ? QFileInfo(str(p, "path")).absoluteFilePath() : session()->projectPath();
         if (path.isEmpty()) fail("the document has no path yet; pass path", invalidParams);
-        if (!path.endsWith(".comp", Qt::CaseInsensitive)) path += ".comp";
+        // The extension decides: a .comp project folder, else a .nekophoto file (added when the path has neither).
+        if (!path.endsWith(".comp", Qt::CaseInsensitive) && !path.endsWith(".nekophoto", Qt::CaseInsensitive)) path += ".nekophoto";
         QString error;
         if (!session()->saveProject(path, &error)) fail(error);
         w->noteRecent(path);

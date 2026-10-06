@@ -198,6 +198,68 @@ def presets(rpc, work, layer_id):
     assert not any(g["name"].startswith("rpc-smoke") for g in rpc.call("presets.list", kind="gradients")["gradients"])
 
 
+def document_files(rpc):
+    """Projects as single .nekophoto files and as .comp folders: saved, reopened, and followed on disk when another
+    program rewrites them; in tabs of their own that are closed afterwards."""
+    import zipfile
+    work = tempfile.mkdtemp()
+    first = rpc.call("tabs.list")
+    rpc.call("tabs.new")
+    rpc.call("document.new", width=90, height=60)
+    rpc.call("shape.draw", kind="rectangle", x=5, y=5, width=40, height=30, color="#2266cc")
+    rpc.call("layers.add", name="Second")
+    single = os.path.join(work, "Single.nekophoto")
+    saved = rpc.call("document.save", path=single)
+    assert saved["path"] == single and os.path.isfile(single), saved
+    with open(single, "rb") as f:
+        head = f.read(80)
+    assert head[:4] == b"PK\x03\x04", head[:4]
+    assert head[30:38 + 34] == b"mimetypeapplication/vnd.nekophoto.document", head[30:72]
+    with zipfile.ZipFile(single) as z:
+        names = z.namelist()
+        assert names[0] == "mimetype" and z.getinfo("mimetype").compress_type == zipfile.ZIP_STORED, names
+        for needed in ("nekophoto.json", "manifest.json", "previews/composite.png"):
+            assert needed in names, (needed, names)
+        header = json.loads(z.read("nekophoto.json"))
+        assert header["format_id"] == "org.nekophoto.document" and header["version"] == 1, header
+        assert z.testzip() is None
+    # No extension: the default is a .nekophoto file. A .comp path still writes a folder.
+    plain = rpc.call("document.save", path=os.path.join(work, "NoExtension"))
+    assert plain["path"].endswith("NoExtension.nekophoto") and os.path.isfile(plain["path"]), plain
+    folder = os.path.join(work, "Folder.comp")
+    rpc.call("document.save", path=folder)
+    assert os.path.isdir(folder) and os.path.isfile(os.path.join(folder, "manifest.json"))
+    rpc.call("document.close", discard=True)
+    for path in (single, folder):
+        rpc.call("document.open", path=path)
+        info = rpc.call("document.info")
+        assert info["width"] == 90 and info.get("path") == path, info
+        assert "Second" in [l["name"] for l in rpc.call("layers.list")]
+        rpc.call("document.save")   # back to where it came from, in its own form
+        assert os.path.isfile(single) and os.path.isdir(folder)
+        rpc.call("document.close", discard=True)
+    # Another program rewrites the open file: the document follows it.
+    rpc.call("document.open", path=single)
+    watched = rpc.call("tabs.list")
+    other = rpc.call("tabs.new")
+    rpc.call("document.new", width=70, height=50)
+    elsewhere = os.path.join(work, "Elsewhere.nekophoto")
+    rpc.call("document.save", path=elsewhere)
+    rpc.call("tabs.close", index=other["index"], discard=True)
+    os.replace(elsewhere, single)
+    rpc.call("tabs.select", index=next(t["index"] for t in watched if t["current"]))
+    for _ in range(50):
+        if rpc.call("document.info")["width"] == 70:
+            break
+        time.sleep(0.1)
+    assert rpc.call("document.info")["width"] == 70, "the open .nekophoto follows its file on disk"
+    rpc.call("document.close", discard=True)
+    for t in sorted(rpc.call("tabs.list"), key=lambda t: -t["index"]):
+        if t["index"] >= len(first):
+            rpc.call("tabs.close", index=t["index"], discard=True)
+    rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
+
+
 def remaining_methods(rpc):
     """Every method the checks above do not reach, in a tab of its own that is closed afterwards."""
     work = tempfile.mkdtemp()
@@ -2232,6 +2294,7 @@ def main():
             print("gmic", cat["version"], "(no catalogue file)")
 
     remaining_methods(rpc)
+    document_files(rpc)
     histogram(rpc)
     sixteen_bit(rpc)
     thirty_two_bit(rpc)

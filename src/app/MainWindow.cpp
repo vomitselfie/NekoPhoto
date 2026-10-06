@@ -387,10 +387,9 @@ void MainWindow::offerRecovery() {
         if (!project) { failed << (r.title + ": " + error); continue; }
         Tab& tab = addTab(true);
         const QString name = tr("%1 (recovered)").arg(r.title.isEmpty() ? tr("Untitled") : r.title);
-        tab.session->adoptDocument(project->document, name);
+        tab.session->adoptRecovered(project->document, name, r.originalPath);   // Save goes back to its own file
         if (project->activeLayer && tab.session->document()->find(*project->activeLayer)) tab.session->selectLayer(*project->activeLayer);
         tab.defaultName = name;
-        tab.session->markUnsaved();   // it exists nowhere else now
         refreshTabTitles();
     }
     if (!failed.isEmpty()) { autosave_->releaseClaimed(); showError(tr("Some documents could not be recovered"), failed.join('\n')); return; }

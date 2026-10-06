@@ -1,7 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <!-- A NekoPhoto document: one ZIP file whose first entry, "mimetype", is stored uncompressed (as in ODF and EPUB),
+       so the type itself sits at byte 38, after the entry's name at byte 30. -->
+  <mime-type type="application/vnd.nekophoto.document">
+    <comment>NekoPhoto project</comment>
+    <sub-class-of type="application/zip"/>
+    <glob pattern="*.nekophoto"/>
+    <magic priority="70">
+      <match type="string" offset="30" value="mimetypeapplication/vnd.nekophoto.document"/>
+    </magic>
+  </mime-type>
+  <!-- The project folder NekoPhoto saved before 1.8.7 (and Compositor for macOS); still opened and saved. -->
   <mime-type type="application/x-compositor-project">
-    <comment>Compositor project (.comp)</comment>
+    <comment>NekoPhoto project folder (.comp)</comment>
     <glob pattern="*.comp"/>
     <sub-class-of type="inode/directory"/>
   </mime-type>

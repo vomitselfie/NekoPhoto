@@ -67,8 +67,12 @@ app=/build/src/app/nekophoto.exe
 timeout 120 wine "$app" --version | grep -qi "nekophoto" || failed+=("--version")
 timeout 300 wine "$app" --demo --screenshot demo.png --save-as Demo.comp && [ -s demo.png ] && [ -f Demo.comp/manifest.json ] || failed+=("demo screenshot")
 timeout 300 wine "$app" Demo.comp --screenshot reopened.png && [ -s reopened.png ] || failed+=("reopen screenshot")
+# The single-file document: saved, then opened again (and saved over itself: a rename over an existing file).
+timeout 300 wine "$app" --demo --screenshot demo2.png --save-as Demo.nekophoto && [ -f Demo.nekophoto ] || failed+=("save .nekophoto")
+timeout 300 wine "$app" Demo.nekophoto --screenshot reopened2.png --save-as Demo.nekophoto && [ -s reopened2.png ] && [ -f Demo.nekophoto ] || failed+=("reopen .nekophoto")
 # A file name outside ASCII (the manifest'"'"'s UTF-8 code page): save the project there and open it again.
 timeout 300 wine "$app" Demo.comp --screenshot "ねこ写真.png" --save-as "ねこ写真.comp" && [ -s "ねこ写真.png" ] && [ -f "ねこ写真.comp/manifest.json" ] || failed+=("non-ASCII path")
+timeout 300 wine "$app" Demo.comp --screenshot "ねこ写真2.png" --save-as "ねこ写真.nekophoto" && [ -f "ねこ写真.nekophoto" ] || failed+=("non-ASCII .nekophoto")
 printf "{\"method\":\"document.open\",\"params\":{\"path\":\"Z:/tmp/ねこ写真.comp\"}}\n{\"method\":\"document.info\"}\n" > open.jsonl
 timeout 300 wine "$app" --headless --batch open.jsonl | grep -q "\"width\":640" || failed+=("non-ASCII open")
 ls -la /tmp/*.png
