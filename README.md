@@ -85,7 +85,9 @@ The full list is in [docs/features.md](docs/features.md).
 
 | Remove Background | G'MIC filters |
 |:---:|:---:|
-| <img src="docs/images/remove-background.jpg" alt="Remove Background's settings dialog open over K.psd by Nathan Lincoln" width="420"> | <img src="docs/images/filters.jpg" alt="The G'MIC filter browser open over K.psd by Nathan Lincoln, previewing Old Photo on it" width="420"> |
+| <img src="docs/images/remove-background.jpg" alt="Remove Background cutting out a Pembroke Welsh Corgi, its settings dialog open" width="420"> | <img src="docs/images/filters.jpg" alt="The G'MIC filter browser open over K by Nathan Lincoln, previewing Old Photo on it" width="420"> |
+
+<sub>Corgi photo: <a href="https://commons.wikimedia.org/wiki/File:Welchcorgipembroke.JPG">Welchcorgipembroke.JPG</a> by pmuths1956 (2008), Wikimedia Commons, CC BY-SA 3.0.</sub>
 
 ## Performance
 
@@ -255,7 +257,9 @@ PSD の書き出しは往復テスト済みです。手元にあるレイヤー�
 
 | 背景を削除 | G'MIC フィルター |
 |:---:|:---:|
-| <img src="docs/images/remove-background.jpg" alt="Nathan Lincoln の K.psd の上に背景を削除の設定画面を開いたところ" width="420"> | <img src="docs/images/filters.jpg" alt="Nathan Lincoln の K.psd の上に G'MIC フィルターブラウザーを開き、オールドフォトをプレビューしているところ" width="420"> |
+| <img src="docs/images/remove-background.jpg" alt="ウェルシュ・コーギー・ペンブロークの背景を削除しているところ(設定画面を表示)" width="420"> | <img src="docs/images/filters.jpg" alt="Nathan Lincoln の『K』の上に G'MIC フィルターブラウザーを開き、オールドフォトをプレビューしているところ" width="420"> |
+
+<sub>コーギーの写真: pmuths1956 による <a href="https://commons.wikimedia.org/wiki/File:Welchcorgipembroke.JPG">Welchcorgipembroke.JPG</a>(2008 年、Wikimedia Commons、CC BY-SA 3.0)。</sub>
 
 ### パフォーマンス
 
