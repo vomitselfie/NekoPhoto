@@ -171,9 +171,12 @@ bool EditorSession::saveProject(const QString& path, QString* error) {
     if (!document_) return false;
     commitTransform();
     ProjectError err;
+    // The watcher lets go first: on Windows its open handles on the package folder would block swapping it.
+    stopWatchingProject();
     // The document itself, never a frame playback shows (endTemporaryLayers stops playback; this holds regardless).
     if (!compositor::saveProject(documentToSave(), activeLayerId_, path.toStdString(), err)) {
         if (error) *error = QString::fromStdString(err.message);
+        if (!projectPath_.isEmpty()) watchProject();
         return false;
     }
     projectPath_ = path;
