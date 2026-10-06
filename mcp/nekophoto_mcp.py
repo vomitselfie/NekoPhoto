@@ -314,7 +314,7 @@ def document_new(width: int = 1920, height: int = 1080, resolution: float = 72) 
 @edit("Open a file")
 def document_open(path: str, page: Optional[int] = None, resolution: Optional[float] = None, settings: Optional[dict] = None,
                   asSmartObject: Optional[bool] = None, bitsPerChannel: Optional[int] = None, mergedOnly: Optional[bool] = None) -> str:
-    """Open a .comp project (in its own tab); a layered file in its own tab, the reply listing its layers and what could
+    """Open a project, a .nekophoto file or a .comp folder (in its own tab); a layered file in its own tab, the reply listing its layers and what could
     not be carried: Photoshop .psd/.psb, Clip Studio .clip, Affinity .afphoto/.afdesign/.afpub/.af, Aseprite .ase/.aseprite (first frame), SVG .svg/.svgz (shapes as editable vector shape layers, the rest as pixels),
     a PDF page (page, 1-based; resolution in ppi, default 150; when app_info reports pdf), an icon .ico/.cur (a
     layer per size) or an animated GIF (a layer per frame, frame 1 visible); or an image file, .tga included, as a
@@ -338,7 +338,8 @@ def document_import(path: str, x: Optional[float] = None, y: Optional[float] = N
 
 @outside("Save the project")
 def document_save(path: Optional[str] = None) -> str:
-    """Save the project as a .comp package, to its current path or to path. macCompatible in the answer is
+    """Save the project to its current path (in the form it has) or to path: a single .nekophoto file, or a .comp
+    project folder when path ends in .comp (a path with neither gets .nekophoto). macCompatible in the answer is
     false when the layers total more than the 100 megapixels Compositor for macOS opens (up to a gigapixel
     saves and opens here)."""
     return text(call("document.save", path=os.path.abspath(path) if path else None))

@@ -2205,6 +2205,10 @@ Working: %2</source>
         <translation>画像、レイヤー付きファイル、プロジェクト (%1)</translation>
     </message>
     <message>
+        <source>NekoPhoto projects (*.nekophoto)</source>
+        <translation>NekoPhoto プロジェクト (*.nekophoto)</translation>
+    </message>
+    <message>
         <source>Photoshop files (*.psd *.psb)</source>
         <translation>Photoshop ファイル (*.psd *.psb)</translation>
     </message>
@@ -6642,10 +6646,6 @@ File &gt; New creates a blank canvas.</source>
         </translation>
     </message>
     <message>
-        <source>Open Project (a .comp folder)</source>
-        <translation>プロジェクトを開く (.comp フォルダー)</translation>
-    </message>
-    <message>
         <source>Not a project</source>
         <translation>プロジェクトではありません</translation>
     </message>
@@ -6706,10 +6706,6 @@ File &gt; New creates a blank canvas.</source>
         <translation>プロジェクトを保存</translation>
     </message>
     <message>
-        <source>Compositor project (*.comp)</source>
-        <translation>Compositor プロジェクト (*.comp)</translation>
-    </message>
-    <message>
         <source>Couldn’t save the project</source>
         <translation>プロジェクトを保存できませんでした</translation>
     </message>
@@ -6752,8 +6748,20 @@ File &gt; New creates a blank canvas.</source>
         </translation>
     </message>
     <message>
+        <source>Open Project Folder (.comp)</source>
+        <translation>プロジェクトフォルダーを開く (.comp)</translation>
+    </message>
+    <message>
         <source>The image could not be converted to the document&apos;s colour mode.</source>
         <translation>画像をドキュメントのカラーモードに変換できませんでした。</translation>
+    </message>
+    <message>
+        <source>NekoPhoto project (*.nekophoto)</source>
+        <translation>NekoPhoto プロジェクト (*.nekophoto)</translation>
+    </message>
+    <message>
+        <source>NekoPhoto project folder (*.comp)</source>
+        <translation>NekoPhoto プロジェクトフォルダー (*.comp)</translation>
     </message>
     <message numerus="yes">
         <source>, %n folder(s)</source>
@@ -7152,10 +7160,6 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>&amp;Open…</source>
         <translation>開く(&amp;O)...</translation>
-    </message>
-    <message>
-        <source>Open Project…</source>
-        <translation>プロジェクトを開く...</translation>
     </message>
     <message>
         <source>Open &amp;Recent</source>
@@ -7808,6 +7812,10 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Invert</source>
         <translation>反転</translation>
+    </message>
+    <message>
+        <source>Open Project Folder…</source>
+        <translation>プロジェクトフォルダーを開く...</translation>
     </message>
     <message>
         <source>Apply</source>

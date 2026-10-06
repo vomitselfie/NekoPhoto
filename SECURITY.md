@@ -20,7 +20,7 @@ advisory; don't post it publicly), and what happens (a crash, a sanitizer trace,
 In scope:
 
 - **File parsers fed hostile files**: anything NekoPhoto opens or imports, such as PSD/PSB (with nested smart
-  objects), Clip Studio `.clip`, Affinity, Aseprite, GIF, TGA, ICO, SVG, PDF, camera RAW, NekoPhoto `.comp`
+  objects), Clip Studio `.clip`, Affinity, Aseprite, GIF, TGA, ICO, SVG, PDF, camera RAW, NekoPhoto `.nekophoto` and `.comp`
   projects, and brush and preset files (`.abr`, `.sut`, `.brushset`, `.brush`, `.pat`, `.asl`, `.grd`, colour
   lookups). A crash, hang, memory-safety bug or out-of-bounds read on a crafted file counts.
 - **The automation socket** (`--rpc`, `--rpc-socket`; a named pipe on Windows) and the MCP bridge in `mcp/`:

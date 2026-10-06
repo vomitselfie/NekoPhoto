@@ -1,12 +1,64 @@
-# Compositor project format, versions 1–6
+# NekoPhoto project format
 
-A `.comp` file is a macOS document package containing `manifest.json` and an `images/` directory of `<layer UUID>.png` assets.
+A NekoPhoto project comes in two forms that hold the same files under the same names:
 
-The manifest identifies `com.compositor.project`, version `6` for new saves (versions `1`–`5` remain readable), and the sRGB working space. It stores document UUID, pixel dimensions, active layer UUID, and layers in bottom-to-top order. Each layer stores its UUID, name, visibility, transform (origin, size, clockwise rotation, flips, sampling), and optional image filename. Blank layers have no image asset.
+- **A `.nekophoto` file** (since 1.8.7, and what new projects and Save As write by default): one ZIP file,
+  described below.
+- **A `.comp` folder**, the project package NekoPhoto wrote before 1.8.7 and Compositor for macOS writes: a folder
+  holding `manifest.json`, an `images/` folder of `<layer UUID>.png` assets and, for newer features, the other files
+  the manifest names. These still open, and save back as folders; Save As can write one too.
 
-Embedded PNGs preserve source pixels and transparency; transforms remain separate. Projects survive moving or deleting imported source photos. Saving uses a coordinated atomic package replacement. Unsupported versions, invalid metadata, missing assets, unsafe paths, and oversized data are rejected before replacing the live document.
+The path decides the form: a path ending in `.nekophoto` is written as a file, any other as a folder. Both are
+replaced atomically: a `.comp` is written as a sibling folder that is then swapped in, a `.nekophoto` as
+`<name>.nekophoto.saving` beside the target, which is flushed to disk, read back, and renamed over the old file. A save
+that fails leaves the previous project as it was.
 
-Limits: 30,000 pixels per canvas/image side, 100 million total source pixels, 10,000 layers, 4 MiB manifest, 512 MiB per encoded asset. See `ProjectStore.swift` for validation.
+## The `.nekophoto` file
+
+A ZIP file (no ZIP64, so at most 4 GiB and 65,535 entries). Its entries, in this order:
+
+| Entry | Contents |
+| --- | --- |
+| `mimetype` | `application/vnd.nekophoto.document`, ASCII, no newline; stored (not compressed) and always first, as in ODF and EPUB, so the bytes at offset 30 read `mimetypeapplication/vnd.nekophoto.document` and identify the file without unpacking it |
+| `nekophoto.json` | the container header, below |
+| `manifest.json` | the manifest, exactly as in a `.comp` folder (everything after "The manifest" below) |
+| `images/…`, `channels/…`, `smartobjects/…`, `profile.icc`, `encoded.icc` | the files the manifest names, under the same relative paths as in a `.comp` folder, byte for byte |
+| `previews/composite.png` | the flattened image, scaled down to at most 1,024 pixels on its long side, for file managers and thumbnailers; never read back |
+
+JSON entries are deflated; images and other entries are stored, since PNGs are already compressed. Names are UTF-8,
+`/`-separated and relative. A reader refuses names with `..`, `.` or empty parts, absolute names, backslashes, colons,
+names that repeat (also differing only in case), encrypted or ZIP64 entries, and entries that claim more data, or a
+higher compression ratio, than the limits allow.
+
+`nekophoto.json`:
+
+```json
+{
+  "format": "NekoPhoto Document",
+  "format_id": "org.nekophoto.document",
+  "version": 1,
+  "minimum_reader_version": 1,
+  "writer": "NekoPhoto 1.8.7"
+}
+```
+
+`version` is the container's version and moves apart from both the app's version (`writer`, for information) and the
+manifest's own `version`. A reader opens a file whose `minimum_reader_version` is at most the container version it
+knows (1), and refuses a newer one with a message asking for a newer NekoPhoto. Entries it does not know (another
+version's additions) are kept with the document and written back unchanged when it is saved as `.nekophoto` again.
+
+The MIME type is `application/vnd.nekophoto.document` (glob `*.nekophoto`, and the magic above); a `.comp` folder
+keeps `application/x-compositor-project`.
+
+## The manifest
+
+The manifest identifies `com.compositor.project`, a version from `1` to `9` (a save writes the lowest version that
+holds the document: `7` while it needs nothing newer, so Compositor for macOS keeps opening it; see versions 8 and 9
+below), and the working space. It stores document UUID, pixel dimensions, active layer UUID, and layers in bottom-to-top order. Each layer stores its UUID, name, visibility, transform (origin, size, clockwise rotation, flips, sampling), and optional image filename. Blank layers have no image asset.
+
+Embedded PNGs preserve source pixels and transparency; transforms remain separate. Projects survive moving or deleting imported source photos. Saving replaces the project atomically (above). Unsupported versions, invalid metadata, missing assets, unsafe paths, and oversized data are rejected before replacing the live document.
+
+Limits in Compositor for macOS (NekoPhoto opens and saves up to a gigapixel of layers): 30,000 pixels per canvas/image side, 100 million total source pixels, 10,000 layers, 4 MiB manifest, 512 MiB per encoded asset. See `ProjectStore.swift` for validation.
 
 Undo history and viewport are session-only. Opening fits the canvas, restores selection, and starts with clean history. Future editable features must extend the schema and round-trip tests. PNG export is a flattened derivative and does not mark project edits saved.
 

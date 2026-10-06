@@ -94,19 +94,21 @@ render {"region": {...}, "zoom": 4}                                             
 Batch export a folder of projects:
 
 ```
-for f in *.comp; do
+for f in *.nekophoto; do
   printf '%s\n' "{\"method\":\"document.open\",\"params\":{\"path\":\"$f\"}}" \
-                "{\"method\":\"document.export\",\"params\":{\"path\":\"${f%.comp}.png\"}}" \
+                "{\"method\":\"document.export\",\"params\":{\"path\":\"${f%.nekophoto}.png\"}}" \
   | nekophoto --headless --batch -
 done
 ```
 
 ## Things to know
 
-- An open project follows its package on disk: an agent that writes the `.comp` folder (its `manifest.json` and
-  `images/`, see project-format.md) sees the open tab reload in place about half a second later, as long as the
-  person has no unsaved changes there (they are asked otherwise). The socket is still the richer way in; writing
-  files suits agents that cannot reach it.
+- Projects save as a single `.nekophoto` file (a ZIP, see project-format.md); `document.save` with a path ending
+  in `.comp` writes a project folder instead, and a `.comp` that was opened saves back as one.
+- An open project follows its file on disk: an agent that replaces the `.nekophoto` file (write a new one beside it,
+  then rename it over) or writes the `.comp` folder (its `manifest.json` and `images/`) sees the open tab reload in
+  place about half a second later, as long as the person has no unsaved changes there (they are asked otherwise).
+  The socket is still the richer way in; writing files suits agents that cannot reach it.
 
 - `layers.set` opacity is 0..1; blend names are the ones `layers.list` reports, in any case or
   spacing ("color-dodge"). Folders have no blend mode.
