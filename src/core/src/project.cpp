@@ -5,12 +5,15 @@
 #include "compositor/png.h"
 #include "compositor/psd.h"
 #include "compositor/render.h"
+#include "compositor/zipfile.h"
 #include <nlohmann/json.hpp>
 #include <zlib.h>
 #ifdef COMPOSITOR_HAVE_ZSTD
 #include <zstd.h>
 #endif
+#include <cctype>
 #include <cmath>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -815,8 +818,10 @@ std::optional<Document> parseManifest(const std::string& text, ProjectError& err
     return d;
 }
 
-std::optional<Document> loadProject(const std::string& pathText, ProjectError& error, const ProjectLoadLimits& limits) {
-    fs::path path(pathText);
+namespace {
+
+/// A package folder (a .comp, or a .nekophoto's files unpacked).
+std::optional<Document> loadPackageFolder(const fs::path& path, ProjectError& error, const ProjectLoadLimits& limits) {
     std::error_code ec;
     if (!fs::is_directory(path, ec)) { error = invalid(); return std::nullopt; }
     fs::path manifestPath = path / "manifest.json";
@@ -1009,12 +1014,209 @@ std::optional<Document> loadProject(const std::string& pathText, ProjectError& e
     return d;
 }
 
+// ---- The .nekophoto container -----------------------------------------------------------------------------------------
+
+/// The files the package format itself defines; anything else in a .nekophoto is another version's and is carried.
+bool isPackageEntry(const std::string& name) {
+    if (name == "manifest.json" || name == "profile.icc" || name == "encoded.icc") return true;
+    for (const char* folder : {"images/", "channels/", "smartobjects/"})
+        if (name.rfind(folder, 0) == 0 && name.size() > std::strlen(folder) && name.find('/', std::strlen(folder)) == std::string::npos) return true;
+    return false;
+}
+
+/// Written fresh by every save, so never carried.
+bool isContainerEntry(const std::string& name) { return name == "mimetype" || name == "nekophoto.json" || name == "previews/composite.png"; }
+
+/// What a document carries of entries it does not know, in total; past it the rest are dropped.
+constexpr unsigned long long extrasLimit = 256ull << 20;
+
+ProjectError notDocument() { return {ProjectError::Invalid, "This is not a valid NekoPhoto document, or it is damaged."}; }
+
+/// The container's header: the mimetype entry and nekophoto.json, read before anything else.
+bool checkContainer(ZipFileReader& zip, ProjectError& error) {
+    const ZipFileEntry* mime = zip.find("mimetype");
+    std::vector<uint8_t> bytes;
+    if (!mime || mime->size > 256 || !zip.read(*mime, bytes) || std::string(bytes.begin(), bytes.end()) != documentMimeType) { error = notDocument(); return false; }
+    const ZipFileEntry* header = zip.find("nekophoto.json");
+    if (!header || header->size > manifestLimit || !zip.read(*header, bytes)) { error = notDocument(); return false; }
+    json j = json::parse(bytes.begin(), bytes.end(), nullptr, false);
+    if (j.is_discarded() || !j.is_object() || nestsTooDeep(j)) { error = notDocument(); return false; }
+    std::string id;
+    if (!getString(j, "format_id", id, true) || id != documentFormatId) { error = notDocument(); return false; }
+    int version = 0, minimum = 1;
+    if (!getInt(j, "version", version, true) || !getInt(j, "minimum_reader_version", minimum, false) || version < 1) { error = notDocument(); return false; }
+    if (minimum > documentContainerVersion) {
+        error = {ProjectError::Version, "This document was saved by a newer version of NekoPhoto (document format " + std::to_string(version)
+                                            + "). Update NekoPhoto to open it.", version};
+        return false;
+    }
+    return true;
+}
+
+ZipLimits containerLimits(const ProjectLoadLimits& limits) {
+    ZipLimits z;
+    // Compressed pixels never outgrow the decoded budget by much (a PNG's worst case is a few bytes a row).
+    const unsigned long long budget = (unsigned long long)std::max(0LL, limits.layerBytes) * 2 + limits.sidecarBytes + extrasLimit;
+    z.totalBytes = std::min<unsigned long long>(z.totalBytes, budget);
+    return z;
+}
+
+fs::path scratchFolder(const std::string& what) {
+    std::mt19937 rng{std::random_device{}()};
+    std::error_code ec;
+    fs::path base = fs::temp_directory_path(ec);
+    if (ec) base = ".";
+    return base / ("nekophoto-" + what + "-" + std::to_string(rng()));
+}
+
+/// A .nekophoto file: its package files are unpacked into a scratch folder and read there by the folder reader, so
+/// both forms share one reader and all its checks; the entries this version does not know are kept in the document.
+std::optional<Document> loadDocumentFile(const fs::path& path, ProjectError& error, const ProjectLoadLimits& limits) {
+    ZipFileReader zip;
+    std::string why;
+    if (!zip.openFile(path.string(), &why, containerLimits(limits))) {
+        const bool large = why.find("larger") != std::string::npos || why.find("more entries") != std::string::npos || why.find("ratio") != std::string::npos;
+        error = large ? ProjectError{ProjectError::TooLarge, "This document exceeds the supported file size. " + why} : notDocument();
+        return std::nullopt;
+    }
+    if (!checkContainer(zip, error)) return std::nullopt;
+    const fs::path scratch = scratchFolder("open");
+    struct Cleanup {
+        fs::path dir;
+        ~Cleanup() { std::error_code e; fs::remove_all(dir, e); }
+    } cleanup{scratch};
+    std::error_code ec;
+    if (!fs::create_directories(scratch, ec)) { error = ioError("could not create " + scratch.string()); return std::nullopt; }
+    auto extras = std::make_shared<std::vector<std::pair<std::string, std::vector<uint8_t>>>>();
+    unsigned long long extraBytes = 0;
+    for (const ZipFileEntry& entry : zip.entries()) {
+        if (entry.isDirectory() || isContainerEntry(entry.name)) continue;
+        const bool package = isPackageEntry(entry.name);
+        if (!package && entry.size > extrasLimit - extraBytes) continue;   // too much to carry: dropped
+        std::vector<uint8_t> bytes;
+        if (!zip.read(entry, bytes)) {
+            if (!package) continue;   // another version's damaged file: not ours to refuse the document over
+            error = entry.name == "manifest.json" ? notDocument() : missingImage();
+            return std::nullopt;
+        }
+        if (!package) {
+            extraBytes += bytes.size();
+            extras->emplace_back(entry.name, std::move(bytes));
+            continue;
+        }
+        const fs::path file = scratch / fs::path(entry.name);
+        fs::create_directories(file.parent_path(), ec);
+        if (!writeBytes(file, bytes)) { error = ioError("could not unpack " + entry.name); return std::nullopt; }
+    }
+    zip.close();
+    auto d = loadPackageFolder(scratch, error, limits);
+    if (d && !extras->empty()) d->packageExtras = std::move(extras);
+    return d;
+}
+
+/// Writes `document` into a new folder `staging` as the package's files (the manifest already made and checked).
+bool writePackageFolder(const Document& document, const std::string& manifest, const fs::path& staging, ProjectError& error);
+
+/// The downscaled composite a .nekophoto carries, as PNG; empty when it cannot be made.
+std::vector<uint8_t> previewPng(const Document& document) {
+    if (document.width < 1 || document.height < 1) return {};
+    const double scale = std::min(1.0, double(documentPreviewSize) / std::max(document.width, document.height));
+    const int w = std::max(1, int(std::lround(document.width * scale))), h = std::max(1, int(std::lround(document.height * scale)));
+    Image out(w, h);
+    RenderOptions options;
+    options.scale = scale;
+    render(document, options, out);
+    std::vector<uint8_t> png;
+    if (!encodePngImage(out, png)) return {};
+    return png;
+}
+
+/// Packs a written package folder into `file` with the container's own entries, then reads its directory back.
+bool packDocumentFile(const Document& document, const fs::path& staging, const fs::path& file, ProjectError& error) {
+    ZipFileWriter zip;
+    std::string why;
+    auto failed = [&](const std::string& what) {
+        error = ioError(what + (why.empty() ? std::string() : ": " + why));
+        return false;
+    };
+    if (!zip.open(file.string(), &why)) return failed("could not create " + file.string());
+    const std::string mime = documentMimeType;
+    if (!zip.add("mimetype", reinterpret_cast<const uint8_t*>(mime.data()), mime.size(), false, &why)) return failed("could not write the document");
+    const json header = {{"format", "NekoPhoto Document"}, {"format_id", documentFormatId}, {"version", documentContainerVersion},
+                         {"minimum_reader_version", 1}, {"writer", std::string("NekoPhoto ") + NEKOPHOTO_WRITER_VERSION}};
+    const std::string headerText = header.dump(2) + "\n";
+    if (!zip.add("nekophoto.json", reinterpret_cast<const uint8_t*>(headerText.data()), headerText.size(), true, &why)) return failed("could not write the document");
+    // The package's files, the manifest first, then each folder in name order (the same document packs the same way).
+    std::vector<std::string> names{"manifest.json"};
+    std::error_code ec;
+    for (const char* top : {"profile.icc", "encoded.icc"}) if (fs::is_regular_file(staging / top, ec)) names.push_back(top);
+    for (const char* folder : {"images", "channels", "smartobjects"}) {
+        if (!fs::is_directory(staging / folder, ec)) continue;
+        std::vector<std::string> files;
+        for (auto& entry : fs::directory_iterator(staging / folder, ec)) files.push_back(std::string(folder) + "/" + entry.path().filename().string());
+        std::sort(files.begin(), files.end());
+        names.insert(names.end(), files.begin(), files.end());
+    }
+    for (const std::string& name : names) {
+        std::vector<uint8_t> bytes;
+        {
+            std::ifstream in(staging / fs::path(name), std::ios::binary);
+            if (!in) return failed("could not read " + name);
+            bytes.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+            if (in.bad()) return failed("could not read " + name);
+        }
+        const bool text = name.size() > 5 && name.compare(name.size() - 5, 5, ".json") == 0;
+        if (!zip.add(name, bytes, text, &why)) return failed("could not write " + name);
+    }
+    if (std::vector<uint8_t> preview = previewPng(document); !preview.empty())
+        if (!zip.add("previews/composite.png", preview, false, &why)) return failed("could not write the preview");
+    if (document.packageExtras)
+        for (const auto& [name, bytes] : *document.packageExtras)
+            if (!isContainerEntry(name) && !isPackageEntry(name) && !zip.add(name, bytes, false, &why)) return failed("could not write " + name);
+    if (!zip.finish(&why)) return failed("could not write " + file.string());
+    // Read back what was written: the directory, the header and the manifest must be there and whole.
+    ZipFileReader check;
+    std::vector<uint8_t> manifest;
+    const ZipFileEntry* entry = nullptr;
+    if (!check.openFile(file.string(), &why) || !checkContainer(check, error) || !(entry = check.find("manifest.json")) || !check.read(*entry, manifest, &why))
+        return failed("the saved document did not read back");
+    return true;
+}
+
+} // namespace
+
+bool isDocumentFilePath(const std::string& path) {
+    const std::string ext = documentFileExtension;
+    if (path.size() <= ext.size()) return false;
+    for (size_t i = 0; i < ext.size(); i++)
+        if (char(std::tolower(static_cast<unsigned char>(path[path.size() - ext.size() + i]))) != ext[i]) return false;
+    return true;
+}
+
+std::optional<Document> loadProject(const std::string& pathText, ProjectError& error, const ProjectLoadLimits& limits) {
+    const fs::path path(pathText);
+    std::error_code ec;
+    if (fs::is_regular_file(path, ec)) return loadDocumentFile(path, error, limits);
+    return loadPackageFolder(path, error, limits);
+}
+
 std::optional<Uuid> loadedActiveLayer(const std::string& pathText) {
-    std::ifstream in(fs::path(pathText) / "manifest.json", std::ios::binary);
-    if (!in) return std::nullopt;
-    std::stringstream buffer;
-    buffer << in.rdbuf();
-    json j = json::parse(buffer.str(), nullptr, false);
+    std::string text;
+    std::error_code ec;
+    if (fs::is_regular_file(fs::path(pathText), ec)) {
+        ZipFileReader zip;
+        const ZipFileEntry* entry = nullptr;
+        std::vector<uint8_t> bytes;
+        if (!zip.openFile(pathText) || !(entry = zip.find("manifest.json")) || entry->size > manifestLimit || !zip.read(*entry, bytes)) return std::nullopt;
+        text.assign(bytes.begin(), bytes.end());
+    } else {
+        std::ifstream in(fs::path(pathText) / "manifest.json", std::ios::binary);
+        if (!in) return std::nullopt;
+        std::stringstream buffer;
+        buffer << in.rdbuf();
+        text = buffer.str();
+    }
+    json j = json::parse(text, nullptr, false);
     std::optional<Uuid> id;
     if (j.is_object() && !nestsTooDeep(j)) getUuid(j, "activeLayerID", id, false);
     return id;
@@ -1103,8 +1305,50 @@ bool saveProject(const Document& document, const std::optional<Uuid>& activeLaye
     std::mt19937 rng{std::random_device{}()};
     fs::path staging = parent / (path.filename().string() + ".saving-" + std::to_string(rng()));
     fs::remove_all(staging, ec);
-    if (!fs::create_directories(staging / "images", ec)) { error = ioError("could not create " + staging.string()); return false; }
     auto abandon = [&]() { std::error_code e; fs::remove_all(staging, e); };
+    if (!writePackageFolder(document, manifest, staging, error)) { abandon(); return false; }
+    if (isDocumentFilePath(pathText)) {
+        // Packed into <name>.nekophoto.saving beside the target, synced and read back, then renamed over it: the rename
+        // replaces the old file in one step (on Windows too), and anything failing before it leaves the old one as it was.
+        const fs::path saving = parent / (path.filename().string() + ".saving");
+        fs::remove(saving, ec);
+        const bool packed = packDocumentFile(document, staging, saving, error);
+        abandon();
+        std::error_code e;
+        if (!packed) { fs::remove(saving, e); return false; }
+        if (fs::is_directory(path, ec)) { fs::remove(saving, e); error = ioError(path.string() + " is a folder"); return false; }
+        fs::rename(saving, path, ec);
+        if (ec) {
+            fs::remove(saving, e);
+            error = ioError("could not move the saved document into place: " + ec.message());
+            return false;
+        }
+        return true;
+    }
+    // Swap the finished package in: the old one is moved aside and removed only after the new one is in place.
+    fs::path backup = parent / (path.filename().string() + ".replaced-" + std::to_string(rng()));
+    bool existed = fs::exists(path, ec);
+    if (existed) {
+        fs::rename(path, backup, ec);
+        if (ec) { abandon(); error = ioError("could not replace " + path.string() + ": " + ec.message()); return false; }
+    }
+    fs::rename(staging, path, ec);
+    if (ec) {
+        if (existed) { std::error_code e; fs::rename(backup, path, e); }
+        abandon();
+        error = ioError("could not move the saved project into place: " + ec.message());
+        return false;
+    }
+    if (existed) fs::remove_all(backup, ec);
+    return true;
+}
+
+namespace {
+
+bool writePackageFolder(const Document& document, const std::string& manifest, const fs::path& staging, ProjectError& error) {
+    std::error_code ec;
+    if (!fs::create_directories(staging / "images", ec)) { error = ioError("could not create " + staging.string()); return false; }
+    auto abandon = [] {};   // the caller removes the folder
     {
         std::ofstream out(staging / "manifest.json", std::ios::binary);
         out << manifest;
@@ -1159,22 +1403,9 @@ bool saveProject(const Document& document, const std::optional<Uuid>& activeLaye
             }
         }
     }
-    // Swap the finished package in: the old one is moved aside and removed only after the new one is in place.
-    fs::path backup = parent / (path.filename().string() + ".replaced-" + std::to_string(rng()));
-    bool existed = fs::exists(path, ec);
-    if (existed) {
-        fs::rename(path, backup, ec);
-        if (ec) { abandon(); error = ioError("could not replace " + path.string() + ": " + ec.message()); return false; }
-    }
-    fs::rename(staging, path, ec);
-    if (ec) {
-        if (existed) { std::error_code e; fs::rename(backup, path, e); }
-        abandon();
-        error = ioError("could not move the saved project into place: " + ec.message());
-        return false;
-    }
-    if (existed) fs::remove_all(backup, ec);
     return true;
 }
+
+} // namespace
 
 } // namespace compositor

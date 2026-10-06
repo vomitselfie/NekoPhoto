@@ -12,6 +12,7 @@
 #include "compositor/svg.h"
 #include "compositor/tga.h"
 #include "compositor/vectorlayer.h"
+#include "compositor/zipfile.h"
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -409,6 +410,156 @@ TEST_CASE(project_smart_object_budget_counts_bytes_at_depth) {
     ProjectLoadLimits atDepth;
     atDepth.smartObjectBytes = 2 * 64 * 64 * 8;
     CHECK(loadProject(path, error, atDepth).has_value());
+    { std::error_code cleanup_; fs::remove_all(dir, cleanup_); }
+}
+
+// ---- .nekophoto: the ZIP container ------------------------------------------------------------------------------------
+
+namespace {
+
+/// One entry as a hostile file might describe it: what the directory claims may differ from what is there.
+struct RawEntry {
+    std::string name;
+    Bytes data;                 // the bytes actually stored
+    uint16_t method = 0;
+    uint16_t flags = 0;
+    uint32_t claimedSize = 0;   // 0: data.size()
+    uint32_t claimedPacked = 0; // 0: data.size()
+    uint32_t claimedOffset = 0xFFFFFFFE;   // the real offset unless set
+};
+
+Bytes rawZip(const std::vector<RawEntry>& entries, uint16_t claimedCount = 0) {
+    Bytes out, directory;
+    for (const RawEntry& e : entries) {
+        const uint32_t offset = e.claimedOffset == 0xFFFFFFFE ? uint32_t(out.size()) : e.claimedOffset;
+        const uint32_t crc = uint32_t(crc32(0, e.data.data(), uInt(e.data.size())));
+        const uint32_t packed = e.claimedPacked ? e.claimedPacked : uint32_t(e.data.size());
+        const uint32_t size = e.claimedSize ? e.claimedSize : uint32_t(e.data.size());
+        u32(out, 0x04034b50); u16(out, 20); u16(out, e.flags); u16(out, e.method); u32(out, 0);
+        u32(out, crc); u32(out, packed); u32(out, size); u16(out, uint32_t(e.name.size())); u16(out, 0);
+        out.insert(out.end(), e.name.begin(), e.name.end());
+        out.insert(out.end(), e.data.begin(), e.data.end());
+        u32(directory, 0x02014b50); u16(directory, 20); u16(directory, 20); u16(directory, e.flags); u16(directory, e.method); u32(directory, 0);
+        u32(directory, crc); u32(directory, packed); u32(directory, size); u16(directory, uint32_t(e.name.size()));
+        u16(directory, 0); u16(directory, 0); u16(directory, 0); u16(directory, 0); u32(directory, 0); u32(directory, offset);
+        directory.insert(directory.end(), e.name.begin(), e.name.end());
+    }
+    const uint32_t at = uint32_t(out.size());
+    out.insert(out.end(), directory.begin(), directory.end());
+    const uint16_t count = claimedCount ? claimedCount : uint16_t(entries.size());
+    u32(out, 0x06054b50); u16(out, 0); u16(out, 0); u16(out, count); u16(out, count); u32(out, uint32_t(directory.size())); u32(out, at); u16(out, 0);
+    return out;
+}
+
+bool zipOpens(const Bytes& bytes, const ZipLimits& limits = {}) {
+    ZipFileReader zip;
+    return zip.openMemory(bytes, nullptr, limits);
+}
+
+Bytes deflated(const Bytes& raw) {
+    z_stream z{};
+    deflateInit2(&z, 9, Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY);
+    Bytes out(deflateBound(&z, uLong(raw.size())));
+    z.next_in = const_cast<Bytef*>(raw.data());
+    z.avail_in = uInt(raw.size());
+    z.next_out = out.data();
+    z.avail_out = uInt(out.size());
+    deflate(&z, Z_FINISH);
+    out.resize(z.total_out);
+    deflateEnd(&z);
+    return out;
+}
+
+} // namespace
+
+TEST_CASE(zip_container_refuses_hostile_directories) {
+    Timer timer;
+    const Bytes small = text("hello");
+    CHECK(zipOpens(rawZip({{"a.txt", small}})));
+    // Names that climb out, are absolute, or hide a drive or a backslash.
+    for (const char* name : {"../a.txt", "images/../../a.txt", "/etc/passwd", "C:/a.txt", "images\\..\\a.txt", "a//b", "./a"})
+        CHECK(!zipOpens(rawZip({{name, small}})));
+    // The same name twice, also in another case (one would overwrite the other when unpacked on Windows).
+    CHECK(!zipOpens(rawZip({{"a.txt", small}, {"a.txt", small}})));
+    CHECK(!zipOpens(rawZip({{"images/A.png", small}, {"images/a.png", small}})));
+    // More entries than allowed.
+    std::vector<RawEntry> many;
+    for (int i = 0; i < 40; i++) many.push_back({"f" + std::to_string(i), small});
+    ZipLimits few;
+    few.entries = 32;
+    CHECK(!zipOpens(rawZip(many), few));
+    CHECK(zipOpens(rawZip(many)));
+    // A count larger than the directory can hold, and the ZIP64 marker.
+    CHECK(!zipOpens(rawZip({{"a.txt", small}}, 500)));
+    CHECK(!zipOpens(rawZip({{"a.txt", small}}, 0xFFFF)));
+    // Encrypted, or an unknown method.
+    RawEntry encrypted{"a.txt", small};
+    encrypted.flags = 1;
+    CHECK(!zipOpens(rawZip({encrypted})));
+    RawEntry bzip{"a.txt", small};
+    bzip.method = 12;
+    CHECK(!zipOpens(rawZip({bzip})));
+    // A stored entry whose sizes disagree, and one whose data claims to run into the directory.
+    RawEntry liar{"a.txt", small};
+    liar.claimedSize = 9;
+    CHECK(!zipOpens(rawZip({liar})));
+    RawEntry overlap{"a.txt", small};
+    overlap.claimedPacked = overlap.claimedSize = 4000;
+    CHECK(!zipOpens(rawZip({overlap})));
+    RawEntry elsewhere{"a.txt", small};
+    elsewhere.claimedOffset = 1u << 30;
+    CHECK(!zipOpens(rawZip({elsewhere})));
+    // A deflate bomb: a few bytes that claim (and would inflate to) far more.
+    const Bytes zeros(64u << 20, 0);
+    RawEntry bomb{"bomb.bin", deflated(zeros)};
+    bomb.method = 8;
+    bomb.claimedSize = uint32_t(zeros.size());
+    CHECK(!zipOpens(rawZip({bomb})));
+    // Too much in total.
+    ZipLimits tight;
+    tight.totalBytes = 8;
+    CHECK(!zipOpens(rawZip({{"a.txt", small}, {"b.txt", small}}), tight));
+    // Truncated anywhere: refused, never read past the end.
+    const Bytes whole = rawZip({{"a.txt", small}, {"b.txt", small}});
+    for (size_t n = 0; n < whole.size(); n += 3) CHECK(!zipOpens(Bytes(whole.begin(), whole.begin() + std::ptrdiff_t(n))));
+    // A CRC that does not match is caught on reading.
+    Bytes damaged = rawZip({{"a.txt", small}});
+    damaged[30 + 5] ^= 0x55;
+    ZipFileReader zip;
+    REQUIRE(zip.openMemory(damaged));
+    Bytes out;
+    CHECK(!zip.read(zip.entries()[0], out));
+    CHECK(timer.seconds() < 10);
+}
+
+TEST_CASE(document_file_with_hostile_entries_is_refused) {
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() / ("nekophoto-hostile-zip-" + std::to_string(std::rand()));
+    fs::create_directories(dir);
+    const std::string header = "{\"format\":\"NekoPhoto Document\",\"format_id\":\"org.nekophoto.document\",\"version\":1,\"minimum_reader_version\":1}";
+    auto write = [&](const std::string& name, const Bytes& bytes) {
+        std::ofstream out(dir / name, std::ios::binary);
+        out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+    };
+    const RawEntry mime{"mimetype", text("application/vnd.nekophoto.document")}, head{"nekophoto.json", text(header)};
+    // A path out of the scratch folder never lands anywhere.
+    write("Escape.nekophoto", rawZip({mime, head, {"images/../../escaped.txt", text("x")}}));
+    ProjectError error;
+    CHECK(!loadProject((dir / "Escape.nekophoto").string(), error));
+    CHECK(!fs::exists(fs::temp_directory_path() / "escaped.txt"));
+    // No manifest: invalid, not a crash.
+    write("Empty.nekophoto", rawZip({mime, head}));
+    CHECK(!loadProject((dir / "Empty.nekophoto").string(), error));
+    CHECK(error.kind == ProjectError::Invalid);
+    // A manifest naming an image that is not there.
+    const std::string manifest = "{\"format\":\"com.compositor.project\",\"version\":7,\"documentID\":\"" + makeUuid() + "\",\"width\":10,\"height\":10,"
+                                 "\"activeLayerID\":null,\"layers\":[{\"id\":\"" + makeUuid() + "\",\"name\":\"L\",\"imageFile\":\"x.png\",\"origin\":[0,0],"
+                                 "\"size\":[10,10],\"visible\":true,\"opacity\":1}]}";
+    write("Missing.nekophoto", rawZip({mime, head, {"manifest.json", text(manifest)}}));
+    CHECK(!loadProject((dir / "Missing.nekophoto").string(), error));
+    // Garbage with the right name.
+    write("Garbage.nekophoto", text("PK\x03\x04 not really"));
+    CHECK(!loadProject((dir / "Garbage.nekophoto").string(), error));
     { std::error_code cleanup_; fs::remove_all(dir, cleanup_); }
 }
 
