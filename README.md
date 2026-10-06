@@ -6,7 +6,7 @@
   <img src="docs/images/hero.jpg" alt="NekoPhoto with K.psd, a Photoshop file by Nathan Lincoln, open: its folders, masked layers, adjustment layers and a smart object with Smart Filters in the Layers panel" width="100%">
 </p>
 
-<p align="center"><sub>Artwork: <em>K</em> by Nathan Lincoln, used with permission.</sub></p>
+<p align="center"><sub>Artwork: <em>K</em> by <a href="https://www.nathanlincoln.com/">Nathan Lincoln</a>, used with permission.</sub></p>
 
 # NekoPhoto
 
@@ -30,7 +30,7 @@ listed before you export. The counts, the known gaps and how to rerun the checks
 |:---:|:---:|
 | <img src="docs/images/demo-psd-roundtrip.webp" alt="Opening K.psd by Nathan Lincoln, saved by Photoshop, with its folders, masks, Smart Filters and adjustment layers intact; fading its Exposure adjustment layer to 50%; exporting it as layered PSD; reopening it with the same 33 layers" width="440"> | <img src="docs/images/demo-brush-import.webp" alt="Importing a Photoshop .abr brush set of 148 brushes and stamping trees, a church, a windmill, a town and a ship with them" width="440"> |
 
-<sub>Recorded headless from NekoPhoto 1.6.1 over its automation socket. PSD demo artwork: <em>K</em> by Nathan Lincoln,
+<sub>Recorded headless from NekoPhoto 1.6.1 over its automation socket. PSD demo artwork: <em>K</em> by <a href="https://www.nathanlincoln.com/">Nathan Lincoln</a>,
 used with permission (also in the screenshot above). Brush demo: the CC0 “Myer Settlement Brushes” by K. M. Alexander, from Patchy's test fixtures.</sub>
 
 NekoPhoto began as a Linux port of [Compositor](https://github.com/robbietilton/Compositor)
@@ -85,7 +85,7 @@ The full list is in [docs/features.md](docs/features.md).
 
 | Remove Background | G'MIC filters |
 |:---:|:---:|
-| <img src="docs/images/remove-background.jpg" alt="Remove Background on an illustration, with the settings dialog open" width="420"> | <img src="docs/images/filters.jpg" alt="The G'MIC filter browser previewing CRT Sub-Pixels on an illustration" width="420"> |
+| <img src="docs/images/remove-background.jpg" alt="Remove Background's settings dialog open over K.psd by Nathan Lincoln" width="420"> | <img src="docs/images/filters.jpg" alt="The G'MIC filter browser open over K.psd by Nathan Lincoln, showing Sharpen (Unsharp Mask)" width="420"> |
 
 ## Performance
 
@@ -204,7 +204,7 @@ Linux: 2022 年以降の x86_64 ディストリビューション(Wayland・X11)
 |:---:|:---:|
 | <img src="docs/images/demo-psd-roundtrip.webp" alt="Nathan Lincoln の Photoshop で保存された K.psd を開き、グループ・マスク・スマートフィルター・調整レイヤーがそのまま残っていることを確認し、露光量の調整レイヤーの不透明度を 50% に下げ、レイヤー付き PSD に書き出して開き直し、同じ 33 レイヤーを確認するところ" width="440"> | <img src="docs/images/demo-brush-import.webp" alt="Photoshop の .abr ブラシセット(148 種類)を読み込み、木・教会・風車・町・船を描くところ" width="440"> |
 
-<sub>NekoPhoto 1.6.1 を画面なしで起動し、自動操作ソケット経由で記録しました。冒頭の画像と PSD のデモの作品: Nathan Lincoln
+<sub>NekoPhoto 1.6.1 を画面なしで起動し、自動操作ソケット経由で記録しました。冒頭の画像と PSD のデモの作品: <a href="https://www.nathanlincoln.com/">Nathan Lincoln</a>
 『K』(許可を得て使用)。ブラシのデモ: K. M. Alexander による CC0 の「Myer Settlement Brushes」(Patchy のテスト用ファイルより)。</sub>
 
 NekoPhoto は macOS 版 [Compositor](https://github.com/robbietilton/Compositor) の
@@ -255,7 +255,7 @@ PSD の書き出しは往復テスト済みです。手元にあるレイヤー�
 
 | 背景を削除 | G'MIC フィルター |
 |:---:|:---:|
-| <img src="docs/images/remove-background.jpg" alt="イラストの背景を削除しているところ(設定画面を表示)" width="420"> | <img src="docs/images/filters.jpg" alt="G'MIC フィルターブラウザーで CRT Sub-Pixels をプレビューしているところ" width="420"> |
+| <img src="docs/images/remove-background.jpg" alt="Nathan Lincoln の K.psd の上に背景を削除の設定画面を開いたところ" width="420"> | <img src="docs/images/filters.jpg" alt="Nathan Lincoln の K.psd の上に G'MIC フィルターブラウザーを開き、アンシャープマスクを表示したところ" width="420"> |
 
 ### パフォーマンス
 
