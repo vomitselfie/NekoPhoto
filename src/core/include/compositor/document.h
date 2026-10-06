@@ -331,6 +331,9 @@ struct Document {
     std::shared_ptr<const PsdDocumentCarry> psdCarry;
     /// Smart object sources, by id, shared by every layer that places them (and by undo snapshots).
     std::map<std::string, std::shared_ptr<const SmartObjectSource>> smartObjects;
+    /// Entries of a .nekophoto file this version does not understand (another version's additions), by name, copied
+    /// through as they are when the document is saved as .nekophoto again (project.h).
+    std::shared_ptr<const std::vector<std::pair<std::string, std::vector<uint8_t>>>> packageExtras;
     /// Slices (artboard.h), for Export Slices and the PSD's resource 1050.
     std::vector<Slice> slices;
     /// Ruler guides (guides.h), for View > Show > Guides and the PSD's resource 1032.

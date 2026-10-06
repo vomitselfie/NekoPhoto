@@ -164,6 +164,7 @@ add_library(compositor_core STATIC
     src/wand.cpp
     src/smartwand.cpp
     src/zip.cpp
+    src/zipfile.cpp
     src/resample.cpp
     src/resample_u16.cpp
     src/heal.cpp
@@ -242,6 +243,8 @@ add_library(compositor_core STATIC
     src/resample_f32.cpp
 )
 add_library(compositor::core ALIAS compositor_core)
+# The version a .nekophoto file names as its writer (nekophoto.json); on the one file, so a version bump rebuilds little.
+set_source_files_properties(src/project.cpp PROPERTIES COMPILE_DEFINITIONS NEKOPHOTO_WRITER_VERSION="${COMPOSITOR_VERSION_STRING}")
 
 # The default Working CMYK profile, ISO Coated v2 300% (basICColor, zlib licence; src/third_party/icc/README.md),
 # compiled in as bytes so the core has a CMYK profile without files beside the program.

@@ -870,6 +870,9 @@ public:
     /// The overrides the renderer needs while an edit is in progress.
     /// Takes an imported document (a PSD, say) as this session's, titled `name`, with no project path yet.
     void adoptDocument(const compositor::Document& document, const QString& name);
+    /// A document recovered after a crash: unsaved, and, when it had been saved before, belonging to that project again,
+    /// so Save writes it back to the same file or folder, in the same form (.nekophoto or .comp).
+    void adoptRecovered(const compositor::Document& document, const QString& name, const QString& originalPath);
     /// The name an imported document carries while it has no project path.
     const QString& importedName() const { return importedName_; }
     compositor::Overrides renderOverrides() const;

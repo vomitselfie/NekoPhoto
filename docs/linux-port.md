@@ -2,7 +2,7 @@
 
 NekoPhoto is a Qt 6 front end over a portable C++ core that re-implements
 the Mac app's document model, compositor, brush, history and `.comp` project
-format. The existing C pixel routines under `Compositor/Rendering` are compiled
+format; its own projects are single `.nekophoto` files holding the same contents. The existing C pixel routines under `Compositor/Rendering` are compiled
 unchanged. The macOS application and its Xcode project are untouched; see
 `docs/linux-port-architecture.md` for how the two relate.
 
@@ -13,7 +13,8 @@ the automation socket (`nekophoto.sock`) and the MCP bridge (`mcp/nekophoto_mcp.
 server name `nekophoto`). On the first launch after the rename the old settings
 file and data folder (model, imported brushes, G'MIC catalogue, recovery files)
 move to the new places, unless something is there already. Unchanged on
-purpose: the `.comp` format and its MIME type, which keep Mac projects opening;
+purpose: the `.comp` format and its MIME type, which keep Mac projects opening
+(new projects are `.nekophoto` files, `application/vnd.nekophoto.document`, since 1.8.7);
 the `COMPOSITOR_*` environment variables and build options; and the C++
 `compositor` namespace. `tools/integrate-appimage.sh` removes a launcher that
 an older compositor-linux AppImage installed.
@@ -43,7 +44,7 @@ Then:
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ctest --test-dir build --output-on-failure
-./build/src/app/nekophoto      # or: ./build/src/app/nekophoto Photo.comp
+./build/src/app/nekophoto      # or: ./build/src/app/nekophoto Photo.nekophoto
 ```
 
 NekoPhoto is built and released for Linux and Windows; the macOS build was dropped after 1.5.3.
@@ -124,8 +125,8 @@ priority (nice 5 and 10; below normal on Windows).
 `--lang ja` (or `en`, `system`) sets the interface language for one run, over the
 Preferences choice; headless and scripted runs are English unless it is given, and
 the automation socket answers in English either way ([translating.md](translating.md)).
-`nekophoto --demo --screenshot out.png --save-as Demo.comp` builds a layered
-demo document, grabs the window and saves a project without any interaction
+`nekophoto --demo --screenshot out.png --save-as Demo.nekophoto` builds a layered
+demo document, grabs the window and saves a project (a `.comp` folder when the path ends in `.comp`) without any interaction
 (works with `QT_QPA_PLATFORM=offscreen`); CI runs it as a smoke test.
 
 `COMPOSITOR_DEBUG_LAYOUT=1` prints each toolbar's, dock's and central widget's
@@ -136,7 +137,7 @@ the layout as a laptop or a tiling window manager would show it.
 ## Installing
 
 `sudo cmake --install build` installs the binary to `/usr/local/bin`, the
-launcher entry, icon and `.comp` MIME type under `/usr/local/share`; follow it
+launcher entry, icon and the `.nekophoto` and `.comp` MIME types under `/usr/local/share`; follow it
 with `sudo update-mime-database /usr/local/share/mime` and
 `sudo update-desktop-database /usr/local/share/applications` so the file type
 and launcher pick it up at once. `cmake --install build --prefix ~/.local` does
@@ -277,7 +278,10 @@ packaging/                      .desktop, icon, MIME type
   a worker thread from a copy of the document. A save or closing the tab
   removes its copy; a clean quit removes the folder. Each instance holds
   `<instance>.lock` (a QLockFile, stale only when its process is gone), so the
-  next launch offers back only what a crashed instance left. Headless, batch,
+  next launch offers back only what a crashed instance left. The copies are
+  `.comp` folders whatever the document is; a recovered document that had been
+  saved before belongs to its own `.nekophoto` file or `.comp` folder again,
+  unsaved, so Save writes it back there in the same form. Headless, batch,
   demo and screenshot runs do not autosave. For tests,
   `COMPOSITOR_AUTOSAVE_MS` sets the interval and `COMPOSITOR_RECOVERY_ANSWER`
   (recover, discard, later) answers the offer.
@@ -350,8 +354,8 @@ packaging/                      .desktop, icon, MIME type
   for symmetric cropping; Canvas Size (with anchor); Image Size with a
   resampling choice.
 - Undo/redo of everything, with Photoshop-style shortcuts throughout.
-- `.comp` projects: open and save version 1–7 packages written by the Mac app,
-  keeping unknown fields; PNG export with resolution metadata; JPEG export with
+- Projects: single `.nekophoto` files by default; `.comp` folders, including version 1–7
+  packages written by the Mac app, open and save in place, keeping unknown fields; PNG export with resolution metadata; JPEG export with
   a live preview.
 - Wayland, X11, HiDPI and fractional scaling; tablet input (as a pointer).
 - Adjustment layers: Levels (with histogram, Auto and black / gray / white

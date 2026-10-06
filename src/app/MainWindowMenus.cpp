@@ -198,7 +198,7 @@ void MainWindow::buildMenus() {
     QMenu* file = menuBar()->addMenu(tr("&File"));
     file->addAction(tr("&New…"), QKeySequence::New, this, &MainWindow::newDocument);
     file->addAction(tr("&Open…"), QKeySequence::Open, this, &MainWindow::openFiles);
-    file->addAction(tr("Open Project…"), this, &MainWindow::openProject);
+    file->addAction(tr("Open Project Folder…"), this, &MainWindow::openProject);   // a .comp folder; .nekophoto files open with Open
     recentMenu_ = file->addMenu(tr("Open &Recent"));
     file->addAction(tr("Import &File…"), QKeySequence("Ctrl+Shift+O"), this, &MainWindow::importFiles);
     file->addAction(tr("Import &Brushes…"), this, [this] { importBrushesInteractively(this, session_); });

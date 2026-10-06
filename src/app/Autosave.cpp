@@ -85,6 +85,8 @@ void Autosave::tick() {
         pool_.start([this, document, active, key, dir, title, original, owner] {
             // A crash at any point leaves a whole copy to offer: the new one is written beside the last, the last is
             // moved aside before the new one takes its name, and only then removed (claimOrphans takes either).
+            // Copies are .comp folders whatever the document is saved as (nothing to pack, every file written once);
+            // `originalPath` names the document's own file or folder, which a recovered document saves back to.
             const QString saving = dir + "/" + key + ".saving.comp", final = dir + "/" + key + ".comp", previous = dir + "/" + key + ".old.comp";
             QDir(saving).removeRecursively();
             compositor::ProjectError error;

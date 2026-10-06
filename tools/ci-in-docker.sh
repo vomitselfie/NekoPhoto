@@ -51,6 +51,8 @@ cmake --build /tmp/build -j"$(nproc)"
 ctest --test-dir /tmp/build --output-on-failure
 if [ "$APP" = ON ]; then
   cd /tmp && QT_QPA_PLATFORM=offscreen /tmp/build/src/app/nekophoto --demo --screenshot demo.png --save-as Demo.comp
+  QT_QPA_PLATFORM=offscreen /tmp/build/src/app/nekophoto --demo --screenshot demo2.png --save-as Demo.nekophoto && [ -f Demo.nekophoto ]
+  QT_QPA_PLATFORM=offscreen /tmp/build/src/app/nekophoto Demo.nekophoto --screenshot reopened.png && [ -s reopened.png ]
   /tmp/build/src/app/nekophoto --headless --rpc-socket /tmp/rpc.sock --demo & sleep 2; COMPOSITOR_BIN=/tmp/build/src/app/nekophoto python3 /src/tools/rpc_smoke.py /tmp/rpc.sock; kill %1
 fi
 if [ "$APPIMAGE" = 1 ] && [ -n "$QTPREFIX" ]; then

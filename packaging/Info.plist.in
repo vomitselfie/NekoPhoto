@@ -34,7 +34,17 @@
     <array>
         <dict>
             <key>CFBundleTypeName</key>
-            <string>Compositor project</string>
+            <string>NekoPhoto project</string>
+            <key>CFBundleTypeExtensions</key>
+            <array><string>nekophoto</string></array>
+            <key>CFBundleTypeMIMETypes</key>
+            <array><string>application/vnd.nekophoto.document</string></array>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>NekoPhoto project folder</string>
             <key>CFBundleTypeExtensions</key>
             <array><string>comp</string></array>
             <key>CFBundleTypeRole</key>

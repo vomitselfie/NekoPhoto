@@ -112,7 +112,7 @@ layer alone; a masked layer as it shows, `masked: false` for its raw pixels),
 `screenshot` (the canvas as shown, or the `window`).
 
 Documents: `tabs.select`, `tabs.new`, `tabs.close`, `document.new`,
-`document.open` (.comp, a Photoshop .psd/.psb (with `mergedOnly`, only the merged image Photoshop stored, as one layer in a new untitled document: for a file whose layers are past the budget), a Clip Studio .clip, an Affinity .afphoto, .afdesign, .afpub or .af, an Aseprite .ase/.aseprite (a layer per cel, its frames on the timeline), an
+`document.open` (a project: a .nekophoto file or a .comp folder; a Photoshop .psd/.psb (with `mergedOnly`, only the merged image Photoshop stored, as one layer in a new untitled document: for a file whose layers are past the budget), a Clip Studio .clip, an Affinity .afphoto, .afdesign, .afpub or .af, an Aseprite .ase/.aseprite (a layer per cel, its frames on the timeline), an
 icon .ico/.cur (a layer per size, the largest visible), an SVG (.svg/.svgz: shapes as vector
 shape layers), a PDF page (`page`, 1-based, and `resolution` in pixels per inch, default 150; when `app.info` reports
 `pdf`) or an animated GIF (a layer per frame, "Frame N (D ms)", frame 1
@@ -123,7 +123,8 @@ dialog, as shot or with `settings` (the object `pixels.cameraRaw` takes; white b
 records, and the reply's `settings` carry them as `rawTemperature` and `rawTint`; see
 [camera-raw.md](camera-raw.md#white-balance)), at `bitsPerChannel` 16 or 8, and with
 `asSmartObject: true` as a smart object keeping the RAW file and the settings), `document.import` (an image as a layer),
-`document.save` (answers `macCompatible`: false past the 100 megapixels of layers Compositor for
+`document.save` (a single .nekophoto file, or a .comp project folder when `path` ends in .comp: the extension decides, and a path
+with neither gets .nekophoto; without `path`, where it was opened or last saved, in the same form; answers `macCompatible`: false past the 100 megapixels of layers Compositor for
 macOS opens; projects here hold up to a gigapixel), `document.export` (.psd, layered, text layers as Photoshop text (`texts` counts them), answering with the counts and any `warnings` and `notes` about what Photoshop cannot carry; or .svg, answering with the `shapes`, `images` and `groups` written and `notes` on what became images (docs/svg-pdf.md); an animated .gif of the timeline's frames (the composite when there are none; `frames` counts them); or the composite as .png, .jpg, .webp or .tif; `quality` for JPEG and WebP, where 100 is lossless; `background` behind a JPEG; PNG, JPEG, WebP, TIFF and PSD carry the
 document's colour profile, `embedProfile: false` leaves it out, and `convertToSrgb` converts to sRGB first, the default
 for GIF), `document.close`. `document.info` reports the document's `profile`.

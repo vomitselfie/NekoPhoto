@@ -401,3 +401,7 @@ add_test(NAME gradient_method_tests COMMAND gradient_method_tests)
 add_executable(histogram_tests histogram_tests.cpp)
 target_link_libraries(histogram_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME histogram_tests COMMAND histogram_tests)
+
+add_executable(document_file_tests document_file_tests.cpp)
+target_link_libraries(document_file_tests PRIVATE compositor::core compositor_warnings)
+add_test(NAME document_file_tests COMMAND document_file_tests)

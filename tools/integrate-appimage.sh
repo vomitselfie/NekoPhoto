@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Puts a NekoPhoto AppImage into the desktop like an installed app: a launcher entry,
-# the icon, and the .comp and .clip file types, all under your home directory (no root needed). A launcher
+# the icon, and the .nekophoto, .comp and .clip file types, all under your home directory (no root needed). A launcher
 # left by compositor-linux (its name before 1.0) is removed.
 #
 #   tools/integrate-appimage.sh ~/Downloads/NekoPhoto-0.1.0-x86_64.AppImage
@@ -62,14 +62,14 @@ Exec=$target %F
 Icon=nekophoto
 Terminal=false
 Categories=Graphics;RasterGraphics;2DGraphics;
-MimeType=image/png;image/jpeg;image/tiff;image/webp;image/vnd.adobe.photoshop;application/x-compositor-project;application/x-clip-studio-project;
+MimeType=image/png;image/jpeg;image/tiff;image/webp;image/vnd.adobe.photoshop;application/vnd.nekophoto.document;application/x-compositor-project;application/x-clip-studio-project;
 Keywords=image;layers;compositing;photo;editor;paint;brush;psd;clip;
 StartupWMClass=nekophoto
 X-AppImage-Version=${version:-unknown}
 EOF
 
 refresh
-command -v xdg-mime >/dev/null && xdg-mime default nekophoto.desktop application/x-compositor-project application/x-clip-studio-project 2>/dev/null || true
+command -v xdg-mime >/dev/null && xdg-mime default nekophoto.desktop application/vnd.nekophoto.document application/x-compositor-project application/x-clip-studio-project 2>/dev/null || true
 
 echo "Installed $target"
-echo "It is in your app launcher as 'NekoPhoto' and opens .comp and .clip projects. Run again with a newer AppImage to update, or with --remove."
+echo "It is in your app launcher as 'NekoPhoto' and opens .nekophoto, .comp and .clip projects. Run again with a newer AppImage to update, or with --remove."

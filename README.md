@@ -34,7 +34,8 @@ listed before you export. The counts, the known gaps and how to rerun the checks
 used with permission (also in the screenshot above). Brush demo: the CC0 “Myer Settlement Brushes” by K. M. Alexander, from Patchy's test fixtures.</sub>
 
 NekoPhoto began as a Linux port of [Compositor](https://github.com/robbietilton/Compositor)
-for macOS, and keeps its `.comp` project folder as NekoPhoto's own format. Until version 1.0 it was
+for macOS. Projects save as a single `.nekophoto` file; `.comp` project folders, from older
+versions and the Mac app, still open and save as they are. Until version 1.0 it was
 called compositor-linux; your settings, brushes and downloaded model move over
 by themselves the first time you start it.
 
@@ -115,7 +116,7 @@ chmod +x NekoPhoto-*.AppImage
 ./NekoPhoto-*.AppImage
 ```
 
-To add it to your app launcher, open `.comp` projects by double-click and
+To add it to your app launcher, open `.nekophoto` and `.comp` projects by double-click and
 offer it for `.psd` files, run the integration script once (no root needed;
 `--remove` undoes it):
 
@@ -210,7 +211,8 @@ Linux: 2022 年以降の x86_64 ディストリビューション(Wayland・X11)
 『K』(許可を得て使用)。ブラシのデモ: K. M. Alexander による CC0 の「Myer Settlement Brushes」(Patchy のテスト用ファイルより)。</sub>
 
 NekoPhoto は macOS 版 [Compositor](https://github.com/robbietilton/Compositor) の
-Linux 移植として始まりました。`.comp` プロジェクト(フォルダー形式)はそのまま NekoPhoto 自身の形式です。バージョン 1.0 までは
+Linux 移植として始まりました。プロジェクトは 1 つの `.nekophoto` ファイルとして保存します。以前のバージョンや Mac 版の
+`.comp` プロジェクトフォルダーも、そのまま開いて保存できます。バージョン 1.0 までは
 compositor-linux という名前でした。設定・ブラシ・ダウンロード済みのモデルは、初回起動時に自動で引き継がれます。
 
 ### 作品をそのまま持ってくる
@@ -286,7 +288,7 @@ chmod +x NekoPhoto-*.AppImage
 ./NekoPhoto-*.AppImage
 ```
 
-アプリランチャーに登録し、`.comp` をダブルクリックで開けるようにして `.psd` の「別のアプリで開く」にも
+アプリランチャーに登録し、`.nekophoto` と `.comp` をダブルクリックで開けるようにして `.psd` の「別のアプリで開く」にも
 表示させるには、統合スクリプトを一度実行します(root 権限は不要、`--remove` で元に戻せます):
 
 ```bash

@@ -72,9 +72,10 @@ QJsonObject AutomationServer::runBatch(const QString& actionName, const QString&
     if (input.isEmpty() || !in.exists()) fail("the input folder does not exist: " + input, invalidParams);
     if (output.isEmpty() || !QDir().mkpath(output)) fail("couldn't make the output folder " + output, invalidParams);
     const QDir out(output);
-    const QStringList patterns = {"*.png", "*.jpg", "*.jpeg", "*.webp", "*.tif", "*.tiff", "*.bmp", "*.gif", "*.tga", "*.psd", "*.psb", "*.comp", "*.ase", "*.aseprite", "*.clip", "*.ico"};
+    const QStringList patterns = {"*.png", "*.jpg", "*.jpeg", "*.webp", "*.tif", "*.tiff", "*.bmp", "*.gif", "*.tga", "*.psd", "*.psb", "*.nekophoto", "*.comp", "*.ase", "*.aseprite", "*.clip", "*.ico"};
     QStringList files;
-    for (const QFileInfo& f : in.entryInfoList(patterns, QDir::Files | QDir::Readable, QDir::Name | QDir::IgnoreCase)) files << f.absoluteFilePath();
+    for (const QFileInfo& f : in.entryInfoList(patterns, QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot | QDir::Readable, QDir::Name | QDir::IgnoreCase))
+        if (f.isFile() || f.suffix().compare("comp", Qt::CaseInsensitive) == 0) files << f.absoluteFilePath();   // .comp projects are folders
     QJsonArray done, failed, skipped;
     const int startTabs = window_->tabCount();
     auto call = [this](const QString& method, const QJsonObject& params) {

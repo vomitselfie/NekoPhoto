@@ -130,7 +130,8 @@ Encoding details that matter for compatibility:
 Embedded PNGs hold straight (unpremultiplied) pixels as written by ImageIO;
 they are premultiplied on load. The Linux core reads and writes the package
 with libpng and keeps unknown JSON fields so a round trip through Linux does
-not strip anything a newer Mac build wrote.
+not strip anything a newer Mac build wrote. NekoPhoto's own projects are
+single `.nekophoto` files: a ZIP holding these same files (`project-format.md`).
 
 ## Adjustment layers and filters
 

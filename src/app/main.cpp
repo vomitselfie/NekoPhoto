@@ -271,7 +271,7 @@ int run(int argc, char** argv) {
     parser.setApplicationDescription("NekoPhoto: a layered photo editor and painting app.");
     parser.addHelpOption();
     parser.addVersionOption();
-    parser.addPositionalArgument("file", "A .comp project or an image to open.");
+    parser.addPositionalArgument("file", "A project (.nekophoto file or .comp folder) or an image to open.");
     QCommandLineOption demo("demo", "Build a layered demo document (optionally from the given image).");
     QCommandLineOption screenshot("screenshot", "Grab the window to <file> after opening, then quit.", "file");
     QCommandLineOption benchBrush("bench-brush", "Developer benchmark: paint strokes with brush preset <id> (or \"round\") through the canvas, print press, move and release latency, then quit.", "id");
@@ -290,7 +290,7 @@ int run(int argc, char** argv) {
     QCommandLineOption benchHardness("bench-hardness", "With --bench-brush, the brush hardness 0..1.", "hardness");
     QCommandLineOption benchSmoothing("bench-smoothing", "With --bench-brush, smoothing at 50%: input, stabilizer, pulled, pressure or all.", "mode");
     QCommandLineOption benchReach("bench-reach", "With --bench-brush, the stroke's half-width as a fraction of the view (default 0.35).", "fraction");
-    QCommandLineOption saveAs("save-as", "Save the document as the .comp package <path> before quitting (with --screenshot).", "path");
+    QCommandLineOption saveAs("save-as", "Save the document as a project at <path> before quitting (with --screenshot): a .nekophoto file, or a .comp folder when <path> ends in .comp.", "path");
     QCommandLineOption prefs("preferences", "Open the Preferences dialog too (with --screenshot, grab it instead of the window).");
     QCommandLineOption fetch("download-model", "Download model <id> (isnet or u2netp) into the models folder, report, and quit.", "id");
     parser.addOption(demo);
