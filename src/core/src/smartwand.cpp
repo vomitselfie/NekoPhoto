@@ -262,6 +262,13 @@ SmartWandImage::Field SmartWandImage::propagate(int seedX, int seedY, int radius
                 for (int ch = 0; ch < 3; ch++) c.centre[m][ch] = centre[m][size_t(ch)];
                 c.reach[m] = std::max(12.0f, 2.5f * float(std::sqrt(count[m] ? var[m] / count[m] : 0.0)) * unitsPerLab);
             }
+            // With Contiguous off a pattern is matched everywhere, so only one of close colours counts (a checker's
+            // two greys): a flat gap among strands of hair would otherwise make the hair's own colour the pattern's.
+            if (anywhere) {
+                float apart = 0;
+                for (int k = 0; k < 3; k++) apart += (c.centre[0][k] - c.centre[1][k]) * (c.centre[0][k] - c.centre[1][k]);
+                if (std::sqrt(apart) * unitsPerLab > 64) continue;
+            }
             coarse.push_back(c);
         }
     // The texture's way in (see Coarse): the pixel's colour on the way between the pattern's two colours, and its

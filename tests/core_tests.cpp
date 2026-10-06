@@ -1526,6 +1526,32 @@ TEST_CASE(wand_without_contiguous_takes_every_pocket_of_the_pattern_but_not_flat
     CHECK_EQ(int(mask.at(85, 20)), 0);      // not the bar
 }
 
+TEST_CASE(wand_without_contiguous_from_a_gap_between_strands_takes_the_gaps_not_the_strands) {
+    // White ground with a band of blue strands drawn in black, white gaps between them: a click in one gap is a flat
+    // colour among strands, not a pattern of white and blue, so the other gaps go and the strands and ink stay.
+    const int W = 200, H = 100;
+    Image image(W, H);
+    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
+        uint8_t* p = image.pixel(x, y);
+        int r = 252, g = 252, b = 252;
+        if (x >= 40 && x < 160 && y >= 20 && y < 80) {
+            const int k = (x - 40) % 16;
+            if (k < 2 || (k >= 10 && k < 12)) r = g = b = 20;      // outlines
+            else if (k < 10) { r = 40; g = 140; b = 235; }         // a strand
+        }
+        p[0] = uint8_t(r); p[1] = uint8_t(g); p[2] = uint8_t(b); p[3] = 255;
+    }
+    SmartWandImage prepared(image);
+    auto field = prepared.propagate(53, 50, 1, wandCost(64), {}, true);   // in the first gap (x 52..55)
+    GrayImage mask(W, H, 0);
+    thresholdWandField(field, 32, false, mask);
+    CHECK_EQ(int(mask.at(53, 50)), 255);
+    CHECK_EQ(int(mask.at(133, 50)), 255);   // another gap
+    CHECK_EQ(int(mask.at(46, 50)), 0);      // a strand
+    CHECK_EQ(int(mask.at(126, 50)), 0);     // another strand
+    CHECK_EQ(int(mask.at(40, 50)), 0);      // ink
+}
+
 TEST_CASE(wand_keep_out_clicks_compete_with_selecting_ones) {
     // At a tolerance high enough to cross into the near colour, a keep-out click on it takes it back out.
     const int W = 120, H = 60;
