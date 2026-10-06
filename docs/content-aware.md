@@ -1,26 +1,29 @@
 # Content-Aware Fill and Content-Aware Move
 
-Both build on the same synthesis (`src/core/src/inpaint.cpp`: coherent PatchMatch synthesis, coarse to fine,
-see the header of `compositor/inpaint.h`) and on the healing membrane (`compositor/heal.h`).
+Both build on the same fill (`src/core/src/inpaint.cpp`: classic exemplar-based inpainting, Criminisi, Perez and
+Toyama 2003) and on the healing membrane (`compositor/heal.h`). The fill works inward from the selection's edge,
+most structured edge first; for each 9x9 patch it scores every candidate in a window of 96 pixels around it and copies
+the best, then a membrane on the low-pass band evens out the tone. It is deterministic: the same selection gives the
+same fill every time. It deliberately differs from Photoshop's fill (no patch rotation, scaling or mirroring, no
+hand-painted sampling area); see [legal-boundaries.md](legal-boundaries.md).
 
 ## Content-Aware Fill
 
 Edit > Content-Aware Fill… (Shift+F5) needs a selection on a visible pixel layer. The dialog shows the document
 with the selection in red and the sampling area in green:
 
-- **Auto** copies from the neighbourhood the fill chooses itself: the selection with twice its size around it,
-  64 to 384 pixels each way. This is what the fill always did, and what `pixels.contentAwareFill` does by default.
-- **All of the Layer** copies from anywhere on the layer (up to 1024 pixels past the selection each way, to keep
-  the pyramid bounded).
-- **Custom** copies only from the area painted green. It starts as everything but the selection; the left button
-  adds, the right button (or Alt) removes, at the Brush size.
+- **Auto** copies from a window around each patch: 96 pixels each way, so up to about 105 pixels past the
+  selection. This is what `pixels.contentAwareFill` does by default.
+- **Wide Area** scans a window of 192 pixels each way instead. It finds sources further away and is slower.
+
+There is no hand-painted (Custom) sampling area: see [legal-boundaries.md](legal-boundaries.md).
 
 What a layer mask hides is never copied from, whichever area is chosen. **Output To** fills the current layer or
 puts only the filled pixels, by the selection's coverage, on a new layer above it. **Preview** shows the fill on
 the canvas without committing it (the preview is always of the current layer).
 
-Automation: `pixels.contentAwareFill` with `sampling` (`auto`, `all`, `custom`), `include` / `exclude` rectangle
-lists for custom sampling, and `output` (`current` or `new`).
+Automation: `pixels.contentAwareFill` with `sampling` (`auto`, or `all` for Wide Area) and `output` (`current` or
+`new`).
 
 ## Content-Aware Move
 

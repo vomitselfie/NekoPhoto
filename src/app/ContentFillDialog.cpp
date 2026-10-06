@@ -1,6 +1,7 @@
 #include "ContentFillDialog.h"
 #include "ActionLibrary.h"
 #include "ImageConvert.h"
+#include "compositor/inpaint.h"
 #include "compositor/render.h"
 #include <QApplication>
 #include <QButtonGroup>
@@ -10,11 +11,9 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMessageBox>
-#include <QMouseEvent>
 #include <QPainter>
 #include <QPushButton>
 #include <QRadioButton>
-#include <QSpinBox>
 #include <QVBoxLayout>
 #include <algorithm>
 
@@ -24,23 +23,14 @@ namespace app {
 
 SamplingCanvas::SamplingCanvas(const QImage& picture, const QImage& selection, QWidget* parent)
     : QWidget(parent), picture_(picture), selection_(selection) {
-    // The custom area starts as everything but the selection, as Photoshop's does.
-    area_ = QImage(picture.size(), QImage::Format_Grayscale8);
-    area_.fill(255);
-    for (int y = 0; y < area_.height(); y++) {
-        uchar* a = area_.scanLine(y);
-        const uchar* s = selection_.constScanLine(y);
-        for (int x = 0; x < area_.width(); x++) if (s[x] >= 128) a[x] = 0;
-    }
     setFixedSize(picture.size());
-    setCursor(Qt::CrossCursor);
 }
 
 void SamplingCanvas::paintEvent(QPaintEvent*) {
     QPainter p(this);
     p.drawImage(0, 0, picture_);
     // Green over where the fill copies from, red over the selection.
-    const QImage& area = custom_ ? area_ : autoArea_;
+    const QImage& area = autoArea_;
     QImage tint(picture_.size(), QImage::Format_ARGB32_Premultiplied);
     tint.fill(Qt::transparent);
     for (int y = 0; y < tint.height(); y++) {
@@ -49,29 +39,10 @@ void SamplingCanvas::paintEvent(QPaintEvent*) {
         const uchar* a = area.isNull() ? nullptr : area.constScanLine(y);
         for (int x = 0; x < tint.width(); x++) {
             if (s[x] >= 128) t[x] = qPremultiply(qRgba(220, 40, 40, 110));
-            else if (all_ || (a && a[x] >= 128)) t[x] = qPremultiply(qRgba(40, 200, 80, 90));
+            else if (a && a[x] >= 128) t[x] = qPremultiply(qRgba(40, 200, 80, 90));
         }
     }
     p.drawImage(0, 0, tint);
-}
-
-void SamplingCanvas::dab(QPointF at, bool add) {
-    if (!custom_) return;
-    QPainter p(&area_);
-    p.setRenderHint(QPainter::Antialiasing, false);
-    p.setPen(Qt::NoPen);
-    p.setBrush(add ? Qt::white : Qt::black);
-    p.drawEllipse(at, brush_ / 2.0, brush_ / 2.0);
-    update();
-}
-
-void SamplingCanvas::mousePressEvent(QMouseEvent* event) {
-    dab(event->position(), event->button() == Qt::LeftButton && !(event->modifiers() & Qt::AltModifier));
-}
-
-void SamplingCanvas::mouseMoveEvent(QMouseEvent* event) {
-    if (event->buttons() & (Qt::LeftButton | Qt::RightButton))
-        dab(event->position(), (event->buttons() & Qt::LeftButton) && !(event->modifiers() & Qt::AltModifier));
 }
 
 ContentFillDialog::ContentFillDialog(EditorSession* session, QWidget* parent) : QDialog(parent), session_(session) {
@@ -87,16 +58,22 @@ ContentFillDialog::ContentFillDialog(EditorSession* session, QWidget* parent) : 
     selection.fill(0);
     if (doc.selection && doc.selection->coverage.u8()) selection = toQImage(*doc.selection->coverage.u8()).convertToFormat(QImage::Format_Grayscale8).scaled(size);
     canvas_ = new SamplingCanvas(picture, selection);
-    // Auto's area, roughly: the neighbourhood the fill searches (twice the selection's size around it, 64 to 384 pixels).
+    // The areas the fill searches: the window scanned around each patch, reaching that far past the selection
+    // (compositor/inpaint.h: the search radius plus a patch).
     if (doc.selection) {
         const Rect b = doc.selection->bounds();
-        const double reach = std::clamp(2 * std::max(b.width, b.height), 64.0, 384.0);
-        QImage autoArea(size, QImage::Format_Grayscale8);
-        autoArea.fill(0);
-        QPainter p(&autoArea);
-        p.fillRect(QRectF((b.x - reach) * scale, (b.y - reach) * scale, (b.width + 2 * reach) * scale, (b.height + 2 * reach) * scale), Qt::white);
-        p.end();
-        canvas_->setAutoArea(autoArea);
+        const InpaintOptions defaults;
+        auto box = [&](double reach) {
+            QImage area(size, QImage::Format_Grayscale8);
+            area.fill(0);
+            QPainter p(&area);
+            p.fillRect(QRectF((b.x - reach) * scale, (b.y - reach) * scale, (b.width + 2 * reach) * scale, (b.height + 2 * reach) * scale), Qt::white);
+            p.end();
+            return area;
+        };
+        autoArea_ = box(defaults.searchRadius + 2 * defaults.patchRadius + 1);
+        wideArea_ = box(defaults.wideSearchRadius + 2 * defaults.patchRadius + 1);
+        canvas_->setAutoArea(autoArea_);
     }
 
     auto* layout = new QHBoxLayout(this);
@@ -107,9 +84,9 @@ ContentFillDialog::ContentFillDialog(EditorSession* session, QWidget* parent) : 
     auto* samplingBox = new QGroupBox(tr("Sampling Area"));
     auto* sl = new QVBoxLayout(samplingBox);
     sampling_ = new QButtonGroup(this);
-    const QStringList names{tr("Auto"), tr("All of the Layer"), tr("Custom")};
-    const QStringList tips{tr("Copy from around the selection"), tr("Copy from anywhere on the layer"),
-                           tr("Copy only from the area painted green: the left button adds, the right button or Alt removes")};
+    // A painted (custom) sampling area is not offered: see docs/legal-boundaries.md, "Content-Aware Fill".
+    const QStringList names{tr("Auto"), tr("Wide Area")};
+    const QStringList tips{tr("Copy from around the selection"), tr("Copy from a wider area around the selection (slower)")};
     for (int i = 0; i < names.size(); i++) {
         auto* b = new QRadioButton(names[i]);
         b->setToolTip(tips[i]);
@@ -117,23 +94,12 @@ ContentFillDialog::ContentFillDialog(EditorSession* session, QWidget* parent) : 
         sl->addWidget(b);
     }
     sampling_->button(0)->setChecked(true);
-    auto* brushRow = new QHBoxLayout;
-    brushRow->addWidget(new QLabel(tr("Brush")));
-    brushSize_ = new QSpinBox;
-    brushSize_->setRange(2, 400);
-    brushSize_->setValue(24);
-    brushSize_->setSuffix(tr(" px"));
-    brushSize_->setToolTip(tr("The sampling brush's diameter on this picture"));
-    brushSize_->setEnabled(false);
-    brushRow->addWidget(brushSize_);
-    sl->addLayout(brushRow);
+    auto* note = new QLabel(tr("A hand-painted sampling area is not available in NekoPhoto."));
+    note->setWordWrap(true);
+    note->setObjectName(QStringLiteral("contentFillCustomNote"));
+    sl->addWidget(note);
     side->addWidget(samplingBox);
-    connect(brushSize_, QOverload<int>::of(&QSpinBox::valueChanged), canvas_, &SamplingCanvas::setBrush);
-    connect(sampling_, &QButtonGroup::idClicked, this, [this](int id) {
-        canvas_->setCustom(id == 2);
-        canvas_->setAll(id == 1);
-        brushSize_->setEnabled(id == 2);
-    });
+    connect(sampling_, &QButtonGroup::idClicked, this, [this](int id) { canvas_->setAutoArea(id == 1 ? wideArea_ : autoArea_); });
 
     auto* outputBox = new QGroupBox(tr("Output"));
     auto* ol = new QHBoxLayout(outputBox);
@@ -160,12 +126,8 @@ ContentFillDialog::~ContentFillDialog() {
 
 ContentFillRequest ContentFillDialog::request() const {
     ContentFillRequest r;
-    r.sampling = ContentFillRequest::Sampling(std::clamp(sampling_->checkedId(), 0, 2));
+    r.sampling = sampling_->checkedId() == 1 ? ContentFillRequest::Sampling::All : ContentFillRequest::Sampling::Auto;
     r.newLayer = output_->currentIndex() == 1;
-    if (r.sampling == ContentFillRequest::Sampling::Custom && session_ && session_->document()) {
-        const Document& doc = *session_->document();
-        r.sampleArea = grayFromQImage(canvas_->area().scaled(doc.width, doc.height));
-    }
     return r;
 }
 
@@ -188,10 +150,9 @@ void ContentFillDialog::apply() {
     if (previewShown_) { session_->clearPixelPreview(); previewShown_ = false; }
     QString error;
     const ContentFillRequest r = request();
-    // Auto and All are pixels.contentAwareFill (the command path; an error is shown by it). A painted custom
-    // sampling area has no request form (the method takes rectangles), so it fills directly and is not recorded.
+    // Both choices are pixels.contentAwareFill (the command path; an error is shown by it).
     const QJsonObject step{{"sampling", r.sampling == ContentFillRequest::Sampling::All ? "all" : "auto"}, {"output", r.newLayer ? "new" : "current"}};
-    if (r.sampling != ContentFillRequest::Sampling::Custom && session_->commandsRouted()) {
+    if (session_->commandsRouted()) {
         QApplication::setOverrideCursor(Qt::WaitCursor);
         const bool filled = session_->runCommand(QStringLiteral("pixels.contentAwareFill"), step).has_value();
         QApplication::restoreOverrideCursor();
@@ -202,7 +163,7 @@ void ContentFillDialog::apply() {
     const bool done = session_->contentAwareFill(&error, r);
     QApplication::restoreOverrideCursor();
     if (!done) { QMessageBox::warning(this, windowTitle(), error); return; }
-    if (r.sampling != ContentFillRequest::Sampling::Custom) recordAction("pixels.contentAwareFill", step);
+    recordAction("pixels.contentAwareFill", step);
     accept();
 }
 

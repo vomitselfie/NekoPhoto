@@ -334,11 +334,11 @@ packaging/                      .desktop, icon, MIME type
   curves and texture rotation, brightness and contrast). A file may decode at most 256 megapixels of tips.
 - Spot Healing Brush (Content-Aware, Create Texture, Proximity Match) and
   Clone Stamp (aligned or not, sampling one layer or all). Content-Aware
-  healing and Content-Aware Fill synthesise from the surroundings with
-  PatchMatch (matching on colour and gradient, keeping repeating patterns in
-  phase), so edges and patterns continue; a healing stroke previews its result
-  once the pointer pauses; the fill grows the layer past its edge when the
-  selection reaches out.
+  healing and Content-Aware Fill fill from the surroundings by classic
+  exemplar inpainting (an exhaustive search of a window around each patch),
+  so edges and patterns continue; a healing stroke heals when the pointer is
+  released; the fill grows the layer past its edge when the selection reaches
+  out. See legal-boundaries.md.
 - Cut, Copy, Copy Merged, Paste (as a new layer, back in place, or centred
   for images from other apps) and Layer via Copy, through the system clipboard.
 - Selections: rectangular and elliptical marquee, freehand and polygonal

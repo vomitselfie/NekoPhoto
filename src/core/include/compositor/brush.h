@@ -223,8 +223,6 @@ public:
     };
     /// Finishes the stroke: the new raster cropped to its pixels, and the transform placing it.
     Commit commit();
-    /// A healing stroke's result so far, in the preview image (what commit will do with the spot as painted).
-    void previewHeal();
 
     // Another paint engine on this stroke's grid (the MyPaint presets): it reads the original pixels, writes
     // the working ones and reports what it changed; the preview, the selection and commit() stay this class's.

@@ -465,18 +465,12 @@ AnyImage EditorSession::contentAwareFillResult(const ContentFillRequest& request
             for (int y = 0; y < m->height(); y++) std::memcpy(visible->row(y + margin) + margin, m->row(y), size_t(m->width()) * sizeof(uint16_t));
         }
         InpaintOptions options;
-        if (request.sampling != ContentFillRequest::Sampling::Auto) {
-            std::shared_ptr<Gray16> sample;
-            if (request.sampling == ContentFillRequest::Sampling::Custom && request.sampleArea && request.sampleArea->width() == document_->width && request.sampleArea->height() == document_->height)
-                sample = widenGray(*selectionInGrid(*request.sampleArea, grown.pixelToDocument(source->width(), source->height()), source->width(), source->height()));
-            else sample = std::make_shared<Gray16>(source->width(), source->height(), uint16_t(one16));
-            if (visible) for (int y = 0; y < sample->height(); y++) for (int x = 0; x < sample->width(); x++) sample->at(x, y) = uint16_t(mul15(sample->at(x, y), visible->at(x, y)));
-            visible = sample;
+        if (request.sampling == ContentFillRequest::Sampling::All) {
+            if (!visible) visible = std::make_shared<Gray16>(source->width(), source->height(), uint16_t(one16));
             options.sampleWholeVisible = true;
         }
         if (!contentFill(*out, *coverage, options, visible.get())) {
-            if (errorText) *errorText = request.sampling == ContentFillRequest::Sampling::Custom ? tr("The sampling area holds no opaque image pixels outside the selection to copy from.")
-                                                                                                   : tr("Not enough unselected, opaque image pixels to synthesize a fill. Use a smaller selection with some surrounding image.");
+            if (errorText) *errorText = tr("Not enough unselected, opaque image pixels to synthesize a fill. Use a smaller selection with some surrounding image.");
             return nullptr;
         }
         if (request.newLayer)
@@ -506,19 +500,13 @@ AnyImage EditorSession::contentAwareFillResult(const ContentFillRequest& request
         for (int y = 0; y < m.height(); y++) std::memcpy(visible->row(y + margin) + margin, m.row(y), size_t(m.width()));
     }
     InpaintOptions options;
-    if (request.sampling != ContentFillRequest::Sampling::Auto) {
-        // All of the layer, or the area painted in the dialog, on the layer's grid and inside what its mask shows.
-        std::shared_ptr<GrayImage> sample;
-        if (request.sampling == ContentFillRequest::Sampling::Custom && request.sampleArea && request.sampleArea->width() == document_->width && request.sampleArea->height() == document_->height)
-            sample = selectionInGrid(*request.sampleArea, grown.pixelToDocument(source->width(), source->height()), source->width(), source->height());
-        else sample = std::make_shared<GrayImage>(source->width(), source->height(), 255);
-        if (visible) for (size_t i = 0; i < sample->byteCount(); i++) sample->data()[i] = uint8_t(sample->data()[i] * visible->data()[i] / 255);
-        visible = sample;
+    if (request.sampling == ContentFillRequest::Sampling::All) {
+        // The wider window, inside what the layer's mask shows.
+        if (!visible) visible = std::make_shared<GrayImage>(source->width(), source->height(), 255);
         options.sampleWholeVisible = true;
     }
     if (!contentFill(*out, *coverage, options, visible.get())) {
-        if (errorText) *errorText = request.sampling == ContentFillRequest::Sampling::Custom ? tr("The sampling area holds no opaque image pixels outside the selection to copy from.")
-                                                                                               : tr("Not enough unselected, opaque image pixels to synthesize a fill. Use a smaller selection with some surrounding image.");
+        if (errorText) *errorText = tr("Not enough unselected, opaque image pixels to synthesize a fill. Use a smaller selection with some surrounding image.");
         return nullptr;
     }
     if (request.newLayer) {

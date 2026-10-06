@@ -199,8 +199,8 @@ replies with the settings applied; [mosh.md](mosh.md) lists every effect and par
 layer's, or every visible layer's, inside the selection or all of them; other apps get them at 8 bits, sRGB; the paste is a new layer
 where they were copied from, or centred when another app copied them, converted to the document's mode, profile and depth, and drops
 the selection),
-`pixels.contentAwareFill` (`sampling`: `auto` around the selection, `all` the whole layer, or `custom`: the
-`include` rectangles, the whole canvas when none, less the `exclude` rectangles; `output`: `current` or `new`, only
+`pixels.contentAwareFill` (`sampling`: `auto`, a window around the selection, or `all`, a wider window; there is
+no custom sampling area, see [legal-boundaries.md](legal-boundaries.md); `output`: `current` or `new`, only
 the filled pixels on a new layer, whose id comes back as `layer`), `pixels.contentAwareMove` (Content-Aware Move:
 the selection's pixels move `dx`, `dy`, the hole is filled and the patch blended in; `mode` `move` or `extend`,
 `adaptation` 0 very strict to 4 very loose; the selection follows), `pixels.contentAwareScale` (Edit > Content-Aware Scale by seam carving: `width`/`height` in pixels or `widthPercent`/`heightPercent`, `protectSelection` keeps the selected pixels; see [content-aware-scale.md](content-aware-scale.md)), `pixels.removeBackground` (`refine`, and then `refineEdges`,

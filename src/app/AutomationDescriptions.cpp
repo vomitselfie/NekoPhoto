@@ -276,8 +276,7 @@ const MethodDoc methodDocs[] = {
     {"pixels.cut", "Edit > Cut: copy the selected pixels of the active layer to the clipboard and clear them (needs a selection).", ""},
     {"pixels.paste", "Edit > Paste of pixels: what pixels.copy, pixels.cut or another app put on the clipboard, as a new layer above the active one (where they were copied from, or centred), converted to the document's mode, profile and depth; into the channel being edited when one is. Drops the selection. Answers the active layer.", ""},
     {"pixels.contentAwareFill", "Content-Aware Fill: fill the selection from its surroundings (needs a selection).",
-     "sampling:(auto|all|custom)=auto Where it copies from: around the selection, anywhere on the layer, or the include/exclude rectangles; "
-     "include:array Custom: rectangles {x, y, width, height} to copy from (none: the whole canvas); exclude:array Custom: rectangles never copied from; "
+     "sampling:(auto|all)=auto Where it copies from: a window around the selection, or a wider one (slower); "
      "output:(current|new)=current Fill the active layer, or put only the filled pixels on a new layer above it"},
     {"pixels.contentAwareMove", "Content-Aware Move: move the selected pixels of the active layer dx, dy; the hole they leave is filled from its surroundings and the patch blended into its new place. The selection follows.",
      "dx:number! Horizontal offset; dy:number! Vertical offset; mode:(move|extend)=move Extend leaves the original and adds the copy; "

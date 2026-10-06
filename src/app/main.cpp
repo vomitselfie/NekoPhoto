@@ -505,12 +505,12 @@ int run(int argc, char** argv) {
                 } else qWarning("unknown Mosh effect: %s", qPrintable(id));
             }
             else if (name == "content-fill") {
-                // A selection in the middle of the canvas, then the dialog with Custom sampling.
+                // A selection in the middle of the canvas, then the dialog with Wide Area sampling.
                 compositor::GrayImage shape(s->document()->width, s->document()->height);
                 for (int y = shape.height() * 2 / 5; y < shape.height() * 3 / 5; y++) for (int x = shape.width() * 2 / 5; x < shape.width() * 3 / 5; x++) shape.at(x, y) = 255;
                 s->applySelectionShape(shape, compositor::SelectionMode::Replace, "Select");
                 auto* dialog = new app::ContentFillDialog(s, &window);
-                if (auto* group = dialog->findChild<QButtonGroup*>()) { group->button(2)->click(); }
+                if (auto* group = dialog->findChild<QButtonGroup*>()) { group->button(1)->click(); }
                 dialog->show();
             }
             else if (name == "cameraraw" || name.startsWith("cameraraw:")) {

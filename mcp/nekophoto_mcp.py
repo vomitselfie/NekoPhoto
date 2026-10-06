@@ -867,16 +867,11 @@ def pixels_invert() -> str:
 
 
 @edit("Content-Aware Fill")
-def pixels_content_aware_fill(sampling: str = "auto", include: list | None = None, exclude: list | None = None, output: str = "current") -> str:
+def pixels_content_aware_fill(sampling: str = "auto", output: str = "current") -> str:
     """Fill the selection from its surroundings (also extends an image past its edge when the selection reaches outside it).
-    sampling: auto (around the selection), all (anywhere on the layer) or custom (the include rectangles, whole canvas when none, less the exclude rectangles; each {x, y, width, height}).
+    sampling: auto (a window around the selection) or all (a wider window, slower).
     output: current (fill the active layer) or new (only the filled pixels on a new layer)."""
-    params: dict = {"sampling": sampling, "output": output}
-    if include is not None:
-        params["include"] = include
-    if exclude is not None:
-        params["exclude"] = exclude
-    return text(call("pixels.contentAwareFill", **params))
+    return text(call("pixels.contentAwareFill", sampling=sampling, output=output))
 
 
 @edit("Content-Aware Move")

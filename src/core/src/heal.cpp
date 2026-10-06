@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
 #include <vector>
 
 extern "C" {
@@ -116,27 +117,30 @@ inline uint32_t hash32(uint32_t x) {
 }
 inline double unitRandom(uint32_t key) { return double(hash32(key) >> 8) / 16777216.0; }
 
-/// Mean squared difference between the ring around the spot and the ring around the patch offset by
-/// (dx, dy); infinite when the patch would overlap the spot or leave the image.
-double ringScore(const Image& image, const std::vector<uint8_t>& role, int wx0, int wy0, int ww, int wh, int dx, int dy, const GrayImage* visible) {
-    if (std::abs(dx) < ww && std::abs(dy) < wh) return INFINITY;
-    if (wx0 + dx < 0 || wy0 + dy < 0 || wx0 + ww + dx > image.width() || wy0 + wh + dy > image.height()) return INFINITY;
-    double sum = 0;
-    long n = 0;
-    for (int y = 0; y < wh; y++) {
+/// Sum of squared differences between the ring around the spot and the ring around the patch offset by (dx, dy), plus
+/// `penalty`; INT64_MAX when the patch would overlap the spot, leave the image or copy hidden pixels, or once the sum
+/// passes `bound` (the caller's best so far: the candidate cannot win).
+int64_t ringDistance(const Image& image, const std::vector<uint8_t>& role, int wx0, int wy0, int ww, int wh, int dx, int dy,
+                     const GrayImage* visible, int64_t bound, int64_t penalty) {
+    if (std::abs(dx) < ww && std::abs(dy) < wh) return INT64_MAX;
+    if (wx0 + dx < 0 || wy0 + dy < 0 || wx0 + ww + dx > image.width() || wy0 + wh + dy > image.height()) return INT64_MAX;
+    if (visible)
+        for (int y = 0; y < wh; y++) {
+            const uint8_t* roleRow = &role[size_t(y) * ww];
+            for (int x = 0; x < ww; x++)
+                if (roleRow[x] != Outside && visible->at(wx0 + x + dx, wy0 + y + dy) < 128) return INT64_MAX;
+        }
+    int64_t sum = penalty;
+    for (int y = 0; y < wh && sum <= bound; y++) {
         const uint8_t* roleRow = &role[size_t(y) * ww];
         const uint8_t* t = image.pixel(wx0, wy0 + y);
         const uint8_t* s = image.pixel(wx0 + dx, wy0 + y + dy);
         for (int x = 0; x < ww; x++, t += 4, s += 4) {
-            if (roleRow[x] == Outside) continue;
-            // A patch that would copy hidden pixels is no candidate.
-            if (visible && visible->at(wx0 + x + dx, wy0 + y + dy) < 128) return INFINITY;
             if (roleRow[x] != Ring) continue;
-            for (int c = 0; c < 4; c++) { double d = double(t[c]) - s[c]; sum += d * d; }
-            n++;
+            for (int c = 0; c < 4; c++) { const int d = int(t[c]) - int(s[c]); sum += d * d; }
         }
     }
-    return n ? sum / n : INFINITY;
+    return sum <= bound ? sum : INT64_MAX;
 }
 
 /// Content-Aware healing: the spot and a thin band around it are synthesised from the surroundings (so
@@ -269,65 +273,33 @@ bool planSpot(const Image& image, const GrayImage& coverage, const PixelBounds& 
     for (uint8_t r : role) ringCount += r == Ring;
     if (!ringCount) return false;
 
-    // Source patch for Proximity Match (and Content-Aware when there was nothing to synthesise from): 24
-    // directions at a few distances, the nearer winning ties, then a fine alignment so repeating texture lines up.
+    // Source patch for Proximity Match (and Content-Aware when there was nothing to synthesise from).
+    // Legal boundary (docs/legal-boundaries.md, "Healing"): an EXHAUSTIVE scan of every offset in a bounded window,
+    // each scored on its own (integer SSD over the ring plus a fixed geometric penalty on the offset), the first in
+    // scan order winning ties. No random candidates, no search that closes in on or perturbs a best offset, nothing
+    // carried from one spot to another (Adobe US 8285055).
     int ox = 0, oy = 0;
     bool haveSource = false;
+    (void)seed;
     if (mode != 1) {
-        // The reference's ring of candidates (24 directions at a few distances, nearer ones favoured), plus
-        // random offsets within reach, scored in parallel; then a random search that closes in on the best.
-        static const double factors[5] = {1.05, 1.35, 1.75, 2.25, 2.8};
-        const int count = mode == 2 ? 2 : 5, fixed = count * 24, random = 96;
-        struct Candidate { double score; int dx, dy; };
-        std::vector<Candidate> candidates(size_t(fixed + random));
-        const int reachX = int(factors[size_t(count) - 1] * ww) + ww, reachY = int(factors[size_t(count) - 1] * wh) + wh;
-        uint32_t rng = hash32(seed ^ 0x9e3779b9u) | 1u;
-        for (int i = fixed; i < fixed + random; i++) {
-            rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
-            const int dx = int(rng % unsigned(2 * reachX + 1)) - reachX;
-            rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
-            const int dy = int(rng % unsigned(2 * reachY + 1)) - reachY;
-            candidates[size_t(i)] = {INFINITY, dx, dy};
-        }
-        auto scored = [&](int dx, int dy) {
-            double score = ringScore(image, role, wx0, wy0, ww, wh, dx, dy, visible);
-            if (!std::isfinite(score)) return score;
-            // Nearer patches win ties, more so for Proximity Match.
-            const double distance = std::hypot(double(dx) / ww, double(dy) / wh);
-            return score * (1 + (mode == 2 ? 0.35 : 0.06) * std::max(0.0, distance - 1));
-        };
-        parallelRows(0, fixed + random, [&](int i0, int i1) {
-            for (int i = i0; i < i1; i++) {
-                Candidate& c = candidates[size_t(i)];
-                if (i < fixed) {
-                    const int f = i / 24, a = i % 24;
-                    const double angle = a * M_PI / 12.0;
-                    c.dx = int(std::lround(std::cos(angle) * factors[f] * ww)); c.dy = int(std::lround(std::sin(angle) * factors[f] * wh));
+        const int spanX = std::clamp(2 * ww, 16, 96), spanY = std::clamp(2 * wh, 16, 96);
+        const int reachX = ww + spanX, reachY = wh + spanY;
+        const int64_t perStep = mode == 2 ? 64 : 8;   // nearer patches win, more so for Proximity Match
+        struct Best { int64_t score = INT64_MAX; int64_t order = INT64_MAX; int dx = 0, dy = 0; } best;
+        std::mutex lock;
+        parallelRows(-reachY, reachY + 1, [&](int dy0, int dy1) {
+            Best local;
+            for (int dy = dy0; dy < dy1; dy++)
+                for (int dx = -reachX; dx <= reachX; dx++) {
+                    const int64_t penalty = ringCount * perStep * (std::abs(dx) + std::abs(dy)) / std::max(1, ww + wh);
+                    const int64_t score = ringDistance(image, role, wx0, wy0, ww, wh, dx, dy, visible, local.score, penalty);
+                    const int64_t order = int64_t(dy + reachY) * (2 * reachX + 1) + (dx + reachX);
+                    if (score < local.score || (score == local.score && score != INT64_MAX && order < local.order)) local = {score, order, dx, dy};
                 }
-                c.score = scored(c.dx, c.dy);
-            }
-        }, 1);
-        double best = INFINITY;
-        for (const Candidate& c : candidates) if (c.score < best) { best = c.score; ox = c.dx; oy = c.dy; }
-        for (int radius = std::max(reachX, reachY) / 2; radius >= 4 && std::isfinite(best); radius /= 2)
-            for (int k = 0; k < 4; k++) {
-                rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
-                const int dx = ox + int(rng % unsigned(2 * radius + 1)) - radius;
-                rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
-                const int dy = oy + int(rng % unsigned(2 * radius + 1)) - radius;
-                const double score = scored(dx, dy);
-                if (score < best) { best = score; ox = dx; oy = dy; }
-            }
-        if (std::isfinite(best)) {
-            const int cx = ox, cy = oy;
-            double refined = ringScore(image, role, wx0, wy0, ww, wh, cx, cy, visible);
-            for (int j = -3; j <= 3; j++)
-                for (int i = -3; i <= 3; i++) {
-                    double score = ringScore(image, role, wx0, wy0, ww, wh, cx + i, cy + j, visible);
-                    if (score < refined) { refined = score; ox = cx + i; oy = cy + j; }
-                }
-            haveSource = true;
-        }
+            std::lock_guard<std::mutex> guard(lock);
+            if (local.score < best.score || (local.score == best.score && local.order < best.order)) best = local;
+        }, 2);
+        if (best.score != INT64_MAX) { ox = best.dx; oy = best.dy; haveSource = true; }
     }
     plan.wx0 = wx0; plan.wy0 = wy0; plan.ww = ww; plan.wh = wh;
     plan.ringCount = ringCount;

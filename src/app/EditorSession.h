@@ -87,9 +87,9 @@ struct TransformEdit {
 
 /// Content-Aware Fill's settings (its dialog, or the automation method).
 struct ContentFillRequest {
-    /// Auto: the fill's own neighbourhood; All: anywhere on the layer; Custom: the painted `sampleArea`.
-    enum class Sampling { Auto, All, Custom } sampling = Sampling::Auto;
-    std::shared_ptr<const compositor::GrayImage> sampleArea;   // document-sized, white = copy from here
+    /// Auto: the window the fill scans around each patch; All: a wider window (compositor/inpaint.h). There is no
+    /// user-drawn sampling area (docs/legal-boundaries.md, "Content-Aware Fill").
+    enum class Sampling { Auto, All } sampling = Sampling::Auto;
     bool newLayer = false;
 };
 
@@ -1100,7 +1100,6 @@ private:
     QTimer stabilizerTick_;       // Stroke Catch-Up: while the pen rests, the stabilised brush closes on it
     QElapsedTimer sincePen_;      // since the last pen event, for the stabiliser's clock between events
     uint32_t strokeSeed_ = 0;
-    QTimer healPreview_;   // a healing stroke shows its result once the pointer pauses
     QTimer myPaintSettle_; // while the pointer rests, a MyPaint brush with slow tracking catches up to it
     compositor::Uuid strokeLayerId_;
     QRectF strokeRegion_;   // everything the stroke has painted so far, in document pixels

@@ -286,4 +286,34 @@ TEST_CASE(content_fill_samples_only_the_chosen_area) {
     CHECK(img.pixel(40, 40)[0] > 200 && img.pixel(40, 40)[2] < 60);
 }
 
+TEST_CASE(content_fill_is_deterministic_and_searches_a_bounded_window) {
+    // The legal boundary (docs/legal-boundaries.md, "Content-Aware Fill"): a fixed order and an exhaustive scan, so the
+    // same input gives the same fill whatever seed is passed; sources come only from the window around each patch.
+    const int w = 420, h = 120;
+    Image img(w, h);
+    std::mt19937 rng(11);
+    std::uniform_int_distribution<int> noise(-20, 20);
+    // Grey noise everywhere, and a red block far to the right (past the 96-pixel window plus a patch).
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            uint8_t* p = img.pixel(x, y);
+            const bool red = x >= 360;
+            p[0] = uint8_t(red ? 230 : 120 + noise(rng)); p[1] = uint8_t(red ? 20 : 120 + noise(rng)); p[2] = uint8_t(red ? 20 : 120 + noise(rng)); p[3] = 255;
+        }
+    GrayImage hole(w, h, 0);
+    for (int y = 40; y < 80; y++) for (int x = 60; x < 120; x++) hole.at(x, y) = 255;
+    Image a = img, b = img;
+    InpaintOptions one, other;
+    one.seed = 1; other.seed = 987654;
+    REQUIRE(contentFill(a, hole, one));
+    REQUIRE(contentFill(b, hole, other));
+    CHECK(a == b);
+    // Nothing red came in from outside the window.
+    int red = 0;
+    for (int y = 40; y < 80; y++) for (int x = 60; x < 120; x++) if (a.pixel(x, y)[0] > 200 && a.pixel(x, y)[1] < 60) red++;
+    CHECK_EQ(red, 0);
+    // Outside the hole nothing changed.
+    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) if (!hole.at(x, y)) { if (std::memcmp(a.pixel(x, y), img.pixel(x, y), 4) != 0) { CHECK(false); y = h; break; } }
+}
+
 TEST_MAIN()
