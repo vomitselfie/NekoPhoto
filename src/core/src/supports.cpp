@@ -223,8 +223,10 @@ constexpr FeatureModes modeTable[] = {
     {"tool.paintBucket", allModes},
     // Step E, adjustments and filters (P7): Image > Adjustments and adjustment layers on the document's own samples
     // (modeedit.h), each kind in the modes Photoshop offers it (adjustmentOfferedInMode; what it lacks stays greyed for
-    // good). Color Lookup's tables are RGB and wait.
+    // good). Color Lookup takes an ICC abstract profile or a device link of the document's colour space there (3DLUT
+    // files are RGB only, as in Photoshop: such a layer is kept and draws nothing).
     {"adjustment.pixels", allModes},
+    {"adjustment.Color Lookup", allModes},
     {"adjustment.Levels", allModes},
     {"adjustment.Curves", allModes},
     {"adjustment.Brightness/Contrast", allModes},
@@ -274,13 +276,30 @@ constexpr FeatureModes modeTable[] = {
     {"edit.vector", allModes},
     {"edit.paint", allModes},
     {"edit.style", allModes},
+    // Smart objects (P9): the contents placed in the document's layout, their own samples when they are of its mode
+    // and profile, else converted through the profiles once (smartObjectSourceImage); warps through every sample, and
+    // Smart Filters on the document's samples (Lab's four as they are, CMYK's five in two passes), Plastic Wrap aside as
+    // in Photoshop (smartFilterDrawsInMode). Convert to Smart Object makes a child of the document's mode.
+    {"edit.smartObject", allModes},
+    // Artboards and slices: geometry and a background colour converted as any stored colour; their exports, SVG
+    // included, go through the profile to sRGB as Export As does. Deleting a clipping base bakes the clipped layers'
+    // coverage into their own samples.
+    {"edit.artboard", allModes},
+    {"tool.artboard", allModes},
+    {"tool.slice", allModes},
+    {"export.artboards", allModes},
+    {"export.slices", allModes},
+    {"export.svg", allModes},
+    {"edit.pixels", allModes},
 };
 
 // What stays RGB for good (not waiting for a port): refused in CMYK and Lab with "Not available in CMYK mode", where a
 // feature not ported yet says "... mode yet". Camera Raw and G'MIC work on RGB, as in Photoshop (Camera Raw Filter
 // needs RGB there); the MyPaint engine mixes RGB and has no ink or Lab model, so its presets would only paint through
 // RGB and back, which this app does not do.
-constexpr std::string_view rgbOnly[] = {"filter.Camera Raw", "filter.G'MIC", "brush.mypaint"};
+// Mosh is NekoPhoto's own glitch effect (no Photoshop counterpart) on RGB colour: Photoshop offers no such filter in CMYK
+// or Lab, and running it through RGB and back is not done here.
+constexpr std::string_view rgbOnly[] = {"filter.Camera Raw", "filter.G'MIC", "brush.mypaint", "filter.Mosh"};
 }   // namespace
 
 const FeatureModes* featureModeTable(size_t& count) {
@@ -455,6 +474,9 @@ std::string_view throughRgbNote(std::string_view feature, SampleType type, Color
     if (feature == "edit.paint" || feature == "tool.shape") return "RGB gradient and pattern fills drawn in sRGB, then converted";
     // The flat formats hold RGB: the composite is drawn through the document's profile to sRGB (Photoshop's Export As).
     if (feature.substr(0, 7) == "export." && feature != "export.psd") return "written as sRGB, converted through the document's profile";
+    // Smart objects: contents of the document's mode and profile placed as they are; RGB contents (a PNG, an RGB PSD,
+    // a camera RAW file) converted through the profiles once.
+    if (feature == "edit.smartObject") return "RGB contents converted through the profiles once, as Photoshop places them";
     return {};
 }
 

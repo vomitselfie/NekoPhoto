@@ -1,6 +1,7 @@
 // Automation methods: artboards and slices. Registered from AutomationServer::registerHandlers (Automation.cpp).
 #include "Automation.h"
 #include "AutomationHandlers.h"
+#include "ImageConvert.h"
 #include "MainWindow.h"
 #include <QColor>
 #include <algorithm>
@@ -79,9 +80,15 @@ QJsonObject exported(const QStringList& files, const QString& error) {
 
 /// The files' depth: a 16-bit document writes 16-bit PNGs, and JPEGs dithered down to 8 bits (said in `note`).
 QJsonObject exportedAtDepth(QJsonObject out, const EditorSession& session, const QString& format) {
-    const bool deep = session.sampleType() == SampleType::U16, png = format.toLower() == "png";
-    out["bits"] = deep && png ? 16 : 8;
-    if (deep && !png) out["note"] = "reduced from 16 to 8 bits per channel with dithering";
+    const QString f = format.toLower();
+    const bool deep = session.sampleType() == SampleType::U16, wide = f == "png" || ((f == "tiff" || f == "tif") && canWriteDeepTiff());
+    out["bits"] = deep && wide ? 16 : 8;
+    if (deep && !wide) out["note"] = "reduced from 16 to 8 bits per channel with dithering";
+    // CMYK and Lab: drawn through the document's profile to sRGB, as the flat exports are.
+    if (const ColorMode mode = session.document()->colorMode; mode != ColorMode::RGB) {
+        out["convertedToSrgb"] = true;
+        out["note"] = QStringLiteral("converted from %1 to sRGB%2").arg(QString::fromLatin1(colorModeName(mode)), deep && !wide ? QStringLiteral(", reduced from 16 to 8 bits per channel with dithering") : QString());
+    }
     return out;
 }
 

@@ -58,6 +58,13 @@ std::shared_ptr<const SmartObjectSource> makeSmartObjectSource(SmartObjectConten
     s->fileType = contents.fileType.empty() ? smartObjectFileType(contents.fileName) : contents.fileType;
     s->bytes = std::make_shared<const std::vector<uint8_t>>(std::move(contents.bytes));
     s->image = contents.image;
+    s->profile = contents.profile;
+    if (contents.native && contents.nativeMode != ColorMode::RGB && contents.native.width() == contents.image.width()
+        && contents.native.height() == contents.image.height()) {
+        s->native = contents.native;
+        s->nativeMode = contents.nativeMode;
+        s->nativeProfile = contents.nativeProfile;
+    }
     s->width = contents.image.width();
     s->height = contents.image.height();
     s->resolution = contents.resolution;
@@ -96,8 +103,8 @@ int redevelopRawSmartObject(Document& document, const std::string& sourceId, con
 }
 
 Layer smartObjectLayer(const std::shared_ptr<const SmartObjectSource>& source, const std::array<double, 8>& quad, const std::string& name,
-                       SampleType type) {
-    Layer layer(Asset::makeAny(smartObjectSourceImage(*source, type), name), Point(quad[0], quad[1]));
+                       const SmartObjectTarget& target) {
+    Layer layer(Asset::makeAny(smartObjectSourceImage(*source, target), name), Point(quad[0], quad[1]));
     layer.name = name;
     if (auto t = transformForQuad(quad, source->width, source->height)) layer.transform = *t;
     SmartObjectInstance instance;
@@ -126,9 +133,10 @@ Uuid placeSmartObject(Document& document, const std::shared_ptr<const SmartObjec
     std::string name = source->fileName;
     if (auto dot = name.rfind('.'); dot != std::string::npos && dot > 0) name.resize(dot);
     Layer layer = smartObjectLayer(source, placementQuad(document, source->width, source->height), name.empty() ? "Smart Object" : name,
-                                   document.sampleType);
+                                   smartObjectTargetOf(document));
     layer.parentId = parent;
     const Uuid id = layer.id;
+    refreshModeThumbnail(layer, document);
     document.layers.insert(document.layers.begin() + long(std::min(index, document.layers.size())), std::move(layer));
     return id;
 }
@@ -166,8 +174,11 @@ std::optional<Uuid> convertToSmartObject(Document& document, const std::vector<U
     if (w > psbMaxSide || h > psbMaxSide) return fail("The layers are too large for a smart object (300,000 pixels a side).");
     Document child(w, h);
     child.resolution = document.resolution;
-    // The child is a document of the same depth (a 16-bit document's layers become a 16-bit PSB).
+    // The child is a document of the same depth and mode (a 16-bit document's layers become a 16-bit PSB, a CMYK
+    // document's a CMYK one in the same profile).
     child.sampleType = document.sampleType;
+    child.colorMode = document.colorMode;
+    child.profile = document.profile;
     child.psdCarry = document.psdCarry;   // the global light and patterns the members' styles use
     for (size_t i : members) {
         Layer l = document.layers[i];
@@ -197,10 +208,16 @@ std::optional<Uuid> convertToSmartObject(Document& document, const std::vector<U
     contents.fileType = "8BPB";
     if (child.sampleType == SampleType::U16) contents.image = Image16Ptr(renderFlattened16(child));
     else contents.image = ImagePtr(renderFlattened(child));
+    if (child.colorMode != ColorMode::RGB) {
+        // In CMYK and Lab the layers' own samples, which the smart object places as they are; `image` is them in sRGB.
+        contents.native = renderNative(child);
+        contents.nativeMode = child.colorMode;
+        contents.nativeProfile = child.profile;
+    } else contents.profile = child.profile;
     contents.resolution = document.resolution;
     auto source = makeSmartObjectSource(std::move(contents));
     if (!source) return fail("The layers could not be drawn.");
-    Layer layer = smartObjectLayer(source, {left, topY, left + w, topY, left + w, topY + h, left, topY + h}, top->name, document.sampleType);
+    Layer layer = smartObjectLayer(source, {left, topY, left + w, topY, left + w, topY + h, left, topY + h}, top->name, smartObjectTargetOf(document));
     layer.parentId = top->parentId;
     const Uuid topId = top->id;
     // Out go the members; in at the topmost one's place goes the smart object.
@@ -215,8 +232,51 @@ std::optional<Uuid> convertToSmartObject(Document& document, const std::vector<U
     for (Layer& l : document.layers) if (l.maskSourceId && gone.count(*l.maskSourceId)) l.maskSourceId.reset();
     document.smartObjects[source->id] = source;
     const Uuid id = layer.id;
+    refreshModeThumbnail(layer, document);
     document.layers.insert(document.layers.begin() + long(at - removedBelow), std::move(layer));
     return id;
+}
+
+std::optional<Uuid> newSmartObjectViaCopy(Document& document, const Uuid& id, const std::string& name, std::string* error) {
+    auto fail = [&](const char* why) -> std::optional<Uuid> { if (error) *error = why; return std::nullopt; };
+    const Layer* found = document.find(id);
+    if (!found || !found->isLiveSmartObject()) return fail("Select a smart object.");
+    if (found->smartObject->locked()) return fail("This smart object shows the preview its file carried; its contents cannot be copied here.");
+    auto old = document.smartObjects.find(found->smartObject->sourceId);
+    if (old == document.smartObjects.end()) return fail("Its contents cannot be read.");
+    // The contents copied under a new id (the file's bytes stay shared, as every copy's do); written to a PSD as a new
+    // embedded file.
+    auto source = std::make_shared<SmartObjectSource>(*old->second);
+    source->id = newSmartObjectId();
+    source->psdBlock.clear();
+    source->psdElement.reset();
+    source->depthCache = std::make_shared<SmartObjectDepthCache>();
+    Layer copy = *found;
+    copy.id = makeUuid();
+    copy.name = name;
+    SmartObjectInstance& so = *copy.smartObject;
+    const std::array<double, 8> quad = so.quad;   // true of its placedTransform, as the original's is
+    const std::string placedId = newSmartObjectId();
+    bool repointed = false;
+    for (PsdBlock& b : so.psdBlocks) {
+        auto moved = repointPsdPlacement(b.key, b.data, quad, source->id, source->width, source->height);
+        auto placed = moved ? patchPsdPlacement(b.key, *moved, quad, placedId) : std::nullopt;
+        if (placed) { b.data = std::move(*placed); repointed = true; }
+    }
+    if (!repointed && !so.psdBlocks.empty()) return fail("Its placement cannot be copied.");
+    if (smartObjectFiltered(so)) {
+        // The copy's own filter cache record (the same canvas and mask).
+        auto carry = std::make_shared<PsdDocumentCarry>(document.psdCarry ? *document.psdCarry : PsdDocumentCarry{});
+        if (!copySmartFilterRecord(carry->globals, so.placedId, placedId)) return fail("Its Smart Filters' cache cannot be copied.");
+        document.psdCarry = carry;
+    }
+    so.sourceId = source->id;
+    so.placedId = placedId;
+    document.smartObjects[source->id] = source;
+    const Uuid copyId = copy.id;
+    const long at = long(document.indexOf(id)) + 1;
+    document.layers.insert(document.layers.begin() + at, std::move(copy));
+    return copyId;
 }
 
 bool smartObjectContentsEditable(const Document& document, const std::string& sourceId, std::string* why) {
@@ -233,7 +293,7 @@ bool smartObjectContentsEditable(const Document& document, const std::string& so
     return true;
 }
 
-int replaceSmartObjectSource(Document& document, const std::string& from, const std::shared_ptr<const SmartObjectSource>& replacement) {
+int replaceSmartObjectSource(Document& document, std::string from, const std::shared_ptr<const SmartObjectSource>& replacement) {
     auto old = document.smartObjects.find(from);
     if (old == document.smartObjects.end() || !replacement || !replacement->image) return 0;
     const std::string oldStem = [&] { std::string n = old->second->fileName; if (auto d = n.rfind('.'); d != std::string::npos) n.resize(d); return n; }();
@@ -252,7 +312,7 @@ int replaceSmartObjectSource(Document& document, const std::string& from, const 
             for (PsdBlock& b : next.psdBlocks)
                 if (auto patched = repointPsdPlacement(b.key, b.data, quad, replacement->id, replacement->width, replacement->height)) b.data = std::move(*patched);
             static const std::vector<PsdBlock> none;
-            auto raster = drawSmartObjectRaster(document.psdCarry ? document.psdCarry->globals : none, next, *replacement, quad, document.sampleType,
+            auto raster = drawSmartObjectRaster(document.psdCarry ? document.psdCarry->globals : none, next, *replacement, quad, smartObjectTargetOf(document),
                                                 smartObjectFiltered(next) ? SmartObjectDraw::Filtered : SmartObjectDraw::Warped);
             if (!raster) continue;
             next.sourceId = replacement->id;
@@ -267,6 +327,7 @@ int replaceSmartObjectSource(Document& document, const std::string& from, const 
             next.placedHeight = raster->image.height();
             so = std::move(next);
             if (!oldStem.empty() && l.name.compare(0, oldStem.size(), oldStem) == 0) l.name = newStem + l.name.substr(oldStem.size());
+            refreshModeThumbnail(l, document);
             changed++;
             continue;
         }
@@ -277,7 +338,7 @@ int replaceSmartObjectSource(Document& document, const std::string& from, const 
         const double sx = t.size.width / std::max(1, w0), sy = t.size.height / std::max(1, h0);
         t.size = Size(replacement->width * sx, replacement->height * sy);
         t.origin = Point(centre.x - t.size.width / 2, centre.y - t.size.height / 2);
-        l.asset = Asset::makeAny(smartObjectSourceImage(*replacement, document.sampleType), l.name);
+        l.asset = Asset::makeAny(smartObjectSourceImage(*replacement, smartObjectTargetOf(document)), l.name);
         l.transform = t;
         l.smartImage = l.asset->image;
         so.sourceId = replacement->id;
@@ -289,6 +350,7 @@ int replaceSmartObjectSource(Document& document, const std::string& from, const 
         so.placedHeight = replacement->height;
         // "A" becomes "B", "A copy" becomes "B copy" (Photoshop's rename).
         if (!oldStem.empty() && l.name.compare(0, oldStem.size(), oldStem) == 0) l.name = newStem + l.name.substr(oldStem.size());
+        refreshModeThumbnail(l, document);
         changed++;
     }
     // The old contents go once nothing places them (an instance that could not be redrawn keeps them).
@@ -374,7 +436,7 @@ bool warpLayer(Document& document, Layer& layer, const TextWarp& warp, std::stri
         for (PsdBlock& b : next.psdBlocks)
             if (auto warped = warpPsdPlacement(b.key, b.data, *mesh, quad)) { b.data = std::move(*warped); written = true; }
         if (!written) return fail("Its placement cannot take a warp.");
-        auto raster = drawSmartObjectRaster({}, next, *source->second, quad, document.sampleType, SmartObjectDraw::Warped);
+        auto raster = drawSmartObjectRaster({}, next, *source->second, quad, smartObjectTargetOf(document), SmartObjectDraw::Warped);
         if (!raster) return fail("The warp could not be drawn.");
         if (layer.mask && !layer.mask->placement) layer.mask->placement = layer.maskTransform();
         const Sampling sampling = layer.transform.sampling;
@@ -387,6 +449,7 @@ bool warpLayer(Document& document, Layer& layer, const TextWarp& warp, std::stri
         next.placedWidth = raster->image.width();
         next.placedHeight = raster->image.height();
         so = std::move(next);
+        refreshModeThumbnail(layer, document);
         return true;
     }
     // Pixels: bent over their own rectangle, for good.
@@ -478,7 +541,9 @@ std::array<double, 8> hullQuad(const WarpMesh& mesh) {
 AnyImage cageSource(const Document& document, const Layer& layer) {
     if (layer.isLiveSmartObject()) {
         auto it = document.smartObjects.find(layer.smartObject->sourceId);
-        return it != document.smartObjects.end() ? it->second->image : AnyImage();
+        if (it == document.smartObjects.end()) return AnyImage();
+        // CMYK and Lab: the contents in the document's layout, as they are drawn.
+        return document.colorMode == ColorMode::RGB ? it->second->image : smartObjectSourceImage(*it->second, smartObjectTargetOf(document));
     }
     return layer.asset ? layer.asset->image : AnyImage();
 }
@@ -606,7 +671,7 @@ bool warpLayerToCage(Document& document, Layer& layer, const WarpMesh& cage, std
         for (PsdBlock& b : next.psdBlocks)
             if (auto warped = warpPsdPlacement(b.key, b.data, contents, quad)) { b.data = std::move(*warped); written = true; }
         if (!written) return fail("Its placement cannot take a warp.");
-        auto raster = drawSmartObjectRaster({}, next, *source->second, quad, document.sampleType, SmartObjectDraw::Warped);
+        auto raster = drawSmartObjectRaster({}, next, *source->second, quad, smartObjectTargetOf(document), SmartObjectDraw::Warped);
         if (!raster) return fail("The warp could not be drawn.");
         layer.asset = Asset::makeAny(raster->image, layer.name);
         layer.transform = raster->transform;
@@ -617,6 +682,7 @@ bool warpLayerToCage(Document& document, Layer& layer, const WarpMesh& cage, std
         next.placedWidth = raster->image.width();
         next.placedHeight = raster->image.height();
         *layer.smartObject = std::move(next);
+        refreshModeThumbnail(layer, document);
         return true;
     }
     if (layer.asset && isFiveSample(layer.asset->image)) {

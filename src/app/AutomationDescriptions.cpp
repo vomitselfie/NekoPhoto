@@ -184,7 +184,7 @@ const MethodDoc methodDocs[] = {
      "id:layer! The artboard; x:integer Left edge; y:integer Top edge; width:integer Width; height:integer Height; name:string New name; background:color white, black, transparent or a CSS colour; moveContents:bool=true Move the layers inside with it"},
     {"artboards.delete", "Turn an artboard back into a plain folder, or delete it with everything in it.", "id:layer! The artboard; contents:bool=false Delete its layers too"},
     {"artboards.export", "File > Export Artboards to Files: each visible artboard as its own image, named after it.",
-     "directory:string! Folder to write into (created when missing); format:string=png png or jpeg; prefix:string File name prefix; quality:integer=90 JPEG quality 1..100"},
+     "directory:string! Folder to write into (created when missing); format:string=png png, jpeg, webp or tiff; prefix:string File name prefix; quality:integer=90 JPEG and WebP quality 1..100"},
     {"slices.list", "The document's slices (named rectangles for export, kept in PSDs as Photoshop's slices).", ""},
     {"slices.add", "A new user slice.",
      "x:integer=0 Left edge; y:integer=0 Top edge; width:integer! Width; height:integer! Height; name:string Its name (default slice_N); url:string Link; target:string Link target; altTag:string Alt text"},
@@ -192,7 +192,7 @@ const MethodDoc methodDocs[] = {
      "id:integer! The slice id; x:integer Left edge; y:integer Top edge; width:integer Width; height:integer Height; name:string Name; url:string Link; target:string Link target; altTag:string Alt text"},
     {"slices.delete", "Delete a slice.", "id:integer! The slice id"},
     {"slices.export", "File > Export Slices: each slice as its own image, named after it.",
-     "directory:string! Folder to write into (created when missing); format:string=png png or jpeg; prefix:string File name prefix; quality:integer=90 JPEG quality 1..100"},
+     "directory:string! Folder to write into (created when missing); format:string=png png, jpeg, webp or tiff; prefix:string File name prefix; quality:integer=90 JPEG and WebP quality 1..100"},
     {"guides.list", "The ruler guides (View > Show > Guides), in the order they were made: index, orientation and position in document pixels. They are saved in projects and PSDs.", ""},
     {"guides.add", "A new ruler guide (View > New Guide…); one undo step. Positions keep to 1/32 pixel, as in a PSD.",
      "orientation:(vertical|horizontal)! A vertical guide is an x position, a horizontal one a y; position:number! Document pixels from the left or top edge (may lie outside the canvas)"},
@@ -203,6 +203,8 @@ const MethodDoc methodDocs[] = {
     {"smartObject.place", "Place an image or PSD file as an embedded smart object above the active layer, 1:1 in the middle (scaled to fit).", "path:string! File path"},
     {"smartObject.replace", "Swap a smart object's contents for a file's, in every layer placing them; each keeps its centre and scale.", "id:layer The smart object layer (default: active); path:string! File path"},
     {"smartObject.rasterize", "A smart object as plain pixels.", "id:layer The smart object layer (default: active)"},
+    {"smartObject.viaCopy", "Layer > Smart Objects > New Smart Object via Copy: a copy of the smart object above it whose contents are its own (editing one leaves the other; Duplicate Layer shares them). Its warp, Smart Filters and filter mask come along.",
+     "id:layer The smart object layer (default: active)"},
     {"smartObject.addFilter", "Add a Smart Filter on top of a smart object's stack (its contents untouched, the filter kept as Photoshop keeps it).",
      "id:layer The smart object layer (default: active); kind:string! gaussian blur, high pass, median, dust and scratches, surface blur, unsharp mask, motion blur, plastic wrap, mosaic, emboss, box blur, radial blur or add noise; "
      "radius:number Pixels (blurs, high pass, median, dust and scratches, surface blur, unsharp mask); threshold:number Levels (dust and scratches, surface blur, unsharp mask); "

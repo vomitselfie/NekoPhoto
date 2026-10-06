@@ -61,7 +61,8 @@ a few levels.
   Photoshop stored in them, one with a Color Fill layer in **Color** mode (no level off anywhere) and a monitor test
   chart with 1-level lightness step wedges (at most 1 level off). The other Lab modes have no Photoshop reference yet.
 - **Adjustment layers**: every kind Photoshop offers in the mode draws on the document's own samples (see
-  [Adjustments and filters](#adjustments-and-filters)); Color Lookup is kept and written back to PSD but not drawn yet.
+  [Adjustments and filters](#adjustments-and-filters)). A Color Lookup layer holding a 3DLUT file is kept and written
+  back to PSD but draws nothing, as 3DLUT files apply in RGB only.
 - **Layer styles** draw in the document's channels: see [Text, shapes and layer styles](#text-shapes-and-layer-styles).
 - The canvas always goes through a colour transform: the document's profile to the monitor profile, or to sRGB when
   none is known, in the same pass that reduces the frame to 8 bits. Layer thumbnails are drawn the same way.
@@ -82,7 +83,7 @@ what Photoshop greys in a mode stays greyed for good ("Not available in CMYK mod
 | Exposure | greyed (Photoshop lacks) | on L |
 | Hue/Saturation, Color Balance, Selective Color, Channel Mixer | yes | greyed (Photoshop lacks) |
 | Vibrance, Black & White | greyed (Photoshop lacks) | greyed (Photoshop lacks) |
-| Color Lookup | not yet | not yet |
+| Color Lookup | ICC abstract profiles, CMYK device links | ICC abstract profiles, Lab device links |
 
 - **Levels and Curves** work on each channel as its histogram shows it: a CMYK plate is dark where the ink is, so
   moving Levels' black input point up adds ink, as in Photoshop. CMYK's composite applies to every ink after the ink's
@@ -99,6 +100,10 @@ what Photoshop greys in a mode stays greyed for good ("Not available in CMYK mod
   a constant); Monochrome makes the black plate alone.
 - **Photo Filter** converts its colour through the profile: in CMYK it is laid over each ink, in Lab it moves a and b
   (and L too without Preserve Luminosity). **Exposure** in Lab changes L through relative luminance.
+- **Color Lookup** takes an ICC **abstract profile** (run from the document's profile through it and back, so it works
+  on the colours as they look) or a **device link** from the document's colour space to itself (a CMYK-to-CMYK link in
+  a CMYK document, the usual way to apply one in Photoshop). **3DLUT files** (.cube, .3dl) work in RGB documents only:
+  loading one in CMYK or Lab says so, and a 3DLUT layer brought in from RGB is kept and draws nothing.
 - **Filters**: Gaussian Blur, Motion Blur and Lens Correction treat every sample alike, as in RGB. Add Noise puts its
   own noise on each ink, or on L, a and b; Monochromatic puts the same noise on every ink, or on L alone in Lab.
 - These are the RGB kernels' formulas adapted to each mode and are not yet checked against Photoshop's own output.
@@ -232,16 +237,16 @@ edit is one undo step.
   converts a document. Other apps get an 8-bit sRGB copy; their pixels come in as sRGB. Pasting into one colour channel
   writes the pixels' gray (read in sRGB) into it.
 - **File ▸ Import** converts the file once, from its embedded profile (sRGB when it has none) through the document's.
-- Place Embedded and smart objects stay greyed, as do Paste Into and Layer via Cut, which NekoPhoto has in no mode
-  yet.
+- Paste Into and Layer via Cut are greyed: NekoPhoto has them in no mode yet.
 
 ## Exports
 
 PNG, JPEG, WebP, TIFF, TGA, ICO and GIF exports of a CMYK or Lab document are the composite converted through the
 document's profile to sRGB, as Photoshop's Export As does: the same conversion the canvas makes without a monitor
 profile, written untagged (sRGB). A 16-bit document exports 16-bit PNG and TIFF, and is dithered to 8 bits for the
-other formats. PSD keeps the document's own mode. SVG, artboard and slice exports stay greyed with the artboards and
-vectors they come from.
+other formats. PSD keeps the document's own mode. **Export Artboards**, **Export Slices** (PNG, JPEG, WebP, TIFF) and
+**SVG** are drawn the same way: each area or image through the profile to sRGB, and SVG's shape colours as the
+document shows them (a CMYK fill's inks, or an RGB colour as it lands in the press gamut), in sRGB.
 
 Checked by `transform_modes_tests` (Image Size keeps the inks at 8 and 16 bits with each sampling mode, Lab keeps a and
 b, the CMYK warp equals the RGB warp channel by channel, Warp and the warp cage on five samples, the flat export equals
@@ -249,12 +254,32 @@ the native composite through the profile within a level, sRGB red into CMYK thro
 (Image Size, Crop, Warp, the cage, Trim, Import, every flat export and layers copied into and out of RGB, in each mode
 and depth).
 
-## Not yet
+## Smart objects
 
-Color Lookup, Mosh, smart objects, artboards and slices in CMYK and Lab (greyed out with "Not available in CMYK mode
-yet"); CMYK JPEG and TIFF (a CMYK document exports them in sRGB). Whether Photoshop offers Color
-Lookup in CMYK and Lab has not been checked against Photoshop itself. Camera Raw, G'MIC and the MyPaint brushes stay
-RGB only ("Not available in CMYK mode", for good).
+Smart objects work in CMYK and Lab documents at 8 and 16 bits, as in Photoshop:
+
+- **Place Embedded** and **Replace Contents** with an RGB file (PNG, JPEG, an RGB PSD, a camera RAW file placed with
+  Open Object): the contents are converted once from their own profile (sRGB when they have none) into the document's
+  mode, and every instance shares the converted pixels. Moving or scaling an instance resamples those, never a copy
+  of a copy.
+- **Convert to Smart Object** makes a PSB of the document's mode and profile: the layers look exactly as they did,
+  and **Edit Contents** opens them in a tab of that mode. Saving the tab puts them back as a PSB of that mode.
+- CMYK or Lab contents placed in a document of the same mode and profile keep their own inks (or L, a and b); in a
+  document of another mode or profile they are converted through the profiles.
+- **Warp**, the warp cage and **Free Transform** draw the contents through the mesh on every sample.
+- **Smart Filters** run on the document's samples: Lab's L, a and b as they are, CMYK's four inks with black treated
+  like the others. Every Smart Filter but **Plastic Wrap** is offered: Plastic Wrap is a Filter Gallery filter, which
+  Photoshop offers in RGB only. The filter mask and Photoshop's filter cache in the PSD hold the document's channels.
+- **Rasterize** keeps what the layer shows.
+- PSD and projects keep the instances live; a CMYK or Lab PSB's own samples are read again from the file when a
+  project opens.
+
+## Not yet, and not here
+
+Remove Background and Content-Aware Fill, Move and Scale stay greyed in CMYK and Lab ("Not available in CMYK mode
+yet"); CMYK JPEG and TIFF (a CMYK document exports them in sRGB). Camera Raw, G'MIC and the MyPaint brushes stay
+RGB only ("Not available in CMYK mode", for good), and so does **Mosh**: it is a glitch effect on RGB colour that
+Photoshop has no counterpart for, and running it through RGB and back is not done here.
 
 ## Automation
 
@@ -322,7 +347,7 @@ colour channels `cyan` ... `black` and `lightness`, `a`, `b`, and the composite 
   (Photoshop の値と 8 bit の 2 階調以内で一致)。Lab では覆い焼きカラー・焼き込みカラー・比較(暗)・比較(明)・
   差の絶対値・除外・減算・除算は使えません(Adobe の説明のとおり)。
 - 調整レイヤーは、そのモードで Photoshop にある種類をすべてドキュメント自身の値で描画します(下の「色調補正と
-  フィルター」)。カラールックアップは保持して PSD に書き戻しますが、まだ描画しません。レイヤースタイルは
+  フィルター」)。3DLUT ファイルのカラールックアップは保持して PSD に書き戻しますが、3DLUT は RGB 専用のため描画しません。レイヤースタイルは
   ドキュメントのチャンネルで描画します(下の「テキスト、シェイプ、レイヤースタイル」)。
 - カンバスは常にドキュメントのプロファイルからモニタープロファイル(不明なら sRGB)へ変換して表示します。
 
@@ -342,7 +367,7 @@ Photoshop にないものは今後も使えません(「CMYK モードでは使�
 | 露光量 | 使用不可(Photoshop にない) | L に適用 |
 | 色相・彩度、カラーバランス、特定色域の選択、チャンネルミキサー | 可 | 使用不可(Photoshop にない) |
 | 自然な彩度、白黒 | 使用不可(Photoshop にない) | 使用不可(Photoshop にない) |
-| カラールックアップ | まだ | まだ |
+| カラールックアップ | ICC 抽象プロファイル、CMYK のデバイスリンク | ICC 抽象プロファイル、Lab のデバイスリンク |
 
 - **レベル補正とトーンカーブ**はヒストグラムに表示されるとおりの各チャンネルに適用します。CMYK の版はインキのある所が
   暗いので、Photoshop と同じくレベル補正の入力の黒を上げるとインキが増えます。CMYK の複合チャンネルは各インキの設定の
@@ -357,6 +382,11 @@ Photoshop にないものは今後も使えません(「CMYK モードでは使�
   CMYK の**チャンネルミキサー**は 4 つのインキの出力(4 インキと定数から)を持ち、モノクロはブラックの版だけを作ります。
 - **レンズフィルター**の色はプロファイルで変換し、CMYK では各インキに重ね、Lab では a と b(輝度を保持しないときは L も)
   を動かします。Lab の**露光量**は相対輝度を通して L を変えます。
+- **カラールックアップ**は ICC の**抽象プロファイル**(ドキュメントのプロファイルから通して戻すので、見た目の色に
+  作用します)か、ドキュメントのカラースペースどうしの**デバイスリンク**(CMYK ドキュメントでは CMYK→CMYK のリンク。
+  Photoshop でデバイスリンクを適用する一般的な方法です)を使えます。**3DLUT ファイル**(.cube、.3dl)は RGB
+  ドキュメント専用です。CMYK・Lab で読み込むとその旨を表示し、RGB から持ち込んだ 3DLUT のレイヤーは保持しますが
+  描画しません。
 - **フィルター**:ぼかし(ガウス)、ぼかし(移動)、レンズ補正はすべての値を RGB と同じように扱います。ノイズを加えるは
   各インキ、または L・a・b にノイズを加え、グレースケールノイズはすべてのインキに同じノイズ(Lab では L のみ)を加えます。
 - 各モードに合わせた RGB の計算式で、Photoshop の出力との照合はまだです。PSD のレベル補正とトーンカーブは同じ
@@ -459,18 +489,40 @@ RGB に変換します。
   相互)。コピーしたレイヤー(選択範囲なしのコピー)はイメージ ▸ モードと同じように変換します。ほかのアプリには
   8 bit の sRGB を渡し、ほかのアプリからのピクセルは sRGB として受け取ります。
 - **ファイル ▸ 読み込み**は埋め込みプロファイル(なければ sRGB)からドキュメントのプロファイルへ一度だけ変換します。
-- 埋め込みで配置とスマートオブジェクトは使えないままです。「ペースト(選択範囲内)」と「カットしたレイヤー」は
-  どのモードにもまだありません。
+- 「ペースト(選択範囲内)」と「カットしたレイヤー」はどのモードにもまだありません。
 
 ### 書き出し
 
 CMYK・Lab ドキュメントの PNG、JPEG、WebP、TIFF、TGA、ICO、GIF への書き出しは、Photoshop の「書き出し形式」と同じく
 合成画像をドキュメントのプロファイルで sRGB に変換したもの(モニタープロファイルなしのカンバス表示と同じ変換)で、
 プロファイルなし(sRGB)で書き出します。16 bit のドキュメントは PNG と TIFF を 16 bit で、ほかの形式はディザーで
-8 bit にして書き出します。PSD はドキュメントのモードのままです。
+8 bit にして書き出します。PSD はドキュメントのモードのままです。**アートボードの書き出し**、**スライスの書き出し**
+(PNG、JPEG、WebP、TIFF)と **SVG** も同じく、各領域や画像をプロファイルで sRGB に変換します。SVG のシェイプの色は
+ドキュメントでの見た目(CMYK の塗りはそのインキ、RGB の色は印刷の色域に入った色)を sRGB で書きます。
 
-### 未対応
+### スマートオブジェクト
 
-カラールックアップ、Mosh、スマートオブジェクト、アートボードとスライス(「CMYK モードではまだ使用できません」と
-表示)、CMYK の JPEG と TIFF(CMYK ドキュメントは sRGB で書き出します)。
-カラールックアップが Photoshop の CMYK・Lab にあるかは Photoshop で確認していません。
+CMYK・Lab ドキュメントでも、8 bit・16 bit ともに Photoshop と同じくスマートオブジェクトを使えます。
+
+- RGB のファイル(PNG、JPEG、RGB の PSD、Camera Raw の「オブジェクトとして開く」で開いた RAW)の**埋め込みで配置**と
+  **コンテンツを置換**:内容をそれ自身のプロファイル(なければ sRGB)からドキュメントのモードへ一度だけ変換し、
+  すべてのインスタンスが変換後のピクセルを共有します。移動や拡大・縮小はそれを再サンプリングします。
+- **スマートオブジェクトに変換**はドキュメントと同じモード・プロファイルの PSB を作ります。レイヤーの見た目は
+  そのままで、**コンテンツを編集**はそのモードのタブで開き、保存するとそのモードの PSB として戻します。
+- 同じモード・プロファイルのドキュメントに置いた CMYK・Lab の内容はインキ(または L・a・b)をそのまま使い、
+  別のモードやプロファイルのドキュメントではプロファイルを通して変換します。
+- **ワープ**、ワープのケージ、**自由変形**はすべての値をメッシュに通して描画します。
+- **スマートフィルター**はドキュメントの値で動きます(Lab は L・a・b をそのまま、CMYK は 4 つのインキでブラックも
+  ほかと同じように扱います)。**ラップ**以外のすべてのスマートフィルターを使えます。ラップはフィルターギャラリーの
+  フィルターで、Photoshop でも RGB 専用です。フィルターマスクと PSD 内のフィルターキャッシュはドキュメントの
+  チャンネルを持ちます。
+- **ラスタライズ**は表示どおりのピクセルを残します。
+- PSD とプロジェクトはインスタンスを編集可能なまま保ちます。プロジェクトを開くと、CMYK・Lab の PSB の値は
+  ファイルから読み直します。
+
+### 未対応・対象外
+
+背景を削除とコンテンツに応じた塗りつぶし・移動・拡大・縮小は CMYK・Lab では使えないままです(「CMYK モードでは
+まだ使用できません」と表示)。CMYK の JPEG と TIFF(CMYK ドキュメントは sRGB で書き出します)もまだです。Camera Raw、
+G'MIC、MyPaint ブラシは RGB 専用で(「CMYK モードでは使用できません」)、**Mosh** も同じです。Mosh は RGB の色に
+かけるグリッチ効果で Photoshop に対応する機能がなく、RGB を経由して戻すことはしません。

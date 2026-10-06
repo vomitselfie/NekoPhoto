@@ -193,7 +193,7 @@ TEST_CASE(supports_has_a_mode_axis) {
     CHECK_EQ(unavailableReason("adjustment.Vibrance", SampleType::U16, ColorMode::CMYK), std::string("Not available in CMYK mode"));
     CHECK_EQ(unavailableReason("adjustment.Exposure", SampleType::U8, ColorMode::CMYK), std::string("Not available in CMYK mode"));
     CHECK(supports("adjustment.Exposure", SampleType::U8, ColorMode::Lab));
-    CHECK_EQ(unavailableReason("adjustment.Color Lookup", SampleType::U8, ColorMode::CMYK), std::string("Not available in CMYK mode yet"));
+    CHECK(supports("adjustment.Color Lookup", SampleType::U8, ColorMode::CMYK) && supports("adjustment.Color Lookup", SampleType::U16, ColorMode::Lab));
     CHECK(supports("filter.Gaussian Blur", SampleType::U16, ColorMode::Lab));
     // Step E: painting in the document's own samples.
     CHECK(supports("tool.brush", SampleType::U8, ColorMode::CMYK));
@@ -203,7 +203,10 @@ TEST_CASE(supports_has_a_mode_axis) {
     CHECK(supports("tool.spotHealing", SampleType::U8, ColorMode::Lab));
     // Greyed for good ("... mode") or until a port ("... mode yet").
     CHECK_EQ(unavailableReason("brush.mypaint", SampleType::U8, ColorMode::Lab), std::string("Not available in Lab mode"));
-    CHECK_EQ(unavailableReason("edit.smartObject", SampleType::U8, ColorMode::CMYK), std::string("Not available in CMYK mode yet"));
+    CHECK_EQ(unavailableReason("filter.Mosh", SampleType::U8, ColorMode::CMYK), std::string("Not available in CMYK mode"));
+    // Smart objects, artboards, slices, their exports and SVG (P9).
+    for (const char* f : {"edit.smartObject", "edit.artboard", "tool.artboard", "tool.slice", "export.artboards", "export.slices", "export.svg", "edit.pixels"})
+        for (ColorMode m : {ColorMode::CMYK, ColorMode::Lab}) CHECK(supports(f, SampleType::U8, m) && supports(f, SampleType::U16, m));
     // Text, shapes and layer styles (P8).
     for (const char* f : {"tool.text", "edit.text", "tool.shape", "tool.pen", "tool.directSelect", "edit.vector", "edit.paint", "edit.style"})
         for (ColorMode m : {ColorMode::CMYK, ColorMode::Lab}) CHECK(supports(f, SampleType::U8, m) && supports(f, SampleType::U16, m));

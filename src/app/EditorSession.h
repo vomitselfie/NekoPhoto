@@ -922,6 +922,8 @@ public:
     bool replaceSmartObjectContents(const QString& path, QString* error);
     /// The active smart object as plain pixels.
     bool rasterizeSmartObject();
+    /// New Smart Object via Copy: the active smart object copied above it with contents of its own (one undo step).
+    bool newSmartObjectViaCopy(QString* error);
     /// The active layer's camera RAW source (Camera Raw's Open Object) and its settings; null when it is not one.
     std::shared_ptr<const compositor::SmartObjectSource> activeRawSmartObject(compositor::CameraRawSettings* settings = nullptr) const;
     /// The active RAW smart object developed again with `settings` into `image`, in every layer placing it (one undo step).

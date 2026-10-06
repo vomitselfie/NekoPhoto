@@ -145,6 +145,11 @@ void refreshModeThumbnails(Document& document) {
         if (layer.asset && layer.asset->image) layer.asset->thumbnail = modeThumbnail(layer.asset->image, document.colorMode, document.profile);
 }
 
+void refreshModeThumbnail(Layer& layer, const Document& document) {
+    if (document.colorMode == ColorMode::RGB || !layer.asset || !layer.asset->image) return;
+    layer.asset->thumbnail = modeThumbnail(layer.asset->image, document.colorMode, document.profile);
+}
+
 bool convertDocumentMode(Document& document, ColorMode to, const ColorProfile& target, const ConvertOptions& options, std::string* why) {
     const ColorMode from = document.colorMode;
     if (from == to) return true;

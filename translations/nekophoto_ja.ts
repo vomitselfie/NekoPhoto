@@ -635,6 +635,10 @@
         <translation>スマートオブジェクトに変換</translation>
     </message>
     <message>
+        <source>New Smart Object via Copy</source>
+        <translation>コピーによる新規スマートオブジェクト</translation>
+    </message>
+    <message>
         <source>Place Embedded</source>
         <translation>埋め込みを配置</translation>
     </message>
@@ -1951,8 +1955,12 @@
         <translation>透明部分の背後のカラー</translation>
     </message>
     <message>
-        <source>The format must be png or jpeg.</source>
-        <translation>形式は png または jpeg にしてください。</translation>
+        <source>The format must be png, jpeg, webp or tiff.</source>
+        <translation>形式は png、jpeg、webp、tiff のいずれかにしてください。</translation>
+    </message>
+    <message>
+        <source>This system has no %1 writer.</source>
+        <translation>このシステムには %1 の書き出し機能がありません。</translation>
     </message>
     <message>
         <source>Could not create %1.</source>
@@ -2696,6 +2704,10 @@ Working: %2</source>
         <translation>スマートオブジェクトをラスタライズ</translation>
     </message>
     <message>
+        <source>New Smart Object via Copy</source>
+        <translation>コピーによる新規スマートオブジェクト</translation>
+    </message>
+    <message>
         <source>Replace Contents</source>
         <translation>内容を置き換え</translation>
     </message>
@@ -3342,6 +3354,10 @@ Working: %2</source>
         <translation>LUT が読み込まれていません。</translation>
     </message>
     <message>
+        <source>%1 (3DLUT files work in RGB documents only)</source>
+        <translation>%1(3DLUT ファイルは RGB ドキュメントでのみ使用できます)</translation>
+    </message>
+    <message>
         <source>%1 (cannot be read)</source>
         <translation>%1(読み込めません)</translation>
     </message>
@@ -3364,6 +3380,10 @@ Working: %2</source>
     <message>
         <source>That file could not be read.</source>
         <translation>ファイルを読み込めませんでした。</translation>
+    </message>
+    <message>
+        <source>In a %1 document Color Lookup takes an ICC abstract profile or a %1 device-link profile; 3DLUT files work in RGB documents only.</source>
+        <translation>%1 ドキュメントのカラールックアップでは、ICC 抽象プロファイルまたは %1 のデバイスリンクプロファイルを使用できます。3DLUT ファイルは RGB ドキュメントでのみ使用できます。</translation>
     </message>
     <message>
         <source>That is not a LUT NekoPhoto can read: a .cube or .3dl table, or an ICC abstract or RGB device-link profile.</source>
@@ -7408,6 +7428,14 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>&amp;Trim…</source>
         <translation>トリミング(&amp;T)...</translation>
+    </message>
+    <message>
+        <source>New Smart Object via &amp;Copy</source>
+        <translation>コピーによる新規スマートオブジェクト(&amp;C)</translation>
+    </message>
+    <message>
+        <source>Couldn’t copy the smart object</source>
+        <translation>スマートオブジェクトをコピーできませんでした</translation>
     </message>
     <message>
         <source>Reselect</source>

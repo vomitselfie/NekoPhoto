@@ -1435,6 +1435,127 @@ def colour_mode_transforms(rpc):
     rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
 
 
+def colour_mode_smart_objects(rpc):
+    """Smart objects, Smart Filters, artboards, slices, SVG and deleting a clipping base in CMYK and Lab, at 8 and 16
+    bits, in a tab of its own: an sRGB file placed through the profile, layers converted to a smart object (contents in
+    the document's mode, opened in their own tab), Smart Filters on the document's samples (Plastic Wrap refused, as in
+    Photoshop), warp, replace, rasterize; artboard and slice exports and SVG in sRGB; PSD and project keep the
+    instances. Mosh is RGB only. Each edit is one undo step."""
+    work = tempfile.mkdtemp()
+    first = rpc.call("tabs.list")
+    tab = rpc.call("tabs.new")
+    red = os.path.join(work, "red.png")
+    rpc.call("document.new", width=16, height=12)
+    rpc.call("pixels.fill", color="#ff0000")
+    rpc.call("document.export", path=red)
+    rpc.call("document.close", discard=True)
+    reddish = lambda hexa: int(hexa[1:3], 16) > 200 and int(hexa[3:5], 16) < 70 and int(hexa[5:7], 16) < 70
+    for mode, bits in (("cmyk", 8), ("cmyk", 16), ("lab", 8), ("lab", 16)):
+        rpc.call("document.new", width=64, height=48)
+        rpc.call("pixels.fill", color="#3080c0")
+        rpc.call("image.mode", colorMode=mode, bits=bits)
+        placed = rpc.call("smartObject.place", path=red)
+        assert placed["kind"] == "smartObject" and not placed["smartObject"]["locked"], placed
+        assert rpc.call("history.info")["undo"] == "Place Embedded"
+        sample = rpc.call("color.sample", x=32, y=24)
+        assert sample["model"] == mode and reddish(sample["color"]), ("red through the profile", mode, bits, sample)
+        if mode == "cmyk":
+            assert sample["values"][0] < 10 and sample["values"][1] > 80, ("red's inks", sample)
+        # Layers converted: their contents in the document's mode, opened in a tab of their own.
+        rpc.call("layers.add", kind="pixels", name="Ink")
+        rpc.call("brush.stroke", points=[[4, 4], [30, 4]], size=6, color="#000000")
+        ink = rpc.call("layers.list")[0]
+        before = rpc.call("color.sample", x=10, y=4)["values"]
+        converted = rpc.call("smartObject.convert", ids=[ink["id"]])
+        assert converted["kind"] == "smartObject", converted
+        assert rpc.call("history.info")["undo"] == "Convert to Smart Object"
+        after = rpc.call("color.sample", x=10, y=4)["values"]
+        assert all(abs(a - b) < 0.6 for a, b in zip(after, before)), ("converted layers look as they did", before, after)
+        here = [t for t in rpc.call("tabs.list") if t["current"]][0]
+        opened = rpc.call("smartObject.editContents", id=converted["id"])
+        info = rpc.call("document.info")
+        assert info["colorMode"] == mode and info["bits"] == bits, ("the contents in their own mode", info)
+        rpc.call("layers.add", kind="pixels", name="Inside")
+        assert rpc.call("smartObject.commit")["committed"]
+        rpc.call("tabs.close", index=opened["tab"])
+        rpc.call("tabs.select", index=here["index"])
+        assert rpc.call("history.info")["undo"] == "Edit Smart Object Contents"
+        # Smart Filters on the document's samples.
+        fx = rpc.call("smartObject.addFilter", id=placed["id"], kind="gaussian blur", radius=2)
+        assert fx["kind"] == "smartObject", fx
+        assert rpc.call("history.info")["undo"] == "Smart Filter"
+        rpc.call("smartObject.addFilter", id=placed["id"], kind="mosaic", cellSize=4)
+        expect_refused(rpc, "not available in", "smartObject.addFilter", id=placed["id"], kind="plastic wrap")
+        # The filter mask painted in a document of this mode.
+        assert rpc.call("smartObject.filterMask", id=placed["id"], action="invert")["mask"]["outside"] == 0
+        assert rpc.call("smartObject.filterMask", id=placed["id"], action="select")["mask"]["painting"]
+        rpc.call("brush.stroke", points=[[2, 2], [40, 30]], size=10, color="#ffffff", mask=True)
+        rpc.call("smartObject.filterMask", id=placed["id"], action="deselect")
+        assert rpc.call("smartObject.filters", id=placed["id"])["mask"]["maskedPixels"] > 0
+        rpc.call("layers.setTransform", id=placed["id"], x=6, y=5)
+        assert rpc.call("layers.get", id=placed["id"])["kind"] == "smartObject"
+        assert rpc.call("smartObject.filters", id=placed["id"])["filters"], "the stack stays"
+        warped = rpc.call("layers.warp", id=converted["id"], style="arc", bend=25)
+        assert warped["kind"] == "smartObject", warped
+        rpc.call("smartObject.replace", id=converted["id"], path=red)
+        assert rpc.call("layers.get", id=converted["id"])["kind"] == "smartObject"
+        own = rpc.call("smartObject.viaCopy", id=placed["id"])
+        assert own["kind"] == "smartObject" and own["id"] != placed["id"], own
+        assert rpc.call("history.info")["undo"] == "New Smart Object via Copy"
+        rpc.call("history.undo")
+        # PSD and project keep the instances.
+        psd = os.path.join(work, "so_%s%d.psd" % (mode, bits))
+        rpc.call("document.export", path=psd)
+        project = os.path.join(work, "so_%s%d.comp" % (mode, bits))
+        rpc.call("document.save", path=project)
+        for path in (psd, project):
+            rpc.call("document.close", discard=True)
+            rpc.call("document.open", path=path)
+            info = rpc.call("document.info")
+            assert info["colorMode"] == mode and info["bits"] == bits, (path, info)
+            kinds = [l["kind"] for l in rpc.call("layers.list")]
+            assert kinds.count("smartObject") == 2, (path, kinds)
+        top = rpc.call("layers.list")[0]
+        assert rpc.call("smartObject.rasterize", id=top["id"])["kind"] == "pixels"
+        # Mosh works on RGB only.
+        expect_refused(rpc, "in %s mode" % ("CMYK" if mode == "cmyk" else "Lab"), "pixels.mosh", effect="vhs")
+        # Deleting a clipping base keeps the clipped layer's look, baked into its own samples.
+        rpc.call("layers.add", kind="pixels", name="Base")
+        rpc.call("brush.stroke", points=[[40, 30], [60, 30]], size=8, color="#000000")
+        base = rpc.call("layers.list")[0]
+        rpc.call("layers.add", kind="pixels", name="Clipped")
+        rpc.call("pixels.fill", color="#ffcc00")
+        clipped = rpc.call("layers.list")[0]
+        rpc.call("layers.set", id=clipped["id"], clipping=True)
+        shown = rpc.call("color.sample", x=50, y=30)["values"]
+        outside = rpc.call("color.sample", x=50, y=10)["values"]
+        rpc.call("layers.delete", id=base["id"])
+        assert rpc.call("history.info")["undo"] == "Delete Layer", rpc.call("history.info")
+        assert all(abs(a - b) < 0.6 for a, b in zip(rpc.call("color.sample", x=50, y=30)["values"], shown)), "kept where the base was"
+        assert all(abs(a - b) < 0.6 for a, b in zip(rpc.call("color.sample", x=50, y=10)["values"], outside)), "still hidden past it"
+        # Artboards and slices, exported in sRGB; SVG too.
+        assert rpc.call("tool.select", name="artboard")["tool"] == "artboard"
+        rpc.call("tool.select", name="move")
+        board = rpc.call("artboards.add", x=4, y=4, width=40, height=30, background="#20a040", name="Board")
+        assert rpc.call("history.info")["undo"] == "New Artboard", rpc.call("history.info")
+        assert rpc.call("artboards.set", id=board["id"], x=8, moveContents=True)["x"] == 8
+        boards = rpc.call("artboards.export", directory=os.path.join(work, "boards_%s%d" % (mode, bits)))
+        assert boards["convertedToSrgb"] and len(boards["files"]) == 1, boards
+        assert boards["bits"] == bits, boards
+        assert rpc.call("tool.select", name="slice")["tool"] == "slice"
+        rpc.call("tool.select", name="move")
+        piece = rpc.call("slices.add", x=0, y=0, width=20, height=16, name="corner")
+        cut = rpc.call("slices.export", directory=os.path.join(work, "slices_%s%d" % (mode, bits)), format="jpeg")
+        assert cut["convertedToSrgb"] and cut["bits"] == 8 and len(cut["files"]) == 1, cut
+        svg = rpc.call("document.export", path=os.path.join(work, "so_%s%d.svg" % (mode, bits)))
+        assert svg["convertedToSrgb"] and svg["images"] >= 1, svg
+        rpc.call("slices.delete", id=piece["id"])
+        rpc.call("artboards.delete", id=board["id"])
+        rpc.call("document.close", discard=True)
+    rpc.call("tabs.close", index=tab["index"], discard=True)
+    rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
+
+
 def pixel_clipboard(rpc):
     """Edit > Cut, Copy, Copy Merged and Paste of pixels (pixels.cut, pixels.copy, pixels.copyMerged, pixels.paste)
     and Select > Reselect, at 8, 16 and 32 bits and in CMYK and Lab, in a tab of its own: a paste is one undo step
@@ -2126,6 +2247,7 @@ def main():
     colour_mode_adjustments(rpc)
     colour_mode_selection(rpc)
     colour_mode_transforms(rpc)
+    colour_mode_smart_objects(rpc)
 
     # Errors come back as errors, not crashes.
     try:

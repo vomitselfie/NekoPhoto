@@ -4,6 +4,7 @@
 #include "HistogramView.h"
 #include "ImageConvert.h"
 #include "compositor/histogram.h"
+#include "compositor/modeedit.h"
 #include <QMessageBox>
 #include <QFileInfo>
 #include <QFile>
@@ -724,7 +725,11 @@ QWidget* AdjustmentEditor::buildMore() {
         name->setWordWrap(true);
         syncers_.push_back([this, name] {
             const auto& c = settings_.colorLookup;
-            name->setText(c.format.empty() ? tr("No LUT loaded.") : colorLookupReadable(c) ? QString::fromStdString(c.name) : tr("%1 (cannot be read)").arg(QString::fromStdString(c.name)));
+            const ColorMode mode = colorMode();
+            const bool drawn = mode == ColorMode::RGB ? colorLookupReadable(c) : session_ && colorLookupAppliesInMode(c, mode, session_->document()->profile);
+            name->setText(c.format.empty() ? tr("No LUT loaded.") : drawn ? QString::fromStdString(c.name)
+                          : mode != ColorMode::RGB && c.format != "icc" ? tr("%1 (3DLUT files work in RGB documents only)").arg(QString::fromStdString(c.name))
+                                                                         : tr("%1 (cannot be read)").arg(QString::fromStdString(c.name)));
         });
         v->addWidget(name);
         auto* load = new QPushButton(tr("Load LUT…"));
@@ -740,7 +745,14 @@ QWidget* AdjustmentEditor::buildMore() {
             const QString ext = QFileInfo(path).suffix().toLower();
             if (ext == "icc" || ext == "icm") { next.format = "icc"; next.data = toBase64(std::vector<uint8_t>(bytes.begin(), bytes.end())); }
             else { next.format = ext == "3dl" ? "3dl" : "cube"; next.data = bytes.toStdString(); }
-            if (!colorLookupReadable(next)) {
+            if (const ColorMode mode = colorMode(); mode != ColorMode::RGB) {
+                // As in Photoshop: in CMYK and Lab, abstract profiles and device links of the document's colour space.
+                if (!session_ || !colorLookupAppliesInMode(next, mode, session_->document()->profile)) {
+                    QMessageBox::warning(this, tr("Color Lookup"), tr("In a %1 document Color Lookup takes an ICC abstract profile or a %1 device-link profile; 3DLUT files work in RGB documents only.")
+                                                                     .arg(QString::fromLatin1(colorModeName(mode))));
+                    return;
+                }
+            } else if (!colorLookupReadable(next)) {
                 QMessageBox::warning(this, tr("Color Lookup"), tr("That is not a LUT NekoPhoto can read: a .cube or .3dl table, or an ICC abstract or RGB device-link profile."));
                 return;
             }

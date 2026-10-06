@@ -82,6 +82,10 @@ In the Layer ▸ Smart Objects menu and over automation (`smartObject.*`, the MC
 - **Replace Contents** swaps in a file's contents; every instance keeps its centre and scale ("A copy" becomes "B
   copy", as Photoshop renames).
 - **Rasterize** keeps what the layer shows as plain pixels.
+- **New Smart Object via Copy** puts a copy of the smart object above it whose contents are its own (a copy of the
+  source under a new id): editing or replacing either one's contents leaves the other as it is, where Duplicate Layer
+  shares them. Its warp, Smart Filters and filter mask come along (the filter cache record is copied for the new
+  instance).
 - **Painting or filtering** a smart object asks first, as Photoshop does: Edit Contents (when it can be edited),
   Rasterize, or Cancel. Automation refuses with the same two ways forward.
 
@@ -97,8 +101,31 @@ message says which layer and why. New sources are written into the PSD's `lnk2` 
 beside the file's own untouched ones, and new placements as Photoshop 2026's `SoLd` (Patchy's authoring shape;
 Photoshop reads SoLd-only files).
 
-Contents come in as NekoPhoto reads them: a CMYK PSD (common for print illustration) converted to sRGB through its
-own colour profile. Edited and put back, such contents are written as an RGB PSD.
+Contents keep their own colour mode. A CMYK or Lab PSD (common for print illustration) is kept as its own samples
+(`SmartObjectSource::native`, with its mode and profile) beside an sRGB copy (`image`) that RGB documents place; Edit
+Contents opens it in its own mode and Save writes it back in that mode.
+
+## In CMYK and Lab documents
+
+Everything above works in CMYK and Lab documents at 8 and 16 bits ([color-modes.md](color-modes.md#smart-objects)).
+
+- An instance's pixels are the contents in the document's layout (`smartObjectSourceImage` with a
+  `SmartObjectTarget`: depth, mode and profile, `smartObjectTargetOf(document)`): CMYK or Lab contents of the same mode
+  and profile as they are, anything else converted through the profiles once, from the contents' own profile
+  (`SmartObjectSource::profile`, sRGB when empty), Relative Colorimetric with black point compensation. The converted
+  buffer is cached on the source and shared by every instance.
+- Convert to Smart Object makes a child document of the document's mode and profile, so the converted layers look
+  exactly as they did.
+- Warps go through `renderWarpedImageAny` (CMYK as two four-sample passes). Smart Filters run on the document's samples:
+  Lab's four as the RGB kernels take red, green, blue and alpha; CMYK's five as (C, M, Y, alpha) and (K, K, K, alpha),
+  which see the same alpha and so grow and trim alike. Plastic Wrap, a Filter Gallery filter, is refused in CMYK and
+  Lab as Photoshop greys it there (`smartFilterDrawsInMode`). The `FEid` record written for an instance holds the
+  document's channels (four inks, or L, a and b).
+- A project keeps the contents' profile and mode in the source record (version 4); CMYK or Lab contents are read again
+  from the embedded PSB when the project opens.
+- Not checked against Photoshop: no Photoshop-saved CMYK or Lab file with Smart Filters was at hand, so the filters'
+  results in CMYK and Lab are the RGB kernels' formulas on the stored samples. The one Photoshop-saved CMYK file with
+  smart objects (every blend mode over rubber ducks) renders as it did before.
 
 ## Warps
 

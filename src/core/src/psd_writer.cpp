@@ -646,18 +646,29 @@ private:
             // Drawn here, and moved or given new contents: Photoshop's cache for it (the unfiltered pixels over the
             // canvas, and the shared mask) is written anew.
             auto cache = doc_.psdCarry ? findSmartFilterCache(doc_.psdCarry->globals, so.placedId) : std::nullopt;
-            // The cache is 8-bit whatever the source's depth.
-            const AnyImage eight = cache ? smartObjectSourceImage(*source->second, SampleType::U8) : AnyImage();
-            auto unfiltered = eight.u8() ? placedSmartObjectRaster(so, *eight.u8(), quad) : std::nullopt;
-            if (!unfiltered || !placedIds_.insert(so.placedId).second) {
+            // The cache is 8-bit whatever the source's depth, in the document's channels.
+            std::optional<std::vector<uint8_t>> record;
+            if (cache) {
+                uint8_t outside = 255;
+                for (const PsdBlock& b : so.psdBlocks)
+                    if (auto stack = (b.key == "SoLd" || b.key == "SoLE") ? parseSmartFilterStack(b.key, b.data) : std::nullopt) { outside = stack->maskDefault; break; }
+                const PixelRect canvas{0, 0, doc_.width, doc_.height};
+                if (doc_.colorMode != ColorMode::RGB) {
+                    auto drawn = drawSmartObjectRaster({}, so, *source->second, quad, SmartObjectTarget(SampleType::U8, doc_.colorMode, &doc_.profile),
+                                                       SmartObjectDraw::Unfiltered);
+                    if (drawn && drawn->image)
+                        record = authorSmartFilterRecord(so.placedId, canvas, drawn->image, drawn->x, drawn->y, cache->mask.get(), cache->maskBounds, outside);
+                } else {
+                    const AnyImage eight = smartObjectSourceImage(*source->second, SampleType::U8);
+                    if (auto unfiltered = eight.u8() ? placedSmartObjectRaster(so, *eight.u8(), quad) : std::nullopt)
+                        record = authorSmartFilterRecord(so.placedId, canvas, *unfiltered, cache->mask.get(), cache->maskBounds, outside);
+                }
+            }
+            if (!record || !placedIds_.insert(so.placedId).second) {
                 summary_.warnings.push_back("Layer \"" + l.name + "\": its Smart Filters' cache could not be rewritten, so it is written as pixels.");
                 return;
             }
-            uint8_t outside = 255;
-            for (const PsdBlock& b : so.psdBlocks)
-                if (auto stack = (b.key == "SoLd" || b.key == "SoLE") ? parseSmartFilterStack(b.key, b.data) : std::nullopt) { outside = stack->maskDefault; break; }
-            filterRecords_.push_back({so.placedId, authorSmartFilterRecord(so.placedId, PixelRect{0, 0, doc_.width, doc_.height}, *unfiltered,
-                                                                             cache->mask.get(), cache->maskBounds, outside)});
+            filterRecords_.push_back({so.placedId, std::move(*record)});
             for (const PsdBlock& b : so.psdBlocks) {
                 auto patched = patchPsdPlacement(b.key, b.data, quad);
                 if (patched) r.carried.push_back({b.key, std::move(*patched)});

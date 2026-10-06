@@ -131,8 +131,9 @@ for GIF), `document.close`. `document.info` reports the document's `profile`.
 Artboards and slices (docs/artboards-slices.md): `artboards.list`, `artboards.add` (`x`, `y`, `width`, `height`, `name`,
 `background`: white, black, transparent or a CSS colour), `artboards.set` (the same by `id`; a move takes its layers along
 unless `moveContents` is false), `artboards.delete` (a plain folder again, or with `contents` everything in it), `artboards.export`
-(`directory`, `format` png or jpeg, `prefix`, `quality`; answers the `files` written and their `bits`: a 16-bit document
-writes 16-bit PNGs, and JPEGs dithered down to 8 bits with a `note`); `slices.list`, `slices.add`, `slices.set`
+(`directory`, `format` png, jpeg, webp or tiff, `prefix`, `quality`; answers the `files` written and their `bits`: a
+16-bit document writes 16-bit PNGs (and TIFFs where Qt keeps 16 bits), the rest dithered down to 8 bits with a `note`; a
+CMYK or Lab document's files are in sRGB, with `convertedToSrgb`); `slices.list`, `slices.add`, `slices.set`
 (by numeric `id`; `name`, `url`, `target`, `altTag`), `slices.delete` and `slices.export` (as `artboards.export`). `layers.get`
 shows a folder's `artboard`; `tool.select` takes `artboard` and `slice`.
 
@@ -142,10 +143,11 @@ Ruler guides (View > Show > Guides): `guides.list` (`index`, `orientation`, `pos
 guides are saved in projects and PSDs.
 
 Smart objects: `smartObject.convert` (the selection or `ids`), `smartObject.place` (`path`), `smartObject.replace`
-(`path`), `smartObject.rasterize`, `smartObject.editContents` (opens a tab; a smart object made from a camera RAW file is developed again instead, with
+(`path`), `smartObject.rasterize`, `smartObject.viaCopy` (New Smart Object via Copy: a copy above it with contents of its
+own), `smartObject.editContents` (opens a tab; a smart object made from a camera RAW file is developed again instead, with
 `settings`, white balance in kelvin as `document.open` takes it, or its own, one undo step) and `smartObject.commit` (in that tab).
-`smartObject.addFilter` adds a Smart Filter (any of the thirteen drawn here, with its settings, opacity and blend) on
-top of a smart object's stack. `smartObject.filters` lists the stack (entries by `index` in running order, 0 applied
+`smartObject.addFilter` adds a Smart Filter (any of the thirteen drawn here, with its settings, opacity and blend; in CMYK
+and Lab every one but Plastic Wrap, as in Photoshop) on top of a smart object's stack. `smartObject.filters` lists the stack (entries by `index` in running order, 0 applied
 first; each with its `kind`, `settings`, `enabled`, `opacity`, `blend`, and `drawn` false for one NekoPhoto does not draw,
 which makes the stack read-only), `smartObject.setFilter` changes an entry's settings, switch, opacity or blend (no
 `index`: `enabled` switches the whole stack), `smartObject.moveFilter` (`index`, `to`), `smartObject.removeFilter`

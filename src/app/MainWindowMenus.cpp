@@ -492,6 +492,10 @@ void MainWindow::buildMenus() {
     nameAction("smart.convert", needsDocument(smart->addAction(tr("&Convert to Smart Object"), this, [this] {
         runCommand("smartObject.convert", {}, tr("Couldn’t convert to a smart object"));
     }), "edit.smartObject"));
+    nameAction("smart.viaCopy", needsDocument(smart->addAction(tr("New Smart Object via &Copy"), this, [this] {
+        const Layer* l = session_->activeLayer();
+        if (l && l->isLiveSmartObject()) runCommand("smartObject.viaCopy", {}, tr("Couldn’t copy the smart object"));
+    }), "edit.smartObject"));
     nameAction("smart.edit", needsDocument(smart->addAction(tr("&Edit Contents"), this, [this] { editSmartObjectContents(); }), "edit.smartObject"));
     nameAction("smart.replace", needsDocument(smart->addAction(tr("&Replace Contents…"), this, [this] {
         const QString path = QFileDialog::getOpenFileName(this, tr("Replace Contents"), QSettings().value("lastDir").toString(),

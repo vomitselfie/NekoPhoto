@@ -242,7 +242,6 @@ void AutomationServer::registerDocumentHandlers() {
         const bool gif = suffix == "gif";
         const color::ExportPlan plan = color::exportPlan(doc, flag(p, "convertToSrgb", gif), flag(p, "embedProfile", true));
         if (suffix == "svg" && floatDocument) fail("SVG export is not available for 32-bit documents yet");
-        if (suffix == "svg" && doc.colorMode != ColorMode::RGB) fail(QStringLiteral("SVG export is not available in %1 mode yet").arg(QString::fromLatin1(colorModeName(doc.colorMode))));
         if (suffix == "svg") {
             // Shape layers as paths, folders as groups, the rest as embedded PNGs (compositor/svg.h).
             SvgExportSummary summary;
@@ -250,8 +249,10 @@ void AutomationServer::registerDocumentHandlers() {
             if (!compositor::exportSvg(doc, path.toStdString(), &summary, &error)) fail("couldn't write " + path + ": " + qs(error));
             QJsonArray notes;
             for (auto& n : summary.notes) notes.append(qs(n));
-            return QJsonObject{{"path", path}, {"width", doc.width}, {"height", doc.height}, {"shapes", summary.shapes}, {"images", summary.images}, {"groups", summary.groups}, {"notes", notes},
-                               {"bits", deep ? 16 : 8}};
+            QJsonObject out{{"path", path}, {"width", doc.width}, {"height", doc.height}, {"shapes", summary.shapes}, {"images", summary.images}, {"groups", summary.groups}, {"notes", notes},
+                            {"bits", deep ? 16 : 8}};
+            if (doc.colorMode != ColorMode::RGB) { out["convertedToSrgb"] = true; out["note"] = QStringLiteral("converted from %1 to sRGB").arg(QString::fromLatin1(colorModeName(doc.colorMode))); }
+            return out;
         }
         if (suffix == "gif") {
             // The timeline's frames as an animated GIF, or the composite as a still one.

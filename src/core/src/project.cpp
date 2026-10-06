@@ -3,6 +3,8 @@
 #include "compositor/depth.h"
 #include "compositor/parallel.h"
 #include "compositor/png.h"
+#include "compositor/psd.h"
+#include "compositor/render.h"
 #include <nlohmann/json.hpp>
 #include <zlib.h>
 #ifdef COMPOSITOR_HAVE_ZSTD
@@ -979,6 +981,18 @@ std::optional<Document> loadProject(const std::string& pathText, ProjectError& e
                     sourceBytes += bytesNeeded;
                     if (depth == SampleType::U16) source->image = Image16Ptr(readPngImage16(png.string()));
                     else source->image = ImagePtr(readPngImage(png.string()));
+                }
+                // CMYK or Lab contents: their own samples, read again from the embedded file.
+                if (source->nativeMode != ColorMode::RGB) {
+                    std::string why;
+                    PsdImportOptions o;
+                    o.depth = 1;
+                    auto nested = source->bytes && source->bytes->size() >= 4 && std::equal(source->bytes->begin(), source->bytes->begin() + 4, "8BPS")
+                                      ? importPsdBytes(*source->bytes, &why, o) : std::nullopt;
+                    if (nested && nested->document.colorMode == source->nativeMode && nested->document.width == source->width
+                        && nested->document.height == source->height)
+                        source->native = nested->realComposite && nested->compositeNative ? nested->compositeNative : renderNative(nested->document);
+                    else source->nativeMode = ColorMode::RGB;
                 }
                 const std::string id = source->id;
                 d.smartObjects[id] = std::make_shared<const SmartObjectSource>(std::move(*source));
