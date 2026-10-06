@@ -44,6 +44,7 @@ public:
 private:
     int radius() const { return int(std::ceil(diameter_ / 2)); }
     float weight(float u) const;
+    void footprintMean(Point center, std::vector<float>& out) const;
     void pickUp(Point center);
     void smudge(Point center);
     void push(Point from, Point to);
@@ -67,7 +68,7 @@ private:
     std::vector<Point> points_;
     bool hasLast_ = false;
     Point last_;
-    std::vector<float> carried_;
+    std::vector<float> carried_;   // Smudge: the one carried colour, a running average (see warpstroke.cpp)
     Field field_;
     std::shared_ptr<ImageT<SampleType::U16>> image16_;
     std::shared_ptr<const ImageT<SampleType::U16>> original16_;

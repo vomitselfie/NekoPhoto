@@ -115,45 +115,53 @@ Rect WarpStroke::takeDirtyRect() {
     return r;
 }
 
-void WarpStroke::pickUp(Point center) {
-    int r = radius(), side = 2 * r + 1;
-    const int n = channels_;
-    carried_.assign(size_t(side) * side * size_t(n), 0);
-    int cx = int(std::lround(center.x)), cy = int(std::lround(center.y));
+// Legal boundary (docs/legal-boundaries.md, "Brushes"): the Smudge tool carries ONE colour, a running average of the
+// canvas under each dab's footprint (premultiplied, per channel), never a per-pixel patch or any other spatial pickup
+// texture, paint amount or wetness. The foreground colour never enters it. Each dab blends the canvas toward the
+// carried colour by the tip's falloff, then the carried colour takes in the footprint's own average by `strength`
+// (US 7768525, US 8749572).
+
+void WarpStroke::footprintMean(Point center, std::vector<float>& out) const {
+    const int r = radius(), n = channels_;
+    const int cx = int(std::lround(center.x)), cy = int(std::lround(center.y));
+    const float invR = 1 / float(diameter_ / 2);
+    std::vector<double> sum(size_t(n), 0.0);
+    double total = 0;
     for (int dy = -r; dy <= r; dy++) {
-        int y = cy + dy;
+        const int y = cy + dy;
         if (y < 0 || y >= height_) continue;
         for (int dx = -r; dx <= r; dx++) {
-            int x = cx + dx;
+            const int x = cx + dx;
             if (x < 0 || x >= width_) continue;
-            size_t c = (size_t(dy + r) * side + size_t(dx + r)) * size_t(n);
-            if (imageC8_) {
-                const uint8_t* p = imageC8_->pixel(x, y);
-                for (int k = 0; k < n; k++) carried_[c + k] = p[k];
-                continue;
+            const float w = weight(std::sqrt(float(dx * dx + dy * dy)) * invR);
+            if (w <= 0) continue;
+            for (int k = 0; k < n; k++) {
+                double v;
+                if (imageC8_) v = imageC8_->pixel(x, y)[k];
+                else if (imageF_) v = imageF_->pixel(x, y)[k];
+                else if (image16_) v = image16_->pixel(x, y)[k];
+                else v = image_->pixel(x, y)[k];
+                sum[size_t(k)] += w * v;
             }
-            if (imageF_) {
-                const float* p = imageF_->pixel(x, y);
-                for (int k = 0; k < 4; k++) carried_[c + k] = p[k];
-                continue;
-            }
-            if (image16_) {
-                const uint16_t* p = image16_->pixel(x, y);
-                for (int k = 0; k < n; k++) carried_[c + k] = p[k];
-                continue;
-            }
-            const uint8_t* p = image_->pixel(x, y);
-            for (int k = 0; k < 4; k++) carried_[c + k] = p[k];
+            total += w;
         }
     }
+    out.assign(size_t(n), 0.0f);
+    if (total > 0) for (int k = 0; k < n; k++) out[size_t(k)] = float(sum[size_t(k)] / total);
+}
+
+void WarpStroke::pickUp(Point center) {
+    footprintMean(center, carried_);
 }
 
 void WarpStroke::smudge(Point center) {
-    int r = radius(), side = 2 * r + 1;
+    int r = radius();
     int cx = int(std::lround(center.x)), cy = int(std::lround(center.y));
     markDirty(cx - r, cy - r, cx + r + 1, cy + r + 1);
-    float keep = float(strength_), invR = 1 / float(diameter_ / 2);
+    const float keep = float(strength_), invR = 1 / float(diameter_ / 2);
     const int n = channels_;
+    std::vector<float> under;
+    footprintMean(center, under);
     for (int dy = -r; dy <= r; dy++) {
         int y = cy + dy;
         if (y < 0 || y >= height_) continue;
@@ -162,46 +170,17 @@ void WarpStroke::smudge(Point center) {
             if (x < 0 || x >= width_) continue;
             float w = weight(std::sqrt(float(dx * dx + dy * dy)) * invR);
             if (w <= 0) continue;
-            size_t c = (size_t(dy + r) * side + size_t(dx + r)) * size_t(n);
-            if (imageC8_) {
-                uint8_t* p = imageC8_->pixel(x, y);
-                for (int k = 0; k < n; k++) {
-                    float under = p[k];
-                    float painted = under + (carried_[c + k] - under) * w;
-                    p[k] = uint8_t(std::max(0.0f, std::min(255.0f, std::round(painted))));
-                    carried_[c + k] = painted + (carried_[c + k] - painted) * keep;
-                }
-                continue;
-            }
-            if (imageF_) {
-                float* p = imageF_->pixel(x, y);
-                for (int k = 0; k < 4; k++) {
-                    const float under = p[k];
-                    const float painted = under + (carried_[c + k] - under) * w;
-                    p[k] = std::max(0.0f, painted);
-                    carried_[c + k] = painted + (carried_[c + k] - painted) * keep;
-                }
-                continue;
-            }
-            if (image16_) {
-                uint16_t* p = image16_->pixel(x, y);
-                for (int k = 0; k < n; k++) {
-                    float under = p[k];
-                    float painted = under + (carried_[c + k] - under) * w;
-                    p[k] = uint16_t(std::max(0.0f, std::min(32768.0f, std::round(painted))));
-                    carried_[c + k] = painted + (carried_[c + k] - painted) * keep;
-                }
-                continue;
-            }
-            uint8_t* p = image_->pixel(x, y);
-            for (int k = 0; k < 4; k++) {
-                float under = p[k];
-                float painted = under + (carried_[c + k] - under) * w;
-                p[k] = uint8_t(std::max(0.0f, std::min(255.0f, std::round(painted))));
-                carried_[c + k] = painted + (carried_[c + k] - painted) * keep;
+            for (int k = 0; k < n; k++) {
+                const float carried = carried_[size_t(k)];
+                if (imageC8_) { uint8_t& v = imageC8_->pixel(x, y)[k]; v = uint8_t(std::clamp(std::round(v + (carried - v) * w), 0.0f, 255.0f)); }
+                else if (imageF_) { float& v = imageF_->pixel(x, y)[k]; v = std::max(0.0f, v + (carried - v) * w); }
+                else if (image16_) { uint16_t& v = image16_->pixel(x, y)[k]; v = uint16_t(std::clamp(std::round(v + (carried - v) * w), 0.0f, 32768.0f)); }
+                else { uint8_t& v = image_->pixel(x, y)[k]; v = uint8_t(std::clamp(std::round(v + (carried - v) * w), 0.0f, 255.0f)); }
             }
         }
     }
+    // The carried colour takes in what this dab passed over (the canvas before it was painted).
+    for (int k = 0; k < n; k++) carried_[size_t(k)] = under[size_t(k)] + (carried_[size_t(k)] - under[size_t(k)]) * keep;
 }
 
 void WarpStroke::growField(int x0, int y0, int x1, int y1) {

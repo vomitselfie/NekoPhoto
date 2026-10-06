@@ -236,6 +236,12 @@ bool saveTipPreset(const std::string& folder, const TipPreset& preset, std::stri
 
 TipStroke::TipStroke(BrushStroke& grid, BrushTip tip, double diameter, uint32_t seed)
     : grid_(grid), tip_(std::move(tip)), diameter_(diameter), rng_(seed) {
+    // Legal boundaries (docs/legal-boundaries.md, "Brushes"): the grain is one static mask anchored to the document,
+    // never carried along the stroke or turned with each dab (US 10902645, US 8896579), and a mouse's pressure never
+    // follows its speed, since pressure can drive flow and opacity (no velocity-dependent deposition). Presets that ask
+    // for Stroke or Dab grain, or for speed as mouse pressure, paint with Canvas grain and full mouse pressure.
+    tip_.grainMode = BrushTip::GrainMode::Canvas;
+    tip_.mousePressureFromSpeed = false;
     if (!grid_.isValid() || !(grid_.gridCoverage() || grid_.gridCoverage16()) || !tip_.normalize() || !(diameter_ > 0)) return;
     // The tip at every halving, so a large tip stamped small samples an image of about its size.
     levels_.push_back({GrayImage(*tip_.shape), 1.0});

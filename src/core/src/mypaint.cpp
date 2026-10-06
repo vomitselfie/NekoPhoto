@@ -141,12 +141,25 @@ void requestEnd(MyPaintTiledSurface2*, MyPaintTileRequest* request) {
 
 /// The preset without the settings and inputs this libmypaint does not know (MyPaint 2 presets name a few that
 /// 1.6 lacks, such as the surface-map inputs); libmypaint would print a warning for each and ignore them.
+///
+/// Legal boundaries (docs/legal-boundaries.md, "Brushes") are applied here too, so every preset paints inside them:
+/// - opacity never follows the pen's speed (no velocity-dependent deposition): the speed inputs, and the custom input
+///   that can carry them, are dropped from the opacity settings;
+/// - smudging keeps ONE carried colour (libmypaint's running average of canvas samples, which the brush colour never
+///   enters): the smudge-bucket setting, which selects among several stores, is dropped;
+/// - colours mix linearly: the spectral paint mode is dropped.
 std::string knownOnly(const std::string& brushJson) {
     nlohmann::json j = nlohmann::json::parse(brushJson, nullptr, false);
     if (j.is_discarded() || !j.is_object() || !j.contains("settings") || !j["settings"].is_object()) return brushJson;
     nlohmann::json& settings = j["settings"];
+    static const char* const dropped[] = {"smudge_bucket", "paint_mode"};
+    static const char* const deposition[] = {"opaque", "opaque_multiply", "opaque_linearize"};
     for (auto it = settings.begin(); it != settings.end();) {
         if (int(mypaint_brush_setting_from_cname(it.key().c_str())) < 0) { it = settings.erase(it); continue; }
+        if (std::find_if(std::begin(dropped), std::end(dropped), [&](const char* d) { return it.key() == d; }) != std::end(dropped)) { it = settings.erase(it); continue; }
+        if (std::find_if(std::begin(deposition), std::end(deposition), [&](const char* d) { return it.key() == d; }) != std::end(deposition)
+            && it->is_object() && it->contains("inputs") && (*it)["inputs"].is_object())
+            for (const char* input : {"speed1", "speed2", "custom"}) (*it)["inputs"].erase(input);
         if (it->is_object() && it->contains("inputs") && (*it)["inputs"].is_object()) {
             nlohmann::json& inputs = (*it)["inputs"];
             for (auto in = inputs.begin(); in != inputs.end();)

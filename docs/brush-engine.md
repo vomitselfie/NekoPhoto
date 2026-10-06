@@ -213,11 +213,14 @@ output = offset + depth × curve(input)        (the range runs from offset to of
 | GrainDepth | the grain's depth | 0..1 |
 | GrainRotation | 0 degrees (the grain turned about the document's origin) | circular |
 
-**Grain modes** (`grainMode`): Canvas (the default) fixes the grain to the document, so a stroke reveals it; Stroke
-fixes it to the stroke; Dab fixes it to each dab, turning and flipping with it. GrainRotation turns it within whichever
-frame. `brush.json` keeps `grainMode` ("canvas", "stroke", "dab") and `grainMovement`.
+**Grain modes** (`grainMode`): the grain is always fixed to the document (Canvas), so a stroke reveals it. Stroke and
+Dab grain, and any mapping onto GrainDepth or GrainRotation, are stored but not applied: the brush texture stays one
+static, document-anchored mask that nothing the pen does can weight or turn ([legal-boundaries.md](legal-boundaries.md);
+the engine forces Canvas in `TipStroke::TipStroke` and `mappingAllowed` skips the grain targets). `brush.json` keeps
+`grainMode` ("canvas", "stroke", "dab") and `grainMovement`, so presets round-trip. Mappings of speed onto Flow or
+Opacity are skipped the same way (no velocity-dependent deposition).
 
-Stroke grain, in detail (`TipStroke::dab`):
+Stroke grain, as it worked before it was disabled (the code path remains in `TipStroke::dab`, unreachable):
 
 - Its frame turns with the stroke's tangent smoothed over about two diameters of travel, so a corner or a jittered dab
   does not spin it. The path's direction is unwrapped from dab to dab, and the tangent follows that, so a path that turns
@@ -278,7 +281,8 @@ existed paint as they did.
   drawing. Lengths are pixels, not diameters, since a taper in Procreate and in Clip Studio does not grow with the brush.
   A brush without a taper takes exactly the code path it took before (`no_taper_paints_as_before`; the parity baseline
   and render hashes are unchanged).
-- **Mouse speed as pressure** (`mousePressureFromSpeed`, off by default, labelled simulated). For a mouse only:
+- **Mouse speed as pressure** (`mousePressureFromSpeed`): not applied (the engine clears it, a mouse paints at full
+  pressure), since pressure can drive flow and opacity ([legal-boundaries.md](legal-boundaries.md)). It was, for a mouse only:
   `pressure = clamp(1.1 - speed / 1500, 0.25, 1) × min(1, 0.3 + 0.7 × distance / (2 × diameter))`: slow presses harder,
   a flick lifts, and the first two diameters ramp in. A stylus's pressure is never replaced.
 
@@ -379,7 +383,7 @@ Procreate can tune each in one place. Curves are the identity unless the row say
 | the tilt angles (`sizeTiltAngle` and the rest) | the Tilt input's curve (`tiltCurve`) | zero up to the angle, then straight up to full at 60 degrees | weakly inferred: needs a source reference |
 | `shapeAzimuth` | TiltDirection → Angle | 0, −360: the tip's x axis points the way the pen leans | weakly inferred: the field and its meaning are plain, which axis and the sign are not |
 | `shapeRoll` | Roll → Angle (the barrel's twist, else the stroke's direction); `followStroke` off | 0, −360: the tip turns with the barrel | weakly inferred: the sign, and how it combines with `shapeAzimuth` |
-| `textureApplication` 0 (moving grain) | grain mode Stroke (texturized grain, 1: Canvas) | not a mapping | weakly inferred: which value is moving comes from the earlier reader |
+| `textureApplication` 0 (moving grain) | Canvas grain with an import note (moving grain is not applied) | not a mapping | weakly inferred: which value is moving comes from the earlier reader |
 | `textureMovement` m | `grainMovement` m | not a mapping | synthetic-only: the scale |
 | speed measured on the screen | ScreenSpeed, not Speed | | strongly inferred: Procreate works in screen space; its zoom reference is still to make |
 | `maxSize` | 200 pixels at 1 | | weakly inferred: from Procreate's own thumbnails |
@@ -493,7 +497,7 @@ test is skipped.
 render as a PNG with `metrics.txt` and the fixtures as JSON; `render <stroke.json> <preset> <out.png>` paints one
 recorded stroke.
 
-**Moving grain under torture** (`brush_grain_tests`). An asymmetric grain made in code (`tortureGrain`: a checkerboard,
+**Moving grain under torture** (`brush_grain_tests`, removed with Stroke grain; kept here as the record). An asymmetric grain made in code (`tortureGrain`: a checkerboard,
 stripes that brighten one way only, an L in one corner) in Stroke mode, on a plain tip and on one whose size follows
 ScreenSpeed; painted along a straight line, a right-angled corner, an S curve, a circle of a turn and a quarter, a spiral
 that ends tighter than the brush and a stroke drawn right to left that wobbles across ±180 degrees at every report; each

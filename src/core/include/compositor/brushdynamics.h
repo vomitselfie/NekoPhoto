@@ -79,6 +79,10 @@ double dynamicsOutput(const DynamicsMapping& mapping, double input);
 double applyDynamics(const BrushDynamics& dynamics, DynamicsTarget target, double base, const BrushSample& sample,
                      double diameter, double random = 0, bool withRandom = true);
 bool hasMapping(const BrushDynamics& dynamics, DynamicsTarget target, std::optional<DynamicsInput> input = std::nullopt);
+/// False for the mappings the engine never applies (docs/legal-boundaries.md, "Brushes"): anything on the grain's depth
+/// or rotation (the texture is static), and speed on flow or opacity (no velocity-dependent deposition). Presets that
+/// carry them load and keep them, but they do nothing.
+bool mappingAllowed(DynamicsTarget target, DynamicsInput input);
 /// A mapping with an identity curve.
 DynamicsMapping dynamicsMapping(DynamicsInput input, DynamicsTarget target, double offset, double depth, double scale = 0);
 /// The first mapping from `input` to `target`, if any.

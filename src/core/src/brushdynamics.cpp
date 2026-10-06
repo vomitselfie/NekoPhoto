@@ -116,6 +116,17 @@ double dynamicsOutput(const DynamicsMapping& m, double x) {
     return m.offset + m.depth * y;
 }
 
+bool mappingAllowed(DynamicsTarget target, DynamicsInput input) {
+    // Legal boundaries (docs/legal-boundaries.md, "Brushes"). The brush texture is one static, document-anchored
+    // grayscale mask: nothing the pen does (pressure, speed, direction, rotation, tilt) or chance may weight or turn it
+    // (US 10902645, US 8896579). Deposition never follows the pen's speed: flow and opacity take no speed input
+    // (the velocity-dependent deposition of US 8854342's family).
+    if (target == DynamicsTarget::GrainDepth || target == DynamicsTarget::GrainRotation) return false;
+    if ((target == DynamicsTarget::Flow || target == DynamicsTarget::Opacity) && (input == DynamicsInput::Speed || input == DynamicsInput::ScreenSpeed))
+        return false;
+    return true;
+}
+
 double applyDynamics(const BrushDynamics& dynamics, DynamicsTarget target, double base, const BrushSample& sample, double diameter,
                      double random, bool withRandom) {
     const bool circular = isCircular(target);
@@ -123,6 +134,7 @@ double applyDynamics(const BrushDynamics& dynamics, DynamicsTarget target, doubl
     bool any = false;
     for (const DynamicsMapping& m : dynamics) {
         if (m.target != target || (!withRandom && m.input == DynamicsInput::Random)) continue;
+        if (!mappingAllowed(m.target, m.input)) continue;
         const double out = dynamicsOutput(m, dynamicsInput(m, sample, diameter, random));
         value = circular ? value + out : value * out;
         any = true;
@@ -134,7 +146,7 @@ double applyDynamics(const BrushDynamics& dynamics, DynamicsTarget target, doubl
 
 bool hasMapping(const BrushDynamics& dynamics, DynamicsTarget target, std::optional<DynamicsInput> input) {
     for (const DynamicsMapping& m : dynamics)
-        if (m.target == target && (!input || m.input == *input)) return true;
+        if (m.target == target && (!input || m.input == *input) && mappingAllowed(m.target, m.input)) return true;
     return false;
 }
 

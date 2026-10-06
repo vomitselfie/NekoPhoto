@@ -260,7 +260,9 @@ BrushDynamicsDialog::BrushDynamicsDialog(const BrushTip* tipOrNull, const QStrin
     for (const DynamicsMapping& m : rest)
         if (m.input != DynamicsInput::Pressure || (m.target != DynamicsTarget::Size && m.target != DynamicsTarget::Flow)) {
             others++;
-            const QString line = tr("%1 → %2").arg(inputLabel(m.input), targetLabel(m.target));
+            // Mappings the engine never applies (static grain, no speed on deposition: docs/legal-boundaries.md) say so.
+            const QString line = mappingAllowed(m.target, m.input) ? tr("%1 → %2").arg(inputLabel(m.input), targetLabel(m.target))
+                                                                   : tr("%1 → %2 (not applied)").arg(inputLabel(m.input), targetLabel(m.target));
             if (!listed.contains(line)) listed.push_back(line);
         }
     if (others) {

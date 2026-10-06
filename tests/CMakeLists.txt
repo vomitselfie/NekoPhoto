@@ -242,9 +242,7 @@ add_executable(brush_dynamics_tests brush_dynamics_tests.cpp)
 target_link_libraries(brush_dynamics_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME brush_dynamics_tests COMMAND brush_dynamics_tests)
 # Moving grain under torture: phase, spin, wrap, sampling, rotation, zoom, depth and threads, from each dab's trace.
-add_executable(brush_grain_tests brush_grain_tests.cpp)
-target_link_libraries(brush_grain_tests PRIVATE brush_harness)
-add_test(NAME brush_grain_tests COMMAND brush_grain_tests)
+# Moving (stroke-anchored) grain is not applied (docs/legal-boundaries.md): its torture tests were removed with it.
 add_executable(brush_smoothing_tests brush_smoothing_tests.cpp)
 target_link_libraries(brush_smoothing_tests PRIVATE brush_harness)
 add_test(NAME brush_smoothing_tests COMMAND brush_smoothing_tests)
@@ -352,6 +350,10 @@ find_package(Python3 QUIET COMPONENTS Interpreter)
 if(COMPOSITOR_BUILD_APP AND NOT WIN32 AND TARGET Qt6::lupdate AND Python3_Interpreter_FOUND)
     add_test(NAME translations_check COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/check_translations.py
         --lupdate $<TARGET_FILE:Qt6::lupdate>)
+endif()
+# The legal boundaries' source checks (docs/legal-boundaries.md).
+if(Python3_Interpreter_FOUND)
+    add_test(NAME legal_boundaries_check COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/check_legal_boundaries.py)
 endif()
 
 # Colour management: transforms against Little CMS (linked directly for the reference values), proofing, Convert.
