@@ -182,6 +182,9 @@ LayerText carryTextEdit(const LayerText& before, LayerText after);
 struct TextRunPatch {
     std::optional<std::string> fontFamily;
     std::optional<double> fontSize;
+    /// Pixels added to each run's own size, rounded and kept within 1..2000 (Photoshop's Ctrl+Shift+> and <), after
+    /// `fontSize` when both are set.
+    std::optional<double> fontSizeBy;
     std::optional<bool> bold, italic;          // bold also clears the weight (the face is then chosen by `bold`)
     std::optional<int> weight;                 // 0, or 100..900: bold follows (600 and up)
     std::optional<std::array<double, 3>> color;

@@ -454,13 +454,13 @@ QString MainWindow::toolHint(Tool tool, bool erase) {
     case Tool::CloneStamp: return tr("Alt-click sets the source, then paint");
     case Tool::Smudge: return tr("Opacity is the strength; Liquify pushes pixels, Smudge drags colour, Blur softens");
     case Tool::Gradient: return tr("Drag a line; drag again to redo it; Enter applies, Esc discards; Shift snaps the angle");
-    case Tool::Pen: return tr("Click for corners, drag for curves; click the first point to close, Enter leaves the path open, Esc cancels");
-    case Tool::DirectSelect: return tr("Drag a point, a handle (Alt: just that one) or a path; Alt-click a point to convert it; Delete removes the chosen point");
+    case Tool::Pen: return tr("Click for corners, drag for curves; click the first point to close, Enter leaves the path open, Esc cancels; hold Ctrl for Direct Selection, Alt-click a point to convert it");
+    case Tool::DirectSelect: return tr("Drag a point, a handle (Alt: just that one) or a path; Ctrl-drag moves the whole path; Alt-click a point to convert it; Delete removes the chosen point");
     case Tool::Dodge: return tr("Opacity is the Exposure (Dodge, Burn) or Flow (Sponge); a stroke never goes past one full pass");
     case Tool::PaintBucket: return tr("Click to fill pixels like the one clicked with the foreground colour, inside the selection");
     case Tool::Shape: return tr("Drag a shape in the foreground colour; Shift squares, Alt grows from the centre; Shift-U switches kind");
     case Tool::Text: return tr("Click to type, or drag a box for paragraph text; click text to edit it. Ctrl+Enter commits, Esc cancels; the options bar styles the selected letters");
-    case Tool::Eyedropper: return tr("Click sets the foreground colour, Alt-click the background");
+    case Tool::Eyedropper: return tr("Click or drag to set the foreground colour, with Alt the background");
     case Tool::Hand: return tr("Drag to pan; hold Space to pan from any tool");
     case Tool::Zoom: return tr("Click zooms in, Alt-click out, drag a box to zoom to it; Ctrl-wheel zooms anywhere");
     case Tool::Artboard: return tr("Drag out an artboard; drag inside one to move it with its contents, an edge or corner to resize it");

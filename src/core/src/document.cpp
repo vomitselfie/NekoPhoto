@@ -714,6 +714,7 @@ LayerText carryTextEdit(const LayerText& before, LayerText after) {
 void TextRunPatch::applyTo(TextRun& r) const {
     if (fontFamily) r.fontFamily = *fontFamily;
     if (fontSize) r.fontSize = std::max(1.0, *fontSize);
+    if (fontSizeBy) r.fontSize = std::clamp(std::round(r.fontSize + *fontSizeBy), 1.0, 2000.0);
     if (bold) { r.bold = *bold; r.weight = 0; }
     if (weight) { r.weight = *weight; r.bold = *weight >= 600; }
     if (italic) r.italic = *italic;

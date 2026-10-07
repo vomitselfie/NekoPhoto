@@ -6649,12 +6649,12 @@ File &gt; New creates a blank canvas.</source>
         <translation>ラインをドラッグ。もう一度ドラッグでやり直し。Enter で適用、Esc で破棄。Shift で角度をスナップ</translation>
     </message>
     <message>
-        <source>Click for corners, drag for curves; click the first point to close, Enter leaves the path open, Esc cancels</source>
-        <translation>クリックでコーナー、ドラッグで曲線。最初の点をクリックで閉じる。Enter でパスを開いたまま終了、Esc でキャンセル</translation>
+        <source>Click for corners, drag for curves; click the first point to close, Enter leaves the path open, Esc cancels; hold Ctrl for Direct Selection, Alt-click a point to convert it</source>
+        <translation>クリックでコーナー、ドラッグで曲線。最初の点をクリックで閉じる。Enter でパスを開いたまま終了、Esc でキャンセル。Ctrl を押している間は直接選択、Alt+クリックで点を切り替え</translation>
     </message>
     <message>
-        <source>Drag a point, a handle (Alt: just that one) or a path; Alt-click a point to convert it; Delete removes the chosen point</source>
-        <translation>点、ハンドル (Alt: そのハンドルのみ)、パスをドラッグ。Alt+クリックで点を切り替え。Delete で選択した点を削除</translation>
+        <source>Drag a point, a handle (Alt: just that one) or a path; Ctrl-drag moves the whole path; Alt-click a point to convert it; Delete removes the chosen point</source>
+        <translation>点、ハンドル (Alt: そのハンドルのみ)、パスをドラッグ。Ctrl+ドラッグでパス全体を移動。Alt+クリックで点を切り替え。Delete で選択した点を削除</translation>
     </message>
     <message>
         <source>Opacity is the Exposure (Dodge, Burn) or Flow (Sponge); a stroke never goes past one full pass</source>
@@ -6673,8 +6673,8 @@ File &gt; New creates a blank canvas.</source>
         <translation>クリックして入力、ドラッグで段落テキストのボックス。テキストをクリックすると編集できます。Ctrl+Enter で確定、Esc で取り消し。オプションバーで選択した文字のスタイルを変更</translation>
     </message>
     <message>
-        <source>Click sets the foreground colour, Alt-click the background</source>
-        <translation>クリックで描画色、Alt+クリックで背景色を設定</translation>
+        <source>Click or drag to set the foreground colour, with Alt the background</source>
+        <translation>クリックまたはドラッグで描画色、Alt を押しながらで背景色を設定</translation>
     </message>
     <message>
         <source>Drag to pan; hold Space to pan from any tool</source>

@@ -122,7 +122,7 @@ private:
     /// the view must be rendered afresh.
     bool scrollCache(QRect visible, QPointF origin, double zoom);
     bool boxPainted_ = false;   // whether the last paint drew a transform box
-    enum class Drag { None, Pan, Move, Resize, Rotate, Distort, PixelMove, Brush, Warp, Gradient, Shape, Marquee, Lasso, Scribble, ClickBox, SelectionMove, Patch, Pen, PathEdit, WarpCage, Crop, CropMove, CropResize, ZoomRect, Hook, Box, Type, Guide };
+    enum class Drag { None, Pan, Move, Resize, Rotate, Distort, PixelMove, Brush, Warp, Gradient, Shape, Marquee, Lasso, Scribble, ClickBox, SelectionMove, Patch, Pen, PathEdit, WarpCage, Crop, CropMove, CropResize, ZoomRect, Hook, Box, Type, Guide, Sample };
     struct HandleHit { bool hit = false; int index = 0; bool rotate = false; };
 
     /// Notes a changed part of the document for the next paint, which renders all of it at once (flushDirty).
@@ -143,7 +143,11 @@ private:
     void release(QPointF viewPoint, Qt::MouseButton button, Qt::KeyboardModifiers modifiers);
     void finishMarquee(Qt::KeyboardModifiers modifiers);
     void finishFreehandLasso();
+    /// The Eyedropper's pick; while it is dragged (Drag::Sample) the colour follows the pointer, read from a composite
+    /// rendered once at the press (`sampleSnapshot_`), into the foreground or, with `sampleBackground_`, the background.
     void sampleColor(QPointF documentPoint, bool background);
+    bool sampleBackground_ = false;
+    std::optional<EditorSession::CompositeSnapshot> sampleSnapshot_;
     compositor::SelectionMode selectionMode(Qt::KeyboardModifiers modifiers) const;
     void drawOverlays(QPainter& painter);
     void drawTransformBox(QPainter& painter, const compositor::Corners& corners, bool active, bool distorting);
@@ -295,6 +299,13 @@ private:
     /// by `delta` document pixels, kept within the options bar's 1..2000.
     void stepTypeSize(double delta);
     static int typeSizeStep(const QKeyEvent* e);
+    /// The same keys with the Move or Type tool and nothing being typed: every run of the selected type layers (else the
+    /// active one) by `delta`, through text.styleRange's sizeBy; false when no type layer is selected. Presses less than
+    /// typeSizeMergeMs apart, with nothing between them in the history, make one undo step.
+    bool stepLayerTypeSize(double delta);
+    static constexpr int typeSizeMergeMs = 1000;
+    struct TypeSizeRun { uint64_t since = 0, after = 0; QElapsedTimer clock; };
+    std::optional<TypeSizeRun> typeSizeRun_;
     void typePress(QPointF view, QPointF documentPoint, Qt::KeyboardModifiers modifiers);
     void typeMove(QPointF documentPoint, Qt::KeyboardModifiers modifiers);
     void typeRelease(QPointF documentPoint);

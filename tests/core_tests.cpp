@@ -826,6 +826,21 @@ TEST_CASE(text_style_range_splits_patches_and_merges) {
     styleTextRange(l, 5, 3, red);
     styleTextRange(l, 1, 0, red);
     CHECK(l == before);
+    // A size step (Ctrl+Shift+> and <): each run by the same pixels, so mixed sizes stay mixed; kept within 1..2000.
+    LayerText mixed; mixed.text = "abcd"; mixed.fontSize = 20;
+    TextRunPatch big; big.fontSize = 31;
+    styleTextRange(mixed, 2, 2, big);
+    TextRunPatch step; step.fontSizeBy = 2;
+    styleTextRange(mixed, 0, 4, step);
+    REQUIRE(mixed.runs.size() == 2);
+    CHECK(mixed.runs[0].fontSize == 22 && mixed.runs[1].fontSize == 33 && mixed.fontSize == 22);
+    TextRunPatch down; down.fontSizeBy = -100;
+    styleTextRange(mixed, 0, 4, down);
+    CHECK(mixed.runs.empty() && mixed.fontSize == 1);
+    LayerText single; single.text = "x"; single.fontSize = 1999;
+    TextRunPatch up; up.fontSizeBy = 10;
+    styleTextRange(single, 0, 1, up);
+    CHECK(single.runs.empty() && single.fontSize == 2000);
 }
 
 TEST_CASE(text_runs_survive_a_project) {

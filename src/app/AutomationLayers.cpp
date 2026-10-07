@@ -491,6 +491,13 @@ void AutomationServer::registerLayersHandlers() {
         TextRunPatch patch;
         if (has(p, "font")) patch.fontFamily = str(p, "font").toStdString();
         if (has(p, "size")) { double size = num(p, "size"); if (!(size >= 1 && size <= 2000)) fail("size must be 1..2000 pixels", invalidParams); patch.fontSize = size; }
+        if (has(p, "sizeBy")) {
+            // Photoshop's Ctrl+Shift+> and <: each run's own size by the step, so mixed sizes stay mixed.
+            if (has(p, "size")) fail("pass size or sizeBy, not both", invalidParams);
+            const double by = num(p, "sizeBy");
+            if (!(std::fabs(by) <= 2000)) fail("sizeBy must be -2000..2000 pixels", invalidParams);
+            patch.fontSizeBy = by;
+        }
         if (has(p, "bold")) patch.bold = flag(p, "bold", false);
         if (has(p, "weight")) { int w = integer(p, "weight"); if (w != 0 && (w < 100 || w > 900)) fail("weight must be 0 or 100..900", invalidParams); patch.weight = w; }
         if (has(p, "italic")) patch.italic = flag(p, "italic", false);

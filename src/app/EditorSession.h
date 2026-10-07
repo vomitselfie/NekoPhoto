@@ -531,7 +531,11 @@ public:
     /// The outline to draw: during a pixel move or a floating transform, the selection carried along.
     std::optional<compositor::Selection> displayedSelection() const;
     /// The composite's straight colour under a document point, or none when transparent / outside.
-    std::optional<QColor> compositeColorAt(QPointF documentPoint) const;
+    std::optional<QColor> compositeColorAt(QPointF documentPoint) const { return compositeColorAt(documentPoint, nullptr); }
+    /// The same for many points over an unchanged document (the Eyedropper dragged): the composite is rendered into
+    /// `snapshot` at the first sample and read from it after (32-bit, CMYK and Lab render the one pixel each time).
+    struct CompositeSnapshot { std::shared_ptr<const compositor::Image> flat; std::shared_ptr<const compositor::Image16> deep; };
+    std::optional<QColor> compositeColorAt(QPointF documentPoint, CompositeSnapshot* snapshot) const;
     /// Hooks a panel can install to take the next canvas press (returns true to claim it), the drag and the release.
     std::function<bool(QPointF)> canvasPressHook;
     std::function<void(QPointF, QPointF)> canvasDragHook;

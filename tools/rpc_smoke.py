@@ -2269,6 +2269,14 @@ def main():
         raise AssertionError("a range past the text should be refused")
     except RuntimeError as e:
         assert "UTF-16" in str(e), e
+    # Ctrl+Shift+> on the layer: every run 2 pixels larger, each from its own size; size and sizeBy exclude each other.
+    stepped = rpc.call("text.styleRange", id=text["id"], sizeBy=2)
+    assert [r["size"] for r in stepped["text"]["runs"]] == [38, 50], stepped["text"]["runs"]
+    try:
+        rpc.call("text.styleRange", id=text["id"], size=20, sizeBy=2)
+        raise AssertionError("size with sizeBy should be refused")
+    except RuntimeError as e:
+        assert "sizeBy" in str(e), e
     plain = rpc.call("text.styleRange", id=text["id"], color="#ff8800", size=36, caps="normal", baselineShift=0, leading=0, underline=False)
     assert "runs" not in plain["text"], plain
     rpc.call("layers.delete", id=text["id"])

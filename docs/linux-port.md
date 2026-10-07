@@ -426,9 +426,11 @@ uses a different model than Apple's Vision, so its cutouts differ in detail.
 | [ ], Shift [ ] | Brush size, hardness |
 | X, D | Swap / reset colours (with the Crop tool, X swaps the crop's height and width) |
 | Space + drag, middle drag, wheel | Pan |
-| Hold a tool's letter | Spring-loaded tools: hold the key and use the tool (or hold it a moment); letting go returns to the tool before. A tap switches for good |
-| Hold Ctrl | The Move tool while held (it picks the layer under the pointer), with the selection, painting, retouching, Eyedropper and Type tools; not with the Pen, Direct Selection, Shape, Crop, Slice, Hand and Zoom tools, nor while typing |
-| Hold Alt with the Brush, Paint Bucket or Gradient | The Eyedropper while held: a click picks the foreground colour (Alt keeps its own meaning with the Eraser, Clone Stamp, Healing Brush and the selection tools) |
+| Hold a tool's letter (or Shift + letter) | Spring-loaded tools: hold the key and use the tool (or hold it a moment); letting go returns to the tool before, and with Shift to its kind before. A tap switches for good |
+| Hold Ctrl | The Move tool while held (it picks the layer under the pointer), with the selection, painting, retouching, Eyedropper and Type tools; not with the Shape, Crop, Slice, Hand and Zoom tools, nor while typing |
+| Pen: hold Ctrl; Alt-click an anchor | The Direct Selection tool while held (drag an anchor, a handle or the path; a Ctrl-click ends a path being drawn, open); Convert Point (smooth ↔ corner) |
+| Direct Selection: Ctrl-drag | Path Selection: the whole path component under the pointer moves |
+| Hold Alt with the Brush, Paint Bucket or Gradient | The Eyedropper while held: a click picks the foreground colour, a drag keeps picking under the pointer (Alt keeps its own meaning with the Eraser, Clone Stamp, Healing Brush and the selection tools) |
 | Hold Ctrl Space, Ctrl Alt Space | Zoom in, zoom out where you click (drag a box to zoom to it) |
 | Ctrl + wheel, Ctrl +/−, Ctrl 0, Ctrl 1 | Zoom, fit, 100% |
 | Ctrl T, Enter, Esc | Free transform (of the selection when there is one), apply, cancel |
@@ -456,4 +458,4 @@ uses a different model than Apple's Vision, so its cutouts differ in detail.
 | Ctrl K (also Ctrl ,) | Preferences |
 | Ctrl F | Edit ▸ Search: find any command, tool or G'MIC filter by name and run it (arrows, Enter, Esc) |
 | Type tool: Ctrl Enter or keypad Enter, Esc | Commit or cancel the text being typed on the canvas (Enter alone starts a new line) |
-| Type tool: Ctrl Shift > / <, Ctrl Alt Shift > / < | The selected letters 2 / 10 pixels larger or smaller, each keeping its own size (with only a caret, the letters typed next) |
+| Type tool: Ctrl Shift > / <, Ctrl Alt Shift > / < | The selected letters 2 / 10 pixels larger or smaller, each keeping its own size (with only a caret, the letters typed next); not typing, with the Move or Type tool, every selected type layer, one undo step per press |

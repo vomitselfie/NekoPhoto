@@ -920,6 +920,37 @@ int heldKeys(MainWindow& w) {
     expect(s.undoNames().size() == stepsBefore, "Alt-click with the Brush painted");
     release(canvas, Qt::Key_Alt, Qt::NoModifier);
     expect(!canvas->heldTool() && s.tool() == Tool::Brush, "letting go of Alt did not go back to the Brush");
+    // Dragged, the held Eyedropper keeps sampling: the foreground follows the pointer to a differently coloured spot.
+    {
+        std::optional<QPointF> other;
+        for (int y = 20; y < s.document()->height && !other; y += 37)
+            for (int x = 20; x < s.document()->width && !other; x += 41)
+                if (auto c = s.compositeColorAt(QPointF(x, y)); c && *c != expected) other = QPointF(x, y);
+        if (!other) { std::fprintf(stderr, "held keys: no second colour in the demo document\n"); return 1; }
+        const QColor second = s.compositeColorAt(*other).value_or(QColor());
+        s.foregroundColor = Qt::black;
+        press(canvas, Qt::Key_Alt, Qt::AltModifier);
+        mouse(QEvent::MouseButtonPress, sample, Qt::AltModifier);
+        expect(s.foregroundColor == expected, "the held Eyedropper's press did not sample");
+        mouse(QEvent::MouseMove, *other, Qt::AltModifier);
+        expect(s.foregroundColor == second, "the held Eyedropper did not follow the drag");
+        expect(canvas->heldTool() == Tool::Eyedropper, "the held Eyedropper let go mid-drag");
+        mouse(QEvent::MouseButtonRelease, *other, Qt::AltModifier);
+        release(canvas, Qt::Key_Alt, Qt::NoModifier);
+        expect(s.undoNames().size() == stepsBefore && s.backgroundColor == QColor(Qt::white), "the held Eyedropper's drag painted or changed the background");
+        // The Eyedropper itself does the same, and with Alt into the background.
+        s.selectTool(Tool::Eyedropper);
+        mouse(QEvent::MouseButtonPress, *other, Qt::NoModifier);
+        mouse(QEvent::MouseMove, sample, Qt::NoModifier);
+        mouse(QEvent::MouseButtonRelease, sample, Qt::NoModifier);
+        expect(s.foregroundColor == expected, "a drag with the Eyedropper did not follow the pointer");
+        mouse(QEvent::MouseButtonPress, sample, Qt::AltModifier);
+        mouse(QEvent::MouseMove, *other, Qt::AltModifier);
+        mouse(QEvent::MouseButtonRelease, *other, Qt::AltModifier);
+        expect(s.backgroundColor == second && s.foregroundColor == expected, "an Alt-drag with the Eyedropper did not sample the background");
+        s.backgroundColor = Qt::white;
+        s.selectTool(Tool::Brush);
+    }
     // The Eraser keeps Alt for itself.
     s.brushErase = true;
     press(canvas, Qt::Key_Alt, Qt::AltModifier);
@@ -944,12 +975,59 @@ int heldKeys(MainWindow& w) {
     expect(!s.transformEdit(), "the held Move tool left a transform open");
     release(canvas, Qt::Key_Control, Qt::NoModifier);
     expect(!canvas->heldTool() && s.tool() == Tool::Brush, "letting go of Ctrl did not go back to the Brush");
-    // The Pen keeps Ctrl (Photoshop's Direct Selection).
-    s.selectTool(Tool::Pen);
-    press(canvas, Qt::Key_Control, Qt::ControlModifier);
-    expect(!canvas->heldTool(), "Ctrl with the Pen held the Move tool");
-    release(canvas, Qt::Key_Control, Qt::NoModifier);
-    s.selectTool(Tool::Brush);
+    // Ctrl with the Pen: the Direct Selection tool while held, dragging an anchor of the path.
+    {
+        s.selectTool(Tool::Pen);
+        s.penMode = EditorSession::PenMode::Path;   // the Work Path, so every component lands in one path
+        for (QPointF p : {QPointF(100, 100), QPointF(200, 100), QPointF(200, 200)}) s.penPress(p);
+        s.penFinish(false);
+        const auto knotAt = [&](int sub, int knot) {
+            const auto path = s.targetPath();
+            return path && sub < int(path->subpaths.size()) && knot < int(path->subpaths[size_t(sub)].knots.size())
+                ? std::optional<VectorPath::Knot>(path->subpaths[size_t(sub)].knots[size_t(knot)]) : std::nullopt;
+        };
+        if (!knotAt(0, 2)) { std::fprintf(stderr, "held keys: the Pen made no path\n"); return 1; }
+        press(canvas, Qt::Key_Control, Qt::ControlModifier);
+        expect(canvas->heldTool() == Tool::DirectSelect, "Ctrl with the Pen did not hold the Direct Selection tool");
+        mouse(QEvent::MouseButtonPress, QPointF(200, 100), Qt::ControlModifier);
+        mouse(QEvent::MouseMove, QPointF(210, 120), Qt::ControlModifier);
+        mouse(QEvent::MouseButtonRelease, QPointF(210, 120), Qt::ControlModifier);
+        auto moved = knotAt(0, 1);
+        expect(moved && std::abs(moved->x - 210) < 0.5 && std::abs(moved->y - 120) < 0.5, "Ctrl-drag with the Pen did not move the anchor");
+        expect(knotAt(0, 0) && knotAt(0, 0)->x == 100 && !s.penDraft(), "Ctrl-drag with the Pen moved more than the anchor, or added one");
+        release(canvas, Qt::Key_Control, Qt::NoModifier);
+        expect(!canvas->heldTool() && s.tool() == Tool::Pen, "letting go of Ctrl did not go back to the Pen");
+        // A path being drawn: Ctrl-click away from it ends it open, as Photoshop's does.
+        s.penPress(QPointF(300, 300));
+        s.penPress(QPointF(360, 300));
+        press(canvas, Qt::Key_Control, Qt::ControlModifier);
+        expect(canvas->heldTool() == Tool::DirectSelect, "Ctrl while drawing a path did not hold the Direct Selection tool");
+        click(QPointF(500, 60), Qt::ControlModifier);
+        release(canvas, Qt::Key_Control, Qt::NoModifier);
+        expect(!s.penDraft() && s.targetPath() && s.targetPath()->subpaths.size() == 2, "Ctrl-click while drawing did not end the path open");
+        // Alt over an anchor with the Pen: Convert Point (the corner becomes smooth), no new anchor.
+        const auto corner = knotAt(0, 1);
+        click(QPointF(210, 120), Qt::AltModifier);
+        const auto converted = knotAt(0, 1);
+        expect(corner && converted && corner->inX == corner->x && (converted->inX != converted->x || converted->inY != converted->y),
+               "Alt-click with the Pen on a corner did not make it smooth");
+        expect(!s.undoNames().empty() && s.undoNames().back() == "Convert Point" && !s.penDraft() && s.targetPath()->subpaths[0].knots.size() == 3,
+               "Alt-click with the Pen did not convert the point as one step");
+        // Ctrl with the Direct Selection tool: Path Selection, the whole component dragged from one of its anchors.
+        s.selectTool(Tool::DirectSelect);
+        press(canvas, Qt::Key_Control, Qt::ControlModifier);
+        expect(!canvas->heldTool(), "Ctrl with the Direct Selection tool held another tool");
+        const auto first = knotAt(0, 0), last = knotAt(0, 2);
+        mouse(QEvent::MouseButtonPress, QPointF(100, 100), Qt::ControlModifier);
+        mouse(QEvent::MouseMove, QPointF(105, 108), Qt::ControlModifier);
+        mouse(QEvent::MouseButtonRelease, QPointF(105, 108), Qt::ControlModifier);
+        release(canvas, Qt::Key_Control, Qt::NoModifier);
+        const auto first2 = knotAt(0, 0), last2 = knotAt(0, 2), other2 = knotAt(1, 0);
+        expect(first && last && first2 && last2 && std::abs(first2->x - first->x - 5) < 0.5 && std::abs(last2->y - last->y - 8) < 0.5,
+               "Ctrl-drag with the Direct Selection tool did not move the whole component");
+        expect(other2 && other2->x == 300, "Ctrl-drag with the Direct Selection tool moved another component");
+        s.selectTool(Tool::Brush);
+    }
 
     // Ctrl+Space zooms in where clicked; Ctrl+Alt+Space out.
     const double zoom = s.viewport.zoom;
@@ -977,6 +1055,28 @@ int heldKeys(MainWindow& w) {
     release(canvas, Qt::Key_M, Qt::NoModifier);
     expect(s.tool() == Tool::Marquee, "a tap of M did not keep the Marquee");
     s.selectTool(Tool::Brush);
+    // Shift+letter likewise: held while used it springs back to the tool and kind before; a tap keeps the new one.
+    {
+        s.marqueeKind = MarqueeKind::Rectangle;
+        expect(press(canvas, Qt::Key_M, Qt::ShiftModifier, QStringLiteral("M")), "Shift+M was not taken by its shortcut");
+        expect(s.tool() == Tool::Marquee && s.marqueeKind == MarqueeKind::Ellipse, "Shift+M did not pick the Elliptical Marquee");
+        click(QPointF(40, 40), Qt::ShiftModifier);
+        release(canvas, Qt::Key_M, Qt::ShiftModifier);
+        expect(s.tool() == Tool::Brush && s.marqueeKind == MarqueeKind::Rectangle, "letting go of Shift+M after using it did not go back to the Brush");
+        // On the tool itself only the kind changes, and comes back.
+        s.selectTool(Tool::Marquee);
+        press(canvas, Qt::Key_M, Qt::ShiftModifier, QStringLiteral("M"));
+        click(QPointF(40, 40), Qt::ShiftModifier);
+        release(canvas, Qt::Key_M, Qt::ShiftModifier);
+        expect(s.tool() == Tool::Marquee && s.marqueeKind == MarqueeKind::Rectangle, "letting go of Shift+M on the Marquee did not go back to the Rectangular Marquee");
+        s.selectTool(Tool::Brush);
+        press(canvas, Qt::Key_G, Qt::ShiftModifier, QStringLiteral("G"));
+        const Tool cycled = s.tool();
+        release(canvas, Qt::Key_G, Qt::ShiftModifier);
+        expect((cycled == Tool::Gradient || cycled == Tool::PaintBucket) && s.tool() == cycled, "a tap of Shift+G did not keep the tool it picked");
+        s.selectTool(Tool::Brush);
+        s.marqueeKind = MarqueeKind::Rectangle;
+    }
 
     // F7: the Layers panel, not while a text field has the keys.
     QDockWidget* layers = w.findChild<QDockWidget*>(QStringLiteral("layersDock"));
@@ -1053,6 +1153,45 @@ int heldKeys(MainWindow& w) {
     std::printf("type size: %g -> %g\n", size, canvas->typeStyleAtCaret() ? canvas->typeStyleAtCaret()->fontSize : 0);
     canvas->commitType();
     expect(!s.document()->layers.empty() && s.activeLayer() && s.activeLayer()->text && s.activeLayer()->text->fontSize == size - 8, "the committed type lost its size");
+
+    // Not typing, with the Move or Type tool: the same keys size every selected type layer, one undo step per press
+    // (quick repeats merge into it).
+    {
+        const Layer* typed = s.activeLayer();
+        if (!typed || !typed->text) { std::fprintf(stderr, "held keys: no type layer\n"); return 1; }
+        const Uuid first = typed->id;
+        LayerText words = *typed->text;
+        words.text = "World";
+        words.runs.clear();
+        words.fontSize = 30;
+        const std::optional<Uuid> second = s.addTextLayer(QPointF(100, 200), words, false);
+        if (!second) { std::fprintf(stderr, "held keys: could not add a second type layer\n"); return 1; }
+        s.selectLayers({first, *second}, *second);
+        s.selectTool(Tool::Move);
+        canvas->setFocus();
+        QApplication::processEvents();
+        auto sizeOf = [&](const Uuid& id) { const auto t = s.layerText(id); return t ? t->fontSize : 0.0; };
+        const double a = sizeOf(first);
+        const size_t steps = s.undoNames().size();
+        expect(!press(canvas, Qt::Key_Greater, Qt::ControlModifier | Qt::ShiftModifier, QStringLiteral(">")), "a shortcut took Ctrl+Shift+> with the Move tool");
+        expect(sizeOf(first) == a + 2 && sizeOf(*second) == 32, "Ctrl+Shift+> with the Move tool did not make both selected type layers 2 pixels larger");
+        expect(s.undoNames().size() == steps + 1 && s.undoNames().back() == "Edit Text", "Ctrl+Shift+> on two layers was not one undo step");
+        press(canvas, Qt::Key_Less, Qt::ControlModifier | Qt::AltModifier | Qt::ShiftModifier, QStringLiteral("<"));
+        expect(sizeOf(first) == std::max(1.0, a - 8) && sizeOf(*second) == 22, "Ctrl+Alt+Shift+< did not make both layers 10 pixels smaller");
+        expect(s.undoNames().size() == steps + 1, "a quick second press made another undo step");
+        std::printf("layer type size: %g, 30 -> %g, %g\n", a, sizeOf(first), sizeOf(*second));
+        s.undo();
+        expect(sizeOf(first) == a && sizeOf(*second) == 30, "one undo did not take back both presses");
+        // The Type tool, nothing typed: the same, on the active layer alone.
+        s.selectLayers({*second}, *second);
+        s.selectTool(Tool::Text);
+        press(canvas, Qt::Key_Period, Qt::ControlModifier | Qt::ShiftModifier, QStringLiteral(">"));
+        expect(sizeOf(*second) == 32 && sizeOf(first) == a && !canvas->typeEditing(), "Ctrl+Shift+> with the Type tool did not size the selected layer alone");
+        // Another tool leaves the keys alone.
+        s.selectTool(Tool::Brush);
+        press(canvas, Qt::Key_Greater, Qt::ControlModifier | Qt::ShiftModifier, QStringLiteral(">"));
+        expect(sizeOf(*second) == 32, "Ctrl+Shift+> with the Brush changed the type");
+    }
 
     std::printf("held keys: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;

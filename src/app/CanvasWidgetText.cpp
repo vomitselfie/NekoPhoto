@@ -12,11 +12,13 @@
 #include <QElapsedTimer>
 #include <QFontMetricsF>
 #include <QInputMethodEvent>
+#include <QJsonObject>
 #include <QKeyEvent>
 #include <QPainter>
 #include <QTextBoundaryFinder>
 #include <QTextCharFormat>
 #include <QTextFormat>
+#include <set>
 #include <tuple>
 #include <algorithm>
 #include <cmath>
@@ -70,7 +72,7 @@ TextRunPatch patchBetween(const LayerText& before, const LayerText& after) {
 }
 
 bool patchEmpty(const TextRunPatch& p) {
-    return !p.fontFamily && !p.fontSize && !p.bold && !p.italic && !p.weight && !p.color && !p.letterSpacing && !p.baselineShift
+    return !p.fontFamily && !p.fontSize && !p.fontSizeBy && !p.bold && !p.italic && !p.weight && !p.color && !p.letterSpacing && !p.baselineShift
         && !p.leading && !p.caps && !p.underline && !p.strikethrough;
 }
 
@@ -297,16 +299,44 @@ void CanvasWidget::stepTypeSize(double delta) {
     }
     // Each selected run by the step, so mixed sizes stay mixed.
     LayerText text = *layer->text;
-    std::vector<std::tuple<int, int, double>> parts;
-    int start = 0;
-    for (const TextRun& run : textRuns(text)) {
-        const int a = std::max(from, start), b = std::min(to, start + run.length);
-        if (a < b) parts.emplace_back(a, b - a, stepped(run.fontSize));
-        start += run.length;
-    }
-    for (const auto& [at, length, size] : parts) { TextRunPatch patch; patch.fontSize = size; styleTextRange(text, at, length, patch); }
+    TextRunPatch patch;
+    patch.fontSizeBy = delta;
+    styleTextRange(text, from, to - from, patch);
     if (text == *layer->text) return;
     setTypeText(text, typeEdit_->caret, typeEdit_->anchor);
+}
+
+bool CanvasWidget::stepLayerTypeSize(double delta) {
+    // Not typing: the selected type layers (else the active one), each run by the step, as text.styleRange's sizeBy.
+    if (typeEdit_ || !session_->hasDocument()) return false;
+    std::vector<Uuid> ids;
+    const auto active = session_->activeLayerId();
+    std::set<Uuid> targets = session_->selectedLayerIds();
+    if (active) targets.insert(*active);
+    for (const Uuid& id : targets) {
+        const Layer* l = session_->document()->find(id);
+        if (l && l->isLiveText() && session_->layerText(id)) ids.push_back(id);
+    }
+    if (ids.empty()) return false;
+    // Presses in quick succession (a held key repeating) make one undo step, as long as nothing came between.
+    uint64_t since = session_->historyRevision();
+    if (typeSizeRun_ && typeSizeRun_->after == since && typeSizeRun_->clock.elapsed() < typeSizeMergeMs) since = typeSizeRun_->since;
+    for (const Uuid& id : ids) {
+        QJsonObject params{{"sizeBy", delta}};
+        if (id != active) params["id"] = QString::fromStdString(id);
+        session_->runCommandOr(QStringLiteral("text.styleRange"), params, [this, id, delta] {
+            std::optional<LayerText> text = session_->layerText(id);
+            if (!text) return;
+            TextRunPatch patch;
+            patch.fontSizeBy = delta;
+            styleTextRange(*text, 0, utf16Length(text->text), patch);
+            session_->setLayerText(id, *text);
+        });
+    }
+    session_->squashHistory(since, QStringLiteral("Edit Text"));
+    typeSizeRun_ = TypeSizeRun{since, session_->historyRevision(), {}};
+    typeSizeRun_->clock.start();
+    return true;
 }
 
 bool CanvasWidget::typeShortcut(QKeyEvent* e) const {
