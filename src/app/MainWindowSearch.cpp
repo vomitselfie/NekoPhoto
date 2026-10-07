@@ -32,7 +32,12 @@ std::vector<PaletteEntry> MainWindow::paletteEntries() {
             e.path = path.join(QStringLiteral(" > "));
             e.englishPath = englishPath.join(QStringLiteral(" > "));
             e.shortcut = a->shortcut().toString(QKeySequence::NativeText);
-            e.id = QStringLiteral("menu:") + e.englishPath + QStringLiteral(" > ") + e.englishLabel;
+            // The registry's id and, for a greyed command, its reason (CommandRegistry.h).
+            if (const Command* c = commands_->forAction(a)) {
+                e.commandId = c->id;
+                e.id = QStringLiteral("command:") + c->id;
+                if (!a->isEnabled()) e.reason = commands_->disabledReason(*c);
+            } else e.id = QStringLiteral("menu:") + e.englishPath + QStringLiteral(" > ") + e.englishLabel;
             e.action = a;
             out.push_back(std::move(e));
         }

@@ -109,9 +109,8 @@ bool isLayeredPath(const QString& path) {
 void MainWindow::newDocument() {
     auto options = askNewDocument(this, {});
     if (!options) return;
-    Tab& tab = addTab(true);
-    tab.session->createDocument(options->width, options->height, options->resolution, true);
-    tab.session->adoptProfile(color::newDocumentProfile());   // the working space (Edit > Color Settings)
+    // document.new: in this tab while it is empty, else a new one, in the working space (Edit > Color Settings).
+    runCommand("document.new", {{"width", options->width}, {"height", options->height}, {"resolution", options->resolution}}, tr("New"));
 }
 
 void MainWindow::openAsDocument(const QString& path) {
@@ -156,28 +155,11 @@ void MainWindow::openLayeredFile(const QString& path) {
     const bool ask = psd && !nextPsdMergedOnly && isVisible();
     nextPsdMergedOnly.reset();
     if (ask) {
-        std::string why;
-        if (auto e = compositor::estimatePsd(file, &why); e && e->canvasFits) {
-            const unsigned long long free = platform::availableMemory();
-            const bool tooBig = !e->layersFit, tight = e->layersFit && free > 0 && e->bytes > free * 8 / 10;
-            if (tooBig || tight) {
-                QApplication::restoreOverrideCursor();
-                auto gb = [](unsigned long long b) { return QLocale().toString(double(b) / 1e9, 'f', 1); };
-                QMessageBox box(QMessageBox::Warning, tr("Open %1").arg(QFileInfo(path).fileName()),
-                                tooBig ? tr("Its %n layer(s) hold %1 megapixels, more than a document can.", nullptr, e->layers).arg(QLocale().toString(e->layerPixels / 1000000))
-                                       : tr("It needs about %1 GB of memory, and %2 GB is free now.").arg(gb(e->bytes), gb(free)),
-                                QMessageBox::NoButton, isVisible() ? this : nullptr);
-                box.setInformativeText(tr("The merged image Photoshop stored in the file can open instead, as one layer (%1 GB). It opens as a new document, so saving cannot replace the layered file.").arg(gb(e->mergedBytes)));
-                QPushButton* merged = box.addButton(tr("Open Merged Image"), QMessageBox::AcceptRole);
-                QPushButton* anyway = tight ? box.addButton(tr("Open Anyway"), QMessageBox::DestructiveRole) : nullptr;
-                box.addButton(QMessageBox::Cancel);
-                box.setDefaultButton(merged);
-                box.exec();
-                if (box.clickedButton() == merged) mergedOnly = true;
-                else if (!anyway || box.clickedButton() != anyway) return;
-                QApplication::setOverrideCursor(Qt::BusyCursor);
-            }
-        }
+        QApplication::restoreOverrideCursor();
+        const std::optional<bool> choice = askPsdMergedOnly(path);
+        if (!choice) return;
+        mergedOnly = *choice;
+        QApplication::setOverrideCursor(Qt::BusyCursor);
     }
     QApplication::restoreOverrideCursor();
     DocumentSource source;
@@ -208,6 +190,46 @@ void MainWindow::openLayeredFile(const QString& path) {
         showImportNotes(tr("Opened with %n change(s): %1", nullptr, int(lastImportNotes_.size())), tr("Imported %1").arg(QFileInfo(path).fileName()),
                         heading, lastImportNotes_, tab.session);
     }
+}
+
+std::optional<bool> MainWindow::askPsdMergedOnly(const QString& path) {
+    // A PSD or PSB is sized up from its records first: layers past the project budget, or more than the memory
+    // free now, offer Photoshop's merged image instead (a new, untitled document, so Save cannot replace the file).
+    std::string why;
+    auto e = compositor::estimatePsd(path.toStdString(), &why);
+    if (!e || !e->canvasFits) return false;
+    const unsigned long long free = platform::availableMemory();
+    const bool tooBig = !e->layersFit, tight = e->layersFit && free > 0 && e->bytes > free * 8 / 10;
+    if (!tooBig && !tight) return false;
+    auto gb = [](unsigned long long b) { return QLocale().toString(double(b) / 1e9, 'f', 1); };
+    QMessageBox box(QMessageBox::Warning, tr("Open %1").arg(QFileInfo(path).fileName()),
+                    tooBig ? tr("Its %n layer(s) hold %1 megapixels, more than a document can.", nullptr, e->layers).arg(QLocale().toString(e->layerPixels / 1000000))
+                           : tr("It needs about %1 GB of memory, and %2 GB is free now.").arg(gb(e->bytes), gb(free)),
+                    QMessageBox::NoButton, isVisible() ? this : nullptr);
+    box.setInformativeText(tr("The merged image Photoshop stored in the file can open instead, as one layer (%1 GB). It opens as a new document, so saving cannot replace the layered file.").arg(gb(e->mergedBytes)));
+    QPushButton* merged = box.addButton(tr("Open Merged Image"), QMessageBox::AcceptRole);
+    QPushButton* anyway = tight ? box.addButton(tr("Open Anyway"), QMessageBox::DestructiveRole) : nullptr;
+    box.addButton(QMessageBox::Cancel);
+    box.setDefaultButton(merged);
+    box.exec();
+    if (box.clickedButton() == merged) return true;
+    if (anyway && box.clickedButton() == anyway) return false;
+    return std::nullopt;
+}
+
+void MainWindow::openFromMenu(const QString& path) {
+    // A camera RAW file and a PDF open through their own dialogs (Camera Raw, the page), which choose what the request
+    // would carry; everything else is document.open, an image as a document of its own (File > Open). A PSD too large
+    // for its layers asks first whether to open its merged image, and the request carries the answer.
+    const bool pdf = path.endsWith(".pdf", Qt::CaseInsensitive);
+    if (pdf || compositor::isRawPath(path.toStdString())) { openAsDocument(path); return; }
+    QJsonObject params{{"path", path}, {"asDocument", true}};
+    if (hasSuffix(path, {".psd", ".psb"}) && isVisible()) {
+        const std::optional<bool> mergedOnly = askPsdMergedOnly(path);
+        if (!mergedOnly) return;
+        params["mergedOnly"] = *mergedOnly;
+    }
+    runCommand("document.open", params, tr("Couldn’t open %1").arg(QFileInfo(path).fileName()));
 }
 
 std::optional<PsdImport> MainWindow::readLayeredSource(DocumentSource& source, QString* errorOut) {
@@ -398,7 +420,7 @@ void MainWindow::openFiles() {
     for (QString path : paths) {
         const QFileInfo info(path);
         if (info.fileName() == "manifest.json" && isProjectPath(info.path())) path = info.path();
-        openAsDocument(path);
+        openFromMenu(path);
     }
 }
 
@@ -407,9 +429,10 @@ void MainWindow::importFiles() {
     QStringList paths = QFileDialog::getOpenFileNames(this, tr("Import File"), QSettings().value("lastDir").toString(), openFilter());
     if (paths.isEmpty()) return;
     QSettings().setValue("lastDir", QFileInfo(paths.first()).path());
+    // document.import for an image into the document on screen; the rest opens as File > Open does.
     for (const QString& path : paths) {
-        if (isLayeredPath(path) || !session_->hasDocument()) openAsDocument(path);
-        else importFile(path);
+        if (isLayeredPath(path) || !session_->hasDocument()) openFromMenu(path);
+        else runCommand("document.import", {{"path", path}}, tr("Couldn’t import %1").arg(QFileInfo(path).fileName()));
     }
 }
 
@@ -522,8 +545,7 @@ bool MainWindow::save(bool asNew) {
     session_->endTemporaryLayers();
     // A smart object's contents go back to it (Save As saves them as a project of their own instead).
     if (!asNew && session_->smartObjectParent()) {
-        QString error;
-        if (!session_->commitToSmartObjectParent(&error)) { showError(tr("Couldn’t put the contents back"), error); return false; }
+        if (!runCommand("smartObject.commit", {}, tr("Couldn’t put the contents back"))) return false;
         refreshTabTitles();
         statusBar()->showMessage(tr("Contents saved into the smart object."), 5000);
         return true;
@@ -540,10 +562,12 @@ bool MainWindow::save(bool asNew) {
             path += selected == folderFilter ? QStringLiteral(".comp") : QStringLiteral(".nekophoto");
         QSettings().setValue("lastDir", QFileInfo(path).path());
     }
-    QString error;
-    if (!session_->saveProject(path, &error)) { showError(tr("Couldn’t save the project"), error); return false; }
-    addRecent(path);
-    if (!session_->document()->fitsMacBudget())
+    // document.save: where the document lives (no path), or the file the dialog chose, which it has asked to replace.
+    QJsonObject params;
+    if (path != session_->projectPath()) params = {{"path", path}, {"overwrite", true}};
+    const auto saved = runCommand("document.save", params, tr("Couldn’t save the project"));
+    if (!saved) return false;
+    if (!saved->toObject().value("macCompatible").toBool(true))
         statusBar()->showMessage(tr("Saved. With %1 megapixels of layers this project is larger than Compositor for macOS opens (100); it opens here.")
                                      .arg(std::max(session_->document()->layerPixels(), session_->document()->maskPixels()) / 1000000), 10000);
     return true;

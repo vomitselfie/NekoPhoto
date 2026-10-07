@@ -79,9 +79,8 @@ docs/         design notes per feature; docs/linux-port-architecture.md maps the
   4. a line in `docs/automation.md`;
   5. coverage in `tools/rpc_smoke.py` (and `tools/mcp_smoke.py` when the bridge does something special).
 - **Commands have one implementation.** An edit that automation can make is made by its automation method, and a
-  menu item, shortcut, dialog OK or canvas gesture that makes the same edit should run that method rather than
-  call `EditorSession` itself. See [Commands](#commands) below; most menu items still call the session directly and
-  are converted one at a time.
+  menu item, shortcut, dialog OK or canvas gesture that makes the same edit runs that method rather than calling
+  `EditorSession` itself. Every menu item is a command in the command registry. See [Commands](#commands) below.
 - **Every visible string goes through `tr()`** and gets its Japanese translation in the same change; the
   `translations_check` test fails otherwise. How to update and translate: [docs/translating.md](docs/translating.md).
 - **No warnings.** CI builds with `-Werror` on GCC and Clang.
@@ -105,15 +104,17 @@ docs/         design notes per feature; docs/linux-port-architecture.md maps the
 
 ## Commands
 
-The automation registry (`add("name", handler)` in `src/app/Automation*.cpp`, with each method's parameters in
+Two tables meet here. The **command registry** (`src/app/CommandRegistry.{h,cpp}`) is every menu command: a stable id,
+its label, its menu path, its default keys, what it needs and why it is greyed, and what it runs. The **automation
+registry** (`add("name", handler)` in `src/app/Automation*.cpp`, with each method's parameters in
 `AutomationDescriptions.cpp`) is the command layer: the socket, `--call`, `--batch`, MCP and Actions playback all run
 those handlers. A menu item converted to it runs the method too, so the edit has one implementation, one history
 entry and one Actions step, wherever it starts:
 
 ```cpp
-// MainWindowMenus.cpp: the menu item (and its shortcut) runs the method with typed parameters.
-layer->addAction(tr("&New Layer"), QKeySequence("Ctrl+Shift+N"), this,
-                 [this] { runCommand("layers.add", {}, tr("New Layer")); });
+// MainWindowMenus.cpp: the menu item (and its shortcut) is a command; it sends the request with typed parameters.
+add(layer, Spec("layer.new", tr("&New Layer"), {QKeySequence("Ctrl+Shift+N")}).document("layers.structure")
+               .request("layers.add", [] { return QJsonObject{}; }, tr("New Layer")));
 ```
 
 `MainWindow::runCommand(method, params, title)` sends the request through `AutomationServer::handle`, exactly as a
@@ -122,6 +123,37 @@ recording gets the step (once), and an error is shown in a dialog titled `title`
 window (dialogs, the canvas) calls `EditorSession::runCommand(method, params)`, which `MainWindow` routes to the
 same place for the tab on screen; `commandsRouted()` says whether it will, and when it will not (a dialog left open on
 another tab) the caller makes the edit directly as before.
+
+### The command registry
+
+`MainWindow::buildMenus` (`MainWindowMenus.cpp`) adds the commands to the menus in order; nothing else makes menu
+items. A command is one row, written with `Spec`:
+
+- **`Spec(id, label, keys)`**: the id is stable across languages and releases, the area and then the menu's own words
+  in camel case (`edit.undo`, `file.saveAs`, `layer.mask.revealAll`, `filter.blur.gaussianBlur`; `commandSlug` makes
+  the last part from English words). The label is translated, with its accelerator. The keys are Photoshop's defaults;
+  no two actions may share one.
+- **`.document(feature)`**: it needs a document, and the `supports()` feature it is (`compositor/supports.h`): the
+  depth and colour mode grey it, saying why. Without a feature it is 8-bit RGB only.
+- **`.request(method, params, title)`**: it is that automation request; `params` returns the parameters, or nothing when
+  there is nothing to do now (no active layer, nothing to merge). An error is shown in a dialog titled `title`.
+- **`.runs(function, method)`**: it opens a dialog or asks something first; the function ends in `runCommand`, a
+  dialog's `commitAsCommand` or the session's `runCommand`, and `method` names the method for Edit > Search and the docs.
+- **`.when(reason)`**: why it cannot run now, or an empty string when it can (`tr("Nothing to undo")`). The registry
+  greys the item while there is a reason, and Edit > Search shows it beside the greyed command.
+
+An action made elsewhere (a panel's show/hide, a submenu, a view switch) joins with `CommandRegistry::adopt`. A
+submenu that lists files or presets as it opens (Open Recent, Apply Style) is marked `commandsDynamic`; its entries
+are not commands. Edit > Search's entries carry the registry id (`PaletteEntry::commandId`), and Recently Used keeps it.
+
+To add a menu command:
+
+1. Find (or add, with the five pieces above) the automation method that makes the edit.
+2. Add a `Spec` row where it belongs in `buildMenus`, with a new id, Photoshop's key if it has one, the feature, and
+   `.request` (or `.runs` for a dialog, whose OK runs the method) and `.when` for a reason it is greyed.
+3. Translate the label and any reason (`translations_check`).
+4. Cover it in `command_path_selftest` (below). Its registry check fails on a menu item that is not a command, an id
+   that is malformed or used twice, and two actions sharing a key.
 
 To convert a menu item:
 
@@ -146,15 +178,21 @@ reuses the menu bar's `QAction`s (by the keys `nameAction` gives them), so it fo
 
 ### Converted
 
-`command_path_selftest` checks every item below that is marked *checked* (91 of them): the menu path (or dialog,
-or panel control), the requests the recording holds, and the session calls the item made before, compared as
-documents, selections, paths, channels and history names, with each recorded once.
+`command_path_selftest` checks every item below that is marked *checked* (133 of them, 134 where G'MIC is installed):
+the menu path (or dialog, key or panel control), the requests the recording holds, and the session calls the item made
+before, compared as documents, selections, paths, channels, colours, vector masks, layer styles and history names, with
+each recorded once; File > New, Open, Import File, Save As and Edit Contents through their file dialogs. When two paths
+part it names the first step where they do.
 
 | Where | Items | Method |
 |---|---|---|
 | File | Export > Export As… and Quick Export, Layer > Export As… and Quick Export (the dialog's choices as parameters; `export_as_selftest` checks them) | `document.export` |
 | File | Revert *(checked)*: the file the document was opened from or last saved to, read again as one undo step | `document.revert` |
-| Edit | Fill with Foreground / Background *(checked)*; Clear *(checked)*: pixels with a selection, else one layer that supplies no clipping mask | `pixels.fill`, `pixels.clear`, `layers.delete` |
+| File | New…, Open…, Import File…, Save, Save As… *(checked)*: the dialogs choose, the method opens or saves (Open's image as a document of its own: `asDocument`; a PSD too large for its layers asks first and sends `mergedOnly`); Save on a smart object's contents puts them back | `document.new`, `document.open`, `document.import`, `document.save`, `smartObject.commit` |
+| Edit | Undo, Redo *(checked)*; Zoom In, Zoom Out, Fit on Screen, Actual Pixels *(checked)* (not recorded: history and the view) | `history.undo`, `history.redo`, `view.zoom` |
+| Edit | Warp…'s OK, the Warp Cage's Enter, Content-Aware Scale's OK *(checked)* | `layers.warp`, `layers.setCage`, `pixels.contentAwareScale` |
+| Tools | Swap and Default colours (X, D), the colour picker *(checked)*: a 16-bit pick as `#rrrrggggbbbb` | `colors.set` |
+| Edit | Fill with Foreground / Background *(checked, a 16-bit colour too)*; Clear *(checked)*: pixels with a selection, else the selected layers, asking first whether to bake layers clipped to them | `pixels.fill`, `pixels.clear`, `layers.delete` |
 | Edit | Cut, Copy, Copy Merged, Paste *(checked)*: Copy with layers selected and no selection copies the layers, Paste pastes copied layers | `pixels.cut`, `pixels.copy`, `pixels.copyMerged`, `pixels.paste`, `layers.copy`, `layers.paste` |
 | Edit | Free Transform's commit *(checked)* | `layers.setTransform` |
 | Edit | Assign Profile…, Convert to Profile… for a built-in profile or none | `document.profile` |
@@ -164,35 +202,40 @@ documents, selections, paths, channels and history names, with each recorded onc
 | Filter | Gaussian Blur, Motion Blur, Add Noise, Lens Correction OK *(checked)* | `pixels.filter` |
 | Layer | New Layer, New Layer Below, New Folder, New Adjustment Layer, Layer via Copy, Duplicate, Delete, Merge Down, Merge Visible, Rename, Group, Bring Forward, Send Backward, Flip Layer Horizontal / Vertical, Resampling, Create / Release Clipping Mask *(checked)* | `layers.add`, `layers.viaCopy`, `layers.duplicate`, `layers.delete`, `layers.merge`, `layers.set`, `layers.group`, `layers.reorder`, `layers.flip` |
 | Layer | Layer Mask: Reveal All, Hide All, From Selection (Reveal / Hide), Enable / Disable, Invert, Apply, Delete *(checked but From Selection)* | `layers.mask` |
+| Layer | Delete Layer with several layers selected *(checked)*, Move Out of Folder *(checked)* | `layers.delete` with `ids` and `bakeClipping`, `layers.move` |
+| Layer | Layer Style: the dialog's OK, Copy, Paste and Clear Layer Style, Apply Style *(checked)*; the Layers panel row menu's Copy, Paste and Clear | `layers.setStyle`, `layers.style`, `layers.applyStyle` |
+| Layer | Vector Mask: Reveal All, Hide All, Current Path, Edit, Delete *(checked)*; the Layers panel's vector mask items and thumbnail | `vectorMask.set`, `vectorMask.target`, `vectorMask.delete` |
+| Layer | Smart Objects > Edit Contents *(checked)* (a camera RAW smart object reopens in Camera Raw, as before) | `smartObject.editContents` |
+| Type | Create Work Path, Convert to Shape *(checked)* | `text.toPath`, `text.toShape` |
 | Layer | Smart Objects: Convert *(checked)*, Rasterize *(checked)*, Replace Contents…; File > Place Embedded… | `smartObject.convert`, `smartObject.rasterize`, `smartObject.replace`, `smartObject.place` |
-| Select | All, Deselect, Inverse, Reselect, Modify (Expand, Contract, Feather, Smooth, Border), Load as Selection (Layer Pixels, Layer Mask, Add, Subtract, Intersect) *(checked)*; Subject (checked where the click-to-select model is downloaded; without it, that it is greyed and says why) | `selection.*`, `selection.subject` |
-| Layers panel | New layer (Ctrl-click: below), New folder, New adjustment layer's menu, Add layer mask, Delete, the opacity slider (one step per drag, shown as it goes) and field, the blend mode, an eye clicked, Alt-click to clip or release, Rename, a row dragged to another place *(checked)*; the row menu's Duplicate, Delete, Create / Release Clipping Mask, Merge Down and mask items | `layers.add`, `layers.mask`, `layers.delete`, `layers.set`, `layers.move`, `layers.duplicate`, `layers.merge` |
+| Select | All, Deselect, Inverse, Reselect, Modify (Expand, Contract, Feather, Smooth, Border), Load as Selection (Layer Pixels, Layer Mask, Add, Subtract, Intersect) *(checked)* | `selection.*` |
+| Select | Subject (checked where the click-to-select model is downloaded; without it, that it is greyed and says why) | `selection.subject` |
+| Select | Edit in Quick Mask Mode, Load Selection…, Save Selection…, the channel keys Ctrl+2 to 9 and Ctrl+Alt+2 to 9 *(checked)* | `selection.quickMask`, `channels.loadSelection`, `channels.saveSelection`, `channels.select` |
+| Filter | Camera Raw Filter, Mosh, G'MIC (where installed), Remove Background: the dialogs' OK *(checked but Remove Background, which needs the model)*; Remove Background reuses the mask the dialog showed | `pixels.cameraRaw`, `pixels.mosh`, `pixels.gmic`, `pixels.removeBackground` |
+| Layers panel | New layer (Ctrl-click: below), New folder, New adjustment layer's menu, Add layer mask, Delete (several layers too), the opacity slider (one step per drag, shown as it goes) and field, the blend mode, an eye clicked, Alt-click to clip or release, Rename, a row dragged to another place *(checked)*; the row menu's Duplicate, Delete, Create / Release Clipping Mask, Merge Down and mask items | `layers.add`, `layers.mask`, `layers.delete`, `layers.set`, `layers.move`, `layers.duplicate`, `layers.merge` |
 | View | New Guide…, Clear Guides; the rulers' and Move tool's guides | `guides.*` |
 | Paths panel | Make Work Path, Fill, Stroke, Make Selection, Make Shape Layer, Delete *(checked)*; Add to Selection | `paths.*` |
 | Channels panel | Save selection as channel, Create new channel *(checked)*; New Channel… | `channels.saveSelection`, `channels.new` |
 
 Where the method cannot express what the item does, the item keeps its direct call (and its old `recordAction`):
-Delete with several layers selected or clipped layers above (it asks whether to bake), a fill colour finer than
-`#rrggbb` (a 16-bit pick), an ICC profile file in Assign / Convert to Profile, Content-Aware Fill's painted Custom
-area, Cut on a smart object (it copies, then asks to rasterize), the Layers panel's bin with several layers selected,
-an eye swipe across several layers (one undo step, which a `layers.set` per layer would split), and a dialog left
-open on another tab. An eye clicked on another layer than the active one, and a dragged row, record the layers'
+a colour neither `#rrggbb` nor `#rrrrggggbbbb` says exactly (a 32-bit pick), an ICC profile file in Assign / Convert
+to Profile, Content-Aware Fill's painted Custom area, Cut on a smart object (it copies, then asks to rasterize), a
+G'MIC command typed in the dialog that `pixels.gmic` does not allow, an eye swipe across several layers (one undo
+step, which a `layers.set` per layer would split), and a dialog left open on another tab. An eye clicked on another layer than the active one, and a dragged row, record the layers'
 ids (`layers.set` with `id`, `layers.move`), as an agent's requests do.
 
 ### Not converted, and why
 
 | Items | Why |
 |---|---|
-| File: New, Open, Import, Save, Save As, the PSD, SVG, ICO, animated GIF, artboard and slice exports, Batch, tabs, Quit | File dialogs and the document's lifetime; `document.*` and `tabs.*` are there for scripts, and Photoshop's actions record none of them as edits |
-| Edit: Undo, Redo | History is not a command |
-| Edit: Warp…, Warp Cage, Content-Aware Scale… | Interactive; `layers.warp`, `layers.setCage` and `pixels.contentAwareScale` exist, but the commits are not proven identical yet |
-| Edit: Color Settings…, Preferences… | Application settings, not document edits |
-| Layer: Edit Text…, Move Out of Folder, Layer Style (dialogs, copy, paste, clear, Apply Style), Smart Objects > Edit Contents, Vector Mask (every item), Type > Create Work Path / Convert to Shape | Their methods name the layer, a style or a path by id (not portable in an action), or the item opens an editor or a tab |
-| Select: Edit in Quick Mask Mode, Load Selection…, Save Selection… | Quick Mask is a mode; the two dialogs choose channels by id |
+| File: Open… or Import File… of a camera RAW file or a PDF | They open through their own dialogs (Camera Raw's develop, the PDF's page and resolution), which choose what the request would carry; `document.open` takes `settings` and `page` for scripts |
+| File: the PSD, SVG, ICO, animated GIF, artboard and slice exports, Batch, Open Project Folder, tabs, Quit | Export dialogs of their own and the window's tabs; `document.export`, `artboards.export`, `slices.export`, `actions.batch` and `tabs.*` are there for scripts |
+| Edit: Toggle Last State, Color Settings…, Preferences…, Search… | History has no toggle method; the others are application settings and the interface |
+| Layer: Edit Text… | It opens the text editor; `text.set` is the edit |
 | Channels panel: Duplicate, Delete, Rename, reorder, eyes, Load as selection | The methods name channels by id; the eyes are view state |
-| Filter: Camera Raw, G'MIC, Remove Background, Mosh, Smart Filters | Large dialogs with their own state (models, presets, layer sources) whose OK is not one request yet |
-| Layers panel: Alt-drag a row (a copy placed there), Alt-drag a mask onto another layer, a folder's fold, the row menu's Layer Style and vector mask items, the Smart Filter rows | No method copies a layer or a mask to a place; folding is view state; the rest name a layer, a style or a filter by id, as the Layer menu's items do |
-| View, Window, Help | Interface only (zoom, rulers, proofing, panels, about) |
+| Filter: Smart Filters | A smart object's filter stack, edited in its own rows |
+| Layers panel: Alt-drag a row (a copy placed there), Alt-drag a mask onto another layer, a folder's fold, the Smart Filter rows | No method copies a layer or a mask to a place; folding is view state; the rest name a filter by id |
+| View (rulers, guides' switches, proofing, panels), Window, Help | Interface only |
 
 ## Where to start
 
@@ -210,7 +253,7 @@ ids (`layers.set` with `id`, `layers.move`), as an agent's requests do.
 | Filters and adjustments | `src/core/src/filters.cpp`, `adjustments*.cpp`, `src/app/FilterDialog.cpp`, `AdjustmentEditor.cpp` |
 | Selections, wand, Quick Select | `src/core/src/selection.cpp`, `smartwand.cpp`, `scribble.cpp`, `src/app/EditorSessionSelection.cpp` |
 | A tool's canvas behaviour | `src/app/CanvasWidget*.cpp`, `ToolOptionsBar.cpp` |
-| Menus and shortcuts | `src/app/MainWindowMenus.cpp`; the canvas's context menu in `MainWindowCanvasMenu.cpp` and `CanvasWidgetMenu.cpp` |
+| Menus and shortcuts | `src/app/MainWindowMenus.cpp` (the commands, added to the menus in order), `CommandRegistry.{h,cpp}`; the canvas's context menu in `MainWindowCanvasMenu.cpp` and `CanvasWidgetMenu.cpp` |
 | Rulers, guides and snapping | `src/app/Ruler.h`, `CanvasWidgetGuides.cpp`, `CanvasWidgetPointer.cpp` (`guideTargets`), `ViewOptions.h`; `src/core/src/guides.cpp` |
 | The Layers panel | `src/app/LayersPanel.cpp` |
 | Other file formats | `src/core/src/{tga,ico,gif,aseprite,svg,affinity,raw}.cpp`, `src/app/MainWindowFiles.cpp` |

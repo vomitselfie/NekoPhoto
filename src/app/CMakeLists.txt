@@ -195,6 +195,7 @@ qt_add_executable(nekophoto
     MainWindowMenus.cpp
     MainWindowSearch.cpp
     CommandPalette.cpp
+    CommandRegistry.cpp
     Autosave.h
     Autosave.cpp
     Bench.h

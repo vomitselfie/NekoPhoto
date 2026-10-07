@@ -2,6 +2,7 @@
 // Layers and Adjustments panels and the status bar. Each tab is one project
 // with its own session, canvas and panels; the menus act on the current one.
 #pragma once
+#include "CommandRegistry.h"
 #include "EditorSession.h"
 #include "compositor/psd.h"
 #include <QJsonObject>
@@ -130,6 +131,8 @@ public:
     CommandPalette* showCommandPalette(const QString& query = {});
     /// What the palette searches: every menu command, the tools and the G'MIC filters.
     std::vector<PaletteEntry> paletteEntries();
+    /// The menus' commands (CommandRegistry.h): ids, labels, keys, what each runs and why one is greyed.
+    const CommandRegistry& commandRegistry() const { return *commands_; }
     /// Filter > G'MIC…, on the filter named `filter` when given.
     void openGmic(const QString& filter = {});
     /// Plays an action on the current tab; returns why it stopped, empty when it completed.
@@ -225,7 +228,6 @@ private:
     static QString toolHint(Tool tool, bool erase);
     void refreshActions();
     void chooseColor(bool background);
-    void deleteSelectedLayers();
     // Menu commands on the command path (CONTRIBUTING.md, "Commands") with a direct fallback for what the method
     // cannot express.
     void deleteLayersCommand();
@@ -234,6 +236,15 @@ private:
     void samplingCommand(compositor::Sampling sampling);
     void trimCommand(const QJsonObject& params);
     void updateColorSwatches();
+    /// The foreground and background colours (the ones flagged), through colors.set.
+    void setColors(const QColor& foreground, const QColor& background, bool setForeground = true, bool setBackground = true);
+    /// A colour as colors.set and pixels.fill take it (#rrggbb, or #rrrrggggbbbb for a 16-bit pick); empty when neither
+    /// says it exactly.
+    static QString colorRequest(const QColor& color);
+    /// Before a PSD or PSB too large for its layers opens: whether to open its merged image instead (nullopt: cancelled).
+    std::optional<bool> askPsdMergedOnly(const QString& path);
+    /// Opens `path` as File > Open does, through document.open (a camera RAW file or a PDF through its own dialog).
+    void openFromMenu(const QString& path);
     void showError(const QString& title, const QString& message);
     void copyLayerFromPayload(int tabIndex, const QString& payload);
     void showPreferences();
@@ -241,9 +252,7 @@ private:
     /// Select > Subject: selection.subject prompted with a box inset 5% from the canvas's edges.
     void selectSubject();
     /// Enables Select > Subject only when the click-to-select model can run, its tooltip saying why not.
-    void refreshSelectSubject();
     QAction* removeBackgroundAction_ = nullptr;
-    QAction* selectSubjectAction_ = nullptr;
     QString* errorSink_ = nullptr;
     bool skipConfirm_ = false;
     AutomationServer* automation_ = nullptr;
@@ -299,9 +308,7 @@ private:
     QAction* redoAction_;
     QAction* toggleStateAction_ = nullptr;
     QAction* revertAction_ = nullptr;
-    QList<QAction*> documentActions_;
-    /// The supports() feature each document action is (compositor/supports.h); an action without one is 8-bit only.
-    QMap<QAction*, QString> actionFeatures_;
+    std::unique_ptr<CommandRegistry> commands_;
     QAction* mode8Action_ = nullptr;
     QAction* modeRgbAction_ = nullptr;
     QAction* modeCmykAction_ = nullptr;

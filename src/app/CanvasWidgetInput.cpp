@@ -151,7 +151,7 @@ void CanvasWidget::keyPressEvent(QKeyEvent* e) {
         if (session_->transformEdit()) { session_->commitTransformCommand(); return; }
         if (session_->gradientPending()) { session_->commitGradient(); return; }
         if (session_->penDraft()) { session_->penFinish(false); return; }
-        if (session_->warpCage()) { QString error; if (!session_->commitWarpCage(&error) && !error.isEmpty()) emit session_->error(error); return; }
+        if (session_->warpCage()) { QString error; if (!session_->commitWarpCageCommand(&error) && !error.isEmpty()) emit session_->error(error); return; }
         if (!lassoPoints_.empty() && session_->lassoKind == LassoKind::Polygonal) { finishPolygonalLasso(); return; }
         if (crop_) { applyCrop(); return; }
         return;

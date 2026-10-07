@@ -3,6 +3,8 @@
 #include "CameraRawDialog.h"
 #include "CameraRawPanels.h"
 #include <QCheckBox>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <random>
@@ -25,7 +27,7 @@ CameraRawSettings& remembered() {
 } // namespace
 
 CameraRawDialog::CameraRawDialog(EditorSession* session, QWidget* parent)
-    : PixelDialog(session, parent), seed_(uint32_t(std::random_device{}())) {
+    : PixelDialog(session, parent), seed_(uint32_t(std::random_device{}() & 0x7fffffffu)) {   // within pixels.cameraRaw's integer seed
     setWindowTitle(tr("Camera Raw Filter"));
     setMinimumWidth(440);
     resize(540, 640);
@@ -74,6 +76,9 @@ void CameraRawDialog::refreshPreview() {
 bool CameraRawDialog::apply() {
     remembered() = panels_->settings();
     if (panels_->settings().normalized().isIdentity()) return true;   // an unchanged grade is not an edit
+    // The command path: pixels.cameraRaw with the grade and this dialog's grain seed.
+    const QJsonObject settings = QJsonDocument::fromJson(QByteArray::fromStdString(panels_->settings().toJson())).object();
+    if (commitAsCommand(QStringLiteral("pixels.cameraRaw"), {{"settings", settings}, {"seed", qint64(seed_)}})) return true;
     if (source16()) {
         auto out = run(*source16(), 1, {});
         throughSelection(*out);

@@ -238,6 +238,15 @@ MainWindow::MainWindow() {
     statusBar()->addWidget(hintLabel_, 1);
     statusBar()->addPermanentWidget(positionLabel_);
 
+    // The menus' commands (CommandRegistry.h): a request goes through runCommand, and a command that needs a document
+    // is greyed without one, or in a depth or colour mode its feature does not support, saying which.
+    commands_ = std::make_unique<CommandRegistry>(this, [this](const QString& method, const QJsonObject& params, const QString& title) { runCommand(method, params, title); },
+                                                  [this](const Command& command) -> QString {
+        if (!session_ || !session_->hasDocument()) return tr("No document is open");
+        const std::string feature = command.feature.toStdString();
+        if (session_->featuresGated() && (feature.empty() || !session_->supportsFeature(feature))) return session_->unavailableTip(feature);
+        return {};
+    });
     buildToolRail();
     buildMenus();
     addTab(false);
@@ -593,42 +602,40 @@ void MainWindow::copyLayerFromPayload(int tabIndex, const QString& payload) {
     if (index != current_) switchTo(index);
 }
 
-void MainWindow::deleteSelectedLayers() {
-    if (!session_->hasDocument()) return;
-    std::vector<Uuid> ids;
-    for (auto& l : session_->document()->layers) if (session_->selectedLayerIds().count(l.id)) ids.push_back(l.id);
-    if (ids.empty() && session_->activeLayerId()) ids.push_back(*session_->activeLayerId());
-    if (ids.empty()) return;
-    auto dependents = session_->clippingDependents(ids);
-    if (dependents.empty()) { session_->deleteLayersResolvingClipping(ids, false); return; }
-    QMessageBox box(this);
-    box.setIcon(QMessageBox::Question);
-    box.setText(ids.size() == 1 ? tr("This layer supplies a clipping mask") : tr("These layers supply clipping masks"));
-    box.setInformativeText(tr("Bake keeps the current masked appearance in the dependent layers’ pixels. Remove Links reveals their pixels. You can undo either choice."));
-    QPushButton* bake = box.addButton(tr("Bake and Delete"), QMessageBox::AcceptRole);
-    QPushButton* remove = box.addButton(tr("Remove Links and Delete"), QMessageBox::DestructiveRole);
-    box.addButton(QMessageBox::Cancel);
-    box.setDefaultButton(bake);
-    box.exec();
-    if (box.clickedButton() == bake) session_->deleteLayersResolvingClipping(ids, true);
-    else if (box.clickedButton() == remove) session_->deleteLayersResolvingClipping(ids, false);
-}
-
 void MainWindow::deleteLayersCommand() {
     if (!session_->hasDocument()) return;
-    // One layer that supplies no clipping mask is layers.delete; several layers, or the question about clipped
-    // layers, stay with the window (the method's step names no layers, so it records as before).
+    // layers.delete: the active layer (no ids, so a recorded action stays portable), or the selected layers by id. When
+    // they supply clipping masks the window asks first whether to bake the clipped layers' look (bakeClipping).
+    std::vector<Uuid> ids;
+    for (auto& l : session_->document()->layers) if (session_->selectedLayerIds().count(l.id)) ids.push_back(l.id);
     const auto active = session_->activeLayerId();
-    const auto& selected = session_->selectedLayerIds();
-    const bool single = active && (selected.empty() || (selected.size() == 1 && selected.count(*active)));
-    if (single && session_->clippingDependents({*active}).empty()) { runCommand("layers.delete", {}, tr("Delete Layer")); return; }
-    deleteSelectedLayers();
-    recordAction("layers.delete");
+    if (ids.empty() && active) ids.push_back(*active);
+    if (ids.empty()) return;
+    QJsonObject params;
+    if (ids.size() > 1 || !active || ids.front() != *active) {
+        QJsonArray list;
+        for (const Uuid& id : ids) list.append(QString::fromStdString(id));
+        params["ids"] = list;
+    }
+    if (!session_->clippingDependents(ids).empty()) {
+        QMessageBox box(this);
+        box.setIcon(QMessageBox::Question);
+        box.setText(ids.size() == 1 ? tr("This layer supplies a clipping mask") : tr("These layers supply clipping masks"));
+        box.setInformativeText(tr("Bake keeps the current masked appearance in the dependent layers’ pixels. Remove Links reveals their pixels. You can undo either choice."));
+        QPushButton* bake = box.addButton(tr("Bake and Delete"), QMessageBox::AcceptRole);
+        QPushButton* remove = box.addButton(tr("Remove Links and Delete"), QMessageBox::DestructiveRole);
+        box.addButton(QMessageBox::Cancel);
+        box.setDefaultButton(bake);
+        box.exec();
+        if (box.clickedButton() != bake && box.clickedButton() != remove) return;
+        params["bakeClipping"] = box.clickedButton() == bake;
+    }
+    runCommand("layers.delete", params, tr("Delete Layer"));
 }
 
 void MainWindow::fillWith(const QColor& color) {
-    // pixels.fill takes #rrggbb; a colour finer than that (a 16-bit pick) fills directly, so the pixels do not change.
-    if (QColor(color.name()) == color) { runCommand("pixels.fill", {{"color", color.name()}}, tr("Fill")); return; }
+    // pixels.fill takes #rrggbb, or #rrrrggggbbbb for a 16-bit pick; a colour neither says exactly fills directly.
+    if (const QString request = colorRequest(color); !request.isEmpty()) { runCommand("pixels.fill", {{"color", request}}, tr("Fill")); return; }
     session_->fillSelection(color);
     recordAction("pixels.fill", {{"color", color.name()}});
 }
@@ -664,19 +671,6 @@ void MainWindow::selectSubject() {
     runCommand("selection.subject", {{"box", QJsonArray{dx, dy, d.width - dx, d.height - dy}}}, tr("Subject"));
 }
 
-void MainWindow::refreshSelectSubject() {
-    if (!selectSubjectAction_) return;
-    const bool has = session_ && session_->hasDocument();
-    QString why;
-    if (!ModelStore::supported()) why = tr("Unavailable: this build has no OpenCV");
-    else if (!ModelStore::promptReady())
-        why = tr("The click-to-select model isn’t downloaded: choose the Click engine in the Quick Selection tool’s options and download it");
-    else if (has && !session_->supportsFeature("tool.quickSelect")) why = session_->unavailableTip("tool.quickSelect");
-    selectSubjectAction_->setEnabled(has && why.isEmpty());
-    selectSubjectAction_->setToolTip(why.isEmpty() ? tr("Select the main subject of the image") : why);
-    if (auto* menu = qobject_cast<QMenu*>(selectSubjectAction_->parent()); menu && !why.isEmpty()) menu->setToolTipsVisible(true);
-}
-
 void MainWindow::refreshBackgroundAction() {
     if (!removeBackgroundAction_) return;
     QString tip;
@@ -690,16 +684,9 @@ void MainWindow::refreshBackgroundAction() {
 
 void MainWindow::refreshActions() {
     bool has = session_->hasDocument();
+    // Every command's enabled state, from the registry (merge, Edit Text, Undo, Redo and Revert by their own reasons).
     refreshDepthGating();
-    const bool eightBit = !session_->featuresGated();
-    if (mergeAction_) { mergeAction_->setText(tr("&%1").arg(names::history(session_->mergeTitle()))); mergeAction_->setEnabled(has && session_->supportsFeature("layers.merge") && session_->canMergeLayers()); }
-    if (mergeVisibleAction_) mergeVisibleAction_->setEnabled(has && session_->supportsFeature("layers.merge") && session_->canMergeVisible());
-    if (editTextAction_) { const Layer* l = has ? session_->activeLayer() : nullptr; editTextAction_->setEnabled(eightBit && l && l->isLiveText()); }
-    undoAction_->setEnabled(session_->canUndo());
-    redoAction_->setEnabled(session_->canRedo());
-    if (toggleStateAction_) toggleStateAction_->setEnabled(session_->canUndo() || session_->canRedo());
-    refreshSelectSubject();
-    if (revertAction_) revertAction_->setEnabled(has && session_->canRevert());
+    if (mergeAction_) mergeAction_->setText(tr("&%1").arg(names::history(session_->mergeTitle())));
     undoAction_->setText(session_->canUndo() ? tr("&Undo %1").arg(names::history(session_->undoName())) : tr("&Undo"));
     redoAction_->setText(session_->canRedo() ? tr("&Redo %1").arg(names::history(session_->redoName())) : tr("&Redo"));
     if (has) sizeLabel_->setText(QStringLiteral("%1 × %2 px").arg(session_->document()->width).arg(session_->document()->height));

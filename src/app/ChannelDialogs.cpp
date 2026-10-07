@@ -7,12 +7,14 @@
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QGroupBox>
+#include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QVBoxLayout>
+#include <algorithm>
 
 using namespace compositor;
 
@@ -89,6 +91,14 @@ void SaveSelectionDialog::refresh() {
 void SaveSelectionDialog::apply() {
     if (!session_) { reject(); return; }
     const QString id = channel_->currentData().toString();
+    // The command path: channels.saveSelection into the chosen channel (by id) or a new one with its name.
+    if (session_->commandsRouted()) {
+        static const char* const modes[] = {"replace", "add", "subtract", "intersect"};
+        QJsonObject params{{"name", name_->text()}, {"mode", modes[std::clamp(operation_->checkedId(), 0, 3)]}};
+        if (!id.isEmpty()) params["id"] = id;
+        if (session_->runCommand(QStringLiteral("channels.saveSelection"), params)) accept();
+        return;
+    }
     QString error;
     const auto saved = session_->saveSelectionToChannel(id.isEmpty() ? std::nullopt : std::optional<Uuid>(id.toStdString()), name_->text(),
                                                         modeFor(operation_->checkedId()), &error);
@@ -143,6 +153,15 @@ void LoadSelectionDialog::apply() {
     SelectionSource source;
     source.kind = data[0] == "channel" ? SelectionSource::AlphaChannel : data[0] == "mask" ? SelectionSource::LayerMask : SelectionSource::Transparency;
     source.id = data[1].toStdString();
+    // The command path: channels.loadSelection with the channel or the layer (by id), Invert and the operation.
+    if (session_->commandsRouted()) {
+        static const char* const modes[] = {"replace", "add", "subtract", "intersect"};
+        QJsonObject params{{"invert", invert_->isChecked()}, {"mode", modes[std::clamp(operation_->checkedId(), 0, 3)]}};
+        if (data[0] == "channel") params["channel"] = data[1];
+        else { params["layer"] = data[1]; params["mask"] = data[0] == "mask"; }
+        if (session_->runCommand(QStringLiteral("channels.loadSelection"), params)) accept();
+        return;
+    }
     QString error;
     if (!session_->loadSelectionFromSource(source, invert_->isChecked(), modeFor(operation_->checkedId()), &error)) {
         QMessageBox::information(this, windowTitle(), error.isEmpty() ? tr("The selection could not be loaded.") : error);

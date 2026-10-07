@@ -322,7 +322,8 @@ def document_new(width: int = 1920, height: int = 1080, resolution: float = 72) 
 
 @edit("Open a file")
 def document_open(path: str, page: Optional[int] = None, resolution: Optional[float] = None, settings: Optional[dict] = None,
-                  asSmartObject: Optional[bool] = None, bitsPerChannel: Optional[int] = None, mergedOnly: Optional[bool] = None) -> str:
+                  asSmartObject: Optional[bool] = None, bitsPerChannel: Optional[int] = None, mergedOnly: Optional[bool] = None,
+                  asDocument: Optional[bool] = None) -> str:
     """Open a project, a .nekophoto file or a .comp folder (in its own tab); a layered file in its own tab, the reply listing its layers and what could
     not be carried: Photoshop .psd/.psb, Clip Studio .clip, Affinity .afphoto/.afdesign/.afpub/.af, Aseprite .ase/.aseprite (first frame), SVG .svg/.svgz (shapes as editable vector shape layers, the rest as pixels),
     a PDF page (page, 1-based; resolution in ppi, default 150; when app_info reports pdf), an icon .ico/.cur (a
@@ -334,9 +335,10 @@ def document_open(path: str, page: Optional[int] = None, resolution: Optional[fl
     "Daylight"; the reply's settings carry rawTemperature and rawTint),
     at bitsPerChannel 16 (or 8); asSmartObject=True makes a smart object that keeps the RAW file and the settings, which
     smart_object_edit_contents develops again. mergedOnly=True opens a PSD/PSB as the merged image Photoshop stored,
-    one layer, for a file whose layers do not fit (a new, untitled document)."""
+    one layer, for a file whose layers do not fit (a new, untitled document). asDocument=True opens an image as a
+    document of its own in a new tab even with a document open (File > Open), instead of as a layer."""
     return text(call("document.open", path=os.path.abspath(path), page=page, resolution=resolution, settings=settings,
-                     asSmartObject=asSmartObject, bitsPerChannel=bitsPerChannel, mergedOnly=mergedOnly))
+                     asSmartObject=asSmartObject, bitsPerChannel=bitsPerChannel, mergedOnly=mergedOnly, asDocument=asDocument))
 
 
 @edit("Import an image as a layer")
@@ -559,20 +561,20 @@ def layers_set_transform(id: str, x: Optional[float] = None, y: Optional[float] 
 
 
 @look("Layer style")
-def layers_style(id: str) -> str:
-    """A layer's effects (Photoshop's layer style): dropShadows, innerShadows, outerGlows, innerGlows, bevels, satins, colorOverlays, gradientOverlays, patternOverlays and strokes, each a list (switched-off ones too, with enabled false), plus visible, maskHidesEffects and blendInteriorAsGroup."""
+def layers_style(id: Optional[str] = None) -> str:
+    """A layer's effects (Photoshop's layer style; the active layer when id is left out): dropShadows, innerShadows, outerGlows, innerGlows, bevels, satins, colorOverlays, gradientOverlays, patternOverlays and strokes, each a list (switched-off ones too, with enabled false), plus visible, maskHidesEffects and blendInteriorAsGroup, the Blending Options' blendIf and the effects' referenceX and referenceY."""
     return text(call("layers.style", id=id))
 
 
 @edit("Set layer style")
-def layers_set_style(id: str, style: dict) -> str:
-    """Replace a layer's effects, shaped as layers_style shows; settings left out take Photoshop's defaults and {} clears the style. Colours are "#rrggbb"; opacity, scale and depth are fractions (1 = 100%); spread, choke and range percent; sizes and distances pixels; angles degrees; mode a blend mode (normal, multiply, screen, overlay, linearDodge, ...). Example: {"dropShadows": [{"distance": 8, "size": 10}], "strokes": [{"size": 3, "color": "#ffffff", "position": "outside"}]}."""
-    return text(call("layers.setStyle", id=id, style=style))
+def layers_set_style(style: dict, id: Optional[str] = None, paste: bool = False) -> str:
+    """Replace a layer's effects, shaped as layers_style shows; settings left out take Photoshop's defaults and {} clears the style. Colours are "#rrggbb"; opacity, scale and depth are fractions (1 = 100%); spread, choke and range percent; sizes and distances pixels; angles degrees; mode a blend mode (normal, multiply, screen, overlay, linearDodge, ...). Example: {"dropShadows": [{"distance": 8, "size": 10}], "strokes": [{"size": 3, "color": "#ffffff", "position": "outside"}]}. blendIf (as layers_get shows it) and referenceX/referenceY are kept from the layer when left out. The active layer when id is left out; paste=true names the step Paste Layer Style."""
+    return text(call("layers.setStyle", id=id, style=style, paste=paste or None))
 
 
 @edit("Apply a style preset")
-def layers_apply_style(id: str, style: str) -> str:
-    """Give a layer an imported style preset by name (presets_list): its effects replace the layer's, and the document gets the patterns the style uses. Answers the layer's style as layers_style shows it."""
+def layers_apply_style(style: str, id: Optional[str] = None) -> str:
+    """Give a layer an imported style preset by name (presets_list): its effects replace the layer's, and the document gets the patterns the style uses (the active layer when id is left out). Answers the layer's style as layers_style shows it."""
     return text(call("layers.applyStyle", id=id, style=style))
 
 
@@ -881,7 +883,7 @@ def pixels_camera_raw(settings: dict, seed: int = 1) -> str:
 
 @edit("Fill")
 def pixels_fill(color: str = "#000000") -> str:
-    """Fill the selection (or the whole active layer) with a CSS colour."""
+    """Fill the selection (or the whole active layer) with a CSS colour; #rrrrggggbbbb gives 16 bits per channel."""
     return text(call("pixels.fill", color=color))
 
 
@@ -949,9 +951,9 @@ def gmic_filters(search: str = "") -> str:
 
 
 @edit("Run a G'MIC filter")
-def pixels_gmic(command: str) -> str:
-    """Run a G'MIC command line on the active layer's pixels inside the selection, e.g. "unsharp 2,1.5", "cartoon 3,150,20,0.25,1.5,8" or a catalogue filter's defaultCommand with edited values. Only filter names (from gmic_filters, or common built-ins such as blur, sharpen, unsharp, denoise, cartoon) followed by numbers are accepted: no strings, paths or other G'MIC commands."""
-    return text(call("pixels.gmic", command=command))
+def pixels_gmic(command: str, name: Optional[str] = None) -> str:
+    """Run a G'MIC command line on the active layer's pixels inside the selection, e.g. "unsharp 2,1.5", "cartoon 3,150,20,0.25,1.5,8" or a catalogue filter's defaultCommand with edited values. Only filter names (from gmic_filters, or common built-ins such as blur, sharpen, unsharp, denoise, cartoon) followed by numbers are accepted: no strings, paths or other G'MIC commands. name is what the undo step calls it after "G'MIC: " (default the command's first word)."""
+    return text(call("pixels.gmic", command=command, name=name))
 
 
 @edit("Remove the background")
@@ -979,9 +981,9 @@ def layers_cage(id: str) -> str:
 
 
 @edit("Warp through a cage")
-def layers_set_cage(id: str, points: list[list[float]]) -> str:
+def layers_set_cage(points: list[list[float]], id: Optional[str] = None) -> str:
     """Warp a layer freely (Photoshop's Custom warp): move some of the 16 points layers_cage gives and pass all 16 back.
-    Corners are points 0, 3, 12 and 15; the rest shape the edges and the inside. Pixels bend for good; a smart object keeps an editable warp."""
+    Corners are points 0, 3, 12 and 15; the rest shape the edges and the inside. Pixels bend for good; a smart object keeps an editable warp. The active layer when id is left out."""
     return text(call("layers.setCage", id=id, points=points))
 
 
@@ -1161,9 +1163,10 @@ def paths_operation(action: str = "set", subpath: int = 0, op: str = "combine") 
 
 
 @edit("Vector mask")
-def vector_mask(id: str, action: str = "get", mode: Optional[str] = None, path: Optional[list] = None, inverted: Optional[bool] = None) -> str:
+def vector_mask(id: Optional[str] = None, action: str = "get", mode: Optional[str] = None, path: Optional[list] = None, inverted: Optional[bool] = None) -> str:
     """A layer's own vector mask (Layer > Vector Mask). action get reads it; set makes or replaces it (mode revealAll, hideAll, currentPath = the path paths_apply chose,
-    or path = subpaths as paths_list gives them; inverted hides inside); delete removes it; target makes it the path the Pen, Direct Selection and paths_anchor edit."""
+    or path = subpaths as paths_list gives them; inverted hides inside); delete removes it; target makes it the path the Pen, Direct Selection and paths_anchor edit.
+    set, delete and target act on the active layer when id is left out (get needs it)."""
     methods = {"get": "vectorMask.get", "set": "vectorMask.set", "delete": "vectorMask.delete", "target": "vectorMask.target"}
     if action not in methods:
         return "action must be get, set, delete or target"
@@ -1173,8 +1176,8 @@ def vector_mask(id: str, action: str = "get", mode: Optional[str] = None, path: 
 
 
 @edit("Text to path")
-def text_to_path(id: str, shape: bool = False) -> str:
-    """Type > Create Work Path: a text layer's glyph outlines as the Work Path (id 1025); shape=true is Type > Convert to Shape (the text layer becomes a shape layer)."""
+def text_to_path(id: Optional[str] = None, shape: bool = False) -> str:
+    """Type > Create Work Path: a text layer's glyph outlines as the Work Path (id 1025); shape=true is Type > Convert to Shape (the text layer becomes a shape layer). The active layer when id is left out."""
     return text(call("text.toShape" if shape else "text.toPath", id=id))
 
 
@@ -1359,7 +1362,7 @@ def tool_select(name: str) -> str:
 
 @edit("Set colours")
 def colors_set(foreground: Optional[str] = None, background: Optional[str] = None) -> str:
-    """Set the foreground and background colours (CSS), which painting, fills and gradients default to."""
+    """Set the foreground and background colours (CSS; #rrrrggggbbbb gives 16 bits per channel), which painting, fills and gradients default to."""
     return text(call("colors.set", foreground=foreground, background=background))
 
 

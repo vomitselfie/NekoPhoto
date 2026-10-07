@@ -1,6 +1,7 @@
 #include "Style.h"
 #include "Names.h"
 #include "LayersPanel.h"
+#include "Automation.h"
 #include "LayerStyleDialog.h"
 #include "SmartFilterDialog.h"
 #include "ImageConvert.h"
@@ -14,6 +15,7 @@
 #include <QDropEvent>
 #include <QMimeData>
 #include <QHBoxLayout>
+#include <QJsonArray>
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
@@ -152,16 +154,25 @@ void toggleClipping(EditorSession* s, const Uuid& id) {
     s->runCommandOr(QStringLiteral("layers.set"), onLayer(s, id, {{"clipping", !clipped}}), [s, id] { s->toggleClippingMask(id); });
 }
 
-/// The bin, or the row's Delete Layer (`id`): no baking of layers clipped to it, as before. Several layers stay
-/// with the session (layers.delete would name them by id).
+/// The bin, or the row's Delete Layer (`id`): no baking of layers clipped to it, as before. Several layers go by id.
 void deleteLayers(EditorSession* s, std::optional<Uuid> id = std::nullopt) {
     if (!s->hasDocument()) return;
     const auto active = s->activeLayerId();
     const auto& selected = s->selectedLayerIds();
     const bool single = id ? true : active && (selected.empty() || (selected.size() == 1 && selected.count(*active)));
     const Uuid target = id ? *id : active ? *active : Uuid();
-    if (!single || target.empty() || !s->document()->find(target) || !s->commandsRouted()) {
+    if (!s->commandsRouted() || (single && (target.empty() || !s->document()->find(target)))) {
         if (id) s->deleteLayer(*id); else s->deleteSelectedLayers();
+        return;
+    }
+    if (!single) {
+        // The selected layers in the document's order, as the session deletes them.
+        std::vector<Uuid> ids;
+        QJsonArray list;
+        for (const Layer& l : s->document()->layers) if (selected.count(l.id)) { ids.push_back(l.id); list.append(QString::fromStdString(l.id)); }
+        QJsonObject params{{"ids", list}};
+        if (!s->clippingDependents(ids).empty()) params["bakeClipping"] = false;
+        s->runCommand(QStringLiteral("layers.delete"), params);
         return;
     }
     QJsonObject params;
@@ -824,7 +835,8 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event) {
             return true;
         }
         if (w && w->property("vectorMask").toBool()) {
-            session_->targetVectorMask(w->property("layerId").toString().toStdString());
+            const Uuid target = w->property("layerId").toString().toStdString();
+            session_->runCommandOr(QStringLiteral("vectorMask.target"), onLayer(session_, target, {}), [this, target] { session_->targetVectorMask(target); });
             return true;
         }
         if (w && w->property("mask").toBool()) {
@@ -871,10 +883,21 @@ void LayersPanel::showContextMenu(const QPoint& pos) {
     if (session_->canStyleLayer(id)) {
         gatedAtDepth(menu->addAction(tr("Layer Style…"), this, [this, id] { LayerStyleDialog(session_, id, this).exec(); }), "edit.style");
         if (session_->activeLayerHasStyle()) {
-            gatedAtDepth(menu->addAction(tr("Copy Layer Style"), this, [this] { session_->copyLayerStyle(); }), "edit.style");
-            gatedAtDepth(menu->addAction(tr("Clear Layer Style"), this, [this] { session_->clearLayerStyle(); }), "edit.style");
+            // As the Layer menu's items: Copy keeps what layers.style answers, Clear and Paste run layers.setStyle.
+            gatedAtDepth(menu->addAction(tr("Copy Layer Style"), this, [this] {
+                if (!session_->commandsRouted()) { session_->copyLayerStyle(); return; }
+                const auto answer = session_->runCommand(QStringLiteral("layers.style"), {});
+                compositor::LayerStyle style;
+                if (answer && layerStyleFromRequest(answer->toObject(), session_->document()->colorMode, style, nullptr)) session_->setStyleClipboard(style);
+            }), "edit.style");
+            gatedAtDepth(menu->addAction(tr("Clear Layer Style"), this, [this] {
+                session_->runCommandOr(QStringLiteral("layers.setStyle"), {{"style", QJsonObject{}}}, [this] { session_->clearLayerStyle(); });
+            }), "edit.style");
         }
-        if (session_->canPasteLayerStyle()) gatedAtDepth(menu->addAction(tr("Paste Layer Style"), this, [this] { session_->pasteLayerStyle(); }), "edit.style");
+        if (session_->canPasteLayerStyle()) gatedAtDepth(menu->addAction(tr("Paste Layer Style"), this, [this] {
+            session_->runCommandOr(QStringLiteral("layers.setStyle"), {{"style", layerStyleRequest(*session_->styleClipboard(), session_->document()->colorMode)}, {"paste", true}},
+                                   [this] { session_->pasteLayerStyle(); });
+        }), "edit.style");
     }
 
     if (session_->smartFilters(id)) {
@@ -904,10 +927,17 @@ void LayersPanel::showContextMenu(const QPoint& pos) {
         menu->addAction(tr("Add Reveal-All Mask"), this, [this] { addMask(true); });
         menu->addAction(tr("Add Hide-All Mask"), this, [this] { addMask(false); });
     }
-    if (hasLayerVectorMask(*layer)) gatedAtDepth(menu->addAction(tr("Delete Vector Mask"), this, [this] { session_->deleteVectorMask(); }), "edit.vector");
+    // The vector mask items run vectorMask.delete and vectorMask.set, as Layer > Vector Mask does.
+    if (hasLayerVectorMask(*layer)) gatedAtDepth(menu->addAction(tr("Delete Vector Mask"), this, [this] {
+        session_->runCommandOr(QStringLiteral("vectorMask.delete"), {}, [this] { session_->deleteVectorMask(); });
+    }), "edit.vector");
     else if (!isVectorShapeLayer(*layer)) {
-        gatedAtDepth(menu->addAction(tr("Add Reveal-All Vector Mask"), this, [this] { session_->addVectorMask(EditorSession::VectorMaskKind::RevealAll); }), "edit.vector");
-        gatedAtDepth(menu->addAction(tr("Add Hide-All Vector Mask"), this, [this] { session_->addVectorMask(EditorSession::VectorMaskKind::HideAll); }), "edit.vector");
+        gatedAtDepth(menu->addAction(tr("Add Reveal-All Vector Mask"), this, [this] {
+            session_->runCommandOr(QStringLiteral("vectorMask.set"), {{"mode", "revealAll"}}, [this] { session_->addVectorMask(EditorSession::VectorMaskKind::RevealAll); });
+        }), "edit.vector");
+        gatedAtDepth(menu->addAction(tr("Add Hide-All Vector Mask"), this, [this] {
+            session_->runCommandOr(QStringLiteral("vectorMask.set"), {{"mode", "hideAll"}}, [this] { session_->addVectorMask(EditorSession::VectorMaskKind::HideAll); });
+        }), "edit.vector");
     }
     menu->popup(tree_->viewport()->mapToGlobal(pos));
 }

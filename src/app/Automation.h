@@ -3,6 +3,8 @@
 // Every request runs on the main thread against the window's current tab and
 // is answered with a JSON object on one line. See docs/automation.md.
 #pragma once
+#include "compositor/colormodes.h"
+#include "compositor/layerstyle.h"
 #include <QJsonObject>
 #include <QPointer>
 #include <QSet>
@@ -97,5 +99,12 @@ private:
     std::map<QString, Handler> handlers_;
     int playDepth_ = 0;   // actions playing inside one another (refused past a few)
 };
+
+/// A layer style as layers.style answers and layers.setStyle takes it: the effects, Blend If's ranges (in the colour
+/// mode's channels) and the effects' reference point. The Layer Style dialog and Paste Layer Style send it.
+QJsonObject layerStyleRequest(const compositor::LayerStyle& style, compositor::ColorMode mode);
+/// The reverse: `request` read into `style` (which keeps its reference point when the request names none). False with
+/// `error` when the request is not a style.
+bool layerStyleFromRequest(const QJsonObject& request, compositor::ColorMode mode, compositor::LayerStyle& style, QString* error);
 
 } // namespace app
