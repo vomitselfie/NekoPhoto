@@ -318,8 +318,10 @@ bool hasNonSrgbProfile(const Document& document) {
     // so there is nothing left to ask.
     if (document.colorMode != ColorMode::RGB) return false;
     // A 32-bit document is exported in the profile its values encode to (its gamma counterpart).
+    // Within a level of sRGB is sRGB: the common "sRGB IEC61966-2.1" ICC files (table curves) round differently from
+    // the built-in parametric one by at most one level, and converting would change nothing a person can see.
     const ColorProfile profile = encodedProfileOf(document);
-    return !profile.empty() && !equivalentProfiles(profile, {});
+    return !profile.empty() && !equivalentProfiles(profile, {}, 1.0);
 }
 
 ExportPlan exportPlan(const Document& document, bool convertToSrgb, bool embed) {

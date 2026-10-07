@@ -61,7 +61,7 @@ const ColorProfile& effectiveProfile(const ColorProfile& profile);
 const ColorProfile& effectiveProfile(const ColorProfile& profile, ColorModel model);
 /// Whether two profiles give the same colours: the same bytes, or matrix-shaper profiles whose conversion between
 /// them is the identity at 16 bits (sRGB by another vendor, say). Untagged counts as sRGB. Cached.
-bool equivalentProfiles(const ColorProfile& a, const ColorProfile& b);
+bool equivalentProfiles(const ColorProfile& a, const ColorProfile& b, double levels = 0.25);
 /// The working space the profile is, when it is equivalent to one.
 std::optional<WorkingSpace> matchingWorkingSpace(const ColorProfile& profile);
 

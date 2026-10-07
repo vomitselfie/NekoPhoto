@@ -11,6 +11,7 @@
 #include <cstring>
 #include <list>
 #include <map>
+#include <tuple>
 #include <mutex>
 
 namespace compositor {
@@ -487,20 +488,22 @@ bool isColorFormat(PixelFormat format) {
     return format == PixelFormat::RGBFloat || format == PixelFormat::CMYKFloat || format == PixelFormat::LabFloat;
 }
 
-bool equivalentProfiles(const ColorProfile& a, const ColorProfile& b) {
+bool equivalentProfiles(const ColorProfile& a, const ColorProfile& b, double levels) {
     const ColorProfile& pa = effectiveProfile(a);
     const ColorProfile& pb = effectiveProfile(b);
     if (pa.icc == pb.icc) return true;
     if (pa.model != ColorModel::RGB || pb.model != ColorModel::RGB) return false;
     static std::mutex mutex;
-    static std::map<std::pair<uint64_t, uint64_t>, bool> known;
+    static std::map<std::tuple<uint64_t, uint64_t, int>, bool> known;
     const uint64_t fa = fingerprint(pa.icc), fb = fingerprint(pb.icc);
-    const std::pair<uint64_t, uint64_t> key{std::min(fa, fb), std::max(fa, fb)};
+    const int limit = std::max(0, int(std::lround(levels * 257)));   // in 16-bit units
+    const std::tuple<uint64_t, uint64_t, int> key{std::min(fa, fb), std::max(fa, fb), limit};
     {
         std::lock_guard<std::mutex> lock(mutex);
         if (auto it = known.find(key); it != known.end()) return it->second;
     }
-    // A grid of colours through a to b: the same colours when none moves by more than a quarter of an 8-bit level.
+    // A grid of colours through a to b: the same colours when none moves by more than `levels` 8-bit levels (a
+    // quarter by default).
     bool same = false;
     cmsContext context = cmsCreateContext(nullptr, nullptr);
     cmsHPROFILE ha = openProfile(context, pa), hb = openProfile(context, pb);
@@ -512,7 +515,7 @@ bool equivalentProfiles(const ColorProfile& a, const ColorProfile& b) {
             out.resize(in.size());
             cmsDoTransform(t, in.data(), out.data(), cmsUInt32Number(in.size() / 3));
             same = true;
-            for (size_t i = 0; i < in.size(); i++) if (std::abs(int(in[i]) - int(out[i])) > 64) { same = false; break; }
+            for (size_t i = 0; i < in.size(); i++) if (std::abs(int(in[i]) - int(out[i])) > limit) { same = false; break; }
             cmsDeleteTransform(t);
         }
     }

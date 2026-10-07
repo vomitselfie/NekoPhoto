@@ -87,6 +87,7 @@ ExportAsDialog::ExportAsDialog(EditorSession* session, bool layer, const QString
     quality_ = new QSlider(Qt::Horizontal);
     quality_->setObjectName("quality");
     quality_->setRange(1, 100);
+    quality_->setMinimumWidth(160);   // the form would squeeze it to its handle
     qualitySpin_ = new QSpinBox;
     qualitySpin_->setRange(1, 100);
     qualitySpin_->setButtonSymbols(QAbstractSpinBox::NoButtons);
