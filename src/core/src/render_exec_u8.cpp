@@ -11,6 +11,7 @@
 #include "compositor/adjustments.h"
 #include "compositor/blend.h"
 #include "compositor/parallel.h"
+#include "compositor/workcounters.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -470,6 +471,8 @@ struct RenderExec<SampleType::U8> {
 
     void adjust(const Layer& layer, Image& target, std::shared_ptr<GrayImage> coverage) {
         if (!layer.adjustment) return;
+        work::add(work::Counter::Adjustments);
+        work::add(work::Counter::AdjustmentPixels, uint64_t(target.width()) * uint64_t(target.height()));
         Image adjusted = target;
         if (!applyAdjustment(*layer.adjustment, adjusted, region, scale)) return;
         BlendMode mode = blendOf(layer);
@@ -624,6 +627,8 @@ struct RenderExec<SampleType::U8> {
                 fused = fused ? composeTransfer(*fused, *next) : std::move(next);
             }
             if (fused) {
+                work::add(work::Counter::Adjustments, uint64_t(end - index));
+                work::add(work::Counter::AdjustmentPixels, uint64_t(cur->width()) * uint64_t(cur->height()));   // one pass for the run
                 applyTransfer(*cur, *fused);
                 for (size_t i = index; i < end; i++)
                     if (auto close = groupsClose.find(i); close != groupsClose.end()) for (const Layer* g : close->second) closeGroup(*g, cur);

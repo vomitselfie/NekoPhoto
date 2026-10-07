@@ -13,6 +13,7 @@
 #include "compositor/smartfilter.h"
 #include "compositor/blend.h"
 #include "smartfilter_kernels.h"
+#include "compositor/workcounters.h"
 
 #include <algorithm>
 #include <array>
@@ -1571,6 +1572,7 @@ std::optional<PlacedRaster> renderSmartFilterStack(const PlacedRaster& placed, c
             return std::nullopt;
     }
     if (!stack.enabled || !placed.image || placed.image->isEmpty()) return placed;
+    work::add(work::Counter::SmartFilterStacks);
 
     const auto active = std::count_if(stack.entries.begin(), stack.entries.end(),
                                       [](const SmartFilterEntry& e) { return e.enabled && e.opacity > 0.0; });
@@ -1581,6 +1583,7 @@ std::optional<PlacedRaster> renderSmartFilterStack(const PlacedRaster& placed, c
     const Result base = embedInFilterCanvas(current, filterCanvas);
     for (const auto& entry : stack.entries) {
         if (!entry.enabled || entry.opacity <= 0.0) continue;
+        work::add(work::Counter::SmartFilterPasses);
         Result filtered = std::visit(RunEntry{current, filterCanvas}, entry.parameters);
         current = blendEntryResult(current, std::move(filtered), entry.opacity, entry.blend);
     }

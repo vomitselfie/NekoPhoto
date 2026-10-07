@@ -3,6 +3,7 @@
 // brush_f32.cpp for 32 and in brush_modes.cpp for CMYK.
 #include "compositor/brush.h"
 #include "stroke_raster.h"
+#include "compositor/workcounters.h"
 
 namespace compositor {
 
@@ -284,6 +285,7 @@ void BrushStroke::walk(Point point) {
 }
 
 void BrushStroke::dab(Point center) {
+    work::add(work::Counter::BrushDabs);
     withRaster([&](auto& raster) { raster.dab(center); });
 }
 
@@ -308,6 +310,7 @@ void BrushStroke::recompose(const Rect& gridRect) {
     if (painted_) return;   // another engine owns the working pixels
     Rect r = gridRect.intersection(Rect(0, 0, width_, height_));
     if (r.isEmpty()) return;
+    work::add(work::Counter::BrushRecomposePixels, uint64_t(r.width) * uint64_t(r.height));
     withRaster([&](auto& raster) { raster.recompose(r); });
 }
 
