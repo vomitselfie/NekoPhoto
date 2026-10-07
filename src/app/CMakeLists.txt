@@ -110,6 +110,8 @@ qt_add_executable(nekophoto
     TimelinePanel.h
     TimelinePanel.cpp
     AutomationActions.cpp
+    AutomationGuard.h
+    AutomationGuard.cpp
     EditorSessionTimeline.cpp
     BrushPicker.h
     BrushPicker.cpp

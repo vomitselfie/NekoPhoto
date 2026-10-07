@@ -127,6 +127,9 @@ public:
     void openGmic(const QString& filter = {});
     /// Plays an action on the current tab; returns why it stopped, empty when it completed.
     QString playAction(const QString& name);
+    /// Before an imported action that writes files first plays from the panel or Batch: asks once, listing the writes.
+    /// True when it may play (nothing to ask, or the person agreed, which is remembered).
+    bool confirmActionWrites(const QString& name);
     /// File > Automate > Batch…, with `action` chosen.
     void showBatchDialog(const QString& action = {});
     /// For screenshots: the Actions or Timeline panel (with frames made from the layers when there are none), or

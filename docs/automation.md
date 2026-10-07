@@ -12,9 +12,26 @@ the undo history, and shows on screen (or nowhere, in headless mode).
 - `nekophoto --headless` runs with no visible window (Qt's offscreen
   platform) and the socket on; for batch work and CI.
 
-The socket is `$XDG_RUNTIME_DIR/nekophoto.sock`, or the path given with
+The socket is `$XDG_RUNTIME_DIR/nekophoto.sock` (without that variable, `runtime-<user>` under the temp folder,
+which must be a folder of yours closed to everyone else), or the path given with
 `--rpc-socket` or `$COMPOSITOR_RPC_SOCKET`. Only the same user can connect. The
 status bar shows "Agent connected" while a client is attached.
+
+### Files and limits
+
+- Methods that write a file (`document.export`, `document.save` to another path, `render`, `screenshot`,
+  `layers.render` and `selection.render` with `path`, `actions.export`, `slices.export`, `artboards.export`)
+  refuse an existing target unless `overwrite: true`; `slices.export` and `artboards.export` then write nothing.
+  `actions.batch` skips existing files unless `overwrite`. File dialogs in the editor ask as before.
+- Write roots: with the `automation/writeRoots` setting (a list of folders) or `--rpc-write-root <dir>`
+  (repeatable), every automation write must land in one of them, its folders resolved through symbolic links,
+  and a final component that is a link is refused. This covers actions played from the panel too. Unset, the
+  default, writes go wherever the user can write.
+- A request line may be at most 64 MiB: past it the reply is error -32600 and the connection is closed.
+- Audit log: the `automation/log` setting or `--rpc-log <file>` appends a tab-separated line per request:
+  time, method, its path-bearing parameters (`path`, `paths`, `directory`, `input`, `output`; never image data or
+  long lists), `ok` or `error <code>`, and the time it took.
+- See [SECURITY.md](../SECURITY.md) for the threat model (other local users).
 
 ## Using it from Claude Code
 
@@ -272,7 +289,9 @@ request on any connection and the person's recordable menu commands, dialogs and
 answers its `index`, `method` and `message`; steps that stay in one document merge into one undo step named after the
 action), `actions.batch` (`name`, `input` and `output` folders, `format` png, jpg, webp, tif, psd, gif or tga,
 `overwrite`: File > Automate > Batch), `actions.save` (`name`, `steps`: create or replace an action, which is how an
-agent edits, reorders or switches off steps), `actions.delete`, `actions.import` and `actions.export` (JSON files).
+agent edits, reorders or switches off steps; no step may be an `actions.*` method, nor call one in an `rpc.batch`),
+`actions.delete`, `actions.import` (checked as `actions.save`; an action that writes files comes in with
+`confirmWrites`, so the Actions panel asks before its first play) and `actions.export` (JSON files; `overwrite`).
 
 Frame animation ([animation.md](animation.md)): `timeline.info` (frames with their `delay` in milliseconds and
 `visibleLayers`, `current`, `loopCount`, 0 for forever), `timeline.frame` (`action` create, fromLayers, duplicate,

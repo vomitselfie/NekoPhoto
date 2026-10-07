@@ -4,6 +4,8 @@
 #include "Language.h"
 #include "ActionLibrary.h"
 #include "AutomationHandlers.h"
+#include "AutomationGuard.h"
+#include <QElapsedTimer>
 #include "LayersPanel.h"
 #include "ModelStore.h"
 #include "compositor/scribble.h"
@@ -34,7 +36,7 @@ AutomationServer::AutomationServer(MainWindow* window) : QObject(window), window
 }
 
 AutomationServer::~AutomationServer() {
-    if (server_) { server_->close(); QLocalServer::removeServer(platform::localServerName(path_)); }
+    if (server_) { server_->close(); platform::removeStaleSocket(platform::localServerName(path_), nullptr); }
 }
 
 QString AutomationServer::defaultSocketPath() {
@@ -45,8 +47,13 @@ QString AutomationServer::defaultSocketPath() {
 
 bool AutomationServer::listen(const QString& path, QString* error) {
     path_ = path;
+    if (path.isEmpty()) {
+        if (error) *error = QStringLiteral("no private runtime folder for the socket; set XDG_RUNTIME_DIR or pass --rpc-socket");
+        return false;
+    }
     const QString name = platform::localServerName(path);
-    QLocalServer::removeServer(name);
+    // Only a socket of ours left by an instance that died; anything else at that path stays, and listening fails.
+    if (!platform::removeStaleSocket(name, error)) return false;
     server_ = new QLocalServer(this);
     server_->setSocketOptions(QLocalServer::UserAccessOption);
     if (!server_->listen(name)) {
@@ -60,16 +67,13 @@ bool AutomationServer::listen(const QString& path, QString* error) {
             connect(socket, &QLocalSocket::readyRead, this, [this, socket] {
                 auto it = clients_.find(socket);
                 if (it == clients_.end()) return;
-                QByteArray& buffer = it->second.buffer;
-                buffer.append(socket->readAll());
-                int newline;
-                while ((newline = buffer.indexOf('\n')) >= 0) {
-                    QByteArray line = buffer.left(newline).trimmed();
-                    buffer.remove(0, newline + 1);
-                    if (line.isEmpty()) continue;
+                const automation::Framed framed = automation::takeLines(it->second.buffer.append(socket->readAll()));
+                for (const QByteArray& line : framed.lines) {
                     QJsonParseError parseError;
                     QJsonDocument doc = QJsonDocument::fromJson(line, &parseError);
                     QJsonObject response;
+                    QElapsedTimer timer;
+                    timer.start();
                     if (parseError.error != QJsonParseError::NoError || !doc.isObject())
                         response = {{"jsonrpc", "2.0"}, {"id", QJsonValue::Null}, {"error", QJsonObject{{"code", -32700}, {"message", "parse error: " + parseError.errorString()}}}};
                     else {
@@ -81,9 +85,19 @@ bool AutomationServer::listen(const QString& path, QString* error) {
                         current_ = nullptr;
                         window_->refreshTranslatedTexts();    // labels the request changed, back in the interface language
                     }
+                    automation::audit(doc.object().value("method").toString(), doc.object().value("params").toObject(), response, timer.elapsed());
                     if (!clients_.count(socket)) return;   // the request closed the connection
                     socket->write(QJsonDocument(response).toJson(QJsonDocument::Compact) + "\n");
                     socket->flush();
+                }
+                if (framed.overflow) {
+                    // A request past the cap: refused, and the connection closed, since the rest of it cannot be framed.
+                    const QJsonObject response{{"jsonrpc", "2.0"}, {"id", QJsonValue::Null},
+                                               {"error", QJsonObject{{"code", -32600}, {"message", QStringLiteral("request too large: a request line may be at most %1 MiB").arg(automation::maxRequestBytes >> 20)}}}};
+                    automation::audit(QStringLiteral("(oversized request)"), {}, response, 0);
+                    socket->write(QJsonDocument(response).toJson(QJsonDocument::Compact) + "\n");
+                    socket->flush();
+                    socket->disconnectFromServer();
                 }
             });
             connect(socket, &QLocalSocket::disconnected, this, [this, socket] {

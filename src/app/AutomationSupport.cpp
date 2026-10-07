@@ -1,4 +1,5 @@
 #include "compositor/vectorlayer.h"
+#include "AutomationGuard.h"
 #include "AutomationHandlers.h"
 #include "compositor/png.h"
 #include <QFileInfo>
@@ -199,14 +200,19 @@ QString base64Png(const Image& image) {
     return QString::fromLatin1(QByteArray(reinterpret_cast<const char*>(bytes.data()), int(bytes.size())).toBase64());
 }
 
+void checkWrite(const QString& path, const QJsonObject& p) {
+    if (const QString why = automation::writeRefusal(path, flag(p, "overwrite", false)); !why.isEmpty()) fail(why);
+}
+
 QJsonObject deliverPng(const Image& image, const QJsonObject& p, QJsonObject result) {
     result["width"] = image.width();
     result["height"] = image.height();
     if (has(p, "path")) {
-        QString path = str(p, "path");
+        const QString path = QFileInfo(str(p, "path")).absoluteFilePath();
+        checkWrite(path, p);
         std::string error;
         if (!writePngImage(path.toStdString(), image, 0, &error)) fail("couldn't write " + path + ": " + qs(error));
-        result["path"] = QFileInfo(path).absoluteFilePath();
+        result["path"] = path;
     } else result["png"] = base64Png(image);
     return result;
 }

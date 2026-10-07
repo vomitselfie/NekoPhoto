@@ -30,6 +30,8 @@
 #include "FontPicker.h"
 #include "SingleInstance.h"
 #include "Platform.h"
+#include "AutomationGuard.h"
+#include <QElapsedTimer>
 #include "CpuPower.h"
 #include "Language.h"
 #include "Scrub.h"
@@ -326,8 +328,12 @@ int run(int argc, char** argv) {
     QCommandLineOption rpc("rpc", "Listen on the automation socket (JSON-RPC over a local socket, for the MCP bridge). Also on when the automation preference is set.");
     QCommandLineOption rpcSocket("rpc-socket", "Socket path for --rpc (default: $XDG_RUNTIME_DIR/nekophoto.sock, or $COMPOSITOR_RPC_SOCKET; on Windows the named pipe nekophoto-<user>).", "path");
     QCommandLineOption headlessOption("headless", "Run without a visible window (offscreen) with the automation socket on; implies --rpc.");
+    QCommandLineOption rpcWriteRoot("rpc-write-root", "Let automation requests write files only inside <dir> (repeatable; adds to the automation/writeRoots setting). Without any, they may write anywhere you can.", "dir");
+    QCommandLineOption rpcLog("rpc-log", "Append one line per automation request to <file>: time, method, the paths it names, ok or the error, and how long it took (also the automation/log setting).", "file");
     parser.addOption(rpc);
     parser.addOption(rpcSocket);
+    parser.addOption(rpcWriteRoot);
+    parser.addOption(rpcLog);
     parser.addOption(headlessOption);
     QCommandLineOption callOption("call", "Send one request to a running instance's socket and print the result: --call layers.list [--params '{...}']. Exit 1 on an error reply, 2 when nothing is listening.", "method");
     QCommandLineOption paramsOption("params", "JSON object of parameters for --call.", "json");
@@ -392,6 +398,13 @@ int run(int argc, char** argv) {
     const bool ownProcess = parser.isSet(newWindow) || parser.isSet(benchBrush) || parser.isSet(benchView) || parser.isSet(benchAdjust) || parser.isSet(benchType) || parser.isSet(screenshot) || parser.isSet(headlessOption) || parser.isSet(batchOption) || parser.isSet(dialogOption) || parser.isSet(saveAs) || parser.isSet(prefs) || parser.isSet(langOption) || parser.isSet(demo) || parser.isSet(toolOption) || parser.isSet(contextMenuOption) || parser.isSet(selfTestOption);
     const QString rpcRequested = parser.isSet(rpc) || parser.isSet(rpcSocket) ? (parser.value(rpcSocket).isEmpty() ? app::AutomationServer::defaultSocketPath() : parser.value(rpcSocket)) : QString();
     if (!ownProcess && app::SingleInstance::handOff(handoff, rpcRequested)) return 0;
+    {
+        // Where automation may write, and its audit log (SECURITY.md, docs/automation.md).
+        QSettings settings;
+        app::automation::setWriteRoots(settings.value("automation/writeRoots").toStringList() + parser.values(rpcWriteRoot));
+        const QString log = parser.isSet(rpcLog) ? parser.value(rpcLog) : settings.value("automation/log").toString();
+        if (!log.isEmpty()) app::automation::setAuditLog(QDir::current().absoluteFilePath(log));
+    }
     app::MainWindow window;
     window.show();
     app::SingleInstance instance;
@@ -413,7 +426,10 @@ int run(int argc, char** argv) {
             if (parseError.error != QJsonParseError::NoError || !doc.isObject()) { std::fprintf(stderr, "bad request line: %s\n", qPrintable(parseError.errorString())); return 2; }
             QJsonObject request = doc.object();
             if (!request.contains("id")) request["id"] = ++id;
+            QElapsedTimer timer;
+            timer.start();
             QJsonObject response = server.handle(request);
+            app::automation::audit(request.value("method").toString(), request.value("params").toObject(), response, timer.elapsed());
             out << QJsonDocument(response).toJson(QJsonDocument::Compact) << "\n";
             out.flush();
             QApplication::processEvents();

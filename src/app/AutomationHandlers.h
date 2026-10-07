@@ -64,7 +64,11 @@ QJsonObject smartFiltersJson(const EditorSession& session, const compositor::Uui
 /// not take are ignored.
 void smartFilterSettingsFrom(const QJsonObject& p, compositor::SmartFilterParameters& parameters);
 QString base64Png(const compositor::Image& image);
-/// `image` as PNG: written to params.path when given (result carries the path), else base64 in "png".
+/// Refuses (fails the request) a write to `path` outside the write roots, or to an existing file unless params.overwrite
+/// is true (AutomationGuard.h).
+void checkWrite(const QString& path, const QJsonObject& p);
+/// `image` as PNG: written to params.path when given (result carries the path; an existing file only with
+/// overwrite: true), else base64 in "png".
 QJsonObject deliverPng(const compositor::Image& image, const QJsonObject& p, QJsonObject result);
 std::shared_ptr<compositor::Image> scaledCopy(const compositor::Image& image, double maxSize);
 

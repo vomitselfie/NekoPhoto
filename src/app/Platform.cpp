@@ -3,6 +3,7 @@
 #include <QDir>
 #include <QFile>
 #include <QGuiApplication>
+#include <QLocalServer>
 #include <QStandardPaths>
 
 #ifdef _WIN32
@@ -15,6 +16,13 @@
 #include <sys/resource.h>
 #include <cstdint>
 #include <cstdlib>
+#endif
+#ifndef _WIN32
+#include <cerrno>
+#include <cstring>
+#include <pwd.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 namespace app::platform {
@@ -75,6 +83,16 @@ QByteArray systemMonitorProfile() {
     return bytes;
 }
 
+bool removeStaleSocket(const QString& serverName, QString*) {
+    QLocalServer::removeServer(serverName);
+    return true;
+}
+
+QString runtimeDirectory() {
+    const QString runtime = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
+    return runtime.isEmpty() ? QDir::tempPath() : runtime;
+}
+
 QString localServerName(const QString& socket) {
     static const QString prefix = QStringLiteral("\\\\.\\pipe\\");
     if (socket.startsWith(prefix, Qt::CaseInsensitive)) return socket;
@@ -99,10 +117,58 @@ void attachParentConsole() {}
 
 int finishProcess(int status) { return status; }
 
+namespace {
+
+/// The user name as Python's getpass.getuser() finds it (the MCP bridge's rule), so both pick the same folder.
+QString userName() {
+    for (const char* key : {"LOGNAME", "USER", "LNAME", "USERNAME"}) {
+        const QString v = qEnvironmentVariable(key);
+        if (!v.isEmpty()) return v;
+    }
+    if (const passwd* pw = getpwuid(getuid())) return QString::fromLocal8Bit(pw->pw_name);
+    return QString::number(getuid());
+}
+
+/// Whether `path` is a real folder (not a link) owned by this user with no access for group or others.
+bool privateFolder(const QByteArray& path) {
+    struct stat info {};
+    return lstat(path.constData(), &info) == 0 && S_ISDIR(info.st_mode) && info.st_uid == getuid() && (info.st_mode & 077) == 0;
+}
+
+} // namespace
+
+QString runtimeDirectory() {
+    const QString runtime = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
+    if (!runtime.isEmpty()) return runtime;
+    // Qt found no usable runtime folder. Never the shared temp folder itself: a private one inside it.
+    const QString path = QDir::tempPath() + QStringLiteral("/runtime-") + userName();
+    const QByteArray native = QFile::encodeName(path);
+    if (mkdir(native.constData(), 0700) != 0 && errno != EEXIST) return {};
+    if (!privateFolder(native)) {
+        qWarning("%s is not a private folder of this user; set XDG_RUNTIME_DIR or --rpc-socket", native.constData());
+        return {};
+    }
+    return path;
+}
+
 QString defaultLocalSocket(const QString& baseName) {
-    QString runtime = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
-    if (runtime.isEmpty()) runtime = QDir::tempPath();
-    return runtime + QLatin1Char('/') + baseName;
+    const QString runtime = runtimeDirectory();
+    return runtime.isEmpty() ? QString() : runtime + QLatin1Char('/') + baseName;
+}
+
+bool removeStaleSocket(const QString& serverName, QString* error) {
+    const QByteArray native = QFile::encodeName(serverName);
+    struct stat info {};
+    if (lstat(native.constData(), &info) != 0) return true;   // nothing there
+    if (!S_ISSOCK(info.st_mode) || info.st_uid != getuid()) {
+        if (error) *error = QStringLiteral("%1 exists and is not a socket of this user; refusing to replace it").arg(serverName);
+        return false;
+    }
+    if (unlink(native.constData()) != 0 && errno != ENOENT) {
+        if (error) *error = QStringLiteral("couldn't remove the old socket %1: %2").arg(serverName, QString::fromLocal8Bit(std::strerror(errno)));
+        return false;
+    }
+    return true;
 }
 
 QString localServerName(const QString& socket) { return socket; }

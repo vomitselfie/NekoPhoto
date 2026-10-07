@@ -242,7 +242,7 @@ bool writeOne(const Image& image, const QString& path, const QString& format, in
 }
 
 QStringList exportRects(const EditorSession& session, const std::vector<std::pair<QString, QRect>>& items, const QString& directory,
-                        const QString& format, const QString& prefix, int quality, QString* error) {
+                        const QString& format, const QString& prefix, int quality, QString* error, const std::function<QString(const QString&)>& check) {
     QStringList written;
     const QString fmt = format.toLower() == "jpg" ? QStringLiteral("jpeg") : format.toLower();
     const QString fmt2 = fmt == "tif" ? QStringLiteral("tiff") : fmt;
@@ -251,21 +251,32 @@ QStringList exportRects(const EditorSession& session, const std::vector<std::pai
         if (error) *error = QObject::tr("This system has no %1 writer.").arg(fmt2.toUpper());
         return written;
     }
+    // The names first, so a refused one stops the export before anything is written. The prefix is cleaned as the
+    // names are: no folders, no leading dots.
+    const QString safePrefix = prefix.isEmpty() ? QString() : fileSafe(prefix, QString());
+    const QString extension = fmt2 == "png" ? ".png" : fmt2 == "jpeg" ? ".jpg" : fmt2 == "webp" ? ".webp" : ".tif";
+    QStringList used, paths;
+    for (const auto& item : items) {
+        QString base = safePrefix + fileSafe(item.first, QStringLiteral("untitled"));
+        QString candidate = base;
+        for (int n = 2; used.contains(candidate, Qt::CaseInsensitive); n++) candidate = base + "-" + QString::number(n);
+        used << candidate;
+        paths << QDir(directory).filePath(candidate + extension);
+        if (check) {
+            if (const QString why = check(paths.back()); !why.isEmpty()) { if (error) *error = why; return written; }
+        }
+    }
     if (!QDir().mkpath(directory)) { if (error) *error = QObject::tr("Could not create %1.").arg(directory); return written; }
-    QStringList used;
     // A 16-bit document: PNG (and TIFF, where Qt writes 16 bits) at 16 bits, the rest dithered down to 8. A CMYK or Lab
     // document's areas come out in sRGB, through its profile, as its flat exports do.
     const bool deep = session.sampleType() == SampleType::U16;
     const bool deepFile = deep && (fmt2 == "png" || (fmt2 == "tiff" && canWriteDeepTiff()));
-    for (const auto& [name, rect] : items) {
+    for (size_t i = 0; i < items.size(); i++) {
+        const QRect& rect = items[i].second;
         std::shared_ptr<Image16> image16 = deep ? session.renderRect16(rect) : nullptr;
         std::shared_ptr<Image> image = deep ? (image16 && !deepFile ? ditherToEightBit(*image16) : nullptr) : session.renderRect(rect);
         if (!image && !image16) continue;
-        QString base = prefix + fileSafe(name, QStringLiteral("untitled"));
-        QString candidate = base;
-        for (int n = 2; used.contains(candidate, Qt::CaseInsensitive); n++) candidate = base + "-" + QString::number(n);
-        used << candidate;
-        const QString path = QDir(directory).filePath(candidate + (fmt2 == "png" ? ".png" : fmt2 == "jpeg" ? ".jpg" : fmt2 == "webp" ? ".webp" : ".tif"));
+        const QString& path = paths[qsizetype(i)];
         if (deepFile && fmt2 == "png") {
             std::string why;
             if (!writePngImage16(path.toStdString(), *image16, session.document()->resolution, &why)) { if (error) *error = QString::fromStdString(why); return written; }
@@ -279,22 +290,24 @@ QStringList exportRects(const EditorSession& session, const std::vector<std::pai
 
 } // namespace
 
-QStringList EditorSession::exportArtboards(const QString& directory, const QString& format, const QString& prefix, int quality, QString* error) {
+QStringList EditorSession::exportArtboards(const QString& directory, const QString& format, const QString& prefix, int quality, QString* error,
+                                           const std::function<QString(const QString&)>& check) {
     std::vector<std::pair<QString, QRect>> items;
     for (const Layer* l : artboards()) {
         if (!l->visible) continue;
         items.push_back({QString::fromStdString(l->name), QRect(l->artboard->x, l->artboard->y, l->artboard->width, l->artboard->height)});
     }
     if (items.empty()) { if (error) *error = tr("The document has no visible artboards."); return {}; }
-    return exportRects(*this, items, directory, format, prefix, quality, error);
+    return exportRects(*this, items, directory, format, prefix, quality, error, check);
 }
 
-QStringList EditorSession::exportSlices(const QString& directory, const QString& format, const QString& prefix, int quality, QString* error) {
+QStringList EditorSession::exportSlices(const QString& directory, const QString& format, const QString& prefix, int quality, QString* error,
+                                       const std::function<QString(const QString&)>& check) {
     if (!document_) return {};
     std::vector<std::pair<QString, QRect>> items;
     for (const Slice& s : document_->slices) items.push_back({QString::fromStdString(s.name.empty() ? "slice_" + std::to_string(s.id) : s.name), QRect(s.x, s.y, s.width, s.height)});
     if (items.empty()) { if (error) *error = tr("The document has no slices."); return {}; }
-    return exportRects(*this, items, directory, format, prefix, quality, error);
+    return exportRects(*this, items, directory, format, prefix, quality, error, check);
 }
 
 } // namespace app

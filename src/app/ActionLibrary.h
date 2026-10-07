@@ -25,6 +25,8 @@ struct ActionStep {
 struct RecordedAction {
     QString name;
     std::vector<ActionStep> steps;
+    /// Imported from a file and writes files: the first play from the Actions panel or Batch asks first.
+    bool confirmWrites = false;
 };
 
 class ActionLibrary : public QObject {
@@ -40,14 +42,24 @@ public:
     void put(const RecordedAction& action);
     bool remove(const QString& name);
     bool rename(const QString& from, const QString& to);
+    /// Clears an action's confirmWrites once the person agreed to its writes.
+    void confirm(const QString& name);
     /// A name not yet used: `base`, then "base 2", ...
     QString uniqueName(const QString& base);
 
     static QJsonObject toJson(const RecordedAction& action);
+    /// An action from JSON, checked: every step needs a method, and no step (nor a call inside an rpc.batch step)
+    /// may be an actions.* method, so an action can never play, record, import or export actions.
     static std::optional<RecordedAction> fromJson(const QJsonObject& json, QString* error);
+    /// Why `method` with `params` cannot be a step, or empty when it can (the check fromJson makes).
+    static QString stepRefusal(const QString& method, const QJsonObject& params);
+    /// What the action's enabled steps write: each such step as "method: path", or "method" when the target is not
+    /// given (document.save to the document's own path).
+    static QStringList writtenFiles(const RecordedAction& action);
     /// A step as one line for the panel: "Gaussian Blur  radius 4" and the like.
     static QString describe(const ActionStep& step);
-    /// Imports a file written by exportFile (one action, or {"actions": [...]}); returns the names added.
+    /// Imports a file written by exportFile (one action, or {"actions": [...]}); returns the names added. An
+    /// imported action that writes files is marked confirmWrites.
     QStringList importFile(const QString& path, QString* error);
     bool exportFile(const QStringList& names, const QString& path, QString* error);
 

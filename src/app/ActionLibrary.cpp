@@ -139,7 +139,52 @@ QJsonObject ActionLibrary::toJson(const RecordedAction& action) {
         if (!s.enabled) o["enabled"] = false;
         steps.append(o);
     }
-    return {{"name", action.name}, {"steps", steps}};
+    QJsonObject out{{"name", action.name}, {"steps", steps}};
+    if (action.confirmWrites) out["confirmWrites"] = true;
+    return out;
+}
+
+QString ActionLibrary::stepRefusal(const QString& method, const QJsonObject& params) {
+    if (method.startsWith("actions.")) return tr("a step can't be an actions method (%1)").arg(method);
+    if (method == "rpc.batch")
+        for (const QJsonValue& call : params.value("calls").toArray()) {
+            const QString inner = call.toObject().value("method").toString();
+            if (inner.startsWith("actions.")) return tr("a step's batch can't call an actions method (%1)").arg(inner);
+        }
+    return {};
+}
+
+QStringList ActionLibrary::writtenFiles(const RecordedAction& action) {
+    // The methods that write files, and the key naming where; render-like methods write only when given a path.
+    static const QHash<QString, const char*> writers = {
+        {"document.save", "path"}, {"document.export", "path"}, {"actions.export", "path"}, {"actions.batch", "output"},
+        {"slices.export", "directory"}, {"artboards.export", "directory"}};
+    static const QSet<QString> renders = {"render", "screenshot", "layers.render", "selection.render"};
+    QStringList out;
+    auto note = [&](const QString& method, const QJsonObject& params) {
+        if (const char* key = writers.value(method, nullptr)) {
+            const QString target = params.value(QLatin1String(key)).toString();
+            out << (target.isEmpty() ? method : method + ": " + target);
+        } else if (renders.contains(method) && params.contains("path")) out << method + ": " + params.value("path").toString();
+    };
+    for (const ActionStep& step : action.steps) {
+        if (!step.enabled) continue;
+        note(step.method, step.params);
+        if (step.method == "rpc.batch")
+            for (const QJsonValue& call : step.params.value("calls").toArray())
+                note(call.toObject().value("method").toString(), call.toObject().value("params").toObject());
+    }
+    return out;
+}
+
+void ActionLibrary::confirm(const QString& name) {
+    load();
+    for (RecordedAction& a : actions_) {
+        if (a.name != name || !a.confirmWrites) continue;
+        a.confirmWrites = false;
+        save();
+        return;
+    }
 }
 
 std::optional<RecordedAction> ActionLibrary::fromJson(const QJsonObject& json, QString* error) {
@@ -155,9 +200,11 @@ std::optional<RecordedAction> ActionLibrary::fromJson(const QJsonObject& json, Q
         if (step.method.isEmpty()) return fail(tr("%1: every step needs a method").arg(action.name));
         if (o.contains("params") && !o.value("params").isObject()) return fail(tr("%1: a step's params must be an object").arg(action.name));
         step.params = o.value("params").toObject();
+        if (const QString why = stepRefusal(step.method, step.params); !why.isEmpty()) return fail(action.name + ": " + why);
         step.enabled = o.value("enabled").toBool(true);
         action.steps.push_back(std::move(step));
     }
+    action.confirmWrites = json.value("confirmWrites").toBool(false);
     return action;
 }
 
@@ -191,6 +238,7 @@ QStringList ActionLibrary::importFile(const QString& path, QString* error) {
     QStringList names;
     for (RecordedAction& a : read) {
         a.name = uniqueName(a.name);
+        a.confirmWrites = !writtenFiles(a).isEmpty();   // whatever the file says
         actions_.push_back(a);
         names << a.name;
     }
@@ -232,7 +280,7 @@ int ActionLibrary::stopRecording() {
 }
 
 void ActionLibrary::record(const QString& method, const QJsonObject& params) {
-    if (recordingName_.isEmpty() || quiet_ > 0 || !recordable(method)) return;
+    if (recordingName_.isEmpty() || quiet_ > 0 || !recordable(method) || !stepRefusal(method, params).isEmpty()) return;
     load();
     for (RecordedAction& a : actions_) {
         if (a.name != recordingName_) continue;

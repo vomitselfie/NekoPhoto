@@ -361,7 +361,7 @@ void AutomationServer::registerPixelsHandlers() {
         LayerTransform transform;
         if (auto deep = s->adjustmentSource16(0, transform)) {
             QString error;
-            auto result = GmicRunner::runSync(*deep, command, &error, integer(p, "timeoutMs", 300000));
+            auto result = GmicRunner::runSync(*deep, command, &error, std::clamp(integer(p, "timeoutMs", 300000), 1, 600000));
             if (!result) fail(error);
             if (auto coverage = s->selectionOnGrid16(transform, deep->width(), deep->height())) blendThroughCoverage(*result, *deep, *coverage);
             s->commitPixels(Image16Ptr(result), transform, "G'MIC: " + command.section(' ', 0, 0));
@@ -370,7 +370,7 @@ void AutomationServer::registerPixelsHandlers() {
         auto source = s->adjustmentSource(0, transform);
         if (!source) fail("the active layer has no pixels; select a pixel layer with layers.select (document.overview shows each layer's kind)");
         QString error;
-        auto result = GmicRunner::runSync(*source, command, &error, integer(p, "timeoutMs", 300000));
+        auto result = GmicRunner::runSync(*source, command, &error, std::clamp(integer(p, "timeoutMs", 300000), 1, 600000));
         if (!result) fail(error);
         if (auto coverage = s->selectionOnGrid(transform, source->width(), source->height())) blendThroughCoverage(*result, *source, *coverage);
         s->commitPixels(result, transform, "G'MIC: " + command.section(' ', 0, 0));
