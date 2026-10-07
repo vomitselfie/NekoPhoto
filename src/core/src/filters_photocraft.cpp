@@ -248,7 +248,9 @@ void polar(const Plane& src, Plane& out, const Rect& bounds, PolarMode mode) {
     const float w = float(std::max(1, bounds.width())), h = float(std::max(1, bounds.height()));
     const float cx = float(bounds.x0) + w / 2.0f, cy = float(bounds.y0) + h / 2.0f;
     const float rmax = std::min(w, h) / 2.0f;
-    remap(src, out, bounds, Edge::Transparent, [&](float x, float y, float& sx, float& sy) {
+    // Photoshop leaves no hole: past the mapped disc (Rectangular to Polar's corners) the source's edge pixels repeat,
+    // so the corners carry the bottom row's colours outwards along each angle and an opaque layer stays opaque.
+    remap(src, out, bounds, Edge::Repeat, [&](float x, float y, float& sx, float& sy) {
         if (mode == PolarMode::RectangularToPolar) {
             // The output is polar: the angle from 12 o'clock clockwise gives the source's x, the radius its y.
             const float dx = x - cx, dy = y - cy;

@@ -7,10 +7,13 @@
 #include "compositor/filters.h"
 #include "compositor/smartfilter.h"
 #include "compositor/supports.h"
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <utility>
 
 using namespace compositor;
 
@@ -288,7 +291,7 @@ TEST_CASE(distortion_values) {
 #ifndef _WIN32
     checkHash("twirl/default", t, 0x96a3905a3a70a023ull);
     checkHash("wave/default", w, 0x71d8c35bc24232a8ull);
-    checkHash("polar/default", p, 0x92abd87429a9f2f8ull);
+    checkHash("polar/default", p, 0x4e20a8cbd5b87500ull);
     checkHash("zigzag/default", z, 0x57732b278a61b8d9ull);
     checkHash("spherize/default", s, 0x4a46c3bca7023850ull);
 #endif
@@ -345,6 +348,33 @@ TEST_CASE(radial_blur_zoom_at_every_depth_and_mode) {
 #ifndef _WIN32
     checkHash("radial/zoom", zoom, 0x62b2c3b6d47f8e00ull);
 #endif
+}
+
+TEST_CASE(polar_coordinates_fills_the_corners_with_the_edge) {
+    // Rectangular to Polar maps the image into the disc inscribed in the area; Photoshop fills what lies past it (the
+    // corners) with the source's edge pixels repeated outwards, so an opaque layer stays opaque. Here the source's
+    // green rises from 0 at the top to 255 at the bottom row and red follows x: each corner is the bottom row's green,
+    // and its red the bottom row's red at the corner's angle.
+    const int w = 64, h = 48;
+    auto img = std::make_shared<Image>(w, h);
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            uint8_t* p = img->pixel(x, y);
+            p[0] = uint8_t(x * 255 / (w - 1)); p[1] = uint8_t(y * 255 / (h - 1)); p[2] = 60; p[3] = 255;
+        }
+    const AnyImage out = run(FilterKind::PolarCoordinates, ImagePtr(img), defaults(FilterKind::PolarCoordinates));
+    REQUIRE(out.u8());
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) CHECK_EQ(int(out.u8()->pixel(x, y)[3]), 255);
+    const double pi = 3.14159265358979323846;
+    for (auto [x, y] : {std::pair{0, 0}, std::pair{w - 1, 0}, std::pair{0, h - 1}, std::pair{w - 1, h - 1}}) {
+        const uint8_t* q = out.u8()->pixel(x, y);
+        CHECK(q[1] >= 250);
+        double theta = std::atan2(x + 0.5 - w / 2.0, -(y + 0.5 - h / 2.0));
+        if (theta < 0) theta += 2 * pi;
+        const int column = std::clamp(int(theta / (2 * pi) * w), 0, w - 1);
+        CHECK(std::abs(int(q[0]) - int(img->pixel(column, h - 1)[0])) <= 10);
+    }
 }
 
 TEST_MAIN()
