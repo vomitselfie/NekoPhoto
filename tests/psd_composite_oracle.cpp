@@ -1,18 +1,23 @@
-// Photoshop's merged image as the oracle: every PSD and PSB of Patchy's fixtures is rendered by NekoPhoto from its
-// layers and compared with the merged image Photoshop stored in the same file ("Maximize Compatibility").
+// Photoshop as the oracle: every PSD and PSB of Patchy's fixtures is rendered by NekoPhoto from its layers and compared
+// with what Photoshop shows for it. The reference is Photoshop's own flatten where Patchy keeps one beside the file (a
+// 24-bit .bmp of the same name, which Patchy's docs name as the render reference: the merged image stored inside a
+// file can be stale when Photoshop saved it headless), else the merged image Photoshop stored in the file ("Maximize
+// Compatibility"). Each line says which: [bmp] or [merged].
 //
 //   psd_composite_oracle [DIR]     DIR, else $PATCHY_FIXTURES, else ../Patchy/test-fixtures/psd beside the checkout
 //
-// For each file: the largest difference of any premultiplied channel (0..255), the share of pixels with a channel
-// more than 2 levels off, and the mean difference per channel. A file passes when no more than 1% of its pixels are
-// more than 2 levels off and the mean is under 1 level. Files without a Photoshop composite are listed, not compared:
-// saved without Maximize Compatibility, or merged onto a matte by another program (see compare()). tests/psd_oracle.txt holds the floor: how many files passed
+// For each file: the largest difference of any channel (0..255), the share of pixels with a channel more than 2
+// levels off, and the mean difference per channel. Against a merged image the channels are premultiplied RGBA; against
+// a flatten they are RGB, NekoPhoto's render matted on white as Photoshop flattens. A file passes when no more than 1%
+// of its pixels are more than 2 levels off and the mean is under 1 level. Files with neither reference are listed,
+// not compared: no flatten and saved without Maximize Compatibility, or merged onto a matte by another program (see
+// compare()). tests/psd_oracle.txt holds the floor: how many files passed
 // when it was last raised, and which. Fewer passing files than the floor fails; more prints a reminder to raise it:
 //
 //   COMPOSITOR_UPDATE_PSD_ORACLE=1 build/tests/psd_composite_oracle
 //
 // rewrites tests/psd_oracle.txt and tests/patchy-manifest.txt (the Patchy commit and the SHA-256 of every fixture
-// used). A checkout that differs from the manifest is reported, not failed: the numbers are then for other files.
+// and flatten used). A checkout that differs from the manifest is reported, not failed: the numbers are then for other files.
 // Without the fixtures the test is skipped.
 #include "compositor/psd.h"
 #include "compositor/psd_carry.h"
@@ -136,7 +141,8 @@ std::string patchyCommit(const fs::path& fixtures) {
 
 struct Result {
     std::string name;
-    bool compared = false;   // false: no merged image to compare with (the reason in `why`)
+    std::string reference;   // "bmp" (Photoshop's flatten beside the file) or "merged" (the file's merged image)
+    bool compared = false;   // false: no reference to compare with (the reason in `why`)
     std::string why;
     int maxError = 0;
     double shareOver2 = 0;   // percent of pixels
@@ -166,12 +172,110 @@ bool opaque(const Image& image) {
     return true;
 }
 
+/// A 24- or 32-bit uncompressed Windows bitmap as opaque RGB rows (top-down, 3 bytes a pixel); empty when it is not one.
+struct Flatten {
+    int width = 0, height = 0;
+    std::vector<uint8_t> rgb;
+};
+
+Flatten readBmp(const fs::path& path) {
+    Flatten out;
+    const std::vector<uint8_t> d = readFile(path);
+    auto u16 = [&](size_t at) { return unsigned(d[at]) | unsigned(d[at + 1]) << 8; };
+    auto u32 = [&](size_t at) { return uint32_t(d[at]) | uint32_t(d[at + 1]) << 8 | uint32_t(d[at + 2]) << 16 | uint32_t(d[at + 3]) << 24; };
+    if (d.size() < 54 || d[0] != 'B' || d[1] != 'M') return out;
+    const uint32_t offset = u32(10);
+    const int32_t width = int32_t(u32(18)), height = int32_t(u32(22));
+    const unsigned bits = u16(28);
+    const uint32_t compression = u32(30);
+    if (width <= 0 || height == 0 || width > 65535 || std::abs(height) > 65535 || (bits != 24 && bits != 32)) return out;
+    if (compression != 0 && !(compression == 3 && bits == 32)) return out;
+    const int h = std::abs(height);
+    const size_t bytesPerPixel = bits / 8, stride = (size_t(width) * bytesPerPixel + 3) / 4 * 4;
+    if (offset > d.size() || d.size() - offset < stride * size_t(h)) return out;
+    out.width = width;
+    out.height = h;
+    out.rgb.resize(size_t(width) * size_t(h) * 3);
+    for (int y = 0; y < h; y++) {
+        const uint8_t* row = d.data() + offset + stride * size_t(height > 0 ? h - 1 - y : y);   // positive: bottom-up
+        for (int x = 0; x < width; x++) {
+            uint8_t* q = out.rgb.data() + (size_t(y) * size_t(width) + size_t(x)) * 3;
+            q[0] = row[size_t(x) * bytesPerPixel + 2];
+            q[1] = row[size_t(x) * bytesPerPixel + 1];
+            q[2] = row[size_t(x) * bytesPerPixel];
+        }
+    }
+    return out;
+}
+
+/// Photoshop's flatten beside `psd`: the same name as a .bmp; for Patchy's two that are named otherwise, the
+/// "-roundtrip" file's "-render" flatten and a PSB's "<name>-psb" one.
+fs::path flattenFor(const fs::path& psd) {
+    std::string stem = psd.stem().string();
+    std::string ext = psd.extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+    std::vector<std::string> names{stem};
+    const std::string roundtrip = "-roundtrip";
+    if (stem.size() > roundtrip.size() && stem.compare(stem.size() - roundtrip.size(), roundtrip.size(), roundtrip) == 0)
+        names.push_back(stem.substr(0, stem.size() - roundtrip.size()) + "-render");
+    if (ext.size() > 1) names.push_back(stem + "-" + ext.substr(1));
+    std::error_code ec;
+    for (const std::string& name : names) {
+        const fs::path candidate = psd.parent_path() / (name + ".bmp");
+        if (fs::is_regular_file(candidate, ec)) return candidate;
+    }
+    return {};
+}
+
+/// The differences of `ours` (premultiplied RGBA) against `ps`, `channels` per pixel (`ps` RGBA, or RGB with `ours`
+/// matted on white).
+void measure(Result& r, const Image& ours, const uint8_t* ps, int channels) {
+    uint64_t over = 0, sum = 0;
+    int worst = 0;
+    for (int y = 0; y < ours.height(); y++) {
+        const uint8_t* b = ours.row(y);
+        const uint8_t* a = ps + size_t(y) * size_t(ours.width()) * size_t(channels);
+        for (int x = 0; x < ours.width(); x++, a += channels, b += 4) {
+            int pixelWorst = 0;
+            for (int c = 0; c < channels; c++) {
+                const int mine = channels == 3 ? int(b[c]) + 255 - int(b[3]) : int(b[c]);
+                const int d = std::abs(int(a[c]) - mine);
+                sum += uint64_t(d);
+                pixelWorst = std::max(pixelWorst, d);
+            }
+            worst = std::max(worst, pixelWorst);
+            if (pixelWorst > 2) over++;
+        }
+    }
+    const double pixels = double(ours.width()) * ours.height();
+    r.maxError = worst;
+    r.shareOver2 = pixels > 0 ? 100.0 * double(over) / pixels : 0;
+    r.mean = pixels > 0 ? double(sum) / (pixels * channels) : 0;
+    r.pass = r.shareOver2 <= kMaxShareOver2 && r.mean < kMaxMean;
+}
+
 Result compare(const fs::path& path) {
     Result r;
     r.name = path.filename().string();
     std::string error;
     auto imported = importPsd(path.string(), &error);
     if (!imported) { r.why = "does not open: " + error; return r; }
+    if (const fs::path bmp = flattenFor(path); !bmp.empty()) {
+        // Photoshop's own flatten: what Photoshop shows.
+        const Flatten ps = readBmp(bmp);
+        if (ps.width > 0) {
+            r.reference = "bmp";
+            r.compared = true;
+            auto ours = renderFlattened(imported->document);
+            if (!ours || ours->width() != ps.width || ours->height() != ps.height) {
+                r.why = "size differs from " + bmp.filename().string();
+                r.maxError = 255; r.shareOver2 = 100; r.mean = 255;
+                return r;
+            }
+            measure(r, *ours, ps.rgb.data(), 3);
+            return r;
+        }
+    }
     if (!imported->composite) { r.why = "no merged image"; return r; }
     if (!imported->realComposite) { r.why = "saved without Maximize Compatibility"; return r; }
     const Image& ps = *imported->composite;
@@ -185,33 +289,17 @@ Result compare(const fs::path& path) {
         r.why = "merged image matted by another program (no Photoshop version info, no transparency over transparent layers)";
         return r;
     }
+    r.reference = "merged";
     r.compared = true;
     if (!ours || ours->width() != ps.width() || ours->height() != ps.height()) {
         r.why = "size differs";
         r.maxError = 255; r.shareOver2 = 100; r.mean = 255;
         return r;
     }
-    uint64_t over = 0, sum = 0;
-    int worst = 0;
-    for (int y = 0; y < ps.height(); y++) {
-        const uint8_t* a = ps.row(y);
-        const uint8_t* b = ours->row(y);
-        for (int x = 0; x < ps.width(); x++, a += 4, b += 4) {
-            int pixelWorst = 0;
-            for (int c = 0; c < 4; c++) {
-                const int d = std::abs(int(a[c]) - int(b[c]));
-                sum += uint64_t(d);
-                pixelWorst = std::max(pixelWorst, d);
-            }
-            worst = std::max(worst, pixelWorst);
-            if (pixelWorst > 2) over++;
-        }
-    }
-    const double pixels = double(ps.width()) * ps.height();
-    r.maxError = worst;
-    r.shareOver2 = pixels > 0 ? 100.0 * double(over) / pixels : 0;
-    r.mean = pixels > 0 ? double(sum) / (pixels * 4) : 0;
-    r.pass = r.shareOver2 <= kMaxShareOver2 && r.mean < kMaxMean;
+    // One contiguous RGBA buffer of Photoshop's merged image, for measure().
+    std::vector<uint8_t> rows(size_t(ps.width()) * size_t(ps.height()) * 4);
+    for (int y = 0; y < ps.height(); y++) std::memcpy(rows.data() + size_t(y) * size_t(ps.width()) * 4, ps.row(y), size_t(ps.width()) * 4);
+    measure(r, *ours, rows.data(), 4);
     return r;
 }
 
@@ -226,7 +314,11 @@ Oracle readOracle(const std::string& path) {
         const std::string line = trim(raw);
         if (line.empty() || line[0] == '#') continue;
         if (line.rfind("floor ", 0) == 0) o.floor = std::atoi(line.c_str() + 6);
-        else if (line.rfind("pass ", 0) == 0) o.passing.insert(trim(line.substr(5)));
+        else if (line.rfind("pass ", 0) == 0) {
+            std::string name = trim(line.substr(5));
+            if (const size_t bracket = name.find(" ["); bracket != std::string::npos) name = trim(name.substr(0, bracket));
+            o.passing.insert(name);
+        }
     }
     return o;
 }
@@ -270,7 +362,10 @@ int main(int argc, char** argv) {
     // The pin: the commit and every file's SHA-256, against the manifest.
     const std::string commit = patchyCommit(dir);
     std::map<std::string, std::string> hashes;
-    for (const fs::path& f : files) hashes[f.filename().string()] = sha256(readFile(f));
+    for (const fs::path& f : files) {
+        hashes[f.filename().string()] = sha256(readFile(f));
+        if (const fs::path bmp = flattenFor(f); !bmp.empty()) hashes[bmp.filename().string()] = sha256(readFile(bmp));   // the reference too
+    }
     const Manifest manifest = readManifest(MANIFEST_FILE);
     std::vector<std::string> drift;
     if (!manifest.commit.empty() && commit != "unknown" && commit != manifest.commit)
@@ -287,14 +382,15 @@ int main(int argc, char** argv) {
     for (const fs::path& f : files) {
         results.push_back(compare(f));
         const Result& r = results.back();
+        const std::string ref = r.reference.empty() ? "" : "[" + r.reference + "]";
         if (r.compared && r.why.empty())
-            std::printf("%s %-60s max %3d  >2: %6.2f%%  mean %6.3f\n", r.pass ? "pass" : "FAIL", r.name.c_str(), r.maxError, r.shareOver2, r.mean);
-        else if (r.compared) std::printf("FAIL %-60s %s\n", r.name.c_str(), r.why.c_str());
-        else std::printf("--   %-60s %s\n", r.name.c_str(), r.why.c_str());
+            std::printf("%s %-8s %-60s max %3d  >2: %6.2f%%  mean %6.3f\n", r.pass ? "pass" : "FAIL", ref.c_str(), r.name.c_str(), r.maxError, r.shareOver2, r.mean);
+        else if (r.compared) std::printf("FAIL %-8s %-60s %s\n", ref.c_str(), r.name.c_str(), r.why.c_str());
+        else std::printf("--   %-8s %-60s %s\n", "", r.name.c_str(), r.why.c_str());
         std::fflush(stdout);
     }
-    int compared = 0, passed = 0;
-    for (const Result& r : results) { compared += r.compared; passed += r.pass; }
+    int compared = 0, passed = 0, againstFlatten = 0;
+    for (const Result& r : results) { compared += r.compared; passed += r.pass; againstFlatten += r.compared && r.reference == "bmp"; }
 
     std::vector<const Result*> worst;
     for (const Result& r : results) if (r.compared && !r.pass) worst.push_back(&r);
@@ -302,19 +398,23 @@ int main(int argc, char** argv) {
     if (!worst.empty()) {
         std::printf("\nWorst by mean difference:\n");
         for (size_t i = 0; i < worst.size() && i < 15; i++)
-            std::printf("  %-60s mean %7.3f  >2: %6.2f%%  max %3d\n", worst[i]->name.c_str(), worst[i]->mean, worst[i]->shareOver2, worst[i]->maxError);
+            std::printf("  %-60s %-8s mean %7.3f  >2: %6.2f%%  max %3d\n", worst[i]->name.c_str(), ("[" + worst[i]->reference + "]").c_str(), worst[i]->mean,
+                        worst[i]->shareOver2, worst[i]->maxError);
     }
-    std::printf("\n%d files, %d with Photoshop's merged image, %d pass (within 2 levels on %.0f%% of pixels or more, mean under %.0f level)\n",
-                int(results.size()), compared, passed, 100 - kMaxShareOver2, kMaxMean);
+    std::printf("\n%d files, %d with a Photoshop reference (%d its flatten, %d the merged image), %d pass (within 2 levels on %.0f%% of pixels or more, "
+                "mean under %.0f level)\n",
+                int(results.size()), compared, againstFlatten, compared - againstFlatten, passed, 100 - kMaxShareOver2, kMaxMean);
 
     if (const char* update = std::getenv("COMPOSITOR_UPDATE_PSD_ORACLE"); update && *update && std::strcmp(update, "0") != 0) {
         std::ofstream o(ORACLE_FILE, std::ios::binary);
-        o << "# Merged-composite oracle: how many of Patchy's fixtures NekoPhoto renders like Photoshop's merged image\n"
-          << "# (tests/psd_composite_oracle.cpp). The floor may only rise; the test fails below it.\n"
+        o << "# Photoshop oracle: how many of Patchy's fixtures NekoPhoto renders like Photoshop's own flatten beside the file\n"
+          << "# (the .bmp), else like the merged image stored in it (tests/psd_composite_oracle.cpp). The floor may only rise;\n"
+          << "# the test fails below it. Each pass names its reference.\n"
           << "# Raise it after an improvement: COMPOSITOR_UPDATE_PSD_ORACLE=1 build/tests/psd_composite_oracle\n"
           << "compared " << compared << "\n"
+          << "flatten " << againstFlatten << "\n"
           << "floor " << passed << "\n";
-        for (const Result& r : results) if (r.pass) o << "pass " << r.name << "\n";
+        for (const Result& r : results) if (r.pass) o << "pass " << r.name << " [" << r.reference << "]\n";
         std::ofstream m(MANIFEST_FILE, std::ios::binary);
         m << "# Patchy's fixtures (MIT, https://github.com/SethRobinson/Patchy, test-fixtures/psd) that tests/psd_composite_oracle.cpp\n"
           << "# measures: the commit and each file's SHA-256. Rewritten with COMPOSITOR_UPDATE_PSD_ORACLE=1.\n"
