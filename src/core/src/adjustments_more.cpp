@@ -196,39 +196,47 @@ void applyBlackWhiteImpl(I& image, const BlackWhiteSettings& s) {
 
 template <class I>
 void applyColorBalanceImpl(I& image, const ColorBalanceSettings& s) {
-    // Fitted to Photoshop's own composites of Patchy's two Color Balance files. Midtones are a gamma per channel,
-    // v^(2^(-amount / 100)), exact on every sample; shadows and highlights move the channel's black and white points
-    // (a shadow towards the colour lifts the output black, away from it clips the input black; highlights the same at
-    // the white end), about 0.3% of the range a slider step, which leaves some 10 levels on the file that uses all three
-    // ranges; Preserve Luminosity puts the original luminance back as Photoshop's Luminosity blend does.
-    double gamma[3], inBlack[3], inWhite[3], outBlack[3], outWhite[3];
+    // Photoshop's Color Balance is a Levels per channel, out = ((v - black) / (white - black))^gamma, its points and
+    // gamma set by the sliders (levels of 0..255, gammas as powers of two). The rules for one slider at a time follow
+    // image-colormatcher's measurements (docs/CALIBRATION.md, MIT, (c) 2026 Ariloum); how several combine was fitted
+    // here to the merged image of Patchy's photoshop-color-balance-full.psd (within a level on every sample):
+    // - Preserve Luminosity on: the shadows raise the black point of each channel by how far its slider sits below the
+    //   highest of the three, the highlights lower the white point by how far it sits above the lowest, and the
+    //   midtones set the gamma 2^-((v - (max + min) / 2) / 100). One slider towards red thus darkens green and blue in
+    //   the shadows rather than lifting red.
+    // - Off: each slider moves only its own channel. Shadows: a negative value raises the black point by its size;
+    //   highlights: a positive one lowers the white point; and every slider bends the gamma, the midtones by
+    //   2^(-v / 100), the shadows and highlights by 2^(-v / 200).
+    double black[3], white[3], gamma[3];
+    std::array<std::array<double, 3>, 3> v;
+    for (int r = 0; r < 3; r++)
+        for (int c = 0; c < 3; c++) v[size_t(r)][size_t(c)] = std::clamp(s.ranges[size_t(r)][size_t(c)], -100.0, 100.0);
+    const auto& shadows = v[0];
+    const auto& midtones = v[1];
+    const auto& highlights = v[2];
     for (int c = 0; c < 3; c++) {
-        const double sh = std::clamp(s.ranges[0][size_t(c)], -100.0, 100.0), mid = std::clamp(s.ranges[1][size_t(c)], -100.0, 100.0);
-        const double hi = std::clamp(s.ranges[2][size_t(c)], -100.0, 100.0);
-        gamma[c] = std::pow(2.0, -mid / 100);
-        inBlack[c] = sh < 0 ? -sh * 0.0035 : 0;
-        outBlack[c] = sh > 0 ? sh * 0.0035 : 0;
-        inWhite[c] = hi > 0 ? 1 - hi * 0.003 : 1;
-        outWhite[c] = hi < 0 ? 1 + hi * 0.003 : 1;
-    }
-    auto lum = [](double r, double g, double b) { return 0.3 * r + 0.59 * g + 0.11 * b; };
-    perPixel(image, [&](double& r, double& g, double& b) {
-        const double before = lum(r, g, b);
-        double c[3] = {r, g, b};
-        for (int i = 0; i < 3; i++) {
-            double x = std::clamp((c[i] - inBlack[i]) / std::max(1e-6, inWhite[i] - inBlack[i]), 0.0, 1.0);
-            x = std::pow(x, gamma[i]);
-            c[i] = outBlack[i] + (outWhite[i] - outBlack[i]) * x;
-        }
+        const size_t i = size_t(c);
+        double log2Gamma;
         if (s.preserveLuminosity) {
-            // Photoshop's SetLum and ClipColor (the Luminosity blend).
-            const double d = before - lum(c[0], c[1], c[2]);
-            for (double& v : c) v += d;
-            const double l = lum(c[0], c[1], c[2]), lo = std::min({c[0], c[1], c[2]}), hi = std::max({c[0], c[1], c[2]});
-            if (lo < 0 && l > lo) for (double& v : c) v = l + (v - l) * l / (l - lo);
-            if (hi > 1 && hi > l) for (double& v : c) v = l + (v - l) * (1 - l) / (hi - l);
+            black[c] = *std::max_element(shadows.begin(), shadows.end()) - shadows[i];
+            white[c] = 255 - (highlights[i] - *std::min_element(highlights.begin(), highlights.end()));
+            const double centre = (*std::max_element(midtones.begin(), midtones.end()) + *std::min_element(midtones.begin(), midtones.end())) / 2;
+            log2Gamma = -(midtones[i] - centre) / 100;
+        } else {
+            black[c] = std::max(0.0, -shadows[i]);
+            white[c] = 255 - std::max(0.0, highlights[i]);
+            log2Gamma = -midtones[i] / 100 - (shadows[i] + highlights[i]) / 200;
         }
-        r = c[0]; g = c[1]; b = c[2];
+        black[c] /= 255;
+        white[c] /= 255;
+        gamma[c] = std::pow(2.0, log2Gamma);
+    }
+    perPixel(image, [&](double& r, double& g, double& b) {
+        double* channel[3] = {&r, &g, &b};
+        for (int c = 0; c < 3; c++) {
+            const double x = std::clamp((*channel[c] - black[c]) / std::max(1e-6, white[c] - black[c]), 0.0, 1.0);
+            *channel[c] = gamma[c] == 1 ? x : std::pow(x, gamma[c]);
+        }
     });
 }
 

@@ -306,7 +306,9 @@ adjusts as it did, and light above white goes on through the function:
   cut. The blurs and Lens Correction work on the linear values.
 
 On an 8-bit picture converted to 32 bits, adjusted there and converted back at exposure 0, every kind is within one
-level of the 8-bit adjustment on opaque pixels. On half-transparent pixels Exposure, Levels, Curves, Invert, Black &
+level of the 8-bit adjustment on opaque pixels but Hue/Saturation, within three: at 8 bits it is Photoshop's byte
+arithmetic (lightness, half-chroma and hue each rounded to a level, which a raised saturation multiplies), at 16 and 32
+bits the same model unrounded. On half-transparent pixels Exposure, Levels, Curves, Invert, Black &
 White, Channel Mixer and Gradient Map stay within a level; Hue/Saturation, Color Balance, Photo Filter and Vibrance
 reach 2 to 5 levels on under 0.1% of samples, because the 8-bit kernels round the straight colour to a whole level
 (value × 255 / alpha, cut) before their function, which at a low alpha is off by up to a level divided by the alpha.

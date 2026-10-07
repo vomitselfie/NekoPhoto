@@ -138,9 +138,10 @@ struct HueSaturationSettings {
 
 // ---- Photoshop's other adjustment layers ----------------------------------------------------------------------
 // Brightness/Contrast, Posterize and Threshold follow Patchy's calibration against Photoshop 2026 (MIT,
-// src/third_party/patchy_psd/README.md); Black & White and Color Balance follow upstream Compositor's C (MIT,
-// LICENSES/MIT-Compositor.txt); Vibrance, Photo Filter, Channel Mixer and Selective Color are the published formulas,
-// not yet checked against Photoshop (docs/adjustment-layers.md).
+// src/third_party/patchy_psd/README.md), as Hue/Saturation does; Color Balance is Photoshop's per-channel Levels
+// (adjustments_more.cpp); Black & White follows upstream Compositor's C (MIT, LICENSES/MIT-Compositor.txt); Vibrance,
+// Photo Filter, Channel Mixer and Selective Color are the published formulas, not yet checked against Photoshop
+// (docs/adjustment-layers.md).
 
 struct BrightnessContrastSettings {
     int brightness = 0, contrast = 0;   // modern: -150..150 and -50..100; legacy: -100..100 each

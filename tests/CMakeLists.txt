@@ -413,6 +413,11 @@ target_link_libraries(blendif_tests PRIVATE compositor::core compositor_warnings
 target_compile_definitions(blendif_tests PRIVATE PATCHY_FIXTURES="${CMAKE_SOURCE_DIR}/../Patchy/test-fixtures/psd")
 add_test(NAME blendif_tests COMMAND blendif_tests)
 
+add_executable(photoshop_adjustment_tests photoshop_adjustment_tests.cpp)
+target_link_libraries(photoshop_adjustment_tests PRIVATE compositor::core compositor_warnings)
+target_compile_definitions(photoshop_adjustment_tests PRIVATE PATCHY_FIXTURES="${CMAKE_SOURCE_DIR}/../Patchy/test-fixtures/psd")
+add_test(NAME photoshop_adjustment_tests COMMAND photoshop_adjustment_tests)
+
 add_executable(gradient_method_tests gradient_method_tests.cpp)
 target_link_libraries(gradient_method_tests PRIVATE compositor::core compositor_warnings)
 add_test(NAME gradient_method_tests COMMAND gradient_method_tests)

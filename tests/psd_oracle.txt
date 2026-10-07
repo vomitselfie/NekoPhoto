@@ -2,12 +2,13 @@
 # (tests/psd_composite_oracle.cpp). The floor may only rise; the test fails below it.
 # Raise it after an improvement: COMPOSITOR_UPDATE_PSD_ORACLE=1 build/tests/psd_composite_oracle
 compared 47
-floor 33
+floor 34
 pass patchy-open-path-strokes.psd
 pass photoshop-bevel-default.psd
 pass photoshop-bevel-texture-ramp.psd
 pass photoshop-brightness-contrast-legacy.psd
 pass photoshop-brightness-contrast-modern.psd
+pass photoshop-color-balance-full.psd
 pass photoshop-color-balance.psd
 pass photoshop-gradient-overlay-geometry.psd
 pass photoshop-group-fx-blend-fill.psd

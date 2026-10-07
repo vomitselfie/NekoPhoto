@@ -120,8 +120,9 @@ AdjustmentSettings exampleAdjustment(AdjustmentKind kind) {
 /// Every adjustment kind: an 8-bit image converted to 16 bits and adjusted there is its 8-bit adjustment within a level.
 /// Opaque pixels are held to one level everywhere; partly transparent ones may differ by more on a small share of
 /// samples, where the 8-bit kernels unpremultiply to a whole level (a pixel at alpha 20 has 20 colour steps) and the
-/// 16-bit ones see the exact colour. Hue/Saturation on opaque pixels is held to two levels: the 8-bit cube stores
-/// 8.8 fixed-point corners and interpolates in 1/255 steps. Posterize and Threshold are exact on opaque pixels; at
+/// 16-bit ones see the exact colour. Hue/Saturation on opaque pixels is held to three levels: at 8 bits it is
+/// Photoshop's byte arithmetic (lightness, half-chroma and hue interpolant each rounded to a level, which a raised
+/// saturation multiplies), at 16 bits the same model unrounded. Posterize and Threshold are exact on opaque pixels; at
 /// partial alpha the 8-bit kernels decide on a colour already rounded (Posterize also interpolates its table between
 /// steps there), so a few such samples land on the neighbouring step.
 TEST_CASE(sixteen_bit_adjustments_match_eight_bit_within_a_level) {
@@ -136,7 +137,7 @@ TEST_CASE(sixteen_bit_adjustments_match_eight_bit_within_a_level) {
         CHECK(applyAdjustment(s, *deep, Rect(0, 0, 200, 150), 1));
         const Apart a = apart(eight, *deep);
         report(std::string("adjust/") + adjustmentKindName(kind), a);
-        const int opaqueAllowed = kind == AdjustmentKind::HueSaturation ? 2 : 1;
+        const int opaqueAllowed = kind == AdjustmentKind::HueSaturation ? 3 : 1;
         if (a.worstOpaque > opaqueAllowed || a.beyondOne > 0.01) {
             std::fprintf(stderr, "  %s: worst %d (opaque %d), %.3f%% beyond a level\n", adjustmentKindName(kind), a.worst, a.worstOpaque, a.beyondOne * 100);
             failures++;

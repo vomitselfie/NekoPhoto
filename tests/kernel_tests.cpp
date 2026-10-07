@@ -33,37 +33,6 @@ Image testImage(int w = 97, int h = 61, uint32_t seed = 7) {
     return img;
 }
 
-/// The previous Hue/Saturation sampler: a float 33-point cube read trilinearly.
-void hueSaturationTrilinear(Image& image, const HueSaturationSettings& settings) {
-    constexpr int dim = 33;
-    std::vector<float> cube(size_t(dim) * dim * dim * 3);
-    for (int bi = 0; bi < dim; bi++)
-        for (int gi = 0; gi < dim; gi++)
-            for (int ri = 0; ri < dim; ri++) {
-                double r = ri / double(dim - 1), g = gi / double(dim - 1), b = bi / double(dim - 1);
-                settings.adjust(r, g, b);
-                size_t index = (size_t(bi) * dim * dim + size_t(gi) * dim + size_t(ri)) * 3;
-                cube[index] = float(r); cube[index + 1] = float(g); cube[index + 2] = float(b);
-            }
-    for (int y = 0; y < image.height(); y++) {
-        uint8_t* p = image.row(y);
-        for (int x = 0; x < image.width(); x++, p += 4) {
-            unsigned a = p[3];
-            if (!a) continue;
-            float in[3] = {std::min(1.0f, p[0] / float(a)), std::min(1.0f, p[1] / float(a)), std::min(1.0f, p[2] / float(a))};
-            float fr = in[0] * (dim - 1), fg = in[1] * (dim - 1), fb = in[2] * (dim - 1);
-            int r0 = std::min(dim - 2, int(fr)), g0 = std::min(dim - 2, int(fg)), b0 = std::min(dim - 2, int(fb));
-            float tr = fr - r0, tg = fg - g0, tb = fb - b0, out[3] = {0, 0, 0};
-            for (int db = 0; db < 2; db++) for (int dg = 0; dg < 2; dg++) for (int dr = 0; dr < 2; dr++) {
-                float w = (dr ? tr : 1 - tr) * (dg ? tg : 1 - tg) * (db ? tb : 1 - tb);
-                const float* c = &cube[(size_t(b0 + db) * dim * dim + size_t(g0 + dg) * dim + size_t(r0 + dr)) * 3];
-                for (int k = 0; k < 3; k++) out[k] += c[k] * w;
-            }
-            for (int c = 0; c < 3; c++) p[c] = uint8_t(std::min(float(a), std::max(0.0f, out[c] * a + 0.5f)));
-        }
-    }
-}
-
 int maxDifference(const Image& a, const Image& b, bool opaqueOnly) {
     int worst = 0;
     for (int y = 0; y < a.height(); y++) {
@@ -138,16 +107,42 @@ TEST_CASE(invert_matches_scalar) {
 
 TEST_MAIN()
 
-TEST_CASE(hue_saturation_cube_matches_the_trilinear_sampler) {
+TEST_CASE(hue_saturation_bytes_follow_the_continuous_model) {
+    // The 8-bit kernel runs Photoshop's integer arithmetic; the 16- and 32-bit kernels the same model unrounded. They
+    // agree within the rounding of the lightness, the half-chroma and the hue interpolant, which a raised saturation
+    // multiplies.
     HueSaturationSettings settings;
+    settings.photoshopSaturation = true;
     settings.adjustments[0] = {40, 25, -10};
     settings.adjustments[1] = {-30, 60, 0};
-    Image reference = testImage(), ours = testImage();
-    hueSaturationTrilinear(reference, settings);
+    Image img = testImage();
+    Image ours = img;
     applyHueSaturation(ours, settings);
-    // Tetrahedral and trilinear reads of the same cube agree except near the creases, where they differ by a level or two.
-    CHECK(maxDifference(reference, ours, true) <= 3);
-    CHECK(maxDifference(reference, ours, false) <= 4);
+    int worst = 0;
+    for (int y = 0; y < img.height(); y++)
+        for (int x = 0; x < img.width(); x++) {
+            const uint8_t* p = img.pixel(x, y);
+            if (p[3] != 255) continue;
+            double c[3] = {p[0] / 255.0, p[1] / 255.0, p[2] / 255.0};
+            settings.adjust(c[0], c[1], c[2]);
+            for (int k = 0; k < 3; k++) worst = std::max(worst, std::abs(int(ours.pixel(x, y)[k]) - int(std::lround(c[k] * 255))));
+        }
+    CHECK(worst <= 3);
+}
+
+TEST_CASE(hue_saturation_at_zero_is_an_exact_identity) {
+    // Photoshop's rebuild rounds towards the brightest channel and truncates towards the darkest, which gives back every
+    // colour of the RGB cube when nothing moves. A vanishing range lightness makes the kernel run, ranges and all.
+    HueSaturationSettings settings;
+    settings.adjustments[2] = {0, 0, 1e-9};
+    Image img(256, 256);
+    for (int blue = 0; blue < 256; blue += 15) {
+        for (int y = 0; y < 256; y++)
+            for (int x = 0; x < 256; x++) { uint8_t* p = img.pixel(x, y); p[0] = uint8_t(x); p[1] = uint8_t(y); p[2] = uint8_t(blue); p[3] = 255; }
+        Image out = img;
+        applyHueSaturation(out, settings);
+        CHECK_EQ(maxDifference(img, out, true), 0);
+    }
 }
 
 TEST_CASE(hue_saturation_keeps_greys_grey) {
@@ -167,7 +162,7 @@ TEST_CASE(hue_saturation_keeps_greys_grey) {
     for (int x = 0; x < 256; x++) CHECK_EQ(int(again.pixel(x, 0)[0]), x);
 }
 
-TEST_CASE(colorize_table_matches_the_exact_adjustment) {
+TEST_CASE(colorize_bytes_follow_the_continuous_model) {
     HueSaturationSettings settings = HueSaturationSettings::colorizeStart();
     settings.current() = {200, 50, 10};
     Image img = testImage();
@@ -180,9 +175,9 @@ TEST_CASE(colorize_table_matches_the_exact_adjustment) {
             double r = p[0] / 255.0, g = p[1] / 255.0, b = p[2] / 255.0;
             settings.adjust(r, g, b);
             const uint8_t* o = ours.pixel(x, y);
-            CHECK(std::abs(int(o[0]) - int(std::lround(r * 255))) <= 1);
-            CHECK(std::abs(int(o[1]) - int(std::lround(g * 255))) <= 1);
-            CHECK(std::abs(int(o[2]) - int(std::lround(b * 255))) <= 1);
+            CHECK(std::abs(int(o[0]) - int(std::lround(r * 255))) <= 2);
+            CHECK(std::abs(int(o[1]) - int(std::lround(g * 255))) <= 2);
+            CHECK(std::abs(int(o[2]) - int(std::lround(b * 255))) <= 2);
         }
 }
 

@@ -92,77 +92,21 @@ double posterizeAt(const PosterizeSettings& settings, double x) {
     return double(v * n / 256) / (n - 1);
 }
 
-// ---- Hue/Saturation: a float cube, sampled tetrahedrally as the 8-bit kernel does ------------------------------
-
-constexpr int cubeDim = 33;
+// ---- Hue/Saturation: Photoshop's model on each exact straight colour (no rounding to bytes) ---------------------
 
 void applyHueSaturation16(Image16& image, const HueSaturationSettings& settings) {
     if (settings.isIdentity()) return;
-    if (settings.colorize) {
-        // Colorize keeps only the lightness (max + min) / 2: one entry per sum of two 15-bit values.
-        const int keys = 2 * int(one16) + 1;
-        std::vector<float> table(size_t(keys) * 3);
-        parallelRows(0, keys, [&](int k0, int k1) {
-            for (int key = k0; key < k1; key++) {
-                double r = key / double(keys - 1), g = r, b = r;
-                settings.adjust(r, g, b);
-                table[size_t(key) * 3] = float(r); table[size_t(key) * 3 + 1] = float(g); table[size_t(key) * 3 + 2] = float(b);
-            }
-        }, 1024);
-        parallelRows(0, image.height(), [&](int y0, int y1) {
-            for (int y = y0; y < y1; y++) {
-                uint16_t* p = image.row(y);
-                for (int x = 0; x < image.width(); x++, p += 4) {
-                    const uint32_t a = p[3];
-                    if (!a) continue;
-                    uint32_t s[3];
-                    for (int c = 0; c < 3; c++) s[c] = std::min<uint32_t>(one16, (p[c] * one16 + a / 2) / a);
-                    const float* t = &table[size_t(std::max({s[0], s[1], s[2]}) + std::min({s[0], s[1], s[2]})) * 3];
-                    for (int c = 0; c < 3; c++) p[c] = uint16_t(std::min<long>(long(a), std::lround(std::clamp(t[c], 0.0f, 1.0f) * float(a))));
-                }
-            }
-        });
-        return;
-    }
-    std::vector<float> cube(size_t(cubeDim) * cubeDim * cubeDim * 3);
-    parallelRows(0, cubeDim, [&](int b0, int b1) {
-        for (int bi = b0; bi < b1; bi++)
-            for (int gi = 0; gi < cubeDim; gi++)
-                for (int ri = 0; ri < cubeDim; ri++) {
-                    double r = ri / double(cubeDim - 1), g = gi / double(cubeDim - 1), b = bi / double(cubeDim - 1);
-                    settings.adjust(r, g, b);
-                    const size_t index = (size_t(bi) * cubeDim * cubeDim + size_t(gi) * cubeDim + size_t(ri)) * 3;
-                    cube[index] = float(r); cube[index + 1] = float(g); cube[index + 2] = float(b);
-                }
-    }, 1);
-    constexpr size_t stepR = 3, stepG = size_t(cubeDim) * 3, stepB = size_t(cubeDim) * cubeDim * 3;
+    const auto adjust = settings.adjuster();
     parallelRows(0, image.height(), [&](int y0, int y1) {
         for (int y = y0; y < y1; y++) {
             uint16_t* p = image.row(y);
             for (int x = 0; x < image.width(); x++, p += 4) {
                 const uint32_t a = p[3];
                 if (!a) continue;
-                int index[3];
-                float frac[3];
-                for (int c = 0; c < 3; c++) {
-                    const float s = std::min(1.0f, float(p[c]) / float(a)) * float(cubeDim - 1);
-                    index[c] = std::min(cubeDim - 2, int(s));
-                    frac[c] = s - float(index[c]);
-                }
-                const size_t step[3] = {stepR, stepG, stepB};
-                int order[3] = {0, 1, 2};
-                if (frac[order[0]] < frac[order[1]]) std::swap(order[0], order[1]);
-                if (frac[order[1]] < frac[order[2]]) std::swap(order[1], order[2]);
-                if (frac[order[0]] < frac[order[1]]) std::swap(order[0], order[1]);
-                const float* c0 = &cube[size_t(index[2]) * stepB + size_t(index[1]) * stepG + size_t(index[0]) * stepR];
-                const float* cA = c0 + step[order[0]];
-                const float* cB = cA + step[order[1]];
-                const float* c1 = cB + step[order[2]];
-                const float tA = frac[order[0]], tB = frac[order[1]], tC = frac[order[2]];
-                for (int c = 0; c < 3; c++) {
-                    const float v = c0[c] + (cA[c] - c0[c]) * tA + (cB[c] - cA[c]) * tB + (c1[c] - cB[c]) * tC;
-                    p[c] = uint16_t(std::min<long>(long(a), std::lround(std::clamp(v, 0.0f, 1.0f) * float(a))));
-                }
+                double c[3];
+                for (int k = 0; k < 3; k++) c[k] = std::min(1.0, double(p[k]) / double(a));
+                adjust(c[0], c[1], c[2]);
+                for (int k = 0; k < 3; k++) p[k] = uint16_t(std::min<long>(long(a), std::lround(std::clamp(c[k], 0.0, 1.0) * double(a))));
             }
         }
     });
