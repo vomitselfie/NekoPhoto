@@ -51,6 +51,13 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/mcp" && "$RUNNER_TEMP/mcp/bin/pip" install -q "mcp>=1.10,<2"
           "$RUNNER_TEMP/mcp/bin/python" tools/mcp_smoke.py "$PWD/rpc.sock"
           kill %1
+      - name: Automation panic hunt
+        # Hostile parameters for every method against its own headless instance; a crash, hang or malformed reply fails.
+        timeout-minutes: 20
+        run: python3 tools/rpc_panic_hunt.py --bin ./build/src/app/nekophoto --budget 600
+      - name: Crash recovery
+        timeout-minutes: 5
+        run: python3 tools/recovery_check.py ./build/src/app/nekophoto
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
         with:
           name: screenshots-${{ matrix.compiler }}

@@ -2,13 +2,42 @@
 
 **English** · [日本語](#日本語)
 
-What NekoPhoto checks, how often, and where it still falls short. The numbers were gathered by running the tools
-on 2026-09-27 against NekoPhoto 1.6.1, not copied from other pages; the commands are beside each one so you can
-run them again.
+What NekoPhoto checks, how often, and where it still falls short. The first table is counted from the repository on
+every build; the other numbers were gathered by running the tools on 2026-09-27 against NekoPhoto 1.6.1, not copied
+from other pages. The commands are beside each one so you can run them again.
 
 ## At a glance
 
-| Check | Result (2026-09-27) | How to rerun |
+Counted from the repository by `tools/compat_table.py` (ctest's `compat_table_check` fails when this table is stale;
+`python3 tools/compat_table.py --write` regenerates it):
+
+<!-- BEGIN GENERATED at-a-glance: tools/compat_table.py --write; do not edit by hand -->
+| Check | Result | How to rerun |
+|---|---|---|
+| Photoshop's merged image as the oracle | **33 of 47** Patchy files with a merged image render within 2 levels of it on 99% of pixels, mean under 1 level (the floor in `tests/psd_oracle.txt`; it may only rise) | `ctest -R psd_composite_oracle` with Patchy beside this checkout (or `PATCHY_FIXTURES`) |
+| Render hashes | **692 scenes**: 156 at 8-bit RGB, 154 at 16-bit RGB, 120 at 32-bit RGB, 70 at 8-bit CMYK, 70 at 16-bit CMYK, 61 at 8-bit Lab, 61 at 16-bit Lab; each rendered on the worker pool and serially | `ctest -R render_hash_tests` |
+| Golden images | **6 golden test cases over 21 reference PNGs** in `tests/golden/` | `ctest -R golden_tests` |
+| Brush parity | **526 baseline rows**: 294 presets over 16 stroke fixtures | `ctest -R brush_parity` |
+| Test suites | **82 CTest tests** registered (700 `TEST_CASE`s); a few need optional dependencies | `ctest --test-dir build` |
+| Capability matrix | **115 features** in 7 modes and depths, generated from `supports()` (the table below) | `ctest -R mode_matrix_check` |
+| Automation | **182 methods**, 181 of them called in `tools/rpc_smoke.py`; every method sent hostile parameters by `tools/rpc_panic_hunt.py` | `python3 tools/rpc_smoke.py <socket>`, `python3 tools/rpc_panic_hunt.py` |
+| Fuzz targets | **11 libFuzzer targets** (PSD and its block parsers, the smaller readers) | [fuzzing.md](fuzzing.md) |
+| Compiler warnings | none: CI builds with `-Werror` on GCC and Clang | `-DCOMPOSITOR_WARNINGS_AS_ERRORS=ON` |
+
+| Mode | native | native, partly through RGB | greyed: Photoshop lacks | greyed: not yet |
+|---|---:|---:|---:|---:|
+| RGB8 | 115 | 0 | 0 | 0 |
+| RGB16 | 115 | 0 | 0 | 0 |
+| RGB32 | 72 | 0 | 11 | 32 |
+| CMYK8 | 86 | 17 | 8 | 4 |
+| CMYK16 | 86 | 17 | 8 | 4 |
+| Lab8 | 83 | 17 | 11 | 4 |
+| Lab16 | 83 | 17 | 11 | 4 |
+<!-- END GENERATED at-a-glance -->
+
+Measured by hand over the corpus (2026-09-27, NekoPhoto 1.6.1):
+
+| Check | Result | How to rerun |
 |---|---|---|
 | PSD round trip over Patchy's fixtures | **117 of 117 files pass**, 3,675 carried blocks back byte for byte, 20 type layers opened as editable text | `build/tests/psd_roundtrip ../Patchy/test-fixtures/psd` |
 | The same converted to 16 bits | **118 of 118 files pass** (Patchy's and K.psd): every carried block comes back from a 16-bit export too (3,975 with K.psd) | `PSD_ROUNDTRIP_16=1 build/tests/psd_roundtrip ../Patchy/test-fixtures/psd ../K.psd` |
@@ -16,10 +45,6 @@ run them again.
 | Styled folders, stage by stage | `NEKOPHOTO_DUMP_FOLDERS=<dir>` writes each styled folder's stages while rendering (backdrop, exterior effects, children, after opacity and Fill, interior effects, the effects' shape) as PNGs, to find where a render first differs from Photoshop's | any render, e.g. `document.export` |
 | 16-bit PSD round trip | an unedited layer's 16-bit channels come back **byte for byte** | `ctest -R depth_format_tests` |
 | Colour profiles | the ICC profile (resource 1039) of **64 of 64** tagged RGB PSDs in the corpus is written back **byte for byte**; conversions match Little CMS and the published sRGB and Adobe RGB matrices; untagged 8-bit documents render bit for bit as before | `ctest -R colormgmt_tests` ([color-management.md](color-management.md)) |
-| Render hashes | **235 scenes**: 133 at 8 bits (blend modes, brushes, filters, adjustments, golden scenes) and 102 at 16 bits (blend modes, adjustments and adjustment layers, filters), each rendered on the worker pool and serially | `ctest -R render_hash_tests` |
-| Golden images | **6 golden test cases over 21 reference PNGs** in `tests/golden/` | `ctest -R golden_tests` |
-| Test suites | **41 CTest suites** (354 `TEST_CASE`s), 41 of 41 passing | `ctest --test-dir build` |
-| Compiler warnings | none: CI builds with `-Werror` on GCC and Clang | `-DCOMPOSITOR_WARNINGS_AS_ERRORS=ON` |
 
 ## The PSD corpus
 
@@ -34,6 +59,13 @@ Posterize, Threshold, Invert), saved channels and paths, and CMYK style colours.
 `psd_roundtrip` opens each file, exports it as PSD, compares the two record by record (every carried block,
 Blend If, the mask section, blend key, flags, folder state, opacity and clipping, the image resources and the
 global blocks) and reopens the export. On this run every file passed and nothing was lost.
+
+`psd_composite_oracle` (in CTest; skipped without the checkout) renders each file from its layers and compares the
+result with the merged image Photoshop stored beside them, premultiplied: the largest channel difference, the share
+of pixels more than 2 levels off and the mean. 47 of the files store a real merged image; the other 70 were saved
+without Maximize Compatibility. `tests/psd_oracle.txt` holds the floor of files within tolerance (it may only rise)
+and `tests/patchy-manifest.txt` pins the Patchy commit and each fixture's SHA-256; a checkout that differs is
+reported, not failed.
 
 Beyond Patchy's corpus, `tests/psd_writer_tests.cpp` covers the edit cases (painted, moved, opacity changed, a
 project save, a canvas change), and every layered PSD from Photoshop and Clip Studio the project has (up to 54
@@ -111,7 +143,7 @@ Every push and pull request runs:
 
 | Job | Runner | What it does |
 |---|---|---|
-| GCC | Ubuntu 24.04 | `-Werror` build, all CTest suites (unit, golden, render hashes, hostile input, translations), offscreen smoke test, automation socket (`tools/rpc_smoke.py`) and MCP bridge (`tools/mcp_smoke.py`) smoke tests |
+| GCC | Ubuntu 24.04 | `-Werror` build, all CTest suites (unit, golden, render hashes, hostile input, translations), offscreen smoke test, automation socket (`tools/rpc_smoke.py`) and MCP bridge (`tools/mcp_smoke.py`) smoke tests, the automation panic hunt (`tools/rpc_panic_hunt.py`: hostile parameters for every method; no crash, hang or malformed reply) and crash recovery (`tools/recovery_check.py`) |
 | Clang | Ubuntu 24.04 | the same with Clang |
 | Windows | windows-latest, MSYS2 UCRT64 MinGW-w64 | `-Werror` build, the tests, offscreen smoke test, `tools/rpc_smoke.py` over the named pipe, the portable zip |
 
@@ -153,7 +185,11 @@ NekoPhoto 1.6.1 でツールを実行して集計したものです。
 
 - **PSD の往復**: [Patchy](https://github.com/SethRobinson/Patchy) の MIT ライセンスのテストファイル 117 個(2 個を除き
   Photoshop 2026 で保存)すべてが合格し、3,675 個のブロックがバイト単位で変化なく戻りました。テキストレイヤー 20 個は編集可能なテキストとして開きます。
-- **描画のハッシュ**: 235 シーン(8 bit 133、16 bit 102)。**ゴールデン画像**: 6 テスト・参照 PNG 21 枚。**テストスイート**: CTest 41 個(すべて合格)。
+<!-- BEGIN GENERATED at-a-glance-ja: tools/compat_table.py --write; do not edit by hand -->
+- **Photoshop の統合画像との比較**: 統合画像を持つ Patchy のファイル 47 個のうち **33 個**が、99% のピクセルで 2 レベル以内・平均 1 レベル未満(下限は `tests/psd_oracle.txt`、下げることはできません)。
+- **描画のハッシュ**: 692 シーン。**ゴールデン画像**: 6 テスト・参照 PNG 21 枚。**ブラシの基準値**: 526 行。**テストスイート**: CTest 82 個(700 `TEST_CASE`)。
+- **自動操作**: メソッド 182 個、うち 181 個を `tools/rpc_smoke.py` で呼び出し、すべてに `tools/rpc_panic_hunt.py` が不正な引数を送ります。**ファジング**: libFuzzer のターゲット 11 個。
+<!-- END GENERATED at-a-glance-ja -->
 - **対応している PSD の要素**: レイヤーとグループ、描画モード、マスク(レイヤーマスク・ベクターマスク・両方・濃度とぼかし)、
   クリッピング、調整レイヤー、レイヤースタイル、ブレンド条件(このレイヤー・下になっているレイヤー、チャンネルごと、分割した
   スライダー。Photoshop の描画との差は 2 レベル以内)、グラデーションの方法(知覚的・リニア・クラシック)、シェイプ、
