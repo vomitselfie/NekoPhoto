@@ -1596,7 +1596,7 @@ def colour_mode_transforms(rpc):
                 out = rpc.call("document.export", path=os.path.join(work, "%s%d.%s" % (mode, bits, ext)))
             except RuntimeError as e:
                 # WebP and TIFF need Qt's image-format plugins.
-                assert ext in ("webp", "tif") and "must end in" in str(e), e
+                assert ext in ("webp", "tif") and ("has no" in str(e) or "must end in" in str(e)), e
                 continue
             assert out.get("convertedToSrgb") is True or ext == "gif", out
         # Layers copied into an RGB document come through the profile.
@@ -2475,7 +2475,7 @@ def main():
         try:
             rpc.call("document.export", path=exported, quality=90)
         except RuntimeError as e:
-            assert suffix in ("webp", "tif") and "must end in" in str(e), e
+            assert suffix in ("webp", "tif") and ("has no" in str(e) or "must end in" in str(e)), e
             print("no %s writer in this Qt; skipped" % suffix)
             continue
         with open(exported, "rb") as f:
