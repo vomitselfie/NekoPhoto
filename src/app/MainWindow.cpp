@@ -600,27 +600,6 @@ void MainWindow::copyLayerFromPayload(int tabIndex, const QString& payload) {
     if (index != current_) switchTo(index);
 }
 
-void MainWindow::deleteSelectedLayers() {
-    if (!session_->hasDocument()) return;
-    std::vector<Uuid> ids;
-    for (auto& l : session_->document()->layers) if (session_->selectedLayerIds().count(l.id)) ids.push_back(l.id);
-    if (ids.empty() && session_->activeLayerId()) ids.push_back(*session_->activeLayerId());
-    if (ids.empty()) return;
-    auto dependents = session_->clippingDependents(ids);
-    if (dependents.empty()) { session_->deleteLayersResolvingClipping(ids, false); return; }
-    QMessageBox box(this);
-    box.setIcon(QMessageBox::Question);
-    box.setText(ids.size() == 1 ? tr("This layer supplies a clipping mask") : tr("These layers supply clipping masks"));
-    box.setInformativeText(tr("Bake keeps the current masked appearance in the dependent layers’ pixels. Remove Links reveals their pixels. You can undo either choice."));
-    QPushButton* bake = box.addButton(tr("Bake and Delete"), QMessageBox::AcceptRole);
-    QPushButton* remove = box.addButton(tr("Remove Links and Delete"), QMessageBox::DestructiveRole);
-    box.addButton(QMessageBox::Cancel);
-    box.setDefaultButton(bake);
-    box.exec();
-    if (box.clickedButton() == bake) session_->deleteLayersResolvingClipping(ids, true);
-    else if (box.clickedButton() == remove) session_->deleteLayersResolvingClipping(ids, false);
-}
-
 void MainWindow::deleteLayersCommand() {
     if (!session_->hasDocument()) return;
     // layers.delete: the active layer (no ids, so a recorded action stays portable), or the selected layers by id. When

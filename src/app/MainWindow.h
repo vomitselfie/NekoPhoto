@@ -226,7 +226,6 @@ private:
     static QString toolHint(Tool tool, bool erase);
     void refreshActions();
     void chooseColor(bool background);
-    void deleteSelectedLayers();
     // Menu commands on the command path (CONTRIBUTING.md, "Commands") with a direct fallback for what the method
     // cannot express.
     void deleteLayersCommand();
