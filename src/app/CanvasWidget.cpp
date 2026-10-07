@@ -82,6 +82,7 @@ CanvasWidget::CanvasWidget(EditorSession* session, QWidget* parent) : QWidget(pa
             if (cropRatio_ > 0) crop_ = fitCropRatio(*crop_, cropRatio_);
             emit cropChanged();
         }
+        refreshHeldTool(QApplication::keyboardModifiers());   // a held tool follows the tool it stands in for
         if (hover_) updateCursor(*hover_, QApplication::keyboardModifiers());
         update();
     });

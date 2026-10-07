@@ -80,7 +80,9 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
     dragStartView_ = lastView_ = view;
     dragStartDocument_ = documentPoint(view);
     dragMoved_ = false;
-    if (button == Qt::MiddleButton || spaceHeld_ || session_->tool() == Tool::Hand) { drag_ = Drag::Pan; updateCursor(view, modifiers); return; }
+    if (toolSpring_ && button == Qt::LeftButton) toolSpring_->used = true;
+    refreshHeldTool(modifiers);   // the keys as they are now, though the canvas may not have seen them go down
+    if (button == Qt::MiddleButton || (spaceHeld_ && !(modifiers & Qt::ControlModifier)) || canvasTool() == Tool::Hand) { drag_ = Drag::Pan; updateCursor(view, modifiers); return; }
     if (button != Qt::LeftButton) return;
     QPointF doc = dragStartDocument_;
     if (session_->canvasPressHook && session_->canvasPressHook(doc)) { drag_ = Drag::Hook; return; }
@@ -96,7 +98,7 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
         if (cageIndex_ >= 0) drag_ = Drag::WarpCage;
         return;
     }
-    switch (session_->tool()) {
+    switch (canvasTool()) {
     case Tool::Move: {
         const Layer* active = session_->activeLayer();
         if (active && boxShown()) {
@@ -148,8 +150,9 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
             return;
         }
         if (!session_->transformEdit()) {
-            if (modifiers & Qt::AltModifier) session_->beginDuplicateTransform();
-            else session_->beginTransform(false);
+            // A Move tool held by Ctrl leaves the session's tool as it is.
+            if (modifiers & Qt::AltModifier) session_->beginDuplicateTransform(!heldTool_);
+            else session_->beginTransform(false, !heldTool_);
         }
         if (!session_->transformEdit()) return;
         transformDrag_ = TransformDrag{session_->transformEdit()->draft, toPoint(doc), TransformDrag::Mode::Move, 0};
@@ -322,7 +325,8 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
         pressBox(view, doc, modifiers);
         return;
     case Tool::Eyedropper:
-        sampleColor(doc, modifiers & Qt::AltModifier);
+        // Alt picks the background colour; held from a painting tool, Alt is what brought the Eyedropper: foreground.
+        sampleColor(doc, !heldTool_ && (modifiers & Qt::AltModifier));
         return;
     case Tool::Zoom:
         zoomRect_.reset();
@@ -402,6 +406,7 @@ void CanvasWidget::move(QPointF view, Qt::MouseButtons buttons, Qt::KeyboardModi
     QPointF doc = documentPoint(view);
     emit cursorMoved(doc);
     if (drag_ == Drag::None) {
+        if (!buttons) refreshHeldTool(modifiers);
         if (session_->tool() == Tool::Lasso && session_->lassoKind == LassoKind::Polygonal && !lassoPoints_.empty()) { lassoCursor_ = doc; update(); }
         updateCursor(view, modifiers);
         // Only where the brush outline was and is now (and Clone Stamp's sample marker), not the whole view.
@@ -709,6 +714,7 @@ void CanvasWidget::release(QPointF view, Qt::MouseButton button, Qt::KeyboardMod
     }
     default: break;
     }
+    refreshHeldTool(modifiers);   // keys let go of during the drag take effect now
     updateCursor(view, modifiers);
 }
 

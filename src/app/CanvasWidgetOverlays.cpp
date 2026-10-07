@@ -84,7 +84,7 @@ void CanvasWidget::drawOverlays(QPainter& painter) {
             painter.setPen(QPen(Qt::black, 1)); painter.drawLine(v + QPointF(-8, 0), v + QPointF(8, 0)); painter.drawLine(v + QPointF(0, -8), v + QPointF(0, 8));
         }
     }
-    if (isBrushLike() && hover_ && !spaceHeld_) {
+    if (isBrushLike() && hover_ && !spaceHeld_ && !heldTool_) {
         double r = session_->brushSettings.diameter / 2 * ppp;
         painter.setBrush(Qt::NoBrush);
         painter.setPen(QPen(QColor(255, 255, 255, 200), 1));

@@ -296,7 +296,8 @@ public:
     // Transform (Move tool)
     const std::optional<TransformEdit>& transformEdit() const { return transformEdit_; }
     bool canTransform() const;
-    void beginTransform(bool persistent);
+    /// `selectMoveTool` false: the session's tool stays (a drag with the Move tool held by Ctrl from another tool).
+    void beginTransform(bool persistent, bool selectMoveTool = true);
     void previewTransform(const compositor::LayerTransform& value);
     void commitTransform();
     void cancelTransform();
@@ -327,7 +328,7 @@ public:
     bool canTransformSelection() const;
     void beginSelectionTransform();
     /// Alt-drag: a copy of the active layer is made and moved; cancelling removes it again.
-    void beginDuplicateTransform();
+    void beginDuplicateTransform(bool selectMoveTool = true);
     /// Several selected layers, or a folder: the transform moves them together in one box.
     bool transformsAsGroup() const;
     std::vector<const compositor::Layer*> groupTransformMembers() const;
@@ -829,6 +830,11 @@ public:
     std::vector<std::string> redoNames() const { return history_.futureNames(); }
     void undo();
     void redo();
+    /// Photoshop CC's Toggle Last State (Ctrl+Alt+Z): redoes the step just undone, otherwise undoes the last step.
+    void toggleLastState();
+    /// File > Revert: the project as it was last saved, in place (the history starts afresh). False when there is no
+    /// saved project or it cannot be read now.
+    bool revertToSaved();
     /// For grouping steps after the fact (the automation server's edit groups): the document's revision now,
     /// the revisions of the recorded steps, those recorded since a revision, and merging them into one step.
     uint64_t historyRevision() const { return history_.revision(); }
@@ -1091,6 +1097,8 @@ private:
     void noteExternalChange();
     void checkExternalChange();
     void reloadFromDisk();
+    bool reloadProject();
+    bool lastStepUndone_ = false;   // the last move through the history was an undo (Toggle Last State)
     QFileSystemWatcher* watcher_ = nullptr;
     QTimer* settle_ = nullptr;
     QByteArray knownDigest_;

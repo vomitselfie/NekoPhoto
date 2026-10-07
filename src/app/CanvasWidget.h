@@ -8,7 +8,9 @@
 #include <QPointF>
 #include <QRect>
 #include <QTimer>
+#include <QElapsedTimer>
 #include <QWidget>
+#include <functional>
 #include <optional>
 #include <vector>
 
@@ -70,6 +72,17 @@ public:
     bool addPathMenu(QMenu* menu, QPointF viewPoint);
     bool addTypeMenu(QMenu* menu);
     bool dragging() const { return drag_ != Drag::None; }
+
+    /// Photoshop's held tools: the tool the canvas works as while a key is held (Ctrl the Move tool, Alt the
+    /// Eyedropper with a painting tool, Ctrl+Space the Zoom tool, Ctrl+Alt+Space zooming out), or none. The session's
+    /// tool and the options bar stay as they are; letting go of the keys goes back to it.
+    std::optional<Tool> heldTool() const { return heldTool_; }
+    /// The tool a press on the canvas uses: the held one, else the session's.
+    Tool canvasTool() const { return heldTool_.value_or(session_->tool()); }
+    /// A tool picked by its letter key: when the key is held a moment, or the tool is used while it is held, letting
+    /// go of it runs `back` (Photoshop's spring-loaded tool keys). A quick tap keeps the new tool.
+    void armToolSpring(int key, std::function<void()> back);
+    static constexpr int springHoldMs = 400;
 
 signals:
     void cursorMoved(QPointF documentPoint);
@@ -178,6 +191,11 @@ private:
     int distortIndex_ = 0;
     bool dragMoved_ = false;
     bool spaceHeld_ = false;
+    std::optional<Tool> heldTool_;
+    /// Works out the held tool from the keys down (`modifiers` and Space); a drag keeps its tool to the end.
+    void refreshHeldTool(Qt::KeyboardModifiers modifiers);
+    struct ToolSpring { int key = 0; QElapsedTimer held; bool used = false; std::function<void()> back; };
+    std::optional<ToolSpring> toolSpring_;
     std::optional<QPointF> hover_;
     /// Direct Selection: what a view point is over on the target path, the knot chosen, and a drag in progress.
     struct PathHit { int sub = -1, knot = -1; enum Part { None, Anchor, In, Out, Subpath } part = None; };
@@ -273,6 +291,10 @@ private:
     bool typeUndo(bool redo);
     bool typeShortcut(QKeyEvent* e) const;
     bool typeKey(QKeyEvent* e);
+    /// Photoshop's Ctrl+Shift+< and > while typing: the selected letters' sizes (each its own) or the size typed next,
+    /// by `delta` document pixels, kept within the options bar's 1..2000.
+    void stepTypeSize(double delta);
+    static int typeSizeStep(const QKeyEvent* e);
     void typePress(QPointF view, QPointF documentPoint, Qt::KeyboardModifiers modifiers);
     void typeMove(QPointF documentPoint, Qt::KeyboardModifiers modifiers);
     void typeRelease(QPointF documentPoint);

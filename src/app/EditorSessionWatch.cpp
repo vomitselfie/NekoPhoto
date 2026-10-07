@@ -115,8 +115,20 @@ void EditorSession::resolveExternalChange(bool revert) {
 }
 
 void EditorSession::reloadFromDisk() {
+    if (!reloadProject()) return;   // half written or mid-sync: the next change is checked afresh
+    externalReloads_++;
+    emit reloadedFromDisk();
+}
+
+bool EditorSession::revertToSaved() {
+    if (!document_ || projectPath_.isEmpty()) return false;
+    cancelBrush();
+    return reloadProject();
+}
+
+bool EditorSession::reloadProject() {
     auto project = readProject(projectPath_, nullptr);
-    if (!project) return;   // half written or mid-sync: the next change is checked afresh
+    if (!project) return false;
     commitTransform();
     const std::optional<compositor::Uuid> active = activeLayerId_;
     previewBase_.reset();
@@ -124,10 +136,12 @@ void EditorSession::reloadFromDisk() {
     setActiveLayer(active && document_->find(*active) ? active : project->activeLayer);
     history_.reset();
     knownDigest_ = projectDigest(projectPath_);
-    externalReloads_++;
+    lastStepUndone_ = false;
     notifyDocument();
     emit selectionChanged();
-    emit reloadedFromDisk();
+    emit titleChanged();
+    emit historyChanged();
+    return true;
 }
 
 } // namespace app

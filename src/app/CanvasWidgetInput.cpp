@@ -32,9 +32,9 @@ CanvasWidget::HandleHit CanvasWidget::hitHandle(QPointF view, const Corners& cor
 
 void CanvasWidget::updateCursor(QPointF view, Qt::KeyboardModifiers modifiers) {
     if (!session_->hasDocument()) { setCursor(Qt::ArrowCursor); return; }
-    if (spaceHeld_ || session_->tool() == Tool::Hand || drag_ == Drag::Pan) { setCursor(drag_ == Drag::Pan ? Qt::ClosedHandCursor : Qt::OpenHandCursor); return; }
+    if ((spaceHeld_ && !(modifiers & Qt::ControlModifier)) || canvasTool() == Tool::Hand || drag_ == Drag::Pan) { setCursor(drag_ == Drag::Pan ? Qt::ClosedHandCursor : Qt::OpenHandCursor); return; }
     if (session_->canvasPressHook) { setCursor(Qt::CrossCursor); return; }
-    switch (session_->tool()) {
+    switch (canvasTool()) {
     case Tool::Move: {
         const Layer* active = session_->activeLayer();
         if (active && boxShown()) {
@@ -118,9 +118,14 @@ bool CanvasWidget::event(QEvent* e) {
 
 void CanvasWidget::keyPressEvent(QKeyEvent* e) {
     if (typeEdit_ && typeKey(e)) return;   // typing on the canvas takes the keys first
-    if (e->key() == Qt::Key_Space && !e->isAutoRepeat()) { spaceHeld_ = true; if (hover_) updateCursor(*hover_, e->modifiers()); return; }
+    if (e->key() == Qt::Key_Space && !e->isAutoRepeat()) { spaceHeld_ = true; refreshHeldTool(e->modifiers()); if (hover_) updateCursor(*hover_, e->modifiers()); return; }
     if (!session_->hasDocument()) { QWidget::keyPressEvent(e); return; }
-    if (e->key() == Qt::Key_Alt || e->key() == Qt::Key_Control) { if (hover_) updateCursor(*hover_, e->modifiers()); }
+    if (e->key() == Qt::Key_Alt || e->key() == Qt::Key_Control) {
+        // Some platforms report a modifier's own press without it in modifiers(): add it.
+        const Qt::KeyboardModifiers modifiers = e->modifiers() | (e->key() == Qt::Key_Alt ? Qt::AltModifier : Qt::ControlModifier);
+        if (!e->isAutoRepeat()) refreshHeldTool(modifiers);
+        if (hover_) updateCursor(*hover_, modifiers);
+    }
     double step = (e->modifiers() & Qt::ShiftModifier) ? 10 : 1;
     switch (e->key()) {
     case Qt::Key_Escape:
@@ -194,13 +199,81 @@ void CanvasWidget::keyPressEvent(QKeyEvent* e) {
 }
 
 void CanvasWidget::keyReleaseEvent(QKeyEvent* e) {
-    if (e->key() == Qt::Key_Space && !e->isAutoRepeat()) { spaceHeld_ = false; if (drag_ == Drag::Pan && session_->tool() != Tool::Hand) drag_ = Drag::None; if (hover_) updateCursor(*hover_, e->modifiers()); return; }
-    if (e->key() == Qt::Key_Alt || e->key() == Qt::Key_Control) { if (hover_) updateCursor(*hover_, e->modifiers()); }
+    if (toolSpring_ && e->key() == toolSpring_->key && !e->isAutoRepeat()) {
+        // A tool key let go: back to the tool before it when it was held a moment or used meanwhile.
+        ToolSpring spring = std::move(*toolSpring_);
+        toolSpring_.reset();
+        if ((spring.used || spring.held.elapsed() >= springHoldMs) && drag_ == Drag::None && !typeEdit_ && spring.back) spring.back();
+        return;
+    }
+    if (e->key() == Qt::Key_Space && !e->isAutoRepeat()) {
+        spaceHeld_ = false;
+        if (drag_ == Drag::Pan && session_->tool() != Tool::Hand) drag_ = Drag::None;
+        refreshHeldTool(e->modifiers());
+        if (hover_) updateCursor(*hover_, e->modifiers());
+        return;
+    }
+    if (e->key() == Qt::Key_Alt || e->key() == Qt::Key_Control) {
+        const Qt::KeyboardModifiers modifiers = e->modifiers() & ~(e->key() == Qt::Key_Alt ? Qt::AltModifier : Qt::ControlModifier);
+        if (!e->isAutoRepeat()) refreshHeldTool(modifiers);
+        if (hover_) updateCursor(*hover_, modifiers);
+    }
     QWidget::keyReleaseEvent(e);
 }
 
+// ---- Held tools -------------------------------------------------------------------------
+
+namespace {
+
+/// Tools Ctrl turns into the Move tool while held, as in Photoshop. Not the Move group itself, the Pen and Direct
+/// Selection (where Ctrl is Photoshop's Direct Selection), the shapes and slices (path and slice selection), the Crop
+/// tool, the Hand and the Zoom.
+bool ctrlMoves(Tool tool) {
+    switch (tool) {
+    case Tool::Marquee: case Tool::Lasso: case Tool::Wand: case Tool::Scribble: case Tool::Brush: case Tool::SpotHealing:
+    case Tool::CloneStamp: case Tool::Smudge: case Tool::Gradient: case Tool::Eyedropper: case Tool::Text: case Tool::Dodge:
+    case Tool::PaintBucket:
+        return true;
+    default: return false;
+    }
+}
+
+} // namespace
+
+void CanvasWidget::refreshHeldTool(Qt::KeyboardModifiers modifiers) {
+    if (drag_ != Drag::None) return;   // a drag keeps its tool to the end, as Photoshop's does
+    const Tool tool = session_->tool();
+    const bool ctrl = modifiers & Qt::ControlModifier, alt = modifiers & Qt::AltModifier;
+    std::optional<Tool> held;
+    if (session_->hasDocument() && !typeEdit_ && !session_->brushActive() && !session_->warpActive() && !session_->pixelMoveActive()) {
+        // Something half made (a path, a shape, a gradient, a lasso, a cage, a dialog picking from the canvas) keeps
+        // its tool; zooming does not disturb it.
+        const bool busy = session_->canvasPressHook || session_->warpCage() || session_->penDraft() || session_->shapeDraft() || session_->gradientPending()
+                          || (session_->transformEdit() && session_->transformEdit()->persistent) || !lassoPoints_.empty();
+        if (spaceHeld_ && ctrl) held = Tool::Zoom;   // Ctrl+Space zooms in, Ctrl+Alt+Space out (the Zoom tool's Alt)
+        else if (spaceHeld_ || busy) held.reset();   // Space alone is the Hand, as before
+        else if (ctrl && ctrlMoves(tool)) held = Tool::Move;
+        else if (alt && !ctrl && ((tool == Tool::Brush && !session_->brushErase) || tool == Tool::PaintBucket || tool == Tool::Gradient)) held = Tool::Eyedropper;
+    }
+    if (held == tool) held.reset();
+    if (held == heldTool_) return;
+    heldTool_ = held;
+    if (hover_) { updateCursor(*hover_, modifiers); update(); }
+}
+
+void CanvasWidget::armToolSpring(int key, std::function<void()> back) {
+    toolSpring_ = ToolSpring{key, {}, false, std::move(back)};
+    toolSpring_->held.start();
+}
+
 void CanvasWidget::leaveEvent(QEvent*) { hover_.reset(); update(); }
-void CanvasWidget::focusOutEvent(QFocusEvent* e) { spaceHeld_ = false; QWidget::focusOutEvent(e); }
+void CanvasWidget::focusOutEvent(QFocusEvent* e) {
+    // The keys are let go of as far as the canvas knows: no Space, no held tool, no spring.
+    spaceHeld_ = false;
+    toolSpring_.reset();
+    refreshHeldTool(Qt::NoModifier);
+    QWidget::focusOutEvent(e);
+}
 
 
 } // namespace app

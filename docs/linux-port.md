@@ -426,11 +426,15 @@ uses a different model than Apple's Vision, so its cutouts differ in detail.
 | [ ], Shift [ ] | Brush size, hardness |
 | X, D | Swap / reset colours (with the Crop tool, X swaps the crop's height and width) |
 | Space + drag, middle drag, wheel | Pan |
+| Hold a tool's letter | Spring-loaded tools: hold the key and use the tool (or hold it a moment); letting go returns to the tool before. A tap switches for good |
+| Hold Ctrl | The Move tool while held (it picks the layer under the pointer), with the selection, painting, retouching, Eyedropper and Type tools; not with the Pen, Direct Selection, Shape, Crop, Slice, Hand and Zoom tools, nor while typing |
+| Hold Alt with the Brush, Paint Bucket or Gradient | The Eyedropper while held: a click picks the foreground colour (Alt keeps its own meaning with the Eraser, Clone Stamp, Healing Brush and the selection tools) |
+| Hold Ctrl Space, Ctrl Alt Space | Zoom in, zoom out where you click (drag a box to zoom to it) |
 | Ctrl + wheel, Ctrl +/−, Ctrl 0, Ctrl 1 | Zoom, fit, 100% |
 | Ctrl T, Enter, Esc | Free transform (of the selection when there is one), apply, cancel |
 | Ctrl R | Rulers (drag a guide out of one; drag it back to delete it) |
 | Ctrl ; , Alt Ctrl ; , Shift Ctrl ; | Show guides, lock guides, snap |
-| Ctrl + drag | Move, transform, marquee, crop or shape without snapping |
+| Ctrl during a drag | Move, transform, marquee, crop or shape without snapping |
 | Right-click on the canvas | Context menu for the tool (the brush picker with the Brush or Eraser) |
 | Ctrl + drag handle | Free distort |
 | Ctrl + arrows | Nudge selected pixels |
@@ -444,9 +448,12 @@ uses a different model than Apple's Vision, so its cutouts differ in detail.
 | Ctrl L, Ctrl M, Ctrl U, Ctrl I | Levels, Curves, Hue/Saturation, Invert |
 | Ctrl X, Ctrl C, Ctrl Shift C, Ctrl V | Cut, copy, copy merged, paste |
 | Alt Backspace, Ctrl Backspace, Delete, Shift F5 | Fill foreground / background, clear, content-aware fill |
-| Ctrl Z, Ctrl Shift Z | Undo, redo |
+| Ctrl Z, Ctrl Shift Z, Ctrl Alt Z | Undo (again for earlier steps), redo, toggle last state (Photoshop CC's defaults) |
+| F7 | Show or hide the Layers panel |
+| F12 | File ▸ Revert: the project as last saved (asks first when there are unsaved changes; the history starts afresh) |
 | Ctrl Alt Shift S | Export JPEG |
 | Ctrl Shift K, Ctrl Y, Ctrl Shift Y | Color Settings, Proof Colors, Gamut Warning |
 | Ctrl K (also Ctrl ,) | Preferences |
 | Ctrl F | Edit ▸ Search: find any command, tool or G'MIC filter by name and run it (arrows, Enter, Esc) |
 | Type tool: Ctrl Enter or keypad Enter, Esc | Commit or cancel the text being typed on the canvas (Enter alone starts a new line) |
+| Type tool: Ctrl Shift > / <, Ctrl Alt Shift > / < | The selected letters 2 / 10 pixels larger or smaller, each keeping its own size (with only a caret, the letters typed next) |

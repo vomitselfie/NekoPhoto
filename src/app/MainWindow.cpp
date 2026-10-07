@@ -672,6 +672,8 @@ void MainWindow::refreshActions() {
     if (editTextAction_) { const Layer* l = has ? session_->activeLayer() : nullptr; editTextAction_->setEnabled(eightBit && l && l->isLiveText()); }
     undoAction_->setEnabled(session_->canUndo());
     redoAction_->setEnabled(session_->canRedo());
+    if (toggleStateAction_) toggleStateAction_->setEnabled(session_->canUndo() || session_->canRedo());
+    if (revertAction_) revertAction_->setEnabled(has && !session_->projectPath().isEmpty());
     undoAction_->setText(session_->canUndo() ? tr("&Undo %1").arg(names::history(session_->undoName())) : tr("&Undo"));
     redoAction_->setText(session_->canRedo() ? tr("&Redo %1").arg(names::history(session_->redoName())) : tr("&Redo"));
     if (has) sizeLabel_->setText(QStringLiteral("%1 × %2 px").arg(session_->document()->width).arg(session_->document()->height));

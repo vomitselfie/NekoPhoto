@@ -7,6 +7,9 @@
 // buttons converted after them (menuCommands): each through the menu bar (answering its dialog), through the
 // requests the recording holds, and through the session calls the interface made before, compared as documents and
 // history names, with each recorded once as the method it names.
+//
+// held-keys: Photoshop's held tools (Alt, Ctrl, Ctrl+Space), spring-loaded tool letters, F7, F12, Ctrl+Alt+Z and the
+// type size keys, through synthesised key and mouse events.
 #include "SelfTest.h"
 #include "ActionLibrary.h"
 #include "AdjustmentEditor.h"
@@ -39,8 +42,16 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QAbstractButton>
+#include <QDir>
+#include <QDockWidget>
+#include <QFile>
 #include <cmath>
 #include <cstdio>
+
+// QtGui's shortcut pass for a key press (what QTest's key clicks use): the focus widget's ShortcutOverride, then the
+// window's shortcuts; true when a shortcut took the key.
+Q_GUI_EXPORT bool qt_sendShortcutOverrideEvent(QObject* o, ulong timestamp, int k, Qt::KeyboardModifiers mods, const QString& text, bool autorep, ushort count);
 
 using namespace compositor;
 
@@ -854,6 +865,199 @@ int search(MainWindow& w) {
     return failures ? 1 : 0;
 }
 
+/// Photoshop's held and missing keys, typed as a person would (each press offered to the shortcuts first, as QTest
+/// does): Alt with the Brush samples the foreground and lets go back to the Brush, Ctrl moves the layer under the
+/// pointer with the Move tool for as long as it is held, Ctrl+Space and Ctrl+Alt+Space zoom, a tool's letter held while
+/// the tool is used springs back and a tap does not, F7 shows and hides the Layers panel (not from a text field),
+/// Ctrl+Alt+Z toggles the last state, F12 reverts (asking first), and Ctrl+Shift+> and < size the type being typed.
+int heldKeys(MainWindow& w) {
+    EditorSession& s = *w.session();
+    buildDemoDocument(s);
+    w.show();
+    w.activateWindow();
+    QApplication::processEvents();
+    CanvasWidget* canvas = w.canvasAt(w.currentTabIndex());
+    if (!canvas) { std::fprintf(stderr, "no canvas\n"); return 1; }
+    canvas->setFocus();
+    QApplication::processEvents();
+    int failures = 0;
+    auto expect = [&](bool ok, const char* what) { if (!ok) { std::fprintf(stderr, "held keys: %s\n", what); failures++; } };
+    // A key press goes to the shortcuts first, then (when none took it) to the widget; true when a shortcut took it.
+    auto press = [](QWidget* target, int key, Qt::KeyboardModifiers modifiers, const QString& text = QString()) {
+        if (qt_sendShortcutOverrideEvent(target, 0, key, modifiers, text, false, 1)) return true;
+        QKeyEvent e(QEvent::KeyPress, key, modifiers, text);
+        QApplication::sendEvent(target, &e);
+        return false;
+    };
+    auto release = [](QWidget* target, int key, Qt::KeyboardModifiers modifiers) {
+        QKeyEvent e(QEvent::KeyRelease, key, modifiers);
+        QApplication::sendEvent(target, &e);
+    };
+    auto mouse = [canvas](QEvent::Type type, QPointF documentPoint, Qt::KeyboardModifiers modifiers) {
+        const QPointF local = canvas->viewPointForTest(documentPoint);
+        QMouseEvent e(type, local, canvas->mapToGlobal(local), Qt::LeftButton, type == QEvent::MouseButtonRelease ? Qt::NoButton : Qt::LeftButton, modifiers);
+        QApplication::sendEvent(canvas, &e);
+    };
+    auto click = [&](QPointF documentPoint, Qt::KeyboardModifiers modifiers) {
+        mouse(QEvent::MouseButtonPress, documentPoint, modifiers);
+        mouse(QEvent::MouseButtonRelease, documentPoint, modifiers);
+    };
+
+    // Alt with the Brush: the Eyedropper, sampling the foreground (not the background, as Alt with the Eyedropper itself).
+    s.selectTool(Tool::Brush);
+    s.brushErase = false;
+    s.foregroundColor = Qt::black;
+    s.backgroundColor = Qt::white;
+    const QPointF sample(30, 400);
+    const QColor expected = s.compositeColorAt(sample).value_or(QColor());
+    const size_t stepsBefore = s.undoNames().size();
+    press(canvas, Qt::Key_Alt, Qt::AltModifier);
+    expect(canvas->heldTool() == Tool::Eyedropper, "Alt with the Brush did not hold the Eyedropper");
+    expect(s.tool() == Tool::Brush, "Alt changed the session's tool");
+    click(sample, Qt::AltModifier);
+    expect(expected.isValid() && expected != QColor(Qt::black) && s.foregroundColor == expected, "the held Eyedropper did not sample the foreground");
+    expect(s.backgroundColor == QColor(Qt::white), "the held Eyedropper changed the background");
+    expect(s.undoNames().size() == stepsBefore, "Alt-click with the Brush painted");
+    release(canvas, Qt::Key_Alt, Qt::NoModifier);
+    expect(!canvas->heldTool() && s.tool() == Tool::Brush, "letting go of Alt did not go back to the Brush");
+    // The Eraser keeps Alt for itself.
+    s.brushErase = true;
+    press(canvas, Qt::Key_Alt, Qt::AltModifier);
+    expect(!canvas->heldTool(), "Alt with the Eraser held the Eyedropper");
+    release(canvas, Qt::Key_Alt, Qt::NoModifier);
+    s.brushErase = false;
+
+    // Ctrl with the Brush: the Move tool, which picks the layer under the pointer and drags it.
+    const QPointF from(330, 260), to(350, 270);
+    const std::optional<Uuid> under = s.layerAt(from);
+    const Layer* before = under ? s.document()->find(*under) : nullptr;
+    const Point origin = before ? before->transform.origin : Point();
+    press(canvas, Qt::Key_Control, Qt::ControlModifier);
+    expect(canvas->heldTool() == Tool::Move, "Ctrl with the Brush did not hold the Move tool");
+    mouse(QEvent::MouseButtonPress, from, Qt::ControlModifier);
+    mouse(QEvent::MouseMove, to, Qt::ControlModifier);
+    mouse(QEvent::MouseButtonRelease, to, Qt::ControlModifier);
+    const Layer* after = under ? s.document()->find(*under) : nullptr;
+    expect(after && std::abs(after->transform.origin.x - origin.x - 20) < 0.5 && std::abs(after->transform.origin.y - origin.y - 10) < 0.5,
+           "the held Move tool did not move the layer under the pointer by 20, 10");
+    if (after) std::printf("held move: %g, %g\n", after->transform.origin.x - origin.x, after->transform.origin.y - origin.y);
+    expect(!s.transformEdit(), "the held Move tool left a transform open");
+    release(canvas, Qt::Key_Control, Qt::NoModifier);
+    expect(!canvas->heldTool() && s.tool() == Tool::Brush, "letting go of Ctrl did not go back to the Brush");
+    // The Pen keeps Ctrl (Photoshop's Direct Selection).
+    s.selectTool(Tool::Pen);
+    press(canvas, Qt::Key_Control, Qt::ControlModifier);
+    expect(!canvas->heldTool(), "Ctrl with the Pen held the Move tool");
+    release(canvas, Qt::Key_Control, Qt::NoModifier);
+    s.selectTool(Tool::Brush);
+
+    // Ctrl+Space zooms in where clicked; Ctrl+Alt+Space out.
+    const double zoom = s.viewport.zoom;
+    press(canvas, Qt::Key_Control, Qt::ControlModifier);
+    press(canvas, Qt::Key_Space, Qt::ControlModifier, QStringLiteral(" "));
+    expect(canvas->heldTool() == Tool::Zoom, "Ctrl+Space did not hold the Zoom tool");
+    click(QPointF(320, 210), Qt::ControlModifier);
+    expect(std::abs(s.viewport.zoom - zoom * 2) < 1e-6, "Ctrl+Space click did not zoom in");
+    press(canvas, Qt::Key_Alt, Qt::ControlModifier | Qt::AltModifier);
+    expect(canvas->heldTool() == Tool::Zoom, "Ctrl+Alt+Space did not hold the Zoom tool");
+    click(QPointF(320, 210), Qt::ControlModifier | Qt::AltModifier);
+    expect(std::abs(s.viewport.zoom - zoom) < 1e-6, "Ctrl+Alt+Space click did not zoom out");
+    release(canvas, Qt::Key_Alt, Qt::ControlModifier);
+    release(canvas, Qt::Key_Space, Qt::ControlModifier);
+    release(canvas, Qt::Key_Control, Qt::NoModifier);
+    expect(!canvas->heldTool() && s.tool() == Tool::Brush, "letting go of Ctrl+Space did not go back to the Brush");
+
+    // A tool's letter held while the tool is used springs back on release; a tap keeps the tool.
+    expect(press(canvas, Qt::Key_M, Qt::NoModifier, QStringLiteral("m")), "M was not taken by the Marquee's shortcut");
+    expect(s.tool() == Tool::Marquee, "M did not pick the Marquee");
+    click(QPointF(40, 40), Qt::NoModifier);
+    release(canvas, Qt::Key_M, Qt::NoModifier);
+    expect(s.tool() == Tool::Brush, "letting go of M after using the Marquee did not go back to the Brush");
+    press(canvas, Qt::Key_M, Qt::NoModifier, QStringLiteral("m"));
+    release(canvas, Qt::Key_M, Qt::NoModifier);
+    expect(s.tool() == Tool::Marquee, "a tap of M did not keep the Marquee");
+    s.selectTool(Tool::Brush);
+
+    // F7: the Layers panel, not while a text field has the keys.
+    QDockWidget* layers = w.findChild<QDockWidget*>(QStringLiteral("layersDock"));
+    if (!layers) { std::fprintf(stderr, "no Layers panel\n"); return 1; }
+    const bool shown = !layers->isHidden();
+    press(canvas, Qt::Key_F7, Qt::NoModifier);
+    expect(layers->isHidden() == shown, "F7 did not toggle the Layers panel");
+    press(canvas, Qt::Key_F7, Qt::NoModifier);
+    expect(layers->isHidden() != shown, "F7 again did not toggle the Layers panel back");
+    {
+        auto* field = new QLineEdit(&w);
+        field->show();
+        field->setFocus();
+        QApplication::processEvents();
+        if (QApplication::focusWidget() == field) {
+            press(field, Qt::Key_F7, Qt::NoModifier);
+            expect(layers->isHidden() != shown, "F7 in a text field toggled the Layers panel");
+            const size_t layerCount = s.document()->layers.size();
+            press(field, Qt::Key_Z, Qt::ControlModifier | Qt::AltModifier);
+            expect(s.document()->layers.size() == layerCount, "Ctrl+Alt+Z in a text field changed the document");
+        } else {
+            std::fprintf(stderr, "held keys: the text field did not take the focus\n");
+            failures++;
+        }
+        delete field;
+        canvas->setFocus();
+        QApplication::processEvents();
+    }
+
+    // Ctrl+Alt+Z: undo the last step, then redo it, then undo it again.
+    const size_t layerCount = s.document()->layers.size();
+    s.addBlankLayer();
+    press(canvas, Qt::Key_Z, Qt::ControlModifier | Qt::AltModifier);
+    expect(s.document()->layers.size() == layerCount, "Ctrl+Alt+Z did not undo the last step");
+    press(canvas, Qt::Key_Z, Qt::ControlModifier | Qt::AltModifier);
+    expect(s.document()->layers.size() == layerCount + 1, "Ctrl+Alt+Z again did not redo it");
+    press(canvas, Qt::Key_Z, Qt::ControlModifier | Qt::AltModifier);
+    expect(s.document()->layers.size() == layerCount, "Ctrl+Alt+Z a third time did not undo it");
+
+    // F12: File > Revert, asking first with unsaved changes (answered Revert here); the saved layers come back.
+    {
+        const QString path = QDir(QDir::tempPath()).filePath(QStringLiteral("nekophoto-held-keys-%1.nekophoto").arg(QCoreApplication::applicationPid()));
+        QString error;
+        if (!s.saveProject(path, &error)) { std::fprintf(stderr, "held keys: could not save %s: %s\n", qPrintable(path), qPrintable(error)); return 1; }
+        QApplication::processEvents();
+        const size_t saved = s.document()->layers.size();
+        s.addBlankLayer();
+        QApplication::processEvents();
+        bool asked = false;
+        QTimer::singleShot(0, [&asked] {
+            if (auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget()))
+                for (QAbstractButton* b : box->buttons())
+                    if (b->text() == QLatin1String("Revert")) { asked = true; b->click(); return; }
+        });
+        expect(press(canvas, Qt::Key_F12, Qt::NoModifier), "F12 was not taken by File > Revert");
+        expect(asked, "Revert did not ask about the unsaved changes");
+        expect(s.document()->layers.size() == saved && !s.isModified(), "F12 did not revert to the saved project");
+        QFile::remove(path);
+    }
+
+    // Ctrl+Shift+> and < while typing: 2 pixels, 10 with Alt; Ctrl held while typing holds no tool.
+    s.selectTool(Tool::Text);
+    if (!canvas->startNewType(QPointF(100, 100), std::nullopt)) { std::fprintf(stderr, "held keys: could not start typing\n"); return 1; }
+    for (QChar c : QStringLiteral("Hello")) press(canvas, 0, Qt::NoModifier, QString(c));
+    press(canvas, Qt::Key_A, Qt::ControlModifier, QStringLiteral("a"));
+    const double size = canvas->typeStyleAtCaret() ? canvas->typeStyleAtCaret()->fontSize : 0;
+    press(canvas, Qt::Key_Control, Qt::ControlModifier);
+    expect(!canvas->heldTool(), "Ctrl while typing held the Move tool");
+    expect(!press(canvas, Qt::Key_Greater, Qt::ControlModifier | Qt::ShiftModifier, QStringLiteral(">")), "a shortcut took Ctrl+Shift+> while typing");
+    expect(canvas->typeStyleAtCaret() && canvas->typeStyleAtCaret()->fontSize == size + 2, "Ctrl+Shift+> did not make the type 2 pixels larger");
+    press(canvas, Qt::Key_Less, Qt::ControlModifier | Qt::AltModifier | Qt::ShiftModifier, QStringLiteral("<"));
+    expect(canvas->typeStyleAtCaret() && canvas->typeStyleAtCaret()->fontSize == size - 8, "Ctrl+Alt+Shift+< did not make the type 10 pixels smaller");
+    release(canvas, Qt::Key_Control, Qt::NoModifier);
+    std::printf("type size: %g -> %g\n", size, canvas->typeStyleAtCaret() ? canvas->typeStyleAtCaret()->fontSize : 0);
+    canvas->commitType();
+    expect(!s.document()->layers.empty() && s.activeLayer() && s.activeLayer()->text && s.activeLayer()->text->fontSize == size - 8, "the committed type lost its size");
+
+    std::printf("held keys: %s\n", failures ? "FAILED" : "ok");
+    return failures ? 1 : 0;
+}
+
 } // namespace
 
 int runSelfTest(MainWindow& window, const QString& name) {
@@ -864,7 +1068,8 @@ int runSelfTest(MainWindow& window, const QString& name) {
     if (name == QLatin1String("guides")) return guides(window);
     if (name == QLatin1String("canvas-menus")) return canvasMenus(window);
     if (name == QLatin1String("search")) return search(window);
-    std::fprintf(stderr, "unknown self-test %s (command-path, guides, canvas-menus, search)\n", qPrintable(name));
+    if (name == QLatin1String("held-keys")) return heldKeys(window);
+    std::fprintf(stderr, "unknown self-test %s (command-path, guides, canvas-menus, search, held-keys)\n", qPrintable(name));
     return 2;
 }
 

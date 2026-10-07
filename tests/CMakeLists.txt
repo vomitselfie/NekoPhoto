@@ -394,6 +394,11 @@ if(TARGET nekophoto)
     add_test(NAME guides_selftest COMMAND nekophoto --self-test guides)
     set_tests_properties(guides_selftest PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/selftest-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/selftest-home/data")
+    # Photoshop's held keys: Alt's Eyedropper, Ctrl's Move tool, Ctrl+Space's zoom, spring-loaded tool letters, F7,
+    # F12, Ctrl+Alt+Z and the type size keys, as synthesised key and mouse events.
+    add_test(NAME held_keys_selftest COMMAND nekophoto --lang en --self-test held-keys)
+    set_tests_properties(held_keys_selftest PROPERTIES ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/held-keys-home/config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/held-keys-home/data")
     # Edit > Search…: Ctrl+F, typed queries and their top result, Enter, Recently Used (English, for the labels).
     add_test(NAME search_selftest COMMAND nekophoto --lang en --self-test search)
     set_tests_properties(search_selftest PROPERTIES ENVIRONMENT

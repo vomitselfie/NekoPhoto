@@ -273,9 +273,46 @@ bool CanvasWidget::typeUndo(bool redo) {
     return true;
 }
 
+int CanvasWidget::typeSizeStep(const QKeyEvent* e) {
+    // Ctrl+Shift+> and < (the keys under them, for layouts that report the unshifted ones), 10 with Alt as well.
+    const Qt::KeyboardModifiers m = e->modifiers();
+    if (!(m & Qt::ControlModifier) || !(m & Qt::ShiftModifier)) return 0;
+    const int step = (m & Qt::AltModifier) ? 10 : 2;
+    switch (e->key()) {
+    case Qt::Key_Greater: case Qt::Key_Period: return step;
+    case Qt::Key_Less: case Qt::Key_Comma: return -step;
+    default: return 0;
+    }
+}
+
+void CanvasWidget::stepTypeSize(double delta) {
+    const Layer* layer = typeLayer();
+    if (!layer) return;
+    const int from = std::min(typeEdit_->caret, typeEdit_->anchor), to = std::max(typeEdit_->caret, typeEdit_->anchor);
+    auto stepped = [delta](double size) { return std::clamp(std::round(size + delta), 1.0, 2000.0); };
+    if (from == to || qText(*layer->text).isEmpty()) {
+        // Only a caret: the size the letters typed next take (or the layer's, while it has no letters).
+        if (auto run = typeStyleAtCaret()) { TextRunPatch patch; patch.fontSize = stepped(run->fontSize); applyTypeStyle(patch); }
+        return;
+    }
+    // Each selected run by the step, so mixed sizes stay mixed.
+    LayerText text = *layer->text;
+    std::vector<std::tuple<int, int, double>> parts;
+    int start = 0;
+    for (const TextRun& run : textRuns(text)) {
+        const int a = std::max(from, start), b = std::min(to, start + run.length);
+        if (a < b) parts.emplace_back(a, b - a, stepped(run.fontSize));
+        start += run.length;
+    }
+    for (const auto& [at, length, size] : parts) { TextRunPatch patch; patch.fontSize = size; styleTextRange(text, at, length, patch); }
+    if (text == *layer->text) return;
+    setTypeText(text, typeEdit_->caret, typeEdit_->anchor);
+}
+
 bool CanvasWidget::typeShortcut(QKeyEvent* e) const {
     // Keys typing takes before the menus' shortcuts: every key without Ctrl, and the editing ones with it.
     if (!(e->modifiers() & (Qt::ControlModifier | Qt::MetaModifier))) return true;
+    if (typeSizeStep(e)) return true;
     switch (e->key()) {
     case Qt::Key_A: case Qt::Key_C: case Qt::Key_V: case Qt::Key_X: case Qt::Key_Z: case Qt::Key_Y:
     case Qt::Key_Return: case Qt::Key_Enter: case Qt::Key_Left: case Qt::Key_Right: case Qt::Key_Up: case Qt::Key_Down:
@@ -305,6 +342,7 @@ bool CanvasWidget::typeKey(QKeyEvent* e) {
         emit typeEditChanged();
         return true;
     };
+    if (const int step = typeSizeStep(e)) { stepTypeSize(step); return true; }
     switch (e->key()) {
     case Qt::Key_Escape: cancelType(); return true;
     case Qt::Key_Enter:

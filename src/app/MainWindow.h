@@ -272,6 +272,10 @@ private:
     QComboBox* zoomBox_;
     QAction* undoAction_;
     QAction* redoAction_;
+    QAction* toggleStateAction_ = nullptr;
+    QAction* revertAction_ = nullptr;
+    /// File > Revert (F12): the project as last saved, after asking when there are unsaved changes.
+    void revertDocument();
     QList<QAction*> documentActions_;
     /// The supports() feature each document action is (compositor/supports.h); an action without one is 8-bit only.
     QMap<QAction*, QString> actionFeatures_;

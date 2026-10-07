@@ -323,7 +323,7 @@ int run(int argc, char** argv) {
     parser.addOption(dialogOption);
     QCommandLineOption contextMenuOption("context-menu", "Open the canvas's context menu at document point <x,y> after opening (with --tool, for screenshots); x,y,transform or x,y,type first starts a free transform or typing there.", "x,y");
     parser.addOption(contextMenuOption);
-    QCommandLineOption selfTestOption("self-test", "Developer check: run in-app test <name> (command-path, guides, canvas-menus, search) on a demo document, print the result and quit with its status.", "name");
+    QCommandLineOption selfTestOption("self-test", "Developer check: run in-app test <name> (command-path, guides, canvas-menus, search, held-keys) on a demo document, print the result and quit with its status.", "name");
     parser.addOption(selfTestOption);
     QCommandLineOption rpc("rpc", "Listen on the automation socket (JSON-RPC over a local socket, for the MCP bridge). Also on when the automation preference is set.");
     QCommandLineOption rpcSocket("rpc-socket", "Socket path for --rpc (default: $XDG_RUNTIME_DIR/nekophoto.sock, or $COMPOSITOR_RPC_SOCKET; on Windows the named pipe nekophoto-<user>).", "path");
