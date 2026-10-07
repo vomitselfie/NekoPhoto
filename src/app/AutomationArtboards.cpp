@@ -1,6 +1,8 @@
 // Automation methods: artboards and slices. Registered from AutomationServer::registerHandlers (Automation.cpp).
 #include "Automation.h"
+#include "AutomationGuard.h"
 #include "AutomationHandlers.h"
+#include <QFileInfo>
 #include "ImageConvert.h"
 #include "MainWindow.h"
 #include <QColor>
@@ -136,7 +138,11 @@ void AutomationServer::registerArtboardHandlers() {
     add("artboards.export", [session, document](const QJsonObject& p) {
         document();
         QString error;
-        const QStringList files = session()->exportArtboards(str(p, "directory"), str(p, "format", "png"), str(p, "prefix", QString()), integer(p, "quality", 90), &error);
+        const QString directory = QFileInfo(str(p, "directory")).absoluteFilePath();
+        if (const QString why = automation::writeRootRefusal(directory); !why.isEmpty()) fail(why);
+        // Each file is checked too: an existing one is refused unless overwrite, a link while write roots are set.
+        const auto check = [&p](const QString& file) { return automation::writeRefusal(file, flag(p, "overwrite", false)); };
+        const QStringList files = session()->exportArtboards(directory, str(p, "format", "png"), str(p, "prefix", QString()), integer(p, "quality", 90), &error, check);
         return exportedAtDepth(exported(files, error), *session(), str(p, "format", "png"));
     });
 
@@ -216,7 +222,11 @@ void AutomationServer::registerArtboardHandlers() {
     add("slices.export", [session, document](const QJsonObject& p) {
         document();
         QString error;
-        const QStringList files = session()->exportSlices(str(p, "directory"), str(p, "format", "png"), str(p, "prefix", QString()), integer(p, "quality", 90), &error);
+        const QString directory = QFileInfo(str(p, "directory")).absoluteFilePath();
+        if (const QString why = automation::writeRootRefusal(directory); !why.isEmpty()) fail(why);
+        // Each file is checked too: an existing one is refused unless overwrite, a link while write roots are set.
+        const auto check = [&p](const QString& file) { return automation::writeRefusal(file, flag(p, "overwrite", false)); };
+        const QStringList files = session()->exportSlices(directory, str(p, "format", "png"), str(p, "prefix", QString()), integer(p, "quality", 90), &error, check);
         return exportedAtDepth(exported(files, error), *session(), str(p, "format", "png"));
     });
 }

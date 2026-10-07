@@ -913,8 +913,12 @@ public:
     std::shared_ptr<compositor::Image16> renderRect16(const QRect& rect) const;
     /// File ▸ Export Artboards to Files / Export Slices: each one written to `directory` as `format` ("png" or "jpeg"),
     /// named `prefix` + its name. Returns the paths written; `error` says why one failed.
-    QStringList exportArtboards(const QString& directory, const QString& format, const QString& prefix, int quality, QString* error);
-    QStringList exportSlices(const QString& directory, const QString& format, const QString& prefix, int quality, QString* error);
+    /// `check`, when given, is asked about every file before anything is written; a reason it gives stops the export
+    /// with nothing written. The prefix goes through the same file-name cleaning as the names.
+    QStringList exportArtboards(const QString& directory, const QString& format, const QString& prefix, int quality, QString* error,
+                                const std::function<QString(const QString&)>& check = {});
+    QStringList exportSlices(const QString& directory, const QString& format, const QString& prefix, int quality, QString* error,
+                             const std::function<QString(const QString&)>& check = {});
 
     // ---- Smart objects (EditorSessionSmartObjects.cpp) --------------------------------------------------------
     /// The selected layers as one smart object (one undo step).

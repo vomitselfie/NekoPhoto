@@ -1836,6 +1836,136 @@ def colour_management(rpc):
     rpc.call("tabs.close", index=tab["index"], discard=True)
 
 
+def expect_error(rpc, words, method, **params):
+    try:
+        rpc.call(method, **params)
+    except RuntimeError as e:
+        assert words in str(e), e
+        return str(e)
+    raise AssertionError(f"{method} {params} should have been refused ({words})")
+
+
+def automation_limits(rpc, path, work):
+    """What automation may not do: replace files unasked, import actions that play actions, send endless requests."""
+    existing = os.path.join(work, "in", "one.png")
+    expect_error(rpc, "already exists", "document.export", path=existing)
+    assert rpc.call("document.export", path=existing, overwrite=True)["path"] == existing
+    expect_error(rpc, "already exists", "render", path=existing, maxSize=32)
+    assert rpc.call("render", path=existing, maxSize=32, overwrite=True)["path"] == existing
+    actions_file = os.path.join(work, "actions.json")
+    expect_error(rpc, "already exists", "actions.export", path=actions_file)
+    rpc.call("actions.export", path=actions_file, overwrite=True)
+    project = os.path.join(work, "limits.nekophoto")
+    rpc.call("document.save", path=project)
+    rpc.call("document.save")   # Save, to where it lives: no question
+    rpc.call("document.save", path=project)
+    other = os.path.join(work, "other.nekophoto")
+    with open(other, "w") as f:
+        f.write("x")
+    expect_error(rpc, "already exists", "document.save", path=other)
+
+    # Slices: an existing file stops the export before anything is written; the prefix can't leave the folder.
+    rpc.call("slices.add", x=0, y=0, width=8, height=8, name="corner")
+    cut = os.path.join(work, "cut")
+    first = rpc.call("slices.export", directory=cut, prefix="../escape_")["files"]
+    assert first and all(os.path.dirname(f) == cut for f in first), first
+    assert not any(n.startswith("escape_") for n in os.listdir(work)), os.listdir(work)
+    expect_error(rpc, "already exists", "slices.export", directory=cut, prefix="../escape_")
+    assert rpc.call("slices.export", directory=cut, prefix="../escape_", overwrite=True)["files"] == first
+
+    # G'MIC's time limit is clamped, not refused (G'MIC itself may be missing here).
+    try:
+        rpc.call("pixels.gmic", command="blur 1", timeoutMs=-5)
+    except RuntimeError as e:
+        assert "timeoutMs" not in str(e), e
+
+    # Imported actions are checked like actions.save: none may play, export or batch actions.
+    hostile = os.path.join(work, "hostile.json")
+    for steps in ([{"method": "actions.play", "params": {"name": "Loop"}}],
+                  [{"method": "rpc.batch", "params": {"calls": [{"method": "actions.play", "params": {"name": "Loop"}}]}}],
+                  [{"method": "actions.export", "params": {"path": "/tmp/x.json"}, "enabled": False}]):
+        with open(hostile, "w") as f:
+            json.dump({"actions": [{"name": "Loop", "steps": steps}]}, f)
+        expect_error(rpc, "actions method", "actions.import", path=hostile)
+    assert not [a for a in rpc.call("actions.list")["actions"] if a["name"].startswith("Loop")]
+    expect_error(rpc, "actions method", "actions.save", name="Loop", steps=[{"method": "rpc.batch", "params": {"calls": [{"method": "actions.play", "params": {}}]}}])
+    # One that writes files imports marked, so the panel asks before its first play; headless play is unchanged.
+    target = os.path.join(work, "imported.png")
+    with open(hostile, "w") as f:
+        json.dump({"name": "Writes", "steps": [{"method": "document.export", "params": {"path": target}}]}, f)
+    name = rpc.call("actions.import", path=hostile)["imported"][0]
+    assert rpc.call("actions.list", name=name)["actions"][0].get("confirmWrites") is True
+    assert rpc.call("actions.play", name=name)["completed"] and os.path.isfile(target)
+    assert not rpc.call("actions.play", name=name)["completed"], "a second play would replace the file unasked"
+    rpc.call("actions.delete", name=name)
+
+    # A request line past 64 MiB is answered -32600 and the connection closed.
+    if os.name != "nt":
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.connect(path)
+        chunk = b"x" * (1 << 20)
+        try:
+            for _ in range(65):
+                sock.sendall(chunk)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        sock.settimeout(30)
+        reply = b""
+        try:
+            while not reply.endswith(b"\n"):
+                data = sock.recv(65536)
+                if not data:
+                    break
+                reply += data
+        except ConnectionResetError:
+            pass
+        sock.close()
+        assert json.loads(reply)["error"]["code"] == -32600, reply[:200]
+        assert rpc.call("app.info")["name"] == "nekophoto", "the server kept serving"
+    write_roots(work)
+    print("automation limits ok")
+
+
+def write_roots(work):
+    """--rpc-write-root and --rpc-log in an instance of their own (when the binary is at hand)."""
+    import subprocess
+    binary = os.environ.get("COMPOSITOR_BIN") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "build", "src", "app", "nekophoto")
+    if os.name == "nt" or not os.path.isfile(binary):
+        print("write roots: no binary, skipped")
+        return
+    root = os.path.join(work, "root")
+    os.makedirs(root)
+    sock_path = os.path.join(tempfile.mkdtemp(prefix="np-"), "w.sock")
+    log = os.path.join(work, "audit.log")
+    env = dict(os.environ, QT_QPA_PLATFORM="offscreen")
+    env.pop("DISPLAY", None)
+    env.pop("WAYLAND_DISPLAY", None)
+    proc = subprocess.Popen([binary, "--headless", "--demo", "--rpc-socket", sock_path, "--rpc-write-root", root, "--rpc-log", log],
+                            env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        other = wait_for(sock_path)
+        assert other.call("render", path=os.path.join(root, "in.png"), maxSize=16)["path"].startswith(root)
+        expect_error(other, "outside the folders", "render", path=os.path.join(work, "out.png"), maxSize=16)
+        expect_error(other, "outside the folders", "document.export", path=os.path.join(root, "..", "up.png"))
+        expect_error(other, "outside the folders", "slices.export", directory=os.path.join(work, "elsewhere"))
+        os.symlink(work, os.path.join(root, "link"))
+        expect_error(other, "outside the folders", "render", path=os.path.join(root, "link", "via.png"), maxSize=16)
+        os.symlink(os.path.join(work, "target.png"), os.path.join(root, "final.png"))
+        expect_error(other, "symbolic link", "render", path=os.path.join(root, "final.png"), maxSize=16, overwrite=True)
+        assert not os.path.exists(os.path.join(work, "out.png")) and not os.path.exists(os.path.join(work, "target.png"))
+        other.call("layers.list", thumbnails=True)
+        other.sock.close()
+    finally:
+        proc.terminate()
+        proc.wait(30)
+    with open(log) as f:
+        lines = f.read().splitlines()
+    assert any("\trender\t" in l and "in.png" in l and "\tok\t" in l for l in lines), lines
+    assert any("\trender\t" in l and "out.png" in l and "\terror -32000\t" in l for l in lines), lines
+    assert not any("png\":" in l or "iVBOR" in l for l in lines), "the log carries no image data"
+    print("write roots and audit log ok")
+
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else None
     if not path:
@@ -2587,7 +2717,9 @@ def main():
     assert sorted(batch["written"]) == ["one.jpg", "two.jpg"] and not batch["failed"], batch
     assert len(rpc.call("tabs.list")) == tabs, "the batch left tabs open"
     assert rpc.call("actions.batch", name=name, input=source, output=os.path.join(work, "out"), format="jpg")["skipped"] == ["one.png", "two.png"]
+    assert sorted(rpc.call("actions.batch", name=name, input=source, output=os.path.join(work, "out"), format="jpg", overwrite=True)["written"]) == ["one.jpg", "two.jpg"]
     rpc.call("actions.delete", name=name)
+    automation_limits(rpc, sys.argv[1], work)
 
     # Frame animation: frames of layer states, delays and looping; an animated GIF out and back in.
     rpc.call("document.new", width=32, height=24)

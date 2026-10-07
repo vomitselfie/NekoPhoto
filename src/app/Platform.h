@@ -20,9 +20,20 @@ void attachParentConsole();
 int finishProcess(int status);
 
 /// The default name of a per-user local socket, e.g. "nekophoto.sock": a file in the runtime directory on
-/// Linux ($XDG_RUNTIME_DIR, else Qt's private temp folder), a named pipe carrying the user name on Windows
+/// Linux (runtimeDirectory(); empty when there is none), a named pipe carrying the user name on Windows
 /// (\\.\pipe\nekophoto-<user>), since pipes live in one namespace for the whole machine.
 QString defaultLocalSocket(const QString& baseName);
+
+/// Before listening at a local socket path: on Unix, removes what an instance that died left there, but only when it
+/// is a socket owned by this user; a file, folder, link or someone else's socket stays and the call returns false
+/// with the reason in `error`. Nothing there is fine. On Windows (named pipes) it does what QLocalServer::removeServer
+/// does.
+bool removeStaleSocket(const QString& serverName, QString* error);
+
+/// The per-user folder for sockets and locks: $XDG_RUNTIME_DIR (through Qt), else <temp>/runtime-<user>, made
+/// 0700 and refused unless it is a real folder owned by this user and closed to everyone else (the MCP bridge
+/// checks the same). Empty when there is no such folder. Windows: Qt's runtime folder, else the temp folder.
+QString runtimeDirectory();
 
 /// What QLocalServer and QLocalSocket are given for a --rpc-socket value. The identity on Linux. On Windows a
 /// pipe name cannot hold a backslash, so a value that looks like a path ("C:/tmp/c.sock") becomes a pipe

@@ -757,7 +757,7 @@ void MainWindow::showPanel(const QString& name) {
         if (session_->hasDocument() && session_->document()->animation.empty()) session_->timelineFramesFromLayers();
     } else if (name == "batch") {
         if (ActionLibrary::instance().actions().empty()) {
-            RecordedAction sample{tr("Web Thumbnail"), {{"image.resize", QJsonObject{{"width", 400}}, true}, {"document.export", QJsonObject{{"path", "/tmp/thumb.png"}}, false}}};
+            RecordedAction sample{tr("Web Thumbnail"), {{"image.resize", QJsonObject{{"width", 400}}, true}, {"document.export", QJsonObject{{"path", "/tmp/thumb.png"}, {"overwrite", true}}, false}}};
             ActionLibrary::instance().put(sample);
         }
         showBatchDialog();
@@ -781,7 +781,25 @@ AutomationServer* MainWindow::automationEngine() {
     return engine_;
 }
 
+bool MainWindow::confirmActionWrites(const QString& name) {
+    const RecordedAction* action = ActionLibrary::instance().find(name);
+    if (!action || !action->confirmWrites) return true;
+    const QStringList writes = ActionLibrary::writtenFiles(*action);
+    if (writes.isEmpty()) { ActionLibrary::instance().confirm(name); return true; }
+    QMessageBox box(QMessageBox::Warning, tr("Play Imported Action"),
+                    tr("“%1” was imported from a file, and this action writes files:").arg(name), QMessageBox::NoButton, this);
+    box.setInformativeText(writes.join('\n'));
+    QPushButton* play = box.addButton(tr("Play"), QMessageBox::AcceptRole);
+    box.addButton(QMessageBox::Cancel);
+    box.setDefaultButton(QMessageBox::Cancel);
+    box.exec();
+    if (box.clickedButton() != play) return false;
+    ActionLibrary::instance().confirm(name);
+    return true;
+}
+
 QString MainWindow::playAction(const QString& name) {
+    if (!confirmActionWrites(name)) return tr("“%1” was not played.").arg(name);
     try {
         const QJsonObject reply = automationEngine()->playAction(name);
         if (reply.value("completed").toBool()) return {};

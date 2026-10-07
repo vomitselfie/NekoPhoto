@@ -2,6 +2,7 @@
 // timeline (timeline.*). See docs/actions.md and docs/animation.md.
 #include "ActionLibrary.h"
 #include "Automation.h"
+#include "AutomationGuard.h"
 #include "AutomationHandlers.h"
 #include "compositor/animation.h"
 #include <QDir>
@@ -42,6 +43,17 @@ QJsonObject AutomationServer::playAction(const QString& name) {
     const RecordedAction* found = ActionLibrary::instance().find(name);
     if (!found) fail("there is no action named '" + name + "'; actions.list shows them", invalidParams);
     const RecordedAction action = *found;   // the library may change while it plays (a step that imports actions)
+    // Steps can't be actions methods (ActionLibrary::fromJson), so this is a backstop against an action reaching
+    // itself some other way: never deeper than a few.
+    constexpr int maxPlayDepth = 4;
+    if (playDepth_ >= maxPlayDepth) fail(QStringLiteral("actions can't play inside one another more than %1 deep").arg(maxPlayDepth));
+    struct Depth {
+        int& depth;
+        explicit Depth(int& d) : depth(d) { depth++; }
+        ~Depth() { depth--; }
+        Depth(const Depth&) = delete;
+        Depth& operator=(const Depth&) = delete;
+    } depth(playDepth_);
     ActionLibrary::Quiet quiet;
     QPointer<EditorSession> session = window_->session();
     const uint64_t since = session ? session->historyRevision() : 0;
@@ -70,7 +82,9 @@ QJsonObject AutomationServer::runBatch(const QString& actionName, const QString&
     if (!batchFormats.contains(format)) fail("format must be one of " + batchFormats.join(", "), invalidParams);
     const QDir in(input);
     if (input.isEmpty() || !in.exists()) fail("the input folder does not exist: " + input, invalidParams);
-    if (output.isEmpty() || !QDir().mkpath(output)) fail("couldn't make the output folder " + output, invalidParams);
+    if (output.isEmpty()) fail("give an output folder", invalidParams);
+    if (const QString why = automation::writeRootRefusal(output); !why.isEmpty()) fail(why);
+    if (!QDir().mkpath(output)) fail("couldn't make the output folder " + output, invalidParams);
     const QDir out(output);
     const QStringList patterns = {"*.png", "*.jpg", "*.jpeg", "*.webp", "*.tif", "*.tiff", "*.bmp", "*.gif", "*.tga", "*.psd", "*.psb", "*.nekophoto", "*.comp", "*.ase", "*.aseprite", "*.clip", "*.ico"};
     QStringList files;
@@ -104,7 +118,7 @@ QJsonObject AutomationServer::runBatch(const QString& actionName, const QString&
         if (!played.value("completed").toBool()) { failure("play", QJsonObject{{"error", played.value("error")}}); continue; }
         {
             ActionLibrary::Quiet quiet;
-            reply = call("document.export", {{"path", target}});
+            reply = call("document.export", {{"path", target}, {"overwrite", overwrite}});
         }
         if (reply.contains("error")) { failure("export", reply); continue; }
         done.append(QFileInfo(target).fileName());
@@ -161,8 +175,6 @@ void AutomationServer::registerActionsHandlers() {
         QJsonObject json{{"name", str(p, "name")}, {"steps", p.value("steps")}};
         auto action = ActionLibrary::fromJson(json, &error);
         if (!action) fail(error, invalidParams);
-        for (const ActionStep& s : action->steps)
-            if (s.method.startsWith("actions.")) fail("a step can't be an actions method (" + s.method + ")", invalidParams);
         ActionLibrary::instance().put(*action);
         return actionJson(*action);
     });
@@ -183,6 +195,7 @@ void AutomationServer::registerActionsHandlers() {
         if (names.isEmpty()) for (const RecordedAction& a : ActionLibrary::instance().actions()) names << a.name;
         QString error;
         const QString path = QFileInfo(str(p, "path")).absoluteFilePath();
+        if (const QString why = automation::writeRefusal(path, flag(p, "overwrite", false)); !why.isEmpty()) fail(why);
         if (!ActionLibrary::instance().exportFile(names, path, &error)) fail(error);
         return QJsonObject{{"path", path}, {"actions", QJsonArray::fromStringList(names)}};
     });

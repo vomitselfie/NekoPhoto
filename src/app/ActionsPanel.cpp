@@ -226,6 +226,7 @@ void ActionsPanel::editStep() {
     QJsonParseError error;
     const QJsonDocument doc = QJsonDocument::fromJson(text->toPlainText().toUtf8(), &error);
     if (!doc.isObject()) { QMessageBox::warning(this, dialog.windowTitle(), tr("That is not a JSON object: %1").arg(error.errorString())); return; }
+    if (const QString why = ActionLibrary::stepRefusal(s.method, doc.object()); !why.isEmpty()) { QMessageBox::warning(this, dialog.windowTitle(), why); return; }
     RecordedAction copy = *found;
     copy.steps[size_t(step)].params = doc.object();
     ActionLibrary::instance().put(copy);

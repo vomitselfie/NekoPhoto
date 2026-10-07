@@ -337,25 +337,25 @@ def document_import(path: str, x: Optional[float] = None, y: Optional[float] = N
 
 
 @outside("Save the project")
-def document_save(path: Optional[str] = None) -> str:
+def document_save(path: Optional[str] = None, overwrite: bool = False) -> str:
     """Save the project to its current path (in the form it has) or to path: a single .nekophoto file, or a .comp
     project folder when path ends in .comp (a path with neither gets .nekophoto). macCompatible in the answer is
     false when the layers total more than the 100 megapixels Compositor for macOS opens (up to a gigapixel
-    saves and opens here)."""
-    return text(call("document.save", path=os.path.abspath(path) if path else None))
+    saves and opens here). Another file or folder already at path is refused unless overwrite=true."""
+    return text(call("document.save", path=os.path.abspath(path) if path else None, overwrite=overwrite or None))
 
 
 @outside("Export an image")
 def document_export(path: str, quality: int = 85, background: str = "#ffffff", embed_profile: bool = True,
-                    convert_to_srgb: Optional[bool] = None) -> str:
+                    convert_to_srgb: Optional[bool] = None, overwrite: bool = False) -> str:
     """Flatten and export to a .png, .webp, .tif or .tga (these keep transparency; WebP at quality 100 is
     lossless), a .ico (16, 32, 48 and 256 px sizes), or .jpg (over background, at quality); .psd/.psb keep layers;
     an .svg writes vector shape layers as paths, folders as groups and every other layer as an embedded PNG; a .gif
     writes the timeline's frames as an animated GIF (the composite when there are none). PNG, JPEG, WebP, TIFF and PSD
     carry the document's colour profile (embed_profile=false leaves it out); convert_to_srgb converts the pixels to
-    sRGB first, for the web (the default for GIF)."""
+    sRGB first, for the web (the default for GIF). An existing file is refused unless overwrite=true."""
     return text(call("document.export", path=os.path.abspath(path), quality=quality, background=background,
-                     embedProfile=embed_profile, convertToSrgb=convert_to_srgb))
+                     embedProfile=embed_profile, convertToSrgb=convert_to_srgb, overwrite=overwrite or None))
 
 
 # ---- actions and the timeline --------------------------------------------------------------------
@@ -409,9 +409,9 @@ def actions_import(path: str) -> str:
 
 
 @outside("Export actions")
-def actions_export(path: str, name: Optional[str] = None, names: Optional[list[str]] = None) -> str:
-    """Write actions (one, several, or all) to a JSON file."""
-    return text(call("actions.export", path=os.path.abspath(path), name=name, names=names))
+def actions_export(path: str, name: Optional[str] = None, names: Optional[list[str]] = None, overwrite: bool = False) -> str:
+    """Write actions (one, several, or all) to a JSON file; an existing file is refused unless overwrite=true."""
+    return text(call("actions.export", path=os.path.abspath(path), name=name, names=names, overwrite=overwrite or None))
 
 
 @look("Timeline")
@@ -603,10 +603,10 @@ def artboards_delete(id: str, contents: bool = False) -> str:
 
 
 @outside("Export artboards to files")
-def artboards_export(directory: str, format: str = "png", prefix: Optional[str] = None, quality: int = 90) -> str:
+def artboards_export(directory: str, format: str = "png", prefix: Optional[str] = None, quality: int = 90, overwrite: bool = False) -> str:
     """Each visible artboard as its own PNG, JPEG, WebP or TIFF in directory (format png, jpeg, webp or tiff), named after the
-    artboard; a CMYK or Lab document's files are in sRGB."""
-    return text(call("artboards.export", directory=os.path.abspath(directory), format=format, prefix=prefix, quality=quality))
+    artboard; a CMYK or Lab document's files are in sRGB. When a file exists nothing is written unless overwrite=true."""
+    return text(call("artboards.export", directory=os.path.abspath(directory), format=format, prefix=prefix, quality=quality, overwrite=overwrite or None))
 
 
 @look("List slices")
@@ -660,9 +660,10 @@ def guides_delete(index: Optional[int] = None, all: bool = False) -> str:
 
 
 @outside("Export slices")
-def slices_export(directory: str, format: str = "png", prefix: Optional[str] = None, quality: int = 90) -> str:
-    """Each slice as its own PNG, JPEG, WebP or TIFF in directory (format png, jpeg, webp or tiff), named after the slice."""
-    return text(call("slices.export", directory=os.path.abspath(directory), format=format, prefix=prefix, quality=quality))
+def slices_export(directory: str, format: str = "png", prefix: Optional[str] = None, quality: int = 90, overwrite: bool = False) -> str:
+    """Each slice as its own PNG, JPEG, WebP or TIFF in directory (format png, jpeg, webp or tiff), named after the slice.
+    When a file exists nothing is written unless overwrite=true."""
+    return text(call("slices.export", directory=os.path.abspath(directory), format=format, prefix=prefix, quality=quality, overwrite=overwrite or None))
 
 
 @edit("Convert to smart object")
@@ -1001,7 +1002,7 @@ def pixels_bucket(x: float, y: float, color: Optional[str] = None, opacity: floa
     return text(call("pixels.bucket", x=x, y=y, color=color, opacity=opacity, tolerance=tolerance, contiguous=contiguous, antialias=antialias, allLayers=all_layers))
 
 
-@edit("Import brushes")
+@outside("Import brushes")
 def brush_import(paths: list[str]) -> str:
     """Import brush files into the brush library: Photoshop .abr, Procreate .brushset and .brush, Clip Studio .sut, or images to use as tips. Answers the new preset ids (use them as brush_stroke's preset) and notes on anything approximated."""
     return text(call("brush.import", paths=[os.path.abspath(p) for p in paths]))
@@ -1019,7 +1020,7 @@ def gradient_draw(x0: float, y0: float, x1: float, y1: float, shape: str = "line
     return text(call("gradient.draw", x0=x0, y0=y0, x1=x1, y1=y1, shape=shape, style=style, reversed=reversed, opacity=opacity, foreground=foreground, background=background, preset=preset, interpolation=interpolation))
 
 
-@edit("Import presets")
+@outside("Import presets")
 def presets_import(paths: list[str]) -> str:
     """Import Photoshop preset files into the preset library: layer styles (.asl, with the patterns they use), patterns (.pat, also added to the open document for pattern overlays and bevel textures) and gradients (.grd). Answers the names imported and notes on anything left out."""
     return text(call("presets.import", paths=[os.path.abspath(p) for p in paths]))

@@ -79,7 +79,7 @@ const MethodDoc methodDocs[] = {
      "name:string! The action; steps:array! {\"method\", \"params\", \"enabled\"} objects, as actions.list shows them"},
     {"actions.delete", "Delete an action from the library.", "name:string! The action"},
     {"actions.import", "Import actions from a JSON file (actions.export's format, or one action object); names already used get a number.", "path:string! The file"},
-    {"actions.export", "Write actions to a JSON file to share or back up.", "path:string! Where to write; name:string One action; names:array Several (default every action)"},
+    {"actions.export", "Write actions to a JSON file to share or back up.", "path:string! Where to write; name:string One action; names:array Several (default every action); overwrite:bool=false Replace an existing file"},
     // frame animation
     {"timeline.info", "The frame animation (Window > Timeline): each frame's delay and the layers it shows, the current frame (-1 without frames) and the loop count (0 forever).", ""},
     {"timeline.frame", "Change the frames (one undo step each, except select, which is none, as in Photoshop): create the first from the layers as they are, fromLayers (a frame per top-level layer), duplicate the current frame (Photoshop's New Frame), select one (the layers then show it; edits to visibility, position and opacity go into it), delete, move, or clear the animation.",
@@ -103,10 +103,10 @@ const MethodDoc methodDocs[] = {
      "bitsPerChannel:integer=16 Camera RAW only: 8 or 16; "
      "mergedOnly:bool=false PSD/PSB only: open the merged image Photoshop stored, as one layer, without the layers"},
     {"document.import", "Import an image file as a new layer.", "path:string! File path; x:number Left edge in document pixels; y:number Top edge"},
-    {"document.save", "Save as a project: a single .nekophoto file, or a .comp project folder when the path ends in .comp (the extension decides; a path with neither gets .nekophoto).", "path:string Where to save (default: where it was opened or last saved, in the same form)"},
+    {"document.save", "Save as a project: a single .nekophoto file, or a .comp project folder when the path ends in .comp (the extension decides; a path with neither gets .nekophoto).", "path:string Where to save (default: where it was opened or last saved, in the same form); overwrite:bool=false Replace an existing file or folder at path when it is not where the document already lives"},
     {"document.export", "Export as a layered Photoshop .psd (the reply lists what Photoshop cannot carry), as .svg (vector shape layers as paths, folders as groups, other layers as embedded PNGs; the reply counts them and lists what became images), the timeline's frames as an animated .gif (the composite when there are none), or the composite as .png, .jpg, .webp, .tif, .tga or .ico (16, 32, 48 and 256 px; the extension decides).",
      "path:string! Output file; quality:integer JPEG and WebP quality 1..100 (100 = lossless WebP; default 85 JPEG, 90 WebP); background:color=#ffffff Behind a JPEG's transparency; "
-     "embedProfile:bool=true Embed the document's colour profile (PNG, JPEG, WebP, TIFF; PSD always carries it); convertToSrgb:bool Convert to sRGB first, for the web (default true for GIF, false otherwise)"},
+     "embedProfile:bool=true Embed the document's colour profile (PNG, JPEG, WebP, TIFF; PSD always carries it); convertToSrgb:bool Convert to sRGB first, for the web (default true for GIF, false otherwise); overwrite:bool=false Replace an existing file at path"},
     {"document.close", "Close the document in the current tab.", "discard:bool=false Close even with unsaved changes"},
     {"canvas.resize", "Change the canvas size, keeping the layers' pixels.",
      "width:integer! Pixels; height:integer! Pixels; anchorX:number=0.5 0 keeps the left edge, 1 the right; anchorY:number=0.5 0 keeps the top, 1 the bottom"},
@@ -128,9 +128,9 @@ const MethodDoc methodDocs[] = {
      "width:integer New width (0 keeps the aspect from height); height:integer New height; scale:number Instead of a size: a factor; sampling:(nearest|smooth|high)=high Resampling; resolution:number Pixels per inch to record"},
     // seeing the result
     {"render", "The composite (what an export gives) as PNG, downscaled so its longest side is at most maxSize.",
-     "region:object {x, y, width, height} in document pixels; maxSize:number=1024 Longest side in pixels (0 = full size); zoom:number=1 Enlarge a region 2..32 times with square pixels to judge edges (region times zoom within 4096); checkerboard:bool=false Show transparency as a checkerboard; path:string Write the PNG here instead of returning base64"},
+     "region:object {x, y, width, height} in document pixels; maxSize:number=1024 Longest side in pixels (0 = full size); zoom:number=1 Enlarge a region 2..32 times with square pixels to judge edges (region times zoom within 4096); checkerboard:bool=false Show transparency as a checkerboard; path:string Write the PNG here instead of returning base64; overwrite:bool=false Replace an existing file at path"},
     {"screenshot", "The canvas as the person sees it (overlays, selection outline), or the whole window.",
-     "window:bool=false The whole window; maxSize:number=1600 Longest side; path:string Write the PNG here instead of returning base64"},
+     "window:bool=false The whole window; maxSize:number=1600 Longest side; path:string Write the PNG here instead of returning base64; overwrite:bool=false Replace an existing file at path"},
     // layers
     {"layers.list", "The layer tree, top first: id, name, depth, kind, visibility, opacity, blend, transform, mask, text.",
      "thumbnails:bool=false Add each pixel layer's 96 px thumbnail as base64 PNG"},
@@ -184,7 +184,7 @@ const MethodDoc methodDocs[] = {
      "id:layer! The artboard; x:integer Left edge; y:integer Top edge; width:integer Width; height:integer Height; name:string New name; background:color white, black, transparent or a CSS colour; moveContents:bool=true Move the layers inside with it"},
     {"artboards.delete", "Turn an artboard back into a plain folder, or delete it with everything in it.", "id:layer! The artboard; contents:bool=false Delete its layers too"},
     {"artboards.export", "File > Export Artboards to Files: each visible artboard as its own image, named after it.",
-     "directory:string! Folder to write into (created when missing); format:string=png png, jpeg, webp or tiff; prefix:string File name prefix; quality:integer=90 JPEG and WebP quality 1..100"},
+     "directory:string! Folder to write into (created when missing); format:string=png png, jpeg, webp or tiff; prefix:string File name prefix (cleaned as the names are: no folders); quality:integer=90 JPEG and WebP quality 1..100; overwrite:bool=false Replace files that exist (else nothing is written)"},
     {"slices.list", "The document's slices (named rectangles for export, kept in PSDs as Photoshop's slices).", ""},
     {"slices.add", "A new user slice.",
      "x:integer=0 Left edge; y:integer=0 Top edge; width:integer! Width; height:integer! Height; name:string Its name (default slice_N); url:string Link; target:string Link target; altTag:string Alt text"},
@@ -192,7 +192,7 @@ const MethodDoc methodDocs[] = {
      "id:integer! The slice id; x:integer Left edge; y:integer Top edge; width:integer Width; height:integer Height; name:string Name; url:string Link; target:string Link target; altTag:string Alt text"},
     {"slices.delete", "Delete a slice.", "id:integer! The slice id"},
     {"slices.export", "File > Export Slices: each slice as its own image, named after it.",
-     "directory:string! Folder to write into (created when missing); format:string=png png, jpeg, webp or tiff; prefix:string File name prefix; quality:integer=90 JPEG and WebP quality 1..100"},
+     "directory:string! Folder to write into (created when missing); format:string=png png, jpeg, webp or tiff; prefix:string File name prefix (cleaned as the names are: no folders); quality:integer=90 JPEG and WebP quality 1..100; overwrite:bool=false Replace files that exist (else nothing is written)"},
     {"guides.list", "The ruler guides (View > Show > Guides), in the order they were made: index, orientation and position in document pixels. They are saved in projects and PSDs.", ""},
     {"guides.add", "A new ruler guide (View > New Guide…); one undo step. Positions keep to 1/32 pixel, as in a PSD.",
      "orientation:(vertical|horizontal)! A vertical guide is an x position, a horizontal one a y; position:number! Document pixels from the left or top edge (may lie outside the canvas)"},
@@ -233,7 +233,7 @@ const MethodDoc methodDocs[] = {
      "id:layer The smart object layer (default: active); settings:object Camera RAW smart objects only: the new develop, keys as pixels.cameraRaw's settings (replacing the old ones). White balance for RAW: temperature in kelvin 2000..50000 with tint -150..150 (or rawTemperature and rawTint), whiteBalance As Shot|Auto|Custom or a preset the file records (Daylight|Cloudy|Shade|Tungsten|Fluorescent|Flash); Auto without numbers solves the white point; nothing about white balance opens As Shot; a temperature within -100..100 is the older form, relative to as shot"},
     {"smartObject.commit", "In a contents tab, put the contents back into the smart object they came from (as Save does).", ""},
     {"layers.render", "One layer alone as PNG, not composited with the others: with a mask, as it shows (mask applied, over the layer's bounds in document pixels); otherwise its own pixels.",
-     "id:layer! The layer; masked:bool=true Apply the layer's mask; false gives the raw pixels; maxSize:number=1024 Longest side; path:string Write the PNG here instead of returning base64"},
+     "id:layer! The layer; masked:bool=true Apply the layer's mask; false gives the raw pixels; maxSize:number=1024 Longest side; path:string Write the PNG here instead of returning base64; overwrite:bool=false Replace an existing file at path"},
     {"adjustments.get", "An adjustment layer's settings.", "id:layer The adjustment layer (default the active one)"},
     {"adjustments.set", "Change an adjustment layer's settings (keys not given keep their values).",
      "id:layer The adjustment layer (default the active one); settings:object! Settings, shaped as adjustments.defaults shows"},
@@ -287,7 +287,7 @@ const MethodDoc methodDocs[] = {
      "width:integer New width in pixels; height:integer New height in pixels; widthPercent:number=100 Or the width in percent; heightPercent:number=100 Or the height in percent; "
      "protectSelection:bool=false Keep the selected pixels"},
     {"pixels.gmic", "Run a G'MIC command line on the active layer, inside the selection. Only catalogue filters and common built-ins followed by numbers are allowed.",
-     "command:string! E.g. \"fx_bokeh 3,8,0,30\", see gmic.filters; timeoutMs:integer=300000 Give up after this long"},
+     "command:string! E.g. \"fx_bokeh 3,8,0,30\", see gmic.filters; timeoutMs:integer=300000 Give up after this long, 1..600000 milliseconds"},
     {"gmic.filters", "The G'MIC filter catalogue with parameters and defaults; filters that do not work here are left out.",
      "search:string Only filters whose name or command contains this; all:bool=false Include the unsupported filters, with the reason"},
     {"pixels.removeBackground", "Mask the active layer's background away with the background-removal model (enable and download it in Preferences first).",
@@ -297,7 +297,7 @@ const MethodDoc methodDocs[] = {
      "detailWindows:number=12 At most this many windows; flip:bool Average the mask with the mirrored image's (default the preference)"},
     // selection
     {"selection.info", "The selection: whether there is one, its bounds and area.", ""},
-    {"selection.render", "The selection as a greyscale PNG mask.", "maxSize:number=1024 Longest side; path:string Write the PNG here instead of returning base64"},
+    {"selection.render", "The selection as a greyscale PNG mask.", "maxSize:number=1024 Longest side; path:string Write the PNG here instead of returning base64; overwrite:bool=false Replace an existing file at path"},
     {"selection.all", "Select the whole canvas.", ""},
     {"selection.none", "Deselect.", ""},
     {"selection.invert", "Invert the selection.", ""},

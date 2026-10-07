@@ -16,11 +16,8 @@ namespace app {
 
 namespace {
 
-QString runtimeDirectory() {
-    QString runtime = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
-    if (runtime.isEmpty()) runtime = QDir::tempPath();
-    return runtime;
-}
+/// The private runtime folder (Platform.h); with none, the lock and socket go nowhere and every launch is its own.
+QString runtimeDirectory() { return platform::runtimeDirectory(); }
 
 } // namespace
 
@@ -33,6 +30,7 @@ QString SingleInstance::lockPath() { return runtimeDirectory() + "/nekophoto-ins
 bool SingleInstance::handOff(const QStringList& files, const QString& rpcSocket) {
     // The lock says whether an instance is running (a dead one's lock is cleared by the PID check); by age a
     // lock is never stale, or a long-running editor would lose it after half a minute.
+    if (runtimeDirectory().isEmpty()) return false;
     QLockFile probe(lockPath());
     probe.setStaleLockTime(std::chrono::milliseconds(0));
     if (probe.tryLock(0)) { probe.unlock(); return false; }
@@ -57,10 +55,11 @@ bool SingleInstance::handOff(const QStringList& files, const QString& rpcSocket)
 }
 
 bool SingleInstance::serve(MainWindow& window) {
+    if (runtimeDirectory().isEmpty()) return false;
     lock_ = std::make_unique<QLockFile>(lockPath());
     lock_->setStaleLockTime(std::chrono::milliseconds(0));
     if (!lock_->tryLock(0)) { lock_.reset(); return false; }
-    QLocalServer::removeServer(socketPath());   // left behind by an instance that died
+    if (!platform::removeStaleSocket(socketPath(), nullptr)) { lock_.reset(); return false; }   // left behind by an instance that died
     server_ = new QLocalServer(this);
     server_->setSocketOptions(QLocalServer::UserAccessOption);
     if (!server_->listen(socketPath())) { delete server_; server_ = nullptr; lock_.reset(); return false; }

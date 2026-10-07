@@ -93,6 +93,13 @@ if(TARGET Qt6::Core)
     target_include_directories(font_group_tests PRIVATE ${CMAKE_SOURCE_DIR}/src/app)
     target_link_libraries(font_group_tests PRIVATE Qt6::Core compositor_warnings)
     add_test(NAME font_group_tests COMMAND font_group_tests)
+    # The automation socket's limits and the checks on imported actions (app code; Qt Core only).
+    add_executable(automation_guard_tests automation_guard_tests.cpp ${CMAKE_SOURCE_DIR}/src/app/AutomationGuard.cpp
+                   ${CMAKE_SOURCE_DIR}/src/app/ActionLibrary.cpp ${CMAKE_SOURCE_DIR}/src/app/ActionLibrary.h)
+    set_target_properties(automation_guard_tests PROPERTIES AUTOMOC ON)
+    target_include_directories(automation_guard_tests PRIVATE ${CMAKE_SOURCE_DIR}/src/app)
+    target_link_libraries(automation_guard_tests PRIVATE Qt6::Core compositor_warnings)
+    add_test(NAME automation_guard_tests COMMAND automation_guard_tests)
     # Scrubby labels (app code on Qt Widgets, run offscreen).
     find_package(Qt6 6.4 QUIET COMPONENTS Widgets)
     if(TARGET Qt6::Widgets)

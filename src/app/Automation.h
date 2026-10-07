@@ -95,6 +95,7 @@ private:
     std::map<QLocalSocket*, Client> clients_;
     QLocalSocket* current_ = nullptr;   // the socket whose request is being handled
     std::map<QString, Handler> handlers_;
+    int playDepth_ = 0;   // actions playing inside one another (refused past a few)
 };
 
 } // namespace app

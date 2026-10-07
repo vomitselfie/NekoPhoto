@@ -2838,6 +2838,14 @@ Working: %2</source>
         <translation>アクション</translation>
     </message>
     <message>
+        <source>a step can&apos;t be an actions method (%1)</source>
+        <translation>ステップにアクションのメソッドは使えません (%1)</translation>
+    </message>
+    <message>
+        <source>a step&apos;s batch can&apos;t call an actions method (%1)</source>
+        <translation>ステップのバッチからアクションのメソッドは呼び出せません (%1)</translation>
+    </message>
+    <message>
         <source>an action needs a name</source>
         <translation>アクションには名前が必要です</translation>
     </message>
@@ -6552,6 +6560,22 @@ File &gt; New creates a blank canvas.</source>
     <message>
         <source>Couldn’t do that</source>
         <translation>実行できませんでした</translation>
+    </message>
+    <message>
+        <source>Play Imported Action</source>
+        <translation>読み込んだアクションの再生</translation>
+    </message>
+    <message>
+        <source>“%1” was imported from a file, and this action writes files:</source>
+        <translation>「%1」はファイルから読み込まれたアクションで、次のファイルを書き込みます:</translation>
+    </message>
+    <message>
+        <source>Play</source>
+        <translation>再生</translation>
+    </message>
+    <message>
+        <source>“%1” was not played.</source>
+        <translation>「%1」は再生されませんでした。</translation>
     </message>
     <message>
         <source>“%1” stopped at step %2 (%3): %4</source>

@@ -739,6 +739,7 @@ void MainWindow::showBatchDialog(const QString& action) {
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     form->addRow(buttons);
     if (dialog.exec() != QDialog::Accepted) return;
+    if (!confirmActionWrites(actions->currentText())) return;
     QSettings().setValue("batch/source", source->text());
     QSettings().setValue("batch/destination", destination->text());
     QSettings().setValue("batch/format", format->currentText());

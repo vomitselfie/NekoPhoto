@@ -86,3 +86,10 @@ action plays, the result is exported to the destination under the same name with
 tif, psd, gif or tga) and the tab closes without saving. Files already in the destination are skipped unless
 Replace is on. A file that fails to open, play or export is listed with the stage and the reason, and the batch goes
 on to the next one. A step that saves or closes the document itself works, but is rarely what a batch wants.
+
+## Imported actions
+
+A step can never be an `actions.*` method (nor an `rpc.batch` that calls one), so an action cannot play itself or
+other actions; files holding such steps are refused on import. An imported action that writes files (export, save,
+a render to a path, slices or artboards) asks once, listing what it writes, before it first plays from the panel or
+Batch. An export step replaces an existing file only when its params say `"overwrite": true`.

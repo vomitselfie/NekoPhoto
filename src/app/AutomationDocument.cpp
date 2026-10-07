@@ -4,6 +4,7 @@
 #include "Automation.h"
 #include "ColorManagement.h"
 #include "compositor/gif.h"
+#include "AutomationGuard.h"
 #include "AutomationHandlers.h"
 #include "CanvasWidget.h"
 #include "ImageConvert.h"
@@ -210,6 +211,9 @@ void AutomationServer::registerDocumentHandlers() {
         if (path.isEmpty()) fail("the document has no path yet; pass path", invalidParams);
         // The extension decides: a .comp project folder, else a .nekophoto file (added when the path has neither).
         if (!path.endsWith(".comp", Qt::CaseInsensitive) && !path.endsWith(".nekophoto", Qt::CaseInsensitive)) path += ".nekophoto";
+        // Saving where the document lives is Save; another existing file or folder needs overwrite, as Save As asks.
+        const bool own = QFileInfo(path).absoluteFilePath() == QFileInfo(session()->projectPath()).absoluteFilePath() && !session()->projectPath().isEmpty();
+        if (const QString why = automation::writeRefusal(path, own || flag(p, "overwrite", false)); !why.isEmpty()) fail(why);
         QString error;
         if (!session()->saveProject(path, &error)) fail(error);
         w->noteRecent(path);
@@ -220,6 +224,7 @@ void AutomationServer::registerDocumentHandlers() {
         session()->endTemporaryLayers();   // the Quick Mask and filter-mask layers are never written
         const Document& doc = document();
         QString path = QFileInfo(str(p, "path")).absoluteFilePath();
+        checkWrite(path, p);
         QString suffix = QFileInfo(path).suffix().toLower();
         if (suffix == "psd" || suffix == "psb") {
             // Layered: what Photoshop cannot carry comes back in the reply, the way the export dialog lists it.
