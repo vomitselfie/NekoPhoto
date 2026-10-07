@@ -148,7 +148,7 @@ void EditorSession::nudgePixels(double dx, double dy) {
     finishPixelMove();
 }
 
-std::optional<QColor> EditorSession::compositeColorAt(QPointF documentPoint) const {
+std::optional<QColor> EditorSession::compositeColorAt(QPointF documentPoint, CompositeSnapshot* snapshot) const {
     if (document_ && (document_->sampleType == SampleType::F32 || document_->colorMode != ColorMode::RGB)) {
         const std::optional<NativeSample> sample = nativeColorAt(documentPoint);
         if (!sample) return std::nullopt;
@@ -156,7 +156,9 @@ std::optional<QColor> EditorSession::compositeColorAt(QPointF documentPoint) con
     }
     if (document_ && document_->sampleType == SampleType::U16) {
         // The 16-bit composite, not the dithered one, so a flat area samples one colour.
-        auto deep = flattened16();
+        std::shared_ptr<const Image16> deep = snapshot ? snapshot->deep : nullptr;
+        if (!deep) deep = flattened16();
+        if (snapshot) snapshot->deep = deep;
         if (!deep) return std::nullopt;
         int x = int(std::floor(documentPoint.x())), y = int(std::floor(documentPoint.y()));
         if (x < 0 || y < 0 || x >= deep->width() || y >= deep->height()) return std::nullopt;
@@ -165,7 +167,9 @@ std::optional<QColor> EditorSession::compositeColorAt(QPointF documentPoint) con
         auto channel = [&](int c) { return int((uint64_t(p[c]) * 255 + p[3] / 2) / p[3]); };
         return QColor(std::min(channel(0), 255), std::min(channel(1), 255), std::min(channel(2), 255));
     }
-    auto flat = flattened();
+    std::shared_ptr<const Image> flat = snapshot ? snapshot->flat : nullptr;
+    if (!flat) flat = flattened();
+    if (snapshot) snapshot->flat = flat;
     if (!flat) return std::nullopt;
     int x = int(std::floor(documentPoint.x())), y = int(std::floor(documentPoint.y()));
     if (x < 0 || y < 0 || x >= flat->width() || y >= flat->height()) return std::nullopt;

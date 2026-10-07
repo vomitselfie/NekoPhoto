@@ -71,11 +71,14 @@ kept in the document's PSD carry, so they go into PSD files and projects as Phot
 - Auto Add/Delete (the Pen's option, on by default, as in Photoshop): with no path being drawn, a click on the target
   path's outline adds an anchor there (the curve split so its shape stays) and it can be dragged at once; a click on an
   anchor deletes it. Automation: `paths.addAnchor`, `paths.deleteAnchor`.
+- With the Pen, Ctrl is the Direct Selection tool while held (a Ctrl-click ends a path being drawn, left open, as in
+  Photoshop), and Alt-click on an anchor converts it (Photoshop's Convert Point) before Auto Add/Delete would remove it.
 - Direct Selection (A) edits the target path: the path chosen in the Paths panel, else the active layer's vector mask
   when its thumbnail was clicked, else the active shape layer's.
   Drag a point, a handle (a smooth point's other handle turns with it; Alt moves just the one), or a whole subpath
   (Shift constrains to an axis); Alt-click a point to turn it from smooth to corner or back; Delete removes the
-  chosen point. A drag is one undo step.
+  chosen point. A drag is one undo step. Ctrl-drag picks the whole component under the pointer, as Photoshop's Ctrl
+  switches to Path Selection.
 - Automation: `paths.list`, `paths.set`, `paths.select`, `paths.delete`, `paths.fill`, `paths.stroke`,
   `paths.toSelection`, `paths.toShape`, `paths.fromSelection`.
 

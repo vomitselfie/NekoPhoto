@@ -194,7 +194,7 @@ channels by name (`gray`, `red`, `green`, `blue`; in CMYK `gray`, `cyan`, `magen
 content and style, same keys plus `lineSpacing` and `letterSpacing`; on text in several styles, which
 `layers.get` lists as `text.runs`, the change carries into every run and a new size scales each), `text.styleRange` (some letters' style, as
 Photoshop's Character panel on a selection: `start` and `length` in UTF-16 units of the text, default all of it, and
-any of `font`, `size`, `bold`, `weight`, `italic`, `color`, `letterSpacing`, `baselineShift`, `leading`, `caps`
+any of `font`, `size`, `sizeBy` (pixels added to each letter's own size, as Photoshop's Ctrl+Shift+> and <), `bold`, `weight`, `italic`, `color`, `letterSpacing`, `baselineShift`, `leading`, `caps`
 (normal, small, all), `underline`, `strikethrough`; the runs split and merge as needed), `layers.delete`,
 `layers.duplicate`, `layers.viaCopy` (Layer via Copy: the selected pixels of the active layer as a new layer
 above it, the whole layer without a selection), `layers.copy` and `layers.paste` (whole layers between documents, as Edit > Copy with layers

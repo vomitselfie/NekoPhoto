@@ -190,6 +190,18 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
     case Tool::Pen: {
         // A click on the first knot closes the path; any other press adds a knot, and dragging shapes its handles.
         const auto& draft = session_->penDraft();
+        if (!draft && (modifiers & Qt::AltModifier)) {
+            // Alt over an anchor: Photoshop's Convert Point, a smooth knot made a corner and a corner smooth.
+            const PathHit hit = pathHit(view);
+            if (hit.part == PathHit::Anchor) {
+                if (auto path = session_->targetPath()) {
+                    convertPoint(path->subpaths[size_t(hit.sub)], hit.knot);
+                    session_->setTargetPath(*path, QT_TRANSLATE_NOOP("History", "Convert Point"));
+                    selectedKnot_ = std::make_pair(hit.sub, hit.knot);
+                }
+                return;
+            }
+        }
         if (draft && draft->knots.size() >= 2) {
             const QPointF first = viewPoint(QPointF(draft->knots[0].x, draft->knots[0].y));
             if (std::hypot(view.x() - first.x(), view.y() - first.y()) <= 7) { session_->penFinish(true); return; }
@@ -220,7 +232,11 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
         return;
     }
     case Tool::DirectSelect: {
-        const PathHit hit = pathHit(view);
+        // Held by Ctrl from the Pen: a path being drawn is left open first, as Photoshop's Ctrl-click ends it.
+        if (heldTool_ == Tool::DirectSelect && session_->penDraft()) session_->penFinish(false);
+        PathHit hit = pathHit(view);
+        // Ctrl with the Direct Selection tool itself: Photoshop's Path Selection, the whole component under the pointer.
+        if ((modifiers & Qt::ControlModifier) && heldTool_ != Tool::DirectSelect && hit.part != PathHit::None) hit = PathHit{hit.sub, -1, PathHit::Subpath};
         if (hit.part == PathHit::None) { selectedKnot_.reset(); session_->setSelectedSubpath(std::nullopt); update(); return; }
         session_->setSelectedSubpath(hit.sub);   // its component's operation shows in the bar
         auto path = session_->targetPath();
@@ -326,7 +342,11 @@ void CanvasWidget::press(QPointF view, Qt::MouseButton button, Qt::KeyboardModif
         return;
     case Tool::Eyedropper:
         // Alt picks the background colour; held from a painting tool, Alt is what brought the Eyedropper: foreground.
-        sampleColor(doc, !heldTool_ && (modifiers & Qt::AltModifier));
+        // Dragging keeps sampling under the pointer, as Photoshop's Eyedropper does.
+        sampleBackground_ = !heldTool_ && (modifiers & Qt::AltModifier);
+        sampleSnapshot_.emplace();
+        drag_ = Drag::Sample;   // first: the colour's change must not let go of a held Eyedropper
+        sampleColor(doc, sampleBackground_);
         return;
     case Tool::Zoom:
         zoomRect_.reset();
@@ -590,6 +610,9 @@ void CanvasWidget::move(QPointF view, Qt::MouseButtons buttons, Qt::KeyboardModi
     case Drag::Box:
         moveBox(doc, modifiers);
         break;
+    case Drag::Sample:
+        sampleColor(doc, sampleBackground_);
+        break;
     default: break;
     }
     lastView_ = view;
@@ -691,6 +714,9 @@ void CanvasWidget::release(QPointF view, Qt::MouseButton button, Qt::KeyboardMod
     case Drag::Box:
         releaseBox();
         break;
+    case Drag::Sample:
+        sampleSnapshot_.reset();
+        break;
     case Drag::Crop: case Drag::CropMove: case Drag::CropResize:
         session_->setSnapGuides({}, {});
         if (crop_ && (crop_->width() < 1 || crop_->height() < 1)) crop_ = QRectF(QPointF(0, 0), documentSize());
@@ -779,10 +805,11 @@ void CanvasWidget::cancelCrop() {
 }
 
 void CanvasWidget::sampleColor(QPointF doc, bool background) {
-    std::optional<QColor> sampled = session_->compositeColorAt(doc);
+    std::optional<QColor> sampled = session_->compositeColorAt(doc, sampleSnapshot_ ? &*sampleSnapshot_ : nullptr);
     if (!sampled) return;
     // Copied out by value: GCC 13 misreads a dereference here as a dangling pointer.
     QColor color = sampled.value_or(QColor());
+    if (color == (background ? session_->backgroundColor : session_->foregroundColor)) return;   // a drag over one colour
     if (background) session_->backgroundColor = color; else session_->foregroundColor = color;
     session_->refreshGradient();
     emit session_->toolChanged();

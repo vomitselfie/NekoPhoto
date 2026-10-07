@@ -488,17 +488,17 @@ def layers_add(kind: str = "pixels", name: Optional[str] = None, adjustment_kind
 @edit("Edit a text layer")
 def text_set(id: Optional[str] = None, text_content: Optional[str] = None, font: Optional[str] = None, size: Optional[float] = None, bold: Optional[bool] = None,
              italic: Optional[bool] = None, color: Optional[str] = None, align: Optional[str] = None, line_spacing: Optional[float] = None, letter_spacing: Optional[float] = None) -> str:
-    """Change a text layer's content or style (the active layer, or id): text_content, font, size (px), bold, italic, color (CSS), align (left, center, right), line_spacing (multiple of the line height), letter_spacing (px). The layer must still be text, not painted on."""
+    """Change a text layer's content or style (the active layer, or id): text_content, font, size (px), size_by (px added to each letter's own size, as Photoshop's Ctrl+Shift+> and <; not with size), bold, italic, color (CSS), align (left, center, right), line_spacing (multiple of the line height), letter_spacing (px). The layer must still be text, not painted on."""
     return text(call("text.set", id=id, text=text_content, font=font, size=size, bold=bold, italic=italic, color=color, align=align, lineSpacing=line_spacing, letterSpacing=letter_spacing))
 
 
 @edit("Style letters of a text layer")
 def text_style_range(id: Optional[str] = None, start: Optional[int] = None, length: Optional[int] = None, font: Optional[str] = None, size: Optional[float] = None,
-                     bold: Optional[bool] = None, weight: Optional[int] = None, italic: Optional[bool] = None, color: Optional[str] = None,
+                     size_by: Optional[float] = None, bold: Optional[bool] = None, weight: Optional[int] = None, italic: Optional[bool] = None, color: Optional[str] = None,
                      letter_spacing: Optional[float] = None, baseline_shift: Optional[float] = None, leading: Optional[float] = None, caps: Optional[str] = None,
                      underline: Optional[bool] = None, strikethrough: Optional[bool] = None) -> str:
-    """Style some letters of a text layer (the active layer, or id), like Photoshop's Character panel on a selection: start and length count UTF-16 units of the text (default all of it); font, size (px), bold, weight (100..900, 0 for auto), italic, color (CSS), letter_spacing (tracking, px), baseline_shift (px up), leading (px, 0 auto), caps (normal, small, all), underline, strikethrough. Only the fields given change; layers_get lists the resulting text.runs."""
-    return text(call("text.styleRange", id=id, start=start, length=length, font=font, size=size, bold=bold, weight=weight, italic=italic, color=color,
+    """Style some letters of a text layer (the active layer, or id), like Photoshop's Character panel on a selection: start and length count UTF-16 units of the text (default all of it); font, size (px), size_by (px added to each letter's own size, as Photoshop's Ctrl+Shift+> and <; not with size), bold, weight (100..900, 0 for auto), italic, color (CSS), letter_spacing (tracking, px), baseline_shift (px up), leading (px, 0 auto), caps (normal, small, all), underline, strikethrough. Only the fields given change; layers_get lists the resulting text.runs."""
+    return text(call("text.styleRange", id=id, start=start, length=length, font=font, size=size, sizeBy=size_by, bold=bold, weight=weight, italic=italic, color=color,
                      letterSpacing=letter_spacing, baselineShift=baseline_shift, leading=leading, caps=caps, underline=underline, strikethrough=strikethrough))
 
 

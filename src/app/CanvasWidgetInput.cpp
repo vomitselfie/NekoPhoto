@@ -53,7 +53,10 @@ void CanvasWidget::updateCursor(QPointF view, Qt::KeyboardModifiers modifiers) {
         return;
     }
     case Tool::Brush: case Tool::SpotHealing: case Tool::CloneStamp: case Tool::Smudge: case Tool::Dodge: setCursor(Qt::BlankCursor); return;
-    case Tool::Pen: setCursor(Qt::CrossCursor); return;
+    case Tool::Pen:
+        // Alt over an anchor: a click converts it.
+        setCursor((modifiers & Qt::AltModifier) && !session_->penDraft() && pathHit(view).part == PathHit::Anchor ? Qt::PointingHandCursor : Qt::CrossCursor);
+        return;
     case Tool::DirectSelect: setCursor(Qt::ArrowCursor); return;
     case Tool::Marquee: case Tool::Lasso: case Tool::Wand: case Tool::Scribble: case Tool::Crop: case Tool::Artboard: case Tool::Slice: case Tool::Gradient: case Tool::Shape: case Tool::Eyedropper: case Tool::PaintBucket: setCursor(Qt::CrossCursor); return;
     case Tool::Text: setCursor(Qt::IBeamCursor); return;
@@ -126,6 +129,8 @@ void CanvasWidget::keyPressEvent(QKeyEvent* e) {
         if (!e->isAutoRepeat()) refreshHeldTool(modifiers);
         if (hover_) updateCursor(*hover_, modifiers);
     }
+    // Ctrl+Shift+> and < with the Move or Type tool, nothing being typed: the selected type layers' sizes.
+    if (const int sizeStep = typeSizeStep(e); sizeStep && (session_->tool() == Tool::Move || session_->tool() == Tool::Text) && stepLayerTypeSize(sizeStep)) return;
     double step = (e->modifiers() & Qt::ShiftModifier) ? 10 : 1;
     switch (e->key()) {
     case Qt::Key_Escape:
@@ -152,7 +157,7 @@ void CanvasWidget::keyPressEvent(QKeyEvent* e) {
         return;
     case Qt::Key_Backspace: case Qt::Key_Delete:
         if (session_->lassoKind == LassoKind::Polygonal && !lassoPoints_.empty()) { lassoPoints_.pop_back(); update(); return; }
-        if (session_->tool() == Tool::DirectSelect && selectedKnot_) {
+        if ((canvasTool() == Tool::DirectSelect || (session_->tool() == Tool::Pen && !session_->penDraft())) && selectedKnot_) {
             // The chosen knot goes; a subpath left with fewer than two goes with it.
             if (auto path = session_->targetPath()) {
                 auto [sub, knot] = *selectedKnot_;
@@ -225,9 +230,9 @@ void CanvasWidget::keyReleaseEvent(QKeyEvent* e) {
 
 namespace {
 
-/// Tools Ctrl turns into the Move tool while held, as in Photoshop. Not the Move group itself, the Pen and Direct
-/// Selection (where Ctrl is Photoshop's Direct Selection), the shapes and slices (path and slice selection), the Crop
-/// tool, the Hand and the Zoom.
+/// Tools Ctrl turns into the Move tool while held, as in Photoshop. Not the Move group itself, the Pen (where Ctrl is
+/// the Direct Selection tool) and Direct Selection (where it picks whole components, as Path Selection), the shapes
+/// and slices (path and slice selection), the Crop tool, the Hand and the Zoom.
 bool ctrlMoves(Tool tool) {
     switch (tool) {
     case Tool::Marquee: case Tool::Lasso: case Tool::Wand: case Tool::Scribble: case Tool::Brush: case Tool::SpotHealing:
@@ -248,11 +253,14 @@ void CanvasWidget::refreshHeldTool(Qt::KeyboardModifiers modifiers) {
     if (session_->hasDocument() && !typeEdit_ && !session_->brushActive() && !session_->warpActive() && !session_->pixelMoveActive()) {
         // Something half made (a path, a shape, a gradient, a lasso, a cage, a dialog picking from the canvas) keeps
         // its tool; zooming does not disturb it.
-        const bool busy = session_->canvasPressHook || session_->warpCage() || session_->penDraft() || session_->shapeDraft() || session_->gradientPending()
+        // The Pen's own path is the exception: Ctrl reaches its anchors (Photoshop ends the path at the click).
+        const bool penCtrl = tool == Tool::Pen && ctrl;
+        const bool busy = session_->canvasPressHook || session_->warpCage() || (session_->penDraft() && !penCtrl) || session_->shapeDraft() || session_->gradientPending()
                           || (session_->transformEdit() && session_->transformEdit()->persistent) || !lassoPoints_.empty();
         if (spaceHeld_ && ctrl) held = Tool::Zoom;   // Ctrl+Space zooms in, Ctrl+Alt+Space out (the Zoom tool's Alt)
         else if (spaceHeld_ || busy) held.reset();   // Space alone is the Hand, as before
         else if (ctrl && ctrlMoves(tool)) held = Tool::Move;
+        else if (penCtrl) held = Tool::DirectSelect;   // Photoshop's Pen: Ctrl is the Direct Selection tool while held
         else if (alt && !ctrl && ((tool == Tool::Brush && !session_->brushErase) || tool == Tool::PaintBucket || tool == Tool::Gradient)) held = Tool::Eyedropper;
     }
     if (held == tool) held.reset();

@@ -312,7 +312,7 @@ CanvasWidget::PathHit CanvasWidget::pathHit(QPointF view) const {
 
 void CanvasWidget::drawPathOverlay(QPainter& painter) {
     auto map = [this](double x, double y) { return viewPoint(QPointF(x, y)); };
-    const Tool tool = session_->tool();
+    const Tool tool = canvasTool();   // the Direct Selection tool held from the Pen shows the anchors too
     // The pen's path so far, and the segment to where the pointer is.
     if (const auto& draft = session_->penDraft()) {
         compositor::VectorPath p;

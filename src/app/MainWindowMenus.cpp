@@ -142,15 +142,34 @@ void MainWindow::buildToolRail() {
     swatches_ = new ColorSwatches;
     // Photoshop's spring-loaded tool keys: a tool's letter held a moment (or held while the tool is used) goes back
     // to the tool before it when let go; a tap keeps the new tool. Held keys do not repeat the switch.
-    auto* springs = new ShortcutWatch(this, [this](QAction* a, const QKeySequence& keys) {
-        const Tool before = session_->tool();
-        const bool erasing = session_->brushErase;
+    // Shift+letter (the next tool or kind of the letter's group) springs back the same way, to the tool and kind before.
+    struct ToolState {
+        Tool tool; bool erase; MarqueeKind marquee; LassoKind lasso; VectorShapeKind shape; int spotHealing, spotHealingType;
+        compositor::ToningKind toning; BlurToolMode blur;
+        bool operator==(const ToolState&) const = default;
+    };
+    auto toolState = [this] {
+        return ToolState{session_->tool(), session_->brushErase, session_->marqueeKind, session_->lassoKind, session_->shapeTool.kind,
+                         session_->spotHealingMode, spotHealingType_, session_->toning.kind, session_->blurMode};
+    };
+    auto* springs = new ShortcutWatch(this, [this, toolState](QAction* a, const QKeySequence& keys) {
+        const ToolState before = toolState();
         a->trigger();
-        if (keys.isEmpty() || (session_->tool() == before && session_->brushErase == erasing)) return;
-        canvas_->armToolSpring(keys[0].key(), [this, before, erasing] {
-            if (before == Tool::Brush && erasing) eraserAction_->trigger();
-            else if (QAction* back = toolActions_.value(before)) back->trigger();
-            else session_->selectTool(before);
+        if (keys.isEmpty() || toolState() == before) return;
+        canvas_->armToolSpring(keys[0].key(), [this, before] {
+            if (session_->lassoKind != before.lasso) canvas_->cancelLasso();
+            if (session_->shapeTool.kind != before.shape) session_->cancelShape();
+            session_->marqueeKind = before.marquee;
+            session_->lassoKind = before.lasso;
+            session_->shapeTool.kind = before.shape;
+            session_->spotHealingMode = before.spotHealing;
+            spotHealingType_ = before.spotHealingType;
+            session_->toning.kind = before.toning;
+            session_->blurMode = before.blur;
+            if (before.tool == Tool::Brush && before.erase) eraserAction_->trigger();
+            else if (QAction* back = toolActions_.value(before.tool)) back->trigger();
+            else session_->selectTool(before.tool);
+            emit session_->toolChanged();
         });
     });
     for (QAction* a : rail->actions()) if (a->isCheckable()) { a->setAutoRepeat(false); a->installEventFilter(springs); }
@@ -178,7 +197,15 @@ void MainWindow::buildToolRail() {
     rail->addWidget(swatches_);
     addToolBar(Qt::LeftToolBarArea, rail);
     // Shift-letter switches a tool's kind without leaving it.
-    auto kindKey = [this](const QString& key, auto slot) { auto* a = new QAction(this); a->setShortcut(QKeySequence(key)); connect(a, &QAction::triggered, this, slot); addAction(a); };
+    // Each springs back when held, as the plain letters do, and does not repeat while held.
+    auto kindKey = [this, springs](const QString& key, auto slot) {
+        auto* a = new QAction(this);
+        a->setShortcut(QKeySequence(key));
+        a->setAutoRepeat(false);
+        a->installEventFilter(springs);
+        connect(a, &QAction::triggered, this, slot);
+        addAction(a);
+    };
     kindKey("Shift+M", [this] { session_->marqueeKind = session_->marqueeKind == MarqueeKind::Rectangle ? MarqueeKind::Ellipse : MarqueeKind::Rectangle; session_->selectTool(Tool::Marquee); emit session_->toolChanged(); });
     kindKey("Shift+L", [this] { session_->lassoKind = session_->lassoKind == LassoKind::Freehand ? LassoKind::Polygonal : LassoKind::Freehand; canvas_->cancelLasso(); session_->selectTool(Tool::Lasso); emit session_->toolChanged(); });
     kindKey("Shift+U", [this] { session_->selectTool(Tool::Shape); session_->toggleShapeKind(); });
