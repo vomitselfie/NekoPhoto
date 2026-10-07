@@ -22,6 +22,7 @@
 #include "ExportAsDialog.h"
 #include "FilterDialog.h"
 #include "LayersPanel.h"
+#include "ModelStore.h"
 #include "Names.h"
 #include "PathsPanel.h"
 #include "MainWindow.h"
@@ -436,7 +437,7 @@ int menuCommands(MainWindow& w) {
     MainWindow* window = &w;
     auto revertFiles = std::make_shared<QStringList>();   // the projects the Revert step saves, removed at the end
 
-    const std::vector<Converted> steps = {
+    std::vector<Converted> steps = {
         {"New Layer Below", "Paint", {}, trigger({"Layer", "New Layer Below"}), [](EditorSession& s, auto&) { s.addBlankLayer(true); }, {"layers.add"}},
         {"New Folder", "Paint", {}, trigger({"Layer", "New Folder"}), [](EditorSession& s, auto&) { s.addGroup(); }, {"layers.add"}},
         {"New Adjustment Layer", "Paint", {}, trigger({"Layer", "New Adjustment Layer", names::adjustmentKind(AdjustmentKind::Curves)}),
@@ -630,6 +631,17 @@ int menuCommands(MainWindow& w) {
          trigger({"Layer", "Merge Visible"}), [](EditorSession& s, auto&) { s.mergeVisible(); }, {"layers.merge"}},
     };
 
+    // Select > Subject: selection.subject with a box 5% inside the canvas, when the click-to-select model is there
+    // (a developer's machine); without it (CI) the item is greyed and says why, checked below.
+    if (ModelStore::promptReady())
+        steps.insert(steps.end() - 2, Converted{"Subject", "Background", {}, trigger({"Select", "Subject"}), [](EditorSession& s, auto&) {
+            const Document& d = *s.document();
+            s.clearClickPrompts();
+            s.setQuickSelectClicks(true);
+            s.setClickBox(QPointF(d.width / 20, d.height / 20), QPointF(d.width - d.width / 20, d.height - d.height / 20), false);
+            s.runClickSelection(SelectionMode::Replace, nullptr);
+        }, {"selection.subject"}});
+
     int failures = 0;
     auto prepare = [](EditorSession& s) {
         buildDemoDocument(s);
@@ -645,6 +657,14 @@ int menuCommands(MainWindow& w) {
     w.newTab();
     EditorSession& a = *w.session();
     prepare(a);
+    if (!ModelStore::promptReady()) {
+        QAction* subject = menuItem(w, {"Select", "Subject"});
+        if (!subject) failures++;
+        else if (subject->isEnabled() || subject->toolTip().isEmpty() || !subject->toolTip().contains(QLatin1String("model"))) {
+            std::fprintf(stderr, "Select > Subject without the click-to-select model: enabled %d, tooltip \"%s\"\n", subject->isEnabled(), qPrintable(subject->toolTip()));
+            failures++;
+        }
+    }
     ActionLibrary::instance().startRecording(QStringLiteral("menu-commands self-test"));
     std::vector<int> recordedBefore;
     auto recorded = [] {

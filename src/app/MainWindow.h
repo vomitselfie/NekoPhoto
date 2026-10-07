@@ -238,7 +238,12 @@ private:
     void copyLayerFromPayload(int tabIndex, const QString& payload);
     void showPreferences();
     void refreshBackgroundAction();
+    /// Select > Subject: selection.subject prompted with a box inset 5% from the canvas's edges.
+    void selectSubject();
+    /// Enables Select > Subject only when the click-to-select model can run, its tooltip saying why not.
+    void refreshSelectSubject();
     QAction* removeBackgroundAction_ = nullptr;
+    QAction* selectSubjectAction_ = nullptr;
     QString* errorSink_ = nullptr;
     bool skipConfirm_ = false;
     AutomationServer* automation_ = nullptr;

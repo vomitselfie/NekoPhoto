@@ -254,7 +254,8 @@ Selection: `selection.all`, `selection.none`, `selection.invert`, `selection.res
 `selection.scribble` (`foreground` and `background`: lists of strokes, each a list of `[x, y]`
 points; `size`, `refine` 0..40, `clear`), `selection.subject` (click to select with the EfficientSAM
 model once downloaded: `foreground` and `background` points as `[x, y]` lists, an optional `box`
-`[x0, y0, x1, y1]`, `refine`, `clear`; `app.info` reports `clickSelect` when it can run) (all take
+`[x0, y0, x1, y1]`, `refine`, `clear`; `app.info` reports `clickSelect` when it can run; Select > Subject sends it a
+`box` 5% inside the canvas) (all take
 `mode` replace, add, subtract or intersect),
 `selection.fromLayer`, `selection.grow`, `selection.feather` (`radius`), `selection.smooth`
 (`radius`), `selection.border` (`width`).

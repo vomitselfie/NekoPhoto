@@ -6931,8 +6931,20 @@ File &gt; New creates a blank canvas.</source>
         <translation>塗りつぶし</translation>
     </message>
     <message>
+        <source>Subject</source>
+        <translation>被写体を選択</translation>
+    </message>
+    <message>
         <source>Unavailable: this build has no OpenCV</source>
         <translation>使用不可: このビルドには OpenCV が含まれていません</translation>
+    </message>
+    <message>
+        <source>The click-to-select model isn’t downloaded: choose the Click engine in the Quick Selection tool’s options and download it</source>
+        <translation>クリックで選択するモデルがダウンロードされていません。クイック選択ツールのオプションでクリックエンジンを選んでダウンロードしてください</translation>
+    </message>
+    <message>
+        <source>Select the main subject of the image</source>
+        <translation>画像の主な被写体を選択します</translation>
     </message>
     <message>
         <source>Off: enable it in Edit &gt; Preferences</source>

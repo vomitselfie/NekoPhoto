@@ -675,6 +675,10 @@ void MainWindow::buildMenus() {
     nameAction("select.reselect", needsDocument(select->addAction(tr("&Reselect"), QKeySequence("Shift+Ctrl+D"), this, [this] { if (session_->canReselect()) runCommand("selection.reselect", {}, tr("Reselect")); }), "edit.selection"));
     nameAction("select.inverse", needsDocument(select->addAction(tr("&Inverse"), QKeySequence("Ctrl+Shift+I"), this, [this] { runCommand("selection.invert", {}, tr("Inverse")); }), "edit.selection"));
     needsDocument(select->addAction(tr("Edit in &Quick Mask Mode"), QKeySequence("Q"), this, [this] { session_->toggleQuickMask(); }), "edit.selection");
+    // Photoshop's Select > Subject, through selection.subject; greyed, saying why, without the click-to-select model.
+    select->addSeparator();
+    selectSubjectAction_ = nameAction("select.subject", select->addAction(tr("Subject"), this, &MainWindow::selectSubject));
+    connect(select, &QMenu::aboutToShow, this, &MainWindow::refreshSelectSubject);
     select->addSeparator();
     QMenu* modify = select->addMenu(tr("&Modify"));
     needsDocument(modify->addAction(tr("&Expand…"), this, [this] { bool ok; int n = QInputDialog::getInt(this, tr("Expand Selection"), tr("Pixels"), 1, 1, 500, 1, &ok); if (ok) runCommand("selection.grow", {{"amount", n}}, tr("Expand Selection")); }), "edit.selection");
