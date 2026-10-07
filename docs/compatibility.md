@@ -92,7 +92,7 @@ some G'MIC filters) are listed in [legal-boundaries.md](legal-boundaries.md).
 - **Not carried**: resolution (ours is written), thumbnails, the ID seed; guides, slices and paths once the canvas
   size changes; a live shape's origination once it moves.
 - **Layer styles not drawn yet**: contours on shadows and glows (drawn linear), noise and jitter, Dissolve (drawn
-  as Normal), "Layer Mask Hides Effects". A bevel with a non-monotone contour is 6.1 levels off on average.
+  as Normal), "Layer Mask Hides Effects". An Outer Bevel's texture is 5.2 levels off on average.
 - **Vector masks**: shape feather is 5.4 levels off (Photoshop feathers the shape as one render); gradient and
   pattern strokes are not drawn.
 - **Smart objects**: no dragging a Smart Filter between smart objects, no editing a stack that holds a filter not

@@ -367,10 +367,6 @@ Mask bevelHeight(const Mask& alpha, int w, int h, const Bevel& bevel, float size
         }
         if (bevel.technique == Bevel::Technique::ChiselSoft) boxBlur(height, w, h, 1, 1);
     }
-    if (bevel.soften > 0) {
-        const int support = int(std::ceil(bevel.soften)), passes = std::min(3, support);
-        for (int p = 0; p < passes; p++) boxBlur(height, w, h, support / passes + (p < support % passes ? 1 : 0), 1);
-    }
     for (auto& v : height) v = unit(v);
     return height;
 }
@@ -1130,39 +1126,129 @@ void drawStyled(const StyledDraw& in, Img& target) {
         } else matte = alpha;
         const float size = bevel.size * float(s);
         const bool pillowFamily = bevel.kind == Bevel::Kind::Pillow || bevel.kind == Bevel::Kind::Emboss;
-        Mask height = bevelHeight(matte, w, h, bevel, pillowFamily ? size * 0.5f : size);
+        const Mask base = bevelHeight(matte, w, h, bevel, pillowFamily ? size * 0.5f : size);
         float slopeGain = 1;
         if (bevel.useContour && bevel.contour.linear()) slopeGain = 1 / std::clamp(bevel.contourRange, 0.01f, 1.0f);
-        else if (bevel.useContour) {
-            const auto lut = bevel.contour.lut();
-            const float range = std::clamp(bevel.contourRange, 0.01f, 1.0f);
-            for (auto& v : height) v = sampleContour(lut, unit(v / range), bevel.contourAntialiased);
-        }
+        const bool contourCurve = bevel.useContour && !bevel.contour.linear();
+        const auto contourLut = contourCurve ? bevel.contour.lut() : std::array<uint8_t, 256>{};
+        const float contourRange = std::clamp(bevel.contourRange, 0.01f, 1.0f);
+        // The texture's bump before its coverage: the pattern's luminance, Photoshop raising the dark texels (Invert
+        // raises the light ones, a negative depth flips it again), box-smoothed so shading covers whole texel plateaus.
+        // An Outer Bevel's texture comes out the other way up (photoshop-bevel-subs: Invert with a negative depth
+        // raises the light texels there).
+        Mask bump;
         if (bevel.useTexture) {
             if (const PatternTile* tile = findPattern(bevel.texturePattern)) {
                 const Pattern p = patternFor(tile, style, bevel.textureScale, 0, bevel.textureLinkWithLayer, bevel.texturePhaseX, bevel.texturePhaseY);
-                Mask bump(height.size(), 0);
+                bump.assign(base.size(), 0);
+                const bool raiseLight = bevel.textureInvert != (bevel.kind == Bevel::Kind::Outer);
                 for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
                     float c[3], a;
                     p.sample(std::floor(padded.x + (x + 0.5) / s), std::floor(padded.y + (y + 0.5) / s), c, a);
                     const float lum = (299 * c[0] + 590 * c[1] + 111 * c[2]) / 1000;
-                    bump[size_t(y) * w + x] = bevel.textureInvert ? lum - 0.5f : 0.5f - lum;
+                    bump[size_t(y) * w + x] = raiseLight ? lum - 0.5f : 0.5f - lum;
                 }
                 boxBlur(bump, w, h, 1, 1);
-                for (size_t i = 0; i < height.size(); i++) {
-                    const float coverage = bevel.kind == Bevel::Kind::Inner || bevel.kind == Bevel::Kind::StrokeEmboss ? matte[i] : 1 - std::abs(unit(height[i]) * 2 - 1);
-                    height[i] += bump[i] * bevel.textureDepth * unit(coverage);
-                }
             }
         }
+        // The surface at an offset of (dx, dy) pixels: the base field (bilinear between pixels, nothing beyond the
+        // window), through the Contour, plus the texture over the face it covers.
+        auto surfaceAt = [&](float dx, float dy, Mask& out) {
+            out.resize(base.size());
+            const int ix = int(std::floor(dx)), iy = int(std::floor(dy));
+            const float fx = dx - float(ix), fy = dy - float(iy);
+            auto at = [&](const Mask& m, int x, int y) { return x < 0 || y < 0 || x >= w || y >= h ? 0.0f : m[size_t(y) * w + x]; };
+            auto lerp2 = [&](const Mask& m, int x, int y) {
+                x += ix; y += iy;
+                if (fx == 0 && fy == 0) return at(m, x, y);
+                return (at(m, x, y) * (1 - fx) + at(m, x + 1, y) * fx) * (1 - fy) + (at(m, x, y + 1) * (1 - fx) + at(m, x + 1, y + 1) * fx) * fy;
+            };
+            parallelRows(0, h, [&](int a, int b) {
+                for (int y = a; y < b; y++) for (int x = 0; x < w; x++) {
+                    float v = lerp2(base, x, y);
+                    if (contourCurve) v = sampleContour(contourLut, unit(v / contourRange), bevel.contourAntialiased);
+                    if (!bump.empty()) {
+                        const float coverage = bevel.kind == Bevel::Kind::Inner || bevel.kind == Bevel::Kind::StrokeEmboss ? lerp2(matte, x, y) : 1 - std::abs(unit(v) * 2 - 1);
+                        v += lerp2(bump, x, y) * bevel.textureDepth * unit(coverage);
+                    }
+                    out[size_t(y) * w + x] = v;
+                }
+            }, 32);
+        };
         const float angle = (180 - bevel.angle) * kPi / 180, altitude = std::clamp(bevel.altitude, 0.0f, 90.0f) * kPi / 180;
         const float lx = -std::cos(angle) * std::cos(altitude), ly = -std::sin(angle) * std::cos(altitude), lz = std::sin(altitude);
         const float normalScale = pillowFamily ? 0.5f * std::clamp(bevel.depth, 0.25f, 10.0f) * float(std::max(2L, std::lround(size * 0.5f))) * slopeGain
                                                : 0.5f * std::clamp(bevel.depth, 0.01f, 10.0f) * std::max(1.0f, size) * slopeGain;
         const bool glossLinear = bevel.gloss.linear();
         const auto glossLut = glossLinear ? std::array<uint8_t, 256>{} : bevel.gloss.lut();
+        // The signed light on a slope (gx, gy) turned by `sign`: the highlight's share above zero, the shadow's below.
+        auto lighting = [&](float gx, float gy, float sign) {
+            gx *= sign; gy *= sign;
+            const float length = std::sqrt(gx * gx + gy * gy + 1);
+            const float raw = gx * lx + gy * ly + lz, surface = raw / std::max(0.0001f, length);
+            float l = surface >= lz ? (surface - lz) / std::max(0.01f, 1 - lz) : -((lz - surface) / std::max(0.01f, lz));
+            if (pillowFamily && raw < lz) l = -((lz - raw) / std::max(0.01f, lz));
+            if (!glossLinear) {
+                // Gloss Contour remaps the Lambert light value; the split then runs against the flat face's sin(altitude).
+                const float remapped = sampleContour(glossLut, unit(surface), bevel.glossAntialiased);
+                l = remapped >= lz ? (remapped - lz) / std::max(0.01f, 1 - lz) : -((lz - remapped) / std::max(0.01f, lz));
+                if (pillowFamily && remapped < lz) {
+                    const float rr = sampleContour(glossLut, unit(raw), bevel.glossAntialiased);
+                    if (rr < lz) l = -((lz - rr) / std::max(0.01f, lz));
+                }
+            }
+            return l;
+        };
+        // The shading as signed light per pixel. Pillow Emboss lights the outside of the contour one way up and the
+        // inside the other (both at an anti-aliased edge, weighted by the matte); the other styles one way.
+        const bool pillow = bevel.kind == Bevel::Kind::Pillow;
+        const float sign = pillow ? (bevel.up ? -1.0f : 1.0f) : (bevel.up ? 1.0f : -1.0f);
+        Mask outer(base.size(), 0), inner(pillow ? base.size() : 0, 0);
+        std::vector<uint8_t> flat(base.size(), 0);
+        // An anti-aliased Contour or Gloss Contour is shaded at nine points of each pixel, a third of a pixel apart from
+        // its corner, and averaged: no centred sampling matched (photoshop-bevel-subs, photoshop-bevel-gloss).
+        const bool supersample = (contourCurve && bevel.contourAntialiased) || (!glossLinear && bevel.glossAntialiased);
+        const int steps = supersample ? 3 : 1;
+        Mask surface;
+        for (int sy = 0; sy < steps; sy++) for (int sx = 0; sx < steps; sx++) {
+            surfaceAt(float(sx) * float(s) / 3, float(sy) * float(s) / 3, surface);
+            const bool first = sx == 0 && sy == 0;
+            parallelRows(0, h, [&](int a, int b) {
+                auto sample = [&](int x, int y) { return x < 0 || y < 0 || x >= w || y >= h ? 0.0f : surface[size_t(y) * w + x]; };
+                for (int y = a; y < b; y++) for (int x = 0; x < w; x++) {
+                    const size_t i = size_t(y) * w + x;
+                    const float left = sample(x - 1, y), right = sample(x + 1, y), top = sample(x, y - 1), bottom = sample(x, y + 1);
+                    const float gx = (left - right) * normalScale, gy = (top - bottom) * normalScale;
+                    if (first) flat[i] = left == right && top == bottom;
+                    outer[i] += std::clamp(lighting(gx, gy, sign), -1.0f, 1.0f);
+                    if (pillow) inner[i] += std::clamp(lighting(gx, gy, -sign), -1.0f, 1.0f);
+                }
+            }, 32);
+        }
+        if (steps > 1) {
+            const float k = 1.0f / float(steps * steps);
+            for (auto& v : outer) v *= k;
+            for (auto& v : inner) v *= k;
+        }
+        // Soften blurs the shading, not the surface ("blurs the results of shading"): a tent of the soften's width, then
+        // a [1 2 1] (photoshop-bevel-gloss). A flat face's Gloss Contour wash goes into the blur, and is drawn outside
+        // the shape only within the softened reach of the slopes.
+        const float soften = bevel.soften * float(s);
+        if (soften > 0) {
+            auto softenField = [&](Mask& field) {
+                if (std::lround(soften) >= 2) tentBlur(field, w, h, soften);
+                tentBlur(field, w, h, 2 * float(s));
+            };
+            softenField(outer);
+            if (pillow) softenField(inner);
+            if (!glossLinear) {
+                Mask reach(base.size());
+                for (size_t i = 0; i < reach.size(); i++) reach[i] = flat[i] ? 0.0f : 1.0f;
+                softenField(reach);
+                for (size_t i = 0; i < reach.size(); i++) if (reach[i] > 1e-6f) flat[i] = 0;
+            }
+        }
         float hi[4] = {}, sh[4] = {}; rgb(bevel.highlight, hi); rgb(bevel.shadow, sh);
-        auto sample = [&](int x, int y) { return x < 0 || y < 0 || x >= w || y >= h ? 0.0f : height[size_t(y) * w + x]; };
         paintOut([&](int ox, int oy, T* d, size_t i) {
             const float m = unit(matte[i]);
             float effect = 0;
@@ -1172,35 +1258,18 @@ void drawStyled(const StyledDraw& in, Img& target) {
             default: effect = 1; break;
             }
             effect *= coverAt(ox, oy);
+            // A flat face carries the Gloss Contour's constant wash under the shape only: flat ground outside stays clean.
+            if (!glossLinear && flat[i]) effect *= m;
             if (effect <= 0) return;
-            const int x = ox - wx0, y = oy - wy0;
-            const float left = sample(x - 1, y), right = sample(x + 1, y), top = sample(x, y - 1), bottom = sample(x, y + 1);
-            const float gx0 = (left - right) * normalScale, gy0 = (top - bottom) * normalScale;
-            const bool flat = left == right && top == bottom;
-            auto shade = [&](float sign, float weight) {
+            auto shade = [&](float l, float weight) {
                 if (weight <= 0) return;
-                const float gx = gx0 * sign, gy = gy0 * sign;
-                const float length = std::sqrt(gx * gx + gy * gy + 1);
-                const float raw = gx * lx + gy * ly + lz, surface = raw / std::max(0.0001f, length);
-                float lighting = surface >= lz ? (surface - lz) / std::max(0.01f, 1 - lz) : -((lz - surface) / std::max(0.01f, lz));
-                if (pillowFamily && raw < lz) lighting = -((lz - raw) / std::max(0.01f, lz));
-                if (!glossLinear) {
-                    if (flat) { weight *= m; if (weight <= 0) return; }
-                    const float remapped = sampleContour(glossLut, unit(surface), bevel.glossAntialiased);
-                    lighting = remapped >= lz ? (remapped - lz) / std::max(0.01f, 1 - lz) : -((lz - remapped) / std::max(0.01f, lz));
-                    if (pillowFamily && remapped < lz) {
-                        const float rr = sampleContour(glossLut, unit(raw), bevel.glossAntialiased);
-                        if (rr < lz) lighting = -((lz - rr) / std::max(0.01f, lz));
-                    }
-                }
-                if (lighting > 0) compositeEffect<T, M>(d, hi, unit(lighting) * weight * bevel.highlightOpacity * master, bevel.highlightMode);
-                else if (lighting < 0) compositeEffect<T, M>(d, sh, unit(-lighting) * weight * bevel.shadowOpacity * master, bevel.shadowMode);
+                if (l > 0) compositeEffect<T, M>(d, hi, unit(l) * weight * bevel.highlightOpacity * master, bevel.highlightMode);
+                else if (l < 0) compositeEffect<T, M>(d, sh, unit(-l) * weight * bevel.shadowOpacity * master, bevel.shadowMode);
             };
-            if (bevel.kind == Bevel::Kind::Pillow) {
-                const float base = bevel.up ? -1.0f : 1.0f;
-                shade(base, effect * (1 - m));
-                shade(-base, effect * m);
-            } else shade(bevel.up ? 1.0f : -1.0f, effect);
+            if (pillow) {
+                shade(outer[i], effect * (1 - m));
+                shade(inner[i], effect * m);
+            } else shade(outer[i], effect);
         });
     }
 }

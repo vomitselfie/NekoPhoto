@@ -156,6 +156,7 @@ cmyk/smart_object/warped 969b9c9a5366a47d
 cmyk/style/all_ten 7b0e30c24db9e977
 cmyk/style/all_ten@0.5 1f611e2d6c84fcb5
 cmyk/style/bevel 83c54b74c9103041
+cmyk/style/bevel_soft_gloss 49d25bc4ec9f8a79
 cmyk/style/color_overlay 295a33e901a2ebc0
 cmyk/style/drop_shadow c1e6102f872d29b1
 cmyk/style/folder 069ac9b7d82e35eb
@@ -226,6 +227,7 @@ cmyk16/smart_object/warped 60fe0ca6bba8f232
 cmyk16/style/all_ten fa2d55e7b5c76bdf
 cmyk16/style/all_ten@0.5 104e6837ee56bff0
 cmyk16/style/bevel 5b218980ed352191
+cmyk16/style/bevel_soft_gloss 00e8aad6c52616c9
 cmyk16/style/color_overlay 8729121df8974fbe
 cmyk16/style/drop_shadow aacd5fbdaa651af8
 cmyk16/style/folder da96e7d76921fac7
@@ -445,6 +447,7 @@ lab/smart_object/warped f8ef7d65dcd5bb99
 lab/style/all_ten 1743d6c3ee669b8d
 lab/style/all_ten@0.5 56aedfeab31fa815
 lab/style/bevel a4d7e889f5c48f79
+lab/style/bevel_soft_gloss af151b7a01459e56
 lab/style/color_overlay 1d5df0a0d0fd5cd5
 lab/style/drop_shadow a1fd9b139cbd36c3
 lab/style/folder f53e41282ace006f
@@ -506,6 +509,7 @@ lab16/smart_object/warped ab4e09683ebb3067
 lab16/style/all_ten 7f6fec917536b039
 lab16/style/all_ten@0.5 dad59701fe655300
 lab16/style/bevel fc4f306e7fe9177b
+lab16/style/bevel_soft_gloss 345b53f4a08cdddf
 lab16/style/color_overlay 2d2e3b00ed2dde2f
 lab16/style/drop_shadow 5017ff30beb114a9
 lab16/style/folder 17cb07b9592f9781
@@ -679,6 +683,7 @@ u16/smart_object/warped 2dc4aa670fe28414
 u16/style/all_ten c252a06240e3288a
 u16/style/all_ten@0.5 54b3da938fb167eb
 u16/style/bevel 5f7fd8a7cb64abd5
+u16/style/bevel_soft_gloss b4d19d8eb58527f7
 u16/style/color_overlay 0d720336ad2db2d1
 u16/style/drop_shadow 518dc481b3736604
 u16/style/folder 41ee39c4a2892366

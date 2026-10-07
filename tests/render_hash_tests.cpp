@@ -659,6 +659,16 @@ std::vector<std::pair<std::string, LayerStyle>> effectStyles() {
         for (auto& v : style.bevels) all.bevels.push_back(v);
     }
     styles.push_back({"all_ten", all});
+    // An outer bevel with Soften and anti-aliased Gloss and Contour curves (the supersampled, softened shading), kept
+    // out of all ten and before them, which stay last.
+    {
+        Bevel b; b.size = 5; b.soften = 3; b.kind = Bevel::Kind::Outer;
+        b.gloss.points = {{0, 0, false}, {96, 240, false}, {160, 60, true}, {255, 255, false}}; b.glossAntialiased = true;
+        b.useContour = true; b.contour.points = {{0, 0, false}, {80, 255, true}, {180, 40, false}, {255, 255, false}};
+        b.contourAntialiased = true; b.contourRange = 0.73f;
+        LayerStyle s; s.bevels.push_back(b);
+        styles.insert(styles.end() - 1, {"bevel_soft_gloss", s});
+    }
     return styles;
 }
 
