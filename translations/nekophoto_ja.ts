@@ -809,6 +809,10 @@
         <source>Type Tool</source>
         <translation>横書き文字ツール</translation>
     </message>
+    <message>
+        <source>Revert</source>
+        <translation>復帰</translation>
+    </message>
 </context>
 <context>
     <name>Names</name>
@@ -2893,6 +2897,10 @@ Working: %2</source>
     <message>
         <source>Timeline</source>
         <translation>タイムライン</translation>
+    </message>
+    <message>
+        <source>Revert</source>
+        <translation>復帰</translation>
     </message>
     <message>
         <source>on</source>
@@ -5279,6 +5287,10 @@ File &gt; New creates a blank canvas.</source>
         <source>The timeline</source>
         <translation>タイムライン</translation>
     </message>
+    <message>
+        <source>Finish or cancel the edit in progress first.</source>
+        <translation>先に進行中の編集を確定するかキャンセルしてください。</translation>
+    </message>
 </context>
 <context>
     <name>app::ExportAsDialog</name>
@@ -7143,6 +7155,18 @@ File &gt; New creates a blank canvas.</source>
         <translation>保存しました。レイヤーが %1 メガピクセルあるため、このプロジェクトは macOS 版 Compositor で開ける上限 (100) を超えていますが、ここでは開けます。</translation>
     </message>
     <message>
+        <source>There is no document to revert.</source>
+        <translation>復帰するドキュメントがありません。</translation>
+    </message>
+    <message>
+        <source>The document was not opened from a file or saved yet, so there is nothing to revert to.</source>
+        <translation>このドキュメントはファイルから開かれておらず、まだ保存もされていないため、復帰先がありません。</translation>
+    </message>
+    <message>
+        <source>“%1” is no longer there.</source>
+        <translation>「%1」が見つかりません。</translation>
+    </message>
+    <message>
         <source>PNG image (*.png)</source>
         <translation>PNG 画像 (*.png)</translation>
     </message>
@@ -7181,24 +7205,8 @@ File &gt; New creates a blank canvas.</source>
         <translation>NekoPhoto プロジェクトフォルダー (*.comp)</translation>
     </message>
     <message>
-        <source>Revert to the saved version of “%1”?</source>
-        <translation>「%1」を保存されたバージョンに復帰しますか?</translation>
-    </message>
-    <message>
-        <source>Your unsaved changes and the history are lost.</source>
-        <translation>保存されていない変更とヒストリーは失われます。</translation>
-    </message>
-    <message>
-        <source>Couldn’t revert</source>
-        <translation>復帰できませんでした</translation>
-    </message>
-    <message>
         <source>“%1” could not be read.</source>
         <translation>「%1」を読み込めませんでした。</translation>
-    </message>
-    <message>
-        <source>Reverted to the saved version.</source>
-        <translation>保存されたバージョンに復帰しました。</translation>
     </message>
     <message numerus="yes">
         <source>, %n folder(s)</source>

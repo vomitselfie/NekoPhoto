@@ -305,6 +305,15 @@ def document_close(discard: bool = False) -> str:
     return text(call("document.close", discard=discard))
 
 
+@edit("Revert to the file")
+def document_revert() -> str:
+    """File > Revert: read the file the document was opened from or last saved to again (a project, PSD/PSB, Clip
+    Studio, Affinity, SVG, PDF, an image, or camera RAW with the Camera Raw settings it opened with), the way it opened,
+    as one undo step named Revert; history_undo brings the edits back. reverted is false when nothing changed since it
+    was opened or saved; refused for a document made here and never saved."""
+    return text(call("document.revert"))
+
+
 @edit("New document")
 def document_new(width: int = 1920, height: int = 1080, resolution: float = 72) -> str:
     """A new document (in a new tab if the current one is in use) with one empty layer."""

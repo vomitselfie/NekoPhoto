@@ -146,12 +146,10 @@ void MainWindow::openPath(const QString& path) {
 void MainWindow::openLayeredFile(const QString& path) {
     // The import reads the whole file; a big one takes a moment.
     QApplication::setOverrideCursor(Qt::BusyCursor);
-    std::string error;
     const std::string file = path.toStdString();
-    const bool affinity = hasSuffix(path, {".afphoto", ".afdesign", ".afpub", ".af"});
     const bool clip = hasSuffix(path, {".clip"}), ase = hasSuffix(path, {".ase", ".aseprite"}), psd = hasSuffix(path, {".psd", ".psb"});
+    const bool affinity = hasSuffix(path, {".afphoto", ".afdesign", ".afpub", ".af"});
     const bool vector = isVectorFilePath(path);
-    std::optional<PsdImport> imported;
     // A PSD or PSB is sized up from its records first: layers past the project budget, or more than the memory
     // free now, offer Photoshop's merged image instead (a new, untitled document, so Save cannot replace the file).
     bool mergedOnly = nextPsdMergedOnly.value_or(false);
@@ -181,40 +179,20 @@ void MainWindow::openLayeredFile(const QString& path) {
             }
         }
     }
-    if (vector) {
-        // SVG as shape layers, PDF as a rendered page (VectorFiles.h).
-        QString message;
-        imported = path.endsWith(".pdf", Qt::CaseInsensitive) ? app::importPdfDocument(path, &message, isVisible() ? this : nullptr) : app::importSvgDocument(path, &message);
-        error = message.toStdString();
-    } else if (clip) imported = compositor::importClip(file, &error);
-    else if (affinity) imported = compositor::importAffinity(file, &error, app::affinityImportOptions());
-    else if (ase) imported = compositor::importAseprite(file, &error);
-    else if (hasSuffix(path, {".ico", ".cur"})) imported = compositor::importIco(file, &error);
-    else if (hasSuffix(path, {".gif"})) imported = compositor::importGif(file, &error);
-    else {
-        compositor::PsdImportOptions options = app::psdImportOptions();
-        options.mergedOnly = mergedOnly;
-        imported = compositor::importPsd(file, &error, options);
-    }
     QApplication::restoreOverrideCursor();
+    DocumentSource source;
+    source.kind = DocumentSource::Kind::Layered;
+    source.path = path;
+    source.mergedOnly = mergedOnly;
+    QString error;
+    std::optional<PsdImport> imported = readLayeredSource(source, &error);
     if (!imported) {
-        if (!error.empty() || !vector) showError(tr("Couldn’t open %1").arg(QFileInfo(path).fileName()), QString::fromStdString(error));   // empty: the page choice was cancelled
+        if (!error.isEmpty() || !vector) showError(tr("Couldn’t open %1").arg(QFileInfo(path).fileName()), error);   // empty: the page choice was cancelled
         return;
     }
-    // The same budgets as every other way in (each importer also stops early on its own limits).
-    if (const compositor::BudgetCheck check = compositor::Document::withinBudget(imported->document); !check) {
-        showError(tr("Couldn’t open %1").arg(QFileInfo(path).fileName()), EditorSession::budgetText(check));
-        return;
-    }
-    if (psd) {
-        app::finishPsdText(*imported);
-        // The file's profile (resource 1039) by Color Settings' policy: kept, converted to the working space, or dropped.
-        const compositor::ColorProfile embedded = imported->document.profile;
-        color::applyToDocument(imported->document, color::decideOnOpen(embedded.empty() ? std::nullopt : std::optional(embedded), this));
-    }
-    if (affinity) app::finishPendingText(*imported);
     Tab& tab = addTab(true);
     tab.session->adoptDocument(imported->document, mergedOnly ? tr("%1 (merged)").arg(QFileInfo(path).completeBaseName()) : QFileInfo(path).completeBaseName());
+    tab.session->setSource(source);   // File > Revert reads it again the same way (the merged image again, say)
     if (!mergedOnly) addRecent(path);
     lastImportNotes_.clear();
     for (const std::string& note : imported->notes) lastImportNotes_ << QString::fromStdString(note);
@@ -230,6 +208,57 @@ void MainWindow::openLayeredFile(const QString& path) {
         showImportNotes(tr("Opened with %n change(s): %1", nullptr, int(lastImportNotes_.size())), tr("Imported %1").arg(QFileInfo(path).fileName()),
                         heading, lastImportNotes_, tab.session);
     }
+}
+
+std::optional<PsdImport> MainWindow::readLayeredSource(DocumentSource& source, QString* errorOut) {
+    const QString& path = source.path;
+    const std::string file = path.toStdString();
+    const bool affinity = hasSuffix(path, {".afphoto", ".afdesign", ".afpub", ".af"});
+    const bool clip = hasSuffix(path, {".clip"}), ase = hasSuffix(path, {".ase", ".aseprite"}), psd = hasSuffix(path, {".psd", ".psb"});
+    std::string error;
+    std::optional<PsdImport> imported;
+    QApplication::setOverrideCursor(Qt::BusyCursor);
+    if (isVectorFilePath(path)) {
+        // SVG as shape layers, PDF as a rendered page (VectorFiles.h).
+        QString message;
+        if (path.endsWith(".pdf", Qt::CaseInsensitive)) {
+            app::PdfOpenOptions used;
+            imported = app::importPdfDocument(path, &message, isVisible() ? this : nullptr, &used);
+            if (imported) { source.pdfPage = used.page; source.pdfResolution = used.resolution; }
+        } else imported = app::importSvgDocument(path, &message);
+        error = message.toStdString();
+    } else if (clip) imported = compositor::importClip(file, &error);
+    else if (affinity) imported = compositor::importAffinity(file, &error, app::affinityImportOptions());
+    else if (ase) imported = compositor::importAseprite(file, &error);
+    else if (hasSuffix(path, {".ico", ".cur"})) imported = compositor::importIco(file, &error);
+    else if (hasSuffix(path, {".gif"})) imported = compositor::importGif(file, &error);
+    else {
+        compositor::PsdImportOptions options = app::psdImportOptions();
+        options.mergedOnly = source.mergedOnly;
+        imported = compositor::importPsd(file, &error, options);
+    }
+    QApplication::restoreOverrideCursor();
+    if (!imported) { if (errorOut) *errorOut = QString::fromStdString(error); return std::nullopt; }
+    // The same budgets as every other way in (each importer also stops early on its own limits).
+    if (const compositor::BudgetCheck check = compositor::Document::withinBudget(imported->document); !check) {
+        if (errorOut) *errorOut = EditorSession::budgetText(check);
+        return std::nullopt;
+    }
+    if (psd) {
+        app::finishPsdText(*imported);
+        // The file's profile (resource 1039) by Color Settings' policy: kept, converted to the working space, or dropped.
+        const compositor::ColorProfile embedded = imported->document.profile;
+        color::applyToDocument(imported->document, openDecision(source, embedded.empty() ? std::nullopt : std::optional(embedded)));
+    }
+    if (affinity) app::finishPendingText(*imported);
+    return imported;
+}
+
+color::OpenDecision MainWindow::openDecision(DocumentSource& source, const std::optional<compositor::ColorProfile>& embedded) {
+    if (source.colour && source.embedded == embedded) return *source.colour;
+    source.embedded = embedded;
+    source.colour = color::decideOnOpen(embedded, this);
+    return *source.colour;
 }
 
 void MainWindow::openProject() {
@@ -313,15 +342,18 @@ bool MainWindow::importImageFile(const QString& path, std::optional<QPointF> at,
     // Into a document: converted from the file's profile to the document's. A first image makes the document, and
     // its profile follows Color Settings' policy.
     const bool first = !session_->hasDocument();
+    DocumentSource source;
+    source.kind = DocumentSource::Kind::Image;
+    source.path = path;
     color::OpenDecision decision;
-    if (first) { decision = color::decideOnOpen(embedded, this); image = color::applyToImage(image, decision); }
+    if (first) { decision = openDecision(source, embedded); image = color::applyToImage(image, decision); }
     else if (session_->document()->colorMode != compositor::ColorMode::RGB) {
         // Into CMYK or Lab: converted once, from the file's profile (sRGB when untagged) through the document's.
         image = session_->pixelsForDocument(image, compositor::ColorMode::RGB, embedded.value_or(compositor::ColorProfile{}));
         if (!image) { if (error) *error = tr("The image could not be converted to the document's colour mode."); return false; }
     } else image = color::convertForDocument(image, embedded, session_->document()->profile);
     if (!session_->insertImage(image, QFileInfo(path).completeBaseName(), at, error)) return false;   // at the document's depth
-    if (first) session_->adoptProfile(decision.profile);
+    if (first) { session_->adoptProfile(decision.profile); session_->setSource(source); }   // the file is the document's
     addRecent(path);
     return true;
 }
@@ -330,11 +362,15 @@ bool MainWindow::openImageAsDocument(const QString& path, QString* error) {
     std::optional<compositor::ColorProfile> embedded;
     auto image = readImageFile(path, error, &embedded);
     if (!image) return false;
-    const color::OpenDecision decision = color::decideOnOpen(embedded, this);
+    DocumentSource source;
+    source.kind = DocumentSource::Kind::Image;
+    source.path = path;
+    const color::OpenDecision decision = openDecision(source, embedded);
     image = color::applyToImage(image, decision);
     Tab& tab = addTab(true);
     tab.session->insertImage(image, QFileInfo(path).completeBaseName(), std::nullopt);   // a first image makes the canvas
     tab.session->adoptProfile(decision.profile);
+    tab.session->setSource(source);
     tab.defaultName = QFileInfo(path).completeBaseName();
     refreshTabTitles();
     addRecent(path);
@@ -397,16 +433,24 @@ bool MainWindow::openRawFile(const QString& path, QString* error, const RawOpenR
         if (error) *error = EditorSession::budgetText(check);
         return false;
     }
+    // File > Revert develops it again with the same settings, as the same kind of document.
+    DocumentSource source;
+    source.kind = DocumentSource::Kind::Raw;
+    source.path = path;
+    source.raw = settings;
+    source.rawAsObject = asObject;
+    source.rawBits = bits;
     // LibRaw develops into sRGB: the document takes it as its profile the way an untagged image does.
-    const color::OpenDecision decision = color::decideOnOpen(std::nullopt, this);
+    const color::OpenDecision decision = openDecision(source, std::nullopt);
     const QString stem = QFileInfo(path).completeBaseName();
     if (asObject) {
         // Open Object: the RAW file and the settings are the smart object's source; the contents stay at 16 bits.
-        auto source = compositor::makeRawSmartObjectSource(bytes, fileName.toStdString(), settings, compositor::Image16Ptr(developed));
-        if (!source) { if (error) *error = tr("The RAW file could not be developed."); return false; }
+        auto object = compositor::makeRawSmartObjectSource(bytes, fileName.toStdString(), settings, compositor::Image16Ptr(developed));
+        if (!object) { if (error) *error = tr("The RAW file could not be developed."); return false; }
         Tab& tab = addTab(true);
-        tab.session->adoptDocument(compositor::smartObjectDocument(source, type), stem);
+        tab.session->adoptDocument(compositor::smartObjectDocument(object, type), stem);
         tab.session->adoptProfile(decision.profile);
+        tab.session->setSource(source);
         tab.defaultName = stem;
     } else {
         compositor::AnyImage image = bits == 8 ? compositor::AnyImage(compositor::ImagePtr(compositor::narrowImage(*developed))) : compositor::AnyImage(compositor::Image16Ptr(developed));
@@ -414,6 +458,7 @@ bool MainWindow::openRawFile(const QString& path, QString* error, const RawOpenR
         Tab& tab = addTab(true);
         tab.session->insertImage(image, stem, std::nullopt);   // a first image makes the canvas, at its depth
         tab.session->adoptProfile(decision.profile);
+        tab.session->setSource(source);
         tab.defaultName = stem;
     }
     refreshTabTitles();
@@ -495,21 +540,76 @@ bool MainWindow::save(bool asNew) {
     return true;
 }
 
-void MainWindow::revertDocument() {
-    if (!session_->hasDocument() || session_->projectPath().isEmpty()) return;
-    const QString name = QFileInfo(session_->projectPath()).fileName();
-    if (session_->isModified()) {
-        QMessageBox box(QMessageBox::Warning, tr("Revert"), tr("Revert to the saved version of “%1”?").arg(name), QMessageBox::NoButton, this);
-        box.setInformativeText(tr("Your unsaved changes and the history are lost."));
-        QPushButton* revert = box.addButton(tr("Revert"), QMessageBox::DestructiveRole);
-        box.addButton(QMessageBox::Cancel);
-        box.setDefaultButton(QMessageBox::Cancel);
-        box.exec();
-        if (box.clickedButton() != revert) return;
+std::optional<EditorSession::LoadedProject> MainWindow::readSource(DocumentSource& source, QString* error) {
+    const QString& path = source.path;
+    switch (source.kind) {
+    case DocumentSource::Kind::None: return std::nullopt;
+    case DocumentSource::Kind::Project: return EditorSession::readProject(path, error);
+    case DocumentSource::Kind::Layered: {
+        if (path.endsWith(".pdf", Qt::CaseInsensitive)) app::pdfOpenOptions() = app::PdfOpenOptions{source.pdfPage, source.pdfResolution, true};
+        auto imported = readLayeredSource(source, error);
+        if (!imported) return std::nullopt;
+        const std::optional<compositor::Uuid> active = EditorSession::defaultActiveLayer(imported->document);
+        return EditorSession::LoadedProject{std::move(imported->document), active, path};
     }
-    canvas_->cancelType();
-    if (!session_->revertToSaved()) { showError(tr("Couldn’t revert"), tr("“%1” could not be read.").arg(name)); return; }
-    statusBar()->showMessage(tr("Reverted to the saved version."), 4000);
+    case DocumentSource::Kind::Image:
+    case DocumentSource::Kind::Raw: {
+        compositor::AnyImage image;
+        color::OpenDecision decision;
+        if (source.kind == DocumentSource::Kind::Image) {
+            std::optional<compositor::ColorProfile> embedded;
+            image = readImageFile(path, error, &embedded);
+            if (!image) return std::nullopt;
+            decision = openDecision(source, embedded);
+        } else {
+            // Developed again with the settings it opened with, at the same depth, as the same kind of document.
+            std::string why;
+            auto bytes = std::make_shared<const std::vector<uint8_t>>(compositor::readRawFileBytes(path.toStdString(), &why));
+            if (bytes->empty()) { if (error) *error = QString::fromStdString(why); return std::nullopt; }
+            QApplication::setOverrideCursor(Qt::BusyCursor);
+            std::shared_ptr<compositor::Image16> developed = compositor::developRaw(*bytes, source.raw, {}, &why);
+            QApplication::restoreOverrideCursor();
+            if (!developed) { if (error) *error = QString::fromStdString(why); return std::nullopt; }
+            const compositor::SampleType type = source.rawBits == 8 ? compositor::SampleType::U8 : compositor::SampleType::U16;
+            if (const compositor::BudgetCheck check = compositor::Document::canCreate(developed->width(), developed->height(), type); !check) {
+                if (error) *error = EditorSession::budgetText(check);
+                return std::nullopt;
+            }
+            decision = openDecision(source, std::nullopt);
+            if (source.rawAsObject) {
+                auto object = compositor::makeRawSmartObjectSource(bytes, QFileInfo(path).fileName().toStdString(), source.raw, compositor::Image16Ptr(developed));
+                if (!object) { if (error) *error = tr("The RAW file could not be developed."); return std::nullopt; }
+                compositor::Document document = compositor::smartObjectDocument(object, type);
+                document.profile = decision.profile;
+                const std::optional<compositor::Uuid> active = EditorSession::defaultActiveLayer(document);
+                return EditorSession::LoadedProject{std::move(document), active, path};
+            }
+            image = source.rawBits == 8 ? compositor::AnyImage(compositor::ImagePtr(compositor::narrowImage(*developed))) : compositor::AnyImage(compositor::Image16Ptr(developed));
+        }
+        image = color::applyToImage(image, decision);
+        // A first image makes the canvas, in a session of its own, exactly as in the tab it opened in.
+        EditorSession scratch;
+        if (!scratch.insertImage(image, QFileInfo(path).completeBaseName(), std::nullopt, error)) return std::nullopt;
+        scratch.adoptProfile(decision.profile);
+        return EditorSession::LoadedProject{*scratch.document(), scratch.activeLayerId(), path};
+    }
+    }
+    return std::nullopt;
+}
+
+bool MainWindow::revertDocument(QString* error) {
+    auto fail = [error](const QString& why) { if (error) *error = why; return false; };
+    if (!session_->hasDocument()) return fail(tr("There is no document to revert."));
+    DocumentSource source = session_->source();
+    if (!source.valid()) return fail(tr("The document was not opened from a file or saved yet, so there is nothing to revert to."));
+    if (!QFileInfo::exists(source.path)) return fail(tr("“%1” is no longer there.").arg(source.path));
+    QString why;
+    auto loaded = readSource(source, &why);
+    if (!loaded) return fail(why.isEmpty() ? tr("“%1” could not be read.").arg(QFileInfo(source.path).fileName()) : why);
+    canvas_->cancelType();   // the type being typed goes, as the rest of the unsaved work
+    if (!session_->revertTo(std::move(*loaded), &why)) return fail(why);
+    session_->setSource(source);   // with any choice made now (a profile decision for a recovered document)
+    return true;
 }
 
 namespace {

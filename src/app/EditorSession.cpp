@@ -93,6 +93,7 @@ void EditorSession::createDocument(int width, int height, double resolution, boo
     document_ = doc;
     setActiveLayer(active);
     projectPath_.clear();
+    source_ = {};
     history_.reset();
     endEdit();
     history_.reset();
@@ -125,6 +126,7 @@ void EditorSession::installProject(LoadedProject project) {
     document_ = std::move(project.document);
     setActiveLayer(project.activeLayer);
     projectPath_ = project.path;
+    source_ = DocumentSource::project(project.path);
     history_.reset();
     watchProject();
     viewport.fit({double(document_->width), double(document_->height)});
@@ -138,13 +140,9 @@ void EditorSession::adoptDocument(const Document& document, const QString& name)
     commitTransform();
     previewBase_.reset();
     document_ = document;
-    // The topmost visible pixel layer starts active (a hidden top layer, common in exports, would confuse).
-    std::optional<Uuid> active;
-    std::set<Uuid> visible = effectiveVisibleIds(document_->layers);
-    for (auto it = document_->layers.rbegin(); it != document_->layers.rend(); ++it) if (!it->isGroup && visible.count(it->id)) { active = it->id; break; }
-    if (!active) for (auto it = document_->layers.rbegin(); it != document_->layers.rend(); ++it) if (!it->isGroup) { active = it->id; break; }
-    setActiveLayer(active);
+    setActiveLayer(defaultActiveLayer(*document_));
     projectPath_.clear();
+    source_ = {};   // the opener says where it came from (setSource)
     stopWatchingProject();
     importedName_ = name;
     history_.reset();
@@ -156,14 +154,30 @@ void EditorSession::adoptDocument(const Document& document, const QString& name)
     emit selectionChanged();
 }
 
-void EditorSession::adoptRecovered(const Document& document, const QString& name, const QString& originalPath) {
+std::optional<Uuid> EditorSession::defaultActiveLayer(const Document& document) {
+    // The topmost visible pixel layer (a hidden top layer, common in exports, would confuse), else the topmost one.
+    std::set<Uuid> visible = effectiveVisibleIds(document.layers);
+    for (auto it = document.layers.rbegin(); it != document.layers.rend(); ++it) if (!it->isGroup && visible.count(it->id)) return it->id;
+    for (auto it = document.layers.rbegin(); it != document.layers.rend(); ++it) if (!it->isGroup) return it->id;
+    return std::nullopt;
+}
+
+void EditorSession::adoptRecovered(const Document& document, const QString& name, const QString& originalPath, const QJsonObject& source) {
     adoptDocument(document, name);
     if (!originalPath.isEmpty()) {
         projectPath_ = originalPath;
         watchProject();   // what is on disk now is the baseline; a later change there is asked about, as for any edit
         emit projectPathChanged();
     }
+    // File > Revert goes back to the file it came from: the one it was opened from (a PSD, say), else its project.
+    source_ = DocumentSource::fromJson(source);
+    if (!source_.valid() && !originalPath.isEmpty()) source_ = DocumentSource::project(originalPath);
     markUnsaved();   // it exists nowhere else now
+}
+
+void EditorSession::setSource(DocumentSource source) {
+    source_ = std::move(source);
+    emit historyChanged();   // File > Revert's state
 }
 
 bool EditorSession::saveProject(const QString& path, QString* error) {
@@ -180,6 +194,7 @@ bool EditorSession::saveProject(const QString& path, QString* error) {
         return false;
     }
     projectPath_ = path;
+    source_ = DocumentSource::project(path);   // Save As: the new file is what File > Revert reads
     history_.markSaved();
     watchProject();   // our own save is the package as we know it
     emit projectPathChanged();
@@ -195,6 +210,7 @@ void EditorSession::closeDocument() {
     document_.reset();
     setActiveLayer(std::nullopt);
     projectPath_.clear();
+    source_ = {};
     stopWatchingProject();
     history_.reset();
     emit projectPathChanged();

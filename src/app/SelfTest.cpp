@@ -431,6 +431,7 @@ int menuCommands(MainWindow& w) {
     // Red's pixels selected, Background active.
     auto backgroundUnderRed = [](EditorSession& s) { select(s, "Red"); s.loadLayerAsSelection(*s.activeLayerId(), false, SelectionMode::Replace); select(s, "Background"); };
     MainWindow* window = &w;
+    auto revertFiles = std::make_shared<QStringList>();   // the projects the Revert step saves, removed at the end
 
     const std::vector<Converted> steps = {
         {"New Layer Below", "Paint", {}, trigger({"Layer", "New Layer Below"}), [](EditorSession& s, auto&) { s.addBlankLayer(true); }, {"layers.add"}},
@@ -614,6 +615,14 @@ int menuCommands(MainWindow& w) {
              return true;
          }), [](EditorSession& s, auto&) { s.placeLayer(layerId(s, "Paint"), std::nullopt, layerId(s, "Background"), false); }, {"layers.move"}},
         // Last: it merges most of the document. Red hidden first, so a hidden layer stays out of the merge.
+        // File > Revert: the project as saved before a change, as one undo step (each tab saves a project of its own).
+        {"Revert", "Paint", [revertFiles](EditorSession& s) {
+             const QString path = QDir(QDir::tempPath()).filePath(QStringLiteral("nekophoto-command-path-%1-%2.nekophoto").arg(QCoreApplication::applicationPid()).arg(revertFiles->size()));
+             revertFiles->push_back(path);
+             QString error;
+             if (!s.saveProject(path, &error)) std::fprintf(stderr, "Revert: could not save %s: %s\n", qPrintable(path), qPrintable(error));
+             s.addBlankLayer();
+         }, trigger({"File", "Revert"}), [window](EditorSession&, auto&) { window->revertDocument(nullptr); }, {"document.revert"}},
         {"Merge Visible", "Paint", [](EditorSession& s) { const Layer* red = s.document()->find(layerId(s, "Red")); if (red && red->visible) s.toggleLayerVisibility(red->id); },
          trigger({"Layer", "Merge Visible"}), [](EditorSession& s, auto&) { s.mergeVisible(); }, {"layers.merge"}},
     };
@@ -718,6 +727,7 @@ int menuCommands(MainWindow& w) {
         std::fprintf(stderr, "menu commands: the command path changed what the interface does:\n--- now\n%s\n--- before\n%s\n", qPrintable(viaInterface), qPrintable(direct));
         failures++;
     }
+    for (const QString& path : *revertFiles) QFile::remove(path);
     std::printf("menu commands: %d checked, %s\n", int(steps.size()), failures ? "FAILED" : "ok");
     return failures;
 }
@@ -874,7 +884,7 @@ int search(MainWindow& w) {
 /// does): Alt with the Brush samples the foreground and lets go back to the Brush, Ctrl moves the layer under the
 /// pointer with the Move tool for as long as it is held, Ctrl+Space and Ctrl+Alt+Space zoom, a tool's letter held while
 /// the tool is used springs back and a tap does not, F7 shows and hides the Layers panel (not from a text field),
-/// Ctrl+Alt+Z toggles the last state, F12 reverts (asking first), and Ctrl+Shift+> and < size the type being typed.
+/// Ctrl+Alt+Z toggles the last state, F12 reverts (one undo step), and Ctrl+Shift+> and < size the type being typed.
 int heldKeys(MainWindow& w) {
     EditorSession& s = *w.session();
     buildDemoDocument(s);
@@ -1021,24 +1031,36 @@ int heldKeys(MainWindow& w) {
     press(canvas, Qt::Key_Z, Qt::ControlModifier | Qt::AltModifier);
     expect(s.document()->layers.size() == layerCount, "Ctrl+Alt+Z a third time did not undo it");
 
-    // F12: File > Revert, asking first with unsaved changes (answered Revert here); the saved layers come back.
+    // F12: File > Revert, without a question (as Photoshop CC: it is one undo step); the saved layers come back, the
+    // steps before stay, and Undo brings back the unsaved layer. Greyed while the document is as saved.
     {
         const QString path = QDir(QDir::tempPath()).filePath(QStringLiteral("nekophoto-held-keys-%1.nekophoto").arg(QCoreApplication::applicationPid()));
         QString error;
         if (!s.saveProject(path, &error)) { std::fprintf(stderr, "held keys: could not save %s: %s\n", qPrintable(path), qPrintable(error)); return 1; }
         QApplication::processEvents();
+        QAction* revert = w.findChild<QAction*>(QStringLiteral("file.revert"));
+        if (!revert) { std::fprintf(stderr, "held keys: no File > Revert\n"); return 1; }
+        expect(!revert->isEnabled(), "File > Revert is available with nothing changed since the save");
         const size_t saved = s.document()->layers.size();
         s.addBlankLayer();
         QApplication::processEvents();
+        expect(revert->isEnabled(), "File > Revert is greyed after a change");
+        std::vector<std::string> steps = s.undoNames();
         bool asked = false;
         QTimer::singleShot(0, [&asked] {
-            if (auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget()))
-                for (QAbstractButton* b : box->buttons())
-                    if (b->text() == QLatin1String("Revert")) { asked = true; b->click(); return; }
+            if (auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) { asked = true; box->reject(); }
         });
         expect(press(canvas, Qt::Key_F12, Qt::NoModifier), "F12 was not taken by File > Revert");
-        expect(asked, "Revert did not ask about the unsaved changes");
+        QApplication::processEvents();
+        expect(!asked, "Revert asked a question");
         expect(s.document()->layers.size() == saved && !s.isModified(), "F12 did not revert to the saved project");
+        steps.push_back("Revert");
+        expect(s.undoNames() == steps, "Revert is not one undo step after the ones before it");
+        expect(!revert->isEnabled(), "File > Revert is available right after reverting");
+        s.undo();
+        expect(s.document()->layers.size() == saved + 1 && s.isModified(), "Undo did not bring back the document as it was before Revert");
+        s.redo();
+        expect(s.document()->layers.size() == saved && !s.isModified(), "Redo did not revert again");
         QFile::remove(path);
     }
 

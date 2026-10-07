@@ -450,7 +450,7 @@ uses a different model than Apple's Vision, so its cutouts differ in detail.
 | Alt Backspace, Ctrl Backspace, Delete, Shift F5 | Fill foreground / background, clear, content-aware fill |
 | Ctrl Z, Ctrl Shift Z, Ctrl Alt Z | Undo (again for earlier steps), redo, toggle last state (Photoshop CC's defaults) |
 | F7 | Show or hide the Layers panel |
-| F12 | File ▸ Revert: the project as last saved (asks first when there are unsaved changes; the history starts afresh) |
+| F12 | File ▸ Revert: the file as opened or last saved, any format, as one undo step (no question; Undo brings the edits back) |
 | Ctrl Alt Shift W (also Ctrl Alt Shift S) | File ▸ Export ▸ Export As |
 | Ctrl Shift ', Ctrl Alt Shift ' | Layer ▸ Quick Export, Layer ▸ Export As (the active layer alone) |
 | Ctrl Shift K, Ctrl Y, Ctrl Shift Y | Color Settings, Proof Colors, Gamut Warning |

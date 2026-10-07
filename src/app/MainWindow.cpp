@@ -388,7 +388,7 @@ void MainWindow::offerRecovery() {
         if (!project) { failed << (r.title + ": " + error); continue; }
         Tab& tab = addTab(true);
         const QString name = tr("%1 (recovered)").arg(r.title.isEmpty() ? tr("Untitled") : r.title);
-        tab.session->adoptRecovered(project->document, name, r.originalPath);   // Save goes back to its own file
+        tab.session->adoptRecovered(project->document, name, r.originalPath, r.source);   // Save goes back to its own file
         if (project->activeLayer && tab.session->document()->find(*project->activeLayer)) tab.session->selectLayer(*project->activeLayer);
         tab.defaultName = name;
         refreshTabTitles();
@@ -674,7 +674,7 @@ void MainWindow::refreshActions() {
     undoAction_->setEnabled(session_->canUndo());
     redoAction_->setEnabled(session_->canRedo());
     if (toggleStateAction_) toggleStateAction_->setEnabled(session_->canUndo() || session_->canRedo());
-    if (revertAction_) revertAction_->setEnabled(has && !session_->projectPath().isEmpty());
+    if (revertAction_) revertAction_->setEnabled(has && session_->canRevert());
     undoAction_->setText(session_->canUndo() ? tr("&Undo %1").arg(names::history(session_->undoName())) : tr("&Undo"));
     redoAction_->setText(session_->canRedo() ? tr("&Redo %1").arg(names::history(session_->redoName())) : tr("&Redo"));
     if (has) sizeLabel_->setText(QStringLiteral("%1 × %2 px").arg(session_->document()->width).arg(session_->document()->height));

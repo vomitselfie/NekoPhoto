@@ -81,8 +81,9 @@ void Autosave::tick() {
         auto document = std::make_shared<const compositor::Document>(session->documentToSave());   // never playback's frame
         const std::optional<compositor::Uuid> active = session->activeLayerId();
         const QString key = entry.key, dir = dir_, title = entry.title ? entry.title() : QString(), original = session->projectPath();
+        const QJsonObject origin = session->source().toJson();   // the file File > Revert reads, for the recovered copy
         EditorSession* owner = session;
-        pool_.start([this, document, active, key, dir, title, original, owner] {
+        pool_.start([this, document, active, key, dir, title, original, origin, owner] {
             // A crash at any point leaves a whole copy to offer: the new one is written beside the last, the last is
             // moved aside before the new one takes its name, and only then removed (claimOrphans takes either).
             // Copies are .comp folders whatever the document is saved as (nothing to pack, every file written once);
@@ -95,7 +96,7 @@ void Autosave::tick() {
                 // The description first, so even a first copy is offered if the rename is the last thing that happens.
                 QFile meta(dir + "/" + key + ".json");
                 if (meta.open(QIODevice::WriteOnly))
-                    meta.write(QJsonDocument(QJsonObject{{"title", title}, {"originalPath", original}, {"saved", QDateTime::currentDateTimeUtc().toString(Qt::ISODate)}}).toJson());
+                    meta.write(QJsonDocument(QJsonObject{{"title", title}, {"originalPath", original}, {"source", origin}, {"saved",QDateTime::currentDateTimeUtc().toString(Qt::ISODate)}}).toJson());
                 QDir(previous).removeRecursively();
                 if (QFileInfo(final).isDir()) ok = QDir().rename(final, previous);
                 if (ok) ok = QDir().rename(saving, final);
@@ -147,7 +148,7 @@ std::vector<Autosave::Recovered> Autosave::claimOrphans() {
             if (file.open(QIODevice::ReadOnly)) o = QJsonDocument::fromJson(file.readAll()).object();
             QDateTime saved = QDateTime::fromString(o.value("saved").toString(), Qt::ISODate);
             if (!saved.isValid()) saved = QFileInfo(project).lastModified().toUTC();
-            out.push_back({project, o.value("title").toString(), o.value("originalPath").toString(), saved});
+            out.push_back({project, o.value("title").toString(), o.value("originalPath").toString(), saved, o.value("source").toObject()});
             any = true;
         }
         if (!any) { QDir(folder).removeRecursively(); lock->unlock(); continue; }   // nothing worth offering

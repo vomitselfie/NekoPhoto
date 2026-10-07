@@ -149,7 +149,12 @@ for GIF; as File > Export > Export As, the flat formats (.png, .jpg, .webp, .tif
 `nearest` or `lanczos`), `transparency: false` to flatten onto `background`, `layer` (an id, or `active`) to write that
 layer alone, cropped to its visible pixels unless `trim: false` (Layer > Export As), and `animated: false` for a still GIF
 of the composite (any of the others also gives one); the reply carries the file's `bytes`; the menus, Quick Export and the
-Export As dialog all commit through this method), `document.close`. `document.info` reports the document's `profile`.
+Export As dialog all commit through this method), `document.revert` (File ▸ Revert: the file the document was opened from or last saved to, read again through
+the reader it opened with and the same choices: a PSD's merged image, a PDF's page, Camera Raw's settings, the profile
+decision; one undo step named `Revert`, so `history.undo` brings the edits back; answers `reverted` (false when nothing
+changed since it was opened or saved), `path`, `format` (`project`, `layered`, `image` or `raw`) and `undoable`; refused for
+a document made here and never saved), `document.close`. `document.info` reports the document's `profile`, and `source`
+(`path` and `format`) when it came from a file.
 
 Artboards and slices (docs/artboards-slices.md): `artboards.list`, `artboards.add` (`x`, `y`, `width`, `height`, `name`,
 `background`: white, black, transparent or a CSS colour), `artboards.set` (the same by `id`; a move takes its layers along

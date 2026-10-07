@@ -263,7 +263,9 @@ void MainWindow::buildMenus() {
     file->addSeparator();
     needsDocument(file->addAction(tr("&Save"), QKeySequence::Save, this, [this] { save(false); }), "document.save");
     needsDocument(file->addAction(tr("Save &As…"), QKeySequence::SaveAs, this, [this] { save(true); }), "document.save");
-    revertAction_ = file->addAction(tr("Re&vert"), QKeySequence("F12"), this, &MainWindow::revertDocument);
+    // File > Revert: the file it was opened from or last saved to, read again as one undo step (no question: Undo
+    // brings the document back, as in Photoshop CC). Greyed until the document has changed.
+    revertAction_ = file->addAction(tr("Re&vert"), QKeySequence("F12"), this, [this] { runCommand("document.revert", {}, tr("Revert")); });
     revertAction_->setObjectName("file.revert");
     revertAction_->installEventFilter(fieldGuard);
     file->addSeparator();

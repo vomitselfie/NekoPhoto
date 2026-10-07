@@ -111,6 +111,7 @@ const MethodDoc methodDocs[] = {
      "resample:(bicubic|bilinear|nearest|lanczos)=bicubic How a new size is resampled; transparency:bool=true PNG, WebP, TIFF, TGA, GIF, ICO: false flattens onto background; "
      "layer:string Export this layer alone (an id, or active), as Layer > Export As; trim:bool=true With layer: crop to the layer's visible pixels (false keeps the canvas); "
      "animated:bool=true GIF: the timeline's frames; false (or any of width, height, scale, layer, transparency) writes the composite as a still GIF"},
+    {"document.revert", "File > Revert: read the file the document was opened from or last saved to again (any format it opens: project, PSD/PSB, Clip Studio, Affinity, SVG, PDF, an image, camera RAW with the Camera Raw settings it opened with), the way it opened, as one undo step named Revert; history.undo brings the edits back. The reply says reverted false when nothing changed since it was opened or saved, and undoable false when the history could not keep the document as it was.", ""},
     {"document.close", "Close the document in the current tab.", "discard:bool=false Close even with unsaved changes"},
     {"canvas.resize", "Change the canvas size, keeping the layers' pixels.",
      "width:integer! Pixels; height:integer! Pixels; anchorX:number=0.5 0 keeps the left edge, 1 the right; anchorY:number=0.5 0 keeps the top, 1 the bottom"},
