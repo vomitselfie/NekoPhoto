@@ -24,6 +24,7 @@ PdfOpenOptions& pdfOpenOptions();
 bool pdfSupported();
 /// A PDF page as a document of one pixel layer.
 /// With `parent`, a PDF of several pages asks which one (unless document.open named it).
-std::optional<compositor::PsdImport> importPdfDocument(const QString& path, QString* error, QWidget* parent = nullptr);
+/// `used`: the page and resolution it was rendered at (what File > Revert renders again).
+std::optional<compositor::PsdImport> importPdfDocument(const QString& path, QString* error, QWidget* parent = nullptr, PdfOpenOptions* used = nullptr);
 
 } // namespace app

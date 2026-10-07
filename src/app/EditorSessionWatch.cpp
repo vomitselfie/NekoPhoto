@@ -120,10 +120,32 @@ void EditorSession::reloadFromDisk() {
     emit reloadedFromDisk();
 }
 
-bool EditorSession::revertToSaved() {
-    if (!document_ || projectPath_.isEmpty()) return false;
+bool EditorSession::revertTo(LoadedProject loaded, QString* error) {
+    if (!document_) return false;
+    // What is half made goes, as Photoshop lets go of it: a stroke, a transform, the Quick Mask and filter-mask layers.
     cancelBrush();
-    return reloadProject();
+    cancelTransform();
+    endTemporaryLayers();
+    if (!canEditLayers()) {
+        if (error) *error = tr("Finish or cancel the edit in progress first.");
+        return false;
+    }
+    wandSession_.reset();
+    const bool sameCanvas = document_->width == loaded.document.width && document_->height == loaded.document.height;
+    // One step that swaps the whole document: Undo brings the one before it back, the earlier steps stay.
+    beginEdit(QT_TRANSLATE_NOOP("History", "Revert"));
+    loaded.document.id = document_->id;   // the same document, as far as the view and the panels go
+    document_ = std::move(loaded.document);
+    setActiveLayer(loaded.activeLayer && document_->find(*loaded.activeLayer) ? loaded.activeLayer : defaultActiveLayer(*document_));
+    endEdit();
+    // The document is the file again: unmodified (Undo makes it modified once more).
+    history_.markSaved();
+    if (source_.kind == DocumentSource::Kind::Project && source_.path == projectPath_) knownDigest_ = projectDigest(projectPath_);
+    lastStepUndone_ = false;
+    if (!sameCanvas) { viewport.fit({double(document_->width), double(document_->height)}); emit viewportChanged(); }
+    notifyDocument();
+    emit selectionChanged();
+    return true;
 }
 
 bool EditorSession::reloadProject() {

@@ -133,7 +133,7 @@ bool pdfSupported() {
 #endif
 }
 
-std::optional<PsdImport> importPdfDocument(const QString& path, QString* error, QWidget* parent) {
+std::optional<PsdImport> importPdfDocument(const QString& path, QString* error, QWidget* parent, PdfOpenOptions* used) {
     const PdfOpenOptions options = pdfOpenOptions();
     pdfOpenOptions() = PdfOpenOptions();   // one open only
 #ifdef COMPOSITOR_HAVE_QTPDF
@@ -179,6 +179,7 @@ std::optional<PsdImport> importPdfDocument(const QString& path, QString* error, 
     if (page.isNull()) { if (error) *error = QObject::tr("The page could not be rendered."); return std::nullopt; }
     result.document = Document(size.width(), size.height());
     result.document.resolution = ppi * scale;
+    if (used) *used = PdfOpenOptions{pageNumber, options.resolution, true};
     const QString name = QObject::tr("Page %1").arg(pageNumber);
     result.document.layers.push_back(Layer(Asset::make(fromQImage(page), name.toStdString()), Point(0, 0)));
     return result;
@@ -186,6 +187,7 @@ std::optional<PsdImport> importPdfDocument(const QString& path, QString* error, 
     (void)path;
     (void)options;
     (void)parent;
+    (void)used;
     if (error) *error = QObject::tr("This build of NekoPhoto opens PDF files only with Qt PDF, which was not found when it was built.");
     return std::nullopt;
 #endif

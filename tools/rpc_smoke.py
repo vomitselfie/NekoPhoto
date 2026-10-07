@@ -260,6 +260,61 @@ def document_files(rpc):
     rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
 
 
+def revert(rpc):
+    """File > Revert (document.revert): a PSD and a PNG read again after an edit, as one undo step that history.undo
+    takes back; Save As makes the project the file to revert to; a document made here has none. In tabs of their own
+    that are closed afterwards."""
+    work = tempfile.mkdtemp()
+    first = rpc.call("tabs.list")
+    rpc.call("tabs.new")
+    rpc.call("document.new", width=120, height=80)
+    expect_refused(rpc, "nothing to revert to", "document.revert")
+    rpc.call("shape.draw", kind="rectangle", x=10, y=10, width=60, height=40, color="#cc3322")
+    psd, png = os.path.join(work, "Revert.psd"), os.path.join(work, "Revert.png")
+    rpc.call("document.export", path=psd)
+    rpc.call("document.export", path=png)
+    rpc.call("document.close", discard=True)
+    for path, form in ((psd, "layered"), (png, "image")):
+        if form == "image":
+            rpc.call("tabs.new")   # an image opens as a document of its own in an empty tab
+        opened = rpc.call("document.open", path=path)
+        info = rpc.call("document.info")
+        assert info["source"] == {"path": path, "format": form}, info
+        layers = [l["name"] for l in rpc.call("layers.list")]
+        if not info["modified"]:
+            assert rpc.call("document.revert")["reverted"] is False   # nothing to revert yet
+        rpc.call("layers.add", name="Unsaved")
+        rpc.call("pixels.fill", color="#00ff00")
+        before = rpc.call("history.list")["undo"]
+        reverted = rpc.call("document.revert")
+        assert reverted["reverted"] and reverted["format"] == form and reverted["path"] == path and reverted["undoable"], reverted
+        assert [l["name"] for l in rpc.call("layers.list")] == layers, (path, layers)
+        after = rpc.call("history.list")["undo"]
+        assert after == before + ["Revert"], (before, after)
+        assert not rpc.call("document.info")["modified"]
+        # Undo brings the edits back; redo reverts again.
+        rpc.call("history.undo")
+        assert sorted(l["name"] for l in rpc.call("layers.list")) == sorted(layers + ["Unsaved"])
+        assert rpc.call("document.info")["modified"]
+        rpc.call("history.redo")
+        assert "Unsaved" not in [l["name"] for l in rpc.call("layers.list")]
+        rpc.call("history.undo")
+        # Save As: the project becomes the file to revert to (Export leaves it).
+        if form == "layered":
+            rpc.call("document.export", path=os.path.join(work, "Elsewhere.png"))
+            assert rpc.call("document.info")["source"]["path"] == psd
+            project = rpc.call("document.save", path=os.path.join(work, "Revert.nekophoto"))["path"]
+            assert rpc.call("document.info")["source"] == {"path": project, "format": "project"}
+            rpc.call("layers.delete", id=next(l["id"] for l in rpc.call("layers.list") if l["name"] == "Unsaved"))
+            assert rpc.call("document.revert")["format"] == "project"
+            assert "Unsaved" in [l["name"] for l in rpc.call("layers.list")], "reverted to the saved project"
+        rpc.call("tabs.close", index=opened.get("tab", rpc.call("document.info")["tab"]), discard=True)
+    for t in sorted(rpc.call("tabs.list"), key=lambda t: -t["index"]):
+        if t["index"] >= len(first):
+            rpc.call("tabs.close", index=t["index"], discard=True)
+    rpc.call("tabs.select", index=next(t["index"] for t in first if t["current"]))
+
+
 def remaining_methods(rpc):
     """Every method the checks above do not reach, in a tab of its own that is closed afterwards."""
     work = tempfile.mkdtemp()
@@ -2478,6 +2533,7 @@ def main():
 
     remaining_methods(rpc)
     document_files(rpc)
+    revert(rpc)
     histogram(rpc)
     sixteen_bit(rpc)
     thirty_two_bit(rpc)
@@ -2676,6 +2732,11 @@ def main():
         eight = rpc.call("document.open", path=dng, bitsPerChannel=8, settings={"exposure": 1, "whiteBalance": "Auto"})
         assert rpc.call("document.info")["bits"] == 8 and eight["settings"]["exposure"] == 1, eight
         assert rpc.call("render", maxSize=32) != plain, "the settings change the develop"
+        # File > Revert develops the file again with the settings and the depth it opened with.
+        developed = rpc.call("render", maxSize=32)
+        rpc.call("pixels.fill", color="#00ff00")
+        assert rpc.call("document.revert")["format"] == "raw"
+        assert rpc.call("document.info")["bits"] == 8 and rpc.call("render", maxSize=32) == developed, "Revert developed the RAW file differently"
         rpc.call("tabs.close", index=eight["tab"], discard=True)
         obj = rpc.call("document.open", path=dng, asSmartObject=True, settings={"exposure": 0.5})
         assert obj["smartObject"] and obj["layers"] == 1, obj
@@ -2689,6 +2750,12 @@ def main():
         assert rpc.call("render", maxSize=32) != before
         rpc.call("history.undo")
         assert rpc.call("render", maxSize=32) == before, "one undo takes the develop back"
+        # Open Object reverts to a smart object developed with the settings it opened with.
+        rpc.call("smartObject.editContents", id=layer["id"], settings={"exposure": -1})
+        rpc.call("layers.add", name="Unsaved")
+        assert rpc.call("document.revert")["format"] == "raw"
+        reverted = rpc.call("layers.list")
+        assert len(reverted) == 1 and reverted[0]["kind"] == "smartObject" and rpc.call("render", maxSize=32) == before, reverted
         rpc.call("tabs.close", index=obj["tab"], discard=True)
         for bad in ({"bitsPerChannel": 12}, {"settings": {"sparkle": 1}}):
             try:
@@ -2716,6 +2783,11 @@ def main():
             f.write(pdf)
         page = rpc.call("document.open", path=pdf_path, page=2, resolution=144)
         assert (page["width"], page["height"]) == (288, 144), page
+        # File > Revert renders the same page at the same resolution again.
+        second = rpc.call("render", maxSize=32)
+        rpc.call("pixels.fill", color="#00ff00")
+        assert rpc.call("document.revert")["format"] == "layered"
+        assert rpc.call("document.info")["width"] == 288 and rpc.call("render", maxSize=32) == second, "Revert read another page"
         try:
             rpc.call("document.open", path=pdf_path, page=3)
             raise AssertionError("the PDF has two pages")

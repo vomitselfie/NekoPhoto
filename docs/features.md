@@ -101,6 +101,7 @@ interface language, and runs it; the last eight used come first.
 - Export PNG, TIFF, TGA, a multi-size Windows icon (16, 32, 48 and 256 px), or JPEG and WebP with a live preview (WebP keeps transparency, and is lossless at quality 100)
 - Crash recovery: unsaved changes are autosaved in the background every few minutes (Preferences sets how often, or turns it off) and offered back after a crash; your own files are never touched
 - Several projects in tabs; opening a file from the file manager adds a tab to the running window
+- File ▸ Revert (F12), as in Photoshop: the document goes back to the file it was opened from or last saved to, whatever its format (a project, PSD/PSB, Clip Studio, Affinity, SVG, PDF, an image, or camera RAW developed again with the Camera Raw settings it opened with), read the way it was opened (a PSD's merged image, a PDF's page, the profile decision); no question, because it is one step in History and Undo brings the edits back. Save As makes the new file the one to revert to, Export does not, and a recovered document reverts to its own file
 - The Crop tool as Photoshop's: ratio presets (Original Ratio, 1:1, 4:5, 5:7, 2:3, 3:2, 4:3, 16:9, 9:16) or a typed W and H, Swap (X), the rule-of-thirds grid while dragging, Alt to drag from the centre, Shift to keep the box's shape, snapping to the canvas edges and centre and to layers, and the box starts on the selection when there is one
 - Crop, Canvas Size and Image Size; Image > Trim cuts the canvas to its content (by transparency or a corner's colour, on the sides you choose); rulers and a pixel grid
 - Artboards, as in Photoshop: the Artboard tool (Shift+V) drags out a named rectangle with a white, black, transparent or custom background whose layers are clipped to it; drag inside one to move it with its contents, an edge or corner to resize it; File > Export Artboards to Files writes each as PNG, JPEG, WebP or TIFF; PSD artboards open and export as Photoshop's own, and projects keep them ([artboards-slices.md](artboards-slices.md))
@@ -115,7 +116,7 @@ interface language, and runs it; the last eight used come first.
 - Scrubby labels, as in Photoshop: drag the label beside a number (Size, Opacity, a filter's Radius, a Layer Style's Distance, the transform fields, Camera Raw's sliders) left or right to change it, with Shift for fine steps and Alt or Ctrl for coarse ones; a click on the label still types in the field, and one drag is one undo step
 - Opening a file that could not be carried over whole (PSD, PSB, Clip Studio, Affinity, SVG, PDF, imported brushes) shows a bar over the canvas instead of a dialog: how many things changed and the first of them, Details for the full list, Undo Open to close the document again
 - Shift + a tool's letter steps through its group, as in Photoshop (Shift+J: Spot Healing, Healing Brush, Patch, Content-Aware Move; Shift+O: Dodge, Burn, Sponge; and the others in [linux-port.md](linux-port.md#keyboard-shortcuts))
-- Photoshop's held keys: Ctrl is the Move tool while held, Alt the Eyedropper with the Brush, Paint Bucket and Gradient, Ctrl+Space and Ctrl+Alt+Space zoom in and out, and a tool's letter held while using it springs back to the tool before when let go; Ctrl+Alt+Z toggles the last state, F7 shows the Layers panel, F12 reverts to the saved project, and Ctrl+Shift+> / < size the type being typed
+- Photoshop's held keys: Ctrl is the Move tool while held, Alt the Eyedropper with the Brush, Paint Bucket and Gradient, Ctrl+Space and Ctrl+Alt+Space zoom in and out, and a tool's letter held while using it springs back to the tool before when let go; Ctrl+Alt+Z toggles the last state, F7 shows the Layers panel, F12 reverts to the file as opened or last saved (one undo step), and Ctrl+Shift+> / < size the type being typed
 
 ## Automation
 - Scripts and AI agents can drive the editor through a socket or MCP; see [automation.md](automation.md). `document.histogram` returns the Histogram panel's bins and statistics
@@ -212,6 +213,7 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 - スライス:スライスツール(Shift+C)で名前付きの矩形を作り、ファイル > スライスを書き出しで PNG/JPEG/WebP/TIFF に書き出します。PSD のスライス(リソース 1050)も編集できる形で読み書きします
 - クラッシュからの復元:未保存の変更を数分ごとにバックグラウンドで自動保存し、異常終了の後に復元を提案します(間隔の変更やオフは環境設定で)。元のファイルには触れません
 - タブで複数のプロジェクト。ファイルマネージャーから開いたファイルは起動中のウィンドウにタブとして追加
+- ファイル ▸ 復帰(F12、Photoshop と同じ):開いたとき、または最後に保存したときのファイルに戻します。形式は問いません(プロジェクト、PSD/PSB、クリップスタジオ、Affinity、SVG、PDF、画像、カメラ RAW は開いたときの Camera Raw の設定で現像し直し)。開いたときと同じ読み方(PSD の統合画像、PDF のページ、プロファイルの選択)で読み直します。ヒストリーの 1 ステップなので確認はなく、取り消しで編集が戻ります。別名で保存すると新しいファイルが復帰先になり、書き出しでは変わりません。復元したドキュメントは元のファイルに戻ります
 - 切り抜きツール(Photoshop と同じ):比率のプリセット(元の縦横比、1:1、4:5、5:7、2:3、3:2、4:3、16:9、9:16)または幅と高さの入力、高さと幅を入れ替え(X)、ドラッグ中の三分割グリッド、Alt で中心から、Shift で縦横比を保持、カンバスの端と中心やレイヤーへのスナップ。選択範囲があればその範囲から始まります
 - 切り抜き、カンバスサイズ、画像解像度。イメージ > トリミングで内容に合わせてカンバスを切り詰め(透明部分または角の色で、選んだ辺のみ)。定規とピクセルグリッド
 - 開いているプロジェクトはディスク上の変更に追従します:他のアプリやエージェントが `.nekophoto` ファイルや `.comp` フォルダーを書き換えると、タブがその場で読み込み直します(触れただけの変更や書き込み途中は無視し、未保存の作業は確認なしに置き換えません)
@@ -224,7 +226,7 @@ NekoPhoto の機能の一覧です(Linux・Windows)。キーボードショー�
 - スクラブ(Photoshop と同じ):数値の横のラベル(直径、不透明度、フィルターの半径、レイヤースタイルの距離、変形の数値欄、Camera Raw のスライダー)を左右にドラッグして値を変えられます。Shift で細かく、Alt または Ctrl で大きく動きます。ラベルのクリックでは従来どおり数値を入力でき、1 回のドラッグは 1 つの取り消し単位です
 - そのままでは引き継げない要素のあるファイル(PSD、PSB、クリップスタジオ、Affinity、SVG、PDF、読み込んだブラシ)を開くと、ダイアログではなくカンバス上部のバーで知らせます:変更の件数と最初の 1 件、詳細で全件の一覧、開くの取り消しでドキュメントを閉じます
 - Shift + ツールのキーで同じグループのツールを順に切り替えます(Photoshop と同じ。Shift+J:スポット修復ブラシ・修復ブラシ・パッチ・コンテンツに応じた移動、Shift+O:覆い焼き・焼き込み・スポンジ。ほかは [linux-port.md](linux-port.md#keyboard-shortcuts))
-- Photoshop と同じ押している間だけのキー:Ctrl を押している間は移動ツール、ブラシ・塗りつぶしツール・グラデーションでは Alt でスポイト、Ctrl+Space と Ctrl+Alt+Space でズームイン・ズームアウト、ツールのキーを押したまま使うと離したときに元のツールへ戻ります。Ctrl+Alt+Z で最後の状態を切り替え、F7 でレイヤーパネルの表示、F12 で保存されたプロジェクトに復帰、Ctrl+Shift+> / < で入力中の文字サイズを変更
+- Photoshop と同じ押している間だけのキー:Ctrl を押している間は移動ツール、ブラシ・塗りつぶしツール・グラデーションでは Alt でスポイト、Ctrl+Space と Ctrl+Alt+Space でズームイン・ズームアウト、ツールのキーを押したまま使うと離したときに元のツールへ戻ります。Ctrl+Alt+Z で最後の状態を切り替え、F7 でレイヤーパネルの表示、F12 で開いた・最後に保存したファイルに復帰(1 回の取り消しで元に戻せます)、Ctrl+Shift+> / < で入力中の文字サイズを変更
 
 ### 自動化
 - スクリプトや AI エージェントからソケットまたは MCP 経由で操作できます。詳しくは [automation.md](automation.md)(英語)。`document.histogram` はヒストグラムパネルのビンと統計情報を返します

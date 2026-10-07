@@ -78,6 +78,8 @@ qt_add_executable(nekophoto
     SelfTest.cpp
     EditorSessionSmartFilters.cpp
     EditorSessionWatch.cpp
+    DocumentSource.h
+    DocumentSource.cpp
     EditorSessionTransform.cpp
     EditorSessionColor.cpp
     ColorManagement.h

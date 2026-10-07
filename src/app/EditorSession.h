@@ -6,6 +6,7 @@
 // canvas, view) and EditorSession{Layers,Transform,Painting,Pixels,Selection,QuickSelect,Adjustments}.cpp.
 #pragma once
 #include "Viewport.h"
+#include "DocumentSource.h"
 #include "compositor/adjustments.h"
 #include "compositor/cameraraw.h"
 #include "compositor/brush.h"
@@ -832,9 +833,18 @@ public:
     void redo();
     /// Photoshop CC's Toggle Last State (Ctrl+Alt+Z): redoes the step just undone, otherwise undoes the last step.
     void toggleLastState();
-    /// File > Revert: the project as it was last saved, in place (the history starts afresh). False when there is no
-    /// saved project or it cannot be read now.
-    bool revertToSaved();
+    /// The file the document was opened from or last saved to, and how it was opened (DocumentSource.h): what
+    /// File > Revert reads again. Opening and saving set it; Export leaves it.
+    const DocumentSource& source() const { return source_; }
+    void setSource(DocumentSource source);
+    /// File > Revert is available: the document came from a file and has changed since it was opened or saved.
+    bool canRevert() const { return document_ && source_.valid() && isModified(); }
+    /// File > Revert: the document as `loaded` (the source read again), in place, as one undo step named "Revert"
+    /// (the steps before it stay; Undo brings back the document as it was). Unmodified afterwards, as just opened.
+    /// False, saying why, when an edit in progress cannot be let go.
+    bool revertTo(LoadedProject loaded, QString* error = nullptr);
+    /// The layer a document taken from a file starts with active: the topmost visible pixel layer.
+    static std::optional<compositor::Uuid> defaultActiveLayer(const compositor::Document& document);
     /// For grouping steps after the fact (the automation server's edit groups): the document's revision now,
     /// the revisions of the recorded steps, those recorded since a revision, and merging them into one step.
     uint64_t historyRevision() const { return history_.revision(); }
@@ -883,7 +893,8 @@ public:
     void adoptDocument(const compositor::Document& document, const QString& name);
     /// A document recovered after a crash: unsaved, and, when it had been saved before, belonging to that project again,
     /// so Save writes it back to the same file or folder, in the same form (.nekophoto or .comp).
-    void adoptRecovered(const compositor::Document& document, const QString& name, const QString& originalPath);
+    /// `source`: where the document came from (DocumentSource::toJson), File > Revert's file.
+    void adoptRecovered(const compositor::Document& document, const QString& name, const QString& originalPath, const QJsonObject& source = {});
     /// The name an imported document carries while it has no project path.
     const QString& importedName() const { return importedName_; }
     compositor::Overrides renderOverrides() const;
@@ -1091,6 +1102,7 @@ private:
     std::set<compositor::Uuid> selectedLayerIds_;
     bool isMaskSelected_ = false;
     QString projectPath_;
+    DocumentSource source_;
     // ---- following the package on disk (EditorSessionWatch.cpp)
     void watchProject();
     void stopWatchingProject();

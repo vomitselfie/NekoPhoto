@@ -43,6 +43,8 @@ void AutomationServer::registerDocumentHandlers() {
                       {"modified", s->isModified()}, {"title", s->title()}, {"tab", w->currentTabIndex()},
                       {"profile", color::profileLabel(doc.profile)}};
         if (!s->projectPath().isEmpty()) o["path"] = s->projectPath();
+        // What File > Revert reads: the file it was opened from or last saved to, and its form.
+        if (s->source().valid()) o["source"] = QJsonObject{{"path", s->source().path}, {"format", s->source().kindName()}};
         if (auto id = s->activeLayerId()) { o["activeLayer"] = qs(*id); o["maskSelected"] = s->isMaskSelected(); }
         if (doc.selection && !doc.selection->isEmpty()) o["selection"] = rectJson(doc.selection->bounds());
         o["undo"] = s->canUndo() ? QJsonValue(s->undoName()) : QJsonValue::Null;
@@ -219,6 +221,25 @@ void AutomationServer::registerDocumentHandlers() {
         w->noteRecent(path);
         // Compositor for macOS opens projects up to 100 megapixels of layers in total.
         return QJsonObject{{"path", path}, {"macCompatible", session()->document()->fitsMacBudget()}};
+    });
+    add("document.revert", [w, session, document](const QJsonObject&) {
+        // File > Revert: the file the document was opened from or last saved to, read again the way it opened, as one
+        // undo step named "Revert" (history.undo brings the edits back). Unchanged since then: nothing to do.
+        document();
+        const DocumentSource source = session()->source();
+        if (!source.valid()) fail("the document was not opened from a file or saved yet, so there is nothing to revert to");
+        QJsonObject out{{"path", source.path}, {"format", source.kindName()}};
+        if (!session()->isModified()) { out["reverted"] = false; return out; }
+        QString error;
+        if (!w->revertDocument(&error)) fail(error);
+        const Document& d = document();
+        out["reverted"] = true;
+        out["width"] = d.width;
+        out["height"] = d.height;
+        out["layers"] = int(d.layers.size());
+        // False when the history's memory budget could not keep the document as it was before.
+        out["undoable"] = session()->canUndo() && session()->undoName() == QLatin1String("Revert");
+        return out;
     });
     add("document.export", [session, document](const QJsonObject& p) {
         session()->endTemporaryLayers();   // the Quick Mask and filter-mask layers are never written

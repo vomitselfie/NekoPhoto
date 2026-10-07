@@ -5,6 +5,7 @@
 // no running instance holds, and offers its projects back.
 #pragma once
 #include <QDateTime>
+#include <QJsonObject>
 #include <QLockFile>
 #include <QObject>
 #include <QString>
@@ -39,7 +40,8 @@ public:
     void restart();
 
     /// A project left by an instance that is no longer running.
-    struct Recovered { QString project, title, originalPath; QDateTime saved; };
+    /// `source`: where the document came from (DocumentSource::toJson), the file File > Revert reads.
+    struct Recovered { QString project, title, originalPath; QDateTime saved; QJsonObject source; };
     /// Claims the folders of instances that are no longer running (their locks are taken, so another launch
     /// does not offer them too) and lists their projects, newest first.
     std::vector<Recovered> claimOrphans();

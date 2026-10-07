@@ -3,6 +3,7 @@
 // with its own session, canvas and panels; the menus act on the current one.
 #pragma once
 #include "EditorSession.h"
+#include "compositor/psd.h"
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QMainWindow>
@@ -70,6 +71,10 @@ public:
     /// A layered file (Photoshop, Clip Studio, Aseprite, an icon's sizes or an animated GIF's frames) in a new
     /// tab, with a note of what did not carry over.
     void openLayeredFile(const QString& path);
+    /// File > Revert (F12, document.revert): the current document's source (EditorSession::source) read again through
+    /// the reader it opened with and the same choices, put in place as one undo step. False with `error` when it has no
+    /// source or the file cannot be read now.
+    bool revertDocument(QString* error);
     /// The next PSD or PSB open without the size prompt: true opens only its merged image, false its layers.
     std::optional<bool> nextPsdMergedOnly;
     const QStringList& lastImportNotes() const { return lastImportNotes_; }
@@ -154,6 +159,14 @@ protected:
     void dropEvent(QDropEvent*) override;
 
 private:
+    /// The reading half of an open: the document `source` holds, read as File > Open reads it, with the choices it
+    /// records (and records the ones made now: the profile decision, a PDF's page). A layered file's import notes
+    /// land in `notes`. Empty with `error` (empty when a choice was cancelled).
+    std::optional<compositor::PsdImport> readLayeredSource(DocumentSource& source, QString* error);
+    std::optional<EditorSession::LoadedProject> readSource(DocumentSource& source, QString* error);
+    /// The profile decision for a file as it opens: the one `source` recorded while the file embeds the same profile,
+    /// else asked (or by Color Settings' policy) and recorded.
+    color::OpenDecision openDecision(DocumentSource& source, const std::optional<compositor::ColorProfile>& embedded);
     struct Tab {
         CanvasFrame* frame = nullptr;
         EditorSession* session = nullptr;
@@ -274,8 +287,6 @@ private:
     QAction* redoAction_;
     QAction* toggleStateAction_ = nullptr;
     QAction* revertAction_ = nullptr;
-    /// File > Revert (F12): the project as last saved, after asking when there are unsaved changes.
-    void revertDocument();
     QList<QAction*> documentActions_;
     /// The supports() feature each document action is (compositor/supports.h); an action without one is 8-bit only.
     QMap<QAction*, QString> actionFeatures_;

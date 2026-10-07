@@ -146,12 +146,13 @@ reuses the menu bar's `QAction`s (by the keys `nameAction` gives them), so it fo
 
 ### Converted
 
-`command_path_selftest` checks every item below that is marked *checked* (90 of them): the menu path (or dialog,
+`command_path_selftest` checks every item below that is marked *checked* (91 of them): the menu path (or dialog,
 or panel control), the requests the recording holds, and the session calls the item made before, compared as
 documents, selections, paths, channels and history names, with each recorded once.
 
 | Where | Items | Method |
 |---|---|---|
+| File | Revert *(checked)*: the file the document was opened from or last saved to, read again as one undo step | `document.revert` |
 | Edit | Fill with Foreground / Background *(checked)*; Clear *(checked)*: pixels with a selection, else one layer that supplies no clipping mask | `pixels.fill`, `pixels.clear`, `layers.delete` |
 | Edit | Cut, Copy, Copy Merged, Paste *(checked)*: Copy with layers selected and no selection copies the layers, Paste pastes copied layers | `pixels.cut`, `pixels.copy`, `pixels.copyMerged`, `pixels.paste`, `layers.copy`, `layers.paste` |
 | Edit | Free Transform's commit *(checked)* | `layers.setTransform` |
