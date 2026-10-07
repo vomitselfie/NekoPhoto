@@ -80,6 +80,18 @@ struct RenderPlan {
 inline int docX(const Rect& region, double scale, int x) { return int(std::floor(region.x + (x + 0.5) / scale)); }
 inline int docY(const Rect& region, double scale, int y) { return int(std::floor(region.y + (y + 0.5) / scale)); }
 
+/// Whether the layer is type to Photoshop: a text layer, or Photoshop text NekoPhoto shows as its pixels (vertical
+/// type, say) while those pixels are still the ones Photoshop drew.
+bool photoshopType(const Layer& layer);
+
+/// Type over what is under it, as Photoshop draws it in an RGB document: with Color Settings' "Blend Text Colors Using
+/// Gamma" (on, at 1.45, by default) a type layer's colours meet the backdrop in a space of gamma 1.45 over linear light,
+/// not in the document's encoding. `source` is the layer drawn alone (premultiplied, its opacity and masks in), blended
+/// into `target` in Normal mode. Photoshop's merged images of Patchy's photoshop-text-* fixtures match it on every
+/// anti-aliased edge pixel.
+void blendTextGamma(const Image& source, Image& target);
+void blendTextGamma(const Image16& source, Image16& target);
+
 /// The pixel half of the renderer at one sample type: specialised per depth (render_exec_u8.cpp).
 template <SampleType S> struct RenderExec;
 

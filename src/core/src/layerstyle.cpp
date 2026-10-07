@@ -3,6 +3,7 @@
 // docs/ps-compat.md there), whose rules were pinned against Photoshop 2026.
 #include "compositor/layerstyle.h"
 #include "compositor/blend.h"
+#include "compositor/depth.h"
 #include "compositor/document.h"
 #include "psd/psd_descriptor.hpp"
 #include <algorithm>
@@ -522,45 +523,84 @@ void readPatterns(const std::vector<uint8_t>& block, std::map<std::string, Patte
                 const int64_t pw64 = right - left, ph64 = bottom - top;
                 if (pw64 <= 0 || ph64 <= 0 || pw64 > 4096 || ph64 > 4096 || w <= 0 || h <= 0) { r.skip(end - r.position()); goto next; }
                 const int pw = int(pw64), ph = int(ph64);
-                // Only the planes the colour mode uses are kept (at most four colour planes and the alpha slot), and a
-                // plane is allocated only when its data can fill it.
-                std::vector<std::vector<uint8_t>> planes;
-                std::vector<uint8_t> alpha;
+                // Only the planes the colour mode uses (one, three or four colour planes, and the transparency in the
+                // last slot) are kept, each at 15 bits. Photoshop keeps a pattern at the depth it was made at, so a plane
+                // is 8 or 16 bits a sample (Patchy's psd_patterns.cpp reads the same); its own rectangle places it in the
+                // pattern's, and what it leaves out reads as no colour, opaque. A plane in another depth or compression
+                // leaves the pattern out.
+                const int colourCount = mode == 3 ? 3 : mode == 4 ? 4 : 1;
+                std::vector<std::vector<uint16_t>> planes(static_cast<size_t>(colourCount));
+                std::vector<uint16_t> alpha;
+                bool deep = false;
                 for (int slot = 0; slot < maxChannels + 2 && r.position() + 4 <= end; slot++) {
                     if (r.read_u32() == 0) continue;
                     const uint32_t planeLength = r.read_u32();
+                    if (planeLength == 0) continue;
                     const size_t planeEnd = r.position() + planeLength;
-                    const uint32_t depth = r.read_u32();
+                    (void)r.read_u32();   // the depth; again, as the sample size, below
                     const int64_t t = int32_t(r.read_u32()), l = int32_t(r.read_u32()), b = int32_t(r.read_u32()), rr = int32_t(r.read_u32());
-                    (void)r.read_u16();
+                    const int sampleDepth = r.read_u16();
                     const int compression = r.read_u8();
                     const bool isAlpha = slot == maxChannels + 1;
-                    const bool wanted = isAlpha || planes.size() < 4;
-                    if (wanted) {
-                        std::vector<uint8_t> plane(size_t(pw) * size_t(ph), 255);
-                        if (depth == 8 && rr - l == pw64 && b - t == ph64) {
-                            if (compression == 0) { auto d = r.read_span(size_t(pw) * size_t(ph)); std::copy(d.begin(), d.end(), plane.begin()); }
-                            else if (compression == 1) {
-                                std::vector<size_t> counts(static_cast<size_t>(ph));
-                                for (auto& c : counts) c = r.read_u16();
-                                for (int y = 0; y < ph; y++) { auto row = r.read_span(counts[size_t(y)]); unpack(row.data(), row.size(), plane.data() + size_t(y) * size_t(pw), size_t(pw)); }
+                    if (isAlpha || slot < colourCount) {
+                        const int64_t qw = rr - l, qh = b - t;
+                        if ((sampleDepth != 8 && sampleDepth != 16) || (compression != 0 && compression != 1) || qw <= 0 || qh <= 0 || qw > 4096 || qh > 4096) {
+                            r.skip(end - r.position());
+                            goto next;
+                        }
+                        const size_t bytes = size_t(sampleDepth) / 8, rowBytes = size_t(qw) * bytes;
+                        std::vector<uint8_t> raw(rowBytes * size_t(qh));
+                        if (compression == 0) { auto d = r.read_span(raw.size()); std::copy(d.begin(), d.end(), raw.begin()); }
+                        else {
+                            std::vector<size_t> counts(static_cast<size_t>(qh));
+                            for (auto& c : counts) c = r.read_u16();
+                            for (size_t y = 0; y < counts.size(); y++) { auto row = r.read_span(counts[y]); unpack(row.data(), row.size(), raw.data() + y * rowBytes, rowBytes); }
+                        }
+                        // CMYK planes hold the ink's complement: no ink is the full value.
+                        std::vector<uint16_t> plane(size_t(pw) * size_t(ph), uint16_t(isAlpha || mode == 4 ? one16 : 0));
+                        for (int64_t y = 0; y < qh; y++) {
+                            const int64_t py = t - top + y;
+                            if (py < 0 || py >= ph) continue;
+                            for (int64_t x = 0; x < qw; x++) {
+                                const int64_t px = l - left + x;
+                                if (px < 0 || px >= pw) continue;
+                                const uint8_t* v = raw.data() + size_t(y) * rowBytes + size_t(x) * bytes;
+                                plane[size_t(py) * size_t(pw) + size_t(px)] = bytes == 1 ? widen8(v[0]) : uint16_t(std::min<uint32_t>(uint32_t(v[0]) << 8 | v[1], one16));
                             }
                         }
-                        if (isAlpha) alpha = std::move(plane); else planes.push_back(std::move(plane));
+                        deep |= bytes == 2;
+                        if (isAlpha) alpha = std::move(plane); else planes[size_t(slot)] = std::move(plane);
                     }
                     r.skip(planeEnd > r.position() ? planeEnd - r.position() : 0);
                 }
+                if (std::all_of(planes.begin(), planes.end(), [](const std::vector<uint16_t>& p) { return p.empty(); })) { r.skip(end - r.position()); goto next; }
+                for (auto& plane : planes) if (plane.empty()) plane.assign(size_t(pw) * size_t(ph), uint16_t(mode == 4 ? one16 : 0));
                 PatternTile tile;
                 tile.width = pw; tile.height = ph;
                 tile.rgba.resize(size_t(pw) * ph * 4);
+                if (deep) tile.rgba16.resize(size_t(pw) * ph * 4);
                 for (size_t i = 0; i < size_t(pw) * ph; i++) {
+                    // 8 bits from the samples rounded to bytes (an 8-bit plane's own bytes), 15 bits from the samples.
                     uint8_t c[3];
-                    if (mode == 2 && !planes.empty() && palette.size() == 768) { const uint8_t k = planes[0][i]; c[0] = palette[k]; c[1] = palette[256 + k]; c[2] = palette[512 + k]; }
-                    else if (mode == 4 && planes.size() >= 4) { const int k = planes[3][i]; for (int j = 0; j < 3; j++) c[j] = uint8_t(planes[size_t(j)][i] * k / 255); }
-                    else if (planes.size() >= 3) for (int j = 0; j < 3; j++) c[j] = planes[size_t(j)][i];
-                    else { const uint8_t g = planes.empty() ? 0 : planes[0][i]; c[0] = c[1] = c[2] = g; }
+                    uint16_t wide[3];
+                    if (mode == 2 && palette.size() == 768) {
+                        const uint8_t k = narrow16(planes[0][i]);
+                        for (int j = 0; j < 3; j++) { c[j] = palette[size_t(j) * 256 + k]; wide[j] = widen8(c[j]); }
+                    } else if (mode == 4) {
+                        const int k = narrow16(planes[3][i]);
+                        for (int j = 0; j < 3; j++) {
+                            c[j] = uint8_t(narrow16(planes[size_t(j)][i]) * k / 255);
+                            wide[j] = uint16_t((uint32_t(planes[size_t(j)][i]) * planes[3][i] + one16 / 2) >> 15);
+                        }
+                    } else if (colourCount == 3) for (int j = 0; j < 3; j++) { wide[j] = planes[size_t(j)][i]; c[j] = narrow16(wide[j]); }
+                    else { wide[0] = wide[1] = wide[2] = planes[0][i]; c[0] = c[1] = c[2] = narrow16(wide[0]); }
+                    const uint16_t a = alpha.empty() ? uint16_t(one16) : alpha[i];
                     for (int j = 0; j < 3; j++) tile.rgba[i * 4 + size_t(j)] = c[j];
-                    tile.rgba[i * 4 + 3] = alpha.empty() ? 255 : alpha[i];
+                    tile.rgba[i * 4 + 3] = narrow16(a);
+                    if (deep) {
+                        for (int j = 0; j < 3; j++) tile.rgba16[i * 4 + size_t(j)] = wide[j];
+                        tile.rgba16[i * 4 + 3] = a;
+                    }
                 }
                 out[id] = std::move(tile);
             }
@@ -866,9 +906,10 @@ void gradientColorExact(const StyleGradient& g, float t, double out[3]) {
             put(c[0], c[1], c[2]);
             return;
         }
-        // Classic: linear blended toward a Catmull-Rom through the neighbours by the smoothness (when there are
-        // more than two stops).
-        const double smooth = s.size() > 2 || g.fillLayer ? g.smoothness : 0.0;
+        // Classic: linear blended toward a Catmull-Rom through the neighbours by the smoothness. Two stops ease too
+        // (the end stops stand in for the missing neighbours): Photoshop's merged image of a two-stop overlay
+        // (Patchy's photoshop-overlay-zorder.psd) follows the eased ramp, as fill layers do.
+        const double smooth = g.smoothness;
         auto c = [&](uint8_t p0, uint8_t p1, uint8_t p2, uint8_t p3) { const double lin = p1 + (p2 - p1) * u; return lin + (catmullRom(p0, p1, p2, p3, u) - lin) * smooth; };
         put(c(p.r, l.color.r, r.color.r, n.r), c(p.g, l.color.g, r.color.g, n.g), c(p.b, l.color.b, r.color.b, n.b));
         return;

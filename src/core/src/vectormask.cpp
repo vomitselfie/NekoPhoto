@@ -657,12 +657,18 @@ std::shared_ptr<const Img> paintAt(const VectorPaint& paint, const Document& doc
                 long tx = long(std::floor(u)) % t.width, ty = long(std::floor(v)) % t.height;
                 if (tx < 0) tx += t.width;
                 if (ty < 0) ty += t.height;
-                const uint8_t* src = t.rgba.data() + (size_t(ty) * size_t(t.width) + size_t(tx)) * 4;
+                const size_t at = (size_t(ty) * size_t(t.width) + size_t(tx)) * 4;
+                const uint8_t* src = t.rgba.data() + at;
                 if constexpr (eight) {
                     for (int k = 0; k < 3; k++) row[k] = uint8_t((src[k] * src[3] + 127) / 255);
                     row[3] = src[3];
+                } else if (!t.rgba16.empty()) {
+                    // A pattern stored at 16 bits: its own 15-bit samples, premultiplied.
+                    const uint16_t* wide = t.rgba16.data() + at;
+                    for (int k = 0; k < 3; k++) row[k] = uint16_t(mul15(wide[k], wide[3]));
+                    row[3] = wide[3];
                 } else {
-                    // Patterns are 8-bit tiles: premultiplied at 15 bits from the straight texel.
+                    // An 8-bit pattern: premultiplied at 15 bits from the straight texel.
                     const uint32_t a = widen8(src[3]);
                     for (int k = 0; k < 3; k++) row[k] = uint16_t(mul15(widen8(src[k]), a));
                     row[3] = uint16_t(a);

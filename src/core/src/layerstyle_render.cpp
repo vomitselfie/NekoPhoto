@@ -515,12 +515,20 @@ struct Pattern {
     int channels = 4;
     double anchorX = 0, anchorY = 0, inverseScale = 1, cosine = 1, sine = 0;
     bool nearest = true, box = false;
+    /// A 16- or 32-bit document's: a pattern stored at 16 bits is sampled at 15 (its `rgba16`), not its 8-bit copy.
+    bool wide = false;
     void sample(double x, double y, float rgb[3], float& alpha) const {
         if (native) { sampleNative(x, y, rgb, alpha); return; }
+        if (wide && !tile->rgba16.empty()) sampleTexels(tile->rgba16.data(), float(one16), x, y, rgb, alpha);
+        else sampleTexels(tile->rgba.data(), 255.0f, x, y, rgb, alpha);
+    }
+    /// The sampling on straight RGBA texels whose full value is `unit`.
+    template <class Texel>
+    void sampleTexels(const Texel* texels, float unit, double x, double y, float rgb[3], float& alpha) const {
         auto texel = [&](long tx, long ty) {
             tx %= tile->width; if (tx < 0) tx += tile->width;
             ty %= tile->height; if (ty < 0) ty += tile->height;
-            return tile->rgba.data() + (size_t(ty) * size_t(tile->width) + size_t(tx)) * 4;
+            return texels + (size_t(ty) * size_t(tile->width) + size_t(tx)) * 4;
         };
         if (box) {
             // Minified: average the texels under the pixel's footprint, weighted by how much of each it covers.
@@ -533,19 +541,19 @@ struct Pattern {
                 for (long tx = long(std::floor(u0)); tx <= long(std::ceil(u1)) - 1; tx++) {
                     const double cx = std::min(u1, tx + 1.0) - std::max(u0, double(tx));
                     if (cx <= 0) continue;
-                    const uint8_t* p = texel(tx, ty);
+                    const Texel* p = texel(tx, ty);
                     for (int k = 0; k < 4; k++) sum[k] += cx * cy * p[k];
                     total += cx * cy;
                 }
             }
-            for (int k = 0; k < 3; k++) rgb[k] = total > 0 ? float(sum[k] / total / 255) : 0;
-            alpha = total > 0 ? float(sum[3] / total / 255) : 0;
+            for (int k = 0; k < 3; k++) rgb[k] = total > 0 ? float(sum[k] / total / unit) : 0;
+            alpha = total > 0 ? float(sum[3] / total / unit) : 0;
             return;
         }
         if (nearest) {
-            const uint8_t* p = texel(long(std::floor(x + 0.5 - anchorX)), long(std::floor(y + 0.5 - anchorY)));
-            for (int k = 0; k < 3; k++) rgb[k] = p[k] / 255.0f;
-            alpha = p[3] / 255.0f;
+            const Texel* p = texel(long(std::floor(x + 0.5 - anchorX)), long(std::floor(y + 0.5 - anchorY)));
+            for (int k = 0; k < 3; k++) rgb[k] = p[k] / unit;
+            alpha = p[3] / unit;
             return;
         }
         double u = x - anchorX, v = y - anchorY;
@@ -553,8 +561,8 @@ struct Pattern {
         u = ru * inverseScale; v = rv * inverseScale;
         const double fu = std::floor(u), fv = std::floor(v);
         const float tx = float(u - fu), ty = float(v - fv);
-        const uint8_t *a = texel(long(fu), long(fv)), *b = texel(long(fu) + 1, long(fv)), *c = texel(long(fu), long(fv) + 1), *d = texel(long(fu) + 1, long(fv) + 1);
-        auto mix = [&](int k) { return ((a[k] * (1 - tx) + b[k] * tx) * (1 - ty) + (c[k] * (1 - tx) + d[k] * tx) * ty) / 255.0f; };
+        const Texel *a = texel(long(fu), long(fv)), *b = texel(long(fu) + 1, long(fv)), *c = texel(long(fu), long(fv) + 1), *d = texel(long(fu) + 1, long(fv) + 1);
+        auto mix = [&](int k) { return ((a[k] * (1 - tx) + b[k] * tx) * (1 - ty) + (c[k] * (1 - tx) + d[k] * tx) * ty) / unit; };
         for (int k = 0; k < 3; k++) rgb[k] = mix(k);
         alpha = mix(3);
     }
@@ -708,15 +716,18 @@ struct NativeColours {
         const float* b = a + nc;
         for (int j = 0; j < nc; j++) out[j] = a[j] + (b[j] - a[j]) * f;
     }
-    /// A pattern tile in the document's channels, straight, alpha last.
+    /// A pattern tile in the document's channels, straight, alpha last (a 16-bit pattern's 15-bit samples in a 16-bit
+    /// document).
     std::vector<float> tile(const PatternTile& t) const {
         const size_t count = size_t(t.width) * size_t(t.height);
+        const bool wide = S != SampleType::U8 && !t.rgba16.empty();
+        auto texel = [&](size_t i) { return wide ? t.rgba16[i] / float(one16) : t.rgba[i] / 255.0f; };
         std::vector<float> rgb(count * 3), colours(count * nc), out(count * (nc + 1));
-        for (size_t i = 0; i < count; i++) for (int j = 0; j < 3; j++) rgb[i * 3 + size_t(j)] = t.rgba[i * 4 + size_t(j)] / 255.0f;
+        for (size_t i = 0; i < count; i++) for (int j = 0; j < 3; j++) rgb[i * 3 + size_t(j)] = texel(i * 4 + size_t(j));
         convert(rgb.data(), colours.data(), count);
         for (size_t i = 0; i < count; i++) {
             for (int j = 0; j < nc; j++) out[i * (nc + 1) + size_t(j)] = colours[i * nc + size_t(j)];
-            out[i * (nc + 1) + nc] = t.rgba[i * 4 + 3] / 255.0f;
+            out[i * (nc + 1) + nc] = texel(i * 4 + 3);
         }
         return out;
     }
@@ -852,7 +863,9 @@ void drawStyled(const StyledDraw& in, Img& target) {
     const bool exterior = !style.dropShadows.empty() || !style.outerGlows.empty();
     if (exterior && in.mode != BlendMode::Normal) backdrop = target;
 
-    const bool drawExterior = in.phase != StyledDraw::Phase::Interior, drawInterior = in.phase != StyledDraw::Phase::Exterior;
+    using Phase = StyledDraw::Phase;
+    const bool drawExterior = in.phase == Phase::Whole || in.phase == Phase::Exterior, drawInterior = in.phase != Phase::Exterior;
+    const bool drawOverlays = in.phase != Phase::InteriorRest, drawRest = in.phase != Phase::InteriorOverlays;
     const bool ownContent = in.phase == StyledDraw::Phase::Whole;
 
     // Exterior: drop shadows, then outer glows.
@@ -911,6 +924,7 @@ void drawStyled(const StyledDraw& in, Img& target) {
     // An overlay's pattern: in CMYK and Lab sampled from the tile converted to the document's channels.
     auto overlayPattern = [&](const PatternTile* tile, const PatternOverlay& p) {
         Pattern pattern = patternFor(tile, style, p.scale, p.angle, p.linkWithLayer, p.phaseX, p.phaseY);
+        pattern.wide = S != SampleType::U8;
         if constexpr (native) { pattern.native = nativeTiles.at(tile).data(); pattern.channels = n; }
         return pattern;
     };
@@ -1008,7 +1022,7 @@ void drawStyled(const StyledDraw& in, Img& target) {
     if (ownContent && in.afterContent) in.afterContent();
 
     // With Fill below 100% the overlays and satins are their own passes (Fill fades the pixels, not the effects).
-    if (!foldInteriors) {
+    if (!foldInteriors && drawOverlays) {
         paintOut([&](int ox, int oy, T* d, size_t i) {
             const float shape = alpha[i] * master * knock(i) * coverAt(ox, oy);
             if (shape <= 0) return;
@@ -1032,6 +1046,7 @@ void drawStyled(const StyledDraw& in, Img& target) {
             for (auto& sm : satins) { float sc[4] = {}; rgb(sm.satin->color, sc); compositeEffect<T, M>(d, sc, shape * sm.mask[i] * sm.satin->opacity, sm.satin->mode); }
         });
     }
+    if (!drawRest) return;
 
     // Inner glows under inner shadows.
     for (const InnerGlow& glow : style.innerGlows) {

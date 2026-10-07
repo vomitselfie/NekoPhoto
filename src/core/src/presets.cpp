@@ -262,7 +262,7 @@ std::optional<std::vector<PatternPreset>> readPat(const std::vector<uint8_t>& by
             const std::string shown = h.name.empty() ? label : h.name;
             if (h.version != 1) { note(notes, shown + ": unsupported record version, left out"); continue; }
             auto tile = decodePattern(p);
-            if (!tile) { note(notes, shown + ": its pixels could not be read (only 8-bit patterns up to 4096 px are), left out"); continue; }
+            if (!tile) { note(notes, shown + ": its pixels could not be read (only 8- and 16-bit patterns up to 4096 px are), left out"); continue; }
             if (p.id.empty()) {   // styles could not name it: give it an id, re-encoded so the record carries it
                 p = makePattern(makeUuid(), h.name, tile->width, tile->height, tile->rgba);
                 note(notes, shown + ": had no id; given one");

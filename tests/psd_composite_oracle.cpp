@@ -5,7 +5,8 @@
 //
 // For each file: the largest difference of any premultiplied channel (0..255), the share of pixels with a channel
 // more than 2 levels off, and the mean difference per channel. A file passes when no more than 1% of its pixels are
-// more than 2 levels off and the mean is under 1 level. tests/psd_oracle.txt holds the floor: how many files passed
+// more than 2 levels off and the mean is under 1 level. Files without a Photoshop composite are listed, not compared:
+// saved without Maximize Compatibility, or merged onto a matte by another program (see compare()). tests/psd_oracle.txt holds the floor: how many files passed
 // when it was last raised, and which. Fewer passing files than the floor fails; more prints a reminder to raise it:
 //
 //   COMPOSITOR_UPDATE_PSD_ORACLE=1 build/tests/psd_composite_oracle
@@ -14,6 +15,7 @@
 // used). A checkout that differs from the manifest is reported, not failed: the numbers are then for other files.
 // Without the fixtures the test is skipped.
 #include "compositor/psd.h"
+#include "compositor/psd_carry.h"
 #include "compositor/render.h"
 #include <algorithm>
 #include <cctype>
@@ -142,6 +144,28 @@ struct Result {
     bool pass = false;
 };
 
+/// Whether the file carries Photoshop's version info resource (1057) naming Photoshop as its writer.
+bool writtenByPhotoshop(const Document& document) {
+    if (!document.psdCarry) return false;
+    for (const auto& resource : document.psdCarry->resources) {
+        if (resource.id != 1057 || resource.data.size() < 9) continue;
+        // u32 version, u8 hasRealMergedData, then the writer's name as a Unicode string (u32 length, UTF-16BE).
+        const auto& d = resource.data;
+        const size_t length = size_t(d[5]) << 24 | size_t(d[6]) << 16 | size_t(d[7]) << 8 | d[8];
+        std::string writer;
+        for (size_t i = 0; i < length && 9 + i * 2 + 1 < d.size(); i++) writer.push_back(char(d[9 + i * 2 + 1]));
+        return writer.find("Photoshop") != std::string::npos;
+    }
+    return false;
+}
+
+bool opaque(const Image& image) {
+    for (int y = 0; y < image.height(); y++)
+        for (int x = 0; x < image.width(); x++)
+            if (image.row(y)[x * 4 + 3] != 255) return false;
+    return true;
+}
+
 Result compare(const fs::path& path) {
     Result r;
     r.name = path.filename().string();
@@ -152,6 +176,15 @@ Result compare(const fs::path& path) {
     if (!imported->realComposite) { r.why = "saved without Maximize Compatibility"; return r; }
     const Image& ps = *imported->composite;
     auto ours = renderFlattened(imported->document);
+    if (!writtenByPhotoshop(imported->document) && ours && ours->width() == ps.width() && ours->height() == ps.height() && opaque(ps) && !opaque(*ours)) {
+        // Photoshop stores a merged image with transparency together with its transparency plane (the layer count is
+        // negative), and puts its version info (resource 1057) in every file it writes. A merged image without
+        // transparency over layers that leave the canvas clear, in a file without that resource, was flattened onto a
+        // matte by another program (patchy-legacy-black-composite.psb: an old Patchy writer's black-matted merged
+        // image), so the file holds no Photoshop composite of its layers to compare with.
+        r.why = "merged image matted by another program (no Photoshop version info, no transparency over transparent layers)";
+        return r;
+    }
     r.compared = true;
     if (!ours || ours->width() != ps.width() || ours->height() != ps.height()) {
         r.why = "size differs";
